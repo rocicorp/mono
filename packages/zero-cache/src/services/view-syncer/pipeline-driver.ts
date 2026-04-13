@@ -21,10 +21,13 @@ import {
   type Storage,
 } from '../../../../zql/src/ivm/operator.ts';
 import type {SourceSchema} from '../../../../zql/src/ivm/schema.ts';
-import type {
-  Source,
-  SourceChange,
-  SourceInput,
+import {
+  type Source,
+  type SourceChange,
+  type SourceInput,
+  makeSourceChangeAdd,
+  makeSourceChangeEdit,
+  makeSourceChangeRemove,
 } from '../../../../zql/src/ivm/source.ts';
 import type {ConnectionCostModel} from '../../../../zql/src/planner/planner-connection.ts';
 import {MeasurePushOperator} from '../../../../zql/src/query/measure-push-operator.ts';
@@ -669,24 +672,23 @@ export class PipelineDriver {
               if (nextValue) {
                 this.#conflictRowsDeleted.add(1);
               }
-              yield* this.#push(tableSource, {
-                type: 'remove',
-                row: prevValue,
-              });
+              yield* this.#push(
+                tableSource,
+                makeSourceChangeRemove(prevValue as Row),
+              );
             }
           }
           if (nextValue) {
             if (editOldRow) {
-              yield* this.#push(tableSource, {
-                type: 'edit',
-                row: nextValue,
-                oldRow: editOldRow,
-              });
+              yield* this.#push(
+                tableSource,
+                makeSourceChangeEdit(nextValue as Row, editOldRow),
+              );
             } else {
-              yield* this.#push(tableSource, {
-                type: 'add',
-                row: nextValue,
-              });
+              yield* this.#push(
+                tableSource,
+                makeSourceChangeAdd(nextValue as Row),
+              );
             }
           }
         } finally {

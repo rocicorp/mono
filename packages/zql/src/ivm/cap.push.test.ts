@@ -14,6 +14,11 @@ import {
 import {createSource} from './test/source-factory.ts';
 import type {Format} from './view.ts';
 
+import {
+  makeSourceChangeAdd,
+  makeSourceChangeEdit,
+  makeSourceChangeRemove,
+} from './source.ts';
 describe('Cap push - basic behavior', () => {
   const sources: Sources = {
     issue: {
@@ -72,13 +77,7 @@ describe('Cap push - basic behavior', () => {
       ast,
       format,
       pushes: [
-        [
-          'comment',
-          {
-            type: 'add',
-            row: {id: 'c2', issueID: 'i1', text: 'c2'},
-          },
-        ],
+        ['comment', makeSourceChangeAdd({id: 'c2', issueID: 'i1', text: 'c2'})],
       ],
     });
 
@@ -151,13 +150,7 @@ describe('Cap push - basic behavior', () => {
       ast,
       format,
       pushes: [
-        [
-          'comment',
-          {
-            type: 'add',
-            row: {id: 'c4', issueID: 'i1', text: 'c4'},
-          },
-        ],
+        ['comment', makeSourceChangeAdd({id: 'c4', issueID: 'i1', text: 'c4'})],
       ],
     });
 
@@ -215,10 +208,7 @@ describe('Cap push - basic behavior', () => {
       pushes: [
         [
           'comment',
-          {
-            type: 'remove',
-            row: {id: 'c2', issueID: 'i1', text: 'c2'},
-          },
+          makeSourceChangeRemove({id: 'c2', issueID: 'i1', text: 'c2'}),
         ],
       ],
     });
@@ -320,10 +310,7 @@ describe('Cap push - basic behavior', () => {
       pushes: [
         [
           'comment',
-          {
-            type: 'remove',
-            row: {id: 'c1', issueID: 'i1', text: 'c1'},
-          },
+          makeSourceChangeRemove({id: 'c1', issueID: 'i1', text: 'c1'}),
         ],
       ],
     });
@@ -389,10 +376,7 @@ describe('Cap push - basic behavior', () => {
       pushes: [
         [
           'comment',
-          {
-            type: 'remove',
-            row: {id: 'c1', issueID: 'i1', text: 'c1'},
-          },
+          makeSourceChangeRemove({id: 'c1', issueID: 'i1', text: 'c1'}),
         ],
       ],
     });
@@ -447,10 +431,7 @@ describe('Cap push - basic behavior', () => {
       pushes: [
         [
           'comment',
-          {
-            type: 'remove',
-            row: {id: 'c4', issueID: 'i1', text: 'c4'},
-          },
+          makeSourceChangeRemove({id: 'c4', issueID: 'i1', text: 'c4'}),
         ],
       ],
     });
@@ -507,11 +488,10 @@ describe('Cap push - basic behavior', () => {
       pushes: [
         [
           'comment',
-          {
-            type: 'edit',
-            oldRow: {id: 'c1', issueID: 'i1', text: 'c1'},
-            row: {id: 'c1', issueID: 'i1', text: 'c1 updated'},
-          },
+          makeSourceChangeEdit(
+            {id: 'c1', issueID: 'i1', text: 'c1 updated'},
+            {id: 'c1', issueID: 'i1', text: 'c1'},
+          ),
         ],
       ],
     });
@@ -639,13 +619,7 @@ describe('Cap push - unordered overlay in join', () => {
       ast,
       format,
       pushes: [
-        [
-          'child',
-          {
-            type: 'remove',
-            row: {id: 'x1', group: 'g1', text: 'x1'},
-          },
-        ],
+        ['child', makeSourceChangeRemove({id: 'x1', group: 'g1', text: 'x1'})],
       ],
     });
 
@@ -819,7 +793,7 @@ describe('Cap limit 0', () => {
         {id: {type: 'string'}, group: {type: 'string'}},
         ['id'],
       );
-      consume(source.push({type: 'add', row: {id: '1', group: 'g1'}}));
+      consume(source.push(makeSourceChangeAdd({id: '1', group: 'g1'})));
 
       const storage = new MemoryStorage();
       const cap = new Cap(

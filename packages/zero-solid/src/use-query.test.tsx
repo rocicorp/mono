@@ -21,6 +21,10 @@ import {
 import {useQuery, type QueryResult, type UseQueryOptions} from './use-query.ts';
 import {ZeroProvider} from './use-zero.ts';
 import {
+  makeSourceChangeAdd,
+  makeSourceChangeEdit,
+} from '../../zql/src/ivm/source.ts';
+import {
   createSchema,
   number,
   relationships,
@@ -52,8 +56,8 @@ function setupTestEnvironment() {
     schema.tables.table.columns,
     schema.tables.table.primaryKey,
   );
-  consume(ms.push({row: {a: 1, b: 'a'}, type: 'add'}));
-  consume(ms.push({row: {a: 2, b: 'b'}, type: 'add'}));
+  consume(ms.push(makeSourceChangeAdd({a: 1, b: 'a'})));
+  consume(ms.push(makeSourceChangeAdd({a: 2, b: 'b'})));
 
   const queryDelegate = new QueryDelegateImpl({sources: {table: ms}});
   const tableQuery = newQuery(schema, 'table');
@@ -138,7 +142,7 @@ test('useQuery', async () => {
   must(queryDelegate.gotCallbacks[0])(true);
   await Promise.resolve();
 
-  consume(ms.push({row: {a: 3, b: 'c'}, type: 'add'}));
+  consume(ms.push(makeSourceChangeAdd({a: 3, b: 'c'})));
   queryDelegate.commit();
 
   expect(rows()).toEqual([
@@ -400,10 +404,10 @@ test('useQuery query deps change, reconcile minimizes reactive updates, tree', a
     schema.tables.comment.columns,
     schema.tables.comment.primaryKey,
   );
-  consume(issueSource.push({row: {id: 'i1'}, type: 'add'}));
-  consume(issueSource.push({row: {id: 'i2'}, type: 'add'}));
-  consume(commentSource.push({row: {id: 'c1', issueID: 'i1'}, type: 'add'}));
-  consume(commentSource.push({row: {id: 'c2', issueID: 'i1'}, type: 'add'}));
+  consume(issueSource.push(makeSourceChangeAdd({id: 'i1'})));
+  consume(issueSource.push(makeSourceChangeAdd({id: 'i2'})));
+  consume(commentSource.push(makeSourceChangeAdd({id: 'c1', issueID: 'i1'})));
+  consume(commentSource.push(makeSourceChangeAdd({id: 'c2', issueID: 'i1'})));
 
   const queryDelegate = new QueryDelegateImpl({
     sources: {issue: issueSource, comment: commentSource},
@@ -691,9 +695,7 @@ test('useQuery query deps change testEffect', () => {
         expect(rows()).toEqual([
           {a: 1, b: 'a', [refCountSymbol]: 1, [idSymbol]: '1'},
         ]);
-        consume(
-          ms.push({type: 'edit', oldRow: {a: 1, b: 'a'}, row: {a: 1, b: 'a2'}}),
-        );
+        consume(ms.push(makeSourceChangeEdit({a: 1, b: 'a2'}, {a: 1, b: 'a'})));
         queryDelegate.commit();
       } else if (run === 1) {
         expect(rows()).toEqual([

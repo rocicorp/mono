@@ -14,6 +14,10 @@ import {createTableSQL, schema} from '../../zql/src/query/test/test-schemas.ts';
 import {Database} from '../../zqlite/src/db.ts';
 import {newQueryDelegate} from '../../zqlite/src/test/source-factory.ts';
 
+import {
+  makeSourceChangeAdd,
+  makeSourceChangeRemove,
+} from '../../zql/src/ivm/source.ts';
 const lc = createSilentLogContext();
 
 let pg: PostgresDB;
@@ -101,16 +105,15 @@ test('add comment to commentless issue → issue appears', () => {
   const view = queryDelegate.materialize(q);
 
   consume(
-    must(queryDelegate.getSource('comments')).push({
-      type: 'add',
-      row: {
+    must(queryDelegate.getSource('comments')).push(
+      makeSourceChangeAdd({
         id: 'c1a',
         authorId: 'user1',
         issue_id: 'issue1',
         text: 'Comment 1a',
         createdAt: 1100000000000,
-      },
-    }),
+      }),
+    ),
   );
 
   const data = view.data as ReadonlyArray<{readonly id: string}>;
@@ -125,16 +128,15 @@ test('add beyond cap limit → issue stays, related shows all', () => {
 
   // issue3 had 3 comments (at cap). Add a 4th.
   consume(
-    must(queryDelegate.getSource('comments')).push({
-      type: 'add',
-      row: {
+    must(queryDelegate.getSource('comments')).push(
+      makeSourceChangeAdd({
         id: 'c3d',
         authorId: 'user1',
         issue_id: 'issue3',
         text: 'Comment 3d',
         createdAt: 1100000001000,
-      },
-    }),
+      }),
+    ),
   );
 
   const data = view.data as ReadonlyArray<{
@@ -156,16 +158,15 @@ test('remove tracked comment with overflow → issue stays', () => {
 
   // issue4 has 5 comments. Remove c4a (tracked by cap). Cap refills from overflow.
   consume(
-    must(queryDelegate.getSource('comments')).push({
-      type: 'remove',
-      row: {
+    must(queryDelegate.getSource('comments')).push(
+      makeSourceChangeRemove({
         id: 'c4a',
         authorId: 'user1',
         issue_id: 'issue4',
         text: 'Comment 4a',
         createdAt: 1015027200000,
-      },
-    }),
+      }),
+    ),
   );
 
   const data = view.data as ReadonlyArray<{readonly id: string}>;
@@ -180,16 +181,15 @@ test('remove untracked overflow comment → issue stays', () => {
 
   // Remove c4e (overflow, not tracked by cap)
   consume(
-    must(queryDelegate.getSource('comments')).push({
-      type: 'remove',
-      row: {
+    must(queryDelegate.getSource('comments')).push(
+      makeSourceChangeRemove({
         id: 'c4e',
         authorId: 'user1',
         issue_id: 'issue4',
         text: 'Comment 4e',
         createdAt: 1015372800000,
-      },
-    }),
+      }),
+    ),
   );
 
   const data = view.data as ReadonlyArray<{readonly id: string}>;
@@ -204,16 +204,15 @@ test('remove only comment → issue disappears', () => {
 
   // Remove c1a from issue1 (the only comment, added in test 2)
   consume(
-    must(queryDelegate.getSource('comments')).push({
-      type: 'remove',
-      row: {
+    must(queryDelegate.getSource('comments')).push(
+      makeSourceChangeRemove({
         id: 'c1a',
         authorId: 'user1',
         issue_id: 'issue1',
         text: 'Comment 1a',
         createdAt: 1100000000000,
-      },
-    }),
+      }),
+    ),
   );
 
   const data = view.data as ReadonlyArray<{readonly id: string}>;
@@ -227,16 +226,15 @@ test('re-add comment → issue reappears', () => {
   const view = queryDelegate.materialize(q);
 
   consume(
-    must(queryDelegate.getSource('comments')).push({
-      type: 'add',
-      row: {
+    must(queryDelegate.getSource('comments')).push(
+      makeSourceChangeAdd({
         id: 'c1b',
         authorId: 'user1',
         issue_id: 'issue1',
         text: 'Comment 1b',
         createdAt: 1100000002000,
-      },
-    }),
+      }),
+    ),
   );
 
   const data = view.data as ReadonlyArray<{readonly id: string}>;
@@ -303,7 +301,7 @@ test('join-level unordered overlay — remove comment triggers overlay for multi
 
   const source = must(queryDelegate.getSource('comments'));
   for (const row of commentsToRemove) {
-    consume(source.push({type: 'remove', row}));
+    consume(source.push(makeSourceChangeRemove(row)));
     expect(view.data).toEqual(queryDelegate.materialize(q).data);
   }
 });

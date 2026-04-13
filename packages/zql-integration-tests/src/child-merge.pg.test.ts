@@ -6,6 +6,7 @@ import {must} from '../../shared/src/must.ts';
 import {initialSync} from '../../zero-cache/src/services/change-source/pg/initial-sync.ts';
 import {getConnectionURI, testDBs} from '../../zero-cache/src/test/db.ts';
 import type {PostgresDB} from '../../zero-cache/src/types/pg.ts';
+import {makeSourceChangeAdd} from '../../zql/src/ivm/source.ts';
 import {consume} from '../../zql/src/ivm/stream.ts';
 import type {QueryDelegate} from '../../zql/src/query/query-delegate.ts';
 import {newQuery} from '../../zql/src/query/query-impl.ts';
@@ -130,16 +131,15 @@ test('child change merging with flipped exists before OR containing flipped exis
   // Both FlippedJoins for 'labels' preserve it (they just flip and forward child changes)
   // Both child changes need to be merged in UnionFanIn
   consume(
-    must(queryDelegate.getSource('comments')).push({
-      type: 'add',
-      row: {
+    must(queryDelegate.getSource('comments')).push(
+      makeSourceChangeAdd({
         id: 'comment2',
         authorId: 'user1',
         issue_id: 'issue1',
         text: 'New comment',
         createdAt: 1100000000000,
-      },
-    }),
+      }),
+    ),
   );
 
   // Verify the view still has the issue

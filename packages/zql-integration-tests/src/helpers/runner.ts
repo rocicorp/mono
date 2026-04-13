@@ -28,6 +28,7 @@ import {getServerSchema} from '../../../zero-server/src/schema.ts';
 import {Transaction} from '../../../zero-server/src/test/util.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {ServerSchema} from '../../../zero-types/src/server-schema.ts';
+import {ChangeType} from '../../../zql/src/ivm/change-type.ts';
 import type {Change} from '../../../zql/src/ivm/change.ts';
 import type {Node} from '../../../zql/src/ivm/data.ts';
 import {
@@ -37,7 +38,14 @@ import {
 import {MemorySource} from '../../../zql/src/ivm/memory-source.ts';
 import {skipYields} from '../../../zql/src/ivm/operator.ts';
 import type {SourceSchema} from '../../../zql/src/ivm/schema.ts';
-import type {Source, SourceChange} from '../../../zql/src/ivm/source.ts';
+import {SourceChangeIndex} from '../../../zql/src/ivm/source-change-index.ts';
+import {
+  makeSourceChangeAdd,
+  makeSourceChangeEdit,
+  makeSourceChangeRemove,
+  type Source,
+  type SourceChange,
+} from '../../../zql/src/ivm/source.ts';
 import {consume} from '../../../zql/src/ivm/stream.ts';
 import type {DBTransaction} from '../../../zql/src/mutate/custom.ts';
 import {QueryDelegateBase} from '../../../zql/src/query/query-delegate-base.ts';
@@ -168,12 +176,7 @@ async function makeDatabases<TSchema extends Schema>(
       ) as Row[];
       raw.set(table.name, rows);
       for (const row of rows) {
-        consume(
-          memory[table.name].push({
-            type: 'add',
-            row,
-          }),
-        );
+        consume(memory[table.name].push(makeSourceChangeAdd(row)));
       }
     }),
   );
@@ -498,31 +501,34 @@ function benchPush(
       let sourceGetter;
       if (type === 'zqlite') {
         changes = changes.map(([source, change]): [string, SourceChange] => {
-          switch (change.type) {
-            case 'add':
+          const changeType = change[SourceChangeIndex.TYPE];
+          const changeRow = change[SourceChangeIndex.ROW];
+          switch (changeType) {
+            case ChangeType.ADD:
               return [
                 source,
-                {
-                  ...change,
-                  row: mapRow(change.row, source, delegates.mapper),
-                },
+                makeSourceChangeAdd(
+                  mapRow(changeRow, source, delegates.mapper),
+                ),
               ];
-            case 'edit':
+            case ChangeType.EDIT:
               return [
                 source,
-                {
-                  ...change,
-                  oldRow: mapRow(change.oldRow, source, delegates.mapper),
-                  row: mapRow(change.row, source, delegates.mapper),
-                },
+                makeSourceChangeEdit(
+                  mapRow(changeRow, source, delegates.mapper),
+                  mapRow(
+                    change[SourceChangeIndex.OLD_ROW]!,
+                    source,
+                    delegates.mapper,
+                  ),
+                ),
               ];
-            case 'remove':
+            case ChangeType.REMOVE:
               return [
                 source,
-                {
-                  ...change,
-                  row: mapRow(change.row, source, delegates.mapper),
-                },
+                makeSourceChangeRemove(
+                  mapRow(changeRow, source, delegates.mapper),
+                ),
               ];
           }
         });
@@ -785,16 +791,12 @@ async function checkRemove(
     await serverTx.mutate[table].delete(row);
 
     consume(
-      must(delegates.sqlite.getSource(delegates.mapper.tableName(table))).push({
-        type: 'remove',
-        row: mappedRow,
-      }),
+      must(delegates.sqlite.getSource(delegates.mapper.tableName(table))).push(
+        makeSourceChangeRemove(mappedRow),
+      ),
     );
     consume(
-      must(delegates.memory.getSource(table)).push({
-        type: 'remove',
-        row,
-      }),
+      must(delegates.memory.getSource(table)).push(makeSourceChangeRemove(row)),
     );
 
     // pg cannot be materialized.
@@ -843,16 +845,12 @@ async function checkAddBack(
     await serverTx.mutate[table].insert(row);
 
     consume(
-      must(delegates.sqlite.getSource(delegates.mapper.tableName(table))).push({
-        type: 'add',
-        row: mappedRow,
-      }),
+      must(delegates.sqlite.getSource(delegates.mapper.tableName(table))).push(
+        makeSourceChangeAdd(mappedRow),
+      ),
     );
     consume(
-      must(delegates.memory.getSource(table)).push({
-        type: 'add',
-        row,
-      }),
+      must(delegates.memory.getSource(table)).push(makeSourceChangeAdd(row)),
     );
 
     const pgResult = await delegates.pg.run(query);
@@ -928,18 +926,14 @@ async function checkEditToRandom(
 
     await serverTx.mutate[table].update(editedRow);
     consume(
-      must(delegates.sqlite.getSource(delegates.mapper.tableName(table))).push({
-        type: 'edit',
-        oldRow: mappedRow,
-        row: mappedEditedRow,
-      }),
+      must(delegates.sqlite.getSource(delegates.mapper.tableName(table))).push(
+        makeSourceChangeEdit(mappedEditedRow, mappedRow),
+      ),
     );
     consume(
-      must(delegates.memory.getSource(table)).push({
-        type: 'edit',
-        oldRow: row,
-        row: editedRow,
-      }),
+      must(delegates.memory.getSource(table)).push(
+        makeSourceChangeEdit(editedRow, row),
+      ),
     );
 
     const pgResult = await delegates.pg.run(query);
@@ -1009,18 +1003,14 @@ async function checkEditToMatch(
     await serverTx.mutate[table].update(original);
 
     consume(
-      must(delegates.sqlite.getSource(delegates.mapper.tableName(table))).push({
-        type: 'edit',
-        oldRow: mappedEdited,
-        row: mappedOriginal,
-      }),
+      must(delegates.sqlite.getSource(delegates.mapper.tableName(table))).push(
+        makeSourceChangeEdit(mappedOriginal, mappedEdited),
+      ),
     );
     consume(
-      must(delegates.memory.getSource(table)).push({
-        type: 'edit',
-        oldRow: edited,
-        row: original,
-      }),
+      must(delegates.memory.getSource(table)).push(
+        makeSourceChangeEdit(original, edited),
+      ),
     );
 
     const pgResult = await delegates.pg.run(query);

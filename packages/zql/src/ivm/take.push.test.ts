@@ -1,7 +1,12 @@
 import {describe, expect, test} from 'vitest';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
-import type {SourceChange} from './source.ts';
+import {
+  type SourceChange,
+  makeSourceChangeAdd,
+  makeSourceChangeEdit,
+  makeSourceChangeRemove,
+} from './source.ts';
 import {runPushTest, type Sources} from './test/fetch-and-push-tests.ts';
 
 describe('take with no partition', () => {
@@ -14,7 +19,7 @@ describe('take with no partition', () => {
           {id: 'i3', created: 300, text: null},
         ],
         limit: 0,
-        pushes: [{type: 'add', row: {id: 'i4', created: 50}}],
+        pushes: [makeSourceChangeAdd({id: 'i4', created: 50})],
       });
       expect(data).toMatchInlineSnapshot(`[]`);
       expect(messages).toMatchInlineSnapshot(`
@@ -44,7 +49,7 @@ describe('take with no partition', () => {
           {id: 'i3', created: 300, text: null},
         ],
         limit: 5,
-        pushes: [{type: 'add', row: {id: 'i4', created: 50}}],
+        pushes: [makeSourceChangeAdd({id: 'i4', created: 50})],
       });
       expect(data).toMatchInlineSnapshot(`
         [
@@ -140,7 +145,7 @@ describe('take with no partition', () => {
           {id: 'i3', created: 300, text: null},
         ],
         limit: 5,
-        pushes: [{type: 'add', row: {id: 'i4', created: 350}}],
+        pushes: [makeSourceChangeAdd({id: 'i4', created: 350})],
       });
       expect(data).toMatchInlineSnapshot(`
         [
@@ -235,7 +240,7 @@ describe('take with no partition', () => {
           {id: 'i4', created: 400, text: null},
         ],
         limit: 3,
-        pushes: [{type: 'add', row: {id: 'i5', created: 350}}],
+        pushes: [makeSourceChangeAdd({id: 'i5', created: 350})],
       });
       expect(data).toMatchInlineSnapshot(`
         [
@@ -303,7 +308,7 @@ describe('take with no partition', () => {
           {id: 'i4', created: 400, text: null},
         ],
         limit: 3,
-        pushes: [{type: 'add', row: {id: 'i5', created: 50}}],
+        pushes: [makeSourceChangeAdd({id: 'i5', created: 50})],
         fetchOnPush: true,
       });
       expect(data).toMatchInlineSnapshot(`
@@ -481,7 +486,7 @@ describe('take with no partition', () => {
           {id: 'i4', created: 400, text: null},
         ],
         limit: 1,
-        pushes: [{type: 'add', row: {id: 'i5', created: 50}}],
+        pushes: [makeSourceChangeAdd({id: 'i5', created: 50})],
         fetchOnPush: true,
       });
       expect(data).toMatchInlineSnapshot(`
@@ -610,7 +615,7 @@ describe('take with no partition', () => {
           {id: 'i4', created: 400, text: null},
         ],
         limit: 3,
-        pushes: [{type: 'add', row: {id: 'i5', created: 250}}],
+        pushes: [makeSourceChangeAdd({id: 'i5', created: 250})],
         fetchOnPush: true,
       });
       expect(data).toMatchInlineSnapshot(`
@@ -788,7 +793,7 @@ describe('take with no partition', () => {
           {id: 'i3', created: 300, text: null},
         ],
         limit: 0,
-        pushes: [{type: 'remove', row: {id: 'i1', created: 100}}],
+        pushes: [makeSourceChangeRemove({id: 'i1', created: 100})],
       });
       expect(data).toMatchInlineSnapshot(`[]`);
       expect(messages).toMatchInlineSnapshot(`
@@ -818,7 +823,7 @@ describe('take with no partition', () => {
           {id: 'i3', created: 300, text: null},
         ],
         limit: 5,
-        pushes: [{type: 'remove', row: {id: 'i1', created: 100}}],
+        pushes: [makeSourceChangeRemove({id: 'i1', created: 100})],
       });
       expect(data).toMatchInlineSnapshot(`
         [
@@ -934,7 +939,7 @@ describe('take with no partition', () => {
           {id: 'i3', created: 300, text: null},
         ],
         limit: 5,
-        pushes: [{type: 'remove', row: {id: 'i3', created: 300}}],
+        pushes: [makeSourceChangeRemove({id: 'i3', created: 300})],
       });
       expect(data).toMatchInlineSnapshot(`
         [
@@ -1051,7 +1056,7 @@ describe('take with no partition', () => {
           {id: 'i4', created: 400, text: null},
         ],
         limit: 3,
-        pushes: [{type: 'remove', row: {id: 'i4', created: 400}}],
+        pushes: [makeSourceChangeRemove({id: 'i4', created: 400})],
       });
       expect(data).toMatchInlineSnapshot(`
         [
@@ -1119,7 +1124,7 @@ describe('take with no partition', () => {
           {id: 'i4', created: 400, text: null},
         ],
         limit: 3,
-        pushes: [{type: 'remove', row: {id: 'i1', created: 100}}],
+        pushes: [makeSourceChangeRemove({id: 'i1', created: 100})],
         fetchOnPush: true,
       });
       expect(data).toMatchInlineSnapshot(`
@@ -1314,7 +1319,7 @@ describe('take with no partition', () => {
           {id: 'i4', created: 400, text: null},
         ],
         limit: 2,
-        pushes: [{type: 'remove', row: {id: 'i1', created: 100}}],
+        pushes: [makeSourceChangeRemove({id: 'i1', created: 100})],
         fetchOnPush: true,
       });
       expect(data).toMatchInlineSnapshot(`
@@ -1487,7 +1492,7 @@ describe('take with no partition', () => {
           {id: 'i4', created: 400, text: null},
         ],
         limit: 1,
-        pushes: [{type: 'remove', row: {id: 'i1', created: 100}}],
+        pushes: [makeSourceChangeRemove({id: 'i1', created: 100})],
         fetchOnPush: true,
       });
       expect(data).toMatchInlineSnapshot(`
@@ -1634,7 +1639,7 @@ describe('take with no partition', () => {
           {id: 'i3', created: 300, text: null},
         ],
         limit: 3,
-        pushes: [{type: 'remove', row: {id: 'i1', created: 100}}],
+        pushes: [makeSourceChangeRemove({id: 'i1', created: 100})],
       });
       expect(data).toMatchInlineSnapshot(`
         [
@@ -1751,7 +1756,7 @@ describe('take with no partition', () => {
           {id: 'i4', created: 400, text: null},
         ],
         limit: 3,
-        pushes: [{type: 'remove', row: {id: 'i3', created: 300}}],
+        pushes: [makeSourceChangeRemove({id: 'i3', created: 300})],
         fetchOnPush: true,
       });
       expect(data).toMatchInlineSnapshot(`
@@ -1945,7 +1950,7 @@ describe('take with no partition', () => {
           {id: 'i3', created: 300, text: null},
         ],
         limit: 3,
-        pushes: [{type: 'remove', row: {id: 'i3', created: 300}}],
+        pushes: [makeSourceChangeRemove({id: 'i3', created: 300})],
       });
       expect(data).toMatchInlineSnapshot(`
         [
@@ -2069,11 +2074,10 @@ describe('take with no partition', () => {
         ...base,
         limit: 0,
         pushes: [
-          {
-            type: 'edit',
-            oldRow: {id: 'i2', created: 200, text: 'b'},
-            row: {id: 'i2', created: 200, text: 'c'},
-          },
+          makeSourceChangeEdit(
+            {id: 'i2', created: 200, text: 'c'},
+            {id: 'i2', created: 200, text: 'b'},
+          ),
         ],
       });
       expect(data).toMatchInlineSnapshot(`[]`);
@@ -2108,11 +2112,10 @@ describe('take with no partition', () => {
           ...base,
           limit: 5,
           pushes: [
-            {
-              type: 'edit',
-              oldRow: {id: 'i1', created: 100, text: 'a'},
-              row: {id: 'i1', created: 100, text: 'a2'},
-            },
+            makeSourceChangeEdit(
+              {id: 'i1', created: 100, text: 'a2'},
+              {id: 'i1', created: 100, text: 'a'},
+            ),
           ],
         });
         expect(data).toMatchInlineSnapshot(`
@@ -2222,11 +2225,10 @@ describe('take with no partition', () => {
           ...base,
           limit: 5,
           pushes: [
-            {
-              type: 'edit',
-              oldRow: {id: 'i4', created: 400, text: 'd'},
-              row: {id: 'i4', created: 400, text: 'd2'},
-            },
+            makeSourceChangeEdit(
+              {id: 'i4', created: 400, text: 'd2'},
+              {id: 'i4', created: 400, text: 'd'},
+            ),
           ],
         });
         expect(data).toMatchInlineSnapshot(`
@@ -2338,11 +2340,10 @@ describe('take with no partition', () => {
           ...base,
           limit: 3,
           pushes: [
-            {
-              type: 'edit',
-              oldRow: {id: 'i4', created: 400, text: 'd'},
-              row: {id: 'i4', created: 400, text: 'd2'},
-            },
+            makeSourceChangeEdit(
+              {id: 'i4', created: 400, text: 'd2'},
+              {id: 'i4', created: 400, text: 'd'},
+            ),
           ],
         });
         expect(data).toMatchInlineSnapshot(`
@@ -2413,11 +2414,10 @@ describe('take with no partition', () => {
           ...base,
           limit: 3,
           pushes: [
-            {
-              type: 'edit',
-              oldRow: {id: 'i2', created: 200, text: 'b'},
-              row: {id: 'i2', created: 200, text: 'b2'},
-            },
+            makeSourceChangeEdit(
+              {id: 'i2', created: 200, text: 'b2'},
+              {id: 'i2', created: 200, text: 'b'},
+            ),
           ],
         });
         expect(data).toMatchInlineSnapshot(`
@@ -2521,11 +2521,10 @@ describe('take with no partition', () => {
           ...base,
           limit: 3,
           pushes: [
-            {
-              type: 'edit',
-              oldRow: {id: 'i3', created: 300, text: 'c'},
-              row: {id: 'i3', created: 300, text: 'c2'},
-            },
+            makeSourceChangeEdit(
+              {id: 'i3', created: 300, text: 'c2'},
+              {id: 'i3', created: 300, text: 'c'},
+            ),
           ],
         });
         expect(data).toMatchInlineSnapshot(`
@@ -2630,11 +2629,10 @@ describe('take with no partition', () => {
           limit: 3,
           fetchOnPush: true,
           pushes: [
-            {
-              type: 'edit',
-              oldRow: {id: 'i3', created: 300, text: 'c'},
-              row: {id: 'i3', created: 550, text: 'c'},
-            },
+            makeSourceChangeEdit(
+              {id: 'i3', created: 550, text: 'c'},
+              {id: 'i3', created: 300, text: 'c'},
+            ),
           ],
         });
         expect(data).toMatchInlineSnapshot(`
@@ -2817,11 +2815,10 @@ describe('take with no partition', () => {
           ...base,
           limit: 3,
           pushes: [
-            {
-              type: 'edit',
-              oldRow: {id: 'i2', created: 200, text: 'b'},
-              row: {id: 'i2', created: 50, text: 'b2'},
-            },
+            makeSourceChangeEdit(
+              {id: 'i2', created: 50, text: 'b2'},
+              {id: 'i2', created: 200, text: 'b'},
+            ),
           ],
         });
         expect(data).toMatchInlineSnapshot(`
@@ -2925,11 +2922,10 @@ describe('take with no partition', () => {
           ...base,
           limit: 3,
           pushes: [
-            {
-              type: 'edit',
-              oldRow: {id: 'i4', created: 400, text: 'd'},
-              row: {id: 'i4', created: 250, text: 'd'},
-            },
+            makeSourceChangeEdit(
+              {id: 'i4', created: 250, text: 'd'},
+              {id: 'i4', created: 400, text: 'd'},
+            ),
           ],
           fetchOnPush: true,
         });
@@ -3114,11 +3110,10 @@ describe('take with no partition', () => {
           ...base,
           limit: 3,
           pushes: [
-            {
-              type: 'edit',
-              oldRow: {id: 'i2', created: 200, text: 'b'},
-              row: {id: 'i2', created: 350, text: 'b2'},
-            },
+            makeSourceChangeEdit(
+              {id: 'i2', created: 350, text: 'b2'},
+              {id: 'i2', created: 200, text: 'b'},
+            ),
           ],
         });
         expect(data).toMatchInlineSnapshot(`
@@ -3237,11 +3232,10 @@ describe('take with no partition', () => {
           ...base,
           limit: 3,
           pushes: [
-            {
-              type: 'edit',
-              oldRow: {id: 'i2', created: 200, text: 'b'},
-              row: {id: 'i2', created: 450, text: 'b2'},
-            },
+            makeSourceChangeEdit(
+              {id: 'i2', created: 450, text: 'b2'},
+              {id: 'i2', created: 200, text: 'b'},
+            ),
           ],
           fetchOnPush: true,
         });
@@ -3426,11 +3420,10 @@ describe('take with no partition', () => {
         ...base,
         limit: 1,
         pushes: [
-          {
-            type: 'edit',
-            oldRow: {id: 'i1', created: 100, text: 'a'},
-            row: {id: 'i1', created: 50, text: 'a2'},
-          },
+          makeSourceChangeEdit(
+            {id: 'i1', created: 50, text: 'a2'},
+            {id: 'i1', created: 100, text: 'a'},
+          ),
         ],
       });
       expect(data).toMatchInlineSnapshot(`
@@ -3527,7 +3520,7 @@ describe('take with partition', () => {
           {id: 'c3', issueID: 'i1', created: 300, text: null},
         ],
         limit: 0,
-        pushes: [{type: 'add', row: {id: 'c6', issueID: 'i2', created: 150}}],
+        pushes: [makeSourceChangeAdd({id: 'c6', issueID: 'i2', created: 150})],
       });
       expect(data).toMatchInlineSnapshot(`
         [
@@ -3573,7 +3566,7 @@ describe('take with partition', () => {
           {id: 'c5', issueID: 'i2', created: 500, text: null},
         ],
         limit: 5,
-        pushes: [{type: 'add', row: {id: 'c6', issueID: 'i2', created: 150}}],
+        pushes: [makeSourceChangeAdd({id: 'c6', issueID: 'i2', created: 150})],
       });
       expect(data).toMatchInlineSnapshot(`
         [
@@ -3755,7 +3748,7 @@ describe('take with partition', () => {
           {id: 'c7', issueID: 'i2', created: 700, text: null},
         ],
         limit: 3,
-        pushes: [{type: 'add', row: {id: 'c8', issueID: 'i2', created: 550}}],
+        pushes: [makeSourceChangeAdd({id: 'c8', issueID: 'i2', created: 550})],
         fetchOnPush: true,
       });
       expect(data).toMatchInlineSnapshot(`
@@ -4156,7 +4149,7 @@ describe('take with partition', () => {
           {id: 'c5', issueID: 'i2', created: 500, text: null},
         ],
         limit: 3,
-        pushes: [{type: 'add', row: {id: 'c6', issueID: '3', created: 550}}],
+        pushes: [makeSourceChangeAdd({id: 'c6', issueID: '3', created: 550})],
       });
       expect(data).toMatchInlineSnapshot(`
         [
@@ -4267,7 +4260,7 @@ describe('take with partition', () => {
         ],
         limit: 0,
         pushes: [
-          {type: 'remove', row: {id: 'c1', issueID: 'i1', created: 100}},
+          makeSourceChangeRemove({id: 'c1', issueID: 'i1', created: 100}),
         ],
       });
       expect(data).toMatchInlineSnapshot(`
@@ -4315,7 +4308,7 @@ describe('take with partition', () => {
         ],
         limit: 5,
         pushes: [
-          {type: 'remove', row: {id: 'c1', issueID: 'i1', created: 100}},
+          makeSourceChangeRemove({id: 'c1', issueID: 'i1', created: 100}),
         ],
       });
       expect(data).toMatchInlineSnapshot(`
@@ -4520,7 +4513,7 @@ describe('take with partition', () => {
         ],
         limit: 5,
         pushes: [
-          {type: 'remove', row: {id: 'c6', issueID: 'i3', created: 600}},
+          makeSourceChangeRemove({id: 'c6', issueID: 'i3', created: 600}),
         ],
       });
       expect(data).toMatchInlineSnapshot(`
@@ -4638,11 +4631,10 @@ describe('take with partition', () => {
         ...base,
         limit: 0,
         pushes: [
-          {
-            type: 'edit',
-            oldRow: {id: 'c2', issueID: 'i1', created: 200, text: 'b'},
-            row: {id: 'c2', issueID: 'i1', created: 200, text: 'b2'},
-          },
+          makeSourceChangeEdit(
+            {id: 'c2', issueID: 'i1', created: 200, text: 'b2'},
+            {id: 'c2', issueID: 'i1', created: 200, text: 'b'},
+          ),
         ],
       });
       expect(data).toMatchInlineSnapshot(`
@@ -4692,11 +4684,10 @@ describe('take with partition', () => {
           ...base,
           limit: 5,
           pushes: [
-            {
-              type: 'edit',
-              oldRow: {id: 'c1', issueID: 'i1', created: 100, text: 'a'},
-              row: {id: 'c1', issueID: 'i1', created: 100, text: 'a2'},
-            },
+            makeSourceChangeEdit(
+              {id: 'c1', issueID: 'i1', created: 100, text: 'a2'},
+              {id: 'c1', issueID: 'i1', created: 100, text: 'a'},
+            ),
           ],
         });
         expect(data).toMatchInlineSnapshot(`
@@ -4889,11 +4880,10 @@ describe('take with partition', () => {
           ...base,
           limit: 5,
           pushes: [
-            {
-              type: 'edit',
-              oldRow: {id: 'c5', issueID: 'i2', created: 500, text: 'e'},
-              row: {id: 'c5', issueID: 'i2', created: 500, text: 'e2'},
-            },
+            makeSourceChangeEdit(
+              {id: 'c5', issueID: 'i2', created: 500, text: 'e2'},
+              {id: 'c5', issueID: 'i2', created: 500, text: 'e'},
+            ),
           ],
         });
         expect(data).toMatchInlineSnapshot(`
@@ -5088,11 +5078,10 @@ describe('take with partition', () => {
           ...base,
           limit: 2,
           pushes: [
-            {
-              type: 'edit',
-              oldRow: {id: 'c3', issueID: 'i1', created: 300, text: 'c'},
-              row: {id: 'c3', issueID: 'i1', created: 300, text: 'c2'},
-            },
+            makeSourceChangeEdit(
+              {id: 'c3', issueID: 'i1', created: 300, text: 'c2'},
+              {id: 'c3', issueID: 'i1', created: 300, text: 'c'},
+            ),
           ],
         });
         expect(data).toMatchInlineSnapshot(`
@@ -5198,11 +5187,10 @@ describe('take with partition', () => {
           ...base,
           limit: 3,
           pushes: [
-            {
-              type: 'edit',
-              oldRow: {id: 'c2', issueID: 'i1', created: 200, text: 'b'},
-              row: {id: 'c2', issueID: 'i1', created: 200, text: 'b2'},
-            },
+            makeSourceChangeEdit(
+              {id: 'c2', issueID: 'i1', created: 200, text: 'b2'},
+              {id: 'c2', issueID: 'i1', created: 200, text: 'b'},
+            ),
           ],
         });
         expect(data).toMatchInlineSnapshot(`
@@ -5395,11 +5383,10 @@ describe('take with partition', () => {
           ...base,
           limit: 3,
           pushes: [
-            {
-              type: 'edit',
-              oldRow: {id: 'c3', issueID: 'i1', created: 300, text: 'c'},
-              row: {id: 'c3', issueID: 'i1', created: 300, text: 'c2'},
-            },
+            makeSourceChangeEdit(
+              {id: 'c3', issueID: 'i1', created: 300, text: 'c2'},
+              {id: 'c3', issueID: 'i1', created: 300, text: 'c'},
+            ),
           ],
         });
         expect(data).toMatchInlineSnapshot(`
@@ -5592,11 +5579,10 @@ describe('take with partition', () => {
           ...base,
           limit: 3,
           pushes: [
-            {
-              type: 'edit',
-              oldRow: {id: 'c3', issueID: 'i1', created: 300, text: 'c'},
-              row: {id: 'c3', issueID: 'i1', created: 150, text: 'c2'},
-            },
+            makeSourceChangeEdit(
+              {id: 'c3', issueID: 'i1', created: 150, text: 'c2'},
+              {id: 'c3', issueID: 'i1', created: 300, text: 'c'},
+            ),
           ],
         });
         expect(data).toMatchInlineSnapshot(`
@@ -5810,11 +5796,10 @@ describe('take with partition', () => {
             limit: 2,
             fetchOnPush: true,
             pushes: [
-              {
-                type: 'edit',
-                oldRow: {id: 'c2', issueID: 'i1', created: 200, text: 'b'},
-                row: {id: 'c2', issueID: 'i1', created: 350, text: 'b2'},
-              },
+              makeSourceChangeEdit(
+                {id: 'c2', issueID: 'i1', created: 350, text: 'b2'},
+                {id: 'c2', issueID: 'i1', created: 200, text: 'b'},
+              ),
             ],
           });
         expect(data).toMatchInlineSnapshot(`
@@ -6172,11 +6157,10 @@ describe('take with partition', () => {
           ...base,
           limit: 3,
           pushes: [
-            {
-              type: 'edit',
-              oldRow: {id: 'c2', issueID: 'i1', created: 200, text: 'b'},
-              row: {id: 'c2', issueID: 'i1', created: 50, text: 'b2'},
-            },
+            makeSourceChangeEdit(
+              {id: 'c2', issueID: 'i1', created: 50, text: 'b2'},
+              {id: 'c2', issueID: 'i1', created: 200, text: 'b'},
+            ),
           ],
         });
         expect(data).toMatchInlineSnapshot(`
@@ -6370,11 +6354,10 @@ describe('take with partition', () => {
             ...base,
             limit: 2,
             pushes: [
-              {
-                type: 'edit',
-                oldRow: {id: 'c3', issueID: 'i1', created: 300, text: 'c'},
-                row: {id: 'c3', issueID: 'i1', created: 150, text: 'c2'},
-              },
+              makeSourceChangeEdit(
+                {id: 'c3', issueID: 'i1', created: 150, text: 'c2'},
+                {id: 'c3', issueID: 'i1', created: 300, text: 'c'},
+              ),
             ],
             fetchOnPush: true,
           });
@@ -6734,11 +6717,10 @@ describe('take with partition', () => {
           ...base,
           limit: 2,
           pushes: [
-            {
-              type: 'edit',
-              oldRow: {id: 'c1', issueID: 'i1', created: 100, text: 'a'},
-              row: {id: 'c1', issueID: 'i1', created: 250, text: 'a2'},
-            },
+            makeSourceChangeEdit(
+              {id: 'c1', issueID: 'i1', created: 250, text: 'a2'},
+              {id: 'c1', issueID: 'i1', created: 100, text: 'a'},
+            ),
           ],
         });
         expect(data).toMatchInlineSnapshot(`
@@ -6943,11 +6925,10 @@ describe('take with partition', () => {
             ...base,
             limit: 2,
             pushes: [
-              {
-                type: 'edit',
-                oldRow: {id: 'c1', issueID: 'i1', created: 100, text: 'a'},
-                row: {id: 'c1', issueID: 'i1', created: 350, text: 'a2'},
-              },
+              makeSourceChangeEdit(
+                {id: 'c1', issueID: 'i1', created: 350, text: 'a2'},
+                {id: 'c1', issueID: 'i1', created: 100, text: 'a'},
+              ),
             ],
             fetchOnPush: true,
           });
@@ -7309,11 +7290,10 @@ describe('take with partition', () => {
             ...base,
             limit: 2,
             pushes: [
-              {
-                type: 'edit',
-                oldRow: {id: 'c1', issueID: 'i1', created: 100, text: 'a'},
-                row: {id: 'c1', issueID: 'i2', created: 100, text: 'a2'},
-              },
+              makeSourceChangeEdit(
+                {id: 'c1', issueID: 'i2', created: 100, text: 'a2'},
+                {id: 'c1', issueID: 'i1', created: 100, text: 'a'},
+              ),
             ],
             fetchOnPush: true,
           });
@@ -8017,7 +7997,7 @@ describe('take limit 0 with related query', () => {
         },
         ast,
         format,
-        pushes: [['owner', {type: 'add', row: {id: 'o1', name: 'Alice'}}]],
+        pushes: [['owner', makeSourceChangeAdd({id: 'o1', name: 'Alice'})]],
       });
 
       expect(data).toEqual([]);

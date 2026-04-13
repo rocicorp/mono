@@ -7,6 +7,11 @@ import {
 } from './test/fetch-and-push-tests.ts';
 import type {Format} from './view.ts';
 
+import {
+  makeSourceChangeAdd,
+  makeSourceChangeEdit,
+  makeSourceChangeRemove,
+} from './source.ts';
 suite('push one:many', () => {
   const sources: Sources = {
     issue: {
@@ -59,7 +64,7 @@ suite('push one:many', () => {
       },
       ast,
       format,
-      pushes: [['issue', {type: 'remove', row: {id: 'i1'}}]],
+      pushes: [['issue', makeSourceChangeRemove({id: 'i1'})]],
     });
 
     expect(log).toMatchInlineSnapshot(`
@@ -123,7 +128,7 @@ suite('push one:many', () => {
       },
       ast,
       format,
-      pushes: [['comment', {type: 'remove', row: {id: 'c1', issueID: 'i1'}}]],
+      pushes: [['comment', makeSourceChangeRemove({id: 'c1', issueID: 'i1'})]],
     });
 
     expect(log).toMatchInlineSnapshot(`
@@ -164,7 +169,7 @@ suite('push one:many', () => {
       },
       ast,
       format,
-      pushes: [['issue', {type: 'add', row: {id: 'i1'}}]],
+      pushes: [['issue', makeSourceChangeAdd({id: 'i1'})]],
     });
 
     expect(log).toMatchInlineSnapshot(`
@@ -253,7 +258,7 @@ suite('push one:many', () => {
       },
       ast,
       format,
-      pushes: [['issue', {type: 'add', row: {id: 'i1'}}]],
+      pushes: [['issue', makeSourceChangeAdd({id: 'i1'})]],
     });
 
     expect(log).toMatchInlineSnapshot(`
@@ -351,7 +356,7 @@ suite('push one:many', () => {
       },
       ast,
       format,
-      pushes: [['issue', {type: 'add', row: {id: 'i2'}}]],
+      pushes: [['issue', makeSourceChangeAdd({id: 'i2'})]],
     });
 
     expect(log).toMatchInlineSnapshot(`
@@ -423,7 +428,7 @@ suite('push one:many', () => {
       },
       ast,
       format,
-      pushes: [['comment', {type: 'add', row: {id: 'c1', issueID: 'i1'}}]],
+      pushes: [['comment', makeSourceChangeAdd({id: 'c1', issueID: 'i1'})]],
     });
 
     expect(log).toMatchInlineSnapshot(`
@@ -517,7 +522,7 @@ suite('push one:many', () => {
       },
       ast,
       format,
-      pushes: [['comment', {type: 'add', row: {id: 'c1', issueID: 'i2'}}]],
+      pushes: [['comment', makeSourceChangeAdd({id: 'c1', issueID: 'i2'})]],
     });
 
     expect(log).toMatchInlineSnapshot(`
@@ -566,7 +571,7 @@ suite('push one:many', () => {
       },
       ast,
       format,
-      pushes: [['issue', {type: 'remove', row: {id: 'i1'}}]],
+      pushes: [['issue', makeSourceChangeRemove({id: 'i1'})]],
     });
 
     expect(log).toMatchInlineSnapshot(`
@@ -641,7 +646,7 @@ suite('push one:many', () => {
       },
       ast,
       format,
-      pushes: [['issue', {type: 'remove', row: {id: 'i1'}}]],
+      pushes: [['issue', makeSourceChangeRemove({id: 'i1'})]],
     });
 
     expect(log).toMatchInlineSnapshot(`
@@ -721,11 +726,11 @@ suite('push one:many', () => {
       ast,
       format,
       pushes: [
-        ['issue', {type: 'add', row: {id: 'i1'}}],
-        ['comment', {type: 'add', row: {id: 'c1', issueID: 'i1'}}],
-        ['comment', {type: 'add', row: {id: 'c2', issueID: 'i1'}}],
-        ['comment', {type: 'remove', row: {id: 'c1', issueID: 'i1'}}],
-        ['issue', {type: 'remove', row: {id: 'i1'}}],
+        ['issue', makeSourceChangeAdd({id: 'i1'})],
+        ['comment', makeSourceChangeAdd({id: 'c1', issueID: 'i1'})],
+        ['comment', makeSourceChangeAdd({id: 'c2', issueID: 'i1'})],
+        ['comment', makeSourceChangeRemove({id: 'c1', issueID: 'i1'})],
+        ['issue', makeSourceChangeRemove({id: 'i1'})],
       ],
     });
 
@@ -1031,11 +1036,10 @@ suite('push one:many', () => {
         pushes: [
           [
             'issue',
-            {
-              type: 'edit',
-              oldRow: {id: 'i1', text: 'issue 1'},
-              row: {id: 'i1', text: 'issue 1 edited'},
-            },
+            makeSourceChangeEdit(
+              {id: 'i1', text: 'issue 1 edited'},
+              {id: 'i1', text: 'issue 1'},
+            ),
           ],
         ],
       });
@@ -1130,11 +1134,10 @@ suite('push one:many', () => {
         pushes: [
           [
             'comment',
-            {
-              type: 'edit',
-              oldRow: {id: 'c1', issueID: 'i1', text: 'comment 1'},
-              row: {id: 'c1', issueID: 'i1', text: 'comment 1 edited'},
-            },
+            makeSourceChangeEdit(
+              {id: 'c1', issueID: 'i1', text: 'comment 1 edited'},
+              {id: 'c1', issueID: 'i1', text: 'comment 1'},
+            ),
           ],
         ],
       });
@@ -1264,11 +1267,10 @@ suite('push one:many', () => {
         pushes: [
           [
             'comment',
-            {
-              type: 'edit',
-              oldRow: {id: 'c1', issueID: 'i1', text: 'comment 1'},
-              row: {id: 'c1', issueID: 'i2', text: 'comment 1.2'},
-            },
+            makeSourceChangeEdit(
+              {id: 'c1', issueID: 'i2', text: 'comment 1.2'},
+              {id: 'c1', issueID: 'i1', text: 'comment 1'},
+            ),
           ],
         ],
       });
@@ -1455,11 +1457,10 @@ suite('push one:many', () => {
         pushes: [
           [
             'issue',
-            {
-              type: 'edit',
-              oldRow: {id: 'i1', text: 'issue 1'},
-              row: {id: 'i3', text: 'issue 1.3'},
-            },
+            makeSourceChangeEdit(
+              {id: 'i3', text: 'issue 1.3'},
+              {id: 'i1', text: 'issue 1'},
+            ),
           ],
         ],
       });
@@ -1663,7 +1664,7 @@ suite('push many:one', () => {
       },
       ast,
       format,
-      pushes: [['issue', {type: 'add', row: {id: 'i1', ownerID: 'u1'}}]],
+      pushes: [['issue', makeSourceChangeAdd({id: 'i1', ownerID: 'u1'})]],
     });
 
     expect(log).toMatchInlineSnapshot(`
@@ -1749,7 +1750,7 @@ suite('push many:one', () => {
       },
       ast,
       format,
-      pushes: [['issue', {type: 'add', row: {id: 'i1', ownerID: 'u2'}}]],
+      pushes: [['issue', makeSourceChangeAdd({id: 'i1', ownerID: 'u2'})]],
     });
 
     expect(log).toMatchInlineSnapshot(`
@@ -1825,7 +1826,7 @@ suite('push many:one', () => {
       },
       ast,
       format,
-      pushes: [['user', {type: 'add', row: {id: 'u1'}}]],
+      pushes: [['user', makeSourceChangeAdd({id: 'u1'})]],
     });
 
     expect(log).toMatchInlineSnapshot(`
@@ -1919,7 +1920,7 @@ suite('push many:one', () => {
       },
       ast,
       format,
-      pushes: [['user', {type: 'add', row: {id: 'u1'}}]],
+      pushes: [['user', makeSourceChangeAdd({id: 'u1'})]],
     });
 
     expect(log).toMatchInlineSnapshot(`
@@ -2079,11 +2080,10 @@ suite('push many:one', () => {
         pushes: [
           [
             'user',
-            {
-              type: 'edit',
-              row: {id: 'u1', text: 'user 1'},
-              oldRow: {id: 'u2', text: 'user 2'},
-            },
+            makeSourceChangeEdit(
+              {id: 'u1', text: 'user 1'},
+              {id: 'u2', text: 'user 2'},
+            ),
           ],
         ],
       });
@@ -2328,11 +2328,10 @@ suite('push many:one', () => {
         pushes: [
           [
             'issue',
-            {
-              type: 'edit',
-              row: {id: 'i2', ownerID: 'u1', text: 'item 2'},
-              oldRow: {id: 'i2', ownerID: 'u2', text: 'item 2'},
-            },
+            makeSourceChangeEdit(
+              {id: 'i2', ownerID: 'u1', text: 'item 2'},
+              {id: 'i2', ownerID: 'u2', text: 'item 2'},
+            ),
           ],
         ],
       });
@@ -2591,11 +2590,10 @@ suite('push many:one', () => {
         pushes: [
           [
             'user',
-            {
-              type: 'edit',
-              row: {id: 'u2', text: 'user 2 changed'},
-              oldRow: {id: 'u2', text: 'user 2'},
-            },
+            makeSourceChangeEdit(
+              {id: 'u2', text: 'user 2 changed'},
+              {id: 'u2', text: 'user 2'},
+            ),
           ],
         ],
       });
@@ -2665,11 +2663,10 @@ suite('push many:one', () => {
         pushes: [
           [
             'user',
-            {
-              type: 'edit',
-              row: {id: 'u1', text: 'user 1 changed'},
-              oldRow: {id: 'u1', text: 'user 1'},
-            },
+            makeSourceChangeEdit(
+              {id: 'u1', text: 'user 1 changed'},
+              {id: 'u1', text: 'user 1'},
+            ),
           ],
         ],
       });
@@ -2903,7 +2900,7 @@ suite('push one:many:many', () => {
       },
       ast,
       format,
-      pushes: [['revision', {type: 'add', row: {id: 'r1', commentID: 'c1'}}]],
+      pushes: [['revision', makeSourceChangeAdd({id: 'r1', commentID: 'c1'})]],
     });
 
     expect(log).toMatchInlineSnapshot(`
@@ -3049,7 +3046,7 @@ suite('push one:many:many', () => {
       },
       ast,
       format,
-      pushes: [['comment', {type: 'add', row: {id: 'c1', issueID: 'i1'}}]],
+      pushes: [['comment', makeSourceChangeAdd({id: 'c1', issueID: 'i1'})]],
     });
 
     expect(log).toMatchInlineSnapshot(`
@@ -3181,7 +3178,7 @@ suite('push one:many:many', () => {
       },
       ast,
       format,
-      pushes: [['issue', {type: 'add', row: {id: 'i1'}}]],
+      pushes: [['issue', makeSourceChangeAdd({id: 'i1'})]],
     });
 
     expect(log).toMatchInlineSnapshot(`
@@ -3303,7 +3300,7 @@ suite('push one:many:many', () => {
       },
       ast,
       format,
-      pushes: [['issue', {type: 'remove', row: {id: 'i1'}}]],
+      pushes: [['issue', makeSourceChangeRemove({id: 'i1'})]],
     });
 
     expect(log).toMatchInlineSnapshot(`
@@ -3476,7 +3473,7 @@ suite('push one:many:one', () => {
       },
       ast,
       format,
-      pushes: [['label', {type: 'add', row: {id: 'l1'}}]],
+      pushes: [['label', makeSourceChangeAdd({id: 'l1'})]],
     });
 
     expect(log).toMatchInlineSnapshot(`
@@ -3616,7 +3613,7 @@ suite('push one:many:one', () => {
       ast,
       format,
       pushes: [
-        ['issueLabel', {type: 'add', row: {issueID: 'i1', labelID: 'l1'}}],
+        ['issueLabel', makeSourceChangeAdd({issueID: 'i1', labelID: 'l1'})],
       ],
     });
 
@@ -3748,7 +3745,7 @@ suite('push one:many:one', () => {
       },
       ast,
       format,
-      pushes: [['label', {type: 'add', row: {id: 'l1'}}]],
+      pushes: [['label', makeSourceChangeAdd({id: 'l1'})]],
     });
 
     expect(log).toMatchInlineSnapshot(`
@@ -4061,21 +4058,20 @@ describe('edit assignee', () => {
       pushes: [
         [
           'issue',
-          {
-            type: 'edit',
-            oldRow: {
-              issueID: 'i1',
-              text: 'first issue',
-              assigneeID: undefined,
-              creatorID: 'u1',
-            },
-            row: {
+          makeSourceChangeEdit(
+            {
               issueID: 'i1',
               text: 'first issue',
               assigneeID: 'u1',
               creatorID: 'u1',
             },
-          },
+            {
+              issueID: 'i1',
+              text: 'first issue',
+              assigneeID: undefined,
+              creatorID: 'u1',
+            },
+          ),
         ],
       ],
       format,
@@ -4372,21 +4368,20 @@ describe('edit assignee', () => {
       pushes: [
         [
           'issue',
-          {
-            type: 'edit',
-            oldRow: {
-              issueID: 'i1',
-              text: 'first issue',
-              assigneeID: undefined,
-              creatorID: 'u1',
-            },
-            row: {
+          makeSourceChangeEdit(
+            {
               issueID: 'i1',
               text: 'first issue',
               assigneeID: 'u1',
               creatorID: 'u1',
             },
-          },
+            {
+              issueID: 'i1',
+              text: 'first issue',
+              assigneeID: undefined,
+              creatorID: 'u1',
+            },
+          ),
         ],
       ],
       format,
@@ -4677,21 +4672,20 @@ describe('edit assignee', () => {
       pushes: [
         [
           'issue',
-          {
-            type: 'edit',
-            oldRow: {
-              issueID: 'i1',
-              text: 'first issue',
-              assigneeID: 'u1',
-              creatorID: 'u1',
-            },
-            row: {
+          makeSourceChangeEdit(
+            {
               issueID: 'i1',
               text: 'first issue',
               assigneeID: undefined,
               creatorID: 'u1',
             },
-          },
+            {
+              issueID: 'i1',
+              text: 'first issue',
+              assigneeID: 'u1',
+              creatorID: 'u1',
+            },
+          ),
         ],
       ],
       format,
@@ -4983,21 +4977,20 @@ describe('edit assignee', () => {
       pushes: [
         [
           'issue',
-          {
-            type: 'edit',
-            oldRow: {
-              issueID: 'i1',
-              text: 'first issue',
-              assigneeID: 'u1',
-              creatorID: 'u1',
-            },
-            row: {
+          makeSourceChangeEdit(
+            {
               issueID: 'i1',
               text: 'first issue',
               assigneeID: undefined,
               creatorID: 'u1',
             },
-          },
+            {
+              issueID: 'i1',
+              text: 'first issue',
+              assigneeID: 'u1',
+              creatorID: 'u1',
+            },
+          ),
         ],
       ],
       format,
@@ -5327,20 +5320,8 @@ describe('joins with compound join keys', () => {
       sourceContents,
       ast,
       pushes: [
-        [
-          'a',
-          {
-            type: 'add',
-            row: {id: 2, a1: 7, a2: 8, a3: 9},
-          },
-        ],
-        [
-          'b',
-          {
-            type: 'add',
-            row: {id: 2, b1: 8, b2: 7, b3: 9},
-          },
-        ],
+        ['a', makeSourceChangeAdd({id: 2, a1: 7, a2: 8, a3: 9})],
+        ['b', makeSourceChangeAdd({id: 2, b1: 8, b2: 7, b3: 9})],
       ],
       format,
     });
@@ -5538,11 +5519,10 @@ describe('joins with compound join keys', () => {
       pushes: [
         [
           'a',
-          {
-            type: 'edit',
-            oldRow: {id: 0, a1: 1, a2: 2, a3: 3},
-            row: {id: 0, a1: 1, a2: 2, a3: 33},
-          },
+          makeSourceChangeEdit(
+            {id: 0, a1: 1, a2: 2, a3: 33},
+            {id: 0, a1: 1, a2: 2, a3: 3},
+          ),
         ],
       ],
       format,
@@ -5713,7 +5693,7 @@ suite('test overlay on many:one pushes', () => {
       },
       ast,
       format,
-      pushes: [['user', {type: 'add', row: {id: 'u1', name: 'Aaron'}}]],
+      pushes: [['user', makeSourceChangeAdd({id: 'u1', name: 'Aaron'})]],
       fetchOnPush: true,
     });
 
@@ -6022,7 +6002,7 @@ suite('test overlay on many:one pushes', () => {
       },
       ast,
       format,
-      pushes: [['user', {type: 'remove', row: {id: 'u1', name: 'Aaron'}}]],
+      pushes: [['user', makeSourceChangeRemove({id: 'u1', name: 'Aaron'})]],
       fetchOnPush: true,
     });
 
@@ -6310,11 +6290,10 @@ suite('test overlay on many:one pushes', () => {
       pushes: [
         [
           'user',
-          {
-            type: 'edit',
-            oldRow: {id: 'u1', name: 'Aaron'},
-            row: {id: 'u1', name: 'Boogs'},
-          },
+          makeSourceChangeEdit(
+            {id: 'u1', name: 'Boogs'},
+            {id: 'u1', name: 'Aaron'},
+          ),
         ],
       ],
       fetchOnPush: true,
@@ -6720,11 +6699,10 @@ suite('test overlay on many:one pushes', () => {
       pushes: [
         [
           'state',
-          {
-            type: 'edit',
-            oldRow: {id: 's0', name: 'Hawaii'},
-            row: {id: 's0', name: 'HI'},
-          },
+          makeSourceChangeEdit(
+            {id: 's0', name: 'HI'},
+            {id: 's0', name: 'Hawaii'},
+          ),
         ],
       ],
       fetchOnPush: true,
@@ -7499,7 +7477,9 @@ suite('test overlay on many:many (no junction) pushes', () => {
       },
       ast,
       format,
-      pushes: [['user', {type: 'add', row: {id: 'u2', name: 'Aaron', num: 2}}]],
+      pushes: [
+        ['user', makeSourceChangeAdd({id: 'u2', name: 'Aaron', num: 2})],
+      ],
       fetchOnPush: true,
     });
 
@@ -7924,7 +7904,7 @@ suite('test overlay on many:many (no junction) pushes', () => {
       ast,
       format,
       pushes: [
-        ['user', {type: 'remove', row: {id: 'u2', name: 'Aaron', num: 2}}],
+        ['user', makeSourceChangeRemove({id: 'u2', name: 'Aaron', num: 2})],
       ],
       fetchOnPush: true,
     });
@@ -8324,11 +8304,10 @@ suite('test overlay on many:many (no junction) pushes', () => {
       pushes: [
         [
           'user',
-          {
-            type: 'edit',
-            oldRow: {id: 'u2', name: 'Aaron', num: 2},
-            row: {id: 'u2', name: 'Aaron', num: 5},
-          },
+          makeSourceChangeEdit(
+            {id: 'u2', name: 'Aaron', num: 5},
+            {id: 'u2', name: 'Aaron', num: 2},
+          ),
         ],
       ],
       fetchOnPush: true,
@@ -8854,11 +8833,10 @@ suite('test overlay on many:many (no junction) pushes', () => {
       pushes: [
         [
           'state',
-          {
-            type: 'edit',
-            oldRow: {id: 's0', name: 'Hawaii'},
-            row: {id: 's0', name: 'HI'},
-          },
+          makeSourceChangeEdit(
+            {id: 's0', name: 'HI'},
+            {id: 's0', name: 'Hawaii'},
+          ),
         ],
       ],
       fetchOnPush: true,

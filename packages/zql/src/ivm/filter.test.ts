@@ -8,6 +8,11 @@ import {Filter} from './filter.ts';
 import {consume} from './stream.ts';
 import {createSource} from './test/source-factory.ts';
 
+import {
+  makeSourceChangeAdd,
+  makeSourceChangeEdit,
+  makeSourceChangeRemove,
+} from './source.ts';
 const lc = createSilentLogContext();
 const mockDelegate = {
   addEdge() {},
@@ -21,9 +26,9 @@ test('basics', () => {
     {a: {type: 'number'}, b: {type: 'string'}},
     ['a'],
   );
-  consume(ms.push({type: 'add', row: {a: 3, b: 'foo'}}));
-  consume(ms.push({type: 'add', row: {a: 2, b: 'bar'}}));
-  consume(ms.push({type: 'add', row: {a: 1, b: 'foo'}}));
+  consume(ms.push(makeSourceChangeAdd({a: 3, b: 'foo'})));
+  consume(ms.push(makeSourceChangeAdd({a: 2, b: 'bar'})));
+  consume(ms.push(makeSourceChangeAdd({a: 1, b: 'foo'})));
 
   const connector = ms.connect([['a', 'asc']]);
   const filter = buildFilterPipeline(
@@ -52,10 +57,10 @@ test('basics', () => {
       },
     ]
   `);
-  consume(ms.push({type: 'add', row: {a: 4, b: 'bar'}}));
-  consume(ms.push({type: 'add', row: {a: 5, b: 'foo'}}));
-  consume(ms.push({type: 'remove', row: {a: 3, b: 'foo'}}));
-  consume(ms.push({type: 'remove', row: {a: 2, b: 'bar'}}));
+  consume(ms.push(makeSourceChangeAdd({a: 4, b: 'bar'})));
+  consume(ms.push(makeSourceChangeAdd({a: 5, b: 'foo'})));
+  consume(ms.push(makeSourceChangeRemove({a: 3, b: 'foo'})));
+  consume(ms.push(makeSourceChangeRemove({a: 2, b: 'bar'})));
 
   expect(out.pushes).toMatchInlineSnapshot(`
     [
@@ -96,7 +101,7 @@ test('edit', () => {
     {a: 2, x: 2},
     {a: 3, x: 3},
   ]) {
-    consume(ms.push({type: 'add', row}));
+    consume(ms.push(makeSourceChangeAdd(row)));
   }
 
   const connector = ms.connect([['a', 'asc']]);
@@ -119,8 +124,8 @@ test('edit', () => {
     ]
   `);
 
-  consume(ms.push({type: 'add', row: {a: 4, x: 4}}));
-  consume(ms.push({type: 'edit', oldRow: {a: 3, x: 3}, row: {a: 3, x: 6}}));
+  consume(ms.push(makeSourceChangeAdd({a: 4, x: 4})));
+  consume(ms.push(makeSourceChangeEdit({a: 3, x: 6}, {a: 3, x: 3})));
 
   expect(out.pushes).toMatchInlineSnapshot(`
     [
@@ -173,7 +178,7 @@ test('edit', () => {
   `);
 
   out.pushes.length = 0;
-  consume(ms.push({type: 'edit', oldRow: {a: 3, x: 6}, row: {a: 3, x: 5}}));
+  consume(ms.push(makeSourceChangeEdit({a: 3, x: 5}, {a: 3, x: 6})));
   expect(out.pushes).toMatchInlineSnapshot(`
     [
       {
@@ -208,7 +213,7 @@ test('edit', () => {
   `);
 
   out.pushes.length = 0;
-  consume(ms.push({type: 'edit', oldRow: {a: 3, x: 5}, row: {a: 3, x: 7}}));
+  consume(ms.push(makeSourceChangeEdit({a: 3, x: 7}, {a: 3, x: 5})));
   expect(out.pushes).toMatchInlineSnapshot(`[]`);
   expect(out.fetch({})).toMatchInlineSnapshot(`
     [
@@ -230,7 +235,7 @@ test('edit', () => {
   `);
 
   out.pushes.length = 0;
-  consume(ms.push({type: 'edit', oldRow: {a: 2, x: 2}, row: {a: 2, x: 4}}));
+  consume(ms.push(makeSourceChangeEdit({a: 2, x: 4}, {a: 2, x: 2})));
   expect(out.pushes).toMatchInlineSnapshot(`
     [
       {

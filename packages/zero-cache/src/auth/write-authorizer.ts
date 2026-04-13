@@ -46,6 +46,11 @@ import type {LiteAndZqlSpec} from '../db/specs.ts';
 import {StatementRunner} from '../db/statements.ts';
 import {mapLiteDataTypeToZqlSchemaValue} from '../types/lite.ts';
 import {
+  makeSourceChangeAdd,
+  makeSourceChangeEdit,
+  makeSourceChangeRemove,
+} from '../../../zql/src/ivm/source.ts';
+import {
   getSchema,
   reloadPermissionsIfChanged,
   type LoadedPermissions,
@@ -165,12 +170,7 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
         const source = this.#getSource(op.tableName);
         switch (op.op) {
           case 'insert': {
-            consume(
-              source.push({
-                type: 'add',
-                row: op.value,
-              }),
-            );
+            consume(source.push(makeSourceChangeAdd(op.value)));
             break;
           }
           // TODO(mlaw): what if someone updates the same thing twice?
@@ -180,20 +180,17 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
           // pushed in.
           case 'update': {
             consume(
-              source.push({
-                type: 'edit',
-                oldRow: this.#requirePreMutationRow(op),
-                row: op.value,
-              }),
+              source.push(
+                makeSourceChangeEdit(op.value, this.#requirePreMutationRow(op)),
+              ),
             );
             break;
           }
           case 'delete': {
             consume(
-              source.push({
-                type: 'remove',
-                row: this.#requirePreMutationRow(op),
-              }),
+              source.push(
+                makeSourceChangeRemove(this.#requirePreMutationRow(op)),
+              ),
             );
             break;
           }

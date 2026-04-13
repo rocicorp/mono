@@ -13,9 +13,15 @@ import {FlippedJoin} from './flipped-join.ts';
 import {Join} from './join.ts';
 import {MemorySource} from './memory-source.ts';
 import {MemoryStorage} from './memory-storage.ts';
-import type {InputBase, FetchRequest} from './operator.ts';
+import type {FetchRequest, InputBase} from './operator.ts';
 import {Skip} from './skip.ts';
-import type {SourceChange, SourceInput} from './source.ts';
+import {
+  makeSourceChangeAdd,
+  makeSourceChangeEdit,
+  makeSourceChangeRemove,
+  type SourceChange,
+  type SourceInput,
+} from './source.ts';
 import type {Stream} from './stream.ts';
 import {consume} from './stream.ts';
 import {Take} from './take.ts';
@@ -101,19 +107,15 @@ function collectPush(
 }
 
 function makeAdd(id: string): SourceChange {
-  return {type: 'add', row: {id}};
+  return makeSourceChangeAdd({id});
 }
 
 function makeRemove(id: string): SourceChange {
-  return {type: 'remove', row: {id}};
+  return makeSourceChangeRemove({id});
 }
 
 function makeEdit(id: string, oldId: string): SourceChange {
-  return {
-    type: 'edit',
-    row: {id},
-    oldRow: {id: oldId},
-  };
+  return makeSourceChangeEdit({id}, {id: oldId});
 }
 
 describe('Yield Propagation (Push)', () => {
@@ -292,8 +294,8 @@ describe('Yield Propagation (Push)', () => {
 
       // Initialize data
       consume(parent.push(makeAdd('1')));
-      consume(child.push({type: 'add', row: {id: 'c1', parentId: '1'}}));
-      consume(child.push({type: 'add', row: {id: 'c2', parentId: '2'}}));
+      consume(child.push(makeSourceChangeAdd({id: 'c1', parentId: '1'})));
+      consume(child.push(makeSourceChangeAdd({id: 'c2', parentId: '2'})));
 
       const join = new Join({
         parent: parent.connect([['id', 'asc']]),
@@ -340,10 +342,7 @@ describe('Yield Propagation (Push)', () => {
       // Push to child with parentId='1' which matches the existing parent.
       // Join fetches from parent. Parent has 1 matching node, so fetch yields 2 (1 before node + 1 at end).
       expect(
-        collectPush(child, {
-          type: 'add',
-          row: {id: 'c1', parentId: '1'},
-        }),
+        collectPush(child, makeSourceChangeAdd({id: 'c1', parentId: '1'})),
       ).toEqual(['yield', 'yield']);
     });
 
@@ -371,10 +370,7 @@ describe('Yield Propagation (Push)', () => {
 
       // Push to child with matching parent. YieldOutput yields.
       expect(
-        collectPush(child, {
-          type: 'add',
-          row: {id: 'c1', parentId: '1'},
-        }),
+        collectPush(child, makeSourceChangeAdd({id: 'c1', parentId: '1'})),
       ).toEqual(['yield', 'yield']);
     });
   });
@@ -388,7 +384,7 @@ describe('Yield Propagation (Push)', () => {
 
       // Initialize data
       consume(parent.push(makeAdd('1')));
-      consume(child.push({type: 'add', row: {id: 'c1', parentId: '1'}}));
+      consume(child.push(makeSourceChangeAdd({id: 'c1', parentId: '1'})));
 
       const flippedJoin = new FlippedJoin({
         parent: parent.connect([['id', 'asc']]),
@@ -407,7 +403,7 @@ describe('Yield Propagation (Push)', () => {
       // Push child with parentId='1' which matches the existing parent.
       // Parent fetch yields 2 (1 before node + 1 at end).
       expect(
-        collectPush(child, {type: 'add', row: {id: 'c2', parentId: '1'}}),
+        collectPush(child, makeSourceChangeAdd({id: 'c2', parentId: '1'})),
       ).toEqual(['yield', 'yield']);
     });
 
@@ -417,7 +413,7 @@ describe('Yield Propagation (Push)', () => {
       const child = new YieldMemorySource(CHILD_SCHEMA);
       child.yieldOnFetch = true;
 
-      consume(child.push({type: 'add', row: {id: 'c1', parentId: '1'}}));
+      consume(child.push(makeSourceChangeAdd({id: 'c1', parentId: '1'})));
 
       const flippedJoin = new FlippedJoin({
         parent: parent.connect([['id', 'asc']]),
@@ -444,7 +440,7 @@ describe('Yield Propagation (Push)', () => {
       child.yieldOnFetch = false;
 
       // Initialize child with matching data
-      consume(child.push({type: 'add', row: {id: 'c1', parentId: '1'}}));
+      consume(child.push(makeSourceChangeAdd({id: 'c1', parentId: '1'})));
 
       const flippedJoin = new FlippedJoin({
         parent: parent.connect([['id', 'asc']]),
@@ -471,7 +467,7 @@ describe('Yield Propagation (Push)', () => {
       const child = new YieldMemorySource(CHILD_SCHEMA);
       child.yieldOnFetch = false;
 
-      consume(child.push({type: 'add', row: {id: 'c1', parentId: '1'}}));
+      consume(child.push(makeSourceChangeAdd({id: 'c1', parentId: '1'})));
 
       const join = new Join({
         parent: parent.connect([['id', 'asc']]),
@@ -499,8 +495,8 @@ describe('Yield Propagation (Push)', () => {
       const child = new YieldMemorySource(CHILD_SCHEMA);
       child.yieldOnFetch = true;
 
-      consume(child.push({type: 'add', row: {id: 'c1', parentId: '1'}}));
-      consume(child.push({type: 'add', row: {id: 'c2', parentId: '1'}}));
+      consume(child.push(makeSourceChangeAdd({id: 'c1', parentId: '1'})));
+      consume(child.push(makeSourceChangeAdd({id: 'c2', parentId: '1'})));
 
       const join = new Join({
         parent: parent.connect([['id', 'asc']]),

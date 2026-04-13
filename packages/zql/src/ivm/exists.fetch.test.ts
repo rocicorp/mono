@@ -17,6 +17,7 @@ import {Snitch, type SnitchMessage} from './snitch.ts';
 import {consume} from './stream.ts';
 import {createSource} from './test/source-factory.ts';
 
+import {makeSourceChangeAdd} from './source.ts';
 const base = {
   columns: [
     {id: {type: 'string'}},
@@ -1564,7 +1565,7 @@ function fetchTest(t: FetchTest, reverse: boolean = false): FetchTestResults {
       t.primaryKeys[i],
     );
     for (const row of rows) {
-      consume(source.push({type: 'add', row}));
+      consume(source.push(makeSourceChangeAdd(row)));
     }
     const snitch = new Snitch(source.connect(ordering), String(i), log);
     return {

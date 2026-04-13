@@ -7,6 +7,11 @@ import {
 } from './test/fetch-and-push-tests.ts';
 import type {Format} from './view.ts';
 
+import {
+  makeSourceChangeAdd,
+  makeSourceChangeEdit,
+  makeSourceChangeRemove,
+} from './source.ts';
 const sources: Sources = {
   issue: {
     columns: {
@@ -147,15 +152,7 @@ suite('EXISTS 1 to many', () => {
       sourceContents,
       ast,
       format,
-      pushes: [
-        [
-          'issue',
-          {
-            type: 'remove',
-            row: {id: 'i1', title: 'issue 1'},
-          },
-        ],
-      ],
+      pushes: [['issue', makeSourceChangeRemove({id: 'i1', title: 'issue 1'})]],
     });
 
     expect(data).toMatchInlineSnapshot(`
@@ -633,15 +630,7 @@ suite('EXISTS', () => {
       sources,
       sourceContents,
       ast,
-      pushes: [
-        [
-          'issue',
-          {
-            type: 'add',
-            row: {id: 'i5', text: 'fifth issue'},
-          },
-        ],
-      ],
+      pushes: [['issue', makeSourceChangeAdd({id: 'i5', text: 'fifth issue'})]],
       format,
     });
 
@@ -697,18 +686,9 @@ suite('EXISTS', () => {
       pushes: [
         [
           'comment',
-          {
-            type: 'add',
-            row: {id: 'c4', issueID: 'i5', text: 'i2 c54 text'},
-          },
+          makeSourceChangeAdd({id: 'c4', issueID: 'i5', text: 'i2 c54 text'}),
         ],
-        [
-          'issue',
-          {
-            type: 'add',
-            row: {id: 'i5', text: 'fifth issue'},
-          },
-        ],
+        ['issue', makeSourceChangeAdd({id: 'i5', text: 'fifth issue'})],
       ],
       format,
     });
@@ -813,13 +793,7 @@ suite('EXISTS', () => {
       sourceContents,
       ast,
       pushes: [
-        [
-          'issue',
-          {
-            type: 'remove',
-            row: {id: 'i2', text: 'first issue'},
-          },
-        ],
+        ['issue', makeSourceChangeRemove({id: 'i2', text: 'first issue'})],
       ],
       format,
     });
@@ -874,13 +848,7 @@ suite('EXISTS', () => {
       sourceContents,
       ast,
       pushes: [
-        [
-          'issue',
-          {
-            type: 'remove',
-            row: {id: 'i1', text: 'first issue'},
-          },
-        ],
+        ['issue', makeSourceChangeRemove({id: 'i1', text: 'first issue'})],
       ],
       format,
     });
@@ -961,11 +929,10 @@ suite('EXISTS', () => {
       pushes: [
         [
           'issue',
-          {
-            type: 'edit',
-            oldRow: {id: 'i2', text: 'second issue'},
-            row: {id: 'i2', text: 'second issue v2'},
-          },
+          makeSourceChangeEdit(
+            {id: 'i2', text: 'second issue v2'},
+            {id: 'i2', text: 'second issue'},
+          ),
         ],
       ],
       format,
@@ -1023,11 +990,10 @@ suite('EXISTS', () => {
       pushes: [
         [
           'issue',
-          {
-            type: 'edit',
-            oldRow: {id: 'i1', text: 'first issue'},
-            row: {id: 'i1', text: 'first issue v2'},
-          },
+          makeSourceChangeEdit(
+            {id: 'i1', text: 'first issue v2'},
+            {id: 'i1', text: 'first issue'},
+          ),
         ],
       ],
       format,
@@ -1116,10 +1082,7 @@ suite('EXISTS', () => {
       pushes: [
         [
           'comment',
-          {
-            type: 'add',
-            row: {id: 'c4', issueID: 'i2', text: 'i2 c4 text'},
-          },
+          makeSourceChangeAdd({id: 'c4', issueID: 'i2', text: 'i2 c4 text'}),
         ],
       ],
       format,
@@ -1227,10 +1190,7 @@ suite('EXISTS', () => {
       pushes: [
         [
           'comment',
-          {
-            type: 'add',
-            row: {id: 'c4', issueID: 'i1', text: 'i1 c4 text'},
-          },
+          makeSourceChangeAdd({id: 'c4', issueID: 'i1', text: 'i1 c4 text'}),
         ],
       ],
       format,
@@ -1339,10 +1299,7 @@ suite('EXISTS', () => {
       pushes: [
         [
           'comment',
-          {
-            type: 'remove',
-            row: {id: 'c1', issueID: 'i1', text: 'i1 c1 text'},
-          },
+          makeSourceChangeRemove({id: 'c1', issueID: 'i1', text: 'i1 c1 text'}),
         ],
       ],
       format,
@@ -1424,10 +1381,7 @@ suite('EXISTS', () => {
       pushes: [
         [
           'comment',
-          {
-            type: 'remove',
-            row: {id: 'c3', issueID: 'i3', text: 'i3 c3 text'},
-          },
+          makeSourceChangeRemove({id: 'c3', issueID: 'i3', text: 'i3 c3 text'}),
         ],
       ],
       format,
@@ -1524,11 +1478,10 @@ suite('EXISTS', () => {
       pushes: [
         [
           'comment',
-          {
-            type: 'edit',
-            oldRow: {id: 'c3', issueID: 'i3', text: 'i3 c3 text'},
-            row: {id: 'c3', issueID: 'i3', text: 'i3 c3 text v2'},
-          },
+          makeSourceChangeEdit(
+            {id: 'c3', issueID: 'i3', text: 'i3 c3 text v2'},
+            {id: 'c3', issueID: 'i3', text: 'i3 c3 text'},
+          ),
         ],
       ],
       format,
@@ -1638,11 +1591,10 @@ suite('EXISTS', () => {
       pushes: [
         [
           'comment',
-          {
-            type: 'edit',
-            oldRow: {id: 'c1', issueID: 'i1', text: 'i1 c1 text'},
-            row: {id: 'c1', issueID: 'i2', text: 'i2 c1 text'},
-          },
+          makeSourceChangeEdit(
+            {id: 'c1', issueID: 'i2', text: 'i2 c1 text'},
+            {id: 'c1', issueID: 'i1', text: 'i1 c1 text'},
+          ),
         ],
       ],
       format,

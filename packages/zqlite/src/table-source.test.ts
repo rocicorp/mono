@@ -19,6 +19,11 @@ import {Database, Statement} from './db.ts';
 import {format} from './internal/sql.ts';
 import {filtersToSQL} from './query-builder.ts';
 import {
+  makeSourceChangeAdd,
+  makeSourceChangeEdit,
+  makeSourceChangeRemove,
+} from '../../zql/src/ivm/source.ts';
+import {
   fromSQLiteTypes,
   TableSource,
   UnsupportedValueError,
@@ -353,10 +358,9 @@ test('pushing values does the correct writes and outputs', () => {
      * 4. add a row that already exists throws
      */
     consume(
-      source.push({
-        type: 'add',
-        row: {a: 1, b: 2.123, c: false, d: 'json string'},
-      }),
+      source.push(
+        makeSourceChangeAdd({a: 1, b: 2.123, c: false, d: 'json string'}),
+      ),
     );
 
     expect(outputted.shift()).toEqual(
@@ -372,12 +376,7 @@ test('pushing values does the correct writes and outputs', () => {
     );
     expect(read.all()).toEqual([{a: 1, b: 2.123, c: 0, d: '"json string"'}]);
 
-    consume(
-      source.push({
-        type: 'remove',
-        row: {a: 1, b: 2.123},
-      }),
-    );
+    consume(source.push(makeSourceChangeRemove({a: 1, b: 2.123})));
 
     expect(outputted.shift()).toEqual(
       makeRemoveChange({
@@ -391,21 +390,11 @@ test('pushing values does the correct writes and outputs', () => {
     expect(read.all()).toEqual([]);
 
     expect(() => {
-      consume(
-        source.push({
-          type: 'remove',
-          row: {a: 1, b: 2.123},
-        }),
-      );
+      consume(source.push(makeSourceChangeRemove({a: 1, b: 2.123})));
     }).toThrow();
     expect(read.all()).toEqual([]);
 
-    consume(
-      source.push({
-        type: 'add',
-        row: {a: 1, b: 2.123, c: true, d: {}},
-      }),
-    );
+    consume(source.push(makeSourceChangeAdd({a: 1, b: 2.123, c: true, d: {}})));
 
     expect(outputted.shift()).toEqual(
       makeAddChange({
@@ -422,24 +411,20 @@ test('pushing values does the correct writes and outputs', () => {
 
     expect(() => {
       consume(
-        source.push({
-          type: 'add',
-          row: {a: 1, b: 2.123, c: true, d: null},
-        }),
+        source.push(makeSourceChangeAdd({a: 1, b: 2.123, c: true, d: null})),
       );
     }).toThrow();
 
     // bigint rows
     consume(
-      source.push({
-        type: 'add',
-        row: {
+      source.push(
+        makeSourceChangeAdd({
           a: BigInt(Number.MAX_SAFE_INTEGER),
           b: 3.456,
           c: true,
           d: [],
-        } as unknown as Row,
-      }),
+        } as unknown as Row),
+      ),
     );
 
     expect(outputted.shift()).toEqual(
@@ -461,28 +446,26 @@ test('pushing values does the correct writes and outputs', () => {
     ]);
 
     consume(
-      source.push({
-        type: 'add',
-        row: {
+      source.push(
+        makeSourceChangeAdd({
           a: BigInt(Number.MAX_SAFE_INTEGER) + 1n,
           b: 0,
           c: true,
           d: true,
-        } as unknown as Row,
-      }),
+        } as unknown as Row),
+      ),
     );
     outputted.shift();
 
     consume(
-      source.push({
-        type: 'add',
-        row: {
+      source.push(
+        makeSourceChangeAdd({
           a: 0,
           b: BigInt(Number.MIN_SAFE_INTEGER) - 1n,
           c: true,
           d: false,
-        } as unknown as Row,
-      }),
+        } as unknown as Row),
+      ),
     );
     outputted.shift();
 
@@ -506,36 +489,35 @@ test('pushing values does the correct writes and outputs', () => {
     read.safeIntegers(false);
 
     consume(
-      source.push({
-        type: 'remove',
-        row: {
+      source.push(
+        makeSourceChangeRemove({
           a: BigInt(Number.MAX_SAFE_INTEGER) + 1n,
           b: 0,
           c: true,
-        } as unknown as Row,
-      }),
+        } as unknown as Row),
+      ),
     );
     outputted.shift();
 
     consume(
-      source.push({
-        type: 'remove',
-        row: {
+      source.push(
+        makeSourceChangeRemove({
           a: 0,
           b: BigInt(Number.MIN_SAFE_INTEGER) - 1n,
           c: true,
-        } as unknown as Row,
-      }),
+        } as unknown as Row),
+      ),
     );
     outputted.shift();
 
     // edit changes
     consume(
-      source.push({
-        type: 'edit',
-        row: {a: 1, b: 2.123, c: false, d: {a: true}} as unknown as Row,
-        oldRow: {a: 1, b: 2.123, c: true, d: {}} as unknown as Row,
-      }),
+      source.push(
+        makeSourceChangeEdit(
+          {a: 1, b: 2.123, c: false, d: {a: true}} as unknown as Row,
+          {a: 1, b: 2.123, c: true, d: {}} as unknown as Row,
+        ),
+      ),
     );
 
     expect(outputted.shift()).toEqual(
@@ -552,11 +534,12 @@ test('pushing values does the correct writes and outputs', () => {
 
     // edit pk should fall back to remove and insert
     consume(
-      source.push({
-        type: 'edit',
-        oldRow: {a: 1, b: 2.123, c: false, d: {a: true}},
-        row: {a: 1, b: 3, c: false, d: {a: true}},
-      }),
+      source.push(
+        makeSourceChangeEdit(
+          {a: 1, b: 3, c: false, d: {a: true}},
+          {a: 1, b: 2.123, c: false, d: {a: true}},
+        ),
+      ),
     );
     expect(outputted.shift()).toEqual(
       makeEditChange(
@@ -575,11 +558,12 @@ test('pushing values does the correct writes and outputs', () => {
     // non existing old row
     expect(() => {
       consume(
-        source.push({
-          type: 'edit',
-          row: {a: 11, b: 2.123, c: 0},
-          oldRow: {a: 12, b: 2.123, c: 1},
-        }),
+        source.push(
+          makeSourceChangeEdit(
+            {a: 11, b: 2.123, c: 0},
+            {a: 12, b: 2.123, c: 1},
+          ),
+        ),
       );
     }).toThrow('Row not found');
   }

@@ -7,6 +7,7 @@ import {
 } from './test/fetch-and-push-tests.ts';
 import type {Format} from './view.ts';
 
+import {makeSourceChangeAdd} from './source.ts';
 const sources: Sources = {
   issue: {
     columns: {
@@ -85,10 +86,7 @@ test('child change, parent is within bound', () => {
     pushes: [
       [
         'comment',
-        {
-          type: 'add',
-          row: {id: 'c3', issueID: 'i2', text: 'i2 c3 text'},
-        },
+        makeSourceChangeAdd({id: 'c3', issueID: 'i2', text: 'i2 c3 text'}),
       ],
     ],
     format,
@@ -196,10 +194,7 @@ test('child change, parent is after bound', () => {
     pushes: [
       [
         'comment',
-        {
-          type: 'add',
-          row: {id: 'c3', issueID: 'i3', text: 'i3 c3 text'},
-        },
+        makeSourceChangeAdd({id: 'c3', issueID: 'i3', text: 'i3 c3 text'}),
       ],
     ],
     format,

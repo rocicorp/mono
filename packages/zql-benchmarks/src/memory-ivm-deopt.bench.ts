@@ -19,6 +19,11 @@ import {Filter} from '../../zql/src/ivm/filter.ts';
 import {Join} from '../../zql/src/ivm/join.ts';
 import {MemorySource} from '../../zql/src/ivm/memory-source.ts';
 
+import {
+  makeSourceChangeAdd,
+  makeSourceChangeEdit,
+  makeSourceChangeRemove,
+} from '../../zql/src/ivm/source.ts';
 const noopDelegate = {addEdge() {}} as unknown as BuilderDelegate;
 
 // ---- Schema definitions ----
@@ -92,7 +97,7 @@ describe('MemorySource fetch', () => {
   bench(`scan ${ISSUE_COUNT} rows, sort 1 key`, function* () {
     const src = new MemorySource('issue', issueColumns, ['id']);
     for (let i = 0; i < ISSUE_COUNT; i++) {
-      for (const _ of src.push({type: 'add', row: makeIssueRow(i)})) {
+      for (const _ of src.push(makeSourceChangeAdd(makeIssueRow(i)))) {
         /* consume */
       }
     }
@@ -107,7 +112,7 @@ describe('MemorySource fetch', () => {
   bench(`scan ${ISSUE_COUNT} rows, sort 2 keys`, function* () {
     const src = new MemorySource('issue', issueColumns, ['id']);
     for (let i = 0; i < ISSUE_COUNT; i++) {
-      for (const _ of src.push({type: 'add', row: makeIssueRow(i)})) {
+      for (const _ of src.push(makeSourceChangeAdd(makeIssueRow(i)))) {
         /* consume */
       }
     }
@@ -125,7 +130,7 @@ describe('MemorySource fetch', () => {
   bench(`scan ${ISSUE_COUNT} rows, sort 4 keys`, function* () {
     const src = new MemorySource('issue', issueColumns, ['id']);
     for (let i = 0; i < ISSUE_COUNT; i++) {
-      for (const _ of src.push({type: 'add', row: makeIssueRow(i)})) {
+      for (const _ of src.push(makeSourceChangeAdd(makeIssueRow(i)))) {
         /* consume */
       }
     }
@@ -149,7 +154,7 @@ describe('MemorySource push', () => {
   bench(`add/remove over ${ISSUE_COUNT} rows, sort 1 key`, function* () {
     const src = new MemorySource('issue', issueColumns, ['id']);
     for (let i = 0; i < ISSUE_COUNT; i++) {
-      for (const _ of src.push({type: 'add', row: makeIssueRow(i)})) {
+      for (const _ of src.push(makeSourceChangeAdd(makeIssueRow(i)))) {
         /* consume */
       }
     }
@@ -159,10 +164,10 @@ describe('MemorySource push', () => {
     let idx = ISSUE_COUNT;
     yield () => {
       const row = makeIssueRow(idx++);
-      for (const _ of src.push({type: 'add', row})) {
+      for (const _ of src.push(makeSourceChangeAdd(row))) {
         /* consume */
       }
-      for (const _ of src.push({type: 'remove', row})) {
+      for (const _ of src.push(makeSourceChangeRemove(row))) {
         /* consume */
       }
     };
@@ -171,7 +176,7 @@ describe('MemorySource push', () => {
   bench(`add/remove over ${ISSUE_COUNT} rows, sort 2 keys`, function* () {
     const src = new MemorySource('issue', issueColumns, ['id']);
     for (let i = 0; i < ISSUE_COUNT; i++) {
-      for (const _ of src.push({type: 'add', row: makeIssueRow(i)})) {
+      for (const _ of src.push(makeSourceChangeAdd(makeIssueRow(i)))) {
         /* consume */
       }
     }
@@ -184,10 +189,10 @@ describe('MemorySource push', () => {
     let idx = ISSUE_COUNT;
     yield () => {
       const row = makeIssueRow(idx++);
-      for (const _ of src.push({type: 'add', row})) {
+      for (const _ of src.push(makeSourceChangeAdd(row))) {
         /* consume */
       }
-      for (const _ of src.push({type: 'remove', row})) {
+      for (const _ of src.push(makeSourceChangeRemove(row))) {
         /* consume */
       }
     };
@@ -196,7 +201,7 @@ describe('MemorySource push', () => {
   bench(`add/remove over ${ISSUE_COUNT} rows, sort 4 keys`, function* () {
     const src = new MemorySource('issue', issueColumns, ['id']);
     for (let i = 0; i < ISSUE_COUNT; i++) {
-      for (const _ of src.push({type: 'add', row: makeIssueRow(i)})) {
+      for (const _ of src.push(makeSourceChangeAdd(makeIssueRow(i)))) {
         /* consume */
       }
     }
@@ -211,10 +216,10 @@ describe('MemorySource push', () => {
     let idx = ISSUE_COUNT;
     yield () => {
       const row = makeIssueRow(idx++);
-      for (const _ of src.push({type: 'add', row})) {
+      for (const _ of src.push(makeSourceChangeAdd(row))) {
         /* consume */
       }
-      for (const _ of src.push({type: 'remove', row})) {
+      for (const _ of src.push(makeSourceChangeRemove(row))) {
         /* consume */
       }
     };
@@ -226,7 +231,7 @@ describe('MemorySource push', () => {
     for (let i = 0; i < ISSUE_COUNT; i++) {
       const row = makeIssueRow(i);
       rows.push(row);
-      for (const _ of src.push({type: 'add', row})) {
+      for (const _ of src.push(makeSourceChangeAdd(row))) {
         /* consume */
       }
     }
@@ -238,10 +243,10 @@ describe('MemorySource push', () => {
       const oldRow = rows[idx % rows.length];
       idx++;
       const newRow = {...oldRow, title: `Updated ${idx}`};
-      for (const _ of src.push({type: 'edit', oldRow, row: newRow})) {
+      for (const _ of src.push(makeSourceChangeEdit(newRow, oldRow))) {
         /* consume */
       }
-      for (const _ of src.push({type: 'edit', oldRow: newRow, row: oldRow})) {
+      for (const _ of src.push(makeSourceChangeEdit(oldRow, newRow))) {
         /* consume */
       }
     };
@@ -253,7 +258,7 @@ describe('MemorySource push', () => {
     for (let i = 0; i < ISSUE_COUNT; i++) {
       const row = makeIssueRow(i);
       rows.push(row);
-      for (const _ of src.push({type: 'add', row})) {
+      for (const _ of src.push(makeSourceChangeAdd(row))) {
         /* consume */
       }
     }
@@ -268,10 +273,10 @@ describe('MemorySource push', () => {
       const oldRow = rows[idx % rows.length];
       idx++;
       const newRow = {...oldRow, title: `Updated ${idx}`};
-      for (const _ of src.push({type: 'edit', oldRow, row: newRow})) {
+      for (const _ of src.push(makeSourceChangeEdit(newRow, oldRow))) {
         /* consume */
       }
-      for (const _ of src.push({type: 'edit', oldRow: newRow, row: oldRow})) {
+      for (const _ of src.push(makeSourceChangeEdit(oldRow, newRow))) {
         /* consume */
       }
     };
@@ -283,7 +288,7 @@ describe('MemorySource push', () => {
     for (let i = 0; i < ISSUE_COUNT; i++) {
       const row = makeIssueRow(i);
       rows.push(row);
-      for (const _ of src.push({type: 'add', row})) {
+      for (const _ of src.push(makeSourceChangeAdd(row))) {
         /* consume */
       }
     }
@@ -300,10 +305,10 @@ describe('MemorySource push', () => {
       const oldRow = rows[idx % rows.length];
       idx++;
       const newRow = {...oldRow, title: `Updated ${idx}`};
-      for (const _ of src.push({type: 'edit', oldRow, row: newRow})) {
+      for (const _ of src.push(makeSourceChangeEdit(newRow, oldRow))) {
         /* consume */
       }
-      for (const _ of src.push({type: 'edit', oldRow: newRow, row: oldRow})) {
+      for (const _ of src.push(makeSourceChangeEdit(oldRow, newRow))) {
         /* consume */
       }
     };
@@ -316,7 +321,7 @@ describe('Filter', () => {
   bench(`fetch open issues (${ISSUE_COUNT} total)`, function* () {
     const src = new MemorySource('issue', issueColumns, ['id']);
     for (let i = 0; i < ISSUE_COUNT; i++) {
-      for (const _ of src.push({type: 'add', row: makeIssueRow(i)})) {
+      for (const _ of src.push(makeSourceChangeAdd(makeIssueRow(i)))) {
         /* consume */
       }
     }
@@ -339,7 +344,7 @@ describe('Filter', () => {
   bench('push add open issue (passes filter)', function* () {
     const src = new MemorySource('issue', issueColumns, ['id']);
     for (let i = 0; i < ISSUE_COUNT; i++) {
-      for (const _ of src.push({type: 'add', row: makeIssueRow(i)})) {
+      for (const _ of src.push(makeSourceChangeAdd(makeIssueRow(i)))) {
         /* consume */
       }
     }
@@ -358,10 +363,10 @@ describe('Filter', () => {
     yield () => {
       const row = makeIssueRow(idx++);
       (row as Record<string, unknown>)['closed'] = false;
-      for (const _ of src.push({type: 'add', row})) {
+      for (const _ of src.push(makeSourceChangeAdd(row))) {
         /* consume */
       }
-      for (const _ of src.push({type: 'remove', row})) {
+      for (const _ of src.push(makeSourceChangeRemove(row))) {
         /* consume */
       }
     };
@@ -370,7 +375,7 @@ describe('Filter', () => {
   bench('push add closed issue (filtered out)', function* () {
     const src = new MemorySource('issue', issueColumns, ['id']);
     for (let i = 0; i < ISSUE_COUNT; i++) {
-      for (const _ of src.push({type: 'add', row: makeIssueRow(i)})) {
+      for (const _ of src.push(makeSourceChangeAdd(makeIssueRow(i)))) {
         /* consume */
       }
     }
@@ -389,10 +394,10 @@ describe('Filter', () => {
     yield () => {
       const row = makeIssueRow(idx++);
       (row as Record<string, unknown>)['closed'] = true;
-      for (const _ of src.push({type: 'add', row})) {
+      for (const _ of src.push(makeSourceChangeAdd(row))) {
         /* consume */
       }
-      for (const _ of src.push({type: 'remove', row})) {
+      for (const _ of src.push(makeSourceChangeRemove(row))) {
         /* consume */
       }
     };
@@ -407,12 +412,12 @@ describe('Join', () => {
     const userSrc = new MemorySource('user', userColumns, ['id']);
 
     for (let i = 0; i < USER_COUNT; i++) {
-      for (const _ of userSrc.push({type: 'add', row: makeUserRow(i)})) {
+      for (const _ of userSrc.push(makeSourceChangeAdd(makeUserRow(i)))) {
         /* consume */
       }
     }
     for (let i = 0; i < ISSUE_COUNT; i++) {
-      for (const _ of issueSrc.push({type: 'add', row: makeIssueRow(i)})) {
+      for (const _ of issueSrc.push(makeSourceChangeAdd(makeIssueRow(i)))) {
         /* consume */
       }
     }
@@ -443,12 +448,12 @@ describe('Join', () => {
     const userSrc = new MemorySource('user', userColumns, ['id']);
 
     for (let i = 0; i < USER_COUNT; i++) {
-      for (const _ of userSrc.push({type: 'add', row: makeUserRow(i)})) {
+      for (const _ of userSrc.push(makeSourceChangeAdd(makeUserRow(i)))) {
         /* consume */
       }
     }
     for (let i = 0; i < ISSUE_COUNT; i++) {
-      for (const _ of issueSrc.push({type: 'add', row: makeIssueRow(i)})) {
+      for (const _ of issueSrc.push(makeSourceChangeAdd(makeIssueRow(i)))) {
         /* consume */
       }
     }
@@ -473,10 +478,10 @@ describe('Join', () => {
     let idx = ISSUE_COUNT;
     yield () => {
       const row = makeIssueRow(idx++);
-      for (const _ of issueSrc.push({type: 'add', row})) {
+      for (const _ of issueSrc.push(makeSourceChangeAdd(row))) {
         /* consume */
       }
-      for (const _ of issueSrc.push({type: 'remove', row})) {
+      for (const _ of issueSrc.push(makeSourceChangeRemove(row))) {
         /* consume */
       }
     };
@@ -487,7 +492,7 @@ describe('Join', () => {
     const userSrc = new MemorySource('user', userColumns, ['id']);
 
     for (let i = 0; i < USER_COUNT; i++) {
-      for (const _ of userSrc.push({type: 'add', row: makeUserRow(i)})) {
+      for (const _ of userSrc.push(makeSourceChangeAdd(makeUserRow(i)))) {
         /* consume */
       }
     }
@@ -495,7 +500,7 @@ describe('Join', () => {
     for (let i = 0; i < ISSUE_COUNT; i++) {
       const row = makeIssueRow(i);
       issueRows.push(row);
-      for (const _ of issueSrc.push({type: 'add', row})) {
+      for (const _ of issueSrc.push(makeSourceChangeAdd(row))) {
         /* consume */
       }
     }
@@ -522,14 +527,10 @@ describe('Join', () => {
       const oldRow = issueRows[idx % issueRows.length];
       idx++;
       const newRow = {...oldRow, title: `Updated ${idx}`};
-      for (const _ of issueSrc.push({type: 'edit', oldRow, row: newRow})) {
+      for (const _ of issueSrc.push(makeSourceChangeEdit(newRow, oldRow))) {
         /* consume */
       }
-      for (const _ of issueSrc.push({
-        type: 'edit',
-        oldRow: newRow,
-        row: oldRow,
-      })) {
+      for (const _ of issueSrc.push(makeSourceChangeEdit(oldRow, newRow))) {
         /* consume */
       }
     };

@@ -2,6 +2,10 @@ import {beforeEach, expect, expectTypeOf, test} from 'vitest';
 import {testLogConfig} from '../../otel/src/test-log-config.ts';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
 import {must} from '../../shared/src/must.ts';
+import {
+  makeSourceChangeAdd,
+  makeSourceChangeRemove,
+} from '../../zql/src/ivm/source.ts';
 import {consume} from '../../zql/src/ivm/stream.ts';
 import type {QueryDelegate} from '../../zql/src/query/query-delegate.ts';
 import {newQuery} from '../../zql/src/query/query-impl.ts';
@@ -25,22 +29,20 @@ beforeEach(() => {
   const labelSource = must(queryDelegate.getSource('label'));
 
   consume(
-    userSource.push({
-      type: 'add',
-      row: {
+    userSource.push(
+      makeSourceChangeAdd({
         id: '0001',
         name: 'Alice',
         metadata: JSON.stringify({
           registrar: 'github',
           login: 'alicegh',
         }),
-      },
-    }),
+      }),
+    ),
   );
   consume(
-    userSource.push({
-      type: 'add',
-      row: {
+    userSource.push(
+      makeSourceChangeAdd({
         id: '0002',
         name: 'Bob',
         metadata: JSON.stringify({
@@ -48,54 +50,50 @@ beforeEach(() => {
           login: 'bob@gmail.com',
           altContacts: ['bobwave', 'bobyt', 'bobplus'],
         }),
-      },
-    }),
+      }),
+    ),
   );
   consume(
-    issueSource.push({
-      type: 'add',
-      row: {
+    issueSource.push(
+      makeSourceChangeAdd({
         id: '0001',
         title: 'issue 1',
         description: 'description 1',
         closed: false,
         owner_id: '0001',
-      },
-    }),
+      }),
+    ),
   );
   consume(
-    issueSource.push({
-      type: 'add',
-      row: {
+    issueSource.push(
+      makeSourceChangeAdd({
         id: '0002',
         title: 'issue 2',
         description: 'description 2',
         closed: false,
         owner_id: '0002',
-      },
-    }),
+      }),
+    ),
   );
   consume(
-    issueSource.push({
-      type: 'add',
-      row: {
+    issueSource.push(
+      makeSourceChangeAdd({
         id: '0003',
         title: 'issue 3',
         description: 'description 3',
         closed: false,
         owner_id: null,
-      },
-    }),
+      }),
+    ),
   );
 
   consume(
-    labelSource.push({
-      type: 'add',
-      row: {
+    labelSource.push(
+      makeSourceChangeAdd({
         id: '0001',
         name: 'bug',
-      },
-    }),
+      }),
+    ),
   );
 });
 
@@ -245,13 +243,12 @@ test('where exists retracts when an edit causes a row to no longer match', () =>
 
   const labelSource = must(queryDelegate.getSource('issueLabel'));
   consume(
-    labelSource.push({
-      type: 'add',
-      row: {
+    labelSource.push(
+      makeSourceChangeAdd({
         issueId: '0001',
         labelId: '0001',
-      },
-    }),
+      }),
+    ),
   );
 
   expect(mapResultToClientNames(view.data, schema, 'issue'))
@@ -275,13 +272,12 @@ test('where exists retracts when an edit causes a row to no longer match', () =>
     `);
 
   consume(
-    labelSource.push({
-      type: 'remove',
-      row: {
+    labelSource.push(
+      makeSourceChangeRemove({
         issueId: '0001',
         labelId: '0001',
-      },
-    }),
+      }),
+    ),
   );
 
   expect(view.data).toMatchInlineSnapshot(`[]`);
@@ -292,39 +288,36 @@ test('schema applied `one`', async () => {
   const commentSource = must(queryDelegate.getSource('comments'));
   const revisionSource = must(queryDelegate.getSource('revision'));
   consume(
-    commentSource.push({
-      type: 'add',
-      row: {
+    commentSource.push(
+      makeSourceChangeAdd({
         id: '0001',
         authorId: '0001',
         issue_id: '0001',
         text: 'comment 1',
         createdAt: 1,
-      },
-    }),
+      }),
+    ),
   );
   consume(
-    commentSource.push({
-      type: 'add',
-      row: {
+    commentSource.push(
+      makeSourceChangeAdd({
         id: '0002',
         authorId: '0002',
         issue_id: '0001',
         text: 'comment 2',
         createdAt: 2,
-      },
-    }),
+      }),
+    ),
   );
   consume(
-    revisionSource.push({
-      type: 'add',
-      row: {
+    revisionSource.push(
+      makeSourceChangeAdd({
         id: '0001',
         authorId: '0001',
         commentId: '0001',
         text: 'revision 1',
-      },
-    }),
+      }),
+    ),
   );
   const query = newQuery(schema, 'issue')
     .related('owner')

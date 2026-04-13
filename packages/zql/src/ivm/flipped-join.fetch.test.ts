@@ -13,6 +13,7 @@ import {Snitch, type SnitchMessage} from './snitch.ts';
 import {consume} from './stream.ts';
 import {createSource} from './test/source-factory.ts';
 
+import {makeSourceChangeAdd} from './source.ts';
 /**
  * These tests are based on join.fetch.test.ts.  Uses same cases.
  * Most of the data snapshots are the same expect for when
@@ -1917,7 +1918,7 @@ function fetchTest(t: FetchTest): FetchTestResults {
       t.primaryKeys[i],
     );
     for (const row of rows) {
-      consume(source.push({type: 'add', row}));
+      consume(source.push(makeSourceChangeAdd(row)));
     }
     const snitch = new Snitch(source.connect(ordering), String(i), log);
     return {

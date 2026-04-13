@@ -9,6 +9,10 @@ import {
 } from '../../zql-integration-tests/src/helpers/runner.ts';
 import type {PullRow} from '../../zql/src/query/query.ts';
 
+import {
+  makeSourceChangeAdd,
+  makeSourceChangeEdit,
+} from '../../zql/src/ivm/source.ts';
 const pgContent = await getChinook();
 
 function defaultTrack(id: number): PullRow<'track', typeof schema> {
@@ -41,40 +45,20 @@ await runBenchmarks(
       name: 'push into unlimited query',
       createQuery: q => q.track,
       generatePush: i => [
-        [
-          'track',
-          {
-            type: 'add',
-            row: defaultTrack(i + 10_000),
-          },
-        ],
+        ['track', makeSourceChangeAdd(defaultTrack(i + 10_000))],
       ],
     },
     {
       name: 'push into limited query, outside the bound',
       createQuery: q => q.track.limit(100),
       generatePush: i => [
-        [
-          'track',
-          {
-            type: 'add',
-            row: defaultTrack(i + 10_000),
-          },
-        ],
+        ['track', makeSourceChangeAdd(defaultTrack(i + 10_000))],
       ],
     },
     {
       name: 'push into limited query, inside the bound',
       createQuery: q => q.track.limit(100),
-      generatePush: i => [
-        [
-          'track',
-          {
-            type: 'add',
-            row: defaultTrack(-1 * i),
-          },
-        ],
-      ],
+      generatePush: i => [['track', makeSourceChangeAdd(defaultTrack(-1 * i))]],
     },
     {
       name: 'edit for limited query, outside the bound',
@@ -135,10 +119,6 @@ function makeEdit() {
       [column]: value,
     };
     currentValues.set(key, newRow);
-    return {
-      type: 'edit',
-      oldRow: row,
-      row: newRow,
-    } as const;
+    return makeSourceChangeEdit(newRow, row);
   };
 }

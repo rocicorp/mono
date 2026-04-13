@@ -21,6 +21,11 @@ import {
 } from './builder.ts';
 import {TestBuilderDelegate} from './test-builder-delegate.ts';
 
+import {
+  makeSourceChangeAdd,
+  makeSourceChangeEdit,
+  makeSourceChangeRemove,
+} from '../ivm/source.ts';
 const lc = createSilentLogContext();
 
 export function testBuilderDelegate() {
@@ -36,25 +41,25 @@ export function testBuilderDelegate() {
     ['id'],
   );
   consume(
-    users.push({type: 'add', row: {id: 1, name: 'aaron', recruiterID: null}}),
+    users.push(makeSourceChangeAdd({id: 1, name: 'aaron', recruiterID: null})),
   );
   consume(
-    users.push({type: 'add', row: {id: 2, name: 'erik', recruiterID: 1}}),
+    users.push(makeSourceChangeAdd({id: 2, name: 'erik', recruiterID: 1})),
   );
   consume(
-    users.push({type: 'add', row: {id: 3, name: 'greg', recruiterID: 1}}),
+    users.push(makeSourceChangeAdd({id: 3, name: 'greg', recruiterID: 1})),
   );
   consume(
-    users.push({type: 'add', row: {id: 4, name: 'matt', recruiterID: 1}}),
+    users.push(makeSourceChangeAdd({id: 4, name: 'matt', recruiterID: 1})),
   );
   consume(
-    users.push({type: 'add', row: {id: 5, name: 'cesar', recruiterID: 3}}),
+    users.push(makeSourceChangeAdd({id: 5, name: 'cesar', recruiterID: 3})),
   );
   consume(
-    users.push({type: 'add', row: {id: 6, name: 'darick', recruiterID: 3}}),
+    users.push(makeSourceChangeAdd({id: 6, name: 'darick', recruiterID: 3})),
   );
   consume(
-    users.push({type: 'add', row: {id: 7, name: 'alex', recruiterID: 1}}),
+    users.push(makeSourceChangeAdd({id: 7, name: 'alex', recruiterID: 1})),
   );
 
   const states = createSource(
@@ -64,11 +69,11 @@ export function testBuilderDelegate() {
     {code: {type: 'string'}},
     ['code'],
   );
-  consume(states.push({type: 'add', row: {code: 'CA'}}));
-  consume(states.push({type: 'add', row: {code: 'HI'}}));
-  consume(states.push({type: 'add', row: {code: 'AZ'}}));
-  consume(states.push({type: 'add', row: {code: 'MD'}}));
-  consume(states.push({type: 'add', row: {code: 'GA'}}));
+  consume(states.push(makeSourceChangeAdd({code: 'CA'})));
+  consume(states.push(makeSourceChangeAdd({code: 'HI'})));
+  consume(states.push(makeSourceChangeAdd({code: 'AZ'})));
+  consume(states.push(makeSourceChangeAdd({code: 'MD'})));
+  consume(states.push(makeSourceChangeAdd({code: 'GA'})));
 
   const userStates = createSource(
     lc,
@@ -77,13 +82,13 @@ export function testBuilderDelegate() {
     {userID: {type: 'number'}, stateCode: {type: 'string'}},
     ['userID', 'stateCode'],
   );
-  consume(userStates.push({type: 'add', row: {userID: 1, stateCode: 'HI'}}));
-  consume(userStates.push({type: 'add', row: {userID: 3, stateCode: 'AZ'}}));
-  consume(userStates.push({type: 'add', row: {userID: 3, stateCode: 'CA'}}));
-  consume(userStates.push({type: 'add', row: {userID: 4, stateCode: 'MD'}}));
-  consume(userStates.push({type: 'add', row: {userID: 5, stateCode: 'AZ'}}));
-  consume(userStates.push({type: 'add', row: {userID: 6, stateCode: 'CA'}}));
-  consume(userStates.push({type: 'add', row: {userID: 7, stateCode: 'GA'}}));
+  consume(userStates.push(makeSourceChangeAdd({userID: 1, stateCode: 'HI'})));
+  consume(userStates.push(makeSourceChangeAdd({userID: 3, stateCode: 'AZ'})));
+  consume(userStates.push(makeSourceChangeAdd({userID: 3, stateCode: 'CA'})));
+  consume(userStates.push(makeSourceChangeAdd({userID: 4, stateCode: 'MD'})));
+  consume(userStates.push(makeSourceChangeAdd({userID: 5, stateCode: 'AZ'})));
+  consume(userStates.push(makeSourceChangeAdd({userID: 6, stateCode: 'CA'})));
+  consume(userStates.push(makeSourceChangeAdd({userID: 7, stateCode: 'GA'})));
 
   const sources = {users, userStates, states};
 
@@ -167,7 +172,7 @@ test('source-only', () => {
     ]
   `);
 
-  consume(sources.users.push({type: 'add', row: {id: 8, name: 'sam'}}));
+  consume(sources.users.push(makeSourceChangeAdd({id: 8, name: 'sam'})));
   expect(sink.pushes).toMatchInlineSnapshot(`
     [
       {
@@ -254,9 +259,9 @@ test('filter', () => {
     ]
   `);
 
-  consume(sources.users.push({type: 'add', row: {id: 8, name: 'sam'}}));
-  consume(sources.users.push({type: 'add', row: {id: 9, name: 'abby'}}));
-  consume(sources.users.push({type: 'remove', row: {id: 8, name: 'sam'}}));
+  consume(sources.users.push(makeSourceChangeAdd({id: 8, name: 'sam'})));
+  consume(sources.users.push(makeSourceChangeAdd({id: 9, name: 'abby'})));
+  consume(sources.users.push(makeSourceChangeRemove({id: 8, name: 'sam'})));
   expect(sink.pushes).toMatchInlineSnapshot(`
     [
       {
@@ -437,28 +442,24 @@ test('self-join', () => {
   `);
 
   consume(
-    sources.users.push({
-      type: 'add',
-      row: {id: 8, name: 'sam', recruiterID: 2},
-    }),
+    sources.users.push(
+      makeSourceChangeAdd({id: 8, name: 'sam', recruiterID: 2}),
+    ),
   );
   consume(
-    sources.users.push({
-      type: 'add',
-      row: {id: 9, name: 'abby', recruiterID: 8},
-    }),
+    sources.users.push(
+      makeSourceChangeAdd({id: 9, name: 'abby', recruiterID: 8}),
+    ),
   );
   consume(
-    sources.users.push({
-      type: 'remove',
-      row: {id: 8, name: 'sam', recruiterID: 2},
-    }),
+    sources.users.push(
+      makeSourceChangeRemove({id: 8, name: 'sam', recruiterID: 2}),
+    ),
   );
   consume(
-    sources.users.push({
-      type: 'add',
-      row: {id: 8, name: 'sam', recruiterID: 3},
-    }),
+    sources.users.push(
+      makeSourceChangeAdd({id: 8, name: 'sam', recruiterID: 3}),
+    ),
   );
 
   expect(sink.pushes).toMatchInlineSnapshot(`
@@ -679,19 +680,20 @@ test('self-join edit', () => {
 
   // or was greg recruited by erik
   consume(
-    sources.users.push({
-      type: 'edit',
-      oldRow: {
-        id: 3,
-        name: 'greg',
-        recruiterID: 1,
-      },
-      row: {
-        id: 3,
-        name: 'greg',
-        recruiterID: 2,
-      },
-    }),
+    sources.users.push(
+      makeSourceChangeEdit(
+        {
+          id: 3,
+          name: 'greg',
+          recruiterID: 2,
+        },
+        {
+          id: 3,
+          name: 'greg',
+          recruiterID: 1,
+        },
+      ),
+    ),
   );
 
   expect(sink.pushes).toMatchInlineSnapshot(`
@@ -927,7 +929,7 @@ test('multi-join', () => {
   `);
 
   consume(
-    sources.userStates.push({type: 'add', row: {userID: 2, stateCode: 'HI'}}),
+    sources.userStates.push(makeSourceChangeAdd({userID: 2, stateCode: 'HI'})),
   );
 
   expect(sink.pushes).toMatchInlineSnapshot(`
@@ -1079,7 +1081,7 @@ test('join with limit', () => {
   `);
 
   consume(
-    sources.userStates.push({type: 'add', row: {userID: 2, stateCode: 'HI'}}),
+    sources.userStates.push(makeSourceChangeAdd({userID: 2, stateCode: 'HI'})),
   );
 
   expect(sink.pushes).toMatchInlineSnapshot(`
@@ -1169,7 +1171,7 @@ test('skip', () => {
     ]
   `);
 
-  consume(sources.users.push({type: 'add', row: {id: 8, name: 'sam'}}));
+  consume(sources.users.push(makeSourceChangeAdd({id: 8, name: 'sam'})));
   expect(sink.pushes).toMatchInlineSnapshot(`
     [
       {
@@ -1309,7 +1311,7 @@ test('exists junction', () => {
 
   // erik moves to hawaii
   consume(
-    sources.userStates.push({type: 'add', row: {userID: 2, stateCode: 'HI'}}),
+    sources.userStates.push(makeSourceChangeAdd({userID: 2, stateCode: 'HI'})),
   );
 
   expect(sink.pushes).toMatchInlineSnapshot(`
@@ -1520,7 +1522,7 @@ test('duplicative exists junction', () => {
 
   // erik moves to hawaii
   consume(
-    sources.userStates.push({type: 'add', row: {userID: 2, stateCode: 'HI'}}),
+    sources.userStates.push(makeSourceChangeAdd({userID: 2, stateCode: 'HI'})),
   );
 
   expect(sink.pushes).toMatchInlineSnapshot(`
@@ -1724,20 +1726,18 @@ test('exists junction with limit, remove row after limit, and last row', () => {
 
   // row after limit
   consume(
-    sources.users.push({
-      type: 'remove',
-      row: {id: 4, name: 'matt', recruiterID: 1},
-    }),
+    sources.users.push(
+      makeSourceChangeRemove({id: 4, name: 'matt', recruiterID: 1}),
+    ),
   );
 
   expect(sink.pushes).toMatchInlineSnapshot(`[]`);
 
   // last row, also after limit
   consume(
-    sources.users.push({
-      type: 'remove',
-      row: {id: 7, name: 'alex', recruiterID: 1},
-    }),
+    sources.users.push(
+      makeSourceChangeRemove({id: 7, name: 'alex', recruiterID: 1}),
+    ),
   );
 
   expect(sink.pushes).toMatchInlineSnapshot(`[]`);
@@ -1815,19 +1815,20 @@ test('exists self join', () => {
 
   // or was greg recruited by erik
   consume(
-    sources.users.push({
-      type: 'edit',
-      oldRow: {
-        id: 3,
-        name: 'greg',
-        recruiterID: 1,
-      },
-      row: {
-        id: 3,
-        name: 'greg',
-        recruiterID: 2,
-      },
-    }),
+    sources.users.push(
+      makeSourceChangeEdit(
+        {
+          id: 3,
+          name: 'greg',
+          recruiterID: 2,
+        },
+        {
+          id: 3,
+          name: 'greg',
+          recruiterID: 1,
+        },
+      ),
+    ),
   );
 
   expect(sink.pushes).toMatchInlineSnapshot(`
@@ -2092,19 +2093,20 @@ test('not exists self join', () => {
 
   // aaron recruited himself
   consume(
-    sources.users.push({
-      type: 'edit',
-      oldRow: {
-        id: 1,
-        name: 'aaron',
-        recruiterID: null,
-      },
-      row: {
-        id: 1,
-        name: 'aaron',
-        recruiterID: 1,
-      },
-    }),
+    sources.users.push(
+      makeSourceChangeEdit(
+        {
+          id: 1,
+          name: 'aaron',
+          recruiterID: 1,
+        },
+        {
+          id: 1,
+          name: 'aaron',
+          recruiterID: null,
+        },
+      ),
+    ),
   );
 
   expect(sink.pushes).toMatchInlineSnapshot(`
@@ -2375,7 +2377,7 @@ test('empty or - nothing goes through', () => {
 
   expect(sink.fetch()).toMatchInlineSnapshot(`[]`);
 
-  consume(sources.users.push({type: 'add', row: {id: 8, name: 'sam'}}));
+  consume(sources.users.push(makeSourceChangeAdd({id: 8, name: 'sam'})));
   expect(sink.pushes).toMatchInlineSnapshot(`[]`);
 });
 
@@ -2398,7 +2400,7 @@ test('empty and - everything goes through', () => {
 
   expect(sink.fetch().length).toEqual(7);
 
-  consume(sources.users.push({type: 'add', row: {id: 8, name: 'sam'}}));
+  consume(sources.users.push(makeSourceChangeAdd({id: 8, name: 'sam'})));
   expect(sink.pushes).toMatchInlineSnapshot(`
     [
       {
@@ -2442,7 +2444,7 @@ test('always false literal comparison - nothing goes through', () => {
 
   expect(sink.fetch()).toMatchInlineSnapshot(`[]`);
 
-  consume(sources.users.push({type: 'add', row: {id: 8, name: 'sam'}}));
+  consume(sources.users.push(makeSourceChangeAdd({id: 8, name: 'sam'})));
   expect(sink.pushes).toMatchInlineSnapshot(`[]`);
 });
 
@@ -2532,7 +2534,7 @@ test('always true literal comparison - everything goes through', () => {
     ]
   `);
 
-  consume(sources.users.push({type: 'add', row: {id: 8, name: 'sam'}}));
+  consume(sources.users.push(makeSourceChangeAdd({id: 8, name: 'sam'})));
   expect(sink.pushes).toMatchInlineSnapshot(`
     [
       {
@@ -2941,20 +2943,14 @@ test('duplicate relationship alias uses last-writer-wins', () => {
   // Verify push also works correctly - only the filtered relationship exists
   // Add a userState that doesn't match the filter - should not propagate
   consume(
-    sources.userStates.push({
-      type: 'add',
-      row: {userID: 1, stateCode: 'NY'},
-    }),
+    sources.userStates.push(makeSourceChangeAdd({userID: 1, stateCode: 'NY'})),
   );
   // No push should be received (filtered out)
   expect(sink.pushes).toEqual([]);
 
   // Add a userState that matches the filter - should propagate
   consume(
-    sources.userStates.push({
-      type: 'add',
-      row: {userID: 1, stateCode: 'CA'},
-    }),
+    sources.userStates.push(makeSourceChangeAdd({userID: 1, stateCode: 'CA'})),
   );
   expect(sink.pushes.length).toBe(1);
   expect(sink.pushes[0].type).toBe('child');

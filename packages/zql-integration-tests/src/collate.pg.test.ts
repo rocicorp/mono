@@ -44,6 +44,7 @@ import {
 import './helpers/comparePg.ts';
 import {fillPgAndSync} from './helpers/setup.ts';
 
+import {makeSourceChangeAdd} from '../../zql/src/ivm/source.ts';
 const lc = createSilentLogContext();
 
 const DB_NAME = 'collate-test';
@@ -151,12 +152,7 @@ beforeAll(async () => {
 
   // Initialize memory sources with test data
   for (const row of testData.item) {
-    consume(
-      memorySources.item.push({
-        type: 'add',
-        row,
-      }),
-    );
+    consume(memorySources.item.push(makeSourceChangeAdd(row)));
   }
 
   // Check that PG, SQLite, and test data are in sync

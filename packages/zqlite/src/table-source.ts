@@ -18,6 +18,7 @@ import {
   createPredicate,
   transformFilters,
 } from '../../zql/src/builder/filter.ts';
+import {ChangeType} from '../../zql/src/ivm/change-type.ts';
 import {makeComparator, type Node} from '../../zql/src/ivm/data.ts';
 import {
   generateWithOverlay,
@@ -29,6 +30,7 @@ import {
 } from '../../zql/src/ivm/memory-source.ts';
 import {type FetchRequest} from '../../zql/src/ivm/operator.ts';
 import type {SourceSchema} from '../../zql/src/ivm/schema.ts';
+import {SourceChangeIndex} from '../../zql/src/ivm/source-change-index.ts';
 import {
   type Source,
   type SourceChange,
@@ -412,34 +414,39 @@ export class TableSource implements Source {
   }
 
   #writeChange(change: SourceChange) {
-    switch (change.type) {
-      case 'add':
+    switch (change[SourceChangeIndex.TYPE]) {
+      case ChangeType.ADD:
         this.#stmts.insert.run(
           ...toSQLiteTypes(
+            // TODO(arv): Compute this once!
             Object.keys(this.#columns),
-            change.row,
+            change[SourceChangeIndex.ROW],
             this.#columns,
           ),
         );
         break;
-      case 'remove':
+      case ChangeType.REMOVE:
         this.#stmts.delete.run(
-          ...toSQLiteTypes(this.#primaryKey, change.row, this.#columns),
+          ...toSQLiteTypes(
+            this.#primaryKey,
+            change[SourceChangeIndex.ROW],
+            this.#columns,
+          ),
         );
         break;
-      case 'edit': {
+      case ChangeType.EDIT: {
         // If the PK is the same, use UPDATE.
         if (
           canUseUpdate(
-            change.oldRow,
-            change.row,
+            change[SourceChangeIndex.OLD_ROW],
+            change[SourceChangeIndex.ROW],
             this.#columns,
             this.#primaryKey,
           )
         ) {
           const mergedRow = {
-            ...change.oldRow,
-            ...change.row,
+            ...change[SourceChangeIndex.OLD_ROW],
+            ...change[SourceChangeIndex.ROW],
           };
           const params = [
             ...nonPrimaryValues(this.#columns, this.#primaryKey, mergedRow),
@@ -448,12 +455,16 @@ export class TableSource implements Source {
           must(this.#stmts.update).run(params);
         } else {
           this.#stmts.delete.run(
-            ...toSQLiteTypes(this.#primaryKey, change.oldRow, this.#columns),
+            ...toSQLiteTypes(
+              this.#primaryKey,
+              change[SourceChangeIndex.OLD_ROW],
+              this.#columns,
+            ),
           );
           this.#stmts.insert.run(
             ...toSQLiteTypes(
               Object.keys(this.#columns),
-              change.row,
+              change[SourceChangeIndex.ROW],
               this.#columns,
             ),
           );

@@ -12,6 +12,7 @@ import {ArrayView} from '../array-view.ts';
 import {Catch} from '../catch.ts';
 import type {Input} from '../operator.ts';
 import type {Source, SourceChange} from '../source.ts';
+import {makeSourceChangeAdd} from '../source.ts';
 import {consume} from '../stream.ts';
 import type {Format} from '../view.ts';
 import {createSource} from './source-factory.ts';
@@ -32,7 +33,7 @@ function makeSource(
     primaryKeys,
   );
   for (const row of rows) {
-    consume(source.push({type: 'add', row}));
+    consume(source.push(makeSourceChangeAdd(row)));
   }
   return source;
 }

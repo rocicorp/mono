@@ -15,6 +15,10 @@ import {MemorySource} from '../../zql/src/ivm/memory-source.ts';
 import {QueryDelegateImpl} from '../../zql/src/query/test/query-delegate.ts';
 import {builder, schema} from './schema.ts';
 
+import {
+  makeSourceChangeAdd,
+  makeSourceChangeEdit,
+} from '../../zql/src/ivm/source.ts';
 // ---- Data sizes -------------------------------------------------------------
 // Keep small to run fast; increase for more stable results.
 
@@ -39,7 +43,7 @@ function makeSources() {
   }
 
   function add(tableName: string, row: Row) {
-    for (const _ of sources[tableName].push({type: 'add', row})) {
+    for (const _ of sources[tableName].push(makeSourceChangeAdd(row))) {
       /* consume */
     }
   }
@@ -183,7 +187,7 @@ describe('push', () => {
         description: 'Pushed issue',
         visibility: 'public',
       };
-      for (const _ of sources['issue'].push({type: 'add', row})) {
+      for (const _ of sources['issue'].push(makeSourceChangeAdd(row))) {
         /* consume */
       }
     };
@@ -209,7 +213,7 @@ describe('push', () => {
         description: 'Pushed issue',
         visibility: 'public',
       };
-      for (const _ of sources['issue'].push({type: 'add', row})) {
+      for (const _ of sources['issue'].push(makeSourceChangeAdd(row))) {
         /* consume */
       }
     };
@@ -226,19 +230,15 @@ describe('push', () => {
       const idx = editCount % NUM_ISSUES;
       const oldRow = issues[idx];
       const newRow = {...oldRow, title: `Edited ${editCount++}`};
-      for (const _ of sources['issue'].push({
-        type: 'edit',
-        oldRow: oldRow as Row,
-        row: newRow,
-      })) {
+      for (const _ of sources['issue'].push(
+        makeSourceChangeEdit(newRow, oldRow as Row),
+      )) {
         /* consume */
       }
       // restore
-      for (const _ of sources['issue'].push({
-        type: 'edit',
-        oldRow: newRow,
-        row: oldRow as Row,
-      })) {
+      for (const _ of sources['issue'].push(
+        makeSourceChangeEdit(oldRow as Row, newRow),
+      )) {
         /* consume */
       }
     };
@@ -258,7 +258,7 @@ describe('push', () => {
         body: 'A new comment',
         creatorID: 'user-0',
       };
-      for (const _ of sources['comment'].push({type: 'add', row})) {
+      for (const _ of sources['comment'].push(makeSourceChangeAdd(row))) {
         /* consume */
       }
     };
@@ -285,7 +285,7 @@ describe('push', () => {
         description: 'Front of list',
         visibility: 'public',
       };
-      for (const _ of sources['issue'].push({type: 'add', row})) {
+      for (const _ of sources['issue'].push(makeSourceChangeAdd(row))) {
         /* consume */
       }
     };
@@ -312,7 +312,7 @@ describe('push', () => {
         description: 'End of list',
         visibility: 'public',
       };
-      for (const _ of sources['issue'].push({type: 'add', row})) {
+      for (const _ of sources['issue'].push(makeSourceChangeAdd(row))) {
         /* consume */
       }
     };

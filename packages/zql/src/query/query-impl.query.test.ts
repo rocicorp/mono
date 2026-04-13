@@ -15,6 +15,11 @@ import {QueryDelegateImpl} from './test/query-delegate.ts';
 import {schema} from './test/test-schemas.ts';
 import type {TypedView} from './typed-view.ts';
 
+import {
+  makeSourceChangeAdd,
+  makeSourceChangeEdit,
+  makeSourceChangeRemove,
+} from '../ivm/source.ts';
 /**
  * Some basic manual tests to get us started.
  *
@@ -40,22 +45,20 @@ function addData(queryDelegate: QueryDelegate) {
   const labelSource = must(queryDelegate.getSource('label'));
   const issueLabelSource = must(queryDelegate.getSource('issueLabel'));
   consume(
-    userSource.push({
-      type: 'add',
-      row: {
+    userSource.push(
+      makeSourceChangeAdd({
         id: '0001',
         name: 'Alice',
         metadata: {
           registrar: 'github',
           login: 'alicegh',
         },
-      },
-    }),
+      }),
+    ),
   );
   consume(
-    userSource.push({
-      type: 'add',
-      row: {
+    userSource.push(
+      makeSourceChangeAdd({
         id: '0002',
         name: 'Bob',
         metadata: {
@@ -63,101 +66,93 @@ function addData(queryDelegate: QueryDelegate) {
           login: 'bob@gmail.com',
           altContacts: ['bobwave', 'bobyt', 'bobplus'],
         },
-      },
-    }),
+      }),
+    ),
   );
   consume(
-    issueSource.push({
-      type: 'add',
-      row: {
+    issueSource.push(
+      makeSourceChangeAdd({
         id: '0001',
         title: 'issue 1',
         description: 'description 1',
         closed: false,
         ownerId: '0001',
         createdAt: 1,
-      },
-    }),
+      }),
+    ),
   );
   consume(
-    issueSource.push({
-      type: 'add',
-      row: {
+    issueSource.push(
+      makeSourceChangeAdd({
         id: '0002',
         title: 'issue 2',
         description: 'description 2',
         closed: false,
         ownerId: '0002',
         createdAt: 2,
-      },
-    }),
+      }),
+    ),
   );
   consume(
-    issueSource.push({
-      type: 'add',
-      row: {
+    issueSource.push(
+      makeSourceChangeAdd({
         id: '0003',
         title: 'issue 3',
         description: 'description 3',
         closed: false,
         ownerId: null,
         createdAt: 3,
-      },
-    }),
+      }),
+    ),
   );
   consume(
-    commentSource.push({
-      type: 'add',
-      row: {
+    commentSource.push(
+      makeSourceChangeAdd({
         id: '0001',
         authorId: '0001',
         issueId: '0001',
         text: 'comment 1',
         createdAt: 1,
-      },
-    }),
+      }),
+    ),
   );
   consume(
-    commentSource.push({
-      type: 'add',
-      row: {
+    commentSource.push(
+      makeSourceChangeAdd({
         id: '0002',
         authorId: '0002',
         issueId: '0001',
         text: 'comment 2',
         createdAt: 2,
-      },
-    }),
+      }),
+    ),
   );
   consume(
-    revisionSource.push({
-      type: 'add',
-      row: {
+    revisionSource.push(
+      makeSourceChangeAdd({
         id: '0001',
         authorId: '0001',
         commentId: '0001',
         text: 'revision 1',
-      },
-    }),
+      }),
+    ),
   );
 
   consume(
-    labelSource.push({
-      type: 'add',
-      row: {
+    labelSource.push(
+      makeSourceChangeAdd({
         id: '0001',
         name: 'label 1',
-      },
-    }),
+      }),
+    ),
   );
   consume(
-    issueLabelSource.push({
-      type: 'add',
-      row: {
+    issueLabelSource.push(
+      makeSourceChangeAdd({
         issueId: '0001',
         labelId: '0001',
-      },
-    }),
+      }),
+    ),
   );
 
   return {
@@ -206,16 +201,15 @@ describe('bare select', () => {
     expect(rows).toEqual([]);
 
     consume(
-      queryDelegate.getSource('issue').push({
-        type: 'add',
-        row: {
+      queryDelegate.getSource('issue').push(
+        makeSourceChangeAdd({
           id: '0001',
           title: 'title',
           description: 'description',
           closed: false,
           ownerId: '0001',
-        },
-      }),
+        }),
+      ),
     );
     queryDelegate.commit();
 
@@ -230,12 +224,11 @@ describe('bare select', () => {
     ]);
 
     consume(
-      queryDelegate.getSource('issue').push({
-        type: 'remove',
-        row: {
+      queryDelegate.getSource('issue').push(
+        makeSourceChangeRemove({
           id: '0001',
-        },
-      }),
+        }),
+      ),
     );
     queryDelegate.commit();
 
@@ -245,17 +238,16 @@ describe('bare select', () => {
   test('source with initial data', () => {
     const queryDelegate = new QueryDelegateImpl();
     consume(
-      queryDelegate.getSource('issue').push({
-        type: 'add',
-        row: {
+      queryDelegate.getSource('issue').push(
+        makeSourceChangeAdd({
           id: '0001',
           title: 'title',
           description: 'description',
           closed: false,
           ownerId: '0001',
           createdAt: 10,
-        },
-      }),
+        }),
+      ),
     );
 
     const issueQuery = newQuery(schema, 'issue');
@@ -282,17 +274,16 @@ describe('bare select', () => {
     const queryDelegate = new QueryDelegateImpl();
 
     consume(
-      queryDelegate.getSource('issue').push({
-        type: 'add',
-        row: {
+      queryDelegate.getSource('issue').push(
+        makeSourceChangeAdd({
           id: '0001',
           title: 'title',
           description: 'description',
           closed: false,
           ownerId: '0001',
           createdAt: 10,
-        },
-      }),
+        }),
+      ),
     );
 
     const issueQuery = newQuery(schema, 'issue');
@@ -315,17 +306,16 @@ describe('bare select', () => {
     ]);
 
     consume(
-      queryDelegate.getSource('issue').push({
-        type: 'add',
-        row: {
+      queryDelegate.getSource('issue').push(
+        makeSourceChangeAdd({
           id: '0002',
           title: 'title2',
           description: 'description2',
           closed: false,
           ownerId: '0002',
           createdAt: 20,
-        },
-      }),
+        }),
+      ),
     );
     queryDelegate.commit();
 
@@ -362,17 +352,16 @@ describe('bare select', () => {
     expect(rows).toEqual([]);
 
     consume(
-      queryDelegate.getSource('issue').push({
-        type: 'add',
-        row: {
+      queryDelegate.getSource('issue').push(
+        makeSourceChangeAdd({
           id: '0001',
           title: 'title',
           description: 'description',
           closed: false,
           ownerId: '0001',
           createdAt: 10,
-        },
-      }),
+        }),
+      ),
     );
     queryDelegate.commit();
 
@@ -390,12 +379,11 @@ describe('bare select', () => {
     m.destroy();
 
     consume(
-      queryDelegate.getSource('issue').push({
-        type: 'remove',
-        row: {
+      queryDelegate.getSource('issue').push(
+        makeSourceChangeRemove({
           id: '0001',
-        },
-      }),
+        }),
+      ),
     );
     queryDelegate.commit();
 
@@ -451,17 +439,16 @@ describe('joins and filters', () => {
     expect(doubleFilterWithNoResultsRows).toEqual([]);
 
     consume(
-      queryDelegate.getSource('issue').push({
-        type: 'remove',
-        row: {
+      queryDelegate.getSource('issue').push(
+        makeSourceChangeRemove({
           id: '0001',
           title: 'issue 1',
           description: 'description 1',
           closed: false,
           ownerId: '0001',
           createdAt: 10,
-        },
-      }),
+        }),
+      ),
     );
     queryDelegate.commit();
 
@@ -470,17 +457,16 @@ describe('joins and filters', () => {
     expect(doubleFilterWithNoResultsRows).toEqual([]);
 
     consume(
-      queryDelegate.getSource('issue').push({
-        type: 'add',
-        row: {
+      queryDelegate.getSource('issue').push(
+        makeSourceChangeAdd({
           id: '0001',
           title: 'issue 1',
           description: 'description 1',
           closed: true,
           ownerId: '0001',
           createdAt: 10,
-        },
-      }),
+        }),
+      ),
     );
 
     // no commit
@@ -588,43 +574,40 @@ describe('joins and filters', () => {
     `);
 
     consume(
-      queryDelegate.getSource('issue').push({
-        type: 'remove',
-        row: {
+      queryDelegate.getSource('issue').push(
+        makeSourceChangeRemove({
           id: '0001',
           title: 'issue 1',
           description: 'description 1',
           closed: false,
           ownerId: '0001',
           createdAt: 1,
-        },
-      }),
+        }),
+      ),
     );
     consume(
-      queryDelegate.getSource('issue').push({
-        type: 'remove',
-        row: {
+      queryDelegate.getSource('issue').push(
+        makeSourceChangeRemove({
           id: '0002',
           title: 'issue 2',
           description: 'description 2',
           closed: false,
           ownerId: '0002',
           createdAt: 2,
-        },
-      }),
+        }),
+      ),
     );
     consume(
-      queryDelegate.getSource('issue').push({
-        type: 'remove',
-        row: {
+      queryDelegate.getSource('issue').push(
+        makeSourceChangeRemove({
           id: '0003',
           title: 'issue 3',
           description: 'description 3',
           closed: false,
           ownerId: null,
           createdAt: 3,
-        },
-      }),
+        }),
+      ),
     );
     queryDelegate.commit();
 
@@ -1115,17 +1098,16 @@ describe('run with options', () => {
       type: 'complete',
     });
     consume(
-      issueSource.push({
-        type: 'remove',
-        row: {
+      issueSource.push(
+        makeSourceChangeRemove({
           id: '0001',
           title: 'issue 1',
           description: 'description 1',
           closed: false,
           ownerId: '0001',
           createdAt: 10,
-        },
-      }),
+        }),
+      ),
     );
     queryDelegate.callAllGotCallbacks();
     const singleFilterRowsUnknown = await singleFilterRowsUnknownP;
@@ -1475,12 +1457,7 @@ test('join with compound keys', async () => {
     {id: 1, a1: 2, a2: 3, a3: 4},
     {id: 2, a1: 2, a2: 3, a3: 5},
   ]) {
-    consume(
-      aSource.push({
-        type: 'add',
-        row,
-      }),
-    );
+    consume(aSource.push(makeSourceChangeAdd(row)));
   }
 
   for (const row of [
@@ -1488,12 +1465,7 @@ test('join with compound keys', async () => {
     {id: 1, b1: 1, b2: 2, b3: 4},
     {id: 2, b1: 2, b2: 3, b3: 5},
   ]) {
-    consume(
-      bSource.push({
-        type: 'add',
-        row,
-      }),
-    );
+    consume(bSource.push(makeSourceChangeAdd(row)));
   }
 
   const relatedQuery = newQuery(schema, 'a').related('b');
@@ -1566,39 +1538,36 @@ test('where exists', () => {
   const labelSource = must(queryDelegate.getSource('label'));
   const issueLabelSource = must(queryDelegate.getSource('issueLabel'));
   consume(
-    issueSource.push({
-      type: 'add',
-      row: {
+    issueSource.push(
+      makeSourceChangeAdd({
         id: '0001',
         title: 'issue 1',
         description: 'description 1',
         closed: false,
         ownerId: '0001',
         createdAt: 10,
-      },
-    }),
+      }),
+    ),
   );
   consume(
-    issueSource.push({
-      type: 'add',
-      row: {
+    issueSource.push(
+      makeSourceChangeAdd({
         id: '0002',
         title: 'issue 2',
         description: 'description 2',
         closed: true,
         ownerId: '0002',
         createdAt: 20,
-      },
-    }),
+      }),
+    ),
   );
   consume(
-    labelSource.push({
-      type: 'add',
-      row: {
+    labelSource.push(
+      makeSourceChangeAdd({
         id: '0001',
         name: 'bug',
-      },
-    }),
+      }),
+    ),
   );
 
   const materializedQuery = newQuery(schema, 'issue')
@@ -1611,13 +1580,12 @@ test('where exists', () => {
   expect(materialized.data).toEqual([]);
 
   consume(
-    issueLabelSource.push({
-      type: 'add',
-      row: {
+    issueLabelSource.push(
+      makeSourceChangeAdd({
         issueId: '0002',
         labelId: '0001',
-      },
-    }),
+      }),
+    ),
   );
 
   expect(materialized.data).toMatchInlineSnapshot(`
@@ -1642,13 +1610,12 @@ test('where exists', () => {
   `);
 
   consume(
-    issueLabelSource.push({
-      type: 'remove',
-      row: {
+    issueLabelSource.push(
+      makeSourceChangeRemove({
         issueId: '0002',
         labelId: '0001',
-      },
-    }),
+      }),
+    ),
   );
 
   expect(materialized.data).toEqual([]);
@@ -1661,17 +1628,16 @@ test("flipped exists, or'ed", () => {
   const issueSource = must(queryDelegate.getSource('issue'));
 
   consume(
-    issueSource.push({
-      type: 'add',
-      row: {
+    issueSource.push(
+      makeSourceChangeAdd({
         id: '0001',
         title: 'issue 1',
         description: 'description 1',
         closed: false,
         ownerId: '0001',
         createdAt: 10,
-      },
-    }),
+      }),
+    ),
   );
 
   const q = newQuery(schema, 'issue').where(({or, exists}) =>
@@ -1684,16 +1650,15 @@ test("flipped exists, or'ed", () => {
   const view = queryDelegate.materialize(q);
 
   consume(
-    commentSource.push({
-      type: 'add',
-      row: {
+    commentSource.push(
+      makeSourceChangeAdd({
         id: 'c1',
         issueId: '0001',
         authorId: 'a1',
         text: 'bug',
         createdAt: 1,
-      },
-    }),
+      }),
+    ),
   );
 
   // Symbol(rc) should be ONE
@@ -1715,23 +1680,24 @@ test("flipped exists, or'ed", () => {
   `);
 
   consume(
-    commentSource.push({
-      type: 'edit',
-      oldRow: {
-        id: 'c1',
-        issueId: '0001',
-        authorId: 'a1',
-        text: 'bug',
-        createdAt: 1,
-      },
-      row: {
-        id: 'c1',
-        issueId: '0001',
-        authorId: 'a2',
-        text: 'bug',
-        createdAt: 1,
-      },
-    }),
+    commentSource.push(
+      makeSourceChangeEdit(
+        {
+          id: 'c1',
+          issueId: '0001',
+          authorId: 'a2',
+          text: 'bug',
+          createdAt: 1,
+        },
+        {
+          id: 'c1',
+          issueId: '0001',
+          authorId: 'a1',
+          text: 'bug',
+          createdAt: 1,
+        },
+      ),
+    ),
   );
 
   expect(view.data).toMatchInlineSnapshot(`
@@ -1749,16 +1715,15 @@ test("flipped exists, or'ed", () => {
   `);
 
   consume(
-    commentSource.push({
-      type: 'remove',
-      row: {
+    commentSource.push(
+      makeSourceChangeRemove({
         id: 'c1',
         issueId: '0001',
         authorId: 'a1',
         text: 'bug',
         createdAt: 1,
-      },
-    }),
+      }),
+    ),
   );
 
   // should have retracted once, without error
@@ -1766,38 +1731,38 @@ test("flipped exists, or'ed", () => {
 
   // will not match the filter
   consume(
-    commentSource.push({
-      type: 'add',
-      row: {
+    commentSource.push(
+      makeSourceChangeAdd({
         id: 'c1',
         issueId: '0001',
         authorId: 'a1',
         text: 'not a bug',
         createdAt: 1,
-      },
-    }),
+      }),
+    ),
   );
 
   expect(view.data).toMatchInlineSnapshot(`[]`);
 
   consume(
-    commentSource.push({
-      type: 'edit',
-      oldRow: {
-        id: 'c1',
-        issueId: '0001',
-        authorId: 'a1',
-        text: 'not a bug',
-        createdAt: 1,
-      },
-      row: {
-        id: 'c1',
-        issueId: '0001',
-        authorId: 'a2',
-        text: 'bug',
-        createdAt: 1,
-      },
-    }),
+    commentSource.push(
+      makeSourceChangeEdit(
+        {
+          id: 'c1',
+          issueId: '0001',
+          authorId: 'a2',
+          text: 'bug',
+          createdAt: 1,
+        },
+        {
+          id: 'c1',
+          issueId: '0001',
+          authorId: 'a1',
+          text: 'not a bug',
+          createdAt: 1,
+        },
+      ),
+    ),
   );
 
   expect(view.data.length).toBe(1);
@@ -1811,44 +1776,41 @@ test('broken flipped exists', async () => {
 
   // issue 1 will have comments
   consume(
-    issueSource.push({
-      type: 'add',
-      row: {
+    issueSource.push(
+      makeSourceChangeAdd({
         id: '0001',
         title: 'issue 1',
         description: 'description 1',
         closed: false,
         ownerId: '0001',
         createdAt: 10,
-      },
-    }),
+      }),
+    ),
   );
   // issue 2 will have no comments
   consume(
-    issueSource.push({
-      type: 'add',
-      row: {
+    issueSource.push(
+      makeSourceChangeAdd({
         id: '0002',
         title: 'issue 2',
         description: 'description 2',
         closed: false,
         ownerId: '0001',
         createdAt: 10,
-      },
-    }),
+      }),
+    ),
   );
 
   consume(
-    commentSource.push({
-      type: 'add',
-      row: {
+    commentSource.push(
+      makeSourceChangeAdd({
         id: 'c1',
         issueId: '0001',
         authorId: 'a1',
         text: 'not a bug',
         createdAt: 1,
-      },
-    }),
+      }),
+    ),
   );
 
   const flipQuery = newQuery(schema, 'issue').whereExists('comments', q =>
@@ -1878,39 +1840,36 @@ test('duplicative where exists', () => {
   const labelSource = must(queryDelegate.getSource('label'));
   const issueLabelSource = must(queryDelegate.getSource('issueLabel'));
   consume(
-    issueSource.push({
-      type: 'add',
-      row: {
+    issueSource.push(
+      makeSourceChangeAdd({
         id: '0001',
         title: 'issue 1',
         description: 'description 1',
         closed: false,
         ownerId: '0001',
         createdAt: 10,
-      },
-    }),
+      }),
+    ),
   );
   consume(
-    issueSource.push({
-      type: 'add',
-      row: {
+    issueSource.push(
+      makeSourceChangeAdd({
         id: '0002',
         title: 'issue 2',
         description: 'description 2',
         closed: true,
         ownerId: '0002',
         createdAt: 20,
-      },
-    }),
+      }),
+    ),
   );
   consume(
-    labelSource.push({
-      type: 'add',
-      row: {
+    labelSource.push(
+      makeSourceChangeAdd({
         id: '0001',
         name: 'bug',
-      },
-    }),
+      }),
+    ),
   );
 
   const materializedQuery2 = newQuery(schema, 'issue')
@@ -1924,13 +1883,12 @@ test('duplicative where exists', () => {
   expect(materialized.data).toEqual([]);
 
   consume(
-    issueLabelSource.push({
-      type: 'add',
-      row: {
+    issueLabelSource.push(
+      makeSourceChangeAdd({
         issueId: '0002',
         labelId: '0001',
-      },
-    }),
+      }),
+    ),
   );
 
   expect(materialized.data).toMatchInlineSnapshot(`
@@ -1955,13 +1913,12 @@ test('duplicative where exists', () => {
   `);
 
   consume(
-    issueLabelSource.push({
-      type: 'remove',
-      row: {
+    issueLabelSource.push(
+      makeSourceChangeRemove({
         issueId: '0002',
         labelId: '0001',
-      },
-    }),
+      }),
+    ),
   );
 
   expect(materialized.data).toEqual([]);
@@ -1979,17 +1936,16 @@ test('where exists before where, see https://bugs.rocicorp.dev/issue/3417', () =
 
   // push a row that does not match the where filter
   consume(
-    issueSource.push({
-      type: 'add',
-      row: {
+    issueSource.push(
+      makeSourceChangeAdd({
         id: '0001',
         title: 'issue 1',
         description: 'description 1',
         closed: false,
         ownerId: '0001',
         createdAt: 10,
-      },
-    }),
+      }),
+    ),
   );
 
   expect(materialized.data).toEqual([]);

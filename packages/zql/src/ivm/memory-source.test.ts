@@ -20,6 +20,11 @@ import {consume} from './stream.ts';
 import {compareRowsTest} from './test/compare-rows-test.ts';
 import {createSource} from './test/source-factory.ts';
 
+import {
+  makeSourceChangeAdd,
+  makeSourceChangeEdit,
+  makeSourceChangeRemove,
+} from './source.ts';
 const lc = createSilentLogContext();
 
 test('schema', () => {
@@ -134,22 +139,18 @@ test('push edit change', () => {
     ['a'],
   );
 
-  consume(
-    ms.push({
-      type: 'add',
-      row: {a: 'a', b: 'b', c: 'c'},
-    }),
-  );
+  consume(ms.push(makeSourceChangeAdd({a: 'a', b: 'b', c: 'c'})));
 
   const conn = ms.connect([['a', 'asc']]);
   const c = new Catch(conn);
 
   consume(
-    ms.push({
-      type: 'edit',
-      oldRow: {a: 'a', b: 'b', c: 'c'},
-      row: {a: 'a', b: 'b2', c: 'c2'},
-    }),
+    ms.push(
+      makeSourceChangeEdit(
+        {a: 'a', b: 'b2', c: 'c2'},
+        {a: 'a', b: 'b', c: 'c'},
+      ),
+    ),
   );
   expect(c.pushes).toMatchInlineSnapshot(`
     [
@@ -193,12 +194,7 @@ test('fetch during push edit change', () => {
     ['a'],
   );
 
-  consume(
-    ms.push({
-      type: 'add',
-      row: {a: 'a', b: 'b', c: 'c'},
-    }),
-  );
+  consume(ms.push(makeSourceChangeAdd({a: 'a', b: 'b', c: 'c'})));
 
   const conn = ms.connect([['a', 'asc']]);
   let fetchDuringPush = undefined;
@@ -219,11 +215,12 @@ test('fetch during push edit change', () => {
   });
 
   consume(
-    ms.push({
-      type: 'edit',
-      oldRow: {a: 'a', b: 'b', c: 'c'},
-      row: {a: 'a', b: 'b2', c: 'c2'},
-    }),
+    ms.push(
+      makeSourceChangeEdit(
+        {a: 'a', b: 'b2', c: 'c2'},
+        {a: 'a', b: 'b', c: 'c'},
+      ),
+    ),
   );
   expect(fetchDuringPush).toMatchInlineSnapshot(`
     [
@@ -645,7 +642,7 @@ describe('generateWithOverlayUnordered', () => {
   test('Epoch gating — overlay skipped when lastPushedEpoch < overlay.epoch', () => {
     const overlay = {
       epoch: 5,
-      change: {type: 'add' as const, row: {id: 4, s: 'd', n: 44}},
+      change: makeSourceChangeAdd({id: 4, s: 'd', n: 44}),
     };
     const actual = Array.from(
       generateWithOverlayUnordered(rows, undefined, overlay, 4, pk),
@@ -657,7 +654,7 @@ describe('generateWithOverlayUnordered', () => {
   test('Epoch gating — overlay applied when lastPushedEpoch >= overlay.epoch', () => {
     const overlay = {
       epoch: 5,
-      change: {type: 'add' as const, row: {id: 4, s: 'd', n: 44}},
+      change: makeSourceChangeAdd({id: 4, s: 'd', n: 44}),
     };
     const actual = Array.from(
       generateWithOverlayUnordered(rows, undefined, overlay, 5, pk),
@@ -669,7 +666,7 @@ describe('generateWithOverlayUnordered', () => {
   test('Constraint filtering — overlay filtered out by constraint', () => {
     const overlay = {
       epoch: 1,
-      change: {type: 'add' as const, row: {id: 4, s: 'd', n: 44}},
+      change: makeSourceChangeAdd({id: 4, s: 'd', n: 44}),
     };
     const actual = Array.from(
       generateWithOverlayUnordered(rows, {s: 'a'}, overlay, 1, pk),
@@ -681,7 +678,7 @@ describe('generateWithOverlayUnordered', () => {
   test('Filter predicate — overlay filtered out by predicate', () => {
     const overlay = {
       epoch: 1,
-      change: {type: 'add' as const, row: {id: 4, s: 'd', n: 44}},
+      change: makeSourceChangeAdd({id: 4, s: 'd', n: 44}),
     };
     const actual = Array.from(
       generateWithOverlayUnordered(
@@ -700,7 +697,7 @@ describe('generateWithOverlayUnordered', () => {
   test('Add change type', () => {
     const overlay = {
       epoch: 1,
-      change: {type: 'add' as const, row: {id: 4, s: 'd', n: 44}},
+      change: makeSourceChangeAdd({id: 4, s: 'd', n: 44}),
     };
     const actual = Array.from(
       generateWithOverlayUnordered(rows, undefined, overlay, 1, pk),
@@ -712,7 +709,7 @@ describe('generateWithOverlayUnordered', () => {
   test('Remove change type', () => {
     const overlay = {
       epoch: 1,
-      change: {type: 'remove' as const, row: {id: 2, s: 'b', n: 22}},
+      change: makeSourceChangeRemove({id: 2, s: 'b', n: 22}),
     };
     const actual = Array.from(
       generateWithOverlayUnordered(rows, undefined, overlay, 1, pk),
@@ -724,11 +721,10 @@ describe('generateWithOverlayUnordered', () => {
   test('Edit change type', () => {
     const overlay = {
       epoch: 1,
-      change: {
-        type: 'edit' as const,
-        row: {id: 2, s: 'b2', n: 225},
-        oldRow: {id: 2, s: 'b', n: 22},
-      },
+      change: makeSourceChangeEdit(
+        {id: 2, s: 'b2', n: 225},
+        {id: 2, s: 'b', n: 22},
+      ),
     };
     const actual = Array.from(
       generateWithOverlayUnordered(rows, undefined, overlay, 1, pk),

@@ -8,9 +8,16 @@ import type {
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import type {SchemaValue} from '../../../zero-schema/src/table-schema.ts';
 import {Catch, expandNode, type CaughtNode} from './catch.ts';
+import {ChangeType} from './change-type.ts';
 import type {Constraint} from './constraint.ts';
 import type {FetchRequest, Input, Output, Start} from './operator.ts';
-import type {SourceChange} from './source.ts';
+import {SourceChangeIndex} from './source-change-index.ts';
+import {
+  makeSourceChangeAdd,
+  makeSourceChangeEdit,
+  makeSourceChangeRemove,
+  type SourceChange,
+} from './source.ts';
 import {consume} from './stream.ts';
 import {createSource} from './test/source-factory.ts';
 
@@ -25,9 +32,14 @@ function asNodes(rows: Row[]) {
 
 function asChanges(sc: SourceChange[]) {
   return sc.map(c => ({
-    type: c.type,
+    type:
+      c[SourceChangeIndex.TYPE] === ChangeType.ADD
+        ? 'add'
+        : c[SourceChangeIndex.TYPE] === ChangeType.REMOVE
+          ? 'remove'
+          : 'edit',
     node: {
-      row: c.row,
+      row: c[SourceChangeIndex.ROW],
       relationships: {},
     },
   }));
@@ -62,18 +74,18 @@ test('simple-fetch', () => {
   const out = new Catch(s.connect(sort));
   expect(out.fetch()).toEqual([]);
 
-  consume(s.push({type: 'add', row: {a: 3}}));
+  consume(s.push(makeSourceChangeAdd({a: 3})));
   expect(out.fetch()).toEqual(asNodes([{a: 3}]));
 
-  consume(s.push({type: 'add', row: {a: 1}}));
-  consume(s.push({type: 'add', row: {a: 2}}));
+  consume(s.push(makeSourceChangeAdd({a: 1})));
+  consume(s.push(makeSourceChangeAdd({a: 2})));
   expect(out.fetch()).toEqual(asNodes([{a: 1}, {a: 2}, {a: 3}]));
 
-  consume(s.push({type: 'remove', row: {a: 1}}));
+  consume(s.push(makeSourceChangeRemove({a: 1})));
   expect(out.fetch()).toEqual(asNodes([{a: 2}, {a: 3}]));
 
-  consume(s.push({type: 'remove', row: {a: 2}}));
-  consume(s.push({type: 'remove', row: {a: 3}}));
+  consume(s.push(makeSourceChangeRemove({a: 2})));
+  consume(s.push(makeSourceChangeRemove({a: 3})));
   expect(out.fetch()).toEqual([]);
 });
 
@@ -116,9 +128,9 @@ test('fetch-with-constraint', () => {
     ['a'],
   );
   const out = new Catch(s.connect(sort));
-  consume(s.push({type: 'add', row: {a: 3, b: true, c: 1, d: null}}));
-  consume(s.push({type: 'add', row: {a: 1, b: true, c: 2, d: null}}));
-  consume(s.push({type: 'add', row: {a: 2, b: false, c: null, d: null}}));
+  consume(s.push(makeSourceChangeAdd({a: 3, b: true, c: 1, d: null})));
+  consume(s.push(makeSourceChangeAdd({a: 1, b: true, c: 2, d: null})));
+  consume(s.push(makeSourceChangeAdd({a: 2, b: false, c: null, d: null})));
 
   expect(out.fetch({constraint: {b: true}})).toEqual(
     asNodes([
@@ -177,8 +189,8 @@ test('fetch-start', () => {
     asNodes([]),
   );
 
-  consume(s.push({type: 'add', row: {a: 2}}));
-  consume(s.push({type: 'add', row: {a: 3}}));
+  consume(s.push(makeSourceChangeAdd({a: 2})));
+  consume(s.push(makeSourceChangeAdd({a: 3})));
   expect(out.fetch({start: {row: {a: 2}, basis: 'at'}})).toEqual(
     asNodes([{a: 2}, {a: 3}]),
   );
@@ -193,7 +205,7 @@ test('fetch-start', () => {
     asNodes([]),
   );
 
-  consume(s.push({type: 'remove', row: {a: 3}}));
+  consume(s.push(makeSourceChangeRemove({a: 3})));
   expect(out.fetch({start: {row: {a: 2}, basis: 'at'}})).toEqual(
     asNodes([{a: 2}]),
   );
@@ -222,8 +234,8 @@ test('fetch-start reverse', () => {
     out.fetch({start: {row: {a: 2}, basis: 'after'}, reverse: true}),
   ).toEqual(asNodes([]));
 
-  consume(s.push({type: 'add', row: {a: 2}}));
-  consume(s.push({type: 'add', row: {a: 3}}));
+  consume(s.push(makeSourceChangeAdd({a: 2})));
+  consume(s.push(makeSourceChangeAdd({a: 3})));
   expect(out.fetch({start: {row: {a: 2}, basis: 'at'}, reverse: true})).toEqual(
     asNodes([{a: 2}]),
   );
@@ -238,7 +250,7 @@ test('fetch-start reverse', () => {
     out.fetch({start: {row: {a: 3}, basis: 'after'}, reverse: true}),
   ).toEqual(asNodes([{a: 2}]));
 
-  consume(s.push({type: 'remove', row: {a: 3}}));
+  consume(s.push(makeSourceChangeRemove({a: 3})));
   expect(out.fetch({start: {row: {a: 2}, basis: 'at'}, reverse: true})).toEqual(
     asNodes([{a: 2}]),
   );
@@ -267,7 +279,7 @@ suite('fetch-with-constraint-and-start', () => {
       ['a'],
     );
     for (const row of c.startData) {
-      consume(s.push({type: 'add', row}));
+      consume(s.push(makeSourceChangeAdd(row)));
     }
     const out = new Catch(s.connect(sort));
     return out.fetch({
@@ -596,42 +608,39 @@ test('push', () => {
 
   expect(out.pushes).toEqual([]);
 
-  consume(s.push({type: 'add', row: {a: 2}}));
-  expect(out.pushes).toEqual(asChanges([{type: 'add', row: {a: 2}}]));
+  consume(s.push(makeSourceChangeAdd({a: 2})));
+  expect(out.pushes).toEqual(asChanges([makeSourceChangeAdd({a: 2})]));
 
-  consume(s.push({type: 'add', row: {a: 1}}));
+  consume(s.push(makeSourceChangeAdd({a: 1})));
   expect(out.pushes).toEqual(
-    asChanges([
-      {type: 'add', row: {a: 2}},
-      {type: 'add', row: {a: 1}},
-    ]),
+    asChanges([makeSourceChangeAdd({a: 2}), makeSourceChangeAdd({a: 1})]),
   );
 
-  consume(s.push({type: 'remove', row: {a: 1}}));
-  consume(s.push({type: 'remove', row: {a: 2}}));
+  consume(s.push(makeSourceChangeRemove({a: 1})));
+  consume(s.push(makeSourceChangeRemove({a: 2})));
   expect(out.pushes).toEqual(
     asChanges([
-      {type: 'add', row: {a: 2}},
-      {type: 'add', row: {a: 1}},
-      {type: 'remove', row: {a: 1}},
-      {type: 'remove', row: {a: 2}},
+      makeSourceChangeAdd({a: 2}),
+      makeSourceChangeAdd({a: 1}),
+      makeSourceChangeRemove({a: 1}),
+      makeSourceChangeRemove({a: 2}),
     ]),
   );
 
   // Remove row that isn't there
   out.reset();
-  expect(() => consume(s.push({type: 'remove', row: {a: 1}}))).toThrow(
+  expect(() => consume(s.push(makeSourceChangeRemove({a: 1})))).toThrow(
     'Row not found',
   );
   expect(out.pushes).toEqual(asChanges([]));
 
   // Add row twice
-  consume(s.push({type: 'add', row: {a: 1}}));
-  expect(out.pushes).toEqual(asChanges([{type: 'add', row: {a: 1}}]));
-  expect(() => consume(s.push({type: 'add', row: {a: 1}}))).toThrow(
+  consume(s.push(makeSourceChangeAdd({a: 1})));
+  expect(out.pushes).toEqual(asChanges([makeSourceChangeAdd({a: 1})]));
+  expect(() => consume(s.push(makeSourceChangeAdd({a: 1})))).toThrow(
     'Row already exists',
   );
-  expect(out.pushes).toEqual(asChanges([{type: 'add', row: {a: 1}}]));
+  expect(out.pushes).toEqual(asChanges([makeSourceChangeAdd({a: 1})]));
 });
 
 test('overlay-source-isolation', () => {
@@ -661,7 +670,7 @@ test('overlay-source-isolation', () => {
   o2.onPush = fetchAll;
   o3.onPush = fetchAll;
 
-  consume(s.push({type: 'add', row: {a: 2}}));
+  consume(s.push(makeSourceChangeAdd({a: 2})));
   expect(o1.fetches).toEqual([
     asNodes([{a: 2}]),
     asNodes([{a: 2}]),
@@ -708,17 +717,15 @@ test('overlay-source-isolation with split edit', () => {
   o2.onPush = fetchAll;
   o3.onPush = fetchAll;
 
-  consume(s.push({type: 'add', row: {a: 2, b: 'foo', c: 1}}));
-  consume(s.push({type: 'add', row: {a: 3, b: 'bar', c: 1}}));
+  consume(s.push(makeSourceChangeAdd({a: 2, b: 'foo', c: 1})));
+  consume(s.push(makeSourceChangeAdd({a: 3, b: 'bar', c: 1})));
 
   clearAll();
 
   consume(
-    s.push({
-      type: 'edit',
-      oldRow: {a: 2, b: 'foo', c: 1},
-      row: {a: 2, b: 'foo2', c: 1},
-    }),
+    s.push(
+      makeSourceChangeEdit({a: 2, b: 'foo2', c: 1}, {a: 2, b: 'foo', c: 1}),
+    ),
   );
 
   // o2 needs edit split, edit is split for all connections,
@@ -997,11 +1004,9 @@ test('overlay-source-isolation with split edit', () => {
   clearAll();
 
   consume(
-    s.push({
-      type: 'edit',
-      oldRow: {a: 3, b: 'bar', c: 1},
-      row: {a: 3, b: 'bar', c: 2},
-    }),
+    s.push(
+      makeSourceChangeEdit({a: 3, b: 'bar', c: 2}, {a: 3, b: 'bar', c: 1}),
+    ),
   );
 
   // o2 and o3 need edit split, edit is split for all connections,
@@ -1288,7 +1293,7 @@ suite('overlay-vs-fetch-start', () => {
       'a',
     ]);
     for (const row of c.startData) {
-      consume(s.push({type: 'add', row}));
+      consume(s.push(makeSourceChangeAdd(row)));
     }
     const out = new OverlaySpy(s.connect(sort));
     out.onPush = () =>
@@ -1314,7 +1319,7 @@ suite('overlay-vs-fetch-start', () => {
           row: {a: 2},
           basis: 'at',
         },
-        change: {type: 'add', row: {a: 1}},
+        change: makeSourceChangeAdd({a: 1}),
       }),
     ).toMatchInlineSnapshot(`
       [
@@ -1345,7 +1350,7 @@ suite('overlay-vs-fetch-start', () => {
           basis: 'at',
         },
         reverse: true,
-        change: {type: 'add', row: {a: 1}},
+        change: makeSourceChangeAdd({a: 1}),
       }),
     ).toMatchInlineSnapshot(`
       [
@@ -1375,7 +1380,7 @@ suite('overlay-vs-fetch-start', () => {
           row: {a: 2},
           basis: 'at',
         },
-        change: {type: 'add', row: {a: 3}},
+        change: makeSourceChangeAdd({a: 3}),
       }),
     ).toMatchInlineSnapshot(`
       [
@@ -1412,7 +1417,7 @@ suite('overlay-vs-fetch-start', () => {
           basis: 'at',
         },
         reverse: true,
-        change: {type: 'add', row: {a: 3}},
+        change: makeSourceChangeAdd({a: 3}),
       }),
     ).toMatchInlineSnapshot(`
       [
@@ -1436,7 +1441,7 @@ suite('overlay-vs-fetch-start', () => {
           row: {a: 2},
           basis: 'at',
         },
-        change: {type: 'add', row: {a: 5}},
+        change: makeSourceChangeAdd({a: 5}),
       }),
     ).toMatchInlineSnapshot(`
       [
@@ -1473,7 +1478,7 @@ suite('overlay-vs-fetch-start', () => {
           basis: 'at',
         },
         reverse: true,
-        change: {type: 'add', row: {a: 5}},
+        change: makeSourceChangeAdd({a: 5}),
       }),
     ).toMatchInlineSnapshot(`
       [
@@ -1497,7 +1502,7 @@ suite('overlay-vs-fetch-start', () => {
           row: {a: 2},
           basis: 'after',
         },
-        change: {type: 'add', row: {a: 1}},
+        change: makeSourceChangeAdd({a: 1}),
       }),
     ).toMatchInlineSnapshot(`
       [
@@ -1522,7 +1527,7 @@ suite('overlay-vs-fetch-start', () => {
           basis: 'after',
         },
         reverse: true,
-        change: {type: 'add', row: {a: 1}},
+        change: makeSourceChangeAdd({a: 1}),
       }),
     ).toMatchInlineSnapshot(`
       [
@@ -1546,7 +1551,7 @@ suite('overlay-vs-fetch-start', () => {
           row: {a: 2},
           basis: 'after',
         },
-        change: {type: 'add', row: {a: 3}},
+        change: makeSourceChangeAdd({a: 3}),
       }),
     ).toMatchInlineSnapshot(`
       [
@@ -1577,7 +1582,7 @@ suite('overlay-vs-fetch-start', () => {
           basis: 'after',
         },
         reverse: true,
-        change: {type: 'add', row: {a: 3}},
+        change: makeSourceChangeAdd({a: 3}),
       }),
     ).toMatchInlineSnapshot(`
       [
@@ -1594,7 +1599,7 @@ suite('overlay-vs-fetch-start', () => {
           row: {a: 2},
           basis: 'after',
         },
-        change: {type: 'add', row: {a: 5}},
+        change: makeSourceChangeAdd({a: 5}),
       }),
     ).toMatchInlineSnapshot(`
       [
@@ -1625,7 +1630,7 @@ suite('overlay-vs-fetch-start', () => {
           basis: 'after',
         },
         reverse: true,
-        change: {type: 'add', row: {a: 5}},
+        change: makeSourceChangeAdd({a: 5}),
       }),
     ).toMatchInlineSnapshot(`
       [
@@ -1642,7 +1647,7 @@ suite('overlay-vs-fetch-start', () => {
           row: {a: 4},
           basis: 'after',
         },
-        change: {type: 'add', row: {a: 3}},
+        change: makeSourceChangeAdd({a: 3}),
       }),
     ).toMatchInlineSnapshot(`
       [
@@ -1660,7 +1665,7 @@ suite('overlay-vs-fetch-start', () => {
           basis: 'after',
         },
         reverse: true,
-        change: {type: 'add', row: {a: 3}},
+        change: makeSourceChangeAdd({a: 3}),
       }),
     ).toMatchInlineSnapshot(`
       [
@@ -1690,7 +1695,7 @@ suite('overlay-vs-fetch-start', () => {
           row: {a: 4},
           basis: 'after',
         },
-        change: {type: 'add', row: {a: 5}},
+        change: makeSourceChangeAdd({a: 5}),
       }),
     ).toMatchInlineSnapshot(`
       [
@@ -1715,7 +1720,7 @@ suite('overlay-vs-fetch-start', () => {
           basis: 'after',
         },
         reverse: true,
-        change: {type: 'add', row: {a: 5}},
+        change: makeSourceChangeAdd({a: 5}),
       }),
     ).toMatchInlineSnapshot(`
       [
@@ -1739,7 +1744,7 @@ suite('overlay-vs-fetch-start', () => {
           row: {a: 2},
           basis: 'at',
         },
-        change: {type: 'remove', row: {a: 2}},
+        change: makeSourceChangeRemove({a: 2}),
       }),
     ).toMatchInlineSnapshot(`
       [
@@ -1764,7 +1769,7 @@ suite('overlay-vs-fetch-start', () => {
           basis: 'at',
         },
         reverse: true,
-        change: {type: 'remove', row: {a: 2}},
+        change: makeSourceChangeRemove({a: 2}),
       }),
     ).toMatchInlineSnapshot(`
       [
@@ -1781,7 +1786,7 @@ suite('overlay-vs-fetch-start', () => {
           row: {a: 2},
           basis: 'at',
         },
-        change: {type: 'remove', row: {a: 4}},
+        change: makeSourceChangeRemove({a: 4}),
       }),
     ).toMatchInlineSnapshot(`
       [
@@ -1806,7 +1811,7 @@ suite('overlay-vs-fetch-start', () => {
           basis: 'at',
         },
         reverse: true,
-        change: {type: 'remove', row: {a: 4}},
+        change: makeSourceChangeRemove({a: 4}),
       }),
     ).toMatchInlineSnapshot(`
       [
@@ -1830,7 +1835,7 @@ suite('overlay-vs-fetch-start', () => {
           row: {a: 4},
           basis: 'at',
         },
-        change: {type: 'remove', row: {a: 2}},
+        change: makeSourceChangeRemove({a: 2}),
       }),
     ).toMatchInlineSnapshot(`
       [
@@ -1855,7 +1860,7 @@ suite('overlay-vs-fetch-start', () => {
           basis: 'at',
         },
         reverse: true,
-        change: {type: 'remove', row: {a: 2}},
+        change: makeSourceChangeRemove({a: 2}),
       }),
     ).toMatchInlineSnapshot(`
       [
@@ -1879,7 +1884,7 @@ suite('overlay-vs-fetch-start', () => {
           row: {a: 4},
           basis: 'at',
         },
-        change: {type: 'remove', row: {a: 4}},
+        change: makeSourceChangeRemove({a: 4}),
       }),
     ).toMatchInlineSnapshot(`
       [
@@ -1897,7 +1902,7 @@ suite('overlay-vs-fetch-start', () => {
           basis: 'at',
         },
         reverse: true,
-        change: {type: 'remove', row: {a: 4}},
+        change: makeSourceChangeRemove({a: 4}),
       }),
     ).toMatchInlineSnapshot(`
       [
@@ -1921,7 +1926,7 @@ suite('overlay-vs-fetch-start', () => {
           row: {a: 2},
           basis: 'after',
         },
-        change: {type: 'remove', row: {a: 2}},
+        change: makeSourceChangeRemove({a: 2}),
       }),
     ).toMatchInlineSnapshot(`
       [
@@ -1946,7 +1951,7 @@ suite('overlay-vs-fetch-start', () => {
           basis: 'after',
         },
         reverse: true,
-        change: {type: 'remove', row: {a: 2}},
+        change: makeSourceChangeRemove({a: 2}),
       }),
     ).toMatchInlineSnapshot(`
       [
@@ -1963,7 +1968,7 @@ suite('overlay-vs-fetch-start', () => {
           row: {a: 2},
           basis: 'after',
         },
-        change: {type: 'remove', row: {a: 4}},
+        change: makeSourceChangeRemove({a: 4}),
       }),
     ).toMatchInlineSnapshot(`
       [
@@ -1980,7 +1985,7 @@ suite('overlay-vs-fetch-start', () => {
           row: {a: 4},
           basis: 'after',
         },
-        change: {type: 'remove', row: {a: 2}},
+        change: makeSourceChangeRemove({a: 2}),
       }),
     ).toMatchInlineSnapshot(`
       [
@@ -1997,7 +2002,7 @@ suite('overlay-vs-fetch-start', () => {
           row: {a: 4},
           basis: 'after',
         },
-        change: {type: 'remove', row: {a: 2}},
+        change: makeSourceChangeRemove({a: 2}),
       }),
     ).toMatchInlineSnapshot(`
       [
@@ -2014,7 +2019,7 @@ suite('overlay-vs-fetch-start', () => {
           row: {a: 4},
           basis: 'after',
         },
-        change: {type: 'remove', row: {a: 4}},
+        change: makeSourceChangeRemove({a: 4}),
       }),
     ).toMatchInlineSnapshot(`
       [
@@ -2032,7 +2037,7 @@ suite('overlay-vs-fetch-start', () => {
           basis: 'after',
         },
         reverse: true,
-        change: {type: 'remove', row: {a: 4}},
+        change: makeSourceChangeRemove({a: 4}),
       }),
     ).toMatchInlineSnapshot(`
       [
@@ -2067,7 +2072,7 @@ suite('overlay-vs-constraint', () => {
       ['a'],
     );
     for (const row of c.startData) {
-      consume(s.push({type: 'add', row}));
+      consume(s.push(makeSourceChangeAdd(row)));
     }
     const out = new OverlaySpy(s.connect(sort));
     out.onPush = () =>
@@ -2092,7 +2097,7 @@ suite('overlay-vs-constraint', () => {
           {a: 4, b: true},
         ],
         constraint: {b: true},
-        change: {type: 'add', row: {a: 1, b: true}},
+        change: makeSourceChangeAdd({a: 1, b: true}),
       }),
     ).toMatchInlineSnapshot(`
       [
@@ -2124,7 +2129,7 @@ suite('overlay-vs-constraint', () => {
           {a: 4, b: true},
         ],
         constraint: {b: true},
-        change: {type: 'add', row: {a: 1, b: false}},
+        change: makeSourceChangeAdd({a: 1, b: false}),
       }),
     ).toMatchInlineSnapshot(`
       [
@@ -2150,7 +2155,7 @@ suite('overlay-vs-constraint', () => {
           {a: 5, b: true},
         ],
         constraint: {b: true},
-        change: {type: 'edit', oldRow: {a: 4, b: true}, row: {a: 4, b: false}},
+        change: makeSourceChangeEdit({a: 4, b: false}, {a: 4, b: true}),
       }),
     ).toMatchInlineSnapshot(`
       [
@@ -2176,7 +2181,7 @@ suite('overlay-vs-constraint', () => {
           {a: 5, b: true},
         ],
         constraint: {b: false},
-        change: {type: 'edit', oldRow: {a: 4, b: true}, row: {a: 4, b: false}},
+        change: makeSourceChangeEdit({a: 4, b: false}, {a: 4, b: true}),
       }),
     ).toMatchInlineSnapshot(`
       [
@@ -2209,7 +2214,7 @@ suite('overlay-vs-constraint', () => {
           {a: 5, b: true},
         ],
         constraint: {a: 4, b: false},
-        change: {type: 'edit', oldRow: {a: 4, b: true}, row: {a: 4, b: false}},
+        change: makeSourceChangeEdit({a: 4, b: false}, {a: 4, b: true}),
       }),
     ).toMatchInlineSnapshot(`
       [
@@ -2244,7 +2249,7 @@ suite('overlay-vs-filter', () => {
       ['a', 'b'],
     );
     for (const row of c.startData) {
-      consume(s.push({type: 'add', row}));
+      consume(s.push(makeSourceChangeAdd(row)));
     }
     const sourceInput = s.connect(sort, c.filter);
     const out = new OverlaySpy(sourceInput);
@@ -2276,7 +2281,7 @@ suite('overlay-vs-filter', () => {
           left: {type: 'column', name: 'b'},
           right: {type: 'literal', value: true},
         },
-        change: {type: 'add', row: {a: 1, b: true}},
+        change: makeSourceChangeAdd({a: 1, b: true}),
       }),
     ).toMatchInlineSnapshot(`
       {
@@ -2316,7 +2321,7 @@ suite('overlay-vs-filter', () => {
           left: {type: 'column', name: 'b'},
           right: {type: 'literal', value: true},
         },
-        change: {type: 'add', row: {a: 1, b: false}},
+        change: makeSourceChangeAdd({a: 1, b: false}),
       }),
     ).toMatchInlineSnapshot(`
       {
@@ -2340,7 +2345,7 @@ suite('overlay-vs-filter', () => {
           left: {type: 'column', name: 'b'},
           right: {type: 'literal', value: true},
         },
-        change: {type: 'edit', oldRow: {a: 4, b: true}, row: {a: 4, b: false}},
+        change: makeSourceChangeEdit({a: 4, b: false}, {a: 4, b: true}),
       }),
     ).toMatchInlineSnapshot(`
       {
@@ -2374,7 +2379,7 @@ suite('overlay-vs-filter', () => {
           left: {type: 'column', name: 'b'},
           right: {type: 'literal', value: false},
         },
-        change: {type: 'edit', oldRow: {a: 4, b: true}, row: {a: 4, b: false}},
+        change: makeSourceChangeEdit({a: 4, b: false}, {a: 4, b: true}),
       }),
     ).toMatchInlineSnapshot(`
       {
@@ -2425,7 +2430,7 @@ suite('overlay-vs-filter', () => {
             },
           ],
         },
-        change: {type: 'add', row: {a: 1, b: false}},
+        change: makeSourceChangeAdd({a: 1, b: false}),
       }),
     ).toMatchInlineSnapshot(`
       {
@@ -2483,7 +2488,7 @@ suite('overlay-vs-filter', () => {
             },
           ],
         },
-        change: {type: 'add', row: {a: 1, b: false}},
+        change: makeSourceChangeAdd({a: 1, b: false}),
       }),
     ).toMatchInlineSnapshot(`
       {
@@ -2550,7 +2555,7 @@ suite('overlay-vs-filter', () => {
             },
           ],
         },
-        change: {type: 'add', row: {a: 1, b: false}},
+        change: makeSourceChangeAdd({a: 1, b: false}),
       }),
     ).toMatchInlineSnapshot(`
       {
@@ -2618,7 +2623,7 @@ suite('overlay-vs-filter', () => {
             },
           ],
         },
-        change: {type: 'add', row: {a: 4, b: false}},
+        change: makeSourceChangeAdd({a: 4, b: false}),
       }),
     ).toMatchInlineSnapshot(`
       {
@@ -2667,7 +2672,7 @@ suite('overlay-vs-constraint-and-start', () => {
       ['a'],
     );
     for (const row of c.startData) {
-      consume(s.push({type: 'add', row}));
+      consume(s.push(makeSourceChangeAdd(row)));
     }
     const out = new OverlaySpy(s.connect(sort));
     out.onPush = () =>
@@ -2700,7 +2705,7 @@ suite('overlay-vs-constraint-and-start', () => {
           basis: 'at',
         },
         constraint: {b: false},
-        change: {type: 'add', row: {a: 5.75, b: false}},
+        change: makeSourceChangeAdd({a: 5.75, b: false}),
       }),
     ).toMatchInlineSnapshot(`
       [
@@ -2747,7 +2752,7 @@ suite('overlay-vs-constraint-and-start', () => {
         },
         reverse: true,
         constraint: {b: false},
-        change: {type: 'add', row: {a: 5.75, b: false}},
+        change: makeSourceChangeAdd({a: 5.75, b: false}),
       }),
     ).toMatchInlineSnapshot(`
       [
@@ -2793,7 +2798,7 @@ suite('overlay-vs-constraint-and-start', () => {
           basis: 'at',
         },
         constraint: {b: false},
-        change: {type: 'add', row: {a: 4, b: false}},
+        change: makeSourceChangeAdd({a: 4, b: false}),
       }),
     ).toMatchInlineSnapshot(`
       [
@@ -2833,7 +2838,7 @@ suite('overlay-vs-constraint-and-start', () => {
         },
         reverse: true,
         constraint: {b: false},
-        change: {type: 'add', row: {a: 4, b: false}},
+        change: makeSourceChangeAdd({a: 4, b: false}),
       }),
     ).toMatchInlineSnapshot(`
       [
@@ -2872,7 +2877,7 @@ suite('overlay-vs-constraint-and-start', () => {
           basis: 'at',
         },
         constraint: {b: false},
-        change: {type: 'add', row: {a: 8, b: false}},
+        change: makeSourceChangeAdd({a: 8, b: false}),
       }),
     ).toMatchInlineSnapshot(`
       [
@@ -2919,7 +2924,7 @@ suite('overlay-vs-constraint-and-start', () => {
         },
         reverse: true,
         constraint: {b: false},
-        change: {type: 'add', row: {a: 8, b: false}},
+        change: makeSourceChangeAdd({a: 8, b: false}),
       }),
     ).toMatchInlineSnapshot(`
       [
@@ -2965,7 +2970,7 @@ suite('overlay-vs-constraint-and-start', () => {
           basis: 'after',
         },
         constraint: {b: false},
-        change: {type: 'add', row: {a: 6.5, b: false}},
+        change: makeSourceChangeAdd({a: 6.5, b: false}),
       }),
     ).toMatchInlineSnapshot(`
       [
@@ -3012,7 +3017,7 @@ suite('overlay-vs-constraint-and-start', () => {
         },
         reverse: true,
         constraint: {b: false},
-        change: {type: 'add', row: {a: 6.5, b: false}},
+        change: makeSourceChangeAdd({a: 6.5, b: false}),
       }),
     ).toMatchInlineSnapshot(`
       [
@@ -3063,7 +3068,7 @@ suite('overlay-vs-constraint-and-start', () => {
           basis: 'at',
         },
         constraint: {b: true, c: 1},
-        change: {type: 'add', row: {a: 5.5, b: true, c: 1}},
+        change: makeSourceChangeAdd({a: 5.5, b: true, c: 1}),
       }),
     ).toMatchInlineSnapshot(`
       [
@@ -3110,7 +3115,7 @@ suite('overlay-vs-constraint-and-start', () => {
         },
         reverse: true,
         constraint: {b: true, c: 1},
-        change: {type: 'add', row: {a: 5.5, b: true, c: 1}},
+        change: makeSourceChangeAdd({a: 5.5, b: true, c: 1}),
       }),
     ).toMatchInlineSnapshot(`
       [
@@ -3156,9 +3161,9 @@ test('per-output-sorts', () => {
   const out1 = new Catch(s.connect(sort1));
   const out2 = new Catch(s.connect(sort2));
 
-  consume(s.push({type: 'add', row: {a: 2, b: 3}}));
-  consume(s.push({type: 'add', row: {a: 1, b: 2}}));
-  consume(s.push({type: 'add', row: {a: 3, b: 1}}));
+  consume(s.push(makeSourceChangeAdd({a: 2, b: 3})));
+  consume(s.push(makeSourceChangeAdd({a: 1, b: 2})));
+  consume(s.push(makeSourceChangeAdd({a: 3, b: 1})));
 
   expect(out1.fetch({})).toEqual(
     asNodes([
@@ -3188,9 +3193,9 @@ test('streams-are-one-time-only', () => {
     {a: {type: 'number'}},
     ['a'],
   );
-  consume(source.push({type: 'add', row: {a: 1}}));
-  consume(source.push({type: 'add', row: {a: 2}}));
-  consume(source.push({type: 'add', row: {a: 3}}));
+  consume(source.push(makeSourceChangeAdd({a: 1})));
+  consume(source.push(makeSourceChangeAdd({a: 2})));
+  consume(source.push(makeSourceChangeAdd({a: 3})));
 
   const conn = source.connect([['a', 'asc']]);
   const stream = conn.fetch({});
@@ -3224,9 +3229,9 @@ test('json is a valid type to read and write to/from a source', () => {
     ['a'],
   );
 
-  consume(source.push({type: 'add', row: {a: 1, j: {foo: 'bar'}}}));
-  consume(source.push({type: 'add', row: {a: 2, j: {baz: 'qux'}}}));
-  consume(source.push({type: 'add', row: {a: 3, j: {foo: 'foo'}}}));
+  consume(source.push(makeSourceChangeAdd({a: 1, j: {foo: 'bar'}})));
+  consume(source.push(makeSourceChangeAdd({a: 2, j: {baz: 'qux'}})));
+  consume(source.push(makeSourceChangeAdd({a: 3, j: {foo: 'foo'}})));
 
   const out = new Catch(source.connect([['a', 'asc']]));
   expect(out.fetch({})).toEqual(
@@ -3237,9 +3242,9 @@ test('json is a valid type to read and write to/from a source', () => {
     ]),
   );
 
-  consume(source.push({type: 'add', row: {a: 4, j: {foo: 'foo'}}}));
-  consume(source.push({type: 'add', row: {a: 5, j: {baz: 'qux'}}}));
-  consume(source.push({type: 'add', row: {a: 6, j: {foo: 'bar'}}}));
+  consume(source.push(makeSourceChangeAdd({a: 4, j: {foo: 'foo'}})));
+  consume(source.push(makeSourceChangeAdd({a: 5, j: {baz: 'qux'}})));
+  consume(source.push(makeSourceChangeAdd({a: 6, j: {foo: 'bar'}})));
   expect(out.pushes).toEqual([
     {
       type: 'add',
@@ -3258,13 +3263,11 @@ test('json is a valid type to read and write to/from a source', () => {
   // check edit and remove too
   out.reset();
   consume(
-    source.push({
-      type: 'edit',
-      oldRow: {a: 5, j: {baz: 'qux'}},
-      row: {a: 5, j: {baz: 'qux2'}},
-    }),
+    source.push(
+      makeSourceChangeEdit({a: 5, j: {baz: 'qux2'}}, {a: 5, j: {baz: 'qux'}}),
+    ),
   );
-  consume(source.push({type: 'remove', row: {a: 5, j: {baz: 'qux'}}}));
+  consume(source.push(makeSourceChangeRemove({a: 5, j: {baz: 'qux'}})));
   expect(out.pushes).toMatchInlineSnapshot(`
     [
       {
@@ -3359,9 +3362,9 @@ test('IS and IS NOT comparisons against null', () => {
     ['a'],
   );
 
-  consume(source.push({type: 'add', row: {a: 1, s: 'foo'}}));
-  consume(source.push({type: 'add', row: {a: 2, s: 'bar'}}));
-  consume(source.push({type: 'add', row: {a: 3, s: null}}));
+  consume(source.push(makeSourceChangeAdd({a: 1, s: 'foo'})));
+  consume(source.push(makeSourceChangeAdd({a: 2, s: 'bar'})));
+  consume(source.push(makeSourceChangeAdd({a: 3, s: null})));
 
   let out = new Catch(
     source.connect([['a', 'asc']], {
@@ -3468,8 +3471,8 @@ test('constant/literal expression', () => {
     ['n'],
   );
 
-  consume(source.push({type: 'add', row: {n: 1, b: true, s: 'foo'}}));
-  consume(source.push({type: 'add', row: {n: 2, b: false, s: 'bar'}}));
+  consume(source.push(makeSourceChangeAdd({n: 1, b: true, s: 'foo'})));
+  consume(source.push(makeSourceChangeAdd({n: 2, b: false, s: 'bar'})));
   const allData = asNodes([
     {n: 1, b: true, s: 'foo'},
     {n: 2, b: false, s: 'bar'},
@@ -3547,7 +3550,7 @@ suite('epoch-based overlay semantic equivalence', () => {
     });
 
     // Push an add - this will trigger 4 push phases (one per connection)
-    consume(s.push({type: 'add', row: {a: 1}}));
+    consume(s.push(makeSourceChangeAdd({a: 1})));
 
     // Verify the invariant: connection sees overlay iff its index <= current push target
     // Phase 0: pushing to conn[0], only conn[0] should see overlay
@@ -3574,7 +3577,7 @@ suite('epoch-based overlay semantic equivalence', () => {
     );
 
     // Add initial data
-    consume(s.push({type: 'add', row: {a: 1, b: 'old'}}));
+    consume(s.push(makeSourceChangeAdd({a: 1, b: 'old'})));
 
     // Create 3 connections - middle one has splitEditKeys on 'b'
     const spies = [
@@ -3600,9 +3603,7 @@ suite('epoch-based overlay semantic equivalence', () => {
     });
 
     // Push an edit that will be split into remove + add
-    consume(
-      s.push({type: 'edit', oldRow: {a: 1, b: 'old'}, row: {a: 1, b: 'new'}}),
-    );
+    consume(s.push(makeSourceChangeEdit({a: 1, b: 'new'}, {a: 1, b: 'old'})));
 
     // Split edit creates 6 push phases: 3 for remove, 3 for add
     expect(observations[0].length).toBe(6);

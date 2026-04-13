@@ -4,7 +4,11 @@ import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts'
 import {Catch} from './catch.ts';
 import type {FetchRequest} from './operator.ts';
 import {type Bound, Skip} from './skip.ts';
-import type {SourceChange} from './source.ts';
+import {
+  type SourceChange,
+  makeSourceChangeAdd,
+  makeSourceChangeEdit,
+} from './source.ts';
 import {consume} from './stream.ts';
 import {createSource} from './test/source-factory.ts';
 
@@ -25,46 +29,39 @@ suite('fetch', () => {
     );
 
     consume(
-      ms.push({
-        type: 'add',
-        row: {id: 1, name: 'Aaron', startDate: '2019-06-18'},
-      }),
+      ms.push(
+        makeSourceChangeAdd({id: 1, name: 'Aaron', startDate: '2019-06-18'}),
+      ),
     );
     consume(
-      ms.push({
-        type: 'add',
-        row: {id: 2, name: 'Erik', startDate: '2020-08-01'},
-      }),
+      ms.push(
+        makeSourceChangeAdd({id: 2, name: 'Erik', startDate: '2020-08-01'}),
+      ),
     );
     consume(
-      ms.push({
-        type: 'add',
-        row: {id: 3, name: 'Greg', startDate: '2021-12-07'},
-      }),
+      ms.push(
+        makeSourceChangeAdd({id: 3, name: 'Greg', startDate: '2021-12-07'}),
+      ),
     );
     consume(
-      ms.push({
-        type: 'add',
-        row: {id: 4, name: 'Cesar', startDate: '2022-12-01'},
-      }),
+      ms.push(
+        makeSourceChangeAdd({id: 4, name: 'Cesar', startDate: '2022-12-01'}),
+      ),
     );
     consume(
-      ms.push({
-        type: 'add',
-        row: {id: 5, name: 'Alex', startDate: '2023-04-01'},
-      }),
+      ms.push(
+        makeSourceChangeAdd({id: 5, name: 'Alex', startDate: '2023-04-01'}),
+      ),
     );
     consume(
-      ms.push({
-        type: 'add',
-        row: {id: 6, name: 'Darick', startDate: '2023-09-01'},
-      }),
+      ms.push(
+        makeSourceChangeAdd({id: 6, name: 'Darick', startDate: '2023-09-01'}),
+      ),
     );
     consume(
-      ms.push({
-        type: 'add',
-        row: {id: 7, name: 'Matt', startDate: '2024-06-01'},
-      }),
+      ms.push(
+        makeSourceChangeAdd({id: 7, name: 'Matt', startDate: '2024-06-01'}),
+      ),
     );
 
     const conn = ms.connect([
@@ -926,7 +923,7 @@ suite('push', () => {
     expect(
       t({
         skipBound: {row: {id: 1, date: '2014-01-24'}, exclusive: false},
-        pushes: [{type: 'add', row: {id: 1, date: '2014-01-23'}}],
+        pushes: [makeSourceChangeAdd({id: 1, date: '2014-01-23'})],
       }),
     ).toMatchInlineSnapshot(`[]`);
   });
@@ -935,7 +932,7 @@ suite('push', () => {
     expect(
       t({
         skipBound: {row: {id: 1, date: '2014-01-24'}, exclusive: false},
-        pushes: [{type: 'add', row: {id: 2, date: '2014-01-23'}}],
+        pushes: [makeSourceChangeAdd({id: 2, date: '2014-01-23'})],
       }),
     ).toMatchInlineSnapshot(`[]`);
   });
@@ -944,7 +941,7 @@ suite('push', () => {
     expect(
       t({
         skipBound: {row: {id: 1, date: '2014-01-24'}, exclusive: false},
-        pushes: [{type: 'add', row: {id: 1, date: '2014-01-24'}}],
+        pushes: [makeSourceChangeAdd({id: 1, date: '2014-01-24'})],
       }),
     ).toMatchInlineSnapshot(`
       [
@@ -966,7 +963,7 @@ suite('push', () => {
     expect(
       t({
         skipBound: {row: {id: 1, date: '2014-01-24'}, exclusive: false},
-        pushes: [{type: 'add', row: {id: 2, date: '2014-01-24'}}],
+        pushes: [makeSourceChangeAdd({id: 2, date: '2014-01-24'})],
       }),
     ).toMatchInlineSnapshot(`
       [
@@ -988,7 +985,7 @@ suite('push', () => {
     expect(
       t({
         skipBound: {row: {id: 1, date: '2014-01-24'}, exclusive: false},
-        pushes: [{type: 'add', row: {id: 1, date: '2014-01-25'}}],
+        pushes: [makeSourceChangeAdd({id: 1, date: '2014-01-25'})],
       }),
     ).toMatchInlineSnapshot(`
       [
@@ -1010,7 +1007,7 @@ suite('push', () => {
     expect(
       t({
         skipBound: {row: {id: 1, date: '2014-01-24'}, exclusive: false},
-        pushes: [{type: 'add', row: {id: 2, date: '2014-01-25'}}],
+        pushes: [makeSourceChangeAdd({id: 2, date: '2014-01-25'})],
       }),
     ).toMatchInlineSnapshot(`
       [
@@ -1032,7 +1029,7 @@ suite('push', () => {
     expect(
       t({
         skipBound: {row: {id: 1, date: '2014-01-24'}, exclusive: true},
-        pushes: [{type: 'add', row: {id: 1, date: '2014-01-23'}}],
+        pushes: [makeSourceChangeAdd({id: 1, date: '2014-01-23'})],
       }),
     ).toMatchInlineSnapshot(`[]`);
   });
@@ -1041,7 +1038,7 @@ suite('push', () => {
     expect(
       t({
         skipBound: {row: {id: 1, date: '2014-01-24'}, exclusive: true},
-        pushes: [{type: 'add', row: {id: 2, date: '2014-01-23'}}],
+        pushes: [makeSourceChangeAdd({id: 2, date: '2014-01-23'})],
       }),
     ).toMatchInlineSnapshot(`[]`);
   });
@@ -1050,7 +1047,7 @@ suite('push', () => {
     expect(
       t({
         skipBound: {row: {id: 1, date: '2014-01-24'}, exclusive: true},
-        pushes: [{type: 'add', row: {id: 1, date: '2014-01-24'}}],
+        pushes: [makeSourceChangeAdd({id: 1, date: '2014-01-24'})],
       }),
     ).toMatchInlineSnapshot(`[]`);
   });
@@ -1059,7 +1056,7 @@ suite('push', () => {
     expect(
       t({
         skipBound: {row: {id: 1, date: '2014-01-24'}, exclusive: true},
-        pushes: [{type: 'add', row: {id: 2, date: '2014-01-24'}}],
+        pushes: [makeSourceChangeAdd({id: 2, date: '2014-01-24'})],
       }),
     ).toMatchInlineSnapshot(`
       [
@@ -1081,7 +1078,7 @@ suite('push', () => {
     expect(
       t({
         skipBound: {row: {id: 1, date: '2014-01-24'}, exclusive: true},
-        pushes: [{type: 'add', row: {id: 1, date: '2014-01-25'}}],
+        pushes: [makeSourceChangeAdd({id: 1, date: '2014-01-25'})],
       }),
     ).toMatchInlineSnapshot(`
       [
@@ -1103,7 +1100,7 @@ suite('push', () => {
     expect(
       t({
         skipBound: {row: {id: 1, date: '2014-01-24'}, exclusive: true},
-        pushes: [{type: 'add', row: {id: 2, date: '2014-01-25'}}],
+        pushes: [makeSourceChangeAdd({id: 2, date: '2014-01-25'})],
       }),
     ).toMatchInlineSnapshot(`
       [
@@ -1126,12 +1123,11 @@ suite('push', () => {
       t({
         skipBound: {row: {id: 1, date: '2014-01-24'}, exclusive: false},
         pushes: [
-          {type: 'add', row: {id: 1, date: '2014-01-22'}},
-          {
-            type: 'edit',
-            oldRow: {id: 1, date: '2014-01-22'},
-            row: {id: 1, date: '2014-01-23'},
-          },
+          makeSourceChangeAdd({id: 1, date: '2014-01-22'}),
+          makeSourceChangeEdit(
+            {id: 1, date: '2014-01-23'},
+            {id: 1, date: '2014-01-22'},
+          ),
         ],
       }),
     ).toMatchInlineSnapshot(`[]`);
@@ -1142,12 +1138,11 @@ suite('push', () => {
       t({
         skipBound: {row: {id: 1, date: '2014-01-24'}, exclusive: false},
         pushes: [
-          {type: 'add', row: {id: 1, date: '2014-01-24', x: 1}},
-          {
-            type: 'edit',
-            oldRow: {id: 1, date: '2014-01-24', x: 1},
-            row: {id: 1, date: '2014-01-24', x: 2},
-          },
+          makeSourceChangeAdd({id: 1, date: '2014-01-24', x: 1}),
+          makeSourceChangeEdit(
+            {id: 1, date: '2014-01-24', x: 2},
+            {id: 1, date: '2014-01-24', x: 1},
+          ),
         ],
       }),
     ).toMatchInlineSnapshot(`
@@ -1185,12 +1180,11 @@ suite('push', () => {
       t({
         skipBound: {row: {id: 1, date: '2014-01-24'}, exclusive: true},
         pushes: [
-          {type: 'add', row: {id: 1, date: '2014-01-24', x: 1}},
-          {
-            type: 'edit',
-            oldRow: {id: 1, date: '2014-01-24', x: 1},
-            row: {id: 1, date: '2014-01-24', x: 2},
-          },
+          makeSourceChangeAdd({id: 1, date: '2014-01-24', x: 1}),
+          makeSourceChangeEdit(
+            {id: 1, date: '2014-01-24', x: 2},
+            {id: 1, date: '2014-01-24', x: 1},
+          ),
         ],
       }),
     ).toMatchInlineSnapshot(`[]`);
@@ -1201,12 +1195,11 @@ suite('push', () => {
       t({
         skipBound: {row: {id: 1, date: '2014-01-24'}, exclusive: true},
         pushes: [
-          {type: 'add', row: {id: 1, date: '2014-01-25'}},
-          {
-            type: 'edit',
-            oldRow: {id: 1, date: '2014-01-25'},
-            row: {id: 1, date: '2014-01-26'},
-          },
+          makeSourceChangeAdd({id: 1, date: '2014-01-25'}),
+          makeSourceChangeEdit(
+            {id: 1, date: '2014-01-26'},
+            {id: 1, date: '2014-01-25'},
+          ),
         ],
       }),
     ).toMatchInlineSnapshot(`
@@ -1241,12 +1234,11 @@ suite('push', () => {
       t({
         skipBound: {row: {id: 1, date: '2014-01-24'}, exclusive: true},
         pushes: [
-          {type: 'add', row: {id: 1, date: '2014-01-23'}},
-          {
-            type: 'edit',
-            oldRow: {id: 1, date: '2014-01-23'},
-            row: {id: 1, date: '2014-01-25'},
-          },
+          makeSourceChangeAdd({id: 1, date: '2014-01-23'}),
+          makeSourceChangeEdit(
+            {id: 1, date: '2014-01-25'},
+            {id: 1, date: '2014-01-23'},
+          ),
         ],
       }),
     ).toMatchInlineSnapshot(`
@@ -1270,12 +1262,11 @@ suite('push', () => {
       t({
         skipBound: {row: {id: 1, date: '2014-01-24'}, exclusive: true},
         pushes: [
-          {type: 'add', row: {id: 1, date: '2014-01-25'}},
-          {
-            type: 'edit',
-            oldRow: {id: 1, date: '2014-01-25'},
-            row: {id: 1, date: '2014-01-23'},
-          },
+          makeSourceChangeAdd({id: 1, date: '2014-01-25'}),
+          makeSourceChangeEdit(
+            {id: 1, date: '2014-01-23'},
+            {id: 1, date: '2014-01-25'},
+          ),
         ],
       }),
     ).toMatchInlineSnapshot(`

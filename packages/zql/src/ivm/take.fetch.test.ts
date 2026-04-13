@@ -17,6 +17,7 @@ import {consume} from './stream.ts';
 import {Take, type PartitionKey} from './take.ts';
 import {createSource} from './test/source-factory.ts';
 
+import {makeSourceChangeAdd} from './source.ts';
 const lc = createSilentLogContext();
 
 suite('take with no partition', () => {
@@ -414,7 +415,7 @@ test('early return during hydrate', () => {
     {id: 'i3', created: 300},
   ];
   for (const row of sourceRows) {
-    consume(source.push({type: 'add', row}));
+    consume(source.push(makeSourceChangeAdd(row)));
   }
   const snitch = new Snitch(source.connect([['id', 'asc']]), 'takeSnitch', log);
   const storage = new MemoryStorage();
@@ -1413,7 +1414,7 @@ function takeTest(t: TakeTest): TakeTestResults {
     t.primaryKey,
   );
   for (const row of t.sourceRows) {
-    consume(source.push({type: 'add', row}));
+    consume(source.push(makeSourceChangeAdd(row)));
   }
   const snitch = new Snitch(
     source.connect(t.sort || [['id', 'asc']]),
