@@ -8,6 +8,10 @@ import {
 } from 'solid-js';
 import {afterEach, describe, expect, expectTypeOf, test, vi} from 'vitest';
 import {MemorySource} from '../../zql/src/ivm/memory-source.ts';
+import {
+  makeSourceChangeAdd,
+  makeSourceChangeEdit,
+} from '../../zql/src/ivm/source.ts';
 import {QueryDelegateImpl} from '../../zql/src/query/test/query-delegate.ts';
 import {
   assert,
@@ -20,10 +24,6 @@ import {
 } from './bindings.ts';
 import {useQuery, type QueryResult, type UseQueryOptions} from './use-query.ts';
 import {ZeroProvider} from './use-zero.ts';
-import {
-  makeSourceChangeAdd,
-  makeSourceChangeEdit,
-} from '../../zql/src/ivm/source.ts';
 import {
   createSchema,
   number,

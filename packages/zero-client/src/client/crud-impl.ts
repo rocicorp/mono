@@ -9,15 +9,15 @@ import {
 } from '../../../zero-protocol/src/push.ts';
 import type {TableSchema} from '../../../zero-schema/src/table-schema.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
-import {consume} from '../../../zql/src/ivm/stream.ts';
-import type {IVMSourceBranch} from './ivm-branch.ts';
-import {toPrimaryKeyString} from './keys.ts';
-import type {WriteTransaction} from './replicache-types.ts';
 import {
   makeSourceChangeAdd,
   makeSourceChangeEdit,
   makeSourceChangeRemove,
 } from '../../../zql/src/ivm/source.ts';
+import {consume} from '../../../zql/src/ivm/stream.ts';
+import type {IVMSourceBranch} from './ivm-branch.ts';
+import {toPrimaryKeyString} from './keys.ts';
+import type {WriteTransaction} from './replicache-types.ts';
 export type {TableMutator} from '../../../zql/src/mutate/crud.ts';
 
 function defaultOptionalFieldsToNull(

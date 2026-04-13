@@ -14,15 +14,15 @@ import {
   type Change,
 } from '../../zql/src/ivm/change.ts';
 import {makeComparator} from '../../zql/src/ivm/data.ts';
-import {consume} from '../../zql/src/ivm/stream.ts';
-import {Database, Statement} from './db.ts';
-import {format} from './internal/sql.ts';
-import {filtersToSQL} from './query-builder.ts';
 import {
   makeSourceChangeAdd,
   makeSourceChangeEdit,
   makeSourceChangeRemove,
 } from '../../zql/src/ivm/source.ts';
+import {consume} from '../../zql/src/ivm/stream.ts';
+import {Database, Statement} from './db.ts';
+import {format} from './internal/sql.ts';
+import {filtersToSQL} from './query-builder.ts';
 import {
   fromSQLiteTypes,
   TableSource,

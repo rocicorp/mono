@@ -25,6 +25,11 @@ import {
   bindStaticParameters,
   buildPipeline,
 } from '../../../zql/src/builder/builder.ts';
+import {
+  makeSourceChangeAdd,
+  makeSourceChangeEdit,
+  makeSourceChangeRemove,
+} from '../../../zql/src/ivm/source.ts';
 import {consume} from '../../../zql/src/ivm/stream.ts';
 import {simplifyCondition} from '../../../zql/src/query/expression.ts';
 import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
@@ -45,11 +50,6 @@ import {computeZqlSpecs} from '../db/lite-tables.ts';
 import type {LiteAndZqlSpec} from '../db/specs.ts';
 import {StatementRunner} from '../db/statements.ts';
 import {mapLiteDataTypeToZqlSchemaValue} from '../types/lite.ts';
-import {
-  makeSourceChangeAdd,
-  makeSourceChangeEdit,
-  makeSourceChangeRemove,
-} from '../../../zql/src/ivm/source.ts';
 import {
   getSchema,
   reloadPermissionsIfChanged,
