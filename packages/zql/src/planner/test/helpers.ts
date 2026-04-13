@@ -3,13 +3,13 @@ import type {
   ConnectionCostModel,
   CostModelCost,
 } from '../planner-connection.ts';
-import type {PlannerConstraint} from '../planner-constraint.ts';
-import {PlannerSource} from '../planner-source.ts';
 import type {PlannerConnection} from '../planner-connection.ts';
-import {PlannerJoin} from '../planner-join.ts';
+import type {PlannerConstraint} from '../planner-constraint.ts';
 import {PlannerFanIn} from '../planner-fan-in.ts';
 import {PlannerFanOut} from '../planner-fan-out.ts';
+import {PlannerJoin} from '../planner-join.ts';
 import type {CostEstimate} from '../planner-node.ts';
+import {PlannerSource} from '../planner-source.ts';
 
 // ============================================================================
 // Test Constants

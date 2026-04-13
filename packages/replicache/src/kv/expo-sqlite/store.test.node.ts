@@ -1,6 +1,6 @@
-import sqlite3 from '@rocicorp/zero-sqlite3';
 import fs from 'node:fs';
 import path from 'node:path';
+import sqlite3 from '@rocicorp/zero-sqlite3';
 import {expect, test, vi} from 'vitest';
 import {withRead, withWrite} from '../../with-transactions.ts';
 import {

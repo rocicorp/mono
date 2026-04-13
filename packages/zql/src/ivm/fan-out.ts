@@ -1,7 +1,7 @@
 import {must} from '../../../shared/src/must.ts';
 import type {Change} from './change.ts';
-import type {FanIn} from './fan-in.ts';
 import type {Node} from './data.ts';
+import type {FanIn} from './fan-in.ts';
 import type {
   FilterInput,
   FilterOperator,

@@ -1,8 +1,8 @@
+import type {ExportResult} from '@opentelemetry/core';
 import {
   type PushMetricExporter,
   type ResourceMetrics,
 } from '@opentelemetry/sdk-metrics';
-import type {ExportResult} from '@opentelemetry/core';
 
 export class NoopMetricExporter implements PushMetricExporter {
   export(

@@ -3,24 +3,26 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "packageManager": "npm@10.9.2",
-  "engines": {
-    "node": ">=22"
-  },
   "scripts": {
     "verify": "node --experimental-strip-types src/verify-package-deps.ts",
     "verify:fix": "node --experimental-strip-types src/verify-package-deps.ts --fix",
     "check-types": "tsc",
     "format": "oxfmt .",
     "check-format": "oxfmt --check .",
-    "lint": "oxlint --quiet --config ../../oxlint.config.ts"
+    "lint": "oxlint --quiet --config ../../oxlint.config.ts",
+    "fmt": "oxfmt .",
+    "check-fmt": "oxfmt --check ."
   },
   "dependencies": {
     "oxc-parser": "^0.94.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.5",
-    "oxfmt": "^0.44.0",
+    "oxfmt": "^0.45.0",
     "typescript": "~6.0.2"
-  }
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "packageManager": "npm@10.9.2"
 }

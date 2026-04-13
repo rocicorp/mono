@@ -10,10 +10,12 @@
     "check-format": "oxfmt --check .",
     "lint": "oxlint --type-aware src/",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "fmt": "oxfmt .",
+    "check-fmt": "oxfmt --check ."
   },
   "devDependencies": {
-    "oxfmt": "^0.44.0",
+    "oxfmt": "^0.45.0",
     "shared": "0.0.0",
     "typescript": "~6.0.2",
     "vitest": "4.1.3"

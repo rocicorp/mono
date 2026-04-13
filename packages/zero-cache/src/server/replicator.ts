@@ -1,7 +1,7 @@
-import type {ObservableCallback} from '@opentelemetry/api';
-import type {LogContext} from '@rocicorp/logger';
 import {stat} from 'node:fs/promises';
 import {pid} from 'node:process';
+import type {ObservableCallback} from '@opentelemetry/api';
+import type {LogContext} from '@rocicorp/logger';
 import {assert} from '../../../shared/src/asserts.ts';
 import {must} from '../../../shared/src/must.ts';
 import * as v from '../../../shared/src/valita.ts';

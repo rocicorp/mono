@@ -1,7 +1,7 @@
 import {describe, expect, expectTypeOf, test} from 'vitest';
+import {assert} from './asserts.ts';
 import {promiseRace} from './promise-race.ts';
 import {sleep} from './sleep.ts';
-import {assert} from './asserts.ts';
 
 describe('promiseRace with record', () => {
   test('returns key of first settled promise', async () => {

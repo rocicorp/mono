@@ -1,10 +1,5 @@
 import type * as v from '../../../shared/src/valita.ts';
 import type {
-  Condition,
-  Ordering,
-  ValuePosition,
-} from '../../../zero-protocol/src/ast.ts';
-import type {
   attemptStartEventJSONSchema,
   bestPlanSelectedEventJSONSchema,
   connectionSelectedEventJSONSchema,
@@ -12,9 +7,14 @@ import type {
   PlanDebugEventJSON,
   planFailedEventJSONSchema,
 } from '../../../zero-protocol/src/analyze-query-result.ts';
+import type {
+  Condition,
+  Ordering,
+  ValuePosition,
+} from '../../../zero-protocol/src/ast.ts';
 import type {PlannerConstraint} from './planner-constraint.ts';
-import type {CostEstimate, JoinType} from './planner-node.ts';
 import type {PlanState} from './planner-graph.ts';
+import type {CostEstimate, JoinType} from './planner-node.ts';
 
 /**
  * Structured debug events emitted during query planning.

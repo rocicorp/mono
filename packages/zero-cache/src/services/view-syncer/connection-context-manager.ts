@@ -2,17 +2,17 @@ import type {LogContext} from '@rocicorp/logger';
 import type {InitConnectionBody} from '../../../../zero-protocol/src/connect.ts';
 import {ErrorKind} from '../../../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../../../zero-protocol/src/error-origin.ts';
+import type {UpdateAuthBody} from '../../../../zero-protocol/src/update-auth.ts';
 import {
   authEquals,
   resolveAuth,
   type Auth,
   type ValidateLegacyJWT,
 } from '../../auth/auth.ts';
+import type {ZeroConfig} from '../../config/zero-config.ts';
 import {compileUrlPattern} from '../../custom/fetch.ts';
 import {ProtocolErrorWithLevel} from '../../types/error-with-level.ts';
 import type {ConnectParams} from '../../workers/connect-params.ts';
-import type {UpdateAuthBody} from '../../../../zero-protocol/src/update-auth.ts';
-import type {ZeroConfig} from '../../config/zero-config.ts';
 
 export type ConnectionState = 'provisional' | 'validated';
 

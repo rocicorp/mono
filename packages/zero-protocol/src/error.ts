@@ -1,9 +1,9 @@
 import {jsonSchema} from '../../shared/src/json-schema.ts';
 import * as v from '../../shared/src/valita.ts';
-import {mutationIDSchema} from './mutation-id.ts';
 import {ErrorKind} from './error-kind.ts';
 import {ErrorOrigin} from './error-origin.ts';
 import {ErrorReason} from './error-reason.ts';
+import {mutationIDSchema} from './mutation-id.ts';
 
 const basicErrorKindSchema = v.literalUnion(
   ErrorKind.AuthInvalidated,

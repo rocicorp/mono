@@ -1,3 +1,8 @@
+import {execSync} from 'child_process';
+import {randomUUID} from 'crypto';
+import {existsSync, mkdirSync, readFileSync, writeFileSync} from 'fs';
+import {homedir, platform} from 'os';
+import {dirname, join} from 'path';
 import type {ObservableResult} from '@opentelemetry/api';
 import {type Meter} from '@opentelemetry/api';
 import {OTLPMetricExporter} from '@opentelemetry/exporter-metrics-otlp-http';
@@ -7,11 +12,6 @@ import {
   PeriodicExportingMetricReader,
 } from '@opentelemetry/sdk-metrics';
 import type {LogContext} from '@rocicorp/logger';
-import {execSync} from 'child_process';
-import {randomUUID} from 'crypto';
-import {existsSync, mkdirSync, readFileSync, writeFileSync} from 'fs';
-import {homedir, platform} from 'os';
-import {dirname, join} from 'path';
 import {h64} from '../../../shared/src/hash.js';
 import {
   getServerVersion,

@@ -8,6 +8,8 @@ import {randInt} from '../../../shared/src/rand.ts';
 import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
 import * as v from '../../../shared/src/valita.ts';
 import {DatabaseStorage} from '../../../zqlite/src/database-storage.ts';
+import type {ValidateLegacyJWT} from '../auth/auth.ts';
+import {tokenConfigOptions, verifyToken} from '../auth/jwt.ts';
 import type {NormalizedZeroConfig} from '../config/normalize.ts';
 import {getNormalizedZeroConfig} from '../config/zero-config.ts';
 import {CustomQueryTransformer} from '../custom-queries/transform-query.ts';
@@ -25,6 +27,7 @@ import type {DrainCoordinator} from '../services/view-syncer/drain-coordinator.t
 import {PipelineDriver} from '../services/view-syncer/pipeline-driver.ts';
 import {Snapshotter} from '../services/view-syncer/snapshotter.ts';
 import {ViewSyncerService} from '../services/view-syncer/view-syncer.ts';
+import {ProtocolErrorWithLevel} from '../types/error-with-level.ts';
 import {pgClient} from '../types/pg.ts';
 import {
   parentWorker,
@@ -40,9 +43,6 @@ import {InspectorDelegate} from './inspector-delegate.ts';
 import {createLogContext} from './logging.ts';
 import {startOtelAuto} from './otel-start.ts';
 import {isPriorityOpRunning, runPriorityOp} from './priority-op.ts';
-import type {ValidateLegacyJWT} from '../auth/auth.ts';
-import {tokenConfigOptions, verifyToken} from '../auth/jwt.ts';
-import {ProtocolErrorWithLevel} from '../types/error-with-level.ts';
 
 function randomID() {
   return randInt(1, Number.MAX_SAFE_INTEGER).toString(36);

@@ -1,7 +1,7 @@
-import commandLineArgs from 'command-line-args';
-import commandLineUsage from 'command-line-usage';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
+import commandLineArgs from 'command-line-args';
+import commandLineUsage from 'command-line-usage';
 
 async function main() {
   const optionDefinitions = [

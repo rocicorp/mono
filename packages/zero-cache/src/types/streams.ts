@@ -1,5 +1,3 @@
-import type {LogContext} from '@rocicorp/logger';
-import {resolver} from '@rocicorp/resolver';
 import {
   pipeline,
   Readable,
@@ -7,6 +5,8 @@ import {
   Writable,
   type DuplexOptions,
 } from 'node:stream';
+import type {LogContext} from '@rocicorp/logger';
+import {resolver} from '@rocicorp/resolver';
 import {
   createWebSocketStream,
   type CloseEvent,

@@ -5,7 +5,11 @@
   "bracketSpacing": false,
   "quoteProps": "consistent",
   "printWidth": 80,
-  "sortPackageJson": false,
+  "sortImports": {
+    "newlinesBetween": false,
+    "partitionByNewline": true
+  },
+  "sortPackageJson": true,
   "ignorePatterns": [
     "node_modules",
     "dist",

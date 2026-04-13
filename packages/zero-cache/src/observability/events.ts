@@ -1,8 +1,8 @@
+import {gzip} from 'node:zlib';
 import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {CloudEvent, emitterFor, httpTransport} from 'cloudevents';
 import {nanoid} from 'nanoid';
-import {gzip} from 'node:zlib';
 import {stringify} from '../../../shared/src/bigint-json.ts';
 import {isJSONValue, type JSONObject} from '../../../shared/src/json.ts';
 import {must} from '../../../shared/src/must.ts';

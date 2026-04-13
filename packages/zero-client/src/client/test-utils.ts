@@ -1,6 +1,5 @@
 import type {LogLevel} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
-import {nanoid} from '../util/nanoid.ts';
 // import {type VitestUtils} from 'vitest';
 import type {Store} from '../../../replicache/src/dag/store.ts';
 import {assert} from '../../../shared/src/asserts.ts';
@@ -34,6 +33,7 @@ import {upstreamSchema} from '../../../zero-protocol/src/up.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
 import type {AnyQuery, Query} from '../../../zql/src/query/query.ts';
+import {nanoid} from '../util/nanoid.ts';
 import type {
   ConnectionManager,
   ConnectionManagerState,

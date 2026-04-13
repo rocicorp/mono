@@ -1,7 +1,7 @@
-import type {LogContext} from '@rocicorp/logger';
-import {resolver} from '@rocicorp/resolver';
 import {pid} from 'node:process';
 import type {MessagePort} from 'node:worker_threads';
+import type {LogContext} from '@rocicorp/logger';
+import {resolver} from '@rocicorp/resolver';
 import {WebSocketServer, type ServerOptions, type WebSocket} from 'ws';
 import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
@@ -13,12 +13,12 @@ import {
 import {resolveAuth, type Auth, type ValidateLegacyJWT} from '../auth/auth.ts';
 import {tokenConfigOptions} from '../auth/jwt.ts';
 import {type ZeroConfig} from '../config/zero-config.ts';
+import {getOrCreateGauge} from '../observability/metrics.ts';
 import {
   recordConnectionAttempted,
   recordConnectionSuccess,
   setActiveClientGroupsGetter,
 } from '../server/anonymous-otel-start.ts';
-import {getOrCreateGauge} from '../observability/metrics.ts';
 import type {Mutagen} from '../services/mutagen/mutagen.ts';
 import type {Pusher} from '../services/mutagen/pusher.ts';
 import type {ReplicaState} from '../services/replicator/replicator.ts';

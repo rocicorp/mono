@@ -1,8 +1,8 @@
-import type {LogContext, LogLevel} from '@rocicorp/logger';
-import {resolver} from '@rocicorp/resolver';
 import type {ChildProcess} from 'node:child_process';
 import {spawn} from 'node:child_process';
 import {existsSync} from 'node:fs';
+import type {LogContext, LogLevel} from '@rocicorp/logger';
+import {resolver} from '@rocicorp/resolver';
 import {must} from '../../../../shared/src/must.ts';
 import {sleep} from '../../../../shared/src/sleep.ts';
 import {Database} from '../../../../zqlite/src/db.ts';

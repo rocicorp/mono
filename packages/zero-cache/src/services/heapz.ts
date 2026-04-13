@@ -1,8 +1,8 @@
+import fs from 'fs';
+import v8 from 'v8';
 import type {LogContext} from '@rocicorp/logger';
 import auth from 'basic-auth';
 import type {FastifyReply, FastifyRequest} from 'fastify';
-import fs from 'fs';
-import v8 from 'v8';
 import type {NormalizedZeroConfig} from '../config/normalize.ts';
 import {isAdminPasswordValid} from '../config/zero-config.ts';
 

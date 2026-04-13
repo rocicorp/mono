@@ -1,3 +1,4 @@
+import {sql} from 'drizzle-orm';
 import {
   pgTable,
   uniqueIndex,
@@ -11,7 +12,6 @@ import {
   unique,
   primaryKey,
 } from 'drizzle-orm/pg-core';
-import {sql} from 'drizzle-orm';
 
 export const user = pgTable(
   'user',

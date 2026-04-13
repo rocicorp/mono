@@ -1,8 +1,8 @@
 {
   "name": "z2s",
-  "description": "ZQL to SQL compiler. Used for testing the ZQL implementation and reads inside of custom mutators",
   "version": "0.0.0",
   "private": true,
+  "description": "ZQL to SQL compiler. Used for testing the ZQL implementation and reads inside of custom mutators",
   "type": "module",
   "scripts": {
     "format": "oxfmt .",
@@ -19,7 +19,9 @@
     "test:pg16:watch": "vitest --project z2s/pg-16",
     "test:pg17": "vitest run --project z2s/pg-17",
     "test:pg17:watch": "vitest --project z2s/pg-17",
-    "test:watch": "vitest watch"
+    "test:watch": "vitest watch",
+    "fmt": "oxfmt .",
+    "check-fmt": "oxfmt --check ."
   },
   "dependencies": {
     "@databases/escape-identifier": "^1.0.3",
@@ -29,7 +31,7 @@
     "@faker-js/faker": "^9.6.0",
     "@types/pg": "^8.11.11",
     "@vitest/runner": "4.1.3",
-    "oxfmt": "^0.44.0",
+    "oxfmt": "^0.45.0",
     "pg": "^8.16.3",
     "shared": "0.0.0",
     "vitest": "4.1.3",

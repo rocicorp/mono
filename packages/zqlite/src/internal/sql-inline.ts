@@ -1,6 +1,6 @@
+import {escapeSQLiteIdentifier} from '@databases/escape-identifier';
 import type {FormatConfig} from '@databases/sql';
 import type {SQLQuery} from '@databases/sql';
-import {escapeSQLiteIdentifier} from '@databases/escape-identifier';
 
 /**
  * Escapes a SQLite string value by doubling single quotes.

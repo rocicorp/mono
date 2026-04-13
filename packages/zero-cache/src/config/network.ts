@@ -1,6 +1,6 @@
+import {networkInterfaces, type NetworkInterfaceInfo} from 'os';
 import type {LogContext} from '@rocicorp/logger';
 import {isIPv6, isPrivate, isReserved} from 'is-in-subnet';
-import {networkInterfaces, type NetworkInterfaceInfo} from 'os';
 
 export const DEFAULT_PREFERRED_PREFIXES = [
   'eth', // linux

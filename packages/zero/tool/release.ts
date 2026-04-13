@@ -1,8 +1,8 @@
-import commandLineArgs from 'command-line-args';
 import {execSync} from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'path';
+import commandLineArgs from 'command-line-args';
 import {
   MIN_SERVER_SUPPORTED_SYNC_PROTOCOL,
   PROTOCOL_VERSION,

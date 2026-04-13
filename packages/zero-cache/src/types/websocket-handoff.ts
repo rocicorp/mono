@@ -1,7 +1,7 @@
-import type {LogContext} from '@rocicorp/logger';
 import type {IncomingMessage} from 'node:http';
 import {Server} from 'node:http';
 import type {Socket} from 'node:net';
+import type {LogContext} from '@rocicorp/logger';
 import {WebSocketServer, type ServerOptions, type WebSocket} from 'ws';
 import {assert} from '../../../shared/src/asserts.ts';
 import {serializableSubset, type IncomingMessageSubset} from './http.ts';

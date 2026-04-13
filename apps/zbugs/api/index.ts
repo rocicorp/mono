@@ -1,7 +1,7 @@
 // https://vercel.com/templates/other/fastify-serverless-function
 
 import '../../../packages/shared/src/dotenv.ts';
-
+import type {IncomingHttpHeaders} from 'http';
 import cookie from '@fastify/cookie';
 import oauthPlugin, {type OAuth2Namespace} from '@fastify/oauth2';
 import {Octokit} from '@octokit/core';
@@ -12,7 +12,6 @@ import {
 } from '@rocicorp/zero';
 import {handleMutateRequest, handleQueryRequest} from '@rocicorp/zero/server';
 import Fastify, {type FastifyReply, type FastifyRequest} from 'fastify';
-import type {IncomingHttpHeaders} from 'http';
 import {jwtVerify, SignJWT, type JWK} from 'jose';
 import {nanoid} from 'nanoid';
 import {assert} from '../../../packages/shared/src/asserts.ts';

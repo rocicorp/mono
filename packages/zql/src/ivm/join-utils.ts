@@ -1,10 +1,10 @@
-import type {Row, Value} from '../../../zero-protocol/src/data.ts';
-import type {Change} from './change.ts';
-import type {SourceSchema} from './schema.ts';
-import type {Stream} from './stream.ts';
-import {compareValues, valuesEqual, type Node} from './data.ts';
 import {assert} from '../../../shared/src/asserts.ts';
 import type {CompoundKey} from '../../../zero-protocol/src/ast.ts';
+import type {Row, Value} from '../../../zero-protocol/src/data.ts';
+import type {Change} from './change.ts';
+import {compareValues, valuesEqual, type Node} from './data.ts';
+import type {SourceSchema} from './schema.ts';
+import type {Stream} from './stream.ts';
 
 export type JoinChangeOverlay = {
   change: Change;
