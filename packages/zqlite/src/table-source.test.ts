@@ -446,7 +446,8 @@ test('pushing values does the correct writes and outputs', () => {
       makeAddChange({
         relationships: {},
         row: {
-          a: 9007199254740991n,
+          // TODO(arv): Fix Row type!!!
+          a: 9007199254740991n as unknown as number,
           b: 3.456,
           c: true,
           d: [],
