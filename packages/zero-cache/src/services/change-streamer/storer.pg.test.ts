@@ -11,7 +11,7 @@ import {ReplicationMessages} from '../replicator/test-utils.ts';
 import {type Downstream} from './change-streamer.ts';
 import * as ErrorType from './error-type-enum.ts';
 import {ensureReplicationConfig, setupCDCTables} from './schema/tables.ts';
-import {Storer} from './storer.ts';
+import {PurgeLocker, Storer} from './storer.ts';
 import {createSubscriber} from './test-utils.ts';
 
 describe('change-streamer/storer', () => {
@@ -62,7 +62,7 @@ describe('change-streamer/storer', () => {
 
     return async () => {
       await testDBs.drop(db);
-      void storer.stop();
+      void storer?.stop();
       await done;
     };
   });
@@ -860,6 +860,46 @@ describe('change-streamer/storer', () => {
         {watermark: '06', pos: 1n},
         {watermark: '06', pos: 2n},
       ]);
+    });
+
+    test('purge prevented by purge lock', async () => {
+      // Move the changeLog forward slightly to test non-initial numbers.
+      const result1 = await storer.purgeRecordsBefore('03');
+      expect(result1).toBe(2);
+
+      const lock = await new PurgeLocker(lc, shard, db).acquire();
+      expect(lock?.minWatermark).toBe('03');
+      expect(lock?.replicaVersion).toBe('00');
+
+      const result2 = await storer.purgeRecordsBefore('06');
+      expect(result2).toBe(0);
+
+      expect(
+        await db`SELECT watermark, pos FROM "xero_5/cdc"."changeLog"`,
+      ).toEqual([
+        {watermark: '03', pos: 0n},
+        {watermark: '03', pos: 1n},
+        {watermark: '03', pos: 2n},
+        {watermark: '06', pos: 0n},
+        {watermark: '06', pos: 1n},
+        {watermark: '06', pos: 2n},
+      ]);
+
+      await lock?.release();
+
+      const result3 = await storer.purgeRecordsBefore('06');
+      expect(result3).toBe(3);
+
+      expect(
+        await db`SELECT watermark, pos FROM "xero_5/cdc"."changeLog"`,
+      ).toEqual([
+        {watermark: '06', pos: 0n},
+        {watermark: '06', pos: 1n},
+        {watermark: '06', pos: 2n},
+      ]);
+
+      // Redundant calls to release should be ignored (and not assert, e.g.)
+      await lock?.release();
     });
 
     test('ownership change detected at begin aborts transaction', async () => {
@@ -1717,5 +1757,11 @@ describe('change-streamer/storer', () => {
         await db`SELECT "ownerAddress" FROM "xero_5/cdc"."replicationState" WHERE owner = 'task-id'`,
       ).toEqual([{ownerAddress: 'wss://change-streamer:12345'}]);
     });
+  });
+
+  test('purge lock on empty change-log (e.g. before initial sync)', async () => {
+    await db`TRUNCATE "xero_5/cdc"."changeLog"`;
+    const purgeLocker = new PurgeLocker(lc, shard, db);
+    expect(await purgeLocker.acquire()).toBeNull();
   });
 });

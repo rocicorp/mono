@@ -1,5 +1,7 @@
+import {PG_LOCK_NOT_AVAILABLE} from '@drdgvhbh/postgres-error-codes';
 import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
+import postgres from 'postgres';
 import {beforeEach, describe, expect, vi, type Mock} from 'vitest';
 import {AbortError} from '../../../../shared/src/abort-error.ts';
 import {assert} from '../../../../shared/src/asserts.ts';
@@ -31,6 +33,7 @@ import {
 } from './change-streamer.ts';
 import * as ErrorType from './error-type-enum.ts';
 import {AutoResetSignal, ensureReplicationConfig} from './schema/tables.ts';
+import {PurgeLocker} from './storer.ts';
 
 describe('change-streamer/service', () => {
   let lc: LogContext;
@@ -82,6 +85,7 @@ describe('change-streamer/service', () => {
       },
       ReplicationStatusPublisher.forTesting(),
       replicaConfig,
+      null,
       true,
       0.04,
       1,
@@ -953,6 +957,7 @@ describe('change-streamer/service', () => {
       source,
       ReplicationStatusPublisher.forTesting(),
       replicaConfig,
+      null,
       true,
       0.04,
       1,
@@ -982,6 +987,7 @@ describe('change-streamer/service', () => {
       source,
       ReplicationStatusPublisher.forTesting(),
       replicaConfig,
+      null,
       true,
       0.04,
       1,
@@ -1006,6 +1012,7 @@ describe('change-streamer/service', () => {
       source,
       ReplicationStatusPublisher.forTesting(),
       replicaConfig,
+      null,
       true,
       0.04,
       1,
@@ -1013,6 +1020,48 @@ describe('change-streamer/service', () => {
     void streamer.run();
 
     expect(await requests.dequeue()).toBe('04');
+  });
+
+  test('initial purge lock released', async () => {
+    const purgeLocker = new PurgeLocker(lc, shard, sql);
+    const lock = await purgeLocker.acquire();
+    expect(lock?.minWatermark).toBe('01');
+
+    let locked: unknown;
+    try {
+      // Verify that the row is locked.
+      await sql`SELECT FROM "zoro_3/cdc"."changeLog" FOR UPDATE NOWAIT`;
+    } catch (e) {
+      locked = e;
+    }
+    expect(locked).toBeInstanceOf(postgres.PostgresError);
+    expect((locked as postgres.PostgresError).code).toBe(PG_LOCK_NOT_AVAILABLE);
+
+    const streamer = await initializeStreamer(
+      lc,
+      shard,
+      'task-id',
+      'change.streamer:12345',
+      'ws',
+      sql,
+      {
+        startStream: vi.fn(),
+        startLagReporter: () => null,
+        stop: () => Promise.resolve(),
+      },
+      ReplicationStatusPublisher.forTesting(),
+      replicaConfig,
+      lock,
+      true,
+      0.04,
+      1,
+    );
+    void streamer.run();
+
+    // This should succeed once the purge lock is released.
+    await sql`SELECT FROM "zoro_3/cdc"."changeLog" FOR UPDATE`;
+
+    streamer.stop();
   });
 
   test('retry on change stream error', async () => {
@@ -1046,6 +1095,7 @@ describe('change-streamer/service', () => {
       source,
       ReplicationStatusPublisher.forTesting(),
       replicaConfig,
+      null,
       true,
       0.04,
       1,
@@ -1088,6 +1138,7 @@ describe('change-streamer/service', () => {
       source,
       ReplicationStatusPublisher.forTesting(),
       replicaConfig,
+      null,
       true,
       0.04,
       1,
@@ -1147,6 +1198,7 @@ describe('change-streamer/service', () => {
       source,
       ReplicationStatusPublisher.forTesting(),
       replicaConfig,
+      null,
       true,
       0.04,
       1,
@@ -1223,6 +1275,7 @@ describe('change-streamer/service', () => {
       source,
       ReplicationStatusPublisher.forTesting(),
       replicaConfig,
+      null,
       true,
       0.04,
       1,

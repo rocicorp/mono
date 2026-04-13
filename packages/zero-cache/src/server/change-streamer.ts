@@ -14,11 +14,14 @@ import {ChangeStreamerHttpServer} from '../services/change-streamer/change-strea
 import {initializeStreamer} from '../services/change-streamer/change-streamer-service.ts';
 import type {ChangeStreamerService} from '../services/change-streamer/change-streamer.ts';
 import {ReplicaMonitor} from '../services/change-streamer/replica-monitor.ts';
+import {initChangeStreamerSchema} from '../services/change-streamer/schema/init.ts';
 import {
   AutoResetSignal,
   CHANGE_STREAMER_APP_NAME,
 } from '../services/change-streamer/schema/tables.ts';
+import {PurgeLocker} from '../services/change-streamer/storer.ts';
 import {exitAfter, runUntilKilled} from '../services/life-cycle.ts';
+import {restoreReplica} from '../services/litestream/commands.ts';
 import {
   replicationStatusError,
   ReplicationStatusPublisher,
@@ -36,12 +39,9 @@ import {startOtelAuto} from './otel-start.ts';
 export default async function runWorker(
   parent: Worker,
   env: NodeJS.ProcessEnv,
-  ...args: string[]
+  ...argv: string[]
 ): Promise<void> {
-  assert(args.length > 0, `parent startMs not specified`);
-  const parentStartMs = parseInt(args[0]);
-
-  const config = getNormalizedZeroConfig({env, argv: args.slice(1)});
+  const config = getNormalizedZeroConfig({env, argv});
   const {
     taskID,
     changeStreamer: {
@@ -77,6 +77,24 @@ export default async function runWorker(
 
   const {autoReset, replicationLag} = config;
   const shard = getShardConfig(config);
+
+  // Ensure the change DB schema is initialized/up-to-date, then acquire
+  // a lock to prevent change-lock purges. This ensures that (this)
+  // change-streamer will be able to resume from the backup.
+  await initChangeStreamerSchema(lc, changeDB, shard);
+  const purgeLock = await new PurgeLocker(lc, shard, changeDB).acquire();
+
+  let restoreStart = new Date();
+  // Restore from litestream if the change-log has entries.
+  if (purgeLock) {
+    try {
+      restoreStart = await restoreReplica(lc, config, purgeLock);
+    } catch (e) {
+      // If the restore failed, e.g. due to a corrupt backup, the
+      // replication-manager recovers by re-syncing.
+      lc.error?.('error restoring backup. resyncing the replica.', e);
+    }
+  }
 
   let changeStreamer: ChangeStreamerService | undefined;
 
@@ -120,6 +138,7 @@ export default async function runWorker(
         changeSource,
         replicationStatusPublisher,
         subscriptionState,
+        purgeLock,
         autoReset ?? false,
         backPressureLimitHeapProportion,
         flowControlConsensusPaddingSeconds,
@@ -172,7 +191,7 @@ export default async function runWorker(
         // generally takes longer).
         //
         // Consider: Also account for permanent volumes?
-        Date.now() - parentStartMs,
+        Date.now() - restoreStart.getTime(),
       )
     : new ReplicaMonitor(lc, replica.file, changeStreamer);
 

@@ -47,7 +47,7 @@ import {
   ensureReplicationConfig,
   markResetRequired,
 } from './schema/tables.ts';
-import {Storer} from './storer.ts';
+import {Storer, type PurgeLock} from './storer.ts';
 import {Subscriber} from './subscriber.ts';
 
 /**
@@ -63,6 +63,7 @@ export async function initializeStreamer(
   changeSource: ChangeSource,
   replicationStatusPublisher: ReplicationStatusPublisher,
   subscriptionState: SubscriptionState,
+  purgeLock: PurgeLock | null,
   autoReset: boolean,
   backPressureLimitHeapProportion: number,
   flowControlConsensusPaddingSeconds: number,
@@ -90,6 +91,7 @@ export async function initializeStreamer(
     replicaVersion,
     changeSource,
     replicationStatusPublisher,
+    purgeLock,
     autoReset,
     backPressureLimitHeapProportion,
     flowControlConsensusPaddingSeconds,
@@ -286,6 +288,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
   );
 
   #latestStatus: Status;
+  #purgeLock: PurgeLock | null;
   #stream: ChangeStream | undefined;
 
   constructor(
@@ -298,6 +301,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     replicaVersion: string,
     source: ChangeSource,
     replicationStatusPublisher: ReplicationStatusPublisher,
+    initialPurgeLock: PurgeLock | null,
     autoReset: boolean,
     backPressureLimitHeapProportion: number,
     flowControlConsensusPaddingSeconds: number,
@@ -325,6 +329,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       flowControlConsensusPaddingSeconds,
     });
     this.#replicationStatusPublisher = replicationStatusPublisher;
+    this.#purgeLock = initialPurgeLock;
     this.#autoReset = autoReset;
     this.#state = new RunningState(this.id, undefined, setTimeoutFn);
     this.#latestStatus = {tag: 'status'};
@@ -342,7 +347,8 @@ class ChangeStreamerImpl implements ChangeStreamerService {
 
     // Once this change-streamer acquires "ownership" of the change DB,
     // it is safe to start the storer.
-    await this.#storer.assumeOwnership();
+    await this.#storer.assumeOwnership(this.#purgeLock);
+    this.#purgeLock = null;
 
     // The threshold in (estimated number of) bytes to send() on subscriber
     // websockets before `await`-ing the I/O buffers to be ready for more.
