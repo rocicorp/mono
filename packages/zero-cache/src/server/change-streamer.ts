@@ -21,7 +21,10 @@ import {
 } from '../services/change-streamer/schema/tables.ts';
 import {PurgeLocker} from '../services/change-streamer/storer.ts';
 import {exitAfter, runUntilKilled} from '../services/life-cycle.ts';
-import {restoreReplica} from '../services/litestream/commands.ts';
+import {
+  BackupNotFoundException,
+  restoreReplica,
+} from '../services/litestream/commands.ts';
 import {
   replicationStatusError,
   ReplicationStatusPublisher,
@@ -83,23 +86,26 @@ export default async function runWorker(
   // a lock to prevent change-lock purges. This ensures that (this)
   // change-streamer will be able to resume from the backup.
   await initChangeStreamerSchema(lc, changeDB, shard);
-  const purgeLock = await new PurgeLocker(lc, shard, changeDB).acquire();
+  let purgeLock = await new PurgeLocker(lc, shard, changeDB).acquire();
 
   // Restore from litestream if the change-log has entries.
   if (purgeLock) {
-    let restored = false;
     try {
-      restored = await restoreReplica(lc, config, purgeLock);
+      await restoreReplica(lc, config, purgeLock);
     } catch (e) {
-      // If the restore failed, e.g. due to a corrupt backup, the
+      // If the restore failed, e.g. due to a corrupt or missing backup, the
       // replication-manager recovers by re-syncing.
-      lc.error?.('error restoring backup. resyncing the replica.', e);
-    }
-    if (!restored) {
+      const log = e instanceof BackupNotFoundException ? 'warn' : 'error';
+      lc[log]?.(
+        `error restoring backup. resyncing the replica: ${String(e)}`,
+        e,
+      );
+
       // The purgeLock must be released if the backup could not be restored,
       // or it will otherwise prevent the change-db update after the resync
       // completes.
       await purgeLock.release();
+      purgeLock = null;
     }
   }
 

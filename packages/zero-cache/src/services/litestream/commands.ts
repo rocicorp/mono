@@ -29,20 +29,25 @@ type ReplicaConstraints = {
   minWatermark: string;
 };
 
+export class BackupNotFoundException extends Error {
+  static readonly name = 'BackupNotFoundException';
+
+  constructor(backupURL: string | undefined) {
+    super(`backup not found at ${backupURL}`);
+  }
+}
+
 /**
  * @param replicaConstraints The constraints of the restored backup when
  *        restoring for the change-streamer (replication-manager). For the
  *        view-syncer, this should be unspecified so that the constraints are
  *        retrieved from the replication-manager via the snapshot protocol.
- * @returns Whether a backup was found. This will only return `false` for the
- *        replication-manager (i.e. when replicaConstraints are specified), as
- *        the replication-manager can recover by resyncing.
  */
 export async function restoreReplica(
   lc: LogContext,
   config: ZeroConfig,
   replicaConstraints: ReplicaConstraints | null,
-): Promise<boolean> {
+) {
   for (let i = 0; i < MAX_RETRIES; i++) {
     if (i > 0) {
       lc.info?.(
@@ -52,16 +57,12 @@ export async function restoreReplica(
     }
     const restored = await tryRestore(lc, config, replicaConstraints);
     if (restored) {
-      return true;
+      return;
     }
     if (replicaConstraints) {
       // This can happen if the litestream URL is purposefully changed to
       // force a resync.
-      lc.warn?.('no litestream backup found', {
-        ...replicaConstraints,
-        backupURL: config.litestream.backupURL,
-      });
-      return false;
+      throw new BackupNotFoundException(config.litestream.backupURL);
     }
   }
   throw new Error(`max attempts exceeded restoring replica`);
