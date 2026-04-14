@@ -12,6 +12,8 @@
     "test:pg16:watch": "vitest --project='*16*'",
     "test:pg17": "vitest --project='*17*' run",
     "test:pg17:watch": "vitest --project='*17*'",
+    "test:pg18": "vitest --project='*18*' run",
+    "test:pg18:watch": "vitest --project='*18*'",
     "test:no-pg": "vitest --project='*no-pg*' run",
     "test:no-pg:watch": "vitest --project='*no-pg*'",
     "check-types": "tsc",

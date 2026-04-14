@@ -594,9 +594,9 @@ describe('computeZqlSpec', () => {
           "tableSpec": {
             "allPotentialPrimaryKeys": [
               [
-                "a",
                 "b",
                 "d",
+                "a",
               ],
             ],
             "backfilling": [],
@@ -629,15 +629,15 @@ describe('computeZqlSpec', () => {
             "minRowVersion": null,
             "name": "foo",
             "primaryKey": [
-              "a",
               "b",
               "d",
+              "a",
             ],
             "uniqueKeys": [
               [
-                "a",
                 "b",
                 "d",
+                "a",
               ],
               [
                 "a",
@@ -674,9 +674,9 @@ describe('computeZqlSpec', () => {
           "tableSpec": {
             "allPotentialPrimaryKeys": [
               [
-                "a",
                 "b",
                 "d",
+                "a",
               ],
             ],
             "backfilling": [],
@@ -717,15 +717,15 @@ describe('computeZqlSpec', () => {
             "minRowVersion": null,
             "name": "foo",
             "primaryKey": [
-              "a",
               "b",
               "d",
+              "a",
             ],
             "uniqueKeys": [
               [
-                "a",
                 "b",
                 "d",
+                "a",
               ],
               [
                 "a",
@@ -764,9 +764,9 @@ describe('computeZqlSpec', () => {
           "tableSpec": {
             "allPotentialPrimaryKeys": [
               [
+                "d",
                 "a",
                 "c",
-                "d",
               ],
             ],
             "backfilling": [],
@@ -807,15 +807,15 @@ describe('computeZqlSpec', () => {
             "minRowVersion": null,
             "name": "foo",
             "primaryKey": [
+              "d",
               "a",
               "c",
-              "d",
             ],
             "uniqueKeys": [
               [
+                "d",
                 "a",
                 "c",
-                "d",
               ],
             ],
           },
@@ -838,6 +838,20 @@ describe('computeZqlSpec', () => {
     `);
   });
 
+  test('compound key preserves index column order', () => {
+    // Regression test: compound primary key columns should preserve the
+    // order defined in the index (d, a, c), not be alphabetically sorted
+    // (a, c, d). Alphabetical sorting causes incorrect ORDER BY and index
+    // usage downstream.
+    // See: https://bugs.rocicorp.dev/p/zero/issue/246641
+    const result = t(`
+    CREATE TABLE foo(a "INT|NOT_NULL", b "INT|NOT_NULL", c "INT|NOT_NULL", d "INT|NOT_NULL");
+    CREATE UNIQUE INDEX foo_pkey ON foo(d ASC, a ASC, c ASC);
+    `);
+    const tableSpec = result[0].tableSpec;
+    expect(tableSpec.primaryKey).toEqual(['d', 'a', 'c']);
+  });
+
   test('additional unique key', () => {
     expect(
       t(`
@@ -854,8 +868,8 @@ describe('computeZqlSpec', () => {
                 "b",
               ],
               [
-                "a",
                 "c",
+                "a",
               ],
             ],
             "backfilling": [],
@@ -903,8 +917,8 @@ describe('computeZqlSpec', () => {
                 "b",
               ],
               [
-                "a",
                 "c",
+                "a",
               ],
             ],
           },

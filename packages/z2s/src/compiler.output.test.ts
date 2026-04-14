@@ -117,6 +117,17 @@ const alternateUser = table('alternate_user')
   })
   .primaryKey('id');
 
+// Table with compound PK where user-defined order differs from alphabetical.
+// PK order: callId, userId, connectionId
+// Alphabetical: callId, connectionId, userId
+const connectedCalls = table('connected_calls')
+  .columns({
+    callId: string(),
+    userId: string(),
+    connectionId: string(),
+  })
+  .primaryKey('callId', 'userId', 'connectionId');
+
 const schema = createSchema({
   tables: [
     user,
@@ -129,6 +140,7 @@ const schema = createSchema({
     timestampsTable,
     timesTable,
     alternateUser,
+    connectedCalls,
   ],
 });
 
@@ -188,6 +200,11 @@ const serverSchema: ServerSchema = {
     id: {type: 'text', isArray: false, isEnum: false},
     name: {type: 'text', isArray: false, isEnum: false},
     age: {type: 'numeric', isArray: false, isEnum: false},
+  },
+  'connected_calls': {
+    callId: {type: 'text', isArray: false, isEnum: false},
+    userId: {type: 'text', isArray: false, isEnum: false},
+    connectionId: {type: 'text', isArray: false, isEnum: false},
   },
 };
 
@@ -1441,4 +1458,23 @@ test('scalar subquery with NOT EXISTS generates IS NOT operator', () => {
       ],
     }
   `);
+});
+
+test('compound primary key ORDER BY preserves user-defined column order', () => {
+  // Verifies that compile() generates ORDER BY with PK columns in the
+  // user-defined order (callId, userId, connectionId), NOT alphabetical
+  // (callId, connectionId, userId).
+  // See: https://bugs.rocicorp.dev/p/zero/issue/246641
+  const result = formatPgInternalConvert(
+    compile(serverSchema, schema, {table: 'connected_calls'}),
+  );
+  // The ORDER BY should have columns in PK-defined order:
+  // callId, userId, connectionId
+  expect(result.text).toContain(
+    'ORDER BY "connected_calls_0"."callId" ASC NULLS FIRST, "connected_calls_0"."userId" ASC NULLS FIRST, "connected_calls_0"."connectionId" ASC NULLS FIRST',
+  );
+  // It should NOT have alphabetical order (connectionId before userId)
+  expect(result.text).not.toContain(
+    'ORDER BY "connected_calls_0"."callId" ASC NULLS FIRST, "connected_calls_0"."connectionId" ASC NULLS FIRST, "connected_calls_0"."userId" ASC NULLS FIRST',
+  );
 });
