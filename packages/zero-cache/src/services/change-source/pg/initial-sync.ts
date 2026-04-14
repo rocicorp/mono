@@ -152,7 +152,10 @@ export async function initialSync(
     let lsn: string;
 
     if (shadow) {
-      const acquired = await acquireExportedSnapshot(lc, upstreamURI);
+      const acquired = await acquireExportedSnapshotForShadowSync(
+        lc,
+        upstreamURI,
+      );
       snapshot = acquired.snapshot;
       lsn = acquired.lsn;
       releaseShadowSnapshot = acquired.release;
@@ -517,7 +520,7 @@ type ReplicationSlot = {
  * Idle-in-transaction timeout is disabled locally so the exporter doesn't
  * get killed while workers are still importing.
  */
-async function acquireExportedSnapshot(
+async function acquireExportedSnapshotForShadowSync(
   lc: LogContext,
   upstreamURI: string,
 ): Promise<{
@@ -692,8 +695,9 @@ export async function getInitialDownloadState(
   const table = liteTableName(spec);
   const columns = Object.keys(spec.columns);
   if (skipTotals) {
-    // Shadow sync suppresses status events, so the expensive COUNT(*) and
+    // Shadow sync suppresses status events, so the COUNT(*) and
     // per-column pg_column_size sums would be computed and thrown away.
+    // These are also expensive statements that run table scans.
     return {
       spec,
       status: {table, columns, rows: 0, totalRows: 0, totalBytes: 0},
