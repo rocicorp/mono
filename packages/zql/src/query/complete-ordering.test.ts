@@ -529,4 +529,31 @@ describe('completeOrdering', () => {
         }
       `);
   });
+
+  test('compound primary key preserves user-defined column order', () => {
+    // This test verifies that completeOrdering preserves the order of
+    // compound primary key columns as defined by the user, not alphabetically.
+    // See: https://bugs.rocicorp.dev/p/zero/issue/246641
+    // The bug was that lite-tables.ts called primaryKey.sort() which
+    // alphabetized compound PK columns (e.g., ['callId', 'userId', 'connectionId']
+    // became ['callId', 'connectionId', 'userId']), causing incorrect ORDER BY
+    // and index column ordering.
+
+    // Simulate the correct PK order as user defined it
+    const userDefinedOrder = ['callId', 'userId', 'connectionId'] as const;
+
+    const baseAST = {table: 'issueLabel'} as const;
+
+    const resultWithCorrectOrder = completeOrdering(
+      baseAST,
+      () => userDefinedOrder,
+    );
+
+    // With correct user-defined order, PK columns should be in user-defined order
+    expect(resultWithCorrectOrder.orderBy).toEqual([
+      ['callId', 'asc'],
+      ['userId', 'asc'],
+      ['connectionId', 'asc'],
+    ]);
+  });
 });

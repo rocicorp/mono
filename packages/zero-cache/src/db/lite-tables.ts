@@ -288,13 +288,9 @@ export function computeZqlSpecsFromLiteSpecs(
     const tableSpec = {
       ...fullTable,
       columns: Object.fromEntries(visibleColumns),
-      // normalize (sort) keys to minimize creating new objects.
-      // See row-key.ts: normalizedKeyOrder()
-      primaryKey: v.parse(primaryKey.sort(), primaryKeySchema),
-      uniqueKeys: uniqueKeys.map(key => v.parse(key.sort(), primaryKeySchema)),
-      allPotentialPrimaryKeys: keys.map(key =>
-        v.parse(key.sort(), primaryKeySchema),
-      ),
+      primaryKey: v.parse(primaryKey, primaryKeySchema),
+      uniqueKeys: uniqueKeys.map(key => v.parse(key, primaryKeySchema)),
+      allPotentialPrimaryKeys: keys.map(key => v.parse(key, primaryKeySchema)),
       minRowVersion: fullTable.minRowVersion ?? null,
     };
 
