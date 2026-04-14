@@ -1,3 +1,5 @@
+import {readdir} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
 import {nanoid} from 'nanoid/non-secure';
 import {beforeEach, describe, expect} from 'vitest';
 import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.ts';
@@ -20,10 +22,15 @@ import {
 import {PG_17} from '../../../types/pg-versions.ts';
 import type {PostgresDB} from '../../../types/pg.ts';
 import {ZERO_VERSION_COLUMN_NAME} from '../../replicator/schema/replication-state.ts';
-import {initialSync, INSERT_BATCH_SIZE} from './initial-sync.ts';
+import {
+  initialSync,
+  INSERT_BATCH_SIZE,
+  shadowInitialSync,
+} from './initial-sync.ts';
 import {fromStateVersionString} from './lsn.ts';
 import {ensureShardSchema} from './schema/init.ts';
 import {getPublicationInfo} from './schema/published.ts';
+import {replicationSlotExpression} from './schema/shard.ts';
 import {UnsupportedTableSchemaError} from './schema/validation.ts';
 
 const APP_ID = '1';
@@ -2749,6 +2756,12 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
       result = e;
     }
     expect(result).toBeInstanceOf(UnsupportedTableSchemaError);
+
+    // Regression: real-path initial-sync must clean up its orphaned slot.
+    const leftoverSlots = await upstream<{slotName: string}[]>`
+      SELECT slot_name as "slotName" FROM pg_replication_slots
+       WHERE slot_name LIKE ${replicationSlotExpression(shardConfig)}`;
+    expect(leftoverSlots).toEqual([]);
   });
 
   test.each([
@@ -2869,5 +2882,159 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
     expect(String(result)).toEqual(
       'Error: The App ID may only consist of lower-case letters, numbers, and the underscore character',
     );
+  });
+
+  describe('shadow initial sync', () => {
+    const SHADOW_SHARD = {
+      appID: APP_ID,
+      shardNum: SHARD_NUM,
+      publications: [],
+    } as const;
+    const SLOT_LIKE = replicationSlotExpression(SHADOW_SHARD);
+
+    async function seedWithManyRows(upstream: PostgresDB, rows: number) {
+      await upstream`CREATE TABLE big(id int4 PRIMARY KEY, val text)`;
+      await upstream`
+        INSERT INTO big (id, val)
+          SELECT g, 'row-' || g FROM generate_series(1, ${rows}) g`;
+      await ensureShardSchema(createSilentLogContext(), upstream, SHADOW_SHARD);
+    }
+
+    async function countSlots(upstream: PostgresDB): Promise<number> {
+      const [{count}] = await upstream<{count: number}[]>`
+        SELECT COUNT(*)::int as count FROM pg_replication_slots
+         WHERE slot_name LIKE ${SLOT_LIKE}`;
+      return count;
+    }
+
+    async function countReplicas(upstream: PostgresDB): Promise<number> {
+      const schema = `${APP_ID}_${SHARD_NUM}`;
+      const [{count}] = await upstream<{count: number}[]>`
+        SELECT COUNT(*)::int as count FROM ${upstream(schema)}."replicas"`;
+      return count;
+    }
+
+    test('does not create a replication slot, add a replicas row, or publish events', async () => {
+      const lc = createSilentLogContext();
+      await seedWithManyRows(upstream, 200);
+
+      const slotsBefore = await countSlots(upstream);
+      const replicasBefore = await countReplicas(upstream);
+      expect(slotsBefore).toBe(0);
+      expect(replicasBefore).toBe(0);
+
+      const eventSink: ZeroEvent[] = [];
+      initEventSinkForTesting(eventSink);
+
+      const replica = new Database(lc, ':memory:');
+      await initialSync(
+        lc,
+        SHADOW_SHARD,
+        replica,
+        getConnectionURI(upstream),
+        {tableCopyWorkers: 2, shadow: {sampleRate: 0.5, maxRowsPerTable: 20}},
+        TEST_CONTEXT,
+      );
+
+      expect(await countSlots(upstream)).toBe(0);
+      expect(await countReplicas(upstream)).toBe(0);
+      expect(eventSink).toEqual([]);
+
+      // And no walsender connections should have been opened.
+      const walsenders = await upstream<{count: number}[]>`
+        SELECT COUNT(*)::int as count FROM pg_stat_activity
+         WHERE backend_type = 'walsender'`;
+      expect(walsenders[0].count).toBe(0);
+    });
+
+    test('caps rows per table via sampleRate + maxRowsPerTable', async () => {
+      const lc = createSilentLogContext();
+      await seedWithManyRows(upstream, 500);
+
+      const replica = new Database(lc, ':memory:');
+      await initialSync(
+        lc,
+        SHADOW_SHARD,
+        replica,
+        getConnectionURI(upstream),
+        {tableCopyWorkers: 2, shadow: {sampleRate: 0.2, maxRowsPerTable: 25}},
+        TEST_CONTEXT,
+      );
+
+      const [{count}] = replica
+        .prepare('SELECT COUNT(*) as count FROM big')
+        .all<{count: number}>();
+      expect(count).toBeLessThanOrEqual(25);
+      expect(count).toBeLessThan(500);
+    });
+
+    test('shadow failure does not drop or touch existing replication slots', async () => {
+      const lc = createSilentLogContext();
+
+      // First establish a real shard + slot via a normal initial sync.
+      await upstream`CREATE TABLE foo(id int4 PRIMARY KEY)`;
+      await upstream`INSERT INTO foo(id) VALUES (1)`;
+      const real = new Database(lc, ':memory:');
+      await initialSync(
+        lc,
+        SHADOW_SHARD,
+        real,
+        getConnectionURI(upstream),
+        {tableCopyWorkers: 1},
+        TEST_CONTEXT,
+      );
+      expect(await countSlots(upstream)).toBe(1);
+      expect(await countReplicas(upstream)).toBe(1);
+
+      // Force a shadow failure mid-sync by adding an invalid table to the
+      // publication after shard setup.
+      await upstream`CREATE TABLE "has/inval!d/ch@aracter$"(id int4)`;
+
+      const replica = new Database(lc, ':memory:');
+      let err: unknown;
+      try {
+        await initialSync(
+          lc,
+          SHADOW_SHARD,
+          replica,
+          getConnectionURI(upstream),
+          {tableCopyWorkers: 1, shadow: {sampleRate: 1}},
+          TEST_CONTEXT,
+        );
+      } catch (e) {
+        err = e;
+      }
+      expect(err).toBeInstanceOf(UnsupportedTableSchemaError);
+
+      // The pre-existing slot and replica row must be untouched.
+      expect(await countSlots(upstream)).toBe(1);
+      expect(await countReplicas(upstream)).toBe(1);
+    });
+
+    test('shadowInitialSync wrapper cleans up tempfile dir', async () => {
+      const lc = createSilentLogContext();
+      await seedWithManyRows(upstream, 50);
+
+      const before = (await readdir(tmpdir())).filter(n =>
+        n.startsWith('zero-shadow-sync-'),
+      );
+
+      await shadowInitialSync(
+        lc,
+        SHADOW_SHARD,
+        getConnectionURI(upstream),
+        {sampleRate: 0.5, maxRowsPerTable: 10},
+        TEST_CONTEXT,
+        {tableCopyWorkers: 1},
+      );
+
+      const after = (await readdir(tmpdir())).filter(n =>
+        n.startsWith('zero-shadow-sync-'),
+      );
+      expect(after).toEqual(before);
+      // And it still left no upstream footprint.
+      expect(await countSlots(upstream)).toBe(0);
+      expect(await countReplicas(upstream)).toBe(0);
+    });
   });
 });
