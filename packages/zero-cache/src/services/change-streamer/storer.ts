@@ -187,7 +187,7 @@ export class Storer implements Service {
       // purging of change-log records can be released, as a change-streamer
       // that was attempting to purge records will correspondingly abort on the
       // ownership check.
-      await purgeLock.release();
+      void purgeLock.release();
     }
   }
 
