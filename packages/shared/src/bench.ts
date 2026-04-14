@@ -25,7 +25,6 @@ type MeasureFn = Parameters<typeof measure>[0];
 const defaultMeasureOptions: MeasureOptions = {
   min_cpu_time: 2e9, // 2 seconds
   min_samples: 50,
-  gc: true,
 };
 
 type BenchResult = {name: string; stats: Stats};
