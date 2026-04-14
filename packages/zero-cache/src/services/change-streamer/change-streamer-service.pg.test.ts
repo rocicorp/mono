@@ -1061,7 +1061,7 @@ describe('change-streamer/service', () => {
     // This should succeed once the purge lock is released.
     await sql`SELECT FROM "zoro_3/cdc"."changeLog" FOR UPDATE`;
 
-    streamer.stop();
+    void streamer.stop();
   });
 
   test('retry on change stream error', async () => {
