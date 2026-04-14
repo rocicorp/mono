@@ -86,10 +86,13 @@ export type InitialSyncOptions = {
    */
   shadow?:
     | {
-        /** 0 < rate <= 1. When 1 (or undefined), no TABLESAMPLE clause is added. */
+        /** 0 < rate <= 1. When 1, no TABLESAMPLE clause is added. */
         sampleRate: number;
-        /** Optional LIMIT N cap appended after TABLESAMPLE. */
-        maxRowsPerTable?: number | undefined;
+        /**
+         * LIMIT N cap appended after TABLESAMPLE. Required: shadow sync is
+         * for verification only, so every run must commit to a row budget.
+         */
+        maxRowsPerTable: number;
       }
     | undefined;
 };
@@ -366,7 +369,7 @@ export async function initialSync(
 
 export type ShadowSyncOptions = {
   sampleRate: number;
-  maxRowsPerTable?: number | undefined;
+  maxRowsPerTable: number;
 };
 
 /**

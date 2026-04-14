@@ -3006,7 +3006,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
           SHADOW_SHARD,
           replica,
           getConnectionURI(upstream),
-          {tableCopyWorkers: 1, shadow: {sampleRate: 1}},
+          {tableCopyWorkers: 1, shadow: {sampleRate: 1, maxRowsPerTable: 100}},
           TEST_CONTEXT,
         );
       } catch (e) {
@@ -3085,7 +3085,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
           SHADOW_SHARD,
           replica,
           getConnectionURI(upstream),
-          {tableCopyWorkers: 1, shadow: {sampleRate: 1}},
+          {tableCopyWorkers: 1, shadow: {sampleRate: 1, maxRowsPerTable: 100}},
           TEST_CONTEXT,
         );
         const {publications} = await getInternalShardConfig(
