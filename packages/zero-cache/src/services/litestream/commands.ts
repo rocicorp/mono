@@ -24,16 +24,30 @@ import {getSubscriptionState} from '../replicator/schema/replication-state.ts';
 const MAX_RETRIES = 60;
 const RETRY_INTERVAL_MS = 3000;
 
+type ReplicaConstraints = {
+  replicaVersion: string;
+  minWatermark: string;
+};
+
+export class BackupNotFoundException extends Error {
+  static readonly name = 'BackupNotFoundException';
+
+  constructor(backupURL: string | undefined) {
+    super(`backup not found at ${backupURL}`);
+  }
+}
+
 /**
- * @returns The time at which the last restore started
- *          (i.e. not counting failed attempts).
+ * @param replicaConstraints The constraints of the restored backup when
+ *        restoring for the change-streamer (replication-manager). For the
+ *        view-syncer, this should be unspecified so that the constraints are
+ *        retrieved from the replication-manager via the snapshot protocol.
  */
 export async function restoreReplica(
   lc: LogContext,
   config: ZeroConfig,
-): Promise<Date> {
-  const {changeStreamer} = config;
-
+  replicaConstraints: ReplicaConstraints | null,
+) {
   for (let i = 0; i < MAX_RETRIES; i++) {
     if (i > 0) {
       lc.info?.(
@@ -41,17 +55,14 @@ export async function restoreReplica(
       );
       await sleep(RETRY_INTERVAL_MS);
     }
-    const start = new Date();
-    const restored = await tryRestore(lc, config);
+    const restored = await tryRestore(lc, config, replicaConstraints);
     if (restored) {
-      return start;
+      return;
     }
-    if (
-      changeStreamer.mode === 'dedicated' &&
-      changeStreamer.uri === undefined
-    ) {
-      lc.info?.('no litestream backup found');
-      return start;
+    if (replicaConstraints) {
+      // This can happen if the litestream URL is purposefully changed to
+      // force a resync.
+      throw new BackupNotFoundException(config.litestream.backupURL);
     }
   }
   throw new Error(`max attempts exceeded restoring replica`);
@@ -123,26 +134,18 @@ function getLitestream(
   };
 }
 
-async function tryRestore(lc: LogContext, config: ZeroConfig) {
-  const {changeStreamer} = config;
-
-  const isViewSyncer =
-    changeStreamer.mode === 'discover' || changeStreamer.uri !== undefined;
-
-  // Fire off a snapshot reservation to the current replication-manager
-  // (if there is one).
-  const firstMessage = reserveAndGetSnapshotStatus(lc, config, isViewSyncer);
+async function tryRestore(
+  lc: LogContext,
+  config: ZeroConfig,
+  replicaConstraints: ReplicaConstraints | null,
+) {
   let snapshotStatus: SnapshotStatus | undefined;
-  if (isViewSyncer) {
-    // The return value is required by view-syncers ...
-    snapshotStatus = await firstMessage;
+  if (!replicaConstraints) {
+    // view-syncers fetch replica constraints from the replication-manager
+    // via the snapshot protocol.
+    snapshotStatus = await reserveAndGetSnapshotStatus(lc, config);
     lc.info?.(`restoring backup from ${snapshotStatus.backupURL}`);
-  } else {
-    // but it is also useful to pause change-log cleanup when a new
-    // replication-manager is starting up. In this case, the request is
-    // best-effort. In particular, there may not be a previous
-    // replication-manager running at all.
-    void firstMessage.catch(e => lc.debug?.(e));
+    replicaConstraints = snapshotStatus;
   }
 
   const {litestream, env} = getLitestream(
@@ -179,10 +182,7 @@ async function tryRestore(lc: LogContext, config: ZeroConfig) {
   if (!existsSync(config.replica.file)) {
     return false;
   }
-  if (
-    snapshotStatus &&
-    !replicaIsValid(lc, config.replica.file, snapshotStatus)
-  ) {
+  if (!replicaIsValid(lc, config.replica.file, replicaConstraints)) {
     lc.info?.(`Deleting local replica and retrying restore`);
     deleteLiteDB(config.replica.file);
     return false;
@@ -193,29 +193,29 @@ async function tryRestore(lc: LogContext, config: ZeroConfig) {
 function replicaIsValid(
   lc: LogContext,
   replica: string,
-  snapshot: SnapshotStatus,
+  constraints: ReplicaConstraints,
 ) {
   const db = new Database(lc, replica);
   try {
     const {replicaVersion, watermark} = getSubscriptionState(
       new StatementRunner(db),
     );
-    if (replicaVersion !== snapshot.replicaVersion) {
+    if (replicaVersion !== constraints.replicaVersion) {
       lc.warn?.(
-        `Local replica version ${replicaVersion} does not match change-streamer replicaVersion ${snapshot.replicaVersion}`,
-        snapshot,
+        `Local replica version ${replicaVersion} does not match expected replicaVersion ${constraints.replicaVersion}`,
+        constraints,
       );
       return false;
     }
-    if (watermark < snapshot.minWatermark) {
+    if (watermark < constraints.minWatermark) {
       lc.warn?.(
-        `Local replica watermark ${watermark} is earlier than change-streamer minWatermark ${snapshot.minWatermark}`,
+        `Local replica watermark ${watermark} is earlier than minWatermark ${constraints.minWatermark}`,
       );
       return false;
     }
     lc.info?.(
-      `Local replica at version ${replicaVersion} and watermark ${watermark} is compatible with change-streamer`,
-      snapshot,
+      `Local replica at version ${replicaVersion} and watermark ${watermark} is compatible`,
+      constraints,
     );
     return true;
   } catch (e) {
@@ -242,7 +242,6 @@ export function startReplicaBackupProcess(
 function reserveAndGetSnapshotStatus(
   lc: LogContext,
   config: ZeroConfig,
-  isViewSyncer: boolean,
 ): Promise<SnapshotStatus> {
   const {promise: status, resolve, reject} = resolver<SnapshotStatus>();
 
@@ -252,7 +251,7 @@ function reserveAndGetSnapshotStatus(
     process.on('SIGTERM', () => abort.abort());
 
     for (let i = 0; ; i++) {
-      let err: unknown | string = '';
+      let err: unknown;
       try {
         let resolved = false;
         const stream = await reserveSnapshot(lc, config);
@@ -270,9 +269,6 @@ function reserveAndGetSnapshotStatus(
         }
       } catch (e) {
         err = e;
-      }
-      if (!isViewSyncer) {
-        return reject(err);
       }
       // Retry in the view-syncer since it cannot proceed until it connects
       // to a (compatible) replication-manager. In particular, a

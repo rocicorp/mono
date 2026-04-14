@@ -1,4 +1,5 @@
 import {getHeapStatistics} from 'node:v8';
+import {PG_LOCK_NOT_AVAILABLE} from '@drdgvhbh/postgres-error-codes';
 import type {LogContext} from '@rocicorp/logger';
 import {resolver, type Resolver} from '@rocicorp/resolver';
 import {type PendingQuery, type Row} from 'postgres';
@@ -11,7 +12,11 @@ import * as v from '../../../../shared/src/valita.ts';
 import * as Mode from '../../db/mode-enum.ts';
 import {runTx} from '../../db/run-transaction.ts';
 import {TransactionPool} from '../../db/transaction-pool.ts';
-import {type PostgresDB, type PostgresTransaction} from '../../types/pg.ts';
+import {
+  isPostgresError,
+  type PostgresDB,
+  type PostgresTransaction,
+} from '../../types/pg.ts';
 import {cdcSchema, type ShardID} from '../../types/shards.ts';
 import {
   backfillRequestSchema,
@@ -159,7 +164,7 @@ export class Storer implements Service {
     return this.#db(`${cdcSchema(this.#shard)}.${table}`);
   }
 
-  async assumeOwnership() {
+  async assumeOwnership(purgeLock?: PurgeLock | null) {
     const db = this.#db;
     const owner = this.#taskID;
     const ownerAddress = this.#discoveryAddress;
@@ -176,6 +181,14 @@ export class Storer implements Service {
     this.#lc.info?.(
       `assumed ownership at ${addressWithProtocol} (${elapsed} ms)`,
     );
+
+    if (purgeLock) {
+      // Once ownership has been assumed, any initial purge-lock preventing the
+      // purging of change-log records can be released, as a change-streamer
+      // that was attempting to purge records will correspondingly abort on the
+      // ownership check.
+      void purgeLock.release();
+    }
   }
 
   async getStartStreamInitializationParameters(): Promise<{
@@ -222,26 +235,45 @@ export class Storer implements Service {
     return minWatermark;
   }
 
-  purgeRecordsBefore(watermark: string): Promise<number> {
-    return runTx(this.#db, async sql => {
-      const [{deleted}] = await sql<{deleted: bigint}[]>`
+  async purgeRecordsBefore(watermark: string): Promise<number> {
+    try {
+      return await runTx(this.#db, async sql => {
+        // This NOWAIT pre-check is an optimization to abort the transaction
+        // (and release associated resources) early.
+        await sql<{watermark: string}[]>`
+          SELECT watermark FROM ${this.#cdc('changeLog')}
+            ORDER BY watermark, pos LIMIT 1
+            FOR UPDATE NOWAIT
+        `;
+        // If the row is purge-locked by an incoming replication-manager, it
+        // will assume ownership of the change-log before releasing the lock.
+        // This DELETE blocks until the lock is released, allowing the change
+        // in ownership to be reliably detected (and the transaction aborted)
+        // in the subsequent check.
+        const [{deleted}] = await sql<{deleted: bigint}[]>`
         WITH purged AS (
           DELETE FROM ${this.#cdc('changeLog')} WHERE watermark < ${watermark} 
             RETURNING watermark, pos
         ) SELECT COUNT(*) as deleted FROM purged;`;
 
-      // Before committing the purge, check that this process is still the
-      // owner. This is done after the DELETE to minimize the amount of time
-      // that writes to the changeLog are delayed.
-      const [{owner}] = await sql<ReplicationState[]>`
+        const [{owner}] = await sql<ReplicationState[]>`
         SELECT * FROM ${this.#cdc('replicationState')} FOR SHARE`;
-      if (owner !== this.#taskID) {
-        throw new AbortError(
-          `aborting changeLog purge to ${watermark} because ownership has been taken by ${owner}`,
+        if (owner !== this.#taskID) {
+          throw new AbortError(
+            `aborting changeLog purge to ${watermark} because ownership has been taken by ${owner}`,
+          );
+        }
+        return Number(deleted);
+      });
+    } catch (e) {
+      if (isPostgresError(e, PG_LOCK_NOT_AVAILABLE)) {
+        this.#lc.info?.(
+          `changeLog is locked from being purged. trying purge later.`,
         );
+        return 0;
       }
-      return Number(deleted);
-    });
+      throw e;
+    }
   }
 
   /**
@@ -810,5 +842,82 @@ function toDownstream(entry: ChangeEntry): WatermarkedChange {
       return [watermark, ['rollback', change]];
     default:
       return [watermark, ['data', change]];
+  }
+}
+
+export class PurgeLock {
+  readonly #lc: LogContext;
+  readonly #tx: TransactionPool;
+  readonly replicaVersion: string;
+  readonly minWatermark: string;
+
+  constructor(
+    lc: LogContext,
+    tx: TransactionPool,
+    replicaVersion: string,
+    watermark: string,
+  ) {
+    this.#lc = lc;
+    this.#tx = tx;
+    this.replicaVersion = replicaVersion;
+    this.minWatermark = watermark;
+  }
+
+  #released = false;
+
+  async release() {
+    if (this.#released) {
+      return;
+    }
+    this.#released = true;
+    this.#tx.setDone();
+    await this.#tx
+      .done()
+      .catch(e => this.#lc.warn?.(`error from purge-lock release`, e));
+    this.#lc.info?.(`released purge lock on ${this.minWatermark}`);
+  }
+}
+
+export class PurgeLocker {
+  readonly #lc: LogContext;
+  readonly #shard: ShardID;
+  readonly #db: PostgresDB;
+
+  constructor(lc: LogContext, shard: ShardID, db: PostgresDB) {
+    this.#lc = lc.withContext('component', 'purge-locker');
+    this.#shard = shard;
+    this.#db = db;
+  }
+
+  // For readability in SQL statements.
+  #cdc(table: string) {
+    return this.#db(`${cdcSchema(this.#shard)}.${table}`);
+  }
+
+  async acquire() {
+    const tx = new TransactionPool(this.#lc, Mode.READ_COMMITTED).run(this.#db);
+    const row = await tx.processReadTask(
+      sql => sql<{watermark: string}[]>`
+      SELECT watermark FROM ${this.#cdc('changeLog')}
+        ORDER BY watermark, pos LIMIT 1
+        FOR SHARE 
+    `,
+    );
+    if (row.length === 0) {
+      this.#lc.info?.(`changeLog is empty. No rows to purge-lock.`);
+      tx.setDone();
+      await tx.done();
+      return null;
+    }
+    const [{watermark}] = row;
+    const [{replicaVersion}] = await tx.processReadTask(
+      sql => sql<{replicaVersion: string}[]>`
+        SELECT "replicaVersion" FROM ${this.#cdc('replicationConfig')}
+      `,
+    );
+    this.#lc.info?.(
+      `locked watermark ${watermark} from being purged from replica@${replicaVersion}`,
+    );
+    return new PurgeLock(this.#lc, tx, replicaVersion, watermark);
   }
 }

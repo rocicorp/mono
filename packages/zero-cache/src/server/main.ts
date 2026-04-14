@@ -94,71 +94,56 @@ export default async function runWorker(
   const runChangeStreamer =
     changeStreamerMode === 'dedicated' && changeStreamerURI === undefined;
 
-  let restoreStart = new Date();
-  if (litestream.backupURL || (litestream.executable && !runChangeStreamer)) {
-    try {
-      restoreStart = await restoreReplica(lc, config);
-    } catch (e) {
-      if (runChangeStreamer) {
-        // If the restore failed, e.g. due to a corrupt backup, the
-        // replication-manager recovers by re-syncing.
-        lc.error?.('error restoring backup. resyncing the replica.', e);
-      } else {
-        // View-syncers, on the other hand, have no option other than to retry
-        // until a valid backup has been published. This is achieved by
-        // shutting down and letting the container runner retry with its
-        // configured policy.
-        throw e;
-      }
+  let changeStreamer: Worker | undefined;
+
+  if (!runChangeStreamer) {
+    changeStreamer = undefined;
+    if (litestream.executable) {
+      // For view-syncers, the backup is restored here. For the replication-manager,
+      // the backup is restored in the change-streamer worker.
+      await restoreReplica(lc, config, null);
+    }
+  } else {
+    const {promise: changeStreamerReady, resolve: changeStreamerStarted} =
+      resolver();
+    changeStreamer = loadWorker(CHANGE_STREAMER_URL, 'supporting').once(
+      'message',
+      changeStreamerStarted,
+    );
+
+    // Wait for the change-streamer to be ready to guarantee that a replica
+    // file is present.
+    await changeStreamerReady;
+
+    if (litestream.backupURL) {
+      // Start a backup replicator and corresponding litestream backup process.
+      const {promise: backupReady, resolve} = resolver();
+      const mode: ReplicaFileMode = 'backup';
+      loadWorker(REPLICATOR_URL, 'supporting', mode, mode).once(
+        // Wait for the Replicator's first message (i.e. "ready") before starting
+        // litestream backup in order to avoid contending on the lock when the
+        // replicator first prepares the db file.
+        'message',
+        () => {
+          processes.addSubprocess(
+            startReplicaBackupProcess(lc, config),
+            'supporting',
+            'litestream',
+          );
+          resolve();
+        },
+      );
+      await backupReady;
     }
   }
 
-  const {promise: changeStreamerReady, resolve: changeStreamerStarted} =
-    resolver();
-  const changeStreamer = runChangeStreamer
-    ? loadWorker(
-        CHANGE_STREAMER_URL,
-        'supporting',
-        undefined,
-        String(restoreStart.getTime()),
-      ).once('message', changeStreamerStarted)
-    : (changeStreamerStarted() ?? undefined);
-
-  const {promise: reaperReady, resolve: reaperStarted} = resolver();
   if (numSyncers > 0) {
+    const {promise: reaperReady, resolve: reaperStarted} = resolver();
     loadWorker(REAPER_URL, 'supporting').once('message', reaperStarted);
-  } else {
-    reaperStarted();
+    // Before starting the view-syncers, ensure that the reaper has started
+    // up, indicating that any CVR db migrations have been performed.
+    await reaperReady;
   }
-
-  // Wait for the change-streamer to be ready to guarantee that a replica
-  // file is present.
-  await changeStreamerReady;
-
-  if (runChangeStreamer && litestream.backupURL) {
-    // Start a backup replicator and corresponding litestream backup process.
-    const {promise: backupReady, resolve} = resolver();
-    const mode: ReplicaFileMode = 'backup';
-    loadWorker(REPLICATOR_URL, 'supporting', mode, mode).once(
-      // Wait for the Replicator's first message (i.e. "ready") before starting
-      // litestream backup in order to avoid contending on the lock when the
-      // replicator first prepares the db file.
-      'message',
-      () => {
-        processes.addSubprocess(
-          startReplicaBackupProcess(lc, config),
-          'supporting',
-          'litestream',
-        );
-        resolve();
-      },
-    );
-    await backupReady;
-  }
-
-  // Before starting the view-syncers, ensure that the reaper has started
-  // up, indicating that any CVR db migrations have been performed.
-  await reaperReady;
 
   const syncers: Worker[] = [];
   if (numSyncers) {
