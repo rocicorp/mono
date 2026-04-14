@@ -30,11 +30,15 @@ import {
   initialSync,
   INSERT_BATCH_SIZE,
   shadowInitialSync,
+  verifyShadowReplica,
 } from './initial-sync.ts';
 import {fromStateVersionString} from './lsn.ts';
 import {ensureShardSchema} from './schema/init.ts';
 import {getPublicationInfo} from './schema/published.ts';
-import {replicationSlotExpression} from './schema/shard.ts';
+import {
+  getInternalShardConfig,
+  replicationSlotExpression,
+} from './schema/shard.ts';
 import {UnsupportedTableSchemaError} from './schema/validation.ts';
 
 const APP_ID = '1';
@@ -3069,6 +3073,86 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
       // And it still left no upstream footprint.
       expect(await countSlots(upstream)).toBe(0);
       expect(await countReplicas(upstream)).toBe(0);
+    });
+
+    describe('verifyShadowReplica', () => {
+      async function runShadowSync() {
+        await seedWithManyRows(upstream, 20);
+        const lc = createSilentLogContext();
+        const replica = new Database(lc, ':memory:');
+        await initialSync(
+          lc,
+          SHADOW_SHARD,
+          replica,
+          getConnectionURI(upstream),
+          {tableCopyWorkers: 1, shadow: {sampleRate: 1}},
+          TEST_CONTEXT,
+        );
+        const {publications} = await getInternalShardConfig(
+          upstream,
+          SHADOW_SHARD,
+        );
+        const publishedInfo = await getPublicationInfo(upstream, publications);
+        const [{count}] = replica
+          .prepare('SELECT COUNT(*) as count FROM big')
+          .all<{count: number}>();
+        return {lc, replica, publishedInfo, bigCount: count};
+      }
+
+      test('passes on a valid replica', async () => {
+        const {lc, replica, publishedInfo, bigCount} = await runShadowSync();
+        const rowsByTable = new Map([['big', bigCount]]);
+        expect(() =>
+          verifyShadowReplica(lc, replica, publishedInfo, rowsByTable),
+        ).not.toThrow();
+      });
+
+      test('throws when a published table is missing from the replica', async () => {
+        const {lc, replica, publishedInfo} = await runShadowSync();
+        replica.exec('DROP TABLE big');
+        expect(() =>
+          verifyShadowReplica(lc, replica, publishedInfo, new Map()),
+        ).toThrow(/missing table in replica: big/);
+      });
+
+      test('throws on row-count mismatch', async () => {
+        const {lc, replica, publishedInfo} = await runShadowSync();
+        const rowsByTable = new Map([['big', 999_999]]);
+        expect(() =>
+          verifyShadowReplica(lc, replica, publishedInfo, rowsByTable),
+        ).toThrow(
+          /row count mismatch for table big: copy counter reported 999999/,
+        );
+      });
+
+      test('throws on missing column_metadata row', async () => {
+        const {lc, replica, publishedInfo} = await runShadowSync();
+        replica.exec(
+          `DELETE FROM "_zero.column_metadata"
+             WHERE table_name = 'big' AND column_name = 'val'`,
+        );
+        expect(() =>
+          verifyShadowReplica(lc, replica, publishedInfo, new Map()),
+        ).toThrow(/missing column_metadata row for big\.val/);
+      });
+
+      test('throws when a table is unqueryable via ZQL', async () => {
+        const {lc, replica, publishedInfo} = await runShadowSync();
+        // Dropping the only unique index over non-null columns makes
+        // computeZqlSpecs silently exclude the table.
+        const idx = replica
+          .prepare(
+            `SELECT name FROM sqlite_master
+              WHERE type = 'index' AND tbl_name = 'big' AND name NOT LIKE 'sqlite_%'`,
+          )
+          .all<{name: string}>();
+        for (const {name} of idx) {
+          replica.exec(`DROP INDEX "${name}"`);
+        }
+        expect(() =>
+          verifyShadowReplica(lc, replica, publishedInfo, new Map()),
+        ).toThrow(/dropped by computeZqlSpecs.*big/s);
+      });
     });
   });
 });

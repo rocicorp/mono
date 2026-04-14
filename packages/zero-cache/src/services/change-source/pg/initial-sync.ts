@@ -19,6 +19,11 @@ import {
   createLiteIndexStatement,
   createLiteTableStatement,
 } from '../../../db/create.ts';
+import {
+  computeZqlSpecs,
+  listIndexes,
+  listTables,
+} from '../../../db/lite-tables.ts';
 import * as Mode from '../../../db/mode-enum.ts';
 import {
   BinaryCopyParser,
@@ -307,7 +312,13 @@ export async function initialSync(
       const index = performance.now() - indexStart;
       lc.info?.(`Created indexes (${index.toFixed(3)} ms)`);
 
-      if (!shadow) {
+      if (shadow) {
+        const rowsByTable = new Map<string, number>();
+        for (let i = 0; i < downloads.length; i++) {
+          rowsByTable.set(downloads[i].status.table, rowCounts[i].rows);
+        }
+        verifyShadowReplica(lc, tx, published, rowsByTable);
+      } else {
         await addReplica(
           sql,
           shard,
@@ -605,6 +616,102 @@ function createLiteTables(
 function createLiteIndices(tx: Database, indices: IndexSpec[]) {
   for (const index of indices) {
     tx.exec(createLiteIndexStatement(mapPostgresToLiteIndex(index)));
+  }
+}
+
+/**
+ * Runs structural assertions over a just-synced replica and throws if any
+ * fail. Only called in shadow mode — a successful return means the replica
+ * is schema-complete, row-count consistent, ZQL-queryable, and its column
+ * metadata is in sync with its lite schema.
+ *
+ * Exported for testing.
+ */
+export function verifyShadowReplica(
+  lc: LogContext,
+  db: Database,
+  published: {tables: PublishedTableSpec[]; indexes: IndexSpec[]},
+  rowsByTable: ReadonlyMap<string, number>,
+): void {
+  const issues: string[] = [];
+
+  // 1. Schema completeness: every published table exists in the replica
+  //    with at least the expected column set.
+  const liteTables = listTables(db);
+  const liteTableByName = new Map(liteTables.map(t => [t.name, t]));
+  for (const pt of published.tables) {
+    const name = liteTableName(pt);
+    const lite = liteTableByName.get(name);
+    if (!lite) {
+      issues.push(`missing table in replica: ${name}`);
+      continue;
+    }
+    for (const col of Object.keys(pt.columns)) {
+      if (!(col in lite.columns)) {
+        issues.push(`column missing in replica table ${name}: ${col}`);
+      }
+    }
+  }
+
+  //    Every published index exists in the replica.
+  const liteIndexNames = new Set(listIndexes(db).map(i => i.name));
+  for (const ix of published.indexes) {
+    const mapped = mapPostgresToLiteIndex(ix);
+    if (!liteIndexNames.has(mapped.name)) {
+      issues.push(
+        `missing index in replica: ${mapped.name} on ${mapped.tableName}`,
+      );
+    }
+  }
+
+  // 2. Row counts: SQLite COUNT(*) matches the in-memory copy counter.
+  for (const [table, expected] of rowsByTable) {
+    try {
+      const [row] = db
+        .prepare(`SELECT COUNT(*) as count FROM "${table}"`)
+        .all<{count: number}>();
+      if (row.count !== expected) {
+        issues.push(
+          `row count mismatch for table ${table}: ` +
+            `copy counter reported ${expected}, replica has ${row.count}`,
+        );
+      }
+    } catch (e) {
+      issues.push(`could not count rows in table ${table}: ${String(e)}`);
+    }
+  }
+
+  // 3. ZQL-queryability: every published table survives computeZqlSpecs's
+  //    filtering (primary-key candidate, ZQL-typed columns, etc.).
+  const tableSpecs = computeZqlSpecs(lc, db, {
+    includeBackfillingColumns: false,
+  });
+  for (const pt of published.tables) {
+    const name = liteTableName(pt);
+    if (!tableSpecs.has(name)) {
+      issues.push(
+        `table not queryable via ZQL (dropped by computeZqlSpecs): ${name}`,
+      );
+    }
+  }
+
+  // 4. Column metadata: every published column has a _zero.column_metadata row.
+  const meta = must(ColumnMetadataStore.getInstance(db));
+  for (const pt of published.tables) {
+    const name = liteTableName(pt);
+    const rows = meta.getTable(name);
+    for (const col of Object.keys(pt.columns)) {
+      if (!rows.has(col)) {
+        issues.push(`missing column_metadata row for ${name}.${col}`);
+      }
+    }
+  }
+
+  if (issues.length) {
+    throw new Error(
+      `Shadow replica verification failed (${issues.length} issue(s)):\n` +
+        issues.map(i => `  - ${i}`).join('\n'),
+    );
   }
 }
 
