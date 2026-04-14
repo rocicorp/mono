@@ -1,3 +1,5 @@
+import {PG_LOCK_NOT_AVAILABLE} from '@drdgvhbh/postgres-error-codes';
+import postgres from 'postgres';
 import {beforeEach, describe, expect} from 'vitest';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import {Queue} from '../../../../shared/src/queue.ts';
@@ -871,8 +873,14 @@ describe('change-streamer/storer', () => {
       expect(lock?.minWatermark).toBe('03');
       expect(lock?.replicaVersion).toBe('00');
 
-      const result2 = await storer.purgeRecordsBefore('06');
-      expect(result2).toBe(0);
+      let err: unknown;
+      try {
+        await storer.purgeRecordsBefore('06');
+      } catch (e) {
+        err = e;
+      }
+      expect(err).toBeInstanceOf(postgres.PostgresError);
+      expect((err as postgres.PostgresError).code).toBe(PG_LOCK_NOT_AVAILABLE);
 
       expect(
         await db`SELECT watermark, pos FROM "xero_5/cdc"."changeLog"`,

@@ -1,5 +1,4 @@
 import {getHeapStatistics} from 'node:v8';
-import {PG_LOCK_NOT_AVAILABLE} from '@drdgvhbh/postgres-error-codes';
 import type {LogContext} from '@rocicorp/logger';
 import {resolver, type Resolver} from '@rocicorp/resolver';
 import {type PendingQuery, type Row} from 'postgres';
@@ -12,11 +11,7 @@ import * as v from '../../../../shared/src/valita.ts';
 import * as Mode from '../../db/mode-enum.ts';
 import {runTx} from '../../db/run-transaction.ts';
 import {TransactionPool} from '../../db/transaction-pool.ts';
-import {
-  isPostgresError,
-  type PostgresDB,
-  type PostgresTransaction,
-} from '../../types/pg.ts';
+import {type PostgresDB, type PostgresTransaction} from '../../types/pg.ts';
 import {cdcSchema, type ShardID} from '../../types/shards.ts';
 import {
   backfillRequestSchema,
@@ -235,45 +230,35 @@ export class Storer implements Service {
     return minWatermark;
   }
 
-  async purgeRecordsBefore(watermark: string): Promise<number> {
-    try {
-      return await runTx(this.#db, async sql => {
-        // This NOWAIT pre-check is an optimization to abort the transaction
-        // (and release associated resources) early.
-        await sql<{watermark: string}[]>`
+  purgeRecordsBefore(watermark: string): Promise<number> {
+    return runTx(this.#db, async sql => {
+      // This NOWAIT pre-check is an optimization to abort the transaction
+      // (and release associated resources) early.
+      await sql<{watermark: string}[]>`
           SELECT watermark FROM ${this.#cdc('changeLog')}
             ORDER BY watermark, pos LIMIT 1
             FOR UPDATE NOWAIT
         `;
-        // If the row is purge-locked by an incoming replication-manager, it
-        // will assume ownership of the change-log before releasing the lock.
-        // This DELETE blocks until the lock is released, allowing the change
-        // in ownership to be reliably detected (and the transaction aborted)
-        // in the subsequent check.
-        const [{deleted}] = await sql<{deleted: bigint}[]>`
+      // If the row is purge-locked by an incoming replication-manager, it
+      // will assume ownership of the change-log before releasing the lock.
+      // This DELETE blocks until the lock is released, allowing the change
+      // in ownership to be reliably detected (and the transaction aborted)
+      // in the subsequent check.
+      const [{deleted}] = await sql<{deleted: bigint}[]>`
         WITH purged AS (
           DELETE FROM ${this.#cdc('changeLog')} WHERE watermark < ${watermark} 
             RETURNING watermark, pos
         ) SELECT COUNT(*) as deleted FROM purged;`;
 
-        const [{owner}] = await sql<ReplicationState[]>`
+      const [{owner}] = await sql<ReplicationState[]>`
         SELECT * FROM ${this.#cdc('replicationState')} FOR SHARE`;
-        if (owner !== this.#taskID) {
-          throw new AbortError(
-            `aborting changeLog purge to ${watermark} because ownership has been taken by ${owner}`,
-          );
-        }
-        return Number(deleted);
-      });
-    } catch (e) {
-      if (isPostgresError(e, PG_LOCK_NOT_AVAILABLE)) {
-        this.#lc.info?.(
-          `changeLog is locked from being purged. trying purge later.`,
+      if (owner !== this.#taskID) {
+        throw new AbortError(
+          `aborting changeLog purge to ${watermark} because ownership has been taken by ${owner}`,
         );
-        return 0;
       }
-      throw e;
-    }
+      return Number(deleted);
+    });
   }
 
   /**
