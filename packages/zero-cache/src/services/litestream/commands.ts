@@ -42,8 +42,6 @@ export async function restoreReplica(
   config: ZeroConfig,
   replicaConstraints: ReplicaConstraints | null,
 ): Promise<Date> {
-  const {changeStreamer} = config;
-
   for (let i = 0; i < MAX_RETRIES; i++) {
     if (i > 0) {
       lc.info?.(
@@ -56,11 +54,10 @@ export async function restoreReplica(
     if (restored) {
       return start;
     }
-    if (
-      changeStreamer.mode === 'dedicated' &&
-      changeStreamer.uri === undefined
-    ) {
-      lc.info?.('no litestream backup found');
+    if (replicaConstraints) {
+      // This can happen if the litestream URL is purposefully changed to
+      // force a resync.
+      lc.warn?.('no litestream backup found', replicaConstraints);
       return start;
     }
   }
