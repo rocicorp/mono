@@ -290,9 +290,7 @@ export function computeZqlSpecsFromLiteSpecs(
       columns: Object.fromEntries(visibleColumns),
       primaryKey: v.parse(primaryKey, primaryKeySchema),
       uniqueKeys: uniqueKeys.map(key => v.parse(key, primaryKeySchema)),
-      allPotentialPrimaryKeys: keys.map(key =>
-        v.parse(key, primaryKeySchema),
-      ),
+      allPotentialPrimaryKeys: keys.map(key => v.parse(key, primaryKeySchema)),
       minRowVersion: fullTable.minRowVersion ?? null,
     };
 
