@@ -860,7 +860,7 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "22",
           },
           "table": "comments",
-          "type": 3,
+          "type": 2,
         },
       ]
     `);
@@ -1144,7 +1144,7 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "boo",
           },
           "table": "uniques",
-          "type": 3,
+          "type": 2,
         },
       ]
     `);
@@ -2175,7 +2175,7 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "1",
           },
           "table": "issues",
-          "type": 3,
+          "type": 2,
         },
       ]
     `);
@@ -2212,7 +2212,7 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "10",
           },
           "table": "comments",
-          "type": 3,
+          "type": 2,
         },
       ]
     `);
@@ -2274,7 +2274,7 @@ describe('view-syncer/pipeline-driver', () => {
             "id": "10",
           },
           "table": "comments",
-          "type": 3,
+          "type": 2,
         },
       ]
     `);
