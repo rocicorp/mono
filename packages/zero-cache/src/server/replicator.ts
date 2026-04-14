@@ -30,6 +30,7 @@ import {
   type WalMode,
 } from '../workers/replicator.ts';
 import {createLogContext} from './logging.ts';
+import {startOtelAuto} from './otel-start.ts';
 
 export default async function runWorker(
   parent: Worker,
@@ -42,6 +43,10 @@ export default async function runWorker(
   const config = getNormalizedZeroConfig({env, argv: args.slice(1)});
   const mode: ReplicatorMode = fileMode === 'backup' ? 'backup' : 'serving';
   const workerName = `${mode}-replicator`;
+  startOtelAuto(
+    createLogContext(config, {worker: workerName}, false),
+    workerName,
+  );
   const lc = createLogContext(config, {worker: workerName});
   initEventSink(lc, config);
 

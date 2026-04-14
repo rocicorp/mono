@@ -63,7 +63,10 @@ export default async function runWorker(
     litestream,
   } = config;
 
-  startOtelAuto(createLogContext(config, {worker: 'change-streamer'}, false));
+  startOtelAuto(
+    createLogContext(config, {worker: 'change-streamer'}, false),
+    'change-streamer',
+  );
   const lc = createLogContext(config, {worker: 'change-streamer'}, true);
   initEventSink(lc, config);
 

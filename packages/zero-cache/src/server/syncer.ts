@@ -72,7 +72,7 @@ export default function runWorker(
 ): Promise<void> {
   const config = getNormalizedZeroConfig({env, argv: args.slice(1)});
 
-  startOtelAuto(createLogContext(config, {worker: 'syncer'}, false));
+  startOtelAuto(createLogContext(config, {worker: 'syncer'}, false), 'syncer');
   const lc = createLogContext(config, {worker: 'syncer'}, true);
   initEventSink(lc, config);
 
