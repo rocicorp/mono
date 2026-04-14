@@ -192,6 +192,51 @@ function histogramAscii(
   return canvas.reverse();
 }
 
+export function printSummary(
+  groupName: string,
+  results: {name: string; stats: Stats}[],
+  colors: boolean,
+) {
+  if (results.length < 2) return;
+
+  const sorted = results.toSorted((a, b) => a.stats.avg - b.stats.avg);
+  const fastest = sorted[0];
+
+  const shortName = (name: string) =>
+    name.includes(' > ') ? name.substring(name.lastIndexOf(' > ') + 3) : name;
+
+  const nameWidth = Math.max(...sorted.map(r => shortName(r.name).length));
+
+  console.log();
+  const header = `summary > ${groupName}`;
+  console.log(colors ? ansi.bold + header + ansi.reset : header);
+
+  for (const {name, stats} of sorted) {
+    const sn = shortName(name);
+    const isFastest = stats === fastest.stats;
+    const ratio = stats.avg / fastest.stats.avg;
+    const timeStr = fmtTime(stats.avg).padStart(9);
+    const ratioStr = isFastest ? 'fastest' : `${ratio.toFixed(2)}x slower`;
+    const paddedName = sn.padEnd(nameWidth);
+    if (colors) {
+      console.log(
+        '  ' +
+          (isFastest ? ansi.bold + ansi.cyan : ansi.gray) +
+          paddedName +
+          ansi.reset +
+          '  ' +
+          timeStr +
+          '/iter  ' +
+          (isFastest ? ansi.cyan : ansi.gray) +
+          ratioStr +
+          ansi.reset,
+      );
+    } else {
+      console.log(`  ${paddedName}  ${timeStr}/iter  ${ratioStr}`);
+    }
+  }
+}
+
 export function printBenchHeader(nameWidth: number, colors: boolean) {
   const print = console.log;
   const nameCol = 'benchmark'.padEnd(nameWidth);

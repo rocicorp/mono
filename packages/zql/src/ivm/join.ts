@@ -17,7 +17,6 @@ import {
   generateWithOverlayUnordered,
   isJoinMatch,
   rowEqualsForCompoundKey,
-  type JoinChangeOverlay,
 } from './join-utils.ts';
 import {
   throwOutput,
@@ -59,7 +58,8 @@ export class Join implements Input {
 
   #output: Output = throwOutput;
 
-  #inprogressChildChange: JoinChangeOverlay | undefined;
+  #inprogressChildChange: Change | undefined;
+  #inprogressChildChangePosition: Row | undefined;
 
   constructor({
     parent,
@@ -219,32 +219,30 @@ export class Join implements Input {
   }
 
   *#pushChildChange(childRow: Row, change: Change): Stream<'yield'> {
-    this.#inprogressChildChange = {
-      change,
-      position: undefined,
-    };
+    this.#inprogressChildChange = change;
+    this.#inprogressChildChangePosition = undefined;
     try {
       const constraint = buildJoinConstraint(
         childRow,
         this.#childKey,
         this.#parentKey,
       );
-      const parentNodes = constraint ? this.#parent.fetch({constraint}) : [];
-
-      for (const parentNode of parentNodes) {
-        if (parentNode === 'yield') {
-          yield parentNode;
-          continue;
+      if (constraint) {
+        for (const parentNode of this.#parent.fetch({constraint})) {
+          if (parentNode === 'yield') {
+            yield parentNode;
+            continue;
+          }
+          this.#inprogressChildChangePosition = parentNode.row;
+          const childChange = makeChildChange(
+            this.#processParentNode(parentNode.row, parentNode.relationships),
+            {
+              relationshipName: this.#relationshipName,
+              change,
+            },
+          );
+          yield* this.#output.push(childChange, this);
         }
-        this.#inprogressChildChange.position = parentNode.row;
-        const childChange = makeChildChange(
-          this.#processParentNode(parentNode.row, parentNode.relationships),
-          {
-            relationshipName: this.#relationshipName,
-            change,
-          },
-        );
-        yield* this.#output.push(childChange, this);
       }
     } finally {
       this.#inprogressChildChange = undefined;
@@ -268,26 +266,26 @@ export class Join implements Input {
         isJoinMatch(
           parentNodeRow,
           this.#parentKey,
-          this.#inprogressChildChange.change[ChangeIndex.NODE].row,
+          this.#inprogressChildChange[ChangeIndex.NODE].row,
           this.#childKey,
         ) &&
-        this.#inprogressChildChange.position &&
+        this.#inprogressChildChangePosition &&
         this.#schema.compareRows(
           parentNodeRow,
-          this.#inprogressChildChange.position,
+          this.#inprogressChildChangePosition,
         ) > 0
       ) {
         const childSchema = this.#child.getSchema();
         if (childSchema.sort === undefined) {
           return generateWithOverlayUnordered(
             stream,
-            this.#inprogressChildChange.change,
+            this.#inprogressChildChange,
             childSchema,
           );
         }
         return generateWithOverlay(
           stream,
-          this.#inprogressChildChange.change,
+          this.#inprogressChildChange,
           childSchema,
         );
       }

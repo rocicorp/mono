@@ -37,6 +37,7 @@
     "semver": "^7.5.4"
   },
   "devDependencies": {
+    "@mitata/counters": "^0.0.8",
     "@types/semver": "^7.5.1",
     "@types/strip-ansi": "^3.0.0",
     "@vitest/runner": "4.1.3",
