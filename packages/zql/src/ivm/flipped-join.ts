@@ -155,10 +155,7 @@ export class FlippedJoin implements Input {
     // related parents with position greater than change.position
     // (which should not yet have the node removed), would not even
     // be fetched here, and would be absent from the output all together.
-    if (
-      this.#inprogressChildChange?[ChangeIndex.TYPE] ===
-      ChangeType.REMOVE
-    ) {
+    if (this.#inprogressChildChange?.[ChangeIndex.TYPE] === ChangeType.REMOVE) {
       const removedNode = this.#inprogressChildChange[ChangeIndex.NODE];
       const compare = this.#child.getSchema().compareRows;
       const insertPos = binarySearch(childNodes.length, i =>
@@ -266,14 +263,13 @@ export class FlippedJoin implements Input {
                 this.#inprogressChildChangePosition,
               ) <= 0;
           if (
-            this.#inprogressChildChange[ChangeIndex.TYPE] ===
-            ChangeType.REMOVE
+            this.#inprogressChildChange[ChangeIndex.TYPE] === ChangeType.REMOVE
           ) {
             if (hasInprogressChildChangeBeenPushedForMinParentNode) {
               // Remove form relatedChildNodes since the removed child
               // was inserted into childNodes above.
               overlaidRelatedChildNodes = relatedChildNodes.filter(
-                  n => n !== this.#inprogressChildChange[ChangeIndex.NODE],
+                n => n !== this.#inprogressChildChange?.[ChangeIndex.NODE],
               );
             }
           } else if (!hasInprogressChildChangeBeenPushedForMinParentNode) {
