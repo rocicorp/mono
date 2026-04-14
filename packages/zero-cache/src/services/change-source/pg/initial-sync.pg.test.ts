@@ -1,8 +1,12 @@
 import {readdir} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
+import {LogContext} from '@rocicorp/logger';
 import {nanoid} from 'nanoid/non-secure';
 import {beforeEach, describe, expect} from 'vitest';
-import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.ts';
+import {
+  createSilentLogContext,
+  TestLogSink,
+} from '../../../../../shared/src/logging-test-utils.ts';
 import type {ZeroEvent} from '../../../../../zero-events/src/index.ts';
 import {Database} from '../../../../../zqlite/src/db.ts';
 import {listIndexes, listTables} from '../../../db/lite-tables.ts';
@@ -3011,6 +3015,37 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
       expect(await countReplicas(upstream)).toBe(1);
     });
 
+    test('shadowInitialSync uses a single table-copy worker', async () => {
+      await seedWithManyRows(upstream, 20);
+      // Publish an extra table so numTables > 1 — otherwise
+      // `Math.min(tableCopyWorkers, numTables)` would clamp to 1 regardless.
+      await upstream`CREATE TABLE extra(id int4 PRIMARY KEY)`;
+      await upstream`INSERT INTO extra(id) VALUES (1)`;
+
+      const sink = new TestLogSink();
+      const lc = new LogContext('info', undefined, sink);
+
+      await shadowInitialSync(
+        lc,
+        SHADOW_SHARD,
+        getConnectionURI(upstream),
+        {sampleRate: 1, maxRowsPerTable: 5},
+        TEST_CONTEXT,
+      );
+
+      const workersLog = sink.messages.find(([, , args]) =>
+        args.some(
+          a =>
+            typeof a === 'string' &&
+            a.startsWith('Started ') &&
+            a.includes(' workers to copy '),
+        ),
+      );
+      expect(workersLog?.[2][0]).toMatch(
+        /^Started 1 workers to copy [2-9]\d* tables$/,
+      );
+    });
+
     test('shadowInitialSync wrapper cleans up tempfile dir', async () => {
       const lc = createSilentLogContext();
       await seedWithManyRows(upstream, 50);
@@ -3025,7 +3060,6 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
         getConnectionURI(upstream),
         {sampleRate: 0.5, maxRowsPerTable: 10},
         TEST_CONTEXT,
-        {tableCopyWorkers: 1},
       );
 
       const after = (await readdir(tmpdir())).filter(n =>

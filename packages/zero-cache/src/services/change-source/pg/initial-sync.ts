@@ -371,10 +371,7 @@ export async function shadowInitialSync(
   upstreamURI: string,
   shadow: ShadowSyncOptions,
   context: ServerContext,
-  syncOptions?: Omit<
-    InitialSyncOptions,
-    'shadow' | 'profileCopy' | 'replicationSlotFailover'
-  >,
+  syncOptions?: Pick<InitialSyncOptions, 'textCopy'>,
 ): Promise<void> {
   const dir = await mkdtemp(join(tmpdir(), 'zero-shadow-sync-'));
   const dbPath = join(dir, 'shadow-replica.db');
@@ -386,7 +383,9 @@ export async function shadowInitialSync(
       db,
       upstreamURI,
       {
-        tableCopyWorkers: syncOptions?.tableCopyWorkers ?? 5,
+        // Shadow sync copies small samples, so one worker is plenty —
+        // no reason to burn additional upstream connections.
+        tableCopyWorkers: 1,
         textCopy: syncOptions?.textCopy,
         shadow,
       },
