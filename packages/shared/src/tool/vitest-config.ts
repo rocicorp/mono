@@ -90,6 +90,9 @@ export const benchConfig = defineConfig({
     'process.env.BENCH_OUTPUT_FORMAT': JSON.stringify(
       process.env.BENCH_OUTPUT_FORMAT ?? '',
     ),
+    'process.env.BENCH_SUMMARY': JSON.stringify(
+      process.env.BENCH_SUMMARY ?? '',
+    ),
   },
 
   test: {
@@ -111,6 +114,10 @@ export const benchConfig = defineConfig({
     slowTestThreshold: 15_000,
     testTimeout: 60_000,
     hookTimeout: 60_000,
+  },
+
+  optimizeDeps: {
+    exclude: ['@mitata/counters'],
   },
 
   server: {
