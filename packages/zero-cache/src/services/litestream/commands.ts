@@ -34,14 +34,15 @@ type ReplicaConstraints = {
  *        restoring for the change-streamer (replication-manager). For the
  *        view-syncer, this should be unspecified so that the constraints are
  *        retrieved from the replication-manager via the snapshot protocol.
- * @returns The time at which the last restore started
- *          (i.e. not counting failed attempts).
+ * @returns Whether a backup was found. This will only return `false` for the
+ *        replication-manager (i.e. when replicaConstraints are specified), as
+ *        the replication-manager can recover by resyncing.
  */
 export async function restoreReplica(
   lc: LogContext,
   config: ZeroConfig,
   replicaConstraints: ReplicaConstraints | null,
-): Promise<Date> {
+): Promise<boolean> {
   for (let i = 0; i < MAX_RETRIES; i++) {
     if (i > 0) {
       lc.info?.(
@@ -49,16 +50,18 @@ export async function restoreReplica(
       );
       await sleep(RETRY_INTERVAL_MS);
     }
-    const start = new Date();
     const restored = await tryRestore(lc, config, replicaConstraints);
     if (restored) {
-      return start;
+      return true;
     }
     if (replicaConstraints) {
       // This can happen if the litestream URL is purposefully changed to
       // force a resync.
-      lc.warn?.('no litestream backup found', replicaConstraints);
-      return start;
+      lc.warn?.('no litestream backup found', {
+        ...replicaConstraints,
+        backupURL: config.litestream.backupURL,
+      });
+      return false;
     }
   }
   throw new Error(`max attempts exceeded restoring replica`);

@@ -41,6 +41,7 @@ export default async function runWorker(
   env: NodeJS.ProcessEnv,
   ...argv: string[]
 ): Promise<void> {
+  const workerStartTime = Date.now();
   const config = getNormalizedZeroConfig({env, argv});
   const {
     taskID,
@@ -84,15 +85,21 @@ export default async function runWorker(
   await initChangeStreamerSchema(lc, changeDB, shard);
   const purgeLock = await new PurgeLocker(lc, shard, changeDB).acquire();
 
-  let restoreStart = new Date();
   // Restore from litestream if the change-log has entries.
   if (purgeLock) {
+    let restored = false;
     try {
-      restoreStart = await restoreReplica(lc, config, purgeLock);
+      restored = await restoreReplica(lc, config, purgeLock);
     } catch (e) {
       // If the restore failed, e.g. due to a corrupt backup, the
       // replication-manager recovers by re-syncing.
       lc.error?.('error restoring backup. resyncing the replica.', e);
+    }
+    if (!restored) {
+      // The purgeLock must be released if the backup could not be restored,
+      // or it will otherwise prevent the change-db update after the resync
+      // completes.
+      await purgeLock.release();
     }
   }
 
@@ -191,7 +198,7 @@ export default async function runWorker(
         // generally takes longer).
         //
         // Consider: Also account for permanent volumes?
-        Date.now() - restoreStart.getTime(),
+        Date.now() - workerStartTime,
       )
     : new ReplicaMonitor(lc, replica.file, changeStreamer);
 
