@@ -1,6 +1,11 @@
 import {describe, expect, test} from 'vitest';
+import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.ts';
 import type {PublishedTableSpec} from '../../../db/specs.ts';
-import {makeDownloadStatements} from './initial-sync.ts';
+import type {PostgresDB} from '../../../types/pg.ts';
+import {
+  getInitialDownloadState,
+  makeDownloadStatements,
+} from './initial-sync.ts';
 
 function spec(
   publications: Record<string, {rowFilter: string | null}> = {
@@ -75,5 +80,66 @@ describe('makeDownloadStatements', () => {
     expect(stmts.select).toMatch(
       /FROM "public"\."t" TABLESAMPLE BERNOULLI\(50\) WHERE a > 10/,
     );
+  });
+});
+
+describe('getInitialDownloadState', () => {
+  function tableSpec(): PublishedTableSpec {
+    return {
+      schema: 'public',
+      name: 't',
+      columns: {a: {dataType: 'int4'}, b: {dataType: 'text'}},
+      publications: {pub1: {rowFilter: null}},
+    } as unknown as PublishedTableSpec;
+  }
+
+  test('skipTotals=true returns zeros without touching the DB', async () => {
+    let called = false;
+    const sql = {
+      unsafe() {
+        called = true;
+        throw new Error('sql should not be called when skipTotals=true');
+      },
+    } as unknown as PostgresDB;
+
+    const state = await getInitialDownloadState(
+      createSilentLogContext(),
+      sql,
+      tableSpec(),
+      true,
+    );
+    expect(called).toBe(false);
+    expect(state.status).toEqual({
+      table: 't',
+      columns: ['a', 'b'],
+      rows: 0,
+      totalRows: 0,
+      totalBytes: 0,
+    });
+  });
+
+  test('skipTotals=false runs the expensive queries', async () => {
+    const received: string[] = [];
+    const sql = {
+      unsafe(stmt: string) {
+        received.push(stmt);
+        const row = stmt.includes('totalRows')
+          ? [{totalRows: 42n}]
+          : [{totalBytes: 1024n}];
+        return {execute: () => Promise.resolve(row)};
+      },
+    } as unknown as PostgresDB;
+
+    const state = await getInitialDownloadState(
+      createSilentLogContext(),
+      sql,
+      tableSpec(),
+      false,
+    );
+    expect(received).toHaveLength(2);
+    expect(received.some(s => s.includes('COUNT(*)'))).toBe(true);
+    expect(received.some(s => s.includes('pg_column_size'))).toBe(true);
+    expect(state.status.totalRows).toBe(42);
+    expect(state.status.totalBytes).toBe(1024);
   });
 });

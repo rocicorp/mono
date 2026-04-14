@@ -253,7 +253,7 @@ export async function initialSync(
       const downloads = await Promise.all(
         tables.map(spec =>
           copiers.processReadTask((db, lc) =>
-            getInitialDownloadState(lc, db, spec, sampleRate, maxRowsPerTable),
+            getInitialDownloadState(lc, db, spec, shadow !== undefined),
           ),
         ),
       );
@@ -682,22 +682,25 @@ type DownloadState = {
   status: DownloadStatus;
 };
 
-async function getInitialDownloadState(
+// Exported for testing.
+export async function getInitialDownloadState(
   lc: LogContext,
   sql: PostgresDB,
   spec: PublishedTableSpec,
-  sampleRate?: number | undefined,
-  maxRowsPerTable?: number | undefined,
+  skipTotals: boolean,
 ): Promise<DownloadState> {
   const start = performance.now();
   const table = liteTableName(spec);
   const columns = Object.keys(spec.columns);
-  const stmts = makeDownloadStatements(
-    spec,
-    columns,
-    sampleRate,
-    maxRowsPerTable,
-  );
+  if (skipTotals) {
+    // Shadow sync suppresses status events, so the expensive COUNT(*) and
+    // per-column pg_column_size sums would be computed and thrown away.
+    return {
+      spec,
+      status: {table, columns, rows: 0, totalRows: 0, totalBytes: 0},
+    };
+  }
+  const stmts = makeDownloadStatements(spec, columns);
   const rowsResult = sql
     .unsafe<{totalRows: bigint}[]>(stmts.getTotalRows)
     .execute();
