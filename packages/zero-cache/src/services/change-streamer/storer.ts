@@ -238,29 +238,24 @@ export class Storer implements Service {
   async purgeRecordsBefore(watermark: string): Promise<number> {
     try {
       return await runTx(this.#db, async sql => {
-        // If the row is purge-locked by an incoming replication-manager, it
-        // will assume ownership of the change-log before releasing the lock.
-        // This would cause the DELETE in this purge attempt to block until
-        // the lock is released, followed by an abort after seeing the change
-        // in ownership (this is what will happen with earlier versions of
-        // the code).
-        //
         // This NOWAIT pre-check is an optimization to abort the transaction
-        // (and release associated resources) earlier.
+        // (and release associated resources) early.
         await sql<{watermark: string}[]>`
           SELECT watermark FROM ${this.#cdc('changeLog')}
             ORDER BY watermark, pos LIMIT 1
             FOR UPDATE NOWAIT
-      `;
+        `;
+        // If the row is purge-locked by an incoming replication-manager, it
+        // will assume ownership of the change-log before releasing the lock.
+        // This DELETE blocks until the lock is released, allowing the change
+        // in ownership to be reliably detected (and the transaction aborted)
+        // in the subsequent check.
         const [{deleted}] = await sql<{deleted: bigint}[]>`
         WITH purged AS (
           DELETE FROM ${this.#cdc('changeLog')} WHERE watermark < ${watermark} 
             RETURNING watermark, pos
         ) SELECT COUNT(*) as deleted FROM purged;`;
 
-        // Before committing the purge, check that this process is still the
-        // owner. This is done after the DELETE to minimize the amount of time
-        // that writes to the changeLog are delayed.
         const [{owner}] = await sql<ReplicationState[]>`
         SELECT * FROM ${this.#cdc('replicationState')} FOR SHARE`;
         if (owner !== this.#taskID) {

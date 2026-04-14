@@ -106,11 +106,10 @@ export default async function runWorker(
   } else {
     const {promise: changeStreamerReady, resolve: changeStreamerStarted} =
       resolver();
-    changeStreamer = loadWorker(
-      CHANGE_STREAMER_URL,
-      'supporting',
-      undefined,
-    ).once('message', changeStreamerStarted);
+    changeStreamer = loadWorker(CHANGE_STREAMER_URL, 'supporting').once(
+      'message',
+      changeStreamerStarted,
+    );
 
     // Wait for the change-streamer to be ready to guarantee that a replica
     // file is present.
