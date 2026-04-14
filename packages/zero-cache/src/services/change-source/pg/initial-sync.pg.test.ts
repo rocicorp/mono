@@ -2949,10 +2949,13 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
       expect(await countReplicas(upstream)).toBe(0);
       expect(eventSink).toEqual([]);
 
-      // And no walsender connections should have been opened.
+      // And no walsender connections should have been opened against this
+      // test's database. Scoped by datname so concurrent tests in other DBs
+      // on the same cluster (which may legitimately open walsenders as part
+      // of real initial-sync flows) don't contaminate the check.
       const walsenders = await upstream<{count: number}[]>`
         SELECT COUNT(*)::int as count FROM pg_stat_activity
-         WHERE backend_type = 'walsender'`;
+         WHERE backend_type = 'walsender' AND datname = current_database()`;
       expect(walsenders[0].count).toBe(0);
     });
 
