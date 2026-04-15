@@ -141,7 +141,7 @@ export class ProcessManager {
     // fails. This is not really an error when the server is shutting down,
     // so log any post-close errors at 'warn'.
     proc.on('error', err =>
-      this.#lc[isOpen ? 'error' : 'warn']?.(
+      this.#lc[!isOpen || this.#drainStart > 0 ? 'warn' : 'error']?.(
         `error from ${name} ${proc.pid}`,
         err,
       ),
