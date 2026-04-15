@@ -36,6 +36,10 @@
       "types": "./out/zero/src/zero.d.ts",
       "default": "./out/zero/src/zero.js"
     },
+    "./analyze": {
+      "types": "./out/zero/src/analyze.d.ts",
+      "default": "./out/zero/src/analyze.js"
+    },
     "./bindings": {
       "types": "./out/zero/src/bindings.d.ts",
       "default": "./out/zero/src/bindings.js"

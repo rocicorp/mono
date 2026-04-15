@@ -15,9 +15,12 @@
     "check-fmt": "oxfmt --check ."
   },
   "dependencies": {
-    "@dotenvx/dotenvx": "^1.39.0"
+    "@dotenvx/dotenvx": "^1.39.0",
+    "@rocicorp/resolver": "^1.0.2",
+    "ws": "^8.18.1"
   },
   "devDependencies": {
+    "@types/ws": "^8.5.12",
     "ast-to-zql": "0.0.0",
     "otel": "0.0.0",
     "oxfmt": "^0.45.0",
