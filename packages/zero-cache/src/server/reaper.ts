@@ -25,8 +25,12 @@ export default async function runWorker(
 ): Promise<void> {
   const config = getNormalizedZeroConfig({env, argv});
 
-  startOtelAuto(createLogContext(config, {worker: 'reaper'}, false), 'reaper');
-  const lc = createLogContext(config, {worker: 'reaper'}, true);
+  startOtelAuto(
+    createLogContext(config, {worker: 'reaper', workerIndex: 0}, false),
+    'reaper',
+    0,
+  );
+  const lc = createLogContext(config, {worker: 'reaper', workerIndex: 0}, true);
   initEventSink(lc, config);
   startAnonymousTelemetry(lc, config);
 

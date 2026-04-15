@@ -112,7 +112,7 @@ describe('Diagnostic Logger Integration Tests', () => {
     const {diag} = await import('@opentelemetry/api');
     const {startOtelAuto} = await import('./otel-start.js');
 
-    startOtelAuto(mockLogContext);
+    startOtelAuto(mockLogContext, 'test', 0);
 
     // Diagnostic logger should be set up once (after SDK initialization, NodeSDK prevented from setting its own)
     expect(diag.setLogger).toHaveBeenCalledTimes(1);
@@ -148,7 +148,7 @@ describe('Diagnostic Logger Integration Tests', () => {
     vi.mocked(diag.setLogger).mockClear();
 
     // Start main OTEL - should not configure again since it's already done
-    startOtelAuto(mockLogContext);
+    startOtelAuto(mockLogContext, 'test', 0);
     expect(diag.setLogger).toHaveBeenCalledTimes(0); // No new calls since already configured
   });
 
@@ -157,7 +157,7 @@ describe('Diagnostic Logger Integration Tests', () => {
     const {startAnonymousTelemetry} = await import('./anonymous-otel-start.js');
 
     // Should not throw errors when called without LogContext
-    expect(() => startOtelAuto()).not.toThrow();
+    expect(() => startOtelAuto(undefined, 'test', 0)).not.toThrow();
     expect(() => startAnonymousTelemetry()).not.toThrow();
   });
 
@@ -167,8 +167,8 @@ describe('Diagnostic Logger Integration Tests', () => {
 
     // Multiple calls should not cause issues
     expect(() => {
-      startOtelAuto(mockLogContext);
-      startOtelAuto(mockLogContext);
+      startOtelAuto(mockLogContext, 'test', 0);
+      startOtelAuto(mockLogContext, 'test', 0);
       startAnonymousTelemetry(mockLogContext);
       startAnonymousTelemetry(mockLogContext);
     }).not.toThrow();
@@ -190,7 +190,7 @@ describe('Diagnostic Logger Integration Tests', () => {
 
       // Call startOtelAuto (it might be already started, but that's ok for this test)
       // The key is that OTEL_LOG_LEVEL should remain after the call
-      startOtelAuto(mockLogContext);
+      startOtelAuto(mockLogContext, 'test', 0);
 
       // Verify OTEL_LOG_LEVEL is still set (was properly restored by the finally block)
       expect(process.env.OTEL_LOG_LEVEL).toBe('DEBUG');

@@ -11,7 +11,7 @@ import {OtelLogSink} from './otel-log-sink.ts';
 
 export function createLogContext(
   {log}: {log: LogConfig},
-  context: {worker: string},
+  context: {worker: string; workerIndex: number},
   includeOtel = true,
 ): LogContext {
   const logSink = createLogSink(log, includeOtel);

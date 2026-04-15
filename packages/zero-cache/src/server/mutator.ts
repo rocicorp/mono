@@ -9,6 +9,7 @@ import {
 } from '../types/processes.ts';
 import {Mutator} from '../workers/mutator.ts';
 import {createLogContext} from './logging.ts';
+import {startOtelAuto} from './otel-start.ts';
 
 function runWorker(
   parent: Worker,
@@ -16,7 +17,12 @@ function runWorker(
   ...args: string[]
 ): Promise<void> {
   const config = getNormalizedZeroConfig({env, argv: args.slice(1)});
-  const lc = createLogContext(config, {worker: 'mutator'});
+  startOtelAuto(
+    createLogContext(config, {worker: 'mutator', workerIndex: 0}, false),
+    'mutator',
+    0,
+  );
+  const lc = createLogContext(config, {worker: 'mutator', workerIndex: 0});
   initEventSink(lc, config);
 
   // TODO: create `PusherFactory`

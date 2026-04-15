@@ -25,7 +25,11 @@ class OtelManager {
     return OtelManager.#instance;
   }
 
-  startOtelAuto(lc?: LogContext, workerName?: string | undefined) {
+  startOtelAuto(
+    lc: LogContext | undefined,
+    workerName: string,
+    workerIndex: number,
+  ) {
     if (this.#started || !otelEnabled()) {
       return;
     }
@@ -43,14 +47,15 @@ class OtelManager {
 
     const resource = resourceFromAttributes({
       [ATTR_SERVICE_VERSION]: process.env.ZERO_SERVER_VERSION ?? 'unknown',
-      // Tag every metric/trace/log with the PID and worker name so each
+      // Tag every metric/trace/log with the worker name and index so each
       // worker process in a multi-worker pod is distinguishable. Without
       // this, N syncer workers sharing the same pod labels clobber each
       // other in the OTel collector on every scrape interval.
-      // 'process.worker' mirrors the 'worker' key in every log context
-      // so logs and metrics can be correlated on the same field.
-      'process.pid': process.pid,
-      ...(workerName !== undefined ? {'process.worker': workerName} : {}),
+      // These mirror the 'worker' and 'workerIndex' keys in every log
+      // context so logs and metrics can be correlated on the same fields.
+      // Using a stable index instead of PID avoids label churn in Prometheus.
+      'process.worker': workerName,
+      'process.worker_index': workerIndex,
     });
 
     // Set defaults to be backwards compatible with the previously
@@ -89,6 +94,7 @@ class OtelManager {
 }
 
 export const startOtelAuto = (
-  lc?: LogContext,
-  workerName?: string | undefined,
-) => OtelManager.getInstance().startOtelAuto(lc, workerName);
+  lc: LogContext | undefined,
+  workerName: string,
+  workerIndex: number,
+) => OtelManager.getInstance().startOtelAuto(lc, workerName, workerIndex);
