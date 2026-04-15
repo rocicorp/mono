@@ -43,11 +43,7 @@ export default async function runWorker(
   const config = getNormalizedZeroConfig({env, argv: args.slice(1)});
   const mode: ReplicatorMode = fileMode === 'backup' ? 'backup' : 'serving';
   const workerName = `${mode}-replicator`;
-  startOtelAuto(
-    createLogContext(config, workerName, 0, false),
-    workerName,
-    0,
-  );
+  startOtelAuto(createLogContext(config, workerName, 0, false), workerName, 0);
   const lc = createLogContext(config, workerName);
   initEventSink(lc, config);
 
