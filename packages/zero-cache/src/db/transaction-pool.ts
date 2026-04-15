@@ -60,7 +60,6 @@ export class TransactionPool {
   #numWorking = 0;
   #db: PostgresDB | undefined; // set when running. stored to allow adaptive pool sizing.
 
-  #refCount = 1;
   #done = false;
   #failure: Error | undefined;
 
@@ -426,48 +425,6 @@ export class TransactionPool {
 
     for (let i = 0; i < this.#numWorkers; i++) {
       this.#tasks.enqueue('done');
-    }
-  }
-
-  /**
-   * An alternative to explicitly calling {@link setDone}, `ref()` increments an internal reference
-   * count, and {@link unref} decrements it. When the reference count reaches 0, {@link setDone} is
-   * automatically called. A TransactionPool is initialized with a reference count of 1.
-   *
-   * `ref()` should be called before sharing the pool with another component, and only after the
-   * pool has been started with {@link run()}. It must not be called on a TransactionPool that is
-   * already done (either via {@link unref()} or {@link setDone()}. (Doing so indicates a logical
-   * error in the code.)
-   *
-   * It follows that:
-   * * The creator of the TransactionPool is responsible for running it.
-   * * The TransactionPool should be ref'ed before being sharing.
-   * * The receiver of the TransactionPool is only responsible for unref'ing it.
-   *
-   * On the other hand, a transaction pool that fails with a runtime error can still be ref'ed;
-   * attempts to use the pool will result in the runtime error as expected.
-   */
-  // TODO: Get rid of the ref-counting stuff. It's no longer needed.
-  ref(count = 1) {
-    assert(
-      this.#db !== undefined && !this.#done,
-      `Cannot ref() a TransactionPool that is not running`,
-    );
-    this.#refCount += count;
-  }
-
-  /**
-   * Decrements the internal reference count, automatically invoking {@link setDone} when it reaches 0.
-   */
-  unref(count = 1) {
-    assert(
-      count <= this.#refCount,
-      () => `Cannot unref ${count} when refCount is ${this.#refCount}`,
-    );
-
-    this.#refCount -= count;
-    if (this.#refCount === 0) {
-      this.setDone();
     }
   }
 

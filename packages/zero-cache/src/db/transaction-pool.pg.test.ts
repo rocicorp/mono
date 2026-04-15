@@ -110,43 +110,6 @@ describe('db/transaction-pool', () => {
     });
   });
 
-  test('ref counting', async () => {
-    const single = newTransactionPool(
-      Mode.SERIALIZABLE,
-      initTask,
-      cleanupTask,
-      1,
-      1,
-    );
-
-    expect(single.isRunning()).toBe(false);
-    single.run(db);
-    expect(single.isRunning()).toBe(true);
-
-    // 1 -> 2 -> 3
-    single.ref();
-    expect(single.isRunning()).toBe(true);
-    single.ref();
-    expect(single.isRunning()).toBe(true);
-
-    // 3 -> 2 -> 1
-    single.unref();
-    expect(single.isRunning()).toBe(true);
-    single.unref();
-    expect(single.isRunning()).toBe(true);
-
-    // 1 -> 0
-    single.unref();
-    expect(single.isRunning()).toBe(false);
-
-    await single.done();
-
-    await expectTables(db, {
-      ['public.workers']: [{id: 1}],
-      ['public.cleaned']: [{id: 1}],
-    });
-  });
-
   test('multiple transactions', async () => {
     const pool = newTransactionPool(
       Mode.SERIALIZABLE,
