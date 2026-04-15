@@ -499,13 +499,11 @@ function startTableCopyWorkers(
   numTables: number,
 ): TransactionPool {
   const {init} = importSnapshot(snapshot);
-  const tableCopiers = new TransactionPool(
-    lc,
-    Mode.READONLY,
+  const tableCopiers = new TransactionPool(lc, {
+    mode: Mode.READONLY,
     init,
-    undefined,
-    numWorkers,
-  );
+    initialWorkers: numWorkers,
+  });
   tableCopiers.run(db);
 
   lc.info?.(`Started ${numWorkers} workers to copy ${numTables} tables`);

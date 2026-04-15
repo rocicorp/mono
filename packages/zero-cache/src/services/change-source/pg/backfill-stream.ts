@@ -233,7 +233,7 @@ async function createSnapshotTransaction(
       await createReplicationSlot(lc, replicationSession, tempSlot);
 
     const {init, imported} = importSnapshot(snapshot);
-    const tx = new TransactionPool(lc, READONLY, init).run(db);
+    const tx = new TransactionPool(lc, {mode: READONLY, init}).run(db);
     await imported;
     await replicationSession.unsafe(`DROP_REPLICATION_SLOT "${tempSlot}"`);
 

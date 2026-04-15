@@ -38,6 +38,40 @@ export type ReadTask<T> = (
   lc: LogContext,
 ) => MaybePromise<T>;
 
+export type Options = {
+  mode: Mode;
+
+  /**
+   * A {@link Task} that is run in each Transaction before it begins
+   * processing general tasks. This can be used to to set the transaction
+   * mode, export/set snapshots, etc. This will be run even if
+   * {@link fail} has been called on the pool.
+   */
+  init?: Task | undefined;
+
+  /**
+   * A {@link Task} that is run in each Transaction before it closes.
+   * This will be run even if {@link fail} has been called, or if a
+   * preceding Task threw an Error.
+   */
+  cleanup?: Task | undefined;
+
+  /**
+   * The initial number of transaction workers to process tasks.
+   * This is the steady state number of workers that will be kept
+   * alive if the TransactionPool is long lived.
+   * This must be greater than 0. Defaults to 1.
+   */
+  initialWorkers?: number;
+
+  /**
+   * When specified, allows the pool to grow to `maxWorkers`. This
+   * must be greater than or equal to `initialWorkers`. On-demand
+   * workers will be shut down after an idle timeout of 5 seconds.
+   */
+  maxWorkers?: number;
+};
+
 /**
  * A TransactionPool is a pool of one or more {@link postgres.TransactionSql}
  * objects that participate in processing a dynamic queue of tasks.
@@ -63,31 +97,18 @@ export class TransactionPool {
   #done = false;
   #failure: Error | undefined;
 
-  /**
-   * @param init A {@link Task} that is run in each Transaction before it begins
-   *             processing general tasks. This can be used to to set the transaction
-   *             mode, export/set snapshots, etc. This will be run even if
-   *             {@link fail} has been called on the pool.
-   * @param cleanup A {@link Task} that is run in each Transaction before it closes.
-   *                This will be run even if {@link fail} has been called, or if a
-   *                preceding Task threw an Error.
-   * @param initialWorkers The initial number of transaction workers to process tasks.
-   *                       This is the steady state number of workers that will be kept
-   *                       alive if the TransactionPool is long lived.
-   *                       This must be greater than 0. Defaults to 1.
-   * @param maxWorkers When specified, allows the pool to grow to `maxWorkers`. This
-   *                   must be greater than or equal to `initialWorkers`. On-demand
-   *                   workers will be shut down after an idle timeout of 5 seconds.
-   */
   constructor(
     lc: LogContext,
-    mode: Mode,
-    init?: Task,
-    cleanup?: Task,
-    initialWorkers = 1,
-    maxWorkers = initialWorkers,
+    opts: Options,
     timeoutTasks = TIMEOUT_TASKS, // Overridden for tests.
   ) {
+    const {
+      mode,
+      init,
+      cleanup,
+      initialWorkers = 1,
+      maxWorkers = initialWorkers,
+    } = opts;
     assert(initialWorkers > 0, 'initialWorkers must be positive');
     assert(
       maxWorkers >= initialWorkers,
