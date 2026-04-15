@@ -3058,19 +3058,17 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
       const lc = createSilentLogContext();
       await seedWithManyRows(upstream, 50);
 
-      // Isolate this test's tempdir so concurrent test configs (pg-15 /
-      // pg-16 / pg-17 / pg-18 run in parallel under one vitest invocation
-      // and all share the real OS tmpdir) can't race on `zero-shadow-sync-*`
-      // entries created by each other's runs.
+      // Isolate this test's scratch dir via parentDir so concurrent test
+      // configs (pg-15 / pg-16 / pg-17 / pg-18 run in parallel under one
+      // vitest invocation and all share the real OS tmpdir) can't race on
+      // `zero-shadow-sync-*` entries created by each other's runs.
       const testTmp = await mkdtemp(join(tmpdir(), 'shadow-cleanup-test-'));
-      const prevTmpdir = process.env.TMPDIR;
-      process.env.TMPDIR = testTmp;
       try {
         await shadowInitialSync(
           lc,
           SHADOW_SHARD,
           getConnectionURI(upstream),
-          {sampleRate: 0.5, maxRowsPerTable: 10},
+          {sampleRate: 0.5, maxRowsPerTable: 10, parentDir: testTmp},
           TEST_CONTEXT,
         );
 
@@ -3080,11 +3078,6 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
         expect(await countSlots(upstream)).toBe(0);
         expect(await countReplicas(upstream)).toBe(0);
       } finally {
-        if (prevTmpdir === undefined) {
-          delete process.env.TMPDIR;
-        } else {
-          process.env.TMPDIR = prevTmpdir;
-        }
         await rm(testTmp, {recursive: true, force: true});
       }
     });

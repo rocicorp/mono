@@ -370,6 +370,11 @@ export async function initialSync(
 export type ShadowSyncOptions = {
   sampleRate: number;
   maxRowsPerTable: number;
+  /**
+   * Parent directory for the throwaway SQLite replica. Defaults to the OS
+   * tmpdir. Primarily for tests that need to isolate the scratch directory.
+   */
+  parentDir?: string | undefined;
 };
 
 /**
@@ -390,7 +395,9 @@ export async function shadowInitialSync(
   context: ServerContext,
   syncOptions?: Pick<InitialSyncOptions, 'textCopy'>,
 ): Promise<void> {
-  const dir = await mkdtemp(join(tmpdir(), 'zero-shadow-sync-'));
+  const dir = await mkdtemp(
+    join(shadow.parentDir ?? tmpdir(), 'zero-shadow-sync-'),
+  );
   const dbPath = join(dir, 'shadow-replica.db');
   const db = new Database(lc, dbPath);
   try {
@@ -559,7 +566,18 @@ async function acquireExportedSnapshotForShadowSync(
     })
     .catch(e => ready.reject(e));
 
-  const {snapshot, lsn} = await ready.promise;
+  let snapshot: string;
+  let lsn: string;
+  try {
+    ({snapshot, lsn} = await ready.promise);
+  } catch (e) {
+    await holder
+      .end()
+      .catch(err =>
+        lc.warn?.(`Error ending shadow snapshot holder after failure`, err),
+      );
+    throw e;
+  }
   lc.info?.(
     `Exported snapshot ${snapshot} at LSN ${lsn} (shadow initial sync)`,
   );
@@ -741,9 +759,13 @@ export type DownloadStatements = {
  * for small tables at low rates.
  */
 function tableSampleClause(sampleRate: number | undefined): string {
-  return sampleRate !== undefined && sampleRate < 1
-    ? /*sql*/ ` TABLESAMPLE BERNOULLI(${sampleRate * 100})`
-    : '';
+  if (sampleRate === undefined || sampleRate >= 1) {
+    return '';
+  }
+  // Round away float noise (e.g. 0.3 * 100 = 30.000000000000004) while still
+  // preserving sub-integer rates like 0.001 (= 0.1%).
+  const pct = parseFloat((sampleRate * 100).toFixed(6));
+  return /*sql*/ ` TABLESAMPLE BERNOULLI(${pct})`;
 }
 
 function limitClause(maxRowsPerTable: number | undefined): string {
