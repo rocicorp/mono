@@ -45,8 +45,12 @@ export default async function runWorker(
   const startMs = Date.now();
   const config = getNormalizedZeroConfig({env});
 
-  startOtelAuto(createLogContext(config, {worker: 'dispatcher'}, false));
-  const lc = createLogContext(config, {worker: 'dispatcher'}, true);
+  startOtelAuto(
+    createLogContext(config, 'dispatcher', 0, false),
+    'dispatcher',
+    0,
+  );
+  const lc = createLogContext(config, 'dispatcher');
   initEventSink(lc, config);
 
   const processes = new ProcessManager(lc, parent);
@@ -163,7 +167,7 @@ export default async function runWorker(
 
     const notifier = createNotifierFrom(lc, replicator);
     for (let i = 0; i < numSyncers; i++) {
-      syncers.push(loadWorker(SYNCER_URL, 'user-facing', i + 1, mode));
+      syncers.push(loadWorker(SYNCER_URL, 'user-facing', i, mode, String(i)));
     }
     syncers.forEach(syncer => handleSubscriptionsFrom(lc, syncer, notifier));
   }

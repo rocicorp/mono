@@ -25,7 +25,7 @@ export async function runWorker(
   // Note: Deprecation warnings are only emitted at this top-level parse;
   //       they are suppressed when parsed in subprocesses.
   const cfg = getZeroConfig({env, emitDeprecationWarnings: true});
-  const lc = createLogContext(cfg, {worker: 'runner'});
+  const lc = createLogContext(cfg, 'runner');
 
   const defaultTaskID = await getTaskID(lc);
   const config = normalizeZeroConfig(lc, cfg, env, defaultTaskID);

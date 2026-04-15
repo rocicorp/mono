@@ -11,11 +11,12 @@ import {OtelLogSink} from './otel-log-sink.ts';
 
 export function createLogContext(
   {log}: {log: LogConfig},
-  context: {worker: string},
+  worker: string,
+  workerIndex = 0,
   includeOtel = true,
 ): LogContext {
   const logSink = createLogSink(log, includeOtel);
-  const lc = createLogContextShared({log}, context, logSink);
+  const lc = createLogContextShared({log}, {worker, workerIndex}, logSink);
   process.on('uncaughtException', async (err, origin) => {
     lc.error?.(origin, err);
     await logSink.flush?.();

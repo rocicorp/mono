@@ -70,14 +70,18 @@ export default function runWorker(
   env: NodeJS.ProcessEnv,
   ...args: string[]
 ): Promise<void> {
-  const config = getNormalizedZeroConfig({env, argv: args.slice(1)});
-
-  startOtelAuto(createLogContext(config, {worker: 'syncer'}, false));
-  const lc = createLogContext(config, {worker: 'syncer'}, true);
-  initEventSink(lc, config);
-
-  assert(args.length > 0, `replicator mode not specified`);
+  assert(args.length >= 2, `expected [fileMode, workerIndex, ...flags]`);
   const fileMode = v.parse(args[0], replicaFileModeSchema);
+  const workerIndex = Number(args[1]);
+  const config = getNormalizedZeroConfig({env, argv: args.slice(2)});
+
+  startOtelAuto(
+    createLogContext(config, 'syncer', workerIndex, false),
+    'syncer',
+    workerIndex,
+  );
+  const lc = createLogContext(config, 'syncer', workerIndex);
+  initEventSink(lc, config);
 
   const {cvr, upstream, enableCrudMutations} = config;
 

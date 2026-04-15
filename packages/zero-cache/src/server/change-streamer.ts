@@ -63,8 +63,12 @@ export default async function runWorker(
     litestream,
   } = config;
 
-  startOtelAuto(createLogContext(config, {worker: 'change-streamer'}, false));
-  const lc = createLogContext(config, {worker: 'change-streamer'}, true);
+  startOtelAuto(
+    createLogContext(config, 'change-streamer', 0, false),
+    'change-streamer',
+    0,
+  );
+  const lc = createLogContext(config, 'change-streamer');
   initEventSink(lc, config);
 
   // Kick off DB connection warmup in the background.
