@@ -46,15 +46,11 @@ export default async function runWorker(
   const config = getNormalizedZeroConfig({env});
 
   startOtelAuto(
-    createLogContext(config, {worker: 'dispatcher', workerIndex: 0}, false),
+    createLogContext(config, 'dispatcher', 0, false),
     'dispatcher',
     0,
   );
-  const lc = createLogContext(
-    config,
-    {worker: 'dispatcher', workerIndex: 0},
-    true,
-  );
+  const lc = createLogContext(config, 'dispatcher');
   initEventSink(lc, config);
 
   const processes = new ProcessManager(lc, parent);

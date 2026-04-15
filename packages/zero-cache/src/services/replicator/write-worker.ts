@@ -49,10 +49,7 @@ function createAPI(): API {
       pragmas: PragmaConfig,
       logConfig: LogConfig,
     ) {
-      lc = createLogContext(
-        {log: logConfig},
-        {worker: 'write-worker', workerIndex: 0},
-      );
+      lc = createLogContext({log: logConfig}, 'write-worker');
       db = new Database(lc, dbPath);
       applyPragmas(db, pragmas);
       runner = new StatementRunner(db);

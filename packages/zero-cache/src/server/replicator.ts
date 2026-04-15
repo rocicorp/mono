@@ -44,11 +44,11 @@ export default async function runWorker(
   const mode: ReplicatorMode = fileMode === 'backup' ? 'backup' : 'serving';
   const workerName = `${mode}-replicator`;
   startOtelAuto(
-    createLogContext(config, {worker: workerName, workerIndex: 0}, false),
+    createLogContext(config, workerName, 0, false),
     workerName,
     0,
   );
-  const lc = createLogContext(config, {worker: workerName, workerIndex: 0});
+  const lc = createLogContext(config, workerName);
   initEventSink(lc, config);
 
   const {file: dbPath, walMode} = await setupReplica(

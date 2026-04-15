@@ -76,11 +76,11 @@ export default function runWorker(
   const config = getNormalizedZeroConfig({env, argv: args.slice(2)});
 
   startOtelAuto(
-    createLogContext(config, {worker: 'syncer', workerIndex}, false),
+    createLogContext(config, 'syncer', workerIndex, false),
     'syncer',
     workerIndex,
   );
-  const lc = createLogContext(config, {worker: 'syncer', workerIndex}, true);
+  const lc = createLogContext(config, 'syncer', workerIndex);
   initEventSink(lc, config);
 
   const {cvr, upstream, enableCrudMutations} = config;

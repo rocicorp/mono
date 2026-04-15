@@ -18,11 +18,11 @@ function runWorker(
 ): Promise<void> {
   const config = getNormalizedZeroConfig({env, argv: args.slice(1)});
   startOtelAuto(
-    createLogContext(config, {worker: 'mutator', workerIndex: 0}, false),
+    createLogContext(config, 'mutator', 0, false),
     'mutator',
     0,
   );
-  const lc = createLogContext(config, {worker: 'mutator', workerIndex: 0});
+  const lc = createLogContext(config, 'mutator');
   initEventSink(lc, config);
 
   // TODO: create `PusherFactory`
