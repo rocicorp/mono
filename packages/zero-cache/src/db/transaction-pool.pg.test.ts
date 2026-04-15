@@ -55,11 +55,7 @@ describe('db/transaction-pool', () => {
   ) {
     const pool = new TransactionPool(
       lc,
-      mode,
-      init,
-      cleanup,
-      initialWorkers,
-      maxWorkers,
+      {mode, init, cleanup, initialWorkers, maxWorkers},
       timeoutTasks,
     );
     pools.push(pool);

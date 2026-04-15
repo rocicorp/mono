@@ -665,7 +665,7 @@ export class CVRStore {
     const end = versionString(upToCVR.version);
     lc.debug?.(`scanning config patches for clients from ${start}`);
 
-    const reader = new TransactionPool(lc, Mode.READONLY).run(this.#db);
+    const reader = new TransactionPool(lc, {mode: Mode.READONLY}).run(this.#db);
     try {
       // Verify that we are reading the right version of the CVR.
       await reader.processReadTask(tx =>
@@ -1191,7 +1191,7 @@ export class CVRStore {
     const db = this.#db;
     const clientGroupID = this.#id;
 
-    const reader = new TransactionPool(lc, Mode.READONLY).run(db);
+    const reader = new TransactionPool(lc, {mode: Mode.READONLY}).run(db);
     try {
       return await reader.processReadTask(
         tx => tx<InspectQueryRow[]>`

@@ -449,7 +449,7 @@ export class Storer implements Service {
           tx = {
             pool: new TransactionPool(
               this.#lc.withContext('watermark', watermark),
-              Mode.READ_COMMITTED,
+              {mode: Mode.READ_COMMITTED},
             ),
             preCommitWatermark: watermark,
             pos: 0,
@@ -547,7 +547,7 @@ export class Storer implements Service {
 
     const reader = new TransactionPool(
       this.#lc.withContext('pool', 'catchup'),
-      Mode.READONLY,
+      {mode: Mode.READONLY},
     );
     reader.run(this.#db);
 
@@ -880,7 +880,9 @@ export class PurgeLocker {
   }
 
   async acquire() {
-    const tx = new TransactionPool(this.#lc, Mode.READ_COMMITTED).run(this.#db);
+    const tx = new TransactionPool(this.#lc, {mode: Mode.READ_COMMITTED}).run(
+      this.#db,
+    );
     const row = await tx.processReadTask(
       sql => sql<{watermark: string}[]>`
       SELECT watermark FROM ${this.#cdc('changeLog')}
