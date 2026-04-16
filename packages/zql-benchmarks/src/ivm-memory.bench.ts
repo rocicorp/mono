@@ -18,6 +18,7 @@ import {builder, schema} from './schema.ts';
 import {
   makeSourceChangeAdd,
   makeSourceChangeEdit,
+  makeSourceChangeRemove,
 } from '../../zql/src/ivm/source.ts';
 // ---- Data sizes -------------------------------------------------------------
 // Keep small to run fast; increase for more stable results.
@@ -137,186 +138,269 @@ const {sources, issues} = makeSources();
 
 // ---- Hydration benchmarks ---------------------------------------------------
 
+// Each iteration creates a full IVM pipeline over the entire dataset. Limit
+// max_samples so delegates don't accumulate faster than GC can collect them.
+const hydrationOpts = {max_samples: 100};
+
 describe('hydration', () => {
-  bench('hydrate: issues only', async () => {
-    const delegate = new QueryDelegateImpl({sources});
-    await delegate.run(builder.issue);
-  });
+  bench(
+    'hydrate: issues only',
+    async () => {
+      const delegate = new QueryDelegateImpl({sources});
+      await delegate.run(builder.issue);
+    },
+    hydrationOpts,
+  );
 
-  bench('hydrate: issues with creator', async () => {
-    const delegate = new QueryDelegateImpl({sources});
-    await delegate.run(builder.issue.related('creator'));
-  });
+  bench(
+    'hydrate: issues with creator',
+    async () => {
+      const delegate = new QueryDelegateImpl({sources});
+      await delegate.run(builder.issue.related('creator'));
+    },
+    hydrationOpts,
+  );
 
-  bench('hydrate: issues with creator + comments', async () => {
-    const delegate = new QueryDelegateImpl({sources});
-    await delegate.run(builder.issue.related('creator').related('comments'));
-  });
+  bench(
+    'hydrate: issues with creator + comments',
+    async () => {
+      const delegate = new QueryDelegateImpl({sources});
+      await delegate.run(builder.issue.related('creator').related('comments'));
+    },
+    hydrationOpts,
+  );
 
-  bench('hydrate: issues filtered open', async () => {
-    const delegate = new QueryDelegateImpl({sources});
-    await delegate.run(builder.issue.where('open', true));
-  });
+  bench(
+    'hydrate: issues filtered open',
+    async () => {
+      const delegate = new QueryDelegateImpl({sources});
+      await delegate.run(builder.issue.where('open', true));
+    },
+    hydrationOpts,
+  );
 
-  bench('hydrate: issues limit 50', async () => {
-    const delegate = new QueryDelegateImpl({sources});
-    await delegate.run(builder.issue.limit(50));
-  });
+  bench(
+    'hydrate: issues limit 50',
+    async () => {
+      const delegate = new QueryDelegateImpl({sources});
+      await delegate.run(builder.issue.limit(50));
+    },
+    hydrationOpts,
+  );
 });
 
 // ---- Push benchmarks --------------------------------------------------------
 
+// Generator-style benches: setup runs once, the yielded fn runs max_samples
+// times, then cleanup runs. Without a cap the source accumulates ~666k rows
+// (2s / 3µs) before removeAll is called, exhausting heap.
+const pushOpts = {max_samples: 1_000};
+
+function addAndTrack(source: MemorySource, row: Row, addedRows: Row[]): void {
+  addedRows.push(row);
+  for (const _ of source.push(makeSourceChangeAdd(row))) {
+    /* consume */
+  }
+}
+
+function removeAll(source: MemorySource, rows: Row[]): void {
+  for (const row of rows) {
+    for (const _ of source.push(makeSourceChangeRemove(row))) {
+      /* consume */
+    }
+  }
+}
+
 describe('push', () => {
   let pushCount = 0;
 
-  bench('push: add issue (no join)', function* () {
-    const delegate = new QueryDelegateImpl({sources});
-    const view = delegate.materialize(builder.issue);
+  bench(
+    'push: add issue (no join)',
+    function* () {
+      const delegate = new QueryDelegateImpl({sources});
+      const view = delegate.materialize(builder.issue);
+      const addedRows: Row[] = [];
 
-    yield () => {
-      const row: Row = {
-        id: `push-issue-${pushCount++}`,
-        shortID: NUM_ISSUES + pushCount,
-        title: `Push Issue ${pushCount}`,
-        open: true,
-        modified: Date.now(),
-        created: Date.now(),
-        projectID: 'proj-0',
-        creatorID: 'user-0',
-        assigneeID: undefined,
-        description: 'Pushed issue',
-        visibility: 'public',
+      yield () => {
+        addAndTrack(
+          sources['issue'],
+          {
+            id: `push-issue-${pushCount++}`,
+            shortID: NUM_ISSUES + pushCount,
+            title: `Push Issue ${pushCount}`,
+            open: true,
+            modified: Date.now(),
+            created: Date.now(),
+            projectID: 'proj-0',
+            creatorID: 'user-0',
+            assigneeID: undefined,
+            description: 'Pushed issue',
+            visibility: 'public',
+          },
+          addedRows,
+        );
       };
-      for (const _ of sources['issue'].push(makeSourceChangeAdd(row))) {
-        /* consume */
-      }
-    };
 
-    view.destroy();
-  });
+      removeAll(sources['issue'], addedRows);
+      view.destroy();
+    },
+    pushOpts,
+  );
 
-  bench('push: add issue (with creator join)', function* () {
-    const delegate = new QueryDelegateImpl({sources});
-    const view = delegate.materialize(builder.issue.related('creator'));
+  bench(
+    'push: add issue (with creator join)',
+    function* () {
+      const delegate = new QueryDelegateImpl({sources});
+      const view = delegate.materialize(builder.issue.related('creator'));
+      const addedRows: Row[] = [];
 
-    yield () => {
-      const row: Row = {
-        id: `push-issue-j-${pushCount++}`,
-        shortID: NUM_ISSUES + pushCount,
-        title: `Push Issue ${pushCount}`,
-        open: true,
-        modified: Date.now(),
-        created: Date.now(),
-        projectID: 'proj-0',
-        creatorID: 'user-0',
-        assigneeID: undefined,
-        description: 'Pushed issue',
-        visibility: 'public',
+      yield () => {
+        addAndTrack(
+          sources['issue'],
+          {
+            id: `push-issue-j-${pushCount++}`,
+            shortID: NUM_ISSUES + pushCount,
+            title: `Push Issue ${pushCount}`,
+            open: true,
+            modified: Date.now(),
+            created: Date.now(),
+            projectID: 'proj-0',
+            creatorID: 'user-0',
+            assigneeID: undefined,
+            description: 'Pushed issue',
+            visibility: 'public',
+          },
+          addedRows,
+        );
       };
-      for (const _ of sources['issue'].push(makeSourceChangeAdd(row))) {
-        /* consume */
-      }
-    };
 
-    view.destroy();
-  });
+      removeAll(sources['issue'], addedRows);
+      view.destroy();
+    },
+    pushOpts,
+  );
 
-  bench('push: edit issue title', function* () {
-    const delegate = new QueryDelegateImpl({sources});
-    const view = delegate.materialize(builder.issue);
-    let editCount = 0;
+  bench(
+    'push: edit issue title',
+    function* () {
+      const delegate = new QueryDelegateImpl({sources});
+      const view = delegate.materialize(builder.issue);
+      let editCount = 0;
 
-    yield () => {
-      const idx = editCount % NUM_ISSUES;
-      const oldRow = issues[idx];
-      const newRow = {...oldRow, title: `Edited ${editCount++}`};
-      for (const _ of sources['issue'].push(
-        makeSourceChangeEdit(newRow, oldRow as Row),
-      )) {
-        /* consume */
-      }
-      // restore
-      for (const _ of sources['issue'].push(
-        makeSourceChangeEdit(oldRow as Row, newRow),
-      )) {
-        /* consume */
-      }
-    };
-
-    view.destroy();
-  });
-
-  bench('push: add comment (child relation)', function* () {
-    const delegate = new QueryDelegateImpl({sources});
-    const view = delegate.materialize(builder.issue.related('comments'));
-
-    yield () => {
-      const row: Row = {
-        id: `push-comment-${pushCount++}`,
-        issueID: `issue-${pushCount % NUM_ISSUES}`,
-        created: Date.now(),
-        body: 'A new comment',
-        creatorID: 'user-0',
+      yield () => {
+        const idx = editCount % NUM_ISSUES;
+        const oldRow = issues[idx];
+        const newRow = {...oldRow, title: `Edited ${editCount++}`};
+        for (const _ of sources['issue'].push(
+          makeSourceChangeEdit(newRow, oldRow as Row),
+        )) {
+          /* consume */
+        }
+        // restore
+        for (const _ of sources['issue'].push(
+          makeSourceChangeEdit(oldRow as Row, newRow),
+        )) {
+          /* consume */
+        }
       };
-      for (const _ of sources['comment'].push(makeSourceChangeAdd(row))) {
-        /* consume */
-      }
-    };
 
-    view.destroy();
-  });
+      view.destroy();
+    },
+    pushOpts,
+  );
 
-  bench('push: add issue inside limit(50)', function* () {
-    const delegate = new QueryDelegateImpl({sources});
-    const view = delegate.materialize(builder.issue.limit(50));
+  bench(
+    'push: add comment (child relation)',
+    function* () {
+      const delegate = new QueryDelegateImpl({sources});
+      const view = delegate.materialize(builder.issue.related('comments'));
+      const addedRows: Row[] = [];
 
-    yield () => {
-      // Very low ID ensures insertion at front (inside limit)
-      const row: Row = {
-        id: `aaa-${String(pushCount++).padStart(12, '0')}`,
-        shortID: -pushCount,
-        title: `Front issue ${pushCount}`,
-        open: true,
-        modified: Date.now(),
-        created: Date.now(),
-        projectID: 'proj-0',
-        creatorID: 'user-0',
-        assigneeID: undefined,
-        description: 'Front of list',
-        visibility: 'public',
+      yield () => {
+        addAndTrack(
+          sources['comment'],
+          {
+            id: `push-comment-${pushCount++}`,
+            issueID: `issue-${pushCount % NUM_ISSUES}`,
+            created: Date.now(),
+            body: 'A new comment',
+            creatorID: 'user-0',
+          },
+          addedRows,
+        );
       };
-      for (const _ of sources['issue'].push(makeSourceChangeAdd(row))) {
-        /* consume */
-      }
-    };
 
-    view.destroy();
-  });
+      removeAll(sources['comment'], addedRows);
+      view.destroy();
+    },
+    pushOpts,
+  );
 
-  bench('push: add issue outside limit(50)', function* () {
-    const delegate = new QueryDelegateImpl({sources});
-    const view = delegate.materialize(builder.issue.limit(50));
+  bench(
+    'push: add issue inside limit(50)',
+    function* () {
+      const delegate = new QueryDelegateImpl({sources});
+      const view = delegate.materialize(builder.issue.limit(50));
+      const addedRows: Row[] = [];
 
-    yield () => {
-      // Very high ID ensures insertion past limit
-      const row: Row = {
-        id: `zzz-${pushCount++}`,
-        shortID: NUM_ISSUES + pushCount,
-        title: `Back issue ${pushCount}`,
-        open: true,
-        modified: Date.now(),
-        created: Date.now(),
-        projectID: 'proj-0',
-        creatorID: 'user-0',
-        assigneeID: undefined,
-        description: 'End of list',
-        visibility: 'public',
+      yield () => {
+        // Very low ID ensures insertion at front (inside limit)
+        addAndTrack(
+          sources['issue'],
+          {
+            id: `aaa-${String(pushCount++).padStart(12, '0')}`,
+            shortID: -pushCount,
+            title: `Front issue ${pushCount}`,
+            open: true,
+            modified: Date.now(),
+            created: Date.now(),
+            projectID: 'proj-0',
+            creatorID: 'user-0',
+            assigneeID: undefined,
+            description: 'Front of list',
+            visibility: 'public',
+          },
+          addedRows,
+        );
       };
-      for (const _ of sources['issue'].push(makeSourceChangeAdd(row))) {
-        /* consume */
-      }
-    };
 
-    view.destroy();
-  });
+      removeAll(sources['issue'], addedRows);
+      view.destroy();
+    },
+    pushOpts,
+  );
+
+  bench(
+    'push: add issue outside limit(50)',
+    function* () {
+      const delegate = new QueryDelegateImpl({sources});
+      const view = delegate.materialize(builder.issue.limit(50));
+      const addedRows: Row[] = [];
+
+      yield () => {
+        // Very high ID ensures insertion past limit
+        addAndTrack(
+          sources['issue'],
+          {
+            id: `zzz-${pushCount++}`,
+            shortID: NUM_ISSUES + pushCount,
+            title: `Back issue ${pushCount}`,
+            open: true,
+            modified: Date.now(),
+            created: Date.now(),
+            projectID: 'proj-0',
+            creatorID: 'user-0',
+            assigneeID: undefined,
+            description: 'End of list',
+            visibility: 'public',
+          },
+          addedRows,
+        );
+      };
+
+      removeAll(sources['issue'], addedRows);
+      view.destroy();
+    },
+    pushOpts,
+  );
 });

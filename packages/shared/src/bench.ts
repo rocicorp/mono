@@ -120,7 +120,12 @@ function wrapTest(testFn: (...args: any[]) => any): TestAPI {
   return wrapped;
 }
 
-export const bench = wrapTest(vitest.test);
+export const bench = wrapTest(vitest.test) as unknown as ((
+  name: string,
+  fn: MeasureFn,
+  opts?: MeasureOptions,
+) => void) &
+  TestAPI;
 
 function wrapSuite(suiteFn: (...args: any[]) => any): typeof vitest.describe {
   const wrapped = ((...args: any[]) => {
