@@ -40,13 +40,15 @@ export class ShadowSyncService implements Service {
   async run() {
     const {intervalMs, sampleRate, maxRowsPerTable, textCopy} = this.#options;
 
-    // Why: stagger the first run by a random fraction of the interval so a
-    // fleet-wide restart does not cause every task to canary simultaneously.
-    const jitter = Math.floor(Math.random() * intervalMs);
+    // Why: wait at least one full interval before the first run so shadow
+    // sync never fires immediately on task startup, and add a random
+    // fraction of the interval on top so a fleet-wide restart does not
+    // cause every task to canary simultaneously.
+    const firstRunDelay = intervalMs + Math.floor(Math.random() * intervalMs);
     this.#lc.info?.(
-      `shadow-syncer started; first run in ${jitter} ms, then every ${intervalMs} ms`,
+      `shadow-syncer started; first run in ${firstRunDelay} ms, then every ${intervalMs} ms`,
     );
-    await this.#state.sleep(jitter);
+    await this.#state.sleep(firstRunDelay);
 
     while (this.#state.shouldRun()) {
       const start = performance.now();

@@ -10,7 +10,6 @@ import {
   type Worker,
 } from '../types/processes.ts';
 import {getShardConfig} from '../types/shards.ts';
-import {startAnonymousTelemetry} from './anonymous-otel-start.ts';
 import {createLogContext} from './logging.ts';
 import {startOtelAuto} from './otel-start.ts';
 
@@ -23,10 +22,13 @@ export default function runWorker(
 ): Promise<void> {
   const config = getNormalizedZeroConfig({env, argv});
 
-  startOtelAuto(createLogContext(config, {worker: 'shadow-syncer'}, false));
-  const lc = createLogContext(config, {worker: 'shadow-syncer'}, true);
+  startOtelAuto(
+    createLogContext(config, 'shadow-syncer', 0, false),
+    'shadow-syncer',
+    0,
+  );
+  const lc = createLogContext(config, 'shadow-syncer');
   initEventSink(lc, config);
-  startAnonymousTelemetry(lc, config);
 
   const {shadowSync, upstream, initialSync} = config;
   const shard = getShardConfig(config);
