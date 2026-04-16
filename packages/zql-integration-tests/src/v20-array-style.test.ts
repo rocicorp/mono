@@ -72,3 +72,59 @@ test('reading from old array style tables', async () => {
     ]
   `);
 });
+
+test('nullable array columns preserve null vs empty array', async () => {
+  const lc = createSilentLogContext();
+  const sqlite = new Database(lc, ':memory:');
+  sqlite.exec(`CREATE TABLE "bar" (
+    "id" "int4|NOT_NULL",
+    "tags" "text[]",
+    "_0_version" "text",
+    primary key ("id")
+  );
+
+  INSERT INTO "bar" ("id", "tags", "_0_version") VALUES
+    (1, NULL, '4f58sg'),
+    (2, '[]', '4f58sg'),
+    (3, '["a", "b"]', '4f58sg');
+  `);
+
+  const schema = createSchema({
+    tables: [
+      table('bar')
+        .columns({
+          id: number(),
+          tags: json<string[]>().optional(),
+        })
+        .primaryKey('id'),
+    ],
+  });
+
+  const d = newQueryDelegate(lc, testLogConfig, sqlite, schema);
+  const queries = createBuilder(schema);
+
+  const rows = await d.run(queries.bar.orderBy('id', 'asc'));
+
+  expect(rows).toMatchInlineSnapshot(`
+    [
+      {
+        "id": 1,
+        "tags": null,
+        Symbol(rc): 1,
+      },
+      {
+        "id": 2,
+        "tags": [],
+        Symbol(rc): 1,
+      },
+      {
+        "id": 3,
+        "tags": [
+          "a",
+          "b",
+        ],
+        Symbol(rc): 1,
+      },
+    ]
+  `);
+});
