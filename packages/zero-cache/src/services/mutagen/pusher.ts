@@ -572,6 +572,8 @@ class PushWorker {
       }
 
       if (isProtocolError(e) && isAuthErrorBody(e.errorBody)) {
+        // The push completed far enough for local validation to reject the
+        // connection, so invalidate it and surface the result as PushFailed.
         this.#lc.warn?.('Push validation failed; invalidating connection', {
           clientID: entry.context.clientID,
           response: e.message,

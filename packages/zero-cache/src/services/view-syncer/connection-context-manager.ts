@@ -372,6 +372,8 @@ export class ConnectionContextManagerImpl implements ConnectionContextManager {
       connection.userID,
     );
 
+    // Check that the ws connection userID provided by the client
+    // matches the confirmed identity from the API server
     if (connection.userID !== effectiveValidatedUserID) {
       throw new ProtocolErrorWithLevel(
         {
@@ -383,6 +385,8 @@ export class ConnectionContextManagerImpl implements ConnectionContextManager {
       );
     }
 
+    // Once a client group is validated, every later validated connection must
+    // agree with that pinned identity.
     if (
       this.#group.validated &&
       this.#group.userID !== effectiveValidatedUserID
@@ -770,6 +774,9 @@ function normalizeValidatedUserID(
   validatedUserID: string | null | undefined,
   fallbackUserID: string | undefined,
 ) {
+  // `null` means the API server explicitly validated a logged-out connection.
+  // `undefined` preserves legacy callers that only validated the stored
+  // connection userID and had no authoritative server userID to thread back.
   if (validatedUserID === null) {
     return undefined;
   }
