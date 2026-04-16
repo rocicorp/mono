@@ -24,7 +24,7 @@ import type {Database} from '../../../../zqlite/src/db.ts';
 import type {OpaqueAuth} from '../../auth/auth.ts';
 import type {
   CustomQueryTransformer,
-  TransformAttempt,
+  HashedTransformResponse,
 } from '../../custom-queries/transform-query.ts';
 import {StatementRunner} from '../../db/statements.ts';
 import {type PgTest, test} from '../../test/db.ts';
@@ -72,9 +72,9 @@ import {type SyncContext} from './view-syncer.ts';
 
 describe('view-syncer/service', () => {
   function transformAttempt(
-    result: TransformAttempt['result'],
+    result: HashedTransformResponse['result'],
     cached = false,
-  ): TransformAttempt {
+  ): HashedTransformResponse {
     return {result, cached};
   }
 
