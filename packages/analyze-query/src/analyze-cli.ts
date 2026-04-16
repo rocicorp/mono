@@ -173,6 +173,11 @@ export async function runAnalyzeCli(opts: AnalyzeCliOptions): Promise<void> {
     installWebSocketHeaderShim(handshakeHeaders);
   }
 
+  // zero-client and replicache reference a build-time `TESTING` global that
+  // bundlers replace with a boolean literal; under tsx there's no replacement,
+  // so provide a runtime default.
+  (globalThis as {TESTING?: boolean}).TESTING ??= false;
+
   const z = new Zero({
     schema: opts.schema,
     server: config.zeroCacheUrl,
