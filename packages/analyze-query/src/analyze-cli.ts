@@ -1,6 +1,7 @@
 import '../../shared/src/dotenv.ts';
 
 import {styleText} from 'node:util';
+import {WebSocket as NodeWebSocket} from 'ws';
 import {logLevel, logOptions} from '../../otel/src/log-options.ts';
 import {colorConsole} from '../../shared/src/logging.ts';
 import {parseOptions} from '../../shared/src/options.ts';
@@ -40,6 +41,23 @@ const options = {
     desc: [
       'Raw JWT forwarded to zero-cache.',
       'Used server-side to fill permission variables for the query.',
+    ],
+  },
+  cookie: {
+    type: v.string().optional(),
+    desc: [
+      'Cookie header value sent on the WebSocket upgrade request,',
+      'e.g. `session=abc; foo=bar`. Use this when zero-cache is behind',
+      'a proxy that resolves auth via cookies. Merged with --headers-json',
+      '(--cookie wins on conflict).',
+    ],
+  },
+  headersJson: {
+    type: v.string().optional(),
+    desc: [
+      'JSON object of arbitrary headers to send on the WebSocket upgrade',
+      'request, e.g. `{"x-api-key":"..."}`. Escape hatch for exotic auth',
+      'schemes; prefer --auth-token or --cookie when possible.',
     ],
   },
   userId: {
@@ -150,6 +168,11 @@ export async function runAnalyzeCli(opts: AnalyzeCliOptions): Promise<void> {
 
   const plan = buildQueryPlan(config);
 
+  const handshakeHeaders = resolveHandshakeHeaders(config);
+  if (Object.keys(handshakeHeaders).length > 0) {
+    installWebSocketHeaderShim(handshakeHeaders);
+  }
+
   const z = new Zero({
     schema: opts.schema,
     server: config.zeroCacheUrl,
@@ -242,6 +265,54 @@ function buildZqlQuery(
 ): AnyQuery {
   const f = new Function('builder', `return builder.${queryString};`);
   return f(builder) as AnyQuery;
+}
+
+function resolveHandshakeHeaders(config: {
+  cookie?: string | undefined;
+  headersJson?: string | undefined;
+}): Record<string, string> {
+  const headers: Record<string, string> = {};
+  if (config.headersJson !== undefined) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(config.headersJson);
+    } catch (e) {
+      colorConsole.error(
+        `--headers-json is not valid JSON: ${e instanceof Error ? e.message : String(e)}`,
+      );
+      process.exit(1);
+    }
+    if (
+      parsed === null ||
+      typeof parsed !== 'object' ||
+      Array.isArray(parsed)
+    ) {
+      colorConsole.error('--headers-json must be a JSON object.');
+      process.exit(1);
+    }
+    for (const [k, val] of Object.entries(parsed)) {
+      if (typeof val !== 'string') {
+        colorConsole.error(
+          `--headers-json values must be strings; got ${typeof val} for "${k}".`,
+        );
+        process.exit(1);
+      }
+      headers[k] = val;
+    }
+  }
+  if (config.cookie !== undefined) {
+    headers.cookie = config.cookie;
+  }
+  return headers;
+}
+
+function installWebSocketHeaderShim(headers: Record<string, string>): void {
+  class HeaderInjectingWebSocket extends NodeWebSocket {
+    constructor(url: string | URL, protocols?: string | string[]) {
+      super(url, protocols, {headers});
+    }
+  }
+  (globalThis as {WebSocket?: unknown}).WebSocket = HeaderInjectingWebSocket;
 }
 
 function renderResult(
