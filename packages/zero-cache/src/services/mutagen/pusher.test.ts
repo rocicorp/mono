@@ -834,7 +834,8 @@ describe('pusher service', () => {
       errorBody: {
         kind: ErrorKind.PushFailed,
         origin: ErrorOrigin.ZeroCache,
-        reason: ErrorReason.Internal,
+        reason: ErrorReason.HTTP,
+        status: 401,
         message: 'Connection userID does not match validated server userID.',
         mutationIDs: [{clientID, id: 1}],
       },
