@@ -1,4 +1,3 @@
-// oxlint-disable-next-line no-restricted-imports
 export {
   runAnalyzeCli,
   type AnalyzeCliOptions,
