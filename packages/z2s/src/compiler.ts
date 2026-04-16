@@ -650,9 +650,10 @@ function selectIdent(server: ServerSpec, column: QualifiedColumn): SQLQuery {
             : epochExpr;
 
         if (serverColumnSchema.isArray) {
-          return sql`ARRAY(SELECT ${toMs(
-            sql`EXTRACT(EPOCH FROM unnest(${colIdent(server, column)})) * 1000`,
-          )}) as ${sql.ident(column.zql)}`;
+          const col = colIdent(server, column);
+          return sql`CASE WHEN ${col} IS NULL THEN NULL ELSE ARRAY(SELECT ${toMs(
+            sql`EXTRACT(EPOCH FROM unnest(${col})) * 1000`,
+          )}) END as ${sql.ident(column.zql)}`;
         }
 
         return sql`${toMs(
