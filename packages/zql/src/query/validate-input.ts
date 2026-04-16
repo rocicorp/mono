@@ -1,5 +1,15 @@
 import type {StandardSchemaV1} from '@standard-schema/spec';
 
+export class InputValidationError extends Error {
+  readonly result: StandardSchemaV1.FailureResult;
+
+  constructor(message: string, result: StandardSchemaV1.FailureResult) {
+    super(message);
+    this.name = 'InputValidationError';
+    this.result = result;
+  }
+}
+
 /**
  * Validates input using a StandardSchema validator if provided.
  * This is shared validation logic used by both defineQuery and defineMutator.
@@ -30,10 +40,11 @@ export function validateInput<TInput, TOutput>(
     );
   }
   if (result.issues) {
-    throw new Error(
+    throw new InputValidationError(
       `Validation failed for ${kind} ${name}: ${result.issues
         .map(issue => issue.message)
         .join(', ')}`,
+      result,
     );
   }
   return result.value;
