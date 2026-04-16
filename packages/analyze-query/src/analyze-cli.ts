@@ -10,7 +10,9 @@ import {Zero} from '../../zero-client/src/client/zero.ts';
 import type {AnalyzeQueryResult} from '../../zero-protocol/src/analyze-query-result.ts';
 import type {AST} from '../../zero-protocol/src/ast.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
+import {createBuilder} from '../../zql/src/query/create-builder.ts';
 import type {AnyQuery} from '../../zql/src/query/query.ts';
+import type {SchemaQuery} from '../../zql/src/query/schema-query.ts';
 
 export type AnalyzeCliOptions = {
   schema: Schema;
@@ -180,7 +182,7 @@ export async function runAnalyzeCli(opts: AnalyzeCliOptions): Promise<void> {
         rpcOptions,
       );
     } else {
-      const built = buildZqlQuery(plan.text, z as Zero<Schema>);
+      const built = buildZqlQuery(plan.text, createBuilder(opts.schema));
       result = await z.inspector.analyzeQuery(built, rpcOptions);
     }
   } catch (e) {
@@ -234,9 +236,12 @@ function buildQueryPlan(config: {
   return {kind: 'named', name: config.queryName as string, args};
 }
 
-function buildZqlQuery(queryString: string, z: Zero<Schema>): AnyQuery {
-  const f = new Function('z', `return z.query.${queryString};`);
-  return f(z) as AnyQuery;
+function buildZqlQuery(
+  queryString: string,
+  builder: SchemaQuery<Schema>,
+): AnyQuery {
+  const f = new Function('builder', `return builder.${queryString};`);
+  return f(builder) as AnyQuery;
 }
 
 function renderResult(

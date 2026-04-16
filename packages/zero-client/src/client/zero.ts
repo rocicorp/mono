@@ -641,7 +641,7 @@ export class Zero<
     const rep = new ReplicacheImpl(replicacheOptions, replicacheImplOptions);
     this.#rep = rep;
 
-    if (TESTING) {
+    if (typeof TESTING !== 'undefined' && TESTING) {
       internalReplicacheImplMap.set(this, rep);
     }
     this.#server = server;
@@ -823,7 +823,7 @@ export class Zero<
 
     this.#expose();
 
-    if (TESTING) {
+    if (typeof TESTING !== 'undefined' && TESTING) {
       asTestZero(this)[exposedToTestingSymbol] = {
         puller: this.#puller,
         pusher: this.#pusher,
@@ -902,7 +902,7 @@ export class Zero<
     server: HTTPString | null;
     enableAnalytics: boolean;
   }): LogOptions {
-    if (TESTING) {
+    if (typeof TESTING !== 'undefined' && TESTING) {
       const testZero = asTestZero(this);
       if (testZero[createLogOptionsSymbol]) {
         return testZero[createLogOptionsSymbol](options);

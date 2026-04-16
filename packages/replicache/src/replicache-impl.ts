@@ -973,7 +973,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
   }
 
   async #invokePush(): Promise<boolean> {
-    if (TESTING) {
+    if (typeof TESTING !== 'undefined' && TESTING) {
       this.onPushInvoked();
     }
     if (this.#isPushDisabled()) {
@@ -1138,7 +1138,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
   }
 
   async beginPull(): Promise<BeginPullResult> {
-    if (TESTING) {
+    if (typeof TESTING !== 'undefined' && TESTING) {
       this.onBeginPull();
     }
     await this.#ready;
@@ -1627,7 +1627,7 @@ export class ReplicacheImpl<MD extends MutatorDefs = {}> {
         this.#idbDatabases,
         this.#kvStoreProvider.create,
       );
-      if (TESTING) {
+      if (typeof TESTING !== 'undefined' && TESTING) {
         void this.onRecoverMutations(result);
       }
       return result;
