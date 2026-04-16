@@ -13,8 +13,13 @@ import {ReplicationMessages} from '../replicator/test-utils.ts';
 import {type Downstream} from './change-streamer.ts';
 import * as ErrorType from './error-type-enum.ts';
 import {ensureReplicationConfig, setupCDCTables} from './schema/tables.ts';
-import {PurgeLocker, Storer} from './storer.ts';
+import {PurgeLocker, Storer, type TuningOptions} from './storer.ts';
 import {createSubscriber} from './test-utils.ts';
+
+const opts: TuningOptions = {
+  backPressureLimitHeapProportion: 0.04,
+  statementTimeoutMs: 20_000,
+};
 
 describe('change-streamer/storer', () => {
   const lc = createSilentLogContext();
@@ -100,7 +105,7 @@ describe('change-streamer/storer', () => {
         REPLICA_VERSION,
         msg => consumed.enqueue(msg),
         err => fatalErrors.enqueue(err),
-        0.04,
+        opts,
       );
       await storer.assumeOwnership();
       done = storer.run();
@@ -1754,7 +1759,7 @@ describe('change-streamer/storer', () => {
         REPLICA_VERSION,
         msg => consumed.enqueue(msg),
         err => fatalErrors.enqueue(err),
-        0.04,
+        opts,
       );
       await storer.assumeOwnership();
       done = storer.run();

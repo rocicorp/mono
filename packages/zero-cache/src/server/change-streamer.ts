@@ -157,8 +157,11 @@ export default async function runWorker(
         subscriptionState,
         purgeLock,
         autoReset ?? false,
-        backPressureLimitHeapProportion,
-        flowControlConsensusPaddingSeconds,
+        {
+          backPressureLimitHeapProportion,
+          flowControlConsensusPaddingSeconds,
+          statementTimeoutMs: change.statementTimeoutMs,
+        },
         setTimeout,
       );
       break;

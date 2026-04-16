@@ -25,7 +25,10 @@ import {
   type SubscriptionState,
 } from '../replicator/schema/replication-state.ts';
 import {ReplicationMessages} from '../replicator/test-utils.ts';
-import {initializeStreamer} from './change-streamer-service.ts';
+import {
+  initializeStreamer,
+  type TuningOptions,
+} from './change-streamer-service.ts';
 import {
   PROTOCOL_VERSION,
   type ChangeStreamerService,
@@ -34,6 +37,12 @@ import {
 import * as ErrorType from './error-type-enum.ts';
 import {AutoResetSignal, ensureReplicationConfig} from './schema/tables.ts';
 import {PurgeLocker} from './storer.ts';
+
+const opts: TuningOptions = {
+  backPressureLimitHeapProportion: 0.04,
+  flowControlConsensusPaddingSeconds: 1,
+  statementTimeoutMs: 20_000,
+};
 
 describe('change-streamer/service', () => {
   let lc: LogContext;
@@ -87,8 +96,7 @@ describe('change-streamer/service', () => {
       replicaConfig,
       null,
       true,
-      0.04,
-      1,
+      opts,
       setTimeoutFn as unknown as typeof setTimeout,
     );
     streamerDone = streamer.run();
@@ -959,8 +967,7 @@ describe('change-streamer/service', () => {
       replicaConfig,
       null,
       true,
-      0.04,
-      1,
+      opts,
     );
     void streamer.run();
 
@@ -989,8 +996,7 @@ describe('change-streamer/service', () => {
       replicaConfig,
       null,
       true,
-      0.04,
-      1,
+      opts,
     );
     void streamer.run();
 
@@ -1014,8 +1020,7 @@ describe('change-streamer/service', () => {
       replicaConfig,
       null,
       true,
-      0.04,
-      1,
+      opts,
     );
     void streamer.run();
 
@@ -1053,8 +1058,7 @@ describe('change-streamer/service', () => {
       replicaConfig,
       lock,
       true,
-      0.04,
-      1,
+      opts,
     );
     void streamer.run();
 
@@ -1097,8 +1101,7 @@ describe('change-streamer/service', () => {
       replicaConfig,
       null,
       true,
-      0.04,
-      1,
+      opts,
     );
     void streamer.run();
 
@@ -1140,8 +1143,7 @@ describe('change-streamer/service', () => {
       replicaConfig,
       null,
       true,
-      0.04,
-      1,
+      opts,
     );
     void streamer.run();
 
@@ -1200,8 +1202,7 @@ describe('change-streamer/service', () => {
       replicaConfig,
       null,
       true,
-      0.04,
-      1,
+      opts,
     );
     void streamer.run();
 
@@ -1277,8 +1278,7 @@ describe('change-streamer/service', () => {
       replicaConfig,
       null,
       true,
-      0.04,
-      1,
+      opts,
     );
     void streamer.run();
 

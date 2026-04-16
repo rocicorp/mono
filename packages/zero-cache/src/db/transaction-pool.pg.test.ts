@@ -11,10 +11,12 @@ import type {PostgresDB} from '../types/pg.ts';
 import * as Mode from './mode-enum.ts';
 import {
   importSnapshot,
+  ResponseTimeoutError,
   sharedSnapshot,
   synchronizedSnapshots,
   TIMEOUT_TASKS,
   TransactionPool,
+  type Options,
   type Task,
 } from './transaction-pool.ts';
 
@@ -53,11 +55,17 @@ describe('db/transaction-pool', () => {
     maxWorkers = initialWorkers,
     timeoutTasks = TIMEOUT_TASKS, // Overridden for tests.
   ) {
-    const pool = new TransactionPool(
-      lc,
+    return newTransactionPoolWithOpts(
       {mode, init, cleanup, initialWorkers, maxWorkers},
       timeoutTasks,
     );
+  }
+
+  function newTransactionPoolWithOpts(
+    opts: Options,
+    timeoutTasks = TIMEOUT_TASKS,
+  ) {
+    const pool = new TransactionPool(lc, opts, timeoutTasks);
     pools.push(pool);
     return pool;
   }
@@ -103,6 +111,40 @@ describe('db/transaction-pool', () => {
       ],
       ['public.workers']: [{id: 1}],
       ['public.cleaned']: [{id: 1}],
+    });
+  });
+
+  test('response timeout', async () => {
+    await db`INSERT INTO foo (id) VALUES (1)`;
+
+    // To induce a response timeout, we hold a lock in one tx and wait
+    // for another tx to timeout.
+    const lockHolder = newTransactionPool(Mode.READ_COMMITTED).run(db);
+    void lockHolder.process(task(`SELECT * FROM foo FOR UPDATE`));
+
+    const lockWaiter = newTransactionPoolWithOpts({
+      mode: Mode.READ_COMMITTED,
+      statementResponseTimeout: 50,
+    }).run(db);
+
+    const promise = lockWaiter.process(task(`DELETE FROM foo`));
+    lockWaiter.setDone();
+
+    // Note: The promise returned by process never throws, but it should
+    //       resolve once the response timeout aborts the transaction.
+    await promise;
+
+    // Release the lock to allow the transaction to proceed.
+    lockHolder.setDone();
+
+    // The final transaction should abort with the ResponseTimeoutError.
+    await expect(lockWaiter.done()).rejects.toThrow(ResponseTimeoutError);
+
+    await lockHolder.done();
+
+    // The delete should not have succeeded.
+    await expectTables(db, {
+      ['public.foo']: [{id: 1, val: null}],
     });
   });
 
@@ -408,7 +450,6 @@ describe('db/transaction-pool', () => {
     void pool.process(task(`INSERT INTO foo (id) VALUES (2)`));
     void pool.process(task(`INSERT INTO foo (id, val) VALUES (8, 'foo')`));
     void pool.process(task(`INSERT INTO foo (id) VALUES (5)`));
-    pool.setDone();
 
     // Set the failure before running.
     pool.fail(new Error('oh nose'));

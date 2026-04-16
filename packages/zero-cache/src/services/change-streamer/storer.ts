@@ -72,6 +72,11 @@ type PendingTransaction = {
 
 const backfillRequestsSchema = v.array(backfillRequestSchema);
 
+export type TuningOptions = {
+  backPressureLimitHeapProportion: number;
+  statementTimeoutMs: number;
+};
+
 /**
  * Handles the storage of changes and the catchup of subscribers
  * that are behind.
@@ -115,6 +120,7 @@ export class Storer implements Service {
   readonly #onFatal: (err: Error) => void;
   readonly #queue = new Queue<QueueEntry>();
   readonly #backPressureThresholdBytes: number;
+  readonly #statementTimeoutMs: number;
 
   #approximateQueuedBytes = 0;
   #running = false;
@@ -129,7 +135,7 @@ export class Storer implements Service {
     replicaVersion: string,
     onConsumed: (c: Commit | UpstreamStatusMessage) => void,
     onFatal: (err: Error) => void,
-    backPressureLimitHeapProportion: number,
+    {backPressureLimitHeapProportion, statementTimeoutMs}: TuningOptions,
   ) {
     this.#lc = lc.withContext('component', 'change-log');
     this.#shard = shard;
@@ -140,6 +146,7 @@ export class Storer implements Service {
     this.#replicaVersion = replicaVersion;
     this.#onConsumed = onConsumed;
     this.#onFatal = onFatal;
+    this.#statementTimeoutMs = statementTimeoutMs;
 
     const heapStats = getHeapStatistics();
     this.#backPressureThresholdBytes =
@@ -449,7 +456,10 @@ export class Storer implements Service {
           tx = {
             pool: new TransactionPool(
               this.#lc.withContext('watermark', watermark),
-              {mode: Mode.READ_COMMITTED},
+              {
+                mode: Mode.READ_COMMITTED,
+                statementResponseTimeout: this.#statementTimeoutMs,
+              },
             ),
             preCommitWatermark: watermark,
             pos: 0,
