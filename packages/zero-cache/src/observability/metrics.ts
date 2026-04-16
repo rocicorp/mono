@@ -15,7 +15,8 @@ export type Category =
   | 'replica' // health of replica and litestream backup
   | 'sync' // replica to client
   | 'mutation'
-  | 'server';
+  | 'server'
+  | 'customer_api';
 
 let meter: Meter | undefined;
 

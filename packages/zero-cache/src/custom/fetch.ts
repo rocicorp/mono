@@ -15,6 +15,10 @@ import {isProtocolError} from '../../../zero-protocol/src/error.ts';
 import type {ConnectionContext} from '../services/view-syncer/connection-context-manager.ts';
 import {ProtocolErrorWithLevel} from '../types/error-with-level.ts';
 import {upstreamSchema, type ShardID} from '../types/shards.ts';
+import {
+  getOrCreateCounter,
+  getOrCreateHistogram,
+} from '../observability/metrics.ts';
 
 const reservedParams = ['schema', 'appID'];
 
@@ -88,6 +92,38 @@ export const getBodyPreview = async (
 
 const MAX_ATTEMPTS = 4;
 
+const requestDuration = getOrCreateHistogram(
+  'customer_api',
+  'request_duration_ms',
+  { description: 'Duration of requests to the customer API server', unit: 'milliseconds' }
+);
+const requestAttempts = getOrCreateHistogram(
+  'customer_api',
+  'request_attempts',
+  { description: 'Number of attempts made to the customer API server per request', unit: 'attempts' }
+);
+const requestsTotal = getOrCreateCounter(
+  'customer_api', 
+  'requests_total', 
+  'Number of requests to the customer API server'
+);
+const requestErrorsTotal = getOrCreateCounter(
+  'customer_api', 
+  'request_errors_total', 
+  'Number of errors from the customer API server'
+);
+
+function getApplicationErrorCode(result: unknown): string | undefined {
+  if (Array.isArray(result) && result.length === 2 && result[0] === 'transform') {
+    return getApplicationErrorCode(result[1]);
+  }
+  if (result !== null && typeof result === 'object') {
+     if ('error' in result && typeof result.error === 'string') return result.error;
+     if ('kind' in result && typeof result.kind === 'string') return result.kind;
+  }
+  return undefined;
+}
+
 export async function fetchFromAPIServer<TValidator extends Type>(
   validator: TValidator,
   source: 'push' | 'transform',
@@ -95,6 +131,57 @@ export async function fetchFromAPIServer<TValidator extends Type>(
   ctx: ConnectionContext,
   shard: ShardID,
   body: ReadonlyJSONValue,
+) {
+  const reqType = source === 'push' ? 'mutate' : 'query';
+  const startTime = performance.now();
+  const stats = { attempt: 0 };
+  
+  try {
+    const result = await fetchFromAPIServerInternal(
+      validator, source, lc, ctx, shard, body, stats
+    );
+    
+    const duration = performance.now() - startTime;
+    requestDuration.record(duration, { type: reqType });
+    requestAttempts.record(stats.attempt, { type: reqType });
+    requestsTotal.add(1, { type: reqType });
+    
+    const appErrorCode = getApplicationErrorCode(result);
+    if (appErrorCode !== undefined) {
+      requestErrorsTotal.add(1, { 
+        type: reqType, 
+        error_category: 'application', 
+        application_error_code: String(appErrorCode) 
+      });
+    }
+    
+    return result;
+  } catch (error) {
+    const duration = performance.now() - startTime;
+    requestDuration.record(duration, { type: reqType });
+    requestAttempts.record(stats.attempt, { type: reqType });
+    requestsTotal.add(1, { type: reqType });
+    
+    let category = 'network';
+    if (isProtocolError(error)) {
+       const reason = 'reason' in error.errorBody ? error.errorBody.reason : undefined;
+       if (reason === ErrorReason.HTTP) category = 'http';
+       else if (reason === ErrorReason.Parse) category = 'parse';
+    }
+    
+    requestErrorsTotal.add(1, { type: reqType, error_category: category });
+    throw error;
+  }
+}
+
+async function fetchFromAPIServerInternal<TValidator extends Type>(
+  validator: TValidator,
+  source: 'push' | 'transform',
+  lc: LogContext,
+  ctx: ConnectionContext,
+  shard: ShardID,
+  body: ReadonlyJSONValue,
+  stats: {attempt: number},
 ) {
   const fetchFromAPIServerID = randInt(1, Number.MAX_SAFE_INTEGER).toString(36);
   lc = lc
@@ -175,6 +262,7 @@ export async function fetchFromAPIServer<TValidator extends Type>(
   const finalUrl = urlObj.toString();
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    stats.attempt = attempt;
     lc = lc.withContext('fetchFromAPIServerAttempt', attempt);
     lc.debug?.('fetch from API server attempt');
     const shouldRetry = async () => {
