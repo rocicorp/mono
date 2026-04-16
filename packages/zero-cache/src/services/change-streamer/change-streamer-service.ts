@@ -47,8 +47,16 @@ import {
   ensureReplicationConfig,
   markResetRequired,
 } from './schema/tables.ts';
-import {Storer, type PurgeLock} from './storer.ts';
+import {
+  Storer,
+  type PurgeLock,
+  type TuningOptions as StorerOptions,
+} from './storer.ts';
 import {Subscriber} from './subscriber.ts';
+
+export type TuningOptions = StorerOptions & {
+  flowControlConsensusPaddingSeconds: number;
+};
 
 /**
  * Performs initialization and schema migrations to initialize a ChangeStreamerImpl.
@@ -65,8 +73,7 @@ export async function initializeStreamer(
   subscriptionState: SubscriptionState,
   purgeLock: PurgeLock | null,
   autoReset: boolean,
-  backPressureLimitHeapProportion: number,
-  flowControlConsensusPaddingSeconds: number,
+  opts: TuningOptions,
   setTimeoutFn = setTimeout,
 ): Promise<ChangeStreamerService> {
   // Make sure the ChangeLog DB is set up.
@@ -93,8 +100,7 @@ export async function initializeStreamer(
     replicationStatusPublisher,
     purgeLock,
     autoReset,
-    backPressureLimitHeapProportion,
-    flowControlConsensusPaddingSeconds,
+    opts,
     setTimeoutFn,
   );
 }
@@ -303,8 +309,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     replicationStatusPublisher: ReplicationStatusPublisher,
     initialPurgeLock: PurgeLock | null,
     autoReset: boolean,
-    backPressureLimitHeapProportion: number,
-    flowControlConsensusPaddingSeconds: number,
+    opts: TuningOptions,
     setTimeoutFn = setTimeout,
   ) {
     this.id = `change-streamer`;
@@ -323,10 +328,11 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       replicaVersion,
       consumed => this.#stream?.acks.push(['status', consumed[1], consumed[2]]),
       err => this.stop(err),
-      backPressureLimitHeapProportion,
+      opts,
     );
     this.#forwarder = new Forwarder(lc, {
-      flowControlConsensusPaddingSeconds,
+      flowControlConsensusPaddingSeconds:
+        opts.flowControlConsensusPaddingSeconds,
     });
     this.#replicationStatusPublisher = replicationStatusPublisher;
     this.#purgeLock = initialPurgeLock;

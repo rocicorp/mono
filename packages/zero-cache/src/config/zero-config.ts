@@ -497,6 +497,17 @@ export const zeroOptions = {
         `{bold zero-cache} replication subscriptions.`,
       ],
     },
+
+    statementTimeoutMs: {
+      type: v.number().default(20_000),
+      desc: [
+        `Fail change-log transactions if a statement response from postgres is not received within`,
+        `the specified timeout. This differs from a postgres {bold statement_timeout} in that`,
+        `it is implemented to handle a pathological case in which Postgres does not return a`,
+        `response but otherwise believes the transaction to be idle.`,
+      ],
+      hidden: true, // make visible if proven to be effective/necessary
+    },
   },
 
   replica: replicaOptions,

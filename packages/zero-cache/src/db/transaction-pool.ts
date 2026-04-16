@@ -70,6 +70,16 @@ export type Options = {
    * workers will be shut down after an idle timeout of 5 seconds.
    */
   maxWorkers?: number;
+
+  /**
+   * Aborts the transaction if the response for a statement is not received
+   * within the specified timeout. Note that this is different from a Postgres
+   * `statement_timeout` or `lock_timeout` in that it is specifically intended
+   * to detect situations in which Postgres either never received the
+   * statement, or the application never got the response for the executed
+   * statement.
+   */
+  statementResponseTimeout?: number;
 };
 
 /**
@@ -89,6 +99,7 @@ export class TransactionPool {
   readonly #workers: Promise<unknown>[] = [];
   readonly #initialWorkers: number;
   readonly #maxWorkers: number;
+  readonly #responseTimeout: number | undefined;
   readonly #timeoutTask: TimeoutTasks;
   #numWorkers: number;
   #numWorking = 0;
@@ -96,6 +107,7 @@ export class TransactionPool {
 
   #done = false;
   #failure: Error | undefined;
+  #orphanedQueryCheckInterval: NodeJS.Timeout;
 
   constructor(
     lc: LogContext,
@@ -108,6 +120,7 @@ export class TransactionPool {
       cleanup,
       initialWorkers = 1,
       maxWorkers = initialWorkers,
+      statementResponseTimeout,
     } = opts;
     assert(initialWorkers > 0, 'initialWorkers must be positive');
     assert(
@@ -123,6 +136,12 @@ export class TransactionPool {
     this.#numWorkers = initialWorkers;
     this.#maxWorkers = maxWorkers;
     this.#timeoutTask = timeoutTasks;
+    this.#responseTimeout = statementResponseTimeout;
+
+    this.#orphanedQueryCheckInterval = setInterval(
+      this.#checkForOrphanedQueries,
+      Math.min(5_000, statementResponseTimeout ?? 5_000),
+    );
   }
 
   /**
@@ -313,6 +332,13 @@ export class TransactionPool {
 
   readonly #start = performance.now();
   #stmts = 0;
+  #latestDoneIndex = 0;
+  #latestDoneTime = 0;
+
+  readonly #pending = new Map<
+    Query,
+    {index: number; time: number; abort: (e: ResponseTimeoutError) => void}
+  >();
 
   /**
    * Implements the semantics specified in {@link process()}.
@@ -345,28 +371,89 @@ export class TransactionPool {
         // Execute the statements (i.e. send to the db) immediately.
         // The last result is returned for the worker to await before
         // closing the transaction.
-        const last = stmts.reduce(
-          (_, stmt) =>
-            stmt
-              .execute()
-              .then(() => {
-                if (++this.#stmts % 1000 === 0) {
-                  const log = this.#stmts % 10000 === 0 ? 'info' : 'debug';
-                  const q = stmt as unknown as Query;
-                  lc[log]?.(
-                    `executed ${this.#stmts}th statement (${(performance.now() - this.#start).toFixed(3)} ms)`,
-                    {statement: q.string},
-                  );
-                }
-              })
-              .catch(e => this.fail(e)),
-          promiseVoid,
-        );
-        return {pending: last.then(r.resolve)};
+        const time = Date.now();
+        const last = stmts.reduce((_, stmt) => {
+          const query = stmt as unknown as Query;
+          const index = ++this.#stmts;
+          const {promise: aborted, reject: abort} = resolver();
+          aborted.catch(() => {}); // always consider it "handled"
+
+          this.#pending.set(query, {index, time, abort});
+          const responded = stmt
+            .execute()
+            .then(() => {
+              if (index % 1000 === 0) {
+                const log = index % 10000 === 0 ? 'info' : 'debug';
+                lc[log]?.(
+                  `executed ${this.#stmts}th statement (${(performance.now() - this.#start).toFixed(3)} ms)`,
+                  {statement: query.string},
+                );
+              }
+            })
+            .catch(e => this.fail(e))
+            .finally(() => {
+              this.#pending.delete(query);
+              if (index > this.#latestDoneIndex) {
+                this.#latestDoneIndex = index;
+                this.#latestDoneTime = Date.now();
+              }
+            });
+
+          const done = Promise.race([responded, aborted]);
+          done.catch(() => {});
+
+          return done;
+        }, promiseVoid);
+        return {pending: last.finally(r.resolve)};
       },
       rejected: r.resolve,
     };
   }
+
+  /**
+   * Periodically checks the map of `#pending` queries for which Promises
+   * have yet to be resolved. Checks for pathological scenarios that have
+   * been observed:
+   *
+   * * A promise does not resolve, even though the transaction is otherwise
+   *   healthy with keepalives being sent.
+   * * A transaction never "finishes" at the postgres.js level after the
+   *   worker exits, implying that postgres.js is awaiting the `last` promise
+   *   returned. In this case Postgres disconnected the application with an
+   *   idle-in-transaction timeout, suggesting that all statements did in
+   *   fact complete.
+   */
+  readonly #checkForOrphanedQueries = () => {
+    if (this.#pending.size === 0) {
+      return;
+    }
+    const now = Date.now();
+    for (const [query, {index, time, abort}] of this.#pending.entries()) {
+      const statement = query.string;
+      const abortWith = (msg: string) => {
+        this.#lc.warn?.(msg, {statement});
+        const err = new ResponseTimeoutError(msg);
+        abort(err);
+        this.fail(err);
+        this.#pending.delete(query);
+      };
+
+      if (index < this.#latestDoneIndex) {
+        const elapsed = now - this.#latestDoneTime;
+        if (this.#responseTimeout && elapsed > this.#responseTimeout) {
+          abortWith(
+            `statement ${this.#latestDoneIndex} completed ${elapsed} ms ago, but statement ${index} has not.`,
+          );
+        }
+      } else {
+        // Nothing out of order, but checking for a response timeout.
+        const elapsed = now - time;
+        if (this.#responseTimeout && elapsed > this.#responseTimeout) {
+          abortWith(`response for statement timed out after ${elapsed} ms`);
+        }
+      }
+    }
+  };
 
   /**
    * Processes and returns the result of executing the {@link ReadTask} from
@@ -447,6 +534,9 @@ export class TransactionPool {
     for (let i = 0; i < this.#numWorkers; i++) {
       this.#tasks.enqueue('done');
     }
+    void Promise.allSettled(this.#workers).then(() =>
+      clearInterval(this.#orphanedQueryCheckInterval),
+    );
   }
 
   isRunning(): boolean {
@@ -457,7 +547,7 @@ export class TransactionPool {
    * Signals all workers to fail their transactions with the given {@link err}.
    */
   fail(err: unknown) {
-    if (!this.#failure) {
+    if (!this.#done && !this.#failure) {
       this.#failure = ensureError(err); // Fail fast: this is checked in the worker loop.
       // Logged for informational purposes. It is the responsibility of
       // higher level logic to classify and handle the exception.
@@ -469,6 +559,9 @@ export class TransactionPool {
         // Enqueue the Error to terminate any workers waiting for tasks.
         this.#tasks.enqueue(this.#failure);
       }
+      void Promise.allSettled(this.#workers).then(() =>
+        clearInterval(this.#orphanedQueryCheckInterval),
+      );
     }
   }
 }
@@ -760,3 +853,11 @@ export const TIMEOUT_TASKS: TimeoutTasks = {
 // The slice of information from the Query object in Postgres.js that gets logged for debugging.
 // https://github.com/porsager/postgres/blob/f58cd4f3affd3e8ce8f53e42799672d86cd2c70b/src/connection.js#L219
 type Query = {string: string; parameters: object[]};
+
+export class ResponseTimeoutError extends Error {
+  static readonly name = 'ResponseTimeoutError';
+
+  constructor(msg: string) {
+    super(msg);
+  }
+}
