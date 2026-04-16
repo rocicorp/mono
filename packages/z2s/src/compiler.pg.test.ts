@@ -26,10 +26,27 @@ const timesTable = table('timesTable')
       .from('nullable_time_without_tz_array'),
     timeWithTz: number().from('time_with_tz'),
     timeWithTzArray: json<number[]>().from('time_with_tz_array'),
+    nullableTimeWithTzArray: json<number[]>()
+      .optional()
+      .from('nullable_time_with_tz_array'),
   })
   .primaryKey('id');
 
-const schema = createSchema({tables: [timesTable]});
+const temporalsTable = table('temporalsTable')
+  .from('temporals')
+  .columns({
+    id: string(),
+    nullableDateArray: json<number[]>().optional().from('nullable_date_array'),
+    nullableTimestampArray: json<number[]>()
+      .optional()
+      .from('nullable_timestamp_array'),
+    nullableTimestamptzArray: json<number[]>()
+      .optional()
+      .from('nullable_timestamptz_array'),
+  })
+  .primaryKey('id');
+
+const schema = createSchema({tables: [timesTable, temporalsTable]});
 
 const serverSchema: ServerSchema = {
   times: {
@@ -43,6 +60,25 @@ const serverSchema: ServerSchema = {
     },
     time_with_tz: {type: 'timetz', isArray: false, isEnum: false},
     time_with_tz_array: {type: 'timetz', isArray: true, isEnum: false},
+    nullable_time_with_tz_array: {
+      type: 'timetz',
+      isArray: true,
+      isEnum: false,
+    },
+  },
+  temporals: {
+    id: {type: 'text', isArray: false, isEnum: false},
+    nullable_date_array: {type: 'date', isArray: true, isEnum: false},
+    nullable_timestamp_array: {
+      type: 'timestamp',
+      isArray: true,
+      isEnum: false,
+    },
+    nullable_timestamptz_array: {
+      type: 'timestamptz',
+      isArray: true,
+      isEnum: false,
+    },
   },
 };
 
@@ -59,7 +95,8 @@ describe('compiler with PostgreSQL', () => {
         time_without_tz_array TIME[] NOT NULL,
         nullable_time_without_tz_array TIME[],
         time_with_tz TIMETZ NOT NULL,
-        time_with_tz_array TIMETZ[] NOT NULL
+        time_with_tz_array TIMETZ[] NOT NULL,
+        nullable_time_with_tz_array TIMETZ[]
       );
 
       INSERT INTO times (
@@ -68,15 +105,26 @@ describe('compiler with PostgreSQL', () => {
         time_without_tz_array,
         nullable_time_without_tz_array,
         time_with_tz,
-        time_with_tz_array
+        time_with_tz_array,
+        nullable_time_with_tz_array
       ) VALUES (
         'row1',
         '09:08:07.654',
         ARRAY['09:08:07.654'::time, '00:00:00'::time],
         NULL,
         '01:00:00+02',
-        ARRAY['01:00:00+02'::timetz, '23:00:00-02'::timetz]
+        ARRAY['01:00:00+02'::timetz, '23:00:00-02'::timetz],
+        NULL
       );
+
+      CREATE TABLE temporals (
+        id TEXT PRIMARY KEY,
+        nullable_date_array DATE[],
+        nullable_timestamp_array TIMESTAMP[],
+        nullable_timestamptz_array TIMESTAMPTZ[]
+      );
+
+      INSERT INTO temporals (id) VALUES ('row1');
     `);
   });
 
@@ -92,7 +140,8 @@ describe('compiler with PostgreSQL', () => {
         time_without_tz_array AS "timeWithoutTzArray",
         nullable_time_without_tz_array AS "nullableTimeWithoutTzArray",
         time_with_tz AS "timeWithTz",
-        time_with_tz_array AS "timeWithTzArray"
+        time_with_tz_array AS "timeWithTzArray",
+        nullable_time_with_tz_array AS "nullableTimeWithTzArray"
       FROM times
       ORDER BY id
     `);
@@ -105,6 +154,7 @@ describe('compiler with PostgreSQL', () => {
         nullableTimeWithoutTzArray: null,
         timeWithTz: 82800000,
         timeWithTzArray: [82800000, 3600000],
+        nullableTimeWithTzArray: null,
       },
     ]);
 
@@ -120,5 +170,27 @@ describe('compiler with PostgreSQL', () => {
     );
 
     expect(compiled).toEqual(raw);
+  });
+
+  test('null date/timestamp/timestamptz arrays are preserved as null', async () => {
+    const sqlQuery = formatPgInternalConvert(
+      compile(serverSchema, schema, {
+        table: 'temporalsTable',
+        related: [],
+      }),
+    );
+
+    const compiled = extractZqlResult(
+      await pg.unsafe(sqlQuery.text, sqlQuery.values as JSONValue[]),
+    );
+
+    expect(compiled).toEqual([
+      {
+        id: 'row1',
+        nullableDateArray: null,
+        nullableTimestampArray: null,
+        nullableTimestamptzArray: null,
+      },
+    ]);
   });
 });
