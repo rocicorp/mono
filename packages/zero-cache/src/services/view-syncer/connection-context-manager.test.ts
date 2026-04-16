@@ -91,10 +91,15 @@ function validate(
   manager: ConnectionContextManager,
   clientID: string,
   wsID: string,
+  validatedUserID: string | null | undefined,
   revision = manager.mustGetConnectionContext(selector(clientID, wsID))
     .revision,
 ) {
-  return manager.validateConnection(selector(clientID, wsID), revision);
+  return manager.validateConnection(
+    selector(clientID, wsID),
+    revision,
+    validatedUserID,
+  );
 }
 
 describe('ConnectionContextManager', () => {
@@ -169,11 +174,11 @@ describe('ConnectionContextManager', () => {
     });
   });
 
-  test('binds the first validated userID', () => {
+  test('binds the first validated userID from client', () => {
     const manager = new ConnectionContextManagerImpl(lc);
     register(manager, 'c1', 'ws1', 'user-1');
 
-    expect(validate(manager, 'c1', 'ws1')).toEqual({
+    expect(validate(manager, 'c1', 'ws1', undefined)).toEqual({
       connection: expect.objectContaining({
         clientID: 'c1',
         wsID: 'ws1',
@@ -196,7 +201,7 @@ describe('ConnectionContextManager', () => {
     registerLoggedOut(manager, 'c1', 'ws1');
     register(manager, 'c2', 'ws2', 'user-2');
 
-    expect(validate(manager, 'c1', 'ws1')).toEqual({
+    expect(validate(manager, 'c1', 'ws1', null)).toEqual({
       connection: expect.objectContaining({
         clientID: 'c1',
         wsID: 'ws1',
@@ -213,20 +218,45 @@ describe('ConnectionContextManager', () => {
     });
 
     expect(() =>
-      validate(manager, 'c2', 'ws2'),
+      validate(manager, 'c2', 'ws2', undefined),
     ).toThrowErrorMatchingInlineSnapshot(
       `[ProtocolError: Client groups are pinned to a single userID. Connection userID does not match existing client group userID.]`,
     );
+  });
+
+  test('rejects mismatched validated userIDs and keeps the connection provisional', () => {
+    const manager = new ConnectionContextManagerImpl(lc);
+    register(manager, 'c1', 'ws1', 'user-1');
+
+    expect(() =>
+      validate(manager, 'c1', 'ws1', 'user-2'),
+    ).toThrowErrorMatchingInlineSnapshot(
+      `[ProtocolError: Connection userID does not match validated server userID.]`,
+    );
+
+    expect(manager.getConnectionContext(selector('c1', 'ws1'))).toMatchObject({
+      clientID: 'c1',
+      wsID: 'ws1',
+      state: 'provisional',
+      userID: 'user-1',
+    });
+    expect(manager.getGroupState()).toEqual({
+      userID: undefined,
+      validated: false,
+      backgroundConnection: undefined,
+      maintenanceNotBeforeAt: undefined,
+      retransformAt: undefined,
+    });
   });
 
   test('rejects mismatched userIDs and keeps the connection provisional', () => {
     const manager = new ConnectionContextManagerImpl(lc);
     register(manager, 'c1', 'ws1', 'user-1');
     register(manager, 'c2', 'ws2', 'user-2');
-    validate(manager, 'c1', 'ws1');
+    validate(manager, 'c1', 'ws1', undefined);
 
     expect(() =>
-      validate(manager, 'c2', 'ws2'),
+      validate(manager, 'c2', 'ws2', undefined),
     ).toThrowErrorMatchingInlineSnapshot(
       `[ProtocolError: Client groups are pinned to a single userID. Connection userID does not match existing client group userID.]`,
     );
@@ -245,7 +275,7 @@ describe('ConnectionContextManager', () => {
   test('keeps the group userID pinned after all live connections are removed', () => {
     const manager = new ConnectionContextManagerImpl(lc);
     register(manager, 'c1', 'ws1', 'user-1');
-    validate(manager, 'c1', 'ws1');
+    validate(manager, 'c1', 'ws1', undefined);
 
     manager.closeConnection(selector('c1', 'ws1'));
     register(manager, 'c2', 'ws2', 'user-2');
@@ -256,7 +286,7 @@ describe('ConnectionContextManager', () => {
       validated: true,
     });
     expect(() =>
-      validate(manager, 'c2', 'ws2'),
+      validate(manager, 'c2', 'ws2', undefined),
     ).toThrowErrorMatchingInlineSnapshot(
       `[ProtocolError: Client groups are pinned to a single userID. Connection userID does not match existing client group userID.]`,
     );
@@ -268,9 +298,9 @@ describe('ConnectionContextManager', () => {
     register(manager, 'c2', 'ws2', 'user-1');
     register(manager, 'c3', 'ws3', 'user-1');
 
-    validate(manager, 'c1', 'ws1');
-    validate(manager, 'c2', 'ws2');
-    validate(manager, 'c3', 'ws3');
+    validate(manager, 'c1', 'ws1', undefined);
+    validate(manager, 'c2', 'ws2', undefined);
+    validate(manager, 'c3', 'ws3', undefined);
 
     expect(manager.getGroupState()).toMatchObject({
       userID: 'user-1',
@@ -298,7 +328,7 @@ describe('ConnectionContextManager', () => {
       () => 1_000,
     );
     register(manager, 'c1', 'ws1', 'user-1');
-    validate(manager, 'c1', 'ws1');
+    validate(manager, 'c1', 'ws1', undefined);
     const previousAuth = manager.mustGetConnectionContext(
       selector('c1', 'ws1'),
     ).auth;
@@ -334,8 +364,8 @@ describe('ConnectionContextManager', () => {
     );
     register(manager, 'c1', 'ws1', 'user-1');
     register(manager, 'c2', 'ws2', 'user-1');
-    validate(manager, 'c1', 'ws1');
-    validate(manager, 'c2', 'ws2');
+    validate(manager, 'c1', 'ws1', undefined);
+    validate(manager, 'c2', 'ws2', undefined);
 
     await expect(
       manager.updateAuth(selector('c2', 'ws2'), {auth: 'token-ws2-new'}),
@@ -365,9 +395,9 @@ describe('ConnectionContextManager', () => {
     register(manager, 'c1', 'ws1', 'user-1');
     register(manager, 'c2', 'ws2', 'user-1');
     register(manager, 'c3', 'ws3', 'user-1');
-    validate(manager, 'c1', 'ws1');
-    validate(manager, 'c2', 'ws2');
-    validate(manager, 'c3', 'ws3');
+    validate(manager, 'c1', 'ws1', undefined);
+    validate(manager, 'c2', 'ws2', undefined);
+    validate(manager, 'c3', 'ws3', undefined);
 
     expect(manager.getBackgroundConnectionContext()).toMatchObject({
       clientID: 'c1',
@@ -388,7 +418,7 @@ describe('ConnectionContextManager', () => {
     register(manager, 'c1', 'ws2');
 
     expect(
-      manager.validateConnection(selector('c1', 'ws1'), 0),
+      manager.validateConnection(selector('c1', 'ws1'), 0, undefined),
     ).toBeUndefined();
     expect(manager.closeConnection(selector('c1', 'ws1'))).toBeUndefined();
     expect(() =>
@@ -486,7 +516,11 @@ describe('ConnectionContextManager', () => {
     });
 
     expect(
-      manager.validateConnection(selector('c1', 'ws1'), registered.revision),
+      manager.validateConnection(
+        selector('c1', 'ws1'),
+        registered.revision,
+        undefined,
+      ),
     ).toBeUndefined();
     expect(
       manager.failConnection(selector('c1', 'ws1'), registered.revision),
@@ -513,8 +547,8 @@ describe('ConnectionContextManager', () => {
     register(manager, 'c1', 'ws1', 'user-1');
     register(manager, 'c2', 'ws2', 'user-1');
     register(manager, 'c3', 'ws3', 'user-1');
-    validate(manager, 'c2', 'ws2');
-    validate(manager, 'c1', 'ws1');
+    validate(manager, 'c2', 'ws2', undefined);
+    validate(manager, 'c1', 'ws1', undefined);
 
     expect(manager.planMaintenance()).toEqual({
       dueRevalidations: [],
@@ -568,8 +602,8 @@ describe('ConnectionContextManager', () => {
       earliestDeadlineAt: 6_000,
     });
 
-    validate(manager, 'c2', 'ws2');
-    validate(manager, 'c1', 'ws1');
+    validate(manager, 'c2', 'ws2', undefined);
+    validate(manager, 'c1', 'ws1', undefined);
 
     expect(manager.planMaintenance()).toEqual({
       dueRevalidations: [],
@@ -590,7 +624,7 @@ describe('ConnectionContextManager', () => {
       () => now,
     );
     register(manager, 'c1', 'ws1', 'user-1');
-    validate(manager, 'c1', 'ws1');
+    validate(manager, 'c1', 'ws1', undefined);
 
     expect(manager.getConnectionContext(selector('c1', 'ws1'))).toMatchObject({
       revalidateAt: 6_000,
@@ -598,7 +632,7 @@ describe('ConnectionContextManager', () => {
     expect(manager.getGroupState().retransformAt).toBe(3_000);
 
     now = 1_500;
-    validate(manager, 'c1', 'ws1');
+    validate(manager, 'c1', 'ws1', undefined);
 
     expect(manager.getConnectionContext(selector('c1', 'ws1'))).toMatchObject({
       revalidateAt: 6_500,
@@ -628,8 +662,8 @@ describe('ConnectionContextManager', () => {
     );
     register(manager, 'c1', 'ws1', 'user-1');
     register(manager, 'c2', 'ws2', 'user-1');
-    validate(manager, 'c1', 'ws1');
-    validate(manager, 'c2', 'ws2');
+    validate(manager, 'c1', 'ws1', undefined);
+    validate(manager, 'c2', 'ws2', undefined);
 
     now = 3_000;
     manager.deferMaintenance('retransform');

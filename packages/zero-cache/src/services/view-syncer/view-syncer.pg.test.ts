@@ -74,8 +74,9 @@ describe('view-syncer/service', () => {
   function transformAttempt(
     result: HashedTransformResponse['result'],
     cached = false,
+    userID?: string | null,
   ): HashedTransformResponse {
-    return {result, cached};
+    return {result, cached, userID};
   }
 
   afterEach(() => {
@@ -2746,6 +2747,32 @@ describe('view-syncer/service', () => {
       expect(cvr.queries['query-hash-bad']).toBeUndefined();
     });
 
+    test('validation userID mismatch during connect fails the connection', async () => {
+      using validateSpy = vi
+        .spyOn(customQueryTransformer!, 'validate')
+        .mockResolvedValueOnce({
+          kind: 'QueryResponse',
+          userID: 'user-server',
+          queries: [],
+        });
+
+      const badContext: SyncContext = {
+        ...SYNC_CONTEXT,
+        clientID: 'bad',
+        wsID: 'ws-bad',
+        userID: 'user-bad',
+        auth: {type: 'opaque', raw: 'token-bad'},
+      };
+      const badClient = connect(badContext, [
+        {op: 'put', hash: 'query-hash-bad', ast: ISSUES_QUERY},
+      ]);
+
+      await expect(badClient.dequeue()).rejects.toThrow(
+        'Connection userID does not match validated server userID.',
+      );
+      expect(validateSpy).toHaveBeenCalledTimes(1);
+    });
+
     test('transform 401 during updateAuth disconnects the failing connection', async () => {
       using transformSpy = vi
         .spyOn(customQueryTransformer!, 'transform')
@@ -2831,6 +2858,41 @@ describe('view-syncer/service', () => {
 
       await expect(nextPoke(badClient)).rejects.toThrow(
         'Fetch from API server returned non-OK status 401',
+      );
+    });
+
+    test('transform userID mismatch during connect fails only that connection', async () => {
+      using transformSpy = vi
+        .spyOn(customQueryTransformer!, 'transform')
+        .mockResolvedValueOnce(
+          transformAttempt(
+            [
+              {
+                id: 'custom-1',
+                transformedAst: ISSUES_QUERY,
+                transformationHash: 'hash-1',
+              },
+            ],
+            false,
+            'user-server',
+          ),
+        );
+
+      const badContext: SyncContext = {
+        ...SYNC_CONTEXT,
+        userID: 'user-bad',
+        auth: {type: 'opaque', raw: 'token-bad'},
+      };
+      const badClient = connect(badContext, [
+        {op: 'put', hash: 'custom-1', name: 'named-query-1', args: ['thing']},
+      ]);
+
+      await nextPoke(badClient);
+      stateChanges.push({state: 'version-ready'});
+      await vi.waitFor(() => expect(transformSpy).toHaveBeenCalledTimes(1));
+
+      await expect(nextPoke(badClient)).rejects.toThrow(
+        'Connection userID does not match validated server userID.',
       );
     });
 

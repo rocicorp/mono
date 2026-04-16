@@ -549,6 +549,7 @@ class PushWorker {
       this.#contextManager.validateConnection(
         entry.context,
         entry.context.revision,
+        'kind' in response ? response.userID : undefined,
       );
       return response;
     } catch (e) {
@@ -568,6 +569,24 @@ class PushWorker {
           );
         }
         return response;
+      }
+
+      if (isProtocolError(e) && isAuthErrorBody(e.errorBody)) {
+        this.#lc.warn?.('Push validation failed; invalidating connection', {
+          clientID: entry.context.clientID,
+          response: e.message,
+        });
+        this.#contextManager.failConnection(
+          entry.context,
+          entry.context.revision,
+        );
+        return {
+          kind: ErrorKind.PushFailed,
+          origin: ErrorOrigin.ZeroCache,
+          reason: ErrorReason.Internal,
+          message: e.message,
+          mutationIDs,
+        } as const satisfies PushFailedBody;
       }
 
       return {

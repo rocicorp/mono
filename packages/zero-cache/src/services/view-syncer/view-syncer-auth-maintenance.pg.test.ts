@@ -249,6 +249,37 @@ describe('view-syncer/auth maintenance', () => {
       expect(client.size()).toBe(0);
     });
 
+    test('scheduled revalidation fails the connection on userID mismatch', async () => {
+      const transformer = customQueryTransformer;
+      expect(transformer).toBeDefined();
+      using validateSpy = vi
+        .spyOn(transformer!, 'validate')
+        .mockResolvedValueOnce(validationSuccess('user-1'))
+        .mockResolvedValueOnce(validationSuccess('user-bad'));
+
+      const client = connect(
+        {...SYNC_CONTEXT, auth: {type: 'opaque', raw: 'token-1'}},
+        [{op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY}],
+      );
+
+      await nextPoke(client);
+      stateChanges.push({state: 'version-ready'});
+      await nextPoke(client);
+
+      expect(validateSpy).toHaveBeenCalledTimes(1);
+
+      callNextSetTimeout(setTimeoutFn, MAINTENANCE_INTERVAL_MS);
+
+      await vi.waitFor(
+        async () =>
+          await expect(client.dequeue()).rejects.toThrow(
+            'Connection userID does not match validated server userID.',
+          ),
+        {timeout: 2_000},
+      );
+      expect(validateSpy).toHaveBeenCalledTimes(2);
+    });
+
     test('ignores stale scheduled revalidation failures after auth changes', async () => {
       const transformer = customQueryTransformer;
       expect(transformer).toBeDefined();

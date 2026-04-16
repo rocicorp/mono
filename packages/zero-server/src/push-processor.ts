@@ -5,6 +5,7 @@ import {must} from '../../shared/src/must.ts';
 import {getValueAtPath} from '../../shared/src/object-traversal.ts';
 import {
   type CustomMutation,
+  type MutateResponse,
   type MutationResponse,
 } from '../../zero-protocol/src/push.ts';
 import {
