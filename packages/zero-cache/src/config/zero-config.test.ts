@@ -318,7 +318,7 @@ test('zero-cache --help', () => {
                                                                         To change the set of publications without disrupting an existing app, a new app                                            
                                                                         should be created.                                                                                                         
                                                                                                                                                                                                    
-     --auth-revalidate-interval-seconds number                          default: 300                                                                                                               
+     --auth-revalidate-interval-seconds number                          default: 60                                                                                                                
        ZERO_AUTH_REVALIDATE_INTERVAL_SECONDS env                                                                                                                                                   
                                                                         The interval in seconds between periodic /query auth revalidation for validated connections.                               
                                                                         If unset, periodic auth revalidation is disabled.                                                                          

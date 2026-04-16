@@ -195,7 +195,7 @@ const authOptions = {
     ],
   },
   revalidateIntervalSeconds: {
-    type: v.number().default(300),
+    type: v.number().default(60),
     desc: [
       `The interval in seconds between periodic /query auth revalidation for validated connections.`,
       `If unset, periodic auth revalidation is disabled.`,
