@@ -21,9 +21,9 @@ const timesTable = table('timesTable')
     id: string(),
     timeWithoutTz: number().from('time_without_tz'),
     timeWithoutTzArray: json<number[]>().from('time_without_tz_array'),
-    nullableTimeWithoutTzArray: json<number[]>().optional().from(
-      'nullable_time_without_tz_array',
-    ),
+    nullableTimeWithoutTzArray: json<number[]>()
+      .optional()
+      .from('nullable_time_without_tz_array'),
     timeWithTz: number().from('time_with_tz'),
     timeWithTzArray: json<number[]>().from('time_with_tz_array'),
   })
@@ -36,7 +36,11 @@ const serverSchema: ServerSchema = {
     id: {type: 'text', isArray: false, isEnum: false},
     time_without_tz: {type: 'time', isArray: false, isEnum: false},
     time_without_tz_array: {type: 'time', isArray: true, isEnum: false},
-    nullable_time_without_tz_array: {type: 'time', isArray: true, isEnum: false},
+    nullable_time_without_tz_array: {
+      type: 'time',
+      isArray: true,
+      isEnum: false,
+    },
     time_with_tz: {type: 'timetz', isArray: false, isEnum: false},
     time_with_tz_array: {type: 'timetz', isArray: true, isEnum: false},
   },
@@ -117,5 +121,4 @@ describe('compiler with PostgreSQL', () => {
 
     expect(compiled).toEqual(raw);
   });
-
 });
