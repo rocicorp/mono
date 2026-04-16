@@ -6,7 +6,7 @@ import {
   table,
 } from '../../zero-schema/src/builder/table-builder.ts';
 import {clientToServer} from '../../zero-schema/src/name-mapper.ts';
-import {mapCRUD} from './push.ts';
+import {apiMutateResponseSchema, mapCRUD, pushResponseSchema} from './push.ts';
 
 const schema = createSchema({
   tables: [
@@ -122,4 +122,75 @@ test('map names', () => {
       ],
     }
   `);
+});
+
+test('preserves legacy mutation errors when parsing mutate responses in strip mode', () => {
+  expect(
+    apiMutateResponseSchema.parse(
+      {
+        mutations: [
+          {
+            id: {clientID: 'cid', id: 1},
+            result: {
+              error: 'oooMutation',
+              ignored: 'extra field',
+            },
+          },
+        ],
+      },
+      {mode: 'strip'},
+    ),
+  ).toEqual({
+    mutations: [
+      {
+        id: {clientID: 'cid', id: 1},
+        result: {
+          error: 'oooMutation',
+        },
+      },
+    ],
+  });
+});
+
+test('strips future fields from canonical mutate responses in strip mode', () => {
+  expect(
+    apiMutateResponseSchema.parse(
+      {
+        kind: 'MutateResponse',
+        userID: 'user-123',
+        mutations: [
+          {
+            id: {clientID: 'cid', id: 1},
+            result: {},
+          },
+        ],
+        futureMutationField: 42,
+      },
+      {mode: 'strip'},
+    ),
+  ).toEqual({
+    kind: 'MutateResponse',
+    userID: 'user-123',
+    mutations: [
+      {
+        id: {clientID: 'cid', id: 1},
+        result: {},
+      },
+    ],
+  });
+});
+
+test('parses legacy push responses through the /mutate API schema', () => {
+  const response = {
+    mutations: [
+      {
+        id: {clientID: 'cid', id: 1},
+        result: {},
+      },
+    ],
+  };
+
+  expect(apiMutateResponseSchema.parse(response, {mode: 'strip'})).toEqual(
+    pushResponseSchema.parse(response, {mode: 'strip'}),
+  );
 });

@@ -6,7 +6,6 @@ import {getValueAtPath} from '../../shared/src/object-traversal.ts';
 import {
   type CustomMutation,
   type MutationResponse,
-  type PushResponse,
 } from '../../zero-protocol/src/push.ts';
 import {
   type Database,
@@ -53,7 +52,7 @@ export class PushProcessor<
     mutators: MD,
     queryString: URLSearchParams | Record<string, string>,
     body: ReadonlyJSONValue,
-  ): Promise<PushResponse>;
+  ): Promise<MutateResponse>;
 
   /**
    * This override gets the query string and the body from a Request object.
@@ -61,17 +60,18 @@ export class PushProcessor<
    * @param mutators the custom mutators for the application
    * @param request A `Request` object.
    */
-  process(mutators: MD, request: Request): Promise<PushResponse>;
+  process(mutators: MD, request: Request): Promise<MutateResponse>;
   process(
     mutators: MD,
     queryOrQueryString: Request | URLSearchParams | Record<string, string>,
     body?: ReadonlyJSONValue,
-  ): Promise<PushResponse> {
+  ): Promise<MutateResponse> {
     if (queryOrQueryString instanceof Request) {
       return handleMutateRequest(
         this.#dbProvider,
         (transact, mutation) =>
           this.#processMutation(mutators, transact, mutation),
+        null,
         queryOrQueryString,
         this.#logLevel,
       );
@@ -80,6 +80,7 @@ export class PushProcessor<
       this.#dbProvider,
       (transact, mutation) =>
         this.#processMutation(mutators, transact, mutation),
+      null,
       queryOrQueryString,
       must(body, 'body is required when using query params directly'),
       this.#logLevel,
