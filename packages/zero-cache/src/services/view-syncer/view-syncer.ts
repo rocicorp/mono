@@ -1385,6 +1385,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         this.contextManager.validateConnection(
           backgroundContext,
           backgroundContext.revision,
+          transformedCustomQueries.userID,
         );
       }
 
@@ -1690,6 +1691,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
               this.contextManager.validateConnection(
                 resolvedContext,
                 resolvedContext.revision,
+                transformedCustomQueries.userID,
               );
             }
             this.#queryTransformations.add(1, {result: 'success'});
@@ -2350,14 +2352,20 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
   async #validateConnection(ctx: ConnectionContext): Promise<boolean> {
     try {
+      let validatedUserID: string | null | undefined = undefined;
       if (this.#customQueryTransformer) {
         const validation = await this.#customQueryTransformer.validate(ctx);
         if (validation.kind === 'TransformFailed') {
           throw new ProtocolErrorWithLevel(validation, 'warn');
         }
+        validatedUserID = validation.userID;
       }
 
-      this.contextManager.validateConnection(ctx, ctx.revision);
+      this.contextManager.validateConnection(
+        ctx,
+        ctx.revision,
+        validatedUserID,
+      );
       return true;
     } catch (e) {
       if (isProtocolError(e) && isAuthErrorBody(e.errorBody)) {

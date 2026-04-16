@@ -2,6 +2,7 @@
 import {
   afterAll,
   afterEach,
+  assert,
   beforeEach,
   describe,
   expect,
@@ -670,10 +671,11 @@ describe('connection hijacking prevention', () => {
     );
 
     const contextManager = contextManagers.get('1');
-    expect(contextManager).toBeDefined();
-    contextManager!.validateConnection(
+    assert(contextManager);
+    contextManager.validateConnection(
       {clientID: 'target-client', wsID: 'ws-1'},
       0,
+      undefined,
     );
 
     const attackerWs = new MockWebSocket() as unknown as WebSocket;
