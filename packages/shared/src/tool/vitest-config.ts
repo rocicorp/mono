@@ -114,6 +114,8 @@ export const benchConfig = defineConfig({
     slowTestThreshold: 15_000,
     testTimeout: 60_000,
     hookTimeout: 60_000,
+    // Run bench files sequentially to avoid memory contention between workers.
+    maxWorkers: 1,
   },
 
   optimizeDeps: {
