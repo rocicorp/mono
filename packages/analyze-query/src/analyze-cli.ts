@@ -2,23 +2,15 @@ import '../../shared/src/dotenv.ts';
 
 import {styleText} from 'node:util';
 import {logLevel, logOptions} from '../../otel/src/log-options.ts';
-import {colorConsole, createLogContext} from '../../shared/src/logging.ts';
+import {colorConsole} from '../../shared/src/logging.ts';
 import {parseOptions} from '../../shared/src/options.ts';
 import * as v from '../../shared/src/valita.ts';
-import {
-  appOptions,
-  shardOptions,
-  ZERO_ENV_VAR_PREFIX,
-  zeroOptions,
-} from '../../zero-cache/src/config/zero-config.ts';
+import {ZERO_ENV_VAR_PREFIX} from '../../zero-cache/src/config/zero-config.ts';
+import {Zero} from '../../zero-client/src/client/zero.ts';
 import type {AnalyzeQueryResult} from '../../zero-protocol/src/analyze-query-result.ts';
 import type {AST} from '../../zero-protocol/src/ast.ts';
-import {clientSchemaFrom} from '../../zero-schema/src/builder/schema-builder.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
-import {newQuery} from '../../zql/src/query/query-impl.ts';
-import {asQueryInternals} from '../../zql/src/query/query-internals.ts';
-import type {PullRow, Query} from '../../zql/src/query/query.ts';
-import {analyzeRemote, type RemoteQuery} from './remote-analyze.ts';
+import type {AnyQuery} from '../../zql/src/query/query.ts';
 
 export type AnalyzeCliOptions = {
   schema: Schema;
@@ -31,35 +23,49 @@ const options = {
     type: v.string().optional(),
     desc: [
       'URL of the remote zero-cache to analyze against.',
-      'Accepts http(s):// or ws(s):// — normalized internally to ws(s)://.',
+      'Accepts http(s):// or ws(s):// (ws(s) is the transport actually used).',
     ],
   },
-  adminPassword: zeroOptions.adminPassword,
+  adminPassword: {
+    type: v.string().optional(),
+    desc: [
+      'Admin password for zero-cache.',
+      'Required when the server is configured with one; ignored in dev mode.',
+    ],
+  },
   authToken: {
     type: v.string().optional(),
     desc: [
-      'Raw JWT forwarded to zero-cache via the WebSocket handshake.',
+      'Raw JWT forwarded to zero-cache.',
       'Used server-side to fill permission variables for the query.',
+    ],
+  },
+  userId: {
+    type: v.string().optional(),
+    desc: [
+      'Optional userID to report to zero-cache.',
+      'Has no functional effect on analysis; defaults to "analyze-cli".',
     ],
   },
   ast: {
     type: v.string().optional(),
     desc: [
       'JSON-encoded AST. Exactly one of --ast / --query / --query-name is required.',
+      'The AST is sent to the server verbatim — provide it in server (post-mapping) form.',
     ],
   },
   query: {
     type: v.string().optional(),
     desc: [
       'ZQL query in chain form, e.g. `issue.related("comments").limit(10)`.',
-      'Parsed locally against the schema passed to runAnalyzeCli.',
+      'Evaluated against the schema you pass to runAnalyzeCli.',
     ],
   },
   queryName: {
     type: v.string().optional(),
     desc: [
       'Name of a server-registered custom (named) query.',
-      'The server resolves it via its own custom-query handler.',
+      'The server resolves the name + args via its registered query handler.',
     ],
   },
   queryArgs: {
@@ -79,18 +85,22 @@ const options = {
     type: v.boolean().default(false),
     desc: ['Include the rows that would be synced to the client.'],
   },
-  app: appOptions,
-  shard: shardOptions,
   log: {
     ...logOptions,
     level: logLevel.default('error'),
   },
 };
 
+type QueryPlan =
+  | {kind: 'ast'; ast: AST}
+  | {kind: 'zql'; text: string}
+  | {kind: 'named'; name: string; args: ReadonlyArray<unknown>};
+
 /**
  * Entry point for a user's `cli.ts`. Parses argv, connects to a remote
- * zero-cache over WebSocket, runs `analyze-query` via the inspector protocol,
- * and renders the result. Intended to be called as:
+ * zero-cache by standing up an in-process Zero client (in-memory storage,
+ * no subscriptions), calls the inspector's `analyze-query` RPC, and
+ * renders the result. Intended to be called as:
  *
  * ```ts
  * import {schema} from './schema.ts';
@@ -113,8 +123,8 @@ export async function runAnalyzeCli(opts: AnalyzeCliOptions): Promise<void> {
         header: 'analyze-query (remote)',
         content: `Analyze a ZQL query against a remote zero-cache.
 
-  Connects over WebSocket using the inspector protocol and reports the
-  server-observed row scans, SQLite query plans, and timings.`,
+  Connects to zero-cache's inspector protocol and reports the server-observed
+  row scans, SQLite query plans, and timings.`,
       },
       {
         header: 'Examples',
@@ -136,27 +146,46 @@ export async function runAnalyzeCli(opts: AnalyzeCliOptions): Promise<void> {
     process.exit(1);
   }
 
-  const remoteQuery = buildRemoteQuery(config, opts.schema);
+  const plan = buildQueryPlan(config);
 
-  const lc = createLogContext({log: config.log});
-  const {clientSchema} = clientSchemaFrom(opts.schema);
+  const z = new Zero({
+    schema: opts.schema,
+    server: config.zeroCacheUrl,
+    auth: config.authToken,
+    userID: config.userId ?? 'analyze-cli',
+    kvStore: 'mem',
+    logLevel: config.log.level,
+  });
 
   let result: AnalyzeQueryResult;
   try {
-    result = await analyzeRemote(
-      lc,
-      config.zeroCacheUrl,
-      config.adminPassword,
-      config.authToken,
-      clientSchema,
-      remoteQuery,
-      {
-        vendedRows: config.outputVendedRows,
-        syncedRows: config.outputSyncedRows,
-      },
-    );
+    const authOk = await z.inspector.authenticate(config.adminPassword ?? '');
+    if (!authOk) {
+      throw new Error(
+        'admin password rejected (or --admin-password is required)',
+      );
+    }
+
+    const rpcOptions = {
+      vendedRows: config.outputVendedRows,
+      syncedRows: config.outputSyncedRows,
+    };
+
+    if (plan.kind === 'ast') {
+      result = await z.inspector.analyzeServerAST(plan.ast, rpcOptions);
+    } else if (plan.kind === 'named') {
+      result = await z.inspector.analyzeNamedQuery(
+        plan.name,
+        plan.args as ReadonlyArray<never>,
+        rpcOptions,
+      );
+    } else {
+      const built = buildZqlQuery(plan.text, z as Zero<Schema>);
+      result = await z.inspector.analyzeQuery(built, rpcOptions);
+    }
   } catch (e) {
     colorConsole.error(e instanceof Error ? e.message : String(e));
+    await z.close().catch(() => {});
     process.exit(1);
   }
 
@@ -164,17 +193,16 @@ export async function runAnalyzeCli(opts: AnalyzeCliOptions): Promise<void> {
     outputSyncedRows: config.outputSyncedRows,
     outputVendedRows: config.outputVendedRows,
   });
+
+  await z.close();
 }
 
-function buildRemoteQuery(
-  config: {
-    ast?: string | undefined;
-    query?: string | undefined;
-    queryName?: string | undefined;
-    queryArgs?: string | undefined;
-  },
-  schema: Schema,
-): RemoteQuery {
+function buildQueryPlan(config: {
+  ast?: string | undefined;
+  query?: string | undefined;
+  queryName?: string | undefined;
+  queryArgs?: string | undefined;
+}): QueryPlan {
   const selectors = [
     config.ast !== undefined && 'ast',
     config.query !== undefined && 'query',
@@ -198,7 +226,7 @@ function buildRemoteQuery(
     return {kind: 'ast', ast: JSON.parse(config.ast) as AST};
   }
   if (config.query !== undefined) {
-    return {kind: 'ast', ast: parseQueryString(config.query, schema)};
+    return {kind: 'zql', text: config.query};
   }
   const args = config.queryArgs
     ? (JSON.parse(config.queryArgs) as ReadonlyArray<unknown>)
@@ -206,18 +234,9 @@ function buildRemoteQuery(
   return {kind: 'named', name: config.queryName as string, args};
 }
 
-function parseQueryString(queryString: string, schema: Schema): AST {
-  const z = {
-    query: Object.fromEntries(
-      Object.entries(schema.tables).map(([name]) => [
-        name,
-        newQuery(schema, name),
-      ]),
-    ),
-  };
+function buildZqlQuery(queryString: string, z: Zero<Schema>): AnyQuery {
   const f = new Function('z', `return z.query.${queryString};`);
-  const q: Query<string, Schema, PullRow<string, Schema>> = f(z);
-  return asQueryInternals(q).ast;
+  return f(z) as AnyQuery;
 }
 
 function renderResult(
