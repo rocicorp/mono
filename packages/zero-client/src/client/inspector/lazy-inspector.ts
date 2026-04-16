@@ -356,6 +356,48 @@ export async function analyzeQuery(
   );
 }
 
+export async function analyzeServerAST(
+  delegate: ExtendedInspectorDelegate,
+  ast: AST,
+  options?: AnalyzeQueryOptions,
+): Promise<AnalyzeQueryResult> {
+  return rpc(
+    await delegate.getSocket(),
+    {op: 'analyze-query', ast, options},
+    inspectAnalyzeQueryDownSchema,
+  );
+}
+
+export async function analyzeNamedQuery(
+  delegate: ExtendedInspectorDelegate,
+  name: string,
+  args: ReadonlyArray<ReadonlyJSONValue>,
+  options?: AnalyzeQueryOptions,
+): Promise<AnalyzeQueryResult> {
+  return rpc(
+    await delegate.getSocket(),
+    {op: 'analyze-query', name, args, options},
+    inspectAnalyzeQueryDownSchema,
+  );
+}
+
+/**
+ * Sends an `authenticate` op to the server. Returns `true` if the password
+ * is accepted (or the server is in a development mode that bypasses the
+ * check). Use this from Node contexts where the default interactive HTML
+ * prompt used by other inspector RPCs is not available.
+ */
+export async function authenticate(
+  delegate: ExtendedInspectorDelegate,
+  password: string,
+): Promise<boolean> {
+  return rpc(
+    await delegate.getSocket(),
+    {op: 'authenticate', value: password},
+    inspectAuthenticatedDownSchema,
+  );
+}
+
 class UnauthenticatedError extends Error {}
 
 export interface InspectorDelegate {
