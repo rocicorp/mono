@@ -119,7 +119,7 @@ export function handleQueryRequest<S extends Schema>(
     queryStringOrRequest instanceof Request
       ? queryStringOrRequest
       : must(
-          bodyOrLogLevel as ReadonlyJSONValue | undefined,
+          bodyOrLogLevel,
           'body is required when using query params directly',
         );
   const resolvedLogLevel =
