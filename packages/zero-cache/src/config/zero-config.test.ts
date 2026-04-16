@@ -602,6 +602,31 @@ test('zero-cache --help', () => {
                                                                         This is slower but can work around issues with binary encoding of                                                          
                                                                         certain data types.                                                                                                        
                                                                                                                                                                                                    
+     --shadow-sync-enabled boolean                                      default: false                                                                                                             
+       ZERO_SHADOW_SYNC_ENABLED env                                                                                                                                                                
+                                                                        Periodically exercises the initial-sync code path against a sample of                                                      
+                                                                        rows from every published table, writing to a throwaway SQLite database.                                                   
+                                                                        This acts as a canary: if the real initial-sync path ever breaks (schema                                                   
+                                                                        drift, PG version quirks, etc.), the shadow run fails before a customer                                                    
+                                                                        actually needs a full reset.                                                                                               
+                                                                                                                                                                                                   
+     --shadow-sync-interval-hours number                                default: 24                                                                                                                
+       ZERO_SHADOW_SYNC_INTERVAL_HOURS env                                                                                                                                                         
+                                                                        The interval between shadow initial-sync runs, in hours. The first run                                                     
+                                                                        is additionally staggered by a random fraction of this interval so that                                                    
+                                                                        a fleet restart does not cause all tasks to canary simultaneously.                                                         
+                                                                                                                                                                                                   
+     --shadow-sync-sample-rate number                                   default: 0.1                                                                                                               
+       ZERO_SHADOW_SYNC_SAMPLE_RATE env                                                                                                                                                            
+                                                                        The BERNOULLI sampling rate for each table (0 < rate <= 1). A value of                                                     
+                                                                        1 disables sampling and copies all rows (still subject to                                                                  
+                                                                        max-rows-per-table).                                                                                                       
+                                                                                                                                                                                                   
+     --shadow-sync-max-rows-per-table number                            default: 10000                                                                                                             
+       ZERO_SHADOW_SYNC_MAX_ROWS_PER_TABLE env                                                                                                                                                     
+                                                                        The hard upper bound on rows copied per table per shadow run. Guards                                                       
+                                                                        against unexpectedly large tables consuming disk / upstream bandwidth.                                                     
+                                                                                                                                                                                                   
      --lazy-startup boolean                                             default: false                                                                                                             
        ZERO_LAZY_STARTUP env                                                                                                                                                                       
                                                                         Delay starting the majority of zero-cache until first request.                                                             
