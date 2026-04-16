@@ -956,7 +956,7 @@ export const zeroOptions = {
     },
 
     sampleRate: {
-      type: v.number().default(0.01),
+      type: v.number().default(0.1),
       desc: [
         `The BERNOULLI sampling rate for each table (0 < rate <= 1). A value of`,
         `1 disables sampling and copies all rows (still subject to`,
@@ -965,7 +965,7 @@ export const zeroOptions = {
     },
 
     maxRowsPerTable: {
-      type: v.number().default(1000),
+      type: v.number().default(10000),
       desc: [
         `The hard upper bound on rows copied per table per shadow run. Guards`,
         `against unexpectedly large tables consuming disk / upstream bandwidth.`,
