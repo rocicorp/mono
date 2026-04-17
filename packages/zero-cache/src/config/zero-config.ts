@@ -934,6 +934,45 @@ export const zeroOptions = {
     },
   },
 
+  shadowSync: {
+    enabled: {
+      type: v.boolean().default(false),
+      desc: [
+        `Periodically exercises the initial-sync code path against a sample of`,
+        `rows from every published table, writing to a throwaway SQLite database.`,
+        `This acts as a canary: if the real initial-sync path ever breaks (schema`,
+        `drift, PG version quirks, etc.), the shadow run fails before a customer`,
+        `actually needs a full reset.`,
+      ],
+    },
+
+    intervalHours: {
+      type: v.number().default(24),
+      desc: [
+        `The interval between shadow initial-sync runs, in hours. The first run`,
+        `is additionally staggered by a random fraction of this interval so that`,
+        `a fleet restart does not cause all tasks to canary simultaneously.`,
+      ],
+    },
+
+    sampleRate: {
+      type: v.number().default(0.1),
+      desc: [
+        `The BERNOULLI sampling rate for each table (0 < rate <= 1). A value of`,
+        `1 disables sampling and copies all rows (still subject to`,
+        `{bold max-rows-per-table}).`,
+      ],
+    },
+
+    maxRowsPerTable: {
+      type: v.number().default(10000),
+      desc: [
+        `The hard upper bound on rows copied per table per shadow run. Guards`,
+        `against unexpectedly large tables consuming disk / upstream bandwidth.`,
+      ],
+    },
+  },
+
   /** @deprecated */
   targetClientRowCount: {
     type: v.number().default(20_000),
