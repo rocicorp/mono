@@ -108,6 +108,7 @@ describe('change-source/tables/ddl', () => {
   const DDL_START: Omit<DdlStartEvent, 'context'> = {
     type: 'ddlStart',
     version: 1,
+    event: {tag: 'UNUSED'},
     schema: {
       tables: [
         {
