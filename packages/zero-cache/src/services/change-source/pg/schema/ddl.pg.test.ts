@@ -1337,6 +1337,7 @@ describe('change-source/tables/ddl', () => {
       let msg = messages[3] as MessageMessage;
       expect(parseDDLStartEvent(msg)).toMatchObject({
         ...DDL_START,
+        event: ddlUpdate.event,
         context: {query},
       } satisfies DdlStartEvent);
 
