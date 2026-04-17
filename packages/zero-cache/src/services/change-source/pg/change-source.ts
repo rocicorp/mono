@@ -1086,7 +1086,7 @@ class ChangeMaker {
     // Store the new event to diff against the next event.
     this.#lastReplicationEventInTx = event;
     if (!prevEvent) {
-      this.#lc.info?.(`received ${msg.prefix}/${type} event`);
+      this.#lc.info?.(`received ${msg.prefix}/${type} event`, event);
       return []; // First snapshot in the tx.
     }
     this.#lc.info?.(`processing ${msg.prefix}/${type} event`, event);
