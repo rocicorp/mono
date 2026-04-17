@@ -140,6 +140,9 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
         case 'rollback':
         case 'control':
         case 'status':
+          if (data.length === 0) {
+            break; // skip empty transactions
+          }
           return data;
         default:
           change satisfies never;
@@ -908,7 +911,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
     [
       'add unpublished column',
       'ALTER TABLE foo ADD "newInt" INT4;',
-      [[]], // no DDL event published
+      [], // no DDL event published
       {},
       [
         // the view of "foo" is unchanged.
@@ -1081,7 +1084,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
     [
       'create unpublished table with indexes',
       'CREATE TABLE public.boo (id INT8 PRIMARY KEY, name TEXT UNIQUE);',
-      [[]],
+      [],
       {},
       [],
       [],
