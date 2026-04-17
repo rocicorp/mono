@@ -88,7 +88,8 @@ export type Rebalance = typeof Rebalance;
  */
 export type Rehome = typeof Rehome;
 /**
- * Unauthorized client request.
+ * JWT validation failure (used in CRUD mutators).
+ * @deprecated
  */
 export type Unauthorized = typeof Unauthorized;
 /**

@@ -1,4 +1,4 @@
-import {context, propagation, ROOT_CONTEXT} from '@opentelemetry/api';
+import {ROOT_CONTEXT, context, propagation} from '@opentelemetry/api';
 import type {LogContext} from '@rocicorp/logger';
 import {groupBy} from '../../../../shared/src/arrays.ts';
 import {assert} from '../../../../shared/src/asserts.ts';
@@ -17,8 +17,8 @@ import * as MutationType from '../../../../zero-protocol/src/mutation-type-enum.
 import {
   apiMutateResponseSchema,
   CLEANUP_RESULTS_MUTATION_NAME,
-  type APIMutateResponse,
   type MutationID,
+  type APIMutateResponse,
   type PushBody,
 } from '../../../../zero-protocol/src/push.ts';
 import {authEquals, isAuthErrorBody} from '../../auth/auth.ts';
@@ -549,7 +549,6 @@ class PushWorker {
       this.#contextManager.validateConnection(
         entry.context,
         entry.context.revision,
-        'kind' in response ? response.userID : undefined,
       );
       return response;
     } catch (e) {
@@ -569,27 +568,6 @@ class PushWorker {
           );
         }
         return response;
-      }
-
-      if (isProtocolError(e) && isAuthErrorBody(e.errorBody)) {
-        // The push completed far enough for local validation to reject the
-        // connection, so invalidate it and surface the result as PushFailed.
-        this.#lc.warn?.('Push validation failed; invalidating connection', {
-          clientID: entry.context.clientID,
-          response: e.message,
-        });
-        this.#contextManager.failConnection(
-          entry.context,
-          entry.context.revision,
-        );
-        return {
-          kind: ErrorKind.PushFailed,
-          origin: ErrorOrigin.ZeroCache,
-          reason: ErrorReason.HTTP,
-          message: e.message,
-          status: 401,
-          mutationIDs,
-        } as const satisfies PushFailedBody;
       }
 
       return {
