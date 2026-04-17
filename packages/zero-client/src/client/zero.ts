@@ -1,4 +1,4 @@
-import {LogContext, type LogLevel} from '@rocicorp/logger';
+import {LogContext, type LogLevel, type LogSink} from '@rocicorp/logger';
 import {type Resolver, resolver} from '@rocicorp/resolver';
 import {type DeletedClients} from '../../../replicache/src/deleted-clients.ts';
 import {getKVStoreProvider} from '../../../replicache/src/get-kv-store-provider.ts';
@@ -524,6 +524,7 @@ export class Zero<
       consoleLogLevel: options.logLevel ?? 'warn',
       server: null, //server, // Reenable remote logging
       enableAnalytics: this.#enableAnalytics,
+      consoleLogSink: options.logSink,
     });
     const logOptions = this.#logOptions;
 
@@ -901,6 +902,7 @@ export class Zero<
     consoleLogLevel: LogLevel;
     server: HTTPString | null;
     enableAnalytics: boolean;
+    consoleLogSink?: LogSink | undefined;
   }): LogOptions {
     if (TESTING) {
       const testZero = asTestZero(this);

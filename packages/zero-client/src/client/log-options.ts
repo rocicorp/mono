@@ -49,17 +49,19 @@ export function createLogOptions(
     consoleLogLevel: LogLevel;
     server: HTTPString | null;
     enableAnalytics: boolean;
+    consoleLogSink?: LogSink | undefined;
   },
   createDatadogLogSink: (options: DatadogLogSinkOptions) => LogSink = (
     options: DatadogLogSinkOptions,
   ) => new DatadogLogSink(options),
 ): LogOptions {
   const {consoleLogLevel, server, enableAnalytics} = options;
+  const userSink = options.consoleLogSink ?? consoleLogSink;
 
   if (!enableAnalytics || server === null) {
     return {
       logLevel: consoleLogLevel,
-      logSink: consoleLogSink,
+      logSink: userSink,
     };
   }
 
@@ -73,7 +75,7 @@ export function createLogOptions(
   const baseURL = new URL(appendPath(server, '/logs/v0/log'));
   const logLevel = consoleLogLevel === 'debug' ? 'debug' : 'info';
   const logSink = new TeeLogSink([
-    new LevelFilterLogSink(consoleLogSink, consoleLogLevel),
+    new LevelFilterLogSink(userSink, consoleLogLevel),
     new LevelFilterLogSink(
       createDatadogLogSink({
         service: datadogServiceLabel,
