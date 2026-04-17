@@ -22,7 +22,6 @@ const triggerEvent = v.object({
 export const ddlEventSchema = triggerEvent.extend({
   version: v.literal(PROTOCOL_VERSION),
   schema: publishedSchema,
-  event: v.object({tag: v.string()}),
 });
 
 // The `ddlStart` message is computed before every DDL event, regardless of
@@ -52,6 +51,7 @@ export type DdlStartEvent = v.Infer<typeof ddlStartEventSchema>;
  */
 export const ddlUpdateEventSchema = ddlEventSchema.extend({
   type: v.literal('ddlUpdate'),
+  event: v.object({tag: v.string()}),
 });
 
 export type DdlUpdateEvent = v.Infer<typeof ddlUpdateEventSchema>;
@@ -100,6 +100,7 @@ export type DdlUpdateEvent = v.Infer<typeof ddlUpdateEventSchema>;
  */
 export const schemaSnapshotEventSchema = ddlEventSchema.extend({
   type: v.literal('schemaSnapshot'),
+  event: v.object({tag: v.string()}),
 });
 
 export type SchemaSnapshotEvent = v.Infer<typeof schemaSnapshotEventSchema>;
@@ -187,7 +188,6 @@ BEGIN
     'type', 'ddlStart',
     'version', ${PROTOCOL_VERSION},
     'schema', schema_specs::json,
-    'event', json_build_object('tag', TG_TAG),
     'context', ${schema}.get_trigger_context()
   ) INTO message;
 
@@ -197,11 +197,9 @@ BEGIN
 END
 $$ LANGUAGE plpgsql;
 
--- Delete legacy function (and dependent legacy triggers).
-DROP FUNCTION IF EXISTS ${schema}.emit_ddl_end(text) CASCADE;
 
-CREATE OR REPLACE FUNCTION ${schema}.emit_ddl_end()
-RETURNS event_trigger AS $$
+CREATE OR REPLACE FUNCTION ${schema}.emit_ddl_end(tag TEXT)
+RETURNS void AS $$
 DECLARE
   publications TEXT[];
   target RECORD;
@@ -225,7 +223,7 @@ BEGIN
   --       tables, and there is no way to determine if the table "used to be" in the
   --       set. Thus, all ALTER TABLE statements must produce a ddl update, similar to
   --       any DROP * statement.
-  IF (target.object_type = 'table' AND TG_TAG != 'ALTER TABLE') 
+  IF (target.object_type = 'table' AND tag != 'ALTER TABLE') 
      OR target.object_type = 'table column' THEN
     SELECT ns.nspname AS "schema", c.relname AS "name" FROM pg_class AS c
       JOIN pg_namespace AS ns ON c.relnamespace = ns.oid
@@ -265,19 +263,19 @@ BEGIN
       INTO relevant;
 
   -- no-op CREATE IF NOT EXIST statements
-  ELSIF TG_TAG LIKE 'CREATE %' AND target.object_type IS NULL THEN
+  ELSIF tag LIKE 'CREATE %' AND target.object_type IS NULL THEN
     relevant := NULL;
   END IF;
 
   IF relevant IS NULL THEN
-    PERFORM ${schema}.notice_ignore(TG_TAG, target);
+    PERFORM ${schema}.notice_ignore(tag, target);
     RETURN;
   END IF;
 
-  IF TG_TAG = 'COMMENT' THEN
+  IF tag = 'COMMENT' THEN
     -- Only make schemaSnapshots for COMMENT ON PUBLICATION
     IF target.object_type != 'publication' THEN
-      PERFORM ${schema}.notice_ignore(TG_TAG, target);
+      PERFORM ${schema}.notice_ignore(tag, target);
       RETURN;
     END IF;
     event_type := 'schemaSnapshot';
@@ -287,15 +285,18 @@ BEGIN
     event_prefix := '';  -- TODO: Use '/ddl' for both when rollback safe
   END IF;
 
-  RAISE INFO 'Creating % for % %', event_type, TG_TAG, row_to_json(target);
+  RAISE INFO 'Creating % for % %', event_type, tag, row_to_json(target);
 
+  -- Construct and emit the DdlUpdateEvent message.
+  SELECT json_build_object('tag', tag) INTO event;
+  
   SELECT ${schema}.schema_specs() INTO schema_specs;
 
   SELECT json_build_object(
     'type', event_type,
     'version', ${PROTOCOL_VERSION},
     'schema', schema_specs::json,
-    'event', json_build_object('tag', TG_TAG),
+    'event', event::json,
     'context', ${schema}.get_trigger_context()
   ) INTO message;
 
@@ -340,17 +341,24 @@ CREATE EVENT TRIGGER ${sharded(`${appID}_ddl_start`)}
   ON ddl_command_start
   WHEN TAG IN (${lit(TAGS)})
   EXECUTE PROCEDURE ${schema}.emit_ddl_start();
-
-CREATE EVENT TRIGGER ${sharded(`${appID}_ddl_end`)}
-  ON ddl_command_end
-  WHEN TAG IN (${lit([...TAGS, 'COMMENT'])})
-  EXECUTE PROCEDURE ${schema}.emit_ddl_end();
 `);
 
-  // Drop legacy functions / triggers.
+  // A per-tag ddl_command_end trigger that dispatches to ${schema}.emit_ddl_end(tag)
   for (const tag of [...TAGS, 'COMMENT']) {
     const tagID = tag.toLowerCase().replace(' ', '_');
-    triggers.push(`DROP FUNCTION IF EXISTS ${schema}.emit_${tagID}() CASCADE;`);
+    triggers.push(/*sql*/ `
+CREATE OR REPLACE FUNCTION ${schema}.emit_${tagID}() 
+RETURNS event_trigger AS $$
+BEGIN
+  PERFORM ${schema}.emit_ddl_end(${lit(tag)});
+END
+$$ LANGUAGE plpgsql;
+
+CREATE EVENT TRIGGER ${sharded(`${appID}_${tagID}`)}
+  ON ddl_command_end
+  WHEN TAG IN (${lit(tag)})
+  EXECUTE PROCEDURE ${schema}.emit_${tagID}();
+`);
   }
   return triggers.join('');
 }
@@ -360,8 +368,18 @@ export function dropEventTriggerStatements(
   appID: string,
   shardID: string | number,
 ) {
-  return /*sql*/ `
+  const stmts: string[] = [];
+  // A single ddl_command_start trigger covering all relevant tags.
+  stmts.push(/*sql*/ `
     DROP EVENT TRIGGER IF EXISTS ${id(`${appID}_ddl_start_${shardID}`)};
-    DROP EVENT TRIGGER IF EXISTS ${id(`${appID}_ddl_end_${shardID}`)};
-  `;
+  `);
+
+  // A per-tag ddl_command_end trigger that dispatches to ${schema}.emit_ddl_end(tag)
+  for (const tag of [...TAGS, 'COMMENT']) {
+    const tagID = tag.toLowerCase().replace(' ', '_');
+    stmts.push(/*sql*/ `
+      DROP EVENT TRIGGER IF EXISTS ${id(`${appID}_${tagID}_${shardID}`)};
+    `);
+  }
+  return stmts.join('');
 }

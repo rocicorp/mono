@@ -88,7 +88,11 @@ import type {
 } from './logical-replication/pgoutput.types.ts';
 import {subscribe, type StreamMessage} from './logical-replication/stream.ts';
 import {fromBigInt, toBigInt, toStateVersionString, type LSN} from './lsn.ts';
-import {replicationEventSchema, type ReplicationEvent} from './schema/ddl.ts';
+import {
+  replicationEventSchema,
+  type DdlUpdateEvent,
+  type SchemaSnapshotEvent,
+} from './schema/ddl.ts';
 import {updateShardSchema} from './schema/init.ts';
 import {
   getPublicationInfo,
@@ -1037,7 +1041,7 @@ class ChangeMaker {
         }
 
       case 'commit':
-        this.#lastReplicationEventInTx = undefined;
+        this.#lastSnapshotInTx = undefined;
         return [
           [
             'commit',
@@ -1060,7 +1064,8 @@ class ChangeMaker {
     }
   }
 
-  #lastReplicationEventInTx: ReplicationEvent | undefined;
+  #preSchema: PublishedSchema | undefined;
+  #lastSnapshotInTx: PublishedSchema | undefined;
 
   #handleDdlMessage(msg: MessageMessage) {
     const event = parseLogicalMessageContent(msg, replicationEventSchema);
@@ -1068,48 +1073,40 @@ class ChangeMaker {
     // is about to happen, so as to avoid interfering / redundant work.
     clearTimeout(this.#replicaIdentityTimer);
 
-    let prevEvent = this.#lastReplicationEventInTx;
+    let previousSchema: PublishedSchema | null;
     const {type} = event;
     switch (type) {
       case 'ddlStart':
-      case 'schemaSnapshot':
-        break;
+        // Store the schema in order to diff it with a subsequent ddlUpdate.
+        this.#preSchema = event.schema;
+        return [];
       case 'ddlUpdate':
         // guaranteed by event triggers
-        assert(prevEvent, `ddlUpdate received without a ddlStart`);
+        previousSchema = must(
+          this.#preSchema,
+          `ddlUpdate received without a ddlStart`,
+        );
+        break;
+      case 'schemaSnapshot':
+        previousSchema = this.#lastSnapshotInTx ?? null;
         break;
       default: // Ignore unknown types for forwards compatibility
         this.#lc.info?.(`ignoring unknown ddl message type: ${type}`);
         return [];
     }
 
-    // Store the new event to diff against the next event.
-    this.#lastReplicationEventInTx = event;
-    if (!prevEvent) {
+    // Store the schema (from either a ddlUpdate or schemaSnapshot) to
+    // diff against the next schemaSnapshot.
+    this.#lastSnapshotInTx = event.schema;
+    if (!previousSchema) {
       this.#lc.info?.(`received ${msg.prefix}/${type} event`);
-      return []; // First snapshot in the tx.
+      return []; // First schemaSnapshot in the tx.
     }
     this.#lc.info?.(`processing ${msg.prefix}/${type} event`, event);
 
-    // The tag (i.e. command) is used to determine whether backfill is
-    // necessary (CREATE TABLE vs ALTER TABLE vs ALTER PUBLICATION).
-    // Because ddl events may be nested, e.g.
-    //
-    // ```
-    //          [1]          [2]        [3]          [4]        [5]
-    // ddl_start => ddl_start => ddl_end => ddl_start => ddl_end => ddl_end
-    // ```
-    //
-    // The effective tag is determined from the starting event if it is
-    // ddl_start (e.g. cases 1, 2, and 4), and from the ending event
-    // otherwise (cases 3 and 5)
-    const effectiveTag =
-      prevEvent.type === 'ddlStart' ? prevEvent.event.tag : event.event.tag;
-    const changes = this.#makeSchemaChanges(
-      prevEvent.schema,
-      event,
-      effectiveTag,
-    ).map(change => ['data', change] satisfies Data);
+    const changes = this.#makeSchemaChanges(previousSchema, event).map(
+      change => ['data', change] satisfies Data,
+    );
 
     this.#lc
       .withContext('tag', event.event.tag)
@@ -1161,12 +1158,11 @@ class ChangeMaker {
    */
   #makeSchemaChanges(
     preSchema: PublishedSchema,
-    event: ReplicationEvent,
-    tag: string,
+    update: DdlUpdateEvent | SchemaSnapshotEvent,
   ): SchemaChange[] {
     try {
       const [prevTbl, prevIdx] = specsByID(preSchema);
-      const [nextTbl, nextIdx] = specsByID(event.schema);
+      const [nextTbl, nextIdx] = specsByID(update.schema);
       const changes: SchemaChange[] = [];
 
       // Validate the new table schemas
@@ -1215,7 +1211,7 @@ class ChangeMaker {
           ...this.#getTableChanges(
             must(prevTbl.get(id)),
             must(nextTbl.get(id)),
-            tag,
+            update.event.tag,
           ),
         );
       }
@@ -1227,7 +1223,7 @@ class ChangeMaker {
           spec,
           metadata: getMetadata(spec),
         };
-        if (!tag.startsWith('CREATE')) {
+        if (!update.event.tag.startsWith('CREATE')) {
           // Tables introduced to the publication via ALTER statements
           // or the COMMENT statement (from schemaSnapshots) must be
           // backfilled.
@@ -1246,7 +1242,7 @@ class ChangeMaker {
       }
       return changes;
     } catch (e) {
-      throw new UnsupportedSchemaChangeError(String(e), event, {cause: e});
+      throw new UnsupportedSchemaChangeError(String(e), update, {cause: e});
     }
   }
 
@@ -1632,11 +1628,11 @@ function makeRelation(relation: PostgresRelation): MessageRelation {
 class UnsupportedSchemaChangeError extends Error {
   readonly name = 'UnsupportedSchemaChangeError';
   readonly description: string;
-  readonly event: ReplicationEvent;
+  readonly event: DdlUpdateEvent | SchemaSnapshotEvent;
 
   constructor(
     description: string,
-    event: ReplicationEvent,
+    event: DdlUpdateEvent | SchemaSnapshotEvent,
     options?: ErrorOptions,
   ) {
     super(
