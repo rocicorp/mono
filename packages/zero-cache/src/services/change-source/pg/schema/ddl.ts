@@ -180,7 +180,7 @@ DECLARE
   message TEXT;
 BEGIN
   -- serialize DDL statements to compute correct schema change diffs
-  PERFORM pg_advisory_xact_lock(${DDL_SERIALIZATION_LOCK});
+  -- PERFORM pg_advisory_xact_lock(${DDL_SERIALIZATION_LOCK});
 
   SELECT ${schema}.schema_specs() INTO schema_specs;
 
