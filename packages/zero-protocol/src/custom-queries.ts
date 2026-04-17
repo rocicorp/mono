@@ -3,8 +3,6 @@ import * as v from '../../shared/src/valita.ts';
 import {astSchema} from './ast.ts';
 import {transformFailedBodySchema} from './error.ts';
 
-/* Shared payloads */
-
 export const transformRequestBodySchema = v.array(
   v.object({
     id: v.string(),
@@ -41,16 +39,10 @@ export const erroredQuerySchema = v.union(
 );
 export type ErroredQuery = v.Infer<typeof erroredQuerySchema>;
 
-export const queryResultSchema = v.union(
-  transformedQuerySchema,
-  erroredQuerySchema,
+export const transformResponseBodySchema = v.array(
+  v.union(transformedQuerySchema, erroredQuerySchema),
 );
-export type QueryResult = v.Infer<typeof queryResultSchema>;
-
-export const queryResponseBodySchema = v.array(queryResultSchema);
-export type QueryResponseBody = v.Infer<typeof queryResponseBodySchema>;
-
-/* Legacy API */
+export type TransformResponseBody = v.Infer<typeof transformResponseBodySchema>;
 
 export const transformRequestMessageSchema = v.tuple([
   v.literal('transform'),
@@ -59,56 +51,25 @@ export const transformRequestMessageSchema = v.tuple([
 export type TransformRequestMessage = v.Infer<
   typeof transformRequestMessageSchema
 >;
-
-const transformFailedErrorMessageSchema = v.tuple([
-  v.literal('transformFailed'),
-  transformFailedBodySchema,
-]);
-const legacyTransformSuccessMessageSchema = v.tuple([
-  v.literal('transformed'),
-  queryResponseBodySchema,
-]);
-
-export const transformResponseMessageSchema = v.union(
-  legacyTransformSuccessMessageSchema,
-  transformFailedErrorMessageSchema,
-);
-export type TransformResponseMessage = v.Infer<
-  typeof transformResponseMessageSchema
->;
-
-export const legacyTransformResponseMessageSchema =
-  transformResponseMessageSchema;
-export type LegacyTransformResponseMessage = TransformResponseMessage;
-
-export const transformResponseBodySchema = queryResponseBodySchema;
-export type TransformResponseBody = QueryResponseBody;
-
-/* API /query */
-
-export const querySuccessSchema = v.object({
-  kind: v.literal('QueryResponse'),
-  userID: v.string().nullable(),
-  queries: queryResponseBodySchema,
-});
-export type QuerySuccess = v.Infer<typeof querySuccessSchema>;
-
-export const queryResponseSchema = v.union(
-  querySuccessSchema,
-  transformFailedBodySchema,
-);
-export type QueryResponse = v.Infer<typeof queryResponseSchema>;
-
-export const apiQueryResponseSchema = v.union(
-  queryResponseSchema,
-  transformResponseMessageSchema,
-);
-export type APIQueryResponse = v.Infer<typeof apiQueryResponseSchema>;
-
-/* Zero client <-> Zero cache */
-
 export const transformErrorMessageSchema = v.tuple([
   v.literal('transformError'),
   v.array(erroredQuerySchema),
 ]);
 export type TransformErrorMessage = v.Infer<typeof transformErrorMessageSchema>;
+
+const transformFailedMessageSchema = v.tuple([
+  v.literal('transformFailed'),
+  transformFailedBodySchema,
+]);
+const transformOkMessageSchema = v.tuple([
+  v.literal('transformed'),
+  transformResponseBodySchema,
+]);
+
+export const transformResponseMessageSchema = v.union(
+  transformOkMessageSchema,
+  transformFailedMessageSchema,
+);
+export type TransformResponseMessage = v.Infer<
+  typeof transformResponseMessageSchema
+>;

@@ -22,11 +22,11 @@ import {
   pushParamsSchema,
   type CleanupResultsArg,
   type CustomMutation,
-  type MutateResponse,
   type Mutation,
   type MutationID,
   type MutationResponse,
   type PushBody,
+  type PushResponse,
 } from '../../zero-protocol/src/push.ts';
 import type {AnyMutatorRegistry} from '../../zql/src/mutate/mutator-registry.ts';
 import {isMutator} from '../../zql/src/mutate/mutator.ts';
@@ -112,11 +112,10 @@ export function handleMutateRequest<
     transact: TransactFn<D>,
     mutation: CustomMutation,
   ) => Promise<MutationResponse>,
-  userID: string | null | undefined,
   queryString: URLSearchParams | Record<string, string>,
   body: ReadonlyJSONValue,
   logLevel?: LogLevel,
-): Promise<MutateResponse>;
+): Promise<PushResponse>;
 
 export function handleMutateRequest<
   D extends Database<ExtractTransactionType<D>>,
@@ -126,10 +125,9 @@ export function handleMutateRequest<
     transact: TransactFn<D>,
     mutation: CustomMutation,
   ) => Promise<MutationResponse>,
-  userID: string | null | undefined,
   request: Request,
   logLevel?: LogLevel,
-): Promise<MutateResponse>;
+): Promise<PushResponse>;
 
 export async function handleMutateRequest<
   D extends Database<ExtractTransactionType<D>>,
@@ -139,11 +137,10 @@ export async function handleMutateRequest<
     transact: TransactFn<D>,
     mutation: CustomMutation,
   ) => Promise<MutationResponse>,
-  userID: string | null | undefined,
   queryStringOrRequest: Request | URLSearchParams | Record<string, string>,
   bodyOrLogLevel?: ReadonlyJSONValue | LogLevel,
   logLevel?: LogLevel,
-): Promise<MutateResponse> {
+): Promise<PushResponse> {
   // Parse overload arguments
   const isRequestOverload = queryStringOrRequest instanceof Request;
 
@@ -321,8 +318,6 @@ export async function handleMutateRequest<
     }
 
     return {
-      kind: 'MutateResponse',
-      userID: userID ?? null,
       mutations: responses,
     };
   } catch (error) {

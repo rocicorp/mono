@@ -43,7 +43,7 @@ import {
 import type {NormalizedZeroConfig} from '../../config/normalize.ts';
 import type {
   CustomQueryTransformer,
-  HashedTransformResponse,
+  TransformAttempt,
 } from '../../custom-queries/transform-query.ts';
 import {
   getOrCreateCounter,
@@ -1663,7 +1663,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         // This ensures the user's API server validates authorization with the
         // current auth context.
         const transformStart = performance.now();
-        let transformedCustomQueries: HashedTransformResponse;
+        let transformedCustomQueries: TransformAttempt;
         try {
           transformedCustomQueries = await this.#runPriorityOp(
             lc,
@@ -2352,7 +2352,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     try {
       if (this.#customQueryTransformer) {
         const validation = await this.#customQueryTransformer.validate(ctx);
-        if (validation.kind === 'TransformFailed') {
+        if (validation !== undefined) {
           throw new ProtocolErrorWithLevel(validation, 'warn');
         }
       }

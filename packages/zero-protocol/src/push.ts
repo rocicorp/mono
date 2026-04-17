@@ -116,7 +116,26 @@ export const customMutationSchema = v.object({
 
 export const mutationSchema = v.union(crudMutationSchema, customMutationSchema);
 
-/* Shared payloads */
+export const pushBodySchema = v.object({
+  clientGroupID: v.string(),
+  mutations: v.array(mutationSchema),
+  pushVersion: v.number(),
+  // For legacy (CRUD) mutations, the schema is tied to the client group /
+  // sync connection. For custom mutations, schema versioning is delegated
+  // to the custom protocol / api-server.
+  schemaVersion: v.number().optional(),
+  timestamp: v.number(),
+  requestID: v.string(),
+  /**
+   * @deprecated auth is managed at client-group scope via connect/updateAuth
+   * and should not be included in push messages.
+   */
+  auth: v.string().optional(),
+  /** W3C traceparent header for distributed tracing. */
+  traceparent: v.string().optional(),
+});
+
+export const pushMessageSchema = v.tuple([v.literal('push'), pushBodySchema]);
 
 const appErrorSchema = v.object({
   error: v.literal('app'),
@@ -133,14 +152,14 @@ const zeroErrorSchema = v.object({
   details: jsonSchema.optional(),
 });
 
-const mutationSuccessSchema = v.object({
+const mutationOkSchema = v.object({
   // The user can return any additional data here
   data: jsonSchema.optional(),
 });
 const mutationErrorSchema = v.union(appErrorSchema, zeroErrorSchema);
 
 export const mutationResultSchema = v.union(
-  mutationSuccessSchema,
+  mutationOkSchema,
   mutationErrorSchema,
 );
 
@@ -148,22 +167,15 @@ export const mutationResponseSchema = v.object({
   id: mutationIDSchema,
   result: mutationResultSchema,
 });
-export type MutationResponse = v.Infer<typeof mutationResponseSchema>;
-export type MutationSuccess = v.Infer<typeof mutationSuccessSchema>;
-export type MutationError = v.Infer<typeof mutationErrorSchema>;
-export type MutationResult = v.Infer<typeof mutationResultSchema>;
 
-/* Legacy API */
-
-export const pushSuccessSchema = v.object({
+const pushOkSchema = v.object({
   mutations: v.array(mutationResponseSchema),
 });
-export type PushSuccess = v.Infer<typeof pushSuccessSchema>;
 
 /**
  * @deprecated push errors are now represented as ['error', { ... }] messages
  */
-const unsupportedPushVersionErrorSchema = v.object({
+const unsupportedPushVersionSchema = v.object({
   /** @deprecated */
   error: v.literal('unsupportedPushVersion'),
   /** @deprecated */
@@ -172,7 +184,7 @@ const unsupportedPushVersionErrorSchema = v.object({
 /**
  * @deprecated push errors are now represented as ['error', { ... }] messages
  */
-const unsupportedSchemaVersionErrorSchema = v.object({
+const unsupportedSchemaVersionSchema = v.object({
   /** @deprecated */
   error: v.literal('unsupportedSchemaVersion'),
   /** @deprecated */
@@ -205,117 +217,36 @@ const zeroPusherErrorSchema = v.object({
 /**
  * @deprecated push errors are now represented as ['error', { ... }] messages
  */
-export const pushErrorSchema = v.union(
-  unsupportedPushVersionErrorSchema,
-  unsupportedSchemaVersionErrorSchema,
+const pushErrorSchema = v.union(
+  unsupportedPushVersionSchema,
+  unsupportedSchemaVersionSchema,
   httpErrorSchema,
   zeroPusherErrorSchema,
 );
-/**
- * @deprecated push errors are now represented as ['error', { ... }] messages
- */
-export type PushError = v.Infer<typeof pushErrorSchema>;
 
-export const pushResponseBodySchema = v.union(
-  pushSuccessSchema,
-  pushErrorSchema,
-);
-export type PushResponseBody = v.Infer<typeof pushResponseBodySchema>;
+export const pushResponseBodySchema = v.union(pushOkSchema, pushErrorSchema);
 
 export const pushResponseSchema = v.union(
   pushResponseBodySchema,
   pushFailedBodySchema,
 );
-export type PushResponse = v.Infer<typeof pushResponseSchema>;
-
-/* API /mutate */
-
-const apiMutationResultSchema = v.union(
-  mutationErrorSchema,
-  mutationSuccessSchema,
-);
-export type APIMutationResult = v.Infer<typeof apiMutationResultSchema>;
-
-const apiMutationResponseSchema = v.object({
-  id: mutationIDSchema,
-  result: apiMutationResultSchema,
-});
-export type APIMutationResponse = v.Infer<typeof apiMutationResponseSchema>;
-
-const apiPushSuccessSchema = v.object({
-  mutations: v.array(apiMutationResponseSchema),
-});
-
-const apiPushResponseSchema = v.union(
-  v.union(apiPushSuccessSchema, pushErrorSchema),
-  pushFailedBodySchema,
-);
-
-export const mutateSuccessSchema = v.object({
-  kind: v.literal('MutateResponse'),
-  userID: v.string().nullable(),
-  mutations: v.array(apiMutationResponseSchema),
-});
-export type MutateSuccess = v.Infer<typeof mutateSuccessSchema>;
-
-export const mutateResponseSchema = v.union(
-  mutateSuccessSchema,
-  pushFailedBodySchema,
-);
-export type MutateResponse = v.Infer<typeof mutateResponseSchema>;
-
-export const apiMutateResponseSchema = v.union(
-  mutateResponseSchema,
-  apiPushResponseSchema,
-);
-export type APIMutateResponse = v.Infer<typeof apiMutateResponseSchema>;
-
-/**
- * The schema for the querystring parameters of the custom push/mutate endpoints.
- */
-export const pushParamsSchema = v.object({
-  schema: v.string(),
-  appID: v.string(),
-});
-
-/* Zero client <-> Zero cache */
-
-export const pushBodySchema = v.object({
-  clientGroupID: v.string(),
-  mutations: v.array(mutationSchema),
-  pushVersion: v.number(),
-  // For legacy (CRUD) mutations, the schema is tied to the client group /
-  // sync connection. For custom mutations, schema versioning is delegated
-  // to the custom protocol / api-server.
-  schemaVersion: v.number().optional(),
-  timestamp: v.number(),
-  requestID: v.string(),
-  /**
-   * @deprecated auth is managed at client-group scope via connect/updateAuth
-   * and should not be included in push messages.
-   */
-  auth: v.string().optional(),
-  /** W3C traceparent header for distributed tracing. */
-  traceparent: v.string().optional(),
-});
-export type PushBody = v.Infer<typeof pushBodySchema>;
-
-export const pushMessageSchema = v.tuple([v.literal('push'), pushBodySchema]);
-export type PushMessage = v.Infer<typeof pushMessageSchema>;
-
 export const pushResponseMessageSchema = v.tuple([
   v.literal('pushResponse'),
   pushResponseBodySchema,
 ]);
-export type PushResponseMessage = v.Infer<typeof pushResponseMessageSchema>;
 
 export const ackMutationResponsesMessageSchema = v.tuple([
   v.literal('ackMutationResponses'),
   mutationIDSchema,
 ]);
-export type AckMutationMessage = v.Infer<
-  typeof ackMutationResponsesMessageSchema
->;
+
+/**
+ * The schema for the querystring parameters of the custom push endpoint.
+ */
+export const pushParamsSchema = v.object({
+  schema: v.string(),
+  appID: v.string(),
+});
 
 export type InsertOp = v.Infer<typeof insertOpSchema>;
 export type UpsertOp = v.Infer<typeof upsertOpSchema>;
@@ -327,6 +258,23 @@ export type CRUDMutationArg = v.Infer<typeof crudArgSchema>;
 export type CRUDMutation = v.Infer<typeof crudMutationSchema>;
 export type CustomMutation = v.Infer<typeof customMutationSchema>;
 export type Mutation = v.Infer<typeof mutationSchema>;
+export type PushBody = v.Infer<typeof pushBodySchema>;
+export type PushMessage = v.Infer<typeof pushMessageSchema>;
+export type PushResponseBody = v.Infer<typeof pushResponseBodySchema>;
+export type PushResponse = v.Infer<typeof pushResponseSchema>;
+export type PushResponseMessage = v.Infer<typeof pushResponseMessageSchema>;
+export type MutationResponse = v.Infer<typeof mutationResponseSchema>;
+export type MutationOk = v.Infer<typeof mutationOkSchema>;
+export type MutationError = v.Infer<typeof mutationErrorSchema>;
+/**
+ * @deprecated push errors are now represented as ['error', { ... }] messages
+ */
+export type PushError = v.Infer<typeof pushErrorSchema>;
+export type PushOk = v.Infer<typeof pushOkSchema>;
+export type MutationResult = v.Infer<typeof mutationResultSchema>;
+export type AckMutationMessage = v.Infer<
+  typeof ackMutationResponsesMessageSchema
+>;
 export type CleanupResultsArg = v.Infer<typeof cleanupResultsArgSchema>;
 export type {MutationID} from './mutation-id.ts';
 

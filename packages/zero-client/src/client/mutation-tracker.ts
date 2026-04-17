@@ -24,9 +24,9 @@ import {
   mutationResultSchema,
   type MutationError,
   type MutationID,
-  type MutationSuccess,
+  type MutationOk,
   type PushError,
-  type PushSuccess,
+  type PushOk,
   type PushResponseBody,
 } from '../../../zero-protocol/src/push.ts';
 import type {MutatorResultSuccessDetails} from './custom.ts';
@@ -308,8 +308,8 @@ export class MutationTracker {
     }
   }
 
-  #processPushOk(success: PushSuccess): void {
-    for (const mutation of success.mutations) {
+  #processPushOk(ok: PushOk): void {
+    for (const mutation of ok.mutations) {
       if ('error' in mutation.result) {
         this.#processMutationError(
           mutation.id.clientID,
@@ -399,11 +399,7 @@ export class MutationTracker {
     }
   }
 
-  #processMutationOk(
-    clientID: string,
-    mid: number,
-    result: MutationSuccess,
-  ): void {
+  #processMutationOk(clientID: string, mid: number, result: MutationOk): void {
     assert(
       clientID === this.#clientID,
       'received mutation for the wrong client',
@@ -428,9 +424,7 @@ export class MutationTracker {
     this.#settleMutation(ephemeralID, entry, result);
   }
 
-  #settleMutation<
-    Result extends MutationSuccess | ApplicationError | ZeroError,
-  >(
+  #settleMutation<Result extends MutationOk | ApplicationError | ZeroError>(
     ephemeralID: EphemeralID,
     entry: {
       mutationID?: number | undefined;
