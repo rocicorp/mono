@@ -3,6 +3,7 @@ import {eq} from 'drizzle-orm';
 import {drizzle as drizzleNodePg} from 'drizzle-orm/node-postgres';
 import {pgTable, text} from 'drizzle-orm/pg-core';
 import {drizzle as drizzlePostgresJs} from 'drizzle-orm/postgres-js';
+import {Kysely, PostgresDialect} from 'kysely';
 import {Client, Pool, type PoolClient} from 'pg';
 import type {ExpectStatic} from 'vitest';
 import {afterEach, beforeEach, describe, expectTypeOf, test} from 'vitest';
@@ -14,6 +15,7 @@ import {string, table} from '../../../zero-schema/src/builder/table-builder.ts';
 import {createBuilder} from '../../../zql/src/query/create-builder.ts';
 import type {ZQLDatabase} from '../zql-database.ts';
 import {zeroDrizzle, type DrizzleTransaction} from './drizzle.ts';
+import {zeroKysely, type KyselyTransaction} from './kysely.ts';
 import {zeroNodePg} from './pg.ts';
 import {zeroPostgresJS} from './postgresjs.ts';
 import {zeroPrisma} from './prisma.ts';
@@ -26,6 +28,7 @@ let nodePgPoolClient: PoolClient;
 let nodePgClient: Client;
 // oxlint-disable-next-line no-explicit-any
 let prismaClient: any;
+let kyselyClient: Kysely<KyselySchema>;
 
 beforeEach(async () => {
   postgresJsClient = await testDBs.create('adapters-pg-test');
@@ -47,6 +50,11 @@ beforeEach(async () => {
   prismaClient = new ((await import('@prisma/client')) as any).PrismaClient({
     adapter: new PrismaPg({
       connectionString: getConnectionURI(postgresJsClient),
+    }),
+  });
+  kyselyClient = new Kysely<KyselySchema>({
+    dialect: new PostgresDialect({
+      pool: nodePgPool,
     }),
   });
 
@@ -102,6 +110,14 @@ afterEach(async () => {
 });
 
 type UserStatus = 'active' | 'inactive';
+
+interface KyselySchema {
+  user: {
+    id: `user_${string}`;
+    name: string | null;
+    status: UserStatus;
+  };
+}
 
 const userTable = pgTable('user', {
   id: text('id').primaryKey().$type<`user_${string}`>(),
@@ -236,6 +252,51 @@ async function exerciseMutations<WrappedTransaction>(
   }, mockTransactionInput);
 }
 
+async function exerciseRollback<WrappedTransaction>(
+  zql: ZQLDatabase<typeof schema, WrappedTransaction>,
+  writeWrappedTransaction: (
+    wrappedTransaction: WrappedTransaction,
+    user: ReturnType<typeof getRandomUser>,
+  ) => Promise<unknown>,
+  expect: ExpectStatic,
+) {
+  const userInsertedByZero = getRandomUser();
+  const userInsertedByWrappedTransaction = getRandomUser();
+  const rollbackError = new Error('rollback test sentinel');
+
+  await expect(
+    zql.transaction(async tx => {
+      await tx.mutate.user.insert(userInsertedByZero);
+      await writeWrappedTransaction(
+        tx.dbTransaction.wrappedTransaction,
+        userInsertedByWrappedTransaction,
+      );
+
+      const zeroInsertResult = await tx.run(
+        builder.user.where('id', '=', userInsertedByZero.id),
+      );
+      const wrappedInsertResult = await tx.run(
+        builder.user.where('id', '=', userInsertedByWrappedTransaction.id),
+      );
+
+      expect(zeroInsertResult).toHaveLength(1);
+      expect(wrappedInsertResult).toHaveLength(1);
+
+      throw rollbackError;
+    }, mockTransactionInput),
+  ).rejects.toThrow(rollbackError.message);
+
+  const zeroInsertAfterRollback = await zql.run(
+    builder.user.where('id', '=', userInsertedByZero.id),
+  );
+  const wrappedInsertAfterRollback = await zql.run(
+    builder.user.where('id', '=', userInsertedByWrappedTransaction.id),
+  );
+
+  expect(zeroInsertAfterRollback).toHaveLength(0);
+  expect(wrappedInsertAfterRollback).toHaveLength(0);
+}
+
 describe('node-postgres', () => {
   test('querying', async ({expect}) => {
     const clients = [nodePgClient, nodePgPoolClient, nodePgPool];
@@ -282,6 +343,23 @@ describe('node-postgres', () => {
       await exerciseMutations(zql, expect);
     }
   });
+
+  test('rolls back zero and wrapped transaction writes', async ({expect}) => {
+    const clients = [nodePgClient, nodePgPoolClient, nodePgPool];
+
+    for (const client of clients) {
+      const zql = zeroNodePg(schema, client);
+      await exerciseRollback(
+        zql,
+        (tx, user) =>
+          tx.query(
+            'INSERT INTO "user" (id, name, status) VALUES ($1, $2, $3)',
+            [user.id, user.name, user.status],
+          ),
+        expect,
+      );
+    }
+  });
 });
 
 describe('postgres-js', () => {
@@ -316,6 +394,19 @@ describe('postgres-js', () => {
   test('mutations', async ({expect}) => {
     const zql = zeroPostgresJS(schema, postgresJsClient);
     await exerciseMutations(zql, expect);
+  });
+
+  test('rolls back zero and wrapped transaction writes', async ({expect}) => {
+    const zql = zeroPostgresJS(schema, postgresJsClient);
+    await exerciseRollback(
+      zql,
+      (tx, user) =>
+        tx`
+          INSERT INTO "user" (id, name, status)
+          VALUES (${user.id}, ${user.name}, ${user.status})
+        `,
+      expect,
+    );
   });
 });
 
@@ -355,6 +446,131 @@ describe('prisma', () => {
   test('mutations', async ({expect}) => {
     const zql = zeroPrisma(schema, prismaClient);
     await exerciseMutations(zql, expect);
+  });
+
+  test('rolls back zero and wrapped transaction writes', async ({expect}) => {
+    const zql = zeroPrisma(schema, prismaClient);
+    await exerciseRollback(
+      zql,
+      (tx, user) =>
+        (tx as typeof prismaClient).user.create({
+          data: {
+            id: user.id,
+            name: user.name,
+            status: user.status,
+          },
+        }),
+      expect,
+    );
+  });
+});
+
+describe('kysely', () => {
+  test('types - implicit database generic', () => {
+    function selectUser(tx: KyselyTransaction<typeof kyselyClient>) {
+      return tx.selectFrom('user').selectAll().executeTakeFirst();
+    }
+
+    expectTypeOf<Awaited<ReturnType<typeof selectUser>>>().toEqualTypeOf<
+      | {
+          id: `user_${string}`;
+          name: string | null;
+          status: UserStatus;
+        }
+      | undefined
+    >();
+  });
+
+  test('types - explicit database generic', () => {
+    function selectUser(tx: KyselyTransaction<KyselySchema>) {
+      return tx.selectFrom('user').selectAll().executeTakeFirst();
+    }
+
+    expectTypeOf<Awaited<ReturnType<typeof selectUser>>>().toEqualTypeOf<
+      | {
+          id: `user_${string}`;
+          name: string | null;
+          status: UserStatus;
+        }
+      | undefined
+    >();
+  });
+
+  test('querying', async ({expect}) => {
+    const newUser = getRandomUser();
+
+    await kyselyClient.insertInto('user').values(newUser).execute();
+
+    const zql = zeroKysely(schema, kyselyClient);
+
+    const resultZQL = await zql.run(builder.user.where('id', '=', newUser.id));
+
+    const resultClientQuery = await zql.transaction(async tx => {
+      const result = await tx.dbTransaction.query(
+        'SELECT * FROM "user" WHERE id = $1',
+        [newUser.id],
+      );
+      return result;
+    }, mockTransactionInput);
+
+    const resultKyselyQuery = await zql.transaction(
+      tx =>
+        tx.dbTransaction.wrappedTransaction
+          .selectFrom('user')
+          .selectAll()
+          .where('id', '=', newUser.id)
+          .executeTakeFirst(),
+      mockTransactionInput,
+    );
+
+    expect(resultZQL[0]?.name).toEqual(newUser.name);
+    expect(resultZQL[0]?.id).toEqual(newUser.id);
+
+    for await (const row of resultClientQuery) {
+      expect(row.name).toBe(newUser.name);
+      expect(row.id).toBe(newUser.id);
+    }
+
+    expect(resultKyselyQuery?.name).toEqual(newUser.name);
+    expect(resultKyselyQuery?.id).toEqual(newUser.id);
+  });
+
+  test('mutations', async ({expect}) => {
+    const zql = zeroKysely(schema, kyselyClient);
+    await exerciseMutations(zql, expect);
+  });
+
+  test('rolls back zero and wrapped transaction writes', async ({expect}) => {
+    const zql = zeroKysely(schema, kyselyClient);
+    await exerciseRollback(
+      zql,
+      (tx, user) => tx.insertInto('user').values(user).execute(),
+      expect,
+    );
+  });
+
+  test('type portability', () => {
+    function getZQL() {
+      return zeroKysely(schema, kyselyClient);
+    }
+
+    const zql = getZQL();
+
+    type TxType = KyselyTransaction<typeof kyselyClient>;
+
+    function selectUser(tx: TxType) {
+      return tx.selectFrom('user').selectAll().executeTakeFirst();
+    }
+
+    expectTypeOf<Awaited<ReturnType<typeof selectUser>>>().toEqualTypeOf<
+      | {
+          id: `user_${string}`;
+          name: string | null;
+          status: UserStatus;
+        }
+      | undefined
+    >();
+    expectTypeOf(zql).toEqualTypeOf<ZQLDatabase<typeof schema, TxType>>();
   });
 });
 
@@ -490,6 +706,19 @@ describe('drizzle and node-postgres', () => {
     }
   });
 
+  test('rolls back zero and wrapped transaction writes', async ({expect}) => {
+    const clients = [pool, client, poolClient];
+
+    for (const drizzleClient of clients) {
+      const zql = zeroDrizzle(schema, drizzleClient);
+      await exerciseRollback(
+        zql,
+        (tx, user) => tx.insert(drizzleSchema.user).values(user),
+        expect,
+      );
+    }
+  });
+
   test('type portability - inferred types should not reference internal drizzle paths', () => {
     function getZQL() {
       return zeroDrizzle(schema, client);
@@ -613,6 +842,15 @@ describe('drizzle and postgres-js', () => {
   test('mutations', async ({expect}) => {
     const zql = zeroDrizzle(schema, client);
     await exerciseMutations(zql, expect);
+  });
+
+  test('rolls back zero and wrapped transaction writes', async ({expect}) => {
+    const zql = zeroDrizzle(schema, client);
+    await exerciseRollback(
+      zql,
+      (tx, user) => tx.insert(drizzleSchema.user).values(user),
+      expect,
+    );
   });
 
   test('type portability', () => {
