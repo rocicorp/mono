@@ -1,5 +1,7 @@
-#!/usr/bin/env zx
+#!/usr/bin/env node
+
 // oxlint-disable no-console
+import {$} from 'zx';
 
 const changedFiles = (await $`git diff --name-only origin/main`.quiet()).stdout
   .trim()
@@ -9,20 +11,24 @@ const changedFiles = (await $`git diff --name-only origin/main`.quiet()).stdout
 process.stdout.write('Pre-push check');
 
 const checks = [
-  {name: 'syncpack lint', result: $`syncpack lint`.quiet().nothrow()},
+  {name: 'syncpack lint', result: $`npx syncpack lint`.quiet().nothrow()},
 ];
 
 if (changedFiles.length > 0) {
   checks.push(
     {
       name: 'lint',
-      result: $`oxlint --quiet --no-error-on-unmatched-pattern ${changedFiles}`
-        .quiet()
-        .nothrow(),
+      result:
+        $`npx oxlint --quiet --no-error-on-unmatched-pattern ${changedFiles}`
+          .quiet()
+          .nothrow(),
     },
     {
       name: 'fmt check',
-      result: $`oxfmt --check ${changedFiles}`.quiet().nothrow(),
+      result:
+        $`npx oxfmt --check --no-error-on-unmatched-pattern ${changedFiles}`
+          .quiet()
+          .nothrow(),
     },
   );
 }
