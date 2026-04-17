@@ -15,14 +15,14 @@ import {createBuilder} from '../../zql/src/query/create-builder.ts';
 import type {AnyQuery} from '../../zql/src/query/query.ts';
 import type {SchemaQuery} from '../../zql/src/query/schema-query.ts';
 
-export type AnalyzeCliOptions = {
+export type AnalyzeCLIOptions = {
   schema: Schema;
   /** Defaults to `process.argv.slice(2)`. */
   argv?: readonly string[];
 };
 
 const options = {
-  zeroCacheUrl: {
+  zeroCacheURL: {
     type: v.string().optional(),
     desc: [
       'URL of the remote zero-cache to analyze against.',
@@ -78,7 +78,7 @@ const options = {
     type: v.string().optional(),
     desc: [
       'ZQL query in chain form, e.g. `issue.related("comments").limit(10)`.',
-      'Evaluated against the schema you pass to runAnalyzeCli.',
+      'Evaluated against the schema you pass to runAnalyzeCLI.',
     ],
   },
   queryName: {
@@ -124,13 +124,14 @@ type QueryPlan =
  *
  * ```ts
  * import {schema} from './schema.ts';
- * import {runAnalyzeCli} from '@rocicorp/zero/analyze';
- * await runAnalyzeCli({schema});
+ * import {runAnalyzeCLI} from '@rocicorp/zero/analyze';
+ * await runAnalyzeCLI({schema});
  * ```
  *
+ * @experimental This API is in progress and may change without notice.
  * Exits the process with code 1 on error.
  */
-export async function runAnalyzeCli(opts: AnalyzeCliOptions): Promise<void> {
+export async function runAnalyzeCLI(opts: AnalyzeCLIOptions): Promise<void> {
   const argv = (opts.argv ?? process.argv.slice(2)).map(s =>
     s.replaceAll('\n', ' '),
   );
@@ -161,7 +162,7 @@ export async function runAnalyzeCli(opts: AnalyzeCliOptions): Promise<void> {
     ],
   });
 
-  if (!config.zeroCacheUrl) {
+  if (!config.zeroCacheURL) {
     colorConsole.error('--zero-cache-url is required. See --help for usage.');
     process.exit(1);
   }
@@ -180,7 +181,7 @@ export async function runAnalyzeCli(opts: AnalyzeCliOptions): Promise<void> {
 
   const z = new Zero({
     schema: opts.schema,
-    server: config.zeroCacheUrl,
+    server: config.zeroCacheURL,
     auth: config.authToken,
     userID: config.userId ?? 'analyze-cli',
     kvStore: 'mem',
