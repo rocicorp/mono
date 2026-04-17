@@ -309,6 +309,15 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     'pipeline-resets',
     'Number of pipeline resets',
   );
+  readonly #rowSetSignatureDrifts = getOrCreateCounter(
+    'sync',
+    'query.row-set-signature-drifts',
+    'Number of times re-hydration of an unchanged query produced a different ' +
+      'row-set signature than what is stored in the CVR (forcing a configVersion ' +
+      'bump and full re-execution). Expected to be near-zero in steady state; ' +
+      'persistent non-zero values indicate non-deterministic query execution ' +
+      '(e.g. Cap operator picking different N-row subsets).',
+  );
 
   readonly #inspectorDelegate: InspectorDelegate;
 
@@ -1518,6 +1527,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
               `prior=${priorSig.toString(16)} new=${candidateSig.toString(16)} ` +
               `(${count} rows). Removing from pipelines for full re-execution.`,
           );
+          this.#rowSetSignatureDrifts.add(1);
           this.#pipelines.removeQuery(queryID);
           driftedQueryIDs.add(queryID);
         }
