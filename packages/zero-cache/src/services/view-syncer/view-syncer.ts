@@ -1381,10 +1381,13 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             customQueries.values(),
           ),
       );
+      // Uncached results can also return the authoritative server userID
+      // for that snapshot.
       if (!transformedCustomQueries.cached) {
         this.contextManager.validateConnection(
           backgroundContext,
           backgroundContext.revision,
+          transformedCustomQueries.userID,
         );
       }
 
@@ -1684,12 +1687,13 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             );
           } else {
             // If the transform wasn't cached, we mark the connection as validated.
-            // This also passes the revision to ensure that race conditions with auth
-            // don't validate stale credentials.
+            // This also threads the authoritative server userID through the
+            // revision check so auth races do not validate stale credentials.
             if (!transformedCustomQueries.cached) {
               this.contextManager.validateConnection(
                 resolvedContext,
                 resolvedContext.revision,
+                transformedCustomQueries.userID,
               );
             }
             this.#queryTransformations.add(1, {result: 'success'});
@@ -2350,17 +2354,32 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
   async #validateConnection(ctx: ConnectionContext): Promise<boolean> {
     try {
+      let validatedUserID: string | null | undefined = undefined;
       if (this.#customQueryTransformer) {
         const validation = await this.#customQueryTransformer.validate(ctx);
         if (validation.kind === 'TransformFailed') {
           throw new ProtocolErrorWithLevel(validation, 'warn');
         }
+        validatedUserID = validation.userID;
       }
 
-      this.contextManager.validateConnection(ctx, ctx.revision);
+      this.contextManager.validateConnection(
+        ctx,
+        ctx.revision,
+        validatedUserID,
+      );
       return true;
     } catch (e) {
       if (isProtocolError(e) && isAuthErrorBody(e.errorBody)) {
+        this.#lc.warn?.(
+          'Connection auth validation failed; invalidating connection',
+          {
+            clientID: ctx.clientID,
+            wsID: ctx.wsID,
+            revision: ctx.revision,
+            message: e.message,
+          },
+        );
         this.#failMaintenanceConnection(ctx, e);
         return false;
       }

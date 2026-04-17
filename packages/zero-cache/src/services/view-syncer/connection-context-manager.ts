@@ -108,6 +108,7 @@ export type ConnectionContextManager = {
   validateConnection(
     selector: ConnectionSelector,
     revision: number,
+    validatedUserID: string | null | undefined,
   ):
     | Readonly<{
         connection: ConnectionContext;
@@ -154,7 +155,7 @@ export type ConnectionContextManager = {
  *
  * Connections are registered as `provisional`, optionally backfilled with
  * `initConnection` metadata, and then promoted to `validated` once their
- * stored `userID` is confirmed as valid. The manager also tracks which
+ * effective `userID` is confirmed as valid. The manager also tracks which
  * validated connection currently serves as the group's background connection.
  *
  * This is intentionally side-effect free.
@@ -345,6 +346,7 @@ export class ConnectionContextManagerImpl implements ConnectionContextManager {
   validateConnection(
     selector: ConnectionSelector,
     revision: number,
+    validatedUserID: string | null | undefined,
   ):
     | Readonly<{
         connection: ConnectionContext;
@@ -365,7 +367,30 @@ export class ConnectionContextManagerImpl implements ConnectionContextManager {
       return undefined;
     }
 
-    if (this.#group.validated && this.#group.userID !== connection.userID) {
+    const effectiveValidatedUserID = normalizeValidatedUserID(
+      validatedUserID,
+      connection.userID,
+    );
+
+    // Check that the ws connection userID provided by the client
+    // matches the confirmed identity from the API server
+    if (connection.userID !== effectiveValidatedUserID) {
+      throw new ProtocolErrorWithLevel(
+        {
+          kind: ErrorKind.Unauthorized,
+          message: 'Connection userID does not match validated server userID.',
+          origin: ErrorOrigin.ZeroCache,
+        },
+        'warn',
+      );
+    }
+
+    // Once a client group is validated, every later validated connection must
+    // agree with that pinned identity.
+    if (
+      this.#group.validated &&
+      this.#group.userID !== effectiveValidatedUserID
+    ) {
       throw new ProtocolErrorWithLevel(
         {
           kind: ErrorKind.Unauthorized,
@@ -379,7 +404,7 @@ export class ConnectionContextManagerImpl implements ConnectionContextManager {
 
     if (!this.#group.validated) {
       this.#group.validated = true;
-      this.#group.userID = connection.userID;
+      this.#group.userID = effectiveValidatedUserID;
     }
 
     connection.state = 'validated';
@@ -743,6 +768,19 @@ function snapshotGroup(group: GroupAuthState): Readonly<GroupAuthState> {
       ? {...group.backgroundConnection}
       : undefined,
   };
+}
+
+function normalizeValidatedUserID(
+  validatedUserID: string | null | undefined,
+  fallbackUserID: string | undefined,
+) {
+  // `null` means the API server explicitly validated a logged-out connection.
+  // `undefined` preserves legacy callers that only validated the stored
+  // connection userID and had no authoritative server userID to thread back.
+  if (validatedUserID === null) {
+    return undefined;
+  }
+  return validatedUserID ?? fallbackUserID;
 }
 
 function compareByInsertionOrder(
