@@ -89,6 +89,7 @@ import type {DrainCoordinator} from './drain-coordinator.ts';
 import {handleInspect} from './inspect-handler.ts';
 import type {PipelineDriver} from './pipeline-driver.ts';
 import {type RowChange} from './pipeline-driver.ts';
+import {parseSignature, rowIDSignatureUnit} from './row-set-signature.ts';
 import {
   cmpVersions,
   EMPTY_CVR_VERSION,
@@ -500,12 +501,20 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           // stateVersion is at or beyond CVR version for the first time.
           lc.info?.(`init pipelines@${version} (cvr@${cvrVer})`);
 
-          await this.#hydrateUnchangedQueries(lc, cvr);
+          const driftedQueryIDs = await this.#hydrateUnchangedQueries(lc, cvr);
           // hydrateUnchangedQueries just transformed
           // all the custom queries, this #syncQueryPipelineSet call
           // should retransform those that are missing from #pipelines, which
-          // are those which errored or changed transform hash
-          await this.#syncQueryPipelineSet(lc, cvr, 'missing', undefined);
+          // are those which errored or changed transform hash, plus those
+          // removed because their rowSetSignature drifted (Cap re-execution
+          // chose a different N-row subset).
+          await this.#syncQueryPipelineSet(
+            lc,
+            cvr,
+            'missing',
+            undefined,
+            driftedQueryIDs,
+          );
           this.#pipelinesSynced = true;
         });
       }
@@ -1318,7 +1327,10 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
    *
    * This must be called from within the #lock.
    */
-  async #hydrateUnchangedQueries(lc: LogContext, cvr: CVRSnapshot) {
+  async #hydrateUnchangedQueries(
+    lc: LogContext,
+    cvr: CVRSnapshot,
+  ): Promise<Set<string>> {
     assert(this.#pipelines.initialized(), 'pipelines must be initialized');
 
     const dbVersion = this.#pipelines.currentVersion();
@@ -1328,7 +1340,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       lc.info?.(
         `CVR (${versionToCookie(cvrVersion)}) is behind db ${dbVersion}`,
       );
-      return; // hydration needs to be run with the CVR updater.
+      return new Set(); // hydration needs to be run with the CVR updater.
     }
 
     const gotQueries = Object.entries(cvr.queries).filter(
@@ -1439,6 +1451,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         `${transformedQueries.length} hydrated`,
     );
 
+    const driftedQueryIDs = new Set<string>();
+
     for (const {
       id: queryID,
       transformationHash,
@@ -1446,6 +1460,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     } of transformedQueries) {
       const timer = new TimeSliceTimer(lc);
       let count = 0;
+      let candidateSig = 0n;
       await startAsyncSpan(
         tracer,
         'vs.#hydrateUnchangedQueries.addQuery',
@@ -1463,6 +1478,12 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
               await timer.yieldProcess('yield in hydrateUnchangedQueries');
             } else {
               count++;
+              const rowID: RowID = {
+                schema: '',
+                table: change.table,
+                rowKey: change.rowKey as RowKey,
+              };
+              candidateSig ^= rowIDSignatureUnit(rowID);
             }
           }
         },
@@ -1473,7 +1494,37 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       this.#hydrationTime.record(elapsed / 1000);
       this.#addQueryMaterializationServerMetric(transformationHash, elapsed);
       lc.debug?.(`hydrated ${count} rows for ${queryID} (${elapsed} ms)`);
+
+      // Drift detection: compare the just-computed candidate signature against
+      // the signature stored in the CVR. They should match for a deterministic
+      // query at the same db state. A mismatch indicates a query containing
+      // the Cap operator picked a different N-row subset on re-execution.
+      // Remove the query from pipelines so #syncQueryPipelineSet 'missing'
+      // re-executes it via the CVRQueryDrivenUpdater path, where the row diff
+      // will be properly emitted to the client.
+      //
+      // Skip when the stored signature is absent — legacy queries from before
+      // this feature was deployed have no signature to compare against, and a
+      // forced re-execution would needlessly resend rows to the client. Such
+      // queries get their signature initialized whenever they next re-execute
+      // via the normal path (transformation hash change, etc.), at which
+      // point drift detection becomes effective for subsequent cycles.
+      const storedSigHex = cvr.queries[queryID]?.rowSetSignature;
+      if (storedSigHex !== undefined && storedSigHex !== null) {
+        const priorSig = parseSignature(storedSigHex);
+        if (priorSig !== candidateSig) {
+          lc.warn?.(
+            `rowSetSignature drift for query ${queryID}: ` +
+              `prior=${priorSig.toString(16)} new=${candidateSig.toString(16)} ` +
+              `(${count} rows). Removing from pipelines for full re-execution.`,
+          );
+          this.#pipelines.removeQuery(queryID);
+          driftedQueryIDs.add(queryID);
+        }
+      }
     }
+
+    return driftedQueryIDs;
   }
 
   #processTransformedCustomQueries(
@@ -1574,6 +1625,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     cvr: CVRSnapshot,
     customQueryTransformMode: CustomQueryTransformMode,
     ctx: ConnectionContext | undefined,
+    driftedQueryIDs: Set<string> = new Set(),
   ) {
     return startAsyncSpan(tracer, 'vs.#syncQueryPipelineSet', async span => {
       span.setAttribute('clientGroupID', this.id);
@@ -1799,6 +1851,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           cvr,
           addQueries,
           Array.from(removeQueriesQueryIds, id => ({id})),
+          driftedQueryIDs,
         );
       } else {
         await this.#catchupClients(lc, cvr);
@@ -1845,6 +1898,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     cvr: CVRSnapshot,
     addQueries: {id: string; ast: AST; transformationHash: string}[],
     removeQueries: {id: string}[],
+    driftedQueryIDs: Set<string> = new Set(),
   ): Promise<void> {
     return startAsyncSpan(tracer, 'vs.#addAndRemoveQueries', async () => {
       assert(
@@ -1866,15 +1920,27 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
       // Note: This kicks off background PG queries for CVR data associated with the
       // executed and removed queries.
-      const {newVersion, queryPatches} = updater.trackQueries(
+      const {queryPatches} = updater.trackQueries(
         lc,
         addQueries,
         removeQueries,
       );
+
+      // For queries being re-executed solely due to rowSetSignature drift
+      // (not a transformationHash change), trackQueries does not bump
+      // configVersion. Force a bump so the row diff produced by received()
+      // gets propagated to the client via a poke. Must happen before
+      // startPoke so the pokers see the final cookie version.
+      if (addQueries.some(q => driftedQueryIDs.has(q.id))) {
+        updater.ensureNewVersion();
+      }
+      const newVersion = updater.updatedVersion();
       const clients = this.#getClients();
       const pokers = startPoke(clients, newVersion);
       for (const patch of queryPatches) {
-        await pokers.addPatch(patch);
+        // Bump patches' toVersion to the post-drift-bump version so that
+        // pokers don't see them as belonging to a stale cookie.
+        await pokers.addPatch({...patch, toVersion: newVersion});
       }
 
       // Removing queries is easy. The pipelines are dropped, and the CVR

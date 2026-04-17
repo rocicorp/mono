@@ -2523,6 +2523,7 @@ describe('view-syncer/service', () => {
               "patchVersion": {
                 "stateVersion": "01",
               },
+              "rowSetSignature": "7b557aaf85ad1c06",
               "transformationHash": "hash-1",
               "transformationVersion": {
                 "stateVersion": "01",
@@ -2556,6 +2557,7 @@ describe('view-syncer/service', () => {
               "patchVersion": {
                 "stateVersion": "01",
               },
+              "rowSetSignature": "7b557aaf85ad1c06",
               "transformationHash": "hash-2",
               "transformationVersion": {
                 "stateVersion": "01",
