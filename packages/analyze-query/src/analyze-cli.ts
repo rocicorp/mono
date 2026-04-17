@@ -20,7 +20,7 @@ import type {SchemaQuery} from '../../zql/src/query/schema-query.ts';
 export type AnalyzeCLIOptions = {
   schema: Schema;
   /** Defaults to `process.argv.slice(2)`. */
-  argv?: readonly string[];
+  argv?: readonly string[] | undefined;
 };
 
 const options = {
