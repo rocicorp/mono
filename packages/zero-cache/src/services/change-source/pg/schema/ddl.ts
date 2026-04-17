@@ -3,11 +3,7 @@ import {assert} from '../../../../../../shared/src/asserts.ts';
 import * as v from '../../../../../../shared/src/valita.ts';
 import {upstreamSchema, type ShardConfig} from '../../../../types/shards.ts';
 import {id} from '../../../../types/sql.ts';
-import {
-  indexDefinitionsQuery,
-  publishedSchema,
-  publishedTableQuery,
-} from './published.ts';
+import {publishedSchema, publishedSchemaQuery} from './published.ts';
 
 // Sent in the 'version' tag of "ddlStart" and "ddlUpdate" event messages.
 // This is used to ensure that the message constructed in the upstream
@@ -123,6 +119,10 @@ function append(shardNum: number) {
   return (name: string) => id(name + '_' + String(shardNum));
 }
 
+// pg_advisory_xact_lock key for serializing ddl statements in order to
+// produce correct schema change diffs.
+const DDL_SERIALIZATION_LOCK = 0x3c6b8468f1bac0b0n;
+
 /**
  * Event trigger functions contain the core logic that are invoked by triggers.
  *
@@ -166,19 +166,11 @@ $$ LANGUAGE plpgsql;
 
 
 CREATE OR REPLACE FUNCTION ${schema}.schema_specs()
-RETURNS TEXT AS $$
-DECLARE
-  tables record;
-  indexes record;
-BEGIN
-  ${publishedTableQuery(publications)} INTO tables;
-  ${indexDefinitionsQuery(publications)} INTO indexes;
-  RETURN json_build_object(
-    'tables', tables.tables,
-    'indexes', indexes.indexes
-  );
-END
-$$ LANGUAGE plpgsql;
+RETURNS TEXT 
+STABLE
+AS $$
+  ${publishedSchemaQuery(publications)}
+$$ LANGUAGE sql;
 
 
 CREATE OR REPLACE FUNCTION ${schema}.emit_ddl_start()
@@ -187,6 +179,9 @@ DECLARE
   schema_specs TEXT;
   message TEXT;
 BEGIN
+  -- serialize DDL statements to compute correct schema change diffs
+  PERFORM pg_advisory_xact_lock(${DDL_SERIALIZATION_LOCK});
+
   SELECT ${schema}.schema_specs() INTO schema_specs;
 
   SELECT json_build_object(

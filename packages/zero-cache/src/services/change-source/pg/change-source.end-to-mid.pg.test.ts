@@ -1486,6 +1486,48 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
       [],
     ],
     [
+      'concurrent schema changes',
+      [
+        // statements are run in parallel
+        `CREATE TABLE your.t0 (id INT8 PRIMARY KEY)`,
+        `CREATE TABLE your.t1 (id INT8 PRIMARY KEY)`,
+        `CREATE TABLE your.t2 (id INT8 PRIMARY KEY)`,
+        `CREATE TABLE your.t3 (id INT8 PRIMARY KEY)`,
+        `CREATE TABLE your.t4 (id INT8 PRIMARY KEY)`,
+        `CREATE TABLE your.t5 (id INT8 PRIMARY KEY)`,
+        `CREATE TABLE your.t6 (id INT8 PRIMARY KEY)`,
+        `CREATE TABLE your.t7 (id INT8 PRIMARY KEY)`,
+        `CREATE TABLE your.t8 (id INT8 PRIMARY KEY)`,
+        `CREATE TABLE your.t9 (id INT8 PRIMARY KEY)`,
+      ],
+      [
+        [{tag: 'create-table'}, {tag: 'create-index'}],
+        [{tag: 'create-table'}, {tag: 'create-index'}],
+        [{tag: 'create-table'}, {tag: 'create-index'}],
+        [{tag: 'create-table'}, {tag: 'create-index'}],
+        [{tag: 'create-table'}, {tag: 'create-index'}],
+        [{tag: 'create-table'}, {tag: 'create-index'}],
+        [{tag: 'create-table'}, {tag: 'create-index'}],
+        [{tag: 'create-table'}, {tag: 'create-index'}],
+        [{tag: 'create-table'}, {tag: 'create-index'}],
+        [{tag: 'create-table'}, {tag: 'create-index'}],
+      ],
+      {
+        ['your.t0']: [],
+        ['your.t1']: [],
+        ['your.t2']: [],
+        ['your.t3']: [],
+        ['your.t4']: [],
+        ['your.t5']: [],
+        ['your.t6']: [],
+        ['your.t7']: [],
+        ['your.t8']: [],
+        ['your.t9']: [],
+      },
+      [],
+      [],
+    ],
+    [
       'no primary key',
       `
       CREATE TABLE your.nopk (a TEXT NOT NULL, b TEXT);
@@ -1960,7 +2002,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
     ],
   ] satisfies [
     name: string,
-    statements: string,
+    statements: string | string[],
     transactions: Partial<DataOrSchemaChange>[][],
     expectedData: Record<string, JSONValue>,
     expectedTables: LiteTableSpec[],
@@ -1975,7 +2017,8 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
       expectedTables,
       expectedIndexes,
     ) => {
-      await upstream.unsafe(stmts);
+      stmts = Array.isArray(stmts) ? stmts : [stmts];
+      await Promise.all(stmts.map(stmt => upstream.unsafe(stmt)));
       for (const changes of transactions) {
         const transaction = await nextTransaction();
         expect(transaction).toMatchObject(changes);
