@@ -195,14 +195,14 @@ const authOptions = {
     ],
   },
   revalidateIntervalSeconds: {
-    type: v.number().default(300),
+    type: v.number().optional(),
     desc: [
       `The interval in seconds between periodic /query auth revalidation for validated connections.`,
       `If unset, periodic auth revalidation is disabled.`,
     ],
   },
   retransformIntervalSeconds: {
-    type: v.number().default(300),
+    type: v.number().optional(),
     desc: [
       `The interval in seconds between periodic shared /query retransform work for a client group.`,
       `If unset, periodic shared retransform is disabled.`,
