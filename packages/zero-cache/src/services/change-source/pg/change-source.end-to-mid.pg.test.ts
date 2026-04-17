@@ -1,4 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
+import {literal} from 'pg-format';
 import {afterAll, beforeAll, describe, expect, test} from 'vitest';
 import {type JSONValue} from '../../../../../shared/src/bigint-json.ts';
 import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.ts';
@@ -15,6 +16,7 @@ import {createChangeProcessor} from '../../replicator/test-utils.ts';
 import type {DataOrSchemaChange} from '../protocol/current/data.ts';
 import type {ChangeStreamMessage} from '../protocol/current/downstream.ts';
 import {initializePostgresChangeSource} from './change-source.ts';
+import {TAGS} from './schema/ddl.ts';
 
 const APP_ID = 'orez';
 
@@ -1878,7 +1880,20 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
     ],
     [
       'disable ALTER PUBLICATION trigger',
-      /*sql*/ `DROP EVENT TRIGGER ${APP_ID}_alter_publication_0;`,
+      /*sql*/ `
+      DROP EVENT TRIGGER ${APP_ID}_ddl_start_0;
+      DROP EVENT TRIGGER ${APP_ID}_ddl_end_0;
+
+      CREATE EVENT TRIGGER ${APP_ID}_ddl_start_0
+        ON ddl_command_start
+        WHEN TAG IN (${literal(removeAlterPublication(TAGS))})
+        EXECUTE PROCEDURE ${APP_ID}_0.emit_ddl_start();
+
+      CREATE EVENT TRIGGER ${APP_ID}_ddl_end_0
+        ON ddl_command_end
+        WHEN TAG IN (${literal(removeAlterPublication([...TAGS, 'COMMENT']))})
+        EXECUTE PROCEDURE ${APP_ID}_0.emit_ddl_end();
+      `,
       [],
       {},
       [],
@@ -1982,6 +1997,48 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
       [],
       [],
     ],
+    [
+      'nested DDL event (RLS)',
+      /*sql*/ `
+     CREATE OR REPLACE FUNCTION add_rls()
+     RETURNS event_trigger AS $$
+     DECLARE
+       target RECORD;
+     BEGIN
+       SELECT object_identity as name
+         FROM pg_event_trigger_ddl_commands() 
+         LIMIT 1 INTO target; 
+       -- This results in firing nested ddl_start / ddl_end triggers
+       EXECUTE format('ALTER TABLE %s ENABLE ROW LEVEL SECURITY', target.name);
+     END
+     $$ LANGUAGE plpgsql;
+
+     CREATE EVENT TRIGGER add_rls_trigger
+      ON ddl_command_end
+      WHEN TAG IN ('CREATE TABLE')
+      EXECUTE PROCEDURE add_rls();
+
+     CREATE TABLE your.table_that_gets_rls (id INT8 PRIMARY KEY, val INT8 NOT NULL);
+     CREATE UNIQUE INDEX val_idx ON your.table_that_gets_rls (val);
+      `,
+      [[{tag: 'create-table'}, {tag: 'create-index'}, {tag: 'create-index'}]],
+      {['your.table_that_gets_rls']: []},
+      [],
+      [
+        {
+          tableName: 'your.table_that_gets_rls',
+          name: 'your.table_that_gets_rls_pkey',
+          columns: {id: 'ASC'},
+          unique: true,
+        },
+        {
+          tableName: 'your.table_that_gets_rls',
+          name: 'your.val_idx',
+          columns: {val: 'ASC'},
+          unique: true,
+        },
+      ],
+    ],
   ] satisfies [
     name: string,
     statements: string | string[],
@@ -2023,3 +2080,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
     },
   );
 });
+
+function removeAlterPublication(tags: readonly string[]) {
+  return tags.filter(tag => tag !== 'ALTER PUBLICATION');
+}

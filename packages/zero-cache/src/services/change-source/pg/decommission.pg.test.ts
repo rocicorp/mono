@@ -49,17 +49,7 @@ describe('decommission', () => {
     );
     expect(
       await upstream`SELECT evtname FROM pg_event_trigger WHERE evtname LIKE 'zerooutcs%'`.values(),
-    ).toEqual([
-      ['zerooutcs_ddl_start_13'],
-      ['zerooutcs_create_table_13'],
-      ['zerooutcs_alter_table_13'],
-      ['zerooutcs_create_index_13'],
-      ['zerooutcs_drop_table_13'],
-      ['zerooutcs_drop_index_13'],
-      ['zerooutcs_alter_publication_13'],
-      ['zerooutcs_alter_schema_13'],
-      ['zerooutcs_comment_13'],
-    ]);
+    ).toEqual([['zerooutcs_ddl_start_13'], ['zerooutcs_ddl_end_13']]);
     expect(
       await upstream`SELECT slot_name FROM pg_replication_slots WHERE slot_name LIKE 'zerooutcs%'`.values(),
     ).toMatchObject([[expect.stringMatching('zerooutcs_13_')]]);
