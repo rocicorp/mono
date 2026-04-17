@@ -253,7 +253,7 @@ const apiPushResponseSchema = v.union(
 
 export const mutateSuccessSchema = v.object({
   kind: v.literal('MutateResponse'),
-  userID: v.string().nullable(),
+  userID: v.string().nullable().optional(),
   mutations: v.array(apiMutationResponseSchema),
 });
 export type MutateSuccess = v.Infer<typeof mutateSuccessSchema>;

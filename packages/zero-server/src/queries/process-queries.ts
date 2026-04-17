@@ -1,7 +1,6 @@
 import type {LogLevel} from '@rocicorp/logger';
 import {getErrorDetails, getErrorMessage} from '../../../shared/src/error.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
-import {must} from '../../../shared/src/must.ts';
 import type {MaybePromise} from '../../../shared/src/types.ts';
 import * as v from '../../../shared/src/valita.ts';
 import {mapAST} from '../../../zero-protocol/src/ast.ts';
@@ -77,18 +76,105 @@ export function handleTransformRequest<S extends Schema>(
   );
 }
 
+type UserID = string | null | undefined;
+type QueryString = URLSearchParams | Record<string, string>;
+
+type HandleQueryRequestArgs = [
+  userIDOrQueryStringOrRequestOrJsonBody:
+    | UserID
+    | Request
+    | QueryString
+    | ReadonlyJSONValue,
+  queryStringOrRequestOrJsonBodyOrLogLevel?:
+    | QueryString
+    | Request
+    | ReadonlyJSONValue
+    | LogLevel,
+  requestOrJsonBodyOrLogLevel?: Request | ReadonlyJSONValue | LogLevel,
+  logLevel?: LogLevel,
+];
+
 /**
- * Processes a transform request by invoking the provided callback for each query.
- * The callback should return a Query that is the transformed result.
+ * Process a `/query` request from a Fetch `Request` or parsed JSON body.
  *
- * This function will call `transformQuery` in parallel for each query found in the request.
+ * @param transformQuery - Runs once per requested query with the query name
+ * and first JSON argument. Returns a `Query`.
+ * @param schema - Schema used when building the returned ASTs.
+ * @param requestOrJsonBody - A Fetch `Request`, or a parsed JSON body.
+ * @param logLevel - Log level for request processing. Defaults to `'info'`.
+ * @returns A `QueryResponse`. Success returns `userID: null` and one result
+ * per query. Per-query errors stay in `queries`; malformed requests return
+ * `TransformFailed`.
+ */
+export function handleQueryRequest<S extends Schema>(
+  transformQuery: TransformQueryFunction,
+  schema: S,
+  requestOrJsonBody: Request | ReadonlyJSONValue,
+  logLevel?: LogLevel,
+): Promise<QueryResponse>;
+
+/**
+ * Process a `/query` request from parsed query parameters and a parsed JSON
+ * body.
  *
- * @param transformQuery - Callback function that takes a query name and args, and returns a Query
- * @param schema - The Zero schema
- * @param userID - The authenticated user ID, or null/undefined if not authenticated
- * @param requestOrJsonBody - Either a Request object or the JSON body directly
- * @param logLevel - Logging level (defaults to 'info')
- * @returns A Promise that resolves to a QueryResponse
+ * @param transformQuery - Runs once per requested query with the query name
+ * and first JSON argument. Returns a `Query`.
+ * @param schema - Schema used when building the returned ASTs.
+ * @param queryString - Parsed query params. Accepted for symmetry and
+ * currently unused.
+ * @param body - Parsed JSON body.
+ * @param logLevel - Log level for request processing. Defaults to `'info'`.
+ * @returns A `QueryResponse`. Success returns `userID: null` and one result
+ * per query. Per-query errors stay in `queries`; malformed requests return
+ * `TransformFailed`.
+ */
+export function handleQueryRequest<S extends Schema>(
+  transformQuery: TransformQueryFunction,
+  schema: S,
+  queryString: URLSearchParams | Record<string, string>,
+  body: ReadonlyJSONValue,
+  logLevel?: LogLevel,
+): Promise<QueryResponse>;
+
+/**
+ * Process a `/query` request and include the authenticated user in the success
+ * response.
+ *
+ * @param transformQuery - Runs once per requested query with the query name
+ * and first JSON argument. Returns a `Query`.
+ * @param schema - Schema used when building the returned ASTs.
+ * @param userID - User ID included in successful responses. Pass `null` or
+ * `undefined` when unauthenticated.
+ * @param requestOrJsonBody - A Fetch `Request`, or a parsed JSON body.
+ * @param logLevel - Log level for request processing. Defaults to `'info'`.
+ * @returns A `QueryResponse`. Success returns `userID: userID ?? null` and
+ * one result per query. Per-query errors stay in `queries`; malformed
+ * requests return `TransformFailed`.
+ */
+export function handleQueryRequest<S extends Schema>(
+  transformQuery: TransformQueryFunction,
+  schema: S,
+  userID: string | null | undefined,
+  requestOrJsonBody: Request | ReadonlyJSONValue,
+  logLevel?: LogLevel,
+): Promise<QueryResponse>;
+
+/**
+ * Process a `/query` request from parsed query parameters and a parsed JSON
+ * body, and include the authenticated user in the success response.
+ *
+ * @param transformQuery - Runs once per requested query with the query name
+ * and first JSON argument. Returns a `Query`.
+ * @param schema - Schema used when building the returned ASTs.
+ * @param userID - User ID included in successful responses. Pass `null` or
+ * `undefined` when unauthenticated.
+ * @param queryString - Parsed query params. Accepted for symmetry and
+ * currently unused.
+ * @param body - Parsed JSON body.
+ * @param logLevel - Log level for request processing. Defaults to `'info'`.
+ * @returns A `QueryResponse`. Success returns `userID: userID ?? null` and
+ * one result per query. Per-query errors stay in `queries`; malformed
+ * requests return `TransformFailed`.
  */
 export function handleQueryRequest<S extends Schema>(
   transformQuery: TransformQueryFunction,
@@ -102,39 +188,121 @@ export function handleQueryRequest<S extends Schema>(
 export function handleQueryRequest<S extends Schema>(
   transformQuery: TransformQueryFunction,
   schema: S,
-  userID: string | null | undefined,
-  request: Request,
-  logLevel?: LogLevel,
-): Promise<QueryResponse>;
-
-export function handleQueryRequest<S extends Schema>(
-  transformQuery: TransformQueryFunction,
-  schema: S,
-  userID: string | null | undefined,
-  queryStringOrRequest: URLSearchParams | Record<string, string> | Request,
-  bodyOrLogLevel?: ReadonlyJSONValue | LogLevel,
-  logLevel?: LogLevel,
+  ...args: HandleQueryRequestArgs
 ): Promise<QueryResponse> {
-  const requestOrJsonBody: Request | ReadonlyJSONValue =
-    queryStringOrRequest instanceof Request
-      ? queryStringOrRequest
-      : must(
-          bodyOrLogLevel,
-          'body is required when using query params directly',
-        );
-  const resolvedLogLevel =
-    queryStringOrRequest instanceof Request
-      ? ((bodyOrLogLevel as LogLevel | undefined) ?? 'info')
-      : (logLevel ?? 'info');
+  const normalized = normalizeQueryRequestArgs(args);
+  const requestOrJsonBody =
+    normalized.source === 'request' ? normalized.request : normalized.jsonBody;
 
   return transform(
     (name, argsArray) => transformQuery(name, argsArray[0]),
     schema,
-    userID,
+    normalized.userID,
     requestOrJsonBody,
     'query',
-    resolvedLogLevel,
+    normalized.logLevel,
   );
+}
+
+type NormalizedQueryRequestArgs =
+  | {
+      readonly source: 'request';
+      readonly userID: UserID;
+      readonly queryString: URLSearchParams;
+      readonly request: Request;
+      readonly logLevel: LogLevel;
+    }
+  | {
+      readonly source: 'parsed';
+      readonly userID: UserID;
+      readonly queryString: QueryString | undefined;
+      readonly jsonBody: ReadonlyJSONValue;
+      readonly logLevel: LogLevel;
+    };
+
+export function normalizeQueryRequestArgs(
+  args: HandleQueryRequestArgs,
+): NormalizedQueryRequestArgs {
+  const [firstArg, secondArg, thirdArg, fourthArg] = args;
+
+  if (firstArg instanceof Request) {
+    return {
+      source: 'request',
+      userID: undefined,
+      queryString: new URL(firstArg.url).searchParams,
+      request: firstArg,
+      logLevel: (secondArg as LogLevel | undefined) ?? 'info',
+    };
+  }
+
+  if (isUserID(firstArg)) {
+    if (secondArg instanceof Request) {
+      return {
+        source: 'request',
+        userID: firstArg ?? null,
+        queryString: new URL(secondArg.url).searchParams,
+        request: secondArg,
+        logLevel: (thirdArg as LogLevel | undefined) ?? 'info',
+      };
+    }
+
+    if (isQueryString(secondArg)) {
+      return {
+        source: 'parsed',
+        userID: firstArg ?? null,
+        queryString: secondArg,
+        jsonBody: thirdArg as ReadonlyJSONValue,
+        logLevel: (fourthArg as LogLevel | undefined) ?? 'info',
+      };
+    }
+
+    return {
+      source: 'parsed',
+      userID: firstArg ?? null,
+      queryString: undefined,
+      jsonBody: secondArg as ReadonlyJSONValue,
+      logLevel: (thirdArg as LogLevel | undefined) ?? 'info',
+    };
+  }
+
+  if (isQueryString(firstArg)) {
+    return {
+      source: 'parsed',
+      userID: undefined,
+      queryString: firstArg,
+      jsonBody: secondArg as ReadonlyJSONValue,
+      logLevel: (thirdArg as LogLevel | undefined) ?? 'info',
+    };
+  }
+
+  return {
+    source: 'parsed',
+    userID: undefined,
+    queryString: undefined,
+    jsonBody: firstArg as ReadonlyJSONValue,
+    logLevel: (secondArg as LogLevel | undefined) ?? 'info',
+  };
+}
+
+function isUserID(value: unknown): value is UserID {
+  return value === null || value === undefined || typeof value === 'string';
+}
+
+function isQueryString(value: unknown): value is QueryString {
+  if (value instanceof URLSearchParams) {
+    return true;
+  }
+
+  if (
+    value instanceof Request ||
+    typeof value !== 'object' ||
+    value === null ||
+    Array.isArray(value)
+  ) {
+    return false;
+  }
+
+  return Object.values(value).every(v => typeof v === 'string');
 }
 
 async function transform<S extends Schema>(
@@ -218,9 +386,9 @@ async function transform<S extends Schema>(
 
     return {
       kind: 'QueryResponse',
-      userID: userID ?? null,
       queries: responses,
-    };
+      ...(typeof userID !== 'undefined' ? {userID} : {}),
+    } as const satisfies QueryResponse;
   } catch (e) {
     const message = getErrorMessage(e);
     const details = getErrorDetails(e);

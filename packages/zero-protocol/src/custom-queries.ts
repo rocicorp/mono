@@ -88,7 +88,7 @@ export type TransformResponseBody = QueryResponseBody;
 
 export const querySuccessSchema = v.object({
   kind: v.literal('QueryResponse'),
-  userID: v.string().nullable(),
+  userID: v.string().nullable().optional(),
   queries: queryResponseBodySchema,
 });
 export type QuerySuccess = v.Infer<typeof querySuccessSchema>;

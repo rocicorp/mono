@@ -32,7 +32,7 @@ function makeQuery(ast: AST): AnyQuery {
 
 function makeQuerySuccessResponse(
   queries: ReadonlyJSONValue,
-  userID: string | null = null,
+  userID: string | null | undefined = undefined,
 ) {
   return {
     kind: 'QueryResponse',
@@ -164,7 +164,7 @@ describe('handleGetQueriesRequest', () => {
 
     const cb = vi.fn(() => makeQuery(ast));
 
-    const result = await handleQueryRequest(cb, schema, undefined, baseQuery, [
+    const result = await handleQueryRequest(cb, schema, [
       'transform',
       [
         {
@@ -430,7 +430,7 @@ describe('handleGetQueriesRequest', () => {
 });
 
 describe('handleQueryRequest', () => {
-  test('returns transformed queries with server names when given JSON body', async () => {
+  test('returns transformed queries with server names when given query params and JSON body', async () => {
     const ast: AST = {
       table: 'names',
       where: {
@@ -443,7 +443,7 @@ describe('handleQueryRequest', () => {
 
     const cb = vi.fn(() => makeQuery(ast));
 
-    const result = await handleQueryRequest(cb, schema, undefined, baseQuery, [
+    const result = await handleQueryRequest(cb, schema, baseQuery, [
       'transform',
       [
         {
@@ -472,6 +472,46 @@ describe('handleQueryRequest', () => {
     );
   });
 
+  test('returns canonical query success when userID and JSON body are provided', async () => {
+    const ast: AST = {
+      table: 'basic',
+      limit: 1,
+    };
+
+    const cb = vi.fn(() => makeQuery(ast));
+
+    const result = await handleQueryRequest(
+      cb,
+      schema,
+      'user-123',
+      [
+        'transform',
+        [
+          {
+            id: 'q2',
+            name: 'basicLimited',
+            args: [],
+          },
+        ],
+      ],
+      'debug',
+    );
+
+    expect(cb).toHaveBeenCalledWith('basicLimited', undefined);
+    expect(result).toEqual(
+      makeQuerySuccessResponse(
+        [
+          {
+            id: 'q2',
+            name: 'basicLimited',
+            ast: expect.objectContaining({table: 'basic'}),
+          },
+        ],
+        'user-123',
+      ),
+    );
+  });
+
   test('reads request bodies from Request instances', async () => {
     const ast: AST = {
       table: 'basic',
@@ -496,7 +536,7 @@ describe('handleQueryRequest', () => {
       body,
     });
 
-    const result = await handleQueryRequest(cb, schema, undefined, request);
+    const result = await handleQueryRequest(cb, schema, request);
 
     expect(cb).toHaveBeenCalledWith('basicLimited', undefined);
     expect(result).toEqual(
@@ -510,14 +550,62 @@ describe('handleQueryRequest', () => {
     );
   });
 
+  test('reads request bodies from Request instances when userID is provided', async () => {
+    const ast: AST = {
+      table: 'basic',
+      limit: 1,
+    };
+
+    const cb = vi.fn(() => makeQuery(ast));
+
+    const body = JSON.stringify([
+      'transform',
+      [
+        {
+          id: 'q2',
+          name: 'basicLimited',
+          args: [],
+        },
+      ],
+    ]);
+
+    const request = new Request(
+      `https://example.com/queries?schema=${baseQuery.schema}&appID=${baseQuery.appID}`,
+      {
+        method: 'POST',
+        body,
+      },
+    );
+
+    const result = await handleQueryRequest(
+      cb,
+      schema,
+      'user-123',
+      request,
+      'debug',
+    );
+
+    expect(cb).toHaveBeenCalledWith('basicLimited', undefined);
+    expect(result).toEqual(
+      makeQuerySuccessResponse(
+        [
+          {
+            id: 'q2',
+            name: 'basicLimited',
+            ast: expect.objectContaining({table: 'basic'}),
+          },
+        ],
+        'user-123',
+      ),
+    );
+  });
+
   test('returns transformFailed parse error when validation fails', async () => {
     const result = await handleQueryRequest(
       () => {
         throw new Error('should not be called');
       },
       schema,
-      undefined,
-      baseQuery,
       ['invalid', []],
     );
 
@@ -543,7 +631,6 @@ describe('handleQueryRequest', () => {
         throw new Error('should not be called');
       },
       schema,
-      undefined,
       request,
     );
 
@@ -569,7 +656,7 @@ describe('handleQueryRequest', () => {
       return makeQuery(ast);
     });
 
-    const result = await handleQueryRequest(cb, schema, undefined, baseQuery, [
+    const result = await handleQueryRequest(cb, schema, [
       'transform',
       [
         {id: 'q1', name: 'first', args: []},
@@ -601,7 +688,7 @@ describe('handleQueryRequest', () => {
       throw error;
     });
 
-    const result = await handleQueryRequest(cb, schema, undefined, baseQuery, [
+    const result = await handleQueryRequest(cb, schema, [
       'transform',
       [{id: 'q1', name: 'test', args: []}],
     ]);
@@ -629,7 +716,7 @@ describe('handleQueryRequest', () => {
       throw error;
     });
 
-    const result = await handleQueryRequest(cb, schema, undefined, baseQuery, [
+    const result = await handleQueryRequest(cb, schema, [
       'transform',
       [{id: 'q1', name: 'test', args: []}],
     ]);
@@ -656,7 +743,7 @@ describe('handleQueryRequest', () => {
       throw parseError;
     });
 
-    const result = await handleQueryRequest(cb, schema, undefined, baseQuery, [
+    const result = await handleQueryRequest(cb, schema, [
       'transform',
       [{id: 'q1', name: 'testQuery', args: [{foo: 'bar'}]}],
     ]);
@@ -688,7 +775,7 @@ describe('handleQueryRequest', () => {
       return makeQuery(ast);
     });
 
-    const result = await handleQueryRequest(cb, schema, undefined, baseQuery, [
+    const result = await handleQueryRequest(cb, schema, [
       'transform',
       [
         {id: 'q1', name: 'parseErrorQuery', args: []},
@@ -729,7 +816,7 @@ describe('handleQueryRequest', () => {
 
     const cb = vi.fn(() => makeQuery(ast));
 
-    const result = await handleQueryRequest(cb, schema, undefined, baseQuery, [
+    const result = await handleQueryRequest(cb, schema, [
       'transform',
       [{id: 'q1', name: 'test', args: []}],
     ]);
