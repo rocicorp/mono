@@ -1,4 +1,4 @@
-import type {LogLevel} from '@rocicorp/logger';
+import type {LogLevel, LogSink} from '@rocicorp/logger';
 import type {StoreProvider} from '../../../replicache/src/kv/store.ts';
 import * as v from '../../../shared/src/valita.ts';
 import type {
@@ -87,6 +87,19 @@ export type ZeroOptions<
    * Default is `'error'`.
    */
   logLevel?: LogLevel | undefined;
+
+  /**
+   * Destination for Zero's log output. When omitted, logs are written with
+   * `console.log`/`info`/`warn`/`error` etc.
+   *
+   * Provide a custom {@linkcode LogSink} to redirect logs — for example, to
+   * `process.stderr` in a CLI so that the tool's structured stdout output
+   * isn't polluted by log lines.
+   *
+   * Note: this overrides only the console sink. When analytics logging is
+   * enabled, the Datadog sink is still installed alongside this one.
+   */
+  logSink?: LogSink | undefined;
 
   /**
    * This defines the schema of the tables used in Zero and their relationships

@@ -1,6 +1,8 @@
 import '../../shared/src/dotenv.ts';
 
+import {Console} from 'node:console';
 import {styleText} from 'node:util';
+import type {LogSink} from '@rocicorp/logger';
 import {WebSocket as NodeWebSocket} from 'ws';
 import {logLevel, logOptions} from '../../otel/src/log-options.ts';
 import {colorConsole} from '../../shared/src/logging.ts';
@@ -18,7 +20,7 @@ import type {SchemaQuery} from '../../zql/src/query/schema-query.ts';
 export type AnalyzeCLIOptions = {
   schema: Schema;
   /** Defaults to `process.argv.slice(2)`. */
-  argv?: readonly string[];
+  argv?: readonly string[] | undefined;
 };
 
 const options = {
@@ -116,6 +118,24 @@ type QueryPlan =
   | {kind: 'zql'; text: string}
   | {kind: 'named'; name: string; args: ReadonlyArray<unknown>};
 
+// Route all Zero client log output to stderr so stdout contains only the
+// analyze result. Shell redirection (`2>/dev/null`) can then cleanly silence
+// logs without affecting output.
+const stderrConsole = new Console({
+  stdout: process.stderr,
+  stderr: process.stderr,
+});
+const stderrLogSink: LogSink = {
+  log(level, context, ...args) {
+    const ctx = context
+      ? Object.entries(context).map(([k, v]) =>
+          v === undefined ? k : `${k}=${v}`,
+        )
+      : [];
+    stderrConsole[level](...ctx, ...args);
+  },
+};
+
 /**
  * Entry point for a user's `cli.ts`. Parses argv, connects to a remote
  * zero-cache by standing up an in-process Zero client (in-memory storage,
@@ -186,6 +206,7 @@ export async function runAnalyzeCLI(opts: AnalyzeCLIOptions): Promise<void> {
     userID: config.userId ?? 'analyze-cli',
     kvStore: 'mem',
     logLevel: config.log.level,
+    logSink: stderrLogSink,
   });
 
   let result: AnalyzeQueryResult;
