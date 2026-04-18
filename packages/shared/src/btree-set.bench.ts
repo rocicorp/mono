@@ -182,7 +182,7 @@ describe('BTreeSet mutations', () => {
     // Simulate source data arriving in reverse order (different comparator)
     const reverseComparator = (a: number, b: number) => b - a;
     yield () => {
-      const sorted = sourceKeys.slice().sort(reverseComparator);
+      const sorted = sourceKeys.toSorted(reverseComparator);
       const t = new BTreeSet<number>(reverseComparator);
       for (const k of sorted) {
         t.add(k);
@@ -195,7 +195,7 @@ describe('BTreeSet mutations', () => {
     const sourceKeys = Array.from({length: NUM_ENTRIES}, (_, i) => i);
     const reverseComparator = (a: number, b: number) => b - a;
     yield () => {
-      const sorted = sourceKeys.slice().sort(reverseComparator);
+      const sorted = sourceKeys.toSorted(reverseComparator);
       const t = BTreeSet.fromSorted(reverseComparator, sorted);
       use(t.size);
     };
