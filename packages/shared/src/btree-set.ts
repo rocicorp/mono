@@ -131,6 +131,47 @@ export class BTreeSet<K> {
   [Symbol.iterator](): IterableIterator<K> {
     return this.keys();
   }
+
+  /**
+   * Builds a BTreeSet from a pre-sorted iterable in O(N) by constructing
+   * the tree bottom-up. The caller must ensure entries are sorted by
+   * `comparator`; violating this produces an invalid tree.
+   */
+  static fromSorted<K>(
+    comparator: Comparator<K>,
+    sortedEntries: Iterable<K>,
+  ): BTreeSet<K> {
+    const tree = new BTreeSet<K>(comparator);
+    const keys = Array.from(sortedEntries);
+    if (keys.length === 0) return tree;
+
+    tree.size = keys.length;
+
+    // Build leaf nodes, filling each to MAX_NODE_SIZE.
+    let currentLevel: BNode<K>[] = [];
+    for (let i = 0; i < keys.length; i += MAX_NODE_SIZE) {
+      currentLevel.push(new BNode<K>(keys.slice(i, i + MAX_NODE_SIZE)));
+    }
+
+    if (currentLevel.length === 1) {
+      tree.#root = currentLevel[0];
+      return tree;
+    }
+
+    // Build internal nodes bottom-up until a single root remains.
+    while (currentLevel.length > 1) {
+      const nextLevel: BNodeInternal<K>[] = [];
+      for (let i = 0; i < currentLevel.length; i += MAX_NODE_SIZE) {
+        nextLevel.push(
+          new BNodeInternal<K>(currentLevel.slice(i, i + MAX_NODE_SIZE)),
+        );
+      }
+      currentLevel = nextLevel;
+    }
+
+    tree.#root = currentLevel[0];
+    return tree;
+  }
 }
 
 class BTreeForwardIterator<K> implements IterableIterator<K> {
