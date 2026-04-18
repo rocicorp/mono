@@ -115,17 +115,17 @@ export class BTreeWrite extends BTreeRead {
       // We do the rebalancing in the parent so we need to do it here as well.
       if (rootNode.getChildNodeSize(this) > this.maxSize) {
         const headerSize = this.chunkHeaderSize;
-        const partitions = partition(
+        const {level} = rootNode;
+        const entries = partition(
           rootNode.entries,
           value => value[2],
           this.minSize - headerSize,
           this.maxSize - headerSize,
+          entries => {
+            const node = this.newNodeImpl(entries, level);
+            return createNewInternalEntryForNode(node, this.getEntrySize);
+          },
         );
-        const {level} = rootNode;
-        const entries: Entry<Hash>[] = partitions.map(entries => {
-          const node = this.newNodeImpl(entries, level);
-          return createNewInternalEntryForNode(node, this.getEntrySize);
-        });
         const newRoot = this.newInternalNodeImpl(entries, level + 1);
         this.rootHash = newRoot.hash;
         return;
