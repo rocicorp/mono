@@ -490,7 +490,7 @@ describe('btree node', () => {
       const getSize = (v: string) => v.length;
 
       const t = (input: string[], expected: string[][]) => {
-        expect(partition(input, getSize, 2, 4)).toEqual(expected);
+        expect(partition(input, getSize, 2, 4, x => x)).toEqual(expected);
       };
 
       t([], []);

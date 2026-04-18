@@ -464,24 +464,16 @@ export class InternalNodeImpl extends NodeImpl<Hash> {
       removeCount = 1;
     }
 
-    const partitions = partition(
+    const newEntries = partition(
       values,
       value => value[2],
       tree.minSize - tree.chunkHeaderSize,
       tree.maxSize - tree.chunkHeaderSize,
+      entries => {
+        const node = tree.newNodeImpl(entries, level);
+        return createNewInternalEntryForNode(node, tree.getEntrySize);
+      },
     );
-
-    // TODO: There are cases where we can reuse the old nodes. Creating new ones
-    // means more memory churn but also more writes to the underlying KV store.
-    const newEntries: Entry<Hash>[] = [];
-    for (const entries of partitions) {
-      const node = tree.newNodeImpl(entries, level);
-      const newHashEntry = createNewInternalEntryForNode(
-        node,
-        tree.getEntrySize,
-      );
-      newEntries.push(newHashEntry);
-    }
 
     if (this.isMutable) {
       this.entries.splice(startIndex, removeCount, ...newEntries);
@@ -654,34 +646,49 @@ export function isDataNodeImpl(
   return node.level === 0;
 }
 
-export function partition<T>(
+export function partition<T, R>(
   values: Iterable<T>,
   // This is the size of each Entry
   getSizeOfEntry: (v: T) => number,
   min: number,
   max: number,
-): T[][] {
-  const partitions: T[][] = [];
-  const sizes: number[] = [];
+  create: (entries: T[]) => R,
+): R[] {
+  const results: R[] = [];
   let sum = 0;
   let accum: T[] = [];
+  // The most recently finalized partition, held back until we know it won't be
+  // merged with trailing entries.
+  let lastPartition: T[] | null = null;
+  let lastSize = 0;
+
+  function commitLast() {
+    if (lastPartition !== null) {
+      results.push(create(lastPartition));
+      lastPartition = null;
+    }
+  }
+
   for (const value of values) {
     const size = getSizeOfEntry(value);
     if (size >= max) {
       if (accum.length > 0) {
-        partitions.push(accum);
-        sizes.push(sum);
+        commitLast();
+        lastPartition = accum;
+        lastSize = sum;
+        accum = [];
+        sum = 0;
       }
-      partitions.push([value]);
-      sizes.push(size);
-      sum = 0;
-      accum = [];
+      commitLast();
+      lastPartition = [value];
+      lastSize = size;
     } else if (sum + size >= min) {
       accum.push(value);
-      partitions.push(accum);
-      sizes.push(sum + size);
-      sum = 0;
+      commitLast();
+      lastPartition = accum;
+      lastSize = sum + size;
       accum = [];
+      sum = 0;
     } else {
       sum += size;
       accum.push(value);
@@ -689,16 +696,18 @@ export function partition<T>(
   }
 
   if (sum > 0) {
-    // oxlint-disable-next-line typescript/no-non-null-assertion
-    if (sizes.length > 0 && sum + sizes.at(-1)! <= max) {
-      // oxlint-disable-next-line typescript/no-non-null-assertion
-      partitions.at(-1)!.push(...accum);
+    if (lastPartition !== null && sum + lastSize <= max) {
+      lastPartition.push(...accum);
+      commitLast();
     } else {
-      partitions.push(accum);
+      commitLast();
+      results.push(create(accum));
     }
+  } else {
+    commitLast();
   }
 
-  return partitions;
+  return results;
 }
 
 export const emptyDataNode = makeNodeChunkData<ReadonlyJSONValue>(
