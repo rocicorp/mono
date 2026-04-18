@@ -142,7 +142,7 @@ export class BTreeSet<K> {
     sortedEntries: Iterable<K>,
   ): BTreeSet<K> {
     const tree = new BTreeSet<K>(comparator);
-    const keys = Array.from(sortedEntries);
+    const keys = [...sortedEntries];
     if (keys.length === 0) return tree;
 
     tree.size = keys.length;
