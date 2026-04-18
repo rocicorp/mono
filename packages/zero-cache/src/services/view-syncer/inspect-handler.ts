@@ -161,7 +161,7 @@ export async function handleInspect(
         unreachable(body);
     }
   } catch (e) {
-    lc.error?.('Error handling inspect message', e);
+    lc.warn?.('Error handling inspect message', e);
     client.sendInspectResponse(lc, {
       op: 'error',
       id: body.id,
