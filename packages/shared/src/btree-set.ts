@@ -142,23 +142,36 @@ export class BTreeSet<K> {
     sortedEntries: Iterable<K>,
   ): BTreeSet<K> {
     const tree = new BTreeSet<K>(comparator);
-    const keys = [...sortedEntries];
-    if (keys.length === 0) return tree;
 
-    tree.size = keys.length;
+    // Stream through entries, flushing a leaf node each time we fill MAX_NODE_SIZE keys.
+    const leaves: BNode<K>[] = [];
+    let currentKeys: K[] = [];
+    let size = 0;
 
-    // Build leaf nodes, filling each to MAX_NODE_SIZE.
-    let currentLevel: BNode<K>[] = [];
-    for (let i = 0; i < keys.length; i += MAX_NODE_SIZE) {
-      currentLevel.push(new BNode<K>(keys.slice(i, i + MAX_NODE_SIZE)));
+    for (const key of sortedEntries) {
+      currentKeys.push(key);
+      if (currentKeys.length === MAX_NODE_SIZE) {
+        leaves.push(new BNode<K>(currentKeys));
+        currentKeys = [];
+      }
+      size++;
     }
 
-    if (currentLevel.length === 1) {
-      tree.#root = currentLevel[0];
+    if (currentKeys.length > 0) {
+      leaves.push(new BNode<K>(currentKeys));
+    }
+
+    if (leaves.length === 0) return tree;
+
+    tree.size = size;
+
+    if (leaves.length === 1) {
+      tree.#root = leaves[0];
       return tree;
     }
 
     // Build internal nodes bottom-up until a single root remains.
+    let currentLevel: BNode<K>[] = leaves;
     while (currentLevel.length > 1) {
       const nextLevel: BNodeInternal<K>[] = [];
       for (let i = 0; i < currentLevel.length; i += MAX_NODE_SIZE) {
