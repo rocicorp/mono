@@ -240,13 +240,9 @@ export class MemorySource implements Source {
     // a different library.)
     // 3. We could even theoretically do (2) on multiple threads and then merge the
     // results!
-    const data = new BTreeSet<Row>(comparator);
-
-    // I checked, there's no special path for adding data in bulk faster.
-    // The constructor takes an array, but it just calls add/set over and over.
-    for (const row of this.#getPrimaryIndex().data) {
-      data.add(row);
-    }
+    const rows = [...this.#getPrimaryIndex().data];
+    rows.sort(comparator);
+    const data = BTreeSet.fromSorted(comparator, rows);
 
     const newIndex = {comparator, data, usedBy: new Set([usedBy])};
     this.#indexes.set(key, newIndex);
