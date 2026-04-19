@@ -464,6 +464,10 @@ export class InternalNodeImpl extends NodeImpl<Hash> {
       removeCount = 1;
     }
 
+    // TODO: There are cases where we can reuse the old nodes. Creating new ones
+    // means more memory churn but also more writes to the underlying KV store.
+    // Maybe we can keep track of the old nodes using a WeakMap and reuse them if they are the same as the new ones.
+
     const newEntries = partition(
       values,
       value => value[2],
