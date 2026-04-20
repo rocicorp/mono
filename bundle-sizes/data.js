@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776088448481,
+  "lastUpdate": 1776666059813,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -55277,6 +55277,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "Size of replicache.min.mjs.br (Brotli compressed)",
             "value": 32246,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "arv@roci.dev",
+            "name": "Erik Arvidsson",
+            "username": "arv"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": false,
+          "id": "9c91ae36b301350f615815c3fa671aee742c1d08",
+          "message": "chore: remove simple-git-hooks and update git hook scripts (#5847)\n\nTo use the new git hook scripts, add the following content to the\ncorresponding files in .git/hooks:\n\nFor pre-commit:\n\n```\n./tools/git-hooks/pre-commit.ts\n```\n\nFor pre-push:\n\n```\n./tools/git-hooks/pre-push.ts\n```",
+          "timestamp": "2026-04-20T06:09:26Z",
+          "tree_id": "56da46069827421b297fb1dc4db80be539d60e02",
+          "url": "https://github.com/rocicorp/mono/commit/9c91ae36b301350f615815c3fa671aee742c1d08"
+        },
+        "date": 1776666047637,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 305528,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 55035,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 112958,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 32248,
             "unit": "bytes"
           }
         ]
