@@ -4,6 +4,7 @@ import {
 } from '@drdgvhbh/postgres-error-codes';
 import type {LogContext} from '@rocicorp/logger';
 import postgres from 'postgres';
+import {assert} from '../../../../../shared/src/asserts.ts';
 import {equals} from '../../../../../shared/src/set-utils.ts';
 import * as v from '../../../../../shared/src/valita.ts';
 import {READONLY} from '../../../db/mode-enum.ts';
@@ -62,6 +63,11 @@ type StreamOptions = {
 // This happens to match NodeJS's getDefaultHighWatermark()
 // (for Node v20+).
 const POSTGRES_COPY_CHUNK_SIZE = 64 * 1024;
+
+// Matches the exact clauses emitted by makeDownloadStatements; quoted
+// identifiers like "limit" won't match because they lack the surrounding
+// whitespace.
+const SAMPLE_OR_LIMIT_RE = /\sTABLESAMPLE\s+BERNOULLI\b|\sLIMIT\s+\d/i;
 
 /**
  * Streams a series of `backfill` messages (ending with `backfill-complete`)
@@ -185,6 +191,12 @@ async function* stream<T>(
   decoders: ((field: T) => JSONValue)[],
   flushThresholdBytes: number,
 ): AsyncGenerator<MessageBackfill | BackfillCompleted> {
+  // Backfill must read every row: TABLESAMPLE / LIMIT are reserved for shadow
+  // sync and must never appear in a backfill COPY.
+  assert(
+    !SAMPLE_OR_LIMIT_RE.test(copyCommand),
+    `backfill COPY must not sample or limit: ${copyCommand}`,
+  );
   const start = performance.now();
   const [rows, bytes] = await tx.processReadTask(sql =>
     Promise.all([
