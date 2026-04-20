@@ -57,7 +57,7 @@ describe('validateInput', () => {
     );
     expect(error.result.issues).toBe(issues);
     // oxlint-disable-next-line typescript/no-explicit-any
-    expect((error.details as any).issues).toBe(issues);
+    expect((error.details as any).result.issues).toBe(issues);
   });
 
   test('should throw error with multiple validation issues', () => {
