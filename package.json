@@ -28,8 +28,7 @@
     "verify-deps:fix": "cd tools/verify-package-deps && npm run verify:fix",
     "bench": "npx turbo run bench --concurrency=1",
     "bench:bmf": "npx turbo run bench:bmf --concurrency=1",
-    "bench:bmf:silent": "npx turbo run bench:bmf:silent --concurrency=1",
-    "postinstall": "simple-git-hooks"
+    "bench:bmf:silent": "npx turbo run bench:bmf:silent --concurrency=1"
   },
   "devDependencies": {
     "@e18e/eslint-plugin": "^0.3.0",
@@ -41,7 +40,6 @@
     "oxfmt": "^0.45.0",
     "oxlint": "^1.60.0",
     "oxlint-tsgolint": "^0.20.0",
-    "simple-git-hooks": "^2.13.1",
     "syncpack": "^14.3.0",
     "tsx": "^4.21.0",
     "turbo": "^2.4.4",
@@ -50,10 +48,6 @@
   },
   "overrides": {
     "esbuild": "^0.27.4"
-  },
-  "simple-git-hooks": {
-    "pre-commit": "./tools/git-hooks/pre-commit.ts",
-    "pre-push": "./tools/git-hooks/pre-push.ts"
   },
   "engines": {
     "node": ">=22"
