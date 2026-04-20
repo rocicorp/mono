@@ -4035,7 +4035,17 @@ describe('view-syncer/cvr', () => {
       Date.UTC(2024, 3, 23, 1),
       ttlClockFromNumber(Date.UTC(2024, 3, 23, 1)),
     );
-    expect(flushed).toMatchInlineSnapshot(`false`);
+    expect(flushed).toMatchInlineSnapshot(`
+      {
+        "clients": 0,
+        "desires": 0,
+        "instances": 1,
+        "queries": 2,
+        "rows": 0,
+        "rowsDeferred": 0,
+        "statements": 3,
+      }
+    `);
 
     expect(
       await cvrStore.catchupConfigPatches(
@@ -4126,7 +4136,16 @@ describe('view-syncer/cvr', () => {
       ]
     `);
 
-    expect(stripRowSetSignatures(updated)).toEqual(stripRowSetSignatures(cvr));
+    // Note: lastActive / ttlClock advance because rowSetSignatures are written
+    // on the first cycle (initial population), even though no client patches
+    // are emitted for unchanged queries.
+    expect(stripRowSetSignatures(updated)).toEqual(
+      stripRowSetSignatures({
+        ...cvr,
+        lastActive: Date.UTC(2024, 3, 23, 1),
+        ttlClock: ttlClockFromNumber(Date.UTC(2024, 3, 23, 1)),
+      }),
+    );
 
     // Verify round tripping.
     const doCVRStore2 = new CVRStore(
@@ -4487,10 +4506,10 @@ describe('view-syncer/cvr', () => {
         "clients": 0,
         "desires": 0,
         "instances": 1,
-        "queries": 0,
+        "queries": 1,
         "rows": 1,
         "rowsDeferred": 0,
-        "statements": 3,
+        "statements": 4,
       }
     `);
 

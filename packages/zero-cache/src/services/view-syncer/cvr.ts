@@ -31,6 +31,11 @@ import {upstreamSchema, type ShardID} from '../../types/shards.ts';
 import type {Patch, PatchToVersion} from './client-handler.ts';
 import {type CVRFlushStats, type CVRStore} from './cvr-store.ts';
 import {
+  formatSignature,
+  parseSignature,
+  rowIDSignatureUnit,
+} from './row-set-signature.ts';
+import {
   cmpVersions,
   maxVersion,
   oneAfter,
@@ -555,6 +560,14 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
   );
   readonly #lastPatches = new CustomKeyMap<RowID, RowPatchInfo>(rowIDString);
 
+  /**
+   * Working copy of {@link QueryRecord.rowSetSignature} per query, lazily
+   * populated as transitions are observed in {@link received} /
+   * {@link #deleteUnreferencedRow}. Flushed back to {@link _cvr} and the
+   * cvr-store on {@link flush}.
+   */
+  readonly #workingSignatures = new Map<string, bigint>();
+
   #existingRows: Promise<Iterable<RowRecord>> | undefined = undefined;
 
   /**
@@ -775,6 +788,88 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
   }
 
   /**
+   * For each query whose membership of `id` changed (joined or left), XORs the
+   * row's signature unit into the working signature. Membership "joined" means
+   * `priorRefCounts[queryID] <= 0 && newRefCounts[queryID] > 0`; "left" is the
+   * inverse. XOR is its own inverse, so a single operation works for both
+   * directions.
+   */
+  #trackSignatureTransitions(
+    id: RowID,
+    priorRefCounts: RefCounts | null | undefined,
+    newRefCounts: RefCounts | null | undefined,
+  ): void {
+    const queryIDs = new Set<string>();
+    if (priorRefCounts) {
+      for (const q of Object.keys(priorRefCounts)) queryIDs.add(q);
+    }
+    if (newRefCounts) {
+      for (const q of Object.keys(newRefCounts)) queryIDs.add(q);
+    }
+    if (queryIDs.size === 0) {
+      return;
+    }
+    let unit: bigint | undefined;
+    for (const queryID of queryIDs) {
+      const was = (priorRefCounts?.[queryID] ?? 0) > 0;
+      const is = (newRefCounts?.[queryID] ?? 0) > 0;
+      if (was === is) {
+        continue;
+      }
+      // Skip removed queries — their record is gone from _cvr.queries and
+      // there's nothing to persist a signature on.
+      if (this._cvr.queries[queryID] === undefined) {
+        continue;
+      }
+      if (unit === undefined) {
+        unit = rowIDSignatureUnit(id);
+      }
+      const cur =
+        this.#workingSignatures.get(queryID) ??
+        parseSignature(this._cvr.queries[queryID].rowSetSignature);
+      this.#workingSignatures.set(queryID, cur ^ unit);
+    }
+  }
+
+  /**
+   * Returns the current working signature (post-transitions) for a query, as
+   * a hex string. Returns the existing stored signature if no transitions
+   * have been recorded for it. Used by the view-syncer to detect drift on
+   * re-hydration.
+   */
+  rowSetSignature(queryID: string): string | undefined {
+    if (this.#workingSignatures.has(queryID)) {
+      return formatSignature(this.#workingSignatures.get(queryID)!);
+    }
+    return this._cvr.queries[queryID]?.rowSetSignature;
+  }
+
+  override flush(
+    lc: LogContext,
+    lastConnectTime: number,
+    lastActive: number,
+    ttlClock: TTLClock,
+  ): Promise<{cvr: CVRSnapshot; flushed: CVRFlushStats | false}> {
+    for (const [queryID, sig] of this.#workingSignatures) {
+      const query = this._cvr.queries[queryID];
+      if (!query) {
+        continue;
+      }
+      // Compare as bigints so an XOR-in/out that nets to zero (e.g. an add
+      // immediately followed by a delete in the same cycle) is correctly
+      // recognized as no change vs. an undefined stored signature.
+      const stored = parseSignature(query.rowSetSignature);
+      if (stored === sig) {
+        continue;
+      }
+      const hex = formatSignature(sig);
+      query.rowSetSignature = hex;
+      this._cvrStore.updateRowSetSignature(queryID, hex);
+    }
+    return super.flush(lc, lastConnectTime, lastActive, ttlClock);
+  }
+
+  /**
    * Tracks rows received from executing queries. This will update row records
    * and row patches if the received rows have a new version. The method also
    * returns (put) patches to be returned to update their state, versioned by
@@ -798,6 +893,14 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
           // Accumulate all received refCounts to determine which rows to prune.
           const previouslyReceived = this.#receivedRows.get(id);
 
+          const priorRefCounts =
+            previouslyReceived !== undefined
+              ? previouslyReceived
+              : applyRemovals(
+                  existing?.refCounts,
+                  this.#removedOrExecutedQueryIDs,
+                );
+
           const merged =
             previouslyReceived !== undefined
               ? mergeRefCounts(previouslyReceived, refCounts)
@@ -807,6 +910,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
                   this.#removedOrExecutedQueryIDs,
                 );
 
+          this.#trackSignatureTransitions(id, priorRefCounts, merged);
           this.#receivedRows.set(id, merged);
 
           const newRowVersion = merged === null ? undefined : version;
@@ -956,6 +1060,12 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
           undefined,
           this.#removedOrExecutedQueryIDs,
         );
+
+        this.#trackSignatureTransitions(
+          existing.id,
+          existing.refCounts,
+          newRefCounts,
+        );
         // If a row is still referenced, we update the refCounts but not the
         // patchVersion (as the existence and contents of the row have not
         // changed from the clients' perspective). If the row is deleted, it
@@ -981,6 +1091,32 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
       },
     );
   }
+}
+
+/**
+ * Returns a copy of `refCounts` with entries in `removeHashes` stripped, or
+ * `null` if the result is empty. Mirrors the "existing minus removed" view
+ * that {@link mergeRefCounts} computes internally so that signature transition
+ * tracking can compare against the same baseline.
+ */
+function applyRemovals(
+  refCounts: RefCounts | null | undefined,
+  removeHashes: Set<string>,
+): RefCounts | null {
+  if (!refCounts) {
+    return null;
+  }
+  if (removeHashes.size === 0) {
+    return refCounts;
+  }
+  const out: RefCounts = {};
+  for (const [hash, count] of Object.entries(refCounts)) {
+    if (removeHashes.has(hash)) {
+      continue;
+    }
+    out[hash] = count;
+  }
+  return Object.values(out).some(v => v > 0) ? out : null;
 }
 
 function mergeRefCounts(
