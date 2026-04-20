@@ -3,10 +3,17 @@ import type {StandardSchemaV1} from '@standard-schema/spec';
 export class InputValidationError extends Error {
   readonly result: StandardSchemaV1.FailureResult;
 
+  // will get picked up by `getErrorDetails` when mapping to an `ApplicationError`
+  readonly details: {
+    type: 'InputValidationError';
+    result: StandardSchemaV1.FailureResult;
+  };
+
   constructor(message: string, result: StandardSchemaV1.FailureResult) {
     super(message);
     this.name = 'InputValidationError';
     this.result = result;
+    this.details = {type: 'InputValidationError', result};
   }
 }
 

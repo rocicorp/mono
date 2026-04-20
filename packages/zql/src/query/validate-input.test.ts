@@ -56,6 +56,8 @@ describe('validateInput', () => {
       'Validation failed for query testQuery: Expected positive number',
     );
     expect(error.result.issues).toBe(issues);
+    // oxlint-disable-next-line typescript/no-explicit-any
+    expect((error.details as any).issues).toBe(issues);
   });
 
   test('should throw error with multiple validation issues', () => {
