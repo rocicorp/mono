@@ -159,9 +159,10 @@ export const baseQueryRecordSchema = v.object({
 
   /**
    * Hex-encoded XOR signature over `h64(JSON.stringify([schema, table, rowKey]))`
-   * of every row currently attached to this query in the CVR (i.e. every row whose
-   * `refCounts[queryID] > 0`). Maintained incrementally as rows join/leave the query
-   * via {@link CVRQueryDrivenUpdater}.
+   * of every row currently attached to this query. Maintained incrementally by
+   * `PipelineDriver` as ADDs / REMOVEs are yielded from the query's pipeline
+   * (EDITs no-op), and persisted via `CVRQueryDrivenUpdater.flush` by a
+   * signature-provider callback.
    *
    * Used to detect drift on re-hydration of queries containing the `Cap` operator,
    * which intentionally does not impose ordering and thus may pick a different N-row

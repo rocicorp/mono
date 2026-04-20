@@ -58,6 +58,7 @@ import {
   ZERO_VERSION_COLUMN_NAME,
 } from '../replicator/schema/replication-state.ts';
 import {checkClientSchema} from './client-schema.ts';
+import {rowIDSignatureUnit} from './row-set-signature.ts';
 import type {Snapshotter} from './snapshotter.ts';
 import {ResetPipelinesSignal, type SnapshotDiff} from './snapshotter.ts';
 
@@ -125,6 +126,15 @@ export class PipelineDriver {
   readonly #tables = new Map<string, TableSource>();
   // Query id to pipeline
   readonly #pipelines = new Map<string, Pipeline>();
+  /**
+   * XOR signature of the set of rows currently attached to each active
+   * query, maintained as RowChanges are yielded from {@link addQuery} and
+   * {@link advance}. ADDs / REMOVEs XOR the row's unit in (XOR is
+   * self-inverse, so one op serves both directions); EDITs are no-ops.
+   * Hydration implicitly reseeds from `0n` because {@link addQuery} calls
+   * {@link removeQuery} first, which deletes the entry.
+   */
+  readonly #rowSetSignatures = new Map<string, bigint>();
 
   readonly #lc: LogContext;
   readonly #snapshotter: Snapshotter;
@@ -214,6 +224,7 @@ export class PipelineDriver {
     this.#pipelines.clear();
     this.#tables.clear();
     this.#allTableNames.clear();
+    this.#rowSetSignatures.clear();
     this.#initAndResetCommon(clientSchema);
   }
 
@@ -394,7 +405,18 @@ export class PipelineDriver {
    *        when yielding the thread for time-slicing).
    * @return The rows from the initial hydration of the query.
    */
-  *addQuery(
+  addQuery(
+    transformationHash: string,
+    queryID: string,
+    query: AST,
+    timer: Timer,
+  ): Iterable<RowChange | 'yield'> {
+    return this.#trackRowSetSignatures(
+      this.#addQueryImpl(transformationHash, queryID, query, timer),
+    );
+  }
+
+  *#addQueryImpl(
     transformationHash: string,
     queryID: string,
     query: AST,
@@ -569,6 +591,39 @@ export class PipelineDriver {
         companion.input.destroy();
       }
     }
+    this.#rowSetSignatures.delete(queryID);
+  }
+
+  /**
+   * Current XOR signature of the row-set attached to `queryID`, or
+   * `undefined` if no pipeline for the query is currently active.
+   * Maintained incrementally by {@link addQuery} and {@link advance}.
+   */
+  rowSetSignature(queryID: string): bigint | undefined {
+    return this.#rowSetSignatures.get(queryID);
+  }
+
+  /**
+   * Wraps an iterable of RowChanges, XORing each row's unit hash into the
+   * query's signature (ADDs and REMOVEs share the same op; EDITs are no-ops).
+   * Used to intercept the yield streams from {@link addQuery} and
+   * {@link advance}.
+   */
+  *#trackRowSetSignatures(
+    changes: Iterable<RowChange | 'yield'>,
+  ): Iterable<RowChange | 'yield'> {
+    for (const change of changes) {
+      if (change !== 'yield' && change.type !== ChangeType.EDIT) {
+        const cur = this.#rowSetSignatures.get(change.queryID) ?? 0n;
+        const unit = rowIDSignatureUnit({
+          schema: '',
+          table: change.table,
+          rowKey: change.rowKey as RowKey,
+        });
+        this.#rowSetSignatures.set(change.queryID, cur ^ unit);
+      }
+      yield change;
+    }
   }
 
   /**
@@ -614,7 +669,7 @@ export class PipelineDriver {
     return {
       version: curr.version,
       numChanges: changes,
-      changes: this.#advance(diff, timer, changes),
+      changes: this.#trackRowSetSignatures(this.#advance(diff, timer, changes)),
     };
   }
 
