@@ -213,6 +213,12 @@ export async function initViewSyncerSchema(
     },
   };
 
+  const migratedV16ToV17: Migration = {
+    migrateSchema: async (_, sql) => {
+      await sql`ALTER TABLE ${sql(schema)}.queries ADD COLUMN "rowSetSignature" TEXT`;
+    },
+  };
+
   const schemaVersionMigrationMap: IncrementalMigrationMap = {
     2: migrateV1toV2,
     3: migrateV2ToV3,
@@ -245,6 +251,10 @@ export async function initViewSyncerSchema(
     // V16 adds instances."profileID" and a corresponding index for estimating
     // active user counts more accurately for apps that use memstore.
     16: migratedV15ToV16,
+    // V17 adds queries."rowSetSignature" — XOR'd hash of row IDs attached to
+    // each query, used to detect drift on re-hydration of queries containing
+    // the Cap operator.
+    17: migratedV16ToV17,
   };
 
   await runSchemaMigrations(
