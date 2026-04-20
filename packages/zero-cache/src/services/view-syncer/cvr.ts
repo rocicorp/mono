@@ -844,6 +844,16 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
     return this._cvr.queries[queryID]?.rowSetSignature;
   }
 
+  /**
+   * Bumps `configVersion` if it has not already been bumped this cycle.
+   * Public alias for {@link _ensureNewVersion} so that
+   * {@link ViewSyncer.#hydrateUnchangedQueries} can force a version bump on
+   * detected row-set drift.
+   */
+  ensureNewVersion(): CVRVersion {
+    return this._ensureNewVersion();
+  }
+
   override flush(
     lc: LogContext,
     lastConnectTime: number,
