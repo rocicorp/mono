@@ -4,11 +4,18 @@ import {
 } from '@drdgvhbh/postgres-error-codes';
 import type {LogContext} from '@rocicorp/logger';
 import postgres from 'postgres';
+import {assert} from '../../../../../shared/src/asserts.ts';
 import {equals} from '../../../../../shared/src/set-utils.ts';
 import * as v from '../../../../../shared/src/valita.ts';
 import {READONLY} from '../../../db/mode-enum.ts';
+import {
+  BinaryCopyParser,
+  hasBinaryDecoder,
+  makeBinaryDecoder,
+  textCastDecoder,
+} from '../../../db/pg-copy-binary.ts';
 import {TsvParser} from '../../../db/pg-copy.ts';
-import {getTypeParsers, type TypeParser} from '../../../db/pg-type-parser.ts';
+import {getTypeParsers} from '../../../db/pg-type-parser.ts';
 import type {PublishedTableSpec} from '../../../db/specs.ts';
 import {importSnapshot, TransactionPool} from '../../../db/transaction-pool.ts';
 import {pgClient, type PostgresDB} from '../../../types/pg.ts';
@@ -26,6 +33,7 @@ import {
 } from './backfill-metadata.ts';
 import {
   createReplicationSlot,
+  makeBinarySelectExprs,
   makeDownloadStatements,
   type DownloadStatements,
 } from './initial-sync.ts';
@@ -40,13 +48,26 @@ type StreamOptions = {
    * The number of bytes at which to flush a batch of rows in a
    * backfill message. Defaults to Node's getDefaultHighWatermark().
    */
-  flushThresholdBytes?: number;
+  flushThresholdBytes?: number | undefined;
+
+  /**
+   * Use text-format COPY instead of binary COPY.
+   * Binary is faster and handles all types (unknown types are cast to
+   * `::text` in the SELECT). This flag exists as an escape hatch to
+   * revert to the old code path if needed.
+   */
+  textCopy?: boolean | undefined;
 };
 
 // The size of chunks that Postgres sends on COPY stream.
 // This happens to match NodeJS's getDefaultHighWatermark()
 // (for Node v20+).
 const POSTGRES_COPY_CHUNK_SIZE = 64 * 1024;
+
+// Matches the exact clauses emitted by makeDownloadStatements; quoted
+// identifiers like "limit" won't match because they lack the surrounding
+// whitespace.
+const SAMPLE_OR_LIMIT_RE = /\sTABLESAMPLE\s+BERNOULLI\b|\sLIMIT\s+\d/i;
 
 /**
  * Streams a series of `backfill` messages (ending with `backfill-complete`)
@@ -65,7 +86,8 @@ export async function* streamBackfill(
     .withContext('component', 'backfill')
     .withContext('table', bf.table.name);
 
-  const {flushThresholdBytes = POSTGRES_COPY_CHUNK_SIZE} = opts;
+  const {flushThresholdBytes = POSTGRES_COPY_CHUNK_SIZE, textCopy = false} =
+    opts;
   const db = pgClient(lc, upstreamURI, {
     connection: {['application_name']: 'backfill-stream'},
     ['max_lifetime']: 120 * 60, // set a long (2h) limit for COPY streaming
@@ -85,20 +107,53 @@ export async function* streamBackfill(
       bf,
       watermark,
     );
-    const types = await getTypeParsers(db, {returnJsonAsString: true});
 
     // Note: validateSchema ensures that the rowKey and columns are disjoint
     const {relation, columns} = backfill;
     const cols = [...relation.rowKey.columns, ...columns];
+    const stmts = makeDownloadStatements(tableSpec, cols);
 
-    yield* stream(
-      lc,
-      tx,
-      backfill,
-      makeDownloadStatements(tableSpec, cols),
-      cols.map(col => types.getTypeParser(tableSpec.columns[col].typeOID)),
-      flushThresholdBytes,
-    );
+    if (textCopy) {
+      const types = await getTypeParsers(db, {returnJsonAsString: true});
+      yield* stream(
+        lc,
+        tx,
+        backfill,
+        stmts,
+        `COPY (${stmts.select}) TO STDOUT`,
+        new TsvParser(),
+        cols.map(col => {
+          const parser = types.getTypeParser(tableSpec.columns[col].typeOID);
+          return (text: string) => parser(text) as JSONValue;
+        }),
+        flushThresholdBytes,
+      );
+    } else {
+      const binaryStmts = makeDownloadStatements(
+        tableSpec,
+        cols,
+        undefined,
+        undefined,
+        makeBinarySelectExprs(tableSpec, cols),
+      );
+
+      yield* stream(
+        lc,
+        tx,
+        backfill,
+        stmts,
+        `COPY (${binaryStmts.select}) TO STDOUT WITH (FORMAT binary)`,
+        new BinaryCopyParser(),
+        cols.map(col => {
+          const spec = tableSpec.columns[col];
+          const decoder = hasBinaryDecoder(spec)
+            ? makeBinaryDecoder(spec)
+            : textCastDecoder;
+          return (buf: Buffer) => decoder(buf) as unknown as JSONValue;
+        }),
+        flushThresholdBytes,
+      );
+    }
   } catch (e) {
     // Although we make the best effort to validate the schema at the
     // transaction snapshot, certain forms of `ALTER TABLE` are not
@@ -123,14 +178,25 @@ export async function* streamBackfill(
   }
 }
 
-async function* stream(
+async function* stream<T>(
   lc: LogContext,
   tx: TransactionPool,
   backfill: BackfillParams,
-  {select, getTotalRows, getTotalBytes}: DownloadStatements,
-  colParsers: TypeParser[],
+  {
+    getTotalRows,
+    getTotalBytes,
+  }: Pick<DownloadStatements, 'getTotalRows' | 'getTotalBytes'>,
+  copyCommand: string,
+  parser: {parse(chunk: Buffer): Iterable<T | null>},
+  decoders: ((field: T) => JSONValue)[],
   flushThresholdBytes: number,
 ): AsyncGenerator<MessageBackfill | BackfillCompleted> {
+  // Backfill must read every row: TABLESAMPLE / LIMIT are reserved for shadow
+  // sync and must never appear in a backfill COPY.
+  assert(
+    !SAMPLE_OR_LIMIT_RE.test(copyCommand),
+    `backfill COPY must not sample or limit: ${copyCommand}`,
+  );
   const start = performance.now();
   const [rows, bytes] = await tx.processReadTask(sql =>
     Promise.all([
@@ -145,14 +211,16 @@ async function* stream(
   };
 
   let elapsed = (performance.now() - start).toFixed(3);
-  lc.info?.(`Computed total rows and bytes for: ${select} (${elapsed} ms)`, {
-    status,
-  });
+  lc.info?.(
+    `Computed total rows and bytes for: ${copyCommand} (${elapsed} ms)`,
+    {
+      status,
+    },
+  );
   const copyStream = await tx.processReadTask(sql =>
-    sql.unsafe(`COPY (${select}) TO STDOUT`).readable(),
+    sql.unsafe(copyCommand).readable(),
   );
 
-  const tsvParser = new TsvParser();
   let totalBytes = 0;
   let totalMsgs = 0;
   let rowValues: JSONValue[][] = [];
@@ -166,18 +234,18 @@ async function* stream(
   };
 
   // Tracks the row being parsed.
-  let row: JSONValue[] = Array.from({length: colParsers.length});
+  let row: JSONValue[] = Array.from({length: decoders.length});
   let col = 0;
 
   for await (const data of copyStream) {
     const chunk = data as Buffer;
-    for (const text of tsvParser.parse(chunk)) {
-      row[col] = text === null ? null : (colParsers[col](text) as JSONValue);
+    for (const field of parser.parse(chunk)) {
+      row[col] = field === null ? null : decoders[col](field);
 
-      if (++col === colParsers.length) {
+      if (++col === decoders.length) {
         rowValues.push(row);
         status.rows++;
-        row = Array.from({length: colParsers.length});
+        row = Array.from({length: decoders.length});
         col = 0;
       }
     }

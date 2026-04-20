@@ -772,11 +772,26 @@ function limitClause(maxRowsPerTable: number | undefined): string {
     : '';
 }
 
+/**
+ * Returns the SELECT column expressions for binary COPY, casting columns
+ * without a known binary decoder to `::text`.
+ */
+export function makeBinarySelectExprs(
+  table: PublishedTableSpec,
+  cols: string[],
+): string[] {
+  return cols.map(col => {
+    const spec = table.columns[col];
+    return hasBinaryDecoder(spec) ? id(col) : `${id(col)}::text`;
+  });
+}
+
 export function makeDownloadStatements(
   table: PublishedTableSpec,
   cols: string[],
   sampleRate?: number | undefined,
   maxRowsPerTable?: number | undefined,
+  selectExprs?: string[] | undefined,
 ): DownloadStatements {
   const filterConditions = Object.values(table.publications)
     .map(({rowFilter}) => rowFilter)
@@ -788,7 +803,7 @@ export function makeDownloadStatements(
   const sample = tableSampleClause(sampleRate);
   const limit = limitClause(maxRowsPerTable);
   const fromTable = /*sql*/ `FROM ${id(table.schema)}.${id(table.name)}${sample} ${where}`;
-  const select = /*sql*/ `SELECT ${cols.map(id).join(',')} ${fromTable}${limit}`;
+  const select = /*sql*/ `SELECT ${(selectExprs ?? cols.map(id)).join(',')} ${fromTable}${limit}`;
   if (limit) {
     // With LIMIT, wrap counts/sums in a subquery so they reflect the
     // capped rowset rather than the full (sampled) table.
@@ -912,20 +927,13 @@ async function copyBinary(
   );
 
   // Build SELECT with ::text casts for columns without a known binary decoder.
-  const filterConditions = Object.values(table.publications)
-    .map(({rowFilter}) => rowFilter)
-    .filter(f => !!f);
-  const where =
-    filterConditions.length === 0
-      ? ''
-      : /*sql*/ `WHERE ${filterConditions.join(' OR ')}`;
-  const sample = tableSampleClause(sampleRate);
-  const limit = limitClause(maxRowsPerTable);
-  const fromTable = /*sql*/ `FROM ${id(table.schema)}.${id(table.name)}${sample} ${where}`;
-  const selectColumns = orderedColumns.map(([name, spec]) =>
-    hasBinaryDecoder(spec) ? id(name) : `${id(name)}::text`,
-  );
-  const select = /*sql*/ `SELECT ${selectColumns.join(',')} ${fromTable}${limit}`;
+  const select = makeDownloadStatements(
+    table,
+    columnNames,
+    sampleRate,
+    maxRowsPerTable,
+    makeBinarySelectExprs(table, columnNames),
+  ).select;
 
   const decoders = orderedColumns.map(([, spec]) =>
     hasBinaryDecoder(spec) ? makeBinaryDecoder(spec) : textCastDecoder,
