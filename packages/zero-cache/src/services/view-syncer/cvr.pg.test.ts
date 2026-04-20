@@ -43,6 +43,24 @@ const SHARD = {appID: APP_ID, shardNum: SHARD_NUM};
 
 const LAST_CONNECT = Date.UTC(2024, 2, 1);
 
+/**
+ * Strips `rowSetSignature` from every QueryRecord in a CVR (or partial CVR)
+ * snapshot so test fixtures that pre-date the signature column can compare via
+ * `toEqual` without listing it in expected output. The signature itself is
+ * verified by dedicated tests (see row-set-signature.test.ts and the
+ * Cap-drift integration tests).
+ */
+function stripRowSetSignatures<T extends {queries: Record<string, object>}>(
+  cvr: T,
+): T {
+  const queries: Record<string, object> = {};
+  for (const [id, q] of Object.entries(cvr.queries)) {
+    const {rowSetSignature: _, ...rest} = q as {rowSetSignature?: unknown};
+    queries[id] = rest;
+  }
+  return {...cvr, queries} as T;
+}
+
 describe('view-syncer/cvr', () => {
   type DBState = {
     instances: (Partial<InstancesRow> &
@@ -149,6 +167,18 @@ describe('view-syncer/cvr', () => {
           break;
         }
         case 'queries': {
+          // Strip rowSetSignature from actual rows when no fixture in
+          // tableState explicitly mentions it. Tests that don't care about
+          // signatures stay terse; tests that DO care can include their
+          // expected value in the fixture.
+          const expectsSig = (tableState as Partial<QueriesRow>[]).some(
+            row => row.rowSetSignature !== undefined,
+          );
+          if (!expectsSig) {
+            for (const row of res as QueriesRow[]) {
+              delete (row as {rowSetSignature?: string | null}).rowSetSignature;
+            }
+          }
           (res as QueriesRow[]).sort(compareQueriesRows);
           (tableState as QueriesRow[]).sort(compareQueriesRows);
           break;
@@ -788,7 +818,9 @@ describe('view-syncer/cvr', () => {
       ON_FAILURE,
     );
     const reloaded = await cvrStore2.load(lc, LAST_CONNECT);
-    expect(reloaded).toEqual(updated);
+    expect(stripRowSetSignatures(reloaded)).toEqual(
+      stripRowSetSignatures(updated),
+    );
 
     // Let the takeover write that's fired during load to reach PG.
     await vi.waitFor(() =>
@@ -1178,7 +1210,7 @@ describe('view-syncer/cvr', () => {
         "statements": 6,
       }
     `);
-    expect(updated).toEqual({
+    expect(stripRowSetSignatures(updated)).toEqual({
       id: 'abc123',
       version: {stateVersion: '1aa', configVersion: 1}, // configVersion bump
       replicaVersion: '101',
@@ -1575,7 +1607,9 @@ describe('view-syncer/cvr', () => {
       ON_FAILURE,
     );
     const reloaded = await cvrStore2.load(lc, LAST_CONNECT);
-    expect(reloaded).toEqual(updated);
+    expect(stripRowSetSignatures(reloaded)).toEqual(
+      stripRowSetSignatures(updated),
+    );
 
     // Add the deleted desired query back. This ensures that the
     // desired query update statement is an UPSERT.
@@ -2045,7 +2079,7 @@ describe('view-syncer/cvr', () => {
       ]
     `);
 
-    expect(updated).toEqual({
+    expect(stripRowSetSignatures(updated)).toEqual({
       ...cvr,
       replicaVersion: '123',
       version: newVersion,
@@ -2080,7 +2114,9 @@ describe('view-syncer/cvr', () => {
       ON_FAILURE,
     );
     const reloaded = await cvrStore2.load(lc, LAST_CONNECT);
-    expect(reloaded).toEqual(updated);
+    expect(stripRowSetSignatures(reloaded)).toEqual(
+      stripRowSetSignatures(updated),
+    );
 
     await expectState(cvrDb, {
       instances: [
@@ -2505,7 +2541,7 @@ describe('view-syncer/cvr', () => {
       ]
     `);
 
-    expect(updated).toEqual({
+    expect(stripRowSetSignatures(updated)).toEqual({
       ...cvr,
       version: newVersion,
       queries: {
@@ -3106,7 +3142,7 @@ describe('view-syncer/cvr', () => {
       ]
     `);
 
-    expect(updated).toEqual({
+    expect(stripRowSetSignatures(updated)).toEqual({
       ...cvr,
       version: newVersion,
       lastActive: 1713834000000,
@@ -3545,7 +3581,7 @@ describe('view-syncer/cvr', () => {
       ]
     `);
 
-    expect(updated).toEqual({
+    expect(stripRowSetSignatures(updated)).toEqual({
       ...cvr,
       version: newVersion,
       queries: {},
@@ -4090,7 +4126,7 @@ describe('view-syncer/cvr', () => {
       ]
     `);
 
-    expect(updated).toEqual(cvr);
+    expect(stripRowSetSignatures(updated)).toEqual(stripRowSetSignatures(cvr));
 
     // Verify round tripping.
     const doCVRStore2 = new CVRStore(
@@ -4258,7 +4294,9 @@ describe('view-syncer/cvr', () => {
       ON_FAILURE,
     );
     const reloaded = await cvrStore2.load(lc, LAST_CONNECT);
-    expect(reloaded).toEqual(updated);
+    expect(stripRowSetSignatures(reloaded)).toEqual(
+      stripRowSetSignatures(updated),
+    );
 
     await expectState(cvrDb, {
       instances: [
@@ -4466,7 +4504,9 @@ describe('view-syncer/cvr', () => {
       ON_FAILURE,
     );
     const reloaded = await cvrStore2.load(lc, LAST_CONNECT);
-    expect(reloaded).toEqual(updated);
+    expect(stripRowSetSignatures(reloaded)).toEqual(
+      stripRowSetSignatures(updated),
+    );
 
     await expectState(cvrDb, {
       instances: [
@@ -4735,7 +4775,9 @@ describe('view-syncer/cvr', () => {
       ON_FAILURE,
     );
     const reloaded = await cvrStore2.load(lc, LAST_CONNECT);
-    expect(reloaded).toEqual(updated);
+    expect(stripRowSetSignatures(reloaded)).toEqual(
+      stripRowSetSignatures(updated),
+    );
 
     await expectState(cvrDb, {
       instances: [
@@ -5252,7 +5294,7 @@ describe('view-syncer/cvr', () => {
         now,
         ttlClock,
       );
-      expect(updated).toEqual({
+      expect(stripRowSetSignatures(updated)).toEqual({
         clients: {
           fooClient: {
             desiredQueryIDs: [],
@@ -5586,7 +5628,7 @@ describe('view-syncer/cvr', () => {
         now,
         ttlClock,
       );
-      expect(updated).toEqual({
+      expect(stripRowSetSignatures(updated)).toEqual({
         clients: {
           fooClient: {
             desiredQueryIDs: [],
@@ -6030,6 +6072,7 @@ describe('view-syncer/cvr', () => {
             "queryArgs": null,
             "queryHash": "oneHash",
             "queryName": null,
+            "rowSetSignature": null,
             "transformationHash": null,
             "transformationVersion": null,
           },
