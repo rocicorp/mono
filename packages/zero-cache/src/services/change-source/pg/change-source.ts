@@ -1042,7 +1042,7 @@ class ChangeMaker {
         switch (msg.prefix.substring(this.#shardPrefix.length)) {
           case '': // Legacy prefix
           case '/ddl':
-            return await this.#handleDdlMessage(lc, msg);
+            return this.#handleDdlMessage(lc, msg);
           default:
             lc.debug?.('ignoring unknown message type', msg.prefix);
             return [];
@@ -1059,7 +1059,7 @@ class ChangeMaker {
         ];
 
       case 'relation':
-        return this.#handleRelation(msg);
+        return await this.#handleRelation(msg);
       case 'type':
         return []; // Nothing need be done for custom types.
       case 'origin':
@@ -1074,10 +1074,7 @@ class ChangeMaker {
 
   #lastReplicationEventInTx: ReplicationEvent | undefined;
 
-  async #handleDdlMessage(
-    lc: LogContext,
-    msg: MessageMessage,
-  ): Promise<ChangeStreamData[]> {
+  #handleDdlMessage(lc: LogContext, msg: MessageMessage): ChangeStreamData[] {
     const event = parseLogicalMessageContent(msg, replicationEventSchema);
     lc = lc
       .withContext('tag', event.event.tag)
