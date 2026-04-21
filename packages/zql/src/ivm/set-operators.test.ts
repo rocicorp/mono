@@ -274,6 +274,33 @@ describe('InputIntersection', () => {
     ]);
   });
 
+  test('fetch intersects different child schemas by mapped key', () => {
+    const access = new MutableInput(
+      [
+        node({assignment_id: 1, teacher_id: 10}),
+        node({assignment_id: 2, teacher_id: 10}),
+      ],
+      childSchema('teacher_assignment_access', ['assignment_id', 'teacher_id']),
+    );
+    const membership = new MutableInput(
+      [
+        node({owner_assignment_id: 2, class_id: 20}),
+        node({owner_assignment_id: 3, class_id: 20}),
+      ],
+      childSchema('assignment_to_class', ['owner_assignment_id', 'class_id']),
+    );
+
+    const intersection = new InputIntersection(
+      [access, membership],
+      ['assignment_id'],
+      [['assignment_id'], ['owner_assignment_id']],
+    );
+
+    expect(Array.from(skipYields(intersection.fetch({})), n => n.row)).toEqual([
+      {assignment_id: 2, teacher_id: 10},
+    ]);
+  });
+
   test('fetch deduplicates rows by intersection key', () => {
     const left = new MutableInput([
       node({id: 1, value: 10}),
@@ -335,6 +362,82 @@ describe('InputIntersection', () => {
       id: 1,
       value: 10,
     });
+  });
+
+  test('push maps key constraints across different child schemas', () => {
+    const access = new MutableInput(
+      [node({assignment_id: 1, teacher_id: 10})],
+      childSchema('teacher_assignment_access', ['assignment_id', 'teacher_id']),
+    );
+    const membership = new MutableInput(
+      [],
+      childSchema('assignment_to_class', ['owner_assignment_id', 'class_id']),
+    );
+    const intersection = new InputIntersection(
+      [access, membership],
+      ['assignment_id'],
+      [['assignment_id'], ['owner_assignment_id']],
+    );
+    const sink = new RecordingOutput();
+    intersection.setOutput(sink);
+
+    membership.rows = [node({owner_assignment_id: 1, class_id: 20})];
+    membership.push(
+      makeAddChange(node({owner_assignment_id: 1, class_id: 20})),
+    );
+
+    expect(sink.changes.map(change => change[ChangeIndex.TYPE])).toEqual([
+      ChangeType.ADD,
+    ]);
+    expect(sink.changes[0][ChangeIndex.NODE].row).toEqual({
+      assignment_id: 1,
+      teacher_id: 10,
+    });
+  });
+
+  test('push removes and edits non-primary branches by mapped key', () => {
+    const access = new MutableInput(
+      [
+        node({assignment_id: 1, teacher_id: 10}),
+        node({assignment_id: 2, teacher_id: 10}),
+      ],
+      childSchema('teacher_assignment_access', ['assignment_id', 'teacher_id']),
+    );
+    const membership = new MutableInput(
+      [node({owner_assignment_id: 1, class_id: 20})],
+      childSchema('assignment_to_class', ['owner_assignment_id', 'class_id']),
+    );
+    const intersection = new InputIntersection(
+      [access, membership],
+      ['assignment_id'],
+      [['assignment_id'], ['owner_assignment_id']],
+    );
+    const sink = new RecordingOutput();
+    intersection.setOutput(sink);
+
+    membership.rows = [node({owner_assignment_id: 2, class_id: 20})];
+    membership.push(
+      makeEditChange(
+        node({owner_assignment_id: 2, class_id: 20}),
+        node({owner_assignment_id: 1, class_id: 20}),
+      ),
+    );
+
+    membership.rows = [];
+    membership.push(
+      makeRemoveChange(node({owner_assignment_id: 2, class_id: 20})),
+    );
+
+    expect(sink.changes.map(change => change[ChangeIndex.TYPE])).toEqual([
+      ChangeType.REMOVE,
+      ChangeType.ADD,
+      ChangeType.REMOVE,
+    ]);
+    expect(sink.changes.map(change => change[ChangeIndex.NODE].row)).toEqual([
+      {assignment_id: 1, teacher_id: 10},
+      {assignment_id: 2, teacher_id: 10},
+      {assignment_id: 2, teacher_id: 10},
+    ]);
   });
 
   test('push emits remove and add when a non-primary branch moves keys', () => {
@@ -460,4 +563,23 @@ function matchesConstraint(
     return true;
   }
   return Object.entries(constraint).every(([key, value]) => row[key] === value);
+}
+
+function childSchema(
+  tableName: string,
+  primaryKey: readonly [string, ...string[]],
+): SourceSchema {
+  return {
+    tableName,
+    columns: Object.fromEntries(
+      primaryKey.map(column => [column, {type: 'number'}]),
+    ),
+    primaryKey,
+    relationships: {},
+    compareRows: (left, right) =>
+      (left[primaryKey[0]] as number) - (right[primaryKey[0]] as number),
+    isHidden: false,
+    sort: primaryKey.map(column => [column, 'asc']),
+    system: 'client',
+  };
 }

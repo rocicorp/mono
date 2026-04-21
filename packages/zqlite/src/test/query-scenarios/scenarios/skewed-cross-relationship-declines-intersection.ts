@@ -22,7 +22,7 @@ const assignmentToClassRelationship = relationshipName(
 );
 
 export default {
-  name: 'permission access and class filter could intersect child keys',
+  name: 'skewed cross relationship declines broad child intersection',
   schema: educationAppSchema,
   seed: db => {
     const tables = createEducationAppTables(db);
@@ -34,27 +34,25 @@ export default {
       `INSERT INTO ${tableName(assignment)} (${colName(assignment, 'id')}, ${colName(assignment, 'teacher_id')}, ${colName(assignment, 'archived_at')}, ${colName(assignment, 'created_at')}) VALUES (?, ?, ?, ?)`,
     );
     for (let i = 1; i <= 2_000; i++) {
-      assignmentStmt.run(i, 2, i === 103 ? 'archived' : null, i);
+      assignmentStmt.run(i, 2, null, i);
     }
 
     const teacherAccessStmt = db.prepare(
       `INSERT INTO ${tableName(teacherAccess)} (${colName(teacherAccess, 'assignment_id')}, ${colName(teacherAccess, 'teacher_id')}, ${colName(teacherAccess, 'access_kind')}) VALUES (?, ?, ?)`,
     );
     teacherAccessStmt.run(101, 1, 'direct');
-    teacherAccessStmt.run(102, 1, 'class');
-    teacherAccessStmt.run(103, 1, 'group');
-    teacherAccessStmt.run(104, 1, 'direct');
+    teacherAccessStmt.run(102, 1, 'direct');
+    teacherAccessStmt.run(103, 1, 'direct');
 
     const assignmentToClassStmt = db.prepare(
       `INSERT INTO ${tableName(assignmentToClass)} (${colName(assignmentToClass, 'assignment_id')}, ${colName(assignmentToClass, 'class_id')}) VALUES (?, ?)`,
     );
-    assignmentToClassStmt.run(102, 10);
-    assignmentToClassStmt.run(103, 10);
-    assignmentToClassStmt.run(1_500, 10);
+    for (let i = 1; i <= 1_900; i++) {
+      assignmentToClassStmt.run(i, 10);
+    }
   },
   query: builder =>
     builder[assignment.name]
-      .where(colName(assignment, 'archived_at'), 'IS', null)
       .whereExists(teacherAccessRelationship, access =>
         access.where(colName(teacherAccess, 'teacher_id'), '=', 1),
       )
@@ -68,13 +66,12 @@ export default {
       where: {
         type: 'and',
         conditions: [
-          {},
-          {
-            type: 'correlatedSubquery',
-          },
           {
             type: 'correlatedSubquery',
             flip: true,
+          },
+          {
+            type: 'correlatedSubquery',
           },
         ],
       },
@@ -82,43 +79,47 @@ export default {
     // Submitted ZQL:
     //
     //   assignment
-    //     .where(archived_at IS null)
     //     .whereExists(teacher_assignment_access, teacher_id = currentTeacher)
-    //     .whereExists(assignment_to_class, class_id = selectedClass)
+    //     .whereExists(assignment_to_class, class_id = veryLargeClass)
     //
-    // Naive plan:
-    //
-    //   assignment(archived_at IS null)
-    //     |-- probe teacher access by assignment_id
-    //     `-- probe class membership by assignment_id
-    //
-    // Desired plan:
+    // Naive intersection:
     //
     //   teacher_assignment_access(teacher_id = currentTeacher) --.
     //                                                            +-- intersect assignment_id
-    //   assignment_to_class(class_id = selectedClass) ----------'
-    //     `-- fetch assignment by assignment_id and archived_at
+    //   assignment_to_class(class_id = veryLargeClass) ----------'
+    //
+    // Optimized plan:
+    //
+    //   teacher_assignment_access(teacher_id = currentTeacher)
+    //     `-- fetch assignment
+    //           `-- probe class membership by assignment_id
     //
     // Intuition:
     //
-    //   This mirrors list screens that layer a permission table with a UI
-    //   filter. Both child tables are selective, so the engine intersects
-    //   assignment ids from the two child tables before loading parents.
+    //   Intersections are only a win when sibling child scans are in the same
+    //   ballpark. Here the teacher access branch has 3 rows, while the class
+    //   branch has 1,900 rows. The guard keeps the tiny child root and probes
+    //   the broad sibling by assignment id instead of materializing it.
     sql: [
-      {
-        table: 'assignment_to_class',
-        sql: 'SELECT "assignment_id","class_id" FROM "assignment_to_class" WHERE "class_id" = ? ORDER BY "assignment_id" asc, "class_id" asc',
-      },
       {
         table: 'teacher_assignment_access',
         sql: 'SELECT "assignment_id","teacher_id","access_kind" FROM "teacher_assignment_access" WHERE "teacher_id" = ? ORDER BY "assignment_id" asc, "teacher_id" asc',
       },
       {
         table: 'assignment',
-        sql: 'SELECT "id","teacher_id","archived_at","created_at" FROM "assignment" WHERE "id" = ? AND "archived_at" IS ? ORDER BY "created_at" desc, "id" asc',
-        calls: 2,
+        sql: 'SELECT "id","teacher_id","archived_at","created_at" FROM "assignment" WHERE "id" = ? AND TRUE ORDER BY "created_at" desc, "id" asc',
+        calls: 3,
+      },
+      {
+        table: 'assignment_to_class',
+        sql: 'SELECT "assignment_id","class_id" FROM "assignment_to_class" WHERE "assignment_id" = ? AND "class_id" = ? ORDER BY "assignment_id" asc, "class_id" asc',
+        calls: 6,
       },
     ],
-    rows: [{id: 102, teacher_id: 2, archived_at: null, created_at: 102}],
+    rows: [
+      {id: 103, teacher_id: 2, archived_at: null, created_at: 103},
+      {id: 102, teacher_id: 2, archived_at: null, created_at: 102},
+      {id: 101, teacher_id: 2, archived_at: null, created_at: 101},
+    ],
   },
 } satisfies QueryScenario<typeof educationAppSchema>;

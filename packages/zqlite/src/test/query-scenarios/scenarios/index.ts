@@ -15,6 +15,7 @@ import sameRelationshipOrMerge from './same-relationship-or-merge.ts';
 import sampleAssignmentOrTeacherAccess from './sample-assignment-or-teacher-access.ts';
 import sharedParentFilterOrFactor from './shared-parent-filter-or-factor.ts';
 import singleExistsChildOr from './single-exists-child-or.ts';
+import skewedCrossRelationshipDeclinesIntersection from './skewed-cross-relationship-declines-intersection.ts';
 import studentAssignmentDirectClassGroupUnion from './student-assignment-direct-class-group-union.ts';
 import studentMembershipMixedOr from './student-membership-mixed-or.ts';
 import studentMembershipSimpleExists from './student-membership-simple-exists.ts';
@@ -43,5 +44,6 @@ export default [
   sameRelationshipAndIntersect,
   duplicateExistsOrDedupe,
   permissionAndClassFilterIntersection,
+  skewedCrossRelationshipDeclinesIntersection,
   studentAssignmentDirectClassGroupUnion,
 ] satisfies readonly QueryScenario<typeof educationAppSchema>[];

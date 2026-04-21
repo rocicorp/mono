@@ -107,7 +107,7 @@ export default {
     sql: [
       {
         table: 'assignment',
-        sql: 'SELECT "id","teacher_id","archived_at","created_at" FROM "assignment" WHERE "archived_at" IS ? ORDER BY "created_at" desc, "id" asc',
+        sql: 'SELECT "id","teacher_id","archived_at","created_at" FROM "assignment" WHERE ("archived_at" IS ? AND "teacher_id" = ?) ORDER BY "created_at" desc, "id" asc',
       },
       {
         table: 'assignment_to_student',

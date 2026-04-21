@@ -28,18 +28,18 @@ import {mergeFetches} from './union-fan-in.ts';
  *
  * Query:
  *
- *   issue
+ *   item
  *     |-- status = 'open'
- *     `-- OR has issue_label(label = 'bug')
+ *     `-- OR EXISTS(item_tag WHERE tag = 'bug')
  *
  * Scan plan:
  *
- *   branch 0: issue(status = 'open') ----------------.
- *                                                   InputUnion -> issue rows
- *   branch 1: issue_label(label = 'bug') -> issue(id) -'
+ *   branch 0: item(status = 'open') ---------------.
+ *                                                  InputUnion -> item rows
+ *   branch 1: item_tag(tag = 'bug') -> item(id) ----'
  *
- * InputUnion streams those issue rows in final sort order and removes duplicate
- * issue ids. If the same issue appears in both branches, the earlier branch is
+ * InputUnion streams those item rows in final sort order and removes duplicate
+ * item ids. If the same item appears in both branches, the earlier branch is
  * the visible copy. Push has to preserve that same rule, including handoffs:
  *
  *   before push:
@@ -229,38 +229,56 @@ export class InputUnion implements Input {
  *
  * Query:
  *
- *   issue
- *     |-- has issue_label(label = 'bug')
- *     `-- AND has issue_label(label = 'urgent')
+ *   item
+ *     |-- EXISTS(item_tag WHERE tag = 'bug')
+ *     `-- AND EXISTS(item_watch WHERE user_id = 7)
  *
  * Scan plan:
  *
- *   issue_label(label = 'bug')    -> ids {10, 20} --.
- *                                                     InputIntersection -> id {20}
- *   issue_label(label = 'urgent') -> ids {20, 30} ----'
- *                                                            |
- *                                                            v
- *                                                        issue(id = 20)
+ *   item_tag(tag = 'bug')   -> item_id ids {10, 20} --.
+ *                                                        InputIntersection -> id {20}
+ *   item_watch(user_id = 7) -> item_ref ids {20, 30} ---'
+ *                                                               |
+ *                                                               v
+ *                                                           item(id = 20)
  *
  * The important idea is simple: do the cheap child-table lookups first, keep
  * only ids found in every branch, then fetch the parent rows. The builder only
  * creates this operator when each child branch can produce at most one row for
- * a given parent id. That keeps "one row representing issue id 20" equivalent
- * to EXISTS semantics. If a future caller wants arbitrary many rows per parent
- * id, this operator would need to track duplicate child rows instead of just
- * ids.
+ * a given parent id. Different child tables may name that id differently,
+ * so `inputKeys` maps every branch key back to the first branch's key. That
+ * keeps "one row representing item id 20" equivalent to EXISTS semantics. If a
+ * future caller wants arbitrary many rows per parent id, this operator would
+ * need to track duplicate child rows instead of just ids.
  */
 export class InputIntersection implements Input {
   readonly #inputs: readonly Input[];
-  readonly #key: CompoundKey;
+  readonly #inputKeys: readonly CompoundKey[];
   readonly #schema: SourceSchema;
+  readonly #inputIndexes: ReadonlyMap<InputBase, number>;
   #output: Output = throwOutput;
 
-  constructor(inputs: readonly Input[], key: CompoundKey) {
+  constructor(
+    inputs: readonly Input[],
+    key: CompoundKey,
+    inputKeys: readonly CompoundKey[] = inputs.map(() => key),
+  ) {
     assert(inputs.length > 0, 'InputIntersection requires at least one input');
+    assert(
+      inputKeys.length === inputs.length,
+      'InputIntersection requires one key per input',
+    );
+    assert(
+      inputKeys.every(inputKey => inputKey.length === key.length),
+      'InputIntersection keys must have the same width',
+    );
     this.#inputs = inputs;
-    this.#key = key;
-    this.#schema = firstInputSchema('input intersection', inputs);
+    this.#inputKeys = inputKeys;
+    this.#schema = inputs[0].getSchema();
+    this.#inputIndexes = new Map(inputs.map((input, index) => [input, index]));
+    for (const [index, input] of inputs.entries()) {
+      assertKeyColumnsExist(input.getSchema(), inputKeys[index]);
+    }
     for (const input of inputs) {
       input.setOutput(this);
     }
@@ -289,14 +307,17 @@ export class InputIntersection implements Input {
     // for the parent lookup.
     const [first, ...rest] = this.#inputs;
     const matchingKeys: ReadonlySet<string>[] = [];
-    for (const input of rest) {
+    for (const [restIndex, input] of rest.entries()) {
       const keys = new Set<string>();
-      for (const node of input.fetch(req)) {
+      const inputIndex = restIndex + 1;
+      for (const node of input.fetch(
+        this.#fetchRequestForInput(req, inputIndex),
+      )) {
         if (node === 'yield') {
           yield node;
           continue;
         }
-        keys.add(rowKey(node.row, this.#key));
+        keys.add(this.#rowKey(inputIndex, node.row));
       }
       matchingKeys.push(keys);
     }
@@ -307,7 +328,7 @@ export class InputIntersection implements Input {
         yield node;
         continue;
       }
-      const key = rowKey(node.row, this.#key);
+      const key = this.#rowKey(0, node.row);
       if (!yieldedKeys.has(key) && matchingKeys.every(keys => keys.has(key))) {
         yieldedKeys.add(key);
         yield node;
@@ -317,29 +338,33 @@ export class InputIntersection implements Input {
 
   *push(change: Change, pusher: InputBase): Stream<'yield'> {
     assert(isInput(pusher), 'Expected pusher to be an input');
-    assert(this.#inputs.includes(pusher), 'Pusher was not an input');
+    const pusherIndex = this.#inputIndexes.get(pusher);
+    assert(pusherIndex !== undefined, 'Pusher was not an input');
 
     switch (change[ChangeIndex.TYPE]) {
       case ChangeType.ADD:
-        yield* this.#pushAdd(change[ChangeIndex.NODE], pusher);
+        yield* this.#pushAdd(change[ChangeIndex.NODE], pusher, pusherIndex);
         return;
 
       case ChangeType.REMOVE:
-        yield* this.#pushRemove(change[ChangeIndex.NODE], pusher);
+        yield* this.#pushRemove(change[ChangeIndex.NODE], pusher, pusherIndex);
         return;
 
       case ChangeType.EDIT: {
         const oldNode = change[ChangeIndex.OLD_NODE];
         const newNode = change[ChangeIndex.NODE];
-        if (rowKey(oldNode.row, this.#key) !== rowKey(newNode.row, this.#key)) {
-          yield* this.#pushRemove(oldNode, pusher);
-          yield* this.#pushAdd(newNode, pusher);
+        if (
+          this.#rowKey(pusherIndex, oldNode.row) !==
+          this.#rowKey(pusherIndex, newNode.row)
+        ) {
+          yield* this.#pushRemove(oldNode, pusher, pusherIndex);
+          yield* this.#pushAdd(newNode, pusher, pusherIndex);
           return;
         }
 
         if (
           pusher === this.#inputs[0] &&
-          (yield* this.#allOtherInputsHaveMatch(pusher, newNode))
+          (yield* this.#allOtherInputsHaveMatch(pusher, pusherIndex, newNode))
         ) {
           yield* this.#output.push(change, this);
         }
@@ -351,6 +376,7 @@ export class InputIntersection implements Input {
           pusher === this.#inputs[0] &&
           (yield* this.#allOtherInputsHaveMatch(
             pusher,
+            pusherIndex,
             change[ChangeIndex.NODE],
           ))
         ) {
@@ -366,11 +392,15 @@ export class InputIntersection implements Input {
     }
   }
 
-  *#pushAdd(node: Node, pusher: Input): Generator<'yield'> {
+  *#pushAdd(
+    node: Node,
+    pusher: Input,
+    pusherIndex: number,
+  ): Generator<'yield'> {
     // An id enters the intersection only when every other branch has that id.
     // Non-first branches emit the first input's row, because fetch always uses
     // the first branch as the visible copy for an intersected id.
-    if (!(yield* this.#allOtherInputsHaveMatch(pusher, node))) {
+    if (!(yield* this.#allOtherInputsHaveMatch(pusher, pusherIndex, node))) {
       return;
     }
     if (pusher === this.#inputs[0]) {
@@ -379,34 +409,42 @@ export class InputIntersection implements Input {
     }
     const visibleCopy = yield* firstMatchingNode(
       this.#inputs[0],
-      keyConstraint(node.row, this.#key),
+      this.#keyConstraintForInput(0, this.#keyValues(pusherIndex, node.row)),
     );
     if (visibleCopy) {
       yield* this.#output.push(makeAddChange(visibleCopy), this);
     }
   }
 
-  *#pushRemove(node: Node, pusher: Input): Generator<'yield'> {
+  *#pushRemove(
+    node: Node,
+    pusher: Input,
+    pusherIndex: number,
+  ): Generator<'yield'> {
     // An id leaves the intersection when this branch no longer has it and all
     // other branches still do. For the first branch, removing the current
     // visible copy is visible even if another first-branch row with the same
     // id remains, because fetch would have emitted the removed row before the
     // change.
-    const constraint = keyConstraint(node.row, this.#key);
+    const values = this.#keyValues(pusherIndex, node.row);
+    const constraint = this.#keyConstraintForInput(pusherIndex, values);
     if (
       pusher !== this.#inputs[0] &&
       (yield* inputHasMatch(pusher, constraint))
     ) {
       return;
     }
-    if (!(yield* this.#allOtherInputsHaveMatch(pusher, node))) {
+    if (!(yield* this.#allOtherInputsHaveMatch(pusher, pusherIndex, node))) {
       return;
     }
     if (pusher === this.#inputs[0]) {
       yield* this.#output.push(makeRemoveChange(node), this);
       return;
     }
-    const visibleCopy = yield* firstMatchingNode(this.#inputs[0], constraint);
+    const visibleCopy = yield* firstMatchingNode(
+      this.#inputs[0],
+      this.#keyConstraintForInput(0, values),
+    );
     if (visibleCopy) {
       yield* this.#output.push(makeRemoveChange(visibleCopy), this);
     }
@@ -414,20 +452,63 @@ export class InputIntersection implements Input {
 
   *#allOtherInputsHaveMatch(
     pusher: InputBase,
+    pusherIndex: number,
     node: Node,
   ): Generator<'yield', boolean> {
     // This tests id presence, not row equality. EXISTS only cares whether each
     // branch can produce at least one related row for the parent id.
-    const constraint = keyConstraint(node.row, this.#key);
-    for (const input of this.#inputs) {
+    const values = this.#keyValues(pusherIndex, node.row);
+    for (const [index, input] of this.#inputs.entries()) {
       if (input === pusher) {
         continue;
       }
-      if (!(yield* inputHasMatch(input, constraint))) {
+      if (
+        !(yield* inputHasMatch(
+          input,
+          this.#keyConstraintForInput(index, values),
+        ))
+      ) {
         return false;
       }
     }
     return true;
+  }
+
+  #fetchRequestForInput(req: FetchRequest, inputIndex: number): FetchRequest {
+    if (inputIndex === 0 || !req.constraint) {
+      return req;
+    }
+
+    const firstKey = this.#inputKeys[0];
+    const inputKey = this.#inputKeys[inputIndex];
+    const constraint: Record<string, Value> = {};
+    for (const [index, key] of firstKey.entries()) {
+      const value = req.constraint[key];
+      if (value !== undefined) {
+        constraint[inputKey[index]] = value;
+      }
+    }
+    return Object.keys(constraint).length === 0 ? {} : {constraint};
+  }
+
+  #rowKey(inputIndex: number, row: Row): string {
+    return JSON.stringify(this.#keyValues(inputIndex, row));
+  }
+
+  #keyValues(inputIndex: number, row: Row): readonly Value[] {
+    return this.#inputKeys[inputIndex].map(column => row[column]);
+  }
+
+  #keyConstraintForInput(
+    inputIndex: number,
+    values: readonly Value[],
+  ): Record<string, Value> {
+    return Object.fromEntries(
+      this.#inputKeys[inputIndex].map((column, index) => [
+        column,
+        values[index],
+      ]),
+    );
   }
 }
 
@@ -465,6 +546,15 @@ function firstInputSchema(
     assertCompatibleSchema(operatorName, schema, input.getSchema());
   }
   return schema;
+}
+
+function assertKeyColumnsExist(schema: SourceSchema, key: CompoundKey): void {
+  for (const column of key) {
+    assert(
+      schema.columns[column] !== undefined,
+      `InputIntersection key column ${column} missing from ${schema.tableName}`,
+    );
+  }
 }
 
 function assertCompatibleSchema(

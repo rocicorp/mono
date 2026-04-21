@@ -40,6 +40,7 @@ import {UnionFanIn} from '../ivm/union-fan-in.ts';
 import {UnionFanOut} from '../ivm/union-fan-out.ts';
 import {planQuery} from '../planner/planner-builder.ts';
 import type {ConnectionCostModel} from '../planner/planner-connection.ts';
+import type {PlannerConstraint} from '../planner/planner-constraint.ts';
 import type {PlanDebugger} from '../planner/planner-debug.ts';
 import {completeOrdering} from '../query/complete-ordering.ts';
 import type {DebugDelegate} from './debug-delegate.ts';
@@ -142,7 +143,15 @@ export function buildPipeline(
   if (costModel) {
     ast = planQuery(ast, costModel, planDebugger, lc);
   }
-  return buildPipelineInternal(ast, delegate, queryID, '');
+  return buildPipelineInternal(
+    ast,
+    delegate,
+    queryID,
+    '',
+    undefined,
+    undefined,
+    costModel,
+  );
 }
 
 export function bindStaticParameters(
@@ -225,6 +234,7 @@ function isParameter(value: ValuePosition): value is Parameter {
 
 const EXISTS_LIMIT = 3;
 const PERMISSIONS_EXISTS_LIMIT = 1;
+const SIBLING_INTERSECTION_COST_FUZZ_FACTOR = 4;
 
 /**
  * Checks if a condition tree contains any NOT EXISTS operations.
@@ -262,6 +272,7 @@ function buildPipelineInternal(
   name: string,
   partitionKey?: CompoundKey,
   isNonFlippedExistsChild?: boolean | undefined,
+  costModel?: ConnectionCostModel,
 ): Input {
   const source = delegate.getSource(ast.table);
   if (!source) {
@@ -282,37 +293,37 @@ function buildPipelineInternal(
   //
   //   Query:
   //
-  //     issue
+  //     item
   //       |-- status = 'open'
-  //       `-- OR has issue_label(label = 'bug')
+  //       `-- OR EXISTS(item_tag WHERE tag = 'bug')
   //
   //   Scan plan:
   //
-  //     issue(status = 'open') -----------------------.
-  //                                                     +-- union issue.id
-  //     issue_label(label = 'bug') -> issue(id) -------'
+  //     item(status = 'open') -----------------------.
+  //                                                   +-- union item.id
+  //     item_tag(tag = 'bug') -> item(id) -----------'
   //
-  // The broad plan would scan all issues and ask "does either branch match?"
-  // for every row. This plan starts from both selective doorways into issue
-  // rows, then dedupes by issue.id.
+  // The broad plan would scan all items and ask "does either branch match?"
+  // for every row. This plan starts from both selective doorways into item
+  // rows, then dedupes by item.id.
   //
   // AND example:
   //
   //   Query:
   //
-  //     issue
-  //       |-- has issue_label(label = 'bug')
-  //       `-- AND has issue_label(label = 'urgent')
+  //     item
+  //       |-- EXISTS(item_tag WHERE tag = 'bug')
+  //       `-- AND EXISTS(item_watch WHERE user_id = 7)
   //
   //   Scan plan:
   //
-  //     issue_label(label = 'bug')    -> ids {10, 20} --.
-  //                                                        +-- ids in both -> issue(id)
-  //     issue_label(label = 'urgent') -> ids {20, 30} ----'
+  //     item_tag(tag = 'bug')      -> item_ids {10, 20} --.
+  //                                                            +-- ids in both -> item(id)
+  //     item_watch(user_id = 7)    -> item_ids {20, 30} ----'
   //
-  // The broad plan would load issues after the first label match, then probe
-  // the second label row-by-row. This plan first finds the issue ids that
-  // appear in both child scans, then loads only those issues.
+  // The broad plan would load items after the first child match, then probe
+  // the second child row-by-row. This plan first finds the item ids that
+  // appear in both child scans, then loads only those items.
   //
   // Each rewrite has its own strict guard below. If a query needs a shape the
   // new physical operator cannot preserve, it falls through to the older
@@ -326,14 +337,16 @@ function buildPipelineInternal(
       queryID,
       name,
       partitionKey,
+      costModel,
     );
   }
 
-  const intersection = getSameRelationshipExistsIntersection(
+  const intersection = getSiblingExistsIntersection(
     ast.where,
     delegate,
+    costModel,
   );
-  const sourceWhere = intersection ? undefined : ast.where;
+  const sourceWhere = intersection ? intersection.sourceWhere : ast.where;
   const csqConditions = intersection
     ? []
     : gatherCorrelatedSubqueryQueryConditions(ast.where);
@@ -388,11 +401,12 @@ function buildPipelineInternal(
   const {fullyAppliedFilters} = conn;
 
   if (intersection) {
-    end = applySameRelationshipExistsIntersection(
+    end = applySiblingExistsIntersection(
       intersection,
       delegate,
       end,
       name,
+      costModel,
     );
   }
 
@@ -421,12 +435,13 @@ function buildPipelineInternal(
         end,
         name,
         true,
+        costModel,
       );
     }
   }
 
   if (sourceWhere && (!fullyAppliedFilters || delegate.applyFiltersAnyway)) {
-    end = applyWhere(end, sourceWhere, delegate, name);
+    end = applyWhere(end, sourceWhere, delegate, name, costModel);
   }
 
   if (ast.limit !== undefined) {
@@ -465,7 +480,15 @@ function buildPipelineInternal(
       byAlias.set(csq.subquery.alias ?? '', csq);
     }
     for (const csq of byAlias.values()) {
-      end = applyCorrelatedSubQuery(csq, delegate, queryID, end, name, false);
+      end = applyCorrelatedSubQuery(
+        csq,
+        delegate,
+        queryID,
+        end,
+        name,
+        false,
+        costModel,
+      );
     }
   }
 
@@ -479,6 +502,7 @@ function applyRootUnionBranches(
   queryID: string,
   name: string,
   partitionKey?: CompoundKey,
+  costModel?: ConnectionCostModel,
 ): Input {
   // Run every OR branch as its own root query, then merge by primary key. A
   // root is just the table/index we choose to scan first. This is the physical
@@ -486,14 +510,14 @@ function applyRootUnionBranches(
   //
   //   Query:
   //
-  //     issue.status = 'open'
-  //       OR EXISTS(issue_label WHERE label = 'bug')
+  //     item.status = 'open'
+  //       OR EXISTS(item_tag WHERE tag = 'bug')
   //
   //   Scan plan:
   //
-  //     issue(status = 'open') -----------------------.
-  //                                                     +-- union issue.id
-  //     issue_label(label = 'bug') -> issue(id) -------'
+  //     item(status = 'open') -----------------------.
+  //                                                   +-- union item.id
+  //     item_tag(tag = 'bug') -> item(id) -----------'
   //
   // Each recursive branch keeps the same ordering and split-edit keys as the
   // original AST, so the union can merge streams without re-sorting.
@@ -507,6 +531,8 @@ function applyRootUnionBranches(
       queryID,
       `${name}:or-${index}`,
       partitionKey,
+      undefined,
+      costModel,
     );
     return stripRootUnionBranchRelationships(input, delegate, name, index);
   });
@@ -542,8 +568,7 @@ function getRootUnionBranches(ast: AST): readonly Condition[] | undefined {
   // related rows all observe the whole result stream, so they need a richer
   // physical plan than "run branch pipelines, then union".
   if (
-    ast.where?.type !== 'or' ||
-    ast.where.conditions.length < 2 ||
+    ast.where === undefined ||
     ast.start !== undefined ||
     ast.limit !== undefined ||
     ast.related !== undefined
@@ -551,7 +576,10 @@ function getRootUnionBranches(ast: AST): readonly Condition[] | undefined {
     return undefined;
   }
 
-  const branches = ast.where.conditions;
+  const branches = getRootUnionBranchConditions(ast.where);
+  if (!branches || branches.length < 2) {
+    return undefined;
+  }
 
   // At least one branch must already be planned to start from a related table.
   // Otherwise root union would just split a simple parent-table scan into
@@ -575,30 +603,75 @@ function getRootUnionBranches(ast: AST): readonly Condition[] | undefined {
   return branches;
 }
 
-function applySameRelationshipExistsIntersection(
-  intersection: SameRelationshipExistsIntersection,
+function getRootUnionBranchConditions(
+  condition: Condition,
+): readonly Condition[] | undefined {
+  if (condition.type === 'or') {
+    return condition.conditions;
+  }
+  if (condition.type !== 'and') {
+    return undefined;
+  }
+
+  const orBranches: Disjunction[] = [];
+  const shared: Condition[] = [];
+  for (const subCondition of condition.conditions) {
+    if (subCondition.type === 'or') {
+      orBranches.push(subCondition);
+      continue;
+    }
+    if (!isNotAndDoesNotContainSubquery(subCondition)) {
+      return undefined;
+    }
+    shared.push(subCondition);
+  }
+
+  if (orBranches.length !== 1) {
+    return undefined;
+  }
+
+  // Physical distributivity for the common permission shape:
+  //
+  //   shared_parent_filter AND (local_branch OR child_branch)
+  //            |
+  //            v
+  //   (shared_parent_filter AND local_branch)
+  //     OR
+  //   (shared_parent_filter AND child_branch)
+  //
+  // This lets the local branch use all of its parent filters at the source
+  // instead of first scanning the broad shared filter and applying the local
+  // branch in a later Filter operator.
+  return orBranches[0].conditions.map(branch =>
+    combineConditions([...shared, branch]),
+  );
+}
+
+function applySiblingExistsIntersection(
+  intersection: SiblingExistsIntersection,
   delegate: BuilderDelegate,
   end: Input,
   name: string,
+  costModel?: ConnectionCostModel,
 ): Input {
   // Build the child side before the parent lookup. In plain English:
-  // find the issue ids that satisfy every sibling EXISTS first, then load the
-  // issue rows for only those ids.
+  // find the parent ids that satisfy every sibling EXISTS first, then load the
+  // parent rows for only those ids.
   //
   //   Query:
   //
-  //     issue
-  //       |-- EXISTS(issue_label WHERE label = 'bug')
-  //       `-- EXISTS(issue_label WHERE label = 'urgent')
+  //     item
+  //       |-- EXISTS(item_tag WHERE tag = 'bug')
+  //       `-- EXISTS(item_watch WHERE user_id = 7)
   //
   //   Scan plan:
   //
-  //     issue_label(label = 'bug') -------------------.
-  //                                                     +-- intersect issue_id -> issue(id)
-  //     issue_label(label = 'urgent') ----------------'
+  //     item_tag(tag = 'bug') ----------------------.
+  //                                                  +-- intersect item ids -> item(id)
+  //     item_watch(user_id = 7) --------------------'
   //
-  // This avoids loading an issue after the first label match only to probe the
-  // second label relationship row-by-row.
+  // This avoids loading an item after the first child match only to probe the
+  // second child relationship row-by-row.
   const {conditions, related} = intersection;
   const childInputs = conditions.map((condition, index) =>
     buildPipelineInternal(
@@ -606,12 +679,15 @@ function applySameRelationshipExistsIntersection(
       delegate,
       '',
       `${name}.${condition.related.subquery.alias}:intersect-${index}`,
-      related.correlation.childField,
+      condition.related.correlation.childField,
+      undefined,
+      costModel,
     ),
   );
   const child = new InputIntersection(
     childInputs,
-    related.correlation.childField,
+    conditions[0].related.correlation.childField,
+    conditions.map(condition => condition.related.correlation.childField),
   );
   for (const childInput of childInputs) {
     delegate.addEdge(childInput, child);
@@ -637,34 +713,46 @@ function applySameRelationshipExistsIntersection(
   );
 }
 
-type SameRelationshipExistsIntersection = {
+type SiblingExistsIntersection = {
   readonly related: CorrelatedSubquery;
   readonly conditions: readonly CorrelatedSubqueryCondition[];
+  readonly sourceWhere: Condition | undefined;
 };
 
-function getSameRelationshipExistsIntersection(
+function getSiblingExistsIntersection(
   condition: Condition | undefined,
   delegate: BuilderDelegate,
-): SameRelationshipExistsIntersection | undefined {
+  costModel?: ConnectionCostModel,
+): SiblingExistsIntersection | undefined {
   // Detect a narrow, physical intersection opportunity:
   //
   //   AND
-  //     EXISTS(relationship R, child predicate A)
-  //     EXISTS(relationship R, child predicate B)
+  //     local parent filters...
+  //     EXISTS(child relationship A)
+  //     EXISTS(child relationship B)
   //
   // We only need one sibling to be planned as flipped. Once one branch is
   // source-driven, intersecting all compatible siblings lets the runtime start
-  // with the child table and avoid parent-first probing.
+  // with child tables and avoid parent-first probing.
   if (condition?.type !== 'and') {
     return undefined;
   }
 
-  const conditions = condition.conditions.map(getIntersectableExists);
-  if (conditions.some(candidate => candidate === undefined)) {
+  const candidates: CorrelatedSubqueryCondition[] = [];
+  const localConditions: NoSubqueryCondition[] = [];
+  for (const subCondition of condition.conditions) {
+    const exists = getIntersectableExists(subCondition);
+    if (exists) {
+      candidates.push(exists);
+      continue;
+    }
+    if (isNotAndDoesNotContainSubquery(subCondition)) {
+      localConditions.push(subCondition);
+      continue;
+    }
     return undefined;
   }
 
-  const candidates = conditions as CorrelatedSubqueryCondition[];
   if (candidates.length < 2) {
     return undefined;
   }
@@ -676,18 +764,14 @@ function getSameRelationshipExistsIntersection(
     return undefined;
   }
 
-  const fingerprint = sameRelationshipExistsFingerprint(candidates[0]);
+  const fingerprint = siblingExistsIntersectionFingerprint(candidates[0]);
   if (
     !fingerprint ||
     candidates.some(
-      candidate => sameRelationshipExistsFingerprint(candidate) !== fingerprint,
+      candidate =>
+        siblingExistsIntersectionFingerprint(candidate) !== fingerprint,
     )
   ) {
-    return undefined;
-  }
-
-  const childSource = delegate.getSource(candidates[0].related.subquery.table);
-  if (!childSource) {
     return undefined;
   }
 
@@ -696,33 +780,119 @@ function getSameRelationshipExistsIntersection(
   // child row for each parent id, each branch must prove it can produce at
   // most one child row for the id it contributes.
   //
-  //   issue_label primary key:
+  //   child table primary key:
   //
-  //     [issue_id, label]
+  //     [parent_id, tag]
   //
   //   Branch filter:
   //
-  //     issue_id comes from the parent relationship
-  //     label = 'bug'
+  //     parent_id comes from the relationship
+  //     tag = 'bug'
   //
   // Together those two values cover the full primary key, so this branch can
-  // produce at most one issue_label row for each issue_id.
-  if (
-    candidates.some(
-      candidate =>
-        !isUniquePerCorrelationKey(
-          candidate,
-          childSource.tableSchema.primaryKey,
-        ),
-    )
-  ) {
+  // produce at most one child row for each parent id.
+  for (const candidate of candidates) {
+    const childSource = delegate.getSource(candidate.related.subquery.table);
+    if (!childSource) {
+      return undefined;
+    }
+    if (
+      !isUniquePerCorrelationKey(candidate, childSource.tableSchema.primaryKey)
+    ) {
+      return undefined;
+    }
+  }
+
+  if (!isSiblingIntersectionCostSafe(candidates, costModel)) {
     return undefined;
   }
 
   return {
     related: candidates[0].related,
     conditions: candidates,
+    sourceWhere: combineAndConditions(localConditions),
   };
+}
+
+function isSiblingIntersectionCostSafe(
+  candidates: readonly CorrelatedSubqueryCondition[],
+  costModel: ConnectionCostModel | undefined,
+): boolean {
+  if (!costModel) {
+    return true;
+  }
+
+  const childScanScores = candidates.map(candidate =>
+    siblingExistsCostScore(candidate, costModel, undefined),
+  );
+  const flippedIndexes = candidates.flatMap((candidate, index) =>
+    candidate.flip === true ? [index] : [],
+  );
+  if (flippedIndexes.length === 0) {
+    return false;
+  }
+
+  const driverRows = Math.max(
+    1,
+    Math.min(...flippedIndexes.map(index => childScanScores[index].rows)),
+  );
+  const driverScore = Math.min(
+    ...flippedIndexes.map(index => childScanScores[index].score),
+  );
+  const semiJoinProbeScore = candidates.reduce((total, candidate) => {
+    if (candidate.flip === true) {
+      return total;
+    }
+    return (
+      total +
+      driverRows *
+        siblingExistsCostScore(
+          candidate,
+          costModel,
+          childCorrelationConstraint(candidate),
+        ).score
+    );
+  }, 0);
+
+  const currentPlanScore = driverScore + semiJoinProbeScore;
+  const intersectionScore = childScanScores.reduce(
+    (total, cost) => total + cost.score,
+    0,
+  );
+
+  // This is only a guardrail around a physical shortcut. The planner has
+  // already chosen at least one child-driven branch. Intersection is great when
+  // sibling child scans are in the same ballpark, but it should not let one tiny
+  // flipped branch drag a whole broad child table into memory. The fuzz factor
+  // gives SQLite's approximate row estimates room to be imperfect while still
+  // rejecting the pathological "3 row branch AND 30k row branch" shape.
+  return (
+    intersectionScore <=
+    currentPlanScore * SIBLING_INTERSECTION_COST_FUZZ_FACTOR
+  );
+}
+
+function siblingExistsCostScore(
+  condition: CorrelatedSubqueryCondition,
+  costModel: ConnectionCostModel,
+  constraint: PlannerConstraint | undefined,
+): {readonly rows: number; readonly score: number} {
+  const {subquery} = condition.related;
+  const cost = costModel(
+    subquery.table,
+    subquery.orderBy ?? [],
+    subquery.where,
+    constraint,
+  );
+  return {rows: cost.rows, score: cost.rows + cost.startupCost};
+}
+
+function childCorrelationConstraint(
+  condition: CorrelatedSubqueryCondition,
+): PlannerConstraint {
+  return Object.fromEntries(
+    condition.related.correlation.childField.map(field => [field, undefined]),
+  );
 }
 
 function getIntersectableExists(
@@ -778,7 +948,7 @@ function hasIntersectableChildSubquery(
   );
 }
 
-function sameRelationshipExistsFingerprint(
+function siblingExistsIntersectionFingerprint(
   condition: CorrelatedSubqueryCondition,
 ): string | undefined {
   const exists = getIntersectableExists(condition);
@@ -787,19 +957,41 @@ function sameRelationshipExistsFingerprint(
   }
 
   const {related} = exists;
-  // Include orderBy because SourceSchema.sort must match across every child
-  // input in the intersection. EXISTS does not care about child ordering
-  // semantically, but the runtime stream contract does.
+  // Different child tables can participate as long as they all map their key
+  // back to the same parent key. The intersection keeps the first child input
+  // as the representative row stream and uses the rest only as key sets:
+  //
+  //   child A(parent_id) ----.
+  //                           +-- ids in every branch -> parent(id)
+  //   child B(parent_id) ----'
+  //
+  // Because non-representative inputs only contribute keys, their table name,
+  // schema, and sort order do not need to match the first input.
   return JSON.stringify({
     system: related.system,
     hidden: related.hidden,
-    correlation: related.correlation,
-    orderBy: related.subquery.orderBy,
-    subquery: {
-      schema: related.subquery.schema,
-      table: related.subquery.table,
-    },
+    parentField: related.correlation.parentField,
+    keyWidth: related.correlation.childField.length,
   });
+}
+
+function combineAndConditions(
+  conditions: readonly NoSubqueryCondition[],
+): Condition | undefined {
+  if (conditions.length === 0) {
+    return undefined;
+  }
+  if (conditions.length === 1) {
+    return conditions[0];
+  }
+  return combineConditions(conditions);
+}
+
+function combineConditions(conditions: readonly Condition[]): Condition {
+  if (conditions.length === 1) {
+    return conditions[0];
+  }
+  return {type: 'and', conditions: [...conditions]};
 }
 
 function isUniquePerCorrelationKey(
@@ -812,17 +1004,17 @@ function isUniquePerCorrelationKey(
   //
   // Example:
   //
-  //   issue_label primary key:
+  //   child table primary key:
   //
-  //     [issue_id, label]
+  //     [parent_id, tag]
   //
   //   Branch filter:
   //
-  //     issue_id comes from the parent relationship
-  //     label = 'bug'
+  //     parent_id comes from the relationship
+  //     tag = 'bug'
   //
-  // Together those values identify one issue_label row. That makes
-  // intersecting by issue_id equivalent to asking whether both EXISTS branches
+  // Together those values identify one child row. That makes intersecting by
+  // parent_id equivalent to asking whether all sibling EXISTS branches
   // are true.
   const constrained = new Set(condition.related.correlation.childField);
   collectEqualityConstrainedColumns(
@@ -864,14 +1056,15 @@ function applyWhere(
   condition: Condition,
   delegate: BuilderDelegate,
   name: string,
+  costModel?: ConnectionCostModel,
 ): Input {
   if (!conditionIncludesFlippedSubqueryAtAnyLevel(condition)) {
     return buildFilterPipeline(input, delegate, filterInput =>
-      applyFilter(filterInput, condition, delegate, name),
+      applyFilter(filterInput, condition, delegate, name, costModel),
     );
   }
 
-  return applyFilterWithFlips(input, condition, delegate, name);
+  return applyFilterWithFlips(input, condition, delegate, name, costModel);
 }
 
 function applyFilterWithFlips(
@@ -879,6 +1072,7 @@ function applyFilterWithFlips(
   condition: Condition,
   delegate: BuilderDelegate,
   name: string,
+  costModel?: ConnectionCostModel,
 ): Input {
   let end = input;
   assert(condition.type !== 'simple', 'Simple conditions cannot have flips');
@@ -899,12 +1093,13 @@ function applyFilterWithFlips(
             },
             delegate,
             name,
+            costModel,
           ),
         );
       }
       assert(withFlipped.length > 0, 'Impossible to have no flips here');
       for (const cond of withFlipped) {
-        end = applyFilterWithFlips(end, cond, delegate, name);
+        end = applyFilterWithFlips(end, cond, delegate, name, costModel);
       }
       break;
     }
@@ -930,13 +1125,16 @@ function applyFilterWithFlips(
             },
             delegate,
             name,
+            costModel,
           ),
         );
         branches.push(branch);
       }
 
       for (const cond of withFlipped) {
-        branches.push(applyFilterWithFlips(end, cond, delegate, name));
+        branches.push(
+          applyFilterWithFlips(end, cond, delegate, name, costModel),
+        );
       }
 
       const ufi = new UnionFanIn(ufo, branches);
@@ -956,6 +1154,7 @@ function applyFilterWithFlips(
         `${name}.${sq.subquery.alias}`,
         sq.correlation.childField,
         false,
+        costModel,
       );
       const flippedJoin = new FlippedJoin({
         parent: end,
@@ -987,12 +1186,13 @@ function applyFilter(
   condition: Condition,
   delegate: BuilderDelegate,
   name: string,
+  costModel?: ConnectionCostModel,
 ): FilterInput {
   switch (condition.type) {
     case 'and':
-      return applyAnd(input, condition, delegate, name);
+      return applyAnd(input, condition, delegate, name, costModel);
     case 'or':
-      return applyOr(input, condition, delegate, name);
+      return applyOr(input, condition, delegate, name, costModel);
     case 'correlatedSubquery':
       return applyCorrelatedSubqueryCondition(input, condition, delegate, name);
     case 'simple':
@@ -1005,9 +1205,10 @@ function applyAnd(
   condition: Conjunction,
   delegate: BuilderDelegate,
   name: string,
+  costModel?: ConnectionCostModel,
 ): FilterInput {
   for (const subCondition of condition.conditions) {
-    input = applyFilter(input, subCondition, delegate, name);
+    input = applyFilter(input, subCondition, delegate, name, costModel);
   }
   return input;
 }
@@ -1017,6 +1218,7 @@ export function applyOr(
   condition: Disjunction,
   delegate: BuilderDelegate,
   name: string,
+  costModel?: ConnectionCostModel,
 ): FilterInput {
   const [subqueryConditions, otherConditions] =
     groupSubqueryConditions(condition);
@@ -1036,7 +1238,7 @@ export function applyOr(
   const fanOut = new FanOut(input);
   delegate.addEdge(input, fanOut);
   const branches = subqueryConditions.map(subCondition =>
-    applyFilter(fanOut, subCondition, delegate, name),
+    applyFilter(fanOut, subCondition, delegate, name, costModel),
   );
   if (otherConditions.length > 0) {
     const filter = new Filter(
@@ -1116,6 +1318,7 @@ function applyCorrelatedSubQuery(
   end: Input,
   name: string,
   fromCondition: boolean,
+  costModel?: ConnectionCostModel,
 ) {
   // TODO: we only omit the join if the CSQ if from a condition since
   // we want to create an empty array for `related` fields that are `limit(0)`
@@ -1131,6 +1334,7 @@ function applyCorrelatedSubQuery(
     `${name}.${sq.subquery.alias}`,
     sq.correlation.childField,
     fromCondition,
+    costModel,
   );
 
   const joinName = `${name}:join(${sq.subquery.alias})`;
