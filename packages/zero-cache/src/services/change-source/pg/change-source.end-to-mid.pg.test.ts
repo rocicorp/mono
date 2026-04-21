@@ -2079,6 +2079,66 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
       }
     },
   );
+
+  // Demonstrates a gap in the DDL event pipeline: non-transactional DDL
+  // statements such as `CREATE INDEX CONCURRENTLY` run their
+  // `ddl_command_start` and `ddl_command_end` event triggers in *different*
+  // internal sub-transactions. Because `pg_logical_emit_message(true, ...)`
+  // attaches each message to whichever sub-tx is active when it fires, the
+  // consumer sees:
+  //
+  //   begin → <ddlStart>  → commit    ← resets #lastReplicationEventInTx
+  //   begin → <ddlUpdate> → commit    ← `assert(prevEvent, ...)` trips
+  //
+  // The assertion at change-source.ts (`ddlUpdate received without a
+  // ddlStart`) trips, the error surfaces as a `reset-required` control
+  // message, and replication halts.
+  //
+  // TODO: After this is fixed, flip this test to assert that the index
+  // creation is replicated successfully. Because the current behavior puts
+  // the ChangeMaker into a permanent error state, this test must be the
+  // last one in the describe block.
+  test('ddlUpdate-without-ddlStart repros when CREATE INDEX CONCURRENTLY spans sub-transactions', async () => {
+    await upstream.unsafe(
+      `CREATE TABLE your.concurrent_idx_target (id INT8 PRIMARY KEY, val INT8);`,
+    );
+    // Drain the CREATE TABLE transaction so the queue starts clean.
+    await nextTransaction();
+
+    // CREATE INDEX CONCURRENTLY cannot run inside an explicit BEGIN/COMMIT;
+    // postgres.js's `.unsafe` sends it via simple-query mode with no
+    // implicit transaction wrapping.
+    await upstream.unsafe(
+      `CREATE INDEX CONCURRENTLY cidx ON your.concurrent_idx_target (val);`,
+    );
+
+    // Drain the stream until the `reset-required` control message produced
+    // by the assertion failure is observed. Empty begin/commit pairs and
+    // the rollback emitted alongside the control message are expected.
+    for (;;) {
+      const msg = await downstream.dequeue('timeout', 10_000);
+      if (msg === 'timeout') {
+        throw new Error('timed out waiting for reset-required control message');
+      }
+      if (msg[0] === 'control') {
+        expect(msg).toMatchObject([
+          'control',
+          {
+            tag: 'reset-required',
+            message: expect.stringContaining(
+              'Unable to continue replication from LSN',
+            ),
+            errorDetails: {
+              reason: expect.stringContaining(
+                'ddlUpdate received without a ddlStart',
+              ),
+            },
+          },
+        ]);
+        break;
+      }
+    }
+  });
 });
 
 function removeAlterPublication(tags: readonly string[]) {
