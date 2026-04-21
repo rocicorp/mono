@@ -18,7 +18,11 @@ const assignmentToStudentRelationship = relationshipName(
 );
 
 export default {
-  name: 'explicit flip true keeps membership branch flipped',
+  name: 'same relationship OR could merge into one flipped membership scan',
+  knownFailure: {
+    reason:
+      'The planner currently flips each sibling exists independently. The desired plan would rewrite the OR into one exists over the same relationship, then flip that single child scan.',
+  },
   schema: educationAppSchema,
   seed: db => {
     const tables = createEducationAppTables(db);
@@ -28,51 +32,59 @@ export default {
     const assignmentStmt = db.prepare(
       `INSERT INTO ${tableServerName(assignment)} (${columnServerName(assignment, 'id')}, ${columnServerName(assignment, 'teacher_id')}, ${columnServerName(assignment, 'archived_at')}, ${columnServerName(assignment, 'created_at')}) VALUES (?, ?, ?, ?)`,
     );
-    for (let i = 1; i <= 25; i++) {
+    for (let i = 1; i <= 2_000; i++) {
       assignmentStmt.run(i, 2, null, i);
     }
 
     const membershipStmt = db.prepare(
       `INSERT INTO ${tableServerName(assignmentToStudent)} (${columnServerName(assignmentToStudent, 'assignment_id')}, ${columnServerName(assignmentToStudent, 'student_id')}, ${columnServerName(assignmentToStudent, 'created_at')}) VALUES (?, ?, ?)`,
     );
-    membershipStmt.run(3, 'student-1', 3);
+    membershipStmt.run(101, 'student-1', 101);
+    membershipStmt.run(102, 'student-1', 102);
+    membershipStmt.run(1_500, 'student-2', 1_500);
   },
   query: builder =>
     builder[assignment.name]
-      .where(columnName(assignment, 'archived_at'), 'IS', null)
-      .whereExists(
-        assignmentToStudentRelationship,
-        q =>
-          q.where(
-            columnName(assignmentToStudent, 'student_id'),
-            '=',
-            'student-1',
+      .where(({exists, or}) =>
+        or(
+          exists(assignmentToStudentRelationship, q =>
+            q.where(
+              columnName(assignmentToStudent, 'student_id'),
+              '=',
+              'student-1',
+            ),
           ),
-        {flip: true},
+          exists(assignmentToStudentRelationship, q =>
+            q.where(
+              columnName(assignmentToStudent, 'student_id'),
+              '=',
+              'student-2',
+            ),
+          ),
+        ),
       )
       .orderBy(columnName(assignment, 'created_at'), 'desc')
       .orderBy(columnName(assignment, 'id'), 'asc'),
   expectations: {
+    // Current optimized AST keeps an OR with two flipped correlated subqueries.
+    // That means the optimized query shape is effectively two sibling child
+    // scans, each filtering one student_id, followed by parent lookups. The
+    // desired optimized AST is one flipped correlated subquery whose child
+    // filter is student-1 OR student-2, so one child scan feeds parent lookups.
     optimizedAST: {
       where: {
-        type: 'and',
-        conditions: [
-          {},
-          {
-            type: 'correlatedSubquery',
-            flip: true,
-          },
-        ],
+        type: 'correlatedSubquery',
+        flip: true,
       },
     },
     sql: [
       {
         table: 'assignment_to_student',
-        sql: 'SELECT "assignment_id","student_id","created_at" FROM "assignment_to_student" WHERE "student_id" = ? ORDER BY "assignment_id" asc, "student_id" asc',
+        sql: 'SELECT "assignment_id","student_id","created_at" FROM "assignment_to_student" WHERE ("student_id" = ? OR "student_id" = ?) ORDER BY "assignment_id" asc, "student_id" asc',
       },
       {
         table: 'assignment',
-        sql: 'SELECT "id","teacher_id","archived_at","created_at" FROM "assignment" WHERE "id" = ? AND "archived_at" IS ? ORDER BY "created_at" desc, "id" asc',
+        sql: 'SELECT "id","teacher_id","archived_at","created_at" FROM "assignment" WHERE "id" = ? ORDER BY "created_at" desc, "id" asc',
       },
     ],
   },

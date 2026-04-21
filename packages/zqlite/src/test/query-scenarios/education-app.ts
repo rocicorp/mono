@@ -5,7 +5,10 @@ import {
   string,
   table,
 } from '../../../../zero-schema/src/builder/table-builder.ts';
-import type {TableSchema} from '../../../../zero-schema/src/table-schema.ts';
+import type {
+  SchemaValue,
+  TableSchema,
+} from '../../../../zero-schema/src/table-schema.ts';
 import type {Database} from '../../db.ts';
 
 const assignment = table('assignment')
@@ -38,62 +41,74 @@ export const educationAppSchema = createSchema({
   relationships: [assignmentRelationships],
 });
 
-type TableReference<TTable extends TableSchema> = {
-  readonly table: TTable['serverName'] extends string
+export const educationAppTables = educationAppSchema.tables;
+export const educationAppRelationships = educationAppSchema.relationships;
+
+export function tableServerName<const TTable extends TableSchema>(
+  tableSchema: TTable,
+): TTable['serverName'] extends string ? TTable['serverName'] : TTable['name'] {
+  return (tableSchema.serverName ??
+    tableSchema.name) as TTable['serverName'] extends string
     ? TTable['serverName']
     : TTable['name'];
-  readonly cols: {
-    readonly [K in keyof TTable['columns'] &
-      string]: TTable['columns'][K] extends {
-      serverName: infer ServerName extends string;
-    }
-      ? ServerName
-      : K;
-  };
-};
-
-function tableReference<const TTable extends TableSchema>(
-  tableSchema: TTable,
-): TableReference<TTable> {
-  return {
-    table: tableSchema.serverName ?? tableSchema.name,
-    cols: Object.fromEntries(
-      Object.entries(tableSchema.columns).map(([name, column]) => [
-        name,
-        column.serverName ?? name,
-      ]),
-    ),
-  } as TableReference<TTable>;
 }
 
-const educationAppTables = {
-  assignment: tableReference(educationAppSchema.tables.assignment),
-  assignmentToStudent: tableReference(
-    educationAppSchema.tables.assignment_to_student,
-  ),
-} as const;
+export function columnName<
+  const TTable extends TableSchema,
+  const TColumn extends keyof TTable['columns'] & string,
+>(_tableSchema: TTable, column: TColumn): TColumn {
+  return column;
+}
+
+export function columnServerName<
+  const TTable extends TableSchema,
+  const TColumn extends keyof TTable['columns'] & string,
+>(
+  tableSchema: TTable,
+  column: TColumn,
+): TTable['columns'][TColumn] extends {
+  serverName: infer ServerName extends string;
+}
+  ? ServerName
+  : TColumn {
+  const schemaValue = tableSchema.columns[column] as SchemaValue;
+  return (schemaValue.serverName ??
+    column) as TTable['columns'][TColumn] extends {
+    serverName: infer ServerName extends string;
+  }
+    ? ServerName
+    : TColumn;
+}
+
+export function relationshipName<
+  const TRelationships extends Record<string, unknown>,
+  const TRelationship extends keyof TRelationships & string,
+>(_relationshipsSchema: TRelationships, relationship: TRelationship) {
+  return relationship;
+}
 
 export function createEducationAppTables(db: Database) {
-  const {assignment, assignmentToStudent} = educationAppTables;
+  const assignment = educationAppTables.assignment;
+  const assignmentToStudent = educationAppTables.assignment_to_student;
 
   db.exec(`
-    CREATE TABLE ${assignment.table} (
-      ${assignment.cols.id} INTEGER PRIMARY KEY,
-      ${assignment.cols.teacher_id} INTEGER,
-      ${assignment.cols.archived_at} TEXT,
-      ${assignment.cols.created_at} INTEGER
+    CREATE TABLE ${tableServerName(assignment)} (
+      ${columnServerName(assignment, 'id')} INTEGER PRIMARY KEY,
+      ${columnServerName(assignment, 'teacher_id')} INTEGER,
+      ${columnServerName(assignment, 'archived_at')} TEXT,
+      ${columnServerName(assignment, 'created_at')} INTEGER
     );
-    CREATE UNIQUE INDEX assignment_id_unique ON ${assignment.table}(${assignment.cols.id});
-    CREATE INDEX assignment_teacher_id_idx ON ${assignment.table}(${assignment.cols.teacher_id});
-    CREATE INDEX assignment_created_at_idx ON ${assignment.table}(${assignment.cols.created_at});
+    CREATE UNIQUE INDEX assignment_id_unique ON ${tableServerName(assignment)}(${columnServerName(assignment, 'id')});
+    CREATE INDEX assignment_teacher_id_idx ON ${tableServerName(assignment)}(${columnServerName(assignment, 'teacher_id')});
+    CREATE INDEX assignment_created_at_idx ON ${tableServerName(assignment)}(${columnServerName(assignment, 'created_at')});
 
-    CREATE TABLE ${assignmentToStudent.table} (
-      ${assignmentToStudent.cols.assignment_id} INTEGER,
-      ${assignmentToStudent.cols.student_id} TEXT,
-      ${assignmentToStudent.cols.created_at} INTEGER,
-      PRIMARY KEY (${assignmentToStudent.cols.assignment_id}, ${assignmentToStudent.cols.student_id})
+    CREATE TABLE ${tableServerName(assignmentToStudent)} (
+      ${columnServerName(assignmentToStudent, 'assignment_id')} INTEGER,
+      ${columnServerName(assignmentToStudent, 'student_id')} TEXT,
+      ${columnServerName(assignmentToStudent, 'created_at')} INTEGER,
+      PRIMARY KEY (${columnServerName(assignmentToStudent, 'assignment_id')}, ${columnServerName(assignmentToStudent, 'student_id')})
     );
-    CREATE INDEX assignment_to_student_student_idx ON ${assignmentToStudent.table}(${assignmentToStudent.cols.student_id});
+    CREATE INDEX assignment_to_student_student_idx ON ${tableServerName(assignmentToStudent)}(${columnServerName(assignmentToStudent, 'student_id')});
   `);
 
   return educationAppTables;

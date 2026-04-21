@@ -41,6 +41,9 @@ export type QueryScenario<S extends Schema> = {
   readonly seed: (db: Database) => void;
   readonly query: (builder: SchemaQuery<S>) => AnyQuery;
   readonly expectations: QueryScenarioExpectations;
+  readonly knownFailure?: {
+    readonly reason: string;
+  };
 };
 
 export type QueryScenarioExpectations = {

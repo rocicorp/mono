@@ -4,6 +4,7 @@ import explicitFlipFalse from './explicit-flip-false.ts';
 import explicitFlipTrue from './explicit-flip-true.ts';
 import mixedOrWithFalseAndMembership from './mixed-or-with-false-and-membership.ts';
 import orWithFalseBranch from './or-with-false-branch.ts';
+import sameRelationshipOrMerge from './same-relationship-or-merge.ts';
 import studentMembershipMixedOr from './student-membership-mixed-or.ts';
 import studentMembershipSimpleExists from './student-membership-simple-exists.ts';
 import teacherFilterWithMembership from './teacher-filter-with-membership.ts';
@@ -18,4 +19,5 @@ export default [
   orWithFalseBranch,
   mixedOrWithFalseAndMembership,
   twoStudentMembershipOr,
+  sameRelationshipOrMerge,
 ] satisfies readonly QueryScenario<typeof educationAppSchema>[];
