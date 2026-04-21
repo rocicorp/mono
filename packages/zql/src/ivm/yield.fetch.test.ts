@@ -51,6 +51,31 @@ class YieldSource implements Input {
   destroy(): void {}
 }
 
+class StaticInput implements Input {
+  readonly #schema: SourceSchema;
+  readonly #nodes: readonly Node[];
+
+  constructor(schema: SourceSchema, nodes: readonly Node[]) {
+    this.#schema = schema;
+    this.#nodes = nodes;
+  }
+
+  setOutput(_: Output): void {}
+
+  getSchema(): SourceSchema {
+    return this.#schema;
+  }
+
+  *fetch(req: FetchRequest): Stream<Node | 'yield'> {
+    const nodes = req.reverse ? this.#nodes.toReversed() : this.#nodes;
+    for (const node of nodes) {
+      yield node;
+    }
+  }
+
+  destroy(): void {}
+}
+
 describe('Yield Propagation', () => {
   test('FilterStart/End propagates yield', () => {
     const source = new YieldSource();
@@ -160,13 +185,13 @@ describe('Yield Propagation', () => {
         "yield",
         "yield",
         "yield",
+        "yield",
         {
           "relationships": {},
           "row": {
             "id": "1",
           },
         },
-        "yield",
         {
           "relationships": {},
           "row": {
@@ -385,4 +410,58 @@ describe('Yield Propagation', () => {
 
     expect(() => catchOp.fetch({})).toThrow(error);
   });
+});
+
+test('UnionFanIn fetch merges relationships from duplicate branch rows', () => {
+  const childSchema: SourceSchema = {
+    ...YIELD_SOURCE_SCHEMA_BASE,
+    tableName: 'child',
+  };
+  const leftRelationship = () =>
+    [{row: {id: 'left-child'}, relationships: {}}] as const;
+  const rightRelationship = () =>
+    [{row: {id: 'right-child'}, relationships: {}}] as const;
+  const parent = new StaticInput(YIELD_SOURCE_SCHEMA_BASE, []);
+  const fanOut = new UnionFanOut(parent);
+  const left = new StaticInput(
+    {
+      ...YIELD_SOURCE_SCHEMA_BASE,
+      relationships: {leftRelationship: childSchema},
+    },
+    [
+      {
+        row: {id: '1'},
+        relationships: {leftRelationship},
+      },
+    ],
+  );
+  const right = new StaticInput(
+    {
+      ...YIELD_SOURCE_SCHEMA_BASE,
+      relationships: {rightRelationship: childSchema},
+    },
+    [
+      {
+        row: {id: '1'},
+        relationships: {rightRelationship},
+      },
+    ],
+  );
+  const fanIn = new UnionFanIn(fanOut, [left, right]);
+  const [node] = [...fanIn.fetch({})];
+
+  expect(node).not.toBe('yield');
+  if (node === undefined || node === 'yield') {
+    throw new Error('Expected one fetched node');
+  }
+  expect(Object.keys(node.relationships).sort()).toEqual([
+    'leftRelationship',
+    'rightRelationship',
+  ]);
+  expect([...node.relationships.leftRelationship()]).toEqual([
+    {row: {id: 'left-child'}, relationships: {}},
+  ]);
+  expect([...node.relationships.rightRelationship()]).toEqual([
+    {row: {id: 'right-child'}, relationships: {}},
+  ]);
 });
