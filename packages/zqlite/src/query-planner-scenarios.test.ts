@@ -10,20 +10,39 @@ import scenarios from './test/query-scenarios/scenarios/index.ts';
 for (const scenario of scenarios as readonly QueryScenario<
   typeof educationAppSchema
 >[]) {
-  const scenarioTest = scenario.knownFailure ? test.fails : test;
+  const knownFailure = scenario.knownFailure;
 
-  scenarioTest(scenario.name, () => {
-    const result = runQueryScenario(scenario);
-    const expectations: QueryScenarioExpectations = scenario.expectations;
+  if (knownFailure) {
+    test(`${scenario.name} current SQL`, () => {
+      const result = runQueryScenario(scenario);
 
-    if (expectations.optimizedAST) {
-      expect(result.optimizedAST).toMatchObject(expectations.optimizedAST);
-    }
-    for (const planDebug of expectations.planDebug ?? []) {
-      expect(result.planDebug).toContain(planDebug);
-    }
-    if (expectations.sql) {
-      expect(result.sql).toEqual(expectations.sql);
-    }
+      expect(result.sql).toEqual(knownFailure.currentSQL);
+    });
+
+    test.fails(`${scenario.name} desired optimization`, () => {
+      assertScenarioExpectations(scenario);
+    });
+    continue;
+  }
+
+  test(scenario.name, () => {
+    assertScenarioExpectations(scenario);
   });
+}
+
+function assertScenarioExpectations(
+  scenario: QueryScenario<typeof educationAppSchema>,
+) {
+  const result = runQueryScenario(scenario);
+  const expectations: QueryScenarioExpectations = scenario.expectations;
+
+  if (expectations.optimizedAST) {
+    expect(result.optimizedAST).toMatchObject(expectations.optimizedAST);
+  }
+  for (const planDebug of expectations.planDebug ?? []) {
+    expect(result.planDebug).toContain(planDebug);
+  }
+  if (expectations.sql) {
+    expect(result.sql).toEqual(expectations.sql);
+  }
 }

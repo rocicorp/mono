@@ -38,6 +38,20 @@ assignment_to_student student-2
 both streams grouped by assignment_id
 then assignment lookup
 `,
+    currentSQL: [
+      {
+        table: 'assignment_to_student',
+        sql: 'SELECT "assignment_id","student_id","created_at" FROM "assignment_to_student" WHERE "student_id" = ? ORDER BY "assignment_id" asc, "student_id" asc',
+      },
+      {
+        table: 'assignment',
+        sql: 'SELECT "id","teacher_id","archived_at","created_at" FROM "assignment" WHERE "id" = ? AND TRUE ORDER BY "created_at" desc, "id" asc',
+      },
+      {
+        table: 'assignment_to_student',
+        sql: 'SELECT "assignment_id","student_id","created_at" FROM "assignment_to_student" WHERE "assignment_id" = ? AND "student_id" = ? ORDER BY "assignment_id" asc, "student_id" asc',
+      },
+    ],
     engineIdea:
       'Teach join enumeration about sibling exists clauses that share the same relationship and correlation under AND. It could introduce an intersection node keyed by the child correlation fields before parent lookup.',
   },

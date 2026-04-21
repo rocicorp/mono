@@ -45,6 +45,7 @@ export type QueryScenario<S extends Schema> = {
     readonly reason: string;
     readonly current: string;
     readonly desired: string;
+    readonly currentSQL: readonly QueryScenarioSQL[];
     readonly engineIdea: string;
   };
 };

@@ -39,6 +39,16 @@ Desired plan shape:
 
 assignment_to_student student-1 => assignment
 `,
+    currentSQL: [
+      {
+        table: 'assignment_to_student',
+        sql: 'SELECT "assignment_id","student_id","created_at" FROM "assignment_to_student" WHERE "student_id" = ? ORDER BY "assignment_id" asc, "student_id" asc',
+      },
+      {
+        table: 'assignment',
+        sql: 'SELECT "id","teacher_id","archived_at","created_at" FROM "assignment" WHERE "id" = ? ORDER BY "created_at" desc, "id" asc',
+      },
+    ],
     engineIdea:
       'Add canonical condition keys during boolean normalization. Use them to collapse duplicate OR branches and duplicate AND branches before costing.',
   },

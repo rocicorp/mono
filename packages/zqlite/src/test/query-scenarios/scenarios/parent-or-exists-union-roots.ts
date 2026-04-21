@@ -39,6 +39,20 @@ assignment_to_student student-1 => assignment
 
 Then merge rows by assignment id.
 `,
+    currentSQL: [
+      {
+        table: 'assignment',
+        sql: 'SELECT "id","teacher_id","archived_at","created_at" FROM "assignment" ORDER BY "created_at" desc, "id" asc',
+      },
+      {
+        table: 'assignment_to_student',
+        sql: 'SELECT "assignment_id","student_id","created_at" FROM "assignment_to_student" WHERE "student_id" = ? ORDER BY "assignment_id" asc, "student_id" asc',
+      },
+      {
+        table: 'assignment',
+        sql: 'SELECT "id","teacher_id","archived_at","created_at" FROM "assignment" WHERE "id" = ? ORDER BY "created_at" desc, "id" asc',
+      },
+    ],
     engineIdea:
       'Add an OR union plan node that can execute each branch from its cheapest root, merge rows by primary key, and preserve the requested ordering after the union.',
   },
