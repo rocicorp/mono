@@ -1,13 +1,12 @@
 import type {QueryScenario} from '../../query-scenario.ts';
 import {
-  columnName,
-  columnServerName,
+  colName,
   createEducationAppTables,
   educationAppRelationships,
   educationAppSchema,
   educationAppTables,
   relationshipName,
-  tableServerName,
+  tableName,
 } from '../education-app.ts';
 
 const assignment = educationAppTables.assignment;
@@ -26,32 +25,28 @@ export default {
     const assignmentToStudent = tables.assignment_to_student;
 
     const assignmentStmt = db.prepare(
-      `INSERT INTO ${tableServerName(assignment)} (${columnServerName(assignment, 'id')}, ${columnServerName(assignment, 'teacher_id')}, ${columnServerName(assignment, 'archived_at')}, ${columnServerName(assignment, 'created_at')}) VALUES (?, ?, ?, ?)`,
+      `INSERT INTO ${tableName(assignment)} (${colName(assignment, 'id')}, ${colName(assignment, 'teacher_id')}, ${colName(assignment, 'archived_at')}, ${colName(assignment, 'created_at')}) VALUES (?, ?, ?, ?)`,
     );
     for (let i = 1; i <= 25; i++) {
       assignmentStmt.run(i, 2, null, i);
     }
 
     const membershipStmt = db.prepare(
-      `INSERT INTO ${tableServerName(assignmentToStudent)} (${columnServerName(assignmentToStudent, 'assignment_id')}, ${columnServerName(assignmentToStudent, 'student_id')}, ${columnServerName(assignmentToStudent, 'created_at')}) VALUES (?, ?, ?)`,
+      `INSERT INTO ${tableName(assignmentToStudent)} (${colName(assignmentToStudent, 'assignment_id')}, ${colName(assignmentToStudent, 'student_id')}, ${colName(assignmentToStudent, 'created_at')}) VALUES (?, ?, ?)`,
     );
     membershipStmt.run(3, 'student-1', 3);
   },
   query: builder =>
     builder[assignment.name]
-      .where(columnName(assignment, 'archived_at'), 'IS', null)
+      .where(colName(assignment, 'archived_at'), 'IS', null)
       .whereExists(
         assignmentToStudentRelationship,
         q =>
-          q.where(
-            columnName(assignmentToStudent, 'student_id'),
-            '=',
-            'student-1',
-          ),
+          q.where(colName(assignmentToStudent, 'student_id'), '=', 'student-1'),
         {flip: false},
       )
-      .orderBy(columnName(assignment, 'created_at'), 'desc')
-      .orderBy(columnName(assignment, 'id'), 'asc'),
+      .orderBy(colName(assignment, 'created_at'), 'desc')
+      .orderBy(colName(assignment, 'id'), 'asc'),
   expectations: {
     optimizedAST: {
       where: {

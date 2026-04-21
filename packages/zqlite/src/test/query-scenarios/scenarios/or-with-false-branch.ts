@@ -1,11 +1,10 @@
 import type {QueryScenario} from '../../query-scenario.ts';
 import {
-  columnName,
-  columnServerName,
+  colName,
   createEducationAppTables,
   educationAppSchema,
   educationAppTables,
-  tableServerName,
+  tableName,
 } from '../education-app.ts';
 
 const assignment = educationAppTables.assignment;
@@ -18,7 +17,7 @@ export default {
     const assignment = tables.assignment;
 
     const assignmentStmt = db.prepare(
-      `INSERT INTO ${tableServerName(assignment)} (${columnServerName(assignment, 'id')}, ${columnServerName(assignment, 'teacher_id')}, ${columnServerName(assignment, 'archived_at')}, ${columnServerName(assignment, 'created_at')}) VALUES (?, ?, ?, ?)`,
+      `INSERT INTO ${tableName(assignment)} (${colName(assignment, 'id')}, ${colName(assignment, 'teacher_id')}, ${colName(assignment, 'archived_at')}, ${colName(assignment, 'created_at')}) VALUES (?, ?, ?, ?)`,
     );
     assignmentStmt.run(1, 1, null, 1);
     assignmentStmt.run(2, 2, null, 2);
@@ -26,10 +25,10 @@ export default {
   query: builder =>
     builder[assignment.name]
       .where(({cmp, or}) =>
-        or(cmp(columnName(assignment, 'teacher_id'), '=', 1), or()),
+        or(cmp(colName(assignment, 'teacher_id'), '=', 1), or()),
       )
-      .orderBy(columnName(assignment, 'created_at'), 'desc')
-      .orderBy(columnName(assignment, 'id'), 'asc'),
+      .orderBy(colName(assignment, 'created_at'), 'desc')
+      .orderBy(colName(assignment, 'id'), 'asc'),
   expectations: {
     optimizedAST: {
       where: {
