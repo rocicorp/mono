@@ -17,32 +17,29 @@ const assignmentToStudentRelationship = relationshipName(
 );
 
 export default {
-  name: 'same relationship OR could merge into one flipped membership scan',
+  name: 'same relationship AND could intersect child scans before parent lookup',
   knownFailure: {
     reason:
-      'The planner currently flips each sibling exists independently. The desired plan would rewrite the OR into one exists over the same relationship, then flip that single child scan.',
+      'Two required memberships over the same relationship can be intersected on assignment_id before loading parent rows. The planner currently chooses one child root, loads the parent, then probes the second child relationship.',
     current: `
-OR
+AND
   exists assignment_to_student where student_id = student-1
   exists assignment_to_student where student_id = student-2
 
 Plan shape today:
 
-assignment_to_student student-1 => assignment
-assignment_to_student student-2 => assignment
+assignment_to_student student-1 => assignment => probe assignment_to_student student-2
 `,
     desired: `
-exists assignment_to_student where:
-  student_id = student-1
-  OR
-  student_id = student-2
+AND as child intersection:
 
-Desired plan shape:
-
-assignment_to_student student-1 OR student-2 => assignment
+assignment_to_student student-1
+assignment_to_student student-2
+both streams grouped by assignment_id
+then assignment lookup
 `,
     engineIdea:
-      'Add a boolean normalization pass that recognizes OR siblings with the same relationship, same correlation, and same exists options. Merge the child filters under one child OR before join enumeration.',
+      'Teach join enumeration about sibling exists clauses that share the same relationship and correlation under AND. It could introduce an intersection node keyed by the child correlation fields before parent lookup.',
   },
   schema: educationAppSchema,
   seed: db => {
@@ -62,12 +59,13 @@ assignment_to_student student-1 OR student-2 => assignment
     );
     membershipStmt.run(101, 'student-1', 101);
     membershipStmt.run(102, 'student-1', 102);
+    membershipStmt.run(102, 'student-2', 103);
     membershipStmt.run(1_500, 'student-2', 1_500);
   },
   query: builder =>
     builder[assignment.name]
-      .where(({exists, or}) =>
-        or(
+      .where(({and, exists}) =>
+        and(
           exists(assignmentToStudentRelationship, q =>
             q.where(
               colName(assignmentToStudent, 'student_id'),
@@ -87,21 +85,10 @@ assignment_to_student student-1 OR student-2 => assignment
       .orderBy(colName(assignment, 'created_at'), 'desc')
       .orderBy(colName(assignment, 'id'), 'asc'),
   expectations: {
-    // Current optimized AST keeps an OR with two flipped correlated subqueries.
-    // That means the optimized query shape is effectively two sibling child
-    // scans, each filtering one student_id, followed by parent lookups. The
-    // desired optimized AST is one flipped correlated subquery whose child
-    // filter is student-1 OR student-2, so one child scan feeds parent lookups.
-    optimizedAST: {
-      where: {
-        type: 'correlatedSubquery',
-        flip: true,
-      },
-    },
     sql: [
       {
         table: 'assignment_to_student',
-        sql: 'SELECT "assignment_id","student_id","created_at" FROM "assignment_to_student" WHERE ("student_id" = ? OR "student_id" = ?) ORDER BY "assignment_id" asc, "student_id" asc',
+        sql: 'SELECT "assignment_id","student_id","created_at" FROM "assignment_to_student" WHERE "student_id" = ? ORDER BY "assignment_id" asc, "student_id" asc',
       },
       {
         table: 'assignment',

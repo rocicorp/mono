@@ -17,33 +17,7 @@ const assignmentToStudentRelationship = relationshipName(
 );
 
 export default {
-  name: 'same relationship OR could merge into one flipped membership scan',
-  knownFailure: {
-    reason:
-      'The planner currently flips each sibling exists independently. The desired plan would rewrite the OR into one exists over the same relationship, then flip that single child scan.',
-    current: `
-OR
-  exists assignment_to_student where student_id = student-1
-  exists assignment_to_student where student_id = student-2
-
-Plan shape today:
-
-assignment_to_student student-1 => assignment
-assignment_to_student student-2 => assignment
-`,
-    desired: `
-exists assignment_to_student where:
-  student_id = student-1
-  OR
-  student_id = student-2
-
-Desired plan shape:
-
-assignment_to_student student-1 OR student-2 => assignment
-`,
-    engineIdea:
-      'Add a boolean normalization pass that recognizes OR siblings with the same relationship, same correlation, and same exists options. Merge the child filters under one child OR before join enumeration.',
-  },
+  name: 'single exists with child OR flips to one membership scan',
   schema: educationAppSchema,
   seed: db => {
     const tables = createEducationAppTables(db);
@@ -66,38 +40,24 @@ assignment_to_student student-1 OR student-2 => assignment
   },
   query: builder =>
     builder[assignment.name]
-      .where(({exists, or}) =>
-        or(
-          exists(assignmentToStudentRelationship, q =>
-            q.where(
-              colName(assignmentToStudent, 'student_id'),
-              '=',
-              'student-1',
-            ),
-          ),
-          exists(assignmentToStudentRelationship, q =>
-            q.where(
-              colName(assignmentToStudent, 'student_id'),
-              '=',
-              'student-2',
-            ),
+      .whereExists(assignmentToStudentRelationship, q =>
+        q.where(({cmp, or}) =>
+          or(
+            cmp(colName(assignmentToStudent, 'student_id'), '=', 'student-1'),
+            cmp(colName(assignmentToStudent, 'student_id'), '=', 'student-2'),
           ),
         ),
       )
       .orderBy(colName(assignment, 'created_at'), 'desc')
       .orderBy(colName(assignment, 'id'), 'asc'),
   expectations: {
-    // Current optimized AST keeps an OR with two flipped correlated subqueries.
-    // That means the optimized query shape is effectively two sibling child
-    // scans, each filtering one student_id, followed by parent lookups. The
-    // desired optimized AST is one flipped correlated subquery whose child
-    // filter is student-1 OR student-2, so one child scan feeds parent lookups.
     optimizedAST: {
       where: {
         type: 'correlatedSubquery',
         flip: true,
       },
     },
+    planDebug: ['flipped'],
     sql: [
       {
         table: 'assignment_to_student',

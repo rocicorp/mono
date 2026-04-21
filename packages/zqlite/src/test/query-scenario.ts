@@ -43,6 +43,9 @@ export type QueryScenario<S extends Schema> = {
   readonly expectations: QueryScenarioExpectations;
   readonly knownFailure?: {
     readonly reason: string;
+    readonly current: string;
+    readonly desired: string;
+    readonly engineIdea: string;
   };
 };
 
