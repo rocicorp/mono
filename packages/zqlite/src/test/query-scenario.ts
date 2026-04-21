@@ -36,9 +36,17 @@ class ScenarioDebug extends Debug {
 }
 
 export type QueryScenario<S extends Schema> = {
+  readonly name: string;
   readonly schema: S;
-  readonly setup: (db: Database) => void;
+  readonly seed: (db: Database) => void;
   readonly query: (builder: SchemaQuery<S>) => AnyQuery;
+  readonly expectations: QueryScenarioExpectations;
+};
+
+export type QueryScenarioExpectations = {
+  readonly optimizedAST?: object;
+  readonly planDebug?: readonly string[];
+  readonly sql?: readonly QueryScenarioSQL[];
 };
 
 export type QueryScenarioSQL = {
@@ -59,7 +67,7 @@ export function runQueryScenario<S extends Schema>(
   const lc = createSilentLogContext();
   using db = new Database(lc, ':memory:');
 
-  scenario.setup(db);
+  scenario.seed(db);
   db.exec(CREATE_TABLE_METADATA_TABLE);
   db.exec('ANALYZE');
 
