@@ -368,7 +368,6 @@ class PostgresChangeSource implements ChangeSource {
     backfillManager.run(clientWatermark, backfillRequests);
 
     const changeMaker = new ChangeMaker(
-      this.#lc,
       this.#shard,
       shardConfig,
       this.#db,
@@ -432,7 +431,11 @@ class PostgresChangeSource implements ChangeSource {
           }
 
           let lastChange: ChangeStreamMessage | undefined;
-          for (const change of await changeMaker.makeChanges(lsn, msg)) {
+          for (const change of await changeMaker.makeChanges(
+            this.#lc.withContext('lsn', fromBigInt(lsn)),
+            lsn,
+            msg,
+          )) {
             await changes.push(change); // Allow the change-streamer to push back.
             lastChange = change;
           }
@@ -905,7 +908,6 @@ type ReplicationError = {
 const SET_REPLICA_IDENTITY_DELAY_MS = 50;
 
 class ChangeMaker {
-  readonly #lc: LogContext;
   readonly #shardPrefix: string;
   readonly #shardConfig: InternalShardConfig;
   readonly #initialSchema: PublishedSchema;
@@ -915,13 +917,11 @@ class ChangeMaker {
   #error: ReplicationError | undefined;
 
   constructor(
-    lc: LogContext,
     {appID, shardNum}: ShardID,
     shardConfig: InternalShardConfig,
     db: PostgresDB,
     initialSchema: PublishedSchema,
   ) {
-    this.#lc = lc;
     // Note: This matches the prefix used in pg_logical_emit_message() in pg/schema/ddl.ts.
     this.#shardPrefix = `${appID}/${shardNum}`;
     this.#shardConfig = shardConfig;
@@ -929,16 +929,20 @@ class ChangeMaker {
     this.#db = db;
   }
 
-  async makeChanges(lsn: bigint, msg: Message): Promise<ChangeStreamMessage[]> {
+  async makeChanges(
+    lc: LogContext,
+    lsn: bigint,
+    msg: Message,
+  ): Promise<ChangeStreamMessage[]> {
     if (this.#error) {
-      this.#logError(this.#error);
+      this.#logError(lc, this.#error);
       return [];
     }
     try {
-      return await this.#makeChanges(msg);
+      return await this.#makeChanges(lc, msg);
     } catch (err) {
       this.#error = {lsn, msg, err, lastLogTime: 0};
-      this.#logError(this.#error);
+      this.#logError(lc, this.#error);
 
       const message = `Unable to continue replication from LSN ${fromBigInt(lsn)}`;
       const errorDetails: JSONObject = {error: message};
@@ -958,14 +962,14 @@ class ChangeMaker {
     }
   }
 
-  #logError(error: ReplicationError) {
+  #logError(lc: LogContext, error: ReplicationError) {
     const {lsn, msg, err, lastLogTime} = error;
     const now = Date.now();
 
     // Output an error to logs as replication messages continue to be dropped,
     // at most once a minute.
     if (now - lastLogTime > 60_000) {
-      this.#lc.error?.(
+      lc.error?.(
         `Unable to continue replication from LSN ${fromBigInt(lsn)}: ${String(
           err,
         )}`,
@@ -978,8 +982,10 @@ class ChangeMaker {
     }
   }
 
-  // oxlint-disable-next-line require-await
-  async #makeChanges(msg: Message): Promise<ChangeStreamData[]> {
+  async #makeChanges(
+    lc: LogContext,
+    msg: Message,
+  ): Promise<ChangeStreamData[]> {
     switch (msg.tag) {
       case 'begin':
         return [
@@ -1030,15 +1036,15 @@ class ChangeMaker {
 
       case 'message':
         if (!msg.prefix.startsWith(this.#shardPrefix)) {
-          this.#lc.debug?.('ignoring message for different shard', msg.prefix);
+          lc.debug?.('ignoring message for different shard', msg.prefix);
           return [];
         }
         switch (msg.prefix.substring(this.#shardPrefix.length)) {
           case '': // Legacy prefix
           case '/ddl':
-            return this.#handleDdlMessage(msg);
+            return this.#handleDdlMessage(lc, msg);
           default:
-            this.#lc.debug?.('ignoring unknown message type', msg.prefix);
+            lc.debug?.('ignoring unknown message type', msg.prefix);
             return [];
         }
 
@@ -1053,7 +1059,7 @@ class ChangeMaker {
         ];
 
       case 'relation':
-        return this.#handleRelation(msg);
+        return await this.#handleRelation(msg);
       case 'type':
         return []; // Nothing need be done for custom types.
       case 'origin':
@@ -1068,8 +1074,12 @@ class ChangeMaker {
 
   #lastReplicationEventInTx: ReplicationEvent | undefined;
 
-  #handleDdlMessage(msg: MessageMessage) {
+  #handleDdlMessage(lc: LogContext, msg: MessageMessage): ChangeStreamData[] {
     const event = parseLogicalMessageContent(msg, replicationEventSchema);
+    lc = lc
+      .withContext('tag', event.event.tag)
+      .withContext('query', event.context.query);
+
     // Cancel manual schema adjustment timeouts when an upstream schema change
     // is about to happen, so as to avoid interfering / redundant work.
     clearTimeout(this.#replicaIdentityTimer);
@@ -1085,17 +1095,17 @@ class ChangeMaker {
         assert(prevEvent, `ddlUpdate received without a ddlStart`);
         break;
       default: // Ignore unknown types for forwards compatibility
-        this.#lc.info?.(`ignoring unknown ddl message type: ${type}`);
+        lc.info?.(`ignoring unknown ddl message type: ${type}`);
         return [];
     }
 
     // Store the new event to diff against the next event.
     this.#lastReplicationEventInTx = event;
     if (!prevEvent) {
-      this.#lc.info?.(`received ${msg.prefix}/${type} event`, event);
+      lc.info?.(`received ${msg.prefix}/${type} event`, event);
       return []; // First snapshot in the tx.
     }
-    this.#lc.info?.(`processing ${msg.prefix}/${type} event`, event);
+    lc.info?.(`processing ${msg.prefix}/${type} event`, event);
 
     // The tag (i.e. command) is used to determine whether backfill is
     // necessary (CREATE TABLE vs ALTER TABLE vs ALTER PUBLICATION).
@@ -1112,15 +1122,13 @@ class ChangeMaker {
     const effectiveTag =
       prevEvent.type === 'ddlStart' ? prevEvent.event.tag : event.event.tag;
     const changes = this.#makeSchemaChanges(
+      lc,
       prevEvent.schema,
       event,
       effectiveTag,
     ).map(change => ['data', change] satisfies Data);
 
-    this.#lc
-      .withContext('tag', event.event.tag)
-      .withContext('query', event.context.query)
-      .info?.(`${changes.length} schema change(s)`, {changes});
+    lc.info?.(`${changes.length} schema change(s)`, {changes});
 
     const replicaIdentities = replicaIdentitiesForTablesWithoutPrimaryKeys(
       event.schema,
@@ -1128,9 +1136,9 @@ class ChangeMaker {
     if (replicaIdentities) {
       this.#replicaIdentityTimer = setTimeout(async () => {
         try {
-          await replicaIdentities.apply(this.#lc, this.#db);
+          await replicaIdentities.apply(lc, this.#db);
         } catch (err) {
-          this.#lc.warn?.(`error setting replica identities`, err);
+          lc.warn?.(`error setting replica identities`, err);
         }
       }, SET_REPLICA_IDENTITY_DELAY_MS);
     }
@@ -1166,6 +1174,7 @@ class ChangeMaker {
    * the type of a column that's indexed.
    */
   #makeSchemaChanges(
+    lc: LogContext,
     preSchema: PublishedSchema,
     event: ReplicationEvent,
     tag: string,
@@ -1177,7 +1186,7 @@ class ChangeMaker {
 
       // Validate the new table schemas
       for (const table of nextTbl.values()) {
-        validate(this.#lc, table);
+        validate(lc, table);
       }
 
       const [droppedIdx, createdIdx] = symmetricDifferences(prevIdx, nextIdx);
@@ -1219,6 +1228,7 @@ class ChangeMaker {
       for (const id of tables) {
         changes.push(
           ...this.#getTableChanges(
+            lc,
             must(prevTbl.get(id)),
             must(nextTbl.get(id)),
             tag,
@@ -1257,6 +1267,7 @@ class ChangeMaker {
   }
 
   #getTableChanges(
+    lc: LogContext,
     oldTable: PublishedTableWithReplicaIdentity,
     newTable: PublishedTableWithReplicaIdentity,
     ddlTag: string,
@@ -1351,9 +1362,7 @@ class ChangeMaker {
           // upstream. Note that this does require that the table have a valid
           // REPLICA IDENTITY, since backfill relies on merging new data with
           // an existing row.
-          this.#lc.info?.(
-            `Backfilling column ${table.name}.${name}: ${String(e)}`,
-          );
+          lc.info?.(`Backfilling column ${table.name}.${name}: ${String(e)}`);
           addColumn.column.spec.dflt = null;
           addColumn.backfill = {attNum: spec.pos} satisfies ColumnMetadata;
         }
