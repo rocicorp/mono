@@ -14,6 +14,7 @@ import {buildSelectQuery, type NoSubqueryCondition} from './query-builder.ts';
 import {SQLiteStatFanout} from './sqlite-stat-fanout.ts';
 
 const NO_SUBQUERY_FILTER: NoSubqueryCondition | undefined = undefined;
+const ALWAYS_FALSE_FILTER: NoSubqueryCondition = {type: 'or', conditions: []};
 const OPTIMISTIC_BLEND_WEIGHT = 1;
 const PESSIMISTIC_BLEND_WEIGHT = 2;
 
@@ -139,6 +140,12 @@ export function getFilterApproximations(
     case 'simple':
       return {optimistic: condition, pessimistic: condition};
     case 'and': {
+      if (condition.conditions.some(isAlwaysFalseCondition)) {
+        return {
+          optimistic: ALWAYS_FALSE_FILTER,
+          pessimistic: ALWAYS_FALSE_FILTER,
+        };
+      }
       const parts = condition.conditions.map(getFilterApproximations);
       return {
         optimistic: combineApproximationBranch('and', parts, 'optimistic'),
@@ -146,7 +153,27 @@ export function getFilterApproximations(
       };
     }
     case 'or': {
-      const parts = condition.conditions.map(getFilterApproximations);
+      if (condition.conditions.length === 0) {
+        return {
+          optimistic: ALWAYS_FALSE_FILTER,
+          pessimistic: ALWAYS_FALSE_FILTER,
+        };
+      }
+      if (condition.conditions.some(isAlwaysTrueCondition)) {
+        return NO_FILTER_APPROXIMATIONS;
+      }
+
+      const nonFalseConditions = condition.conditions.filter(
+        condition => !isAlwaysFalseCondition(condition),
+      );
+      if (nonFalseConditions.length === 0) {
+        return {
+          optimistic: ALWAYS_FALSE_FILTER,
+          pessimistic: ALWAYS_FALSE_FILTER,
+        };
+      }
+
+      const parts = nonFalseConditions.map(getFilterApproximations);
       const optimistic = combineApproximationBranch('or', parts, 'optimistic');
 
       // If any branch loses information after correlated subquery removal,
@@ -160,6 +187,14 @@ export function getFilterApproximations(
       return {optimistic, pessimistic};
     }
   }
+}
+
+function isAlwaysFalseCondition(condition: Condition): boolean {
+  return condition.type === 'or' && condition.conditions.length === 0;
+}
+
+function isAlwaysTrueCondition(condition: Condition): boolean {
+  return condition.type === 'and' && condition.conditions.length === 0;
 }
 
 export function removeCorrelatedSubqueries(

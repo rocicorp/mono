@@ -48,6 +48,20 @@ function orCondition(...conditions: Condition[]): Condition {
 }
 
 describe('removeCorrelatedSubqueries', () => {
+  test('keeps surviving OR predicates when another branch is always false', () => {
+    // a = 1
+    // OR FALSE
+    //
+    // FALSE is a real filter branch, not uncertainty from a removed correlated
+    // subquery. Dropping the whole OR here would overestimate an exact `a = 1`
+    // filter as a full scan.
+    expect(
+      removeCorrelatedSubqueries(
+        orCondition(equalsCondition('a', 1), orCondition()),
+      ),
+    ).toEqual(equalsCondition('a', 1));
+  });
+
   test('drops an OR when a whole branch is a correlated subquery', () => {
     // a = 1
     // OR EXISTS(bar)
@@ -79,6 +93,35 @@ describe('removeCorrelatedSubqueries', () => {
 });
 
 describe('getFilterApproximations', () => {
+  test('does not treat always-false OR branches as pessimistic uncertainty', () => {
+    expect(
+      getFilterApproximations(
+        orCondition(equalsCondition('a', 1), orCondition()),
+      ),
+    ).toEqual({
+      optimistic: equalsCondition('a', 1),
+      pessimistic: equalsCondition('a', 1),
+    });
+  });
+
+  test('preserves always-false filters when all OR branches are false', () => {
+    expect(getFilterApproximations(orCondition(orCondition()))).toEqual({
+      optimistic: orCondition(),
+      pessimistic: orCondition(),
+    });
+  });
+
+  test('preserves always-false filters through AND approximations', () => {
+    expect(
+      getFilterApproximations(
+        andCondition(equalsCondition('a', 1), orCondition()),
+      ),
+    ).toEqual({
+      optimistic: orCondition(),
+      pessimistic: orCondition(),
+    });
+  });
+
   test('tracks optimistic and pessimistic forms for mixed OR branches', () => {
     // optimistic:  a = 1
     // pessimistic: <no root-table filter>
