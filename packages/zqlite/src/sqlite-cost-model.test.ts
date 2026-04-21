@@ -21,14 +21,14 @@ function equalsCondition(columnName: string, value: LiteralValue): Condition {
   };
 }
 
-function correlatedExistsCondition(): Condition {
+function correlatedExistsCondition(parentField: string): Condition {
   return {
     type: 'correlatedSubquery',
     op: 'EXISTS',
     related: {
       system: 'client',
       correlation: {
-        parentField: ['a'],
+        parentField: [parentField],
         childField: ['fooId'],
       },
       subquery: {
@@ -56,7 +56,7 @@ describe('removeCorrelatedSubqueries', () => {
     // real query. Dropping the OR entirely is the conservative approximation.
     expect(
       removeCorrelatedSubqueries(
-        orCondition(equalsCondition('a', 1), correlatedExistsCondition()),
+        orCondition(equalsCondition('a', 1), correlatedExistsCondition('a')),
       ),
     ).toBeUndefined();
   });
@@ -70,7 +70,7 @@ describe('removeCorrelatedSubqueries', () => {
     expect(
       removeCorrelatedSubqueries(
         orCondition(
-          andCondition(equalsCondition('a', 1), correlatedExistsCondition()),
+          andCondition(equalsCondition('a', 1), correlatedExistsCondition('a')),
           equalsCondition('b', 2),
         ),
       ),
@@ -87,7 +87,7 @@ describe('getFilterApproximations', () => {
     // "pretend the correlated branch might widen this all the way out".
     expect(
       getFilterApproximations(
-        orCondition(equalsCondition('a', 1), correlatedExistsCondition()),
+        orCondition(equalsCondition('a', 1), correlatedExistsCondition('a')),
       ),
     ).toEqual({
       optimistic: equalsCondition('a', 1),
@@ -108,7 +108,7 @@ describe('getFilterApproximations', () => {
       getFilterApproximations(
         andCondition(
           equalsCondition('b', 2),
-          orCondition(equalsCondition('a', 4), correlatedExistsCondition()),
+          orCondition(equalsCondition('a', 4), correlatedExistsCondition('a')),
         ),
       ),
     ).toEqual({
@@ -128,7 +128,10 @@ describe('getFilterApproximations', () => {
     // both approximations should be empty.
     expect(
       getFilterApproximations(
-        orCondition(correlatedExistsCondition(), correlatedExistsCondition()),
+        orCondition(
+          correlatedExistsCondition('a'),
+          correlatedExistsCondition('a'),
+        ),
       ),
     ).toEqual({
       optimistic: undefined,
@@ -181,7 +184,7 @@ describe('SQLite cost model', () => {
   test('mixed OR with correlated branch stays between optimistic and pessimistic row bounds', () => {
     const mixedOrFilter = orCondition(
       equalsCondition('a', 4),
-      correlatedExistsCondition(),
+      correlatedExistsCondition('a'),
     );
     const {optimistic, pessimistic} = getFilterApproximations(mixedOrFilter);
 
@@ -207,7 +210,7 @@ describe('SQLite cost model', () => {
   test('mixed OR inside AND preserves the surrounding simple filter signal', () => {
     const mixedNestedFilter = andCondition(
       equalsCondition('b', 2),
-      orCondition(equalsCondition('a', 4), correlatedExistsCondition()),
+      orCondition(equalsCondition('a', 4), correlatedExistsCondition('a')),
     );
     const {optimistic, pessimistic} =
       getFilterApproximations(mixedNestedFilter);
@@ -232,8 +235,8 @@ describe('SQLite cost model', () => {
 
   test('pure correlated OR falls back to the baseline root scan estimate', () => {
     const onlyCorrelatedOrFilter = orCondition(
-      correlatedExistsCondition(),
-      correlatedExistsCondition(),
+      correlatedExistsCondition('a'),
+      correlatedExistsCondition('a'),
     );
 
     // EXISTS(bar_1) OR EXISTS(bar_2)
@@ -248,7 +251,7 @@ describe('SQLite cost model', () => {
   test('mixed OR uses the more conservative startup cost bound', () => {
     const mixedOrFilter = orCondition(
       equalsCondition('a', 4),
-      correlatedExistsCondition(),
+      correlatedExistsCondition('a'),
     );
     const {optimistic, pessimistic} = getFilterApproximations(mixedOrFilter);
 
