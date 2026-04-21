@@ -30,6 +30,7 @@ import {rowIDString} from '../../types/row-key.ts';
 import {upstreamSchema, type ShardID} from '../../types/shards.ts';
 import type {Patch, PatchToVersion} from './client-handler.ts';
 import {type CVRFlushStats, type CVRStore} from './cvr-store.ts';
+import {formatSignature, parseSignature} from './row-set-signature.ts';
 import {
   cmpVersions,
   maxVersion,
@@ -535,6 +536,14 @@ type RowPatchInfo = {
 };
 
 /**
+ * Callback used by {@link CVRQueryDrivenUpdater.flush} to retrieve the
+ * current row-set signature maintained by the pipeline driver for a given
+ * query. Returning `undefined` means "no pipeline for this query right now" —
+ * the stored signature on disk is left alone.
+ */
+export type RowSetSignatureProvider = (queryID: string) => bigint | undefined;
+
+/**
  * A {@link CVRQueryDrivenUpdater} is used for updating a CVR after making queries.
  * The caller should invoke:
  *
@@ -554,19 +563,26 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
     rowIDString,
   );
   readonly #lastPatches = new CustomKeyMap<RowID, RowPatchInfo>(rowIDString);
+  readonly #rowSetSignature: RowSetSignatureProvider | undefined;
 
   #existingRows: Promise<Iterable<RowRecord>> | undefined = undefined;
 
   /**
    * @param stateVersion The `stateVersion` at which the queries were executed.
+   * @param rowSetSignature Optional callback that returns the current row-set
+   *        signature for a query, typically backed by
+   *        `PipelineDriver.rowSetSignature`. When provided, {@link flush}
+   *        persists any signature deltas it observes.
    */
   constructor(
     cvrStore: CVRStore,
     cvr: CVRSnapshot,
     stateVersion: LexiVersion,
     replicaVersion: string,
+    rowSetSignature?: RowSetSignatureProvider,
   ) {
     super(cvrStore, cvr, replicaVersion);
+    this.#rowSetSignature = rowSetSignature;
 
     assert(
       // We should either be setting the cvr.replicaVersion for the first time, or it should
@@ -774,6 +790,34 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
     return this._cvr.version;
   }
 
+  override flush(
+    lc: LogContext,
+    lastConnectTime: number,
+    lastActive: number,
+    ttlClock: TTLClock,
+  ): Promise<{cvr: CVRSnapshot; flushed: CVRFlushStats | false}> {
+    if (this.#rowSetSignature) {
+      // Persist the per-query row-set signature for any query whose
+      // pipeline-driver signature differs from what's on disk. Queries
+      // without an active pipeline (provider returns undefined) keep their
+      // stored value.
+      for (const [queryID, query] of Object.entries(this._cvr.queries)) {
+        const sig = this.#rowSetSignature(queryID);
+        if (sig === undefined) {
+          continue;
+        }
+        const stored = parseSignature(query.rowSetSignature);
+        if (stored === sig) {
+          continue;
+        }
+        const hex = formatSignature(sig);
+        query.rowSetSignature = hex;
+        this._cvrStore.updateRowSetSignature(queryID, hex);
+      }
+    }
+    return super.flush(lc, lastConnectTime, lastActive, ttlClock);
+  }
+
   /**
    * Tracks rows received from executing queries. This will update row records
    * and row patches if the received rows have a new version. The method also
@@ -956,6 +1000,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
           undefined,
           this.#removedOrExecutedQueryIDs,
         );
+
         // If a row is still referenced, we update the refCounts but not the
         // patchVersion (as the existence and contents of the row have not
         // changed from the clients' perspective). If the row is deleted, it
