@@ -3,7 +3,13 @@ import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
 import {computeZqlSpecs} from '../../zero-cache/src/db/lite-tables.ts';
 import type {LiteAndZqlSpec} from '../../zero-cache/src/db/specs.ts';
 import {CREATE_TABLE_METADATA_TABLE} from '../../zero-cache/src/services/replicator/schema/table-metadata.ts';
-import type {Condition, LiteralValue} from '../../zero-protocol/src/ast.ts';
+import type {
+  AST,
+  Condition,
+  LiteralValue,
+} from '../../zero-protocol/src/ast.ts';
+import {planQuery} from '../../zql/src/planner/planner-builder.ts';
+import {AccumulatorDebugger} from '../../zql/src/planner/planner-debug.ts';
 import {Database} from './db.ts';
 import {
   btreeCost,
@@ -45,6 +51,15 @@ function andCondition(...conditions: Condition[]): Condition {
 
 function orCondition(...conditions: Condition[]): Condition {
   return {type: 'or', conditions};
+}
+
+function isNullCondition(columnName: string): Condition {
+  return {
+    type: 'simple',
+    left: {type: 'column', name: columnName},
+    op: 'IS',
+    right: {type: 'literal', value: null},
+  };
 }
 
 describe('removeCorrelatedSubqueries', () => {
@@ -536,5 +551,105 @@ describe('SQLite cost model with skewed data (STAT4 verification)', () => {
     // Should recognize 1 is common and estimate much higher
     expect(commonEstimate.rows).toBeGreaterThan(1500);
     expect(commonEstimate.rows).toBeLessThan(2000);
+  });
+});
+
+describe('SQLite cost model planner integration', () => {
+  test('mixed OR costing lets the planner automatically flip a selective membership branch', () => {
+    const lc = createSilentLogContext();
+    const db = new Database(lc, ':memory:');
+
+    db.exec(`
+      CREATE TABLE assignment (
+        id INTEGER PRIMARY KEY,
+        teacher_id INTEGER,
+        archived_at TEXT,
+        created_at INTEGER
+      );
+      CREATE UNIQUE INDEX assignment_id_unique ON assignment(id);
+      CREATE INDEX assignment_teacher_id_idx ON assignment(teacher_id);
+      CREATE INDEX assignment_created_at_idx ON assignment(created_at);
+
+      CREATE TABLE assignment_to_student (
+        assignment_id INTEGER,
+        student_id TEXT,
+        created_at INTEGER,
+        PRIMARY KEY (assignment_id, student_id)
+      );
+      CREATE INDEX assignment_to_student_student_idx ON assignment_to_student(student_id);
+    `);
+    db.exec(CREATE_TABLE_METADATA_TABLE);
+
+    const assignmentStmt = db.prepare(
+      'INSERT INTO assignment (id, teacher_id, archived_at, created_at) VALUES (?, ?, ?, ?)',
+    );
+    for (let i = 1; i <= 2_000; i++) {
+      assignmentStmt.run(i, i === 4 ? 1 : 2, null, i);
+    }
+
+    const membershipStmt = db.prepare(
+      'INSERT INTO assignment_to_student (assignment_id, student_id, created_at) VALUES (?, ?, ?)',
+    );
+    membershipStmt.run(101, 'student-1', 101);
+    membershipStmt.run(102, 'student-1', 102);
+    membershipStmt.run(103, 'student-1', 103);
+    db.exec('ANALYZE');
+
+    const tableSpecs = new Map<string, LiteAndZqlSpec>();
+    computeZqlSpecs(lc, db, {includeBackfillingColumns: false}, tableSpecs);
+    const costModel = createSQLiteCostModel(db, tableSpecs);
+
+    const ast: AST = {
+      table: 'assignment',
+      where: andCondition(
+        isNullCondition('archived_at'),
+        orCondition(equalsCondition('teacher_id', 1), {
+          type: 'correlatedSubquery',
+          op: 'EXISTS',
+          related: {
+            system: 'client',
+            correlation: {
+              parentField: ['id'],
+              childField: ['assignment_id'],
+            },
+            subquery: {
+              table: 'assignment_to_student',
+              where: equalsCondition('student_id', 'student-1'),
+              orderBy: [['assignment_id', 'asc']],
+            },
+          },
+        }),
+      ),
+      orderBy: [
+        ['created_at', 'desc'],
+        ['id', 'asc'],
+      ],
+    };
+
+    const planDebugger = new AccumulatorDebugger();
+    const optimized = planQuery(ast, costModel, planDebugger);
+
+    expect(optimized).toMatchObject({
+      where: {
+        type: 'and',
+        conditions: [
+          {},
+          {
+            type: 'or',
+            conditions: [
+              {},
+              {
+                type: 'correlatedSubquery',
+                flip: true,
+              },
+            ],
+          },
+        ],
+      },
+    });
+    expect(planDebugger.format()).toContain('Best plan: Attempt 2');
+    expect(planDebugger.format()).toContain(
+      'FO ⋈ assignment_to_student: flipped',
+    );
   });
 });
