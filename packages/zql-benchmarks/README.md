@@ -2,14 +2,14 @@
 
 ## Query Scenario Comparison
 
-Use `compare-query-scenarios` when you want to compare the SQL and runtime of one ZQL scenario across two local Zero commits, branches, worktrees, or paths.
+Use `bench:scenario` when you want to compare the SQL and runtime of one ZQL scenario across two local Zero commits, branches, worktrees, or paths.
 
 The command never fetches from the network. Git refs must already exist locally. When a ref is not a filesystem path, the script creates a detached worktree under `.tmp/query-scenario-worktrees` and imports the runtime modules from that checkout.
 
 Compare the current working tree against `origin/main`:
 
 ```sh
-npm --workspace=zql-benchmarks run compare-query-scenarios -- \
+npm --workspace=zql-benchmarks run bench:scenario -- \
   --left origin/main \
   --right . \
   --scenario student-membership-mixed-or
@@ -18,7 +18,7 @@ npm --workspace=zql-benchmarks run compare-query-scenarios -- \
 Compare two local commits:
 
 ```sh
-npm --workspace=zql-benchmarks run compare-query-scenarios -- \
+npm --workspace=zql-benchmarks run bench:scenario -- \
   --left 9587e11 \
   --right 04dc506 \
   --scenario permission-and-class-filter-intersection
@@ -27,7 +27,7 @@ npm --workspace=zql-benchmarks run compare-query-scenarios -- \
 Compare two different query shapes on the same checkout:
 
 ```sh
-npm --workspace=zql-benchmarks run compare-query-scenarios -- \
+npm --workspace=zql-benchmarks run bench:scenario -- \
   --left . \
   --right . \
   --left-scenario parent-or-exists-union-roots \
@@ -37,7 +37,7 @@ npm --workspace=zql-benchmarks run compare-query-scenarios -- \
 Run the full committed scenario suite and keep machine-readable output:
 
 ```sh
-npm --workspace=zql-benchmarks run compare-query-scenarios -- \
+npm --workspace=zql-benchmarks run bench:scenario -- \
   --left origin/main \
   --right . \
   --format json > .tmp/query-scenario-compare.json
@@ -50,7 +50,7 @@ Scenario selection accepts the full scenario name, `all`, or a short slug from t
 You can point the runner at a custom scenario module:
 
 ```sh
-npm --workspace=zql-benchmarks run compare-query-scenarios -- \
+npm --workspace=zql-benchmarks run bench:scenario -- \
   --left origin/main \
   --right . \
   --scenario-source ./packages/zqlite/src/test/query-scenarios/scenarios/index.ts \

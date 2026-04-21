@@ -677,7 +677,7 @@ function printHelp(): void {
   print(`Compare ZQL scenario query performance across local Zero commits.
 
 Usage:
-  npm --workspace=zql-benchmarks run compare-query-scenarios -- [options]
+  npm --workspace=zql-benchmarks run bench:scenario -- [options]
 
 Options:
   --left <ref-or-path>          Left side. Defaults to origin/main.
