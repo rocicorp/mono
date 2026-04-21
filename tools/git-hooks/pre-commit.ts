@@ -1,4 +1,10 @@
 #!/usr/bin/env node
+
+// To use this add a file called .git/hooks/pre-commit with the following content:
+//
+// #!/bin/sh
+// ./tools/git-hooks/pre-commit.ts
+
 import {$} from 'zx';
 
 const files = (

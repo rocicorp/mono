@@ -186,14 +186,14 @@ export class Connection {
       const value = JSON.parse(data);
       msg = valita.parse(value, upstreamSchema);
     } catch (e) {
-      this.#lc.warn?.(`failed to parse message "${data}": ${String(e)}`);
+      const errorBody = {
+        kind: ErrorKind.InvalidMessage,
+        message: String(e),
+        origin: ErrorOrigin.ZeroCache,
+      } as const;
       this.#closeWithError(
-        {
-          kind: ErrorKind.InvalidMessage,
-          message: String(e),
-          origin: ErrorOrigin.ZeroCache,
-        },
-        e,
+        errorBody,
+        new ProtocolErrorWithLevel(errorBody, 'warn'),
       );
       return;
     }

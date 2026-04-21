@@ -46,3 +46,27 @@ All contributors must sign a contributor agreement, either for an <a href="https
       - request and response content
       - some process is starting
   - We do not use a warning level because warnings are typically not actionable and are mostly ignored. We prefer the developer to take a position: does the thing rise to the level that a developer should go do something about it or not? We do not use a trace level because we haven't yet found a use for it, and extra log levels are just confusing.
+
+### Git Hooks
+
+We provide optional pre-commit and pre-push hooks in `tools/git-hooks/`.
+
+**pre-commit**: Automatically formats staged files using `oxfmt` and re-adds them before the commit.
+
+To install, create `.git/hooks/pre-commit`:
+
+```sh
+#!/bin/sh
+./tools/git-hooks/pre-commit.ts
+```
+
+**pre-push**: Runs `syncpack lint`, `oxlint`, and `oxfmt --check` against files changed relative to `origin/main` before pushing.
+
+To install, create `.git/hooks/pre-push`:
+
+```sh
+#!/bin/sh
+./tools/git-hooks/pre-push.ts
+```
+
+Make both files executable with `chmod +x .git/hooks/pre-commit .git/hooks/pre-push`.

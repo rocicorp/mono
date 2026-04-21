@@ -598,9 +598,9 @@ test('zero-cache --help', () => {
                                                                                                                                                                                                    
      --initial-sync-text-copy boolean                                   default: false                                                                                                             
        ZERO_INITIAL_SYNC_TEXT_COPY env                                                                                                                                                             
-                                                                        Use text-format COPY instead of binary COPY for the initial sync.                                                          
-                                                                        This is slower but can work around issues with binary encoding of                                                          
-                                                                        certain data types.                                                                                                        
+                                                                        Use text-format COPY instead of binary COPY for initial sync and                                                           
+                                                                        backfill streaming. This is slower but can work around issues with                                                         
+                                                                        binary encoding of certain data types.                                                                                     
                                                                                                                                                                                                    
      --shadow-sync-enabled boolean                                      default: false                                                                                                             
        ZERO_SHADOW_SYNC_ENABLED env                                                                                                                                                                
