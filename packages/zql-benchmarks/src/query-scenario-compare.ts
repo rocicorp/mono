@@ -5,6 +5,23 @@ import {basename, dirname, isAbsolute, resolve} from 'node:path';
 import {performance} from 'node:perf_hooks';
 import {pathToFileURL} from 'node:url';
 
+// CLI for comparing planner scenario performance across two local Zero checkouts.
+//
+// Common commands:
+//
+//   npm --workspace=zql-benchmarks run bench:scenario -- --left origin/main --right . --scenario student-membership-mixed-or
+//   npm --workspace=zql-benchmarks run bench:scenario -- --left 9587e11 --right 04dc506 --scenario permission-and-class-filter-intersection
+//   npm --workspace=zql-benchmarks run bench:scenario -- --left . --right . --left-scenario parent-or-exists-union-roots --right-scenario student-membership-mixed-or
+//
+// The left and right targets can be local git refs, commits, branches, or
+// filesystem paths. Git refs are resolved with the local object database only:
+// no network fetch happens here. Ref targets are checked out into detached
+// worktrees under .tmp/query-scenario-worktrees so the current checkout can stay
+// dirty while the benchmark imports runtime modules from each side.
+//
+// Use --format json when you need exact SQL shapes and planner debug text for a
+// PR comment. Run with --help for the same usage information at the terminal.
+
 type Format = 'json' | 'markdown';
 
 type Options = {
@@ -692,6 +709,22 @@ Options:
   --warmups <n>                 Warmup iterations. Defaults to 2.
   --format markdown|json        Defaults to markdown.
   --help                        Show this help.
+
+Examples:
+  Compare this checkout against main for one scenario:
+    npm --workspace=zql-benchmarks run bench:scenario -- --left origin/main --right . --scenario student-membership-mixed-or
+
+  Compare two local commits:
+    npm --workspace=zql-benchmarks run bench:scenario -- --left 9587e11 --right 04dc506 --scenario permission-and-class-filter-intersection
+
+  Compare two different query shapes on the same checkout:
+    npm --workspace=zql-benchmarks run bench:scenario -- --left . --right . --left-scenario parent-or-exists-union-roots --right-scenario student-membership-mixed-or
+
+  Capture SQL shapes and planner debug text:
+    npm --workspace=zql-benchmarks run bench:scenario -- --left origin/main --right . --format json > .tmp/query-scenario-compare.json
+
+Scenario selection accepts the full scenario name, "all", or a filename-ish slug
+like "student-membership-mixed-or".
 
 Refs are resolved locally with git rev-parse. The script creates detached
 worktrees under .tmp/query-scenario-worktrees and never fetches from the network.
