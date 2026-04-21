@@ -13,6 +13,10 @@ import {compileInline} from './internal/sql-inline.ts';
 import {buildSelectQuery, type NoSubqueryCondition} from './query-builder.ts';
 import {SQLiteStatFanout} from './sqlite-stat-fanout.ts';
 
+const NO_SUBQUERY_FILTER: NoSubqueryCondition | undefined = undefined;
+const OPTIMISTIC_BLEND_WEIGHT = 1;
+const PESSIMISTIC_BLEND_WEIGHT = 2;
+
 /**
  * Loop information returned by SQLite's scanstatus API.
  */
@@ -47,84 +51,182 @@ export function createSQLiteCostModel(
     filters: Condition | undefined,
     constraint: PlannerConstraint | undefined,
   ): CostModelCost => {
-    // Transform filters to remove correlated subqueries
-    // The cost model can't handle correlated subqueries, so we estimate cost
-    // without them. This is conservative - actual cost may be higher.
-    const noSubqueryFilters = filters
-      ? removeCorrelatedSubqueries(filters)
-      : undefined;
-
-    // Build the SQL query using the same logic as actual queries
     const {zqlSpec} = must(tableSpecs.get(tableName));
+    const fanout = (columns: string[]) =>
+      fanoutEstimator.getFanout(tableName, columns);
 
-    const query = buildSelectQuery(
-      tableName,
-      zqlSpec,
-      constraint,
-      noSubqueryFilters,
-      sort,
-      undefined, // reverse is undefined here
-      undefined, // start is undefined here
-    );
+    const estimateForFilters = (
+      noSubqueryFilters: NoSubqueryCondition | undefined,
+    ): CostModelCost => {
+      const query = buildSelectQuery(
+        tableName,
+        zqlSpec,
+        constraint,
+        noSubqueryFilters,
+        sort,
+        undefined, // reverse is undefined here
+        undefined, // start is undefined here
+      );
 
-    // Use compileInline to inline actual values into the SQL for cost estimation.
-    // This allows SQLite's query planner to see real values and make better decisions
-    // about index usage and query plans. This is safe here because it's only used for
-    // cost estimation, not for executing user-facing queries (which use parameterized
-    // queries via the standard compile() function).
-    const sql = compileInline(query);
+      // Use compileInline to inline actual values into the SQL for cost estimation.
+      // This allows SQLite's query planner to see real values and make better decisions
+      // about index usage and query plans. This is safe here because it's only used for
+      // cost estimation, not for executing user-facing queries (which use parameterized
+      // queries via the standard compile() function).
+      const sql = compileInline(query);
 
-    // Prepare statement to get scanstatus information
-    const stmt = db.prepare(sql);
+      // Prepare statement to get scanstatus information
+      const stmt = db.prepare(sql);
 
-    // Get scanstatus loops from the prepared statement
-    const loops = getScanstatusLoops(stmt);
+      // Get scanstatus loops from the prepared statement
+      const loops = getScanstatusLoops(stmt);
 
-    // Scanstatus should always be available - if we get no loops, something is wrong
-    assert(
-      loops.length > 0,
-      `Expected scanstatus to return at least one loop for query: ${sql}`,
-    );
+      // Scanstatus should always be available - if we get no loops, something is wrong
+      assert(
+        loops.length > 0,
+        `Expected scanstatus to return at least one loop for query: ${sql}`,
+      );
 
-    const ret = estimateCost(loops, (columns: string[]) =>
-      fanoutEstimator.getFanout(tableName, columns),
-    );
+      return estimateCost(loops, fanout);
+    };
 
-    return ret;
+    const approximations = filters
+      ? getFilterApproximations(filters)
+      : NO_FILTER_APPROXIMATIONS;
+
+    const optimistic = estimateForFilters(approximations.optimistic);
+
+    if (
+      sameNoSubqueryCondition(
+        approximations.optimistic,
+        approximations.pessimistic,
+      )
+    ) {
+      return optimistic;
+    }
+
+    const pessimistic = estimateForFilters(approximations.pessimistic);
+    return blendApproximateCosts(optimistic, pessimistic);
   };
 }
 
 /**
- * Removes correlated subqueries from conditions.
- * The cost model estimates cost without correlated subqueries since
- * they can't be included in the scanstatus query.
+ * Approximations of a filter after removing correlated subqueries.
+ *
+ * - optimistic: keep whatever simple predicates remain, even inside ORs.
+ * - pessimistic: if an OR loses any branch, drop the whole OR from costing.
+ *
+ * The planner uses the optimistic estimate to preserve simple-filter signal,
+ * then blends it with the pessimistic estimate so mixed ORs cannot make a root
+ * scan look unrealistically selective.
  */
-function removeCorrelatedSubqueries(
+export type FilterApproximations = {
+  optimistic: NoSubqueryCondition | undefined;
+  pessimistic: NoSubqueryCondition | undefined;
+};
+
+const NO_FILTER_APPROXIMATIONS: FilterApproximations = {
+  optimistic: NO_SUBQUERY_FILTER,
+  pessimistic: NO_SUBQUERY_FILTER,
+};
+
+export function getFilterApproximations(
   condition: Condition,
-): NoSubqueryCondition | undefined {
+): FilterApproximations {
   switch (condition.type) {
     case 'correlatedSubquery':
-      // Remove subqueries - we can't estimate their cost via scanstatus
-      return undefined;
+      return NO_FILTER_APPROXIMATIONS;
     case 'simple':
-      return condition;
+      return {optimistic: condition, pessimistic: condition};
     case 'and': {
-      const filtered = condition.conditions
-        .map(c => removeCorrelatedSubqueries(c))
-        .filter((c): c is NoSubqueryCondition => c !== undefined);
-      if (filtered.length === 0) return undefined;
-      if (filtered.length === 1) return filtered[0];
-      return {type: 'and', conditions: filtered};
+      const parts = condition.conditions.map(getFilterApproximations);
+      return {
+        optimistic: combineApproximationBranch('and', parts, 'optimistic'),
+        pessimistic: combineApproximationBranch('and', parts, 'pessimistic'),
+      };
     }
     case 'or': {
-      const filtered = condition.conditions
-        .map(c => removeCorrelatedSubqueries(c))
-        .filter((c): c is NoSubqueryCondition => c !== undefined);
-      if (filtered.length === 0) return undefined;
-      if (filtered.length === 1) return filtered[0];
-      return {type: 'or', conditions: filtered};
+      const parts = condition.conditions.map(getFilterApproximations);
+      const optimistic = combineApproximationBranch('or', parts, 'optimistic');
+
+      // If any branch loses information after correlated subquery removal,
+      // the OR can no longer be conservatively approximated by its survivors.
+      // In that case we keep an optimistic estimate for signal, but drop the
+      // whole OR from the pessimistic estimate.
+      const pessimistic = parts.some(p => p.pessimistic === NO_SUBQUERY_FILTER)
+        ? NO_SUBQUERY_FILTER
+        : combineApproximationBranch('or', parts, 'pessimistic');
+
+      return {optimistic, pessimistic};
     }
   }
+}
+
+export function removeCorrelatedSubqueries(
+  condition: Condition,
+): NoSubqueryCondition | undefined {
+  return getFilterApproximations(condition).pessimistic;
+}
+
+function combineApproximationBranch(
+  type: 'and' | 'or',
+  parts: FilterApproximations[],
+  key: keyof FilterApproximations,
+): NoSubqueryCondition | undefined {
+  return combineConditions(
+    type,
+    parts
+      .map(part => part[key])
+      .filter(
+        (condition): condition is NoSubqueryCondition =>
+          condition !== undefined,
+      ),
+  );
+}
+
+function combineConditions(
+  type: 'and' | 'or',
+  conditions: NoSubqueryCondition[],
+): NoSubqueryCondition | undefined {
+  if (conditions.length === 0) return NO_SUBQUERY_FILTER;
+  if (conditions.length === 1) return conditions[0];
+  return {type, conditions};
+}
+
+function sameNoSubqueryCondition(
+  a: NoSubqueryCondition | undefined,
+  b: NoSubqueryCondition | undefined,
+): boolean {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+
+function blendApproximateCosts(
+  optimistic: CostModelCost,
+  pessimistic: CostModelCost,
+): CostModelCost {
+  return {
+    // Blend in log space, weighted toward the pessimistic estimate.
+    // This preserves simple-filter signal without allowing mixed ORs to
+    // collapse to implausibly tiny row counts.
+    rows: blendApproximateRows(optimistic.rows, pessimistic.rows),
+    startupCost: Math.max(optimistic.startupCost, pessimistic.startupCost),
+    fanout: optimistic.fanout,
+  };
+}
+
+function blendApproximateRows(
+  optimisticRows: number,
+  pessimisticRows: number,
+): number {
+  const optimisticLogRows = Math.log(Math.max(optimisticRows, 1));
+  const pessimisticLogRows = Math.log(Math.max(pessimisticRows, 1));
+  const totalWeight = OPTIMISTIC_BLEND_WEIGHT + PESSIMISTIC_BLEND_WEIGHT;
+
+  return Math.exp(
+    (optimisticLogRows * OPTIMISTIC_BLEND_WEIGHT +
+      pessimisticLogRows * PESSIMISTIC_BLEND_WEIGHT) /
+      totalWeight,
+  );
 }
 
 /**
