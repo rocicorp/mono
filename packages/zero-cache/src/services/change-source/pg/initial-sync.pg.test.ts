@@ -2901,18 +2901,19 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
       const lc = createSilentLogContext();
       const upstreamURI = getConnectionURI(upstream);
       const timeoutSlot = `${APP_ID}_${SHARD_NUM}_${Date.now()}_timeout`;
-      const blocker = pgClient(lc, upstreamURI, {
+      const blocker = pgClient(lc, upstreamURI, 'slot-timeout-blocker', {
         max: 1,
-        connection: {['application_name']: 'slot-timeout-blocker'},
       });
-      const timeoutSession = pgClient(lc, upstreamURI, {
-        max: 1,
-        ['fetch_types']: false,
-        connection: {
-          replication: 'database',
-          ['application_name']: 'slot-timeout-under-test',
+      const timeoutSession = pgClient(
+        lc,
+        upstreamURI,
+        'slot-timeout-under-test',
+        {
+          max: 1,
+          ['fetch_types']: false,
+          connection: {replication: 'database'},
         },
-      });
+      );
 
       let blockerInTransaction = false;
       try {

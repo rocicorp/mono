@@ -112,7 +112,9 @@ export function zeroPostgresJS<
   T extends Record<string, unknown> = Record<string, unknown>,
 >(schema: S, pg: postgres.Sql<T> | string) {
   if (typeof pg === 'string') {
-    pg = postgres(pg) as postgres.Sql<T>;
+    pg = postgres(pg, {
+      connection: {['application_name']: 'zero-server'},
+    }) as postgres.Sql<T>;
   }
   return new ZQLDatabase(new PostgresJSConnection(pg), schema);
 }
