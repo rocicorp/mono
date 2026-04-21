@@ -57,6 +57,7 @@ import {CpuProfiler} from '../../../types/profiler.ts';
 import type {ShardConfig} from '../../../types/shards.ts';
 import {ALLOWED_APP_ID_CHARACTERS} from '../../../types/shards.ts';
 import {id} from '../../../types/sql.ts';
+import {orTimeout} from '../../../types/timeout.ts';
 import {ReplicationStatusPublisher} from '../../replicator/replication-status.ts';
 import {ColumnMetadataStore} from '../../replicator/schema/column-metadata.ts';
 import {initReplicationState} from '../../replicator/schema/replication-state.ts';
@@ -529,6 +530,10 @@ type ReplicationSlot = {
   output_plugin: string;
 };
 
+// Successful CREATE_REPLICATION_SLOT calls have always completed within 1s in
+// observed production runs; use 5s as a hard stop for pathological hangs.
+const CREATE_REPLICATION_SLOT_TIMEOUT_MS = 5_000;
+
 /**
  * Shadow-mode alternative to `createReplicationSlot`: opens a dedicated
  * READ ONLY REPEATABLE READ transaction on a normal connection, exports the
@@ -604,13 +609,28 @@ export async function createReplicationSlot(
   // Note: must be false if pgVersion < PG_17. Caller must verify.
   failover = false,
 ): Promise<ReplicationSlot> {
-  const [slot] = failover
-    ? await session.unsafe<ReplicationSlot[]>(
+  const createSlot = failover
+    ? session.unsafe<ReplicationSlot[]>(
         /*sql*/ `CREATE_REPLICATION_SLOT "${slotName}" LOGICAL pgoutput (FAILOVER)`,
       )
-    : await session.unsafe<ReplicationSlot[]>(
+    : session.unsafe<ReplicationSlot[]>(
         /*sql*/ `CREATE_REPLICATION_SLOT "${slotName}" LOGICAL pgoutput`,
       );
+  const raced = await orTimeout(createSlot, CREATE_REPLICATION_SLOT_TIMEOUT_MS);
+  if (raced === 'timed-out') {
+    // Create slot can block indefinitely waiting for old transactions. End
+    // this connection in the background and fail fast so the process restarts.
+    void session
+      .end()
+      .catch(e =>
+        lc.warn?.(`Error closing timed out replication slot session`, e),
+      );
+    throw new Error(
+      `Timed out after ${CREATE_REPLICATION_SLOT_TIMEOUT_MS} ms creating replication slot ${slotName}. ` +
+        `Crashing to force a clean restart.`,
+    );
+  }
+  const [slot] = raced;
   lc.info?.(`Created replication slot ${slotName}`, slot);
   return slot;
 }
