@@ -30,7 +30,10 @@ const PG_18_UP = 180000;
 
 const TEST_CONTEXT = {boo: 'far'};
 
-describe('change-source/pg/backfill-test', {timeout: 30000}, () => {
+describe.each([
+  {mode: 'binary', textCopy: false},
+  {mode: 'text', textCopy: true},
+])('change-source/pg/backfill-test ($mode)', ({textCopy}) => {
   let lc: LogContext;
   let upstream: PostgresDB;
   let pgVersion: number;
@@ -103,7 +106,7 @@ describe('change-source/pg/backfill-test', {timeout: 30000}, () => {
           shardNum: 0,
         },
         replicaDbFile.path,
-        {tableCopyWorkers: 5},
+        {tableCopyWorkers: 5, textCopy},
         TEST_CONTEXT,
       )
     ).changeSource;
@@ -586,6 +589,88 @@ describe('change-source/pg/backfill-test', {timeout: 30000}, () => {
           },
         },
       ],
+    ],
+    [
+      'table with diverse types including custom types',
+      PG_15_UP,
+      /*sql*/ `
+      CREATE TYPE mood AS ENUM ('sad', 'ok', 'happy');
+      CREATE TYPE custom_point AS (x float8, y float8);
+
+      CREATE TABLE typed_data (
+        id INT PRIMARY KEY,
+        small_int INT2,
+        big_int INT8,
+        real_val FLOAT4,
+        double_val FLOAT8,
+        flag BOOL,
+        name VARCHAR(100),
+        uid UUID,
+        data JSONB,
+        created_at TIMESTAMPTZ,
+        birth_date DATE,
+        start_time TIME,
+        price NUMERIC,
+        feeling mood,
+        tags TEXT[],
+        location custom_point,
+        mac MACADDR,
+        duration INTERVAL
+      );
+
+      INSERT INTO typed_data (
+        id, small_int, big_int, real_val, double_val, flag,
+        name, uid, data, created_at, birth_date, start_time,
+        price, feeling, tags, location, mac, duration
+      ) VALUES (
+        1, 42, 1000000000000, 1.5, 3.141592653589793, true,
+        'Alice', 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
+        '{"role":"admin"}'::jsonb,
+        '2024-01-15 12:30:00+00'::timestamptz,
+        '2024-01-15'::date,
+        '12:30:00'::time,
+        99.5,
+        'happy',
+        ARRAY['tag1','tag2'],
+        ROW(1.5, 2.5)::custom_point,
+        '08:00:2b:01:02:03'::macaddr,
+        '1 year 2 months 3 days 04:05:06'::interval
+      );
+
+      -- Second row with all nulls (except PK) to test null handling.
+      INSERT INTO typed_data (id) VALUES (2);
+
+      ALTER TABLE typed_data SET SCHEMA published;
+      `,
+      null,
+      {
+        ['published.typed_data']: [
+          {
+            id: 1n,
+            small_int: 42n,
+            big_int: 1000000000000n,
+            real_val: 1.5,
+            double_val: 3.141592653589793,
+            flag: 1n,
+            name: 'Alice',
+            uid: 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11',
+            data: '{"role": "admin"}', // JSONB normalized
+            created_at: 1705321800000n, // 2024-01-15 12:30:00 UTC
+            birth_date: 1705276800000n, // 2024-01-15 UTC midnight
+            start_time: 45000000n, // 12:30:00 = 45,000,000 ms
+            price: 99.5,
+            feeling: 'happy',
+            tags: '["tag1","tag2"]',
+            location: '(1.5,2.5)', // composite ::text cast
+            mac: '08:00:2b:01:02:03', // ::text cast
+            duration: '1 year 2 mons 3 days 04:05:06', // ::text cast
+          },
+          {
+            id: 2n,
+          },
+        ],
+      },
+      [],
     ],
     [
       'empty table with no primary key',
