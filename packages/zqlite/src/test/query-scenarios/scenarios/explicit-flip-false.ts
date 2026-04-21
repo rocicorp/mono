@@ -1,10 +1,27 @@
 import type {QueryScenario} from '../../query-scenario.ts';
-import {assignmentSchema, seedAssignments} from '../assignment.ts';
+import {
+  educationAppSchema,
+  createEducationAppTables,
+} from '../education-app.ts';
 
 export default {
   name: 'explicit flip false keeps membership branch unflipped',
-  schema: assignmentSchema,
-  seed: seedAssignments,
+  schema: educationAppSchema,
+  seed: db => {
+    createEducationAppTables(db);
+
+    const assignmentStmt = db.prepare(
+      'INSERT INTO assignment (id, teacher_id, archived_at, created_at) VALUES (?, ?, ?, ?)',
+    );
+    for (let i = 1; i <= 25; i++) {
+      assignmentStmt.run(i, 2, null, i);
+    }
+
+    const membershipStmt = db.prepare(
+      'INSERT INTO assignment_to_student (assignment_id, student_id, created_at) VALUES (?, ?, ?)',
+    );
+    membershipStmt.run(3, 'student-1', 3);
+  },
   query: builder =>
     builder.assignment
       .where('archived_at', 'IS', null)
@@ -39,4 +56,4 @@ export default {
       },
     ],
   },
-} satisfies QueryScenario<typeof assignmentSchema>;
+} satisfies QueryScenario<typeof educationAppSchema>;

@@ -1,5 +1,5 @@
 import type {QueryScenario} from '../../query-scenario.ts';
-import type {assignmentSchema} from '../assignment.ts';
+import type {educationAppSchema} from '../education-app.ts';
 import explicitFlipFalse from './explicit-flip-false.ts';
 import explicitFlipTrue from './explicit-flip-true.ts';
 import mixedOrWithFalseAndMembership from './mixed-or-with-false-and-membership.ts';
@@ -18,4 +18,4 @@ export default [
   orWithFalseBranch,
   mixedOrWithFalseAndMembership,
   twoStudentMembershipOr,
-] satisfies readonly QueryScenario<typeof assignmentSchema>[];
+] satisfies readonly QueryScenario<typeof educationAppSchema>[];

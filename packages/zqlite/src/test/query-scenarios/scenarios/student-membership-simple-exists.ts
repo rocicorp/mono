@@ -1,10 +1,29 @@
 import type {QueryScenario} from '../../query-scenario.ts';
-import {assignmentSchema, seedAssignments} from '../assignment.ts';
+import {
+  educationAppSchema,
+  createEducationAppTables,
+} from '../education-app.ts';
 
 export default {
   name: 'simple student membership exists auto flips to membership root',
-  schema: assignmentSchema,
-  seed: seedAssignments,
+  schema: educationAppSchema,
+  seed: db => {
+    createEducationAppTables(db);
+
+    const assignmentStmt = db.prepare(
+      'INSERT INTO assignment (id, teacher_id, archived_at, created_at) VALUES (?, ?, ?, ?)',
+    );
+    for (let i = 1; i <= 2_000; i++) {
+      assignmentStmt.run(i, i === 4 ? 1 : 2, null, i);
+    }
+
+    const membershipStmt = db.prepare(
+      'INSERT INTO assignment_to_student (assignment_id, student_id, created_at) VALUES (?, ?, ?)',
+    );
+    membershipStmt.run(101, 'student-1', 101);
+    membershipStmt.run(102, 'student-1', 102);
+    membershipStmt.run(103, 'student-1', 103);
+  },
   query: builder =>
     builder.assignment
       .where('archived_at', 'IS', null)
@@ -38,4 +57,4 @@ export default {
       },
     ],
   },
-} satisfies QueryScenario<typeof assignmentSchema>;
+} satisfies QueryScenario<typeof educationAppSchema>;

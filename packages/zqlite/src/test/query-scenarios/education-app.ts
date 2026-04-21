@@ -32,12 +32,12 @@ const assignmentRelationships = relationships(assignment, ({many}) => ({
   }),
 }));
 
-export const assignmentSchema = createSchema({
+export const educationAppSchema = createSchema({
   tables: [assignment, assignmentToStudent],
   relationships: [assignmentRelationships],
 });
 
-export function seedAssignments(db: Database) {
+export function createEducationAppTables(db: Database) {
   db.exec(`
     CREATE TABLE assignment (
       id INTEGER PRIMARY KEY,
@@ -57,19 +57,4 @@ export function seedAssignments(db: Database) {
     );
     CREATE INDEX assignment_to_student_student_idx ON assignment_to_student(student_id);
   `);
-
-  const assignmentStmt = db.prepare(
-    'INSERT INTO assignment (id, teacher_id, archived_at, created_at) VALUES (?, ?, ?, ?)',
-  );
-  for (let i = 1; i <= 2_000; i++) {
-    assignmentStmt.run(i, i === 4 ? 1 : 2, null, i);
-  }
-
-  const membershipStmt = db.prepare(
-    'INSERT INTO assignment_to_student (assignment_id, student_id, created_at) VALUES (?, ?, ?)',
-  );
-  membershipStmt.run(101, 'student-1', 101);
-  membershipStmt.run(102, 'student-1', 102);
-  membershipStmt.run(103, 'student-1', 103);
-  membershipStmt.run(1_500, 'student-2', 1_500);
 }
