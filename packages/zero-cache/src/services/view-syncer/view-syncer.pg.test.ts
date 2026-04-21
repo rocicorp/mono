@@ -63,6 +63,7 @@ import {
   permissionsAll,
   type QueryFetchMock,
   REPLICA_VERSION,
+  restartViewSyncer,
   serviceID,
   setup,
   SHARD,
@@ -115,6 +116,8 @@ describe('view-syncer/service', () => {
   let customQueryTransformer: CustomQueryTransformer | undefined;
   let clearMocks: () => void;
   let queryFetch: QueryFetchMock;
+  let config: Awaited<ReturnType<typeof setup>>['config'];
+  let databaseStorage: Awaited<ReturnType<typeof setup>>['databaseStorage'];
 
   function callNextSetTimeout(delta: number) {
     // Sanity check that the system time is the mocked time.
@@ -156,6 +159,8 @@ describe('view-syncer/service', () => {
       customQueryTransformer,
       queryFetch,
       clearMocks,
+      config,
+      databaseStorage,
     } = await setup(testDBs, 'view_syncer_service_test', permissionsAll, {
       queryFetchMode: 'empty-validation',
     }));
@@ -4434,24 +4439,22 @@ describe('view-syncer/service', () => {
       `);
   });
 
-  test('rowSetSignature persisted by end-to-end hydrate and advance', async () => {
-    const issue = (id: string): RowID => ({
-      schema: '',
-      table: 'issues',
-      rowKey: {id},
-    });
-    const expectedSig = (...rows: RowID[]) =>
-      formatSignature(rows.reduce((s, r) => s ^ rowIDSignatureUnit(r), 0n));
-    const loadSig = async (hash: string) => {
-      const [{rowSetSignature}] = await cvrDB<
-        {rowSetSignature: string | null}[]
-      >`
-        SELECT "rowSetSignature" FROM ${cvrDB(cvrSchema(SHARD))}.queries
-         WHERE "clientGroupID" = ${serviceID} AND "queryHash" = ${hash}
-      `;
-      return rowSetSignature;
-    };
+  const issueRowID = (id: string): RowID => ({
+    schema: '',
+    table: 'issues',
+    rowKey: {id},
+  });
+  const expectedIssuesSig = (...rows: RowID[]) =>
+    formatSignature(rows.reduce((s, r) => s ^ rowIDSignatureUnit(r), 0n));
+  const loadStoredSig = async (hash: string) => {
+    const [row] = await cvrDB<{rowSetSignature: string | null}[]>`
+      SELECT "rowSetSignature" FROM ${cvrDB(cvrSchema(SHARD))}.queries
+       WHERE "clientGroupID" = ${serviceID} AND "queryHash" = ${hash}
+    `;
+    return row?.rowSetSignature ?? null;
+  };
 
+  test('rowSetSignature persisted by end-to-end hydrate and advance', async () => {
     const client = connect(SYNC_CONTEXT, [
       {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
     ]);
@@ -4460,8 +4463,13 @@ describe('view-syncer/service', () => {
     stateChanges.push({state: 'version-ready'});
     await nextPoke(client); // initial hydration — rows 1,2,3,4
 
-    expect(await loadSig('query-hash1')).toEqual(
-      expectedSig(issue('1'), issue('2'), issue('3'), issue('4')),
+    expect(await loadStoredSig('query-hash1')).toEqual(
+      expectedIssuesSig(
+        issueRowID('1'),
+        issueRowID('2'),
+        issueRowID('3'),
+        issueRowID('4'),
+      ),
     );
 
     // Advance: delete issue 3 (leaves the query), update issue 4 (stays in the
@@ -4480,9 +4488,79 @@ describe('view-syncer/service', () => {
     stateChanges.push({state: 'version-ready'});
     await nextPoke(client);
 
-    expect(await loadSig('query-hash1')).toEqual(
-      expectedSig(issue('1'), issue('2'), issue('4')),
+    expect(await loadStoredSig('query-hash1')).toEqual(
+      expectedIssuesSig(issueRowID('1'), issueRowID('2'), issueRowID('4')),
     );
+  });
+
+  test('rowSetSignature drift on rehydration triggers re-execution and CVR correction', async () => {
+    // Phase 1: initial hydration via the current VS. CVR persists the
+    // authoritative signature for query-hash1.
+    const client = connect(SYNC_CONTEXT, [
+      {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
+    ]);
+    await nextPoke(client); // desiredQueriesPatch
+    stateChanges.push({state: 'version-ready'});
+    await nextPoke(client); // initial hydration
+
+    const correctSig = expectedIssuesSig(
+      issueRowID('1'),
+      issueRowID('2'),
+      issueRowID('3'),
+      issueRowID('4'),
+    );
+    expect(await loadStoredSig('query-hash1')).toEqual(correctSig);
+
+    // Phase 2: stop the VS, then tamper with the stored signature to simulate
+    // what the CVR would hold if a prior non-deterministic hydration (e.g. the
+    // Cap operator picking a different N-row subset) had produced a different
+    // row-set at this same stateVersion.
+    await vs.stop();
+    await viewSyncerDone;
+
+    const BOGUS_SIG = 'deadbeefcafebabe';
+    await cvrDB`
+      UPDATE ${cvrDB(cvrSchema(SHARD))}.queries
+         SET "rowSetSignature" = ${BOGUS_SIG}
+       WHERE "clientGroupID" = ${serviceID}
+         AND "queryHash" = 'query-hash1'
+    `;
+    expect(await loadStoredSig('query-hash1')).toEqual(BOGUS_SIG);
+
+    // Phase 3: fresh VS against the same cvrDB / replicaDbFile. A client
+    // connects to keep the service alive through the reset path so that
+    // #hydrateUnchangedQueries runs and detects the drift between the
+    // (bogus) stored signature and the freshly-computed driver signature.
+    const restart = restartViewSyncer({
+      databaseStorage,
+      replicaDbFile,
+      cvrDB,
+      config,
+      customQueryTransformer,
+      setTimeoutFn,
+    });
+    try {
+      // A connected client prevents the run loop from shutting down when it
+      // sees no clients. Reuse SYNC_CONTEXT with a new wsID to avoid
+      // "connection replaced" log noise.
+      restart.connect({...SYNC_CONTEXT, wsID: 'ws2'}, [
+        {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
+      ]);
+      restart.stateChanges.push({state: 'version-ready'});
+
+      // The CVRQueryDrivenUpdater flush writes the corrected signature
+      // asynchronously. Poll until it matches what the driver would produce.
+      const deadline = Date.now() + 10_000;
+      let finalSig = await loadStoredSig('query-hash1');
+      while (finalSig !== correctSig && Date.now() < deadline) {
+        await sleep(20);
+        finalSig = await loadStoredSig('query-hash1');
+      }
+      expect(finalSig).toEqual(correctSig);
+    } finally {
+      await restart.vs.stop();
+      await restart.viewSyncerDone;
+    }
   });
 
   test('process advancement with lmid change, client has no queries.  See https://bugs.rocicorp.dev/issue/3628', async () => {
