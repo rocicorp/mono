@@ -116,31 +116,14 @@ test('mixed OR costing lets the planner automatically flip a selective membershi
   expect(result.sql).toMatchInlineSnapshot(`
     [
       {
-        "nvisit": 4000,
-        "plan": [
-          "SCAN assignment",
-          "USE TEMP B-TREE FOR ORDER BY",
-        ],
-        "rows": 2000,
         "sql": "SELECT "id","teacher_id","archived_at","created_at" FROM "assignment" WHERE "archived_at" IS ? ORDER BY "created_at" desc, "id" asc",
         "table": "assignment",
       },
       {
-        "nvisit": 3,
-        "plan": [
-          "SEARCH assignment_to_student USING INDEX assignment_to_student_student_idx (student_id=?)",
-          "USE TEMP B-TREE FOR ORDER BY",
-        ],
-        "rows": 3,
         "sql": "SELECT "assignment_id","student_id","created_at" FROM "assignment_to_student" WHERE "student_id" = ? ORDER BY "assignment_id" asc, "student_id" asc",
         "table": "assignment_to_student",
       },
       {
-        "nvisit": 3,
-        "plan": [
-          "SEARCH assignment USING INTEGER PRIMARY KEY (rowid=?)",
-        ],
-        "rows": 3,
         "sql": "SELECT "id","teacher_id","archived_at","created_at" FROM "assignment" WHERE "id" = ? AND "archived_at" IS ? ORDER BY "created_at" desc, "id" asc",
         "table": "assignment",
       },

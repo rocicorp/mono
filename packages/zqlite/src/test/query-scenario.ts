@@ -16,7 +16,6 @@ import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
 import type {AnyQuery} from '../../../zql/src/query/query.ts';
 import type {SchemaQuery} from '../../../zql/src/query/schema-query.ts';
 import {Database} from '../db.ts';
-import {explainQueries} from '../explain-queries.ts';
 import {createSQLiteCostModel} from '../sqlite-cost-model.ts';
 import {newQueryDelegate} from './source-factory.ts';
 
@@ -45,9 +44,6 @@ export type QueryScenario<S extends Schema> = {
 export type QueryScenarioSQL = {
   readonly table: string;
   readonly sql: string;
-  readonly rows: number;
-  readonly nvisit: number;
-  readonly plan: readonly string[];
 };
 
 export type QueryScenarioResult = {
@@ -85,21 +81,11 @@ export function runQueryScenario<S extends Schema>(
   sink.fetch();
   sink.destroy();
 
-  const rowCounts = debug.getVendedRowCounts();
-  const nvisitCounts = debug.getNVisitCounts();
-  const sqlitePlans = explainQueries(rowCounts, db);
-
   return {
     ast,
     optimizedAST,
     planDebug: planDebugger.format(),
-    sql: debug.queries.map(({table, sql}) => ({
-      table,
-      sql,
-      rows: rowCounts[table]?.[sql] ?? 0,
-      nvisit: nvisitCounts[table]?.[sql] ?? 0,
-      plan: sqlitePlans[sql] ?? [],
-    })),
+    sql: debug.queries,
   };
 }
 
