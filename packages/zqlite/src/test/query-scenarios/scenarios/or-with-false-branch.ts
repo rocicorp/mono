@@ -8,10 +8,10 @@ export default {
   name: 'OR with false branch keeps surviving teacher predicate',
   schema: educationAppSchema,
   seed: db => {
-    createEducationAppTables(db);
+    const {assignment} = createEducationAppTables(db);
 
     const assignmentStmt = db.prepare(
-      'INSERT INTO assignment (id, teacher_id, archived_at, created_at) VALUES (?, ?, ?, ?)',
+      `INSERT INTO ${assignment.table} (${assignment.cols.id}, ${assignment.cols.teacher_id}, ${assignment.cols.archived_at}, ${assignment.cols.created_at}) VALUES (?, ?, ?, ?)`,
     );
     assignmentStmt.run(1, 1, null, 1);
     assignmentStmt.run(2, 2, null, 2);

@@ -5,6 +5,7 @@ import {
   string,
   table,
 } from '../../../../zero-schema/src/builder/table-builder.ts';
+import type {TableSchema} from '../../../../zero-schema/src/table-schema.ts';
 import type {Database} from '../../db.ts';
 
 const assignment = table('assignment')
@@ -37,24 +38,63 @@ export const educationAppSchema = createSchema({
   relationships: [assignmentRelationships],
 });
 
-export function createEducationAppTables(db: Database) {
-  db.exec(`
-    CREATE TABLE assignment (
-      id INTEGER PRIMARY KEY,
-      teacher_id INTEGER,
-      archived_at TEXT,
-      created_at INTEGER
-    );
-    CREATE UNIQUE INDEX assignment_id_unique ON assignment(id);
-    CREATE INDEX assignment_teacher_id_idx ON assignment(teacher_id);
-    CREATE INDEX assignment_created_at_idx ON assignment(created_at);
+type TableReference<TTable extends TableSchema> = {
+  readonly table: TTable['serverName'] extends string
+    ? TTable['serverName']
+    : TTable['name'];
+  readonly cols: {
+    readonly [K in keyof TTable['columns'] &
+      string]: TTable['columns'][K] extends {
+      serverName: infer ServerName extends string;
+    }
+      ? ServerName
+      : K;
+  };
+};
 
-    CREATE TABLE assignment_to_student (
-      assignment_id INTEGER,
-      student_id TEXT,
-      created_at INTEGER,
-      PRIMARY KEY (assignment_id, student_id)
+function tableReference<const TTable extends TableSchema>(
+  tableSchema: TTable,
+): TableReference<TTable> {
+  return {
+    table: tableSchema.serverName ?? tableSchema.name,
+    cols: Object.fromEntries(
+      Object.entries(tableSchema.columns).map(([name, column]) => [
+        name,
+        column.serverName ?? name,
+      ]),
+    ),
+  } as TableReference<TTable>;
+}
+
+const educationAppTables = {
+  assignment: tableReference(educationAppSchema.tables.assignment),
+  assignmentToStudent: tableReference(
+    educationAppSchema.tables.assignment_to_student,
+  ),
+} as const;
+
+export function createEducationAppTables(db: Database) {
+  const {assignment, assignmentToStudent} = educationAppTables;
+
+  db.exec(`
+    CREATE TABLE ${assignment.table} (
+      ${assignment.cols.id} INTEGER PRIMARY KEY,
+      ${assignment.cols.teacher_id} INTEGER,
+      ${assignment.cols.archived_at} TEXT,
+      ${assignment.cols.created_at} INTEGER
     );
-    CREATE INDEX assignment_to_student_student_idx ON assignment_to_student(student_id);
+    CREATE UNIQUE INDEX assignment_id_unique ON ${assignment.table}(${assignment.cols.id});
+    CREATE INDEX assignment_teacher_id_idx ON ${assignment.table}(${assignment.cols.teacher_id});
+    CREATE INDEX assignment_created_at_idx ON ${assignment.table}(${assignment.cols.created_at});
+
+    CREATE TABLE ${assignmentToStudent.table} (
+      ${assignmentToStudent.cols.assignment_id} INTEGER,
+      ${assignmentToStudent.cols.student_id} TEXT,
+      ${assignmentToStudent.cols.created_at} INTEGER,
+      PRIMARY KEY (${assignmentToStudent.cols.assignment_id}, ${assignmentToStudent.cols.student_id})
+    );
+    CREATE INDEX assignment_to_student_student_idx ON ${assignmentToStudent.table}(${assignmentToStudent.cols.student_id});
   `);
+
+  return educationAppTables;
 }

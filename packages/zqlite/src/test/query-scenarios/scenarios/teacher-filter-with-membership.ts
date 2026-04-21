@@ -8,17 +8,17 @@ export default {
   name: 'selective teacher filter keeps membership exists unflipped',
   schema: educationAppSchema,
   seed: db => {
-    createEducationAppTables(db);
+    const {assignment, assignmentToStudent} = createEducationAppTables(db);
 
     const assignmentStmt = db.prepare(
-      'INSERT INTO assignment (id, teacher_id, archived_at, created_at) VALUES (?, ?, ?, ?)',
+      `INSERT INTO ${assignment.table} (${assignment.cols.id}, ${assignment.cols.teacher_id}, ${assignment.cols.archived_at}, ${assignment.cols.created_at}) VALUES (?, ?, ?, ?)`,
     );
     for (let i = 1; i <= 2_000; i++) {
       assignmentStmt.run(i, i === 4 ? 1 : 2, null, i);
     }
 
     const membershipStmt = db.prepare(
-      'INSERT INTO assignment_to_student (assignment_id, student_id, created_at) VALUES (?, ?, ?)',
+      `INSERT INTO ${assignmentToStudent.table} (${assignmentToStudent.cols.assignment_id}, ${assignmentToStudent.cols.student_id}, ${assignmentToStudent.cols.created_at}) VALUES (?, ?, ?)`,
     );
     membershipStmt.run(101, 'student-1', 101);
     membershipStmt.run(102, 'student-1', 102);
