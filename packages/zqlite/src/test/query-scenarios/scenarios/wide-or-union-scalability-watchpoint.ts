@@ -17,7 +17,7 @@ const assignmentToStudentRelationship = relationshipName(
 );
 
 export default {
-  name: 'wide OR union is a scalability watchpoint',
+  name: 'wide OR declines broad root union',
   schema: educationAppSchema,
   seed: db => {
     const tables = createEducationAppTables(db);
@@ -67,7 +67,7 @@ export default {
     //     OR EXISTS membership(student)
     //   )
     //
-    // Current plan:
+    // Candidate root-union plan:
     //
     //   parent branch 0 ----------------.
     //   parent branch 1 ----------------|
@@ -76,33 +76,30 @@ export default {
     //   parent branch 4 ----------------|
     //   membership branch -> parent ----'
     //
-    // Watchpoint:
+    // Chosen plan:
     //
-    //   This is not a correctness failure, and fetch can be fine for a modest
-    //   branch count. The push path still probes sibling branches to preserve
-    //   visible-copy semantics, so very wide ORs should eventually be costed or
-    //   grouped before lowering to InputUnion.
+    //   assignment full scan
+    //     |
+    //     `-- membership(student) branch stays child-rooted
+    //
+    // Intuition:
+    //
+    //   Most parent branches here are broad. Splitting them would just create
+    //   several large parent scans and extra push-time union bookkeeping. The
+    //   cost guard keeps the generic plan because the local parent branch is
+    //   not a narrow doorway into the table.
     sql: [
       {
         table: 'assignment',
-        sql: 'SELECT "id","teacher_id","archived_at","created_at" FROM "assignment" WHERE "teacher_id" IN (SELECT value FROM json_each(?)) ORDER BY "created_at" desc, "id" asc',
-      },
-      {
-        table: 'assignment',
-        sql: 'SELECT "id","teacher_id","archived_at","created_at" FROM "assignment" WHERE "id" = ? ORDER BY "created_at" desc, "id" asc',
-        calls: 2,
-      },
-      {
-        table: 'assignment',
-        sql: 'SELECT "id","teacher_id","archived_at","created_at" FROM "assignment" WHERE "created_at" = ? ORDER BY "created_at" desc, "id" asc',
-      },
-      {
-        table: 'assignment',
-        sql: 'SELECT "id","teacher_id","archived_at","created_at" FROM "assignment" WHERE "archived_at" IS ? ORDER BY "created_at" desc, "id" asc',
+        sql: 'SELECT "id","teacher_id","archived_at","created_at" FROM "assignment" ORDER BY "created_at" desc, "id" asc',
       },
       {
         table: 'assignment_to_student',
         sql: 'SELECT "assignment_id","student_id","created_at" FROM "assignment_to_student" WHERE "student_id" = ? ORDER BY "assignment_id" asc, "student_id" asc',
+      },
+      {
+        table: 'assignment',
+        sql: 'SELECT "id","teacher_id","archived_at","created_at" FROM "assignment" WHERE "id" = ? ORDER BY "created_at" desc, "id" asc',
       },
     ],
   },

@@ -236,6 +236,38 @@ const EXISTS_LIMIT = 3;
 const PERMISSIONS_EXISTS_LIMIT = 1;
 const SIBLING_INTERSECTION_COST_FUZZ_FACTOR = 4;
 
+// This is a hard ceiling, not the main decision rule. The cost guard in
+// isRootUnionCostSafe() still has to prove that parent-rooted DNF branches are
+// selective before root union is allowed.
+//
+// Why 32?
+//
+//   * multiple-or-groups-block-root-union.ts proves the real 2x2 case drops
+//     from 2,004 SQL calls to 8 SQL calls.
+//   * A local cap sweep with the same education-app shape showed selective
+//     3x3, 4x4, and 5x5 DNF products staying bounded with cap 32. The 5x5 case
+//     used 113 SQL calls instead of the 30k-probe fallback.
+//   * wide-or-union-scalability-watchpoint.ts proves broad parent branches are
+//     declined by the cost guard instead of being split just because the branch
+//     product fits under this ceiling.
+//
+// Re-run the committed guardrails with:
+//
+//   npm --workspace=zql-benchmarks run bench:scenario -- --left origin/main --right . --scenario "multiple OR groups" --iterations 9 --warmups 2
+//   npm --workspace=zql-benchmarks run bench:scenario -- --left origin/main --right . --scenario "wide OR" --iterations 9 --warmups 2
+//
+// If this value changes, first add or temporarily sweep a larger DNF scenario
+// and compare the practical call counts against the theoretical product:
+//
+//   2x2 => 4 branches
+//   3x3 => 9 branches
+//   4x4 => 16 branches
+//   5x5 => 25 branches
+//   6x6 => 36 branches, currently over the ceiling
+const MAX_ROOT_UNION_DNF_BRANCHES = 32;
+const ROOT_UNION_LOCAL_BRANCH_SELECTIVITY = 0.1;
+const ROOT_UNION_LOCAL_BRANCH_MIN_ROWS = 32;
+
 /**
  * Checks if a condition tree contains any NOT EXISTS operations.
  * Recursively checks AND/OR branches but does not recurse into nested subqueries
@@ -328,7 +360,7 @@ function buildPipelineInternal(
   // Each rewrite has its own strict guard below. If a query needs a shape the
   // new physical operator cannot preserve, it falls through to the older
   // generic pipeline.
-  const rootUnionBranches = getRootUnionBranches(ast);
+  const rootUnionBranches = getRootUnionBranches(ast, costModel);
   if (rootUnionBranches) {
     return applyRootUnionBranches(
       ast,
@@ -563,7 +595,10 @@ function stripRootUnionBranchRelationships(
   return delegate.decorateInput(stripped, `${name}:or-${index}:strip-related`);
 }
 
-function getRootUnionBranches(ast: AST): readonly Condition[] | undefined {
+function getRootUnionBranches(
+  ast: AST,
+  costModel?: ConnectionCostModel,
+): readonly Condition[] | undefined {
   // This rewrite is only safe at the root of a plain query. start, limit, and
   // related rows all observe the whole result stream, so they need a richer
   // physical plan than "run branch pipelines, then union".
@@ -596,7 +631,11 @@ function getRootUnionBranches(ast: AST): readonly Condition[] | undefined {
 
   // The normalizer flattens ORs before planning. If a nested OR survives here,
   // keep the old path rather than inventing branch semantics locally.
-  if (branches.some(branch => branch.type === 'or')) {
+  if (branches.some(conditionContainsOr)) {
+    return undefined;
+  }
+
+  if (!isRootUnionCostSafe(ast, branches, costModel)) {
     return undefined;
   }
 
@@ -617,6 +656,9 @@ function getRootUnionBranchConditions(
   const shared: Condition[] = [];
   for (const subCondition of condition.conditions) {
     if (subCondition.type === 'or') {
+      if (subCondition.conditions.length === 0) {
+        return undefined;
+      }
       orBranches.push(subCondition);
       continue;
     }
@@ -626,7 +668,15 @@ function getRootUnionBranchConditions(
     shared.push(subCondition);
   }
 
-  if (orBranches.length !== 1) {
+  if (orBranches.length === 0) {
+    return undefined;
+  }
+
+  const branchCount = orBranches.reduce(
+    (count, branch) => count * branch.conditions.length,
+    1,
+  );
+  if (orBranches.length > 1 && branchCount > MAX_ROOT_UNION_DNF_BRANCHES) {
     return undefined;
   }
 
@@ -642,9 +692,93 @@ function getRootUnionBranchConditions(
   // This lets the local branch use all of its parent filters at the source
   // instead of first scanning the broad shared filter and applying the local
   // branch in a later Filter operator.
-  return orBranches[0].conditions.map(branch =>
-    combineConditions([...shared, branch]),
+  //
+  // The same idea works for a few independent OR groups:
+  //
+  //   (A OR B) AND (C OR D)
+  //            |
+  //            v
+  //   (A AND C) OR (A AND D) OR (B AND C) OR (B AND D)
+  //
+  // This is powerful for small permission predicates because each branch can
+  // pick its own source table. It is also easy to abuse: three five-way ORs
+  // would become 125 branch pipelines. Keep the multi-OR cap intentionally
+  // small and fall back to the old generic pipeline when the product is too
+  // large.
+  let branches: readonly Condition[] = [combineConditions(shared)];
+  for (const orBranch of orBranches) {
+    branches = branches.flatMap(prefix =>
+      orBranch.conditions.map(branch =>
+        combineConditions([...flattenAndConditions(prefix), branch]),
+      ),
+    );
+  }
+  return branches;
+}
+
+function flattenAndConditions(condition: Condition): readonly Condition[] {
+  return condition.type === 'and' ? condition.conditions : [condition];
+}
+
+function conditionContainsOr(condition: Condition): boolean {
+  if (condition.type === 'or') {
+    return true;
+  }
+  if (condition.type === 'and') {
+    return condition.conditions.some(conditionContainsOr);
+  }
+  return false;
+}
+
+function isRootUnionCostSafe(
+  ast: AST,
+  branches: readonly Condition[],
+  costModel: ConnectionCostModel | undefined,
+): boolean {
+  if (!costModel) {
+    return true;
+  }
+
+  const rootCost = costModel(
+    ast.table,
+    ast.orderBy ?? [],
+    undefined,
+    undefined,
   );
+  const maxLocalRows = Math.max(
+    ROOT_UNION_LOCAL_BRANCH_MIN_ROWS,
+    rootCost.rows * ROOT_UNION_LOCAL_BRANCH_SELECTIVITY,
+  );
+
+  // DNF is great when every parent-rooted branch is a narrow doorway into the
+  // table. It is bad when a local branch is basically another full parent scan:
+  //
+  //   Good:
+  //
+  //     (id = 42) OR EXISTS(child)
+  //
+  //   Bad:
+  //
+  //     (created_at > 0) OR EXISTS(child)
+  //
+  // A branch that contains a flipped subquery can start from the child table.
+  // A branch without one must prove that its parent-side scan is small.
+  for (const branch of branches) {
+    if (conditionIncludesFlippedSubqueryAtAnyLevel(branch)) {
+      continue;
+    }
+    const branchCost = costModel(
+      ast.table,
+      ast.orderBy ?? [],
+      branch,
+      undefined,
+    );
+    if (branchCost.rows > maxLocalRows) {
+      return false;
+    }
+  }
+
+  return true;
 }
 
 function applySiblingExistsIntersection(

@@ -22,7 +22,7 @@ const assignmentToClassRelationship = relationshipName(
 );
 
 export default {
-  name: 'multiple OR groups still cannot use budgeted root union',
+  name: 'multiple OR groups use budgeted root union',
   schema: educationAppSchema,
   seed: db => {
     const tables = createEducationAppTables(db);
@@ -82,59 +82,68 @@ export default {
     //     (id = pinnedAssignment OR EXISTS assignment_to_class(class))
     //   )
     //
-    // Current plan:
+    // Naive plan:
     //
     //   assignment
     //     |-- evaluate first OR
     //     `-- evaluate second OR
     //
-    // Desired plan:
+    // Optimized plan:
     //
-    //   small DNF expansion with a budget:
+    //   Expand only while the branch count stays under the DNF budget:
     //
-    //     teacher_id branch AND pinned id branch
-    //     teacher_id branch AND class branch
-    //     membership branch AND pinned id branch
-    //     membership branch AND class branch
+    //                 second OR
+    //              id       class
+    //   first  .--------.--------.
+    //   OR     |        |        |
+    // teacher  | t & id | t & cl |
+    // member   | m & id | m & cl |
+    //          '--------'--------'
+    //
+    //   Each cell is now a separate root branch:
+    //
+    //     t & id  -> assignment(teacher_id, id)
+    //     t & cl  -> assignment(teacher_id) -> probe class
+    //     m & id  -> membership(student) -> assignment(id)
+    //     m & cl  -> membership(student) AND class(class_id)
     //
     // Intuition:
     //
-    //   One OR group can be split today. Two independent OR groups would need a
-    //   costed expansion budget so we do not accidentally explode the plan.
+    //   The old plan scanned every assignment because it could not split both
+    //   OR groups at once. This rewrite uses normal boolean distributivity, but
+    //   only for small products. A 2x2 matrix is cheap. A wide matrix still
+    //   falls back to the generic planner instead of creating a giant union.
     sql: [
       {
         table: 'assignment',
-        sql: 'desired: costed DNF root union for two small OR groups',
+        sql: 'SELECT "id","teacher_id","archived_at","created_at" FROM "assignment" WHERE ("teacher_id" = ? AND "id" = ?) ORDER BY "created_at" desc, "id" asc',
       },
-    ],
-  },
-  knownFailure: {
-    reason:
-      'Root union currently handles one OR group, not multiple independent OR groups.',
-    current:
-      'The engine keeps one parent stream and evaluates the OR groups as filters.',
-    desired:
-      'Expand small OR groups into selective physical branches only when the branch count stays under a cost budget.',
-    currentSQL: [
       {
         table: 'assignment',
-        sql: 'SELECT "id","teacher_id","archived_at","created_at" FROM "assignment" WHERE TRUE ORDER BY "created_at" desc, "id" asc',
+        sql: 'SELECT "id","teacher_id","archived_at","created_at" FROM "assignment" WHERE "teacher_id" = ? ORDER BY "created_at" desc, "id" asc',
       },
       {
         table: 'assignment_to_class',
         sql: 'SELECT "assignment_id","class_id" FROM "assignment_to_class" WHERE "assignment_id" = ? AND "class_id" = ? ORDER BY "assignment_id" asc, "class_id" asc',
-        calls: 2001,
+        calls: 2,
       },
       {
         table: 'assignment_to_student',
         sql: 'SELECT "assignment_id","student_id","created_at" FROM "assignment_to_student" WHERE "student_id" = ? ORDER BY "assignment_id" asc, "student_id" asc',
+        calls: 2,
       },
       {
         table: 'assignment',
-        sql: 'SELECT "id","teacher_id","archived_at","created_at" FROM "assignment" WHERE "id" = ? AND TRUE ORDER BY "created_at" desc, "id" asc',
+        sql: 'SELECT "id","teacher_id","archived_at","created_at" FROM "assignment" WHERE "id" = ? AND "id" = ? ORDER BY "created_at" desc, "id" asc',
+      },
+      {
+        table: 'assignment_to_class',
+        sql: 'SELECT "assignment_id","class_id" FROM "assignment_to_class" WHERE "class_id" = ? ORDER BY "assignment_id" asc, "class_id" asc',
       },
     ],
-    engineIdea:
-      'Add a costed DNF planner alternative with a hard fanout cap and common-filter factoring.',
+    rows: [
+      {id: 1500, teacher_id: 1, archived_at: null, created_at: 1500},
+      {id: 101, teacher_id: 1, archived_at: null, created_at: 101},
+    ],
   },
 } satisfies QueryScenario<typeof educationAppSchema>;
