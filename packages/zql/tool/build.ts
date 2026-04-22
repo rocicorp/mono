@@ -27,10 +27,7 @@ async function buildPackages() {
     ...shared,
     external: await getExternalFromPackageJSON(import.meta.url),
     platform: 'browser',
-    define: {
-      ...define,
-      'import.meta.env': 'undefined',
-    },
+    define,
     format: 'esm',
     entryPoints: [basePath('src', 'index.ts')],
     bundle: true,

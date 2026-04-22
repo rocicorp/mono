@@ -29,7 +29,7 @@ function basePath(...parts: string[]): string {
 async function buildReplicache(options: BuildOptions) {
   const define = {
     ...makeDefine(options.mode),
-    'import.meta.env': 'undefined',
+    ...(forBundleSizeDashboard ? {'import.meta.env': 'undefined'} : {}),
   };
   const {ext, mode, external, ...restOfOptions} = options;
   const outfile = basePath('out', 'replicache.' + ext);
