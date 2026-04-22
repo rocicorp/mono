@@ -78,6 +78,13 @@ const UNSUPPORTED_TOKENS = /\b(current_time|current_date|current_timestamp)\b/i;
 // care about them.
 const STRING_EXPRESSION_REGEX = /^('.*')::[^']+$/;
 
+// PostgreSQL array constructor expressions, e.g. `ARRAY[]::text[]`,
+// `ARRAY['a','b']::text[]`. The empty form is stored as a JSON empty array
+// string literal in SQLite. Non-empty forms are unsupported and trigger
+// the backfill path.
+const ARRAY_CONSTRUCTOR_REGEX = /^ARRAY\s*\[/i;
+const EMPTY_ARRAY_CONSTRUCTOR_REGEX = /^ARRAY\s*\[\s*\]/i;
+
 // Exported for testing.
 export function mapPostgresToLiteDefault(
   table: string,
@@ -91,6 +98,15 @@ export function mapPostgresToLiteDefault(
   if (UNSUPPORTED_TOKENS.test(defaultExpression)) {
     throw new UnsupportedColumnDefaultError(
       `Cannot ADD a column with CURRENT_TIME, CURRENT_DATE, or CURRENT_TIMESTAMP`,
+    );
+  }
+  if (ARRAY_CONSTRUCTOR_REGEX.test(defaultExpression)) {
+    if (EMPTY_ARRAY_CONSTRUCTOR_REGEX.test(defaultExpression)) {
+      // ARRAY[]::text[] → store as JSON empty array string
+      return `'[]'`;
+    }
+    throw new UnsupportedColumnDefaultError(
+      `Unsupported default value for ${table}.${column}: ${defaultExpression}`,
     );
   }
   if (SIMPLE_TOKEN_EXPRESSION_REGEX.test(defaultExpression)) {

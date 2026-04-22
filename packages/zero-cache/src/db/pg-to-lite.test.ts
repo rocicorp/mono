@@ -414,6 +414,10 @@ test.each([
   ['CURRENT_TIMESTAMP'],
   ['Current_Time'],
   ['current_DATE'],
+  // Non-empty array constructors are unsupported (trigger backfill path)
+  ["ARRAY['foo']::text[]"],
+  ["ARRAY['a','b']::text[]"],
+  ['ARRAY[1,2]::integer[]'],
 ])('unsupported column default %s', value => {
   expect(() =>
     mapPostgresToLiteDefault('foo', 'bar', 'boolean', value),
@@ -425,6 +429,12 @@ test.each([
   ['true', '1', 'boolean'],
   ['false', '0', 'boolean'],
   ["'12345678901234567890'::bigint", "'12345678901234567890'", 'int8'],
+  // Empty PG array constructors map to JSON empty array string literal
+  ['ARRAY[]::text[]', "'[]'", 'text[]'],
+  ['ARRAY[]::integer[]', "'[]'", 'integer[]'],
+  ['array[]::text[]', "'[]'", 'text[]'],
+  ['ARRAY[ ]::text[]', "'[]'", 'text[]'],
+  ['ARRAY [  ]::text[]', "'[]'", 'text[]'],
 ])('supported column default %s', (input, output, dataType) => {
   expect(mapPostgresToLiteDefault('foo', 'bar', dataType, input)).toEqual(
     output,
