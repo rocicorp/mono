@@ -47,7 +47,7 @@ import type {
 } from '../../custom-queries/transform-query.ts';
 import {
   getOrCreateCounter,
-  getOrCreateHistogram,
+  getOrCreateLatencyHistogram,
   getOrCreateUpDownCounter,
 } from '../../observability/metrics.ts';
 import type {InspectorDelegate} from '../../server/inspector-delegate.ts';
@@ -263,31 +263,25 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     'hydration',
     'Number of query hydrations',
   );
-  readonly #hydrationTime = getOrCreateHistogram('sync', 'hydration-time', {
-    description: 'Time to hydrate a query.',
-    unit: 's',
-  });
-  readonly #transactionAdvanceTime = getOrCreateHistogram(
+  readonly #hydrationTime = getOrCreateLatencyHistogram(
+    'sync',
+    'hydration-time',
+    'Time to hydrate a query.',
+  );
+  readonly #transactionAdvanceTime = getOrCreateLatencyHistogram(
     'sync',
     'advance-time',
-    {
-      description:
-        'Time to advance all queries for a given client group after applying a new transaction to the replica.',
-      unit: 's',
-    },
+    'Time to advance all queries for a given client group after applying a new transaction to the replica.',
   );
   readonly #queryTransformations = getOrCreateCounter(
     'sync',
     'query.transformations',
     'Number of query transformations performed',
   );
-  readonly #queryTransformationTime = getOrCreateHistogram(
+  readonly #queryTransformationTime = getOrCreateLatencyHistogram(
     'sync',
     'query.transformation-time',
-    {
-      description: 'Time to transform custom queries via API server',
-      unit: 's',
-    },
+    'Time to transform custom queries via API server.',
   );
   readonly #queryTransformationHashChanges = getOrCreateCounter(
     'sync',
@@ -299,10 +293,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     'query.transformation-no-ops',
     'Number of times query transformation resulted in no-op (hash unchanged)',
   );
-  readonly #lockWaitTime = getOrCreateHistogram('sync', 'lock-wait-time', {
-    description: 'Time spent waiting to acquire the ViewSyncer lock.',
-    unit: 's',
-  });
+  readonly #lockWaitTime = getOrCreateLatencyHistogram(
+    'sync',
+    'lock-wait-time',
+    'Time spent waiting to acquire the ViewSyncer lock.',
+  );
   readonly #pipelineResets = getOrCreateCounter(
     'sync',
     'pipeline-resets',
@@ -375,7 +370,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     this.#lc.debug?.('about to acquire lock for cvr ', rid);
     const lockWaitStart = performance.now();
     return this.#lock.withLock(async () => {
-      this.#lockWaitTime.record((performance.now() - lockWaitStart) / 1000);
+      this.#lockWaitTime.recordMs(performance.now() - lockWaitStart);
       this.#lc.debug?.('acquired lock in #runInLockWithCVR ', rid);
       const lc = this.#lc.withContext('lock', rid);
       if (!this.#stateChanges.active) {
@@ -1470,7 +1465,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
       const elapsed = timer.totalElapsed();
       this.#hydrations.add(1);
-      this.#hydrationTime.record(elapsed / 1000);
+      this.#hydrationTime.recordMs(elapsed);
       this.#addQueryMaterializationServerMetric(transformationHash, elapsed);
       lc.debug?.(`hydrated ${count} rows for ${queryID} (${elapsed} ms)`);
     }
@@ -1698,8 +1693,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           this.#queryTransformations.add(1, {result: 'error'});
           throw e;
         } finally {
-          const transformDuration = (performance.now() - transformStart) / 1000;
-          this.#queryTransformationTime.record(transformDuration);
+          const transformDuration = performance.now() - transformStart;
+          this.#queryTransformationTime.recordMs(transformDuration);
         }
 
         // Process the transformed queries and track which ones succeeded.
@@ -1927,7 +1922,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           });
         }
         hydrations.add(1);
-        hydrationTime.record(totalProcessTime / 1000);
+        hydrationTime.recordMs(totalProcessTime);
       }
       // #processChanges does batched de-duping of rows. Wrap all pipelines in
       // a single generator in order to maximize de-duping.
@@ -2233,7 +2228,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       lc.info?.(
         `finished processing advancement of ${numChanges} changes ((process: ${totalProcessTime} ms, wall: ${wallTime} ms))`,
       );
-      this.#transactionAdvanceTime.record(totalProcessTime / 1000);
+      this.#transactionAdvanceTime.recordMs(totalProcessTime);
       return 'success';
     });
   }
