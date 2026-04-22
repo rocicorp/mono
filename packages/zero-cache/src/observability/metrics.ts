@@ -136,7 +136,9 @@ export function getOrCreateLatencyHistogram(
     getMeter().createHistogram(`zero.${category}.${name}`, {
       description,
       unit: 's',
-      boundaries: LATENCY_HISTOGRAM_BOUNDARIES_S,
+      advice: {
+        explicitBucketBoundaries: LATENCY_HISTOGRAM_BOUNDARIES_S,
+      },
     }),
   );
   return {
