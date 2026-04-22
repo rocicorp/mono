@@ -254,4 +254,40 @@ describe('db/migration-lite', () => {
       db.close();
     });
   }
+
+  test('preserves original error after auto-rollback', async () => {
+    let err: unknown;
+    try {
+      await runSchemaMigrations(
+        createSilentLogContext(),
+        debugName,
+        dbFile.path,
+        {
+          migrateSchema: (_log, db) => {
+            db.exec(`
+              CREATE TABLE "AutoRollback" (
+                id INTEGER PRIMARY KEY
+              );
+
+              CREATE TRIGGER "AutoRollbackTrigger"
+              BEFORE INSERT ON "AutoRollback"
+              BEGIN
+                SELECT RAISE(ROLLBACK, 'auto rollback');
+              END;
+            `);
+            db.prepare(`INSERT INTO "AutoRollback" (id) VALUES (1)`).run();
+          },
+        },
+        {1: {}},
+      );
+    } catch (e) {
+      err = e;
+    }
+
+    expect(err).toBeDefined();
+    expect(String(err)).toContain('auto rollback');
+    expect(String(err)).not.toContain(
+      'cannot rollback - no transaction is active',
+    );
+  });
 });

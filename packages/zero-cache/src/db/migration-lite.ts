@@ -336,7 +336,13 @@ async function runTransaction<T>(
     return result;
   } catch (e) {
     log.error?.('Aborted transaction due to error', e);
-    db.prepare('ROLLBACK').run();
+    if (db.inTransaction) {
+      try {
+        db.prepare('ROLLBACK').run();
+      } catch (rollbackError) {
+        log.error?.('Unable to rollback transaction', rollbackError);
+      }
+    }
     throw e;
   }
 }
