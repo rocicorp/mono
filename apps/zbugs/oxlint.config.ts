@@ -9,6 +9,11 @@ import {baseConfig} from '../../oxlint.base.ts';
 export default defineConfig({
   ...baseConfig,
   plugins: [...baseConfig.plugins, 'react'],
+  rules: {
+    ...baseConfig.rules,
+    'react-hooks/rules-of-hooks': 'error',
+    'react-hooks/exhaustive-deps': 'error',
+  },
   env: {
     builtin: true,
     browser: true,
