@@ -274,6 +274,53 @@ test('absorbs redundant branches after factoring common predicates', () => {
   });
 });
 
+test('does not absorb client exists helper evidence into a parent-only OR branch', () => {
+  const active = eq('active', true);
+  const helperExists = exists(eq('title', 'hello'));
+
+  expect(
+    normalizeWhere({
+      type: 'or',
+      conditions: [
+        active,
+        {
+          type: 'and',
+          conditions: [active, helperExists],
+        },
+      ],
+    }),
+  ).toEqual({
+    type: 'or',
+    conditions: [
+      active,
+      {
+        type: 'and',
+        conditions: [active, helperExists],
+      },
+    ],
+  });
+});
+
+test('absorbs permission exists evidence because permission helpers are not synced', () => {
+  const active = eq('active', true);
+
+  expect(
+    normalizeWhere({
+      type: 'or',
+      conditions: [
+        active,
+        {
+          type: 'and',
+          conditions: [
+            active,
+            exists(eq('title', 'hello'), {system: 'permissions'}),
+          ],
+        },
+      ],
+    }),
+  ).toEqual(active);
+});
+
 test('collapses impossible exists subqueries', () => {
   const active = eq('active', true);
 
@@ -448,6 +495,7 @@ function exists(
   options: {
     readonly op?: 'EXISTS' | 'NOT EXISTS' | undefined;
     readonly scalar?: boolean | undefined;
+    readonly system?: 'permissions' | 'client' | 'test' | undefined;
     readonly subquery?: Partial<AST> | undefined;
   } = {},
 ): CorrelatedSubqueryCondition {
@@ -456,6 +504,7 @@ function exists(
     op: options.op ?? 'EXISTS',
     scalar: options.scalar,
     related: {
+      system: options.system,
       correlation: {
         parentField: ['id'],
         childField: ['userId'],

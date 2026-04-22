@@ -561,6 +561,26 @@ function factorCommonConjuncts(
   const remainingBranches = branches.map(branch =>
     branch.filter(condition => !commonKeys.has(conditionKey(condition))),
   );
+  // Do not turn this:
+  //
+  //   A OR (A AND EXISTS(client_helper))
+  //
+  // into this:
+  //
+  //   A AND (TRUE OR EXISTS(client_helper))  ->  A
+  //
+  // The parent ids are the same, but the synced row set is not. The client
+  // still needs the helper row that proved the EXISTS branch. Permission
+  // helpers are private server evidence, so conditionContainsSyncedSubqueryEvidence
+  // deliberately ignores them.
+  if (
+    remainingBranches.some(branch => branch.length === 0) &&
+    remainingBranches.some(branch =>
+      branch.some(conditionContainsSyncedSubqueryEvidence),
+    )
+  ) {
+    return undefined;
+  }
 
   return buildAnd([
     ...common,
@@ -576,6 +596,7 @@ function absorbRedundantOrBranches(
       condition.type === 'and'
         ? new Set(condition.conditions.map(conditionKey))
         : new Set([conditionKey(condition)]),
+    syncedEvidenceKeys: syncedEvidenceKeys(condition),
   }));
   const keep = conditions.map(() => true);
 
@@ -590,6 +611,9 @@ function absorbRedundantOrBranches(
       if (!branchSubsumes(candidate.keys, branch.keys)) {
         continue;
       }
+      if (!canDropBranchWithoutLosingSyncedEvidence(branch, candidate)) {
+        continue;
+      }
       if (
         candidate.keys.size < branch.keys.size ||
         candidateIndex < branchIndex
@@ -602,6 +626,30 @@ function absorbRedundantOrBranches(
   return conditions.filter((_, index) => keep[index]);
 }
 
+function canDropBranchWithoutLosingSyncedEvidence(
+  branch: {
+    readonly syncedEvidenceKeys: ReadonlySet<string>;
+  },
+  candidate: {
+    readonly keys: ReadonlySet<string>;
+  },
+): boolean {
+  // Boolean absorption is only row-set safe when every client helper row from
+  // the branch being dropped is still represented by the branch that remains:
+  //
+  //   safe:     EXISTS(child) OR (EXISTS(child) AND A)  -> EXISTS(child)
+  //   unsafe:   A OR (A AND EXISTS(child))              -> keep both
+  //
+  // Both expressions return the same parent ids, but only the unsafe original
+  // carries the child helper rows the client needs after hydration.
+  for (const key of branch.syncedEvidenceKeys) {
+    if (!candidate.keys.has(key)) {
+      return false;
+    }
+  }
+  return true;
+}
+
 function branchSubsumes(
   candidate: ReadonlySet<string>,
   branch: ReadonlySet<string>,
@@ -612,6 +660,28 @@ function branchSubsumes(
     }
   }
   return true;
+}
+
+function syncedEvidenceKeys(condition: Condition): ReadonlySet<string> {
+  const conditions =
+    condition.type === 'and' ? condition.conditions : [condition];
+  return new Set(
+    conditions
+      .filter(conditionContainsSyncedSubqueryEvidence)
+      .map(conditionKey),
+  );
+}
+
+function conditionContainsSyncedSubqueryEvidence(
+  condition: Condition,
+): boolean {
+  if (condition.type === 'correlatedSubquery') {
+    return condition.related.system !== 'permissions';
+  }
+  if (condition.type === 'and' || condition.type === 'or') {
+    return condition.conditions.some(conditionContainsSyncedSubqueryEvidence);
+  }
+  return false;
 }
 
 function mergeSameRelationshipExists(

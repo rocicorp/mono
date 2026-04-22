@@ -3,7 +3,7 @@ import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts'
 import {computeZqlSpecs} from '../../../zero-cache/src/db/lite-tables.ts';
 import type {LiteAndZqlSpec} from '../../../zero-cache/src/db/specs.ts';
 import {CREATE_TABLE_METADATA_TABLE} from '../../../zero-cache/src/services/replicator/schema/table-metadata.ts';
-import type {AST} from '../../../zero-protocol/src/ast.ts';
+import type {AST, Condition} from '../../../zero-protocol/src/ast.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import {buildPipeline} from '../../../zql/src/builder/builder.ts';
@@ -51,6 +51,7 @@ export type QueryScenario<S extends Schema> = {
   readonly schema: S;
   readonly seed: (db: Database) => void;
   readonly query: (builder: SchemaQuery<S>) => AnyQuery;
+  readonly transformAST?: ((ast: AST) => AST) | undefined;
   readonly expectations: QueryScenarioExpectations;
   readonly knownFailure?: QueryScenarioKnownFailure;
 };
@@ -101,7 +102,10 @@ export function runQueryScenario<S extends Schema>(
   const costModel = createSQLiteCostModel(db, tableSpecs);
 
   const builder = createBuilder(scenario.schema);
-  const ast = asQueryInternals(scenario.query(builder)).ast;
+  const queryAST = asQueryInternals(scenario.query(builder)).ast;
+  const ast = scenario.transformAST
+    ? scenario.transformAST(queryAST)
+    : queryAST;
   const optimizedAST = planQueryOnce(ast, costModel, new AccumulatorDebugger());
 
   const debug = new ScenarioDebug();
@@ -135,6 +139,37 @@ export function runQueryScenario<S extends Schema>(
     sql: debug.compactQueries(),
     rows,
   };
+}
+
+export function markAllExistsAsPermissions(ast: AST): AST {
+  return {
+    ...ast,
+    where: ast.where ? markConditionExistsAsPermissions(ast.where) : undefined,
+    related: ast.related?.map(related => ({
+      ...related,
+      subquery: markAllExistsAsPermissions(related.subquery),
+    })),
+  };
+}
+
+function markConditionExistsAsPermissions(condition: Condition): Condition {
+  if (condition.type === 'correlatedSubquery') {
+    return {
+      ...condition,
+      related: {
+        ...condition.related,
+        system: 'permissions',
+        subquery: markAllExistsAsPermissions(condition.related.subquery),
+      },
+    };
+  }
+  if (condition.type === 'and' || condition.type === 'or') {
+    return {
+      ...condition,
+      conditions: condition.conditions.map(markConditionExistsAsPermissions),
+    };
+  }
+  return condition;
 }
 
 function planQueryOnce(

@@ -41,6 +41,7 @@ type BenchmarkScenario = {
   readonly schema: unknown;
   readonly seed: (db: BenchmarkDatabase) => void;
   readonly query: (builder: unknown) => unknown;
+  readonly transformAST?: ((ast: unknown) => unknown) | undefined;
 };
 
 type ScenarioEntry = {
@@ -504,7 +505,10 @@ function runScenario(
     );
     const costModel = modules.createSQLiteCostModel(db, tableSpecs);
     const builder = modules.createBuilder(scenario.schema);
-    const ast = modules.asQueryInternals(scenario.query(builder)).ast;
+    const queryAST = modules.asQueryInternals(scenario.query(builder)).ast;
+    const ast = scenario.transformAST
+      ? scenario.transformAST(queryAST)
+      : queryAST;
     const debug = makeCountingDebug(modules.Debug);
     const samples: number[] = [];
     let rowCount = 0;

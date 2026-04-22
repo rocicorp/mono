@@ -14,6 +14,8 @@ import notExistsAntiJoinUnsupported from './not-exists-anti-join-unsupported.ts'
 import orWithFalseBranch from './or-with-false-branch.ts';
 import parentOrExistsUnionRoots from './parent-or-exists-union-roots.ts';
 import permissionAndClassFilterIntersection from './permission-and-class-filter-intersection.ts';
+import permissionSystemParentOrExistsUnion from './permission-system-parent-or-exists-union.ts';
+import permissionSystemSiblingIntersection from './permission-system-sibling-intersection.ts';
 import rootOrLimitBlocksUnion from './root-or-limit-blocks-union.ts';
 import rootOrRelatedBlocksUnion from './root-or-related-blocks-union.ts';
 import sameRelationshipAndIntersect from './same-relationship-and-intersect.ts';
@@ -50,6 +52,8 @@ export default [
   sharedParentFilterOrFactor,
   sameRelationshipAndIntersect,
   duplicateExistsOrDedupe,
+  permissionSystemParentOrExistsUnion,
+  permissionSystemSiblingIntersection,
   permissionAndClassFilterIntersection,
   skewedCrossRelationshipDeclinesIntersection,
   studentAssignmentDirectClassGroupUnion,
