@@ -1089,8 +1089,13 @@ class ChangeMaker {
       case 'schemaSnapshot':
         break;
       case 'ddlUpdate':
-        // guaranteed by event triggers
-        assert(prevEvent, `ddlUpdate received without a ddlStart`);
+        if (!prevEvent) {
+          // A fix for this is in the works. Log an error with the full
+          // LogContext (e.g. including the tag and query) to collect/confirm
+          // the scenarios in which this happens.
+          lc.error?.(`ddlUpdate received without a ddlStart`);
+          assert(prevEvent, `ddlUpdate received without a ddlStart`);
+        }
         break;
       default: // Ignore unknown types for forwards compatibility
         lc.info?.(`ignoring unknown ddl message type: ${type}`);
