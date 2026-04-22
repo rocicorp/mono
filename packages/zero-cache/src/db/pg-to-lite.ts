@@ -97,7 +97,7 @@ export function mapPostgresToLiteDefault(
   }
   if (UNSUPPORTED_TOKENS.test(defaultExpression)) {
     throw new UnsupportedColumnDefaultError(
-      `Cannot ADD a column with CURRENT_TIME, CURRENT_DATE, or CURRENT_TIMESTAMP`,
+      `Cannot ADD a column with CURRENT_TIME, CURRENT_DATE, or CURRENT_TIMESTAMP for ${table}.${column}`,
     );
   }
   if (ARRAY_CONSTRUCTOR_REGEX.test(defaultExpression)) {

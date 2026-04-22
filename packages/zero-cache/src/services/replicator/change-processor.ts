@@ -20,6 +20,7 @@ import {
   mapPostgresToLite,
   mapPostgresToLiteColumn,
   mapPostgresToLiteIndex,
+  UnsupportedColumnDefaultError,
 } from '../../db/pg-to-lite.ts';
 import type {StatementRunner} from '../../db/statements.ts';
 import type {LexiVersion} from '../../types/lexi-version.ts';
@@ -603,38 +604,18 @@ class TransactionProcessor {
     const table = liteTableName(msg.table);
     const {name} = msg.column;
     const spec = mapPostgresToLiteColumn(table, msg.column);
-    const ddl = `ALTER TABLE ${id(table)} ADD ${id(name)} ${liteColumnDef(spec)}`;
     try {
-      this.#db.db.exec(ddl);
+      this.#db.db.exec(
+        `ALTER TABLE ${id(table)} ADD ${id(name)} ${liteColumnDef(spec)}`,
+      );
     } catch (e) {
-      if (e instanceof SqliteError) {
-        if (
-          e.code === 'SQLITE_ERROR' &&
-          e.message.includes('duplicate column name')
-        ) {
-          // The column was already added (e.g. crash after exec but before
-          // watermark update). Log and continue — this is idempotent.
-          this.#lc.warn?.(
-            `Column ${table}.${name} already exists, skipping ADD`,
-          );
-        } else if (spec.dflt !== null) {
-          // The DEFAULT clause may have contained an expression that SQLite
-          // rejected (e.g. a PG-specific syntax that slipped through). Retry
-          // without the DEFAULT so the column is at least added.
-          //
-          // This is safe because mapPostgresToLiteColumn always returns
-          // notNull: false for SQLite replica columns, so SQLite will accept
-          // ADD COLUMN without a DEFAULT (a NOT NULL column without a default
-          // is the only case SQLite rejects).
-          this.#lc.warn?.(
-            `Failed to ADD column ${table}.${name} with DEFAULT (${spec.dflt}), retrying without DEFAULT: ${e.message}`,
-          );
-          this.#db.db.exec(
-            `ALTER TABLE ${id(table)} ADD ${id(name)} ${liteColumnDef({...spec, dflt: null})}`,
-          );
-        } else {
-          throw e;
-        }
+      if (e instanceof SqliteError && spec.dflt !== null) {
+        // The DEFAULT clause may have contained an expression that SQLite
+        // rejected (e.g. a PG-specific syntax that slipped through). Force backfill
+        // of the column.
+        throw new UnsupportedColumnDefaultError(
+          `Unsupported default value for ${table}.${name}: ${spec.dflt}`,
+        );
       } else {
         throw e;
       }
