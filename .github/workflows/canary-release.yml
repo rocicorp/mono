@@ -1,0 +1,55 @@
+name: Canary Release
+
+on:
+  pull_request:
+    types: [closed]
+
+jobs:
+  canary-release:
+    name: Canary Release
+    if: github.event.pull_request.merged == true && contains(github.event.pull_request.labels.*.name, 'release-canary')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          ref: ${{ github.event.pull_request.base.ref }}
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24.x
+          cache: 'npm'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - run: npm ci
+
+      - name: Run canary release
+        id: release
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          output=$(node packages/zero/tool/release.ts canary ${{ github.event.pull_request.base.ref }} --yes --skip-tests 2>&1 | tee /dev/stderr)
+          version=$(echo "$output" | grep -oP 'Published @rocicorp/zero@\K[^\s]+')
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Comment on PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh pr comment ${{ github.event.pull_request.number }} --body "## Canary Release Published
+
+          **npm:** \`@rocicorp/zero@${{ steps.release.outputs.version }}\`
+          \`\`\`
+          npm install @rocicorp/zero@${{ steps.release.outputs.version }}
+          \`\`\`
+
+          **Docker:** \`rocicorp/zero:${{ steps.release.outputs.version }}\`"
