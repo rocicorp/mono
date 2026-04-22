@@ -75,8 +75,7 @@ export function getOrCreateUpDownCounter(
  * durations and converts them to seconds internally.
  *
  * Use {@link getOrCreateLatencyHistogram} to create one — the unit (`'s'`),
- * bucket boundaries, and ms→s conversion are all baked in and cannot be
- * forgotten.
+ * bucket boundaries, and ms→s conversion are all baked in
  */
 export type LatencyHistogram = {
   /**
@@ -98,13 +97,14 @@ export type LatencyHistogram = {
  * The operational range is 1 ms – 5,000 ms (including customers actively
  * tuning queries). ~2× logarithmic steps give proportionally consistent
  * `histogram_quantile` accuracy regardless of where values cluster within
- * that range. 10,000 ms is an overflow catcher for truly broken states.
+ * that range. 10,000 ms and 30,000 ms are overflow catchers for truly broken
+ * states.
  *
  *   1 ms, 2 ms, 5 ms, 10 ms, 20 ms, 50 ms, 100 ms, 200 ms, 500 ms,
- *   1 s, 2 s, 5 s, 10 s
+ *   1 s, 2 s, 5 s, 10 s, 30 s
  */
 const LATENCY_HISTOGRAM_BOUNDARIES_S = [
-  0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10,
+  0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 30,
 ];
 
 const latencyHistograms = cache<Histogram>();
@@ -140,10 +140,10 @@ export function getOrCreateLatencyHistogram(
     }),
   );
   return {
-    recordMs: (durationMs, attributes) => h.record(durationMs / 1000, attributes),
+    recordMs: (durationMs, attributes) =>
+      h.record(durationMs / 1000, attributes),
   };
 }
-
 
 const counters = cache<Counter>();
 
