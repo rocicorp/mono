@@ -105,8 +105,10 @@ export default {
     //
     // Intuition:
     //
-    //   Both OR branches ask the same relationship for the same parent key, so
-    //   they can share one child index scan.
+    //   This is the right parent-id plan, but it is not row-set safe for
+    //   client helper rows yet. Each original EXISTS branch can hydrate its
+    //   own helper evidence. A merged branch would need to preserve that
+    //   evidence before it can replace the two scans with one IN scan.
     sql: [
       {
         table: 'assignment_to_student',
@@ -118,5 +120,45 @@ export default {
         calls: 3,
       },
     ],
+  },
+  // Safety note:
+  //
+  //   A normal database optimizer can merge these two semi-joins:
+  //
+  //     EXISTS membership(student = 1)
+  //       OR
+  //     EXISTS membership(student = 2)
+  //
+  //   into one membership(student IN [1, 2]) scan.
+  //
+  //   In Zero, the client-system helper rows are part of the synced row set:
+  //
+  //     assignment 101
+  //       `-- membership helper row for student 1
+  //
+  //   The old unmerged shape can hydrate helper evidence per EXISTS branch.
+  //   The merged shape must prove it will hydrate the same evidence before it
+  //   is safe, especially around helper limits and CAP row-set signatures.
+  knownFailure: {
+    reason:
+      'Same-relationship OR merge is disabled for client system WHERE EXISTS branches because merging can shrink helper evidence even when parent ids stay the same.',
+    current:
+      'The planner flips both membership branches separately, so each client helper branch can still hydrate its own evidence.',
+    desired:
+      'Use one membership IN scan while preserving exactly the helper rows each original EXISTS branch would have synced.',
+    currentSQL: [
+      {
+        table: 'assignment_to_student',
+        sql: 'SELECT "assignment_id","student_id","created_at" FROM "assignment_to_student" WHERE "student_id" = ? ORDER BY "assignment_id" asc, "student_id" asc',
+        calls: 2,
+      },
+      {
+        table: 'assignment',
+        sql: 'SELECT "id","teacher_id","archived_at","created_at" FROM "assignment" WHERE "id" = ? ORDER BY "created_at" desc, "id" asc',
+        calls: 3,
+      },
+    ],
+    engineIdea:
+      'Give OR merge a relationship-aware helper evidence model, or only merge client helpers after proving the helper cap and hydrated row set are unchanged.',
   },
 } satisfies QueryScenario<typeof educationAppSchema>;

@@ -21,6 +21,11 @@ import {pathToFileURL} from 'node:url';
 //
 // Use --format json when you need exact SQL shapes and planner debug text for a
 // PR comment. Run with --help for the same usage information at the terminal.
+//
+// Scenario definitions load from this checkout by default, then run against
+// both targets. That is intentional for new scenarios that older commits do not
+// have, but it means this is not a pure branch-to-branch test of old scenario
+// files unless --scenario-source points somewhere else.
 
 type Format = 'json' | 'markdown';
 
@@ -61,6 +66,7 @@ type BenchmarkSuccess = {
   readonly status: 'ok';
   readonly scenarioName: string;
   readonly rowCount: number;
+  readonly rowDigest: string;
   readonly medianMs: number;
   readonly minMs: number;
   readonly maxMs: number;
@@ -201,7 +207,7 @@ for (let index = 0; index < leftScenarios.length; index++) {
     sameRows:
       leftRun.status === 'ok' &&
       rightRun.status === 'ok' &&
-      leftRun.rowCount === rightRun.rowCount,
+      leftRun.rowDigest === rightRun.rowDigest,
     msRatio:
       leftRun.status !== 'ok' ||
       rightRun.status !== 'ok' ||
@@ -512,6 +518,7 @@ function runScenario(
     const debug = makeCountingDebug(modules.Debug);
     const samples: number[] = [];
     let rowCount = 0;
+    let rowDigest = '';
     let planDebug = '';
 
     for (
@@ -538,9 +545,14 @@ function runScenario(
         planDebugger,
       );
       const sink = new modules.Catch(input);
-      rowCount = sink.fetch().filter(node => node !== 'yield').length;
+      const rows = sink
+        .fetch()
+        .filter(node => node !== 'yield')
+        .map(node => (node as {readonly row: unknown}).row);
       sink.destroy();
       const elapsed = performance.now() - start;
+      rowCount = rows.length;
+      rowDigest = stableStringify(rows);
       if (iteration >= options.warmups) {
         samples.push(elapsed);
       }
@@ -556,6 +568,7 @@ function runScenario(
       status: 'ok',
       scenarioName: scenario.name,
       rowCount,
+      rowDigest,
       medianMs: round(samples[Math.floor(samples.length / 2)]),
       minMs: round(samples[0]),
       maxMs: round(maxMs),
@@ -646,7 +659,7 @@ function formatMarkdown({
   ) {
     lines.push('');
     lines.push(
-      'Warning: at least one comparison returned a different row count. That can be expected when comparing two different queries, but it is a correctness red flag when comparing the same query across commits.',
+      'Warning: at least one comparison returned different rows. That can be expected when comparing two different queries, but it is a correctness red flag when comparing the same query across commits.',
     );
   }
   if (
@@ -741,6 +754,19 @@ function formatMs(value: number): string {
 
 function escapeMarkdown(value: string): string {
   return value.replaceAll('|', '\\|');
+}
+
+function stableStringify(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map(stableStringify).join(',')}]`;
+  }
+  if (value && typeof value === 'object') {
+    return `{${Object.entries(value)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, entry]) => `${JSON.stringify(key)}:${stableStringify(entry)}`)
+      .join(',')}}`;
+  }
+  return JSON.stringify(value) ?? 'undefined';
 }
 
 function printHelp(): void {

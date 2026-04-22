@@ -141,29 +141,13 @@ test('applies same-column AND exclusions', () => {
   ).toEqual(inCondition('status', 'NOT IN', ['active', 'pending']));
 });
 
-test('merges OR exists branches over the same relationship', () => {
-  expect(
-    normalizeWhere({
-      type: 'or',
-      conditions: [exists(eq('title', 'hello')), exists(eq('title', 'world'))],
-    }),
-  ).toEqual(
-    exists({
-      type: 'simple',
-      left: {type: 'column', name: 'title'},
-      op: 'IN',
-      right: {type: 'literal', value: ['hello', 'world']},
-    }),
-  );
-});
-
-test('merges OR exists branches after implicit ordering is completed', () => {
+test('merges permission OR exists branches over the same relationship', () => {
   expect(
     normalizeWhere({
       type: 'or',
       conditions: [
-        exists(eq('title', 'hello'), {subquery: {orderBy: [['id', 'asc']]}}),
-        exists(eq('title', 'world'), {subquery: {orderBy: [['id', 'asc']]}}),
+        exists(eq('title', 'hello'), {system: 'permissions'}),
+        exists(eq('title', 'world'), {system: 'permissions'}),
       ],
     }),
   ).toEqual(
@@ -174,21 +158,64 @@ test('merges OR exists branches after implicit ordering is completed', () => {
         op: 'IN',
         right: {type: 'literal', value: ['hello', 'world']},
       },
-      {subquery: {orderBy: [['id', 'asc']]}},
+      {system: 'permissions'},
     ),
   );
 });
 
-test('preserves unrestricted exists when merging narrower exists branches', () => {
+test('does not merge client OR exists branches because each branch can hydrate helpers', () => {
   expect(
     normalizeWhere({
       type: 'or',
-      conditions: [exists(undefined), exists(eq('title', 'hello'))],
+      conditions: [exists(eq('title', 'hello')), exists(eq('title', 'world'))],
     }),
-  ).toEqual(exists(undefined));
+  ).toEqual({
+    type: 'or',
+    conditions: [exists(eq('title', 'hello')), exists(eq('title', 'world'))],
+  });
 });
 
-test('factors common parent filters before merging child exists branches', () => {
+test('merges permission OR exists branches after implicit ordering is completed', () => {
+  expect(
+    normalizeWhere({
+      type: 'or',
+      conditions: [
+        exists(eq('title', 'hello'), {
+          system: 'permissions',
+          subquery: {orderBy: [['id', 'asc']]},
+        }),
+        exists(eq('title', 'world'), {
+          system: 'permissions',
+          subquery: {orderBy: [['id', 'asc']]},
+        }),
+      ],
+    }),
+  ).toEqual(
+    exists(
+      {
+        type: 'simple',
+        left: {type: 'column', name: 'title'},
+        op: 'IN',
+        right: {type: 'literal', value: ['hello', 'world']},
+      },
+      {system: 'permissions', subquery: {orderBy: [['id', 'asc']]}},
+    ),
+  );
+});
+
+test('preserves unrestricted permission exists when merging narrower exists branches', () => {
+  expect(
+    normalizeWhere({
+      type: 'or',
+      conditions: [
+        exists(undefined, {system: 'permissions'}),
+        exists(eq('title', 'hello'), {system: 'permissions'}),
+      ],
+    }),
+  ).toEqual(exists(undefined, {system: 'permissions'}));
+});
+
+test('factors common parent filters before merging permission child exists branches', () => {
   const active = eq('active', true);
 
   expect(
@@ -197,11 +224,17 @@ test('factors common parent filters before merging child exists branches', () =>
       conditions: [
         {
           type: 'and',
-          conditions: [active, exists(eq('title', 'hello'))],
+          conditions: [
+            active,
+            exists(eq('title', 'hello'), {system: 'permissions'}),
+          ],
         },
         {
           type: 'and',
-          conditions: [active, exists(eq('title', 'world'))],
+          conditions: [
+            active,
+            exists(eq('title', 'world'), {system: 'permissions'}),
+          ],
         },
       ],
     }),
@@ -209,12 +242,15 @@ test('factors common parent filters before merging child exists branches', () =>
     type: 'and',
     conditions: [
       active,
-      exists({
-        type: 'simple',
-        left: {type: 'column', name: 'title'},
-        op: 'IN',
-        right: {type: 'literal', value: ['hello', 'world']},
-      }),
+      exists(
+        {
+          type: 'simple',
+          left: {type: 'column', name: 'title'},
+          op: 'IN',
+          right: {type: 'literal', value: ['hello', 'world']},
+        },
+        {system: 'permissions'},
+      ),
     ],
   });
 });
@@ -299,6 +335,29 @@ test('does not absorb client exists helper evidence into a parent-only OR branch
       },
     ],
   });
+});
+
+test('does not collapse always true OR when another branch has client helper evidence', () => {
+  const helperExists = exists(eq('title', 'hello'));
+
+  expect(
+    normalizeWhere({
+      type: 'or',
+      conditions: [TRUE, helperExists],
+    }),
+  ).toEqual({
+    type: 'or',
+    conditions: [TRUE, helperExists],
+  });
+});
+
+test('collapses always true OR when the other helper evidence is permission-only', () => {
+  expect(
+    normalizeWhere({
+      type: 'or',
+      conditions: [TRUE, exists(eq('title', 'hello'), {system: 'permissions'})],
+    }),
+  ).toEqual(TRUE);
 });
 
 test('absorbs permission exists evidence because permission helpers are not synced', () => {

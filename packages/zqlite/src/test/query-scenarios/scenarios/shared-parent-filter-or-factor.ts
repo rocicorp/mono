@@ -78,18 +78,11 @@ export default {
             right: {type: 'literal', value: null},
           },
           {
-            type: 'correlatedSubquery',
-            flip: true,
-            related: {
-              subquery: {
-                where: {
-                  type: 'simple',
-                  op: 'IN',
-                  left: {type: 'column', name: 'student_id'},
-                  right: {type: 'literal', value: ['student-1', 'student-2']},
-                },
-              },
-            },
+            type: 'or',
+            conditions: [
+              {type: 'correlatedSubquery', flip: true},
+              {type: 'correlatedSubquery', flip: true},
+            ],
           },
         ],
       },
@@ -116,20 +109,28 @@ export default {
     //              |
     //              v
     //   archived_at IS null
-    //     AND EXISTS membership(student_id IN ['student-1', 'student-2'])
+    //     AND (
+    //       EXISTS membership(student_id = 'student-1')
+    //       OR EXISTS membership(student_id = 'student-2')
+    //     )
     //
-    //   assignment_to_student(student_id IN ['student-1', 'student-2'])
-    //     `-- fetch assignment by assignment_id
-    //         `-- keep it only if archived_at IS null
+    //   membership(student_id = 'student-1') --.
+    //                                           +-- union assignment ids
+    //   membership(student_id = 'student-2') --'
+    //                                           |
+    //                                           v
+    //                         fetch assignment(id, archived_at IS null)
     //
     // Intuition:
     //
-    //   The duplicate parent filter is factored once, and the two child
-    //   branches become one membership index scan.
+    //   The duplicate parent filter is factored once. The two client helper
+    //   branches stay separate so each branch can hydrate the same helper
+    //   evidence the submitted query asked for.
     sql: [
       {
         table: 'assignment_to_student',
-        sql: 'SELECT "assignment_id","student_id","created_at" FROM "assignment_to_student" WHERE "student_id" IN (SELECT value FROM json_each(?)) ORDER BY "assignment_id" asc, "student_id" asc',
+        sql: 'SELECT "assignment_id","student_id","created_at" FROM "assignment_to_student" WHERE "student_id" = ? ORDER BY "assignment_id" asc, "student_id" asc',
+        calls: 2,
       },
       {
         table: 'assignment',

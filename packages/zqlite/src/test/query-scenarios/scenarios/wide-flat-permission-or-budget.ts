@@ -20,7 +20,7 @@ const assignmentToStudentRelationship = relationshipName(
 );
 
 export default {
-  name: 'permission system same relationship OR merges into one flipped membership scan',
+  name: 'wide flat permission OR respects root union branch budget',
   schema: educationAppSchema,
   seed: db => {
     const tables = createEducationAppTables(db);
@@ -34,29 +34,22 @@ export default {
       assignmentStmt.run(i, 2, null, i);
     }
 
-    const membershipStmt = db.prepare(
+    db.prepare(
       `INSERT INTO ${tableName(assignmentToStudent)} (${colName(assignmentToStudent, 'assignment_id')}, ${colName(assignmentToStudent, 'student_id')}, ${colName(assignmentToStudent, 'created_at')}) VALUES (?, ?, ?)`,
-    );
-    membershipStmt.run(101, 'student-1', 101);
-    membershipStmt.run(102, 'student-1', 102);
-    membershipStmt.run(1_500, 'student-2', 1_500);
+    ).run(1_999, 'student-1', 1_999);
   },
   query: builder =>
     builder[assignment.name]
-      .where(({exists, or}) =>
+      .where(({cmp, exists, or}) =>
         or(
-          exists(assignmentToStudentRelationship, q =>
-            q.where(
+          ...Array.from({length: 33}, (_, index) =>
+            cmp(colName(assignment, 'id'), '=', index + 1),
+          ),
+          exists(assignmentToStudentRelationship, membership =>
+            membership.where(
               colName(assignmentToStudent, 'student_id'),
               '=',
               'student-1',
-            ),
-          ),
-          exists(assignmentToStudentRelationship, q =>
-            q.where(
-              colName(assignmentToStudent, 'student_id'),
-              '=',
-              'student-2',
             ),
           ),
         ),
@@ -65,51 +58,47 @@ export default {
       .orderBy(colName(assignment, 'id'), 'asc'),
   transformAST: markAllExistsAsPermissions,
   expectations: {
-    optimizedAST: {
-      where: {
-        type: 'correlatedSubquery',
-        flip: true,
-      },
-    },
     // Submitted ZQL:
     //
     //   assignment.where(
-    //     EXISTS permission_membership(student_id = 'student-1')
-    //     OR EXISTS permission_membership(student_id = 'student-2')
+    //     id = 1
+    //     OR id = 2
+    //     OR ...
+    //     OR id = 33
+    //     OR EXISTS permission_membership(student = currentStudent)
     //   )
     //
-    // Naive plan:
+    // Tempting plan:
     //
-    //   assignment
-    //     |-- probe permission membership for student-1
-    //     `-- probe permission membership for student-2
+    //   id branch 1 -------------------.
+    //   id branch 2 -------------------|
+    //   ...                            +-- 34 InputUnion branches
+    //   id branch 33 ------------------|
+    //   permission membership -> parent'
     //
-    // Optimized plan:
+    // Chosen plan:
     //
-    //   EXISTS permission_membership(student_id = 'student-1')
-    //      OR
-    //   EXISTS permission_membership(student_id = 'student-2')
-    //              |
-    //              v
-    //   EXISTS permission_membership(student_id IN ['student-1', 'student-2'])
-    //
-    //   assignment_to_student(student_id IN ['student-1', 'student-2'])
-    //     `-- fetch assignment by assignment_id
+    //   assignment(id IN [1..33])
+    //     |
+    //     `-- permission membership branch stays child-rooted
     //
     // Intuition:
     //
-    //   Permission helper rows are private evidence, so merging the two
-    //   branches cannot shrink the synced client row set. The optimizer can
-    //   use one child-domain scan instead of two.
+    //   Even when every branch is individually selective, a flat OR can create
+    //   a silly number of branch pipelines. The branch budget applies to the
+    //   final branch count, not just distributed DNF products.
     sql: [
       {
+        table: 'assignment',
+        sql: 'SELECT "id","teacher_id","archived_at","created_at" FROM "assignment" WHERE "id" IN (SELECT value FROM json_each(?)) ORDER BY "created_at" desc, "id" asc',
+      },
+      {
         table: 'assignment_to_student',
-        sql: 'SELECT "assignment_id","student_id","created_at" FROM "assignment_to_student" WHERE "student_id" IN (SELECT value FROM json_each(?)) ORDER BY "assignment_id" asc, "student_id" asc',
+        sql: 'SELECT "assignment_id","student_id","created_at" FROM "assignment_to_student" WHERE "student_id" = ? ORDER BY "assignment_id" asc, "student_id" asc',
       },
       {
         table: 'assignment',
         sql: 'SELECT "id","teacher_id","archived_at","created_at" FROM "assignment" WHERE "id" = ? ORDER BY "created_at" desc, "id" asc',
-        calls: 3,
       },
     ],
   },

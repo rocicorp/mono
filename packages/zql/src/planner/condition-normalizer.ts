@@ -126,7 +126,7 @@ function buildAnd(conditions: readonly Condition[]): Condition {
 
 function buildOr(conditions: readonly Condition[]): Condition {
   const flattened = flatten('or', conditions);
-  if (flattened.some(isAlwaysTrue)) {
+  if (orCanCollapseToTrue(flattened)) {
     return TRUE;
   }
 
@@ -147,7 +147,7 @@ function buildOr(conditions: readonly Condition[]): Condition {
   }
 
   const merged = mergeSameRelationshipExists(compacted);
-  if (merged.some(isAlwaysTrue)) {
+  if (orCanCollapseToTrue(merged)) {
     return TRUE;
   }
 
@@ -160,6 +160,30 @@ function buildOr(conditions: readonly Condition[]): Condition {
     default:
       return {type: 'or', conditions: surviving};
   }
+}
+
+function orCanCollapseToTrue(conditions: readonly Condition[]): boolean {
+  // A normal boolean optimizer can turn:
+  //
+  //   TRUE OR EXISTS(client_helper)
+  //
+  // into TRUE. Zero cannot always do that. Client whereExists branches also
+  // hydrate the helper rows that made the branch true:
+  //
+  //   parent row
+  //     `-- client helper row
+  //
+  // Returning the same parent rows but dropping that helper evidence would
+  // shrink the synced row set and make the CAP row-set signature lie. Permission
+  // helpers are private server evidence, so they are still safe to discard.
+  return (
+    conditions.some(isAlwaysTrue) &&
+    !conditions.some(
+      condition =>
+        !isAlwaysTrue(condition) &&
+        conditionContainsSyncedSubqueryEvidence(condition),
+    )
+  );
 }
 
 type InLiteralValue = string | number | boolean;
@@ -747,7 +771,11 @@ function mergeableExistsKey(condition: Condition): string | undefined {
   if (condition.type !== 'correlatedSubquery') {
     return undefined;
   }
-  if (condition.op !== 'EXISTS' || condition.scalar === true) {
+  if (
+    condition.op !== 'EXISTS' ||
+    condition.scalar === true ||
+    condition.related.system !== 'permissions'
+  ) {
     return undefined;
   }
 

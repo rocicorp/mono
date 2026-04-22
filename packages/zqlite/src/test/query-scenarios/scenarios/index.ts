@@ -30,6 +30,7 @@ import studentMembershipSimpleExists from './student-membership-simple-exists.ts
 import teacherFilterOrIn from './teacher-filter-or-in.ts';
 import teacherFilterWithMembership from './teacher-filter-with-membership.ts';
 import twoStudentMembershipOr from './two-student-membership-or.ts';
+import wideFlatPermissionOrBudget from './wide-flat-permission-or-budget.ts';
 import wideOrUnionScalabilityWatchpoint from './wide-or-union-scalability-watchpoint.ts';
 
 export default [
@@ -62,6 +63,7 @@ export default [
   nestedChildExistsSelectsChildRoot,
   nonUniqueChildIdBlocksIntersection,
   multipleOrGroupsBlockRootUnion,
+  wideFlatPermissionOrBudget,
   wideOrUnionScalabilityWatchpoint,
   notExistsAntiJoinUnsupported,
 ] satisfies readonly QueryScenario<typeof educationAppSchema>[];

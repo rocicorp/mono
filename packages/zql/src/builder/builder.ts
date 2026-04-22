@@ -321,6 +321,10 @@ function buildPipelineInternal(
   // pipeline below. These do not change the meaning of the WHERE clause. They
   // only choose a better place to start reading rows.
   //
+  // TODO: Move this selection into an explicit physical-planner layer. The
+  // builder should eventually lower a chosen RootUnionPlan or
+  // SiblingIntersectionPlan instead of discovering those alternatives here.
+  //
   // OR example:
   //
   //   Query:
@@ -624,6 +628,9 @@ function getRootUnionBranches(
   if (!branches || branches.length < 2) {
     return undefined;
   }
+  if (branches.length > MAX_ROOT_UNION_DNF_BRANCHES) {
+    return undefined;
+  }
 
   // At least one branch must already be planned to start from a related table.
   // Otherwise root union would just split a simple parent-table scan into
@@ -789,7 +796,7 @@ function isRootUnionCostSafe(
   costModel: ConnectionCostModel | undefined,
 ): boolean {
   if (!costModel) {
-    return true;
+    return false;
   }
 
   const rootCost = costModel(
@@ -1031,7 +1038,7 @@ function isSiblingIntersectionCostSafe(
   costModel: ConnectionCostModel | undefined,
 ): boolean {
   if (!costModel) {
-    return true;
+    return false;
   }
 
   const childScanScores = candidates.map(candidate =>
