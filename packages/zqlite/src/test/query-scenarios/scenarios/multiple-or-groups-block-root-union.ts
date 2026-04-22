@@ -146,4 +146,49 @@ export default {
       {id: 101, teacher_id: 1, archived_at: null, created_at: 101},
     ],
   },
+  // Safety note:
+  //
+  //   The DNF rewrite is tempting because it turns this:
+  //
+  //     (teacher OR membership) AND (pinned OR class)
+  //
+  //   into four small roots. But two of those roots are client system
+  //   WHERE EXISTS branches. Their membership and class rows are helper rows
+  //   the client must receive:
+  //
+  //     assignment row
+  //       |-- membership helper row
+  //       `-- class helper row
+  //
+  //   Until root union can merge that relationship evidence, the engine keeps
+  //   the slower parent rooted plan.
+  knownFailure: {
+    reason:
+      'Budgeted DNF root union is currently disabled for client system WHERE EXISTS branches because helper rows must remain part of the synced row set.',
+    current:
+      'The query falls back to the generic parent rooted OR plan and probes class membership for each assignment.',
+    desired:
+      'Expand the small DNF matrix into selective roots while preserving membership and class helper rows.',
+    currentSQL: [
+      {
+        table: 'assignment',
+        sql: 'SELECT "id","teacher_id","archived_at","created_at" FROM "assignment" WHERE TRUE ORDER BY "created_at" desc, "id" asc',
+      },
+      {
+        table: 'assignment_to_class',
+        sql: 'SELECT "assignment_id","class_id" FROM "assignment_to_class" WHERE "assignment_id" = ? AND "class_id" = ? ORDER BY "assignment_id" asc, "class_id" asc',
+        calls: 2001,
+      },
+      {
+        table: 'assignment_to_student',
+        sql: 'SELECT "assignment_id","student_id","created_at" FROM "assignment_to_student" WHERE "student_id" = ? ORDER BY "assignment_id" asc, "student_id" asc',
+      },
+      {
+        table: 'assignment',
+        sql: 'SELECT "id","teacher_id","archived_at","created_at" FROM "assignment" WHERE "id" = ? AND TRUE ORDER BY "created_at" desc, "id" asc',
+      },
+    ],
+    engineIdea:
+      'Treat DNF root union as a relationship aware union of evidence, not only as a union of parent ids.',
+  },
 } satisfies QueryScenario<typeof educationAppSchema>;

@@ -111,4 +111,39 @@ export default {
       },
     ],
   },
+  // Safety note:
+  //
+  //   Root union would be faster here, but this is a client system
+  //   WHERE EXISTS. The matching membership row is part of the synced row set:
+  //
+  //     assignment row 101
+  //       `-- membership helper row 101/student-1
+  //
+  //   A parent only union would return the right assignment ids while silently
+  //   dropping the helper row that the client and CAP row-set signature need.
+  knownFailure: {
+    reason:
+      'Root union is currently disabled for client system WHERE EXISTS branches because helper rows must remain attached to the synced query row set.',
+    current:
+      'The planner flips the EXISTS branch, but the builder falls back to a broad parent root plus membership probes.',
+    desired:
+      'Split the parent branch and membership branch into separate roots while preserving the membership helper rows.',
+    currentSQL: [
+      {
+        table: 'assignment',
+        sql: 'SELECT "id","teacher_id","archived_at","created_at" FROM "assignment" ORDER BY "created_at" desc, "id" asc',
+      },
+      {
+        table: 'assignment_to_student',
+        sql: 'SELECT "assignment_id","student_id","created_at" FROM "assignment_to_student" WHERE "student_id" = ? ORDER BY "assignment_id" asc, "student_id" asc',
+      },
+      {
+        table: 'assignment',
+        sql: 'SELECT "id","teacher_id","archived_at","created_at" FROM "assignment" WHERE "id" = ? ORDER BY "created_at" desc, "id" asc',
+        calls: 3,
+      },
+    ],
+    engineIdea:
+      'Represent root union as a relationship preserving physical plan, not just a parent row set union.',
+  },
 } satisfies QueryScenario<typeof educationAppSchema>;

@@ -128,4 +128,39 @@ export default {
       },
     ],
   },
+  // Safety note:
+  //
+  //   Removing the FALSE branch is safe. Splitting the remaining OR is not
+  //   safe yet because the membership EXISTS is client system evidence:
+  //
+  //     assignment row
+  //       `-- membership helper row
+  //
+  //   The helper row has to hydrate and has to be counted by the CAP row-set
+  //   signature.
+  knownFailure: {
+    reason:
+      'Root union is currently disabled for client system WHERE EXISTS branches because those helper rows are part of the synced row set and CAP row-set signature.',
+    current:
+      'The impossible OR branch is simplified and the membership branch flips, but the builder keeps the generic OR plan to preserve helper row hydration.',
+    desired:
+      'Ignore the false branch, split the remaining parent and membership roots, and still sync membership helper rows.',
+    currentSQL: [
+      {
+        table: 'assignment',
+        sql: 'SELECT "id","teacher_id","archived_at","created_at" FROM "assignment" WHERE "archived_at" IS ? ORDER BY "created_at" desc, "id" asc',
+      },
+      {
+        table: 'assignment_to_student',
+        sql: 'SELECT "assignment_id","student_id","created_at" FROM "assignment_to_student" WHERE "student_id" = ? ORDER BY "assignment_id" asc, "student_id" asc',
+      },
+      {
+        table: 'assignment',
+        sql: 'SELECT "id","teacher_id","archived_at","created_at" FROM "assignment" WHERE "id" = ? AND "archived_at" IS ? ORDER BY "created_at" desc, "id" asc',
+        calls: 3,
+      },
+    ],
+    engineIdea:
+      'Make root union relationship aware so branch splitting does not drop client system helper rows or their signature entries.',
+  },
 } satisfies QueryScenario<typeof educationAppSchema>;

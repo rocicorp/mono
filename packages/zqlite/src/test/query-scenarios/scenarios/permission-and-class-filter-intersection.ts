@@ -121,4 +121,42 @@ export default {
     ],
     rows: [{id: 102, teacher_id: 2, archived_at: null, created_at: 102}],
   },
+  // Safety note:
+  //
+  //   This scenario looks like a permission shape, but in this harness both
+  //   WHERE EXISTS branches are client system helpers. That means both child
+  //   rows are synced evidence, not just private server checks:
+  //
+  //     assignment 102
+  //       |-- teacher_access helper row
+  //       `-- assignment_to_class helper row
+  //
+  //   A pure id intersection would find assignment 102 correctly while losing
+  //   one of those helper rows.
+  knownFailure: {
+    reason:
+      'Sibling intersection is currently disabled for client system WHERE EXISTS branches because helper rows must remain part of the synced row set.',
+    current:
+      'The planner flips the class branch, then probes teacher access per candidate assignment to preserve helper hydration.',
+    desired:
+      'Intersect teacher access and class membership child scans while preserving both helper row streams.',
+    currentSQL: [
+      {
+        table: 'assignment_to_class',
+        sql: 'SELECT "assignment_id","class_id" FROM "assignment_to_class" WHERE "class_id" = ? ORDER BY "assignment_id" asc, "class_id" asc',
+      },
+      {
+        table: 'assignment',
+        sql: 'SELECT "id","teacher_id","archived_at","created_at" FROM "assignment" WHERE "id" = ? AND "archived_at" IS ? ORDER BY "created_at" desc, "id" asc',
+        calls: 3,
+      },
+      {
+        table: 'teacher_assignment_access',
+        sql: 'SELECT "assignment_id","teacher_id","access_kind" FROM "teacher_assignment_access" WHERE "assignment_id" = ? AND "teacher_id" = ? ORDER BY "assignment_id" asc, "teacher_id" asc',
+        calls: 3,
+      },
+    ],
+    engineIdea:
+      'Split server only permission checks from client helper relationships, or make intersection preserve all helper relationship evidence.',
+  },
 } satisfies QueryScenario<typeof educationAppSchema>;

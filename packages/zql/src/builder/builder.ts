@@ -582,11 +582,20 @@ function stripRootUnionBranchRelationships(
   name: string,
   index: number,
 ): Input {
-  // Root union is a set of parent rows, not a way to expose relationship
-  // payloads. A flipped EXISTS branch may temporarily attach its child rows so
-  // the branch can prove the EXISTS is true, but those rows are condition-only
-  // data. Strip them before the branch joins the union so every branch exposes
-  // the same plain parent-row schema.
+  // Root union is only allowed after getRootUnionBranches() proves every
+  // EXISTS relationship is a permission helper. Permission helpers are used
+  // only as server side proof and are not sent to the client.
+  //
+  //   permission branch proves EXISTS with helper rows
+  //                     |
+  //                     v
+  //             StripRelationships
+  //                     |
+  //                     v
+  //          plain parent rows enter root union
+  //
+  // Client system EXISTS helpers cannot take this path because those helper
+  // rows are part of the synced row set.
   if (Object.keys(input.getSchema().relationships).length === 0) {
     return input;
   }
@@ -626,6 +635,38 @@ function getRootUnionBranches(
   // There must also be at least one local parent branch. If every branch is a
   // child branch, the existing UnionFanOut and UnionFanIn path handles it.
   if (!branches.some(isNotAndDoesNotContainSubquery)) {
+    return undefined;
+  }
+
+  // Why this refuses client system WHERE EXISTS
+  //
+  // In Zero, a client WHERE EXISTS is not just a boolean question. The server
+  // also hydrates the helper rows that made the EXISTS true, because the client
+  // needs those rows to keep the query alive after the first sync.
+  //
+  //   Submitted query
+  //
+  //     issue
+  //       |-- closed = true
+  //       `-- OR EXISTS issue_label(label = 'bug')
+  //
+  //   What the client row set contains
+  //
+  //     issue rows        issue 1, issue 2
+  //     helper rows       issue_label 1, because it proved the EXISTS branch
+  //
+  //   Unsafe root union today
+  //
+  //     issue(closed = true) ---------------------.
+  //                                               +-- issue rows only
+  //     issue_label(label = 'bug') -> issue ------'
+  //       ^ this helper row would be dropped
+  //
+  // Dropping that helper row would make hydration smaller than the real query
+  // result and would also make the CAP row-set signature lie. Permission
+  // helpers are different: the streamer intentionally skips them, so stripping
+  // them does not change the client row set.
+  if (branches.some(conditionContainsSyncedSubqueryAtAnyLevel)) {
     return undefined;
   }
 
@@ -726,6 +767,18 @@ function conditionContainsOr(condition: Condition): boolean {
   }
   if (condition.type === 'and') {
     return condition.conditions.some(conditionContainsOr);
+  }
+  return false;
+}
+
+function conditionContainsSyncedSubqueryAtAnyLevel(
+  condition: Condition,
+): boolean {
+  if (condition.type === 'correlatedSubquery') {
+    return condition.related.system !== 'permissions';
+  }
+  if (condition.type === 'and' || condition.type === 'or') {
+    return condition.conditions.some(conditionContainsSyncedSubqueryAtAnyLevel);
   }
   return false;
 }
@@ -888,6 +941,31 @@ function getSiblingExistsIntersection(
   }
 
   if (candidates.length < 2) {
+    return undefined;
+  }
+
+  // Same safety rule as root union. A client system WHERE EXISTS contributes
+  // helper rows to the synced row set, not just a yes or no answer.
+  //
+  //   Submitted query
+  //
+  //     assignment
+  //       |-- EXISTS membership(student = 1)
+  //       `-- EXISTS class_link(class = 10)
+  //
+  //   Unsafe intersection today
+  //
+  //     membership(student = 1) --.
+  //                                +-- ids in both -> assignment rows only
+  //     class_link(class = 10) ----'
+  //
+  // The assignment ids would be right, but at least one helper branch would be
+  // missing from hydration and from the CAP row-set signature. Permission
+  // helper rows are not streamed, so permission checks can still use this
+  // shortcut.
+  if (
+    candidates.some(candidate => candidate.related.system !== 'permissions')
+  ) {
     return undefined;
   }
 

@@ -120,4 +120,39 @@ export default {
       },
     ],
   },
+  // Safety note:
+  //
+  //   The desired root union would return the same assignment ids, but a client
+  //   WHERE EXISTS also syncs the membership row that proved the match:
+  //
+  //     assignment 101
+  //       `-- assignment_to_student helper row
+  //
+  //   Returning only assignment rows would make hydration and the CAP row-set
+  //   signature too small.
+  knownFailure: {
+    reason:
+      'Root union is currently disabled for client system WHERE EXISTS branches because those helper rows are part of the synced row set and CAP row-set signature.',
+    current:
+      'The planner flips the membership branch, but the builder keeps the generic OR plan so helper membership rows still hydrate correctly.',
+    desired:
+      'Use a relationship preserving root union that splits the parent branch while still syncing membership helper rows.',
+    currentSQL: [
+      {
+        table: 'assignment',
+        sql: 'SELECT "id","teacher_id","archived_at","created_at" FROM "assignment" WHERE "archived_at" IS ? ORDER BY "created_at" desc, "id" asc',
+      },
+      {
+        table: 'assignment_to_student',
+        sql: 'SELECT "assignment_id","student_id","created_at" FROM "assignment_to_student" WHERE "student_id" = ? ORDER BY "assignment_id" asc, "student_id" asc',
+      },
+      {
+        table: 'assignment',
+        sql: 'SELECT "id","teacher_id","archived_at","created_at" FROM "assignment" WHERE "id" = ? AND "archived_at" IS ? ORDER BY "created_at" desc, "id" asc',
+        calls: 3,
+      },
+    ],
+    engineIdea:
+      'Teach root union to merge relationship payloads and to emit child row add and remove changes when a row is represented by a different OR branch.',
+  },
 } satisfies QueryScenario<typeof educationAppSchema>;

@@ -105,4 +105,40 @@ export default {
       {id: 4, teacher_id: 2, archived_at: null, created_at: 4},
     ],
   },
+  // Safety note:
+  //
+  //   The fast plan wants to union assignment ids from two roots:
+  //
+  //     assignment(local branch) -------------------.
+  //                                                 +-- assignment ids
+  //     teacher_access(teacher = currentTeacher) --'
+  //
+  //   That is unsafe for a client system WHERE EXISTS because the access row
+  //   is also synced as helper evidence. Returning only assignment ids would
+  //   make the client row set and CAP row-set signature too small.
+  knownFailure: {
+    reason:
+      'Root union is currently disabled for client system WHERE EXISTS branches because helper rows must remain attached to the synced query row set.',
+    current:
+      'The planner flips teacher access, but the builder keeps the generic OR plan so access helper rows still hydrate.',
+    desired:
+      'Split assignment and teacher access roots while preserving teacher access helper rows.',
+    currentSQL: [
+      {
+        table: 'assignment',
+        sql: 'SELECT "id","teacher_id","archived_at","created_at" FROM "assignment" ORDER BY "created_at" desc, "id" asc',
+      },
+      {
+        table: 'teacher_assignment_access',
+        sql: 'SELECT "assignment_id","teacher_id","access_kind" FROM "teacher_assignment_access" WHERE "teacher_id" = ? ORDER BY "assignment_id" asc, "teacher_id" asc',
+      },
+      {
+        table: 'assignment',
+        sql: 'SELECT "id","teacher_id","archived_at","created_at" FROM "assignment" WHERE "id" = ? ORDER BY "created_at" desc, "id" asc',
+        calls: 3,
+      },
+    ],
+    engineIdea:
+      'Teach root union to preserve relationship payloads and child row changes across branch handoffs.',
+  },
 } satisfies QueryScenario<typeof educationAppSchema>;

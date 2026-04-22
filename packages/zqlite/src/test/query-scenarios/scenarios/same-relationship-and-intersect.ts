@@ -100,4 +100,41 @@ export default {
     ],
     rows: [{id: 102, teacher_id: 2, archived_at: null, created_at: 102}],
   },
+  // Safety note:
+  //
+  //   Intersecting child ids is the right physical idea for permission checks:
+  //
+  //     membership(student = 1) --.
+  //                              +-- assignment ids in both
+  //     membership(student = 2) --'
+  //
+  //   For client system WHERE EXISTS, each membership branch can also produce
+  //   helper rows that must hydrate. An id only intersection would keep the
+  //   assignment row but lose at least one helper branch.
+  knownFailure: {
+    reason:
+      'Sibling intersection is currently disabled for client system WHERE EXISTS branches because helper rows must remain part of the synced row set.',
+    current:
+      'The planner flips one membership branch, then probes the second membership branch per assignment to preserve helper hydration.',
+    desired:
+      'Intersect membership child scans first while preserving every synced helper row from each EXISTS branch.',
+    currentSQL: [
+      {
+        table: 'assignment_to_student',
+        sql: 'SELECT "assignment_id","student_id","created_at" FROM "assignment_to_student" WHERE "student_id" = ? ORDER BY "assignment_id" asc, "student_id" asc',
+      },
+      {
+        table: 'assignment',
+        sql: 'SELECT "id","teacher_id","archived_at","created_at" FROM "assignment" WHERE "id" = ? AND TRUE ORDER BY "created_at" desc, "id" asc',
+        calls: 2,
+      },
+      {
+        table: 'assignment_to_student',
+        sql: 'SELECT "assignment_id","student_id","created_at" FROM "assignment_to_student" WHERE "assignment_id" = ? AND "student_id" = ? ORDER BY "assignment_id" asc, "student_id" asc',
+        calls: 3,
+      },
+    ],
+    engineIdea:
+      'Model intersection as an id set plus relationship evidence, so the engine can optimize ids without losing synced helper rows.',
+  },
 } satisfies QueryScenario<typeof educationAppSchema>;
