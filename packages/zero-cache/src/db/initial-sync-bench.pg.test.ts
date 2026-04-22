@@ -33,7 +33,7 @@ describe.skipIf(!UPSTREAM_DB)('initial-sync-bench', () => {
       const lc = createSilentLogContext();
 
       // Count rows in all user tables for the report.
-      const sql = pgClient(lc, upstreamURI);
+      const sql = pgClient(lc, upstreamURI, 'initial-sync-bench');
       const tables = await sql<{table: string; rows: bigint}[]>`
         SELECT schemaname || '.' || relname AS table,
                n_live_tup AS rows

@@ -1862,6 +1862,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         cvr,
         stateVersion,
         this.#pipelines.replicaVersion,
+        queryID => this.#pipelines.rowSetSignature(queryID),
       );
 
       // Note: This kicks off background PG queries for CVR data associated with the
@@ -2191,6 +2192,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         cvr,
         version,
         this.#pipelines.replicaVersion,
+        queryID => this.#pipelines.rowSetSignature(queryID),
       );
       // Only poke clients that are at the cvr.version. New clients that
       // are behind need to first be caught up when their initConnection

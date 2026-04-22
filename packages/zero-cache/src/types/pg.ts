@@ -319,12 +319,17 @@ export type PostgresTransaction = postgres.TransactionSql<{
 export function pgClient(
   lc: LogContext,
   connectionURI: string,
+  // A descriptive name for the code that is making the connection, so that we
+  // can debug things like deadlocks.
+  applicationName: string,
   options?: postgres.Options<{
     bigint: PostgresType<bigint>;
     json: PostgresType<JSONValue>;
   }>,
   opts?: TypeOptions,
 ): PostgresDB {
+  applicationName = `zero-${applicationName}`;
+
   const onnotice = (n: Notice) => {
     // https://www.postgresql.org/docs/current/plpgsql-errors-and-messages.html#PLPGSQL-STATEMENTS-RAISE
     switch (n.severity) {
@@ -360,6 +365,7 @@ export function pgClient(
 
   // Set connections to expire between 5 and 10 minutes to free up state on PG.
   const maxLifetimeSeconds = randInt(5 * 60, 10 * 60);
+  const providedConnection = options?.connection ?? {};
 
   return postgres(connectionURI, {
     ...postgresTypeConfig(opts),
@@ -367,6 +373,10 @@ export function pgClient(
     ['max_lifetime']: maxLifetimeSeconds,
     ssl,
     ...options,
+    connection: {
+      ...providedConnection,
+      ['application_name']: applicationName,
+    },
   });
 }
 
