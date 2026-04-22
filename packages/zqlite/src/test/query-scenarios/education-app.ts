@@ -259,6 +259,7 @@ export function createEducationAppTables(db: Database) {
       ${colName(teacher, 'role')} TEXT,
       ${colName(teacher, 'school_id')} INTEGER
     );
+    CREATE UNIQUE INDEX teacher_id_unique ON ${tableName(teacher)}(${colName(teacher, 'id')});
     CREATE INDEX teacher_user_id_idx ON ${tableName(teacher)}(${colName(teacher, 'user_id')});
 
     CREATE TABLE ${tableName(teacherAssignmentAccess)} (
@@ -275,6 +276,7 @@ export function createEducationAppTables(db: Database) {
       ${colName(classroom, 'status')} TEXT,
       ${colName(classroom, 'school_id')} INTEGER
     );
+    CREATE UNIQUE INDEX class_id_unique ON ${tableName(classroom)}(${colName(classroom, 'id')});
     CREATE INDEX class_status_idx ON ${tableName(classroom)}(${colName(classroom, 'status')});
 
     CREATE TABLE ${tableName(assignmentToClass)} (
@@ -295,6 +297,7 @@ export function createEducationAppTables(db: Database) {
       ${colName(studentGroup, 'id')} INTEGER PRIMARY KEY,
       ${colName(studentGroup, 'name')} TEXT
     );
+    CREATE UNIQUE INDEX student_group_id_unique ON ${tableName(studentGroup)}(${colName(studentGroup, 'id')});
 
     CREATE TABLE ${tableName(assignmentToGroup)} (
       ${colName(assignmentToGroup, 'assignment_id')} INTEGER,

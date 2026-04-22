@@ -26,7 +26,7 @@ const classRelationship = relationshipName(
 );
 
 export default {
-  name: 'nested child exists blocks sibling intersection',
+  name: 'nested child exists selects child root',
   schema: educationAppSchema,
   seed: db => {
     const tables = createEducationAppTables(db);
@@ -83,38 +83,55 @@ export default {
     //       EXISTS class(status = visible)
     //     )
     //
-    // Current behavior:
+    // Naive plan:
     //
-    //   planner cost modeling reaches the nested child EXISTS and fails before
-    //   the scenario can produce SQL.
+    //   assignment
+    //     |
+    //     +-> probe teacher_access(teacher_id = currentTeacher)
+    //     |
+    //     `-> probe assignment_to_class
+    //           |
+    //           `-> probe class(status = visible)
     //
-    // Desired plan:
+    // Optimized plan:
     //
-    //   teacher_access(teacher_id = currentTeacher) --------------.
-    //                                                            +-- intersect assignment_id
-    //   class(status = visible) -> assignment_to_class -----------'
+    //   class(status = visible)
+    //     |
+    //     v
+    //   assignment_to_class(class_id)
+    //     |
+    //     v
+    //   assignment(id)
+    //     |
+    //     `-> probe teacher_access(teacher_id = currentTeacher)
     //
     // Intuition:
     //
-    //   The current intersection helper only accepts plain child filters. A
-    //   future planner could flatten this simple nested EXISTS into another
-    //   child-driven key producer instead of rejecting the whole intersection.
+    //   This nested EXISTS is supported. The planner follows the visible class
+    //   branch first because it produces a tiny set of assignment ids, then it
+    //   checks teacher access only for those candidates. This is not the sibling
+    //   intersection helper. It is the general flip planner choosing the nested
+    //   child path as the cheapest root.
     sql: [
       {
+        table: 'class',
+        sql: 'SELECT "id","status","school_id" FROM "class" WHERE "status" = ? ORDER BY "id" asc',
+      },
+      {
+        table: 'assignment_to_class',
+        sql: 'SELECT "assignment_id","class_id" FROM "assignment_to_class" WHERE "class_id" = ? ORDER BY "assignment_id" asc, "class_id" asc',
+      },
+      {
+        table: 'assignment',
+        sql: 'SELECT "id","teacher_id","archived_at","created_at" FROM "assignment" WHERE "id" = ? AND TRUE ORDER BY "created_at" desc, "id" asc',
+        calls: 2,
+      },
+      {
         table: 'teacher_assignment_access',
-        sql: 'desired: teacher_access ids intersect visible-class assignment ids',
+        sql: 'SELECT "assignment_id","teacher_id","access_kind" FROM "teacher_assignment_access" WHERE "assignment_id" = ? AND "teacher_id" = ? ORDER BY "assignment_id" asc, "teacher_id" asc',
+        calls: 3,
       },
     ],
-  },
-  knownFailure: {
-    reason:
-      'Nested EXISTS inside a child branch is outside the current scenario planner path.',
-    current:
-      'The scenario currently fails before SQL generation while the cost model plans the nested child relationship.',
-    desired:
-      'Flatten the nested class EXISTS into a child-driven key producer and intersect assignment ids.',
-    currentError: 'Unexpected undefined value',
-    engineIdea:
-      'Represent nested relationship filters as composable key producers before lowering to IVM joins.',
+    rows: [{id: 102, teacher_id: 2, archived_at: null, created_at: 102}],
   },
 } satisfies QueryScenario<typeof educationAppSchema>;

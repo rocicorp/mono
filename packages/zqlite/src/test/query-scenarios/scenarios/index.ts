@@ -8,7 +8,7 @@ import explicitFlipTrue from './explicit-flip-true.ts';
 import impossibleExistsOrParentFilter from './impossible-exists-or-parent-filter.ts';
 import mixedOrWithFalseAndMembership from './mixed-or-with-false-and-membership.ts';
 import multipleOrGroupsBlockRootUnion from './multiple-or-groups-block-root-union.ts';
-import nestedChildExistsBlocksIntersection from './nested-child-exists-blocks-intersection.ts';
+import nestedChildExistsSelectsChildRoot from './nested-child-exists-selects-child-root.ts';
 import nonUniqueChildIdBlocksIntersection from './non-unique-child-id-blocks-intersection.ts';
 import notExistsAntiJoinUnsupported from './not-exists-anti-join-unsupported.ts';
 import orWithFalseBranch from './or-with-false-branch.ts';
@@ -55,7 +55,7 @@ export default [
   studentAssignmentDirectClassGroupUnion,
   rootOrLimitBlocksUnion,
   rootOrRelatedBlocksUnion,
-  nestedChildExistsBlocksIntersection,
+  nestedChildExistsSelectsChildRoot,
   nonUniqueChildIdBlocksIntersection,
   multipleOrGroupsBlockRootUnion,
   wideOrUnionScalabilityWatchpoint,
