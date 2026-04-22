@@ -29,7 +29,7 @@ async function buildPackages() {
     platform: 'browser',
     define: {
       ...define,
-      ['TESTING']: 'false',
+      'import.meta.env': 'undefined',
     },
     format: 'esm',
     entryPoints: [basePath('src', 'index.ts')],

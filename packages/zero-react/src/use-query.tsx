@@ -1,5 +1,6 @@
 import {resolver} from '@rocicorp/resolver';
 import React, {useSyncExternalStore} from 'react';
+import {TESTING} from '../../shared/src/testing.ts';
 import {
   type Immutable,
   addContextToQuery,
@@ -344,8 +345,6 @@ function makeError(retry: () => void, error: ErroredQuery): QueryErrorDetails {
     },
   };
 }
-
-declare const TESTING: boolean;
 
 // oxlint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyViewWrapper = ViewWrapper<any, any, any, any, any>;
