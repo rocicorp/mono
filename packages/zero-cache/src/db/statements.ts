@@ -67,4 +67,12 @@ export class StatementRunner {
   rollback(): RunResult {
     return this.run('ROLLBACK');
   }
+
+  rollbackIfInTransaction(): boolean {
+    if (!this.db.inTransaction) {
+      return false;
+    }
+    this.rollback();
+    return true;
+  }
 }

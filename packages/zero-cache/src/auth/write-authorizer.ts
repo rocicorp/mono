@@ -215,7 +215,7 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
         }
       }
     } finally {
-      this.#statementRunner.rollback();
+      this.#statementRunner.rollbackIfInTransaction();
     }
 
     return true;

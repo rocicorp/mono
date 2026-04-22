@@ -45,6 +45,10 @@ export type CreateSQLiteDatabase = (
   opts?: SQLiteStoreOptions,
 ) => SQLiteDatabase;
 
+const CANNOT_ROLLBACK_REGEX = /cannot rollback/i;
+const NO_ACTIVE_TRANSACTION_REGEX =
+  /no transaction(?: is)? active|in progress/i;
+
 /**
  * SQLite-based implementation of the Store interface using a configurable delegate.
  * Supports shared connections between multiple store instances with the same name,
@@ -275,17 +279,34 @@ export class SQLiteWrite implements Write {
     if (!this.#closed) {
       this.#closed = true;
 
+      let rollbackError: unknown;
       if (!this.#committed) {
-        this.#dbDelegate.execSync('ROLLBACK');
+        try {
+          this.#dbDelegate.execSync('ROLLBACK');
+        } catch (e) {
+          if (!isNoActiveTransactionRollbackError(e)) {
+            rollbackError = e;
+          }
+        }
       }
 
       this.#release();
+      if (rollbackError !== undefined) {
+        throw rollbackError;
+      }
     }
   }
 
   get closed(): boolean {
     return this.#closed;
   }
+}
+
+function isNoActiveTransactionRollbackError(err: unknown): boolean {
+  const msg = String(err);
+  return (
+    CANNOT_ROLLBACK_REGEX.test(msg) && NO_ACTIVE_TRANSACTION_REGEX.test(msg)
+  );
 }
 
 type StoreEntry = {

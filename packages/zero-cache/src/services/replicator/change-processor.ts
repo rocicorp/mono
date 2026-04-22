@@ -910,7 +910,7 @@ class TransactionProcessor {
 
   abort(lc: LogContext) {
     lc.info?.(`aborting transaction ${this.#version}`);
-    this.#db.rollback();
+    this.#db.rollbackIfInTransaction();
   }
 }
 
