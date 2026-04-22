@@ -20,6 +20,7 @@ import {
   type CVRSnapshot,
   CVRUpdater,
 } from './cvr.ts';
+import {formatSignature} from './row-set-signature.ts';
 import {
   type ClientsRow,
   compareClientsRows,
@@ -5158,6 +5159,90 @@ describe('view-syncer/cvr', () => {
           },
         ],
       }),
+    );
+  });
+
+  test('flush persists rowSetSignature from signatureProvider', async () => {
+    const initialState: DBState = {
+      instances: [
+        {
+          clientGroupID: 'abc123',
+          version: '1aa',
+          replicaVersion: '120',
+          lastActive: Date.UTC(2024, 3, 23),
+          ttlClock: ttlClockFromNumber(Date.UTC(2024, 3, 23)),
+          clientSchema: null,
+        },
+      ],
+      clients: [{clientGroupID: 'abc123', clientID: 'fooClient'}],
+      queries: [
+        {
+          clientGroupID: 'abc123',
+          queryHash: 'oneHash',
+          clientAST: {table: 'issues'},
+          queryArgs: null,
+          queryName: null,
+          transformationHash: 'serverOneHash',
+          transformationVersion: '1aa',
+          patchVersion: '1aa:01',
+          internal: null,
+          deleted: null,
+        },
+      ],
+      desires: [
+        {
+          clientGroupID: 'abc123',
+          clientID: 'fooClient',
+          queryHash: 'oneHash',
+          patchVersion: '1a9:01',
+          deleted: null,
+          inactivatedAt: null,
+          ttl: DEFAULT_TTL_MS,
+        },
+      ],
+      rows: [],
+    };
+
+    await setInitialState(cvrDb, initialState);
+    const cvrStore = new CVRStore(
+      lc,
+      cvrDb,
+      SHARD,
+      'my-task',
+      'abc123',
+      ON_FAILURE,
+    );
+    const cvr = await cvrStore.load(lc, LAST_CONNECT);
+    const providedSig = 0xdeadbeefn;
+    const updater = new CVRQueryDrivenUpdater(
+      cvrStore,
+      cvr,
+      '1ba',
+      '120',
+      queryID => (queryID === 'oneHash' ? providedSig : undefined),
+    );
+    const {cvr: updated} = await updater.flush(
+      lc,
+      LAST_CONNECT,
+      Date.UTC(2024, 3, 23, 1),
+      ttlClockFromNumber(Date.UTC(2024, 3, 23, 1)),
+    );
+    expect(updated.queries.oneHash.rowSetSignature).toEqual(
+      formatSignature(providedSig),
+    );
+
+    // Reload and verify round trip.
+    const reloadStore = new CVRStore(
+      lc,
+      cvrDb,
+      SHARD,
+      'my-task',
+      'abc123',
+      ON_FAILURE,
+    );
+    const reloaded = await reloadStore.load(lc, LAST_CONNECT);
+    expect(reloaded.queries.oneHash.rowSetSignature).toEqual(
+      formatSignature(providedSig),
     );
   });
 

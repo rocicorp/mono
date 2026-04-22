@@ -1048,7 +1048,6 @@ class ChangeMaker {
         }
 
       case 'commit':
-        this.#lastReplicationEventInTx = undefined;
         return [
           [
             'commit',
@@ -1071,7 +1070,7 @@ class ChangeMaker {
     }
   }
 
-  #lastReplicationEventInTx: ReplicationEvent | undefined;
+  #lastReplicationEvent: ReplicationEvent | undefined;
 
   #handleDdlMessage(lc: LogContext, msg: MessageMessage): ChangeStreamData[] {
     const event = parseLogicalMessageContent(msg, replicationEventSchema);
@@ -1083,7 +1082,7 @@ class ChangeMaker {
     // is about to happen, so as to avoid interfering / redundant work.
     clearTimeout(this.#replicaIdentityTimer);
 
-    let prevEvent = this.#lastReplicationEventInTx;
+    let prevEvent = this.#lastReplicationEvent;
     const {type} = event;
     switch (type) {
       case 'ddlStart':
@@ -1099,7 +1098,7 @@ class ChangeMaker {
     }
 
     // Store the new event to diff against the next event.
-    this.#lastReplicationEventInTx = event;
+    this.#lastReplicationEvent = event;
     if (!prevEvent) {
       lc.info?.(`received ${msg.prefix}/${type} event`, event);
       return []; // First snapshot in the tx.
