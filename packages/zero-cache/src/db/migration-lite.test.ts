@@ -283,7 +283,14 @@ describe('db/migration-lite', () => {
         },
       },
       verify: err => {
-        expect(String(err)).toContain('auto rollback');
+        expect(err).toBeInstanceOf(AggregateError);
+        expect((err as AggregateError).errors).toHaveLength(2);
+        expect(String((err as AggregateError).errors[0])).toContain(
+          'auto rollback',
+        );
+        expect(String((err as AggregateError).errors[1])).toContain(
+          'cannot rollback - no transaction is active',
+        );
       },
     },
     {
@@ -362,8 +369,5 @@ describe('db/migration-lite', () => {
 
     expect(err).toBeDefined();
     c.verify(err);
-    expect(String(err)).not.toContain(
-      'cannot rollback - no transaction is active',
-    );
   });
 });

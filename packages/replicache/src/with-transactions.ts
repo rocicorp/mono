@@ -49,9 +49,38 @@ export async function using<TX extends Release, Return>(
   fn: (tx: TX) => Return | Promise<Return>,
 ): Promise<Return> {
   const write = await x;
+  let result: Return | undefined;
+  let operationError: unknown;
   try {
-    return await fn(write);
-  } finally {
-    write.release();
+    result = await fn(write);
+  } catch (e) {
+    operationError = e;
   }
+
+  try {
+    write.release();
+  } catch (releaseError) {
+    if (operationError !== undefined) {
+      throw combinedReleaseError(operationError, releaseError);
+    }
+    throw releaseError;
+  }
+
+  if (operationError !== undefined) {
+    throw operationError;
+  }
+  return result as Return;
+}
+
+function combinedReleaseError(
+  operationError: unknown,
+  releaseError: unknown,
+): AggregateError {
+  return new AggregateError(
+    [operationError, releaseError],
+    `Transaction operation failed and release also failed: operation error = ${String(
+      operationError,
+    )}; release error = ${String(releaseError)}`,
+    {cause: operationError},
+  );
 }

@@ -1,4 +1,5 @@
 import {afterEach, describe, expect, test} from 'vitest';
+import {withWriteNoImplicitCommit} from '../with-transactions.ts';
 import type {PreparedStatement, SQLiteDatabase} from './sqlite-store.ts';
 import {SQLiteStore, clearAllNamedStoresForTesting} from './sqlite-store.ts';
 
@@ -96,27 +97,33 @@ describe('kv/sqlite-store', () => {
     clearAllNamedStoresForTesting();
   });
 
-  test('release preserves original error when transaction already auto-aborted', async () => {
+  test('withWriteNoImplicitCommit reports both operation and release errors', async () => {
     const db = new FakeSQLiteDatabase(
       true,
       'cannot rollback - no transaction is active',
     );
     const store = new SQLiteStore('auto-aborted', () => db);
 
-    const write = await store.write();
-    const err = await write.put('key', 'value').then(
+    const err = await withWriteNoImplicitCommit(store, async write => {
+      await write.put('key', 'value');
+    }).then(
       () => undefined,
       e => e,
     );
 
-    expect(String(err)).toContain('original put failure');
-    expect(() => write.release()).not.toThrow();
-    expect(write.closed).toBe(true);
+    expect(err).toBeInstanceOf(AggregateError);
+    expect((err as AggregateError).errors).toHaveLength(2);
+    expect(String((err as AggregateError).errors[0])).toContain(
+      'original put failure',
+    );
+    expect(String((err as AggregateError).errors[1])).toContain(
+      'cannot rollback - no transaction is active',
+    );
 
     await store.close();
   });
 
-  test('release still throws unexpected rollback errors', async () => {
+  test('release throws rollback errors when there is no operation error', async () => {
     const db = new FakeSQLiteDatabase(
       false,
       'cannot rollback - no transaction is active',
@@ -124,10 +131,13 @@ describe('kv/sqlite-store', () => {
     );
     const store = new SQLiteStore('rollback-failure', () => db);
 
-    const write = await store.write();
-    await write.put('key', 'value');
-
-    expect(() => write.release()).toThrow('unexpected rollback failure');
+    const err = await withWriteNoImplicitCommit(store, async write => {
+      await write.put('key', 'value');
+    }).then(
+      () => undefined,
+      e => e,
+    );
+    expect(String(err)).toContain('unexpected rollback failure');
     await store.close();
   });
 });

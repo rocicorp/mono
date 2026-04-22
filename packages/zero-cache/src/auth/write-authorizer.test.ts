@@ -576,9 +576,12 @@ describe('primary key validation', () => {
         e => e,
       );
 
-    expect(err).toBeDefined();
-    expect(String(err)).toContain('auto rollback write authorizer');
-    expect(String(err)).not.toContain(
+    expect(err).toBeInstanceOf(AggregateError);
+    expect((err as AggregateError).errors).toHaveLength(2);
+    expect(String((err as AggregateError).errors[0])).toContain(
+      'auto rollback write authorizer',
+    );
+    expect(String((err as AggregateError).errors[1])).toContain(
       'cannot rollback - no transaction is active',
     );
   });

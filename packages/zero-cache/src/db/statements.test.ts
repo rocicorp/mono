@@ -47,14 +47,9 @@ describe('db/statements', () => {
     expectTables(db.db, {foo: [{id: 987}]});
   });
 
-  test('rollbackIfInTransaction', () => {
-    expect(db.rollbackIfInTransaction()).toBe(false);
-
-    db.begin();
-    db.run('INSERT INTO foo(id) VALUES(?)', 999);
-    expect(db.rollbackIfInTransaction()).toBe(true);
-    expectTables(db.db, {foo: []});
-
-    expect(db.rollbackIfInTransaction()).toBe(false);
+  test('rollback throws if no transaction is active', () => {
+    expect(() => db.rollback()).toThrow(
+      'cannot rollback - no transaction is active',
+    );
   });
 });

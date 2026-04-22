@@ -165,6 +165,7 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
     ops: Exclude<CRUDOp, UpsertOp>[],
   ) {
     this.#statementRunner.beginConcurrent();
+    let opError: unknown;
     try {
       for (const op of ops) {
         const source = this.#getSource(op.tableName);
@@ -214,8 +215,22 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
             break;
         }
       }
+    } catch (e) {
+      opError = e;
+      throw e;
     } finally {
-      this.#statementRunner.rollbackIfInTransaction();
+      try {
+        this.#statementRunner.rollback();
+      } catch (rollbackError) {
+        if (opError !== undefined) {
+          throw combinedRollbackError(
+            'canPostMutation failed and rollback also failed',
+            opError,
+            rollbackError,
+          );
+        }
+        throw rollbackError;
+      }
     }
 
     return true;
@@ -589,3 +604,15 @@ type ActionOpMap = {
   update: UpdateOp;
   delete: DeleteOp;
 };
+
+function combinedRollbackError(
+  context: string,
+  operationError: unknown,
+  rollbackError: unknown,
+): AggregateError {
+  return new AggregateError(
+    [operationError, rollbackError],
+    `${context}: operation error = ${String(operationError)}; rollback error = ${String(rollbackError)}`,
+    {cause: operationError},
+  );
+}

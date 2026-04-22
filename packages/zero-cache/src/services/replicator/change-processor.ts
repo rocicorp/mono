@@ -114,11 +114,20 @@ export class ChangeProcessor {
 
   #fail(lc: LogContext, err: unknown) {
     if (!this.#failure) {
-      this.#currentTx?.abort(lc); // roll back any pending transaction.
+      let failureError = err;
+      try {
+        this.#currentTx?.abort(lc); // roll back any pending transaction.
+      } catch (rollbackError) {
+        failureError = combinedRollbackError(
+          'Message processing failed and rollback also failed',
+          err,
+          rollbackError,
+        );
+      }
 
-      this.#failure = ensureError(err);
+      this.#failure = ensureError(failureError);
 
-      if (!(err instanceof AbortError)) {
+      if (!(this.#failure instanceof AbortError)) {
         // Propagate the failure up to the service.
         lc.error?.('Message Processing failed:', this.#failure);
         this.#failService(lc, this.#failure);
@@ -910,7 +919,7 @@ class TransactionProcessor {
 
   abort(lc: LogContext) {
     lc.info?.(`aborting transaction ${this.#version}`);
-    this.#db.rollbackIfInTransaction();
+    this.#db.rollback();
   }
 }
 
@@ -931,4 +940,16 @@ function ensureError(err: unknown): Error {
   const error = new Error();
   error.cause = err;
   return error;
+}
+
+function combinedRollbackError(
+  context: string,
+  operationError: unknown,
+  rollbackError: unknown,
+): AggregateError {
+  return new AggregateError(
+    [operationError, rollbackError],
+    `${context}: operation error = ${String(operationError)}; rollback error = ${String(rollbackError)}`,
+    {cause: operationError},
+  );
 }

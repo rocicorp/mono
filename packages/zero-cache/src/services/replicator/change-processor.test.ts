@@ -3792,8 +3792,12 @@ describe('replicator/change-processor-errors', () => {
     ]);
 
     expect(failures).toHaveLength(1);
-    expect(String(failures[0])).toContain('auto rollback change processor');
-    expect(String(failures[0])).not.toContain(
+    expect(failures[0]).toBeInstanceOf(AggregateError);
+    expect((failures[0] as AggregateError).errors).toHaveLength(2);
+    expect(String((failures[0] as AggregateError).errors[0])).toContain(
+      'auto rollback change processor',
+    );
+    expect(String((failures[0] as AggregateError).errors[1])).toContain(
       'cannot rollback - no transaction is active',
     );
     expect(replica.inTransaction).toBe(false);
