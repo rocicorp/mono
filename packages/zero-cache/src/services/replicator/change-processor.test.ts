@@ -3759,6 +3759,49 @@ describe('replicator/change-processor-errors', () => {
     processor.abort(lc);
     expect(replica.inTransaction).toBe(false);
   });
+
+  test('preserves original sqlite auto-rollback error', () => {
+    const failures: unknown[] = [];
+    const processor = createChangeProcessor(replica, (_, err) =>
+      failures.push(err),
+    );
+    const messages = new ReplicationMessages({auto_rollback: 'id'});
+
+    replica.exec(/*sql*/ `
+      CREATE TABLE auto_rollback(
+        id INTEGER,
+        _0_version TEXT,
+        PRIMARY KEY(id)
+      );
+
+      CREATE TRIGGER "AutoRollbackChangeProcessor"
+      BEFORE INSERT ON auto_rollback
+      BEGIN
+        SELECT RAISE(ROLLBACK, 'auto rollback change processor');
+      END;
+    `);
+
+    processor.processMessage(lc, [
+      'begin',
+      messages.begin(),
+      {commitWatermark: '0e'},
+    ]);
+    processor.processMessage(lc, [
+      'data',
+      messages.insert('auto_rollback', {id: 123}),
+    ]);
+
+    expect(failures).toHaveLength(1);
+    expect(failures[0]).toBeInstanceOf(Error);
+    expect(String(failures[0])).toContain('auto rollback change processor');
+    expect(String(failures[0])).toContain(
+      'cannot rollback - no transaction is active',
+    );
+    expect(String((failures[0] as Error).cause)).toContain(
+      'auto rollback change processor',
+    );
+    expect(replica.inTransaction).toBe(false);
+  });
 });
 
 describe('replicator/column-metadata-integration', () => {
