@@ -32,9 +32,8 @@ export default async function runWorker(
 
   const {cvr} = config;
   const shard = getShardID(config);
-  const cvrDB = pgClient(lc, cvr.db, {
+  const cvrDB = pgClient(lc, cvr.db, `sync-cvr-purger`, {
     max: 1,
-    connection: {['application_name']: `zero-sync-cvr-purger`},
   });
   await initViewSyncerSchema(lc, cvrDB, shard);
   parent.send(['ready', {ready: true}]);

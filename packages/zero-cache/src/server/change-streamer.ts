@@ -15,10 +15,7 @@ import {initializeStreamer} from '../services/change-streamer/change-streamer-se
 import type {ChangeStreamerService} from '../services/change-streamer/change-streamer.ts';
 import {ReplicaMonitor} from '../services/change-streamer/replica-monitor.ts';
 import {initChangeStreamerSchema} from '../services/change-streamer/schema/init.ts';
-import {
-  AutoResetSignal,
-  CHANGE_STREAMER_APP_NAME,
-} from '../services/change-streamer/schema/tables.ts';
+import {AutoResetSignal} from '../services/change-streamer/schema/tables.ts';
 import {PurgeLocker} from '../services/change-streamer/storer.ts';
 import {exitAfter, runUntilKilled} from '../services/life-cycle.ts';
 import {
@@ -75,9 +72,9 @@ export default async function runWorker(
   const changeDB = pgClient(
     lc,
     change.db,
+    'change-streamer',
     {
       max: change.maxConns,
-      connection: {['application_name']: CHANGE_STREAMER_APP_NAME},
     },
     {sendStringAsJson: true},
   );

@@ -301,6 +301,7 @@ async function runHash(hash: string) {
   const cvrDB = pgClient(
     lc,
     must(config.cvr.db, 'CVR DB must be provided when using the hash option'),
+    'analyze-query-hash-cvr',
   );
 
   const rows = await cvrDB`select "clientAST", "internal" from ${cvrDB(
