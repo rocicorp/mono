@@ -137,7 +137,7 @@ export async function initializePostgresChangeSource(
 
   // Check that upstream is properly setup, and throw an AutoReset to re-run
   // initial sync if not.
-  const db = pgClient(lc, upstreamURI);
+  const db = pgClient(lc, upstreamURI, 'change-source-init');
   try {
     const upstreamReplica = await checkAndUpdateUpstream(
       lc,
@@ -271,11 +271,10 @@ class PostgresChangeSource implements ChangeSource {
     textCopy?: boolean | undefined,
   ) {
     this.#lc = lc.withContext('component', 'change-source');
-    this.#db = pgClient(lc, upstreamUri, {
+    this.#db = pgClient(lc, upstreamUri, 'replication-monitor', {
       max: 1,
       // used occasionally for schema changes, periodically for lag reporting
       ['idle_timeout']: 60,
-      connection: {['application_name']: 'zero-replication-monitor'},
     });
     this.#upstreamUri = upstreamUri;
     this.#shard = shard;

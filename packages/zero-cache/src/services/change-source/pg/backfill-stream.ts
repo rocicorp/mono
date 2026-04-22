@@ -88,8 +88,7 @@ export async function* streamBackfill(
 
   const {flushThresholdBytes = POSTGRES_COPY_CHUNK_SIZE, textCopy = false} =
     opts;
-  const db = pgClient(lc, upstreamURI, {
-    connection: {['application_name']: 'backfill-stream'},
+  const db = pgClient(lc, upstreamURI, 'backfill-stream', {
     ['max_lifetime']: 120 * 60, // set a long (2h) limit for COPY streaming
   });
   let tx: TransactionPool | undefined;
@@ -291,10 +290,15 @@ async function createSnapshotTransaction(
   db: PostgresDB,
   slotNamePrefix: string,
 ) {
-  const replicationSession = pgClient(lc, upstreamURI, {
-    ['fetch_types']: false, // Necessary for the streaming protocol
-    connection: {replication: 'database'}, // https://www.postgresql.org/docs/current/protocol-replication.html
-  });
+  const replicationSession = pgClient(
+    lc,
+    upstreamURI,
+    'backfill-replication-session',
+    {
+      ['fetch_types']: false, // Necessary for the streaming protocol
+      connection: {replication: 'database'}, // https://www.postgresql.org/docs/current/protocol-replication.html
+    },
+  );
   const tempSlot = `${slotNamePrefix}_bf_${Date.now()}`;
   try {
     const {snapshot_name: snapshot, consistent_point: lsn} =

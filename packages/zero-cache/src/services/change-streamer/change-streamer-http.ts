@@ -214,10 +214,9 @@ export class ChangeStreamerHttpClient implements ChangeStreamer {
     this.#shardID = shardID;
     // Create a pg client with a single short-lived connection for the purpose
     // of change-streamer discovery (i.e. ChangeDB as DNS).
-    this.#changeDB = pgClient(lc, changeDB, {
+    this.#changeDB = pgClient(lc, changeDB, 'change-streamer-discovery', {
       max: 1,
       ['idle_timeout']: 15,
-      connection: {['application_name']: 'change-streamer-discovery'},
     });
     this.#changeStreamerURI = changeStreamerURI;
   }
