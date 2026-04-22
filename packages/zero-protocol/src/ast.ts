@@ -7,7 +7,6 @@
  */
 
 import {compareUTF8} from 'compare-utf8';
-import {defined} from '../../shared/src/arrays.ts';
 import {assert} from '../../shared/src/asserts.ts';
 import {must} from '../../shared/src/must.ts';
 import * as v from '../../shared/src/valita.ts';
@@ -435,8 +434,8 @@ const NORMALIZE_TRANSFORM: ASTTransform = {
   tableName: t => t,
   columnName: (_, c) => c,
   related: sortedRelated,
-  where: flattened,
-  conditions: c => c.sort(cmpCondition),
+  where: simplifyCondition,
+  conditions: c => c,
 };
 
 export function normalizeAST(ast: AST): Required<AST> {
@@ -551,36 +550,210 @@ function cmpRelated(a: CorrelatedSubquery, b: CorrelatedSubquery): number {
 }
 
 /**
- * Returns a flattened version of the Conditions in which nested Conjunctions with
- * the same operation ('AND' or 'OR') are flattened to the same level. e.g.
- *
- * ```
- * ((a AND b) AND (c AND (d OR (e OR f)))) -> (a AND b AND c AND (d OR e OR f))
- * ```
- *
- * Also flattens singleton Conjunctions regardless of operator, and removes
- * empty Conjunctions.
+ * Canonicalizes a boolean condition tree: flattens nested same-type compounds,
+ * sorts siblings, dedups, consolidates `col = x OR col = y` to `col IN (...)`,
+ * applies absorption, and unwraps empty/singleton compounds. Idempotent.
  */
-function flattened(cond: Condition): Condition | undefined {
+export function simplifyCondition(cond: Condition): Condition | undefined {
   if (cond.type === 'simple' || cond.type === 'correlatedSubquery') {
     return cond;
   }
-  const conditions = defined(
-    cond.conditions.flatMap(c =>
-      c.type === cond.type ? c.conditions.map(c => flattened(c)) : flattened(c),
-    ),
-  );
 
-  switch (conditions.length) {
+  // Bottom-up: simplify each child first, then flatten same-type children
+  // into this level.
+  const simplifiedChildren: Condition[] = [];
+  for (const c of cond.conditions) {
+    const s = simplifyCondition(c);
+    if (s === undefined) {
+      continue;
+    }
+    if (s.type === cond.type) {
+      simplifiedChildren.push(...s.conditions);
+    } else {
+      simplifiedChildren.push(s);
+    }
+  }
+
+  // Dedup via canonical-key Set (O(s) rather than sort+adjacent scan).
+  let siblingKeys = new Set<string>();
+  let children: Condition[] = [];
+  for (const c of simplifiedChildren) {
+    const k = conditionKey(c);
+    if (!siblingKeys.has(k)) {
+      siblingKeys.add(k);
+      children.push(c);
+    }
+  }
+
+  children.sort(cmpCondition);
+
+  if (cond.type === 'or') {
+    const consolidated = consolidateEqualsToIn(children);
+    if (consolidated) {
+      children = consolidated;
+      children.sort(cmpCondition);
+      siblingKeys = new Set<string>();
+      for (const c of children) siblingKeys.add(conditionKey(c));
+    }
+  }
+
+  const absorbed = absorb(cond.type, children, siblingKeys);
+  if (absorbed) {
+    children = absorbed;
+  }
+
+  switch (children.length) {
     case 0:
       return undefined;
     case 1:
-      return conditions[0];
+      return children[0];
     default:
       return {
         type: cond.type,
-        conditions,
+        conditions: children,
       };
+  }
+}
+
+// Only `col = <non-null literal>` and `col IN [literal, ...]` branches are
+// eligible; `col = NULL` uses `IS` in ZQL and is intentionally skipped.
+// Returns undefined if no consolidation was applied.
+function consolidateEqualsToIn(
+  conds: readonly Condition[],
+): Condition[] | undefined {
+  type Group = {
+    values: (string | number | boolean)[];
+    indices: number[];
+  };
+  const byColumn = new Map<string, Group>();
+
+  for (let i = 0; i < conds.length; i++) {
+    const c = conds[i];
+    if (c.type !== 'simple') continue;
+    if (c.left.type !== 'column') continue;
+    if (c.right.type !== 'literal') continue;
+
+    const right = c.right.value;
+    const isArr = Array.isArray(right);
+    if (c.op === '=') {
+      if (right === null || isArr) continue;
+    } else if (c.op === 'IN') {
+      if (!isArr) continue;
+    } else {
+      continue;
+    }
+
+    let group = byColumn.get(c.left.name);
+    if (!group) {
+      group = {values: [], indices: []};
+      byColumn.set(c.left.name, group);
+    }
+    if (isArr) {
+      group.values.push(...(right as readonly (string | number | boolean)[]));
+    } else {
+      group.values.push(right as string | number | boolean);
+    }
+    group.indices.push(i);
+  }
+
+  // Find groups that actually need consolidation (more than one eligible
+  // branch for the same column).
+  const replacements = new Map<number, Condition | null>();
+  for (const [colName, group] of byColumn) {
+    if (group.indices.length < 2) continue;
+
+    const uniqueSorted = dedupAndSortLiterals(group.values);
+    const replacement: SimpleCondition = {
+      type: 'simple',
+      op: 'IN',
+      left: {type: 'column', name: colName},
+      right: {type: 'literal', value: uniqueSorted},
+    };
+    replacements.set(group.indices[0], replacement);
+    for (let k = 1; k < group.indices.length; k++) {
+      replacements.set(group.indices[k], null);
+    }
+  }
+
+  if (replacements.size === 0) {
+    return undefined;
+  }
+
+  const result: Condition[] = [];
+  for (let i = 0; i < conds.length; i++) {
+    const r = replacements.get(i);
+    if (r === undefined) {
+      result.push(conds[i]);
+    } else if (r !== null) {
+      result.push(r);
+    }
+  }
+  return result;
+}
+
+// Sort by string coercion for deterministic order across mixed-type arrays.
+function dedupAndSortLiterals(
+  values: readonly (string | number | boolean)[],
+): readonly (string | number | boolean)[] {
+  const unique = [...new Set(values)];
+  unique.sort((a, b) => compareUTF8(String(a), String(b)));
+  return unique;
+}
+
+// Returns undefined if nothing was absorbed. Linear in total children size:
+// for each opposite-type compound child, we hash its sub-condition keys and
+// look them up in the pre-built sibling key set.
+function absorb(
+  parentType: 'and' | 'or',
+  children: readonly Condition[],
+  siblingKeys: ReadonlySet<string>,
+): Condition[] | undefined {
+  const oppositeType = parentType === 'and' ? 'or' : 'and';
+  let result: Condition[] | undefined;
+  for (let i = 0; i < children.length; i++) {
+    const child = children[i];
+    let drop = false;
+    if (child.type === oppositeType) {
+      for (const sub of child.conditions) {
+        if (siblingKeys.has(conditionKey(sub))) {
+          drop = true;
+          break;
+        }
+      }
+    }
+    if (drop) {
+      if (!result) result = children.slice(0, i);
+    } else if (result) {
+      result.push(child);
+    }
+  }
+  return result;
+}
+
+// Canonical structural key. Stable for any two conditions that are
+// structurally equal after simplification (children are already sorted at
+// compound nodes). JSON.stringify on strings/literals handles escaping so
+// separators inside values can't collide with delimiters.
+function conditionKey(c: Condition): string {
+  switch (c.type) {
+    case 'simple':
+      return `s|${valueKey(c.left)}|${c.op}|${valueKey(c.right)}`;
+    case 'correlatedSubquery':
+      return `cs|${JSON.stringify(c.related.subquery.alias ?? '')}|${c.op}|${c.flip ?? 0}|${c.scalar ?? 0}`;
+    case 'and':
+    case 'or':
+      return `${c.type}[${c.conditions.map(conditionKey).join(',')}]`;
+  }
+}
+
+function valueKey(v: ValuePosition): string {
+  switch (v.type) {
+    case 'column':
+      return `col|${JSON.stringify(v.name)}`;
+    case 'literal':
+      return `lit|${JSON.stringify(v.value)}`;
+    case 'static':
+      return `stc|${v.anchor}|${JSON.stringify(v.field)}`;
   }
 }
 
