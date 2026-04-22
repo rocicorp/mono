@@ -54,7 +54,10 @@ type QuerySeen = {
   calls: number;
 };
 
-type BenchmarkRun = {
+type BenchmarkRun = BenchmarkSuccess | BenchmarkFailure;
+
+type BenchmarkSuccess = {
+  readonly status: 'ok';
   readonly scenarioName: string;
   readonly rowCount: number;
   readonly medianMs: number;
@@ -64,6 +67,12 @@ type BenchmarkRun = {
   readonly uniqueSQL: number;
   readonly sql: readonly QuerySeen[];
   readonly planDebug: string;
+};
+
+type BenchmarkFailure = {
+  readonly status: 'error';
+  readonly scenarioName: string;
+  readonly error: string;
 };
 
 type Target = {
@@ -188,12 +197,19 @@ for (let index = 0; index < leftScenarios.length; index++) {
         : `${leftScenario.name} -> ${rightScenario.name}`,
     left: leftRun,
     right: rightRun,
-    sameRows: leftRun.rowCount === rightRun.rowCount,
+    sameRows:
+      leftRun.status === 'ok' &&
+      rightRun.status === 'ok' &&
+      leftRun.rowCount === rightRun.rowCount,
     msRatio:
+      leftRun.status !== 'ok' ||
+      rightRun.status !== 'ok' ||
       rightRun.medianMs === 0
         ? undefined
         : leftRun.medianMs / rightRun.medianMs,
     callRatio:
+      leftRun.status !== 'ok' ||
+      rightRun.status !== 'ok' ||
       rightRun.totalCalls === 0
         ? undefined
         : leftRun.totalCalls / rightRun.totalCalls,
@@ -533,6 +549,7 @@ function runScenario(
       throw new Error('No measured benchmark samples were captured');
     }
     return {
+      status: 'ok',
       scenarioName: scenario.name,
       rowCount,
       medianMs: round(samples[Math.floor(samples.length / 2)]),
@@ -545,6 +562,12 @@ function runScenario(
       uniqueSQL: debug.queries.length,
       sql: debug.queries,
       planDebug,
+    };
+  } catch (error) {
+    return {
+      status: 'error',
+      scenarioName: scenario.name,
+      error: errorMessage(error),
     };
   } finally {
     db[Symbol.dispose]();
@@ -609,10 +632,29 @@ function formatMarkdown({
     );
   }
 
-  if (comparisons.some(comparison => !comparison.sameRows)) {
+  if (
+    comparisons.some(
+      comparison =>
+        comparison.left.status === 'ok' &&
+        comparison.right.status === 'ok' &&
+        !comparison.sameRows,
+    )
+  ) {
     lines.push('');
     lines.push(
       'Warning: at least one comparison returned a different row count. That can be expected when comparing two different queries, but it is a correctness red flag when comparing the same query across commits.',
+    );
+  }
+  if (
+    comparisons.some(
+      comparison =>
+        comparison.left.status === 'error' ||
+        comparison.right.status === 'error',
+    )
+  ) {
+    lines.push('');
+    lines.push(
+      'Warning: at least one comparison hit an error. That usually means the scenario is documenting an unsupported or not-yet-plannable shape.',
     );
   }
 
@@ -620,7 +662,14 @@ function formatMarkdown({
 }
 
 function formatRun(run: BenchmarkRun): string {
+  if (run.status === 'error') {
+    return `error: ${escapeMarkdown(run.error)}`;
+  }
   return `${formatMs(run.medianMs)}, ${run.totalCalls.toLocaleString()} SQL calls, ${run.uniqueSQL} SQL shapes, ${run.rowCount.toLocaleString()} rows`;
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 function resolveInputPath(value: string): string {

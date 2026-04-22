@@ -25,9 +25,15 @@ for (const scenario of scenarios as readonly QueryScenario<
   const knownFailure = scenario.knownFailure;
 
   if (knownFailure) {
-    test(`${scenario.name} current SQL`, () => {
-      const result = runQueryScenario(scenario);
+    test(`${scenario.name} current behavior`, () => {
+      if ('currentError' in knownFailure) {
+        expect(() => runQueryScenario(scenario)).toThrowError(
+          knownFailure.currentError,
+        );
+        return;
+      }
 
+      const result = runQueryScenario(scenario);
       expect(result.sql).toEqual(knownFailure.currentSQL);
     });
 

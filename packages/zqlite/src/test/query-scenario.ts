@@ -52,14 +52,18 @@ export type QueryScenario<S extends Schema> = {
   readonly seed: (db: Database) => void;
   readonly query: (builder: SchemaQuery<S>) => AnyQuery;
   readonly expectations: QueryScenarioExpectations;
-  readonly knownFailure?: {
-    readonly reason: string;
-    readonly current: string;
-    readonly desired: string;
-    readonly currentSQL: readonly QueryScenarioSQL[];
-    readonly engineIdea: string;
-  };
+  readonly knownFailure?: QueryScenarioKnownFailure;
 };
+
+export type QueryScenarioKnownFailure = {
+  readonly reason: string;
+  readonly current: string;
+  readonly desired: string;
+  readonly engineIdea: string;
+} & (
+  | {readonly currentSQL: readonly QueryScenarioSQL[]}
+  | {readonly currentError: string}
+);
 
 export type QueryScenarioExpectations = {
   readonly optimizedAST?: object;
