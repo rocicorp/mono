@@ -1093,7 +1093,7 @@ class ChangeMaker {
           // A fix for this is in the works. Log an error with the full
           // LogContext (e.g. including the tag and query) to collect/confirm
           // the scenarios in which this happens.
-          lc.error?.(`ddlUpdate received without a ddlStart`);
+          lc.error?.(`ddlUpdate received without a ddlStart`, {event});
           assert(prevEvent, `ddlUpdate received without a ddlStart`);
         }
         break;
@@ -1105,10 +1105,10 @@ class ChangeMaker {
     // Store the new event to diff against the next event.
     this.#lastReplicationEvent = event;
     if (!prevEvent) {
-      lc.info?.(`received ${msg.prefix}/${type} event`, event);
+      lc.info?.(`received ${msg.prefix}/${type} event`, {event});
       return []; // First snapshot in the tx.
     }
-    lc.info?.(`processing ${msg.prefix}/${type} event`, event);
+    lc.info?.(`processing ${msg.prefix}/${type} event`, {event});
 
     // The tag (i.e. command) is used to determine whether backfill is
     // necessary (CREATE TABLE vs ALTER TABLE vs ALTER PUBLICATION).
