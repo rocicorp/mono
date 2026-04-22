@@ -8,6 +8,10 @@ jobs:
   canary-release:
     name: Canary Release
     if: github.event.pull_request.merged == true && contains(github.event.pull_request.labels.*.name, 'release-canary')
+    permissions:
+      contents: write
+      id-token: write
+      pull-requests: write
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -34,8 +38,6 @@ jobs:
 
       - name: Run canary release
         id: release
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
           output=$(node packages/zero/tool/release.ts canary ${{ github.event.pull_request.base.ref }} --yes --skip-tests 2>&1 | tee /dev/stderr)
           version=$(echo "$output" | grep -oP 'Published @rocicorp/zero@\K[^\s]+')
