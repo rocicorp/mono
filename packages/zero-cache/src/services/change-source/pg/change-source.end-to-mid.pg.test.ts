@@ -1229,6 +1229,23 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
       [],
     ],
     [
+      'create index concurrently',
+      `
+      CREATE INDEX CONCURRENTLY foo_flt3 ON foo (flt DESC, id ASC);
+      `,
+      [[{tag: 'create-index'}]],
+      {foo: []},
+      [],
+      [
+        {
+          tableName: 'foo',
+          name: 'foo_flt3',
+          columns: {flt: 'DESC', id: 'ASC'},
+          unique: false,
+        },
+      ],
+    ],
+    [
       'remove table (with indexes) from publication',
       `ALTER PUBLICATION zero_some_public DROP TABLE boo`,
       [
