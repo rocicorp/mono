@@ -1,8 +1,10 @@
 import {mkdtemp, readdir, rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
+import {PG_LOCK_NOT_AVAILABLE} from '@drdgvhbh/postgres-error-codes';
 import {LogContext} from '@rocicorp/logger';
 import {nanoid} from 'nanoid/non-secure';
+import postgres from 'postgres';
 import {beforeEach, describe, expect} from 'vitest';
 import {
   createSilentLogContext,
@@ -2922,11 +2924,18 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
         blockerInTransaction = true;
         await blocker`SELECT txid_current()`;
 
-        // Create replication slot in different session.
-        await expect(
-          createReplicationSlot(lc, timeoutSession, timeoutSlot),
-        ).rejects.toThrow(
-          `Timed out after 5000 ms creating replication slot ${timeoutSlot}. Crashing to force a clean restart.`,
+        // The server-side lock_timeout (set inside createReplicationSlot)
+        // should fire before the client-side orTimeout, producing a
+        // PostgresError with code 55P03 (lock_not_available).
+        let caught: unknown;
+        try {
+          await createReplicationSlot(lc, timeoutSession, timeoutSlot);
+        } catch (e) {
+          caught = e;
+        }
+        expect(caught).toBeInstanceOf(postgres.PostgresError);
+        expect((caught as postgres.PostgresError).code).toBe(
+          PG_LOCK_NOT_AVAILABLE,
         );
       } finally {
         if (blockerInTransaction) {

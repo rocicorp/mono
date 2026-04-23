@@ -533,6 +533,11 @@ type ReplicationSlot = {
 // observed production runs; use 5s as a hard stop for pathological hangs.
 const CREATE_REPLICATION_SLOT_TIMEOUT_MS = 5_000;
 
+// The lock_timeout is set 1s before the client-side orTimeout so that
+// Postgres reliably aborts first and tears down the walsender cleanly.
+// The client-side timeout remains as a fallback for network-level failures.
+const SERVER_LOCK_TIMEOUT_MS = CREATE_REPLICATION_SLOT_TIMEOUT_MS - 1_000;
+
 /**
  * Shadow-mode alternative to `createReplicationSlot`: opens a dedicated
  * READ ONLY REPEATABLE READ transaction on a normal connection, exports the
@@ -623,7 +628,7 @@ export async function createReplicationSlot(
   // reclaim it. Without lock_timeout the orphan persists until TCP keepalive
   // fires (~2h default) or the blocking transaction finishes.
   await session.unsafe(
-    `SET lock_timeout = ${CREATE_REPLICATION_SLOT_TIMEOUT_MS}`,
+    `SET lock_timeout = ${SERVER_LOCK_TIMEOUT_MS}`,
   );
 
   const createSlot = failover
