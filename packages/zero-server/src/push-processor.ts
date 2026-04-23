@@ -72,7 +72,6 @@ export class PushProcessor<
         this.#dbProvider,
         (transact, mutation) =>
           this.#processMutation(mutators, transact, mutation),
-        null,
         queryOrQueryString,
         this.#logLevel,
       );
@@ -81,7 +80,6 @@ export class PushProcessor<
       this.#dbProvider,
       (transact, mutation) =>
         this.#processMutation(mutators, transact, mutation),
-      null,
       queryOrQueryString,
       must(body, 'body is required when using query params directly'),
       this.#logLevel,

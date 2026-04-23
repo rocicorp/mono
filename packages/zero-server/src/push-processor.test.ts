@@ -33,7 +33,6 @@ function makeSuccessResponse(
 ): MutateResponse {
   return {
     kind: 'MutateResponse',
-    userID: null,
     mutations,
   } as const;
 }

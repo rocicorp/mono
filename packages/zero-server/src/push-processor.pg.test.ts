@@ -73,7 +73,6 @@ function makeSuccessResponse(
 ): MutateResponse {
   return {
     kind: 'MutateResponse',
-    userID: null,
     mutations,
   } as const;
 }
@@ -728,7 +727,6 @@ test('mutators with and without namespaces', async () => {
           "result": {},
         },
       ],
-      "userID": null,
     }
   `);
   expect(await processor.process(mutators, params, makePush(2, 'topPass')))
@@ -744,7 +742,6 @@ test('mutators with and without namespaces', async () => {
           "result": {},
         },
       ],
-      "userID": null,
     }
   `);
 
@@ -769,7 +766,6 @@ test('mutators with and without namespaces', async () => {
               },
             },
           ],
-          "userID": null,
         }
       `);
   expect(await processor.process(mutators, params, makePush(4, 'topReject')))
@@ -791,7 +787,6 @@ test('mutators with and without namespaces', async () => {
                     },
                   },
                 ],
-                "userID": null,
               }
             `);
 
@@ -868,7 +863,6 @@ test('mutators with arbitrary depth nesting', async () => {
           "result": {},
         },
       ],
-      "userID": null,
     }
   `);
 
@@ -894,7 +888,6 @@ test('mutators with arbitrary depth nesting', async () => {
             },
           },
         ],
-        "userID": null,
       }
     `);
 
@@ -917,7 +910,6 @@ test('mutators with arbitrary depth nesting', async () => {
                 "result": {},
               },
             ],
-            "userID": null,
           }
         `);
 
