@@ -1026,8 +1026,8 @@ function getRowKey(cols: PrimaryKey, row: Row): RowKey {
 
 /**
  * Core hydration logic used by {@link PipelineDriver#addQuery}, extracted to a
- * function for reuse by bin-analyze so that bin-analyze's hydration logic
- * is as close as possible to zero-cache's real hydration logic.
+ * function for reuse by the analyze-query RPC path so that analysis hydrates
+ * queries the same way the view-syncer does in production.
  */
 export function* hydrate(
   input: Input,
