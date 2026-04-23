@@ -63,49 +63,83 @@ export function warnIfDataTypeSupported(
   }
 }
 
-// As per https://www.sqlite.org/lang_altertable.html#altertabaddcol,
-// expressions with parentheses are disallowed ...
-const SIMPLE_TOKEN_EXPRESSION_REGEX = /^[^'()]+$/; // e.g. true, false, 1234, 1234.5678
+// Numeric literals: integers and decimals, optionally negative
+const NUMERIC_LITERAL_REGEX = /^-?\d+(\.\d+)?$/;
 
-// as well as current_time, current_date, and current_timestamp ...
-const UNSUPPORTED_TOKENS = /\b(current_time|current_date|current_timestamp)\b/i;
+// Boolean literals (PG emits lowercase)
+const BOOLEAN_LITERAL_REGEX = /^(true|false)$/;
 
+// Quoted string with type cast to a simple scalar type: 'value'::typename
 // For strings and certain incarnations of primitives (e.g. integers greater
 // than 2^31-1, Postgres' nodeToString() represents the values as type-casted
 // 'string' values, e.g. `'2147483648'::bigint`, `'foo'::text`.
-//
-// These type-qualifiers must be removed, as SQLite doesn't understand or
-// care about them.
-const STRING_EXPRESSION_REGEX = /^('.*')::[^']+$/;
+// Only matches simple type names (word characters) - array types like
+// `::text[]` won't match and will trigger backfill.
+const QUOTED_STRING_WITH_CAST_REGEX = /^('.*')::(\w+)$/;
 
+// Empty array constructor syntax: ARRAY[]::text[], ARRAY[]::integer[], etc.
+// Maps to '[]' (JSON empty array) in SQLite.
+const EMPTY_ARRAY_CONSTRUCTOR_REGEX = /^ARRAY\s*\[\s*\]::\w+\[\]$/i;
+
+// Empty array literal syntax: '{}'::text[], '{}'::integer[], etc.
+// Maps to '[]' (JSON empty array) in SQLite.
+const EMPTY_ARRAY_LITERAL_REGEX = /^'\{\}'::\w+\[\]$/;
+
+// Conservative allowlist approach for SQLite ADD COLUMN defaults.
+// We only allow patterns we know are safe. Everything else triggers
+// backfill from PostgreSQL, which correctly handles complex defaults.
+//
+// Note: We don't validate that the default value matches the column type
+// (e.g., that a numeric literal is used with a numeric column). PostgreSQL
+// already enforces this at schema definition time - you can't define
+// `ALTER TABLE foo ADD bar TEXT DEFAULT 123` in PG. So we trust that any
+// default we receive from the replication stream is type-compatible with
+// whatever we map the type to in SQLite.
+//
+// Example: `true`/`false` literals can only appear as defaults for boolean
+// columns in PG, so we don't need to check the column type before converting
+// to 1/0.
+//
+// See: https://www.sqlite.org/lang_altertable.html#altertabaddcol
+//
 // Exported for testing.
 export function mapPostgresToLiteDefault(
   table: string,
   column: string,
-  dataType: string,
   defaultExpression: string | null | undefined,
-) {
+): string | null {
   if (!defaultExpression) {
     return null;
   }
-  if (UNSUPPORTED_TOKENS.test(defaultExpression)) {
-    throw new UnsupportedColumnDefaultError(
-      `Cannot ADD a column with CURRENT_TIME, CURRENT_DATE, or CURRENT_TIMESTAMP`,
-    );
-  }
-  if (SIMPLE_TOKEN_EXPRESSION_REGEX.test(defaultExpression)) {
-    if (liteTypeToZqlValueType(dataType) === 'boolean') {
-      return defaultExpression === 'true' ? '1' : '0';
-    }
+
+  // Numeric literals pass through unchanged
+  if (NUMERIC_LITERAL_REGEX.test(defaultExpression)) {
     return defaultExpression;
   }
-  const match = STRING_EXPRESSION_REGEX.exec(defaultExpression);
-  if (!match) {
-    throw new UnsupportedColumnDefaultError(
-      `Unsupported default value for ${table}.${column}: ${defaultExpression}`,
-    );
+
+  // Boolean literals convert to SQLite's 1/0
+  if (BOOLEAN_LITERAL_REGEX.test(defaultExpression)) {
+    return defaultExpression === 'true' ? '1' : '0';
   }
-  return match[1];
+
+  // Quoted strings with type casts: extract just the quoted part
+  const match = QUOTED_STRING_WITH_CAST_REGEX.exec(defaultExpression);
+  if (match) {
+    return match[1];
+  }
+
+  // Empty arrays: ARRAY[]::type[] or '{}'::type[] → '[]'
+  if (
+    EMPTY_ARRAY_CONSTRUCTOR_REGEX.test(defaultExpression) ||
+    EMPTY_ARRAY_LITERAL_REGEX.test(defaultExpression)
+  ) {
+    return "'[]'";
+  }
+
+  // Everything else triggers backfill
+  throw new UnsupportedColumnDefaultError(
+    `Unsupported default value for ${table}.${column}: ${defaultExpression}`,
+  );
 }
 
 export function mapPostgresToLiteColumn(
@@ -142,7 +176,7 @@ export function mapPostgresToLiteColumn(
     dflt:
       ignoreDefault === 'ignore-default'
         ? null
-        : mapPostgresToLiteDefault(table, column.name, dataType, dflt),
+        : mapPostgresToLiteDefault(table, column.name, dflt),
     elemPgTypeClass,
   };
 }
