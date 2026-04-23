@@ -4454,6 +4454,138 @@ describe('view-syncer/service', () => {
     return row?.rowSetSignature ?? null;
   };
 
+  // ---- drift-test helpers ----
+
+  // Direct-SQL row mutations bypass the replicator so the replica stateVersion
+  // stays put — simulating how a non-deterministic operator (e.g. Cap) would
+  // produce a different row set on re-execution at the same stateVersion.
+  const pruneIssues = (...ids: readonly string[]) => {
+    if (ids.length === 0) return;
+    const placeholders = ids.map(() => '?').join(', ');
+    replica
+      .prepare(`DELETE FROM issues WHERE id IN (${placeholders})`)
+      .run(...ids);
+  };
+  const deleteIssue = (id: string) => {
+    replica.prepare(`DELETE FROM issues WHERE id = ?`).run(id);
+  };
+  const insertIssue = (
+    id: string,
+    opts: {
+      title?: string | undefined;
+      owner?: string | undefined;
+      version?: string | undefined;
+    } = {},
+  ) => {
+    replica
+      .prepare(
+        `INSERT INTO issues (id, title, owner, parent, big, _0_version)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+      )
+      .run(
+        id,
+        opts.title ?? `issue ${id}`,
+        opts.owner ?? '100',
+        null,
+        0,
+        opts.version ?? '01',
+      );
+  };
+
+  const cookieOf = (poke: Downstream[]): string | null => {
+    const end = poke.find(([c]) => c === 'pokeEnd') as
+      | [string, PokeEndBody]
+      | undefined;
+    return end?.[1].cookie ?? null;
+  };
+
+  // Drains pokes from `queue` until one carrying a non-empty rowsPatch is
+  // received. Returns `undefined` if the queue stays quiet for `quietMs` ms
+  // before producing such a poke — which is the expected signal for the
+  // no-drift and legacy-null-sig cases (the run loop never forces a re-execute,
+  // so no row-diff poke is ever emitted).
+  async function drainUntilRowsPatchOrQuiet(
+    queue: Queue<Downstream>,
+    quietMs = 250,
+  ): Promise<Downstream[] | undefined> {
+    const sentinel = Symbol('quiet') as unknown as Downstream;
+    let current: Downstream[] = [];
+    for (;;) {
+      const msg = await queue.dequeue(sentinel, quietMs);
+      if (msg === sentinel) return undefined;
+      current.push(msg);
+      if (msg[0] === 'pokeEnd') {
+        const part = current.find(([c]) => c === 'pokePart') as
+          | [string, PokePartBody]
+          | undefined;
+        if (part?.[1].rowsPatch?.length) {
+          return current;
+        }
+        current = [];
+      }
+    }
+  }
+
+  function rowOpsFor(poke: Downstream[], tableName: string) {
+    const part = poke.find(([c]) => c === 'pokePart') as
+      | [string, PokePartBody]
+      | undefined;
+    const rowsPatch = part?.[1].rowsPatch ?? [];
+    const puts = rowsPatch.filter(
+      (p): p is {op: 'put'; tableName: string; value: {id: string}} =>
+        p.op === 'put' && p.tableName === tableName,
+    );
+    const dels = rowsPatch.filter(
+      (p): p is {op: 'del'; tableName: string; id: {id: string}} =>
+        p.op === 'del' && p.tableName === tableName,
+    );
+    return {puts, dels};
+  }
+
+  // Stops the currently-running VS, applies `mutate`, spins up a fresh VS
+  // against the same CVR / replica, and reconnects the client at `baseCookie`.
+  // Reconnecting at the prior cookie lets the client-handler's toVersion
+  // filter drop no-op patches, so the poke we observe only contains the
+  // drift-induced diff.
+  async function restartAfter(opts: {
+    baseCookie: string | null;
+    mutate: () => void | Promise<void>;
+    queriesPatch: UpQueriesPatch;
+    wsID?: string | undefined;
+  }): Promise<{
+    queue: Queue<Downstream>;
+    stateChanges: Subscription<ReplicaState>;
+    cleanup: () => Promise<void>;
+  }> {
+    await vs.stop();
+    await viewSyncerDone;
+    await opts.mutate();
+    const restart = restartViewSyncer({
+      databaseStorage,
+      replicaDbFile,
+      cvrDB,
+      config,
+      customQueryTransformer,
+      setTimeoutFn,
+    });
+    const queue = restart.connect(
+      {
+        ...SYNC_CONTEXT,
+        baseCookie: opts.baseCookie,
+        wsID: opts.wsID ?? 'ws2',
+      },
+      opts.queriesPatch,
+    );
+    return {
+      queue,
+      stateChanges: restart.stateChanges,
+      cleanup: async () => {
+        await restart.vs.stop();
+        await restart.viewSyncerDone;
+      },
+    };
+  }
+
   test('rowSetSignature persisted by end-to-end hydrate and advance', async () => {
     const client = connect(SYNC_CONTEXT, [
       {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
@@ -4494,14 +4626,13 @@ describe('view-syncer/service', () => {
   });
 
   test('rowSetSignature drift on rehydration triggers re-execution and CVR correction', async () => {
-    // Phase 1: initial hydration via the current VS. CVR persists the
-    // authoritative signature for query-hash1.
+    // Initial hydration: CVR persists the authoritative sig for query-hash1.
     const client = connect(SYNC_CONTEXT, [
       {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
     ]);
-    await nextPoke(client); // desiredQueriesPatch
+    await nextPoke(client);
     stateChanges.push({state: 'version-ready'});
-    await nextPoke(client); // initial hydration
+    await nextPoke(client);
 
     const correctSig = expectedIssuesSig(
       issueRowID('1'),
@@ -4511,45 +4642,28 @@ describe('view-syncer/service', () => {
     );
     expect(await loadStoredSig('query-hash1')).toEqual(correctSig);
 
-    // Phase 2: stop the VS, then tamper with the stored signature to simulate
-    // what the CVR would hold if a prior non-deterministic hydration (e.g. the
-    // Cap operator picking a different N-row subset) had produced a different
-    // row-set at this same stateVersion.
-    await vs.stop();
-    await viewSyncerDone;
-
+    // Tamper with the stored sig to simulate what the CVR would hold if a
+    // prior non-deterministic hydration had produced a different row-set at
+    // this same stateVersion. On restart, drift detection must correct it.
     const BOGUS_SIG = 'deadbeefcafebabe';
-    await cvrDB`
-      UPDATE ${cvrDB(cvrSchema(SHARD))}.queries
-         SET "rowSetSignature" = ${BOGUS_SIG}
-       WHERE "clientGroupID" = ${serviceID}
-         AND "queryHash" = 'query-hash1'
-    `;
-    expect(await loadStoredSig('query-hash1')).toEqual(BOGUS_SIG);
-
-    // Phase 3: fresh VS against the same cvrDB / replicaDbFile. A client
-    // connects to keep the service alive through the reset path so that
-    // #hydrateUnchangedQueries runs and detects the drift between the
-    // (bogus) stored signature and the freshly-computed driver signature.
-    const restart = restartViewSyncer({
-      databaseStorage,
-      replicaDbFile,
-      cvrDB,
-      config,
-      customQueryTransformer,
-      setTimeoutFn,
+    const {stateChanges: rsc, cleanup} = await restartAfter({
+      baseCookie: null,
+      mutate: async () => {
+        await cvrDB`
+          UPDATE ${cvrDB(cvrSchema(SHARD))}.queries
+             SET "rowSetSignature" = ${BOGUS_SIG}
+           WHERE "clientGroupID" = ${serviceID}
+             AND "queryHash" = 'query-hash1'
+        `;
+        expect(await loadStoredSig('query-hash1')).toEqual(BOGUS_SIG);
+      },
+      queriesPatch: [{op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY}],
     });
     try {
-      // A connected client prevents the run loop from shutting down when it
-      // sees no clients. Reuse SYNC_CONTEXT with a new wsID to avoid
-      // "connection replaced" log noise.
-      restart.connect({...SYNC_CONTEXT, wsID: 'ws2'}, [
-        {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
-      ]);
-      restart.stateChanges.push({state: 'version-ready'});
+      rsc.push({state: 'version-ready'});
 
-      // The CVRQueryDrivenUpdater flush writes the corrected signature
-      // asynchronously. Poll until it matches what the driver would produce.
+      // CVRQueryDrivenUpdater flush writes the corrected signature
+      // asynchronously. Poll until it matches the driver-side signature.
       const deadline = Date.now() + 10_000;
       let finalSig = await loadStoredSig('query-hash1');
       while (finalSig !== correctSig && Date.now() < deadline) {
@@ -4558,123 +4672,58 @@ describe('view-syncer/service', () => {
       }
       expect(finalSig).toEqual(correctSig);
     } finally {
-      await restart.vs.stop();
-      await restart.viewSyncerDone;
+      await cleanup();
     }
   });
 
   test('rowSetSignature drift diffs rows: del A, put C, keep B; version is bumped', async () => {
-    // Prune the replica down to rows {1, 2} via direct SQL — bypasses the
-    // replicator so the replica stateVersion stays at '01', the same version
-    // at which drift detection will run on restart.
-    replica.prepare(`DELETE FROM issues WHERE id IN ('3', '4', '5')`).run();
+    pruneIssues('3', '4', '5');
 
-    // Phase 1: initial hydration at stateVersion '01'. Query returns {1, 2}.
-    // Stored rowSetSignature = sig({1, 2}). A=1, B=2.
+    // Phase 1: query returns {1, 2}. A=1, B=2.
     const client1 = connect(SYNC_CONTEXT, [
       {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY2},
     ]);
-    await nextPoke(client1); // desiredQueriesPatch
+    await nextPoke(client1);
     stateChanges.push({state: 'version-ready'});
-    const phase1Poke = await nextPoke(client1);
-    const phase1EndMsg = phase1Poke.find(([c]) => c === 'pokeEnd') as [
-      string,
-      PokeEndBody,
-    ];
-    const phase1Cookie = phase1EndMsg[1].cookie;
+    const phase1Cookie = cookieOf(await nextPoke(client1));
 
     expect(await loadStoredSig('query-hash1')).toEqual(
       expectedIssuesSig(issueRowID('1'), issueRowID('2')),
     );
 
-    // Phase 2: stop the VS, then mutate the replica directly — delete row 1
-    // (A: should be retracted) and insert row 6 (C: should be added). Row 2
-    // (B) is untouched. No stateVersion bump: this is how a non-deterministic
-    // operator (e.g. Cap) choosing a different subset on re-execution at the
-    // same stateVersion would look to the drift check.
-    await vs.stop();
-    await viewSyncerDone;
-
-    replica.prepare(`DELETE FROM issues WHERE id = '1'`).run();
-    replica
-      .prepare(
-        `INSERT INTO issues (id, title, owner, parent, big, _0_version)
-           VALUES (?, ?, ?, ?, ?, ?)`,
-      )
-      .run('6', 'row C', '100', null, 0, '01');
-
-    // Phase 3: fresh VS against the same cvrDB / replica. Reconnect the client
-    // at phase1Cookie so the client-handler's toVersion filter drops any
-    // no-op patches for unchanged rows — leaving only the diff in rowsPatch.
-    const restart = restartViewSyncer({
-      databaseStorage,
-      replicaDbFile,
-      cvrDB,
-      config,
-      customQueryTransformer,
-      setTimeoutFn,
+    // Phase 2: mutate replica — delete row 1 (A), insert row 6 (C). Row 2 (B)
+    // untouched. No stateVersion bump.
+    const {
+      queue,
+      stateChanges: rsc,
+      cleanup,
+    } = await restartAfter({
+      baseCookie: phase1Cookie,
+      mutate: () => {
+        deleteIssue('1');
+        insertIssue('6', {title: 'row C'});
+      },
+      queriesPatch: [{op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY2}],
     });
     try {
-      const reconnected = restart.connect(
-        {...SYNC_CONTEXT, baseCookie: phase1Cookie, wsID: 'ws2'},
-        [{op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY2}],
-      );
-      restart.stateChanges.push({state: 'version-ready'});
-
-      // Drain pokes until we find the one with the drift-triggered row diff.
-      // There may be a preceding no-op poke (e.g. lmid / gotQueries ack); the
-      // vitest timeout guards indefinite hangs if no such poke is emitted.
-      let rowsPoke: Downstream[] | undefined;
-      for (let i = 0; i < 5 && !rowsPoke; i++) {
-        const poke = await nextPoke(reconnected);
-        const part = poke.find(([c]) => c === 'pokePart') as
-          | [string, PokePartBody]
-          | undefined;
-        if (part?.[1].rowsPatch?.length) {
-          rowsPoke = poke;
-        }
-      }
+      rsc.push({state: 'version-ready'});
+      const rowsPoke = await drainUntilRowsPatchOrQuiet(queue);
       expect(rowsPoke).toBeDefined();
 
-      const pokeStart = (
-        rowsPoke!.find(([c]) => c === 'pokeStart') as [string, PokeStartBody]
-      )[1];
-      const pokePart = (
-        rowsPoke!.find(([c]) => c === 'pokePart') as [string, PokePartBody]
-      )[1];
       const pokeEnd = (
         rowsPoke!.find(([c]) => c === 'pokeEnd') as [string, PokeEndBody]
       )[1];
+      const {puts, dels} = rowOpsFor(rowsPoke!, 'issues');
 
       // (1) Version is bumped past the pre-drift cookie.
-      expect(pokeEnd.cookie).not.toEqual(phase1Cookie);
-      expect(pokeEnd.cookie > phase1Cookie).toBe(true);
-      // baseCookie of this poke is either phase1Cookie (no prior poke) or a
-      // later intermediate — either way, it must not be ahead of pokeEnd.
-      expect(pokeStart.baseCookie).toBeTruthy();
+      expect(pokeEnd.cookie > phase1Cookie!).toBe(true);
 
-      // (2) Diff semantics.
-      const issueDels = pokePart.rowsPatch!.filter(
-        (p): p is {op: 'del'; tableName: string; id: {id: string}} =>
-          p.op === 'del' && p.tableName === 'issues',
-      );
-      const issuePuts = pokePart.rowsPatch!.filter(
-        (p): p is {op: 'put'; tableName: string; value: {id: string}} =>
-          p.op === 'put' && p.tableName === 'issues',
-      );
-
-      // A (row 1) is retracted.
-      expect(issueDels.map(p => p.id.id)).toEqual(['1']);
-      // C (row 6) is added.
-      expect(issuePuts.map(p => p.value.id)).toEqual(['6']);
-      // B (row 2) is NOT re-emitted: its rowVersion did not change, so its
-      // patchVersion stayed put and toVersion filtering dropped the put.
-      for (const p of pokePart.rowsPatch!) {
-        if (p.op === 'put' && p.tableName === 'issues') {
-          expect(p.value.id).not.toEqual('2');
-        } else if (p.op === 'del' && p.tableName === 'issues') {
-          expect(p.id.id).not.toEqual('2');
-        }
+      // (2) Diff semantics: A retracted, C added, B not re-emitted.
+      expect(dels.map(p => p.id.id)).toEqual(['1']);
+      expect(puts.map(p => p.value.id)).toEqual(['6']);
+      for (const p of [...puts, ...dels]) {
+        const id = 'value' in p ? p.value.id : p.id.id;
+        expect(id).not.toEqual('2');
       }
 
       // Corrected signature is persisted.
@@ -4682,8 +4731,209 @@ describe('view-syncer/service', () => {
         expectedIssuesSig(issueRowID('2'), issueRowID('6')),
       );
     } finally {
-      await restart.vs.stop();
-      await restart.viewSyncerDone;
+      await cleanup();
+    }
+  });
+
+  test('rowSetSignature match on rehydration: no re-execution, no row-diff poke', async () => {
+    pruneIssues('3', '4', '5');
+
+    const client1 = connect(SYNC_CONTEXT, [
+      {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY2},
+    ]);
+    await nextPoke(client1);
+    stateChanges.push({state: 'version-ready'});
+    const phase1Cookie = cookieOf(await nextPoke(client1));
+    const expectedSig = expectedIssuesSig(issueRowID('1'), issueRowID('2'));
+    expect(await loadStoredSig('query-hash1')).toEqual(expectedSig);
+
+    // No mutation between phases. Rehydration must produce the same sig →
+    // drift detection must NOT fire and must NOT force a re-execution.
+    const {
+      queue,
+      stateChanges: rsc,
+      cleanup,
+    } = await restartAfter({
+      baseCookie: phase1Cookie,
+      mutate: () => {},
+      queriesPatch: [{op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY2}],
+    });
+    try {
+      rsc.push({state: 'version-ready'});
+
+      // No drift → no row-diff poke.
+      expect(await drainUntilRowsPatchOrQuiet(queue)).toBeUndefined();
+
+      // Sig unchanged (re-execution via CVRQueryDrivenUpdater never ran,
+      // which is the only path that would flush a new sig here).
+      expect(await loadStoredSig('query-hash1')).toEqual(expectedSig);
+    } finally {
+      await cleanup();
+    }
+  });
+
+  test('rowSetSignature drift: only the drifted query is re-executed', async () => {
+    pruneIssues('3', '4', '5');
+
+    // Two queries on different tables: A=issues (will drift), B=users (stable).
+    const client1 = connect(SYNC_CONTEXT, [
+      {op: 'put', hash: 'query-hash-A', ast: ISSUES_QUERY2},
+      {op: 'put', hash: 'query-hash-B', ast: USERS_QUERY},
+    ]);
+    await nextPoke(client1);
+    stateChanges.push({state: 'version-ready'});
+    const phase1Cookie = cookieOf(await nextPoke(client1));
+
+    const initialSigA = expectedIssuesSig(issueRowID('1'), issueRowID('2'));
+    const initialSigB = await loadStoredSig('query-hash-B');
+    expect(await loadStoredSig('query-hash-A')).toEqual(initialSigA);
+    expect(initialSigB).toBeTruthy();
+
+    // Only issues is mutated. Users table is untouched → its sig must match
+    // on rehydration and drift must not fire for it.
+    const {
+      queue,
+      stateChanges: rsc,
+      cleanup,
+    } = await restartAfter({
+      baseCookie: phase1Cookie,
+      mutate: () => {
+        deleteIssue('1');
+        insertIssue('6', {title: 'row C'});
+      },
+      queriesPatch: [
+        {op: 'put', hash: 'query-hash-A', ast: ISSUES_QUERY2},
+        {op: 'put', hash: 'query-hash-B', ast: USERS_QUERY},
+      ],
+    });
+    try {
+      rsc.push({state: 'version-ready'});
+      const rowsPoke = await drainUntilRowsPatchOrQuiet(queue);
+      expect(rowsPoke).toBeDefined();
+
+      const {puts: issuePuts, dels: issueDels} = rowOpsFor(rowsPoke!, 'issues');
+      const {puts: userPuts, dels: userDels} = rowOpsFor(rowsPoke!, 'users');
+
+      // Issues drifted: del 1, put 6.
+      expect(issueDels.map(p => p.id.id)).toEqual(['1']);
+      expect(issuePuts.map(p => p.value.id)).toEqual(['6']);
+
+      // Users did NOT drift: no row-level changes for users in this poke.
+      expect(userDels).toHaveLength(0);
+      expect(userPuts).toHaveLength(0);
+
+      // Sig A is updated; sig B is unchanged.
+      expect(await loadStoredSig('query-hash-A')).toEqual(
+        expectedIssuesSig(issueRowID('2'), issueRowID('6')),
+      );
+      expect(await loadStoredSig('query-hash-B')).toEqual(initialSigB);
+    } finally {
+      await cleanup();
+    }
+  });
+
+  test('rowSetSignature absent (legacy): drift check is skipped, no forced re-execution', async () => {
+    pruneIssues('3', '4', '5');
+
+    const client1 = connect(SYNC_CONTEXT, [
+      {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY2},
+    ]);
+    await nextPoke(client1);
+    stateChanges.push({state: 'version-ready'});
+    const phase1Cookie = cookieOf(await nextPoke(client1));
+    expect(await loadStoredSig('query-hash1')).toEqual(
+      expectedIssuesSig(issueRowID('1'), issueRowID('2')),
+    );
+
+    // Null the stored sig to simulate a query record written before this
+    // feature was deployed. Also mutate the replica: if drift detection
+    // incorrectly fired on null sigs, the mutation would surface as a row
+    // diff. With the correct behavior, the legacy query is left alone.
+    const {
+      queue,
+      stateChanges: rsc,
+      cleanup,
+    } = await restartAfter({
+      baseCookie: phase1Cookie,
+      mutate: async () => {
+        await cvrDB`
+          UPDATE ${cvrDB(cvrSchema(SHARD))}.queries
+             SET "rowSetSignature" = NULL
+           WHERE "clientGroupID" = ${serviceID}
+             AND "queryHash" = 'query-hash1'
+        `;
+        expect(await loadStoredSig('query-hash1')).toBeNull();
+        deleteIssue('1');
+        insertIssue('6', {title: 'would be drift if detection fired'});
+      },
+      queriesPatch: [{op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY2}],
+    });
+    try {
+      rsc.push({state: 'version-ready'});
+
+      // Core guarantee of the legacy-null-sig skip: no forced re-execution →
+      // no row-diff poke. If this fired, clients reconnecting to a pre-feature
+      // deployment would see a spurious re-send of every row.
+      expect(await drainUntilRowsPatchOrQuiet(queue)).toBeUndefined();
+
+      // The sig *does* get initialized on this cycle — but through
+      // CVRQueryDrivenUpdater.flush's opportunistic pass over all queries
+      // (triggered by the normal add of internal queries on restart), not
+      // through drift re-execution. That's the intended "sigs get initialized
+      // whenever they next re-execute via the normal path" behavior.
+      expect(await loadStoredSig('query-hash1')).toEqual(
+        expectedIssuesSig(issueRowID('2'), issueRowID('6')),
+      );
+    } finally {
+      await cleanup();
+    }
+  });
+
+  test('rowSetSignature drift: custom (named) query diffs rows correctly', async () => {
+    pruneIssues('3', '4', '5');
+
+    queryFetch.respond([
+      {ast: ISSUES_QUERY2, id: 'custom-1', name: 'named-query'},
+    ]);
+
+    const client1 = connect(SYNC_CONTEXT, [
+      {op: 'put', hash: 'custom-1', name: 'named-query', args: ['thing']},
+    ]);
+    await nextPoke(client1);
+    stateChanges.push({state: 'version-ready'});
+    const phase1Cookie = cookieOf(await nextPoke(client1));
+    expect(await loadStoredSig('custom-1')).toEqual(
+      expectedIssuesSig(issueRowID('1'), issueRowID('2')),
+    );
+
+    const {
+      queue,
+      stateChanges: rsc,
+      cleanup,
+    } = await restartAfter({
+      baseCookie: phase1Cookie,
+      mutate: () => {
+        deleteIssue('1');
+        insertIssue('6', {title: 'row C'});
+      },
+      queriesPatch: [
+        {op: 'put', hash: 'custom-1', name: 'named-query', args: ['thing']},
+      ],
+    });
+    try {
+      rsc.push({state: 'version-ready'});
+      const rowsPoke = await drainUntilRowsPatchOrQuiet(queue);
+      expect(rowsPoke).toBeDefined();
+
+      const {puts, dels} = rowOpsFor(rowsPoke!, 'issues');
+      expect(dels.map(p => p.id.id)).toEqual(['1']);
+      expect(puts.map(p => p.value.id)).toEqual(['6']);
+
+      expect(await loadStoredSig('custom-1')).toEqual(
+        expectedIssuesSig(issueRowID('2'), issueRowID('6')),
+      );
+    } finally {
+      await cleanup();
     }
   });
 
