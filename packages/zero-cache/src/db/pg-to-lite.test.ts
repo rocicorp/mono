@@ -408,25 +408,77 @@ test.each([
 );
 
 test.each([
+  // Expressions with parentheses
   ['(id + 2)'],
   ['generate(id)'],
+  ['now()'],
+
+  // Time-related keywords/functions
   ['current_timestamp'],
   ['CURRENT_TIMESTAMP'],
   ['Current_Time'],
   ['current_DATE'],
+  ['LOCALTIME'],
+  ['LOCALTIMESTAMP'],
+
+  // Session variables
+  ['CURRENT_USER'],
+  ['SESSION_USER'],
+  ['CURRENT_SCHEMA'],
+
+  // Non-empty PG array constructors (need backfill)
+  ["ARRAY['a', 'b']::text[]"],
+  ['ARRAY[1,2,3]::integer[]'],
+
+  // Bare type casts (without quotes)
+  ['1::integer'],
+  ['0::smallint'],
+
+  // Boolean expressions
+  ['true AND false'],
+  ['NOT true'],
+
+  // Other PG-specific syntax
+  ['uuid_generate_v4()'],
+  ['gen_random_uuid()'],
+
+  // Bare quoted strings without type cast (need explicit ::type)
+  ["'foo'"],
+  ["'hello world'"],
 ])('unsupported column default %s', value => {
-  expect(() =>
-    mapPostgresToLiteDefault('foo', 'bar', 'boolean', value),
-  ).toThrow(UnsupportedColumnDefaultError);
+  expect(() => mapPostgresToLiteDefault('foo', 'bar', value)).toThrow(
+    UnsupportedColumnDefaultError,
+  );
 });
 
 test.each([
-  ['123', '123', 'int4'],
-  ['true', '1', 'boolean'],
-  ['false', '0', 'boolean'],
-  ["'12345678901234567890'::bigint", "'12345678901234567890'", 'int8'],
-])('supported column default %s', (input, output, dataType) => {
-  expect(mapPostgresToLiteDefault('foo', 'bar', dataType, input)).toEqual(
-    output,
-  );
+  // Integers
+  ['123', '123'],
+  ['0', '0'],
+  ['-456', '-456'],
+  ['2147483648', '2147483648'],
+
+  // Decimals
+  ['123.456', '123.456'],
+  ['-0.5', '-0.5'],
+
+  // Booleans (converted to 1/0)
+  ['true', '1'],
+  ['false', '0'],
+
+  // Quoted strings with type casts
+  ["'12345678901234567890'::bigint", "'12345678901234567890'"],
+  ["'foo'::text", "'foo'"],
+  ["'hello world'::varchar", "'hello world'"],
+  ["''::text", "''"], // empty string
+  ["'it''s'::text", "'it''s'"], // escaped quote
+
+  // Empty arrays → JSON empty array
+  ['ARRAY[]::text[]', "'[]'"],
+  ['ARRAY[]::integer[]', "'[]'"],
+  ['ARRAY[ ]::text[]', "'[]'"], // with whitespace
+  ["'{}'::text[]", "'[]'"], // PG literal syntax
+  ["'{}'::integer[]", "'[]'"],
+])('supported column default %s', (input, output) => {
+  expect(mapPostgresToLiteDefault('foo', 'bar', input)).toEqual(output);
 });
