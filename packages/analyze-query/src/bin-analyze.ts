@@ -42,6 +42,7 @@ import {newQuery} from '../../zql/src/query/query-impl.ts';
 import {asQueryInternals} from '../../zql/src/query/query-internals.ts';
 import type {PullRow, Query} from '../../zql/src/query/query.ts';
 import {Database} from '../../zqlite/src/db.ts';
+import {createSQLiteCostModel} from '../../zqlite/src/sqlite-cost-model.ts';
 import {TableSource} from '../../zqlite/src/table-source.ts';
 import {explainQueries} from './explain-queries.ts';
 
@@ -97,6 +98,13 @@ const options = {
     type: v.boolean().default(false),
     desc: [
       'Whether to output the rows which would be synced to the client for the analyzed query.',
+    ],
+  },
+  planner: {
+    type: v.boolean().default(true),
+    desc: [
+      'Whether to run the query planner before analyzing. The planner is always on in production,',
+      'so this defaults to true. Pass --planner=false to analyze the raw, unplanned AST.',
     ],
   },
   cvr: {
@@ -202,6 +210,10 @@ const clientToServerMapper = clientToServer(schema.tables);
 const debug = new Debug();
 const tableSpecs = computeZqlSpecs(lc, db, {includeBackfillingColumns: false});
 
+const costModel = config.planner
+  ? createSQLiteCostModel(db, tableSpecs)
+  : undefined;
+
 class AnalyzeQueryDelegate extends QueryDelegateBase {
   readonly debug = debug;
   readonly defaultQueryComplete = true;
@@ -250,6 +262,7 @@ if (config.ast) {
       db,
       tableSpecs,
       host,
+      costModel,
     },
     async () => {},
   );
@@ -292,6 +305,7 @@ function runQuery(queryString: string): Promise<AnalyzeQueryResult> {
       db,
       tableSpecs,
       host,
+      costModel,
     },
     async () => {},
   );
@@ -329,6 +343,7 @@ async function runHash(hash: string) {
       db,
       tableSpecs,
       host,
+      costModel,
     },
     async () => {},
   );
