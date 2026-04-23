@@ -5,7 +5,10 @@ import * as v from '../../shared/src/valita.ts';
 import {ErrorKind} from '../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../zero-protocol/src/error-origin.ts';
 import {ErrorReason} from '../../zero-protocol/src/error-reason.ts';
-import {type PushBody} from '../../zero-protocol/src/push.ts';
+import {
+  type MutateResponse,
+  type PushBody,
+} from '../../zero-protocol/src/push.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
 import {
   defineMutators,
@@ -21,6 +24,19 @@ import type {
 } from './process-mutations.ts';
 import {PushProcessor} from './push-processor.ts';
 import {ZQLDatabase} from './zql-database.ts';
+
+function makeSuccessResponse(
+  mutations: Array<{
+    id: {clientID: string; id: number};
+    result: Record<string, unknown>;
+  }>,
+): MutateResponse {
+  return {
+    kind: 'MutateResponse',
+    userID: null,
+    mutations,
+  } as const;
+}
 
 const baseBody = {
   pushVersion: 1,
@@ -235,8 +251,8 @@ describe('mutator resolution', () => {
 
     expect(mutator).toHaveBeenCalledTimes(1);
     expect(mutator).toHaveBeenCalledWith(expect.any(Object), 'payload');
-    expect(response).toEqual({
-      mutations: [
+    expect(response).toEqual(
+      makeSuccessResponse([
         {
           id: {
             clientID: 'test_client',
@@ -244,8 +260,8 @@ describe('mutator resolution', () => {
           },
           result: {},
         },
-      ],
-    });
+      ]),
+    );
   });
 
   test('resolves dot separated keys used by new mutators', async () => {
@@ -270,8 +286,8 @@ describe('mutator resolution', () => {
 
     expect(mutator).toHaveBeenCalledTimes(1);
     expect(mutator).toHaveBeenCalledWith(expect.any(Object), 'payload');
-    expect(response).toEqual({
-      mutations: [
+    expect(response).toEqual(
+      makeSuccessResponse([
         {
           id: {
             clientID: 'test_client',
@@ -279,8 +295,8 @@ describe('mutator resolution', () => {
           },
           result: {},
         },
-      ],
-    });
+      ]),
+    );
   });
 });
 
@@ -315,8 +331,8 @@ describe('mutator calling conventions', () => {
       args: 'payload',
       ctx: context,
     });
-    expect(response).toEqual({
-      mutations: [
+    expect(response).toEqual(
+      makeSuccessResponse([
         {
           id: {
             clientID: 'test_client',
@@ -324,8 +340,8 @@ describe('mutator calling conventions', () => {
           },
           result: {},
         },
-      ],
-    });
+      ]),
+    );
   });
 
   test('legacy custom mutators receive db transaction and args', async () => {

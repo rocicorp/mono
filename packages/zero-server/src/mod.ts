@@ -3,6 +3,8 @@ export {
   isApplicationError,
   type ApplicationErrorOptions,
 } from '../../zero-protocol/src/application-error.ts';
+export type {QueryResponse} from '../../zero-protocol/src/custom-queries.ts';
+export type {MutateResponse} from '../../zero-protocol/src/push.ts';
 export type {
   ServerColumnSchema,
   ServerSchema,

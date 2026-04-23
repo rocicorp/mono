@@ -9,8 +9,9 @@ import {ErrorKind} from '../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../zero-protocol/src/error-origin.ts';
 import {ErrorReason} from '../../zero-protocol/src/error-reason.ts';
 import {
-  type CleanupResultsArg,
   CRUD_MUTATION_NAME,
+  type CleanupResultsArg,
+  type MutateResponse,
   type MutationResponse,
 } from '../../zero-protocol/src/push.ts';
 import {createSchema} from '../../zero-schema/src/builder/schema-builder.ts';
@@ -209,6 +210,17 @@ function makePushBody(mutations: readonly MutationShape[]): ReadonlyJSONValue {
   } as const;
 }
 
+function makeSuccessResponse(
+  mutations: MutationResponse[],
+  userID: string | null | undefined = undefined,
+): MutateResponse {
+  return {
+    kind: 'MutateResponse',
+    userID,
+    mutations,
+  } as const;
+}
+
 describe('handleMutateRequest', () => {
   let consoleErrorSpy: MockInstance<typeof console.error>;
   let consoleWarnSpy: MockInstance<typeof console.warn>;
@@ -287,7 +299,122 @@ describe('handleMutateRequest', () => {
         },
       },
     ]);
-    expect(response).toEqual({mutations: recordedResults});
+    expect(response).toEqual(makeSuccessResponse(recordedResults));
+  });
+
+  test('successful responses echo the authenticated userID', async () => {
+    const {db: trackingDb} = createTrackingDatabase();
+
+    const response = await handleMutateRequest(
+      trackingDb,
+      (transact, _mutation) =>
+        transact((_tx, _name, _args) => promiseUndefined),
+      'user-123',
+      baseQuery,
+      makePushBody([makeCustomMutation()]),
+    );
+
+    expect(response).toEqual(
+      makeSuccessResponse(
+        [
+          {
+            id: {clientID: 'cid', id: 1},
+            result: {},
+          },
+        ],
+        'user-123',
+      ),
+    );
+  });
+
+  test('processes authenticated push requests when provided with a Request object', async () => {
+    const {
+      db: trackingDb,
+      recordedLMIDs,
+      recordedResults,
+    } = createTrackingDatabase();
+
+    const request = new Request(
+      `https://example.com/push?schema=${baseQuery.schema}&appID=${baseQuery.appID}`,
+      {
+        method: 'POST',
+        body: JSON.stringify(makePushBody([makeCustomMutation({id: 1})])),
+        headers: {'content-type': 'application/json'},
+      },
+    );
+
+    const response = await handleMutateRequest(
+      trackingDb,
+      (transact, _mutation) =>
+        transact((_tx, _name, _args) => promiseUndefined),
+      'user-123',
+      request,
+      'debug',
+    );
+
+    expect(response).toEqual(
+      makeSuccessResponse(
+        [
+          {
+            id: {clientID: 'cid', id: 1},
+            result: {},
+          },
+        ],
+        'user-123',
+      ),
+    );
+    expect(recordedLMIDs).toEqual([1]);
+    expect(recordedResults).toEqual([]);
+  });
+
+  test('logged-out undefined responses use null userID', async () => {
+    const {db: trackingDb} = createTrackingDatabase();
+
+    const response = await handleMutateRequest(
+      trackingDb,
+      (transact, _mutation) =>
+        transact((_tx, _name, _args) => promiseUndefined),
+      undefined,
+      baseQuery,
+      makePushBody([makeCustomMutation()]),
+    );
+
+    expect(response).toEqual(
+      makeSuccessResponse(
+        [
+          {
+            id: {clientID: 'cid', id: 1},
+            result: {},
+          },
+        ],
+        null,
+      ),
+    );
+  });
+
+  test('logged-out null responses use null userID', async () => {
+    const {db: trackingDb} = createTrackingDatabase();
+
+    const response = await handleMutateRequest(
+      trackingDb,
+      (transact, _mutation) =>
+        transact((_tx, _name, _args) => promiseUndefined),
+      null,
+      baseQuery,
+      makePushBody([makeCustomMutation()]),
+    );
+
+    expect(response).toEqual(
+      makeSuccessResponse(
+        [
+          {
+            id: {clientID: 'cid', id: 1},
+            result: {},
+          },
+        ],
+        null,
+      ),
+    );
   });
 
   test('post-commit application errors are logged but not persisted', async () => {
@@ -799,8 +926,8 @@ describe('handleMutateRequest', () => {
       );
 
       // Both mutations complete; the second is retried and treated as app error
-      expect(response).toEqual({
-        mutations: [
+      expect(response).toEqual(
+        makeSuccessResponse([
           {
             id: {clientID: 'cid', id: 1},
             result: {},
@@ -812,8 +939,8 @@ describe('handleMutateRequest', () => {
               message: errorMsg,
             },
           },
-        ],
-      });
+        ]),
+      );
 
       // Both LMIDs are persisted (first attempt for m1, retry for m2)
       expect(recordedLMIDs).toEqual([1, 2]);
@@ -1102,6 +1229,7 @@ describe.each(mutatorInvokers)(
       // The response should contain the application error
       expect(response).toMatchInlineSnapshot(`
         {
+          "kind": "MutateResponse",
           "mutations": [
             {
               "id": {

@@ -139,6 +139,18 @@ describe('fetchFromAPIServer', () => {
     });
   });
 
+  test('strips unknown fields from successful API responses', async () => {
+    mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({success: true, ignored: 'value'}), {
+        status: 200,
+      }),
+    );
+
+    const result = await fetchWithContext(validator, 'push');
+
+    expect(result).toEqual({success: true});
+  });
+
   test('preserves existing query params when appending reserved ones', async () => {
     mockFetch.mockResolvedValueOnce(
       new Response(JSON.stringify({success: true}), {status: 200}),
