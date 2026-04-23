@@ -473,7 +473,84 @@ describe.each([
           columns: {
             id: {dataType: 'int4|NOT_NULL', pos: 1},
             num: {dataType: 'int4', pos: 2},
-            expr: {dataType: 'int4', pos: 4},
+            // dflt is null because backfill was used (expression default not supported)
+            expr: {dataType: 'int4', pos: 4, dflt: null},
+          },
+        },
+      ],
+    ],
+    [
+      'column with non-empty array default triggers backfill',
+      PG_15_UP,
+      /*sql*/ `
+      ALTER TABLE published.bar ADD COLUMN tags TEXT[] DEFAULT ARRAY['a', 'b']::text[];
+      `,
+      null,
+      {
+        ['published.bar']: [
+          {
+            id: 1n,
+            num: 1n,
+            tags: '["a","b"]',
+          },
+          {
+            id: 2n,
+            num: 2n,
+            tags: '["a","b"]',
+          },
+          {
+            id: 3n,
+            num: 3n,
+            tags: '["a","b"]',
+          },
+        ],
+      },
+      [
+        {
+          name: 'published.bar',
+          columns: {
+            id: {dataType: 'int4|NOT_NULL', pos: 1},
+            num: {dataType: 'int4', pos: 2},
+            // dflt is null because backfill was used (non-empty array not supported)
+            tags: {dataType: 'text[]|TEXT_ARRAY', pos: 4, dflt: null},
+          },
+        },
+      ],
+    ],
+    [
+      'column with CURRENT_USER default triggers backfill',
+      PG_15_UP,
+      /*sql*/ `
+      ALTER TABLE published.bar ADD COLUMN created_by TEXT DEFAULT CURRENT_USER;
+      `,
+      null,
+      {
+        ['published.bar']: [
+          {
+            id: 1n,
+            num: 1n,
+            created_by: 'test',
+          },
+          {
+            id: 2n,
+            num: 2n,
+            created_by: 'test',
+          },
+          {
+            id: 3n,
+            num: 3n,
+            created_by: 'test',
+          },
+        ],
+      },
+      [
+        {
+          name: 'published.bar',
+          columns: {
+            id: {dataType: 'int4|NOT_NULL', pos: 1},
+            num: {dataType: 'int4', pos: 2},
+            // dflt is null because backfill was used (CURRENT_USER not supported)
+            created_by: {dataType: 'text', pos: 4, dflt: null},
           },
         },
       ],
