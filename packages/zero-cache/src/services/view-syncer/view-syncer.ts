@@ -1758,10 +1758,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         ...(erroredQueryIDs || []),
       ]);
       const addQueries = transformedQueries
-        .map(({id, transformed}) => ({
+        .map(({id, origQuery, transformed}) => ({
           id,
           ast: transformed.transformedAst,
           transformationHash: transformed.transformationHash,
+          name: origQuery.type === 'custom' ? origQuery.name : undefined,
         }))
         .filter(
           q =>
@@ -1838,7 +1839,12 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   #addAndRemoveQueries(
     lc: LogContext,
     cvr: CVRSnapshot,
-    addQueries: {id: string; ast: AST; transformationHash: string}[],
+    addQueries: {
+      id: string;
+      ast: AST;
+      transformationHash: string;
+      name?: string | undefined;
+    }[],
     removeQueries: {id: string}[],
   ): Promise<void> {
     return startAsyncSpan(tracer, 'vs.#addAndRemoveQueries', async () => {
@@ -1919,6 +1925,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           manualSpan(tracer, 'vs.addAndConsumeQuery', elapsed, {
             hash: q.id,
             transformationHash: q.transformationHash,
+            ...(q.name !== undefined && {name: q.name}),
           });
         }
         hydrations.add(1);
