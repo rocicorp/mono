@@ -215,10 +215,9 @@ describe('createReplicationSlot', () => {
     ).rejects.toBe(pgError);
   });
 
-  test(
-    'falls back to client-side timeout when session hangs',
-    {timeout: 15_000},
-    async () => {
+  test('falls back to client-side timeout when session hangs', async () => {
+    vi.useFakeTimers();
+    try {
       const session = mockSession(async stmt => {
         if (stmt.startsWith('SET lock_timeout')) {
           return [];
@@ -228,23 +227,26 @@ describe('createReplicationSlot', () => {
         return new Promise(() => {});
       });
 
-      const start = Date.now();
-      await expect(
-        createReplicationSlot(createSilentLogContext(), session, 'hang_slot'),
-      ).rejects.toThrow(
+      const result = createReplicationSlot(
+        createSilentLogContext(),
+        session,
+        'hang_slot',
+      );
+
+      // Advance past the 5s client-side timeout.
+      await vi.advanceTimersByTimeAsync(6_000);
+
+      await expect(result).rejects.toThrow(
         /Timed out after \d+ ms creating replication slot hang_slot/,
       );
-      const elapsed = Date.now() - start;
-
-      // Should fire within a reasonable window of the 5s timeout.
-      expect(elapsed).toBeGreaterThanOrEqual(4_000);
-      expect(elapsed).toBeLessThan(8_000);
 
       // session.end() is called in the background to tear down the
       // orphaned connection.
       expect(
         (session.end as ReturnType<typeof vi.fn>).mock.calls.length,
       ).toBeGreaterThanOrEqual(1);
-    },
-  );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
