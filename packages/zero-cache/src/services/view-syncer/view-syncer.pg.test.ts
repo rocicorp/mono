@@ -4563,6 +4563,130 @@ describe('view-syncer/service', () => {
     }
   });
 
+  test('rowSetSignature drift diffs rows: del A, put C, keep B; version is bumped', async () => {
+    // Prune the replica down to rows {1, 2} via direct SQL — bypasses the
+    // replicator so the replica stateVersion stays at '01', the same version
+    // at which drift detection will run on restart.
+    replica.prepare(`DELETE FROM issues WHERE id IN ('3', '4', '5')`).run();
+
+    // Phase 1: initial hydration at stateVersion '01'. Query returns {1, 2}.
+    // Stored rowSetSignature = sig({1, 2}). A=1, B=2.
+    const client1 = connect(SYNC_CONTEXT, [
+      {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY2},
+    ]);
+    await nextPoke(client1); // desiredQueriesPatch
+    stateChanges.push({state: 'version-ready'});
+    const phase1Poke = await nextPoke(client1);
+    const phase1EndMsg = phase1Poke.find(([c]) => c === 'pokeEnd') as [
+      string,
+      PokeEndBody,
+    ];
+    const phase1Cookie = phase1EndMsg[1].cookie;
+
+    expect(await loadStoredSig('query-hash1')).toEqual(
+      expectedIssuesSig(issueRowID('1'), issueRowID('2')),
+    );
+
+    // Phase 2: stop the VS, then mutate the replica directly — delete row 1
+    // (A: should be retracted) and insert row 6 (C: should be added). Row 2
+    // (B) is untouched. No stateVersion bump: this is how a non-deterministic
+    // operator (e.g. Cap) choosing a different subset on re-execution at the
+    // same stateVersion would look to the drift check.
+    await vs.stop();
+    await viewSyncerDone;
+
+    replica.prepare(`DELETE FROM issues WHERE id = '1'`).run();
+    replica
+      .prepare(
+        `INSERT INTO issues (id, title, owner, parent, big, _0_version)
+           VALUES (?, ?, ?, ?, ?, ?)`,
+      )
+      .run('6', 'row C', '100', null, 0, '01');
+
+    // Phase 3: fresh VS against the same cvrDB / replica. Reconnect the client
+    // at phase1Cookie so the client-handler's toVersion filter drops any
+    // no-op patches for unchanged rows — leaving only the diff in rowsPatch.
+    const restart = restartViewSyncer({
+      databaseStorage,
+      replicaDbFile,
+      cvrDB,
+      config,
+      customQueryTransformer,
+      setTimeoutFn,
+    });
+    try {
+      const reconnected = restart.connect(
+        {...SYNC_CONTEXT, baseCookie: phase1Cookie, wsID: 'ws2'},
+        [{op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY2}],
+      );
+      restart.stateChanges.push({state: 'version-ready'});
+
+      // Drain pokes until we find the one with the drift-triggered row diff.
+      // There may be a preceding no-op poke (e.g. lmid / gotQueries ack); the
+      // vitest timeout guards indefinite hangs if no such poke is emitted.
+      let rowsPoke: Downstream[] | undefined;
+      for (let i = 0; i < 5 && !rowsPoke; i++) {
+        const poke = await nextPoke(reconnected);
+        const part = poke.find(([c]) => c === 'pokePart') as
+          | [string, PokePartBody]
+          | undefined;
+        if (part?.[1].rowsPatch?.length) {
+          rowsPoke = poke;
+        }
+      }
+      expect(rowsPoke).toBeDefined();
+
+      const pokeStart = (
+        rowsPoke!.find(([c]) => c === 'pokeStart') as [string, PokeStartBody]
+      )[1];
+      const pokePart = (
+        rowsPoke!.find(([c]) => c === 'pokePart') as [string, PokePartBody]
+      )[1];
+      const pokeEnd = (
+        rowsPoke!.find(([c]) => c === 'pokeEnd') as [string, PokeEndBody]
+      )[1];
+
+      // (1) Version is bumped past the pre-drift cookie.
+      expect(pokeEnd.cookie).not.toEqual(phase1Cookie);
+      expect(pokeEnd.cookie > phase1Cookie).toBe(true);
+      // baseCookie of this poke is either phase1Cookie (no prior poke) or a
+      // later intermediate — either way, it must not be ahead of pokeEnd.
+      expect(pokeStart.baseCookie).toBeTruthy();
+
+      // (2) Diff semantics.
+      const issueDels = pokePart.rowsPatch!.filter(
+        (p): p is {op: 'del'; tableName: string; id: {id: string}} =>
+          p.op === 'del' && p.tableName === 'issues',
+      );
+      const issuePuts = pokePart.rowsPatch!.filter(
+        (p): p is {op: 'put'; tableName: string; value: {id: string}} =>
+          p.op === 'put' && p.tableName === 'issues',
+      );
+
+      // A (row 1) is retracted.
+      expect(issueDels.map(p => p.id.id)).toEqual(['1']);
+      // C (row 6) is added.
+      expect(issuePuts.map(p => p.value.id)).toEqual(['6']);
+      // B (row 2) is NOT re-emitted: its rowVersion did not change, so its
+      // patchVersion stayed put and toVersion filtering dropped the put.
+      for (const p of pokePart.rowsPatch!) {
+        if (p.op === 'put' && p.tableName === 'issues') {
+          expect(p.value.id).not.toEqual('2');
+        } else if (p.op === 'del' && p.tableName === 'issues') {
+          expect(p.id.id).not.toEqual('2');
+        }
+      }
+
+      // Corrected signature is persisted.
+      expect(await loadStoredSig('query-hash1')).toEqual(
+        expectedIssuesSig(issueRowID('2'), issueRowID('6')),
+      );
+    } finally {
+      await restart.vs.stop();
+      await restart.viewSyncerDone;
+    }
+  });
+
   test('process advancement with lmid change, client has no queries.  See https://bugs.rocicorp.dev/issue/3628', async () => {
     const client = connect(SYNC_CONTEXT, []);
     expect(await nextPoke(client)).toMatchInlineSnapshot(`
