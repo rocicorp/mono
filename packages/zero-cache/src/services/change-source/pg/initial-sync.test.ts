@@ -227,16 +227,24 @@ describe('createReplicationSlot', () => {
         return new Promise(() => {});
       });
 
+      // Capture the rejection eagerly to avoid an unhandled rejection
+      // between the time advanceTimersByTimeAsync triggers it and the
+      // time we assert on it.
+      let caught: unknown;
       const result = createReplicationSlot(
         createSilentLogContext(),
         session,
         'hang_slot',
-      );
+      ).catch(e => {
+        caught = e;
+      });
 
       // Advance past the 5s client-side timeout.
       await vi.advanceTimersByTimeAsync(6_000);
+      await result;
 
-      await expect(result).rejects.toThrow(
+      expect(caught).toBeInstanceOf(Error);
+      expect(String(caught)).toMatch(
         /Timed out after \d+ ms creating replication slot hang_slot/,
       );
 
@@ -245,6 +253,9 @@ describe('createReplicationSlot', () => {
       expect(
         (session.end as ReturnType<typeof vi.fn>).mock.calls.length,
       ).toBeGreaterThanOrEqual(1);
+
+      // Drain any remaining timers/microtasks before restoring real timers.
+      await vi.runAllTimersAsync();
     } finally {
       vi.useRealTimers();
     }
