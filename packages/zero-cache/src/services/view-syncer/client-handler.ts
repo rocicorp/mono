@@ -26,7 +26,7 @@ import {mutationResultSchema} from '../../../../zero-protocol/src/push.ts';
 import type {RowPatchOp} from '../../../../zero-protocol/src/row-patch.ts';
 import {
   getOrCreateCounter,
-  getOrCreateHistogram,
+  getOrCreateLatencyHistogram,
 } from '../../observability/metrics.ts';
 import {
   getLogLevel,
@@ -121,11 +121,11 @@ export class ClientHandler {
   readonly #downstream: Subscription<Downstream>;
   #baseVersion: NullableCVRVersion;
 
-  readonly #pokeTime = getOrCreateHistogram('sync', 'poke.time', {
-    description:
-      'Time elapsed for each poke transaction. Canceled / noop pokes are excluded.',
-    unit: 's',
-  });
+  readonly #pokeTime = getOrCreateLatencyHistogram(
+    'sync',
+    'poke.time',
+    'Time elapsed for each poke transaction. Canceled / noop pokes are excluded.',
+  );
 
   readonly #pokeTransactions = getOrCreateCounter(
     'sync',
@@ -328,7 +328,7 @@ export class ClientHandler {
 
         const elapsed = performance.now() - start;
         this.#pokeTransactions.add(1);
-        this.#pokeTime.record(elapsed / 1000);
+        this.#pokeTime.recordMs(elapsed);
       },
     };
   }
