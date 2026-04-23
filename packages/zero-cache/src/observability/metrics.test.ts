@@ -12,17 +12,15 @@ import {getOrCreateLatencyHistogram} from './metrics.ts';
  * A minimal synchronous MetricReader that lets us collect metrics on demand.
  */
 class TestMetricReader extends MetricReader {
-  // oxlint-disable-next-line require-await
   protected async onForceFlush(): Promise<void> {
     /* noop */
   }
 
-  // oxlint-disable-next-line require-await
   protected async onShutdown(): Promise<void> {
     /* noop */
   }
 
-  async collectMetrics(): Promise<CollectionResult> {
+  collectMetrics(): Promise<CollectionResult> {
     return this.collect();
   }
 }
