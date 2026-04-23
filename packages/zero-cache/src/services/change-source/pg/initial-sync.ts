@@ -627,9 +627,7 @@ export async function createReplicationSlot(
   // the existing cleanup code (which drops inactive slots on retry) can't
   // reclaim it. Without lock_timeout the orphan persists until TCP keepalive
   // fires (~2h default) or the blocking transaction finishes.
-  await session.unsafe(
-    `SET lock_timeout = ${SERVER_LOCK_TIMEOUT_MS}`,
-  );
+  await session.unsafe(`SET lock_timeout = ${SERVER_LOCK_TIMEOUT_MS}`);
 
   const createSlot = failover
     ? session.unsafe<ReplicationSlot[]>(

@@ -1,3 +1,4 @@
+import type postgres from 'postgres';
 import {describe, expect, test, vi} from 'vitest';
 import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.ts';
 import type {PublishedTableSpec} from '../../../db/specs.ts';
@@ -151,7 +152,7 @@ describe('createReplicationSlot', () => {
     return {
       unsafe: vi.fn(handler),
       end: vi.fn(() => Promise.resolve()),
-    } as unknown as import('postgres').Sql;
+    } as unknown as postgres.Sql;
   }
 
   test('returns the slot on success', async () => {
@@ -161,12 +162,12 @@ describe('createReplicationSlot', () => {
       snapshot_name: 'snap',
       output_plugin: 'pgoutput',
     };
-    const session = mockSession(async stmt => {
+    const session = mockSession(stmt => {
       if (stmt.startsWith('SET lock_timeout')) {
-        return [];
+        return Promise.resolve([]);
       }
       // CREATE_REPLICATION_SLOT
-      return [slot];
+      return Promise.resolve([slot]);
     });
 
     const result = await createReplicationSlot(
@@ -179,19 +180,19 @@ describe('createReplicationSlot', () => {
 
   test('sets lock_timeout before creating the slot', async () => {
     const calls: string[] = [];
-    const session = mockSession(async stmt => {
+    const session = mockSession(stmt => {
       calls.push(stmt);
       if (stmt.startsWith('SET lock_timeout')) {
-        return [];
+        return Promise.resolve([]);
       }
-      return [
+      return Promise.resolve([
         {
           slot_name: 's',
           consistent_point: '0/1',
           snapshot_name: 'snap',
           output_plugin: 'pgoutput',
         },
-      ];
+      ]);
     });
 
     await createReplicationSlot(createSilentLogContext(), session, 's');
@@ -203,11 +204,11 @@ describe('createReplicationSlot', () => {
     const pgError = new Error('canceling statement due to lock timeout');
     (pgError as unknown as {code: string}).code = '55P03';
 
-    const session = mockSession(async stmt => {
+    const session = mockSession(stmt => {
       if (stmt.startsWith('SET lock_timeout')) {
-        return [];
+        return Promise.resolve([]);
       }
-      throw pgError;
+      return Promise.reject(pgError);
     });
 
     await expect(
@@ -218,9 +219,9 @@ describe('createReplicationSlot', () => {
   test('falls back to client-side timeout when session hangs', async () => {
     vi.useFakeTimers();
     try {
-      const session = mockSession(async stmt => {
+      const session = mockSession(stmt => {
         if (stmt.startsWith('SET lock_timeout')) {
-          return [];
+          return Promise.resolve([]);
         }
         // Simulate a hang: never resolve (e.g. network partition where
         // the server aborted but the client never receives the error).
