@@ -522,3 +522,125 @@ describe('Cap edge cases', () => {
     expect(view.data).toEqual(qd.materialize(q).data);
   });
 });
+
+describe('Cap OR with multiple EXISTS', () => {
+  let pg3: PostgresDB;
+  let sqlite3: Database;
+  let issueQuery3: Query<'issue', Schema>;
+  let qd: QueryDelegate;
+
+  beforeAll(async () => {
+    pg3 = await testDBs.create('cap-or-exists');
+    await pg3.unsafe(createTableSQL);
+    sqlite3 = new Database(lc, ':memory:');
+
+    // Two users so the two EXISTS branches are independently meaningful:
+    //   exists('comments')      → this issue has any direct comments
+    //   exists('ownerComments') → this issue's OWNER has authored ≥1 comment
+    //                             anywhere in the table
+    await pg3.unsafe(/*sql*/ `
+      INSERT INTO "users" ("id", "name") VALUES
+        ('u1', 'User 1'),
+        ('u2', 'User 2');
+
+      INSERT INTO "issues" ("id", "title", "description", "closed", "owner_id", "createdAt") VALUES
+        ('iA', 'A', 'dA', false, 'u1', TIMESTAMPTZ '2001-01-01T00:00:00.000Z'),
+        ('iB', 'B', 'dB', false, 'u2', TIMESTAMPTZ '2001-01-02T00:00:00.000Z'),
+        ('iC', 'C', 'dC', false, 'u1', TIMESTAMPTZ '2001-01-03T00:00:00.000Z'),
+        ('iD', 'D', 'dD', false, 'u2', TIMESTAMPTZ '2001-01-04T00:00:00.000Z');
+
+      -- Only u1 authors anything initially.
+      -- iA: has direct comments AND owner=u1 has authored → both branches TRUE
+      -- iB: no direct comments AND owner=u2 has NOT authored → both FALSE (excluded)
+      -- iC: no direct comments BUT owner=u1 has authored (on iA) → only ownerComments TRUE
+      -- iD: no direct comments AND owner=u2 has NOT authored → both FALSE (excluded)
+      INSERT INTO "comments" ("id", "authorId", "issue_id", "text", "createdAt") VALUES
+        ('cA1', 'u1', 'iA', 'a1', TIMESTAMP '2002-01-01 00:00:00');
+    `);
+
+    await initialSync(
+      new LogContext('debug', {}, consoleLogSink),
+      {appID: 'cap_or', shardNum: 0, publications: []},
+      sqlite3,
+      getConnectionURI(pg3),
+      {tableCopyWorkers: 1},
+      {},
+    );
+
+    qd = newQueryDelegate(lc, testLogConfig, sqlite3, schema);
+    issueQuery3 = newQuery(schema, 'issue');
+  });
+
+  test('OR of two EXISTS: dedup, independent branches, drift-free', () => {
+    const q = issueQuery3.where(({exists, or}) =>
+      or(exists('comments'), exists('ownerComments')),
+    );
+    const view = qd.materialize(q);
+
+    // Initial: iA (both branches), iC (ownerComments only).
+    const initial = view.data as ReadonlyArray<{readonly id: string}>;
+    expect(new Set(initial.map(r => r.id))).toEqual(new Set(['iA', 'iC']));
+    expect(view.data).toEqual(qd.materialize(q).data);
+
+    // Push: u2 authors a comment on iD.
+    //   exists('comments') for iD:      cB1 is on iD → TRUE
+    //   exists('ownerComments') for iD: iD.owner=u2, cB1 is by u2 → TRUE
+    //   exists('ownerComments') for iB: iB.owner=u2, cB1 is by u2 → TRUE
+    // Both branches fire for iD; FanIn must dedup → iD appears once.
+    // iB also becomes visible via ownerComments only.
+    consume(
+      must(qd.getSource('comments')).push(
+        makeSourceChangeAdd({
+          id: 'cD1',
+          authorId: 'u2',
+          issue_id: 'iD',
+          text: 'd1',
+          createdAt: 1100000000000,
+        }),
+      ),
+    );
+    const after = view.data as ReadonlyArray<{readonly id: string}>;
+    expect(new Set(after.map(r => r.id))).toEqual(
+      new Set(['iA', 'iB', 'iC', 'iD']),
+    );
+    // Crucial: no duplicates from the FanIn when both branches match.
+    expect(after.length).toBe(4);
+    expect(view.data).toEqual(qd.materialize(q).data);
+
+    // Push: remove cA1 (authored by u1, on iA).
+    //   iA loses direct comments.
+    //   iA loses ownerComments (u1 no longer has any comment anywhere).
+    //   iC loses ownerComments (same reason) → iC disappears.
+    //   iA: both branches now FALSE → disappears.
+    consume(
+      must(qd.getSource('comments')).push(
+        makeSourceChangeRemove({
+          id: 'cA1',
+          authorId: 'u1',
+          issue_id: 'iA',
+          text: 'a1',
+          createdAt: 1009843200000,
+        }),
+      ),
+    );
+    const after2 = view.data as ReadonlyArray<{readonly id: string}>;
+    expect(new Set(after2.map(r => r.id))).toEqual(new Set(['iB', 'iD']));
+    expect(view.data).toEqual(qd.materialize(q).data);
+
+    // Push: remove cD1 → iB and iD both lose their only backing.
+    consume(
+      must(qd.getSource('comments')).push(
+        makeSourceChangeRemove({
+          id: 'cD1',
+          authorId: 'u2',
+          issue_id: 'iD',
+          text: 'd1',
+          createdAt: 1100000000000,
+        }),
+      ),
+    );
+    const after3 = view.data as ReadonlyArray<{readonly id: string}>;
+    expect(after3.map(r => r.id)).toEqual([]);
+    expect(view.data).toEqual(qd.materialize(q).data);
+  });
+});

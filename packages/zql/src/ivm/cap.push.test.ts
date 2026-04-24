@@ -1274,3 +1274,175 @@ describe('Cap wiring', () => {
     `);
   });
 });
+
+describe('Cap push - compound partition key', () => {
+  // Compound correlation: parent.(region,org) → child.(region,org).
+  // Exercises multi-column partitioning in getCapStateKey, serializePK,
+  // and makePartitionKeyComparator — paths the single-column tests skip.
+  const sources: Sources = {
+    parent: {
+      columns: {
+        id: {type: 'string'},
+        region: {type: 'string'},
+        org: {type: 'string'},
+      },
+      primaryKeys: ['id'],
+    },
+    child: {
+      columns: {
+        id: {type: 'string'},
+        region: {type: 'string'},
+        org: {type: 'string'},
+        text: {type: 'string'},
+      },
+      primaryKeys: ['id'],
+    },
+  };
+
+  const ast: AST = {
+    table: 'parent',
+    orderBy: [['id', 'asc']],
+    where: {
+      type: 'correlatedSubquery',
+      related: {
+        system: 'client',
+        correlation: {
+          parentField: ['region', 'org'],
+          childField: ['region', 'org'],
+        },
+        subquery: {
+          table: 'child',
+          alias: 'children',
+          orderBy: [['id', 'asc']],
+        },
+      },
+      op: 'EXISTS',
+    },
+  } as const;
+
+  const format: Format = {
+    singular: false,
+    relationships: {
+      children: {
+        singular: false,
+        relationships: {},
+      },
+    },
+  };
+
+  test('partitions are keyed by all compound fields', () => {
+    const sourceContents: SourceContents = {
+      parent: [
+        {id: 'p1', region: 'us', org: 'acme'},
+        {id: 'p2', region: 'us', org: 'wayne'},
+        {id: 'p3', region: 'eu', org: 'acme'},
+      ],
+      child: [
+        {id: 'cA', region: 'us', org: 'acme', text: 'A'},
+        {id: 'cB', region: 'us', org: 'wayne', text: 'B'},
+      ],
+    };
+    const {data, actualStorage} = runPushTest({
+      sources,
+      sourceContents,
+      ast,
+      format,
+      pushes: [],
+    });
+
+    // p1 (us,acme) and p2 (us,wayne) each have their own child;
+    // p3 (eu,acme) has no matching child → excluded.
+    expect((data as unknown as readonly {id: string}[]).map(r => r.id)).toEqual(
+      ['p1', 'p2'],
+    );
+
+    // Storage keys include BOTH partition columns — a single-column
+    // key would collide (us,acme) with (us,wayne) and both parents
+    // would appear to share a cap bucket.
+    // p3 (eu,acme) has no matching children; its partition is still
+    // hydrated with size=0 during the initial scan.
+    expect(actualStorage['.children:cap']).toMatchInlineSnapshot(`
+      {
+        "["cap","eu","acme"]": {
+          "pks": [],
+          "size": 0,
+        },
+        "["cap","us","acme"]": {
+          "pks": [
+            "["cA"]",
+          ],
+          "size": 1,
+        },
+        "["cap","us","wayne"]": {
+          "pks": [
+            "["cB"]",
+          ],
+          "size": 1,
+        },
+      }
+    `);
+  });
+
+  test('push to one compound partition does not affect another', () => {
+    const sourceContents: SourceContents = {
+      parent: [
+        {id: 'p1', region: 'us', org: 'acme'},
+        {id: 'p2', region: 'us', org: 'wayne'},
+      ],
+      child: [
+        {id: 'c1', region: 'us', org: 'acme', text: 'x'},
+        {id: 'c2', region: 'us', org: 'acme', text: 'y'},
+        {id: 'c3', region: 'us', org: 'acme', text: 'z'},
+      ],
+    };
+    const {actualStorage} = runPushTest({
+      sources,
+      sourceContents,
+      ast,
+      format,
+      pushes: [
+        // 4th child in (us,acme) — exceeds cap limit of 3 → dropped.
+        [
+          'child',
+          makeSourceChangeAdd({
+            id: 'c4',
+            region: 'us',
+            org: 'acme',
+            text: 'w',
+          }),
+        ],
+        // 1st child in (us,wayne) — independent bucket, accepted.
+        [
+          'child',
+          makeSourceChangeAdd({
+            id: 'c5',
+            region: 'us',
+            org: 'wayne',
+            text: 'v',
+          }),
+        ],
+      ],
+    });
+
+    // (us,acme) cap still has c1,c2,c3 (c4 dropped; overflow).
+    // (us,wayne) cap now has c5.
+    expect(actualStorage['.children:cap']).toMatchInlineSnapshot(`
+      {
+        "["cap","us","acme"]": {
+          "pks": [
+            "["c1"]",
+            "["c2"]",
+            "["c3"]",
+          ],
+          "size": 3,
+        },
+        "["cap","us","wayne"]": {
+          "pks": [
+            "["c5"]",
+          ],
+          "size": 1,
+        },
+      }
+    `);
+  });
+});
