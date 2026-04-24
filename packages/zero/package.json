@@ -76,6 +76,10 @@
       "types": "./out/zero/src/adapters/drizzle.d.ts",
       "default": "./out/zero/src/adapters/drizzle.js"
     },
+    "./server/adapters/kysely": {
+      "types": "./out/zero/src/adapters/kysely.d.ts",
+      "default": "./out/zero/src/adapters/kysely.js"
+    },
     "./server/adapters/prisma": {
       "types": "./out/zero/src/adapters/prisma.d.ts",
       "default": "./out/zero/src/adapters/prisma.js"
@@ -191,9 +195,13 @@
   },
   "peerDependencies": {
     "@op-engineering/op-sqlite": ">=15",
-    "expo-sqlite": ">=15"
+    "expo-sqlite": ">=15",
+    "kysely": "^0.28.16"
   },
   "peerDependenciesMeta": {
+    "kysely": {
+      "optional": true
+    },
     "expo-sqlite": {
       "optional": true
     },
