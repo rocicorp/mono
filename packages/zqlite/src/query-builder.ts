@@ -193,6 +193,40 @@ export function toSQLiteType(v: unknown, type: ValueType): unknown {
   }
 }
 
+function nullableAwareEquality(
+  field: string,
+  value: unknown,
+  columnType: SchemaValue,
+): SQLQuery {
+  // Use = instead of IS for non-nullable columns to enable better
+  // index usage in SQLite.
+  return columnType.optional === true
+    ? sql`${sql.ident(field)} IS ${value}`
+    : sql`${sql.ident(field)} = ${value}`;
+}
+
+function nullableAwareRangeComparison(
+  field: string,
+  value: unknown,
+  operator: '>' | '<',
+  columnType: SchemaValue,
+): SQLQuery {
+  // For non-nullable columns, skip IS NULL checks to avoid breaking
+  // SQLite's MULTI-INDEX OR optimization, which falls back to a full
+  // table scan when any OR branch involves NULL.
+  // See: https://github.com/rocicorp/mono/pull/5542
+  const comparison = sql`${sql.ident(field)} ${sql.__dangerous__rawValue(
+    operator,
+  )} ${value}`;
+  if (columnType.optional !== true) {
+    return comparison;
+  }
+
+  return operator === '>'
+    ? sql`(${value} IS NULL OR ${comparison})`
+    : sql`(${sql.ident(field)} IS NULL OR ${comparison})`;
+}
+
 /**
  * The ordering could be complex such as:
  * `ORDER BY a ASC, b DESC, c ASC`
@@ -223,42 +257,23 @@ function gatherStartConstraints(
     const [iField, iDirection] = order[i];
     for (let j = 0; j <= i; j++) {
       if (j === i) {
-        const constraintValue = toSQLiteType(
-          from[iField],
-          columnTypes[iField].type,
+        const columnType = columnTypes[iField];
+        const constraintValue = toSQLiteType(from[iField], columnType.type);
+        const operator =
+          iDirection === 'asc' ? (reverse ? '<' : '>') : reverse ? '>' : '<';
+        group.push(
+          nullableAwareRangeComparison(
+            iField,
+            constraintValue,
+            operator,
+            columnType,
+          ),
         );
-        if (iDirection === 'asc') {
-          if (!reverse) {
-            group.push(
-              sql`(${constraintValue} IS NULL OR ${sql.ident(iField)} > ${constraintValue})`,
-            );
-          } else {
-            reverse satisfies true;
-            group.push(
-              sql`(${sql.ident(iField)} IS NULL OR ${sql.ident(iField)} < ${constraintValue})`,
-            );
-          }
-        } else {
-          iDirection satisfies 'desc';
-          if (!reverse) {
-            group.push(
-              sql`(${sql.ident(iField)} IS NULL OR ${sql.ident(iField)} < ${constraintValue})`,
-            );
-          } else {
-            reverse satisfies true;
-            group.push(
-              sql`(${constraintValue} IS NULL OR ${sql.ident(iField)} > ${constraintValue})`,
-            );
-          }
-        }
       } else {
         const [jField] = order[j];
-        group.push(
-          sql`${sql.ident(jField)} IS ${toSQLiteType(
-            from[jField],
-            columnTypes[jField].type,
-          )}`,
-        );
+        const columnType = columnTypes[jField];
+        const value = toSQLiteType(from[jField], columnType.type);
+        group.push(nullableAwareEquality(jField, value, columnType));
       }
     }
     constraints.push(sql`(${sql.join(group, sql` AND `)})`);
@@ -267,13 +282,11 @@ function gatherStartConstraints(
   if (basis === 'at') {
     constraints.push(
       sql`(${sql.join(
-        order.map(
-          s =>
-            sql`${sql.ident(s[0])} IS ${toSQLiteType(
-              from[s[0]],
-              columnTypes[s[0]].type,
-            )}`,
-        ),
+        order.map(([field]) => {
+          const columnType = columnTypes[field];
+          const value = toSQLiteType(from[field], columnType.type);
+          return nullableAwareEquality(field, value, columnType);
+        }),
         sql` AND `,
       )})`,
     );
