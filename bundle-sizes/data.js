@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776666059813,
+  "lastUpdate": 1776996781203,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -55321,6 +55321,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "Size of replicache.min.mjs.br (Brotli compressed)",
             "value": 32248,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "aaron@aaronboodman.com",
+            "name": "Aaron Boodman",
+            "username": "aboodman"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "72aade611001762a7abbcb5cc0187fe10affaa2a",
+          "message": "fix(zero-cache,replicache): preserve sqlite tx failures via Error.cause (#5862)\n\nSome SQLite errors auto-abort the transaction. In this case, calling\nROLLBACK throws a new error, obscuring the original one.\n\nFix this pattern throughout the codebase.\n\nOriginal report:\nhttps://discord.com/channels/830183651022471199/1495148037935206620/1496448522860630017",
+          "timestamp": "2026-04-23T16:11:24-10:00",
+          "tree_id": "6c88f748f6ee5ed0e553e2ac173317c4040bbb6f",
+          "url": "https://github.com/rocicorp/mono/commit/72aade611001762a7abbcb5cc0187fe10affaa2a"
+        },
+        "date": 1776996769338,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 306068,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 55169,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 113180,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 32317,
             "unit": "bytes"
           }
         ]
