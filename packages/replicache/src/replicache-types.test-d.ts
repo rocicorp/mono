@@ -33,25 +33,21 @@ test('mutator optional args', async () => {
   });
 
   const {mut, mut2, mut3, mut4} = rep.mutate;
-  const res: number = await mut(42);
-  use(res);
 
-  const res2: string = await mut2('s');
-  use(res2);
+  assertType<number>(await mut(42));
+  assertType<string>(await mut2('s'));
+  assertType<Promise<void>>(mut3());
+  assertType<Promise<void>>(mut4());
 
-  await mut3();
   //  @ts-expect-error: Expected 0 arguments, but got 1.ts(2554)
   await mut3(42);
   //  @ts-expect-error: Type 'void' is not assignable to type 'number'.ts(2322)
-  const res3: number = await mut3();
-  use(res3);
+  assertType<number>(await mut3());
 
-  await mut4();
   //  @ts-expect-error: Expected 0 arguments, but got 1.ts(2554)
   await mut4(42);
   //  @ts-expect-error: Type 'void' is not assignable to type 'number'.ts(2322)
-  const res4: number = await mut4();
-  use(res4);
+  assertType<number>(await mut4());
 });
 
 test('Test partial JSONObject', async () => {
@@ -68,7 +64,7 @@ test('Test partial JSONObject', async () => {
   type Todo = {id: number; text: string};
 
   const {mut} = rep.mutate;
-  await mut({});
+  assertType<Promise<Partial<Todo>>>(mut({}));
   await mut({id: 42});
   await mut({text: 'abc'});
 
@@ -97,20 +93,16 @@ test('Test register param', () => {
     },
   });
 
-  const mut: () => Promise<void> = rep.mutate.mut;
-  use(mut);
+  assertType<() => Promise<void>>(rep.mutate.mut);
 
   // @ts-expect-error Type 'number' is not assignable to type 'string'.ts(2322)
-  const mut2: (x: number) => Promise<void> = rep.mutate.mut2;
-  use(mut2);
+  assertType<(x: number) => Promise<void>>(rep.mutate.mut2);
 
   // @ts-expect-error Type '(args: string) => Promise<void>' is not assignable to type '() => Promise<void>'.ts(2322)
-  const mut3: () => Promise<void> = rep.mutate.mut3;
-  use(mut3);
+  assertType<() => Promise<void>>(rep.mutate.mut3);
 
   // This is fine according to the rules of JS/TS
-  const mut4: (x: number) => Promise<void> = rep.mutate.mut4;
-  use(mut4);
+  assertType<(x: number) => Promise<void>>(rep.mutate.mut4);
 
   new Replicache({
     name: 'test-types',
@@ -132,12 +124,14 @@ test('Key type for scans', async () => {
 
   await rep.query(async tx => {
     for await (const k of tx.scan({indexName: 'n'}).keys()) {
+      assertType<IndexKey>(k);
       // @ts-expect-error Type '[secondary: string, primary?: string | undefined]' is not assignable to type 'string'.ts(2322)
       const k2: string = k;
       use(k2);
     }
 
     for await (const k of tx.scan({indexName: 'n', start: {key: 's'}}).keys()) {
+      assertType<IndexKey>(k);
       // @ts-expect-error Type '[secondary: string, primary?: string | undefined]' is not assignable to type 'string'.ts(2322)
       const k2: string = k;
       use(k2);
@@ -146,12 +140,14 @@ test('Key type for scans', async () => {
     for await (const k of tx
       .scan({indexName: 'n', start: {key: ['s']}})
       .keys()) {
+      assertType<IndexKey>(k);
       // @ts-expect-error Type '[secondary: string, primary?: string | undefined]' is not assignable to type 'string'.ts(2322)
       const k2: string = k;
       use(k2);
     }
 
     for await (const k of tx.scan({start: {key: 'p'}}).keys()) {
+      assertType<string>(k);
       // @ts-expect-error Type 'string' is not assignable to type '[string]'.ts(2322)
       const k2: [string] = k;
       use(k2);
@@ -312,17 +308,10 @@ test('scan with index', async () => {
   });
 
   await rep.query(async tx => {
-    (await tx.scan({indexName: 'a'}).keys().toArray()) as [
-      secondary: string,
-      primary: string,
-    ][];
-
-    let indexKeys: IndexKey[] = await tx
-      .scan({indexName: 'a'})
-      .keys()
-      .toArray();
-    indexKeys = await tx.scan({indexName: 'a', prefix: 'a'}).keys().toArray();
-    use(indexKeys);
+    assertType<IndexKey[]>(await tx.scan({indexName: 'a'}).keys().toArray());
+    assertType<IndexKey[]>(
+      await tx.scan({indexName: 'a', prefix: 'a'}).keys().toArray(),
+    );
 
     // @ts-expect-error Cannot convert Index[] to string[]
     (await tx.scan({indexName: 'a'}).keys().toArray()) as string[];
@@ -335,12 +324,8 @@ test('scan without index', async () => {
   });
 
   await rep.query(async tx => {
-    await tx.scan().keys().toArray();
-    await tx.scan({}).keys().toArray();
-
-    let indexKeys: string[] = await tx.scan({}).keys().toArray();
-    indexKeys = await tx.scan({prefix: 'a'}).keys().toArray();
-    use(indexKeys);
+    assertType<string[]>(await tx.scan().keys().toArray());
+    assertType<string[]>(await tx.scan({prefix: 'a'}).keys().toArray());
 
     // @ts-expect-error Cannot convert string[] to IndexKey[]
     (await tx.scan({}).keys().toArray()) as IndexKey[];
@@ -370,7 +355,10 @@ test('mutator return read only', async () => {
     },
   });
 
-  use(rep);
+  assertType<Promise<{readonly y: number}>>(rep.mutate.mut({y: 1}));
+  assertType<Promise<{y: number}>>(rep.mutate.mut2({y: 1}));
+  assertType<Promise<ReadonlyArray<number>>>(rep.mutate.mut3([1, 2]));
+  assertType<Promise<Array<number>>>(rep.mutate.mut4([1, 2]));
 });
 
 test('Allowing undefined in JSONObject', async () => {
@@ -383,7 +371,7 @@ test('Allowing undefined in JSONObject', async () => {
       },
     },
   });
-  await rep.mutate.mut({a: undefined});
+  assertType<Promise<void>>(rep.mutate.mut({a: undefined}));
 });
 
 test('Parameterized get', async () => {
@@ -391,14 +379,12 @@ test('Parameterized get', async () => {
     name: 'test-types',
     mutators: {
       mut: async (tx: WriteTransaction) => {
-        const p: {x: string} | undefined = await tx.get<{x: string}>('x');
-        use(p);
+        assertType<{x: string} | undefined>(await tx.get<{x: string}>('x'));
       },
     },
   });
   await rep.query(async tx => {
-    const p: {x: string} | undefined = await tx.get<{x: string}>('x');
-    use(p);
+    assertType<{x: string} | undefined>(await tx.get<{x: string}>('x'));
   });
 });
 
@@ -407,6 +393,7 @@ test('Parameterized get invalid types', async () => {
     name: 'test-types',
     mutators: {
       mut: async (tx: WriteTransaction) => {
+        assertType<{x: string} | undefined>(await tx.get<{x: string}>('x'));
         // @ts-expect-error Type 'string' is not assignable to type 'number'.ts(2322)
         const p: {x: number} | undefined = await tx.get<{x: string}>('x');
         use(p);
@@ -414,6 +401,7 @@ test('Parameterized get invalid types', async () => {
     },
   });
   await rep.query(async tx => {
+    assertType<{x: string} | undefined>(await tx.get<{x: string}>('x'));
     // @ts-expect-error Type 'string' is not assignable to type 'number'.ts(2322)
     const p: {x: number} | undefined = await tx.get<{x: string}>('x');
     use(p);
@@ -428,6 +416,7 @@ test('Parameterized get deep read only object/array', async () => {
       mut: async (tx: WriteTransaction) => {
         const v = await tx.get<T>('x');
         assert(v, 'Expected value for key "x" to be defined');
+        assertType<DeepReadonly<T>>(v);
         // @ts-expect-error Cannot assign to 'x' because it is a read-only property.ts(2540)
         v.x = [42];
         // @ts-expect-error Index signature in type 'readonly number[]' only permits reading.ts(2542)
@@ -438,6 +427,7 @@ test('Parameterized get deep read only object/array', async () => {
   await rep.query(async tx => {
     const v = await tx.get<T>('x');
     assert(v, 'Expected value for key "x" to be defined');
+    assertType<DeepReadonly<T>>(v);
     // @ts-expect-error Cannot assign to 'x' because it is a read-only property.ts(2540)
     v.x = [42];
     // @ts-expect-error Index signature in type 'readonly number[]' only permits reading.ts(2542)
@@ -534,12 +524,14 @@ test('Parameterized scan.values invalid types', async () => {
     mutators: {
       mut: async (tx: WriteTransaction) => {
         for await (const v of tx.scan<V>()) {
+          assertType<DeepReadonly<V>>(v);
           // @ts-expect-error Type 'number' is not assignable to type 'string'.ts(2322)
           const v2: {x: string} = v;
           use(v2);
         }
 
         for await (const v of tx.scan<V>().values()) {
+          assertType<DeepReadonly<V>>(v);
           // @ts-expect-error Type 'number' is not assignable to type 'string'.ts(2322)
           const v2: {x: string} = v;
           use(v2);
@@ -558,12 +550,14 @@ test('Parameterized scan.values invalid types', async () => {
 
   await rep.query(async tx => {
     for await (const v of tx.scan<V>()) {
+      assertType<DeepReadonly<V>>(v);
       // @ts-expect-error Type 'number' is not assignable to type 'string'.ts(2322)
       const v2: {x: string} = v;
       use(v2);
     }
 
     for await (const v of tx.scan<V>().values()) {
+      assertType<DeepReadonly<V>>(v);
       // @ts-expect-error Type 'number' is not assignable to type 'string'.ts(2322)
       const v2: {x: string} = v;
       use(v2);
@@ -586,6 +580,7 @@ test('Parameterized scan.values deep read only object/array', async () => {
     mutators: {
       mut: async (tx: WriteTransaction) => {
         for await (const v of tx.scan<V>()) {
+          assertType<DeepReadonly<V>>(v);
           // @ts-expect-error Cannot assign to 'x' because it is a read-only property.ts(2540)
           v.x = [42];
           // @ts-expect-error Index signature in type 'readonly number[]' only permits reading.ts(2542)
@@ -593,6 +588,7 @@ test('Parameterized scan.values deep read only object/array', async () => {
         }
 
         for await (const v of tx.scan<V>().values()) {
+          assertType<DeepReadonly<V>>(v);
           // @ts-expect-error Cannot assign to 'x' because it is a read-only property.ts(2540)
           v.x = [42];
           // @ts-expect-error Index signature in type 'readonly number[]' only permits reading.ts(2542)
@@ -600,12 +596,14 @@ test('Parameterized scan.values deep read only object/array', async () => {
         }
 
         const vs = await tx.scan<V>().toArray();
+        assertType<DeepReadonly<V>[]>(vs);
         // @ts-expect-error Cannot assign to 'x' because it is a read-only property.ts(2540)
         vs[0].x = [42];
         // @ts-expect-error Index signature in type 'readonly number[]' only permits reading.ts(2542)
         vs[0].x[0] = 42;
 
         const vs2 = await tx.scan<V>().values().toArray();
+        assertType<DeepReadonly<V>[]>(vs2);
         // @ts-expect-error Cannot assign to 'x' because it is a read-only property.ts(2540)
         vs2[0].x = [42];
         // @ts-expect-error Index signature in type 'readonly number[]' only permits reading.ts(2542)
@@ -616,6 +614,7 @@ test('Parameterized scan.values deep read only object/array', async () => {
 
   await rep.query(async tx => {
     for await (const v of tx.scan<V>()) {
+      assertType<DeepReadonly<V>>(v);
       // @ts-expect-error Cannot assign to 'x' because it is a read-only property.ts(2540)
       v.x = [42];
       // @ts-expect-error Index signature in type 'readonly number[]' only permits reading.ts(2542)
@@ -623,6 +622,7 @@ test('Parameterized scan.values deep read only object/array', async () => {
     }
 
     for await (const v of tx.scan<V>().values()) {
+      assertType<DeepReadonly<V>>(v);
       // @ts-expect-error Cannot assign to 'x' because it is a read-only property.ts(2540)
       v.x = [42];
       // @ts-expect-error Index signature in type 'readonly number[]' only permits reading.ts(2542)
@@ -630,12 +630,14 @@ test('Parameterized scan.values deep read only object/array', async () => {
     }
 
     const vs = await tx.scan<V>().toArray();
+    assertType<DeepReadonly<V>[]>(vs);
     // @ts-expect-error Cannot assign to 'x' because it is a read-only property.ts(2540)
     vs[0].x = [42];
     // @ts-expect-error Index signature in type 'readonly number[]' only permits reading.ts(2542)
     vs[0].x[0] = 42;
 
     const vs2 = await tx.scan<V>().values().toArray();
+    assertType<DeepReadonly<V>[]>(vs2);
     // @ts-expect-error Cannot assign to 'x' because it is a read-only property.ts(2540)
     vs2[0].x = [42];
     // @ts-expect-error Index signature in type 'readonly number[]' only permits reading.ts(2542)
@@ -650,30 +652,24 @@ test('Parameterized scan.entries', async () => {
     mutators: {
       mut: async (tx: WriteTransaction) => {
         for await (const e of tx.scan<V>().entries()) {
-          const v: readonly [string, {readonly x: number}] = e;
-          use(v);
+          assertType<readonly [string, {readonly x: number}]>(e);
         }
 
-        const es: (readonly [string, {readonly x: number}])[] = await tx
-          .scan<V>()
-          .entries()
-          .toArray();
-        use(es);
+        assertType<(readonly [string, {readonly x: number}])[]>(
+          await tx.scan<V>().entries().toArray(),
+        );
       },
     },
   });
 
   await rep.query(async tx => {
-    for await (const v of tx.scan<V>().entries()) {
-      const v2: readonly [string, {x: number}] = v;
-      use(v2);
+    for await (const e of tx.scan<V>().entries()) {
+      assertType<readonly [string, {readonly x: number}]>(e);
     }
 
-    const es: (readonly [string, {readonly x: number}])[] = await tx
-      .scan<V>()
-      .entries()
-      .toArray();
-    use(es);
+    assertType<(readonly [string, {readonly x: number}])[]>(
+      await tx.scan<V>().entries().toArray(),
+    );
   });
 });
 
@@ -711,11 +707,15 @@ test('Parameterized scan.entries invalid types', async () => {
     mutators: {
       mut: async (tx: WriteTransaction) => {
         for await (const e of tx.scan<V>().entries()) {
+          assertType<readonly [string, {readonly x: number}]>(e);
           // @ts-expect-error Type 'number' is not assignable to type 'string'.ts(2322)
           const v: readonly [string, {readonly x: string}] = e;
           use(v);
         }
 
+        assertType<(readonly [string, {readonly x: number}])[]>(
+          await tx.scan<V>().entries().toArray(),
+        );
         // @ts-expect-error Type 'number' is not assignable to type 'string'.ts(2322)
         const es: (readonly [string, {readonly x: string}])[] = await tx
           .scan<V>()
@@ -728,11 +728,15 @@ test('Parameterized scan.entries invalid types', async () => {
 
   await rep.query(async tx => {
     for await (const e of tx.scan<V>().entries()) {
+      assertType<readonly [string, {readonly x: number}]>(e);
       // @ts-expect-error Type 'number' is not assignable to type 'string'.ts(2322)
       const v: readonly [string, {x: string}] = e;
       use(v);
     }
 
+    assertType<(readonly [string, {readonly x: number}])[]>(
+      await tx.scan<V>().entries().toArray(),
+    );
     // @ts-expect-error Type 'number' is not assignable to type 'string'.ts(2322)
     const es: (readonly [string, {readonly x: string}])[] = await tx
       .scan<V>()
@@ -751,6 +755,7 @@ test('Parameterized scan.entries deep read only object/array', async () => {
         for await (const e of tx.scan<V>().entries()) {
           const [k, v] = e;
           use(k);
+          assertType<DeepReadonly<V>>(v);
           // @ts-expect-error Cannot assign to 'x' because it is a read-only property.ts(2540)
           v.x = [42];
           // @ts-expect-error Index signature in type 'readonly number[]' only permits reading.ts(2542)
@@ -758,6 +763,7 @@ test('Parameterized scan.entries deep read only object/array', async () => {
         }
 
         const es = await tx.scan<V>().entries().toArray();
+        assertType<(readonly [string, DeepReadonly<V>])[]>(es);
         // @ts-expect-error Cannot assign to 'x' because it is a read-only property.ts(2540)
         es[0][1].x = [42];
         // @ts-expect-error Index signature in type 'readonly number[]' only permits reading.ts(2542)
@@ -770,6 +776,7 @@ test('Parameterized scan.entries deep read only object/array', async () => {
     for await (const e of tx.scan<V>().entries()) {
       const [k, v] = e;
       use(k);
+      assertType<DeepReadonly<V>>(v);
       // @ts-expect-error Cannot assign to 'x' because it is a read-only property.ts(2540)
       v.x = [42];
       // @ts-expect-error Index signature in type 'readonly number[]' only permits reading.ts(2542)
@@ -777,6 +784,7 @@ test('Parameterized scan.entries deep read only object/array', async () => {
     }
 
     const es = await tx.scan<V>().entries().toArray();
+    assertType<(readonly [string, DeepReadonly<V>])[]>(es);
     // @ts-expect-error Cannot assign to 'x' because it is a read-only property.ts(2540)
     es[0][1].x = [42];
     // @ts-expect-error Index signature in type 'readonly number[]' only permits reading.ts(2542)
