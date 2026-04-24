@@ -10,7 +10,7 @@ import {runTx} from '../../db/run-transaction.ts';
 import {TransactionPool} from '../../db/transaction-pool.ts';
 import {
   getOrCreateCounter,
-  getOrCreateHistogram,
+  getOrCreateLatencyHistogram,
 } from '../../observability/metrics.ts';
 import {type PostgresDB, type PostgresTransaction} from '../../types/pg.ts';
 import {rowIDString} from '../../types/row-key.ts';
@@ -104,12 +104,12 @@ export class RowRecordCache {
   #flushedRowsVersion: CVRVersion | null = null;
   #flushing: Resolver<void> | null = null;
 
-  readonly #cvrFlushTime = getOrCreateHistogram('sync', 'cvr.flush-time', {
-    description:
-      'Time to flush a CVR transaction. This includes both synchronous ' +
-      'and asynchronous flushes, distinguished by the flush.type attribute',
-    unit: 's',
-  });
+  readonly #cvrFlushTime = getOrCreateLatencyHistogram(
+    'sync',
+    'cvr.flush-time',
+    'Time to flush a CVR transaction. This includes both synchronous ' +
+      'and asynchronous flushes, distinguished by the flush.type attribute.',
+  );
   readonly #cvrRowsFlushed = getOrCreateCounter(
     'sync',
     'cvr.rows-flushed',
@@ -135,7 +135,7 @@ export class RowRecordCache {
   }
 
   recordSyncFlushStats(stats: CVRFlushStats, elapsedMs: number) {
-    this.#cvrFlushTime.record(elapsedMs / 1000, {
+    this.#cvrFlushTime.recordMs(elapsedMs, {
       [FLUSH_TYPE_ATTRIBUTE]: 'sync',
     });
     if (stats.rowsDeferred === 0) {
@@ -144,7 +144,7 @@ export class RowRecordCache {
   }
 
   #recordAsyncFlushStats(rows: number, elapsedMs: number) {
-    this.#cvrFlushTime.record(elapsedMs / 1000, {
+    this.#cvrFlushTime.recordMs(elapsedMs, {
       [FLUSH_TYPE_ATTRIBUTE]: 'async',
     });
     this.#cvrRowsFlushed.add(rows);

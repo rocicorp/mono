@@ -1,6 +1,6 @@
 {
   "name": "@rocicorp/zero",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "Zero is a web framework for serverless web development.",
   "homepage": "https://zero.rocicorp.dev",
   "bugs": {
@@ -35,6 +35,10 @@
     ".": {
       "types": "./out/zero/src/zero.d.ts",
       "default": "./out/zero/src/zero.js"
+    },
+    "./analyze": {
+      "types": "./out/zero/src/analyze.d.ts",
+      "default": "./out/zero/src/analyze.js"
     },
     "./bindings": {
       "types": "./out/zero/src/bindings.d.ts",

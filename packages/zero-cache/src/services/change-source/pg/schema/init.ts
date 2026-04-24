@@ -242,10 +242,16 @@ function getIncrementalMigrations(
     //
     // This also adds forwards-compatible support for hierarchical logical
     // message prefixes and unknown ddl event types.
-    // (subsued by v18)
+    // (subsumed by v18)
 
     // v18: Pure refactoring of event trigger code.
-    18: {
+    // (subsumed by v19)
+
+    // v19: Correctly handle concurrently issued DDL statements.
+    // (subsumed by v20)
+
+    // v20: Handle nested DDL triggers
+    20: {
       migrateSchema: async (lc, sql) => {
         const [{publications}] = await sql<{publications: string[]}[]>`
           SELECT publications FROM ${sql(shardConfigTable)}`;

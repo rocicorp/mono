@@ -68,7 +68,6 @@ jobs:
           cat output.json |\
           bencher run \
           --project zero \
-          --ci-number ${{ github.run_number }} \
           --testbed self-hosted-metal \
           --token '${{ secrets.BENCHER_API_TOKEN }}' \
           --adapter json \

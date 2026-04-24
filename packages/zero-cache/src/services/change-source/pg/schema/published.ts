@@ -1,5 +1,7 @@
 import {literal} from 'pg-format';
 import type postgres from 'postgres';
+import {assert} from '../../../../../../shared/src/asserts.ts';
+import {BigIntJSON} from '../../../../../../shared/src/bigint-json.ts';
 import {equals} from '../../../../../../shared/src/set-utils.ts';
 import * as v from '../../../../../../shared/src/valita.ts';
 import {computeZqlSpecsFromLiteSpecs} from '../../../../db/lite-tables.ts';
@@ -10,14 +12,15 @@ import {
 import {publishedIndexSpec, publishedTableSpec} from '../../../../db/specs.ts';
 import {liteTableName} from '../../../../types/names.ts';
 
-export function publishedTableQuery(publications: readonly string[]) {
+export function publishedSchemaQuery(publications: readonly string[]) {
   // Notes:
   // * There's a bug in PG15 in which generated columns are incorrectly
   //   included in pg_publication_tables.attnames, (even though the generated
   //   column values are not be included in the replication stream).
   //   The WHERE condition `attgenerated = ''` fixes this by explicitly excluding
   //   generated columns from the list.
-  return /*sql*/ `
+  return (
+    /*sql*/ `
 WITH published_columns AS (SELECT 
   pc.oid::int8 AS "oid",
   nspname AS "schema",
@@ -89,32 +92,28 @@ tables AS (SELECT json_build_object(
     "publication", 
     jsonb_build_object('rowFilter', "rowFilter")
   )
-) AS "table" FROM published_columns GROUP BY "schema", "schemaOID", "name", "oid", "replicaIdentity")
-
-SELECT COALESCE(json_agg("table"), '[]'::json) as "tables" FROM tables
-  `;
-}
-
-export function indexDefinitionsQuery(publications: readonly string[]) {
-  // Note: pg_attribute contains column names for tables and for indexes.
-  // However, the latter does not get updated when a column in a table is
-  // renamed.
-  //
-  // https://www.postgresql.org/message-id/5860814f-c91d-4ab0-b771-ded90d7b9c55%40www.fastmail.com
-  //
-  // To address this, the pg_attribute rows are looked up for the index's
-  // table rather than the index itself, using the pg_index.indkey array
-  // to determine the set and order of columns to include.
-  //
-  // Notes:
-  // * The first bit of indoption is 1 for DESC and 0 for ASC:
-  //   https://github.com/postgres/postgres/blob/4e1fad37872e49a711adad5d9870516e5c71a375/src/include/catalog/pg_index.h#L89
-  // * pg_index.indkey is an int2vector which is 0-based instead of 1-based.
-  // * The additional check for attgenerated is required for the aforementioned
-  //   (in publishedTableQuery) bug in PG15 in which generated columns are
-  //   incorrectly included in pg_publication_tables.attnames
-  return /*sql*/ `
-  WITH indexed_columns AS (SELECT
+) AS "table" FROM published_columns 
+  GROUP BY "schema", "schemaOID", "name", "oid", "replicaIdentity"),
+  ` +
+    // Note: pg_attribute contains column names for tables and for indexes.
+    // However, the latter does not get updated when a column in a table is
+    // renamed.
+    //
+    // https://www.postgresql.org/message-id/5860814f-c91d-4ab0-b771-ded90d7b9c55%40www.fastmail.com
+    //
+    // To address this, the pg_attribute rows are looked up for the index's
+    // table rather than the index itself, using the pg_index.indkey array
+    // to determine the set and order of columns to include.
+    //
+    // Notes:
+    // * The first bit of indoption is 1 for DESC and 0 for ASC:
+    //   https://github.com/postgres/postgres/blob/4e1fad37872e49a711adad5d9870516e5c71a375/src/include/catalog/pg_index.h#L89
+    // * pg_index.indkey is an int2vector which is 0-based instead of 1-based.
+    // * The additional check for attgenerated is required for the aforementioned
+    //   (in publishedTableQuery) bug in PG15 in which generated columns are
+    //   incorrectly included in pg_publication_tables.attnames
+    /*sql*/ `
+  indexed_columns AS (SELECT
       pg_indexes.schemaname as "schema",
       pg_indexes.tablename as "tableName",
       pg_indexes.indexname as "name",
@@ -170,8 +169,12 @@ export function indexDefinitionsQuery(publications: readonly string[]) {
       GROUP BY "schema", "tableName", "name", "unique", 
          "isPrimaryKey", "isReplicaIdentity", "isImmediate")
 
-    SELECT COALESCE(json_agg("index"), '[]'::json) as "indexes" FROM indexes
-  `;
+    SELECT json_build_object(
+      'tables', COALESCE((SELECT json_agg("table") FROM tables), '[]'::json),
+      'indexes', COALESCE((SELECT json_agg("index") FROM indexes), '[]'::json)
+    ) as "publishedSchema"
+  `
+  );
 }
 
 export const publishedSchema = v
@@ -271,9 +274,7 @@ export async function getPublicationInfo(
     WHERE pb.pubname IN (${literal(publications)})
     ORDER BY pubname;
 
-  ${publishedTableQuery(publications)};
-
-  ${indexDefinitionsQuery(publications)};
+  ${publishedSchemaQuery(publications)};
 `);
 
   // The first query is used to check that tables in multiple publications
@@ -299,14 +300,13 @@ export async function getPublicationInfo(
     });
   }
 
+  assert(
+    result[2][0].publishedSchema,
+    () => `Invalid publishedSchema result ${BigIntJSON.stringify(result[2])}`,
+  );
+
   return {
     publications: v.parse(result[1], publicationsResultSchema),
-    ...v.parse(
-      {
-        ...result[2][0], // tables
-        ...result[3][0], // indexes
-      },
-      publishedSchema,
-    ),
+    ...v.parse(result[2][0].publishedSchema, publishedSchema),
   };
 }

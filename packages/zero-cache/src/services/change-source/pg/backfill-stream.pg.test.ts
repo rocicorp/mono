@@ -99,17 +99,26 @@ describe('backfill-stream', () => {
     return () => testDBs.drop(upstream);
   });
 
-  test(`column backfill`, async () => {
+  test.each([
+    {mode: 'binary', textCopy: false},
+    {mode: 'text', textCopy: true},
+  ])(`column backfill ($mode)`, async ({textCopy}) => {
     const stream = streamBackfill(
       lc,
       upstreamURI,
       {slot: 'slot_name', publications: ['the_pub']},
       columnBackfillRequest,
+      {textCopy},
     );
     const results = [];
     for await (const msg of stream) {
       results.push(msg);
     }
+
+    // Binary mode returns JSON[] as a stringified array.
+    // Text mode returns JSON[] as a parsed JS array.
+    const arr = (vals: unknown[]) => (textCopy ? vals : JSON.stringify(vals));
+
     expect(results).toMatchObject([
       {
         tag: 'backfill',
@@ -121,18 +130,16 @@ describe('backfill-stream', () => {
         },
         columns: ['c', 'b'],
         rowValues: [
-          // Column 'c JSON[]' should be an array of JSON values
-          // Column 'b JSON' should be stringified JSON
-          [1n, 2, [1, 2, '3', {e: 4}], '{"d" : 1}'],
-          [2n, 3, [2, 3, '4', {e: 5}], '{"d" : 2}'],
-          [3n, 4, [3, 4, '5', {e: 6}], '{"d" : 3}'],
-          [4n, 5, [4, 5, '6', {e: 7}], '{"d" : 4}'],
-          [5n, 6, [5, 6, '7', {e: 8}], '{"d" : 5}'],
-          [6n, 7, [6, 7, '8', {e: 9}], '{"d" : 6}'],
-          [7n, 8, [7, 8, '9', {e: 10}], '{"d" : 7}'],
-          [8n, 9, [8, 9, '10', {e: 11}], '{"d" : 8}'],
-          [9n, 10, [9, 10, '11', {e: 12}], '{"d" : 9}'],
-          [10n, 11, [10, 11, '12', {e: 13}], '{"d" : 10}'],
+          [1n, 2, arr([1, 2, '3', {e: 4}]), '{"d" : 1}'],
+          [2n, 3, arr([2, 3, '4', {e: 5}]), '{"d" : 2}'],
+          [3n, 4, arr([3, 4, '5', {e: 6}]), '{"d" : 3}'],
+          [4n, 5, arr([4, 5, '6', {e: 7}]), '{"d" : 4}'],
+          [5n, 6, arr([5, 6, '7', {e: 8}]), '{"d" : 5}'],
+          [6n, 7, arr([6, 7, '8', {e: 9}]), '{"d" : 6}'],
+          [7n, 8, arr([7, 8, '9', {e: 10}]), '{"d" : 7}'],
+          [8n, 9, arr([8, 9, '10', {e: 11}]), '{"d" : 8}'],
+          [9n, 10, arr([9, 10, '11', {e: 12}]), '{"d" : 9}'],
+          [10n, 11, arr([10, 11, '12', {e: 13}]), '{"d" : 10}'],
         ],
         status: {rows: 10, totalRows: 10, totalBytes: expect.any(Number)},
       },
@@ -149,17 +156,24 @@ describe('backfill-stream', () => {
     ]);
   });
 
-  test(`table backfill`, async () => {
+  test.each([
+    {mode: 'binary', textCopy: false},
+    {mode: 'text', textCopy: true},
+  ])(`table backfill ($mode)`, async ({textCopy}) => {
     const stream = streamBackfill(
       lc,
       upstreamURI,
       {slot: 'slot_name', publications: ['the_pub']},
       tableBackfillRequest,
+      {textCopy},
     );
     const results = [];
     for await (const msg of stream) {
       results.push(msg);
     }
+
+    const arr = (vals: unknown[]) => (textCopy ? vals : JSON.stringify(vals));
+
     // Columns should deduped and ordered: [id2, id1, a, c, b]
     expect(results).toMatchObject([
       {
@@ -172,20 +186,20 @@ describe('backfill-stream', () => {
         },
         columns: ['a', 'c', 'b'],
         rowValues: [
-          [2, 1n, '1111111111', [1, 2, '3', {e: 4}], '{"d" : 1}'],
-          [3, 2n, '2222222222', [2, 3, '4', {e: 5}], '{"d" : 2}'],
-          [4, 3n, '3333333333', [3, 4, '5', {e: 6}], '{"d" : 3}'],
-          [5, 4n, '4444444444', [4, 5, '6', {e: 7}], '{"d" : 4}'],
-          [6, 5n, '5555555555', [5, 6, '7', {e: 8}], '{"d" : 5}'],
-          [7, 6n, '6666666666', [6, 7, '8', {e: 9}], '{"d" : 6}'],
-          [8, 7n, '7777777777', [7, 8, '9', {e: 10}], '{"d" : 7}'],
-          [9, 8n, '8888888888', [8, 9, '10', {e: 11}], '{"d" : 8}'],
-          [10, 9n, '9999999999', [9, 10, '11', {e: 12}], '{"d" : 9}'],
+          [2, 1n, '1111111111', arr([1, 2, '3', {e: 4}]), '{"d" : 1}'],
+          [3, 2n, '2222222222', arr([2, 3, '4', {e: 5}]), '{"d" : 2}'],
+          [4, 3n, '3333333333', arr([3, 4, '5', {e: 6}]), '{"d" : 3}'],
+          [5, 4n, '4444444444', arr([4, 5, '6', {e: 7}]), '{"d" : 4}'],
+          [6, 5n, '5555555555', arr([5, 6, '7', {e: 8}]), '{"d" : 5}'],
+          [7, 6n, '6666666666', arr([6, 7, '8', {e: 9}]), '{"d" : 6}'],
+          [8, 7n, '7777777777', arr([7, 8, '9', {e: 10}]), '{"d" : 7}'],
+          [9, 8n, '8888888888', arr([8, 9, '10', {e: 11}]), '{"d" : 8}'],
+          [10, 9n, '9999999999', arr([9, 10, '11', {e: 12}]), '{"d" : 9}'],
           [
             11,
             10n,
             '10101010101010101010',
-            [10, 11, '12', {e: 13}],
+            arr([10, 11, '12', {e: 13}]),
             '{"d" : 10}',
           ],
         ],

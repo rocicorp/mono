@@ -6,6 +6,8 @@ import type {Node} from './data.ts';
 import type {SourceSchema} from './schema.ts';
 import type {Stream} from './stream.ts';
 
+export {skipYields} from './skip-yields.ts';
+
 /**
  * Input to an operator.
  */
@@ -85,14 +87,6 @@ export const throwOutput: Output = {
     throw new Error('Output not set');
   },
 };
-
-export function* skipYields(stream: Stream<Node | 'yield'>): Stream<Node> {
-  for (const node of stream) {
-    if (node !== 'yield') {
-      yield node;
-    }
-  }
-}
 
 /**
  * Operators are arranged into pipelines.

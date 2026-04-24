@@ -33,6 +33,7 @@ import {
   MUTATOR_URL,
   REAPER_URL,
   REPLICATOR_URL,
+  SHADOW_SYNCER_URL,
   SYNCER_URL,
 } from './worker-urls.ts';
 
@@ -147,6 +148,15 @@ export default async function runWorker(
     // Before starting the view-syncers, ensure that the reaper has started
     // up, indicating that any CVR db migrations have been performed.
     await reaperReady;
+  }
+
+  // Only run the shadow-sync canary on the replication-manager (or in
+  // single-node mode, where it also owns upstream). Running on every
+  // view-syncer would hammer the upstream with N redundant canaries.
+  if (config.shadowSync.enabled && runChangeStreamer) {
+    const {promise: shadowReady, resolve: shadowStarted} = resolver();
+    loadWorker(SHADOW_SYNCER_URL, 'supporting').once('message', shadowStarted);
+    await shadowReady;
   }
 
   const syncers: Worker[] = [];

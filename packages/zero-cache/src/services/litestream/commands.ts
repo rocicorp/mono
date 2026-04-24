@@ -49,21 +49,31 @@ export async function restoreReplica(
   replicaConstraints: ReplicaConstraints | null,
 ) {
   for (let i = 0; i < MAX_RETRIES; i++) {
-    if (i > 0) {
-      lc.info?.(
-        `replica not found. retrying in ${RETRY_INTERVAL_MS / 1000} seconds`,
-      );
-      await sleep(RETRY_INTERVAL_MS);
-    }
-    const restored = await tryRestore(lc, config, replicaConstraints);
-    if (restored) {
-      return;
+    try {
+      if (await tryRestore(lc, config, replicaConstraints)) {
+        return;
+      }
+    } catch (e) {
+      if (i === 0) {
+        // A restore will fail if the `replicate` process creates a new
+        // snapshot (and compacts old files) at the same time. Snapshots are
+        // infrequent (e.g. once every 12 hours), and the scenario is
+        // recoverable with a retry.
+        lc.warn?.(`initial restore attempt failed. retrying once`, e);
+        continue;
+      }
+      // If it fails again on the retry, though, bail.
+      throw e;
     }
     if (replicaConstraints) {
       // This can happen if the litestream URL is purposefully changed to
       // force a resync.
       throw new BackupNotFoundException(config.litestream.backupURL);
     }
+    lc.info?.(
+      `replica not found. retrying in ${RETRY_INTERVAL_MS / 1000} seconds`,
+    );
+    await sleep(RETRY_INTERVAL_MS);
   }
   throw new Error(`max attempts exceeded restoring replica`);
 }

@@ -108,6 +108,7 @@ describe('change-source/tables/ddl', () => {
   const DDL_START: Omit<DdlStartEvent, 'context'> = {
     type: 'ddlStart',
     version: 1,
+    event: {tag: 'UNUSED'},
     schema: {
       tables: [
         {
@@ -1336,6 +1337,7 @@ describe('change-source/tables/ddl', () => {
       let msg = messages[3] as MessageMessage;
       expect(parseDDLStartEvent(msg)).toMatchObject({
         ...DDL_START,
+        event: ddlUpdate.event,
         context: {query},
       } satisfies DdlStartEvent);
 

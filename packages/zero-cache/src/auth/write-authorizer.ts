@@ -165,6 +165,7 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
     ops: Exclude<CRUDOp, UpsertOp>[],
   ) {
     this.#statementRunner.beginConcurrent();
+    let opError: unknown;
     try {
       for (const op of ops) {
         const source = this.#getSource(op.tableName);
@@ -214,8 +215,22 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
             break;
         }
       }
+    } catch (e) {
+      opError = e;
+      throw e;
     } finally {
-      this.#statementRunner.rollback();
+      try {
+        this.#statementRunner.rollback();
+      } catch (rollbackError) {
+        if (opError !== undefined) {
+          const combinedError = new Error(
+            `canPostMutation failed and rollback also failed: operation error = ${String(opError)}; rollback error = ${String(rollbackError)}`,
+          );
+          combinedError.cause = opError;
+          throw combinedError;
+        }
+        throw rollbackError;
+      }
     }
 
     return true;

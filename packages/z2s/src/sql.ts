@@ -172,6 +172,10 @@ function createPlaceholder(index: number, arg: SqlConvertArg) {
     return `$${index}`;
   }
 
+  if (arg.value === null && arg.plural) {
+    return `$${index}`;
+  }
+
   if (arg[sqlConvert] === 'literal') {
     const {value} = arg;
     if (Array.isArray(value)) {

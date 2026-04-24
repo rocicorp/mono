@@ -70,17 +70,7 @@ describe('decommission', () => {
     );
     expect(
       await upstream`SELECT evtname FROM pg_event_trigger WHERE evtname LIKE 'zeroout%'`.values(),
-    ).toEqual([
-      ['zeroout_ddl_start_13'],
-      ['zeroout_create_table_13'],
-      ['zeroout_alter_table_13'],
-      ['zeroout_create_index_13'],
-      ['zeroout_drop_table_13'],
-      ['zeroout_drop_index_13'],
-      ['zeroout_alter_publication_13'],
-      ['zeroout_alter_schema_13'],
-      ['zeroout_comment_13'],
-    ]);
+    ).toEqual([['zeroout_ddl_start_13'], ['zeroout_ddl_end_13']]);
     expect(
       await upstream`SELECT slot_name FROM pg_replication_slots WHERE slot_name LIKE 'zeroout%'`.values(),
     ).toMatchObject([[expect.stringMatching('zeroout_13_')]]);

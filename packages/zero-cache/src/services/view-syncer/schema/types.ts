@@ -156,6 +156,22 @@ export const baseQueryRecordSchema = v.object({
    * queries with a newer `transformationVersion`.
    */
   transformationVersion: cvrVersionSchema.optional(),
+
+  /**
+   * Hex-encoded XOR signature over `h64(JSON.stringify([schema, table, rowKey]))`
+   * of every row currently attached to this query. Maintained incrementally by
+   * `PipelineDriver` as ADDs / REMOVEs are yielded from the query's pipeline
+   * (EDITs no-op), and persisted via `CVRQueryDrivenUpdater.flush` by a
+   * signature-provider callback.
+   *
+   * Used to detect drift on re-hydration of queries containing the `Cap` operator,
+   * which intentionally does not impose ordering and thus may pick a different N-row
+   * subset on re-execution. Comparing the pre-hydration signature with the post-
+   * hydration signature lets us force a `configVersion` bump so the standard CVR-diff
+   * machinery emits the reconciling poke. Absent or `'0'` means the signature is
+   * empty (no rows currently attached).
+   */
+  rowSetSignature: v.string().optional(),
 });
 
 /**
@@ -340,6 +356,7 @@ export function queryRecordToQueryRow(
         transformationVersion: maybeVersionString(query.transformationVersion),
         internal: true,
         deleted: false, // put vs del "got" query
+        rowSetSignature: query.rowSetSignature ?? null,
       };
     case 'client':
       return {
@@ -353,6 +370,7 @@ export function queryRecordToQueryRow(
         transformationVersion: maybeVersionString(query.transformationVersion),
         internal: null,
         deleted: false, // put vs del "got" query
+        rowSetSignature: query.rowSetSignature ?? null,
       };
     case 'custom':
       return {
@@ -366,6 +384,7 @@ export function queryRecordToQueryRow(
         transformationVersion: maybeVersionString(query.transformationVersion),
         internal: null,
         deleted: false, // put vs del "got" query
+        rowSetSignature: query.rowSetSignature ?? null,
       };
   }
 }
