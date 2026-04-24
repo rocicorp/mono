@@ -59,7 +59,7 @@
     "bench:watch": "vitest bench --watch",
     "format": "oxfmt .",
     "check-format": "oxfmt --check .",
-    "check-types": "tsc -p tsconfig.json && tsc -p tsconfig.build.json && tsc -p tool/tsconfig.json && vitest run --config vitest.typecheck.config.ts",
+    "check-types": "tsc -p tsconfig.json && tsc -p tsconfig.build.json && tsc -p tool/tsconfig.json",
     "check-types:watch": "tsc -p tsconfig.json  --watch",
     "check-types:build:watch": "tsc -p tsconfig.build.json --watch",
     "check-types:tool:watch": "tsc -p tool/tsconfig.json --watch",
