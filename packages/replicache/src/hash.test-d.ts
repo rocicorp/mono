@@ -1,7 +1,7 @@
 import {test} from 'vitest';
 import {type Hash, newRandomHash} from './hash.ts';
 
-test('type checking only', () => {
+test('Hash is a branded string', () => {
   const h = newRandomHash();
   // Should not be an error
   const s: string = h;
