@@ -238,7 +238,7 @@ test('mutator.fn throws on validation failure and does not run', async () => {
       tx: {} as Transaction<typeof schema, unknown>,
     }),
   ).rejects.toThrowErrorMatchingInlineSnapshot(
-    `[Error: Validation failed for mutator item.test: invalid]`,
+    `[InputValidationError: Validation failed for mutator item.test: invalid]`,
   );
 
   expect(fn).not.toHaveBeenCalled();

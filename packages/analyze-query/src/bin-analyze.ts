@@ -5,7 +5,6 @@ import {styleText} from 'node:util';
 import {astToZQL} from '../../ast-to-zql/src/ast-to-zql.ts';
 import {formatOutput} from '../../ast-to-zql/src/format.ts';
 import {logLevel, logOptions} from '../../otel/src/log-options.ts';
-import {testLogConfig} from '../../otel/src/test-log-config.ts';
 import {colorConsole, createLogContext} from '../../shared/src/logging.ts';
 import {must} from '../../shared/src/must.ts';
 import {parseOptions} from '../../shared/src/options.ts';
@@ -40,16 +39,16 @@ import type {Source} from '../../zql/src/ivm/source.ts';
 import {QueryDelegateBase} from '../../zql/src/query/query-delegate-base.ts';
 import {newQuery} from '../../zql/src/query/query-impl.ts';
 import {asQueryInternals} from '../../zql/src/query/query-internals.ts';
-import type {PullRow, Query} from '../../zql/src/query/query.ts';
+import {type PullRow, type Query} from '../../zql/src/query/query.ts';
 import {Database} from '../../zqlite/src/db.ts';
+import {explainQueries} from '../../zqlite/src/explain-queries.ts';
 import {TableSource} from '../../zqlite/src/table-source.ts';
-import {explainQueries} from './explain-queries.ts';
 
 const options = {
   schema: deployPermissionsOptions.schema,
   replicaFile: {
     ...zeroOptions.replica.file,
-    desc: [`File path to the SQLite replica to test queries against.`],
+    desc: ['File path to the SQLite replica to test queries against.'],
   },
   ast: {
     type: v.string().optional(),
@@ -60,17 +59,17 @@ const options = {
   query: {
     type: v.string().optional(),
     desc: [
-      `Query to be analyzed in the form of: table.where(...).related(...).etc. `,
-      `Only one of ast/query/hash should be provided.`,
+      'Query to be analyzed in the form of: table.where(...).related(...).etc. ',
+      'Only one of ast/query/hash should be provided.',
     ],
   },
   hash: {
     type: v.string().optional(),
     desc: [
-      `Hash of the query to be analyzed. This is used to look up the query in the database. `,
-      `Only one of ast/query/hash should be provided.`,
-      `You should run this script from the directory containing your .env file to reduce the amount of`,
-      `configuration required. The .env file should contain the connection URL to the CVR database.`,
+      'Hash of the query to be analyzed. This is used to look up the query in the database. ',
+      'Only one of ast/query/hash should be provided.',
+      'You should run this script from the directory containing your .env file to reduce the amount of',
+      'configuration required. The .env file should contain the connection URL to the CVR database.',
     ],
   },
   applyPermissions: {
@@ -127,9 +126,6 @@ const options = {
 };
 
 const cfg = parseOptions(options, {
-  // the command line parses drops all text after the first newline
-  // so we need to replace newlines with spaces
-  // before parsing
   argv: process.argv.slice(2).map(s => s.replaceAll('\n', ' ')),
   envNamePrefix: ZERO_ENV_VAR_PREFIX,
   description: [
@@ -186,6 +182,10 @@ const lc = createLogContext({
   log: config.log,
 });
 
+colorConsole.warn(
+  'DEPRECATED: `analyze-query` is deprecated. Please migrate to a project-specific analyze command built with `runAnalyzeCLI` from `@rocicorp/zero/analyze`.',
+);
+
 if (!fs.existsSync(config.replicaFile)) {
   colorConsole.error(`Replica file ${config.replicaFile} does not exist`);
   process.exit(1);
@@ -216,7 +216,7 @@ class AnalyzeQueryDelegate extends QueryDelegateBase {
 
     source = new TableSource(
       lc,
-      testLogConfig,
+      config.log,
       db,
       serverTableName,
       tableSpec.zqlSpec,
@@ -233,7 +233,6 @@ const host = new AnalyzeQueryDelegate();
 let result: AnalyzeQueryResult;
 
 if (config.ast) {
-  // the user likely has a transformed AST since the wire and storage formats are the transformed AST
   result = await runAst(
     lc,
     clientSchema,

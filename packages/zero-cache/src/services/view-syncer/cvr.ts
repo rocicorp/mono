@@ -790,6 +790,15 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
     return this._cvr.version;
   }
 
+  /**
+   * Public alias for {@link _ensureNewVersion}. Forces a `configVersion` bump
+   * when the caller needs a new CVR version for reasons outside the built-in
+   * tracking (e.g. rowSetSignature drift re-execution).
+   */
+  ensureNewVersion(): CVRVersion {
+    return this._ensureNewVersion();
+  }
+
   override flush(
     lc: LogContext,
     lastConnectTime: number,

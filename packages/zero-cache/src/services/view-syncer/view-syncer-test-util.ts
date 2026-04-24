@@ -41,6 +41,7 @@ import {CustomQueryTransformer} from '../../custom-queries/transform-query.ts';
 import {InspectorDelegate} from '../../server/inspector-delegate.ts';
 import type {TestDBs} from '../../test/db.ts';
 import {DbFile} from '../../test/lite.ts';
+import type {PostgresDB} from '../../types/pg.ts';
 import {upstreamSchema} from '../../types/shards.ts';
 import {id} from '../../types/sql.ts';
 import type {Source} from '../../types/streams.ts';
@@ -750,9 +751,8 @@ export async function setup(
   const replicator = fakeReplicator(lc, replica);
   const stateChanges: Subscription<ReplicaState> = Subscription.create();
   const drainCoordinator = new DrainCoordinator();
-  const operatorStorage = new DatabaseStorage(
-    storageDB,
-  ).createClientGroupStorage(serviceID);
+  const databaseStorage = new DatabaseStorage(storageDB);
+  const operatorStorage = databaseStorage.createClientGroupStorage(serviceID);
 
   const config = {
     auth: {...authConfig},
@@ -917,7 +917,149 @@ export async function setup(
       queryFetch.reset();
       restoreFetch();
     },
+    config,
+    databaseStorage,
   };
+}
+
+/**
+ * Builds a fresh {@link ViewSyncerService} against resources produced by
+ * {@link setup}. Intended for tests that need to simulate a process restart —
+ * the original `vs` must have been `stop()`ed (destroys pipelines / operator
+ * storage / snapshotter) before calling this. The returned instance shares
+ * `storageDB`, `replicaDbFile`, `cvrDB`, and `customQueryTransformer` with the
+ * original but gets its own pipelines, snapshotter, operator storage,
+ * state-change subscription, drain coordinator, and connection-context
+ * manager.
+ */
+export function restartViewSyncer(params: {
+  databaseStorage: DatabaseStorage;
+  replicaDbFile: DbFile;
+  cvrDB: PostgresDB;
+  config: NormalizedZeroConfig;
+  customQueryTransformer: CustomQueryTransformer | undefined;
+  setTimeoutFn: Awaited<ReturnType<typeof setup>>['setTimeoutFn'];
+}) {
+  const {
+    databaseStorage,
+    replicaDbFile,
+    cvrDB,
+    config,
+    customQueryTransformer,
+    setTimeoutFn,
+  } = params;
+  const lc = createSilentLogContext();
+
+  const stateChanges: Subscription<ReplicaState> = Subscription.create();
+  const drainCoordinator = new DrainCoordinator();
+  const operatorStorage = databaseStorage.createClientGroupStorage(serviceID);
+  const inspectorDelegate = new InspectorDelegate(customQueryTransformer);
+
+  const {query} = config;
+  const contextManager = new ConnectionContextManagerImpl(
+    lc,
+    config.auth.revalidateIntervalSeconds,
+    config.auth.retransformIntervalSeconds,
+    {
+      url: query.url,
+      apiKey: query.apiKey,
+      allowedClientHeaders: query.allowedClientHeaders,
+      forwardCookies: query.forwardCookies,
+    },
+    {
+      url: config.push?.url ?? config.mutate?.url,
+      apiKey: config.push?.apiKey ?? config.mutate?.apiKey,
+      allowedClientHeaders:
+        config.push?.allowedClientHeaders ??
+        config.mutate?.allowedClientHeaders,
+      forwardCookies:
+        config.push?.forwardCookies ?? config.mutate?.forwardCookies ?? false,
+    },
+  );
+
+  const vs = new ViewSyncerService(
+    config,
+    lc,
+    SHARD,
+    TASK_ID,
+    serviceID,
+    cvrDB,
+    new PipelineDriver(
+      lc.withContext('component', 'pipeline-driver'),
+      testLogConfig,
+      new Snapshotter(lc, replicaDbFile.path, SHARD),
+      SHARD,
+      operatorStorage,
+      'view-syncer-restart',
+      inspectorDelegate,
+      () => YIELD_THRESHOLD_MS,
+    ),
+    stateChanges,
+    drainCoordinator,
+    100,
+    inspectorDelegate,
+    contextManager,
+    customQueryTransformer,
+    (_lc, _description, op) => op(),
+    undefined,
+    setTimeoutFn,
+  );
+  const viewSyncerDone = vs.run();
+
+  function connect(
+    ctx: SyncContext,
+    desiredQueriesPatch: UpQueriesPatch,
+    clientSchema: ClientSchema | null = defaultClientSchema,
+    activeClients?: string[],
+  ): Queue<Downstream> {
+    const selector = {clientID: ctx.clientID, wsID: ctx.wsID};
+    vs.contextManager.registerConnection(
+      selector,
+      {
+        protocolVersion: ctx.protocolVersion,
+        clientID: ctx.clientID,
+        clientGroupID: serviceID,
+        profileID: ctx.profileID,
+        baseCookie: ctx.baseCookie,
+        timestamp: Date.now(),
+        lmID: 0,
+        wsID: ctx.wsID,
+        debugPerf: false,
+        auth: ctx.auth?.raw,
+        userID: ctx.userID,
+        initConnectionMsg: undefined,
+        httpCookie: ctx.httpCookie,
+        origin: ctx.origin,
+      },
+      ctx.auth,
+    );
+    vs.contextManager.initConnection(selector, {
+      desiredQueriesPatch,
+      clientSchema: clientSchema ?? undefined,
+      activeClients,
+    });
+    const source = vs.initConnection(selector, [
+      'initConnection',
+      {
+        desiredQueriesPatch,
+        clientSchema: clientSchema ?? undefined,
+        activeClients,
+      },
+    ]);
+    const queue = new Queue<Downstream>();
+    void (async function () {
+      try {
+        for await (const msg of source) {
+          queue.enqueue(msg);
+        }
+      } catch (e) {
+        queue.enqueueRejection(e);
+      }
+    })();
+    return queue;
+  }
+
+  return {vs, stateChanges, viewSyncerDone, drainCoordinator, connect};
 }
 
 /**
