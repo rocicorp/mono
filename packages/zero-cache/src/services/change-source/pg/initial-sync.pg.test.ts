@@ -1,8 +1,10 @@
 import {mkdtemp, readdir, rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
+import {PG_LOCK_NOT_AVAILABLE} from '@drdgvhbh/postgres-error-codes';
 import {LogContext} from '@rocicorp/logger';
 import {nanoid} from 'nanoid/non-secure';
+import postgres from 'postgres';
 import {beforeEach, describe, expect} from 'vitest';
 import {
   createSilentLogContext,
@@ -25,9 +27,10 @@ import {
   initDB as initLiteDB,
 } from '../../../test/lite.ts';
 import {PG_17} from '../../../types/pg-versions.ts';
-import type {PostgresDB} from '../../../types/pg.ts';
+import {pgClient, type PostgresDB} from '../../../types/pg.ts';
 import {ZERO_VERSION_COLUMN_NAME} from '../../replicator/schema/replication-state.ts';
 import {
+  createReplicationSlot,
   initialSync,
   INSERT_BATCH_SIZE,
   shadowInitialSync,
@@ -2892,6 +2895,61 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
       'Error: The App ID may only consist of lower-case letters, numbers, and the underscore character',
     );
   });
+
+  test(
+    'createReplicationSlot times out behind an older idle transaction',
+    {timeout: 15_000},
+    async () => {
+      const lc = createSilentLogContext();
+      const upstreamURI = getConnectionURI(upstream);
+      const timeoutSlot = `${APP_ID}_${SHARD_NUM}_${Date.now()}_timeout`;
+      const blocker = pgClient(lc, upstreamURI, 'slot-timeout-blocker', {
+        max: 1,
+      });
+      const timeoutSession = pgClient(
+        lc,
+        upstreamURI,
+        'slot-timeout-under-test',
+        {
+          max: 1,
+          ['fetch_types']: false,
+          connection: {replication: 'database'},
+        },
+      );
+
+      let blockerInTransaction = false;
+      try {
+        // Start a transaction in one session and leave it open.
+        await blocker`BEGIN`;
+        blockerInTransaction = true;
+        await blocker`SELECT txid_current()`;
+
+        // The server-side lock_timeout (set inside createReplicationSlot)
+        // should fire before the client-side orTimeout, producing a
+        // PostgresError with code 55P03 (lock_not_available).
+        let caught: unknown;
+        try {
+          await createReplicationSlot(lc, timeoutSession, timeoutSlot);
+        } catch (e) {
+          caught = e;
+        }
+        expect(caught).toBeInstanceOf(postgres.PostgresError);
+        expect((caught as postgres.PostgresError).code).toBe(
+          PG_LOCK_NOT_AVAILABLE,
+        );
+      } finally {
+        if (blockerInTransaction) {
+          await blocker`ROLLBACK`;
+        }
+        await blocker.end();
+        await timeoutSession.end().catch(() => {});
+        await upstream`
+          SELECT pg_drop_replication_slot(slot_name)
+            FROM pg_replication_slots
+            WHERE slot_name = ${timeoutSlot} AND NOT active`;
+      }
+    },
+  );
 
   describe('shadow initial sync', () => {
     const SHADOW_SHARD = {

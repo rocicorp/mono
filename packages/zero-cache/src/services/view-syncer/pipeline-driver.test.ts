@@ -10,6 +10,7 @@ import {
   string,
   table,
 } from '../../../../zero-schema/src/builder/table-builder.ts';
+import {ChangeType} from '../../../../zql/src/ivm/change-type.ts';
 import {
   CREATE_STORAGE_TABLE,
   DatabaseStorage,
@@ -19,6 +20,7 @@ import {Database} from '../../../../zqlite/src/db.ts';
 import {listTables} from '../../db/lite-tables.ts';
 import {InspectorDelegate} from '../../server/inspector-delegate.ts';
 import {DbFile} from '../../test/lite.ts';
+import type {RowKey} from '../../types/row-key.ts';
 import {upstreamSchema, type ShardID} from '../../types/shards.ts';
 import {populateFromExistingTables} from '../replicator/schema/column-metadata.ts';
 import {initReplicationState} from '../replicator/schema/replication-state.ts';
@@ -28,7 +30,9 @@ import {
   type FakeReplicator,
 } from '../replicator/test-utils.ts';
 import {getMutationResultsQuery} from './cvr.ts';
-import {PipelineDriver, type Timer} from './pipeline-driver.ts';
+import {PipelineDriver, type RowChange, type Timer} from './pipeline-driver.ts';
+import {rowIDSignatureUnit} from './row-set-signature.ts';
+import type {RowID} from './schema/types.ts';
 import {ResetPipelinesSignal, Snapshotter} from './snapshotter.ts';
 import {TimeSliceTimer} from './view-syncer.ts';
 
@@ -864,6 +868,185 @@ describe('view-syncer/pipeline-driver', () => {
         },
       ]
     `);
+  });
+
+  test('rowSetSignature reflects hydrate + advance deltas', () => {
+    const toID = (c: RowChange): RowID => ({
+      schema: '',
+      table: c.table,
+      rowKey: c.rowKey as RowKey,
+    });
+    const sigFromChanges = (changes: readonly RowChange[]) => {
+      let sig = 0n;
+      for (const c of changes) {
+        if (c.type === ChangeType.EDIT) continue;
+        sig ^= rowIDSignatureUnit(toID(c));
+      }
+      return sig;
+    };
+    const onlyRowChanges = (
+      xs: Iterable<RowChange | 'yield'>,
+    ): readonly RowChange[] =>
+      [...xs].filter((c): c is RowChange => c !== 'yield');
+
+    pipelines.init(clientSchema);
+    const hydrated = onlyRowChanges(
+      pipelines.addQuery(
+        'hash1',
+        'queryID1',
+        ISSUES_AND_COMMENTS,
+        startTimer(),
+      ),
+    );
+    expect(pipelines.rowSetSignature('queryID1')).toEqual(
+      sigFromChanges(hydrated),
+    );
+
+    // Delete issues/1 (cascades to comments/10) and insert a fresh issues/4.
+    replicator.processTransaction(
+      '134',
+      messages.delete('issues', {id: '1'}),
+      messages.insert('issues', {id: '4', closed: 0}),
+    );
+    const advanced = onlyRowChanges(changes());
+    expect(pipelines.rowSetSignature('queryID1')).toEqual(
+      sigFromChanges([...hydrated, ...advanced]),
+    );
+
+    // An update that doesn't touch relationship keys yields EDITs only;
+    // the signature must stay the same.
+    const sigBeforeEdit = pipelines.rowSetSignature('queryID1');
+    replicator.processTransaction(
+      '135',
+      messages.update('comments', {id: '22', issueID: '2', upvotes: 99}),
+    );
+    const afterEdit = onlyRowChanges(changes());
+    expect(afterEdit.length).toBeGreaterThan(0);
+    expect(afterEdit.every(c => c.type === ChangeType.EDIT)).toBe(true);
+    expect(pipelines.rowSetSignature('queryID1')).toEqual(sigBeforeEdit);
+
+    // removeQuery clears the entry.
+    pipelines.removeQuery('queryID1');
+    expect(pipelines.rowSetSignature('queryID1')).toBeUndefined();
+  });
+
+  test('rowSetSignature resets on re-execution (addQuery with same queryID)', () => {
+    const toID = (c: RowChange): RowID => ({
+      schema: '',
+      table: c.table,
+      rowKey: c.rowKey as RowKey,
+    });
+    const sigFromChanges = (changes: readonly RowChange[]) => {
+      let sig = 0n;
+      for (const c of changes) {
+        if (c.type === ChangeType.EDIT) continue;
+        sig ^= rowIDSignatureUnit(toID(c));
+      }
+      return sig;
+    };
+    const onlyRowChanges = (
+      xs: Iterable<RowChange | 'yield'>,
+    ): readonly RowChange[] =>
+      [...xs].filter((c): c is RowChange => c !== 'yield');
+
+    pipelines.init(clientSchema);
+
+    const firstChanges = onlyRowChanges(
+      pipelines.addQuery(
+        'hash1',
+        'queryID1',
+        ISSUES_AND_COMMENTS,
+        startTimer(),
+      ),
+    );
+    const firstSig = pipelines.rowSetSignature('queryID1');
+    expect(firstSig).toEqual(sigFromChanges(firstChanges));
+    expect(firstSig).not.toEqual(0n);
+
+    // Re-execute with a new transformation hash. addQuery internally calls
+    // removeQuery, which must reset the signature before hydration accumulates
+    // from 0. If it didn't, the second hydration's XORs would cancel the
+    // first's (same AST, same rows) and land at 0n.
+    const secondChanges = onlyRowChanges(
+      pipelines.addQuery(
+        'hash2',
+        'queryID1',
+        ISSUES_AND_COMMENTS,
+        startTimer(),
+      ),
+    );
+    expect(pipelines.rowSetSignature('queryID1')).toEqual(
+      sigFromChanges(secondChanges),
+    );
+    expect(pipelines.rowSetSignature('queryID1')).toEqual(firstSig);
+  });
+
+  test('rowSetSignature is maintained independently per query', () => {
+    const toID = (c: RowChange): RowID => ({
+      schema: '',
+      table: c.table,
+      rowKey: c.rowKey as RowKey,
+    });
+    const sigFromChanges = (changes: readonly RowChange[]) => {
+      let sig = 0n;
+      for (const c of changes) {
+        if (c.type === ChangeType.EDIT) continue;
+        sig ^= rowIDSignatureUnit(toID(c));
+      }
+      return sig;
+    };
+    const onlyRowChanges = (
+      xs: Iterable<RowChange | 'yield'>,
+    ): readonly RowChange[] =>
+      [...xs].filter((c): c is RowChange => c !== 'yield');
+
+    const ISSUES_ONLY: AST = {table: 'issues', orderBy: [['id', 'desc']]};
+
+    pipelines.init(clientSchema);
+
+    const commentedHydrated = onlyRowChanges(
+      pipelines.addQuery(
+        'hash-issues-comments',
+        'qIssuesComments',
+        ISSUES_AND_COMMENTS,
+        startTimer(),
+      ),
+    );
+    const issuesHydrated = onlyRowChanges(
+      pipelines.addQuery(
+        'hash-issues',
+        'qIssuesOnly',
+        ISSUES_ONLY,
+        startTimer(),
+      ),
+    );
+
+    expect(pipelines.rowSetSignature('qIssuesComments')).toEqual(
+      sigFromChanges(commentedHydrated),
+    );
+    expect(pipelines.rowSetSignature('qIssuesOnly')).toEqual(
+      sigFromChanges(issuesHydrated),
+    );
+
+    const issuesOnlySigBefore = pipelines.rowSetSignature('qIssuesOnly');
+
+    // Delete a comment: only qIssuesComments reads from the comments table,
+    // so only its signature should change. qIssuesOnly's pipeline never sees
+    // the event, so its signature is untouched.
+    replicator.processTransaction(
+      '134',
+      messages.delete('comments', {id: '22'}),
+    );
+    const advanced = onlyRowChanges(changes());
+    expect(advanced.length).toBeGreaterThan(0);
+    expect(advanced.every(c => c.queryID === 'qIssuesComments')).toBe(true);
+
+    expect(pipelines.rowSetSignature('qIssuesComments')).toEqual(
+      sigFromChanges([...commentedHydrated, ...advanced]),
+    );
+    expect(pipelines.rowSetSignature('qIssuesOnly')).toEqual(
+      issuesOnlySigBefore,
+    );
   });
 
   test('timeout on slow advancement', () => {

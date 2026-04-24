@@ -41,6 +41,8 @@ import {CVRStore} from './cvr-store.ts';
 import {CVRQueryDrivenUpdater, CVRUpdater} from './cvr.ts';
 import type {DrainCoordinator} from './drain-coordinator.ts';
 import {PipelineDriver} from './pipeline-driver.ts';
+import {formatSignature, rowIDSignatureUnit} from './row-set-signature.ts';
+import type {RowID} from './schema/types.ts';
 import {ttlClockFromNumber} from './ttl-clock.ts';
 import {
   app2Messages,
@@ -2523,6 +2525,7 @@ describe('view-syncer/service', () => {
               "patchVersion": {
                 "stateVersion": "01",
               },
+              "rowSetSignature": "7b557aaf85ad1c06",
               "transformationHash": "hash-1",
               "transformationVersion": {
                 "stateVersion": "01",
@@ -2556,6 +2559,7 @@ describe('view-syncer/service', () => {
               "patchVersion": {
                 "stateVersion": "01",
               },
+              "rowSetSignature": "7b557aaf85ad1c06",
               "transformationHash": "hash-2",
               "transformationVersion": {
                 "stateVersion": "01",
@@ -4428,6 +4432,57 @@ describe('view-syncer/service', () => {
           },
         ]
       `);
+  });
+
+  test('rowSetSignature persisted by end-to-end hydrate and advance', async () => {
+    const issue = (id: string): RowID => ({
+      schema: '',
+      table: 'issues',
+      rowKey: {id},
+    });
+    const expectedSig = (...rows: RowID[]) =>
+      formatSignature(rows.reduce((s, r) => s ^ rowIDSignatureUnit(r), 0n));
+    const loadSig = async (hash: string) => {
+      const [{rowSetSignature}] = await cvrDB<
+        {rowSetSignature: string | null}[]
+      >`
+        SELECT "rowSetSignature" FROM ${cvrDB(cvrSchema(SHARD))}.queries
+         WHERE "clientGroupID" = ${serviceID} AND "queryHash" = ${hash}
+      `;
+      return rowSetSignature;
+    };
+
+    const client = connect(SYNC_CONTEXT, [
+      {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
+    ]);
+    await nextPoke(client); // desiredQueriesPatch
+
+    stateChanges.push({state: 'version-ready'});
+    await nextPoke(client); // initial hydration — rows 1,2,3,4
+
+    expect(await loadSig('query-hash1')).toEqual(
+      expectedSig(issue('1'), issue('2'), issue('3'), issue('4')),
+    );
+
+    // Advance: delete issue 3 (leaves the query), update issue 4 (stays in the
+    // query, row-version bump only — must not change the signature).
+    replicator.processTransaction(
+      '123',
+      messages.delete('issues', {id: '3'}),
+      messages.update('issues', {
+        id: '4',
+        title: 'edited bar',
+        owner: 101,
+        parent: 2,
+        big: 100n,
+      }),
+    );
+    stateChanges.push({state: 'version-ready'});
+    await nextPoke(client);
+
+    expect(await loadSig('query-hash1')).toEqual(
+      expectedSig(issue('1'), issue('2'), issue('4')),
+    );
   });
 
   test('process advancement with lmid change, client has no queries.  See https://bugs.rocicorp.dev/issue/3628', async () => {

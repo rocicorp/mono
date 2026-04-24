@@ -15,10 +15,7 @@ import {initializeStreamer} from '../services/change-streamer/change-streamer-se
 import type {ChangeStreamerService} from '../services/change-streamer/change-streamer.ts';
 import {ReplicaMonitor} from '../services/change-streamer/replica-monitor.ts';
 import {initChangeStreamerSchema} from '../services/change-streamer/schema/init.ts';
-import {
-  AutoResetSignal,
-  CHANGE_STREAMER_APP_NAME,
-} from '../services/change-streamer/schema/tables.ts';
+import {AutoResetSignal} from '../services/change-streamer/schema/tables.ts';
 import {PurgeLocker} from '../services/change-streamer/storer.ts';
 import {exitAfter, runUntilKilled} from '../services/life-cycle.ts';
 import {
@@ -75,9 +72,9 @@ export default async function runWorker(
   const changeDB = pgClient(
     lc,
     change.db,
+    'change-streamer',
     {
       max: change.maxConns,
-      connection: {['application_name']: CHANGE_STREAMER_APP_NAME},
     },
     {sendStringAsJson: true},
   );
@@ -171,6 +168,19 @@ export default async function runWorker(
         // TODO: Make deleteLiteDB work with litestream. It will probably have to be
         //       a semantic wipe instead of a file delete.
         deleteLiteDB(replica.file);
+        // Release the purge lock before retrying. This is safe because the
+        // purge lock exists to preserve change-log entries so the new
+        // change-streamer can resume from the backup replica's watermark.
+        // An AutoResetSignal means we cant resume from the backup replica
+        // (e.g. its replication slot is gone), so the change-log entries the lock
+        // was protecting are no longer needed. The retry performs a fresh
+        // initial sync with a new replication slot, independent of the old
+        // change-log. Releasing is also necessary to avoid a
+        // self-deadlock when CHANGE_DB == UPSTREAM_DB:
+        // CREATE_REPLICATION_SLOT waits for all older transactions to
+        // finish, including this lock's open transaction.
+        await purgeLock?.release();
+        purgeLock = null;
         continue; // execute again with a fresh initial-sync
       }
       await publishCriticalEvent(

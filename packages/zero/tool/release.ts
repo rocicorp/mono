@@ -513,7 +513,10 @@ function logReleaseHeader(
   summary: string,
   currentVersion: string,
   nextVersion: string,
-  options?: {skipGit?: boolean | undefined; skipNPM?: boolean | undefined},
+  options?: {
+    skipGit?: boolean | undefined;
+    skipNPM?: boolean | undefined;
+  },
 ) {
   console.log('');
   console.log('='.repeat(60));

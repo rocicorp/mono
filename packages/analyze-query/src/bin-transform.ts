@@ -35,7 +35,7 @@ const config = parseOptions(options, {envNamePrefix: ZERO_ENV_VAR_PREFIX});
 const lc = new LogContext('debug', {}, consoleLogSink);
 const {permissions} = await loadSchemaAndPermissions(config.schema);
 
-const cvrDB = pgClient(lc, config.cvr.db);
+const cvrDB = pgClient(lc, config.cvr.db, 'analyze-query-transform-cvr');
 
 const rows =
   await cvrDB`select "clientAST", "internal" from ${cvrDB(upstreamSchema(getShardID(config)) + '/cvr')}."queries" where "queryHash" = ${must(

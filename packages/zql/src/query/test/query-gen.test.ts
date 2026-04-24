@@ -4,18 +4,19 @@ import {asQueryInternals} from '../query-internals.ts';
 import {generateQuery} from './query-gen.ts';
 import {generateSchema} from './schema-gen.ts';
 
-// This is flakey!!!
-test.skip('random generation', () => {
-  const randomizer = generateMersenne53Randomizer(
-    Date.now() ^ (Math.random() * 0x100000000),
-  );
+test('random generation', () => {
+  const seed = Date.now() ^ (Math.random() * 0x100000000);
+  const randomizer = generateMersenne53Randomizer(seed);
   const rng = () => randomizer.next();
   const faker = new Faker({
     locale: en,
     randomizer,
   });
   const schema = generateSchema(rng, faker);
-  expect(() => generateQuery(schema, {}, rng, faker)).not.toThrow();
+  expect(
+    () => generateQuery(schema, {}, rng, faker),
+    `seed: ${seed}`,
+  ).not.toThrow();
 });
 
 test('stable generation', () => {

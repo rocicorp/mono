@@ -1,8 +1,10 @@
-import {describe, expect, test} from 'vitest';
+import type postgres from 'postgres';
+import {describe, expect, test, vi} from 'vitest';
 import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.ts';
 import type {PublishedTableSpec} from '../../../db/specs.ts';
 import type {PostgresDB} from '../../../types/pg.ts';
 import {
+  createReplicationSlot,
   getInitialDownloadState,
   makeDownloadStatements,
 } from './initial-sync.ts';
@@ -141,5 +143,122 @@ describe('getInitialDownloadState', () => {
     expect(received.some(s => s.includes('pg_column_size'))).toBe(true);
     expect(state.status.totalRows).toBe(42);
     expect(state.status.totalBytes).toBe(1024);
+  });
+});
+
+describe('createReplicationSlot', () => {
+  /** Builds a mock session whose `unsafe` calls are handled by `handler`. */
+  function mockSession(handler: (stmt: string) => Promise<unknown>) {
+    return {
+      unsafe: vi.fn(handler),
+      end: vi.fn(() => Promise.resolve()),
+    } as unknown as postgres.Sql;
+  }
+
+  test('returns the slot on success', async () => {
+    const slot = {
+      slot_name: 'test_slot',
+      consistent_point: '0/1',
+      snapshot_name: 'snap',
+      output_plugin: 'pgoutput',
+    };
+    const session = mockSession(stmt => {
+      if (stmt.startsWith('SET lock_timeout')) {
+        return Promise.resolve([]);
+      }
+      // CREATE_REPLICATION_SLOT
+      return Promise.resolve([slot]);
+    });
+
+    const result = await createReplicationSlot(
+      createSilentLogContext(),
+      session,
+      'test_slot',
+    );
+    expect(result).toEqual(slot);
+  });
+
+  test('sets lock_timeout before creating the slot', async () => {
+    const calls: string[] = [];
+    const session = mockSession(stmt => {
+      calls.push(stmt);
+      if (stmt.startsWith('SET lock_timeout')) {
+        return Promise.resolve([]);
+      }
+      return Promise.resolve([
+        {
+          slot_name: 's',
+          consistent_point: '0/1',
+          snapshot_name: 'snap',
+          output_plugin: 'pgoutput',
+        },
+      ]);
+    });
+
+    await createReplicationSlot(createSilentLogContext(), session, 's');
+    expect(calls[0]).toMatch(/^SET lock_timeout = \d+$/);
+    expect(calls[1]).toMatch(/CREATE_REPLICATION_SLOT/);
+  });
+
+  test('propagates server-side errors (e.g. lock_not_available)', async () => {
+    const pgError = new Error('canceling statement due to lock timeout');
+    (pgError as unknown as {code: string}).code = '55P03';
+
+    const session = mockSession(stmt => {
+      if (stmt.startsWith('SET lock_timeout')) {
+        return Promise.resolve([]);
+      }
+      return Promise.reject(pgError);
+    });
+
+    await expect(
+      createReplicationSlot(createSilentLogContext(), session, 'test_slot'),
+    ).rejects.toBe(pgError);
+  });
+
+  test('falls back to client-side timeout when session hangs', async () => {
+    vi.useFakeTimers();
+    try {
+      const session = mockSession(stmt => {
+        if (stmt.startsWith('SET lock_timeout')) {
+          return Promise.resolve([]);
+        }
+        // Simulate a hang: never resolve (e.g. network partition where
+        // the server aborted but the client never receives the error).
+        return new Promise(() => {});
+      });
+
+      // Capture the rejection eagerly to avoid an unhandled rejection
+      // between the time advanceTimersByTimeAsync triggers it and the
+      // time we assert on it.
+      let caught: unknown;
+      const result = createReplicationSlot(
+        createSilentLogContext(),
+        session,
+        'hang_slot',
+      ).catch(e => {
+        caught = e;
+      });
+
+      // Advance past the 5s client-side timeout.
+      await vi.advanceTimersByTimeAsync(6_000);
+      await result;
+
+      expect(caught).toBeInstanceOf(Error);
+      expect(String(caught)).toMatch(
+        /Timed out after \d+ ms creating replication slot hang_slot/,
+      );
+
+      // session.end() is called in the background to tear down the
+      // orphaned connection.
+      expect(
+        (session.end as ReturnType<typeof vi.fn>).mock.calls.length,
+      ).toBeGreaterThanOrEqual(1);
+
+      // Drain any remaining timers/microtasks before restoring real timers.
+      await vi.runAllTimersAsync();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

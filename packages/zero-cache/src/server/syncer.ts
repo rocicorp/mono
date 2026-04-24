@@ -88,18 +88,16 @@ export default function runWorker(
   const replicaFile = replicaFileName(config.replica.file, fileMode);
   lc.debug?.(`running view-syncer on ${replicaFile}`);
 
-  const cvrDB = pgClient(lc, cvr.db, {
+  const cvrDB = pgClient(lc, cvr.db, `sync-worker-${pid}-cvr`, {
     max: must(cvr.maxConnsPerWorker, 'cvr.maxConnsPerWorker must be set'),
-    connection: {['application_name']: `zero-sync-worker-${pid}-cvr`},
   });
 
   const upstreamDB = enableCrudMutations
-    ? pgClient(lc, upstream.db, {
+    ? pgClient(lc, upstream.db, `sync-worker-${pid}-upstream`, {
         max: must(
           upstream.maxConnsPerWorker,
           'upstream.maxConnsPerWorker must be set',
         ),
-        connection: {['application_name']: `zero-sync-worker-${pid}-upstream`},
       })
     : undefined;
 

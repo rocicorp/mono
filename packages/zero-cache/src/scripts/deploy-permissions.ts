@@ -123,7 +123,7 @@ async function deployPermissions(
   permissions: PermissionsConfig,
   force: boolean,
 ) {
-  const db = pgClient(lc, upstreamURI);
+  const db = pgClient(lc, upstreamURI, 'deploy-permissions');
   const {host, port} = db.options;
   colorConsole.debug(`Connecting to upstream@${host}:${port}`);
   try {

@@ -649,7 +649,7 @@ export class Zero<
     this.userID = userID ?? undefined;
     this.#lc = lc.withContext('clientID', rep.clientID);
 
-    if (userID === 'anon') {
+    if (userID === 'anon' && !options.auth) {
       this.#lc.warn?.(
         'ZeroOptions.userID "anon" is deprecated for logged-out clients. Omit it entirely for logged-out clients.',
       );

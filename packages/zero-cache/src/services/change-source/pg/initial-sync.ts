@@ -57,6 +57,7 @@ import {CpuProfiler} from '../../../types/profiler.ts';
 import type {ShardConfig} from '../../../types/shards.ts';
 import {ALLOWED_APP_ID_CHARACTERS} from '../../../types/shards.ts';
 import {id} from '../../../types/sql.ts';
+import {orTimeout} from '../../../types/timeout.ts';
 import {ReplicationStatusPublisher} from '../../replicator/replication-status.ts';
 import {ColumnMetadataStore} from '../../replicator/schema/column-metadata.ts';
 import {initReplicationState} from '../../replicator/schema/replication-state.ts';
@@ -121,13 +122,13 @@ export async function initialSync(
     shadow,
   } = syncOptions;
   const copyProfiler = profileCopy ? await CpuProfiler.connect() : null;
-  const sql = pgClient(lc, upstreamURI);
+  const sql = pgClient(lc, upstreamURI, 'initial-sync');
   // Replication session is only needed to create a replication slot in the
   // real path. In shadow mode we export a snapshot on a normal connection
   // instead, so no replication session is opened.
   const replicationSession = shadow
     ? undefined
-    : pgClient(lc, upstreamURI, {
+    : pgClient(lc, upstreamURI, 'initial-sync-replication-session', {
         ['fetch_types']: false, // Necessary for the streaming protocol
         connection: {replication: 'database'}, // https://www.postgresql.org/docs/current/protocol-replication.html
       });
@@ -245,9 +246,8 @@ export async function initialSync(
         ? numTables
         : Math.min(tableCopyWorkers, numTables);
 
-    const copyPool = pgClient(lc, upstreamURI, {
+    const copyPool = pgClient(lc, upstreamURI, 'initial-sync-copy-worker', {
       max: numWorkers,
-      connection: {['application_name']: 'initial-sync-copy-worker'},
       ['max_lifetime']: 120 * 60, // set a long (2h) limit for COPY streaming
     });
     const copiers = startTableCopyWorkers(
@@ -529,6 +529,15 @@ type ReplicationSlot = {
   output_plugin: string;
 };
 
+// Successful CREATE_REPLICATION_SLOT calls have always completed within 1s in
+// observed production runs; use 5s as a hard stop for pathological hangs.
+const CREATE_REPLICATION_SLOT_TIMEOUT_MS = 5_000;
+
+// The lock_timeout is set 1s before the client-side orTimeout so that
+// Postgres reliably aborts first and tears down the walsender cleanly.
+// The client-side timeout remains as a fallback for network-level failures.
+const SERVER_LOCK_TIMEOUT_MS = CREATE_REPLICATION_SLOT_TIMEOUT_MS - 1_000;
+
 /**
  * Shadow-mode alternative to `createReplicationSlot`: opens a dedicated
  * READ ONLY REPEATABLE READ transaction on a normal connection, exports the
@@ -547,9 +556,8 @@ async function acquireExportedSnapshotForShadowSync(
   lsn: string;
   release: () => Promise<void>;
 }> {
-  const holder = pgClient(lc, upstreamURI, {
+  const holder = pgClient(lc, upstreamURI, 'shadow-initial-sync-snapshot', {
     max: 1,
-    connection: {['application_name']: 'shadow-initial-sync-snapshot'},
   });
   const ready = resolver<{snapshot: string; lsn: string}>();
   const release = resolver<void>();
@@ -604,13 +612,45 @@ export async function createReplicationSlot(
   // Note: must be false if pgVersion < PG_17. Caller must verify.
   failover = false,
 ): Promise<ReplicationSlot> {
-  const [slot] = failover
-    ? await session.unsafe<ReplicationSlot[]>(
+  // CREATE_REPLICATION_SLOT can hang indefinitely waiting for long-running
+  // transactions to finish: internally it calls SnapBuildWaitSnapshot →
+  // XactLockTableWait → LockAcquire on each running XID. statement_timeout
+  // does NOT apply to replication commands, but lock_timeout does (it governs
+  // the heavyweight lock wait inside LockAcquire). Setting it here causes
+  // Postgres to raise ERRCODE_LOCK_NOT_AVAILABLE and cleanly tear down the
+  // walsender, rather than relying solely on the client-side orTimeout
+  // which can leave an orphaned backend.
+  //
+  // An orphaned walsender is actively harmful: by this point the replication
+  // slot has already been created and is pinning WAL retention and catalog_xmin.
+  // Worse, the slot is marked `active` (the walsender PID is still alive), so
+  // the existing cleanup code (which drops inactive slots on retry) can't
+  // reclaim it. Without lock_timeout the orphan persists until TCP keepalive
+  // fires (~2h default) or the blocking transaction finishes.
+  await session.unsafe(`SET lock_timeout = ${SERVER_LOCK_TIMEOUT_MS}`);
+
+  const createSlot = failover
+    ? session.unsafe<ReplicationSlot[]>(
         /*sql*/ `CREATE_REPLICATION_SLOT "${slotName}" LOGICAL pgoutput (FAILOVER)`,
       )
-    : await session.unsafe<ReplicationSlot[]>(
+    : session.unsafe<ReplicationSlot[]>(
         /*sql*/ `CREATE_REPLICATION_SLOT "${slotName}" LOGICAL pgoutput`,
       );
+  const raced = await orTimeout(createSlot, CREATE_REPLICATION_SLOT_TIMEOUT_MS);
+  if (raced === 'timed-out') {
+    // Create slot can block indefinitely waiting for old transactions. End
+    // this connection in the background and fail fast so the process restarts.
+    void session
+      .end()
+      .catch(e =>
+        lc.warn?.(`Error closing timed out replication slot session`, e),
+      );
+    throw new Error(
+      `Timed out after ${CREATE_REPLICATION_SLOT_TIMEOUT_MS} ms creating replication slot ${slotName}. ` +
+        `Crashing to force a clean restart.`,
+    );
+  }
+  const [slot] = raced;
   lc.info?.(`Created replication slot ${slotName}`, slot);
   return slot;
 }

@@ -85,7 +85,7 @@ describe('createQuery', () => {
     expect(() =>
       addContextToQuery(query('boom'), {}),
     ).toThrowErrorMatchingInlineSnapshot(
-      `[Error: Validation failed for query test: bad]`,
+      `[InputValidationError: Validation failed for query test: bad]`,
     );
     expect(run).not.toHaveBeenCalled();
   });

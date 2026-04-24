@@ -137,7 +137,7 @@ export async function initializePostgresChangeSource(
 
   // Check that upstream is properly setup, and throw an AutoReset to re-run
   // initial sync if not.
-  const db = pgClient(lc, upstreamURI);
+  const db = pgClient(lc, upstreamURI, 'change-source-init');
   try {
     const upstreamReplica = await checkAndUpdateUpstream(
       lc,
@@ -271,11 +271,10 @@ class PostgresChangeSource implements ChangeSource {
     textCopy?: boolean | undefined,
   ) {
     this.#lc = lc.withContext('component', 'change-source');
-    this.#db = pgClient(lc, upstreamUri, {
+    this.#db = pgClient(lc, upstreamUri, 'replication-monitor', {
       max: 1,
       // used occasionally for schema changes, periodically for lag reporting
       ['idle_timeout']: 60,
-      connection: {['application_name']: 'zero-replication-monitor'},
     });
     this.#upstreamUri = upstreamUri;
     this.#shard = shard;
@@ -1049,7 +1048,6 @@ class ChangeMaker {
         }
 
       case 'commit':
-        this.#lastReplicationEventInTx = undefined;
         return [
           [
             'commit',
@@ -1072,7 +1070,7 @@ class ChangeMaker {
     }
   }
 
-  #lastReplicationEventInTx: ReplicationEvent | undefined;
+  #lastReplicationEvent: ReplicationEvent | undefined;
 
   #handleDdlMessage(lc: LogContext, msg: MessageMessage): ChangeStreamData[] {
     const event = parseLogicalMessageContent(msg, replicationEventSchema);
@@ -1084,15 +1082,20 @@ class ChangeMaker {
     // is about to happen, so as to avoid interfering / redundant work.
     clearTimeout(this.#replicaIdentityTimer);
 
-    let prevEvent = this.#lastReplicationEventInTx;
+    let prevEvent = this.#lastReplicationEvent;
     const {type} = event;
     switch (type) {
       case 'ddlStart':
       case 'schemaSnapshot':
         break;
       case 'ddlUpdate':
-        // guaranteed by event triggers
-        assert(prevEvent, `ddlUpdate received without a ddlStart`);
+        if (!prevEvent) {
+          // A fix for this is in the works. Log an error with the full
+          // LogContext (e.g. including the tag and query) to collect/confirm
+          // the scenarios in which this happens.
+          lc.error?.(`ddlUpdate received without a ddlStart`, {event});
+          assert(prevEvent, `ddlUpdate received without a ddlStart`);
+        }
         break;
       default: // Ignore unknown types for forwards compatibility
         lc.info?.(`ignoring unknown ddl message type: ${type}`);
@@ -1100,12 +1103,12 @@ class ChangeMaker {
     }
 
     // Store the new event to diff against the next event.
-    this.#lastReplicationEventInTx = event;
+    this.#lastReplicationEvent = event;
     if (!prevEvent) {
-      lc.info?.(`received ${msg.prefix}/${type} event`, event);
+      lc.info?.(`received ${msg.prefix}/${type} event`, {event});
       return []; // First snapshot in the tx.
     }
-    lc.info?.(`processing ${msg.prefix}/${type} event`, event);
+    lc.info?.(`processing ${msg.prefix}/${type} event`, {event});
 
     // The tag (i.e. command) is used to determine whether backfill is
     // necessary (CREATE TABLE vs ALTER TABLE vs ALTER PUBLICATION).
