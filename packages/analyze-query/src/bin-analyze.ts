@@ -183,7 +183,7 @@ const lc = createLogContext({
 });
 
 colorConsole.warn(
-  'DEPRECATED: `analyze-query` is deprecated. Please migrate to a project-specific analyze command built with `runAnalyzeCli` from `@rocicorp/zero/analyze`.',
+  'DEPRECATED: `analyze-query` is deprecated. Please migrate to a project-specific analyze command built with `runAnalyzeCLI` from `@rocicorp/zero/analyze`.',
 );
 
 if (!fs.existsSync(config.replicaFile)) {
