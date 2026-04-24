@@ -56,7 +56,7 @@ export class FlippedJoin implements Input {
   readonly #childKey: CompoundKey;
   readonly #relationshipName: string;
   readonly #schema: SourceSchema;
-  readonly #parentKeyIsPrimary: boolean;
+  readonly #parentKeyIsUnique: boolean;
 
   #output: Output = throwOutput;
 
@@ -85,10 +85,12 @@ export class FlippedJoin implements Input {
 
     const parentSchema = parent.getSchema();
     const childSchema = child.getSchema();
-    this.#parentKeyIsPrimary = keyMatchesPrimaryKey(
-      parentKey,
-      parentSchema.primaryKey,
-    );
+    this.#parentKeyIsUnique =
+      keyMatchesPrimaryKey(parentKey, parentSchema.primaryKey) ||
+      (parentSchema.uniqueIndexes?.some(idx =>
+        keyMatchesPrimaryKey(parentKey, idx),
+      ) ??
+        false);
     this.#schema = {
       ...parentSchema,
       relationships: {
@@ -165,18 +167,19 @@ export class FlippedJoin implements Input {
       childNodes.splice(insertPos, 0, removedNode);
     }
 
-    if (this.#parentKeyIsPrimary) {
+    if (this.#parentKeyIsUnique) {
       yield* this.#fetchQuicksort(req, childNodes);
     } else {
       yield* this.#fetchMergeSort(req, childNodes);
     }
   }
 
-  // When parentKey is the parent's primary key each child -> parent fetch
-  // returns at most one row, so the merge-sort degenerates to N simultaneous
-  // prepared-statement iterators each holding a single-row cursor.  Instead,
-  // fetch sequentially (letting the statement cache reuse a single prepared
-  // statement) and sort the resulting parents into order.
+  // When parentKey matches a unique index on the parent (primary or
+  // otherwise) each child -> parent fetch returns at most one row, so the
+  // merge-sort degenerates to N simultaneous prepared-statement iterators
+  // each holding a single-row cursor.  Instead, fetch sequentially (letting
+  // the statement cache reuse a single prepared statement) and sort the
+  // resulting parents into order.
   *#fetchQuicksort(
     req: FetchRequest,
     childNodes: Node[],
@@ -202,10 +205,10 @@ export class FlippedJoin implements Input {
           ...constraintFromChild,
         },
       });
-      // parentKey is the parent's primary key, so this fetch returns
-      // at most one row under the Source contract.  Iterate to completion
-      // rather than breaking to preserve yield propagation and to avoid
-      // silently changing behavior if a source ever returns more.
+      // parentKey matches a unique index, so this fetch returns at most
+      // one row under the Source contract.  Iterate to completion rather
+      // than breaking to preserve yield propagation and to avoid silently
+      // changing behavior if a source ever returns more.
       for (const node of stream) {
         if (node === 'yield') {
           yield 'yield';
