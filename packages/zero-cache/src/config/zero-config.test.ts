@@ -610,11 +610,13 @@ test('zero-cache --help', () => {
                                                                         drift, PG version quirks, etc.), the shadow run fails before a customer                                                    
                                                                         actually needs a full reset.                                                                                               
                                                                                                                                                                                                    
-     --shadow-sync-interval-hours number                                default: 24                                                                                                                
+     --shadow-sync-interval-hours number                                default: 12                                                                                                                
        ZERO_SHADOW_SYNC_INTERVAL_HOURS env                                                                                                                                                         
-                                                                        The interval between shadow initial-sync runs, in hours. The first run                                                     
-                                                                        is additionally staggered by a random fraction of this interval so that                                                    
-                                                                        a fleet restart does not cause all tasks to canary simultaneously.                                                         
+                                                                        The interval between shadow initial-sync runs, in hours. The first                                                         
+                                                                        run fires within [2/3, 1) of this interval after startup, so the                                                           
+                                                                        canary completes at least once per task lifetime (the replication                                                          
+                                                                        manager is restarted every ~24h) while still jittering so a fleet                                                          
+                                                                        restart does not cause all tasks to canary simultaneously.                                                                 
                                                                                                                                                                                                    
      --shadow-sync-sample-rate number                                   default: 0.1                                                                                                               
        ZERO_SHADOW_SYNC_SAMPLE_RATE env                                                                                                                                                            
