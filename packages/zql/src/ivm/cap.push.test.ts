@@ -761,6 +761,66 @@ describe('Cap push - basic behavior', () => {
       ]
     `);
   });
+
+  test('child edit that changes PK updates tracked set', () => {
+    const sourceContents: SourceContents = {
+      issue: [{id: 'i1', text: 'i1'}],
+      comment: [
+        {id: 'c1', issueID: 'i1', text: 'c1'},
+        {id: 'c2', issueID: 'i1', text: 'c2'},
+      ],
+    };
+    const {data, actualStorage} = runPushTest({
+      sources,
+      sourceContents,
+      ast,
+      format,
+      pushes: [
+        [
+          'comment',
+          makeSourceChangeEdit(
+            {id: 'c1_renamed', issueID: 'i1', text: 'c1'},
+            {id: 'c1', issueID: 'i1', text: 'c1'},
+          ),
+        ],
+      ],
+    });
+
+    expect(actualStorage['.comments:cap']).toMatchInlineSnapshot(`
+      {
+        "["cap","i1"]": {
+          "pks": [
+            "["c1_renamed"]",
+            "["c2"]",
+          ],
+          "size": 2,
+        },
+      }
+    `);
+    expect(data).toMatchInlineSnapshot(`
+      [
+        {
+          "comments": [
+            {
+              "id": "c1_renamed",
+              "issueID": "i1",
+              "text": "c1",
+              Symbol(rc): 1,
+            },
+            {
+              "id": "c2",
+              "issueID": "i1",
+              "text": "c2",
+              Symbol(rc): 1,
+            },
+          ],
+          "id": "i1",
+          "text": "i1",
+          Symbol(rc): 1,
+        },
+      ]
+    `);
+  });
 });
 
 describe('Cap push - unordered overlay in join', () => {
