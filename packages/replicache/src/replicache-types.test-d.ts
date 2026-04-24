@@ -1,6 +1,6 @@
 /* oxlint-disable require-await */
 
-import {test} from 'vitest';
+import {assertType, test} from 'vitest';
 import {assert} from '../../shared/src/asserts.ts';
 import type {ReadonlyJSONObject} from '../../shared/src/json.ts';
 import type {IndexKey} from './db/index.ts';
@@ -11,12 +11,7 @@ function use(..._args: unknown[]) {
   // do nothing
 }
 
-function expectType<T>(_: T) {
-  // do nothing
-}
-
-// Only used for type checking
-test.skip('mutator optional args [type checking only]', async () => {
+test('mutator optional args', async () => {
   const rep = new Replicache({
     name: 'test-types',
     mutators: {
@@ -57,21 +52,9 @@ test.skip('mutator optional args [type checking only]', async () => {
   //  @ts-expect-error: Type 'void' is not assignable to type 'number'.ts(2322)
   const res4: number = await mut4();
   use(res4);
-
-  // This should be an error!
-  // new Replicache({name: 'test-types-2', {
-  //   mutators: {
-  //     // @ts-expect-error symbol is not a JSONValue
-  //     mut5: (tx: WriteTransaction, x: symbol) => {
-  //       use(tx, x);
-  //       return 42;
-  //     },
-  //   },
-  // });
 });
 
-// Only used for type checking
-test.skip('Test partial JSONObject [type checking only]', async () => {
+test('Test partial JSONObject', async () => {
   const rep = new Replicache({
     name: 'test-types',
     mutators: {
@@ -95,8 +78,7 @@ test.skip('Test partial JSONObject [type checking only]', async () => {
   await mut({id: 'abc'});
 });
 
-// Only used for type checking
-test.skip('Test register param [type checking only]', () => {
+test('Test register param', () => {
   const rep = new Replicache({
     name: 'test-types',
     mutators: {
@@ -143,8 +125,7 @@ test.skip('Test register param [type checking only]', () => {
   });
 });
 
-// Only used for type checking
-test.skip('Key type for scans [type checking only]', async () => {
+test('Key type for scans', async () => {
   const rep = new Replicache({
     name: 'test-types',
   });
@@ -184,8 +165,7 @@ test.skip('Key type for scans [type checking only]', async () => {
   });
 });
 
-// Only used for type checking
-test.skip('mut [type checking only]', async () => {
+test('mut', async () => {
   type CustomType = {
     n: number;
     s: string;
@@ -234,13 +214,6 @@ test.skip('mut [type checking only]', async () => {
       h: async (tx: WriteTransaction, x: number) => {
         use(tx, x);
       },
-
-      // // This should be flagged as an error but I need to use `any` for the
-      // // arg since I need covariance and TS uses contravariance here.
-      // // @ts-expect-error XXX
-      // i: (tx: WriteTransaction, d: Date) =>
-      // {use(tx, d);
-      // },
 
       j: async (tx: WriteTransaction, custom: CustomType) => {
         use(tx, custom);
@@ -333,8 +306,7 @@ test.skip('mut [type checking only]', async () => {
   }
 });
 
-// Only used for type checking
-test.skip('scan with index [type checking only]', async () => {
+test('scan with index', async () => {
   const rep = new Replicache({
     name: 'scan-with-index',
   });
@@ -357,8 +329,7 @@ test.skip('scan with index [type checking only]', async () => {
   });
 });
 
-// Only used for type checking
-test.skip('scan without index [type checking only]', async () => {
+test('scan without index', async () => {
   const rep = new Replicache({
     name: 'scan-with-index',
   });
@@ -376,8 +347,7 @@ test.skip('scan without index [type checking only]', async () => {
   });
 });
 
-// Only used for type checking
-test.skip('mutator return read only [type checking only]', async () => {
+test('mutator return read only', async () => {
   const rep = new Replicache({
     name: 'test-types',
     mutators: {
@@ -403,7 +373,7 @@ test.skip('mutator return read only [type checking only]', async () => {
   use(rep);
 });
 
-test.skip('Allowing undefined in JSONObject [type checking only]', async () => {
+test('Allowing undefined in JSONObject', async () => {
   const rep = new Replicache({
     name: 'test-types',
     mutators: {
@@ -416,7 +386,7 @@ test.skip('Allowing undefined in JSONObject [type checking only]', async () => {
   await rep.mutate.mut({a: undefined});
 });
 
-test.skip('Parameterized get [type checking only]', async () => {
+test('Parameterized get', async () => {
   const rep = new Replicache({
     name: 'test-types',
     mutators: {
@@ -432,7 +402,7 @@ test.skip('Parameterized get [type checking only]', async () => {
   });
 });
 
-test.skip('Parameterized get invalid types [type checking only]', async () => {
+test('Parameterized get invalid types', async () => {
   const rep = new Replicache({
     name: 'test-types',
     mutators: {
@@ -450,7 +420,7 @@ test.skip('Parameterized get invalid types [type checking only]', async () => {
   });
 });
 
-test.skip('Parameterized get deep read only object/array [type checking only]', async () => {
+test('Parameterized get deep read only object/array', async () => {
   type T = {x: number[]};
   const rep = new Replicache({
     name: 'test-types',
@@ -475,7 +445,7 @@ test.skip('Parameterized get deep read only object/array [type checking only]', 
   });
 });
 
-test.skip('Parameterized scan.values [type checking only]', async () => {
+test('Parameterized scan.values', async () => {
   type V = {x: number};
   type DeepV = DeepReadonly<V>;
   const rep = new Replicache({
@@ -483,40 +453,40 @@ test.skip('Parameterized scan.values [type checking only]', async () => {
     mutators: {
       mut: async (tx: WriteTransaction) => {
         for await (const v of tx.scan<V>()) {
-          expectType<DeepV>(v);
+          assertType<DeepV>(v);
         }
 
         for await (const v of tx.scan<V>().values()) {
-          expectType<DeepV>(v);
+          assertType<DeepV>(v);
         }
 
         const vs = await tx.scan<V>().values().toArray();
-        expectType<DeepV[]>(vs);
+        assertType<DeepV[]>(vs);
 
         const vs2 = await tx.scan<V>().toArray();
-        expectType<DeepV[]>(vs2);
+        assertType<DeepV[]>(vs2);
       },
     },
   });
 
   await rep.query(async tx => {
     for await (const v of tx.scan<V>()) {
-      expectType<DeepV>(v);
+      assertType<DeepV>(v);
     }
 
     for await (const v of tx.scan<V>().values()) {
-      expectType<DeepV>(v);
+      assertType<DeepV>(v);
     }
 
     const vs: V[] = await tx.scan<V>().values().toArray();
-    expectType<DeepV[]>(vs);
+    assertType<DeepV[]>(vs);
 
     const vs2: V[] = await tx.scan<V>().toArray();
-    expectType<DeepV[]>(vs2);
+    assertType<DeepV[]>(vs2);
   });
 });
 
-test.skip('Parameterized index scan.values [type checking only]', async () => {
+test('Parameterized index scan.values', async () => {
   type V = {x: number};
   type DeepV = DeepReadonly<V>;
   const rep = new Replicache({
@@ -524,40 +494,40 @@ test.skip('Parameterized index scan.values [type checking only]', async () => {
     mutators: {
       mut: async (tx: WriteTransaction) => {
         for await (const v of tx.scan<V>({indexName: 'x'})) {
-          expectType<DeepV>(v);
+          assertType<DeepV>(v);
         }
 
         for await (const v of tx.scan<V>({indexName: 'x'}).values()) {
-          expectType<DeepV>(v);
+          assertType<DeepV>(v);
         }
 
         const vs = await tx.scan<V>({indexName: 'x'}).values().toArray();
-        expectType<DeepV[]>(vs);
+        assertType<DeepV[]>(vs);
 
         const vs2 = await tx.scan<V>({indexName: 'x'}).toArray();
-        expectType<DeepV[]>(vs2);
+        assertType<DeepV[]>(vs2);
       },
     },
   });
 
   await rep.query(async tx => {
     for await (const v of tx.scan<V>()) {
-      expectType<DeepV>(v);
+      assertType<DeepV>(v);
     }
 
     for await (const v of tx.scan<V>().values()) {
-      expectType<DeepV>(v);
+      assertType<DeepV>(v);
     }
 
     const vs: V[] = await tx.scan<V>().values().toArray();
-    expectType<DeepV[]>(vs);
+    assertType<DeepV[]>(vs);
 
     const vs2: V[] = await tx.scan<V>().toArray();
-    expectType<DeepV[]>(vs2);
+    assertType<DeepV[]>(vs2);
   });
 });
 
-test.skip('Parameterized scan.values invalid types [type checking only]', async () => {
+test('Parameterized scan.values invalid types', async () => {
   type V = {x: number};
   const rep = new Replicache({
     name: 'test-types',
@@ -609,7 +579,7 @@ test.skip('Parameterized scan.values invalid types [type checking only]', async 
   });
 });
 
-test.skip('Parameterized scan.values deep read only object/array [type checking only]', async () => {
+test('Parameterized scan.values deep read only object/array', async () => {
   type V = {x: number[]};
   const rep = new Replicache({
     name: 'test-types',
@@ -673,7 +643,7 @@ test.skip('Parameterized scan.values deep read only object/array [type checking 
   });
 });
 
-test.skip('Parameterized scan.entries [type checking only]', async () => {
+test('Parameterized scan.entries', async () => {
   type V = {x: number};
   const rep = new Replicache({
     name: 'test-types',
@@ -707,7 +677,7 @@ test.skip('Parameterized scan.entries [type checking only]', async () => {
   });
 });
 
-test.skip('Parameterized index scan.entries [type checking only]', async () => {
+test('Parameterized index scan.entries', async () => {
   type V = {x: number};
   type EntryDeepV = readonly [IndexKey, DeepReadonly<{x: number}>];
   const rep = new Replicache({
@@ -715,26 +685,26 @@ test.skip('Parameterized index scan.entries [type checking only]', async () => {
     mutators: {
       mut: async (tx: WriteTransaction) => {
         for await (const e of tx.scan<V>({indexName: 'x'}).entries()) {
-          expectType<EntryDeepV>(e);
+          assertType<EntryDeepV>(e);
         }
 
         const es = await tx.scan<V>({indexName: 'x'}).entries().toArray();
-        expectType<EntryDeepV[]>(es);
+        assertType<EntryDeepV[]>(es);
       },
     },
   });
 
   await rep.query(async tx => {
     for await (const v of tx.scan<V>({indexName: 'x'}).entries()) {
-      expectType<EntryDeepV>(v);
+      assertType<EntryDeepV>(v);
     }
 
     const es = await tx.scan<V>({indexName: 'x'}).entries().toArray();
-    expectType<EntryDeepV[]>(es);
+    assertType<EntryDeepV[]>(es);
   });
 });
 
-test.skip('Parameterized scan.entries invalid types [type checking only]', async () => {
+test('Parameterized scan.entries invalid types', async () => {
   type V = {x: number};
   const rep = new Replicache({
     name: 'test-types',
@@ -772,7 +742,7 @@ test.skip('Parameterized scan.entries invalid types [type checking only]', async
   });
 });
 
-test.skip('Parameterized scan.entries deep read only object/array [type checking only]', async () => {
+test('Parameterized scan.entries deep read only object/array', async () => {
   type V = {x: number[]};
   const rep = new Replicache({
     name: 'test-types',
