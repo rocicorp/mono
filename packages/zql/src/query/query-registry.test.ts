@@ -1197,6 +1197,45 @@ describe('mustGetQuery', () => {
     expectTypeOf(query2['~']['$schema']).toEqualTypeOf<typeof schema>();
   });
 
+  test('mustGetQuery makes ctx optional only for fallback unknown context', () => {
+    type Context = {userId: string};
+
+    const unknownContextQueries = defineQueriesWithType<typeof schema>()({
+      getUser: defineQuery(({args}) => {
+        void args;
+        return builder.foo;
+      }),
+    });
+
+    const concreteContextQueries = defineQueriesWithType<typeof schema>()({
+      getUser: defineQuery(({args, ctx}: {args: string; ctx: Context}) => {
+        void ctx;
+        return builder.foo.where('id', '=', args);
+      }),
+    });
+
+    const unknownContextQuery = mustGetQuery(unknownContextQueries, 'getUser');
+    const concreteContextQuery = mustGetQuery(
+      concreteContextQueries,
+      'getUser',
+    );
+
+    expectTypeOf(unknownContextQuery.fn).toBeCallableWith({args: undefined});
+    expectTypeOf(unknownContextQuery.fn).toBeCallableWith({args: 'abc'});
+    expectTypeOf(unknownContextQuery.fn).toBeCallableWith({
+      args: 'abc',
+      ctx: {arbitrary: true},
+    });
+
+    expectTypeOf(concreteContextQuery.fn).toBeCallableWith({
+      args: 'abc',
+      ctx: {userId: '123'},
+    });
+
+    // @ts-expect-error ctx is still required when a concrete context exists
+    void concreteContextQuery.fn({args: 'abc'});
+  });
+
   test('throws for non-existent query', () => {
     const queries = defineQueries({
       getUser: defineQuery(() => builder.foo),

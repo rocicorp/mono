@@ -295,7 +295,7 @@ function createMutator<
       : (options.args as unknown as ArgsOutput);
     await definition.fn({
       args: validatedArgs,
-      ctx: options.ctx,
+      ctx: options.ctx as C,
       tx: options.tx,
     });
   };

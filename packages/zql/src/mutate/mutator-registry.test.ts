@@ -291,6 +291,53 @@ test('mustGetMutator throws for unknown names and returns the correct type', () 
   );
 });
 
+test('mustGetMutator makes ctx optional only for fallback unknown context', () => {
+  type Context = {userId: string};
+  type DbTransaction = {db: true};
+
+  const unknownContextMutators = defineMutatorsWithType<typeof schema>()({
+    run: defineMutator(async ({args, tx}) => {
+      void args;
+      void tx;
+    }),
+  });
+
+  const concreteContextMutators = defineMutatorsWithType<typeof schema>()({
+    run: defineMutator<{id: string}, typeof schema, Context, DbTransaction>(
+      async ({args, ctx, tx}) => {
+        void args;
+        void ctx;
+        void tx;
+      },
+    ),
+  });
+
+  const unknownContextMutator = mustGetMutator(unknownContextMutators, 'run');
+  const concreteContextMutator = mustGetMutator(concreteContextMutators, 'run');
+
+  expectTypeOf(unknownContextMutator.fn).toBeCallableWith({
+    args: undefined,
+    tx: {} as Transaction<typeof schema, unknown>,
+  });
+  expectTypeOf(unknownContextMutator.fn).toBeCallableWith({
+    args: {id: '1'},
+    ctx: {arbitrary: true},
+    tx: {} as Transaction<typeof schema, unknown>,
+  });
+
+  expectTypeOf(concreteContextMutator.fn).toBeCallableWith({
+    args: {id: '1'},
+    ctx: {userId: '123'},
+    tx: {} as Transaction<typeof schema, DbTransaction>,
+  });
+
+  // @ts-expect-error ctx is still required when a concrete context exists
+  void concreteContextMutator.fn({
+    args: {id: '1'},
+    tx: {} as Transaction<typeof schema, DbTransaction>,
+  });
+});
+
 test('isMutatorRegistry returns false for non-registries', () => {
   expect(isMutatorRegistry(null)).toBe(false);
   expect(isMutatorRegistry(undefined)).toBe(false);
