@@ -4756,6 +4756,7 @@ describe('view-syncer/service', () => {
       mutate: () => {},
       queriesPatch: [{op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY2}],
     });
+    const removeSpy = vi.spyOn(PipelineDriver.prototype, 'removeQuery');
     try {
       rsc.push({state: 'version-ready'});
 
@@ -4765,7 +4766,16 @@ describe('view-syncer/service', () => {
       // Sig unchanged (re-execution via CVRQueryDrivenUpdater never ran,
       // which is the only path that would flush a new sig here).
       expect(await loadStoredSig('query-hash1')).toEqual(expectedSig);
+
+      // addQuery internally calls removeQuery(queryID); so a single hydration
+      // in hydrateUnchangedQueries produces exactly one call. Drift would add
+      // an explicit removeQuery plus a second hydration (3 total).
+      const callsForHash1 = removeSpy.mock.calls.filter(
+        ([id]) => id === 'query-hash1',
+      ).length;
+      expect(callsForHash1).toBe(1);
     } finally {
+      removeSpy.mockRestore();
       await cleanup();
     }
   });
@@ -4804,6 +4814,7 @@ describe('view-syncer/service', () => {
         {op: 'put', hash: 'query-hash-B', ast: USERS_QUERY},
       ],
     });
+    const removeSpy = vi.spyOn(PipelineDriver.prototype, 'removeQuery');
     try {
       rsc.push({state: 'version-ready'});
       const rowsPoke = await drainUntilRowsPatchOrQuiet(queue);
@@ -4825,7 +4836,16 @@ describe('view-syncer/service', () => {
         expectedIssuesSig(issueRowID('2'), issueRowID('6')),
       );
       expect(await loadStoredSig('query-hash-B')).toEqual(initialSigB);
+
+      // A was re-executed (drift): addQuery-internal + explicit drift-branch
+      // removeQuery + second hydration's internal = 3 calls.
+      // B was kept (no drift): just the single hydrateUnchangedQueries call = 1.
+      const callsFor = (id: string) =>
+        removeSpy.mock.calls.filter(([q]) => q === id).length;
+      expect(callsFor('query-hash-A')).toBe(3);
+      expect(callsFor('query-hash-B')).toBe(1);
     } finally {
+      removeSpy.mockRestore();
       await cleanup();
     }
   });
