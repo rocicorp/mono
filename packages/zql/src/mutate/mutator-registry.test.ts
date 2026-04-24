@@ -191,7 +191,6 @@ test('mutator.fn validates args when validator is provided', async () => {
 
   await mutators.item.test.fn({
     args: {id: '456'},
-    ctx: undefined,
     tx: mockTx,
   });
 
@@ -234,7 +233,6 @@ test('mutator.fn throws on validation failure and does not run', async () => {
   await expect(
     mutators.item.test.fn({
       args: {id: 'bad'},
-      ctx: undefined,
       tx: {} as Transaction<typeof schema, unknown>,
     }),
   ).rejects.toThrowErrorMatchingInlineSnapshot(
@@ -291,6 +289,53 @@ test('mustGetMutator throws for unknown names and returns the correct type', () 
   expect(() => mustGetMutator(mutators, 'nonexistent')).toThrow(
     'Mutator not found: nonexistent',
   );
+});
+
+test('mustGetMutator makes ctx optional only for fallback unknown context', () => {
+  type Context = {userId: string};
+  type DbTransaction = {db: true};
+
+  const unknownContextMutators = defineMutatorsWithType<typeof schema>()({
+    run: defineMutator(async ({args, tx}) => {
+      void args;
+      void tx;
+    }),
+  });
+
+  const concreteContextMutators = defineMutatorsWithType<typeof schema>()({
+    run: defineMutator<{id: string}, typeof schema, Context, DbTransaction>(
+      async ({args, ctx, tx}) => {
+        void args;
+        void ctx;
+        void tx;
+      },
+    ),
+  });
+
+  const unknownContextMutator = mustGetMutator(unknownContextMutators, 'run');
+  const concreteContextMutator = mustGetMutator(concreteContextMutators, 'run');
+
+  expectTypeOf(unknownContextMutator.fn).toBeCallableWith({
+    args: undefined,
+    tx: {} as Transaction<typeof schema, unknown>,
+  });
+  expectTypeOf(unknownContextMutator.fn).toBeCallableWith({
+    args: {id: '1'},
+    ctx: {arbitrary: true},
+    tx: {} as Transaction<typeof schema, unknown>,
+  });
+
+  expectTypeOf(concreteContextMutator.fn).toBeCallableWith({
+    args: {id: '1'},
+    ctx: {userId: '123'},
+    tx: {} as Transaction<typeof schema, DbTransaction>,
+  });
+
+  // @ts-expect-error ctx is still required when a concrete context exists
+  void concreteContextMutator.fn({
+    args: {id: '1'},
+    tx: {} as Transaction<typeof schema, DbTransaction>,
+  });
 });
 
 test('isMutatorRegistry returns false for non-registries', () => {
@@ -531,7 +576,6 @@ describe('input/output type separation', () => {
     // Call fn with string input (simulating server receiving raw args)
     await mutators.item.update.fn({
       args: '42',
-      ctx: undefined,
       tx: mockTx,
     });
 
@@ -579,9 +623,12 @@ describe('input/output type separation', () => {
     } as Transaction<typeof schema, unknown>;
 
     // When fn is called, it should transform undefined to 'default-value'
+    expectTypeOf(mutators.item.create.fn).toBeCallableWith({
+      args: undefined,
+      tx: mockTx,
+    });
     await mutators.item.create.fn({
       args: undefined,
-      ctx: undefined,
       tx: mockTx,
     });
 
@@ -743,11 +790,10 @@ describe('type inference', () => {
       .toEqualTypeOf<ReadonlyJSONValue | undefined>();
     const request3 = mutators.def3('whatever');
     expectTypeOf(request3.args).toEqualTypeOf<ReadonlyJSONValue | undefined>();
-    expectTypeOf<typeof request3.mutator.fn>().parameter(0).toEqualTypeOf<{
-      args: ReadonlyJSONValue | undefined;
-      ctx: unknown;
-      tx: Transaction<typeof schema, unknown>;
-    }>();
+    expectTypeOf(request3.mutator.fn).toBeCallableWith({
+      args: undefined,
+      tx: {} as Transaction<typeof schema, unknown>,
+    });
 
     const request4 = mutators.def4('test-string');
     expectTypeOf(request4.args).toEqualTypeOf<string>();
