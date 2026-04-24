@@ -1,0 +1,22 @@
+name: 'Setup Docker'
+description: 'Ensure Docker is installed (>= v25) and running.'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Ensure Docker is installed and running
+      shell: bash
+      run: |
+        MIN_DOCKER_VERSION=25
+        install_docker() {
+            sudo flock /var/lock/apt-get.lock apt-get update -y
+            sudo flock /var/lock/apt-get.lock apt-get install -y docker.io
+        else
+          MAJOR=$(docker version --format '{{.Server.Version}}' 2>/dev/null | cut -d. -f1)
+          if [ -z "$MAJOR" ] || [ "$MAJOR" -lt "$MIN_DOCKER_VERSION" ]; then
+            echo "Docker version too old or unresponsive (major=$MAJOR), reinstalling..."
+            install_docker
+          fi
+        fi
+        sudo systemctl start docker || true
+        sudo usermod -aG docker "$(whoami)" || true

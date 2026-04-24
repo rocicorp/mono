@@ -55,24 +55,7 @@ jobs:
           node-version: 24.x
       - uses: bencherdev/bencher@main
 
-      - name: Ensure Docker is installed and running
-        run: |
-          MIN_DOCKER_VERSION=25
-          install_docker() {
-            sudo apt-get update -y
-            sudo apt-get install -y docker.io
-          }
-          if ! command -v docker &>/dev/null; then
-            install_docker
-          else
-            MAJOR=$(docker version --format '{{.Server.Version}}' 2>/dev/null | cut -d. -f1)
-            if [ -z "$MAJOR" ] || [ "$MAJOR" -lt "$MIN_DOCKER_VERSION" ]; then
-              echo "Docker version too old or unresponsive (major=$MAJOR), reinstalling..."
-              install_docker
-            fi
-          fi
-          sudo systemctl start docker || true
-          sudo usermod -aG docker "$(whoami)" || true
+      - uses: ./.github/actions/setup-docker
 
       - run: npm ci
 
