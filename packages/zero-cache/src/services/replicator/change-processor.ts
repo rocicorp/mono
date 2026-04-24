@@ -114,11 +114,20 @@ export class ChangeProcessor {
 
   #fail(lc: LogContext, err: unknown) {
     if (!this.#failure) {
-      this.#currentTx?.abort(lc); // roll back any pending transaction.
+      let failureError = err;
+      try {
+        this.#currentTx?.abort(lc); // roll back any pending transaction.
+      } catch (rollbackError) {
+        const combinedError = new Error(
+          `Message processing failed and rollback also failed: operation error = ${String(err)}; rollback error = ${String(rollbackError)}`,
+        );
+        combinedError.cause = err;
+        failureError = combinedError;
+      }
 
-      this.#failure = ensureError(err);
+      this.#failure = ensureError(failureError);
 
-      if (!(err instanceof AbortError)) {
+      if (!(this.#failure instanceof AbortError)) {
         // Propagate the failure up to the service.
         lc.error?.('Message Processing failed:', this.#failure);
         this.#failService(lc, this.#failure);

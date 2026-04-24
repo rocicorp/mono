@@ -274,12 +274,19 @@ export class SQLiteWrite implements Write {
   release(): void {
     if (!this.#closed) {
       this.#closed = true;
-
+      let rollbackError: unknown;
       if (!this.#committed) {
-        this.#dbDelegate.execSync('ROLLBACK');
+        try {
+          this.#dbDelegate.execSync('ROLLBACK');
+        } catch (e) {
+          rollbackError = e;
+        }
       }
 
       this.#release();
+      if (rollbackError !== undefined) {
+        throw rollbackError;
+      }
     }
   }
 
