@@ -46,4 +46,10 @@ describe('db/statements', () => {
 
     expectTables(db.db, {foo: [{id: 987}]});
   });
+
+  test('rollback throws if no transaction is active', () => {
+    expect(() => db.rollback()).toThrow(
+      'cannot rollback - no transaction is active',
+    );
+  });
 });
