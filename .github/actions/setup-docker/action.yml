@@ -9,8 +9,11 @@ runs:
       run: |
         MIN_DOCKER_VERSION=25
         install_docker() {
-            sudo flock /var/lock/apt-get.lock apt-get update -y
-            sudo flock /var/lock/apt-get.lock apt-get install -y docker.io
+          sudo flock /var/lock/apt-get.lock apt-get update -y
+          sudo flock /var/lock/apt-get.lock apt-get install -y docker.io
+        }
+        if ! command -v docker &>/dev/null; then
+          install_docker
         else
           MAJOR=$(docker version --format '{{.Server.Version}}' 2>/dev/null | cut -d. -f1)
           if [ -z "$MAJOR" ] || [ "$MAJOR" -lt "$MIN_DOCKER_VERSION" ]; then
