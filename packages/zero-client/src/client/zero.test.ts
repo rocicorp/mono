@@ -2150,7 +2150,7 @@ test.each([
   expect(calls.length).eq(0);
 });
 
-test.skip('passing cacheURL null allows queries without WS connection', async () => {
+test('passing cacheURL null allows queries without WS connection', async () => {
   const schema = createSchema({
     tables: [
       table('tasks')
