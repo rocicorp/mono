@@ -13,8 +13,7 @@ import {
 void main();
 
 async function main() {
-  const {mode, from, remote, allowLocalChanges, dockerOnly, yes, skipTests} =
-    parseArgs();
+  const {mode, from, remote, allowLocalChanges, dockerOnly, yes} = parseArgs();
 
   try {
     // Find the git root directory
@@ -134,21 +133,9 @@ async function main() {
 
     let result: Release;
     if (mode === 'canary') {
-      result = await releaseCanary(
-        currentVersion,
-        remote,
-        from,
-        yes,
-        skipTests,
-      );
+      result = await releaseCanary(currentVersion, remote, from, yes);
     } else if (mode === 'stable') {
-      result = await releaseStable(
-        currentVersion,
-        remote,
-        from,
-        yes,
-        skipTests,
-      );
+      result = await releaseStable(currentVersion, remote, from, yes);
     } else {
       if (mode !== 'retry') {
         throw new Error(`Unexpected release mode: ${mode}`);
@@ -159,7 +146,6 @@ async function main() {
         fromReleaseVersion,
         dockerOnly,
         yes,
-        skipTests,
       );
     }
 
@@ -243,11 +229,6 @@ function parseArgs() {
       description: 'Skip interactive confirmation prompt',
     },
     {
-      name: 'skip-tests',
-      type: Boolean,
-      description: 'Skip running tests during release build',
-    },
-    {
       name: 'positionals',
       type: String,
       defaultOption: true,
@@ -305,7 +286,6 @@ function parseArgs() {
     allowLocalChanges: Boolean(options['allow-local-changes']),
     dockerOnly,
     yes: Boolean(options.yes),
-    skipTests: Boolean(options['skip-tests']),
   };
 }
 
@@ -327,7 +307,6 @@ Options:
   --allow-local-changes      Allow running with local changes in working directory
   --docker-only              Retry mode only: skip npm and publish only docker
   --yes                      Skip interactive confirmation prompt
-  --skip-tests               Skip running tests during release build
 `);
 
   console.log(`
@@ -364,7 +343,6 @@ async function releaseCanary(
   remote: string,
   from: string,
   yes: boolean,
-  skipTests: boolean,
 ): Promise<Release> {
   const version = bumpCanaryVersion(currentVersion, remote);
   const tagName = `zero/v${version}`;
@@ -373,11 +351,10 @@ async function releaseCanary(
     `Creating canary release from ${from}`,
     currentVersion,
     version,
-    {skipTests},
   );
   await confirmRelease(yes);
 
-  build(version, skipTests);
+  build(version);
   execute(`git commit -am "Bump version to ${version}"`);
 
   const releaseCommitHash = execute('git rev-parse HEAD', {stdio: 'pipe'});
@@ -401,7 +378,6 @@ async function releaseStable(
   remote: string,
   from: string,
   yes: boolean,
-  skipTests: boolean,
 ): Promise<Release> {
   const tagName = `zero/v${currentVersion}`;
 
@@ -409,11 +385,10 @@ async function releaseStable(
     `Creating stable release from ${from}`,
     currentVersion,
     currentVersion,
-    {skipTests},
   );
   await confirmRelease(yes);
 
-  build(currentVersion, skipTests);
+  build(currentVersion);
 
   const releaseCommitHash = execute('git rev-parse HEAD', {stdio: 'pipe'});
   if (!releaseCommitHash) {
@@ -437,7 +412,6 @@ async function retryRelease(
   fromReleaseVersion: string | undefined,
   dockerOnly: boolean,
   yes: boolean,
-  skipTests: boolean,
 ): Promise<Release> {
   if (fromReleaseVersion === undefined) {
     throw new Error(
@@ -452,14 +426,14 @@ async function retryRelease(
     `Retrying ${isCanary ? 'canary' : 'stable'} release from ${from}`,
     currentVersion,
     fromReleaseVersion,
-    {skipGit: true, skipNPM: dockerOnly, skipTests},
+    {skipGit: true, skipNPM: dockerOnly},
   );
   await confirmRelease(yes);
 
   if (dockerOnly) {
     console.log('Skipping npm publish (--docker-only)');
   } else {
-    build(fromReleaseVersion, skipTests);
+    build(fromReleaseVersion);
     pushNPM(fromReleaseVersion, isCanary);
   }
 
@@ -542,7 +516,6 @@ function logReleaseHeader(
   options?: {
     skipGit?: boolean | undefined;
     skipNPM?: boolean | undefined;
-    skipTests?: boolean | undefined;
   },
 ) {
   console.log('');
@@ -555,9 +528,6 @@ function logReleaseHeader(
   }
   if (options?.skipNPM) {
     console.log(`npm publish:     skipped`);
-  }
-  if (options?.skipTests) {
-    console.log(`tests:           skipped`);
   }
   console.log('='.repeat(60));
   console.log('');
@@ -589,16 +559,11 @@ async function confirmRelease(yes: boolean) {
   }
 }
 
-function build(version: string, skipTests: boolean) {
+function build(version: string) {
   // Installs turbo and other build dependencies needed for npm packaging.
   execute('npm install');
   setVersionInWorkspace(version);
   execute('npm install');
-  if (skipTests) {
-    console.log('Skipping tests (--skip-tests)');
-  } else {
-    execute('npm run test');
-  }
   execute('npm run build');
   execute('npm run format');
   execute('npx -y syncpack fix');
