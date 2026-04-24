@@ -4664,13 +4664,11 @@ describe('view-syncer/service', () => {
 
       // CVRQueryDrivenUpdater flush writes the corrected signature
       // asynchronously. Poll until it matches the driver-side signature.
-      const deadline = Date.now() + 10_000;
-      let finalSig = await loadStoredSig('query-hash1');
-      while (finalSig !== correctSig && Date.now() < deadline) {
-        await sleep(20);
-        finalSig = await loadStoredSig('query-hash1');
-      }
-      expect(finalSig).toEqual(correctSig);
+      await vi.waitFor(
+        async () =>
+          expect(await loadStoredSig('query-hash1')).toEqual(correctSig),
+        {timeout: 10_000, interval: 20},
+      );
     } finally {
       await cleanup();
     }
