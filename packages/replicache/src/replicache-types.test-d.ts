@@ -1,6 +1,6 @@
 /* oxlint-disable require-await */
 
-import {test} from 'vitest';
+import {expectTypeOf, test} from 'vitest';
 import {assert} from '../../shared/src/asserts.ts';
 import type {ReadonlyJSONObject} from '../../shared/src/json.ts';
 import type {IndexKey} from './db/index.ts';
@@ -11,52 +11,33 @@ function use(..._args: unknown[]) {
   // do nothing
 }
 
-function expectType<T>(_: T) {
-  // do nothing
-}
-
 // Only used for type checking
-test.skip('mutator optional args [type checking only]', async () => {
+test('mutator optional args', async () => {
   const rep = new Replicache({
     name: 'test-types',
     mutators: {
-      mut: async (tx: WriteTransaction, x: number) => {
-        use(tx);
-        return x;
-      },
-      mut2: (tx: WriteTransaction, x: string) => {
-        use(tx);
-        return x;
-      },
-      mut3: (tx: WriteTransaction) => {
-        use(tx);
-      },
-      mut4: async (tx: WriteTransaction) => {
-        use(tx);
-      },
+      mut: async (_: WriteTransaction, x: number) => x,
+      mut2: (_: WriteTransaction, x: string) => x,
+      mut3: (_: WriteTransaction) => {},
+      mut4: async (_: WriteTransaction) => {},
     },
   });
 
   const {mut, mut2, mut3, mut4} = rep.mutate;
-  const res: number = await mut(42);
-  use(res);
+  expectTypeOf(mut).toExtend<(x: number) => Promise<number>>();
+  expectTypeOf(mut2).toExtend<(x: string) => Promise<string>>();
+  expectTypeOf(mut3).toExtend<() => Promise<void>>();
+  expectTypeOf(mut4).toExtend<() => Promise<void>>();
 
-  const res2: string = await mut2('s');
-  use(res2);
-
-  await mut3();
   //  @ts-expect-error: Expected 0 arguments, but got 1.ts(2554)
   await mut3(42);
-  //  @ts-expect-error: Type 'void' is not assignable to type 'number'.ts(2322)
-  const res3: number = await mut3();
-  use(res3);
+
+  expectTypeOf(await mut3()).not.toBeNumber();
 
   await mut4();
   //  @ts-expect-error: Expected 0 arguments, but got 1.ts(2554)
   await mut4(42);
-  //  @ts-expect-error: Type 'void' is not assignable to type 'number'.ts(2322)
-  const res4: number = await mut4();
-  use(res4);
+  expectTypeOf(await mut4()).not.toBeNumber();
 
   // This should be an error!
   // new Replicache({name: 'test-types-2', {
@@ -71,7 +52,7 @@ test.skip('mutator optional args [type checking only]', async () => {
 });
 
 // Only used for type checking
-test.skip('Test partial JSONObject [type checking only]', async () => {
+test('Test partial JSONObject', async () => {
   const rep = new Replicache({
     name: 'test-types',
     mutators: {
@@ -89,6 +70,9 @@ test.skip('Test partial JSONObject [type checking only]', async () => {
   await mut({id: 42});
   await mut({text: 'abc'});
 
+  expectTypeOf(mut).toBeFunction();
+  expectTypeOf(mut).parameters.toExtend<[Partial<Todo>]>();
+
   // @ts-expect-error Type '42' has no properties in common with type 'Partial<Todo>'.ts(2559)
   await mut(42);
   // @ts-expect-error Type 'string' is not assignable to type 'number | undefined'.ts(2322)
@@ -96,39 +80,39 @@ test.skip('Test partial JSONObject [type checking only]', async () => {
 });
 
 // Only used for type checking
-test.skip('Test register param [type checking only]', () => {
+test('Test register param', () => {
   const rep = new Replicache({
     name: 'test-types',
     mutators: {
-      mut: async (tx: WriteTransaction) => {
-        use(tx);
+      mut: async (_: WriteTransaction) => {},
+      mut2: async (_: WriteTransaction, x: string) => {
+        expectTypeOf(x).toBeString();
       },
-      mut2: async (tx: WriteTransaction, x: string) => {
-        use(tx, x);
+      mut3: async (_: WriteTransaction, x: string) => {
+        expectTypeOf(x).toBeString();
       },
-      mut3: async (tx: WriteTransaction, x: string) => {
-        use(tx, x);
-      },
-      mut4: async (tx: WriteTransaction) => {
-        use(tx);
-      },
+      mut4: async (_: WriteTransaction) => {},
     },
   });
 
-  const mut: () => Promise<void> = rep.mutate.mut;
-  use(mut);
+  const {mut, mut2, mut3, mut4} = rep.mutate;
+  expectTypeOf(mut).toBeFunction();
+  expectTypeOf(mut).parameters.toExtend<[]>();
+  expectTypeOf(mut).returns.toEqualTypeOf<Promise<void>>();
 
-  // @ts-expect-error Type 'number' is not assignable to type 'string'.ts(2322)
-  const mut2: (x: number) => Promise<void> = rep.mutate.mut2;
-  use(mut2);
+  expectTypeOf(mut2).not.toExtend<(x: number) => Promise<void>>();
 
-  // @ts-expect-error Type '(args: string) => Promise<void>' is not assignable to type '() => Promise<void>'.ts(2322)
-  const mut3: () => Promise<void> = rep.mutate.mut3;
-  use(mut3);
+  expectTypeOf(mut2).toBeFunction();
+  expectTypeOf(mut2).parameters.toExtend<[string]>();
+  expectTypeOf(mut2).returns.toEqualTypeOf<Promise<void>>();
+
+  expectTypeOf(mut3).not.toExtend<() => Promise<void>>();
+  expectTypeOf(mut3).toBeFunction();
+  expectTypeOf(mut3).parameters.toExtend<[string]>();
+  expectTypeOf(mut3).returns.toEqualTypeOf<Promise<void>>();
 
   // This is fine according to the rules of JS/TS
-  const mut4: (x: number) => Promise<void> = rep.mutate.mut4;
-  use(mut4);
+  expectTypeOf(mut4).toExtend<(x: number) => Promise<void>>();
 
   new Replicache({
     name: 'test-types',
@@ -144,33 +128,31 @@ test.skip('Test register param [type checking only]', () => {
 });
 
 // Only used for type checking
-test.skip('Key type for scans [type checking only]', async () => {
+test('Key type for scans', async () => {
   const rep = new Replicache({
     name: 'test-types',
   });
 
   await rep.query(async tx => {
     for await (const k of tx.scan({indexName: 'n'}).keys()) {
-      // @ts-expect-error Type '[secondary: string, primary?: string | undefined]' is not assignable to type 'string'.ts(2322)
-      const k2: string = k;
-      use(k2);
+      expectTypeOf(k).toExtend<IndexKey>();
+      expectTypeOf(k).not.toExtend<string>();
     }
 
     for await (const k of tx.scan({indexName: 'n', start: {key: 's'}}).keys()) {
-      // @ts-expect-error Type '[secondary: string, primary?: string | undefined]' is not assignable to type 'string'.ts(2322)
-      const k2: string = k;
-      use(k2);
+      expectTypeOf(k).toExtend<IndexKey>();
+      expectTypeOf(k).not.toExtend<string>();
     }
 
     for await (const k of tx
       .scan({indexName: 'n', start: {key: ['s']}})
       .keys()) {
-      // @ts-expect-error Type '[secondary: string, primary?: string | undefined]' is not assignable to type 'string'.ts(2322)
-      const k2: string = k;
-      use(k2);
+      expectTypeOf(k).toExtend<IndexKey>();
+      expectTypeOf(k).not.toExtend<string>();
     }
 
     for await (const k of tx.scan({start: {key: 'p'}}).keys()) {
+      expectTypeOf(k).toExtend<string>();
       // @ts-expect-error Type 'string' is not assignable to type '[string]'.ts(2322)
       const k2: [string] = k;
       use(k2);
@@ -185,7 +167,7 @@ test.skip('Key type for scans [type checking only]', async () => {
 });
 
 // Only used for type checking
-test.skip('mut [type checking only]', async () => {
+test('mut', async () => {
   type CustomType = {
     n: number;
     s: string;
@@ -244,20 +226,18 @@ test.skip('mut [type checking only]', async () => {
 
       j: async (tx: WriteTransaction, custom: CustomType) => {
         use(tx, custom);
-        custom.n as number;
-        custom.s as string;
-        // @ts-expect-error xxx
-        custom.n as boolean;
+        expectTypeOf(custom.n).toExtend<number>();
+        expectTypeOf(custom.s).toExtend<string>();
+        expectTypeOf(custom.n).not.toExtend<boolean>();
 
         await tx.set('c', custom);
       },
 
       k: async (tx: WriteTransaction, custom: CustomInterface) => {
         use(tx, custom);
-        custom.n as number;
-        custom.s as string;
-        // @ts-expect-error xxx
-        custom.n as boolean;
+        expectTypeOf(custom.n).toExtend<number>();
+        expectTypeOf(custom.s).toExtend<string>();
+        expectTypeOf(custom.n).not.toExtend<boolean>();
 
         // @ts-expect-error Index signature is missing in type 'CustomInterface'
         await tx.set('c', custom);
@@ -265,27 +245,26 @@ test.skip('mut [type checking only]', async () => {
 
       l: async (tx: WriteTransaction, custom: ToRecord<CustomInterface>) => {
         use(tx, custom);
-        custom.n as number;
-        custom.s as string;
-        // @ts-expect-error xxx
-        custom.n as boolean;
+        expectTypeOf(custom.n).toExtend<number>();
+        expectTypeOf(custom.s).toExtend<string>();
+        expectTypeOf(custom.n).not.toExtend<boolean>();
 
         await tx.set('c', custom);
       },
     },
   });
 
-  void (rep.mutate.a() satisfies Promise<number>);
-  void (rep.mutate.b(4) satisfies Promise<string>);
+  expectTypeOf(rep.mutate.a()).toEqualTypeOf<Promise<number>>();
+  expectTypeOf(rep.mutate.b(4)).toEqualTypeOf<Promise<string>>();
 
-  void (rep.mutate.c() satisfies Promise<void>);
-  void (rep.mutate.d(2) satisfies Promise<void>);
+  expectTypeOf(rep.mutate.c()).toEqualTypeOf<Promise<void>>();
+  expectTypeOf(rep.mutate.d(2)).toEqualTypeOf<Promise<void>>();
 
-  void (rep.mutate.e() satisfies Promise<number>);
-  void (rep.mutate.f(4) satisfies Promise<string>);
+  expectTypeOf(rep.mutate.e()).toEqualTypeOf<Promise<number>>();
+  expectTypeOf(rep.mutate.f(4)).toEqualTypeOf<Promise<string>>();
 
-  void (rep.mutate.g() satisfies Promise<void>);
-  void (rep.mutate.h(2) satisfies Promise<void>);
+  expectTypeOf(rep.mutate.g()).toEqualTypeOf<Promise<void>>();
+  expectTypeOf(rep.mutate.h(2)).toEqualTypeOf<Promise<void>>();
 
   // @ts-expect-error Expected 1 arguments, but got 0.ts(2554)
   await rep.mutate.b();
@@ -334,16 +313,15 @@ test.skip('mut [type checking only]', async () => {
 });
 
 // Only used for type checking
-test.skip('scan with index [type checking only]', async () => {
+test('scan with index', async () => {
   const rep = new Replicache({
     name: 'scan-with-index',
   });
 
   await rep.query(async tx => {
-    (await tx.scan({indexName: 'a'}).keys().toArray()) as [
-      secondary: string,
-      primary: string,
-    ][];
+    expectTypeOf(await tx.scan({indexName: 'a'}).keys().toArray()).toExtend<
+      IndexKey[]
+    >();
 
     let indexKeys: IndexKey[] = await tx
       .scan({indexName: 'a'})
@@ -358,14 +336,14 @@ test.skip('scan with index [type checking only]', async () => {
 });
 
 // Only used for type checking
-test.skip('scan without index [type checking only]', async () => {
+test('scan without index', async () => {
   const rep = new Replicache({
     name: 'scan-with-index',
   });
 
   await rep.query(async tx => {
-    await tx.scan().keys().toArray();
-    await tx.scan({}).keys().toArray();
+    expectTypeOf(await tx.scan().keys().toArray()).toExtend<string[]>();
+    expectTypeOf(await tx.scan({}).keys().toArray()).toExtend<string[]>();
 
     let indexKeys: string[] = await tx.scan({}).keys().toArray();
     indexKeys = await tx.scan({prefix: 'a'}).keys().toArray();
@@ -377,7 +355,7 @@ test.skip('scan without index [type checking only]', async () => {
 });
 
 // Only used for type checking
-test.skip('mutator return read only [type checking only]', async () => {
+test('mutator return read only', async () => {
   const rep = new Replicache({
     name: 'test-types',
     mutators: {
@@ -400,10 +378,21 @@ test.skip('mutator return read only [type checking only]', async () => {
     },
   });
 
-  use(rep);
+  expectTypeOf(rep.mutate.mut).toExtend<
+    (x: {y: number}) => Promise<{readonly y: number}>
+  >();
+  expectTypeOf(rep.mutate.mut2).toExtend<
+    (x: {readonly y: number}) => Promise<{y: number}>
+  >();
+  expectTypeOf(rep.mutate.mut3).toExtend<
+    (x: number[]) => Promise<ReadonlyArray<number>>
+  >();
+  expectTypeOf(rep.mutate.mut4).toExtend<
+    (x: ReadonlyArray<number>) => Promise<number[]>
+  >();
 });
 
-test.skip('Allowing undefined in JSONObject [type checking only]', async () => {
+test('Allowing undefined in JSONObject', async () => {
   const rep = new Replicache({
     name: 'test-types',
     mutators: {
@@ -413,30 +402,36 @@ test.skip('Allowing undefined in JSONObject [type checking only]', async () => {
       },
     },
   });
+  expectTypeOf<{a: undefined}>().toExtend<ReadonlyJSONObject>();
   await rep.mutate.mut({a: undefined});
 });
 
-test.skip('Parameterized get [type checking only]', async () => {
+test('Parameterized get', async () => {
   const rep = new Replicache({
     name: 'test-types',
     mutators: {
       mut: async (tx: WriteTransaction) => {
-        const p: {x: string} | undefined = await tx.get<{x: string}>('x');
+        const p = await tx.get<{x: string}>('x');
+        expectTypeOf(p).toExtend<{x: string} | undefined>();
         use(p);
       },
     },
   });
   await rep.query(async tx => {
-    const p: {x: string} | undefined = await tx.get<{x: string}>('x');
+    const p = await tx.get<{x: string}>('x');
+    expectTypeOf(p).toExtend<{x: string} | undefined>();
     use(p);
   });
 });
 
-test.skip('Parameterized get invalid types [type checking only]', async () => {
+test('Parameterized get invalid types', async () => {
   const rep = new Replicache({
     name: 'test-types',
     mutators: {
       mut: async (tx: WriteTransaction) => {
+        expectTypeOf(await tx.get<{x: string}>('x')).toExtend<
+          {x: string} | undefined
+        >();
         // @ts-expect-error Type 'string' is not assignable to type 'number'.ts(2322)
         const p: {x: number} | undefined = await tx.get<{x: string}>('x');
         use(p);
@@ -444,13 +439,16 @@ test.skip('Parameterized get invalid types [type checking only]', async () => {
     },
   });
   await rep.query(async tx => {
+    expectTypeOf(await tx.get<{x: string}>('x')).toExtend<
+      {x: string} | undefined
+    >();
     // @ts-expect-error Type 'string' is not assignable to type 'number'.ts(2322)
     const p: {x: number} | undefined = await tx.get<{x: string}>('x');
     use(p);
   });
 });
 
-test.skip('Parameterized get deep read only object/array [type checking only]', async () => {
+test('Parameterized get deep read only object/array', async () => {
   type T = {x: number[]};
   const rep = new Replicache({
     name: 'test-types',
@@ -475,7 +473,7 @@ test.skip('Parameterized get deep read only object/array [type checking only]', 
   });
 });
 
-test.skip('Parameterized scan.values [type checking only]', async () => {
+test('Parameterized scan.values', async () => {
   type V = {x: number};
   type DeepV = DeepReadonly<V>;
   const rep = new Replicache({
@@ -483,40 +481,40 @@ test.skip('Parameterized scan.values [type checking only]', async () => {
     mutators: {
       mut: async (tx: WriteTransaction) => {
         for await (const v of tx.scan<V>()) {
-          expectType<DeepV>(v);
+          expectTypeOf(v).toExtend<DeepV>();
         }
 
         for await (const v of tx.scan<V>().values()) {
-          expectType<DeepV>(v);
+          expectTypeOf(v).toExtend<DeepV>();
         }
 
         const vs = await tx.scan<V>().values().toArray();
-        expectType<DeepV[]>(vs);
+        expectTypeOf(vs).toExtend<DeepV[]>();
 
         const vs2 = await tx.scan<V>().toArray();
-        expectType<DeepV[]>(vs2);
+        expectTypeOf(vs2).toExtend<DeepV[]>();
       },
     },
   });
 
   await rep.query(async tx => {
     for await (const v of tx.scan<V>()) {
-      expectType<DeepV>(v);
+      expectTypeOf(v).toExtend<DeepV>();
     }
 
     for await (const v of tx.scan<V>().values()) {
-      expectType<DeepV>(v);
+      expectTypeOf(v).toExtend<DeepV>();
     }
 
     const vs: V[] = await tx.scan<V>().values().toArray();
-    expectType<DeepV[]>(vs);
+    expectTypeOf(vs).toExtend<DeepV[]>();
 
     const vs2: V[] = await tx.scan<V>().toArray();
-    expectType<DeepV[]>(vs2);
+    expectTypeOf(vs2).toExtend<DeepV[]>();
   });
 });
 
-test.skip('Parameterized index scan.values [type checking only]', async () => {
+test('Parameterized index scan.values', async () => {
   type V = {x: number};
   type DeepV = DeepReadonly<V>;
   const rep = new Replicache({
@@ -524,40 +522,40 @@ test.skip('Parameterized index scan.values [type checking only]', async () => {
     mutators: {
       mut: async (tx: WriteTransaction) => {
         for await (const v of tx.scan<V>({indexName: 'x'})) {
-          expectType<DeepV>(v);
+          expectTypeOf(v).toExtend<DeepV>();
         }
 
         for await (const v of tx.scan<V>({indexName: 'x'}).values()) {
-          expectType<DeepV>(v);
+          expectTypeOf(v).toExtend<DeepV>();
         }
 
         const vs = await tx.scan<V>({indexName: 'x'}).values().toArray();
-        expectType<DeepV[]>(vs);
+        expectTypeOf(vs).toExtend<DeepV[]>();
 
         const vs2 = await tx.scan<V>({indexName: 'x'}).toArray();
-        expectType<DeepV[]>(vs2);
+        expectTypeOf(vs2).toExtend<DeepV[]>();
       },
     },
   });
 
   await rep.query(async tx => {
     for await (const v of tx.scan<V>()) {
-      expectType<DeepV>(v);
+      expectTypeOf(v).toExtend<DeepV>();
     }
 
     for await (const v of tx.scan<V>().values()) {
-      expectType<DeepV>(v);
+      expectTypeOf(v).toExtend<DeepV>();
     }
 
     const vs: V[] = await tx.scan<V>().values().toArray();
-    expectType<DeepV[]>(vs);
+    expectTypeOf(vs).toExtend<DeepV[]>();
 
     const vs2: V[] = await tx.scan<V>().toArray();
-    expectType<DeepV[]>(vs2);
+    expectTypeOf(vs2).toExtend<DeepV[]>();
   });
 });
 
-test.skip('Parameterized scan.values invalid types [type checking only]', async () => {
+test('Parameterized scan.values invalid types', async () => {
   type V = {x: number};
   const rep = new Replicache({
     name: 'test-types',
@@ -588,12 +586,14 @@ test.skip('Parameterized scan.values invalid types [type checking only]', async 
 
   await rep.query(async tx => {
     for await (const v of tx.scan<V>()) {
+      expectTypeOf(v).toExtend<{readonly x: number}>();
       // @ts-expect-error Type 'number' is not assignable to type 'string'.ts(2322)
       const v2: {x: string} = v;
       use(v2);
     }
 
     for await (const v of tx.scan<V>().values()) {
+      expectTypeOf(v).toExtend<{readonly x: number}>();
       // @ts-expect-error Type 'number' is not assignable to type 'string'.ts(2322)
       const v2: {x: string} = v;
       use(v2);
@@ -609,7 +609,7 @@ test.skip('Parameterized scan.values invalid types [type checking only]', async 
   });
 });
 
-test.skip('Parameterized scan.values deep read only object/array [type checking only]', async () => {
+test('Parameterized scan.values deep read only object/array', async () => {
   type V = {x: number[]};
   const rep = new Replicache({
     name: 'test-types',
@@ -646,6 +646,7 @@ test.skip('Parameterized scan.values deep read only object/array [type checking 
 
   await rep.query(async tx => {
     for await (const v of tx.scan<V>()) {
+      expectTypeOf(v).toExtend<DeepReadonly<V>>();
       // @ts-expect-error Cannot assign to 'x' because it is a read-only property.ts(2540)
       v.x = [42];
       // @ts-expect-error Index signature in type 'readonly number[]' only permits reading.ts(2542)
@@ -673,41 +674,35 @@ test.skip('Parameterized scan.values deep read only object/array [type checking 
   });
 });
 
-test.skip('Parameterized scan.entries [type checking only]', async () => {
+test('Parameterized scan.entries', async () => {
   type V = {x: number};
   const rep = new Replicache({
     name: 'test-types',
     mutators: {
       mut: async (tx: WriteTransaction) => {
         for await (const e of tx.scan<V>().entries()) {
-          const v: readonly [string, {readonly x: number}] = e;
-          use(v);
+          expectTypeOf(e).toExtend<readonly [string, {readonly x: number}]>();
         }
 
-        const es: (readonly [string, {readonly x: number}])[] = await tx
-          .scan<V>()
-          .entries()
-          .toArray();
-        use(es);
+        const es = await tx.scan<V>().entries().toArray();
+        expectTypeOf(es).toExtend<
+          (readonly [string, {readonly x: number}])[]
+        >();
       },
     },
   });
 
   await rep.query(async tx => {
     for await (const v of tx.scan<V>().entries()) {
-      const v2: readonly [string, {x: number}] = v;
-      use(v2);
+      expectTypeOf(v).toExtend<readonly [string, {readonly x: number}]>();
     }
 
-    const es: (readonly [string, {readonly x: number}])[] = await tx
-      .scan<V>()
-      .entries()
-      .toArray();
-    use(es);
+    const es = await tx.scan<V>().entries().toArray();
+    expectTypeOf(es).toExtend<(readonly [string, {readonly x: number}])[]>();
   });
 });
 
-test.skip('Parameterized index scan.entries [type checking only]', async () => {
+test('Parameterized index scan.entries', async () => {
   type V = {x: number};
   type EntryDeepV = readonly [IndexKey, DeepReadonly<{x: number}>];
   const rep = new Replicache({
@@ -715,26 +710,26 @@ test.skip('Parameterized index scan.entries [type checking only]', async () => {
     mutators: {
       mut: async (tx: WriteTransaction) => {
         for await (const e of tx.scan<V>({indexName: 'x'}).entries()) {
-          expectType<EntryDeepV>(e);
+          expectTypeOf(e).toExtend<EntryDeepV>();
         }
 
         const es = await tx.scan<V>({indexName: 'x'}).entries().toArray();
-        expectType<EntryDeepV[]>(es);
+        expectTypeOf(es).toExtend<EntryDeepV[]>();
       },
     },
   });
 
   await rep.query(async tx => {
     for await (const v of tx.scan<V>({indexName: 'x'}).entries()) {
-      expectType<EntryDeepV>(v);
+      expectTypeOf(v).toExtend<EntryDeepV>();
     }
 
     const es = await tx.scan<V>({indexName: 'x'}).entries().toArray();
-    expectType<EntryDeepV[]>(es);
+    expectTypeOf(es).toExtend<EntryDeepV[]>();
   });
 });
 
-test.skip('Parameterized scan.entries invalid types [type checking only]', async () => {
+test('Parameterized scan.entries invalid types', async () => {
   type V = {x: number};
   const rep = new Replicache({
     name: 'test-types',
@@ -757,6 +752,9 @@ test.skip('Parameterized scan.entries invalid types [type checking only]', async
   });
 
   await rep.query(async tx => {
+    expectTypeOf(await tx.scan<V>().entries().toArray()).toExtend<
+      (readonly [string, {readonly x: number}])[]
+    >();
     for await (const e of tx.scan<V>().entries()) {
       // @ts-expect-error Type 'number' is not assignable to type 'string'.ts(2322)
       const v: readonly [string, {x: string}] = e;
@@ -772,7 +770,7 @@ test.skip('Parameterized scan.entries invalid types [type checking only]', async
   });
 });
 
-test.skip('Parameterized scan.entries deep read only object/array [type checking only]', async () => {
+test('Parameterized scan.entries deep read only object/array', async () => {
   type V = {x: number[]};
   const rep = new Replicache({
     name: 'test-types',
@@ -798,6 +796,7 @@ test.skip('Parameterized scan.entries deep read only object/array [type checking
 
   await rep.query(async tx => {
     for await (const e of tx.scan<V>().entries()) {
+      expectTypeOf(e).toExtend<readonly [string, DeepReadonly<V>]>();
       const [k, v] = e;
       use(k);
       // @ts-expect-error Cannot assign to 'x' because it is a read-only property.ts(2540)

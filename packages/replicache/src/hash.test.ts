@@ -1,7 +1,6 @@
 import {expect, test} from 'vitest';
 import * as valita from '../../shared/src/valita.ts';
 import {
-  type Hash,
   STRING_LENGTH,
   emptyHash,
   fakeHash,
@@ -50,19 +49,6 @@ test('newRandomHash', () => {
   const h = newRandomHash();
   expect(h.length).toBe(22);
   expect(h).toMatch(/^[0-9a-v-]+$/);
-});
-
-test.skip('type checking only', () => {
-  {
-    const h = newRandomHash();
-    // Should not be an error
-    const s: string = h;
-
-    // @ts-expect-error Should be an error
-    const h2: Hash = 'abc';
-
-    return s + h2;
-  }
 });
 
 test('makeNewFakeHashFunction', () => {
