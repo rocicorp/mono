@@ -145,7 +145,7 @@ test('warns when constructing a logged-out client with legacy anon userID', asyn
   await z.close();
 });
 
-test.skip('does not warn for authenticated users whose userID is anon', async () => {
+test('does not warn for authenticated users whose userID is anon', async () => {
   const z = zeroForTest({
     auth: 'auth-token',
     userID: 'anon',
