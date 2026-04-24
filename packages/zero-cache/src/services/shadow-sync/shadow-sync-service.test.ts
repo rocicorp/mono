@@ -45,16 +45,15 @@ describe('ShadowSyncService scheduling', () => {
     );
   }
 
-  test('first run waits at least one full interval (jitter = 0)', async () => {
+  test('first run waits at least 2/3 of an interval (jitter = 0)', async () => {
+    // minFirstRunDelay = floor(1000 * 2 / 3) = 666, jitter = 0.
     vi.spyOn(Math, 'random').mockReturnValue(0);
     const service = makeService();
     const running = service.run();
 
-    // One interval minus a tick — no run yet.
-    await vi.advanceTimersByTimeAsync(INTERVAL_MS - 1);
+    await vi.advanceTimersByTimeAsync(665);
     expect(shadowInitialSyncMock).not.toHaveBeenCalled();
 
-    // Cross the one-interval boundary — first run fires.
     await vi.advanceTimersByTimeAsync(1);
     expect(shadowInitialSyncMock).toHaveBeenCalledTimes(1);
 
@@ -62,13 +61,14 @@ describe('ShadowSyncService scheduling', () => {
     await running;
   });
 
-  test('first run waits up to two intervals (jitter ≈ max)', async () => {
-    // Math.floor(0.9999 * 1000) = 999, so firstRunDelay = 1999.
+  test('first run fires before one full interval (jitter ≈ max)', async () => {
+    // minFirstRunDelay = 666, range = 1000 - 666 = 334.
+    // Math.floor(0.9999 * 334) = 333, so firstRunDelay = 999.
     vi.spyOn(Math, 'random').mockReturnValue(0.9999);
     const service = makeService();
     const running = service.run();
 
-    await vi.advanceTimersByTimeAsync(INTERVAL_MS * 2 - 2);
+    await vi.advanceTimersByTimeAsync(998);
     expect(shadowInitialSyncMock).not.toHaveBeenCalled();
 
     await vi.advanceTimersByTimeAsync(1);
