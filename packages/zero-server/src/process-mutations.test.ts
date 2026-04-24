@@ -1107,6 +1107,10 @@ describe.each(mutatorInvokers)(
             result: {
               error: 'app',
               message: expect.stringContaining('id must be a valid UUID'),
+              details: {
+                type: 'InputValidationError',
+                result: {issues: [{message: 'id must be a valid UUID'}]},
+              },
             },
           },
         ],
@@ -1119,6 +1123,10 @@ describe.each(mutatorInvokers)(
           result: {
             error: 'app',
             message: expect.stringContaining('id must be a valid UUID'),
+            details: {
+              type: 'InputValidationError',
+              result: {issues: [{message: 'id must be a valid UUID'}]},
+            },
           },
         },
       ]);
