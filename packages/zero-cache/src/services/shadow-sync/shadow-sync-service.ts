@@ -40,11 +40,16 @@ export class ShadowSyncService implements Service {
   async run() {
     const {intervalMs, sampleRate, maxRowsPerTable, textCopy} = this.#options;
 
-    // Why: wait at least one full interval before the first run so shadow
-    // sync never fires immediately on task startup, and add a random
-    // fraction of the interval on top so a fleet-wide restart does not
-    // cause every task to canary simultaneously.
-    const firstRunDelay = intervalMs + Math.floor(Math.random() * intervalMs);
+    // Why: first run fires in [intervalMs * 2/3, intervalMs) — late enough
+    // that shadow sync never fires immediately on task startup, but always
+    // before one full interval elapses so the canary completes at least once
+    // per task lifetime (the replication manager is restarted every ~24h).
+    // The last third is randomized so a fleet-wide restart does not cause
+    // every task to canary simultaneously.
+    const minFirstRunDelay = Math.floor((intervalMs * 2) / 3);
+    const firstRunDelay =
+      minFirstRunDelay +
+      Math.floor(Math.random() * (intervalMs - minFirstRunDelay));
     this.#lc.info?.(
       `shadow-syncer started; first run in ${firstRunDelay} ms, then every ${intervalMs} ms`,
     );

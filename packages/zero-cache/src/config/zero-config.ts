@@ -947,11 +947,13 @@ export const zeroOptions = {
     },
 
     intervalHours: {
-      type: v.number().default(24),
+      type: v.number().default(12),
       desc: [
-        `The interval between shadow initial-sync runs, in hours. The first run`,
-        `is additionally staggered by a random fraction of this interval so that`,
-        `a fleet restart does not cause all tasks to canary simultaneously.`,
+        `The interval between shadow initial-sync runs, in hours. The first`,
+        `run fires within [2/3, 1) of this interval after startup, so the`,
+        `canary completes at least once per task lifetime (the replication`,
+        `manager is restarted every ~24h) while still jittering so a fleet`,
+        `restart does not cause all tasks to canary simultaneously.`,
       ],
     },
 
