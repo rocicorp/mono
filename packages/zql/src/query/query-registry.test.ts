@@ -292,6 +292,8 @@ describe('defineQueries', () => {
     expectTypeOf(queries.getValue)
       .parameter(0)
       .toEqualTypeOf<string | undefined>();
+    expectTypeOf(queries.getValue.fn).toBeCallableWith({args: undefined});
+    expectTypeOf(queries.getValue.fn).toBeCallableWith({args: 'explicit'});
 
     // Call with undefined - query function gets transformed value
     const result = addContextToQuery(queries.getValue(undefined), {});
@@ -314,7 +316,7 @@ describe('defineQueries', () => {
     });
 
     // Call with actual string value
-    const result2 = queries.getValue.fn({args: 'explicit', ctx: {}});
+    const result2 = queries.getValue.fn({args: 'explicit'});
 
     // The query AST should use the input value (no transform needed)
     expect(asQueryInternals(result2).ast).toEqual({

@@ -191,7 +191,6 @@ test('mutator.fn validates args when validator is provided', async () => {
 
   await mutators.item.test.fn({
     args: {id: '456'},
-    ctx: undefined,
     tx: mockTx,
   });
 
@@ -234,7 +233,6 @@ test('mutator.fn throws on validation failure and does not run', async () => {
   await expect(
     mutators.item.test.fn({
       args: {id: 'bad'},
-      ctx: undefined,
       tx: {} as Transaction<typeof schema, unknown>,
     }),
   ).rejects.toThrowErrorMatchingInlineSnapshot(
@@ -531,7 +529,6 @@ describe('input/output type separation', () => {
     // Call fn with string input (simulating server receiving raw args)
     await mutators.item.update.fn({
       args: '42',
-      ctx: undefined,
       tx: mockTx,
     });
 
@@ -579,9 +576,12 @@ describe('input/output type separation', () => {
     } as Transaction<typeof schema, unknown>;
 
     // When fn is called, it should transform undefined to 'default-value'
+    expectTypeOf(mutators.item.create.fn).toBeCallableWith({
+      args: undefined,
+      tx: mockTx,
+    });
     await mutators.item.create.fn({
       args: undefined,
-      ctx: undefined,
       tx: mockTx,
     });
 
@@ -743,11 +743,10 @@ describe('type inference', () => {
       .toEqualTypeOf<ReadonlyJSONValue | undefined>();
     const request3 = mutators.def3('whatever');
     expectTypeOf(request3.args).toEqualTypeOf<ReadonlyJSONValue | undefined>();
-    expectTypeOf<typeof request3.mutator.fn>().parameter(0).toEqualTypeOf<{
-      args: ReadonlyJSONValue | undefined;
-      ctx: unknown;
-      tx: Transaction<typeof schema, unknown>;
-    }>();
+    expectTypeOf(request3.mutator.fn).toBeCallableWith({
+      args: undefined,
+      tx: {} as Transaction<typeof schema, unknown>,
+    });
 
     const request4 = mutators.def4('test-string');
     expectTypeOf(request4.args).toEqualTypeOf<string>();

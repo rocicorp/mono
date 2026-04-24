@@ -24,7 +24,7 @@ import {
   type MutateRequestTypes,
   type Mutator,
   type MutatorDefinition,
-  type MutatorDefinitionFunction,
+  type MutatorExecutionFunction,
   type MutatorTypes,
 } from './mutator.ts';
 
@@ -285,7 +285,7 @@ function createMutator<
 
   // fn takes ReadonlyJSONValue args because it's called during rebase (from
   // stored JSON) and on the server (from wire format). Validation happens here.
-  const fn: MutatorDefinitionFunction<
+  const fn: MutatorExecutionFunction<
     ArgsInput,
     C,
     Transaction<TSchema, TWrappedTransaction>
