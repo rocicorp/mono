@@ -1100,48 +1100,58 @@ describe.each(mutatorInvokers)(
       expect(recordedLMIDs).toEqual([1]);
 
       // The response should contain the application error
-      expect(response).toEqual({
-        mutations: [
-          {
-            id: {clientID: 'cid', id: 1},
-            result: {
-              error: 'app',
-              details: {
-                type: 'InputValidationError',
-                result: {
-                  issues: [{message: 'id must be a valid UUID'}],
-                },
+      expect(response).toMatchInlineSnapshot(`
+        {
+          "mutations": [
+            {
+              "id": {
+                "clientID": "cid",
+                "id": 1,
               },
-              message: expect.stringContaining('id must be a valid UUID'),
-              details: {
-                type: 'InputValidationError',
-                result: {issues: [{message: 'id must be a valid UUID'}]},
+              "result": {
+                "details": {
+                  "result": {
+                    "issues": [
+                      {
+                        "message": "id must be a valid UUID",
+                      },
+                    ],
+                  },
+                  "type": "InputValidationError",
+                },
+                "error": "app",
+                "message": "Validation failed for mutator item.update: id must be a valid UUID",
               },
             },
-          },
-        ],
-      });
+          ],
+        }
+      `);
 
       // writeMutationResult should be called with the error
-      expect(recordedResults).toEqual([
-        {
-          id: {clientID: 'cid', id: 1},
-          result: {
-            error: 'app',
-            details: {
-              type: 'InputValidationError',
-              result: {
-                issues: [{message: 'id must be a valid UUID'}],
-              },
+      expect(recordedResults).toMatchInlineSnapshot(`
+        [
+          {
+            "id": {
+              "clientID": "cid",
+              "id": 1,
             },
-            message: expect.stringContaining('id must be a valid UUID'),
-            details: {
-              type: 'InputValidationError',
-              result: {issues: [{message: 'id must be a valid UUID'}]},
+            "result": {
+              "details": {
+                "result": {
+                  "issues": [
+                    {
+                      "message": "id must be a valid UUID",
+                    },
+                  ],
+                },
+                "type": "InputValidationError",
+              },
+              "error": "app",
+              "message": "Validation failed for mutator item.update: id must be a valid UUID",
             },
           },
-        },
-      ]);
+        ]
+      `);
     });
 
     test('validator transforms args before passing to mutator', async () => {
