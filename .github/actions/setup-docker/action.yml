@@ -7,19 +7,26 @@ runs:
     - name: Ensure Docker is installed and running
       shell: bash
       run: |
-        MIN_DOCKER_VERSION=25
+        MIN_DOCKER_MAJOR=25
+
         install_docker() {
-          sudo flock /var/lock/apt-get.lock apt-get update -y
-          sudo flock /var/lock/apt-get.lock apt-get install -y docker.io
+          sudo flock /var/lock/apt-get.lock bash -c 'apt-get update -y && apt-get install -y docker.io'
         }
+
+        # Install if binary is missing
         if ! command -v docker &>/dev/null; then
           install_docker
-        else
-          MAJOR=$(docker version --format '{{.Server.Version}}' 2>/dev/null | cut -d. -f1)
-          if [ -z "$MAJOR" ] || [ "$MAJOR" -lt "$MIN_DOCKER_VERSION" ]; then
-            echo "Docker version too old or unresponsive (major=$MAJOR), reinstalling..."
-            install_docker
-          fi
         fi
+
+        # Start daemon before checking version (daemon may simply not be running yet)
         sudo systemctl start docker || true
+
+        # Now check version against a running daemon
+        MAJOR=$(docker version --format '{{.Server.Version}}' 2>/dev/null | cut -d. -f1)
+        if [ -z "$MAJOR" ] || [ "$MAJOR" -lt "$MIN_DOCKER_MAJOR" ]; then
+          echo "Docker version too old or unresponsive (major=${MAJOR:-unknown}), reinstalling..."
+          install_docker
+          sudo systemctl restart docker
+        fi
+
         sudo usermod -aG docker "$(whoami)" || true
