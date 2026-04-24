@@ -4955,6 +4955,153 @@ describe('view-syncer/service', () => {
     }
   });
 
+  test('rowSetSignature: emptied-by-advance query rehydrates to "0" without drift', async () => {
+    // Phase 1: hydrate non-empty. Signature is sig(1) ^ sig(2).
+    pruneIssues('3', '4', '5');
+    const client1 = connect(SYNC_CONTEXT, [
+      {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY2},
+    ]);
+    await nextPoke(client1);
+    stateChanges.push({state: 'version-ready'});
+    await nextPoke(client1);
+    expect(await loadStoredSig('query-hash1')).toEqual(
+      expectedIssuesSig(issueRowID('1'), issueRowID('2')),
+    );
+
+    // Advance: delete both rows via the replicator. #trackRowSetSignatures
+    // XORs each REMOVE with the same unit the ADD contributed, so the live
+    // signature returns to 0n and the CVR persists hex "0".
+    replicator.processTransaction(
+      '123',
+      messages.delete('issues', {id: '1'}),
+      messages.delete('issues', {id: '2'}),
+    );
+    stateChanges.push({state: 'version-ready'});
+    const phase1Cookie = cookieOf(await nextPoke(client1));
+    expect(await loadStoredSig('query-hash1')).toEqual('0');
+
+    // Phase 2: restart. Rehydration yields 0 rows → the map entry is never
+    // created → provider returns undefined → candidate = undefined ?? 0n = 0n.
+    // Stored "0" parses to 0n. Match: no drift, no re-execution.
+    const {
+      queue,
+      stateChanges: rsc,
+      cleanup,
+    } = await restartAfter({
+      baseCookie: phase1Cookie,
+      mutate: () => {},
+      queriesPatch: [{op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY2}],
+    });
+    const removeSpy = vi.spyOn(PipelineDriver.prototype, 'removeQuery');
+    try {
+      rsc.push({state: 'version-ready'});
+
+      expect(await drainUntilRowsPatchOrQuiet(queue)).toBeUndefined();
+      expect(await loadStoredSig('query-hash1')).toEqual('0');
+
+      // Single call = internal removeQuery from the one addQuery in
+      // hydrateUnchangedQueries. Drift would be 3.
+      const calls = removeSpy.mock.calls.filter(
+        ([id]) => id === 'query-hash1',
+      ).length;
+      expect(calls).toBe(1);
+    } finally {
+      removeSpy.mockRestore();
+      await cleanup();
+    }
+  });
+
+  test('rowSetSignature: transformationHash change bypasses the drift check', async () => {
+    // Direct-mock the transformer so we can drive the transformationHash
+    // explicitly (the real transformer caches by query id for 5s, which would
+    // re-serve phase 1's hash in phase 2).
+    pruneIssues('3', '4', '5');
+    const transformSpy = vi
+      .spyOn(customQueryTransformer!, 'transform')
+      .mockResolvedValue(
+        transformAttempt([
+          {
+            id: 'custom-1',
+            transformedAst: ISSUES_QUERY2,
+            transformationHash: 'hash-1',
+          },
+        ]),
+      );
+
+    // Phase 1: hydrate with hash-1. CVR persists transformationHash=hash-1 and
+    // the row-set signature for issues {1, 2}.
+    const client1 = connect(SYNC_CONTEXT, [
+      {op: 'put', hash: 'custom-1', name: 'named-query', args: ['thing']},
+    ]);
+    await nextPoke(client1);
+    stateChanges.push({state: 'version-ready'});
+    const phase1Cookie = cookieOf(await nextPoke(client1));
+    expect(await loadStoredSig('custom-1')).toEqual(
+      expectedIssuesSig(issueRowID('1'), issueRowID('2')),
+    );
+
+    // Tamper the stored sig: if drift *were* checked in phase 2, a bogus
+    // stored value would force a drift re-execution. The hash-mismatch filter
+    // in #hydrateUnchangedQueries must drop this query before the drift
+    // comparison is reached.
+    const BOGUS_SIG = 'deadbeefcafebabe';
+
+    // Phase 2: restart. Transformer now returns hash-2 (different from the
+    // CVR's stored hash-1). In hydrateUnchangedQueries, the custom-query
+    // branch filters the mismatched entry out before any addQuery / drift
+    // check runs. #syncQueryPipelineSet then re-hydrates fresh.
+    const {
+      queue,
+      stateChanges: rsc,
+      cleanup,
+    } = await restartAfter({
+      baseCookie: phase1Cookie,
+      mutate: async () => {
+        await cvrDB`
+          UPDATE ${cvrDB(cvrSchema(SHARD))}.queries
+             SET "rowSetSignature" = ${BOGUS_SIG}
+           WHERE "clientGroupID" = ${serviceID}
+             AND "queryHash" = 'custom-1'
+        `;
+      },
+      queriesPatch: [
+        {op: 'put', hash: 'custom-1', name: 'named-query', args: ['thing']},
+      ],
+    });
+    transformSpy.mockResolvedValue(
+      transformAttempt([
+        {
+          id: 'custom-1',
+          transformedAst: ISSUES_QUERY2,
+          transformationHash: 'hash-2',
+        },
+      ]),
+    );
+    const removeSpy = vi.spyOn(PipelineDriver.prototype, 'removeQuery');
+    try {
+      rsc.push({state: 'version-ready'});
+      await drainUntilRowsPatchOrQuiet(queue);
+
+      // Transformation-hash-change path: query is dropped from
+      // hydrateUnchangedQueries at the hash-mismatch filter (no addQuery, no
+      // drift check). #syncQueryPipelineSet then hydrates fresh; its single
+      // addQuery fires one internal removeQuery. Total: 1.
+      // The drift path for this same query would produce 3 calls.
+      const calls = removeSpy.mock.calls.filter(
+        ([id]) => id === 'custom-1',
+      ).length;
+      expect(calls).toBe(1);
+
+      // Sig is overwritten by the fresh hydration (no longer BOGUS).
+      expect(await loadStoredSig('custom-1')).toEqual(
+        expectedIssuesSig(issueRowID('1'), issueRowID('2')),
+      );
+    } finally {
+      removeSpy.mockRestore();
+      await cleanup();
+    }
+  });
+
   test('process advancement with lmid change, client has no queries.  See https://bugs.rocicorp.dev/issue/3628', async () => {
     const client = connect(SYNC_CONTEXT, []);
     expect(await nextPoke(client)).toMatchInlineSnapshot(`
