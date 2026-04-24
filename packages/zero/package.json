@@ -14,6 +14,7 @@
     "directory": "packages/zero"
   },
   "bin": {
+    "analyze-query": "./out/zero/src/analyze-query.js",
     "ast-to-zql": "./out/zero/src/ast-to-zql.js",
     "transform-query": "./out/zero/src/transform-query.js",
     "zero-build-schema": "./out/zero/src/build-schema.js",
