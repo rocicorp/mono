@@ -1151,3 +1151,126 @@ describe('Cap limit 0', () => {
     },
   );
 });
+
+describe('Cap wiring', () => {
+  const sources: Sources = {
+    issue: {
+      columns: {
+        id: {type: 'string'},
+        text: {type: 'string'},
+      },
+      primaryKeys: ['id'],
+    },
+    comment: {
+      columns: {
+        id: {type: 'string'},
+        issueID: {type: 'string'},
+        text: {type: 'string'},
+      },
+      primaryKeys: ['id'],
+    },
+  };
+  const format: Format = {
+    singular: false,
+    relationships: {
+      comments: {
+        singular: false,
+        relationships: {},
+      },
+    },
+  };
+
+  test('flipped EXISTS subquery is NOT wired through Cap', () => {
+    // Flipped EXISTS children route through FlippedJoin, which depends
+    // on ordering. If the builder ever accidentally sends them through
+    // Cap instead, ordering guarantees silently break. This test pins
+    // the wiring.
+    const flippedAst: AST = {
+      table: 'issue',
+      orderBy: [['id', 'asc']],
+      where: {
+        type: 'correlatedSubquery',
+        related: {
+          system: 'client',
+          correlation: {parentField: ['id'], childField: ['issueID']},
+          subquery: {
+            table: 'comment',
+            alias: 'comments',
+            orderBy: [['id', 'asc']],
+          },
+        },
+        op: 'EXISTS',
+        flip: true,
+      },
+    } as const;
+
+    const sourceContents: SourceContents = {
+      issue: [{id: 'i1', text: 'i1'}],
+      comment: [
+        {id: 'c1', issueID: 'i1', text: 'c1'},
+        {id: 'c2', issueID: 'i1', text: 'c2'},
+      ],
+    };
+    const {actualStorage} = runPushTest({
+      sources,
+      sourceContents,
+      ast: flippedAst,
+      format,
+      pushes: [],
+    });
+
+    const capKeys = Object.keys(actualStorage).filter(k => k.endsWith(':cap'));
+    expect(capKeys).toEqual([]);
+  });
+
+  test('permissions-system EXISTS uses cap limit=1', () => {
+    // EXISTS on a subquery with system='permissions' must use the
+    // PERMISSIONS_EXISTS_LIMIT (1) rather than the default EXISTS_LIMIT
+    // (3). If this constant is ever changed, permissions checks could
+    // overfetch or undercount — security-relevant.
+    const permissionsAst: AST = {
+      table: 'issue',
+      orderBy: [['id', 'asc']],
+      where: {
+        type: 'correlatedSubquery',
+        related: {
+          system: 'permissions',
+          correlation: {parentField: ['id'], childField: ['issueID']},
+          subquery: {
+            table: 'comment',
+            alias: 'comments',
+            orderBy: [['id', 'asc']],
+          },
+        },
+        op: 'EXISTS',
+      },
+    } as const;
+
+    const sourceContents: SourceContents = {
+      issue: [{id: 'i1', text: 'i1'}],
+      comment: [
+        {id: 'c1', issueID: 'i1', text: 'c1'},
+        {id: 'c2', issueID: 'i1', text: 'c2'},
+        {id: 'c3', issueID: 'i1', text: 'c3'},
+      ],
+    };
+    const {actualStorage} = runPushTest({
+      sources,
+      sourceContents,
+      ast: permissionsAst,
+      format,
+      pushes: [],
+    });
+
+    expect(actualStorage['.comments:cap']).toMatchInlineSnapshot(`
+      {
+        "["cap","i1"]": {
+          "pks": [
+            "["c1"]",
+          ],
+          "size": 1,
+        },
+      }
+    `);
+  });
+});
