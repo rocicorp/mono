@@ -148,7 +148,6 @@ const stderrLogSink: LogSink = {
  * await runAnalyzeCLI({schema});
  * ```
  *
- * @experimental This API is in progress and may change without notice.
  * Exits the process with code 1 on error.
  */
 export async function runAnalyzeCLI(opts: AnalyzeCLIOptions): Promise<void> {
