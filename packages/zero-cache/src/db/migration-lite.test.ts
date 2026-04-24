@@ -254,4 +254,118 @@ describe('db/migration-lite', () => {
       db.close();
     });
   }
+
+  const thrownValue = {type: 'custom-throw-value'};
+
+  type ErrorCase = {
+    name: string;
+    setup: Migration;
+    verify: (err: unknown) => void;
+  };
+
+  const errorCases: ErrorCase[] = [
+    {
+      name: 'preserves sqlite error for internal rollback',
+      setup: {
+        migrateSchema: (_log, db) => {
+          db.exec(`
+            CREATE TABLE "AutoRollback" (
+              id INTEGER PRIMARY KEY
+            );
+
+            CREATE TRIGGER "AutoRollbackTrigger"
+            BEFORE INSERT ON "AutoRollback"
+            BEGIN
+              SELECT RAISE(ROLLBACK, 'auto rollback');
+            END;
+          `);
+          db.prepare(`INSERT INTO "AutoRollback" (id) VALUES (1)`).run();
+        },
+      },
+      verify: err => {
+        expect(err).toBeInstanceOf(Error);
+        expect(String(err)).toContain('auto rollback');
+        expect(String(err)).toContain(
+          'cannot rollback - no transaction is active',
+        );
+        expect(String((err as Error).cause)).toContain('auto rollback');
+      },
+    },
+    {
+      name: 'preserves sqlite error without internal rollback',
+      setup: {
+        migrateSchema: (_log, db) => {
+          db.exec(`
+            CREATE TABLE "NoAutoRollback" (
+              id INTEGER PRIMARY KEY,
+              email TEXT UNIQUE
+            );
+          `);
+          db.prepare(
+            `INSERT INTO "NoAutoRollback" (id, email) VALUES (1, 'a@example.com')`,
+          ).run();
+          db.prepare(
+            `INSERT INTO "NoAutoRollback" (id, email) VALUES (2, 'a@example.com')`,
+          ).run();
+        },
+      },
+      verify: err => {
+        expect(String(err)).toContain('UNIQUE constraint failed');
+      },
+    },
+    {
+      name: 'preserves synchronous javascript error',
+      setup: {
+        migrateSchema: () => {
+          throw new Error('sync javascript error');
+        },
+      },
+      verify: err => {
+        expect(err).toBeInstanceOf(Error);
+        expect((err as Error).message).toBe('sync javascript error');
+      },
+    },
+    {
+      name: 'preserves asynchronous javascript error',
+      setup: {
+        migrateData: async () => {
+          await Promise.resolve();
+          throw new Error('async javascript error');
+        },
+      },
+      verify: err => {
+        expect(err).toBeInstanceOf(Error);
+        expect((err as Error).message).toBe('async javascript error');
+      },
+    },
+    {
+      name: 'preserves non-Error thrown values',
+      setup: {
+        migrateSchema: () => {
+          throw thrownValue;
+        },
+      },
+      verify: err => {
+        expect(err).toBe(thrownValue);
+      },
+    },
+  ];
+
+  test.each(errorCases)('$name', async c => {
+    let err: unknown;
+    try {
+      await runSchemaMigrations(
+        createSilentLogContext(),
+        debugName,
+        dbFile.path,
+        c.setup,
+        {1: {}},
+      );
+    } catch (e) {
+      err = e;
+    }
+
+    expect(err).toBeDefined();
+    c.verify(err);
+  });
 });
