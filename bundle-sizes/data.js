@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1776996781203,
+  "lastUpdate": 1777037515029,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -55345,6 +55345,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/rocicorp/mono/commit/72aade611001762a7abbcb5cc0187fe10affaa2a"
         },
         "date": 1776996769338,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 306068,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 55169,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 113180,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 32317,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "arv@roci.dev",
+            "name": "Erik Arvidsson",
+            "username": "arv"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "d05fd05b4cc71645cedf51131dbf303e0630f682",
+          "message": "chore(replicache): Add type checking for hash functionality and create dedicated test file (#5879)\n\nCo-authored-by: Copilot <copilot@github.com>",
+          "timestamp": "2026-04-24T13:20:00Z",
+          "tree_id": "7d25d9429495827c510c74b4aec534e09510958f",
+          "url": "https://github.com/rocicorp/mono/commit/d05fd05b4cc71645cedf51131dbf303e0630f682"
+        },
+        "date": 1777037502380,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
