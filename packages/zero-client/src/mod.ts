@@ -158,6 +158,7 @@ export {
   type MutatorDefinition,
 } from '../../zql/src/mutate/mutator.ts';
 export {createBuilder} from '../../zql/src/query/create-builder.ts';
+export {InputValidationError} from '../../zql/src/query/validate-input.ts';
 export {escapeLike} from '../../zql/src/query/escape-like.ts';
 export type {
   ExpressionBuilder,
