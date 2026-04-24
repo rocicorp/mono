@@ -1,4 +1,4 @@
 export {
-  runAnalyzeCLI,
-  type AnalyzeCLIOptions,
+  runAnalyzeCli,
+  type AnalyzeCliOptions,
 } from '../../analyze-query/src/analyze-cli.ts';
