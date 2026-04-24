@@ -12,7 +12,15 @@ test('random generation', () => {
     locale: en,
     randomizer,
   });
-  const schema = generateSchema(rng, faker);
+  let schema;
+  try {
+    schema = generateSchema(rng, faker);
+  } catch (e) {
+    // oxlint-disable-next-line no-console
+    console.error('Error generating schema for seed', seed);
+    throw e;
+  }
+
   expect(
     () => generateQuery(schema, {}, rng, faker),
     `seed: ${seed}`,
