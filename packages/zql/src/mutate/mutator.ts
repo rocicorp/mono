@@ -5,6 +5,7 @@ import type {
   DefaultContext,
   DefaultSchema,
   DefaultWrappedTransaction,
+  IsUnknown,
 } from '../../../zero-types/src/default-types.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {AnyTransaction, Transaction} from './custom.ts';
@@ -197,6 +198,16 @@ export type MutatorDefinitionFunction<
   tx: TTransaction;
 }) => Promise<void>;
 
+export type MutatorExecutionFunction<
+  TOutput extends ReadonlyJSONValue | undefined,
+  TContext,
+  TTransaction,
+> = (
+  options: IsUnknown<TContext> extends true
+    ? {args: TOutput; tx: TTransaction; ctx?: TContext}
+    : {args: TOutput; tx: TTransaction; ctx: TContext},
+) => Promise<void>;
+
 // ----------------------------------------------------------------------------
 // Mutator and MutateRequest types
 // ----------------------------------------------------------------------------
@@ -234,7 +245,7 @@ export type Mutator<
    * during rebase (from stored JSON) and on the server (from wire format).
    * Validation happens internally before the recipe function runs.
    */
-  readonly 'fn': MutatorDefinitionFunction<
+  readonly 'fn': MutatorExecutionFunction<
     TInput,
     TContext,
     Transaction<TSchema, TWrappedTransaction>

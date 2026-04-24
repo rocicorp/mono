@@ -17,6 +17,12 @@ import type {Schema} from './schema.ts';
  */
 export interface DefaultTypes {}
 
+export type IsUnknown<T> = unknown extends T
+  ? [T] extends [unknown]
+    ? true
+    : false
+  : false;
+
 export type DefaultSchema<TDefaultTypes = DefaultTypes> =
   TDefaultTypes extends {
     readonly schema: infer S extends Schema;
