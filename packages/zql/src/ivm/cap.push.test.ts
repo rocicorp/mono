@@ -1150,6 +1150,54 @@ describe('Cap limit 0', () => {
       expect(result).toEqual([]);
     },
   );
+
+  test('pushes are dropped when limit=0 (no capState ever set)', () => {
+    // limit=0 short-circuits #initialFetch before capState is written.
+    // Every subsequent push must therefore see capState===undefined and
+    // silently drop. If capState ever leaked in (e.g. from a future
+    // refactor that pre-seeds state), pushes would start forwarding and
+    // produce rows that EXISTS-with-limit-0 must never emit.
+    const source = createSource(
+      lc,
+      testLogConfig,
+      'table',
+      {
+        id: {type: 'string'},
+        group: {type: 'string'},
+        text: {type: 'string'},
+      },
+      ['id'],
+    );
+    consume(
+      source.push(makeSourceChangeAdd({id: '1', group: 'g1', text: 'a'})),
+    );
+
+    const storage = new MemoryStorage();
+    const cap = new Cap(source.connect([['id', 'asc']]), storage, 0, ['group']);
+    const c = new Catch(cap);
+
+    // Fetch first — the early-return path that does NOT seed capState.
+    expect(c.fetch({constraint: {group: 'g1'}})).toEqual([]);
+
+    // ADD / REMOVE / EDIT must all be no-ops at the Cap level.
+    consume(
+      source.push(makeSourceChangeAdd({id: '2', group: 'g1', text: 'b'})),
+    );
+    consume(
+      source.push(makeSourceChangeRemove({id: '1', group: 'g1', text: 'a'})),
+    );
+    consume(
+      source.push(
+        makeSourceChangeEdit(
+          {id: '2', group: 'g1', text: 'b updated'},
+          {id: '2', group: 'g1', text: 'b'},
+        ),
+      ),
+    );
+
+    expect(c.pushes).toEqual([]);
+    expect(storage.cloneData()).toEqual({});
+  });
 });
 
 describe('Cap wiring', () => {
@@ -1221,6 +1269,169 @@ describe('Cap wiring', () => {
 
     const capKeys = Object.keys(actualStorage).filter(k => k.endsWith(':cap'));
     expect(capKeys).toEqual([]);
+  });
+
+  test('EXISTS subquery with start throws', () => {
+    // builder.ts:294 asserts that non-flipped EXISTS children have no
+    // `start` bound. If anything ever serializes a `start` into an
+    // EXISTS subquery AST, the assert is the only thing standing between
+    // us and a Cap pipeline that silently uses an unsupported bound.
+    const astWithStart: AST = {
+      table: 'issue',
+      orderBy: [['id', 'asc']],
+      where: {
+        type: 'correlatedSubquery',
+        related: {
+          system: 'client',
+          correlation: {parentField: ['id'], childField: ['issueID']},
+          subquery: {
+            table: 'comment',
+            alias: 'comments',
+            orderBy: [['id', 'asc']],
+            start: {row: {id: 'c0'}, exclusive: false},
+          },
+        },
+        op: 'EXISTS',
+      },
+    } as const;
+
+    expect(() =>
+      runPushTest({
+        sources,
+        sourceContents: {issue: [], comment: []},
+        ast: astWithStart,
+        format,
+        pushes: [],
+      }),
+    ).toThrow('EXISTS subqueries must not have start');
+  });
+
+  test('EXISTS subquery with related throws', () => {
+    // builder.ts:297 asserts that non-flipped EXISTS children have no
+    // `related`. EXISTS is a presence check; nesting a `related` into
+    // it would build a Join under Cap that's never observed, and the
+    // companion partition assumptions would break.
+    const astWithRelated: AST = {
+      table: 'issue',
+      orderBy: [['id', 'asc']],
+      where: {
+        type: 'correlatedSubquery',
+        related: {
+          system: 'client',
+          correlation: {parentField: ['id'], childField: ['issueID']},
+          subquery: {
+            table: 'comment',
+            alias: 'comments',
+            orderBy: [['id', 'asc']],
+            related: [
+              {
+                system: 'client',
+                correlation: {
+                  parentField: ['issueID'],
+                  childField: ['id'],
+                },
+                subquery: {
+                  table: 'issue',
+                  alias: 'issue',
+                  orderBy: [['id', 'asc']],
+                },
+              },
+            ],
+          },
+        },
+        op: 'EXISTS',
+      },
+    } as const;
+
+    expect(() =>
+      runPushTest({
+        sources,
+        sourceContents: {issue: [], comment: []},
+        ast: astWithRelated,
+        format,
+        pushes: [],
+      }),
+    ).toThrow('EXISTS subqueries must not have related');
+  });
+
+  test('nested EXISTS produces a Cap at every level', () => {
+    // Each non-flipped EXISTS in the tree gets its own Cap. The outer
+    // Cap caps issues' direct comments; the inner Cap caps each
+    // comment's revisions. If wiring ever flattens these, only one
+    // Cap storage would appear and inner-level overfetch would be
+    // invisible.
+    const sourcesNested: Sources = {
+      issue: {
+        columns: {id: {type: 'string'}},
+        primaryKeys: ['id'],
+      },
+      comment: {
+        columns: {
+          id: {type: 'string'},
+          issueID: {type: 'string'},
+        },
+        primaryKeys: ['id'],
+      },
+      revision: {
+        columns: {
+          id: {type: 'string'},
+          commentID: {type: 'string'},
+        },
+        primaryKeys: ['id'],
+      },
+    };
+
+    const nestedAst: AST = {
+      table: 'issue',
+      orderBy: [['id', 'asc']],
+      where: {
+        type: 'correlatedSubquery',
+        related: {
+          system: 'client',
+          correlation: {parentField: ['id'], childField: ['issueID']},
+          subquery: {
+            table: 'comment',
+            alias: 'comments',
+            orderBy: [['id', 'asc']],
+            where: {
+              type: 'correlatedSubquery',
+              related: {
+                system: 'client',
+                correlation: {
+                  parentField: ['id'],
+                  childField: ['commentID'],
+                },
+                subquery: {
+                  table: 'revision',
+                  alias: 'revisions',
+                  orderBy: [['id', 'asc']],
+                },
+              },
+              op: 'EXISTS',
+            },
+          },
+        },
+        op: 'EXISTS',
+      },
+    } as const;
+
+    const sourceContents: SourceContents = {
+      issue: [{id: 'i1'}],
+      comment: [{id: 'c1', issueID: 'i1'}],
+      revision: [{id: 'r1', commentID: 'c1'}],
+    };
+    const {actualStorage} = runPushTest({
+      sources: sourcesNested,
+      sourceContents,
+      ast: nestedAst,
+      format: {singular: false, relationships: {}},
+      pushes: [],
+    });
+
+    const capKeys = Object.keys(actualStorage)
+      .filter(k => k.endsWith(':cap'))
+      .sort();
+    expect(capKeys).toEqual(['.comments.revisions:cap', '.comments:cap']);
   });
 
   test('permissions-system EXISTS uses cap limit=1', () => {
@@ -1441,6 +1652,206 @@ describe('Cap push - compound partition key', () => {
             "["c5"]",
           ],
           "size": 1,
+        },
+      }
+    `);
+  });
+});
+
+describe('Cap push - compound primary key', () => {
+  // Child PK is ['groupId','seq']. Exercises the multi-element loops in
+  // serializePK and deserializePKToConstraint (cap.ts:315-329) — every
+  // other test in this file uses single-column PK ['id'], so the
+  // multi-element path is otherwise unverified. The PK-point-lookup
+  // re-fetch (cap.ts:113-122) deserializes back into a constraint, so
+  // a broken round-trip here would either return wrong rows from the
+  // source or cause the source to throw on an unrecognized constraint.
+  const sources: Sources = {
+    parent: {
+      columns: {
+        id: {type: 'string'},
+        groupId: {type: 'string'},
+      },
+      primaryKeys: ['id'],
+    },
+    child: {
+      columns: {
+        groupId: {type: 'string'},
+        seq: {type: 'string'},
+        text: {type: 'string'},
+      },
+      primaryKeys: ['groupId', 'seq'],
+    },
+  };
+
+  const ast: AST = {
+    table: 'parent',
+    orderBy: [['id', 'asc']],
+    where: {
+      type: 'correlatedSubquery',
+      related: {
+        system: 'client',
+        correlation: {parentField: ['groupId'], childField: ['groupId']},
+        subquery: {
+          table: 'child',
+          alias: 'children',
+          orderBy: [['seq', 'asc']],
+        },
+      },
+      op: 'EXISTS',
+    },
+  } as const;
+
+  const format: Format = {
+    singular: false,
+    relationships: {
+      children: {
+        singular: false,
+        relationships: {},
+      },
+    },
+  };
+
+  test('initial hydration tracks PKs as JSON-encoded compound arrays', () => {
+    const sourceContents: SourceContents = {
+      parent: [{id: 'p1', groupId: 'g1'}],
+      child: [
+        {groupId: 'g1', seq: 's1', text: 'a'},
+        {groupId: 'g1', seq: 's2', text: 'b'},
+      ],
+    };
+    const {actualStorage} = runPushTest({
+      sources,
+      sourceContents,
+      ast,
+      format,
+      pushes: [],
+    });
+
+    // Each entry in pks is JSON.stringify of [groupId, seq] in PK order.
+    // A bug that serialized only the first PK column would yield
+    // duplicate '"g1"' entries instead of distinct compound arrays.
+    expect(actualStorage['.children:cap']).toMatchInlineSnapshot(`
+      {
+        "["cap","g1"]": {
+          "pks": [
+            "["g1","s1"]",
+            "["g1","s2"]",
+          ],
+          "size": 2,
+        },
+      }
+    `);
+  });
+
+  test('remove + refill round-trips compound PKs through point lookup', () => {
+    // Removing s1 forces Cap to refill: it scans the partition, skips
+    // pks already in its set (deserialized from compound JSON), and
+    // picks the next one. If deserializePKToConstraint built a wrong
+    // constraint shape, the refill would either pick a wrong row or
+    // re-pick the removed row.
+    const sourceContents: SourceContents = {
+      parent: [{id: 'p1', groupId: 'g1'}],
+      child: [
+        {groupId: 'g1', seq: 's1', text: 'a'},
+        {groupId: 'g1', seq: 's2', text: 'b'},
+        {groupId: 'g1', seq: 's3', text: 'c'},
+        {groupId: 'g1', seq: 's4', text: 'd'},
+      ],
+    };
+    const {data, actualStorage} = runPushTest({
+      sources,
+      sourceContents,
+      ast,
+      format,
+      pushes: [
+        [
+          'child',
+          makeSourceChangeRemove({groupId: 'g1', seq: 's1', text: 'a'}),
+        ],
+      ],
+    });
+
+    expect(actualStorage['.children:cap']).toMatchInlineSnapshot(`
+      {
+        "["cap","g1"]": {
+          "pks": [
+            "["g1","s2"]",
+            "["g1","s3"]",
+            "["g1","s4"]",
+          ],
+          "size": 3,
+        },
+      }
+    `);
+    expect(data).toMatchInlineSnapshot(`
+      [
+        {
+          "children": [
+            {
+              "groupId": "g1",
+              "seq": "s2",
+              "text": "b",
+              Symbol(rc): 1,
+            },
+            {
+              "groupId": "g1",
+              "seq": "s3",
+              "text": "c",
+              Symbol(rc): 1,
+            },
+            {
+              "groupId": "g1",
+              "seq": "s4",
+              "text": "d",
+              Symbol(rc): 1,
+            },
+          ],
+          "groupId": "g1",
+          "id": "p1",
+          Symbol(rc): 1,
+        },
+      ]
+    `);
+  });
+
+  test('edit that changes a non-leading PK column updates tracked set', () => {
+    // The PK is ['groupId','seq']; we keep groupId stable (so the
+    // partition assertion passes) but change seq. The new compound PK
+    // must replace the old one in the tracked set with the columns in
+    // the right order — a bug that swapped column order would emit
+    // '["s1_new","g1"]' here.
+    const sourceContents: SourceContents = {
+      parent: [{id: 'p1', groupId: 'g1'}],
+      child: [
+        {groupId: 'g1', seq: 's1', text: 'a'},
+        {groupId: 'g1', seq: 's2', text: 'b'},
+      ],
+    };
+    const {actualStorage} = runPushTest({
+      sources,
+      sourceContents,
+      ast,
+      format,
+      pushes: [
+        [
+          'child',
+          makeSourceChangeEdit(
+            {groupId: 'g1', seq: 's1_new', text: 'a'},
+            {groupId: 'g1', seq: 's1', text: 'a'},
+          ),
+        ],
+      ],
+    });
+
+    expect(actualStorage['.children:cap']).toMatchInlineSnapshot(`
+      {
+        "["cap","g1"]": {
+          "pks": [
+            "["g1","s1_new"]",
+            "["g1","s2"]",
+          ],
+          "size": 2,
         },
       }
     `);

@@ -644,3 +644,168 @@ describe('Cap OR with multiple EXISTS', () => {
     expect(view.data).toEqual(qd.materialize(q).data);
   });
 });
+
+describe('Cap AND with multiple EXISTS', () => {
+  let pg4: PostgresDB;
+  let sqlite4: Database;
+  let issueQuery4: Query<'issue', Schema>;
+  let qd: QueryDelegate;
+
+  beforeAll(async () => {
+    pg4 = await testDBs.create('cap-and-exists');
+    await pg4.unsafe(createTableSQL);
+    sqlite4 = new Database(lc, ':memory:');
+
+    // Same shape as the OR fixture but the truth tables matter
+    // differently for AND: a row is included only when BOTH branches
+    // hold. Each branch lives behind its own Cap (limit 3, unordered),
+    // so a single comment change can simultaneously toggle both
+    // branches for the same issue.
+    //
+    //   exists('comments')      — issue has any direct comment
+    //   exists('ownerComments') — issue's owner has authored ≥1 comment anywhere
+    //
+    // Initial truth table:
+    //   iA  u1 owns, has cA1 by u1     → comments=T, ownerComments=T → INCLUDED
+    //   iB  u2 owns, no comments       → comments=F, ownerComments=F → excluded
+    //   iC  u1 owns, no direct comment → comments=F, ownerComments=T → excluded (AND)
+    //   iD  u2 owns, no comments       → comments=F, ownerComments=F → excluded
+    await pg4.unsafe(/*sql*/ `
+      INSERT INTO "users" ("id", "name") VALUES
+        ('u1', 'User 1'),
+        ('u2', 'User 2');
+
+      INSERT INTO "issues" ("id", "title", "description", "closed", "owner_id", "createdAt") VALUES
+        ('iA', 'A', 'dA', false, 'u1', TIMESTAMPTZ '2001-01-01T00:00:00.000Z'),
+        ('iB', 'B', 'dB', false, 'u2', TIMESTAMPTZ '2001-01-02T00:00:00.000Z'),
+        ('iC', 'C', 'dC', false, 'u1', TIMESTAMPTZ '2001-01-03T00:00:00.000Z'),
+        ('iD', 'D', 'dD', false, 'u2', TIMESTAMPTZ '2001-01-04T00:00:00.000Z');
+
+      INSERT INTO "comments" ("id", "authorId", "issue_id", "text", "createdAt") VALUES
+        ('cA1', 'u1', 'iA', 'a1', TIMESTAMP '2002-01-01 00:00:00');
+    `);
+
+    await initialSync(
+      new LogContext('debug', {}, consoleLogSink),
+      {appID: 'cap_and', shardNum: 0, publications: []},
+      sqlite4,
+      getConnectionURI(pg4),
+      {tableCopyWorkers: 1},
+      {},
+    );
+
+    qd = newQueryDelegate(lc, testLogConfig, sqlite4, schema);
+    issueQuery4 = newQuery(schema, 'issue');
+  });
+
+  test('AND of two EXISTS: both branches must hold, drift-free', () => {
+    // Two chained whereExists() compose with AND. Each builds its own
+    // Cap; the join above feeds rows that survived the first Exists
+    // into the second's parent stream. If either Cap mishandled
+    // refill or partition keys, the live view would diverge from a
+    // fresh materialization.
+    const q = issueQuery4.whereExists('comments').whereExists('ownerComments');
+    const view = qd.materialize(q);
+
+    const initial = view.data as ReadonlyArray<{readonly id: string}>;
+    expect(initial.map(r => r.id)).toEqual(['iA']);
+    expect(view.data).toEqual(qd.materialize(q).data);
+
+    // Add a u1 comment on iC. Now iC has direct comments AND its owner
+    // (u1) had already authored cA1 → both branches TRUE → iC enters.
+    consume(
+      must(qd.getSource('comments')).push(
+        makeSourceChangeAdd({
+          id: 'cC1',
+          authorId: 'u1',
+          issue_id: 'iC',
+          text: 'c1',
+          createdAt: 1100000000000,
+        }),
+      ),
+    );
+    expect(
+      (view.data as ReadonlyArray<{readonly id: string}>).map(r => r.id),
+    ).toEqual(['iA', 'iC']);
+    expect(view.data).toEqual(qd.materialize(q).data);
+
+    // u2 authors a comment on iD. iD: comments TRUE (cD1 on iD) AND
+    // ownerComments TRUE (u2 just authored) → enters. iB: comments
+    // still FALSE on iB itself → AND fails → still excluded even
+    // though owner=u2 now has a comment.
+    consume(
+      must(qd.getSource('comments')).push(
+        makeSourceChangeAdd({
+          id: 'cD1',
+          authorId: 'u2',
+          issue_id: 'iD',
+          text: 'd1',
+          createdAt: 1100000001000,
+        }),
+      ),
+    );
+    expect(
+      new Set(
+        (view.data as ReadonlyArray<{readonly id: string}>).map(r => r.id),
+      ),
+    ).toEqual(new Set(['iA', 'iC', 'iD']));
+    expect(view.data).toEqual(qd.materialize(q).data);
+
+    // Remove cA1: iA loses comments AND its owner u1 loses ownerComments
+    // (u1 still has cC1 on iC) — wait, u1 authored cC1 above, so
+    // ownerComments stays TRUE for u1's issues. iA loses comments only;
+    // AND fails → iA exits. iC keeps both branches.
+    consume(
+      must(qd.getSource('comments')).push(
+        makeSourceChangeRemove({
+          id: 'cA1',
+          authorId: 'u1',
+          issue_id: 'iA',
+          text: 'a1',
+          createdAt: 1009843200000,
+        }),
+      ),
+    );
+    expect(
+      new Set(
+        (view.data as ReadonlyArray<{readonly id: string}>).map(r => r.id),
+      ),
+    ).toEqual(new Set(['iC', 'iD']));
+    expect(view.data).toEqual(qd.materialize(q).data);
+
+    // Remove cC1: iC loses comments. u1 has no more comments anywhere
+    // → ownerComments FALSE for iA and iC both. iC exits.
+    consume(
+      must(qd.getSource('comments')).push(
+        makeSourceChangeRemove({
+          id: 'cC1',
+          authorId: 'u1',
+          issue_id: 'iC',
+          text: 'c1',
+          createdAt: 1100000000000,
+        }),
+      ),
+    );
+    expect(
+      (view.data as ReadonlyArray<{readonly id: string}>).map(r => r.id),
+    ).toEqual(['iD']);
+    expect(view.data).toEqual(qd.materialize(q).data);
+
+    // Remove cD1: iD loses everything. View is empty.
+    consume(
+      must(qd.getSource('comments')).push(
+        makeSourceChangeRemove({
+          id: 'cD1',
+          authorId: 'u2',
+          issue_id: 'iD',
+          text: 'd1',
+          createdAt: 1100000001000,
+        }),
+      ),
+    );
+    expect(
+      (view.data as ReadonlyArray<{readonly id: string}>).map(r => r.id),
+    ).toEqual([]);
+    expect(view.data).toEqual(qd.materialize(q).data);
+  });
+});
