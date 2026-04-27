@@ -652,6 +652,37 @@ test('getByKey', () => {
   ).toBeUndefined();
 });
 
+test('schema exposes unique index column sets, sorted', () => {
+  const db = new Database(createSilentLogContext(), ':memory:');
+  db.exec(/* sql */ `
+    CREATE TABLE foo (id TEXT PRIMARY KEY, email TEXT, orgId TEXT, slug TEXT);
+    CREATE UNIQUE INDEX foo_email_key ON foo (email);
+    CREATE UNIQUE INDEX foo_org_slug_key ON foo (slug, orgId);
+  `);
+
+  const source = new TableSource(
+    lc,
+    testLogConfig,
+    db,
+    'foo',
+    {
+      id: {type: 'string'},
+      email: {type: 'string'},
+      orgId: {type: 'string'},
+      slug: {type: 'string'},
+    },
+    ['id'],
+  );
+
+  const schema = source.connect([['id', 'asc']]).getSchema();
+  // Each entry is sorted alphabetically.  The set of entries covers PK +
+  // every UNIQUE INDEX on the table.
+  expect(schema.uniqueIndexes).toEqual(
+    expect.arrayContaining([['id'], ['email'], ['orgId', 'slug']]),
+  );
+  expect(schema.uniqueIndexes).toHaveLength(3);
+});
+
 describe('optional filters to sql', () => {
   test('simple condition', () => {
     expect(
