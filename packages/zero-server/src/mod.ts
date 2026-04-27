@@ -36,6 +36,7 @@ export {
   OutOfOrderMutation,
   type Database,
   type ExtractTransactionType,
+  type MutateRequestOptions,
   type Params,
   type Parsed,
   type TransactFn,
@@ -48,6 +49,7 @@ export {
   handleGetQueriesRequest,
   handleQueryRequest,
   handleTransformRequest,
+  type QueryRequestOptions,
   type TransformQueryFunction,
 } from './queries/process-queries.ts';
 export {ZQLDatabase} from './zql-database.ts';

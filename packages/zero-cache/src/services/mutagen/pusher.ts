@@ -19,10 +19,7 @@ import {
 } from '../../../../zero-protocol/src/mutate-server.ts';
 import type {MutationID} from '../../../../zero-protocol/src/mutation-id.ts';
 import * as MutationType from '../../../../zero-protocol/src/mutation-type-enum.ts';
-import {
-  CLEANUP_RESULTS_MUTATION_NAME,
-  mutationResponseSchema,
-} from '../../../../zero-protocol/src/mutation.ts';
+import {CLEANUP_RESULTS_MUTATION_NAME} from '../../../../zero-protocol/src/mutation.ts';
 import {type PushBody} from '../../../../zero-protocol/src/push.ts';
 import {authEquals, isAuthErrorBody} from '../../auth/auth.ts';
 import {type ZeroConfig} from '../../config/zero-config.ts';
@@ -152,7 +149,7 @@ export class PusherService implements Service, Pusher {
 
     try {
       await fetchFromAPIServer(
-        mutationResponseSchema,
+        mutateResponseSchema,
         'push',
         this.#lc,
         ctx,
@@ -211,7 +208,7 @@ export class PusherService implements Service, Pusher {
 
     try {
       await fetchFromAPIServer(
-        mutationResponseSchema,
+        mutateResponseSchema,
         'push',
         this.#lc,
         ctx,

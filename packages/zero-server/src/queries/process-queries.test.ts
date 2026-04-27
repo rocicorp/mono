@@ -83,6 +83,7 @@ describe('handleGetQueriesRequest', () => {
         },
       ]),
     );
+    expect(result).not.toHaveProperty('userID');
   });
 
   test('reads request bodies from Request instances', async () => {
@@ -122,9 +123,10 @@ describe('handleGetQueriesRequest', () => {
         },
       ]),
     );
+    expect(result).not.toHaveProperty('userID');
   });
 
-  test('returns canonical query success when userID and query params are provided', async () => {
+  test('returns canonical query success when userID is provided', async () => {
     const ast: AST = {
       table: 'basic',
       limit: 1,
@@ -132,16 +134,21 @@ describe('handleGetQueriesRequest', () => {
 
     const cb = vi.fn(() => makeQuery(ast));
 
-    const result = await handleQueryRequest(cb, schema, 'user-123', baseQuery, [
-      'transform',
+    const result = await handleQueryRequest(
+      cb,
+      schema,
       [
-        {
-          id: 'q2',
-          name: 'basicLimited',
-          args: [],
-        },
+        'transform',
+        [
+          {
+            id: 'q2',
+            name: 'basicLimited',
+            args: [],
+          },
+        ],
       ],
-    ]);
+      {userID: 'user-123'},
+    );
 
     expect(result).toEqual(
       makeQuerySuccessResponse(
@@ -157,7 +164,7 @@ describe('handleGetQueriesRequest', () => {
     );
   });
 
-  test('returns canonical query success with null userID for logged-out requests', async () => {
+  test('omits userID when options are omitted for logged-out requests', async () => {
     const ast: AST = {
       table: 'basic',
     };
@@ -184,6 +191,45 @@ describe('handleGetQueriesRequest', () => {
         },
       ]),
     );
+    expect(result).not.toHaveProperty('userID');
+  });
+
+  test('returns canonical query success with null userID when options include undefined userID', async () => {
+    const ast: AST = {
+      table: 'basic',
+    };
+
+    const cb = vi.fn(() => makeQuery(ast));
+
+    const result = await handleQueryRequest(
+      cb,
+      schema,
+      [
+        'transform',
+        [
+          {
+            id: 'q1',
+            name: 'basicQuery',
+            args: [],
+          },
+        ],
+      ],
+      {userID: undefined},
+    );
+
+    expect(result).toEqual(
+      makeQuerySuccessResponse(
+        [
+          {
+            id: 'q1',
+            name: 'basicQuery',
+            ast: expect.objectContaining({table: 'basic'}),
+          },
+        ],
+        null,
+      ),
+    );
+    expect(result).toHaveProperty('userID', null);
   });
 
   test('returns transformFailed parse error when validation fails', async () => {
@@ -430,7 +476,7 @@ describe('handleGetQueriesRequest', () => {
 });
 
 describe('handleQueryRequest', () => {
-  test('returns transformed queries with server names when given query params and JSON body', async () => {
+  test('returns transformed queries with server names when given JSON body', async () => {
     const ast: AST = {
       table: 'names',
       where: {
@@ -443,7 +489,7 @@ describe('handleQueryRequest', () => {
 
     const cb = vi.fn(() => makeQuery(ast));
 
-    const result = await handleQueryRequest(cb, schema, baseQuery, [
+    const result = await handleQueryRequest(cb, schema, [
       'transform',
       [
         {
@@ -483,7 +529,6 @@ describe('handleQueryRequest', () => {
     const result = await handleQueryRequest(
       cb,
       schema,
-      'user-123',
       [
         'transform',
         [
@@ -494,7 +539,7 @@ describe('handleQueryRequest', () => {
           },
         ],
       ],
-      'debug',
+      {userID: 'user-123', logLevel: 'debug'},
     );
 
     expect(cb).toHaveBeenCalledWith('basicLimited', undefined);
@@ -577,13 +622,10 @@ describe('handleQueryRequest', () => {
       },
     );
 
-    const result = await handleQueryRequest(
-      cb,
-      schema,
-      'user-123',
-      request,
-      'debug',
-    );
+    const result = await handleQueryRequest(cb, schema, request, {
+      userID: 'user-123',
+      logLevel: 'debug',
+    });
 
     expect(cb).toHaveBeenCalledWith('basicLimited', undefined);
     expect(result).toEqual(

@@ -29,6 +29,7 @@ import {
   getMutation,
   handleMutateRequest,
   type Database,
+  type MutateRequestOptions,
   type TransactionProviderHooks,
 } from './process-mutations.ts';
 
@@ -221,6 +222,12 @@ function makeSuccessResponse(
   } as const;
 }
 
+function makeMutateRequestOptions(
+  overrides: MutateRequestOptions = {},
+): MutateRequestOptions {
+  return overrides;
+}
+
 describe('handleMutateRequest', () => {
   let consoleErrorSpy: MockInstance<typeof console.error>;
   let consoleWarnSpy: MockInstance<typeof console.warn>;
@@ -249,6 +256,7 @@ describe('handleMutateRequest', () => {
       },
       baseQuery,
       makePushBody([makeCustomMutation({id: 1}), makeCustomMutation({id: 2})]),
+      makeMutateRequestOptions(),
     );
 
     expect(recordedLMIDs).toEqual([1, 2]);
@@ -286,6 +294,7 @@ describe('handleMutateRequest', () => {
       },
       baseQuery,
       makePushBody([makeCustomMutation({id: 1})]),
+      makeMutateRequestOptions(),
     );
 
     expect(recordedLMIDs).toEqual([1]);
@@ -309,9 +318,9 @@ describe('handleMutateRequest', () => {
       trackingDb,
       (transact, _mutation) =>
         transact((_tx, _name, _args) => promiseUndefined),
-      'user-123',
       baseQuery,
       makePushBody([makeCustomMutation()]),
+      makeMutateRequestOptions({userID: 'user-123'}),
     );
 
     expect(response).toEqual(
@@ -347,9 +356,8 @@ describe('handleMutateRequest', () => {
       trackingDb,
       (transact, _mutation) =>
         transact((_tx, _name, _args) => promiseUndefined),
-      'user-123',
       request,
-      'debug',
+      {userID: 'user-123', logLevel: 'debug'},
     );
 
     expect(response).toEqual(
@@ -374,9 +382,9 @@ describe('handleMutateRequest', () => {
       trackingDb,
       (transact, _mutation) =>
         transact((_tx, _name, _args) => promiseUndefined),
-      undefined,
       baseQuery,
       makePushBody([makeCustomMutation()]),
+      makeMutateRequestOptions({userID: undefined}),
     );
 
     expect(response).toEqual(
@@ -390,6 +398,7 @@ describe('handleMutateRequest', () => {
         null,
       ),
     );
+    expect(response).toHaveProperty('userID', null);
   });
 
   test('logged-out null responses use null userID', async () => {
@@ -399,9 +408,9 @@ describe('handleMutateRequest', () => {
       trackingDb,
       (transact, _mutation) =>
         transact((_tx, _name, _args) => promiseUndefined),
-      null,
       baseQuery,
       makePushBody([makeCustomMutation()]),
+      makeMutateRequestOptions({userID: null}),
     );
 
     expect(response).toEqual(
@@ -415,6 +424,30 @@ describe('handleMutateRequest', () => {
         null,
       ),
     );
+    expect(response).toHaveProperty('userID', null);
+  });
+
+  test('omits userID when userID is omitted from options', async () => {
+    const {db: trackingDb} = createTrackingDatabase();
+
+    const response = await handleMutateRequest(
+      trackingDb,
+      (transact, _mutation) =>
+        transact((_tx, _name, _args) => promiseUndefined),
+      baseQuery,
+      makePushBody([makeCustomMutation()]),
+      makeMutateRequestOptions(),
+    );
+
+    expect(response).toEqual(
+      makeSuccessResponse([
+        {
+          id: {clientID: 'cid', id: 1},
+          result: {},
+        },
+      ]),
+    );
+    expect(response).not.toHaveProperty('userID');
   });
 
   test('post-commit application errors are logged but not persisted', async () => {
@@ -432,6 +465,7 @@ describe('handleMutateRequest', () => {
       },
       baseQuery,
       makePushBody([makeCustomMutation({id: 1}), makeCustomMutation({id: 2})]),
+      makeMutateRequestOptions(),
     );
 
     // Post-commit errors: LMID is always updated
@@ -464,6 +498,7 @@ describe('handleMutateRequest', () => {
         }),
       baseQuery,
       makePushBody([makeCustomMutation({id: 1}), makeCustomMutation({id: 2})]),
+      makeMutateRequestOptions(),
     );
 
     // Transaction errors: LMID is updated for all mutations
@@ -509,6 +544,7 @@ describe('handleMutateRequest', () => {
         makeCustomMutation({id: 3, name: 'mutation3'}),
         makeCustomMutation({id: 4, name: 'mutation4'}),
       ]),
+      makeMutateRequestOptions(),
     );
 
     // LMID is updated only once for each mutation
@@ -551,6 +587,7 @@ describe('handleMutateRequest', () => {
         }),
       baseQuery,
       makePushBody([makeCustomMutation()]),
+      makeMutateRequestOptions(),
     );
 
     expect(response).toMatchObject({
@@ -586,6 +623,7 @@ describe('handleMutateRequest', () => {
         transact((_tx, _name, _args) => promiseUndefined),
       baseQuery,
       body,
+      makeMutateRequestOptions(),
     );
 
     expect(response).toMatchObject({
@@ -617,6 +655,7 @@ describe('handleMutateRequest', () => {
       },
       baseQuery,
       'invalid body',
+      makeMutateRequestOptions(),
     );
 
     expect(callbackInvoked).toBe(false);
@@ -689,6 +728,7 @@ describe('handleMutateRequest', () => {
       },
       baseQuery,
       makePushBody([makeCrudMutation()]),
+      makeMutateRequestOptions(),
     );
 
     expect(callbackInvoked).toBe(false);
@@ -726,6 +766,7 @@ describe('handleMutateRequest', () => {
         timestamp: TEST_TIMESTAMP,
         requestID: 'req',
       },
+      makeMutateRequestOptions(),
     );
 
     expect(callbackInvoked).toBe(false);
@@ -756,6 +797,7 @@ describe('handleMutateRequest', () => {
         transact((_tx, _name, _args) => promiseUndefined),
       baseQuery,
       makePushBody([makeCustomMutation({id: 5})]),
+      makeMutateRequestOptions(),
     );
 
     expect(response).toMatchObject({
@@ -789,6 +831,7 @@ describe('handleMutateRequest', () => {
         makeCustomMutation({id: 10}),
         makeCustomMutation({id: 11}),
       ]),
+      makeMutateRequestOptions(),
     );
 
     expect(response).toMatchObject({
@@ -820,6 +863,7 @@ describe('handleMutateRequest', () => {
         transact((_tx, _name, _args) => promiseUndefined),
       baseQuery,
       makePushBody([makeCustomMutation({id: 3})]),
+      makeMutateRequestOptions(),
     );
 
     expect(recordedLMIDs).toEqual([]);
@@ -843,6 +887,7 @@ describe('handleMutateRequest', () => {
         transact((_tx, _name, _args) => promiseUndefined),
       baseQuery,
       makePushBody([makeCustomMutation({id: 3}), makeCustomMutation({id: 2})]),
+      makeMutateRequestOptions(),
     );
 
     // only the second mutation's LMID is persisted, since the first one is considered already processed
@@ -869,6 +914,7 @@ describe('handleMutateRequest', () => {
         transact((_tx, _name, _args) => promiseUndefined),
       baseQuery,
       makePushBody([makeCustomMutation({id: 1}), makeCustomMutation({id: 2})]),
+      makeMutateRequestOptions(),
     );
 
     expect(response).toMatchObject({
@@ -923,6 +969,7 @@ describe('handleMutateRequest', () => {
           makeCustomMutation({id: 1}),
           makeCustomMutation({id: 2}),
         ]),
+        makeMutateRequestOptions(),
       );
 
       // Both mutations complete; the second is retried and treated as app error
@@ -988,6 +1035,7 @@ describe('handleMutateRequest', () => {
           makeCustomMutation({id: 1}),
           makeCustomMutation({id: 2}),
         ]),
+        makeMutateRequestOptions(),
       );
 
       expect(response).toMatchObject({
@@ -1021,6 +1069,7 @@ describe('handleMutateRequest', () => {
       },
       baseQuery,
       makePushBody([makeCustomMutation({id: 1})]),
+      makeMutateRequestOptions(),
     );
 
     expect(response).toMatchObject({
@@ -1172,6 +1221,7 @@ describe.each(mutatorInvokers)(
         makePushBody([
           makeCustomMutation({name: 'item.update', args: [{id: 'test-123'}]}),
         ]),
+        makeMutateRequestOptions(),
       );
 
       expect(validator['~standard'].validate).toHaveBeenCalledWith({
@@ -1218,6 +1268,7 @@ describe.each(mutatorInvokers)(
         makePushBody([
           makeCustomMutation({name: 'item.update', args: [{id: 'invalid'}]}),
         ]),
+        makeMutateRequestOptions(),
       );
 
       // The mutator function should NOT have been called due to validation failure
@@ -1320,6 +1371,7 @@ describe.each(mutatorInvokers)(
         makePushBody([
           makeCustomMutation({name: 'item.update', args: [{id: 'lowercase'}]}),
         ]),
+        makeMutateRequestOptions(),
       );
 
       // The mutator should receive the transformed (uppercased) args

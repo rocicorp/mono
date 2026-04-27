@@ -175,10 +175,12 @@ async function mutateHandler(
           const mutator = mustGetMutator(mutators, name);
           return mutator.fn({tx, args, ctx: authData});
         }),
-      authData?.sub,
       request.query,
       request.body,
-      'info',
+      {
+        userID: authData?.sub,
+        logLevel: 'info',
+      },
     );
 
     // we don't yet handle errors here, since Loops emails return 429 very often
@@ -216,9 +218,10 @@ async function queryHandler(
           return query.fn({args, ctx: authData});
         },
         schema,
-        authData?.sub,
-        request.query,
         request.body,
+        {
+          userID: authData?.sub,
+        },
       ),
     );
   });
