@@ -6,7 +6,7 @@ import {
   type InsertOp,
   type UpdateOp,
   type UpsertOp,
-} from '../../../zero-protocol/src/push.ts';
+} from '../../../zero-protocol/src/mutation.ts';
 import type {TableSchema} from '../../../zero-schema/src/table-schema.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import {

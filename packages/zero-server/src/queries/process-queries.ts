@@ -6,13 +6,13 @@ import * as v from '../../../shared/src/valita.ts';
 import {mapAST} from '../../../zero-protocol/src/ast.ts';
 import {
   transformRequestMessageSchema,
-  type QueryResponse,
   type TransformRequestMessage,
   type TransformResponseBody,
 } from '../../../zero-protocol/src/custom-queries.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
 import {ErrorReason} from '../../../zero-protocol/src/error-reason.ts';
+import type {QueryResponse} from '../../../zero-protocol/src/query-server.ts';
 import {clientToServer} from '../../../zero-schema/src/name-mapper.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import {QueryParseError} from '../../../zql/src/query/error.ts';

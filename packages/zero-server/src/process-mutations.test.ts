@@ -8,12 +8,12 @@ import {ApplicationError} from '../../zero-protocol/src/application-error.ts';
 import {ErrorKind} from '../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../zero-protocol/src/error-origin.ts';
 import {ErrorReason} from '../../zero-protocol/src/error-reason.ts';
+import type {MutateResponse} from '../../zero-protocol/src/mutate-server.ts';
 import {
   CRUD_MUTATION_NAME,
   type CleanupResultsArg,
-  type MutateResponse,
-  type MutationResponse,
-} from '../../zero-protocol/src/push.ts';
+} from '../../zero-protocol/src/mutation.ts';
+import {type MutationResponse} from '../../zero-protocol/src/push.ts';
 import {createSchema} from '../../zero-schema/src/builder/schema-builder.ts';
 import {string, table} from '../../zero-schema/src/builder/table-builder.ts';
 import {

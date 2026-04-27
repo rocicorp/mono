@@ -412,7 +412,7 @@ describe('handleGetQueriesRequest', () => {
       ]);
 
       assert(
-        result.kind === 'TransformFailed',
+        !Array.isArray(result) && result.kind === 'TransformFailed',
         'Expected transformFailed tuple response',
       );
       expect(result).toEqual({

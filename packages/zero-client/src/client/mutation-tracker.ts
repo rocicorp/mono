@@ -20,14 +20,16 @@ import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
 import {ErrorReason} from '../../../zero-protocol/src/error-reason.ts';
 import {ProtocolError} from '../../../zero-protocol/src/error.ts';
+import type {MutationID} from '../../../zero-protocol/src/mutation-id.ts';
 import {
   mutationResultSchema,
   type MutationError,
-  type MutationID,
-  type MutationSuccess,
-  type PushError,
-  type PushSuccess,
-  type PushResponseBody,
+  type MutationOk,
+} from '../../../zero-protocol/src/mutation.ts';
+import type {
+  PushError,
+  PushOk,
+  PushResponseBody,
 } from '../../../zero-protocol/src/push.ts';
 import type {MutatorResultSuccessDetails} from './custom.ts';
 import {isZeroError, type ZeroError} from './error.ts';
@@ -308,7 +310,7 @@ export class MutationTracker {
     }
   }
 
-  #processPushOk(success: PushSuccess): void {
+  #processPushOk(success: PushOk): void {
     for (const mutation of success.mutations) {
       if ('error' in mutation.result) {
         this.#processMutationError(
@@ -399,11 +401,7 @@ export class MutationTracker {
     }
   }
 
-  #processMutationOk(
-    clientID: string,
-    mid: number,
-    result: MutationSuccess,
-  ): void {
+  #processMutationOk(clientID: string, mid: number, result: MutationOk): void {
     assert(
       clientID === this.#clientID,
       'received mutation for the wrong client',
@@ -428,9 +426,7 @@ export class MutationTracker {
     this.#settleMutation(ephemeralID, entry, result);
   }
 
-  #settleMutation<
-    Result extends MutationSuccess | ApplicationError | ZeroError,
-  >(
+  #settleMutation<Result extends MutationOk | ApplicationError | ZeroError>(
     ephemeralID: EphemeralID,
     entry: {
       mutationID?: number | undefined;

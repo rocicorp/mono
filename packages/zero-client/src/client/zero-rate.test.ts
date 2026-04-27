@@ -2,7 +2,7 @@ import {beforeEach, expect, test, vi} from 'vitest';
 import type {PushRequest} from '../../../replicache/src/sync/push.ts';
 import * as ErrorKind from '../../../zero-protocol/src/error-kind-enum.ts';
 import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
-import type {Mutation} from '../../../zero-protocol/src/push.ts';
+import type {Mutation} from '../../../zero-protocol/src/mutation.ts';
 import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {
   number,

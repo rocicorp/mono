@@ -237,7 +237,7 @@ export async function fetchFromAPIServer<TValidator extends Type>(
       try {
         const json = await response.json();
         const result = validator.parse(json, {
-          mode: 'strip',
+          mode: 'passthrough',
         });
         lc.debug?.('fetch from API server succeeded');
         return result;

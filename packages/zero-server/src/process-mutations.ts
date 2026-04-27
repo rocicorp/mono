@@ -16,15 +16,19 @@ import {ErrorOrigin} from '../../zero-protocol/src/error-origin.ts';
 import {ErrorReason} from '../../zero-protocol/src/error-reason.ts';
 import type {PushFailedBody} from '../../zero-protocol/src/error.ts';
 import {
+  mutateParamsSchema,
+  type MutateResponse,
+} from '../../zero-protocol/src/mutate-server.ts';
+import type {MutationID} from '../../zero-protocol/src/mutation-id.ts';
+import {
   CLEANUP_RESULTS_MUTATION_NAME,
   cleanupResultsArgSchema,
-  pushBodySchema,
-  pushParamsSchema,
   type CleanupResultsArg,
   type CustomMutation,
-  type MutateResponse,
   type Mutation,
-  type MutationID,
+} from '../../zero-protocol/src/mutation.ts';
+import {
+  pushBodySchema,
   type MutationResponse,
   type PushBody,
 } from '../../zero-protocol/src/push.ts';
@@ -62,7 +66,7 @@ export interface Database<T> {
 }
 
 export type ExtractTransactionType<D> = D extends Database<infer T> ? T : never;
-export type Params = v.Infer<typeof pushParamsSchema>;
+export type Params = v.Infer<typeof mutateParamsSchema>;
 
 export type TransactFn<D extends Database<ExtractTransactionType<D>>> = (
   cb: TransactFnCallback<D>,
@@ -264,7 +268,7 @@ export async function handleMutateRequest<
 
   let pushBody: PushBody;
   try {
-    pushBody = v.parse(jsonBody, pushBodySchema);
+    pushBody = v.parse(jsonBody, pushBodySchema, 'passthrough');
     mutationIDs = pushBody.mutations.map(m => ({
       id: m.id,
       clientID: m.clientID,
@@ -289,7 +293,7 @@ export async function handleMutateRequest<
       normalized.queryString instanceof URLSearchParams
         ? Object.fromEntries(normalized.queryString)
         : normalized.queryString;
-    queryParams = v.parse(queryStringObj, pushParamsSchema, 'passthrough');
+    queryParams = v.parse(queryStringObj, mutateParamsSchema, 'passthrough');
   } catch (error) {
     lc.error?.('Failed to parse push query parameters', error);
     const message = `Failed to parse push query parameters: ${getErrorMessage(error)}`;

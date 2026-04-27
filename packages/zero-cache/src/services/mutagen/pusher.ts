@@ -1,4 +1,4 @@
-import {ROOT_CONTEXT, context, propagation} from '@opentelemetry/api';
+import {context, propagation, ROOT_CONTEXT} from '@opentelemetry/api';
 import type {LogContext} from '@rocicorp/logger';
 import {groupBy} from '../../../../shared/src/arrays.ts';
 import {assert} from '../../../../shared/src/asserts.ts';
@@ -13,14 +13,17 @@ import {
   isProtocolError,
   type PushFailedBody,
 } from '../../../../zero-protocol/src/error.ts';
+import {
+  mutateResponseSchema,
+  type MutateResponse,
+} from '../../../../zero-protocol/src/mutate-server.ts';
+import type {MutationID} from '../../../../zero-protocol/src/mutation-id.ts';
 import * as MutationType from '../../../../zero-protocol/src/mutation-type-enum.ts';
 import {
-  apiMutateResponseSchema,
   CLEANUP_RESULTS_MUTATION_NAME,
-  type MutationID,
-  type APIMutateResponse,
-  type PushBody,
-} from '../../../../zero-protocol/src/push.ts';
+  mutationResponseSchema,
+} from '../../../../zero-protocol/src/mutation.ts';
+import {type PushBody} from '../../../../zero-protocol/src/push.ts';
 import {authEquals, isAuthErrorBody} from '../../auth/auth.ts';
 import {type ZeroConfig} from '../../config/zero-config.ts';
 import {fetchFromAPIServer} from '../../custom/fetch.ts';
@@ -149,7 +152,7 @@ export class PusherService implements Service, Pusher {
 
     try {
       await fetchFromAPIServer(
-        apiMutateResponseSchema,
+        mutationResponseSchema,
         'push',
         this.#lc,
         ctx,
@@ -208,7 +211,7 @@ export class PusherService implements Service, Pusher {
 
     try {
       await fetchFromAPIServer(
-        apiMutateResponseSchema,
+        mutationResponseSchema,
         'push',
         this.#lc,
         ctx,
@@ -361,7 +364,7 @@ class PushWorker {
    * 2. If the push succeeds, we look for any mutation failure that should cause the connection to terminate
    *  and terminate the connection for those clients.
    */
-  #fanOutResponses(response: APIMutateResponse) {
+  #fanOutResponses(response: MutateResponse) {
     const connectionTerminations: (() => void)[] = [];
 
     // if the entire push failed, send that to the client.
@@ -485,7 +488,7 @@ class PushWorker {
     connectionTerminations.forEach(cb => cb());
   }
 
-  async #processPush(entry: PusherEntry): Promise<APIMutateResponse> {
+  async #processPush(entry: PusherEntry): Promise<MutateResponse> {
     this.#customMutations.add(entry.push.mutations.length, {
       clientGroupID: entry.push.clientGroupID,
     });
@@ -518,7 +521,7 @@ class PushWorker {
       }));
 
       const response = await fetchFromAPIServer(
-        apiMutateResponseSchema,
+        mutateResponseSchema,
         'push',
         this.#lc,
         entry.context,

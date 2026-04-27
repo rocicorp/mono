@@ -1,13 +1,10 @@
 import {expect, test} from 'vitest';
-
-import {
-  apiQueryResponseSchema,
-  transformResponseMessageSchema,
-} from './custom-queries.ts';
+import {transformResponseMessageSchema} from './custom-queries';
+import {queryResponseSchema} from './query-server';
 
 test('strips future fields from canonical query responses in strip mode', () => {
   expect(
-    apiQueryResponseSchema.parse(
+    queryResponseSchema.parse(
       {
         kind: 'QueryResponse',
         userID: 'user-123',
@@ -22,9 +19,10 @@ test('strips future fields from canonical query responses in strip mode', () => 
         ],
         futureQueryPriority: 'future-field',
       },
-      {mode: 'strip'},
+      {mode: 'passthrough'},
     ),
   ).toEqual({
+    futureQueryPriority: 'future-field',
     kind: 'QueryResponse',
     userID: 'user-123',
     queries: [
@@ -53,7 +51,7 @@ test('parses legacy transform responses through the /query API schema', () => {
     ],
   ] as const;
 
-  expect(apiQueryResponseSchema.parse(response, {mode: 'strip'})).toEqual(
-    transformResponseMessageSchema.parse(response, {mode: 'strip'}),
+  expect(queryResponseSchema.parse(response, {mode: 'passthrough'})).toEqual(
+    transformResponseMessageSchema.parse(response, {mode: 'passthrough'}),
   );
 });

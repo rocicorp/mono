@@ -5,10 +5,8 @@ import * as v from '../../shared/src/valita.ts';
 import {ErrorKind} from '../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../zero-protocol/src/error-origin.ts';
 import {ErrorReason} from '../../zero-protocol/src/error-reason.ts';
-import {
-  type MutateResponse,
-  type PushBody,
-} from '../../zero-protocol/src/push.ts';
+import type {MutateResponse} from '../../zero-protocol/src/mutate-server.ts';
+import {type PushBody} from '../../zero-protocol/src/push.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
 import {
   defineMutators,

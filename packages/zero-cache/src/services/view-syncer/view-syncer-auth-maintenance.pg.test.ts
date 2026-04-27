@@ -1,13 +1,13 @@
 import {resolver} from '@rocicorp/resolver';
 import {afterEach, beforeEach, describe, expect, vi} from 'vitest';
 import type {Queue} from '../../../../shared/src/queue.ts';
-import type {QueryResponse} from '../../../../zero-protocol/src/custom-queries.ts';
 import type {Downstream} from '../../../../zero-protocol/src/down.ts';
 import {ErrorKind} from '../../../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../../../zero-protocol/src/error-origin.ts';
 import {ErrorReason} from '../../../../zero-protocol/src/error-reason.ts';
 import {PROTOCOL_VERSION} from '../../../../zero-protocol/src/protocol-version.ts';
 import type {UpQueriesPatch} from '../../../../zero-protocol/src/queries-patch.ts';
+import type {TransformResponse} from '../../custom-queries/transform-query.ts';
 import {type PgTest, test} from '../../test/db.ts';
 import type {DbFile} from '../../test/lite.ts';
 import type {PostgresDB} from '../../types/pg.ts';
@@ -49,7 +49,7 @@ function scheduled500(queryIDs: string[]) {
 
 const MAINTENANCE_INTERVAL_MS = 67_000;
 
-function validationSuccess(userID: string | null = null): QueryResponse {
+function validationSuccess(userID: string | null = null): TransformResponse {
   return {
     kind: 'QueryResponse' as const,
     userID,

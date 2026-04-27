@@ -6,7 +6,9 @@ import {
   table,
 } from '../../zero-schema/src/builder/table-builder.ts';
 import {clientToServer} from '../../zero-schema/src/name-mapper.ts';
-import {apiMutateResponseSchema, mapCRUD, pushResponseSchema} from './push.ts';
+import {mutateResponseSchema} from './mutate-server.ts';
+import {mapCRUD} from './mutation.ts';
+import {pushResponseSchema} from './push.ts';
 
 const schema = createSchema({
   tables: [
@@ -124,9 +126,9 @@ test('map names', () => {
   `);
 });
 
-test('preserves legacy mutation errors when parsing mutate responses in strip mode', () => {
+test('preserves legacy mutation errors when parsing mutate responses in passthrough mode', () => {
   expect(
-    apiMutateResponseSchema.parse(
+    mutateResponseSchema.parse(
       {
         mutations: [
           {
@@ -138,7 +140,7 @@ test('preserves legacy mutation errors when parsing mutate responses in strip mo
           },
         ],
       },
-      {mode: 'strip'},
+      {mode: 'passthrough'},
     ),
   ).toEqual({
     mutations: [
@@ -146,15 +148,16 @@ test('preserves legacy mutation errors when parsing mutate responses in strip mo
         id: {clientID: 'cid', id: 1},
         result: {
           error: 'oooMutation',
+          ignored: 'extra field',
         },
       },
     ],
   });
 });
 
-test('strips future fields from canonical mutate responses in strip mode', () => {
+test('strips future fields from canonical mutate responses in passthrough mode', () => {
   expect(
-    apiMutateResponseSchema.parse(
+    mutateResponseSchema.parse(
       {
         kind: 'MutateResponse',
         userID: 'user-123',
@@ -166,9 +169,10 @@ test('strips future fields from canonical mutate responses in strip mode', () =>
         ],
         futureMutationField: 42,
       },
-      {mode: 'strip'},
+      {mode: 'passthrough'},
     ),
   ).toEqual({
+    futureMutationField: 42,
     kind: 'MutateResponse',
     userID: 'user-123',
     mutations: [
@@ -190,7 +194,7 @@ test('parses legacy push responses through the /mutate API schema', () => {
     ],
   };
 
-  expect(apiMutateResponseSchema.parse(response, {mode: 'strip'})).toEqual(
+  expect(mutateResponseSchema.parse(response, {mode: 'strip'})).toEqual(
     pushResponseSchema.parse(response, {mode: 'strip'}),
   );
 });

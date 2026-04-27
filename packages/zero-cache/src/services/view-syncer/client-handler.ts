@@ -17,12 +17,12 @@ import {
   type TransformFailedBody,
 } from '../../../../zero-protocol/src/error.ts';
 import type {InspectDownBody} from '../../../../zero-protocol/src/inspect-down.ts';
+import {mutationResultSchema} from '../../../../zero-protocol/src/mutation.ts';
 import type {
   PokePartBody,
   PokeStartBody,
 } from '../../../../zero-protocol/src/poke.ts';
 import {primaryKeyValueRecordSchema} from '../../../../zero-protocol/src/primary-key.ts';
-import {mutationResultSchema} from '../../../../zero-protocol/src/push.ts';
 import type {RowPatchOp} from '../../../../zero-protocol/src/row-patch.ts';
 import {
   getOrCreateCounter,

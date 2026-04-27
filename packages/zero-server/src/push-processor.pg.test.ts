@@ -11,12 +11,12 @@ import {ApplicationError} from '../../zero-protocol/src/application-error.ts';
 import {ErrorKind} from '../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../zero-protocol/src/error-origin.ts';
 import {ErrorReason} from '../../zero-protocol/src/error-reason.ts';
+import type {MutateResponse} from '../../zero-protocol/src/mutate-server.ts';
 import {
   CLEANUP_RESULTS_MUTATION_NAME,
-  type MutateResponse,
   type MutationResult,
-  type PushBody,
-} from '../../zero-protocol/src/push.ts';
+} from '../../zero-protocol/src/mutation.ts';
+import {type PushBody} from '../../zero-protocol/src/push.ts';
 import {customMutatorKey} from '../../zql/src/mutate/custom.ts';
 import {PostgresJSConnection} from './adapters/postgresjs.ts';
 import {OutOfOrderMutation} from './process-mutations.ts';

@@ -5,11 +5,9 @@ import {ErrorKind} from '../../../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../../../zero-protocol/src/error-origin.ts';
 import {ErrorReason} from '../../../../zero-protocol/src/error-reason.ts';
 import type {PushFailedBody} from '../../../../zero-protocol/src/error.ts';
-import type {
-  APIMutateResponse,
-  Mutation,
-  PushBody,
-} from '../../../../zero-protocol/src/push.ts';
+import type {MutateResponse} from '../../../../zero-protocol/src/mutate-server.ts';
+import type {Mutation} from '../../../../zero-protocol/src/mutation.ts';
+import type {PushBody} from '../../../../zero-protocol/src/push.ts';
 import {ProtocolErrorWithLevel} from '../../types/error-with-level.ts';
 import {
   type ConnectionContext,
@@ -670,6 +668,60 @@ describe('pusher service', () => {
         Promise.resolve({
           kind: 'MutateResponse',
           userID: 'user-123',
+          mutations: [],
+        }),
+    });
+
+    const pusher = newPusherService({
+      url: ['http://example.com'],
+      apiKey: 'api-key',
+      forwardCookies: false,
+    });
+    void pusher.run();
+    const {selector} = openConnection(pusher, {
+      clientID,
+      wsID,
+      auth: 'jwt',
+      userID: 'user-123',
+    });
+
+    expect(
+      getContextManager(pusher).getConnectionContext(selector),
+    ).toMatchObject({
+      clientID,
+      wsID,
+      state: 'provisional',
+      revision: 1,
+    });
+
+    pusher.enqueuePush(selector, makePush(1, clientID));
+
+    await vi.waitFor(() =>
+      expect(
+        getContextManager(pusher).getConnectionContext(selector),
+      ).toMatchObject({
+        clientID,
+        wsID,
+        userID: 'user-123',
+        state: 'validated',
+        revision: 1,
+      }),
+    );
+    expect(getContextManager(pusher).getGroupState()).toMatchObject({
+      userID: 'user-123',
+      validated: true,
+      backgroundConnection: selector,
+    });
+
+    await pusher.stop();
+  });
+
+  test('legacy mutate responses validate the live connection', async () => {
+    const fetch = (global.fetch = vi.fn());
+    fetch.mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
           mutations: [],
         }),
     });
@@ -1404,7 +1456,7 @@ describe('pusher streaming', () => {
 
 describe('pusher errors', () => {
   async function expectPushErrorResponse(
-    errorResponse: APIMutateResponse,
+    errorResponse: MutateResponse,
     expectedError: PushFailedBody,
   ) {
     const fetch = (global.fetch = vi.fn());
@@ -1592,7 +1644,7 @@ describe('pusher errors', () => {
 
   test('handles ooo mutation with subsequent mutations', async () => {
     const fetch = (global.fetch = vi.fn());
-    const oooResponse: APIMutateResponse = {
+    const oooResponse: MutateResponse = {
       kind: 'MutateResponse',
       userID: null,
       mutations: [

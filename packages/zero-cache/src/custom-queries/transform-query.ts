@@ -5,9 +5,7 @@ import {TimedCache} from '../../../shared/src/cache.ts';
 import {getErrorMessage} from '../../../shared/src/error.ts';
 import {sortedEntries} from '../../../shared/src/sorted-entries.ts';
 import {
-  apiQueryResponseSchema,
   type ErroredQuery,
-  type QueryResponseBody,
   type TransformRequestBody,
   type TransformRequestMessage,
 } from '../../../zero-protocol/src/custom-queries.ts';
@@ -19,6 +17,10 @@ import {
   type TransformFailedBody,
 } from '../../../zero-protocol/src/error.ts';
 import {hashOfAST} from '../../../zero-protocol/src/query-hash.ts';
+import {
+  queryResponseSchema,
+  type QueryResponseBody,
+} from '../../../zero-protocol/src/query-server.ts';
 import type {TransformedAndHashed} from '../auth/read-authorizer.ts';
 import {fetchFromAPIServer} from '../custom/fetch.ts';
 import type {
@@ -30,7 +32,7 @@ import type {ShardID} from '../types/shards.ts';
 
 const tracer = trace.getTracer('custom-query-transformer');
 
-type TransformResponse =
+export type TransformResponse =
   | {
       kind: 'QueryResponse';
       userID?: string | null | undefined;
@@ -173,7 +175,7 @@ export class CustomQueryTransformer {
         'customQueryTransformer.fetchFromAPIServer',
         () =>
           fetchFromAPIServer(
-            apiQueryResponseSchema,
+            queryResponseSchema,
             'transform',
             this.#lc,
             ctx,
