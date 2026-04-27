@@ -62,6 +62,7 @@ function orgFixture(opts?: {
     CREATE UNIQUE INDEX org_slug_key ON org (slug);
     CREATE TABLE membership (
       id TEXT PRIMARY KEY,
+      orgId TEXT NOT NULL,
       orgSlug TEXT NOT NULL,
       userId TEXT NOT NULL
     );
@@ -88,16 +89,17 @@ function orgFixture(opts?: {
     'membership',
     {
       id: {type: 'string'},
+      orgId: {type: 'string'},
       orgSlug: {type: 'string'},
       userId: {type: 'string'},
     },
     ['id'],
     opts?.childRows ?? [
-      {id: 'm1', orgSlug: 'acme', userId: 'u1'},
-      {id: 'm2', orgSlug: 'acme', userId: 'u2'},
-      {id: 'm3', orgSlug: 'globex', userId: 'u3'},
+      {id: 'm1', orgId: 'o1', orgSlug: 'acme', userId: 'u1'},
+      {id: 'm2', orgId: 'o1', orgSlug: 'acme', userId: 'u2'},
+      {id: 'm3', orgId: 'o2', orgSlug: 'globex', userId: 'u3'},
       // Inner join drops m4 (no matching org).
-      {id: 'm4', orgSlug: 'unknown', userId: 'u4'},
+      {id: 'm4', orgId: 'unknown', orgSlug: 'unknown', userId: 'u4'},
     ],
   );
 
@@ -127,6 +129,18 @@ const memberIds = (n: CaughtNode) =>
     (n as unknown as {relationships: {memberships: CaughtNode[]}}).relationships
       .memberships ?? []
   ).map(c => (c as unknown as {row: {id: string}}).row.id);
+
+test('parentKey === PRIMARY KEY takes quicksort path through TableSource', () => {
+  // The most common production case: child references parent by PK.  Goes
+  // through the same #fetchQuicksort code path, but via a real prepared-
+  // statement lookup against the PK index rather than MemorySource's BTree.
+  const f = orgFixture();
+  const result = f.fetch(['id'], ['orgId']);
+
+  expect(parentIds(result)).toEqual(['o1', 'o2']); // o3 dropped (no members)
+  expect(memberIds(result[0])).toEqual(['m1', 'm2']);
+  expect(memberIds(result[1])).toEqual(['m3']);
+});
 
 test('parentKey === non-PK UNIQUE INDEX takes quicksort path with correct output', () => {
   const f = orgFixture();
@@ -313,9 +327,9 @@ test('multiple children sharing a parent are returned in child-input order', () 
   // are inserted in 'm1', 'm2' order and the child ordering is by id asc.
   const f = orgFixture({
     childRows: [
-      {id: 'm2', orgSlug: 'acme', userId: 'u2'},
-      {id: 'm1', orgSlug: 'acme', userId: 'u1'},
-      {id: 'm3', orgSlug: 'acme', userId: 'u3'},
+      {id: 'm2', orgId: 'o1', orgSlug: 'acme', userId: 'u2'},
+      {id: 'm1', orgId: 'o1', orgSlug: 'acme', userId: 'u1'},
+      {id: 'm3', orgId: 'o1', orgSlug: 'acme', userId: 'u3'},
     ],
   });
   const result = f.fetch(['slug'], ['orgSlug']);
