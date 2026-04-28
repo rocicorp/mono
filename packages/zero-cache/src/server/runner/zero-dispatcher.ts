@@ -13,12 +13,14 @@ import {
 export class ZeroDispatcher extends HttpService {
   readonly id = 'zero-dispatcher';
   readonly #getWorker: () => Promise<Worker>;
+  readonly #onStart: (() => void) | undefined;
 
   constructor(
     config: NormalizedZeroConfig,
     lc: LogContext,
     opts: Options,
     getWorker: () => Promise<Worker>,
+    onStart?: () => void,
   ) {
     super(`zero-dispatcher`, lc, opts, fastify => {
       fastify.get('/statz', (req, res) =>
@@ -30,6 +32,11 @@ export class ZeroDispatcher extends HttpService {
       installWebSocketHandoff(lc, this.#handoff, fastify.server);
     });
     this.#getWorker = getWorker;
+    this.#onStart = onStart;
+  }
+
+  protected override _onStart() {
+    this.#onStart?.();
   }
 
   readonly #handoff = (
