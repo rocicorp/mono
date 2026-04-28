@@ -370,8 +370,7 @@ describe('Cap edge cases', () => {
 
   // Gap 2: EDIT of an untracked (overflow) row must be dropped by Cap
   // without perturbing the live view. Cap tracks the first 3 comments
-  // of i1; c1d is overflow. The drift assertion would flag any mismatch
-  // between live state and a fresh materialization.
+  // of i1; c1d is overflow.
   test('edit of untracked overflow comment does not disturb view', () => {
     const q = issueQuery2.whereExists('comments').related('comments');
     const view = qd.materialize(q);
@@ -402,11 +401,7 @@ describe('Cap edge cases', () => {
     expect(view.data).toEqual(qd.materialize(q).data);
   });
 
-  // Gap 3: nested whereExists. A revision change that does NOT flip
-  // existence of its parent comment travels up the inner Exists as a
-  // CHILD change and must be forwarded by the outer Cap for tracked
-  // rows (cap.ts:272-277).
-  test('nested whereExists — inner revision change forwarded as CHILD', () => {
+  test('nested whereExists', () => {
     const q = issueQuery2
       .whereExists('comments', c => c.whereExists('revisions'))
       .related('comments', c => c.related('revisions'));
@@ -415,7 +410,7 @@ describe('Cap edge cases', () => {
     expect(view.data).toEqual(qd.materialize(q).data);
 
     // Add a revision on c2a. c2a still has revisions both before and
-    // after, so existence is unchanged — change flows as CHILD.
+    // after, so existence is unchanged
     consume(
       must(qd.getSource('revision')).push(
         makeSourceChangeAdd({
@@ -571,7 +566,7 @@ describe('Cap OR with multiple EXISTS', () => {
     issueQuery3 = newQuery(schema, 'issue');
   });
 
-  test('OR of two EXISTS: dedup, independent branches, drift-free', () => {
+  test('OR of two EXISTS: dedup, independent branches', () => {
     const q = issueQuery3.where(({exists, or}) =>
       or(exists('comments'), exists('ownerComments')),
     );
@@ -698,7 +693,7 @@ describe('Cap AND with multiple EXISTS', () => {
     issueQuery4 = newQuery(schema, 'issue');
   });
 
-  test('AND of two EXISTS: both branches must hold, drift-free', () => {
+  test('AND of two EXISTS', () => {
     // Two chained whereExists() compose with AND. Each builds its own
     // Cap; the join above feeds rows that survived the first Exists
     // into the second's parent stream. If either Cap mishandled
