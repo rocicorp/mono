@@ -8,6 +8,7 @@ import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
 import type {SchemaValue} from '../../../zero-schema/src/table-schema.ts';
 import {Catch, type CaughtNode} from './catch.ts';
 import {FlippedJoin} from './flipped-join.ts';
+import type {FetchRequest} from './operator.ts';
 import type {SourceSchema} from './schema.ts';
 import {Snitch, type SnitchMessage} from './snitch.ts';
 import {consume} from './stream.ts';
@@ -1899,6 +1900,212 @@ suite('compound join keys', () => {
   });
 });
 
+suite('fetch one:many with FetchRequest', () => {
+  // parentKey === primaryKey, so this exercises #fetchQuicksort.
+  const base = {
+    columns: [
+      {id: {type: 'string'}},
+      {id: {type: 'string'}, issueID: {type: 'string'}},
+    ],
+    primaryKeys: [['id'], ['id']],
+    joins: [
+      {
+        parentKey: ['id'],
+        childKey: ['issueID'],
+        relationshipName: 'comments',
+      },
+    ],
+  } as const;
+  const sources: Row[][] = [
+    [{id: 'i1'}, {id: 'i2'}, {id: 'i3'}],
+    [
+      {id: 'c1', issueID: 'i1'},
+      {id: 'c2', issueID: 'i2'},
+      {id: 'c3', issueID: 'i3'},
+    ],
+  ];
+
+  test('reverse: true yields parents in descending order', () => {
+    const results = fetchTest({
+      ...base,
+      sources,
+      fetchRequest: {reverse: true},
+    });
+
+    expect(results.data.map(n => (n as CaughtNode & {row: Row}).row.id))
+      .toMatchInlineSnapshot(`
+      [
+        "i3",
+        "i2",
+        "i1",
+      ]
+    `);
+  });
+
+  test('start basis "at" includes the start row (forward)', () => {
+    const results = fetchTest({
+      ...base,
+      sources,
+      fetchRequest: {start: {row: {id: 'i2'}, basis: 'at'}},
+    });
+
+    expect(results.data.map(n => (n as CaughtNode & {row: Row}).row.id))
+      .toMatchInlineSnapshot(`
+      [
+        "i2",
+        "i3",
+      ]
+    `);
+  });
+
+  test('start basis "after" excludes the start row (forward)', () => {
+    const results = fetchTest({
+      ...base,
+      sources,
+      fetchRequest: {start: {row: {id: 'i2'}, basis: 'after'}},
+    });
+
+    expect(results.data.map(n => (n as CaughtNode & {row: Row}).row.id))
+      .toMatchInlineSnapshot(`
+      [
+        "i3",
+      ]
+    `);
+  });
+
+  test('start basis "at" with reverse', () => {
+    const results = fetchTest({
+      ...base,
+      sources,
+      fetchRequest: {start: {row: {id: 'i2'}, basis: 'at'}, reverse: true},
+    });
+
+    expect(results.data.map(n => (n as CaughtNode & {row: Row}).row.id))
+      .toMatchInlineSnapshot(`
+      [
+        "i2",
+        "i1",
+      ]
+    `);
+  });
+
+  test('start basis "after" with reverse', () => {
+    const results = fetchTest({
+      ...base,
+      sources,
+      fetchRequest: {start: {row: {id: 'i2'}, basis: 'after'}, reverse: true},
+    });
+
+    expect(results.data.map(n => (n as CaughtNode & {row: Row}).row.id))
+      .toMatchInlineSnapshot(`
+      [
+        "i1",
+      ]
+    `);
+  });
+});
+
+suite('fetch with compound primary key === parentKey (quicksort path)', () => {
+  // Parent PK is ['orgId', 'slug'].  parentKey matches PK, so this exercises
+  // #fetchQuicksort with a multi-column unique key.  Children share parents:
+  // m1 references org=o1/slug=s1; m2 references org=o1/slug=s1; m3 references
+  // org=o2/slug=s2.  So parent (o1, s1) has two related children.
+  const base = {
+    columns: [
+      {orgId: {type: 'string'}, slug: {type: 'string'}, name: {type: 'string'}},
+      {
+        id: {type: 'string'},
+        memberOrgId: {type: 'string'},
+        memberSlug: {type: 'string'},
+      },
+    ],
+    primaryKeys: [['orgId', 'slug'], ['id']],
+    joins: [
+      {
+        parentKey: ['orgId', 'slug'],
+        childKey: ['memberOrgId', 'memberSlug'],
+        relationshipName: 'members',
+      },
+    ],
+  } as const;
+  const sorts: Ordering[] = [
+    [
+      ['orgId', 'asc'],
+      ['slug', 'asc'],
+    ],
+    [['id', 'asc']],
+  ];
+
+  test('two parents, one with multiple children', () => {
+    const results = fetchTest({
+      ...base,
+      sorts,
+      sources: [
+        [
+          {orgId: 'o1', slug: 's1', name: 'Org One'},
+          {orgId: 'o2', slug: 's2', name: 'Org Two'},
+        ],
+        [
+          {id: 'm1', memberOrgId: 'o1', memberSlug: 's1'},
+          {id: 'm2', memberOrgId: 'o1', memberSlug: 's1'},
+          {id: 'm3', memberOrgId: 'o2', memberSlug: 's2'},
+        ],
+      ],
+    });
+
+    expect(results.data).toMatchInlineSnapshot(`
+      [
+        {
+          "relationships": {
+            "members": [
+              {
+                "relationships": {},
+                "row": {
+                  "id": "m1",
+                  "memberOrgId": "o1",
+                  "memberSlug": "s1",
+                },
+              },
+              {
+                "relationships": {},
+                "row": {
+                  "id": "m2",
+                  "memberOrgId": "o1",
+                  "memberSlug": "s1",
+                },
+              },
+            ],
+          },
+          "row": {
+            "name": "Org One",
+            "orgId": "o1",
+            "slug": "s1",
+          },
+        },
+        {
+          "relationships": {
+            "members": [
+              {
+                "relationships": {},
+                "row": {
+                  "id": "m3",
+                  "memberOrgId": "o2",
+                  "memberSlug": "s2",
+                },
+              },
+            ],
+          },
+          "row": {
+            "name": "Org Two",
+            "orgId": "o2",
+            "slug": "s2",
+          },
+        },
+      ]
+    `);
+  });
+});
+
 function fetchTest(t: FetchTest): FetchTestResults {
   assert(t.sources.length > 0, 'Expected at least one source');
   assert(
@@ -1972,7 +2179,7 @@ function fetchTest(t: FetchTest): FetchTestResults {
   expect(finalJoin.getSchema()).toStrictEqual(expectedSchema);
 
   const c = new Catch(finalJoin);
-  const r = c.fetch();
+  const r = c.fetch(t.fetchRequest);
 
   results.data = r;
   expect(c.pushes).toEqual([]);
@@ -1991,6 +2198,7 @@ type FetchTest = {
     childKey: CompoundKey;
     relationshipName: string;
   }[];
+  fetchRequest?: FetchRequest | undefined;
 };
 
 type FetchTestResults = {
