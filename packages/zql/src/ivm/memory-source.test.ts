@@ -266,7 +266,7 @@ describe('fetch with req.filter', () => {
           right: {type: 'literal', value: 'x'},
         },
       }),
-    ].filter((n): n is {row: Row; relationships: object} => n !== 'yield');
+    ].filter(n => n !== 'yield');
 
     expect(rows.map(n => n.row)).toEqual([
       {a: 'a1', b: 'x'},
@@ -297,7 +297,7 @@ describe('fetch with req.filter', () => {
           right: {type: 'literal', value: 'id-42'},
         },
       }),
-    ].filter((n): n is {row: Row; relationships: object} => n !== 'yield');
+    ].filter(n => n !== 'yield');
 
     expect(rows.map(n => n.row)).toEqual([{a: 'id-42', b: 'val-42'}]);
     conn.destroy();
@@ -335,7 +335,7 @@ describe('fetch with req.filter', () => {
           right: {type: 'literal', value: 'p'},
         },
       }),
-    ].filter((n): n is {row: Row; relationships: object} => n !== 'yield');
+    ].filter(n => n !== 'yield');
 
     expect(rows.map(n => n.row)).toEqual([{a: '1', b: 'x', c: 'p'}]);
     conn.destroy();

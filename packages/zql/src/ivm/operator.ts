@@ -90,6 +90,25 @@ export type FetchRequest = {
    *
    * Always a `NoSubqueryCondition` — anything passed via `req.filter` must
    * already have had correlated subqueries stripped (see `transformFilters`).
+   *
+   * Contract:
+   * - The only operator that *introduces* `req.filter` is `FilterStart`. It
+   *   AND-merges its static condition with whatever `req.filter` it receives
+   *   and forwards the merged value upstream. No other operator should
+   *   construct a `req.filter`.
+   * - "Pass-through" fetch operators (`Skip`, `Take`, `Join`, `FlippedJoin`,
+   *   `UnionFanIn`, `UnionFanOut`) MUST preserve `req.filter` when forwarding
+   *   to their input — typically via `{...req, ...overrides}` spread. Dropping
+   *   it silently regresses predicate pushdown for queries below the
+   *   forwarding operator.
+   * - Operators that *initiate* internal fetches (e.g., `Join.#pushChildChange`,
+   *   `FlippedJoin.#pushChildChange`, `UnionFanIn.#pushInternalChange`,
+   *   `Take`'s push-time bound recomputation) construct fresh
+   *   `FetchRequest`s without `req.filter`, and that is correct: there is no
+   *   inbound consumer-side filter at those call sites. Any `FilterStart`
+   *   that sits between such an internal fetch and the source will still
+   *   apply its own condition on the way through, so the source still gets
+   *   the right WHERE.
    */
   readonly filter?: NoSubqueryCondition | undefined;
 };
