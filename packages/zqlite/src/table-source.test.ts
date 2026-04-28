@@ -652,6 +652,52 @@ test('getByKey', () => {
   ).toBeUndefined();
 });
 
+test('schema.uniqueIndexes column lists are sorted alphabetically, regardless of DDL order', () => {
+  // SourceSchema.uniqueIndexes is consumed by FlippedJoin's #parentKeyIsUnique
+  // check, which calls keyMatchesPrimaryKey(parentKey, indexCols).  That
+  // function sorts its first argument internally but REQUIRES its second
+  // argument to be pre-sorted — set-equality is implemented as sorted-array
+  // equality.  Uniqueness is order-agnostic at the SQL level (a UNIQUE
+  // (orgId, slug) index is just as unique as UNIQUE (slug, orgId)), so
+  // canonicalizing to alphabetical order lets parentKey lists in any column
+  // order match without consumers needing to know the DDL.
+  const db = new Database(createSilentLogContext(), ':memory:');
+  db.exec(/* sql */ `
+    CREATE TABLE foo (id TEXT PRIMARY KEY, email TEXT, orgId TEXT, slug TEXT);
+    CREATE UNIQUE INDEX foo_email_key ON foo (email);
+    -- DDL order is (slug, orgId); schema entry must come back sorted.
+    CREATE UNIQUE INDEX foo_org_slug_key ON foo (slug, orgId);
+  `);
+
+  const source = new TableSource(
+    lc,
+    testLogConfig,
+    db,
+    'foo',
+    {
+      id: {type: 'string'},
+      email: {type: 'string'},
+      orgId: {type: 'string'},
+      slug: {type: 'string'},
+    },
+    ['id'],
+  );
+
+  const schema = source.connect([['id', 'asc']]).getSchema();
+
+  // PK + every UNIQUE INDEX is exposed.
+  expect(schema.uniqueIndexes).toHaveLength(3);
+  expect(schema.uniqueIndexes).toEqual(
+    expect.arrayContaining([['id'], ['email'], ['orgId', 'slug']]),
+  );
+
+  // Every entry is sorted alphabetically — the contract `keyMatchesPrimaryKey`
+  // depends on.  Compare each entry to a freshly-sorted copy.
+  for (const idx of schema.uniqueIndexes ?? []) {
+    expect(idx).toEqual([...idx].toSorted());
+  }
+});
+
 describe('optional filters to sql', () => {
   test('simple condition', () => {
     expect(
