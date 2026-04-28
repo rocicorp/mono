@@ -34,6 +34,11 @@ export const ddlEventSchema = triggerEvent.extend({
 // are guaranteed to be preceded by a `ddlStart` message.
 export const ddlStartEventSchema = ddlEventSchema.extend({
   type: v.literal('ddlStart'),
+  // For backwards compatibility with previous versions of the trigger,
+  // default an absent `event` field with a semantic equivalent. This
+  // field override can be removed in a version that is rollback safe
+  // with 1.4.0.
+  event: v.object({tag: v.string()}).optional(() => ({tag: 'UNKNOWN'})),
 });
 
 export type DdlStartEvent = v.Infer<typeof ddlStartEventSchema>;
