@@ -1832,28 +1832,6 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
       ],
     ],
     [
-      'disable ALTER PUBLICATION trigger',
-      /*sql*/ `
-      DROP EVENT TRIGGER ${APP_ID}_ddl_start_0;
-      DROP EVENT TRIGGER ${APP_ID}_ddl_end_0;
-
-      CREATE EVENT TRIGGER ${APP_ID}_ddl_start_0
-        ON ddl_command_start
-        WHEN TAG IN (${literal(removeAlterPublication(TAGS))})
-        EXECUTE PROCEDURE ${APP_ID}_0.emit_ddl_start();
-
-      CREATE EVENT TRIGGER ${APP_ID}_ddl_end_0
-        ON ddl_command_end
-        WHEN TAG IN (${literal(removeAlterPublication([...TAGS, 'COMMENT']))})
-        EXECUTE PROCEDURE ${APP_ID}_0.emit_ddl_end();
-      `,
-      [],
-      {},
-      [],
-      [],
-    ],
-    // Cases hereafter no longer have the ALTER PUBLICATION TRIGGER
-    [
       'concurrent schema changes',
       [
         // statements are run in parallel
@@ -1897,6 +1875,8 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
 
      CREATE TABLE your.table_that_gets_rls (id INT8 PRIMARY KEY, val INT8 NOT NULL);
      CREATE UNIQUE INDEX val_idx ON your.table_that_gets_rls (val);
+
+     DROP EVENT TRIGGER add_rls_trigger;
       `,
       [[{tag: 'create-table'}, {tag: 'create-index'}, {tag: 'create-index'}]],
       {['your.table_that_gets_rls']: []},
@@ -1915,6 +1895,121 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
           unique: true,
         },
       ],
+    ],
+    [
+      'disable ALTER PUBLICATION trigger',
+      /*sql*/ `
+      DROP EVENT TRIGGER ${APP_ID}_ddl_start_0;
+      DROP EVENT TRIGGER ${APP_ID}_ddl_end_0;
+
+      CREATE EVENT TRIGGER ${APP_ID}_ddl_start_0
+        ON ddl_command_start
+        WHEN TAG IN (${literal(removeAlterPublication(TAGS))})
+        EXECUTE PROCEDURE ${APP_ID}_0.emit_ddl_start();
+
+      CREATE EVENT TRIGGER ${APP_ID}_ddl_end_0
+        ON ddl_command_end
+        WHEN TAG IN (${literal(removeAlterPublication([...TAGS, 'COMMENT']))})
+        EXECUTE PROCEDURE ${APP_ID}_0.emit_ddl_end();
+      `,
+      [],
+      {},
+      [],
+      [],
+    ],
+    // Cases hereafter no longer have the ALTER PUBLICATION TRIGGER
+    [
+      'missing ALTER PUBLICATION trigger covered by COMMENT',
+      /*sql*/ `
+      ALTER PUBLICATION zero_some_public SET TABLE existing, TABLE existing_full,
+        TABLE foo (id, int, flt);
+      COMMENT ON PUBLICATION zero_some_public IS 'bonk';
+
+      -- Additional comments have no effect.
+      COMMENT ON PUBLICATION zero_some_public IS 'bonk';
+      COMMENT ON PUBLICATION zero_some_public IS NULL;
+      `,
+      [
+        [
+          {
+            tag: 'add-column',
+            table: {schema: 'public', name: 'foo'},
+            tableMetadata: {
+              schemaOID: expect.any(Number),
+              relationOID: expect.any(Number),
+              rowKey: {id: {attNum: 1}},
+            },
+            backfill: {attNum: expect.any(Number)},
+          },
+        ],
+        [{tag: 'backfill-completed'}],
+      ],
+      {foo: []},
+      [
+        {
+          name: 'foo',
+          columns: {
+            id: {
+              characterMaximumLength: null,
+              dataType: 'text|NOT_NULL',
+              elemPgTypeClass: null,
+              dflt: null,
+              notNull: false,
+              pos: 1,
+            },
+            ['_0_version']: {
+              characterMaximumLength: null,
+              dataType: 'TEXT',
+              elemPgTypeClass: null,
+              notNull: false,
+              pos: 2,
+            },
+            flt: {
+              characterMaximumLength: null,
+              dataType: 'float8',
+              elemPgTypeClass: null,
+              dflt: null,
+              notNull: false,
+              pos: 3,
+            },
+            int: {
+              characterMaximumLength: null,
+              dataType: 'int4',
+              elemPgTypeClass: null,
+              dflt: null,
+              notNull: false,
+              pos: 4,
+            },
+          },
+        },
+      ],
+      [],
+    ],
+    [
+      'disable all event triggers',
+      /*sql*/ `
+      DROP EVENT TRIGGER ${APP_ID}_ddl_start_0;
+      DROP EVENT TRIGGER ${APP_ID}_ddl_end_0;
+      `,
+      [],
+      {},
+      [],
+      [],
+    ],
+    // Cases hereafter have no the event triggers
+    [
+      'create table covered by update_schemas() call',
+      /*sql*/ `
+      CREATE TABLE IF NOT EXISTS your.new_table (id INT8 PRIMARY KEY);
+      SELECT ${APP_ID}_0.update_schemas();
+      `,
+      [
+        [{tag: 'create-table'}, {tag: 'create-index'}],
+        [{tag: 'backfill-completed'}],
+      ],
+      {['your.new_table']: []},
+      [],
+      [],
     ],
   ] satisfies [
     name: string,
