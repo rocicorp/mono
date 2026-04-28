@@ -706,7 +706,15 @@ export class CVRStore {
       const [allDesires, queryRows] = await reader.processReadTask(tx =>
         Promise.all([
           tx<DesiresRow[]>`
-      SELECT * FROM ${this.#cvr('desires')}
+      SELECT
+        "clientGroupID",
+        "clientID",
+        "queryHash",
+        "patchVersion",
+        "deleted",
+        "ttl",
+        "inactivatedAt"
+      FROM ${this.#cvr('desires')}
         WHERE "clientGroupID" = ${this.#id}
         AND "patchVersion" > ${start}
         AND "patchVersion" <= ${end}`,
