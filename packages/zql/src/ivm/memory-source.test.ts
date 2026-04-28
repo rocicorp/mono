@@ -243,6 +243,105 @@ test('fetch during push edit change', () => {
   `);
 });
 
+describe('fetch with req.filter', () => {
+  test('non-PK filter returns only matching rows', () => {
+    const ms = createSource(
+      lc,
+      testLogConfig,
+      'table',
+      {a: {type: 'string'}, b: {type: 'string'}},
+      ['a'],
+    );
+    consume(ms.push(makeSourceChangeAdd({a: 'a1', b: 'x'})));
+    consume(ms.push(makeSourceChangeAdd({a: 'a2', b: 'y'})));
+    consume(ms.push(makeSourceChangeAdd({a: 'a3', b: 'x'})));
+
+    const conn = ms.connect([['a', 'asc']]);
+    const rows = [
+      ...conn.fetch({
+        filter: {
+          type: 'simple',
+          op: '=',
+          left: {type: 'column', name: 'b'},
+          right: {type: 'literal', value: 'x'},
+        },
+      }),
+    ].filter((n): n is {row: Row; relationships: object} => n !== 'yield');
+
+    expect(rows.map(n => n.row)).toEqual([
+      {a: 'a1', b: 'x'},
+      {a: 'a3', b: 'x'},
+    ]);
+    conn.destroy();
+  });
+
+  test('PK-equality filter drives indexed PK lookup', () => {
+    const ms = createSource(
+      lc,
+      testLogConfig,
+      'table',
+      {a: {type: 'string'}, b: {type: 'string'}},
+      ['a'],
+    );
+    for (let i = 0; i < 100; i++) {
+      consume(ms.push(makeSourceChangeAdd({a: `id-${i}`, b: `val-${i}`})));
+    }
+
+    const conn = ms.connect([['a', 'asc']]);
+    const rows = [
+      ...conn.fetch({
+        filter: {
+          type: 'simple',
+          op: '=',
+          left: {type: 'column', name: 'a'},
+          right: {type: 'literal', value: 'id-42'},
+        },
+      }),
+    ].filter((n): n is {row: Row; relationships: object} => n !== 'yield');
+
+    expect(rows.map(n => n.row)).toEqual([{a: 'id-42', b: 'val-42'}]);
+    conn.destroy();
+  });
+
+  test('req.filter is ANDed with connection-time filter', () => {
+    const ms = createSource(
+      lc,
+      testLogConfig,
+      'table',
+      {
+        a: {type: 'string'},
+        b: {type: 'string'},
+        c: {type: 'string'},
+      },
+      ['a'],
+    );
+    consume(ms.push(makeSourceChangeAdd({a: '1', b: 'x', c: 'p'})));
+    consume(ms.push(makeSourceChangeAdd({a: '2', b: 'x', c: 'q'})));
+    consume(ms.push(makeSourceChangeAdd({a: '3', b: 'y', c: 'p'})));
+
+    const conn = ms.connect([['a', 'asc']], {
+      type: 'simple',
+      op: '=',
+      left: {type: 'column', name: 'b'},
+      right: {type: 'literal', value: 'x'},
+    });
+
+    const rows = [
+      ...conn.fetch({
+        filter: {
+          type: 'simple',
+          op: '=',
+          left: {type: 'column', name: 'c'},
+          right: {type: 'literal', value: 'p'},
+        },
+      }),
+    ].filter((n): n is {row: Row; relationships: object} => n !== 'yield');
+
+    expect(rows.map(n => n.row)).toEqual([{a: '1', b: 'x', c: 'p'}]);
+    conn.destroy();
+  });
+});
+
 describe('generateWithOverlayInner', () => {
   const rows = [
     {id: 1, s: 'a', n: 11},
