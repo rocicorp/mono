@@ -776,7 +776,7 @@ export async function setup(
     queryURLs.length > 0 ? new CustomQueryTransformer(lc, SHARD) : undefined;
 
   const inspectorDelegate = new InspectorDelegate(customQueryTransformer);
-  const contextManager = new ConnectionContextManagerImpl(
+  const connContextManager = new ConnectionContextManagerImpl(
     lc,
     config.auth.revalidateIntervalSeconds,
     config.auth.retransformIntervalSeconds,
@@ -817,7 +817,7 @@ export async function setup(
     drainCoordinator,
     100,
     inspectorDelegate,
-    contextManager,
+    connContextManager,
     customQueryTransformer,
     (_lc, _description, op) => op(),
     undefined,
@@ -838,7 +838,7 @@ export async function setup(
     activeClients?: string[],
   ): {queue: Queue<Downstream>; source: Source<Downstream>} {
     const selector = {clientID: ctx.clientID, wsID: ctx.wsID};
-    vs.contextManager.registerConnection(
+    vs.connContextManager.registerConnection(
       selector,
       {
         protocolVersion: ctx.protocolVersion,
@@ -858,7 +858,7 @@ export async function setup(
       },
       ctx.auth,
     );
-    vs.contextManager.initConnection(selector, {
+    vs.connContextManager.initConnection(selector, {
       desiredQueriesPatch,
       clientSchema: clientSchema ?? undefined,
       activeClients,
@@ -956,7 +956,7 @@ export function restartViewSyncer(params: {
   const inspectorDelegate = new InspectorDelegate(customQueryTransformer);
 
   const {query} = config;
-  const contextManager = new ConnectionContextManagerImpl(
+  const connContextManager = new ConnectionContextManagerImpl(
     lc,
     config.auth.revalidateIntervalSeconds,
     config.auth.retransformIntervalSeconds,
@@ -998,7 +998,7 @@ export function restartViewSyncer(params: {
     drainCoordinator,
     100,
     inspectorDelegate,
-    contextManager,
+    connContextManager,
     customQueryTransformer,
     (_lc, _description, op) => op(),
     undefined,
@@ -1013,7 +1013,7 @@ export function restartViewSyncer(params: {
     activeClients?: string[],
   ): Queue<Downstream> {
     const selector = {clientID: ctx.clientID, wsID: ctx.wsID};
-    vs.contextManager.registerConnection(
+    vs.connContextManager.registerConnection(
       selector,
       {
         protocolVersion: ctx.protocolVersion,
@@ -1033,7 +1033,7 @@ export function restartViewSyncer(params: {
       },
       ctx.auth,
     );
-    vs.contextManager.initConnection(selector, {
+    vs.connContextManager.initConnection(selector, {
       desiredQueriesPatch,
       clientSchema: clientSchema ?? undefined,
       activeClients,

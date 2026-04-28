@@ -100,7 +100,7 @@ describe('change-streamer/http', () => {
     const server = new ChangeStreamerHttpServer(
       lc,
       createTestConfig(),
-      {port: 0, startupDelayMs: 10000},
+      {port: 0, startupDelayMs: 10000, keepaliveTimeoutMs: undefined},
       parent,
       {
         id: 'change-streamer',
@@ -158,6 +158,7 @@ describe('change-streamer/http', () => {
       {
         port: 0,
         startupDelayMs: 10000,
+        keepaliveTimeoutMs: undefined,
       },
       parent,
       {

@@ -1594,6 +1594,23 @@ describe('change-source/tables/ddl', () => {
       event: {tag: 'ALTER TABLE'},
     });
   });
+
+  test('parse legacy ddlStartEvent', () => {
+    const legacyDdlStartEvent: Omit<DdlStartEvent, 'event'> = {
+      type: 'ddlStart',
+      version: 1,
+      context: {query: 'foo'},
+      schema: {tables: [], indexes: []},
+    };
+    const parsed = v.parse(legacyDdlStartEvent, ddlStartEventSchema);
+    expect(parsed).toMatchObject({
+      type: 'ddlStart',
+      version: 1,
+      context: {query: 'foo'},
+      schema: {tables: [], indexes: []},
+      event: {tag: 'UNKNOWN'},
+    });
+  });
 });
 
 function parseDDLStartEvent(msg: MessageMessage) {

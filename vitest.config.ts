@@ -37,6 +37,8 @@ function* getProjects(): Iterable<string> {
     for (const e of entries) {
       if (!e.isDirectory()) continue;
       if (e.name === 'node_modules') continue;
+      // Skip tsnapi — run separately via `npm run api-snapshot`
+      if (e.name === 'tsnapi') continue;
       if (depth > 0) {
         yield* walk(
           `${basePath}${e.name}/`,

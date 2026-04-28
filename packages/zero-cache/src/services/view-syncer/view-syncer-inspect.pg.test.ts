@@ -22,6 +22,7 @@ import type {Source} from '../../types/streams.ts';
 import type {Subscription} from '../../types/subscription.ts';
 import type {ReplicaState} from '../replicator/replicator.ts';
 import {type FakeReplicator} from '../replicator/test-utils.ts';
+import type {ConnectionValidation} from './connection-context-manager.ts';
 import {
   expectNoPokes,
   ISSUES_QUERY,
@@ -37,11 +38,20 @@ import type {ViewSyncerService} from './view-syncer.ts';
 import {type SyncContext} from './view-syncer.ts';
 
 describe('view-syncer/service', () => {
+  const clientFallback: ConnectionValidation = {kind: 'client-fallback'};
+
   function transformAttempt(
     result: HashedTransformResponse['result'],
     cached = false,
+    validation: ConnectionValidation = clientFallback,
   ): HashedTransformResponse {
-    return {result, cached};
+    if (Array.isArray(result)) {
+      return cached
+        ? {kind: 'success', result, cached: true}
+        : {kind: 'success', result, cached: false, validation};
+    }
+
+    return {kind: 'failed', result};
   }
 
   let replicaDbFile: DbFile;
@@ -513,17 +523,21 @@ describe('view-syncer/service', () => {
     expect(transformSpy).toHaveBeenCalledOnce();
     const [ctx, queries] = transformSpy.mock.lastCall!;
 
-    expect(ctx.queryContext.headerOptions).toEqual(
-      expect.objectContaining({
-        apiKey: undefined,
-        allowedClientHeaders: undefined,
-        customHeaders: undefined,
-        token: undefined,
-        cookie: undefined,
-        origin: undefined,
-        userID: 'user-123',
-      }),
-    );
+    expect(ctx.queryContext).toMatchInlineSnapshot(`
+      {
+        "allowedUrlPatterns": [
+          URLPattern {},
+        ],
+        "headerOptions": {
+          "allowedClientHeaders": undefined,
+          "apiKey": undefined,
+          "cookie": undefined,
+          "customHeaders": undefined,
+          "origin": undefined,
+        },
+        "url": "http://my-pull-endpoint.dev/api/zero/pull",
+      }
+    `);
 
     const queriesArray = [...queries];
     expect(queriesArray).toHaveLength(1);
@@ -532,7 +546,6 @@ describe('view-syncer/service', () => {
       args: ['arg1', 'arg2'],
       type: 'custom',
     });
-    expect(ctx.queryContext.url).toMatch(/\/api\/zero\/pull$/);
   });
 
   describe('inspect error handling', () => {
