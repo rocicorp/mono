@@ -362,7 +362,7 @@ describe('change-source/pg', () => {
         {
           lock: true,
           publications: ['_woo_metadata_0', 'zero_foo'],
-          ddlDetection: true, // degraded mode
+          ddlDetection: true,
         },
       ],
     });
