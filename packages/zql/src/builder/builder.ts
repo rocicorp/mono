@@ -450,7 +450,21 @@ function buildOrPipelineWithPerBranchConnects(
     }
   }
 
-  // Build each branch as its own pipeline rooted at a fresh source.connect.
+  // ORDERING INVARIANT (composition with nested per-branch ORs):
+  //   1. Build all branches FIRST. Recursive calls into
+  //      buildOrPipelineWithPerBranchConnects attach their coordinators to the
+  //      same source as a side-effect during this loop.
+  //   2. Attach THIS level's coordinator only AFTER branches are built.
+  //
+  // This produces a source listener list ordered [innermost, ..., outermost].
+  // JS Set iteration is insertion order, so when the source pushes:
+  //   - beginPush fires inner→outer (all UFIs enter accumulating state)
+  //   - endPush  fires inner→outer (inner UFIs flush their merged change up
+  //                                 into outer UFIs while the outer is still
+  //                                 in its accumulation window)
+  // Reordering — attaching this level's coordinator before recursing — would
+  // make outer.endPush fire first, causing inner emissions to land on outer
+  // via #pushInternalChange (which asserts ADD/REMOVE) and crash on EDITs.
   const branches: Input[] = [];
   for (let i = 0; i < orCondition.conditions.length; i++) {
     const branchCond = orCondition.conditions[i];
