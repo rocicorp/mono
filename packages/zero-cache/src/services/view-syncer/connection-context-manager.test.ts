@@ -5,6 +5,7 @@ import type {ConnectParams} from '../../workers/connect-params.ts';
 import {
   type ConnectionContextManager,
   type ConnectionSelector,
+  type ConnectionValidation,
   ConnectionContextManagerImpl,
 } from './connection-context-manager.ts';
 
@@ -87,14 +88,28 @@ type ConnectInitBody = {
   userPushHeaders?: Record<string, string> | undefined;
 };
 
+const clientFallback: ConnectionValidation = {kind: 'client-fallback'};
+
+const serverValidated = (
+  validatedUserID: string | null,
+): ConnectionValidation => ({
+  kind: 'server-validated',
+  validatedUserID,
+});
+
 function validate(
   manager: ConnectionContextManager,
   clientID: string,
   wsID: string,
+  validation: ConnectionValidation = clientFallback,
   revision = manager.mustGetConnectionContext(selector(clientID, wsID))
     .revision,
 ) {
-  return manager.validateConnection(selector(clientID, wsID), revision);
+  return manager.validateConnection(
+    selector(clientID, wsID),
+    revision,
+    validation,
+  );
 }
 
 describe('ConnectionContextManager', () => {
@@ -106,7 +121,7 @@ describe('ConnectionContextManager', () => {
       wsID: 'ws1',
       revision: 0,
       state: 'provisional',
-      userID: 'user-c1',
+      user: {id: 'user-c1'},
       auth: {type: 'opaque', raw: 'token-ws1'},
       revalidateAt: undefined,
       queryContext: {
@@ -169,7 +184,7 @@ describe('ConnectionContextManager', () => {
     });
   });
 
-  test('binds the first validated userID', () => {
+  test('binds the first validated userID from client', () => {
     const manager = new ConnectionContextManagerImpl(lc);
     register(manager, 'c1', 'ws1', 'user-1');
 
@@ -178,34 +193,32 @@ describe('ConnectionContextManager', () => {
         clientID: 'c1',
         wsID: 'ws1',
         state: 'validated',
-        userID: 'user-1',
+        user: {id: 'user-1'},
         revalidateAt: undefined,
       }),
       group: {
-        userID: 'user-1',
+        pinnedUser: {id: 'user-1'},
         backgroundConnection: {clientID: 'c1', wsID: 'ws1'},
         maintenanceNotBeforeAt: undefined,
         retransformAt: undefined,
-        validated: true,
       },
     });
   });
 
-  test('pins a logged-out client group to an undefined userID', () => {
+  test('pins a logged-out client group to a null userID', () => {
     const manager = new ConnectionContextManagerImpl(lc);
     registerLoggedOut(manager, 'c1', 'ws1');
     register(manager, 'c2', 'ws2', 'user-2');
 
-    expect(validate(manager, 'c1', 'ws1')).toEqual({
+    expect(validate(manager, 'c1', 'ws1', serverValidated(null))).toEqual({
       connection: expect.objectContaining({
         clientID: 'c1',
         wsID: 'ws1',
         state: 'validated',
-        userID: undefined,
+        user: {id: null},
       }),
       group: {
-        userID: undefined,
-        validated: true,
+        pinnedUser: {id: null},
         backgroundConnection: {clientID: 'c1', wsID: 'ws1'},
         maintenanceNotBeforeAt: undefined,
         retransformAt: undefined,
@@ -217,6 +230,30 @@ describe('ConnectionContextManager', () => {
     ).toThrowErrorMatchingInlineSnapshot(
       `[ProtocolError: Client groups are pinned to a single userID. Connection userID does not match existing client group userID.]`,
     );
+  });
+
+  test('rejects mismatched validated userIDs and keeps the connection provisional', () => {
+    const manager = new ConnectionContextManagerImpl(lc);
+    register(manager, 'c1', 'ws1', 'user-1');
+
+    expect(() =>
+      validate(manager, 'c1', 'ws1', serverValidated('user-2')),
+    ).toThrowErrorMatchingInlineSnapshot(
+      `[ProtocolError: Connection userID does not match validated server userID.]`,
+    );
+
+    expect(manager.getConnectionContext(selector('c1', 'ws1'))).toMatchObject({
+      clientID: 'c1',
+      wsID: 'ws1',
+      state: 'provisional',
+      user: {id: 'user-1'},
+    });
+    expect(manager.getGroupState()).toEqual({
+      pinnedUser: undefined,
+      backgroundConnection: undefined,
+      maintenanceNotBeforeAt: undefined,
+      retransformAt: undefined,
+    });
   });
 
   test('rejects mismatched userIDs and keeps the connection provisional', () => {
@@ -237,8 +274,7 @@ describe('ConnectionContextManager', () => {
       state: 'provisional',
     });
     expect(manager.getGroupState()).toMatchObject({
-      userID: 'user-1',
-      validated: true,
+      pinnedUser: {id: 'user-1'},
     });
   });
 
@@ -251,9 +287,8 @@ describe('ConnectionContextManager', () => {
     register(manager, 'c2', 'ws2', 'user-2');
 
     expect(manager.getGroupState()).toMatchObject({
-      userID: 'user-1',
+      pinnedUser: {id: 'user-1'},
       backgroundConnection: undefined,
-      validated: true,
     });
     expect(() =>
       validate(manager, 'c2', 'ws2'),
@@ -273,8 +308,7 @@ describe('ConnectionContextManager', () => {
     validate(manager, 'c3', 'ws3');
 
     expect(manager.getGroupState()).toMatchObject({
-      userID: 'user-1',
-      validated: true,
+      pinnedUser: {id: 'user-1'},
     });
     expect(manager.getConnectionContext(selector('c1', 'ws1'))).toMatchObject({
       state: 'validated',
@@ -309,7 +343,7 @@ describe('ConnectionContextManager', () => {
       clientID: 'c1',
       wsID: 'ws1',
       state: 'validated',
-      userID: 'user-1',
+      user: {id: 'user-1'},
       revalidateAt: 6_000,
     });
     expect(manager.getBackgroundConnectionContext()).toMatchObject({
@@ -350,7 +384,7 @@ describe('ConnectionContextManager', () => {
       clientID: 'c1',
       wsID: 'ws1',
       state: 'validated',
-      userID: 'user-1',
+      user: {id: 'user-1'},
       revalidateAt: 6_000,
     });
     expect(manager.getBackgroundConnectionContext()).toMatchObject({
@@ -388,7 +422,7 @@ describe('ConnectionContextManager', () => {
     register(manager, 'c1', 'ws2');
 
     expect(
-      manager.validateConnection(selector('c1', 'ws1'), 0),
+      manager.validateConnection(selector('c1', 'ws1'), 0, clientFallback),
     ).toBeUndefined();
     expect(manager.closeConnection(selector('c1', 'ws1'))).toBeUndefined();
     expect(() =>
@@ -486,7 +520,11 @@ describe('ConnectionContextManager', () => {
     });
 
     expect(
-      manager.validateConnection(selector('c1', 'ws1'), registered.revision),
+      manager.validateConnection(
+        selector('c1', 'ws1'),
+        registered.revision,
+        clientFallback,
+      ),
     ).toBeUndefined();
     expect(
       manager.failConnection(selector('c1', 'ws1'), registered.revision),

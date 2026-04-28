@@ -184,6 +184,7 @@ export class Syncer implements SingletonService {
     recordConnectionAttempted();
     const {clientID, clientGroupID, auth, userID} = params;
     const hasProvidedAuth = auth !== undefined && auth !== '';
+    const incomingUserID = userID ?? null;
 
     if (hasProvidedAuth) {
       const tokenOptions = tokenConfigOptions(this.#config.auth ?? {});
@@ -219,7 +220,7 @@ export class Syncer implements SingletonService {
         // no previous auth, since this is a new connection, and resolveAuth is
         // connection scoped, not client group scoped
         undefined,
-        userID,
+        incomingUserID,
         auth,
         this.#validateLegacyJWT,
       );
@@ -230,7 +231,7 @@ export class Syncer implements SingletonService {
           {
             clientGroupID,
             clientID,
-            userID,
+            incomingUserID,
             hasProvidedAuth,
             errorKind: e.message,
           },
@@ -252,7 +253,10 @@ export class Syncer implements SingletonService {
     // with an invalid opaque token. The long-term fix is to keep the replacement
     // connection pending until its auth is fully validated, and only then replace
     // the existing socket.
-    if (group.validated && group.userID !== userID) {
+    if (
+      group.pinnedUser !== undefined &&
+      group.pinnedUser.id !== incomingUserID
+    ) {
       const error = new ProtocolError({
         kind: ErrorKind.Unauthorized,
         message:

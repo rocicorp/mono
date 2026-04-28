@@ -22,6 +22,7 @@ import type {Source} from '../../types/streams.ts';
 import type {Subscription} from '../../types/subscription.ts';
 import type {ReplicaState} from '../replicator/replicator.ts';
 import {type FakeReplicator} from '../replicator/test-utils.ts';
+import type {ConnectionValidation} from './connection-context-manager.ts';
 import {
   expectNoPokes,
   ISSUES_QUERY,
@@ -37,11 +38,20 @@ import type {ViewSyncerService} from './view-syncer.ts';
 import {type SyncContext} from './view-syncer.ts';
 
 describe('view-syncer/service', () => {
+  const clientFallback: ConnectionValidation = {kind: 'client-fallback'};
+
   function transformAttempt(
     result: HashedTransformResponse['result'],
     cached = false,
+    validation: ConnectionValidation = clientFallback,
   ): HashedTransformResponse {
-    return {result, cached};
+    if (Array.isArray(result)) {
+      return cached
+        ? {kind: 'success', result, cached: true}
+        : {kind: 'success', result, cached: false, validation};
+    }
+
+    return {kind: 'failed', result};
   }
 
   let replicaDbFile: DbFile;

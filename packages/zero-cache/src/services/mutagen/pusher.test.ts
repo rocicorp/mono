@@ -171,7 +171,7 @@ function makeEntry(
       state: 'provisional',
       clientID: resolvedClientID,
       wsID: options.wsID ?? `ws-${resolvedClientID}`,
-      userID: options.userID,
+      user: {id: options.userID ?? null},
       auth: getAuth(options.auth),
       profileID: null,
       baseCookie: null,
@@ -702,14 +702,13 @@ describe('pusher service', () => {
       ).toMatchObject({
         clientID,
         wsID,
-        userID: 'user-123',
+        user: {id: 'user-123'},
         state: 'validated',
         revision: 1,
       }),
     );
     expect(getContextManager(pusher).getGroupState()).toMatchObject({
-      userID: 'user-123',
-      validated: true,
+      pinnedUser: {id: 'user-123'},
       backgroundConnection: selector,
     });
 
@@ -766,6 +765,134 @@ describe('pusher service', () => {
       validated: true,
       backgroundConnection: selector,
     });
+
+    await pusher.stop();
+  });
+
+  test('canonical null mutate responses validate logged-out connections', async () => {
+    const fetch = (global.fetch = vi.fn());
+    fetch.mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          kind: 'MutateResponse',
+          userID: null,
+          mutations: [],
+        }),
+    });
+
+    const pusher = newPusherService({
+      url: ['http://example.com'],
+      apiKey: 'api-key',
+      forwardCookies: false,
+    });
+    void pusher.run();
+    const {selector} = openConnection(pusher, {
+      clientID,
+      wsID,
+    });
+
+    pusher.enqueuePush(selector, makePush(1, clientID));
+
+    await vi.waitFor(() =>
+      expect(
+        getContextManager(pusher).getConnectionContext(selector),
+      ).toMatchObject({
+        clientID,
+        wsID,
+        user: {id: null},
+        state: 'validated',
+        revision: 1,
+      }),
+    );
+    expect(getContextManager(pusher).getGroupState()).toMatchObject({
+      pinnedUser: {id: null},
+      backgroundConnection: selector,
+    });
+
+    await pusher.stop();
+  });
+
+  test('legacy successful pushes still validate using the stored connection userID', async () => {
+    const fetch = (global.fetch = vi.fn());
+    fetch.mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          mutations: [],
+        }),
+    });
+
+    const pusher = newPusherService({
+      url: ['http://example.com'],
+      apiKey: 'api-key',
+      forwardCookies: false,
+    });
+    void pusher.run();
+    const {selector} = openConnection(pusher, {
+      clientID,
+      wsID,
+      auth: 'jwt',
+      userID: 'user-123',
+    });
+
+    pusher.enqueuePush(selector, makePush(1, clientID));
+
+    await vi.waitFor(() =>
+      expect(
+        getContextManager(pusher).getConnectionContext(selector),
+      ).toMatchObject({
+        clientID,
+        wsID,
+        user: {id: 'user-123'},
+        state: 'validated',
+        revision: 1,
+      }),
+    );
+
+    await pusher.stop();
+  });
+
+  test('mismatched canonical mutate responses fail the live connection', async () => {
+    const fetch = (global.fetch = vi.fn());
+    fetch.mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          kind: 'MutateResponse',
+          userID: 'user-bad',
+          mutations: [],
+        }),
+    });
+
+    const pusher = newPusherService({
+      url: ['http://example.com'],
+      apiKey: 'api-key',
+      forwardCookies: false,
+    });
+    void pusher.run();
+    const {selector, stream} = openConnection(pusher, {
+      clientID,
+      wsID,
+      auth: 'jwt',
+      userID: 'user-123',
+    });
+
+    pusher.enqueuePush(selector, makePush(1, clientID));
+
+    await expect(stream[Symbol.asyncIterator]().next()).rejects.toMatchObject({
+      errorBody: {
+        kind: ErrorKind.PushFailed,
+        origin: ErrorOrigin.ZeroCache,
+        reason: ErrorReason.HTTP,
+        status: 401,
+        message: 'Connection userID does not match validated server userID.',
+        mutationIDs: [{clientID, id: 1}],
+      },
+    });
+    expect(
+      getContextManager(pusher).getConnectionContext(selector),
+    ).toBeUndefined();
 
     await pusher.stop();
   });

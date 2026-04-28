@@ -17,6 +17,21 @@ import type {ConnectParams} from '../../workers/connect-params.ts';
 export type ConnectionState = 'provisional' | 'validated';
 
 /**
+ * Normalized user identity shared by live connection state and group auth state.
+ * `id: null` means logged out.
+ */
+export type UserState = {id: string | null};
+
+/**
+ * Delineates the two paths for validating a connection: either server can validate
+ * the user's identity and return a definitive userID to trust, or we fall back to
+ * trusting the one provided by the client in the incoming query params.
+ */
+export type ConnectionValidation =
+  | {kind: 'client-fallback'}
+  | {kind: 'server-validated'; validatedUserID: string | null};
+
+/**
  * Identifies one live websocket for a client slot.
  */
 export type ConnectionSelector = {
@@ -50,7 +65,7 @@ export type ConnectionContext = {
 
   readonly clientID: string;
   readonly wsID: string;
-  readonly userID: string | undefined;
+  readonly user: UserState;
 
   auth: Auth | undefined;
 
@@ -74,13 +89,9 @@ export type ConnectionContext = {
  * The background connection is the validated connection currently used for
  * shared background work. Retransform happens on a group level, and uses
  * the background connection's credential to refetch the latest queries.
- *
- * Since auth can be pinned to logged-out users, `userID` can be undefined
- * even after validation.
  */
 export type GroupAuthState = {
-  userID: string | undefined;
-  validated: boolean;
+  pinnedUser: UserState | undefined;
 
   backgroundConnection: ConnectionSelector | undefined;
   retransformAt: number | undefined;
@@ -108,6 +119,7 @@ export type ConnectionContextManager = {
   validateConnection(
     selector: ConnectionSelector,
     revision: number,
+    validation: ConnectionValidation,
   ):
     | Readonly<{
         connection: ConnectionContext;
@@ -154,7 +166,7 @@ export type ConnectionContextManager = {
  *
  * Connections are registered as `provisional`, optionally backfilled with
  * `initConnection` metadata, and then promoted to `validated` once their
- * stored `userID` is confirmed as valid. The manager also tracks which
+ * effective `userID` is confirmed as valid. The manager also tracks which
  * validated connection currently serves as the group's background connection.
  *
  * This is intentionally side-effect free.
@@ -165,11 +177,10 @@ export class ConnectionContextManagerImpl implements ConnectionContextManager {
   // The live connection records, keyed by clientID
   readonly #connections = new Map<string, ConnectionContext>();
   readonly #group: GroupAuthState = {
-    userID: undefined,
+    pinnedUser: undefined,
     backgroundConnection: undefined,
     retransformAt: undefined,
     maintenanceNotBeforeAt: undefined,
-    validated: false,
   };
 
   readonly #validateLegacyJWT: ValidateLegacyJWT | undefined;
@@ -231,7 +242,7 @@ export class ConnectionContextManagerImpl implements ConnectionContextManager {
       clientID: connectParams.clientID,
       wsID: connectParams.wsID,
       revision: 0,
-      userID: connectParams.userID,
+      user: {id: connectParams.userID ?? null},
       auth,
 
       profileID: connectParams.profileID,
@@ -318,7 +329,7 @@ export class ConnectionContextManagerImpl implements ConnectionContextManager {
     const nextAuth = await resolveAuth(
       this.#lc,
       connection.auth,
-      connection.userID,
+      connection.user.id,
       body.auth,
       this.#validateLegacyJWT,
     );
@@ -345,6 +356,7 @@ export class ConnectionContextManagerImpl implements ConnectionContextManager {
   validateConnection(
     selector: ConnectionSelector,
     revision: number,
+    validation: ConnectionValidation,
   ):
     | Readonly<{
         connection: ConnectionContext;
@@ -365,7 +377,38 @@ export class ConnectionContextManagerImpl implements ConnectionContextManager {
       return undefined;
     }
 
-    if (this.#group.validated && this.#group.userID !== connection.userID) {
+    let validatedUserState: UserState | undefined;
+
+    // If the API server has validated the user's identity, we ensure that
+    // the connection's claimed userID matches it.
+    if (validation.kind === 'server-validated') {
+      validatedUserState = {id: validation.validatedUserID};
+
+      // Check that the ws connection userID provided by the client
+      // matches the validated userID from the API server.
+      if (connection.user.id !== validatedUserState.id) {
+        throw new ProtocolErrorWithLevel(
+          {
+            kind: ErrorKind.Unauthorized,
+            message:
+              'Connection userID does not match validated server userID.',
+            origin: ErrorOrigin.ZeroCache,
+          },
+          'warn',
+        );
+      }
+    }
+
+    // The incoming user state is either the validated user state from the server
+    // or the WS client's claimed user state if no server validation occurred.
+    const incomingUserState = validatedUserState ?? connection.user;
+
+    // Once a client group is validated, every later validated connection must
+    // agree with that pinned identity.
+    if (
+      this.#group.pinnedUser !== undefined &&
+      this.#group.pinnedUser.id !== incomingUserState.id
+    ) {
       throw new ProtocolErrorWithLevel(
         {
           kind: ErrorKind.Unauthorized,
@@ -377,9 +420,8 @@ export class ConnectionContextManagerImpl implements ConnectionContextManager {
       );
     }
 
-    if (!this.#group.validated) {
-      this.#group.validated = true;
-      this.#group.userID = connection.userID;
+    if (this.#group.pinnedUser === undefined) {
+      this.#group.pinnedUser = incomingUserState;
     }
 
     connection.state = 'validated';

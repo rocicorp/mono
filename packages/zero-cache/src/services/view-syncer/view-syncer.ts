@@ -75,6 +75,7 @@ import type {
   ConnectionContext,
   ConnectionContextManager,
   ConnectionSelector,
+  ConnectionValidation,
 } from './connection-context-manager.ts';
 import {ClientNotFoundError, CVRStore} from './cvr-store.ts';
 import type {CVRUpdater} from './cvr.ts';
@@ -1397,10 +1398,16 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             customQueries.values(),
           ),
       );
-      if (!transformedCustomQueries.cached) {
+      // Uncached results can also return the authoritative server userID
+      // for that snapshot.
+      if (
+        transformedCustomQueries.kind === 'success' &&
+        !transformedCustomQueries.cached
+      ) {
         this.contextManager.validateConnection(
           backgroundContext,
           backgroundContext.revision,
+          transformedCustomQueries.validation,
         );
       }
 
@@ -1728,19 +1735,20 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
           // Check if transform failed entirely (HTTP error or server-side failure).
           // This should disconnect the client and keep existing pipelines intact.
-          if ('kind' in transformedCustomQueries.result) {
+          if (transformedCustomQueries.kind === 'failed') {
             throw new ProtocolErrorWithLevel(
               transformedCustomQueries.result,
               'warn',
             );
           } else {
             // If the transform wasn't cached, we mark the connection as validated.
-            // This also passes the revision to ensure that race conditions with auth
-            // don't validate stale credentials.
+            // This also threads the authoritative server userID through the
+            // revision check so auth races do not validate stale credentials.
             if (!transformedCustomQueries.cached) {
               this.contextManager.validateConnection(
                 resolvedContext,
                 resolvedContext.revision,
+                transformedCustomQueries.validation,
               );
             }
             this.#queryTransformations.add(1, {result: 'success'});
@@ -2424,17 +2432,30 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
   async #validateConnection(ctx: ConnectionContext): Promise<boolean> {
     try {
+      let validation: ConnectionValidation | undefined = undefined;
       if (this.#customQueryTransformer) {
-        const validation = await this.#customQueryTransformer.validate(ctx);
-        if (validation.kind === 'TransformFailed') {
-          throw new ProtocolErrorWithLevel(validation, 'warn');
+        const response = await this.#customQueryTransformer.validate(ctx);
+        if (response.kind === 'TransformFailed') {
+          throw new ProtocolErrorWithLevel(response, 'warn');
         }
+        validation = response.validation;
+      } else {
+        validation = {kind: 'client-fallback'};
       }
 
-      this.contextManager.validateConnection(ctx, ctx.revision);
+      this.contextManager.validateConnection(ctx, ctx.revision, validation);
       return true;
     } catch (e) {
       if (isProtocolError(e) && isAuthErrorBody(e.errorBody)) {
+        this.#lc.warn?.(
+          'Connection auth validation failed; invalidating connection',
+          {
+            clientID: ctx.clientID,
+            wsID: ctx.wsID,
+            revision: ctx.revision,
+            message: e.message,
+          },
+        );
         this.#failMaintenanceConnection(ctx, e);
         return false;
       }

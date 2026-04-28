@@ -7,12 +7,16 @@ import {ErrorOrigin} from '../../../../zero-protocol/src/error-origin.ts';
 import {ErrorReason} from '../../../../zero-protocol/src/error-reason.ts';
 import {PROTOCOL_VERSION} from '../../../../zero-protocol/src/protocol-version.ts';
 import type {UpQueriesPatch} from '../../../../zero-protocol/src/queries-patch.ts';
-import type {TransformResponse} from '../../custom-queries/transform-query.ts';
+import type {
+  HashedTransformResponse,
+  TransformResponse,
+} from '../../custom-queries/transform-query.ts';
 import {type PgTest, test} from '../../test/db.ts';
 import type {DbFile} from '../../test/lite.ts';
 import type {PostgresDB} from '../../types/pg.ts';
 import type {Subscription} from '../../types/subscription.ts';
 import type {ReplicaState} from '../replicator/replicator.ts';
+import type {ConnectionValidation} from './connection-context-manager.ts';
 import {
   ISSUES_QUERY,
   nextPoke,
@@ -52,8 +56,40 @@ const MAINTENANCE_INTERVAL_MS = 67_000;
 function validationSuccess(userID: string | null = null): TransformResponse {
   return {
     kind: 'QueryResponse' as const,
-    userID,
+    validation: {
+      kind: 'server-validated',
+      validatedUserID: userID,
+    },
     queries: [],
+  };
+}
+
+const clientFallback: ConnectionValidation = {kind: 'client-fallback'};
+
+function transformSuccess(
+  result: Extract<HashedTransformResponse, {kind: 'success'}>['result'],
+  validation: ConnectionValidation = clientFallback,
+): HashedTransformResponse {
+  return {
+    kind: 'success' as const,
+    result,
+    cached: false as const,
+    validation,
+  };
+}
+
+function transformFailure(result: {
+  kind: ErrorKind.TransformFailed;
+  message: string;
+  origin: ErrorOrigin.ZeroCache;
+  queryIDs: string[];
+  reason: ErrorReason.HTTP;
+  status: number;
+  bodyPreview: string;
+}): HashedTransformResponse {
+  return {
+    kind: 'failed' as const,
+    result,
   };
 }
 
@@ -166,7 +202,7 @@ describe('view-syncer/auth maintenance', () => {
         timeout: 2_000,
       });
       expect(validateSpy.mock.calls[1][0].auth?.raw).toBe('token-1');
-      expect(validateSpy.mock.calls[1][0].userID).toBe('user-1');
+      expect(validateSpy.mock.calls[1][0].user).toEqual({id: 'user-1'});
     });
 
     test('failed scheduled revalidation only fails the offending connection', async () => {
@@ -247,6 +283,37 @@ describe('view-syncer/auth maintenance', () => {
         timeout: 2_000,
       });
       expect(client.size()).toBe(0);
+    });
+
+    test('scheduled revalidation fails the connection on userID mismatch', async () => {
+      const transformer = customQueryTransformer;
+      expect(transformer).toBeDefined();
+      using validateSpy = vi
+        .spyOn(transformer!, 'validate')
+        .mockResolvedValueOnce(validationSuccess('user-1'))
+        .mockResolvedValueOnce(validationSuccess('user-bad'));
+
+      const client = connect(
+        {...SYNC_CONTEXT, auth: {type: 'opaque', raw: 'token-1'}},
+        [{op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY}],
+      );
+
+      await nextPoke(client);
+      stateChanges.push({state: 'version-ready'});
+      await nextPoke(client);
+
+      expect(validateSpy).toHaveBeenCalledTimes(1);
+
+      callNextSetTimeout(setTimeoutFn, MAINTENANCE_INTERVAL_MS);
+
+      await vi.waitFor(
+        async () =>
+          await expect(client.dequeue()).rejects.toThrow(
+            'Connection userID does not match validated server userID.',
+          ),
+        {timeout: 2_000},
+      );
+      expect(validateSpy).toHaveBeenCalledTimes(2);
     });
 
     test('ignores stale scheduled revalidation failures after auth changes', async () => {
@@ -358,40 +425,34 @@ describe('view-syncer/auth maintenance', () => {
         .mockResolvedValue(validationSuccess('user-1'));
       using transformSpy = vi
         .spyOn(transformer!, 'transform')
-        .mockResolvedValueOnce({
-          result: [
+        .mockResolvedValueOnce(
+          transformSuccess([
             {
               id: 'custom-1',
               transformedAst: ISSUES_QUERY,
               transformationHash: 'hash-1',
             },
-          ],
-          cached: false,
-        })
-        .mockResolvedValueOnce({
-          result: [
+          ]),
+        )
+        .mockResolvedValueOnce(
+          transformSuccess([
             {
               id: 'custom-1',
               transformedAst: ISSUES_QUERY,
               transformationHash: 'hash-1b',
             },
-          ],
-          cached: false,
-        })
-        .mockResolvedValueOnce({
-          result: scheduled401(['custom-1']),
-          cached: false,
-        })
-        .mockResolvedValueOnce({
-          result: [
+          ]),
+        )
+        .mockResolvedValueOnce(transformFailure(scheduled401(['custom-1'])))
+        .mockResolvedValueOnce(
+          transformSuccess([
             {
               id: 'custom-1',
               transformedAst: ISSUES_QUERY,
               transformationHash: 'hash-2',
             },
-          ],
-          cached: false,
-        });
+          ]),
+        );
 
       const selectedClient = connect(
         {...SYNC_CONTEXT, auth: {type: 'opaque', raw: 'token-selected'}},
@@ -442,11 +503,11 @@ describe('view-syncer/auth maintenance', () => {
         timeout: 2_000,
       });
       expect(transformSpy.mock.calls[1][0].auth?.raw).toBe('token-replacement');
-      expect(transformSpy.mock.calls[1][0].userID).toBe('user-1');
+      expect(transformSpy.mock.calls[1][0].user).toEqual({id: 'user-1'});
       expect(transformSpy.mock.calls[2][0].auth?.raw).toBe('token-selected');
-      expect(transformSpy.mock.calls[2][0].userID).toBe('user-1');
+      expect(transformSpy.mock.calls[2][0].user).toEqual({id: 'user-1'});
       expect(transformSpy.mock.calls[3][0].auth?.raw).toBe('token-replacement');
-      expect(transformSpy.mock.calls[3][0].userID).toBe('user-1');
+      expect(transformSpy.mock.calls[3][0].user).toEqual({id: 'user-1'});
     });
 
     test('scheduled background retransform retries after transient query failure without disconnecting', async () => {
@@ -457,30 +518,25 @@ describe('view-syncer/auth maintenance', () => {
         .mockResolvedValue(validationSuccess('user-1'));
       using transformSpy = vi
         .spyOn(transformer!, 'transform')
-        .mockResolvedValueOnce({
-          result: [
+        .mockResolvedValueOnce(
+          transformSuccess([
             {
               id: 'custom-1',
               transformedAst: ISSUES_QUERY,
               transformationHash: 'hash-1',
             },
-          ],
-          cached: false,
-        })
-        .mockResolvedValueOnce({
-          result: scheduled500(['custom-1']),
-          cached: false,
-        })
-        .mockResolvedValueOnce({
-          result: [
+          ]),
+        )
+        .mockResolvedValueOnce(transformFailure(scheduled500(['custom-1'])))
+        .mockResolvedValueOnce(
+          transformSuccess([
             {
               id: 'custom-1',
               transformedAst: ISSUES_QUERY,
               transformationHash: 'hash-1',
             },
-          ],
-          cached: false,
-        });
+          ]),
+        );
 
       const client = connect(
         {...SYNC_CONTEXT, auth: {type: 'opaque', raw: 'token-selected'}},

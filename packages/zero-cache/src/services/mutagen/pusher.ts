@@ -549,6 +549,11 @@ class PushWorker {
       this.#contextManager.validateConnection(
         entry.context,
         entry.context.revision,
+        'kind' in response &&
+          response.kind === 'MutateResponse' &&
+          response?.userID !== undefined
+          ? {kind: 'server-validated', validatedUserID: response.userID}
+          : {kind: 'client-fallback'},
       );
       return response;
     } catch (e) {
@@ -568,6 +573,27 @@ class PushWorker {
           );
         }
         return response;
+      }
+
+      if (isProtocolError(e) && isAuthErrorBody(e.errorBody)) {
+        // The push completed far enough for local validation to reject the
+        // connection, so invalidate it and surface the result as PushFailed.
+        this.#lc.warn?.('Push validation failed; invalidating connection', {
+          clientID: entry.context.clientID,
+          response: e.message,
+        });
+        this.#contextManager.failConnection(
+          entry.context,
+          entry.context.revision,
+        );
+        return {
+          kind: ErrorKind.PushFailed,
+          origin: ErrorOrigin.ZeroCache,
+          reason: ErrorReason.HTTP,
+          message: e.message,
+          status: 401,
+          mutationIDs,
+        } as const satisfies PushFailedBody;
       }
 
       return {
@@ -673,7 +699,7 @@ function assertAreCompatiblePushes(left: PusherEntry, right: PusherEntry) {
     'origin must be the same for all pushes with the same clientID',
   );
   assert(
-    left.context.userID === right.context.userID,
+    left.context.user.id === right.context.user.id,
     'userID must be the same for all pushes with the same clientID',
   );
   assert(
