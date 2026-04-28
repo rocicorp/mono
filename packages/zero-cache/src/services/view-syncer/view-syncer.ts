@@ -800,7 +800,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         downstream,
       );
 
-
       // Note: initConnection() must be synchronous so that `downstream` is
       // immediately returned to the caller (connection.ts). This ensures
       // that if the connection is subsequently closed, the `downstream`
@@ -830,11 +829,12 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
                 'warn',
               );
             }
-            // Validate auth before sending any data to this connection.
-            // #handleConfigUpdate below (via #syncQueryPipelineSet /
-            // #catchupClients) pokes row data to all clients, so the
-            // connection must be validated first. This also ensures shared
-            // maintenance always has a validated connection to fall back to.
+            // Validate auth before adding new client to #clients.  Once
+            // added to #clients data can be sent to the client via poke.
+            // Note: while the #handleConfigUpdate call below will also
+            // transform queries, that may hit the transform cache so do not
+            // rely on it for validation. This also ensures shared maintenance
+            // alwayshas a validated connection to fall back to.
             if (!(await this.#validateConnection(connCtx))) {
               return;
             }
@@ -854,9 +854,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             }
 
             // NOW safe to add: auth is validated and connection is alive.
-            this.#clients.get(connCtx.clientID)?.close(
-              `replaced by wsID: ${connCtx.wsID}`,
-            );
+            this.#clients
+              .get(connCtx.clientID)
+              ?.close(`replaced by wsID: ${connCtx.wsID}`);
             this.#clients.set(connCtx.clientID, newClient);
 
             await this.#handleConfigUpdate(
