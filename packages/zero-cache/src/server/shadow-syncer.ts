@@ -39,7 +39,7 @@ export default function runWorker(
   const service = new ShadowSyncService(
     lc,
     shard,
-    upstream.db,
+    must(upstream.db, 'upstream.db is required for shadow-sync'),
     getServerContext(config),
     {
       intervalMs: shadowSync.intervalHours * MS_PER_HOUR,

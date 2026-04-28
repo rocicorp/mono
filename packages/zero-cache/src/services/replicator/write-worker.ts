@@ -50,7 +50,11 @@ function createAPI(): API {
       logConfig: LogConfig,
     ) {
       lc = createLogContext({log: logConfig}, 'write-worker');
-      db = new Database(lc, dbPath);
+      db = new Database(
+        lc,
+        dbPath,
+        pragmas.readonly ? {readonly: true} : undefined,
+      );
       applyPragmas(db, pragmas);
       runner = new StatementRunner(db);
       mode = cpMode;

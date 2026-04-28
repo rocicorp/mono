@@ -325,20 +325,28 @@ export type LegacyJWTAuthConfig = Pick<
 export const zeroOptions = {
   upstream: {
     db: {
-      type: v.string(),
+      type: v.string().optional(),
       desc: [
         `The "upstream" authoritative postgres database.`,
         `In the future we will support other types of upstream besides PG.`,
+        ``,
+        `Required for {bold upstream-type=pg} (the default) and {bold custom}.`,
+        `Not required when {bold upstream-type=static} (read-only debugging`,
+        `against an existing replica file).`,
       ],
     },
 
     type: {
-      type: v.literalUnion('pg', 'custom').default('pg'),
+      type: v.literalUnion('pg', 'custom', 'static').default('pg'),
       desc: [
         `The meaning of the {bold upstream-db} depends on the upstream type:`,
         `* {bold pg}: The connection database string, e.g. "postgres://..."`,
         `* {bold custom}: The base URI of the change source "endpoint, e.g.`,
         `          "https://my-change-source.dev/changes/v0/stream?apiKey=..."`,
+        `* {bold static}: No upstream. The replica file at {bold replica-file} is`,
+        `          opened read-only and zero-cache serves queries from it without`,
+        `          performing initial sync or streaming further changes. Intended`,
+        `          for local debugging against a pre-built replica.`,
       ],
       hidden: true, // TODO: Unhide when ready to officially support.
     },

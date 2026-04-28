@@ -127,12 +127,20 @@ async function setJournalMode(
  * Returns the PragmaConfig for a given replica file mode.
  * This is used by both the main thread (setupReplica) and
  * the write worker thread to apply the same pragma settings.
+ *
+ * `readonly: true` opts the SQLite connection into read-only mode and
+ * suppresses pragmas that would mutate the database (used for
+ * `ZERO_UPSTREAM_TYPE=static`).
  */
-export function getPragmaConfig(mode: ReplicaFileMode): PragmaConfig {
+export function getPragmaConfig(
+  mode: ReplicaFileMode,
+  readonly = false,
+): PragmaConfig {
   return {
     busyTimeout: 30000,
     analysisLimit: 1000,
     walAutocheckpoint: mode === 'backup' ? 0 : undefined,
+    readonly,
   };
 }
 
@@ -140,8 +148,20 @@ export function setupReplica(
   lc: LogContext,
   mode: ReplicaFileMode,
   replicaOptions: ReplicaOptions,
-) {
+  staticUpstream = false,
+): Promise<{file: string; walMode: WalMode}> {
   lc.info?.(`setting up ${mode} replica`);
+
+  if (staticUpstream) {
+    // Static mode: the user supplies a pre-built replica file that we must
+    // not mutate. Skip the prepare() pipeline entirely (it would change the
+    // journal mode, possibly VACUUM, run schema upgrades, etc.) and trust
+    // the file as-is.
+    lc.info?.(
+      `static mode: skipping replica prepare for ${replicaOptions.file}`,
+    );
+    return Promise.resolve({file: replicaOptions.file, walMode: 'wal2'});
+  }
 
   switch (mode) {
     case 'backup':

@@ -50,16 +50,18 @@ export default async function runWorker(
   lc = createLogContext(config, workerName);
   initEventSink(lc, config);
 
+  const staticUpstream = config.upstream.type === 'static';
   const {file: dbPath, walMode} = await setupReplica(
     lc,
     fileMode,
     config.replica,
+    staticUpstream,
   );
 
   setupMetrics(lc, dbPath, walMode);
 
   // Create the write worker for async SQLite writes.
-  const pragmas = getPragmaConfig(fileMode);
+  const pragmas = getPragmaConfig(fileMode, staticUpstream);
   const workerClient = new ThreadWriteWorkerClient();
   await workerClient.init(dbPath, mode, pragmas, config.log);
 

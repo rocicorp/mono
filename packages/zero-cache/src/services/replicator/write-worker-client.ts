@@ -12,6 +12,13 @@ export type PragmaConfig = {
   busyTimeout: number;
   analysisLimit: number;
   walAutocheckpoint?: number | undefined;
+  /**
+   * When true, the SQLite connection is opened in read-only mode and
+   * no pragmas that would mutate the database are applied. Used for
+   * `ZERO_UPSTREAM_TYPE=static` to guarantee that an externally supplied
+   * replica file is not modified.
+   */
+  readonly?: boolean | undefined;
 };
 
 type ErrorHandler = (err: Error) => void;
@@ -55,8 +62,13 @@ export type Response<M extends Method = Method> =
 export type WriteError = {writeError: Error};
 
 export function applyPragmas(db: Database, pragmas: PragmaConfig) {
+  // busy_timeout and analysis_limit are connection-local and safe on
+  // read-only connections; the others would attempt to mutate the file.
   db.pragma(`busy_timeout = ${pragmas.busyTimeout}`);
   db.pragma(`analysis_limit = ${pragmas.analysisLimit}`);
+  if (pragmas.readonly) {
+    return;
+  }
   if (pragmas.walAutocheckpoint !== undefined) {
     db.pragma(`wal_autocheckpoint = ${pragmas.walAutocheckpoint}`);
   }

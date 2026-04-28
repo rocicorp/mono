@@ -1,5 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 import {logOptions} from '../../../otel/src/log-options.ts';
+import {must} from '../../../shared/src/must.ts';
 import type {Config} from '../../../shared/src/options.ts';
 import {appOptions, shardOptions, zeroOptions} from '../config/zero-config.ts';
 import {decommissionShard} from '../services/change-source/pg/decommission.ts';
@@ -43,7 +44,11 @@ export async function decommissionZero(
   lc.info?.(`Decommissioning app "${app.id}"`);
 
   if (cfg.upstream.type === 'pg') {
-    const upstream = pgClient(lc, cfg.upstream.db, 'decommission-upstream');
+    const upstream = pgClient(
+      lc,
+      must(cfg.upstream.db, 'upstream.db is required for type=pg'),
+      'decommission-upstream',
+    );
     await decommissionShard(lc, upstream, app.id, shard.num);
 
     lc.debug?.(`Cleaning up upstream metadata from ${hostPort(upstream)}`);
@@ -51,14 +56,24 @@ export async function decommissionZero(
     await upstream.end();
   }
 
-  const cvr = pgClient(lc, cfg.cvr.db ?? cfg.upstream.db, 'decommission-cvr');
+  const cvr = pgClient(
+    lc,
+    must(
+      cfg.cvr.db ?? cfg.upstream.db,
+      'cvr.db or upstream.db is required to decommission',
+    ),
+    'decommission-cvr',
+  );
   lc.debug?.(`Cleaning up cvc data from ${hostPort(cvr)}`);
   await cvr.unsafe(`DROP SCHEMA IF EXISTS ${id(cvrSchema(shardID))} CASCADE`);
   await cvr.end();
 
   const cdc = pgClient(
     lc,
-    cfg.change.db ?? cfg.upstream.db,
+    must(
+      cfg.change.db ?? cfg.upstream.db,
+      'change.db or upstream.db is required to decommission',
+    ),
     'decommission-cdc',
   );
   lc.debug?.(`Cleaning up cdc data from ${hostPort(cdc)}`);

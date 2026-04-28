@@ -10,6 +10,7 @@ import {initEventSink, publishCriticalEvent} from '../observability/events.ts';
 import {upgradeReplica} from '../services/change-source/common/replica-schema.ts';
 import {initializeCustomChangeSource} from '../services/change-source/custom/change-source.ts';
 import {initializePostgresChangeSource} from '../services/change-source/pg/change-source.ts';
+import {initializeStaticChangeSource} from '../services/change-source/static/change-source.ts';
 import {BackupMonitor} from '../services/change-streamer/backup-monitor.ts';
 import {ChangeStreamerHttpServer} from '../services/change-streamer/change-streamer-http.ts';
 import {initializeStreamer} from '../services/change-streamer/change-streamer-service.ts';
@@ -95,7 +96,9 @@ export default async function runWorker(
   let purgeLock = await new PurgeLocker(lc, shard, changeDB).acquire();
 
   // Restore from litestream if the change-log has entries.
-  if (purgeLock) {
+  // Skipped in static mode — the user is supplying their own replica file and
+  // we never want to overwrite it from a backup.
+  if (purgeLock && upstream.type !== 'static') {
     try {
       await restoreReplica(lc, config, purgeLock);
     } catch (e) {
@@ -122,11 +125,14 @@ export default async function runWorker(
   for (const first of [true, false]) {
     try {
       // Note: This performs initial sync of the replica if necessary.
+      // For 'static' upstreams, no upstream connection is made and no initial
+      // sync occurs — the supplied replica file is opened read-only and its
+      // existing watermark is used as the subscription state.
       const {changeSource, subscriptionState} =
         upstream.type === 'pg'
           ? await initializePostgresChangeSource(
               lc,
-              upstream.db,
+              must(upstream.db, 'upstream.db is required for type=pg'),
               shard,
               replica.file,
               {
@@ -136,13 +142,15 @@ export default async function runWorker(
               context,
               replicationLag.reportIntervalMs,
             )
-          : await initializeCustomChangeSource(
-              lc,
-              upstream.db,
-              shard,
-              replica.file,
-              context,
-            );
+          : upstream.type === 'custom'
+            ? await initializeCustomChangeSource(
+                lc,
+                must(upstream.db, 'upstream.db is required for type=custom'),
+                shard,
+                replica.file,
+                context,
+              )
+            : initializeStaticChangeSource(lc, replica.file);
 
       const replicationStatusPublisher =
         ReplicationStatusPublisher.forReplicaFile(replica.file);
@@ -205,7 +213,11 @@ export default async function runWorker(
   // as well (in both the replication-manager and the view-syncer), but the
   // change-streamer independently reads the replica, and it is fine run the
   // upgrade logic redundantly since it is idempotent.
-  await upgradeReplica(lc, 'change-streamer-init', replica.file);
+  // Skipped in static mode: the user-supplied replica file is treated as
+  // immutable, and any required schema upgrade is the user's responsibility.
+  if (upstream.type !== 'static') {
+    await upgradeReplica(lc, 'change-streamer-init', replica.file);
+  }
 
   const {backupURL, port: metricsPort} = litestream;
   const monitor = backupURL

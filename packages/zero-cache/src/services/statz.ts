@@ -4,6 +4,7 @@ import type {LogContext} from '@rocicorp/logger';
 import auth from 'basic-auth';
 import type {FastifyReply, FastifyRequest} from 'fastify';
 import {BigIntJSON} from '../../../shared/src/bigint-json.ts';
+import {must} from '../../../shared/src/must.ts';
 import {Database} from '../../../zqlite/src/db.ts';
 import type {NormalizedZeroConfig as ZeroConfig} from '../config/normalize.ts';
 import {isAdminPasswordValid} from '../config/zero-config.ts';
@@ -15,7 +16,11 @@ import {getReplicationState} from './replicator/schema/replication-state.ts';
 
 async function upstreamStats(lc: LogContext, config: ZeroConfig) {
   const schema = upstreamSchema(getShardID(config));
-  const sql = pgClient(lc, config.upstream.db, 'statz-upstream');
+  const sql = pgClient(
+    lc,
+    must(config.upstream.db, 'upstream.db is required for upstreamStats'),
+    'statz-upstream',
+  );
   try {
     return await getPgStats([
       [

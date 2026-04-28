@@ -61,6 +61,17 @@ export default async function runWorker(
   const processes = new ProcessManager(lc, parent);
 
   const {numSyncWorkers: numSyncers} = config;
+  // In static mode there is no upstream to write mutations to, so CRUD
+  // mutations are forced off regardless of the user's configured value.
+  const staticUpstream = config.upstream.type === 'static';
+  if (staticUpstream && config.enableCrudMutations) {
+    lc.info?.(
+      'ZERO_UPSTREAM_TYPE=static: forcing enableCrudMutations=false; ' +
+        'CRUD mutations are unsupported without an upstream.',
+    );
+    config.enableCrudMutations = false;
+    env['ZERO_ENABLE_CRUD_MUTATIONS'] = 'false';
+  }
   if (config.enableCrudMutations && config.upstream.maxConns < numSyncers) {
     throw new Error(
       `Insufficient upstream connections (${config.upstream.maxConns}) for ${numSyncers} syncers.` +
@@ -107,7 +118,9 @@ export default async function runWorker(
 
   if (!runChangeStreamer) {
     changeStreamer = undefined;
-    if (litestream.executable) {
+    // Skip litestream restore in static mode — the user is supplying their
+    // own replica file that we never want to overwrite.
+    if (litestream.executable && !staticUpstream) {
       // For view-syncers, the backup is restored here. For the replication-manager,
       // the backup is restored in the change-streamer worker.
       await restoreReplica(lc, config, null);
@@ -124,7 +137,7 @@ export default async function runWorker(
     // file is present.
     await changeStreamerReady;
 
-    if (litestream.backupURL) {
+    if (litestream.backupURL && !staticUpstream) {
       // Start a backup replicator and corresponding litestream backup process.
       const {promise: backupReady, resolve} = resolver();
       const mode: ReplicaFileMode = 'backup';
@@ -157,7 +170,8 @@ export default async function runWorker(
   // Only run the shadow-sync canary on the replication-manager (or in
   // single-node mode, where it also owns upstream). Running on every
   // view-syncer would hammer the upstream with N redundant canaries.
-  if (config.shadowSync.enabled && runChangeStreamer) {
+  // Skipped entirely in static mode — there is no upstream to canary.
+  if (config.shadowSync.enabled && runChangeStreamer && !staticUpstream) {
     const {promise: shadowReady, resolve: shadowStarted} = resolver();
     loadWorker(SHADOW_SYNCER_URL, 'supporting').once('message', shadowStarted);
     await shadowReady;

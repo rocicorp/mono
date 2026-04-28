@@ -27,10 +27,14 @@ test('zero-cache --help', () => {
   expect(logger.info).toHaveBeenCalled();
   expect(stripAnsi(logger.info.mock.calls[0][0])).toMatchInlineSnapshot(`
     "
-     --upstream-db string                                               required                                                                                                                   
+     --upstream-db string                                               optional                                                                                                                   
        ZERO_UPSTREAM_DB env                                                                                                                                                                        
                                                                         The "upstream" authoritative postgres database.                                                                            
                                                                         In the future we will support other types of upstream besides PG.                                                          
+                                                                                                                                                                                                   
+                                                                        Required for upstream-type=pg (the default) and custom.                                                                    
+                                                                        Not required when upstream-type=static (read-only debugging                                                                
+                                                                        against an existing replica file).                                                                                         
                                                                                                                                                                                                    
      --upstream-max-conns number                                        default: 20                                                                                                                
        ZERO_UPSTREAM_MAX_CONNS env                                                                                                                                                                 

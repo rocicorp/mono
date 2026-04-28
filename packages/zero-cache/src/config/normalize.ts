@@ -100,14 +100,28 @@ export function normalizeZeroConfig(
     env['ZERO_CHANGE_STREAMER_ADDRESS'] = address;
   }
 
-  if (!config.change.db) {
-    config.change.db = config.upstream.db;
-    env['ZERO_CHANGE_DB'] = config.upstream.db;
-  }
-
-  if (!config.cvr.db) {
-    config.cvr.db = config.upstream.db;
-    env['ZERO_CVR_DB'] = config.upstream.db;
+  if (config.upstream.type === 'static') {
+    assert(
+      config.change.db,
+      'ZERO_CHANGE_DB must be set explicitly when ZERO_UPSTREAM_TYPE=static',
+    );
+    assert(
+      config.cvr.db,
+      'ZERO_CVR_DB must be set explicitly when ZERO_UPSTREAM_TYPE=static',
+    );
+  } else {
+    assert(
+      config.upstream.db,
+      'ZERO_UPSTREAM_DB is required (unless ZERO_UPSTREAM_TYPE=static)',
+    );
+    if (!config.change.db) {
+      config.change.db = config.upstream.db;
+      env['ZERO_CHANGE_DB'] = config.upstream.db;
+    }
+    if (!config.cvr.db) {
+      config.cvr.db = config.upstream.db;
+      env['ZERO_CVR_DB'] = config.upstream.db;
+    }
   }
 
   if (!config.keepaliveTimeoutMs && isRunningInECS()) {
