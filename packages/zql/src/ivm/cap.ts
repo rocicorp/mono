@@ -88,56 +88,36 @@ export class Cap implements Operator {
     assert(!req.start, 'Cap does not support start');
     assert(!req.reverse, 'Cap does not support reverse');
 
-    if (
+    // Cap is only built for non-flipped EXISTS subqueries, whose only
+    // downstream consumer is a Join that always fetches with a constraint
+    // built from the correlation's childField — which is Cap's partition
+    // key. So either partitionKey is undefined, or constraint matches.
+    assert(
       !this.#partitionKey ||
-      (req.constraint &&
-        constraintMatchesPartitionKey(req.constraint, this.#partitionKey))
-    ) {
-      const capStateKey = getCapStateKey(this.#partitionKey, req.constraint);
-      const capState = this.#storage.get(capStateKey);
-      if (!capState) {
-        yield* this.#initialFetch(req);
-        return;
-      }
-      if (capState.size === 0) {
-        return;
-      }
-      // PK-based point lookups: fetch each tracked row by its PK directly,
-      // rather than scanning the partition and filtering.
-      for (const pk of capState.pks) {
-        const constraint = deserializePKToConstraint(pk, this.#primaryKey);
-        for (const inputNode of this.#input.fetch({constraint})) {
-          if (inputNode === 'yield') {
-            yield inputNode;
-            continue;
-          }
-          yield inputNode;
-        }
-      }
+        (req.constraint !== undefined &&
+          constraintMatchesPartitionKey(req.constraint, this.#partitionKey)),
+      'Cap fetch: constraint must match partition key when partitioned',
+    );
+
+    const capStateKey = getCapStateKey(this.#partitionKey, req.constraint);
+    const capState = this.#storage.get(capStateKey);
+    if (!capState) {
+      yield* this.#initialFetch(req);
       return;
     }
-    // There is a partition key, but the fetch is not constrained or constrained
-    // on a different key. This currently only happens with nested sub-queries.
-    const pkSetCache = new Map<string, Set<string> | null>();
-    for (const inputNode of this.#input.fetch(req)) {
-      if (inputNode === 'yield') {
-        yield inputNode;
-        continue;
-      }
-      const capStateKey = getCapStateKey(this.#partitionKey, inputNode.row);
-      if (!pkSetCache.has(capStateKey)) {
-        const capState = this.#storage.get(capStateKey);
-        pkSetCache.set(
-          capStateKey,
-          capState && capState.size > 0 ? new Set(capState.pks) : null,
-        );
-      }
-      const pkSet = pkSetCache.get(capStateKey);
-      if (pkSet) {
-        const pk = serializePK(inputNode.row, this.#primaryKey);
-        if (pkSet.has(pk)) {
+    if (capState.size === 0) {
+      return;
+    }
+    // PK-based point lookups: fetch each tracked row by its PK directly,
+    // rather than scanning the partition and filtering.
+    for (const pk of capState.pks) {
+      const constraint = deserializePKToConstraint(pk, this.#primaryKey);
+      for (const inputNode of this.#input.fetch({constraint})) {
+        if (inputNode === 'yield') {
           yield inputNode;
+          continue;
         }
+        yield inputNode;
       }
     }
   }
