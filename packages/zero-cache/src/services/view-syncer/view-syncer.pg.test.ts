@@ -1283,9 +1283,7 @@ describe('view-syncer/service', () => {
             "baseCookie": null,
             "clientID": "foo",
             "insertionOrder": 1,
-            "profileID": "p0000g00000003203",
-            "protocolVersion": 50,
-            "pushContext": {
+            "mutateContext": {
               "allowedUrlPatterns": undefined,
               "headerOptions": {
                 "allowedClientHeaders": undefined,
@@ -1293,11 +1291,11 @@ describe('view-syncer/service', () => {
                 "cookie": undefined,
                 "customHeaders": undefined,
                 "origin": undefined,
-                "token": undefined,
-                "userID": "user-1",
               },
               "url": undefined,
             },
+            "profileID": "p0000g00000003203",
+            "protocolVersion": 50,
             "queryContext": {
               "allowedUrlPatterns": [
                 URLPattern {},
@@ -1308,8 +1306,6 @@ describe('view-syncer/service', () => {
                 "cookie": undefined,
                 "customHeaders": undefined,
                 "origin": undefined,
-                "token": undefined,
-                "userID": "user-1",
               },
               "url": "http://my-pull-endpoint.dev/api/zero/pull",
             },
@@ -1577,9 +1573,7 @@ describe('view-syncer/service', () => {
             "baseCookie": null,
             "clientID": "foo",
             "insertionOrder": 1,
-            "profileID": "p0000g00000003203",
-            "protocolVersion": 50,
-            "pushContext": {
+            "mutateContext": {
               "allowedUrlPatterns": undefined,
               "headerOptions": {
                 "allowedClientHeaders": undefined,
@@ -1587,11 +1581,11 @@ describe('view-syncer/service', () => {
                 "cookie": undefined,
                 "customHeaders": undefined,
                 "origin": undefined,
-                "token": undefined,
-                "userID": "user-1",
               },
               "url": undefined,
             },
+            "profileID": "p0000g00000003203",
+            "protocolVersion": 50,
             "queryContext": {
               "allowedUrlPatterns": [
                 URLPattern {},
@@ -1602,8 +1596,6 @@ describe('view-syncer/service', () => {
                 "cookie": undefined,
                 "customHeaders": undefined,
                 "origin": undefined,
-                "token": undefined,
-                "userID": "user-1",
               },
               "url": "http://my-pull-endpoint.dev/api/zero/pull",
             },
@@ -2259,9 +2251,7 @@ describe('view-syncer/service', () => {
             "baseCookie": null,
             "clientID": "foo",
             "insertionOrder": 1,
-            "profileID": "p0000g00000003203",
-            "protocolVersion": 50,
-            "pushContext": {
+            "mutateContext": {
               "allowedUrlPatterns": undefined,
               "headerOptions": {
                 "allowedClientHeaders": undefined,
@@ -2269,11 +2259,11 @@ describe('view-syncer/service', () => {
                 "cookie": undefined,
                 "customHeaders": undefined,
                 "origin": undefined,
-                "token": undefined,
-                "userID": "user-1",
               },
               "url": undefined,
             },
+            "profileID": "p0000g00000003203",
+            "protocolVersion": 50,
             "queryContext": {
               "allowedUrlPatterns": [
                 URLPattern {},
@@ -2284,8 +2274,6 @@ describe('view-syncer/service', () => {
                 "cookie": undefined,
                 "customHeaders": undefined,
                 "origin": undefined,
-                "token": undefined,
-                "userID": "user-1",
               },
               "url": "http://my-pull-endpoint.dev/api/zero/pull",
             },
@@ -2482,9 +2470,7 @@ describe('view-syncer/service', () => {
             "baseCookie": null,
             "clientID": "cq-c2-client",
             "insertionOrder": 2,
-            "profileID": "p0000g00000003203",
-            "protocolVersion": 50,
-            "pushContext": {
+            "mutateContext": {
               "allowedUrlPatterns": undefined,
               "headerOptions": {
                 "allowedClientHeaders": undefined,
@@ -2492,11 +2478,11 @@ describe('view-syncer/service', () => {
                 "cookie": undefined,
                 "customHeaders": undefined,
                 "origin": undefined,
-                "token": undefined,
-                "userID": "user-1",
               },
               "url": undefined,
             },
+            "profileID": "p0000g00000003203",
+            "protocolVersion": 50,
             "queryContext": {
               "allowedUrlPatterns": [
                 URLPattern {},
@@ -2507,8 +2493,6 @@ describe('view-syncer/service', () => {
                 "cookie": undefined,
                 "customHeaders": undefined,
                 "origin": undefined,
-                "token": undefined,
-                "userID": "user-1",
               },
               "url": "http://my-pull-endpoint.dev/api/zero/pull",
             },
@@ -2638,7 +2622,7 @@ describe('view-syncer/service', () => {
       expect(transformSpy.mock.calls[0][0].auth?.raw).toBe('token-1');
       expect(transformSpy.mock.calls[0][0].user).toEqual({id: 'user-1'});
 
-      await vs.contextManager.updateAuth(
+      await vs.connContextManager.updateAuth(
         {clientID: token1Context.clientID, wsID: token1Context.wsID},
         {auth: token2.raw},
       );
@@ -2840,7 +2824,7 @@ describe('view-syncer/service', () => {
 
       expect(transformSpy).toHaveBeenCalledTimes(1);
 
-      await vs.contextManager.updateAuth(
+      await vs.connContextManager.updateAuth(
         {clientID: authContext.clientID, wsID: authContext.wsID},
         {auth: 'token-2'},
       );

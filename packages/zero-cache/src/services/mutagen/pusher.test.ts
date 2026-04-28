@@ -53,7 +53,7 @@ function newPusherService(pushConfig: {
   forwardCookies: boolean;
   allowedClientHeaders?: string[] | undefined;
 }): PusherService {
-  const contextManager = new ConnectionContextManagerImpl(
+  const connContextManager = new ConnectionContextManagerImpl(
     lc,
     undefined,
     undefined,
@@ -70,33 +70,33 @@ function newPusherService(pushConfig: {
       forwardCookies: pushConfig.forwardCookies,
     },
   );
-  const pusher = new PusherService(config, lc, 'cgid', contextManager);
-  contextManagers.set(pusher, contextManager);
+  const pusher = new PusherService(config, lc, 'cgid', connContextManager);
+  contextManagers.set(pusher, connContextManager);
   return pusher;
 }
 
 function getContextManager(
   pusher: PusherService,
 ): ConnectionContextManagerImpl {
-  const contextManager = contextManagers.get(pusher);
-  if (!contextManager) {
+  const connContextManager = contextManagers.get(pusher);
+  if (!connContextManager) {
     throw new Error('Missing context manager for test pusher');
   }
-  return contextManager;
+  return connContextManager;
 }
 
 function registerConnection(
   pusher: PusherService,
   options: TestConnectionOptions = {},
 ): ConnectionSelector {
-  const contextManager = getContextManager(pusher);
+  const connContextManager = getContextManager(pusher);
   const resolvedClientID = options.clientID ?? clientID;
   const selector = {
     clientID: resolvedClientID,
     wsID: options.wsID ?? `ws-${resolvedClientID}`,
   };
 
-  contextManager.registerConnection(
+  connContextManager.registerConnection(
     selector,
     {
       protocolVersion: 0,
@@ -116,7 +116,7 @@ function registerConnection(
     },
     getAuth(options.auth),
   );
-  contextManager.initConnection(selector, {
+  connContextManager.initConnection(selector, {
     desiredQueriesPatch: [],
     userPushURL: options.userPushURL,
     userPushHeaders: options.userPushHeaders,
@@ -167,7 +167,7 @@ function makeEntry(
     options.clientID ?? push.mutations[0]?.clientID ?? clientID;
   return {
     push,
-    context: {
+    connCtx: {
       state: 'provisional',
       clientID: resolvedClientID,
       wsID: options.wsID ?? `ws-${resolvedClientID}`,
@@ -190,7 +190,7 @@ function makeEntry(
           allowedClientHeaders: undefined,
         },
       },
-      pushContext: {
+      mutateContext: {
         url: options.userPushURL,
         allowedUrlPatterns: [],
         headerOptions: {
@@ -250,11 +250,11 @@ describe('combine pushes', () => {
     expect(pushes).toHaveLength(2);
     expect(terminate).toBe(false);
 
-    const client1Push = pushes.find(p => p.context.clientID === 'client1');
+    const client1Push = pushes.find(p => p.connCtx.clientID === 'client1');
     expect(client1Push).toBeDefined();
     expect(client1Push?.push.mutations).toHaveLength(3);
 
-    const client2Push = pushes.find(p => p.context.clientID === 'client2');
+    const client2Push = pushes.find(p => p.connCtx.clientID === 'client2');
     expect(client2Push).toBeDefined();
     expect(client2Push?.push.mutations).toHaveLength(1);
   });
@@ -370,7 +370,7 @@ describe('combine pushes', () => {
       auth: 'a',
     });
 
-    second.context.auth = {type: 'opaque', raw: 'a'};
+    second.connCtx.auth = {type: 'opaque', raw: 'a'};
 
     const [pushes, terminate] = combinePushes([first, second]);
 
@@ -390,10 +390,10 @@ describe('combine pushes', () => {
     expect(pushes).toHaveLength(2);
     expect(terminate).toBe(false);
 
-    const client1Push = pushes.find(p => p.context.clientID === 'client1');
+    const client1Push = pushes.find(p => p.connCtx.clientID === 'client1');
     expect(client1Push?.push.mutations).toHaveLength(2);
 
-    const client2Push = pushes.find(p => p.context.clientID === 'client2');
+    const client2Push = pushes.find(p => p.connCtx.clientID === 'client2');
     expect(client2Push?.push.mutations).toHaveLength(5);
   });
 
@@ -404,7 +404,7 @@ describe('combine pushes', () => {
       makeEntry(makePush(1, 'client1'), {clientID: 'client1', auth: 'a'}),
     ]);
 
-    const client1Push = pushes.find(p => p.context.clientID === 'client1');
+    const client1Push = pushes.find(p => p.connCtx.clientID === 'client1');
     expect(client1Push?.push.mutations[0].id).toBeLessThan(
       client1Push?.push.mutations[1].id || 0,
     );

@@ -79,7 +79,7 @@ describe('fetchFromAPIServer', () => {
         allowedUrlPatterns,
         headerOptions,
       },
-      pushContext: {
+      mutateContext: {
         url,
         allowedUrlPatterns,
         headerOptions,

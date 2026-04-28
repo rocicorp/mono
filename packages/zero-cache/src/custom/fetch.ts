@@ -101,7 +101,7 @@ export async function fetchFromAPIServer<TValidator extends Type>(
     .withContext('fetchFromAPIServerID', fetchFromAPIServerID)
     .withContext('source', source);
 
-  const fetchConfig = source === 'push' ? ctx.pushContext : ctx.queryContext;
+  const fetchConfig = source === 'push' ? ctx.mutateContext : ctx.queryContext;
   const url = must(
     fetchConfig.url,
     `Fetch config for ${source} is missing URL`,

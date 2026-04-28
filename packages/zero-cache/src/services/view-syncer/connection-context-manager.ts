@@ -80,7 +80,7 @@ export type ConnectionContext = {
   readonly insertionOrder: number;
 
   readonly queryContext: ConnectionFetchContext;
-  readonly pushContext: ConnectionFetchContext;
+  readonly mutateContext: ConnectionFetchContext;
 };
 
 /**
@@ -168,8 +168,6 @@ export type ConnectionContextManager = {
  * `initConnection` metadata, and then promoted to `validated` once their
  * effective `userID` is confirmed as valid. The manager also tracks which
  * validated connection currently serves as the group's background connection.
- *
- * This is intentionally side-effect free.
  */
 export class ConnectionContextManagerImpl implements ConnectionContextManager {
   readonly #lc: LogContext;
@@ -229,11 +227,20 @@ export class ConnectionContextManagerImpl implements ConnectionContextManager {
   ): Readonly<ConnectionContext> {
     this.#removeConnection(selector);
 
-    const sharedHeaders = {
-      customHeaders: undefined,
-      token: auth?.raw,
-      origin: connectParams.origin,
-      userID: connectParams.userID,
+    const getContext = (type: 'query' | 'mutate'): ConnectionFetchContext => {
+      const config = type === 'query' ? this.#queryConfig : this.#pushConfig;
+
+      return {
+        url: config?.url?.[0],
+        allowedUrlPatterns: config?.url?.map(compileUrlPattern),
+        headerOptions: {
+          customHeaders: undefined,
+          origin: connectParams.origin,
+          apiKey: config?.apiKey,
+          allowedClientHeaders: config?.allowedClientHeaders,
+          cookie: config?.forwardCookies ? connectParams.httpCookie : undefined,
+        },
+      };
     };
 
     const connection: ConnectionContext = {
@@ -251,30 +258,8 @@ export class ConnectionContextManagerImpl implements ConnectionContextManager {
 
       revalidateAt: undefined,
 
-      queryContext: {
-        url: this.#queryConfig?.url?.[0],
-        allowedUrlPatterns: this.#queryConfig?.url?.map(compileUrlPattern),
-        headerOptions: {
-          ...sharedHeaders,
-          apiKey: this.#queryConfig?.apiKey,
-          allowedClientHeaders: this.#queryConfig?.allowedClientHeaders,
-          cookie: this.#queryConfig?.forwardCookies
-            ? connectParams.httpCookie
-            : undefined,
-        },
-      },
-      pushContext: {
-        url: this.#pushConfig?.url?.[0],
-        allowedUrlPatterns: this.#pushConfig?.url?.map(compileUrlPattern),
-        headerOptions: {
-          ...sharedHeaders,
-          apiKey: this.#pushConfig?.apiKey,
-          allowedClientHeaders: this.#pushConfig?.allowedClientHeaders,
-          cookie: this.#pushConfig?.forwardCookies
-            ? connectParams.httpCookie
-            : undefined,
-        },
-      },
+      queryContext: getContext('query'),
+      mutateContext: getContext('mutate'),
 
       insertionOrder: ++this.#nextInsertionOrder,
     };
@@ -304,10 +289,11 @@ export class ConnectionContextManagerImpl implements ConnectionContextManager {
         body.userQueryHeaders;
     }
     if (body.userPushURL) {
-      connection.pushContext.url = body.userPushURL;
+      connection.mutateContext.url = body.userPushURL;
     }
     if (body.userPushHeaders) {
-      connection.pushContext.headerOptions.customHeaders = body.userPushHeaders;
+      connection.mutateContext.headerOptions.customHeaders =
+        body.userPushHeaders;
     }
 
     connection.revision++;
@@ -462,10 +448,9 @@ export class ConnectionContextManagerImpl implements ConnectionContextManager {
       return;
     }
     if (
-      selector !== undefined &&
-      (backgroundConnection.clientID !== selector.clientID ||
-        backgroundConnection.wsID !== selector.wsID ||
-        backgroundConnection.revision !== revision)
+      backgroundConnection.clientID !== selector.clientID ||
+      backgroundConnection.wsID !== selector.wsID ||
+      backgroundConnection.revision !== revision
     ) {
       return;
     }
@@ -766,12 +751,12 @@ function snapshotConnection<T extends ConnectionContext | undefined>(
           : undefined,
       },
     },
-    pushContext: {
-      ...connection.pushContext,
+    mutateContext: {
+      ...connection.mutateContext,
       headerOptions: {
-        ...connection.pushContext.headerOptions,
-        customHeaders: connection.pushContext.headerOptions.customHeaders
-          ? {...connection.pushContext.headerOptions.customHeaders}
+        ...connection.mutateContext.headerOptions,
+        customHeaders: connection.mutateContext.headerOptions.customHeaders
+          ? {...connection.mutateContext.headerOptions.customHeaders}
           : undefined,
       },
     },

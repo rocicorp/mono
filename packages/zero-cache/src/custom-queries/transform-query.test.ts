@@ -82,7 +82,7 @@ describe('CustomQueryTransformer', () => {
         allowedUrlPatterns: [new URLPattern(pullUrl)],
         headerOptions: normalizedHeaderOptions,
       },
-      pushContext: {
+      mutateContext: {
         url: undefined,
         allowedUrlPatterns: [],
         headerOptions: {

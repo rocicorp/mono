@@ -99,11 +99,11 @@ function makeFactories(
     ) =>
       (() => {
         const stopped = resolver<void>();
-        const contextManager = new ConnectionContextManagerImpl(lc);
-        contextManagersOut.set(id, contextManager);
+        const connContextManager = new ConnectionContextManagerImpl(lc);
+        contextManagersOut.set(id, connContextManager);
         return {
           id,
-          contextManager,
+          connContextManager,
           initConnection: vi.fn(),
           changeDesiredQueries: vi.fn(),
           deleteClients: vi.fn(),
@@ -136,7 +136,10 @@ function makeFactories(
       mutagensOut.push(ret);
       return ret;
     },
-    pusherFactory: (id: string, contextManager: ConnectionContextManager) => {
+    pusherFactory: (
+      id: string,
+      connContextManager: ConnectionContextManager,
+    ) => {
       const ret = new PusherService(
         {
           app: {id: 'test-app'},
@@ -144,7 +147,7 @@ function makeFactories(
         } as ZeroConfig,
         lc,
         id,
-        contextManager,
+        connContextManager,
       );
       pushersOut.push(ret);
       return ret;
@@ -670,9 +673,9 @@ describe('connection hijacking prevention', () => {
       {} as any,
     );
 
-    const contextManager = contextManagers.get('1');
-    assert(contextManager);
-    contextManager.validateConnection(
+    const connContextManager = contextManagers.get('1');
+    assert(connContextManager);
+    connContextManager.validateConnection(
       {clientID: 'target-client', wsID: 'ws-1'},
       0,
       {kind: 'client-fallback'},

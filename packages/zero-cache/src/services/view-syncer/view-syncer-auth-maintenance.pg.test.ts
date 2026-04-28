@@ -350,14 +350,16 @@ describe('view-syncer/auth maintenance', () => {
       });
       expect(validateSpy.mock.calls[1][0].auth?.raw).toBe('token-1');
 
-      await vs.contextManager.updateAuth(selector, {auth: 'token-2'});
+      await vs.connContextManager.updateAuth(selector, {auth: 'token-2'});
 
       // resolve the stale validation for the original auth
       staleValidation.resolve(scheduled401([]));
 
       await Promise.resolve();
 
-      expect(vs.contextManager.getConnectionContext(selector)).toMatchObject({
+      expect(
+        vs.connContextManager.getConnectionContext(selector),
+      ).toMatchObject({
         clientID: selector.clientID,
         wsID: selector.wsID,
         revision: 2,

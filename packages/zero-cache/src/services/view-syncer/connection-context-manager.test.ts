@@ -133,7 +133,7 @@ describe('ConnectionContextManager', () => {
           userID: 'user-c1',
         },
       },
-      pushContext: {
+      mutateContext: {
         url: undefined,
         headerOptions: {
           token: 'token-ws1',
@@ -160,7 +160,7 @@ describe('ConnectionContextManager', () => {
           customHeaders: {foo: 'bar'},
         },
       },
-      pushContext: {
+      mutateContext: {
         url: 'https://api.example/push',
         headerOptions: {
           customHeaders: {baz: 'qux'},
@@ -174,7 +174,7 @@ describe('ConnectionContextManager', () => {
       state: 'provisional',
       auth: {type: 'opaque', raw: 'token-ws2'},
       queryContext: {url: undefined},
-      pushContext: {url: undefined},
+      mutateContext: {url: undefined},
     });
     expect(manager.closeConnection(selector('c1', 'ws1'))).toBeUndefined();
     expect(manager.getConnectionContext(selector('c1', 'ws2'))).toMatchObject({
@@ -492,7 +492,7 @@ describe('ConnectionContextManager', () => {
             userID: 'user-1',
           }),
         }),
-        pushContext: expect.objectContaining({
+        mutateContext: expect.objectContaining({
           url: 'https://user.example/push',
           allowedUrlPatterns: expect.arrayContaining([
             new URLPattern('https://user.example/push'),

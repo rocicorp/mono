@@ -67,7 +67,7 @@ type Config = Pick<ZeroConfig, 'app' | 'shard'>;
  */
 export class PusherService implements Service, Pusher {
   readonly id: string;
-  readonly #contextManager: ConnectionContextManager;
+  readonly #connContextManager: ConnectionContextManager;
   readonly #pusher: PushWorker;
   readonly #queue: Queue<PusherEntryOrStop>;
   readonly #config: Config;
@@ -80,16 +80,16 @@ export class PusherService implements Service, Pusher {
     appConfig: Config,
     lc: LogContext,
     clientGroupID: string,
-    contextManager: ConnectionContextManager,
+    connContextManager: ConnectionContextManager,
   ) {
-    this.#contextManager = contextManager;
+    this.#connContextManager = connContextManager;
     this.#config = appConfig;
     this.#lc = lc.withContext('component', 'pusherService');
     this.#queue = new Queue();
     this.#pusher = new PushWorker(
       appConfig,
       lc,
-      this.#contextManager,
+      this.#connContextManager,
       this.#queue,
     );
     this.id = clientGroupID;
@@ -104,7 +104,7 @@ export class PusherService implements Service, Pusher {
     push: PushBody,
   ): Exclude<HandlerResult, StreamResult> {
     this.#pusher.enqueuePush(
-      this.#contextManager.mustGetConnectionContext(selector),
+      this.#connContextManager.mustGetConnectionContext(selector),
       push,
     );
 
@@ -117,8 +117,8 @@ export class PusherService implements Service, Pusher {
     requester: ConnectionSelector,
     upToID: MutationID,
   ): Promise<void> {
-    const ctx = this.#contextManager.getConnectionContext(requester);
-    if (!ctx?.pushContext?.url) {
+    const connCtx = this.#connContextManager.getConnectionContext(requester);
+    if (!connCtx?.mutateContext?.url) {
       // No push URL configured, skip cleanup
       return;
     }
@@ -152,7 +152,7 @@ export class PusherService implements Service, Pusher {
         mutateResponseSchema,
         'push',
         this.#lc,
-        ctx,
+        connCtx,
         {appID: this.#config.app.id, shardNum: this.#config.shard.num},
         cleanupBody,
       );
@@ -177,8 +177,8 @@ export class PusherService implements Service, Pusher {
       return;
     }
 
-    const ctx = this.#contextManager.getConnectionContext(requester);
-    if (!ctx?.pushContext?.url) {
+    const connCtx = this.#connContextManager.getConnectionContext(requester);
+    if (!connCtx?.mutateContext?.url) {
       // No push URL configured, skip cleanup
       return;
     }
@@ -211,7 +211,7 @@ export class PusherService implements Service, Pusher {
         mutateResponseSchema,
         'push',
         this.#lc,
-        ctx,
+        connCtx,
         {appID: this.#config.app.id, shardNum: this.#config.shard.num},
         cleanupBody,
       );
@@ -256,7 +256,7 @@ export class PusherService implements Service, Pusher {
 
 type PusherEntry = {
   push: PushBody;
-  context: ConnectionContext;
+  connCtx: ConnectionContext;
 };
 type PusherEntryOrStop = PusherEntry | 'stop';
 
@@ -265,7 +265,7 @@ type PusherEntryOrStop = PusherEntry | 'stop';
  * to the user's API server.
  */
 class PushWorker {
-  readonly #contextManager: ConnectionContextManager;
+  readonly #connContextManager: ConnectionContextManager;
   readonly #queue: Queue<PusherEntryOrStop>;
   readonly #lc: LogContext;
   readonly #config: Config;
@@ -288,11 +288,11 @@ class PushWorker {
   constructor(
     config: Config,
     lc: LogContext,
-    contextManager: ConnectionContextManager,
+    connContextManager: ConnectionContextManager,
     queue: Queue<PusherEntryOrStop>,
   ) {
     this.#lc = lc.withContext('component', 'pusher');
-    this.#contextManager = contextManager;
+    this.#connContextManager = connContextManager;
     this.#queue = queue;
     this.#config = config;
     this.#clients = new Map();
@@ -326,10 +326,10 @@ class PushWorker {
     return downstream;
   }
 
-  enqueuePush(context: ConnectionContext, push: PushBody) {
+  enqueuePush(connCtx: ConnectionContext, push: PushBody) {
     this.#queue.enqueue({
       push,
-      context,
+      connCtx,
     });
   }
 
@@ -497,7 +497,7 @@ class PushWorker {
     recordMutation('custom', entry.push.mutations.length);
 
     const url = must(
-      entry.context.pushContext.url,
+      entry.connCtx.mutateContext.url,
       'ZERO_MUTATE_URL is not set',
     );
 
@@ -521,7 +521,7 @@ class PushWorker {
         mutateResponseSchema,
         'push',
         this.#lc,
-        entry.context,
+        entry.connCtx,
         {
           appID: this.#config.app.id,
           shardNum: this.#config.shard.num,
@@ -534,21 +534,21 @@ class PushWorker {
       ) {
         if (isAuthErrorBody(response)) {
           this.#lc.warn?.('Push auth failed; invalidating connection', {
-            clientID: entry.context.clientID,
+            clientID: entry.connCtx.clientID,
             response: 'kind' in response ? response.message : undefined,
           });
-          this.#contextManager.failConnection(
-            entry.context,
-            entry.context.revision,
+          this.#connContextManager.failConnection(
+            entry.connCtx,
+            entry.connCtx.revision,
           );
         }
         return response;
       }
       // A successful push also validates this connection's current auth snapshot.
       // That lets later shared work reuse it without trusting stale credentials.
-      this.#contextManager.validateConnection(
-        entry.context,
-        entry.context.revision,
+      this.#connContextManager.validateConnection(
+        entry.connCtx,
+        entry.connCtx.revision,
         'kind' in response &&
           response.kind === 'MutateResponse' &&
           response?.userID !== undefined
@@ -564,12 +564,12 @@ class PushWorker {
         } as const satisfies PushFailedBody;
         if (isAuthErrorBody(response)) {
           this.#lc.warn?.('Push auth failed; invalidating connection', {
-            clientID: entry.context.clientID,
+            clientID: entry.connCtx.clientID,
             response: 'kind' in response ? response.message : undefined,
           });
-          this.#contextManager.failConnection(
-            entry.context,
-            entry.context.revision,
+          this.#connContextManager.failConnection(
+            entry.connCtx,
+            entry.connCtx.revision,
           );
         }
         return response;
@@ -579,12 +579,12 @@ class PushWorker {
         // The push completed far enough for local validation to reject the
         // connection, so invalidate it and surface the result as PushFailed.
         this.#lc.warn?.('Push validation failed; invalidating connection', {
-          clientID: entry.context.clientID,
+          clientID: entry.connCtx.clientID,
           response: e.message,
         });
-        this.#contextManager.failConnection(
-          entry.context,
-          entry.context.revision,
+        this.#connContextManager.failConnection(
+          entry.connCtx,
+          entry.connCtx.revision,
         );
         return {
           kind: ErrorKind.PushFailed,
@@ -649,7 +649,7 @@ export function combinePushes(
       return [collect(), true];
     }
 
-    const key = `${entry.context.clientID}:${entry.context.wsID}:${entry.context.revision}`;
+    const key = `${entry.connCtx.clientID}:${entry.connCtx.wsID}:${entry.connCtx.revision}`;
     const existing = pushesByConnection.get(key);
     if (existing) {
       existing.push(entry);
@@ -665,19 +665,19 @@ export function combinePushes(
 // If they are not, we have a bug in the code somewhere.
 function assertAreCompatiblePushes(left: PusherEntry, right: PusherEntry) {
   assert(
-    left.context.clientID === right.context.clientID,
+    left.connCtx.clientID === right.connCtx.clientID,
     'clientID must be the same for all pushes',
   );
   assert(
-    left.context.wsID === right.context.wsID,
+    left.connCtx.wsID === right.connCtx.wsID,
     'wsID must be the same for all pushes',
   );
   assert(
-    left.context.revision === right.context.revision,
+    left.connCtx.revision === right.connCtx.revision,
     'revision must be the same for all pushes',
   );
   assert(
-    authEquals(left.context.auth, right.context.auth),
+    authEquals(left.connCtx.auth, right.connCtx.auth),
     'auth must be the same for all pushes with the same clientID',
   );
   assert(
@@ -689,21 +689,21 @@ function assertAreCompatiblePushes(left: PusherEntry, right: PusherEntry) {
     'pushVersion must be the same for all pushes with the same clientID',
   );
   assert(
-    left.context.pushContext.headerOptions.cookie ===
-      right.context.pushContext.headerOptions.cookie,
+    left.connCtx.mutateContext.headerOptions.cookie ===
+      right.connCtx.mutateContext.headerOptions.cookie,
     'httpCookie must be the same for all pushes with the same clientID',
   );
   assert(
-    left.context.pushContext.headerOptions.origin ===
-      right.context.pushContext.headerOptions.origin,
+    left.connCtx.mutateContext.headerOptions.origin ===
+      right.connCtx.mutateContext.headerOptions.origin,
     'origin must be the same for all pushes with the same clientID',
   );
   assert(
-    left.context.user.id === right.context.user.id,
+    left.connCtx.user.id === right.connCtx.user.id,
     'userID must be the same for all pushes with the same clientID',
   );
   assert(
-    left.context.pushContext.url === right.context.pushContext.url,
+    left.connCtx.mutateContext.url === right.connCtx.mutateContext.url,
     'userPushURL must be the same for all pushes with the same clientID',
   );
 }
