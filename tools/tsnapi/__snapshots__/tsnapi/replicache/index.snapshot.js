@@ -3,7 +3,7 @@
  */
 // #region Classes
 export class Replicache {
-  impl;
+  impl
   constructor(_) {}
   get pullURL() {}
   set pullURL(_) {}
@@ -56,21 +56,21 @@ export async function* mergeAsyncIterables(_, _, _) {}
 // #endregion
 
 // #region Variables
-export var TEST_LICENSE_KEY;
+export var TEST_LICENSE_KEY
 // #endregion
 
 // #region Other
-export {consoleLogSink};
-export {deleteAllReplicacheData};
-export {dropAllDatabases};
-export {dropDatabase};
-export {getDefaultPuller};
-export {getDefaultPusher};
-export {IDBNotFoundError};
-export {isScanIndexOptions};
-export {makeIDBName};
-export {makeScanResult};
-export {PullError};
-export {TransactionClosedError};
-export {version};
+export { consoleLogSink }
+export { deleteAllReplicacheData }
+export { dropAllDatabases }
+export { dropDatabase }
+export { getDefaultPuller }
+export { getDefaultPusher }
+export { IDBNotFoundError }
+export { isScanIndexOptions }
+export { makeIDBName }
+export { makeScanResult }
+export { PullError }
+export { TransactionClosedError }
+export { version }
 // #endregion
