@@ -273,7 +273,16 @@ export async function getReplicaAtVersion(
 ): Promise<Replica | null> {
   const schema = sql(upstreamSchema(shard));
   const result = await sql`
-    SELECT * FROM ${schema}.replicas JOIN ${schema}."shardConfig" ON true
+    SELECT
+      replicas."slot",
+      replicas."version",
+      replicas."initialSchema",
+      replicas."initialSyncContext",
+      replicas."subscriberContext",
+      "shardConfig"."publications",
+      "shardConfig"."ddlDetection",
+      "shardConfig"."lock"
+    FROM ${schema}.replicas JOIN ${schema}."shardConfig" ON true
       WHERE version = ${replicaVersion};
   `;
   if (result.length === 0) {

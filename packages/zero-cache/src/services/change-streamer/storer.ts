@@ -258,7 +258,12 @@ export class Storer implements Service {
         ) SELECT COUNT(*) as deleted FROM purged;`;
 
       const [{owner}] = await sql<ReplicationState[]>`
-        SELECT * FROM ${this.#cdc('replicationState')} FOR SHARE`;
+        SELECT
+          "lastWatermark",
+          "owner",
+          "ownerAddress",
+          "lock"
+        FROM ${this.#cdc('replicationState')} FOR SHARE`;
       if (owner !== this.#taskID) {
         throw new AbortError(
           `aborting changeLog purge to ${watermark} because ownership has been taken by ${owner}`,
@@ -471,7 +476,12 @@ export class Storer implements Service {
           // a concurrent ownership change.
           void tx.pool.process(tx => {
             tx<ReplicationState[]> /*sql*/ `
-          SELECT * FROM ${this.#cdc('replicationState')} FOR UPDATE`.then(
+          SELECT
+            "lastWatermark",
+            "owner",
+            "ownerAddress",
+            "lock"
+          FROM ${this.#cdc('replicationState')} FOR UPDATE`.then(
               ([result]) => resolve(result),
               reject,
             );
@@ -569,7 +579,12 @@ export class Storer implements Service {
       // snapshot for the REPEATABLE_READ transaction.
       [{lastWatermark}] = await reader.processReadTask(
         sql => sql<ReplicationState[]>`
-        SELECT * FROM ${this.#cdc('replicationState')}
+        SELECT
+          "lastWatermark",
+          "owner",
+          "ownerAddress",
+          "lock"
+        FROM ${this.#cdc('replicationState')}
       `,
       );
     } catch (e) {
