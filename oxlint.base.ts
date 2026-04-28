@@ -26,6 +26,7 @@ export const baseConfig = {
     'um.js',
     'prod/sst/sst-env.d.ts',
     '**/um.js',
+    '**/__snapshots__/**',
   ],
   rules: {
     // Disable unsafe optional chaining - many legitimate patterns in codebase

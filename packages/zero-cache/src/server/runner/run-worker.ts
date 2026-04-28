@@ -49,7 +49,7 @@ export async function runWorker(
   const config = normalizeZeroConfig(lc, cfg, env, defaultTaskID);
   const processes = new ProcessManager(lc, parent ?? process);
 
-  const {port, lazyStartup} = config;
+  const {port, keepaliveTimeoutMs, lazyStartup} = config;
   const serverVersion = getServerVersion(config);
   lc.info?.(`starting server${!serverVersion ? '' : `@${serverVersion}`} `, {
     protocolVersion: PROTOCOL_VERSION,
@@ -90,8 +90,12 @@ export async function runWorker(
     await runUntilKilled(
       lc,
       parent ?? process,
-      new ZeroDispatcher(config, lc, {port}, startZeroCache, () =>
-        printStartupMessage(env),
+      new ZeroDispatcher(
+        config,
+        lc,
+        {port, keepaliveTimeoutMs},
+        startZeroCache,
+        () => printStartupMessage(env),
       ),
     );
   } catch (err) {

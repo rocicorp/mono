@@ -53,7 +53,7 @@ function newPusherService(pushConfig: {
   forwardCookies: boolean;
   allowedClientHeaders?: string[] | undefined;
 }): PusherService {
-  const contextManager = new ConnectionContextManagerImpl(
+  const connContextManager = new ConnectionContextManagerImpl(
     lc,
     undefined,
     undefined,
@@ -70,33 +70,33 @@ function newPusherService(pushConfig: {
       forwardCookies: pushConfig.forwardCookies,
     },
   );
-  const pusher = new PusherService(config, lc, 'cgid', contextManager);
-  contextManagers.set(pusher, contextManager);
+  const pusher = new PusherService(config, lc, 'cgid', connContextManager);
+  contextManagers.set(pusher, connContextManager);
   return pusher;
 }
 
 function getContextManager(
   pusher: PusherService,
 ): ConnectionContextManagerImpl {
-  const contextManager = contextManagers.get(pusher);
-  if (!contextManager) {
+  const connContextManager = contextManagers.get(pusher);
+  if (!connContextManager) {
     throw new Error('Missing context manager for test pusher');
   }
-  return contextManager;
+  return connContextManager;
 }
 
 function registerConnection(
   pusher: PusherService,
   options: TestConnectionOptions = {},
 ): ConnectionSelector {
-  const contextManager = getContextManager(pusher);
+  const connContextManager = getContextManager(pusher);
   const resolvedClientID = options.clientID ?? clientID;
   const selector = {
     clientID: resolvedClientID,
     wsID: options.wsID ?? `ws-${resolvedClientID}`,
   };
 
-  contextManager.registerConnection(
+  connContextManager.registerConnection(
     selector,
     {
       protocolVersion: 0,
@@ -114,9 +114,9 @@ function registerConnection(
       httpCookie: options.httpCookie,
       origin: options.origin,
     },
-    getAuth(options.auth),
+    makeAuth(options.auth),
   );
-  contextManager.initConnection(selector, {
+  connContextManager.initConnection(selector, {
     desiredQueriesPatch: [],
     userPushURL: options.userPushURL,
     userPushHeaders: options.userPushHeaders,
@@ -136,18 +136,11 @@ function openConnection(
   };
 }
 
-const authCache = new Map<string, NonNullable<ConnectionContext['auth']>>();
-
-function getAuth(raw: string | undefined) {
+function makeAuth(raw: string | undefined): ConnectionContext['auth'] {
   if (raw === undefined) {
     return undefined;
   }
-  let auth = authCache.get(raw);
-  if (!auth) {
-    auth = {type: 'opaque', raw};
-    authCache.set(raw, auth);
-  }
-  return auth;
+  return {type: 'opaque', raw};
 }
 
 function makeEntry(
@@ -156,7 +149,7 @@ function makeEntry(
     clientID?: string | undefined;
     wsID?: string | undefined;
     revision?: number | undefined;
-    auth?: string | undefined;
+    auth?: ConnectionContext['auth'] | undefined;
     httpCookie?: string | undefined;
     origin?: string | undefined;
     userID?: string | undefined;
@@ -167,12 +160,12 @@ function makeEntry(
     options.clientID ?? push.mutations[0]?.clientID ?? clientID;
   return {
     push,
-    context: {
+    connCtx: {
       state: 'provisional',
       clientID: resolvedClientID,
       wsID: options.wsID ?? `ws-${resolvedClientID}`,
-      userID: options.userID,
-      auth: getAuth(options.auth),
+      user: {id: options.userID ?? null},
+      auth: options.auth,
       profileID: null,
       baseCookie: null,
       protocolVersion: 0,
@@ -190,7 +183,7 @@ function makeEntry(
           allowedClientHeaders: undefined,
         },
       },
-      pushContext: {
+      mutateContext: {
         url: options.userPushURL,
         allowedUrlPatterns: [],
         headerOptions: {
@@ -220,8 +213,8 @@ describe('combine pushes', () => {
 
   test('stop after pushes', () => {
     const [pushes, terminate] = combinePushes([
-      makeEntry(makePush(1), {auth: 'a'}),
-      makeEntry(makePush(1), {auth: 'a'}),
+      makeEntry(makePush(1), {auth: makeAuth('a')}),
+      makeEntry(makePush(1), {auth: makeAuth('a')}),
       undefined,
     ]);
     expect(pushes).toHaveLength(1);
@@ -230,9 +223,9 @@ describe('combine pushes', () => {
 
   test('stop in the middle', () => {
     const [pushes, terminate] = combinePushes([
-      makeEntry(makePush(1), {auth: 'a'}),
+      makeEntry(makePush(1), {auth: makeAuth('a')}),
       undefined,
-      makeEntry(makePush(1), {auth: 'a'}),
+      makeEntry(makePush(1), {auth: makeAuth('a')}),
     ]);
     expect(pushes).toHaveLength(1);
     expect(pushes[0].push.mutations).toHaveLength(1);
@@ -242,28 +235,47 @@ describe('combine pushes', () => {
 
   test('combines pushes for same clientID', () => {
     const [pushes, terminate] = combinePushes([
-      makeEntry(makePush(1, 'client1'), {clientID: 'client1', auth: 'a'}),
-      makeEntry(makePush(2, 'client1'), {clientID: 'client1', auth: 'a'}),
-      makeEntry(makePush(1, 'client2'), {clientID: 'client2', auth: 'b'}),
+      makeEntry(makePush(1, 'client1'), {
+        clientID: 'client1',
+        auth: makeAuth('a'),
+      }),
+      makeEntry(makePush(2, 'client1'), {
+        clientID: 'client1',
+        auth: makeAuth('a'),
+      }),
+      makeEntry(makePush(1, 'client2'), {
+        clientID: 'client2',
+        auth: makeAuth('b'),
+      }),
     ]);
 
     expect(pushes).toHaveLength(2);
     expect(terminate).toBe(false);
 
-    const client1Push = pushes.find(p => p.context.clientID === 'client1');
+    const client1Push = pushes.find(p => p.connCtx.clientID === 'client1');
     expect(client1Push).toBeDefined();
     expect(client1Push?.push.mutations).toHaveLength(3);
 
-    const client2Push = pushes.find(p => p.context.clientID === 'client2');
+    const client2Push = pushes.find(p => p.connCtx.clientID === 'client2');
     expect(client2Push).toBeDefined();
     expect(client2Push?.push.mutations).toHaveLength(1);
   });
 
-  test('throws on jwt mismatch for same client', () => {
+  test('throws on auth mismatch for same client snapshot', () => {
     expect(() =>
       combinePushes([
-        makeEntry(makePush(1, 'client1'), {clientID: 'client1', auth: 'a'}),
-        makeEntry(makePush(2, 'client1'), {clientID: 'client1', auth: 'b'}),
+        makeEntry(makePush(1, 'client1'), {
+          clientID: 'client1',
+          wsID: 'ws1',
+          revision: 1,
+          auth: makeAuth('a'),
+        }),
+        makeEntry(makePush(2, 'client1'), {
+          clientID: 'client1',
+          wsID: 'ws1',
+          revision: 1,
+          auth: makeAuth('b'),
+        }),
       ]),
     ).toThrow('auth must be the same for all pushes with the same clientID');
   });
@@ -273,12 +285,12 @@ describe('combine pushes', () => {
       combinePushes([
         makeEntry(makePush(1, 'client1'), {
           clientID: 'client1',
-          auth: 'a',
+          auth: makeAuth('a'),
           userID: 'user-1',
         }),
         makeEntry(makePush(2, 'client1'), {
           clientID: 'client1',
-          auth: 'a',
+          auth: makeAuth('a'),
           userID: 'user-2',
         }),
       ]),
@@ -293,14 +305,14 @@ describe('combine pushes', () => {
             ...makePush(1, 'client1'),
             schemaVersion: 1,
           },
-          {clientID: 'client1', auth: 'a'},
+          {clientID: 'client1', auth: makeAuth('a')},
         ),
         makeEntry(
           {
             ...makePush(2, 'client1'),
             schemaVersion: 2,
           },
-          {clientID: 'client1', auth: 'a'},
+          {clientID: 'client1', auth: makeAuth('a')},
         ),
       ]),
     ).toThrow(
@@ -316,14 +328,14 @@ describe('combine pushes', () => {
             ...makePush(1, 'client1'),
             pushVersion: 1,
           },
-          {clientID: 'client1', auth: 'a'},
+          {clientID: 'client1', auth: makeAuth('a')},
         ),
         makeEntry(
           {
             ...makePush(2, 'client1'),
             pushVersion: 2,
           },
-          {clientID: 'client1', auth: 'a'},
+          {clientID: 'client1', auth: makeAuth('a')},
         ),
       ]),
     ).toThrow(
@@ -339,7 +351,7 @@ describe('combine pushes', () => {
           schemaVersion: 1,
           pushVersion: 1,
         },
-        {clientID: 'client1', auth: 'a'},
+        {clientID: 'client1', auth: makeAuth('a')},
       ),
       makeEntry(
         {
@@ -347,7 +359,7 @@ describe('combine pushes', () => {
           schemaVersion: 1,
           pushVersion: 1,
         },
-        {clientID: 'client1', auth: 'a'},
+        {clientID: 'client1', auth: makeAuth('a')},
       ),
     ]);
 
@@ -361,16 +373,14 @@ describe('combine pushes', () => {
       clientID: 'client1',
       wsID: 'ws1',
       revision: 1,
-      auth: 'a',
+      auth: makeAuth('a'),
     });
     const second = makeEntry(makePush(1, 'client1'), {
       clientID: 'client1',
       wsID: 'ws1',
       revision: 1,
-      auth: 'a',
+      auth: makeAuth('a'),
     });
-
-    second.context.auth = {type: 'opaque', raw: 'a'};
 
     const [pushes, terminate] = combinePushes([first, second]);
 
@@ -381,30 +391,51 @@ describe('combine pushes', () => {
 
   test('handles multiple clients with multiple pushes', () => {
     const [pushes, terminate] = combinePushes([
-      makeEntry(makePush(1, 'client1'), {clientID: 'client1', auth: 'a'}),
-      makeEntry(makePush(2, 'client2'), {clientID: 'client2', auth: 'b'}),
-      makeEntry(makePush(1, 'client1'), {clientID: 'client1', auth: 'a'}),
-      makeEntry(makePush(3, 'client2'), {clientID: 'client2', auth: 'b'}),
+      makeEntry(makePush(1, 'client1'), {
+        clientID: 'client1',
+        auth: makeAuth('a'),
+      }),
+      makeEntry(makePush(2, 'client2'), {
+        clientID: 'client2',
+        auth: makeAuth('b'),
+      }),
+      makeEntry(makePush(1, 'client1'), {
+        clientID: 'client1',
+        auth: makeAuth('a'),
+      }),
+      makeEntry(makePush(3, 'client2'), {
+        clientID: 'client2',
+        auth: makeAuth('b'),
+      }),
     ]);
 
     expect(pushes).toHaveLength(2);
     expect(terminate).toBe(false);
 
-    const client1Push = pushes.find(p => p.context.clientID === 'client1');
+    const client1Push = pushes.find(p => p.connCtx.clientID === 'client1');
     expect(client1Push?.push.mutations).toHaveLength(2);
 
-    const client2Push = pushes.find(p => p.context.clientID === 'client2');
+    const client2Push = pushes.find(p => p.connCtx.clientID === 'client2');
     expect(client2Push?.push.mutations).toHaveLength(5);
   });
 
   test('preserves mutation order within client', () => {
     const [pushes] = combinePushes([
-      makeEntry(makePush(1, 'client1'), {clientID: 'client1', auth: 'a'}),
-      makeEntry(makePush(1, 'client2'), {clientID: 'client2', auth: 'b'}),
-      makeEntry(makePush(1, 'client1'), {clientID: 'client1', auth: 'a'}),
+      makeEntry(makePush(1, 'client1'), {
+        clientID: 'client1',
+        auth: makeAuth('a'),
+      }),
+      makeEntry(makePush(1, 'client2'), {
+        clientID: 'client2',
+        auth: makeAuth('b'),
+      }),
+      makeEntry(makePush(1, 'client1'), {
+        clientID: 'client1',
+        auth: makeAuth('a'),
+      }),
     ]);
 
-    const client1Push = pushes.find(p => p.context.clientID === 'client1');
+    const client1Push = pushes.find(p => p.connCtx.clientID === 'client1');
     expect(client1Push?.push.mutations[0].id).toBeLessThan(
       client1Push?.push.mutations[1].id || 0,
     );
@@ -702,14 +733,13 @@ describe('pusher service', () => {
       ).toMatchObject({
         clientID,
         wsID,
-        userID: 'user-123',
+        user: {id: 'user-123'},
         state: 'validated',
         revision: 1,
       }),
     );
     expect(getContextManager(pusher).getGroupState()).toMatchObject({
-      userID: 'user-123',
-      validated: true,
+      pinnedUser: {id: 'user-123'},
       backgroundConnection: selector,
     });
 
@@ -756,16 +786,143 @@ describe('pusher service', () => {
       ).toMatchObject({
         clientID,
         wsID,
-        userID: 'user-123',
+        user: {id: 'user-123'},
         state: 'validated',
         revision: 1,
       }),
     );
     expect(getContextManager(pusher).getGroupState()).toMatchObject({
-      userID: 'user-123',
-      validated: true,
+      pinnedUser: {id: 'user-123'},
       backgroundConnection: selector,
     });
+
+    await pusher.stop();
+  });
+
+  test('canonical null mutate responses validate logged-out connections', async () => {
+    const fetch = (global.fetch = vi.fn());
+    fetch.mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          kind: 'MutateResponse',
+          userID: null,
+          mutations: [],
+        }),
+    });
+
+    const pusher = newPusherService({
+      url: ['http://example.com'],
+      apiKey: 'api-key',
+      forwardCookies: false,
+    });
+    void pusher.run();
+    const {selector} = openConnection(pusher, {
+      clientID,
+      wsID,
+    });
+
+    pusher.enqueuePush(selector, makePush(1, clientID));
+
+    await vi.waitFor(() =>
+      expect(
+        getContextManager(pusher).getConnectionContext(selector),
+      ).toMatchObject({
+        clientID,
+        wsID,
+        user: {id: null},
+        state: 'validated',
+        revision: 1,
+      }),
+    );
+    expect(getContextManager(pusher).getGroupState()).toMatchObject({
+      pinnedUser: {id: null},
+      backgroundConnection: selector,
+    });
+
+    await pusher.stop();
+  });
+
+  test('legacy successful pushes still validate using the stored connection userID', async () => {
+    const fetch = (global.fetch = vi.fn());
+    fetch.mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          mutations: [],
+        }),
+    });
+
+    const pusher = newPusherService({
+      url: ['http://example.com'],
+      apiKey: 'api-key',
+      forwardCookies: false,
+    });
+    void pusher.run();
+    const {selector} = openConnection(pusher, {
+      clientID,
+      wsID,
+      auth: 'jwt',
+      userID: 'user-123',
+    });
+
+    pusher.enqueuePush(selector, makePush(1, clientID));
+
+    await vi.waitFor(() =>
+      expect(
+        getContextManager(pusher).getConnectionContext(selector),
+      ).toMatchObject({
+        clientID,
+        wsID,
+        user: {id: 'user-123'},
+        state: 'validated',
+        revision: 1,
+      }),
+    );
+
+    await pusher.stop();
+  });
+
+  test('mismatched canonical mutate responses fail the live connection', async () => {
+    const fetch = (global.fetch = vi.fn());
+    fetch.mockResolvedValue({
+      ok: true,
+      json: () =>
+        Promise.resolve({
+          kind: 'MutateResponse',
+          userID: 'user-bad',
+          mutations: [],
+        }),
+    });
+
+    const pusher = newPusherService({
+      url: ['http://example.com'],
+      apiKey: 'api-key',
+      forwardCookies: false,
+    });
+    void pusher.run();
+    const {selector, stream} = openConnection(pusher, {
+      clientID,
+      wsID,
+      auth: 'jwt',
+      userID: 'user-123',
+    });
+
+    pusher.enqueuePush(selector, makePush(1, clientID));
+
+    await expect(stream[Symbol.asyncIterator]().next()).rejects.toMatchObject({
+      errorBody: {
+        kind: ErrorKind.PushFailed,
+        origin: ErrorOrigin.ZeroCache,
+        reason: ErrorReason.HTTP,
+        status: 401,
+        message: 'Connection userID does not match validated server userID.',
+        mutationIDs: [{clientID, id: 1}],
+      },
+    });
+    expect(
+      getContextManager(pusher).getConnectionContext(selector),
+    ).toBeUndefined();
 
     await pusher.stop();
   });
