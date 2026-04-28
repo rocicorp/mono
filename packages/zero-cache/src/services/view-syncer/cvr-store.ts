@@ -317,7 +317,19 @@ export class CVRStore {
             'clients',
           )}
            WHERE "clientGroupID" = ${id}`,
-          tx<QueriesRow[]>`SELECT * FROM ${this.#cvr('queries')}
+          tx<QueriesRow[]>`SELECT
+            "clientGroupID",
+            "queryHash",
+            "clientAST",
+            "queryName",
+            "queryArgs",
+            "patchVersion",
+            "transformationHash",
+            "transformationVersion",
+            "internal",
+            "deleted",
+            "rowSetSignature"
+          FROM ${this.#cvr('queries')}
           WHERE "clientGroupID" = ${id} AND deleted IS DISTINCT FROM true`,
           tx<DesiresRow[]>`SELECT
           "clientGroupID",
