@@ -1112,7 +1112,7 @@ class ChangeMaker {
     // The tag (i.e. command) is used as an optimization to determine whether
     // backfill is necessary (CREATE TABLE vs ALTER TABLE vs
     // ALTER PUBLICATION). If the context is not available (rare), the tag
-    // defaults to 'UNKNOWN', which conservatively initiates a backfill.
+    // falls back to 'UNKNOWN', which conservatively initiates a backfill.
     //
     // Because ddl events may be nested, e.g.
     //

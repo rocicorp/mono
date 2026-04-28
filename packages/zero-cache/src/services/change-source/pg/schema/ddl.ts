@@ -96,9 +96,6 @@ export type DdlUpdateEvent = v.Infer<typeof ddlUpdateEventSchema>;
  * COMMIT;
  * ```
  *
- * The COMMENT statement will only result emitting a `schemaSnapshot`
- * message if a relevant change to the published schema was detected.
- *
  * Note that it is fine to invoke `COMMENT ON PUBLICATION` statements
  * on a database that *does* support event triggers on
  * `ALTER PUBLICATION` statements, as it will simply be a no-op.
