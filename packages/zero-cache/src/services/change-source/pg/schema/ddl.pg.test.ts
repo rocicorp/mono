@@ -105,9 +105,10 @@ describe('change-source/tables/ddl', () => {
     `;
 
   // For zero_all, zero_sum
-  const DDL_START: Omit<DdlStartEvent, 'context' | 'event'> = {
+  const DDL_START: Omit<DdlStartEvent, 'context'> = {
     type: 'ddlStart',
     version: 1,
+    event: {tag: 'UNUSED'},
     schema: {
       tables: [
         {
