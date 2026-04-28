@@ -105,10 +105,9 @@ describe('change-source/tables/ddl', () => {
     `;
 
   // For zero_all, zero_sum
-  const DDL_START: Omit<DdlStartEvent, 'context'> = {
+  const DDL_START: Omit<DdlStartEvent, 'context' | 'event'> = {
     type: 'ddlStart',
     version: 1,
-    event: {tag: 'UNUSED'},
     schema: {
       tables: [
         {
@@ -1592,6 +1591,23 @@ describe('change-source/tables/ddl', () => {
         query: `ALTER TABLE pub.foo ADD boo text; ALTER TABLE pub.foo DROP boo;`,
       },
       event: {tag: 'ALTER TABLE'},
+    });
+  });
+
+  test('parse legacy ddlStartEvent', () => {
+    const legacyDdlStartEvent: Omit<DdlStartEvent, 'event'> = {
+      type: 'ddlStart',
+      version: 1,
+      context: {query: 'foo'},
+      schema: {tables: [], indexes: []},
+    };
+    const parsed = v.parse(legacyDdlStartEvent, ddlStartEventSchema);
+    expect(parsed).toMatchObject({
+      type: 'ddlStart',
+      version: 1,
+      context: {query: 'foo'},
+      schema: {tables: [], indexes: []},
+      event: {tag: 'UNKNOWN'},
     });
   });
 });
