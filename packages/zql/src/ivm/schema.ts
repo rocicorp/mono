@@ -10,6 +10,14 @@ export type SourceSchema = {
   readonly tableName: string;
   readonly columns: Record<string, SchemaValue>;
   readonly primaryKey: PrimaryKey;
+  /**
+   * Column sets for `UNIQUE` indexes on the table, including the one
+   * covering the primary key.  Each entry is pre-sorted.  Populated when
+   * the underlying source has introspectable schema (e.g. `TableSource`).
+   * When absent, consumers should assume no unique indexes are known and
+   * fall back to safe behavior.
+   */
+  readonly uniqueIndexes?: readonly PrimaryKey[] | undefined;
   readonly relationships: {[key: string]: SourceSchema};
   readonly isHidden: boolean;
   // The system responsible for the presence of this node in the query.
