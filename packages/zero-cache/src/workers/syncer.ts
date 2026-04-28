@@ -102,7 +102,7 @@ export class Syncer implements SingletonService {
     pusherFactory:
       | ((
           id: string,
-          contextManager: ConnectionContextManager,
+          connContextManager: ConnectionContextManager,
         ) => Pusher & Service)
       | undefined,
     parent: Worker,
@@ -128,7 +128,10 @@ export class Syncer implements SingletonService {
       this.#pushers = new ServiceRunner(
         lc,
         id =>
-          pusherFactory(id, this.#viewSyncers.getService(id).contextManager),
+          pusherFactory(
+            id,
+            this.#viewSyncers.getService(id).connContextManager,
+          ),
         p => p.hasRefs(),
       );
     }
@@ -184,6 +187,7 @@ export class Syncer implements SingletonService {
     recordConnectionAttempted();
     const {clientID, clientGroupID, auth, userID} = params;
     const hasProvidedAuth = auth !== undefined && auth !== '';
+    const incomingUserID = userID ?? null;
 
     if (hasProvidedAuth) {
       const tokenOptions = tokenConfigOptions(this.#config.auth ?? {});
@@ -219,7 +223,7 @@ export class Syncer implements SingletonService {
         // no previous auth, since this is a new connection, and resolveAuth is
         // connection scoped, not client group scoped
         undefined,
-        userID,
+        incomingUserID,
         auth,
         this.#validateLegacyJWT,
       );
@@ -230,7 +234,7 @@ export class Syncer implements SingletonService {
           {
             clientGroupID,
             clientID,
-            userID,
+            incomingUserID,
             hasProvidedAuth,
             errorKind: e.message,
           },
@@ -243,8 +247,8 @@ export class Syncer implements SingletonService {
     }
 
     const viewSyncer = this.#viewSyncers.getService(clientGroupID);
-    const contextManager = viewSyncer.contextManager;
-    const group = contextManager.getGroupState();
+    const connContextManager = viewSyncer.connContextManager;
+    const group = connContextManager.getGroupState();
 
     // TODO(0xcadams): we only check for user ID mismatch here if the group is
     // already validated. This prevents wrong-user reconnects from evicting a
@@ -252,7 +256,10 @@ export class Syncer implements SingletonService {
     // with an invalid opaque token. The long-term fix is to keep the replacement
     // connection pending until its auth is fully validated, and only then replace
     // the existing socket.
-    if (group.validated && group.userID !== userID) {
+    if (
+      group.pinnedUser !== undefined &&
+      group.pinnedUser.id !== incomingUserID
+    ) {
       const error = new ProtocolError({
         kind: ErrorKind.Unauthorized,
         message:
@@ -273,7 +280,7 @@ export class Syncer implements SingletonService {
       existing.close(`replaced by ${params.wsID}`);
     }
 
-    contextManager.registerConnection(
+    connContextManager.registerConnection(
       {clientID, wsID: params.wsID},
       params,
       initialAuth,
@@ -294,13 +301,13 @@ export class Syncer implements SingletonService {
         new SyncerWsMessageHandler(
           this.#lc,
           params,
-          contextManager,
+          connContextManager,
           viewSyncer,
           mutagen,
           pusher,
         ),
         () => {
-          contextManager.closeConnection({
+          connContextManager.closeConnection({
             clientID,
             wsID: params.wsID,
           });
@@ -314,7 +321,7 @@ export class Syncer implements SingletonService {
         },
       );
     } catch (e) {
-      contextManager.closeConnection({clientID, wsID: params.wsID});
+      connContextManager.closeConnection({clientID, wsID: params.wsID});
       mutagen?.unref();
       pusher?.unref();
       throw e;

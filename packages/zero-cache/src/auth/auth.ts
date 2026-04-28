@@ -49,7 +49,7 @@ export function authEquals(a: Auth | undefined, b: Auth | undefined) {
 export async function resolveAuth(
   lc: LogContext,
   previousAuth: Auth | undefined,
-  userID: string | undefined,
+  userID: string | null,
   wireAuth: string | undefined,
   validateLegacyJWT: ValidateLegacyJWT | undefined,
 ): Promise<Auth | undefined> {
@@ -76,7 +76,7 @@ export async function resolveAuth(
       return undefined;
     }
 
-    if (userID === undefined) {
+    if (userID === null) {
       throw new ProtocolError({
         kind: ErrorKind.Unauthorized,
         message: 'Authenticated connections require a userID.',

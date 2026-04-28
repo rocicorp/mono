@@ -174,7 +174,7 @@ export default function runWorker(
 
     const customQueryTransformer =
       customQueryConfig && new CustomQueryTransformer(logger, shard);
-    const contextManager = new ConnectionContextManagerImpl(
+    const connContextManager = new ConnectionContextManagerImpl(
       logger,
       config.auth.revalidateIntervalSeconds,
       config.auth.retransformIntervalSeconds,
@@ -221,7 +221,7 @@ export default function runWorker(
       drainCoordinator,
       config.log.slowHydrateThreshold,
       inspectorDelegate,
-      contextManager,
+      connContextManager,
       customQueryTransformer,
       runPriorityOp,
     );
@@ -244,12 +244,12 @@ export default function runWorker(
   const pusherFactory =
     pushConfig === undefined
       ? undefined
-      : (id: string, contextManager: ConnectionContextManager) =>
+      : (id: string, connContextManager: ConnectionContextManager) =>
           new PusherService(
             config,
             lc.withContext('clientGroupID', id),
             id,
-            contextManager,
+            connContextManager,
           );
 
   const syncer = new Syncer(

@@ -40,13 +40,13 @@ export class SyncerWsMessageHandler implements MessageHandler {
   readonly #lc: LogContext;
   readonly #clientGroupID: string;
   readonly #connectionSelector: ConnectionSelector;
-  readonly #contextManager: ConnectionContextManager;
+  readonly #connContextManager: ConnectionContextManager;
   readonly #pusher: Pusher | undefined;
 
   constructor(
     lc: LogContext,
     connectParams: ConnectParams,
-    contextManager: ConnectionContextManager,
+    connContextManager: ConnectionContextManager,
     viewSyncer: ViewSyncer,
     mutagen: Mutagen | undefined,
     pusher: Pusher | undefined,
@@ -54,7 +54,7 @@ export class SyncerWsMessageHandler implements MessageHandler {
     const {clientGroupID, clientID, wsID} = connectParams;
     this.#viewSyncer = viewSyncer;
     this.#mutagen = mutagen;
-    this.#contextManager = contextManager;
+    this.#connContextManager = connContextManager;
     this.#mutationLock = new Lock();
     this.#lc = lc
       .withContext('connection')
@@ -146,7 +146,7 @@ export class SyncerWsMessageHandler implements MessageHandler {
                 ];
               }
 
-              const auth = this.#contextManager.mustGetConnectionContext(
+              const auth = this.#connContextManager.mustGetConnectionContext(
                 this.#connectionSelector,
               ).auth;
               assert(
@@ -192,16 +192,16 @@ export class SyncerWsMessageHandler implements MessageHandler {
         break;
       case 'updateAuth':
         await startAsyncSpan(tracer, 'connection.updateAuth', async () => {
-          const initialConnection =
-            this.#contextManager.mustGetConnectionContext(
+          const initialConnCtx =
+            this.#connContextManager.mustGetConnectionContext(
               this.#connectionSelector,
             );
-          const updatedConnection = await this.#contextManager.updateAuth(
+          const updatedConnCtx = await this.#connContextManager.updateAuth(
             this.#connectionSelector,
             msg[1],
           );
           const authRevisionChanged =
-            updatedConnection.revision !== initialConnection.revision;
+            updatedConnCtx.revision !== initialConnCtx.revision;
 
           await viewSyncer.updateAuth(
             this.#connectionSelector,
@@ -225,7 +225,10 @@ export class SyncerWsMessageHandler implements MessageHandler {
         break;
       }
       case 'initConnection': {
-        this.#contextManager.initConnection(this.#connectionSelector, msg[1]);
+        this.#connContextManager.initConnection(
+          this.#connectionSelector,
+          msg[1],
+        );
         return withTraceparent(msg[1].traceparent, () => {
           const ret: HandlerResult[] = [
             {
