@@ -16,17 +16,21 @@ import {ErrorOrigin} from '../../zero-protocol/src/error-origin.ts';
 import {ErrorReason} from '../../zero-protocol/src/error-reason.ts';
 import type {PushFailedBody} from '../../zero-protocol/src/error.ts';
 import {
+  mutateParamsSchema,
+  type MutateResponse,
+} from '../../zero-protocol/src/mutate-server.ts';
+import type {MutationID} from '../../zero-protocol/src/mutation-id.ts';
+import {
   CLEANUP_RESULTS_MUTATION_NAME,
   cleanupResultsArgSchema,
-  pushBodySchema,
-  pushParamsSchema,
   type CleanupResultsArg,
   type CustomMutation,
   type Mutation,
-  type MutationID,
+} from '../../zero-protocol/src/mutation.ts';
+import {
+  pushBodySchema,
   type MutationResponse,
   type PushBody,
-  type PushResponse,
 } from '../../zero-protocol/src/push.ts';
 import type {AnyMutatorRegistry} from '../../zql/src/mutate/mutator-registry.ts';
 import {isMutator} from '../../zql/src/mutate/mutator.ts';
@@ -62,7 +66,7 @@ export interface Database<T> {
 }
 
 export type ExtractTransactionType<D> = D extends Database<infer T> ? T : never;
-export type Params = v.Infer<typeof pushParamsSchema>;
+export type Params = v.Infer<typeof mutateParamsSchema>;
 
 export type TransactFn<D extends Database<ExtractTransactionType<D>>> = (
   cb: TransactFnCallback<D>,
@@ -104,19 +108,34 @@ const applicationErrorWrapper = async <T>(fn: () => Promise<T>): Promise<T> => {
  */
 export const handleMutationRequest = handleMutateRequest;
 
-export function handleMutateRequest<
-  D extends Database<ExtractTransactionType<D>>,
->(
-  dbProvider: D,
-  cb: (
-    transact: TransactFn<D>,
-    mutation: CustomMutation,
-  ) => Promise<MutationResponse>,
-  queryString: URLSearchParams | Record<string, string>,
-  body: ReadonlyJSONValue,
-  logLevel?: LogLevel,
-): Promise<PushResponse>;
+type QueryParams = URLSearchParams | Record<string, string>;
 
+export type MutateRequestOptions = {
+  userID?: string | null | undefined;
+  logLevel?: LogLevel | undefined;
+};
+
+type NormalizedMutateRequestArgs = {
+  readonly requestOrJsonBody: Request | ReadonlyJSONValue;
+  readonly userID: string | null | undefined;
+  readonly queryParams: QueryParams;
+  readonly logLevel: LogLevel;
+};
+
+/**
+ * Process a `/mutate` request from a `Request`.
+ *
+ * @param dbProvider - Database used to run transactions and store mutation
+ * results.
+ * @param cb - Runs once per custom mutation. Use `transact` for DB work.
+ * Errors before `transact` are saved; errors after commit are logged.
+ * @param request - Request to read query params and JSON body from.
+ * @param logLevelOrOptions - Either a log level or additional request
+ * options.
+ * @returns A `MutateResponse`. Success returns `userID: options.userID ?? null`
+ * when `options.userID` is provided; invalid requests return the `PushFailed`
+ * branch.
+ */
 export function handleMutateRequest<
   D extends Database<ExtractTransactionType<D>>,
 >(
@@ -126,8 +145,36 @@ export function handleMutateRequest<
     mutation: CustomMutation,
   ) => Promise<MutationResponse>,
   request: Request,
-  logLevel?: LogLevel,
-): Promise<PushResponse>;
+  logLevelOrOptions?: LogLevel | MutateRequestOptions,
+): Promise<MutateResponse>;
+
+/**
+ * Process a `/mutate` request from parsed query params and a parsed JSON body.
+ *
+ * @param dbProvider - Database used to run transactions and store mutation
+ * results.
+ * @param cb - Runs once per custom mutation. Use `transact` for DB work.
+ * Errors before `transact` are saved; errors after commit are logged.
+ * @param queryParams - Parsed query params.
+ * @param jsonBody - Parsed JSON body.
+ * @param logLevelOrOptions - Either a log level or additional request
+ * options.
+ * @returns A `MutateResponse`. Success returns `userID: options.userID ?? null`
+ * when `options.userID` is provided; invalid requests return the `PushFailed`
+ * branch.
+ */
+export function handleMutateRequest<
+  D extends Database<ExtractTransactionType<D>>,
+>(
+  dbProvider: D,
+  cb: (
+    transact: TransactFn<D>,
+    mutation: CustomMutation,
+  ) => Promise<MutationResponse>,
+  queryParams: QueryParams,
+  jsonBody: ReadonlyJSONValue,
+  logLevelOrOptions?: LogLevel | MutateRequestOptions,
+): Promise<MutateResponse>;
 
 export async function handleMutateRequest<
   D extends Database<ExtractTransactionType<D>>,
@@ -137,31 +184,43 @@ export async function handleMutateRequest<
     transact: TransactFn<D>,
     mutation: CustomMutation,
   ) => Promise<MutationResponse>,
-  queryStringOrRequest: Request | URLSearchParams | Record<string, string>,
-  bodyOrLogLevel?: ReadonlyJSONValue | LogLevel,
-  logLevel?: LogLevel,
-): Promise<PushResponse> {
-  // Parse overload arguments
-  const isRequestOverload = queryStringOrRequest instanceof Request;
+  requestOrQueryParams: Request | QueryParams,
+  jsonBodyOrLogLevelOrOptions?:
+    | ReadonlyJSONValue
+    | LogLevel
+    | MutateRequestOptions,
+  logLevelOrOptions?: LogLevel | MutateRequestOptions,
+): Promise<MutateResponse> {
+  let requestOrJsonBody: Request | ReadonlyJSONValue;
+  let queryParams: QueryParams;
+  let optionsArg: LogLevel | MutateRequestOptions | undefined;
 
-  let request: Request | undefined;
-  let queryString: URLSearchParams | Record<string, string>;
+  if (requestOrQueryParams instanceof Request) {
+    requestOrJsonBody = requestOrQueryParams;
+    queryParams = new URL(requestOrQueryParams.url).searchParams;
+    optionsArg = jsonBodyOrLogLevelOrOptions as
+      | LogLevel
+      | MutateRequestOptions
+      | undefined;
+  } else {
+    requestOrJsonBody = jsonBodyOrLogLevelOrOptions as ReadonlyJSONValue;
+    queryParams = requestOrQueryParams;
+    optionsArg = logLevelOrOptions;
+  }
+
+  const options = normalizeMutateRequestOptions(optionsArg);
+  const normalized: NormalizedMutateRequestArgs = {
+    requestOrJsonBody,
+    userID: 'userID' in options ? (options.userID ?? null) : undefined,
+    queryParams,
+    logLevel: options.logLevel ?? 'info',
+  };
+  const lc = createLogContext(normalized.logLevel).withContext('PushProcessor');
   let jsonBody: unknown;
 
-  let lc: LogContext;
-
-  if (isRequestOverload) {
-    request = queryStringOrRequest;
-    const level = (bodyOrLogLevel as LogLevel | undefined) ?? 'info';
-
-    // Create log context early, before extracting JSON from Request
-    lc = createLogContext(level).withContext('PushProcessor');
-
-    const url = new URL(request.url);
-    queryString = url.searchParams;
-
+  if (normalized.requestOrJsonBody instanceof Request) {
     try {
-      jsonBody = await request.json();
+      jsonBody = await normalized.requestOrJsonBody.json();
     } catch (error) {
       lc.error?.('Failed to parse push body', error);
       const message = `Failed to parse push body: ${getErrorMessage(error)}`;
@@ -176,17 +235,14 @@ export async function handleMutateRequest<
       } as const satisfies PushFailedBody;
     }
   } else {
-    queryString = queryStringOrRequest;
-    jsonBody = bodyOrLogLevel;
-    const level = logLevel ?? 'info';
-    lc = createLogContext(level).withContext('PushProcessor');
+    jsonBody = normalized.requestOrJsonBody;
   }
 
   let mutationIDs: MutationID[] = [];
 
   let pushBody: PushBody;
   try {
-    pushBody = v.parse(jsonBody, pushBodySchema);
+    pushBody = v.parse(jsonBody, pushBodySchema, 'passthrough');
     mutationIDs = pushBody.mutations.map(m => ({
       id: m.id,
       clientID: m.clientID,
@@ -205,13 +261,17 @@ export async function handleMutateRequest<
     } as const satisfies PushFailedBody;
   }
 
-  let queryParams: Params;
+  let parsedQueryParams: Params;
   try {
-    const queryStringObj =
-      queryString instanceof URLSearchParams
-        ? Object.fromEntries(queryString)
-        : queryString;
-    queryParams = v.parse(queryStringObj, pushParamsSchema, 'passthrough');
+    const rawQueryParams =
+      normalized.queryParams instanceof URLSearchParams
+        ? Object.fromEntries(normalized.queryParams)
+        : normalized.queryParams;
+    parsedQueryParams = v.parse(
+      rawQueryParams,
+      mutateParamsSchema,
+      'passthrough',
+    );
   } catch (error) {
     lc.error?.('Failed to parse push query parameters', error);
     const message = `Failed to parse push query parameters: ${getErrorMessage(error)}`;
@@ -241,7 +301,12 @@ export async function handleMutateRequest<
   let processedCount = 0;
 
   try {
-    const transactor = new Transactor(dbProvider, pushBody, queryParams, lc);
+    const transactor = new Transactor(
+      dbProvider,
+      pushBody,
+      parsedQueryParams,
+      lc,
+    );
 
     // Each mutation goes through three phases:
     //   1. Pre-transaction: user logic that runs before `transact` is called. If
@@ -257,7 +322,12 @@ export async function handleMutateRequest<
           `Processing internal mutation '${m.name}' (clientID=${m.clientID})`,
         );
         try {
-          await processCleanupResultsMutation(dbProvider, m, queryParams, lc);
+          await processCleanupResultsMutation(
+            dbProvider,
+            m,
+            parsedQueryParams,
+            lc,
+          );
           // No response added - this is fire-and-forget
           processedCount++;
         } catch (error) {
@@ -318,8 +388,12 @@ export async function handleMutateRequest<
     }
 
     return {
+      kind: 'MutateResponse',
       mutations: responses,
-    };
+      ...(typeof normalized.userID !== 'undefined'
+        ? {userID: normalized.userID}
+        : {}),
+    } as const satisfies MutateResponse;
   } catch (error) {
     lc.error?.('Failed to process push request', error);
     // only include mutationIDs for mutations that were not processed
@@ -342,6 +416,14 @@ export async function handleMutateRequest<
       ...(details ? {details} : {}),
     };
   }
+}
+
+function normalizeMutateRequestOptions(
+  logLevelOrOptions: LogLevel | MutateRequestOptions | undefined,
+): MutateRequestOptions {
+  return typeof logLevelOrOptions === 'string'
+    ? {logLevel: logLevelOrOptions}
+    : (logLevelOrOptions ?? {});
 }
 
 class Transactor<D extends Database<ExtractTransactionType<D>>> {

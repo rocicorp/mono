@@ -8,11 +8,11 @@ import {
   transformRequestMessageSchema,
   type TransformRequestMessage,
   type TransformResponseBody,
-  type TransformResponseMessage,
 } from '../../../zero-protocol/src/custom-queries.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
 import {ErrorReason} from '../../../zero-protocol/src/error-reason.ts';
+import type {QueryResponse} from '../../../zero-protocol/src/query-server.ts';
 import {clientToServer} from '../../../zero-schema/src/name-mapper.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import {QueryParseError} from '../../../zql/src/query/error.ts';
@@ -37,8 +37,15 @@ export function handleGetQueriesRequest<S extends Schema>(
   schema: S,
   requestOrJsonBody: Request | ReadonlyJSONValue,
   logLevel: LogLevel = 'info',
-): Promise<TransformResponseMessage> {
-  return transform(cb, schema, requestOrJsonBody, 'getQueries', logLevel);
+): Promise<QueryResponse> {
+  return transform(
+    cb,
+    schema,
+    undefined,
+    requestOrJsonBody,
+    'getQueries',
+    logLevel,
+  );
 }
 
 /**
@@ -58,35 +65,87 @@ export function handleTransformRequest<S extends Schema>(
   schema: S,
   requestOrJsonBody: Request | ReadonlyJSONValue,
   logLevel: LogLevel = 'info',
-): Promise<TransformResponseMessage> {
-  return transform(cb, schema, requestOrJsonBody, 'transform', logLevel);
+): Promise<QueryResponse> {
+  return transform(
+    cb,
+    schema,
+    undefined,
+    requestOrJsonBody,
+    'transform',
+    logLevel,
+  );
 }
 
+export type QueryRequestOptions = {
+  userID?: string | null | undefined;
+  logLevel?: LogLevel | undefined;
+};
+
+type NormalizedQueryRequestArgs = {
+  readonly requestOrJsonBody: Request | ReadonlyJSONValue;
+  readonly userID: string | null | undefined;
+  readonly logLevel: LogLevel;
+};
+
 /**
- * Processes a transform request by invoking the provided callback for each query.
- * The callback should return a Query that is the transformed result.
+ * Process a `/query` request.
  *
- * This function will call `transformQuery` in parallel for each query found in the request.
- *
- * @param transformQuery - Callback function that takes a query name and args, and returns a Query
- * @param schema - The Zero schema
- * @param requestOrJsonBody - Either a Request object or the JSON body directly
- * @param logLevel - Logging level (defaults to 'info')
- * @returns A Promise that resolves to a TransformResponseMessage
+ * @param transformQuery - Runs once per requested query with the query name
+ * and first JSON argument. Returns a `Query`.
+ * @param schema - Schema used when building the returned ASTs.
+ * @param request - A Fetch `Request`.
+ * @param logLevelOrOptions - Either a log level or additional request
+ * options.
+ * @returns A `QueryResponse`. Success returns `userID: options.userID ?? null`
+ * when `options.userID` is provided. Per-query errors stay in `queries`;
+ * malformed requests return `TransformFailed`.
  */
 export function handleQueryRequest<S extends Schema>(
   transformQuery: TransformQueryFunction,
   schema: S,
+  request: Request,
+  logLevelOrOptions?: LogLevel | QueryRequestOptions,
+): Promise<QueryResponse>;
+
+/**
+ * Process a `/query` request from a parsed JSON body.
+ */
+export function handleQueryRequest<S extends Schema>(
+  transformQuery: TransformQueryFunction,
+  schema: S,
+  jsonBody: ReadonlyJSONValue,
+  logLevelOrOptions?: LogLevel | QueryRequestOptions,
+): Promise<QueryResponse>;
+
+export function handleQueryRequest<S extends Schema>(
+  transformQuery: TransformQueryFunction,
+  schema: S,
   requestOrJsonBody: Request | ReadonlyJSONValue,
-  logLevel: LogLevel = 'info',
-) {
+  logLevelOrOptions?: LogLevel | QueryRequestOptions,
+): Promise<QueryResponse> {
+  const options = normalizeQueryRequestOptions(logLevelOrOptions);
+  const normalized: NormalizedQueryRequestArgs = {
+    requestOrJsonBody,
+    userID: 'userID' in options ? (options.userID ?? null) : undefined,
+    logLevel: options.logLevel ?? 'info',
+  };
+
   return transform(
     (name, argsArray) => transformQuery(name, argsArray[0]),
     schema,
-    requestOrJsonBody,
+    normalized.userID,
+    normalized.requestOrJsonBody,
     'query',
-    logLevel,
+    normalized.logLevel,
   );
+}
+
+function normalizeQueryRequestOptions(
+  logLevelOrOptions: LogLevel | QueryRequestOptions | undefined,
+): QueryRequestOptions {
+  return typeof logLevelOrOptions === 'string'
+    ? {logLevel: logLevelOrOptions}
+    : (logLevelOrOptions ?? {});
 }
 
 async function transform<S extends Schema>(
@@ -95,10 +154,11 @@ async function transform<S extends Schema>(
     args: readonly ReadonlyJSONValue[],
   ) => MaybePromise<{query: AnyQuery} | AnyQuery>,
   schema: S,
+  userID: string | null | undefined,
   requestOrJsonBody: Request | ReadonlyJSONValue,
   apiName: 'query' | 'getQueries' | 'transform',
   logLevel: LogLevel = 'info',
-): Promise<TransformResponseMessage> {
+): Promise<QueryResponse> {
   const lc = createLogContext(logLevel).withContext('TransformRequest');
   let parsed: TransformRequestMessage;
   let queryIDs: string[] = [];
@@ -119,17 +179,14 @@ async function transform<S extends Schema>(
     const message = `Failed to parse ${apiName} request: ${getErrorMessage(error)}`;
     const details = getErrorDetails(error);
 
-    return [
-      'transformFailed',
-      {
-        kind: ErrorKind.TransformFailed,
-        origin: ErrorOrigin.Server,
-        reason: ErrorReason.Parse,
-        message,
-        queryIDs,
-        ...(details ? {details} : {}),
-      },
-    ];
+    return {
+      kind: ErrorKind.TransformFailed,
+      origin: ErrorOrigin.Server,
+      reason: ErrorReason.Parse,
+      message,
+      queryIDs,
+      ...(details ? {details} : {}),
+    };
   }
 
   try {
@@ -170,22 +227,23 @@ async function transform<S extends Schema>(
       }),
     );
 
-    return ['transformed', responses];
+    return {
+      kind: 'QueryResponse',
+      queries: responses,
+      ...(typeof userID !== 'undefined' ? {userID} : {}),
+    } as const satisfies QueryResponse;
   } catch (e) {
     const message = getErrorMessage(e);
     const details = getErrorDetails(e);
 
-    return [
-      'transformFailed',
-      {
-        kind: ErrorKind.TransformFailed,
-        origin: ErrorOrigin.Server,
-        reason: ErrorReason.Internal,
-        message,
-        queryIDs,
-        ...(details ? {details} : {}),
-      },
-    ];
+    return {
+      kind: ErrorKind.TransformFailed,
+      origin: ErrorOrigin.Server,
+      reason: ErrorReason.Internal,
+      message,
+      queryIDs,
+      ...(details ? {details} : {}),
+    };
   }
 }
 

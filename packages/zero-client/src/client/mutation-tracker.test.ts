@@ -11,10 +11,7 @@ import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
 import {ProtocolError} from '../../../zero-protocol/src/error.ts';
 import type {MutationPatch} from '../../../zero-protocol/src/mutations-patch.ts';
-import type {
-  PushResponse,
-  PushResponseBody,
-} from '../../../zero-protocol/src/push.ts';
+import type {PushResponseBody} from '../../../zero-protocol/src/push.ts';
 import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {ClientErrorKind} from './client-error-kind.ts';
 import {makeReplicacheMutator} from './custom.ts';
@@ -44,7 +41,7 @@ describe('MutationTracker', () => {
     const {ephemeralID, serverPromise} = tracker.trackMutation();
     tracker.mutationIDAssigned(ephemeralID, 1);
 
-    const response: PushResponse = {
+    const response: PushResponseBody = {
       mutations: [
         {
           id: {clientID: CLIENT_ID, id: 1},
@@ -65,7 +62,7 @@ describe('MutationTracker', () => {
     const {serverPromise, ephemeralID} = tracker.trackMutation();
     tracker.mutationIDAssigned(ephemeralID, 1);
 
-    const response: PushResponse = {
+    const response: PushResponseBody = {
       mutations: [
         {
           id: {clientID: CLIENT_ID, id: 1},
@@ -94,7 +91,7 @@ describe('MutationTracker', () => {
     const {serverPromise, ephemeralID} = tracker.trackMutation();
     tracker.mutationIDAssigned(ephemeralID, 1);
 
-    const response: PushResponse = {
+    const response: PushResponseBody = {
       mutations: [
         {
           id: {clientID: CLIENT_ID, id: 1},
@@ -126,7 +123,7 @@ describe('MutationTracker', () => {
     const {ephemeralID, serverPromise} = tracker.trackMutation();
     tracker.mutationIDAssigned(ephemeralID, 1);
 
-    const response: PushResponse = {
+    const response: PushResponseBody = {
       error: 'unsupportedPushVersion',
       mutationIDs: [{clientID: CLIENT_ID, id: 1}],
     };
@@ -185,7 +182,7 @@ describe('MutationTracker', () => {
     const {ephemeralID, serverPromise} = tracker.trackMutation();
     tracker.mutationIDAssigned(ephemeralID, 1);
 
-    const response: PushResponse = {
+    const response: PushResponseBody = {
       mutations: [
         {
           id: {clientID: CLIENT_ID, id: 1},
@@ -214,7 +211,7 @@ describe('MutationTracker', () => {
     const mutation = tracker.trackMutation();
     tracker.mutationIDAssigned(mutation.ephemeralID, 1);
 
-    const response: PushResponse = {
+    const response: PushResponseBody = {
       mutations: [
         {
           id: {clientID: 'other-client', id: 1},
@@ -246,7 +243,7 @@ describe('MutationTracker', () => {
 
     const r1 = {};
     const r2 = {};
-    const response: PushResponse = {
+    const response: PushResponseBody = {
       mutations: [
         {
           id: {clientID: CLIENT_ID, id: 1},
@@ -279,7 +276,7 @@ describe('MutationTracker', () => {
     const mutation2 = tracker.trackMutation();
     tracker.mutationIDAssigned(mutation2.ephemeralID, 2);
 
-    const response: PushResponse = {
+    const response: PushResponseBody = {
       mutations: [
         {
           id: {clientID: CLIENT_ID, id: 1},
@@ -569,7 +566,7 @@ describe('MutationTracker', () => {
     tracker.setClientIDAndWatch(CLIENT_ID, watch);
 
     tracker.trackMutation();
-    const response: PushResponse = {
+    const response: PushResponseBody = {
       mutations: [
         {
           id: {clientID: CLIENT_ID, id: 1},
@@ -585,7 +582,7 @@ describe('MutationTracker', () => {
     tracker.setClientIDAndWatch(CLIENT_ID, watch);
 
     tracker.trackMutation();
-    const response: PushResponse = {
+    const response: PushResponseBody = {
       mutations: [
         {
           id: {clientID: CLIENT_ID, id: 1},
@@ -709,7 +706,7 @@ describe('MutationTracker', () => {
     const {ephemeralID} = tracker.trackMutation();
     tracker.mutationIDAssigned(ephemeralID, 1);
 
-    const response: PushResponse = {
+    const response: PushResponseBody = {
       mutations: [
         {
           id: {clientID: CLIENT_ID, id: 1},

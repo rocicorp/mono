@@ -1,6 +1,6 @@
 import type {MaybePromise} from '../../shared/src/types.ts';
 import {formatPg, sql} from '../../z2s/src/sql.ts';
-import type {CleanupResultsArg} from '../../zero-protocol/src/push.ts';
+import type {CleanupResultsArg} from '../../zero-protocol/src/mutation.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
 import type {DBConnection, DBTransaction} from '../../zql/src/mutate/custom.ts';
 import type {

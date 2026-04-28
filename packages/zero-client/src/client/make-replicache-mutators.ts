@@ -1,7 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
 import type {MutatorDefs} from '../../../replicache/src/types.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
-import {CRUD_MUTATION_NAME} from '../../../zero-protocol/src/push.ts';
+import {CRUD_MUTATION_NAME} from '../../../zero-protocol/src/mutation.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import {customMutatorKey} from '../../../zql/src/mutate/custom.ts';
 import {
