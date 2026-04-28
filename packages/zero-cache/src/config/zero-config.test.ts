@@ -332,6 +332,24 @@ test('zero-cache --help', () => {
        ZERO_PORT env                                                                                                                                                                               
                                                                         The port for sync connections.                                                                                             
                                                                                                                                                                                                    
+     --keepalive-timeout-ms number                                      optional                                                                                                                   
+       ZERO_KEEPALIVE_TIMEOUT_MS env                                                                                                                                                               
+                                                                        The timeout since the last /keepalive request after which the server will initiate                                         
+                                                                        a graceful shutdown. This is a workaround for AWS Elastic Container Service, which                                         
+                                                                        otherwise provides no signal that a target has been deregistered (and should thus begin                                    
+                                                                        shutdown); the cessation of health checks at /keepalive is instead used as the signal to                                   
+                                                                        drain. (ECS later sends a SIGTERM before killing the server but only allows a 30-second                                    
+                                                                        timeout before sending SIGKILL).                                                                                           
+                                                                                                                                                                                                   
+                                                                        Other container runners explicitly send a SIGTERM followed by a configurable drain interval,                               
+                                                                        in which case /keepalive logic is not necessary.                                                                           
+                                                                                                                                                                                                   
+                                                                        When running the server in ECS, this timeout should be set to some multiple of the health                                  
+                                                                        check interval. If the option is unset, the keepalive timeout is disabled in non-ECS environments,                         
+                                                                        and defaults to 20 seconds when run in ECS (determined by the presence of the                                              
+                                                                        ECS_CONTAINER_METADATA_URI_V4 environment variable as per                                                                  
+                                                                        https://docs.aws.amazon.com/AmazonECS/latest/developerguide/ecs-environment-variables.html).                               
+                                                                                                                                                                                                   
      --change-streamer-uri string                                       optional                                                                                                                   
        ZERO_CHANGE_STREAMER_URI env                                                                                                                                                                
                                                                         When set, connects to the change-streamer at the given URI.                                                                
