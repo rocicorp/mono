@@ -9,11 +9,13 @@ import type {
   Disjunction,
 } from '../../../zero-protocol/src/ast.ts';
 import {planIdSymbol} from '../../../zero-protocol/src/ast.ts';
+import {transformFilters} from '../builder/filter.ts';
 import type {ConnectionCostModel} from './planner-connection.ts';
 import type {PlannerConstraint} from './planner-constraint.ts';
 import type {PlanDebugger} from './planner-debug.ts';
 import {PlannerFanIn} from './planner-fan-in.ts';
 import {PlannerFanOut} from './planner-fan-out.ts';
+import {PlannerFilter} from './planner-filter.ts';
 import {PlannerGraph} from './planner-graph.ts';
 import {PlannerJoin} from './planner-join.ts';
 import type {PlannerNode} from './planner-node.ts';
@@ -24,6 +26,7 @@ function wireOutput(from: PlannerNode, to: PlannerNode): void {
     case 'connection':
     case 'join':
     case 'fan-in':
+    case 'filter':
       from.setOutput(to);
       break;
     case 'fan-out':
@@ -154,11 +157,13 @@ function processOr(
   parentTable: string,
   getPlanId: () => number,
 ): Exclude<PlannerNode, PlannerTerminus> {
-  const subqueryConditions = condition.conditions.filter(
+  // Skip building fan structure when no branch contains a CSQ. The runtime
+  // collapses such ORs to a single Filter node, so the planner has nothing
+  // to choose between.
+  const hasAnySubquery = condition.conditions.some(
     c => c.type === 'correlatedSubquery' || hasCorrelatedSubquery(c),
   );
-
-  if (subqueryConditions.length === 0) {
+  if (!hasAnySubquery) {
     return input;
   }
 
@@ -167,15 +172,30 @@ function processOr(
   wireOutput(input, fanOut);
 
   const branches: Exclude<PlannerNode, PlannerTerminus>[] = [];
-  for (const subCondition of subqueryConditions) {
-    const branch = processCondition(
-      subCondition,
-      fanOut,
-      graph,
-      model,
-      parentTable,
-      getPlanId,
-    );
+  for (const subCondition of condition.conditions) {
+    let branch: Exclude<PlannerNode, PlannerTerminus>;
+    if (
+      subCondition.type === 'correlatedSubquery' ||
+      hasCorrelatedSubquery(subCondition)
+    ) {
+      branch = processCondition(
+        subCondition,
+        fanOut,
+        graph,
+        model,
+        parentTable,
+        getPlanId,
+      );
+    } else {
+      // Simple OR branch: wrap in a PlannerFilter so its filter can be
+      // registered at the receiving connection on a per-branch basis when
+      // the FanIn is in UFI mode.
+      const transformed = transformFilters(subCondition).filters;
+      const filter = new PlannerFilter(fanOut, transformed);
+      graph.filters.push(filter);
+      wireOutput(fanOut, filter);
+      branch = filter;
+    }
     branches.push(branch);
     fanOut.addOutput(branch);
   }
