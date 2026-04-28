@@ -51,6 +51,7 @@ import type {
   SourceChangeEdit,
   SourceChangeRemove,
   SourceInput,
+  SourceTxnListener,
 } from './source.ts';
 import {makeSourceChangeAdd, makeSourceChangeRemove} from './source.ts';
 import type {Stream} from './stream.ts';
@@ -101,6 +102,7 @@ export class MemorySource implements Source {
   readonly #primaryIndexSort: Ordering;
   readonly #indexes: Map<string, Index> = new Map();
   readonly #connections: Connection[] = [];
+  readonly #txnListeners: Set<SourceTxnListener> = new Set();
 
   #overlay: Overlay | undefined;
   #pushEpoch = 0;
@@ -384,7 +386,15 @@ export class MemorySource implements Source {
       setOverlay,
       writeChange,
       () => ++this.#pushEpoch,
+      this.#txnListeners,
     );
+  }
+
+  addTxnListener(listener: SourceTxnListener): () => void {
+    this.#txnListeners.add(listener);
+    return () => {
+      this.#txnListeners.delete(listener);
+    };
   }
 
   #writeChange(change: SourceChange) {
@@ -456,6 +466,7 @@ export function* genPushAndWriteWithSplitEdit(
   setOverlay: (o: Overlay | undefined) => Overlay | undefined,
   writeChange: (c: SourceChange) => void,
   getNextEpoch: () => number,
+  txnListeners?: ReadonlySet<SourceTxnListener>,
 ) {
   let shouldSplitEdit = false;
   if (change[SourceChangeIndex.TYPE] === ChangeType.EDIT) {
@@ -484,6 +495,7 @@ export function* genPushAndWriteWithSplitEdit(
       setOverlay,
       writeChange,
       getNextEpoch(),
+      txnListeners,
     );
     yield* genPushAndWrite(
       connections,
@@ -492,6 +504,7 @@ export function* genPushAndWriteWithSplitEdit(
       setOverlay,
       writeChange,
       getNextEpoch(),
+      txnListeners,
     );
   } else {
     yield* genPushAndWrite(
@@ -501,6 +514,7 @@ export function* genPushAndWriteWithSplitEdit(
       setOverlay,
       writeChange,
       getNextEpoch(),
+      txnListeners,
     );
   }
 }
@@ -512,11 +526,20 @@ function* genPushAndWrite(
   setOverlay: (o: Overlay | undefined) => Overlay | undefined,
   writeChange: (c: SourceChange) => void,
   pushEpoch: number,
+  txnListeners: ReadonlySet<SourceTxnListener> | undefined,
 ) {
+  if (txnListeners) {
+    for (const l of txnListeners) l.beginPush();
+  }
   for (const x of genPush(connections, change, exists, setOverlay, pushEpoch)) {
     yield x;
   }
   writeChange(change);
+  if (txnListeners) {
+    for (const l of txnListeners) {
+      yield* l.endPush(change[SourceChangeIndex.TYPE]);
+    }
+  }
 }
 
 function* genPush(

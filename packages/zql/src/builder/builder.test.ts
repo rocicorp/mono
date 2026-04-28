@@ -18,6 +18,7 @@ import {
   conditionIncludesFlippedSubqueryAtAnyLevel,
   groupSubqueryConditions,
   partitionBranches,
+  shouldSplitRootOr,
 } from './builder.ts';
 import {TestBuilderDelegate} from './test-builder-delegate.ts';
 
@@ -2954,4 +2955,72 @@ test('duplicate relationship alias uses last-writer-wins', () => {
   );
   expect(sink.pushes.length).toBe(1);
   expect(sink.pushes[0].type).toBe('child');
+});
+
+test('shouldSplitRootOr', () => {
+  const simple: Condition = {
+    type: 'simple',
+    left: {type: 'column', name: 'id'},
+    op: '=',
+    right: {type: 'literal', value: 1},
+  };
+  const flippedCsq: CorrelatedSubqueryCondition = {
+    type: 'correlatedSubquery',
+    op: 'EXISTS',
+    related: {
+      system: 'client',
+      correlation: {parentField: ['id'], childField: ['userID']},
+      subquery: {table: 'other', alias: 'other'},
+    },
+    flip: true,
+  };
+  const semiCsq: CorrelatedSubqueryCondition = {
+    ...flippedCsq,
+    flip: false,
+  };
+
+  // Bug-report shape: OR with simple + flipped exists -> split.
+  expect(
+    shouldSplitRootOr({type: 'or', conditions: [simple, flippedCsq]}),
+  ).toBe(true);
+
+  // OR with two flipped subqueries (no independently-pushable simple branch).
+  expect(
+    shouldSplitRootOr({type: 'or', conditions: [flippedCsq, flippedCsq]}),
+  ).toBe(false);
+
+  // OR with simple + non-flipped EXISTS (no flipped branch).
+  expect(shouldSplitRootOr({type: 'or', conditions: [simple, semiCsq]})).toBe(
+    false,
+  );
+
+  // Not an OR.
+  expect(shouldSplitRootOr(simple)).toBe(false);
+  expect(shouldSplitRootOr(undefined)).toBe(false);
+
+  // Nested OR — only TOP-LEVEL OR triggers the split. AND at the root falls
+  // through even if it contains a flipped OR.
+  const andWithInnerOr: Conjunction = {
+    type: 'and',
+    conditions: [simple, {type: 'or', conditions: [simple, flippedCsq]}],
+  };
+  expect(shouldSplitRootOr(andWithInnerOr)).toBe(false);
+
+  // OR where the simple branch is wrapped in an `and` of `simple`s — still
+  // independently pushable.
+  const andOfSimples: Conjunction = {
+    type: 'and',
+    conditions: [
+      simple,
+      {
+        type: 'simple',
+        left: {type: 'column', name: 'name'},
+        op: '=',
+        right: {type: 'literal', value: 'foo'},
+      },
+    ],
+  };
+  expect(
+    shouldSplitRootOr({type: 'or', conditions: [andOfSimples, flippedCsq]}),
+  ).toBe(true);
 });

@@ -136,18 +136,6 @@ describe('UnionFanIn', () => {
       );
     });
 
-    test('throws when input schemas have mismatched compareRows', () => {
-      const fanOut = mockUnionFanOut(mockSchema);
-      const input1 = mockOperator({
-        ...mockSchema,
-        compareRows: () => 0,
-      });
-
-      expect(() => new UnionFanIn(fanOut, [input1])).toThrow(
-        'compareRows mismatch in union fan-in',
-      );
-    });
-
     test('throws when input schemas have mismatched sort', () => {
       const fanOut = mockUnionFanOut(mockSchema);
       const input1 = mockOperator({

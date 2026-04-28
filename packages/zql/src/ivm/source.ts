@@ -32,6 +32,23 @@ export function makeSourceChangeEdit(row: Row, oldRow: Row): SourceChangeEdit {
 }
 
 /**
+ * Listener notified when the source begins and ends pushing a single
+ * logical change to all of its connections. Used by `SourceTxnCoordinator`
+ * to drive the `MultiSourceUnionFanIn` accumulation window without a
+ * `UnionFanOut` directly above the union.
+ *
+ * `endPush` is invoked once for each `beginPush`. For an `EDIT` that the
+ * source splits into REMOVE+ADD, two begin/end pairs fire (one per half).
+ *
+ * `endPush` returns a stream so it can yield while the underlying union
+ * fan-in flushes accumulated pushes downstream.
+ */
+export interface SourceTxnListener {
+  beginPush(): void;
+  endPush(changeType: ChangeType): Stream<'yield'>;
+}
+
+/**
  * A source is an input that serves as the root data source of the pipeline.
  * Sources have multiple outputs. To add an output, call `connect()`, then
  * hook yourself up to the returned Connector, like:
@@ -94,6 +111,13 @@ export interface Source {
    * into all connected inputs and committed to the source.
    */
   genPush(change: SourceChange): Stream<'yield' | undefined>;
+
+  /**
+   * Register a listener that is notified at the start and end of each
+   * logical push (one begin/end pair per `genPushAndWrite` invocation,
+   * so split-edit pushes fire two pairs). Returns an unsubscribe function.
+   */
+  addTxnListener(listener: SourceTxnListener): () => void;
 }
 
 export interface SourceInput extends Input {

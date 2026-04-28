@@ -19,33 +19,64 @@ import {
   pushAccumulatedChanges,
 } from './push-accumulated.ts';
 import type {SourceSchema} from './schema.ts';
+import type {SourceTxnCoordinator} from './source-txn-coordinator.ts';
 import {first, type Stream} from './stream.ts';
 import type {UnionFanOut} from './union-fan-out.ts';
 
 export class UnionFanIn implements Operator {
   readonly #inputs: readonly Input[];
   readonly #schema: SourceSchema;
+  readonly #coordinator: SourceTxnCoordinator | undefined;
   #fanOutPushStarted: boolean = false;
   #output: Output = throwOutput;
   #accumulatedPushes: Change[] = [];
 
-  constructor(fanOut: UnionFanOut, inputs: Input[]) {
+  constructor(driver: UnionFanOut | SourceTxnCoordinator, inputs: Input[]) {
     this.#inputs = inputs;
-    const fanOutSchema = fanOut.getSchema();
-    fanOut.setFanIn(this);
-    assert(fanOutSchema.sort !== undefined, 'UnionFanIn requires sorted input');
+    // Discriminate by capability: a UnionFanOut exposes getSchema (it has a
+    // schema-bearing input above the union), a SourceTxnCoordinator does not
+    // (it only forwards begin/end signals). We use this rather than instanceof
+    // so tests can pass mock UFOs without subclassing.
+    const isFanOut = 'getSchema' in driver;
+    this.#coordinator = isFanOut ? undefined : (driver as SourceTxnCoordinator);
+
+    // The "base" schema describes the row shape flowing through the union.
+    // For UFO-driven mode, the UFO provides it (its single input determines
+    // the shape). For coordinator-driven mode, branches each carry their own
+    // source connection, so we derive the base shape from the first input
+    // (and assert all inputs agree).
+    let baseSchema: SourceSchema;
+    let baseRelationships: Record<
+      string,
+      SourceSchema['relationships'][string]
+    >;
+    if (isFanOut) {
+      const fanOut = driver as UnionFanOut;
+      baseSchema = fanOut.getSchema();
+      baseRelationships = baseSchema.relationships;
+      fanOut.setFanIn(this);
+    } else {
+      assert(
+        inputs.length > 0,
+        'UnionFanIn coordinator mode requires at least one input',
+      );
+      baseSchema = inputs[0].getSchema();
+      baseRelationships = {};
+      (driver as SourceTxnCoordinator).setFanIn(this);
+    }
+    assert(baseSchema.sort !== undefined, 'UnionFanIn requires sorted input');
 
     const schema: Writable<SourceSchema> = {
-      tableName: fanOutSchema.tableName,
-      columns: fanOutSchema.columns,
-      primaryKey: fanOutSchema.primaryKey,
+      tableName: baseSchema.tableName,
+      columns: baseSchema.columns,
+      primaryKey: baseSchema.primaryKey,
       relationships: {
-        ...fanOutSchema.relationships,
+        ...baseRelationships,
       },
-      isHidden: fanOutSchema.isHidden,
-      system: fanOutSchema.system,
-      compareRows: fanOutSchema.compareRows,
-      sort: fanOutSchema.sort,
+      isHidden: baseSchema.isHidden,
+      system: baseSchema.system,
+      compareRows: baseSchema.compareRows,
+      sort: baseSchema.sort,
     };
 
     // now go through inputs and merge relationships
@@ -64,21 +95,21 @@ export class UnionFanIn implements Operator {
         schema.system === inputSchema.system,
         `System mismatch in union fan-in: ${schema.system} !== ${inputSchema.system}`,
       );
-      assert(
-        schema.compareRows === inputSchema.compareRows,
-        `compareRows mismatch in union fan-in`,
-      );
+      // compareRows is purely derived from `sort` (see makeComparator). Two
+      // source connections on the same table produce different comparator
+      // instances even when their sort orderings are equivalent, so we check
+      // sort identity instead — that's the actual invariant the union needs.
       assert(schema.sort === inputSchema.sort, `Sort mismatch in union fan-in`);
 
       for (const [relName, relSchema] of Object.entries(
         inputSchema.relationships,
       )) {
-        if (relName in fanOutSchema.relationships) {
+        if (relName in baseRelationships) {
           continue;
         }
 
         // All branches will have unique relationship names except for relationships
-        // that come in from `fanOut`.
+        // that come in from the driver schema.
         assert(
           !relationshipsFromBranches.has(relName),
           `Relationship ${relName} exists in multiple upstream inputs to union fan-in`,
@@ -98,6 +129,7 @@ export class UnionFanIn implements Operator {
     for (const input of this.#inputs) {
       input.destroy();
     }
+    this.#coordinator?.destroy();
   }
 
   fetch(req: FetchRequest): Stream<Node | 'yield'> {

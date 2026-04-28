@@ -2,7 +2,12 @@ import type {Condition, Ordering} from '../../../../zero-protocol/src/ast.ts';
 import type {DebugDelegate} from '../../builder/debug-delegate.ts';
 import type {Node} from '../data.ts';
 import type {FetchRequest} from '../operator.ts';
-import type {Source, SourceChange, SourceInput} from '../source.ts';
+import type {
+  Source,
+  SourceChange,
+  SourceInput,
+  SourceTxnListener,
+} from '../source.ts';
 import type {Stream} from '../stream.ts';
 
 /**
@@ -116,6 +121,10 @@ export class RandomYieldSource implements Source {
     if (this.#rng() < this.#yieldProbability) {
       yield 'yield';
     }
+  }
+
+  addTxnListener(listener: SourceTxnListener): () => void {
+    return this.#source.addTxnListener(listener);
   }
 }
 

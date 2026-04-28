@@ -31,6 +31,7 @@ import {FlippedJoin} from '../ivm/flipped-join.ts';
 import {Join} from '../ivm/join.ts';
 import type {Input, InputBase, Storage} from '../ivm/operator.ts';
 import {Skip} from '../ivm/skip.ts';
+import {SourceTxnCoordinator} from '../ivm/source-txn-coordinator.ts';
 import type {Source, SourceInput} from '../ivm/source.ts';
 import {Take} from '../ivm/take.ts';
 import {UnionFanIn} from '../ivm/union-fan-in.ts';
@@ -258,6 +259,7 @@ function buildPipelineInternal(
   queryID: string,
   name: string,
   partitionKey?: CompoundKey,
+  extraSplitEditKeys?: ReadonlySet<string>,
 ): Input {
   const source = delegate.getSource(ast.table);
   if (!source) {
@@ -270,10 +272,26 @@ function buildPipelineInternal(
     assertNoNotExists(ast.where);
   }
 
+  if (shouldSplitRootOr(ast.where)) {
+    return buildOrPipelineWithPerBranchConnects(
+      ast,
+      delegate,
+      queryID,
+      name,
+      partitionKey,
+      extraSplitEditKeys,
+    );
+  }
+
   const csqConditions = gatherCorrelatedSubqueryQueryConditions(ast.where);
   const splitEditKeys: Set<string> = partitionKey
     ? new Set(partitionKey)
     : new Set();
+  if (extraSplitEditKeys) {
+    for (const key of extraSplitEditKeys) {
+      splitEditKeys.add(key);
+    }
+  }
   const aliases = new Set<string>();
   for (const csq of csqConditions) {
     aliases.add(csq.related.subquery.alias || '');
@@ -346,6 +364,149 @@ function buildPipelineInternal(
 
   if (ast.related) {
     // Dedupe by alias - last one wins (LWW), like limit(5).limit(10)
+    const byAlias = new Map<string, CorrelatedSubquery>();
+    for (const csq of ast.related) {
+      byAlias.set(csq.subquery.alias ?? '', csq);
+    }
+    for (const csq of byAlias.values()) {
+      end = applyCorrelatedSubQuery(csq, delegate, queryID, end, name, false);
+    }
+  }
+
+  return end;
+}
+
+/**
+ * Returns true when `where` is an OR at the root with at least one branch that
+ * contains a flipped subquery and at least one other branch that is independently
+ * pushable (a `simple` cmp or an `and` of `simple`s). For these queries we build
+ * each OR branch with its own `source.connect` so branch-specific filters reach
+ * the source instead of being stripped by the OR-with-subquery transform.
+ */
+export function shouldSplitRootOr(
+  where: Condition | undefined,
+): where is Disjunction {
+  if (!where || where.type !== 'or') {
+    return false;
+  }
+  let hasFlipped = false;
+  let hasIndependentlyPushable = false;
+  for (const branch of where.conditions) {
+    if (conditionIncludesFlippedSubqueryAtAnyLevel(branch)) {
+      hasFlipped = true;
+    } else if (isNotAndDoesNotContainSubquery(branch)) {
+      hasIndependentlyPushable = true;
+    }
+  }
+  return hasFlipped && hasIndependentlyPushable;
+}
+
+function buildOrPipelineWithPerBranchConnects(
+  ast: AST,
+  delegate: BuilderDelegate,
+  queryID: string,
+  name: string,
+  partitionKey: CompoundKey | undefined,
+  extraSplitEditKeys: ReadonlySet<string> | undefined,
+): Input {
+  const source = delegate.getSource(ast.table);
+  if (!source) {
+    throw new Error(`Source not found: ${ast.table}`);
+  }
+  assert(
+    ast.where?.type === 'or',
+    'buildOrPipelineWithPerBranchConnects: expected OR',
+  );
+  const orCondition = ast.where;
+
+  // Compute mergedSplitEditKeys across all branches plus partitionKey, related
+  // CSQs, and any extraSplitEditKeys passed from a caller. Every per-branch
+  // source.connect uses this same set so all branches see identical EDIT
+  // splitting — UFI requires a uniform view of changes.
+  const mergedSplitEditKeys: Set<string> = new Set();
+  if (partitionKey) {
+    for (const key of partitionKey) {
+      mergedSplitEditKeys.add(key);
+    }
+  }
+  if (extraSplitEditKeys) {
+    for (const key of extraSplitEditKeys) {
+      mergedSplitEditKeys.add(key);
+    }
+  }
+  for (const branch of orCondition.conditions) {
+    const csqs = gatherCorrelatedSubqueryQueryConditions(branch);
+    for (const csq of csqs) {
+      for (const key of csq.related.correlation.parentField) {
+        mergedSplitEditKeys.add(key);
+      }
+    }
+  }
+  if (ast.related) {
+    for (const csq of ast.related) {
+      for (const key of csq.correlation.parentField) {
+        mergedSplitEditKeys.add(key);
+      }
+    }
+  }
+
+  // Build each branch as its own pipeline rooted at a fresh source.connect.
+  const branches: Input[] = [];
+  for (let i = 0; i < orCondition.conditions.length; i++) {
+    const branchCond = orCondition.conditions[i];
+    const branchAst: AST = {
+      ...ast,
+      where: branchCond,
+      related: undefined,
+      start: undefined,
+      limit: undefined,
+    };
+    branches.push(
+      buildPipelineInternal(
+        branchAst,
+        delegate,
+        queryID,
+        `${name}:branch${i}`,
+        partitionKey,
+        mergedSplitEditKeys,
+      ),
+    );
+  }
+
+  // Drive the union via a SourceTxnCoordinator subscribed to the OR's parent
+  // source. Each per-branch source.connect on `ast.table` receives the same
+  // logical push from this source; the coordinator opens a single
+  // accumulation window on the UFI per push so duplicates dedupe correctly.
+  const coordinator = new SourceTxnCoordinator();
+  coordinator.attachSource(source);
+  const ufi = new UnionFanIn(coordinator, branches);
+  for (const branch of branches) {
+    delegate.addEdge(branch, ufi);
+  }
+  let end: Input = delegate.decorateInput(ufi, `${name}:ufi`);
+
+  // Reapply tail decorations (start, limit, related joins) on the union output.
+  // The branch ASTs synthesized above stripped these so they're applied once
+  // here over the full unioned stream.
+  if (ast.start) {
+    const skip = new Skip(end, ast.start);
+    delegate.addEdge(end, skip);
+    end = delegate.decorateInput(skip, `${name}:skip)`);
+  }
+
+  if (ast.limit !== undefined) {
+    const takeName = `${name}:take`;
+    const take = new Take(
+      end,
+      delegate.createStorage(takeName),
+      ast.limit,
+      partitionKey,
+    );
+    delegate.addEdge(end, take);
+    end = delegate.decorateInput(take, takeName);
+  }
+
+  if (ast.related) {
     const byAlias = new Map<string, CorrelatedSubquery>();
     for (const csq of ast.related) {
       byAlias.set(csq.subquery.alias ?? '', csq);

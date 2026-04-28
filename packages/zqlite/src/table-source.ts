@@ -35,6 +35,7 @@ import {
   type Source,
   type SourceChange,
   type SourceInput,
+  type SourceTxnListener,
 } from '../../zql/src/ivm/source.ts';
 import type {Stream} from '../../zql/src/ivm/stream.ts';
 import {assertOrderingIncludesPK} from '../../zql/src/query/complete-ordering.ts';
@@ -75,6 +76,7 @@ let eventCount = 0;
 export class TableSource implements Source {
   readonly #dbCache = new WeakMap<Database, Statements>();
   readonly #connections: Connection[] = [];
+  readonly #txnListeners: Set<SourceTxnListener> = new Set();
   readonly #table: string;
   readonly #columns: Record<string, SchemaValue>;
   // Maps sorted columns JSON string (e.g. '["a","b"]) to Set of columns.
@@ -410,7 +412,15 @@ export class TableSource implements Source {
       setOverlay,
       writeChange,
       () => ++this.#pushEpoch,
+      this.#txnListeners,
     );
+  }
+
+  addTxnListener(listener: SourceTxnListener): () => void {
+    this.#txnListeners.add(listener);
+    return () => {
+      this.#txnListeners.delete(listener);
+    };
   }
 
   #writeChange(change: SourceChange) {
