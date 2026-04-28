@@ -3,6 +3,7 @@ import {describe, expect, test} from 'vitest';
 import {assert} from '../../../shared/src/asserts.ts';
 import {must} from '../../../shared/src/must.ts';
 import type {AST, Condition, Ordering} from '../../../zero-protocol/src/ast.ts';
+import {transformFilters} from '../../../zql/src/builder/filter.ts';
 import {planQuery} from '../../../zql/src/planner/planner-builder.ts';
 import type {CostModelCost} from '../../../zql/src/planner/planner-connection.ts';
 import type {PlannerConstraint} from '../../../zql/src/planner/planner-constraint.ts';
@@ -202,46 +203,21 @@ describe('two joins via or', () => {
 
 describe('or(simple, exists) — predicate-pushdown planning', () => {
   /**
-   * Mimics how `createSQLiteCostModel` simplifies filters before asking
-   * SQLite for a cost (`removeCorrelatedSubqueries` in
-   * `packages/zqlite/src/sqlite-cost-model.ts`).
-   *
-   * The bug: OR semantics. For `or(cmp, exists)`, `removeCorrelatedSubqueries`
-   * drops the CSQ branch and returns just `cmp`, which is a strict *subset*
-   * of the original OR's match set. The cost model is then told a much more
-   * selective filter than the runtime actually applies at the source — at
-   * runtime the OR cannot be pushed down at all, and the source scans the
-   * full table.
-   */
-  function buggySimplify(c: Condition): Condition | undefined {
-    switch (c.type) {
-      case 'correlatedSubquery':
-        return undefined;
-      case 'simple':
-        return c;
-      case 'and':
-      case 'or': {
-        const filtered = c.conditions
-          .map(buggySimplify)
-          .filter((x): x is Condition => x !== undefined);
-        if (filtered.length === 0) return undefined;
-        if (filtered.length === 1) return filtered[0];
-        return {type: c.type, conditions: filtered};
-      }
-    }
-  }
-
-  /**
    * Cost model that mimics the production SQLite cost model: it
    * (a) honors filter selectivity (PK-equality on `id` collapses to 1 row),
-   * (b) strips CSQs from the incoming filter via `buggySimplify` first
-   *     before reading filter selectivity.
+   * (b) strips CSQs from the incoming filter via `transformFilters` (the
+   *     same function the runtime uses to decide what to push to the
+   *     source at connection time),
    * (c) honors constraint selectivity for known FK columns.
    *
-   * This is enough to reproduce the planning bug deterministically, without
-   * needing a real SQLite instance.
+   * Previously, the production cost model used `removeCorrelatedSubqueries`
+   * which had wrong OR semantics (it returned just the simple branch
+   * instead of `undefined`). That bias caused the planner to think the
+   * parent connection was a 1-row PK lookup when it was actually a full
+   * table scan, biasing plan selection toward semi-join. See
+   * `packages/zqlite/src/sqlite-cost-model.ts` history.
    */
-  function makeBuggyCostModel(tableSizes: Record<string, number>) {
+  function makeRealisticCostModel(tableSizes: Record<string, number>) {
     const defaultFanout = () => ({fanout: 3, confidence: 'none' as const});
 
     return (
@@ -250,7 +226,7 @@ describe('or(simple, exists) — predicate-pushdown planning', () => {
       filters: Condition | undefined,
       constraint: PlannerConstraint | undefined,
     ): CostModelCost => {
-      const stripped = filters ? buggySimplify(filters) : undefined;
+      const stripped = transformFilters(filters).filters;
 
       // PK constraint from a parent join → 1-row PK lookup.
       if (constraint && 'id' in constraint) {
@@ -266,9 +242,6 @@ describe('or(simple, exists) — predicate-pushdown planning', () => {
       }
 
       // Recognize a PK-equality filter (e.g. `id = ?`) and treat as 1 row.
-      // ⚠️ This is the buggy code path: for `or(cmp('id', X), exists(...))`,
-      // `buggySimplify` returns just `cmp('id', X)`, and the cost model
-      // reports 1 row — even though the *runtime* scans the full table.
       if (
         stripped &&
         stripped.type === 'simple' &&
@@ -288,34 +261,25 @@ describe('or(simple, exists) — predicate-pushdown planning', () => {
   }
 
   /**
-   * Bug repro: `track.where(or(cmp('id', X), exists('invoiceLines')))`.
+   * Regression: `track.where(or(cmp('id', X), exists('invoiceLines')))`.
    *
-   * The relationship `track ← invoiceLine` (invoiceLine has trackId pointing
-   * at track.id) makes flipping a clear win when track is huge and
-   * invoiceLine is small:
-   *   - semi: scan all 1M tracks, check invoiceLines per row.
-   *   - flipped: scan 100 invoiceLines, lookup track by PK each time. = 100.
+   * Before the fix to `removeCorrelatedSubqueries`, the cost model received
+   * `cmp('id', X)` for the parent connection (because the buggy OR
+   * simplification dropped the CSQ branch) and reported it as a 1-row PK
+   * lookup. The planner therefore preferred semi-join even though semi
+   * scans the full track table at runtime.
    *
-   * But the buggy cost model reports `track` parent scan as 1 row (because
-   * `buggySimplify(or(cmp(id,X), exists(...)))` returns `cmp(id, X)` and
-   * the cost model treats that as a PK lookup). The planner therefore
-   * computes:
-   *   - semi cost = 1 (parent) × 5 (invoiceLine via trackId) = 5
-   *   - flipped cost = 100 (invoiceLine) × 1 (track by PK) = 100
-   * and picks semi.
-   *
-   * Reality: the runtime can't push the OR down at all in semi mode, so it
-   * scans 1M tracks. With our `req.filter` PR, the *flipped* plan would
-   * push `cmp(id, X)` down branch A (PK lookup) and use FlippedJoin on
-   * branch B (100 lookups). Total ≈ 101 ops — far better than 1M.
-   *
-   * EXPECTED BEHAVIOR (after fix): flip = true.
-   * CURRENT BEHAVIOR (with bug): flip = false (test will fail).
+   * After the fix, the cost model receives `undefined` for the parent
+   * (transformFilters returns undefined for OR-with-CSQ), reflecting the
+   * runtime's actual behavior. The planner then sees:
+   *   - semi cost = 1M (full track) × 5 (invoiceLines via trackId) = 5M
+   *   - flipped cost = 100 (invoiceLines) × 1 (track by PK) = 100
+   * and correctly picks flipped.
    */
-  test('flips EXISTS when the simple branch over-credits the source', () => {
-    const costModel = makeBuggyCostModel({
-      track: 1_000_000, // parent — huge
-      invoiceLine: 100, // child — small
+  test('flips EXISTS for or(cmp("id", X), exists)', () => {
+    const costModel = makeRealisticCostModel({
+      track: 1_000_000,
+      invoiceLine: 100,
     });
 
     const planned = planQuery(
@@ -327,19 +291,16 @@ describe('or(simple, exists) — predicate-pushdown planning', () => {
       costModel,
     );
 
-    // The simple `cmp('id', X)` branch lives at index 0; the exists at
-    // index 1 of the OR's conditions.
     expect(pick(planned, ['where', 'conditions', 1, 'flip'])).toBe(true);
   });
 
   /**
-   * Same shape with a non-PK simple branch. Should also flip — but here the
-   * buggy simplification doesn't lie about cardinality (track scan still
-   * looks like 1M because `cmp('name', X)` isn't recognized as selective).
-   * So the planner has accurate inputs and should flip even today.
+   * Same shape with a non-PK simple branch. The buggy simplification didn't
+   * mis-credit cardinality here (track scan stays at 1M) so this case
+   * already passed before the fix — keeping it as a sanity check.
    */
-  test('flips EXISTS when the simple branch is a non-PK cmp (sanity)', () => {
-    const costModel = makeBuggyCostModel({
+  test('flips EXISTS for or(cmp(non-PK, X), exists)', () => {
+    const costModel = makeRealisticCostModel({
       track: 1_000_000,
       invoiceLine: 100,
     });
@@ -354,6 +315,33 @@ describe('or(simple, exists) — predicate-pushdown planning', () => {
     );
 
     expect(pick(planned, ['where', 'conditions', 1, 'flip'])).toBe(true);
+  });
+
+  /**
+   * AND with CSQ: `track.where(cmp).whereExists('invoiceLines')`.
+   *
+   * Before AND the fix, transformFilters and removeCorrelatedSubqueries
+   * agreed for AND shapes — both kept the simple conjuncts and dropped
+   * CSQs. This test guards against regression in the AND path.
+   *
+   * The simple `cmp('id', X)` is a PK lookup → cost model reports 1 row
+   * for the parent. With only 1 parent row to scan, semi is much cheaper
+   * than flipped (1 × 5 = 5 vs 100 × 1 = 100). Planner should keep semi.
+   */
+  test('AND with PK simple branch: cost model still sees the simple filter', () => {
+    const costModel = makeRealisticCostModel({
+      track: 1_000_000,
+      invoiceLine: 100,
+    });
+
+    const planned = planQuery(
+      ast(builder.track.where('id', 1).whereExists('invoiceLines')),
+      costModel,
+    );
+
+    // `where(...).whereExists(...)` ⇒ AST shape `and(cmp, exists)`.
+    // The exists is the second conjunct. Should NOT flip — semi is cheaper.
+    expect(pick(planned, ['where', 'conditions', 1, 'flip'])).toBe(false);
   });
 });
 
