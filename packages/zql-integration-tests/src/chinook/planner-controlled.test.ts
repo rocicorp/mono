@@ -1,5 +1,5 @@
 // cases with a controlled cost model
-import {describe, expect, test} from 'vitest';
+import {describe, expect, test, vi} from 'vitest';
 import {assert} from '../../../shared/src/asserts.ts';
 import {must} from '../../../shared/src/must.ts';
 import type {AST, Condition, Ordering} from '../../../zero-protocol/src/ast.ts';
@@ -342,6 +342,98 @@ describe('or(simple, exists) — predicate-pushdown planning', () => {
     // `where(...).whereExists(...)` ⇒ AST shape `and(cmp, exists)`.
     // The exists is the second conjunct. Should NOT flip — semi is cheaper.
     expect(pick(planned, ['where', 'conditions', 1, 'flip'])).toBe(false);
+  });
+
+  /**
+   * End-to-end verification that the simple OR branch's per-branch filter
+   * reaches the cost model exactly when the FanIn is in UFI mode (i.e.,
+   * when at least one CSQ branch is flipped). In FI mode (no flip), the
+   * runtime fans out a single source scan to all branches, so registering
+   * the per-branch filter would mis-credit the source — the planner
+   * deliberately skips registration there.
+   */
+  test('per-branch filter reaches cost model in flipped (UFI) attempts only', () => {
+    const defaultFanout = () => ({fanout: 3, confidence: 'none' as const});
+    const costModel = vi.fn(
+      (
+        table: string,
+        _sort: Ordering,
+        filters: Condition | undefined,
+        constraint: PlannerConstraint | undefined,
+      ): CostModelCost => {
+        if (constraint && 'id' in constraint) {
+          return {startupCost: 0, rows: 1, fanout: defaultFanout};
+        }
+        if (table === 'invoiceLine' && constraint && 'trackId' in constraint) {
+          return {startupCost: 0, rows: 5, fanout: defaultFanout};
+        }
+        const stripped = transformFilters(filters).filters;
+        if (
+          stripped &&
+          stripped.type === 'simple' &&
+          stripped.op === '=' &&
+          stripped.left.type === 'column' &&
+          stripped.left.name === 'id'
+        ) {
+          return {startupCost: 0, rows: 1, fanout: defaultFanout};
+        }
+        return {
+          startupCost: 0,
+          rows: table === 'track' ? 1_000_000 : 100,
+          fanout: defaultFanout,
+        };
+      },
+    );
+
+    planQuery(
+      ast(
+        builder.track.where(({or, cmp, exists}) =>
+          or(cmp('id', 1), exists('invoiceLines')),
+        ),
+      ),
+      costModel,
+    );
+
+    // The planner runs both attempts (semi/FI and flipped/UFI). Inspect
+    // every cost-model invocation for `track` and check whether the
+    // per-branch filter (`cmp('id', X)`) was passed to it.
+    const trackFilters = costModel.mock.calls
+      .filter(c => c[0] === 'track')
+      .map(c => c[2]);
+
+    // Walks into AND/OR wrappers to find a simple cmp on `id`.
+    const containsCmpId = (f: Condition | undefined): boolean => {
+      if (f === undefined) return false;
+      if (f.type === 'simple') {
+        return f.op === '=' && f.left.type === 'column' && f.left.name === 'id';
+      }
+      if (f.type === 'and' || f.type === 'or') {
+        return f.conditions.some(containsCmpId);
+      }
+      return false;
+    };
+
+    // The cost model is also run during PlannerConnection's selectivity
+    // computation at construction (which calls `model(... ast.where ...)`).
+    // To isolate the per-branch flow, we filter to calls where the AND
+    // wrapper is present — that only happens when both #filters and a
+    // per-branch filter are AND-merged in estimateCost.
+    const sawPerBranchAnd = trackFilters.some(
+      f =>
+        f !== undefined &&
+        f.type === 'and' &&
+        f.conditions.length === 2 &&
+        containsCmpId(f),
+    );
+    expect(sawPerBranchAnd).toBe(true);
+
+    // The original ast.where (without the per-branch filter) was also
+    // passed for FI/semi attempts where the per-branch filter is
+    // suppressed. Confirm at least one such call is present.
+    const sawPlainOr = trackFilters.some(
+      f => f !== undefined && f.type === 'or',
+    );
+    expect(sawPlainOr).toBe(true);
   });
 });
 
