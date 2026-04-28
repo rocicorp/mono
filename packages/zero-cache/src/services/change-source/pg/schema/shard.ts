@@ -280,8 +280,7 @@ export async function getReplicaAtVersion(
       replicas."initialSyncContext",
       replicas."subscriberContext",
       "shardConfig"."publications",
-      "shardConfig"."ddlDetection",
-      "shardConfig"."lock"
+      "shardConfig"."ddlDetection"
     FROM ${schema}.replicas JOIN ${schema}."shardConfig" ON true
       WHERE version = ${replicaVersion};
   `;

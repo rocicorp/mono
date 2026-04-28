@@ -39,7 +39,6 @@ import {
   AutoResetSignal,
   markResetRequired,
   type BackfillingColumn,
-  type ReplicationState,
   type TableMetadataRow,
 } from './schema/tables.ts';
 import type {Subscriber} from './subscriber.ts';
@@ -66,8 +65,12 @@ type PendingTransaction = {
   pool: TransactionPool;
   preCommitWatermark: string;
   pos: number;
-  startingReplicationState: Promise<ReplicationState>;
+  startingReplicationState: Promise<ReplicationOwner>;
   ack: boolean;
+};
+
+type ReplicationOwner = {
+  owner: string | null;
 };
 
 const backfillRequestsSchema = v.array(backfillRequestSchema);
@@ -257,13 +260,8 @@ export class Storer implements Service {
             RETURNING watermark, pos
         ) SELECT COUNT(*) as deleted FROM purged;`;
 
-      const [{owner}] = await sql<ReplicationState[]>`
-        SELECT
-          "lastWatermark",
-          "owner",
-          "ownerAddress",
-          "lock"
-        FROM ${this.#cdc('replicationState')} FOR SHARE`;
+      const [{owner}] = await sql<ReplicationOwner[]>`
+        SELECT "owner" FROM ${this.#cdc('replicationState')} FOR SHARE`;
       if (owner !== this.#taskID) {
         throw new AbortError(
           `aborting changeLog purge to ${watermark} because ownership has been taken by ${owner}`,
@@ -456,7 +454,7 @@ export class Storer implements Service {
 
         if (tag === 'begin') {
           assert(!tx, 'received BEGIN in the middle of a transaction');
-          const {promise, resolve, reject} = resolver<ReplicationState>();
+          const {promise, resolve, reject} = resolver<ReplicationOwner>();
           void promise.catch(() => {}); // handle rejections before the await
           tx = {
             pool: new TransactionPool(
@@ -475,13 +473,8 @@ export class Storer implements Service {
           // Acquire a lock on the replicationState row to detect and/or prevent
           // a concurrent ownership change.
           void tx.pool.process(tx => {
-            tx<ReplicationState[]> /*sql*/ `
-          SELECT
-            "lastWatermark",
-            "owner",
-            "ownerAddress",
-            "lock"
-          FROM ${this.#cdc('replicationState')} FOR UPDATE`.then(
+            tx<ReplicationOwner[]> /*sql*/ `
+          SELECT "owner" FROM ${this.#cdc('replicationState')} FOR UPDATE`.then(
               ([result]) => resolve(result),
               reject,
             );
@@ -578,13 +571,8 @@ export class Storer implements Service {
       // done by performing a single read on the db, which determines the
       // snapshot for the REPEATABLE_READ transaction.
       [{lastWatermark}] = await reader.processReadTask(
-        sql => sql<ReplicationState[]>`
-        SELECT
-          "lastWatermark",
-          "owner",
-          "ownerAddress",
-          "lock"
-        FROM ${this.#cdc('replicationState')}
+        sql => sql<{lastWatermark: string}[]>`
+        SELECT "lastWatermark" FROM ${this.#cdc('replicationState')}
       `,
       );
     } catch (e) {

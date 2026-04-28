@@ -1,4 +1,4 @@
-const selectStar = /\bselect\s+\*\s+from\b/i;
+const selectStar = /\bselect\b[\s\S]*?\*(?=\s*(?:,|\bfrom\b))[\s\S]*?\bfrom\b/i;
 
 const plugin = {
   meta: {
@@ -32,16 +32,14 @@ const plugin = {
       },
       create(context) {
         const options = context.options[0] ?? {};
-        const filename = normalizePath(
-          context.filename ?? context.getFilename?.() ?? '',
-        );
+        const filename = context.filename ?? context.getFilename?.() ?? '';
         if (!shouldCheck(filename, options.include ?? [])) {
           return {};
         }
 
         function check(node, text) {
           const stripped = stripCommentOnlyLines(text);
-          if (selectStar.test(stripped)) {
+          if (hasSelectStar(stripped)) {
             context.report({node, messageId: 'noSelectStar'});
           }
         }
@@ -71,8 +69,8 @@ function stripCommentOnlyLines(source) {
     .join('\n');
 }
 
-function normalizePath(source) {
-  return source.replaceAll('\\', '/');
+function hasSelectStar(source) {
+  return selectStar.test(source);
 }
 
 function shouldCheck(filename, include) {
