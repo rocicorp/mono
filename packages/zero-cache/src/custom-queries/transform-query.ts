@@ -25,6 +25,7 @@ import type {TransformedAndHashed} from '../auth/read-authorizer.ts';
 import {fetchFromAPIServer} from '../custom/fetch.ts';
 import type {
   ConnectionContext,
+  ConnectionValidation,
   HeaderOptions,
 } from '../services/view-syncer/connection-context-manager.ts';
 import type {CustomQueryRecord} from '../services/view-syncer/schema/types.ts';
@@ -35,16 +36,28 @@ const tracer = trace.getTracer('custom-query-transformer');
 export type TransformResponse =
   | {
       kind: 'QueryResponse';
-      userID?: string | null | undefined;
       queries: QueryResponseBody;
+      validation: ConnectionValidation;
     }
   | TransformFailedBody;
 
-export type HashedTransformResponse = {
-  result: (TransformedAndHashed | ErroredQuery)[] | TransformFailedBody;
-  userID?: string | null | undefined;
-  cached: boolean;
-};
+export type HashedTransformResponse =
+  | {
+      kind: 'failed';
+      result: TransformFailedBody;
+    }
+  | ({
+      kind: 'success';
+      result: (TransformedAndHashed | ErroredQuery)[];
+    } & (
+      | {
+          cached: true;
+        }
+      | {
+          cached: false;
+          validation: ConnectionValidation;
+        }
+    ));
 
 /**
  * Transforms a custom query by calling the user's API server.
@@ -119,6 +132,7 @@ export class CustomQueryTransformer {
 
     if (request.length === 0) {
       return {
+        kind: 'success',
         result: cachedResponses,
         cached: true,
       };
@@ -130,8 +144,8 @@ export class CustomQueryTransformer {
     const response = await this.#requestTransform(ctx, request, 'transform');
     if (response.kind === 'TransformFailed') {
       return {
+        kind: 'failed',
         result: response,
-        cached,
       };
     }
 
@@ -156,8 +170,9 @@ export class CustomQueryTransformer {
     }
 
     return {
+      kind: 'success',
       result: [...newResponses, ...cachedResponses],
-      userID: response.userID,
+      validation: response.validation,
       cached,
     };
   }
@@ -185,13 +200,26 @@ export class CustomQueryTransformer {
       );
 
       if ('kind' in transformResponse) {
-        return transformResponse;
+        return transformResponse.kind === 'QueryResponse'
+          ? {
+              kind: 'QueryResponse',
+              queries: transformResponse.queries,
+              validation:
+                transformResponse.userID !== undefined
+                  ? {
+                      kind: 'server-validated',
+                      validatedUserID: transformResponse.userID,
+                    }
+                  : {kind: 'client-fallback'},
+            }
+          : transformResponse;
       }
 
       if (transformResponse[0] === 'transformed') {
+        // Legacy query response, so we use client fallback
         return {
           kind: 'QueryResponse',
-          userID: undefined,
+          validation: {kind: 'client-fallback'},
           queries: transformResponse[1],
         };
       }
@@ -227,7 +255,7 @@ function getCacheKey(ctx: ConnectionContext, queryID: string) {
     token: ctx.auth?.raw,
     cookie: ctx.queryContext.headerOptions.cookie,
     origin: ctx.queryContext.headerOptions.origin,
-    userID: ctx.userID,
+    userID: ctx.user,
     url: ctx.queryContext.url,
     customHeaders: normalizedForwardedHeaders(ctx.queryContext.headerOptions),
   });

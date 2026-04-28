@@ -37,6 +37,7 @@ import type {ReplicaState} from '../replicator/replicator.ts';
 import {updateReplicationWatermark} from '../replicator/schema/replication-state.ts';
 import {type FakeReplicator} from '../replicator/test-utils.ts';
 import {ClientHandler} from './client-handler.ts';
+import type {ConnectionValidation} from './connection-context-manager.ts';
 import {CVRStore} from './cvr-store.ts';
 import {CVRQueryDrivenUpdater, CVRUpdater} from './cvr.ts';
 import type {DrainCoordinator} from './drain-coordinator.ts';
@@ -74,11 +75,20 @@ import type {ViewSyncerService} from './view-syncer.ts';
 import {type SyncContext} from './view-syncer.ts';
 
 describe('view-syncer/service', () => {
+  const clientFallback: ConnectionValidation = {kind: 'client-fallback'};
+
   function transformAttempt(
     result: HashedTransformResponse['result'],
     cached = false,
+    validation: ConnectionValidation = clientFallback,
   ): HashedTransformResponse {
-    return {result, cached};
+    if (Array.isArray(result)) {
+      return cached
+        ? {kind: 'success', result, cached: true}
+        : {kind: 'success', result, cached: false, validation};
+    }
+
+    return {kind: 'failed', result};
   }
 
   afterEach(() => {
@@ -1273,9 +1283,7 @@ describe('view-syncer/service', () => {
             "baseCookie": null,
             "clientID": "foo",
             "insertionOrder": 1,
-            "profileID": "p0000g00000003203",
-            "protocolVersion": 50,
-            "pushContext": {
+            "mutateContext": {
               "allowedUrlPatterns": undefined,
               "headerOptions": {
                 "allowedClientHeaders": undefined,
@@ -1283,11 +1291,11 @@ describe('view-syncer/service', () => {
                 "cookie": undefined,
                 "customHeaders": undefined,
                 "origin": undefined,
-                "token": undefined,
-                "userID": "user-1",
               },
               "url": undefined,
             },
+            "profileID": "p0000g00000003203",
+            "protocolVersion": 50,
             "queryContext": {
               "allowedUrlPatterns": [
                 URLPattern {},
@@ -1298,15 +1306,15 @@ describe('view-syncer/service', () => {
                 "cookie": undefined,
                 "customHeaders": undefined,
                 "origin": undefined,
-                "token": undefined,
-                "userID": "user-1",
               },
               "url": "http://my-pull-endpoint.dev/api/zero/pull",
             },
             "revalidateAt": undefined,
             "revision": 1,
             "state": "validated",
-            "userID": "user-1",
+            "user": {
+              "id": "user-1",
+            },
             "wsID": "ws1",
           },
           [
@@ -1565,9 +1573,7 @@ describe('view-syncer/service', () => {
             "baseCookie": null,
             "clientID": "foo",
             "insertionOrder": 1,
-            "profileID": "p0000g00000003203",
-            "protocolVersion": 50,
-            "pushContext": {
+            "mutateContext": {
               "allowedUrlPatterns": undefined,
               "headerOptions": {
                 "allowedClientHeaders": undefined,
@@ -1575,11 +1581,11 @@ describe('view-syncer/service', () => {
                 "cookie": undefined,
                 "customHeaders": undefined,
                 "origin": undefined,
-                "token": undefined,
-                "userID": "user-1",
               },
               "url": undefined,
             },
+            "profileID": "p0000g00000003203",
+            "protocolVersion": 50,
             "queryContext": {
               "allowedUrlPatterns": [
                 URLPattern {},
@@ -1590,15 +1596,15 @@ describe('view-syncer/service', () => {
                 "cookie": undefined,
                 "customHeaders": undefined,
                 "origin": undefined,
-                "token": undefined,
-                "userID": "user-1",
               },
               "url": "http://my-pull-endpoint.dev/api/zero/pull",
             },
             "revalidateAt": undefined,
             "revision": 1,
             "state": "validated",
-            "userID": "user-1",
+            "user": {
+              "id": "user-1",
+            },
             "wsID": "ws1",
           },
           [
@@ -2245,9 +2251,7 @@ describe('view-syncer/service', () => {
             "baseCookie": null,
             "clientID": "foo",
             "insertionOrder": 1,
-            "profileID": "p0000g00000003203",
-            "protocolVersion": 50,
-            "pushContext": {
+            "mutateContext": {
               "allowedUrlPatterns": undefined,
               "headerOptions": {
                 "allowedClientHeaders": undefined,
@@ -2255,11 +2259,11 @@ describe('view-syncer/service', () => {
                 "cookie": undefined,
                 "customHeaders": undefined,
                 "origin": undefined,
-                "token": undefined,
-                "userID": "user-1",
               },
               "url": undefined,
             },
+            "profileID": "p0000g00000003203",
+            "protocolVersion": 50,
             "queryContext": {
               "allowedUrlPatterns": [
                 URLPattern {},
@@ -2270,15 +2274,15 @@ describe('view-syncer/service', () => {
                 "cookie": undefined,
                 "customHeaders": undefined,
                 "origin": undefined,
-                "token": undefined,
-                "userID": "user-1",
               },
               "url": "http://my-pull-endpoint.dev/api/zero/pull",
             },
             "revalidateAt": undefined,
             "revision": 1,
             "state": "validated",
-            "userID": "user-1",
+            "user": {
+              "id": "user-1",
+            },
             "wsID": "ws1",
           },
           [
@@ -2466,9 +2470,7 @@ describe('view-syncer/service', () => {
             "baseCookie": null,
             "clientID": "cq-c2-client",
             "insertionOrder": 2,
-            "profileID": "p0000g00000003203",
-            "protocolVersion": 50,
-            "pushContext": {
+            "mutateContext": {
               "allowedUrlPatterns": undefined,
               "headerOptions": {
                 "allowedClientHeaders": undefined,
@@ -2476,11 +2478,11 @@ describe('view-syncer/service', () => {
                 "cookie": undefined,
                 "customHeaders": undefined,
                 "origin": undefined,
-                "token": undefined,
-                "userID": "user-1",
               },
               "url": undefined,
             },
+            "profileID": "p0000g00000003203",
+            "protocolVersion": 50,
             "queryContext": {
               "allowedUrlPatterns": [
                 URLPattern {},
@@ -2491,15 +2493,15 @@ describe('view-syncer/service', () => {
                 "cookie": undefined,
                 "customHeaders": undefined,
                 "origin": undefined,
-                "token": undefined,
-                "userID": "user-1",
               },
               "url": "http://my-pull-endpoint.dev/api/zero/pull",
             },
             "revalidateAt": undefined,
             "revision": 1,
             "state": "provisional",
-            "userID": "user-1",
+            "user": {
+              "id": "user-1",
+            },
             "wsID": "cq-c2-wsid",
           },
           [
@@ -2618,9 +2620,9 @@ describe('view-syncer/service', () => {
 
       expect(transformSpy).toHaveBeenCalledTimes(1);
       expect(transformSpy.mock.calls[0][0].auth?.raw).toBe('token-1');
-      expect(transformSpy.mock.calls[0][0].userID).toBe('user-1');
+      expect(transformSpy.mock.calls[0][0].user).toEqual({id: 'user-1'});
 
-      await vs.contextManager.updateAuth(
+      await vs.connContextManager.updateAuth(
         {clientID: token1Context.clientID, wsID: token1Context.wsID},
         {auth: token2.raw},
       );
@@ -2632,7 +2634,7 @@ describe('view-syncer/service', () => {
 
       expect(transformSpy).toHaveBeenCalledTimes(2);
       expect(transformSpy.mock.calls[1][0].auth?.raw).toBe('token-2');
-      expect(transformSpy.mock.calls[1][0].userID).toBe('user-1');
+      expect(transformSpy.mock.calls[1][0].user).toEqual({id: 'user-1'});
     });
 
     test('uses the originating connection auth for connection-triggered custom query transforms', async () => {
@@ -2674,7 +2676,7 @@ describe('view-syncer/service', () => {
 
       expect(transformSpy).toHaveBeenCalledTimes(1);
       expect(transformSpy.mock.calls[0][0].auth?.raw).toBe('token-origin');
-      expect(transformSpy.mock.calls[0][0].userID).toBe('user-1');
+      expect(transformSpy.mock.calls[0][0].user).toEqual({id: 'user-1'});
     });
 
     test('does not retransform custom queries when opaque auth is unchanged after revision is synced', async () => {
@@ -2755,6 +2757,35 @@ describe('view-syncer/service', () => {
       expect(cvr.queries['query-hash-bad']).toBeUndefined();
     });
 
+    test('validation userID mismatch during connect fails the connection', async () => {
+      using validateSpy = vi
+        .spyOn(customQueryTransformer!, 'validate')
+        .mockResolvedValueOnce({
+          kind: 'QueryResponse',
+          validation: {
+            kind: 'server-validated',
+            validatedUserID: 'user-server',
+          },
+          queries: [],
+        });
+
+      const badContext: SyncContext = {
+        ...SYNC_CONTEXT,
+        clientID: 'bad',
+        wsID: 'ws-bad',
+        userID: 'user-bad',
+        auth: {type: 'opaque', raw: 'token-bad'},
+      };
+      const badClient = connect(badContext, [
+        {op: 'put', hash: 'query-hash-bad', ast: ISSUES_QUERY},
+      ]);
+
+      await expect(badClient.dequeue()).rejects.toThrow(
+        'Connection userID does not match validated server userID.',
+      );
+      expect(validateSpy).toHaveBeenCalledTimes(1);
+    });
+
     test('transform 401 during updateAuth disconnects the failing connection', async () => {
       using transformSpy = vi
         .spyOn(customQueryTransformer!, 'transform')
@@ -2793,7 +2824,7 @@ describe('view-syncer/service', () => {
 
       expect(transformSpy).toHaveBeenCalledTimes(1);
 
-      await vs.contextManager.updateAuth(
+      await vs.connContextManager.updateAuth(
         {clientID: authContext.clientID, wsID: authContext.wsID},
         {auth: 'token-2'},
       );
@@ -2840,6 +2871,41 @@ describe('view-syncer/service', () => {
 
       await expect(nextPoke(badClient)).rejects.toThrow(
         'Fetch from API server returned non-OK status 401',
+      );
+    });
+
+    test('transform userID mismatch during connect fails only that connection', async () => {
+      using transformSpy = vi
+        .spyOn(customQueryTransformer!, 'transform')
+        .mockResolvedValueOnce(
+          transformAttempt(
+            [
+              {
+                id: 'custom-1',
+                transformedAst: ISSUES_QUERY,
+                transformationHash: 'hash-1',
+              },
+            ],
+            false,
+            {kind: 'server-validated', validatedUserID: 'user-server'},
+          ),
+        );
+
+      const badContext: SyncContext = {
+        ...SYNC_CONTEXT,
+        userID: 'user-bad',
+        auth: {type: 'opaque', raw: 'token-bad'},
+      };
+      const badClient = connect(badContext, [
+        {op: 'put', hash: 'custom-1', name: 'named-query-1', args: ['thing']},
+      ]);
+
+      await nextPoke(badClient);
+      stateChanges.push({state: 'version-ready'});
+      await vi.waitFor(() => expect(transformSpy).toHaveBeenCalledTimes(1));
+
+      await expect(nextPoke(badClient)).rejects.toThrow(
+        'Connection userID does not match validated server userID.',
       );
     });
 

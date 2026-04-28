@@ -66,7 +66,7 @@ describe('fetchFromAPIServer', () => {
       state: 'provisional',
       clientID: 'test-client',
       wsID: 'test-ws',
-      userID: options.userID,
+      user: {id: options.userID ?? null},
       auth: options.auth ? {type: 'opaque', raw: options.auth} : undefined,
       profileID: null,
       baseCookie: null,
@@ -79,7 +79,7 @@ describe('fetchFromAPIServer', () => {
         allowedUrlPatterns,
         headerOptions,
       },
-      pushContext: {
+      mutateContext: {
         url,
         allowedUrlPatterns,
         headerOptions,
