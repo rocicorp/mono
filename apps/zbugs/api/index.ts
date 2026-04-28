@@ -1,6 +1,7 @@
 // https://vercel.com/templates/other/fastify-serverless-function
 
 import '../../../packages/shared/src/dotenv.ts';
+
 import type {IncomingHttpHeaders} from 'http';
 import cookie from '@fastify/cookie';
 import oauthPlugin, {type OAuth2Namespace} from '@fastify/oauth2';
@@ -163,7 +164,7 @@ async function mutateHandler(
   }>,
   reply: FastifyReply,
 ) {
-  await withAuth(request, reply, async jwtData => {
+  await withAuth(request, reply, async authData => {
     const postCommitTasks: (() => Promise<void>)[] = [];
     const mutators = createServerMutators(postCommitTasks);
 
@@ -172,11 +173,14 @@ async function mutateHandler(
       (transact, _mutation) =>
         transact((tx, name, args) => {
           const mutator = mustGetMutator(mutators, name);
-          return mutator.fn({tx, args, ctx: jwtData});
+          return mutator.fn({tx, args, ctx: authData});
         }),
       request.query,
       request.body,
-      'info',
+      {
+        userID: authData?.sub,
+        logLevel: 'info',
+      },
     );
 
     // we don't yet handle errors here, since Loops emails return 429 very often
@@ -215,6 +219,9 @@ async function queryHandler(
         },
         schema,
         request.body,
+        {
+          userID: authData?.sub,
+        },
       ),
     );
   });

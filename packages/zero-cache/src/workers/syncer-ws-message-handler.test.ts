@@ -1,7 +1,7 @@
 import {describe, expect, test, vi} from 'vitest';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import * as MutationType from '../../../zero-protocol/src/mutation-type-enum.ts';
-import {CRUD_MUTATION_NAME} from '../../../zero-protocol/src/push.ts';
+import {CRUD_MUTATION_NAME} from '../../../zero-protocol/src/mutation.ts';
 import type {Auth, ValidateLegacyJWT} from '../auth/auth.ts';
 import type {Mutagen} from '../services/mutagen/mutagen.ts';
 import type {Pusher} from '../services/mutagen/pusher.ts';

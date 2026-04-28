@@ -13,17 +13,17 @@ import {
 } from '../../../../zero-protocol/src/error.ts';
 import * as MutationType from '../../../../zero-protocol/src/mutation-type-enum.ts';
 import {
-  primaryKeyValueSchema,
-  type PrimaryKeyValue,
-} from '../../../../zero-protocol/src/primary-key.ts';
-import {
   type CRUDMutation,
   type DeleteOp,
   type InsertOp,
   type Mutation,
   type UpdateOp,
   type UpsertOp,
-} from '../../../../zero-protocol/src/push.ts';
+} from '../../../../zero-protocol/src/mutation.ts';
+import {
+  primaryKeyValueSchema,
+  type PrimaryKeyValue,
+} from '../../../../zero-protocol/src/primary-key.ts';
 import type {DatabaseStorage} from '../../../../zqlite/src/database-storage.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {

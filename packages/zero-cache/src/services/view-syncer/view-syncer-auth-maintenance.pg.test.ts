@@ -7,6 +7,7 @@ import {ErrorOrigin} from '../../../../zero-protocol/src/error-origin.ts';
 import {ErrorReason} from '../../../../zero-protocol/src/error-reason.ts';
 import {PROTOCOL_VERSION} from '../../../../zero-protocol/src/protocol-version.ts';
 import type {UpQueriesPatch} from '../../../../zero-protocol/src/queries-patch.ts';
+import type {TransformResponse} from '../../custom-queries/transform-query.ts';
 import {type PgTest, test} from '../../test/db.ts';
 import type {DbFile} from '../../test/lite.ts';
 import type {PostgresDB} from '../../types/pg.ts';
@@ -19,8 +20,8 @@ import {
   setup,
   USERS_QUERY,
 } from './view-syncer-test-util.ts';
-import {type SyncContext} from './view-syncer.ts';
 import type {ViewSyncerService} from './view-syncer.ts';
+import {type SyncContext} from './view-syncer.ts';
 
 function scheduled401(queryIDs: string[]) {
   return {
@@ -47,6 +48,14 @@ function scheduled500(queryIDs: string[]) {
 }
 
 const MAINTENANCE_INTERVAL_MS = 67_000;
+
+function validationSuccess(userID: string | null = null): TransformResponse {
+  return {
+    kind: 'QueryResponse' as const,
+    userID,
+    queries: [],
+  };
+}
 
 describe('view-syncer/auth maintenance', () => {
   afterEach(() => {
@@ -135,7 +144,7 @@ describe('view-syncer/auth maintenance', () => {
       expect(transformer).toBeDefined();
       using validateSpy = vi
         .spyOn(transformer!, 'validate')
-        .mockResolvedValue(undefined);
+        .mockResolvedValue(validationSuccess('user-1'));
 
       const authContext: SyncContext = {
         ...SYNC_CONTEXT,
@@ -165,10 +174,10 @@ describe('view-syncer/auth maintenance', () => {
       expect(transformer).toBeDefined();
       using validateSpy = vi
         .spyOn(transformer!, 'validate')
-        .mockResolvedValueOnce(undefined)
-        .mockResolvedValueOnce(undefined)
+        .mockResolvedValueOnce(validationSuccess('user-1'))
+        .mockResolvedValueOnce(validationSuccess('user-1'))
         .mockResolvedValueOnce(scheduled401([]))
-        .mockResolvedValueOnce(undefined);
+        .mockResolvedValueOnce(validationSuccess('user-1'));
 
       const client1 = connect(
         {...SYNC_CONTEXT, auth: {type: 'opaque', raw: 'token-1'}},
@@ -209,9 +218,9 @@ describe('view-syncer/auth maintenance', () => {
       expect(transformer).toBeDefined();
       using validateSpy = vi
         .spyOn(transformer!, 'validate')
-        .mockResolvedValueOnce(undefined)
+        .mockResolvedValueOnce(validationSuccess('user-1'))
         .mockResolvedValueOnce(scheduled500([]))
-        .mockResolvedValueOnce(undefined);
+        .mockResolvedValueOnce(validationSuccess('user-1'));
 
       const client = connect(
         {...SYNC_CONTEXT, auth: {type: 'opaque', raw: 'token-1'}},
@@ -246,7 +255,7 @@ describe('view-syncer/auth maintenance', () => {
       const staleValidation = resolver<ReturnType<typeof scheduled401>>();
       using validateSpy = vi
         .spyOn(transformer!, 'validate')
-        .mockResolvedValueOnce(undefined)
+        .mockResolvedValueOnce(validationSuccess('user-1'))
         .mockImplementationOnce(() => staleValidation.promise);
 
       const authContext: SyncContext = {
@@ -346,7 +355,7 @@ describe('view-syncer/auth maintenance', () => {
       expect(transformer).toBeDefined();
       using validateSpy = vi
         .spyOn(transformer!, 'validate')
-        .mockResolvedValue(undefined);
+        .mockResolvedValue(validationSuccess('user-1'));
       using transformSpy = vi
         .spyOn(transformer!, 'transform')
         .mockResolvedValueOnce({
@@ -445,7 +454,7 @@ describe('view-syncer/auth maintenance', () => {
       expect(transformer).toBeDefined();
       using validateSpy = vi
         .spyOn(transformer!, 'validate')
-        .mockResolvedValue(undefined);
+        .mockResolvedValue(validationSuccess('user-1'));
       using transformSpy = vi
         .spyOn(transformer!, 'transform')
         .mockResolvedValueOnce({

@@ -6,7 +6,9 @@ import {
   table,
 } from '../../zero-schema/src/builder/table-builder.ts';
 import {clientToServer} from '../../zero-schema/src/name-mapper.ts';
-import {mapCRUD} from './push.ts';
+import {mutateResponseSchema} from './mutate-server.ts';
+import {mapCRUD} from './mutation.ts';
+import {pushResponseSchema} from './push.ts';
 
 const schema = createSchema({
   tables: [
@@ -122,4 +124,77 @@ test('map names', () => {
       ],
     }
   `);
+});
+
+test('preserves legacy mutation errors when parsing mutate responses in passthrough mode', () => {
+  expect(
+    mutateResponseSchema.parse(
+      {
+        mutations: [
+          {
+            id: {clientID: 'cid', id: 1},
+            result: {
+              error: 'oooMutation',
+              ignored: 'extra field',
+            },
+          },
+        ],
+      },
+      {mode: 'passthrough'},
+    ),
+  ).toEqual({
+    mutations: [
+      {
+        id: {clientID: 'cid', id: 1},
+        result: {
+          error: 'oooMutation',
+          ignored: 'extra field',
+        },
+      },
+    ],
+  });
+});
+
+test('strips future fields from canonical mutate responses in passthrough mode', () => {
+  expect(
+    mutateResponseSchema.parse(
+      {
+        kind: 'MutateResponse',
+        userID: 'user-123',
+        mutations: [
+          {
+            id: {clientID: 'cid', id: 1},
+            result: {},
+          },
+        ],
+        futureMutationField: 42,
+      },
+      {mode: 'passthrough'},
+    ),
+  ).toEqual({
+    futureMutationField: 42,
+    kind: 'MutateResponse',
+    userID: 'user-123',
+    mutations: [
+      {
+        id: {clientID: 'cid', id: 1},
+        result: {},
+      },
+    ],
+  });
+});
+
+test('parses legacy push responses through the /mutate API schema', () => {
+  const response = {
+    mutations: [
+      {
+        id: {clientID: 'cid', id: 1},
+        result: {},
+      },
+    ],
+  };
+
+  expect(mutateResponseSchema.parse(response, {mode: 'strip'})).toEqual(
+    pushResponseSchema.parse(response, {mode: 'strip'}),
+  );
 });

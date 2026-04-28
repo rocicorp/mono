@@ -1,5 +1,6 @@
 import {assert, describe, expect, test, vi} from 'vitest';
 
+import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {ApplicationError} from '../../../zero-protocol/src/application-error.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
 import {ErrorReason} from '../../../zero-protocol/src/error-reason.ts';
@@ -13,6 +14,11 @@ import {
   handleQueryRequest,
 } from './process-queries.ts';
 
+const baseQuery = {
+  appID: 'test-app',
+  schema: 'test-schema',
+};
+
 function makeQuery(ast: AST): AnyQuery {
   const query = {
     [queryInternalsTag]: true,
@@ -22,6 +28,17 @@ function makeQuery(ast: AST): AnyQuery {
     },
   } as unknown as AnyQuery;
   return query;
+}
+
+function makeQuerySuccessResponse(
+  queries: ReadonlyJSONValue,
+  userID: string | null | undefined = undefined,
+) {
+  return {
+    kind: 'QueryResponse',
+    userID,
+    queries,
+  } as const;
 }
 
 describe('handleGetQueriesRequest', () => {
@@ -51,24 +68,22 @@ describe('handleGetQueriesRequest', () => {
     ]);
 
     expect(cb).toHaveBeenCalledWith('namesByFoo', [{foo: 'bar'}]);
-    expect(result[0]).toBe('transformed');
-    assert(
-      result[0] === 'transformed',
-      `Expected result type to be 'transformed'`,
+    expect(result).toEqual(
+      makeQuerySuccessResponse([
+        {
+          id: 'q1',
+          name: 'namesByFoo',
+          ast: expect.objectContaining({
+            table: 'divergent_names',
+            where: expect.objectContaining({
+              type: 'simple',
+              left: {type: 'column', name: 'divergent_b'},
+            }),
+          }),
+        },
+      ]),
     );
-    const [response] = result[1];
-    assert(!('error' in response));
-    expect(response).toEqual({
-      id: 'q1',
-      name: 'namesByFoo',
-      ast: expect.objectContaining({
-        table: 'divergent_names',
-        where: expect.objectContaining({
-          type: 'simple',
-          left: {type: 'column', name: 'divergent_b'},
-        }),
-      }),
-    });
+    expect(result).not.toHaveProperty('userID');
   });
 
   test('reads request bodies from Request instances', async () => {
@@ -99,16 +114,122 @@ describe('handleGetQueriesRequest', () => {
     const result = await handleGetQueriesRequest(cb, schema, request);
 
     expect(cb).toHaveBeenCalledWith('basicLimited', []);
-    expect(result).toEqual([
-      'transformed',
-      [
+    expect(result).toEqual(
+      makeQuerySuccessResponse([
         {
           id: 'q2',
           name: 'basicLimited',
           ast: expect.objectContaining({table: 'basic'}),
         },
+      ]),
+    );
+    expect(result).not.toHaveProperty('userID');
+  });
+
+  test('returns canonical query success when userID is provided', async () => {
+    const ast: AST = {
+      table: 'basic',
+      limit: 1,
+    };
+
+    const cb = vi.fn(() => makeQuery(ast));
+
+    const result = await handleQueryRequest(
+      cb,
+      schema,
+      [
+        'transform',
+        [
+          {
+            id: 'q2',
+            name: 'basicLimited',
+            args: [],
+          },
+        ],
+      ],
+      {userID: 'user-123'},
+    );
+
+    expect(result).toEqual(
+      makeQuerySuccessResponse(
+        [
+          {
+            id: 'q2',
+            name: 'basicLimited',
+            ast: expect.objectContaining({table: 'basic'}),
+          },
+        ],
+        'user-123',
+      ),
+    );
+  });
+
+  test('omits userID when options are omitted for logged-out requests', async () => {
+    const ast: AST = {
+      table: 'basic',
+    };
+
+    const cb = vi.fn(() => makeQuery(ast));
+
+    const result = await handleQueryRequest(cb, schema, [
+      'transform',
+      [
+        {
+          id: 'q1',
+          name: 'basicQuery',
+          args: [],
+        },
       ],
     ]);
+
+    expect(result).toEqual(
+      makeQuerySuccessResponse([
+        {
+          id: 'q1',
+          name: 'basicQuery',
+          ast: expect.objectContaining({table: 'basic'}),
+        },
+      ]),
+    );
+    expect(result).not.toHaveProperty('userID');
+  });
+
+  test('returns canonical query success with null userID when options include undefined userID', async () => {
+    const ast: AST = {
+      table: 'basic',
+    };
+
+    const cb = vi.fn(() => makeQuery(ast));
+
+    const result = await handleQueryRequest(
+      cb,
+      schema,
+      [
+        'transform',
+        [
+          {
+            id: 'q1',
+            name: 'basicQuery',
+            args: [],
+          },
+        ],
+      ],
+      {userID: undefined},
+    );
+
+    expect(result).toEqual(
+      makeQuerySuccessResponse(
+        [
+          {
+            id: 'q1',
+            name: 'basicQuery',
+            ast: expect.objectContaining({table: 'basic'}),
+          },
+        ],
+        null,
+      ),
+    );
+    expect(result).toHaveProperty('userID', null);
   });
 
   test('returns transformFailed parse error when validation fails', async () => {
@@ -120,10 +241,9 @@ describe('handleGetQueriesRequest', () => {
       ['invalid', []],
     );
 
-    expect(result[0]).toBe('transformFailed');
-    expect(result[1]).toEqual({
+    expect(result).toEqual({
       reason: ErrorReason.Parse,
-      kind: expect.any(String),
+      kind: expect.stringMatching('TransformFailed'),
       origin: expect.any(String),
       message: expect.stringContaining('Failed to parse getQueries request'),
       queryIDs: [],
@@ -146,10 +266,9 @@ describe('handleGetQueriesRequest', () => {
       request,
     );
 
-    expect(result[0]).toBe('transformFailed');
-    expect(result[1]).toEqual({
+    expect(result).toEqual({
       reason: ErrorReason.Parse,
-      kind: expect.any(String),
+      kind: expect.stringMatching('TransformFailed'),
       origin: expect.any(String),
       message: expect.stringContaining('Failed to parse getQueries request'),
       details: expect.objectContaining({name: 'SyntaxError'}),
@@ -179,24 +298,21 @@ describe('handleGetQueriesRequest', () => {
     ]);
 
     expect(cb).toHaveBeenCalledTimes(2);
-    expect(result[0]).toBe('transformed');
-    assert(
-      result[0] === 'transformed',
-      `Expected result type to be 'transformed'`,
+    expect(result).toEqual(
+      makeQuerySuccessResponse([
+        {
+          error: 'app',
+          id: 'q1',
+          name: 'first',
+          message: 'callback failed',
+        },
+        {
+          id: 'q2',
+          name: 'second',
+          ast: expect.objectContaining({table: 'basic'}),
+        },
+      ]),
     );
-    const [first, second] = result[1];
-    expect(first).toEqual({
-      error: 'app',
-      id: 'q1',
-      name: 'first',
-      message: 'callback failed',
-    });
-    assert(!('error' in second));
-    expect(second).toEqual({
-      id: 'q2',
-      name: 'second',
-      ast: expect.objectContaining({table: 'basic'}),
-    });
   });
 
   test('wraps thrown errors from callback with details when possible', async () => {
@@ -210,19 +326,17 @@ describe('handleGetQueriesRequest', () => {
       [{id: 'q1', name: 'test', args: []}],
     ]);
 
-    expect(result[0]).toBe('transformed');
-    assert(
-      result[0] === 'transformed',
-      `Expected result type to be 'transformed'`,
+    expect(result).toEqual(
+      makeQuerySuccessResponse([
+        {
+          error: 'app',
+          id: 'q1',
+          name: 'test',
+          message: 'custom type error',
+          details: expect.objectContaining({name: 'TypeError'}),
+        },
+      ]),
     );
-    const [response] = result[1];
-    expect(response).toEqual({
-      error: 'app',
-      id: 'q1',
-      name: 'test',
-      message: 'custom type error',
-      details: expect.objectContaining({name: 'TypeError'}),
-    });
   });
 
   test('retains custom details from ApplicationError', async () => {
@@ -240,19 +354,17 @@ describe('handleGetQueriesRequest', () => {
       [{id: 'q1', name: 'test', args: []}],
     ]);
 
-    expect(result[0]).toBe('transformed');
-    assert(
-      result[0] === 'transformed',
-      `Expected result type to be 'transformed'`,
+    expect(result).toEqual(
+      makeQuerySuccessResponse([
+        {
+          error: 'app',
+          id: 'q1',
+          name: 'test',
+          message: 'Application specific error',
+          details: customDetails,
+        },
+      ]),
     );
-    const [response] = result[1];
-    expect(response).toEqual({
-      error: 'app',
-      id: 'q1',
-      name: 'test',
-      message: 'Application specific error',
-      details: customDetails,
-    });
   });
 
   test('marks QueryParseError as parse error instead of app error', async () => {
@@ -269,19 +381,17 @@ describe('handleGetQueriesRequest', () => {
       [{id: 'q1', name: 'testQuery', args: [{foo: 'bar'}]}],
     ]);
 
-    expect(result[0]).toBe('transformed');
-    assert(
-      result[0] === 'transformed',
-      `Expected result type to be 'transformed'`,
+    expect(result).toEqual(
+      makeQuerySuccessResponse([
+        {
+          error: 'parse',
+          id: 'q1',
+          name: 'testQuery',
+          message: 'Failed to parse arguments for query: Invalid argument type',
+          details: expect.objectContaining({name: 'QueryParseError'}),
+        },
+      ]),
     );
-    const [response] = result[1];
-    expect(response).toEqual({
-      error: 'parse',
-      id: 'q1',
-      name: 'testQuery',
-      message: 'Failed to parse arguments for query: Invalid argument type',
-      details: expect.objectContaining({name: 'QueryParseError'}),
-    });
   });
 
   test('marks QueryParseError as parse error and continues processing remaining queries', async () => {
@@ -308,25 +418,22 @@ describe('handleGetQueriesRequest', () => {
     ]);
 
     expect(cb).toHaveBeenCalledTimes(2);
-    expect(result[0]).toBe('transformed');
-    assert(
-      result[0] === 'transformed',
-      `Expected result type to be 'transformed'`,
+    expect(result).toEqual(
+      makeQuerySuccessResponse([
+        {
+          error: 'parse',
+          id: 'q1',
+          name: 'parseErrorQuery',
+          message: 'Failed to parse arguments for query: Invalid args',
+          details: expect.objectContaining({name: 'QueryParseError'}),
+        },
+        {
+          id: 'q2',
+          name: 'successQuery',
+          ast: expect.objectContaining({table: 'basic'}),
+        },
+      ]),
     );
-    const [first, second] = result[1];
-    expect(first).toEqual({
-      error: 'parse',
-      id: 'q1',
-      name: 'parseErrorQuery',
-      message: 'Failed to parse arguments for query: Invalid args',
-      details: expect.objectContaining({name: 'QueryParseError'}),
-    });
-    assert(!('error' in second));
-    expect(second).toEqual({
-      id: 'q2',
-      name: 'successQuery',
-      ast: expect.objectContaining({table: 'basic'}),
-    });
   });
 
   test('returns transformFailed for infrastructure errors during schema processing', async () => {
@@ -350,12 +457,11 @@ describe('handleGetQueriesRequest', () => {
         [{id: 'q1', name: 'test', args: []}],
       ]);
 
-      expect(result[0]).toBe('transformFailed');
       assert(
-        result[0] === 'transformFailed',
-        `Expected result type to be 'transformFailed'`,
+        !Array.isArray(result) && result.kind === 'TransformFailed',
+        'Expected transformFailed tuple response',
       );
-      expect(result[1]).toEqual({
+      expect(result).toEqual({
         reason: ErrorReason.Internal,
         kind: expect.any(String),
         origin: expect.any(String),
@@ -369,7 +475,7 @@ describe('handleGetQueriesRequest', () => {
   });
 });
 
-describe('handleTransformRequest', () => {
+describe('handleQueryRequest', () => {
   test('returns transformed queries with server names when given JSON body', async () => {
     const ast: AST = {
       table: 'names',
@@ -395,9 +501,8 @@ describe('handleTransformRequest', () => {
     ]);
 
     expect(cb).toHaveBeenCalledWith('namesByFoo', {foo: 'bar'});
-    expect(result).toEqual([
-      'transformed',
-      [
+    expect(result).toEqual(
+      makeQuerySuccessResponse([
         {
           id: 'q1',
           name: 'namesByFoo',
@@ -409,8 +514,47 @@ describe('handleTransformRequest', () => {
             }),
           }),
         },
+      ]),
+    );
+  });
+
+  test('returns canonical query success when userID and JSON body are provided', async () => {
+    const ast: AST = {
+      table: 'basic',
+      limit: 1,
+    };
+
+    const cb = vi.fn(() => makeQuery(ast));
+
+    const result = await handleQueryRequest(
+      cb,
+      schema,
+      [
+        'transform',
+        [
+          {
+            id: 'q2',
+            name: 'basicLimited',
+            args: [],
+          },
+        ],
       ],
-    ]);
+      {userID: 'user-123', logLevel: 'debug'},
+    );
+
+    expect(cb).toHaveBeenCalledWith('basicLimited', undefined);
+    expect(result).toEqual(
+      makeQuerySuccessResponse(
+        [
+          {
+            id: 'q2',
+            name: 'basicLimited',
+            ast: expect.objectContaining({table: 'basic'}),
+          },
+        ],
+        'user-123',
+      ),
+    );
   });
 
   test('reads request bodies from Request instances', async () => {
@@ -440,16 +584,62 @@ describe('handleTransformRequest', () => {
     const result = await handleQueryRequest(cb, schema, request);
 
     expect(cb).toHaveBeenCalledWith('basicLimited', undefined);
-    expect(result).toEqual([
-      'transformed',
-      [
+    expect(result).toEqual(
+      makeQuerySuccessResponse([
         {
           id: 'q2',
           name: 'basicLimited',
           ast: expect.objectContaining({table: 'basic'}),
         },
+      ]),
+    );
+  });
+
+  test('reads request bodies from Request instances when userID is provided', async () => {
+    const ast: AST = {
+      table: 'basic',
+      limit: 1,
+    };
+
+    const cb = vi.fn(() => makeQuery(ast));
+
+    const body = JSON.stringify([
+      'transform',
+      [
+        {
+          id: 'q2',
+          name: 'basicLimited',
+          args: [],
+        },
       ],
     ]);
+
+    const request = new Request(
+      `https://example.com/queries?schema=${baseQuery.schema}&appID=${baseQuery.appID}`,
+      {
+        method: 'POST',
+        body,
+      },
+    );
+
+    const result = await handleQueryRequest(cb, schema, request, {
+      userID: 'user-123',
+      logLevel: 'debug',
+    });
+
+    expect(cb).toHaveBeenCalledWith('basicLimited', undefined);
+    expect(result).toEqual(
+      makeQuerySuccessResponse(
+        [
+          {
+            id: 'q2',
+            name: 'basicLimited',
+            ast: expect.objectContaining({table: 'basic'}),
+          },
+        ],
+        'user-123',
+      ),
+    );
   });
 
   test('returns transformFailed parse error when validation fails', async () => {
@@ -461,17 +651,14 @@ describe('handleTransformRequest', () => {
       ['invalid', []],
     );
 
-    expect(result).toEqual([
-      'transformFailed',
-      {
-        kind: expect.any(String),
-        message: expect.stringContaining('Failed to parse query request'),
-        origin: expect.any(String),
-        queryIDs: [],
-        reason: ErrorReason.Parse,
-        details: expect.objectContaining({name: 'TypeError'}),
-      },
-    ]);
+    expect(result).toEqual({
+      kind: expect.any(String),
+      message: expect.stringContaining('Failed to parse query request'),
+      origin: expect.any(String),
+      queryIDs: [],
+      reason: ErrorReason.Parse,
+      details: expect.objectContaining({name: 'TypeError'}),
+    });
   });
 
   test('returns transformFailed parse error when request body parsing fails', async () => {
@@ -489,17 +676,14 @@ describe('handleTransformRequest', () => {
       request,
     );
 
-    expect(result).toEqual([
-      'transformFailed',
-      {
-        reason: ErrorReason.Parse,
-        kind: expect.any(String),
-        origin: expect.any(String),
-        message: expect.stringContaining('Failed to parse query request'),
-        details: expect.objectContaining({name: 'SyntaxError'}),
-        queryIDs: [],
-      },
-    ]);
+    expect(result).toEqual({
+      reason: ErrorReason.Parse,
+      kind: expect.any(String),
+      origin: expect.any(String),
+      message: expect.stringContaining('Failed to parse query request'),
+      details: expect.objectContaining({name: 'SyntaxError'}),
+      queryIDs: [],
+    });
   });
 
   test('marks failed queries with app error and continues processing remaining queries', async () => {
@@ -523,24 +707,21 @@ describe('handleTransformRequest', () => {
     ]);
 
     expect(cb).toHaveBeenCalledTimes(2);
-    expect(result[0]).toBe('transformed');
-    assert(
-      result[0] === 'transformed',
-      `Expected result type to be 'transformed'`,
+    expect(result).toEqual(
+      makeQuerySuccessResponse([
+        {
+          error: 'app',
+          id: 'q1',
+          name: 'first',
+          message: 'callback failed',
+        },
+        {
+          id: 'q2',
+          name: 'second',
+          ast: expect.objectContaining({table: 'basic'}),
+        },
+      ]),
     );
-    const [first, second] = result[1];
-    expect(first).toEqual({
-      error: 'app',
-      id: 'q1',
-      name: 'first',
-      message: 'callback failed',
-    });
-    assert(!('error' in second));
-    expect(second).toEqual({
-      id: 'q2',
-      name: 'second',
-      ast: expect.objectContaining({table: 'basic'}),
-    });
   });
 
   test('wraps thrown errors from callback with details when possible', async () => {
@@ -554,9 +735,8 @@ describe('handleTransformRequest', () => {
       [{id: 'q1', name: 'test', args: []}],
     ]);
 
-    expect(result).toEqual([
-      'transformed',
-      [
+    expect(result).toEqual(
+      makeQuerySuccessResponse([
         {
           error: 'app',
           id: 'q1',
@@ -564,8 +744,8 @@ describe('handleTransformRequest', () => {
           message: 'custom type error',
           details: expect.objectContaining({name: 'TypeError'}),
         },
-      ],
-    ]);
+      ]),
+    );
   });
 
   test('retains custom details from ApplicationError', async () => {
@@ -583,9 +763,8 @@ describe('handleTransformRequest', () => {
       [{id: 'q1', name: 'test', args: []}],
     ]);
 
-    expect(result).toEqual([
-      'transformed',
-      [
+    expect(result).toEqual(
+      makeQuerySuccessResponse([
         {
           error: 'app',
           id: 'q1',
@@ -593,8 +772,8 @@ describe('handleTransformRequest', () => {
           message: 'Application specific error',
           details: customDetails,
         },
-      ],
-    ]);
+      ]),
+    );
   });
 
   test('marks QueryParseError as parse error instead of app error', async () => {
@@ -611,9 +790,8 @@ describe('handleTransformRequest', () => {
       [{id: 'q1', name: 'testQuery', args: [{foo: 'bar'}]}],
     ]);
 
-    expect(result).toEqual([
-      'transformed',
-      [
+    expect(result).toEqual(
+      makeQuerySuccessResponse([
         {
           error: 'parse',
           id: 'q1',
@@ -621,8 +799,8 @@ describe('handleTransformRequest', () => {
           message: 'Failed to parse arguments for query: Invalid argument type',
           details: expect.objectContaining({name: 'QueryParseError'}),
         },
-      ],
-    ]);
+      ]),
+    );
   });
 
   test('marks QueryParseError as parse error and continues processing remaining queries', async () => {
@@ -648,9 +826,8 @@ describe('handleTransformRequest', () => {
     ]);
 
     expect(cb).toHaveBeenCalledTimes(2);
-    expect(result).toEqual([
-      'transformed',
-      [
+    expect(result).toEqual(
+      makeQuerySuccessResponse([
         {
           error: 'parse',
           id: 'q1',
@@ -663,8 +840,8 @@ describe('handleTransformRequest', () => {
           name: 'successQuery',
           ast: expect.objectContaining({table: 'basic'}),
         },
-      ],
-    ]);
+      ]),
+    );
   });
 
   test('returns transformFailed for infrastructure errors during schema processing', async () => {
@@ -686,16 +863,13 @@ describe('handleTransformRequest', () => {
       [{id: 'q1', name: 'test', args: []}],
     ]);
 
-    expect(result).toEqual([
-      'transformFailed',
-      {
-        kind: expect.any(String),
-        message: 'Schema processing failed',
-        origin: expect.any(String),
-        queryIDs: ['q1'],
-        reason: ErrorReason.Internal,
-        details: expect.objectContaining({name: 'TypeError'}),
-      },
-    ]);
+    expect(result).toEqual({
+      kind: expect.any(String),
+      message: 'Schema processing failed',
+      origin: expect.any(String),
+      queryIDs: ['q1'],
+      reason: ErrorReason.Internal,
+      details: expect.objectContaining({name: 'TypeError'}),
+    });
   });
 });

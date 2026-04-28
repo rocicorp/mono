@@ -6,7 +6,7 @@ import type {
   DeleteOp,
   InsertOp,
   UpdateOp,
-} from '../../../zero-protocol/src/push.ts';
+} from '../../../zero-protocol/src/mutation.ts';
 import type {
   PermissionsConfig,
   Rule,
