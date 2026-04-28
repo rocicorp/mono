@@ -761,6 +761,14 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       const connCtx =
         this.connContextManager.mustGetConnectionContext(selector);
 
+      // The Syncer closes the previous Connection for this clientID before
+      // calling initConnection. That close synchronously removes the old
+      // ClientHandler from #clients, so there should be none here.
+      assert(
+        !this.#clients.has(connCtx.clientID),
+        `client ${connCtx.clientID} already in #clients at initConnection`,
+      );
+
       const lc = this.#lc
         .withContext('clientID', connCtx.clientID)
         .withContext('wsID', connCtx.wsID);
@@ -851,9 +859,13 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             }
 
             // NOW safe to add: auth is validated and connection is alive.
-            this.#clients
-              .get(connCtx.clientID)
-              ?.close(`replaced by wsID: ${connCtx.wsID}`);
+            // The Syncer closes the previous Connection (and thus its
+            // ClientHandler) before calling initConnection, so there
+            // should be no existing client for this clientID.
+            assert(
+              !this.#clients.has(connCtx.clientID),
+              `client ${connCtx.clientID} already in #clients`,
+            );
             this.#clients.set(connCtx.clientID, newClient);
 
             await this.#handleConfigUpdate(
