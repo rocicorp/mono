@@ -1,5 +1,6 @@
 import {
   afterEach,
+  assert,
   beforeEach,
   describe,
   expect,
@@ -24,6 +25,7 @@ import type {TransformedAndHashed} from '../auth/read-authorizer.ts';
 import {fetchFromAPIServer} from '../custom/fetch.ts';
 import type {
   ConnectionContext,
+  ConnectionValidation,
   HeaderOptions,
 } from '../services/view-syncer/connection-context-manager.ts';
 import type {CustomQueryRecord} from '../services/view-syncer/schema/types.ts';
@@ -67,7 +69,7 @@ describe('CustomQueryTransformer', () => {
       state: 'provisional',
       clientID: 'test-client',
       wsID: 'test-ws',
-      userID: options.userID,
+      user: {id: options.userID ?? null},
       auth: auth ? {type: 'opaque', raw: auth} : undefined,
       profileID: null,
       baseCookie: null,
@@ -80,7 +82,7 @@ describe('CustomQueryTransformer', () => {
         allowedUrlPatterns: [new URLPattern(pullUrl)],
         headerOptions: normalizedHeaderOptions,
       },
-      pushContext: {
+      mutateContext: {
         url: undefined,
         allowedUrlPatterns: [],
         headerOptions: {
@@ -154,7 +156,7 @@ describe('CustomQueryTransformer', () => {
     const auth = options.auth ?? defaultAuth;
 
     return expect.objectContaining({
-      userID: options.userID,
+      user: {id: options.userID ?? null},
       auth: auth ? {type: 'opaque', raw: auth} : undefined,
       queryContext: expect.objectContaining({
         url: options.userQueryURL ?? pullUrl,
@@ -300,13 +302,31 @@ describe('CustomQueryTransformer', () => {
     ReturnType<ReturnType<typeof makeTransformer>['transform']>
   >;
 
+  const clientFallback: ConnectionValidation = {kind: 'client-fallback'};
+
+  const serverValidated = (
+    validatedUserID: string | null,
+  ): ConnectionValidation => ({
+    kind: 'server-validated',
+    validatedUserID,
+  });
+
   function expectTransformAttempt(
     actual: TransformAttempt,
     expected: TransformAttempt['result'],
     cached = false,
-    userID?: string | null,
+    validation: ConnectionValidation = clientFallback,
   ) {
-    expect(actual).toEqual({result: expected, cached, userID});
+    if (Array.isArray(expected)) {
+      expect(actual).toEqual(
+        cached
+          ? {kind: 'success', result: expected, cached: true}
+          : {kind: 'success', result: expected, cached: false, validation},
+      );
+      return;
+    }
+
+    expect(actual).toEqual({kind: 'failed', result: expected});
   }
 
   beforeEach(() => {
@@ -335,7 +355,12 @@ describe('CustomQueryTransformer', () => {
     expectLastTransformFetch(mockQueries);
 
     // Verify the result
-    expectTransformAttempt(result, transformResults, false, 'user-123');
+    expectTransformAttempt(
+      result,
+      transformResults,
+      false,
+      serverValidated('user-123'),
+    );
   });
 
   test('validate should hit the API with an empty transform request', async () => {
@@ -349,7 +374,7 @@ describe('CustomQueryTransformer', () => {
     expectLastTransformFetch([]);
     expect(result).toEqual({
       kind: 'QueryResponse',
-      userID: 'user-123',
+      validation: serverValidated('user-123'),
       queries: [],
     });
   });
@@ -522,6 +547,7 @@ describe('CustomQueryTransformer', () => {
     expectLastTransformFetch([mockQueries[1]]);
 
     // Verify combined result includes both cached and fresh data
+    assert(result.kind === 'success');
     expect(result.cached).toBe(false);
     expect(result.result).toHaveLength(2);
     expect(result.result).toEqual(expect.arrayContaining(transformResults));

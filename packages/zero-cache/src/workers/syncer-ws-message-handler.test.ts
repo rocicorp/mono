@@ -40,10 +40,10 @@ type MockViewSyncer = ViewSyncer & {
 };
 
 function createMockViewSyncer(
-  contextManager: ConnectionContextManager,
+  connContextManager: ConnectionContextManager,
 ): MockViewSyncer {
   return {
-    contextManager,
+    connContextManager,
     updateAuth: vi.fn().mockResolvedValue(undefined),
     changeDesiredQueries: vi.fn().mockResolvedValue(undefined),
     deleteClients: vi.fn().mockResolvedValue([]),
@@ -80,10 +80,10 @@ function createHandler(
   pusher: MockPusher,
   initialAuth: Auth | undefined,
   connectParamsOverrides: Partial<ConnectParams> = {},
-  contextManager = new ConnectionContextManagerImpl(lc),
+  connContextManager = new ConnectionContextManagerImpl(lc),
 ) {
   const connectParams = createConnectParams(connectParamsOverrides);
-  contextManager.registerConnection(
+  connContextManager.registerConnection(
     {clientID: connectParams.clientID, wsID: connectParams.wsID},
     connectParams,
     initialAuth,
@@ -91,7 +91,7 @@ function createHandler(
   return new SyncerWsMessageHandler(
     lc,
     connectParams,
-    contextManager,
+    connContextManager,
     viewSyncer,
     mutagen as unknown as Mutagen,
     pusher as unknown as Pusher,
@@ -102,8 +102,8 @@ describe('SyncerWsMessageHandler auth handling', () => {
   test('ignores push auth and uses the connection auth snapshot', async () => {
     const pusher = createMockPusher();
     const mutagen = createMockMutagen();
-    const contextManager = new ConnectionContextManagerImpl(lc);
-    const viewSyncer = createMockViewSyncer(contextManager);
+    const connContextManager = new ConnectionContextManagerImpl(lc);
+    const viewSyncer = createMockViewSyncer(connContextManager);
     const handler = createHandler(
       viewSyncer,
       mutagen,
@@ -113,7 +113,7 @@ describe('SyncerWsMessageHandler auth handling', () => {
         raw: 'connection-token',
       },
       {},
-      contextManager,
+      connContextManager,
     );
 
     await handler.handleMessage([
@@ -151,8 +151,8 @@ describe('SyncerWsMessageHandler auth handling', () => {
   test('updateAuth updates auth used by later pushes', async () => {
     const pusher = createMockPusher();
     const mutagen = createMockMutagen();
-    const contextManager = new ConnectionContextManagerImpl(lc);
-    const viewSyncer = createMockViewSyncer(contextManager);
+    const connContextManager = new ConnectionContextManagerImpl(lc);
+    const viewSyncer = createMockViewSyncer(connContextManager);
     const handler = createHandler(
       viewSyncer,
       mutagen,
@@ -162,7 +162,7 @@ describe('SyncerWsMessageHandler auth handling', () => {
         raw: 'old-token',
       },
       {},
-      contextManager,
+      connContextManager,
     );
 
     await handler.handleMessage(['updateAuth', {auth: 'new-token'}]);
@@ -220,8 +220,8 @@ describe('SyncerWsMessageHandler auth handling', () => {
   test('ackMutationResponses forwards connection auth context to cleanup', async () => {
     const pusher = createMockPusher();
     const mutagen = createMockMutagen();
-    const contextManager = new ConnectionContextManagerImpl(lc);
-    const viewSyncer = createMockViewSyncer(contextManager);
+    const connContextManager = new ConnectionContextManagerImpl(lc);
+    const viewSyncer = createMockViewSyncer(connContextManager);
     const handler = createHandler(
       viewSyncer,
       mutagen,
@@ -234,7 +234,7 @@ describe('SyncerWsMessageHandler auth handling', () => {
         httpCookie: 'my-cookie',
         origin: 'https://app.example',
       },
-      contextManager,
+      connContextManager,
     );
 
     await handler.handleMessage([
@@ -260,8 +260,8 @@ describe('SyncerWsMessageHandler auth handling', () => {
   test('deleteClients forwards connection auth context to cleanup', async () => {
     const pusher = createMockPusher();
     const mutagen = createMockMutagen();
-    const contextManager = new ConnectionContextManagerImpl(lc);
-    const viewSyncer = createMockViewSyncer(contextManager);
+    const connContextManager = new ConnectionContextManagerImpl(lc);
+    const viewSyncer = createMockViewSyncer(connContextManager);
     viewSyncer.deleteClients.mockResolvedValue(['client-a']);
     const handler = createHandler(
       viewSyncer,
@@ -275,7 +275,7 @@ describe('SyncerWsMessageHandler auth handling', () => {
         httpCookie: 'my-cookie',
         origin: 'https://app.example',
       },
-      contextManager,
+      connContextManager,
     );
 
     await handler.handleMessage(['deleteClients', {clientIDs: ['client-a']}]);
@@ -292,8 +292,8 @@ describe('SyncerWsMessageHandler auth handling', () => {
   test('rejects clearing auth on an authenticated connection', async () => {
     const pusher = createMockPusher();
     const mutagen = createMockMutagen();
-    const contextManager = new ConnectionContextManagerImpl(lc);
-    const viewSyncer = createMockViewSyncer(contextManager);
+    const connContextManager = new ConnectionContextManagerImpl(lc);
+    const viewSyncer = createMockViewSyncer(connContextManager);
     const handler = createHandler(
       viewSyncer,
       mutagen,
@@ -303,7 +303,7 @@ describe('SyncerWsMessageHandler auth handling', () => {
         raw: 'old-token',
       },
       {},
-      contextManager,
+      connContextManager,
     );
 
     await expect(
@@ -319,7 +319,7 @@ describe('SyncerWsMessageHandler auth handling', () => {
     const mutagen = createMockMutagen();
     const validateLegacyJWT: ValidateLegacyJWT = () =>
       Promise.reject(new Error('bad token'));
-    const contextManager = new ConnectionContextManagerImpl(
+    const connContextManager = new ConnectionContextManagerImpl(
       lc,
       undefined,
       undefined,
@@ -327,14 +327,14 @@ describe('SyncerWsMessageHandler auth handling', () => {
       undefined,
       validateLegacyJWT,
     );
-    const viewSyncer = createMockViewSyncer(contextManager);
+    const viewSyncer = createMockViewSyncer(connContextManager);
     const handler = createHandler(
       viewSyncer,
       mutagen,
       pusher,
       undefined,
       {},
-      contextManager,
+      connContextManager,
     );
 
     await expect(
@@ -348,8 +348,8 @@ describe('SyncerWsMessageHandler auth handling', () => {
   test('uses handler-local JWT auth for CRUD mutations', async () => {
     const pusher = createMockPusher();
     const mutagen = createMockMutagen();
-    const contextManager = new ConnectionContextManagerImpl(lc);
-    const viewSyncer = createMockViewSyncer(contextManager);
+    const connContextManager = new ConnectionContextManagerImpl(lc);
+    const viewSyncer = createMockViewSyncer(connContextManager);
     const handler = createHandler(
       viewSyncer,
       mutagen,
@@ -360,7 +360,7 @@ describe('SyncerWsMessageHandler auth handling', () => {
         decoded: {sub: 'test-user', iat: 1},
       },
       {},
-      contextManager,
+      connContextManager,
     );
 
     await handler.handleMessage([
@@ -394,8 +394,8 @@ describe('SyncerWsMessageHandler auth handling', () => {
   test('rejects CRUD mutations when auth is opaque', async () => {
     const pusher = createMockPusher();
     const mutagen = createMockMutagen();
-    const contextManager = new ConnectionContextManagerImpl(lc);
-    const viewSyncer = createMockViewSyncer(contextManager);
+    const connContextManager = new ConnectionContextManagerImpl(lc);
+    const viewSyncer = createMockViewSyncer(connContextManager);
     const handler = createHandler(
       viewSyncer,
       mutagen,
@@ -405,7 +405,7 @@ describe('SyncerWsMessageHandler auth handling', () => {
         raw: 'opaque-token',
       },
       {},
-      contextManager,
+      connContextManager,
     );
 
     await expect(
