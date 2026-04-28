@@ -318,12 +318,12 @@ test('zero-cache --help', () => {
                                                                         To change the set of publications without disrupting an existing app, a new app                                            
                                                                         should be created.                                                                                                         
                                                                                                                                                                                                    
-     --auth-revalidate-interval-seconds number                          optional                                                                                                                   
+     --auth-revalidate-interval-seconds number                          default: 300                                                                                                               
        ZERO_AUTH_REVALIDATE_INTERVAL_SECONDS env                                                                                                                                                   
                                                                         The interval in seconds between periodic /query auth revalidation for validated connections.                               
                                                                         If unset, periodic auth revalidation is disabled.                                                                          
                                                                                                                                                                                                    
-     --auth-retransform-interval-seconds number                         optional                                                                                                                   
+     --auth-retransform-interval-seconds number                         default: 300                                                                                                               
        ZERO_AUTH_RETRANSFORM_INTERVAL_SECONDS env                                                                                                                                                  
                                                                         The interval in seconds between periodic shared /query retransform work for a client group.                                
                                                                         If unset, periodic shared retransform is disabled.                                                                         
@@ -610,11 +610,13 @@ test('zero-cache --help', () => {
                                                                         drift, PG version quirks, etc.), the shadow run fails before a customer                                                    
                                                                         actually needs a full reset.                                                                                               
                                                                                                                                                                                                    
-     --shadow-sync-interval-hours number                                default: 24                                                                                                                
+     --shadow-sync-interval-hours number                                default: 12                                                                                                                
        ZERO_SHADOW_SYNC_INTERVAL_HOURS env                                                                                                                                                         
-                                                                        The interval between shadow initial-sync runs, in hours. The first run                                                     
-                                                                        is additionally staggered by a random fraction of this interval so that                                                    
-                                                                        a fleet restart does not cause all tasks to canary simultaneously.                                                         
+                                                                        The interval between shadow initial-sync runs, in hours. The first                                                         
+                                                                        run fires within [2/3, 1) of this interval after startup, so the                                                           
+                                                                        canary completes at least once per task lifetime (the replication                                                          
+                                                                        manager is restarted every ~24h) while still jittering so a fleet                                                          
+                                                                        restart does not cause all tasks to canary simultaneously.                                                                 
                                                                                                                                                                                                    
      --shadow-sync-sample-rate number                                   default: 0.1                                                                                                               
        ZERO_SHADOW_SYNC_SAMPLE_RATE env                                                                                                                                                            

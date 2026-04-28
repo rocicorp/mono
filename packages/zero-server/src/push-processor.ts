@@ -3,11 +3,9 @@ import {assert} from '../../shared/src/asserts.ts';
 import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
 import {must} from '../../shared/src/must.ts';
 import {getValueAtPath} from '../../shared/src/object-traversal.ts';
-import {
-  type CustomMutation,
-  type MutationResponse,
-  type PushResponse,
-} from '../../zero-protocol/src/push.ts';
+import type {MutateResponse} from '../../zero-protocol/src/mutate-server.ts';
+import type {CustomMutation} from '../../zero-protocol/src/mutation.ts';
+import {type MutationResponse} from '../../zero-protocol/src/push.ts';
 import {
   type Database,
   type ExtractTransactionType,
@@ -53,7 +51,7 @@ export class PushProcessor<
     mutators: MD,
     queryString: URLSearchParams | Record<string, string>,
     body: ReadonlyJSONValue,
-  ): Promise<PushResponse>;
+  ): Promise<MutateResponse>;
 
   /**
    * This override gets the query string and the body from a Request object.
@@ -61,12 +59,12 @@ export class PushProcessor<
    * @param mutators the custom mutators for the application
    * @param request A `Request` object.
    */
-  process(mutators: MD, request: Request): Promise<PushResponse>;
+  process(mutators: MD, request: Request): Promise<MutateResponse>;
   process(
     mutators: MD,
     queryOrQueryString: Request | URLSearchParams | Record<string, string>,
     body?: ReadonlyJSONValue,
-  ): Promise<PushResponse> {
+  ): Promise<MutateResponse> {
     if (queryOrQueryString instanceof Request) {
       return handleMutateRequest(
         this.#dbProvider,

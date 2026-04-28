@@ -12,7 +12,7 @@ import {PROTOCOL_VERSION} from '../../../../zero-protocol/src/protocol-version.t
 import type {UpQueriesPatch} from '../../../../zero-protocol/src/queries-patch.ts';
 import type {
   CustomQueryTransformer,
-  TransformAttempt,
+  HashedTransformResponse,
 } from '../../custom-queries/transform-query.ts';
 import type {InspectorDelegate} from '../../server/inspector-delegate.ts';
 import {type PgTest, test} from '../../test/db.ts';
@@ -38,9 +38,9 @@ import {type SyncContext} from './view-syncer.ts';
 
 describe('view-syncer/service', () => {
   function transformAttempt(
-    result: TransformAttempt['result'],
+    result: HashedTransformResponse['result'],
     cached = false,
-  ): TransformAttempt {
+  ): HashedTransformResponse {
     return {result, cached};
   }
 

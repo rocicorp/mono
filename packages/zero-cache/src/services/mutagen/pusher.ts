@@ -1,7 +1,7 @@
-import {ROOT_CONTEXT, context, propagation} from '@opentelemetry/api';
+import {context, propagation, ROOT_CONTEXT} from '@opentelemetry/api';
 import type {LogContext} from '@rocicorp/logger';
 import {groupBy} from '../../../../shared/src/arrays.ts';
-import {assert, unreachable} from '../../../../shared/src/asserts.ts';
+import {assert} from '../../../../shared/src/asserts.ts';
 import {getErrorMessage} from '../../../../shared/src/error.ts';
 import {must} from '../../../../shared/src/must.ts';
 import {Queue} from '../../../../shared/src/queue.ts';
@@ -13,14 +13,14 @@ import {
   isProtocolError,
   type PushFailedBody,
 } from '../../../../zero-protocol/src/error.ts';
-import * as MutationType from '../../../../zero-protocol/src/mutation-type-enum.ts';
 import {
-  CLEANUP_RESULTS_MUTATION_NAME,
-  pushResponseSchema,
-  type MutationID,
-  type PushBody,
-  type PushResponse,
-} from '../../../../zero-protocol/src/push.ts';
+  mutateResponseSchema,
+  type MutateResponse,
+} from '../../../../zero-protocol/src/mutate-server.ts';
+import type {MutationID} from '../../../../zero-protocol/src/mutation-id.ts';
+import * as MutationType from '../../../../zero-protocol/src/mutation-type-enum.ts';
+import {CLEANUP_RESULTS_MUTATION_NAME} from '../../../../zero-protocol/src/mutation.ts';
+import {type PushBody} from '../../../../zero-protocol/src/push.ts';
 import {authEquals, isAuthErrorBody} from '../../auth/auth.ts';
 import {type ZeroConfig} from '../../config/zero-config.ts';
 import {fetchFromAPIServer} from '../../custom/fetch.ts';
@@ -149,7 +149,7 @@ export class PusherService implements Service, Pusher {
 
     try {
       await fetchFromAPIServer(
-        pushResponseSchema,
+        mutateResponseSchema,
         'push',
         this.#lc,
         ctx,
@@ -208,7 +208,7 @@ export class PusherService implements Service, Pusher {
 
     try {
       await fetchFromAPIServer(
-        pushResponseSchema,
+        mutateResponseSchema,
         'push',
         this.#lc,
         ctx,
@@ -361,11 +361,14 @@ class PushWorker {
    * 2. If the push succeeds, we look for any mutation failure that should cause the connection to terminate
    *  and terminate the connection for those clients.
    */
-  #fanOutResponses(response: PushResponse) {
+  #fanOutResponses(response: MutateResponse) {
     const connectionTerminations: (() => void)[] = [];
 
     // if the entire push failed, send that to the client.
-    if ('kind' in response || 'error' in response) {
+    if (
+      ('kind' in response && response.kind === ErrorKind.PushFailed) ||
+      'error' in response
+    ) {
       this.#lc.warn?.(
         'The server behind ZERO_MUTATE_URL returned a push error.',
         response,
@@ -421,10 +424,8 @@ class PushWorker {
                   };
 
           this.#failDownstream(client.downstream, pushFailedBody);
-        } else if ('kind' in response) {
-          this.#failDownstream(client.downstream, response);
         } else {
-          unreachable(response);
+          this.#failDownstream(client.downstream, response);
         }
       }
     } else {
@@ -484,7 +485,7 @@ class PushWorker {
     connectionTerminations.forEach(cb => cb());
   }
 
-  async #processPush(entry: PusherEntry): Promise<PushResponse> {
+  async #processPush(entry: PusherEntry): Promise<MutateResponse> {
     this.#customMutations.add(entry.push.mutations.length, {
       clientGroupID: entry.push.clientGroupID,
     });
@@ -517,7 +518,7 @@ class PushWorker {
       }));
 
       const response = await fetchFromAPIServer(
-        pushResponseSchema,
+        mutateResponseSchema,
         'push',
         this.#lc,
         entry.context,
@@ -527,7 +528,10 @@ class PushWorker {
         },
         entry.push,
       );
-      if ('kind' in response || 'error' in response) {
+      if (
+        ('kind' in response && response.kind === ErrorKind.PushFailed) ||
+        'error' in response
+      ) {
         if (isAuthErrorBody(response)) {
           this.#lc.warn?.('Push auth failed; invalidating connection', {
             clientID: entry.context.clientID,

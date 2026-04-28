@@ -7,17 +7,17 @@ import type {JSONValue, ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {must} from '../../../shared/src/must.ts';
 import * as v from '../../../shared/src/valita.ts';
 import type {Condition} from '../../../zero-protocol/src/ast.ts';
-import {
-  primaryKeyValueSchema,
-  type PrimaryKeyValue,
-} from '../../../zero-protocol/src/primary-key.ts';
 import type {
   CRUDOp,
   DeleteOp,
   InsertOp,
   UpdateOp,
   UpsertOp,
-} from '../../../zero-protocol/src/push.ts';
+} from '../../../zero-protocol/src/mutation.ts';
+import {
+  primaryKeyValueSchema,
+  type PrimaryKeyValue,
+} from '../../../zero-protocol/src/primary-key.ts';
 import type {Policy} from '../../../zero-schema/src/compiled-permissions.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {BuilderDelegate} from '../../../zql/src/builder/builder.ts';

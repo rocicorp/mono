@@ -50,7 +50,15 @@ import {
   type ErrorMessage,
   ProtocolError,
 } from '../../../zero-protocol/src/error.ts';
+import type {MutationID} from '../../../zero-protocol/src/mutation-id.ts';
 import * as MutationType from '../../../zero-protocol/src/mutation-type-enum.ts';
+import {
+  type CRUDMutation,
+  type CRUDMutationArg,
+  CRUD_MUTATION_NAME,
+  type CustomMutation,
+  mapCRUD,
+} from '../../../zero-protocol/src/mutation.ts';
 import type {PingMessage} from '../../../zero-protocol/src/ping.ts';
 import type {
   PokeEndMessage,
@@ -63,14 +71,7 @@ import type {
   PullResponseBody,
   PullResponseMessage,
 } from '../../../zero-protocol/src/pull.ts';
-import type {
-  CRUDMutation,
-  CRUDMutationArg,
-  CustomMutation,
-  MutationID,
-  PushMessage,
-} from '../../../zero-protocol/src/push.ts';
-import {CRUD_MUTATION_NAME, mapCRUD} from '../../../zero-protocol/src/push.ts';
+import type {PushMessage} from '../../../zero-protocol/src/push.ts';
 import type {UpQueriesPatchOp} from '../../../zero-protocol/src/queries-patch.ts';
 import type {Upstream} from '../../../zero-protocol/src/up.ts';
 import type {NullableVersion} from '../../../zero-protocol/src/version.ts';
@@ -649,7 +650,7 @@ export class Zero<
     this.userID = userID ?? undefined;
     this.#lc = lc.withContext('clientID', rep.clientID);
 
-    if (userID === 'anon') {
+    if (userID === 'anon' && !options.auth) {
       this.#lc.warn?.(
         'ZeroOptions.userID "anon" is deprecated for logged-out clients. Omit it entirely for logged-out clients.',
       );

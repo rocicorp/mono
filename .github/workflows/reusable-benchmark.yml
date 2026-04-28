@@ -55,6 +55,8 @@ jobs:
           node-version: 24.x
       - uses: bencherdev/bencher@main
 
+      - uses: ./.github/actions/setup-docker
+
       - run: npm ci
 
       - name: Run benchmarks

@@ -166,7 +166,7 @@ test('logged-out client uses a private storage sentinel for idb naming', async (
   });
 
   expect(zero.idbName).toEqual(
-    `rep:zero-${LOGGED_OUT_STORAGE_USER_ID}-o92aeop6ci3f:7:49.32bj126fs2e3f`,
+    `rep:zero-${LOGGED_OUT_STORAGE_USER_ID}-o92aeop6ci3f:7:50.32bj126fs2e3f`,
   );
 
   await zero.close();

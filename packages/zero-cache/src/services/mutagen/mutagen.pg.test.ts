@@ -11,7 +11,7 @@ import {
   type CRUDMutation,
   type CRUDOp,
   type UpsertOp,
-} from '../../../../zero-protocol/src/push.ts';
+} from '../../../../zero-protocol/src/mutation.ts';
 import type {WriteAuthorizer} from '../../auth/write-authorizer.ts';
 import * as Mode from '../../db/mode-enum.ts';
 import {expectTables, type PgTest, test} from '../../test/db.ts';

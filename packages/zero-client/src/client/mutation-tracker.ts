@@ -20,14 +20,16 @@ import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
 import {ErrorReason} from '../../../zero-protocol/src/error-reason.ts';
 import {ProtocolError} from '../../../zero-protocol/src/error.ts';
+import type {MutationID} from '../../../zero-protocol/src/mutation-id.ts';
 import {
   mutationResultSchema,
   type MutationError,
-  type MutationID,
   type MutationOk,
-  type PushError,
-  type PushOk,
-  type PushResponseBody,
+} from '../../../zero-protocol/src/mutation.ts';
+import type {
+  PushError,
+  PushOk,
+  PushResponseBody,
 } from '../../../zero-protocol/src/push.ts';
 import type {MutatorResultSuccessDetails} from './custom.ts';
 import {isZeroError, type ZeroError} from './error.ts';
@@ -308,8 +310,8 @@ export class MutationTracker {
     }
   }
 
-  #processPushOk(ok: PushOk): void {
-    for (const mutation of ok.mutations) {
+  #processPushOk(success: PushOk): void {
+    for (const mutation of success.mutations) {
       if ('error' in mutation.result) {
         this.#processMutationError(
           mutation.id.clientID,

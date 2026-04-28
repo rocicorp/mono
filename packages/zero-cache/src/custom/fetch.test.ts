@@ -20,6 +20,7 @@ import {
   ProtocolError,
   isProtocolError,
 } from '../../../zero-protocol/src/error.ts';
+import {queryResponseSchema} from '../../../zero-protocol/src/query-server.ts';
 import type {
   ConnectionContext,
   HeaderOptions,
@@ -137,6 +138,41 @@ describe('fetchFromAPIServer', () => {
       'Authorization': 'Bearer token-abc',
       'Cookie': 'session=xyz',
     });
+  });
+
+  test('preserves unknown fields from successful API responses', async () => {
+    mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({success: true, ignored: 'value'}), {
+        status: 200,
+      }),
+    );
+
+    const result = await fetchWithContext(validator, 'push');
+
+    expect(result).toEqual({success: true, ignored: 'value'});
+  });
+
+  test('parses legacy query responses through the helper', async () => {
+    const legacyResponse = [
+      'transformed',
+      [
+        {
+          id: 'q1',
+          name: 'issues',
+          ast: {
+            table: 'issue',
+          },
+        },
+      ],
+    ] as const;
+
+    mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify(legacyResponse), {status: 200}),
+    );
+
+    const result = await fetchWithContext(queryResponseSchema, 'transform');
+
+    expect(result).toEqual(legacyResponse);
   });
 
   test('preserves existing query params when appending reserved ones', async () => {
