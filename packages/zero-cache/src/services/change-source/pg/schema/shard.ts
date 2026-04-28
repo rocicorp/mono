@@ -377,9 +377,17 @@ export async function setupTriggers(
   tx: PostgresTransaction,
   shard: ShardConfig,
 ) {
+  const schema = upstreamSchema(shard);
+  const [{ddlDetection}] = await tx<InternalShardConfig[]> /*sql*/ `
+    SELECT "ddlDetection" FROM ${tx(schema)}."shardConfig"`;
   try {
     await tx.savepoint(sub => sub.unsafe(triggerSetup(shard)));
   } catch (e) {
+    if (ddlDetection) {
+      // If ddlDetection has already been enabled, subsequent failures to
+      // upgrade the trigger should be propagated rather than swallowed.
+      throw e;
+    }
     if (
       !(
         e instanceof postgres.PostgresError &&
