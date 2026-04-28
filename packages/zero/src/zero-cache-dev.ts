@@ -16,6 +16,7 @@ import {deployPermissionsOptions} from '../../zero-cache/src/scripts/permissions
 
 const deployPermissionsScript = 'zero-deploy-permissions';
 const zeroCacheScript = 'zero-cache';
+const startupMessageEnv = 'ZERO_ENABLE_STARTUP_MESSAGE';
 
 function killProcess(childProcess: ChildProcess | undefined) {
   if (!childProcess || childProcess.exitCode !== null) {
@@ -133,6 +134,9 @@ async function main() {
       // Default NODE_ENV to development mode.
       // @ts-ignore NODE_ENV is not always set. Please ignore error.
       ['NODE_ENV']: 'development',
+
+      // Print the dev-only startup message after the server is listening.
+      [startupMessageEnv]: '1',
 
       // But let the developer override any of these dev defaults.
       ...process.env,
