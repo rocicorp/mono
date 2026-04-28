@@ -8,6 +8,7 @@ import {getPublicationInfo} from './published.ts';
 import {
   addReplica,
   setupTablesAndReplication,
+  setupTriggers,
   validatePublicationName,
   validatePublications,
 } from './shard.ts';
@@ -342,6 +343,44 @@ describe('change-source/pg', () => {
     `);
 
     expect(await db`SELECT evtname from pg_event_trigger`.values()).toEqual([]);
+  });
+
+  test('trigger upgrade failure detected', async () => {
+    const shardConfig = {
+      appID: 'woo',
+      shardNum: 0,
+      publications: ['zero_foo'],
+    };
+
+    await db /*sql*/ `
+      CREATE TABLE foo(id INT4 PRIMARY KEY);
+      CREATE PUBLICATION zero_foo FOR TABLE foo;
+    `.simple();
+    await db.begin(tx => setupTablesAndReplication(lc, tx, shardConfig));
+    await expectTables(db, {
+      ['woo_0.shardConfig']: [
+        {
+          lock: true,
+          publications: ['_woo_metadata_0', 'zero_foo'],
+          ddlDetection: true, // degraded mode
+        },
+      ],
+    });
+    expect(
+      await db`SELECT evtname from pg_event_trigger`.values(),
+    ).toMatchObject([['woo_ddl_start_0'], ['woo_ddl_end_0']]);
+
+    // Now try to upgrade as a different user.
+    await db /*sql*/ `
+      CREATE ROLE different_user IN ROLE current_user;
+      SET ROLE different_user;
+    `.simple();
+
+    await expect(
+      db.begin(tx => setupTriggers(lc, tx, shardConfig)),
+    ).rejects.toThrowErrorMatchingInlineSnapshot(
+      `[PostgresError: permission denied to create event trigger "woo_ddl_start_0"]`,
+    );
   });
 
   test('permissions hash trigger', async () => {
