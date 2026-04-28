@@ -317,7 +317,19 @@ export class CVRStore {
             'clients',
           )}
            WHERE "clientGroupID" = ${id}`,
-          tx<QueriesRow[]>`SELECT * FROM ${this.#cvr('queries')}
+          tx<QueriesRow[]>`SELECT
+            "clientGroupID",
+            "queryHash",
+            "clientAST",
+            "queryName",
+            "queryArgs",
+            "patchVersion",
+            "transformationHash",
+            "transformationVersion",
+            "internal",
+            "deleted",
+            "rowSetSignature"
+          FROM ${this.#cvr('queries')}
           WHERE "clientGroupID" = ${id} AND deleted IS DISTINCT FROM true`,
           tx<DesiresRow[]>`SELECT
           "clientGroupID",
@@ -694,7 +706,15 @@ export class CVRStore {
       const [allDesires, queryRows] = await reader.processReadTask(tx =>
         Promise.all([
           tx<DesiresRow[]>`
-      SELECT * FROM ${this.#cvr('desires')}
+      SELECT
+        "clientGroupID",
+        "clientID",
+        "queryHash",
+        "patchVersion",
+        "deleted",
+        "ttl",
+        "inactivatedAt"
+      FROM ${this.#cvr('desires')}
         WHERE "clientGroupID" = ${this.#id}
         AND "patchVersion" > ${start}
         AND "patchVersion" <= ${end}`,
