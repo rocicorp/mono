@@ -1,5 +1,6 @@
 import type {JSONValue} from '../../../shared/src/json.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
+import type {NoSubqueryCondition} from '../builder/filter.ts';
 import type {Change} from './change.ts';
 import type {Constraint} from './constraint.ts';
 import type {Node} from './data.ts';
@@ -79,6 +80,18 @@ export type FetchRequest = {
 
   /** Whether to fetch in reverse order of the SourceSchema's sort. */
   readonly reverse?: boolean | undefined;
+
+  /**
+   * Additional predicate the consumer wants the source/intermediate operators
+   * to apply to the fetched rows. The receiver must AND this with whatever
+   * filtering it already applies. Sources may use this to drive index
+   * selection (e.g. PK lookup) the same way they use the connection-time
+   * filter.
+   *
+   * Always a `NoSubqueryCondition` — anything passed via `req.filter` must
+   * already have had correlated subqueries stripped (see `transformFilters`).
+   */
+  readonly filter?: NoSubqueryCondition | undefined;
 };
 
 export type Start = {
