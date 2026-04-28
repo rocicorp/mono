@@ -58,6 +58,7 @@ export default async function runWorker(
     replica,
     initialSync,
     litestream,
+    keepaliveTimeoutMs,
   } = config;
 
   startOtelAuto(
@@ -228,7 +229,7 @@ export default async function runWorker(
   const changeStreamerWebServer = new ChangeStreamerHttpServer(
     lc,
     config,
-    {port, startupDelayMs},
+    {port, keepaliveTimeoutMs, startupDelayMs},
     parent,
     changeStreamer,
     monitor instanceof BackupMonitor ? monitor : null,

@@ -37,6 +37,7 @@ const CHANGES_PATH = `/replication/v${PROTOCOL_VERSION}/changes`;
 
 type Options = {
   port: number;
+  keepaliveTimeoutMs: number | undefined;
   startupDelayMs: number;
 };
 

@@ -28,6 +28,13 @@ export function isDevelopmentMode(): boolean {
   return process.env.NODE_ENV === 'development';
 }
 
+function isRunningInECS(): boolean {
+  // https://docs.aws.amazon.com/AmazonECS/latest/developerguide/ecs-environment-variables.html
+  return process.env.ECS_CONTAINER_METADATA_URI_V4 !== undefined;
+}
+
+const DEFAULT_ECS_KEEPALIVE_TIMEOUT_MS = 20_000;
+
 export function assertNormalized(
   config: ZeroConfig,
 ): asserts config is NormalizedZeroConfig {
@@ -101,6 +108,11 @@ export function normalizeZeroConfig(
   if (!config.cvr.db) {
     config.cvr.db = config.upstream.db;
     env['ZERO_CVR_DB'] = config.upstream.db;
+  }
+
+  if (!config.keepaliveTimeoutMs && isRunningInECS()) {
+    config.keepaliveTimeoutMs = DEFAULT_ECS_KEEPALIVE_TIMEOUT_MS;
+    env['ZERO_KEEPALIVE_TIMEOUT_MS'] = String(DEFAULT_ECS_KEEPALIVE_TIMEOUT_MS);
   }
 
   lc.info?.(`runtime env: taskID=${config.taskID}, hostIP=${hostIP}`);
