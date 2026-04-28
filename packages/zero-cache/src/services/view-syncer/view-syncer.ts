@@ -799,16 +799,21 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         connCtx.baseCookie,
         downstream,
       );
-      this.#clients
-        .get(connCtx.clientID)
-        ?.close(`replaced by wsID: ${connCtx.wsID}`);
-      this.#clients.set(connCtx.clientID, newClient);
+
 
       // Note: initConnection() must be synchronous so that `downstream` is
       // immediately returned to the caller (connection.ts). This ensures
       // that if the connection is subsequently closed, the `downstream`
       // subscription can be properly canceled even if #runInLockForClient()
       // has not had a chance to run.
+      //
+      // The client is NOT added to #clients here — it is deferred until
+      // after auth validation inside the lock below. This prevents
+      // concurrent lock-held operations (e.g. #advancePipelines) from
+      // poking data to this client before its auth is validated.
+      // #deleteClientDueToDisconnect already handles the case where the
+      // client was never added to #clients (the identity check on line
+      // 648 will be false).
       void startAsyncSpan(tracer, 'vs.initConnection.async', () =>
         this.#runInLockForClient(
           connCtx,
@@ -825,14 +830,35 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
                 'warn',
               );
             }
-            // Validate auth before sending any data is sent to this connection.
-            // the #handleConfigUpdate call below will also transform
-            // queries, but that may hit the transform cache so do not rely on
-            // it for validation. This also ensures shared maintenance always has
-            // a validated connection to fall back to.
+            // Validate auth before sending any data to this connection.
+            // #handleConfigUpdate below (via #syncQueryPipelineSet /
+            // #catchupClients) pokes row data to all clients, so the
+            // connection must be validated first. This also ensures shared
+            // maintenance always has a validated connection to fall back to.
             if (!(await this.#validateConnection(connCtx))) {
               return;
             }
+
+            // Guard against the WebSocket closing while we were waiting for
+            // the lock or for validation. If the connection context was
+            // removed by the cleanup callback, adding the client would
+            // create a zombie that can never be cleaned up.
+            if (
+              !this.connContextManager.getConnectionContext({
+                clientID,
+                wsID: connCtx.wsID,
+              })
+            ) {
+              lc.debug?.('connection closed during validation');
+              return;
+            }
+
+            // NOW safe to add: auth is validated and connection is alive.
+            this.#clients.get(connCtx.clientID)?.close(
+              `replaced by wsID: ${connCtx.wsID}`,
+            );
+            this.#clients.set(connCtx.clientID, newClient);
+
             await this.#handleConfigUpdate(
               lc,
               clientID,
@@ -1082,7 +1108,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     const {clientID, wsID} = selector;
     const [cmd, body] = msg;
 
-    if (newClient || !this.#clients.has(clientID)) {
+    if (newClient) {
       this.#lastConnectTime = Date.now();
     }
 
@@ -1103,24 +1129,31 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
               .withContext('cmd', cmd);
             lc.debug?.('acquired lock for cvr');
 
-            client = this.#clients.get(clientID);
-            if (client?.wsID !== wsID) {
-              lc.debug?.('mismatched wsID', client?.wsID, wsID);
-              // Only respond to messages of the currently connected client.
-              // Connections may have been drained or dropped due to an error.
-              return;
-            }
-
-            connCtx = this.connContextManager.getConnectionContext(selector);
-
             if (newClient) {
-              assert(
-                newClient === client,
-                'newClient must match existing client',
-              );
-              checkClientAndCVRVersions(client.version(), cvr.version);
-            } else if (!this.#clients.has(clientID)) {
-              lc.warn?.(`Processing ${cmd} before initConnection was received`);
+              // For initConnection: the client hasn't been added to #clients
+              // yet (deferred until after validation). Verify the connection
+              // context still exists — it won't if the WebSocket closed while
+              // waiting for the lock.
+              connCtx = this.connContextManager.getConnectionContext(selector);
+              if (!connCtx) {
+                lc.debug?.('connection closed before lock acquired');
+                return;
+              }
+              checkClientAndCVRVersions(newClient.version(), cvr.version);
+            } else {
+              client = this.#clients.get(clientID);
+              if (client?.wsID !== wsID) {
+                lc.debug?.('mismatched wsID', client?.wsID, wsID);
+                // Only respond to messages of the currently connected client.
+                // Connections may have been drained or dropped due to an error.
+                return;
+              }
+              connCtx = this.connContextManager.getConnectionContext(selector);
+              if (!this.#clients.has(clientID)) {
+                lc.warn?.(
+                  `Processing ${cmd} before initConnection was received`,
+                );
+              }
             }
 
             lc.debug?.(cmd, body);
@@ -1135,11 +1168,12 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           if (connCtx) {
             this.connContextManager.failConnection(selector, connCtx.revision);
           }
-          if (client) {
-            // Ideally, propagate the exception to the client's downstream subscription ...
-            client.fail(e);
+          const clientToFail = newClient ?? client;
+          if (clientToFail) {
+            // Propagate the exception to the client's downstream subscription.
+            clientToFail.fail(e);
           } else {
-            // unless the exception happened before the client could be looked up.
+            // The exception happened before the client could be looked up.
             throw e;
           }
         }
