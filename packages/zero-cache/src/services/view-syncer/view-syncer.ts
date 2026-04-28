@@ -810,9 +810,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       // after auth validation inside the lock below. This prevents
       // concurrent lock-held operations (e.g. #advancePipelines) from
       // poking data to this client before its auth is validated.
-      // #deleteClientDueToDisconnect already handles the case where the
-      // client was never added to #clients (the identity check on line
-      // 648 will be false).
       void startAsyncSpan(tracer, 'vs.initConnection.async', () =>
         this.#runInLockForClient(
           connCtx,
@@ -830,7 +827,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
               );
             }
             // Validate auth before adding new client to #clients.  Once
-            // added to #clients data can be sent to the client via poke.
+            // added to #clients, data can be sent to the client via poke.
             // Note: while the #handleConfigUpdate call below will also
             // transform queries, that may hit the transform cache so do not
             // rely on it for validation. This also ensures shared maintenance
@@ -1149,10 +1146,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
                 return;
               }
               connCtx = this.connContextManager.getConnectionContext(selector);
-              if (!this.#clients.has(clientID)) {
-                lc.warn?.(
-                  `Processing ${cmd} before initConnection was received`,
-                );
+              if (!connCtx) {
+                lc.debug?.('connection context missing');
+                return;
               }
             }
 
