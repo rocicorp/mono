@@ -1,5 +1,10 @@
 import type {OxlintConfig} from 'oxlint';
 
+const zeroPlugin = new URL(
+  './tools/oxlint-plugin-zero/index.js',
+  import.meta.url,
+).pathname;
+
 /**
  * Shared oxlint configuration for all packages in the monorepo.
  * This is a plain data module (not an oxlint config file) so it can be
@@ -7,7 +12,7 @@ import type {OxlintConfig} from 'oxlint';
  */
 export const baseConfig = {
   plugins: ['eslint', 'typescript', 'unicorn', 'jest'],
-  jsPlugins: ['@e18e/eslint-plugin'],
+  jsPlugins: ['@e18e/eslint-plugin', zeroPlugin],
   ignorePatterns: [
     'node_modules',
     'dist',
@@ -164,6 +169,13 @@ export const baseConfig = {
     'e18e/prefer-regex-test': 'error',
     'e18e/prefer-array-some': 'error',
     'e18e/prefer-static-regex': 'error',
+
+    'zero/no-select-star': [
+      'error',
+      {
+        include: ['packages/zero-cache/src/'],
+      },
+    ],
   },
   overrides: [
     {

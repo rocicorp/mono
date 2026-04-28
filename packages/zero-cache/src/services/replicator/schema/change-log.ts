@@ -158,6 +158,7 @@ export class ChangeLog {
         VALUES (@version, -1, @table, @version, @op)
     `);
 
+    // oxlint-disable-next-line zero/no-select-star -- Local SQLite replica query; not run through pg prepared statements.
     this.#getRowOpStmt = db.prepare(/*sql*/ `
       SELECT * FROM "_zero.changeLog2" WHERE "table" = ? AND "rowKey" = JSON(?)
     `);

@@ -173,7 +173,15 @@ export class RowRecordCache {
             rowIDString,
           );
           for await (const rows of this.#db<RowsRow[]>`
-            SELECT * FROM ${this.#cvr(`rows`)}
+            SELECT
+              "clientGroupID",
+              "schema",
+              "table",
+              "rowKey",
+              "rowVersion",
+              "patchVersion",
+              "refCounts"
+            FROM ${this.#cvr(`rows`)}
               WHERE "clientGroupID" = ${this.#cvrID} AND "refCounts" IS NOT NULL`
             // TODO(arv): Arbitrary page size
             .cursor(5000)) {
@@ -347,12 +355,28 @@ export class RowRecordCache {
       const {query} = await reader.processReadTask(tx => {
         const query =
           excludeQueryHashes.length === 0
-            ? tx<RowsRow[]>`SELECT * FROM ${this.#cvr('rows')}
+            ? tx<RowsRow[]>`SELECT
+              "clientGroupID",
+              "schema",
+              "table",
+              "rowKey",
+              "rowVersion",
+              "patchVersion",
+              "refCounts"
+            FROM ${this.#cvr('rows')}
         WHERE "clientGroupID" = ${this.#cvrID}
           AND "patchVersion" > ${start}
           AND "patchVersion" <= ${end}`
             : // Exclude rows that were already sent as part of query hydration.
-              tx<RowsRow[]>`SELECT * FROM ${this.#cvr('rows')}
+              tx<RowsRow[]>`SELECT
+              "clientGroupID",
+              "schema",
+              "table",
+              "rowKey",
+              "rowVersion",
+              "patchVersion",
+              "refCounts"
+            FROM ${this.#cvr('rows')}
         WHERE "clientGroupID" = ${this.#cvrID}
           AND "patchVersion" > ${start}
           AND "patchVersion" <= ${end}
