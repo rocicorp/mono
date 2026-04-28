@@ -114,7 +114,7 @@ function registerConnection(
       httpCookie: options.httpCookie,
       origin: options.origin,
     },
-    getAuth(options.auth),
+    makeAuth(options.auth),
   );
   connContextManager.initConnection(selector, {
     desiredQueriesPatch: [],
@@ -136,18 +136,11 @@ function openConnection(
   };
 }
 
-const authCache = new Map<string, NonNullable<ConnectionContext['auth']>>();
-
-function getAuth(raw: string | undefined) {
+function makeAuth(raw: string | undefined): ConnectionContext['auth'] {
   if (raw === undefined) {
     return undefined;
   }
-  let auth = authCache.get(raw);
-  if (!auth) {
-    auth = {type: 'opaque', raw};
-    authCache.set(raw, auth);
-  }
-  return auth;
+  return {type: 'opaque', raw};
 }
 
 function makeEntry(
@@ -156,7 +149,7 @@ function makeEntry(
     clientID?: string | undefined;
     wsID?: string | undefined;
     revision?: number | undefined;
-    auth?: string | undefined;
+    auth?: ConnectionContext['auth'] | undefined;
     httpCookie?: string | undefined;
     origin?: string | undefined;
     userID?: string | undefined;
@@ -172,7 +165,7 @@ function makeEntry(
       clientID: resolvedClientID,
       wsID: options.wsID ?? `ws-${resolvedClientID}`,
       user: {id: options.userID ?? null},
-      auth: getAuth(options.auth),
+      auth: options.auth,
       profileID: null,
       baseCookie: null,
       protocolVersion: 0,
@@ -220,8 +213,8 @@ describe('combine pushes', () => {
 
   test('stop after pushes', () => {
     const [pushes, terminate] = combinePushes([
-      makeEntry(makePush(1), {auth: 'a'}),
-      makeEntry(makePush(1), {auth: 'a'}),
+      makeEntry(makePush(1), {auth: makeAuth('a')}),
+      makeEntry(makePush(1), {auth: makeAuth('a')}),
       undefined,
     ]);
     expect(pushes).toHaveLength(1);
@@ -230,9 +223,9 @@ describe('combine pushes', () => {
 
   test('stop in the middle', () => {
     const [pushes, terminate] = combinePushes([
-      makeEntry(makePush(1), {auth: 'a'}),
+      makeEntry(makePush(1), {auth: makeAuth('a')}),
       undefined,
-      makeEntry(makePush(1), {auth: 'a'}),
+      makeEntry(makePush(1), {auth: makeAuth('a')}),
     ]);
     expect(pushes).toHaveLength(1);
     expect(pushes[0].push.mutations).toHaveLength(1);
@@ -242,9 +235,18 @@ describe('combine pushes', () => {
 
   test('combines pushes for same clientID', () => {
     const [pushes, terminate] = combinePushes([
-      makeEntry(makePush(1, 'client1'), {clientID: 'client1', auth: 'a'}),
-      makeEntry(makePush(2, 'client1'), {clientID: 'client1', auth: 'a'}),
-      makeEntry(makePush(1, 'client2'), {clientID: 'client2', auth: 'b'}),
+      makeEntry(makePush(1, 'client1'), {
+        clientID: 'client1',
+        auth: makeAuth('a'),
+      }),
+      makeEntry(makePush(2, 'client1'), {
+        clientID: 'client1',
+        auth: makeAuth('a'),
+      }),
+      makeEntry(makePush(1, 'client2'), {
+        clientID: 'client2',
+        auth: makeAuth('b'),
+      }),
     ]);
 
     expect(pushes).toHaveLength(2);
@@ -259,11 +261,21 @@ describe('combine pushes', () => {
     expect(client2Push?.push.mutations).toHaveLength(1);
   });
 
-  test('throws on jwt mismatch for same client', () => {
+  test('throws on auth mismatch for same client snapshot', () => {
     expect(() =>
       combinePushes([
-        makeEntry(makePush(1, 'client1'), {clientID: 'client1', auth: 'a'}),
-        makeEntry(makePush(2, 'client1'), {clientID: 'client1', auth: 'b'}),
+        makeEntry(makePush(1, 'client1'), {
+          clientID: 'client1',
+          wsID: 'ws1',
+          revision: 1,
+          auth: makeAuth('a'),
+        }),
+        makeEntry(makePush(2, 'client1'), {
+          clientID: 'client1',
+          wsID: 'ws1',
+          revision: 1,
+          auth: makeAuth('b'),
+        }),
       ]),
     ).toThrow('auth must be the same for all pushes with the same clientID');
   });
@@ -273,12 +285,12 @@ describe('combine pushes', () => {
       combinePushes([
         makeEntry(makePush(1, 'client1'), {
           clientID: 'client1',
-          auth: 'a',
+          auth: makeAuth('a'),
           userID: 'user-1',
         }),
         makeEntry(makePush(2, 'client1'), {
           clientID: 'client1',
-          auth: 'a',
+          auth: makeAuth('a'),
           userID: 'user-2',
         }),
       ]),
@@ -293,14 +305,14 @@ describe('combine pushes', () => {
             ...makePush(1, 'client1'),
             schemaVersion: 1,
           },
-          {clientID: 'client1', auth: 'a'},
+          {clientID: 'client1', auth: makeAuth('a')},
         ),
         makeEntry(
           {
             ...makePush(2, 'client1'),
             schemaVersion: 2,
           },
-          {clientID: 'client1', auth: 'a'},
+          {clientID: 'client1', auth: makeAuth('a')},
         ),
       ]),
     ).toThrow(
@@ -316,14 +328,14 @@ describe('combine pushes', () => {
             ...makePush(1, 'client1'),
             pushVersion: 1,
           },
-          {clientID: 'client1', auth: 'a'},
+          {clientID: 'client1', auth: makeAuth('a')},
         ),
         makeEntry(
           {
             ...makePush(2, 'client1'),
             pushVersion: 2,
           },
-          {clientID: 'client1', auth: 'a'},
+          {clientID: 'client1', auth: makeAuth('a')},
         ),
       ]),
     ).toThrow(
@@ -339,7 +351,7 @@ describe('combine pushes', () => {
           schemaVersion: 1,
           pushVersion: 1,
         },
-        {clientID: 'client1', auth: 'a'},
+        {clientID: 'client1', auth: makeAuth('a')},
       ),
       makeEntry(
         {
@@ -347,7 +359,7 @@ describe('combine pushes', () => {
           schemaVersion: 1,
           pushVersion: 1,
         },
-        {clientID: 'client1', auth: 'a'},
+        {clientID: 'client1', auth: makeAuth('a')},
       ),
     ]);
 
@@ -361,16 +373,14 @@ describe('combine pushes', () => {
       clientID: 'client1',
       wsID: 'ws1',
       revision: 1,
-      auth: 'a',
+      auth: makeAuth('a'),
     });
     const second = makeEntry(makePush(1, 'client1'), {
       clientID: 'client1',
       wsID: 'ws1',
       revision: 1,
-      auth: 'a',
+      auth: makeAuth('a'),
     });
-
-    second.connCtx.auth = {type: 'opaque', raw: 'a'};
 
     const [pushes, terminate] = combinePushes([first, second]);
 
@@ -381,10 +391,22 @@ describe('combine pushes', () => {
 
   test('handles multiple clients with multiple pushes', () => {
     const [pushes, terminate] = combinePushes([
-      makeEntry(makePush(1, 'client1'), {clientID: 'client1', auth: 'a'}),
-      makeEntry(makePush(2, 'client2'), {clientID: 'client2', auth: 'b'}),
-      makeEntry(makePush(1, 'client1'), {clientID: 'client1', auth: 'a'}),
-      makeEntry(makePush(3, 'client2'), {clientID: 'client2', auth: 'b'}),
+      makeEntry(makePush(1, 'client1'), {
+        clientID: 'client1',
+        auth: makeAuth('a'),
+      }),
+      makeEntry(makePush(2, 'client2'), {
+        clientID: 'client2',
+        auth: makeAuth('b'),
+      }),
+      makeEntry(makePush(1, 'client1'), {
+        clientID: 'client1',
+        auth: makeAuth('a'),
+      }),
+      makeEntry(makePush(3, 'client2'), {
+        clientID: 'client2',
+        auth: makeAuth('b'),
+      }),
     ]);
 
     expect(pushes).toHaveLength(2);
@@ -399,9 +421,18 @@ describe('combine pushes', () => {
 
   test('preserves mutation order within client', () => {
     const [pushes] = combinePushes([
-      makeEntry(makePush(1, 'client1'), {clientID: 'client1', auth: 'a'}),
-      makeEntry(makePush(1, 'client2'), {clientID: 'client2', auth: 'b'}),
-      makeEntry(makePush(1, 'client1'), {clientID: 'client1', auth: 'a'}),
+      makeEntry(makePush(1, 'client1'), {
+        clientID: 'client1',
+        auth: makeAuth('a'),
+      }),
+      makeEntry(makePush(1, 'client2'), {
+        clientID: 'client2',
+        auth: makeAuth('b'),
+      }),
+      makeEntry(makePush(1, 'client1'), {
+        clientID: 'client1',
+        auth: makeAuth('a'),
+      }),
     ]);
 
     const client1Push = pushes.find(p => p.connCtx.clientID === 'client1');

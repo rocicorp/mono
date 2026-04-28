@@ -20,7 +20,7 @@ export type ConnectionState = 'provisional' | 'validated';
  * Normalized user identity shared by live connection state and group auth state.
  * `id: null` means logged out.
  */
-export type UserState = {id: string | null};
+export type UserState = {readonly id: string | null};
 
 /**
  * Delineates the two paths for validating a connection: either server can validate
@@ -42,17 +42,17 @@ export type ConnectionSelector = {
 type FetchConfig = ZeroConfig['query'];
 
 export type HeaderOptions = {
-  apiKey?: string | undefined;
-  customHeaders?: Record<string, string> | undefined;
-  allowedClientHeaders?: readonly string[] | undefined;
-  cookie?: string | undefined;
-  origin?: string | undefined;
+  readonly apiKey?: string | undefined;
+  readonly customHeaders?: Readonly<Record<string, string>> | undefined;
+  readonly allowedClientHeaders?: readonly string[] | undefined;
+  readonly cookie?: string | undefined;
+  readonly origin?: string | undefined;
 };
 
 export type ConnectionFetchContext = {
-  url: string | undefined;
-  allowedUrlPatterns: URLPattern[] | undefined;
-  headerOptions: HeaderOptions;
+  readonly url: string | undefined;
+  readonly allowedUrlPatterns: readonly URLPattern[] | undefined;
+  readonly headerOptions: HeaderOptions;
 };
 
 /**
@@ -61,21 +61,21 @@ export type ConnectionFetchContext = {
  * `revalidateAt` is only populated while the connection is `validated`.
  */
 export type ConnectionContext = {
-  state: ConnectionState;
+  readonly state: ConnectionState;
 
   readonly clientID: string;
   readonly wsID: string;
   readonly user: UserState;
 
-  auth: Auth | undefined;
+  readonly auth: Auth | undefined;
 
   readonly profileID: string | null;
   readonly baseCookie: string | null;
   readonly protocolVersion: number;
 
-  revision: number;
+  readonly revision: number;
 
-  revalidateAt: number | undefined;
+  readonly revalidateAt: number | undefined;
 
   readonly insertionOrder: number;
 
@@ -91,12 +91,12 @@ export type ConnectionContext = {
  * the background connection's credential to refetch the latest queries.
  */
 export type GroupAuthState = {
-  pinnedUser: UserState | undefined;
+  readonly pinnedUser: UserState | undefined;
 
-  backgroundConnection: ConnectionSelector | undefined;
-  retransformAt: number | undefined;
+  readonly backgroundConnection: ConnectionSelector | undefined;
+  readonly retransformAt: number | undefined;
   // Defer all maintenance in case a transient failure occurs.
-  maintenanceNotBeforeAt: number | undefined;
+  readonly maintenanceNotBeforeAt: number | undefined;
 };
 
 export type ConnectionContextManager = {
@@ -174,7 +174,7 @@ export class ConnectionContextManagerImpl implements ConnectionContextManager {
 
   // The live connection records, keyed by clientID
   readonly #connections = new Map<string, ConnectionContext>();
-  readonly #group: GroupAuthState = {
+  #group: GroupAuthState = {
     pinnedUser: undefined,
     backgroundConnection: undefined,
     retransformAt: undefined,
@@ -237,7 +237,9 @@ export class ConnectionContextManagerImpl implements ConnectionContextManager {
           customHeaders: undefined,
           origin: connectParams.origin,
           apiKey: config?.apiKey,
-          allowedClientHeaders: config?.allowedClientHeaders,
+          allowedClientHeaders: cloneAllowedClientHeaders(
+            config?.allowedClientHeaders,
+          ),
           cookie: config?.forwardCookies ? connectParams.httpCookie : undefined,
         },
       };
@@ -263,10 +265,10 @@ export class ConnectionContextManagerImpl implements ConnectionContextManager {
 
       insertionOrder: ++this.#nextInsertionOrder,
     };
-    this.#connections.set(connection.clientID, connection);
+    this.#storeConnection(connection);
     this.#refreshBackgroundConnectionContext();
     this.#updateBackgroundRetransformDeadline(false);
-    return snapshotConnection(connection);
+    return connection;
   }
 
   /**
@@ -281,25 +283,46 @@ export class ConnectionContextManagerImpl implements ConnectionContextManager {
   ): Readonly<ConnectionContext> {
     const connection = this.#mustGetConnectionContext(selector);
 
+    let queryContext = connection.queryContext;
+    let mutateContext = connection.mutateContext;
+
     if (body.userQueryURL) {
-      connection.queryContext.url = body.userQueryURL;
+      queryContext = {
+        ...queryContext,
+        url: body.userQueryURL,
+      };
     }
     if (body.userQueryHeaders) {
-      connection.queryContext.headerOptions.customHeaders =
-        body.userQueryHeaders;
+      queryContext = {
+        ...queryContext,
+        headerOptions: {
+          ...queryContext.headerOptions,
+          customHeaders: cloneCustomHeaders(body.userQueryHeaders),
+        },
+      };
     }
     if (body.userPushURL) {
-      connection.mutateContext.url = body.userPushURL;
+      mutateContext = {
+        ...mutateContext,
+        url: body.userPushURL,
+      };
     }
     if (body.userPushHeaders) {
-      connection.mutateContext.headerOptions.customHeaders =
-        body.userPushHeaders;
+      mutateContext = {
+        ...mutateContext,
+        headerOptions: {
+          ...mutateContext.headerOptions,
+          customHeaders: cloneCustomHeaders(body.userPushHeaders),
+        },
+      };
     }
 
-    connection.revision++;
-    this.#demoteConnection(connection);
-
-    return snapshotConnection(connection);
+    return this.#demoteConnection({
+      ...connection,
+      revision: connection.revision + 1,
+      queryContext,
+      mutateContext,
+    });
   }
 
   /**
@@ -321,13 +344,22 @@ export class ConnectionContextManagerImpl implements ConnectionContextManager {
     );
 
     const authChanged = !authEquals(connection.auth, nextAuth);
-    connection.auth = nextAuth;
     if (authChanged) {
-      connection.revision++;
-      this.#demoteConnection(connection);
+      return this.#demoteConnection({
+        ...connection,
+        auth: nextAuth,
+        revision: connection.revision + 1,
+      });
     }
 
-    return snapshotConnection(connection);
+    if (nextAuth === connection.auth) {
+      return connection;
+    }
+
+    return this.#storeConnection({
+      ...connection,
+      auth: nextAuth,
+    });
   }
 
   /**
@@ -407,16 +439,22 @@ export class ConnectionContextManagerImpl implements ConnectionContextManager {
     }
 
     if (this.#group.pinnedUser === undefined) {
-      this.#group.pinnedUser = incomingUserState;
+      this.#setGroup({
+        ...this.#group,
+        pinnedUser: incomingUserState,
+      });
     }
 
-    connection.state = 'validated';
-    connection.revalidateAt = this.#nextRevalidateAt();
-    this.#refreshBackgroundConnectionContext(connection);
+    const validatedConnection = this.#storeConnection({
+      ...connection,
+      state: 'validated',
+      revalidateAt: this.#nextRevalidateAt(),
+    });
+    this.#refreshBackgroundConnectionContext(validatedConnection);
     this.#updateBackgroundRetransformDeadline(false);
 
     return {
-      connection: snapshotConnection(connection),
+      connection: validatedConnection,
       group: this.getGroupState(),
     };
   }
@@ -465,29 +503,32 @@ export class ConnectionContextManagerImpl implements ConnectionContextManager {
     if (intervalMs === undefined) {
       return;
     }
-    this.#group.maintenanceNotBeforeAt = Math.max(
-      this.#group.maintenanceNotBeforeAt ?? 0,
-      this.#now() + intervalMs,
-    );
+    this.#setGroup({
+      ...this.#group,
+      maintenanceNotBeforeAt: Math.max(
+        this.#group.maintenanceNotBeforeAt ?? 0,
+        this.#now() + intervalMs,
+      ),
+    });
   }
 
   /** Returns the current live record for a client slot, if any. */
   getConnectionContext(
     selector: ConnectionSelector,
   ): Readonly<ConnectionContext> | undefined {
-    return snapshotConnection(this.#getConnectionContext(selector));
+    return this.#getConnectionContext(selector);
   }
 
   /** Returns the live record for one websocket or throws if it is unavailable. */
   mustGetConnectionContext(
     selector: ConnectionSelector,
   ): Readonly<ConnectionContext> {
-    return snapshotConnection(this.#mustGetConnectionContext(selector));
+    return this.#mustGetConnectionContext(selector);
   }
 
   /** Returns the current background connection, if one exists. */
   getBackgroundConnectionContext(): Readonly<ConnectionContext> | undefined {
-    return snapshotConnection(this.#getBackgroundConnectionContext());
+    return this.#getBackgroundConnectionContext();
   }
 
   mustGetBackgroundConnectionContext(): Readonly<ConnectionContext> {
@@ -508,7 +549,7 @@ export class ConnectionContextManagerImpl implements ConnectionContextManager {
 
   /** Returns the shared group auth state. */
   getGroupState(): Readonly<GroupAuthState> {
-    return snapshotGroup(this.#group);
+    return this.#group;
   }
 
   /**
@@ -536,7 +577,7 @@ export class ConnectionContextManagerImpl implements ConnectionContextManager {
         continue;
       }
       if (connection.revalidateAt <= now) {
-        dueRevalidations.push(snapshotConnection(connection));
+        dueRevalidations.push(connection);
       }
       earliestDeadlineAt = minDefined(
         earliestDeadlineAt,
@@ -592,20 +633,22 @@ export class ConnectionContextManagerImpl implements ConnectionContextManager {
       return undefined;
     }
 
-    const snapshot = snapshotConnection(connection);
-
     this.#connections.delete(connection.clientID);
     this.#refreshBackgroundConnectionContext();
     this.#updateBackgroundRetransformDeadline(false);
 
-    return snapshot;
+    return connection;
   }
 
-  #demoteConnection(connection: ConnectionContext): void {
-    connection.state = 'provisional';
-    connection.revalidateAt = undefined;
+  #demoteConnection(connection: ConnectionContext): ConnectionContext {
+    const demotedConnection = this.#storeConnection({
+      ...connection,
+      state: 'provisional',
+      revalidateAt: undefined,
+    });
     this.#refreshBackgroundConnectionContext();
     this.#updateBackgroundRetransformDeadline(false);
+    return demotedConnection;
   }
 
   /**
@@ -629,10 +672,10 @@ export class ConnectionContextManagerImpl implements ConnectionContextManager {
       if (currentBackgroundConnection !== undefined) {
         return;
       }
-      this.#group.backgroundConnection = {
+      this.#setBackgroundConnection({
         clientID: preferred.clientID,
         wsID: preferred.wsID,
-      };
+      });
       this.#lc.debug?.('Selected background connection for shared auth work', {
         clientID: preferred.clientID,
         wsID: preferred.wsID,
@@ -651,12 +694,14 @@ export class ConnectionContextManagerImpl implements ConnectionContextManager {
       .filter(connection => connection.state === 'validated')
       .sort(comparePreferredValidatedConnection)
       .at(0);
-    this.#group.backgroundConnection = nextBackgroundConnection
-      ? {
-          clientID: nextBackgroundConnection.clientID,
-          wsID: nextBackgroundConnection.wsID,
-        }
-      : undefined;
+    this.#setBackgroundConnection(
+      nextBackgroundConnection
+        ? {
+            clientID: nextBackgroundConnection.clientID,
+            wsID: nextBackgroundConnection.wsID,
+          }
+        : undefined,
+    );
     if (nextBackgroundConnection) {
       this.#lc.debug?.('Selected background connection for shared auth work', {
         clientID: nextBackgroundConnection.clientID,
@@ -706,6 +751,35 @@ export class ConnectionContextManagerImpl implements ConnectionContextManager {
     return connection;
   }
 
+  #storeConnection(connection: ConnectionContext): ConnectionContext {
+    this.#connections.set(connection.clientID, connection);
+    return connection;
+  }
+
+  #setGroup(group: GroupAuthState): GroupAuthState {
+    this.#group = group;
+    return group;
+  }
+
+  #setBackgroundConnection(
+    backgroundConnection: ConnectionSelector | undefined,
+  ) {
+    if (
+      sameConnectionSelector(
+        this.#group.backgroundConnection,
+        backgroundConnection,
+      )
+    ) {
+      return;
+    }
+    this.#setGroup({
+      ...this.#group,
+      backgroundConnection: backgroundConnection
+        ? {...backgroundConnection}
+        : undefined,
+    });
+  }
+
   /**
    * Keeps the group background retransform deadline coherent with current
    * schedulability.
@@ -718,12 +792,20 @@ export class ConnectionContextManagerImpl implements ConnectionContextManager {
   #updateBackgroundRetransformDeadline(reset: boolean) {
     const backgroundConnection = this.#getBackgroundConnectionContext();
     if (!backgroundConnection || this.#retransformIntervalMs === undefined) {
-      this.#group.retransformAt = undefined;
+      if (this.#group.retransformAt !== undefined) {
+        this.#setGroup({
+          ...this.#group,
+          retransformAt: undefined,
+        });
+      }
       return;
     }
 
     if (reset || this.#group.retransformAt === undefined) {
-      this.#group.retransformAt = this.#now() + this.#retransformIntervalMs;
+      this.#setGroup({
+        ...this.#group,
+        retransformAt: this.#now() + this.#retransformIntervalMs,
+      });
     }
   }
 
@@ -732,44 +814,6 @@ export class ConnectionContextManagerImpl implements ConnectionContextManager {
       ? undefined
       : this.#now() + this.#revalidateIntervalMs;
   }
-}
-
-function snapshotConnection<T extends ConnectionContext | undefined>(
-  connection: T,
-): T extends undefined ? T | undefined : Readonly<T> {
-  if (!connection) {
-    return undefined as T extends undefined ? T | undefined : Readonly<T>;
-  }
-  return {
-    ...connection,
-    queryContext: {
-      ...connection.queryContext,
-      headerOptions: {
-        ...connection.queryContext.headerOptions,
-        customHeaders: connection.queryContext.headerOptions.customHeaders
-          ? {...connection.queryContext.headerOptions.customHeaders}
-          : undefined,
-      },
-    },
-    mutateContext: {
-      ...connection.mutateContext,
-      headerOptions: {
-        ...connection.mutateContext.headerOptions,
-        customHeaders: connection.mutateContext.headerOptions.customHeaders
-          ? {...connection.mutateContext.headerOptions.customHeaders}
-          : undefined,
-      },
-    },
-  } as T extends undefined ? T | undefined : Readonly<T>;
-}
-
-function snapshotGroup(group: GroupAuthState): Readonly<GroupAuthState> {
-  return {
-    ...group,
-    backgroundConnection: group.backgroundConnection
-      ? {...group.backgroundConnection}
-      : undefined,
-  };
 }
 
 function compareByInsertionOrder(
@@ -794,4 +838,21 @@ function minDefined(a: number | undefined, b: number | undefined) {
     return a;
   }
   return Math.min(a, b);
+}
+
+function sameConnectionSelector(
+  a: ConnectionSelector | undefined,
+  b: ConnectionSelector | undefined,
+) {
+  return a?.clientID === b?.clientID && a?.wsID === b?.wsID;
+}
+
+function cloneCustomHeaders(
+  headers: Readonly<Record<string, string>> | undefined,
+) {
+  return headers ? {...headers} : undefined;
+}
+
+function cloneAllowedClientHeaders(headers: readonly string[] | undefined) {
+  return headers ? [...headers] : undefined;
 }

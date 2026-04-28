@@ -127,19 +127,15 @@ describe('ConnectionContextManager', () => {
       queryContext: {
         url: undefined,
         headerOptions: {
-          token: 'token-ws1',
           cookie: undefined,
           origin: 'origin-ws1',
-          userID: 'user-c1',
         },
       },
       mutateContext: {
         url: undefined,
         headerOptions: {
-          token: 'token-ws1',
           cookie: undefined,
           origin: 'origin-ws1',
-          userID: 'user-c1',
         },
       },
     });
@@ -321,6 +317,125 @@ describe('ConnectionContextManager', () => {
     });
   });
 
+  test('returned connection contexts stay stable across later manager updates', async () => {
+    const manager = new ConnectionContextManagerImpl(
+      lc,
+      5,
+      10,
+      undefined,
+      undefined,
+      undefined,
+      () => 1_000,
+    );
+    const registered = register(manager, 'c1', 'ws1', 'user-1');
+    const initialized = initConnection(manager, 'c1', 'ws1', {
+      userQueryURL: 'https://api.example/query',
+      userQueryHeaders: {foo: 'bar'},
+    });
+    const validated = validate(manager, 'c1', 'ws1')?.connection;
+    const background = manager.mustGetBackgroundConnectionContext();
+
+    const updated = await manager.updateAuth(selector('c1', 'ws1'), {
+      auth: 'token-ws1-next',
+    });
+
+    expect(registered).toMatchObject({
+      revision: 0,
+      state: 'provisional',
+      queryContext: {
+        url: undefined,
+        headerOptions: {
+          customHeaders: undefined,
+        },
+      },
+    });
+    expect(initialized).toMatchObject({
+      revision: 1,
+      state: 'provisional',
+      queryContext: {
+        url: 'https://api.example/query',
+        headerOptions: {
+          customHeaders: {foo: 'bar'},
+        },
+      },
+    });
+    expect(validated).toMatchObject({
+      revision: 1,
+      state: 'validated',
+      revalidateAt: 6_000,
+      auth: {type: 'opaque', raw: 'token-ws1'},
+    });
+    expect(background).toMatchObject({
+      revision: 1,
+      state: 'validated',
+      revalidateAt: 6_000,
+    });
+    expect(updated).toMatchObject({
+      revision: 2,
+      state: 'provisional',
+      revalidateAt: undefined,
+      auth: {type: 'opaque', raw: 'token-ws1-next'},
+    });
+    expect(manager.getBackgroundConnectionContext()).toBeUndefined();
+  });
+
+  test('returned group contexts stay stable across later manager updates', () => {
+    let now = 1_000;
+    const manager = new ConnectionContextManagerImpl(
+      lc,
+      5,
+      2,
+      undefined,
+      undefined,
+      undefined,
+      () => now,
+    );
+    register(manager, 'c1', 'ws1', 'user-1');
+    register(manager, 'c2', 'ws2', 'user-1');
+    validate(manager, 'c1', 'ws1');
+
+    const initial = manager.getGroupState();
+
+    now = 2_000;
+    const background = manager.mustGetBackgroundConnectionContext();
+    manager.markBackgroundRetransformSuccess(
+      selector(background.clientID, background.wsID),
+      background.revision,
+    );
+    const retransformed = manager.getGroupState();
+
+    manager.deferMaintenance('revalidate');
+    const deferred = manager.getGroupState();
+
+    validate(manager, 'c2', 'ws2');
+    manager.closeConnection(selector('c1', 'ws1'));
+
+    expect(initial).toEqual({
+      pinnedUser: {id: 'user-1'},
+      backgroundConnection: {clientID: 'c1', wsID: 'ws1'},
+      maintenanceNotBeforeAt: undefined,
+      retransformAt: 3_000,
+    });
+    expect(retransformed).toEqual({
+      pinnedUser: {id: 'user-1'},
+      backgroundConnection: {clientID: 'c1', wsID: 'ws1'},
+      maintenanceNotBeforeAt: undefined,
+      retransformAt: 4_000,
+    });
+    expect(deferred).toEqual({
+      pinnedUser: {id: 'user-1'},
+      backgroundConnection: {clientID: 'c1', wsID: 'ws1'},
+      maintenanceNotBeforeAt: 7_000,
+      retransformAt: 4_000,
+    });
+    expect(manager.getGroupState()).toEqual({
+      pinnedUser: {id: 'user-1'},
+      backgroundConnection: {clientID: 'c2', wsID: 'ws2'},
+      maintenanceNotBeforeAt: 7_000,
+      retransformAt: 4_000,
+    });
+  });
+
   test('does not demote a validated connection when auth is unchanged by value', async () => {
     const manager = new ConnectionContextManagerImpl(
       lc,
@@ -480,31 +595,27 @@ describe('ConnectionContextManager', () => {
         queryContext: expect.objectContaining({
           url: 'https://user.example/query',
           allowedUrlPatterns: expect.arrayContaining([
-            new URLPattern('https://user.example/query'),
+            new URLPattern('https://default.example/query'),
           ]),
           headerOptions: expect.objectContaining({
             apiKey: 'query-api-key',
             customHeaders: {'x-query-header': 'query-value'},
             allowedClientHeaders: ['x-query-header'],
-            token: 'token-1',
             cookie: 'cookie-ws1',
             origin: 'origin-ws1',
-            userID: 'user-1',
           }),
         }),
         mutateContext: expect.objectContaining({
           url: 'https://user.example/push',
           allowedUrlPatterns: expect.arrayContaining([
-            new URLPattern('https://user.example/push'),
+            new URLPattern('https://default.example/push'),
           ]),
           headerOptions: expect.objectContaining({
             apiKey: 'push-api-key',
             customHeaders: {'x-push-header': 'push-value'},
             allowedClientHeaders: ['x-push-header'],
-            token: 'token-1',
             cookie: undefined,
             origin: 'origin-ws1',
-            userID: 'user-1',
           }),
         }),
       }),

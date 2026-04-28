@@ -43,7 +43,7 @@ export function compileUrlPattern(pattern: string): URLPattern {
  * Header names are compared case-insensitively.
  */
 function filterCustomHeaders(
-  headers: Record<string, string> | undefined,
+  headers: Readonly<Record<string, string>> | undefined,
   allowedHeaders: readonly string[] | undefined,
 ): Record<string, string> {
   if (!headers) {
@@ -329,7 +329,7 @@ export async function fetchFromAPIServer<TValidator extends Type>(
  */
 export function urlMatch(
   url: string,
-  allowedUrlPatterns: URLPattern[],
+  allowedUrlPatterns: readonly URLPattern[],
 ): boolean {
   for (const pattern of allowedUrlPatterns) {
     if (pattern.test(url)) {
