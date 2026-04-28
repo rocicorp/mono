@@ -755,14 +755,13 @@ describe('pusher service', () => {
       ).toMatchObject({
         clientID,
         wsID,
-        userID: 'user-123',
+        user: {id: 'user-123'},
         state: 'validated',
         revision: 1,
       }),
     );
     expect(getContextManager(pusher).getGroupState()).toMatchObject({
-      userID: 'user-123',
-      validated: true,
+      pinnedUser: {id: 'user-123'},
       backgroundConnection: selector,
     });
 
