@@ -200,6 +200,163 @@ describe('two joins via or', () => {
   });
 });
 
+describe('or(simple, exists) — predicate-pushdown planning', () => {
+  /**
+   * Mimics how `createSQLiteCostModel` simplifies filters before asking
+   * SQLite for a cost (`removeCorrelatedSubqueries` in
+   * `packages/zqlite/src/sqlite-cost-model.ts`).
+   *
+   * The bug: OR semantics. For `or(cmp, exists)`, `removeCorrelatedSubqueries`
+   * drops the CSQ branch and returns just `cmp`, which is a strict *subset*
+   * of the original OR's match set. The cost model is then told a much more
+   * selective filter than the runtime actually applies at the source — at
+   * runtime the OR cannot be pushed down at all, and the source scans the
+   * full table.
+   */
+  function buggySimplify(c: Condition): Condition | undefined {
+    switch (c.type) {
+      case 'correlatedSubquery':
+        return undefined;
+      case 'simple':
+        return c;
+      case 'and':
+      case 'or': {
+        const filtered = c.conditions
+          .map(buggySimplify)
+          .filter((x): x is Condition => x !== undefined);
+        if (filtered.length === 0) return undefined;
+        if (filtered.length === 1) return filtered[0];
+        return {type: c.type, conditions: filtered};
+      }
+    }
+  }
+
+  /**
+   * Cost model that mimics the production SQLite cost model: it
+   * (a) honors filter selectivity (PK-equality on `id` collapses to 1 row),
+   * (b) strips CSQs from the incoming filter via `buggySimplify` first
+   *     before reading filter selectivity.
+   * (c) honors constraint selectivity for known FK columns.
+   *
+   * This is enough to reproduce the planning bug deterministically, without
+   * needing a real SQLite instance.
+   */
+  function makeBuggyCostModel(tableSizes: Record<string, number>) {
+    const defaultFanout = () => ({fanout: 3, confidence: 'none' as const});
+
+    return (
+      table: string,
+      _sort: Ordering,
+      filters: Condition | undefined,
+      constraint: PlannerConstraint | undefined,
+    ): CostModelCost => {
+      const stripped = filters ? buggySimplify(filters) : undefined;
+
+      // PK constraint from a parent join → 1-row PK lookup.
+      if (constraint && 'id' in constraint) {
+        return {startupCost: 0, rows: 1, fanout: defaultFanout};
+      }
+
+      // FK constraints we know about (low fanout per parent).
+      if (constraint && 'trackId' in constraint) {
+        return {startupCost: 0, rows: 5, fanout: defaultFanout};
+      }
+      if (constraint && 'albumId' in constraint) {
+        return {startupCost: 0, rows: 10, fanout: defaultFanout};
+      }
+
+      // Recognize a PK-equality filter (e.g. `id = ?`) and treat as 1 row.
+      // ⚠️ This is the buggy code path: for `or(cmp('id', X), exists(...))`,
+      // `buggySimplify` returns just `cmp('id', X)`, and the cost model
+      // reports 1 row — even though the *runtime* scans the full table.
+      if (
+        stripped &&
+        stripped.type === 'simple' &&
+        stripped.op === '=' &&
+        stripped.left.type === 'column' &&
+        stripped.left.name === 'id'
+      ) {
+        return {startupCost: 0, rows: 1, fanout: defaultFanout};
+      }
+
+      return {
+        startupCost: 0,
+        rows: must(tableSizes[table]),
+        fanout: defaultFanout,
+      };
+    };
+  }
+
+  /**
+   * Bug repro: `track.where(or(cmp('id', X), exists('invoiceLines')))`.
+   *
+   * The relationship `track ← invoiceLine` (invoiceLine has trackId pointing
+   * at track.id) makes flipping a clear win when track is huge and
+   * invoiceLine is small:
+   *   - semi: scan all 1M tracks, check invoiceLines per row.
+   *   - flipped: scan 100 invoiceLines, lookup track by PK each time. = 100.
+   *
+   * But the buggy cost model reports `track` parent scan as 1 row (because
+   * `buggySimplify(or(cmp(id,X), exists(...)))` returns `cmp(id, X)` and
+   * the cost model treats that as a PK lookup). The planner therefore
+   * computes:
+   *   - semi cost = 1 (parent) × 5 (invoiceLine via trackId) = 5
+   *   - flipped cost = 100 (invoiceLine) × 1 (track by PK) = 100
+   * and picks semi.
+   *
+   * Reality: the runtime can't push the OR down at all in semi mode, so it
+   * scans 1M tracks. With our `req.filter` PR, the *flipped* plan would
+   * push `cmp(id, X)` down branch A (PK lookup) and use FlippedJoin on
+   * branch B (100 lookups). Total ≈ 101 ops — far better than 1M.
+   *
+   * EXPECTED BEHAVIOR (after fix): flip = true.
+   * CURRENT BEHAVIOR (with bug): flip = false (test will fail).
+   */
+  test('flips EXISTS when the simple branch over-credits the source', () => {
+    const costModel = makeBuggyCostModel({
+      track: 1_000_000, // parent — huge
+      invoiceLine: 100, // child — small
+    });
+
+    const planned = planQuery(
+      ast(
+        builder.track.where(({or, cmp, exists}) =>
+          or(cmp('id', 1), exists('invoiceLines')),
+        ),
+      ),
+      costModel,
+    );
+
+    // The simple `cmp('id', X)` branch lives at index 0; the exists at
+    // index 1 of the OR's conditions.
+    expect(pick(planned, ['where', 'conditions', 1, 'flip'])).toBe(true);
+  });
+
+  /**
+   * Same shape with a non-PK simple branch. Should also flip — but here the
+   * buggy simplification doesn't lie about cardinality (track scan still
+   * looks like 1M because `cmp('name', X)` isn't recognized as selective).
+   * So the planner has accurate inputs and should flip even today.
+   */
+  test('flips EXISTS when the simple branch is a non-PK cmp (sanity)', () => {
+    const costModel = makeBuggyCostModel({
+      track: 1_000_000,
+      invoiceLine: 100,
+    });
+
+    const planned = planQuery(
+      ast(
+        builder.track.where(({or, cmp, exists}) =>
+          or(cmp('name', 'Outlaw Blues'), exists('invoiceLines')),
+        ),
+      ),
+      costModel,
+    );
+
+    expect(pick(planned, ['where', 'conditions', 1, 'flip'])).toBe(true);
+  });
+});
+
 describe('double nested exists', () => {
   test('track.exists(album.exists(artist)): track > album > artist', () => {
     const costModel = makeCostModel({track: 5000, album: 100, artist: 10});
