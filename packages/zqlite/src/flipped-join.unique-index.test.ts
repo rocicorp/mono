@@ -337,3 +337,93 @@ test('multiple children sharing a parent are returned in child-input order', () 
   // child connect ordering is id asc, so the relationship is m1, m2, m3.
   expect(memberIds(result[0])).toEqual(['m1', 'm2', 'm3']);
 });
+
+test('child rows with NULL in childKey are skipped (no parent match possible)', () => {
+  // buildJoinConstraint returns null when any childKey value is null, and
+  // #fetchQuicksort `continue`s rather than fetching.  A single bad child
+  // among many valid ones must not affect the others' output.
+  const db = new Database(createSilentLogContext(), ':memory:');
+  db.exec(/* sql */ `
+    CREATE TABLE org (id TEXT PRIMARY KEY, slug TEXT NOT NULL);
+    CREATE UNIQUE INDEX org_slug_key ON org (slug);
+    -- orgSlug is NULLABLE here (unlike the default orgFixture).
+    CREATE TABLE membership (
+      id TEXT PRIMARY KEY,
+      orgSlug TEXT
+    );
+  `);
+  const parent = makeSource(
+    db,
+    'org',
+    {id: {type: 'string'}, slug: {type: 'string'}},
+    ['id'],
+    [
+      {id: 'o1', slug: 'acme'},
+      {id: 'o2', slug: 'globex'},
+    ],
+  );
+  const child = makeSource(
+    db,
+    'membership',
+    {id: {type: 'string'}, orgSlug: {type: 'string'}},
+    ['id'],
+    [
+      {id: 'm1', orgSlug: 'acme'},
+      {id: 'm2', orgSlug: null},
+      {id: 'm3', orgSlug: 'globex'},
+    ],
+  );
+  const join = new FlippedJoin({
+    parent: parent.connect([['id', 'asc']]),
+    child: child.connect([['id', 'asc']]),
+    parentKey: ['slug'],
+    childKey: ['orgSlug'],
+    relationshipName: 'memberships',
+    hidden: false,
+    system: 'client',
+  });
+  const result = new Catch(join).fetch();
+
+  // m2 is silently dropped; o1 and o2 still produced from m1 and m3.
+  expect(parentIds(result)).toEqual(['o1', 'o2']);
+  expect(memberIds(result[0])).toEqual(['m1']);
+  expect(memberIds(result[1])).toEqual(['m3']);
+});
+
+test('req.constraint that conflicts with child-derived constraint is skipped', () => {
+  // When req.constraint pins a parentKey column to a value that disagrees
+  // with the value derived from the child row, constraintsAreCompatible
+  // returns false and the per-child fetch is skipped — the conflicting
+  // child contributes no parent.  m1 -> slug=acme, m3 -> slug=globex; with
+  // req.constraint {slug: 'acme'}, only m1's branch survives.
+  const f = orgFixture({
+    childRows: [
+      {id: 'm1', orgId: 'o1', orgSlug: 'acme', userId: 'u1'},
+      {id: 'm3', orgId: 'o2', orgSlug: 'globex', userId: 'u3'},
+    ],
+  });
+  const result = f.fetch(['slug'], ['orgSlug'], {constraint: {slug: 'acme'}});
+  expect(parentIds(result)).toEqual(['o1']);
+  expect(memberIds(result[0])).toEqual(['m1']);
+});
+
+test('req.reverse with multiple children per parent preserves child-input order within group', () => {
+  // The grouping loop relies on Array.sort being stable.  With reverse,
+  // parents are emitted in descending order, but children within each
+  // group must STILL come out in child-input order (not reversed) — that
+  // is the documented contract on FlippedJoin's output.
+  const f = orgFixture({
+    childRows: [
+      {id: 'm1', orgId: 'o1', orgSlug: 'acme', userId: 'u1'},
+      {id: 'm2', orgId: 'o1', orgSlug: 'acme', userId: 'u2'},
+      {id: 'm3', orgId: 'o2', orgSlug: 'globex', userId: 'u3'},
+      {id: 'm4', orgId: 'o2', orgSlug: 'globex', userId: 'u4'},
+    ],
+  });
+  const result = f.fetch(['slug'], ['orgSlug'], {reverse: true});
+  expect(parentIds(result)).toEqual(['o2', 'o1']);
+  // Child input order is id asc — preserved within each parent group
+  // even though the parent list is reversed.
+  expect(memberIds(result[0])).toEqual(['m3', 'm4']);
+  expect(memberIds(result[1])).toEqual(['m1', 'm2']);
+});
