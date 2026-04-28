@@ -1,0 +1,29 @@
+name: API Snapshot
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  merge_group:
+
+concurrency:
+  group: '${{ github.workflow }} @ ${{ github.event.pull_request.head.label || github.head_ref || github.ref }}'
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  api-snapshot:
+    name: API Snapshot
+    runs-on: ubuntu-latest
+    env:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_TEAM: rocicorp
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24.x
+          cache: 'npm'
+      - run: npm ci
+      - run: npm run build
+      - run: npm run api-snapshot
