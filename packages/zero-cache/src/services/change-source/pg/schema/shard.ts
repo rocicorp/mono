@@ -14,7 +14,10 @@ import type {PostgresDB, PostgresTransaction} from '../../../../types/pg.ts';
 import type {AppID, ShardConfig, ShardID} from '../../../../types/shards.ts';
 import {appSchema, check, upstreamSchema} from '../../../../types/shards.ts';
 import {id} from '../../../../types/sql.ts';
-import {createEventTriggerStatements} from './ddl.ts';
+import {
+  createEventFunctionStatements,
+  createEventTriggerStatements,
+} from './ddl.ts';
 import {
   getPublicationInfo,
   publishedSchema,
@@ -388,6 +391,12 @@ export async function setupTriggers(
   const schema = upstreamSchema(shard);
   const [{ddlDetection}] = await tx<InternalShardConfig[]> /*sql*/ `
     SELECT "ddlDetection" FROM ${tx(schema)}."shardConfig"`;
+
+  // The functions invoked by event triggers are installed even if
+  // event triggers are not supported/allowed by the db provider.
+  // This allows users to manually invoke the update_schemas() function
+  // as a workaround.
+  await tx.unsafe(createEventFunctionStatements(shard));
   try {
     await tx.savepoint(sub => sub.unsafe(triggerSetup(shard)));
   } catch (e) {
