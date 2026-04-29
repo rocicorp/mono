@@ -938,7 +938,7 @@ class ChangeMaker {
       return [];
     }
     try {
-      return await this.#makeChanges(lc, msg);
+      return await this.#makeChanges(lc, lsn, msg);
     } catch (err) {
       this.#error = {lsn, msg, err, lastLogTime: 0};
       this.#logError(lc, this.#error);
@@ -972,10 +972,18 @@ class ChangeMaker {
         `Unable to continue replication from LSN ${fromBigInt(lsn)}: ${String(
           err,
         )}`,
-        err instanceof UnsupportedSchemaChangeError
-          ? err.event.context
-          : // 'content' can be a large byte Buffer. Exclude it from logging output.
-            {...msg, content: undefined},
+        {
+          // 'content' can be a large byte Buffer. Exclude it from logging output.
+          ...{change: {...msg, content: undefined}},
+          ...(err instanceof UnsupportedSchemaChangeError && {
+            context: err.event.context,
+          }),
+          ...(err instanceof Error && {
+            errorMsg: err.message,
+            name: err.name,
+            stack: err.stack,
+          }),
+        },
       );
       error.lastLogTime = now;
     }
@@ -983,6 +991,7 @@ class ChangeMaker {
 
   async #makeChanges(
     lc: LogContext,
+    lsn: bigint,
     msg: Message,
   ): Promise<ChangeStreamData[]> {
     switch (msg.tag) {
@@ -1041,7 +1050,7 @@ class ChangeMaker {
         switch (msg.prefix.substring(this.#shardPrefix.length)) {
           case '': // Legacy prefix
           case '/ddl':
-            return this.#handleDdlMessage(lc, msg);
+            return this.#handleDdlMessage(lc, lsn, msg);
           default:
             lc.debug?.('ignoring unknown message type', msg.prefix);
             return [];
@@ -1074,9 +1083,14 @@ class ChangeMaker {
   // of the next one.
   #lastReplicationEvent: ReplicationEvent | undefined;
 
-  #handleDdlMessage(lc: LogContext, msg: MessageMessage): ChangeStreamData[] {
+  #handleDdlMessage(
+    lc: LogContext,
+    lsn: bigint,
+    msg: MessageMessage,
+  ): ChangeStreamData[] {
     const event = parseLogicalMessageContent(msg, replicationEventSchema);
     lc = lc
+      .withContext('lsn', fromBigInt(lsn))
       .withContext('tag', event.event.tag)
       .withContext('query', event.context.query);
 
