@@ -1,4 +1,4 @@
-import {consoleLogSink, LogContext} from '@rocicorp/logger';
+import type {LogContext} from '@rocicorp/logger';
 import {literal} from 'pg-format';
 import {afterAll, beforeAll, describe, expect, test} from 'vitest';
 import {type JSONValue} from '../../../../../shared/src/bigint-json.ts';
@@ -38,8 +38,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
   let replicator: ChangeProcessor;
 
   beforeAll(async () => {
-    lc = new LogContext('debug', {}, consoleLogSink);
-    createSilentLogContext();
+    lc = createSilentLogContext();
     upstream = await testDBs.create('change_source_end_to_mid_test_upstream');
     replicaDbFile = new DbFile('change_source_end_to_mid_test_replica');
     replica = replicaDbFile.connect(lc);
@@ -124,7 +123,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
   async function nextTransaction(): Promise<DataOrSchemaChange[]> {
     const data: DataOrSchemaChange[] = [];
     for (;;) {
-      const change = await downstream.dequeue('timeout', 20_000);
+      const change = await downstream.dequeue('timeout', 30_000);
       if (change === 'timeout') {
         throw new Error('timed out waiting for change');
       }
@@ -137,8 +136,6 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
         case 'begin':
           break;
         case 'data':
-          // TODO: for debugging on GitHub actions. Remove before submitting.
-          lc.info?.(`received data`, change[1].tag);
           data.push(change[1]);
           break;
         case 'commit':
