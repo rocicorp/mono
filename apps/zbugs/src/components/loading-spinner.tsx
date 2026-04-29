@@ -44,20 +44,14 @@ export function LoadingSpinner({forceShow}: {forceShow?: boolean | undefined}) {
 }
 
 function DemoLoadingSpinner() {
-  const [dots, setDots] = useState('.');
   const [elapsed, setElapsed] = useState(0);
 
   useEffect(() => {
-    const dotsInterval = setInterval(() => {
-      setDots(d => (d.length >= 3 ? '.' : d + '.'));
-    }, 400);
-
     const timerInterval = setInterval(() => {
       setElapsed(Date.now() - (demoStartTime ?? Date.now()));
     }, 100);
 
     return () => {
-      clearInterval(dotsInterval);
       clearInterval(timerInterval);
     };
   }, []);
@@ -67,10 +61,15 @@ function DemoLoadingSpinner() {
   return (
     <div className="loading-spinner loading-spinner-demo">
       <div className="loading-spinner-demo-container">
-        <img src={spinnerUrl} alt="" width={96} height={96} />
-        <span>Loading 1.2 million bugs</span>
-        <span>
-          in {seconds} seconds{dots}
+        <div className="loading-spinner-demo-icon">
+          <img src={spinnerUrl} alt="" width={96} height={96} />
+        </div>
+        <span className="loading-spinner-demo-title">
+          Loading 1.2 million bugs
+        </span>
+        <span className="loading-spinner-demo-time">
+          in <span className="loading-spinner-demo-seconds">{seconds}</span>{' '}
+          seconds...
         </span>
       </div>
     </div>
