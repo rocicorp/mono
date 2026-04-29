@@ -1107,7 +1107,6 @@ class ChangeMaker {
       lc.info?.(`received ${msg.prefix}/${type} event`, {event});
       return [];
     }
-    lc.info?.(`processing ${msg.prefix}/${type} event`, {event});
 
     // The tag (i.e. command) is used as an optimization to determine whether
     // backfill is necessary (CREATE TABLE vs ALTER TABLE vs
@@ -1131,7 +1130,9 @@ class ChangeMaker {
         : event.type === 'ddlUpdate'
           ? event.event.tag
           : 'UNKNOWN';
-    lc.info?.(`Processing ${effectiveTag} command from ${event.type}`);
+    lc.info?.(`processing ${effectiveTag} command from ${msg.prefix}/${type}`, {
+      event,
+    });
     const changes = this.#makeSchemaChanges(
       lc,
       prevSchema,
