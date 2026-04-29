@@ -137,6 +137,10 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
           break;
         case 'data':
           data.push(change[1]);
+          if (change[1].tag === 'backfill-completed') {
+            // TODO: for debugging on GitHub actions. Remove before submitting.
+            console.error(`received backfill-completed`, change[1]);
+          }
           break;
         case 'commit':
         case 'rollback':
@@ -1897,6 +1901,70 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
       ],
     ],
     [
+      'working ALTER PUBLICATION trigger not affected by surrounding COMMENTs',
+      /*sql*/ `
+      COMMENT ON PUBLICATION zero_some_public IS 'bonk';
+      ALTER PUBLICATION zero_some_public SET TABLE existing, TABLE existing_full,
+        TABLE foo (id, "newInt", flt);
+      COMMENT ON PUBLICATION zero_some_public IS 'bonk';
+      `,
+      [
+        [
+          {
+            tag: 'add-column',
+            table: {schema: 'public', name: 'foo'},
+            tableMetadata: {
+              schemaOID: expect.any(Number),
+              relationOID: expect.any(Number),
+              rowKey: {id: {attNum: 1}},
+            },
+            backfill: {attNum: expect.any(Number)},
+          },
+        ],
+        [{tag: 'backfill-completed'}],
+      ],
+      {foo: []},
+      [
+        {
+          name: 'foo',
+          columns: {
+            id: {
+              characterMaximumLength: null,
+              dataType: 'text|NOT_NULL',
+              elemPgTypeClass: null,
+              dflt: null,
+              notNull: false,
+              pos: 1,
+            },
+            ['_0_version']: {
+              characterMaximumLength: null,
+              dataType: 'TEXT',
+              elemPgTypeClass: null,
+              notNull: false,
+              pos: 2,
+            },
+            flt: {
+              characterMaximumLength: null,
+              dataType: 'float8',
+              elemPgTypeClass: null,
+              dflt: null,
+              notNull: false,
+              pos: 3,
+            },
+            newInt: {
+              characterMaximumLength: null,
+              dataType: 'int4',
+              elemPgTypeClass: null,
+              dflt: null,
+              notNull: false,
+              pos: 4,
+            },
+          },
+        },
+      ],
+      [],
+    ],
+    [
       'disable ALTER PUBLICATION trigger',
       /*sql*/ `
       DROP EVENT TRIGGER ${APP_ID}_ddl_start_0;
@@ -1931,6 +1999,11 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
       `,
       [
         [
+          {
+            tag: 'drop-column',
+            table: {schema: 'public', name: 'foo'},
+            column: 'newInt',
+          },
           {
             tag: 'add-column',
             table: {schema: 'public', name: 'foo'},
@@ -2051,61 +2124,6 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
       }
     },
   );
-
-  // TODO: Flaky - fix in a follow-up PR.
-  // These tests fail intermittently because a backfill-completed message from
-  // a prior test bleeds into these tests via the shared downstream queue.
-  test.skip('working ALTER PUBLICATION trigger not affected by surrounding COMMENTs', async () => {
-    await upstream.unsafe(/*sql*/ `
-      COMMENT ON PUBLICATION zero_some_public IS 'bonk';
-      ALTER PUBLICATION zero_some_public SET TABLE existing, TABLE existing_full,
-        TABLE foo (id, "newInt", flt);
-      COMMENT ON PUBLICATION zero_some_public IS 'bonk';
-      `);
-    const t1 = await nextTransaction();
-    expect(t1).toMatchObject([
-      {
-        tag: 'add-column',
-        table: {schema: 'public', name: 'foo'},
-        tableMetadata: {
-          schemaOID: expect.any(Number),
-          relationOID: expect.any(Number),
-          rowKey: {id: {attNum: 1}},
-        },
-        backfill: {attNum: expect.any(Number)},
-      },
-    ]);
-    const t2 = await nextTransaction();
-    expect(t2).toMatchObject([{tag: 'backfill-completed'}]);
-  });
-
-  test.skip('missing ALTER PUBLICATION trigger covered by surrounding COMMENTs', async () => {
-    await upstream.unsafe(/*sql*/ `
-      COMMENT ON PUBLICATION zero_some_public IS 'bonk';
-      ALTER PUBLICATION zero_some_public SET TABLE existing, TABLE existing_full,
-        TABLE foo (id, "newInt", int, flt);
-      COMMENT ON PUBLICATION zero_some_public IS 'bonk';
-
-      -- Additional comments have no effect.
-      COMMENT ON PUBLICATION zero_some_public IS 'bonk';
-      COMMENT ON PUBLICATION zero_some_public IS NULL;
-      `);
-    const t1 = await nextTransaction();
-    expect(t1).toMatchObject([
-      {
-        tag: 'add-column',
-        table: {schema: 'public', name: 'foo'},
-        tableMetadata: {
-          schemaOID: expect.any(Number),
-          relationOID: expect.any(Number),
-          rowKey: {id: {attNum: 1}},
-        },
-        backfill: {attNum: expect.any(Number)},
-      },
-    ]);
-    const t2 = await nextTransaction();
-    expect(t2).toMatchObject([{tag: 'backfill-completed'}]);
-  });
 });
 
 function removeAlterPublication(tags: readonly string[]) {
