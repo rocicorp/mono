@@ -1,4 +1,4 @@
-import type {LogContext} from '@rocicorp/logger';
+import {consoleLogSink, LogContext} from '@rocicorp/logger';
 import {literal} from 'pg-format';
 import {afterAll, beforeAll, describe, expect, test} from 'vitest';
 import {type JSONValue} from '../../../../../shared/src/bigint-json.ts';
@@ -38,7 +38,8 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
   let replicator: ChangeProcessor;
 
   beforeAll(async () => {
-    lc = createSilentLogContext();
+    lc = new LogContext('debug', {}, consoleLogSink);
+    createSilentLogContext();
     upstream = await testDBs.create('change_source_end_to_mid_test_upstream');
     replicaDbFile = new DbFile('change_source_end_to_mid_test_replica');
     replica = replicaDbFile.connect(lc);
@@ -139,8 +140,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
           data.push(change[1]);
           if (change[1].tag === 'backfill-completed') {
             // TODO: for debugging on GitHub actions. Remove before submitting.
-            // oxlint-disable-next-line
-            console.error(`received backfill-completed`, change[1]);
+            lc.error?.(`received backfill-completed`, change[1]);
           }
           break;
         case 'commit':
