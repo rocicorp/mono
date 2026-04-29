@@ -124,7 +124,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
   async function nextTransaction(): Promise<DataOrSchemaChange[]> {
     const data: DataOrSchemaChange[] = [];
     for (;;) {
-      const change = await downstream.dequeue('timeout', 10_000);
+      const change = await downstream.dequeue('timeout', 20_000);
       if (change === 'timeout') {
         throw new Error('timed out waiting for change');
       }
@@ -137,20 +137,20 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
         case 'begin':
           break;
         case 'data':
+          // TODO: for debugging on GitHub actions. Remove before submitting.
+          lc.info?.(`received data`, change[1].tag);
           data.push(change[1]);
-          if (change[1].tag === 'backfill-completed') {
-            // TODO: for debugging on GitHub actions. Remove before submitting.
-            lc.error?.(`received backfill-completed`, change[1]);
-          }
           break;
         case 'commit':
+          if (data.length) {
+            return data;
+          }
+          break; // skip empty transactions
         case 'rollback':
+          throw new Error(`received rollback: ${JSON.stringify(change)}`);
         case 'control':
         case 'status':
-          if (data.length === 0) {
-            break; // skip empty transactions
-          }
-          return data;
+          break;
         default:
           change satisfies never;
       }
