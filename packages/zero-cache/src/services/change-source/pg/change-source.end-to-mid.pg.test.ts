@@ -139,6 +139,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
           data.push(change[1]);
           if (change[1].tag === 'backfill-completed') {
             // TODO: for debugging on GitHub actions. Remove before submitting.
+            // oxlint-disable-next-line
             console.error(`received backfill-completed`, change[1]);
           }
           break;
