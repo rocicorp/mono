@@ -166,6 +166,7 @@ async function cvrStats(lc: LogContext, config: ZeroConfig) {
         'biggestAstHash',
         sql`SELECT "queryHash", length("clientAST"::text) AS "ast_length"
       FROM ${sql(schema)}."queries"
+      WHERE "clientAST" IS NOT NULL
       ORDER BY length("clientAST"::text) DESC
       LIMIT 1;`,
       ],
