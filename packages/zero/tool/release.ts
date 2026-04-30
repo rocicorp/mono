@@ -5,10 +5,6 @@ import {stdin as input, stdout as output} from 'node:process';
 import {createInterface} from 'node:readline/promises';
 import * as path from 'path';
 import commandLineArgs from 'command-line-args';
-import {
-  MIN_SERVER_SUPPORTED_SYNC_PROTOCOL,
-  PROTOCOL_VERSION,
-} from '../../zero-protocol/src/protocol-version.ts';
 
 void main();
 
@@ -636,8 +632,6 @@ async function pushDocker(version: string) {
         `docker buildx build \\
     --platform linux/amd64,linux/arm64 \\
     --build-arg=ZERO_VERSION=${version} \\
-    --build-arg=ZERO_SYNC_PROTOCOL_VERSION=${PROTOCOL_VERSION} \\
-    --build-arg=ZERO_MIN_SUPPORTED_SYNC_PROTOCOL_VERSION=${MIN_SERVER_SUPPORTED_SYNC_PROTOCOL} \\
     -t rocicorp/zero:${version} \\
     --push .`,
         {cwd: basePath('packages', 'zero')},
