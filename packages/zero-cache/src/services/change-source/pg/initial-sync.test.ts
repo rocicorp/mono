@@ -240,8 +240,8 @@ describe('createReplicationSlot', () => {
         caught = e;
       });
 
-      // Advance past the 5s client-side timeout.
-      await vi.advanceTimersByTimeAsync(6_000);
+      // Advance past the 30s client-side timeout.
+      await vi.advanceTimersByTimeAsync(31_000);
       await result;
 
       expect(caught).toBeInstanceOf(Error);
