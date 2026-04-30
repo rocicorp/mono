@@ -1,15 +1,16 @@
-import {consoleLogSink, LogContext} from '@rocicorp/logger';
 import {describe, expect, test} from 'vitest';
+import {BigIntJSON} from '../../../../shared/src/bigint-json.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import {sleep} from '../../../../shared/src/sleep.ts';
 import {ReplicationMessages} from '../replicator/test-utils.ts';
 import {Broadcast} from './broadcast.ts';
 import {createSubscriber} from './test-utils.ts';
 
+const json = BigIntJSON.stringify;
+
 describe('change-streamer/broadcast', () => {
   const messages = new ReplicationMessages({issues: 'id'});
-  const lc = new LogContext('debug', {}, consoleLogSink);
-  createSilentLogContext();
+  const lc = createSilentLogContext();
 
   test('without tracking', () => {
     const [sub1, stream1] = createSubscriber('00', true);
@@ -19,7 +20,11 @@ describe('change-streamer/broadcast', () => {
 
     Broadcast.withoutTracking(
       [sub1, sub2, sub3, sub4],
-      ['11', ['begin', messages.begin(), {commitWatermark: '13'}]],
+      [
+        '11',
+        'begin',
+        json(['begin', messages.begin(), {commitWatermark: '13'}]),
+      ],
     );
 
     for (const sub of [sub1, sub2, sub3, sub4]) {
@@ -43,7 +48,11 @@ describe('change-streamer/broadcast', () => {
 
     const broadcast = new Broadcast(
       [sub1, sub2, sub3, sub4],
-      ['11', ['begin', messages.begin(), {commitWatermark: '13'}]],
+      [
+        '11',
+        'begin',
+        json(['begin', messages.begin(), {commitWatermark: '13'}]),
+      ],
     );
 
     expect(broadcast.isDone).toBe(false);
@@ -75,7 +84,11 @@ describe('change-streamer/broadcast', () => {
 
     const broadcast = new Broadcast(
       [sub1, sub2, sub3, sub4],
-      ['11', ['begin', messages.begin(), {commitWatermark: '13'}]],
+      [
+        '11',
+        'begin',
+        json(['begin', messages.begin(), {commitWatermark: '13'}]),
+      ],
     );
 
     expect(broadcast.isDone).toBe(false);
