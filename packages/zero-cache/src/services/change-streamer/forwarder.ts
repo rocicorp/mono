@@ -1,8 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
 import {joinIterables, wrapIterable} from '../../../../shared/src/iterables.ts';
-import type {ChangeStreamData} from '../change-source/protocol/current.ts';
 import {Broadcast} from './broadcast.ts';
-import type {WatermarkedChange} from './change-streamer-service.ts';
+import type {ChangeTag, WatermarkedChange} from './change-streamer-service.ts';
 import type {Status} from './change-streamer.ts';
 import type {Subscriber} from './subscriber.ts';
 
@@ -113,8 +112,8 @@ export class Forwarder {
     }
   }
 
-  #updateActiveSubscribers([type]: ChangeStreamData) {
-    switch (type) {
+  #updateActiveSubscribers(tag: ChangeTag) {
+    switch (tag) {
       case 'begin':
         // While in a Transaction, all added subscribers are "queued" so that no
         // messages are forwarded to them. This state corresponds to being queued

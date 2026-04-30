@@ -224,10 +224,30 @@ type Streamed<T> = {
   id: number;
 };
 
-export async function streamOut<T extends JSONValue>(
+export function streamOut<T extends JSONValue>(
   lc: LogContext,
   source: Source<T>,
   sink: WebSocket,
+): Promise<void> {
+  return streamOutInternal(lc, source, sink, BigIntJSON.stringify);
+}
+
+/**
+ * Streams out a `Source` for which messages are already stringified JSON.
+ */
+export function streamOutStringified(
+  lc: LogContext,
+  source: Source<string>,
+  sink: WebSocket,
+): Promise<void> {
+  return streamOutInternal(lc, source, sink, json => json);
+}
+
+async function streamOutInternal<T extends JSONValue>(
+  lc: LogContext,
+  source: Source<T>,
+  sink: WebSocket,
+  stringify: (payload: T) => string,
 ): Promise<void> {
   sendPingsForLiveness(lc, sink, PING_INTERVAL_MS);
 
@@ -253,7 +273,7 @@ export async function streamOut<T extends JSONValue>(
       lc.debug?.(`started pipelined outbound stream`);
       for await (const {value: msg, consumed} of pipeline) {
         const id = ++nextID;
-        const data = BigIntJSON.stringify({msg, id} satisfies Streamed<T>);
+        const data = `{"id":${id},"msg":${stringify(msg)}}`;
         // Enable for debugging. Otherwise too verbose.
         // lc.debug?.(`pipelining`, data);
         sink.send(data);
@@ -271,7 +291,7 @@ export async function streamOut<T extends JSONValue>(
       lc.debug?.(`started synchronous outbound stream`);
       for await (const msg of source) {
         const id = ++nextID;
-        const data = BigIntJSON.stringify({msg, id} satisfies Streamed<T>);
+        const data = `{"id":${id},"msg":${stringify(msg)}}`;
         // Enable for debugging. Otherwise too verbose.
         // lc.debug?.(`sending`, data);
         sink.send(data);

@@ -1,7 +1,6 @@
 import type {Enum} from '../../../../shared/src/enum.ts';
 import * as v from '../../../../shared/src/valita.ts';
 import type {Source} from '../../types/streams.ts';
-import {type Change} from '../change-source/protocol/current/data.ts';
 import {changeStreamDataSchema} from '../change-source/protocol/current/downstream.ts';
 import type {ReplicatorMode} from '../replicator/replicator.ts';
 import {changeSourceTimingsSchema} from '../replicator/reporter/report-schema.ts';
@@ -125,17 +124,6 @@ export type SubscriberContext = {
   initial: boolean;
 };
 
-export type ChangeEntry = {
-  change: Change;
-
-  /**
-   * Note that it is technically possible for multiple changes to have
-   * the same watermark, but that of a commit is guaranteed to be final,
-   * so subscribers should only store the watermark of commit changes.
-   */
-  watermark: string;
-};
-
 /**
  * The StatusMessage payload for now is empty, but can be extended to
  * include meta-level information in the future.
@@ -206,7 +194,14 @@ export function errorTypeToReadableName(val: ErrorType) {
  */
 export type Downstream = v.Infer<typeof downstreamSchema>;
 
-export interface ChangeStreamerService extends ChangeStreamer, Service {
+export interface ChangeStreamerService
+  extends Omit<ChangeStreamer, 'subscribe'>, Service {
+  /**
+   * The server-side interface overrides `subscribe()` to return a stream
+   * of already-stringified {@link Downstream} payloads.
+   */
+  subscribe(ctx: SubscriberContext): Promise<Source<string>>;
+
   /**
    * Notifies the change streamer of a watermark that has been backed up,
    * indicating that changes before the watermark can be purged if active
