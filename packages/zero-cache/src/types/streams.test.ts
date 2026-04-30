@@ -18,6 +18,7 @@ import {
   stream,
   streamIn,
   streamOut,
+  streamOutStringified,
   type Sink,
   type Source,
 } from './streams.ts';
@@ -214,6 +215,7 @@ describe('streams with internal acks', () => {
 
   let server: FastifyInstance;
   let producer: Subscription<Message>;
+  let stringifiedProducer: Subscription<string>;
   let consumed: Queue<Message>;
   let cleanedUp: Promise<Message[]>;
   let cleanup: (m: Message[]) => void;
@@ -233,10 +235,14 @@ describe('streams with internal acks', () => {
       consumed: m => consumed.enqueue(m),
       cleanup: resolve,
     });
+    stringifiedProducer = Subscription.create();
 
     server = Fastify();
     await server.register(websocket);
-    server.get('/', {websocket: true}, ws => streamOut(lc, producer, ws));
+    server.get('/', {websocket: true}, ws => {
+      void streamOut(lc, producer, ws);
+      void streamOutStringified(lc, stringifiedProducer, ws);
+    });
 
     // Run the server for real instead of using `injectWS()`, as that has a
     // different behavior for ws.close().
@@ -458,6 +464,15 @@ describe('streams with internal acks', () => {
 
   test('passthrough', async () => {
     producer.push({from: 1, to: 2, str: 'foo', extra: 'bar'} as Message);
+
+    const {consumer} = await startReceiver();
+    expect(await drain(1, consumer)).toEqual([
+      {from: 1, to: 2, str: 'foo', extra: 'bar'},
+    ]);
+  });
+
+  test('stringified source', async () => {
+    stringifiedProducer.push('{"from":1,"to":2,"str":"foo","extra":"bar"}');
 
     const {consumer} = await startReceiver();
     expect(await drain(1, consumer)).toEqual([

@@ -5,7 +5,7 @@ import postgres from 'postgres';
 import {beforeEach, describe, expect, vi, type Mock} from 'vitest';
 import {AbortError} from '../../../../shared/src/abort-error.ts';
 import {assert} from '../../../../shared/src/asserts.ts';
-import {stringify} from '../../../../shared/src/bigint-json.ts';
+import {BigIntJSON, stringify} from '../../../../shared/src/bigint-json.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import {Queue} from '../../../../shared/src/queue.ts';
 import {sleep} from '../../../../shared/src/sleep.ts';
@@ -107,11 +107,11 @@ describe('change-streamer/service', () => {
     };
   });
 
-  function drainToQueue(sub: Source<Downstream>): Queue<Downstream> {
+  function drainToQueue(sub: Source<string>): Queue<Downstream> {
     const queue = new Queue<Downstream>();
     void (async () => {
       for await (const msg of sub) {
-        queue.enqueue(msg);
+        queue.enqueue(BigIntJSON.parse(msg) as Downstream);
       }
     })();
     return queue;
@@ -868,7 +868,8 @@ describe('change-streamer/service', () => {
     expect(setTimeoutFn).toHaveBeenCalledTimes(3);
 
     drainToQueue(sub1);
-    for await (const msg of sub2) {
+    for await (const json of sub2) {
+      const msg: Downstream = BigIntJSON.parse(json) as Downstream;
       if (msg[0] === 'commit' && msg[2].watermark === '08') {
         // Now that sub2 has consumed past '06',
         // a purge should successfully clear records before '06'
