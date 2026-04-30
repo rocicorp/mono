@@ -529,8 +529,14 @@ type ReplicationSlot = {
   output_plugin: string;
 };
 
-// Successful CREATE_REPLICATION_SLOT calls have always completed within 1s in
-// observed production runs; use 30s as a hard stop for pathological hangs.
+// When creating a replication slot, Postgres waits for open transactions
+// to complete before reserving a consistent_point (LSN) in the WAL and creating
+// a matching transaction snapshot. As such, it can technically take an arbitrary
+// amount of time (e.g. DDL operations, table-wide operations, etc.).
+//
+// However, to detect pathological situations, bound the amount of time that
+// the server waits for replication slot creation, so that a continual failure to
+// create a replication slot is surfaced by errors / alerts.
 const CREATE_REPLICATION_SLOT_TIMEOUT_MS = 30_000;
 
 // The lock_timeout is set 1s before the client-side orTimeout so that
