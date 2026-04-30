@@ -52,17 +52,6 @@ async function main() {
       );
     }
 
-    // For stable releases, we need to know the base version early
-    // Read it from the current working directory before we chdir
-    const zeroPackageJsonPath = path.join(
-      gitRoot,
-      'packages',
-      'zero',
-      'package.json',
-    );
-    const packageData = getPackageData(zeroPackageJsonPath);
-    const currentVersion = packageData.version;
-
     // Check that the ref we're building from exists both locally and remotely
     // and that they point to the same commit
     console.log(
@@ -130,6 +119,10 @@ async function main() {
     } catch {
       execute(`git checkout ${from}`);
     }
+
+    const zeroPackageJsonPath = basePath('packages', 'zero', 'package.json');
+    const packageData = getPackageData(zeroPackageJsonPath);
+    const currentVersion = packageData.version;
 
     let result: Release;
     if (mode === 'canary') {
