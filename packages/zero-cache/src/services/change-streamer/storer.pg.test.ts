@@ -1,25 +1,36 @@
 import {PG_LOCK_NOT_AVAILABLE} from '@drdgvhbh/postgres-error-codes';
 import postgres from 'postgres';
 import {beforeEach, describe, expect} from 'vitest';
+import {BigIntJSON} from '../../../../shared/src/bigint-json.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import {Queue} from '../../../../shared/src/queue.ts';
 import {sleep} from '../../../../shared/src/sleep.ts';
 import {type PgTest, test} from '../../test/db.ts';
 import type {PostgresDB} from '../../types/pg.ts';
 import type {Subscription} from '../../types/subscription.ts';
-import {type Commit} from '../change-source/protocol/current/downstream.ts';
+import {
+  type ChangeStreamData,
+  type Commit,
+} from '../change-source/protocol/current/downstream.ts';
 import type {UpstreamStatusMessage} from '../change-source/protocol/current/status.ts';
 import {ReplicationMessages} from '../replicator/test-utils.ts';
 import {type Downstream} from './change-streamer.ts';
 import * as ErrorType from './error-type-enum.ts';
 import {ensureReplicationConfig, setupCDCTables} from './schema/tables.ts';
-import {PurgeLocker, Storer, type TuningOptions} from './storer.ts';
+import {
+  extractChangeSubstring,
+  PurgeLocker,
+  Storer,
+  type TuningOptions,
+} from './storer.ts';
 import {createSubscriber} from './test-utils.ts';
 
 const opts: TuningOptions = {
   backPressureLimitHeapProportion: 0.04,
   statementTimeoutMs: 20_000,
 };
+
+const json = BigIntJSON.stringify;
 
 describe('change-streamer/storer', () => {
   const lc = createSilentLogContext();
@@ -82,9 +93,10 @@ describe('change-streamer/storer', () => {
 
   const messages = new ReplicationMessages({issues: 'id'});
 
-  async function drain(sub: Subscription<Downstream>, untilWatermark?: string) {
+  async function drain(sub: Subscription<string>, untilWatermark?: string) {
     const msgs: Downstream[] = [];
-    for await (const msg of sub) {
+    for await (const json of sub) {
+      const msg: Downstream = JSON.parse(json);
       msgs.push(msg);
       if (msg[0] === 'commit' && msg[2].watermark === untilWatermark) {
         break;
@@ -167,11 +179,8 @@ describe('change-streamer/storer', () => {
         await storer.getStartStreamInitializationParameters(),
       ).toMatchObject({lastWatermark: '06', backfillRequests: []});
 
-      storer.store([
-        '08',
-        ['begin', messages.begin(), {commitWatermark: '08'}],
-      ]);
-      storer.store(['08', ['commit', messages.commit(), {watermark: '08'}]]);
+      storer.store('08', ['begin', messages.begin(), {commitWatermark: '08'}]);
+      storer.store('08', ['commit', messages.commit(), {watermark: '08'}]);
 
       await storer.allProcessed();
       expect(
@@ -180,28 +189,22 @@ describe('change-streamer/storer', () => {
 
       // Add table metadata. This should be stored, but not returned in
       // initialization parameters without any backfill data.
-      storer.store([
-        '09',
-        ['begin', messages.begin(), {commitWatermark: '09'}],
-      ]);
-      storer.store([
-        '09',
-        [
-          'data',
-          {
-            tag: 'create-table',
-            spec: {
-              schema: 'my',
-              name: 'foo',
-              columns: {},
-            },
-            metadata: {
-              rowKey: {type: 'index', columns: ['a', 'b']},
-            },
+      storer.store('09', ['begin', messages.begin(), {commitWatermark: '09'}]);
+      storer.store('09', [
+        'data',
+        {
+          tag: 'create-table',
+          spec: {
+            schema: 'my',
+            name: 'foo',
+            columns: {},
           },
-        ],
+          metadata: {
+            rowKey: {type: 'index', columns: ['a', 'b']},
+          },
+        },
       ]);
-      storer.store(['09', ['commit', messages.commit(), {watermark: '09'}]]);
+      storer.store('09', ['commit', messages.commit(), {watermark: '09'}]);
 
       // No backfillRequests should be present.
       await storer.allProcessed();
@@ -214,30 +217,24 @@ describe('change-streamer/storer', () => {
       `);
 
       // Add a different table with backfill metadata only.
-      storer.store([
-        '0a',
-        ['begin', messages.begin(), {commitWatermark: '0a'}],
-      ]);
-      storer.store([
-        '0a',
-        [
-          'data',
-          {
-            tag: 'create-table',
-            spec: {
-              schema: 'your',
-              name: 'bar',
-              columns: {},
-            },
-            backfill: {
-              a: {fooID: 987, barID: 'zoo'},
-              b: {fooID: 843, barID: 'ozz'},
-              d: {fooID: 777, barID: 'zoz'},
-            },
+      storer.store('0a', ['begin', messages.begin(), {commitWatermark: '0a'}]);
+      storer.store('0a', [
+        'data',
+        {
+          tag: 'create-table',
+          spec: {
+            schema: 'your',
+            name: 'bar',
+            columns: {},
           },
-        ],
+          backfill: {
+            a: {fooID: 987, barID: 'zoo'},
+            b: {fooID: 843, barID: 'ozz'},
+            d: {fooID: 777, barID: 'zoz'},
+          },
+        },
       ]);
-      storer.store(['0a', ['commit', messages.commit(), {watermark: '0a'}]]);
+      storer.store('0a', ['commit', messages.commit(), {watermark: '0a'}]);
 
       // The table should appear in the backfillRequests, with null metadata
       // since none was ever specified.
@@ -273,26 +270,20 @@ describe('change-streamer/storer', () => {
         `);
 
       // Add a column to the original table backfill metadata.
-      storer.store([
-        '0b',
-        ['begin', messages.begin(), {commitWatermark: '0a'}],
-      ]);
-      storer.store([
-        '0b',
-        [
-          'data',
-          {
-            tag: 'add-column',
-            table: {
-              schema: 'my',
-              name: 'foo',
-            },
-            column: {name: 'c', spec: {pos: 3, dataType: 'text'}},
-            backfill: {fooID: 123, barID: 'baz'},
+      storer.store('0b', ['begin', messages.begin(), {commitWatermark: '0a'}]);
+      storer.store('0b', [
+        'data',
+        {
+          tag: 'add-column',
+          table: {
+            schema: 'my',
+            name: 'foo',
           },
-        ],
+          column: {name: 'c', spec: {pos: 3, dataType: 'text'}},
+          backfill: {fooID: 123, barID: 'baz'},
+        },
       ]);
-      storer.store(['0b', ['commit', messages.commit(), {watermark: '0b'}]]);
+      storer.store('0b', ['commit', messages.commit(), {watermark: '0b'}]);
 
       // Now the original table shows up in the backfillRequests, with its
       // table metadata.
@@ -349,29 +340,23 @@ describe('change-streamer/storer', () => {
         `);
 
       // Add another column to the same table with new table metadata.
-      storer.store([
-        '0c',
-        ['begin', messages.begin(), {commitWatermark: '0b'}],
-      ]);
-      storer.store([
-        '0c',
-        [
-          'data',
-          {
-            tag: 'add-column',
-            table: {
-              schema: 'my',
-              name: 'foo',
-            },
-            tableMetadata: {
-              rowKey: {type: 'default', columns: ['b']},
-            },
-            column: {name: 'd', spec: {pos: 4, dataType: 'text'}},
-            backfill: {fooID: 456, barID: 'boo'},
+      storer.store('0c', ['begin', messages.begin(), {commitWatermark: '0b'}]);
+      storer.store('0c', [
+        'data',
+        {
+          tag: 'add-column',
+          table: {
+            schema: 'my',
+            name: 'foo',
           },
-        ],
+          tableMetadata: {
+            rowKey: {type: 'default', columns: ['b']},
+          },
+          column: {name: 'd', spec: {pos: 4, dataType: 'text'}},
+          backfill: {fooID: 456, barID: 'boo'},
+        },
       ]);
-      storer.store(['0c', ['commit', messages.commit(), {watermark: '0c'}]]);
+      storer.store('0c', ['commit', messages.commit(), {watermark: '0c'}]);
 
       await storer.allProcessed();
       expect(await storer.getStartStreamInitializationParameters())
@@ -429,30 +414,24 @@ describe('change-streamer/storer', () => {
         `);
 
       // Update the table metadata of the new table.
-      storer.store([
-        '0d',
-        ['begin', messages.begin(), {commitWatermark: '0c'}],
-      ]);
-      storer.store([
-        '0d',
-        [
-          'data',
-          {
-            tag: 'update-table-metadata',
-            table: {
-              schema: 'your',
-              name: 'bar',
-            },
-            old: {
-              rowKey: {type: 'full', columns: ['a', 'b']},
-            },
-            new: {
-              rowKey: {type: 'default', columns: ['a']},
-            },
+      storer.store('0d', ['begin', messages.begin(), {commitWatermark: '0c'}]);
+      storer.store('0d', [
+        'data',
+        {
+          tag: 'update-table-metadata',
+          table: {
+            schema: 'your',
+            name: 'bar',
           },
-        ],
+          old: {
+            rowKey: {type: 'full', columns: ['a', 'b']},
+          },
+          new: {
+            rowKey: {type: 'default', columns: ['a']},
+          },
+        },
       ]);
-      storer.store(['0d', ['commit', messages.commit(), {watermark: '0d'}]]);
+      storer.store('0d', ['commit', messages.commit(), {watermark: '0d'}]);
 
       await storer.allProcessed();
       expect(await storer.getStartStreamInitializationParameters())
@@ -517,32 +496,26 @@ describe('change-streamer/storer', () => {
         `);
 
       // Rename one of the backfilling columns
-      storer.store([
-        '0e',
-        ['begin', messages.begin(), {commitWatermark: '0e'}],
-      ]);
-      storer.store([
-        '0e',
-        [
-          'data',
-          {
-            tag: 'update-column',
-            table: {
-              schema: 'your',
-              name: 'bar',
-            },
-            old: {
-              name: 'b',
-              spec: {pos: 2, dataType: 'text'},
-            },
-            new: {
-              name: 'newName',
-              spec: {pos: 2, dataType: 'text'},
-            },
+      storer.store('0e', ['begin', messages.begin(), {commitWatermark: '0e'}]);
+      storer.store('0e', [
+        'data',
+        {
+          tag: 'update-column',
+          table: {
+            schema: 'your',
+            name: 'bar',
           },
-        ],
+          old: {
+            name: 'b',
+            spec: {pos: 2, dataType: 'text'},
+          },
+          new: {
+            name: 'newName',
+            spec: {pos: 2, dataType: 'text'},
+          },
+        },
       ]);
-      storer.store(['0e', ['commit', messages.commit(), {watermark: '0e'}]]);
+      storer.store('0e', ['commit', messages.commit(), {watermark: '0e'}]);
 
       await storer.allProcessed();
       expect(await storer.getStartStreamInitializationParameters())
@@ -607,25 +580,19 @@ describe('change-streamer/storer', () => {
         `);
 
       // Drop a backfilling column.
-      storer.store([
-        '0f',
-        ['begin', messages.begin(), {commitWatermark: '0f'}],
-      ]);
-      storer.store([
-        '0f',
-        [
-          'data',
-          {
-            tag: 'drop-column',
-            table: {
-              schema: 'your',
-              name: 'bar',
-            },
-            column: 'newName',
+      storer.store('0f', ['begin', messages.begin(), {commitWatermark: '0f'}]);
+      storer.store('0f', [
+        'data',
+        {
+          tag: 'drop-column',
+          table: {
+            schema: 'your',
+            name: 'bar',
           },
-        ],
+          column: 'newName',
+        },
       ]);
-      storer.store(['0f', ['commit', messages.commit(), {watermark: '0f'}]]);
+      storer.store('0f', ['commit', messages.commit(), {watermark: '0f'}]);
 
       await storer.allProcessed();
       expect(await storer.getStartStreamInitializationParameters())
@@ -686,27 +653,25 @@ describe('change-streamer/storer', () => {
         `);
 
       // Set the other backfilling columns to completed
-      storer.store([
-        '110',
-        ['begin', messages.begin(), {commitWatermark: '110'}],
+      storer.store('110', [
+        'begin',
+        messages.begin(),
+        {commitWatermark: '110'},
       ]);
-      storer.store([
-        '110',
-        [
-          'data',
-          {
-            tag: 'backfill-completed',
-            relation: {
-              schema: 'your',
-              name: 'bar',
-              rowKey: {columns: ['a']},
-            },
-            columns: ['d'],
-            watermark: '0f',
+      storer.store('110', [
+        'data',
+        {
+          tag: 'backfill-completed',
+          relation: {
+            schema: 'your',
+            name: 'bar',
+            rowKey: {columns: ['a']},
           },
-        ],
+          columns: ['d'],
+          watermark: '0f',
+        },
       ]);
-      storer.store(['110', ['commit', messages.commit(), {watermark: '110'}]]);
+      storer.store('110', ['commit', messages.commit(), {watermark: '110'}]);
 
       await storer.allProcessed();
       expect(await storer.getStartStreamInitializationParameters())
@@ -743,43 +708,38 @@ describe('change-streamer/storer', () => {
         `);
 
       // Rename the backfilling table, and a contained column in the same tx.
-      storer.store([
-        '111',
-        ['begin', messages.begin(), {commitWatermark: '111'}],
+      storer.store('111', [
+        'begin',
+        messages.begin(),
+        {commitWatermark: '111'},
       ]);
-      storer.store([
-        '111',
-        [
-          'data',
-          {
-            tag: 'rename-table',
-            old: {schema: 'my', name: 'foo'},
-            new: {schema: 'your', name: 'bloo'},
+      storer.store('111', [
+        'data',
+        {
+          tag: 'rename-table',
+          old: {schema: 'my', name: 'foo'},
+          new: {schema: 'your', name: 'bloo'},
+        },
+      ]);
+      storer.store('111', [
+        'data',
+        {
+          tag: 'update-column',
+          table: {
+            schema: 'your',
+            name: 'bloo',
           },
-        ],
-      ]);
-      storer.store([
-        '111',
-        [
-          'data',
-          {
-            tag: 'update-column',
-            table: {
-              schema: 'your',
-              name: 'bloo',
-            },
-            old: {
-              name: 'd',
-              spec: {pos: 2, dataType: 'text'},
-            },
-            new: {
-              name: 'deez',
-              spec: {pos: 2, dataType: 'text'},
-            },
+          old: {
+            name: 'd',
+            spec: {pos: 2, dataType: 'text'},
           },
-        ],
+          new: {
+            name: 'deez',
+            spec: {pos: 2, dataType: 'text'},
+          },
+        },
       ]);
-      storer.store(['111', ['commit', messages.commit(), {watermark: '111'}]]);
+      storer.store('111', ['commit', messages.commit(), {watermark: '111'}]);
 
       await storer.allProcessed();
       expect(await storer.getStartStreamInitializationParameters())
@@ -816,21 +776,19 @@ describe('change-streamer/storer', () => {
         `);
 
       // Drop the backfilling table
-      storer.store([
-        '112',
-        ['begin', messages.begin(), {commitWatermark: '112'}],
+      storer.store('112', [
+        'begin',
+        messages.begin(),
+        {commitWatermark: '112'},
       ]);
-      storer.store([
-        '112',
-        [
-          'data',
-          {
-            tag: 'drop-table',
-            id: {schema: 'your', name: 'bloo'},
-          },
-        ],
+      storer.store('112', [
+        'data',
+        {
+          tag: 'drop-table',
+          id: {schema: 'your', name: 'bloo'},
+        },
       ]);
-      storer.store(['112', ['commit', messages.commit(), {watermark: '112'}]]);
+      storer.store('112', ['commit', messages.commit(), {watermark: '112'}]);
 
       await storer.allProcessed();
       expect(await storer.getStartStreamInitializationParameters())
@@ -923,13 +881,10 @@ describe('change-streamer/storer', () => {
       // SELECT will read the new owner immediately.
       await db`UPDATE "xero_5/cdc"."replicationState" SET owner = 'other-task'`;
 
-      storer.store([
-        '07',
-        ['begin', messages.begin(), {commitWatermark: '08'}],
-      ]);
+      storer.store('07', ['begin', messages.begin(), {commitWatermark: '08'}]);
       storer.catchup(sub1, 'serving');
-      storer.store(['07', ['data', messages.insert('issues', {id: 'foo'})]]);
-      storer.store(['08', ['commit', messages.commit(), {watermark: '08'}]]);
+      storer.store('07', ['data', messages.insert('issues', {id: 'foo'})]);
+      storer.store('08', ['commit', messages.commit(), {watermark: '08'}]);
       storer.catchup(sub2, 'serving');
 
       await expect(done).rejects.toThrow(
@@ -946,11 +901,8 @@ describe('change-streamer/storer', () => {
     test('ownership change not possible during transaction', async () => {
       // Start a transaction — this begins a SERIALIZABLE tx that
       // reads replicationState (owner = 'task-id').
-      storer.store([
-        '07',
-        ['begin', messages.begin(), {commitWatermark: '08'}],
-      ]);
-      storer.store(['07', ['data', messages.insert('issues', {id: 'foo'})]]);
+      storer.store('07', ['begin', messages.begin(), {commitWatermark: '08'}]);
+      storer.store('07', ['data', messages.insert('issues', {id: 'foo'})]);
 
       // Wait for the storer to process 'begin' and start the SERIALIZABLE tx.
       // The pipelined SELECT of replicationState should have executed by now.
@@ -969,7 +921,7 @@ describe('change-streamer/storer', () => {
       );
 
       // Now send commit.
-      storer.store(['08', ['commit', messages.commit(), {watermark: '08'}]]);
+      storer.store('08', ['commit', messages.commit(), {watermark: '08'}]);
 
       // Now an ownership change should succeed.
       expect(
@@ -987,19 +939,13 @@ describe('change-streamer/storer', () => {
     });
 
     test('abort', async () => {
-      storer.store([
-        '0b',
-        ['begin', messages.begin(), {commitWatermark: '0b'}],
-      ]);
-      storer.store(['0b', ['data', messages.insert('issues', {id: 'foo'})]]);
+      storer.store('0b', ['begin', messages.begin(), {commitWatermark: '0b'}]);
+      storer.store('0b', ['data', messages.insert('issues', {id: 'foo'})]);
       storer.abort();
 
-      storer.store([
-        '0a',
-        ['begin', messages.begin(), {commitWatermark: '0a'}],
-      ]);
-      storer.store(['0a', ['data', messages.insert('issues', {id: 'bar'})]]);
-      storer.store(['0a', ['commit', messages.commit(), {watermark: '0a'}]]);
+      storer.store('0a', ['begin', messages.begin(), {commitWatermark: '0a'}]);
+      storer.store('0a', ['data', messages.insert('issues', {id: 'bar'})]);
+      storer.store('0a', ['commit', messages.commit(), {watermark: '0a'}]);
 
       await expectConsumed('0a');
 
@@ -1035,9 +981,14 @@ describe('change-streamer/storer', () => {
       // This should be buffered until catchup is complete.
       void sub.send([
         '07',
-        ['begin', messages.begin(), {commitWatermark: '08'}],
+        'begin',
+        json(['begin', messages.begin(), {commitWatermark: '08'}]),
       ]);
-      void sub.send(['08', ['commit', messages.commit(), {watermark: '08'}]]);
+      void sub.send([
+        '08',
+        'commit',
+        json(['commit', messages.commit(), {watermark: '08'}]),
+      ]);
 
       // Catchup should start immediately since there are no txes in progress.
       storer.catchup(sub, 'backup');
@@ -1157,33 +1108,35 @@ describe('change-streamer/storer', () => {
       // This should be buffered until catchup is complete.
       void sub1.send([
         '09',
-        ['begin', messages.begin(), {commitWatermark: '0a'}],
+        'begin',
+        json(['begin', messages.begin(), {commitWatermark: '0a'}]),
       ]);
       void sub1.send([
         '0a',
-        ['commit', messages.commit({buffer: 'me'}), {watermark: '0a'}],
+        'commit',
+        json(['commit', messages.commit({buffer: 'me'}), {watermark: '0a'}]),
       ]);
       void sub2.send([
         '09',
-        ['begin', messages.begin(), {commitWatermark: '0a'}],
+        'begin',
+        json(['begin', messages.begin(), {commitWatermark: '0a'}]),
       ]);
       void sub2.send([
         '0a',
-        ['commit', messages.commit({buffer: 'me'}), {watermark: '0a'}],
+        'commit',
+        json(['commit', messages.commit({buffer: 'me'}), {watermark: '0a'}]),
       ]);
 
       // Start a transaction before enqueuing catchup.
-      storer.store([
-        '07',
-        ['begin', messages.begin(), {commitWatermark: '08'}],
-      ]);
+      storer.store('07', ['begin', messages.begin(), {commitWatermark: '08'}]);
       // Enqueue catchup before transaction completes.
       storer.catchup(sub1, 'serving');
       storer.catchup(sub2, 'serving');
       // Finish the transaction.
-      storer.store([
-        '08',
-        ['commit', messages.commit({extra: 'stuff'}), {watermark: '08'}],
+      storer.store('08', [
+        'commit',
+        messages.commit({extra: 'stuff'}),
+        {watermark: '08'},
       ]);
 
       storer.status(['status', {ack: true}, {watermark: '0e'}]);
@@ -1420,31 +1373,32 @@ describe('change-streamer/storer', () => {
       // This should be buffered until catchup is complete.
       void sub1.send([
         '09',
-        ['begin', messages.begin(), {commitWatermark: '0a'}],
+        'begin',
+        json(['begin', messages.begin(), {commitWatermark: '0a'}]),
       ]);
       void sub1.send([
         '0a',
-        ['commit', messages.commit({buffer: 'me'}), {watermark: '0a'}],
+        'commit',
+        json(['commit', messages.commit({buffer: 'me'}), {watermark: '0a'}]),
       ]);
       void sub2.send([
         '09',
-        ['begin', messages.begin(), {commitWatermark: '0a'}],
+        'begin',
+        json(['begin', messages.begin(), {commitWatermark: '0a'}]),
       ]);
       void sub2.send([
         '0a',
-        ['commit', messages.commit({buffer: 'me'}), {watermark: '0a'}],
+        'commit',
+        json(['commit', messages.commit({buffer: 'me'}), {watermark: '0a'}]),
       ]);
 
       // Start a transaction before enqueuing catchup.
-      storer.store([
-        '07',
-        ['begin', messages.begin(), {commitWatermark: '08'}],
-      ]);
+      storer.store('07', ['begin', messages.begin(), {commitWatermark: '08'}]);
       // Enqueue catchup before transaction completes.
       storer.catchup(sub1, 'backup');
       storer.catchup(sub2, 'serving');
       // Rollback the transaction.
-      storer.store(['08', ['rollback', messages.rollback()]]);
+      storer.store('08', ['rollback', messages.rollback()]);
 
       storer.status(['status', {ack: true}, {watermark: '0a'}]);
       storer.status(['status', {ack: true}, {watermark: '0c'}]);
@@ -1623,34 +1577,31 @@ describe('change-streamer/storer', () => {
       // This should be buffered until catchup is complete.
       void sub.send([
         '0b',
-        ['begin', messages.begin(), {commitWatermark: '0c'}],
+        'begin',
+        json(['begin', messages.begin(), {commitWatermark: '0c'}]),
       ]);
       void sub.send([
         '0c',
-        ['commit', messages.commit({waa: 'hoo'}), {watermark: '0c'}],
+        'commit',
+        json(['commit', messages.commit({waa: 'hoo'}), {watermark: '0c'}]),
       ]);
 
       // Start a transaction before enqueuing catchup.
-      storer.store([
-        '07',
-        ['begin', messages.begin(), {commitWatermark: '08'}],
-      ]);
+      storer.store('07', ['begin', messages.begin(), {commitWatermark: '08'}]);
       // Enqueue catchup before transaction completes.
       storer.catchup(sub, 'serving');
       // Finish the transaction.
-      storer.store([
-        '08',
-        ['commit', messages.commit({extra: 'fields'}), {watermark: '08'}],
+      storer.store('08', [
+        'commit',
+        messages.commit({extra: 'fields'}),
+        {watermark: '08'},
       ]);
 
       // And finish another the transaction. In reality, these would be
       // sent by the forwarder, but we skip it in the test to confirm that
       // catchup doesn't include the next transaction.
-      storer.store([
-        '09',
-        ['begin', messages.begin(), {commitWatermark: '0a'}],
-      ]);
-      storer.store(['0a', ['commit', messages.commit(), {watermark: '0a'}]]);
+      storer.store('09', ['begin', messages.begin(), {commitWatermark: '0a'}]);
+      storer.store('0a', ['commit', messages.commit(), {watermark: '0a'}]);
 
       storer.status(['status', {ack: true}, {watermark: '0d'}]);
       storer.status(['status', {ack: true}, {watermark: '0e'}]);
@@ -1777,4 +1728,24 @@ describe('change-streamer/storer', () => {
     const purgeLocker = new PurgeLocker(lc, shard, db);
     expect(await purgeLocker.acquire()).toBeNull();
   });
+
+  const msgs = new ReplicationMessages({foo: 'id'});
+
+  test.each([
+    [['begin', {tag: 'begin'}, {commitWatermark: 'foo'}]],
+    [['commit', {tag: 'commit'}, {watermark: 'foo'}]],
+    [['data', msgs.insert('foo', {id: 'bar', val: 'baz'})]],
+    [['data', msgs.delete('foo', {id: 'bar'})]],
+    [['data', msgs.renameTable('foo', 'bar')]],
+  ] satisfies [ChangeStreamData][])(
+    'extract change message substring: %',
+    changeStreamData => {
+      expect(
+        extractChangeSubstring(
+          BigIntJSON.stringify(changeStreamData),
+          changeStreamData[1].tag,
+        ),
+      ).toBe(JSON.stringify(changeStreamData[1]));
+    },
+  );
 });

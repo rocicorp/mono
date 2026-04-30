@@ -114,6 +114,7 @@ test('change-streamer startup does not deadlock on autoreset retry when change a
         ZERO_NUM_SYNC_WORKERS: '1',
         ZERO_PORT: String(changeStreamerPort - 1),
         ZERO_CHANGE_STREAMER_PORT: String(changeStreamerPort),
+        ZERO_LOG_LEVEL: 'error', // silence logs from the worker
       };
 
       const workerDone = runWorker(worker, env);
