@@ -530,8 +530,8 @@ type ReplicationSlot = {
 };
 
 // Successful CREATE_REPLICATION_SLOT calls have always completed within 1s in
-// observed production runs; use 5s as a hard stop for pathological hangs.
-const CREATE_REPLICATION_SLOT_TIMEOUT_MS = 5_000;
+// observed production runs; use 30s as a hard stop for pathological hangs.
+const CREATE_REPLICATION_SLOT_TIMEOUT_MS = 30_000;
 
 // The lock_timeout is set 1s before the client-side orTimeout so that
 // Postgres reliably aborts first and tears down the walsender cleanly.
