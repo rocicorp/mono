@@ -93,9 +93,14 @@ type ListContextParams = {
 
 // Mirror of buildListQuery in apps/zbugs/shared/queries.ts. Permissions
 // collapse to `visibility = 'public'` for an unauthenticated profile run.
+//
+// When `forceSemiJoin` is true, the labels EXISTS is annotated with
+// `{flip: false}` so the planner can't choose the flipped (child-driven)
+// plan. Used to compare against the planner's default choice.
 function buildListPageQuery(
   listContext: ListContextParams,
   limit: number,
+  forceSemiJoin = false,
 ): AnyQuery {
   const {projectName, sortField, sortDirection, open, labels} = listContext;
 
@@ -115,20 +120,23 @@ function buildListPageQuery(
       // oxlint-disable-next-line eqeqeq
       open != null ? cmp('open', open) : undefined,
       ...labels.map(label =>
-        exists('issueLabels', q =>
-          q.whereExists(
-            'label',
-            q =>
-              q
-                .where('name', label)
-                .whereExists(
-                  'project',
-                  q =>
-                    q.where('lowerCaseName', projectName.toLocaleLowerCase()),
-                  {scalar: true},
-                ),
-            {scalar: true},
-          ),
+        exists(
+          'issueLabels',
+          q =>
+            q.whereExists(
+              'label',
+              q =>
+                q
+                  .where('name', label)
+                  .whereExists(
+                    'project',
+                    q =>
+                      q.where('lowerCaseName', projectName.toLocaleLowerCase()),
+                    {scalar: true},
+                  ),
+              {scalar: true},
+            ),
+          forceSemiJoin ? {flip: false} : undefined,
         ),
       ),
     ),
@@ -342,11 +350,17 @@ const baseListContext: ListContextParams = {
 };
 const limit = 50;
 
-const variants: {label: string; ctx: ListContextParams}[] = [
-  {
-    label: 'issueListV2 — gatewaycore + label=api-gateway (suspect)',
-    ctx: {...baseListContext, labels: ['api-gateway']},
-  },
+const variants: {
+  label: string;
+  ctx: ListContextParams;
+  forceSemiJoin?: boolean;
+}[] = [
+  // Variant 1 (planner-default flip plan) commented out — it takes ~5 min.
+  // Numbers from the last full run: 325,510 ms / 679,595 rows read / 205 synced.
+  // {
+  //   label: 'issueListV2 — gatewaycore + label=api-gateway (suspect)',
+  //   ctx: {...baseListContext, labels: ['api-gateway']},
+  // },
   {
     label: 'issueListV2 — gatewaycore (no label, baseline)',
     ctx: baseListContext,
@@ -355,7 +369,21 @@ const variants: {label: string; ctx: ListContextParams}[] = [
     label: 'issueListV2 — gatewaycore + label=enhancement (other label)',
     ctx: {...baseListContext, labels: ['enhancement']},
   },
+  {
+    label:
+      'issueListV2 — gatewaycore + label=api-gateway (FORCED semi/flip:false)',
+    ctx: {...baseListContext, labels: ['api-gateway']},
+    forceSemiJoin: true,
+  },
 ];
+
+// Filter to a single variant by 1-based index via ZBUGS_VARIANT (e.g. =4
+// to run just the forced-semi run).
+const variantFilter = process.env.ZBUGS_VARIANT
+  ? parseInt(process.env.ZBUGS_VARIANT, 10) - 1
+  : undefined;
+const selectedVariants =
+  variantFilter !== undefined ? [variants[variantFilter]] : variants;
 
 // Default to plan-only — the actual queries can be very expensive. Set
 // ZBUGS_EXECUTE=1 to also run the queries (printing per-table read counts,
@@ -385,8 +413,8 @@ async function printPlanOnly(label: string, query: AnyQuery) {
   }
 }
 
-for (const {label, ctx} of variants) {
-  const query = buildListPageQuery(ctx, limit);
+for (const {label, ctx, forceSemiJoin} of selectedVariants) {
+  const query = buildListPageQuery(ctx, limit, forceSemiJoin);
   console.log(styleText(['cyan', 'bold'], `\n>>> ${label}`));
   try {
     await printPlanOnly(label, query);
