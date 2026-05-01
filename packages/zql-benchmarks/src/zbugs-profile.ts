@@ -45,18 +45,39 @@ if (!dbPath) {
   process.exit(1);
 }
 
+function stage<T>(label: string, fn: () => T): T {
+  const start = performance.now();
+  const r = fn();
+  const ms = performance.now() - start;
+  console.log(styleText('gray', `[stage] ${label}: ${ms.toFixed(1)}ms`));
+  return r;
+}
+
 const lc = createSilentLogContext();
-const db = new Database(lc, dbPath);
-db.exec('ANALYZE;');
+const db = stage('open Database', () => new Database(lc, dbPath));
+// ANALYZE is very slow on the tera.db replica and stats persist in
+// sqlite_stat1. Default to skipping; opt in with ZBUGS_RUN_ANALYZE=1.
+if (process.env.ZBUGS_RUN_ANALYZE) {
+  stage('ANALYZE', () => db.exec('ANALYZE;'));
+} else {
+  console.log(
+    styleText(
+      'gray',
+      '[stage] ANALYZE: skipped (set ZBUGS_RUN_ANALYZE=1 to run)',
+    ),
+  );
+}
 
 const tableSpecs = new Map<string, LiteAndZqlSpec>();
-computeZqlSpecs(lc, db, {includeBackfillingColumns: false}, tableSpecs);
+stage('computeZqlSpecs', () =>
+  computeZqlSpecs(lc, db, {includeBackfillingColumns: false}, tableSpecs),
+);
 
 // Mirror production: planner runs when ZERO_ENABLE_QUERY_PLANNER is set.
 // Default to ON here since the whole point is to inspect what the planner does.
 const enablePlanner = process.env.ZBUGS_DISABLE_PLANNER ? false : true;
 const costModel = enablePlanner
-  ? createSQLiteCostModel(db, tableSpecs)
+  ? stage('createSQLiteCostModel', () => createSQLiteCostModel(db, tableSpecs))
   : undefined;
 
 type ListContextParams = {
@@ -160,7 +181,9 @@ function planOnly(query: AnyQuery): {
   const planDebugger = new AccumulatorDebugger();
   const host = makeHost(undefined);
 
-  const serverAst = mapAST(clientAst, clientToServerMapper);
+  const serverAst = stage('  mapAST', () =>
+    mapAST(clientAst, clientToServerMapper),
+  );
 
   // Resolve scalar subqueries (whereExists with {scalar: true}) — same as runAst.
   const executor = (
@@ -176,20 +199,13 @@ function planOnly(query: AnyQuery): {
     return node ? ((node.row[childField] as LiteralValue) ?? null) : undefined;
   };
 
-  const {ast: resolvedAst} = resolveSimpleScalarSubqueries(
-    serverAst,
-    tableSpecs,
-    executor,
+  const {ast: resolvedAst} = stage('  resolveScalarSubqueries', () =>
+    resolveSimpleScalarSubqueries(serverAst, tableSpecs, executor),
   );
 
   const start = performance.now();
-  const pipeline = buildPipeline(
-    resolvedAst,
-    host,
-    'query-id',
-    costModel,
-    lc,
-    planDebugger,
+  const pipeline = stage('  buildPipeline (planner)', () =>
+    buildPipeline(resolvedAst, host, 'query-id', costModel, lc, planDebugger),
   );
   const buildMs = performance.now() - start;
   pipeline.destroy();
