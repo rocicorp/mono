@@ -92,8 +92,20 @@ export default async function runWorker(
   // Ensure the change DB schema is initialized/up-to-date, then acquire
   // a lock to prevent change-lock purges. This ensures that (this)
   // change-streamer will be able to resume from the backup.
+  //
+  // In static mode there is no other change-streamer to race against and
+  // `forceReinit` will TRUNCATE the change-log anyway, so we skip the
+  // purge-lock entirely. Holding it would self-deadlock the TRUNCATE in
+  // `ensureReplicationConfig` against our own FOR SHARE lock; after the
+  // 5s timeout, `terminateChangeDBLockHolders` would kill our own
+  // connection (it can't tell self from a stale peer — both have
+  // application_name=zero-change-streamer), leaving postgres.js with
+  // queued writes against a closed socket.
   await initChangeStreamerSchema(lc, changeDB, shard);
-  let purgeLock = await new PurgeLocker(lc, shard, changeDB).acquire();
+  let purgeLock =
+    upstream.type === 'static'
+      ? null
+      : await new PurgeLocker(lc, shard, changeDB).acquire();
 
   // Restore from litestream if the change-log has entries.
   // Skipped in static mode — the user is supplying their own replica file and
@@ -173,10 +185,25 @@ export default async function runWorker(
           statementTimeoutMs: change.statementTimeoutMs,
         },
         setTimeout,
+        // The static replica is authoritative — rebuild the cdc tables to
+        // match it instead of throwing AutoResetSignal on stale change-db
+        // state from a prior deployment.
+        upstream.type === 'static',
       );
       break;
     } catch (e) {
       if (first && e instanceof AutoResetSignal) {
+        // In static mode the replica file IS the source of truth, so we
+        // never delete it. `forceReinit` above should also prevent
+        // AutoResetSignal from being thrown, but bail loudly if something
+        // else triggers it rather than silently destroying the user's file.
+        if (upstream.type === 'static') {
+          throw new Error(
+            `Unexpected AutoResetSignal in ZERO_UPSTREAM_TYPE=static mode. ` +
+              `The static replica is authoritative and cannot be re-synced.`,
+            {cause: e},
+          );
+        }
         lc.warn?.(`resetting replica ${replica.file}`, e);
         // TODO: Make deleteLiteDB work with litestream. It will probably have to be
         //       a semantic wipe instead of a file delete.

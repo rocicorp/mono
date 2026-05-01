@@ -75,6 +75,12 @@ export async function initializeStreamer(
   autoReset: boolean,
   opts: TuningOptions,
   setTimeoutFn = setTimeout,
+  /**
+   * When true, the replica file is the source of truth and the cdc tables
+   * are rebuilt to match it. Used for `ZERO_UPSTREAM_TYPE=static`, where
+   * there is no upstream to reconcile against.
+   */
+  forceReinit = false,
 ): Promise<ChangeStreamerService> {
   // Make sure the ChangeLog DB is set up.
   await initChangeStreamerSchema(lc, changeDB, shard);
@@ -85,6 +91,7 @@ export async function initializeStreamer(
     shard,
     autoReset,
     setTimeoutFn,
+    forceReinit,
   );
 
   const {replicaVersion} = subscriptionState;

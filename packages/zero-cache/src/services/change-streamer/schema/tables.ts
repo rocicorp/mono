@@ -169,6 +169,14 @@ export async function ensureReplicationConfig(
   shard: ShardID,
   autoReset: boolean,
   setTimeoutFn: typeof setTimeout = setTimeout,
+  /**
+   * When true, treat the replica file as the source of truth and rebuild
+   * the cdc tables to match it, regardless of the existing recorded state
+   * (skips the `replicaConfig.replicaVersion !== watermark` guard and ignores
+   * `resetRequired`). Used by `ZERO_UPSTREAM_TYPE=static`, where there is no
+   * upstream to recover from and the supplied replica is authoritative.
+   */
+  forceReinit = false,
 ) {
   const {publications, replicaVersion, watermark} = subscriptionState;
   const replicaConfig = {publications, replicaVersion};
@@ -189,7 +197,7 @@ export async function ensureReplicationConfig(
         resetRequired: boolean | null;
       }[]
     > /*sql*/ `
-    SELECT "replicaVersion", "publications", "resetRequired" 
+    SELECT "replicaVersion", "publications", "resetRequired"
       FROM ${sql(schema)}."replicationConfig"`;
 
     if (results.length) {
@@ -198,7 +206,7 @@ export async function ensureReplicationConfig(
         replicaVersion !== replicaConfig.replicaVersion ||
         !equals(new Set(publications), new Set(replicaConfig.publications))
       ) {
-        if (replicaConfig.replicaVersion !== watermark) {
+        if (!forceReinit && replicaConfig.replicaVersion !== watermark) {
           throw new AutoResetSignal(
             `Cannot reset change db@${replicaVersion} to ` +
               `service replica@${replicaConfig.replicaVersion} ` +
@@ -273,7 +281,7 @@ export async function ensureReplicationConfig(
     }
 
     const {resetRequired} = results[0];
-    if (resetRequired) {
+    if (resetRequired && !forceReinit) {
       if (autoReset) {
         throw new AutoResetSignal('reset required by replication stream');
       }
