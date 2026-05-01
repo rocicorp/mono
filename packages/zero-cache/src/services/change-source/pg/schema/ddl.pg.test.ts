@@ -11,6 +11,7 @@ import type {
 } from '../logical-replication/pgoutput.types.ts';
 import {subscribe} from '../logical-replication/stream.ts';
 import {
+  createEventFunctionStatements,
   createEventTriggerStatements,
   ddlStartEventSchema,
   ddlUpdateEventSchema,
@@ -38,13 +39,14 @@ describe('change-source/tables/ddl', () => {
 
     await upstream.unsafe(STARTING_SCHEMA);
 
-    await upstream.unsafe(
-      createEventTriggerStatements({
-        appID: APP_ID,
-        shardNum: SHARD_NUM,
-        publications: ['zero_all', 'zero_sum'],
-      }),
-    );
+    const shard = {
+      appID: APP_ID,
+      shardNum: SHARD_NUM,
+      publications: ['zero_all', 'zero_sum'],
+    };
+
+    await upstream.unsafe(createEventFunctionStatements(shard));
+    await upstream.unsafe(createEventTriggerStatements(shard));
 
     await upstream`SELECT pg_create_logical_replication_slot(${SLOT_NAME}, 'pgoutput')`;
 
@@ -109,6 +111,7 @@ describe('change-source/tables/ddl', () => {
     type: 'ddlStart',
     version: 1,
     event: {tag: 'UNUSED'},
+    previousSchema: null,
     schema: {
       tables: [
         {
@@ -1305,7 +1308,7 @@ describe('change-source/tables/ddl', () => {
         },
       },
     ],
-  ] satisfies [string, string, DdlUpdateEvent][])(
+  ] satisfies [string, string, Partial<DdlUpdateEvent>][])(
     '%s',
     async (_, query, ddlUpdate) => {
       await upstream.begin(async tx => {
@@ -1319,14 +1322,14 @@ describe('change-source/tables/ddl', () => {
         {tag: 'insert'},
         {
           tag: 'message',
-          prefix: 'zap/0',
+          prefix: 'zap/0/ddl',
           content: expect.any(Uint8Array),
           flags: 1,
           transactional: true,
         },
         {
           tag: 'message',
-          prefix: 'zap/0',
+          prefix: 'zap/0/ddl',
           content: expect.any(Uint8Array),
           flags: 1,
           transactional: true,
@@ -1339,7 +1342,7 @@ describe('change-source/tables/ddl', () => {
         ...DDL_START,
         event: ddlUpdate.event,
         context: {query},
-      } satisfies DdlStartEvent);
+      } satisfies Partial<DdlStartEvent>);
 
       msg = messages[4] as MessageMessage;
       expect(parseDDLUpdateEvent(msg)).toMatchObject(ddlUpdate);
@@ -1348,22 +1351,73 @@ describe('change-source/tables/ddl', () => {
 
   test.each([
     [
-      'schema snapshot',
-      `COMMENT ON PUBLICATION zero_sum IS 'foo'`,
+      'COMMENT',
+      /*sql*/ `
+      ALTER PUBLICATION zero_sum DROP TABLE pub.boo;
+      COMMENT ON PUBLICATION zero_sum IS 'foo'
+      `,
       {
         context: {
-          query: `COMMENT ON PUBLICATION zero_sum IS 'foo'`,
+          query: /*sql*/ `
+      ALTER PUBLICATION zero_sum DROP TABLE pub.boo;
+      COMMENT ON PUBLICATION zero_sum IS 'foo'
+      `,
         },
         type: 'schemaSnapshot',
         version: 1,
         event: {tag: 'COMMENT'},
-        schema: DDL_START.schema,
+        schema: {
+          tables: replaced(DDL_START.schema.tables, 0, 1, {
+            ...DDL_START.schema.tables[0],
+            // No longer associated with the zero_sum publication.
+            publications: {['zero_all']: {rowFilter: null}},
+          }),
+          indexes: DDL_START.schema.indexes,
+        },
       },
     ],
-  ] satisfies [string, string, SchemaSnapshotEvent][])(
-    '%s',
+    [
+      'Manually SELECT update_schemas()',
+      /*sql*/ `
+      ALTER PUBLICATION zero_sum DROP TABLE pub.foo;
+      SELECT ${APP_ID}_${SHARD_NUM}.update_schemas();
+      `,
+      {
+        context: {
+          query: /*sql*/ `
+      ALTER PUBLICATION zero_sum DROP TABLE pub.foo;
+      SELECT ${APP_ID}_${SHARD_NUM}.update_schemas();
+      `,
+        },
+        type: 'schemaSnapshot',
+        version: 1,
+        event: {tag: 'MANUAL'},
+        schema: {
+          tables: replaced(DDL_START.schema.tables, 1, 1, {
+            ...DDL_START.schema.tables[1],
+            // No longer associated with the zero_sum publication.
+            publications: {['zero_all']: {rowFilter: null}},
+          }),
+          indexes: DDL_START.schema.indexes,
+        },
+      },
+    ],
+  ] satisfies [string, string, Partial<SchemaSnapshotEvent>][])(
+    'Snapshot workarounds when event triggers are unavailable: %s',
     async (_, query, schemaSnapshot) => {
       await upstream.begin(async tx => {
+        // Disable all event triggers, and re-enable only the COMMENT one,
+        // in order to simulate a diff in the schema that isn't caught by
+        // the standard event triggers.
+        await tx.unsafe(/*sql*/ `
+          DROP EVENT TRIGGER ${APP_ID}_ddl_start_${SHARD_NUM};
+          DROP EVENT TRIGGER ${APP_ID}_ddl_end_${SHARD_NUM};
+
+          CREATE EVENT TRIGGER ${APP_ID}_ddl_end_${SHARD_NUM}
+            ON ddl_command_end
+            WHEN TAG IN ('COMMENT')
+            EXECUTE PROCEDURE ${APP_ID}_${SHARD_NUM}.emit_ddl_end();
+        `);
         await tx`INSERT INTO pub.boo(id) VALUES('1')`;
         await tx.unsafe(query);
       });
@@ -1393,19 +1447,21 @@ describe('change-source/tables/ddl', () => {
   test.each([
     [
       'CREATE TABLE private.bar(id TEXT PRIMARY KEY, a INT4 UNIQUE, b INT8 UNIQUE, UNIQUE(b, a))',
-      [/ignoring CREATE TABLE .*private.bar/],
+      [/ignoring irrelevant CREATE TABLE .*private.bar/],
     ],
     [
       'CREATE INDEX foo_name_index on private.foo (name desc, id)',
-      [/ignoring CREATE INDEX .*private.foo_name_index/],
+      [/ignoring irrelevant CREATE INDEX .*private.foo_name_index/],
     ],
     [
       `ALTER TABLE private.foo RENAME name to handle`,
-      [/ignoring ALTER TABLE .*private.foo.handle/],
+      [/ignoring irrelevant ALTER TABLE .*private.foo.handle/],
     ],
     [
       `ALTER PUBLICATION nonzeropub ADD TABLE pub.yoo`,
-      [/ignoring ALTER PUBLICATION .*pub.yoo in publication nonzeropub/],
+      [
+        /ignoring irrelevant ALTER PUBLICATION .*pub.yoo in publication nonzeropub/,
+      ],
     ],
     [
       `
@@ -1421,13 +1477,13 @@ describe('change-source/tables/ddl', () => {
       );
       SELECT "dataVersion", "schemaVersion", "minSafeVersion" FROM "cvr"."versionHistory";
       `,
-      [/ignoring CREATE TABLE .*cvr.\\"versionHistory\\"/],
+      [/ignoring irrelevant CREATE TABLE .*cvr.\\"versionHistory\\"/],
     ],
     [
       `CREATE TABLE IF NOT EXISTS pub.foo(id TEXT PRIMARY KEY, name TEXT UNIQUE, description TEXT);`,
       [
         /relation "foo" already exists, skipping/,
-        /ignoring CREATE TABLE .*"object_identity":null/,
+        /ignoring irrelevant CREATE TABLE .*"object_identity":null/,
       ],
     ],
   ] satisfies [string, RegExp[]][])(
@@ -1449,7 +1505,7 @@ describe('change-source/tables/ddl', () => {
         {tag: 'insert'},
         {
           tag: 'message',
-          prefix: 'zap/0',
+          prefix: 'zap/0/ddl',
           content: expect.any(Uint8Array),
           flags: 1,
           transactional: true,
@@ -1462,6 +1518,7 @@ describe('change-source/tables/ddl', () => {
         type: 'ddlStart',
       });
 
+      expect((await notices.dequeue()).message).toMatch(/Emitted .* ddlStart/);
       for (const n of expectedNotices) {
         const notice = await notices.dequeue();
         expect(notice.message).toMatch(n);
@@ -1472,14 +1529,20 @@ describe('change-source/tables/ddl', () => {
   test.each([
     [
       `COMMENT ON TABLE zero.foo IS 'whatever';`,
-      [/ignoring COMMENT.*zero.foo/],
+      [/ignoring irrelevant COMMENT.*zero.foo/],
     ],
     [
       `COMMENT ON PUBLICATION nonzeropub IS 'whatever';`,
-      [/ignoring COMMENT.*nonzeropub/],
+      [/ignoring irrelevant COMMENT.*nonzeropub/],
     ],
+    // TODO: include this test when no-op schemaSnapshots are skipped,
+    // once 1.5.0 is rollback safe. (1.0.0 ~ 1.4.0 rely on them)
+    // [
+    //   `COMMENT ON PUBLICATION zero_sum IS 'foo'`,
+    //   [/ignoring noop COMMENT.*zero_sum/],
+    // ],
   ] satisfies [string, RegExp[]][])(
-    'ignore unrelated comments: %s',
+    'ignore unrelated or noop comments: %s',
     async (query, expectedNotices) => {
       while (notices.size()) {
         await notices.dequeue();
@@ -1518,14 +1581,14 @@ describe('change-source/tables/ddl', () => {
       {tag: 'begin'},
       {
         tag: 'message',
-        prefix: 'zap/0',
+        prefix: 'zap/0/ddl',
         content: expect.any(Uint8Array),
         flags: 1,
         transactional: true,
       },
       {
         tag: 'message',
-        prefix: 'zap/0',
+        prefix: 'zap/0/ddl',
         content: expect.any(Uint8Array),
         flags: 1,
         transactional: true,
@@ -1535,28 +1598,28 @@ describe('change-source/tables/ddl', () => {
       {tag: 'begin'},
       {
         tag: 'message',
-        prefix: 'zap/0',
+        prefix: 'zap/0/ddl',
         content: expect.any(Uint8Array),
         flags: 1,
         transactional: true,
       },
       {
         tag: 'message',
-        prefix: 'zap/0',
+        prefix: 'zap/0/ddl',
         content: expect.any(Uint8Array),
         flags: 1,
         transactional: true,
       },
       {
         tag: 'message',
-        prefix: 'zap/0',
+        prefix: 'zap/0/ddl',
         content: expect.any(Uint8Array),
         flags: 1,
         transactional: true,
       },
       {
         tag: 'message',
-        prefix: 'zap/0',
+        prefix: 'zap/0/ddl',
         content: expect.any(Uint8Array),
         flags: 1,
         transactional: true,

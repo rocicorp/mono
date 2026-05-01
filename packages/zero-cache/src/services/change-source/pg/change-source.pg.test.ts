@@ -744,7 +744,15 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
       expect(logSink.messages[0]).toMatchObject([
         'error',
         {component: 'change-source'},
-        [expect.stringContaining(errMsg), {query: stmt}],
+        [
+          expect.stringContaining(errMsg),
+          {
+            change: {tag: 'message'},
+            context: {query: stmt},
+            name: 'UnsupportedSchemaChangeError',
+            stack: expect.stringContaining('UnsupportedSchemaChangeError'),
+          },
+        ],
       ]);
     } finally {
       changes.cancel();
@@ -866,7 +874,11 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
             expect.stringMatching(
               /Unable to continue replication from LSN .* MissingEventTriggerSupport/,
             ),
-            {tag: 'relation'},
+            {
+              change: {tag: 'relation'},
+              name: 'MissingEventTriggerSupport',
+              stack: expect.stringContaining('MissingEventTriggerSupport'),
+            },
           ],
         ]);
       } finally {

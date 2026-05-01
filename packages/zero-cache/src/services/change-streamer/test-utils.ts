@@ -7,11 +7,11 @@ let nextID = 1;
 export function createSubscriber(
   watermark = '00',
   caughtUp = false,
-): [Subscriber, Downstream[], Subscription<Downstream>] {
+): [Subscriber, Downstream[], Subscription<string>] {
   const id = '' + nextID++;
   const received: Downstream[] = [];
-  const sub = Subscription.create<Downstream>({
-    cleanup: unconsumed => received.push(...unconsumed),
+  const sub = Subscription.create<string>({
+    cleanup: unconsumed => received.push(...unconsumed.map(m => JSON.parse(m))),
   });
   const subscriber = new Subscriber(
     PROTOCOL_VERSION,

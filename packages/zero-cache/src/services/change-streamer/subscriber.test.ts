@@ -2,6 +2,8 @@ import {describe, expect, test} from 'vitest';
 import {ReplicationMessages} from '../replicator/test-utils.ts';
 import {createSubscriber} from './test-utils.ts';
 
+const json = JSON.stringify;
+
 describe('change-streamer/subscriber', () => {
   const messages = new ReplicationMessages({issues: 'id'});
 
@@ -9,8 +11,16 @@ describe('change-streamer/subscriber', () => {
     const [sub, stream] = createSubscriber('00');
 
     // Send some messages while it is catching up.
-    void sub.send(['11', ['begin', messages.begin(), {commitWatermark: '12'}]]);
-    void sub.send(['12', ['commit', messages.commit(), {watermark: '12'}]]);
+    void sub.send([
+      '11',
+      'begin',
+      json(['begin', messages.begin(), {commitWatermark: '12'}]),
+    ]);
+    void sub.send([
+      '12',
+      'commit',
+      json(['commit', messages.commit(), {watermark: '12'}]),
+    ]);
 
     // Status messages before initialization should be ignored.
     sub.sendStatus({tag: 'status', lagReport: {nextSendTimeMs: 123}});
@@ -18,20 +28,33 @@ describe('change-streamer/subscriber', () => {
     // Send catchup messages.
     void sub.catchup([
       '01',
-      ['begin', messages.begin(), {commitWatermark: '02'}],
+      'begin',
+      json(['begin', messages.begin(), {commitWatermark: '02'}]),
     ]);
 
     // Status messages after initialization are sent. These can happen
     // within a transaction.
     sub.sendStatus({tag: 'status', lagReport: {nextSendTimeMs: 234}});
 
-    void sub.catchup(['02', ['commit', messages.commit(), {watermark: '02'}]]);
+    void sub.catchup([
+      '02',
+      'commit',
+      json(['commit', messages.commit(), {watermark: '02'}]),
+    ]);
 
     sub.setCaughtUp();
 
     // Send some messages after catchup.
-    void sub.send(['21', ['begin', messages.begin(), {commitWatermark: '22'}]]);
-    void sub.send(['22', ['commit', messages.commit(), {watermark: '22'}]]);
+    void sub.send([
+      '21',
+      'begin',
+      json(['begin', messages.begin(), {commitWatermark: '22'}]),
+    ]);
+    void sub.send([
+      '22',
+      'commit',
+      json(['commit', messages.commit(), {watermark: '22'}]),
+    ]);
 
     sub.sendStatus({tag: 'status', lagReport: {nextSendTimeMs: 456}});
 
@@ -129,31 +152,51 @@ describe('change-streamer/subscriber', () => {
     // does just to ensure that catchup messages are subject to the filter.
     void sub.catchup([
       '01',
-      ['begin', messages.begin(), {commitWatermark: '02'}],
+      'begin',
+      json(['begin', messages.begin(), {commitWatermark: '02'}]),
     ]);
-    void sub.catchup(['02', ['commit', messages.commit(), {watermark: '02'}]]);
+    void sub.catchup([
+      '02',
+      'commit',
+      json(['commit', messages.commit(), {watermark: '02'}]),
+    ]);
     sub.setCaughtUp();
 
     // Still lower than the watermark ...
     void sub.send([
       '121',
-      ['begin', messages.begin(), {commitWatermark: '123'}],
+      'begin',
+      json(['begin', messages.begin(), {commitWatermark: '123'}]),
     ]);
-    void sub.send(['123', ['commit', messages.commit(), {watermark: '123'}]]);
+    void sub.send([
+      '123',
+      'commit',
+      json(['commit', messages.commit(), {watermark: '123'}]),
+    ]);
 
     // These should be sent.
     void sub.send([
       '124',
-      ['begin', messages.begin(), {commitWatermark: '125'}],
+      'begin',
+      json(['begin', messages.begin(), {commitWatermark: '125'}]),
     ]);
-    void sub.send(['125', ['commit', messages.commit(), {watermark: '125'}]]);
+    void sub.send([
+      '125',
+      'commit',
+      json(['commit', messages.commit(), {watermark: '125'}]),
+    ]);
 
     // Replays should be ignored.
     void sub.send([
       '124',
-      ['begin', messages.begin(), {commitWatermark: '125'}],
+      'begin',
+      json(['begin', messages.begin(), {commitWatermark: '125'}]),
     ]);
-    void sub.send(['125', ['commit', messages.commit(), {watermark: '125'}]]);
+    void sub.send([
+      '125',
+      'commit',
+      json(['commit', messages.commit(), {watermark: '125'}]),
+    ]);
 
     sub.close();
     expect(stream).toMatchInlineSnapshot(`
@@ -190,23 +233,48 @@ describe('change-streamer/subscriber', () => {
     const [sub, _, receiver] = createSubscriber('00');
 
     // Send some messages while it is catching up.
-    void sub.send(['11', ['begin', messages.begin(), {commitWatermark: '12'}]]);
-    void sub.send(['12', ['commit', messages.commit(), {watermark: '12'}]]);
+    void sub.send([
+      '11',
+      'begin',
+      json(['begin', messages.begin(), {commitWatermark: '12'}]),
+    ]);
+    void sub.send([
+      '12',
+      'commit',
+      json(['commit', messages.commit(), {watermark: '12'}]),
+    ]);
 
     // Send catchup messages.
     void sub.catchup([
       '01',
-      ['begin', messages.begin(), {commitWatermark: '02'}],
+      'begin',
+      json(['begin', messages.begin(), {commitWatermark: '02'}]),
     ]);
-    void sub.catchup(['02', ['commit', messages.commit(), {watermark: '02'}]]);
+    void sub.catchup([
+      '02',
+      'commit',
+      json(['commit', messages.commit(), {watermark: '02'}]),
+    ]);
 
     sub.setCaughtUp();
 
     // Send some messages after catchup.
-    void sub.send(['21', ['begin', messages.begin(), {commitWatermark: '22'}]]);
-    void sub.send(['22', ['commit', messages.commit(), {watermark: '22'}]]);
+    void sub.send([
+      '21',
+      'begin',
+      json(['begin', messages.begin(), {commitWatermark: '22'}]),
+    ]);
+    void sub.send([
+      '22',
+      'commit',
+      json(['commit', messages.commit(), {watermark: '22'}]),
+    ]);
 
-    void sub.send(['31', ['begin', messages.begin(), {commitWatermark: '31'}]]);
+    void sub.send([
+      '31',
+      'begin',
+      json(['begin', messages.begin(), {commitWatermark: '31'}]),
+    ]);
 
     expect(sub.acked).toBe('00');
 
@@ -216,7 +284,8 @@ describe('change-streamer/subscriber', () => {
     expect(sub.numPending).toBe(pending);
 
     let txNum = 0;
-    for await (const msg of receiver) {
+    for await (const json of receiver) {
+      const msg = JSON.parse(json);
       expect(sub.numProcessed).toBe(processed++);
       expect(sub.numPending).toBe(pending--);
 

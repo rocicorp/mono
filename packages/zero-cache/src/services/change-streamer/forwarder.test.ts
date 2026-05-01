@@ -1,8 +1,11 @@
 import {describe, expect, test} from 'vitest';
+import {BigIntJSON} from '../../../../shared/src/bigint-json.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import {ReplicationMessages} from '../replicator/test-utils.ts';
 import {Forwarder} from './forwarder.ts';
 import {createSubscriber} from './test-utils.ts';
+
+const json = BigIntJSON.stringify;
 
 describe('change-streamer/forwarder', () => {
   const messages = new ReplicationMessages({issues: 'id'});
@@ -18,21 +21,25 @@ describe('change-streamer/forwarder', () => {
     forwarder.add(sub1);
     forwarder.forward([
       '11',
-      ['begin', messages.begin(), {commitWatermark: '13'}],
+      'begin',
+      json(['begin', messages.begin(), {commitWatermark: '13'}]),
     ]);
     forwarder.add(sub2);
     void forwarder.forwardWithFlowControl([
       '12',
-      ['data', messages.truncate('issues')],
+      'truncate',
+      json(['data', messages.truncate('issues')]),
     ]);
     void forwarder.forwardWithFlowControl([
       '13',
-      ['commit', messages.commit(), {watermark: '13'}],
+      'commit',
+      json(['commit', messages.commit(), {watermark: '13'}]),
     ]);
     forwarder.add(sub3);
     forwarder.forward([
       '14',
-      ['begin', messages.begin(), {commitWatermark: '15'}],
+      'begin',
+      json(['begin', messages.begin(), {commitWatermark: '15'}]),
     ]);
     forwarder.add(sub4);
 
@@ -163,18 +170,25 @@ describe('change-streamer/forwarder', () => {
     forwarder.add(sub1);
     forwarder.forward([
       '11',
-      ['begin', messages.begin(), {commitWatermark: '14'}],
+      'begin',
+      json(['begin', messages.begin(), {commitWatermark: '14'}]),
     ]);
     forwarder.add(sub2);
-    forwarder.forward(['12', ['data', messages.truncate('issues')]]);
+    forwarder.forward([
+      '12',
+      'truncate',
+      json(['data', messages.truncate('issues')]),
+    ]);
     void forwarder.forwardWithFlowControl([
       '13',
-      ['rollback', messages.rollback()],
+      'rollback',
+      json(['rollback', messages.rollback()]),
     ]);
     forwarder.add(sub3);
     forwarder.forward([
       '14',
-      ['begin', messages.begin(), {commitWatermark: '15'}],
+      'begin',
+      json(['begin', messages.begin(), {commitWatermark: '15'}]),
     ]);
     forwarder.add(sub4);
 

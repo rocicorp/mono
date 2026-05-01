@@ -938,7 +938,7 @@ class ChangeMaker {
       return [];
     }
     try {
-      return await this.#makeChanges(lc, msg);
+      return await this.#makeChanges(lc, lsn, msg);
     } catch (err) {
       this.#error = {lsn, msg, err, lastLogTime: 0};
       this.#logError(lc, this.#error);
@@ -972,10 +972,18 @@ class ChangeMaker {
         `Unable to continue replication from LSN ${fromBigInt(lsn)}: ${String(
           err,
         )}`,
-        err instanceof UnsupportedSchemaChangeError
-          ? err.event.context
-          : // 'content' can be a large byte Buffer. Exclude it from logging output.
-            {...msg, content: undefined},
+        {
+          // 'content' can be a large byte Buffer. Exclude it from logging output.
+          ...{change: {...msg, content: undefined}},
+          ...(err instanceof UnsupportedSchemaChangeError && {
+            context: err.event.context,
+          }),
+          ...(err instanceof Error && {
+            errorMsg: err.message,
+            name: err.name,
+            stack: err.stack,
+          }),
+        },
       );
       error.lastLogTime = now;
     }
@@ -983,6 +991,7 @@ class ChangeMaker {
 
   async #makeChanges(
     lc: LogContext,
+    lsn: bigint,
     msg: Message,
   ): Promise<ChangeStreamData[]> {
     switch (msg.tag) {
@@ -1041,7 +1050,7 @@ class ChangeMaker {
         switch (msg.prefix.substring(this.#shardPrefix.length)) {
           case '': // Legacy prefix
           case '/ddl':
-            return this.#handleDdlMessage(lc, msg);
+            return this.#handleDdlMessage(lc, lsn, msg);
           default:
             lc.debug?.('ignoring unknown message type', msg.prefix);
             return [];
@@ -1070,11 +1079,18 @@ class ChangeMaker {
     }
   }
 
+  // The lastReplicationEvent is stored to understand the context
+  // of the next one.
   #lastReplicationEvent: ReplicationEvent | undefined;
 
-  #handleDdlMessage(lc: LogContext, msg: MessageMessage): ChangeStreamData[] {
+  #handleDdlMessage(
+    lc: LogContext,
+    lsn: bigint,
+    msg: MessageMessage,
+  ): ChangeStreamData[] {
     const event = parseLogicalMessageContent(msg, replicationEventSchema);
     lc = lc
+      .withContext('lsn', fromBigInt(lsn))
       .withContext('tag', event.event.tag)
       .withContext('query', event.context.query);
 
@@ -1082,36 +1098,35 @@ class ChangeMaker {
     // is about to happen, so as to avoid interfering / redundant work.
     clearTimeout(this.#replicaIdentityTimer);
 
-    let prevEvent = this.#lastReplicationEvent;
     const {type} = event;
     switch (type) {
       case 'ddlStart':
       case 'schemaSnapshot':
-        break;
       case 'ddlUpdate':
-        if (!prevEvent) {
-          // A fix for this is in the works. Log an error with the full
-          // LogContext (e.g. including the tag and query) to collect/confirm
-          // the scenarios in which this happens.
-          lc.error?.(`ddlUpdate received without a ddlStart`, {event});
-          assert(prevEvent, `ddlUpdate received without a ddlStart`);
-        }
         break;
       default: // Ignore unknown types for forwards compatibility
         lc.info?.(`ignoring unknown ddl message type: ${type}`);
         return [];
     }
 
-    // Store the new event to diff against the next event.
+    const prevEvent = this.#lastReplicationEvent;
+    // Store the new event to understand the context of the next event.
     this.#lastReplicationEvent = event;
-    if (!prevEvent) {
-      lc.info?.(`received ${msg.prefix}/${type} event`, {event});
-      return []; // First snapshot in the tx.
-    }
-    lc.info?.(`processing ${msg.prefix}/${type} event`, {event});
 
-    // The tag (i.e. command) is used to determine whether backfill is
-    // necessary (CREATE TABLE vs ALTER TABLE vs ALTER PUBLICATION).
+    const prevSchema =
+      event.previousSchema === undefined // pre-v21 event => use prevEvent
+        ? prevEvent?.schema
+        : event.previousSchema;
+    if (!prevSchema) {
+      lc.info?.(`received ${msg.prefix}/${type} event`, {event});
+      return [];
+    }
+
+    // The tag (i.e. command) is used as an optimization to determine whether
+    // backfill is necessary (CREATE TABLE vs ALTER TABLE vs
+    // ALTER PUBLICATION). If the context is not available (rare), the tag
+    // falls back to 'UNKNOWN', which conservatively initiates a backfill.
+    //
     // Because ddl events may be nested, e.g.
     //
     // ```
@@ -1119,14 +1134,22 @@ class ChangeMaker {
     // ddl_start => ddl_start => ddl_end => ddl_start => ddl_end => ddl_end
     // ```
     //
-    // The effective tag is determined from the starting event if it is
-    // ddl_start (e.g. cases 1, 2, and 4), and from the ending event
-    // otherwise (cases 3 and 5)
+    // The effective tag is determined from the previous event if it is
+    // ddl_start (e.g. cases 1, 2, and 4), and from the current event
+    // if it is a ddl_end (case 5), and 'UNKNOWN' otherwise (case 3 and
+    // 'schemaSnapshot' workarounds).
     const effectiveTag =
-      prevEvent.type === 'ddlStart' ? prevEvent.event.tag : event.event.tag;
+      prevEvent?.type === 'ddlStart'
+        ? prevEvent.event.tag
+        : event.type === 'ddlUpdate'
+          ? event.event.tag
+          : 'UNKNOWN';
+    lc.info?.(`processing ${effectiveTag} command from ${msg.prefix}/${type}`, {
+      event,
+    });
     const changes = this.#makeSchemaChanges(
       lc,
-      prevEvent.schema,
+      prevSchema,
       event,
       effectiveTag,
     ).map(change => ['data', change] satisfies Data);
@@ -1246,10 +1269,15 @@ class ChangeMaker {
           spec,
           metadata: getMetadata(spec),
         };
+        // Only tables introduced by a `CREATE` statement can skip backfill.
+        // All other scenarios in which tables are introduced into the
+        // schema, e.g.
+        // * ALTER PUBLICATION statements
+        // * COMMENT statements
+        // * MANUAL snapshots
+        // * UNKNOWN command tags
+        // must be backfilled.
         if (!tag.startsWith('CREATE')) {
-          // Tables introduced to the publication via ALTER statements
-          // or the COMMENT statement (from schemaSnapshots) must be
-          // backfilled.
           createTable.backfill = mapValues(spec.columns, ({pos: attNum}) => ({
             attNum,
           })) satisfies Record<string, ColumnMetadata>;
@@ -1330,10 +1358,14 @@ class ChangeMaker {
       }
     }
 
-    // All columns introduced by a publication change require backfill
-    // (which appear as ALTER PUBLICATION or COMMENT tags).
-    // Columns created by ALTER TABLE, on the other hand, only require
-    // backfill if they have non-constant defaults.
+    // Only columns introduced by `ALTER TABLE` statements can potentially
+    // skip backfill if they have non-constant defaults. All other scenarios
+    // in which columns are introduced, e.g.
+    // * ALTER PUBLICATION
+    // * COMMENT
+    // * MANUAL
+    // * UNKNOWN
+    // must be backfilled.
     const alwaysBackfill = ddlTag !== 'ALTER TABLE';
 
     // ADD
