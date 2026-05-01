@@ -1937,14 +1937,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         queryID => this.#pipelines.rowSetSignature(queryID),
       );
 
-      // Note: This kicks off background PG queries for CVR data associated with the
-      // executed and removed queries.
-      const {queryPatches} = updater.trackQueries(
-        lc,
-        addQueries,
-        removeQueries,
-      );
-
       // For queries being re-executed solely due to rowSetSignature drift
       // (not a transformationHash change), trackQueries does not bump
       // configVersion. Force a bump so the row diff produced by received()
@@ -1953,13 +1945,21 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       if (addQueries.some(q => driftedQueryIDs.has(q.id))) {
         updater.ensureNewVersion();
       }
-      const newVersion = updater.updatedVersion();
+
+      // Note: This kicks off background PG queries for CVR data associated with the
+      // executed and removed queries.
+      const {queryPatches, newVersion} = updater.trackQueries(
+        lc,
+        addQueries,
+        removeQueries,
+      );
+
       const clients = this.#getClients();
       const pokers = startPoke(clients, newVersion);
       for (const patch of queryPatches) {
         // Bump patches' toVersion to the post-drift-bump version so that
         // pokers don't see them as belonging to a stale cookie.
-        await pokers.addPatch({...patch, toVersion: newVersion});
+        await pokers.addPatch(patch);
       }
 
       // Removing queries is easy. The pipelines are dropped, and the CVR
