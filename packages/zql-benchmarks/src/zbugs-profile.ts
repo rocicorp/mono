@@ -1,4 +1,6 @@
 import {styleText} from 'node:util';
+import {astToZQL} from '../../ast-to-zql/src/ast-to-zql.ts';
+import {formatOutput} from '../../ast-to-zql/src/format.ts';
 import {testLogConfig} from '../../otel/src/test-log-config.ts';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
 import {
@@ -7,19 +9,28 @@ import {
 } from '../../zero-cache/src/db/lite-tables.ts';
 import type {LiteAndZqlSpec} from '../../zero-cache/src/db/specs.ts';
 import {runAst} from '../../zero-cache/src/services/run-ast.ts';
+import type {AST, LiteralValue} from '../../zero-protocol/src/ast.ts';
+import {mapAST} from '../../zero-protocol/src/ast.ts';
 import {clientSchemaFrom} from '../../zero-schema/src/builder/schema-builder.ts';
 import {clientToServer} from '../../zero-schema/src/name-mapper.ts';
-import type {BuilderDelegate} from '../../zql/src/builder/builder.ts';
+import {
+  buildPipeline,
+  type BuilderDelegate,
+} from '../../zql/src/builder/builder.ts';
 import {Debug} from '../../zql/src/builder/debug-delegate.ts';
+import type {Node} from '../../zql/src/ivm/data.ts';
 import {MemoryStorage} from '../../zql/src/ivm/memory-storage.ts';
+import {skipYields} from '../../zql/src/ivm/operator.ts';
 import {
   AccumulatorDebugger,
+  formatPlannerEvents,
   serializePlanDebugEvents,
 } from '../../zql/src/planner/planner-debug.ts';
 import {asQueryInternals} from '../../zql/src/query/query-internals.ts';
 import type {AnyQuery} from '../../zql/src/query/query.ts';
 import {Database} from '../../zqlite/src/db.ts';
 import {explainQueries} from '../../zqlite/src/explain-queries.ts';
+import {resolveSimpleScalarSubqueries} from '../../zqlite/src/resolve-scalar-subqueries.ts';
 import {createSQLiteCostModel} from '../../zqlite/src/sqlite-cost-model.ts';
 import {TableSource} from '../../zqlite/src/table-source.ts';
 import {builder, schema} from './schema.ts';
@@ -107,13 +118,9 @@ function buildListPageQuery(
   return q as unknown as AnyQuery;
 }
 
-async function runOnce(query: AnyQuery) {
-  const {ast} = asQueryInternals(query);
-  const debug = new Debug();
-  const planDebugger = new AccumulatorDebugger();
+function makeHost(debug: Debug | undefined): BuilderDelegate {
   const sources = new Map<string, TableSource>();
-
-  const host: BuilderDelegate = {
+  return {
     debug,
     enableNotExists: true,
     getSource(tableName: string) {
@@ -137,9 +144,66 @@ async function runOnce(query: AnyQuery) {
     addEdge() {},
     decorateFilterInput: input => input,
   };
+}
+
+const clientToServerMapper = clientToServer(schema.tables);
+
+// Mirrors runAst's setup up through buildPipeline (which is where the planner
+// runs), but does NOT hydrate. Returns the resolved server AST and the
+// accumulated planner debug events.
+function planOnly(query: AnyQuery): {
+  resolvedAst: AST;
+  planDebugger: AccumulatorDebugger;
+  buildMs: number;
+} {
+  const {ast: clientAst} = asQueryInternals(query);
+  const planDebugger = new AccumulatorDebugger();
+  const host = makeHost(undefined);
+
+  const serverAst = mapAST(clientAst, clientToServerMapper);
+
+  // Resolve scalar subqueries (whereExists with {scalar: true}) — same as runAst.
+  const executor = (
+    subqueryAST: AST,
+    childField: string,
+  ): LiteralValue | null | undefined => {
+    const input = buildPipeline(subqueryAST, host, 'scalar-subquery');
+    let node: Node | undefined;
+    for (const n of skipYields(input.fetch({}))) {
+      node ??= n;
+    }
+    input.destroy();
+    return node ? ((node.row[childField] as LiteralValue) ?? null) : undefined;
+  };
+
+  const {ast: resolvedAst} = resolveSimpleScalarSubqueries(
+    serverAst,
+    tableSpecs,
+    executor,
+  );
+
+  const start = performance.now();
+  const pipeline = buildPipeline(
+    resolvedAst,
+    host,
+    'query-id',
+    costModel,
+    lc,
+    planDebugger,
+  );
+  const buildMs = performance.now() - start;
+  pipeline.destroy();
+
+  return {resolvedAst, planDebugger, buildMs};
+}
+
+async function runOnce(query: AnyQuery) {
+  const {ast} = asQueryInternals(query);
+  const debug = new Debug();
+  const planDebugger = new AccumulatorDebugger();
+  const host = makeHost(debug);
 
   const clientSchema = clientSchemaFrom(schema).clientSchema;
-  const clientToServerMapper = clientToServer(schema.tables);
 
   const result = await runAst(
     lc,
@@ -277,12 +341,43 @@ const variants: {label: string; ctx: ListContextParams}[] = [
   },
 ];
 
+// Default to plan-only — the actual queries can be very expensive. Set
+// ZBUGS_EXECUTE=1 to also run the queries (printing per-table read counts,
+// SQLite plans, and timing).
+const execute = !!process.env.ZBUGS_EXECUTE;
+
+async function printPlanOnly(label: string, query: AnyQuery) {
+  const {resolvedAst, planDebugger, buildMs} = planOnly(query);
+  console.log(styleText(['blue', 'bold'], `\n=== ${label} (plan-only) ===\n`));
+  console.log(styleText('bold', 'planner:'), enablePlanner ? 'ON' : 'OFF');
+  console.log(styleText('bold', 'buildPipeline time:'), colorTime(buildMs));
+
+  console.log(styleText(['blue', 'bold'], '\n--- Resolved server AST ---\n'));
+  const zql = await formatOutput(resolvedAst.table + astToZQL(resolvedAst));
+  console.log(zql);
+
+  console.log(styleText(['blue', 'bold'], '\n--- Planner Decisions ---\n'));
+  if (planDebugger.events.length === 0) {
+    console.log(
+      styleText(
+        'yellow',
+        '(no planner events — costModel disabled or no joins to plan)',
+      ),
+    );
+  } else {
+    console.log(formatPlannerEvents(planDebugger.events));
+  }
+}
+
 for (const {label, ctx} of variants) {
   const query = buildListPageQuery(ctx, limit);
   console.log(styleText(['cyan', 'bold'], `\n>>> ${label}`));
   try {
-    const result = await runOnce(query);
-    printResult(label, result);
+    await printPlanOnly(label, query);
+    if (execute) {
+      const result = await runOnce(query);
+      printResult(label, result);
+    }
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     console.log(styleText('red', `failed: ${msg}`));
