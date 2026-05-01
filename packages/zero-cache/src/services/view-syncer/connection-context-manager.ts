@@ -140,6 +140,8 @@ export type ConnectionContextManager = {
     revision: number,
   ): void;
 
+  setSharedRetransformReady(ready: boolean): void;
+
   deferMaintenance(kind: 'revalidate' | 'retransform'): void;
 
   getConnectionContext(
@@ -188,6 +190,7 @@ export class ConnectionContextManagerImpl implements ConnectionContextManager {
   readonly #retransformIntervalMs: number | undefined;
   readonly #queryConfig: FetchConfig | undefined;
   readonly #pushConfig: FetchConfig | undefined;
+  #sharedRetransformReady = false;
   #nextInsertionOrder = 0;
 
   constructor(
@@ -495,6 +498,14 @@ export class ConnectionContextManagerImpl implements ConnectionContextManager {
     this.#updateBackgroundRetransformDeadline(true);
   }
 
+  setSharedRetransformReady(ready: boolean): void {
+    if (this.#sharedRetransformReady === ready) {
+      return;
+    }
+    this.#sharedRetransformReady = ready;
+    this.#updateBackgroundRetransformDeadline(true);
+  }
+
   deferMaintenance(kind: 'revalidate' | 'retransform'): void {
     const intervalMs =
       kind === 'revalidate'
@@ -787,11 +798,16 @@ export class ConnectionContextManagerImpl implements ConnectionContextManager {
    * When `reset` is false, this seeds a deadline only when shared retransform
    * is now possible and no deadline exists yet, preserving any existing
    * cadence. When `reset` is true, it starts a fresh interval from `#now()` if
-   * retransform is schedulable, or clears the deadline if it is not.
+   * retransform is schedulable for the current ready ViewSyncer instance, or
+   * clears the deadline if it is not.
    */
   #updateBackgroundRetransformDeadline(reset: boolean) {
     const backgroundConnection = this.#getBackgroundConnectionContext();
-    if (!backgroundConnection || this.#retransformIntervalMs === undefined) {
+    if (
+      !backgroundConnection ||
+      this.#retransformIntervalMs === undefined ||
+      !this.#sharedRetransformReady
+    ) {
       if (this.#group.retransformAt !== undefined) {
         this.#setGroup({
           ...this.#group,

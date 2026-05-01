@@ -112,6 +112,15 @@ describe('view-syncer/auth maintenance', () => {
     fn?.();
   }
 
+  function hasScheduledTimeout(
+    setTimeoutFn: ReturnType<typeof vi.fn<typeof setTimeout>>,
+    delay: number,
+  ) {
+    return setTimeoutFn.mock.calls.some(
+      ([, scheduledDelay]) => scheduledDelay === delay,
+    );
+  }
+
   const SYNC_CONTEXT: SyncContext = {
     clientID: 'foo',
     profileID: 'p0000g00000003203',
@@ -419,6 +428,135 @@ describe('view-syncer/auth maintenance', () => {
       };
     });
 
+    test('schedules shared retransform only after initial pipeline sync', async () => {
+      const transformer = customQueryTransformer;
+      expect(transformer).toBeDefined();
+      using validateSpy = vi
+        .spyOn(transformer!, 'validate')
+        .mockResolvedValue(validationSuccess('user-1'));
+      using transformSpy = vi
+        .spyOn(transformer!, 'transform')
+        .mockResolvedValueOnce(
+          transformSuccess([
+            {
+              id: 'custom-1',
+              transformedAst: ISSUES_QUERY,
+              transformationHash: 'hash-1',
+            },
+          ]),
+        )
+        .mockResolvedValueOnce(
+          transformSuccess([
+            {
+              id: 'custom-1',
+              transformedAst: ISSUES_QUERY,
+              transformationHash: 'hash-2',
+            },
+          ]),
+        );
+
+      const client = connect(
+        {...SYNC_CONTEXT, auth: {type: 'opaque', raw: 'token-selected'}},
+        [
+          {
+            op: 'put',
+            hash: 'custom-1',
+            name: 'named-query-1',
+            args: ['thing'],
+          },
+        ],
+      );
+
+      await nextPoke(client);
+
+      expect(validateSpy).toHaveBeenCalledTimes(1);
+      expect(transformSpy).toHaveBeenCalledTimes(0);
+      expect(hasScheduledTimeout(setTimeoutFn, MAINTENANCE_INTERVAL_MS)).toBe(
+        false,
+      );
+
+      stateChanges.push({state: 'version-ready'});
+      await nextPoke(client);
+
+      expect(transformSpy).toHaveBeenCalledTimes(1);
+      await vi.waitFor(() => {
+        expect(
+          vs.connContextManager.getBackgroundConnectionContext(),
+        ).toBeDefined();
+        expect(
+          vs.connContextManager.getGroupState().retransformAt,
+        ).toBeDefined();
+        expect(hasScheduledTimeout(setTimeoutFn, MAINTENANCE_INTERVAL_MS)).toBe(
+          true,
+        );
+      });
+
+      callNextSetTimeout(setTimeoutFn, MAINTENANCE_INTERVAL_MS);
+
+      await vi.waitFor(() => expect(transformSpy).toHaveBeenCalledTimes(2), {
+        timeout: 2_000,
+      });
+    });
+
+    test('stale scheduled background retransform does not run after stop', async () => {
+      const transformer = customQueryTransformer;
+      expect(transformer).toBeDefined();
+      using validateSpy = vi
+        .spyOn(transformer!, 'validate')
+        .mockResolvedValue(validationSuccess('user-1'));
+      using transformSpy = vi
+        .spyOn(transformer!, 'transform')
+        .mockResolvedValueOnce(
+          transformSuccess([
+            {
+              id: 'custom-1',
+              transformedAst: ISSUES_QUERY,
+              transformationHash: 'hash-1',
+            },
+          ]),
+        );
+
+      const client = connect(
+        {...SYNC_CONTEXT, auth: {type: 'opaque', raw: 'token-selected'}},
+        [
+          {
+            op: 'put',
+            hash: 'custom-1',
+            name: 'named-query-1',
+            args: ['thing'],
+          },
+        ],
+      );
+
+      await nextPoke(client);
+      stateChanges.push({state: 'version-ready'});
+      await nextPoke(client);
+
+      await vi.waitFor(() => {
+        expect(validateSpy).toHaveBeenCalledTimes(1);
+        expect(transformSpy).toHaveBeenCalledTimes(1);
+        expect(
+          vs.connContextManager.getGroupState().retransformAt,
+        ).toBeDefined();
+        expect(hasScheduledTimeout(setTimeoutFn, MAINTENANCE_INTERVAL_MS)).toBe(
+          true,
+        );
+      });
+
+      await vs.stop();
+
+      expect(vs.connContextManager.getGroupState().retransformAt).toBeUndefined();
+
+      // Fire the previously scheduled maintenance callback after shutdown to
+      // prove the stopped service no longer performs shared retransform work.
+      callNextSetTimeout(setTimeoutFn, MAINTENANCE_INTERVAL_MS);
+
+      await vi.waitFor(() => {
+        expect(transformSpy).toHaveBeenCalledTimes(1);
+        expect(vs.connContextManager.getGroupState().retransformAt).toBeUndefined();
+      });
+    });
+
     test('retries scheduled background retransform with a promoted replacement connection', async () => {
       const transformer = customQueryTransformer;
       expect(transformer).toBeDefined();
@@ -558,6 +696,11 @@ describe('view-syncer/auth maintenance', () => {
 
       expect(validateSpy).toHaveBeenCalledTimes(1);
       expect(transformSpy).toHaveBeenCalledTimes(1);
+      await vi.waitFor(() =>
+        expect(
+          vs.connContextManager.getGroupState().retransformAt,
+        ).toBeDefined(),
+      );
       expect(client.size()).toBe(0);
 
       callNextSetTimeout(setTimeoutFn, MAINTENANCE_INTERVAL_MS);

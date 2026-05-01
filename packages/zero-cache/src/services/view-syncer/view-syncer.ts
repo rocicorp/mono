@@ -492,6 +492,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             this.#pipelineResets.add(1, {reason: result.reason});
             this.#pipelines.reset(clientSchema);
             this.#pipelinesSynced = false;
+            this.connContextManager.setSharedRetransformReady(false);
           }
 
           // Advance the snapshot to the current version.
@@ -521,6 +522,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             driftedQueryIDs,
           );
           this.#pipelinesSynced = true;
+          this.connContextManager.setSharedRetransformReady(true);
         });
       }
 
@@ -2491,12 +2493,14 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
   stop(): Promise<void> {
     this.#lc.info?.('stopping view syncer');
+    this.connContextManager.setSharedRetransformReady(false);
     this.#initialized.reject('shut down before initialization completed');
     this.#stateChanges.cancel();
     return this.#stopped.promise;
   }
 
   async #cleanup(err?: unknown) {
+    this.connContextManager.setSharedRetransformReady(false);
     this.#stopTTLClockInterval();
     this.#stopExpireTimer();
     this.#stopAuthMaintenanceTimer();
