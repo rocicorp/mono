@@ -148,6 +148,36 @@ function buildDenormQuery(
   );
 }
 
+/**
+ * Mid-denorm: stop at the class level instead of cross-joining with
+ * student_class_membership. Replaces the 4-branch OR with one linear
+ * chain through teacher_class_access. Trades a per-class fan-in for a
+ * dramatically smaller denorm table (no student-enrollment fanout).
+ */
+function buildClassAccessQuery(
+  q: Query<'student', Schema>,
+): Query<'student', Schema> {
+  return q.whereExists(
+    'classes',
+    sc =>
+      sc.whereExists(
+        'class',
+        c =>
+          c.whereExists(
+            'teacherClassAccesses',
+            tca =>
+              tca.whereExists('teacher', t => t.where('userId', '=', USER_ID), {
+                flip: true,
+                scalar: true,
+              }),
+            {flip: true},
+          ),
+        {flip: true},
+      ),
+    {flip: true},
+  );
+}
+
 function timeMs<T>(fn: () => T): [T, number] {
   const start = performance.now();
   const result = fn();
@@ -195,13 +225,16 @@ describe(
     test('ratio across 1x..8x topology scale (constant student data)', async () => {
       type Row = {
         topo: number;
-        teachers: number;
         classes: number;
         normMedian: number;
-        denormMedian: number;
-        ratio: number;
+        classDenormMedian: number;
+        studentDenormMedian: number;
+        normVsStudent: number;
+        normVsClass: number;
+        classVsStudent: number;
         normNvisit: number;
-        denormNvisit: number;
+        classNvisit: number;
+        studentNvisit: number;
       };
       const rows: Row[] = [];
 
@@ -218,54 +251,73 @@ describe(
         const normalizedQ = buildNormalizedQuery(studentQuery)
           .orderBy('id', 'asc')
           .limit(500);
-        const denormQ = buildDenormQuery(studentQuery)
+        const classDenormQ = buildClassAccessQuery(studentQuery)
+          .orderBy('id', 'asc')
+          .limit(500);
+        const studentDenormQ = buildDenormQuery(studentQuery)
           .orderBy('id', 'asc')
           .limit(500);
 
         const normNvisit = totalNvisit(harness, normalizedQ);
-        const denormNvisit = totalNvisit(harness, denormQ);
+        const classNvisit = totalNvisit(harness, classDenormQ);
+        const studentNvisit = totalNvisit(harness, studentDenormQ);
 
         const norm = await timeQuery(harness, normalizedQ, RUNS_PER_SCALE);
-        const denorm = await timeQuery(harness, denormQ, RUNS_PER_SCALE);
+        const classDenorm = await timeQuery(
+          harness,
+          classDenormQ,
+          RUNS_PER_SCALE,
+        );
+        const studentDenorm = await timeQuery(
+          harness,
+          studentDenormQ,
+          RUNS_PER_SCALE,
+        );
 
         rows.push({
           topo: topologyScale,
-          teachers: seed.numTeachers,
           classes: seed.numClasses,
           normMedian: norm.median,
-          denormMedian: denorm.median,
-          ratio: norm.median / denorm.median,
+          classDenormMedian: classDenorm.median,
+          studentDenormMedian: studentDenorm.median,
+          normVsStudent: norm.median / studentDenorm.median,
+          normVsClass: norm.median / classDenorm.median,
+          classVsStudent: classDenorm.median / studentDenorm.median,
           normNvisit,
-          denormNvisit,
+          classNvisit,
+          studentNvisit,
         });
       }
 
       console.log('\n=== school-access topology scaling (zqlite) ===');
-      console.log(
-        [
-          'topo',
-          'teachers',
-          'classes',
-          'norm.med',
-          'denorm.med',
-          'ratio',
-          'norm.nvisit',
-          'denorm.nvisit',
-        ]
-          .map(s => s.padStart(12))
-          .join(' '),
-      );
+      const cols = [
+        'topo',
+        'classes',
+        'norm',
+        'classDen',
+        'studDen',
+        'norm/stud',
+        'norm/class',
+        'class/stud',
+        'norm.nvi',
+        'class.nvi',
+        'stud.nvi',
+      ];
+      console.log(cols.map(s => s.padStart(12)).join(' '));
       for (const r of rows) {
         console.log(
           [
             `${r.topo}x`,
-            r.teachers.toString(),
             r.classes.toString(),
             `${r.normMedian.toFixed(2)}ms`,
-            `${r.denormMedian.toFixed(2)}ms`,
-            `${r.ratio.toFixed(2)}x`,
+            `${r.classDenormMedian.toFixed(2)}ms`,
+            `${r.studentDenormMedian.toFixed(2)}ms`,
+            `${r.normVsStudent.toFixed(2)}x`,
+            `${r.normVsClass.toFixed(2)}x`,
+            `${r.classVsStudent.toFixed(2)}x`,
             r.normNvisit.toString(),
-            r.denormNvisit.toString(),
+            r.classNvisit.toString(),
+            r.studentNvisit.toString(),
           ]
             .map(s => s.padStart(12))
             .join(' '),
@@ -274,7 +326,8 @@ describe(
 
       for (const r of rows) {
         expect(r.normMedian).toBeGreaterThan(0);
-        expect(r.denormMedian).toBeGreaterThan(0);
+        expect(r.classDenormMedian).toBeGreaterThan(0);
+        expect(r.studentDenormMedian).toBeGreaterThan(0);
       }
     });
   },

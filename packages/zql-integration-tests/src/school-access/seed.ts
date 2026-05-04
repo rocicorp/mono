@@ -152,6 +152,14 @@ CREATE TABLE teacher_student_access (
 );
 CREATE INDEX teacher_student_access_teacher_id_idx ON teacher_student_access (teacher_id);
 CREATE INDEX teacher_student_access_student_id_idx ON teacher_student_access (student_id);
+
+CREATE TABLE teacher_class_access (
+  id INTEGER PRIMARY KEY,
+  teacher_id INTEGER NOT NULL,
+  class_id INTEGER NOT NULL
+);
+CREATE INDEX teacher_class_access_teacher_id_idx ON teacher_class_access (teacher_id);
+CREATE INDEX teacher_class_access_class_id_idx ON teacher_class_access (class_id);
 `;
 
 export function generateInserts(seed: Seed = SEED): string {
@@ -266,6 +274,28 @@ export function generateInserts(seed: Seed = SEED): string {
   }
   lines.push(
     `INSERT INTO teacher_student_access (id, teacher_id, student_id) VALUES ${accessValues.join(
+      ',\n  ',
+    )};`,
+  );
+
+  // teacher_class_access (smaller denorm): 1 row per (teacher_with_access,
+  // class). For our admin, that's 1 row per class. Plus 1 row per regular
+  // teaching teacher × the class they teach (direct access). The customer's
+  // real maintenance trigger would also write rows for co-teacher grants
+  // (granter's classes propagate to grantees) but for our query the admin
+  // already has access via school-admin so we don't need separate rows.
+  const tcaValues: string[] = [];
+  let tcaId = 1;
+  // Admin's class access: every class.
+  for (let i = 1; i <= numClasses; i++) {
+    tcaValues.push(`(${tcaId++}, ${adminTeacherId}, ${i})`);
+  }
+  // Each regular teacher's class access (direct): 1 row per class they teach.
+  for (let i = 1; i <= numClasses; i++) {
+    tcaValues.push(`(${tcaId++}, ${i}, ${i})`);
+  }
+  lines.push(
+    `INSERT INTO teacher_class_access (id, teacher_id, class_id) VALUES ${tcaValues.join(
       ',\n  ',
     )};`,
   );

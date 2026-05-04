@@ -82,6 +82,15 @@ const teacherStudentAccess = table('teacherStudentAccess')
   })
   .primaryKey('id');
 
+const teacherClassAccess = table('teacherClassAccess')
+  .from('teacher_class_access')
+  .columns({
+    id: number(),
+    teacherId: number().from('teacher_id'),
+    classId: number().from('class_id'),
+  })
+  .primaryKey('id');
+
 const districtRelationships = relationships(district, ({many}) => ({
   schools: many({
     sourceField: ['id'],
@@ -129,6 +138,11 @@ const teacherRelationships = relationships(teacher, ({one, many}) => ({
     destField: ['teacherId'],
     destSchema: teacherStudentAccess,
   }),
+  classAccesses: many({
+    sourceField: ['id'],
+    destField: ['teacherId'],
+    destSchema: teacherClassAccess,
+  }),
 }));
 
 const teacherToCoTeacherRelationships = relationships(
@@ -162,6 +176,11 @@ const klassRelationships = relationships(klass, ({one, many}) => ({
     sourceField: ['id'],
     destField: ['classId'],
     destSchema: studentClassMembership,
+  }),
+  teacherClassAccesses: many({
+    sourceField: ['id'],
+    destField: ['classId'],
+    destSchema: teacherClassAccess,
   }),
 }));
 
@@ -223,6 +242,22 @@ const teacherStudentAccessRelationships = relationships(
   }),
 );
 
+const teacherClassAccessRelationships = relationships(
+  teacherClassAccess,
+  ({one}) => ({
+    teacher: one({
+      sourceField: ['teacherId'],
+      destField: ['id'],
+      destSchema: teacher,
+    }),
+    class: one({
+      sourceField: ['classId'],
+      destField: ['id'],
+      destSchema: klass,
+    }),
+  }),
+);
+
 export const schema = createSchema({
   tables: [
     district,
@@ -234,6 +269,7 @@ export const schema = createSchema({
     student,
     studentClassMembership,
     teacherStudentAccess,
+    teacherClassAccess,
   ],
   relationships: [
     districtRelationships,
@@ -245,6 +281,7 @@ export const schema = createSchema({
     studentRelationships,
     studentClassMembershipRelationships,
     teacherStudentAccessRelationships,
+    teacherClassAccessRelationships,
   ],
 });
 
