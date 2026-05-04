@@ -1,5 +1,6 @@
 /* oxlint-disable no-console */
 import {describe, expect, test} from 'vitest';
+import {Debug} from '../../../zql/src/builder/debug-delegate.ts';
 import type {AnyQuery, Query} from '../../../zql/src/query/query.ts';
 import {mapResultToClientNames} from '../../../zqlite/src/test/source-factory.ts';
 import '../helpers/comparePg.ts';
@@ -188,6 +189,67 @@ async function profile(label: string, q: AnyQuery, runs: number) {
   return {min, median, max};
 }
 
+/**
+ * Hydrate `q` with a Debug delegate attached to the SQLite query delegate
+ * and return the per-source NVISIT (SQLite scan-step count) and rows-vended
+ * counts. NVISIT is what produces the customer-style "1,787 scanned" total.
+ */
+function analyze(q: AnyQuery) {
+  const debug = new Debug();
+  const prev = harness.delegates.sqlite.debug;
+  harness.delegates.sqlite.debug = debug;
+  try {
+    const view = harness.delegates.sqlite.materialize(q);
+    view.destroy();
+  } finally {
+    harness.delegates.sqlite.debug = prev;
+  }
+
+  const nvisitBySource = debug.getNVisitCounts();
+  const vendedBySource = debug.getVendedRowCounts();
+
+  let totalNvisit = 0;
+  const perSourceNvisit: Record<string, number> = {};
+  for (const [src, byQuery] of Object.entries(nvisitBySource)) {
+    let sum = 0;
+    for (const v of Object.values(byQuery)) sum += v;
+    perSourceNvisit[src] = sum;
+    totalNvisit += sum;
+  }
+
+  let totalVended = 0;
+  const perSourceVended: Record<string, number> = {};
+  for (const [src, byQuery] of Object.entries(vendedBySource)) {
+    let sum = 0;
+    for (const v of Object.values(byQuery)) sum += v;
+    perSourceVended[src] = sum;
+    totalVended += sum;
+  }
+
+  return {
+    totalNvisit,
+    totalVended,
+    perSourceNvisit,
+    perSourceVended,
+    nvisitBySource,
+  };
+}
+
+function logAnalysis(label: string, a: ReturnType<typeof analyze>) {
+  const sortedNvisit = Object.entries(a.perSourceNvisit).sort(
+    (x, y) => y[1] - x[1],
+  );
+  console.log(
+    `[${label}] total scanned (NVISIT)=${a.totalNvisit}  total vended=${a.totalVended}`,
+  );
+  for (const [src, n] of sortedNvisit) {
+    const v = a.perSourceVended[src] ?? 0;
+    console.log(
+      `  ${src.padEnd(28)} scanned=${n.toString().padStart(6)}  vended=${v}`,
+    );
+  }
+}
+
 describe('school access query shapes', {timeout: 120_000}, () => {
   test('normalized OR + flip + scalar matches PG (no limit)', async () => {
     const q = buildNormalizedQuery(studentQuery).orderBy('id', 'asc');
@@ -228,6 +290,9 @@ describe('school access query shapes', {timeout: 120_000}, () => {
     const denormQ = buildDenormQuery(studentQuery)
       .orderBy('id', 'asc')
       .limit(500);
+
+    logAnalysis('normalized.scans', analyze(normalizedQ));
+    logAnalysis('denorm.scans    ', analyze(denormQ));
 
     const RUNS = 5;
     const norm = await profile('normalized', normalizedQ, RUNS);
