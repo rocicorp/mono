@@ -299,7 +299,7 @@ describe(
       }
 
       async function hammer(q: AnyQuery, label: string) {
-        const {profile, elapsedMs} = await captureProfile(async () => {
+        const {profile, elapsedMs} = await captureProfile(() => {
           for (let i = 0; i < ITERATIONS; i++) {
             const view = harness.delegates.sqlite.materialize(q);
             view.destroy();

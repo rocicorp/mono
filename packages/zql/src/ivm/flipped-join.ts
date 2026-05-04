@@ -185,6 +185,7 @@ export class FlippedJoin implements Input {
     childNodes: Node[],
   ): Stream<Node | 'yield'> {
     const pairs: {childNode: Node; parentNode: Node}[] = [];
+    const parentReqConstraint = req.constraint;
     for (const childNode of childNodes) {
       const constraintFromChild = buildJoinConstraint(
         childNode.row,
@@ -193,18 +194,18 @@ export class FlippedJoin implements Input {
       );
       if (
         !constraintFromChild ||
-        (req.constraint &&
-          !constraintsAreCompatible(constraintFromChild, req.constraint))
+        (parentReqConstraint &&
+          !constraintsAreCompatible(constraintFromChild, parentReqConstraint))
       ) {
         continue;
       }
-      const stream = this.#parent.fetch({
-        ...req,
-        constraint: {
-          ...req.constraint,
-          ...constraintFromChild,
-        },
-      });
+      // Skip merging when the parent's incoming constraint is empty —
+      // saves one object allocation per child on a hot loop.
+      const mergedConstraint =
+        parentReqConstraint === undefined
+          ? constraintFromChild
+          : {...parentReqConstraint, ...constraintFromChild};
+      const stream = this.#parent.fetch({...req, constraint: mergedConstraint});
       // parentKey matches a unique index, so this fetch returns at most
       // one row under the Source contract.  Iterate to completion rather
       // than breaking to preserve yield propagation and to avoid silently
@@ -246,6 +247,7 @@ export class FlippedJoin implements Input {
   ): Stream<Node | 'yield'> {
     const parentIterators: Iterator<Node | 'yield'>[] = [];
     let threw = false;
+    const parentReqConstraint = req.constraint;
     try {
       for (const childNode of childNodes) {
         // TODO: consider adding the ability to pass a set of
@@ -257,17 +259,20 @@ export class FlippedJoin implements Input {
         );
         if (
           !constraintFromChild ||
-          (req.constraint &&
-            !constraintsAreCompatible(constraintFromChild, req.constraint))
+          (parentReqConstraint &&
+            !constraintsAreCompatible(constraintFromChild, parentReqConstraint))
         ) {
           parentIterators.push(emptyArray[Symbol.iterator]());
         } else {
+          // Skip merging when the parent's incoming constraint is empty —
+          // saves one object allocation per child on a hot loop.
+          const mergedConstraint =
+            parentReqConstraint === undefined
+              ? constraintFromChild
+              : {...parentReqConstraint, ...constraintFromChild};
           const stream = this.#parent.fetch({
             ...req,
-            constraint: {
-              ...req.constraint,
-              ...constraintFromChild,
-            },
+            constraint: mergedConstraint,
           });
           const iterator = stream[Symbol.iterator]();
           parentIterators.push(iterator);
