@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777037515029,
+  "lastUpdate": 1777874040199,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -55409,6 +55409,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "Size of replicache.min.mjs.br (Brotli compressed)",
             "value": 32317,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "arv@roci.dev",
+            "name": "Erik Arvidsson",
+            "username": "arv"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9ce919da92bd522c84380a144e2d230bce347132",
+          "message": "feat(replicache): Add bulk insertion optimization with putMany (#5380)\n\n# feat(replicache): Add bulk insertion optimization with putMany\n\n## Overview\n\nThis PR adds bulk insertion optimization to Replicache's BTree and\ndatabase layer, significantly improving performance for large batch\noperations like sync patches.\n\n## Changes\n\n### Core BTree Changes\n\n**`packages/replicache/src/btree/node.ts`**\n\n- Added `putMany()` method to `DataNodeImpl` for efficient merging of\nsorted entries\n- Added `putMany()` method to `InternalNodeImpl` with child grouping and\nrebalancing\n- Added `putManyMergeAndPartition()` helper for node rebalancing during\nbulk operations\n- Extracted `binarySearchFrom()` to enable optimized searching from a\nstart index\n- Refactored `readTreeData()` to accept `getEntrySize` parameter and\nmoved it outside the `describe` block (test helper improvement)\n\n**`packages/replicache/src/btree/write.ts`**\n\n- Added `BTreeWrite.putMany()` method with two optimized paths:\n- **Fast path**: Bulk loads empty trees bottom-up using optimal\npartitioning\n- **Slow path**: Merges entries into existing trees with efficient\nrebalancing\n- Validates entries are sorted and converts to sized entries in a single\npass\n- Reuses arrays to minimize allocations during tree construction\n\n### Database Layer\n\n**`packages/replicache/src/db/write.ts`**\n\n- Added `Write.putMany()` method that delegates to\n`BTreeWrite.putMany()`\n- Handles index updates for all entries before bulk insertion\n- Maintains compatibility with existing `put()` semantics\n\n### Sync Layer Optimization\n\n**`packages/replicache/src/sync/patch.ts`**\n\n- Added `optimizePatch()` function to eliminate redundant operations:\n  - Drops all operations before the last `clear`\n- For each key, a later `put` or `del` replaces all earlier operations\non that key\n- Removes standalone `del` operations after a `clear` (deleting from an\nempty tree is a no-op)\n- If any `update` operation is present, returns the original patch\nunmodified (from the last `clear` onward) — `update` is not used in\nZero/Replicache, so optimization is skipped to stay safe\n  - Sorts the resulting operations by key for optimal bulk loading\n- Modified `apply()` to use optimized patches with bulk loading\n- Extracted `mergeUpdate()` helper for update operation handling\n- Added `bulkLoadPuts()` to handle the leading run of consecutive `put`\noperations efficiently\n\n### Other\n\n**`packages/zero/package.json`**\n\n- Removed unused `zero-protocol` devDependency\n\n## Performance Impact\n\nThe optimization targets common sync patterns:\n\n1. **Initial sync**: Loading thousands of entries into an empty tree\n2. **Large patches**: Applying batches of updates from the server\n3. **Snapshot application**: Replacing entire datasets\n\n### Benchmark Results\n\nComparison of `putMany()` vs sequential `put()` operations:\n\n| Scenario          | Entries | Value Size | Speedup    |\n| ----------------- | ------- | ---------- | ---------- |\n| Empty tree        | 100     | small      | **3.36x**  |\n| Empty tree        | 100     | large      | **1.49x**  |\n| Empty tree        | 1,000   | small      | **5.30x**  |\n| Empty tree        | 1,000   | large      | **1.58x**  |\n| Empty tree        | 10,000  | small      | **4.15x**  |\n| Empty tree        | 10,000  | large      | **1.13x**  |\n| Construction only | 10,000  | small      | **53.73x** |\n| Update existing   | 1,000   | mixed      | **4.47x**  |\n\n**Key findings:**\n\n- Small values show 3-5x speedup consistently\n- Construction-only (no flush) shows dramatic 53x improvement\n- Large values benefit less due to serialization overhead\n- Updating existing entries shows 4.5x improvement\n\nAdditional benefits:\n\n- Reduces chunk writes through optimal tree construction\n- Minimizes redundant operations through patch optimization\n\n## Testing\n\n**New test files:**\n\n- `packages/replicache/src/btree/write.bench.ts` - Performance\nbenchmarks comparing sequential put() vs putMany()\n- Extensive test coverage in:\n- `packages/replicache/src/btree/node.test.ts` - 17 new tests for\nputMany() behavior\n- `packages/replicache/src/db/write.test.ts` - 3 new tests for\ndatabase-level putMany()\n- `packages/replicache/src/sync/patch.test.ts` - 24 new tests for patch\noptimization\n\n**Test scenarios covered:**\n\n- Empty tree bulk loading\n- Merging with existing entries\n- Tree rebalancing and partitioning\n- Index updates\n- Update operation merging\n- Patch optimization edge cases\n\n## Compatibility\n\n- No breaking changes to public APIs\n- Existing `put()` and `del()` methods remain unchanged\n- `putMany()` is an additive optimization that can be adopted\nincrementally\n- Works with both FormatVersion.V6 and FormatVersion.V7\n\n## Implementation Details\n\n### Key Algorithm Improvements\n\n1. **Bottom-up tree construction**: When building from scratch,\nconstructs the optimal tree structure in a single pass\n2. **Batch rebalancing**: Groups entries by affected child node and\nrebalances once per group\n3. **Restricted binary search**: Uses previous search results to narrow\nsearch ranges for sorted input\n4. **Patch deduplication**: Eliminates redundant operations before\napplying to the tree\n\n### Memory Efficiency\n\n- Reuses arrays during tree construction to minimize allocations\n- Mutates entries in-place during tree node creation (for immutable node\npattern)\n- Batch processes operations to reduce intermediate tree states\n\n## Future Work\n\n- Consider adding `delMany()` for bulk deletions\n- Explore parallel index updates for large batches",
+          "timestamp": "2026-05-04T05:43:14Z",
+          "tree_id": "b82bff1e38879c9f8b889db07c41f4bc6c198035",
+          "url": "https://github.com/rocicorp/mono/commit/9ce919da92bd522c84380a144e2d230bce347132"
+        },
+        "date": 1777874028091,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 315268,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 56624,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 116570,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 33180,
             "unit": "bytes"
           }
         ]
