@@ -1,27 +1,70 @@
 /**
- * Generates a deterministic dataset that mirrors the customer's profile:
- *   - 1 district, 1 school
- *   - 32 teachers at the school (31 regular + 1 school-administrator)
- *   - 29 classes, 29 teacher_to_class rows (1:1 teacher to class for the
- *     first 29 teachers; the admin and teachers 30..31 don't teach a class)
- *   - 564 students, 1128 student_class_membership rows (2 classes per student)
- *   - 1128 teacher_student_access rows (admin sees every (student, class)
- *     membership at their school)
+ * Generates a deterministic dataset that mirrors the customer's profile.
  *
- * The user being authenticated is the school administrator.
+ * The shape is deliberately built so that THREE of the four OR branches in
+ * the normalized access query stay live at runtime, each producing matches
+ * for every (student, class) membership. This is what stresses the OR
+ * fan-out: every membership row gets evaluated against three independent
+ * flipped-exists pipelines.
+ *
+ *   - 1 district, 1 school
+ *   - 32 teachers at the school (31 regular + 1 school-administrator).
+ *     The 1 admin is the requesting user.
+ *   - 29 classes
+ *   - teacher_to_class:
+ *       - 29 rows for the 29 regular teachers (1:1 teacher → class)
+ *       - 29 rows for the admin (admin teaches every class) → DIRECT branch
+ *         resolves to admin and matches every class.
+ *   - teacher_to_co_teacher:
+ *       - 29 rows: each of the 29 teaching teachers grants admin co-teacher
+ *         access → CO_TEACHER branch resolves to admin and matches every
+ *         class via the granter's teacher_to_class.
+ *   - school-admin role is held by admin → SCHOOL_ADMIN branch matches.
+ *   - DISTRICT_ADMIN: dead. The scalar (user_id=USER, role='administrator')
+ *     resolves to no row, so the branch is compiled out — admin holds the
+ *     school-administrator role, not administrator. Matches the customer's
+ *     reported plan, where one of the role-scoped branches dies.
+ *   - `numStudents` students, `numStudents * membershipsPerStudent` total
+ *     student_class_membership rows.
+ *   - 1 teacher_student_access row per membership for the denorm shape.
  */
 
 export const USER_ID = 'user-admin-1';
 
-export const SEED = {
+export const BASE_SEED = {
   numTeachers: 32,
   numClasses: 29,
-  numStudents: 564,
+  baseNumStudents: 564,
   membershipsPerStudent: 2,
   adminTeacherId: 9999,
   districtId: 1,
   schoolId: 1,
+} as const;
+
+export type Seed = {
+  numTeachers: number;
+  numClasses: number;
+  numStudents: number;
+  membershipsPerStudent: number;
+  adminTeacherId: number;
+  districtId: number;
+  schoolId: number;
 };
+
+export function makeSeed(scale = 1): Seed {
+  return {
+    numTeachers: BASE_SEED.numTeachers,
+    numClasses: BASE_SEED.numClasses,
+    numStudents: BASE_SEED.baseNumStudents * scale,
+    membershipsPerStudent: BASE_SEED.membershipsPerStudent,
+    adminTeacherId: BASE_SEED.adminTeacherId,
+    districtId: BASE_SEED.districtId,
+    schoolId: BASE_SEED.schoolId,
+  };
+}
+
+// Backwards-compatible default (scale = 1) used by the original test.
+export const SEED: Seed = makeSeed(1);
 
 export const DDL = /* sql */ `
 CREATE TABLE district (
@@ -90,7 +133,7 @@ CREATE INDEX teacher_student_access_teacher_id_idx ON teacher_student_access (te
 CREATE INDEX teacher_student_access_student_id_idx ON teacher_student_access (student_id);
 `;
 
-export function generateInserts(): string {
+export function generateInserts(seed: Seed = SEED): string {
   const lines: string[] = [];
   const {
     numTeachers,
@@ -100,7 +143,7 @@ export function generateInserts(): string {
     adminTeacherId,
     districtId,
     schoolId,
-  } = SEED;
+  } = seed;
 
   lines.push(`INSERT INTO district VALUES (${districtId}, 'District 1');`);
   lines.push(
@@ -134,13 +177,34 @@ export function generateInserts(): string {
     )};`,
   );
 
-  // 1 teacher_to_class per regular teacher i in [1..numClasses]
+  // teacher_to_class:
+  //   - 1 row per regular teacher i in [1..numClasses]
+  //   - 1 row per admin per class (admin teaches every class) — keeps the
+  //     DIRECT branch live at runtime.
   const tcValues: string[] = [];
+  let tcId = 1;
   for (let i = 1; i <= numClasses; i++) {
-    tcValues.push(`(${i}, ${i}, ${i})`);
+    tcValues.push(`(${tcId++}, ${i}, ${i})`);
+  }
+  for (let i = 1; i <= numClasses; i++) {
+    tcValues.push(`(${tcId++}, ${adminTeacherId}, ${i})`);
   }
   lines.push(
     `INSERT INTO teacher_to_class (id, teacher_id, class_id) VALUES ${tcValues.join(
+      ',\n  ',
+    )};`,
+  );
+
+  // teacher_to_co_teacher: each of the 29 teaching regular teachers grants
+  // admin co-teacher access. Keeps the CO_TEACHER branch live at runtime —
+  // it walks back from admin to all granting teachers and from each granter
+  // to their classes.
+  const cotValues: string[] = [];
+  for (let i = 1; i <= numClasses; i++) {
+    cotValues.push(`(${i}, ${i}, ${adminTeacherId})`);
+  }
+  lines.push(
+    `INSERT INTO teacher_to_co_teacher (id, from_teacher_id, to_teacher_id) VALUES ${cotValues.join(
       ',\n  ',
     )};`,
   );
@@ -188,6 +252,6 @@ export function generateInserts(): string {
   return lines.join('\n');
 }
 
-export function generatePgContent(): string {
-  return `${DDL}\n${generateInserts()}\n`;
+export function generatePgContent(seed: Seed = SEED): string {
+  return `${DDL}\n${generateInserts(seed)}\n`;
 }
