@@ -19,6 +19,10 @@ export function configForVersion(version: number, url: string) {
       tsconfigPaths: true,
       alias: [
         {
+          find: '@rocicorp/zero/testing',
+          replacement: resolve(packagesDir, 'zero/src/testing.ts'),
+        },
+        {
           find: '@rocicorp/zero',
           replacement: resolve(packagesDir, 'zero/src/zero.ts'),
         },
@@ -46,7 +50,9 @@ export function configForVersion(version: number, url: string) {
 
 export function configForNoPg(url: string) {
   const name = nameFromURL(url);
+
   return mergeConfig(config, {
+    plugins: [tsconfigPaths()],
     test: {
       name: `${name}/no-pg`,
       browser: {enabled: false},

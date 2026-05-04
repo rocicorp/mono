@@ -8,6 +8,7 @@
     "src/react-native.ts",
     "src/sqlite.ts",
     "src/expo-sqlite.ts",
-    "src/op-sqlite.ts"
+    "src/op-sqlite.ts",
+    "src/testing.ts"
   ]
 }

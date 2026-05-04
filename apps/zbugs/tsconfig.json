@@ -4,7 +4,8 @@
     "jsx": "react-jsx",
     "paths": {
       "@rocicorp/zero": ["../../packages/zero/src/zero.ts"],
-      "@rocicorp/zero/react": ["../../packages/zero/src/react.ts"]
+      "@rocicorp/zero/react": ["../../packages/zero/src/react.ts"],
+      "@rocicorp/zero/testing": ["../../packages/zero/src/testing.ts"]
     },
     "declaration": true
   },
