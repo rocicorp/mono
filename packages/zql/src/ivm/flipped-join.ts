@@ -1,6 +1,5 @@
 import {assert, unreachable} from '../../../shared/src/asserts.ts';
 import {binarySearch} from '../../../shared/src/binary-search.ts';
-import {emptyArray} from '../../../shared/src/sentinels.ts';
 import type {CompoundKey, System} from '../../../zero-protocol/src/ast.ts';
 import type {Row, Value} from '../../../zero-protocol/src/data.ts';
 import {ChangeIndex} from './change-index.ts';
@@ -12,7 +11,7 @@ import {
   makeRemoveChange,
   type Change,
 } from './change.ts';
-import {constraintsAreCompatible, keyMatchesPrimaryKey} from './constraint.ts';
+import {constraintsAreCompatible, type Constraint} from './constraint.ts';
 import type {Node} from './data.ts';
 import {
   buildJoinConstraint,
@@ -20,6 +19,7 @@ import {
   isJoinMatch,
   rowEqualsForCompoundKey,
 } from './join-utils.ts';
+import {mergeSortedStreams} from './memory-source.ts';
 import {
   throwOutput,
   type FetchRequest,
@@ -28,6 +28,41 @@ import {
 } from './operator.ts';
 import type {SourceSchema} from './schema.ts';
 import {type Stream} from './stream.ts';
+
+/**
+ * Maximum number of `multiConstraint` entries sent in a single
+ * `parent.fetch` call. Larger child-node sets are split into multiple
+ * fetches whose sorted streams are merged in JS.
+ *
+ * Why bound this:
+ *  - **Plan stability.** SQLite plans `WHERE x IN (?,?,...)` of a given
+ *    arity as a distinct prepared statement. Quantizing chunk size keeps
+ *    the statement-cache hit rate high regardless of input size.
+ *  - **Bounded fetch on early termination.** With one giant IN, if
+ *    SQLite picks a buffered ORDER BY plan it materializes all matches
+ *    before yielding row 1 — wasted work when downstream `Take` only
+ *    consumes a few. Chunking caps that overhead at one chunk's worth.
+ *  - **Parameter limit.** Well under SQLite's default
+ *    `SQLITE_MAX_VARIABLE_NUMBER` (32766). Compound keys multiply the
+ *    parameter count by key length, so we leave headroom.
+ */
+const DEFAULT_CHUNK_SIZE = 256;
+
+// Mutable test seam — production code reads this via the getter.
+let multiConstraintChunkSize = DEFAULT_CHUNK_SIZE;
+
+export function getMultiConstraintChunkSize(): number {
+  return multiConstraintChunkSize;
+}
+
+/** Test only. Returns a restore function. */
+export function setMultiConstraintChunkSizeForTest(size: number): () => void {
+  const prev = multiConstraintChunkSize;
+  multiConstraintChunkSize = size;
+  return () => {
+    multiConstraintChunkSize = prev;
+  };
+}
 
 type Args = {
   parent: Input;
@@ -56,7 +91,6 @@ export class FlippedJoin implements Input {
   readonly #childKey: CompoundKey;
   readonly #relationshipName: string;
   readonly #schema: SourceSchema;
-  readonly #parentKeyIsUnique: boolean;
 
   #output: Output = throwOutput;
 
@@ -85,12 +119,6 @@ export class FlippedJoin implements Input {
 
     const parentSchema = parent.getSchema();
     const childSchema = child.getSchema();
-    this.#parentKeyIsUnique =
-      keyMatchesPrimaryKey(parentKey, parentSchema.primaryKey) ||
-      (parentSchema.uniqueIndexes?.some(idx =>
-        keyMatchesPrimaryKey(parentKey, idx),
-      ) ??
-        false);
     this.#schema = {
       ...parentSchema,
       relationships: {
@@ -167,30 +195,47 @@ export class FlippedJoin implements Input {
       childNodes.splice(insertPos, 0, removedNode);
     }
 
-    if (this.#parentKeyIsUnique) {
-      yield* this.#fetchQuicksort(req, childNodes);
-    } else {
-      yield* this.#fetchMergeSort(req, childNodes);
-    }
+    yield* this.#fetchBatched(req, childNodes);
   }
 
-  // When parentKey matches a unique index on the parent (primary or
-  // otherwise) each child -> parent fetch returns at most one row, so the
-  // merge-sort degenerates to N simultaneous prepared-statement iterators
-  // each holding a single-row cursor.  Instead, fetch sequentially (letting
-  // the statement cache reuse a single prepared statement) and sort the
-  // resulting parents into order.
-  *#fetchQuicksort(
+  /**
+   * Fetches parents for `childNodes` in batched calls, using
+   * `multiConstraint` so the source can issue one query per chunk (e.g.
+   * SQL `IN` with index-aware seek) instead of N per-child cursors.
+   *
+   * Multi-constraint values are split into chunks of `CHUNK_SIZE`, so:
+   *  - SQL `IN` lists stay bounded (predictable plans, statement-cache
+   *    hits across calls of the same chunk size, well below SQLite's
+   *    parameter limit).
+   *  - If downstream stops pulling early (Take, limit), later chunks
+   *    never advance their cursor — the source does no extra work.
+   *
+   * Within each chunk, the source returns parents in `compareRows` order.
+   * Across chunks, we merge with `mergeSortedStreams` so the overall
+   * stream is also in order.
+   *
+   * Replaces the previous split between `#fetchMergeSort` and
+   * `#fetchQuicksort`. The unique-vs-not distinction is no longer needed:
+   * the source handles cardinality (single index seek for each value) and
+   * ordering (SQL `ORDER BY` / index walk).
+   */
+  *#fetchBatched(
     req: FetchRequest,
     childNodes: Node[],
   ): Stream<Node | 'yield'> {
-    const pairs: {childNode: Node; parentNode: Node}[] = [];
     const parentReqConstraint = req.constraint;
-    for (const childNode of childNodes) {
+    const parentKey = this.#parentKey;
+    const childKey = this.#childKey;
+
+    // Build (deduped) multi-constraint and a key→child-indexes map. Same
+    // parent-key value across multiple children groups them together.
+    const multiConstraint: Constraint[] = [];
+    const childIndexesByKey = new Map<string, number[]>();
+    for (let i = 0; i < childNodes.length; i++) {
       const constraintFromChild = buildJoinConstraint(
-        childNode.row,
-        this.#childKey,
-        this.#parentKey,
+        childNodes[i].row,
+        childKey,
+        parentKey,
       );
       if (
         !constraintFromChild ||
@@ -199,162 +244,69 @@ export class FlippedJoin implements Input {
       ) {
         continue;
       }
-      // Skip merging when the parent's incoming constraint is empty —
-      // saves one object allocation per child on a hot loop.
-      const mergedConstraint =
-        parentReqConstraint === undefined
-          ? constraintFromChild
-          : {...parentReqConstraint, ...constraintFromChild};
-      const stream = this.#parent.fetch({...req, constraint: mergedConstraint});
-      // parentKey matches a unique index, so this fetch returns at most
-      // one row under the Source contract.  Iterate to completion rather
-      // than breaking to preserve yield propagation and to avoid silently
-      // changing behavior if a source ever returns more.
-      for (const node of stream) {
-        if (node === 'yield') {
-          yield 'yield';
-          continue;
-        }
-        pairs.push({childNode, parentNode: node});
+      const key = canonicalConstraintKey(constraintFromChild, parentKey);
+      const existing = childIndexesByKey.get(key);
+      if (existing === undefined) {
+        childIndexesByKey.set(key, [i]);
+        multiConstraint.push(constraintFromChild);
+      } else {
+        existing.push(i);
       }
     }
 
-    const compareRows = this.#schema.compareRows;
-    const dir = req.reverse ? -1 : 1;
-    pairs.sort((a, b) => compareRows(a.parentNode.row, b.parentNode.row) * dir);
+    if (multiConstraint.length === 0) {
+      return;
+    }
 
-    // Group consecutive pairs with equal parent rows.  Array.sort is stable,
-    // and childNodes was already in child order, so children within each
-    // group retain child order.
-    let i = 0;
-    while (i < pairs.length) {
-      const minParentNode = pairs[i].parentNode;
-      const relatedChildNodes: Node[] = [];
-      while (
-        i < pairs.length &&
-        compareRows(pairs[i].parentNode.row, minParentNode.row) === 0
-      ) {
-        relatedChildNodes.push(pairs[i].childNode);
-        i++;
+    // Source returns parents in compareRows order within each chunk.
+    // Merge across chunks to yield a globally ordered stream.
+    const compareRows = this.#schema.compareRows;
+    const compare: (a: Node, b: Node) => number = req.reverse
+      ? (a, b) => compareRows(b.row, a.row)
+      : (a, b) => compareRows(a.row, b.row);
+
+    const parentStream =
+      multiConstraint.length <= multiConstraintChunkSize
+        ? this.#parent.fetch({...req, multiConstraint})
+        : this.#fetchChunked(req, multiConstraint, compare);
+
+    for (const node of parentStream) {
+      if (node === 'yield') {
+        yield 'yield';
+        continue;
       }
-      yield* this.#yieldParentWithOverlay(minParentNode, relatedChildNodes);
+      const key = canonicalRowKey(node.row, parentKey);
+      const idxs = childIndexesByKey.get(key);
+      if (idxs === undefined) {
+        // Defensive: source returned a row that doesn't match any of our
+        // constraints. Shouldn't happen, but skip rather than throw.
+        continue;
+      }
+      // Children retain their original input order within the group
+      // because we appended to `idxs` in iteration order.
+      const relatedChildNodes: Node[] = idxs.map(i => childNodes[i]);
+      yield* this.#yieldParentWithOverlay(node, relatedChildNodes);
     }
   }
 
-  *#fetchMergeSort(
+  *#fetchChunked(
     req: FetchRequest,
-    childNodes: Node[],
+    multiConstraint: readonly Constraint[],
+    compare: (a: Node, b: Node) => number,
   ): Stream<Node | 'yield'> {
-    const parentIterators: Iterator<Node | 'yield'>[] = [];
-    let threw = false;
-    const parentReqConstraint = req.constraint;
-    try {
-      for (const childNode of childNodes) {
-        // TODO: consider adding the ability to pass a set of
-        // ids to fetch, and have them applied to sqlite using IN.
-        const constraintFromChild = buildJoinConstraint(
-          childNode.row,
-          this.#childKey,
-          this.#parentKey,
-        );
-        if (
-          !constraintFromChild ||
-          (parentReqConstraint &&
-            !constraintsAreCompatible(constraintFromChild, parentReqConstraint))
-        ) {
-          parentIterators.push(emptyArray[Symbol.iterator]());
-        } else {
-          // Skip merging when the parent's incoming constraint is empty —
-          // saves one object allocation per child on a hot loop.
-          const mergedConstraint =
-            parentReqConstraint === undefined
-              ? constraintFromChild
-              : {...parentReqConstraint, ...constraintFromChild};
-          const stream = this.#parent.fetch({
-            ...req,
-            constraint: mergedConstraint,
-          });
-          const iterator = stream[Symbol.iterator]();
-          parentIterators.push(iterator);
-        }
-      }
-      const nextParentNodes: (Node | null)[] = [];
-      for (let i = 0; i < parentIterators.length; i++) {
-        const iter = parentIterators[i];
-        let result = iter.next();
-        // yield yields when initializing
-        while (!result.done && result.value === 'yield') {
-          yield result.value;
-          result = iter.next();
-        }
-        nextParentNodes[i] = result.done ? null : (result.value as Node);
-      }
-
-      while (true) {
-        let minParentNode = null;
-        let minParentNodeChildIndexes: number[] = [];
-        for (let i = 0; i < nextParentNodes.length; i++) {
-          const parentNode = nextParentNodes[i];
-          if (parentNode === null) {
-            continue;
-          }
-          if (minParentNode === null) {
-            minParentNode = parentNode;
-            minParentNodeChildIndexes.push(i);
-          } else {
-            const compareResult =
-              this.#schema.compareRows(parentNode.row, minParentNode.row) *
-              (req.reverse ? -1 : 1);
-            if (compareResult === 0) {
-              minParentNodeChildIndexes.push(i);
-            } else if (compareResult < 0) {
-              minParentNode = parentNode;
-              minParentNodeChildIndexes = [i];
-            }
-          }
-        }
-        if (minParentNode === null) {
-          return;
-        }
-        const relatedChildNodes: Node[] = [];
-        for (const minParentNodeChildIndex of minParentNodeChildIndexes) {
-          relatedChildNodes.push(childNodes[minParentNodeChildIndex]);
-          const iter = parentIterators[minParentNodeChildIndex];
-          let result = iter.next();
-          // yield yields when advancing
-          while (!result.done && result.value === 'yield') {
-            yield result.value;
-            result = iter.next();
-          }
-          nextParentNodes[minParentNodeChildIndex] = result.done
-            ? null
-            : (result.value as Node);
-        }
-        yield* this.#yieldParentWithOverlay(minParentNode, relatedChildNodes);
-      }
-    } catch (e) {
-      threw = true;
-      for (const iter of parentIterators) {
-        try {
-          iter.throw?.(e);
-        } catch (_cleanupError) {
-          // error in the iter.throw cleanup,
-          // catch so other iterators are cleaned up
-        }
-      }
-      throw e;
-    } finally {
-      if (!threw) {
-        for (const iter of parentIterators) {
-          try {
-            iter.return?.();
-          } catch (_cleanupError) {
-            // error in the iter.return cleanup,
-            // catch so other iterators are cleaned up
-          }
-        }
-      }
+    const chunkStreams: Stream<Node | 'yield'>[] = [];
+    for (let i = 0; i < multiConstraint.length; i += multiConstraintChunkSize) {
+      chunkStreams.push(
+        this.#parent.fetch({
+          ...req,
+          multiConstraint: multiConstraint.slice(
+            i,
+            i + multiConstraintChunkSize,
+          ),
+        }),
+      );
     }
+    yield* mergeSortedStreams(chunkStreams, compare);
   }
 
   *#yieldParentWithOverlay(
@@ -593,4 +545,47 @@ export class FlippedJoin implements Input {
         unreachable(change);
     }
   }
+}
+
+/**
+ * Canonical string key for a constraint, in `parentKey` order. Used by
+ * `#fetchBatched` to dedupe `multiConstraint` entries and to map each
+ * returned parent row back to the children that referenced its
+ * parent-key tuple.
+ */
+function canonicalConstraintKey(c: Constraint, parentKey: CompoundKey): string {
+  if (parentKey.length === 1) {
+    return canonicalValue(c[parentKey[0]]);
+  }
+  let s = '';
+  for (let i = 0; i < parentKey.length; i++) {
+    if (i > 0) s += '\x00';
+    s += canonicalValue(c[parentKey[i]]);
+  }
+  return s;
+}
+
+function canonicalRowKey(row: Row, parentKey: CompoundKey): string {
+  if (parentKey.length === 1) {
+    return canonicalValue(row[parentKey[0]]);
+  }
+  let s = '';
+  for (let i = 0; i < parentKey.length; i++) {
+    if (i > 0) s += '\x00';
+    s += canonicalValue(row[parentKey[i]]);
+  }
+  return s;
+}
+
+function canonicalValue(v: Value | bigint | undefined): string {
+  // Tag by type so we don't conflate e.g. `1` (number) with `"1"` (string).
+  // Bigint shows up at runtime when zqlite's safeIntegers is on, even
+  // though the static `Value` type doesn't list it.
+  if (v === null || v === undefined) return 'n';
+  const t = typeof v;
+  if (t === 'string') return 's' + (v as string);
+  if (t === 'number') return 'd' + (v as number);
+  if (t === 'bigint') return 'b' + (v as bigint).toString();
+  if (t === 'boolean') return v ? 't' : 'f';
+  return 'j' + JSON.stringify(v);
 }

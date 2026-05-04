@@ -328,6 +328,7 @@ export class TableSource implements Source {
               connection.lastPushedEpoch,
               comparator,
               connection.filters?.predicate,
+              req.multiConstraint,
             ),
             this.#shouldYield,
           ),
@@ -348,6 +349,7 @@ export class TableSource implements Source {
             connection.lastPushedEpoch,
             this.#primaryKey,
             connection.filters?.predicate,
+            req.multiConstraint,
           ),
           this.#shouldYield,
         );
@@ -548,27 +550,30 @@ export class TableSource implements Source {
       order,
       request.reverse,
       request.start,
+      request.multiConstraint,
     );
   }
 
   /**
    * Returns the SQL text + bindings for `req` against this connection.
    *
-   * For fetches with no `start` clause (the common case on the hot
-   * inner-flipped-join path), reuses a per-connection cached SQL string and
-   * value template, replacing only the constraint values per call. Skips
-   * `buildSelectQuery`, `format`, and `normalizeWhitespace` on cache hits.
+   * For fetches with no `start` clause and no `multiConstraint` (the common
+   * case on the hot inner-flipped-join path), reuses a per-connection cached
+   * SQL string and value template, replacing only the constraint values per
+   * call. Skips `buildSelectQuery`, `format`, and `normalizeWhitespace` on
+   * cache hits.
    *
-   * Fetches with `start` fall through to a fresh build — the binding pattern
-   * for compound-order pagination depends on per-column nullability, so the
-   * extraction logic is non-trivial. Pagination fetches don't dominate any
-   * profile we've measured, so this is fine.
+   * Fetches with `start` or `multiConstraint` fall through to a fresh build:
+   *  - `start`: binding pattern for compound-order pagination depends on
+   *    per-column nullability, non-trivial to template.
+   *  - `multiConstraint`: binding count varies per call (one per IN value),
+   *    so the SQL text varies too — caching wouldn't share across calls.
    */
   #getCachedSql(
     req: FetchRequest,
     connection: Connection,
   ): {text: string; values: readonly unknown[]} {
-    if (req.start !== undefined) {
+    if (req.start !== undefined || req.multiConstraint !== undefined) {
       const query = this.#requestToSQL(
         req,
         connection.filters?.condition,

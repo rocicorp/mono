@@ -254,6 +254,15 @@ export class MemorySource implements Source {
   }
 
   *#fetch(req: FetchRequest, conn: Connection): Stream<Node | 'yield'> {
+    // multiConstraint is handled by recursively running a single-constraint
+    // fetch for each entry and merging the sorted streams. TableSource
+    // implements it natively via SQL `IN`; the in-memory path is correct
+    // but not specially optimized — it pays the index-seek cost N times
+    // rather than 1.
+    if (req.multiConstraint && req.multiConstraint.length > 0) {
+      yield* this.#fetchMulti(req, conn);
+      return;
+    }
     const requestedSort = must(conn.sort);
     const {compareRows} = conn;
     // Avoid allocating a new closure when not reversing (the common case).
@@ -361,6 +370,26 @@ export class MemorySource implements Source {
     yield* conn.filters
       ? generateWithFilter(withConstraint, conn.filters.predicate)
       : withConstraint;
+  }
+
+  *#fetchMulti(req: FetchRequest, conn: Connection): Stream<Node | 'yield'> {
+    const multi = req.multiConstraint!;
+    const baseConstraint = req.constraint;
+    // Run a single-constraint sub-fetch for each entry. The resulting
+    // streams are each in sort order; merge them.
+    const subStreams: Stream<Node | 'yield'>[] = multi.map(c => {
+      const merged: Constraint = baseConstraint ? {...baseConstraint, ...c} : c;
+      return this.#fetch(
+        {...req, constraint: merged, multiConstraint: undefined},
+        conn,
+      );
+    });
+    yield* mergeSortedStreams(
+      subStreams,
+      req.reverse
+        ? (a, b) => conn.compareRows(b.row, a.row)
+        : (a, b) => conn.compareRows(a.row, b.row),
+    );
   }
 
   *push(change: SourceChange): Stream<'yield'> {
@@ -629,6 +658,7 @@ export function* generateWithOverlay(
   lastPushedEpoch: number,
   compare: Comparator,
   filterPredicate?: (row: Row) => boolean | undefined,
+  multiConstraint?: readonly Constraint[] | undefined,
 ) {
   let overlayToApply: Overlay | undefined = undefined;
   if (overlay && lastPushedEpoch >= overlay.epoch) {
@@ -640,6 +670,7 @@ export function* generateWithOverlay(
     overlayToApply,
     compare,
     filterPredicate,
+    multiConstraint,
   );
   yield* generateWithOverlayInner(rows, overlays, compare);
 }
@@ -650,6 +681,7 @@ function computeOverlays(
   overlay: Overlay | undefined,
   compare: Comparator,
   filterPredicate?: (row: Row) => boolean | undefined,
+  multiConstraint?: readonly Constraint[] | undefined,
 ): Overlays {
   let overlays: Overlays = {
     add: undefined,
@@ -684,11 +716,32 @@ function computeOverlays(
     overlays = overlaysForConstraint(overlays, constraint);
   }
 
+  if (multiConstraint && multiConstraint.length > 0) {
+    overlays = overlaysForMultiConstraint(overlays, multiConstraint);
+  }
+
   if (filterPredicate) {
     overlays = overlaysForFilterPredicate(overlays, filterPredicate);
   }
 
   return overlays;
+}
+
+function overlaysForMultiConstraint(
+  {add, remove}: Overlays,
+  multiConstraint: readonly Constraint[],
+): Overlays {
+  const matchesAny = (row: Row | undefined) => {
+    if (row === undefined) return false;
+    for (const c of multiConstraint) {
+      if (constraintMatchesRow(c, row)) return true;
+    }
+    return false;
+  };
+  return {
+    add: matchesAny(add) ? add : undefined,
+    remove: matchesAny(remove) ? remove : undefined,
+  };
 }
 
 export {overlaysForStartAt as overlaysForStartAtForTest};
@@ -779,6 +832,7 @@ export function* generateWithOverlayUnordered(
   lastPushedEpoch: number,
   primaryKey: PrimaryKey,
   filterPredicate?: (row: Row) => boolean,
+  multiConstraint?: readonly Constraint[] | undefined,
 ) {
   let overlayToApply: Overlay | undefined = undefined;
   if (overlay && lastPushedEpoch >= overlay.epoch) {
@@ -807,6 +861,9 @@ export function* generateWithOverlayUnordered(
   }
   if (constraint) {
     overlays = overlaysForConstraint(overlays, constraint);
+  }
+  if (multiConstraint && multiConstraint.length > 0) {
+    overlays = overlaysForMultiConstraint(overlays, multiConstraint);
   }
   if (filterPredicate) {
     overlays = overlaysForFilterPredicate(overlays, filterPredicate);
@@ -916,4 +973,76 @@ export function stringify(change: SourceChange) {
   return JSON.stringify(change, (_, v) =>
     typeof v === 'bigint' ? v.toString() : v,
   );
+}
+
+/**
+ * N-way merge of pre-sorted Node streams. Each input stream must yield
+ * Nodes in `compare` order (and may interleave 'yield' values, which are
+ * forwarded as-is). The merged stream yields Nodes in `compare` order.
+ *
+ * Used by MemorySource to handle batched multiConstraint fetches by
+ * running one sub-fetch per constraint and merging the sorted results.
+ *
+ * If the merged stream is closed early (e.g. downstream `Take` `break`s
+ * after hitting its limit, prompting JS to call `.return()` on this
+ * generator), the `finally` block propagates `.return()` to each
+ * sub-iterator so the underlying sources (SQLite cursors, etc.) can run
+ * their cleanup. Without this, mid-merge early-termination leaves
+ * cursors open, causing later writes on the same connection to fail
+ * with "database connection is busy executing a query".
+ */
+export function* mergeSortedStreams(
+  streams: readonly Stream<Node | 'yield'>[],
+  compare: (a: Node, b: Node) => number,
+): Stream<Node | 'yield'> {
+  const iterators: Iterator<Node | 'yield'>[] = streams.map(s =>
+    s[Symbol.iterator](),
+  );
+  const heads: (Node | null)[] = new Array(iterators.length).fill(null);
+
+  const advance = function* (i: number): Generator<'yield', void, undefined> {
+    while (true) {
+      const r = iterators[i].next();
+      if (r.done) {
+        heads[i] = null;
+        return;
+      }
+      if (r.value === 'yield') {
+        yield 'yield';
+        continue;
+      }
+      heads[i] = r.value;
+      return;
+    }
+  };
+
+  try {
+    // Prime each iterator.
+    for (let i = 0; i < iterators.length; i++) {
+      yield* advance(i);
+    }
+
+    while (true) {
+      let minIdx = -1;
+      for (let i = 0; i < heads.length; i++) {
+        if (heads[i] === null) continue;
+        if (minIdx === -1 || compare(heads[i]!, heads[minIdx]!) < 0) {
+          minIdx = i;
+        }
+      }
+      if (minIdx === -1) return;
+      yield heads[minIdx]!;
+      yield* advance(minIdx);
+    }
+  } finally {
+    // Close any iterators that aren't already exhausted so their
+    // `finally` blocks (which release cursors / cached statements) run.
+    // Iterators we exhausted set heads[i] = null and have already
+    // finalized, so calling .return() on them is a no-op.
+    for (let i = 0; i < iterators.length; i++) {
+      if (heads[i] !== null) {
+        iterators[i].return?.();
+      }
+    }
+  }
 }

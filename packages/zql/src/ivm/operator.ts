@@ -45,6 +45,21 @@ export interface Input extends InputBase {
 
 export type FetchRequest = {
   readonly constraint?: Constraint | undefined;
+
+  /**
+   * Batched form of `constraint` used by FlippedJoin to fetch many child→
+   * parent rows in a single statement instead of one prepared-statement
+   * cursor per child. Each entry has the same shape (same columns); the
+   * source treats the union as `(col_a, col_b, …) IN VALUES (…)`. ANDed
+   * with `constraint` if both are provided.
+   *
+   * Sources may opt out by ignoring this field — callers must always be
+   * prepared to receive a superset of rows and filter, but currently every
+   * source that consumes FlippedJoin output (TableSource, MemorySource)
+   * implements it natively.
+   */
+  readonly multiConstraint?: readonly Constraint[] | undefined;
+
   /** If supplied, `start.row` must have previously been output by fetch or push. */
   readonly start?: Start | undefined;
 

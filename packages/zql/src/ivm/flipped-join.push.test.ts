@@ -2496,19 +2496,16 @@ suite('push many:one', () => {
             "fetch",
             {
               "constraint": {
-                "id": "i1",
                 "ownerID": "u2",
               },
-            },
-          ],
-          [
-            ".issues:source(issue)",
-            "fetch",
-            {
-              "constraint": {
-                "id": "i2",
-                "ownerID": "u2",
-              },
+              "multiConstraint": [
+                {
+                  "id": "i1",
+                },
+                {
+                  "id": "i2",
+                },
+              ],
             },
           ],
           [
@@ -2592,19 +2589,16 @@ suite('push many:one', () => {
             "fetch",
             {
               "constraint": {
-                "id": "i1",
                 "ownerID": "u1",
               },
-            },
-          ],
-          [
-            ".issues:source(issue)",
-            "fetch",
-            {
-              "constraint": {
-                "id": "i2",
-                "ownerID": "u1",
-              },
+              "multiConstraint": [
+                {
+                  "id": "i1",
+                },
+                {
+                  "id": "i2",
+                },
+              ],
             },
           ],
           [
@@ -3131,9 +3125,13 @@ suite('push one:many:many', () => {
           "fetch",
           {
             "constraint": {
-              "id": "c1",
               "issueID": "i1",
             },
+            "multiConstraint": [
+              {
+                "id": "c1",
+              },
+            ],
           },
         ],
         [
@@ -3280,9 +3278,13 @@ suite('push one:many:many', () => {
           "fetch",
           {
             "constraint": {
-              "id": "c1",
               "issueID": "i1",
             },
+            "multiConstraint": [
+              {
+                "id": "c1",
+              },
+            ],
           },
         ],
         [
@@ -3408,9 +3410,13 @@ suite('push one:many:many', () => {
           "fetch",
           {
             "constraint": {
-              "id": "c1",
               "issueID": "i1",
             },
+            "multiConstraint": [
+              {
+                "id": "c1",
+              },
+            ],
           },
         ],
         [
@@ -3442,9 +3448,13 @@ suite('push one:many:many', () => {
           "fetch",
           {
             "constraint": {
-              "id": "c1",
               "issueID": "i1",
             },
+            "multiConstraint": [
+              {
+                "id": "c1",
+              },
+            ],
           },
         ],
       ]
@@ -3551,9 +3561,13 @@ suite('push one:many:many', () => {
           "fetch",
           {
             "constraint": {
-              "id": "c1",
               "issueID": "i1",
             },
+            "multiConstraint": [
+              {
+                "id": "c1",
+              },
+            ],
           },
         ],
         [
@@ -3585,9 +3599,13 @@ suite('push one:many:many', () => {
           "fetch",
           {
             "constraint": {
-              "id": "c1",
               "issueID": "i1",
             },
+            "multiConstraint": [
+              {
+                "id": "c1",
+              },
+            ],
           },
         ],
       ]
@@ -3790,8 +3808,12 @@ suite('push one:many:one', () => {
           {
             "constraint": {
               "issueID": "i1",
-              "labelID": "l1",
             },
+            "multiConstraint": [
+              {
+                "labelID": "l1",
+              },
+            ],
           },
         ],
         [
@@ -3937,8 +3959,12 @@ suite('push one:many:one', () => {
           {
             "constraint": {
               "issueID": "i1",
-              "labelID": "l1",
             },
+            "multiConstraint": [
+              {
+                "labelID": "l1",
+              },
+            ],
           },
         ],
         [
@@ -4102,8 +4128,12 @@ suite('push one:many:one', () => {
           {
             "constraint": {
               "issueID": "i1",
-              "labelID": "l1",
             },
+            "multiConstraint": [
+              {
+                "labelID": "l1",
+              },
+            ],
           },
         ],
         [
@@ -4165,8 +4195,12 @@ suite('push one:many:one', () => {
           {
             "constraint": {
               "issueID": "i2",
-              "labelID": "l1",
             },
+            "multiConstraint": [
+              {
+                "labelID": "l1",
+              },
+            ],
           },
         ],
         [

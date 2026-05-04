@@ -31,12 +31,17 @@ export function buildSelectQuery(
   order: Ordering | undefined,
   reverse: boolean | undefined,
   start: Start | undefined,
+  multiConstraint?: readonly Constraint[] | undefined,
 ) {
   let query = sql`SELECT ${sql.join(
     Object.keys(columns).map(c => sql.ident(c)),
     sql`,`,
   )} FROM ${sql.ident(tableName)}`;
   const constraints: SQLQuery[] = constraintsToSQL(constraint, columns);
+
+  if (multiConstraint && multiConstraint.length > 0) {
+    constraints.push(multiConstraintToSQL(multiConstraint, columns));
+  }
 
   if (start) {
     assert(order !== undefined, 'start requires ordering');
@@ -73,6 +78,50 @@ export function constraintsToSQL(
   }
 
   return constraints;
+}
+
+/**
+ * Builds a single batched IN clause from `multiConstraint`. All entries are
+ * assumed to share the same shape (the keys of the first entry); FlippedJoin
+ * derives them from the same parentKey for all children.
+ *
+ * Single-column form: `col IN (?, ?, ?)`
+ * Compound form:      `(a, b) IN (VALUES (?, ?), (?, ?), …)`
+ *
+ * NOTE: SQLite optimizes `col IN (literal-list)` using the column's index;
+ * verified via EXPLAIN QUERY PLAN — see query-builder.test.ts.
+ */
+export function multiConstraintToSQL(
+  multiConstraint: readonly Constraint[],
+  columns: Record<string, SchemaValue>,
+): SQLQuery {
+  assert(multiConstraint.length > 0, 'multiConstraint must be non-empty');
+  // All entries share the same keys; pull the column list from the first.
+  const keys = Object.keys(multiConstraint[0]);
+  assert(keys.length > 0, 'multiConstraint entries must have at least one key');
+
+  if (keys.length === 1) {
+    const key = keys[0];
+    const colType = columns[key].type;
+    return sql`${sql.ident(key)} IN (${sql.join(
+      multiConstraint.map(c => sql`${toSQLiteType(c[key], colType)}`),
+      sql`,`,
+    )})`;
+  }
+
+  // Compound: `(col_a, col_b, …) IN (VALUES (?, ?, …), …)`
+  const colList = sql`(${sql.join(
+    keys.map(k => sql.ident(k)),
+    sql`,`,
+  )})`;
+  const rows = multiConstraint.map(
+    c =>
+      sql`(${sql.join(
+        keys.map(k => sql`${toSQLiteType(c[k], columns[k].type)}`),
+        sql`,`,
+      )})`,
+  );
+  return sql`${colList} IN (VALUES ${sql.join(rows, sql`,`)})`;
 }
 
 export function orderByToSQL(order: Ordering, reverse: boolean): SQLQuery {

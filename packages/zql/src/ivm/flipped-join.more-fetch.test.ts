@@ -192,28 +192,28 @@ suite('one:many:one', () => {
           ".issueLabels_2_1:source(issueLabel)",
           "fetch",
           {
-            "constraint": {
-              "labelID": "l2",
-            },
+            "multiConstraint": [
+              {
+                "labelID": "l2",
+              },
+            ],
           },
         ],
         [
           ":flipped-join(issueLabels_1_0)",
           "fetch",
           {
-            "constraint": {
-              "id": "i1",
-            },
+            "multiConstraint": [
+              {
+                "id": "i1",
+              },
+            ],
           },
         ],
         [
           ".issueLabels_1_0:flipped-join(labels_1)",
           "fetch",
-          {
-            "constraint": {
-              "issueID": "i1",
-            },
-          },
+          {},
         ],
         [
           ".issueLabels_1_0.labels_1:source(label)",
@@ -224,19 +224,25 @@ suite('one:many:one', () => {
           ".issueLabels_1_0:source(issueLabel)",
           "fetch",
           {
-            "constraint": {
-              "issueID": "i1",
-              "labelID": "l1",
-            },
+            "multiConstraint": [
+              {
+                "labelID": "l1",
+              },
+            ],
           },
         ],
         [
           ":source(issue)",
           "fetch",
           {
-            "constraint": {
-              "id": "i1",
-            },
+            "multiConstraint": [
+              {
+                "id": "i1",
+              },
+              {
+                "id": "i2",
+              },
+            ],
           },
         ],
       ]
