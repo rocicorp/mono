@@ -40,7 +40,10 @@ import type {Stream} from '../../zql/src/ivm/stream.ts';
 import {assertOrderingIncludesPK} from '../../zql/src/query/complete-ordering.ts';
 import type {Database, Statement} from './db.ts';
 import {compile, format, sql} from './internal/sql.ts';
-import {StatementCache} from './internal/statement-cache.ts';
+import {
+  normalizeWhitespace,
+  StatementCache,
+} from './internal/statement-cache.ts';
 import {
   buildSelectQuery,
   toSQLiteType,
@@ -77,6 +80,14 @@ export class TableSource implements Source {
   readonly #connections: Connection[] = [];
   readonly #table: string;
   readonly #columns: Record<string, SchemaValue>;
+  // Per-connection cache of (text, value-template) keyed on request shape.
+  // Connections are stable; bucket entries live as long as the connection.
+  // Skipped for fetches with `start` (start binding patterns are non-trivial
+  // and pagination fetches are rare on the hot inner-flipped-join path).
+  readonly #sqlBuildCache = new WeakMap<
+    Connection,
+    Map<string, CachedSqlBuild>
+  >();
   // Maps sorted columns JSON string (e.g. '["a","b"]) to Set of columns.
   readonly #uniqueIndexes: Map<string, Set<string>>;
   readonly #uniqueIndexColumns: readonly PrimaryKey[];
@@ -291,9 +302,7 @@ export class TableSource implements Source {
   *#fetch(req: FetchRequest, connection: Connection): Stream<Node | 'yield'> {
     const {sort, debug} = connection;
 
-    const query = this.#requestToSQL(req, connection.filters?.condition, sort);
-    const sqlAndBindings = format(query);
-
+    const sqlAndBindings = this.#getCachedSql(req, connection);
     const cachedStatement = this.#stmts.cache.get(sqlAndBindings.text);
     cachedStatement.statement.safeIntegers(true);
     const rowIterator = cachedStatement.statement.iterate<Row>(
@@ -541,7 +550,94 @@ export class TableSource implements Source {
       request.start,
     );
   }
+
+  /**
+   * Returns the SQL text + bindings for `req` against this connection.
+   *
+   * For fetches with no `start` clause (the common case on the hot
+   * inner-flipped-join path), reuses a per-connection cached SQL string and
+   * value template, replacing only the constraint values per call. Skips
+   * `buildSelectQuery`, `format`, and `normalizeWhitespace` on cache hits.
+   *
+   * Fetches with `start` fall through to a fresh build — the binding pattern
+   * for compound-order pagination depends on per-column nullability, so the
+   * extraction logic is non-trivial. Pagination fetches don't dominate any
+   * profile we've measured, so this is fine.
+   */
+  #getCachedSql(
+    req: FetchRequest,
+    connection: Connection,
+  ): {text: string; values: readonly unknown[]} {
+    if (req.start !== undefined) {
+      const query = this.#requestToSQL(
+        req,
+        connection.filters?.condition,
+        connection.sort,
+      );
+      const formatted = format(query);
+      return {text: formatted.text, values: formatted.values};
+    }
+
+    const constraintKeys = req.constraint
+      ? Object.keys(req.constraint).sort()
+      : EMPTY_KEYS;
+    const shapeKey = `${req.reverse ? 'r' : 'f'}|${constraintKeys.join(',')}`;
+
+    let bucket = this.#sqlBuildCache.get(connection);
+    if (bucket === undefined) {
+      bucket = new Map();
+      this.#sqlBuildCache.set(connection, bucket);
+    }
+
+    let cached = bucket.get(shapeKey);
+    if (cached === undefined) {
+      const sortedConstraint =
+        constraintKeys.length === 0
+          ? undefined
+          : Object.fromEntries(
+              constraintKeys.map(k => [k, req.constraint![k]]),
+            );
+      const query = buildSelectQuery(
+        this.#table,
+        this.#columns,
+        sortedConstraint,
+        connection.filters?.condition,
+        connection.sort,
+        req.reverse,
+        undefined,
+      );
+      const formatted = format(query);
+      cached = {
+        text: normalizeWhitespace(formatted.text),
+        template: formatted.values.slice(),
+        constraintKeys,
+      };
+      bucket.set(shapeKey, cached);
+    }
+
+    // Allocate a fresh values array per call (cheap) so that two concurrent
+    // fetches on the same connection don't race on a shared template.
+    const values: unknown[] = cached.template.slice();
+    if (req.constraint !== undefined) {
+      for (let i = 0; i < cached.constraintKeys.length; i++) {
+        const key = cached.constraintKeys[i];
+        values[i] = toSQLiteType(req.constraint[key], this.#columns[key].type);
+      }
+    }
+    return {text: cached.text, values};
+  }
 }
+
+type CachedSqlBuild = {
+  readonly text: string;
+  // Template values from the initial format(). The first
+  // `constraintKeys.length` entries are placeholders that get overwritten
+  // per fetch; the rest are static filter literals.
+  readonly template: readonly unknown[];
+  readonly constraintKeys: readonly string[];
+};
+
+const EMPTY_KEYS: readonly string[] = [];
 
 function getUniqueIndexes(
   db: Database,

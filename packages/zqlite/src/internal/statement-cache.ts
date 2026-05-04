@@ -126,6 +126,27 @@ export class StatementCache {
   }
 }
 
-function normalizeWhitespace(sql: string) {
-  return sql.replaceAll(/\s+/g, ' ');
+// SQL strings that come through `get` are produced by a deterministic
+// builder, so the same input string keeps appearing on every fetch in a hot
+// pipeline. Memoize the regex output to skip the per-call replaceAll.
+const normalizeCache = new Map<string, string>();
+const NORMALIZE_CACHE_LIMIT = 1024;
+
+export function normalizeWhitespace(sql: string) {
+  const cached = normalizeCache.get(sql);
+  if (cached !== undefined) {
+    return cached;
+  }
+  const out = sql.replaceAll(/\s+/g, ' ');
+  if (normalizeCache.size >= NORMALIZE_CACHE_LIMIT) {
+    // Drop oldest entry. Map preserves insertion order, so the first key is
+    // the oldest. Cheaper than a real LRU and good enough — the working set
+    // for any one process is small.
+    const firstKey = normalizeCache.keys().next().value;
+    if (firstKey !== undefined) {
+      normalizeCache.delete(firstKey);
+    }
+  }
+  normalizeCache.set(sql, out);
+  return out;
 }
