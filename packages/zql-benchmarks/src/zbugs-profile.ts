@@ -357,10 +357,10 @@ const variants: {
 }[] = [
   // Variant 1 (planner-default flip plan) commented out — it takes ~5 min.
   // Numbers from the last full run: 325,510 ms / 679,595 rows read / 205 synced.
-  // {
-  //   label: 'issueListV2 — gatewaycore + label=api-gateway (suspect)',
-  //   ctx: {...baseListContext, labels: ['api-gateway']},
-  // },
+  {
+    label: 'issueListV2 — gatewaycore + label=api-gateway (suspect)',
+    ctx: {...baseListContext, labels: ['api-gateway']},
+  },
   {
     label: 'issueListV2 — gatewaycore (no label, baseline)',
     ctx: baseListContext,
