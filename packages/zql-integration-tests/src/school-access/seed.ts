@@ -32,8 +32,8 @@
 export const USER_ID = 'user-admin-1';
 
 export const BASE_SEED = {
-  numTeachers: 32,
-  numClasses: 29,
+  baseNumClasses: 29,
+  // numTeachers is derived: numClasses + 2 non-teaching + 1 admin
   baseNumStudents: 564,
   membershipsPerStudent: 2,
   adminTeacherId: 9999,
@@ -51,11 +51,32 @@ export type Seed = {
   schoolId: number;
 };
 
-export function makeSeed(scale = 1): Seed {
+export type ScaleOptions = {
+  /** Multiplier on numStudents (and proportional memberships/access). */
+  studentScale?: number;
+  /**
+   * Multiplier on numClasses and numTeachers (school topology). The
+   * normalized OR branches do work proportional to school topology, not to
+   * student data, so this is the axis that should grow the norm/denorm
+   * ratio if our hypothesis is right.
+   */
+  topologyScale?: number;
+};
+
+export function makeSeed(opts: number | ScaleOptions = 1): Seed {
+  const studentScale =
+    typeof opts === 'number' ? opts : (opts.studentScale ?? 1);
+  const topologyScale =
+    typeof opts === 'number' ? 1 : (opts.topologyScale ?? 1);
+
+  const numClasses = BASE_SEED.baseNumClasses * topologyScale;
+  // numTeachers = numClasses (each teaches 1 class) + 2 non-teaching + 1 admin
+  const numTeachers = numClasses + 3;
+
   return {
-    numTeachers: BASE_SEED.numTeachers,
-    numClasses: BASE_SEED.numClasses,
-    numStudents: BASE_SEED.baseNumStudents * scale,
+    numTeachers,
+    numClasses,
+    numStudents: BASE_SEED.baseNumStudents * studentScale,
     membershipsPerStudent: BASE_SEED.membershipsPerStudent,
     adminTeacherId: BASE_SEED.adminTeacherId,
     districtId: BASE_SEED.districtId,
@@ -63,7 +84,7 @@ export function makeSeed(scale = 1): Seed {
   };
 }
 
-// Backwards-compatible default (scale = 1) used by the original test.
+// Backwards-compatible default (scale = 1 on both axes) used by the original test.
 export const SEED: Seed = makeSeed(1);
 
 export const DDL = /* sql */ `
