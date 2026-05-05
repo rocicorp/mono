@@ -69,83 +69,63 @@ export function handleTransformRequest<S extends Schema>(
   );
 }
 
-type HandleQueryRequestFromRequestArgs<S extends Schema> = {
-  handler: QueryRequestHandler;
-  schema: S;
-  request: Request;
-  userID: string | null | undefined;
-  logLevel?: LogLevel | undefined;
-};
-
-type HandleQueryRequestFromBodyArgs<S extends Schema> = {
-  handler: QueryRequestHandler;
-  schema: S;
-  body: ReadonlyJSONValue;
-  userID: string | null | undefined;
-  logLevel?: LogLevel | undefined;
-};
-
-type HandleQueryRequestObjectArgs<S extends Schema> =
-  | HandleQueryRequestFromRequestArgs<S>
-  | HandleQueryRequestFromBodyArgs<S>;
-
 /**
  * Parsed query params accepted by {@linkcode handleQueryRequest} when the
  * incoming request URL has already been handled by your framework.
  */
 export type QuerySearchParams = URLSearchParams | Record<string, string>;
 
-type NormalizedQueryRequestArgs<S extends Schema> =
+export type HandleQueryRequestArgs<S extends Schema> = {
+  /** Callback that transforms each requested query into a `Query`. */
+  handler: QueryRequestHandler;
+  /** Schema used when building the returned ASTs. */
+  schema: S;
+  /**
+   * Authenticated user ID. Null or undefined means the user is logged out.
+   */
+  userID: string | null | undefined;
+  /** Optional log level for request parsing and execution. */
+  logLevel?: LogLevel | undefined;
+} & (
+  | {
+      /** Fetch request containing the `/query` JSON body. */
+      request: Request;
+    }
+  | {
+      /** Parsed query params from the `/query` request URL. */
+      query: QuerySearchParams;
+      /** Parsed JSON body from the `/query` request. */
+      body: ReadonlyJSONValue;
+    }
+);
+
+type NormalizedQueryRequestArgs<S extends Schema> = {
+  readonly schema: S;
+  readonly handler: LegacyQueryRequestHandler;
+  // Note: semantics of undefined differ from HandleQueryRequestArgs.userID.
+  // Here, undefined means the app didn't provide a user ID - we do not know if
+  // the user is logged in or not. This is legacy behavior needed to support
+  // deprecated signatures of handleQueryRequest which did not receive userID
+  // from app.
+  readonly userID: string | null | undefined;
+  readonly logLevel: LogLevel;
+} & (
   | {
       readonly type: 'request';
-      readonly schema: S;
-      readonly handler: LegacyQueryRequestHandler;
       readonly request: Request;
-      readonly userID: string | null | undefined;
-      readonly logLevel: LogLevel;
     }
   | {
       readonly type: 'body';
-      readonly schema: S;
-      readonly handler: LegacyQueryRequestHandler;
       readonly jsonBody: ReadonlyJSONValue;
-      readonly userID: string | null | undefined;
-      readonly logLevel: LogLevel;
-    };
+    }
+);
 
 /**
  * Process a `/query` request from a Fetch `Request`.
  */
-export function handleQueryRequest<S extends Schema>(input: {
-  /** Callback that transforms each requested query into a `Query`. */
-  handler: QueryRequestHandler;
-  /** Schema used when building the returned ASTs. */
-  schema: S;
-  /** Fetch request containing the `/query` JSON body. */
-  request: Request;
-  /** Authenticated user ID, or null or undefined for logged-out requests. */
-  userID: string | null | undefined;
-  /** Optional log level for request parsing and execution. */
-  logLevel?: LogLevel | undefined;
-}): Promise<QueryResponse>;
-
-/**
- * Process a `/query` request from a parsed JSON body.
- */
-export function handleQueryRequest<S extends Schema>(input: {
-  /** Callback that transforms each requested query into a `Query`. */
-  handler: QueryRequestHandler;
-  /** Schema used when building the returned ASTs. */
-  schema: S;
-  /** Parsed `/query` query params, usually from the request URL. */
-  query: QuerySearchParams;
-  /** Parsed JSON body from the `/query` request. */
-  body: ReadonlyJSONValue;
-  /** Authenticated user ID, or null or undefined for logged-out requests. */
-  userID: string | null | undefined;
-  /** Optional log level for request parsing and execution. */
-  logLevel?: LogLevel | undefined;
-}): Promise<QueryResponse>;
+export function handleQueryRequest<S extends Schema>(
+  input: HandleQueryRequestArgs<S>,
+): Promise<QueryResponse>;
 
 /**
  * @deprecated Pass a single object instead:
@@ -170,7 +150,7 @@ export function handleQueryRequest<S extends Schema>(
 ): Promise<QueryResponse>;
 
 export function handleQueryRequest<S extends Schema>(
-  inputOrTransformQuery: HandleQueryRequestObjectArgs<S> | QueryRequestHandler,
+  inputOrTransformQuery: HandleQueryRequestArgs<S> | QueryRequestHandler,
   schema?: S,
   requestOrJsonBody?: Request | ReadonlyJSONValue,
   logLevel?: LogLevel,
@@ -190,7 +170,7 @@ export function handleQueryRequest<S extends Schema>(
 }
 
 function normalizeQueryRequestInput<S extends Schema>(
-  input: HandleQueryRequestObjectArgs<S>,
+  input: HandleQueryRequestArgs<S>,
 ): NormalizedQueryRequestArgs<S> {
   return 'request' in input
     ? normalizeLegacyQueryRequestArgs(
