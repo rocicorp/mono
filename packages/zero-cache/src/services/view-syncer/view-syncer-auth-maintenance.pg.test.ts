@@ -545,7 +545,9 @@ describe('view-syncer/auth maintenance', () => {
 
       await vs.stop();
 
-      expect(vs.connContextManager.getGroupState().retransformAt).toBeUndefined();
+      expect(
+        vs.connContextManager.getGroupState().retransformAt,
+      ).toBeUndefined();
 
       // Fire the previously scheduled maintenance callback after shutdown to
       // prove the stopped service no longer performs shared retransform work.
@@ -553,7 +555,9 @@ describe('view-syncer/auth maintenance', () => {
 
       await vi.waitFor(() => {
         expect(transformSpy).toHaveBeenCalledTimes(1);
-        expect(vs.connContextManager.getGroupState().retransformAt).toBeUndefined();
+        expect(
+          vs.connContextManager.getGroupState().retransformAt,
+        ).toBeUndefined();
       });
     });
 
