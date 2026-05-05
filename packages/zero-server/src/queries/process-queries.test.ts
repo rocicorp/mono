@@ -73,7 +73,7 @@ describe('handleQueryRequest', () => {
       userID: null,
     });
 
-    expect(cb).toHaveBeenCalledWith('namesByFoo', [{foo: 'bar'}]);
+    expect(cb).toHaveBeenCalledWith('namesByFoo', {foo: 'bar'});
     expect(result).toEqual(
       makeCanonicalQuerySuccessResponse(
         [
@@ -124,7 +124,7 @@ describe('handleQueryRequest', () => {
       logLevel: 'debug',
     });
 
-    expect(cb).toHaveBeenCalledWith('basicLimited', []);
+    expect(cb).toHaveBeenCalledWith('basicLimited', undefined);
     expect(result).toEqual(
       makeCanonicalQuerySuccessResponse(
         [
