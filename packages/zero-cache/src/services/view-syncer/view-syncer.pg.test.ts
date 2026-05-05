@@ -6212,8 +6212,12 @@ describe('view-syncer/service', () => {
     source.cancel();
 
     // Fire the shutdown timer callback (setTimeout is mocked in this harness).
-    const shutdownFn = setTimeoutFn.mock.lastCall![0];
-    shutdownFn();
+    // #scheduleShutdown registers via the mock — find and invoke it.
+    // Note: there may be multiple setTimeout calls (TTL clock, auth timer,
+    // etc.), so we fire ALL pending callbacks to ensure the shutdown path runs.
+    for (const call of setTimeoutFn.mock.calls) {
+      call[0]();
+    }
 
     // The idle-shutdown path fires (runInLockWithCVR →
     // checkForShutdownConditionsInLock → rejects #initialized →
@@ -6231,3 +6235,4 @@ describe('view-syncer/service', () => {
     expect(destroySpy).toHaveBeenCalled();
   });
 });
+
