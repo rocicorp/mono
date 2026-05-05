@@ -15,6 +15,7 @@ import {
   setDeletedClients,
   type DeletedClients,
 } from '../../../replicache/src/deleted-clients.ts';
+import {hasMemStore} from '../../../replicache/src/kv/mem-store.ts';
 import {makeClientV6} from '../../../replicache/src/persist/clients-test-helpers.ts';
 import {
   getClients,
@@ -2925,70 +2926,110 @@ test('SchemaVersionNotSupported custom onUpdateNeeded handler', async () => {
   });
 });
 
-test('ClientNotFound default handler', async () => {
-  const storage: Record<string, string> = {};
-  vi.spyOn(window, 'sessionStorage', 'get').mockImplementation(() =>
-    storageMock(storage),
-  );
-  const {promise, resolve} = resolver();
-  const fake = vi.fn(resolve);
-  const z = zeroForTest(undefined, false);
-  z.reload = fake;
-
-  await z.triggerError({
+const clientStateNotFoundErrorCases = [
+  {
     kind: ErrorKind.ClientNotFound,
     message: 'server test message',
-    origin: ErrorOrigin.ZeroCache,
-  });
-  await vi.advanceTimersToNextTimerAsync();
-  await promise;
-  expect(z.connectionStatus).toBe(ConnectionStatus.Error);
-
-  expect(fake).toBeCalledTimes(1);
-
-  expect(storage[RELOAD_REASON_STORAGE_KEY]).toBe(
-    `["ClientNotFound","Server could not find state needed to synchronize this client. server test message"]`,
-  );
-});
-
-test('ClientNotFound custom onClientStateNotFound handler', async () => {
-  const {promise, resolve} = resolver();
-  const fake = vi.fn(() => {
-    resolve();
-  });
-  const z = zeroForTest({onClientStateNotFound: fake});
-  await z.triggerError({
-    kind: ErrorKind.ClientNotFound,
-    message: 'server test message',
-    origin: ErrorOrigin.ZeroCache,
-  });
-  await promise;
-  expect(z.connectionStatus).toBe(ConnectionStatus.Error);
-
-  expect(fake).toBeCalledTimes(1);
-});
-
-test('server ahead', async () => {
-  const {promise, resolve} = resolver();
-  const storage: Record<string, string> = {};
-  vi.spyOn(window, 'sessionStorage', 'get').mockImplementation(() =>
-    storageMock(storage),
-  );
-  const z = zeroForTest();
-  z.reload = resolve;
-
-  await z.triggerError({
+    expectedReloadReason:
+      '["ClientNotFound","Server could not find state needed to synchronize this client. server test message"]',
+    dropsDatabase: false,
+  },
+  {
     kind: ErrorKind.InvalidConnectionRequestBaseCookie,
     message: 'unexpected BaseCookie',
-    origin: ErrorOrigin.ZeroCache,
-  });
+    expectedReloadReason:
+      '["InvalidConnectionRequestBaseCookie","Server reported that client is ahead of server. This probably happened because the server is in development mode and restarted. Currently when this happens, the dev server loses its state and on reconnect sees the client as ahead. If you see this in other cases, it may be a bug in Zero."]',
+    dropsDatabase: true,
+  },
+  {
+    kind: ErrorKind.InvalidConnectionRequestLastMutationID,
+    message: 'unexpected lastMutationID',
+    expectedReloadReason:
+      '["InvalidConnectionRequestLastMutationID","Server reported that client is ahead of server. This probably happened because the server is in development mode and restarted. Currently when this happens, the dev server loses its state and on reconnect sees the client as ahead. If you see this in other cases, it may be a bug in Zero."]',
+    dropsDatabase: true,
+  },
+] as const;
 
-  await vi.waitUntil(() => storage[RELOAD_REASON_STORAGE_KEY]);
+test.each(clientStateNotFoundErrorCases)(
+  '$kind default onClientStateNotFound handler',
+  async ({kind, message, expectedReloadReason, dropsDatabase}) => {
+    const storage: Record<string, string> = {};
+    vi.spyOn(window, 'sessionStorage', 'get').mockImplementation(() =>
+      storageMock(storage),
+    );
+    const {promise, resolve} = resolver();
+    const reload = vi.fn(resolve);
+    const z = zeroForTest();
+    z.reload = reload;
 
+    expect(hasMemStore(z.idbName)).toBe(true);
+
+    await z.triggerError({
+      kind,
+      message,
+      origin: ErrorOrigin.ZeroCache,
+    });
+
+    await vi.waitUntil(() => storage[RELOAD_REASON_STORAGE_KEY] !== undefined);
+    await promise;
+
+    expect(z.connectionStatus).toBe(ConnectionStatus.Error);
+    expect(reload).toHaveBeenCalledTimes(1);
+    expect(storage[RELOAD_REASON_STORAGE_KEY]).toBe(expectedReloadReason);
+    expect(hasMemStore(z.idbName)).toBe(!dropsDatabase);
+  },
+);
+
+test.each(clientStateNotFoundErrorCases)(
+  '$kind custom onClientStateNotFound handler',
+  async ({kind, message, dropsDatabase}) => {
+    const {promise, resolve} = resolver();
+    let z: TestZero<Schema>;
+    const fake = vi.fn(() => {
+      expect(hasMemStore(z.idbName)).toBe(!dropsDatabase);
+      resolve();
+    });
+    z = zeroForTest({onClientStateNotFound: fake});
+    const reload = vi.fn();
+    z.reload = reload;
+
+    expect(hasMemStore(z.idbName)).toBe(true);
+
+    await z.triggerError({
+      kind,
+      message,
+      origin: ErrorOrigin.ZeroCache,
+    });
+
+    await promise;
+
+    expect(z.connectionStatus).toBe(ConnectionStatus.Error);
+    expect(fake).toHaveBeenCalledTimes(1);
+    expect(fake).toHaveBeenCalledWith();
+    expect(reload).not.toHaveBeenCalled();
+    expect(hasMemStore(z.idbName)).toBe(!dropsDatabase);
+  },
+);
+
+test('local onClientStateNotFound default handler', async () => {
+  const storage: Record<string, string> = {};
+  vi.spyOn(window, 'sessionStorage', 'get').mockImplementation(() =>
+    storageMock(storage),
+  );
+  const {promise, resolve} = resolver();
+  const reload = vi.fn(resolve);
+  const z = zeroForTest(undefined);
+  z.reload = reload;
+
+  getInternalReplicacheImplForTesting(z).onClientStateNotFound?.();
+
+  await vi.waitUntil(() => storage[RELOAD_REASON_STORAGE_KEY] !== undefined);
+  await vi.advanceTimersToNextTimerAsync();
   await promise;
 
-  expect(storage[RELOAD_REASON_STORAGE_KEY]).toEqual(
-    `["InvalidConnectionRequestBaseCookie","Server reported that client is ahead of server. This probably happened because the server is in development mode and restarted. Currently when this happens, the dev server loses its state and on reconnect sees the client as ahead. If you see this in other cases, it may be a bug in Zero."]`,
+  expect(reload).toHaveBeenCalledTimes(1);
+  expect(storage[RELOAD_REASON_STORAGE_KEY]).toBe(
+    '["ClientNotFound","The local persistent state needed to synchronize this client has been garbage collected."]',
   );
 });
 
