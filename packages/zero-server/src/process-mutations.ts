@@ -128,89 +128,61 @@ export type MutateRequestHandler<
   mutation: CustomMutation,
 ) => Promise<MutationResponse>;
 
-type HandleMutateRequestFromRequestArgs<
+export type HandleMutateRequestArgs<
   D extends Database<ExtractTransactionType<D>>,
 > = {
+  /** Database used to run transactions and store mutation results. */
   dbProvider: D;
   handler: MutateRequestHandler<D>;
-  request: Request;
+  /**
+   * Authenticated user ID. Null or undefined means the user is logged out.
+   */
   userID: string | null | undefined;
+  /** Optional log level for request parsing and execution. */
   logLevel?: LogLevel | undefined;
-};
-
-type HandleMutateRequestFromBodyArgs<
-  D extends Database<ExtractTransactionType<D>>,
-> = {
-  dbProvider: D;
-  handler: MutateRequestHandler<D>;
-  query: MutateSearchParams;
-  body: ReadonlyJSONValue;
-  userID: string | null | undefined;
-  logLevel?: LogLevel | undefined;
-};
-
-type HandleMutateRequestObjectArgs<
-  D extends Database<ExtractTransactionType<D>>,
-> = HandleMutateRequestFromRequestArgs<D> | HandleMutateRequestFromBodyArgs<D>;
+} & (
+  | {
+      /** Fetch request containing both query params and the JSON body. */
+      request: Request;
+    }
+  | {
+      /** Parsed query params from the `/mutate` request URL. */
+      query: MutateSearchParams;
+      /** Parsed JSON body from the `/mutate` request. */
+      body: ReadonlyJSONValue;
+    }
+);
 
 type NormalizedMutateRequestArgs<
   D extends Database<ExtractTransactionType<D>>,
-> =
+> = {
+  readonly dbProvider: D;
+  readonly handler: MutateRequestHandler<D>;
+  // Note: semantics of undefined differ from HandleMutateRequestArgs.userID.
+  // Here, undefined means the app didn't provide a user ID - we do not know if
+  // the user is logged in or not. This is legacy behavior needed to support
+  // deprecated signatures of handleMutateRequest which did not receive userID
+  // from app.
+  readonly userID: string | null | undefined;
+  readonly logLevel: LogLevel;
+} & (
   | {
       readonly type: 'request';
-      readonly dbProvider: D;
-      readonly handler: MutateRequestHandler<D>;
       readonly request: Request;
-      readonly userID: string | null | undefined;
-      readonly logLevel: LogLevel;
     }
   | {
       readonly type: 'body';
-      readonly dbProvider: D;
-      readonly handler: MutateRequestHandler<D>;
-      readonly jsonBody: ReadonlyJSONValue;
-      readonly userID: string | null | undefined;
       readonly queryParams: Record<string, string>;
-      readonly logLevel: LogLevel;
-    };
+      readonly jsonBody: ReadonlyJSONValue;
+    }
+);
 
 /**
  * Process a `/mutate` request from a Fetch `Request`.
  */
 export function handleMutateRequest<
   D extends Database<ExtractTransactionType<D>>,
->(input: {
-  /** Database used to run transactions and store mutation results. */
-  dbProvider: D;
-  /** Handler invoked once per custom mutation in the request. */
-  handler: MutateRequestHandler<D>;
-  /** Fetch request containing both query params and the JSON body. */
-  request: Request;
-  /** Authenticated user ID, or null or undefined for logged-out requests. */
-  userID: string | null | undefined;
-  /** Optional log level for request parsing and execution. */
-  logLevel?: LogLevel | undefined;
-}): Promise<MutateResponse>;
-
-/**
- * Process a `/mutate` request from parsed query params and JSON body.
- */
-export function handleMutateRequest<
-  D extends Database<ExtractTransactionType<D>>,
->(input: {
-  /** Database used to run transactions and store mutation results. */
-  dbProvider: D;
-  /** Handler invoked once per custom mutation in the request. */
-  handler: MutateRequestHandler<D>;
-  /** Parsed `/mutate` query params, usually from the request URL. */
-  query: MutateSearchParams;
-  /** Parsed JSON body from the `/mutate` request. */
-  body: ReadonlyJSONValue;
-  /** Authenticated user ID, or null or undefined for logged-out requests. */
-  userID: string | null | undefined;
-  /** Optional log level for request parsing and execution. */
-  logLevel?: LogLevel | undefined;
-}): Promise<MutateResponse>;
+>(input: HandleMutateRequestArgs<D>): Promise<MutateResponse>;
 
 /**
  * @deprecated Pass a single object instead:
@@ -242,7 +214,7 @@ export function handleMutateRequest<
 export async function handleMutateRequest<
   D extends Database<ExtractTransactionType<D>>,
 >(
-  inputOrDbProvider: HandleMutateRequestObjectArgs<D> | D,
+  inputOrDbProvider: HandleMutateRequestArgs<D> | D,
   maybeHandler?: MutateRequestHandler<D> | undefined,
   requestOrQuery?: Request | MutateSearchParams | undefined,
   bodyOrLogLevel?: ReadonlyJSONValue | LogLevel | undefined,
@@ -464,7 +436,7 @@ export async function handleMutateRequest<
 
 function normalizeMutateRequestInput<
   D extends Database<ExtractTransactionType<D>>,
->(input: HandleMutateRequestObjectArgs<D>): NormalizedMutateRequestArgs<D> {
+>(input: HandleMutateRequestArgs<D>): NormalizedMutateRequestArgs<D> {
   if ('request' in input) {
     return {
       type: 'request',
