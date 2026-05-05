@@ -125,7 +125,7 @@ export function handleQueryRequest<S extends Schema>(input: {
   request: Request;
   /** Authenticated user ID, or null or undefined for logged-out requests. */
   userID: string | null | undefined;
-  /** Optional server-side log level for request parsing and execution. */
+  /** Optional log level for request parsing and execution. */
   logLevel?: LogLevel | undefined;
 }): Promise<QueryResponse>;
 
@@ -143,7 +143,7 @@ export function handleQueryRequest<S extends Schema>(input: {
   body: ReadonlyJSONValue;
   /** Authenticated user ID, or null or undefined for logged-out requests. */
   userID: string | null | undefined;
-  /** Optional server-side log level for request parsing and execution. */
+  /** Optional log level for request parsing and execution. */
   logLevel?: LogLevel | undefined;
 }): Promise<QueryResponse>;
 
