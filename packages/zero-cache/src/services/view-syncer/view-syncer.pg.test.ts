@@ -6235,4 +6235,3 @@ describe('view-syncer/service', () => {
     expect(destroySpy).toHaveBeenCalled();
   });
 });
-
