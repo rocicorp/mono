@@ -375,7 +375,7 @@ export class Zero<
   readonly #onlineManager: OnlineManager;
 
   readonly #onUpdateNeeded: (reason: UpdateNeededReason) => void;
-  readonly #onClientStateNotFound: (reason?: string) => void;
+  readonly #onClientStateNotFound: (kind: ErrorKind, message: string) => void;
   // Last cookie used to initiate a connection
   #connectCookie: NullableVersion = null;
   // Total number of sockets successfully connected by this client
@@ -693,18 +693,19 @@ export class Zero<
       onUpdateNeededCallback(convertOnUpdateNeededReason(reason));
     };
 
-    const onClientStateNotFoundCallback =
-      onClientStateNotFound ??
-      ((reason?: string) => {
-        reloadWithReason(
-          this.#lc,
-          this.#reload,
-          ErrorKind.ClientNotFound,
-          reason ?? ON_CLIENT_STATE_NOT_FOUND_REASON_CLIENT,
-        );
-      });
-    this.#onClientStateNotFound = onClientStateNotFoundCallback;
-    this.#rep.onClientStateNotFound = onClientStateNotFoundCallback;
+    this.#onClientStateNotFound = (kind: ErrorKind, message: string) => {
+      if (onClientStateNotFound) {
+        onClientStateNotFound();
+      } else {
+        reloadWithReason(this.#lc, this.#reload, kind, message);
+      }
+    };
+    this.#rep.onClientStateNotFound = () => {
+      this.#onClientStateNotFound(
+        ErrorKind.ClientNotFound,
+        ON_CLIENT_STATE_NOT_FOUND_REASON_CLIENT,
+      );
+    };
 
     const mutatorProxy = new MutatorProxy(
       this.#lc,
@@ -1441,7 +1442,10 @@ export class Zero<
       });
     } else if (kind === ErrorKind.ClientNotFound) {
       await this.#rep.disableClientGroup();
-      this.#onClientStateNotFound?.(onClientStateNotFoundServerReason(message));
+      this.#onClientStateNotFound(
+        kind,
+        onClientStateNotFoundServerReason(message),
+      );
     } else if (
       kind === ErrorKind.InvalidConnectionRequestLastMutationID ||
       kind === ErrorKind.InvalidConnectionRequestBaseCookie
@@ -1449,7 +1453,8 @@ export class Zero<
       await dropReplicacheDatabase(this.#rep.idbName, {
         kvStore: this.#kvStore,
       });
-      reloadWithReason(lc, this.#reload, kind, serverAheadReloadReason);
+
+      this.#onClientStateNotFound(kind, serverAheadReloadReason);
     }
   }
 
