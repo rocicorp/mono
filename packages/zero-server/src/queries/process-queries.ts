@@ -99,7 +99,7 @@ type NormalizedQueryRequestArgs<S extends Schema> =
   | {
       readonly type: 'request';
       readonly schema: S;
-      readonly handler: QueryRequestHandler | LegacyQueryRequestHandler;
+      readonly handler: LegacyQueryRequestHandler;
       readonly request: Request;
       readonly userID: string | null | undefined;
       readonly logLevel: LogLevel;
@@ -107,7 +107,7 @@ type NormalizedQueryRequestArgs<S extends Schema> =
   | {
       readonly type: 'body';
       readonly schema: S;
-      readonly handler: QueryRequestHandler | LegacyQueryRequestHandler;
+      readonly handler: LegacyQueryRequestHandler;
       readonly jsonBody: ReadonlyJSONValue;
       readonly userID: string | null | undefined;
       readonly logLevel: LogLevel;
@@ -171,16 +171,16 @@ export function handleQueryRequest<S extends Schema>(
 
 export function handleQueryRequest<S extends Schema>(
   inputOrTransformQuery: HandleQueryRequestObjectArgs<S> | QueryRequestHandler,
-  schema?: S | undefined,
-  requestOrJsonBody?: Request | ReadonlyJSONValue | undefined,
-  logLevel?: LogLevel | undefined,
+  schema?: S,
+  requestOrJsonBody?: Request | ReadonlyJSONValue,
+  logLevel?: LogLevel,
 ): Promise<QueryResponse> {
   const normalized =
     typeof inputOrTransformQuery === 'object' &&
     'handler' in inputOrTransformQuery
       ? normalizeQueryRequestInput(inputOrTransformQuery)
       : normalizeLegacyQueryRequestArgs(
-          inputOrTransformQuery,
+          wrapQueryRequestHandler(inputOrTransformQuery),
           schema,
           requestOrJsonBody,
           logLevel,
@@ -193,29 +193,28 @@ function normalizeQueryRequestInput<S extends Schema>(
   input: HandleQueryRequestObjectArgs<S>,
 ): NormalizedQueryRequestArgs<S> {
   return 'request' in input
-    ? {
-        type: 'request',
-        handler: input.handler,
-        schema: input.schema,
-        request: input.request,
-        userID: input.userID ?? null,
-        logLevel: input.logLevel ?? 'info',
-      }
-    : {
-        type: 'body',
-        handler: input.handler,
-        schema: input.schema,
-        jsonBody: input.body,
-        userID: input.userID ?? null,
-        logLevel: input.logLevel ?? 'info',
-      };
+    ? normalizeLegacyQueryRequestArgs(
+        wrapQueryRequestHandler(input.handler),
+        input.schema,
+        input.request,
+        input.logLevel,
+        input.userID ?? null,
+      )
+    : normalizeLegacyQueryRequestArgs(
+        wrapQueryRequestHandler(input.handler),
+        input.schema,
+        input.body,
+        input.logLevel,
+        input.userID ?? null,
+      );
 }
 
 function normalizeLegacyQueryRequestArgs<S extends Schema>(
-  handler: QueryRequestHandler | LegacyQueryRequestHandler,
+  handler: LegacyQueryRequestHandler,
   schema: S | undefined,
   requestOrJsonBody: Request | ReadonlyJSONValue | undefined,
   logLevel: LogLevel | undefined,
+  userID?: string | null,
 ): NormalizedQueryRequestArgs<S> {
   assert(
     typeof schema !== 'undefined',
@@ -228,7 +227,7 @@ function normalizeLegacyQueryRequestArgs<S extends Schema>(
       handler,
       schema,
       request: requestOrJsonBody,
-      userID: undefined,
+      userID,
       logLevel: logLevel ?? 'info',
     };
   }
@@ -243,7 +242,7 @@ function normalizeLegacyQueryRequestArgs<S extends Schema>(
     handler,
     schema,
     jsonBody: requestOrJsonBody,
-    userID: undefined,
+    userID,
     logLevel: logLevel ?? 'info',
   };
 }
@@ -355,8 +354,13 @@ export type QueryRequestHandler = (
 /** @deprecated Use `QueryRequestHandler` instead. */
 export type TransformQueryFunction = QueryRequestHandler;
 
-/** @deprecated Use `QueryRequestHandler` instead. */
 export type LegacyQueryRequestHandler = (
   name: string,
   args: readonly ReadonlyJSONValue[],
 ) => MaybePromise<{query: AnyQuery} | AnyQuery>;
+
+function wrapQueryRequestHandler(
+  handler: QueryRequestHandler,
+): LegacyQueryRequestHandler {
+  return (name, args) => handler(name, args[0]);
+}
