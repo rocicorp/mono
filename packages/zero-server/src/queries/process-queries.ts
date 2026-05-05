@@ -89,6 +89,12 @@ type HandleQueryRequestObjectArgs<S extends Schema> =
   | HandleQueryRequestFromRequestArgs<S>
   | HandleQueryRequestFromBodyArgs<S>;
 
+/**
+ * Parsed query params accepted by {@linkcode handleQueryRequest} when the
+ * incoming request URL has already been handled by your framework.
+ */
+export type QuerySearchParams = URLSearchParams | Record<string, string>;
+
 type NormalizedQueryRequestArgs<S extends Schema> =
   | {
       readonly type: 'request';
@@ -131,6 +137,8 @@ export function handleQueryRequest<S extends Schema>(input: {
   handler: QueryRequestHandler;
   /** Schema used when building the returned ASTs. */
   schema: S;
+  /** Parsed `/query` query params, usually from the request URL. */
+  query: QuerySearchParams;
   /** Parsed JSON body from the `/query` request. */
   body: ReadonlyJSONValue;
   /** Authenticated user ID, or null or undefined for logged-out requests. */

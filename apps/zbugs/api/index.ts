@@ -216,8 +216,10 @@ async function queryHandler(
           return query.fn({args, ctx: authData});
         },
         schema,
+        query: request.query,
         body: request.body,
         userID: authData?.sub,
+        logLevel: 'info',
       }),
     );
   });

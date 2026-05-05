@@ -112,7 +112,7 @@ export const handleMutationRequest = handleMutateRequest;
  * Parsed query params accepted by {@linkcode handleMutateRequest} when the
  * incoming request URL has already been handled by your framework.
  */
-export type MutateRequestQuery = URLSearchParams | Record<string, string>;
+export type MutateSearchParams = URLSearchParams | Record<string, string>;
 
 /**
  * Runs once per custom mutation in a `/mutate` request.
@@ -143,7 +143,7 @@ type HandleMutateRequestFromBodyArgs<
 > = {
   dbProvider: D;
   handler: MutateRequestHandler<D>;
-  query: MutateRequestQuery;
+  query: MutateSearchParams;
   body: ReadonlyJSONValue;
   userID: string | null | undefined;
   logLevel?: LogLevel | undefined;
@@ -203,7 +203,7 @@ export function handleMutateRequest<
   /** Handler invoked once per custom mutation in the request. */
   handler: MutateRequestHandler<D>;
   /** Parsed `/mutate` query params, usually from the request URL. */
-  query: MutateRequestQuery;
+  query: MutateSearchParams;
   /** Parsed JSON body from the `/mutate` request. */
   body: ReadonlyJSONValue;
   /** Authenticated user ID, or null or undefined for logged-out requests. */
@@ -221,7 +221,7 @@ export function handleMutateRequest<
 >(
   dbProvider: D,
   handler: MutateRequestHandler<D>,
-  query: MutateRequestQuery,
+  query: MutateSearchParams,
   body: ReadonlyJSONValue,
   logLevel?: LogLevel,
 ): Promise<MutateResponse>;
@@ -244,7 +244,7 @@ export async function handleMutateRequest<
 >(
   inputOrDbProvider: HandleMutateRequestObjectArgs<D> | D,
   maybeHandler?: MutateRequestHandler<D> | undefined,
-  requestOrQuery?: Request | MutateRequestQuery | undefined,
+  requestOrQuery?: Request | MutateSearchParams | undefined,
   bodyOrLogLevel?: ReadonlyJSONValue | LogLevel | undefined,
   logLevel?: LogLevel | undefined,
 ): Promise<MutateResponse> {
@@ -495,7 +495,7 @@ function normalizeLegacyMutateRequestArgs<
 >(
   dbProvider: D,
   handler: MutateRequestHandler<D> | undefined,
-  requestOrQuery: Request | MutateRequestQuery | undefined,
+  requestOrQuery: Request | MutateSearchParams | undefined,
   bodyOrLogLevel: ReadonlyJSONValue | LogLevel | undefined,
   logLevel: LogLevel | undefined,
 ): NormalizedMutateRequestArgs<D> {
