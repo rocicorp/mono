@@ -393,6 +393,7 @@ describe('ConnectionContextManager', () => {
     register(manager, 'c1', 'ws1', 'user-1');
     register(manager, 'c2', 'ws2', 'user-1');
     validate(manager, 'c1', 'ws1');
+    manager.setSharedRetransformReady(true);
 
     const initial = manager.getGroupState();
 
@@ -448,6 +449,7 @@ describe('ConnectionContextManager', () => {
     );
     register(manager, 'c1', 'ws1', 'user-1');
     validate(manager, 'c1', 'ws1');
+    manager.setSharedRetransformReady(true);
     const previousAuth = manager.mustGetConnectionContext(
       selector('c1', 'ws1'),
     ).auth;
@@ -485,6 +487,7 @@ describe('ConnectionContextManager', () => {
     register(manager, 'c2', 'ws2', 'user-1');
     validate(manager, 'c1', 'ws1');
     validate(manager, 'c2', 'ws2');
+    manager.setSharedRetransformReady(true);
 
     await expect(
       manager.updateAuth(selector('c2', 'ws2'), {auth: 'token-ws2-new'}),
@@ -664,6 +667,7 @@ describe('ConnectionContextManager', () => {
     register(manager, 'c3', 'ws3', 'user-1');
     validate(manager, 'c2', 'ws2');
     validate(manager, 'c1', 'ws1');
+    manager.setSharedRetransformReady(true);
 
     expect(manager.planMaintenance()).toEqual({
       dueRevalidations: [],
@@ -740,6 +744,7 @@ describe('ConnectionContextManager', () => {
     );
     register(manager, 'c1', 'ws1', 'user-1');
     validate(manager, 'c1', 'ws1');
+    manager.setSharedRetransformReady(true);
 
     expect(manager.getConnectionContext(selector('c1', 'ws1'))).toMatchObject({
       revalidateAt: 6_000,
@@ -779,6 +784,7 @@ describe('ConnectionContextManager', () => {
     register(manager, 'c2', 'ws2', 'user-1');
     validate(manager, 'c1', 'ws1');
     validate(manager, 'c2', 'ws2');
+    manager.setSharedRetransformReady(true);
 
     now = 3_000;
     manager.deferMaintenance('retransform');
@@ -808,6 +814,53 @@ describe('ConnectionContextManager', () => {
       ],
       dueRetransform: true,
       earliestDeadlineAt: 3_000,
+    });
+  });
+
+  test('does not schedule shared retransform until readiness is enabled', () => {
+    let now = 1_000;
+    const manager = new ConnectionContextManagerImpl(
+      lc,
+      5,
+      2,
+      undefined,
+      undefined,
+      undefined,
+      () => now,
+    );
+    register(manager, 'c1', 'ws1', 'user-1');
+    validate(manager, 'c1', 'ws1');
+
+    expect(manager.getGroupState().retransformAt).toBeUndefined();
+    expect(manager.planMaintenance()).toEqual({
+      dueRevalidations: [],
+      dueRetransform: false,
+      earliestDeadlineAt: 6_000,
+    });
+
+    manager.setSharedRetransformReady(true);
+
+    expect(manager.getGroupState().retransformAt).toBe(3_000);
+    expect(manager.planMaintenance()).toEqual({
+      dueRevalidations: [],
+      dueRetransform: false,
+      earliestDeadlineAt: 3_000,
+    });
+
+    now = 3_000;
+    expect(manager.planMaintenance()).toEqual({
+      dueRevalidations: [],
+      dueRetransform: true,
+      earliestDeadlineAt: 3_000,
+    });
+
+    manager.setSharedRetransformReady(false);
+
+    expect(manager.getGroupState().retransformAt).toBeUndefined();
+    expect(manager.planMaintenance()).toEqual({
+      dueRevalidations: [],
+      dueRetransform: false,
+      earliestDeadlineAt: 6_000,
     });
   });
 });
