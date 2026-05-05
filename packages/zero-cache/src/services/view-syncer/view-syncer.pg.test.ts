@@ -6203,6 +6203,11 @@ describe('view-syncer/service', () => {
   test('view-syncer run completes when client disconnects before initialization', async () => {
     const destroySpy = vi.spyOn(PipelineDriver.prototype, 'destroy');
 
+    // Use fake timers starting from *now* so that advancing past the
+    // keepalive window (DEFAULT_KEEPALIVE_MS = 5000, set at construction
+    // time using real Date.now()) works correctly.
+    vi.setSystemTime(vi.getRealSystemTime());
+
     const {source} = connectWithQueueAndSource(SYNC_CONTEXT, [
       {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
     ]);
@@ -6211,13 +6216,27 @@ describe('view-syncer/service', () => {
     // has a chance to resolve #initialized.
     source.cancel();
 
-    // Fire the shutdown timer callback (setTimeout is mocked in this harness).
-    // #scheduleShutdown registers via the mock — find and invoke it.
-    // Note: there may be multiple setTimeout calls (TTL clock, auth timer,
-    // etc.), so we fire ALL pending callbacks to ensure the shutdown path runs.
+    // Let the initConnection async callback acquire and release the lock.
+    await sleep(100);
+
+    // Advance time past the keepalive window (DEFAULT_KEEPALIVE_MS = 5000)
+    // so that #checkForShutdownConditionsInLock returns true.
+    vi.setSystemTime(Date.now() + 6000);
+
+    // Fire ALL pending timer callbacks (setTimeout is mocked).
     for (const call of setTimeoutFn.mock.calls) {
       call[0]();
     }
+
+    // Let the shutdown lock acquisition and async cleanup settle.
+    await sleep(100);
+
+    // Fire any newly scheduled callbacks (shutdown may reschedule).
+    vi.setSystemTime(Date.now() + 6000);
+    for (const call of setTimeoutFn.mock.calls) {
+      call[0]();
+    }
+    await sleep(100);
 
     // The idle-shutdown path fires (runInLockWithCVR →
     // checkForShutdownConditionsInLock → rejects #initialized →
