@@ -40,6 +40,8 @@ function makeLegacyQuerySuccessResponse(queries: ReadonlyJSONValue) {
   } as const;
 }
 
+const query = {};
+
 describe('handleQueryRequest', () => {
   test('returns transformed queries with server names for body inputs', async () => {
     const ast: AST = {
@@ -57,6 +59,7 @@ describe('handleQueryRequest', () => {
     const result = await handleQueryRequest({
       handler: cb,
       schema,
+      query,
       body: [
         'transform',
         [
@@ -146,6 +149,7 @@ describe('handleQueryRequest', () => {
     const result = await handleQueryRequest({
       handler: cb,
       schema,
+      query,
       body: [
         'transform',
         [
@@ -180,6 +184,7 @@ describe('handleQueryRequest', () => {
         throw new Error('should not be called');
       },
       schema,
+      query,
       body: ['invalid', []],
       userID: null,
     });
@@ -234,6 +239,7 @@ describe('handleQueryRequest', () => {
     const result = await handleQueryRequest({
       handler: cb,
       schema,
+      query,
       body: [
         'transform',
         [
@@ -274,6 +280,7 @@ describe('handleQueryRequest', () => {
     const result = await handleQueryRequest({
       handler: cb,
       schema,
+      query,
       body: ['transform', [{id: 'q1', name: 'test', args: []}]],
       userID: null,
     });
@@ -307,6 +314,7 @@ describe('handleQueryRequest', () => {
     const result = await handleQueryRequest({
       handler: cb,
       schema,
+      query,
       body: ['transform', [{id: 'q1', name: 'test', args: []}]],
       userID: null,
     });
@@ -339,6 +347,7 @@ describe('handleQueryRequest', () => {
     const result = await handleQueryRequest({
       handler: cb,
       schema,
+      query,
       body: [
         'transform',
         [{id: 'q1', name: 'testQuery', args: [{foo: 'bar'}]}],
@@ -380,6 +389,7 @@ describe('handleQueryRequest', () => {
     const result = await handleQueryRequest({
       handler: cb,
       schema,
+      query,
       body: [
         'transform',
         [
@@ -428,6 +438,7 @@ describe('handleQueryRequest', () => {
     const result = await handleQueryRequest({
       handler: cb,
       schema,
+      query,
       body: ['transform', [{id: 'q1', name: 'test', args: []}]],
       userID: null,
     });
