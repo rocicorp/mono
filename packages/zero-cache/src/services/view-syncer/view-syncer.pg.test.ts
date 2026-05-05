@@ -6194,4 +6194,34 @@ describe('view-syncer/service', () => {
     expect(destroySpy).toHaveBeenCalled();
     expect(destroyCalledAfterRelease).toBe(true);
   });
+
+  // Regression test: a client that disconnects before initConnection's async
+  // callback resolves #initialized used to leave the ViewSyncer as a zombie
+  // in the ServiceRunner (run() blocked on readyState() forever), inflating
+  // the active-client-groups gauge. The fix rejects #initialized in the
+  // idle-shutdown path so that run() can exit.
+  test('view-syncer run completes when client disconnects before initialization', async () => {
+    const {source} = connectWithQueueAndSource(SYNC_CONTEXT, [
+      {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
+    ]);
+
+    // Disconnect immediately, before the async initConnection callback
+    // has a chance to resolve #initialized.
+    source.cancel();
+
+    // Fire the shutdown timer callback (setTimeout is mocked in this harness).
+    const shutdownFn = setTimeoutFn.mock.lastCall![0];
+    shutdownFn();
+
+    // The idle-shutdown path fires (runInLockWithCVR →
+    // checkForShutdownConditionsInLock → rejects #initialized →
+    // stateChanges.cancel). This should cause vs.run() to exit.
+    // Without the fix, viewSyncerDone would never resolve here.
+    const timeout = sleep(5000).then(() => 'timeout' as const);
+    const result = await Promise.race([
+      viewSyncerDone.then(() => 'done' as const),
+      timeout,
+    ]);
+    expect(result).toBe('done');
+  });
 });
