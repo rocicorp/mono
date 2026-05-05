@@ -6201,6 +6201,8 @@ describe('view-syncer/service', () => {
   // the active-client-groups gauge. The fix rejects #initialized in the
   // idle-shutdown path so that run() can exit.
   test('view-syncer run completes when client disconnects before initialization', async () => {
+    const destroySpy = vi.spyOn(PipelineDriver.prototype, 'destroy');
+
     const {source} = connectWithQueueAndSource(SYNC_CONTEXT, [
       {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
     ]);
@@ -6215,7 +6217,8 @@ describe('view-syncer/service', () => {
 
     // The idle-shutdown path fires (runInLockWithCVR →
     // checkForShutdownConditionsInLock → rejects #initialized →
-    // stateChanges.cancel). This should cause vs.run() to exit.
+    // stateChanges.cancel). This should cause vs.run() to exit via its
+    // catch block (which calls #cleanup) and finally block.
     // Without the fix, viewSyncerDone would never resolve here.
     const timeout = sleep(5000).then(() => 'timeout' as const);
     const result = await Promise.race([
@@ -6223,5 +6226,8 @@ describe('view-syncer/service', () => {
       timeout,
     ]);
     expect(result).toBe('done');
+
+    // Verify that #cleanup ran (pipelines destroyed).
+    expect(destroySpy).toHaveBeenCalled();
   });
 });
