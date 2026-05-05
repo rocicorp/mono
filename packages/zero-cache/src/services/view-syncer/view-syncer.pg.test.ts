@@ -6194,4 +6194,63 @@ describe('view-syncer/service', () => {
     expect(destroySpy).toHaveBeenCalled();
     expect(destroyCalledAfterRelease).toBe(true);
   });
+
+  // Regression test: a client that disconnects before initConnection's async
+  // callback resolves #initialized used to leave the ViewSyncer as a zombie
+  // in the ServiceRunner (run() blocked on readyState() forever), inflating
+  // the active-client-groups gauge. The fix rejects #initialized in the
+  // idle-shutdown path so that run() can exit.
+  test('view-syncer run completes when client disconnects before initialization', async () => {
+    const destroySpy = vi.spyOn(PipelineDriver.prototype, 'destroy');
+
+    // Use fake timers starting from *now* so that advancing past the
+    // keepalive window (DEFAULT_KEEPALIVE_MS = 5000, set at construction
+    // time using real Date.now()) works correctly.
+    vi.setSystemTime(vi.getRealSystemTime());
+
+    const {source} = connectWithQueueAndSource(SYNC_CONTEXT, [
+      {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
+    ]);
+
+    // Disconnect immediately, before the async initConnection callback
+    // has a chance to resolve #initialized.
+    source.cancel();
+
+    // Let the initConnection async callback acquire and release the lock.
+    await sleep(100);
+
+    // Advance time past the keepalive window (DEFAULT_KEEPALIVE_MS = 5000)
+    // so that #checkForShutdownConditionsInLock returns true.
+    vi.setSystemTime(Date.now() + 6000);
+
+    // Fire ALL pending timer callbacks (setTimeout is mocked).
+    for (const call of setTimeoutFn.mock.calls) {
+      call[0]();
+    }
+
+    // Let the shutdown lock acquisition and async cleanup settle.
+    await sleep(100);
+
+    // Fire any newly scheduled callbacks (shutdown may reschedule).
+    vi.setSystemTime(Date.now() + 6000);
+    for (const call of setTimeoutFn.mock.calls) {
+      call[0]();
+    }
+    await sleep(100);
+
+    // The idle-shutdown path fires (runInLockWithCVR →
+    // checkForShutdownConditionsInLock → rejects #initialized →
+    // stateChanges.cancel). This should cause vs.run() to exit via its
+    // catch block (which calls #cleanup) and finally block.
+    // Without the fix, viewSyncerDone would never resolve here.
+    const timeout = sleep(5000).then(() => 'timeout' as const);
+    const result = await Promise.race([
+      viewSyncerDone.then(() => 'done' as const),
+      timeout,
+    ]);
+    expect(result).toBe('done');
+
+    // Verify that #cleanup ran (pipelines destroyed).
+    expect(destroySpy).toHaveBeenCalled();
+  });
 });
