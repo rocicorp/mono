@@ -102,7 +102,15 @@ function buildListPageQuery(
   limit: number,
   forceSemiJoin = false,
 ): AnyQuery {
-  const {projectName, sortField, sortDirection, open, labels} = listContext;
+  const {
+    projectName,
+    sortField,
+    sortDirection,
+    open,
+    labels,
+    creator,
+    assignee,
+  } = listContext;
 
   let q = builder.issue.related('labels');
 
@@ -141,6 +149,17 @@ function buildListPageQuery(
       ),
     ),
   );
+
+  if (creator) {
+    q = q.whereExists('creator', q => q.where('login', creator), {
+      scalar: true,
+    });
+  }
+  if (assignee) {
+    q = q.whereExists('assignee', q => q.where('login', assignee), {
+      scalar: true,
+    });
+  }
 
   q = q.where('visibility', '=', 'public');
 
@@ -374,6 +393,15 @@ const variants: {
       'issueListV2 — gatewaycore + label=api-gateway (FORCED semi/flip:false)',
     ctx: {...baseListContext, labels: ['api-gateway']},
     forceSemiJoin: true,
+  },
+  {
+    label:
+      'issueListV2 — gatewaycore + labels=[api-gateway,async-processing] + assignee=aldasmith-predovic44',
+    ctx: {
+      ...baseListContext,
+      labels: ['api-gateway', 'async-processing'],
+      assignee: 'aldasmith-predovic44',
+    },
   },
 ];
 
