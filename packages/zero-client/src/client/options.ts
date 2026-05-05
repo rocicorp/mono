@@ -235,16 +235,24 @@ export type ZeroOptions<
 
   /**
    * `onClientStateNotFound` is called when this client is no longer able
-   * to sync with the zero-cache due to missing synchronization state.  This
+   * to sync with zero-cache due to missing synchronization state. This
    * can be because:
    * - the local persistent synchronization state has been garbage collected.
    *   This can happen if the client has no pending mutations and has not been
    *   used for a while (e.g. the client's tab has been hidden for a long time).
-   * - the zero-cache fails to find the server side synchronization state for
+   * - zero-cache fails to find the server side synchronization state for
    *   this client.
+   * - zero-cache rejects this client's persisted synchronization state,
+   *   requiring the local Replicache database to be reset.
    *
-   * The default behavior is to reload the page (using `location.reload()`).
-   * Provide your own function to prevent the page from reloading automatically.
+   * The current `Zero` instance should be treated as dead and replaced, not
+   * reconnected.
+   *
+   * The default behavior for the Zero client is to reload the page
+   * (using `location.reload()`). The React and SolidJS providers will replace
+   * the client in-place, without a full page reload.
+   *
+   * Provide your own function to prevent this functionality.
    */
   onClientStateNotFound?: (() => void) | undefined;
 

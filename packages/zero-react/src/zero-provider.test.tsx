@@ -16,6 +16,8 @@ vi.mock('./zero.ts', async importOriginal => {
 
 import {Zero as ZeroConstructor} from './zero.ts';
 
+const fakeSchema = {} as Schema;
+
 function createMockZero(clientID = 'test-client'): Zero<Schema> {
   const closeMock = vi.fn().mockResolvedValue(undefined);
   const connectMock = vi.fn().mockResolvedValue(undefined);
@@ -128,7 +130,7 @@ describe('ZeroProvider', () => {
       });
     });
 
-    test('calls init callback with zero instance', () => {
+    test('does not call init callback when zero is provided externally', () => {
       const mockZero = createMockZero();
       const initMock = vi.fn();
 
@@ -213,7 +215,7 @@ describe('ZeroProvider', () => {
       const options: ZeroOptions<Schema> = {
         cacheURL: 'https://example.com',
         userID: 'test-user',
-        schema: {} as Schema,
+        schema: fakeSchema,
       };
 
       const root = renderWithRoot(
@@ -251,7 +253,7 @@ describe('ZeroProvider', () => {
       } = {
         cacheURL: 'https://example.com',
         userID: 'test-user',
-        schema: {} as Schema,
+        schema: fakeSchema,
         init: initMock,
       };
 
@@ -278,7 +280,7 @@ describe('ZeroProvider', () => {
 
       const options: ZeroOptions<Schema> = {
         cacheURL: 'https://example.com',
-        schema: {} as Schema,
+        schema: fakeSchema,
         userID: 'test-user',
       };
 
@@ -308,7 +310,7 @@ describe('ZeroProvider', () => {
 
       const options: ZeroOptions<Schema> = {
         cacheURL: 'https://example.com',
-        schema: {} as Schema,
+        schema: fakeSchema,
         auth,
         userID: 'test-user',
       };
@@ -337,7 +339,7 @@ describe('ZeroProvider', () => {
         return mockZero;
       });
 
-      const schema = {} as Schema;
+      const schema = fakeSchema;
 
       const root = renderWithRoot(
         <ZeroProvider
@@ -409,7 +411,7 @@ describe('ZeroProvider', () => {
         return mockZero;
       });
 
-      const schema = {} as Schema;
+      const schema = fakeSchema;
 
       const root = renderWithRoot(
         <ZeroProvider
@@ -454,7 +456,7 @@ describe('ZeroProvider', () => {
         return mockZero2;
       });
 
-      const schema = {} as Schema;
+      const schema = fakeSchema;
       let capturedZero: Zero<Schema> | undefined;
 
       function TestComponent() {
@@ -514,7 +516,7 @@ describe('ZeroProvider', () => {
         return mockZero2;
       });
 
-      const schema = {} as Schema;
+      const schema = fakeSchema;
       let capturedZero: Zero<Schema> | undefined;
 
       function TestComponent() {
@@ -636,7 +638,7 @@ describe('ZeroProvider', () => {
       const root = renderWithRoot(
         <ZeroProvider
           cacheURL="https://example.com"
-          schema={{} as Schema}
+          schema={fakeSchema}
           userID="test-user"
         >
           <ChildComponent />
@@ -680,7 +682,7 @@ describe('ZeroProvider', () => {
       const root = renderWithRoot(
         <ZeroProvider
           cacheURL="https://example1.com"
-          schema={{} as Schema}
+          schema={fakeSchema}
           userID="test-user"
         >
           <TestComponent label="1" />
@@ -695,7 +697,7 @@ describe('ZeroProvider', () => {
         root.render(
           <ZeroProvider
             cacheURL="https://example2.com"
-            schema={{} as Schema}
+            schema={fakeSchema}
             userID="test-user"
           >
             <TestComponent label="2" />
@@ -708,6 +710,169 @@ describe('ZeroProvider', () => {
       expect(mockZero1.close).toHaveBeenCalledTimes(1);
       expect(capturedZero2).toBe(mockZero2);
       expect(capturedZero2).not.toBe(capturedZero1);
+
+      act(() => {
+        root.unmount();
+      });
+    });
+
+    test('does not recreate zero when custom onClientStateNotFound fires', () => {
+      const mockZero1 = createMockZero('client-1');
+      const mockZero2 = createMockZero('client-2');
+      const ZeroMock = vi.mocked(ZeroConstructor);
+      ZeroMock.mockImplementationOnce(function () {
+        return mockZero1;
+      }).mockImplementationOnce(function () {
+        return mockZero2;
+      });
+
+      const onClientStateNotFound = vi.fn();
+      let capturedZero: Zero<Schema> | undefined;
+
+      function TestComponent() {
+        capturedZero = useZero<Schema>();
+        return <div>test</div>;
+      }
+
+      const root = renderWithRoot(
+        <ZeroProvider
+          cacheURL="https://example.com"
+          schema={fakeSchema}
+          onClientStateNotFound={onClientStateNotFound}
+        >
+          <TestComponent />
+        </ZeroProvider>,
+      );
+
+      const zeroArgs = ZeroMock.mock.calls[0]?.[0] as ZeroOptions<Schema>;
+      expect(capturedZero).toBe(mockZero1);
+
+      act(() => {
+        zeroArgs.onClientStateNotFound?.();
+      });
+
+      expect(onClientStateNotFound).toHaveBeenCalledTimes(1);
+      expect(ZeroMock).toHaveBeenCalledTimes(1);
+      expect(mockZero1.close).not.toHaveBeenCalled();
+      expect(capturedZero).toBe(mockZero1);
+
+      act(() => {
+        root.unmount();
+      });
+    });
+
+    test('re-runs init when zero is recreated after client state not found', async () => {
+      const mockZero1 = createMockZero('client-1');
+      const mockZero2 = createMockZero('client-2');
+      const ZeroMock = vi.mocked(ZeroConstructor);
+      ZeroMock.mockImplementationOnce(function () {
+        return mockZero1;
+      }).mockImplementationOnce(function () {
+        return mockZero2;
+      });
+
+      const init = vi.fn();
+
+      const root = renderWithRoot(
+        <ZeroProvider
+          cacheURL="https://example.com"
+          schema={fakeSchema}
+          init={init}
+        >
+          <div>test</div>
+        </ZeroProvider>,
+      );
+
+      const zeroArgs = ZeroMock.mock.calls[0]?.[0] as ZeroOptions<Schema>;
+
+      act(() => {
+        zeroArgs.onClientStateNotFound?.();
+      });
+
+      await vi.waitFor(() => {
+        expect(ZeroMock).toHaveBeenCalledTimes(2);
+        expect(init).toHaveBeenCalledTimes(2);
+      });
+
+      act(() => {
+        root.unmount();
+      });
+    });
+
+    test('dedupes repeated client state not found requests while rotation is pending', async () => {
+      const mockZero1 = createMockZero('client-1');
+      const mockZero2 = createMockZero('client-2');
+      const ZeroMock = vi.mocked(ZeroConstructor);
+      ZeroMock.mockImplementationOnce(function () {
+        return mockZero1;
+      }).mockImplementationOnce(function () {
+        return mockZero2;
+      });
+      const root = renderWithRoot(
+        <ZeroProvider cacheURL="https://example.com" schema={fakeSchema}>
+          <div>test</div>
+        </ZeroProvider>,
+      );
+
+      const zeroArgs = ZeroMock.mock.calls[0]?.[0] as ZeroOptions<Schema>;
+      const onNotFound = zeroArgs.onClientStateNotFound;
+      expect(onNotFound).toBeDefined();
+
+      act(() => {
+        onNotFound!();
+        onNotFound!();
+      });
+
+      await vi.waitFor(() => {
+        expect(ZeroMock).toHaveBeenCalledTimes(2);
+      });
+
+      act(() => {
+        root.unmount();
+      });
+    });
+
+    test('still rotates when onClientStateNotFound callback throws', async () => {
+      const mockZero1 = createMockZero('client-1');
+      const mockZero2 = createMockZero('client-2');
+      const ZeroMock = vi.mocked(ZeroConstructor);
+      ZeroMock.mockImplementationOnce(function () {
+        return mockZero1;
+      }).mockImplementationOnce(function () {
+        return mockZero2;
+      });
+
+      const onClientStateNotFound = vi.fn(() => {
+        throw new Error('boom');
+      });
+
+      function TestComponent() {
+        useZero<Schema>();
+        return <div>test</div>;
+      }
+
+      const root = renderWithRoot(
+        <ZeroProvider
+          cacheURL="https://example.com"
+          schema={fakeSchema}
+          onClientStateNotFound={onClientStateNotFound}
+        >
+          <TestComponent />
+        </ZeroProvider>,
+      );
+
+      const zeroArgs = ZeroMock.mock.calls[0]?.[0] as ZeroOptions<Schema>;
+
+      expect(() => {
+        act(() => {
+          zeroArgs.onClientStateNotFound?.();
+        });
+      }).not.toThrow();
+
+      await vi.waitFor(() => {
+        expect(onClientStateNotFound).toHaveBeenCalledTimes(1);
+        expect(ZeroMock).toHaveBeenCalledTimes(2);
+      });
 
       act(() => {
         root.unmount();
