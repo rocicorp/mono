@@ -917,3 +917,129 @@ export function stringify(change: SourceChange) {
     typeof v === 'bigint' ? v.toString() : v,
   );
 }
+
+/**
+ * N-way merge of pre-sorted Node streams. Each input stream must yield
+ * Nodes in `compare` order (and may interleave 'yield' values, which are
+ * forwarded as-is). The merged stream yields Nodes in `compare` order.
+ *
+ * Implemented as a binary min-heap keyed by `compare(entry.row, ...)`, so
+ * each emit costs O(log K) (K = number of streams) rather than the O(K)
+ * a linear-scan-of-heads merge would. Matters when FlippedJoin chunks a
+ * large `multiConstraints` IN-list into hundreds of sub-fetches.
+ *
+ * If the merged stream is closed early (e.g. downstream `Take` `break`s
+ * after hitting its limit, prompting JS to call `.return()` on this
+ * generator), the `finally` block propagates `.return()` to each
+ * non-exhausted sub-iterator so the underlying sources (SQLite cursors,
+ * etc.) can run their cleanup. Without this, mid-merge early-termination
+ * leaves cursors open, causing later writes on the same connection to
+ * fail with "database connection is busy executing a query".
+ */
+export function* mergeSortedStreams(
+  streams: readonly Stream<Node | 'yield'>[],
+  compare: (a: Node, b: Node) => number,
+): Stream<Node | 'yield'> {
+  const iterators: Iterator<Node | 'yield'>[] = streams.map(s =>
+    s[Symbol.iterator](),
+  );
+  // True while iterators[i] hasn't yet returned `done`. The finally
+  // block uses this to skip already-exhausted streams when propagating
+  // `.return()`.
+  const active: boolean[] = new Array(iterators.length).fill(true);
+
+  // Min-heap of entries; `idx` tells us which stream to refill from
+  // after the entry's row is emitted.
+  type Entry = {row: Node; idx: number};
+  const heap: Entry[] = [];
+
+  const siftUp = (start: number) => {
+    let i = start;
+    while (i > 0) {
+      const p = (i - 1) >> 1;
+      if (compare(heap[i].row, heap[p].row) >= 0) return;
+      const t = heap[i];
+      heap[i] = heap[p];
+      heap[p] = t;
+      i = p;
+    }
+  };
+
+  const siftDown = (start: number) => {
+    let i = start;
+    const n = heap.length;
+    while (true) {
+      const l = (i << 1) + 1;
+      const r = l + 1;
+      let smallest = i;
+      if (l < n && compare(heap[l].row, heap[smallest].row) < 0) smallest = l;
+      if (r < n && compare(heap[r].row, heap[smallest].row) < 0) smallest = r;
+      if (smallest === i) return;
+      const t = heap[i];
+      heap[i] = heap[smallest];
+      heap[smallest] = t;
+      i = smallest;
+    }
+  };
+
+  // Pull the next Node from iterator `idx`, forwarding any 'yield's.
+  // Returns the Node, or `undefined` once the stream is exhausted.
+  const pullNext = function* (
+    idx: number,
+  ): Generator<'yield', Node | undefined, undefined> {
+    while (true) {
+      const r = iterators[idx].next();
+      if (r.done) {
+        active[idx] = false;
+        return undefined;
+      }
+      if (r.value === 'yield') {
+        yield 'yield';
+        continue;
+      }
+      return r.value;
+    }
+  };
+
+  try {
+    // Prime: push the first row of each non-empty stream onto the heap.
+    for (let i = 0; i < iterators.length; i++) {
+      const row = yield* pullNext(i);
+      if (row !== undefined) {
+        heap.push({row, idx: i});
+        siftUp(heap.length - 1);
+      }
+    }
+
+    while (heap.length > 0) {
+      // Root is the global min across all active streams.
+      const top = heap[0];
+      yield top.row;
+      const next = yield* pullNext(top.idx);
+      if (next !== undefined) {
+        // Refill root in place (top === heap[0]) and sift down. The
+        // already-yielded `top.row` value is captured by the yield, so
+        // mutating it here doesn't affect what was emitted.
+        top.row = next;
+        siftDown(0);
+      } else {
+        // Stream exhausted. Move tail to root and shrink. Pop returns
+        // the last entry; if the heap had only one entry it was the
+        // root we just yielded, so we just leave the heap empty.
+        const last = must(heap.pop());
+        if (heap.length > 0) {
+          heap[0] = last;
+          siftDown(0);
+        }
+      }
+    }
+  } finally {
+    // Close any iterators that aren't already exhausted so their
+    // `finally` blocks (which release cursors / cached statements) run.
+    for (let i = 0; i < iterators.length; i++) {
+      if (active[i]) {
+        iterators[i].return?.();
+      }
+    }
+  }
+}
