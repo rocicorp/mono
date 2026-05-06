@@ -1,5 +1,6 @@
 import {assert, unreachable} from '../../../shared/src/asserts.ts';
 import {binarySearch} from '../../../shared/src/binary-search.ts';
+import {must} from '../../../shared/src/must.ts';
 import type {CompoundKey, System} from '../../../zero-protocol/src/ast.ts';
 import type {Row, Value} from '../../../zero-protocol/src/data.ts';
 import {ChangeIndex} from './change-index.ts';
@@ -328,12 +329,15 @@ export class FlippedJoin implements Input {
         if (minParentNode === null) {
           return;
         }
-        const idxs = childIndexesByKey.get(
-          canonicalKey(minParentNode.row, parentKey),
+        // Every fetched parent row matches the constraint for one entry
+        // in `computedKeys`, whose canonical key was inserted into the
+        // map — so the lookup is guaranteed to hit. Children retain
+        // their original input order within the group because we
+        // appended to the indexes array in iteration order.
+        const idxs = must(
+          childIndexesByKey.get(canonicalKey(minParentNode.row, parentKey)),
         );
-        // Children retain their original input order within the group
-        // because we appended to `idxs` in iteration order.
-        const relatedChildNodes: Node[] = (idxs ?? []).map(i => childNodes[i]);
+        const relatedChildNodes: Node[] = idxs.map(i => childNodes[i]);
 
         const iter = parentIterators[minIdx];
         let result = iter.next();
