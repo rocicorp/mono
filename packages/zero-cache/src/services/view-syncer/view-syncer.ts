@@ -403,6 +403,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       // If all clients have disconnected, cancel all pending work.
       if (await this.#checkForShutdownConditionsInLock()) {
         this.#lc.info?.(`closing clientGroupID=${this.id}`);
+        // Reject #initialized so that run() unblocks if it is still
+        // waiting on readyState(). This is a no-op if already resolved.
+        this.#initialized.reject('shut down before initialization completed');
         this.#stateChanges.cancel(); // Note: #stateChanges.active becomes false.
         return;
       }
