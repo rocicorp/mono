@@ -8,14 +8,17 @@ import {Catch} from './catch.ts';
 import {ChangeIndex} from './change-index.ts';
 import {ChangeType} from './change-type.ts';
 import type {Change} from './change.ts';
+import type {Node} from './data.ts';
 import {
   generateWithOverlayInner,
   generateWithOverlayInnerUnordered,
   generateWithOverlayUnordered,
   MemorySource,
+  mergeSortedStreams,
   overlaysForConstraintForTest,
   overlaysForStartAtForTest,
 } from './memory-source.ts';
+import type {Stream} from './stream.ts';
 import {consume} from './stream.ts';
 import {compareRowsTest} from './test/compare-rows-test.ts';
 import {createSource} from './test/source-factory.ts';
@@ -731,5 +734,219 @@ describe('generateWithOverlayUnordered', () => {
       ({row}) => row,
     );
     expect(actual).toEqual([{id: 2, s: 'b2', n: 225}, rows[0], rows[2]]);
+  });
+});
+
+describe('mergeSortedStreams', () => {
+  const node = (id: number): Node => ({row: {id}, relationships: {}});
+  const ids = (xs: Iterable<Node | 'yield'>): (number | 'yield')[] =>
+    Array.from(xs, x => (x === 'yield' ? 'yield' : (x.row.id as number)));
+  const byId = (a: Node, b: Node) =>
+    (a.row.id as number) - (b.row.id as number);
+
+  function* gen(values: readonly (Node | 'yield')[]): Stream<Node | 'yield'> {
+    for (const v of values) {
+      yield v;
+    }
+  }
+
+  test('no streams yields nothing', () => {
+    expect(ids(mergeSortedStreams([], byId))).toEqual([]);
+  });
+
+  test('single empty stream yields nothing', () => {
+    expect(ids(mergeSortedStreams([gen([])], byId))).toEqual([]);
+  });
+
+  test('all empty streams yields nothing', () => {
+    expect(ids(mergeSortedStreams([gen([]), gen([]), gen([])], byId))).toEqual(
+      [],
+    );
+  });
+
+  test('single non-empty stream is passed through in order', () => {
+    expect(
+      ids(mergeSortedStreams([gen([node(1), node(2), node(3)])], byId)),
+    ).toEqual([1, 2, 3]);
+  });
+
+  test('two streams are interleaved in compare order', () => {
+    const a = gen([node(1), node(3), node(5)]);
+    const b = gen([node(2), node(4), node(6)]);
+    expect(ids(mergeSortedStreams([a, b], byId))).toEqual([1, 2, 3, 4, 5, 6]);
+  });
+
+  test('three streams of varying lengths', () => {
+    const a = gen([node(1), node(10)]);
+    const b = gen([node(2), node(3), node(4), node(11)]);
+    const c = gen([node(5)]);
+    expect(ids(mergeSortedStreams([a, b, c], byId))).toEqual([
+      1, 2, 3, 4, 5, 10, 11,
+    ]);
+  });
+
+  test('one empty stream among non-empty merges correctly', () => {
+    const a = gen([node(1), node(3)]);
+    const empty = gen([]);
+    const c = gen([node(2), node(4)]);
+    expect(ids(mergeSortedStreams([a, empty, c], byId))).toEqual([1, 2, 3, 4]);
+  });
+
+  test('equal-key rows across streams are all emitted', () => {
+    const a = gen([node(1), node(2)]);
+    const b = gen([node(1), node(2)]);
+    const c = gen([node(2), node(3)]);
+    const out = ids(mergeSortedStreams([a, b, c], byId));
+    expect(out).toEqual([1, 1, 2, 2, 2, 3]);
+  });
+
+  test('reverse order via comparator', () => {
+    const a = gen([node(5), node(3), node(1)]);
+    const b = gen([node(6), node(4), node(2)]);
+    const reverse = (x: Node, y: Node) => byId(y, x);
+    expect(ids(mergeSortedStreams([a, b], reverse))).toEqual([
+      6, 5, 4, 3, 2, 1,
+    ]);
+  });
+
+  test("'yield' forwarded during priming", () => {
+    const a = gen(['yield', node(1), node(3)]);
+    const b = gen([node(2), node(4)]);
+    // Priming both iterators yields the 'yield' from `a`'s first slot
+    // before any Nodes are emitted.
+    expect(ids(mergeSortedStreams([a, b], byId))).toEqual([
+      'yield',
+      1,
+      2,
+      3,
+      4,
+    ]);
+  });
+
+  test("'yield' forwarded during advance", () => {
+    // After yielding node(1) the merge calls advance(0), which sees the
+    // 'yield' before node(3) and forwards it immediately — so the
+    // 'yield' lands between node(1) and node(2), not in id order.
+    const a = gen([node(1), 'yield', node(3)]);
+    const b = gen([node(2), node(4)]);
+    expect(ids(mergeSortedStreams([a, b], byId))).toEqual([
+      1,
+      'yield',
+      2,
+      3,
+      4,
+    ]);
+  });
+
+  test("multiple 'yield's between rows are all forwarded", () => {
+    const a = gen([node(1), 'yield', 'yield', node(3)]);
+    const b = gen([node(2)]);
+    expect(ids(mergeSortedStreams([a, b], byId))).toEqual([
+      1,
+      'yield',
+      'yield',
+      2,
+      3,
+    ]);
+  });
+
+  test('output preserves global sort invariant on randomized input', () => {
+    // Generate a few independently-sorted streams and assert the merged
+    // output is globally sorted. Keeps the test deterministic via a fixed
+    // shuffle.
+    const data = [3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5, 8, 9, 7, 9, 3];
+    const buckets: number[][] = [[], [], [], []];
+    for (let i = 0; i < data.length; i++) {
+      buckets[i % buckets.length].push(data[i]);
+    }
+    const streams = buckets.map(b => gen(b.sort((x, y) => x - y).map(node)));
+    const out = ids(mergeSortedStreams(streams, byId)) as number[];
+    for (let i = 1; i < out.length; i++) {
+      expect(out[i]).toBeGreaterThanOrEqual(out[i - 1]);
+    }
+    expect(out.length).toBe(data.length);
+  });
+
+  test('.return() propagates to un-exhausted sub-iterators on early termination', () => {
+    // Build streams that record whether .return() was invoked.
+    const returned: boolean[] = [false, false, false];
+    const trackable = (i: number, values: readonly Node[]): Stream<Node> => ({
+      [Symbol.iterator]() {
+        let idx = 0;
+        return {
+          next() {
+            if (idx < values.length) {
+              return {value: values[idx++], done: false};
+            }
+            return {value: undefined, done: true};
+          },
+          return(v?: unknown) {
+            returned[i] = true;
+            return {value: v, done: true};
+          },
+          [Symbol.iterator]() {
+            return this;
+          },
+        };
+      },
+    });
+
+    const a = trackable(0, [node(1), node(4), node(7)]);
+    const b = trackable(1, [node(2), node(5), node(8)]);
+    const c = trackable(2, [node(3), node(6), node(9)]);
+
+    const merged = mergeSortedStreams([a, b, c], byId);
+    const it = merged[Symbol.iterator]();
+    // Pull a couple values then break — JS would call .return() under
+    // for-of `break`; we invoke explicitly.
+    expect(it.next().value).toEqual(node(1));
+    expect(it.next().value).toEqual(node(2));
+    it.return?.();
+
+    // All three sub-iterators still had un-yielded rows, so all should
+    // have been .return()-d via mergeSortedStreams's finally block.
+    expect(returned).toEqual([true, true, true]);
+  });
+
+  test('.return() not called on already-exhausted sub-iterators', () => {
+    let aReturned = false;
+    let bReturned = false;
+    const trackable = (
+      values: readonly Node[],
+      onReturn: () => void,
+    ): Stream<Node> => ({
+      [Symbol.iterator]() {
+        let idx = 0;
+        return {
+          next() {
+            if (idx < values.length) {
+              return {value: values[idx++], done: false};
+            }
+            return {value: undefined, done: true};
+          },
+          return(v?: unknown) {
+            onReturn();
+            return {value: v, done: true};
+          },
+          [Symbol.iterator]() {
+            return this;
+          },
+        };
+      },
+    });
+
+    // `a` will be drained; `b` will still have rows when we early-exit.
+    const a = trackable([node(1)], () => (aReturned = true));
+    const b = trackable([node(2), node(3), node(4)], () => (bReturned = true));
+
+    const it = mergeSortedStreams([a, b], byId)[Symbol.iterator]();
+    expect(it.next().value).toEqual(node(1)); // from a — exhausts a
+    expect(it.next().value).toEqual(node(2)); // from b
+    it.return?.();
+
+    // a was exhausted naturally; the merge marks heads[0]=null and skips
+    // .return() on it. b still had rows, so it must be .return()'d.
+    expect(aReturned).toBe(false);
+    expect(bReturned).toBe(true);
   });
 });
