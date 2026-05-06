@@ -1042,7 +1042,32 @@ export function stringify(change: SourceChange) {
  * leaves cursors open, causing later writes on the same connection to
  * fail with "database connection is busy executing a query".
  */
-export function* mergeSortedStreams(
+type MergeSortedStreamsFn = (
+  streams: readonly Stream<Node | 'yield'>[],
+  compare: (a: Node, b: Node) => number,
+) => Stream<Node | 'yield'>;
+
+let mergeSortedStreamsImpl: MergeSortedStreamsFn = mergeSortedStreamsHeap;
+
+export function mergeSortedStreams(
+  streams: readonly Stream<Node | 'yield'>[],
+  compare: (a: Node, b: Node) => number,
+): Stream<Node | 'yield'> {
+  return mergeSortedStreamsImpl(streams, compare);
+}
+
+/** Test only. Returns a restore function. */
+export function setMergeSortedStreamsImplForTest(
+  impl: MergeSortedStreamsFn,
+): () => void {
+  const prev = mergeSortedStreamsImpl;
+  mergeSortedStreamsImpl = impl;
+  return () => {
+    mergeSortedStreamsImpl = prev;
+  };
+}
+
+function* mergeSortedStreamsHeap(
   streams: readonly Stream<Node | 'yield'>[],
   compare: (a: Node, b: Node) => number,
 ): Stream<Node | 'yield'> {
