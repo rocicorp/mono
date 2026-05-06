@@ -210,9 +210,9 @@ describe('view-syncer/service', () => {
     const r1 = rows.find(r => r.queryID === 'query-hash1');
     const r2 = rows.find(r => r.queryID === 'query-hash2');
 
-    // Both queries should contain some materialization samples
-    expect(r1?.metrics?.['query-materialization-server']).toEqual(
-      expect.arrayContaining([expect.any(Number)]),
+    // Both queries should contain a materialization time (plain number, not histogram)
+    expect(r1?.metrics?.['query-hydration-server-ms']).toEqual(
+      expect.any(Number),
     );
 
     // And both should have identical update metrics since the update happened after both were mapped

@@ -3,7 +3,7 @@ import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {mapValues} from '../../../shared/src/objects.ts';
 import {TDigest} from '../../../shared/src/tdigest.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
-import type {ServerMetrics as ServerMetricsJSON} from '../../../zero-protocol/src/inspect-down.ts';
+import type {QueryServerMetrics as QueryServerMetricsJSON} from '../../../zero-protocol/src/inspect-down.ts';
 import {hashOfNameAndArgs} from '../../../zero-protocol/src/query-hash.ts';
 import {
   isServerMetric,
@@ -19,6 +19,7 @@ import {ProtocolErrorWithLevel} from '../types/error-with-level.ts';
 /**
  * Server-side metrics collected for queries during materialization and update.
  * These metrics are reported via the inspector and complement client-side metrics.
+ * Used for the global aggregate (all queries combined).
  */
 export type ServerMetrics = {
   'query-materialization-server': TDigest;
@@ -35,7 +36,10 @@ const authenticatedClientGroupIDs = new Set<ClientGroupID>();
 
 export class InspectorDelegate implements MetricsDelegate {
   readonly #globalMetrics: ServerMetrics = newMetrics();
-  readonly #perQueryServerMetrics = new Map<string, ServerMetrics>();
+  // Per-query hydration time (ms) — each query is hydrated at most once.
+  readonly #perQueryHydrateMs = new Map<string, number>();
+  // Per-query update metrics — queries receive many incremental updates.
+  readonly #perQueryUpdateMetrics = new Map<string, TDigest>();
   readonly #queryIDToAST: Map<string, AST> = new Map();
   readonly #customQueryTransformer: CustomQueryTransformer | undefined;
 
@@ -50,18 +54,29 @@ export class InspectorDelegate implements MetricsDelegate {
   ): void {
     assert(isServerMetric(metric), `Invalid server metric: ${metric}`);
     const queryID = args[0];
-    let serverMetrics = this.#perQueryServerMetrics.get(queryID);
-    if (!serverMetrics) {
-      serverMetrics = newMetrics();
-      this.#perQueryServerMetrics.set(queryID, serverMetrics);
+    if (metric === 'query-materialization-server') {
+      this.#perQueryHydrateMs.set(queryID, value);
+    } else {
+      let digest = this.#perQueryUpdateMetrics.get(queryID);
+      if (!digest) {
+        digest = new TDigest();
+        this.#perQueryUpdateMetrics.set(queryID, digest);
+      }
+      digest.add(value);
     }
-    serverMetrics[metric].add(value);
     this.#globalMetrics[metric].add(value);
   }
 
-  getMetricsJSONForQuery(queryID: string): ServerMetricsJSON | null {
-    const serverMetrics = this.#perQueryServerMetrics.get(queryID);
-    return serverMetrics ? mapValues(serverMetrics, v => v.toJSON()) : null;
+  getMetricsJSONForQuery(queryID: string): QueryServerMetricsJSON | null {
+    const hydrateMs = this.#perQueryHydrateMs.get(queryID);
+    const updateMetrics = this.#perQueryUpdateMetrics.get(queryID);
+    if (hydrateMs === undefined && updateMetrics === undefined) {
+      return null;
+    }
+    return {
+      'query-hydration-server-ms': hydrateMs,
+      'query-update-server': (updateMetrics ?? new TDigest()).toJSON(),
+    };
   }
 
   getMetricsJSON() {
@@ -73,7 +88,8 @@ export class InspectorDelegate implements MetricsDelegate {
   }
 
   removeQuery(queryID: string): void {
-    this.#perQueryServerMetrics.delete(queryID);
+    this.#perQueryHydrateMs.delete(queryID);
+    this.#perQueryUpdateMetrics.delete(queryID);
     this.#queryIDToAST.delete(queryID);
   }
 

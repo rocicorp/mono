@@ -53,7 +53,9 @@ type Entry = {
 };
 
 type ClientMetric = {
-  [K in keyof ClientMetricMap]: TDigest;
+  'query-materialization-client': number | undefined;
+  'query-materialization-end-to-end': number | undefined;
+  'query-update-client': TDigest;
 };
 
 /**
@@ -495,7 +497,13 @@ export class QueryManager implements InspectorDelegate {
       existing = newMetrics();
       this.#queryMetrics.set(queryID, existing);
     }
-    existing[metric].add(value);
+    if (metric === 'query-update-client') {
+      existing['query-update-client'].add(value);
+    } else {
+      // query-materialization-client and query-materialization-end-to-end are
+      // recorded once per query (last value wins).
+      existing[metric] = value;
+    }
   }
 
   getQueryMetrics(queryID: string): ClientMetric | undefined {
@@ -512,8 +520,8 @@ export class QueryManager implements InspectorDelegate {
 
 function newMetrics(): ClientMetric {
   return {
-    'query-materialization-client': new TDigest(),
-    'query-materialization-end-to-end': new TDigest(),
+    'query-materialization-client': undefined,
+    'query-materialization-end-to-end': undefined,
     'query-update-client': new TDigest(),
   };
 }
