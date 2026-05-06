@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1777874040199,
+  "lastUpdate": 1778067043930,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -55453,6 +55453,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "Size of replicache.min.mjs.br (Brotli compressed)",
             "value": 33180,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "arv@roci.dev",
+            "name": "Erik Arvidsson",
+            "username": "arv"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f79b714e5f23133cf453c0f1e4dfe2ef9e0b45d8",
+          "message": "refactor: replace TESTING global with import.meta.env.VITEST (#5864)\n\nVitest sets import.meta.env.VITEST natively, so the custom\nesbuild-injected TESTING global is redundant. Centralizes TESTING and\nassertTesting() in packages/shared/src/testing.ts. Esbuild build scripts\ndefine 'import.meta.env' as 'undefined' for dead-code elimination in\nproduction.",
+          "timestamp": "2026-05-06T11:13:15Z",
+          "tree_id": "5e96306ac1212aef033529b7cda2166933eef2f3",
+          "url": "https://github.com/rocicorp/mono/commit/f79b714e5f23133cf453c0f1e4dfe2ef9e0b45d8"
+        },
+        "date": 1778067031467,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 315325,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 56632,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 116673,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 33203,
             "unit": "bytes"
           }
         ]
