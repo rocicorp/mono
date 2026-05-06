@@ -24,7 +24,7 @@ assertValidBrowser(VITEST_BROWSER);
 
 const define = {
   ...makeDefine(),
-  ['TESTING']: 'true',
+  'import.meta.env.VITEST': 'true',
 };
 
 const logSilenceMessages = [

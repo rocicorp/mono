@@ -8,6 +8,7 @@ import {getBrowserGlobal} from '../../shared/src/browser-env.ts';
 import {getDocumentVisibilityWatcher} from '../../shared/src/document-visible.ts';
 import type {JSONValue, ReadonlyJSONValue} from '../../shared/src/json.ts';
 import {promiseVoid} from '../../shared/src/resolved-promises.ts';
+import {TESTING} from '../../shared/src/testing.ts';
 import type {MaybePromise} from '../../shared/src/types.ts';
 import {PullDelegate, PushDelegate} from './connection-loop-delegates.ts';
 import {ConnectionLoop, MAX_DELAY_MS, MIN_DELAY_MS} from './connection-loop.ts';
@@ -127,8 +128,6 @@ import {
   withWrite,
   withWriteNoImplicitCommit,
 } from './with-transactions.ts';
-
-declare const TESTING: boolean;
 
 declare const process: {
   env: {

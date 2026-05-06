@@ -513,7 +513,7 @@ test('putMany with large batch and indexes', async () => {
     for (let i = 0; i < 100; i++) {
       entries.push([
         `key${i.toString().padStart(3, '0')}`,
-        deepFreeze({id: i}),
+        deepFreeze({id: i.toString().padStart(3, '0')}),
       ]);
     }
 
@@ -536,9 +536,9 @@ test('putMany with large batch and indexes', async () => {
     );
 
     // Check some entries
-    expect(await w.get('key000')).toEqual({id: 0});
-    expect(await w.get('key050')).toEqual({id: 50});
-    expect(await w.get('key099')).toEqual({id: 99});
+    expect(await w.get('key000')).toEqual({id: '000'});
+    expect(await w.get('key050')).toEqual({id: '050'});
+    expect(await w.get('key099')).toEqual({id: '099'});
 
     // Count all entries to verify bulk load worked
     const allKeys = await asyncIterableToArray(w.map.keys());

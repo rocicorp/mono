@@ -37,6 +37,7 @@ import {promiseRace} from '../../../shared/src/promise-race.ts';
 import {emptyFunction} from '../../../shared/src/sentinels.ts';
 import {sleep, sleepWithAbort} from '../../../shared/src/sleep.ts';
 import {Subscribable} from '../../../shared/src/subscribable.ts';
+import {assertTesting, TESTING} from '../../../shared/src/testing.ts';
 import * as valita from '../../../shared/src/valita.ts';
 import type {Writable} from '../../../shared/src/writable.ts';
 import {type ClientSchema} from '../../../zero-protocol/src/client-schema.ts';
@@ -188,8 +189,6 @@ import {
 
 export type NoRelations = Record<string, never>;
 
-declare const TESTING: boolean;
-
 export type TestingContext = {
   puller: Puller;
   pusher: Pusher;
@@ -307,7 +306,7 @@ const internalReplicacheImplMap = new WeakMap<object, ReplicacheImpl>();
 export function getInternalReplicacheImplForTesting(
   z: object,
 ): ReplicacheImpl<MutatorDefs> {
-  assert(TESTING, 'Expected TESTING to be true');
+  assertTesting();
   return must(internalReplicacheImplMap.get(z));
 }
 
