@@ -5,6 +5,7 @@ import type {Store} from '../../../replicache/src/dag/store.ts';
 import {assert} from '../../../shared/src/asserts.ts';
 import type {JSONValue, ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {TestLogSink} from '../../../shared/src/logging-test-utils.ts';
+import {assertTesting} from '../../../shared/src/testing.ts';
 import type {ConnectedMessage} from '../../../zero-protocol/src/connect.ts';
 import type {Downstream} from '../../../zero-protocol/src/down.ts';
 import type {
@@ -118,12 +119,12 @@ export class TestZero<
   }
 
   get connectionStatus(): ConnectionStatus {
-    assert(TESTING, 'Expected TESTING to be true');
+    assertTesting();
     return this[exposedToTestingSymbol].connectionManager().state.name;
   }
 
   get connectionState(): ConnectionManagerState {
-    assert(TESTING, 'Expected TESTING to be true');
+    assertTesting();
     return this[exposedToTestingSymbol].connectionManager().state;
   }
 
@@ -151,7 +152,7 @@ export class TestZero<
   }
 
   [createLogOptionsSymbol](options: {consoleLogLevel: LogLevel}): LogOptions {
-    assert(TESTING, 'Expected TESTING to be true');
+    assertTesting();
     return {
       logLevel: options.consoleLogLevel,
       logSink: new TestLogSink(),
@@ -159,7 +160,7 @@ export class TestZero<
   }
 
   get testLogSink(): TestLogSink {
-    assert(TESTING, 'Expected TESTING to be true');
+    assertTesting();
     const {logSink} = this[exposedToTestingSymbol].logOptions;
     assert(
       logSink instanceof TestLogSink,
@@ -284,22 +285,22 @@ export class TestZero<
   declare [exposedToTestingSymbol]: TestingContext;
 
   get pusher() {
-    assert(TESTING, 'Expected TESTING to be true');
+    assertTesting();
     return this[exposedToTestingSymbol].pusher;
   }
 
   get puller() {
-    assert(TESTING, 'Expected TESTING to be true');
+    assertTesting();
     return this[exposedToTestingSymbol].puller;
   }
 
   set reload(r: () => void) {
-    assert(TESTING, 'Expected TESTING to be true');
+    assertTesting();
     this[exposedToTestingSymbol].setReload(r);
   }
 
   get queryDelegate() {
-    assert(TESTING, 'Expected TESTING to be true');
+    assertTesting();
     return this[exposedToTestingSymbol].queryDelegate();
   }
 
@@ -330,7 +331,7 @@ export class TestZero<
    * want to simulate that all queries have been fully synced from the server.
    */
   async markAllQueriesAsGot(): Promise<void> {
-    assert(TESTING, 'Expected TESTING to be true');
+    assertTesting();
     const queryManager = this[exposedToTestingSymbol].queryManager();
     const gotQueriesPatch = Array.from(
       queryManager.getAllNonGotQueryHashes(),
@@ -348,8 +349,6 @@ export class TestZero<
     await this.triggerPoke({gotQueriesPatch});
   }
 }
-
-declare const TESTING: boolean;
 
 let testZeroCounter = 0;
 

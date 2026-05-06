@@ -33,6 +33,7 @@ import {
   initReplicacheTesting,
   replicacheForTesting,
   tickAFewTimes,
+  tickUntil,
 } from './test-util.ts';
 import {withRead, withWriteNoImplicitCommit} from './with-transactions.ts';
 
@@ -1493,7 +1494,7 @@ describe('DD31', () => {
 
   test('mutation recovery is invoked at startup', async () => {
     const rep = await replicacheForTesting('mutation-recovery-startup-dd31');
-    expect(rep.recoverMutationsFake).toHaveBeenCalledTimes(1);
+    await tickUntil(vi, () => rep.recoverMutationsFake.mock.calls.length >= 1);
     expect(rep.recoverMutationsFake).toHaveBeenCalledTimes(1);
     expect(await rep.recoverMutationsFake.mock.results[0].value).toBe(true);
   });
@@ -1509,6 +1510,7 @@ describe('DD31', () => {
         useDefaultURLs: false,
       },
     );
+    await tickUntil(vi, () => rep.recoverMutationsFake.mock.calls.length >= 1);
     expect(rep.recoverMutationsFake).toHaveBeenCalledTimes(1);
     expect(await rep.recoverMutationsFake.mock.results[0].value).toBe(false);
     expect(await rep.recoverMutations()).toBe(false);
@@ -1522,6 +1524,7 @@ describe('DD31', () => {
       },
       disableAllBackgroundProcesses,
     );
+    await tickUntil(vi, () => rep.recoverMutationsFake.mock.calls.length >= 1);
     expect(rep.recoverMutationsFake).toHaveBeenCalledTimes(1);
     expect(await rep.recoverMutationsFake.mock.results[0].value).toBe(false);
     expect(await rep.recoverMutations()).toBe(false);
@@ -1532,6 +1535,7 @@ describe('DD31', () => {
     const rep = await replicacheForTesting('mutation-recovery-online', {
       pullURL,
     });
+    await tickUntil(vi, () => rep.recoverMutationsFake.mock.calls.length >= 1);
     expect(rep.recoverMutationsFake).toHaveBeenCalledTimes(1);
     expect(rep.online).toBe(true);
 
@@ -1563,6 +1567,7 @@ describe('DD31', () => {
 
   test('mutation recovery is invoked on 5 minute interval', async () => {
     const rep = await replicacheForTesting('mutation-recovery-startup-dd31-4');
+    await tickUntil(vi, () => rep.recoverMutationsFake.mock.calls.length >= 1);
     expect(rep.recoverMutationsFake).toHaveBeenCalledTimes(1);
     await vi.advanceTimersByTimeAsync(5 * 60 * 1000);
     expect(rep.recoverMutationsFake).toHaveBeenCalledTimes(2);

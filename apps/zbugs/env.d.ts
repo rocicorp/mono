@@ -3,6 +3,7 @@
 
 interface ImportMetaEnv {
   readonly VITE_PUBLIC_SERVER: string;
+  readonly VITEST?: string;
   // more env variables...
 }
 
