@@ -57,25 +57,10 @@ export class ChangeStreamerHttpServer extends HttpService {
     backupMonitor: BackupMonitor | null,
   ) {
     super('change-streamer-http-server', lc, opts, async fastify => {
-      const websocketOptions: {perMessageDeflate?: boolean | object} = {};
-      if (config.websocketCompression) {
-        if (config.websocketCompressionOptions) {
-          try {
-            websocketOptions.perMessageDeflate = JSON.parse(
-              config.websocketCompressionOptions,
-            );
-          } catch (e) {
-            throw new Error(
-              `Failed to parse ZERO_WEBSOCKET_COMPRESSION_OPTIONS: ${String(e)}. Expected valid JSON.`,
-            );
-          }
-        } else {
-          websocketOptions.perMessageDeflate = true;
-        }
-      }
-
       await fastify.register(websocket, {
-        options: websocketOptions,
+        options: {
+          maxPayload: config.websocketMaxPayloadBytes,
+        },
       });
 
       fastify.get(CHANGES_PATH_PATTERN, {websocket: true}, this.#subscribe);
