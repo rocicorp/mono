@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778067043930,
+  "lastUpdate": 1778079981682,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -55477,6 +55477,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/rocicorp/mono/commit/f79b714e5f23133cf453c0f1e4dfe2ef9e0b45d8"
         },
         "date": 1778067031467,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 315325,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 56632,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 116673,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 33203,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "matt.wonlaw@gmail.com",
+            "name": "Matt Wonlaw",
+            "username": "tantaman"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "399369268152f8e157ba6aebb097338a6df9b0b7",
+          "message": "chore(zero-cache): update zero-sqlite3 (#5913)",
+          "timestamp": "2026-05-06T14:55:13Z",
+          "tree_id": "b17062799c563a77815ccea9fc7e4246d630ba97",
+          "url": "https://github.com/rocicorp/mono/commit/399369268152f8e157ba6aebb097338a6df9b0b7"
+        },
+        "date": 1778079967122,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
