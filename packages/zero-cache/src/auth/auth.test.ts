@@ -131,7 +131,7 @@ describe('resolveAuth', () => {
 
   test('rejects authenticated requests without a userID', async () => {
     await expect(
-      resolveAuth(lc, undefined, undefined, 'opaque-1', undefined),
+      resolveAuth(lc, undefined, null, 'opaque-1', undefined),
     ).rejects.toMatchObject({
       errorBody: {
         kind: ErrorKind.Unauthorized,

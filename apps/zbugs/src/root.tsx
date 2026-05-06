@@ -91,6 +91,7 @@ function DemoLoadedPill({
     return null;
   }
 
+  const dismiss = () => setVisible(false);
   const seconds = (loadTimeMs / 1000).toFixed(1);
 
   return (
@@ -106,6 +107,9 @@ function DemoLoadedPill({
           queries and offline support.
         </p>
       )}
+      <button className="demo-loaded-pill-ok" type="button" onClick={dismiss}>
+        OK
+      </button>
     </div>
   );
 }
@@ -146,6 +150,8 @@ export function Root() {
     }
   }, [contentReady, isDemoMode, isDemoVideo, spinnerStay, demoLoadTime]);
 
+  const showContent = contentReady && !spinnerStay;
+
   return (
     <ListContextProvider>
       {(!contentReady || spinnerStay) && (
@@ -157,7 +163,8 @@ export function Root() {
       <div
         className="app-container flex p-8"
         style={{
-          visibility: contentReady && !spinnerStay ? 'visible' : 'hidden',
+          opacity: showContent ? 1 : 0,
+          pointerEvents: showContent ? undefined : 'none',
         }}
       >
         <Switch>

@@ -533,6 +533,11 @@ type ReplicationSlot = {
 // observed production runs; use 5s as a hard stop for pathological hangs.
 const CREATE_REPLICATION_SLOT_TIMEOUT_MS = 5_000;
 
+// The lock_timeout is set 1s before the client-side orTimeout so that
+// Postgres reliably aborts first and tears down the walsender cleanly.
+// The client-side timeout remains as a fallback for network-level failures.
+const SERVER_LOCK_TIMEOUT_MS = CREATE_REPLICATION_SLOT_TIMEOUT_MS - 1_000;
+
 /**
  * Shadow-mode alternative to `createReplicationSlot`: opens a dedicated
  * READ ONLY REPEATABLE READ transaction on a normal connection, exports the
@@ -607,6 +612,23 @@ export async function createReplicationSlot(
   // Note: must be false if pgVersion < PG_17. Caller must verify.
   failover = false,
 ): Promise<ReplicationSlot> {
+  // CREATE_REPLICATION_SLOT can hang indefinitely waiting for long-running
+  // transactions to finish: internally it calls SnapBuildWaitSnapshot →
+  // XactLockTableWait → LockAcquire on each running XID. statement_timeout
+  // does NOT apply to replication commands, but lock_timeout does (it governs
+  // the heavyweight lock wait inside LockAcquire). Setting it here causes
+  // Postgres to raise ERRCODE_LOCK_NOT_AVAILABLE and cleanly tear down the
+  // walsender, rather than relying solely on the client-side orTimeout
+  // which can leave an orphaned backend.
+  //
+  // An orphaned walsender is actively harmful: by this point the replication
+  // slot has already been created and is pinning WAL retention and catalog_xmin.
+  // Worse, the slot is marked `active` (the walsender PID is still alive), so
+  // the existing cleanup code (which drops inactive slots on retry) can't
+  // reclaim it. Without lock_timeout the orphan persists until TCP keepalive
+  // fires (~2h default) or the blocking transaction finishes.
+  await session.unsafe(`SET lock_timeout = ${SERVER_LOCK_TIMEOUT_MS}`);
+
   const createSlot = failover
     ? session.unsafe<ReplicationSlot[]>(
         /*sql*/ `CREATE_REPLICATION_SLOT "${slotName}" LOGICAL pgoutput (FAILOVER)`,

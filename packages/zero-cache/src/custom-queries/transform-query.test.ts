@@ -1,5 +1,6 @@
 import {
   afterEach,
+  assert,
   beforeEach,
   describe,
   expect,
@@ -8,10 +9,7 @@ import {
   vi,
 } from 'vitest';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
-import type {
-  TransformResponseBody,
-  TransformResponseMessage,
-} from '../../../zero-protocol/src/custom-queries.ts';
+import type {TransformResponseMessage} from '../../../zero-protocol/src/custom-queries.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
 import {ErrorReason} from '../../../zero-protocol/src/error-reason.ts';
@@ -19,10 +17,15 @@ import {
   ProtocolError,
   type TransformFailedBody,
 } from '../../../zero-protocol/src/error.ts';
+import type {
+  QueryResponse,
+  QueryResponseBody,
+} from '../../../zero-protocol/src/query-server.ts';
 import type {TransformedAndHashed} from '../auth/read-authorizer.ts';
 import {fetchFromAPIServer} from '../custom/fetch.ts';
 import type {
   ConnectionContext,
+  ConnectionValidation,
   HeaderOptions,
 } from '../services/view-syncer/connection-context-manager.ts';
 import type {CustomQueryRecord} from '../services/view-syncer/schema/types.ts';
@@ -66,7 +69,7 @@ describe('CustomQueryTransformer', () => {
       state: 'provisional',
       clientID: 'test-client',
       wsID: 'test-ws',
-      userID: options.userID,
+      user: {id: options.userID ?? null},
       auth: auth ? {type: 'opaque', raw: auth} : undefined,
       profileID: null,
       baseCookie: null,
@@ -79,7 +82,7 @@ describe('CustomQueryTransformer', () => {
         allowedUrlPatterns: [new URLPattern(pullUrl)],
         headerOptions: normalizedHeaderOptions,
       },
-      pushContext: {
+      mutateContext: {
         url: undefined,
         allowedUrlPatterns: [],
         headerOptions: {
@@ -153,7 +156,7 @@ describe('CustomQueryTransformer', () => {
     const auth = options.auth ?? defaultAuth;
 
     return expect.objectContaining({
-      userID: options.userID,
+      user: {id: options.userID ?? null},
       auth: auth ? {type: 'opaque', raw: auth} : undefined,
       queryContext: expect.objectContaining({
         url: options.userQueryURL ?? pullUrl,
@@ -173,9 +176,20 @@ describe('CustomQueryTransformer', () => {
   }
 
   function transformedMessage(
-    body: TransformResponseBody,
+    body: QueryResponseBody,
   ): TransformResponseMessage {
     return ['transformed', body];
+  }
+
+  function queryResponseMessage(
+    body: QueryResponseBody,
+    userID: string | null = null,
+  ): QueryResponse {
+    return {
+      kind: 'QueryResponse',
+      userID,
+      queries: body,
+    };
   }
 
   function transformFailedMessage(
@@ -226,7 +240,7 @@ describe('CustomQueryTransformer', () => {
     },
   ];
 
-  const mockQueryResponses: TransformResponseBody = [
+  const mockQueryResponses: QueryResponseBody = [
     {
       id: 'query1',
       name: 'getUserById',
@@ -288,12 +302,31 @@ describe('CustomQueryTransformer', () => {
     ReturnType<ReturnType<typeof makeTransformer>['transform']>
   >;
 
+  const clientFallback: ConnectionValidation = {kind: 'client-fallback'};
+
+  const serverValidated = (
+    validatedUserID: string | null,
+  ): ConnectionValidation => ({
+    kind: 'server-validated',
+    validatedUserID,
+  });
+
   function expectTransformAttempt(
     actual: TransformAttempt,
     expected: TransformAttempt['result'],
     cached = false,
+    validation: ConnectionValidation = clientFallback,
   ) {
-    expect(actual).toEqual({result: expected, cached});
+    if (Array.isArray(expected)) {
+      expect(actual).toEqual(
+        cached
+          ? {kind: 'success', result: expected, cached: true}
+          : {kind: 'success', result: expected, cached: false, validation},
+      );
+      return;
+    }
+
+    expect(actual).toEqual({kind: 'failed', result: expected});
   }
 
   beforeEach(() => {
@@ -308,7 +341,7 @@ describe('CustomQueryTransformer', () => {
 
   test('should transform queries successfully and return TransformedAndHashed array', async () => {
     mockFetchFromAPIServer.mockResolvedValue(
-      transformedMessage(mockQueryResponses),
+      queryResponseMessage(mockQueryResponses, 'user-123'),
     );
 
     const transformer = makeTransformer();
@@ -322,17 +355,28 @@ describe('CustomQueryTransformer', () => {
     expectLastTransformFetch(mockQueries);
 
     // Verify the result
-    expectTransformAttempt(result, transformResults);
+    expectTransformAttempt(
+      result,
+      transformResults,
+      false,
+      serverValidated('user-123'),
+    );
   });
 
   test('validate should hit the API with an empty transform request', async () => {
-    mockFetchFromAPIServer.mockResolvedValue(transformedMessage([]));
+    mockFetchFromAPIServer.mockResolvedValue(
+      queryResponseMessage([], 'user-123'),
+    );
 
     const transformer = makeTransformer();
     const result = await transformer.validate(headerOptions, undefined);
 
     expectLastTransformFetch([]);
-    expect(result).toBeUndefined();
+    expect(result).toEqual({
+      kind: 'QueryResponse',
+      validation: serverValidated('user-123'),
+      queries: [],
+    });
   });
 
   test('validate should pass through transformFailed responses', async () => {
@@ -503,6 +547,7 @@ describe('CustomQueryTransformer', () => {
     expectLastTransformFetch([mockQueries[1]]);
 
     // Verify combined result includes both cached and fresh data
+    assert(result.kind === 'success');
     expect(result.cached).toBe(false);
     expect(result.result).toHaveLength(2);
     expect(result.result).toEqual(expect.arrayContaining(transformResults));

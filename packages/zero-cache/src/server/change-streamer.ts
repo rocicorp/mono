@@ -58,6 +58,7 @@ export default async function runWorker(
     replica,
     initialSync,
     litestream,
+    keepaliveTimeoutMs,
   } = config;
 
   startOtelAuto(
@@ -168,6 +169,19 @@ export default async function runWorker(
         // TODO: Make deleteLiteDB work with litestream. It will probably have to be
         //       a semantic wipe instead of a file delete.
         deleteLiteDB(replica.file);
+        // Release the purge lock before retrying. This is safe because the
+        // purge lock exists to preserve change-log entries so the new
+        // change-streamer can resume from the backup replica's watermark.
+        // An AutoResetSignal means we cant resume from the backup replica
+        // (e.g. its replication slot is gone), so the change-log entries the lock
+        // was protecting are no longer needed. The retry performs a fresh
+        // initial sync with a new replication slot, independent of the old
+        // change-log. Releasing is also necessary to avoid a
+        // self-deadlock when CHANGE_DB == UPSTREAM_DB:
+        // CREATE_REPLICATION_SLOT waits for all older transactions to
+        // finish, including this lock's open transaction.
+        await purgeLock?.release();
+        purgeLock = null;
         continue; // execute again with a fresh initial-sync
       }
       await publishCriticalEvent(
@@ -215,7 +229,7 @@ export default async function runWorker(
   const changeStreamerWebServer = new ChangeStreamerHttpServer(
     lc,
     config,
-    {port, startupDelayMs},
+    {port, keepaliveTimeoutMs, startupDelayMs},
     parent,
     changeStreamer,
     monitor instanceof BackupMonitor ? monitor : null,

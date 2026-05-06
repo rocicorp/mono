@@ -318,12 +318,12 @@ test('zero-cache --help', () => {
                                                                         To change the set of publications without disrupting an existing app, a new app                                            
                                                                         should be created.                                                                                                         
                                                                                                                                                                                                    
-     --auth-revalidate-interval-seconds number                          optional                                                                                                                   
+     --auth-revalidate-interval-seconds number                          default: 300                                                                                                               
        ZERO_AUTH_REVALIDATE_INTERVAL_SECONDS env                                                                                                                                                   
                                                                         The interval in seconds between periodic /query auth revalidation for validated connections.                               
                                                                         If unset, periodic auth revalidation is disabled.                                                                          
                                                                                                                                                                                                    
-     --auth-retransform-interval-seconds number                         optional                                                                                                                   
+     --auth-retransform-interval-seconds number                         default: 300                                                                                                               
        ZERO_AUTH_RETRANSFORM_INTERVAL_SECONDS env                                                                                                                                                  
                                                                         The interval in seconds between periodic shared /query retransform work for a client group.                                
                                                                         If unset, periodic shared retransform is disabled.                                                                         
@@ -331,6 +331,24 @@ test('zero-cache --help', () => {
      --port number                                                      default: 4848                                                                                                              
        ZERO_PORT env                                                                                                                                                                               
                                                                         The port for sync connections.                                                                                             
+                                                                                                                                                                                                   
+     --keepalive-timeout-ms number                                      optional                                                                                                                   
+       ZERO_KEEPALIVE_TIMEOUT_MS env                                                                                                                                                               
+                                                                        The timeout since the last /keepalive request after which the server will initiate                                         
+                                                                        a graceful shutdown. This is a workaround for AWS Elastic Container Service, which                                         
+                                                                        otherwise provides no signal that a target has been deregistered (and should thus begin                                    
+                                                                        shutdown); the cessation of health checks at /keepalive is instead used as the signal to                                   
+                                                                        drain. (ECS later sends a SIGTERM before killing the server but only allows a 30-second                                    
+                                                                        timeout before sending SIGKILL).                                                                                           
+                                                                                                                                                                                                   
+                                                                        Other container runners explicitly send a SIGTERM followed by a configurable drain interval,                               
+                                                                        in which case /keepalive logic is not necessary.                                                                           
+                                                                                                                                                                                                   
+                                                                        When running the server in ECS, this timeout should be set to some multiple of the health                                  
+                                                                        check interval. If the option is unset, the keepalive timeout is disabled in non-ECS environments,                         
+                                                                        and defaults to 20 seconds when run in ECS (determined by the presence of the                                              
+                                                                        ECS_CONTAINER_METADATA_URI_V4 environment variable as per                                                                  
+                                                                        https://docs.aws.amazon.com/AmazonECS/latest/developerguide/ecs-environment-variables.html).                               
                                                                                                                                                                                                    
      --change-streamer-uri string                                       optional                                                                                                                   
        ZERO_CHANGE_STREAMER_URI env                                                                                                                                                                
@@ -610,11 +628,13 @@ test('zero-cache --help', () => {
                                                                         drift, PG version quirks, etc.), the shadow run fails before a customer                                                    
                                                                         actually needs a full reset.                                                                                               
                                                                                                                                                                                                    
-     --shadow-sync-interval-hours number                                default: 24                                                                                                                
+     --shadow-sync-interval-hours number                                default: 12                                                                                                                
        ZERO_SHADOW_SYNC_INTERVAL_HOURS env                                                                                                                                                         
-                                                                        The interval between shadow initial-sync runs, in hours. The first run                                                     
-                                                                        is additionally staggered by a random fraction of this interval so that                                                    
-                                                                        a fleet restart does not cause all tasks to canary simultaneously.                                                         
+                                                                        The interval between shadow initial-sync runs, in hours. The first                                                         
+                                                                        run fires within [2/3, 1) of this interval after startup, so the                                                           
+                                                                        canary completes at least once per task lifetime (the replication                                                          
+                                                                        manager is restarted every ~24h) while still jittering so a fleet                                                          
+                                                                        restart does not cause all tasks to canary simultaneously.                                                                 
                                                                                                                                                                                                    
      --shadow-sync-sample-rate number                                   default: 0.1                                                                                                               
        ZERO_SHADOW_SYNC_SAMPLE_RATE env                                                                                                                                                            

@@ -105,11 +105,7 @@ jobs:
       - run: npm ci
       - uses: ./.github/actions/playwright-install
       - name: Run tests
-        uses: nick-fields/retry@v4
-        with:
-          timeout_minutes: 10
-          max_attempts: 3
-          command: TEST_PG_MODE=nopg npm run test -- --shard=${{ matrix.shard }}/3
+        run: TEST_PG_MODE=nopg npm run test -- --shard=${{ matrix.shard }}/3
 
   test-pg:
     name: Test PG ${{ matrix.pg-version }} (Shard ${{ matrix.shard }}/2)

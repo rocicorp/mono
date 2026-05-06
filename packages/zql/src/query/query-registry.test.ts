@@ -85,7 +85,7 @@ describe('createQuery', () => {
     expect(() =>
       addContextToQuery(query('boom'), {}),
     ).toThrowErrorMatchingInlineSnapshot(
-      `[Error: Validation failed for query test: bad]`,
+      `[InputValidationError: Validation failed for query test: bad]`,
     );
     expect(run).not.toHaveBeenCalled();
   });
@@ -292,6 +292,8 @@ describe('defineQueries', () => {
     expectTypeOf(queries.getValue)
       .parameter(0)
       .toEqualTypeOf<string | undefined>();
+    expectTypeOf(queries.getValue.fn).toBeCallableWith({args: undefined});
+    expectTypeOf(queries.getValue.fn).toBeCallableWith({args: 'explicit'});
 
     // Call with undefined - query function gets transformed value
     const result = addContextToQuery(queries.getValue(undefined), {});
@@ -314,7 +316,7 @@ describe('defineQueries', () => {
     });
 
     // Call with actual string value
-    const result2 = queries.getValue.fn({args: 'explicit', ctx: {}});
+    const result2 = queries.getValue.fn({args: 'explicit'});
 
     // The query AST should use the input value (no transform needed)
     expect(asQueryInternals(result2).ast).toEqual({
@@ -1193,6 +1195,45 @@ describe('mustGetQuery', () => {
 
     expectTypeOf(query1['~']['$context']).toEqualTypeOf<Context>();
     expectTypeOf(query2['~']['$schema']).toEqualTypeOf<typeof schema>();
+  });
+
+  test('mustGetQuery makes ctx optional only for fallback unknown context', () => {
+    type Context = {userId: string};
+
+    const unknownContextQueries = defineQueriesWithType<typeof schema>()({
+      getUser: defineQuery(({args}) => {
+        void args;
+        return builder.foo;
+      }),
+    });
+
+    const concreteContextQueries = defineQueriesWithType<typeof schema>()({
+      getUser: defineQuery(({args, ctx}: {args: string; ctx: Context}) => {
+        void ctx;
+        return builder.foo.where('id', '=', args);
+      }),
+    });
+
+    const unknownContextQuery = mustGetQuery(unknownContextQueries, 'getUser');
+    const concreteContextQuery = mustGetQuery(
+      concreteContextQueries,
+      'getUser',
+    );
+
+    expectTypeOf(unknownContextQuery.fn).toBeCallableWith({args: undefined});
+    expectTypeOf(unknownContextQuery.fn).toBeCallableWith({args: 'abc'});
+    expectTypeOf(unknownContextQuery.fn).toBeCallableWith({
+      args: 'abc',
+      ctx: {arbitrary: true},
+    });
+
+    expectTypeOf(concreteContextQuery.fn).toBeCallableWith({
+      args: 'abc',
+      ctx: {userId: '123'},
+    });
+
+    // @ts-expect-error ctx is still required when a concrete context exists
+    void concreteContextQuery.fn({args: 'abc'});
   });
 
   test('throws for non-existent query', () => {

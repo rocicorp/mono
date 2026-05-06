@@ -11,11 +11,12 @@ import {ApplicationError} from '../../zero-protocol/src/application-error.ts';
 import {ErrorKind} from '../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../zero-protocol/src/error-origin.ts';
 import {ErrorReason} from '../../zero-protocol/src/error-reason.ts';
+import type {MutateResponse} from '../../zero-protocol/src/mutate-server.ts';
 import {
   CLEANUP_RESULTS_MUTATION_NAME,
   type MutationResult,
-  type PushBody,
-} from '../../zero-protocol/src/push.ts';
+} from '../../zero-protocol/src/mutation.ts';
+import {type PushBody} from '../../zero-protocol/src/push.ts';
 import {customMutatorKey} from '../../zql/src/mutate/custom.ts';
 import {PostgresJSConnection} from './adapters/postgresjs.ts';
 import {OutOfOrderMutation} from './process-mutations.ts';
@@ -62,6 +63,18 @@ function makePush(
       args: [],
     })),
   };
+}
+
+function makeSuccessResponse(
+  mutations: Array<{
+    id: {clientID: string; id: number};
+    result: MutationResult;
+  }>,
+): MutateResponse {
+  return {
+    kind: 'MutateResponse',
+    mutations,
+  } as const;
 }
 
 const mutators = {
@@ -111,8 +124,8 @@ describe('out of order mutation', () => {
       }),
     );
 
-    expect(await processor.process(mutators, params, makePush(1))).toEqual({
-      mutations: [
+    expect(await processor.process(mutators, params, makePush(1))).toEqual(
+      makeSuccessResponse([
         {
           id: {
             clientID: 'cid',
@@ -120,8 +133,8 @@ describe('out of order mutation', () => {
           },
           result: {},
         },
-      ],
-    });
+      ]),
+    );
 
     const result = await processor.process(mutators, params, makePush(3));
 
@@ -155,8 +168,8 @@ test('first mutation', async () => {
     }),
   );
 
-  expect(await processor.process(mutators, params, makePush(1))).toEqual({
-    mutations: [
+  expect(await processor.process(mutators, params, makePush(1))).toEqual(
+    makeSuccessResponse([
       {
         id: {
           clientID: 'cid',
@@ -164,8 +177,8 @@ test('first mutation', async () => {
         },
         result: {},
       },
-    ],
-  });
+    ]),
+  );
 
   await checkClientsTable(pg, 1);
   // only error responses are written
@@ -185,8 +198,8 @@ test('previously seen mutation', async () => {
   await processor.process(mutators, params, makePush(2));
   await processor.process(mutators, params, makePush(3));
 
-  expect(await processor.process(mutators, params, makePush(2))).toEqual({
-    mutations: [
+  expect(await processor.process(mutators, params, makePush(2))).toEqual(
+    makeSuccessResponse([
       {
         id: {
           clientID: 'cid',
@@ -198,8 +211,8 @@ test('previously seen mutation', async () => {
             'Ignoring mutation from cid with ID 2 as it was already processed. Expected: 4',
         },
       },
-    ],
-  });
+    ]),
+  );
 
   await checkClientsTable(pg, 3);
   await checkMutationsTable(pg, []);
@@ -221,8 +234,8 @@ test('lmid still moves forward if the mutator implementation throws', async () =
     params,
     makePush(3, customMutatorKey('|', ['foo', 'baz'])),
   );
-  expect(result).toEqual({
-    mutations: [
+  expect(result).toEqual(
+    makeSuccessResponse([
       {
         id: {
           clientID: 'cid',
@@ -233,8 +246,8 @@ test('lmid still moves forward if the mutator implementation throws', async () =
           message: 'application error',
         },
       },
-    ],
-  });
+    ]),
+  );
   await checkClientsTable(pg, 3);
   await checkMutationsTable(pg, [
     {
@@ -267,18 +280,20 @@ test('processes all mutations, even if all mutations throw app errors', async ()
         Array(4).fill(customMutatorKey('|', ['foo', 'baz'])),
       ),
     ),
-  ).toEqual({
-    mutations: Array.from({length: 4}, (_, i) => ({
-      id: {
-        clientID: 'cid',
-        id: i + 1,
-      },
-      result: {
-        error: 'app',
-        message: 'application error',
-      },
-    })),
-  });
+  ).toEqual(
+    makeSuccessResponse(
+      Array.from({length: 4}, (_, i) => ({
+        id: {
+          clientID: 'cid',
+          id: i + 1,
+        },
+        result: {
+          error: 'app',
+          message: 'application error',
+        },
+      })),
+    ),
+  );
 
   await checkClientsTable(pg, 4);
   await checkMutationsTable(
@@ -324,18 +339,20 @@ test('processes all mutations, even if all mutations have been seen before', asy
           Array(4).fill(mutator),
         ),
       ),
-    ).toEqual({
-      mutations: Array.from({length: 4}, (_, i) => ({
-        id: {
-          clientID: 'cid',
-          id: basis + i + 1,
-        },
-        result: {
-          details: `Ignoring mutation from cid with ID ${basis + i + 1} as it was already processed. Expected: ${basis + 4 + 1}`,
-          error: 'alreadyProcessed',
-        },
-      })),
-    });
+    ).toEqual(
+      makeSuccessResponse(
+        Array.from({length: 4}, (_, i) => ({
+          id: {
+            clientID: 'cid',
+            id: basis + i + 1,
+          },
+          result: {
+            details: `Ignoring mutation from cid with ID ${basis + i + 1} as it was already processed. Expected: ${basis + 4 + 1}`,
+            error: 'alreadyProcessed',
+          },
+        })),
+      ),
+    );
   }
 
   // re-send the same mutations
@@ -425,18 +442,20 @@ test('continues processing if all mutations throw in error mode with "MutationAl
         Array(4).fill('foo|bar'),
       ),
     ),
-  ).toEqual({
-    mutations: Array.from({length: 4}, (_, i) => ({
-      id: {
-        clientID: 'cid',
-        id: i + 1,
-      },
-      result: {
-        details: `Ignoring mutation from cid with ID 1 as it was already processed. Expected: 2`,
-        error: 'alreadyProcessed',
-      },
-    })),
-  });
+  ).toEqual(
+    makeSuccessResponse(
+      Array.from({length: 4}, (_, i) => ({
+        id: {
+          clientID: 'cid',
+          id: i + 1,
+        },
+        result: {
+          details: `Ignoring mutation from cid with ID 1 as it was already processed. Expected: 2`,
+          error: 'alreadyProcessed',
+        },
+      })),
+    ),
+  );
 
   await checkClientsTable(pg, undefined);
   await checkMutationsTable(pg, []);
@@ -649,8 +668,8 @@ test('mutation throws an app error then an already processed error', async () =>
 
   // When MutationAlreadyProcessedError is thrown during error retry,
   // it returns a mutation response (not a server error)
-  expect(response).toEqual({
-    mutations: [
+  expect(response).toEqual(
+    makeSuccessResponse([
       {
         id: {
           clientID: 'cid',
@@ -662,8 +681,8 @@ test('mutation throws an app error then an already processed error', async () =>
             'Ignoring mutation from cid with ID 1 as it was already processed. Expected: 2',
         },
       },
-    ],
-  });
+    ]),
+  );
   await checkClientsTable(pg, undefined);
   await checkMutationsTable(pg, []);
 });
@@ -698,6 +717,7 @@ test('mutators with and without namespaces', async () => {
     ),
   ).toMatchInlineSnapshot(`
     {
+      "kind": "MutateResponse",
       "mutations": [
         {
           "id": {
@@ -712,6 +732,7 @@ test('mutators with and without namespaces', async () => {
   expect(await processor.process(mutators, params, makePush(2, 'topPass')))
     .toMatchInlineSnapshot(`
     {
+      "kind": "MutateResponse",
       "mutations": [
         {
           "id": {
@@ -731,41 +752,43 @@ test('mutators with and without namespaces', async () => {
       makePush(3, customMutatorKey('|', ['namespaced', 'reject'])),
     ),
   ).toMatchInlineSnapshot(`
-    {
-      "mutations": [
         {
-          "id": {
-            "clientID": "cid",
-            "id": 3,
-          },
-          "result": {
-            "error": "app",
-            "message": "application error",
-          },
-        },
-      ],
-    }
-  `);
+          "kind": "MutateResponse",
+          "mutations": [
+            {
+              "id": {
+                "clientID": "cid",
+                "id": 3,
+              },
+              "result": {
+                "error": "app",
+                "message": "application error",
+              },
+            },
+          ],
+        }
+      `);
   expect(await processor.process(mutators, params, makePush(4, 'topReject')))
     .toMatchInlineSnapshot(`
-      {
-        "mutations": [
-          {
-            "id": {
-              "clientID": "cid",
-              "id": 4,
-            },
-            "result": {
-              "details": {
-                "key": "value1",
-              },
-              "error": "app",
-              "message": "application error with details",
-            },
-          },
-        ],
-      }
-    `);
+              {
+                "kind": "MutateResponse",
+                "mutations": [
+                  {
+                    "id": {
+                      "clientID": "cid",
+                      "id": 4,
+                    },
+                    "result": {
+                      "details": {
+                        "key": "value1",
+                      },
+                      "error": "app",
+                      "message": "application error with details",
+                    },
+                  },
+                ],
+              }
+            `);
 
   await checkClientsTable(pg, 4);
   await checkMutationsTable(pg, [
@@ -830,6 +853,7 @@ test('mutators with arbitrary depth nesting', async () => {
     ),
   ).toMatchInlineSnapshot(`
     {
+      "kind": "MutateResponse",
       "mutations": [
         {
           "id": {
@@ -850,21 +874,22 @@ test('mutators with arbitrary depth nesting', async () => {
       makePush(2, 'level1|level2|level3|reject'),
     ),
   ).toMatchInlineSnapshot(`
-    {
-      "mutations": [
-        {
-          "id": {
-            "clientID": "cid",
-            "id": 2,
+      {
+        "kind": "MutateResponse",
+        "mutations": [
+          {
+            "id": {
+              "clientID": "cid",
+              "id": 2,
+            },
+            "result": {
+              "error": "app",
+              "message": "deep application error",
+            },
           },
-          "result": {
-            "error": "app",
-            "message": "deep application error",
-          },
-        },
-      ],
-    }
-  `);
+        ],
+      }
+    `);
 
   // Test 5-level nesting
   expect(
@@ -874,18 +899,19 @@ test('mutators with arbitrary depth nesting', async () => {
       makePush(3, 'deep|nested|structure|works|fine'),
     ),
   ).toMatchInlineSnapshot(`
-    {
-      "mutations": [
-        {
-          "id": {
-            "clientID": "cid",
-            "id": 3,
-          },
-          "result": {},
-        },
-      ],
-    }
-  `);
+          {
+            "kind": "MutateResponse",
+            "mutations": [
+              {
+                "id": {
+                  "clientID": "cid",
+                  "id": 3,
+                },
+                "result": {},
+              },
+            ],
+          }
+        `);
 
   await checkClientsTable(pg, 3);
   await checkMutationsTable(pg, [
@@ -967,7 +993,7 @@ describe('cleanup mutations', () => {
     });
 
     // Verify cleanup returns empty mutations (fire-and-forget)
-    expect(cleanupResult).toEqual({mutations: []});
+    expect(cleanupResult).toEqual(makeSuccessResponse([]));
 
     // Verify only mutation 3 remains (mutations 1 and 2 were deleted)
     await checkMutationsTable(pg, [
@@ -1111,7 +1137,7 @@ describe('cleanup mutations', () => {
     });
 
     // Verify cleanup returns empty mutations (fire-and-forget)
-    expect(cleanupResult).toEqual({mutations: []});
+    expect(cleanupResult).toEqual(makeSuccessResponse([]));
 
     // Verify only client3's mutation remains
     const afterCleanup = await pg.unsafe(

@@ -6,7 +6,7 @@ import type {
   DeleteOp,
   InsertOp,
   UpdateOp,
-} from '../../../zero-protocol/src/push.ts';
+} from '../../../zero-protocol/src/mutation.ts';
 import type {
   PermissionsConfig,
   Rule,
@@ -541,6 +541,46 @@ describe('primary key validation', () => {
 
     await expect(authorizer.canPostMutation({sub: '2'}, [op])).rejects.toThrow(
       "Primary key column 'id' is missing from operation value for table foo",
+    );
+  });
+
+  test('preserves original sqlite auto-rollback error', async () => {
+    replica.exec(/*sql*/ `
+      CREATE TRIGGER "AutoRollbackWriteAuthorizer"
+      BEFORE INSERT ON foo
+      BEGIN
+        SELECT RAISE(ROLLBACK, 'auto rollback write authorizer');
+      END;
+    `);
+
+    const authorizer = new WriteAuthorizerImpl(
+      lc,
+      zeroConfig,
+      replica,
+      'the_app',
+      'cg',
+      writeAuthzStorage,
+    );
+
+    const err = await authorizer
+      .canPostMutation({sub: '2'}, [
+        {
+          op: 'insert',
+          primaryKey: ['id'],
+          tableName: 'foo',
+          value: {id: '2', a: 'value'},
+        },
+      ])
+      .then(
+        () => undefined,
+        e => e,
+      );
+
+    expect(err).toBeInstanceOf(Error);
+    expect(String(err)).toContain('auto rollback write authorizer');
+    expect(String(err)).toContain('cannot rollback - no transaction is active');
+    expect(String((err as Error).cause)).toContain(
+      'auto rollback write authorizer',
     );
   });
 

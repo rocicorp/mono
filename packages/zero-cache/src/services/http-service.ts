@@ -7,6 +7,7 @@ import type {Service} from './service.ts';
 
 export type Options = {
   port: number;
+  keepaliveTimeoutMs: number | undefined;
 };
 
 /**
@@ -20,7 +21,7 @@ export class HttpService implements Service {
   readonly #fastify: FastifyInstance;
   readonly #port: number;
   protected readonly _state: RunningState;
-  readonly #heartbeatMonitor: HeartbeatMonitor;
+  readonly #heartbeatMonitor: HeartbeatMonitor | undefined;
   readonly #init: (fastify: FastifyInstance) => void | Promise<void>;
 
   constructor(
@@ -29,13 +30,16 @@ export class HttpService implements Service {
     opts: Options,
     init: (fastify: FastifyInstance) => void | Promise<void>,
   ) {
+    const {port, keepaliveTimeoutMs} = opts;
     this.id = id;
     this._lc = lc.withContext('component', this.id);
     this.#fastify = Fastify();
-    this.#port = opts.port;
+    this.#port = port;
     this.#init = init;
     this._state = new RunningState(id);
-    this.#heartbeatMonitor = new HeartbeatMonitor(this._lc);
+    this.#heartbeatMonitor = keepaliveTimeoutMs
+      ? new HeartbeatMonitor(this._lc, keepaliveTimeoutMs)
+      : undefined;
   }
 
   // Life-cycle hooks for subclass implementations
@@ -48,7 +52,7 @@ export class HttpService implements Service {
   async start(): Promise<string> {
     this.#fastify.get('/', (_req, res) => res.send('OK'));
     this.#fastify.get('/keepalive', ({headers}, res) => {
-      this.#heartbeatMonitor.onHeartbeat(headers);
+      this.#heartbeatMonitor?.onHeartbeat(headers);
       return res.send('OK');
     });
     await this.#init(this.#fastify);
@@ -68,7 +72,7 @@ export class HttpService implements Service {
 
   async stop(): Promise<void> {
     this._lc.info?.(`${this.id}: no longer accepting connections`);
-    this.#heartbeatMonitor.stop();
+    this.#heartbeatMonitor?.stop();
     this._state.stop(this._lc);
     await this.#fastify.close();
     await this._onStop();

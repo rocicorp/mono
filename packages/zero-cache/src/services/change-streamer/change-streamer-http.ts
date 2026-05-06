@@ -9,17 +9,22 @@ import type {IncomingMessageSubset} from '../../types/http.ts';
 import {pgClient, type PostgresDB} from '../../types/pg.ts';
 import {type Worker} from '../../types/processes.ts';
 import {type ShardID} from '../../types/shards.ts';
-import {streamIn, streamOut, type Source} from '../../types/streams.ts';
+import {
+  streamIn,
+  streamOut,
+  streamOutStringified,
+  type Source,
+} from '../../types/streams.ts';
 import {URLParams} from '../../types/url-params.ts';
 import {installWebSocketReceiver} from '../../types/websocket-handoff.ts';
 import {closeWithError, PROTOCOL_ERROR} from '../../types/ws.ts';
 import {HttpService} from '../http-service.ts';
-import type {Service} from '../service.ts';
 import type {BackupMonitor} from './backup-monitor.ts';
 import {
   downstreamSchema,
   PROTOCOL_VERSION,
   type ChangeStreamer,
+  type ChangeStreamerService,
   type Downstream,
   type SubscriberContext,
 } from './change-streamer.ts';
@@ -37,6 +42,7 @@ const CHANGES_PATH = `/replication/v${PROTOCOL_VERSION}/changes`;
 
 type Options = {
   port: number;
+  keepaliveTimeoutMs: number | undefined;
   startupDelayMs: number;
 };
 
@@ -44,7 +50,7 @@ export class ChangeStreamerHttpServer extends HttpService {
   readonly id = 'change-streamer-http-server';
   readonly #lc: LogContext;
   readonly #opts: Options;
-  readonly #changeStreamer: ChangeStreamer & Service;
+  readonly #changeStreamer: ChangeStreamerService;
   readonly #backupMonitor: BackupMonitor | null;
 
   constructor(
@@ -52,7 +58,7 @@ export class ChangeStreamerHttpServer extends HttpService {
     config: ZeroConfig,
     opts: Options,
     parent: Worker,
-    changeStreamer: ChangeStreamer & Service,
+    changeStreamer: ChangeStreamerService,
     backupMonitor: BackupMonitor | null,
   ) {
     super('change-streamer-http-server', lc, opts, async fastify => {
@@ -158,7 +164,7 @@ export class ChangeStreamerHttpServer extends HttpService {
         // end the reservation to safely resume scheduling cleanup.
         this.#backupMonitor.endReservation(ctx.taskID);
       }
-      void streamOut(this._lc, downstream, ws);
+      void streamOutStringified(this._lc, downstream, ws);
     } catch (err) {
       closeWithError(this._lc, ws, err, PROTOCOL_ERROR);
     }

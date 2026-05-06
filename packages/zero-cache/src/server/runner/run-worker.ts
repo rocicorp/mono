@@ -1,6 +1,8 @@
 import '../../../../shared/src/dotenv.ts';
 
+import {styleText} from 'node:util';
 import {resolver, type Resolver} from '@rocicorp/resolver';
+import {colorConsole} from '../../../../shared/src/logging.ts';
 import {PROTOCOL_VERSION} from '../../../../zero-protocol/src/protocol-version.ts';
 import {normalizeZeroConfig} from '../../config/normalize.ts';
 import {getServerVersion, getZeroConfig} from '../../config/zero-config.ts';
@@ -10,6 +12,22 @@ import {createLogContext} from '../logging.ts';
 import {MAIN_URL} from '../worker-urls.ts';
 import {getTaskID} from './runtime.ts';
 import {ZeroDispatcher} from './zero-dispatcher.ts';
+
+const startupMessageEnv = 'ZERO_ENABLE_STARTUP_MESSAGE';
+
+function printStartupMessage(env: NodeJS.ProcessEnv) {
+  if (env[startupMessageEnv] !== '1') {
+    return;
+  }
+
+  colorConsole.log(
+    `\nBTW, ${styleText(['bold', 'cyan'], 'Cloud Zero')} ` +
+      'is now available - professional Zero hosting from the team that built it.\n' +
+      `Get started now: ${styleText(['blue', 'underline'], 'https://zero.rocicorp.dev/cloud')}\n\n` +
+      styleText('dim', `Disable this message with ${startupMessageEnv}=0`) +
+      '\n',
+  );
+}
 
 /**
  * Top-level `runner` entry point to the zero-cache. This layer is responsible for:
@@ -31,7 +49,7 @@ export async function runWorker(
   const config = normalizeZeroConfig(lc, cfg, env, defaultTaskID);
   const processes = new ProcessManager(lc, parent ?? process);
 
-  const {port, lazyStartup} = config;
+  const {port, keepaliveTimeoutMs, lazyStartup} = config;
   const serverVersion = getServerVersion(config);
   lc.info?.(`starting server${!serverVersion ? '' : `@${serverVersion}`} `, {
     protocolVersion: PROTOCOL_VERSION,
@@ -72,7 +90,13 @@ export async function runWorker(
     await runUntilKilled(
       lc,
       parent ?? process,
-      new ZeroDispatcher(config, lc, {port}, startZeroCache),
+      new ZeroDispatcher(
+        config,
+        lc,
+        {port, keepaliveTimeoutMs},
+        startZeroCache,
+        () => printStartupMessage(env),
+      ),
     );
   } catch (err) {
     processes.logErrorAndExit(err, 'main');

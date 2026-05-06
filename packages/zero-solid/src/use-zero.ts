@@ -3,6 +3,7 @@ import {
   createContext,
   createEffect,
   createMemo,
+  createSignal,
   onCleanup,
   splitProps,
   untrack,
@@ -79,6 +80,12 @@ export function ZeroProvider<
 >(
   props: {
     children: JSX.Element;
+    /**
+     * Called after ZeroProvider constructs a new Zero instance.
+     *
+     * This runs only when the provider creates Zero from options, and is not
+     * called when an existing instance is passed with `zero`.
+     */
     init?: (zero: Zero<S, MD, Context>) => void;
   } & (
     | {
@@ -88,27 +95,56 @@ export function ZeroProvider<
   ),
 ) {
   let prevAuth = 'auth' in props ? props.auth : undefined;
+  const [rotationGeneration, setRotationGeneration] = createSignal(0);
 
   const auth = createMemo(() => ('auth' in props ? props.auth : undefined));
   const hasAuth = createMemo(() => typeof auth() === 'string');
 
   const zero = createMemo(() => {
+    rotationGeneration();
+
     if ('zero' in props) {
       return props.zero;
     }
 
     hasAuth();
 
-    const [, options] = splitProps(props, ['children', 'auth']);
+    const [local, options] = splitProps(props, ['children', 'auth', 'init']);
 
     const authValue = untrack(auth);
     prevAuth = authValue;
+    let rotationRequested = false;
+
+    const scheduleRotation = () => {
+      if (rotationRequested) {
+        return;
+      }
+      rotationRequested = true;
+      setRotationGeneration(gen => gen + 1);
+    };
+
     const createdZero = new Zero({
       ...options,
       ...(authValue !== undefined ? {auth: authValue} : {}),
       batchViewUpdates: batch,
+      onClientStateNotFound: () => {
+        if (rotationRequested) {
+          return;
+        }
+
+        if (options.onClientStateNotFound) {
+          try {
+            options.onClientStateNotFound();
+            return;
+          } catch {
+            // rotate since zero client is now closed
+          }
+        }
+
+        scheduleRotation();
+      },
     });
-    options.init?.(createdZero);
+    local.init?.(createdZero);
     onCleanup(() => createdZero.close());
     return createdZero;
   });

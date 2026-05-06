@@ -1,6 +1,6 @@
 import type {StandardSchemaV1} from '@standard-schema/spec';
 import {describe, expect, test} from 'vitest';
-import {validateInput} from './validate-input.ts';
+import {InputValidationError, validateInput} from './validate-input.ts';
 
 describe('validateInput', () => {
   test('should return input as-is when no validator is provided', () => {
@@ -27,7 +27,8 @@ describe('validateInput', () => {
     expect(result).toBe('84');
   });
 
-  test('should throw error when validation fails', () => {
+  test('should throw InputValidationError when validation fails', () => {
+    const issues = [{message: 'Expected positive number'}];
     const validator: StandardSchemaV1<number, number> = {
       '~standard': {
         version: 1,
@@ -36,14 +37,27 @@ describe('validateInput', () => {
           if (typeof data === 'number' && data > 0) {
             return {value: data};
           }
-          return {issues: [{message: 'Expected positive number'}]};
+          return {issues};
         },
       },
     };
 
-    expect(() => validateInput('testQuery', -5, validator, 'query')).toThrow(
+    let caught: unknown;
+    try {
+      validateInput('testQuery', -5, validator, 'query');
+    } catch (e) {
+      caught = e;
+    }
+
+    expect(caught).toBeInstanceOf(InputValidationError);
+    expect(caught).toBeInstanceOf(Error);
+    const error = caught as InputValidationError;
+    expect(error.message).toBe(
       'Validation failed for query testQuery: Expected positive number',
     );
+    expect(error.result.issues).toBe(issues);
+    // oxlint-disable-next-line typescript/no-explicit-any
+    expect((error.details as any).result.issues).toBe(issues);
   });
 
   test('should throw error with multiple validation issues', () => {

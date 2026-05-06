@@ -86,6 +86,7 @@ describe('analyzeQuery', () => {
     log: {
       level: 'error',
     },
+    enableQueryPlanner: true,
     // oxlint-disable-next-line @typescript-eslint/no-explicit-any
   } as any;
 
@@ -726,7 +727,7 @@ describe('analyzeQuery', () => {
       expect(result.joinPlans).toEqual(mockDebugEvents);
     });
 
-    test('does not include join plans when joinPlans is false', async () => {
+    test('runs the planner but does not collect diagnostics when joinPlans is false', async () => {
       vi.clearAllMocks();
 
       const mockResult: AnalyzeQueryResult = {
@@ -752,30 +753,28 @@ describe('analyzeQuery', () => {
         false, // joinPlans = false
       );
 
-      // Verify AccumulatorDebugger was NOT created
+      // Planner always runs so analysis matches production.
+      expect(createSQLiteCostModel).toHaveBeenCalledWith(
+        expect.any(Object),
+        expect.any(Map),
+      );
+
+      // Diagnostic collection is gated on joinPlans.
       expect(AccumulatorDebugger).not.toHaveBeenCalled();
+      expect(serializePlanDebugEvents).not.toHaveBeenCalled();
+      expect(result.joinPlans).toBeUndefined();
 
-      // Verify createSQLiteCostModel was NOT called
-      expect(createSQLiteCostModel).not.toHaveBeenCalled();
-
-      // Verify runAst was called without cost model and debugger
       expect(runAst).toHaveBeenCalledWith(
         lc,
         minimalClientSchema,
         simpleAST,
         true,
         expect.objectContaining({
-          costModel: undefined,
+          costModel: expect.anything(),
           planDebugger: undefined,
         }),
         expect.anything(), // shouldYield
       );
-
-      // Verify serializePlanDebugEvents was NOT called
-      expect(serializePlanDebugEvents).not.toHaveBeenCalled();
-
-      // Verify result does not include joinPlans
-      expect(result.joinPlans).toBeUndefined();
     });
 
     test('defaults joinPlans to false when not provided', async () => {
@@ -792,7 +791,8 @@ describe('analyzeQuery', () => {
       vi.mocked(runAst).mockResolvedValue(mockResult);
       vi.mocked(explainQueries).mockReturnValue({});
 
-      // Call without joinPlans parameter
+      // Call without joinPlans parameter: the planner still runs, but
+      // diagnostic events are not collected.
       const result = await analyzeQuery(
         lc,
         mockConfig,
@@ -800,12 +800,59 @@ describe('analyzeQuery', () => {
         simpleAST,
       );
 
-      // Verify cost model and debugger were NOT created
+      expect(createSQLiteCostModel).toHaveBeenCalledWith(
+        expect.any(Object),
+        expect.any(Map),
+      );
       expect(AccumulatorDebugger).not.toHaveBeenCalled();
-      expect(createSQLiteCostModel).not.toHaveBeenCalled();
-
-      // Verify result does not include joinPlans
       expect(result.joinPlans).toBeUndefined();
+    });
+
+    test('skips the planner when config.enableQueryPlanner is false', async () => {
+      vi.clearAllMocks();
+
+      const mockResult: AnalyzeQueryResult = {
+        warnings: [],
+        syncedRowCount: 5,
+        start: 1000,
+        end: 1050,
+        readRowCountsByQuery: {},
+      };
+
+      vi.mocked(runAst).mockResolvedValue(mockResult);
+      vi.mocked(explainQueries).mockReturnValue({});
+
+      const configWithPlannerOff = {
+        ...mockConfig,
+        enableQueryPlanner: false,
+      } as NormalizedZeroConfig;
+
+      // Even with joinPlans=true, the planner does not run because the
+      // server config disables it. This keeps analysis aligned with
+      // production behavior.
+      await analyzeQuery(
+        lc,
+        configWithPlannerOff,
+        minimalClientSchema,
+        simpleAST,
+        true,
+        false,
+        undefined,
+        undefined,
+        true, // joinPlans = true
+      );
+
+      expect(createSQLiteCostModel).not.toHaveBeenCalled();
+      expect(runAst).toHaveBeenCalledWith(
+        lc,
+        minimalClientSchema,
+        simpleAST,
+        true,
+        expect.objectContaining({
+          costModel: undefined,
+        }),
+        expect.anything(),
+      );
     });
   });
 });

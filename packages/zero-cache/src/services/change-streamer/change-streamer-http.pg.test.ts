@@ -3,6 +3,7 @@ import {resolver} from '@rocicorp/resolver';
 import Fastify from 'fastify';
 import {beforeEach, describe, expect, type MockedFunction, vi} from 'vitest';
 import WebSocket from 'ws';
+import {BigIntJSON} from '../../../../shared/src/bigint-json.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import type {ZeroConfig} from '../../config/zero-config.ts';
 import {getConnectionURI, type PgTest, test} from '../../test/db.ts';
@@ -39,10 +40,10 @@ const SHARD_ID = {
 describe('change-streamer/http', () => {
   let lc: LogContext;
   let changeDB: PostgresDB;
-  let downstream: Subscription<Downstream>;
+  let downstream: Subscription<string>;
   let snapshotStream: Subscription<SnapshotMessage>;
   let subscribeFn: MockedFunction<
-    (ctx: SubscriberContext) => Promise<Subscription<Downstream>>
+    (ctx: SubscriberContext) => Promise<Subscription<string>>
   >;
   let snapshotFn: MockedFunction<(id: string) => Subscription<SnapshotMessage>>;
   let endReservationFn: MockedFunction<(id: string) => void>;
@@ -72,7 +73,10 @@ describe('change-streamer/http', () => {
 
     const {promise, resolve: cleanup} = resolver<Downstream[]>();
     connectionClosed = promise;
-    downstream = Subscription.create({cleanup});
+    downstream = Subscription.create({
+      cleanup: msgs =>
+        cleanup(msgs.map(m => BigIntJSON.parse(m) as Downstream)),
+    });
     snapshotStream = Subscription.create();
     subscribeFn = vi.fn();
     snapshotFn = vi.fn();
@@ -100,7 +104,7 @@ describe('change-streamer/http', () => {
     const server = new ChangeStreamerHttpServer(
       lc,
       createTestConfig(),
-      {port: 0, startupDelayMs: 10000},
+      {port: 0, startupDelayMs: 10000, keepaliveTimeoutMs: undefined},
       parent,
       {
         id: 'change-streamer',
@@ -110,6 +114,8 @@ describe('change-streamer/http', () => {
           service.resolve();
           return service.promise;
         }),
+        scheduleCleanup: vi.fn(),
+        getChangeLogState: vi.fn(),
       },
       {
         startSnapshotReservation: snapshotFn.mockReturnValue(snapshotStream),
@@ -158,6 +164,7 @@ describe('change-streamer/http', () => {
       {
         port: 0,
         startupDelayMs: 10000,
+        keepaliveTimeoutMs: undefined,
       },
       parent,
       {
@@ -168,6 +175,8 @@ describe('change-streamer/http', () => {
           service.resolve();
           return service.promise;
         }),
+        scheduleCleanup: vi.fn(),
+        getChangeLogState: vi.fn(),
       },
       null,
     );
@@ -293,8 +302,12 @@ describe('change-streamer/http', () => {
 
       expect(endReservationFn).toHaveBeenCalledWith('foo-task');
 
-      downstream.push(['begin', {tag: 'begin'}, {commitWatermark: '456'}]);
-      downstream.push(['commit', {tag: 'commit'}, {watermark: '456'}]);
+      downstream.push(
+        JSON.stringify(['begin', {tag: 'begin'}, {commitWatermark: '456'}]),
+      );
+      downstream.push(
+        JSON.stringify(['commit', {tag: 'commit'}, {watermark: '456'}]),
+      );
 
       expect(await drain(2, sub)).toEqual([
         ['begin', {tag: 'begin'}, {commitWatermark: '456'}],
@@ -334,7 +347,7 @@ describe('change-streamer/http', () => {
       big3: BigInt(Number.MAX_SAFE_INTEGER) + 3n,
     });
 
-    downstream.push(['data', insert]);
+    downstream.push(BigIntJSON.stringify(['data', insert]));
     expect(await drain(1, sub)).toMatchInlineSnapshot(`
       [
         [

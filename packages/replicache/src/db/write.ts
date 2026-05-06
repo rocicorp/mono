@@ -90,6 +90,34 @@ export class Write extends Read {
     await this.map.put(key, value);
   }
 
+  /**
+   * Inserts or updates multiple entries in a single bulk operation. More
+   * efficient than calling {@link put} in a loop because it uses
+   * {@link BTreeWrite.putMany} to build or merge tree nodes in one pass.
+   *
+   * `entries` must be sorted in ascending key order.
+   */
+  async putMany(
+    lc: LogContext,
+    entries: ReadonlyArray<readonly [string, FrozenJSONValue]>,
+  ): Promise<void> {
+    if (entries.length === 0) {
+      return;
+    }
+
+    // Update indexes for all entries
+    if (this.indexes.size > 0) {
+      // TODO(arv): Indexes can use the optimizePatch pattern too.
+      for (const [key, value] of entries) {
+        const oldVal = lazy(() => this.map.get(key));
+        await updateIndexes(lc, this.indexes, key, oldVal, value);
+      }
+    }
+
+    // BTreeWrite.putMany handles both empty and non-empty trees optimally
+    await this.map.putMany(entries);
+  }
+
   getMutationID(): Promise<number> {
     return getMutationID(this.#clientID, this.#dagWrite, this.#meta);
   }

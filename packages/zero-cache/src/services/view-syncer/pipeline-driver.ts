@@ -48,7 +48,7 @@ import {computeZqlSpecs, mustGetTableSpec} from '../../db/lite-tables.ts';
 import type {LiteAndZqlSpec, LiteTableSpec} from '../../db/specs.ts';
 import {
   getOrCreateCounter,
-  getOrCreateHistogram,
+  getOrCreateLatencyHistogram,
 } from '../../observability/metrics.ts';
 import type {InspectorDelegate} from '../../server/inspector-delegate.ts';
 import {type RowKey} from '../../types/row-key.ts';
@@ -153,11 +153,11 @@ export class PipelineDriver {
   #primaryKeys: Map<string, PrimaryKey> | null = null;
   #permissions: LoadedPermissions | null = null;
 
-  readonly #advanceTime = getOrCreateHistogram('sync', 'ivm.advance-time', {
-    description:
-      'Time to advance all queries for a given client group for in response to a single change.',
-    unit: 's',
-  });
+  readonly #advanceTime = getOrCreateLatencyHistogram(
+    'sync',
+    'ivm.advance-time',
+    'Time to advance all queries for a given client group in response to a single change.',
+  );
 
   readonly #conflictRowsDeleted = getOrCreateCounter(
     'sync',
@@ -751,7 +751,7 @@ export class PipelineDriver {
         }
 
         const elapsed = timer.totalElapsed() - start;
-        this.#advanceTime.record(elapsed / 1000, {
+        this.#advanceTime.recordMs(elapsed, {
           table,
           type,
         });
@@ -1026,8 +1026,8 @@ function getRowKey(cols: PrimaryKey, row: Row): RowKey {
 
 /**
  * Core hydration logic used by {@link PipelineDriver#addQuery}, extracted to a
- * function for reuse by bin-analyze so that bin-analyze's hydration logic
- * is as close as possible to zero-cache's real hydration logic.
+ * function for reuse by the analyze-query RPC path so that analysis hydrates
+ * queries the same way the view-syncer does in production.
  */
 export function* hydrate(
   input: Input,
