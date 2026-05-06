@@ -87,7 +87,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
   const {setListContext} = useListContext();
   useEffect(() => {
     setListContext(listContext);
-  }, [listContext]);
+  }, [listContext, setListContext]);
 
   const [issue, issueResult] = useQuery(
     queries.issueDetail({idField, id: idValue}),
@@ -116,7 +116,7 @@ export function IssuePage({onReady}: {onReady: () => void}) {
       recordPageLoad('issue-page');
       preload(z, projectName);
     }
-  }, [issueResult.type, login.loginState?.decoded, z]);
+  }, [issueResult.type, z, projectName]);
 
   useEffect(() => {
     // only push viewed forward if the issue has been modified since the last viewing
