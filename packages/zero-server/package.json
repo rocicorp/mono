@@ -9,7 +9,7 @@
     "check-format": "oxfmt --check .",
     "check-types": "tsc",
     "check-types:watch": "tsc --watch",
-    "lint": "oxlint --type-aware src/",
+    "lint": "oxlint --quiet --config ../../oxlint.config.ts src/",
     "postinstall": "prisma generate --schema ./src/adapters/schema.test.prisma",
     "test": "vitest run",
     "test:watch": "vitest watch",

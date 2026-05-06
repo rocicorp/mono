@@ -113,7 +113,7 @@
     "check-types:server:watch": "tsc -p tsconfig.server.json --watch",
     "format": "oxfmt .",
     "check-format": "oxfmt --check .",
-    "lint": "oxlint --type-aware src/",
+    "lint": "oxlint --quiet --config ../../oxlint.config.ts src/",
     "docs": "node --experimental-strip-types --no-warnings tool/generate-docs.ts",
     "docs:server": "node --watch --experimental-strip-types --no-warnings tool/generate-docs.ts --server",
     "fmt": "oxfmt .",

@@ -10,7 +10,7 @@
     "check-types:watch": "tsc --watch",
     "format": "oxfmt .",
     "check-format": "oxfmt --check .",
-    "lint": "oxlint --type-aware src/",
+    "lint": "oxlint --quiet --config ../../oxlint.config.ts src/",
     "fmt": "oxfmt .",
     "check-fmt": "oxfmt --check ."
   },

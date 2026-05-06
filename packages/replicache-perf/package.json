@@ -7,7 +7,7 @@
     "check-format": "oxfmt --check .",
     "check-types": "tsc",
     "check-types:watch": "tsc --watch",
-    "lint": "oxlint --type-aware src/",
+    "lint": "oxlint --quiet --config ../../oxlint.config.ts src/",
     "build": "tsx tool/build.ts",
     "perf": "npm run build && tsx src/runner.ts",
     "fmt": "oxfmt .",
