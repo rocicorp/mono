@@ -46,6 +46,7 @@ import {
 export class IVMSourceBranch {
   readonly #sources: Map<string, MemorySource | undefined>;
   readonly #tables: Record<string, TableSchema>;
+  #advanceError: unknown;
   hash: Hash | undefined;
 
   constructor(
@@ -59,6 +60,8 @@ export class IVMSourceBranch {
   }
 
   getSource(name: string): MemorySource | undefined {
+    this.#throwIfInvalid();
+
     if (this.#sources.has(name)) {
       return this.#sources.get(name);
     }
@@ -75,19 +78,33 @@ export class IVMSourceBranch {
     this.#sources.clear();
   }
 
+  #throwIfInvalid() {
+    if (this.#advanceError) {
+      throw this.#advanceError;
+    }
+  }
+
   /**
    * Mutates the current branch, advancing it to the new head
    * by applying the given diffs.
    */
   advance(expectedHead: Hash | undefined, newHead: Hash, diffs: NoIndexDiff) {
+    this.#throwIfInvalid();
+
     assert(
       this.hash === expectedHead,
       () =>
         `Expected head must match the main head. Got: ${this.hash}, expected: ${expectedHead}`,
     );
 
-    applyDiffs(diffs, this);
-    this.hash = newHead;
+    try {
+      applyDiffs(diffs, this);
+      this.hash = newHead;
+    } catch (e) {
+      this.#advanceError = e;
+      this.clear();
+      throw e;
+    }
   }
 
   /**
@@ -98,6 +115,8 @@ export class IVMSourceBranch {
     desiredHead: Hash,
     readOptions?: ZeroReadOptions,
   ): Promise<IVMSourceBranch> {
+    this.#throwIfInvalid();
+
     const fork = this.fork();
 
     if (fork.hash === desiredHead) {
