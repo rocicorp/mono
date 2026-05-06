@@ -77,9 +77,13 @@ suite('fetch one:many', () => {
           "0",
           "fetch",
           {
-            "constraint": {
-              "id": "i1",
-            },
+            "multiConstraints": [
+              [
+                {
+                  "id": "i1",
+                },
+              ],
+            ],
           },
         ],
       ]
@@ -142,9 +146,13 @@ suite('fetch one:many', () => {
           "0",
           "fetch",
           {
-            "constraint": {
-              "id": "i1",
-            },
+            "multiConstraints": [
+              [
+                {
+                  "id": "i1",
+                },
+              ],
+            ],
           },
         ],
       ]
@@ -169,9 +177,13 @@ suite('fetch one:many', () => {
           "0",
           "fetch",
           {
-            "constraint": {
-              "id": "i2",
-            },
+            "multiConstraints": [
+              [
+                {
+                  "id": "i2",
+                },
+              ],
+            ],
           },
         ],
       ]
@@ -221,18 +233,16 @@ suite('fetch one:many', () => {
           "0",
           "fetch",
           {
-            "constraint": {
-              "id": "i1",
-            },
-          },
-        ],
-        [
-          "0",
-          "fetch",
-          {
-            "constraint": {
-              "id": "i2",
-            },
+            "multiConstraints": [
+              [
+                {
+                  "id": "i1",
+                },
+                {
+                  "id": "i2",
+                },
+              ],
+            ],
           },
         ],
       ]
@@ -314,36 +324,16 @@ suite('fetch one:many', () => {
           "0",
           "fetch",
           {
-            "constraint": {
-              "id": "i1",
-            },
-          },
-        ],
-        [
-          "0",
-          "fetch",
-          {
-            "constraint": {
-              "id": "i1",
-            },
-          },
-        ],
-        [
-          "0",
-          "fetch",
-          {
-            "constraint": {
-              "id": "i2",
-            },
-          },
-        ],
-        [
-          "0",
-          "fetch",
-          {
-            "constraint": {
-              "id": "i2",
-            },
+            "multiConstraints": [
+              [
+                {
+                  "id": "i1",
+                },
+                {
+                  "id": "i2",
+                },
+              ],
+            ],
           },
         ],
       ]
@@ -421,9 +411,13 @@ suite('fetch many:one', () => {
           "0",
           "fetch",
           {
-            "constraint": {
-              "ownerID": "u1",
-            },
+            "multiConstraints": [
+              [
+                {
+                  "ownerID": "u1",
+                },
+              ],
+            ],
           },
         ],
       ]
@@ -467,9 +461,13 @@ suite('fetch many:one', () => {
           "0",
           "fetch",
           {
-            "constraint": {
-              "ownerID": "u1",
-            },
+            "multiConstraints": [
+              [
+                {
+                  "ownerID": "u1",
+                },
+              ],
+            ],
           },
         ],
       ]
@@ -535,9 +533,13 @@ suite('fetch many:one', () => {
           "0",
           "fetch",
           {
-            "constraint": {
-              "ownerID": "u1",
-            },
+            "multiConstraints": [
+              [
+                {
+                  "ownerID": "u1",
+                },
+              ],
+            ],
           },
         ],
       ]
@@ -603,18 +605,16 @@ suite('fetch many:one', () => {
           "0",
           "fetch",
           {
-            "constraint": {
-              "ownerID": "u1",
-            },
-          },
-        ],
-        [
-          "0",
-          "fetch",
-          {
-            "constraint": {
-              "ownerID": "u2",
-            },
+            "multiConstraints": [
+              [
+                {
+                  "ownerID": "u1",
+                },
+                {
+                  "ownerID": "u2",
+                },
+              ],
+            ],
           },
         ],
       ]
@@ -698,18 +698,26 @@ suite('fetch one:many:many', () => {
           "1",
           "fetch",
           {
-            "constraint": {
-              "id": "c1",
-            },
+            "multiConstraints": [
+              [
+                {
+                  "id": "c1",
+                },
+              ],
+            ],
           },
         ],
         [
           "0",
           "fetch",
           {
-            "constraint": {
-              "id": "i1",
-            },
+            "multiConstraints": [
+              [
+                {
+                  "id": "i1",
+                },
+              ],
+            ],
           },
         ],
       ]
@@ -785,18 +793,26 @@ suite('fetch one:many:many', () => {
           "1",
           "fetch",
           {
-            "constraint": {
-              "id": "c1",
-            },
+            "multiConstraints": [
+              [
+                {
+                  "id": "c1",
+                },
+              ],
+            ],
           },
         ],
         [
           "0",
           "fetch",
           {
-            "constraint": {
-              "id": "i1",
-            },
+            "multiConstraints": [
+              [
+                {
+                  "id": "i1",
+                },
+              ],
+            ],
           },
         ],
       ]
@@ -956,108 +972,38 @@ suite('fetch one:many:many', () => {
           "1",
           "fetch",
           {
-            "constraint": {
-              "id": "c1",
-            },
-          },
-        ],
-        [
-          "1",
-          "fetch",
-          {
-            "constraint": {
-              "id": "c1",
-            },
-          },
-        ],
-        [
-          "1",
-          "fetch",
-          {
-            "constraint": {
-              "id": "c2",
-            },
-          },
-        ],
-        [
-          "1",
-          "fetch",
-          {
-            "constraint": {
-              "id": "c2",
-            },
-          },
-        ],
-        [
-          "1",
-          "fetch",
-          {
-            "constraint": {
-              "id": "c3",
-            },
-          },
-        ],
-        [
-          "1",
-          "fetch",
-          {
-            "constraint": {
-              "id": "c3",
-            },
-          },
-        ],
-        [
-          "1",
-          "fetch",
-          {
-            "constraint": {
-              "id": "c4",
-            },
-          },
-        ],
-        [
-          "1",
-          "fetch",
-          {
-            "constraint": {
-              "id": "c4",
-            },
+            "multiConstraints": [
+              [
+                {
+                  "id": "c1",
+                },
+                {
+                  "id": "c2",
+                },
+                {
+                  "id": "c3",
+                },
+                {
+                  "id": "c4",
+                },
+              ],
+            ],
           },
         ],
         [
           "0",
           "fetch",
           {
-            "constraint": {
-              "id": "i1",
-            },
-          },
-        ],
-        [
-          "0",
-          "fetch",
-          {
-            "constraint": {
-              "id": "i1",
-            },
-          },
-        ],
-        [
-          "0",
-          "fetch",
-          {
-            "constraint": {
-              "id": "i2",
-            },
-          },
-        ],
-        [
-          "0",
-          "fetch",
-          {
-            "constraint": {
-              "id": "i2",
-            },
+            "multiConstraints": [
+              [
+                {
+                  "id": "i1",
+                },
+                {
+                  "id": "i2",
+                },
+              ],
+            ],
           },
         ],
       ]
@@ -1133,18 +1079,26 @@ suite('fetch one:many:one', () => {
           "1",
           "fetch",
           {
-            "constraint": {
-              "labelID": "l1",
-            },
+            "multiConstraints": [
+              [
+                {
+                  "labelID": "l1",
+                },
+              ],
+            ],
           },
         ],
         [
           "0",
           "fetch",
           {
-            "constraint": {
-              "id": "i1",
-            },
+            "multiConstraints": [
+              [
+                {
+                  "id": "i1",
+                },
+              ],
+            ],
           },
         ],
       ]
@@ -1236,18 +1190,26 @@ suite('fetch one:many:one', () => {
           "1",
           "fetch",
           {
-            "constraint": {
-              "labelID": "l1",
-            },
+            "multiConstraints": [
+              [
+                {
+                  "labelID": "l1",
+                },
+              ],
+            ],
           },
         ],
         [
           "0",
           "fetch",
           {
-            "constraint": {
-              "id": "i1",
-            },
+            "multiConstraints": [
+              [
+                {
+                  "id": "i1",
+                },
+              ],
+            ],
           },
         ],
       ]
@@ -1324,36 +1286,29 @@ suite('fetch one:many:one', () => {
           "1",
           "fetch",
           {
-            "constraint": {
-              "labelID": "l1",
-            },
-          },
-        ],
-        [
-          "1",
-          "fetch",
-          {
-            "constraint": {
-              "labelID": "l2",
-            },
-          },
-        ],
-        [
-          "0",
-          "fetch",
-          {
-            "constraint": {
-              "id": "i1",
-            },
+            "multiConstraints": [
+              [
+                {
+                  "labelID": "l1",
+                },
+                {
+                  "labelID": "l2",
+                },
+              ],
+            ],
           },
         ],
         [
           "0",
           "fetch",
           {
-            "constraint": {
-              "id": "i1",
-            },
+            "multiConstraints": [
+              [
+                {
+                  "id": "i1",
+                },
+              ],
+            ],
           },
         ],
       ]
@@ -1473,54 +1428,32 @@ suite('fetch one:many:one', () => {
           "1",
           "fetch",
           {
-            "constraint": {
-              "labelID": "l1",
-            },
-          },
-        ],
-        [
-          "1",
-          "fetch",
-          {
-            "constraint": {
-              "labelID": "l2",
-            },
-          },
-        ],
-        [
-          "0",
-          "fetch",
-          {
-            "constraint": {
-              "id": "i1",
-            },
+            "multiConstraints": [
+              [
+                {
+                  "labelID": "l1",
+                },
+                {
+                  "labelID": "l2",
+                },
+              ],
+            ],
           },
         ],
         [
           "0",
           "fetch",
           {
-            "constraint": {
-              "id": "i1",
-            },
-          },
-        ],
-        [
-          "0",
-          "fetch",
-          {
-            "constraint": {
-              "id": "i2",
-            },
-          },
-        ],
-        [
-          "0",
-          "fetch",
-          {
-            "constraint": {
-              "id": "i2",
-            },
+            "multiConstraints": [
+              [
+                {
+                  "id": "i1",
+                },
+                {
+                  "id": "i2",
+                },
+              ],
+            ],
           },
         ],
       ]
@@ -1590,10 +1523,14 @@ suite('compound join keys', () => {
           "0",
           "fetch",
           {
-            "constraint": {
-              "a1": 2,
-              "a2": 1,
-            },
+            "multiConstraints": [
+              [
+                {
+                  "a1": 2,
+                  "a2": 1,
+                },
+              ],
+            ],
           },
         ],
       ]
@@ -1660,10 +1597,14 @@ suite('compound join keys', () => {
           "0",
           "fetch",
           {
-            "constraint": {
-              "a1": 1,
-              "a2": 2,
-            },
+            "multiConstraints": [
+              [
+                {
+                  "a1": 1,
+                  "a2": 2,
+                },
+              ],
+            ],
           },
         ],
       ]
@@ -1689,10 +1630,14 @@ suite('compound join keys', () => {
           "0",
           "fetch",
           {
-            "constraint": {
-              "a1": 2,
-              "a2": 1,
-            },
+            "multiConstraints": [
+              [
+                {
+                  "a1": 2,
+                  "a2": 1,
+                },
+              ],
+            ],
           },
         ],
       ]
@@ -1747,20 +1692,18 @@ suite('compound join keys', () => {
           "0",
           "fetch",
           {
-            "constraint": {
-              "a1": 1,
-              "a2": 2,
-            },
-          },
-        ],
-        [
-          "0",
-          "fetch",
-          {
-            "constraint": {
-              "a1": 5,
-              "a2": 4,
-            },
+            "multiConstraints": [
+              [
+                {
+                  "a1": 1,
+                  "a2": 2,
+                },
+                {
+                  "a1": 5,
+                  "a2": 4,
+                },
+              ],
+            ],
           },
         ],
       ]
@@ -1859,20 +1802,18 @@ suite('compound join keys', () => {
           "0",
           "fetch",
           {
-            "constraint": {
-              "a1": 1,
-              "a2": 2,
-            },
-          },
-        ],
-        [
-          "0",
-          "fetch",
-          {
-            "constraint": {
-              "a1": 4,
-              "a2": 5,
-            },
+            "multiConstraints": [
+              [
+                {
+                  "a1": 1,
+                  "a2": 2,
+                },
+                {
+                  "a1": 4,
+                  "a2": 5,
+                },
+              ],
+            ],
           },
         ],
       ]
@@ -1881,7 +1822,6 @@ suite('compound join keys', () => {
 });
 
 suite('fetch one:many with FetchRequest', () => {
-  // parentKey === primaryKey, so this exercises #fetchQuicksort.
   const base = {
     columns: [
       {id: {type: 'string'}},
@@ -1985,10 +1925,9 @@ suite('fetch one:many with FetchRequest', () => {
   });
 });
 
-suite('fetch with compound primary key === parentKey (quicksort path)', () => {
-  // Parent PK is ['orgId', 'slug'].  parentKey matches PK, so this exercises
-  // #fetchQuicksort with a multi-column unique key.  Children share parents:
-  // m1 references org=o1/slug=s1; m2 references org=o1/slug=s1; m3 references
+suite('fetch with compound primary key === parentKey', () => {
+  // Parent PK is ['orgId', 'slug'].  Children share parents: m1 references
+  // org=o1/slug=s1; m2 references org=o1/slug=s1; m3 references
   // org=o2/slug=s2.  So parent (o1, s1) has two related children.
   const base = {
     columns: [
