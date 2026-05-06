@@ -43,8 +43,27 @@ export interface Input extends InputBase {
   fetch(req: FetchRequest): Stream<Node | 'yield'>;
 }
 
+/**
+ * A single multi-row IN clause: a non-empty list of Constraints all
+ * sharing the same column shape. Sources treat it as
+ * `(col_a, col_b, …) IN VALUES (…)`.
+ */
+export type MultiConstraint = readonly Constraint[];
+
 export type FetchRequest = {
   readonly constraint?: Constraint | undefined;
+
+  /**
+   * List of multi-row IN clauses, all ANDed together (and ANDed with
+   * `constraint` if both are provided). Each entry is a `MultiConstraint`
+   * over its own set of columns.
+   *
+   * Used by FlippedJoin to push child→parent fetches into a single
+   * batched statement, and to AND together constraints contributed by
+   * chained FlippedJoins (e.g. `assigneeID IN (…) AND creatorID IN (…)`).
+   */
+  readonly multiConstraints?: readonly MultiConstraint[] | undefined;
+
   /** If supplied, `start.row` must have previously been output by fetch or push. */
   readonly start?: Start | undefined;
 

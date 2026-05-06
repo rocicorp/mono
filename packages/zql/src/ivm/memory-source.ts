@@ -39,6 +39,7 @@ import {
   skipYields,
   type FetchRequest,
   type Input,
+  type MultiConstraint,
   type Output,
   type Start,
 } from './operator.ts';
@@ -254,6 +255,19 @@ export class MemorySource implements Source {
   }
 
   *#fetch(req: FetchRequest, conn: Connection): Stream<Node | 'yield'> {
+    // multiConstraints is handled by driving sub-fetches off the first
+    // entry's values and post-filtering matches against any remaining
+    // entries. TableSource implements multi-IN natively via SQL `AND` of
+    // `IN` clauses; the in-memory path is correct but not specially
+    // optimized — it pays the index-seek cost per primary value, then
+    // walks each result against the rest.
+    if (
+      req.multiConstraints &&
+      req.multiConstraints.some(mc => mc.length > 0)
+    ) {
+      yield* this.#fetchMulti(req, conn);
+      return;
+    }
     const requestedSort = must(conn.sort);
     const {compareRows} = conn;
     // Avoid allocating a new closure when not reversing (the common case).
@@ -361,6 +375,60 @@ export class MemorySource implements Source {
     yield* conn.filters
       ? generateWithFilter(withConstraint, conn.filters.predicate)
       : withConstraint;
+  }
+
+  *#fetchMulti(req: FetchRequest, conn: Connection): Stream<Node | 'yield'> {
+    const multis = must(req.multiConstraints).filter(mc => mc.length > 0);
+    assert(
+      multis.length > 0,
+      'fetchMulti requires at least one multiConstraint',
+    );
+    const [primary, ...rest] = multis;
+    const baseConstraint = req.constraint;
+
+    // Drive sub-fetches off `primary`. Within each sub-fetch the source
+    // can use its index for `primary`; we then post-filter rows by
+    // checking they also match every entry in `rest`.
+    const subStreams: Stream<Node | 'yield'>[] = primary.map(c => {
+      const merged: Constraint = baseConstraint ? {...baseConstraint, ...c} : c;
+      return this.#fetch(
+        {...req, constraint: merged, multiConstraints: undefined},
+        conn,
+      );
+    });
+    const merged = mergeSortedStreams(
+      subStreams,
+      req.reverse
+        ? (a, b) => conn.compareRows(b.row, a.row)
+        : (a, b) => conn.compareRows(a.row, b.row),
+    );
+
+    if (rest.length === 0) {
+      yield* merged;
+      return;
+    }
+
+    for (const node of merged) {
+      if (node === 'yield') {
+        yield 'yield';
+        continue;
+      }
+      let matchesAll = true;
+      for (const mc of rest) {
+        let any = false;
+        for (const c of mc) {
+          if (constraintMatchesRow(c, node.row)) {
+            any = true;
+            break;
+          }
+        }
+        if (!any) {
+          matchesAll = false;
+          break;
+        }
+      }
+      if (matchesAll) yield node;
+    }
   }
 
   *push(change: SourceChange): Stream<'yield'> {
@@ -629,6 +697,7 @@ export function* generateWithOverlay(
   lastPushedEpoch: number,
   compare: Comparator,
   filterPredicate?: (row: Row) => boolean | undefined,
+  multiConstraints?: readonly MultiConstraint[] | undefined,
 ) {
   let overlayToApply: Overlay | undefined = undefined;
   if (overlay && lastPushedEpoch >= overlay.epoch) {
@@ -640,6 +709,7 @@ export function* generateWithOverlay(
     overlayToApply,
     compare,
     filterPredicate,
+    multiConstraints,
   );
   yield* generateWithOverlayInner(rows, overlays, compare);
 }
@@ -650,6 +720,7 @@ function computeOverlays(
   overlay: Overlay | undefined,
   compare: Comparator,
   filterPredicate?: (row: Row) => boolean | undefined,
+  multiConstraints?: readonly MultiConstraint[] | undefined,
 ): Overlays {
   let overlays: Overlays = {
     add: undefined,
@@ -684,11 +755,38 @@ function computeOverlays(
     overlays = overlaysForConstraint(overlays, constraint);
   }
 
+  if (multiConstraints) {
+    for (const mc of multiConstraints) {
+      if (mc.length > 0) {
+        overlays = overlaysForMultiConstraint(overlays, mc);
+      }
+    }
+  }
+
   if (filterPredicate) {
     overlays = overlaysForFilterPredicate(overlays, filterPredicate);
   }
 
   return overlays;
+}
+
+export {overlaysForMultiConstraint as overlaysForMultiConstraintForTest};
+
+function overlaysForMultiConstraint(
+  {add, remove}: Overlays,
+  multiConstraint: MultiConstraint,
+): Overlays {
+  const matchesAny = (row: Row | undefined) => {
+    if (row === undefined) return false;
+    for (const c of multiConstraint) {
+      if (constraintMatchesRow(c, row)) return true;
+    }
+    return false;
+  };
+  return {
+    add: matchesAny(add) ? add : undefined,
+    remove: matchesAny(remove) ? remove : undefined,
+  };
 }
 
 export {overlaysForStartAt as overlaysForStartAtForTest};
@@ -779,6 +877,7 @@ export function* generateWithOverlayUnordered(
   lastPushedEpoch: number,
   primaryKey: PrimaryKey,
   filterPredicate?: (row: Row) => boolean,
+  multiConstraints?: readonly MultiConstraint[] | undefined,
 ) {
   let overlayToApply: Overlay | undefined = undefined;
   if (overlay && lastPushedEpoch >= overlay.epoch) {
@@ -807,6 +906,13 @@ export function* generateWithOverlayUnordered(
   }
   if (constraint) {
     overlays = overlaysForConstraint(overlays, constraint);
+  }
+  if (multiConstraints) {
+    for (const mc of multiConstraints) {
+      if (mc.length > 0) {
+        overlays = overlaysForMultiConstraint(overlays, mc);
+      }
+    }
   }
   if (filterPredicate) {
     overlays = overlaysForFilterPredicate(overlays, filterPredicate);

@@ -1074,3 +1074,248 @@ test('SQLite iterator is closed when an error occurs before #mapFromSQLiteTypes 
     Statement.prototype.iterate = origIterate;
   }
 });
+
+describe('TableSource × multiConstraints (end-to-end)', () => {
+  // End-to-end coverage of `req.multiConstraints` against real SQLite,
+  // beyond the SQL-shape and EXPLAIN QUERY PLAN assertions in
+  // query-builder.test.ts. These tests validate row identity, ordering,
+  // and interaction with the other FetchRequest fields after the SQL is
+  // executed and rows are mapped back through TableSource.
+  //
+  // See FlippedJoin#fetchBatched (zql/src/ivm/flipped-join.ts) for the
+  // production caller — it builds the multiConstraints array from
+  // child→parent join keys and chunks calls so SQL `IN (…)` lists stay
+  // bounded (default 256, well under SQLITE_MAX_VARIABLE_NUMBER).
+
+  function setupParents(): {db: Database; source: TableSource} {
+    const db = new Database(createSilentLogContext(), ':memory:');
+    // INTEGER PRIMARY KEY is the rowid alias and doesn't create a
+    // separate unique index, which TableSource requires. Use an
+    // explicit unique index instead.
+    db.exec(/* sql */ `
+      CREATE TABLE parent (
+        id INTEGER NOT NULL,
+        org TEXT NOT NULL,
+        active INTEGER NOT NULL,
+        label TEXT NOT NULL
+      );
+      CREATE UNIQUE INDEX parent_id_idx ON parent (id);
+    `);
+    const ins = db.prepare(
+      'INSERT INTO parent (id, org, active, label) VALUES (?,?,?,?)',
+    );
+    db.transaction(() => {
+      for (let i = 1; i <= 5; i++) {
+        ins.run(i, i % 2 === 0 ? 'o-even' : 'o-odd', i === 2 ? 0 : 1, `p${i}`);
+      }
+    });
+    const source = new TableSource(
+      lc,
+      testLogConfig,
+      db,
+      'parent',
+      {
+        id: {type: 'number'},
+        org: {type: 'string'},
+        active: {type: 'boolean'},
+        label: {type: 'string'},
+      },
+      ['id'],
+    );
+    return {db, source};
+  }
+
+  test('single-key IN list returns the matching rows in sort order', () => {
+    const {source} = setupParents();
+    const input = source.connect([['id', 'asc']]);
+    const rows = Array.from(
+      input.fetch({multiConstraints: [[{id: 4}, {id: 1}, {id: 3}]]}),
+      n => (n === 'yield' ? n : n.row),
+    );
+    expect(rows).toEqual([
+      {id: 1, org: 'o-odd', active: true, label: 'p1'},
+      {id: 3, org: 'o-odd', active: true, label: 'p3'},
+      {id: 4, org: 'o-even', active: true, label: 'p4'},
+    ]);
+  });
+
+  test('IN entries that match no rows return nothing', () => {
+    const {source} = setupParents();
+    const input = source.connect([['id', 'asc']]);
+    const rows = Array.from(
+      input.fetch({multiConstraints: [[{id: 99}, {id: 100}]]}),
+      n => (n === 'yield' ? n : n.row),
+    );
+    expect(rows).toEqual([]);
+  });
+
+  test('two multiConstraints are ANDed (chained-FlippedJoin shape)', () => {
+    const {source} = setupParents();
+    const input = source.connect([['id', 'asc']]);
+    // id IN (1,2,3,4) AND org IN ('o-even')
+    // Production trigger: chained FlippedJoins each contribute one entry.
+    const rows = Array.from(
+      input.fetch({
+        multiConstraints: [
+          [{id: 1}, {id: 2}, {id: 3}, {id: 4}],
+          [{org: 'o-even'}],
+        ],
+      }),
+      n => (n === 'yield' ? n : n.row),
+    );
+    expect(rows.map(r => (r as Row).id)).toEqual([2, 4]);
+  });
+
+  test('multiConstraints + req.constraint AND together', () => {
+    const {source} = setupParents();
+    const input = source.connect([['id', 'asc']]);
+    // active = true AND id IN (1,2,3,4,5)  → p2 (active=false) excluded
+    const rows = Array.from(
+      input.fetch({
+        constraint: {active: true},
+        multiConstraints: [[{id: 1}, {id: 2}, {id: 3}, {id: 4}, {id: 5}]],
+      }),
+      n => (n === 'yield' ? n : n.row),
+    );
+    expect(rows.map(r => (r as Row).id)).toEqual([1, 3, 4, 5]);
+  });
+
+  test('multiConstraints + reverse: descending sort honored', () => {
+    const {source} = setupParents();
+    const input = source.connect([['id', 'asc']]);
+    const rows = Array.from(
+      input.fetch({
+        multiConstraints: [[{id: 1}, {id: 3}, {id: 5}]],
+        reverse: true,
+      }),
+      n => (n === 'yield' ? n : n.row),
+    );
+    expect(rows.map(r => (r as Row).id)).toEqual([5, 3, 1]);
+  });
+
+  test('multiConstraints + start basis "after" excludes start row', () => {
+    const {source} = setupParents();
+    const input = source.connect([['id', 'asc']]);
+    const rows = Array.from(
+      input.fetch({
+        multiConstraints: [[{id: 1}, {id: 2}, {id: 3}, {id: 4}, {id: 5}]],
+        start: {row: {id: 3}, basis: 'after'},
+      }),
+      n => (n === 'yield' ? n : n.row),
+    );
+    expect(rows.map(r => (r as Row).id)).toEqual([4, 5]);
+  });
+
+  test('multiConstraints with empty entry is ignored, not treated as no-match', () => {
+    const {source} = setupParents();
+    const input = source.connect([['id', 'asc']]);
+    // The query-builder skips zero-length entries (`mc.length > 0` guard).
+    // An empty entry alongside a real one must behave as just the real one
+    // — no spurious filter that drops everything.
+    const rows = Array.from(
+      input.fetch({multiConstraints: [[], [{id: 2}, {id: 4}]]}),
+      n => (n === 'yield' ? n : n.row),
+    );
+    expect(rows.map(r => (r as Row).id)).toEqual([2, 4]);
+  });
+
+  test('compound-key IN list (row-value VALUES) returns matching rows', () => {
+    const db = new Database(createSilentLogContext(), ':memory:');
+    db.exec(/* sql */ `
+      CREATE TABLE pair (
+        a TEXT NOT NULL,
+        b INTEGER NOT NULL,
+        c TEXT NOT NULL,
+        PRIMARY KEY (a, b)
+      );
+    `);
+    const ins = db.prepare('INSERT INTO pair (a, b, c) VALUES (?,?,?)');
+    db.transaction(() => {
+      ins.run('x', 1, 'p');
+      ins.run('x', 2, 'q');
+      ins.run('y', 1, 'r');
+      ins.run('y', 2, 's');
+    });
+    const source = new TableSource(
+      lc,
+      testLogConfig,
+      db,
+      'pair',
+      {
+        a: {type: 'string'},
+        b: {type: 'number'},
+        c: {type: 'string'},
+      },
+      ['a', 'b'],
+    );
+    const input = source.connect([
+      ['a', 'asc'],
+      ['b', 'asc'],
+    ]);
+    const rows = Array.from(
+      input.fetch({
+        multiConstraints: [
+          [
+            {a: 'y', b: 1},
+            {a: 'x', b: 2},
+          ],
+        ],
+      }),
+      n => (n === 'yield' ? n : n.row),
+    );
+    expect(rows).toEqual([
+      {a: 'x', b: 2, c: 'q'},
+      {a: 'y', b: 1, c: 'r'},
+    ]);
+  });
+
+  test('overlay × multiConstraints — add overlay matching IN list is yielded', () => {
+    const {source} = setupParents();
+    const input = source.connect([['id', 'asc']]);
+    let overlayFetch: Row[] | undefined;
+    input.setOutput({
+      push: () => {
+        overlayFetch = Array.from(
+          input.fetch({multiConstraints: [[{id: 6}, {id: 1}]]}),
+          n => {
+            assert(n !== 'yield', 'unexpected yield');
+            return n.row;
+          },
+        );
+        return [];
+      },
+    });
+    consume(
+      source.push(
+        makeSourceChangeAdd({id: 6, org: 'o-even', active: true, label: 'p6'}),
+      ),
+    );
+    expect(overlayFetch?.map(r => r.id)).toEqual([1, 6]);
+  });
+
+  test('overlay × multiConstraints — add overlay outside IN list is dropped', () => {
+    const {source} = setupParents();
+    const input = source.connect([['id', 'asc']]);
+    let overlayFetch: Row[] | undefined;
+    input.setOutput({
+      push: () => {
+        // p6 is the overlay row; the IN list excludes id=6, so the
+        // overlay must not appear despite the in-progress push.
+        overlayFetch = Array.from(
+          input.fetch({multiConstraints: [[{id: 1}, {id: 3}]]}),
+          n => {
+            assert(n !== 'yield', 'unexpected yield');
+            return n.row;
+          },
+        );
+        return [];
+      },
+    });
+    consume(
+      source.push(
+        makeSourceChangeAdd({id: 6, org: 'o-even', active: true, label: 'p6'}),
+      ),
+    );
+    expect(overlayFetch?.map(r => r.id)).toEqual([1, 3]);
+  });
+});
