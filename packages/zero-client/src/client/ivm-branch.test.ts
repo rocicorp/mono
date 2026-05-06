@@ -441,6 +441,13 @@ describe('advance', () => {
       expect(e).toBe(originalError);
     }
 
+    try {
+      branch.fork();
+      expect.fail('Expected poisoned branch fork to throw');
+    } catch (e) {
+      expect(e).toBe(originalError);
+    }
+
     await expect(branch.forkToHead(dagStore, 'head2' as Hash)).rejects.toBe(
       originalError,
     );

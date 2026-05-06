@@ -137,6 +137,8 @@ export class IVMSourceBranch {
    * The mutations modify the fork rather than original branch.
    */
   fork() {
+    this.#throwIfInvalid();
+
     return new IVMSourceBranch(
       this.#tables,
       this.hash,
