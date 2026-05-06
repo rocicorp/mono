@@ -28,6 +28,7 @@ function createTestConfig(overrides?: Partial<ZeroConfig>) {
   return {
     websocketCompression: false,
     websocketCompressionOptions: undefined,
+    websocketMaxPayloadBytes: 10 * 1024 * 1024,
     ...overrides,
   } as ZeroConfig;
 }
