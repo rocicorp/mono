@@ -152,31 +152,19 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
           "fetch",
           {
             "constraint": {
-              "id": "i1",
               "ownerId": "o2",
             },
+            "multiConstraints": [
+              [
+                {
+                  "id": "i1",
+                },
+                {
+                  "id": "i2",
+                },
+              ],
+            ],
           },
-        ],
-        [
-          "0",
-          "fetch",
-          {
-            "constraint": {
-              "id": "i2",
-              "ownerId": "o2",
-            },
-          },
-        ],
-        [
-          "0",
-          "fetchCount",
-          {
-            "constraint": {
-              "id": "i1",
-              "ownerId": "o2",
-            },
-          },
-          0,
         ],
         [
           "2",
@@ -202,9 +190,18 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
           "fetchCount",
           {
             "constraint": {
-              "id": "i2",
               "ownerId": "o2",
             },
+            "multiConstraints": [
+              [
+                {
+                  "id": "i1",
+                },
+                {
+                  "id": "i2",
+                },
+              ],
+            ],
           },
           1,
         ],
@@ -413,31 +410,19 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
           "fetch",
           {
             "constraint": {
-              "id": "i1",
               "ownerId": "o2",
             },
+            "multiConstraints": [
+              [
+                {
+                  "id": "i1",
+                },
+                {
+                  "id": "i2",
+                },
+              ],
+            ],
           },
-        ],
-        [
-          "0",
-          "fetch",
-          {
-            "constraint": {
-              "id": "i2",
-              "ownerId": "o2",
-            },
-          },
-        ],
-        [
-          "0",
-          "fetchCount",
-          {
-            "constraint": {
-              "id": "i1",
-              "ownerId": "o2",
-            },
-          },
-          0,
         ],
         [
           "2",
@@ -463,9 +448,18 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
           "fetchCount",
           {
             "constraint": {
-              "id": "i2",
               "ownerId": "o2",
             },
+            "multiConstraints": [
+              [
+                {
+                  "id": "i1",
+                },
+                {
+                  "id": "i2",
+                },
+              ],
+            ],
           },
           1,
         ],
@@ -903,19 +897,18 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
             "fetch",
             {
               "constraint": {
-                "id": "i1",
                 "ownerId": "o2",
               },
-            },
-          ],
-          [
-            "0",
-            "fetch",
-            {
-              "constraint": {
-                "id": "i2",
-                "ownerId": "o2",
-              },
+              "multiConstraints": [
+                [
+                  {
+                    "id": "i1",
+                  },
+                  {
+                    "id": "i2",
+                  },
+                ],
+              ],
             },
           ],
           [
@@ -923,20 +916,18 @@ suite('sibling relationships tests with issues, comments, and owners', () => {
             "fetchCount",
             {
               "constraint": {
-                "id": "i1",
                 "ownerId": "o2",
               },
-            },
-            0,
-          ],
-          [
-            "0",
-            "fetchCount",
-            {
-              "constraint": {
-                "id": "i2",
-                "ownerId": "o2",
-              },
+              "multiConstraints": [
+                [
+                  {
+                    "id": "i1",
+                  },
+                  {
+                    "id": "i2",
+                  },
+                ],
+              ],
             },
             1,
           ],
