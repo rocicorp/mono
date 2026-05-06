@@ -1870,26 +1870,6 @@ suite('compound join keys', () => {
           "fetch",
           {
             "constraint": {
-              "a1": 1,
-              "a2": 2,
-            },
-          },
-        ],
-        [
-          "0",
-          "fetch",
-          {
-            "constraint": {
-              "a1": 4,
-              "a2": 5,
-            },
-          },
-        ],
-        [
-          "0",
-          "fetch",
-          {
-            "constraint": {
               "a1": 4,
               "a2": 5,
             },
