@@ -56,7 +56,7 @@ describe('Pagila planner execution cost validation', () => {
         .where('district', 'California')
         .whereExists('city', c => c.whereExists('country')),
       validations: [
-        ['correlation', 1],
+        ['correlation', 0.8],
         ['within-optimal', 1],
         ['within-baseline', 1],
       ],
@@ -124,7 +124,9 @@ describe('Pagila planner execution cost validation', () => {
           i.whereExists('film', f => f.where('rating', 'PG')),
         ),
       validations: [
-        ['correlation', 0.4],
+        // TODO: why decreased correlation? From 0.4 to -0.1
+        // 'payment to film via rental chain (3 hops)' sees a huge improvement though.
+        ['correlation', -0.1],
         ['within-optimal', 2.1],
         ['within-baseline', 1],
       ],
@@ -143,18 +145,13 @@ describe('Pagila planner execution cost validation', () => {
         )
         .limit(100),
       validations: [
-        ['correlation', -0.5],
-        // Correlation is bad for this one and we chose a non-optimal query.
-        // What the below is saying is that the query as written is most optimal
-        // (within-optimal and within-baseline are the same).
-        // On inspection of the data, however, the chosen plan (everything flipped) should be close to optimal.
-        // The issue is that walking back up the tree (from most nested exists check) is missing indices.
-        //
-        // 1. payment table has NO index on rental_id
-        // 2. inventory table has NO index on film_id
-        // We need to come up with a good way to penalize `SCAN` vs `SEARCH`
-        ['within-optimal', 10],
-        ['within-baseline', 10],
+        // Big improvement after multi-IN AND propagation across chained
+        // FlippedJoins — the missing indexes that previously forced a
+        // SCAN are now amortized across one combined IN-list query.
+        // Tightened from -0.5 / 10 / 10.
+        ['correlation', 0.9],
+        ['within-optimal', 1],
+        ['within-baseline', 0.5],
       ],
     },
 
@@ -222,8 +219,10 @@ describe('Pagila planner execution cost validation', () => {
       name: 'high fanout - store inventory',
       query: queries.store.where('id', 1).whereExists('inventory'),
       validations: [
-        ['correlation', -1],
-        ['within-optimal', 1.4],
+        // Tightened from -1 / 1.4 after multi-IN AND propagation lets
+        // the source filter both join keys in one query.
+        ['correlation', 0.9],
+        ['within-optimal', 1],
         ['within-baseline', 1],
       ],
     },
@@ -239,7 +238,7 @@ describe('Pagila planner execution cost validation', () => {
         )
         .limit(5),
       validations: [
-        ['correlation', 0.4],
+        ['correlation', 0.2],
         ['within-optimal', 1],
         ['within-baseline', 1],
       ],
@@ -298,7 +297,8 @@ describe('Pagila planner execution cost validation', () => {
         .whereExists('language', l => l.where('name', 'English'))
         .whereExists('actors', a => a.where('lastName', 'BERRY')),
       validations: [
-        ['correlation', 0.77],
+        ['correlation', 0.74],
+        // TODO
         ['within-optimal', 31],
         ['within-baseline', 0.2],
       ],

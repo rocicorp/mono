@@ -262,7 +262,6 @@ describe('Yield Propagation', () => {
         "yield",
         "yield",
         "yield",
-        "yield",
         {
           "relationships": {
             "child": [
@@ -279,37 +278,6 @@ describe('Yield Propagation', () => {
           },
         },
         "yield",
-        {
-          "relationships": {
-            "child": [
-              {
-                "relationships": {},
-                "row": {
-                  "id": "1",
-                },
-              },
-            ],
-          },
-          "row": {
-            "id": "1",
-          },
-        },
-        "yield",
-        {
-          "relationships": {
-            "child": [
-              {
-                "relationships": {},
-                "row": {
-                  "id": "2",
-                },
-              },
-            ],
-          },
-          "row": {
-            "id": "2",
-          },
-        },
         {
           "relationships": {
             "child": [
