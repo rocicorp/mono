@@ -617,8 +617,10 @@ export class FlippedJoin implements Input {
  * Canonical string key over `keys` of `record`, used by `#fetchMergeSort`
  * both to dedupe per-child fetches and to map each returned parent row
  * back to the children that referenced its parent-key tuple.
+ *
+ * Exported for testing.
  */
-function canonicalKey(
+export function canonicalKey(
   record: Record<string, Value | undefined>,
   keys: CompoundKey,
 ): string {
