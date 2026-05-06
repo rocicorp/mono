@@ -1,18 +1,14 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import sqlite3 from '@rocicorp/zero-sqlite3';
-import {expect, test, vi} from 'vitest';
+import { expect, test, vi } from 'vitest';
+import { withRead, withWrite } from '../../with-transactions.ts';
 import {
-  withRead,
-  withWrite,
-  withWriteNoImplicitCommit,
-} from '../../with-transactions.ts';
-import {
-  registerCreatedFile,
-  runSQLiteStoreTests,
+    registerCreatedFile,
+    runSQLiteStoreTests,
 } from '../sqlite-store-test-util.ts';
-import {clearAllNamedStoresForTesting, safeFilename} from '../sqlite-store.ts';
-import {expoSQLiteStoreProvider, type ExpoSQLiteStoreOptions} from './store.ts';
+import { clearAllNamedStoresForTesting, safeFilename } from '../sqlite-store.ts';
+import { expoSQLiteStoreProvider, type ExpoSQLiteStoreOptions } from './store.ts';
 
 //Mock the expo-sqlite module with Node SQLite implementation
 vi.mock('expo-sqlite', () => ({
@@ -142,7 +138,7 @@ test('different configuration options', async () => {
   await storeWithOptions.close();
 });
 
-test('withWriteNoImplicitCommit reports both operation and rollback errors', async () => {
+test('withWrite reports both operation and rollback errors', async () => {
   const storeName = 'auto-rollback-expo';
   const store = createStore(storeName);
   const filename = path.resolve(
@@ -161,7 +157,7 @@ test('withWriteNoImplicitCommit reports both operation and rollback errors', asy
   `);
   triggerDb.close();
 
-  const err = await withWriteNoImplicitCommit(store, async write => {
+  const err = await withWrite(store, async write => {
     await write.put('trigger-rollback', 'value');
   }).then(
     () => undefined,

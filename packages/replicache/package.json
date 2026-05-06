@@ -63,7 +63,7 @@
     "check-types:watch": "tsc -p tsconfig.json  --watch",
     "check-types:build:watch": "tsc -p tsconfig.build.json --watch",
     "check-types:tool:watch": "tsc -p tool/tsconfig.json --watch",
-    "lint": "oxlint --type-aware src/",
+    "lint": "oxlint --type-aware --config ../../oxlint.config.ts src/",
     "build": "rm -rf out && tsc -p tsconfig.build.json && npx tsx tool/build.ts",
     "build-bundle-sizes": "rm -rf out && npx tsx tool/build.ts --bundle-sizes",
     "prepack": "npm run lint && npm run test && npm run build && mv README.md README-org.md && mv README-external.md README.md",
