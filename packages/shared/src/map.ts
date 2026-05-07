@@ -1,11 +1,11 @@
-declare global {
-  interface Map<K, V> {
-    getOrInsert(key: K, defaultValue: V): V;
-    getOrInsertComputed(key: K, compute: (key: K) => V): V;
-  }
-}
+const nativeSupport =
+  typeof (Map.prototype as unknown as MapES2026<unknown, unknown>)
+    .getOrInsert === 'function';
 
-const nativeSupport = typeof Map.prototype.getOrInsert === 'function';
+interface MapES2026<K, V> {
+  getOrInsert(key: K, defaultValue: V): V;
+  getOrInsertComputed(key: K, compute: (key: K) => V): V;
+}
 
 /**
  * Returns the value for {@link key} in {@link map}.  If no mapping exists,
@@ -43,7 +43,7 @@ function getOrInsertComputedPolyfill<K, V>(
 }
 
 function getOrInsertNative<K, V>(map: Map<K, V>, key: K, defaultValue: V): V {
-  return map.getOrInsert(key, defaultValue);
+  return (map as unknown as MapES2026<K, V>).getOrInsert(key, defaultValue);
 }
 
 function getOrInsertComputedNative<K, V>(
@@ -51,7 +51,7 @@ function getOrInsertComputedNative<K, V>(
   key: K,
   compute: (key: K) => V,
 ): V {
-  return map.getOrInsertComputed(key, compute);
+  return (map as unknown as MapES2026<K, V>).getOrInsertComputed(key, compute);
 }
 
 export const getOrInsert = nativeSupport
