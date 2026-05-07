@@ -319,6 +319,7 @@ export class TableSource implements Source {
               connection.lastPushedEpoch,
               comparator,
               connection.filters?.predicate,
+              req.multiConstraints,
             ),
             this.#shouldYield,
           ),
@@ -339,6 +340,7 @@ export class TableSource implements Source {
             connection.lastPushedEpoch,
             this.#primaryKey,
             connection.filters?.predicate,
+            req.multiConstraints,
           ),
           this.#shouldYield,
         );
@@ -539,6 +541,7 @@ export class TableSource implements Source {
       order,
       request.reverse,
       request.start,
+      request.multiConstraints,
     );
   }
 }
