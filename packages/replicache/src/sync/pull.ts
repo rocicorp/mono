@@ -13,7 +13,7 @@ import {
   commitIsLocalDD31,
   DEFAULT_HEAD_NAME,
   type LocalMeta,
-  localMutations as localMutations,
+  localMutations,
   snapshotMetaParts,
 } from '../db/commit.ts';
 import {newWriteSnapshotDD31} from '../db/write.ts';
