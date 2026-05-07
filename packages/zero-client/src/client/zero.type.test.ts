@@ -1,5 +1,6 @@
 import {
   afterAll,
+  assert,
   beforeAll,
   describe,
   expect,
@@ -185,21 +186,21 @@ describe('run', () => {
       expectTypeOf(skippedFalse).toEqualTypeOf<Issue[] | undefined>();
     };
 
-    expectTypeOf(check).toBeFunction();
+    assert(check);
   });
 });
 
 describe('preload', () => {
-  test('preload with many rows', async () => {
-    const result = await z.preload(zql.issues);
+  test('preload with many rows', () => {
+    const result = z.preload(zql.issues);
     expectTypeOf(result.complete).toEqualTypeOf<Promise<void>>();
-    await z.preload(queries.issues());
+    z.preload(queries.issues());
   });
 
-  test('preload with one row', async () => {
-    const result = await z.preload(zql.issues.one());
+  test('preload with one row', () => {
+    const result = z.preload(zql.issues.one());
     expectTypeOf(result.complete).toEqualTypeOf<Promise<void>>();
-    await z.preload(queries.issue());
+    z.preload(queries.issue());
   });
 
   test('preload with conditional query', async () => {

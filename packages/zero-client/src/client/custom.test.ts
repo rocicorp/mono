@@ -397,9 +397,9 @@ describe('custom mutators can query the local store during an optimistic mutatio
 
   test('tx.run handles conditional queries', async () => {
     const zql = createBuilder(legacySchema);
-    let skippedQueryResult: unknown;
-    let skippedCompleteQueryResult: unknown;
-    let falseQueryResult: unknown;
+    let skippedQueryResult: unknown = true;
+    let skippedCompleteQueryResult: unknown = true;
+    let falseQueryResult: unknown = true;
 
     const z = zeroForTest({
       schema: legacySchema,
