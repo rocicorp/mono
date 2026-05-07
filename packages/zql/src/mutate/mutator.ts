@@ -196,7 +196,7 @@ export type MutatorDefinitionFunction<
   args: TOutput;
   ctx: TContext;
   tx: TTransaction;
-}) => Promise<void>;
+}) => Promise<ReadonlyJSONValue | void>;
 
 export type MutatorExecutionFunction<
   TOutput extends ReadonlyJSONValue | undefined,
@@ -206,7 +206,7 @@ export type MutatorExecutionFunction<
   options: IsUnknown<TContext> extends true
     ? {args: TOutput; tx: TTransaction; ctx?: TContext}
     : {args: TOutput; tx: TTransaction; ctx: TContext},
-) => Promise<void>;
+) => Promise<ReadonlyJSONValue | void>;
 
 // ----------------------------------------------------------------------------
 // Mutator and MutateRequest types

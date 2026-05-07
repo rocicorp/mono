@@ -77,7 +77,7 @@ export type TransactFnCallback<D extends Database<ExtractTransactionType<D>>> =
     tx: ExtractTransactionType<D>,
     mutatorName: string,
     mutatorArgs: ReadonlyJSONValue | undefined,
-  ) => Promise<void>;
+  ) => Promise<ReadonlyJSONValue | void>;
 
 export type Parsed<D extends Database<ExtractTransactionType<D>>> = {
   transact: TransactFn<D>;
@@ -615,11 +615,12 @@ class Transactor<D extends Database<ExtractTransactionType<D>>> {
             mutation.id,
           );
 
+          let returnData: ReadonlyJSONValue | void = undefined;
           if (appError === undefined) {
             this.#lc.debug?.(
               `Executing mutator '${mutation.name}' (id=${mutation.id})`,
             );
-            await cb(dbTx, mutation.name, mutation.args[0]);
+            returnData = await cb(dbTx, mutation.name, mutation.args[0]);
           } else {
             const mutationResult = makeAppErrorResponse(mutation, appError);
             await transactionHooks.writeMutationResult(mutationResult);
@@ -630,7 +631,8 @@ class Transactor<D extends Database<ExtractTransactionType<D>>> {
               clientID: mutation.clientID,
               id: mutation.id,
             },
-            result: {},
+            result:
+              returnData !== undefined ? {data: returnData} : {},
           };
         },
         this.#getTransactionInput(mutation),

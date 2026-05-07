@@ -17,10 +17,12 @@ import type {
 import {isZeroError, type ZeroError} from './error.ts';
 import type {MutationTracker} from './mutation-tracker.ts';
 
-const successResultDetails = {
+const successResult = (
+  data: ReadonlyJSONValue | void,
+): MutatorResultSuccessDetails => ({
   type: 'success',
-} as const satisfies MutatorResultSuccessDetails;
-const successResult = () => successResultDetails;
+  ...(data !== undefined ? {data} : {}),
+});
 
 function getStateDescription(error: ZeroError): string {
   switch (error.kind) {

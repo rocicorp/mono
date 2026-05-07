@@ -72,14 +72,14 @@ function makeReplicacheMutator<
   mutator: Mutator<TArgs, TSchema, TContext, TWrappedTransaction>,
   schema: TSchema,
   context: TContext,
-): (repTx: WriteTransaction, args: ReadonlyJSONValue) => Promise<void> {
+): (repTx: WriteTransaction, args: ReadonlyJSONValue) => Promise<ReadonlyJSONValue | void> {
   return async (
     repTx: WriteTransaction,
     args: ReadonlyJSONValue,
-  ): Promise<void> => {
+  ): Promise<ReadonlyJSONValue | void> => {
     const tx = new TransactionImpl(lc, repTx, schema);
     // fn does input validation internally
-    await mutator.fn({
+    return mutator.fn({
       args: args as TArgs,
       ctx: context,
       tx: tx,
@@ -176,7 +176,7 @@ function extendFromMutatorRegistry<S extends Schema, C>(
         mutateObject[value.mutatorName] = (
           repTx: WriteTransaction,
           args: ReadonlyJSONValue,
-        ): Promise<void> => {
+        ): Promise<ReadonlyJSONValue | void> => {
           const tx = new TransactionImpl(lc, repTx, schema);
           return value.fn({args, ctx: context, tx});
         };

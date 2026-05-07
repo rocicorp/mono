@@ -1,4 +1,5 @@
 import {assert} from '../../shared/src/asserts.ts';
+import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
 import {mapValues} from '../../shared/src/objects.ts';
 import {recordProxy} from '../../shared/src/record-proxy.ts';
 import {
@@ -49,7 +50,7 @@ export type CustomMutatorImpl<
   // oxlint-disable-next-line @typescript-eslint/no-explicit-any
   TArgs = any,
   Context = unknown,
-> = (tx: TDBTransaction, args: TArgs, ctx: Context) => Promise<void>;
+> = (tx: TDBTransaction, args: TArgs, ctx: Context) => Promise<ReadonlyJSONValue | void>;
 
 /**
  * QueryDelegate implementation for server-side transactions.

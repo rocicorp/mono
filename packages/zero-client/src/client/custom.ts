@@ -41,6 +41,7 @@ export type CustomMutatorDefs = {
 export type MutatorResultDetails =
   | {
       readonly type: 'success';
+      readonly data?: ReadonlyJSONValue | undefined;
     }
   | {
       readonly type: 'error';
@@ -82,7 +83,7 @@ export type CustomMutatorImpl<
   // The issue being that it will be a protocol change to support varargs.
   args: TArgs,
   ctx: Context,
-) => Promise<void>;
+) => Promise<ReadonlyJSONValue | void>;
 
 /**
  * The shape exposed on the `Zero.mutate` instance.
@@ -100,7 +101,7 @@ export type MakeCustomMutatorInterfaces<
   readonly [NamespaceOrName in keyof MD]: MD[NamespaceOrName] extends (
     tx: Transaction<S>,
     ...args: infer Args
-  ) => Promise<void>
+  ) => Promise<ReadonlyJSONValue | void>
     ? (...args: Args) => MutatorResult
     : MD[NamespaceOrName] extends CustomMutatorDefs
       ? MakeCustomMutatorInterfaces<S, MD[NamespaceOrName], TContext>
@@ -110,7 +111,7 @@ export type MakeCustomMutatorInterfaces<
 export type MakeCustomMutatorInterface<TSchema extends Schema, F> = F extends (
   tx: ClientTransaction<TSchema>,
   ...args: infer Args
-) => Promise<void>
+) => Promise<ReadonlyJSONValue | void>
   ? (...args: Args) => MutatorResult
   : never;
 
@@ -188,13 +189,13 @@ export function makeReplicacheMutator<
   mutator: CustomMutatorImpl<S, TWrappedTransaction>,
   schema: S,
   context: Context,
-): (repTx: WriteTransaction, args: ReadonlyJSONValue) => Promise<void> {
+): (repTx: WriteTransaction, args: ReadonlyJSONValue) => Promise<ReadonlyJSONValue | void> {
   return async (
     repTx: WriteTransaction,
     args: ReadonlyJSONValue,
-  ): Promise<void> => {
+  ): Promise<ReadonlyJSONValue | void> => {
     const tx = new TransactionImpl(lc, repTx, schema);
-    await mutator(tx, args, context);
+    return mutator(tx, args, context);
   };
 }
 

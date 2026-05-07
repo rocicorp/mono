@@ -1221,7 +1221,7 @@ type MutatorInvoker = (
   name: string,
   tx: unknown,
   args: unknown,
-) => Promise<void>;
+) => Promise<ReadonlyJSONValue | void>;
 
 const mutatorInvokers: Array<{name: string; invoke: MutatorInvoker}> = [
   {

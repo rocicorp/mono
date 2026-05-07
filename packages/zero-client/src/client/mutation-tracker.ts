@@ -43,7 +43,6 @@ function nextEphemeralID(): EphemeralID {
   return ++currentEphemeralID as EphemeralID;
 }
 
-const successResultDetails: MutationSuccessType = {type: 'success'};
 
 /**
  * Tracks what pushes are in-flight and resolves promises when they're acked.
@@ -439,7 +438,11 @@ export class MutationTracker {
       // the mutator proxy catches both client and server errors
       entry.resolver.reject(result);
     } else {
-      entry.resolver.resolve(successResultDetails);
+      const ok = result as MutationOk;
+      entry.resolver.resolve({
+        type: 'success',
+        ...(ok.data !== undefined ? {data: ok.data} : {}),
+      });
     }
 
     this.#outstandingMutations.delete(ephemeralID);
