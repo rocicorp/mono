@@ -50,7 +50,11 @@ export type CustomMutatorImpl<
   // oxlint-disable-next-line @typescript-eslint/no-explicit-any
   TArgs = any,
   Context = unknown,
-> = (tx: TDBTransaction, args: TArgs, ctx: Context) => Promise<ReadonlyJSONValue | void>;
+> = (
+  tx: TDBTransaction,
+  args: TArgs,
+  ctx: Context,
+) => Promise<ReadonlyJSONValue | void>;
 
 /**
  * QueryDelegate implementation for server-side transactions.

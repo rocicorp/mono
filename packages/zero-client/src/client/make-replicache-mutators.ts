@@ -72,7 +72,10 @@ function makeReplicacheMutator<
   mutator: Mutator<TArgs, TSchema, TContext, TWrappedTransaction>,
   schema: TSchema,
   context: TContext,
-): (repTx: WriteTransaction, args: ReadonlyJSONValue) => Promise<ReadonlyJSONValue | void> {
+): (
+  repTx: WriteTransaction,
+  args: ReadonlyJSONValue,
+) => Promise<ReadonlyJSONValue | void> {
   return async (
     repTx: WriteTransaction,
     args: ReadonlyJSONValue,
