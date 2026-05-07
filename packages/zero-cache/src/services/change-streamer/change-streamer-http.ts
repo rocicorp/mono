@@ -4,7 +4,6 @@ import type {LogContext} from '@rocicorp/logger';
 import WebSocket from 'ws';
 import {assert} from '../../../../shared/src/asserts.ts';
 import {must} from '../../../../shared/src/must.ts';
-import type {ZeroConfig} from '../../config/zero-config.ts';
 import type {IncomingMessageSubset} from '../../types/http.ts';
 import {pgClient, type PostgresDB} from '../../types/pg.ts';
 import {type Worker} from '../../types/processes.ts';
@@ -55,33 +54,13 @@ export class ChangeStreamerHttpServer extends HttpService {
 
   constructor(
     lc: LogContext,
-    config: ZeroConfig,
     opts: Options,
     parent: Worker,
     changeStreamer: ChangeStreamerService,
     backupMonitor: BackupMonitor | null,
   ) {
     super('change-streamer-http-server', lc, opts, async fastify => {
-      const websocketOptions: {perMessageDeflate?: boolean | object} = {};
-      if (config.websocketCompression) {
-        if (config.websocketCompressionOptions) {
-          try {
-            websocketOptions.perMessageDeflate = JSON.parse(
-              config.websocketCompressionOptions,
-            );
-          } catch (e) {
-            throw new Error(
-              `Failed to parse ZERO_WEBSOCKET_COMPRESSION_OPTIONS: ${String(e)}. Expected valid JSON.`,
-            );
-          }
-        } else {
-          websocketOptions.perMessageDeflate = true;
-        }
-      }
-
-      await fastify.register(websocket, {
-        options: websocketOptions,
-      });
+      await fastify.register(websocket);
 
       fastify.get(CHANGES_PATH_PATTERN, {websocket: true}, this.#subscribe);
       fastify.get(
