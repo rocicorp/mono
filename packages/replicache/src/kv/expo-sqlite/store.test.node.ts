@@ -1,14 +1,14 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import sqlite3 from '@rocicorp/zero-sqlite3';
-import { expect, test, vi } from 'vitest';
-import { withRead, withWrite } from '../../with-transactions.ts';
+import {expect, test, vi} from 'vitest';
+import {withRead, withWrite} from '../../with-transactions.ts';
 import {
-    registerCreatedFile,
-    runSQLiteStoreTests,
+  registerCreatedFile,
+  runSQLiteStoreTests,
 } from '../sqlite-store-test-util.ts';
-import { clearAllNamedStoresForTesting, safeFilename } from '../sqlite-store.ts';
-import { expoSQLiteStoreProvider, type ExpoSQLiteStoreOptions } from './store.ts';
+import {clearAllNamedStoresForTesting, safeFilename} from '../sqlite-store.ts';
+import {expoSQLiteStoreProvider, type ExpoSQLiteStoreOptions} from './store.ts';
 
 //Mock the expo-sqlite module with Node SQLite implementation
 vi.mock('expo-sqlite', () => ({
