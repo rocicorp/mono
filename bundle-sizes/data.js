@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778079981682,
+  "lastUpdate": 1778145315977,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -55541,6 +55541,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "Size of replicache.min.mjs.br (Brotli compressed)",
             "value": 33203,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "greg@roci.dev",
+            "name": "Greg Baker",
+            "username": "grgbkr"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "27ff4d5c00d01dda49c70f7b5237c80d5638e175",
+          "message": "fix(replicache): fix putMany rebalancing duplicating entries across adjacent children (#5923)\n\n## Problem\n\n`putMany`'s rebalancing logic in `InternalNodeImpl` produced duplicate\nkeys across sibling leaf nodes, causing the BTree `diff` algorithm to\nreport incorrect `add` operations for rows that already existed. This\ntriggered `\"Row already exists\"` assertion failures in the IVM\n`MemorySource` during poke processing.\n\n## Root Cause\n\nWhen two adjacent children (e.g., indices 0 and 1) both needed\nrebalancing after `putMany`, the old code processed them independently\nright-to-left:\n\n1. **Child[1]** merged with sibling at `newEntries[0]` (the original\nchild[0] data), producing rebalanced nodes containing child[0]'s\nentries.\n2. **Child[0]** then merged with its next sibling at `newEntries[1]`,\nwhich was now the rebalanced result from step 1 — already containing\nchild[0]'s data.\n\nThis duplicated child[0]'s entries across multiple leaf nodes, breaking\nthe BTree's sorted+unique invariant. The `diff` algorithm's\n`diffEntries` merge then produced wrong results because the flattened\ncomposite entries were no longer sorted.\n\n## Fix\n\nAdjacent children that need rebalancing are now grouped into contiguous\nruns. Each group (extended by one sibling on each side for merge\ncontext) is flattened and repartitioned as a single unit, preventing any\nchild's data from appearing in two separate merge operations.\n\nThe now-unused `putManyMergeAndPartition` helper was removed since its\nlogic is subsumed by the group-based approach.",
+          "timestamp": "2026-05-07T08:52:49Z",
+          "tree_id": "e0afabb3523f8d1f01c139d42b7cd4db36ebf444",
+          "url": "https://github.com/rocicorp/mono/commit/27ff4d5c00d01dda49c70f7b5237c80d5638e175"
+        },
+        "date": 1778145303895,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 315505,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 56729,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 116720,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 33278,
             "unit": "bytes"
           }
         ]
