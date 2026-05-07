@@ -395,6 +395,53 @@ describe('custom mutators can query the local store during an optimistic mutatio
     ]);
   });
 
+  test('tx.run handles conditional queries', async () => {
+    const zql = createBuilder(legacySchema);
+    let skippedQueryResult: unknown;
+    let skippedCompleteQueryResult: unknown;
+    let falseQueryResult: unknown;
+
+    const z = zeroForTest({
+      schema: legacySchema,
+      mutators: {
+        issue: {
+          maybeQuery: async (tx: MutatorTx, args: {enabled: boolean}) => {
+            const maybeQuery = args.enabled ? zql.issue : undefined;
+            const result = await tx.run(maybeQuery);
+            expectTypeOf(result).toEqualTypeOf<
+              Row<typeof legacySchema.tables.issue>[] | undefined
+            >();
+            skippedQueryResult = result;
+
+            const maybeCompleteQuery = args.enabled ? zql.issue : undefined;
+            const skippedCompleteResult = await tx.run(maybeCompleteQuery, {
+              type: 'complete',
+            });
+            expectTypeOf(skippedCompleteResult).toEqualTypeOf<
+              Row<typeof legacySchema.tables.issue>[] | undefined
+            >();
+            skippedCompleteQueryResult = skippedCompleteResult;
+
+            const falseQuery = args.enabled && zql.issue;
+            const falseResult = await tx.run(falseQuery);
+            expectTypeOf(falseResult).toEqualTypeOf<
+              Row<typeof legacySchema.tables.issue>[] | undefined
+            >();
+            falseQueryResult = falseResult;
+          },
+        },
+      } as const,
+    });
+
+    await z.mutate.issue.maybeQuery({enabled: false}).client;
+
+    expect(skippedQueryResult).toBeUndefined();
+    expect(skippedCompleteQueryResult).toBeUndefined();
+    expect(falseQueryResult).toBeUndefined();
+
+    await z.close();
+  });
+
   test('closeAll using tx.run', async () => {
     const zql = createBuilder(legacySchema);
 

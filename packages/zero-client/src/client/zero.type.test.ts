@@ -59,6 +59,10 @@ const mutators = defineMutatorsWithType<typeof schema>()({
 });
 
 const zql = createBuilder(schema);
+type Issue = {
+  readonly id: string;
+  readonly value: number;
+};
 
 const queries = defineQueriesWithType<typeof schema>()({
   issues: defineQueryWithType<typeof schema>()(() => zql.issues),
@@ -120,6 +124,69 @@ describe('run', () => {
     >();
     expect(y).toEqual({id: 'a', value: 1, [refCountSymbol]: 1});
   });
+
+  test('run with conditional query', async () => {
+    const enabled = true as boolean;
+
+    const maybeIssuesQuery = enabled ? zql.issues : undefined;
+    const x = await z.run(maybeIssuesQuery);
+    expectTypeOf(x).toEqualTypeOf<Issue[] | undefined>();
+    expect(x).toEqual([{id: 'a', value: 1, [refCountSymbol]: 1}]);
+
+    const maybeIssuesRequest = enabled ? queries.issues() : undefined;
+    const y = await z.run(maybeIssuesRequest);
+    expectTypeOf(y).toEqualTypeOf<Issue[] | undefined>();
+    expect(y).toEqual([{id: 'a', value: 1, [refCountSymbol]: 1}]);
+
+    const maybeIssuesAndQuery = enabled && zql.issues;
+    const issuesFromAndQuery = await z.run(maybeIssuesAndQuery);
+    expectTypeOf(issuesFromAndQuery).toEqualTypeOf<Issue[] | undefined>();
+
+    const disabled = false as boolean;
+    const skippedQuery = disabled ? zql.issues : undefined;
+    const skipped = await z.run(skippedQuery);
+    expectTypeOf(skipped).toEqualTypeOf<Issue[] | undefined>();
+    expect(skipped).toBeUndefined();
+
+    const skippedFalseQuery = disabled && zql.issues;
+    const skippedFalse = await z.run(skippedFalseQuery);
+    expectTypeOf(skippedFalse).toEqualTypeOf<Issue[] | undefined>();
+    expect(skippedFalse).toBeUndefined();
+  });
+
+  test('tx.run with conditional query return types', () => {
+    const check = async (tx: Transaction<typeof schema>) => {
+      const issues = await tx.run(zql.issues);
+      expectTypeOf(issues).toEqualTypeOf<Issue[]>();
+
+      const issue = await tx.run(zql.issues.one());
+      expectTypeOf(issue).toEqualTypeOf<Issue | undefined>();
+
+      const enabled = true as boolean;
+      const maybeIssuesQuery = enabled ? zql.issues : undefined;
+      const maybeIssues = await tx.run(maybeIssuesQuery);
+      expectTypeOf(maybeIssues).toEqualTypeOf<Issue[] | undefined>();
+
+      const maybeIssuesAndQuery = enabled && zql.issues;
+      const maybeIssuesAnd = await tx.run(maybeIssuesAndQuery);
+      expectTypeOf(maybeIssuesAnd).toEqualTypeOf<Issue[] | undefined>();
+
+      const maybeIssueQuery = enabled ? zql.issues.one() : undefined;
+      const maybeIssue = await tx.run(maybeIssueQuery);
+      expectTypeOf(maybeIssue).toEqualTypeOf<Issue | undefined>();
+
+      const disabled = false as boolean;
+      const skippedQuery = disabled ? zql.issues : undefined;
+      const skipped = await tx.run(skippedQuery);
+      expectTypeOf(skipped).toEqualTypeOf<Issue[] | undefined>();
+
+      const skippedFalseQuery = disabled && zql.issues;
+      const skippedFalse = await tx.run(skippedFalseQuery);
+      expectTypeOf(skippedFalse).toEqualTypeOf<Issue[] | undefined>();
+    };
+
+    expectTypeOf(check).toBeFunction();
+  });
 });
 
 describe('preload', () => {
@@ -133,6 +200,27 @@ describe('preload', () => {
     const result = await z.preload(zql.issues.one());
     expectTypeOf(result.complete).toEqualTypeOf<Promise<void>>();
     await z.preload(queries.issue());
+  });
+
+  test('preload with conditional query', async () => {
+    const enabled = false as boolean;
+
+    const maybePreload = z.preload(enabled ? zql.issues : undefined);
+    expectTypeOf(maybePreload.complete).toEqualTypeOf<Promise<void>>();
+    await maybePreload.complete;
+    maybePreload.cleanup();
+
+    const skippedQuery = enabled ? zql.issues : undefined;
+    const skipped = z.preload(skippedQuery);
+    expectTypeOf(skipped.complete).toEqualTypeOf<Promise<void>>();
+    await skipped.complete;
+    skipped.cleanup();
+
+    const skippedFalseQuery = enabled && zql.issues;
+    const skippedFalse = z.preload(skippedFalseQuery);
+    expectTypeOf(skippedFalse.complete).toEqualTypeOf<Promise<void>>();
+    await skippedFalse.complete;
+    skippedFalse.cleanup();
   });
 });
 

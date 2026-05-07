@@ -29,11 +29,13 @@ import {
 } from '../../../shared/src/browser-env.ts';
 import {getDocumentVisibilityWatcher} from '../../../shared/src/document-visible.ts';
 import {getErrorMessage} from '../../../shared/src/error.ts';
+import type {Falsy} from '../../../shared/src/falsy.ts';
 import {h64} from '../../../shared/src/hash.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {must} from '../../../shared/src/must.ts';
 import {navigator} from '../../../shared/src/navigator.ts';
 import {promiseRace} from '../../../shared/src/promise-race.ts';
+import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
 import {emptyFunction} from '../../../shared/src/sentinels.ts';
 import {sleep, sleepWithAbort} from '../../../shared/src/sleep.ts';
 import {Subscribable} from '../../../shared/src/subscribable.ts';
@@ -939,7 +941,41 @@ export class Zero<
   >(
     query: QueryOrQueryRequest<TTable, TInput, TOutput, S, TReturn, C>,
     options?: PreloadOptions,
-  ) {
+  ): {
+    cleanup: () => void;
+    complete: Promise<void>;
+  };
+  preload<
+    TTable extends keyof S['tables'] & string,
+    TInput extends ReadonlyJSONValue | undefined,
+    TOutput extends ReadonlyJSONValue | undefined,
+    TReturn,
+  >(
+    query: QueryOrQueryRequest<TTable, TInput, TOutput, S, TReturn, C> | Falsy,
+    options?: PreloadOptions,
+  ): {
+    cleanup: () => void;
+    complete: Promise<void>;
+  };
+  preload<
+    TTable extends keyof S['tables'] & string,
+    TInput extends ReadonlyJSONValue | undefined,
+    TOutput extends ReadonlyJSONValue | undefined,
+    TReturn,
+  >(
+    query: QueryOrQueryRequest<TTable, TInput, TOutput, S, TReturn, C> | Falsy,
+    options?: PreloadOptions,
+  ): {
+    cleanup: () => void;
+    complete: Promise<void>;
+  } {
+    if (!query) {
+      return {
+        cleanup: emptyFunction,
+        complete: promiseVoid,
+      };
+    }
+
     return this.#zeroContext.preload(
       addContextToQuery(query, this.context),
       options,
@@ -974,7 +1010,29 @@ export class Zero<
   >(
     query: QueryOrQueryRequest<TTable, TInput, TOutput, S, TReturn, C>,
     runOptions?: RunOptions,
-  ): Promise<HumanReadable<TReturn>> {
+  ): Promise<HumanReadable<TReturn>>;
+  run<
+    TTable extends keyof S['tables'] & string,
+    TInput extends ReadonlyJSONValue | undefined,
+    TOutput extends ReadonlyJSONValue | undefined,
+    TReturn,
+  >(
+    query: QueryOrQueryRequest<TTable, TInput, TOutput, S, TReturn, C> | Falsy,
+    runOptions?: RunOptions,
+  ): Promise<HumanReadable<TReturn> | undefined>;
+  run<
+    TTable extends keyof S['tables'] & string,
+    TInput extends ReadonlyJSONValue | undefined,
+    TOutput extends ReadonlyJSONValue | undefined,
+    TReturn,
+  >(
+    query: QueryOrQueryRequest<TTable, TInput, TOutput, S, TReturn, C> | Falsy,
+    runOptions?: RunOptions,
+  ): Promise<HumanReadable<TReturn> | undefined> {
+    if (!query) {
+      return Promise.resolve(undefined);
+    }
+
     return this.#zeroContext.run(
       addContextToQuery(query, this.context),
       runOptions,

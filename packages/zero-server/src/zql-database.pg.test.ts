@@ -1,10 +1,13 @@
-import {beforeEach, expect, test} from 'vitest';
+import {beforeEach, expect, expectTypeOf, test} from 'vitest';
 import {
   getClientsTableDefinition,
   getMutationsTableDefinition,
 } from '../../zero-cache/src/services/change-source/pg/schema/shard.ts';
 import {testDBs} from '../../zero-cache/src/test/db.ts';
 import type {PostgresDB} from '../../zero-cache/src/types/pg.ts';
+import {createSchema} from '../../zero-schema/src/builder/schema-builder.ts';
+import {string, table} from '../../zero-schema/src/builder/table-builder.ts';
+import {createBuilder} from '../../zql/src/query/create-builder.ts';
 import {zeroPostgresJS} from './adapters/postgresjs.ts';
 
 let sql: PostgresDB;
@@ -82,4 +85,38 @@ test('write mutation result', async () => {
     await sql`SELECT "result" FROM zero_0.mutations WHERE "clientGroupID" = 'cg1' AND "clientID" = 'c1' AND "mutationID" = 1`;
   // expect the result to match
   expect(result).toEqual([{result: {data: {foo: 'bar'}}}]);
+});
+
+test('run handles conditional query', async () => {
+  const user = table('user')
+    .columns({
+      id: string(),
+      name: string(),
+    })
+    .primaryKey('id');
+  const schema = createSchema({tables: [user]});
+  const builder = createBuilder(schema);
+  const db = zeroPostgresJS(schema, sql);
+  const enabled = false as boolean;
+
+  const maybeQuery = enabled ? builder.user : undefined;
+  const users = await db.run(maybeQuery);
+  expectTypeOf(users).toEqualTypeOf<
+    {readonly id: string; readonly name: string}[] | undefined
+  >();
+  expect(users).toBeUndefined();
+
+  const skippedQuery = enabled ? builder.user : undefined;
+  const skipped = await db.run(skippedQuery);
+  expectTypeOf(skipped).toEqualTypeOf<
+    {readonly id: string; readonly name: string}[] | undefined
+  >();
+  expect(skipped).toBeUndefined();
+
+  const skippedFalseQuery = enabled && builder.user;
+  const skippedFalse = await db.run(skippedFalseQuery);
+  expectTypeOf(skippedFalse).toEqualTypeOf<
+    {readonly id: string; readonly name: string}[] | undefined
+  >();
+  expect(skippedFalse).toBeUndefined();
 });

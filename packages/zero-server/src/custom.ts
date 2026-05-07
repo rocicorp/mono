@@ -1,4 +1,5 @@
 import {assert} from '../../shared/src/asserts.ts';
+import type {Falsy} from '../../shared/src/falsy.ts';
 import {mapValues} from '../../shared/src/objects.ts';
 import {recordProxy} from '../../shared/src/record-proxy.ts';
 import {
@@ -149,7 +150,19 @@ export class TransactionImpl<
   run<TTable extends keyof TSchema['tables'] & string, TReturn>(
     query: Query<TTable, TSchema, TReturn>,
     _options?: RunOptions,
-  ): Promise<HumanReadable<TReturn>> {
+  ): Promise<HumanReadable<TReturn>>;
+  run<TTable extends keyof TSchema['tables'] & string, TReturn>(
+    query: Query<TTable, TSchema, TReturn> | Falsy,
+    _options?: RunOptions,
+  ): Promise<HumanReadable<TReturn> | undefined>;
+  run<TTable extends keyof TSchema['tables'] & string, TReturn>(
+    query: Query<TTable, TSchema, TReturn> | Falsy,
+    _options?: RunOptions,
+  ): Promise<HumanReadable<TReturn> | undefined> {
+    if (!query) {
+      return Promise.resolve(undefined);
+    }
+
     const queryInternals = asQueryInternals(query);
 
     // Execute the query using the database-specific executor

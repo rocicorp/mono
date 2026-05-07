@@ -1,4 +1,5 @@
 import {assert} from '../../../shared/src/asserts.ts';
+import type {Falsy} from '../../../shared/src/falsy.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
 import type {
   DefaultSchema,
@@ -51,6 +52,10 @@ export interface TransactionBase<S extends Schema> {
     query: Query<TTable, S, TReturn>,
     options?: RunOptions,
   ): Promise<HumanReadable<TReturn>>;
+  run<TTable extends keyof S['tables'] & string, TReturn>(
+    query: Query<TTable, S, TReturn> | Falsy,
+    options?: RunOptions,
+  ): Promise<HumanReadable<TReturn> | undefined>;
 }
 
 export type Transaction<

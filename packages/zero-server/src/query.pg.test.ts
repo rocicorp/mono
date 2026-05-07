@@ -1,4 +1,4 @@
-import {beforeEach, describe, expect, test} from 'vitest';
+import {beforeEach, describe, expect, expectTypeOf, test} from 'vitest';
 import {testDBs} from '../../zero-cache/src/test/db.ts';
 import type {PostgresDB} from '../../zero-cache/src/types/pg.ts';
 import {makeServerTransaction} from './custom.ts';
@@ -80,6 +80,45 @@ describe('makeSchemaQuery', () => {
       // Test that tx.query.table.run() works (the fix for the bug)
       const result = await transaction.query.basic.run();
       expect(result).toEqual([{id: '1', a: 2, b: 'foo', c: true}]);
+    });
+  });
+
+  test('tx.run handles falsy query', async () => {
+    await pg.begin(async tx => {
+      const dbTransaction = new Transaction(tx);
+      const transaction = await makeServerTransaction(
+        dbTransaction,
+        'test-client',
+        1,
+        schema,
+      );
+
+      const enabled = false as boolean;
+      const query = enabled ? transaction.query.basic : undefined;
+      const result = await transaction.run(query);
+      expectTypeOf(result).toEqualTypeOf<
+        | {
+            readonly id: string;
+            readonly a: number;
+            readonly b: string;
+            readonly c: boolean | null;
+          }[]
+        | undefined
+      >();
+      expect(result).toBeUndefined();
+
+      const falseQuery = enabled && transaction.query.basic;
+      const falseResult = await transaction.run(falseQuery);
+      expectTypeOf(falseResult).toEqualTypeOf<
+        | {
+            readonly id: string;
+            readonly a: number;
+            readonly b: string;
+            readonly c: boolean | null;
+          }[]
+        | undefined
+      >();
+      expect(falseResult).toBeUndefined();
     });
   });
 });

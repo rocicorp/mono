@@ -1,3 +1,4 @@
+import type {Falsy} from '../../shared/src/falsy.ts';
 import type {MaybePromise} from '../../shared/src/types.ts';
 import {formatPg, sql} from '../../z2s/src/sql.ts';
 import type {CleanupResultsArg} from '../../zero-protocol/src/mutation.ts';
@@ -121,7 +122,19 @@ export class ZQLDatabase<
   run<TTable extends keyof TSchema['tables'] & string, TReturn>(
     query: Query<TTable, TSchema, TReturn>,
     options?: RunOptions,
-  ): Promise<HumanReadable<TReturn>> {
+  ): Promise<HumanReadable<TReturn>>;
+  run<TTable extends keyof TSchema['tables'] & string, TReturn>(
+    query: Query<TTable, TSchema, TReturn> | Falsy,
+    options?: RunOptions,
+  ): Promise<HumanReadable<TReturn> | undefined>;
+  run<TTable extends keyof TSchema['tables'] & string, TReturn>(
+    query: Query<TTable, TSchema, TReturn> | Falsy,
+    options?: RunOptions,
+  ): Promise<HumanReadable<TReturn> | undefined> {
+    if (!query) {
+      return Promise.resolve(undefined);
+    }
+
     return this.transaction(tx => tx.run(query, options));
   }
 }

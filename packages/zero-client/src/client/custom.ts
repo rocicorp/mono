@@ -3,6 +3,7 @@ import type {ZeroTxData} from '../../../replicache/src/replicache-options.ts';
 import type {WriteTransactionImpl} from '../../../replicache/src/transactions.ts';
 import {zeroData} from '../../../replicache/src/transactions.ts';
 import {assert} from '../../../shared/src/asserts.ts';
+import type {Falsy} from '../../../shared/src/falsy.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {must} from '../../../shared/src/must.ts';
 import {emptyFunction} from '../../../shared/src/sentinels.ts';
@@ -166,7 +167,18 @@ export class TransactionImpl<
   run<TTable extends keyof TSchema['tables'] & string, TReturn>(
     query: Query<TTable, TSchema, TReturn>,
     options?: RunOptions,
-  ): Promise<HumanReadable<TReturn>> {
+  ): Promise<HumanReadable<TReturn>>;
+  run<TTable extends keyof TSchema['tables'] & string, TReturn>(
+    query: Query<TTable, TSchema, TReturn> | Falsy,
+    options?: RunOptions,
+  ): Promise<HumanReadable<TReturn> | undefined>;
+  run<TTable extends keyof TSchema['tables'] & string, TReturn>(
+    query: Query<TTable, TSchema, TReturn> | Falsy,
+    options?: RunOptions,
+  ): Promise<HumanReadable<TReturn> | undefined> {
+    if (!query) {
+      return Promise.resolve(undefined);
+    }
     return this.#zeroContext.run(query, options);
   }
 }
