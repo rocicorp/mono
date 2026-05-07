@@ -1821,9 +1821,9 @@ suite('compound join keys', () => {
   });
 
   // Three children sharing one parent-key tuple collapse to a single
-  // parent fetch (not three).  Children appear in the relationship in
-  // their original input order, since #fetchMergeSort appends to the
-  // per-key index list in iteration order.
+  // multi-constraint entry (not three).  Children appear in the
+  // relationship in their original input order, since #fetchBatched
+  // appends to the per-key index list in iteration order.
   test('one parent, three children sharing a parent-key', () => {
     const results = fetchTest({
       ...base,
@@ -2295,12 +2295,11 @@ suite('fetch with compound primary key === parentKey', () => {
   });
 });
 
-// Targets the merge-sort path specifically (#fetchMergeSort): parentKey
-// is non-unique on the parent, so #fetchQuicksort is bypassed and the
-// heap-based K-way merge is exercised. Other suites cover small K (1-2);
-// these scale K up and exercise reverse: true, which has no other
-// merge-sort coverage.
-suite('merge-sort path: large K and reverse', () => {
+// Exercises the chunked multi-constraint path with large K (number of
+// unique parent-key values) and reverse: true. Other suites cover small
+// K (1-2); these scale K up and add reverse coverage that no other
+// suite has.
+suite('large K and reverse', () => {
   const base = {
     columns: [
       {id: {type: 'number'}, groupId: {type: 'number'}},

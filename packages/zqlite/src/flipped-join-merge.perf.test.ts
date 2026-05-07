@@ -8,29 +8,19 @@ import {Database} from './db.ts';
 import {TableSource} from './table-source.ts';
 
 /**
- * Wall-clock perf for FlippedJoin against a real zqlite TableSource on
- * the non-unique parentKey path — the path optimized by the heap-merge
- * + dedup changes.
- *
- * Two compounding wins this test surfaces:
- *  - **Dedup of redundant parent fetches.** Children sharing a
- *    parent-key value now produce one parent cursor, not N. Pre-fix the
- *    code opened one cursor per child and each cursor refetched the
- *    same parent rows.
- *  - **Heap-based K-way merge.** O(log K) per emit instead of O(K) per
- *    emit (linear scan of every iterator's head row). K = number of
- *    open per-key cursors, so K = #childNodes pre-dedup vs #unique-keys
- *    post-dedup — the dedup win shrinks K too.
+ * Wall-clock perf for FlippedJoin against a real zqlite TableSource
+ * with N children sharing K unique parent-key values, exercising the
+ * dedup of redundant parent fetches: children sharing a parent-key
+ * value produce one entry in the multi-constraint, not N.
  *
  * Gated on PERF=1 so it doesn't run in CI. To run:
  *
  *   PERF=1 npm --workspace=zqlite run test -- flipped-join-merge.perf
  *
- * To compare against the pre-heap-merge / pre-dedup algorithm, check
- * out a revision before those changes landed in a worktree and port
- * this file across — the FlippedJoin and TableSource constructor
- * signatures are identical at that revision, so no test-side changes
- * are needed.
+ * To compare against the pre-dedup algorithm, check out a revision
+ * before those changes landed in a worktree and port this file across —
+ * the FlippedJoin and TableSource constructor signatures are identical
+ * at that revision, so no test-side changes are needed.
  */
 
 const lc = createSilentLogContext();
@@ -40,11 +30,9 @@ function setupDb(
   uniqueBuckets: number,
 ): {parent: TableSource; child: TableSource} {
   const db = new Database(lc, ':memory:');
-  // parent.bucket is intentionally NOT unique — that's what forces
-  // FlippedJoin down the merge-sort path (i.e. the path the heap-merge
-  // + dedup changes optimized). With a unique parent key the operator
-  // takes the quicksort path instead, which doesn't exercise either of
-  // the wins we want to measure.
+  // parent.bucket is intentionally NOT unique — multiple parents per
+  // bucket means multiple children can share a parent-key value, which
+  // is what surfaces the dedup-of-redundant-parent-fetches win.
   db.exec(/* sql */ `
     CREATE TABLE parent (
       id INTEGER NOT NULL,
@@ -153,7 +141,7 @@ function logRow(r: RunResult) {
 }
 
 describe.skipIf(!process.env.PERF)(
-  'FlippedJoin perf — non-unique parentKey (merge-sort path)',
+  'FlippedJoin perf — non-unique parentKey (dedup factor)',
   {timeout: 600_000},
   () => {
     test('2.5k children, sweep dedup factor', () => {
@@ -171,7 +159,7 @@ describe.skipIf(!process.env.PERF)(
       const cases = [N, N / 5, N / 25, N / 125, N / 625];
 
       console.log(
-        `\n=== FlippedJoin merge-sort: ${N.toLocaleString()} children, 1:1 parents-per-bucket ===`,
+        `\n=== FlippedJoin dedup: ${N.toLocaleString()} children, 1:1 parents-per-bucket ===`,
       );
       logHeader();
       for (const buckets of cases) {
@@ -183,7 +171,7 @@ describe.skipIf(!process.env.PERF)(
       const N = 2_500;
       runOnce(500, 50);
       console.log(
-        `\n=== FlippedJoin merge-sort: ${N.toLocaleString()} children, dedup=25 (3 runs) ===`,
+        `\n=== FlippedJoin dedup: ${N.toLocaleString()} children, dedup=25 (3 runs) ===`,
       );
       logHeader();
       for (let i = 0; i < 3; i++) {
