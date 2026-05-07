@@ -1,6 +1,6 @@
 import {assert, unreachable} from '../../../shared/src/asserts.ts';
 import {binarySearch} from '../../../shared/src/binary-search.ts';
-import {emptyArray} from '../../../shared/src/sentinels.ts';
+import {must} from '../../../shared/src/must.ts';
 import type {CompoundKey, System} from '../../../zero-protocol/src/ast.ts';
 import type {Row, Value} from '../../../zero-protocol/src/data.ts';
 import {ChangeIndex} from './change-index.ts';
@@ -12,7 +12,11 @@ import {
   makeRemoveChange,
   type Change,
 } from './change.ts';
-import {constraintsAreCompatible, keyMatchesPrimaryKey} from './constraint.ts';
+import {
+  constraintsAreCompatible,
+  keyMatchesPrimaryKey,
+  type Constraint,
+} from './constraint.ts';
 import type {Node} from './data.ts';
 import {
   buildJoinConstraint,
@@ -244,34 +248,49 @@ export class FlippedJoin implements Input {
     req: FetchRequest,
     childNodes: Node[],
   ): Stream<Node | 'yield'> {
+    // Group children by parent-key value so children sharing a value
+    // share one fetch (and one cursor). Without this, two children with
+    // the same parent-key value would each open their own iterator that
+    // re-fetches the same parent rows — wasted IO.
+    const parentKey = this.#parentKey;
+    const computedKeys: Constraint[] = [];
+    const childIndexesByKey = new Map<string, number[]>();
+    for (let i = 0; i < childNodes.length; i++) {
+      const constraintFromChild = buildJoinConstraint(
+        childNodes[i].row,
+        this.#childKey,
+        parentKey,
+      );
+      if (
+        !constraintFromChild ||
+        (req.constraint &&
+          !constraintsAreCompatible(constraintFromChild, req.constraint))
+      ) {
+        continue;
+      }
+      const key = canonicalKey(constraintFromChild, parentKey);
+      const existing = childIndexesByKey.get(key);
+      if (existing === undefined) {
+        childIndexesByKey.set(key, [i]);
+        computedKeys.push(constraintFromChild);
+      } else {
+        existing.push(i);
+      }
+    }
+
+    if (computedKeys.length === 0) {
+      return;
+    }
+
     const parentIterators: Iterator<Node | 'yield'>[] = [];
     let threw = false;
     try {
-      for (const childNode of childNodes) {
-        // TODO: consider adding the ability to pass a set of
-        // ids to fetch, and have them applied to sqlite using IN.
-        const constraintFromChild = buildJoinConstraint(
-          childNode.row,
-          this.#childKey,
-          this.#parentKey,
-        );
-        if (
-          !constraintFromChild ||
-          (req.constraint &&
-            !constraintsAreCompatible(constraintFromChild, req.constraint))
-        ) {
-          parentIterators.push(emptyArray[Symbol.iterator]());
-        } else {
-          const stream = this.#parent.fetch({
-            ...req,
-            constraint: {
-              ...req.constraint,
-              ...constraintFromChild,
-            },
-          });
-          const iterator = stream[Symbol.iterator]();
-          parentIterators.push(iterator);
-        }
+      for (const c of computedKeys) {
+        const stream = this.#parent.fetch({
+          ...req,
+          constraint: req.constraint ? {...req.constraint, ...c} : c,
+        });
+        parentIterators.push(stream[Symbol.iterator]());
       }
       const nextParentNodes: (Node | null)[] = [];
       for (let i = 0; i < parentIterators.length; i++) {
@@ -285,46 +304,50 @@ export class FlippedJoin implements Input {
         nextParentNodes[i] = result.done ? null : (result.value as Node);
       }
 
+      // Linear-scan K-way merge over per-unique-key cursors. Each cursor
+      // matches a distinct parent-key value, so the cursors return
+      // disjoint sets of parent rows and the merge sees no ties — every
+      // emit maps back to exactly one entry in childIndexesByKey.
       while (true) {
-        let minParentNode = null;
-        let minParentNodeChildIndexes: number[] = [];
+        let minIdx = -1;
+        let minParentNode: Node | null = null;
         for (let i = 0; i < nextParentNodes.length; i++) {
           const parentNode = nextParentNodes[i];
           if (parentNode === null) {
             continue;
           }
-          if (minParentNode === null) {
+          if (
+            minParentNode === null ||
+            this.#schema.compareRows(parentNode.row, minParentNode.row) *
+              (req.reverse ? -1 : 1) <
+              0
+          ) {
             minParentNode = parentNode;
-            minParentNodeChildIndexes.push(i);
-          } else {
-            const compareResult =
-              this.#schema.compareRows(parentNode.row, minParentNode.row) *
-              (req.reverse ? -1 : 1);
-            if (compareResult === 0) {
-              minParentNodeChildIndexes.push(i);
-            } else if (compareResult < 0) {
-              minParentNode = parentNode;
-              minParentNodeChildIndexes = [i];
-            }
+            minIdx = i;
           }
         }
         if (minParentNode === null) {
           return;
         }
-        const relatedChildNodes: Node[] = [];
-        for (const minParentNodeChildIndex of minParentNodeChildIndexes) {
-          relatedChildNodes.push(childNodes[minParentNodeChildIndex]);
-          const iter = parentIterators[minParentNodeChildIndex];
-          let result = iter.next();
-          // yield yields when advancing
-          while (!result.done && result.value === 'yield') {
-            yield result.value;
-            result = iter.next();
-          }
-          nextParentNodes[minParentNodeChildIndex] = result.done
-            ? null
-            : (result.value as Node);
+        // Every fetched parent row matches the constraint for one entry
+        // in `computedKeys`, whose canonical key was inserted into the
+        // map — so the lookup is guaranteed to hit. Children retain
+        // their original input order within the group because we
+        // appended to the indexes array in iteration order.
+        const idxs = must(
+          childIndexesByKey.get(canonicalKey(minParentNode.row, parentKey)),
+        );
+        const relatedChildNodes: Node[] = idxs.map(i => childNodes[i]);
+
+        const iter = parentIterators[minIdx];
+        let result = iter.next();
+        // yield yields when advancing
+        while (!result.done && result.value === 'yield') {
+          yield result.value;
+          result = iter.next();
         }
+        nextParentNodes[minIdx] = result.done ? null : (result.value as Node);
+
         yield* this.#yieldParentWithOverlay(minParentNode, relatedChildNodes);
       }
     } catch (e) {
@@ -588,4 +611,39 @@ export class FlippedJoin implements Input {
         unreachable(change);
     }
   }
+}
+
+/**
+ * Canonical string key over `keys` of `record`, used by `#fetchMergeSort`
+ * both to dedupe per-child fetches and to map each returned parent row
+ * back to the children that referenced its parent-key tuple.
+ *
+ * Exported for testing.
+ */
+export function canonicalKey(
+  record: Record<string, Value | undefined>,
+  keys: CompoundKey,
+): string {
+  if (keys.length === 1) {
+    return canonicalValue(record[keys[0]]);
+  }
+  let s = '';
+  for (let i = 0; i < keys.length; i++) {
+    if (i > 0) s += '\x00';
+    s += canonicalValue(record[keys[i]]);
+  }
+  return s;
+}
+
+function canonicalValue(v: Value | bigint | undefined): string {
+  // Tag by type so we don't conflate e.g. `1` (number) with `"1"` (string).
+  // Bigint shows up at runtime when zqlite's safeIntegers is on, even
+  // though the static `Value` type doesn't list it.
+  if (v === null || v === undefined) return 'n';
+  const t = typeof v;
+  if (t === 'string') return 's' + (v as string);
+  if (t === 'number') return 'd' + (v as number);
+  if (t === 'bigint') return 'b' + (v as bigint).toString();
+  if (t === 'boolean') return v ? 't' : 'f';
+  return 'j' + JSON.stringify(v);
 }
