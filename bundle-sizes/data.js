@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778151489485,
+  "lastUpdate": 1778159315836,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -55609,6 +55609,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/rocicorp/mono/commit/4ea131c91ef124403b1886728feba3b54c98236c"
         },
         "date": 1778151477472,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 315505,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 56729,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 116720,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 33278,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "arv@roci.dev",
+            "name": "Erik Arvidsson",
+            "username": "arv"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "94a232a0e6d8580b53a0a7f625c247f48ce72128",
+          "message": "perf(replicache): Batch writes in SQLiteStore (#5915)\n\nThis pull request introduces a batching mechanism for SQLite write\noperations in the `SQLiteWrite` class, optimizing how deletes and\nupserts are performed.\n\n**SQLite write batching and implementation changes:**\n\n* The `SQLiteWrite` class now extends `WriteImplBase` and batches\ndeletes and upserts, executing them as single statements per operation\ntype in `commit`. This improves efficiency by reducing the number of\nSQLite statements executed.\n* The prepared statements for `put` and `del` in `setupDatabase` have\nbeen updated to accept arrays of values, allowing for batched\noperations.\n\n**Testing improvements:**\n\n* Added a new test to verify that `SQLiteWrite` batches deletes and\nupserts into single statements, ensuring the new batching logic works as\nexpected.\n\n\n---\n\n**KV Benchmark Summary (1000 puts+commit):**\n\nThe branch version dramatically outperforms released packages:\n\n| Implementation | Avg | Speedup |\n|---|---|---|\n| **op-sqlite-branch** | 3.96ms | **7.5x faster** than main |\n| **expo-sqlite-branch** | 6.30ms | **9x faster** than main |\n| op-sqlite-main | 29.87ms | baseline |\n| expo-sqlite-main | 56.52ms | slowest |\n\n**Key findings:**\n- Branch (current work) shows **massive gains** — likely from the batch\ncommit optimization\n- op-sqlite significantly outperforms expo-sqlite across all versions\n- Branch versions are more stable, except expo-sqlite-branch has one\noutlier (23ms spike)\n- Main branch (27ms) falls between main and branch, suggesting\nincremental prior improvements\n\nThis validates the batch commit refactoring: ~7-9x speedup on KV\noperations.\n\n---------\n\nCo-authored-by: Copilot <copilot@github.com>",
+          "timestamp": "2026-05-07T12:46:09Z",
+          "tree_id": "37a07631d946ba118028c1dcffe1af933957c076",
+          "url": "https://github.com/rocicorp/mono/commit/94a232a0e6d8580b53a0a7f625c247f48ce72128"
+        },
+        "date": 1778159303017,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
