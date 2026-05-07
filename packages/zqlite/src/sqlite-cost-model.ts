@@ -179,6 +179,9 @@ function estimateCost(
 
   let totalRows = 0;
   let totalCost = 0;
+  // Default to true (indexed seek) when scanstatus reports nothing useful;
+  // overridden below by the first top-level op's explain text.
+  let usesIndex = true;
 
   // Identify if there are multiple top-level (parentId=0) operations
   // If so, the first is typically the scan, and subsequent ones are sorts
@@ -193,6 +196,11 @@ function estimateCost(
       // First top-level op is the main scan
       // and determines the total number of rows output.
       totalRows = op.est;
+      // SQLite's EXPLAIN QUERY PLAN reports `SEARCH ...` for index seeks
+      // (including primary-key lookups) and `SCAN ...` for full table
+      // scans. PlannerJoin uses this to decide whether to amortize per-fetch
+      // cost across IN-list chunks.
+      usesIndex = op.explain.startsWith('SEARCH');
       firstLoop = false;
     } else {
       if (op.explain.includes('ORDER BY')) {
@@ -205,6 +213,7 @@ function estimateCost(
     rows: totalRows,
     startupCost: totalCost,
     fanout,
+    usesIndex,
   };
 }
 

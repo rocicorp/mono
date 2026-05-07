@@ -48,6 +48,7 @@ suite('PlannerFanIn', () => {
       selectivity: 1.0,
       limit: undefined,
       fanout: expect.any(Function),
+      usesIndex: true,
     };
     expect(inputs[0].estimateCost(1, [])).toStrictEqual(baseCost);
     expect(inputs[1].estimateCost(1, [])).toStrictEqual(baseCost);
@@ -67,6 +68,7 @@ suite('PlannerFanIn', () => {
       selectivity: 1.0,
       limit: undefined,
       fanout: expect.any(Function),
+      usesIndex: true,
     };
     expect(inputs[0].estimateCost(1, [])).toStrictEqual(baseCost);
     expect(inputs[1].estimateCost(1, [])).toStrictEqual(baseCost);
@@ -100,6 +102,7 @@ suite('PlannerFanIn', () => {
           confidence: 'none',
           fanout: 1,
         }),
+        usesIndex: true,
       });
 
       return new PlannerSource(tableName, costModel).connect(

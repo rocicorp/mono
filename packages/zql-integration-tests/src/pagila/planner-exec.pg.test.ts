@@ -95,9 +95,9 @@ describe('Pagila planner execution cost validation', () => {
         .whereExists('actors', a => a.where('lastName', 'GUINESS'))
         .whereExists('categories', c => c.where('name', 'Action')),
       validations: [
-        ['correlation', -0.09],
+        ['correlation', 0.1],
         ['within-optimal', 1],
-        ['within-baseline', 0.07],
+        ['within-baseline', 0.065],
       ],
     },
 
@@ -124,10 +124,11 @@ describe('Pagila planner execution cost validation', () => {
           i.whereExists('film', f => f.where('rating', 'PG')),
         ),
       validations: [
-        // TODO: why decreased correlation? From 0.4 to -0.1
-        // 'payment to film via rental chain (3 hops)' sees a huge improvement though.
-        ['correlation', -0.1],
-        ['within-optimal', 2.1],
+        // Correlation recovered after index-aware flipped-join cost — was
+        // -0.1 with the chunked-startup-only discount, now 0.10 because the
+        // SCAN-vs-seek distinction is reflected in the planner.
+        ['correlation', 0.05],
+        ['within-optimal', 1.95],
         ['within-baseline', 1],
       ],
     },
@@ -148,10 +149,11 @@ describe('Pagila planner execution cost validation', () => {
         // Big improvement after multi-IN AND propagation across chained
         // FlippedJoins — the missing indexes that previously forced a
         // SCAN are now amortized across one combined IN-list query.
-        // Tightened from -0.5 / 10 / 10.
-        ['correlation', 0.9],
+        // Tightened from -0.5 / 10 / 10. Index-aware discount for the
+        // unindexed-parent SCAN case settles correlation at ~0.82.
+        ['correlation', 0.8],
         ['within-optimal', 1],
-        ['within-baseline', 0.5],
+        ['within-baseline', 0.45],
       ],
     },
 
@@ -182,8 +184,8 @@ describe('Pagila planner execution cost validation', () => {
       ),
       validations: [
         ['correlation', 0],
-        ['within-optimal', 1],
-        ['within-baseline', 1],
+        ['within-optimal', 1.05],
+        ['within-baseline', 0.5],
       ],
     },
 
@@ -221,7 +223,7 @@ describe('Pagila planner execution cost validation', () => {
       validations: [
         // Tightened from -1 / 1.4 after multi-IN AND propagation lets
         // the source filter both join keys in one query.
-        ['correlation', 0.9],
+        ['correlation', 0.95],
         ['within-optimal', 1],
         ['within-baseline', 1],
       ],
@@ -271,7 +273,7 @@ describe('Pagila planner execution cost validation', () => {
       // within-optimal excluded: empty results cause divide-by-zero (optimal has 0 rows)
       validations: [
         ['correlation', 0.8],
-        ['within-baseline', 0.01],
+        ['within-baseline', 0.005],
       ],
     },
 
@@ -300,7 +302,7 @@ describe('Pagila planner execution cost validation', () => {
         ['correlation', 0.74],
         // TODO
         ['within-optimal', 31],
-        ['within-baseline', 0.2],
+        ['within-baseline', 0.19],
       ],
     },
 

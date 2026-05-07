@@ -65,6 +65,7 @@ export const simpleCostModel: ConnectionCostModel = (
     startupCost: 0,
     rows: rows,
     fanout,
+    usesIndex: true,
   };
 };
 
@@ -81,6 +82,7 @@ export function expectedCost(constraintCount: number): CostEstimate {
     selectivity: 1.0,
     limit: undefined,
     fanout,
+    usesIndex: true,
   };
 }
 
@@ -93,6 +95,7 @@ export function multCost(base: CostEstimate, factor: number): CostEstimate {
     selectivity: base.selectivity,
     limit: base.limit,
     fanout,
+    usesIndex: base.usesIndex,
   };
 }
 

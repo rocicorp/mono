@@ -95,6 +95,9 @@ export class PlannerFanIn {
       fanout: () => {
         throw new Error('Failed to set fanout model');
       },
+      // AND across branches — a SCAN in any branch defeats IN-list batching
+      // for downstream flipped joins.
+      usesIndex: true,
     };
 
     if (this.#type === 'FI') {
@@ -125,6 +128,7 @@ export class PlannerFanIn {
         if (cost.scanEst > maxScanEst) {
           maxScanEst = cost.scanEst;
         }
+        totalCost.usesIndex = totalCost.usesIndex && cost.usesIndex;
 
         // OR branches: combine selectivities assuming independent events
         // P(A OR B) = 1 - (1-A)(1-B)
@@ -161,6 +165,7 @@ export class PlannerFanIn {
         totalCost.cost += cost.cost;
         totalCost.scanEst += cost.scanEst;
         totalCost.startupCost = totalCost.startupCost + cost.startupCost;
+        totalCost.usesIndex = totalCost.usesIndex && cost.usesIndex;
 
         // OR branches: combine selectivities assuming independent events
         // P(A OR B) = 1 - (1-A)(1-B)

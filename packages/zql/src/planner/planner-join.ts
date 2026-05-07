@@ -371,8 +371,27 @@ export class PlannerJoin {
         selectivity: child.selectivity * parent.selectivity,
         limit: parent.limit,
         fanout: parent.fanout,
+        usesIndex: parent.usesIndex,
       };
     } else {
+      // FlippedJoin batches child→parent lookups into chunks of
+      // MULTI_CONSTRAINT_CHUNK_SIZE, issuing one IN-list query per chunk.
+      //
+      // - When the parent uses an index seek, batching does not amortize:
+      //   each IN value still pays its own seek, so total work scales with
+      //   `child.scanEst` directly.
+      // - When the parent does a full table scan, batching amortizes the
+      //   whole per-fetch cost: SQLite scans once per chunk regardless of
+      //   IN-list size, so total work scales with `ceil(child.scanEst / CHUNK)`.
+      //
+      // The cost model already encodes this distinction in
+      // `parent.scanEst` (≈1 for an indexed seek, ≈table_size for a scan),
+      // but only the chunk count tells us how many of those fetches we
+      // actually pay for at runtime.
+      const perFetchCost = parent.startupCost + parent.cost + parent.scanEst;
+      const flippedCost = parent.usesIndex
+        ? child.scanEst * perFetchCost
+        : Math.ceil(child.scanEst / MULTI_CONSTRAINT_CHUNK_SIZE) * perFetchCost;
       costEstimate = {
         startupCost: child.startupCost,
         scanEst:
@@ -384,24 +403,14 @@ export class PlannerJoin {
                   ? 0
                   : parent.limit / downstreamChildSelectivity,
               ),
-        // FlippedJoin batches child→parent lookups into chunks of
-        // MULTI_CONSTRAINT_CHUNK_SIZE, issuing one IN-list query per
-        // chunk. So `parent.startupCost` (statement prepare + plan
-        // setup) is paid once per chunk, not once per child row. The
-        // per-seek work (`parent.cost` index walk + `parent.scanEst`
-        // rows) still scales with child row count: each IN value still
-        // does its own index seek.
-        cost:
-          child.cost +
-          Math.ceil(child.scanEst / MULTI_CONSTRAINT_CHUNK_SIZE) *
-            parent.startupCost +
-          child.scanEst * (parent.cost + parent.scanEst),
+        cost: child.cost + flippedCost,
         // the child selectivity is not relevant here because it has already been taken into account via the flipping.
         // I.e., `child.returnedRows` is the estimated number of rows produced by the child _after_ taking filtering into account.
         returnedRows: parent.returnedRows * child.returnedRows,
         selectivity: parent.selectivity * child.selectivity,
         limit: parent.limit,
         fanout: parent.fanout,
+        usesIndex: parent.usesIndex,
       };
     }
 

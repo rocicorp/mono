@@ -149,6 +149,37 @@ describe('SQLite cost model', () => {
     expect(startupCost).toBe(0);
   });
 
+  test('usesIndex reflects SEARCH vs SCAN at the leaf', () => {
+    // PK lookup → SEARCH (uses index)
+    const indexed = costModel('foo', [['a', 'asc']], undefined, {
+      a: undefined,
+    });
+    expect(indexed.usesIndex).toBe(true);
+
+    // Filter on unindexed column → SCAN
+    const unindexed = costModel(
+      'foo',
+      [['a', 'asc']],
+      {
+        type: 'simple',
+        left: {type: 'column', name: 'b'},
+        op: '=',
+        right: {type: 'literal', value: 2},
+      },
+      undefined,
+    );
+    expect(unindexed.usesIndex).toBe(false);
+
+    // Unconstrained ordered scan → SCAN
+    const unconstrained = costModel(
+      'foo',
+      [['a', 'asc']],
+      undefined,
+      undefined,
+    );
+    expect(unconstrained.usesIndex).toBe(false);
+  });
+
   test('startup cost for index scan is zero', () => {
     // SELECT * FROM foo ORDER BY a
     // Uses primary key index - no sort needed, so startup cost should be 0

@@ -53,6 +53,20 @@ export type CostEstimate = {
   limit: number | undefined;
 
   fanout: FanoutCostModel;
+
+  /**
+   * Whether the per-fetch query plan at the leaf source uses an index seek
+   * (true) or a full table scan (false).
+   *
+   * Propagates upward through joins / fan-in / fan-out so that a flipped
+   * join can determine — without inspecting its own subtree — whether the
+   * IN-list batching amortizes per-fetch work. SCAN parents amortize (one
+   * scan per chunk); SEEK parents do not (one seek per IN value).
+   *
+   * Fan-in over multiple branches reports `true` only if every branch is
+   * indexed (conservative AND — a SCAN in any branch defeats batching).
+   */
+  usesIndex: boolean;
 };
 
 /**

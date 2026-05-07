@@ -48,6 +48,7 @@ suite('PlannerFanOut', () => {
       selectivity: 1.0,
       limit: undefined,
       fanout: expect.any(Function),
+      usesIndex: true,
     });
   });
 

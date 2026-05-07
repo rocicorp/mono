@@ -68,6 +68,7 @@ suite('PlannerJoin', () => {
       selectivity: 1.0,
       limit: undefined,
       fanout: expect.any(Function),
+      usesIndex: true,
     });
   });
 
@@ -85,6 +86,7 @@ suite('PlannerJoin', () => {
       selectivity: 1.0,
       limit: undefined,
       fanout: expect.any(Function),
+      usesIndex: true,
     });
   });
 
@@ -107,6 +109,7 @@ suite('PlannerJoin', () => {
       selectivity: 1.0,
       limit: undefined,
       fanout: expect.any(Function),
+      usesIndex: true,
     });
   });
 

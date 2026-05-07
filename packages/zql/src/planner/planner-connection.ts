@@ -205,7 +205,7 @@ export class PlannerConnection {
       this.#baseConstraints,
       constraint,
     );
-    const {startupCost, fanout, rows} = this.#model(
+    const {startupCost, fanout, rows, usesIndex} = this.#model(
       this.table,
       this.#sort,
       this.#filters,
@@ -222,6 +222,7 @@ export class PlannerConnection {
       selectivity: this.selectivity,
       limit: this.limit,
       fanout,
+      usesIndex,
     };
     this.#cachedConstraintCosts.set(key, cost);
 
@@ -336,6 +337,15 @@ export type CostModelCost = {
   startupCost: number;
   rows: number;
   fanout: FanoutCostModel;
+  /**
+   * Whether the per-fetch query plan uses an index seek (true) or a full
+   * table scan (false).
+   *
+   * Read by `PlannerJoin` when computing flipped-join cost: batched IN-list
+   * fetches amortize per-chunk work for SCANs (one scan per chunk regardless
+   * of IN-list size) but not for index seeks (one seek per IN value).
+   */
+  usesIndex: boolean;
 };
 export type ConnectionCostModel = (
   table: string,

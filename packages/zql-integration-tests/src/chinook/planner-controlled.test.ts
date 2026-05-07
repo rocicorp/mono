@@ -58,6 +58,7 @@ describe('one join', () => {
       startupCost: 0,
       rows: 10,
       fanout: () => ({fanout: 3, confidence: 'none' as const}),
+      usesIndex: true,
     });
     const unplanned = ast(builder.track.whereExists('album'));
     const planned = planQuery(unplanned, costModel);
@@ -146,9 +147,19 @@ describe('two joins via or', () => {
             Object.hasOwn(constraint, 'id'),
             'Expected constraint to have id',
           );
-          return {startupCost: 0, rows: 1, fanout: defaultFanout};
+          return {
+            startupCost: 0,
+            rows: 1,
+            fanout: defaultFanout,
+            usesIndex: true,
+          };
         }
-        return {startupCost: 0, rows: 2, fanout: defaultFanout}; // only 2 albums with the name 'Outlaw Blues'
+        return {
+          startupCost: 0,
+          rows: 2,
+          fanout: defaultFanout,
+          usesIndex: true,
+        }; // only 2 albums with the name 'Outlaw Blues'
       }
 
       if (table === 'invoiceLine') {
@@ -161,23 +172,48 @@ describe('two joins via or', () => {
           // TODO: We cannot get this to flip one and not the other without incorporating
           // limits and selectivity into the cost model. For now, just return a low cost to
           // simulate the track quickly matching invoices and returning early.
-          return {startupCost: 0, rows: 0.1, fanout: defaultFanout};
+          return {
+            startupCost: 0,
+            rows: 0.1,
+            fanout: defaultFanout,
+            usesIndex: true,
+          };
         }
 
-        return {startupCost: 0, rows: 10_000, fanout: defaultFanout};
+        return {
+          startupCost: 0,
+          rows: 10_000,
+          fanout: defaultFanout,
+          usesIndex: true,
+        };
       }
 
       if (table === 'track') {
         if (constraint !== undefined) {
           if (Object.hasOwn(constraint, 'id')) {
-            return {startupCost: 0, rows: 1, fanout: defaultFanout};
+            return {
+              startupCost: 0,
+              rows: 1,
+              fanout: defaultFanout,
+              usesIndex: true,
+            };
           }
           if (Object.hasOwn(constraint, 'albumId')) {
-            return {startupCost: 0, rows: 10, fanout: defaultFanout};
+            return {
+              startupCost: 0,
+              rows: 10,
+              fanout: defaultFanout,
+              usesIndex: true,
+            };
           }
           throw new Error('Unexpected constraint on track');
         }
-        return {startupCost: 0, rows: 1_000, fanout: defaultFanout};
+        return {
+          startupCost: 0,
+          rows: 1_000,
+          fanout: defaultFanout,
+          usesIndex: true,
+        };
       }
 
       throw new Error(`Unexpected table: ${table}`);
@@ -332,18 +368,21 @@ describe('related calls get plans', () => {
             rows: 1,
             startupCost: 0,
             fanout: defaultFanout,
+            usesIndex: true,
           };
         }
         return {
           rows: 10_000,
           startupCost: 0,
           fanout: defaultFanout,
+          usesIndex: true,
         };
       }
       return {
         rows: 10,
         startupCost: 0,
         fanout: defaultFanout,
+        usesIndex: true,
       };
     };
 
@@ -441,6 +480,7 @@ function makeCostModel(costs: Record<string, number>) {
         startupCost: 0,
         rows: 1,
         fanout: defaultFanout,
+        usesIndex: true,
       };
     }
 
@@ -450,6 +490,7 @@ function makeCostModel(costs: Record<string, number>) {
         startupCost: 0,
         rows: 100,
         fanout: defaultFanout,
+        usesIndex: true,
       };
     }
 
@@ -459,6 +500,7 @@ function makeCostModel(costs: Record<string, number>) {
         startupCost: 0,
         rows: 10,
         fanout: defaultFanout,
+        usesIndex: true,
       };
     }
 
@@ -468,6 +510,7 @@ function makeCostModel(costs: Record<string, number>) {
       startupCost: 0,
       rows: ret,
       fanout: defaultFanout,
+      usesIndex: true,
     };
   };
 }

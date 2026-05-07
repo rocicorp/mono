@@ -117,8 +117,16 @@ export function validateWithinOptimal(
     current.actualRowsScanned < best.actualRowsScanned ? current : best,
   );
 
-  // Calculate ratio
-  const ratio = pickedPlan.actualRowsScanned / optimalPlan.actualRowsScanned;
+  // Calculate ratio. When the optimal plan visits zero rows the picked plan
+  // must too (optimal is the minimum), so 0/0 means picked = optimal — treat
+  // as ratio 1 instead of NaN. Mirrors the same protection in
+  // validateWithinBaseline below.
+  const ratio =
+    optimalPlan.actualRowsScanned > 0
+      ? pickedPlan.actualRowsScanned / optimalPlan.actualRowsScanned
+      : pickedPlan.actualRowsScanned === 0
+        ? 1
+        : Infinity;
   const passed = ratio <= toleranceFactor;
 
   const details = passed

@@ -135,7 +135,7 @@ describe('Chinook planner execution cost validation', () => {
         ['within-baseline', 1],
       ],
       extraIndexValidations: [
-        ['correlation', 0.4],
+        ['correlation', 0.95],
         ['within-optimal', 1],
         ['within-baseline', 1],
       ],
@@ -174,12 +174,12 @@ describe('Chinook planner execution cost validation', () => {
         )
         .limit(5),
       validations: [
-        ['correlation', 0.15],
-        ['within-optimal', 1.5],
+        ['correlation', 0.18],
+        ['within-optimal', 1.25],
         ['within-baseline', 1],
       ],
       extraIndexValidations: [
-        ['correlation', -0.5],
+        ['correlation', -0.4],
         ['within-baseline', 1],
       ],
     },
@@ -196,7 +196,7 @@ describe('Chinook planner execution cost validation', () => {
         )
         .limit(20),
       validations: [
-        ['correlation', 0.25],
+        ['correlation', 0.35],
         ['within-optimal', 1],
         ['within-baseline', 1],
       ],
@@ -248,14 +248,14 @@ describe('Chinook planner execution cost validation', () => {
         .whereExists('tracks', track => track.where('composer', 'Kurt Cobain'))
         .limit(10),
       validations: [
-        ['correlation', 0.0],
-        ['within-optimal', 3.37],
+        ['correlation', 0.55],
+        ['within-optimal', 2.25],
         ['within-baseline', 1],
       ],
       extraIndexValidations: [
-        ['correlation', 0.8],
+        ['correlation', 0.95],
         ['within-optimal', 1],
-        ['within-baseline', 0.04],
+        ['within-baseline', 0.035],
       ],
     },
 
@@ -301,7 +301,7 @@ describe('Chinook planner execution cost validation', () => {
         .limit(10),
       validations: [
         ['correlation', -1.0],
-        ['within-optimal', 10],
+        ['within-optimal', 9],
         ['within-baseline', 1],
       ],
       extraIndexValidations: [
@@ -359,12 +359,12 @@ describe('Chinook planner execution cost validation', () => {
         .whereExists('albums', album => album.whereExists('tracks'))
         .limit(1),
       validations: [
-        ['correlation', 0.4],
+        ['correlation', 0.95],
         ['within-optimal', 1],
         ['within-baseline', 1],
       ],
       extraIndexValidations: [
-        ['correlation', 0.4],
+        ['correlation', 0.95],
         ['within-optimal', 1],
         ['within-baseline', 1],
       ],
@@ -445,15 +445,15 @@ describe('Chinook planner execution cost validation', () => {
           i.whereExists('customer', c => c.whereExists('supportRep', e => e)),
         ),
       validations: [
-        ['correlation', -0.7],
+        ['correlation', -0.55],
         ['within-optimal', 2.3],
         ['within-baseline', 2.3],
       ],
       // Does well with indices
       extraIndexValidations: [
-        ['correlation', 0.85],
-        ['within-optimal', 1.43],
-        ['within-baseline', 1.43],
+        ['correlation', 0.9],
+        ['within-optimal', 1.1],
+        ['within-baseline', 1.05],
       ],
     },
 
@@ -505,9 +505,9 @@ describe('Chinook planner execution cost validation', () => {
         ['within-baseline', 1],
       ],
       extraIndexValidations: [
-        ['correlation', 0.3],
+        ['correlation', 0.9],
         ['within-optimal', 1],
-        ['within-baseline', 0.8],
+        ['within-baseline', 0.72],
       ],
     },
 
