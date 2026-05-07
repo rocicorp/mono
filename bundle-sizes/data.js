@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778145315977,
+  "lastUpdate": 1778151489485,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -55565,6 +55565,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/rocicorp/mono/commit/27ff4d5c00d01dda49c70f7b5237c80d5638e175"
         },
         "date": 1778145303895,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 315505,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 56729,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 116720,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 33278,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "arv@roci.dev",
+            "name": "Erik Arvidsson",
+            "username": "arv"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4ea131c91ef124403b1886728feba3b54c98236c",
+          "message": "chore(lint): unify oxlint scripts and bump lint/test toolchain (#5911)\n\nCentralize package lint commands on the root oxlint config so type-aware\nrules run consistently across workspaces and CI. This removes drift\nbetween package-level flags and root settings after tooling changes.\n\nAlso updates oxlint/oxfmt/vitest and related dev dependencies to keep\nthe monorepo on a compatible, current baseline.",
+          "timestamp": "2026-05-07T10:39:30Z",
+          "tree_id": "777cab4659ad3aea37d0643254bc4dd0ffef3142",
+          "url": "https://github.com/rocicorp/mono/commit/4ea131c91ef124403b1886728feba3b54c98236c"
+        },
+        "date": 1778151477472,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
