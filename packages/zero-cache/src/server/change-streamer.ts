@@ -1,8 +1,12 @@
+import type {LogContext} from '@rocicorp/logger';
 import {assert} from '../../../shared/src/asserts.ts';
 import {must} from '../../../shared/src/must.ts';
 import {DatabaseInitError} from '../../../zqlite/src/db.ts';
 import {getServerContext} from '../config/server-context.ts';
-import {getNormalizedZeroConfig} from '../config/zero-config.ts';
+import {
+  getNormalizedZeroConfig,
+  type NormalizedZeroConfig,
+} from '../config/zero-config.ts';
 import {deleteLiteDB} from '../db/delete-lite-db.ts';
 import {warmupConnections} from '../db/warmup.ts';
 import {initEventSink, publishCriticalEvent} from '../observability/events.ts';
@@ -37,12 +41,11 @@ import {createLogContext} from './logging.ts';
 import {startOtelAuto} from './otel-start.ts';
 
 export default async function runWorker(
+  lc: LogContext,
   parent: Worker,
-  env: NodeJS.ProcessEnv,
-  ...argv: string[]
+  config: NormalizedZeroConfig,
 ): Promise<void> {
   const workerStartTime = Date.now();
-  const config = getNormalizedZeroConfig({env, argv});
   const {
     taskID,
     changeStreamer: {
@@ -61,12 +64,6 @@ export default async function runWorker(
     keepaliveTimeoutMs,
   } = config;
 
-  startOtelAuto(
-    createLogContext(config, 'change-streamer', 0, false),
-    'change-streamer',
-    0,
-  );
-  const lc = createLogContext(config, 'change-streamer');
   initEventSink(lc, config);
 
   // Kick off DB connection warmup in the background.
@@ -244,7 +241,15 @@ export default async function runWorker(
 
 // fork()
 if (!singleProcessMode()) {
-  void exitAfter(() =>
-    runWorker(must(parentWorker), process.env, ...process.argv.slice(2)),
+  const config = getNormalizedZeroConfig({
+    env: process.env,
+    argv: process.argv.slice(2),
+  });
+  startOtelAuto(
+    createLogContext(config, 'change-streamer', 0, false),
+    'change-streamer',
+    0,
   );
+  const lc = createLogContext(config, 'change-streamer');
+  void exitAfter(lc, () => runWorker(lc, must(parentWorker), config));
 }

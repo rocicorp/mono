@@ -5,7 +5,10 @@ import type {LogContext} from '@rocicorp/logger';
 import {assert} from '../../../shared/src/asserts.ts';
 import {must} from '../../../shared/src/must.ts';
 import * as v from '../../../shared/src/valita.ts';
-import {getNormalizedZeroConfig} from '../config/zero-config.ts';
+import {
+  getNormalizedZeroConfig,
+  type NormalizedZeroConfig,
+} from '../config/zero-config.ts';
 import {initEventSink} from '../observability/events.ts';
 import {getOrCreateGauge} from '../observability/metrics.ts';
 import {ChangeStreamerHttpClient} from '../services/change-streamer/change-streamer-http.ts';
@@ -27,24 +30,20 @@ import {
   replicaFileModeSchema,
   setUpMessageHandlers,
   setupReplica,
+  type ReplicaFileMode,
   type WalMode,
 } from '../workers/replicator.ts';
 import {createLogContext} from './logging.ts';
 import {startOtelAuto} from './otel-start.ts';
 
 export default async function runWorker(
+  lc: LogContext,
   parent: Worker,
-  env: NodeJS.ProcessEnv,
-  ...args: string[]
+  fileMode: ReplicaFileMode,
+  config: NormalizedZeroConfig,
 ): Promise<void> {
-  assert(args.length > 0, `replicator mode not specified`);
-  const fileMode = v.parse(args[0], replicaFileModeSchema);
-
-  const config = getNormalizedZeroConfig({env, argv: args.slice(1)});
   const mode: ReplicatorMode = fileMode === 'backup' ? 'backup' : 'serving';
   const workerName = `${mode}-replicator`;
-  startOtelAuto(createLogContext(config, workerName, 0, false), workerName, 0);
-  const lc = createLogContext(config, workerName);
   initEventSink(lc, config);
 
   const {file: dbPath, walMode} = await setupReplica(
@@ -140,7 +139,16 @@ function observeFileSize(lc: LogContext, file: string): ObservableCallback {
 
 // fork()
 if (!singleProcessMode()) {
-  void exitAfter(() =>
-    runWorker(must(parentWorker), process.env, ...process.argv.slice(2)),
-  );
+  const args = process.argv.slice(2);
+  assert(args.length > 0, `replicator mode not specified`);
+  const fileMode = v.parse(args[0], replicaFileModeSchema);
+  const config = getNormalizedZeroConfig({
+    env: process.env,
+    argv: args.slice(1),
+  });
+  const mode: ReplicatorMode = fileMode === 'backup' ? 'backup' : 'serving';
+  const workerName = `${mode}-replicator`;
+  startOtelAuto(createLogContext(config, workerName, 0, false), workerName, 0);
+  const lc = createLogContext(config, workerName);
+  void exitAfter(lc, () => runWorker(lc, must(parentWorker), fileMode, config));
 }

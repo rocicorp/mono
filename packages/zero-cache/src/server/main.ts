@@ -1,7 +1,11 @@
 import path from 'node:path';
+import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {must} from '../../../shared/src/must.ts';
-import {getNormalizedZeroConfig} from '../config/zero-config.ts';
+import {
+  getNormalizedZeroConfig,
+  type NormalizedZeroConfig,
+} from '../config/zero-config.ts';
 import {initEventSink} from '../observability/events.ts';
 import {
   exitAfter,
@@ -40,18 +44,13 @@ import {
 const clientConnectionBifurcated = false;
 
 export default async function runWorker(
+  lc: LogContext,
   parent: Worker,
   env: NodeJS.ProcessEnv,
+  config: NormalizedZeroConfig,
 ): Promise<void> {
   const startMs = Date.now();
-  const config = getNormalizedZeroConfig({env});
 
-  startOtelAuto(
-    createLogContext(config, 'dispatcher', 0, false),
-    'dispatcher',
-    0,
-  );
-  const lc = createLogContext(config, 'dispatcher');
   initEventSink(lc, config);
 
   const processes = new ProcessManager(lc, parent);
@@ -218,5 +217,14 @@ export default async function runWorker(
 }
 
 if (!singleProcessMode()) {
-  void exitAfter(() => runWorker(must(parentWorker), process.env));
+  const config = getNormalizedZeroConfig({env: process.env});
+  startOtelAuto(
+    createLogContext(config, 'dispatcher', 0, false),
+    'dispatcher',
+    0,
+  );
+  const lc = createLogContext(config, 'dispatcher');
+  void exitAfter(lc, () =>
+    runWorker(lc, must(parentWorker), process.env, config),
+  );
 }

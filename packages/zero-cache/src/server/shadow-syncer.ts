@@ -1,6 +1,10 @@
+import type {LogContext} from '@rocicorp/logger';
 import {must} from '../../../shared/src/must.ts';
 import {getServerContext} from '../config/server-context.ts';
-import {getNormalizedZeroConfig} from '../config/zero-config.ts';
+import {
+  getNormalizedZeroConfig,
+  type NormalizedZeroConfig,
+} from '../config/zero-config.ts';
 import {initEventSink} from '../observability/events.ts';
 import {exitAfter, runUntilKilled} from '../services/life-cycle.ts';
 import {ShadowSyncService} from '../services/shadow-sync/shadow-sync-service.ts';
@@ -16,18 +20,10 @@ import {startOtelAuto} from './otel-start.ts';
 const MS_PER_HOUR = 1000 * 60 * 60;
 
 export default function runWorker(
+  lc: LogContext,
   parent: Worker,
-  env: NodeJS.ProcessEnv,
-  ...argv: string[]
+  config: NormalizedZeroConfig,
 ): Promise<void> {
-  const config = getNormalizedZeroConfig({env, argv});
-
-  startOtelAuto(
-    createLogContext(config, 'shadow-syncer', 0, false),
-    'shadow-syncer',
-    0,
-  );
-  const lc = createLogContext(config, 'shadow-syncer');
   initEventSink(lc, config);
 
   const {shadowSync, upstream, initialSync} = config;
@@ -52,7 +48,15 @@ export default function runWorker(
 
 // fork()
 if (!singleProcessMode()) {
-  void exitAfter(() =>
-    runWorker(must(parentWorker), process.env, ...process.argv.slice(2)),
+  const config = getNormalizedZeroConfig({
+    env: process.env,
+    argv: process.argv.slice(2),
+  });
+  startOtelAuto(
+    createLogContext(config, 'shadow-syncer', 0, false),
+    'shadow-syncer',
+    0,
   );
+  const lc = createLogContext(config, 'shadow-syncer');
+  void exitAfter(lc, () => runWorker(lc, must(parentWorker), config));
 }

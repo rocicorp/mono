@@ -2,6 +2,7 @@ import {randomUUID} from 'node:crypto';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {pid} from 'node:process';
+import type {LogContext} from '@rocicorp/logger';
 import {assert} from '../../../shared/src/asserts.ts';
 import {must} from '../../../shared/src/must.ts';
 import {randInt} from '../../../shared/src/rand.ts';
@@ -10,8 +11,10 @@ import * as v from '../../../shared/src/valita.ts';
 import {DatabaseStorage} from '../../../zqlite/src/database-storage.ts';
 import type {ValidateLegacyJWT} from '../auth/auth.ts';
 import {tokenConfigOptions, verifyToken} from '../auth/jwt.ts';
-import type {NormalizedZeroConfig} from '../config/normalize.ts';
-import {getNormalizedZeroConfig} from '../config/zero-config.ts';
+import {
+  getNormalizedZeroConfig,
+  type NormalizedZeroConfig,
+} from '../config/zero-config.ts';
 import {CustomQueryTransformer} from '../custom-queries/transform-query.ts';
 import {warmupConnections} from '../db/warmup.ts';
 import {initEventSink} from '../observability/events.ts';
@@ -36,7 +39,11 @@ import {
 } from '../types/processes.ts';
 import {getShardID} from '../types/shards.ts';
 import type {Subscription} from '../types/subscription.ts';
-import {replicaFileModeSchema, replicaFileName} from '../workers/replicator.ts';
+import {
+  replicaFileModeSchema,
+  replicaFileName,
+  type ReplicaFileMode,
+} from '../workers/replicator.ts';
 import {Syncer} from '../workers/syncer.ts';
 import {startAnonymousTelemetry} from './anonymous-otel-start.ts';
 import {InspectorDelegate} from './inspector-delegate.ts';
@@ -66,21 +73,11 @@ function getCustomQueryConfig(
 }
 
 export default function runWorker(
+  lc: LogContext,
   parent: Worker,
-  env: NodeJS.ProcessEnv,
-  ...args: string[]
+  fileMode: ReplicaFileMode,
+  config: NormalizedZeroConfig,
 ): Promise<void> {
-  assert(args.length >= 2, `expected [fileMode, workerIndex, ...flags]`);
-  const fileMode = v.parse(args[0], replicaFileModeSchema);
-  const workerIndex = Number(args[1]);
-  const config = getNormalizedZeroConfig({env, argv: args.slice(2)});
-
-  startOtelAuto(
-    createLogContext(config, 'syncer', workerIndex, false),
-    'syncer',
-    workerIndex,
-  );
-  const lc = createLogContext(config, 'syncer', workerIndex);
   initEventSink(lc, config);
 
   const {cvr, upstream, enableCrudMutations} = config;
@@ -271,7 +268,19 @@ export default function runWorker(
 
 // fork()
 if (!singleProcessMode()) {
-  void exitAfter(() =>
-    runWorker(must(parentWorker), process.env, ...process.argv.slice(2)),
+  const args = process.argv.slice(2);
+  assert(args.length >= 2, `expected [fileMode, workerIndex, ...flags]`);
+  const fileMode = v.parse(args[0], replicaFileModeSchema);
+  const workerIndex = Number(args[1]);
+  const config = getNormalizedZeroConfig({
+    env: process.env,
+    argv: args.slice(2),
+  });
+  startOtelAuto(
+    createLogContext(config, 'syncer', workerIndex, false),
+    'syncer',
+    workerIndex,
   );
+  const lc = createLogContext(config, 'syncer', workerIndex);
+  void exitAfter(lc, () => runWorker(lc, must(parentWorker), fileMode, config));
 }

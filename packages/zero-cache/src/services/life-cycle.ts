@@ -1,5 +1,4 @@
 import type {IncomingHttpHeaders} from 'node:http';
-import {pid} from 'node:process';
 import type {EventEmitter} from 'stream';
 import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
@@ -302,15 +301,13 @@ export async function runUntilKilled(
   }
 }
 
-export async function exitAfter(run: () => Promise<void>) {
+export async function exitAfter(lc: LogContext, run: () => Promise<void>) {
   try {
     await run();
-    // oxlint-disable-next-line no-console
-    console.info(`pid ${pid} exiting normally`);
+    lc.info?.(`exiting normally`);
     process.exit(0);
   } catch (e) {
-    // oxlint-disable-next-line no-console
-    console.error(`pid ${pid} exiting with error`, e);
+    lc.error?.(`exiting with error`, e);
     process.exit(-1);
   }
 }

@@ -1,6 +1,7 @@
 import {expect, vi} from 'vitest';
 import {assert} from '../../../shared/src/asserts.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import {getNormalizedZeroConfig} from '../config/zero-config.ts';
 import {StatementRunner} from '../db/statements.ts';
 import {initializePostgresChangeSource} from '../services/change-source/pg/change-source.ts';
 import {initChangeStreamerSchema} from '../services/change-streamer/schema/init.ts';
@@ -117,7 +118,8 @@ test('change-streamer startup does not deadlock on autoreset retry when change a
         ZERO_LOG_LEVEL: 'error', // silence logs from the worker
       };
 
-      const workerDone = runWorker(worker, env);
+      const config = getNormalizedZeroConfig({env});
+      const workerDone = runWorker(lc, worker, config);
       const startup = await orTimeout(
         Promise.all([ready, workerDone]).then(() => true),
         7_500,

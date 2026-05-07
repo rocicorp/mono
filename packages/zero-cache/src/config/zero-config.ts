@@ -27,6 +27,7 @@ import {
   type NormalizedZeroConfig,
 } from './normalize.ts';
 export type {LogConfig} from '../../../otel/src/log-options.ts';
+export type {NormalizedZeroConfig} from './normalize.ts';
 
 export const ZERO_ENV_VAR_PREFIX = 'ZERO_';
 

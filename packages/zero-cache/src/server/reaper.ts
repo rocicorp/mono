@@ -1,5 +1,9 @@
+import type {LogContext} from '@rocicorp/logger';
 import {must} from '../../../shared/src/must.ts';
-import {getNormalizedZeroConfig} from '../config/zero-config.ts';
+import {
+  getNormalizedZeroConfig,
+  type NormalizedZeroConfig,
+} from '../config/zero-config.ts';
 import {initEventSink} from '../observability/events.ts';
 import {exitAfter, runUntilKilled} from '../services/life-cycle.ts';
 import {ActiveUsersGauge} from '../services/view-syncer/active-users-gauge.ts';
@@ -19,14 +23,10 @@ import {startOtelAuto} from './otel-start.ts';
 const MS_PER_HOUR = 1000 * 60 * 60;
 
 export default async function runWorker(
+  lc: LogContext,
   parent: Worker,
-  env: NodeJS.ProcessEnv,
-  ...argv: string[]
+  config: NormalizedZeroConfig,
 ): Promise<void> {
-  const config = getNormalizedZeroConfig({env, argv});
-
-  startOtelAuto(createLogContext(config, 'reaper', 0, false), 'reaper', 0);
-  const lc = createLogContext(config, 'reaper');
   initEventSink(lc, config);
   startAnonymousTelemetry(lc, config);
 
@@ -57,7 +57,11 @@ export default async function runWorker(
 
 // fork()
 if (!singleProcessMode()) {
-  void exitAfter(() =>
-    runWorker(must(parentWorker), process.env, ...process.argv.slice(2)),
-  );
+  const config = getNormalizedZeroConfig({
+    env: process.env,
+    argv: process.argv.slice(2),
+  });
+  startOtelAuto(createLogContext(config, 'reaper', 0, false), 'reaper', 0);
+  const lc = createLogContext(config, 'reaper');
+  void exitAfter(lc, () => runWorker(lc, must(parentWorker), config));
 }
