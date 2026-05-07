@@ -9,7 +9,7 @@
     "check-format": "oxfmt --check .",
     "check-types": "tsc",
     "check-types:watch": "tsc --watch",
-    "lint": "oxlint --type-aware src/",
+    "lint": "oxlint --quiet --config ../../oxlint.config.ts src/",
     "test": "vitest run",
     "test:watch": "vitest watch",
     "fmt": "oxfmt .",
@@ -19,9 +19,9 @@
     "@rocicorp/logger": "^5.4.0"
   },
   "devDependencies": {
-    "@vitest/runner": "4.1.3",
-    "oxfmt": "^0.45.0",
-    "vitest": "4.1.3",
+    "@vitest/runner": "^4.1.5",
+    "oxfmt": "^0.48.0",
+    "vitest": "^4.1.5",
     "zero-cache": "0.0.0",
     "zero-server": "0.0.0"
   }
