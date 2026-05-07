@@ -815,9 +815,7 @@ describe('ttl', () => {
           expect.objectContaining({
             queryID: 'query-hash1',
             metrics: expect.objectContaining({
-              'query-materialization-server': expect.arrayContaining([
-                expect.any(Number),
-              ]),
+              'query-hydration-server-ms': expect.any(Number),
             }),
           }),
         ]),
