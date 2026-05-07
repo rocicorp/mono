@@ -289,11 +289,11 @@ function createMutator<
     ArgsInput,
     C,
     Transaction<TSchema, TWrappedTransaction>
-  > = options => {
+  > = async options => {
     const validatedArgs = validator
       ? validateInput(name, options.args, validator, 'mutator')
       : (options.args as unknown as ArgsOutput);
-    return definition.fn({
+    return await definition.fn({
       args: validatedArgs,
       ctx: options.ctx as C,
       tx: options.tx,
