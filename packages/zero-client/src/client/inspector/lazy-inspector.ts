@@ -437,6 +437,9 @@ export interface InspectorDelegate {
   getAST(queryID: string): AST | undefined;
   readonly metrics: ClientMetrics;
   mapClientASTToServer(ast: AST): AST;
+  setQueryEvictedCallback(
+    cb: (hash: string, ast: AST, metrics: QueryClientMetrics) => void,
+  ): void;
 }
 
 export interface ExtendedInspectorDelegate extends InspectorDelegate {

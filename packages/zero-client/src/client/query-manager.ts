@@ -36,6 +36,7 @@ import type {ClientErrorKind} from './client-error-kind.ts';
 import type {ClientError} from './error.ts';
 import {type ZeroError} from './error.ts';
 import type {InspectorDelegate} from './inspector/inspector.ts';
+import type {QueryClientMetrics} from './inspector/lazy-inspector.ts';
 import {desiredQueriesPrefixForClient, GOT_QUERIES_KEY_PREFIX} from './keys.ts';
 import type {MutationTracker} from './mutation-tracker.ts';
 import type {ReadTransaction} from './replicache-types.ts';
@@ -87,6 +88,9 @@ export class QueryManager implements InspectorDelegate {
   readonly #queryMetrics: Map<string, PerQueryClientMetric> = new Map();
   readonly #slowMaterializeThreshold: number;
   #closedError: ZeroError | undefined;
+  #queryEvictedCallback:
+    | ((hash: string, ast: AST, metrics: QueryClientMetrics) => void)
+    | undefined;
 
   constructor(
     lc: LogContext,
@@ -147,6 +151,12 @@ export class QueryManager implements InspectorDelegate {
   getAST(queryID: string): AST | undefined {
     const ast = this.#queries.get(queryID)?.normalized;
     return ast && mapAST(ast, this.#serverToClient);
+  }
+
+  setQueryEvictedCallback(
+    cb: (hash: string, ast: AST, metrics: QueryClientMetrics) => void,
+  ): void {
+    this.#queryEvictedCallback = cb;
   }
 
   mapClientASTToServer(ast: AST): AST {
@@ -441,10 +451,15 @@ export class QueryManager implements InspectorDelegate {
       if (this.#recentQueries.size > this.#recentQueriesMaxSize) {
         const lruQueryID = this.#recentQueries.values().next().value;
         assert(lruQueryID, 'Expected LRU query ID to exist');
+        const evictedAST = this.getAST(lruQueryID);
+        const evictedMetrics = this.#queryMetrics.get(lruQueryID);
         this.#queries.delete(lruQueryID);
         this.#recentQueries.delete(lruQueryID);
         this.#queryMetrics.delete(lruQueryID);
         this.#queueQueryChange({op: 'del', hash: lruQueryID});
+        assert(evictedAST, 'Expected evicted AST to exist');
+        assert(evictedMetrics, 'Expected evicted metrics to exist');
+        this.#queryEvictedCallback?.(lruQueryID, evictedAST, evictedMetrics);
       }
     }
   }
