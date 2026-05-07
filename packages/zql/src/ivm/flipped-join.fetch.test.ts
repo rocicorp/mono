@@ -2352,6 +2352,119 @@ suite('fetch with compound primary key === parentKey (quicksort path)', () => {
   });
 });
 
+// Targets the merge-sort path specifically (#fetchMergeSort): parentKey
+// is non-unique on the parent, so #fetchQuicksort is bypassed and the
+// heap-based K-way merge is exercised. Other suites cover small K (1-2);
+// these scale K up and exercise reverse: true, which has no other
+// merge-sort coverage.
+suite('merge-sort path: large K and reverse', () => {
+  const base = {
+    columns: [
+      {id: {type: 'number'}, groupId: {type: 'number'}},
+      {id: {type: 'number'}, parentGroupId: {type: 'number'}},
+    ],
+    primaryKeys: [['id'], ['id']],
+    joins: [
+      {
+        parentKey: ['groupId'],
+        childKey: ['parentGroupId'],
+        relationshipName: 'children',
+      },
+    ],
+  } as const;
+
+  // Parent ids are assigned round-robin across groups so each per-group
+  // cursor's rows are interleaved with every other cursor's rows in the
+  // global id ordering. The heap has to compare-and-pop across all K
+  // streams throughout, not just within a contiguous run per cursor.
+  function makeParents(numGroups: number, perGroup: number): Row[] {
+    const out: Row[] = [];
+    for (let p = 0; p < perGroup; p++) {
+      for (let g = 0; g < numGroups; g++) {
+        out.push({id: p * numGroups + g, groupId: g});
+      }
+    }
+    return out;
+  }
+  function makeChildren(numGroups: number): Row[] {
+    return Array.from({length: numGroups}, (_, g) => ({
+      id: 1000 + g,
+      parentGroupId: g,
+    }));
+  }
+
+  test('reverse: true with K=2 streams emits parents in descending order', () => {
+    const results = fetchTest({
+      ...base,
+      sources: [makeParents(2, 3), makeChildren(2)],
+      fetchRequest: {reverse: true},
+    });
+
+    expect(
+      results.data.map(n => (n as CaughtNode & {row: Row}).row.id),
+    ).toEqual([5, 4, 3, 2, 1, 0]);
+  });
+
+  test('K=10 streams interleave correctly under heap merge (forward)', () => {
+    const results = fetchTest({
+      ...base,
+      sources: [makeParents(10, 5), makeChildren(10)],
+    });
+
+    expect(
+      results.data.map(n => (n as CaughtNode & {row: Row}).row.id),
+    ).toEqual(Array.from({length: 50}, (_, i) => i));
+  });
+
+  test('K=10 streams with reverse: true emit in descending order', () => {
+    const results = fetchTest({
+      ...base,
+      sources: [makeParents(10, 5), makeChildren(10)],
+      fetchRequest: {reverse: true},
+    });
+
+    expect(
+      results.data.map(n => (n as CaughtNode & {row: Row}).row.id),
+    ).toEqual(Array.from({length: 50}, (_, i) => 49 - i));
+  });
+
+  // Combines dedup-by-canonical-key with the heap merge: 80 child nodes
+  // collapse to K=20 unique cursors, each returning 5 parents. Verifies
+  // both the global ordering and that every emitted parent gets all four
+  // children sharing its groupId attached (dedup map → children).
+  test('K=20 with shared parent-keys exercises dedup → heap together', () => {
+    const numGroups = 20;
+    const perGroup = 5;
+    const childrenPerGroup = 4;
+    const parents = makeParents(numGroups, perGroup);
+    const children: Row[] = [];
+    for (let g = 0; g < numGroups; g++) {
+      for (let dup = 0; dup < childrenPerGroup; dup++) {
+        children.push({
+          id: 1000 + g * childrenPerGroup + dup,
+          parentGroupId: g,
+        });
+      }
+    }
+    const results = fetchTest({
+      ...base,
+      sources: [parents, children],
+    });
+
+    expect(
+      results.data.map(n => (n as CaughtNode & {row: Row}).row.id),
+    ).toEqual(Array.from({length: numGroups * perGroup}, (_, i) => i));
+
+    for (const node of results.data) {
+      const n = node as CaughtNode & {
+        row: Row;
+        relationships: Record<string, CaughtNode[]>;
+      };
+      expect(n.relationships.children).toHaveLength(childrenPerGroup);
+    }
+  });
+});
+
 function fetchTest(t: FetchTest): FetchTestResults {
   assert(t.sources.length > 0, 'Expected at least one source');
   assert(
