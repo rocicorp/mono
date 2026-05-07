@@ -566,7 +566,7 @@ export class InternalNodeImpl extends NodeImpl<Hash> {
       }> = [];
 
       for (const {index, node} of childrenToRebalance) {
-        const lastGroup = groups[groups.length - 1];
+        const lastGroup = groups.at(-1);
         // Adjacent to previous group? (within 1 index of the last group's max)
         if (lastGroup && index <= lastGroup.maxIndex + 1) {
           lastGroup.nodes.set(index, node);
@@ -586,10 +586,7 @@ export class InternalNodeImpl extends NodeImpl<Hash> {
 
         // Extend range by one sibling on each side for merge context.
         const startIndex = Math.max(0, group.minIndex - 1);
-        const endIndex = Math.min(
-          newEntries.length - 1,
-          group.maxIndex + 1,
-        );
+        const endIndex = Math.min(newEntries.length - 1, group.maxIndex + 1);
         const removeCount = endIndex - startIndex + 1;
 
         // Collect all entries from the range: use the putMany result for
