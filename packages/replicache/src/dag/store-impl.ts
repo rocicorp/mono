@@ -67,6 +67,9 @@ export class ReadImpl implements Read {
     const refsPromise = this._tx.get(chunkMetaKey(hash));
     const data = await dataPromise;
     if (data === undefined) {
+      refsPromise.catch(() => {
+        // Ignore error since we will return undefined anyway.
+      });
       return undefined;
     }
 
