@@ -1455,12 +1455,10 @@ describe('mutator return values', () => {
     });
 
     expect(response).toEqual(
-      makeSuccessResponse([
-        {
-          id: {clientID: 'cid', id: 1},
-          result: {data: {id: 'abc-123'}},
-        },
-      ]),
+      makeSuccessResponse(
+        [{id: {clientID: 'cid', id: 1}, result: {data: {id: 'abc-123'}}}],
+        null,
+      ),
     );
   });
 
@@ -1483,12 +1481,10 @@ describe('mutator return values', () => {
     });
 
     expect(response).toEqual(
-      makeSuccessResponse([
-        {
-          id: {clientID: 'cid', id: 1},
-          result: {data: undefined},
-        },
-      ]),
+      makeSuccessResponse(
+        [{id: {clientID: 'cid', id: 1}, result: {data: undefined}}],
+        null,
+      ),
     );
   });
 
@@ -1522,12 +1518,10 @@ describe('mutator return values', () => {
     });
 
     expect(response).toEqual(
-      makeSuccessResponse([
-        {
-          id: {clientID: 'cid', id: 1},
-          result: {data: {id: 'new-widget'}},
-        },
-      ]),
+      makeSuccessResponse(
+        [{id: {clientID: 'cid', id: 1}, result: {data: {id: 'new-widget'}}}],
+        null,
+      ),
     );
   });
 
@@ -1558,12 +1552,10 @@ describe('mutator return values', () => {
     });
 
     expect(response).toEqual(
-      makeSuccessResponse([
-        {
-          id: {clientID: 'cid', id: 1},
-          result: {data: undefined},
-        },
-      ]),
+      makeSuccessResponse(
+        [{id: {clientID: 'cid', id: 1}, result: {data: undefined}}],
+        null,
+      ),
     );
   });
 
@@ -1593,10 +1585,13 @@ describe('mutator return values', () => {
     });
 
     expect(response).toEqual(
-      makeSuccessResponse([
-        {id: {clientID: 'cid', id: 1}, result: {data: {seq: 1}}},
-        {id: {clientID: 'cid', id: 2}, result: {data: {seq: 2}}},
-      ]),
+      makeSuccessResponse(
+        [
+          {id: {clientID: 'cid', id: 1}, result: {data: {seq: 1}}},
+          {id: {clientID: 'cid', id: 2}, result: {data: {seq: 2}}},
+        ],
+        null,
+      ),
     );
   });
 
@@ -1630,9 +1625,10 @@ describe('mutator return values', () => {
       });
 
       expect(response).toEqual(
-        makeSuccessResponse([
-          {id: {clientID: 'cid', id: 1}, result: {data: returnValue}},
-        ]),
+        makeSuccessResponse(
+          [{id: {clientID: 'cid', id: 1}, result: {data: returnValue}}],
+          null,
+        ),
       );
     }
   });
