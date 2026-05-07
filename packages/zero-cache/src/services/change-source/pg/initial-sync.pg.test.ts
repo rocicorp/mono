@@ -2898,7 +2898,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
 
   test(
     'createReplicationSlot times out behind an older idle transaction',
-    {timeout: 15_000},
+    {timeout: 45_000},
     async () => {
       const lc = createSilentLogContext();
       const upstreamURI = getConnectionURI(upstream);

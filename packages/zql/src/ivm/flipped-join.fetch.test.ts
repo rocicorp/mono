@@ -3,11 +3,11 @@ import {testLogConfig} from '../../../otel/src/test-log-config.ts';
 import {assert} from '../../../shared/src/asserts.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import type {CompoundKey, Ordering} from '../../../zero-protocol/src/ast.ts';
-import type {Row} from '../../../zero-protocol/src/data.ts';
+import type {Row, Value} from '../../../zero-protocol/src/data.ts';
 import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
 import type {SchemaValue} from '../../../zero-schema/src/table-schema.ts';
 import {Catch, type CaughtNode} from './catch.ts';
-import {FlippedJoin} from './flipped-join.ts';
+import {canonicalKey, FlippedJoin} from './flipped-join.ts';
 import type {FetchRequest} from './operator.ts';
 import type {SourceSchema} from './schema.ts';
 import {Snitch, type SnitchMessage} from './snitch.ts';
@@ -1870,6 +1870,192 @@ suite('compound join keys', () => {
           "fetch",
           {
             "constraint": {
+              "a1": 4,
+              "a2": 5,
+            },
+          },
+        ],
+      ]
+    `);
+  });
+
+  // Three children sharing one parent-key tuple collapse to a single
+  // parent fetch (not three).  Children appear in the relationship in
+  // their original input order, since #fetchMergeSort appends to the
+  // per-key index list in iteration order.
+  test('one parent, three children sharing a parent-key', () => {
+    const results = fetchTest({
+      ...base,
+      sources: [
+        [{id: 0, a1: 1, a2: 2, a3: 3}],
+        [
+          {id: 10, b1: 2, b2: 1, b3: 100},
+          {id: 11, b1: 2, b2: 1, b3: 101},
+          {id: 12, b1: 2, b2: 1, b3: 102},
+        ],
+      ],
+    });
+
+    expect(results.data).toMatchInlineSnapshot(`
+      [
+        {
+          "relationships": {
+            "ab": [
+              {
+                "relationships": {},
+                "row": {
+                  "b1": 2,
+                  "b2": 1,
+                  "b3": 100,
+                  "id": 10,
+                },
+              },
+              {
+                "relationships": {},
+                "row": {
+                  "b1": 2,
+                  "b2": 1,
+                  "b3": 101,
+                  "id": 11,
+                },
+              },
+              {
+                "relationships": {},
+                "row": {
+                  "b1": 2,
+                  "b2": 1,
+                  "b3": 102,
+                  "id": 12,
+                },
+              },
+            ],
+          },
+          "row": {
+            "a1": 1,
+            "a2": 2,
+            "a3": 3,
+            "id": 0,
+          },
+        },
+      ]
+    `);
+    expect(results.fetchMessages).toMatchInlineSnapshot(`
+      [
+        [
+          "1",
+          "fetch",
+          {},
+        ],
+        [
+          "0",
+          "fetch",
+          {
+            "constraint": {
+              "a1": 1,
+              "a2": 2,
+            },
+          },
+        ],
+      ]
+    `);
+  });
+
+  // Asymmetric multiplicities: three children share parent-key {a1:1,a2:2}
+  // and one child has parent-key {a1:4,a2:5}.  Two distinct fetches, and
+  // the larger group preserves input order.
+  test('two parents with asymmetric child multiplicities', () => {
+    const results = fetchTest({
+      ...base,
+      sources: [
+        [
+          {id: 0, a1: 1, a2: 2, a3: 3},
+          {id: 1, a1: 4, a2: 5, a3: 6},
+        ],
+        [
+          {id: 10, b1: 2, b2: 1, b3: 100},
+          {id: 11, b1: 5, b2: 4, b3: 200},
+          {id: 12, b1: 2, b2: 1, b3: 101},
+          {id: 13, b1: 2, b2: 1, b3: 102},
+        ],
+      ],
+    });
+
+    expect(results.data).toMatchInlineSnapshot(`
+      [
+        {
+          "relationships": {
+            "ab": [
+              {
+                "relationships": {},
+                "row": {
+                  "b1": 2,
+                  "b2": 1,
+                  "b3": 100,
+                  "id": 10,
+                },
+              },
+              {
+                "relationships": {},
+                "row": {
+                  "b1": 2,
+                  "b2": 1,
+                  "b3": 101,
+                  "id": 12,
+                },
+              },
+              {
+                "relationships": {},
+                "row": {
+                  "b1": 2,
+                  "b2": 1,
+                  "b3": 102,
+                  "id": 13,
+                },
+              },
+            ],
+          },
+          "row": {
+            "a1": 1,
+            "a2": 2,
+            "a3": 3,
+            "id": 0,
+          },
+        },
+        {
+          "relationships": {
+            "ab": [
+              {
+                "relationships": {},
+                "row": {
+                  "b1": 5,
+                  "b2": 4,
+                  "b3": 200,
+                  "id": 11,
+                },
+              },
+            ],
+          },
+          "row": {
+            "a1": 4,
+            "a2": 5,
+            "a3": 6,
+            "id": 1,
+          },
+        },
+      ]
+    `);
+    expect(results.fetchMessages).toMatchInlineSnapshot(`
+      [
+        [
+          "1",
+          "fetch",
+          {},
+        ],
+        [
+          "0",
+          "fetch",
+          {
+            "constraint": {
               "a1": 1,
               "a2": 2,
             },
@@ -1885,18 +2071,78 @@ suite('compound join keys', () => {
             },
           },
         ],
-        [
-          "0",
-          "fetch",
-          {
-            "constraint": {
-              "a1": 4,
-              "a2": 5,
-            },
-          },
-        ],
       ]
     `);
+  });
+});
+
+suite('canonicalKey', () => {
+  // canonicalKey tags each value by type so two different values can't
+  // collide on the same key string.  The dedup map in #fetchMergeSort
+  // depends on this — without tagging, e.g. `1` (number) and `"1"`
+  // (string) would group together, and the wrong children would be
+  // attached to a parent row.
+  test('distinguishes number from string with same printed form', () => {
+    expect(canonicalKey({k: 1}, ['k'])).not.toBe(canonicalKey({k: '1'}, ['k']));
+  });
+
+  test('distinguishes boolean true/false from strings "t"/"f"', () => {
+    expect(canonicalKey({k: true}, ['k'])).not.toBe(
+      canonicalKey({k: 't'}, ['k']),
+    );
+    expect(canonicalKey({k: false}, ['k'])).not.toBe(
+      canonicalKey({k: 'f'}, ['k']),
+    );
+  });
+
+  test('distinguishes null/undefined from string "n"', () => {
+    expect(canonicalKey({k: null}, ['k'])).not.toBe(
+      canonicalKey({k: 'n'}, ['k']),
+    );
+    expect(canonicalKey({k: undefined}, ['k'])).not.toBe(
+      canonicalKey({k: 'n'}, ['k']),
+    );
+  });
+
+  test('treats null and undefined as the same value', () => {
+    // buildJoinConstraint produces `undefined` for missing-but-nullable
+    // join columns; the source-side constraint shape uses `null`. They
+    // must canonicalize identically so dedup groups them together.
+    expect(canonicalKey({k: null}, ['k'])).toBe(
+      canonicalKey({k: undefined}, ['k']),
+    );
+  });
+
+  test('distinguishes bigint from number with same numeric value', () => {
+    // safeIntegers in zqlite produces bigint at runtime even though the
+    // static Value type doesn't list it.
+    expect(canonicalKey({k: 1n as unknown as Value}, ['k'])).not.toBe(
+      canonicalKey({k: 1}, ['k']),
+    );
+  });
+
+  test('compound key separator avoids collisions across boundaries', () => {
+    // Without a separator, ('ab','c') and ('a','bc') would canonicalize
+    // identically. The \x00 delimiter keeps the boundaries distinct for
+    // typical id-shaped values.
+    expect(canonicalKey({a: 'ab', b: 'c'}, ['a', 'b'])).not.toBe(
+      canonicalKey({a: 'a', b: 'bc'}, ['a', 'b']),
+    );
+  });
+
+  test('equal compound tuples produce equal keys', () => {
+    expect(canonicalKey({a: 1, b: 'x'}, ['a', 'b'])).toBe(
+      canonicalKey({a: 1, b: 'x'}, ['a', 'b']),
+    );
+  });
+
+  test('JSON-encoded fallback for object/array values', () => {
+    expect(canonicalKey({k: {a: 1} as unknown as Value}, ['k'])).not.toBe(
+      canonicalKey({k: {a: 2} as unknown as Value}, ['k']),
+    );
+    expect(canonicalKey({k: {a: 1} as unknown as Value}, ['k'])).toBe(
+      canonicalKey({k: {a: 1} as unknown as Value}, ['k']),
+    );
   });
 });
 
