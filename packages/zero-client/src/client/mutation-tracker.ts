@@ -8,6 +8,7 @@ import type {
 } from '../../../replicache/src/replicache-options.ts';
 import {assert, unreachable} from '../../../shared/src/asserts.ts';
 import {getErrorDetails} from '../../../shared/src/error.ts';
+import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {must} from '../../../shared/src/must.ts';
 import {emptyObject} from '../../../shared/src/sentinels.ts';
 import * as v from '../../../shared/src/valita.ts';
@@ -31,11 +32,10 @@ import type {
   PushOk,
   PushResponseBody,
 } from '../../../zero-protocol/src/push.ts';
-import type {MutatorResultSuccessDetails} from './custom.ts';
 import {isZeroError, type ZeroError} from './error.ts';
 import {MUTATIONS_KEY_PREFIX} from './keys.ts';
 
-type MutationSuccessType = MutatorResultSuccessDetails;
+type MutationSuccessType = ReadonlyJSONValue | undefined;
 type MutationErrorType = ApplicationError | ZeroError;
 
 let currentEphemeralID = 0;
@@ -438,10 +438,7 @@ export class MutationTracker {
       entry.resolver.reject(result);
     } else {
       const ok = result as MutationOk;
-      entry.resolver.resolve({
-        type: 'success',
-        data: ok.data,
-      });
+      entry.resolver.resolve(ok.data);
     }
 
     this.#outstandingMutations.delete(ephemeralID);
