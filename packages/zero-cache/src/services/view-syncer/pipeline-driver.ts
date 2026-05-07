@@ -1078,7 +1078,7 @@ function mustGetPrimaryKey(
   assert(
     rv,
     () =>
-      // oxlint-disable-next-line typescript/restrict-template-expressions e18e/prefer-array-to-sorted
+      // oxlint-disable-next-line e18e/prefer-array-to-sorted
       `table '${table}' is not one of: ${[...pKeys.keys()].sort()}. ` +
       `Check the spelling and ensure that the table has a primary key.`,
   );
