@@ -1532,7 +1532,7 @@ describe('mutator return values', () => {
         schema: legacySchema,
         mutators: {
           issue: {
-            fn: async (_tx: MutatorTx) => returnValue,
+            fn: (_tx: MutatorTx) => Promise.resolve(returnValue),
           },
         } as const,
       });

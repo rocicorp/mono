@@ -76,7 +76,7 @@ function makeReplicacheMutator<
   repTx: WriteTransaction,
   args: ReadonlyJSONValue,
 ) => Promise<ReadonlyJSONValue | void> {
-  return async (
+  return (
     repTx: WriteTransaction,
     args: ReadonlyJSONValue,
   ): Promise<ReadonlyJSONValue | void> => {

@@ -615,7 +615,7 @@ class Transactor<D extends Database<ExtractTransactionType<D>>> {
             mutation.id,
           );
 
-          let returnData: ReadonlyJSONValue | void = undefined;
+          let returnData: ReadonlyJSONValue | void;
           if (appError === undefined) {
             this.#lc.debug?.(
               `Executing mutator '${mutation.name}' (id=${mutation.id})`,
