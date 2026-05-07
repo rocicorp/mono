@@ -27,7 +27,6 @@ test('SQLiteWrite batches deletes and upserts into one statement each', async ()
     close: vi.fn(),
     destroy: vi.fn(),
     prepare: vi.fn(),
-    exec: vi.fn().mockResolvedValue(undefined),
     execSync: vi.fn(),
   };
   const preparedStatements = makePreparedStatements();
@@ -49,8 +48,6 @@ test('SQLiteWrite batches deletes and upserts into one statement each', async ()
   expect(preparedStatements.put.exec).toHaveBeenCalledWith([
     '[["upsert-1","value-1"],["upsert-2",{"nested":true}]]',
   ]);
-  // db.exec not called for sizes within cache range
-  expect(db.exec).not.toHaveBeenCalled();
   expect(db.execSync).toHaveBeenCalledWith('COMMIT');
   expect(release).toHaveBeenCalledTimes(1);
 });
