@@ -13,7 +13,7 @@ import {
   commitIsLocalDD31,
   DEFAULT_HEAD_NAME,
   type LocalMeta,
-  localMutations as localMutations_1,
+  localMutations as localMutations,
   snapshotMetaParts,
 } from '../db/commit.ts';
 import {newWriteSnapshotDD31} from '../db/write.ts';
@@ -353,21 +353,26 @@ export function maybeEndPull<M extends LocalMeta>(
 
     // Collect pending commits from the main chain and determine which
     // of them if any need to be replayed.
-    const syncHead = await commitFromHash(syncHeadHash, dagRead);
+    const [syncHead, commits] = await Promise.all([
+      commitFromHash(syncHeadHash, dagRead),
+      localMutations(mainHeadHash, dagRead),
+    ]);
+    const syncHeadMutationIDs = new Map<ClientID, Promise<number>>();
     const pending: Commit<M>[] = [];
-    const localMutations = await localMutations_1(mainHeadHash, dagRead);
-    for (const commit of localMutations) {
-      let cid = clientID;
+    // Kick off all mutation ID loads before awaiting.
+    for (const commit of commits) {
       assert(
         commitIsLocalDD31(commit),
         'Expected commit to be a local DD31 commit',
       );
-      cid = commit.meta.clientID;
-
-      if (
-        (await commit.getMutationID(cid, dagRead)) >
-        (await syncHead.getMutationID(cid, dagRead))
-      ) {
+      const cid = commit.meta.clientID;
+      if (!syncHeadMutationIDs.has(cid)) {
+        syncHeadMutationIDs.set(cid, syncHead.getMutationID(cid, dagRead));
+      }
+    }
+    for (const commit of commits) {
+      const cid = commit.meta.clientID;
+      if (commit.meta.mutationID > (await syncHeadMutationIDs.get(cid)!)) {
         // We know that the dag can only contain either LocalMetaSDD or LocalMetaDD31
         pending.push(commit as Commit<M>);
       }
