@@ -189,7 +189,10 @@ export function makeReplicacheMutator<
   mutator: CustomMutatorImpl<S, TWrappedTransaction>,
   schema: S,
   context: Context,
-): (repTx: WriteTransaction, args: ReadonlyJSONValue) => Promise<ReadonlyJSONValue | void> {
+): (
+  repTx: WriteTransaction,
+  args: ReadonlyJSONValue,
+) => Promise<ReadonlyJSONValue | void> {
   return async (
     repTx: WriteTransaction,
     args: ReadonlyJSONValue,

@@ -1532,8 +1532,8 @@ describe('mutator return values', () => {
   });
 
   test('defineMutator: void return leaves result.data undefined', async () => {
-    const noopMutator = defineMutatorWithType<typeof testSchema>()(
-      () => Promise.resolve(),
+    const noopMutator = defineMutatorWithType<typeof testSchema>()(() =>
+      Promise.resolve(),
     );
 
     const mutators = defineMutatorsWithType<typeof testSchema>()({

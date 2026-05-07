@@ -43,7 +43,6 @@ function nextEphemeralID(): EphemeralID {
   return ++currentEphemeralID as EphemeralID;
 }
 
-
 /**
  * Tracks what pushes are in-flight and resolves promises when they're acked.
  */

@@ -1415,7 +1415,10 @@ describe('mutator return values', () => {
       serverResult.type === 'success',
       'Expected server result type to be success',
     );
-    expect(serverResult.data).toEqual({serverID: 'srv-001', canonicalID: 'issue-001'});
+    expect(serverResult.data).toEqual({
+      serverID: 'srv-001',
+      canonicalID: 'issue-001',
+    });
 
     await z.close();
   });
