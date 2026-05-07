@@ -101,7 +101,7 @@ export type MakeCustomMutatorInterfaces<
   readonly [NamespaceOrName in keyof MD]: MD[NamespaceOrName] extends (
     tx: Transaction<S>,
     ...args: infer Args
-  ) => Promise<ReadonlyJSONValue | void>
+  ) => Promise<unknown>
     ? (...args: Args) => MutatorResult
     : MD[NamespaceOrName] extends CustomMutatorDefs
       ? MakeCustomMutatorInterfaces<S, MD[NamespaceOrName], TContext>
@@ -111,7 +111,7 @@ export type MakeCustomMutatorInterfaces<
 export type MakeCustomMutatorInterface<TSchema extends Schema, F> = F extends (
   tx: ClientTransaction<TSchema>,
   ...args: infer Args
-) => Promise<ReadonlyJSONValue | void>
+) => Promise<unknown>
   ? (...args: Args) => MutatorResult
   : never;
 

@@ -17,11 +17,9 @@ import type {
 import {isZeroError, type ZeroError} from './error.ts';
 import type {MutationTracker} from './mutation-tracker.ts';
 
-const successResult = (
-  data: ReadonlyJSONValue | void,
-): MutatorResultSuccessDetails => ({
+const successResult = (data: unknown): MutatorResultSuccessDetails => ({
   type: 'success',
-  ...(data !== undefined ? {data} : {}),
+  data: data as ReadonlyJSONValue | undefined,
 });
 
 function getStateDescription(error: ZeroError): string {

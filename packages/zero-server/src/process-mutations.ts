@@ -631,8 +631,7 @@ class Transactor<D extends Database<ExtractTransactionType<D>>> {
               clientID: mutation.clientID,
               id: mutation.id,
             },
-            result:
-              returnData !== undefined ? {data: returnData} : {},
+            result: {data: returnData as ReadonlyJSONValue | undefined},
           };
         },
         this.#getTransactionInput(mutation),

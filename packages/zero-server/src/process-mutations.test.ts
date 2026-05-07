@@ -1421,3 +1421,219 @@ describe.each(mutatorInvokers)(
     });
   },
 );
+
+describe('mutator return values', () => {
+  let consoleErrorSpy: MockInstance<typeof console.error>;
+  let consoleWarnSpy: MockInstance<typeof console.warn>;
+
+  beforeEach(() => {
+    consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    consoleErrorSpy.mockRestore();
+    consoleWarnSpy.mockRestore();
+  });
+
+  test('legacy CustomMutatorDefs: return value appears in MutationResponse.result.data', async () => {
+    const {db: trackingDb} = createTrackingDatabase();
+
+    const mutators: CustomMutatorDefs<undefined> = {
+      createItem: (_tx, _args, _ctx) => Promise.resolve({id: 'abc-123'}),
+    };
+
+    const response = await handleMutateRequest({
+      dbProvider: trackingDb,
+      handler: (transact, _mutation) =>
+        transact((tx, name, args) =>
+          getMutation(mutators, name)(tx, args, undefined),
+        ),
+      query: baseQuery,
+      body: makePushBody([makeCustomMutation({name: 'createItem'})]),
+      userID: null,
+    });
+
+    expect(response).toEqual(
+      makeSuccessResponse([
+        {
+          id: {clientID: 'cid', id: 1},
+          result: {data: {id: 'abc-123'}},
+        },
+      ]),
+    );
+  });
+
+  test('legacy CustomMutatorDefs: void return leaves result.data undefined', async () => {
+    const {db: trackingDb} = createTrackingDatabase();
+
+    const mutators: CustomMutatorDefs<undefined> = {
+      noop: (_tx, _args, _ctx) => Promise.resolve(),
+    };
+
+    const response = await handleMutateRequest({
+      dbProvider: trackingDb,
+      handler: (transact, _mutation) =>
+        transact((tx, name, args) =>
+          getMutation(mutators, name)(tx, args, undefined),
+        ),
+      query: baseQuery,
+      body: makePushBody([makeCustomMutation({name: 'noop'})]),
+      userID: null,
+    });
+
+    expect(response).toEqual(
+      makeSuccessResponse([
+        {
+          id: {clientID: 'cid', id: 1},
+          result: {data: undefined},
+        },
+      ]),
+    );
+  });
+
+  test('defineMutator: return value appears in MutationResponse.result.data', async () => {
+    const createItem = defineMutatorWithType<typeof testSchema>()(
+      ({args}: {args: {name: string}; ctx: unknown; tx: unknown}) =>
+        Promise.resolve({id: 'new-' + args.name}),
+    );
+
+    const mutators = defineMutatorsWithType<typeof testSchema>()({
+      item: {create: createItem},
+    });
+
+    const {db: trackingDb} = createTrackingDatabase();
+
+    const response = await handleMutateRequest({
+      dbProvider: trackingDb,
+      handler: (transact, _mutation) =>
+        transact((tx, name, args) =>
+          mustGetMutator(mutators, name).fn({
+            tx: tx as never,
+            args,
+            ctx: undefined,
+          }),
+        ),
+      query: baseQuery,
+      body: makePushBody([
+        makeCustomMutation({name: 'item.create', args: [{name: 'widget'}]}),
+      ]),
+      userID: null,
+    });
+
+    expect(response).toEqual(
+      makeSuccessResponse([
+        {
+          id: {clientID: 'cid', id: 1},
+          result: {data: {id: 'new-widget'}},
+        },
+      ]),
+    );
+  });
+
+  test('defineMutator: void return leaves result.data undefined', async () => {
+    const noopMutator = defineMutatorWithType<typeof testSchema>()(
+      () => Promise.resolve(),
+    );
+
+    const mutators = defineMutatorsWithType<typeof testSchema>()({
+      item: {noop: noopMutator},
+    });
+
+    const {db: trackingDb} = createTrackingDatabase();
+
+    const response = await handleMutateRequest({
+      dbProvider: trackingDb,
+      handler: (transact, _mutation) =>
+        transact((tx, name, args) =>
+          mustGetMutator(mutators, name).fn({
+            tx: tx as never,
+            args,
+            ctx: undefined,
+          }),
+        ),
+      query: baseQuery,
+      body: makePushBody([makeCustomMutation({name: 'item.noop'})]),
+      userID: null,
+    });
+
+    expect(response).toEqual(
+      makeSuccessResponse([
+        {
+          id: {clientID: 'cid', id: 1},
+          result: {data: undefined},
+        },
+      ]),
+    );
+  });
+
+  test('return values are independent per mutation in a batch', async () => {
+    const {db: trackingDb} = createTrackingDatabase();
+
+    let callCount = 0;
+    const mutators: CustomMutatorDefs<undefined> = {
+      createItem: (_tx, _args, _ctx) => {
+        callCount++;
+        return Promise.resolve({seq: callCount});
+      },
+    };
+
+    const response = await handleMutateRequest({
+      dbProvider: trackingDb,
+      handler: (transact, _mutation) =>
+        transact((tx, name, args) =>
+          getMutation(mutators, name)(tx, args, undefined),
+        ),
+      query: baseQuery,
+      body: makePushBody([
+        makeCustomMutation({id: 1, name: 'createItem'}),
+        makeCustomMutation({id: 2, name: 'createItem'}),
+      ]),
+      userID: null,
+    });
+
+    expect(response).toEqual(
+      makeSuccessResponse([
+        {id: {clientID: 'cid', id: 1}, result: {data: {seq: 1}}},
+        {id: {clientID: 'cid', id: 2}, result: {data: {seq: 2}}},
+      ]),
+    );
+  });
+
+  test('return value supports all JSON scalar types', async () => {
+    const cases: ReadonlyJSONValue[] = [
+      42,
+      'hello',
+      true,
+      false,
+      null,
+      [1, 2, 3],
+      {nested: {value: 'deep'}},
+    ];
+
+    for (const returnValue of cases) {
+      const {db: trackingDb} = createTrackingDatabase();
+
+      const mutators: CustomMutatorDefs<undefined> = {
+        fn: () => Promise.resolve(returnValue),
+      };
+
+      const response = await handleMutateRequest({
+        dbProvider: trackingDb,
+        handler: (transact, _mutation) =>
+          transact((tx, name, args) =>
+            getMutation(mutators, name)(tx, args, undefined),
+          ),
+        query: baseQuery,
+        body: makePushBody([makeCustomMutation({name: 'fn'})]),
+        userID: null,
+      });
+
+      expect(response).toEqual(
+        makeSuccessResponse([
+          {id: {clientID: 'cid', id: 1}, result: {data: returnValue}},
+        ]),
+      );
+    }
+  });
+});

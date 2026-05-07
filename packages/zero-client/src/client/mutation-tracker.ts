@@ -441,7 +441,7 @@ export class MutationTracker {
       const ok = result as MutationOk;
       entry.resolver.resolve({
         type: 'success',
-        ...(ok.data !== undefined ? {data: ok.data} : {}),
+        data: ok.data,
       });
     }
 
