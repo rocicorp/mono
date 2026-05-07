@@ -2,11 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import sqlite3 from '@rocicorp/zero-sqlite3';
 import {expect, test, vi} from 'vitest';
-import {
-  withRead,
-  withWrite,
-  withWriteNoImplicitCommit,
-} from '../../with-transactions.ts';
+import {withRead, withWrite} from '../../with-transactions.ts';
 import {
   registerCreatedFile,
   runSQLiteStoreTests,
@@ -162,7 +158,7 @@ test('withWriteNoImplicitCommit reports both operation and rollback errors', asy
   `);
   triggerDb.close();
 
-  const err = await withWriteNoImplicitCommit(store, async write => {
+  const err = await withWrite(store, async write => {
     await write.put('trigger-rollback', 'value');
   }).then(
     () => undefined,
