@@ -172,7 +172,7 @@
   },
   "devDependencies": {
     "@op-engineering/op-sqlite": ">=15",
-    "@vitest/runner": "4.1.5",
+    "@vitest/runner": "^4.1.5",
     "analyze-query": "0.0.0",
     "ast-to-zql": "0.0.0",
     "expo-sqlite": ">=15",
@@ -183,7 +183,7 @@
     "typedoc-plugin-markdown": "^4.10.0",
     "typescript": "~6.0.2",
     "vite": "8.0.3",
-    "vitest": "4.1.5",
+    "vitest": "^4.1.5",
     "zero-cache": "0.0.0",
     "zero-client": "0.0.0",
     "zero-pg": "0.0.0",
