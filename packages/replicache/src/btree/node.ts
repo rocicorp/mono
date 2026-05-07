@@ -449,62 +449,6 @@ function readonlySplice<T>(
   return arr;
 }
 
-/**
- * Helper for putMany that merges and partitions a child node.
- * Returns the new entries and the splice parameters (startIndex and removeCount).
- */
-async function putManyMergeAndPartition(
-  tree: BTreeWrite,
-  parentLevel: number,
-  i: number,
-  childNode: DataNodeImpl | InternalNodeImpl,
-  currentEntries: Entry<Hash>[],
-): Promise<{entries: Entry<Hash>[]; startIndex: number; removeCount: number}> {
-  const level = parentLevel - 1;
-
-  type IterableHashEntries = Iterable<Entry<Hash>>;
-
-  let values: IterableHashEntries;
-  let startIndex: number;
-  let removeCount: number;
-  if (i > 0) {
-    const hash = currentEntries[i - 1][1];
-    const previousSibling = await tree.getNode(hash);
-    values = joinIterables(
-      previousSibling.entries as IterableHashEntries,
-      childNode.entries as IterableHashEntries,
-    );
-    startIndex = i - 1;
-    removeCount = 2;
-  } else if (i < currentEntries.length - 1) {
-    const hash = currentEntries[i + 1][1];
-    const nextSibling = await tree.getNode(hash);
-    values = joinIterables(
-      childNode.entries as IterableHashEntries,
-      nextSibling.entries as IterableHashEntries,
-    );
-    startIndex = i;
-    removeCount = 2;
-  } else {
-    values = childNode.entries as IterableHashEntries;
-    startIndex = i;
-    removeCount = 1;
-  }
-
-  const newEntries = partition(
-    values,
-    e => e[2],
-    tree.minSize - tree.chunkHeaderSize,
-    tree.maxSize - tree.chunkHeaderSize,
-    entries => {
-      const node = tree.newNodeImpl(entries, level);
-      return createNewInternalEntryForNode(node, tree.getEntrySize);
-    },
-  );
-
-  return {entries: newEntries, startIndex, removeCount};
-}
-
 export class InternalNodeImpl extends NodeImpl<Hash> {
   readonly level: number;
 
@@ -602,22 +546,80 @@ export class InternalNodeImpl extends NodeImpl<Hash> {
       }
     }
 
-    // Handle rebalancing - process from right to left to maintain indices
+    // Handle rebalancing - merge adjacent children that need rebalancing
+    // into contiguous groups and process each group as one unit.
+    //
+    // BUG FIX: Previously, each child was rebalanced independently R-to-L.
+    // When adjacent children (e.g., indices 0 and 1) both needed rebalancing,
+    // child[1] would merge with sibling[0] (the ORIGINAL), then child[0]
+    // would merge with the rebalanced result at position 1, duplicating
+    // child[0]'s data. The fix groups adjacent indices together.
     if (childrenToRebalance.length > 0) {
-      childrenToRebalance.sort((a, b) => b.index - a.index);
+      childrenToRebalance.sort((a, b) => a.index - b.index);
+
+      // Group adjacent indices into contiguous runs, each extended by one
+      // sibling on either side for merge context.
+      const groups: Array<{
+        nodes: Map<number, DataNodeImpl | InternalNodeImpl>;
+        minIndex: number;
+        maxIndex: number;
+      }> = [];
 
       for (const {index, node} of childrenToRebalance) {
-        const {
-          entries: rebalanced,
-          startIndex,
-          removeCount,
-        } = await putManyMergeAndPartition(
-          tree,
-          this.level,
-          index,
-          node,
-          newEntries,
+        const lastGroup = groups[groups.length - 1];
+        // Adjacent to previous group? (within 1 index of the last group's max)
+        if (lastGroup && index <= lastGroup.maxIndex + 1) {
+          lastGroup.nodes.set(index, node);
+          lastGroup.maxIndex = index;
+        } else {
+          groups.push({
+            nodes: new Map([[index, node]]),
+            minIndex: index,
+            maxIndex: index,
+          });
+        }
+      }
+
+      // Process groups from right to left to maintain indices during splices.
+      for (let g = groups.length - 1; g >= 0; g--) {
+        const group = groups[g];
+
+        // Extend range by one sibling on each side for merge context.
+        const startIndex = Math.max(0, group.minIndex - 1);
+        const endIndex = Math.min(
+          newEntries.length - 1,
+          group.maxIndex + 1,
         );
+        const removeCount = endIndex - startIndex + 1;
+
+        // Collect all entries from the range: use the putMany result for
+        // indices that were rebalanced, the current newEntries node otherwise.
+        type IterableHashEntries = Iterable<Entry<Hash>>;
+        const allValues: IterableHashEntries[] = [];
+        for (let idx = startIndex; idx <= endIndex; idx++) {
+          const rebalancedNode = group.nodes.get(idx);
+          if (rebalancedNode) {
+            allValues.push(rebalancedNode.entries as IterableHashEntries);
+          } else {
+            const hash = newEntries[idx][1];
+            const existingNode = await tree.getNode(hash);
+            allValues.push(existingNode.entries as IterableHashEntries);
+          }
+        }
+
+        const level = this.level - 1;
+        const merged = joinIterables(...allValues);
+        const rebalanced = partition(
+          merged,
+          e => e[2],
+          tree.minSize - tree.chunkHeaderSize,
+          tree.maxSize - tree.chunkHeaderSize,
+          entries => {
+            const node = tree.newNodeImpl(entries, level);
+            return createNewInternalEntryForNode(node, tree.getEntrySize);
+          },
+        );
+
         newEntries.splice(startIndex, removeCount, ...rebalanced);
       }
     }
