@@ -24,6 +24,7 @@ import {
   isJoinMatch,
   rowEqualsForCompoundKey,
 } from './join-utils.ts';
+import {mergeSortedStreams} from './memory-source.ts';
 import {
   throwOutput,
   type FetchRequest,
@@ -282,96 +283,38 @@ export class FlippedJoin implements Input {
       return;
     }
 
-    const parentIterators: Iterator<Node | 'yield'>[] = [];
-    let threw = false;
-    try {
-      for (const c of computedKeys) {
-        const stream = this.#parent.fetch({
-          ...req,
-          constraint: req.constraint ? {...req.constraint, ...c} : c,
-        });
-        parentIterators.push(stream[Symbol.iterator]());
-      }
-      const nextParentNodes: (Node | null)[] = [];
-      for (let i = 0; i < parentIterators.length; i++) {
-        const iter = parentIterators[i];
-        let result = iter.next();
-        // yield yields when initializing
-        while (!result.done && result.value === 'yield') {
-          yield result.value;
-          result = iter.next();
-        }
-        nextParentNodes[i] = result.done ? null : (result.value as Node);
-      }
+    const compareRows = this.#schema.compareRows;
+    const compare: (a: Node, b: Node) => number = req.reverse
+      ? (a, b) => compareRows(b.row, a.row)
+      : (a, b) => compareRows(a.row, b.row);
 
-      // Linear-scan K-way merge over per-unique-key cursors. Each cursor
-      // matches a distinct parent-key value, so the cursors return
-      // disjoint sets of parent rows and the merge sees no ties — every
-      // emit maps back to exactly one entry in childIndexesByKey.
-      while (true) {
-        let minIdx = -1;
-        let minParentNode: Node | null = null;
-        for (let i = 0; i < nextParentNodes.length; i++) {
-          const parentNode = nextParentNodes[i];
-          if (parentNode === null) {
-            continue;
-          }
-          if (
-            minParentNode === null ||
-            this.#schema.compareRows(parentNode.row, minParentNode.row) *
-              (req.reverse ? -1 : 1) <
-              0
-          ) {
-            minParentNode = parentNode;
-            minIdx = i;
-          }
-        }
-        if (minParentNode === null) {
-          return;
-        }
-        // Every fetched parent row matches the constraint for one entry
-        // in `computedKeys`, whose canonical key was inserted into the
-        // map — so the lookup is guaranteed to hit. Children retain
-        // their original input order within the group because we
-        // appended to the indexes array in iteration order.
-        const idxs = must(
-          childIndexesByKey.get(canonicalKey(minParentNode.row, parentKey)),
-        );
-        const relatedChildNodes: Node[] = idxs.map(i => childNodes[i]);
+    // One stream per unique parent-key value. Each stream returns its
+    // matching parent rows in compareRows order; the heap merges them
+    // into a globally ordered stream. Distinct rows can't compare equal
+    // (compareRows includes the primary key), so no tie handling needed
+    // — every emit maps back to exactly one entry in childIndexesByKey.
+    const streams: Stream<Node | 'yield'>[] = computedKeys.map(c =>
+      this.#parent.fetch({
+        ...req,
+        constraint: req.constraint ? {...req.constraint, ...c} : c,
+      }),
+    );
 
-        const iter = parentIterators[minIdx];
-        let result = iter.next();
-        // yield yields when advancing
-        while (!result.done && result.value === 'yield') {
-          yield result.value;
-          result = iter.next();
-        }
-        nextParentNodes[minIdx] = result.done ? null : (result.value as Node);
-
-        yield* this.#yieldParentWithOverlay(minParentNode, relatedChildNodes);
+    for (const node of mergeSortedStreams(streams, compare)) {
+      if (node === 'yield') {
+        yield 'yield';
+        continue;
       }
-    } catch (e) {
-      threw = true;
-      for (const iter of parentIterators) {
-        try {
-          iter.throw?.(e);
-        } catch (_cleanupError) {
-          // error in the iter.throw cleanup,
-          // catch so other iterators are cleaned up
-        }
-      }
-      throw e;
-    } finally {
-      if (!threw) {
-        for (const iter of parentIterators) {
-          try {
-            iter.return?.();
-          } catch (_cleanupError) {
-            // error in the iter.return cleanup,
-            // catch so other iterators are cleaned up
-          }
-        }
-      }
+      // Every fetched parent row matches the constraint for one entry
+      // in `computedKeys`, whose canonical key was inserted into the
+      // map — so the lookup is guaranteed to hit. Children retain
+      // their original input order within the group because we
+      // appended to the indexes array in iteration order.
+      const idxs = must(
+        childIndexesByKey.get(canonicalKey(node.row, parentKey)),
+      );
+      const relatedChildNodes: Node[] = idxs.map(i => childNodes[i]);
+      yield* this.#yieldParentWithOverlay(node, relatedChildNodes);
     }
   }
 
