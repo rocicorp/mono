@@ -698,9 +698,7 @@ class LagReporter {
   readonly #lc: LogContext;
   readonly messagePrefix: string;
 
-  // Weird issue with oxlint, which thinks:
-  // × eslint(no-unused-private-class-members): 'db' is defined but never used.
-  // oxlint-disable-next-line eslint(no-unused-private-class-members)
+  // oxlint-disable-next-line no-unused-private-class-members
   readonly #db: PostgresDB;
   readonly #lagIntervalMs: number;
 

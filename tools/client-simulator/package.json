@@ -19,7 +19,7 @@
     "ws": "^8.18.1"
   },
   "devDependencies": {
-    "oxfmt": "^0.45.0",
+    "oxfmt": "^0.48.0",
     "shared": "0.0.0",
     "zero-protocol": "0.0.0"
   }
