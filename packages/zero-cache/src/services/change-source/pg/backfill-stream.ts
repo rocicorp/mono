@@ -319,7 +319,7 @@ async function createSnapshotTransaction(
       `SELECT pg_drop_replication_slot(slot_name) FROM pg_replication_slots
          WHERE slot_name = '${tempSlot}'`,
     );
-    lc.error?.(`Failed to create backfill snapshot`, e);
+    lc.warn?.(`Failed to create backfill snapshot`, e);
     throw e;
   } finally {
     await replicationSession.end();
