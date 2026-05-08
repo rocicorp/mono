@@ -1484,6 +1484,114 @@ describe('Cap wiring', () => {
       }
     `);
   });
+
+  test('non-flipped EXISTS child with flipped OR branch falls back to Take', () => {
+    // EXISTS-child source.connect goes unordered so SQLite can pick any
+    // index, and Cap absorbs the unordered output. But if the child body
+    // contains a flipped OR branch, applyFilterWithFlips builds a
+    // UnionFanIn over that same source, and UnionFanIn's constructor
+    // asserts the inputs have a sort. Without this fallback, building
+    // the pipeline throws "UnionFanIn requires sorted input".
+    //
+    // Shape:
+    //   issue WHERE EXISTS comments
+    //     WHERE comment.text = "public"
+    //        OR EXISTS owner WHERE owner.role = "teacher"  // flipped
+    const sourcesORFlip: Sources = {
+      issue: {
+        columns: {id: {type: 'string'}},
+        primaryKeys: ['id'],
+      },
+      comment: {
+        columns: {
+          id: {type: 'string'},
+          issueID: {type: 'string'},
+          ownerID: {type: 'string'},
+          text: {type: 'string'},
+        },
+        primaryKeys: ['id'],
+      },
+      user: {
+        columns: {
+          id: {type: 'string'},
+          role: {type: 'string'},
+        },
+        primaryKeys: ['id'],
+      },
+    };
+
+    const orFlipAst: AST = {
+      table: 'issue',
+      orderBy: [['id', 'asc']],
+      where: {
+        type: 'correlatedSubquery',
+        related: {
+          system: 'client',
+          correlation: {parentField: ['id'], childField: ['issueID']},
+          subquery: {
+            table: 'comment',
+            alias: 'comments',
+            orderBy: [['id', 'asc']],
+            where: {
+              type: 'or',
+              conditions: [
+                {
+                  type: 'simple',
+                  left: {type: 'column', name: 'text'},
+                  op: '=',
+                  right: {type: 'literal', value: 'public'},
+                },
+                {
+                  type: 'correlatedSubquery',
+                  op: 'EXISTS',
+                  flip: true,
+                  related: {
+                    system: 'client',
+                    correlation: {
+                      parentField: ['ownerID'],
+                      childField: ['id'],
+                    },
+                    subquery: {
+                      table: 'user',
+                      alias: 'owner',
+                      orderBy: [['id', 'asc']],
+                      where: {
+                        type: 'simple',
+                        left: {type: 'column', name: 'role'},
+                        op: '=',
+                        right: {type: 'literal', value: 'teacher'},
+                      },
+                    },
+                  },
+                },
+              ],
+            },
+          },
+        },
+        op: 'EXISTS',
+      },
+    } as const;
+
+    const sourceContents: SourceContents = {
+      issue: [{id: 'i1'}],
+      comment: [{id: 'c1', issueID: 'i1', ownerID: 'u1', text: 'public'}],
+      user: [{id: 'u1', role: 'teacher'}],
+    };
+
+    // Builds without throwing — UFI lives over a sorted source because
+    // the EXISTS child fell back to Take.
+    const {actualStorage} = runPushTest({
+      sources: sourcesORFlip,
+      sourceContents,
+      ast: orFlipAst,
+      format: {singular: false, relationships: {}},
+      pushes: [],
+    });
+
+    // No `:cap` storage because the EXISTS child took the Take path.
+    const capKeys = Object.keys(actualStorage).filter(k => k.endsWith(':cap'));
+    expect(capKeys).toEqual([]);
+  });
 });
 
 describe('Cap push - compound partition key', () => {
