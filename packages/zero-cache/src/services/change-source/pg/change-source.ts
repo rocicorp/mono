@@ -1,7 +1,6 @@
 import {
   PG_ADMIN_SHUTDOWN,
   PG_INSUFFICIENT_PRIVILEGE,
-  PG_OBJECT_IN_USE,
 } from '@drdgvhbh/postgres-error-codes';
 import type {LogContext} from '@rocicorp/logger';
 import {nanoid} from 'nanoid';
@@ -17,14 +16,12 @@ import {
   intersection,
   symmetricDifferences,
 } from '../../../../../shared/src/set-utils.ts';
-import {sleep} from '../../../../../shared/src/sleep.ts';
 import * as v from '../../../../../shared/src/valita.ts';
 import {Database} from '../../../../../zqlite/src/db.ts';
 import {
   mapPostgresToLiteColumn,
   UnsupportedColumnDefaultError,
 } from '../../../db/pg-to-lite.ts';
-import {runTx} from '../../../db/run-transaction.ts';
 import type {
   ColumnSpec,
   PublishedIndexSpec,
@@ -88,6 +85,7 @@ import type {
 } from './logical-replication/pgoutput.types.ts';
 import {subscribe, type StreamMessage} from './logical-replication/stream.ts';
 import {fromBigInt, toBigInt, toStateVersionString, type LSN} from './lsn.ts';
+import {dropOldReplicasAndSlots} from './replication-slots.ts';
 import {replicationEventSchema, type ReplicationEvent} from './schema/ddl.ts';
 import {updateShardSchema} from './schema/init.ts';
 import {
@@ -100,13 +98,14 @@ import {
   getInternalShardConfig,
   getReplicaAtVersion,
   internalPublicationPrefix,
-  legacyReplicationSlot,
   replicaIdentitiesForTablesWithoutPrimaryKeys,
-  replicationSlotExpression,
+  replicationSlotPrefix,
   type InternalShardConfig,
   type Replica,
 } from './schema/shard.ts';
 import {validate} from './schema/validation.ts';
+
+const REPLICA_SLOT_CLEANUP_INTERVAL_MS = 30_000;
 
 /**
  * Initializes a Postgres change source, including the initial sync of the
@@ -294,6 +293,7 @@ class PostgresChangeSource implements ChangeSource {
 
   async stop(): Promise<void> {
     this.#lagReporter?.stop();
+    clearTimeout(this.#cleanupTimer);
     await this.#db.end();
   }
 
@@ -328,10 +328,9 @@ class PostgresChangeSource implements ChangeSource {
     clientWatermark: string,
     backfillRequests: BackfillRequest[] = [],
   ): Promise<ChangeStream> {
-    const {slot} = this.#replica;
-
-    await this.#stopExistingReplicationSlotSubscribers(slot);
+    await this.#stopExistingReplicationSlotSubscriber();
     const config = await getInternalShardConfig(this.#db, this.#shard);
+    const {slot} = this.#replica;
     this.#lc.info?.(`starting replication stream@${slot}`);
     return this.#startStream(slot, clientWatermark, config, backfillRequests);
   }
@@ -505,117 +504,72 @@ class PostgresChangeSource implements ChangeSource {
   }
 
   /**
-   * Stops replication slots associated with this shard, and returns
-   * a `cleanup` task that drops any slot other than the specified
-   * `slotToKeep`.
-   *
-   * Note that replication slots created after `slotToKeep` (as indicated by
-   * the timestamp suffix) are preserved, as those are newly syncing replicas
-   * that will soon take over the slot.
+   * Stops replication slots associated with this shard, and asynchronously
+   * runs a cleanup task that drops older replicas and slots.
    */
-  async #stopExistingReplicationSlotSubscribers(slotToKeep: string) {
-    const slotExpression = replicationSlotExpression(this.#shard);
-    const legacySlotName = legacyReplicationSlot(this.#shard);
+  async #stopExistingReplicationSlotSubscriber() {
+    const sql = this.#db;
+    const {id: replicaID, slot} = this.#replica;
+    const replicasTable = `${upstreamSchema(this.#shard)}.replicas`;
 
-    const result = await runTx(this.#db, async sql => {
-      // Note: `slot_name <= slotToKeep` uses a string compare of the millisecond
-      // timestamp, which works until it exceeds 13 digits (sometime in 2286).
-      const result = await sql<
-        {slot: string; pid: string | null; terminated: boolean | null}[]
-      > /*sql*/ `
-      SELECT slot_name as slot, pg_terminate_backend(active_pid) as terminated, active_pid as pid
-        FROM pg_replication_slots 
-        WHERE (slot_name LIKE ${slotExpression} OR slot_name = ${legacySlotName})
-              AND slot_name <= ${slotToKeep}`;
-      this.#lc.info?.(
-        `terminated replication slots: ${JSON.stringify(result)}`,
-      );
-      const replicasTable = `${upstreamSchema(this.#shard)}.replicas`;
-      const replicasBefore = await sql`
-        SELECT slot, version, "initialSyncContext", "subscriberContext" 
-          FROM ${sql(replicasTable)} ORDER BY slot`;
-
-      if (result.length === 0) {
-        const shardSlots = await sql`
+    const result = await sql`
+      SELECT pg_terminate_backend(active_pid) as terminated, active_pid as pid
+        FROM pg_replication_slots
+        WHERE slot_name = ${slot}
+    `;
+    if (result.length === 0) {
+      const slotExpression = replicationSlotPrefix(this.#shard);
+      const replicas = await sql`
+        SELECT id, rank, slot, version, "initialSyncContext", "subscriberContext" 
+          FROM ${sql(replicasTable)} ORDER BY rank DESC`;
+      const slots = await sql`
         SELECT slot_name as slot, active, active_pid as pid
           FROM pg_replication_slots
-          WHERE slot_name LIKE ${slotExpression} OR slot_name = ${legacySlotName}
+          WHERE slot_name LIKE ${slotExpression}
           ORDER BY slot_name`;
-        this.#lc.warn?.(
-          `slot ${slotToKeep} not found while cleaning subscribers`,
-          {slots: shardSlots, replicas: replicasBefore},
-        );
-        throw new AbortError(
-          `replication slot ${slotToKeep} is missing. A different ` +
-            `replication-manager should now be running on a new ` +
-            `replication slot.`,
-        );
-      }
-      // Clear the state of the older replicas.
-      this.#lc.info?.(
-        `replicas before cleanup (slotToKeep=${slotToKeep}): ${JSON.stringify(
-          replicasBefore,
-        )}`,
-      );
-      await sql`
-        DELETE FROM ${sql(replicasTable)} WHERE slot < ${slotToKeep}`;
-      await sql`
-        UPDATE ${sql(replicasTable)} 
-          SET "subscriberContext" = ${this.#context}
-          WHERE slot = ${slotToKeep}`;
-      const replicasAfter = await sql<{slot: string; version: string}[]>`
-      SELECT slot, version FROM ${sql(replicasTable)} ORDER BY slot`;
-      this.#lc.info?.(
-        `replicas after cleanup (slotToKeep=${slotToKeep}): ${JSON.stringify(
-          replicasAfter,
-        )}`,
-      );
-      return result;
-    });
-
-    const pids = result.filter(({pid}) => pid !== null).map(({pid}) => pid);
-    if (pids.length) {
-      this.#lc.info?.(`signaled subscriber ${pids} to shut down`);
-    }
-    const otherSlots = result
-      .filter(({slot}) => slot !== slotToKeep)
-      .map(({slot}) => slot);
-
-    if (otherSlots.length) {
-      void this.#dropReplicationSlots(otherSlots).catch(e =>
-        this.#lc.warn?.(`error dropping replication slots`, e),
+      this.#lc.warn?.(`slot ${slot} not found while cleaning subscribers`, {
+        slots,
+        replicas,
+      });
+      throw new AbortError(
+        `replication slot ${slot} is missing. A different ` +
+          `replication-manager should now be running on a new ` +
+          `replication slot.`,
       );
     }
+    this.#lc.info?.(`terminated replication slots: ${JSON.stringify(result)}`);
+    await sql`
+      UPDATE ${sql(replicasTable)} 
+        SET "subscriberContext" = ${this.#context}
+        WHERE id = ${replicaID}`;
+    void this.#cleanUpOlderReplicasAndSlots();
   }
 
-  async #dropReplicationSlots(slots: string[]) {
-    this.#lc.info?.(`dropping other replication slot(s) ${slots}`);
-    const sql = this.#db;
-    for (let i = 0; i < 5; i++) {
-      try {
-        await sql`
-          SELECT pg_drop_replication_slot(slot_name) FROM pg_replication_slots
-            WHERE slot_name IN ${sql(slots)}
-        `;
-        this.#lc.info?.(`successfully dropped ${slots}`);
+  #cleanupTimer: NodeJS.Timeout | undefined;
+
+  async #cleanUpOlderReplicasAndSlots() {
+    clearTimeout(this.#cleanupTimer);
+
+    try {
+      const result = await dropOldReplicasAndSlots(
+        this.#lc,
+        this.#db,
+        this.#shard,
+        this.#replica.rank,
+      );
+      if (result.draining === 0) {
+        this.#lc.info?.(`finished cleaning up replicas and slots`, {result});
         return;
-      } catch (e) {
-        // error: replication slot "zero_slot_change_source_test_id" is active for PID 268
-        if (
-          e instanceof postgres.PostgresError &&
-          e.code === PG_OBJECT_IN_USE
-        ) {
-          // The freeing up of the replication slot is not transactional;
-          // sometimes it takes time for Postgres to consider the slot
-          // inactive.
-          this.#lc.debug?.(`attempt ${i + 1}: ${String(e)}`, e);
-        } else {
-          this.#lc.warn?.(`error dropping ${slots}`, e);
-        }
-        await sleep(1000);
       }
+      this.#lc.info?.(`old slots still draining`, {result});
+    } catch (e) {
+      this.#lc.warn?.(`error dropping replication slots`, e);
     }
-    this.#lc.warn?.(`maximum attempts exceeded dropping ${slots}`);
+
+    this.#cleanupTimer = setTimeout(
+      () => this.#cleanUpOlderReplicasAndSlots(),
+      REPLICA_SLOT_CLEANUP_INTERVAL_MS,
+    );
   }
 }
 
