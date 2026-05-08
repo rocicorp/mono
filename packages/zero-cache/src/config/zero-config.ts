@@ -831,6 +831,15 @@ export const zeroOptions = {
       ],
     },
 
+    region: {
+      type: v.string().optional(),
+      desc: [
+        `The AWS region for the litestream backup bucket. Required for non-standard AWS partitions`,
+        `(e.g. GovCloud {bold us-gov-west-1}) where Litestream cannot auto-detect the region.`,
+        `The {bold replication-manager} and {bold view-syncers} must have the same region.`,
+      ],
+    },
+
     port: {
       type: v.number().optional(),
       desc: [
