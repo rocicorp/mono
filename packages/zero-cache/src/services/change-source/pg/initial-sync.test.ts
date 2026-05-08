@@ -4,10 +4,10 @@ import {createSilentLogContext} from '../../../../../shared/src/logging-test-uti
 import type {PublishedTableSpec} from '../../../db/specs.ts';
 import type {PostgresDB} from '../../../types/pg.ts';
 import {
-  createReplicationSlot,
   getInitialDownloadState,
   makeDownloadStatements,
 } from './initial-sync.ts';
+import {createReplicationSlot} from './replication-slots.ts';
 
 function spec(
   publications: Record<string, {rowFilter: string | null}> = {
@@ -182,7 +182,7 @@ describe('createReplicationSlot', () => {
     const result = await createReplicationSlot(
       createSilentLogContext(),
       session,
-      'test_slot',
+      {slotName: 'test_slot'},
     );
     expect(result).toEqual(slot);
   });
@@ -204,7 +204,9 @@ describe('createReplicationSlot', () => {
       ]);
     });
 
-    await createReplicationSlot(createSilentLogContext(), session, 's');
+    await createReplicationSlot(createSilentLogContext(), session, {
+      slotName: 's',
+    });
     expect(calls[0]).toMatch(/^SET lock_timeout = \d+$/);
     expect(calls[1]).toMatch(/CREATE_REPLICATION_SLOT/);
   });
@@ -221,7 +223,9 @@ describe('createReplicationSlot', () => {
     });
 
     await expect(
-      createReplicationSlot(createSilentLogContext(), session, 'test_slot'),
+      createReplicationSlot(createSilentLogContext(), session, {
+        slotName: 'test_slot',
+      }),
     ).rejects.toBe(pgError);
   });
 
@@ -241,11 +245,9 @@ describe('createReplicationSlot', () => {
       // between the time advanceTimersByTimeAsync triggers it and the
       // time we assert on it.
       let caught: unknown;
-      const result = createReplicationSlot(
-        createSilentLogContext(),
-        session,
-        'hang_slot',
-      ).catch(e => {
+      const result = createReplicationSlot(createSilentLogContext(), session, {
+        slotName: 'hang_slot',
+      }).catch(e => {
         caught = e;
       });
 

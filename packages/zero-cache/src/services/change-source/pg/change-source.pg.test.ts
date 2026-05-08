@@ -1076,7 +1076,7 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
 
     // Start a *third* initial sync with an empty replica.
     const replicaFile3 = new DbFile('change_source_pg_test_replica2');
-    await initializePostgresChangeSource(
+    const {changeSource: source3} = await initializePostgresChangeSource(
       lc,
       upstreamURI,
       {
@@ -1105,8 +1105,6 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
     // subscription and drop the first replication slot.
     const {changes: changes2} = await startStream('00', source2);
 
-    await expect(() => downstream1.dequeue()).rejects.toThrow(AbortError);
-
     // The new stream should get the same changes since it was synced
     // before they occurred.
     const downstream2 = drainToQueue(changes2);
@@ -1125,17 +1123,36 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
       {watermark: expect.stringMatching(WATERMARK_REGEX)},
     ]);
 
-    changes2.cancel();
-
     // Verify that the older replica state has been cleaned up.
     // The newer replica state should remain.
-    const replicasAfterTakeover = await upstream.unsafe(`
+    const replicasAfterSource2 = await upstream.unsafe(`
       SELECT slot FROM "${APP_ID}_${SHARD_NUM}".replicas ORDER BY slot
     `);
-    expect(replicasAfterTakeover).toEqual(replicas3.slice(1));
+    expect(replicasAfterSource2).toEqual(replicas3.slice(1));
 
-    // Verify that the two latter slots remain. (Use waitFor to reduce
-    // flakiness because the drop is non-transactional.)
+    // However, all 3 replication slots should remain because [1] is still
+    // active and [3], although not yet active, is a newer replica.
+    const slots3 = await upstream<{slot: string}[]>`
+        SELECT slot_name as slot FROM pg_replication_slots
+          WHERE slot_name LIKE ${APP_ID + '\\_' + SHARD_NUM + '\\_%'}
+          ORDER BY slot_name
+      `.values();
+    expect(slots3).toHaveLength(3);
+
+    // Shut down the first replica slot and then start the third one.
+    changes1.cancel();
+    const {changes: changes3} = await startStream('00', source3);
+
+    // Now there should only be one replica left.
+    const replicasAfterSource3 = await upstream.unsafe(`
+      SELECT slot FROM "${APP_ID}_${SHARD_NUM}".replicas ORDER BY slot
+    `);
+    expect(replicasAfterSource3).toEqual(replicas3.slice(2));
+
+    // Verify that the two latter slots remain. The first one should have
+    // been dropped because the source stopped subscribing. The second
+    // one is allowed to drain.
+    // (Use waitFor to reduce flakiness because the drop is non-transactional.)
     await vi.waitFor(
       async () => {
         const slots3 = await upstream<{slot: string}[]>`
@@ -1145,11 +1162,11 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
     `.values();
         expect(slots3).toEqual(slots2.slice(1));
       },
-      {
-        interval: 100,
-      },
+      {interval: 100},
     );
 
+    changes2.cancel();
+    changes3.cancel();
     replicaFile2.delete();
     replicaFile3.delete();
   });
