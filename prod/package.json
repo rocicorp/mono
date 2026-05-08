@@ -10,6 +10,6 @@
     "check-fmt": "oxfmt --check ."
   },
   "devDependencies": {
-    "oxfmt": "^0.48.0"
+    "oxfmt": "^0.45.0"
   }
 }
