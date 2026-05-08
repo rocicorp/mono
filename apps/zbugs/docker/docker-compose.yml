@@ -1,5 +1,5 @@
 x-postgres-common: &postgres-common
-  image: postgres:17-alpine
+  image: postgres:16.2-alpine
   shm_size: 1g
   user: postgres
   restart: always
@@ -21,10 +21,8 @@ services:
     command: |
       postgres 
       -c wal_level=logical
-      -c max_wal_senders=50 
-      -c max_replication_slots=20 
-      -c max_slot_wal_keep_size=1GB
-      -c max_connections=500
+      -c max_wal_senders=10 
+      -c max_replication_slots=5 
       -c hot_standby=on 
       -c hot_standby_feedback=on
     volumes:
@@ -41,10 +39,8 @@ services:
     command: |
       postgres 
       -c wal_level=logical
-      -c max_wal_senders=50 
-      -c max_replication_slots=20
-      -c max_slot_wal_keep_size=1GB
-      -c max_connections=500
+      -c max_wal_senders=10 
+      -c max_replication_slots=5 
       -c hot_standby=on 
       -c hot_standby_feedback=on
     volumes:
