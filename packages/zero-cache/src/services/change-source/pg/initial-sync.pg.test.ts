@@ -3263,8 +3263,10 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
       expect(state.status.rows).toBe(0); // rows starts at 0, incremented during copy
       // After ANALYZE, reltuples should be exactly 1000.
       expect(state.status.totalRows).toBe(1000);
-      // pg_relation_size should return a positive byte count.
-      expect(state.status.totalBytes).toBeGreaterThan(0);
+      // 1000 rows × ~150 bytes each (100-byte data + id + name + overhead).
+      // pg_relation_size returns the on-disk file size, expect 100KB-500KB.
+      expect(state.status.totalBytes).toBeGreaterThan(100_000);
+      expect(state.status.totalBytes).toBeLessThan(500_000);
     });
 
     test('returns zeros for a never-analyzed empty table', async () => {
@@ -3316,7 +3318,10 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
       const state = await getInitialDownloadState(lc, upstream, spec, false);
 
       expect(state.status.totalRows).toBe(100);
-      expect(state.status.totalBytes).toBeGreaterThan(0);
+      // 100 rows × ~40 bytes each (id + val + overhead).
+      // Expect at least one 8KB page and no more than 64KB.
+      expect(state.status.totalBytes).toBeGreaterThanOrEqual(8192);
+      expect(state.status.totalBytes).toBeLessThan(65_536);
     });
   });
 });
