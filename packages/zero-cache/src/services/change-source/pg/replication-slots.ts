@@ -292,6 +292,6 @@ export function slotPoolSuffix(n: number) {
   return suffix;
 }
 
-export function replicationSlotManagementLock(shard: ShardID) {
+function replicationSlotManagementLock(shard: ShardID) {
   return `replication-slot-management:${shard.appID}_${shard.shardNum}`;
 }
