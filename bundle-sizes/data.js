@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778159315836,
+  "lastUpdate": 1778219680391,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -55653,6 +55653,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/rocicorp/mono/commit/94a232a0e6d8580b53a0a7f625c247f48ce72128"
         },
         "date": 1778159303017,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 315505,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 56729,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 116720,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 33278,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "arv@roci.dev",
+            "name": "Erik Arvidsson",
+            "username": "arv"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "6a429b934610421db8fe63bf6662f1753b0ef60f",
+          "message": "fix(inspector): Various inspector fixes (#5924)\n\nThis pull request refactors how server-side query hydration metrics are\ntracked and reported, simplifying per-query hydration metrics from a\nTDigest histogram to a plain number representing the most recent\nhydration time in milliseconds. It also updates related tests and type\ndefinitions accordingly, and improves the handling of deleted queries in\nthe inspector.\n\n**Metrics Handling Refactor:**\n\n* Per-query hydration metrics are now tracked as a single number\n(`query-hydration-server-ms`) instead of a TDigest histogram,\nsimplifying both storage and reporting. Update metrics remain as TDigest\nhistograms.\n* Type changes: The per-query metrics type is renamed from\n`ServerMetrics` to `QueryServerMetrics` to reflect the new structure,\nand all related imports and usages are updated.\n\n**Inspector and Query Handling Improvements:**\n\n* The `Inspector` class now caches AST and metrics for deleted queries,\nallowing continued access to their data after eviction. The inspector\ndelegate is updated to support a query-evicted callback for this\npurpose.\n\n* The inspector and tests are updated to expect and handle the new\nper-query hydration metric format (plain number or absence thereof),\nincluding changes to test assertions and mock data.\n**Service Integration:**\n\n* The `ViewSyncerService` now ensures that queries are registered with\nthe inspector delegate upon hydration or materialization, to maintain\naccurate tracking.\n\n---------\n\nCo-authored-by: Copilot <copilot@github.com>\nCo-authored-by: Copilot <198982749+Copilot@users.noreply.github.com>\nCo-authored-by: arv <45845+arv@users.noreply.github.com>",
+          "timestamp": "2026-05-08T05:34:45Z",
+          "tree_id": "252677f09314515e476ec867d5df40cf6ba58a65",
+          "url": "https://github.com/rocicorp/mono/commit/6a429b934610421db8fe63bf6662f1753b0ef60f"
+        },
+        "date": 1778219668361,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
