@@ -253,27 +253,6 @@ function getIncrementalMigrations(
         lc.info?.(`Upgraded DDL event triggers`);
       },
     },
-
-    22: {
-      migrateSchema: async (_, sql) => {
-        await sql`
-          ALTER TABLE ${sql(upstreamSchema(shard))}.replicas 
-            ALTER "initialSchema" DROP NOT NULL;
-        `;
-        await sql`
-          ALTER TABLE ${sql(upstreamSchema(shard))}.replicas 
-            DROP CONSTRAINT replicas_pkey;
-        `;
-        await sql`
-          ALTER TABLE ${sql(upstreamSchema(shard))}.replicas 
-            ADD COLUMN id TEXT PRIMARY KEY DEFAULT replace(gen_random_uuid()::text, '-', '');
-        `;
-        await sql`
-          ALTER TABLE ${sql(upstreamSchema(shard))}.replicas 
-            ADD COLUMN rank BIGSERIAL;
-        `;
-      },
-    },
   };
 }
 
