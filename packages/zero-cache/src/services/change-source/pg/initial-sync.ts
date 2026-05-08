@@ -3,13 +3,9 @@ import {platform, tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {Writable} from 'node:stream';
 import {pipeline} from 'node:stream/promises';
-import {
-  PG_CONFIGURATION_LIMIT_EXCEEDED,
-  PG_INSUFFICIENT_PRIVILEGE,
-} from '@drdgvhbh/postgres-error-codes';
 import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
-import postgres from 'postgres';
+import {assert} from '../../../../../shared/src/asserts.ts';
 import type {JSONObject} from '../../../../../shared/src/bigint-json.ts';
 import {must} from '../../../../../shared/src/must.ts';
 import {equals} from '../../../../../shared/src/set-utils.ts';
@@ -57,19 +53,17 @@ import {CpuProfiler} from '../../../types/profiler.ts';
 import type {ShardConfig} from '../../../types/shards.ts';
 import {ALLOWED_APP_ID_CHARACTERS} from '../../../types/shards.ts';
 import {id} from '../../../types/sql.ts';
-import {orTimeout} from '../../../types/timeout.ts';
 import {ReplicationStatusPublisher} from '../../replicator/replication-status.ts';
 import {ColumnMetadataStore} from '../../replicator/schema/column-metadata.ts';
 import {initReplicationState} from '../../replicator/schema/replication-state.ts';
 import {toStateVersionString} from './lsn.ts';
+import {createReplicaAndSlot} from './replication-slots.ts';
 import {ensureShardSchema} from './schema/init.ts';
 import {getPublicationInfo} from './schema/published.ts';
 import {
-  addReplica,
   dropShard,
   getInternalShardConfig,
-  newReplicationSlot,
-  replicationSlotExpression,
+  initReplica,
   validatePublications,
 } from './schema/shard.ts';
 
@@ -132,7 +126,9 @@ export async function initialSync(
         ['fetch_types']: false, // Necessary for the streaming protocol
         connection: {replication: 'database'}, // https://www.postgresql.org/docs/current/protocol-replication.html
       });
-  const slotName = newReplicationSlot(shard);
+
+  const replicaID = Date.now().toString();
+  let slotName: string | undefined; // undefined === shadow
   const statusPublisher = ReplicationStatusPublisher.forRunningTransaction(
     tx,
     shadow ? async () => {} : undefined,
@@ -169,49 +165,17 @@ export async function initialSync(
       lsn = acquired.lsn;
       releaseShadowSnapshot = acquired.release;
     } else {
-      let slot: ReplicationSlot;
-      for (let first = true; ; first = false) {
-        try {
-          slot = await createReplicationSlot(
-            lc,
-            must(replicationSession),
-            slotName,
-            replicationSlotFailover && pgVersion >= PG_17,
-          );
-          break;
-        } catch (e) {
-          if (first && e instanceof postgres.PostgresError) {
-            if (e.code === PG_INSUFFICIENT_PRIVILEGE) {
-              // Some Postgres variants (e.g. Google Cloud SQL) require that
-              // the user have the REPLICATION role in order to create a slot.
-              // Note that this must be done by the upstreamDB connection, and
-              // does not work in the replicationSession itself.
-              await sql`ALTER ROLE current_user WITH REPLICATION`;
-              lc.info?.(`Added the REPLICATION role to database user`);
-              continue;
-            }
-            if (e.code === PG_CONFIGURATION_LIMIT_EXCEEDED) {
-              const slotExpression = replicationSlotExpression(shard);
-
-              const dropped = await sql<{slot: string}[]>`
-                SELECT slot_name as slot, pg_drop_replication_slot(slot_name)
-                  FROM pg_replication_slots
-                  WHERE slot_name LIKE ${slotExpression} AND NOT active`;
-              if (dropped.length) {
-                lc.warn?.(
-                  `Dropped inactive replication slots: ${dropped.map(({slot}) => slot)}`,
-                  e,
-                );
-                continue;
-              }
-              lc.error?.(`Unable to drop replication slots`, e);
-            }
-          }
-          throw e;
-        }
-      }
+      const slot = await createReplicaAndSlot(
+        lc,
+        sql,
+        must(replicationSession),
+        shard,
+        replicaID,
+        replicationSlotFailover && pgVersion >= PG_17,
+      );
       snapshot = slot.snapshot_name;
       lsn = slot.consistent_point;
+      slotName = slot.slot_name;
     }
 
     const initialVersion = toStateVersionString(lsn);
@@ -315,21 +279,15 @@ export async function initialSync(
       const index = performance.now() - indexStart;
       lc.info?.(`Created indexes (${index.toFixed(3)} ms)`);
 
-      if (shadow) {
+      if (slotName && replicaID) {
+        await initReplica(sql, shard, replicaID, published, context);
+      } else {
+        assert(shadow, 'expected to be in shadow sync if there is no slotName');
         const rowsByTable = new Map<string, number>();
         for (let i = 0; i < downloads.length; i++) {
           rowsByTable.set(downloads[i].status.table, rowCounts[i].rows);
         }
         verifyShadowReplica(lc, tx, published, rowsByTable);
-      } else {
-        await addReplica(
-          sql,
-          shard,
-          slotName,
-          initialVersion,
-          published,
-          context,
-        );
       }
 
       const elapsed = performance.now() - start;
@@ -342,7 +300,7 @@ export async function initialSync(
       void copyPool.end().catch(e => lc.warn?.(`Error closing copyPool`, e));
     }
   } catch (e) {
-    if (!shadow) {
+    if (slotName) {
       // If initial-sync did not succeed, make a best effort to drop the
       // orphaned replication slot to avoid running out of slots in
       // pathological cases that result in repeated failures.
@@ -521,29 +479,6 @@ function startTableCopyWorkers(
   return tableCopiers;
 }
 
-// Row returned by `CREATE_REPLICATION_SLOT`
-type ReplicationSlot = {
-  slot_name: string;
-  consistent_point: string;
-  snapshot_name: string;
-  output_plugin: string;
-};
-
-// When creating a replication slot, Postgres waits for open transactions
-// to complete before reserving a consistent_point (LSN) in the WAL and creating
-// a matching transaction snapshot. As such, it can technically take an arbitrary
-// amount of time (e.g. DDL operations, table-wide operations, etc.).
-//
-// However, to detect pathological situations, bound the amount of time that
-// the server waits for replication slot creation, so that a continual failure to
-// create a replication slot is surfaced by errors / alerts.
-const CREATE_REPLICATION_SLOT_TIMEOUT_MS = 30_000;
-
-// The lock_timeout is set 1s before the client-side orTimeout so that
-// Postgres reliably aborts first and tears down the walsender cleanly.
-// The client-side timeout remains as a fallback for network-level failures.
-const SERVER_LOCK_TIMEOUT_MS = CREATE_REPLICATION_SLOT_TIMEOUT_MS - 1_000;
-
 /**
  * Shadow-mode alternative to `createReplicationSlot`: opens a dedicated
  * READ ONLY REPEATABLE READ transaction on a normal connection, exports the
@@ -606,59 +541,6 @@ async function acquireExportedSnapshotForShadowSync(
       await holder.end();
     },
   };
-}
-
-// Note: The replication connection does not support the extended query protocol,
-//       so all commands must be sent using sql.unsafe(). This is technically safe
-//       because all placeholder values are under our control (i.e. "slotName").
-export async function createReplicationSlot(
-  lc: LogContext,
-  session: postgres.Sql,
-  slotName: string,
-  // Note: must be false if pgVersion < PG_17. Caller must verify.
-  failover = false,
-): Promise<ReplicationSlot> {
-  // CREATE_REPLICATION_SLOT can hang indefinitely waiting for long-running
-  // transactions to finish: internally it calls SnapBuildWaitSnapshot →
-  // XactLockTableWait → LockAcquire on each running XID. statement_timeout
-  // does NOT apply to replication commands, but lock_timeout does (it governs
-  // the heavyweight lock wait inside LockAcquire). Setting it here causes
-  // Postgres to raise ERRCODE_LOCK_NOT_AVAILABLE and cleanly tear down the
-  // walsender, rather than relying solely on the client-side orTimeout
-  // which can leave an orphaned backend.
-  //
-  // An orphaned walsender is actively harmful: by this point the replication
-  // slot has already been created and is pinning WAL retention and catalog_xmin.
-  // Worse, the slot is marked `active` (the walsender PID is still alive), so
-  // the existing cleanup code (which drops inactive slots on retry) can't
-  // reclaim it. Without lock_timeout the orphan persists until TCP keepalive
-  // fires (~2h default) or the blocking transaction finishes.
-  await session.unsafe(`SET lock_timeout = ${SERVER_LOCK_TIMEOUT_MS}`);
-
-  const createSlot = failover
-    ? session.unsafe<ReplicationSlot[]>(
-        /*sql*/ `CREATE_REPLICATION_SLOT "${slotName}" LOGICAL pgoutput (FAILOVER)`,
-      )
-    : session.unsafe<ReplicationSlot[]>(
-        /*sql*/ `CREATE_REPLICATION_SLOT "${slotName}" LOGICAL pgoutput`,
-      );
-  const raced = await orTimeout(createSlot, CREATE_REPLICATION_SLOT_TIMEOUT_MS);
-  if (raced === 'timed-out') {
-    // Create slot can block indefinitely waiting for old transactions. End
-    // this connection in the background and fail fast so the process restarts.
-    void session
-      .end()
-      .catch(e =>
-        lc.warn?.(`Error closing timed out replication slot session`, e),
-      );
-    throw new Error(
-      `Timed out after ${CREATE_REPLICATION_SLOT_TIMEOUT_MS} ms creating replication slot ${slotName}. ` +
-        `Crashing to force a clean restart.`,
-    );
-  }
-  const [slot] = raced;
-  lc.info?.(`Created replication slot ${slotName}`, slot);
-  return slot;
 }
 
 function createLiteTables(
