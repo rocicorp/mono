@@ -87,10 +87,13 @@ export class Query {
       return Number.isNaN(n) ? null : n;
     };
 
-    // Extract hydration metrics (median values) - handle NaN by defaulting to 0
-    this.hydrateClient = percentile('query-materialization-client', 0.5);
-    this.hydrateServer = percentile('query-materialization-server', 0.5);
-    this.hydrateTotal = percentile('query-materialization-end-to-end', 0.5);
+    // Hydration times are plain numbers (performance.now()-based durations), so
+    // read them directly instead of going through the TDigest percentile path.
+    this.hydrateClient =
+      clientMetrics?.['query-materialization-client'] ?? null;
+    this.hydrateServer = serverMetrics?.['query-hydration-server-ms'] ?? null;
+    this.hydrateTotal =
+      clientMetrics?.['query-materialization-end-to-end'] ?? null;
 
     // Extract update metrics (P50 and P95) - handle NaN by defaulting to 0
     this.updateClientP50 = percentile('query-update-client', 0.5);

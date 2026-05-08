@@ -11,6 +11,19 @@ const serverMetricsSchema = v.object({
 
 export type ServerMetrics = v.Infer<typeof serverMetricsSchema>;
 
+/**
+ * Per-query server metrics sent with each query row in the inspector protocol.
+ * `query-hydration-server-ms` is a plain number (milliseconds) since each
+ * query is typically hydrated only once. `query-update-server` is a TDigest
+ * histogram since queries receive many incremental updates.
+ */
+const queryServerMetricsSchema = v.object({
+  'query-hydration-server-ms': v.number().optional(),
+  'query-update-server': tdigestSchema,
+});
+
+export type QueryServerMetrics = v.Infer<typeof queryServerMetricsSchema>;
+
 const inspectQueryRowSchema = v.object({
   clientID: v.string(),
   queryID: v.string(),
@@ -26,7 +39,7 @@ const inspectQueryRowSchema = v.object({
   ttl: v.number(),
   inactivatedAt: v.number().nullable(),
   rowCount: v.number(),
-  metrics: serverMetricsSchema.nullable().optional(),
+  metrics: queryServerMetricsSchema.nullable().optional(),
 });
 
 export type InspectQueryRow = v.Infer<typeof inspectQueryRowSchema>;
