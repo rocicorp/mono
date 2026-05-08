@@ -886,21 +886,28 @@ export async function getInitialDownloadState(
   const table = liteTableName(spec);
   const columns = Object.keys(spec.columns);
   if (skipTotals) {
-    // Shadow sync suppresses status events, so the COUNT(*) and
-    // per-column pg_column_size sums would be computed and thrown away.
-    // These are also expensive statements that run table scans.
+    // Shadow sync suppresses status events, so the pg_class
+    // estimates would be computed and thrown away.
     return {
       spec,
       status: {table, columns, rows: 0, totalRows: 0, totalBytes: 0},
     };
   }
-  const stmts = makeDownloadStatements(spec, columns);
-  const rowsResult = sql
-    .unsafe<{totalRows: bigint}[]>(stmts.getTotalRows)
-    .execute();
-  const bytesResult = sql
-    .unsafe<{totalBytes: bigint}[]>(stmts.getTotalBytes)
-    .execute();
+  // Use pg_class estimates instead of expensive COUNT(*) and
+  // SUM(pg_column_size(...)) full table scans. The exact values are only
+  // used for progress reporting, so estimates are sufficient.
+  const qualifiedName = `${id(spec.schema)}.${id(spec.name)}`;
+  const estimateResult = await sql<
+    {totalRows: number; totalBytes: number}[]
+  >`SELECT GREATEST(reltuples, 0)::float8 AS "totalRows",
+         pg_relation_size(oid)::float8 AS "totalBytes"
+    FROM pg_class
+    WHERE oid = ${qualifiedName}::regclass`;
+
+  const {totalRows, totalBytes} = estimateResult[0] ?? {
+    totalRows: 0,
+    totalBytes: 0,
+  };
 
   const state: DownloadState = {
     spec,
@@ -908,8 +915,8 @@ export async function getInitialDownloadState(
       table,
       columns,
       rows: 0,
-      totalRows: Number((await rowsResult)[0].totalRows),
-      totalBytes: Number((await bytesResult)[0].totalBytes),
+      totalRows,
+      totalBytes,
     },
   };
   const elapsed = (performance.now() - start).toFixed(3);
