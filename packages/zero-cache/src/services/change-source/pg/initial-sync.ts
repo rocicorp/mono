@@ -581,6 +581,8 @@ export function verifyShadowReplica(
   rowsByTable: ReadonlyMap<string, number>,
 ): void {
   const issues: string[] = [];
+  let columnsChecked = 0;
+  let rowsChecked = 0;
 
   // 1. Schema completeness: every published table exists in the replica
   //    with at least the expected column set.
@@ -594,6 +596,7 @@ export function verifyShadowReplica(
       continue;
     }
     for (const col of Object.keys(pt.columns)) {
+      columnsChecked++;
       if (!(col in lite.columns)) {
         issues.push(`column missing in replica table ${name}: ${col}`);
       }
@@ -622,6 +625,8 @@ export function verifyShadowReplica(
           `row count mismatch for table ${table}: ` +
             `copy counter reported ${expected}, replica has ${row.count}`,
         );
+      } else {
+        rowsChecked += row.count;
       }
     } catch (e) {
       issues.push(`could not count rows in table ${table}: ${String(e)}`);
@@ -660,6 +665,14 @@ export function verifyShadowReplica(
         issues.map(i => `  - ${i}`).join('\n'),
     );
   }
+
+  lc.info?.(
+    `Shadow replica verification passed: ` +
+      `${published.tables.length} tables, ` +
+      `${published.indexes.length} indexes, ` +
+      `${columnsChecked} columns, ` +
+      `${rowsChecked.toLocaleString()} rows`,
+  );
 }
 
 // Verified empirically that batches of 50 seem to be the sweet spot,
