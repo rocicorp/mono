@@ -43,3 +43,28 @@ export function wrapWithProtocolError(error: unknown): ProtocolError {
     {cause: error},
   );
 }
+
+export function wrapWithProtocolErrorWithLevel(
+  error: unknown,
+  logLevel: LogLevel,
+): ProtocolErrorWithLevel {
+  if (error instanceof ProtocolErrorWithLevel) {
+    return error;
+  }
+
+  if (isProtocolError(error)) {
+    return new ProtocolErrorWithLevel(error.errorBody, logLevel, {
+      cause: error,
+    });
+  }
+
+  return new ProtocolErrorWithLevel(
+    {
+      kind: ErrorKind.Internal,
+      message: getErrorMessage(error),
+      origin: ErrorOrigin.ZeroCache,
+    },
+    logLevel,
+    {cause: error},
+  );
+}

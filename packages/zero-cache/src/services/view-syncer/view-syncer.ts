@@ -55,6 +55,7 @@ import {
   getLogLevel,
   ProtocolErrorWithLevel,
   wrapWithProtocolError,
+  wrapWithProtocolErrorWithLevel,
 } from '../../types/error-with-level.ts';
 import type {PostgresDB} from '../../types/pg.ts';
 import {rowIDString, type RowKey} from '../../types/row-key.ts';
@@ -1240,7 +1241,13 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
           if (deleted?.clientIDs?.length) {
             for (const cid of deleted.clientIDs) {
-              assert(cid !== clientID, 'cannot delete self');
+              if (cid === clientID) {
+                throw new ProtocolError({
+                  kind: ErrorKind.InvalidConnectionRequest,
+                  message: 'cannot delete self',
+                  origin: ErrorOrigin.ZeroCache,
+                });
+              }
               clientIDsToDelete.add(cid);
             }
           }
@@ -1384,7 +1391,10 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       }
     }
 
-    const transformedQueries: TransformedAndHashed[] = [];
+    const transformedQueries: {
+      origQuery: QueryRecord;
+      transformed: TransformedAndHashed;
+    }[] = [];
     let customErrorCount = 0;
     let customHashMismatchCount = 0;
     let otherHashMismatchCount = 0;
@@ -1428,14 +1438,13 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       // the client.
       if (Array.isArray(transformedCustomQueries.result)) {
         for (const q of transformedCustomQueries.result) {
+          const origQuery = must(customQueries.get(q.id));
           if ('error' in q) {
             customErrorCount++;
-          } else if (
-            q.transformationHash !== customQueries.get(q.id)?.transformationHash
-          ) {
+          } else if (q.transformationHash !== origQuery.transformationHash) {
             customHashMismatchCount++;
           } else {
-            transformedQueries.push(q);
+            transformedQueries.push({origQuery, transformed: q});
           }
         }
       }
@@ -1457,7 +1466,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       if (transformed.transformationHash === q.transformationHash) {
         // only process queries that transformed to the same
         // transformationHash as in the CVR here
-        transformedQueries.push(transformed);
+        transformedQueries.push({origQuery: q, transformed});
       } else {
         otherHashMismatchCount++;
       }
@@ -1475,9 +1484,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     const driftedQueryIDs = new Set<string>();
 
     for (const {
-      id: queryID,
-      transformationHash,
-      transformedAst,
+      origQuery,
+      transformed: {id: queryID, transformationHash, transformedAst},
     } of transformedQueries) {
       const timer = new TimeSliceTimer(lc);
       let count = 0;
@@ -1488,17 +1496,21 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           span.setAttribute('queryHash', queryID);
           span.setAttribute('transformationHash', transformationHash);
           span.setAttribute('table', transformedAst.table);
-          for (const change of this.#pipelines.addQuery(
-            transformationHash,
-            queryID,
-            transformedAst,
-            await timer.start(),
-          )) {
-            if (change === 'yield') {
-              await timer.yieldProcess('yield in hydrateUnchangedQueries');
-            } else {
-              count++;
+          try {
+            for (const change of this.#pipelines.addQuery(
+              transformationHash,
+              queryID,
+              transformedAst,
+              await timer.start(),
+            )) {
+              if (change === 'yield') {
+                await timer.yieldProcess('yield in hydrateUnchangedQueries');
+              } else {
+                count++;
+              }
             }
+          } catch (e) {
+            throw wrapQueryHydrationError(e, origQuery.type);
           }
         },
       );
@@ -1837,6 +1849,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           ast: transformed.transformedAst,
           transformationHash: transformed.transformationHash,
           name: origQuery.type === 'custom' ? origQuery.name : undefined,
+          type: origQuery.type,
         }))
         .filter(
           q =>
@@ -1919,6 +1932,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       ast: AST;
       transformationHash: string;
       name?: string | undefined;
+      type: QueryRecord['type'];
     }[],
     removeQueries: {id: string}[],
     driftedQueryIDs: Set<string> = new Set(),
@@ -1996,12 +2010,16 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             .withContext('transformationHash', q.transformationHash);
           lc.debug?.(`adding pipeline for query`, q.ast);
 
-          yield* pipelines.addQuery(
-            q.transformationHash,
-            q.id,
-            q.ast,
-            timer.startWithoutYielding(),
-          );
+          try {
+            yield* pipelines.addQuery(
+              q.transformationHash,
+              q.id,
+              q.ast,
+              timer.startWithoutYielding(),
+            );
+          } catch (e) {
+            throw wrapQueryHydrationError(e, q.type);
+          }
           const elapsed = timer.stop();
           totalProcessTime += elapsed;
 
@@ -2590,6 +2608,15 @@ function isTransformFailedError(error: ProtocolError): boolean {
     error.errorBody.kind === ErrorKind.TransformFailed &&
     !isAuthErrorBody(error.errorBody)
   );
+}
+
+function wrapQueryHydrationError(
+  error: unknown,
+  queryType: QueryRecord['type'],
+): unknown {
+  return queryType === 'internal'
+    ? error
+    : wrapWithProtocolErrorWithLevel(error, 'warn');
 }
 
 /**

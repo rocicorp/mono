@@ -89,7 +89,11 @@ function assertNotInternal(
 ): asserts query is ClientQueryRecord {
   if (query.type === 'internal') {
     // This should never happen for behaving clients, as query ids should be hashes.
-    throw new Error(`Query ID ${query.id} is reserved for internal use`);
+    throw new ProtocolError({
+      kind: 'InvalidConnectionRequest',
+      message: `Query ID ${query.id} is reserved for internal use`,
+      origin: ErrorOrigin.ZeroCache,
+    });
   }
 }
 
