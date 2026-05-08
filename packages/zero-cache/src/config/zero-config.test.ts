@@ -544,6 +544,12 @@ test('zero-cache --help', () => {
                                                                         The S3-compatible endpoint URL to use for the litestream backup. Only required for non-AWS services.                       
                                                                         The replication-manager and view-syncers must have the same endpoint.                                                      
                                                                                                                                                                                                    
+     --litestream-region string                                         optional                                                                                                                   
+       ZERO_LITESTREAM_REGION env                                                                                                                                                                  
+                                                                        The AWS region for the litestream backup bucket. Required for non-standard AWS partitions                                  
+                                                                        (e.g. GovCloud us-gov-west-1) where Litestream cannot auto-detect the region.                                              
+                                                                        The replication-manager and view-syncers must have the same region.                                                        
+                                                                                                                                                                                                   
      --litestream-port number                                           optional                                                                                                                   
        ZERO_LITESTREAM_PORT env                                                                                                                                                                    
                                                                         Port on which litestream exports metrics, used to determine the replication                                                
