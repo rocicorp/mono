@@ -20,7 +20,7 @@
   },
   "devDependencies": {
     "@vitest/runner": "^4.1.5",
-    "oxfmt": "^0.45.0",
+    "oxfmt": "^0.48.0",
     "vitest": "^4.1.5",
     "zero-cache": "0.0.0",
     "zero-server": "0.0.0"
