@@ -900,7 +900,7 @@ export async function getInitialDownloadState(
   const estimateResult = await sql<
     {totalRows: number; totalBytes: number}[]
   >`SELECT GREATEST(reltuples, 0)::float8 AS "totalRows",
-         pg_relation_size(oid)::float8 AS "totalBytes"
+         pg_table_size(oid)::float8 AS "totalBytes"
     FROM pg_class
     WHERE oid = ${qualifiedName}::regclass`;
 
