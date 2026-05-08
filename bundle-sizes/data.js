@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778241571174,
+  "lastUpdate": 1778241862840,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -55741,6 +55741,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/rocicorp/mono/commit/00a0da6775dce7703ef6636500538bbb7eaeec7c"
         },
         "date": 1778241559286,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 315505,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 56729,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 116720,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 33278,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "arv@roci.dev",
+            "name": "Erik Arvidsson",
+            "username": "arv"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "8e879fa11614f5e8d73d1fafc98f1673593c2b93",
+          "message": "Revert \"chore: Downgrade oxfmt\" (#5937)\n\nReverts rocicorp/mono#5936",
+          "timestamp": "2026-05-08T14:02:14+02:00",
+          "tree_id": "3a27ccbafeee030cee52688e9ba806c39c8c7f56",
+          "url": "https://github.com/rocicorp/mono/commit/8e879fa11614f5e8d73d1fafc98f1673593c2b93"
+        },
+        "date": 1778241849614,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
