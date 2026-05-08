@@ -4,7 +4,7 @@ x-postgres-common: &postgres-common
   user: postgres
   restart: always
   healthcheck:
-    test: "pg_isready -U user --dbname=postgres"
+    test: 'pg_isready -U user --dbname=postgres'
     interval: 10s
     timeout: 5s
     retries: 5
