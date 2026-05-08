@@ -1,7 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
 import type {ReplicacheImpl} from '../../../replicache/src/replicache-impl.ts';
 import type {ClientID} from '../../../replicache/src/sync/ids.ts';
-import {assert} from '../../../shared/src/asserts.ts';
+import {assert, unreachable} from '../../../shared/src/asserts.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {must} from '../../../shared/src/must.ts';
 import {difference} from '../../../shared/src/set-utils.ts';
@@ -36,6 +36,7 @@ import type {ClientErrorKind} from './client-error-kind.ts';
 import type {ClientError} from './error.ts';
 import {type ZeroError} from './error.ts';
 import type {InspectorDelegate} from './inspector/inspector.ts';
+import type {QueryClientMetrics} from './inspector/lazy-inspector.ts';
 import {desiredQueriesPrefixForClient, GOT_QUERIES_KEY_PREFIX} from './keys.ts';
 import type {MutationTracker} from './mutation-tracker.ts';
 import type {ReadTransaction} from './replicache-types.ts';
@@ -54,6 +55,12 @@ type Entry = {
 
 type ClientMetric = {
   [K in keyof ClientMetricMap]: TDigest;
+};
+
+type PerQueryClientMetric = {
+  'query-materialization-client': number | undefined;
+  'query-materialization-end-to-end': number | undefined;
+  'query-update-client': TDigest;
 };
 
 /**
@@ -78,9 +85,12 @@ export class QueryManager implements InspectorDelegate {
   #batchTimer: ReturnType<typeof setTimeout> | undefined;
   readonly #lc: LogContext;
   readonly #metrics: ClientMetric = newMetrics();
-  readonly #queryMetrics: Map<string, ClientMetric> = new Map();
+  readonly #queryMetrics: Map<string, PerQueryClientMetric> = new Map();
   readonly #slowMaterializeThreshold: number;
   #closedError: ZeroError | undefined;
+  #queryEvictedCallback:
+    | ((hash: string, ast: AST, metrics: QueryClientMetrics) => void)
+    | undefined;
 
   constructor(
     lc: LogContext,
@@ -141,6 +151,12 @@ export class QueryManager implements InspectorDelegate {
   getAST(queryID: string): AST | undefined {
     const ast = this.#queries.get(queryID)?.normalized;
     return ast && mapAST(ast, this.#serverToClient);
+  }
+
+  setQueryEvictedCallback(
+    cb: (hash: string, ast: AST, metrics: QueryClientMetrics) => void,
+  ): void {
+    this.#queryEvictedCallback = cb;
   }
 
   mapClientASTToServer(ast: AST): AST {
@@ -435,10 +451,15 @@ export class QueryManager implements InspectorDelegate {
       if (this.#recentQueries.size > this.#recentQueriesMaxSize) {
         const lruQueryID = this.#recentQueries.values().next().value;
         assert(lruQueryID, 'Expected LRU query ID to exist');
+        const evictedAST = this.getAST(lruQueryID);
+        const evictedMetrics = this.#queryMetrics.get(lruQueryID);
         this.#queries.delete(lruQueryID);
         this.#recentQueries.delete(lruQueryID);
         this.#queryMetrics.delete(lruQueryID);
         this.#queueQueryChange({op: 'del', hash: lruQueryID});
+        assert(evictedAST, 'Expected evicted AST to exist');
+        assert(evictedMetrics, 'Expected evicted metrics to exist');
+        this.#queryEvictedCallback?.(lruQueryID, evictedAST, evictedMetrics);
       }
     }
   }
@@ -492,13 +513,28 @@ export class QueryManager implements InspectorDelegate {
     // The query manager manages metrics that are per query.
     let existing = this.#queryMetrics.get(queryID);
     if (!existing) {
-      existing = newMetrics();
+      existing = newPerQueryMetrics();
       this.#queryMetrics.set(queryID, existing);
     }
-    existing[metric].add(value);
+    switch (metric) {
+      case 'query-update-client':
+        existing['query-update-client'].add(value);
+        break;
+      case 'query-materialization-client':
+      case 'query-materialization-end-to-end':
+        // Recorded once per query (last value wins).
+        existing[
+          metric as
+            | 'query-materialization-client'
+            | 'query-materialization-end-to-end'
+        ] = value;
+        break;
+      default:
+        unreachable(metric);
+    }
   }
 
-  getQueryMetrics(queryID: string): ClientMetric | undefined {
+  getQueryMetrics(queryID: string): PerQueryClientMetric | undefined {
     return this.#queryMetrics.get(queryID);
   }
 
@@ -514,6 +550,14 @@ function newMetrics(): ClientMetric {
   return {
     'query-materialization-client': new TDigest(),
     'query-materialization-end-to-end': new TDigest(),
+    'query-update-client': new TDigest(),
+  };
+}
+
+function newPerQueryMetrics(): PerQueryClientMetric {
+  return {
+    'query-materialization-client': undefined,
+    'query-materialization-end-to-end': undefined,
     'query-update-client': new TDigest(),
   };
 }

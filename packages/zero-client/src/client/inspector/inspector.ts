@@ -14,6 +14,7 @@ import type {
   ExtendedInspectorDelegate,
   InspectorDelegate,
   Metrics,
+  QueryClientMetrics,
   Rep,
 } from './lazy-inspector.ts';
 
@@ -24,6 +25,10 @@ export type Lazy = typeof import('./lazy-inspector.ts');
 
 export class Inspector {
   readonly #delegate: ExtendedInspectorDelegate;
+  readonly #deletedQueries = new Map<
+    string,
+    {readonly ast: AST; readonly metrics: QueryClientMetrics}
+  >();
   readonly client: Client;
   readonly clientGroup: ClientGroup;
 
@@ -33,15 +38,28 @@ export class Inspector {
     queryDelegate: QueryDelegate,
     getSocket: () => Promise<WebSocket>,
   ) {
+    const deletedQueries = this.#deletedQueries;
+    inspectorDelegate.setQueryEvictedCallback((hash, ast, metrics) => {
+      deletedQueries.set(hash, {ast, metrics});
+    });
     this.#delegate = {
-      getQueryMetrics:
-        inspectorDelegate.getQueryMetrics.bind(inspectorDelegate),
-      getAST: inspectorDelegate.getAST.bind(inspectorDelegate),
+      getQueryMetrics(hash) {
+        return (
+          inspectorDelegate.getQueryMetrics(hash) ??
+          deletedQueries.get(hash)?.metrics
+        );
+      },
+      getAST(queryID) {
+        return (
+          inspectorDelegate.getAST(queryID) ?? deletedQueries.get(queryID)?.ast
+        );
+      },
       mapClientASTToServer:
         inspectorDelegate.mapClientASTToServer.bind(inspectorDelegate),
       get metrics() {
         return inspectorDelegate.metrics;
       },
+      setQueryEvictedCallback() {},
       queryDelegate,
       rep,
       getSocket,

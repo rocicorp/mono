@@ -629,7 +629,7 @@ describe('query metrics', () => {
             rowCount: 1,
             ttl: 60_000,
             metrics: {
-              'query-materialization-server': [1000, 1, 2],
+              'query-hydration-server-ms': 1,
               'query-update-server': [100, 3, 4],
             },
           },
@@ -657,7 +657,7 @@ describe('query metrics', () => {
         "query-materialization-server": [
           1000,
           1,
-          2,
+          1,
         ],
         "query-update-client": [
           1000,
@@ -1669,11 +1669,8 @@ describe('authenticate', () => {
       const z = zeroForTest({schema});
       await z.triggerConnected();
 
-      // Create TDigest instances with test data for server metrics
-      const serverHydrationDigest = new TDigest();
-      serverHydrationDigest.add(50, 1); // 50ms
-      serverHydrationDigest.add(75, 1); // 75ms
-      serverHydrationDigest.add(100, 1); // 100ms
+      // Create TDigest for server update metrics
+      const serverHydrationMs = 75; // plain number: the hydration time in ms
 
       const serverUpdateDigest = new TDigest();
       serverUpdateDigest.add(5, 1); // 5ms
@@ -1711,7 +1708,7 @@ describe('authenticate', () => {
               rowCount: 10,
               ttl: 60_000,
               metrics: {
-                'query-materialization-server': serverHydrationDigest.toJSON(),
+                'query-hydration-server-ms': serverHydrationMs,
                 'query-update-server': serverUpdateDigest.toJSON(),
               },
             },
@@ -1726,7 +1723,7 @@ describe('authenticate', () => {
 
       // Test hydration metrics (P50/median) - client metrics will default to null since no client metrics are provided
       expect(query.hydrateClient).toBeNull(); // null since no client metrics
-      expect(query.hydrateServer).toBe(75); // P50 of [50, 75, 100]
+      expect(query.hydrateServer).toBe(75); // plain number sent from server
       expect(query.hydrateTotal).toBeNull(); // null since no client metrics
 
       // Test update metrics
@@ -1788,11 +1785,11 @@ describe('authenticate', () => {
       await z.close();
     });
 
-    test('metrics properties handle empty TDigest correctly', async () => {
+    test('metrics properties handle absent hydration field correctly', async () => {
       const z = zeroForTest({schema});
       await z.triggerConnected();
 
-      // Mock server response with empty metrics (empty TDigest)
+      // Mock server response with no hydration metric and empty update TDigest
       const emptyDigest = new TDigest();
 
       // Use waitForID pattern which awaits socket before calling inspector
@@ -1818,7 +1815,7 @@ describe('authenticate', () => {
               rowCount: 0,
               ttl: 60_000,
               metrics: {
-                'query-materialization-server': emptyDigest.toJSON(),
+                // omit query-hydration-server-ms to simulate no hydration recorded
                 'query-update-server': emptyDigest.toJSON(),
               },
             },
@@ -1831,7 +1828,7 @@ describe('authenticate', () => {
 
       const query = queries[0];
 
-      // Empty TDigest quantile returns NaN, but our implementation should default to null
+      // Absent hydration field means no hydration recorded → hydrateServer is null
       expect(query.hydrateClient).toBeNull();
       expect(query.hydrateServer).toBeNull();
       expect(query.hydrateTotal).toBeNull();
@@ -1875,7 +1872,7 @@ describe('authenticate', () => {
               rowCount: 1,
               ttl: 60_000,
               metrics: {
-                'query-materialization-server': singlePointDigest.toJSON(),
+                'query-hydration-server-ms': 42,
                 'query-update-server': singlePointDigest.toJSON(),
               },
             },
@@ -1905,16 +1902,6 @@ describe('authenticate', () => {
       await z.triggerConnected();
 
       // Create TDigest instances with different hydration times
-      const slowDigest = new TDigest();
-      slowDigest.add(100, 1); // 100ms
-
-      const mediumDigest = new TDigest();
-      mediumDigest.add(50, 1); // 50ms
-
-      const fastDigest = new TDigest();
-      fastDigest.add(10, 1); // 10ms
-
-      const emptyDigest = new TDigest(); // Empty digest: quantile() returns NaN, converted to null hydrateServer
       const emptyUpdateDigest = new TDigest();
 
       // Use waitForID pattern which awaits socket before calling inspector
@@ -1941,7 +1928,7 @@ describe('authenticate', () => {
               rowCount: 10,
               ttl: 60_000,
               metrics: {
-                'query-materialization-server': slowDigest.toJSON(),
+                'query-hydration-server-ms': 100,
                 'query-update-server': emptyUpdateDigest.toJSON(),
               },
             },
@@ -1957,7 +1944,7 @@ describe('authenticate', () => {
               rowCount: 5,
               ttl: 60_000,
               metrics: {
-                'query-materialization-server': fastDigest.toJSON(),
+                'query-hydration-server-ms': 10,
                 'query-update-server': emptyUpdateDigest.toJSON(),
               },
             },
@@ -1973,7 +1960,7 @@ describe('authenticate', () => {
               rowCount: 3,
               ttl: 60_000,
               metrics: {
-                'query-materialization-server': emptyDigest.toJSON(),
+                // omit query-hydration-server-ms to simulate no hydration recorded
                 'query-update-server': emptyUpdateDigest.toJSON(),
               },
             },
@@ -1989,7 +1976,7 @@ describe('authenticate', () => {
               rowCount: 7,
               ttl: 60_000,
               metrics: {
-                'query-materialization-server': mediumDigest.toJSON(),
+                'query-hydration-server-ms': 50,
                 'query-update-server': emptyUpdateDigest.toJSON(),
               },
             },

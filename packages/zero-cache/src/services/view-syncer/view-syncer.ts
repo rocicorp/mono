@@ -1507,6 +1507,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       this.#hydrations.add(1);
       this.#hydrationTime.recordMs(elapsed);
       this.#addQueryMaterializationServerMetric(transformationHash, elapsed);
+      this.#inspectorDelegate.addQuery(transformationHash, transformedAst);
       lc.debug?.(`hydrated ${count} rows for ${queryID} (${elapsed} ms)`);
 
       // Drift detection: compare the just-computed candidate signature against
@@ -2006,6 +2007,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           totalProcessTime += elapsed;
 
           self.#addQueryMaterializationServerMetric(q.id, elapsed);
+          self.#inspectorDelegate.addQuery(q.id, q.ast);
 
           if (elapsed > slowHydrateThreshold) {
             lc.warn?.('Slow query materialization', elapsed, q.ast);
