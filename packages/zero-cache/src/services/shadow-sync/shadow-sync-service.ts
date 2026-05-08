@@ -1,10 +1,26 @@
 import type {LogContext} from '@rocicorp/logger';
 import {promiseVoid} from '../../../../shared/src/resolved-promises.ts';
+import {
+  getOrCreateCounter,
+  getOrCreateLatencyHistogram,
+} from '../../observability/metrics.ts';
 import type {ShardConfig} from '../../types/shards.ts';
 import type {ServerContext} from '../change-source/pg/initial-sync.ts';
 import {shadowInitialSync} from '../change-source/pg/initial-sync.ts';
 import {RunningState} from '../running-state.ts';
 import type {Service} from '../service.ts';
+
+const shadowSyncRuns = getOrCreateCounter(
+  'replication',
+  'shadow-sync-runs',
+  'Number of shadow initial-sync runs, labeled by result.',
+);
+
+const shadowSyncDuration = getOrCreateLatencyHistogram(
+  'replication',
+  'shadow-sync-duration',
+  'Wall-clock duration of a shadow initial-sync run, labeled by result.',
+);
 
 export type ShadowSyncOptions = {
   intervalMs: number;
@@ -67,11 +83,15 @@ export class ShadowSyncService implements Service {
           textCopy !== undefined ? {textCopy} : undefined,
         );
         const elapsed = performance.now() - start;
+        shadowSyncRuns.add(1, {result: 'success'});
+        shadowSyncDuration.recordMs(elapsed, {result: 'success'});
         this.#lc.info?.(
           `shadow initial-sync completed (${elapsed.toFixed(0)} ms)`,
         );
       } catch (e) {
         const elapsed = performance.now() - start;
+        shadowSyncRuns.add(1, {result: 'error'});
+        shadowSyncDuration.recordMs(elapsed, {result: 'error'});
         this.#lc.error?.(
           `shadow initial-sync failed after ${elapsed.toFixed(0)} ms`,
           e,
