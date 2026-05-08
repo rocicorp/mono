@@ -2,18 +2,11 @@ import {LogContext} from '@rocicorp/logger';
 import {beforeEach, describe, expect} from 'vitest';
 import {TestLogSink} from '../../../../../../shared/src/logging-test-utils.ts';
 import {Index} from '../../../../db/postgres-replica-identity-enum.ts';
-import {
-  expectTables,
-  expectTablesToMatch,
-  initDB,
-  type PgTest,
-  test,
-} from '../../../../test/db.ts';
+import {expectTables, initDB, type PgTest, test} from '../../../../test/db.ts';
 import type {PostgresDB} from '../../../../types/pg.ts';
 import {getPublicationInfo} from './published.ts';
 import {
-  createReplica,
-  initReplica,
+  addReplica,
   setupTablesAndReplication,
   setupTriggers,
   validatePublicationName,
@@ -52,17 +45,11 @@ describe('change-source/pg', () => {
         shardNum: 0,
         publications: [],
       });
-      await createReplica(
+      await addReplica(
         tx,
         {appID: APP_ID, shardNum: 0},
-        '12345',
         'zro_0_1234',
         '0wdfj02',
-      );
-      await initReplica(
-        tx,
-        {appID: APP_ID, shardNum: 0},
-        '12345',
         {tables: [], indexes: []},
         {foo: 'bar'},
       );
@@ -75,7 +62,7 @@ describe('change-source/pg', () => {
       ['_zro_public_0', null, null, null],
     ]);
 
-    await expectTablesToMatch(db, {
+    await expectTables(db, {
       ['zro.permissions']: [{lock: true, permissions: null, hash: null}],
       ['zro_0.shardConfig']: [
         {
@@ -86,7 +73,6 @@ describe('change-source/pg', () => {
       ],
       ['zro_0.replicas']: [
         {
-          id: /\d{10,}/,
           slot: 'zro_0_1234',
           version: '0wdfj02',
           initialSchema: {tables: [], indexes: []},

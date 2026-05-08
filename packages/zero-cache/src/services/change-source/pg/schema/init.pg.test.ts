@@ -1,5 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
-import {beforeEach, describe, expect} from 'vitest';
+import {beforeEach, describe} from 'vitest';
 import {createSilentLogContext} from '../../../../../../shared/src/logging-test-utils.ts';
 import {
   createVersionHistoryTable,
@@ -18,7 +18,7 @@ import {
   ensureShardSchema,
   updateShardSchema,
 } from './init.ts';
-import {createReplica, initReplica, metadataPublicationName} from './shard.ts';
+import {addReplica, metadataPublicationName} from './shard.ts';
 
 const APP_ID = 'zappz';
 const SHARD_NUM = 23;
@@ -66,8 +66,6 @@ describe('change-streamer/pg/schema/init', () => {
         ],
         [`${APP_ID}_${SHARD_NUM}.replicas`]: [
           {
-            id: /\d{10,}/,
-            rank: expect.any(BigInt),
             slot: `${APP_ID}_${SHARD_NUM}_1234`,
             version: '2dhf29ef',
             initialSchema: {tables: [], indexes: []},
@@ -97,8 +95,6 @@ describe('change-streamer/pg/schema/init', () => {
         ],
         [`${APP_ID}_${SHARD_NUM}.replicas`]: [
           {
-            id: /\d{10,}/,
-            rank: expect.any(BigInt),
             slot: `${APP_ID}_${SHARD_NUM}_5678`,
             version: 's8dfh2d',
             initialSchema: {tables: [], indexes: []},
@@ -178,8 +174,6 @@ describe('change-streamer/pg/schema/init', () => {
         ],
         [`${APP_ID}_${SHARD_NUM}.replicas`]: [
           {
-            id: /[a-z0-9]{10,}/, // Random ID is backfilled
-            rank: expect.any(BigInt),
             slot: `${APP_ID}_${SHARD_NUM}`,
             version: '123',
             initialSchema: {tables: [], indexes: []},
@@ -215,17 +209,11 @@ describe('change-streamer/pg/schema/init', () => {
           publications: c.requestedPublications ?? [],
         });
         if (c.newReplica) {
-          await createReplica(
+          await addReplica(
             upstream,
             {appID: APP_ID, shardNum: SHARD_NUM},
-            '12345',
             c.newReplica[0],
             c.newReplica[1],
-          );
-          await initReplica(
-            upstream,
-            {appID: APP_ID, shardNum: SHARD_NUM},
-            '12345',
             {tables: [], indexes: []},
             {foo: 'bar'},
           );
