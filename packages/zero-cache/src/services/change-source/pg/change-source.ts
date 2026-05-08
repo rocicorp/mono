@@ -805,7 +805,7 @@ class LagReporter {
       msg.prefix === this.messagePrefix,
       `unexpected message prefix: ${msg.prefix}`,
     );
-    const report = parseLogicalMessageContent(msg, lagReportSchema);
+    const report = parseLogicalMessageContent(this.#lc, msg, lagReportSchema);
     return this.#processLagReport(
       report,
       toStateVersionString(msg.messageLsn ?? '0/0'),
@@ -1040,7 +1040,7 @@ class ChangeMaker {
     lsn: bigint,
     msg: MessageMessage,
   ): ChangeStreamData[] {
-    const event = parseLogicalMessageContent(msg, replicationEventSchema);
+    const event = parseLogicalMessageContent(lc, msg, replicationEventSchema);
     lc = lc
       .withContext('lsn', fromBigInt(lsn))
       .withContext('tag', event.event.tag)
@@ -1675,13 +1675,22 @@ class ShutdownSignal extends AbortError {
 }
 
 function parseLogicalMessageContent<T>(
-  {content}: MessageMessage,
+  lc: LogContext,
+  msg: MessageMessage,
   schema: v.Type<T>,
 ) {
+  const {content} = msg;
   const str =
     content instanceof Buffer
       ? content.toString('utf-8')
       : new TextDecoder().decode(content);
-  const json = JSON.parse(str);
-  return v.parse(json, schema, 'passthrough');
+  try {
+    const json = JSON.parse(str);
+    return v.parse(json, schema, 'passthrough');
+  } catch (e) {
+    lc.error?.(`unable to parse logical message content: ${String(e)}`, {
+      message: {...msg, content: str},
+    });
+    throw e;
+  }
 }
