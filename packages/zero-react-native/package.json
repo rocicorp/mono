@@ -19,7 +19,7 @@
     "@rocicorp/resolver": "^1.0.2"
   },
   "devDependencies": {
-    "oxfmt": "^0.45.0",
+    "oxfmt": "^0.48.0",
     "replicache": "15.2.1",
     "shared": "0.0.0"
   }
