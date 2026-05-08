@@ -31,6 +31,7 @@ import {pgClient, type PostgresDB} from '../../../types/pg.ts';
 import {ZERO_VERSION_COLUMN_NAME} from '../../replicator/schema/replication-state.ts';
 import {
   createReplicationSlot,
+  getInitialDownloadState,
   initialSync,
   INSERT_BATCH_SIZE,
   shadowInitialSync,
@@ -3218,6 +3219,109 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
           verifyShadowReplica(lc, replica, publishedInfo, new Map()),
         ).toThrow(/dropped by computeZqlSpecs.*big/s);
       });
+    });
+  });
+
+  describe('getInitialDownloadState', () => {
+    let upstream: PostgresDB;
+
+    beforeEach<PgTest>(async ({testDBs}) => {
+      upstream = await testDBs.create('download_state_test');
+      return () => testDBs.drop(upstream);
+    });
+
+    test('returns estimates from pg_class for a populated table', async () => {
+      await upstream.unsafe(/*sql*/ `
+        CREATE TABLE estimate_test (
+          id INTEGER PRIMARY KEY,
+          name TEXT,
+          data TEXT
+        );
+        INSERT INTO estimate_test (id, name, data)
+          SELECT i, 'name_' || i, repeat('x', 100)
+          FROM generate_series(1, 1000) AS i;
+        ANALYZE estimate_test;
+      `);
+
+      const lc = createSilentLogContext();
+      const spec: PublishedTableSpec = {
+        schema: 'public',
+        name: 'estimate_test',
+        columns: {
+          id: {dataType: 'int4', pos: 1},
+          name: {dataType: 'text', pos: 2},
+          data: {dataType: 'text', pos: 3},
+        },
+        publications: {pub1: {rowFilter: null}},
+      } as unknown as PublishedTableSpec;
+
+      const state = await getInitialDownloadState(lc, upstream, spec, false);
+
+      expect(state.spec).toBe(spec);
+      expect(state.status.table).toBe('estimate_test');
+      expect(state.status.columns).toEqual(['id', 'name', 'data']);
+      expect(state.status.rows).toBe(0); // rows starts at 0, incremented during copy
+      // After ANALYZE, reltuples should be exactly 1000.
+      expect(state.status.totalRows).toBe(1000);
+      // 1000 rows × ~150 bytes each (100-byte data + id + name + overhead).
+      // pg_relation_size returns the on-disk file size, expect 100KB-500KB.
+      expect(state.status.totalBytes).toBeGreaterThan(100_000);
+      expect(state.status.totalBytes).toBeLessThan(500_000);
+    });
+
+    test('returns zeros for a never-analyzed empty table', async () => {
+      await upstream.unsafe(/*sql*/ `
+        CREATE TABLE empty_test (
+          id INTEGER PRIMARY KEY
+        );
+      `);
+
+      const lc = createSilentLogContext();
+      const spec: PublishedTableSpec = {
+        schema: 'public',
+        name: 'empty_test',
+        columns: {
+          id: {dataType: 'int4', pos: 1},
+        },
+        publications: {pub1: {rowFilter: null}},
+      } as unknown as PublishedTableSpec;
+
+      const state = await getInitialDownloadState(lc, upstream, spec, false);
+
+      expect(state.status.totalRows).toBe(0);
+      expect(state.status.totalBytes).toBe(0);
+    });
+
+    test('handles non-public schema tables', async () => {
+      await upstream.unsafe(/*sql*/ `
+        CREATE SCHEMA test_schema;
+        CREATE TABLE test_schema.my_table (
+          id INTEGER PRIMARY KEY,
+          val TEXT
+        );
+        INSERT INTO test_schema.my_table (id, val)
+          SELECT i, 'val_' || i FROM generate_series(1, 100) AS i;
+        ANALYZE test_schema.my_table;
+      `);
+
+      const lc = createSilentLogContext();
+      const spec: PublishedTableSpec = {
+        schema: 'test_schema',
+        name: 'my_table',
+        columns: {
+          id: {dataType: 'int4', pos: 1},
+          val: {dataType: 'text', pos: 2},
+        },
+        publications: {pub1: {rowFilter: null}},
+      } as unknown as PublishedTableSpec;
+
+      const state = await getInitialDownloadState(lc, upstream, spec, false);
+
+      expect(state.status.totalRows).toBe(100);
+      // 100 rows × ~40 bytes each (id + val + overhead).
+      // Expect at least one 8KB page and no more than 64KB.
+      expect(state.status.totalBytes).toBeGreaterThanOrEqual(8192);
+      expect(state.status.totalBytes).toBeLessThan(65_536);
     });
   });
 });

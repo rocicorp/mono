@@ -97,12 +97,18 @@ describe('getInitialDownloadState', () => {
 
   test('skipTotals=true returns zeros without touching the DB', async () => {
     let called = false;
-    const sql = {
-      unsafe() {
+    const sql = Object.assign(
+      () => {
         called = true;
         throw new Error('sql should not be called when skipTotals=true');
       },
-    } as unknown as PostgresDB;
+      {
+        unsafe() {
+          called = true;
+          throw new Error('sql should not be called when skipTotals=true');
+        },
+      },
+    ) as unknown as PostgresDB;
 
     const state = await getInitialDownloadState(
       createSilentLogContext(),
@@ -120,17 +126,23 @@ describe('getInitialDownloadState', () => {
     });
   });
 
-  test('skipTotals=false runs the expensive queries', async () => {
-    const received: string[] = [];
-    const sql = {
-      unsafe(stmt: string) {
-        received.push(stmt);
-        const row = stmt.includes('totalRows')
-          ? [{totalRows: 42n}]
-          : [{totalBytes: 1024n}];
-        return {execute: () => Promise.resolve(row)};
+  test('skipTotals=false uses pg_class estimates', async () => {
+    // The tagged template sql`...` is called as a function with
+    // (strings, ...values) when used as a template tag.
+    const sql = Object.assign(
+      (strings: TemplateStringsArray, ..._values: unknown[]) => {
+        const query = strings.join('$1');
+        if (query.includes('pg_class')) {
+          return Promise.resolve([{totalRows: 42, totalBytes: 8192}]);
+        }
+        return Promise.resolve([]);
       },
-    } as unknown as PostgresDB;
+      {
+        unsafe() {
+          throw new Error('unsafe should not be called');
+        },
+      },
+    ) as unknown as PostgresDB;
 
     const state = await getInitialDownloadState(
       createSilentLogContext(),
@@ -138,11 +150,8 @@ describe('getInitialDownloadState', () => {
       tableSpec(),
       false,
     );
-    expect(received).toHaveLength(2);
-    expect(received.some(s => s.includes('COUNT(*)'))).toBe(true);
-    expect(received.some(s => s.includes('pg_column_size'))).toBe(true);
     expect(state.status.totalRows).toBe(42);
-    expect(state.status.totalBytes).toBe(1024);
+    expect(state.status.totalBytes).toBe(8192);
   });
 });
 
