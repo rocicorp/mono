@@ -255,7 +255,7 @@ export class Connection {
   };
 
   #handleError = (e: ErrorEvent) => {
-    this.#lc.error?.('WebSocket error event', e.message, e.error);
+    this.#lc.warn?.('WebSocket error event', e.message, e.error);
   };
 
   #proxyInbound() {
