@@ -2,9 +2,16 @@ import {describe, expect, test} from 'vitest';
 import {testLogConfig} from '../../../otel/src/test-log-config.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
+import {buildPipeline} from '../builder/builder.ts';
+import {TestBuilderDelegate} from '../builder/test-builder-delegate.ts';
+import {newQuery} from '../query/query-impl.ts';
+import {asQueryInternals} from '../query/query-internals.ts';
+import type {AnyQuery} from '../query/query.ts';
+import {schema as testSchema} from '../query/test/test-schemas.ts';
 import {Cap} from './cap.ts';
 import {Catch} from './catch.ts';
 import {MemoryStorage} from './memory-storage.ts';
+import type {Source} from './source.ts';
 import {consume} from './stream.ts';
 import {
   runPushTest,
@@ -1492,107 +1499,97 @@ describe('Cap wiring', () => {
     // UnionFanIn over that same source, and UnionFanIn's constructor
     // asserts the inputs have a sort. Without this fallback, building
     // the pipeline throws "UnionFanIn requires sorted input".
-    //
-    // Shape:
-    //   issue WHERE EXISTS comments
-    //     WHERE comment.text = "public"
-    //        OR EXISTS owner WHERE owner.role = "teacher"  // flipped
-    const sourcesORFlip: Sources = {
-      issue: {
-        columns: {id: {type: 'string'}},
-        primaryKeys: ['id'],
-      },
-      comment: {
-        columns: {
-          id: {type: 'string'},
-          issueID: {type: 'string'},
-          ownerID: {type: 'string'},
-          text: {type: 'string'},
-        },
-        primaryKeys: ['id'],
-      },
-      user: {
-        columns: {
-          id: {type: 'string'},
-          role: {type: 'string'},
-        },
-        primaryKeys: ['id'],
-      },
-    };
+    const ast = astOf(
+      newQuery(testSchema, 'issue').whereExists('comments', c =>
+        c.where(({or, cmp, exists}) =>
+          or(
+            cmp('text', 'public'),
+            exists('author', a => a.where('name', 'Alice'), {flip: true}),
+          ),
+        ),
+      ),
+    );
 
-    const orFlipAst: AST = {
-      table: 'issue',
-      orderBy: [['id', 'asc']],
-      where: {
-        type: 'correlatedSubquery',
-        related: {
-          system: 'client',
-          correlation: {parentField: ['id'], childField: ['issueID']},
-          subquery: {
-            table: 'comment',
-            alias: 'comments',
-            orderBy: [['id', 'asc']],
-            where: {
-              type: 'or',
-              conditions: [
-                {
-                  type: 'simple',
-                  left: {type: 'column', name: 'text'},
-                  op: '=',
-                  right: {type: 'literal', value: 'public'},
-                },
-                {
-                  type: 'correlatedSubquery',
-                  op: 'EXISTS',
-                  flip: true,
-                  related: {
-                    system: 'client',
-                    correlation: {
-                      parentField: ['ownerID'],
-                      childField: ['id'],
-                    },
-                    subquery: {
-                      table: 'user',
-                      alias: 'owner',
-                      orderBy: [['id', 'asc']],
-                      where: {
-                        type: 'simple',
-                        left: {type: 'column', name: 'role'},
-                        op: '=',
-                        right: {type: 'literal', value: 'teacher'},
-                      },
-                    },
-                  },
-                },
-              ],
-            },
-          },
-        },
-        op: 'EXISTS',
-      },
-    } as const;
-
-    const sourceContents: SourceContents = {
-      issue: [{id: 'i1'}],
-      comment: [{id: 'c1', issueID: 'i1', ownerID: 'u1', text: 'public'}],
-      user: [{id: 'u1', role: 'teacher'}],
-    };
-
-    // Builds without throwing — UFI lives over a sorted source because
-    // the EXISTS child fell back to Take.
-    const {actualStorage} = runPushTest({
-      sources: sourcesORFlip,
-      sourceContents,
-      ast: orFlipAst,
-      format: {singular: false, relationships: {}},
-      pushes: [],
-    });
+    const capKeys = capKeysFromBuild(ast);
 
     // No `:cap` storage because the EXISTS child took the Take path.
-    const capKeys = Object.keys(actualStorage).filter(k => k.endsWith(':cap'));
     expect(capKeys).toEqual([]);
   });
+
+  test('non-flipped EXISTS child with OR(simple, non-flipped EXISTS) still uses Cap', () => {
+    // Symmetric counterpart to the falls-back-to-Take test. An OR with
+    // no flipped subqueries goes through the regular FanOut/FanIn path
+    // (filter-level dedup, no sort requirement), so the Cap-vs-Take
+    // gate must stay on Cap. If a future refactor broadened the flip
+    // detection to fire on any subquery in the where, Cap would
+    // silently disappear from this shape — this test pins it.
+    const ast = astOf(
+      newQuery(testSchema, 'issue').whereExists('comments', c =>
+        c.where(({or, cmp, exists}) =>
+          or(cmp('text', 'public'), exists('author')),
+        ),
+      ),
+    );
+
+    // The outer EXISTS child (`zsubq_comments`) keeps Cap because no
+    // flips exist anywhere in its where. The non-flipped EXISTS inside
+    // the OR also gets its own Cap as a nested EXISTS child. Aliases
+    // are prefixed by the query builder (`zsubq_`) and the inside-where
+    // ones are then uniquified (`_0`/`_1`/...).
+    expect(capKeysFromBuild(ast)).toEqual([
+      '.zsubq_comments.zsubq_author_0:cap',
+      '.zsubq_comments:cap',
+    ]);
+  });
+
+  test('non-flipped EXISTS child with OR(exists, exists, exists) still uses Cap at every level', () => {
+    // Three non-flipped EXISTS branches in an OR. Asserts every level
+    // got a Cap operator. Aliases inside `where` are uniquified
+    // (`_0`/`_1`/`_2`) in source order.
+    const ast = astOf(
+      newQuery(testSchema, 'issue').whereExists('comments', c =>
+        c.where(({or, exists}) =>
+          or(exists('issue'), exists('revisions'), exists('author')),
+        ),
+      ),
+    );
+
+    expect(capKeysFromBuild(ast)).toEqual([
+      '.zsubq_comments.zsubq_author_2:cap',
+      '.zsubq_comments.zsubq_issue_0:cap',
+      '.zsubq_comments.zsubq_revisions_1:cap',
+      '.zsubq_comments:cap',
+    ]);
+  });
 });
+
+function astOf(q: AnyQuery): AST {
+  return asQueryInternals(q).ast;
+}
+
+// Builds the pipeline against the test schema (sources are empty;
+// createStorage registers each operator's storage at build time, so we
+// can read back the wiring without fetching). Avoids runPushTest here:
+// its dual-materialization equality assertion is sensitive to OR
+// short-circuit between Catch and ArrayView in shapes that have
+// multiple non-flipped EXISTS branches under an OR.
+function capKeysFromBuild(ast: AST): string[] {
+  const sources: Record<string, Source> = {};
+  for (const [name, table] of Object.entries(testSchema.tables)) {
+    sources[name] = createSource(
+      createSilentLogContext(),
+      testLogConfig,
+      name,
+      table.columns,
+      table.primaryKey,
+    );
+  }
+  const delegate = new TestBuilderDelegate(sources, false);
+  buildPipeline(ast, delegate, 'query-id');
+  return Object.keys(delegate.clonedStorage)
+    .filter(k => k.endsWith(':cap'))
+    .sort();
+}
 
 describe('Cap push - compound partition key', () => {
   // Compound correlation: parent.(region,org) → child.(region,org).
