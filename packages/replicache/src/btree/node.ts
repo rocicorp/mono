@@ -161,9 +161,21 @@ export function binarySearch(
   key: string,
   entries: BinarySearchEntries,
 ): number {
-  return binarySearchWithFunc(entries.length, i =>
-    compareUTF8(key, entries[i][0]),
+  return binarySearchFrom(key, entries, 0);
+}
+
+/**
+ * Binary search starting from a given index.
+ */
+function binarySearchFrom(
+  key: string,
+  entries: BinarySearchEntries,
+  start: number,
+): number {
+  const result = binarySearchWithFunc(entries.length - start, i =>
+    compareUTF8(key, entries[start + i][0]),
   );
+  return start + result;
 }
 
 export function binarySearchFound(
@@ -263,6 +275,11 @@ abstract class NodeImpl<Value> {
     tree: BTreeWrite,
   ): Promise<NodeImpl<Value>>;
 
+  abstract putMany(
+    entries: ReadonlyArray<Entry<FrozenJSONValue>>,
+    tree: BTreeWrite,
+  ): Promise<NodeImpl<Value>>;
+
   abstract del(
     key: string,
     tree: BTreeWrite,
@@ -321,6 +338,57 @@ export class DataNodeImpl extends NodeImpl<FrozenJSONValue> {
     return Promise.resolve(
       this.#splice(tree, i, deleteCount, [key, value, entrySize]),
     );
+  }
+
+  putMany(
+    entries: ReadonlyArray<Entry<FrozenJSONValue>>,
+    tree: BTreeWrite,
+  ): Promise<DataNodeImpl> {
+    if (entries.length === 0) {
+      return Promise.resolve(this);
+    }
+
+    // Merge sorted entries with existing entries
+    const merged: Entry<FrozenJSONValue>[] = [];
+    let i = 0; // index in this.entries
+    let j = 0; // index in entries
+
+    while (i < this.entries.length && j < entries.length) {
+      const existingEntry = this.entries[i];
+      const newEntry = entries[j];
+      const cmp = compareUTF8(existingEntry[0], newEntry[0]);
+
+      if (cmp < 0) {
+        merged.push(existingEntry);
+        i++;
+      } else if (cmp > 0) {
+        merged.push(newEntry);
+        j++;
+      } else {
+        // Same key, new entry wins (update)
+        merged.push(newEntry);
+        i++;
+        j++;
+      }
+    }
+
+    // Add remaining entries
+    while (i < this.entries.length) {
+      merged.push(this.entries[i]);
+      i++;
+    }
+    while (j < entries.length) {
+      merged.push(entries[j]);
+      j++;
+    }
+
+    if (this.isMutable) {
+      this.entries = merged;
+      this._updateNode(tree);
+      return Promise.resolve(this);
+    }
+
+    return Promise.resolve(tree.newDataNodeImpl(merged));
   }
 
   #splice(
@@ -423,6 +491,145 @@ export class InternalNodeImpl extends NodeImpl<Hash> {
     return this.#replaceChild(tree, i, newEntry);
   }
 
+  async putMany(
+    entries: ReadonlyArray<Entry<FrozenJSONValue>>,
+    tree: BTreeWrite,
+  ): Promise<InternalNodeImpl> {
+    if (entries.length === 0) {
+      return this;
+    }
+
+    // Group entries by child index
+    // Since entries are sorted, we can restrict the binary search range
+    const childGroups: Map<number, Entry<FrozenJSONValue>[]> = new Map();
+
+    let searchStart = 0;
+    for (const entry of entries) {
+      const key = entry[0];
+      // Binary search from searchStart to end (entries are sorted)
+      let i = binarySearchFrom(key, this.entries, searchStart);
+      if (i === this.entries.length) {
+        // Insert into last (right most) leaf.
+        i--;
+      }
+      searchStart = i;
+
+      let group = childGroups.get(i);
+      if (!group) {
+        group = [];
+        childGroups.set(i, group);
+      }
+      group.push(entry);
+    }
+
+    // Process each affected child
+    const newEntries = [...this.entries];
+    const childrenToRebalance: Array<{
+      index: number;
+      node: DataNodeImpl | InternalNodeImpl;
+    }> = [];
+
+    for (const [childIndex, childEntries] of childGroups) {
+      const childHash = this.entries[childIndex][1];
+      const oldChildNode = await tree.getNode(childHash);
+      const childNode = await oldChildNode.putMany(childEntries, tree);
+
+      const childNodeSize = childNode.getChildNodeSize(tree);
+      if (childNodeSize > tree.maxSize || childNodeSize < tree.minSize) {
+        childrenToRebalance.push({index: childIndex, node: childNode});
+      } else {
+        const newEntry = createNewInternalEntryForNode(
+          childNode,
+          tree.getEntrySize,
+        );
+        newEntries[childIndex] = newEntry;
+      }
+    }
+
+    // Handle rebalancing - merge adjacent children that need rebalancing
+    // into contiguous groups and process each group as one unit.
+    //
+    // BUG FIX: Previously, each child was rebalanced independently R-to-L.
+    // When adjacent children (e.g., indices 0 and 1) both needed rebalancing,
+    // child[1] would merge with sibling[0] (the ORIGINAL), then child[0]
+    // would merge with the rebalanced result at position 1, duplicating
+    // child[0]'s data. The fix groups adjacent indices together.
+    if (childrenToRebalance.length > 0) {
+      childrenToRebalance.sort((a, b) => a.index - b.index);
+
+      // Group adjacent indices into contiguous runs, each extended by one
+      // sibling on either side for merge context.
+      const groups: Array<{
+        nodes: Map<number, DataNodeImpl | InternalNodeImpl>;
+        minIndex: number;
+        maxIndex: number;
+      }> = [];
+
+      for (const {index, node} of childrenToRebalance) {
+        const lastGroup = groups.at(-1);
+        // Adjacent to previous group? (within 1 index of the last group's max)
+        if (lastGroup && index <= lastGroup.maxIndex + 1) {
+          lastGroup.nodes.set(index, node);
+          lastGroup.maxIndex = index;
+        } else {
+          groups.push({
+            nodes: new Map([[index, node]]),
+            minIndex: index,
+            maxIndex: index,
+          });
+        }
+      }
+
+      // Process groups from right to left to maintain indices during splices.
+      for (let g = groups.length - 1; g >= 0; g--) {
+        const group = groups[g];
+
+        // Extend range by one sibling on each side for merge context.
+        const startIndex = Math.max(0, group.minIndex - 1);
+        const endIndex = Math.min(newEntries.length - 1, group.maxIndex + 1);
+        const removeCount = endIndex - startIndex + 1;
+
+        // Collect all entries from the range: use the putMany result for
+        // indices that were rebalanced, the current newEntries node otherwise.
+        type IterableHashEntries = Iterable<Entry<Hash>>;
+        const allValues: IterableHashEntries[] = [];
+        for (let idx = startIndex; idx <= endIndex; idx++) {
+          const rebalancedNode = group.nodes.get(idx);
+          if (rebalancedNode) {
+            allValues.push(rebalancedNode.entries as IterableHashEntries);
+          } else {
+            const hash = newEntries[idx][1];
+            const existingNode = await tree.getNode(hash);
+            allValues.push(existingNode.entries as IterableHashEntries);
+          }
+        }
+
+        const level = this.level - 1;
+        const merged = joinIterables(...allValues);
+        const rebalanced = partition(
+          merged,
+          e => e[2],
+          tree.minSize - tree.chunkHeaderSize,
+          tree.maxSize - tree.chunkHeaderSize,
+          entries => {
+            const node = tree.newNodeImpl(entries, level);
+            return createNewInternalEntryForNode(node, tree.getEntrySize);
+          },
+        );
+
+        newEntries.splice(startIndex, removeCount, ...rebalanced);
+      }
+    }
+
+    if (this.isMutable) {
+      this.entries = newEntries;
+      this._updateNode(tree);
+      return this;
+    }
+
+    return tree.newInternalNodeImpl(newEntries, this.level);
+  }
+
   /**
    * This merges the child node entries with previous or next sibling and then
    * partitions the merged entries.
@@ -464,24 +671,16 @@ export class InternalNodeImpl extends NodeImpl<Hash> {
       removeCount = 1;
     }
 
-    const partitions = partition(
+    const newEntries = partition(
       values,
       value => value[2],
       tree.minSize - tree.chunkHeaderSize,
       tree.maxSize - tree.chunkHeaderSize,
+      entries => {
+        const node = tree.newNodeImpl(entries, level);
+        return createNewInternalEntryForNode(node, tree.getEntrySize);
+      },
     );
-
-    // TODO: There are cases where we can reuse the old nodes. Creating new ones
-    // means more memory churn but also more writes to the underlying KV store.
-    const newEntries: Entry<Hash>[] = [];
-    for (const entries of partitions) {
-      const node = tree.newNodeImpl(entries, level);
-      const newHashEntry = createNewInternalEntryForNode(
-        node,
-        tree.getEntrySize,
-      );
-      newEntries.push(newHashEntry);
-    }
 
     if (this.isMutable) {
       this.entries.splice(startIndex, removeCount, ...newEntries);
@@ -654,34 +853,49 @@ export function isDataNodeImpl(
   return node.level === 0;
 }
 
-export function partition<T>(
+export function partition<T, R>(
   values: Iterable<T>,
   // This is the size of each Entry
   getSizeOfEntry: (v: T) => number,
   min: number,
   max: number,
-): T[][] {
-  const partitions: T[][] = [];
-  const sizes: number[] = [];
+  create: (entries: T[]) => R,
+): R[] {
+  const results: R[] = [];
   let sum = 0;
   let accum: T[] = [];
+  // The most recently finalized partition, held back until we know it won't be
+  // merged with trailing entries.
+  let lastPartition: T[] | null = null;
+  let lastSize = 0;
+
+  function commitLast() {
+    if (lastPartition !== null) {
+      results.push(create(lastPartition));
+      lastPartition = null;
+    }
+  }
+
   for (const value of values) {
     const size = getSizeOfEntry(value);
     if (size >= max) {
       if (accum.length > 0) {
-        partitions.push(accum);
-        sizes.push(sum);
+        commitLast();
+        lastPartition = accum;
+        lastSize = sum;
+        accum = [];
+        sum = 0;
       }
-      partitions.push([value]);
-      sizes.push(size);
-      sum = 0;
-      accum = [];
+      commitLast();
+      lastPartition = [value];
+      lastSize = size;
     } else if (sum + size >= min) {
       accum.push(value);
-      partitions.push(accum);
-      sizes.push(sum + size);
-      sum = 0;
+      commitLast();
+      lastPartition = accum;
+      lastSize = sum + size;
       accum = [];
+      sum = 0;
     } else {
       sum += size;
       accum.push(value);
@@ -689,16 +903,18 @@ export function partition<T>(
   }
 
   if (sum > 0) {
-    // oxlint-disable-next-line typescript/no-non-null-assertion
-    if (sizes.length > 0 && sum + sizes.at(-1)! <= max) {
-      // oxlint-disable-next-line typescript/no-non-null-assertion
-      partitions.at(-1)!.push(...accum);
+    if (lastPartition !== null && sum + lastSize <= max) {
+      lastPartition.push(...accum);
+      commitLast();
     } else {
-      partitions.push(accum);
+      commitLast();
+      results.push(create(accum));
     }
+  } else {
+    commitLast();
   }
 
-  return partitions;
+  return results;
 }
 
 export const emptyDataNode = makeNodeChunkData<ReadonlyJSONValue>(

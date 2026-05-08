@@ -1,0 +1,21 @@
+name: 'Setup Docker'
+description: 'Ensure Docker is installed (>= v25) and running.'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Ensure Docker is installed and running
+      shell: bash
+      run: |
+        # -o DPkg::Lock::Timeout waits for the lock instead of failing (safe for parallel jobs)
+        # -o DPkg::Lock::Timeout waits for the lock instead of failing (safe for parallel jobs)
+        sudo apt-get install -y -o DPkg::Lock::Timeout=120 docker.io
+        sudo systemctl enable --now docker
+        # Wait for daemon to create the socket (systemctl returns before it's ready).
+        # Exits as soon as the socket appears; 10s is just the failure ceiling.
+        timeout 10 bash -c 'until [ -S /var/run/docker.sock ]; do sleep 0.5; done'
+        # usermod only takes effect in a new session; chmod the socket so the
+        # current process can reach the daemon immediately without re-login.
+        sudo chmod 666 /var/run/docker.sock
+        # Verify Docker is actually reachable
+        docker ps

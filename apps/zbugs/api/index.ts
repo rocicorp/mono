@@ -1,6 +1,7 @@
 // https://vercel.com/templates/other/fastify-serverless-function
 
 import '../../../packages/shared/src/dotenv.ts';
+
 import type {IncomingHttpHeaders} from 'http';
 import cookie from '@fastify/cookie';
 import oauthPlugin, {type OAuth2Namespace} from '@fastify/oauth2';
@@ -163,21 +164,22 @@ async function mutateHandler(
   }>,
   reply: FastifyReply,
 ) {
-  await withAuth(request, reply, async jwtData => {
+  await withAuth(request, reply, async authData => {
     const postCommitTasks: (() => Promise<void>)[] = [];
     const mutators = createServerMutators(postCommitTasks);
 
-    const response = await handleMutateRequest(
+    const response = await handleMutateRequest({
       dbProvider,
-      (transact, _mutation) =>
+      handler: (transact, _mutation) =>
         transact((tx, name, args) => {
           const mutator = mustGetMutator(mutators, name);
-          return mutator.fn({tx, args, ctx: jwtData});
+          return mutator.fn({tx, args, ctx: authData});
         }),
-      request.query,
-      request.body,
-      'info',
-    );
+      query: request.query,
+      body: request.body,
+      userID: authData?.sub,
+      logLevel: 'info',
+    });
 
     // we don't yet handle errors here, since Loops emails return 429 very often
     // and we don't want to block the mutation
@@ -208,14 +210,17 @@ async function queryHandler(
 ) {
   await withAuth(request, reply, async authData => {
     reply.send(
-      await handleQueryRequest(
-        (name: string, args: ReadonlyJSONValue | undefined) => {
+      await handleQueryRequest({
+        handler: (name, args) => {
           const query = mustGetQuery(queries, name);
           return query.fn({args, ctx: authData});
         },
         schema,
-        request.body,
-      ),
+        query: request.query,
+        body: request.body,
+        userID: authData?.sub,
+        logLevel: 'info',
+      }),
     );
   });
 }

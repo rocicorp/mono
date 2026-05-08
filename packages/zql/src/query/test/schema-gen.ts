@@ -78,7 +78,7 @@ function generateRelationshipsForTable(
 
   const relationships: Record<string, Relationship> = {};
   for (let i = 0; i < numRelationships; i++) {
-    const destTable = shuffledTables[i];
+    const destTable = shuffledTables[i % shuffledTables.length];
     const sourceField = selectRandom(rng, Object.keys(table.columns));
     if (table.columns[sourceField].type === 'json') {
       continue;

@@ -114,6 +114,9 @@ export type QueriesRow = {
   transformationVersion: string | null;
   internal: boolean | null;
   deleted: boolean | null;
+  // Optional because (a) old DBs migrated to v17 will start with NULL, and
+  // (b) test fixtures predate this column.
+  rowSetSignature?: string | null;
 };
 
 function createQueriesTable(shard: ShardID) {
@@ -129,6 +132,7 @@ CREATE TABLE ${schema(shard)}.queries (
   "transformationVersion" TEXT,
   "internal"              BOOL,  -- If true, no need to track / send patches
   "deleted"               BOOL,  -- put vs del "got" query
+  "rowSetSignature"       TEXT,  -- Hex XOR of h64([schema,table,rowKey]) for rows in this query (drift detection for Cap)
 
   PRIMARY KEY ("clientGroupID", "queryHash"),
 

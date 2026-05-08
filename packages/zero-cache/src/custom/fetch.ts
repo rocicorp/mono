@@ -43,7 +43,7 @@ export function compileUrlPattern(pattern: string): URLPattern {
  * Header names are compared case-insensitively.
  */
 function filterCustomHeaders(
-  headers: Record<string, string> | undefined,
+  headers: Readonly<Record<string, string>> | undefined,
   allowedHeaders: readonly string[] | undefined,
 ): Record<string, string> {
   if (!headers) {
@@ -101,7 +101,7 @@ export async function fetchFromAPIServer<TValidator extends Type>(
     .withContext('fetchFromAPIServerID', fetchFromAPIServerID)
     .withContext('source', source);
 
-  const fetchConfig = source === 'push' ? ctx.pushContext : ctx.queryContext;
+  const fetchConfig = source === 'push' ? ctx.mutateContext : ctx.queryContext;
   const url = must(
     fetchConfig.url,
     `Fetch config for ${source} is missing URL`,
@@ -236,7 +236,9 @@ export async function fetchFromAPIServer<TValidator extends Type>(
 
       try {
         const json = await response.json();
-        const result = validator.parse(json);
+        const result = validator.parse(json, {
+          mode: 'passthrough',
+        });
         lc.debug?.('fetch from API server succeeded');
         return result;
       } catch (error) {
@@ -327,7 +329,7 @@ export async function fetchFromAPIServer<TValidator extends Type>(
  */
 export function urlMatch(
   url: string,
-  allowedUrlPatterns: URLPattern[],
+  allowedUrlPatterns: readonly URLPattern[],
 ): boolean {
   for (const pattern of allowedUrlPatterns) {
     if (pattern.test(url)) {

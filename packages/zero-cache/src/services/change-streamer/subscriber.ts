@@ -1,10 +1,10 @@
 import {assert} from '../../../../shared/src/asserts.ts';
+import {BigIntJSON} from '../../../../shared/src/bigint-json.ts';
 import type {Enum} from '../../../../shared/src/enum.ts';
 import {must} from '../../../../shared/src/must.ts';
 import {max} from '../../types/lexi-version.ts';
 import type {Subscription} from '../../types/subscription.ts';
-import type {ChangeStreamData} from '../change-source/protocol/current.ts';
-import type {WatermarkedChange} from './change-streamer-service.ts';
+import type {ChangeTag, WatermarkedChange} from './change-streamer-service.ts';
 import {type Downstream, type Status} from './change-streamer.ts';
 import * as ErrorType from './error-type-enum.ts';
 
@@ -20,7 +20,7 @@ type ErrorType = Enum<typeof ErrorType>;
 export class Subscriber {
   readonly #protocolVersion: number;
   readonly id: string;
-  readonly #downstream: Subscription<Downstream>;
+  readonly #downstream: Subscription<string>;
   readonly #latestStatus: () => Status;
   #watermark: string;
   #acked: string;
@@ -30,7 +30,7 @@ export class Subscriber {
     protocolVersion: number,
     id: string,
     watermark: string,
-    downstream: Subscription<Downstream>,
+    downstream: Subscription<string>,
     latestStatus: () => Status,
   ) {
     this.#protocolVersion = protocolVersion;
@@ -107,25 +107,29 @@ export class Subscriber {
   }
 
   async #sendChange(change: WatermarkedChange) {
-    const [watermark, downstream] = change;
+    const [watermark, tag, json] = change;
     if (watermark <= this.watermark) {
       return;
     }
-    if (!this.supportsMessage(downstream[1])) {
+    if (!this.supportsMessage(tag)) {
       return;
     }
-    if (downstream[0] === 'commit') {
+    if (tag === 'commit') {
       this.#watermark = watermark;
     }
-    const result = await this.#sendDownstream(downstream);
-    if (downstream[0] === 'commit' && result === 'consumed') {
+    const result = await this.#sendStringifiedDownstream(json);
+    if (tag === 'commit' && result === 'consumed') {
       this.#acked = max(this.#acked, watermark);
     }
   }
 
-  async #sendDownstream(downstream: Downstream) {
+  #sendDownstream(downstream: Downstream) {
+    return this.#sendStringifiedDownstream(BigIntJSON.stringify(downstream));
+  }
+
+  async #sendStringifiedDownstream(json: string) {
     this.#pending++;
-    const {result} = this.#downstream.push(downstream);
+    const {result} = this.#downstream.push(json);
     try {
       return await result;
     } finally {
@@ -188,8 +192,8 @@ export class Subscriber {
     return {processRate, pending};
   }
 
-  supportsMessage(change: ChangeStreamData[1]) {
-    switch (change.tag) {
+  supportsMessage(tag: ChangeTag) {
+    switch (tag) {
       case 'update-table-metadata':
         // update-table-row-key is only understood by subscribers >= protocol v5
         return this.#protocolVersion >= 5;
@@ -203,9 +207,10 @@ export class Subscriber {
 
   close(error?: ErrorType, message?: string) {
     if (error) {
-      const {result} = this.#downstream.push(['error', {type: error, message}]);
       // Wait for the ACK of the error message before closing the connection.
-      void result.then(() => this.#downstream.cancel());
+      void this.#sendDownstream(['error', {type: error, message}]).finally(() =>
+        this.#downstream.cancel(),
+      );
     } else {
       this.#downstream.cancel();
     }

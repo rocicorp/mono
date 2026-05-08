@@ -11,7 +11,7 @@ import type {
   ValueType,
 } from '../../zero-schema/src/table-schema.ts';
 import type {Constraint} from '../../zql/src/ivm/constraint.ts';
-import type {Start} from '../../zql/src/ivm/operator.ts';
+import type {MultiConstraint, Start} from '../../zql/src/ivm/operator.ts';
 import {sql} from './internal/sql.ts';
 
 /**
@@ -31,12 +31,21 @@ export function buildSelectQuery(
   order: Ordering | undefined,
   reverse: boolean | undefined,
   start: Start | undefined,
+  multiConstraints?: readonly MultiConstraint[] | undefined,
 ) {
   let query = sql`SELECT ${sql.join(
     Object.keys(columns).map(c => sql.ident(c)),
     sql`,`,
   )} FROM ${sql.ident(tableName)}`;
   const constraints: SQLQuery[] = constraintsToSQL(constraint, columns);
+
+  if (multiConstraints) {
+    for (const mc of multiConstraints) {
+      if (mc.length > 0) {
+        constraints.push(multiConstraintToSQL(mc, columns));
+      }
+    }
+  }
 
   if (start) {
     assert(order !== undefined, 'start requires ordering');
@@ -73,6 +82,63 @@ export function constraintsToSQL(
   }
 
   return constraints;
+}
+
+/**
+ * Builds a single batched IN clause from a `MultiConstraint`. All entries
+ * are assumed to share the same shape (the keys of the first entry);
+ * FlippedJoin derives them from the same parentKey for all children.
+ *
+ * Single-column form: `col IN (?, ?, ?)`
+ * Compound form:      `(a, b) IN (VALUES (?, ?), (?, ?), …)`
+ *
+ * NOTE: SQLite optimizes `col IN (literal-list)` using the column's index;
+ * verified via EXPLAIN QUERY PLAN — see query-builder.test.ts.
+ */
+export function multiConstraintToSQL(
+  multiConstraint: MultiConstraint,
+  columns: Record<string, SchemaValue>,
+): SQLQuery {
+  assert(multiConstraint.length > 0, 'multiConstraint must be non-empty');
+  // All entries share the same keys; pull the column list from the first.
+  const keys = Object.keys(multiConstraint[0]);
+  assert(keys.length > 0, 'multiConstraint entries must have at least one key');
+  // Subsequent entries must share the first entry's shape — the SQL form
+  // is `(col_a, col_b, …) IN VALUES (…)`, with one binding per key per
+  // entry. Heterogeneous keys would silently produce incorrect bindings.
+  for (let i = 1; i < multiConstraint.length; i++) {
+    const entry = multiConstraint[i];
+    assert(
+      Object.keys(entry).length === keys.length && keys.every(k => k in entry),
+      () =>
+        `multiConstraint entries must share the same keys (entry 0: [${keys.join(
+          ',',
+        )}], entry ${i}: [${Object.keys(entry).join(',')}])`,
+    );
+  }
+
+  if (keys.length === 1) {
+    const key = keys[0];
+    const colType = columns[key].type;
+    return sql`${sql.ident(key)} IN (${sql.join(
+      multiConstraint.map(c => sql`${toSQLiteType(c[key], colType)}`),
+      sql`,`,
+    )})`;
+  }
+
+  // Compound: `(col_a, col_b, …) IN (VALUES (?, ?, …), …)`
+  const colList = sql`(${sql.join(
+    keys.map(k => sql.ident(k)),
+    sql`,`,
+  )})`;
+  const rows = multiConstraint.map(
+    c =>
+      sql`(${sql.join(
+        keys.map(k => sql`${toSQLiteType(c[k], columns[k].type)}`),
+        sql`,`,
+      )})`,
+  );
+  return sql`${colList} IN (VALUES ${sql.join(rows, sql`,`)})`;
 }
 
 export function orderByToSQL(order: Ordering, reverse: boolean): SQLQuery {
@@ -193,6 +259,40 @@ export function toSQLiteType(v: unknown, type: ValueType): unknown {
   }
 }
 
+function nullableAwareEquality(
+  field: string,
+  value: unknown,
+  columnType: SchemaValue,
+): SQLQuery {
+  // Use = instead of IS for non-nullable columns to enable better
+  // index usage in SQLite.
+  return columnType.optional === true
+    ? sql`${sql.ident(field)} IS ${value}`
+    : sql`${sql.ident(field)} = ${value}`;
+}
+
+function nullableAwareRangeComparison(
+  field: string,
+  value: unknown,
+  operator: '>' | '<',
+  columnType: SchemaValue,
+): SQLQuery {
+  // For non-nullable columns, skip IS NULL checks to avoid breaking
+  // SQLite's MULTI-INDEX OR optimization, which falls back to a full
+  // table scan when any OR branch involves NULL.
+  // See: https://github.com/rocicorp/mono/pull/5542
+  const comparison = sql`${sql.ident(field)} ${sql.__dangerous__rawValue(
+    operator,
+  )} ${value}`;
+  if (columnType.optional !== true) {
+    return comparison;
+  }
+
+  return operator === '>'
+    ? sql`(${value} IS NULL OR ${comparison})`
+    : sql`(${sql.ident(field)} IS NULL OR ${comparison})`;
+}
+
 /**
  * The ordering could be complex such as:
  * `ORDER BY a ASC, b DESC, c ASC`
@@ -223,42 +323,23 @@ function gatherStartConstraints(
     const [iField, iDirection] = order[i];
     for (let j = 0; j <= i; j++) {
       if (j === i) {
-        const constraintValue = toSQLiteType(
-          from[iField],
-          columnTypes[iField].type,
+        const columnType = columnTypes[iField];
+        const constraintValue = toSQLiteType(from[iField], columnType.type);
+        const operator =
+          iDirection === 'asc' ? (reverse ? '<' : '>') : reverse ? '>' : '<';
+        group.push(
+          nullableAwareRangeComparison(
+            iField,
+            constraintValue,
+            operator,
+            columnType,
+          ),
         );
-        if (iDirection === 'asc') {
-          if (!reverse) {
-            group.push(
-              sql`(${constraintValue} IS NULL OR ${sql.ident(iField)} > ${constraintValue})`,
-            );
-          } else {
-            reverse satisfies true;
-            group.push(
-              sql`(${sql.ident(iField)} IS NULL OR ${sql.ident(iField)} < ${constraintValue})`,
-            );
-          }
-        } else {
-          iDirection satisfies 'desc';
-          if (!reverse) {
-            group.push(
-              sql`(${sql.ident(iField)} IS NULL OR ${sql.ident(iField)} < ${constraintValue})`,
-            );
-          } else {
-            reverse satisfies true;
-            group.push(
-              sql`(${constraintValue} IS NULL OR ${sql.ident(iField)} > ${constraintValue})`,
-            );
-          }
-        }
       } else {
         const [jField] = order[j];
-        group.push(
-          sql`${sql.ident(jField)} IS ${toSQLiteType(
-            from[jField],
-            columnTypes[jField].type,
-          )}`,
-        );
+        const columnType = columnTypes[jField];
+        const value = toSQLiteType(from[jField], columnType.type);
+        group.push(nullableAwareEquality(jField, value, columnType));
       }
     }
     constraints.push(sql`(${sql.join(group, sql` AND `)})`);
@@ -267,13 +348,11 @@ function gatherStartConstraints(
   if (basis === 'at') {
     constraints.push(
       sql`(${sql.join(
-        order.map(
-          s =>
-            sql`${sql.ident(s[0])} IS ${toSQLiteType(
-              from[s[0]],
-              columnTypes[s[0]].type,
-            )}`,
-        ),
+        order.map(([field]) => {
+          const columnType = columnTypes[field];
+          const value = toSQLiteType(from[field], columnType.type);
+          return nullableAwareEquality(field, value, columnType);
+        }),
         sql` AND `,
       )})`,
     );

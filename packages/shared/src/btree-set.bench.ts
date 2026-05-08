@@ -149,12 +149,54 @@ describe('BTreeSet mutations', () => {
     };
   });
 
+  bench('fromSorted() 100 sequential keys', function* () {
+    const keys = Array.from({length: 100}, (_, i) => i);
+    yield () => {
+      const t = BTreeSet.fromSorted(numericComparator, keys);
+      use(t.size);
+    };
+  });
+
   bench('add() 1000 sequential keys', function* () {
     yield () => {
       const t = new BTreeSet<number>(numericComparator);
       for (let i = 0; i < NUM_ENTRIES; i++) {
         t.add(i);
       }
+      use(t.size);
+    };
+  });
+
+  bench('fromSorted() 1000 sequential keys', function* () {
+    const keys = Array.from({length: NUM_ENTRIES}, (_, i) => i);
+    yield () => {
+      const t = BTreeSet.fromSorted(numericComparator, keys);
+      use(t.size);
+    };
+  });
+
+  // Simulates #getOrCreateIndex: source data is sorted by a different comparator,
+  // so we must sort first then build. Compare against the prior add()-loop approach.
+  bench('getOrCreateIndex pattern (old): add() loop after sort', function* () {
+    const sourceKeys = Array.from({length: NUM_ENTRIES}, (_, i) => i);
+    // Simulate source data arriving in reverse order (different comparator)
+    const reverseComparator = (a: number, b: number) => b - a;
+    yield () => {
+      const sorted = sourceKeys.toSorted(reverseComparator);
+      const t = new BTreeSet<number>(reverseComparator);
+      for (const k of sorted) {
+        t.add(k);
+      }
+      use(t.size);
+    };
+  });
+
+  bench('getOrCreateIndex pattern (new): sort + fromSorted()', function* () {
+    const sourceKeys = Array.from({length: NUM_ENTRIES}, (_, i) => i);
+    const reverseComparator = (a: number, b: number) => b - a;
+    yield () => {
+      const sorted = sourceKeys.toSorted(reverseComparator);
+      const t = BTreeSet.fromSorted(reverseComparator, sorted);
       use(t.size);
     };
   });

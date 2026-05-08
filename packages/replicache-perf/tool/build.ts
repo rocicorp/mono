@@ -9,7 +9,10 @@ const dirname = path.dirname(fileURLToPath(import.meta.url));
 
 async function buildIndex(): Promise<void> {
   const minify = true;
-  const define = makeDefine('release');
+  const define = {
+    ...makeDefine('release'),
+    'import.meta.env': 'undefined',
+  };
   await esbuild.build({
     ...sharedOptions(minify),
     external: ['node:*', 'expo*'],

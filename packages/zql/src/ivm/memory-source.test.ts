@@ -8,14 +8,21 @@ import {Catch} from './catch.ts';
 import {ChangeIndex} from './change-index.ts';
 import {ChangeType} from './change-type.ts';
 import type {Change} from './change.ts';
+import type {Node} from './data.ts';
 import {
+  generateWithOverlay,
   generateWithOverlayInner,
   generateWithOverlayInnerUnordered,
   generateWithOverlayUnordered,
   MemorySource,
+  mergeSortedStreams,
   overlaysForConstraintForTest,
+  overlaysForMultiConstraintForTest,
   overlaysForStartAtForTest,
+  type Overlay,
 } from './memory-source.ts';
+import type {MultiConstraint} from './operator.ts';
+import type {Stream} from './stream.ts';
 import {consume} from './stream.ts';
 import {compareRowsTest} from './test/compare-rows-test.ts';
 import {createSource} from './test/source-factory.ts';
@@ -516,6 +523,95 @@ test('overlaysForStartAt', () => {
   ).toEqual({add: undefined, remove: undefined});
 });
 
+describe('overlaysForMultiConstraint', () => {
+  test('add overlay matching one IN entry is kept', () => {
+    expect(
+      overlaysForMultiConstraintForTest({add: {id: 'i2'}, remove: undefined}, [
+        {id: 'i1'},
+        {id: 'i2'},
+        {id: 'i3'},
+      ]),
+    ).toEqual({add: {id: 'i2'}, remove: undefined});
+  });
+
+  test('add overlay matching no IN entry is dropped', () => {
+    expect(
+      overlaysForMultiConstraintForTest({add: {id: 'i9'}, remove: undefined}, [
+        {id: 'i1'},
+        {id: 'i2'},
+      ]),
+    ).toEqual({add: undefined, remove: undefined});
+  });
+
+  test('remove overlay matching one IN entry is kept', () => {
+    expect(
+      overlaysForMultiConstraintForTest({add: undefined, remove: {id: 'i1'}}, [
+        {id: 'i1'},
+        {id: 'i2'},
+      ]),
+    ).toEqual({add: undefined, remove: {id: 'i1'}});
+  });
+
+  test('remove overlay matching no IN entry is dropped', () => {
+    expect(
+      overlaysForMultiConstraintForTest({add: undefined, remove: {id: 'i9'}}, [
+        {id: 'i1'},
+        {id: 'i2'},
+      ]),
+    ).toEqual({add: undefined, remove: undefined});
+  });
+
+  test('add and remove are filtered independently', () => {
+    // add matches, remove does not
+    expect(
+      overlaysForMultiConstraintForTest({add: {id: 'i1'}, remove: {id: 'i9'}}, [
+        {id: 'i1'},
+        {id: 'i2'},
+      ]),
+    ).toEqual({add: {id: 'i1'}, remove: undefined});
+
+    // remove matches, add does not
+    expect(
+      overlaysForMultiConstraintForTest({add: {id: 'i9'}, remove: {id: 'i2'}}, [
+        {id: 'i1'},
+        {id: 'i2'},
+      ]),
+    ).toEqual({add: undefined, remove: {id: 'i2'}});
+  });
+
+  test('compound-key IN entry — full match required per entry', () => {
+    // (a, b) IN ((1, 'x'), (2, 'y'))
+    const mc = [
+      {a: 1, b: 'x'},
+      {a: 2, b: 'y'},
+    ];
+    // matches entry 1 exactly
+    expect(
+      overlaysForMultiConstraintForTest(
+        {add: {a: 2, b: 'y', c: 'extra'}, remove: undefined},
+        mc,
+      ),
+    ).toEqual({add: {a: 2, b: 'y', c: 'extra'}, remove: undefined});
+    // partial match (a matches but b doesn't) → not in IN
+    expect(
+      overlaysForMultiConstraintForTest(
+        {add: {a: 1, b: 'y'}, remove: undefined},
+        mc,
+      ),
+    ).toEqual({add: undefined, remove: undefined});
+  });
+
+  test('row missing a constrained column does not match', () => {
+    // constraint requires `id`, but overlay row only has `name`
+    expect(
+      overlaysForMultiConstraintForTest(
+        {add: {name: 'foo'} as Row, remove: undefined},
+        [{id: 'i1'}],
+      ),
+    ).toEqual({add: undefined, remove: undefined});
+  });
+});
+
 describe('generateWithOverlayInnerUnordered', () => {
   const rows = [
     {id: 1, s: 'a', n: 11},
@@ -731,5 +827,371 @@ describe('generateWithOverlayUnordered', () => {
       ({row}) => row,
     );
     expect(actual).toEqual([{id: 2, s: 'b2', n: 225}, rows[0], rows[2]]);
+  });
+});
+
+describe('multiConstraints overlay handling — both helpers', () => {
+  // Shared scenarios for `generateWithOverlay` (ordered) and
+  // `generateWithOverlayUnordered`. Both helpers accept `multiConstraints`
+  // and apply it to the overlay add/remove sides identically. They diverge
+  // only in *output ordering* (ordered emits at sort position; unordered
+  // prepends an ADD overlay), so each scenario specifies both expected
+  // shapes.
+  //
+  // The ordered helper is exercised in production by TableSource
+  // (table-source.ts:309); MemorySource's #fetchMulti post-filters at a
+  // higher layer and passes `multiConstraints: undefined` to the helper.
+  // These tests pin the helper's contract independently of either source.
+  type Scenario = {
+    name: string;
+    iteratorRows?: readonly Row[];
+    overlay: Overlay;
+    multiConstraints: readonly MultiConstraint[];
+    expectedUnordered: readonly Row[];
+    expectedOrdered: readonly Row[];
+  };
+
+  const rows: readonly Row[] = [
+    {id: 1, s: 'a', n: 11},
+    {id: 2, s: 'b', n: 22},
+    {id: 3, s: 'c', n: 33},
+  ];
+  const pk = ['id'] as const;
+  const compare = (a: Row, b: Row) => (a.id as number) - (b.id as number);
+
+  const ADD_4 = {id: 4, s: 'd', n: 44};
+  const ADD_2_b2 = {id: 2, s: 'b2', n: 225};
+
+  const scenarios: Scenario[] = [
+    {
+      name: 'add overlay matching IN list is yielded',
+      overlay: {epoch: 1, change: makeSourceChangeAdd(ADD_4)},
+      multiConstraints: [[{id: 1}, {id: 4}, {id: 7}]],
+      expectedUnordered: [ADD_4, ...rows],
+      expectedOrdered: [...rows, ADD_4],
+    },
+    {
+      name: 'add overlay outside IN list is dropped',
+      overlay: {epoch: 1, change: makeSourceChangeAdd(ADD_4)},
+      multiConstraints: [[{id: 1}, {id: 2}]],
+      expectedUnordered: rows,
+      expectedOrdered: rows,
+    },
+    {
+      name: 'remove overlay matching IN list suppresses row',
+      overlay: {epoch: 1, change: makeSourceChangeRemove(rows[1])},
+      multiConstraints: [[{id: 1}, {id: 2}]],
+      expectedUnordered: [rows[0], rows[2]],
+      expectedOrdered: [rows[0], rows[2]],
+    },
+    {
+      // The remove overlay's row is not in the IN list → multi filters it
+      // out. The underlying iterator already excludes the removed row
+      // from its scan (storage write happens after this generator), so
+      // we simulate that with `iteratorRows`.
+      name: 'remove overlay outside IN list does NOT suppress row',
+      iteratorRows: [rows[0], rows[2]],
+      overlay: {epoch: 1, change: makeSourceChangeRemove(rows[1])},
+      multiConstraints: [[{id: 99}]],
+      expectedUnordered: [rows[0], rows[2]],
+      expectedOrdered: [rows[0], rows[2]],
+    },
+    {
+      // ADD side {id:2,b2} matches IN → injected. REMOVE side {id:1}
+      // doesn't match → dropped, so rows[0] (id=1) survives. The ADD
+      // appears alongside the existing id=2 row in both orderings; the
+      // inner generator does not treat compare-equal as replacement
+      // (see `generateWithOverlayInner > Add overlay replace`).
+      name: 'edit overlay where new matches but old does not',
+      overlay: {
+        epoch: 1,
+        change: makeSourceChangeEdit(ADD_2_b2, {id: 1, s: 'a', n: 11}),
+      },
+      multiConstraints: [[{id: 2}, {id: 3}]],
+      expectedUnordered: [ADD_2_b2, ...rows],
+      expectedOrdered: [rows[0], rows[1], ADD_2_b2, rows[2]],
+    },
+    {
+      name: 'multiple entries are ANDed (match)',
+      overlay: {epoch: 1, change: makeSourceChangeAdd(ADD_4)},
+      multiConstraints: [[{id: 4}, {id: 5}], [{s: 'd'}]],
+      expectedUnordered: [ADD_4, ...rows],
+      expectedOrdered: [...rows, ADD_4],
+    },
+    {
+      name: 'multiple entries are ANDed (one IN list rejects)',
+      overlay: {epoch: 1, change: makeSourceChangeAdd(ADD_4)},
+      multiConstraints: [[{id: 4}, {id: 5}], [{s: 'q'}]],
+      expectedUnordered: rows,
+      expectedOrdered: rows,
+    },
+    {
+      // The mc.length > 0 guard means an empty MultiConstraint is a no-op.
+      name: 'empty entry (length 0) is ignored, not treated as mismatch',
+      overlay: {epoch: 1, change: makeSourceChangeAdd(ADD_4)},
+      multiConstraints: [[]],
+      expectedUnordered: [ADD_4, ...rows],
+      expectedOrdered: [...rows, ADD_4],
+    },
+  ];
+
+  describe.each(scenarios)(
+    '$name',
+    ({
+      iteratorRows,
+      overlay,
+      multiConstraints,
+      expectedUnordered,
+      expectedOrdered,
+    }) => {
+      const input = iteratorRows ?? rows;
+
+      test('unordered', () => {
+        const actual = Array.from(
+          generateWithOverlayUnordered(
+            input,
+            undefined,
+            overlay,
+            1,
+            pk,
+            undefined,
+            multiConstraints,
+          ),
+          ({row}) => row,
+        );
+        expect(actual).toEqual(expectedUnordered);
+      });
+
+      test('ordered', () => {
+        const actual = Array.from(
+          generateWithOverlay(
+            undefined,
+            input,
+            undefined,
+            overlay,
+            1,
+            compare,
+            undefined,
+            multiConstraints,
+          ),
+          ({row}) => row,
+        );
+        expect(actual).toEqual(expectedOrdered);
+      });
+    },
+  );
+});
+
+describe('mergeSortedStreams', () => {
+  const node = (id: number): Node => ({row: {id}, relationships: {}});
+  const ids = (xs: Iterable<Node | 'yield'>): (number | 'yield')[] =>
+    Array.from(xs, x => (x === 'yield' ? 'yield' : (x.row.id as number)));
+  const byId = (a: Node, b: Node) =>
+    (a.row.id as number) - (b.row.id as number);
+
+  function* gen(values: readonly (Node | 'yield')[]): Stream<Node | 'yield'> {
+    for (const v of values) {
+      yield v;
+    }
+  }
+
+  test('no streams yields nothing', () => {
+    expect(ids(mergeSortedStreams([], byId))).toEqual([]);
+  });
+
+  test('single empty stream yields nothing', () => {
+    expect(ids(mergeSortedStreams([gen([])], byId))).toEqual([]);
+  });
+
+  test('all empty streams yields nothing', () => {
+    expect(ids(mergeSortedStreams([gen([]), gen([]), gen([])], byId))).toEqual(
+      [],
+    );
+  });
+
+  test('single non-empty stream is passed through in order', () => {
+    expect(
+      ids(mergeSortedStreams([gen([node(1), node(2), node(3)])], byId)),
+    ).toEqual([1, 2, 3]);
+  });
+
+  test('two streams are interleaved in compare order', () => {
+    const a = gen([node(1), node(3), node(5)]);
+    const b = gen([node(2), node(4), node(6)]);
+    expect(ids(mergeSortedStreams([a, b], byId))).toEqual([1, 2, 3, 4, 5, 6]);
+  });
+
+  test('three streams of varying lengths', () => {
+    const a = gen([node(1), node(10)]);
+    const b = gen([node(2), node(3), node(4), node(11)]);
+    const c = gen([node(5)]);
+    expect(ids(mergeSortedStreams([a, b, c], byId))).toEqual([
+      1, 2, 3, 4, 5, 10, 11,
+    ]);
+  });
+
+  test('one empty stream among non-empty merges correctly', () => {
+    const a = gen([node(1), node(3)]);
+    const empty = gen([]);
+    const c = gen([node(2), node(4)]);
+    expect(ids(mergeSortedStreams([a, empty, c], byId))).toEqual([1, 2, 3, 4]);
+  });
+
+  test('equal-key rows across streams are all emitted', () => {
+    const a = gen([node(1), node(2)]);
+    const b = gen([node(1), node(2)]);
+    const c = gen([node(2), node(3)]);
+    const out = ids(mergeSortedStreams([a, b, c], byId));
+    expect(out).toEqual([1, 1, 2, 2, 2, 3]);
+  });
+
+  test('reverse order via comparator', () => {
+    const a = gen([node(5), node(3), node(1)]);
+    const b = gen([node(6), node(4), node(2)]);
+    const reverse = (x: Node, y: Node) => byId(y, x);
+    expect(ids(mergeSortedStreams([a, b], reverse))).toEqual([
+      6, 5, 4, 3, 2, 1,
+    ]);
+  });
+
+  test("'yield' forwarded during priming", () => {
+    const a = gen(['yield', node(1), node(3)]);
+    const b = gen([node(2), node(4)]);
+    // Priming both iterators yields the 'yield' from `a`'s first slot
+    // before any Nodes are emitted.
+    expect(ids(mergeSortedStreams([a, b], byId))).toEqual([
+      'yield',
+      1,
+      2,
+      3,
+      4,
+    ]);
+  });
+
+  test("'yield' forwarded during advance", () => {
+    // After yielding node(1) the merge calls advance(0), which sees the
+    // 'yield' before node(3) and forwards it immediately — so the
+    // 'yield' lands between node(1) and node(2), not in id order.
+    const a = gen([node(1), 'yield', node(3)]);
+    const b = gen([node(2), node(4)]);
+    expect(ids(mergeSortedStreams([a, b], byId))).toEqual([
+      1,
+      'yield',
+      2,
+      3,
+      4,
+    ]);
+  });
+
+  test("multiple 'yield's between rows are all forwarded", () => {
+    const a = gen([node(1), 'yield', 'yield', node(3)]);
+    const b = gen([node(2)]);
+    expect(ids(mergeSortedStreams([a, b], byId))).toEqual([
+      1,
+      'yield',
+      'yield',
+      2,
+      3,
+    ]);
+  });
+
+  test('output preserves global sort invariant on randomized input', () => {
+    // Generate a few independently-sorted streams and assert the merged
+    // output is globally sorted. Keeps the test deterministic via a fixed
+    // shuffle.
+    const data = [3, 1, 4, 1, 5, 9, 2, 6, 5, 3, 5, 8, 9, 7, 9, 3];
+    const buckets: number[][] = [[], [], [], []];
+    for (let i = 0; i < data.length; i++) {
+      buckets[i % buckets.length].push(data[i]);
+    }
+    const streams = buckets.map(b => gen(b.sort((x, y) => x - y).map(node)));
+    const out = ids(mergeSortedStreams(streams, byId)) as number[];
+    for (let i = 1; i < out.length; i++) {
+      expect(out[i]).toBeGreaterThanOrEqual(out[i - 1]);
+    }
+    expect(out.length).toBe(data.length);
+  });
+
+  test('.return() propagates to un-exhausted sub-iterators on early termination', () => {
+    // Build streams that record whether .return() was invoked.
+    const returned: boolean[] = [false, false, false];
+    const trackable = (i: number, values: readonly Node[]): Stream<Node> => ({
+      [Symbol.iterator]() {
+        let idx = 0;
+        return {
+          next() {
+            if (idx < values.length) {
+              return {value: values[idx++], done: false};
+            }
+            return {value: undefined, done: true};
+          },
+          return(v?: unknown) {
+            returned[i] = true;
+            return {value: v, done: true};
+          },
+          [Symbol.iterator]() {
+            return this;
+          },
+        };
+      },
+    });
+
+    const a = trackable(0, [node(1), node(4), node(7)]);
+    const b = trackable(1, [node(2), node(5), node(8)]);
+    const c = trackable(2, [node(3), node(6), node(9)]);
+
+    const merged = mergeSortedStreams([a, b, c], byId);
+    const it = merged[Symbol.iterator]();
+    // Pull a couple values then break — JS would call .return() under
+    // for-of `break`; we invoke explicitly.
+    expect(it.next().value).toEqual(node(1));
+    expect(it.next().value).toEqual(node(2));
+    it.return?.();
+
+    // All three sub-iterators still had un-yielded rows, so all should
+    // have been .return()-d via mergeSortedStreams's finally block.
+    expect(returned).toEqual([true, true, true]);
+  });
+
+  test('.return() not called on already-exhausted sub-iterators', () => {
+    let aReturned = false;
+    let bReturned = false;
+    const trackable = (
+      values: readonly Node[],
+      onReturn: () => void,
+    ): Stream<Node> => ({
+      [Symbol.iterator]() {
+        let idx = 0;
+        return {
+          next() {
+            if (idx < values.length) {
+              return {value: values[idx++], done: false};
+            }
+            return {value: undefined, done: true};
+          },
+          return(v?: unknown) {
+            onReturn();
+            return {value: v, done: true};
+          },
+          [Symbol.iterator]() {
+            return this;
+          },
+        };
+      },
+    });
+
+    // `a` will be drained; `b` will still have rows when we early-exit.
+    const a = trackable([node(1)], () => (aReturned = true));
+    const b = trackable([node(2), node(3), node(4)], () => (bReturned = true));
+
+    const it = mergeSortedStreams([a, b], byId)[Symbol.iterator]();
+    expect(it.next().value).toEqual(node(1)); // from a — exhausts a
+    expect(it.next().value).toEqual(node(2)); // from b
+    it.return?.();
+
+    // a was exhausted naturally; the merge marks heads[0]=null and skips
+    // .return() on it. b still had rows, so it must be .return()'d.
+    expect(aReturned).toBe(false);
+    expect(bReturned).toBe(true);
   });
 });

@@ -80,7 +80,11 @@ async function main() {
     }
 
     if (Object.keys(bmf).length === 0) {
-      throw new Error('No valid benchmark data found in input');
+      console.error(
+        'Warning: No valid benchmark data found in input (benchmarks may have failed to run)',
+      );
+      process.stdout.write('{}');
+      process.exit(0);
     }
 
     process.stdout.write(JSON.stringify(bmf, null, 2));

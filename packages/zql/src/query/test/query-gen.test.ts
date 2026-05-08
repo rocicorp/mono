@@ -1,23 +1,35 @@
 import {en, Faker, generateMersenne53Randomizer} from '@faker-js/faker';
-import {expect, test} from 'vitest';
+import {describe, expect, test} from 'vitest';
 import {asQueryInternals} from '../query-internals.ts';
 import {generateQuery} from './query-gen.ts';
 import {generateSchema} from './schema-gen.ts';
 
-// This is flakey!!!
-test.skip('random generation', () => {
-  const randomizer = generateMersenne53Randomizer(
-    Date.now() ^ (Math.random() * 0x100000000),
-  );
-  const rng = () => randomizer.next();
-  const faker = new Faker({
-    locale: en,
-    randomizer,
-  });
-  const schema = generateSchema(rng, faker);
-  expect(() => generateQuery(schema, {}, rng, faker)).not.toThrow();
-});
+describe('random generation', () => {
+  test.each([
+    {name: '794617431', seed: 794617431},
+    {name: 'random seed', seed: Date.now() ^ (Math.random() * 0x100000000)},
+  ])('$name', ({seed}) => {
+    const randomizer = generateMersenne53Randomizer(seed);
+    const rng = () => randomizer.next();
+    const faker = new Faker({
+      locale: en,
+      randomizer,
+    });
+    let schema;
+    try {
+      schema = generateSchema(rng, faker);
+    } catch (e) {
+      // oxlint-disable-next-line no-console
+      console.error('Error generating schema for seed', seed);
+      throw e;
+    }
 
+    expect(
+      () => generateQuery(schema, {}, rng, faker),
+      `seed: ${seed}`,
+    ).not.toThrow();
+  });
+});
 test('stable generation', () => {
   const randomizer = generateMersenne53Randomizer(42);
   const rng = () => randomizer.next();

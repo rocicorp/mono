@@ -1884,23 +1884,78 @@ emoji-picker {
 }
 
 .loading-spinner.loading-spinner-demo {
+  inset: 0;
+  display: grid;
+  place-items: center;
+  transform: none;
+  z-index: var(--z-index-modal);
   font-size: 1.5rem;
   color: var(--color-text-primary);
+  background: var(--color-background);
 }
 
 .loading-spinner-demo-container {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.5rem;
+  box-sizing: border-box;
+  width: min(24rem, calc(100vw - 3rem));
+  gap: 0.625rem;
   padding: 3rem 4rem;
   border: 3px solid var(--color-modal-outline);
   border-radius: 1rem;
   backdrop-filter: var(--filter-backdrop-blur);
+  text-align: center;
 }
 
-.loading-spinner-demo-container img {
+.loading-spinner-demo-icon {
+  display: grid;
+  place-items: center;
+  width: 96px;
+  height: 96px;
   margin-bottom: 1rem;
+  flex: 0 0 auto;
+}
+
+.loading-spinner-demo-icon img {
+  display: block;
+  width: 96px;
+  height: 96px;
+  margin: 0;
+}
+
+.loading-spinner-demo-time {
+  display: inline-block;
+  min-width: 15ch;
+  white-space: nowrap;
+  text-align: center;
+  line-height: 1.25;
+  font-variant-numeric: tabular-nums;
+}
+
+.loading-spinner-demo-seconds {
+  font-variant-numeric: tabular-nums;
+}
+
+.loading-spinner-demo-title {
+  white-space: nowrap;
+  line-height: 1.25;
+}
+
+@media (max-width: 640px) {
+  .loading-spinner.loading-spinner-demo {
+    padding: 0.75rem;
+    font-size: min(1.5rem, 6.5vw);
+  }
+
+  .loading-spinner-demo-container {
+    width: auto;
+    max-width: calc(100vw - 1.5rem);
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    backdrop-filter: none;
+  }
 }
 
 @property --demo-pill-angle {
@@ -1914,7 +1969,8 @@ emoji-picker {
   top: 2rem;
   right: 2rem;
   z-index: var(--z-index-modal);
-  padding: 1.25rem 1.5rem;
+  box-sizing: border-box;
+  padding: 1.25rem;
   border-radius: 1rem;
   background-color: var(--color-background);
   color: var(--color-text-primary);
@@ -1982,6 +2038,33 @@ emoji-picker {
 
 .demo-loaded-pill.fading {
   opacity: 0;
+}
+
+.demo-loaded-pill-ok {
+  display: none;
+}
+
+.demo-loaded-pill-ok {
+  display: block;
+  box-sizing: border-box;
+  margin-top: 1rem;
+  padding: 0.625rem 2rem;
+  border: 1px solid var(--color-button-outline);
+  border-radius: 0.5rem;
+  background: var(--color-row-hover);
+  color: var(--color-text-primary);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.demo-loaded-pill-ok:hover {
+  background: var(--color-light-outline);
+}
+
+.demo-loaded-pill-ok:focus-visible {
+  outline: 2px solid var(--color-primary-cta);
+  outline-offset: 2px;
 }
 
 .loading-spinner img {

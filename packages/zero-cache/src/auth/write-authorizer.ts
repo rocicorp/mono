@@ -7,17 +7,17 @@ import type {JSONValue, ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {must} from '../../../shared/src/must.ts';
 import * as v from '../../../shared/src/valita.ts';
 import type {Condition} from '../../../zero-protocol/src/ast.ts';
-import {
-  primaryKeyValueSchema,
-  type PrimaryKeyValue,
-} from '../../../zero-protocol/src/primary-key.ts';
 import type {
   CRUDOp,
   DeleteOp,
   InsertOp,
   UpdateOp,
   UpsertOp,
-} from '../../../zero-protocol/src/push.ts';
+} from '../../../zero-protocol/src/mutation.ts';
+import {
+  primaryKeyValueSchema,
+  type PrimaryKeyValue,
+} from '../../../zero-protocol/src/primary-key.ts';
 import type {Policy} from '../../../zero-schema/src/compiled-permissions.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {BuilderDelegate} from '../../../zql/src/builder/builder.ts';
@@ -165,6 +165,7 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
     ops: Exclude<CRUDOp, UpsertOp>[],
   ) {
     this.#statementRunner.beginConcurrent();
+    let opError: unknown;
     try {
       for (const op of ops) {
         const source = this.#getSource(op.tableName);
@@ -214,8 +215,22 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
             break;
         }
       }
+    } catch (e) {
+      opError = e;
+      throw e;
     } finally {
-      this.#statementRunner.rollback();
+      try {
+        this.#statementRunner.rollback();
+      } catch (rollbackError) {
+        if (opError !== undefined) {
+          const combinedError = new Error(
+            `canPostMutation failed and rollback also failed: operation error = ${String(opError)}; rollback error = ${String(rollbackError)}`,
+          );
+          combinedError.cause = opError;
+          throw combinedError;
+        }
+        throw rollbackError;
+      }
     }
 
     return true;

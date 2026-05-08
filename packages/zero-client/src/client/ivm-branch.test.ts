@@ -13,6 +13,7 @@ import {
 import {initFromStore, IVMSourceBranch} from './ivm-branch.ts';
 
 import type {FrozenJSONValue} from '../../../replicache/src/frozen-json.ts';
+import type {Hash} from '../../../replicache/src/hash.ts';
 import type {Diff} from '../../../replicache/src/sync/patch.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import type {Node} from '../../../zql/src/ivm/data.ts';
@@ -390,6 +391,66 @@ describe('advance', () => {
           .fetch({}),
       ]).toEqual(expected);
     });
+  });
+
+  test('poisons the branch with the original error when advance fails', async () => {
+    const {dagStore} = await createDb([], timestamp++);
+    const branch = new IVMSourceBranch({
+      users: {
+        name: 'users',
+        columns: {
+          id: {type: 'string'},
+          name: {type: 'string'},
+        },
+        primaryKey: ['id'],
+      },
+    });
+
+    let originalError: unknown;
+    try {
+      branch.advance(undefined, 'head1' as Hash, [
+        {
+          op: 'add',
+          key: `${ENTITIES_KEY_PREFIX}users/u1`,
+          newValue: {id: 'u1', name: 'Alice'},
+        },
+        {
+          op: 'add',
+          key: `${ENTITIES_KEY_PREFIX}users/u1`,
+          newValue: {id: 'u1', name: 'Alice'},
+        },
+      ]);
+    } catch (e) {
+      originalError = e;
+    }
+
+    expect(originalError).toBeInstanceOf(Error);
+    expect(String(originalError)).toContain('Row already exists');
+
+    try {
+      branch.advance('head1' as Hash, 'head2' as Hash, []);
+      expect.fail('Expected poisoned branch advance to throw');
+    } catch (e) {
+      expect(e).toBe(originalError);
+    }
+
+    try {
+      branch.getSource('users');
+      expect.fail('Expected poisoned branch getSource to throw');
+    } catch (e) {
+      expect(e).toBe(originalError);
+    }
+
+    try {
+      branch.fork();
+      expect.fail('Expected poisoned branch fork to throw');
+    } catch (e) {
+      expect(e).toBe(originalError);
+    }
+
+    await expect(branch.forkToHead(dagStore, 'head2' as Hash)).rejects.toBe(
+      originalError,
+    );
   });
 });
 

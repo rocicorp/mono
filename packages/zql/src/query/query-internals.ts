@@ -84,7 +84,10 @@ export function asQueryInternals<
 >(
   query: Query<TTable, TSchema, TReturn>,
 ): QueryInternals<TTable, TSchema, TReturn> {
-  assert(queryInternalsTag in query, 'Query does not implement QueryInternals');
+  assert(
+    queryInternalsTag in query,
+    'Query does not implement QueryInternals. This likely means there are two copies of Zero in your runtime.',
+  );
   return query as unknown as QueryInternals<TTable, TSchema, TReturn>;
 }
 

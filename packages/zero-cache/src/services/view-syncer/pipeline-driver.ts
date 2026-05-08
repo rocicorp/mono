@@ -48,7 +48,7 @@ import {computeZqlSpecs, mustGetTableSpec} from '../../db/lite-tables.ts';
 import type {LiteAndZqlSpec, LiteTableSpec} from '../../db/specs.ts';
 import {
   getOrCreateCounter,
-  getOrCreateHistogram,
+  getOrCreateLatencyHistogram,
 } from '../../observability/metrics.ts';
 import type {InspectorDelegate} from '../../server/inspector-delegate.ts';
 import {type RowKey} from '../../types/row-key.ts';
@@ -58,6 +58,7 @@ import {
   ZERO_VERSION_COLUMN_NAME,
 } from '../replicator/schema/replication-state.ts';
 import {checkClientSchema} from './client-schema.ts';
+import {rowIDSignatureUnit} from './row-set-signature.ts';
 import type {Snapshotter} from './snapshotter.ts';
 import {ResetPipelinesSignal, type SnapshotDiff} from './snapshotter.ts';
 
@@ -125,6 +126,15 @@ export class PipelineDriver {
   readonly #tables = new Map<string, TableSource>();
   // Query id to pipeline
   readonly #pipelines = new Map<string, Pipeline>();
+  /**
+   * XOR signature of the set of rows currently attached to each active
+   * query, maintained as RowChanges are yielded from {@link addQuery} and
+   * {@link advance}. ADDs / REMOVEs XOR the row's unit in (XOR is
+   * self-inverse, so one op serves both directions); EDITs are no-ops.
+   * Hydration implicitly reseeds from `0n` because {@link addQuery} calls
+   * {@link removeQuery} first, which deletes the entry.
+   */
+  readonly #rowSetSignatures = new Map<string, bigint>();
 
   readonly #lc: LogContext;
   readonly #snapshotter: Snapshotter;
@@ -143,11 +153,11 @@ export class PipelineDriver {
   #primaryKeys: Map<string, PrimaryKey> | null = null;
   #permissions: LoadedPermissions | null = null;
 
-  readonly #advanceTime = getOrCreateHistogram('sync', 'ivm.advance-time', {
-    description:
-      'Time to advance all queries for a given client group for in response to a single change.',
-    unit: 's',
-  });
+  readonly #advanceTime = getOrCreateLatencyHistogram(
+    'sync',
+    'ivm.advance-time',
+    'Time to advance all queries for a given client group in response to a single change.',
+  );
 
   readonly #conflictRowsDeleted = getOrCreateCounter(
     'sync',
@@ -214,6 +224,7 @@ export class PipelineDriver {
     this.#pipelines.clear();
     this.#tables.clear();
     this.#allTableNames.clear();
+    this.#rowSetSignatures.clear();
     this.#initAndResetCommon(clientSchema);
   }
 
@@ -394,7 +405,18 @@ export class PipelineDriver {
    *        when yielding the thread for time-slicing).
    * @return The rows from the initial hydration of the query.
    */
-  *addQuery(
+  addQuery(
+    transformationHash: string,
+    queryID: string,
+    query: AST,
+    timer: Timer,
+  ): Iterable<RowChange | 'yield'> {
+    return this.#trackRowSetSignatures(
+      this.#addQueryImpl(transformationHash, queryID, query, timer),
+    );
+  }
+
+  *#addQueryImpl(
     transformationHash: string,
     queryID: string,
     query: AST,
@@ -569,6 +591,39 @@ export class PipelineDriver {
         companion.input.destroy();
       }
     }
+    this.#rowSetSignatures.delete(queryID);
+  }
+
+  /**
+   * Current XOR signature of the row-set attached to `queryID`, or
+   * `undefined` if no pipeline for the query is currently active.
+   * Maintained incrementally by {@link addQuery} and {@link advance}.
+   */
+  rowSetSignature(queryID: string): bigint | undefined {
+    return this.#rowSetSignatures.get(queryID);
+  }
+
+  /**
+   * Wraps an iterable of RowChanges, XORing each row's unit hash into the
+   * query's signature (ADDs and REMOVEs share the same op; EDITs are no-ops).
+   * Used to intercept the yield streams from {@link addQuery} and
+   * {@link advance}.
+   */
+  *#trackRowSetSignatures(
+    changes: Iterable<RowChange | 'yield'>,
+  ): Iterable<RowChange | 'yield'> {
+    for (const change of changes) {
+      if (change !== 'yield' && change.type !== ChangeType.EDIT) {
+        const cur = this.#rowSetSignatures.get(change.queryID) ?? 0n;
+        const unit = rowIDSignatureUnit({
+          schema: '',
+          table: change.table,
+          rowKey: change.rowKey as RowKey,
+        });
+        this.#rowSetSignatures.set(change.queryID, cur ^ unit);
+      }
+      yield change;
+    }
   }
 
   /**
@@ -614,7 +669,7 @@ export class PipelineDriver {
     return {
       version: curr.version,
       numChanges: changes,
-      changes: this.#advance(diff, timer, changes),
+      changes: this.#trackRowSetSignatures(this.#advance(diff, timer, changes)),
     };
   }
 
@@ -696,7 +751,7 @@ export class PipelineDriver {
         }
 
         const elapsed = timer.totalElapsed() - start;
-        this.#advanceTime.record(elapsed / 1000, {
+        this.#advanceTime.recordMs(elapsed, {
           table,
           type,
         });
@@ -971,8 +1026,8 @@ function getRowKey(cols: PrimaryKey, row: Row): RowKey {
 
 /**
  * Core hydration logic used by {@link PipelineDriver#addQuery}, extracted to a
- * function for reuse by bin-analyze so that bin-analyze's hydration logic
- * is as close as possible to zero-cache's real hydration logic.
+ * function for reuse by the analyze-query RPC path so that analysis hydrates
+ * queries the same way the view-syncer does in production.
  */
 export function* hydrate(
   input: Input,
@@ -1023,7 +1078,7 @@ function mustGetPrimaryKey(
   assert(
     rv,
     () =>
-      // oxlint-disable-next-line typescript/restrict-template-expressions e18e/prefer-array-to-sorted
+      // oxlint-disable-next-line e18e/prefer-array-to-sorted
       `table '${table}' is not one of: ${[...pKeys.keys()].sort()}. ` +
       `Check the spelling and ensure that the table has a primary key.`,
   );

@@ -7,11 +7,16 @@ import {ErrorOrigin} from '../../../../zero-protocol/src/error-origin.ts';
 import {ErrorReason} from '../../../../zero-protocol/src/error-reason.ts';
 import {PROTOCOL_VERSION} from '../../../../zero-protocol/src/protocol-version.ts';
 import type {UpQueriesPatch} from '../../../../zero-protocol/src/queries-patch.ts';
+import type {
+  HashedTransformResponse,
+  TransformResponse,
+} from '../../custom-queries/transform-query.ts';
 import {type PgTest, test} from '../../test/db.ts';
 import type {DbFile} from '../../test/lite.ts';
 import type {PostgresDB} from '../../types/pg.ts';
 import type {Subscription} from '../../types/subscription.ts';
 import type {ReplicaState} from '../replicator/replicator.ts';
+import type {ConnectionValidation} from './connection-context-manager.ts';
 import {
   ISSUES_QUERY,
   nextPoke,
@@ -19,8 +24,8 @@ import {
   setup,
   USERS_QUERY,
 } from './view-syncer-test-util.ts';
-import {type SyncContext} from './view-syncer.ts';
 import type {ViewSyncerService} from './view-syncer.ts';
+import {type SyncContext} from './view-syncer.ts';
 
 function scheduled401(queryIDs: string[]) {
   return {
@@ -48,6 +53,46 @@ function scheduled500(queryIDs: string[]) {
 
 const MAINTENANCE_INTERVAL_MS = 67_000;
 
+function validationSuccess(userID: string | null = null): TransformResponse {
+  return {
+    kind: 'QueryResponse' as const,
+    validation: {
+      kind: 'server-validated',
+      validatedUserID: userID,
+    },
+    queries: [],
+  };
+}
+
+const clientFallback: ConnectionValidation = {kind: 'client-fallback'};
+
+function transformSuccess(
+  result: Extract<HashedTransformResponse, {kind: 'success'}>['result'],
+  validation: ConnectionValidation = clientFallback,
+): HashedTransformResponse {
+  return {
+    kind: 'success' as const,
+    result,
+    cached: false as const,
+    validation,
+  };
+}
+
+function transformFailure(result: {
+  kind: ErrorKind.TransformFailed;
+  message: string;
+  origin: ErrorOrigin.ZeroCache;
+  queryIDs: string[];
+  reason: ErrorReason.HTTP;
+  status: number;
+  bodyPreview: string;
+}): HashedTransformResponse {
+  return {
+    kind: 'failed' as const,
+    result,
+  };
+}
+
 describe('view-syncer/auth maintenance', () => {
   afterEach(() => {
     vi.restoreAllMocks();
@@ -65,6 +110,15 @@ describe('view-syncer/auth maintenance', () => {
     const fn = matchingCall?.[0] ?? setTimeoutFn.mock.lastCall?.[0];
     expect(fn).toBeTypeOf('function');
     fn?.();
+  }
+
+  function hasScheduledTimeout(
+    setTimeoutFn: ReturnType<typeof vi.fn<typeof setTimeout>>,
+    delay: number,
+  ) {
+    return setTimeoutFn.mock.calls.some(
+      ([, scheduledDelay]) => scheduledDelay === delay,
+    );
   }
 
   const SYNC_CONTEXT: SyncContext = {
@@ -135,7 +189,7 @@ describe('view-syncer/auth maintenance', () => {
       expect(transformer).toBeDefined();
       using validateSpy = vi
         .spyOn(transformer!, 'validate')
-        .mockResolvedValue(undefined);
+        .mockResolvedValue(validationSuccess('user-1'));
 
       const authContext: SyncContext = {
         ...SYNC_CONTEXT,
@@ -157,7 +211,7 @@ describe('view-syncer/auth maintenance', () => {
         timeout: 2_000,
       });
       expect(validateSpy.mock.calls[1][0].auth?.raw).toBe('token-1');
-      expect(validateSpy.mock.calls[1][0].userID).toBe('user-1');
+      expect(validateSpy.mock.calls[1][0].user).toEqual({id: 'user-1'});
     });
 
     test('failed scheduled revalidation only fails the offending connection', async () => {
@@ -165,10 +219,10 @@ describe('view-syncer/auth maintenance', () => {
       expect(transformer).toBeDefined();
       using validateSpy = vi
         .spyOn(transformer!, 'validate')
-        .mockResolvedValueOnce(undefined)
-        .mockResolvedValueOnce(undefined)
+        .mockResolvedValueOnce(validationSuccess('user-1'))
+        .mockResolvedValueOnce(validationSuccess('user-1'))
         .mockResolvedValueOnce(scheduled401([]))
-        .mockResolvedValueOnce(undefined);
+        .mockResolvedValueOnce(validationSuccess('user-1'));
 
       const client1 = connect(
         {...SYNC_CONTEXT, auth: {type: 'opaque', raw: 'token-1'}},
@@ -209,9 +263,9 @@ describe('view-syncer/auth maintenance', () => {
       expect(transformer).toBeDefined();
       using validateSpy = vi
         .spyOn(transformer!, 'validate')
-        .mockResolvedValueOnce(undefined)
+        .mockResolvedValueOnce(validationSuccess('user-1'))
         .mockResolvedValueOnce(scheduled500([]))
-        .mockResolvedValueOnce(undefined);
+        .mockResolvedValueOnce(validationSuccess('user-1'));
 
       const client = connect(
         {...SYNC_CONTEXT, auth: {type: 'opaque', raw: 'token-1'}},
@@ -240,13 +294,44 @@ describe('view-syncer/auth maintenance', () => {
       expect(client.size()).toBe(0);
     });
 
+    test('scheduled revalidation fails the connection on userID mismatch', async () => {
+      const transformer = customQueryTransformer;
+      expect(transformer).toBeDefined();
+      using validateSpy = vi
+        .spyOn(transformer!, 'validate')
+        .mockResolvedValueOnce(validationSuccess('user-1'))
+        .mockResolvedValueOnce(validationSuccess('user-bad'));
+
+      const client = connect(
+        {...SYNC_CONTEXT, auth: {type: 'opaque', raw: 'token-1'}},
+        [{op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY}],
+      );
+
+      await nextPoke(client);
+      stateChanges.push({state: 'version-ready'});
+      await nextPoke(client);
+
+      expect(validateSpy).toHaveBeenCalledTimes(1);
+
+      callNextSetTimeout(setTimeoutFn, MAINTENANCE_INTERVAL_MS);
+
+      await vi.waitFor(
+        async () =>
+          await expect(client.dequeue()).rejects.toThrow(
+            'Connection userID does not match validated server userID.',
+          ),
+        {timeout: 2_000},
+      );
+      expect(validateSpy).toHaveBeenCalledTimes(2);
+    });
+
     test('ignores stale scheduled revalidation failures after auth changes', async () => {
       const transformer = customQueryTransformer;
       expect(transformer).toBeDefined();
       const staleValidation = resolver<ReturnType<typeof scheduled401>>();
       using validateSpy = vi
         .spyOn(transformer!, 'validate')
-        .mockResolvedValueOnce(undefined)
+        .mockResolvedValueOnce(validationSuccess('user-1'))
         .mockImplementationOnce(() => staleValidation.promise);
 
       const authContext: SyncContext = {
@@ -274,14 +359,16 @@ describe('view-syncer/auth maintenance', () => {
       });
       expect(validateSpy.mock.calls[1][0].auth?.raw).toBe('token-1');
 
-      await vs.contextManager.updateAuth(selector, {auth: 'token-2'});
+      await vs.connContextManager.updateAuth(selector, {auth: 'token-2'});
 
       // resolve the stale validation for the original auth
       staleValidation.resolve(scheduled401([]));
 
       await Promise.resolve();
 
-      expect(vs.contextManager.getConnectionContext(selector)).toMatchObject({
+      expect(
+        vs.connContextManager.getConnectionContext(selector),
+      ).toMatchObject({
         clientID: selector.clientID,
         wsID: selector.wsID,
         revision: 2,
@@ -341,48 +428,175 @@ describe('view-syncer/auth maintenance', () => {
       };
     });
 
-    test('retries scheduled background retransform with a promoted replacement connection', async () => {
+    test('schedules shared retransform only after initial pipeline sync', async () => {
       const transformer = customQueryTransformer;
       expect(transformer).toBeDefined();
       using validateSpy = vi
         .spyOn(transformer!, 'validate')
-        .mockResolvedValue(undefined);
+        .mockResolvedValue(validationSuccess('user-1'));
       using transformSpy = vi
         .spyOn(transformer!, 'transform')
-        .mockResolvedValueOnce({
-          result: [
+        .mockResolvedValueOnce(
+          transformSuccess([
             {
               id: 'custom-1',
               transformedAst: ISSUES_QUERY,
               transformationHash: 'hash-1',
             },
-          ],
-          cached: false,
-        })
-        .mockResolvedValueOnce({
-          result: [
-            {
-              id: 'custom-1',
-              transformedAst: ISSUES_QUERY,
-              transformationHash: 'hash-1b',
-            },
-          ],
-          cached: false,
-        })
-        .mockResolvedValueOnce({
-          result: scheduled401(['custom-1']),
-          cached: false,
-        })
-        .mockResolvedValueOnce({
-          result: [
+          ]),
+        )
+        .mockResolvedValueOnce(
+          transformSuccess([
             {
               id: 'custom-1',
               transformedAst: ISSUES_QUERY,
               transformationHash: 'hash-2',
             },
-          ],
-          cached: false,
-        });
+          ]),
+        );
+
+      const client = connect(
+        {...SYNC_CONTEXT, auth: {type: 'opaque', raw: 'token-selected'}},
+        [
+          {
+            op: 'put',
+            hash: 'custom-1',
+            name: 'named-query-1',
+            args: ['thing'],
+          },
+        ],
+      );
+
+      await nextPoke(client);
+
+      expect(validateSpy).toHaveBeenCalledTimes(1);
+      expect(transformSpy).toHaveBeenCalledTimes(0);
+      expect(hasScheduledTimeout(setTimeoutFn, MAINTENANCE_INTERVAL_MS)).toBe(
+        false,
+      );
+
+      stateChanges.push({state: 'version-ready'});
+      await nextPoke(client);
+
+      expect(transformSpy).toHaveBeenCalledTimes(1);
+      await vi.waitFor(() => {
+        expect(
+          vs.connContextManager.getBackgroundConnectionContext(),
+        ).toBeDefined();
+        expect(
+          vs.connContextManager.getGroupState().retransformAt,
+        ).toBeDefined();
+        expect(hasScheduledTimeout(setTimeoutFn, MAINTENANCE_INTERVAL_MS)).toBe(
+          true,
+        );
+      });
+
+      callNextSetTimeout(setTimeoutFn, MAINTENANCE_INTERVAL_MS);
+
+      await vi.waitFor(() => expect(transformSpy).toHaveBeenCalledTimes(2), {
+        timeout: 2_000,
+      });
+    });
+
+    test('stale scheduled background retransform does not run after stop', async () => {
+      const transformer = customQueryTransformer;
+      expect(transformer).toBeDefined();
+      using validateSpy = vi
+        .spyOn(transformer!, 'validate')
+        .mockResolvedValue(validationSuccess('user-1'));
+      using transformSpy = vi
+        .spyOn(transformer!, 'transform')
+        .mockResolvedValueOnce(
+          transformSuccess([
+            {
+              id: 'custom-1',
+              transformedAst: ISSUES_QUERY,
+              transformationHash: 'hash-1',
+            },
+          ]),
+        );
+
+      const client = connect(
+        {...SYNC_CONTEXT, auth: {type: 'opaque', raw: 'token-selected'}},
+        [
+          {
+            op: 'put',
+            hash: 'custom-1',
+            name: 'named-query-1',
+            args: ['thing'],
+          },
+        ],
+      );
+
+      await nextPoke(client);
+      stateChanges.push({state: 'version-ready'});
+      await nextPoke(client);
+
+      await vi.waitFor(() => {
+        expect(validateSpy).toHaveBeenCalledTimes(1);
+        expect(transformSpy).toHaveBeenCalledTimes(1);
+        expect(
+          vs.connContextManager.getGroupState().retransformAt,
+        ).toBeDefined();
+        expect(hasScheduledTimeout(setTimeoutFn, MAINTENANCE_INTERVAL_MS)).toBe(
+          true,
+        );
+      });
+
+      await vs.stop();
+
+      expect(
+        vs.connContextManager.getGroupState().retransformAt,
+      ).toBeUndefined();
+
+      // Fire the previously scheduled maintenance callback after shutdown to
+      // prove the stopped service no longer performs shared retransform work.
+      callNextSetTimeout(setTimeoutFn, MAINTENANCE_INTERVAL_MS);
+
+      await vi.waitFor(() => {
+        expect(transformSpy).toHaveBeenCalledTimes(1);
+        expect(
+          vs.connContextManager.getGroupState().retransformAt,
+        ).toBeUndefined();
+      });
+    });
+
+    test('retries scheduled background retransform with a promoted replacement connection', async () => {
+      const transformer = customQueryTransformer;
+      expect(transformer).toBeDefined();
+      using validateSpy = vi
+        .spyOn(transformer!, 'validate')
+        .mockResolvedValue(validationSuccess('user-1'));
+      using transformSpy = vi
+        .spyOn(transformer!, 'transform')
+        .mockResolvedValueOnce(
+          transformSuccess([
+            {
+              id: 'custom-1',
+              transformedAst: ISSUES_QUERY,
+              transformationHash: 'hash-1',
+            },
+          ]),
+        )
+        .mockResolvedValueOnce(
+          transformSuccess([
+            {
+              id: 'custom-1',
+              transformedAst: ISSUES_QUERY,
+              transformationHash: 'hash-1b',
+            },
+          ]),
+        )
+        .mockResolvedValueOnce(transformFailure(scheduled401(['custom-1'])))
+        .mockResolvedValueOnce(
+          transformSuccess([
+            {
+              id: 'custom-1',
+              transformedAst: ISSUES_QUERY,
+              transformationHash: 'hash-2',
+            },
+          ]),
+        );
 
       const selectedClient = connect(
         {...SYNC_CONTEXT, auth: {type: 'opaque', raw: 'token-selected'}},
@@ -433,11 +647,11 @@ describe('view-syncer/auth maintenance', () => {
         timeout: 2_000,
       });
       expect(transformSpy.mock.calls[1][0].auth?.raw).toBe('token-replacement');
-      expect(transformSpy.mock.calls[1][0].userID).toBe('user-1');
+      expect(transformSpy.mock.calls[1][0].user).toEqual({id: 'user-1'});
       expect(transformSpy.mock.calls[2][0].auth?.raw).toBe('token-selected');
-      expect(transformSpy.mock.calls[2][0].userID).toBe('user-1');
+      expect(transformSpy.mock.calls[2][0].user).toEqual({id: 'user-1'});
       expect(transformSpy.mock.calls[3][0].auth?.raw).toBe('token-replacement');
-      expect(transformSpy.mock.calls[3][0].userID).toBe('user-1');
+      expect(transformSpy.mock.calls[3][0].user).toEqual({id: 'user-1'});
     });
 
     test('scheduled background retransform retries after transient query failure without disconnecting', async () => {
@@ -445,33 +659,28 @@ describe('view-syncer/auth maintenance', () => {
       expect(transformer).toBeDefined();
       using validateSpy = vi
         .spyOn(transformer!, 'validate')
-        .mockResolvedValue(undefined);
+        .mockResolvedValue(validationSuccess('user-1'));
       using transformSpy = vi
         .spyOn(transformer!, 'transform')
-        .mockResolvedValueOnce({
-          result: [
+        .mockResolvedValueOnce(
+          transformSuccess([
             {
               id: 'custom-1',
               transformedAst: ISSUES_QUERY,
               transformationHash: 'hash-1',
             },
-          ],
-          cached: false,
-        })
-        .mockResolvedValueOnce({
-          result: scheduled500(['custom-1']),
-          cached: false,
-        })
-        .mockResolvedValueOnce({
-          result: [
+          ]),
+        )
+        .mockResolvedValueOnce(transformFailure(scheduled500(['custom-1'])))
+        .mockResolvedValueOnce(
+          transformSuccess([
             {
               id: 'custom-1',
               transformedAst: ISSUES_QUERY,
               transformationHash: 'hash-1',
             },
-          ],
-          cached: false,
-        });
+          ]),
+        );
 
       const client = connect(
         {...SYNC_CONTEXT, auth: {type: 'opaque', raw: 'token-selected'}},
@@ -491,6 +700,11 @@ describe('view-syncer/auth maintenance', () => {
 
       expect(validateSpy).toHaveBeenCalledTimes(1);
       expect(transformSpy).toHaveBeenCalledTimes(1);
+      await vi.waitFor(() =>
+        expect(
+          vs.connContextManager.getGroupState().retransformAt,
+        ).toBeDefined(),
+      );
       expect(client.size()).toBe(0);
 
       callNextSetTimeout(setTimeoutFn, MAINTENANCE_INTERVAL_MS);

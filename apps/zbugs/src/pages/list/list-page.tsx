@@ -152,7 +152,7 @@ export function ListPage({onReady}: {onReady: () => void}) {
     document.title =
       `Zero Bugs → ${listContext.title}` +
       (permalinkID ? ` → Issue ${permalinkID}` : '');
-  }, [listContext]);
+  }, [listContext, permalinkID, setListContext]);
 
   const listRef = useRef<HTMLDivElement>(null);
   const tableWrapperRef = useRef<HTMLDivElement>(null);

@@ -1,5 +1,10 @@
 #!/usr/bin/env node
 
+// To use this add a file called .git/hooks/pre-push with the following content:
+//
+// #!/bin/sh
+// ./tools/git-hooks/pre-push.ts
+
 // oxlint-disable no-console
 import {$} from 'zx';
 

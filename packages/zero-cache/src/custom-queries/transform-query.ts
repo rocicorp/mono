@@ -5,11 +5,9 @@ import {TimedCache} from '../../../shared/src/cache.ts';
 import {getErrorMessage} from '../../../shared/src/error.ts';
 import {sortedEntries} from '../../../shared/src/sorted-entries.ts';
 import {
-  transformResponseMessageSchema,
   type ErroredQuery,
   type TransformRequestBody,
   type TransformRequestMessage,
-  type TransformResponseBody,
 } from '../../../zero-protocol/src/custom-queries.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
@@ -19,10 +17,15 @@ import {
   type TransformFailedBody,
 } from '../../../zero-protocol/src/error.ts';
 import {hashOfAST} from '../../../zero-protocol/src/query-hash.ts';
+import {
+  queryResponseSchema,
+  type QueryResponseBody,
+} from '../../../zero-protocol/src/query-server.ts';
 import type {TransformedAndHashed} from '../auth/read-authorizer.ts';
 import {fetchFromAPIServer} from '../custom/fetch.ts';
 import type {
   ConnectionContext,
+  ConnectionValidation,
   HeaderOptions,
 } from '../services/view-syncer/connection-context-manager.ts';
 import type {CustomQueryRecord} from '../services/view-syncer/schema/types.ts';
@@ -30,11 +33,31 @@ import type {ShardID} from '../types/shards.ts';
 
 const tracer = trace.getTracer('custom-query-transformer');
 
-type TransformResponse = TransformResponseBody | TransformFailedBody;
-export type TransformAttempt = {
-  result: (TransformedAndHashed | ErroredQuery)[] | TransformFailedBody;
-  cached: boolean;
-};
+export type TransformResponse =
+  | {
+      kind: 'QueryResponse';
+      queries: QueryResponseBody;
+      validation: ConnectionValidation;
+    }
+  | TransformFailedBody;
+
+export type HashedTransformResponse =
+  | {
+      kind: 'failed';
+      result: TransformFailedBody;
+    }
+  | ({
+      kind: 'success';
+      result: (TransformedAndHashed | ErroredQuery)[];
+    } & (
+      | {
+          cached: true;
+        }
+      | {
+          cached: false;
+          validation: ConnectionValidation;
+        }
+    ));
 
 /**
  * Transforms a custom query by calling the user's API server.
@@ -77,18 +100,16 @@ export class CustomQueryTransformer {
    * Successful validation is intentionally opaque because callers only care
    * whether the request succeeded or failed.
    */
-  async validate(
-    ctx: ConnectionContext,
-  ): Promise<TransformFailedBody | undefined> {
+  async validate(ctx: ConnectionContext): Promise<TransformResponse> {
     const response = await this.#requestTransform(ctx, [], 'validate');
 
-    return Array.isArray(response) ? undefined : response;
+    return response;
   }
 
   async transform(
     ctx: ConnectionContext,
     queries: Iterable<CustomQueryRecord>,
-  ): Promise<TransformAttempt> {
+  ): Promise<HashedTransformResponse> {
     const request: TransformRequestBody = [];
     const cachedResponses: TransformedAndHashed[] = [];
 
@@ -111,6 +132,7 @@ export class CustomQueryTransformer {
 
     if (request.length === 0) {
       return {
+        kind: 'success',
         result: cachedResponses,
         cached: true,
       };
@@ -120,14 +142,14 @@ export class CustomQueryTransformer {
     }
 
     const response = await this.#requestTransform(ctx, request, 'transform');
-    if (!Array.isArray(response)) {
+    if (response.kind === 'TransformFailed') {
       return {
+        kind: 'failed',
         result: response,
-        cached,
       };
     }
 
-    const newResponses = response.map(transformed => {
+    const newResponses = response.queries.map(transformed => {
       if ('error' in transformed) {
         return transformed;
       }
@@ -148,7 +170,9 @@ export class CustomQueryTransformer {
     }
 
     return {
+      kind: 'success',
       result: [...newResponses, ...cachedResponses],
+      validation: response.validation,
       cached,
     };
   }
@@ -166,7 +190,7 @@ export class CustomQueryTransformer {
         'customQueryTransformer.fetchFromAPIServer',
         () =>
           fetchFromAPIServer(
-            transformResponseMessageSchema,
+            queryResponseSchema,
             'transform',
             this.#lc,
             ctx,
@@ -174,6 +198,31 @@ export class CustomQueryTransformer {
             ['transform', request] satisfies TransformRequestMessage,
           ),
       );
+
+      if ('kind' in transformResponse) {
+        return transformResponse.kind === 'QueryResponse'
+          ? {
+              kind: 'QueryResponse',
+              queries: transformResponse.queries,
+              validation:
+                transformResponse.userID !== undefined
+                  ? {
+                      kind: 'server-validated',
+                      validatedUserID: transformResponse.userID,
+                    }
+                  : {kind: 'client-fallback'},
+            }
+          : transformResponse;
+      }
+
+      if (transformResponse[0] === 'transformed') {
+        // Legacy query response, so we use client fallback
+        return {
+          kind: 'QueryResponse',
+          validation: {kind: 'client-fallback'},
+          queries: transformResponse[1],
+        };
+      }
 
       return transformResponse[1];
     } catch (e) {
@@ -206,7 +255,7 @@ function getCacheKey(ctx: ConnectionContext, queryID: string) {
     token: ctx.auth?.raw,
     cookie: ctx.queryContext.headerOptions.cookie,
     origin: ctx.queryContext.headerOptions.origin,
-    userID: ctx.userID,
+    userID: ctx.user,
     url: ctx.queryContext.url,
     customHeaders: normalizedForwardedHeaders(ctx.queryContext.headerOptions),
   });

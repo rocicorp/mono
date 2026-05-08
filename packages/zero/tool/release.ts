@@ -5,10 +5,6 @@ import {stdin as input, stdout as output} from 'node:process';
 import {createInterface} from 'node:readline/promises';
 import * as path from 'path';
 import commandLineArgs from 'command-line-args';
-import {
-  MIN_SERVER_SUPPORTED_SYNC_PROTOCOL,
-  PROTOCOL_VERSION,
-} from '../../zero-protocol/src/protocol-version.ts';
 
 void main();
 
@@ -51,17 +47,6 @@ async function main() {
         'retry mode requires <from> to be an existing release tag (e.g. zero/v0.24.0-canary.3)',
       );
     }
-
-    // For stable releases, we need to know the base version early
-    // Read it from the current working directory before we chdir
-    const zeroPackageJsonPath = path.join(
-      gitRoot,
-      'packages',
-      'zero',
-      'package.json',
-    );
-    const packageData = getPackageData(zeroPackageJsonPath);
-    const currentVersion = packageData.version;
 
     // Check that the ref we're building from exists both locally and remotely
     // and that they point to the same commit
@@ -130,6 +115,10 @@ async function main() {
     } catch {
       execute(`git checkout ${from}`);
     }
+
+    const zeroPackageJsonPath = basePath('packages', 'zero', 'package.json');
+    const packageData = getPackageData(zeroPackageJsonPath);
+    const currentVersion = packageData.version;
 
     let result: Release;
     if (mode === 'canary') {
@@ -513,7 +502,10 @@ function logReleaseHeader(
   summary: string,
   currentVersion: string,
   nextVersion: string,
-  options?: {skipGit?: boolean | undefined; skipNPM?: boolean | undefined},
+  options?: {
+    skipGit?: boolean | undefined;
+    skipNPM?: boolean | undefined;
+  },
 ) {
   console.log('');
   console.log('='.repeat(60));
@@ -633,8 +625,6 @@ async function pushDocker(version: string) {
         `docker buildx build \\
     --platform linux/amd64,linux/arm64 \\
     --build-arg=ZERO_VERSION=${version} \\
-    --build-arg=ZERO_SYNC_PROTOCOL_VERSION=${PROTOCOL_VERSION} \\
-    --build-arg=ZERO_MIN_SUPPORTED_SYNC_PROTOCOL_VERSION=${MIN_SERVER_SUPPORTED_SYNC_PROTOCOL} \\
     -t rocicorp/zero:${version} \\
     --push .`,
         {cwd: basePath('packages', 'zero')},

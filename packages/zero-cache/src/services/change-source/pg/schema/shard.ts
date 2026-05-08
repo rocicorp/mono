@@ -14,7 +14,10 @@ import type {PostgresDB, PostgresTransaction} from '../../../../types/pg.ts';
 import type {AppID, ShardConfig, ShardID} from '../../../../types/shards.ts';
 import {appSchema, check, upstreamSchema} from '../../../../types/shards.ts';
 import {id} from '../../../../types/sql.ts';
-import {createEventTriggerStatements} from './ddl.ts';
+import {
+  createEventFunctionStatements,
+  createEventTriggerStatements,
+} from './ddl.ts';
 import {
   getPublicationInfo,
   publishedSchema,
@@ -273,7 +276,15 @@ export async function getReplicaAtVersion(
 ): Promise<Replica | null> {
   const schema = sql(upstreamSchema(shard));
   const result = await sql`
-    SELECT * FROM ${schema}.replicas JOIN ${schema}."shardConfig" ON true
+    SELECT
+      replicas."slot",
+      replicas."version",
+      replicas."initialSchema",
+      replicas."initialSyncContext",
+      replicas."subscriberContext",
+      "shardConfig"."publications",
+      "shardConfig"."ddlDetection"
+    FROM ${schema}.replicas JOIN ${schema}."shardConfig" ON true
       WHERE version = ${replicaVersion};
   `;
   if (result.length === 0) {
@@ -377,9 +388,23 @@ export async function setupTriggers(
   tx: PostgresTransaction,
   shard: ShardConfig,
 ) {
+  const schema = upstreamSchema(shard);
+  const [{ddlDetection}] = await tx<InternalShardConfig[]> /*sql*/ `
+    SELECT "ddlDetection" FROM ${tx(schema)}."shardConfig"`;
+
+  // The functions invoked by event triggers are installed even if
+  // event triggers are not supported/allowed by the db provider.
+  // This allows users to manually invoke the update_schemas() function
+  // as a workaround.
+  await tx.unsafe(createEventFunctionStatements(shard));
   try {
     await tx.savepoint(sub => sub.unsafe(triggerSetup(shard)));
   } catch (e) {
+    if (ddlDetection) {
+      // If ddlDetection has already been enabled, subsequent failures to
+      // upgrade the trigger should be propagated rather than swallowed.
+      throw e;
+    }
     if (
       !(
         e instanceof postgres.PostgresError &&

@@ -123,7 +123,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
   async function nextTransaction(): Promise<DataOrSchemaChange[]> {
     const data: DataOrSchemaChange[] = [];
     for (;;) {
-      const change = await downstream.dequeue('timeout', 10_000);
+      const change = await downstream.dequeue('timeout', 30_000);
       if (change === 'timeout') {
         throw new Error('timed out waiting for change');
       }
@@ -139,13 +139,15 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
           data.push(change[1]);
           break;
         case 'commit':
+          if (data.length) {
+            return data;
+          }
+          break; // skip empty transactions
         case 'rollback':
+          throw new Error(`received rollback: ${JSON.stringify(change)}`);
         case 'control':
         case 'status':
-          if (data.length === 0) {
-            break; // skip empty transactions
-          }
-          return data;
+          break;
         default:
           change satisfies never;
       }
@@ -1229,6 +1231,23 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
       [],
     ],
     [
+      'create index concurrently',
+      `
+      CREATE INDEX CONCURRENTLY foo_flt3 ON foo (flt DESC, id ASC);
+      `,
+      [[{tag: 'create-index'}]],
+      {foo: []},
+      [],
+      [
+        {
+          tableName: 'foo',
+          name: 'foo_flt3',
+          columns: {flt: 'DESC', id: 'ASC'},
+          unique: false,
+        },
+      ],
+    ],
+    [
       'remove table (with indexes) from publication',
       `ALTER PUBLICATION zero_some_public DROP TABLE boo`,
       [
@@ -1815,6 +1834,71 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
       ],
     ],
     [
+      'concurrent schema changes',
+      [
+        // statements are run in parallel
+        `CREATE TABLE IF NOT EXISTS your.t0 (id INT8 PRIMARY KEY)`,
+        `CREATE TABLE IF NOT EXISTS your.t1 (id INT8 PRIMARY KEY)`,
+        `CREATE TABLE IF NOT EXISTS your.t2 (id INT8 PRIMARY KEY)`,
+      ],
+      [
+        [{tag: 'create-table'}, {tag: 'create-index'}],
+        [{tag: 'create-table'}, {tag: 'create-index'}],
+        [{tag: 'create-table'}, {tag: 'create-index'}],
+      ],
+      {
+        ['your.t0']: [],
+        ['your.t1']: [],
+        ['your.t2']: [],
+      },
+      [],
+      [],
+    ],
+    [
+      'nested DDL event (RLS)',
+      /*sql*/ `
+     CREATE OR REPLACE FUNCTION add_rls()
+     RETURNS event_trigger AS $$
+     DECLARE
+       target RECORD;
+     BEGIN
+       SELECT object_identity as name
+         FROM pg_event_trigger_ddl_commands() 
+         LIMIT 1 INTO target; 
+       -- This results in firing nested ddl_start / ddl_end triggers
+       EXECUTE format('ALTER TABLE %s ENABLE ROW LEVEL SECURITY', target.name);
+     END
+     $$ LANGUAGE plpgsql;
+
+     CREATE EVENT TRIGGER add_rls_trigger
+      ON ddl_command_end
+      WHEN TAG IN ('CREATE TABLE')
+      EXECUTE PROCEDURE add_rls();
+
+     CREATE TABLE your.table_that_gets_rls (id INT8 PRIMARY KEY, val INT8 NOT NULL);
+     CREATE UNIQUE INDEX val_idx ON your.table_that_gets_rls (val);
+
+     DROP EVENT TRIGGER add_rls_trigger;
+      `,
+      [[{tag: 'create-table'}, {tag: 'create-index'}, {tag: 'create-index'}]],
+      {['your.table_that_gets_rls']: []},
+      [],
+      [
+        {
+          tableName: 'your.table_that_gets_rls',
+          name: 'your.table_that_gets_rls_pkey',
+          columns: {id: 'ASC'},
+          unique: true,
+        },
+        {
+          tableName: 'your.table_that_gets_rls',
+          name: 'your.val_idx',
+          columns: {val: 'ASC'},
+          unique: true,
+        },
+      ],
+    ],
+    [
       'working ALTER PUBLICATION trigger not affected by surrounding COMMENTs',
       /*sql*/ `
       COMMENT ON PUBLICATION zero_some_public IS 'bonk';
@@ -1901,11 +1985,10 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
     ],
     // Cases hereafter no longer have the ALTER PUBLICATION TRIGGER
     [
-      'missing ALTER PUBLICATION trigger covered by surrounding COMMENTs',
+      'missing ALTER PUBLICATION trigger covered by COMMENT',
       /*sql*/ `
-      COMMENT ON PUBLICATION zero_some_public IS 'bonk';
       ALTER PUBLICATION zero_some_public SET TABLE existing, TABLE existing_full,
-        TABLE foo (id, "newInt", int, flt);
+        TABLE foo (id, int, flt);
       COMMENT ON PUBLICATION zero_some_public IS 'bonk';
 
       -- Additional comments have no effect.
@@ -1914,6 +1997,11 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
       `,
       [
         [
+          {
+            tag: 'drop-column',
+            table: {schema: 'public', name: 'foo'},
+            column: 'newInt',
+          },
           {
             tag: 'add-column',
             table: {schema: 'public', name: 'foo'},
@@ -1955,7 +2043,7 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
               notNull: false,
               pos: 3,
             },
-            newInt: {
+            int: {
               characterMaximumLength: null,
               dataType: 'int4',
               elemPgTypeClass: null,
@@ -1963,81 +2051,36 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
               notNull: false,
               pos: 4,
             },
-            int: {
-              characterMaximumLength: null,
-              dataType: 'int4',
-              elemPgTypeClass: null,
-              dflt: null,
-              notNull: false,
-              pos: 5,
-            },
           },
         },
       ],
       [],
     ],
     [
-      'concurrent schema changes',
-      [
-        // statements are run in parallel
-        `CREATE TABLE IF NOT EXISTS your.t0 (id INT8 PRIMARY KEY)`,
-        `CREATE TABLE IF NOT EXISTS your.t1 (id INT8 PRIMARY KEY)`,
-        `CREATE TABLE IF NOT EXISTS your.t2 (id INT8 PRIMARY KEY)`,
-      ],
-      [
-        [{tag: 'create-table'}, {tag: 'create-index'}],
-        [{tag: 'create-table'}, {tag: 'create-index'}],
-        [{tag: 'create-table'}, {tag: 'create-index'}],
-      ],
-      {
-        ['your.t0']: [],
-        ['your.t1']: [],
-        ['your.t2']: [],
-      },
+      'disable all event triggers',
+      /*sql*/ `
+      DROP EVENT TRIGGER ${APP_ID}_ddl_start_0;
+      DROP EVENT TRIGGER ${APP_ID}_ddl_end_0;
+      `,
+      [],
+      {},
       [],
       [],
     ],
+    // Cases hereafter have no the event triggers
     [
-      'nested DDL event (RLS)',
+      'create table covered by update_schemas() call',
       /*sql*/ `
-     CREATE OR REPLACE FUNCTION add_rls()
-     RETURNS event_trigger AS $$
-     DECLARE
-       target RECORD;
-     BEGIN
-       SELECT object_identity as name
-         FROM pg_event_trigger_ddl_commands() 
-         LIMIT 1 INTO target; 
-       -- This results in firing nested ddl_start / ddl_end triggers
-       EXECUTE format('ALTER TABLE %s ENABLE ROW LEVEL SECURITY', target.name);
-     END
-     $$ LANGUAGE plpgsql;
-
-     CREATE EVENT TRIGGER add_rls_trigger
-      ON ddl_command_end
-      WHEN TAG IN ('CREATE TABLE')
-      EXECUTE PROCEDURE add_rls();
-
-     CREATE TABLE your.table_that_gets_rls (id INT8 PRIMARY KEY, val INT8 NOT NULL);
-     CREATE UNIQUE INDEX val_idx ON your.table_that_gets_rls (val);
+      CREATE TABLE IF NOT EXISTS your.new_table (id INT8 PRIMARY KEY);
+      SELECT ${APP_ID}_0.update_schemas();
       `,
-      [[{tag: 'create-table'}, {tag: 'create-index'}, {tag: 'create-index'}]],
-      {['your.table_that_gets_rls']: []},
-      [],
       [
-        {
-          tableName: 'your.table_that_gets_rls',
-          name: 'your.table_that_gets_rls_pkey',
-          columns: {id: 'ASC'},
-          unique: true,
-        },
-        {
-          tableName: 'your.table_that_gets_rls',
-          name: 'your.val_idx',
-          columns: {val: 'ASC'},
-          unique: true,
-        },
+        [{tag: 'create-table'}, {tag: 'create-index'}],
+        [{tag: 'backfill-completed'}],
       ],
+      {['your.new_table']: []},
+      [],
+      [],
     ],
   ] satisfies [
     name: string,

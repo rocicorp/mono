@@ -5,7 +5,9 @@ import type {Read, Store, Write} from './store.ts';
 import {
   throwIfStoreClosed,
   throwIfTransactionClosed,
+  transactionIsClosedRejection,
 } from './throw-if-closed.ts';
+import {deleteSentinel, WriteImplBase} from './write-impl-base.ts';
 
 /**
  * A SQLite prepared statement.
@@ -165,7 +167,7 @@ export function setupDatabase(
   // Create the entry table
   delegate.execSync(`
     CREATE TABLE IF NOT EXISTS entry (
-      key TEXT PRIMARY KEY, 
+      key TEXT PRIMARY KEY,
       value TEXT NOT NULL
     ) WITHOUT ROWID
   `);
@@ -175,9 +177,12 @@ export function setupDatabase(
     has: delegate.prepare(`SELECT 1 FROM entry WHERE key = ? LIMIT 1`),
     get: delegate.prepare('SELECT value FROM entry WHERE key = ?'),
     put: delegate.prepare(
-      'INSERT OR REPLACE INTO entry (key, value) VALUES (?, ?)',
+      `INSERT OR REPLACE INTO entry (key, value)
+   SELECT e.value->>0, e.value->1 FROM json_each(?) e`,
     ),
-    del: delegate.prepare('DELETE FROM entry WHERE key = ?'),
+    del: delegate.prepare(
+      `DELETE FROM entry WHERE key IN (SELECT value FROM json_each(?))`,
+    ),
   };
 }
 
@@ -220,7 +225,7 @@ export class SQLiteStoreRead implements Read {
   }
 }
 
-export class SQLiteWrite implements Write {
+export class SQLiteWrite extends WriteImplBase implements Write {
   readonly #release: () => void;
   readonly #dbDelegate: SQLiteDatabase;
   readonly #preparedStatements: PreparedStatements;
@@ -232,54 +237,66 @@ export class SQLiteWrite implements Write {
     dbDelegate: SQLiteDatabase,
     preparedStatements: PreparedStatements,
   ) {
+    super(new SQLiteStoreRead(() => undefined, preparedStatements));
     this.#release = release;
     this.#dbDelegate = dbDelegate;
     this.#preparedStatements = preparedStatements;
   }
 
-  async has(key: string): Promise<boolean> {
-    throwIfTransactionClosed(this);
-    const value = await this.#preparedStatements.has.firstValue([key]);
-    return value !== undefined;
-  }
-
-  async get(key: string): Promise<ReadonlyJSONValue | undefined> {
-    throwIfTransactionClosed(this);
-    const value = await this.#preparedStatements.get.firstValue([key]);
-    if (!value) {
-      return undefined;
+  async commit(): Promise<void> {
+    if (this.#closed) {
+      return transactionIsClosedRejection();
     }
 
-    const parsedValue = JSON.parse(value as string) as ReadonlyJSONValue;
-    return deepFreeze(parsedValue);
-  }
+    const deleteKeys: string[] = [];
+    for (const entry of this._pending) {
+      if (entry[1] === deleteSentinel) {
+        deleteKeys.push(entry[0]);
+        this._pending.delete(entry[0]);
+      }
+    }
 
-  async put(key: string, value: ReadonlyJSONValue): Promise<void> {
-    throwIfTransactionClosed(this);
-    await this.#preparedStatements.put.exec([key, JSON.stringify(value)]);
-  }
+    const delP =
+      deleteKeys.length > 0
+        ? this.#preparedStatements.del.exec([JSON.stringify(deleteKeys)])
+        : undefined;
+    const upP =
+      this._pending.size > 0
+        ? this.#preparedStatements.put.exec([
+            JSON.stringify([...this._pending]),
+          ])
+        : undefined;
 
-  async del(key: string): Promise<void> {
-    throwIfTransactionClosed(this);
-    await this.#preparedStatements.del.exec([key]);
-  }
+    if (delP && upP) {
+      await Promise.all([delP, upP]);
+    } else if (delP) {
+      await delP;
+    } else if (upP) {
+      await upP;
+    }
 
-  // oxlint-disable-next-line require-await
-  async commit(): Promise<void> {
-    throwIfTransactionClosed(this);
     this.#dbDelegate.execSync('COMMIT');
+    this._pending.clear();
     this.#committed = true;
   }
 
   release(): void {
     if (!this.#closed) {
       this.#closed = true;
-
+      super.release();
+      let rollbackError: unknown;
       if (!this.#committed) {
-        this.#dbDelegate.execSync('ROLLBACK');
+        try {
+          this.#dbDelegate.execSync('ROLLBACK');
+        } catch (e) {
+          rollbackError = e;
+        }
       }
 
       this.#release();
+      if (rollbackError !== undefined) {
+        throw rollbackError;
+      }
     }
   }
 

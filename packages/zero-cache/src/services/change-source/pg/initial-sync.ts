@@ -57,6 +57,7 @@ import {CpuProfiler} from '../../../types/profiler.ts';
 import type {ShardConfig} from '../../../types/shards.ts';
 import {ALLOWED_APP_ID_CHARACTERS} from '../../../types/shards.ts';
 import {id} from '../../../types/sql.ts';
+import {orTimeout} from '../../../types/timeout.ts';
 import {ReplicationStatusPublisher} from '../../replicator/replication-status.ts';
 import {ColumnMetadataStore} from '../../replicator/schema/column-metadata.ts';
 import {initReplicationState} from '../../replicator/schema/replication-state.ts';
@@ -121,13 +122,13 @@ export async function initialSync(
     shadow,
   } = syncOptions;
   const copyProfiler = profileCopy ? await CpuProfiler.connect() : null;
-  const sql = pgClient(lc, upstreamURI);
+  const sql = pgClient(lc, upstreamURI, 'initial-sync');
   // Replication session is only needed to create a replication slot in the
   // real path. In shadow mode we export a snapshot on a normal connection
   // instead, so no replication session is opened.
   const replicationSession = shadow
     ? undefined
-    : pgClient(lc, upstreamURI, {
+    : pgClient(lc, upstreamURI, 'initial-sync-replication-session', {
         ['fetch_types']: false, // Necessary for the streaming protocol
         connection: {replication: 'database'}, // https://www.postgresql.org/docs/current/protocol-replication.html
       });
@@ -245,9 +246,8 @@ export async function initialSync(
         ? numTables
         : Math.min(tableCopyWorkers, numTables);
 
-    const copyPool = pgClient(lc, upstreamURI, {
+    const copyPool = pgClient(lc, upstreamURI, 'initial-sync-copy-worker', {
       max: numWorkers,
-      connection: {['application_name']: 'initial-sync-copy-worker'},
       ['max_lifetime']: 120 * 60, // set a long (2h) limit for COPY streaming
     });
     const copiers = startTableCopyWorkers(
@@ -529,6 +529,21 @@ type ReplicationSlot = {
   output_plugin: string;
 };
 
+// When creating a replication slot, Postgres waits for open transactions
+// to complete before reserving a consistent_point (LSN) in the WAL and creating
+// a matching transaction snapshot. As such, it can technically take an arbitrary
+// amount of time (e.g. DDL operations, table-wide operations, etc.).
+//
+// However, to detect pathological situations, bound the amount of time that
+// the server waits for replication slot creation, so that a continual failure to
+// create a replication slot is surfaced by errors / alerts.
+const CREATE_REPLICATION_SLOT_TIMEOUT_MS = 30_000;
+
+// The lock_timeout is set 1s before the client-side orTimeout so that
+// Postgres reliably aborts first and tears down the walsender cleanly.
+// The client-side timeout remains as a fallback for network-level failures.
+const SERVER_LOCK_TIMEOUT_MS = CREATE_REPLICATION_SLOT_TIMEOUT_MS - 1_000;
+
 /**
  * Shadow-mode alternative to `createReplicationSlot`: opens a dedicated
  * READ ONLY REPEATABLE READ transaction on a normal connection, exports the
@@ -547,9 +562,8 @@ async function acquireExportedSnapshotForShadowSync(
   lsn: string;
   release: () => Promise<void>;
 }> {
-  const holder = pgClient(lc, upstreamURI, {
+  const holder = pgClient(lc, upstreamURI, 'shadow-initial-sync-snapshot', {
     max: 1,
-    connection: {['application_name']: 'shadow-initial-sync-snapshot'},
   });
   const ready = resolver<{snapshot: string; lsn: string}>();
   const release = resolver<void>();
@@ -604,13 +618,45 @@ export async function createReplicationSlot(
   // Note: must be false if pgVersion < PG_17. Caller must verify.
   failover = false,
 ): Promise<ReplicationSlot> {
-  const [slot] = failover
-    ? await session.unsafe<ReplicationSlot[]>(
+  // CREATE_REPLICATION_SLOT can hang indefinitely waiting for long-running
+  // transactions to finish: internally it calls SnapBuildWaitSnapshot →
+  // XactLockTableWait → LockAcquire on each running XID. statement_timeout
+  // does NOT apply to replication commands, but lock_timeout does (it governs
+  // the heavyweight lock wait inside LockAcquire). Setting it here causes
+  // Postgres to raise ERRCODE_LOCK_NOT_AVAILABLE and cleanly tear down the
+  // walsender, rather than relying solely on the client-side orTimeout
+  // which can leave an orphaned backend.
+  //
+  // An orphaned walsender is actively harmful: by this point the replication
+  // slot has already been created and is pinning WAL retention and catalog_xmin.
+  // Worse, the slot is marked `active` (the walsender PID is still alive), so
+  // the existing cleanup code (which drops inactive slots on retry) can't
+  // reclaim it. Without lock_timeout the orphan persists until TCP keepalive
+  // fires (~2h default) or the blocking transaction finishes.
+  await session.unsafe(`SET lock_timeout = ${SERVER_LOCK_TIMEOUT_MS}`);
+
+  const createSlot = failover
+    ? session.unsafe<ReplicationSlot[]>(
         /*sql*/ `CREATE_REPLICATION_SLOT "${slotName}" LOGICAL pgoutput (FAILOVER)`,
       )
-    : await session.unsafe<ReplicationSlot[]>(
+    : session.unsafe<ReplicationSlot[]>(
         /*sql*/ `CREATE_REPLICATION_SLOT "${slotName}" LOGICAL pgoutput`,
       );
+  const raced = await orTimeout(createSlot, CREATE_REPLICATION_SLOT_TIMEOUT_MS);
+  if (raced === 'timed-out') {
+    // Create slot can block indefinitely waiting for old transactions. End
+    // this connection in the background and fail fast so the process restarts.
+    void session
+      .end()
+      .catch(e =>
+        lc.warn?.(`Error closing timed out replication slot session`, e),
+      );
+    throw new Error(
+      `Timed out after ${CREATE_REPLICATION_SLOT_TIMEOUT_MS} ms creating replication slot ${slotName}. ` +
+        `Crashing to force a clean restart.`,
+    );
+  }
+  const [slot] = raced;
   lc.info?.(`Created replication slot ${slotName}`, slot);
   return slot;
 }
@@ -772,11 +818,26 @@ function limitClause(maxRowsPerTable: number | undefined): string {
     : '';
 }
 
+/**
+ * Returns the SELECT column expressions for binary COPY, casting columns
+ * without a known binary decoder to `::text`.
+ */
+export function makeBinarySelectExprs(
+  table: PublishedTableSpec,
+  cols: string[],
+): string[] {
+  return cols.map(col => {
+    const spec = table.columns[col];
+    return hasBinaryDecoder(spec) ? id(col) : `${id(col)}::text`;
+  });
+}
+
 export function makeDownloadStatements(
   table: PublishedTableSpec,
   cols: string[],
   sampleRate?: number | undefined,
   maxRowsPerTable?: number | undefined,
+  selectExprs?: string[] | undefined,
 ): DownloadStatements {
   const filterConditions = Object.values(table.publications)
     .map(({rowFilter}) => rowFilter)
@@ -788,7 +849,7 @@ export function makeDownloadStatements(
   const sample = tableSampleClause(sampleRate);
   const limit = limitClause(maxRowsPerTable);
   const fromTable = /*sql*/ `FROM ${id(table.schema)}.${id(table.name)}${sample} ${where}`;
-  const select = /*sql*/ `SELECT ${cols.map(id).join(',')} ${fromTable}${limit}`;
+  const select = /*sql*/ `SELECT ${(selectExprs ?? cols.map(id)).join(',')} ${fromTable}${limit}`;
   if (limit) {
     // With LIMIT, wrap counts/sums in a subquery so they reflect the
     // capped rowset rather than the full (sampled) table.
@@ -912,20 +973,13 @@ async function copyBinary(
   );
 
   // Build SELECT with ::text casts for columns without a known binary decoder.
-  const filterConditions = Object.values(table.publications)
-    .map(({rowFilter}) => rowFilter)
-    .filter(f => !!f);
-  const where =
-    filterConditions.length === 0
-      ? ''
-      : /*sql*/ `WHERE ${filterConditions.join(' OR ')}`;
-  const sample = tableSampleClause(sampleRate);
-  const limit = limitClause(maxRowsPerTable);
-  const fromTable = /*sql*/ `FROM ${id(table.schema)}.${id(table.name)}${sample} ${where}`;
-  const selectColumns = orderedColumns.map(([name, spec]) =>
-    hasBinaryDecoder(spec) ? id(name) : `${id(name)}::text`,
-  );
-  const select = /*sql*/ `SELECT ${selectColumns.join(',')} ${fromTable}${limit}`;
+  const select = makeDownloadStatements(
+    table,
+    columnNames,
+    sampleRate,
+    maxRowsPerTable,
+    makeBinarySelectExprs(table, columnNames),
+  ).select;
 
   const decoders = orderedColumns.map(([, spec]) =>
     hasBinaryDecoder(spec) ? makeBinaryDecoder(spec) : textCastDecoder,

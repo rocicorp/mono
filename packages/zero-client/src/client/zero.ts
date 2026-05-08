@@ -37,6 +37,7 @@ import {promiseRace} from '../../../shared/src/promise-race.ts';
 import {emptyFunction} from '../../../shared/src/sentinels.ts';
 import {sleep, sleepWithAbort} from '../../../shared/src/sleep.ts';
 import {Subscribable} from '../../../shared/src/subscribable.ts';
+import {assertTesting, TESTING} from '../../../shared/src/testing.ts';
 import * as valita from '../../../shared/src/valita.ts';
 import type {Writable} from '../../../shared/src/writable.ts';
 import {type ClientSchema} from '../../../zero-protocol/src/client-schema.ts';
@@ -50,7 +51,15 @@ import {
   type ErrorMessage,
   ProtocolError,
 } from '../../../zero-protocol/src/error.ts';
+import type {MutationID} from '../../../zero-protocol/src/mutation-id.ts';
 import * as MutationType from '../../../zero-protocol/src/mutation-type-enum.ts';
+import {
+  type CRUDMutation,
+  type CRUDMutationArg,
+  CRUD_MUTATION_NAME,
+  type CustomMutation,
+  mapCRUD,
+} from '../../../zero-protocol/src/mutation.ts';
 import type {PingMessage} from '../../../zero-protocol/src/ping.ts';
 import type {
   PokeEndMessage,
@@ -63,14 +72,7 @@ import type {
   PullResponseBody,
   PullResponseMessage,
 } from '../../../zero-protocol/src/pull.ts';
-import type {
-  CRUDMutation,
-  CRUDMutationArg,
-  CustomMutation,
-  MutationID,
-  PushMessage,
-} from '../../../zero-protocol/src/push.ts';
-import {CRUD_MUTATION_NAME, mapCRUD} from '../../../zero-protocol/src/push.ts';
+import type {PushMessage} from '../../../zero-protocol/src/push.ts';
 import type {UpQueriesPatchOp} from '../../../zero-protocol/src/queries-patch.ts';
 import type {Upstream} from '../../../zero-protocol/src/up.ts';
 import type {NullableVersion} from '../../../zero-protocol/src/version.ts';
@@ -186,8 +188,6 @@ import {
 } from './zero-rep.ts';
 
 export type NoRelations = Record<string, never>;
-
-declare const TESTING: boolean;
 
 export type TestingContext = {
   puller: Puller;
@@ -306,7 +306,7 @@ const internalReplicacheImplMap = new WeakMap<object, ReplicacheImpl>();
 export function getInternalReplicacheImplForTesting(
   z: object,
 ): ReplicacheImpl<MutatorDefs> {
-  assert(TESTING, 'Expected TESTING to be true');
+  assertTesting();
   return must(internalReplicacheImplMap.get(z));
 }
 
@@ -374,7 +374,7 @@ export class Zero<
   readonly #onlineManager: OnlineManager;
 
   readonly #onUpdateNeeded: (reason: UpdateNeededReason) => void;
-  readonly #onClientStateNotFound: (reason?: string) => void;
+  readonly #onClientStateNotFound: (kind: ErrorKind, message: string) => void;
   // Last cookie used to initiate a connection
   #connectCookie: NullableVersion = null;
   // Total number of sockets successfully connected by this client
@@ -649,7 +649,7 @@ export class Zero<
     this.userID = userID ?? undefined;
     this.#lc = lc.withContext('clientID', rep.clientID);
 
-    if (userID === 'anon') {
+    if (userID === 'anon' && !options.auth) {
       this.#lc.warn?.(
         'ZeroOptions.userID "anon" is deprecated for logged-out clients. Omit it entirely for logged-out clients.',
       );
@@ -692,18 +692,19 @@ export class Zero<
       onUpdateNeededCallback(convertOnUpdateNeededReason(reason));
     };
 
-    const onClientStateNotFoundCallback =
-      onClientStateNotFound ??
-      ((reason?: string) => {
-        reloadWithReason(
-          this.#lc,
-          this.#reload,
-          ErrorKind.ClientNotFound,
-          reason ?? ON_CLIENT_STATE_NOT_FOUND_REASON_CLIENT,
-        );
-      });
-    this.#onClientStateNotFound = onClientStateNotFoundCallback;
-    this.#rep.onClientStateNotFound = onClientStateNotFoundCallback;
+    this.#onClientStateNotFound = (kind: ErrorKind, message: string) => {
+      if (onClientStateNotFound) {
+        onClientStateNotFound();
+      } else {
+        reloadWithReason(this.#lc, this.#reload, kind, message);
+      }
+    };
+    this.#rep.onClientStateNotFound = () => {
+      this.#onClientStateNotFound(
+        ErrorKind.ClientNotFound,
+        ON_CLIENT_STATE_NOT_FOUND_REASON_CLIENT,
+      );
+    };
 
     const mutatorProxy = new MutatorProxy(
       this.#lc,
@@ -1440,7 +1441,10 @@ export class Zero<
       });
     } else if (kind === ErrorKind.ClientNotFound) {
       await this.#rep.disableClientGroup();
-      this.#onClientStateNotFound?.(onClientStateNotFoundServerReason(message));
+      this.#onClientStateNotFound(
+        kind,
+        onClientStateNotFoundServerReason(message),
+      );
     } else if (
       kind === ErrorKind.InvalidConnectionRequestLastMutationID ||
       kind === ErrorKind.InvalidConnectionRequestBaseCookie
@@ -1448,7 +1452,8 @@ export class Zero<
       await dropReplicacheDatabase(this.#rep.idbName, {
         kvStore: this.#kvStore,
       });
-      reloadWithReason(lc, this.#reload, kind, serverAheadReloadReason);
+
+      this.#onClientStateNotFound(kind, serverAheadReloadReason);
     }
   }
 

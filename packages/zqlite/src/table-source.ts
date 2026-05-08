@@ -79,6 +79,7 @@ export class TableSource implements Source {
   readonly #columns: Record<string, SchemaValue>;
   // Maps sorted columns JSON string (e.g. '["a","b"]) to Set of columns.
   readonly #uniqueIndexes: Map<string, Set<string>>;
+  readonly #uniqueIndexColumns: readonly PrimaryKey[];
   readonly #primaryKey: PrimaryKey;
   readonly #logConfig: LogConfig;
   readonly #lc: LogContext;
@@ -107,6 +108,12 @@ export class TableSource implements Source {
     this.#table = tableName;
     this.#columns = columns;
     this.#uniqueIndexes = getUniqueIndexes(db, tableName);
+    // `keyMatchesPrimaryKey` requires the compared key to be pre-sorted and
+    // non-empty.  A unique index always has >= 1 column, hence the cast.
+    this.#uniqueIndexColumns = Array.from(
+      this.#uniqueIndexes.values(),
+      set => [...set].toSorted() as unknown as PrimaryKey,
+    );
     this.#primaryKey = primaryKey;
     this.#stmts = this.#getStatementsFor(db);
     this.#shouldYield = shouldYield;
@@ -213,6 +220,7 @@ export class TableSource implements Source {
       tableName: this.#table,
       columns: this.#columns,
       primaryKey: this.#primaryKey,
+      uniqueIndexes: this.#uniqueIndexColumns,
       sort: unordered ? undefined : connection.sort,
       relationships: {},
       isHidden: false,
@@ -311,6 +319,7 @@ export class TableSource implements Source {
               connection.lastPushedEpoch,
               comparator,
               connection.filters?.predicate,
+              req.multiConstraints,
             ),
             this.#shouldYield,
           ),
@@ -331,6 +340,7 @@ export class TableSource implements Source {
             connection.lastPushedEpoch,
             this.#primaryKey,
             connection.filters?.predicate,
+            req.multiConstraints,
           ),
           this.#shouldYield,
         );
@@ -531,6 +541,7 @@ export class TableSource implements Source {
       order,
       request.reverse,
       request.start,
+      request.multiConstraints,
     );
   }
 }

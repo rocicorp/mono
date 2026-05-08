@@ -3,6 +3,8 @@ export {
   isApplicationError,
   type ApplicationErrorOptions,
 } from '../../zero-protocol/src/application-error.ts';
+export type {MutateResponse} from '../../zero-protocol/src/mutate-server.ts';
+export type {QueryResponse} from '../../zero-protocol/src/query-server.ts';
 export type {
   ServerColumnSchema,
   ServerSchema,
@@ -34,6 +36,7 @@ export {
   OutOfOrderMutation,
   type Database,
   type ExtractTransactionType,
+  type MutateRequestHandler,
   type Params,
   type Parsed,
   type TransactFn,
@@ -46,6 +49,7 @@ export {
   handleGetQueriesRequest,
   handleQueryRequest,
   handleTransformRequest,
+  type QueryRequestHandler,
   type TransformQueryFunction,
 } from './queries/process-queries.ts';
 export {ZQLDatabase} from './zql-database.ts';

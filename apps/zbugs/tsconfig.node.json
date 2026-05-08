@@ -10,5 +10,5 @@
       ]
     }
   },
-  "include": ["vite.config.ts", "api/index.ts"]
+  "include": ["vite.config.ts", "api/index.ts", "env.d.ts"]
 }

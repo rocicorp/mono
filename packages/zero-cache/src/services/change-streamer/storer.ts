@@ -25,21 +25,22 @@ import {
   type SchemaChange,
   type TableMetadata,
 } from '../change-source/protocol/current.ts';
-import {type Commit} from '../change-source/protocol/current/downstream.ts';
+import {
+  type ChangeStreamData,
+  type Commit,
+} from '../change-source/protocol/current/downstream.ts';
 import type {
   DownstreamStatusMessage,
   UpstreamStatusMessage,
 } from '../change-source/protocol/current/status.ts';
 import type {ReplicatorMode} from '../replicator/replicator.ts';
 import type {Service} from '../service.ts';
-import type {WatermarkedChange} from './change-streamer-service.ts';
-import {type ChangeEntry} from './change-streamer.ts';
+import type {ChangeTag, WatermarkedChange} from './change-streamer-service.ts';
 import * as ErrorType from './error-type-enum.ts';
 import {
   AutoResetSignal,
   markResetRequired,
   type BackfillingColumn,
-  type ReplicationState,
   type TableMetadataRow,
 } from './schema/tables.ts';
 import type {Subscriber} from './subscriber.ts';
@@ -66,8 +67,12 @@ type PendingTransaction = {
   pool: TransactionPool;
   preCommitWatermark: string;
   pos: number;
-  startingReplicationState: Promise<ReplicationState>;
+  startingReplicationState: Promise<ReplicationOwner>;
   ack: boolean;
+};
+
+type ReplicationOwner = {
+  owner: string | null;
 };
 
 const backfillRequestsSchema = v.array(backfillRequestSchema);
@@ -257,8 +262,8 @@ export class Storer implements Service {
             RETURNING watermark, pos
         ) SELECT COUNT(*) as deleted FROM purged;`;
 
-      const [{owner}] = await sql<ReplicationState[]>`
-        SELECT * FROM ${this.#cdc('replicationState')} FOR SHARE`;
+      const [{owner}] = await sql<ReplicationOwner[]>`
+        SELECT "owner" FROM ${this.#cdc('replicationState')} FOR SHARE`;
       if (owner !== this.#taskID) {
         throw new AbortError(
           `aborting changeLog purge to ${watermark} because ownership has been taken by ${owner}`,
@@ -269,20 +274,16 @@ export class Storer implements Service {
   }
 
   /**
-   * @returns The size of the serialized entry, for memory / I/O estimations.
+   * @returns The JSON stringified stream message to be sent downstream.
    */
-  store(entry: WatermarkedChange) {
-    const [watermark, [_tag, change]] = entry;
-    // Eagerly stringify the JSON object so that the memory usage can be
-    // more accurately measured (i.e. without an extra object traversal and
-    // ad hoc memory counting heuristics).
-    //
-    // This essentially moves the stringify() computation out of the pg client,
-    // which is instead configured to pass `string` objects directly as JSON
-    // strings for JSON-valued columns (see TypeOptions.sendStringAsJson).
-    const json = BigIntJSON.stringify(change);
+  store(watermark: string, data: ChangeStreamData) {
+    // Eagerly stringify the JSON payload to:
+    // - avoid redundant stringification when fanning out to subscribers
+    // - efficiently estimate the amount of memory the payload consumes
+    const json = BigIntJSON.stringify(data);
     this.#approximateQueuedBytes += json.length;
 
+    const change = data[1];
     this.#queue.enqueue([
       'change',
       watermark,
@@ -290,7 +291,7 @@ export class Storer implements Service {
       isDataChange(change) ? null : change, // drop DataChanges to save memory
     ]);
 
-    return json.length;
+    return json;
   }
 
   abort() {
@@ -451,7 +452,7 @@ export class Storer implements Service {
 
         if (tag === 'begin') {
           assert(!tx, 'received BEGIN in the middle of a transaction');
-          const {promise, resolve, reject} = resolver<ReplicationState>();
+          const {promise, resolve, reject} = resolver<ReplicationOwner>();
           void promise.catch(() => {}); // handle rejections before the await
           tx = {
             pool: new TransactionPool(
@@ -470,8 +471,8 @@ export class Storer implements Service {
           // Acquire a lock on the replicationState row to detect and/or prevent
           // a concurrent ownership change.
           void tx.pool.process(tx => {
-            tx<ReplicationState[]> /*sql*/ `
-          SELECT * FROM ${this.#cdc('replicationState')} FOR UPDATE`.then(
+            tx<ReplicationOwner[]> /*sql*/ `
+          SELECT "owner" FROM ${this.#cdc('replicationState')} FOR UPDATE`.then(
               ([result]) => resolve(result),
               reject,
             );
@@ -486,7 +487,9 @@ export class Storer implements Service {
           watermark: tag === 'commit' ? watermark : tx.preCommitWatermark,
           precommit: tag === 'commit' ? tx.preCommitWatermark : null,
           pos: tx.pos,
-          change: json,
+          // For backwards compatibility, only the change message is stored
+          // in the cdc changeLog.
+          change: extractChangeSubstring(json, tag),
         };
 
         const processed = tx.pool.process(sql => [
@@ -568,8 +571,8 @@ export class Storer implements Service {
       // done by performing a single read on the db, which determines the
       // snapshot for the REPEATABLE_READ transaction.
       [{lastWatermark}] = await reader.processReadTask(
-        sql => sql<ReplicationState[]>`
-        SELECT * FROM ${this.#cdc('replicationState')}
+        sql => sql<{lastWatermark: string}[]>`
+        SELECT "lastWatermark" FROM ${this.#cdc('replicationState')}
       `,
       );
     } catch (e) {
@@ -599,8 +602,8 @@ export class Storer implements Service {
         let count = 0;
         let lastBatchConsumed: Promise<unknown> | undefined;
 
-        for await (const entries of tx<ChangeEntry[]> /*sql*/ `
-          SELECT watermark, change FROM ${this.#cdc('changeLog')}
+        for await (const entries of tx<ChangeLogEntry[]> /*sql*/ `
+          SELECT watermark, change->'tag' as tag, change::text FROM ${this.#cdc('changeLog')}
            WHERE watermark >= ${sub.watermark}
              AND watermark <= ${lastWatermark}
            ORDER BY watermark, pos`.cursor(2000)) {
@@ -826,17 +829,62 @@ export class Storer implements Service {
   }
 }
 
-function toDownstream(entry: ChangeEntry): WatermarkedChange {
-  const {watermark, change} = entry;
-  switch (change.tag) {
+/**
+ * Extracts the stringified change message from the stringified
+ * stream message (e.g. the second tuple element). This optimization
+ * facilitates stringifying (and sharing the result of) the stream
+ * message exactly once, but storing only the change message substring
+ * in the changeLog for backwards compatibility.
+ */
+export function extractChangeSubstring(
+  streamMessageJSON: string,
+  tag: Change['tag'] | undefined,
+) {
+  switch (tag) {
     case 'begin':
-      return [watermark, ['begin', change, {commitWatermark: watermark}]];
     case 'commit':
-      return [watermark, ['commit', change, {watermark}]];
-    case 'rollback':
-      return [watermark, ['rollback', change]];
+      // e.g.
+      // ["begin",<message-json>,{"commitWatermark":"92fj2d0s"}]
+      // ["commit",<message-json>,{"watermark":"92fj2d0s"}]
+      return streamMessageJSON.substring(
+        streamMessageJSON.indexOf(',') + 1,
+        streamMessageJSON.lastIndexOf(','),
+      );
     default:
-      return [watermark, ['data', change]];
+      // ["data",<message-json>]
+      return streamMessageJSON.substring(
+        streamMessageJSON.indexOf(',') + 1,
+        streamMessageJSON.lastIndexOf(']'),
+      );
+  }
+}
+
+type ChangeLogEntry = {
+  watermark: string;
+  tag: string;
+  change: string;
+};
+
+function toDownstream(entry: ChangeLogEntry): WatermarkedChange {
+  const {watermark, change} = entry;
+  const tag = entry.tag as ChangeTag;
+  switch (tag) {
+    case 'begin':
+      return [
+        watermark,
+        tag,
+        `["begin",${change},{"commitWatermark":"${watermark}"}]`,
+      ];
+    case 'commit':
+      return [
+        watermark,
+        tag,
+        `["commit",${change},{"watermark":"${watermark}"}]`,
+      ];
+    case 'rollback':
+      return [watermark, tag, `["rollback",${change}]`];
+    default:
+      return [watermark, tag, `["data",${change}]`];
   }
 }
 

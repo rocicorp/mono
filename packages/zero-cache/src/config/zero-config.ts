@@ -195,14 +195,14 @@ const authOptions = {
     ],
   },
   revalidateIntervalSeconds: {
-    type: v.number().optional(),
+    type: v.number().default(300),
     desc: [
       `The interval in seconds between periodic /query auth revalidation for validated connections.`,
       `If unset, periodic auth revalidation is disabled.`,
     ],
   },
   retransformIntervalSeconds: {
-    type: v.number().optional(),
+    type: v.number().default(300),
     desc: [
       `The interval in seconds between periodic shared /query retransform work for a client group.`,
       `If unset, periodic shared retransform is disabled.`,
@@ -523,6 +523,27 @@ export const zeroOptions = {
   port: {
     type: v.number().default(4848),
     desc: [`The port for sync connections.`],
+  },
+
+  keepaliveTimeoutMs: {
+    type: v.number().optional(),
+    desc: [
+      `The timeout since the last /keepalive request after which the server will initiate`,
+      `a graceful shutdown. This is a workaround for AWS Elastic Container Service, which`,
+      `otherwise provides no signal that a target has been deregistered (and should thus begin`,
+      `shutdown); the cessation of health checks at /keepalive is instead used as the signal to`,
+      `drain. (ECS later sends a SIGTERM before killing the server but only allows a 30-second`,
+      `timeout before sending SIGKILL).`,
+      ``,
+      `Other container runners explicitly send a SIGTERM followed by a configurable drain interval,`,
+      `in which case /keepalive logic is not necessary.`,
+      ``,
+      `When running the server in ECS, this timeout should be set to some multiple of the health`,
+      `check interval. If the option is unset, the keepalive timeout is disabled in non-ECS environments,`,
+      `and defaults to 20 seconds when run in ECS (determined by the presence of the`,
+      `{bold ECS_CONTAINER_METADATA_URI_V4} environment variable as per`,
+      `https://docs.aws.amazon.com/AmazonECS/latest/developerguide/ecs-environment-variables.html).`,
+    ],
   },
 
   changeStreamer: {
@@ -927,9 +948,9 @@ export const zeroOptions = {
     textCopy: {
       type: v.boolean().default(false),
       desc: [
-        `Use text-format COPY instead of binary COPY for the initial sync.`,
-        `This is slower but can work around issues with binary encoding of`,
-        `certain data types.`,
+        `Use text-format COPY instead of binary COPY for initial sync and`,
+        `backfill streaming. This is slower but can work around issues with`,
+        `binary encoding of certain data types.`,
       ],
     },
   },
@@ -947,11 +968,13 @@ export const zeroOptions = {
     },
 
     intervalHours: {
-      type: v.number().default(24),
+      type: v.number().default(12),
       desc: [
-        `The interval between shadow initial-sync runs, in hours. The first run`,
-        `is additionally staggered by a random fraction of this interval so that`,
-        `a fleet restart does not cause all tasks to canary simultaneously.`,
+        `The interval between shadow initial-sync runs, in hours. The first`,
+        `run fires within [2/3, 1) of this interval after startup, so the`,
+        `canary completes at least once per task lifetime (the replication`,
+        `manager is restarted every ~24h) while still jittering so a fleet`,
+        `restart does not cause all tasks to canary simultaneously.`,
       ],
     },
 
