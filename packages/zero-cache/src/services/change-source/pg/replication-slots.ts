@@ -1,9 +1,6 @@
-import {
-  PG_CONFIGURATION_LIMIT_EXCEEDED,
-  PG_INSUFFICIENT_PRIVILEGE,
-} from '@drdgvhbh/postgres-error-codes';
+import {PG_INSUFFICIENT_PRIVILEGE} from '@drdgvhbh/postgres-error-codes';
 import type {LogContext} from '@rocicorp/logger';
-import postgres from 'postgres';
+import type postgres from 'postgres';
 import {runTx} from '../../../db/run-transaction';
 import {isPostgresError, type PostgresDB} from '../../../types/pg';
 import {upstreamSchema, type ShardID} from '../../../types/shards';
@@ -130,6 +127,8 @@ export async function createReplicaAndSlot(
   replicaID: string,
   failover: boolean,
 ): Promise<ReplicationSlot> {
+  await dropUnclaimedSlots(lc, sql, shard);
+
   const lockName = replicationSlotManagementLock(shard);
   const slotPoolPrefix = replicationSlotPrefix(shard);
   for (let first = true; ; first = false) {
@@ -168,32 +167,14 @@ export async function createReplicaAndSlot(
         return slot;
       });
     } catch (e) {
-      if (first && e instanceof postgres.PostgresError) {
-        if (isPostgresError(e, PG_INSUFFICIENT_PRIVILEGE)) {
-          // Some Postgres variants (e.g. Google Cloud SQL) require that
-          // the user have the REPLICATION role in order to create a slot.
-          // Note that this must be done by the upstreamDB connection, and
-          // does not work in the replicationSession itself.
-          await sql`ALTER ROLE current_user WITH REPLICATION`;
-          lc.info?.(`Added the REPLICATION role to database user`);
-          continue;
-        }
-        if (isPostgresError(e, PG_CONFIGURATION_LIMIT_EXCEEDED)) {
-          const slotExpression = replicationSlotExpression(shard);
-
-          const dropped = await sql<{slot: string}[]>`
-                SELECT slot_name as slot, pg_drop_replication_slot(slot_name)
-                  FROM pg_replication_slots
-                  WHERE slot_name LIKE ${slotExpression} AND NOT active`;
-          if (dropped.length) {
-            lc.warn?.(
-              `Dropped inactive replication slots: ${dropped.map(({slot}) => slot)}`,
-              e,
-            );
-            continue;
-          }
-          lc.error?.(`Unable to drop replication slots`, e);
-        }
+      if (first && isPostgresError(e, PG_INSUFFICIENT_PRIVILEGE)) {
+        // Some Postgres variants (e.g. Google Cloud SQL) require that
+        // the user have the REPLICATION role in order to create a slot.
+        // Note that this must be done by the upstreamDB connection, and
+        // does not work in the replicationSession itself.
+        await sql`ALTER ROLE current_user WITH REPLICATION`;
+        lc.info?.(`Added the REPLICATION role to database user`);
+        continue;
       }
       throw e;
     }
@@ -226,11 +207,21 @@ export async function dropOldReplicasAndSlots(
     await sql`DELETE FROM ${sql(replicasTable)} WHERE rank < ${beforeRank}`;
   }
 
+  return dropUnclaimedSlots(lc, sql, shard);
+}
+
+function dropUnclaimedSlots(
+  lc: LogContext,
+  sql: PostgresDB,
+  shard: ShardID,
+): Promise<{dropped: number; active: number; draining: number}> {
   // The slot / replica cleanup happens within a transaction while holding
   // the replication slot management lock for this shard, to ensure that no
   // slot that belongs to a newer replica is dropped.
   const lockName = replicationSlotManagementLock(shard);
   const slotExpression = replicationSlotExpression(shard);
+  const replicasTable = `${upstreamSchema(shard)}.replicas`;
+
   return runTx(sql, async tx => {
     await tx`SELECT pg_advisory_xact_lock(hashtext(${lockName}))`;
 
