@@ -135,7 +135,7 @@ export async function createReplicaAndSlot(
   for (let first = true; ; first = false) {
     await dropUnclaimedSlots(lc, sql, shard);
     try {
-      return runTx(sql, async tx => {
+      return await runTx(sql, async tx => {
         await tx`SELECT pg_advisory_xact_lock(hashtext(${lockName}))`;
 
         // Pick an available slotName from the slotPoolPrefix pool.
