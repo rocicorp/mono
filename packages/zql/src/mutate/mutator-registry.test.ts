@@ -1,15 +1,15 @@
 // oxlint-disable require-await
-import type { StandardSchemaV1 } from '@standard-schema/spec';
-import { assert, describe, expect, expectTypeOf, test, vi } from 'vitest';
-import type { ReadonlyJSONValue } from '../../../shared/src/json.ts';
-import { createSchema } from '../../../zero-schema/src/builder/schema-builder.ts';
+import type {StandardSchemaV1} from '@standard-schema/spec';
+import {assert, describe, expect, expectTypeOf, test, vi} from 'vitest';
+import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
+import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {
   number,
   string,
   table,
 } from '../../../zero-schema/src/builder/table-builder.ts';
-import type { Schema } from '../../../zero-types/src/schema.ts';
-import type { AnyTransaction, Transaction } from './custom.ts';
+import type {Schema} from '../../../zero-types/src/schema.ts';
+import type {AnyTransaction, Transaction} from './custom.ts';
 import {
   defineMutators,
   defineMutatorsWithType,
@@ -18,7 +18,7 @@ import {
   iterateMutators,
   mustGetMutator,
 } from './mutator-registry.ts';
-import { defineMutator, defineMutatorWithType, type Mutator } from './mutator.ts';
+import {defineMutator, defineMutatorWithType, type Mutator} from './mutator.ts';
 
 const schema = createSchema({
   tables: [
@@ -333,7 +333,7 @@ test('mustGetMutator makes ctx optional only for fallback unknown context', () =
     tx: {} as Transaction<typeof schema, unknown>,
   });
   expectTypeOf(unknownContextMutator.fn).toBeCallableWith({
-    args: {id: '1'}, 
+    args: {id: '1'},
     ctx: {arbitrary: true},
     tx: {} as Transaction<typeof schema, unknown>,
   });
