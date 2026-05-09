@@ -2322,7 +2322,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
       const wallTime = performance.now() - start;
       const totalProcessTime = timer.totalElapsed();
-      lc.info?.(
+      lc.debug?.(
         `finished processing advancement of ${numChanges} changes ((process: ${totalProcessTime} ms, wall: ${wallTime} ms))`,
       );
       this.#transactionAdvanceTime.recordMs(totalProcessTime);
