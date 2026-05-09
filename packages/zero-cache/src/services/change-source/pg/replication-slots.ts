@@ -1,4 +1,7 @@
-import {PG_INSUFFICIENT_PRIVILEGE} from '@drdgvhbh/postgres-error-codes';
+import {
+  PG_CONFIGURATION_LIMIT_EXCEEDED,
+  PG_INSUFFICIENT_PRIVILEGE,
+} from '@drdgvhbh/postgres-error-codes';
 import type {LogContext} from '@rocicorp/logger';
 import type postgres from 'postgres';
 import {runTx} from '../../../db/run-transaction';
@@ -127,11 +130,10 @@ export async function createReplicaAndSlot(
   replicaID: string,
   failover: boolean,
 ): Promise<ReplicationSlot> {
-  await dropUnclaimedSlots(lc, sql, shard);
-
   const lockName = replicationSlotManagementLock(shard);
   const slotPoolPrefix = replicationSlotPrefix(shard);
   for (let first = true; ; first = false) {
+    await dropUnclaimedSlots(lc, sql, shard);
     try {
       return runTx(sql, async tx => {
         await tx`SELECT pg_advisory_xact_lock(hashtext(${lockName}))`;
@@ -175,6 +177,18 @@ export async function createReplicaAndSlot(
         await sql`ALTER ROLE current_user WITH REPLICATION`;
         lc.info?.(`Added the REPLICATION role to database user`);
         continue;
+      }
+      if (first && isPostgresError(e, PG_CONFIGURATION_LIMIT_EXCEEDED)) {
+        lc.warn?.(
+          `Reached max replication slots. Attempting to clean up unused slots`,
+          e,
+        );
+        // Drop any inactive replicas from failed initial syncs (e.g. inactive slots).
+        const replicasTable = `${upstreamSchema(shard)}.replicas`;
+        await sql`
+          DELETE FROM ${sql(replicasTable)} USING pg_replication_slots slots
+            WHERE replicas.slot = slots.slot_name AND NOT slots.active`;
+        continue; // then let dropUnclaimedSlots() perform its cleanup
       }
       throw e;
     }
