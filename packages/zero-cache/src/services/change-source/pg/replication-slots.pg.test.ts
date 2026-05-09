@@ -97,7 +97,7 @@ describe('createReplicationSlot', () => {
     }
   });
 
-  test('create replica and slots reuses pool names', async () => {
+  test('create replica and slots cleans up and reuses pool names', async () => {
     const lc = createSilentLogContext();
     const upstreamURI = getConnectionURI(upstream);
     const session = pgClient(lc, upstreamURI, 'slot-pool', {
@@ -105,6 +105,17 @@ describe('createReplicationSlot', () => {
       ['fetch_types']: false,
       connection: {replication: 'database'},
     });
+
+    // Create some unused slots. These should be dropped and reused.
+    await createReplicationSlot(lc, session, {slotName: 'zero_18_a'});
+    await createReplicationSlot(lc, session, {slotName: 'zero_18_d'});
+
+    expect(
+      await upstream`
+      SELECT slot_name FROM pg_replication_slots 
+        WHERE slot_name LIKE 'zero_18_%' 
+        ORDER BY slot_name`.values(),
+    ).toEqual([['zero_18_a'], ['zero_18_d']]);
 
     const create = (id: string) =>
       createReplicaAndSlot(lc, upstream, session, shard, id, false);
@@ -122,6 +133,13 @@ describe('createReplicationSlot', () => {
 
     ({slot_name: name} = await create('rep_4'));
     expect(name).toBe('zero_18_b');
+
+    expect(
+      await upstream`
+      SELECT slot_name FROM pg_replication_slots 
+        WHERE slot_name LIKE 'zero_18_%' 
+        ORDER BY slot_name`.values(),
+    ).toEqual([['zero_18_a'], ['zero_18_b'], ['zero_18_c']]);
 
     expect(
       await upstream`SELECT id, slot, version FROM ${upstream(`${APP_ID}_${SHARD_NUM}`)}.replicas`,
