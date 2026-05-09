@@ -178,6 +178,9 @@ export async function createReplicaAndSlot(
         lc.info?.(`Added the REPLICATION role to database user`);
         continue;
       }
+      // Note: This is currently manually tested since max_replication_slots
+      //       is a PG startup parameter that other tests depend on.
+      // TODO: Figure out a way to unit test this (with the full PG setup).
       if (first && isPostgresError(e, PG_CONFIGURATION_LIMIT_EXCEEDED)) {
         lc.warn?.(
           `Reached max replication slots. Attempting to clean up unused slots`,
