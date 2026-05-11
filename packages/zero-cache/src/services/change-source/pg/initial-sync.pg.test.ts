@@ -3144,10 +3144,11 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
         ).toThrow(/missing column_metadata row for big\.val/);
       });
 
-      test('throws when a table is unqueryable via ZQL', async () => {
-        const {lc, replica, publishedInfo} = await runShadowSync();
-        // Dropping the only unique index over non-null columns makes
-        // computeZqlSpecs silently exclude the table.
+      test('does not check ZQL-queryability (matches prod tolerance)', async () => {
+        // computeZqlSpecs silently drops tables with no PK / no qualifying
+        // unique index in production too — there's nothing shadow-specific
+        // about that condition, so the verifier should NOT fail on it.
+        const {replica, publishedInfo, bigCount} = await runShadowSync();
         const idx = replica
           .prepare(
             `SELECT name FROM sqlite_master
@@ -3157,9 +3158,15 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
         for (const {name} of idx) {
           replica.exec(`DROP INDEX "${name}"`);
         }
+        const filtered = {
+          ...publishedInfo,
+          indexes: publishedInfo.indexes.filter(i => i.tableName !== 'big'),
+        };
+        const lc = createSilentLogContext();
+        const rowsByTable = new Map([['big', bigCount]]);
         expect(() =>
-          verifyShadowReplica(lc, replica, publishedInfo, new Map()),
-        ).toThrow(/dropped by computeZqlSpecs.*big/s);
+          verifyShadowReplica(lc, replica, filtered, rowsByTable),
+        ).not.toThrow();
       });
     });
   });

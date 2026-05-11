@@ -15,11 +15,7 @@ import {
   createLiteIndexStatement,
   createLiteTableStatement,
 } from '../../../db/create.ts';
-import {
-  computeZqlSpecs,
-  listIndexes,
-  listTables,
-} from '../../../db/lite-tables.ts';
+import {listIndexes, listTables} from '../../../db/lite-tables.ts';
 import * as Mode from '../../../db/mode-enum.ts';
 import {
   BinaryCopyParser,
@@ -569,8 +565,14 @@ function createLiteIndices(tx: Database, indices: IndexSpec[]) {
 /**
  * Runs structural assertions over a just-synced replica and throws if any
  * fail. Only called in shadow mode — a successful return means the replica
- * is schema-complete, row-count consistent, ZQL-queryable, and its column
- * metadata is in sync with its lite schema.
+ * is schema-complete, row-count consistent, and its column metadata is in
+ * sync with its lite schema.
+ *
+ * Note: this intentionally does NOT verify ZQL-queryability. Tables that
+ * `computeZqlSpecs` drops (no PK / no all-NOT-NULL unique index, unsupported
+ * column types, etc.) are silently skipped in production too — there's
+ * nothing shadow-specific about them, so failing here would diverge from
+ * prod over an upstream-schema condition prod accepts.
  *
  * Exported for testing.
  */
@@ -633,21 +635,7 @@ export function verifyShadowReplica(
     }
   }
 
-  // 3. ZQL-queryability: every published table survives computeZqlSpecs's
-  //    filtering (primary-key candidate, ZQL-typed columns, etc.).
-  const tableSpecs = computeZqlSpecs(lc, db, {
-    includeBackfillingColumns: false,
-  });
-  for (const pt of published.tables) {
-    const name = liteTableName(pt);
-    if (!tableSpecs.has(name)) {
-      issues.push(
-        `table not queryable via ZQL (dropped by computeZqlSpecs): ${name}`,
-      );
-    }
-  }
-
-  // 4. Column metadata: every published column has a _zero.column_metadata row.
+  // 3. Column metadata: every published column has a _zero.column_metadata row.
   const meta = must(ColumnMetadataStore.getInstance(db));
   for (const pt of published.tables) {
     const name = liteTableName(pt);
