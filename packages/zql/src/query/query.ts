@@ -197,6 +197,62 @@ export type QueryResultType<Q extends AnyQueryLike> = Q extends
     : never;
 
 /**
+ * The subquery shape passed to `whereExists` / `exists` callbacks. Strictly
+ * a subset of {@link Query}: only the methods that compose the EXISTS body
+ * meaningfully are exposed. `start` and `related` are omitted because they
+ * are ignored by the EXISTS-child pipeline and currently trip runtime
+ * asserts in the builder.
+ */
+export interface ExistsSubquery<
+  TTable extends keyof TSchema['tables'] & string,
+  TSchema extends ZeroSchema = DefaultSchema,
+> {
+  where<
+    TSelector extends NoCompoundTypeSelector<PullTableSchema<TTable, TSchema>>,
+    TOperator extends SimpleOperator,
+  >(
+    field: TSelector,
+    op: TOperator,
+    value:
+      | GetFilterType<PullTableSchema<TTable, TSchema>, TSelector, TOperator>
+      | ParameterReference
+      | undefined,
+  ): ExistsSubquery<TTable, TSchema>;
+  where<
+    TSelector extends NoCompoundTypeSelector<PullTableSchema<TTable, TSchema>>,
+  >(
+    field: TSelector,
+    value:
+      | GetFilterType<PullTableSchema<TTable, TSchema>, TSelector, '='>
+      | ParameterReference
+      | undefined,
+  ): ExistsSubquery<TTable, TSchema>;
+  where(
+    expressionFactory: ExpressionFactory<TTable, TSchema>,
+  ): ExistsSubquery<TTable, TSchema>;
+
+  whereExists(
+    relationship: AvailableRelationships<TTable, TSchema>,
+    options?: ExistsOptions,
+  ): ExistsSubquery<TTable, TSchema>;
+  whereExists<TRelationship extends AvailableRelationships<TTable, TSchema>>(
+    relationship: TRelationship,
+    cb: (
+      q: ExistsSubquery<DestTableName<TTable, TSchema, TRelationship>, TSchema>,
+    ) => ExistsSubquery<string, TSchema>,
+    options?: ExistsOptions,
+  ): ExistsSubquery<TTable, TSchema>;
+
+  // DO NOT REMOVE. Due to how IVM works when not using Cap we rely on sorted streams.
+  // Ordering the `exists` allows the user to ensure an index that matches the sort is picked,
+  // preventing temp b-trees and table scans.
+  orderBy<TSelector extends Selector<PullTableSchema<TTable, TSchema>>>(
+    field: TSelector,
+    direction: 'asc' | 'desc',
+  ): ExistsSubquery<TTable, TSchema>;
+}
+
+/**
  * A hybrid query that runs on both client and server.
  * Results are returned immediately from the client followed by authoritative
  * results from the server.
@@ -230,7 +286,7 @@ export interface Query<
   TTable extends keyof TSchema['tables'] & string,
   TSchema extends ZeroSchema = DefaultSchema,
   TReturn = PullRow<TTable, TSchema>,
-> {
+> extends ExistsSubquery<TTable, TSchema> {
   related<TRelationship extends AvailableRelationships<TTable, TSchema>>(
     relationship: TRelationship,
   ): Query<
@@ -297,8 +353,8 @@ export interface Query<
   whereExists<TRelationship extends AvailableRelationships<TTable, TSchema>>(
     relationship: TRelationship,
     cb: (
-      q: Query<DestTableName<TTable, TSchema, TRelationship>, TSchema>,
-    ) => Query<string, TSchema>,
+      q: ExistsSubquery<DestTableName<TTable, TSchema, TRelationship>, TSchema>,
+    ) => ExistsSubquery<string, TSchema>,
     options?: ExistsOptions,
   ): Query<TTable, TSchema, TReturn>;
 
@@ -395,3 +451,5 @@ export const DEFAULT_RUN_OPTIONS_COMPLETE = {
 } as const;
 
 export type AnyQuery = Query<string, ZeroSchema, any>;
+
+export type AnyExistsSubquery = ExistsSubquery<string, ZeroSchema>;

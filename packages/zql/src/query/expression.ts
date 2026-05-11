@@ -12,10 +12,10 @@ import type {
   AvailableRelationships,
   DestTableName,
   ExistsOptions,
+  ExistsSubquery,
   GetFilterType,
   NoCompoundTypeSelector,
   PullTableSchema,
-  Query,
 } from './query.ts';
 
 export type ParameterReference = {
@@ -51,14 +51,18 @@ export class ExpressionBuilder<
 > {
   readonly #exists: (
     relationship: string,
-    cb?: (query: Query<TTable, TSchema>) => Query<TTable, TSchema, any>,
+    cb?: (
+      query: ExistsSubquery<TTable, TSchema>,
+    ) => ExistsSubquery<string, TSchema>,
     options?: ExistsOptions,
   ) => Condition;
 
   constructor(
     exists: (
       relationship: string,
-      cb?: (query: Query<TTable, TSchema>) => Query<TTable, TSchema, any>,
+      cb?: (
+        query: ExistsSubquery<TTable, TSchema>,
+      ) => ExistsSubquery<string, TSchema>,
       options?: ExistsOptions,
     ) => Condition,
   ) {
@@ -125,8 +129,11 @@ export class ExpressionBuilder<
   exists = <TRelationship extends AvailableRelationships<TTable, TSchema>>(
     relationship: TRelationship,
     cb?: (
-      query: Query<DestTableName<TTable, TSchema, TRelationship>, TSchema>,
-    ) => Query<any, TSchema>,
+      query: ExistsSubquery<
+        DestTableName<TTable, TSchema, TRelationship>,
+        TSchema
+      >,
+    ) => ExistsSubquery<string, TSchema>,
     options?: ExistsOptions,
   ): Condition => this.#exists(relationship, cb, options);
 }

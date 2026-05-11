@@ -25,8 +25,10 @@ import {
 import type {CustomQueryID} from './named.ts';
 import {type QueryInternals, queryInternalsTag} from './query-internals.ts';
 import type {
+  AnyExistsSubquery,
   AnyQuery,
   ExistsOptions,
+  ExistsSubquery,
   GetFilterType,
   HumanReadable,
   PreloadOptions,
@@ -194,7 +196,7 @@ export class QueryImpl<
 
   whereExists = (
     relationship: string,
-    cbOrOptions?: ((q: AnyQuery) => AnyQuery) | ExistsOptions,
+    cbOrOptions?: ((q: AnyExistsSubquery) => AnyExistsSubquery) | ExistsOptions,
     options?: ExistsOptions,
   ): Query<TTable, TSchema, TReturn> => {
     const cb = typeof cbOrOptions === 'function' ? cbOrOptions : undefined;
@@ -462,7 +464,7 @@ export class QueryImpl<
 
   #exists = (
     relationship: string,
-    cb: ((query: AnyQuery) => AnyQuery) | undefined,
+    cb: ((query: AnyExistsSubquery) => AnyExistsSubquery) | undefined,
     options?: ExistsOptions,
   ): Condition => {
     cb = cb ?? (q => q);
@@ -575,9 +577,11 @@ export function asQueryImpl<
   TTable extends keyof TSchema['tables'] & string,
   TSchema extends Schema,
   TReturn,
->(q: Query<TTable, TSchema, TReturn>): QueryImpl<TTable, TSchema, TReturn> {
+>(
+  q: ExistsSubquery<TTable, TSchema> | Query<TTable, TSchema, TReturn>,
+): QueryImpl<TTable, TSchema, TReturn> {
   assert(q instanceof QueryImpl, 'Expected QueryImpl instance');
-  return q;
+  return q as QueryImpl<TTable, TSchema, TReturn>;
 }
 
 function throwQueryNotRunnable(): never {
