@@ -510,7 +510,10 @@ function makeCostModel(costs: Record<string, number>) {
       startupCost: 0,
       rows: ret,
       fanout: defaultFanout,
-      usesIndex: true,
+      // No-constraint paths are full scans in real SQLite (no SEARCH
+      // index to seek on); reflect that here so the flipped-join cost
+      // model amortizes correctly.
+      usesIndex: Object.keys(constraint).length > 0,
     };
   };
 }

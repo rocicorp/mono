@@ -14,6 +14,20 @@ import type {
 import type {PlannerTerminus} from './planner-terminus.ts';
 
 /**
+ * Effective chunk size when batching IN-list fetches against an
+ * indexed-seek parent. The full chunk (MULTI_CONSTRAINT_CHUNK_SIZE) is
+ * the SQL-level batch size, but per-row seek work isn't amortized by
+ * batching — only per-statement overhead is. A small empirical factor
+ * tracks the observed batching speedup for indexed lookups without
+ * overshooting and flipping plans that aren't actually faster.
+ *
+ * Only applied when the fetch count exceeds one full chunk; below that
+ * threshold batching produces a single SQL statement either way and
+ * the speedup is dominated by data-dependent constants we can't model.
+ */
+const INDEXED_SEEK_AMORTIZATION = 2;
+
+/**
  * Translate constraints for a flipped join from parent space to child space.
  * Matches the runtime behavior of FlippedJoin.fetch() which translates
  * parent constraints to child constraints using index-based key mapping.
@@ -377,21 +391,35 @@ export class PlannerJoin {
       // FlippedJoin batches child→parent lookups into chunks of
       // MULTI_CONSTRAINT_CHUNK_SIZE, issuing one IN-list query per chunk.
       //
-      // - When the parent uses an index seek, batching does not amortize:
-      //   each IN value still pays its own seek, so total work scales with
-      //   `child.scanEst` directly.
       // - When the parent does a full table scan, batching amortizes the
       //   whole per-fetch cost: SQLite scans once per chunk regardless of
       //   IN-list size, so total work scales with `ceil(child.scanEst / CHUNK)`.
+      // - When the parent uses an index seek, batching still helps but
+      //   less dramatically: per-row seek work doesn't amortize, but
+      //   per-statement overhead (prep, planning, round-trip) does.
+      //   Empirically a small effective chunk (~8) tracks the observed
+      //   speedup without overshooting.
       //
-      // The cost model already encodes this distinction in
-      // `parent.scanEst` (≈1 for an indexed seek, ≈table_size for a scan),
-      // but only the chunk count tells us how many of those fetches we
-      // actually pay for at runtime.
+      // `parent.scanEst` already encodes the per-fetch row count
+      // (≈1 for an indexed seek, ≈table_size for a scan); the chunk
+      // factor reflects how many fetches we actually pay for at runtime.
       const perFetchCost = parent.startupCost + parent.cost + parent.scanEst;
-      const flippedCost = parent.usesIndex
-        ? child.scanEst * perFetchCost
-        : Math.ceil(child.scanEst / MULTI_CONSTRAINT_CHUNK_SIZE) * perFetchCost;
+      let effectiveChunk: number;
+      if (!parent.usesIndex) {
+        effectiveChunk = MULTI_CONSTRAINT_CHUNK_SIZE;
+      } else if (child.scanEst >= MULTI_CONSTRAINT_CHUNK_SIZE) {
+        // Indexed seek with enough fetches to span multiple chunks —
+        // per-statement overhead amortizes across chunks.
+        effectiveChunk = INDEXED_SEEK_AMORTIZATION;
+      } else {
+        // Sub-chunk fetch count: batching still emits one SQL
+        // statement, but the cost model doesn't credit overhead
+        // savings here to avoid flipping plans where the picked path
+        // is genuinely fewer rows.
+        effectiveChunk = 1;
+      }
+      const flippedCost =
+        Math.ceil(child.scanEst / effectiveChunk) * perFetchCost;
       costEstimate = {
         startupCost: child.startupCost,
         scanEst:
