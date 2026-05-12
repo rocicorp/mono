@@ -254,6 +254,111 @@ describe('change-streamer/schema/tables', () => {
     ).rejects.toThrow(AutoResetSignal);
   });
 
+  test('no deadlocks when table is reset', async () => {
+    // Set up initial replication config.
+    await ensureReplicationConfig(
+      lc,
+      sql,
+      {
+        replicaVersion: '183',
+        publications: ['zero_data', 'zero_metadata'],
+        watermark: '183',
+      },
+      shard,
+      true,
+    );
+
+    await sql`
+      UPDATE "rezo_8/cdc"."replicationState" SET owner = 'me'
+    `.simple();
+    await sql`
+      INSERT INTO "rezo_8/cdc"."changeLog" (watermark, pos, change)
+        VALUES ('184', 0, '{"tag":"begin"}'::json),
+               ('184', 1, '{"tag":"commit"}'::json),
+               ('185', 0, '{"tag":"begin"}'::json),
+               ('185', 1, '{"tag":"commit"}'::json)
+    `.simple();
+
+    const readReplicationState = resolver();
+    const canProceed = resolver();
+
+    // Simulate the sequence of locking / reading / writing done by the
+    // storer when updating the changeLog.
+    const changeLogPreUpdateState = sql.begin(async tx => {
+      const state = tx<{owner: string; lastWatermark: string}[]>`
+        SELECT owner, "lastWatermark" FROM "rezo_8/cdc"."replicationState" FOR UPDATE
+      `.execute();
+      readReplicationState.resolve();
+      await canProceed.promise;
+
+      await tx`
+        INSERT INTO "rezo_8/cdc"."changeLog" (watermark, pos, change)
+          VALUES ('186', 0, '{"tag":"begin"}'::json),
+                 ('186', 1, '{"tag":"commit"}'::json),
+                 ('187', 0, '{"tag":"begin"}'::json),
+                 ('187', 1, '{"tag":"commit"}'::json)
+      `.simple();
+
+      await tx`
+        UPDATE "rezo_8/cdc"."replicationState" SET "lastWatermark" = '187';
+      `;
+
+      return state;
+    });
+
+    // Start the reset once the changeLogUpdate has acquired the replicationState lock.
+    await readReplicationState.promise;
+    const resetDone = ensureReplicationConfig(
+      lc,
+      sql,
+      {
+        replicaVersion: '190',
+        publications: ['zero_data', 'zero_metadata'],
+        watermark: '190',
+      },
+      shard,
+      true,
+    );
+
+    // Let the changeLogUpdate proceed after the reset gets going.
+    // The reset itself should block when attempting to truncate the
+    // replicationState table.
+    setTimeout(canProceed.resolve, 500);
+
+    // The changeLog update should succeeded.
+    // If, on the other hand, the reset logic doesn't operate on the tables
+    // in the same lock acquisition order, one of the requests will fail at the
+    // Postgres level with a `deadlock detected` error.
+    expect(await changeLogPreUpdateState).toEqual([
+      {lastWatermark: '183', owner: 'me'},
+    ]);
+
+    // Verify the final state after the reset finishes.
+    await resetDone;
+    await expectTables(sql, {
+      ['rezo_8/cdc.replicationState']: [
+        {
+          lastWatermark: '190',
+          lock: 1,
+          owner: null,
+          ownerAddress: null,
+        },
+      ],
+      ['rezo_8/cdc.changeLog']: [
+        {watermark: '190', pos: 0n, change: {tag: 'begin'}, precommit: null},
+        {watermark: '190', pos: 1n, change: {tag: 'commit'}, precommit: null},
+      ],
+      ['rezo_8/cdc.replicationConfig']: [
+        {
+          replicaVersion: '190',
+          publications: ['zero_data', 'zero_metadata'],
+          resetRequired: null,
+          lock: 1,
+        },
+      ],
+    });
+  });
+
   test('terminateChangeDBLockHolders with multiple blockers', async () => {
     // Set up initial replication config.
     await ensureReplicationConfig(
