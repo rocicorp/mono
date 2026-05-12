@@ -15,6 +15,7 @@ import {
   formatBytes,
   formatRate,
   percentile,
+  sleep,
   writeJsonSummary,
 } from './perf-utils.ts';
 
@@ -105,13 +106,13 @@ function encode(msg: Downstream, preencoded: string | undefined) {
   };
 }
 
-function runScenario(
+async function runScenario(
   strategy: Strategy,
   rowsPerTx: number,
   payload: {readonly size: string; readonly bytes: number},
   tx: number,
   targetTxPerSec: number,
-): ScenarioResult {
+): Promise<ScenarioResult> {
   let messages = 0;
   let pokeParts = 0;
   let encodedBytes = 0;
@@ -131,6 +132,7 @@ function runScenario(
   };
 
   const start = performance.now();
+  let nextDue = start;
   let baseCookie = watermarkFor(1);
   for (let i = 0; i < tx; i++) {
     const txStart = performance.now();
@@ -188,6 +190,12 @@ function runScenario(
     send(['pokeEnd', {pokeID, cookie: pokeID}]);
     baseCookie = pokeID;
     latencies.push(performance.now() - txStart);
+
+    nextDue += 1000 / targetTxPerSec;
+    const waitMs = nextDue - performance.now();
+    if (waitMs > 0) {
+      await sleep(waitMs);
+    }
   }
 
   const wallMs = performance.now() - start;
@@ -248,7 +256,7 @@ export async function main() {
         'legacy-fixed-100',
         'byte-aware-128kb-batched-preencoded',
       ] satisfies Strategy[]) {
-        const result = runScenario(
+        const result = await runScenario(
           strategy,
           rows,
           payload,
