@@ -1,7 +1,7 @@
-import type {Zero} from '@rocicorp/zero';
-import {useQuery} from '@rocicorp/zero/react';
 import {mutators} from '../../shared/mutators.ts';
 import {queries} from '../../shared/queries.ts';
+import {useQuery} from '../../shared/zero-hooks.ts';
+import type {Zero} from '../../shared/zero.ts';
 
 export function useUserPref(key: string): string | undefined {
   const [pref] = useQuery(queries.userPref(key));

@@ -1,5 +1,5 @@
-import type {Row} from '@rocicorp/zero';
 import {memo, type ImgHTMLAttributes} from 'react';
+import type {Row} from '../../shared/zero.ts';
 import {avatarURLWithSize} from '../avatar-url-with-size.ts';
 
 interface AvatarImageProps extends ImgHTMLAttributes<HTMLImageElement> {

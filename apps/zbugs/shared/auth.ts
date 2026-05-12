@@ -1,8 +1,9 @@
-import type {Query, Transaction} from '@rocicorp/zero';
+import type {Query} from '@rocicorp/zero';
 import {must} from '../../../packages/shared/src/must.ts';
 import * as v from '../../../packages/shared/src/valita.ts';
 import {MutationError, MutationErrorCode} from './error.ts';
 import {builder, type schema} from './schema.ts';
+import type {Transaction} from './zero.ts';
 
 // TDOO(arv): Use zod-mini here too
 
@@ -39,7 +40,7 @@ export function isAdmin(token: AuthData | undefined) {
 export async function assertIsCreatorOrAdmin(
   tx: Transaction,
   authData: AuthData | undefined,
-  query: Query<'comment' | 'issue' | 'emoji'>,
+  query: Query<'comment' | 'issue' | 'emoji', typeof schema>,
   id: string,
 ) {
   assertIsLoggedIn(authData);
@@ -65,7 +66,7 @@ export async function assertIsCreatorOrAdmin(
 }
 
 export async function assertUserCanSeeIssue(
-  tx: Transaction<typeof schema, unknown>,
+  tx: Transaction,
   userID: string,
   issueID: string,
 ) {
@@ -86,7 +87,7 @@ export async function assertUserCanSeeIssue(
 }
 
 export async function assertUserCanSeeComment(
-  tx: Transaction<typeof schema, unknown>,
+  tx: Transaction,
   userID: string,
   commentID: string,
 ) {
@@ -95,10 +96,4 @@ export async function assertUserCanSeeComment(
   );
 
   await assertUserCanSeeIssue(tx, userID, comment.issueID);
-}
-
-declare module '@rocicorp/zero' {
-  interface DefaultTypes {
-    context: AuthData | undefined;
-  }
 }

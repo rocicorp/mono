@@ -60,20 +60,50 @@ type CustomQueryCallable<
   TSchema extends Schema,
   TReturn,
   TContext,
-> = [TInput] extends [undefined]
-  ? () => QueryRequest<TTable, TInput, TOutput, TSchema, TReturn, TContext>
-  : undefined extends TInput
+> =
+  IsAny<TInput> extends true
     ? {
-        (): QueryRequest<TTable, TInput, TOutput, TSchema, TReturn, TContext>;
-        (
-          args?: TInput,
-        ): QueryRequest<TTable, TInput, TOutput, TSchema, TReturn, TContext>;
-      }
-    : {
         (
           args: TInput,
         ): QueryRequest<TTable, TInput, TOutput, TSchema, TReturn, TContext>;
-      };
+      }
+    : [TInput] extends [undefined]
+      ? () => QueryRequest<TTable, TInput, TOutput, TSchema, TReturn, TContext>
+      : undefined extends TInput
+        ? {
+            (): QueryRequest<
+              TTable,
+              TInput,
+              TOutput,
+              TSchema,
+              TReturn,
+              TContext
+            >;
+            (
+              args?: TInput,
+            ): QueryRequest<
+              TTable,
+              TInput,
+              TOutput,
+              TSchema,
+              TReturn,
+              TContext
+            >;
+          }
+        : {
+            (
+              args: TInput,
+            ): QueryRequest<
+              TTable,
+              TInput,
+              TOutput,
+              TSchema,
+              TReturn,
+              TContext
+            >;
+          };
+
+type IsAny<T> = 0 extends 1 & T ? true : false;
 
 // oxlint-disable-next-line no-explicit-any
 export type AnyCustomQuery = CustomQuery<string, any, any, Schema, any, any>;
@@ -302,9 +332,11 @@ export type QueryExecutionFunction<
   TInput extends ReadonlyJSONValue | undefined,
   TReturn,
   TContext,
-> = (
-  options: QueryExecutionOptions<TInput, TContext>,
-) => Query<TTable, Schema, TReturn>;
+> = {
+  bivarianceHack(
+    options: QueryExecutionOptions<TInput, TContext>,
+  ): Query<TTable, Schema, TReturn>;
+}['bivarianceHack'];
 
 type QueryExecutionOptions<
   TInput extends ReadonlyJSONValue | undefined,
@@ -489,7 +521,7 @@ export function defineQueryWithType() {
  * The return type of defineQueryWithType. A function matching the
  * defineQuery overloads but with Schema and Context pre-bound.
  */
-type TypedDefineQuery<TSchema extends Schema, TContext> = {
+export type TypedDefineQuery<TSchema extends Schema, TContext> = {
   // Without validator
   <
     TArgs extends ReadonlyJSONValue | undefined,
@@ -729,7 +761,7 @@ export function defineQueriesWithType<
  * The return type of defineQueriesWithType. A function matching the
  * defineQueries overloads but with Schema pre-bound.
  */
-type TypedDefineQueries<S extends Schema> = {
+export type TypedDefineQueries<S extends Schema> = {
   // Single definitions
   <QD>(
     definitions: QD & AssertQueryDefinitions<QD>,

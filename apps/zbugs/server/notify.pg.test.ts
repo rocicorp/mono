@@ -1,9 +1,8 @@
-import type {ServerTransaction} from '@rocicorp/zero';
 import type postgres from 'postgres';
 import {beforeEach, describe, expect, it} from 'vitest';
 import {testDBs} from '../../../packages/zero-cache/src/test/db.ts';
-import {type Schema} from '../shared/schema.ts';
 import {gatherRecipients} from './notify.ts';
+import type {ServerTransaction} from './zero.ts';
 
 describe('notify', () => {
   let db: postgres.Sql;
@@ -86,9 +85,7 @@ describe('notify', () => {
     };
   });
 
-  const createMockTx = (
-    sql: postgres.Sql,
-  ): ServerTransaction<Schema, postgres.TransactionSql> =>
+  const createMockTx = (sql: postgres.Sql): ServerTransaction =>
     ({
       dbTransaction: {
         wrappedTransaction: sql,

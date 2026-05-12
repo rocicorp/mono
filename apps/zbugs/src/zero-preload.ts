@@ -1,5 +1,5 @@
-import type {Zero} from '@rocicorp/zero';
 import {queries} from '../shared/queries.ts';
+import type {Zero} from '../shared/zero.ts';
 import {CACHE_PRELOAD} from './query-cache-policy.ts';
 
 export function preload(z: Zero, projectName: string) {

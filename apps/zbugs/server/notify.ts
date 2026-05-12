@@ -1,10 +1,11 @@
-import {type ServerTransaction, type UpdateValue} from '@rocicorp/zero';
+import {type UpdateValue} from '@rocicorp/zero';
 import {assertIsLoggedIn, type AuthData} from '../shared/auth.ts';
 import {MutationError, MutationErrorCode} from '../shared/error.ts';
 import {builder, type schema} from '../shared/schema.ts';
 import {postToDiscord} from './discord.ts';
 import {sendEmail} from './email.ts';
 import type {PostCommitTask} from './server-mutators.ts';
+import type {ServerTransaction} from './zero.ts';
 
 type CreateIssueNotification = {
   kind: 'create-issue';

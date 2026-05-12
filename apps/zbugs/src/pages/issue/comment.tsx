@@ -1,8 +1,8 @@
-import type {Row} from '@rocicorp/zero';
-import {useZero} from '@rocicorp/zero/react';
+import type {Row as QueryRow} from '@rocicorp/zero';
 import classNames from 'classnames';
 import {memo, useState} from 'react';
 import {mutators} from '../../../shared/mutators.ts';
+import {useZero} from '../../../shared/zero-hooks.ts';
 import {makePermalink} from '../../comment-permalink.ts';
 import type {commentQuery} from '../../comment-query.ts';
 import {AvatarImage} from '../../components/avatar-image.tsx';
@@ -21,7 +21,7 @@ import style from './comment.module.css';
 type Props = {
   id: string;
   issueID: string;
-  comment: Row<ReturnType<typeof commentQuery>>;
+  comment: QueryRow<ReturnType<typeof commentQuery>>;
   /**
    * Height of the comment. Used to keep the layout stable when comments are
    * being "loaded".

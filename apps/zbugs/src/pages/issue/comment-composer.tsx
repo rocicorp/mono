@@ -1,7 +1,7 @@
-import {useZero} from '@rocicorp/zero/react';
 import {nanoid} from 'nanoid';
 import {useEffect, useRef, useState} from 'react';
 import {mutators} from '../../../shared/mutators.ts';
+import {useZero} from '../../../shared/zero-hooks.ts';
 import {Button} from '../../components/button.tsx';
 import {GigabugsPromo} from '../../components/gigabugs-promo.tsx';
 import {
