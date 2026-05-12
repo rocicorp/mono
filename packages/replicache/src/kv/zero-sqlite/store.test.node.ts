@@ -1,3 +1,4 @@
+import {tmpdir} from 'node:os';
 import {expect, test} from 'vitest';
 import {withRead, withWrite} from '../../with-transactions.ts';
 import {
@@ -7,15 +8,16 @@ import {
 import {clearAllNamedStoresForTesting} from '../sqlite-store.ts';
 import {zeroSQLiteStoreProvider, type ZeroSQLiteStoreOptions} from './store.ts';
 
-const defaultStoreOptions = {
+const defaultStoreOptions: ZeroSQLiteStoreOptions = {
   busyTimeout: 200,
   journalMode: 'WAL',
   synchronous: 'NORMAL',
   readUncommitted: false,
-} as const;
+  directory: tmpdir(),
+};
 
 function createStore(name: string, opts?: ZeroSQLiteStoreOptions) {
-  const provider = zeroSQLiteStoreProvider(opts);
+  const provider = zeroSQLiteStoreProvider({...defaultStoreOptions, ...opts});
   name = `zero_${name}`;
   const store = provider.create(name);
   registerCreatedFile(name);

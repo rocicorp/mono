@@ -11,8 +11,11 @@ export {safeFilename} from '../sqlite-store.ts';
 
 export type ZeroSQLiteStoreOptions = SQLiteStoreOptions;
 
-export function dropZeroSQLiteStore(name: string): Promise<void> {
-  return dropStore(name, filename => new ZeroSQLiteDatabase(filename));
+export function dropZeroSQLiteStore(
+  name: string,
+  opts?: ZeroSQLiteStoreOptions,
+): Promise<void> {
+  return dropStore(name, filename => new ZeroSQLiteDatabase(filename), opts);
 }
 
 /**
@@ -26,7 +29,7 @@ export function zeroSQLiteStoreProvider(
   return {
     create: name =>
       new SQLiteStore(name, name => new ZeroSQLiteDatabase(name), opts),
-    drop: dropZeroSQLiteStore,
+    drop: name => dropZeroSQLiteStore(name, opts),
   };
 }
 
@@ -38,17 +41,13 @@ class ZeroSQLitePreparedStatement implements PreparedStatement {
   }
 
   // oxlint-disable-next-line require-await
-  async firstValue(params: string[]): Promise<unknown | undefined> {
-    const result = this.#statement.all(...params);
-    if (result === undefined || result.length === 0) {
-      return undefined;
-    }
-    return Object.values(result[0] as Record<string, unknown>)[0];
+  async exec(params: string[]): Promise<void> {
+    this.#statement.run(params);
   }
 
   // oxlint-disable-next-line require-await
-  async exec(params: string[]): Promise<void> {
-    this.#statement.run(params);
+  async all(params: string[]): Promise<unknown[][]> {
+    return this.#statement.raw(true).all(...params) as unknown[][];
   }
 }
 
