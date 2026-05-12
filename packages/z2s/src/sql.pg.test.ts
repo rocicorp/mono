@@ -9,7 +9,7 @@ const DB_NAME = 'sql-test';
 
 let pg: PostgresDB;
 beforeAll(async () => {
-  pg = await testDBs.create(DB_NAME, undefined, false);
+  pg = await testDBs.create(DB_NAME, {typeOpts: false});
   await pg.unsafe(`
     CREATE TABLE test_items (
       id SERIAL PRIMARY KEY,
@@ -167,11 +167,7 @@ describe('SQL builder with PostgreSQL', () => {
   ] as const)(
     'numeric $type with fractional milliseconds round-trips correctly',
     async ({type, value}) => {
-      await using pg = await testDBs.create(
-        `${DB_NAME}_${type}_frac`,
-        undefined,
-        {},
-      );
+      await using pg = await testDBs.create(`${DB_NAME}_${type}_frac`);
 
       const table = `round_trip_${type}_frac`;
       await pg.unsafe(`
@@ -214,11 +210,7 @@ describe('SQL builder with PostgreSQL', () => {
   ] as const)(
     'numeric $type with BC date ($value) round-trips correctly',
     async ({type, value}) => {
-      await using pg = await testDBs.create(
-        `${DB_NAME}_${type}_bc`,
-        undefined,
-        {},
-      );
+      await using pg = await testDBs.create(`${DB_NAME}_${type}_bc`);
 
       const table = `round_trip_${type}_bc`;
       await pg.unsafe(`
@@ -253,11 +245,7 @@ describe('SQL builder with PostgreSQL', () => {
   ] as const)(
     'numeric $type inserts round-trip as milliseconds',
     async ({type, value}) => {
-      await using pg = await testDBs.create(
-        `${DB_NAME}_${type}`,
-        undefined,
-        {},
-      );
+      await using pg = await testDBs.create(`${DB_NAME}_${type}`);
 
       const table = `round_trip_${type}`;
       await pg.unsafe(`

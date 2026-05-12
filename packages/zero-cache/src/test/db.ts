@@ -38,7 +38,7 @@ export type OnNoticeFn = (n: postgres.Notice) => void;
 
 export type TestDBOptions = {
   onNotice?: OnNoticeFn;
-  typeOpts?: TypeOptions;
+  typeOpts?: TypeOptions | false;
 };
 
 const IGNORE_LEVELS = new Set(['DEBUG', 'INFO', 'NOTICE']);
