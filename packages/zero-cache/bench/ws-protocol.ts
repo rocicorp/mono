@@ -4,7 +4,7 @@ import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
 import type {Downstream} from '../../zero-protocol/src/down.ts';
 import type {PokePartMessage} from '../../zero-protocol/src/poke.ts';
 import type {RowPatchOp} from '../../zero-protocol/src/row-patch.ts';
-import {smokePayloadProfiles, loadPayloadProfiles} from './load-fixtures.ts';
+import {loadPayloadProfiles} from './load-fixtures.ts';
 import {
   argValue,
   envFlag,
@@ -40,14 +40,47 @@ type CodecResult = {
   readonly decodedRows: number;
 };
 
+type CodecComparison = {
+  readonly rows: number;
+  readonly payload: string;
+  readonly payloadBytes: number;
+  readonly baselineCodec: 'dict-json-row-patch';
+  readonly candidateCodec: 'custom-binary-row-patch';
+  readonly baselineEncodedBytes: number;
+  readonly candidateEncodedBytes: number;
+  readonly encodedByteReductionPct: number;
+  readonly baselineEncodeDecodeMs: number;
+  readonly candidateEncodeDecodeMs: number;
+  readonly encodeDecodeReductionPct: number;
+  readonly baselineOpsPerSec: number;
+  readonly candidateOpsPerSec: number;
+  readonly candidateDecodedRows: number;
+  readonly representative: boolean;
+  readonly meetsStack5Threshold: boolean;
+};
+
+type Recommendation = {
+  readonly decision:
+    | 'custom-binary-stack-5-candidate'
+    | 'dictionary-json-or-no-production-protocol-change'
+    | 'representative-cases-not-run';
+  readonly threshold: string;
+  readonly representativeCases: number;
+  readonly passingRepresentativeCases: number;
+  readonly text: string;
+};
+
 type Summary = {
   readonly name: 'zero-ws-protocol-microbench';
   readonly mode: 'smoke' | 'full';
   readonly generatedAt: string;
   readonly results: readonly CodecResult[];
+  readonly comparisons: readonly CodecComparison[];
+  readonly recommendation: Recommendation;
   readonly skipped: readonly string[];
 };
 
+const stack5ThresholdPct = 25;
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder();
 const columns = [
@@ -311,8 +344,8 @@ const customBinaryCodec: Codec = {
 
 const codecs = [
   jsonTextCodec,
-  binaryUtf8JsonCodec,
   dictCodec,
+  binaryUtf8JsonCodec,
   customBinaryCodec,
 ];
 
@@ -349,26 +382,153 @@ function printResult(result: CodecResult) {
   console.log(
     [
       `${result.codec}`,
-      `${result.rows} rows`,
-      `${result.payload} (${formatBytes(result.payloadBytes)})`,
-      `${formatBytes(result.encodedBytes)}`,
-      `${formatRate(result.opsPerSec)} encode+decode/s`,
-      `${result.encodeDecodeMs.toFixed(2)} ms`,
+      `rows=${result.rows}`,
+      `payload=${result.payload} (${formatBytes(result.payloadBytes)})`,
+      `encoded=${formatBytes(result.encodedBytes)}`,
+      `encodeDecode=${result.encodeDecodeMs.toFixed(2)} ms`,
+      `ops=${formatRate(result.opsPerSec)}/s`,
+      `decodedRows=${result.decodedRows}`,
     ].join(' | '),
   );
 }
 
+function pctReduction(before: number, after: number): number {
+  if (before === 0) {
+    return 0;
+  }
+  return ((before - after) / before) * 100;
+}
+
+function isRepresentativeCase(result: CodecResult): boolean {
+  return result.rows >= 100 || result.payload === 'large';
+}
+
+function findResult(
+  results: readonly CodecResult[],
+  codec: CodecName,
+): CodecResult {
+  const result = results.find(result => result.codec === codec);
+  if (result === undefined) {
+    throw new Error(`Missing codec result for ${codec}`);
+  }
+  return result;
+}
+
+function compareCustomToDict(results: readonly CodecResult[]): CodecComparison {
+  const baseline = findResult(results, 'dict-json-row-patch');
+  const candidate = findResult(results, 'custom-binary-row-patch');
+  const encodedByteReductionPct = pctReduction(
+    baseline.encodedBytes,
+    candidate.encodedBytes,
+  );
+  const encodeDecodeReductionPct = pctReduction(
+    baseline.encodeDecodeMs,
+    candidate.encodeDecodeMs,
+  );
+
+  return {
+    rows: baseline.rows,
+    payload: baseline.payload,
+    payloadBytes: baseline.payloadBytes,
+    baselineCodec: 'dict-json-row-patch',
+    candidateCodec: 'custom-binary-row-patch',
+    baselineEncodedBytes: baseline.encodedBytes,
+    candidateEncodedBytes: candidate.encodedBytes,
+    encodedByteReductionPct,
+    baselineEncodeDecodeMs: baseline.encodeDecodeMs,
+    candidateEncodeDecodeMs: candidate.encodeDecodeMs,
+    encodeDecodeReductionPct,
+    baselineOpsPerSec: baseline.opsPerSec,
+    candidateOpsPerSec: candidate.opsPerSec,
+    candidateDecodedRows: candidate.decodedRows,
+    representative: isRepresentativeCase(baseline),
+    meetsStack5Threshold:
+      encodedByteReductionPct >= stack5ThresholdPct ||
+      encodeDecodeReductionPct >= stack5ThresholdPct,
+  };
+}
+
+function formatPct(value: number): string {
+  return `${value >= 0 ? '+' : ''}${value.toFixed(1)}%`;
+}
+
+function printComparison(comparison: CodecComparison) {
+  console.log(
+    [
+      `${comparison.candidateCodec} vs ${comparison.baselineCodec}`,
+      `rows=${comparison.rows}`,
+      `payload=${comparison.payload} (${formatBytes(comparison.payloadBytes)})`,
+      `bytes=${formatBytes(comparison.candidateEncodedBytes)} vs ${formatBytes(
+        comparison.baselineEncodedBytes,
+      )}`,
+      `byteReduction=${formatPct(comparison.encodedByteReductionPct)}`,
+      `encodeDecode=${comparison.candidateEncodeDecodeMs.toFixed(
+        2,
+      )} ms vs ${comparison.baselineEncodeDecodeMs.toFixed(2)} ms`,
+      `timeReduction=${formatPct(comparison.encodeDecodeReductionPct)}`,
+      `representative=${comparison.representative}`,
+      `stack5Threshold=${comparison.meetsStack5Threshold}`,
+    ].join(' | '),
+  );
+}
+
+function makeRecommendation(
+  comparisons: readonly CodecComparison[],
+): Recommendation {
+  const threshold = `custom binary must beat dictionary JSON by >=${stack5ThresholdPct}% encode+decode time or >=${stack5ThresholdPct}% bytes on every representative large/fanout case`;
+  const representative = comparisons.filter(
+    comparison => comparison.representative,
+  );
+  const passing = representative.filter(
+    comparison => comparison.meetsStack5Threshold,
+  );
+
+  if (representative.length === 0) {
+    return {
+      decision: 'representative-cases-not-run',
+      threshold,
+      representativeCases: 0,
+      passingRepresentativeCases: 0,
+      text: 'NO-GO for Stack 5 custom binary from this run: representative large/fanout cases were not run; keep production protocol unchanged and run perf:ws:full before reconsidering.',
+    };
+  }
+
+  if (passing.length === representative.length) {
+    return {
+      decision: 'custom-binary-stack-5-candidate',
+      threshold,
+      representativeCases: representative.length,
+      passingRepresentativeCases: passing.length,
+      text: `GO for Stack 5 custom binary candidate: ${passing.length}/${representative.length} representative large/fanout cases beat dictionary JSON by >=${stack5ThresholdPct}% on encode+decode time or bytes.`,
+    };
+  }
+
+  return {
+    decision: 'dictionary-json-or-no-production-protocol-change',
+    threshold,
+    representativeCases: representative.length,
+    passingRepresentativeCases: passing.length,
+    text: `NO-GO for Stack 5 custom binary: ${passing.length}/${representative.length} representative large/fanout cases beat dictionary JSON by >=${stack5ThresholdPct}% on encode+decode time or bytes; recommend dictionary JSON as the comparison baseline or no production protocol change.`,
+  };
+}
+
 export async function main() {
   const full = envFlag('ZERO_WS_FULL');
-  const rowsVariants = full ? [1, 10, 100] : [10];
-  const payloads = full ? loadPayloadProfiles : smokePayloadProfiles;
+  const rowsVariants = full ? [1, 10, 100] : [10, 100];
+  const payloads = full
+    ? loadPayloadProfiles
+    : loadPayloadProfiles.filter(
+        payload => payload.size === 'small' || payload.size === 'large',
+      );
   const iterations = envInt('ZERO_WS_ITERATIONS', full ? 200 : 100);
   const output = argValue('out') ?? process.env.ZERO_BENCH_OUT;
   const results: CodecResult[] = [];
+  const comparisons: CodecComparison[] = [];
 
   for (const rows of rowsVariants) {
     for (const payload of payloads) {
       const msg = makePokePart(rows, payload.bytes);
+      const scenarioResults: CodecResult[] = [];
       for (const codec of codecs) {
         const result = runCodec(
           codec,
@@ -379,21 +539,30 @@ export async function main() {
           iterations,
         );
         results.push(result);
+        scenarioResults.push(result);
         printResult(result);
       }
+      const comparison = compareCustomToDict(scenarioResults);
+      comparisons.push(comparison);
+      printComparison(comparison);
     }
   }
+  const recommendation = makeRecommendation(comparisons);
 
   const summary: Summary = {
     name: 'zero-ws-protocol-microbench',
     mode: full ? 'full' : 'smoke',
     generatedAt: new Date().toISOString(),
     results,
+    comparisons,
+    recommendation,
     skipped: [
-      'MessagePack/CBOR: skipped because neither dependency exists in this package; codecs are table-driven so a dependency-backed codec can be added later without production protocol changes.',
+      'MessagePack: not run because zero-cache has no MessagePack dependency; no dependency was added for this benchmark.',
+      'CBOR: not run because zero-cache has no CBOR dependency; no dependency was added for this benchmark.',
     ],
   };
   await writeJsonSummary(summary, output);
+  console.log(recommendation.text);
   console.log(JSON.stringify(summary));
 }
 
