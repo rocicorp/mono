@@ -130,6 +130,7 @@ export type {
 } from '../../zql/src/mutate/crud.ts';
 export type {
   AnyTransaction,
+  ClientTransaction,
   Location,
   ServerTransaction,
   Transaction,
@@ -248,4 +249,10 @@ export type {
   QueryErrorDetails,
   QueryResultDetails,
 } from './types/query-result.ts';
-export {initZero, type InitZeroResult, type TypedZero} from './init-zero.ts';
+export {
+  initZero,
+  type InitZeroOptions,
+  type InitZeroResult,
+  type InitZeroTypes,
+  type TypedZero,
+} from './init-zero.ts';

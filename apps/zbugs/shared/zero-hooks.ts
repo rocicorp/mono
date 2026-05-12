@@ -1,6 +1,5 @@
-import {initZeroReact} from '@rocicorp/zero/react';
-import type {AuthData} from './auth.ts';
-import type {schema} from './schema.ts';
+import {wrapZeroReact} from '@rocicorp/zero/react';
+import {zero} from './zero.ts';
 
 export const {
   ZeroProvider,
@@ -8,4 +7,4 @@ export const {
   useQuery,
   useSuspenseQuery,
   useConnectionState,
-} = initZeroReact<typeof schema, AuthData | undefined>();
+} = wrapZeroReact(zero);

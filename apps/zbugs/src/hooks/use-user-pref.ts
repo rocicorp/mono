@@ -1,7 +1,7 @@
 import {mutators} from '../../shared/mutators.ts';
 import {queries} from '../../shared/queries.ts';
 import {useQuery} from '../../shared/zero-hooks.ts';
-import type {Zero} from '../../shared/zero.ts';
+import type {ZeroClient} from '../../shared/zero.ts';
 
 export function useUserPref(key: string): string | undefined {
   const [pref] = useQuery(queries.userPref(key));
@@ -9,7 +9,7 @@ export function useUserPref(key: string): string | undefined {
 }
 
 export async function setUserPref(
-  z: Zero,
+  z: ZeroClient,
   key: string,
   value: string,
 ): Promise<void> {
@@ -22,7 +22,7 @@ export function useNumericPref(key: string, defaultValue: number): number {
 }
 
 export function setNumericPref(
-  z: Zero,
+  z: ZeroClient,
   key: string,
   value: number,
 ): Promise<void> {

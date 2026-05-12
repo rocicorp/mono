@@ -1,8 +1,8 @@
 import type postgres from 'postgres';
 import {beforeEach, describe, expect, it} from 'vitest';
 import {testDBs} from '../../../packages/zero-cache/src/test/db.ts';
+import type {ServerTransaction} from '../shared/zero.ts';
 import {gatherRecipients} from './notify.ts';
-import type {ServerTransaction} from './zero.ts';
 
 describe('notify', () => {
   let db: postgres.Sql;

@@ -1,17 +1,19 @@
-import {
-  initZero,
-  type Row as ZeroRow,
-  type ServerTransaction as ZeroServerTransaction,
-  type Transaction as ZeroTransaction,
-  type Zero as ZeroClient,
-} from '@rocicorp/zero';
+import {initZero} from '@rocicorp/zero';
+import type postgres from 'postgres';
 import type {AuthData} from './auth.ts';
 import {schema} from './schema.ts';
 
-export type Row = ZeroRow<typeof schema>;
-export type Zero = ZeroClient<typeof schema, undefined, AuthData | undefined>;
-export type Transaction = ZeroTransaction<typeof schema>;
-export type ServerTransaction = ZeroServerTransaction<typeof schema>;
+export const zero = initZero<
+  typeof schema,
+  AuthData | undefined,
+  postgres.TransactionSql
+>({schema});
 
-export const {defineMutator, defineMutators, defineQuery, defineQueries} =
-  initZero<typeof schema, AuthData | undefined>();
+export const {Zero, defineMutator, defineMutators, defineQuery, defineQueries} =
+  zero;
+
+export type ZeroTypes = typeof zero;
+export type Row = ZeroTypes['~']['$row'];
+export type Transaction = ZeroTypes['~']['$transaction'];
+export type ServerTransaction = ZeroTypes['~']['$serverTransaction'];
+export type ZeroClient = ZeroTypes['~']['$zero'];

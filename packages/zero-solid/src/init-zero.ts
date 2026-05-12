@@ -1,41 +1,74 @@
+import {mergeProps} from 'solid-js';
 import {useConnectionState as useConnectionStateImpl} from './use-connection-state.ts';
 import {useQuery as useQueryImpl, type TypedUseQuery} from './use-query.ts';
 import {
   useZero as useZeroImpl,
   ZeroProvider as ZeroProviderImpl,
+  type ZeroProviderProps,
 } from './use-zero.ts';
 import type {
   BaseDefaultContext,
   BaseDefaultSchema,
-  DefaultContext,
-  DefaultSchema,
-  TypedZero,
+  InitZeroResult,
 } from './zero.ts';
-import {Zero as ZeroImpl} from './zero.ts';
 
-export type InitZeroSolidResult<
+type WithoutSchema<T> = T extends unknown ? Omit<T, 'schema'> : never;
+
+type TypedZeroProvider<
   S extends BaseDefaultSchema,
   C extends BaseDefaultContext,
-> = {
-  readonly Zero: TypedZero<S, C>;
-  readonly ZeroProvider: typeof ZeroProviderImpl<S, undefined, C>;
+  TSchemaBound extends boolean,
+> = (
+  props: TSchemaBound extends true
+    ? WithoutSchema<ZeroProviderProps<S, undefined, C>>
+    : ZeroProviderProps<S, undefined, C>,
+) => ReturnType<typeof ZeroProviderImpl<S, undefined, C>>;
+
+export type WrapZeroSolidResult<
+  S extends BaseDefaultSchema,
+  C extends BaseDefaultContext,
+  TWrappedTransaction,
+  TSchemaBound extends boolean = false,
+> = InitZeroResult<S, C, TWrappedTransaction, TSchemaBound> & {
+  readonly ZeroProvider: TypedZeroProvider<S, C, TSchemaBound>;
   readonly useZero: typeof useZeroImpl<S, undefined, C>;
   readonly useQuery: TypedUseQuery<S, C>;
   readonly useConnectionState: typeof useConnectionStateImpl;
 };
 
 /**
- * Returns typed Solid hooks and provider without relying on module augmentation.
+ * Adds typed Solid hooks and provider to typed Zero helpers.
  */
-export function initZeroSolid<
-  S extends BaseDefaultSchema = DefaultSchema,
-  C extends BaseDefaultContext = DefaultContext,
->(): InitZeroSolidResult<S, C> {
+export function wrapZeroSolid<
+  S extends BaseDefaultSchema,
+  C extends BaseDefaultContext,
+  TWrappedTransaction,
+  TSchemaBound extends boolean,
+>(
+  zero: InitZeroResult<S, C, TWrappedTransaction, TSchemaBound>,
+): WrapZeroSolidResult<S, C, TWrappedTransaction, TSchemaBound> {
+  const ZeroProvider =
+    'schema' in zero
+      ? (props: WithoutSchema<ZeroProviderProps<S, undefined, C>>) => {
+          if ('zero' in props) {
+            return ZeroProviderImpl(
+              props as ZeroProviderProps<S, undefined, C>,
+            );
+          }
+
+          return ZeroProviderImpl(
+            mergeProps(props, {
+              schema: (zero as {readonly schema: S}).schema,
+            }) as ZeroProviderProps<S, undefined, C>,
+          );
+        }
+      : ZeroProviderImpl;
+
   return {
-    Zero: ZeroImpl as TypedZero<S, C>,
-    ZeroProvider: ZeroProviderImpl as typeof ZeroProviderImpl<S, undefined, C>,
+    ...zero,
+    ZeroProvider: ZeroProvider as TypedZeroProvider<S, C, boolean>,
     useZero: useZeroImpl as typeof useZeroImpl<S, undefined, C>,
     useQuery: useQueryImpl as TypedUseQuery<S, C>,
     useConnectionState: useConnectionStateImpl,
-  };
+  } as WrapZeroSolidResult<S, C, TWrappedTransaction, TSchemaBound>;
 }

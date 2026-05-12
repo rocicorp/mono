@@ -73,27 +73,26 @@ export function createUseZero<
   return () => useZero<S, MD, Context>();
 }
 
+export type ZeroProviderProps<
+  S extends BaseDefaultSchema = DefaultSchema,
+  MD extends CustomMutatorDefs | undefined = undefined,
+  Context extends BaseDefaultContext = DefaultContext,
+> = {
+  children: JSX.Element;
+  /**
+   * Called after ZeroProvider constructs a new Zero instance.
+   *
+   * This runs only when the provider creates Zero from options, and is not
+   * called when an existing instance is passed with `zero`.
+   */
+  init?: (zero: Zero<S, MD, Context>) => void;
+} & ({zero: Zero<S, MD, Context>} | ZeroOptions<S, MD, Context>);
+
 export function ZeroProvider<
   S extends BaseDefaultSchema = DefaultSchema,
   MD extends CustomMutatorDefs | undefined = undefined,
   Context extends BaseDefaultContext = DefaultContext,
->(
-  props: {
-    children: JSX.Element;
-    /**
-     * Called after ZeroProvider constructs a new Zero instance.
-     *
-     * This runs only when the provider creates Zero from options, and is not
-     * called when an existing instance is passed with `zero`.
-     */
-    init?: (zero: Zero<S, MD, Context>) => void;
-  } & (
-    | {
-        zero: Zero<S, MD, Context>;
-      }
-    | ZeroOptions<S, MD, Context>
-  ),
-) {
+>(props: ZeroProviderProps<S, MD, Context>) {
   let prevAuth = 'auth' in props ? props.auth : undefined;
   const [rotationGeneration, setRotationGeneration] = createSignal(0);
 

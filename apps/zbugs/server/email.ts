@@ -1,6 +1,5 @@
 import {MutationError, MutationErrorCode} from '../shared/error.ts';
-import type {Row} from '../shared/zero.ts';
-import type {ServerTransaction} from './zero.ts';
+import type {Row, ServerTransaction} from '../shared/zero.ts';
 
 export async function sendEmail({
   tx,
