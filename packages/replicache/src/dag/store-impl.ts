@@ -63,12 +63,17 @@ export class ReadImpl implements Read {
   }
 
   async getChunk(hash: Hash): Promise<Chunk | undefined> {
-    const data = await this._tx.get(chunkDataKey(hash));
+    const dataPromise = this._tx.get(chunkDataKey(hash));
+    const refsPromise = this._tx.get(chunkMetaKey(hash));
+    const data = await dataPromise;
     if (data === undefined) {
+      refsPromise.catch(() => {
+        // Ignore error since we will return undefined anyway.
+      });
       return undefined;
     }
 
-    const refsVal = await this._tx.get(chunkMetaKey(hash));
+    const refsVal = await refsPromise;
     let refs: Refs;
     if (refsVal !== undefined) {
       assertRefs(refsVal);

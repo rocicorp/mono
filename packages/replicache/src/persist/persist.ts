@@ -1,6 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
 import {assert} from '../../../shared/src/asserts.ts';
 import type {Enum} from '../../../shared/src/enum.ts';
+import {getOrInsert, getOrInsertComputed} from '../../../shared/src/map.ts';
 import type {Chunk} from '../dag/chunk.ts';
 import type {LazyStore} from '../dag/lazy-store.ts';
 import type {Read, Store, Write} from '../dag/store.ts';
@@ -276,14 +277,23 @@ async function rebase(
   formatVersion: FormatVersion,
   zeroData: ZeroTxData | undefined,
 ): Promise<Hash> {
+  const basisMutationIDs = new Map<Hash, Map<ClientID, Promise<number>>>();
+  const getBasisMutationID = (
+    basisHash: Hash,
+    clientID: ClientID,
+  ): Promise<number> =>
+    getOrInsertComputed(
+      getOrInsert(basisMutationIDs, basisHash, new Map()),
+      clientID,
+      () =>
+        commitFromHash(basisHash, write).then(commit =>
+          commit.getMutationID(clientID, write),
+        ),
+    );
   for (let i = mutations.length - 1; i >= 0; i--) {
     const mutationCommit = mutations[i];
     const {meta} = mutationCommit;
-    const newMainHead = await commitFromHash(basis, write);
-    if (
-      (await mutationCommit.getMutationID(meta.clientID, write)) >
-      (await newMainHead.getMutationID(meta.clientID, write))
-    ) {
+    if (meta.mutationID > (await getBasisMutationID(basis, meta.clientID))) {
       mutationIDs[meta.clientID] = meta.mutationID;
       basis = (
         await rebaseMutationAndPutCommit(
