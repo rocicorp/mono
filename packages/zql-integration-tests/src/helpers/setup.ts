@@ -13,7 +13,7 @@ export async function fillPgAndSync(
   dbName: string,
 ) {
   const lc = createSilentLogContext();
-  const pg = await testDBs.create(dbName, undefined, false);
+  const pg = await testDBs.create(dbName, {typeOpts: false});
 
   await pg.unsafe(createTableSQL);
   const sqlite = new Database(lc, ':memory:');

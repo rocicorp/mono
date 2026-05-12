@@ -33,9 +33,9 @@ describe('change-source/tables/ddl', () => {
 
   beforeEach<PgTest>(async ({testDBs}) => {
     notices = new Queue();
-    upstream = await testDBs.create('ddl_test_upstream', n =>
-      notices.enqueue(n),
-    );
+    upstream = await testDBs.create('ddl_test_upstream', {
+      onNotice: n => notices.enqueue(n),
+    });
 
     await upstream.unsafe(STARTING_SCHEMA);
 

@@ -104,7 +104,7 @@ async function makeDatabases<TSchema extends Schema>(
   // Test data must be in client format
   testData?: (serverSchema: ServerSchema) => Record<string, Row[]>,
 ): Promise<DBs<TSchema>> {
-  const pg = await testDBs.create(suiteName, undefined, false);
+  const pg = await testDBs.create(suiteName, {typeOpts: false});
   await pg.unsafe(pgContent);
 
   const serverSchema = await pg.begin(tx =>

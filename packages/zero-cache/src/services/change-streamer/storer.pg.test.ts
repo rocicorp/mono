@@ -46,8 +46,8 @@ describe('change-streamer/storer', () => {
   const SHARD_NUM = 5;
 
   beforeEach<PgTest>(async ({testDBs}) => {
-    db = await testDBs.create('change_streamer_storer', undefined, {
-      sendStringAsJson: true,
+    db = await testDBs.create('change_streamer_storer', {
+      typeOpts: {sendStringAsJson: true},
     });
     shard = {appID: APP_ID, shardNum: SHARD_NUM};
     await db.begin(tx => setupCDCTables(lc, tx, shard));
