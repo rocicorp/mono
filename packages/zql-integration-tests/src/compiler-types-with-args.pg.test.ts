@@ -90,7 +90,7 @@ let issueQuery: Query<'issue', Schema>;
 let queryDelegate: QueryDelegate;
 
 beforeAll(async () => {
-  pg = await testDBs.create(DB_NAME, undefined, false);
+  pg = await testDBs.create(DB_NAME, {typeOpts: false});
   await pg.unsafe(createTableSQL);
 
   serverSchema = await pg.begin(tx =>
