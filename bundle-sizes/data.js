@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778242171436,
+  "lastUpdate": 1778565045806,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -55849,6 +55849,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "Size of replicache.min.mjs.br (Brotli compressed)",
             "value": 33278,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "arv@roci.dev",
+            "name": "Erik Arvidsson",
+            "username": "arv"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "5d981bf0159d294c1389dcd6c7d2eddfe6c40a5e",
+          "message": "perf(replicache): parallelize I/O during pull and rebase (#5926)\n\nIssue concurrent reads instead of sequential awaits when determining\nwhich mutations need to be replayed or rebased:\n\n- `maybeEndPull`: fetch `syncHead` and `localMutations` concurrently;\nkick off all `getMutationID` reads before awaiting any.\n- `persist/rebase`: cache basis mutation ID lookups per `(basisHash,\nclientID)` so each is fetched at most once.\n- `ReadImpl.getChunk`: issue chunk-data and chunk-meta reads in\nparallel.\n- Add `shared/map.ts` with `getOrInsert`/`getOrInsertComputed` helpers\n(ES2026 `Map` feature with polyfill).\n\n---------\n\nCo-authored-by: Copilot <copilot@github.com>",
+          "timestamp": "2026-05-12T05:39:51Z",
+          "tree_id": "8f60d8027a1e5fe6dff13e5528560ba75cb0d741",
+          "url": "https://github.com/rocicorp/mono/commit/5d981bf0159d294c1389dcd6c7d2eddfe6c40a5e"
+        },
+        "date": 1778565034172,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 316956,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 56979,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 117187,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 33481,
             "unit": "bytes"
           }
         ]
