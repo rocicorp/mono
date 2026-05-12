@@ -78,7 +78,8 @@ type ScenarioComparison = {
   readonly scenario: string;
   readonly payload: string;
   readonly messages: number;
-  readonly ackReductionPct: number;
+  readonly ackMessageReductionPct: number;
+  readonly ackByteReductionPct: number;
   readonly elapsedChangePct: number;
   readonly p95LatencyChangePct: number;
   readonly p95LatencyDeltaMs: number;
@@ -574,9 +575,13 @@ function compareResults(
   baseline: ScenarioResult,
   cumulative: ScenarioResult,
 ): ScenarioComparison {
-  const ackReductionPct = percentReduction(
+  const ackMessageReductionPct = percentReduction(
     cumulative.ackMessages,
     baseline.ackMessages,
+  );
+  const ackByteReductionPct = percentReduction(
+    cumulative.ackBytes,
+    baseline.ackBytes,
   );
   const elapsedChangePct = percentChange(
     cumulative.elapsedMs,
@@ -594,10 +599,10 @@ function compareResults(
   const noLatencyRegression =
     p95LatencyDeltaMs <= 1 || p95LatencyChangePct <= 5;
   const improvesOverhead =
-    ackReductionPct > 10 ||
+    ackMessageReductionPct > 10 ||
     elapsedChangePct <= -10 ||
     eventLoopDelayP95ChangePct <= -10;
-  const materiallyReducesTraffic = ackReductionPct >= 50;
+  const materiallyReducesTraffic = ackByteReductionPct >= 50;
   const go =
     noLatencyRegression && (improvesOverhead || materiallyReducesTraffic);
 
@@ -605,7 +610,8 @@ function compareResults(
     scenario: baseline.scenario,
     payload: baseline.payload,
     messages: baseline.messages,
-    ackReductionPct,
+    ackMessageReductionPct,
+    ackByteReductionPct,
     elapsedChangePct,
     p95LatencyChangePct,
     p95LatencyDeltaMs,
@@ -652,7 +658,8 @@ function printComparison(comparison: ScenarioComparison) {
       comparison.decision.toUpperCase(),
       comparison.scenario,
       comparison.payload,
-      `ack reduction=${comparison.ackReductionPct.toFixed(1)}%`,
+      `ack msg reduction=${comparison.ackMessageReductionPct.toFixed(1)}%`,
+      `ack byte reduction=${comparison.ackByteReductionPct.toFixed(1)}%`,
       `elapsed change=${comparison.elapsedChangePct.toFixed(1)}%`,
       `p95 delta=${comparison.p95LatencyDeltaMs.toFixed(3)} ms`,
       `eld-p95 change=${comparison.eventLoopDelayP95ChangePct.toFixed(1)}%`,
