@@ -734,6 +734,26 @@ export const zeroOptions = {
     ],
   },
 
+  pokePartFlush: {
+    maxBytes: {
+      type: v.number().default(128 * 1024),
+      desc: [
+        'Target maximum JSON bytes per pokePart before the view-syncer flushes to WebSocket.',
+        '',
+        'This bounds large row pokes without changing the sync protocol. Actual messages can exceed',
+        'this target by one patch because rows are estimated before flushing. Default: 128KB.',
+      ],
+    },
+    maxRows: {
+      type: v.number().default(100),
+      desc: [
+        'Maximum row/config patches per pokePart before flushing.',
+        '',
+        'This remains as a pathological-object guard in addition to the byte target.',
+      ],
+    },
+  },
+
   websocketCompression: {
     type: v.boolean().default(false),
     desc: [

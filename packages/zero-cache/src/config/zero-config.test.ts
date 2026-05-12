@@ -476,6 +476,19 @@ test('zero-cache --help', () => {
                                                                                                                                                                                                    
                                                                         A password is optional in development mode but required in production mode.                                                
                                                                                                                                                                                                    
+     --poke-part-flush-max-bytes number                                 default: 131072                                                                                                            
+       ZERO_POKE_PART_FLUSH_MAX_BYTES env                                                                                                                                                          
+                                                                        Target maximum JSON bytes per pokePart before the view-syncer flushes to WebSocket.                                        
+                                                                                                                                                                                                   
+                                                                        This bounds large row pokes without changing the sync protocol. Actual messages can exceed                                 
+                                                                        this target by one patch because rows are estimated before flushing. Default: 128KB.                                       
+                                                                                                                                                                                                   
+     --poke-part-flush-max-rows number                                  default: 100                                                                                                               
+       ZERO_POKE_PART_FLUSH_MAX_ROWS env                                                                                                                                                           
+                                                                        Maximum row/config patches per pokePart before flushing.                                                                   
+                                                                                                                                                                                                   
+                                                                        This remains as a pathological-object guard in addition to the byte target.                                                
+                                                                                                                                                                                                   
      --websocket-compression boolean                                    default: false                                                                                                             
        ZERO_WEBSOCKET_COMPRESSION env                                                                                                                                                              
                                                                         Enable WebSocket per-message deflate compression.                                                                          

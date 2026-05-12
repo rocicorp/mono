@@ -9,6 +9,7 @@ import type {Downstream} from '../../../zero-protocol/src/down.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
 import {ProtocolErrorWithLevel} from '../types/error-with-level.ts';
+import {preencodeDownstream} from '../types/preencoded.ts';
 import {send, sendError, type WebSocketLike} from './connection.ts';
 
 class MockSocket implements WebSocketLike {
@@ -47,6 +48,18 @@ describe('send', () => {
     ws.readyState = WebSocket.OPEN;
     send(lc, ws, data, callback);
     expect(sendSpy).toHaveBeenCalledWith(JSON.stringify(data), callback);
+  });
+
+  test('uses preencoded downstream JSON when available', () => {
+    using sendSpy = vi.spyOn(ws, 'send');
+    const callback = () => {};
+    const msg = preencodeDownstream(['pokePart', {pokeID: 'p1'}]);
+    ws.readyState = WebSocket.OPEN;
+    send(lc, ws, msg, callback);
+    expect(sendSpy).toHaveBeenCalledWith(
+      '["pokePart",{"pokeID":"p1"}]',
+      callback,
+    );
   });
 });
 

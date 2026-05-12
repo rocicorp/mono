@@ -32,6 +32,7 @@ import {
   getLogLevel,
   wrapWithProtocolError,
 } from '../../types/error-with-level.ts';
+import {preencodeDownstream} from '../../types/preencoded.ts';
 import {upstreamSchema, type ShardID} from '../../types/shards.ts';
 import type {Subscription} from '../../types/subscription.ts';
 import {
@@ -71,12 +72,14 @@ export type PatchToVersion = {
 
 export interface PokeHandler {
   addPatch(patch: PatchToVersion): Promise<void>;
+  addPatches(patches: Iterable<PatchToVersion>): Promise<void>;
   cancel(): Promise<void>;
   end(finalVersion: CVRVersion): Promise<void>;
 }
 
 const NOOP: PokeHandler = {
   addPatch: () => promiseVoid,
+  addPatches: () => promiseVoid,
   cancel: () => promiseVoid,
   end: () => promiseVoid,
 };
@@ -95,6 +98,10 @@ export function startPoke(
     addPatch: async patch => {
       await Promise.allSettled(pokers.map(poker => poker.addPatch(patch)));
     },
+    addPatches: async patches => {
+      const batch = [...patches];
+      await Promise.allSettled(pokers.map(poker => poker.addPatches(batch)));
+    },
     cancel: async () => {
       await Promise.allSettled(pokers.map(poker => poker.cancel()));
     },
@@ -104,9 +111,23 @@ export function startPoke(
   };
 }
 
-// Semi-arbitrary threshold at which poke body parts are flushed.
-// When row size is being computed, that should be used as a threshold instead.
-const PART_COUNT_FLUSH_THRESHOLD = 100;
+export const DEFAULT_POKE_PART_FLUSH_BYTES = 128 * 1024;
+export const DEFAULT_POKE_PART_FLUSH_ROWS = 100;
+
+export type PokePartFlushConfig = {
+  readonly maxBytes?: number | undefined;
+  readonly maxRows?: number | undefined;
+};
+
+type NormalizedPokePartFlushConfig = {
+  readonly maxBytes: number;
+  readonly maxRows: number;
+};
+
+const defaultPokePartFlushConfig = {
+  maxBytes: DEFAULT_POKE_PART_FLUSH_BYTES,
+  maxRows: DEFAULT_POKE_PART_FLUSH_ROWS,
+} satisfies NormalizedPokePartFlushConfig;
 
 /**
  * Handles a single `ViewSyncer` connection.
@@ -120,6 +141,7 @@ export class ClientHandler {
   readonly #lc: LogContext;
   readonly #downstream: Subscription<Downstream>;
   #baseVersion: NullableCVRVersion;
+  readonly #pokePartFlushConfig: NormalizedPokePartFlushConfig;
 
   readonly #pokeTime = getOrCreateLatencyHistogram(
     'sync',
@@ -147,6 +169,7 @@ export class ClientHandler {
     shard: ShardID,
     baseCookie: string | null,
     downstream: Subscription<Downstream>,
+    pokePartFlushConfig: PokePartFlushConfig = {},
   ) {
     lc.debug?.('new client handler');
     this.#clientGroupID = clientGroupID;
@@ -156,6 +179,12 @@ export class ClientHandler {
     this.#zeroMutationsTable = `${upstreamSchema(shard)}.mutations`;
     this.#lc = lc;
     this.#downstream = downstream;
+    this.#pokePartFlushConfig = {
+      maxBytes:
+        pokePartFlushConfig.maxBytes ?? defaultPokePartFlushConfig.maxBytes,
+      maxRows:
+        pokePartFlushConfig.maxRows ?? defaultPokePartFlushConfig.maxRows,
+    };
     this.#baseVersion = cookieToVersion(baseCookie);
   }
 
@@ -201,100 +230,86 @@ export class ClientHandler {
     let pokeStarted = false;
     let body: PokePartBody | undefined;
     let partCount = 0;
-    const ensureBody = async () => {
+    let estimatedBytes = pokePartBaseBytes(pokeID);
+    const flushBytesThreshold = this.#pokePartFlushConfig.maxBytes;
+    const flushRowsThreshold = this.#pokePartFlushConfig.maxRows;
+
+    const ensureStarted = async () => {
       if (!pokeStarted) {
         await this.#push(['pokeStart', pokeStart]);
         pokeStarted = true;
       }
-      return (body ??= {pokeID});
     };
+    const ensureBody = () => (body ??= {pokeID});
     const flushBody = async () => {
       if (body) {
-        await this.#push(['pokePart', body]);
+        await ensureStarted();
+        await this.#push(preencodeDownstream(['pokePart', body]));
         body = undefined;
         partCount = 0;
+        estimatedBytes = pokePartBaseBytes(pokeID);
       }
     };
+    const shouldFlushBody = () =>
+      estimatedBytes >= flushBytesThreshold || partCount >= flushRowsThreshold;
 
-    const addPatch = async (patchToVersion: PatchToVersion) => {
+    const addPatchToPendingBody = (patchToVersion: PatchToVersion) => {
       const {patch, toVersion} = patchToVersion;
       if (cmpVersions(toVersion, this.#baseVersion) <= 0) {
-        return;
-      }
-      const body = await ensureBody();
-
-      const {type, op} = patch;
-      switch (type) {
-        case 'query': {
-          const patches = patch.clientID
-            ? ((body.desiredQueriesPatches ??= {})[patch.clientID] ??= [])
-            : (body.gotQueriesPatch ??= []);
-          if (op === 'put') {
-            patches.push({op, hash: patch.id});
-          } else {
-            patches.push({op, hash: patch.id});
-          }
-          break;
-        }
-        case 'row':
-          if (patch.id.table === this.#zeroClientsTable) {
-            this.#updateLMIDs((body.lastMutationIDChanges ??= {}), patch);
-          } else if (patch.id.table === this.#zeroMutationsTable) {
-            const patches = (body.mutationsPatch ??= []);
-            if (op === 'put') {
-              const row = v.parse(
-                ensureSafeJSON(patch.contents),
-                mutationRowSchema,
-                'passthrough',
-              );
-              patches.push({
-                op: 'put',
-                mutation: {
-                  id: {
-                    clientID: row.clientID,
-                    id: row.mutationID,
-                  },
-                  result: row.result,
-                },
-              });
-            } else {
-              const {clientID, mutationID} = patch.id.rowKey;
-              assert(
-                typeof clientID === 'string',
-                'client id must be a string',
-              );
-              const id = Number(mutationID);
-              assert(
-                !Number.isNaN(id) && Number.isFinite(id) && id >= 0,
-                'mutation id must be a finite number',
-              );
-              patches.push({
-                op: 'del',
-                id: {
-                  clientID,
-                  id,
-                },
-              });
-            }
-          } else {
-            (body.rowsPatch ??= []).push(makeRowPatch(patch));
-          }
-          break;
-        default:
-          unreachable(patch);
+        return false;
       }
 
-      if (++partCount >= PART_COUNT_FLUSH_THRESHOLD) {
-        await flushBody();
-      }
+      estimatedBytes += addPatchToBody(
+        ensureBody(),
+        patch,
+        this.#zeroClientsTable,
+        this.#zeroMutationsTable,
+        patch.type === 'row'
+          ? (lmids: Record<string, number>) => this.#updateLMIDs(lmids, patch)
+          : undefined,
+      );
+      partCount++;
+      return true;
     };
 
     return {
       addPatch: async (patchToVersion: PatchToVersion) => {
         try {
-          await addPatch(patchToVersion);
-          if (patchToVersion.patch.type === 'row') {
+          if (cmpVersions(patchToVersion.toVersion, this.#baseVersion) > 0) {
+            await ensureStarted();
+          }
+          const added = addPatchToPendingBody(patchToVersion);
+          if (added && patchToVersion.patch.type === 'row') {
             this.#pokedRows.add(1);
+          }
+          if (shouldFlushBody()) {
+            await flushBody();
+          }
+        } catch (e) {
+          this.#downstream.fail(wrapWithProtocolError(e));
+        }
+      },
+
+      addPatches: async (patches: Iterable<PatchToVersion>) => {
+        let rows = 0;
+        try {
+          for (const patch of patches) {
+            if (
+              !pokeStarted &&
+              cmpVersions(patch.toVersion, this.#baseVersion) > 0
+            ) {
+              await ensureStarted();
+            }
+            const added = addPatchToPendingBody(patch);
+            if (added && patch.patch.type === 'row') {
+              rows++;
+            }
+            if (shouldFlushBody()) {
+              await flushBody();
+            }
+          }
+          if (rows > 0) {
+            this.#pokedRows.add(rows);
           }
         } catch (e) {
           this.#downstream.fail(wrapWithProtocolError(e));
@@ -313,7 +328,7 @@ export class ClientHandler {
           if (cmpVersions(this.#baseVersion, finalVersion) === 0) {
             return; // Nothing changed and nothing was sent.
           }
-          await this.#push(['pokeStart', pokeStart]);
+          await ensureStarted();
         } else if (cmpVersions(this.#baseVersion, finalVersion) >= 0) {
           // Sanity check: If the poke was started, the finalVersion
           // must be > #baseVersion.
@@ -383,6 +398,108 @@ export class ClientHandler {
       patch.op satisfies 'constrain' | 'del';
     }
   }
+}
+
+function addPatchToBody(
+  body: PokePartBody,
+  patch: Patch,
+  clientsTable: string,
+  mutationsTable: string,
+  updateLMIDs: ((lmids: Record<string, number>) => void) | undefined,
+) {
+  const {type, op} = patch;
+  switch (type) {
+    case 'query': {
+      const patchOp = {op, hash: patch.id};
+      if (patch.clientID) {
+        const patches = (body.desiredQueriesPatches ??= {});
+        pushEstimated(patches, patch.clientID, patchOp);
+      } else {
+        (body.gotQueriesPatch ??= []).push(patchOp);
+      }
+      return estimatedKeyedJSONEntryBytes(
+        patch.clientID ?? 'gotQueriesPatch',
+        patchOp,
+      );
+    }
+    case 'row':
+      if (patch.id.table === clientsTable) {
+        assert(updateLMIDs, 'missing lmid updater');
+        updateLMIDs((body.lastMutationIDChanges ??= {}));
+        return estimatedKeyedJSONEntryBytes(
+          'lastMutationIDChanges',
+          patch.id.rowKey,
+        );
+      }
+      if (patch.id.table === mutationsTable) {
+        const mutationPatch = makeMutationPatch(patch);
+        (body.mutationsPatch ??= []).push(mutationPatch);
+        return estimatedKeyedJSONEntryBytes('mutationsPatch', mutationPatch);
+      }
+      const rowPatch = makeRowPatch(patch);
+      (body.rowsPatch ??= []).push(rowPatch);
+      return estimatedKeyedJSONEntryBytes('rowsPatch', rowPatch);
+    default:
+      unreachable(patch);
+  }
+}
+
+function pushEstimated<T>(record: Record<string, T[]>, key: string, value: T) {
+  (record[key] ??= []).push(value);
+}
+
+function makeMutationPatch(patch: RowPatch) {
+  const {op} = patch;
+  if (op === 'put') {
+    const row = v.parse(
+      ensureSafeJSON(patch.contents),
+      mutationRowSchema,
+      'passthrough',
+    );
+    return {
+      op: 'put' as const,
+      mutation: {
+        id: {
+          clientID: row.clientID,
+          id: row.mutationID,
+        },
+        result: row.result,
+      },
+    };
+  }
+
+  const {clientID, mutationID} = patch.id.rowKey;
+  assert(typeof clientID === 'string', 'client id must be a string');
+  const id = Number(mutationID);
+  assert(
+    !Number.isNaN(id) && Number.isFinite(id) && id >= 0,
+    'mutation id must be a finite number',
+  );
+  return {
+    op: 'del' as const,
+    id: {
+      clientID,
+      id,
+    },
+  };
+}
+
+const pokePartEnvelopeBytes = Buffer.byteLength('["pokePart",]');
+
+function pokePartBaseBytes(pokeID: string) {
+  return (
+    pokePartEnvelopeBytes +
+    Buffer.byteLength('{"pokeID":}') +
+    estimatedJSONBytes(pokeID)
+  );
+}
+
+function estimatedKeyedJSONEntryBytes(key: string, value: unknown) {
+  return Buffer.byteLength(`,"${key}":`) + estimatedJSONBytes(value);
+}
+
+function estimatedJSONBytes(value: unknown) {
+  return Buffer.byteLength(JSON.stringify(value));
 }
 
 // Note: The {APP_ID}_{SHARD_ID}.clients table is set up in replicator/initial-sync.ts.

@@ -803,6 +803,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         this.#shard,
         connCtx.baseCookie,
         downstream,
+        this.#config.pokePartFlush,
       );
       this.#clients
         .get(connCtx.clientID)
@@ -1048,9 +1049,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             this.#getClients(cvr.version),
             newCVR.version,
           );
-          for (const patch of patches) {
-            await pokers.addPatch(patch);
-          }
+          await pokers.addPatches(patches);
           await pokers.end(newCVR.version);
         },
       );
@@ -1961,11 +1960,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
       const clients = this.#getClients();
       const pokers = startPoke(clients, newVersion);
-      for (const patch of queryPatches) {
-        // Bump patches' toVersion to the post-drift-bump version so that
-        // pokers don't see them as belonging to a stale cookie.
-        await pokers.addPatch(patch);
-      }
+      // Bump patches' toVersion to the post-drift-bump version so that
+      // pokers don't see them as belonging to a stale cookie.
+      await pokers.addPatches(queryPatches);
 
       // Removing queries is easy. The pipelines are dropped, and the CVR
       // updater handles the updates and pokes.
@@ -2033,9 +2030,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         tracer,
         'vs.#syncQueryPipelineSet.deleteUnreferencedRows',
         async () => {
-          for (const patch of await updater.deleteUnreferencedRows(lc)) {
-            await pokers.addPatch(patch);
-          }
+          await pokers.addPatches(await updater.deleteUnreferencedRows(lc));
         },
       );
 
@@ -2127,6 +2122,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       // await the rowPatches first so that the AsyncGenerator kicks off.
       let rowPatchCount = 0;
       for await (const rows of rowPatches) {
+        const rowPatchBatch: PatchToVersion[] = [];
         for (const row of rows) {
           const {schema, table} = row;
           const rowKey = row.rowKey as RowKey;
@@ -2144,10 +2140,10 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             const {contents} = contentsAndVersion(row);
             patch = {type: 'row', op: 'put', id, contents};
           }
-          const patchToVersion = {patch, toVersion};
-          await pokers.addPatch(patchToVersion);
+          rowPatchBatch.push({patch, toVersion});
           rowPatchCount++;
         }
+        await pokers.addPatches(rowPatchBatch);
       }
       span.setAttribute('rowPatchCount', rowPatchCount);
       if (rowPatchCount) {
@@ -2155,9 +2151,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       }
 
       // Then await the config patches which were fetched in parallel.
-      for (const patch of await configPatches) {
-        await pokers.addPatch(patch);
-      }
+      await pokers.addPatches(await configPatches);
 
       if (!usePokers) {
         await pokers.end(cvr.version);
@@ -2192,9 +2186,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             'processBatch.flushToClient',
             async span => {
               span.setAttribute('patches', patches.length);
-              for (const patch of patches) {
-                await pokers.addPatch(patch);
-              }
+              await pokers.addPatches(patches);
             },
           );
           rows.clear();
