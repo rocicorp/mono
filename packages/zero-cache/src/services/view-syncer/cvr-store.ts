@@ -1319,7 +1319,7 @@ export class ConcurrentModificationException extends ProtocolErrorWithLevel {
   constructor(expectedVersion: string, actualVersion: string) {
     super(
       {
-        kind: ErrorKind.Internal,
+        kind: ErrorKind.Rehome,
         message: `CVR has been concurrently modified. Expected ${expectedVersion}, got ${actualVersion}`,
         origin: ErrorOrigin.ZeroCache,
       },

@@ -1,3 +1,4 @@
+import type {LogContext} from '@rocicorp/logger';
 import {expect, vi} from 'vitest';
 import {testLogConfig} from '../../../../otel/src/test-log-config.ts';
 import {h128} from '../../../../shared/src/hash.ts';
@@ -584,6 +585,7 @@ export const TEST_ADMIN_PASSWORD = 'test-pwd';
 
 type SetupOptions = Readonly<{
   authConfig?: Partial<NormalizedZeroConfig['auth']> | undefined;
+  lc?: LogContext | undefined;
   /**
    * Enables a default `/query` stub for PG integration tests that should still
    * exercise real auth-validation code paths without having to model full
@@ -634,7 +636,11 @@ export async function setup(
   permissions: PermissionsConfig | undefined,
   options: SetupOptions = {},
 ) {
-  const {authConfig = {}, queryFetchMode = 'none'} = options;
+  const {
+    authConfig = {},
+    lc = createSilentLogContext(),
+    queryFetchMode = 'none',
+  } = options;
   const effectiveQueryConfig: ZeroConfig['query'] =
     queryFetchMode === 'none' ? {...queryConfig, url: []} : queryConfig;
   const queryFetch = createQueryFetchMock();
@@ -643,8 +649,6 @@ export async function setup(
     effectiveQueryConfig.url?.[0],
     queryFetch,
   );
-
-  const lc = createSilentLogContext();
   const storageDB = new Database(lc, ':memory:');
   storageDB.prepare(CREATE_STORAGE_TABLE).run();
 

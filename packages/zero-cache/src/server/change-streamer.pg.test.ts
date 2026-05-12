@@ -42,8 +42,7 @@ test('change-streamer startup does not deadlock on autoreset retry when change a
   const shard = {appID: 'zoro', shardNum: 3, publications: []};
   const upstream = await testDBs.create(
     'change_streamer_worker_autoreset_deadlock_test_upstream',
-    undefined,
-    {sendStringAsJson: true},
+    {typeOpts: {sendStringAsJson: true}},
   );
   const upstreamURI = getConnectionURI(upstream);
   const replicaFile = new DbFile('change-streamer-worker-autoreset-deadlock');
@@ -67,8 +66,10 @@ test('change-streamer startup does not deadlock on autoreset retry when change a
       {test: 'context'},
     ));
 
-    const [{slot: oldSlot}] = await upstream<{slot: string}[]>`
-      SELECT slot FROM ${upstream(`${shard.appID}_${shard.shardNum}.replicas`)}`;
+    const [{id: oldID, slot: oldSlot}] = await upstream<
+      {id: string; slot: string}[]
+    >`
+      SELECT id, slot FROM ${upstream(`${shard.appID}_${shard.shardNum}.replicas`)}`;
 
     const restoredReplica = replicaFile.connect(lc);
     const subscriptionState = getSubscriptionState(
@@ -130,13 +131,14 @@ test('change-streamer startup does not deadlock on autoreset retry when change a
       process.env.SINGLE_PROCESS = originalSingleProcess;
     }
 
-    const liveSlots = await upstream<{slot: string}[]>`
-      SELECT slot_name as slot
+    const liveSlots = await upstream<{id: string; slot: string}[]>`
+      SELECT id, slot, rank
         FROM pg_replication_slots
-       WHERE slot_name LIKE ${`${shard.appID}\\_${shard.shardNum}\\_%`}
-       ORDER BY slot_name`;
-    expect(liveSlots).toHaveLength(1);
-    expect(liveSlots[0].slot).not.toBe(oldSlot);
+        JOIN ${upstream(`${shard.appID}_${shard.shardNum}.replicas`)} ON slot_name = slot
+        ORDER BY rank DESC LIMIT 1;
+    `;
+    expect(liveSlots[0].slot).toBe(oldSlot); // same slot name
+    expect(liveSlots[0].id).not.toBe(oldID); // was reused for new replica
   } finally {
     await initialSource?.stop().catch(() => {});
     replicaFile.delete();

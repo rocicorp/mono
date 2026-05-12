@@ -303,10 +303,19 @@ export type QueryExecutionFunction<
   TReturn,
   TContext,
 > = (
-  options: IsUnknown<TContext> extends true
-    ? {args: TInput; ctx?: TContext}
-    : {args: TInput; ctx: TContext},
+  options: QueryExecutionOptions<TInput, TContext>,
 ) => Query<TTable, Schema, TReturn>;
+
+type QueryExecutionOptions<
+  TInput extends ReadonlyJSONValue | undefined,
+  TContext,
+> = undefined extends TInput
+  ? IsUnknown<TContext> extends true
+    ? {args?: TInput | undefined; ctx?: TContext | undefined}
+    : {args?: TInput | undefined; ctx: TContext}
+  : IsUnknown<TContext> extends true
+    ? {args: TInput; ctx?: TContext | undefined}
+    : {args: TInput; ctx: TContext};
 
 /**
  * Defines a query to be used with {@link defineQueries}.

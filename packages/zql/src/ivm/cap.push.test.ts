@@ -2,9 +2,16 @@ import {describe, expect, test} from 'vitest';
 import {testLogConfig} from '../../../otel/src/test-log-config.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
+import {buildPipeline} from '../builder/builder.ts';
+import {TestBuilderDelegate} from '../builder/test-builder-delegate.ts';
+import {newQuery} from '../query/query-impl.ts';
+import {asQueryInternals} from '../query/query-internals.ts';
+import type {AnyQuery} from '../query/query.ts';
+import {schema as testSchema} from '../query/test/test-schemas.ts';
 import {Cap} from './cap.ts';
 import {Catch} from './catch.ts';
 import {MemoryStorage} from './memory-storage.ts';
+import type {Source} from './source.ts';
 import {consume} from './stream.ts';
 import {
   runPushTest,
@@ -1484,7 +1491,105 @@ describe('Cap wiring', () => {
       }
     `);
   });
+
+  test('non-flipped EXISTS child with flipped OR branch falls back to Take', () => {
+    // EXISTS-child source.connect goes unordered so SQLite can pick any
+    // index, and Cap absorbs the unordered output. But if the child body
+    // contains a flipped OR branch, applyFilterWithFlips builds a
+    // UnionFanIn over that same source, and UnionFanIn's constructor
+    // asserts the inputs have a sort. Without this fallback, building
+    // the pipeline throws "UnionFanIn requires sorted input".
+    const ast = astOf(
+      newQuery(testSchema, 'issue').whereExists('comments', c =>
+        c.where(({or, cmp, exists}) =>
+          or(
+            cmp('text', 'public'),
+            exists('author', a => a.where('name', 'Alice'), {flip: true}),
+          ),
+        ),
+      ),
+    );
+
+    const capKeys = capKeysFromBuild(ast);
+
+    // No `:cap` storage because the EXISTS child took the Take path.
+    expect(capKeys).toEqual([]);
+  });
+
+  test('non-flipped EXISTS child with OR(simple, non-flipped EXISTS) still uses Cap', () => {
+    // Symmetric counterpart to the falls-back-to-Take test. An OR with
+    // no flipped subqueries goes through the regular FanOut/FanIn path
+    // (filter-level dedup, no sort requirement), so the Cap-vs-Take
+    // gate must stay on Cap. If a future refactor broadened the flip
+    // detection to fire on any subquery in the where, Cap would
+    // silently disappear from this shape — this test pins it.
+    const ast = astOf(
+      newQuery(testSchema, 'issue').whereExists('comments', c =>
+        c.where(({or, cmp, exists}) =>
+          or(cmp('text', 'public'), exists('author')),
+        ),
+      ),
+    );
+
+    // The outer EXISTS child (`zsubq_comments`) keeps Cap because no
+    // flips exist anywhere in its where. The non-flipped EXISTS inside
+    // the OR also gets its own Cap as a nested EXISTS child. Aliases
+    // are prefixed by the query builder (`zsubq_`) and the inside-where
+    // ones are then uniquified (`_0`/`_1`/...).
+    expect(capKeysFromBuild(ast)).toEqual([
+      '.zsubq_comments.zsubq_author_0:cap',
+      '.zsubq_comments:cap',
+    ]);
+  });
+
+  test('non-flipped EXISTS child with OR(exists, exists, exists) still uses Cap at every level', () => {
+    // Three non-flipped EXISTS branches in an OR. Asserts every level
+    // got a Cap operator. Aliases inside `where` are uniquified
+    // (`_0`/`_1`/`_2`) in source order.
+    const ast = astOf(
+      newQuery(testSchema, 'issue').whereExists('comments', c =>
+        c.where(({or, exists}) =>
+          or(exists('issue'), exists('revisions'), exists('author')),
+        ),
+      ),
+    );
+
+    expect(capKeysFromBuild(ast)).toEqual([
+      '.zsubq_comments.zsubq_author_2:cap',
+      '.zsubq_comments.zsubq_issue_0:cap',
+      '.zsubq_comments.zsubq_revisions_1:cap',
+      '.zsubq_comments:cap',
+    ]);
+  });
 });
+
+function astOf(q: AnyQuery): AST {
+  return asQueryInternals(q).ast;
+}
+
+// Builds the pipeline against the test schema (sources are empty;
+// createStorage registers each operator's storage at build time, so we
+// can read back the wiring without fetching). Avoids runPushTest here:
+// its dual-materialization equality assertion is sensitive to OR
+// short-circuit between Catch and ArrayView in shapes that have
+// multiple non-flipped EXISTS branches under an OR.
+function capKeysFromBuild(ast: AST): string[] {
+  const sources: Record<string, Source> = {};
+  for (const [name, table] of Object.entries(testSchema.tables)) {
+    sources[name] = createSource(
+      createSilentLogContext(),
+      testLogConfig,
+      name,
+      table.columns,
+      table.primaryKey,
+    );
+  }
+  const delegate = new TestBuilderDelegate(sources, false);
+  buildPipeline(ast, delegate, 'query-id');
+  return Object.keys(delegate.clonedStorage)
+    .filter(k => k.endsWith(':cap'))
+    .sort();
+}
 
 describe('Cap push - compound partition key', () => {
   // Compound correlation: parent.(region,org) → child.(region,org).
