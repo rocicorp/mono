@@ -28,6 +28,8 @@
     "perf:load:full": "ZERO_LOAD_FULL=1 tsx ./bench/load-harness.ts",
     "perf:ws": "tsx ./bench/ws-protocol.ts",
     "perf:ws:full": "ZERO_WS_FULL=1 tsx ./bench/ws-protocol.ts",
+    "perf:ack": "tsx ./bench/ack-overhead.ts",
+    "perf:ack:full": "ZERO_ACK_FULL=1 tsx ./bench/ack-overhead.ts",
     "perf:poke": "tsx ./bench/poke-flush.ts",
     "perf:poke:full": "ZERO_POKE_FULL=1 tsx ./bench/poke-flush.ts",
     "perf:poke-flush": "npm run perf:poke",
