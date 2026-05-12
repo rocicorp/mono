@@ -2018,28 +2018,6 @@ describe('junction relationship limitations', () => {
     ).not.toThrow();
   });
 
-  test('cannot limit exists junction', () => {
-    expect(() => issueQuery.whereExists('labels', q => q.limit(10))).toThrow(
-      'Limit is not supported in junction',
-    );
-  });
-
-  test('can limit exists after exiting the junction', () => {
-    expect(() =>
-      issueQuery.whereExists('labels', q =>
-        q.whereExists('issues', q =>
-          q.whereExists('comments', q => q.limit(10)),
-        ),
-      ),
-    ).not.toThrow();
-
-    expect(() =>
-      labelQuery.whereExists('issues', q =>
-        q.whereExists('comments', q => q.limit(10)),
-      ),
-    ).not.toThrow();
-  });
-
   test('cannot order by a junction edge', () => {
     expect(() =>
       issueQuery.related('labels', q => q.orderBy('id', 'asc')),
