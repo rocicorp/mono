@@ -209,15 +209,18 @@ export async function ensureReplicationConfig(
           `Data in cdc tables @${replicaVersion} is incompatible ` +
             `with replica @${replicaConfig.replicaVersion}. Clearing tables.`,
         );
-        // Note: The replicationState table is explicitly not TRUNCATE'd.
-        //       Any existing row must be overwritten by an UPDATE or
-        //       INSERT ... ON CONFLICT clause in order to correctly abort
-        //       any pending transaction by a concurrently running
-        //       change-streamer. Deleting the existing row and creating
-        //       a new one, on the other hand, may not properly trigger the
-        //       SERIALIZATION failure necessary to abort the pending tx.
+        // Note: The order of TRUNCATE matters. The replicationState table is
+        //       truncated before the changeLog table, in order to acquire
+        //       (exclusive) locks on the tables in the same order that the
+        //       storer.ts acquires locks when writing the changeLog, namely:
+        //
+        // 1. SELECT ... FROM replicationState FOR UPDATE;
+        // 2. INSERT INTO changeLog ...;
+        //    ...
+        // n. UPDATE replicationState ...;
         needsTruncate = true;
         stmts.push(
+          sql`TRUNCATE TABLE ${sql(schema)}."replicationState"`,
           sql`TRUNCATE TABLE ${sql(schema)}."changeLog"`,
           sql`TRUNCATE TABLE ${sql(schema)}."replicationConfig"`,
           sql`TRUNCATE TABLE ${sql(schema)}."tableMetadata"`,
