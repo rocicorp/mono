@@ -7,7 +7,7 @@ import {
 
 function makePreparedStatement() {
   return {
-    firstValue: vi.fn().mockResolvedValue(undefined),
+    all: vi.fn().mockResolvedValue([]),
     exec: vi.fn().mockResolvedValue(undefined),
   };
 }
@@ -16,6 +16,8 @@ function makePreparedStatements(): PreparedStatements {
   return {
     has: makePreparedStatement(),
     get: makePreparedStatement(),
+    hasMany: makePreparedStatement(),
+    getMany: makePreparedStatement(),
     del: makePreparedStatement(),
     put: makePreparedStatement(),
   };

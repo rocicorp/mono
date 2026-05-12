@@ -13,10 +13,14 @@ export type OpSQLiteStoreOptions = SQLiteStoreOptions & {
   encryptionKey?: string;
 };
 
-function dropOpSQLiteStore(name: string): Promise<void> {
+function dropOpSQLiteStore(
+  name: string,
+  opts?: OpSQLiteStoreOptions,
+): Promise<void> {
   return dropStore(
     name,
-    (filename, opts) => new OpSQLiteDatabase(filename, opts),
+    (filename, options) => new OpSQLiteDatabase(filename, options),
+    opts,
   );
 }
 
@@ -36,7 +40,7 @@ export function opSQLiteStoreProvider(
         (name, options) => new OpSQLiteDatabase(name, options),
         opts,
       ),
-    drop: dropOpSQLiteStore,
+    drop: name => dropOpSQLiteStore(name, opts),
   };
 }
 
@@ -49,13 +53,12 @@ class OpSQLitePreparedStatement implements PreparedStatement {
     this.#sql = sql;
   }
 
-  async firstValue(params: string[]): Promise<string | undefined> {
-    const rows = await this.#db.executeRaw(this.#sql, params);
-    return rows[0]?.[0];
-  }
-
   async exec(params: string[]): Promise<void> {
     await this.#db.executeRaw(this.#sql, params);
+  }
+
+  all(params: string[]): Promise<unknown[][]> {
+    return this.#db.executeRaw(this.#sql, params);
   }
 }
 

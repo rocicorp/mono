@@ -49,19 +49,17 @@ vi.mock('expo-sqlite', () => ({
             try {
               const isSelectQuery = /^\s*select/i.test(sql);
               if (isSelectQuery) {
-                const result = stmt.all(...params);
+                const rows = stmt.raw(true).all(...params) as unknown[][];
                 return Promise.resolve({
                   getFirstAsync: () =>
-                    Promise.resolve(
-                      result.length > 0
-                        ? Object.values(result[0] as Record<string, unknown>)
-                        : null,
-                    ),
+                    Promise.resolve(rows.length > 0 ? rows[0] : null),
+                  getAllAsync: () => Promise.resolve(rows),
                 });
               }
               stmt.run(...params);
               return Promise.resolve({
                 getFirstAsync: () => Promise.resolve(null),
+                getAllAsync: () => Promise.resolve([]),
               });
             } catch (error) {
               return Promise.reject(error);
