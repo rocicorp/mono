@@ -42,8 +42,7 @@ test('change-streamer startup does not deadlock on autoreset retry when change a
   const shard = {appID: 'zoro', shardNum: 3, publications: []};
   const upstream = await testDBs.create(
     'change_streamer_worker_autoreset_deadlock_test_upstream',
-    undefined,
-    {sendStringAsJson: true},
+    {typeOpts: {sendStringAsJson: true}},
   );
   const upstreamURI = getConnectionURI(upstream);
   const replicaFile = new DbFile('change-streamer-worker-autoreset-deadlock');
