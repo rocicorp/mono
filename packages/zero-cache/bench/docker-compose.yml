@@ -1,0 +1,14 @@
+services:
+  zero-cache-load-smoke:
+    image: node:22-bookworm
+    working_dir: /repo
+    volumes:
+      - ../../..:/repo
+    command: bash -lc "npm ci && npm --workspace=zero-cache run perf:load"
+
+  zero-cache-ws-smoke:
+    image: node:22-bookworm
+    working_dir: /repo
+    volumes:
+      - ../../..:/repo
+    command: bash -lc "npm ci && npm --workspace=zero-cache run perf:ws"
