@@ -73,6 +73,276 @@ export type CommitResult = {
   changeLogUpdated: boolean;
 };
 
+type ChangeProcessorOptions = {
+  readonly cacheDmlSqlPlans?: boolean;
+};
+
+type UpsertPlan = {
+  readonly rowColumns: readonly string[];
+  readonly sql: string;
+};
+
+type UpdatePlan = {
+  readonly rowColumns: readonly string[];
+  readonly keyColumns: readonly string[];
+  readonly sql: string;
+};
+
+type DeletePlan = {
+  readonly keyColumns: readonly string[];
+  readonly sql: string;
+};
+
+class DmlSqlPlanCache {
+  readonly #enabled: boolean;
+  readonly #upsertPlans = new Map<string, UpsertPlan>();
+  readonly #updatePlans = new Map<string, UpdatePlan>();
+  readonly #deletePlans = new Map<string, DeletePlan>();
+  readonly #lastUpsertPlan = new Map<string, UpsertPlan>();
+  readonly #lastUpdatePlan = new Map<string, UpdatePlan>();
+  readonly #lastDeletePlan = new Map<string, DeletePlan>();
+
+  constructor(enabled: boolean) {
+    this.#enabled = enabled;
+  }
+
+  clear() {
+    this.#upsertPlans.clear();
+    this.#updatePlans.clear();
+    this.#deletePlans.clear();
+    this.#lastUpsertPlan.clear();
+    this.#lastUpdatePlan.clear();
+    this.#lastDeletePlan.clear();
+  }
+
+  getUpsertPlan(table: string, row: LiteRow, numCols: number): UpsertPlan {
+    if (!this.#enabled) {
+      return createUpsertPlan(table, columnsForRow(row, numCols));
+    }
+
+    const last = this.#lastUpsertPlan.get(table);
+    if (last && rowHasColumns(row, numCols, last.rowColumns)) {
+      return last;
+    }
+
+    const rowColumns = columnsForRow(row, numCols);
+    const cacheKey = shapeKey(table, rowColumns);
+    let plan = this.#upsertPlans.get(cacheKey);
+    if (!plan) {
+      plan = createUpsertPlan(table, rowColumns);
+      this.#upsertPlans.set(cacheKey, plan);
+    }
+    this.#lastUpsertPlan.set(table, plan);
+    return plan;
+  }
+
+  getUpdatePlan(
+    table: string,
+    row: LiteRow,
+    numCols: number,
+    keyColumns: readonly string[],
+  ): UpdatePlan {
+    if (!this.#enabled) {
+      return createUpdatePlan(table, columnsForRow(row, numCols), keyColumns);
+    }
+
+    const last = this.#lastUpdatePlan.get(table);
+    if (
+      last &&
+      rowHasColumns(row, numCols, last.rowColumns) &&
+      sameColumns(keyColumns, last.keyColumns)
+    ) {
+      return last;
+    }
+
+    const rowColumns = columnsForRow(row, numCols);
+    const cacheKey = shapeKey(table, rowColumns, keyColumns);
+    let plan = this.#updatePlans.get(cacheKey);
+    if (!plan) {
+      plan = createUpdatePlan(table, rowColumns, keyColumns);
+      this.#updatePlans.set(cacheKey, plan);
+    }
+    this.#lastUpdatePlan.set(table, plan);
+    return plan;
+  }
+
+  getDeletePlan(table: string, keyColumns: readonly string[]): DeletePlan {
+    if (!this.#enabled) {
+      return createDeletePlan(table, keyColumns);
+    }
+
+    const last = this.#lastDeletePlan.get(table);
+    if (last && sameColumns(keyColumns, last.keyColumns)) {
+      return last;
+    }
+
+    const cacheKey = shapeKey(table, keyColumns);
+    let plan = this.#deletePlans.get(cacheKey);
+    if (!plan) {
+      plan = createDeletePlan(table, keyColumns);
+      this.#deletePlans.set(cacheKey, plan);
+    }
+    this.#lastDeletePlan.set(table, plan);
+    return plan;
+  }
+}
+
+function createUpsertPlan(
+  table: string,
+  rowColumns: readonly string[],
+): UpsertPlan {
+  const insertColumns = [...rowColumns, ZERO_VERSION_COLUMN_NAME];
+  const columnsSQL = insertColumns.map(c => id(c)).join(',');
+  return {
+    rowColumns,
+    sql: /*sql*/ `
+      INSERT OR REPLACE INTO ${id(table)} (${columnsSQL})
+        VALUES (${placeholders(insertColumns.length)})
+      `,
+  };
+}
+
+function createUpdatePlan(
+  table: string,
+  rowColumns: readonly string[],
+  keyColumns: readonly string[],
+): UpdatePlan {
+  const setExprs = [...rowColumns, ZERO_VERSION_COLUMN_NAME].map(
+    col => `${id(col)}=?`,
+  );
+  const conds = keyColumns.map(col => `${id(col)}=?`);
+  return {
+    rowColumns,
+    keyColumns,
+    sql: /*sql*/ `
+      UPDATE ${id(table)}
+        SET ${setExprs.join(',')}
+        WHERE ${conds.join(' AND ')}
+      `,
+  };
+}
+
+function createDeletePlan(
+  table: string,
+  keyColumns: readonly string[],
+): DeletePlan {
+  const conds = keyColumns.map(col => `${id(col)}=?`);
+  return {
+    keyColumns,
+    sql: `DELETE FROM ${id(table)} WHERE ${conds.join(' AND ')}`,
+  };
+}
+
+function columnsForRow(row: LiteRow, numCols: number): string[] {
+  const columns: string[] = [];
+  columns.length = numCols;
+  let i = 0;
+  for (const col in row) {
+    columns[i++] = col;
+  }
+  assert(i === numCols, `Expected ${numCols} columns, got ${i}`);
+  return columns;
+}
+
+function rowHasColumns(
+  row: LiteRow,
+  numCols: number,
+  columns: readonly string[],
+) {
+  if (numCols !== columns.length) {
+    return false;
+  }
+  for (const col of columns) {
+    if (!Object.hasOwn(row, col)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function sameColumns(left: readonly string[], right: readonly string[]) {
+  if (left.length !== right.length) {
+    return false;
+  }
+  for (let i = 0; i < left.length; i++) {
+    if (left[i] !== right[i]) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function shapeKey(
+  table: string,
+  columns: readonly string[],
+  extraColumns?: readonly string[],
+) {
+  let key = columnKeyPart(table) + columnListKeyPart(columns);
+  if (extraColumns) {
+    key += columnListKeyPart(extraColumns);
+  }
+  return key;
+}
+
+function columnListKeyPart(columns: readonly string[]) {
+  let key = `#${columns.length}`;
+  for (const col of columns) {
+    key += columnKeyPart(col);
+  }
+  return key;
+}
+
+function columnKeyPart(col: string) {
+  return `${col.length}:${col}`;
+}
+
+function placeholders(length: number) {
+  return Array.from({length}).fill('?').join(',');
+}
+
+function upsertValues(
+  row: LiteRow,
+  columns: readonly string[],
+  version: LexiVersion,
+) {
+  const values: (LiteValueType | LexiVersion)[] = [];
+  values.length = columns.length + 1;
+  for (let i = 0; i < columns.length; i++) {
+    values[i] = row[columns[i]];
+  }
+  values[columns.length] = version;
+  return values;
+}
+
+function updateValues(
+  row: LiteRow,
+  rowColumns: readonly string[],
+  key: LiteRowKey,
+  keyColumns: readonly string[],
+  version: LexiVersion,
+) {
+  const values: (LiteValueType | LexiVersion)[] = [];
+  values.length = rowColumns.length + keyColumns.length + 1;
+  let pos = 0;
+  for (const col of rowColumns) {
+    values[pos++] = row[col];
+  }
+  values[pos++] = version;
+  for (const col of keyColumns) {
+    values[pos++] = key[col];
+  }
+  return values;
+}
+
+function keyValues(key: LiteRowKey, keyColumns: readonly string[]) {
+  const values: LiteValueType[] = [];
+  values.length = keyColumns.length;
+  for (let i = 0; i < keyColumns.length; i++) {
+    values[i] = key[keyColumns[i]];
+  }
+  return values;
+}
+
 /**
  * The ChangeProcessor partitions the stream of messages into transactions
  * by creating a {@link TransactionProcessor} when a transaction begins, and dispatching
@@ -95,6 +365,7 @@ export class ChangeProcessor {
   // and reloads them after a schema change. It is cached here to avoid
   // reading them from the DB on every transaction.
   readonly #tableSpecs = new Map<string, LiteTableSpecWithReplicationStatus>();
+  readonly #dmlSqlPlans: DmlSqlPlanCache;
 
   #currentTx: TransactionProcessor | null = null;
 
@@ -104,12 +375,14 @@ export class ChangeProcessor {
     db: StatementRunner,
     mode: ChangeProcessorMode,
     failService: (lc: LogContext, err: unknown) => void,
+    {cacheDmlSqlPlans = true}: ChangeProcessorOptions = {},
   ) {
     this.#db = db;
     this.#changeLog = new ChangeLog(db.db);
     this.#tableMetadata = new TableMetadataTracker(db.db);
     this.#mode = mode;
     this.#failService = failService;
+    this.#dmlSqlPlans = new DmlSqlPlanCache(cacheDmlSqlPlans);
   }
 
   #fail(lc: LogContext, err: unknown) {
@@ -186,6 +459,7 @@ export class ChangeProcessor {
           this.#changeLog,
           this.#tableMetadata,
           this.#tableSpecs,
+          this.#dmlSqlPlans,
           commitVersion,
           jsonFormat,
         );
@@ -328,6 +602,7 @@ class TransactionProcessor {
   readonly #changeLog: ChangeLog;
   readonly #tableMetadata: TableMetadataTracker;
   readonly #tableSpecs: Map<string, LiteTableSpecWithReplicationStatus>;
+  readonly #dmlSqlPlans: DmlSqlPlanCache;
   readonly #jsonFormat: JSONFormat;
   readonly #columnMetadata: ColumnMetadataStore;
 
@@ -342,6 +617,7 @@ class TransactionProcessor {
     changeLog: ChangeLog,
     tableMetadata: TableMetadataTracker,
     tableSpecs: Map<string, LiteTableSpecWithReplicationStatus>,
+    dmlSqlPlans: DmlSqlPlanCache,
     commitVersion: LexiVersion,
     jsonFormat: JSONFormat,
   ) {
@@ -380,6 +656,7 @@ class TransactionProcessor {
     this.#changeLog = changeLog;
     this.#tableMetadata = tableMetadata;
     this.#tableSpecs = tableSpecs;
+    this.#dmlSqlPlans = dmlSqlPlans;
     // The column_metadata table is guaranteed to exist since the
     // replica-schema.ts migration to v8.
     this.#columnMetadata = must(ColumnMetadataStore.getInstance(db.db));
@@ -391,6 +668,7 @@ class TransactionProcessor {
 
   #reloadTableSpecs() {
     this.#tableSpecs.clear();
+    this.#dmlSqlPlans.clear();
     // zqlSpecs include the primary key derived from unique indexes
     const zqlSpecs = computeZqlSpecs(this.#lc, this.#db.db, {
       includeBackfillingColumns: true,
@@ -412,10 +690,7 @@ class TransactionProcessor {
     return must(this.#tableSpecs.get(name), `Unknown table ${name}`);
   }
 
-  #getKey(
-    {row, numCols}: {row: LiteRow; numCols: number},
-    {relation}: {relation: MessageRelation},
-  ): LiteRowKey {
+  #getKeyColumns({relation}: {relation: MessageRelation}) {
     const keyColumns =
       relation.rowKey.type !== 'full'
         ? relation.rowKey.columns // already a suitable key
@@ -425,6 +700,14 @@ class TransactionProcessor {
         `Cannot replicate table "${relation.name}" without a PRIMARY KEY or UNIQUE INDEX`,
       );
     }
+    return keyColumns;
+  }
+
+  #getKey(
+    {row, numCols}: {row: LiteRow; numCols: number},
+    {relation}: {relation: MessageRelation},
+    keyColumns = this.#getKeyColumns({relation}),
+  ): LiteRowKey {
     // For the common case (replica identity default), the row is already the
     // key for deletes and updates, in which case a new object can be avoided.
     if (numCols === keyColumns.length) {
@@ -442,10 +725,7 @@ class TransactionProcessor {
     const tableSpec = this.#tableSpec(table);
     const newRow = liteRow(insert.new, tableSpec, this.#jsonFormat);
 
-    this.#upsert(table, {
-      ...newRow.row,
-      [ZERO_VERSION_COLUMN_NAME]: this.#version,
-    });
+    this.#upsert(table, newRow);
 
     if (insert.relation.rowKey.columns.length === 0) {
       // INSERTs can be replicated for rows without a PRIMARY KEY or a
@@ -461,15 +741,9 @@ class TransactionProcessor {
     this.#logSetOp(table, key, getBackfilledColumns(newRow.row, tableSpec));
   }
 
-  #upsert(table: string, row: LiteRow) {
-    const columns = Object.keys(row).map(c => id(c));
-    this.#db.run(
-      `
-      INSERT OR REPLACE INTO ${id(table)} (${columns.join(',')})
-        VALUES (${Array.from({length: columns.length}).fill('?').join(',')})
-      `,
-      Object.values(row),
-    );
+  #upsert(table: string, {row, numCols}: {row: LiteRow; numCols: number}) {
+    const plan = this.#dmlSqlPlans.getUpsertPlan(table, row, numCols);
+    this.#db.run(plan.sql, upsertValues(row, plan.rowColumns, this.#version));
   }
 
   // Updates by default are applied as UPDATE commands to support partial
@@ -488,16 +762,17 @@ class TransactionProcessor {
     const table = liteTableName(update.relation);
     const tableSpec = this.#tableSpec(table);
     const newRow = liteRow(update.new, tableSpec, this.#jsonFormat);
-    const row = {...newRow.row, [ZERO_VERSION_COLUMN_NAME]: this.#version};
+    const keyColumns = this.#getKeyColumns(update);
 
     // update.key is set with the old values if the key has changed.
     const oldKey = update.key
       ? this.#getKey(
           liteRow(update.key, this.#tableSpec(table), this.#jsonFormat),
           update,
+          keyColumns,
         )
       : null;
-    const newKey = this.#getKey(newRow, update);
+    const newKey = this.#getKey(newRow, update, keyColumns);
 
     if (oldKey) {
       this.#logDeleteOp(table, oldKey, tableSpec.backfilling);
@@ -505,43 +780,48 @@ class TransactionProcessor {
     this.#logSetOp(table, newKey, getBackfilledColumns(newRow.row, tableSpec));
 
     const currKey = oldKey ?? newKey;
-    const conds = Object.keys(currKey).map(col => `${id(col)}=?`);
-    const setExprs = Object.keys(row).map(col => `${id(col)}=?`);
+    const plan = this.#dmlSqlPlans.getUpdatePlan(
+      table,
+      newRow.row,
+      newRow.numCols,
+      keyColumns,
+    );
 
     const {changes} = this.#db.run(
-      `
-      UPDATE ${id(table)}
-        SET ${setExprs.join(',')}
-        WHERE ${conds.join(' AND ')}
-      `,
-      [...Object.values(row), ...Object.values(currKey)],
+      plan.sql,
+      updateValues(
+        newRow.row,
+        plan.rowColumns,
+        currKey,
+        plan.keyColumns,
+        this.#version,
+      ),
     );
 
     // If the UPDATE did not affect any rows, perform an UPSERT of the
     // new row for resumptive replication.
     if (changes === 0) {
-      this.#upsert(table, row);
+      this.#upsert(table, newRow);
     }
   }
 
   processDelete(del: MessageDelete) {
     const table = liteTableName(del.relation);
     const tableSpec = this.#tableSpec(table);
+    const keyColumns = this.#getKeyColumns(del);
     const rowKey = this.#getKey(
       liteRow(del.key, tableSpec, this.#jsonFormat),
       del,
+      keyColumns,
     );
 
-    this.#delete(table, rowKey);
+    this.#delete(table, rowKey, keyColumns);
     this.#logDeleteOp(table, rowKey, tableSpec.backfilling);
   }
 
-  #delete(table: string, rowKey: LiteRowKey) {
-    const conds = Object.keys(rowKey).map(col => `${id(col)}=?`);
-    this.#db.run(
-      `DELETE FROM ${id(table)} WHERE ${conds.join(' AND ')}`,
-      Object.values(rowKey),
-    );
+  #delete(table: string, rowKey: LiteRowKey, keyColumns: readonly string[]) {
+    const plan = this.#dmlSqlPlans.getDeletePlan(table, keyColumns);
+    this.#db.run(plan.sql, keyValues(rowKey, plan.keyColumns));
   }
 
   processTruncate(truncate: MessageTruncate) {
