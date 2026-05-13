@@ -26,6 +26,8 @@
     "bench:bmf:silent": "npm run bench:bmf --silent",
     "perf:load": "tsx ./bench/load-harness.ts",
     "perf:load:full": "ZERO_LOAD_FULL=1 tsx ./bench/load-harness.ts",
+    "perf:rm-vs-load": "tsx ./bench/rm-vs-load.ts",
+    "perf:rm-vs-load:full": "ZERO_RM_VS_FULL=1 tsx ./bench/rm-vs-load.ts",
     "perf:ws": "tsx ./bench/ws-protocol.ts",
     "perf:ws:full": "ZERO_WS_FULL=1 tsx ./bench/ws-protocol.ts",
     "perf:ack": "tsx ./bench/ack-overhead.ts",
