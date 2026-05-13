@@ -49,6 +49,10 @@ jobs:
           npx tsx tool/split-perf.ts perf-temp-output.json perf-v2-output.json perf-v2-p95-output.json
         shell: bash
 
+      # Disable git hooks so github-action-benchmark can commit to gh-pages
+      # (the pre-commit hook references tools/ which doesn't exist on gh-pages)
+      - run: git config core.hooksPath /dev/null
+
       # Run `github-action-benchmark` action
       - name: Store benchmark result
         uses: rhysd/github-action-benchmark@v1
