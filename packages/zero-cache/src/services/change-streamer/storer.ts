@@ -480,9 +480,18 @@ export class Storer implements Service {
             ack: !change.skipAck,
           };
           tx.pool.run(this.#db);
-          // Acquire the replicationState lock and optimistically move the
-          // watermark in the same transaction as the changeLog inserts. If the
-          // transaction rolls back, this update rolls back too.
+          // Golden path for one upstream transaction:
+          //
+          //   BEGIN
+          //     guarded UPDATE replicationState WHERE owner = this task
+          //     buffered INSERT changeLog rows...
+          //   COMMIT
+          //
+          // The guarded UPDATE replaces the old SELECT-owner-then-UPDATE
+          // round trip while preserving the safety property: if ownership was
+          // lost, no rows are ACKed to upstream Postgres. Keeping the
+          // watermark update inside this transaction also means rollbacks undo
+          // both the changeLog rows and the advertised resume point together.
           void tx.pool.process(tx => {
             const lastWatermark = watermark;
             tx<ReplicationOwner[]> /*sql*/ `
@@ -628,6 +637,13 @@ export class Storer implements Service {
     }
     const entries = tx.pendingChangeLogEntries;
     tx.pendingChangeLogEntries = [];
+    // Multi-row INSERTs are the golden path for data-heavy transactions:
+    //
+    //   old: data row -> INSERT -> data row -> INSERT -> ...
+    //   new: data row -> buffer -> data row -> buffer -> INSERT many rows
+    //
+    // Schema changes still flush immediately so their metadata side effects
+    // remain ordered with the exact change that introduced them.
     return tx.pool.process(sql => [
       sql`INSERT INTO ${this.#cdc('changeLog')} ${sql(entries)}`,
     ]);
