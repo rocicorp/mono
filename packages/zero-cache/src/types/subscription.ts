@@ -75,9 +75,12 @@ export class Subscription<T, M = T> implements Source<T>, Sink<M> {
   }
 
   // Consumers waiting to consume messages (i.e. an async iteration awaiting the next message).
-  readonly #consumers: Resolver<Entry<M> | null>[] = [];
+  readonly #consumers: (Resolver<Entry<M> | null> | undefined)[] = [];
+  #consumerHead = 0;
   // Messages waiting to be dequeued.
-  readonly #messages: (Entry<M> | 'terminus')[] = [];
+  readonly #messages: (Entry<M> | 'terminus' | undefined)[] = [];
+  #messageHead = 0;
+  #messageCount = 0;
   // Messages dequeued but not yet consumed.
   readonly #consuming = new Set<Entry<M>>();
   readonly #pipelineEnabled: boolean;
@@ -151,23 +154,26 @@ export class Subscription<T, M = T> implements Source<T>, Sink<M> {
       entry.resolve('unconsumed');
       return {result};
     }
-    const consumer = this.#consumers.shift();
+    const consumer = this.#dequeueConsumer();
     if (consumer) {
       consumer.resolve(entry);
     } else if (
       this.#coalesce &&
-      this.#messages.length &&
-      this.#messages.at(-1) !== 'terminus'
+      this.#messageCount > 0 &&
+      this.#lastMessage() !== 'terminus'
     ) {
       // oxlint-disable-next-line typescript/no-non-null-assertion
       const prev = this.#messages.at(-1)!;
-      assert(prev !== 'terminus', 'prev should not be terminus after check');
+      assert(
+        prev !== undefined && prev !== 'terminus',
+        'prev should be an entry after check',
+      );
       this.#messages[this.#messages.length - 1] = {
         value: this.#coalesce(entry, prev),
         resolve,
       };
     } else {
-      this.#messages.push(entry);
+      this.#enqueueMessage(entry);
     }
     return {result};
   }
@@ -179,7 +185,7 @@ export class Subscription<T, M = T> implements Source<T>, Sink<M> {
 
   /** The number of messages waiting to be dequeued. */
   get queued(): number {
-    return this.#messages.length;
+    return this.#messageCount;
   }
 
   /** The number of messages dequeued but not yet "consumed" */
@@ -202,10 +208,10 @@ export class Subscription<T, M = T> implements Source<T>, Sink<M> {
   end() {
     if (this.#sentinel) {
       // already terminated
-    } else if (this.#messages.length === 0) {
+    } else if (this.#messageCount === 0) {
       this.cancel();
     } else {
-      this.#messages.push('terminus');
+      this.#enqueueMessage('terminus');
     }
   }
 
@@ -231,15 +237,15 @@ export class Subscription<T, M = T> implements Source<T>, Sink<M> {
     if (!this.#sentinel) {
       this.#sentinel = sentinel;
       this.#cleanup(
-        [...this.#consuming, ...this.#messages.filter(m => m !== 'terminus')],
+        [...this.#consuming, ...this.#pendingMessages()],
         sentinel instanceof Error ? sentinel : undefined,
       );
-      this.#messages.splice(0);
+      this.#resetMessages();
 
       for (
-        let consumer = this.#consumers.shift();
+        let consumer = this.#dequeueConsumer();
         consumer;
-        consumer = this.#consumers.shift()
+        consumer = this.#dequeueConsumer()
       ) {
         sentinel === 'canceled'
           ? consumer.resolve(null)
@@ -257,7 +263,7 @@ export class Subscription<T, M = T> implements Source<T>, Sink<M> {
   #pipeline(): AsyncIterator<{value: T; consumed: () => void}> {
     return {
       next: async () => {
-        const entry = this.#messages.shift();
+        const entry = this.#dequeueMessage();
         if (entry === 'terminus') {
           this.cancel();
           return {value: undefined, done: true};
@@ -326,6 +332,96 @@ export class Subscription<T, M = T> implements Source<T>, Sink<M> {
         return Promise.resolve({value, done: true});
       },
     };
+  }
+
+  #dequeueConsumer(): Resolver<Entry<M> | null> | undefined {
+    while (this.#consumerHead < this.#consumers.length) {
+      const consumer = this.#consumers[this.#consumerHead];
+      this.#consumers[this.#consumerHead] = undefined;
+      this.#consumerHead++;
+      if (consumer) {
+        this.#maybeCompactConsumers();
+        return consumer;
+      }
+    }
+
+    this.#resetConsumers();
+    return undefined;
+  }
+
+  #enqueueMessage(message: Entry<M> | 'terminus'): void {
+    this.#messages.push(message);
+    this.#messageCount++;
+  }
+
+  #dequeueMessage(): Entry<M> | 'terminus' | undefined {
+    if (this.#messageCount === 0) {
+      this.#resetMessages();
+      return undefined;
+    }
+
+    while (this.#messageHead < this.#messages.length) {
+      const message = this.#messages[this.#messageHead];
+      this.#messages[this.#messageHead] = undefined;
+      this.#messageHead++;
+      if (message) {
+        this.#messageCount--;
+        this.#maybeCompactMessages();
+        return message;
+      }
+    }
+
+    this.#messageCount = 0;
+    this.#resetMessages();
+    return undefined;
+  }
+
+  #lastMessage(): Entry<M> | 'terminus' | undefined {
+    return this.#messageCount === 0 ? undefined : this.#messages.at(-1);
+  }
+
+  #pendingMessages(): Entry<M>[] {
+    const pending: Entry<M>[] = [];
+    for (let i = this.#messageHead; i < this.#messages.length; i++) {
+      const message = this.#messages[i];
+      if (message && message !== 'terminus') {
+        pending.push(message);
+      }
+    }
+    return pending;
+  }
+
+  #maybeCompactConsumers(): void {
+    if (
+      this.#consumerHead > 1024 &&
+      this.#consumerHead * 2 > this.#consumers.length
+    ) {
+      this.#consumers.splice(0, this.#consumerHead);
+      this.#consumerHead = 0;
+    }
+  }
+
+  #maybeCompactMessages(): void {
+    if (this.#messageCount === 0) {
+      this.#resetMessages();
+    } else if (
+      this.#messageHead > 1024 &&
+      this.#messageHead * 2 > this.#messages.length
+    ) {
+      this.#messages.splice(0, this.#messageHead);
+      this.#messageHead = 0;
+    }
+  }
+
+  #resetConsumers(): void {
+    this.#consumers.length = 0;
+    this.#consumerHead = 0;
+  }
+
+  #resetMessages(): void {
+    this.#messages.length = 0;
+    this.#messageHead = 0;
+    this.#messageCount = 0;
   }
 }
 
