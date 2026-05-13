@@ -45,7 +45,11 @@ import type {
 
 // End-to-end load driver for reviewing storer/changeLog throughput changes.
 //
-// The benchmark intentionally exercises the shape reviewers care about:
+// #5976/#5977: https://github.com/rocicorp/mono/pull/5976
+// This harness exists to keep storer performance work anchored to the same
+// production-shaped bottleneck: one replication-manager, fanout to live
+// view-syncers, optional reconnect catchup, SQLite apply, JSON serialization,
+// and Postgres writes sharing the same event loop.
 //
 //   one RM writes the stream
 //            |
@@ -53,10 +57,6 @@ import type {
 //       Storer/changeLog  ---->  N live view-syncers
 //            |
 //            `---------------->  optional reconnect catchup
-//
-// Component microbenches can hide wins that disappear once fanout, catchup,
-// JSON serialization, SQLite apply, and Postgres write pressure share the same
-// event loop. Keep this folder as the golden-path perf harness for storer PRs.
 
 const lc = createSilentLogContext();
 const shard: ShardID = {appID: 'bench', shardNum: 0};
