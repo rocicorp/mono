@@ -1398,16 +1398,14 @@ export class Zero<
       // frame (e.g. a mutation containing a large base64-encoded blob).
       // Because the mutation is persisted in IndexedDB, the client would
       // otherwise reconnect and immediately re-send it, causing an infinite
-      // reconnect loop. Drop the local database to remove the stuck mutation
-      // and reload.
+      // reconnect loop. Disable the client group to abandon the stuck
+      // mutation and reload with a fresh client group.
       if (code === 1009) {
         lc.error?.(
           'Server closed connection with 1009 (Message Too Big). ' +
-            'Dropping local database to remove oversized mutation.',
+            'Disabling client group to remove oversized mutation.',
         );
-        await dropReplicacheDatabase(this.#rep.idbName, {
-          kvStore: this.#kvStore,
-        });
+        await this.#rep.disableClientGroup();
         this.#onClientStateNotFound(
           ErrorKind.InvalidMessage,
           'A mutation exceeded the server message size limit. ' +

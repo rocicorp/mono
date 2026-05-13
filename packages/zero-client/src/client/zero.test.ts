@@ -3033,6 +3033,59 @@ test('local onClientStateNotFound default handler', async () => {
   );
 });
 
+test('close code 1009 (Message Too Big) disables client group and reloads', async () => {
+  const storage: Record<string, string> = {};
+  vi.spyOn(window, 'sessionStorage', 'get').mockImplementation(() =>
+    storageMock(storage),
+  );
+  const {promise, resolve} = resolver();
+  const reload = vi.fn(resolve);
+  const z = zeroForTest();
+  z.reload = reload;
+
+  await z.triggerConnected();
+  expect(z.connectionStatus).toBe(ConnectionStatus.Connected);
+  expect(hasMemStore(z.idbName)).toBe(true);
+
+  await z.triggerClose(1009);
+
+  await vi.waitUntil(() => storage[RELOAD_REASON_STORAGE_KEY] !== undefined);
+  await promise;
+
+  expect(reload).toHaveBeenCalledTimes(1);
+  // disableClientGroup does not drop the database, just the client group
+  expect(hasMemStore(z.idbName)).toBe(true);
+  expect(storage[RELOAD_REASON_STORAGE_KEY]).toBe(
+    '["InvalidMessage","A mutation exceeded the server message size limit. Local state has been reset."]',
+  );
+});
+
+test('close code 1009 with custom onClientStateNotFound handler', async () => {
+  const {promise, resolve} = resolver();
+  let z: TestZero<Schema>;
+  const fake = vi.fn(() => {
+    // disableClientGroup does not drop the database
+    expect(hasMemStore(z.idbName)).toBe(true);
+    resolve();
+  });
+  z = zeroForTest({onClientStateNotFound: fake});
+  const reload = vi.fn();
+  z.reload = reload;
+
+  await z.triggerConnected();
+  expect(z.connectionStatus).toBe(ConnectionStatus.Connected);
+  expect(hasMemStore(z.idbName)).toBe(true);
+
+  await z.triggerClose(1009);
+
+  await promise;
+
+  expect(fake).toHaveBeenCalledTimes(1);
+  expect(fake).toHaveBeenCalledWith();
+  expect(reload).not.toHaveBeenCalled();
+  expect(hasMemStore(z.idbName)).toBe(true);
+});
+
 test('Constructing Zero with a negative hiddenTabDisconnectDelay option throws an error', () => {
   let expected;
   try {
