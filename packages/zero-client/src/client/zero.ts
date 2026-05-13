@@ -1361,7 +1361,7 @@ export class Zero<
     }
   };
 
-  #onClose = (e: CloseEvent) => {
+  #onClose = async (e: CloseEvent) => {
     let lc = this.#lc;
     try {
       assert(this.#socket, 'Socket is not set before onClose');
@@ -1393,6 +1393,27 @@ export class Zero<
       );
       this.#connectResolver.reject(closeError);
       this.#disconnect(lc, closeError);
+
+      // 1009 = Message Too Big. The server rejected an oversized WebSocket
+      // frame (e.g. a mutation containing a large base64-encoded blob).
+      // Because the mutation is persisted in IndexedDB, the client would
+      // otherwise reconnect and immediately re-send it, causing an infinite
+      // reconnect loop. Drop the local database to remove the stuck mutation
+      // and reload.
+      if (code === 1009) {
+        lc.error?.(
+          'Server closed connection with 1009 (Message Too Big). ' +
+            'Dropping local database to remove oversized mutation.',
+        );
+        await dropReplicacheDatabase(this.#rep.idbName, {
+          kvStore: this.#kvStore,
+        });
+        this.#onClientStateNotFound(
+          ErrorKind.InvalidMessage,
+          'A mutation exceeded the server message size limit. ' +
+            'Local state has been reset.',
+        );
+      }
     } catch (e) {
       lc.error?.('Unhandled error in onClose', e);
       const internalError = new ClientError(
