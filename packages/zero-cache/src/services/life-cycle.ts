@@ -308,7 +308,7 @@ export async function exitAfter(lc: LogContext, run: () => Promise<void>) {
     lc.info?.(`pid ${pid} exiting normally`);
     process.exit(0);
   } catch (e) {
-    lc.error?.(`exiting with error: {String(e)}`, e);
+    lc.error?.(`exiting with error: ${String(e)}`, e);
     process.exit(-1);
   }
 }
