@@ -10,9 +10,9 @@ import type {Subscriber} from './subscriber.ts';
  * Creating a `Broadcast` automatically initiates the send.
  *
  * By default, {@link Broadcast.done} resolves when all subscribers
- * have acked the change. However, {@link Broadcast.checkProgress()}
- * can be called to resolve the broadcast earlier based on the flow
- * control policy.
+ * have acked the change. When flow control options are supplied,
+ * {@link Broadcast.done} resolves after majority consensus plus the
+ * configured padding.
  */
 export class Broadcast {
   /**
@@ -31,7 +31,9 @@ export class Broadcast {
   readonly #pending: Set<Subscriber>;
   readonly #completed: Completed[];
   readonly #done = resolver();
+  readonly #flowControl: FlowControlOptions | undefined;
   #isDone = false;
+  #flowControlTimer: ReturnType<typeof setTimeout> | undefined;
 
   readonly #watermark: string;
   readonly #majority: number;
@@ -43,9 +45,14 @@ export class Broadcast {
    * Broadcasts the `change` to the `subscribers` and tracks their
    * completion.
    */
-  constructor(subscribers: Iterable<Subscriber>, change: WatermarkedChange) {
+  constructor(
+    subscribers: Iterable<Subscriber>,
+    change: WatermarkedChange,
+    flowControl: FlowControlOptions | undefined = undefined,
+  ) {
     this.#pending = new Set(subscribers);
     this.#completed = [];
+    this.#flowControl = flowControl;
     this.#watermark = change[0];
     this.#majority = Math.floor(this.#pending.size / 2) + 1;
 
@@ -69,12 +76,67 @@ export class Broadcast {
     this.#pending.delete(sub);
     if (this.#pending.size === 0) {
       this.#setDone();
+    } else {
+      this.#resetConsensusTimer();
     }
   }
 
-  #setDone() {
+  #setDone(): boolean {
+    if (this.#isDone) {
+      return false;
+    }
     this.#isDone = true;
+    this.#clearConsensusTimer();
     this.#done.resolve();
+    return true;
+  }
+
+  #resetConsensusTimer() {
+    if (
+      this.#isDone ||
+      this.#flowControl === undefined ||
+      !(this.#flowControl.flowControlConsensusPaddingMs >= 0) ||
+      this.#completed.length < this.#majority
+    ) {
+      return;
+    }
+    this.#clearConsensusTimer();
+    this.#flowControlTimer = setTimeout(
+      this.#releaseAfterConsensusPadding,
+      this.#flowControl.flowControlConsensusPaddingMs,
+    );
+  }
+
+  readonly #releaseAfterConsensusPadding = () => {
+    this.#flowControlTimer = undefined;
+    const flowControl = this.#flowControl;
+    if (
+      this.#isDone ||
+      flowControl === undefined ||
+      this.#pending.size === 0 ||
+      this.#completed.length < this.#majority
+    ) {
+      return;
+    }
+    const now = performance.now();
+    if (
+      now - this.#latestCompleted <
+      flowControl.flowControlConsensusPaddingMs
+    ) {
+      this.#resetConsensusTimer();
+      return;
+    }
+    this.#logWithState(
+      flowControl.lc,
+      `continuing with ${this.#pending.size} subscriber(s) still pending`,
+      now - this.#start,
+    );
+    this.#setDone();
+  };
+
+  #clearConsensusTimer() {
+    clearTimeout(this.#flowControlTimer);
+    this.#flowControlTimer = undefined;
   }
 
   get isDone(): boolean {
@@ -159,8 +221,14 @@ export class Broadcast {
     flowControlConsensusPaddingMs: number,
     now: number,
   ) {
+    if (this.#isDone) {
+      return true;
+    }
     if (this.#pending.size === 0) {
       return true;
+    }
+    if (!(flowControlConsensusPaddingMs >= 0)) {
+      return false;
     }
     const elapsed = now - this.#start;
     if (this.#completed.length < this.#majority) {
@@ -213,4 +281,9 @@ type Completed = {
   changes: number;
   /** The elapsed milliseconds. */
   elapsed: number;
+};
+
+export type FlowControlOptions = {
+  readonly lc: LogContext;
+  readonly flowControlConsensusPaddingMs: number;
 };
