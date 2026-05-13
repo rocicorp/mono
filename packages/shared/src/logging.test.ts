@@ -1,5 +1,6 @@
 import {expect, test} from 'vitest';
 import {AbortError} from './abort-error';
+import type {ReadonlyJSONValue} from './json';
 import {errorOrObject} from './logging';
 
 class CustomErrorWithDetails extends Error {
