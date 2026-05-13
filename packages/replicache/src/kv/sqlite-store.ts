@@ -5,6 +5,7 @@ import type {Read, Store, Write} from './store.ts';
 import {
   maybeTransactionIsClosedRejection,
   throwIfStoreClosed,
+  transactionError,
   transactionIsClosedRejection,
 } from './throw-if-closed.ts';
 import {deleteSentinel, WriteImplBase} from './write-impl-base.ts';
@@ -341,11 +342,28 @@ export class SQLiteStoreRead implements Read {
       this.#scheduled = true;
       queueMicrotask(() => {
         this.#scheduled = false;
+
         const {get, has, getMany, hasMany} = this.#preparedStatements;
-        const getKeys = this.#pendingGetKeys.splice(0);
-        const getCallbacks = this.#pendingGetCallbacks.splice(0);
-        const hasKeys = this.#pendingHasKeys.splice(0);
-        const hasCallbacks = this.#pendingHasCallbacks.splice(0);
+        const getKeys = this.#pendingGetKeys;
+        this.#pendingGetKeys = [];
+        const getCallbacks = this.#pendingGetCallbacks;
+        this.#pendingGetCallbacks = [];
+        const hasKeys = this.#pendingHasKeys;
+        this.#pendingHasKeys = [];
+        const hasCallbacks = this.#pendingHasCallbacks;
+        this.#pendingHasCallbacks = [];
+
+        if (this.#closed) {
+          const e = transactionError();
+          for (let i = CB_REJECT; i < getCallbacks.length; i += CB_STRIDE) {
+            (getCallbacks[i] as Reject)(e);
+          }
+          for (let i = CB_REJECT; i < hasCallbacks.length; i += CB_STRIDE) {
+            (hasCallbacks[i] as Reject)(e);
+          }
+          return;
+        }
+
         if (getKeys.length === 1) {
           void flushSingle(getKeys[0], getCallbacks, get, settleSingleGet);
         } else if (getKeys.length > 1) {
