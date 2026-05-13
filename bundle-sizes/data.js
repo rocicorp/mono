@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778565045806,
+  "lastUpdate": 1778663411013,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -55873,6 +55873,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/rocicorp/mono/commit/5d981bf0159d294c1389dcd6c7d2eddfe6c40a5e"
         },
         "date": 1778565034172,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 316956,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 56979,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 117187,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 33481,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "arv@roci.dev",
+            "name": "Erik Arvidsson",
+            "username": "arv"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c9d9b6ae626fdecac88bb3c005ecc713904e6e2a",
+          "message": "perf(replicache): Batch concurrent get/has operations in SQLiteStore (#5958)\n\n## Summary\n\nOptimize `SQLiteStoreRead` by batching concurrent `get()` and `has()`\ncalls into single database queries using microtask scheduling, reducing\nround-trips when multiple keys are accessed concurrently.\n\n## Key Changes\n\n- **Batching in `SQLiteStoreRead`**: `get()` and `has()` calls queue\ninto striped callback arrays (`[resolve, reject, resolve, reject, ...]`)\nand are flushed together in a `queueMicrotask` callback. `get` and `has`\noperations are batched independently.\n\n- **Single-key fast path**: When exactly one key is pending at flush\ntime, the original single-row SQL (`WHERE key = ?`) is used directly,\navoiding JSON serialization overhead for the common sequential case.\n\n- **New batch statements**: Added `getMany` (`SELECT key, value FROM\nentry WHERE key IN (SELECT value FROM json_each(?))`) and `hasMany`\n(`SELECT key FROM entry WHERE key IN (SELECT value FROM json_each(?))`)\nprepared statements alongside the existing single-key `get`/`has`\nstatements.\n\n- **Updated `PreparedStatement` interface**: Replaced `firstValue()`\nwith `all(params): Promise<unknown[][]>` to support returning multiple\nrows for batch queries.\n\n- **Type aliases for casts**: `GetResolve`, `HasResolve`, `Reject`\naliases make the necessary `as`-casts on the `unknown[]` callback array\nconcise.\n\n- **All adapters updated**: zero-sqlite, expo-sqlite, and op-sqlite\nimplement the new `all()` method. The expo-sqlite mock's\n`executeForRawResultAsync` gains `getAllAsync()` support.\n\n- **`directory` option**: `SQLiteStoreOptions` gains an optional\n`directory` field so stores can be created in a specific path;\n`dropStore`/`dropZeroSQLiteStore` accept it too for consistent file\nresolution.\n\n## Tests\n\n- `sqlite-store.test.node.ts`: Unit tests verifying batching behaviour —\nconcurrent gets coalesce into one `getMany` call, sequential awaited\ngets use the single-key path, concurrent has coalesces into `hasMany`,\nmixed get+has use separate SQL calls.\n- `sqlite-store.test.ts`: Integration test for `SQLiteWrite` batch\ncommit (deletes + upserts flushed as one statement each).",
+          "timestamp": "2026-05-13T08:44:12Z",
+          "tree_id": "c5e8a1a95defaad8dcf275ddfec99724ca622daa",
+          "url": "https://github.com/rocicorp/mono/commit/c9d9b6ae626fdecac88bb3c005ecc713904e6e2a"
+        },
+        "date": 1778663398024,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
