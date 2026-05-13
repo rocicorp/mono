@@ -324,12 +324,6 @@ async function runInBrowser(
     if (data[0] === 'result') {
       const result = data[1];
 
-      if (options.format === 'json') {
-        jsonEntries.push(result);
-      } else if (options.format === 'bmf') {
-        bmf = {...bmf, ...toBencherMetricFormat(result)};
-      }
-
       switch (options.format) {
         case 'json':
           jsonEntries.push(...createGithubActionBenchmarkJSONEntries(result));
