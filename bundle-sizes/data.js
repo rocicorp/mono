@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778664730541,
+  "lastUpdate": 1778667083928,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -55961,6 +55961,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/rocicorp/mono/commit/8250cc570c1022ebbf6784ee434ebd5510bd340e"
         },
         "date": 1778664715086,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 316956,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 56979,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 117187,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 33481,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "arv@roci.dev",
+            "name": "Erik Arvidsson",
+            "username": "arv"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f271e5ed8ccb30288b3451b890ff4e90857b31cd",
+          "message": "chore(workflow): update paths to trigger on changes in .github and pa… (#5967)\n\n…ckage-lock.json",
+          "timestamp": "2026-05-13T09:50:34Z",
+          "tree_id": "797a68b9ddbe2e4247923c27839d1383e5a95921",
+          "url": "https://github.com/rocicorp/mono/commit/f271e5ed8ccb30288b3451b890ff4e90857b31cd"
+        },
+        "date": 1778667071666,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
