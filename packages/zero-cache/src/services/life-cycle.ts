@@ -302,15 +302,13 @@ export async function runUntilKilled(
   }
 }
 
-export async function exitAfter(run: () => Promise<void>) {
+export async function exitAfter(lc: LogContext, run: () => Promise<void>) {
   try {
     await run();
-    // oxlint-disable-next-line no-console
-    console.info(`pid ${pid} exiting normally`);
+    lc.info?.(`pid ${pid} exiting normally`);
     process.exit(0);
   } catch (e) {
-    // oxlint-disable-next-line no-console
-    console.error(`pid ${pid} exiting with error`, e);
+    lc.error?.(`exiting with error: {String(e)}`, e);
     process.exit(-1);
   }
 }

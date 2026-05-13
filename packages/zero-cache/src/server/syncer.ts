@@ -2,6 +2,7 @@ import {randomUUID} from 'node:crypto';
 import {tmpdir} from 'node:os';
 import path from 'node:path';
 import {pid} from 'node:process';
+import {consoleLogSink, LogContext} from '@rocicorp/logger';
 import {assert} from '../../../shared/src/asserts.ts';
 import {must} from '../../../shared/src/must.ts';
 import {randInt} from '../../../shared/src/rand.ts';
@@ -65,6 +66,9 @@ function getCustomQueryConfig(
   };
 }
 
+// Default LogContext, overridden in runWorker
+let lc = new LogContext('info', {}, consoleLogSink);
+
 export default function runWorker(
   parent: Worker,
   env: NodeJS.ProcessEnv,
@@ -80,7 +84,7 @@ export default function runWorker(
     'syncer',
     workerIndex,
   );
-  const lc = createLogContext(config, 'syncer', workerIndex);
+  lc = createLogContext(config, 'syncer', workerIndex);
   initEventSink(lc, config);
 
   const {cvr, upstream, enableCrudMutations} = config;
@@ -271,7 +275,7 @@ export default function runWorker(
 
 // fork()
 if (!singleProcessMode()) {
-  void exitAfter(() =>
+  void exitAfter(lc, () =>
     runWorker(must(parentWorker), process.env, ...process.argv.slice(2)),
   );
 }
