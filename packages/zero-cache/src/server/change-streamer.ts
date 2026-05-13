@@ -1,3 +1,4 @@
+import {consoleLogSink, LogContext} from '@rocicorp/logger';
 import {assert} from '../../../shared/src/asserts.ts';
 import {must} from '../../../shared/src/must.ts';
 import {DatabaseInitError} from '../../../zqlite/src/db.ts';
@@ -36,6 +37,9 @@ import {getShardConfig} from '../types/shards.ts';
 import {createLogContext} from './logging.ts';
 import {startOtelAuto} from './otel-start.ts';
 
+// Default LogContext, overridden in runWorker
+let lc = new LogContext('info', {}, consoleLogSink);
+
 export default async function runWorker(
   parent: Worker,
   env: NodeJS.ProcessEnv,
@@ -66,7 +70,7 @@ export default async function runWorker(
     'change-streamer',
     0,
   );
-  const lc = createLogContext(config, 'change-streamer');
+  lc = createLogContext(config, 'change-streamer');
   initEventSink(lc, config);
 
   // Kick off DB connection warmup in the background.
@@ -184,10 +188,6 @@ export default async function runWorker(
         purgeLock = null;
         continue; // execute again with a fresh initial-sync
       }
-      await publishCriticalEvent(
-        lc,
-        replicationStatusError(lc, 'Initializing', e),
-      );
       if (e instanceof DatabaseInitError) {
         throw new Error(
           `Cannot open ZERO_REPLICA_FILE at "${replica.file}". Please check that the path is valid.`,
@@ -243,7 +243,10 @@ export default async function runWorker(
 
 // fork()
 if (!singleProcessMode()) {
-  void exitAfter(() =>
-    runWorker(must(parentWorker), process.env, ...process.argv.slice(2)),
+  void exitAfter(lc, () =>
+    runWorker(must(parentWorker), process.env, ...process.argv.slice(2)).catch(
+      e =>
+        publishCriticalEvent(lc, replicationStatusError(lc, 'Initializing', e)),
+    ),
   );
 }
