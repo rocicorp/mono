@@ -21,7 +21,7 @@ export class Forwarder {
 
   constructor(
     lc: LogContext,
-    opts: ProgressMonitorOptions = {flowControlConsensusPaddingSeconds: 1},
+    opts: ProgressMonitorOptions = {flowControlConsensusPaddingSeconds: 0.1},
   ) {
     this.#lc = lc.withContext('component', 'progress-monitor');
     this.#progressMonitorOptions = opts;
@@ -97,7 +97,16 @@ export class Forwarder {
    * Promise that resolves when replication should continue.
    */
   async forwardWithFlowControl(entry: WatermarkedChange) {
-    const broadcast = new Broadcast(this.#active.values(), entry);
+    const {flowControlConsensusPaddingSeconds} = this.#progressMonitorOptions;
+    const flowControlConsensusPaddingMs =
+      flowControlConsensusPaddingSeconds * 1000;
+    const broadcast = new Broadcast(
+      this.#active.values(),
+      entry,
+      flowControlConsensusPaddingMs >= 0
+        ? {lc: this.#lc, flowControlConsensusPaddingMs}
+        : undefined,
+    );
     this.#updateActiveSubscribers(entry[1]);
 
     // set for progress tracking
