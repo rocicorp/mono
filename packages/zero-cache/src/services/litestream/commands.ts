@@ -95,6 +95,7 @@ function getLitestream(
     logLevel,
     configPath,
     endpoint,
+    region,
     port = config.port + 2,
     checkpointThresholdMB,
     minCheckpointPageCount = checkpointThresholdMB * 250, // SQLite page size is 4KB
@@ -140,6 +141,7 @@ function getLitestream(
       ['LITESTREAM_CONFIG']: configPath,
       ['LITESTREAM_PORT']: String(port),
       ...(endpoint ? {['ZERO_LITESTREAM_ENDPOINT']: endpoint} : {}),
+      ...(region ? {['ZERO_LITESTREAM_REGION']: region} : {}),
     },
   };
 }

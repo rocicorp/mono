@@ -286,6 +286,81 @@ describe(
               },
             ],
           },
+          // Regression coverage for the Cap/UFI interaction.
+          //
+          // The outer non-flipped whereExists builds an EXISTS-child
+          // pipeline. If that child's body contains a flipped subquery
+          // anywhere, applyFilterWithFlips constructs a UnionFanIn
+          // over the child source, and UFI requires sorted input. The
+          // fix in builder.ts must skip the unordered Cap path for
+          // these children — these tests exercise that end-to-end.
+          {
+            name: 'Cap/UFI: non-flipped EXISTS body with OR(simple, flipped EXISTS)',
+            createQuery: b =>
+              b.album.whereExists('tracks', t =>
+                t.where(({or, cmp, exists}) =>
+                  or(
+                    cmp('name', 'Enter Sandman'),
+                    exists('genre', g => g.where('name', 'Rock'), {
+                      flip: true,
+                    }),
+                  ),
+                ),
+              ),
+          },
+          {
+            name: 'Cap/UFI: non-flipped EXISTS body with OR of two flipped EXISTSes',
+            createQuery: b =>
+              b.album.whereExists('tracks', t =>
+                t.where(({or, exists}) =>
+                  or(
+                    exists('genre', g => g.where('name', 'Rock'), {
+                      flip: true,
+                    }),
+                    exists(
+                      'mediaType',
+                      m => m.where('name', 'AAC audio file'),
+                      {flip: true},
+                    ),
+                  ),
+                ),
+              ),
+          },
+          {
+            name: 'Cap/UFI: doubly nested non-flipped EXISTS, inner body has OR(simple, flipped EXISTS)',
+            createQuery: b =>
+              b.artist.whereExists('albums', a =>
+                a.whereExists('tracks', t =>
+                  t.where(({or, cmp, exists}) =>
+                    or(
+                      cmp('name', 'Enter Sandman'),
+                      exists('genre', g => g.where('name', 'Rock'), {
+                        flip: true,
+                      }),
+                    ),
+                  ),
+                ),
+              ),
+          },
+          {
+            name: 'Cap/UFI: non-flipped EXISTS body with OR mixing simple, non-flipped, and flipped EXISTS',
+            createQuery: b =>
+              b.album.whereExists('tracks', t =>
+                t.where(({or, cmp, exists}) =>
+                  or(
+                    cmp('name', 'Enter Sandman'),
+                    exists('genre', g => g.where('name', 'Rock'), {
+                      flip: false,
+                    }),
+                    exists(
+                      'mediaType',
+                      m => m.where('name', 'AAC audio file'),
+                      {flip: true},
+                    ),
+                  ),
+                ),
+              ),
+          },
         ],
       ),
     )('$name', async ({fn}) => {

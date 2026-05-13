@@ -22,11 +22,13 @@ describe('InspectorDelegate', () => {
     d.addMetric('query-update-server', 3, queryID);
 
     const queryMetrics = d.getMetricsJSONForQuery(queryID);
+    // query-hydration-server-ms is a plain number (last value wins)
     expect(queryMetrics).toEqual({
-      'query-materialization-server': [1000, 5, 1, 15, 1], // Two centroids: 5 and 15
+      'query-hydration-server-ms': 15,
       'query-update-server': [1000, 3, 1], // One centroid: 3
     });
 
+    // Global metrics still use TDigest for aggregation
     const globalMetrics = d.getMetricsJSON();
     expect(globalMetrics).toEqual({
       'query-materialization-server': [1000, 5, 1, 15, 1],
@@ -112,12 +114,12 @@ describe('InspectorDelegate', () => {
     const m2 = d.getMetricsJSONForQuery(q2);
 
     expect(m1).toEqual({
-      'query-materialization-server': [1000, 10, 1],
+      'query-hydration-server-ms': 10,
       'query-update-server': [1000], // Empty TDigest
     });
 
     expect(m2).toEqual({
-      'query-materialization-server': [1000, 20, 1],
+      'query-hydration-server-ms': 20,
       'query-update-server': [1000], // Empty TDigest
     });
   });

@@ -1,6 +1,10 @@
+import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {afterEach, beforeEach, describe, expect, type Mock, vi} from 'vitest';
-import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
+import {
+  createSilentLogContext,
+  TestLogSink,
+} from '../../../../shared/src/logging-test-utils.ts';
 import type {Queue} from '../../../../shared/src/queue.ts';
 import {sleep} from '../../../../shared/src/sleep.ts';
 import {type ClientSchema} from '../../../../zero-protocol/src/client-schema.ts';
@@ -100,7 +104,8 @@ describe('view-syncer/service', () => {
   let replica: Database;
   let cvrDB: PostgresDB;
   let upstreamDb: PostgresDB;
-  const lc = createSilentLogContext();
+  let lc = createSilentLogContext();
+  let logSink: TestLogSink;
   let stateChanges: Subscription<ReplicaState>;
   let drainCoordinator: DrainCoordinator;
 
@@ -151,6 +156,8 @@ describe('view-syncer/service', () => {
   };
 
   beforeEach<PgTest>(async ({testDBs}) => {
+    logSink = new TestLogSink();
+    lc = new LogContext('debug', undefined, logSink);
     ({
       storageDB,
       replicaDbFile,
@@ -172,6 +179,7 @@ describe('view-syncer/service', () => {
       config,
       databaseStorage,
     } = await setup(testDBs, 'view_syncer_service_test', permissionsAll, {
+      lc,
       queryFetchMode: 'empty-validation',
     }));
 
@@ -1295,7 +1303,7 @@ describe('view-syncer/service', () => {
               "url": undefined,
             },
             "profileID": "p0000g00000003203",
-            "protocolVersion": 50,
+            "protocolVersion": 51,
             "queryContext": {
               "allowedUrlPatterns": [
                 URLPattern {},
@@ -1585,7 +1593,7 @@ describe('view-syncer/service', () => {
               "url": undefined,
             },
             "profileID": "p0000g00000003203",
-            "protocolVersion": 50,
+            "protocolVersion": 51,
             "queryContext": {
               "allowedUrlPatterns": [
                 URLPattern {},
@@ -2263,7 +2271,7 @@ describe('view-syncer/service', () => {
               "url": undefined,
             },
             "profileID": "p0000g00000003203",
-            "protocolVersion": 50,
+            "protocolVersion": 51,
             "queryContext": {
               "allowedUrlPatterns": [
                 URLPattern {},
@@ -2482,7 +2490,7 @@ describe('view-syncer/service', () => {
               "url": undefined,
             },
             "profileID": "p0000g00000003203",
-            "protocolVersion": 50,
+            "protocolVersion": 51,
             "queryContext": {
               "allowedUrlPatterns": [
                 URLPattern {},
@@ -6249,6 +6257,30 @@ describe('view-syncer/service', () => {
       timeout,
     ]);
     expect(result).toBe('done');
+
+    const stopWarns = logSink.messages.filter(
+      ([level, , args]) =>
+        level === 'warn' &&
+        args.some(
+          arg =>
+            typeof arg === 'string' &&
+            arg.includes('stopping view-syncer') &&
+            arg.includes('shut down before initialization completed'),
+        ),
+    );
+    expect(stopWarns).toHaveLength(1);
+
+    const stopErrors = logSink.messages.filter(
+      ([level, , args]) =>
+        level === 'error' &&
+        args.some(
+          arg =>
+            typeof arg === 'string' &&
+            arg.includes('stopping view-syncer') &&
+            arg.includes('shut down before initialization completed'),
+        ),
+    );
+    expect(stopErrors).toHaveLength(0);
 
     // Verify that #cleanup ran (pipelines destroyed).
     expect(destroySpy).toHaveBeenCalled();

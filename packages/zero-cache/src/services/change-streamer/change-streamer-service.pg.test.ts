@@ -63,8 +63,8 @@ describe('change-streamer/service', () => {
   beforeEach<PgTest>(async ({testDBs}) => {
     lc = createSilentLogContext();
 
-    sql = await testDBs.create('change_streamer_test_change_db', undefined, {
-      sendStringAsJson: true,
+    sql = await testDBs.create('change_streamer_test_change_db', {
+      typeOpts: {sendStringAsJson: true},
     });
 
     const replica = new Database(lc, ':memory:');

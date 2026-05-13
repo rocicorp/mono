@@ -242,10 +242,33 @@ function getIncrementalMigrations(
     // v18: Pure refactoring of event trigger code.
     // v19 (1.4.0): Correctly handle concurrently issued DDL statements.
     // v20 (1.4.0): Handle nested DDL triggers
-
     // v21 (1.5.0): Handle cross-transaction DDL operations (i.e. concurrent
     // index operations), and support manual invocation of update_schemas().
-    21: {
+
+    22: {
+      migrateSchema: async (_, sql) => {
+        await sql`
+          ALTER TABLE ${sql(upstreamSchema(shard))}.replicas 
+            ALTER "initialSchema" DROP NOT NULL;
+        `;
+        await sql`
+          ALTER TABLE ${sql(upstreamSchema(shard))}.replicas 
+            DROP CONSTRAINT replicas_pkey;
+        `;
+        await sql`
+          ALTER TABLE ${sql(upstreamSchema(shard))}.replicas 
+            ADD COLUMN id TEXT PRIMARY KEY DEFAULT replace(gen_random_uuid()::text, '-', '');
+        `;
+        await sql`
+          ALTER TABLE ${sql(upstreamSchema(shard))}.replicas 
+            ADD COLUMN rank BIGSERIAL;
+        `;
+      },
+    },
+
+    // v23 (1.6.0): Event triggers: Handle the case where current_query()
+    // returns NULL. Add more logging to debug unexpected messages
+    23: {
       migrateSchema: async (lc, sql) => {
         const [{publications}] = await sql<{publications: string[]}[]>`
           SELECT publications FROM ${sql(shardConfigTable)}`;
