@@ -1,3 +1,4 @@
+import {resolver, type Resolver} from '@rocicorp/resolver';
 import {assert} from '../../../../shared/src/asserts.ts';
 import {BigIntJSON} from '../../../../shared/src/bigint-json.ts';
 import type {Enum} from '../../../../shared/src/enum.ts';
@@ -9,6 +10,11 @@ import {type Downstream, type Status} from './change-streamer.ts';
 import * as ErrorType from './error-type-enum.ts';
 
 type ErrorType = Enum<typeof ErrorType>;
+
+type BacklogEntry = {
+  change: WatermarkedChange;
+  done: Resolver<void>;
+};
 
 /**
  * Encapsulates a subscriber to changes. All subscribers start in a
@@ -24,7 +30,8 @@ export class Subscriber {
   readonly #latestStatus: () => Status;
   #watermark: string;
   #acked: string;
-  #backlog: WatermarkedChange[] | null;
+  #backlog: BacklogEntry[] | null;
+  #backlogFlush: Promise<void> | undefined;
 
   constructor(
     protocolVersion: number,
@@ -54,7 +61,9 @@ export class Subscriber {
     const [watermark] = change;
     if (watermark > this.#watermark) {
       if (this.#backlog) {
-        this.#backlog.push(change);
+        const done = resolver<void>();
+        this.#backlog.push({change, done});
+        await done.promise;
       } else {
         await this.#sendChange(change);
       }
@@ -76,7 +85,17 @@ export class Subscriber {
 
   sendStatus(status: Status) {
     if (this.#protocolVersion >= 2 && this.#initialized) {
-      void this.#sendDownstream(['status', status]);
+      const json = BigIntJSON.stringify([
+        'status',
+        status,
+      ] satisfies Downstream);
+      if (this.#backlogFlush) {
+        void this.#backlogFlush
+          .then(() => this.#sendStringifiedDownstream(json))
+          .catch(err => this.fail(err));
+      } else {
+        void this.#sendStringifiedDownstream(json);
+      }
     }
   }
 
@@ -96,14 +115,44 @@ export class Subscriber {
       this.#backlog,
       'setCaughtUp() called but subscriber is not in catchup mode',
     );
-    // Note that this method must be asynchronous in order for send() to
-    // interpret the #backlog variable correctly. This is the only place
-    // where I/O flow control is not heeded. However, it will be awaited
-    // by the next caller to send().
-    for (const change of this.#backlog) {
-      void this.#sendChange(change);
+    if (this.#backlogFlush) {
+      return this.#backlogFlush;
     }
-    this.#backlog = null;
+
+    const backlog = this.#backlog;
+    const flush = this.#flushBacklog(backlog).finally(() => {
+      if (this.#backlogFlush === flush) {
+        this.#backlogFlush = undefined;
+      }
+    });
+    this.#backlogFlush = flush;
+    void flush.catch(err => this.fail(err));
+    return flush;
+  }
+
+  async #flushBacklog(backlog: BacklogEntry[]) {
+    let next = 0;
+    try {
+      while (next < backlog.length) {
+        const entry = backlog[next++];
+        try {
+          await this.#sendChange(entry.change);
+          entry.done.resolve();
+        } catch (err) {
+          entry.done.reject(err);
+          throw err;
+        }
+      }
+    } catch (err) {
+      while (next < backlog.length) {
+        backlog[next++].done.reject(err);
+      }
+      throw err;
+    } finally {
+      if (this.#backlog === backlog) {
+        this.#backlog = null;
+      }
+    }
   }
 
   async #sendChange(change: WatermarkedChange) {
