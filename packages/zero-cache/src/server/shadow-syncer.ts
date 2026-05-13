@@ -1,3 +1,4 @@
+import {consoleLogSink, LogContext} from '@rocicorp/logger';
 import {must} from '../../../shared/src/must.ts';
 import {getServerContext} from '../config/server-context.ts';
 import {getNormalizedZeroConfig} from '../config/zero-config.ts';
@@ -15,6 +16,9 @@ import {startOtelAuto} from './otel-start.ts';
 
 const MS_PER_HOUR = 1000 * 60 * 60;
 
+// Default LogContext, overridden in runWorker
+let lc = new LogContext('info', {}, consoleLogSink);
+
 export default function runWorker(
   parent: Worker,
   env: NodeJS.ProcessEnv,
@@ -27,7 +31,7 @@ export default function runWorker(
     'shadow-syncer',
     0,
   );
-  const lc = createLogContext(config, 'shadow-syncer');
+  lc = createLogContext(config, 'shadow-syncer');
   initEventSink(lc, config);
 
   const {shadowSync, upstream, initialSync} = config;
@@ -52,7 +56,7 @@ export default function runWorker(
 
 // fork()
 if (!singleProcessMode()) {
-  void exitAfter(() =>
+  void exitAfter(lc, () =>
     runWorker(must(parentWorker), process.env, ...process.argv.slice(2)),
   );
 }

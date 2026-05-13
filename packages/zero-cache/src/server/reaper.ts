@@ -1,3 +1,4 @@
+import {consoleLogSink, LogContext} from '@rocicorp/logger';
 import {must} from '../../../shared/src/must.ts';
 import {getNormalizedZeroConfig} from '../config/zero-config.ts';
 import {initEventSink} from '../observability/events.ts';
@@ -18,6 +19,9 @@ import {startOtelAuto} from './otel-start.ts';
 
 const MS_PER_HOUR = 1000 * 60 * 60;
 
+// Default LogContext, overridden in runWorker
+let lc = new LogContext('info', {}, consoleLogSink);
+
 export default async function runWorker(
   parent: Worker,
   env: NodeJS.ProcessEnv,
@@ -26,7 +30,7 @@ export default async function runWorker(
   const config = getNormalizedZeroConfig({env, argv});
 
   startOtelAuto(createLogContext(config, 'reaper', 0, false), 'reaper', 0);
-  const lc = createLogContext(config, 'reaper');
+  lc = createLogContext(config, 'reaper');
   initEventSink(lc, config);
   startAnonymousTelemetry(lc, config);
 
@@ -57,7 +61,7 @@ export default async function runWorker(
 
 // fork()
 if (!singleProcessMode()) {
-  void exitAfter(() =>
+  void exitAfter(lc, () =>
     runWorker(must(parentWorker), process.env, ...process.argv.slice(2)),
   );
 }

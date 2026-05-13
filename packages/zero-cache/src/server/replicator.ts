@@ -1,7 +1,7 @@
 import {stat} from 'node:fs/promises';
 import {pid} from 'node:process';
 import type {ObservableCallback} from '@opentelemetry/api';
-import type {LogContext} from '@rocicorp/logger';
+import {consoleLogSink, LogContext} from '@rocicorp/logger';
 import {assert} from '../../../shared/src/asserts.ts';
 import {must} from '../../../shared/src/must.ts';
 import * as v from '../../../shared/src/valita.ts';
@@ -32,6 +32,9 @@ import {
 import {createLogContext} from './logging.ts';
 import {startOtelAuto} from './otel-start.ts';
 
+// Default LogContext, overridden in runWorker
+let lc = new LogContext('info', {}, consoleLogSink);
+
 export default async function runWorker(
   parent: Worker,
   env: NodeJS.ProcessEnv,
@@ -44,7 +47,7 @@ export default async function runWorker(
   const mode: ReplicatorMode = fileMode === 'backup' ? 'backup' : 'serving';
   const workerName = `${mode}-replicator`;
   startOtelAuto(createLogContext(config, workerName, 0, false), workerName, 0);
-  const lc = createLogContext(config, workerName);
+  lc = createLogContext(config, workerName);
   initEventSink(lc, config);
 
   const {file: dbPath, walMode} = await setupReplica(
@@ -140,7 +143,7 @@ function observeFileSize(lc: LogContext, file: string): ObservableCallback {
 
 // fork()
 if (!singleProcessMode()) {
-  void exitAfter(() =>
+  void exitAfter(lc, () =>
     runWorker(must(parentWorker), process.env, ...process.argv.slice(2)),
   );
 }
