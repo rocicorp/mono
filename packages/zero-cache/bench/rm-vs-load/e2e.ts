@@ -1,8 +1,9 @@
 /* oxlint-disable no-console */
 
 const defaults = {
-  // The shared PR-review scenario: one replication-manager feeding a
-  // production-shaped fanout of sixteen view-syncers.
+  // #5976/#5977 pin the review scenario here so future storer perf PRs compare
+  // against the same 1 RM / 16 view-syncer load instead of tuning a new local
+  // workload for each hypothesis.
   ZERO_RM_VS_FULL: '1',
   ZERO_RM_VS_DURATION_MS: '1200',
   ZERO_RM_VS_SUBSCRIBERS: '16',

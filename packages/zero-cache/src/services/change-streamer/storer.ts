@@ -480,18 +480,15 @@ export class Storer implements Service {
             ack: !change.skipAck,
           };
           tx.pool.run(this.#db);
-          // Golden path for one upstream transaction:
+          // #5976: https://github.com/rocicorp/mono/pull/5976
+          // Guarded UPDATE combines the ownership check with the watermark
+          // write to remove the previous SELECT-owner-then-UPDATE round trip.
+          // This was measured in the shared 1 RM / 16 view-syncer e2e suite as
+          // part of the ~13-35% rows/s improvement in #5976.
           //
-          //   BEGIN
-          //     guarded UPDATE replicationState WHERE owner = this task
-          //     buffered INSERT changeLog rows...
-          //   COMMIT
-          //
-          // The guarded UPDATE replaces the old SELECT-owner-then-UPDATE
-          // round trip while preserving the safety property: if ownership was
-          // lost, no rows are ACKed to upstream Postgres. Keeping the
-          // watermark update inside this transaction also means rollbacks undo
-          // both the changeLog rows and the advertised resume point together.
+          // Keep this inside the same transaction as the changeLog writes: if
+          // ownership was lost or a later write fails, no rows are ACKed and
+          // the advertised resume point rolls back with the changeLog rows.
           void tx.pool.process(tx => {
             const lastWatermark = watermark;
             tx<ReplicationOwner[]> /*sql*/ `

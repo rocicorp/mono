@@ -22,7 +22,7 @@ Files:
 - `perf-utils.ts` keeps benchmark-only helpers out of production code.
 - `types.ts` keeps result shapes stable for scripts that compare branches.
 
-Golden path:
+Default review run:
 
 ```bash
 npm --workspace=zero-cache run perf:rm-vs-load:e2e -- --out /tmp/rm-vs-load.json
