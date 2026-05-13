@@ -484,6 +484,11 @@ export class CVRStore {
     this.#pendingRowRecordUpdates.set(row.id, row);
   }
 
+  clearRowRecordUpdate(id: RowID): void {
+    this.#pendingRowRecordUpdates.delete(id);
+    this.#forceUpdates.delete(id);
+  }
+
   /**
    * Note: Removing a row from the CVR should be represented by a
    *       {@link putRowRecord()} with `refCounts: null` in order to properly

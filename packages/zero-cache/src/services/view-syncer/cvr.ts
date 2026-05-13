@@ -685,7 +685,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
             results.size
           } (of ${total}) rows for executed / removed queries ${[
             ...this.#removedOrExecutedQueryIDs,
-          ]}`,
+          ].join(',')}`,
         );
         return results.values();
       },
@@ -882,12 +882,22 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
           // for that row, as the row with the old key will be removed.
           const rowVersion = version ?? existing?.rowVersion;
           if (rowVersion) {
-            this._cvrStore.putRowRecord({
+            const rowRecord: RowRecord = {
               id,
               rowVersion,
               patchVersion,
               refCounts: merged,
-            });
+            };
+            if (
+              !deepEqual(
+                rowRecord as ReadonlyJSONValue,
+                existing as ReadonlyJSONValue | undefined,
+              )
+            ) {
+              this._cvrStore.putRowRecord(rowRecord);
+            } else {
+              this._cvrStore.clearRowRecordUpdate(id);
+            }
           } else {
             // This means that a row that was not in the CVR was added during
             // this update, and then subsequently removed. Since there's no

@@ -1,6 +1,22 @@
 import {expect, test} from 'vitest';
-import {getInactiveQueries, type CVR} from './cvr.ts';
-import type {ClientQueryRecord} from './schema/types.ts';
+import {CustomKeyMap} from '../../../../shared/src/custom-key-map.ts';
+import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
+import {rowIDString} from '../../types/row-key.ts';
+import type {PatchToVersion} from './client-handler.ts';
+import type {CVRStore} from './cvr-store.ts';
+import {
+  CVRQueryDrivenUpdater,
+  getInactiveQueries,
+  type CVR,
+  type CVRSnapshot,
+  type RowUpdate,
+} from './cvr.ts';
+import type {
+  ClientQueryRecord,
+  CVRVersion,
+  RowID,
+  RowRecord,
+} from './schema/types.ts';
 import {ttlClockFromNumber, type TTLClock} from './ttl-clock.ts';
 
 type QueryDef = {
@@ -234,4 +250,272 @@ test.each([
 ])('getInactiveQueries %o', ({clients, expected}) => {
   const cvr = makeCVR(clients);
   expect(getInactiveQueries(cvr)).toEqual(expected);
+});
+
+const lc = createSilentLogContext();
+const patchVersion: CVRVersion = {stateVersion: '1a0'};
+const updatedVersion: CVRVersion = {stateVersion: '1aa'};
+
+const ROW_ID1: RowID = {
+  schema: 'public',
+  table: 'issues',
+  rowKey: {id: '1'},
+};
+
+const ROW_ID2: RowID = {
+  schema: 'public',
+  table: 'issues',
+  rowKey: {id: '2'},
+};
+
+function makeQueryDrivenCVR(): CVRSnapshot {
+  return {
+    id: 'abc123',
+    version: {stateVersion: '1a9'},
+    lastActive: Date.UTC(2024, 1, 20),
+    ttlClock: ttlClockFromNumber(Date.UTC(2024, 1, 20)),
+    replicaVersion: '120',
+    clients: {
+      fooClient: {
+        id: 'fooClient',
+        desiredQueryIDs: ['oneHash'],
+      },
+    },
+    queries: {
+      oneHash: {
+        ast: {table: 'issues'},
+        type: 'client',
+        clientState: {
+          fooClient: {
+            inactivatedAt: undefined,
+            ttl: 1000,
+            version: {stateVersion: '1a9', configVersion: 1},
+          },
+        },
+        id: 'oneHash',
+        patchVersion,
+        transformationHash: 'serverOneHash',
+        transformationVersion: patchVersion,
+      },
+    },
+    clientSchema: null,
+    profileID: null,
+  };
+}
+
+function makeRowRecord(
+  id: RowID,
+  rowVersion: string,
+  refCounts: RowRecord['refCounts'] = {oneHash: 1},
+  recordPatchVersion: CVRVersion = patchVersion,
+): RowRecord {
+  return {
+    id,
+    rowVersion,
+    patchVersion: recordPatchVersion,
+    refCounts,
+  };
+}
+
+function makeStore(rowRecords: RowRecord[]) {
+  const rows = new CustomKeyMap<RowID, RowRecord>(rowIDString);
+  for (const row of rowRecords) {
+    rows.set(row.id, row);
+  }
+
+  const putRows: RowRecord[] = [];
+  const deletedRows: RowID[] = [];
+  const clearedRows: RowID[] = [];
+  const store = {
+    getRowRecords: () => Promise.resolve(rows),
+    putRowRecord: (row: RowRecord) => {
+      putRows.push(row);
+    },
+    clearRowRecordUpdate: (id: RowID) => {
+      clearedRows.push(id);
+    },
+    delRowRecord: (id: RowID) => {
+      deletedRows.push(id);
+    },
+    updateQuery: () => {},
+  } as unknown as CVRStore;
+
+  return {clearedRows, deletedRows, putRows, store};
+}
+
+function makeTrackedUpdater(store: CVRStore): CVRQueryDrivenUpdater {
+  const updater = new CVRQueryDrivenUpdater(
+    store,
+    makeQueryDrivenCVR(),
+    updatedVersion.stateVersion,
+    '120',
+  );
+  updater.trackQueries(
+    lc,
+    [{id: 'oneHash', transformationHash: 'serverOneHash'}],
+    [],
+  );
+  return updater;
+}
+
+test('received skips row persistence for unchanged records while emitting row patches', async () => {
+  const existing = makeRowRecord(ROW_ID1, '03');
+  const {deletedRows, putRows, store} = makeStore([existing]);
+  const updater = makeTrackedUpdater(store);
+
+  const update: RowUpdate = {
+    version: '03',
+    contents: {id: 'same-row-version'},
+    refCounts: {oneHash: 1},
+  };
+
+  expect(await updater.received(lc, new Map([[ROW_ID1, update]]))).toEqual([
+    {
+      toVersion: patchVersion,
+      patch: {
+        type: 'row',
+        op: 'put',
+        id: ROW_ID1,
+        contents: {id: 'same-row-version'},
+      },
+    },
+  ] satisfies PatchToVersion[]);
+  expect(putRows).toEqual([]);
+  expect(deletedRows).toEqual([]);
+});
+
+test('received persists changed and deleted row records with the correct patches', async () => {
+  const existing1 = makeRowRecord(ROW_ID1, '03');
+  const existing2 = makeRowRecord(ROW_ID2, '03');
+  const {clearedRows, deletedRows, putRows, store} = makeStore([
+    existing1,
+    existing2,
+  ]);
+  const updater = makeTrackedUpdater(store);
+
+  expect(
+    await updater.received(
+      lc,
+      new Map([
+        [
+          ROW_ID1,
+          {
+            version: '04',
+            contents: {id: 'changed'},
+            refCounts: {oneHash: 1},
+          },
+        ],
+      ]),
+    ),
+  ).toEqual([
+    {
+      toVersion: updatedVersion,
+      patch: {
+        type: 'row',
+        op: 'put',
+        id: ROW_ID1,
+        contents: {id: 'changed'},
+      },
+    },
+  ] satisfies PatchToVersion[]);
+  expect(putRows).toEqual([
+    {
+      ...existing1,
+      rowVersion: '04',
+      patchVersion: updatedVersion,
+    },
+  ]);
+
+  expect(
+    await updater.received(
+      lc,
+      new Map([
+        [
+          ROW_ID2,
+          {
+            refCounts: {oneHash: 0},
+          },
+        ],
+      ]),
+    ),
+  ).toEqual([
+    {
+      toVersion: updatedVersion,
+      patch: {
+        type: 'row',
+        op: 'del',
+        id: ROW_ID2,
+      },
+    },
+  ] satisfies PatchToVersion[]);
+  expect(putRows).toEqual([
+    {
+      ...existing1,
+      rowVersion: '04',
+      patchVersion: updatedVersion,
+    },
+    {
+      ...existing2,
+      patchVersion: updatedVersion,
+      refCounts: null,
+    },
+  ]);
+  expect(deletedRows).toEqual([]);
+  expect(clearedRows).toEqual([]);
+});
+
+test('received cancels a queued row update when the final row record is unchanged', async () => {
+  const existing = makeRowRecord(ROW_ID1, '03');
+  const {clearedRows, putRows, store} = makeStore([existing]);
+  const updater = makeTrackedUpdater(store);
+
+  expect(
+    await updater.received(
+      lc,
+      new Map([
+        [
+          ROW_ID1,
+          {
+            version: '04',
+            contents: {id: 'changed'},
+            refCounts: {oneHash: 1},
+          },
+        ],
+      ]),
+    ),
+  ).toEqual([
+    {
+      toVersion: updatedVersion,
+      patch: {
+        type: 'row',
+        op: 'put',
+        id: ROW_ID1,
+        contents: {id: 'changed'},
+      },
+    },
+  ] satisfies PatchToVersion[]);
+  expect(putRows).toEqual([
+    {
+      ...existing,
+      rowVersion: '04',
+      patchVersion: updatedVersion,
+    },
+  ]);
+
+  expect(
+    await updater.received(
+      lc,
+      new Map([
+        [
+          ROW_ID1,
+          {
+            version: '03',
+            contents: {id: 'original'},
+            refCounts: {oneHash: 0},
+          },
+        ],
+      ]),
+    ),
+  ).toEqual([]);
+  expect(clearedRows).toEqual([ROW_ID1]);
 });
