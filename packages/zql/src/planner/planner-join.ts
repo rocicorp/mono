@@ -1,5 +1,5 @@
 import {assert} from '../../../shared/src/asserts.ts';
-import {MULTI_CONSTRAINT_CHUNK_SIZE} from '../ivm/flipped-join.ts';
+import {getMultiConstraintChunkSize} from '../ivm/flipped-join.ts';
 import {
   mergeConstraints,
   type PlannerConstraint,
@@ -385,7 +385,7 @@ export class PlannerJoin {
                   : parent.limit / downstreamChildSelectivity,
               ),
         // FlippedJoin batches child→parent lookups into chunks of
-        // MULTI_CONSTRAINT_CHUNK_SIZE, issuing one IN-list query per
+        // getMultiConstraintChunkSize(), issuing one IN-list query per
         // chunk. So `parent.startupCost` (statement prepare + plan
         // setup) is paid once per chunk, not once per child row. The
         // per-seek work (`parent.cost` index walk + `parent.scanEst`
@@ -393,7 +393,7 @@ export class PlannerJoin {
         // does its own index seek.
         cost:
           child.cost +
-          Math.ceil(child.scanEst / MULTI_CONSTRAINT_CHUNK_SIZE) *
+          Math.ceil(child.scanEst / getMultiConstraintChunkSize()) *
             parent.startupCost +
           child.scanEst * (parent.cost + parent.scanEst),
         // the child selectivity is not relevant here because it has already been taken into account via the flipping.

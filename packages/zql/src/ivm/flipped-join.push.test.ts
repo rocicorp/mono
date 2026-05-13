@@ -1,5 +1,6 @@
-import {describe, expect, suite, test} from 'vitest';
+import {afterEach, describe, expect, suite, test} from 'vitest';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
+import {setMultiConstraintChunkSizeForTest} from './flipped-join.ts';
 import {
   runPushTest,
   type SourceContents,
@@ -12,6 +13,12 @@ import {
   makeSourceChangeEdit,
   makeSourceChangeRemove,
 } from './source.ts';
+
+let restoreChunkSize: (() => void) | undefined;
+afterEach(() => {
+  restoreChunkSize?.();
+  restoreChunkSize = undefined;
+});
 /**
  * These tests are based on join.push.test.ts.  Uses same cases.
  * Most of the data snapshots are the same expect for when
@@ -4333,6 +4340,77 @@ suite('push one:many:one', () => {
         },
       ]
     `);
+  });
+
+  // Force chunkSize=2 with multiple labels so the multi-constraint fetch
+  // on issueLabel — emitted by the ArrayView refresh after a label push
+  // — overflows one chunk and exercises `#fetchChunked` while the
+  // pipeline is processing the push. Compares pushes & data against the
+  // same scenario at default chunk size to prove chunking is
+  // behavior-preserving under push.
+  test('push works when chunked path runs during downstream refresh', () => {
+    const sourceContents: SourceContents = {
+      issue: [{id: 'i1'}],
+      issueLabel: [
+        {issueID: 'i1', labelID: 'l1'},
+        {issueID: 'i1', labelID: 'l2'},
+        {issueID: 'i1', labelID: 'l3'},
+        {issueID: 'i1', labelID: 'l4'},
+        {issueID: 'i1', labelID: 'l5'},
+      ],
+      // 5 labels so InnerFJ.child.fetch (all labels) returns 5 nodes.
+      // With chunkSize=2 the multi-constraint fetch on issueLabel splits
+      // into 3 chunks (2+2+1) during the post-push refresh.
+      label: [{id: 'l1'}, {id: 'l2'}, {id: 'l3'}, {id: 'l4'}, {id: 'l5'}],
+    };
+    const pushes = [
+      ['issueLabel', makeSourceChangeAdd({issueID: 'i1', labelID: 'l6'})],
+      ['label', makeSourceChangeAdd({id: 'l6'})],
+    ] as const;
+
+    const baseline = runPushTest({
+      sources,
+      sourceContents,
+      ast,
+      format,
+      pushes: pushes as unknown as [
+        string,
+        ReturnType<typeof makeSourceChangeAdd>,
+      ][],
+    });
+
+    restoreChunkSize = setMultiConstraintChunkSizeForTest(2);
+    const chunked = runPushTest({
+      sources,
+      sourceContents,
+      ast,
+      format,
+      pushes: pushes as unknown as [
+        string,
+        ReturnType<typeof makeSourceChangeAdd>,
+      ][],
+    });
+
+    // Same push semantics regardless of chunking.
+    expect(chunked.pushes).toEqual(baseline.pushes);
+    expect(chunked.data).toEqual(baseline.data);
+
+    // Confirm chunking actually fired: at least one fetch on the
+    // issueLabel source carried `multiConstraints` with the chunked
+    // size, proving #fetchChunked ran during the push-driven refresh.
+    const issueLabelChunkedFetches = chunked.log.filter(msg => {
+      const path = msg[0];
+      const kind = msg[1];
+      const req = msg[2] as {multiConstraints?: unknown[][]} | undefined;
+      return (
+        typeof path === 'string' &&
+        path.includes('source(issueLabel)') &&
+        kind === 'fetch' &&
+        Array.isArray(req?.multiConstraints) &&
+        req.multiConstraints.some(mc => Array.isArray(mc) && mc.length === 2)
+      );
+    });
+    expect(issueLabelChunkedFetches.length).toBeGreaterThan(0);
   });
 });
 

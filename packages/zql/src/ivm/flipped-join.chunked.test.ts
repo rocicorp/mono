@@ -259,6 +259,83 @@ test('chunked fetch propagates .return() to sub-streams on early termination', (
   expect(returnCalls.sort()).toEqual([0, 1, 2]);
 });
 
+test('chunked fetch forwards yields from parent and child sub-streams', () => {
+  // The Input contract requires any 'yield' produced upstream to be
+  // forwarded to the caller. For the chunked path, this means
+  // `mergeSortedStreams` must forward yields from each sub-stream, and
+  // FlippedJoin must forward them after the merge.
+  restoreChunkSize = setMultiConstraintChunkSizeForTest(2);
+
+  const parent = createSource(
+    lc,
+    testLogConfig,
+    'parent',
+    {id: {type: 'string'}, label: {type: 'string'}},
+    ['id'],
+  );
+  const child = createSource(
+    lc,
+    testLogConfig,
+    'child',
+    {id: {type: 'string'}, parentId: {type: 'string'}},
+    ['id'],
+  );
+
+  for (let i = 1; i <= 5; i++) {
+    consume(
+      parent.push(makeSourceChangeAdd({id: `p${i}`, label: `Parent ${i}`})),
+    );
+    consume(child.push(makeSourceChangeAdd({id: `c${i}`, parentId: `p${i}`})));
+  }
+
+  // Inject 'yield' before every row of every fetch on this Input.
+  function yieldInjector(inner: Input): Input {
+    return {
+      getSchema: () => inner.getSchema(),
+      setOutput: (o: Output) => inner.setOutput(o),
+      destroy: () => inner.destroy(),
+      *fetch(req: FetchRequest): Stream<Node | 'yield'> {
+        for (const node of inner.fetch(req)) {
+          yield 'yield';
+          yield node;
+        }
+      },
+    };
+  }
+
+  const fj = new FlippedJoin({
+    parent: yieldInjector(parent.connect([['id', 'asc']])),
+    child: yieldInjector(child.connect([['id', 'asc']])),
+    parentKey: ['id'],
+    childKey: ['parentId'],
+    relationshipName: 'children',
+    hidden: false,
+    system: 'client',
+  });
+
+  // Collect both yields and rows so we can prove yields are forwarded.
+  const yieldsAndRows: ('yield' | string)[] = [];
+  for (const node of fj.fetch({})) {
+    yieldsAndRows.push(node === 'yield' ? 'yield' : String(node.row.id));
+  }
+
+  // Rows are still produced in parent compareRows order...
+  expect(yieldsAndRows.filter(x => x !== 'yield')).toEqual([
+    'p1',
+    'p2',
+    'p3',
+    'p4',
+    'p5',
+  ]);
+
+  // ...and yields are forwarded. 5 from the child fetch + ≥5 from parent
+  // chunks (one per row yielded by the wrapped parent.fetch in each of
+  // the 3 chunks). The exact parent count depends on when the merge
+  // primes vs. emits, so just assert there's a healthy number.
+  const yieldCount = yieldsAndRows.filter(x => x === 'yield').length;
+  expect(yieldCount).toBeGreaterThanOrEqual(10);
+});
+
 test('chunked fetch dedupes children sharing the same parent-key value', () => {
   restoreChunkSize = setMultiConstraintChunkSizeForTest(2);
 
@@ -568,6 +645,159 @@ describe('canonicalKey', () => {
       canonicalKeyForTest({k: null}, ['k']),
     );
   });
+
+  test('empty string does not collide with null/undefined', () => {
+    // "" → "s" (just the type tag), null → "n". Without the tag they would
+    // both render as the empty string.
+    expect(canonicalKeyForTest({k: ''}, ['k'])).not.toBe(
+      canonicalKeyForTest({k: null}, ['k']),
+    );
+    expect(canonicalKeyForTest({k: ''}, ['k'])).not.toBe(
+      canonicalKeyForTest({k: undefined}, ['k']),
+    );
+  });
+
+  test('falsy trio: 0n vs 0 vs false are all distinct', () => {
+    // Common production overlap: a SQLite INTEGER column read with
+    // safeIntegers gives bigint, a MemorySource gives number, and naive
+    // user code might compare against `false`. All three must hash apart.
+    const zeroBig = canonicalKeyForTest({k: 0n}, ['k']);
+    const zeroNum = canonicalKeyForTest({k: 0}, ['k']);
+    const falseBool = canonicalKeyForTest({k: false}, ['k']);
+    expect(zeroBig).not.toBe(zeroNum);
+    expect(zeroBig).not.toBe(falseBool);
+    expect(zeroNum).not.toBe(falseBool);
+  });
+});
+
+// Exercises the chunk-count branch boundary in `#fetchBatched`:
+//   computedMulti.length <= multiConstraintChunkSize → single fetch
+//   computedMulti.length >  multiConstraintChunkSize → #fetchChunked
+// `cases` covers N = chunkSize (single-chunk, exact threshold) and
+// N = 2*chunkSize (two full chunks, no remainder). The +1-remainder cases
+// (5 with chunk=2 and `null FK` setup) are exercised by other tests.
+test.each([
+  {n: 2, chunkSize: 2, expectedChunks: [2]},
+  {n: 4, chunkSize: 2, expectedChunks: [2, 2]},
+])(
+  'chunk boundary: $n children at chunk size $chunkSize → $expectedChunks',
+  ({n, chunkSize, expectedChunks}) => {
+    restoreChunkSize = setMultiConstraintChunkSizeForTest(chunkSize);
+
+    const parent = createSource(
+      lc,
+      testLogConfig,
+      'parent',
+      {id: {type: 'string'}, label: {type: 'string'}},
+      ['id'],
+    );
+    const child = createSource(
+      lc,
+      testLogConfig,
+      'child',
+      {id: {type: 'string'}, parentId: {type: 'string'}},
+      ['id'],
+    );
+
+    for (let i = 1; i <= n; i++) {
+      consume(
+        parent.push(makeSourceChangeAdd({id: `p${i}`, label: `Parent ${i}`})),
+      );
+      consume(
+        child.push(makeSourceChangeAdd({id: `c${i}`, parentId: `p${i}`})),
+      );
+    }
+
+    const log: SnitchMessage[] = [];
+    const parentSnitch = new Snitch(parent.connect([['id', 'asc']]), 'p', log);
+    const childSnitch = new Snitch(child.connect([['id', 'asc']]), 'c', log);
+
+    const fj = new FlippedJoin({
+      parent: parentSnitch,
+      child: childSnitch,
+      parentKey: ['id'],
+      childKey: ['parentId'],
+      relationshipName: 'children',
+      hidden: false,
+      system: 'client',
+    });
+
+    const result = new Catch(fj).fetch({});
+    expect(result.map(n => asRow(n).row.id)).toEqual(
+      Array.from({length: n}, (_, i) => `p${i + 1}`),
+    );
+
+    const parentFetches = parentFetchMessages(log);
+    expect(parentFetches).toHaveLength(expectedChunks.length);
+    for (let i = 0; i < expectedChunks.length; i++) {
+      expect(must(parentFetches[i][2].multiConstraints)[0]).toHaveLength(
+        expectedChunks[i],
+      );
+    }
+  },
+);
+
+test('children with null FK are silently dropped from the multi-constraint', () => {
+  // buildJoinConstraint returns undefined when any source value is null,
+  // and #fetchBatched skips those children when computing the dedup map.
+  // Verify under chunking so we hit the multi-chunk path as well.
+  restoreChunkSize = setMultiConstraintChunkSizeForTest(2);
+
+  const parent = createSource(
+    lc,
+    testLogConfig,
+    'parent',
+    {id: {type: 'string'}, label: {type: 'string'}},
+    ['id'],
+  );
+  const child = createSource(
+    lc,
+    testLogConfig,
+    'child',
+    {id: {type: 'string'}, parentId: {type: 'string'}},
+    ['id'],
+  );
+
+  // 4 parents.
+  for (let i = 1; i <= 4; i++) {
+    consume(
+      parent.push(makeSourceChangeAdd({id: `p${i}`, label: `Parent ${i}`})),
+    );
+  }
+  // 5 children: c0 has null FK, c1..c4 each point at p1..p4. With chunk
+  // size 2, the 4 valid children must split into 2 chunks (not 3), proving
+  // the null-FK row was dropped before chunking.
+  consume(child.push(makeSourceChangeAdd({id: 'c0', parentId: null})));
+  for (let i = 1; i <= 4; i++) {
+    consume(child.push(makeSourceChangeAdd({id: `c${i}`, parentId: `p${i}`})));
+  }
+
+  const log: SnitchMessage[] = [];
+  const parentSnitch = new Snitch(parent.connect([['id', 'asc']]), 'p', log);
+  const childSnitch = new Snitch(child.connect([['id', 'asc']]), 'c', log);
+
+  const fj = new FlippedJoin({
+    parent: parentSnitch,
+    child: childSnitch,
+    parentKey: ['id'],
+    childKey: ['parentId'],
+    relationshipName: 'children',
+    hidden: false,
+    system: 'client',
+  });
+
+  const result = new Catch(fj).fetch({});
+
+  // Only the 4 parents with matching valid children appear; the null-FK
+  // child is not reflected anywhere in the output.
+  expect(result.map(n => asRow(n).row.id)).toEqual(['p1', 'p2', 'p3', 'p4']);
+
+  // 2 chunks of 2 valid children (not 3) — the null-FK row was filtered
+  // before chunking.
+  const parentFetches = parentFetchMessages(log);
+  expect(parentFetches).toHaveLength(2);
+  expect(must(parentFetches[0][2].multiConstraints)[0]).toHaveLength(2);
+  expect(must(parentFetches[1][2].multiConstraints)[0]).toHaveLength(2);
 });
 
 test('inprogress child REMOVE incompatible with req.constraint is dropped from multi', () => {
