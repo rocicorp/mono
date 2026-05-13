@@ -12,11 +12,7 @@ import {
   makeRemoveChange,
   type Change,
 } from './change.ts';
-import {
-  constraintsAreCompatible,
-  keyMatchesPrimaryKey,
-  type Constraint,
-} from './constraint.ts';
+import {constraintsAreCompatible, type Constraint} from './constraint.ts';
 import type {Node} from './data.ts';
 import {
   buildJoinConstraint,
@@ -61,7 +57,6 @@ export class FlippedJoin implements Input {
   readonly #childKey: CompoundKey;
   readonly #relationshipName: string;
   readonly #schema: SourceSchema;
-  readonly #parentKeyIsUnique: boolean;
 
   #output: Output = throwOutput;
 
@@ -90,12 +85,6 @@ export class FlippedJoin implements Input {
 
     const parentSchema = parent.getSchema();
     const childSchema = child.getSchema();
-    this.#parentKeyIsUnique =
-      keyMatchesPrimaryKey(parentKey, parentSchema.primaryKey) ||
-      (parentSchema.uniqueIndexes?.some(idx =>
-        keyMatchesPrimaryKey(parentKey, idx),
-      ) ??
-        false);
     this.#schema = {
       ...parentSchema,
       relationships: {
@@ -172,77 +161,7 @@ export class FlippedJoin implements Input {
       childNodes.splice(insertPos, 0, removedNode);
     }
 
-    if (this.#parentKeyIsUnique) {
-      yield* this.#fetchQuicksort(req, childNodes);
-    } else {
-      yield* this.#fetchMergeSort(req, childNodes);
-    }
-  }
-
-  // When parentKey matches a unique index on the parent (primary or
-  // otherwise) each child -> parent fetch returns at most one row, so the
-  // merge-sort degenerates to N simultaneous prepared-statement iterators
-  // each holding a single-row cursor.  Instead, fetch sequentially (letting
-  // the statement cache reuse a single prepared statement) and sort the
-  // resulting parents into order.
-  *#fetchQuicksort(
-    req: FetchRequest,
-    childNodes: Node[],
-  ): Stream<Node | 'yield'> {
-    const pairs: {childNode: Node; parentNode: Node}[] = [];
-    for (const childNode of childNodes) {
-      const constraintFromChild = buildJoinConstraint(
-        childNode.row,
-        this.#childKey,
-        this.#parentKey,
-      );
-      if (
-        !constraintFromChild ||
-        (req.constraint &&
-          !constraintsAreCompatible(constraintFromChild, req.constraint))
-      ) {
-        continue;
-      }
-      const stream = this.#parent.fetch({
-        ...req,
-        constraint: {
-          ...req.constraint,
-          ...constraintFromChild,
-        },
-      });
-      // parentKey matches a unique index, so this fetch returns at most
-      // one row under the Source contract.  Iterate to completion rather
-      // than breaking to preserve yield propagation and to avoid silently
-      // changing behavior if a source ever returns more.
-      for (const node of stream) {
-        if (node === 'yield') {
-          yield 'yield';
-          continue;
-        }
-        pairs.push({childNode, parentNode: node});
-      }
-    }
-
-    const compareRows = this.#schema.compareRows;
-    const dir = req.reverse ? -1 : 1;
-    pairs.sort((a, b) => compareRows(a.parentNode.row, b.parentNode.row) * dir);
-
-    // Group consecutive pairs with equal parent rows.  Array.sort is stable,
-    // and childNodes was already in child order, so children within each
-    // group retain child order.
-    let i = 0;
-    while (i < pairs.length) {
-      const minParentNode = pairs[i].parentNode;
-      const relatedChildNodes: Node[] = [];
-      while (
-        i < pairs.length &&
-        compareRows(pairs[i].parentNode.row, minParentNode.row) === 0
-      ) {
-        relatedChildNodes.push(pairs[i].childNode);
-        i++;
-      }
-      yield* this.#yieldParentWithOverlay(minParentNode, relatedChildNodes);
-    }
+    yield* this.#fetchMergeSort(req, childNodes);
   }
 
   *#fetchMergeSort(

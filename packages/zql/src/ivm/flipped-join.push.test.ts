@@ -995,17 +995,17 @@ suite('push one:many', () => {
     `);
   });
 
-  test('remove child triggers overlay through quicksort path on re-fetch', () => {
-    // parentField:['id'] === issue.primaryKey, so FlippedJoin.fetch routes
-    // through #fetchQuicksort.  When a child REMOVE is in flight, the
-    // removed comment is re-inserted into the fetched childNodes (so
-    // related-parent enumeration still finds it), and #yieldParentWithOverlay
-    // is responsible for filtering it out of the parent's relationship for
-    // any parent at-or-before #inprogressChildChangePosition.  With unique
-    // parentKey the only matching parent is the current one, which always
-    // satisfies that condition.  fetchOnPush: true forces a re-fetch
-    // mid-push so the overlay actually fires; the assertion is that the
-    // returned parent shows comments=[c2] (post-removal), not [c1, c2].
+  test('remove child triggers overlay on re-fetch with unique parentKey', () => {
+    // parentField:['id'] === issue.primaryKey.  When a child REMOVE is in
+    // flight, the removed comment is re-inserted into the fetched
+    // childNodes (so related-parent enumeration still finds it), and
+    // #yieldParentWithOverlay is responsible for filtering it out of the
+    // parent's relationship for any parent at-or-before
+    // #inprogressChildChangePosition.  With unique parentKey the only
+    // matching parent is the current one, which always satisfies that
+    // condition.  fetchOnPush: true forces a re-fetch mid-push so the
+    // overlay actually fires; the assertion is that the returned parent
+    // shows comments=[c2] (post-removal), not [c1, c2].
     const {pushesWithFetch} = runPushTest({
       sources,
       sourceContents: {
