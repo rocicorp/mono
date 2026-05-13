@@ -1,3 +1,4 @@
+/* oxlint-disable no-console */
 import {rmSync} from 'node:fs';
 import {performance} from 'node:perf_hooks';
 import {fileURLToPath} from 'node:url';

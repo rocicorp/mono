@@ -1,3 +1,4 @@
+/* oxlint-disable no-console */
 import {once} from 'node:events';
 import type {AddressInfo} from 'node:net';
 import {monitorEventLoopDelay, performance} from 'node:perf_hooks';
