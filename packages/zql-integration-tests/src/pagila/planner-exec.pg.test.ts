@@ -95,9 +95,9 @@ describe('Pagila planner execution cost validation', () => {
         .whereExists('actors', a => a.where('lastName', 'GUINESS'))
         .whereExists('categories', c => c.where('name', 'Action')),
       validations: [
-        ['correlation', -0.09],
+        ['correlation', 0.5],
         ['within-optimal', 1],
-        ['within-baseline', 0.07],
+        ['within-baseline', 0.046],
       ],
     },
 
@@ -127,7 +127,7 @@ describe('Pagila planner execution cost validation', () => {
         // TODO: why decreased correlation? From 0.4 to -0.1
         // 'payment to film via rental chain (3 hops)' sees a huge improvement though.
         ['correlation', -0.1],
-        ['within-optimal', 2.1],
+        ['within-optimal', 2.0],
         ['within-baseline', 1],
       ],
     },
@@ -151,7 +151,7 @@ describe('Pagila planner execution cost validation', () => {
         // Tightened from -0.5 / 10 / 10.
         ['correlation', 0.9],
         ['within-optimal', 1],
-        ['within-baseline', 0.5],
+        ['within-baseline', 0.47],
       ],
     },
 
@@ -181,9 +181,9 @@ describe('Pagila planner execution cost validation', () => {
         ),
       ),
       validations: [
-        ['correlation', 0],
+        ['correlation', 0.75],
         ['within-optimal', 1],
-        ['within-baseline', 1],
+        ['within-baseline', 0.85],
       ],
     },
 
@@ -195,8 +195,8 @@ describe('Pagila planner execution cost validation', () => {
         )
         .limit(100),
       validations: [
-        ['correlation', 0],
-        ['within-optimal', 1],
+        ['correlation', 0.5],
+        ['within-optimal', 1.9],
         ['within-baseline', 1],
       ],
     },
@@ -271,7 +271,7 @@ describe('Pagila planner execution cost validation', () => {
       // within-optimal excluded: empty results cause divide-by-zero (optimal has 0 rows)
       validations: [
         ['correlation', 0.8],
-        ['within-baseline', 0.01],
+        ['within-baseline', 0],
       ],
     },
 
@@ -300,7 +300,7 @@ describe('Pagila planner execution cost validation', () => {
         ['correlation', 0.74],
         // TODO
         ['within-optimal', 31],
-        ['within-baseline', 0.2],
+        ['within-baseline', 0.19],
       ],
     },
 

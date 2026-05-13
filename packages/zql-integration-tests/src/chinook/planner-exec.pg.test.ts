@@ -42,7 +42,7 @@ describe('Chinook planner execution cost validation', () => {
       extraIndexValidations: [
         ['correlation', 1.0],
         ['within-optimal', 1],
-        ['within-baseline', 0.01],
+        ['within-baseline', 0.009],
       ],
     },
 
@@ -61,7 +61,7 @@ describe('Chinook planner execution cost validation', () => {
       extraIndexValidations: [
         ['correlation', 0.94],
         ['within-optimal', 1],
-        ['within-baseline', 0.01],
+        ['within-baseline', 0.009],
       ],
     },
 
@@ -130,12 +130,12 @@ describe('Chinook planner execution cost validation', () => {
           album.whereExists('tracks', track => track),
         ),
       validations: [
-        ['correlation', 0.75],
+        ['correlation', 0.9],
         ['within-optimal', 1],
         ['within-baseline', 1],
       ],
       extraIndexValidations: [
-        ['correlation', 0.4],
+        ['correlation', 0.75],
         ['within-optimal', 1],
         ['within-baseline', 1],
       ],
@@ -158,7 +158,7 @@ describe('Chinook planner execution cost validation', () => {
       ],
       extraIndexValidations: [
         ['correlation', 0.6],
-        ['within-baseline', 0.001],
+        ['within-baseline', 0],
       ],
     },
 
@@ -175,12 +175,12 @@ describe('Chinook planner execution cost validation', () => {
         .limit(5),
       validations: [
         ['correlation', 0.15],
-        ['within-optimal', 1.5],
+        ['within-optimal', 1.3],
         ['within-baseline', 1],
       ],
       extraIndexValidations: [
-        ['correlation', -0.5],
-        ['within-baseline', 1],
+        ['correlation', 0.35],
+        ['within-baseline', 0],
       ],
     },
 
@@ -196,12 +196,12 @@ describe('Chinook planner execution cost validation', () => {
         )
         .limit(20),
       validations: [
-        ['correlation', 0.25],
+        ['correlation', 0.3],
         ['within-optimal', 1],
         ['within-baseline', 1],
       ],
       extraIndexValidations: [
-        ['correlation', 0.3],
+        ['correlation', 0.35],
         ['within-optimal', 1],
         ['within-baseline', 1],
       ],
@@ -248,14 +248,14 @@ describe('Chinook planner execution cost validation', () => {
         .whereExists('tracks', track => track.where('composer', 'Kurt Cobain'))
         .limit(10),
       validations: [
-        ['correlation', 0.0],
-        ['within-optimal', 3.37],
+        ['correlation', 0.5],
+        ['within-optimal', 2.3],
         ['within-baseline', 1],
       ],
       extraIndexValidations: [
-        ['correlation', 0.8],
+        ['correlation', 0.9],
         ['within-optimal', 1],
-        ['within-baseline', 0.04],
+        ['within-baseline', 0.031],
       ],
     },
 
@@ -282,7 +282,7 @@ describe('Chinook planner execution cost validation', () => {
       ],
       extraIndexValidations: [
         ['correlation', 0.9],
-        ['within-baseline', 0.001],
+        ['within-baseline', 0],
       ],
     },
 
@@ -301,13 +301,13 @@ describe('Chinook planner execution cost validation', () => {
         .limit(10),
       validations: [
         ['correlation', -1.0],
-        ['within-optimal', 10],
+        ['within-optimal', 9.4],
         ['within-baseline', 1],
       ],
       extraIndexValidations: [
-        ['correlation', -1.0],
-        ['within-optimal', 87],
-        ['within-baseline', 1],
+        ['correlation', 0.9],
+        ['within-optimal', 1.1],
+        ['within-baseline', 0.0125],
       ],
     },
 
@@ -342,12 +342,12 @@ describe('Chinook planner execution cost validation', () => {
             ),
         ),
       validations: [
-        ['correlation', 0.4],
+        ['correlation', 0.75],
         ['within-optimal', 1.22],
         ['within-baseline', 0.106],
       ],
       extraIndexValidations: [
-        ['correlation', 0.35],
+        ['correlation', 0.75],
         ['within-optimal', 1.22],
         ['within-baseline', 0.106],
       ],
@@ -359,12 +359,12 @@ describe('Chinook planner execution cost validation', () => {
         .whereExists('albums', album => album.whereExists('tracks'))
         .limit(1),
       validations: [
-        ['correlation', 0.4],
+        ['correlation', 0.75],
         ['within-optimal', 1],
         ['within-baseline', 1],
       ],
       extraIndexValidations: [
-        ['correlation', 0.4],
+        ['correlation', 0.75],
         ['within-optimal', 1],
         ['within-baseline', 1],
       ],
@@ -415,7 +415,7 @@ describe('Chinook planner execution cost validation', () => {
       ],
       extraIndexValidations: [
         ['correlation', 0.94],
-        ['within-baseline', 0.001],
+        ['within-baseline', 0],
       ],
     },
 
@@ -425,12 +425,12 @@ describe('Chinook planner execution cost validation', () => {
         .where('name', 'LIKE', 'Music%')
         .whereExists('tracks', t => t.where('name', 'LIKE', 'A%')),
       validations: [
-        ['correlation', 0.4],
+        ['correlation', 0.75],
         ['within-optimal', 1],
         ['within-baseline', 1],
       ],
       extraIndexValidations: [
-        ['correlation', 0.4],
+        ['correlation', 0.75],
         ['within-optimal', 1],
         ['within-baseline', 1],
       ],
@@ -450,10 +450,11 @@ describe('Chinook planner execution cost validation', () => {
         ['within-baseline', 2.3],
       ],
       // Does well with indices
+      // within-optimal omitted: with indices both picked and optimal scan 0
+      // rows, yielding a 0/0 NaN ratio that no threshold can satisfy.
       extraIndexValidations: [
         ['correlation', 0.85],
-        ['within-optimal', 1.43],
-        ['within-baseline', 1.43],
+        ['within-baseline', 1.1],
       ],
     },
 
@@ -466,7 +467,7 @@ describe('Chinook planner execution cost validation', () => {
       validations: [
         ['correlation', 1.0],
         ['within-optimal', 1],
-        ['within-baseline', 0.012],
+        ['within-baseline', 0.006],
       ],
       extraIndexValidations: [
         ['correlation', 1.0],
@@ -507,7 +508,7 @@ describe('Chinook planner execution cost validation', () => {
       extraIndexValidations: [
         ['correlation', 0.3],
         ['within-optimal', 1],
-        ['within-baseline', 0.8],
+        ['within-baseline', 0.74],
       ],
     },
 
