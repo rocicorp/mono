@@ -252,7 +252,7 @@ describe('UnionFanIn', () => {
     ): Operator => ({
       getSchema: () => schema,
       fetch: (req: FetchRequest) =>
-        req.reverse ? [...data].reverse() : [...data],
+        req.reverse ? data.toReversed() : [...data],
       push: vi.fn(),
       setOutput: vi.fn(),
       destroy: vi.fn(),
