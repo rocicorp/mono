@@ -6,6 +6,8 @@ on:
     paths:
       - 'packages/replicache/**'
       - 'packages/replicache-perf/**'
+      - '.github/**'
+      - 'package-lock.json'
 
 jobs:
   playwright-install:
