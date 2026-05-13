@@ -79,9 +79,9 @@ describe('change-streamer/storer', () => {
     fatalErrors = new Queue();
 
     return async () => {
-      await testDBs.drop(db);
       void storer?.stop();
       await done;
+      await testDBs.drop(db);
     };
   });
 
@@ -153,6 +153,35 @@ describe('change-streamer/storer', () => {
       expect(rows.map(row => Number(row.pos))).toEqual(
         Array.from({length: 252}, (_, i) => i),
       );
+    });
+
+    test('rollback only discards the current transaction from a group', async () => {
+      storer.store('08', ['begin', messages.begin(), {commitWatermark: '08'}]);
+      storer.store('08', ['commit', messages.commit(), {watermark: '08'}]);
+
+      storer.store('09', ['begin', messages.begin(), {commitWatermark: '09'}]);
+      storer.store('09', [
+        'data',
+        messages.insert('issues', {id: 'rolled-back'}),
+      ]);
+      storer.store('09', ['rollback', messages.rollback()]);
+
+      await storer.allProcessed();
+      await expectConsumed('08');
+
+      expect(
+        await db`
+          SELECT watermark, pos, change->>'tag' as tag
+            FROM "xero_5/cdc"."changeLog"
+           WHERE watermark >= '08'
+           ORDER BY watermark, pos`,
+      ).toEqual([
+        {watermark: '08', pos: 0n, tag: 'begin'},
+        {watermark: '08', pos: 1n, tag: 'commit'},
+      ]);
+      expect(
+        await db`SELECT "lastWatermark" FROM "xero_5/cdc"."replicationState"`,
+      ).toEqual([{lastWatermark: '08'}]);
     });
 
     test('purge', async () => {
@@ -914,7 +943,7 @@ describe('change-streamer/storer', () => {
       storer.catchup(sub2, 'serving');
 
       await expect(done).rejects.toThrow(
-        'changeLog ownership is no longer held by this task',
+        'changeLog ownership has been assumed by other-task',
       );
       // Prevent the beforeEach cleanup from re-throwing the rejected done.
       done = Promise.resolve();
@@ -948,6 +977,7 @@ describe('change-streamer/storer', () => {
 
       // Now send commit.
       storer.store('08', ['commit', messages.commit(), {watermark: '08'}]);
+      await storer.allProcessed();
 
       // Now an ownership change should succeed.
       expect(
@@ -973,6 +1003,7 @@ describe('change-streamer/storer', () => {
       storer.store('0a', ['data', messages.insert('issues', {id: 'bar'})]);
       storer.store('0a', ['commit', messages.commit(), {watermark: '0a'}]);
 
+      await storer.allProcessed();
       await expectConsumed('0a');
 
       expect(
