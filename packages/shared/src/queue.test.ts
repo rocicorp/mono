@@ -219,4 +219,52 @@ describe('Queue', () => {
     queue.enqueue(3);
     await promise;
   });
+
+  test('dequeue and drain keep FIFO order after many dequeues', async () => {
+    const queue = new Queue<number>();
+    for (let i = 0; i < 2048; i++) {
+      queue.enqueue(i);
+    }
+
+    for (let i = 0; i < 1024; i++) {
+      expect(await queue.dequeue()).toBe(i);
+    }
+    queue.enqueue(2048);
+    queue.enqueue(2049);
+
+    expect(queue.size()).toBe(1026);
+    expect(queue.drain()).toEqual(
+      Array.from({length: 1026}, (_, i) => i + 1024),
+    );
+    expect(queue.size()).toBe(0);
+  });
+
+  test('delete and drain ignore already dequeued head entries', async () => {
+    const queue = new Queue<string>();
+    queue.enqueue('a');
+    queue.enqueue('b');
+    queue.enqueue('c');
+    queue.enqueue('d');
+
+    expect(await queue.dequeue()).toBe('a');
+    expect(queue.delete('c')).toBe(1);
+
+    expect(queue.size()).toBe(2);
+    expect(queue.drain()).toEqual(['b', 'd']);
+    expect(queue.size()).toBe(0);
+  });
+
+  test('timed out consumers do not block later enqueues', async () => {
+    const queue = new Queue<string>();
+    const timedOut = Promise.all(
+      Array.from({length: 8}, () => queue.dequeue('timed out', 5)),
+    );
+
+    expect(await timedOut).toEqual(Array.from({length: 8}).fill('timed out'));
+
+    queue.enqueue('live');
+    expect(queue.size()).toBe(1);
+    expect(await queue.dequeue()).toBe('live');
+    expect(queue.size()).toBe(0);
+  });
 });

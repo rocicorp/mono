@@ -7,28 +7,34 @@ import {assert} from './asserts.ts';
  */
 export class Queue<T> {
   // Consumers waiting for entries to be produced.
-  readonly #consumers: Consumer<T>[] = [];
+  readonly #consumers: (Consumer<T> | undefined)[] = [];
+  #consumerHead = 0;
+  #consumerCount = 0;
   // Produced entries waiting to be consumed.
-  readonly #produced: Produced<T>[] = [];
+  readonly #produced: (Produced<T> | undefined)[] = [];
+  #producedHead = 0;
+  #producedCount = 0;
 
   enqueue(value: T): void {
-    const consumer = this.#consumers.shift();
+    const consumer = this.#dequeueConsumer();
     if (consumer) {
       consumer.resolver.resolve(value);
       clearTimeout(consumer.timeoutID);
       return;
     }
     this.#produced.push({value});
+    this.#producedCount++;
   }
 
   enqueueRejection(reason?: unknown): void {
-    const consumer = this.#consumers.shift();
+    const consumer = this.#dequeueConsumer();
     if (consumer) {
       consumer.resolver.reject(reason);
       clearTimeout(consumer.timeoutID);
       return;
     }
     this.#produced.push({rejection: reason});
+    this.#producedCount++;
   }
 
   /**
@@ -44,13 +50,15 @@ export class Queue<T> {
     assert(value !== undefined, 'Queue delete value must not be undefined');
 
     let count = 0;
-    for (let i = this.#produced.length - 1; i >= 0; i--) {
+    for (let i = this.#produced.length - 1; i >= this.#producedHead; i--) {
       const p = this.#produced[i];
-      if (p.value === value) {
-        this.#produced.splice(i, 1);
+      if (p?.value === value) {
+        this.#produced[i] = undefined;
+        this.#producedCount--;
         count++;
       }
     }
+    this.#maybeCompactProduced();
     return count;
   }
 
@@ -61,22 +69,26 @@ export class Queue<T> {
    * @returns A Promise that resolves to the next enqueued value.
    */
   dequeue(timeoutValue?: T, timeoutMs: number = 0): Promise<T> | T {
-    const produced = this.#produced.shift();
+    const produced = this.#dequeueProduced();
     if (produced) {
       return produced.value ?? Promise.reject(produced.rejection);
     }
     const r = resolver<T>();
-    const timeoutID =
+    const consumer: Consumer<T> = {resolver: r, timeoutID: undefined};
+    consumer.timeoutID =
       timeoutValue === undefined
         ? undefined
         : setTimeout(() => {
-            const i = this.#consumers.findIndex(c => c.resolver === r);
+            const i = this.#consumers.indexOf(consumer, this.#consumerHead);
             if (i >= 0) {
-              const [consumer] = this.#consumers.splice(i, 1);
+              this.#consumers[i] = undefined;
+              this.#consumerCount--;
               consumer.resolver.resolve(timeoutValue);
+              this.#maybeCompactConsumers();
             }
           }, timeoutMs);
-    this.#consumers.push({resolver: r, timeoutID});
+    this.#consumers.push(consumer);
+    this.#consumerCount++;
     return r.promise;
   }
 
@@ -96,10 +108,13 @@ export class Queue<T> {
    */
   drain(): (T | undefined)[] {
     const ret: (T | undefined)[] = [];
-    for (const p of this.#produced) {
-      ret.push(p.value);
+    for (let i = this.#producedHead; i < this.#produced.length; i++) {
+      const p = this.#produced[i];
+      if (p) {
+        ret.push(p.value);
+      }
     }
-    this.#produced.length = 0;
+    this.#resetProduced();
 
     return ret;
   }
@@ -111,7 +126,7 @@ export class Queue<T> {
    *          handed to the consumer and the Queue's size remains 0.
    */
   size(): number {
-    return this.#produced.length;
+    return this.#producedCount;
   }
 
   asAsyncIterable(cleanup = NOOP): AsyncIterable<T> {
@@ -134,6 +149,86 @@ export class Queue<T> {
         return Promise.resolve({value, done: true});
       },
     };
+  }
+
+  #dequeueConsumer(): Consumer<T> | undefined {
+    if (this.#consumerCount === 0) {
+      this.#resetConsumers();
+      return undefined;
+    }
+
+    while (this.#consumerHead < this.#consumers.length) {
+      const consumer = this.#consumers[this.#consumerHead];
+      this.#consumers[this.#consumerHead] = undefined;
+      this.#consumerHead++;
+      if (consumer) {
+        this.#consumerCount--;
+        this.#maybeCompactConsumers();
+        return consumer;
+      }
+    }
+
+    this.#consumerCount = 0;
+    this.#resetConsumers();
+    return undefined;
+  }
+
+  #dequeueProduced(): Produced<T> | undefined {
+    if (this.#producedCount === 0) {
+      this.#resetProduced();
+      return undefined;
+    }
+
+    while (this.#producedHead < this.#produced.length) {
+      const produced = this.#produced[this.#producedHead];
+      this.#produced[this.#producedHead] = undefined;
+      this.#producedHead++;
+      if (produced) {
+        this.#producedCount--;
+        this.#maybeCompactProduced();
+        return produced;
+      }
+    }
+
+    this.#producedCount = 0;
+    this.#resetProduced();
+    return undefined;
+  }
+
+  #maybeCompactConsumers(): void {
+    if (this.#consumerCount === 0) {
+      this.#resetConsumers();
+    } else if (
+      this.#consumerHead > 1024 &&
+      this.#consumerHead * 2 > this.#consumers.length
+    ) {
+      this.#consumers.splice(0, this.#consumerHead);
+      this.#consumerHead = 0;
+    }
+  }
+
+  #maybeCompactProduced(): void {
+    if (this.#producedCount === 0) {
+      this.#resetProduced();
+    } else if (
+      this.#producedHead > 1024 &&
+      this.#producedHead * 2 > this.#produced.length
+    ) {
+      this.#produced.splice(0, this.#producedHead);
+      this.#producedHead = 0;
+    }
+  }
+
+  #resetConsumers(): void {
+    this.#consumers.length = 0;
+    this.#consumerHead = 0;
+    this.#consumerCount = 0;
+  }
+
+  #resetProduced(): void {
+    this.#produced.length = 0;
+    this.#producedHead = 0;
+    this.#producedCount = 0;
   }
 }
 
