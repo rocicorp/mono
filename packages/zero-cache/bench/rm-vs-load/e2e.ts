@@ -36,4 +36,4 @@ console.log(
   ].join('\n'),
 );
 
-await import('./rm-vs-load.ts');
+await import('./index.ts');
