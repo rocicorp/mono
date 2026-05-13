@@ -29,17 +29,16 @@ export async function runHandoffBenchmark(): Promise<HandoffResult[]> {
   ];
 }
 
-// Reproduces the catchup handoff risk fixed by the subscriber backlog change.
+// #5970: https://github.com/rocicorp/mono/pull/5970
+// This benchmark keeps the catchup handoff regression reproducible. The
+// previous fire-and-forget handoff could report producer completion while
+// leaving 100k messages queued downstream; the fixed path reports completion
+// only after downstream consumption, keeping max pending at 1 in this harness.
 //
 //   storer catchup cursor
 //          |
 //          v
 //   subscriber backlog  ---> downstream websocket
-//
-// The unsafe shape is a fire-and-forget handoff: the storer can finish loading
-// catchup rows while the downstream queue is still holding a huge number of
-// unacked messages. The golden path is flow-controlled handoff: every backlog
-// entry resolves only after the downstream push is consumed.
 async function run(mode: HandoffMode): Promise<HandoffResult> {
   const downstream = Subscription.create<string>();
   let consumed = 0;

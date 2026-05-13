@@ -131,17 +131,16 @@ export class Subscriber {
   }
 
   async #flushBacklog(backlog: BacklogEntry[]) {
-    // The backlog is a safety valve between catchup and live forwarding:
+    // #5970: https://github.com/rocicorp/mono/pull/5970
+    // Keep catchup handoff flow-controlled so completion means the downstream
+    // subscriber consumed the buffered live messages. Previously, fire-and-
+    // forget Promise fanout could move a large backlog into downstream pending
+    // state and let catchup report success before that work was actually done.
     //
     //   catchup query -> backlog[0] -> downstream ACK
     //                  -> backlog[1] -> downstream ACK
     //                  -> ...
     //                  -> live forwarding
-    //
-    // Do not convert this back to fire-and-forget Promise fanout. The storer
-    // awaits each BacklogEntry.done resolver, which caps downstream memory and
-    // prevents catchup from claiming completion before the subscriber has
-    // actually consumed the buffered live messages.
     let next = 0;
     try {
       while (next < backlog.length) {

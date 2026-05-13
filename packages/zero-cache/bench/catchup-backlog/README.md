@@ -17,7 +17,7 @@ Files:
 - `report.ts` owns the ASCII output table so benchmark mechanics and
   presentation do not blur together.
 
-Golden path:
+Default review run:
 
 ```bash
 npm --workspace=zero-cache run perf:catchup-backlog
