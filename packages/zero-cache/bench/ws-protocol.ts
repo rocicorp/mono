@@ -1,3 +1,4 @@
+/* oxlint-disable no-console */
 import {performance} from 'node:perf_hooks';
 import {fileURLToPath} from 'node:url';
 import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
