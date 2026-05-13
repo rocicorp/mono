@@ -637,13 +637,14 @@ export class Storer implements Service {
     }
     const entries = tx.pendingChangeLogEntries;
     tx.pendingChangeLogEntries = [];
-    // Multi-row INSERTs are the golden path for data-heavy transactions:
+    // #5976: https://github.com/rocicorp/mono/pull/5976
+    // Batch insert buffered data rows to reduce changeDB round trips.
+    // Previously, data-heavy upstream transactions issued one INSERT per
+    // changeLog row; batching was measured in the shared 1 RM / 16 view-syncer
+    // e2e suite as part of the ~13-35% rows/s improvement in #5976.
     //
-    //   old: data row -> INSERT -> data row -> INSERT -> ...
-    //   new: data row -> buffer -> data row -> buffer -> INSERT many rows
-    //
-    // Schema changes still flush immediately so their metadata side effects
-    // remain ordered with the exact change that introduced them.
+    // Schema changes still flush immediately before metadata writes so their
+    // side effects remain ordered with the change that introduced them.
     return tx.pool.process(sql => [
       sql`INSERT INTO ${this.#cdc('changeLog')} ${sql(entries)}`,
     ]);
