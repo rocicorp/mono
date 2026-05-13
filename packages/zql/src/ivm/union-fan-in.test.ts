@@ -243,6 +243,77 @@ describe('UnionFanIn', () => {
       expect(result).toHaveLength(3);
       expect(result.map(n => n.row.id)).toEqual([1, 2, 3]);
     });
+
+    // Each branch supplies rows in the order requested by FetchRequest.
+    // `req.reverse` is honored by the mock so we can simulate a real source.
+    const mockOrderedOperator = (
+      schema: SourceSchema,
+      data: Node[],
+    ): Operator => ({
+      getSchema: () => schema,
+      fetch: (req: FetchRequest) =>
+        req.reverse ? [...data].reverse() : [...data],
+      push: vi.fn(),
+      setOutput: vi.fn(),
+      destroy: vi.fn(),
+    });
+
+    test('reverse + multi-branch yields rows in descending order', () => {
+      // Branch A asc: [1, 3, 5]   reverse: [5, 3, 1]
+      // Branch B asc: [2, 4]      reverse: [4, 2]
+      // Correct merged reverse:   [5, 4, 3, 2, 1]
+      const dataA: Node[] = [
+        {row: {id: 1}, relationships: {}},
+        {row: {id: 3}, relationships: {}},
+        {row: {id: 5}, relationships: {}},
+      ];
+      const dataB: Node[] = [
+        {row: {id: 2}, relationships: {}},
+        {row: {id: 4}, relationships: {}},
+      ];
+
+      const fanOut = mockUnionFanOut(mockSchema);
+      const inputA = mockOrderedOperator(mockSchema, dataA);
+      const inputB = mockOrderedOperator(mockSchema, dataB);
+
+      const fanIn = new UnionFanIn(fanOut, [inputA, inputB]);
+      const result = [
+        ...skipYields(fanIn.fetch({reverse: true} as FetchRequest)),
+      ];
+
+      // BUG: UnionFanIn.fetch hands mergeFetches an ascending comparator
+      // regardless of req.reverse, so the merge picks min across descending
+      // heads and yields rows out of order. We assert the *correct* order
+      // so the test fails until the comparator is reversed when req.reverse.
+      expect(result.map(n => n.row.id)).toEqual([5, 4, 3, 2, 1]);
+    });
+
+    test('reverse + multi-branch with overlap dedupes adjacent duplicates', () => {
+      // Both branches contain id=2 and id=4. In ascending merge dedup works
+      // because equal rows arrive adjacently; in reverse merge equal rows
+      // can be split apart by the wrong comparator, defeating dedup.
+      const dataA: Node[] = [
+        {row: {id: 1}, relationships: {}},
+        {row: {id: 2}, relationships: {}},
+        {row: {id: 4}, relationships: {}},
+      ];
+      const dataB: Node[] = [
+        {row: {id: 2}, relationships: {}},
+        {row: {id: 3}, relationships: {}},
+        {row: {id: 4}, relationships: {}},
+      ];
+
+      const fanOut = mockUnionFanOut(mockSchema);
+      const inputA = mockOrderedOperator(mockSchema, dataA);
+      const inputB = mockOrderedOperator(mockSchema, dataB);
+
+      const fanIn = new UnionFanIn(fanOut, [inputA, inputB]);
+      const result = [
+        ...skipYields(fanIn.fetch({reverse: true} as FetchRequest)),
+      ];
+
+      expect(result.map(n => n.row.id)).toEqual([4, 3, 2, 1]);
+    });
   });
 
   describe('destroy', () => {
