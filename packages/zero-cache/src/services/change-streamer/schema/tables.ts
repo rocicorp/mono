@@ -41,7 +41,15 @@ function createChangeLogTable(shard: ShardID) {
   return /*sql*/ `
   CREATE TABLE ${schema(shard)}."changeLog" (
     watermark  TEXT,
-    pos        INT8,
+    -- #5978: https://github.com/rocicorp/mono/pull/5978
+    -- Keep pos as INT4 because it is scoped to one upstream transaction's
+    -- watermark, not to the global stream. INT4 keeps the hot
+    -- (watermark, pos) catchup index narrower while still allowing roughly two
+    -- billion stored messages inside a single upstream transaction.
+    --
+    --   watermark 0001: begin=0, data=1, data=2, commit=3
+    --   watermark 0002: begin=0, data=1, commit=2
+    pos        INT4,
     change     JSON NOT NULL,
     precommit  TEXT,  -- Only exists on commit entries. Purely for debugging.
     PRIMARY KEY (watermark, pos)
