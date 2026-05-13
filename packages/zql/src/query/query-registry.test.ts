@@ -225,11 +225,28 @@ describe('defineQueries', () => {
       table: 'foo',
     });
 
+    expectTypeOf(queries.getAllUsers.fn).toBeCallableWith({
+      ctx: {userId: 'ctx-user'},
+    });
+
+    const result2 = queries.getAllUsers.fn({ctx: {userId: 'ctx-user'}});
+    expect(asQueryInternals(result2).ast).toEqual({
+      table: 'foo',
+    });
+
     // Should also work with explicit undefined
-    const result2 = addContextToQuery(queries.getAllUsers(), {
+    const result3 = queries.getAllUsers.fn({
+      args: undefined,
+      ctx: {userId: 'ctx-user'},
+    });
+    expect(asQueryInternals(result3).ast).toEqual({
+      table: 'foo',
+    });
+
+    const result4 = addContextToQuery(queries.getAllUsers(), {
       userId: 'ctx-user',
     });
-    expect(asQueryInternals(result2).ast).toEqual({
+    expect(asQueryInternals(result4).ast).toEqual({
       table: 'foo',
     });
   });
@@ -294,6 +311,7 @@ describe('defineQueries', () => {
       .toEqualTypeOf<string | undefined>();
     expectTypeOf(queries.getValue.fn).toBeCallableWith({args: undefined});
     expectTypeOf(queries.getValue.fn).toBeCallableWith({args: 'explicit'});
+    expectTypeOf(queries.getValue.fn).toBeCallableWith({});
 
     // Call with undefined - query function gets transformed value
     const result = addContextToQuery(queries.getValue(undefined), {});
@@ -517,6 +535,11 @@ describe('defineQueries types', () => {
     expectTypeOf<Parameters<typeof queries.getUser.fn>>().toEqualTypeOf<
       [{args: string; ctx: {userId: string}}]
     >();
+
+    const callWithoutArgs = () =>
+      // @ts-expect-error args is still required when it does not include undefined
+      queries.getUser.fn({ctx: {userId: '123'}});
+    void callWithoutArgs;
   });
 
   test('after setting args, should have query but not be callable again', () => {

@@ -1,4 +1,5 @@
 import path from 'node:path';
+import {consoleLogSink, LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {must} from '../../../shared/src/must.ts';
 import {getNormalizedZeroConfig} from '../config/zero-config.ts';
@@ -39,6 +40,9 @@ import {
 
 const clientConnectionBifurcated = false;
 
+// Default LogContext, overridden in runWorker
+let lc = new LogContext('info', {}, consoleLogSink);
+
 export default async function runWorker(
   parent: Worker,
   env: NodeJS.ProcessEnv,
@@ -51,7 +55,7 @@ export default async function runWorker(
     'dispatcher',
     0,
   );
-  const lc = createLogContext(config, 'dispatcher');
+  lc = createLogContext(config, 'dispatcher');
   initEventSink(lc, config);
 
   const processes = new ProcessManager(lc, parent);
@@ -218,5 +222,5 @@ export default async function runWorker(
 }
 
 if (!singleProcessMode()) {
-  void exitAfter(() => runWorker(must(parentWorker), process.env));
+  void exitAfter(lc, () => runWorker(must(parentWorker), process.env));
 }

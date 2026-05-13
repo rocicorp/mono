@@ -7,6 +7,18 @@ import {
   type IndexedDBDatabase,
 } from './idb-databases-store.ts';
 
+// mock import {randomUint64} from '../../../shared/src/random-uint64.ts'; to return predictable values
+vi.mock('../../../shared/src/random-uint64.ts', async importOriginal => {
+  const original = await importOriginal<
+    // oxlint-disable-next-line consistent-type-imports
+    typeof import('../../../shared/src/random-uint64.ts')
+  >();
+
+  return {
+    randomUint64: vi.fn(() => original.randomUint64()),
+  };
+});
+
 afterEach(() => {
   vi.restoreAllMocks();
 });
@@ -109,18 +121,6 @@ test('clear', async () => {
 });
 
 describe('getProfileID', () => {
-  // mock import {randomUint64} from '../../../shared/src/random-uint64.ts'; to return predictable values
-  vi.mock('../../../shared/src/random-uint64.ts', async importOriginal => {
-    const original = await importOriginal<
-      // oxlint-disable-next-line consistent-type-imports
-      typeof import('../../../shared/src/random-uint64.ts')
-    >();
-
-    return {
-      randomUint64: vi.fn(() => original.randomUint64()),
-    };
-  });
-
   beforeEach(() => {
     // mock localStorage.getItem to return a predictable value
     const localStorageMock = {

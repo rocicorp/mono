@@ -302,6 +302,15 @@ test('mustGetMutator makes ctx optional only for fallback unknown context', () =
     }),
   });
 
+  const concreteNoArgsMutators = defineMutatorsWithType<typeof schema>()({
+    run: defineMutator<undefined, typeof schema, Context, DbTransaction>(
+      async ({ctx, tx}) => {
+        void ctx;
+        void tx;
+      },
+    ),
+  });
+
   const concreteContextMutators = defineMutatorsWithType<typeof schema>()({
     run: defineMutator<{id: string}, typeof schema, Context, DbTransaction>(
       async ({args, ctx, tx}) => {
@@ -313,8 +322,12 @@ test('mustGetMutator makes ctx optional only for fallback unknown context', () =
   });
 
   const unknownContextMutator = mustGetMutator(unknownContextMutators, 'run');
+  const concreteNoArgsMutator = mustGetMutator(concreteNoArgsMutators, 'run');
   const concreteContextMutator = mustGetMutator(concreteContextMutators, 'run');
 
+  expectTypeOf(unknownContextMutator.fn).toBeCallableWith({
+    tx: {} as Transaction<typeof schema, unknown>,
+  });
   expectTypeOf(unknownContextMutator.fn).toBeCallableWith({
     args: undefined,
     tx: {} as Transaction<typeof schema, unknown>,
@@ -325,11 +338,24 @@ test('mustGetMutator makes ctx optional only for fallback unknown context', () =
     tx: {} as Transaction<typeof schema, unknown>,
   });
 
+  expectTypeOf(concreteNoArgsMutator.fn).toBeCallableWith({
+    ctx: {userId: '123'},
+    tx: {} as Transaction<typeof schema, DbTransaction>,
+  });
+
   expectTypeOf(concreteContextMutator.fn).toBeCallableWith({
     args: {id: '1'},
     ctx: {userId: '123'},
     tx: {} as Transaction<typeof schema, DbTransaction>,
   });
+
+  const callWithoutArgs = () =>
+    // @ts-expect-error args is still required when it does not include undefined
+    concreteContextMutators.run.fn({
+      ctx: {userId: '123'},
+      tx: {} as Transaction<typeof schema, DbTransaction>,
+    });
+  void callWithoutArgs;
 
   // @ts-expect-error ctx is still required when a concrete context exists
   void concreteContextMutator.fn({
@@ -623,6 +649,9 @@ describe('input/output type separation', () => {
     } as Transaction<typeof schema, unknown>;
 
     // When fn is called, it should transform undefined to 'default-value'
+    expectTypeOf(mutators.item.create.fn).toBeCallableWith({
+      tx: mockTx,
+    });
     expectTypeOf(mutators.item.create.fn).toBeCallableWith({
       args: undefined,
       tx: mockTx,

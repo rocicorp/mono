@@ -298,10 +298,19 @@ function buildPipelineInternal(
     );
   }
 
+  // The Cap optimization needs the source connect to be unordered, but
+  // applyFilterWithFlips builds a UnionFanIn over the source whenever
+  // ast.where contains a flipped subquery, and UnionFanIn requires a
+  // sort on its inputs. In that case, fall back to the ordered + Take
+  // path for this EXISTS child.
+  const useCap =
+    isNonFlippedExistsChild &&
+    !(ast.where && conditionIncludesFlippedSubqueryAtAnyLevel(ast.where));
+
   const conn = source.connect(
     // exists pipelines are unordered — orderBy is ignored here.
     // Non-exists pipelines always have orderBy completed with PKs.
-    isNonFlippedExistsChild ? undefined : must(ast.orderBy),
+    useCap ? undefined : must(ast.orderBy),
     ast.where,
     splitEditKeys,
     delegate.debug,
@@ -350,7 +359,7 @@ function buildPipelineInternal(
     // This allows SQLite to chose the order and never end up creating temp b-trees.
     // The problem with SQLite creating a temp b-tree is it will incur a scan of the entire
     // result set where exists only needs the first row.
-    if (isNonFlippedExistsChild) {
+    if (useCap) {
       const capName = `${name}:cap`;
       const cap = new Cap(
         end,

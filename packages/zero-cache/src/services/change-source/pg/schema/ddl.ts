@@ -153,7 +153,7 @@ RETURNS record AS $$
 DECLARE
   result record;
 BEGIN
-  SELECT current_query() AS "query" into result;
+  SELECT COALESCE(current_query(), 'current_query() returned NULL') AS "query" into result;
   RETURN result;
 END
 $$ LANGUAGE plpgsql;
