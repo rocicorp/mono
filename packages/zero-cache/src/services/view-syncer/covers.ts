@@ -177,17 +177,10 @@ function valuePositionEqual(a: ValuePosition, b: ValuePosition): boolean {
       }
       return av === bv;
     }
-    case 'static': {
-      assert(b.type === 'static', 'type-checked above');
-      if (a.anchor !== b.anchor) return false;
-      const af = a.field;
-      const bf = b.field;
-      if (Array.isArray(af) || Array.isArray(bf)) {
-        if (!Array.isArray(af) || !Array.isArray(bf)) return false;
-        return compoundKeyEqual(af, bf);
-      }
-      return af === bf;
-    }
+    case 'static':
+      // Static parameters (authData/preMutationRow) are not used now that all
+      // queries are custom queries — params resolve before reaching the AST.
+      throw new Error('Static parameters are not supported in covers()');
   }
 }
 

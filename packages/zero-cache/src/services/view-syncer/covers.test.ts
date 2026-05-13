@@ -1,5 +1,5 @@
 import {describe, expect, test} from 'vitest';
-import type {AST, Condition} from '../../../../zero-protocol/src/ast.ts';
+import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import {createBuilder} from '../../../../zql/src/query/create-builder.ts';
 import {asQueryInternals} from '../../../../zql/src/query/query-internals.ts';
 import type {AnyQuery} from '../../../../zql/src/query/query.ts';
@@ -73,6 +73,40 @@ describe('covers - WHERE inclusion', () => {
     );
     expect(covers(x, y)).toBe(true);
     expect(covers(y, x)).toBe(true);
+  });
+
+  test('IN with same list matches structurally', () => {
+    const x = ast(b.issue.where('id', 'IN', ['a', 'b', 'c']));
+    const y = ast(b.issue.where('id', 'IN', ['a', 'b', 'c']));
+    expect(covers(x, y)).toBe(true);
+    expect(covers(y, x)).toBe(true);
+  });
+
+  test('LIKE with same pattern matches structurally', () => {
+    const x = ast(b.issue.where('title', 'LIKE', '%bug%'));
+    const y = ast(b.issue.where('title', 'LIKE', '%bug%'));
+    expect(covers(x, y)).toBe(true);
+    expect(covers(y, x)).toBe(true);
+  });
+
+  test('IS NULL matches structurally', () => {
+    const x = ast(b.issue.where('ownerId', 'IS', null));
+    const y = ast(b.issue.where('ownerId', 'IS', null));
+    expect(covers(x, y)).toBe(true);
+    expect(covers(y, x)).toBe(true);
+  });
+
+  test('!= with same value matches structurally', () => {
+    const x = ast(b.issue.where('closed', '!=', false));
+    const y = ast(b.issue.where('closed', '!=', false));
+    expect(covers(x, y)).toBe(true);
+    expect(covers(y, x)).toBe(true);
+  });
+
+  test('full table covers IN-list point query', () => {
+    const all = ast(b.issue);
+    const inList = ast(b.issue.where('id', 'IN', ['a', 'b', 'c']));
+    expect(covers(all, inList)).toBe(true);
   });
 });
 
@@ -173,6 +207,38 @@ describe('covers - related subqueries', () => {
     expect(covers(x, y)).toBe(true);
     expect(covers(y, x)).toBe(true);
   });
+
+  test('junction with unrestricted inner covers junction with inner where', () => {
+    const a = ast(b.issue.related('labels'));
+    const r = ast(b.issue.related('labels', lq => lq.where('name', 'bug')));
+    expect(covers(a, r)).toBe(true);
+    expect(covers(r, a)).toBe(false);
+  });
+
+  test('two-level nested related: identical → mutual', () => {
+    const x = ast(b.issue.related('comments', cq => cq.related('author')));
+    const y = ast(b.issue.related('comments', cq => cq.related('author')));
+    expect(covers(x, y)).toBe(true);
+    expect(covers(y, x)).toBe(true);
+  });
+
+  test('two-level nested: A inner unrestricted covers B inner restricted', () => {
+    const a = ast(b.issue.related('comments', cq => cq.related('author')));
+    const r = ast(
+      b.issue.related('comments', cq =>
+        cq.where('authorId', 'matt').related('author'),
+      ),
+    );
+    expect(covers(a, r)).toBe(true);
+    expect(covers(r, a)).toBe(false);
+  });
+
+  test('A has deeper related than B at the same alias → covers', () => {
+    const a = ast(b.issue.related('comments', cq => cq.related('author')));
+    const r = ast(b.issue.related('comments'));
+    expect(covers(a, r)).toBe(true);
+    expect(covers(r, a)).toBe(false);
+  });
 });
 
 describe('covers - EXISTS conjuncts', () => {
@@ -200,54 +266,26 @@ describe('covers - EXISTS conjuncts', () => {
     expect(covers(x, y)).toBe(false);
     expect(covers(y, x)).toBe(false);
   });
-});
 
-describe('covers - static parameters', () => {
-  // The query builder doesn't surface static parameters directly (they're
-  // injected by the permission system at bind time). Constructed by hand to
-  // verify the algorithm handles them.
-  test('identical static-param condition matches', () => {
-    const param: Condition = {
-      type: 'simple',
-      op: '=',
-      left: {type: 'column', name: 'ownerId'},
-      right: {type: 'static', anchor: 'authData', field: 'userId'},
-    };
-    const a: AST = {table: 'issue', where: param};
-    const r: AST = {
-      table: 'issue',
-      where: {
-        type: 'and',
-        conditions: [
-          param,
-          {
-            type: 'simple',
-            op: '=',
-            left: {type: 'column', name: 'closed'},
-            right: {type: 'literal', value: false},
-          },
-        ],
-      },
-    };
+  test('A: one EXISTS, B: A’s EXISTS + another → A covers B', () => {
+    const a = ast(b.issue.whereExists('comments'));
+    const r = ast(b.issue.whereExists('comments').whereExists('owner'));
     expect(covers(a, r)).toBe(true);
+    expect(covers(r, a)).toBe(false);
   });
 
-  test('different anchors do not match', () => {
-    const aWhere: Condition = {
-      type: 'simple',
-      op: '=',
-      left: {type: 'column', name: 'ownerId'},
-      right: {type: 'static', anchor: 'authData', field: 'userId'},
-    };
-    const bWhere: Condition = {
-      type: 'simple',
-      op: '=',
-      left: {type: 'column', name: 'ownerId'},
-      right: {type: 'static', anchor: 'preMutationRow', field: 'userId'},
-    };
-    expect(
-      covers({table: 'issue', where: aWhere}, {table: 'issue', where: bWhere}),
-    ).toBe(false);
+  test('mixed simple + EXISTS: A has only the simple → A covers B', () => {
+    const a = ast(b.issue.where('closed', false));
+    const r = ast(b.issue.where('closed', false).whereExists('comments'));
+    expect(covers(a, r)).toBe(true);
+    expect(covers(r, a)).toBe(false);
+  });
+
+  test('identical NOT EXISTS → mutual coverage', () => {
+    const x = ast(b.issue.where(({not, exists}) => not(exists('comments'))));
+    const y = ast(b.issue.where(({not, exists}) => not(exists('comments'))));
+    expect(covers(x, y)).toBe(true);
+    expect(covers(y, x)).toBe(true);
   });
 });
 
@@ -267,6 +305,16 @@ describe('covers - v1 deliberately rejects (semantic implication)', () => {
       ),
     );
     const r = ast(b.issue.where('closed', false));
+    expect(covers(a, r)).toBe(false);
+  });
+
+  test('EXISTS-subquery widening not detected', () => {
+    // Semantically: EXISTS(comments) admits everything EXISTS(comments WHERE x)
+    // admits, but the conjuncts are structurally different.
+    const a = ast(b.issue.whereExists('comments'));
+    const r = ast(
+      b.issue.whereExists('comments', cq => cq.where('authorId', 'matt')),
+    );
     expect(covers(a, r)).toBe(false);
   });
 
