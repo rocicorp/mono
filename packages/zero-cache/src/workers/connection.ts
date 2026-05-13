@@ -23,6 +23,7 @@ import {
   getLogLevel,
   wrapWithProtocolError,
 } from '../types/error-with-level.ts';
+import {getPreencodedDownstream} from '../types/preencoded.ts';
 import type {Source} from '../types/streams.ts';
 import type {ConnectParams} from './connect-params.ts';
 
@@ -322,7 +323,7 @@ export class Connection {
     callback: ((err?: Error | null) => void) | 'ignore-backpressure',
   ) {
     this.#lastDownstreamMsgTime = Date.now();
-    return send(this.#lc, this.#ws, data, callback);
+    send(this.#lc, this.#ws, data, callback);
   }
 
   sendError(errorBody: ErrorBody, thrown?: unknown) {
@@ -340,10 +341,10 @@ export function send(
   ws: WebSocketLike,
   data: Downstream,
   callback: ((err?: Error | null) => void) | 'ignore-backpressure',
-) {
+): void {
   if (ws.readyState === WebSocket.OPEN) {
     ws.send(
-      JSON.stringify(data),
+      getPreencodedDownstream(data) ?? JSON.stringify(data),
       callback === 'ignore-backpressure' ? undefined : callback,
     );
   } else {

@@ -11,6 +11,7 @@ import type {
 import {Subscription} from '../../types/subscription.ts';
 import {
   ClientHandler,
+  DEFAULT_POKE_PART_FLUSH_BYTES,
   ensureSafeJSON,
   startPoke,
   type Patch,
@@ -368,6 +369,199 @@ describe('view-syncer/client-handler', () => {
         {pokeID: '123', baseCookie: '121'},
       ] satisfies PokeStartMessage,
       ['pokeEnd', {pokeID: '123', cookie: '123'}] satisfies PokeEndMessage,
+    ]);
+  });
+
+  test('flushes poke parts by estimated bytes and max row guard', async () => {
+    const {subscription, close} = createSubscription();
+    const handler = new ClientHandler(
+      lc,
+      'g1',
+      'id1',
+      'ws1',
+      SHARD,
+      '121',
+      subscription,
+      {maxBytes: 450, maxRows: 10},
+    );
+    const poker = handler.startPoke({stateVersion: '123'});
+
+    await poker.addPatches(
+      [0, 1, 2].map(i => ({
+        toVersion: {stateVersion: '123'},
+        patch: {
+          type: 'row',
+          op: 'put',
+          id: {schema: 'public', table: 'issues', rowKey: {id: `byte-${i}`}},
+          contents: {id: `byte-${i}`, payload: 'x'.repeat(180)},
+        },
+      })) satisfies Parameters<PokeHandler['addPatches']>[0],
+    );
+    await poker.end({stateVersion: '123'});
+
+    const {received} = await close();
+    const byteFlushParts = received.filter(
+      (msg): msg is PokePartMessage => msg[0] === 'pokePart',
+    );
+    expect(byteFlushParts.map(part => part[1].rowsPatch?.length)).toEqual([
+      2, 1,
+    ]);
+    for (const part of byteFlushParts) {
+      expect(JSON.stringify(part).length).toBeLessThan(
+        DEFAULT_POKE_PART_FLUSH_BYTES,
+      );
+    }
+
+    const guarded = createSubscription();
+    const guardedHandler = new ClientHandler(
+      lc,
+      'g1',
+      'id1',
+      'ws1',
+      SHARD,
+      '121',
+      guarded.subscription,
+      {maxBytes: 10_000, maxRows: 2},
+    );
+    const guardedPoker = guardedHandler.startPoke({stateVersion: '123'});
+    await guardedPoker.addPatches(
+      [0, 1, 2].map(i => ({
+        toVersion: {stateVersion: '123'},
+        patch: {
+          type: 'row',
+          op: 'put',
+          id: {schema: 'public', table: 'issues', rowKey: {id: `row-${i}`}},
+          contents: {id: `row-${i}`, payload: 'x'},
+        },
+      })) satisfies Parameters<PokeHandler['addPatches']>[0],
+    );
+    await guardedPoker.end({stateVersion: '123'});
+
+    const guardedParts = (await guarded.close()).received.filter(
+      (msg): msg is PokePartMessage => msg[0] === 'pokePart',
+    );
+    expect(guardedParts.map(part => part[1].rowsPatch?.length)).toEqual([2, 1]);
+  });
+
+  test('batched addPatches preserves ordering and filters by base version', async () => {
+    const {subscription, close} = createSubscription();
+    const handler = new ClientHandler(
+      lc,
+      'g1',
+      'id1',
+      'ws1',
+      SHARD,
+      '121',
+      subscription,
+    );
+    const poker = handler.startPoke({stateVersion: '123'});
+
+    await poker.addPatches([
+      {
+        toVersion: {stateVersion: '121'},
+        patch: {
+          type: 'row',
+          op: 'put',
+          id: {schema: 'public', table: 'issues', rowKey: {id: 'old'}},
+          contents: {id: 'old'},
+        },
+      },
+      {
+        toVersion: {stateVersion: '122'},
+        patch: {
+          type: 'query',
+          op: 'put',
+          id: 'query-a',
+        },
+      },
+      {
+        toVersion: {stateVersion: '123'},
+        patch: {
+          type: 'row',
+          op: 'put',
+          id: {schema: 'public', table: 'issues', rowKey: {id: 'first'}},
+          contents: {id: 'first'},
+        },
+      },
+      {
+        toVersion: {stateVersion: '123'},
+        patch: {
+          type: 'row',
+          op: 'del',
+          id: {schema: 'public', table: 'issues', rowKey: {id: 'second'}},
+        },
+      },
+    ]);
+    await poker.end({stateVersion: '123'});
+
+    const part = (await close()).received.find(
+      (msg): msg is PokePartMessage => msg[0] === 'pokePart',
+    );
+    expect(part?.[1].gotQueriesPatch).toEqual([{op: 'put', hash: 'query-a'}]);
+    expect(part?.[1].rowsPatch).toEqual([
+      {op: 'put', tableName: 'issues', value: {id: 'first'}},
+      {op: 'del', tableName: 'issues', id: {id: 'second'}},
+    ]);
+  });
+
+  test('multi-client addPatches applies each client base version independently', async () => {
+    const subscriptions = [createSubscription(), createSubscription()];
+    const handlers = [
+      new ClientHandler(
+        lc,
+        'g1',
+        'id1',
+        'ws1',
+        SHARD,
+        '121',
+        subscriptions[0].subscription,
+      ),
+      new ClientHandler(
+        lc,
+        'g1',
+        'id2',
+        'ws2',
+        SHARD,
+        '120',
+        subscriptions[1].subscription,
+      ),
+    ];
+    const pokers = startPoke(handlers, {stateVersion: '123'});
+
+    await pokers.addPatches([
+      {
+        toVersion: {stateVersion: '121'},
+        patch: {
+          type: 'row',
+          op: 'put',
+          id: {schema: 'public', table: 'issues', rowKey: {id: 'old'}},
+          contents: {id: 'old'},
+        },
+      },
+      {
+        toVersion: {stateVersion: '123'},
+        patch: {
+          type: 'row',
+          op: 'put',
+          id: {schema: 'public', table: 'issues', rowKey: {id: 'new'}},
+          contents: {id: 'new'},
+        },
+      },
+    ]);
+    await pokers.end({stateVersion: '123'});
+
+    const results = await Promise.all(subscriptions.map(sub => sub.close()));
+    const rows = results.map(result =>
+      result.received
+        .filter((msg): msg is PokePartMessage => msg[0] === 'pokePart')
+        .flatMap(msg => msg[1].rowsPatch ?? []),
+    );
+    expect(rows).toEqual([
+      [{op: 'put', tableName: 'issues', value: {id: 'new'}}],
+      [
+        {op: 'put', tableName: 'issues', value: {id: 'old'}},
+        {op: 'put', tableName: 'issues', value: {id: 'new'}},
+      ],
     ]);
   });
 
