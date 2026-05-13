@@ -1,0 +1,28 @@
+x-zero-cache-smoke: &zero-cache-smoke
+  image: node:22-bookworm
+  working_dir: /repo
+  volumes:
+    - ../../..:/repo
+    - zero-cache-node-modules:/repo/node_modules
+
+services:
+  zero-cache-install:
+    <<: *zero-cache-smoke
+    command: npm ci
+
+  zero-cache-load-smoke:
+    <<: *zero-cache-smoke
+    depends_on:
+      zero-cache-install:
+        condition: service_completed_successfully
+    command: npm --workspace=zero-cache run perf:load
+
+  zero-cache-ws-smoke:
+    <<: *zero-cache-smoke
+    depends_on:
+      zero-cache-install:
+        condition: service_completed_successfully
+    command: npm --workspace=zero-cache run perf:ws
+
+volumes:
+  zero-cache-node-modules:
