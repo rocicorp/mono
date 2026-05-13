@@ -129,6 +129,32 @@ describe('change-streamer/storer', () => {
       ).toEqual([{ownerAddress: 'change-streamer:12345'}]);
     });
 
+    test('stores large transactions in batched changeLog inserts without reordering', async () => {
+      storer.store('08', ['begin', messages.begin(), {commitWatermark: '08'}]);
+      for (let i = 0; i < 250; i++) {
+        storer.store('08', [
+          'data',
+          messages.insert('issues', {id: `batched-${i}`}),
+        ]);
+      }
+      storer.store('08', ['commit', messages.commit(), {watermark: '08'}]);
+
+      await storer.allProcessed();
+      await expectConsumed('08');
+
+      const rows = await db<{pos: bigint; tag: string}[]>`
+        SELECT pos, change->>'tag' as tag
+          FROM "xero_5/cdc"."changeLog"
+          WHERE watermark = '08'
+          ORDER BY pos`;
+      expect(rows).toHaveLength(252);
+      expect(rows.at(0)).toEqual({pos: 0n, tag: 'begin'});
+      expect(rows.at(-1)).toEqual({pos: 251n, tag: 'commit'});
+      expect(rows.map(row => Number(row.pos))).toEqual(
+        Array.from({length: 252}, (_, i) => i),
+      );
+    });
+
     test('purge', async () => {
       expect(await storer.purgeRecordsBefore('02')).toBe(2);
       expect(

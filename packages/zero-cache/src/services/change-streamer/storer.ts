@@ -67,6 +67,7 @@ type PendingTransaction = {
   pool: TransactionPool;
   preCommitWatermark: string;
   pos: number;
+  pendingChangeLogEntries: ChangeLogInsert[];
   startingReplicationState: Promise<ReplicationOwner>;
   ack: boolean;
 };
@@ -75,7 +76,15 @@ type ReplicationOwner = {
   owner: string | null;
 };
 
+type ChangeLogInsert = {
+  watermark: string;
+  precommit: string | null;
+  pos: number;
+  change: string;
+};
+
 const backfillRequestsSchema = v.array(backfillRequestSchema);
+const CHANGE_LOG_INSERT_BATCH_SIZE = 100;
 
 export type TuningOptions = {
   backPressureLimitHeapProportion: number;
@@ -464,6 +473,7 @@ export class Storer implements Service {
             ),
             preCommitWatermark: watermark,
             pos: 0,
+            pendingChangeLogEntries: [],
             startingReplicationState: promise,
             ack: !change.skipAck,
           };
@@ -483,7 +493,7 @@ export class Storer implements Service {
           tx.pos++;
         }
 
-        const entry = {
+        const entry: ChangeLogInsert = {
           watermark: tag === 'commit' ? watermark : tx.preCommitWatermark,
           precommit: tag === 'commit' ? tx.preCommitWatermark : null,
           pos: tx.pos,
@@ -492,12 +502,22 @@ export class Storer implements Service {
           change: extractChangeSubstring(json, tag),
         };
 
-        const processed = tx.pool.process(sql => [
-          sql`INSERT INTO ${this.#cdc('changeLog')} ${sql(entry)}`,
-          ...(change !== null && isSchemaChange(change)
-            ? this.#trackBackfillMetadata(sql, change)
-            : []),
-        ]);
+        let processed = promiseVoid;
+        if (change !== null && isSchemaChange(change)) {
+          await this.#flushChangeLogEntries(tx);
+          processed = tx.pool.process(sql => [
+            sql`INSERT INTO ${this.#cdc('changeLog')} ${sql(entry)}`,
+            ...this.#trackBackfillMetadata(sql, change),
+          ]);
+        } else {
+          tx.pendingChangeLogEntries.push(entry);
+          if (
+            tag === 'commit' ||
+            tx.pendingChangeLogEntries.length >= CHANGE_LOG_INSERT_BATCH_SIZE
+          ) {
+            processed = this.#flushChangeLogEntries(tx);
+          }
+        }
 
         if (tx.pos % 100 === 0) {
           // Backpressure is exerted on commit when awaiting tx.pool.done().
@@ -540,6 +560,7 @@ export class Storer implements Service {
         } else if (tag === 'rollback') {
           // Aborted transactions are not stored in the changeLog. Abort the current tx
           // and process catchup of subscribers that were waiting for it to end.
+          tx.pendingChangeLogEntries = [];
           tx.pool.abort();
           await tx.pool.done();
           tx = null;
@@ -551,6 +572,17 @@ export class Storer implements Service {
       catchupQueue.forEach(({subscriber}) => subscriber.fail(e));
       throw e;
     }
+  }
+
+  #flushChangeLogEntries(tx: PendingTransaction): Promise<void> {
+    if (tx.pendingChangeLogEntries.length === 0) {
+      return promiseVoid;
+    }
+    const entries = tx.pendingChangeLogEntries;
+    tx.pendingChangeLogEntries = [];
+    return tx.pool.process(sql => [
+      sql`INSERT INTO ${this.#cdc('changeLog')} ${sql(entries)}`,
+    ]);
   }
 
   async #startCatchup(subs: SubscriberAndMode[]) {
