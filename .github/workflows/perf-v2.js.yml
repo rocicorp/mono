@@ -33,6 +33,7 @@ jobs:
       # Clear out potential user data dirs left over from previous failures.
       - run: rm -rf /tmp/replicache-playwright-*
       - run: npm ci
+      - run: npx playwright install
 
       - run: npm run build
         working-directory: packages/replicache-perf
