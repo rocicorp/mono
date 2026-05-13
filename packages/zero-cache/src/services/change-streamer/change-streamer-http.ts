@@ -238,7 +238,7 @@ export class ChangeStreamerHttpClient implements ChangeStreamer {
     const params = getParams(ctx);
     const ws = new WebSocket(uri + `?${params.toString()}`);
 
-    return streamIn(this.#lc, ws, downstreamSchema);
+    return streamIn(this.#lc, ws, downstreamSchema, {ack: 'cumulative'});
   }
 }
 
