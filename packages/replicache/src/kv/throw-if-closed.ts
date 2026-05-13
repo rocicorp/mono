@@ -2,7 +2,7 @@ function storeError(): Error {
   return new Error('Store is closed');
 }
 
-function transactionError(): Error {
+export function transactionError(): Error {
   return new Error('Transaction is closed');
 }
 

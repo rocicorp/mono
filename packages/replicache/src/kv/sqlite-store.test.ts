@@ -1,13 +1,14 @@
 import {expect, test, vi} from 'vitest';
 import {
   SQLiteWrite,
+  SQLiteStoreRead,
   type PreparedStatements,
   type SQLiteDatabase,
 } from './sqlite-store.ts';
 
 function makePreparedStatement() {
   return {
-    firstValue: vi.fn().mockResolvedValue(undefined),
+    all: vi.fn().mockResolvedValue([]),
     exec: vi.fn().mockResolvedValue(undefined),
   };
 }
@@ -16,6 +17,8 @@ function makePreparedStatements(): PreparedStatements {
   return {
     has: makePreparedStatement(),
     get: makePreparedStatement(),
+    hasMany: makePreparedStatement(),
+    getMany: makePreparedStatement(),
     del: makePreparedStatement(),
     put: makePreparedStatement(),
   };
@@ -50,4 +53,36 @@ test('SQLiteWrite batches deletes and upserts into one statement each', async ()
   ]);
   expect(db.execSync).toHaveBeenCalledWith('COMMIT');
   expect(release).toHaveBeenCalledTimes(1);
+});
+
+test('SQLiteStoreRead rejects pending get and has operations when closed', async () => {
+  const release = vi.fn();
+  const preparedStatements = makePreparedStatements();
+
+  const read = new SQLiteStoreRead(release, preparedStatements);
+
+  // Schedule multiple get and has operations
+  const getPromise1 = read.get('key-1');
+  const getPromise2 = read.get('key-2');
+  const hasPromise1 = read.has('key-3');
+  const hasPromise2 = read.has('key-4');
+
+  // Close the transaction before microtask executes
+  read.release();
+
+  // Yield control to allow microtask to run
+  await Promise.resolve();
+
+  // All pending promises should be rejected with "Transaction is closed"
+  await expect(getPromise1).rejects.toThrow('Transaction is closed');
+  await expect(getPromise2).rejects.toThrow('Transaction is closed');
+  await expect(hasPromise1).rejects.toThrow('Transaction is closed');
+  await expect(hasPromise2).rejects.toThrow('Transaction is closed');
+
+  expect(release).toHaveBeenCalledTimes(1);
+  // Database statements should not have been called
+  expect(preparedStatements.get.all).not.toHaveBeenCalled();
+  expect(preparedStatements.has.all).not.toHaveBeenCalled();
+  expect(preparedStatements.getMany.all).not.toHaveBeenCalled();
+  expect(preparedStatements.hasMany.all).not.toHaveBeenCalled();
 });
