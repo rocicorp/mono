@@ -6,7 +6,6 @@ import {
   maybeTransactionIsClosedRejection,
   throwIfStoreClosed,
   transactionError,
-  transactionIsClosedRejection,
 } from './throw-if-closed.ts';
 import {deleteSentinel, WriteImplBase} from './write-impl-base.ts';
 
@@ -62,7 +61,7 @@ export class SQLiteStore implements Store {
     opts?: SQLiteStoreOptions,
   ) {
     this.#filename = resolveFilename(name, opts);
-    this.#entry = getOrCreateEntry(name, create, opts);
+    this.#entry = getOrCreateEntry(this.#filename, create, opts);
   }
 
   async read(): Promise<Read> {
@@ -208,10 +207,10 @@ type GetResolve = (v: ReadonlyJSONValue | undefined) => void;
 type HasResolve = (v: boolean) => void;
 type Reject = (e: unknown) => void;
 
-function parseRawValue(raw: string | undefined): ReadonlyJSONValue | undefined {
-  return raw === undefined
-    ? undefined
-    : deepFreeze(JSON.parse(raw) as ReadonlyJSONValue);
+function rejectAll(callbacks: unknown[], e: unknown): void {
+  for (let i = CB_REJECT; i < callbacks.length; i += CB_STRIDE) {
+    (callbacks[i] as Reject)(e);
+  }
 }
 
 function resolveGet(
@@ -220,63 +219,39 @@ function resolveGet(
   raw: string | undefined,
 ): void {
   try {
-    resolve(parseRawValue(raw));
+    resolve(
+      raw === undefined
+        ? undefined
+        : deepFreeze(JSON.parse(raw) as ReadonlyJSONValue),
+    );
   } catch (e) {
     reject(e);
   }
 }
 
-async function flushSingle(
-  key: string,
+async function flushGets(
+  keys: string[],
   callbacks: unknown[],
-  stmt: PreparedStatement,
-  settle: (rows: unknown[][], callbacks: unknown[]) => void,
+  ps: PreparedStatements,
 ): Promise<void> {
   let rows: unknown[][];
   try {
-    rows = await stmt.all([key]);
+    rows =
+      keys.length === 1
+        ? await ps.get.all([keys[0]])
+        : await ps.getMany.all([JSON.stringify(keys)]);
   } catch (e) {
-    (callbacks[CB_REJECT] as Reject)(e);
+    rejectAll(callbacks, e);
     return;
   }
-  settle(rows, callbacks);
-}
-
-function settleSingleGet(rows: unknown[][], callbacks: unknown[]): void {
-  resolveGet(
-    callbacks[CB_RESOLVE] as GetResolve,
-    callbacks[CB_REJECT] as Reject,
-    rows[0]?.[0] as string | undefined,
-  );
-}
-
-function settleSingleHas(rows: unknown[][], callbacks: unknown[]): void {
-  (callbacks[CB_RESOLVE] as HasResolve)(rows.length > 0);
-}
-
-async function flushBatch(
-  keys: string[],
-  callbacks: unknown[],
-  stmt: PreparedStatement,
-  settle: (keys: string[], callbacks: unknown[], rows: unknown[][]) => void,
-): Promise<void> {
-  let rows: unknown[][];
-  try {
-    rows = await stmt.all([JSON.stringify(keys)]);
-  } catch (e) {
-    for (let i = CB_REJECT; i < callbacks.length; i += CB_STRIDE) {
-      (callbacks[i] as Reject)(e);
-    }
+  if (keys.length === 1) {
+    resolveGet(
+      callbacks[CB_RESOLVE] as GetResolve,
+      callbacks[CB_REJECT] as Reject,
+      rows[0]?.[0] as string | undefined,
+    );
     return;
   }
-  settle(keys, callbacks, rows);
-}
-
-function settleGets(
-  keys: string[],
-  callbacks: unknown[],
-  rows: unknown[][],
-): void {
   const resultMap = new Map(rows as [string, string][]);
   for (let i = 0; i < keys.length; i++) {
     resolveGet(
@@ -287,11 +262,25 @@ function settleGets(
   }
 }
 
-function settleHas(
+async function flushHas(
   keys: string[],
   callbacks: unknown[],
-  rows: unknown[][],
-): void {
+  ps: PreparedStatements,
+): Promise<void> {
+  let rows: unknown[][];
+  try {
+    rows =
+      keys.length === 1
+        ? await ps.has.all([keys[0]])
+        : await ps.hasMany.all([JSON.stringify(keys)]);
+  } catch (e) {
+    rejectAll(callbacks, e);
+    return;
+  }
+  if (keys.length === 1) {
+    (callbacks[CB_RESOLVE] as HasResolve)(rows.length > 0);
+    return;
+  }
   const existingKeys = new Set(rows.map(row => row[0] as string));
   for (let i = 0; i < keys.length; i++) {
     (callbacks[i * CB_STRIDE + CB_RESOLVE] as HasResolve)(
@@ -343,7 +332,7 @@ export class SQLiteStoreRead implements Read {
       queueMicrotask(() => {
         this.#scheduled = false;
 
-        const {get, has, getMany, hasMany} = this.#preparedStatements;
+        const ps = this.#preparedStatements;
         const getKeys = this.#pendingGetKeys;
         this.#pendingGetKeys = [];
         const getCallbacks = this.#pendingGetCallbacks;
@@ -355,24 +344,16 @@ export class SQLiteStoreRead implements Read {
 
         if (this.#closed) {
           const e = transactionError();
-          for (let i = CB_REJECT; i < getCallbacks.length; i += CB_STRIDE) {
-            (getCallbacks[i] as Reject)(e);
-          }
-          for (let i = CB_REJECT; i < hasCallbacks.length; i += CB_STRIDE) {
-            (hasCallbacks[i] as Reject)(e);
-          }
+          rejectAll(getCallbacks, e);
+          rejectAll(hasCallbacks, e);
           return;
         }
 
-        if (getKeys.length === 1) {
-          void flushSingle(getKeys[0], getCallbacks, get, settleSingleGet);
-        } else if (getKeys.length > 1) {
-          void flushBatch(getKeys, getCallbacks, getMany, settleGets);
+        if (getKeys.length > 0) {
+          void flushGets(getKeys, getCallbacks, ps);
         }
-        if (hasKeys.length === 1) {
-          void flushSingle(hasKeys[0], hasCallbacks, has, settleSingleHas);
-        } else if (hasKeys.length > 1) {
-          void flushBatch(hasKeys, hasCallbacks, hasMany, settleHas);
+        if (hasKeys.length > 0) {
+          void flushHas(hasKeys, hasCallbacks, ps);
         }
       });
     }
@@ -410,7 +391,7 @@ export class SQLiteWrite extends WriteImplBase implements Write {
 
   async commit(): Promise<void> {
     if (this.#closed) {
-      return transactionIsClosedRejection();
+      throw transactionError();
     }
 
     const deleteKeys: string[] = [];
@@ -425,20 +406,15 @@ export class SQLiteWrite extends WriteImplBase implements Write {
       deleteKeys.length > 0
         ? this.#preparedStatements.del.exec([JSON.stringify(deleteKeys)])
         : undefined;
-    const upP =
+    const putP =
       this._pending.size > 0
         ? this.#preparedStatements.put.exec([
             JSON.stringify([...this._pending]),
           ])
         : undefined;
 
-    if (delP && upP) {
-      await Promise.all([delP, upP]);
-    } else if (delP) {
-      await delP;
-    } else if (upP) {
-      await upP;
-    }
+    if (putP) await putP;
+    if (delP) await delP;
 
     this.#dbDelegate.execSync('COMMIT');
     this._pending.clear();
@@ -486,11 +462,10 @@ const stores = new Map<string, StoreEntry>();
  * name share the same database connection, lock, and delegate.
  */
 function getOrCreateEntry(
-  name: string,
+  filename: string,
   create: (filename: string, opts?: SQLiteStoreOptions) => SQLiteDatabase,
   opts?: SQLiteStoreOptions,
 ): StoreEntry {
-  const filename = resolveFilename(name, opts);
   const entry = stores.get(filename);
 
   if (entry) {
