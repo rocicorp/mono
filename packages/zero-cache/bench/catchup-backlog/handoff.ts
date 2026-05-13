@@ -1,8 +1,7 @@
-/* oxlint-disable no-console */
 import {setImmediate as yieldImmediate} from 'node:timers/promises';
-import {Subscription} from '../src/types/subscription.ts';
+import {Subscription} from '../../src/types/subscription.ts';
 
-const MESSAGE_COUNT = 100_000;
+export const MESSAGE_COUNT = 100_000;
 const YIELD_EVERY = 512;
 const PAYLOAD = JSON.stringify([
   'data',
@@ -12,6 +11,23 @@ const PAYLOAD = JSON.stringify([
     new: {id: 'issue-1', title: 'the view-syncer is behind', owner: 'rm'},
   },
 ]);
+
+export type HandoffMode = 'fire-and-forget handoff' | 'flow-controlled handoff';
+
+export type HandoffResult = {
+  mode: HandoffMode;
+  producerMs: number;
+  totalMs: number;
+  messagesPerSecond: number;
+  maxDownstreamPending: number;
+};
+
+export async function runHandoffBenchmark(): Promise<HandoffResult[]> {
+  return [
+    await run('fire-and-forget handoff'),
+    await run('flow-controlled handoff'),
+  ];
+}
 
 // Reproduces the catchup handoff risk fixed by the subscriber backlog change.
 //
@@ -24,17 +40,7 @@ const PAYLOAD = JSON.stringify([
 // catchup rows while the downstream queue is still holding a huge number of
 // unacked messages. The golden path is flow-controlled handoff: every backlog
 // entry resolves only after the downstream push is consumed.
-type Mode = 'fire-and-forget handoff' | 'flow-controlled handoff';
-
-type Result = {
-  mode: Mode;
-  producerMs: number;
-  totalMs: number;
-  messagesPerSecond: number;
-  maxDownstreamPending: number;
-};
-
-async function run(mode: Mode): Promise<Result> {
+async function run(mode: HandoffMode): Promise<HandoffResult> {
   const downstream = Subscription.create<string>();
   let consumed = 0;
   let maxDownstreamPending = 0;
@@ -93,43 +99,4 @@ async function run(mode: Mode): Promise<Result> {
     messagesPerSecond: MESSAGE_COUNT / (totalMs / 1000),
     maxDownstreamPending,
   };
-}
-
-const results = [
-  await run('fire-and-forget handoff'),
-  await run('flow-controlled handoff'),
-];
-
-const maxModeLength = Math.max(...results.map(r => r.mode.length));
-console.log(
-  `catchup backlog handoff benchmark (${MESSAGE_COUNT.toLocaleString()} messages)`,
-);
-console.log(
-  [
-    'mode'.padEnd(maxModeLength),
-    'producer ms'.padStart(12),
-    'total ms'.padStart(10),
-    'msg/s'.padStart(12),
-    'max pending'.padStart(12),
-  ].join(' | '),
-);
-console.log(
-  [
-    ''.padEnd(maxModeLength, '-'),
-    ''.padStart(12, '-'),
-    ''.padStart(10, '-'),
-    ''.padStart(12, '-'),
-    ''.padStart(12, '-'),
-  ].join('-|-'),
-);
-for (const result of results) {
-  console.log(
-    [
-      result.mode.padEnd(maxModeLength),
-      result.producerMs.toFixed(1).padStart(12),
-      result.totalMs.toFixed(1).padStart(10),
-      result.messagesPerSecond.toFixed(0).padStart(12),
-      result.maxDownstreamPending.toLocaleString().padStart(12),
-    ].join(' | '),
-  );
 }
