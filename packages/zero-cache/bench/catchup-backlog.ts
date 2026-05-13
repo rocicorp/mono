@@ -13,6 +13,17 @@ const PAYLOAD = JSON.stringify([
   },
 ]);
 
+// Reproduces the catchup handoff risk fixed by the subscriber backlog change.
+//
+//   storer catchup cursor
+//          |
+//          v
+//   subscriber backlog  ---> downstream websocket
+//
+// The unsafe shape is a fire-and-forget handoff: the storer can finish loading
+// catchup rows while the downstream queue is still holding a huge number of
+// unacked messages. The golden path is flow-controlled handoff: every backlog
+// entry resolves only after the downstream push is consumed.
 type Mode = 'fire-and-forget handoff' | 'flow-controlled handoff';
 
 type Result = {

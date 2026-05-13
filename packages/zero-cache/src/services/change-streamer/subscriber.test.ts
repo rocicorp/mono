@@ -297,6 +297,7 @@ describe('change-streamer/subscriber', () => {
     expect(sub.getStats()).toEqual({processRate: 0, pending: 4});
     expect(sub.numPending).toBe(4);
 
+    const ackedByOpenTx = ['00', '00', '02', '12', '22'];
     let txNum = 0;
     for await (const json of receiver) {
       const msg = JSON.parse(json);
@@ -307,20 +308,9 @@ describe('change-streamer/subscriber', () => {
       if (msg[0] === 'begin') {
         txNum++;
       }
-      switch (txNum) {
-        case 1:
-          expect(sub.acked).toBe('00');
-          break;
-        case 2:
-          expect(sub.acked).toBe('02');
-          break;
-        case 3:
-          expect(sub.acked).toBe('12');
-          break;
-        case 4:
-          expect(sub.acked).toBe('22');
-          sub.close();
-          break;
+      expect(sub.acked).toBe(ackedByOpenTx[txNum]);
+      if (txNum === 4) {
+        sub.close();
       }
     }
     expect(sub.numProcessed).toBe(8);

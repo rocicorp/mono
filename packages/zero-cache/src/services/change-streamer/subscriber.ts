@@ -131,6 +131,17 @@ export class Subscriber {
   }
 
   async #flushBacklog(backlog: BacklogEntry[]) {
+    // The backlog is a safety valve between catchup and live forwarding:
+    //
+    //   catchup query -> backlog[0] -> downstream ACK
+    //                  -> backlog[1] -> downstream ACK
+    //                  -> ...
+    //                  -> live forwarding
+    //
+    // Do not convert this back to fire-and-forget Promise fanout. The storer
+    // awaits each BacklogEntry.done resolver, which caps downstream memory and
+    // prevents catchup from claiming completion before the subscriber has
+    // actually consumed the buffered live messages.
     let next = 0;
     try {
       while (next < backlog.length) {
