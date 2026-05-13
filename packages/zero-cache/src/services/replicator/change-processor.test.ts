@@ -3639,6 +3639,51 @@ describe('replicator/change-processor', () => {
       }
     });
   }
+
+  test('DML plan cache binds repeated shapes by column name', () => {
+    initDB(
+      servingReplica,
+      `
+      CREATE TABLE foo(
+        id INTEGER,
+        shard INTEGER,
+        alpha INTEGER,
+        beta INTEGER,
+        _0_version TEXT,
+        PRIMARY KEY(id, shard)
+      );
+      `,
+    );
+
+    const foo = new ReplicationMessages({foo: ['id', 'shard']});
+    for (const change of [
+      ['begin', foo.begin(), {commitWatermark: '07'}],
+      ['data', foo.insert('foo', {id: 1, shard: 10, alpha: 100, beta: 200})],
+      ['data', foo.insert('foo', {beta: 400, shard: 20, id: 2, alpha: 300})],
+      ['data', foo.update('foo', {id: 1, shard: 10, alpha: 101, beta: 201})],
+      ['data', foo.update('foo', {beta: 401, shard: 20, id: 2, alpha: 301})],
+      ['data', foo.delete('foo', {shard: 20, id: 2})],
+      ['commit', foo.commit(), {watermark: '07'}],
+    ] satisfies ChangeStreamData[]) {
+      servingProcessor.processMessage(lc, change);
+    }
+
+    expectTables(
+      servingReplica,
+      {
+        foo: [
+          {
+            id: 1n,
+            shard: 10n,
+            alpha: 101n,
+            beta: 201n,
+            ['_0_version']: '07',
+          },
+        ],
+      },
+      'bigint',
+    );
+  });
 });
 
 describe('replicator/change-processor-errors', () => {
