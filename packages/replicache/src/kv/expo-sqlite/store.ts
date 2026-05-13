@@ -14,8 +14,11 @@ import type {StoreProvider} from '../store.ts';
 
 export type ExpoSQLiteStoreOptions = SQLiteStoreOptions;
 
-export function dropExpoSQLiteStore(name: string): Promise<void> {
-  return dropStore(name, filename => new ExpoSQLiteDatabase(filename));
+export function dropExpoSQLiteStore(
+  name: string,
+  opts?: ExpoSQLiteStoreOptions,
+): Promise<void> {
+  return dropStore(name, filename => new ExpoSQLiteDatabase(filename), opts);
 }
 
 /**
@@ -29,7 +32,7 @@ export function expoSQLiteStoreProvider(
   return {
     create: name =>
       new SQLiteStore(name, name => new ExpoSQLiteDatabase(name), opts),
-    drop: dropExpoSQLiteStore,
+    drop: name => dropExpoSQLiteStore(name, opts),
   };
 }
 
@@ -40,14 +43,13 @@ class ExpoSQLitePreparedStatement implements PreparedStatement {
     this.#statement = statement;
   }
 
-  async firstValue(params: string[]): Promise<string | undefined> {
-    const result = await this.#statement.executeForRawResultAsync(params);
-    const row = await result.getFirstAsync();
-    return row === null ? undefined : row[0];
-  }
-
   async exec(params: string[]): Promise<void> {
     await this.#statement.executeForRawResultAsync(params);
+  }
+
+  async all(params: string[]): Promise<unknown[][]> {
+    const result = await this.#statement.executeForRawResultAsync(params);
+    return result.getAllAsync() as Promise<unknown[][]>;
   }
 }
 
