@@ -1,18 +1,18 @@
-import {BigIntJSON} from '../../shared/src/bigint-json.ts';
-import type {TableSpec} from '../src/db/specs.ts';
+import {BigIntJSON} from '../../../shared/src/bigint-json.ts';
+import type {TableSpec} from '../../src/db/specs.ts';
 import type {
   DataOrSchemaChange,
   IndexCreate,
   MessageInsert,
   MessageRelation,
-} from '../src/services/change-source/protocol/current/data.ts';
+} from '../../src/services/change-source/protocol/current/data.ts';
 import type {
   Begin,
   Commit,
   Data,
-} from '../src/services/change-source/protocol/current/downstream.ts';
-import type {WatermarkedChange} from '../src/services/change-streamer/change-streamer-service.ts';
-import {ReplicationMessages} from '../src/services/replicator/test-utils.ts';
+} from '../../src/services/change-source/protocol/current/downstream.ts';
+import type {WatermarkedChange} from '../../src/services/change-streamer/change-streamer-service.ts';
+import {ReplicationMessages} from '../../src/services/replicator/test-utils.ts';
 
 type PayloadSize = 'small' | 'medium' | 'large';
 type TransactionMessage = Begin | Data | Commit;

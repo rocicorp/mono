@@ -3,45 +3,45 @@ import {rmSync} from 'node:fs';
 import {performance} from 'node:perf_hooks';
 import {PostgreSqlContainer} from '@testcontainers/postgresql';
 import postgres from 'postgres';
-import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
-import {Database} from '../../zqlite/src/db.ts';
-import {StatementRunner} from '../src/db/statements.ts';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import {Database} from '../../../zqlite/src/db.ts';
+import {StatementRunner} from '../../src/db/statements.ts';
 import {
   type ChangeTag,
   type WatermarkedChange,
-} from '../src/services/change-streamer/change-streamer-service.ts';
-import {PROTOCOL_VERSION} from '../src/services/change-streamer/change-streamer.ts';
-import {Forwarder} from '../src/services/change-streamer/forwarder.ts';
+} from '../../src/services/change-streamer/change-streamer-service.ts';
+import {PROTOCOL_VERSION} from '../../src/services/change-streamer/change-streamer.ts';
+import {Forwarder} from '../../src/services/change-streamer/forwarder.ts';
 import {
   ensureReplicationConfig,
   setupCDCTables,
-} from '../src/services/change-streamer/schema/tables.ts';
-import {Storer} from '../src/services/change-streamer/storer.ts';
-import {Subscriber} from '../src/services/change-streamer/subscriber.ts';
-import {ChangeProcessor} from '../src/services/replicator/change-processor.ts';
-import {initReplicationState} from '../src/services/replicator/schema/replication-state.ts';
-import {postgresTypeConfig, type PostgresDB} from '../src/types/pg.ts';
-import {cdcSchema, type ShardID} from '../src/types/shards.ts';
-import {Subscription} from '../src/types/subscription.ts';
-import {
-  loadPayloadProfiles,
-  makeSchemaChanges,
-  makeTransaction,
-  smokePayloadProfiles,
-  watermarkFor,
-  type PayloadProfile,
-} from './load-fixtures.ts';
+} from '../../src/services/change-streamer/schema/tables.ts';
+import {Storer} from '../../src/services/change-streamer/storer.ts';
+import {Subscriber} from '../../src/services/change-streamer/subscriber.ts';
+import {ChangeProcessor} from '../../src/services/replicator/change-processor.ts';
+import {initReplicationState} from '../../src/services/replicator/schema/replication-state.ts';
+import {postgresTypeConfig, type PostgresDB} from '../../src/types/pg.ts';
+import {cdcSchema, type ShardID} from '../../src/types/shards.ts';
+import {Subscription} from '../../src/types/subscription.ts';
+import {makeSchemaChanges, makeTransaction, watermarkFor} from './fixtures.ts';
 import {
   argValue,
   envFlag,
   envInt,
-  formatBytes,
   formatRate,
   percentile,
   sleep,
   sum,
   writeJsonSummary,
 } from './perf-utils.ts';
+import {describeScenarios, loadScenarios} from './scenarios.ts';
+import type {
+  ConsumerConfig,
+  LoadConsumer,
+  Scenario,
+  ScenarioSummary,
+  Summary,
+} from './types.ts';
 
 // End-to-end load driver for reviewing storer/changeLog throughput changes.
 //
@@ -56,71 +56,7 @@ import {
 //
 // Component microbenches can hide wins that disappear once fanout, catchup,
 // JSON serialization, SQLite apply, and Postgres write pressure share the same
-// event loop. Keep this script as the golden-path perf harness for storer PRs.
-type Scenario = {
-  readonly name: string;
-  readonly rowsPerTx: number;
-  readonly payload: PayloadProfile;
-  readonly targetTxPerSec: number;
-};
-
-type ConsumerConfig = {
-  readonly count: number;
-  readonly ackDelayMs: number;
-  readonly slowAckDelayMs: number;
-  readonly slowEvery: number;
-};
-
-type ScenarioSummary = {
-  readonly name: string;
-  readonly rowsPerTx: number;
-  readonly payload: string;
-  readonly payloadBytes: number;
-  readonly targetTxPerSec: number;
-  readonly durationMs: number;
-  readonly tx: number;
-  readonly rows: number;
-  readonly storerBytes: number;
-  readonly elapsedMs: number;
-  readonly storerDrainMs: number;
-  readonly ingestTxPerSec: number;
-  readonly ingestRowsPerSec: number;
-  readonly fanoutMessages: number;
-  readonly fanoutMessagesPerSec: number;
-  readonly p50TxLatencyMs: number;
-  readonly p95TxLatencyMs: number;
-  readonly p99TxLatencyMs: number;
-  readonly subscriberCount: number;
-  readonly reconnectCatchup: boolean;
-  readonly reconnectCatchupFrom: string | null;
-  readonly reconnectMessages: number;
-  readonly subscriberAckDelayMs: number;
-  readonly slowSubscriberAckDelayMs: number;
-  readonly slowSubscriberEvery: number;
-  readonly maxAckLagMessages: number;
-  readonly avgAckLagMessages: number;
-};
-
-type Summary = {
-  readonly name: 'zero-cache-rm-vs-load';
-  readonly mode: 'smoke' | 'full';
-  readonly generatedAt: string;
-  readonly rmCount: 1;
-  readonly viewSyncerCount: number;
-  readonly scenarios: readonly ScenarioSummary[];
-};
-
-type LoadConsumer = {
-  readonly sub: Subscriber;
-  readonly stop: () => void;
-  readonly done: Promise<void>;
-  readonly stats: () => {
-    readonly processed: number;
-    readonly maxAckLagMessages: number;
-    readonly totalAckLagMessages: number;
-    readonly samples: number;
-  };
-};
+// event loop. Keep this folder as the golden-path perf harness for storer PRs.
 
 const lc = createSilentLogContext();
 const shard: ShardID = {appID: 'bench', shardNum: 0};
@@ -138,12 +74,8 @@ const consumerConfig: ConsumerConfig = {
   slowEvery: envInt('ZERO_RM_VS_SLOW_EVERY', full ? 4 : 2),
 };
 
-const scenarios = filterScenarios(full ? fullScenarios() : smokeScenarios());
-console.log(
-  `scenario bytes: ${scenarios
-    .map(s => `${s.name}=${s.rowsPerTx}x${formatBytes(s.payload.bytes)}`)
-    .join(', ')}`,
-);
+const scenarios = loadScenarios(full);
+console.log(`scenario bytes: ${describeScenarios(scenarios)}`);
 const container = await new PostgreSqlContainer(
   process.env.ZERO_RM_VS_PG_IMAGE ?? 'postgres:17',
 ).start();
@@ -190,71 +122,6 @@ try {
 } finally {
   await container.stop();
   cleanupSQLite(sqlitePath);
-}
-
-function smokeScenarios(): Scenario[] {
-  const small = profile('small', smokePayloadProfiles);
-  return [
-    {
-      name: 'steady-small',
-      rowsPerTx: 1,
-      payload: small,
-      targetTxPerSec: envInt('ZERO_RM_VS_TARGET_TPS', 500),
-    },
-  ];
-}
-
-function fullScenarios(): Scenario[] {
-  const small = profile('small', loadPayloadProfiles);
-  const medium = profile('medium', loadPayloadProfiles);
-  const large = profile('large', loadPayloadProfiles);
-  return [
-    {
-      name: 'single-row-flood',
-      rowsPerTx: 1,
-      payload: small,
-      targetTxPerSec: envInt('ZERO_RM_VS_SMALL_TARGET_TPS', 1_200),
-    },
-    {
-      name: 'medium-batch-pressure',
-      rowsPerTx: 10,
-      payload: medium,
-      targetTxPerSec: envInt('ZERO_RM_VS_MEDIUM_TARGET_TPS', 400),
-    },
-    {
-      name: 'large-row-burst',
-      rowsPerTx: 50,
-      payload: large,
-      targetTxPerSec: envInt('ZERO_RM_VS_LARGE_TARGET_TPS', 80),
-    },
-  ];
-}
-
-function profile(
-  size: PayloadProfile['size'],
-  profiles: readonly PayloadProfile[],
-): PayloadProfile {
-  const payload = profiles.find(profile => profile.size === size);
-  if (payload === undefined) {
-    throw new Error(`Missing ${size} payload profile`);
-  }
-  return payload;
-}
-
-function filterScenarios(scenarios: Scenario[]): Scenario[] {
-  const filter = process.env.ZERO_RM_VS_SCENARIO;
-  if (filter === undefined || filter === '') {
-    return scenarios;
-  }
-  const selected = scenarios.filter(scenario => scenario.name === filter);
-  if (selected.length === 0) {
-    throw new Error(
-      `Unknown ZERO_RM_VS_SCENARIO=${filter}; choices: ${scenarios
-        .map(scenario => scenario.name)
-        .join(', ')}`,
-    );
-  }
-  return selected;
 }
 
 async function runScenario(
