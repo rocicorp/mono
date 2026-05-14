@@ -118,7 +118,7 @@ import {
 import type {ConditionalSchemaQuery} from '../../../zql/src/query/schema-query.ts';
 import type {TypedView} from '../../../zql/src/query/typed-view.ts';
 import {nanoid} from '../util/nanoid.ts';
-import {send} from '../util/socket.ts';
+
 import {ActiveClientsManager} from './active-clients-manager.ts';
 import {ClientErrorKind} from './client-error-kind.ts';
 import {
@@ -392,6 +392,11 @@ export class Zero<
 
   #forceEnableRefresh = false;
 
+  // Ring buffer of up to 5 recent outbound messages (excluding pings).
+  // Tracks type, serialized size, and a 200-character snippet for diagnostics
+  // when a 1009 (Message Too Big) close occurs.
+  #recentSentMessages: {type: string; size: number; snippet: string}[] = [];
+
   /**
    * The timeout in milliseconds for ping operations. Controls both:
    * - How long to wait in idle before sending a ping
@@ -547,7 +552,8 @@ export class Zero<
 
     this.#mutationTracker = new MutationTracker(
       lc,
-      (upTo: MutationID) => this.#send(['ackMutationResponses', upTo]),
+      (upTo: MutationID) =>
+        this.#sendIfConnected(['ackMutationResponses', upTo]),
       error => this.#disconnect(lc, error),
     );
 
@@ -772,7 +778,7 @@ export class Zero<
           };
         }
 
-        this.#send([msg[0], body]);
+        this.#sendIfConnected([msg[0], body]);
       },
       rep.experimentalWatch.bind(rep),
       maxRecentQueries,
@@ -786,7 +792,7 @@ export class Zero<
     this.#clientToServer = clientToServer(schema.tables);
 
     this.#deleteClientsManager = new DeleteClientsManager(
-      msg => this.#send(msg),
+      msg => this.#sendIfConnected(msg),
       rep.perdag,
       this.#lc,
       this.#rep.clientGroupID,
@@ -890,12 +896,27 @@ export class Zero<
     }
   }
 
+  #sendIfConnected(msg: Upstream): void {
+    if (this.#connectionManager.is(ConnectionStatus.Connected)) {
+      this.#send(msg);
+    }
+  }
+
   #send(msg: Upstream): void {
-    if (
-      this.#socket &&
-      this.#connectionManager.is(ConnectionStatus.Connected)
-    ) {
-      send(this.#socket, msg);
+    if (this.#socket) {
+      const json = JSON.stringify(msg);
+      if (msg[0] !== 'ping') {
+        const history = this.#recentSentMessages;
+        if (history.length >= 5) {
+          history.shift();
+        }
+        history.push({
+          type: msg[0],
+          size: json.length,
+          snippet: json.slice(0, 200),
+        });
+      }
+      this.#socket.send(json);
     }
   }
 
@@ -1361,7 +1382,7 @@ export class Zero<
     }
   };
 
-  #onClose = (e: CloseEvent) => {
+  #onClose = async (e: CloseEvent) => {
     let lc = this.#lc;
     try {
       assert(this.#socket, 'Socket is not set before onClose');
@@ -1380,19 +1401,56 @@ export class Zero<
         });
       }
 
-      const closeError = new ClientError(
-        wasClean
-          ? {
-              kind: ClientErrorKind.CleanClose,
-              message: 'WebSocket connection closed cleanly',
-            }
-          : {
-              kind: ClientErrorKind.AbruptClose,
-              message: 'WebSocket connection closed abruptly',
-            },
-      );
-      this.#connectResolver.reject(closeError);
-      this.#disconnect(lc, closeError);
+      // 1009 = Message Too Big. The server rejected an oversized WebSocket
+      // message, most likely a mutation containing a large value (e.g. a
+      // base64-encoded image), but possibly a large changeDesiredQueries
+      // payload. Because mutations are persisted in IndexedDB, the client
+      // would otherwise reconnect and immediately re-send the message,
+      // causing an infinite reconnect loop. Disable the client group to
+      // abandon the stuck message and reload with a fresh client group.
+      //
+      // Using InvalidMessage as the error kind transitions the connection
+      // to Error state, making it observable via connection.state.subscribe().
+      // The reload is routed through onClientStateNotFound so customers can
+      // override it (e.g. to show UI, defer reload, or report to Sentry).
+      if (code === 1009) {
+        const recentMessagesInfo =
+          this.#recentSentMessages.length > 0
+            ? '\nRecent sent messages:\n' +
+              JSON.stringify(this.#recentSentMessages, null, 2)
+            : '';
+        const messageTooLargeError = new ClientError({
+          kind: ClientErrorKind.InvalidMessage,
+          message:
+            'A WebSocket message exceeded the server message size limit. ' +
+            "This is usually caused by a mutation's args containing a large " +
+            'value such as a base64-encoded image. Consider uploading ' +
+            'large files to object storage and storing only the URL in Zero.' +
+            recentMessagesInfo,
+        });
+        this.#connectResolver.reject(messageTooLargeError);
+        this.#disconnect(lc, messageTooLargeError);
+
+        await this.#rep.disableClientGroup();
+        this.#onClientStateNotFound(
+          ErrorKind.InvalidMessage,
+          messageTooLargeError.message,
+        );
+      } else {
+        const closeError = new ClientError(
+          wasClean
+            ? {
+                kind: ClientErrorKind.CleanClose,
+                message: 'WebSocket connection closed cleanly',
+              }
+            : {
+                kind: ClientErrorKind.AbruptClose,
+                message: 'WebSocket connection closed abruptly',
+              },
+        );
+        this.#connectResolver.reject(closeError);
+        this.#disconnect(lc, closeError);
+      }
     } catch (e) {
       lc.error?.('Unhandled error in onClose', e);
       const internalError = new ClientError(
@@ -1512,7 +1570,7 @@ export class Zero<
     this.#lastMutationIDSent = NULL_LAST_MUTATION_ID_SENT;
 
     lc.debug?.('Resolving connect resolver');
-    const socket = must(this.#socket);
+    must(this.#socket);
     const queriesPatch = await this.#rep.query(tx =>
       this.#queryManager.getQueriesPatch(tx, this.#initConnectionQueries),
     );
@@ -1523,14 +1581,14 @@ export class Zero<
 
     const maybeSendDeletedClients = () => {
       if (hasDeletedClients()) {
-        send(socket, ['deleteClients', this.#deletedClients!]);
+        this.#send(['deleteClients', this.#deletedClients!]);
         this.#deletedClients = undefined;
       }
     };
 
     if (queriesPatch.size > 0 && this.#initConnectionQueries !== undefined) {
       maybeSendDeletedClients();
-      send(socket, [
+      this.#send([
         'changeDesiredQueries',
         {
           desiredQueriesPatch: [...queriesPatch.values()],
@@ -1541,7 +1599,7 @@ export class Zero<
       // if #initConnectionQueries was undefined that means we never
       // sent `initConnection` to the server inside the sec-protocol header.
       const clientSchema = this.#clientSchema;
-      send(socket, [
+      this.#send([
         'initConnection',
         {
           desiredQueriesPatch: [...queriesPatch.values()],
@@ -1861,8 +1919,7 @@ export class Zero<
     await this.#connectResolver.promise;
     const lc = this.#lc.withContext('requestID', requestID);
     lc.debug?.(`pushing ${req.mutations.length} mutations`);
-    const socket = this.#socket;
-    assert(socket, 'Expected socket to be connected for push');
+    assert(this.#socket, 'Expected socket to be connected for push');
 
     const isMutationRecoveryPush =
       req.clientGroupID !== (await this.clientGroupID);
@@ -1913,7 +1970,7 @@ export class Zero<
           traceparent: this.#options.getTraceparent?.(),
         },
       ];
-      send(socket, msg);
+      this.#send(msg);
       if (!isMutationRecoveryPush) {
         this.#lastMutationIDSent = {clientID: m.clientID, id: m.id};
       }
@@ -2219,9 +2276,8 @@ export class Zero<
 
     // If we are connecting we wait until we are connected.
     await this.#connectResolver.promise;
-    const socket = this.#socket;
     assert(
-      socket,
+      this.#socket,
       'Expected socket to be connected for mutation recovery pull',
     );
     // Mutation recovery pull.
@@ -2239,7 +2295,7 @@ export class Zero<
         requestID,
       },
     ];
-    send(socket, pullRequestMessage);
+    this.#send(pullRequestMessage);
     const pullResponseResolver: Resolver<PullResponseBody> = resolver();
     this.#pendingPullsByRequestID.set(requestID, pullResponseResolver);
     try {
@@ -2294,7 +2350,7 @@ export class Zero<
     this.#rep.auth = toReplicacheAuthToken(auth);
 
     if (auth) {
-      this.#send(['updateAuth', {auth}]);
+      this.#sendIfConnected(['updateAuth', {auth}]);
     }
   }
 
@@ -2331,7 +2387,7 @@ export class Zero<
     const pingMessage: PingMessage = ['ping', {}];
     const t0 = performance.now();
     assert(this.#socket, 'Expected socket to be connected for ping');
-    send(this.#socket, pingMessage);
+    this.#send(pingMessage);
 
     const raceResult = await promiseRace({
       waitForPong: promise,

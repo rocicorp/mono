@@ -3,11 +3,11 @@ import {testLogConfig} from '../../../otel/src/test-log-config.ts';
 import {assert} from '../../../shared/src/asserts.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import type {CompoundKey, Ordering} from '../../../zero-protocol/src/ast.ts';
-import type {Row, Value} from '../../../zero-protocol/src/data.ts';
+import type {Row} from '../../../zero-protocol/src/data.ts';
 import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
 import type {SchemaValue} from '../../../zero-schema/src/table-schema.ts';
 import {Catch, type CaughtNode} from './catch.ts';
-import {canonicalKey, FlippedJoin} from './flipped-join.ts';
+import {canonicalKeyForTest, FlippedJoin} from './flipped-join.ts';
 import type {FetchRequest} from './operator.ts';
 import type {SourceSchema} from './schema.ts';
 import {Snitch, type SnitchMessage} from './snitch.ts';
@@ -77,9 +77,13 @@ suite('fetch one:many', () => {
           "0",
           "fetch",
           {
-            "constraint": {
-              "id": "i1",
-            },
+            "multiConstraints": [
+              [
+                {
+                  "id": "i1",
+                },
+              ],
+            ],
           },
         ],
       ]
@@ -142,9 +146,13 @@ suite('fetch one:many', () => {
           "0",
           "fetch",
           {
-            "constraint": {
-              "id": "i1",
-            },
+            "multiConstraints": [
+              [
+                {
+                  "id": "i1",
+                },
+              ],
+            ],
           },
         ],
       ]
@@ -169,9 +177,13 @@ suite('fetch one:many', () => {
           "0",
           "fetch",
           {
-            "constraint": {
-              "id": "i2",
-            },
+            "multiConstraints": [
+              [
+                {
+                  "id": "i2",
+                },
+              ],
+            ],
           },
         ],
       ]
@@ -221,18 +233,16 @@ suite('fetch one:many', () => {
           "0",
           "fetch",
           {
-            "constraint": {
-              "id": "i1",
-            },
-          },
-        ],
-        [
-          "0",
-          "fetch",
-          {
-            "constraint": {
-              "id": "i2",
-            },
+            "multiConstraints": [
+              [
+                {
+                  "id": "i1",
+                },
+                {
+                  "id": "i2",
+                },
+              ],
+            ],
           },
         ],
       ]
@@ -314,36 +324,16 @@ suite('fetch one:many', () => {
           "0",
           "fetch",
           {
-            "constraint": {
-              "id": "i1",
-            },
-          },
-        ],
-        [
-          "0",
-          "fetch",
-          {
-            "constraint": {
-              "id": "i1",
-            },
-          },
-        ],
-        [
-          "0",
-          "fetch",
-          {
-            "constraint": {
-              "id": "i2",
-            },
-          },
-        ],
-        [
-          "0",
-          "fetch",
-          {
-            "constraint": {
-              "id": "i2",
-            },
+            "multiConstraints": [
+              [
+                {
+                  "id": "i1",
+                },
+                {
+                  "id": "i2",
+                },
+              ],
+            ],
           },
         ],
       ]
@@ -421,9 +411,13 @@ suite('fetch many:one', () => {
           "0",
           "fetch",
           {
-            "constraint": {
-              "ownerID": "u1",
-            },
+            "multiConstraints": [
+              [
+                {
+                  "ownerID": "u1",
+                },
+              ],
+            ],
           },
         ],
       ]
@@ -467,9 +461,13 @@ suite('fetch many:one', () => {
           "0",
           "fetch",
           {
-            "constraint": {
-              "ownerID": "u1",
-            },
+            "multiConstraints": [
+              [
+                {
+                  "ownerID": "u1",
+                },
+              ],
+            ],
           },
         ],
       ]
@@ -535,9 +533,13 @@ suite('fetch many:one', () => {
           "0",
           "fetch",
           {
-            "constraint": {
-              "ownerID": "u1",
-            },
+            "multiConstraints": [
+              [
+                {
+                  "ownerID": "u1",
+                },
+              ],
+            ],
           },
         ],
       ]
@@ -603,18 +605,16 @@ suite('fetch many:one', () => {
           "0",
           "fetch",
           {
-            "constraint": {
-              "ownerID": "u1",
-            },
-          },
-        ],
-        [
-          "0",
-          "fetch",
-          {
-            "constraint": {
-              "ownerID": "u2",
-            },
+            "multiConstraints": [
+              [
+                {
+                  "ownerID": "u1",
+                },
+                {
+                  "ownerID": "u2",
+                },
+              ],
+            ],
           },
         ],
       ]
@@ -698,18 +698,26 @@ suite('fetch one:many:many', () => {
           "1",
           "fetch",
           {
-            "constraint": {
-              "id": "c1",
-            },
+            "multiConstraints": [
+              [
+                {
+                  "id": "c1",
+                },
+              ],
+            ],
           },
         ],
         [
           "0",
           "fetch",
           {
-            "constraint": {
-              "id": "i1",
-            },
+            "multiConstraints": [
+              [
+                {
+                  "id": "i1",
+                },
+              ],
+            ],
           },
         ],
       ]
@@ -785,18 +793,26 @@ suite('fetch one:many:many', () => {
           "1",
           "fetch",
           {
-            "constraint": {
-              "id": "c1",
-            },
+            "multiConstraints": [
+              [
+                {
+                  "id": "c1",
+                },
+              ],
+            ],
           },
         ],
         [
           "0",
           "fetch",
           {
-            "constraint": {
-              "id": "i1",
-            },
+            "multiConstraints": [
+              [
+                {
+                  "id": "i1",
+                },
+              ],
+            ],
           },
         ],
       ]
@@ -956,108 +972,38 @@ suite('fetch one:many:many', () => {
           "1",
           "fetch",
           {
-            "constraint": {
-              "id": "c1",
-            },
-          },
-        ],
-        [
-          "1",
-          "fetch",
-          {
-            "constraint": {
-              "id": "c1",
-            },
-          },
-        ],
-        [
-          "1",
-          "fetch",
-          {
-            "constraint": {
-              "id": "c2",
-            },
-          },
-        ],
-        [
-          "1",
-          "fetch",
-          {
-            "constraint": {
-              "id": "c2",
-            },
-          },
-        ],
-        [
-          "1",
-          "fetch",
-          {
-            "constraint": {
-              "id": "c3",
-            },
-          },
-        ],
-        [
-          "1",
-          "fetch",
-          {
-            "constraint": {
-              "id": "c3",
-            },
-          },
-        ],
-        [
-          "1",
-          "fetch",
-          {
-            "constraint": {
-              "id": "c4",
-            },
-          },
-        ],
-        [
-          "1",
-          "fetch",
-          {
-            "constraint": {
-              "id": "c4",
-            },
+            "multiConstraints": [
+              [
+                {
+                  "id": "c1",
+                },
+                {
+                  "id": "c2",
+                },
+                {
+                  "id": "c3",
+                },
+                {
+                  "id": "c4",
+                },
+              ],
+            ],
           },
         ],
         [
           "0",
           "fetch",
           {
-            "constraint": {
-              "id": "i1",
-            },
-          },
-        ],
-        [
-          "0",
-          "fetch",
-          {
-            "constraint": {
-              "id": "i1",
-            },
-          },
-        ],
-        [
-          "0",
-          "fetch",
-          {
-            "constraint": {
-              "id": "i2",
-            },
-          },
-        ],
-        [
-          "0",
-          "fetch",
-          {
-            "constraint": {
-              "id": "i2",
-            },
+            "multiConstraints": [
+              [
+                {
+                  "id": "i1",
+                },
+                {
+                  "id": "i2",
+                },
+              ],
+            ],
           },
         ],
       ]
@@ -1133,18 +1079,26 @@ suite('fetch one:many:one', () => {
           "1",
           "fetch",
           {
-            "constraint": {
-              "labelID": "l1",
-            },
+            "multiConstraints": [
+              [
+                {
+                  "labelID": "l1",
+                },
+              ],
+            ],
           },
         ],
         [
           "0",
           "fetch",
           {
-            "constraint": {
-              "id": "i1",
-            },
+            "multiConstraints": [
+              [
+                {
+                  "id": "i1",
+                },
+              ],
+            ],
           },
         ],
       ]
@@ -1236,18 +1190,26 @@ suite('fetch one:many:one', () => {
           "1",
           "fetch",
           {
-            "constraint": {
-              "labelID": "l1",
-            },
+            "multiConstraints": [
+              [
+                {
+                  "labelID": "l1",
+                },
+              ],
+            ],
           },
         ],
         [
           "0",
           "fetch",
           {
-            "constraint": {
-              "id": "i1",
-            },
+            "multiConstraints": [
+              [
+                {
+                  "id": "i1",
+                },
+              ],
+            ],
           },
         ],
       ]
@@ -1324,36 +1286,29 @@ suite('fetch one:many:one', () => {
           "1",
           "fetch",
           {
-            "constraint": {
-              "labelID": "l1",
-            },
-          },
-        ],
-        [
-          "1",
-          "fetch",
-          {
-            "constraint": {
-              "labelID": "l2",
-            },
-          },
-        ],
-        [
-          "0",
-          "fetch",
-          {
-            "constraint": {
-              "id": "i1",
-            },
+            "multiConstraints": [
+              [
+                {
+                  "labelID": "l1",
+                },
+                {
+                  "labelID": "l2",
+                },
+              ],
+            ],
           },
         ],
         [
           "0",
           "fetch",
           {
-            "constraint": {
-              "id": "i1",
-            },
+            "multiConstraints": [
+              [
+                {
+                  "id": "i1",
+                },
+              ],
+            ],
           },
         ],
       ]
@@ -1473,54 +1428,32 @@ suite('fetch one:many:one', () => {
           "1",
           "fetch",
           {
-            "constraint": {
-              "labelID": "l1",
-            },
-          },
-        ],
-        [
-          "1",
-          "fetch",
-          {
-            "constraint": {
-              "labelID": "l2",
-            },
-          },
-        ],
-        [
-          "0",
-          "fetch",
-          {
-            "constraint": {
-              "id": "i1",
-            },
+            "multiConstraints": [
+              [
+                {
+                  "labelID": "l1",
+                },
+                {
+                  "labelID": "l2",
+                },
+              ],
+            ],
           },
         ],
         [
           "0",
           "fetch",
           {
-            "constraint": {
-              "id": "i1",
-            },
-          },
-        ],
-        [
-          "0",
-          "fetch",
-          {
-            "constraint": {
-              "id": "i2",
-            },
-          },
-        ],
-        [
-          "0",
-          "fetch",
-          {
-            "constraint": {
-              "id": "i2",
-            },
+            "multiConstraints": [
+              [
+                {
+                  "id": "i1",
+                },
+                {
+                  "id": "i2",
+                },
+              ],
+            ],
           },
         ],
       ]
@@ -1590,10 +1523,14 @@ suite('compound join keys', () => {
           "0",
           "fetch",
           {
-            "constraint": {
-              "a1": 2,
-              "a2": 1,
-            },
+            "multiConstraints": [
+              [
+                {
+                  "a1": 2,
+                  "a2": 1,
+                },
+              ],
+            ],
           },
         ],
       ]
@@ -1660,10 +1597,14 @@ suite('compound join keys', () => {
           "0",
           "fetch",
           {
-            "constraint": {
-              "a1": 1,
-              "a2": 2,
-            },
+            "multiConstraints": [
+              [
+                {
+                  "a1": 1,
+                  "a2": 2,
+                },
+              ],
+            ],
           },
         ],
       ]
@@ -1689,10 +1630,14 @@ suite('compound join keys', () => {
           "0",
           "fetch",
           {
-            "constraint": {
-              "a1": 2,
-              "a2": 1,
-            },
+            "multiConstraints": [
+              [
+                {
+                  "a1": 2,
+                  "a2": 1,
+                },
+              ],
+            ],
           },
         ],
       ]
@@ -1747,20 +1692,18 @@ suite('compound join keys', () => {
           "0",
           "fetch",
           {
-            "constraint": {
-              "a1": 1,
-              "a2": 2,
-            },
-          },
-        ],
-        [
-          "0",
-          "fetch",
-          {
-            "constraint": {
-              "a1": 5,
-              "a2": 4,
-            },
+            "multiConstraints": [
+              [
+                {
+                  "a1": 1,
+                  "a2": 2,
+                },
+                {
+                  "a1": 5,
+                  "a2": 4,
+                },
+              ],
+            ],
           },
         ],
       ]
@@ -1859,20 +1802,18 @@ suite('compound join keys', () => {
           "0",
           "fetch",
           {
-            "constraint": {
-              "a1": 1,
-              "a2": 2,
-            },
-          },
-        ],
-        [
-          "0",
-          "fetch",
-          {
-            "constraint": {
-              "a1": 4,
-              "a2": 5,
-            },
+            "multiConstraints": [
+              [
+                {
+                  "a1": 1,
+                  "a2": 2,
+                },
+                {
+                  "a1": 4,
+                  "a2": 5,
+                },
+              ],
+            ],
           },
         ],
       ]
@@ -1880,9 +1821,9 @@ suite('compound join keys', () => {
   });
 
   // Three children sharing one parent-key tuple collapse to a single
-  // parent fetch (not three).  Children appear in the relationship in
-  // their original input order, since #fetchMergeSort appends to the
-  // per-key index list in iteration order.
+  // multi-constraint entry (not three).  Children appear in the
+  // relationship in their original input order, since #fetchBatched
+  // appends to the per-key index list in iteration order.
   test('one parent, three children sharing a parent-key', () => {
     const results = fetchTest({
       ...base,
@@ -1950,10 +1891,14 @@ suite('compound join keys', () => {
           "0",
           "fetch",
           {
-            "constraint": {
-              "a1": 1,
-              "a2": 2,
-            },
+            "multiConstraints": [
+              [
+                {
+                  "a1": 1,
+                  "a2": 2,
+                },
+              ],
+            ],
           },
         ],
       ]
@@ -2055,20 +2000,18 @@ suite('compound join keys', () => {
           "0",
           "fetch",
           {
-            "constraint": {
-              "a1": 1,
-              "a2": 2,
-            },
-          },
-        ],
-        [
-          "0",
-          "fetch",
-          {
-            "constraint": {
-              "a1": 4,
-              "a2": 5,
-            },
+            "multiConstraints": [
+              [
+                {
+                  "a1": 1,
+                  "a2": 2,
+                },
+                {
+                  "a1": 4,
+                  "a2": 5,
+                },
+              ],
+            ],
           },
         ],
       ]
@@ -2078,29 +2021,31 @@ suite('compound join keys', () => {
 
 suite('canonicalKey', () => {
   // canonicalKey tags each value by type so two different values can't
-  // collide on the same key string.  The dedup map in #fetchMergeSort
+  // collide on the same key string.  The dedup map in #fetchBatched
   // depends on this — without tagging, e.g. `1` (number) and `"1"`
   // (string) would group together, and the wrong children would be
   // attached to a parent row.
   test('distinguishes number from string with same printed form', () => {
-    expect(canonicalKey({k: 1}, ['k'])).not.toBe(canonicalKey({k: '1'}, ['k']));
+    expect(canonicalKeyForTest({k: 1}, ['k'])).not.toBe(
+      canonicalKeyForTest({k: '1'}, ['k']),
+    );
   });
 
   test('distinguishes boolean true/false from strings "t"/"f"', () => {
-    expect(canonicalKey({k: true}, ['k'])).not.toBe(
-      canonicalKey({k: 't'}, ['k']),
+    expect(canonicalKeyForTest({k: true}, ['k'])).not.toBe(
+      canonicalKeyForTest({k: 't'}, ['k']),
     );
-    expect(canonicalKey({k: false}, ['k'])).not.toBe(
-      canonicalKey({k: 'f'}, ['k']),
+    expect(canonicalKeyForTest({k: false}, ['k'])).not.toBe(
+      canonicalKeyForTest({k: 'f'}, ['k']),
     );
   });
 
   test('distinguishes null/undefined from string "n"', () => {
-    expect(canonicalKey({k: null}, ['k'])).not.toBe(
-      canonicalKey({k: 'n'}, ['k']),
+    expect(canonicalKeyForTest({k: null}, ['k'])).not.toBe(
+      canonicalKeyForTest({k: 'n'}, ['k']),
     );
-    expect(canonicalKey({k: undefined}, ['k'])).not.toBe(
-      canonicalKey({k: 'n'}, ['k']),
+    expect(canonicalKeyForTest({k: undefined}, ['k'])).not.toBe(
+      canonicalKeyForTest({k: 'n'}, ['k']),
     );
   });
 
@@ -2108,16 +2053,16 @@ suite('canonicalKey', () => {
     // buildJoinConstraint produces `undefined` for missing-but-nullable
     // join columns; the source-side constraint shape uses `null`. They
     // must canonicalize identically so dedup groups them together.
-    expect(canonicalKey({k: null}, ['k'])).toBe(
-      canonicalKey({k: undefined}, ['k']),
+    expect(canonicalKeyForTest({k: null}, ['k'])).toBe(
+      canonicalKeyForTest({k: undefined}, ['k']),
     );
   });
 
   test('distinguishes bigint from number with same numeric value', () => {
     // safeIntegers in zqlite produces bigint at runtime even though the
     // static Value type doesn't list it.
-    expect(canonicalKey({k: 1n as unknown as Value}, ['k'])).not.toBe(
-      canonicalKey({k: 1}, ['k']),
+    expect(canonicalKeyForTest({k: 1n}, ['k'])).not.toBe(
+      canonicalKeyForTest({k: 1}, ['k']),
     );
   });
 
@@ -2125,29 +2070,28 @@ suite('canonicalKey', () => {
     // Without a separator, ('ab','c') and ('a','bc') would canonicalize
     // identically. The \x00 delimiter keeps the boundaries distinct for
     // typical id-shaped values.
-    expect(canonicalKey({a: 'ab', b: 'c'}, ['a', 'b'])).not.toBe(
-      canonicalKey({a: 'a', b: 'bc'}, ['a', 'b']),
+    expect(canonicalKeyForTest({a: 'ab', b: 'c'}, ['a', 'b'])).not.toBe(
+      canonicalKeyForTest({a: 'a', b: 'bc'}, ['a', 'b']),
     );
   });
 
   test('equal compound tuples produce equal keys', () => {
-    expect(canonicalKey({a: 1, b: 'x'}, ['a', 'b'])).toBe(
-      canonicalKey({a: 1, b: 'x'}, ['a', 'b']),
+    expect(canonicalKeyForTest({a: 1, b: 'x'}, ['a', 'b'])).toBe(
+      canonicalKeyForTest({a: 1, b: 'x'}, ['a', 'b']),
     );
   });
 
   test('JSON-encoded fallback for object/array values', () => {
-    expect(canonicalKey({k: {a: 1} as unknown as Value}, ['k'])).not.toBe(
-      canonicalKey({k: {a: 2} as unknown as Value}, ['k']),
+    expect(canonicalKeyForTest({k: {a: 1}}, ['k'])).not.toBe(
+      canonicalKeyForTest({k: {a: 2}}, ['k']),
     );
-    expect(canonicalKey({k: {a: 1} as unknown as Value}, ['k'])).toBe(
-      canonicalKey({k: {a: 1} as unknown as Value}, ['k']),
+    expect(canonicalKeyForTest({k: {a: 1}}, ['k'])).toBe(
+      canonicalKeyForTest({k: {a: 1}}, ['k']),
     );
   });
 });
 
 suite('fetch one:many with FetchRequest', () => {
-  // parentKey === primaryKey, so this exercises #fetchQuicksort.
   const base = {
     columns: [
       {id: {type: 'string'}},
@@ -2251,10 +2195,9 @@ suite('fetch one:many with FetchRequest', () => {
   });
 });
 
-suite('fetch with compound primary key === parentKey (quicksort path)', () => {
-  // Parent PK is ['orgId', 'slug'].  parentKey matches PK, so this exercises
-  // #fetchQuicksort with a multi-column unique key.  Children share parents:
-  // m1 references org=o1/slug=s1; m2 references org=o1/slug=s1; m3 references
+suite('fetch with compound primary key === parentKey', () => {
+  // Parent PK is ['orgId', 'slug'].  Children share parents: m1 references
+  // org=o1/slug=s1; m2 references org=o1/slug=s1; m3 references
   // org=o2/slug=s2.  So parent (o1, s1) has two related children.
   const base = {
     columns: [
@@ -2352,12 +2295,11 @@ suite('fetch with compound primary key === parentKey (quicksort path)', () => {
   });
 });
 
-// Targets the merge-sort path specifically (#fetchMergeSort): parentKey
-// is non-unique on the parent, so #fetchQuicksort is bypassed and the
-// heap-based K-way merge is exercised. Other suites cover small K (1-2);
-// these scale K up and exercise reverse: true, which has no other
-// merge-sort coverage.
-suite('merge-sort path: large K and reverse', () => {
+// Exercises the chunked multi-constraint path with large K (number of
+// unique parent-key values) and reverse: true. Other suites cover small
+// K (1-2); these scale K up and add reverse coverage that no other
+// suite has.
+suite('large K and reverse', () => {
   const base = {
     columns: [
       {id: {type: 'number'}, groupId: {type: 'number'}},
