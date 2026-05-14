@@ -102,9 +102,11 @@ export class UnionFanIn implements Operator {
 
   fetch(req: FetchRequest): Stream<Node | 'yield'> {
     const iterables = this.#inputs.map(input => input.fetch(req));
-    return mergeFetches(iterables, (l, r) =>
-      this.#schema.compareRows(l.row, r.row),
-    );
+    const compareRows = this.#schema.compareRows;
+    const compare = req.reverse
+      ? (l: Node, r: Node) => compareRows(r.row, l.row)
+      : (l: Node, r: Node) => compareRows(l.row, r.row);
+    return mergeFetches(iterables, compare);
   }
 
   getSchema(): SourceSchema {
