@@ -46,4 +46,13 @@ export const scenarios = [
     payloadBytes: 192,
     yieldEvery: 512,
   },
+  {
+    name: '16-vs-outage-load',
+    subscribers: 16,
+    messagesPerSubscriber: 25_000,
+    payloadBytes: 512,
+    yieldEvery: 256,
+    delayEvery: 128,
+    delayMs: 1,
+  },
 ] as const satisfies readonly HandoffScenario[];

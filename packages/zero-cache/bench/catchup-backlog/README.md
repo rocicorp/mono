@@ -16,7 +16,8 @@ Files:
   flow-controlled handoff.
 - `scenarios.ts` defines the load matrix: small reconnect, baseline backlog,
   larger row payloads, slow downstream consumption, and 16 concurrent VS
-  reconnects.
+  reconnects, including an outage-recovery shape where 16 VSs catch up while
+  downstream consumption is still under load.
 - `report.ts` owns the ASCII output table so benchmark mechanics and
   presentation do not blur together.
 
