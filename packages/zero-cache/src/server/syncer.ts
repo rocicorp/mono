@@ -29,7 +29,7 @@ import {PipelineDriver} from '../services/view-syncer/pipeline-driver.ts';
 import {Snapshotter} from '../services/view-syncer/snapshotter.ts';
 import {ViewSyncerService} from '../services/view-syncer/view-syncer.ts';
 import {ProtocolErrorWithLevel} from '../types/error-with-level.ts';
-import {pgClient} from '../types/pg.ts';
+import {connectPgClient} from '../types/pg.ts';
 import {
   parentWorker,
   singleProcessMode,
@@ -69,7 +69,7 @@ function getCustomQueryConfig(
 // Default LogContext, overridden in runWorker
 let lc = new LogContext('info', {}, consoleLogSink);
 
-export default function runWorker(
+export default async function runWorker(
   parent: Worker,
   env: NodeJS.ProcessEnv,
   ...args: string[]
@@ -92,18 +92,19 @@ export default function runWorker(
   const replicaFile = replicaFileName(config.replica.file, fileMode);
   lc.debug?.(`running view-syncer on ${replicaFile}`);
 
-  const cvrDB = pgClient(lc, cvr.db, `sync-worker-${pid}-cvr`, {
+  const cvrDB = await connectPgClient(lc, cvr.db, `sync-worker-${pid}-cvr`, {
     max: must(cvr.maxConnsPerWorker, 'cvr.maxConnsPerWorker must be set'),
   });
 
-  const upstreamDB = enableCrudMutations
-    ? pgClient(lc, upstream.db, `sync-worker-${pid}-upstream`, {
-        max: must(
-          upstream.maxConnsPerWorker,
-          'upstream.maxConnsPerWorker must be set',
-        ),
-      })
-    : undefined;
+  const upstreamDB =
+    enableCrudMutations && upstream.type === 'pg'
+      ? await connectPgClient(lc, upstream.db, `sync-worker-${pid}-upstream`, {
+          max: must(
+            upstream.maxConnsPerWorker,
+            'upstream.maxConnsPerWorker must be set',
+          ),
+        })
+      : undefined;
 
   const dbWarmup = Promise.allSettled([
     warmupConnections(lc, cvrDB, 'cvr'),
