@@ -551,7 +551,8 @@ export class Zero<
 
     this.#mutationTracker = new MutationTracker(
       lc,
-      (upTo: MutationID) => this.#sendIfConnected(['ackMutationResponses', upTo]),
+      (upTo: MutationID) =>
+        this.#sendIfConnected(['ackMutationResponses', upTo]),
       error => this.#disconnect(lc, error),
     );
 
@@ -1572,7 +1573,7 @@ export class Zero<
     this.#lastMutationIDSent = NULL_LAST_MUTATION_ID_SENT;
 
     lc.debug?.('Resolving connect resolver');
-    const socket = must(this.#socket);
+    must(this.#socket);
     const queriesPatch = await this.#rep.query(tx =>
       this.#queryManager.getQueriesPatch(tx, this.#initConnectionQueries),
     );
@@ -1921,8 +1922,7 @@ export class Zero<
     await this.#connectResolver.promise;
     const lc = this.#lc.withContext('requestID', requestID);
     lc.debug?.(`pushing ${req.mutations.length} mutations`);
-    const socket = this.#socket;
-    assert(socket, 'Expected socket to be connected for push');
+    assert(this.#socket, 'Expected socket to be connected for push');
 
     const isMutationRecoveryPush =
       req.clientGroupID !== (await this.clientGroupID);
@@ -2279,9 +2279,8 @@ export class Zero<
 
     // If we are connecting we wait until we are connected.
     await this.#connectResolver.promise;
-    const socket = this.#socket;
     assert(
-      socket,
+      this.#socket,
       'Expected socket to be connected for mutation recovery pull',
     );
     // Mutation recovery pull.

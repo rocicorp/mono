@@ -3048,21 +3048,24 @@ test('close code 1009 (Message Too Big) disables client group and reloads', asyn
   expect(hasMemStore(z.idbName)).toBe(true);
 
   // Send a push message directly to populate the recent sent messages buffer
-  await z.pusher({
-    profileID: 'p1',
-    clientGroupID: 'c1',
-    mutations: [
-      {
-        clientID: 'c1',
-        id: 1,
-        name: 'issues.insert',
-        args: {id: '1', value: 'a large payload'},
-        timestamp: 123,
-      },
-    ],
-    pushVersion: 1,
-    schemaVersion: '1',
-  }, 'req-1');
+  await z.pusher(
+    {
+      profileID: 'p1',
+      clientGroupID: 'c1',
+      mutations: [
+        {
+          clientID: 'c1',
+          id: 1,
+          name: 'issues.insert',
+          args: {id: '1', value: 'a large payload'},
+          timestamp: 123,
+        },
+      ],
+      pushVersion: 1,
+      schemaVersion: '1',
+    },
+    'req-1',
+  );
 
   await z.triggerClose(1009);
 
@@ -3109,7 +3112,9 @@ test('close code 1009 with custom onClientStateNotFound defers reload', async ()
   assert(state.name === ConnectionStatus.Error);
   expect(state.reason).toBeInstanceOf(ClientError);
   expect(state.reason.kind).toBe(ClientErrorKind.InvalidMessage);
-  expect(state.reason.message).toContain('exceeded the server message size limit');
+  expect(state.reason.message).toContain(
+    'exceeded the server message size limit',
+  );
 });
 
 test('Constructing Zero with a negative hiddenTabDisconnectDelay option throws an error', () => {
