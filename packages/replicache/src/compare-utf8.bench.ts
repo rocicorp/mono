@@ -1,9 +1,9 @@
 import {compareUTF8} from 'compare-utf8';
+import {bench, describe} from '../../shared/src/bench.ts';
 import {
   makeRandomASCIIStrings,
   makeRandomStrings,
 } from '../../shared/src/test-data.ts';
-import {bench, describe} from '../../shared/src/bench.ts';
 
 const NUM_STRINGS = 50_000;
 const STRING_LENGTH = 50;
@@ -66,8 +66,16 @@ describe('compare-utf8', () => {
   makeCompareBench('TextEncoder', encoderCompare, makeRandomStrings);
   makeCompareBench('String.localeCompare', localeCompare, makeRandomStrings);
 
-  makeCompareBench('String compare ASCII', stringCompare, makeRandomASCIIStrings);
-  makeCompareBench('Intl.Collator ASCII', collateCompare, makeRandomASCIIStrings);
+  makeCompareBench(
+    'String compare ASCII',
+    stringCompare,
+    makeRandomASCIIStrings,
+  );
+  makeCompareBench(
+    'Intl.Collator ASCII',
+    collateCompare,
+    makeRandomASCIIStrings,
+  );
   makeCompareBench('Compare UTF8 ASCII', compareUTF8, makeRandomASCIIStrings);
   makeCompareBench('TextEncoder ASCII', encoderCompare, makeRandomASCIIStrings);
   makeCompareBench(

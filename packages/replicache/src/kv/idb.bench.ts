@@ -1,9 +1,12 @@
 // oxlint-disable no-console
 import {deleteDB, type IDBPDatabase, openDB} from 'idb/with-async-ittr';
-import xbytes from 'xbytes';
 import {afterAll, beforeAll} from 'vitest';
+import xbytes from 'xbytes';
 import {bench, describe} from '../../../shared/src/bench.ts';
-import {randomData, type RandomDataType} from '../../../shared/src/test-data.ts';
+import {
+  randomData,
+  type RandomDataType,
+} from '../../../shared/src/test-data.ts';
 
 async function idbPopulate(
   db: IDBPDatabase<unknown>,
@@ -47,7 +50,7 @@ function makeIDBReadGetAllBench(opts: IDBBenchOpts) {
     beforeAll(async () => {
       await deleteDB(dbName);
       const db = await openDB(dbName, 1, {
-        upgrade(db: IDBDatabase) {
+        upgrade(db) {
           db.createObjectStore(storeName);
         },
       });
@@ -70,9 +73,7 @@ function makeIDBReadGetAllBench(opts: IDBBenchOpts) {
             durability: 'relaxed',
           });
           const store = tx.objectStore(storeName);
-          const values = await store.getAll(
-            IDBKeyRange.bound(0, numKeys - 1),
-          );
+          const values = await store.getAll(IDBKeyRange.bound(0, numKeys - 1));
           console.log(`Read ${values.length} values`);
         };
       } finally {
@@ -92,7 +93,7 @@ function makeIDBReadGetAllGetAllKeysBench(opts: IDBBenchOpts) {
     beforeAll(async () => {
       await deleteDB(dbName);
       const db = await openDB(dbName, 1, {
-        upgrade(db: IDBDatabase) {
+        upgrade(db) {
           db.createObjectStore('store1');
         },
       });
@@ -139,7 +140,7 @@ function makeIDBReadGetBench(opts: IDBBenchOpts) {
     beforeAll(async () => {
       await deleteDB(dbName);
       const db = await openDB(dbName, 1, {
-        upgrade(db: IDBDatabase) {
+        upgrade(db) {
           db.createObjectStore(storeName);
         },
       });
@@ -182,7 +183,7 @@ function makeIDBWriteBench(opts: IDBBenchOpts) {
     beforeAll(async () => {
       await deleteDB('db1');
       const db = await openDB('db1', 1, {
-        upgrade(db: IDBDatabase) {
+        upgrade(db) {
           db.createObjectStore('store1');
         },
       });
@@ -217,7 +218,7 @@ function makeIDBReadGetWithInlineKeysBench(opts: IDBBenchOpts) {
     beforeAll(async () => {
       await deleteDB(dbName);
       const db = await openDB(dbName, 1, {
-        upgrade(db: IDBDatabase) {
+        upgrade(db) {
           db.createObjectStore(storeName, {keyPath: 'key'});
         },
       });
@@ -266,7 +267,7 @@ function makeIDBReadGetAllWithInlineKeyBench(opts: IDBBenchOpts) {
     beforeAll(async () => {
       await deleteDB(dbName);
       const db = await openDB(dbName, 1, {
-        upgrade(db: IDBDatabase) {
+        upgrade(db) {
           db.createObjectStore(storeName, {keyPath: 'key'});
         },
       });
@@ -293,9 +294,7 @@ function makeIDBReadGetAllWithInlineKeyBench(opts: IDBBenchOpts) {
             durability: 'relaxed',
           });
           const store = tx.objectStore(storeName);
-          const values = await store.getAll(
-            IDBKeyRange.bound(0, numKeys - 1),
-          );
+          const values = await store.getAll(IDBKeyRange.bound(0, numKeys - 1));
           console.log(`Read ${values.length} values`);
         };
       } finally {
@@ -315,7 +314,7 @@ function makeIDBWriteWithInlineKeyBench(opts: IDBBenchOpts) {
     beforeAll(async () => {
       await deleteDB(dbName);
       const db = await openDB(dbName, 1, {
-        upgrade(db: IDBDatabase) {
+        upgrade(db) {
           db.createObjectStore(storeName, {keyPath: 'key'});
         },
       });

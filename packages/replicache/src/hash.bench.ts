@@ -1,7 +1,7 @@
 import {createSHA512} from 'hash-wasm';
-import {makeRandomStrings} from '../../shared/src/test-data.ts';
-import {bench, describe} from '../../shared/src/bench.ts';
 import {beforeAll} from 'vitest';
+import {bench, describe} from '../../shared/src/bench.ts';
+import {makeRandomStrings} from '../../shared/src/test-data.ts';
 
 const NUM_STRINGS = 100;
 const STRING_LENGTH = 100_000;
@@ -48,7 +48,7 @@ describe('hash', () => {
       calculateHash = sum => hasher.init().update(sum).digest('binary');
     });
 
-    bench('sha512 wasm from string utf8', async () => {
+    bench('sha512 wasm from string utf8', () => {
       for (let i = 0; i < randomStrings.length; i++) {
         const sum = stringToUint8Array(randomStrings[i]);
         results.push(calculateHash(sum));
@@ -69,7 +69,7 @@ describe('hash', () => {
           .digest('binary');
     });
 
-    bench('sha512 wasm from string utf16', async () => {
+    bench('sha512 wasm from string utf16', () => {
       for (let i = 0; i < randomStrings.length; i++) {
         const sum = stringToUint16Array(randomStrings[i]);
         results.push(calculateHash(sum));

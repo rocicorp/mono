@@ -187,8 +187,13 @@ describe('replicache', () => {
     keysWatchedPerSub: number;
     numSubsDirty: number;
   }): string {
-    const {valueSize, numSubsTotal, keysPerSub, keysWatchedPerSub, numSubsDirty} =
-      opts;
+    const {
+      valueSize,
+      numSubsTotal,
+      keysPerSub,
+      keysWatchedPerSub,
+      numSubsDirty,
+    } = opts;
     const numKeys = keysPerSub * numSubsTotal;
     const cacheSizeMB = (numKeys * valueSize) / 1024 / 1024;
     const kbReadPerSub = (keysWatchedPerSub * valueSize) / 1024;
@@ -202,84 +207,95 @@ describe('replicache', () => {
     keysWatchedPerSub: number;
     numSubsDirty: number;
   }) {
-    const {valueSize, numSubsTotal, keysPerSub, keysWatchedPerSub, numSubsDirty} =
-      opts;
+    const {
+      valueSize,
+      numSubsTotal,
+      keysPerSub,
+      keysWatchedPerSub,
+      numSubsDirty,
+    } = opts;
     const numKeys = keysPerSub * numSubsTotal;
     const makeKey = (index: number) => `key${index}`;
 
-    bench(writeSubReadName(opts), async function* () {
-      const keys = Array.from({length: numKeys}, (_, index) => makeKey(index));
-      const sortedKeys = keys.sort();
-      const initData: Readonly<Record<string, TestDataObject>> =
-        Object.fromEntries(
-          keys.map(key => [key, jsonObjectTestData(valueSize)]),
+    bench(
+      writeSubReadName(opts),
+      async function* () {
+        const keys = Array.from({length: numKeys}, (_, index) =>
+          makeKey(index),
         );
-      const dataFromSubscribe: Record<string, TestDataObject> = {};
+        const sortedKeys = keys.sort();
+        const initData: Readonly<Record<string, TestDataObject>> =
+          Object.fromEntries(
+            keys.map(key => [key, jsonObjectTestData(valueSize)]),
+          );
+        const dataFromSubscribe: Record<string, TestDataObject> = {};
 
-      const rep = makeRep<{putMap: typeof putMap}>({
-        mutators: {putMap},
-      });
+        const rep = makeRep<{putMap: typeof putMap}>({
+          mutators: {putMap},
+        });
 
-      await rep.mutate.putMap(initData);
-      let onDataCallCount = 0;
+        await rep.mutate.putMap(initData);
+        let onDataCallCount = 0;
 
-      const subs = Array.from({length: numSubsTotal}, (_, i) => {
-        const startKeyIndex = i * keysPerSub;
-        return rep.subscribe(
-          tx => {
-            const startKey = sortedKeys[startKeyIndex];
-            return tx
-              .scan({
-                start: {key: startKey},
-                limit: keysWatchedPerSub,
-              })
-              .toArray();
-          },
-          {
-            onData(v) {
-              onDataCallCount++;
-              const vals = v as TestDataObject[];
-              for (const [j, val] of vals.entries()) {
-                dataFromSubscribe[sortedKeys[startKeyIndex + j]] = val;
-              }
+        const subs = Array.from({length: numSubsTotal}, (_, i) => {
+          const startKeyIndex = i * keysPerSub;
+          return rep.subscribe(
+            tx => {
+              const startKey = sortedKeys[startKeyIndex];
+              return tx
+                .scan({
+                  start: {key: startKey},
+                  limit: keysWatchedPerSub,
+                })
+                .toArray();
             },
-          },
+            {
+              onData(v) {
+                onDataCallCount++;
+                const vals = v as TestDataObject[];
+                for (const [j, val] of vals.entries()) {
+                  dataFromSubscribe[sortedKeys[startKeyIndex + j]] = val;
+                }
+              },
+            },
+          );
+        });
+
+        while (onDataCallCount !== numSubsTotal) {
+          await sleep(10);
+        }
+
+        const changes = Object.fromEntries(
+          sampleSize(range(numSubsTotal), numSubsDirty).map(v => [
+            sortedKeys[v * keysPerSub],
+            jsonObjectTestData(valueSize),
+          ]),
         );
-      });
 
-      while (onDataCallCount !== numSubsTotal) {
-        await sleep(10);
-      }
+        try {
+          yield async () => {
+            await rep.mutate.putMap(changes);
+          };
+        } finally {
+          subs.forEach(c => c());
+          await closeAndCleanupRep(rep);
+        }
 
-      const changes = Object.fromEntries(
-        sampleSize(range(numSubsTotal), numSubsDirty).map(v => [
-          sortedKeys[v * keysPerSub],
-          jsonObjectTestData(valueSize),
-        ]),
-      );
-
-      try {
-        yield async () => {
-          await rep.mutate.putMap(changes);
-        };
-      } finally {
-        subs.forEach(c => c());
-        await closeAndCleanupRep(rep);
-      }
-
-      assert(
-        onDataCallCount === numSubsTotal + numSubsDirty,
-        () =>
-          `Expected onDataCallCount (${onDataCallCount}) to equal numSubsTotal + numSubsDirty (${numSubsTotal + numSubsDirty})`,
-      );
-      for (const [changeKey, changeValue] of Object.entries(changes)) {
         assert(
-          deepEqual(changeValue, dataFromSubscribe[changeKey]),
+          onDataCallCount === numSubsTotal + numSubsDirty,
           () =>
-            `Expected subscription data for key '${changeKey}' to match the change value`,
+            `Expected onDataCallCount (${onDataCallCount}) to equal numSubsTotal + numSubsDirty (${numSubsTotal + numSubsDirty})`,
         );
-      }
-    }, slowBenchOpts);
+        for (const [changeKey, changeValue] of Object.entries(changes)) {
+          assert(
+            deepEqual(changeValue, dataFromSubscribe[changeKey]),
+            () =>
+              `Expected subscription data for key '${changeKey}' to match the change value`,
+          );
+        }
+      },
+      slowBenchOpts,
+    );
   }
 
   // write/sub/read 1mb
@@ -384,17 +400,21 @@ describe('replicache', () => {
       const repName = makeRepName();
       await setupPersistedData(repName, 5000);
 
-      let rep: ReplicacheImpl | undefined;
+      const openedReps: ReplicacheImpl[] = [];
       try {
         yield async () => {
-          rep = makeRep({
+          const rep = makeRep({
             name: repName,
             indexes: {idx: {jsonPointer: '/ascii'}},
           });
+          openedReps.push(rep);
           await rep.query(() => undefined);
         };
       } finally {
-        await closeAndCleanupRep(rep);
+        await Promise.all(openedReps.map(r => r.close()));
+        if (openedReps.length > 0) {
+          await dropIDBStoreWithMemFallback(openedReps[0].idbName);
+        }
       }
     },
     slowBenchOpts,
@@ -404,98 +424,101 @@ describe('replicache', () => {
   // startup
   // -------------------------------------------------------------------------
 
-  describe(
-    `startup read ${valSize}x100 from ${valSize}x100000 stored`,
-    () => {
-      const repName = makeRepName();
-      let lastRep: ReplicachePerfTest<Record<never, never>> | undefined;
+  describe(`startup read ${valSize}x100 from ${valSize}x100000 stored`, () => {
+    const repName = makeRepName();
+    let lastRep: ReplicachePerfTest<Record<never, never>> | undefined;
 
-      beforeAll(async () => {
-        await setupPersistedData(repName, 100000);
-      });
+    beforeAll(async () => {
+      await setupPersistedData(repName, 100000);
+    });
 
-      afterAll(async () => {
-        await closeAndCleanupRep(lastRep);
-      });
+    afterAll(async () => {
+      await closeAndCleanupRep(lastRep);
+    });
 
-      bench(
-        `startup read ${valSize}x100 from ${valSize}x100000 stored`,
-        async function* () {
-          const randomKeysToRead = sampleSize(range(100000), 100).map(
-            i => `key${i}`,
-          );
-          let rep: ReplicachePerfTest<Record<never, never>> | undefined;
+    bench(
+      `startup read ${valSize}x100 from ${valSize}x100000 stored`,
+      async function* () {
+        const randomKeysToRead = sampleSize(range(100000), 100).map(
+          i => `key${i}`,
+        );
+        const openedReps: ReplicachePerfTest<Record<never, never>>[] = [];
 
-          yield async () => {
-            rep = new ReplicachePerfTest({name: repName, pullInterval: null});
-            lastRep = rep;
-            let getCount = 0;
-            await rep.query(async (tx: ReadTransaction) => {
-              for (const randomKey of randomKeysToRead) {
-                getCount += Object.keys(
-                  (await tx.get(randomKey)) as TestDataObject,
-                ).length;
-              }
-            });
-            console.log(getCount);
-          };
+        yield async () => {
+          const rep = new ReplicachePerfTest({
+            name: repName,
+            pullInterval: null,
+          });
+          openedReps.push(rep);
+          lastRep = rep;
+          let getCount = 0;
+          await rep.query(async (tx: ReadTransaction) => {
+            for (const randomKey of randomKeysToRead) {
+              getCount += Object.keys(
+                (await tx.get(randomKey)) as TestDataObject,
+              ).length;
+            }
+          });
+          console.log(getCount);
+        };
 
-          // Close but don't drop IDB - needed for next iteration
-          await rep?.close();
-        },
-        slowBenchOpts,
-      );
-    },
-  );
+        // Close all reps opened during measurement to stop heartbeat timers
+        await Promise.all(openedReps.map(r => r.close()));
+      },
+      slowBenchOpts,
+    );
+  });
 
-  describe(
-    `startup scan ${valSize}x100 from ${valSize}x100000 stored`,
-    () => {
-      const repName = makeRepName();
-      let lastRep: ReplicachePerfTest<Record<never, never>> | undefined;
+  describe(`startup scan ${valSize}x100 from ${valSize}x100000 stored`, () => {
+    const repName = makeRepName();
+    let lastRep: ReplicachePerfTest<Record<never, never>> | undefined;
 
-      beforeAll(async () => {
-        await setupPersistedData(repName, 100000);
-      });
+    beforeAll(async () => {
+      await setupPersistedData(repName, 100000);
+    });
 
-      afterAll(async () => {
-        await closeAndCleanupRep(lastRep);
-      });
+    afterAll(async () => {
+      await closeAndCleanupRep(lastRep);
+    });
 
-      bench(
-        `startup scan ${valSize}x100 from ${valSize}x100000 stored`,
-        async function* () {
-          const keys = Array.from(
-            {length: 100000 - 100},
-            (_, index) => `key${index}`,
-          );
-          const sortedKeys = keys.sort();
-          const randomIndex = Math.floor(Math.random() * sortedKeys.length);
-          const randomStartKey = sortedKeys[randomIndex];
+    bench(
+      `startup scan ${valSize}x100 from ${valSize}x100000 stored`,
+      async function* () {
+        const keys = Array.from(
+          {length: 100000 - 100},
+          (_, index) => `key${index}`,
+        );
+        const sortedKeys = keys.sort();
+        const randomIndex = Math.floor(Math.random() * sortedKeys.length);
+        const randomStartKey = sortedKeys[randomIndex];
 
-          let rep: ReplicachePerfTest<Record<never, never>> | undefined;
+        const openedReps: ReplicachePerfTest<Record<never, never>>[] = [];
 
-          yield async () => {
-            rep = new ReplicachePerfTest({name: repName, pullInterval: null});
-            lastRep = rep;
-            await rep.query(async (tx: ReadTransaction) => {
-              let count = 0;
-              for await (const value of tx.scan({
-                start: {key: randomStartKey},
-                limit: 100,
-              })) {
-                count += Object.keys(value as TestDataObject).length;
-              }
-              console.log(count);
-            });
-          };
+        yield async () => {
+          const rep = new ReplicachePerfTest({
+            name: repName,
+            pullInterval: null,
+          });
+          openedReps.push(rep);
+          lastRep = rep;
+          await rep.query(async (tx: ReadTransaction) => {
+            let count = 0;
+            for await (const value of tx.scan({
+              start: {key: randomStartKey},
+              limit: 100,
+            })) {
+              count += Object.keys(value as TestDataObject).length;
+            }
+            console.log(count);
+          });
+        };
 
-          await rep?.close();
-        },
-        slowBenchOpts,
-      );
-    },
-  );
+        // Close all reps opened during measurement to stop heartbeat timers
+        await Promise.all(openedReps.map(r => r.close()));
+      },
+      slowBenchOpts,
+    );
+  });
 
   // -------------------------------------------------------------------------
   // persist
@@ -700,7 +723,10 @@ describe('replicache', () => {
       'populate tmcw',
       async function* () {
         const rep = makeRep<{
-          putFeatures: (tx: WriteTransaction, updates: JSONValue[]) => Promise<void>;
+          putFeatures: (
+            tx: WriteTransaction,
+            updates: JSONValue[],
+          ) => Promise<void>;
         }>({
           mutators: {
             async putFeatures(tx: WriteTransaction, updates: JSONValue[]) {
@@ -728,7 +754,10 @@ describe('replicache', () => {
       'persist tmcw',
       async function* () {
         const rep = makeRep<{
-          putFeatures: (tx: WriteTransaction, updates: JSONValue[]) => Promise<void>;
+          putFeatures: (
+            tx: WriteTransaction,
+            updates: JSONValue[],
+          ) => Promise<void>;
         }>({
           mutators: {
             async putFeatures(tx: WriteTransaction, updates: JSONValue[]) {
@@ -758,73 +787,83 @@ describe('replicache', () => {
   // rebase
   // -------------------------------------------------------------------------
 
+  // Rebase benchmark: measures pull/rebase of 1000 pending mutations.
+  // Pre-creates one rep per call (1 warmup + min_samples measurements) so each
+  // call gets a fresh rep with unconsumed mutations. Mitata always makes exactly
+  // 1 warmup call when the measured function takes > 500µs (which rebase does).
   bench(
     'rebase 1000x1024',
     async function* () {
-      const repName = makeRepName();
       const mutations = 1000;
       const targetSizePerMutation = 1024;
       const numKeys = 1000;
       const targetSizePerKey = 1024;
 
-      const rep = new ReplicachePerfTest({
-        name: repName,
-        pullInterval: null,
-        pushDelay: 9999,
-        mutators: {putMap},
-        // oxlint-disable-next-line require-await
-        puller: async () => ({
-          response: {
-            cookie: 1,
-            lastMutationIDChanges: {},
-            patch: [{op: 'put' as const, key: 'pull-done', value: true}],
-          },
-          httpRequestInfo: {
-            httpStatusCode: 200,
-            errorMessage: '',
-          },
-        }),
-      });
-
-      await rep.mutate.putMap(
-        Object.fromEntries(
-          Array.from({length: numKeys}).map((_, i) => [
-            `key${i}`,
-            jsonObjectTestData(targetSizePerKey),
-          ]),
-        ),
-      );
-
-      for (let i = 0; i < mutations; i++) {
-        await rep.mutate.putMap({
-          key: jsonObjectTestData(targetSizePerMutation),
+      async function createRebaseRep(): Promise<
+        ReplicachePerfTest<{putMap: typeof putMap}>
+      > {
+        const repName = makeRepName();
+        const rep = new ReplicachePerfTest({
+          name: repName,
+          pullInterval: null,
+          pushDelay: 9999,
+          mutators: {putMap},
+          // oxlint-disable-next-line require-await
+          puller: async () => ({
+            response: {
+              cookie: 1,
+              lastMutationIDChanges: {},
+              patch: [{op: 'put' as const, key: 'pull-done', value: true}],
+            },
+            httpRequestInfo: {
+              httpStatusCode: 200,
+              errorMessage: '',
+            },
+          }),
         });
+        await rep.mutate.putMap(
+          Object.fromEntries(
+            Array.from({length: numKeys}).map((_, i) => [
+              `key${i}`,
+              jsonObjectTestData(targetSizePerKey),
+            ]),
+          ),
+        );
+        for (let i = 0; i < mutations; i++) {
+          await rep.mutate.putMap({
+            key: jsonObjectTestData(targetSizePerMutation),
+          });
+        }
+        return rep;
       }
 
-      const {promise, resolve} = resolver<void>();
-      let subscribeCallCount = 0;
-      const cancel = rep.subscribe(tx => tx.get('pull-done'), {
-        onData: r => {
-          subscribeCallCount++;
-          if (r) resolve();
-        },
-      });
+      // 1 warmup call + min_samples (1) measurement call = 2 total calls.
+      const [warmupRep, ...measureReps] = await Promise.all([
+        createRebaseRep(),
+        createRebaseRep(),
+      ]);
+      const allReps = [warmupRep, ...measureReps];
+      let idx = 0;
 
-      try {
-        yield async () => {
-          void rep.pull();
-          await promise;
-        };
-      } finally {
+      yield async () => {
+        const rep = allReps[idx++];
+        const {promise, resolve} = resolver<void>();
+        const cancel = rep.subscribe(tx => tx.get('pull-done'), {
+          onData: r => {
+            if (r) resolve();
+          },
+        });
+        // Suppress "Closed" rejection when rep.close() aborts the in-flight pull.
+        rep.pull().catch(() => {});
+        await promise;
         cancel();
+      };
+
+      // Cleanup after all calls so IDB deletion is not included in timing.
+      for (const rep of allReps) {
         await closeAndCleanupRep(rep);
       }
-
-      assert(
-        subscribeCallCount === 2,
-        'subscribe should have been called: ' + subscribeCallCount,
-      );
     },
-    slowBenchOpts,
+    {min_samples: 1, min_cpu_time: 0},
   );
 });
