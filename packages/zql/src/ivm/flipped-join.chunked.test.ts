@@ -2,6 +2,8 @@ import {afterEach, describe, expect, test} from 'vitest';
 import {testLogConfig} from '../../../otel/src/test-log-config.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {must} from '../../../shared/src/must.ts';
+import type {Row} from '../../../zero-protocol/src/data.ts';
+import type {SchemaValue} from '../../../zero-schema/src/table-schema.ts';
 import type {CaughtNode} from './catch.ts';
 import {Catch} from './catch.ts';
 import type {Node} from './data.ts';
@@ -42,23 +44,34 @@ afterEach(() => {
 });
 
 /**
- * When `multiConstraint` exceeds the chunk size, FlippedJoin issues
- * multiple parent.fetch calls and merges their sorted streams. This test
- * sets the chunk size to 2 with 5 children so we get 3 chunks (2 + 2 + 1)
- * and asserts:
- *   - the parent fetches are split across 3 calls
- *   - the merged output is in parent compareRows order
- *   - each parent is grouped with the right children
+ * Builds a parent/child source pair, pushes rows, and wires them into a
+ * FlippedJoin keyed on `parent.id` / `child.parentId`.
+ *
+ * Defaults: parents are `{id: 'pN', label: 'Parent N'}`; children are 1:1
+ * (`{id: 'cN', parentId: 'pN'}`). Override `parentColumns`+`parentRow` for
+ * extra columns, or `childPushes` for non-1:1 shapes (incl. null FKs).
+ *
+ * When `wrapParent` / `wrapChild` is provided, the connected source is passed
+ * through it instead of a Snitch — that side's calls won't appear in `log`.
  */
-test('chunked fetch merges sorted streams across multiple parent.fetch calls', () => {
-  // Force a tiny chunk so a moderate child count exercises the path.
-  restoreChunkSize = setMultiConstraintChunkSizeForTest(2);
+function makeSetup(opts: {
+  chunkSize?: number;
+  parentCount: number;
+  parentColumns?: Record<string, SchemaValue>;
+  parentRow?: (i: number) => Row;
+  childPushes?: readonly Row[];
+  wrapParent?: (input: Input) => Input;
+  wrapChild?: (input: Input) => Input;
+}) {
+  if (opts.chunkSize !== undefined) {
+    restoreChunkSize = setMultiConstraintChunkSizeForTest(opts.chunkSize);
+  }
 
   const parent = createSource(
     lc,
     testLogConfig,
     'parent',
-    {id: {type: 'string'}, label: {type: 'string'}},
+    opts.parentColumns ?? {id: {type: 'string'}, label: {type: 'string'}},
     ['id'],
   );
   const child = createSource(
@@ -69,29 +82,57 @@ test('chunked fetch merges sorted streams across multiple parent.fetch calls', (
     ['id'],
   );
 
-  // 5 distinct parents, 5 children referencing 5 distinct parent ids.
-  for (let i = 1; i <= 5; i++) {
-    consume(
-      parent.push(makeSourceChangeAdd({id: `p${i}`, label: `Parent ${i}`})),
-    );
+  const parentRow =
+    opts.parentRow ?? ((i: number) => ({id: `p${i}`, label: `Parent ${i}`}));
+  for (let i = 1; i <= opts.parentCount; i++) {
+    consume(parent.push(makeSourceChangeAdd(parentRow(i))));
   }
-  for (let i = 1; i <= 5; i++) {
-    consume(child.push(makeSourceChangeAdd({id: `c${i}`, parentId: `p${i}`})));
+
+  const childPushes =
+    opts.childPushes ??
+    Array.from({length: opts.parentCount}, (_, idx) => ({
+      id: `c${idx + 1}`,
+      parentId: `p${idx + 1}`,
+    }));
+  for (const c of childPushes) {
+    consume(child.push(makeSourceChangeAdd(c)));
   }
 
   const log: SnitchMessage[] = [];
-  const parentSnitch = new Snitch(parent.connect([['id', 'asc']]), 'p', log);
-  const childSnitch = new Snitch(child.connect([['id', 'asc']]), 'c', log);
+  const parentConnected = parent.connect([['id', 'asc']]);
+  const childConnected = child.connect([['id', 'asc']]);
+
+  const parentInput: Input = opts.wrapParent
+    ? opts.wrapParent(parentConnected)
+    : new Snitch(parentConnected, 'p', log);
+  const childInput: Input = opts.wrapChild
+    ? opts.wrapChild(childConnected)
+    : new Snitch(childConnected, 'c', log);
 
   const fj = new FlippedJoin({
-    parent: parentSnitch,
-    child: childSnitch,
+    parent: parentInput,
+    child: childInput,
     parentKey: ['id'],
     childKey: ['parentId'],
     relationshipName: 'children',
     hidden: false,
     system: 'client',
   });
+
+  return {fj, log, parent, child};
+}
+
+/**
+ * When `multiConstraint` exceeds the chunk size, FlippedJoin issues
+ * multiple parent.fetch calls and merges their sorted streams. This test
+ * sets the chunk size to 2 with 5 children so we get 3 chunks (2 + 2 + 1)
+ * and asserts:
+ *   - the parent fetches are split across 3 calls
+ *   - the merged output is in parent compareRows order
+ *   - each parent is grouped with the right children
+ */
+test('chunked fetch merges sorted streams across multiple parent.fetch calls', () => {
+  const {fj, log} = makeSetup({chunkSize: 2, parentCount: 5});
 
   const result = new Catch(fj).fetch({});
 
@@ -122,43 +163,7 @@ test('chunked fetch merges sorted streams across multiple parent.fetch calls', (
 
 test('single chunk path used when multiConstraints fits in one chunk', () => {
   // Default chunk size is 256; 3 children fit comfortably.
-  const parent = createSource(
-    lc,
-    testLogConfig,
-    'parent',
-    {id: {type: 'string'}, label: {type: 'string'}},
-    ['id'],
-  );
-  const child = createSource(
-    lc,
-    testLogConfig,
-    'child',
-    {id: {type: 'string'}, parentId: {type: 'string'}},
-    ['id'],
-  );
-
-  for (let i = 1; i <= 3; i++) {
-    consume(
-      parent.push(makeSourceChangeAdd({id: `p${i}`, label: `Parent ${i}`})),
-    );
-  }
-  for (let i = 1; i <= 3; i++) {
-    consume(child.push(makeSourceChangeAdd({id: `c${i}`, parentId: `p${i}`})));
-  }
-
-  const log: SnitchMessage[] = [];
-  const parentSnitch = new Snitch(parent.connect([['id', 'asc']]), 'p', log);
-  const childSnitch = new Snitch(child.connect([['id', 'asc']]), 'c', log);
-
-  const fj = new FlippedJoin({
-    parent: parentSnitch,
-    child: childSnitch,
-    parentKey: ['id'],
-    childKey: ['parentId'],
-    relationshipName: 'children',
-    hidden: false,
-    system: 'client',
-  });
+  const {fj, log} = makeSetup({parentCount: 3});
 
   const result = new Catch(fj).fetch({});
   expect(result.map(n => asRow(n).row.id)).toEqual(['p1', 'p2', 'p3']);
@@ -174,73 +179,41 @@ test('chunked fetch propagates .return() to sub-streams on early termination', (
   // .return() mid-merge, sub-stream iterators leaked. With SQLite cursors
   // backing those iterators, this caused subsequent operations on the
   // same connection to fail with "database connection is busy".
-  restoreChunkSize = setMultiConstraintChunkSizeForTest(2);
-
-  const parent = createSource(
-    lc,
-    testLogConfig,
-    'parent',
-    {id: {type: 'string'}, label: {type: 'string'}},
-    ['id'],
-  );
-  const child = createSource(
-    lc,
-    testLogConfig,
-    'child',
-    {id: {type: 'string'}, parentId: {type: 'string'}},
-    ['id'],
-  );
-
-  for (let i = 1; i <= 5; i++) {
-    consume(
-      parent.push(makeSourceChangeAdd({id: `p${i}`, label: `Parent ${i}`})),
-    );
-  }
-  for (let i = 1; i <= 5; i++) {
-    consume(child.push(makeSourceChangeAdd({id: `c${i}`, parentId: `p${i}`})));
-  }
 
   // Wrap parent.fetch so each returned stream tracks whether .return()
   // was called. With chunk size 2 and 5 children we get 3 chunks; the
   // outer iterator only consumes from the first chunk before breaking,
   // so the second & third chunks must have .return() propagated.
-  const parentInput = parent.connect([['id', 'asc']]);
   const returnCalls: number[] = [];
   let nextStreamIdx = 0;
-  const wrappedParent: Input = {
-    getSchema: () => parentInput.getSchema(),
-    setOutput: (o: Output) => parentInput.setOutput(o),
-    destroy: () => parentInput.destroy(),
-    fetch: (req: FetchRequest): Stream<Node | 'yield'> => {
-      const idx = nextStreamIdx++;
-      const inner = parentInput.fetch(req);
-      return {
-        [Symbol.iterator]() {
-          const it = inner[Symbol.iterator]();
-          const wrapped: IterableIterator<Node | 'yield'> = {
-            next: () => it.next(),
-            return(value?: unknown): IteratorResult<Node | 'yield'> {
-              returnCalls.push(idx);
-              return it.return?.(value) ?? {done: true, value: undefined};
-            },
-            [Symbol.iterator]() {
-              return wrapped;
-            },
-          };
-          return wrapped;
-        },
-      };
-    },
-  };
-
-  const fj = new FlippedJoin({
-    parent: wrappedParent,
-    child: child.connect([['id', 'asc']]),
-    parentKey: ['id'],
-    childKey: ['parentId'],
-    relationshipName: 'children',
-    hidden: false,
-    system: 'client',
+  const {fj} = makeSetup({
+    chunkSize: 2,
+    parentCount: 5,
+    wrapParent: parentInput => ({
+      getSchema: () => parentInput.getSchema(),
+      setOutput: (o: Output) => parentInput.setOutput(o),
+      destroy: () => parentInput.destroy(),
+      fetch: (req: FetchRequest): Stream<Node | 'yield'> => {
+        const idx = nextStreamIdx++;
+        const inner = parentInput.fetch(req);
+        return {
+          [Symbol.iterator]() {
+            const it = inner[Symbol.iterator]();
+            const wrapped: IterableIterator<Node | 'yield'> = {
+              next: () => it.next(),
+              return(value?: unknown): IteratorResult<Node | 'yield'> {
+                returnCalls.push(idx);
+                return it.return?.(value) ?? {done: true, value: undefined};
+              },
+              [Symbol.iterator]() {
+                return wrapped;
+              },
+            };
+            return wrapped;
+          },
+        };
+      },
+    }),
   });
 
   // Manually pull from the generator and break early, so .return() is
@@ -264,29 +237,6 @@ test('chunked fetch forwards yields from parent and child sub-streams', () => {
   // forwarded to the caller. For the chunked path, this means
   // `mergeSortedStreams` must forward yields from each sub-stream, and
   // FlippedJoin must forward them after the merge.
-  restoreChunkSize = setMultiConstraintChunkSizeForTest(2);
-
-  const parent = createSource(
-    lc,
-    testLogConfig,
-    'parent',
-    {id: {type: 'string'}, label: {type: 'string'}},
-    ['id'],
-  );
-  const child = createSource(
-    lc,
-    testLogConfig,
-    'child',
-    {id: {type: 'string'}, parentId: {type: 'string'}},
-    ['id'],
-  );
-
-  for (let i = 1; i <= 5; i++) {
-    consume(
-      parent.push(makeSourceChangeAdd({id: `p${i}`, label: `Parent ${i}`})),
-    );
-    consume(child.push(makeSourceChangeAdd({id: `c${i}`, parentId: `p${i}`})));
-  }
 
   // Inject 'yield' before every row of every fetch on this Input.
   function yieldInjector(inner: Input): Input {
@@ -303,14 +253,11 @@ test('chunked fetch forwards yields from parent and child sub-streams', () => {
     };
   }
 
-  const fj = new FlippedJoin({
-    parent: yieldInjector(parent.connect([['id', 'asc']])),
-    child: yieldInjector(child.connect([['id', 'asc']])),
-    parentKey: ['id'],
-    childKey: ['parentId'],
-    relationshipName: 'children',
-    hidden: false,
-    system: 'client',
+  const {fj} = makeSetup({
+    chunkSize: 2,
+    parentCount: 5,
+    wrapParent: yieldInjector,
+    wrapChild: yieldInjector,
   });
 
   // Collect both yields and rows so we can prove yields are forwarded.
@@ -337,52 +284,15 @@ test('chunked fetch forwards yields from parent and child sub-streams', () => {
 });
 
 test('chunked fetch dedupes children sharing the same parent-key value', () => {
-  restoreChunkSize = setMultiConstraintChunkSizeForTest(2);
-
-  const parent = createSource(
-    lc,
-    testLogConfig,
-    'parent',
-    {id: {type: 'string'}, label: {type: 'string'}},
-    ['id'],
-  );
-  const child = createSource(
-    lc,
-    testLogConfig,
-    'child',
-    {id: {type: 'string'}, parentId: {type: 'string'}},
-    ['id'],
-  );
-
   // 3 distinct parents but 6 children (each parent has 2 children).
-  for (let i = 1; i <= 3; i++) {
-    consume(
-      parent.push(makeSourceChangeAdd({id: `p${i}`, label: `Parent ${i}`})),
-    );
-  }
+  const childPushes: Row[] = [];
   let n = 1;
   for (let i = 1; i <= 3; i++) {
-    consume(
-      child.push(makeSourceChangeAdd({id: `c${n++}`, parentId: `p${i}`})),
-    );
-    consume(
-      child.push(makeSourceChangeAdd({id: `c${n++}`, parentId: `p${i}`})),
-    );
+    childPushes.push({id: `c${n++}`, parentId: `p${i}`});
+    childPushes.push({id: `c${n++}`, parentId: `p${i}`});
   }
 
-  const log: SnitchMessage[] = [];
-  const parentSnitch = new Snitch(parent.connect([['id', 'asc']]), 'p', log);
-  const childSnitch = new Snitch(child.connect([['id', 'asc']]), 'c', log);
-
-  const fj = new FlippedJoin({
-    parent: parentSnitch,
-    child: childSnitch,
-    parentKey: ['id'],
-    childKey: ['parentId'],
-    relationshipName: 'children',
-    hidden: false,
-    system: 'client',
-  });
+  const {fj, log} = makeSetup({chunkSize: 2, parentCount: 3, childPushes});
 
   const result = new Catch(fj).fetch({});
 
@@ -401,64 +311,21 @@ test('chunked fetch dedupes children sharing the same parent-key value', () => {
 });
 
 /**
- * Helper: 5 parents, 5 1:1 children, chunk size set to 2 → 3 chunks.
- * Returns the FlippedJoin and a setup that the FetchRequest tests below
- * share, so each test focuses on its own assertion. Each parent also
+ * 5 parents, 5 1:1 children, chunk size 2 → 3 chunks. Each parent also
  * carries an `active` flag (p2 is inactive) so we can test req.constraint
  * on a non-join column.
  */
 function setupFiveOneToOne() {
-  restoreChunkSize = setMultiConstraintChunkSizeForTest(2);
-
-  const parent = createSource(
-    lc,
-    testLogConfig,
-    'parent',
-    {
+  return makeSetup({
+    chunkSize: 2,
+    parentCount: 5,
+    parentColumns: {
       id: {type: 'string'},
       label: {type: 'string'},
       active: {type: 'boolean'},
     },
-    ['id'],
-  );
-  const child = createSource(
-    lc,
-    testLogConfig,
-    'child',
-    {id: {type: 'string'}, parentId: {type: 'string'}},
-    ['id'],
-  );
-
-  for (let i = 1; i <= 5; i++) {
-    consume(
-      parent.push(
-        makeSourceChangeAdd({
-          id: `p${i}`,
-          label: `Parent ${i}`,
-          active: i !== 2,
-        }),
-      ),
-    );
-  }
-  for (let i = 1; i <= 5; i++) {
-    consume(child.push(makeSourceChangeAdd({id: `c${i}`, parentId: `p${i}`})));
-  }
-
-  const log: SnitchMessage[] = [];
-  const parentSnitch = new Snitch(parent.connect([['id', 'asc']]), 'p', log);
-  const childSnitch = new Snitch(child.connect([['id', 'asc']]), 'c', log);
-
-  const fj = new FlippedJoin({
-    parent: parentSnitch,
-    child: childSnitch,
-    parentKey: ['id'],
-    childKey: ['parentId'],
-    relationshipName: 'children',
-    hidden: false,
-    system: 'client',
+    parentRow: i => ({id: `p${i}`, label: `Parent ${i}`, active: i !== 2}),
   });
-
-  return {fj, log};
 }
 
 test('chunked fetch with reverse: true yields parents in descending order', () => {
@@ -682,48 +549,10 @@ test.each([
 ])(
   'chunk boundary: $n children at chunk size $chunkSize → $expectedChunks',
   ({n, chunkSize, expectedChunks}) => {
-    restoreChunkSize = setMultiConstraintChunkSizeForTest(chunkSize);
-
-    const parent = createSource(
-      lc,
-      testLogConfig,
-      'parent',
-      {id: {type: 'string'}, label: {type: 'string'}},
-      ['id'],
-    );
-    const child = createSource(
-      lc,
-      testLogConfig,
-      'child',
-      {id: {type: 'string'}, parentId: {type: 'string'}},
-      ['id'],
-    );
-
-    for (let i = 1; i <= n; i++) {
-      consume(
-        parent.push(makeSourceChangeAdd({id: `p${i}`, label: `Parent ${i}`})),
-      );
-      consume(
-        child.push(makeSourceChangeAdd({id: `c${i}`, parentId: `p${i}`})),
-      );
-    }
-
-    const log: SnitchMessage[] = [];
-    const parentSnitch = new Snitch(parent.connect([['id', 'asc']]), 'p', log);
-    const childSnitch = new Snitch(child.connect([['id', 'asc']]), 'c', log);
-
-    const fj = new FlippedJoin({
-      parent: parentSnitch,
-      child: childSnitch,
-      parentKey: ['id'],
-      childKey: ['parentId'],
-      relationshipName: 'children',
-      hidden: false,
-      system: 'client',
-    });
+    const {fj, log} = makeSetup({chunkSize, parentCount: n});
 
     const result = new Catch(fj).fetch({});
-    expect(result.map(n => asRow(n).row.id)).toEqual(
+    expect(result.map(node => asRow(node).row.id)).toEqual(
       Array.from({length: n}, (_, i) => `p${i + 1}`),
     );
 
@@ -741,50 +570,19 @@ test('children with null FK are silently dropped from the multi-constraint', () 
   // buildJoinConstraint returns undefined when any source value is null,
   // and #fetchBatched skips those children when computing the dedup map.
   // Verify under chunking so we hit the multi-chunk path as well.
-  restoreChunkSize = setMultiConstraintChunkSizeForTest(2);
-
-  const parent = createSource(
-    lc,
-    testLogConfig,
-    'parent',
-    {id: {type: 'string'}, label: {type: 'string'}},
-    ['id'],
-  );
-  const child = createSource(
-    lc,
-    testLogConfig,
-    'child',
-    {id: {type: 'string'}, parentId: {type: 'string'}},
-    ['id'],
-  );
-
-  // 4 parents.
-  for (let i = 1; i <= 4; i++) {
-    consume(
-      parent.push(makeSourceChangeAdd({id: `p${i}`, label: `Parent ${i}`})),
-    );
-  }
+  //
   // 5 children: c0 has null FK, c1..c4 each point at p1..p4. With chunk
   // size 2, the 4 valid children must split into 2 chunks (not 3), proving
   // the null-FK row was dropped before chunking.
-  consume(child.push(makeSourceChangeAdd({id: 'c0', parentId: null})));
-  for (let i = 1; i <= 4; i++) {
-    consume(child.push(makeSourceChangeAdd({id: `c${i}`, parentId: `p${i}`})));
-  }
+  const childPushes: Row[] = [
+    {id: 'c0', parentId: null},
+    {id: 'c1', parentId: 'p1'},
+    {id: 'c2', parentId: 'p2'},
+    {id: 'c3', parentId: 'p3'},
+    {id: 'c4', parentId: 'p4'},
+  ];
 
-  const log: SnitchMessage[] = [];
-  const parentSnitch = new Snitch(parent.connect([['id', 'asc']]), 'p', log);
-  const childSnitch = new Snitch(child.connect([['id', 'asc']]), 'c', log);
-
-  const fj = new FlippedJoin({
-    parent: parentSnitch,
-    child: childSnitch,
-    parentKey: ['id'],
-    childKey: ['parentId'],
-    relationshipName: 'children',
-    hidden: false,
-    system: 'client',
-  });
+  const {fj, log} = makeSetup({chunkSize: 2, parentCount: 4, childPushes});
 
   const result = new Catch(fj).fetch({});
 
@@ -815,41 +613,7 @@ test('inprogress child REMOVE incompatible with req.constraint is dropped from m
   // {id:'p2'}. The splice would put c1 back into childNodes, but its
   // parent-key {id:'p1'} conflicts with req.constraint and must be
   // dropped from the multi.
-  const parent = createSource(
-    lc,
-    testLogConfig,
-    'parent',
-    {id: {type: 'string'}, label: {type: 'string'}},
-    ['id'],
-  );
-  const child = createSource(
-    lc,
-    testLogConfig,
-    'child',
-    {id: {type: 'string'}, parentId: {type: 'string'}},
-    ['id'],
-  );
-
-  for (let i = 1; i <= 3; i++) {
-    consume(
-      parent.push(makeSourceChangeAdd({id: `p${i}`, label: `Parent ${i}`})),
-    );
-    consume(child.push(makeSourceChangeAdd({id: `c${i}`, parentId: `p${i}`})));
-  }
-
-  const log: SnitchMessage[] = [];
-  const parentSnitch = new Snitch(parent.connect([['id', 'asc']]), 'p', log);
-  const childSnitch = new Snitch(child.connect([['id', 'asc']]), 'c', log);
-
-  const fj = new FlippedJoin({
-    parent: parentSnitch,
-    child: childSnitch,
-    parentKey: ['id'],
-    childKey: ['parentId'],
-    relationshipName: 'children',
-    hidden: false,
-    system: 'client',
-  });
+  const {fj, child, log} = makeSetup({parentCount: 3});
 
   let fetched: CaughtNode[] | undefined;
   fj.setOutput({
