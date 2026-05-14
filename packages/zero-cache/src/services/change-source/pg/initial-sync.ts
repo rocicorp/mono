@@ -40,6 +40,7 @@ import {
 import {liteTableName} from '../../../types/names.ts';
 import {PG_15, PG_17} from '../../../types/pg-versions.ts';
 import {
+  connectPgClient,
   pgClient,
   type PostgresDB,
   type PostgresTransaction,
@@ -112,7 +113,7 @@ export async function initialSync(
     shadow,
   } = syncOptions;
   const copyProfiler = profileCopy ? await CpuProfiler.connect() : null;
-  const sql = pgClient(lc, upstreamURI, 'initial-sync');
+  const sql = await connectPgClient(lc, upstreamURI, 'initial-sync');
   // Replication session is only needed to create a replication slot in the
   // real path. In shadow mode we export a snapshot on a normal connection
   // instead, so no replication session is opened.
@@ -206,10 +207,15 @@ export async function initialSync(
         ? numTables
         : Math.min(tableCopyWorkers, numTables);
 
-    const copyPool = pgClient(lc, upstreamURI, 'initial-sync-copy-worker', {
-      max: numWorkers,
-      ['max_lifetime']: 120 * 60, // set a long (2h) limit for COPY streaming
-    });
+    const copyPool = await connectPgClient(
+      lc,
+      upstreamURI,
+      'initial-sync-copy-worker',
+      {
+        max: numWorkers,
+        ['max_lifetime']: 120 * 60, // set a long (2h) limit for COPY streaming
+      },
+    );
     const copiers = startTableCopyWorkers(
       lc,
       copyPool,
@@ -493,9 +499,14 @@ async function acquireExportedSnapshotForShadowSync(
   lsn: string;
   release: () => Promise<void>;
 }> {
-  const holder = pgClient(lc, upstreamURI, 'shadow-initial-sync-snapshot', {
-    max: 1,
-  });
+  const holder = await connectPgClient(
+    lc,
+    upstreamURI,
+    'shadow-initial-sync-snapshot',
+    {
+      max: 1,
+    },
+  );
   const ready = resolver<{snapshot: string; lsn: string}>();
   const release = resolver<void>();
   const held = holder

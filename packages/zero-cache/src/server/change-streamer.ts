@@ -27,7 +27,7 @@ import {
   replicationStatusError,
   ReplicationStatusPublisher,
 } from '../services/replicator/replication-status.ts';
-import {pgClient} from '../types/pg.ts';
+import {connectPgClient} from '../types/pg.ts';
 import {
   parentWorker,
   singleProcessMode,
@@ -74,7 +74,7 @@ export default async function runWorker(
   initEventSink(lc, config);
 
   // Kick off DB connection warmup in the background.
-  const changeDB = pgClient(
+  const changeDB = await connectPgClient(
     lc,
     change.db,
     'change-streamer',

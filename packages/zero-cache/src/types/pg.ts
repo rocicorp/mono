@@ -1,9 +1,22 @@
+import {
+  PG_CONFIGURATION_LIMIT_EXCEEDED,
+  PG_CONNECTION_DOES_NOT_EXIST,
+  PG_CONNECTION_EXCEPTION,
+  PG_CONNECTION_FAILURE,
+  PG_INSUFFICIENT_PRIVILEGE,
+  PG_INVALID_AUTHORIZATION_SPECIFICATION,
+  PG_INVALID_CATALOG_NAME,
+  PG_INVALID_PASSWORD,
+  PG_SQLCLIENT_UNABLE_TO_ESTABLISH_SQLCONNECTION,
+  PG_TOO_MANY_CONNECTIONS,
+} from '@drdgvhbh/postgres-error-codes';
 import {PreciseDate} from '@google-cloud/precise-date';
 import {OID} from '@postgresql-typed/oids';
 import type {LogContext} from '@rocicorp/logger';
 import postgres, {type Notice, type PostgresType} from 'postgres';
 import {BigIntJSON, type JSONValue} from '../../../shared/src/bigint-json.ts';
 import {randInt} from '../../../shared/src/rand.ts';
+import {ConfigurationError} from './configuration-error.ts';
 import {
   DATE,
   JSON,
@@ -380,6 +393,24 @@ export function pgClient(
   });
 }
 
+export async function connectPgClient(
+  ...args: Parameters<typeof pgClient>
+): Promise<PostgresDB> {
+  const db = pgClient(...args);
+  try {
+    await db`SELECT 1`.simple().execute();
+    return db;
+  } catch (e) {
+    if (isPostgresConfigError(e)) {
+      throw new ConfigurationError(
+        'Unable to connect to Postgres. Check your database configuration.',
+        {cause: e},
+      );
+    }
+    throw e;
+  }
+}
+
 /**
  * Disables any statement_timeout for the current transaction. By default,
  * Postgres does not impose a statement timeout, but some users and providers
@@ -406,4 +437,51 @@ export const typeNameByOID: Record<number, string> = Object.freeze(
 
 export function isPostgresError(e: unknown, ...codes: [string, ...string[]]) {
   return e instanceof postgres.PostgresError && codes.includes(e.code);
+}
+
+function isPostgresStartupConnectionError(e: unknown) {
+  if (!(e instanceof Error) || !('code' in e)) {
+    return false;
+  }
+  const {code} = e;
+  // postgres.js throws plain Error instances for connection failures that
+  // happen before Postgres can return a SQLSTATE. These are still startup
+  // configuration problems for Zero: wrong host/port, unreachable DB, DNS,
+  // TLS certificate mismatch, etc.
+  return (
+    typeof code === 'string' &&
+    [
+      'CONNECT_TIMEOUT',
+      'ECONNREFUSED',
+      'ECONNRESET',
+      'EHOSTUNREACH',
+      'ENETUNREACH',
+      'ENOTFOUND',
+      'EAI_AGAIN',
+      'ETIMEDOUT',
+      'ERR_TLS_CERT_ALTNAME_INVALID',
+      'SELF_SIGNED_CERT_IN_CHAIN',
+      'DEPTH_ZERO_SELF_SIGNED_CERT',
+      'UNABLE_TO_VERIFY_LEAF_SIGNATURE',
+    ].includes(code)
+  );
+}
+
+export function isPostgresConfigError(e: unknown) {
+  return (
+    isPostgresStartupConnectionError(e) ||
+    isPostgresError(
+      e,
+      PG_CONNECTION_EXCEPTION,
+      PG_SQLCLIENT_UNABLE_TO_ESTABLISH_SQLCONNECTION,
+      PG_CONNECTION_DOES_NOT_EXIST,
+      PG_CONNECTION_FAILURE,
+      PG_INVALID_AUTHORIZATION_SPECIFICATION,
+      PG_INVALID_PASSWORD,
+      PG_INVALID_CATALOG_NAME,
+      PG_INSUFFICIENT_PRIVILEGE,
+      PG_TOO_MANY_CONNECTIONS,
+      PG_CONFIGURATION_LIMIT_EXCEEDED,
+    )
+  );
 }

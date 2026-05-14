@@ -6,7 +6,7 @@ import {exitAfter, runUntilKilled} from '../services/life-cycle.ts';
 import {ActiveUsersGauge} from '../services/view-syncer/active-users-gauge.ts';
 import {CVRPurger} from '../services/view-syncer/cvr-purger.ts';
 import {initViewSyncerSchema} from '../services/view-syncer/schema/init.ts';
-import {pgClient} from '../types/pg.ts';
+import {connectPgClient} from '../types/pg.ts';
 import {
   parentWorker,
   singleProcessMode,
@@ -36,7 +36,7 @@ export default async function runWorker(
 
   const {cvr} = config;
   const shard = getShardID(config);
-  const cvrDB = pgClient(lc, cvr.db, `sync-cvr-purger`, {
+  const cvrDB = await connectPgClient(lc, cvr.db, `sync-cvr-purger`, {
     max: 1,
   });
   await initViewSyncerSchema(lc, cvrDB, shard);

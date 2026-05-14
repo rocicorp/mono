@@ -3,6 +3,7 @@ import {pid} from 'node:process';
 import type {EventEmitter} from 'stream';
 import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
+import {ConfigurationError} from '../types/configuration-error.ts';
 import {
   singleProcessMode,
   type Subprocess,
@@ -308,6 +309,10 @@ export async function exitAfter(lc: LogContext, run: () => Promise<void>) {
     lc.info?.(`pid ${pid} exiting normally`);
     process.exit(0);
   } catch (e) {
+    if (e instanceof ConfigurationError) {
+      lc.error?.(`exiting with configuration error: ${String(e)}`, e);
+      process.exit(0);
+    }
     lc.error?.(`exiting with error: ${String(e)}`, e);
     process.exit(-1);
   }

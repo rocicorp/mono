@@ -18,7 +18,7 @@ import {TsvParser} from '../../../db/pg-copy.ts';
 import {getTypeParsers} from '../../../db/pg-type-parser.ts';
 import type {PublishedTableSpec} from '../../../db/specs.ts';
 import {importSnapshot, TransactionPool} from '../../../db/transaction-pool.ts';
-import {pgClient, type PostgresDB} from '../../../types/pg.ts';
+import {connectPgClient, pgClient, type PostgresDB} from '../../../types/pg.ts';
 import {SchemaIncompatibilityError} from '../common/backfill-manager.ts';
 import type {
   BackfillCompleted,
@@ -88,7 +88,7 @@ export async function* streamBackfill(
 
   const {flushThresholdBytes = POSTGRES_COPY_CHUNK_SIZE, textCopy = false} =
     opts;
-  const db = pgClient(lc, upstreamURI, 'backfill-stream', {
+  const db = await connectPgClient(lc, upstreamURI, 'backfill-stream', {
     ['max_lifetime']: 120 * 60, // set a long (2h) limit for COPY streaming
   });
   let tx: TransactionPool | undefined;
