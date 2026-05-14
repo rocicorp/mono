@@ -1,101 +1,163 @@
-import {setImmediate as yieldImmediate} from 'node:timers/promises';
+import {
+  setImmediate as yieldImmediate,
+  setTimeout as delay,
+} from 'node:timers/promises';
 import {Subscription} from '../../src/types/subscription.ts';
-
-export const MESSAGE_COUNT = 100_000;
-const YIELD_EVERY = 512;
-const PAYLOAD = JSON.stringify([
-  'data',
-  {
-    tag: 'insert',
-    relation: {schema: 'public', name: 'issues', replicaIdentity: 'default'},
-    new: {id: 'issue-1', title: 'the view-syncer is behind', owner: 'rm'},
-  },
-]);
+import {scenarios, type HandoffScenario} from './scenarios.ts';
 
 export type HandoffMode = 'fire-and-forget handoff' | 'flow-controlled handoff';
 
 export type HandoffResult = {
+  scenario: HandoffScenario;
   mode: HandoffMode;
   producerMs: number;
   totalMs: number;
   messagesPerSecond: number;
-  maxDownstreamPending: number;
+  maxAggregatePending: number;
+  maxPendingPerSubscriber: number;
 };
 
 export async function runHandoffBenchmark(): Promise<HandoffResult[]> {
-  return [
-    await run('fire-and-forget handoff'),
-    await run('flow-controlled handoff'),
-  ];
+  const results: HandoffResult[] = [];
+  for (const scenario of scenarios) {
+    results.push(await run(scenario, 'fire-and-forget handoff'));
+    results.push(await run(scenario, 'flow-controlled handoff'));
+  }
+  return results;
 }
 
 // #5970: https://github.com/rocicorp/mono/pull/5970
 // This benchmark keeps the catchup handoff regression reproducible. The
-// previous fire-and-forget handoff could report producer completion while
-// leaving 100k messages queued downstream; the fixed path reports completion
-// only after downstream consumption, keeping max pending at 1 in this harness.
+// previous fire-and-forget handoff could report producer completion while a
+// large catchup backlog remained queued downstream; the fixed path reports
+// completion only after downstream consumption, keeping pending work bounded.
 //
 //   storer catchup cursor
 //          |
 //          v
 //   subscriber backlog  ---> downstream websocket
-async function run(mode: HandoffMode): Promise<HandoffResult> {
-  const downstream = Subscription.create<string>();
-  let consumed = 0;
-  let maxDownstreamPending = 0;
+async function run(
+  scenario: HandoffScenario,
+  mode: HandoffMode,
+): Promise<HandoffResult> {
+  const downstreams = Array.from({length: scenario.subscribers}, () =>
+    Subscription.create<string>(),
+  );
+  const consumed = Array.from({length: scenario.subscribers}, () => 0);
+  let maxAggregatePending = 0;
+  let maxPendingPerSubscriber = 0;
 
   const samplePending = () => {
-    maxDownstreamPending = Math.max(
-      maxDownstreamPending,
-      downstream.queued + downstream.consuming,
-    );
+    let aggregate = 0;
+    for (const downstream of downstreams) {
+      const pending = downstream.queued + downstream.consuming;
+      aggregate += pending;
+      maxPendingPerSubscriber = Math.max(maxPendingPerSubscriber, pending);
+    }
+    maxAggregatePending = Math.max(maxAggregatePending, aggregate);
   };
 
-  const consumer = (async () => {
+  const consumers = downstreams.map(async (downstream, subscriber) => {
     const iter = downstream[Symbol.asyncIterator]();
-    while (consumed < MESSAGE_COUNT) {
+    while (consumed[subscriber] < scenario.messagesPerSubscriber) {
       const next = await iter.next();
       if (next.done) {
-        throw new Error('downstream ended before consuming all messages');
+        throw new Error(
+          `downstream ${subscriber} ended before consuming all messages`,
+        );
       }
       JSON.parse(next.value);
-      consumed++;
+      consumed[subscriber]++;
       samplePending();
-      if (consumed % YIELD_EVERY === 0) {
+      if (consumed[subscriber] % scenario.yieldEvery === 0) {
         await yieldImmediate();
+      }
+      if (
+        scenario.delayEvery &&
+        scenario.delayMs &&
+        consumed[subscriber] % scenario.delayEvery === 0
+      ) {
+        await delay(scenario.delayMs);
       }
     }
     await iter.return?.();
-  })();
+  });
+
+  const pushPayload = (
+    downstream: Subscription<string>,
+    subscriber: number,
+    message: number,
+  ) =>
+    downstream.push(createPayload(subscriber, message, scenario.payloadBytes))
+      .result;
 
   const start = performance.now();
   let producerMs: number;
   if (mode === 'fire-and-forget handoff') {
     const pending: Promise<unknown>[] = [];
-    for (let i = 0; i < MESSAGE_COUNT; i++) {
-      pending.push(downstream.push(PAYLOAD).result);
-      if (i % YIELD_EVERY === 0) {
-        samplePending();
+    for (let subscriber = 0; subscriber < downstreams.length; subscriber++) {
+      const downstream = downstreams[subscriber];
+      for (
+        let message = 0;
+        message < scenario.messagesPerSubscriber;
+        message++
+      ) {
+        pending.push(pushPayload(downstream, subscriber, message));
+        if (message % scenario.yieldEvery === 0) {
+          samplePending();
+        }
       }
     }
     producerMs = performance.now() - start;
     await Promise.all(pending);
   } else {
-    for (let i = 0; i < MESSAGE_COUNT; i++) {
-      const {result} = downstream.push(PAYLOAD);
-      samplePending();
-      await result;
-    }
+    await Promise.all(
+      downstreams.map(async (downstream, subscriber) => {
+        for (
+          let message = 0;
+          message < scenario.messagesPerSubscriber;
+          message++
+        ) {
+          const result = pushPayload(downstream, subscriber, message);
+          samplePending();
+          await result;
+        }
+      }),
+    );
     producerMs = performance.now() - start;
   }
-  await consumer;
+  await Promise.all(consumers);
   const totalMs = performance.now() - start;
 
+  const totalMessages = scenario.subscribers * scenario.messagesPerSubscriber;
+
   return {
+    scenario,
     mode,
     producerMs,
     totalMs,
-    messagesPerSecond: MESSAGE_COUNT / (totalMs / 1000),
-    maxDownstreamPending,
+    messagesPerSecond: totalMessages / (totalMs / 1000),
+    maxAggregatePending,
+    maxPendingPerSubscriber,
   };
+}
+
+function createPayload(
+  subscriber: number,
+  message: number,
+  payloadBytes: number,
+) {
+  const base = {
+    tag: 'insert',
+    relation: {schema: 'public', name: 'issues', replicaIdentity: 'default'},
+    new: {
+      id: `issue-${subscriber}-${message}`,
+      title: 'the view-syncer is behind',
+      owner: 'rm',
+      body: '',
+    },
+  };
+  const withoutBody = JSON.stringify(['data', base]);
+  base.new.body = 'x'.repeat(Math.max(0, payloadBytes - withoutBody.length));
+  return JSON.stringify(['data', base]);
 }

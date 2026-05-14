@@ -14,6 +14,9 @@ Files:
 - `index.ts` is the executable entrypoint.
 - `handoff.ts` models the unsafe fire-and-forget handoff and the intended
   flow-controlled handoff.
+- `scenarios.ts` defines the load matrix: small reconnect, baseline backlog,
+  larger row payloads, slow downstream consumption, and 16 concurrent VS
+  reconnects.
 - `report.ts` owns the ASCII output table so benchmark mechanics and
   presentation do not blur together.
 
