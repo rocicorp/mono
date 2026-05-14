@@ -30,7 +30,12 @@ import type {
 import {StatementRunner} from '../../../db/statements.ts';
 import {type LexiVersion} from '../../../types/lexi-version.ts';
 import {PG_17} from '../../../types/pg-versions.ts';
-import {isPostgresError, pgClient, type PostgresDB} from '../../../types/pg.ts';
+import {
+  connectPgClient,
+  isPostgresError,
+  pgClient,
+  type PostgresDB,
+} from '../../../types/pg.ts';
 import {
   upstreamSchema,
   type ShardConfig,
@@ -136,7 +141,7 @@ export async function initializePostgresChangeSource(
 
   // Check that upstream is properly setup, and throw an AutoReset to re-run
   // initial sync if not.
-  const db = pgClient(lc, upstreamURI, 'change-source-init');
+  const db = await connectPgClient(lc, upstreamURI, 'change-source-init');
   try {
     const upstreamReplica = await checkAndUpdateUpstream(
       lc,

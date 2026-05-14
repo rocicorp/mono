@@ -1,15 +1,17 @@
 import EventEmitter from 'node:events';
 import {resolver} from '@rocicorp/resolver';
-import {beforeEach, describe, expect, test} from 'vitest';
+import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
 import {
+  exitAfter,
   INTENTIONAL_SHUTDOWN_ERROR_CODE,
   ProcessManager,
   runUntilKilled,
   type WorkerType,
 } from '../services/life-cycle.ts';
 import type {SingletonService} from '../services/service.ts';
+import {ConfigurationError} from '../types/configuration-error.ts';
 import {inProcChannel} from '../types/processes.ts';
 
 describe('shutdown', () => {
@@ -82,6 +84,10 @@ describe('shutdown', () => {
     all = [changeStreamer, replicator, syncer1, syncer2];
 
     await Promise.all(all.map(w => w.running.promise));
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   test.each([
@@ -253,5 +259,21 @@ describe('shutdown', () => {
 
     // sort() because order doesn't matter.
     expect(events.sort()).toEqual(expectedEvents.sort());
+  });
+});
+
+describe('exitAfter', () => {
+  test('exits 0 for configuration errors', async () => {
+    const exit = vi.spyOn(process, 'exit').mockImplementation(code => {
+      throw Object.assign(new Error('process.exit'), {code});
+    });
+
+    await expect(
+      exitAfter(createSilentLogContext(), () => {
+        throw new ConfigurationError('bad config');
+      }),
+    ).rejects.toMatchObject({code: 0});
+
+    expect(exit).toHaveBeenCalledWith(0);
   });
 });
