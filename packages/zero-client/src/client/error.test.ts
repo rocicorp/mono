@@ -390,8 +390,8 @@ describe('getErrorConnectionTransition', () => {
 
   test('returns error status for fatal server errors', () => {
     const error = new ProtocolError({
-      kind: ErrorKind.InvalidPush,
-      message: 'invalid push',
+      kind: ErrorKind.VersionNotSupported,
+      message: 'version not supported',
       origin: ErrorOrigin.Server,
     });
 
@@ -402,6 +402,7 @@ describe('getErrorConnectionTransition', () => {
   });
 
   test.each([
+    ErrorKind.InvalidPush,
     ErrorKind.Rebalance,
     ErrorKind.Rehome,
     ErrorKind.ServerOverloaded,

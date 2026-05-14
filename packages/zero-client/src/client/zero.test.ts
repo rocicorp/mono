@@ -283,6 +283,21 @@ describe('onOnlineChange callback', () => {
     expect(getOfflineCount()).toBe(1);
   });
 
+  test('InvalidPush is transient: drops the connection but does not fatal', async () => {
+    // InvalidPush is usually transient (racing writers to lastMutationID).
+    // Replicache will re-push the same mutation IDs on reconnect, and by
+    // then the racing writer has typically caught up.
+    const {z} = getNewZero();
+    await z.triggerConnected();
+    await z.triggerError({
+      kind: ErrorKind.InvalidPush,
+      message: 'unexpected mutation id',
+      origin: ErrorOrigin.ZeroCache,
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(z.connectionStatus).not.toBe(ConnectionStatus.Error);
+  });
+
   test('respects large backoff directives', async () => {
     const {z, getOnlineCount, getOfflineCount} = getNewZero();
     await z.triggerConnected();

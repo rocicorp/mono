@@ -201,7 +201,6 @@ export function getErrorConnectionTransition(
       case ErrorKind.InvalidConnectionRequestLastMutationID:
       case ErrorKind.InvalidConnectionRequestClientDeleted:
       case ErrorKind.InvalidMessage:
-      case ErrorKind.InvalidPush:
       case ErrorKind.VersionNotSupported:
       case ErrorKind.SchemaVersionNotSupported:
       case ErrorKind.Internal:
@@ -211,6 +210,12 @@ export function getErrorConnectionTransition(
       case ErrorKind.TransformFailed:
         return {status: ConnectionStatus.Error, reason: ex} as const;
 
+      // InvalidPush is transient: lastMutationID updates can race between
+      // mutagen (CRUD) and the user's API server (custom mutators), or
+      // between multiple zero-cache replicas / multiple user API server
+      // instances. Replicache will re-push the same mutation IDs on
+      // reconnect, by which time the racing writer has usually caught up.
+      case ErrorKind.InvalidPush:
       // Errors that should continue with backoff/retry
       case ErrorKind.Rebalance:
       case ErrorKind.Rehome:
