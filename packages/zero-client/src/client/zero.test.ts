@@ -3033,6 +3033,90 @@ test('local onClientStateNotFound default handler', async () => {
   );
 });
 
+test('close code 1009 (Message Too Big) disables client group and reloads', async () => {
+  const storage: Record<string, string> = {};
+  vi.spyOn(window, 'sessionStorage', 'get').mockImplementation(() =>
+    storageMock(storage),
+  );
+  const {promise, resolve} = resolver();
+  const reload = vi.fn(resolve);
+  const z = zeroForTest(undefined, false);
+  z.reload = reload;
+
+  await z.triggerConnected();
+  expect(z.connectionStatus).toBe(ConnectionStatus.Connected);
+  expect(hasMemStore(z.idbName)).toBe(true);
+
+  // Send a push message directly to populate the recent sent messages buffer
+  await z.pusher(
+    {
+      profileID: 'p1',
+      clientGroupID: 'c1',
+      mutations: [
+        {
+          clientID: 'c1',
+          id: 1,
+          name: 'issues.insert',
+          args: {id: '1', value: 'a large payload'},
+          timestamp: 123,
+        },
+      ],
+      pushVersion: 1,
+      schemaVersion: '1',
+    },
+    'req-1',
+  );
+
+  await z.triggerClose(1009);
+
+  await vi.waitUntil(() => storage[RELOAD_REASON_STORAGE_KEY] !== undefined);
+  await vi.advanceTimersToNextTimerAsync();
+  await promise;
+
+  // Connection transitions to Error state (observable by customers)
+  expect(z.connectionStatus).toBe(ConnectionStatus.Error);
+  expect(reload).toHaveBeenCalledTimes(1);
+  // disableClientGroup does not drop the database, just the client group
+  expect(hasMemStore(z.idbName)).toBe(true);
+  expect(storage[RELOAD_REASON_STORAGE_KEY]).toContain('InvalidMessage');
+  expect(storage[RELOAD_REASON_STORAGE_KEY]).toContain(
+    'exceeded the server message size limit',
+  );
+  // Assert recent messages logic worked
+  expect(storage[RELOAD_REASON_STORAGE_KEY]).toContain('Recent sent messages:');
+  expect(storage[RELOAD_REASON_STORAGE_KEY]).toContain('push');
+  expect(storage[RELOAD_REASON_STORAGE_KEY]).toContain('a large payload');
+});
+
+test('close code 1009 with custom onClientStateNotFound defers reload', async () => {
+  const {promise, resolve} = resolver();
+  const fake = vi.fn(resolve);
+  const z = zeroForTest({onClientStateNotFound: fake}, false);
+  const reload = vi.fn();
+  z.reload = reload;
+
+  await z.triggerConnected();
+  expect(z.connectionStatus).toBe(ConnectionStatus.Connected);
+  expect(hasMemStore(z.idbName)).toBe(true);
+
+  await z.triggerClose(1009);
+  await promise;
+
+  // Custom handler is called instead of reload
+  expect(fake).toHaveBeenCalledTimes(1);
+  expect(reload).not.toHaveBeenCalled();
+
+  // Connection is in Error state with actionable details
+  expect(z.connectionStatus).toBe(ConnectionStatus.Error);
+  const state = z.connectionState;
+  assert(state.name === ConnectionStatus.Error);
+  expect(state.reason).toBeInstanceOf(ClientError);
+  expect(state.reason.kind).toBe(ClientErrorKind.InvalidMessage);
+  expect(state.reason.message).toContain(
+    'exceeded the server message size limit',
+  );
+});
+
 test('Constructing Zero with a negative hiddenTabDisconnectDelay option throws an error', () => {
   let expected;
   try {
