@@ -8,41 +8,41 @@ import {withWrite} from '../with-transactions.ts';
 import {NODE_HEADER_SIZE} from './read.ts';
 import {BTreeWrite} from './write.ts';
 
+function generateEntries(
+  count: number,
+  valueSize: 'small' | 'large',
+): Array<[string, FrozenJSONValue]> {
+  const entries: Array<[string, FrozenJSONValue]> = [];
+  for (let i = 0; i < count; i++) {
+    const key = `key${i.toString().padStart(6, '0')}`;
+    const value =
+      valueSize === 'small'
+        ? `value${i}`
+        : {
+            id: i,
+            name: `name${i}`,
+            description: `This is a longer description for entry ${i}`,
+            metadata: {
+              created: Date.now(),
+              tags: ['tag1', 'tag2', 'tag3'],
+              nested: {
+                level1: {
+                  level2: {
+                    data: `nested-${i}`,
+                  },
+                },
+              },
+            },
+          };
+    entries.push([key, deepFreeze(value)]);
+  }
+  return entries;
+}
+
 describe('BTreeWrite bulk load performance', () => {
   const formatVersion = FormatVersion.Latest;
   const minSize = 8 * 1024;
   const maxSize = 16 * 1024;
-
-  function generateEntries(
-    count: number,
-    valueSize: 'small' | 'large',
-  ): Array<[string, FrozenJSONValue]> {
-    const entries: Array<[string, FrozenJSONValue]> = [];
-    for (let i = 0; i < count; i++) {
-      const key = `key${i.toString().padStart(6, '0')}`;
-      const value =
-        valueSize === 'small'
-          ? `value${i}`
-          : {
-              id: i,
-              name: `name${i}`,
-              description: `This is a longer description for entry ${i}`,
-              metadata: {
-                created: Date.now(),
-                tags: ['tag1', 'tag2', 'tag3'],
-                nested: {
-                  level1: {
-                    level2: {
-                      data: `nested-${i}`,
-                    },
-                  },
-                },
-              },
-            };
-      entries.push([key, deepFreeze(value)]);
-    }
-    return entries;
-  }
 
   for (const count of [100, 1000, 10000]) {
     for (const valueSize of ['small', 'large'] as const) {
@@ -261,37 +261,6 @@ describe('BTreeWrite bulk delete performance', () => {
   const formatVersion = FormatVersion.Latest;
   const minSize = 8 * 1024;
   const maxSize = 16 * 1024;
-
-  function generateEntries(
-    count: number,
-    valueSize: 'small' | 'large',
-  ): Array<[string, FrozenJSONValue]> {
-    const entries: Array<[string, FrozenJSONValue]> = [];
-    for (let i = 0; i < count; i++) {
-      const key = `key${i.toString().padStart(6, '0')}`;
-      const value =
-        valueSize === 'small'
-          ? `value${i}`
-          : {
-              id: i,
-              name: `name${i}`,
-              description: `This is a longer description for entry ${i}`,
-              metadata: {
-                created: Date.now(),
-                tags: ['tag1', 'tag2', 'tag3'],
-                nested: {
-                  level1: {
-                    level2: {
-                      data: `nested-${i}`,
-                    },
-                  },
-                },
-              },
-            };
-      entries.push([key, deepFreeze(value)]);
-    }
-    return entries;
-  }
 
   // Benchmark: delete all entries
   describe('deleting all entries', () => {
