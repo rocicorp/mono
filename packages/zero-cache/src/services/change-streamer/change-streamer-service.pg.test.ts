@@ -18,13 +18,13 @@ import {Subscription, type Result} from '../../types/subscription.ts';
 import type {ChangeSource} from '../change-source/change-source.ts';
 import {type ChangeStreamMessage} from '../change-source/protocol/current/downstream.ts';
 import type {UpstreamStatusMessage} from '../change-source/protocol/current/status.ts';
-import {ReplicationStatusPublisher} from '../replicator/replication-status.ts';
 import {
   getSubscriptionState,
   initReplicationState,
   type SubscriptionState,
 } from '../replicator/schema/replication-state.ts';
 import {ReplicationMessages} from '../replicator/test-utils.ts';
+import {UnrecoverableError} from '../running-state.ts';
 import {
   initializeStreamer,
   type TuningOptions,
@@ -92,7 +92,6 @@ describe('change-streamer/service', () => {
         startLagReporter: () => Promise.resolve({nextSendTimeMs: 123}),
         stop: () => Promise.resolve(),
       },
-      ReplicationStatusPublisher.forTesting(),
       replicaConfig,
       null,
       true,
@@ -964,7 +963,6 @@ describe('change-streamer/service', () => {
       'ws',
       sql,
       source,
-      ReplicationStatusPublisher.forTesting(),
       replicaConfig,
       null,
       true,
@@ -973,6 +971,33 @@ describe('change-streamer/service', () => {
     void streamer.run();
 
     expect(await hasRetried).toBe(true);
+  });
+
+  test('crashes after five consecutive stream failures', async () => {
+    await streamer.stop();
+    await streamerDone;
+
+    const source = {
+      startStream: vi.fn().mockRejectedValue(new Error('nope')),
+      startLagReporter: () => null,
+      stop: () => Promise.resolve(),
+    } satisfies ChangeSource;
+    streamer = await initializeStreamer(
+      lc,
+      shard,
+      'task-id',
+      'change.streamer:12345',
+      'ws',
+      sql,
+      source,
+      replicaConfig,
+      null,
+      true,
+      opts,
+    );
+
+    await expect(streamer.run()).rejects.toThrow(UnrecoverableError);
+    expect(source.startStream).toHaveBeenCalledTimes(5);
   });
 
   test('starting point', async () => {
@@ -993,7 +1018,6 @@ describe('change-streamer/service', () => {
       'ws',
       sql,
       source,
-      ReplicationStatusPublisher.forTesting(),
       replicaConfig,
       null,
       true,
@@ -1017,7 +1041,6 @@ describe('change-streamer/service', () => {
       'ws',
       sql,
       source,
-      ReplicationStatusPublisher.forTesting(),
       replicaConfig,
       null,
       true,
@@ -1055,7 +1078,6 @@ describe('change-streamer/service', () => {
         startLagReporter: () => null,
         stop: () => Promise.resolve(),
       },
-      ReplicationStatusPublisher.forTesting(),
       replicaConfig,
       lock,
       true,
@@ -1098,7 +1120,6 @@ describe('change-streamer/service', () => {
       'ws',
       sql,
       source,
-      ReplicationStatusPublisher.forTesting(),
       replicaConfig,
       null,
       true,
@@ -1140,7 +1161,6 @@ describe('change-streamer/service', () => {
       'ws',
       sql,
       source,
-      ReplicationStatusPublisher.forTesting(),
       replicaConfig,
       null,
       true,
@@ -1199,7 +1219,6 @@ describe('change-streamer/service', () => {
       'ws',
       sql,
       source,
-      ReplicationStatusPublisher.forTesting(),
       replicaConfig,
       null,
       true,
@@ -1275,7 +1294,6 @@ describe('change-streamer/service', () => {
       'ws',
       sql,
       source,
-      ReplicationStatusPublisher.forTesting(),
       replicaConfig,
       null,
       true,

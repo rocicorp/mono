@@ -2,8 +2,6 @@ import {getDefaultHighWaterMark} from 'node:stream';
 import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {unreachable} from '../../../../shared/src/asserts.ts';
-import {promiseVoid} from '../../../../shared/src/resolved-promises.ts';
-import {publishCriticalEvent} from '../../observability/events.ts';
 import {getOrCreateCounter} from '../../observability/metrics.ts';
 import {
   min,
@@ -23,11 +21,7 @@ import {
   type ChangeStreamData,
   type Rollback,
 } from '../change-source/protocol/current/downstream.ts';
-import {
-  publishReplicationError,
-  replicationStatusError,
-  type ReplicationStatusPublisher,
-} from '../replicator/replication-status.ts';
+import {publishReplicationError} from '../replicator/replication-status.ts';
 import type {SubscriptionState} from '../replicator/schema/replication-state.ts';
 import {
   DEFAULT_MAX_RETRY_DELAY_MS,
@@ -69,7 +63,6 @@ export async function initializeStreamer(
   discoveryProtocol: string,
   changeDB: PostgresDB,
   changeSource: ChangeSource,
-  replicationStatusPublisher: ReplicationStatusPublisher,
   subscriptionState: SubscriptionState,
   purgeLock: PurgeLock | null,
   autoReset: boolean,
@@ -97,7 +90,6 @@ export async function initializeStreamer(
     changeDB,
     replicaVersion,
     changeSource,
-    replicationStatusPublisher,
     purgeLock,
     autoReset,
     opts,
@@ -105,7 +97,7 @@ export async function initializeStreamer(
   );
 }
 
-const REPLICATION_STATUS_ERROR_DELAY_THRESHOLD_MS = 5000;
+const MAX_CONSECUTIVE_FAILURES = 5;
 
 export type ChangeTag = ChangeStreamData[1]['tag'];
 
@@ -276,7 +268,6 @@ class ChangeStreamerImpl implements ChangeStreamerService {
   readonly #source: ChangeSource;
   readonly #storer: Storer;
   readonly #forwarder: Forwarder;
-  readonly #replicationStatusPublisher: ReplicationStatusPublisher;
 
   readonly #autoReset: boolean;
   readonly #state: RunningState;
@@ -316,7 +307,6 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     changeDB: PostgresDB,
     replicaVersion: string,
     source: ChangeSource,
-    replicationStatusPublisher: ReplicationStatusPublisher,
     initialPurgeLock: PurgeLock | null,
     autoReset: boolean,
     opts: TuningOptions,
@@ -344,7 +334,6 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       flowControlConsensusPaddingSeconds:
         opts.flowControlConsensusPaddingSeconds,
     });
-    this.#replicationStatusPublisher = replicationStatusPublisher;
     this.#purgeLock = initialPurgeLock;
     this.#autoReset = autoReset;
     this.#state = new RunningState(this.id, undefined, setTimeoutFn);
@@ -369,6 +358,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     // The threshold in (estimated number of) bytes to send() on subscriber
     // websockets before `await`-ing the I/O buffers to be ready for more.
     const flushBytesThreshold = getDefaultHighWaterMark(false);
+    let consecutiveFailures = 0;
 
     while (this.#state.shouldRun()) {
       let err: unknown;
@@ -384,21 +374,11 @@ class ChangeStreamerImpl implements ChangeStreamerService {
         this.#storer.run().catch(e => stream.changes.cancel(e));
 
         this.#stream = stream;
-        if (
-          this.#state.resetBackoff() >
-          REPLICATION_STATUS_ERROR_DELAY_THRESHOLD_MS
-        ) {
-          // After recovering from a backoff for which a replication status
-          // error was published, publish an OK status
-          this.#replicationStatusPublisher.publish(
-            this.#lc,
-            'Replicating',
-            `Replicating from ${lastWatermark}`,
-          );
-        }
+        this.#state.resetBackoff();
         watermark = null;
 
         for await (const change of stream.changes) {
+          consecutiveFailures = 0;
           const [type, msg] = change;
           switch (type) {
             case 'status':
@@ -470,6 +450,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
         }
       } catch (e) {
         err = e;
+        consecutiveFailures++;
       } finally {
         this.#stream?.changes.cancel();
         this.#stream = undefined;
@@ -483,15 +464,15 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       }
 
       // Backoff and drain any pending entries in the storer before reconnecting.
+      if (consecutiveFailures >= MAX_CONSECUTIVE_FAILURES) {
+        throw new UnrecoverableError(
+          `change-streamer failed ${consecutiveFailures} consecutive times`,
+          {cause: err},
+        );
+      }
       await Promise.all([
         this.#storer.stop(),
         this.#state.backoff(this.#lc, err),
-        this.#state.retryDelay > REPLICATION_STATUS_ERROR_DELAY_THRESHOLD_MS
-          ? publishCriticalEvent(
-              this.#lc,
-              replicationStatusError(this.#lc, 'Replicating', err),
-            )
-          : promiseVoid,
       ]);
     }
 

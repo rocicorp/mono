@@ -23,10 +23,7 @@ import {
   BackupNotFoundException,
   restoreReplica,
 } from '../services/litestream/commands.ts';
-import {
-  replicationStatusError,
-  ReplicationStatusPublisher,
-} from '../services/replicator/replication-status.ts';
+import {replicationStatusError} from '../services/replicator/replication-status.ts';
 import {connectPgClient} from '../types/pg.ts';
 import {
   parentWorker,
@@ -144,9 +141,6 @@ export default async function runWorker(
               context,
             );
 
-      const replicationStatusPublisher =
-        ReplicationStatusPublisher.forReplicaFile(replica.file);
-
       changeStreamer = await initializeStreamer(
         lc,
         shard,
@@ -155,7 +149,6 @@ export default async function runWorker(
         protocol,
         changeDB,
         changeSource,
-        replicationStatusPublisher,
         subscriptionState,
         purgeLock,
         autoReset ?? false,

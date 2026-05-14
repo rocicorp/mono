@@ -150,15 +150,19 @@ export class ChangeStreamerHttpServer extends HttpService {
   };
 
   #changeStreamerStarted = false;
+  #changeStreamerError: unknown;
 
   #ensureChangeStreamerStarted(reason: string) {
     if (!this.#changeStreamerStarted && this._state.shouldRun()) {
       this.#lc.info?.(`starting ChangeStreamerService: ${reason}`);
       void this.#changeStreamer
         .run()
-        .catch(e =>
-          this.#lc.warn?.(`ChangeStreamerService ended with error`, e),
-        )
+        .catch(e => {
+          // Preserve the failure across stop(), so runUntilKilled() sees this
+          // service stop as an error and exits the worker process.
+          this.#changeStreamerError = e;
+          this.#lc.warn?.(`ChangeStreamerService ended with error`, e);
+        })
         .finally(() => this.stop());
 
       this.#changeStreamerStarted = true;
@@ -174,6 +178,13 @@ export class ChangeStreamerHttpServer extends HttpService {
         ),
       startupDelayMs,
     );
+  }
+
+  override async run(): Promise<void> {
+    await super.run();
+    if (this.#changeStreamerError) {
+      throw this.#changeStreamerError;
+    }
   }
 
   protected override async _onStop(): Promise<void> {
