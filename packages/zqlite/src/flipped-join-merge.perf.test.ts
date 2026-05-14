@@ -8,31 +8,32 @@ import {Database} from './db.ts';
 import {TableSource} from './table-source.ts';
 
 /**
- * Wall-clock perf for FlippedJoin against a real zqlite TableSource
- * with N children sharing K unique parent-key values, exercising the
- * dedup of redundant parent fetches: children sharing a parent-key
- * value produce one entry in the multi-constraint, not N.
+ * Wall-clock perf for FlippedJoin against a real zqlite TableSource at
+ * the 1:1 parent:child shape, sweeping N. Each child has its own
+ * parent-key value, so K (the number of distinct parent-key values) is
+ * equal to N — the shape where the batched-fetch path most clearly
+ * outperforms a per-key-cursor merge.
  *
  * Gated on PERF=1 so it doesn't run in CI. To run:
  *
  *   PERF=1 npm --workspace=zqlite run test -- flipped-join-merge.perf
  *
- * To compare against the pre-dedup algorithm, check out a revision
- * before those changes landed in a worktree and port this file across —
- * the FlippedJoin and TableSource constructor signatures are identical
- * at that revision, so no test-side changes are needed.
+ * To compare against an earlier revision, check it out in a worktree
+ * and port this file across — the FlippedJoin and TableSource
+ * constructor signatures haven't changed.
  */
 
 const lc = createSilentLogContext();
 
-function setupDb(
-  numChildren: number,
-  uniqueBuckets: number,
-): {parent: TableSource; child: TableSource} {
+function setupDb(numChildren: number): {
+  parent: TableSource;
+  child: TableSource;
+} {
   const db = new Database(lc, ':memory:');
-  // parent.bucket is intentionally NOT unique — multiple parents per
-  // bucket means multiple children can share a parent-key value, which
-  // is what surfaces the dedup-of-redundant-parent-fetches win.
+  // parent.bucket is intentionally NOT declared unique in the schema —
+  // FlippedJoin keys off schema-declared uniqueness, not observed data,
+  // so this keeps the operator on the merge-sort path even when each
+  // bucket value happens to be unique.
   db.exec(/* sql */ `
     CREATE TABLE parent (
       id INTEGER NOT NULL,
@@ -48,20 +49,15 @@ function setupDb(
     CREATE INDEX child_bucket_idx ON child (bucket);
   `);
 
-  // 1:1 parents-to-children-per-bucket so total emitted-row count is
-  // independent of the dedup factor — only the merge K and per-cursor
-  // work change across cases.
-  const numParents = numChildren;
+  // 1:1 parent:child — each child has its own bucket value.
   const insertParent = db.prepare(
     'INSERT INTO parent (id, bucket) VALUES (?,?)',
   );
   const insertChild = db.prepare('INSERT INTO child (id, bucket) VALUES (?,?)');
   db.transaction(() => {
-    for (let i = 1; i <= numParents; i++) {
-      insertParent.run(i, ((i - 1) % uniqueBuckets) + 1);
-    }
     for (let i = 1; i <= numChildren; i++) {
-      insertChild.run(i, ((i - 1) % uniqueBuckets) + 1);
+      insertParent.run(i, i);
+      insertChild.run(i, i);
     }
   });
 
@@ -86,14 +82,12 @@ function setupDb(
 
 type RunResult = {
   numChildren: number;
-  uniqueBuckets: number;
-  childrenPerBucket: number;
   rowsOut: number;
   elapsedMs: number;
 };
 
-function runOnce(numChildren: number, uniqueBuckets: number): RunResult {
-  const {parent, child} = setupDb(numChildren, uniqueBuckets);
+function runOnce(numChildren: number): RunResult {
+  const {parent, child} = setupDb(numChildren);
 
   const fj = new FlippedJoin({
     parent: parent.connect([['id', 'asc']]),
@@ -111,8 +105,6 @@ function runOnce(numChildren: number, uniqueBuckets: number): RunResult {
 
   return {
     numChildren,
-    uniqueBuckets,
-    childrenPerBucket: numChildren / uniqueBuckets,
     rowsOut: result.length,
     elapsedMs,
   };
@@ -121,61 +113,45 @@ function runOnce(numChildren: number, uniqueBuckets: number): RunResult {
 function logHeader() {
   console.log(
     'children'.padStart(10) +
-      'buckets'.padStart(10) +
-      'kidsPerBkt'.padStart(12) +
       'rowsOut'.padStart(10) +
       'elapsedMs'.padStart(12) +
-      'ms/row'.padStart(11),
+      'us/row'.padStart(10),
   );
 }
 
 function logRow(r: RunResult) {
+  const usPerRow = (r.elapsedMs * 1000) / Math.max(1, r.rowsOut);
   console.log(
     r.numChildren.toString().padStart(10) +
-      r.uniqueBuckets.toString().padStart(10) +
-      r.childrenPerBucket.toString().padStart(12) +
       r.rowsOut.toString().padStart(10) +
       r.elapsedMs.toFixed(1).padStart(12) +
-      (r.elapsedMs / Math.max(1, r.rowsOut)).toFixed(4).padStart(11),
+      usPerRow.toFixed(1).padStart(10),
   );
 }
 
 describe.skipIf(!process.env.PERF)(
-  'FlippedJoin perf — non-unique parentKey (dedup factor)',
+  'FlippedJoin perf — scaling N at 1:1 parent:child',
   {timeout: 600_000},
   () => {
-    test('2.5k children, sweep dedup factor', () => {
-      const N = 2_500;
+    test('sweep N from 100 to 10k', () => {
       // Warm-up so JIT compilation is amortized away from the timing.
-      runOnce(500, 50);
+      runOnce(500);
 
-      // dedup factor = N / uniqueBuckets. Pre-fix the code always
-      // opened N cursors regardless of dedup, so cases with high dedup
-      // show the largest cursor-count delta. K = uniqueBuckets is also
-      // the merge fan-in, so high-K rows show the heap vs linear-scan
-      // win. Scale is intentionally small so the pre-fix algorithm (no
-      // batching, K = N cursors at dedup=1) finishes in seconds, not
-      // minutes — useful for A/B against the previous algorithm.
-      const cases = [N, N / 5, N / 25, N / 125, N / 625];
+      const cases = [100, 500, 1_000, 2_500, 5_000, 10_000];
 
-      console.log(
-        `\n=== FlippedJoin dedup: ${N.toLocaleString()} children, 1:1 parents-per-bucket ===`,
-      );
+      console.log(`\n=== FlippedJoin scaling: 1:1 parent:child ===`);
       logHeader();
-      for (const buckets of cases) {
-        logRow(runOnce(N, buckets));
+      for (const n of cases) {
+        logRow(runOnce(n));
       }
     });
 
-    test('2.5k children, dedup=25, repeated for variance', () => {
-      const N = 2_500;
-      runOnce(500, 50);
-      console.log(
-        `\n=== FlippedJoin dedup: ${N.toLocaleString()} children, dedup=25 (3 runs) ===`,
-      );
+    test('N=2,500, repeated for variance', () => {
+      runOnce(500);
+      console.log(`\n=== FlippedJoin: N=2,500, 1:1 parent:child (3 runs) ===`);
       logHeader();
       for (let i = 0; i < 3; i++) {
-        logRow(runOnce(N, N / 25));
+        logRow(runOnce(2_500));
       }
     });
   },
