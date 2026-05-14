@@ -1428,10 +1428,6 @@ export class Zero<
             'large files to object storage and storing only the URL in Zero.' +
             recentMessagesInfo,
         });
-        lc.error?.(
-          'Server closed connection with 1009 (Message Too Big).',
-          messageTooLargeError,
-        );
         this.#connectResolver.reject(messageTooLargeError);
         this.#disconnect(lc, messageTooLargeError);
 
