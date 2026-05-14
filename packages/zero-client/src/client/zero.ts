@@ -392,8 +392,9 @@ export class Zero<
 
   #forceEnableRefresh = false;
 
-  // Ring buffer of recent outbound messages (type + serialized size)
-  // for diagnostics when a 1009 (Message Too Big) close occurs.
+  // Ring buffer of up to 5 recent outbound messages (excluding pings).
+  // Tracks type, serialized size, and a 200-character snippet for diagnostics
+  // when a 1009 (Message Too Big) close occurs.
   #recentSentMessages: {type: string; size: number; snippet: string}[] = [];
 
   /**
