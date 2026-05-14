@@ -392,6 +392,10 @@ export class Zero<
 
   #forceEnableRefresh = false;
 
+  // Ring buffer of recent outbound messages (type + serialized size)
+  // for diagnostics when a 1009 (Message Too Big) close occurs.
+  #recentSentMessages: {type: string; size: number; snippet: string}[] = [];
+
   /**
    * The timeout in milliseconds for ping operations. Controls both:
    * - How long to wait in idle before sending a ping
@@ -895,7 +899,17 @@ export class Zero<
       this.#socket &&
       this.#connectionManager.is(ConnectionStatus.Connected)
     ) {
-      send(this.#socket, msg);
+      const json = JSON.stringify(msg);
+      const history = this.#recentSentMessages;
+      if (history.length >= 5) {
+        history.shift();
+      }
+      history.push({
+        type: msg[0],
+        size: json.length,
+        snippet: json.slice(0, 200),
+      });
+      this.#socket.send(json);
     }
   }
 
@@ -1380,37 +1394,55 @@ export class Zero<
         });
       }
 
-      const closeError = new ClientError(
-        wasClean
-          ? {
-              kind: ClientErrorKind.CleanClose,
-              message: 'WebSocket connection closed cleanly',
-            }
-          : {
-              kind: ClientErrorKind.AbruptClose,
-              message: 'WebSocket connection closed abruptly',
-            },
-      );
-      this.#connectResolver.reject(closeError);
-      this.#disconnect(lc, closeError);
-
       // 1009 = Message Too Big. The server rejected an oversized WebSocket
-      // frame (e.g. a mutation containing a large base64-encoded blob).
-      // Because the mutation is persisted in IndexedDB, the client would
-      // otherwise reconnect and immediately re-send it, causing an infinite
-      // reconnect loop. Disable the client group to abandon the stuck
-      // mutation and reload with a fresh client group.
+      // message, most likely a mutation containing a large value (e.g. a
+      // base64-encoded image), but possibly a large changeDesiredQueries
+      // payload. Because mutations are persisted in IndexedDB, the client
+      // would otherwise reconnect and immediately re-send the message,
+      // causing an infinite reconnect loop. Disable the client group to
+      // abandon the stuck message and reload with a fresh client group.
+      //
+      // Using InvalidMessage as the error kind transitions the connection
+      // to Error state, making it observable via connection.state.subscribe().
+      // The reload is routed through onClientStateNotFound so customers can
+      // override it (e.g. to show UI, defer reload, or report to Sentry).
       if (code === 1009) {
+        const messageTooLargeError = new ClientError({
+          kind: ClientErrorKind.InvalidMessage,
+          message:
+            'A WebSocket message exceeded the server message size limit ' +
+            '(ZERO_WEBSOCKET_MAX_PAYLOAD_BYTES). ' +
+            'This is usually caused by a mutation containing a large ' +
+            'value such as a base64-encoded image. Consider uploading ' +
+            'large files to object storage and storing only the URL in Zero.',
+        });
         lc.error?.(
-          'Server closed connection with 1009 (Message Too Big). ' +
-            'Disabling client group to remove oversized mutation.',
+          'Server closed connection with 1009 (Message Too Big).',
+          messageTooLargeError,
+          {recentMessages: this.#recentSentMessages},
         );
+        this.#connectResolver.reject(messageTooLargeError);
+        this.#disconnect(lc, messageTooLargeError);
+
         await this.#rep.disableClientGroup();
         this.#onClientStateNotFound(
           ErrorKind.InvalidMessage,
-          'A mutation exceeded the server message size limit. ' +
-            'Local state has been reset.',
+          messageTooLargeError.message,
         );
+      } else {
+        const closeError = new ClientError(
+          wasClean
+            ? {
+                kind: ClientErrorKind.CleanClose,
+                message: 'WebSocket connection closed cleanly',
+              }
+            : {
+                kind: ClientErrorKind.AbruptClose,
+                message: 'WebSocket connection closed abruptly',
+              },
+        );
+        this.#connectResolver.reject(closeError);
+        this.#disconnect(lc, closeError);
       }
     } catch (e) {
       lc.error?.('Unhandled error in onClose', e);

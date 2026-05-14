@@ -3040,7 +3040,7 @@ test('close code 1009 (Message Too Big) disables client group and reloads', asyn
   );
   const {promise, resolve} = resolver();
   const reload = vi.fn(resolve);
-  const z = zeroForTest();
+  const z = zeroForTest(undefined, false);
   z.reload = reload;
 
   await z.triggerConnected();
@@ -3050,25 +3050,24 @@ test('close code 1009 (Message Too Big) disables client group and reloads', asyn
   await z.triggerClose(1009);
 
   await vi.waitUntil(() => storage[RELOAD_REASON_STORAGE_KEY] !== undefined);
+  await vi.advanceTimersToNextTimerAsync();
   await promise;
 
+  // Connection transitions to Error state (observable by customers)
+  expect(z.connectionStatus).toBe(ConnectionStatus.Error);
   expect(reload).toHaveBeenCalledTimes(1);
   // disableClientGroup does not drop the database, just the client group
   expect(hasMemStore(z.idbName)).toBe(true);
-  expect(storage[RELOAD_REASON_STORAGE_KEY]).toBe(
-    '["InvalidMessage","A mutation exceeded the server message size limit. Local state has been reset."]',
+  expect(storage[RELOAD_REASON_STORAGE_KEY]).toContain('InvalidMessage');
+  expect(storage[RELOAD_REASON_STORAGE_KEY]).toContain(
+    'ZERO_WEBSOCKET_MAX_PAYLOAD_BYTES',
   );
 });
 
-test('close code 1009 with custom onClientStateNotFound handler', async () => {
+test('close code 1009 with custom onClientStateNotFound defers reload', async () => {
   const {promise, resolve} = resolver();
-  let z: TestZero<Schema>;
-  const fake = vi.fn(() => {
-    // disableClientGroup does not drop the database
-    expect(hasMemStore(z.idbName)).toBe(true);
-    resolve();
-  });
-  z = zeroForTest({onClientStateNotFound: fake});
+  const fake = vi.fn(resolve);
+  const z = zeroForTest({onClientStateNotFound: fake}, false);
   const reload = vi.fn();
   z.reload = reload;
 
@@ -3077,13 +3076,19 @@ test('close code 1009 with custom onClientStateNotFound handler', async () => {
   expect(hasMemStore(z.idbName)).toBe(true);
 
   await z.triggerClose(1009);
-
   await promise;
 
+  // Custom handler is called instead of reload
   expect(fake).toHaveBeenCalledTimes(1);
-  expect(fake).toHaveBeenCalledWith();
   expect(reload).not.toHaveBeenCalled();
-  expect(hasMemStore(z.idbName)).toBe(true);
+
+  // Connection is in Error state with actionable details
+  expect(z.connectionStatus).toBe(ConnectionStatus.Error);
+  const state = z.connectionState;
+  assert(state.name === ConnectionStatus.Error);
+  expect(state.reason).toBeInstanceOf(ClientError);
+  expect(state.reason.kind).toBe(ClientErrorKind.InvalidMessage);
+  expect(state.reason.message).toContain('ZERO_WEBSOCKET_MAX_PAYLOAD_BYTES');
 });
 
 test('Constructing Zero with a negative hiddenTabDisconnectDelay option throws an error', () => {
