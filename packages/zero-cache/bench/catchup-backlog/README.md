@@ -14,6 +14,8 @@ Files:
 - `index.ts` is the executable entrypoint.
 - `handoff.ts` models the unsafe fire-and-forget handoff and the intended
   flow-controlled handoff.
+- `memory.ts` measures heap growth for the outage-recovery queue burst.
+- `payload.ts` owns the synthetic change payload used by both probes.
 - `scenarios.ts` defines the load matrix: small reconnect, baseline backlog,
   larger row payloads, slow downstream consumption, and 16 concurrent VS
   reconnects, including an outage-recovery shape where 16 VSs catch up while
@@ -25,4 +27,10 @@ Default review run:
 
 ```bash
 npm --workspace=zero-cache run perf:catchup-backlog
+```
+
+Memory probe for the 16-VS outage-recovery queue burst:
+
+```bash
+npm --workspace=zero-cache run perf:catchup-backlog:memory
 ```

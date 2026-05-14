@@ -3,6 +3,7 @@ import {
   setTimeout as delay,
 } from 'node:timers/promises';
 import {Subscription} from '../../src/types/subscription.ts';
+import {createPayload} from './payload.ts';
 import {scenarios, type HandoffScenario} from './scenarios.ts';
 
 export type HandoffMode = 'fire-and-forget handoff' | 'flow-controlled handoff';
@@ -140,24 +141,4 @@ async function run(
     maxAggregatePending,
     maxPendingPerSubscriber,
   };
-}
-
-function createPayload(
-  subscriber: number,
-  message: number,
-  payloadBytes: number,
-) {
-  const base = {
-    tag: 'insert',
-    relation: {schema: 'public', name: 'issues', replicaIdentity: 'default'},
-    new: {
-      id: `issue-${subscriber}-${message}`,
-      title: 'the view-syncer is behind',
-      owner: 'rm',
-      body: '',
-    },
-  };
-  const withoutBody = JSON.stringify(['data', base]);
-  base.new.body = 'x'.repeat(Math.max(0, payloadBytes - withoutBody.length));
-  return JSON.stringify(['data', base]);
 }

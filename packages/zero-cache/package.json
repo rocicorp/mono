@@ -25,6 +25,7 @@
     "bench:bmf": "BENCH_OUTPUT_FORMAT=json pnpm run bench 2>&1 | node ../shared/src/tool/mitata-json-to-bmf.ts",
     "bench:bmf:silent": "pnpm run bench:bmf --silent",
     "perf:catchup-backlog": "node ./bench/catchup-backlog/index.ts",
+    "perf:catchup-backlog:memory": "node --expose-gc ./bench/catchup-backlog/memory.ts",
     "local": "node tool/local.ts",
     "start": "node ./src/server/runner/main.ts",
     "benchdb": "node ./bench/bench.ts",
