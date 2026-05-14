@@ -52,7 +52,7 @@ export interface Input extends InputBase {
  * - **Unique entries.** TableSource gets set semantics for free from SQL
  *   `IN`; MemorySource fans sub-fetches out per entry, so duplicates
  *   would yield the same row N times. FlippedJoin groups by canonical
- *   parent-key (`flipped-join.ts:#fetchMergeSort`) before emitting.
+ *   parent-key (`flipped-join.ts:#fetchBatched`) before emitting.
  * - **Key-compatible with `req.constraint`.** Entries that contradict
  *   `constraint` should be dropped upstream. FlippedJoin filters
  *   incompatible children via `constraintsAreCompatible` before adding
