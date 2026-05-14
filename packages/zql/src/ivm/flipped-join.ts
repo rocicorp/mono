@@ -46,15 +46,13 @@ import {type Stream} from './stream.ts';
  *    `SQLITE_MAX_VARIABLE_NUMBER` (32766). Compound keys multiply the
  *    parameter count by key length, so we leave headroom.
  *
- * The exact value is a heuristic, not optimized for IO/page locality.
- * Smaller values (64) win correlation on more pg planner-exec tests but
- * shift one query's picked plan ~1.4x off optimal. Tested 64/128/256;
- * 256 had the best worst-case across the suite.
+ * Tested 64/128/256; 256 had the best worst-case across planner suites
+ * and perf tests.
  *
  * We should, however, start doing shadow tests of the planner
  * against cloudzero queries.
  */
-export const MULTI_CONSTRAINT_CHUNK_SIZE = 256;
+const MULTI_CONSTRAINT_CHUNK_SIZE = 256;
 
 // Mutable test seam — production code reads this via the getter.
 let multiConstraintChunkSize: number = MULTI_CONSTRAINT_CHUNK_SIZE;

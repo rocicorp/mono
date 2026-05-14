@@ -1,6 +1,6 @@
 import {expect, suite, test} from 'vitest';
 import {
-  MULTI_CONSTRAINT_CHUNK_SIZE,
+  getMultiConstraintChunkSize,
   setMultiConstraintChunkSizeForTest,
 } from '../ivm/flipped-join.ts';
 import type {ConnectionCostModel} from './planner-connection.ts';
@@ -201,7 +201,7 @@ suite('PlannerJoin', () => {
     });
 
     test('cost respects the default chunk size at the 256 boundary', () => {
-      const C = MULTI_CONSTRAINT_CHUNK_SIZE;
+      const C = getMultiConstraintChunkSize();
       // N=C uses 1 chunk; N=C+1 uses 2 chunks.
       expect(flippedCost(1)).toBe(1 * PARENT_STARTUP + 1);
       expect(flippedCost(C)).toBe(1 * PARENT_STARTUP + C);
