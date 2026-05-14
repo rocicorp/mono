@@ -118,7 +118,7 @@ import {
 import type {ConditionalSchemaQuery} from '../../../zql/src/query/schema-query.ts';
 import type {TypedView} from '../../../zql/src/query/typed-view.ts';
 import {nanoid} from '../util/nanoid.ts';
-import {send} from '../util/socket.ts';
+
 import {ActiveClientsManager} from './active-clients-manager.ts';
 import {ClientErrorKind} from './client-error-kind.ts';
 import {
@@ -551,7 +551,7 @@ export class Zero<
 
     this.#mutationTracker = new MutationTracker(
       lc,
-      (upTo: MutationID) => this.#send(['ackMutationResponses', upTo]),
+      (upTo: MutationID) => this.#sendIfConnected(['ackMutationResponses', upTo]),
       error => this.#disconnect(lc, error),
     );
 
@@ -776,7 +776,7 @@ export class Zero<
           };
         }
 
-        this.#send([msg[0], body]);
+        this.#sendIfConnected([msg[0], body]);
       },
       rep.experimentalWatch.bind(rep),
       maxRecentQueries,
@@ -790,7 +790,7 @@ export class Zero<
     this.#clientToServer = clientToServer(schema.tables);
 
     this.#deleteClientsManager = new DeleteClientsManager(
-      msg => this.#send(msg),
+      msg => this.#sendIfConnected(msg),
       rep.perdag,
       this.#lc,
       this.#rep.clientGroupID,
@@ -894,21 +894,26 @@ export class Zero<
     }
   }
 
+  #sendIfConnected(msg: Upstream): void {
+    if (this.#connectionManager.is(ConnectionStatus.Connected)) {
+      this.#send(msg);
+    }
+  }
+
   #send(msg: Upstream): void {
-    if (
-      this.#socket &&
-      this.#connectionManager.is(ConnectionStatus.Connected)
-    ) {
+    if (this.#socket) {
       const json = JSON.stringify(msg);
-      const history = this.#recentSentMessages;
-      if (history.length >= 5) {
-        history.shift();
+      if (msg[0] !== 'ping') {
+        const history = this.#recentSentMessages;
+        if (history.length >= 5) {
+          history.shift();
+        }
+        history.push({
+          type: msg[0],
+          size: json.length,
+          snippet: json.slice(0, 200),
+        });
       }
-      history.push({
-        type: msg[0],
-        size: json.length,
-        snippet: json.slice(0, 200),
-      });
       this.#socket.send(json);
     }
   }
@@ -1407,19 +1412,23 @@ export class Zero<
       // The reload is routed through onClientStateNotFound so customers can
       // override it (e.g. to show UI, defer reload, or report to Sentry).
       if (code === 1009) {
+        const recentMessagesInfo =
+          this.#recentSentMessages.length > 0
+            ? '\nRecent sent messages:\n' +
+              JSON.stringify(this.#recentSentMessages, null, 2)
+            : '';
         const messageTooLargeError = new ClientError({
           kind: ClientErrorKind.InvalidMessage,
           message:
-            'A WebSocket message exceeded the server message size limit ' +
-            '(ZERO_WEBSOCKET_MAX_PAYLOAD_BYTES). ' +
-            'This is usually caused by a mutation containing a large ' +
+            'A WebSocket message exceeded the server message size limit. ' +
+            "This is usually caused by a mutation's args containing a large " +
             'value such as a base64-encoded image. Consider uploading ' +
-            'large files to object storage and storing only the URL in Zero.',
+            'large files to object storage and storing only the URL in Zero.' +
+            recentMessagesInfo,
         });
         lc.error?.(
           'Server closed connection with 1009 (Message Too Big).',
           messageTooLargeError,
-          {recentMessages: this.#recentSentMessages},
         );
         this.#connectResolver.reject(messageTooLargeError);
         this.#disconnect(lc, messageTooLargeError);
@@ -1574,14 +1583,14 @@ export class Zero<
 
     const maybeSendDeletedClients = () => {
       if (hasDeletedClients()) {
-        send(socket, ['deleteClients', this.#deletedClients!]);
+        this.#send(['deleteClients', this.#deletedClients!]);
         this.#deletedClients = undefined;
       }
     };
 
     if (queriesPatch.size > 0 && this.#initConnectionQueries !== undefined) {
       maybeSendDeletedClients();
-      send(socket, [
+      this.#send([
         'changeDesiredQueries',
         {
           desiredQueriesPatch: [...queriesPatch.values()],
@@ -1592,7 +1601,7 @@ export class Zero<
       // if #initConnectionQueries was undefined that means we never
       // sent `initConnection` to the server inside the sec-protocol header.
       const clientSchema = this.#clientSchema;
-      send(socket, [
+      this.#send([
         'initConnection',
         {
           desiredQueriesPatch: [...queriesPatch.values()],
@@ -1964,7 +1973,7 @@ export class Zero<
           traceparent: this.#options.getTraceparent?.(),
         },
       ];
-      send(socket, msg);
+      this.#send(msg);
       if (!isMutationRecoveryPush) {
         this.#lastMutationIDSent = {clientID: m.clientID, id: m.id};
       }
@@ -2290,7 +2299,7 @@ export class Zero<
         requestID,
       },
     ];
-    send(socket, pullRequestMessage);
+    this.#send(pullRequestMessage);
     const pullResponseResolver: Resolver<PullResponseBody> = resolver();
     this.#pendingPullsByRequestID.set(requestID, pullResponseResolver);
     try {
@@ -2345,7 +2354,7 @@ export class Zero<
     this.#rep.auth = toReplicacheAuthToken(auth);
 
     if (auth) {
-      this.#send(['updateAuth', {auth}]);
+      this.#sendIfConnected(['updateAuth', {auth}]);
     }
   }
 
@@ -2382,7 +2391,7 @@ export class Zero<
     const pingMessage: PingMessage = ['ping', {}];
     const t0 = performance.now();
     assert(this.#socket, 'Expected socket to be connected for ping');
-    send(this.#socket, pingMessage);
+    this.#send(pingMessage);
 
     const raceResult = await promiseRace({
       waitForPong: promise,
