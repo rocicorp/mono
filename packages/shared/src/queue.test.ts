@@ -219,4 +219,30 @@ describe('Queue', () => {
     queue.enqueue(3);
     await promise;
   });
+
+  test('large queue drains efficiently (O(n) not O(n^2))', () => {
+    const queue = new Queue<number>();
+    const n = 100_000;
+    for (let i = 0; i < n; i++) {
+      queue.enqueue(i);
+    }
+    expect(queue.size()).toBe(n);
+
+    // When items are already enqueued, dequeue() returns T synchronously.
+    // This isolates the data structure cost from async/Promise overhead.
+    const start = performance.now();
+    let sum = 0;
+    for (let i = 0; i < n; i++) {
+      sum += queue.dequeue() as number;
+    }
+    const elapsed = performance.now() - start;
+
+    // Verify all values were dequeued correctly.
+    expect(sum).toBe((n * (n - 1)) / 2);
+    expect(queue.size()).toBe(0);
+
+    // With O(n^2) Array.shift(), 100k items takes ~1000ms.
+    // With O(1) cursor-based dequeue, it takes ~2ms.
+    expect(elapsed).toBeLessThan(200);
+  });
 });
