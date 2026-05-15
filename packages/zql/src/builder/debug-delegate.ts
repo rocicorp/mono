@@ -80,7 +80,7 @@ export class Debug implements DebugDelegate {
       counts[query] = (counts[query] ?? 0) + 1;
     }
     if (rows) {
-      rows[query] = [...(rows[query] ?? []), row];
+      (rows[query] ??= []).push(row);
     }
   }
 
