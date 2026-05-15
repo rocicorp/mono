@@ -14,36 +14,64 @@ if (!globalThis.gc) {
   );
 }
 
-const downstreams = Array.from({length: scenario.subscribers}, () =>
+globalThis.gc();
+const initialHeap = process.memoryUsage().heapUsed;
+
+const backlogs = Array.from({length: scenario.subscribers}, (_, subscriber) =>
+  Array.from({length: scenario.messagesPerSubscriber}, (_, message) =>
+    createPayload(subscriber, message, scenario.payloadBytes),
+  ),
+);
+globalThis.gc();
+const backlogHeap = process.memoryUsage().heapUsed;
+
+const oldDownstreams = Array.from({length: scenario.subscribers}, () =>
   Subscription.create<string>(),
 );
-
-globalThis.gc();
-const before = process.memoryUsage().heapUsed;
-
 for (let subscriber = 0; subscriber < scenario.subscribers; subscriber++) {
-  const downstream = downstreams[subscriber];
-  for (let message = 0; message < scenario.messagesPerSubscriber; message++) {
-    downstream.push(createPayload(subscriber, message, scenario.payloadBytes));
+  const downstream = oldDownstreams[subscriber];
+  for (const payload of backlogs[subscriber]) {
+    downstream.push(payload);
   }
 }
-
 globalThis.gc();
-const after = process.memoryUsage().heapUsed;
-const queued = downstreams.reduce(
-  (total, downstream) => total + downstream.queued + downstream.consuming,
-  0,
+const oldHandoffHeap = process.memoryUsage().heapUsed;
+
+const newDownstreams = Array.from({length: scenario.subscribers}, () =>
+  Subscription.create<string>(),
 );
-const heapDelta = after - before;
+for (let subscriber = 0; subscriber < scenario.subscribers; subscriber++) {
+  newDownstreams[subscriber].push(backlogs[subscriber][0]);
+}
+globalThis.gc();
+const newHandoffHeap = process.memoryUsage().heapUsed;
+
+const backlogEntries = scenario.subscribers * scenario.messagesPerSubscriber;
+const oldQueued = countPending(oldDownstreams);
+const newQueued = countPending(newDownstreams);
+const backlogDelta = backlogHeap - initialHeap;
+const oldExtraDelta = oldHandoffHeap - backlogHeap;
+const newExtraDelta = newHandoffHeap - oldHandoffHeap;
 
 console.log(
   [
     `scenario: ${scenario.name}`,
-    `queued entries: ${queued.toLocaleString()}`,
-    `heap delta: ${formatMB(heapDelta)}`,
-    `bytes / queued entry: ${(heapDelta / queued).toFixed(0)}`,
+    `backlog entries: ${backlogEntries.toLocaleString()}`,
+    `private backlog heap: ${formatMB(backlogDelta)}`,
+    `old handoff queued entries: ${oldQueued.toLocaleString()}`,
+    `old handoff extra heap: ${formatMB(oldExtraDelta)}`,
+    `new handoff queued entries: ${newQueued.toLocaleString()}`,
+    `new handoff extra heap: ${formatMB(newExtraDelta)}`,
+    `old extra bytes / queued entry: ${(oldExtraDelta / oldQueued).toFixed(0)}`,
   ].join('\n'),
 );
+
+function countPending(downstreams: Subscription<string>[]) {
+  return downstreams.reduce(
+    (total, downstream) => total + downstream.queued + downstream.consuming,
+    0,
+  );
+}
 
 function formatMB(bytes: number) {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
