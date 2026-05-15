@@ -1,10 +1,15 @@
+import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
-import {beforeEach, describe, expect} from 'vitest';
-import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
+import {beforeEach, describe, expect, vi} from 'vitest';
+import {
+  createSilentLogContext,
+  TestLogSink,
+} from '../../../../shared/src/logging-test-utils.ts';
 import {DEFAULT_TTL_MS} from '../../../../zql/src/query/ttl.ts';
 import {test, type PgTest} from '../../test/db.ts';
 import type {PostgresDB} from '../../types/pg.ts';
 import {cvrSchema} from '../../types/shards.ts';
+import {exitAfter} from '../life-cycle.ts';
 import {CVRPurger} from './cvr-purger.ts';
 import {
   setupCVRTables,
@@ -190,6 +195,34 @@ describe('view-syncer/cvr-purger', () => {
     return () => testDBs.drop(cvrDb);
   });
 
+  async function expectPurgerToExitNormallyWithoutErrorLog() {
+    const logSink = new TestLogSink();
+    const exit = vi
+      .spyOn(process, 'exit')
+      .mockImplementation(() => undefined as never);
+    try {
+      await exitAfter(new LogContext('debug', undefined, logSink), () =>
+        new CVRPurger(
+          new LogContext('debug', undefined, logSink),
+          cvrDb,
+          SHARD,
+          {
+            inactivityThresholdMs: INACTIVITY_THRESHOLD_MS,
+            initialBatchSize: 25,
+            initialIntervalMs: 60000,
+          },
+          TOMBSTONE_THRESHOLD_MS,
+        ).run(),
+      );
+      expect(exit).toHaveBeenCalledWith(0);
+      expect(logSink.messages.filter(([level]) => level === 'error')).toEqual(
+        [],
+      );
+    } finally {
+      exit.mockRestore();
+    }
+  }
+
   test('complete purge', async () => {
     expect(await purger.purgeInactiveCVRs(1000)).toEqual({
       purged: 3,
@@ -369,5 +402,17 @@ describe('view-syncer/cvr-purger', () => {
       // Let the locking transaction complete.
       releaseRowLock();
     }
+  });
+
+  test('shutdown if CVR table is missing', async () => {
+    await cvrDb`DROP TABLE "zapp_3/cvr".instances CASCADE`;
+
+    await expectPurgerToExitNormallyWithoutErrorLog();
+  });
+
+  test('shutdown if CVR schema is missing', async () => {
+    await cvrDb`DROP SCHEMA "zapp_3/cvr" CASCADE`;
+
+    await expectPurgerToExitNormallyWithoutErrorLog();
   });
 });
