@@ -202,10 +202,10 @@ describe('req.filter contract (pass-through operators preserve it)', () => {
     const sink = new Catch(flippedJoin);
     [...sink.fetch({filter: incomingFilter})];
 
-    // FlippedJoin should have invoked at least one parent fetch with the
-    // child-derived constraint AND the original req.filter intact.
+    // FlippedJoin should have invoked at least one parent fetch with
+    // child-derived multiConstraints AND the original req.filter intact.
     const parentCalls = recorder.received.filter(
-      r => r.constraint !== undefined,
+      r => r.multiConstraints !== undefined,
     );
     expect(parentCalls.length).toBeGreaterThanOrEqual(1);
     for (const req of parentCalls) {
