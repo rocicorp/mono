@@ -283,19 +283,35 @@ describe('onOnlineChange callback', () => {
     expect(getOfflineCount()).toBe(1);
   });
 
-  test('InvalidPush is transient: drops the connection but does not fatal', async () => {
-    // InvalidPush is usually transient (racing writers to lastMutationID).
+  test('InvalidPush with OutOfOrderMutation reason is transient: drops the connection but does not fatal', async () => {
+    // OoO InvalidPush is transient (racing writers to lastMutationID).
     // Replicache will re-push the same mutation IDs on reconnect, and by
     // then the racing writer has typically caught up.
     const {z} = getNewZero();
     await z.triggerConnected();
     await z.triggerError({
       kind: ErrorKind.InvalidPush,
+      reason: ErrorReason.OutOfOrderMutation,
       message: 'unexpected mutation id',
       origin: ErrorOrigin.ZeroCache,
     });
     await vi.advanceTimersByTimeAsync(0);
     expect(z.connectionStatus).not.toBe(ConnectionStatus.Error);
+  });
+
+  test('InvalidPush without OutOfOrderMutation reason is fatal', async () => {
+    // Other InvalidPush cases (clientGroupID mismatch, misconfiguration) are
+    // real protocol/config errors and must surface as Error.
+    const {z} = getNewZero();
+    await z.triggerConnected();
+    await z.triggerError({
+      kind: ErrorKind.InvalidPush,
+      reason: ErrorReason.Internal,
+      message: 'clientGroupID mismatch',
+      origin: ErrorOrigin.ZeroCache,
+    });
+    await z.waitForConnectionStatus(ConnectionStatus.Error);
+    expect(z.connectionStatus).toBe(ConnectionStatus.Error);
   });
 
   test('respects large backoff directives', async () => {

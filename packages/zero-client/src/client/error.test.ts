@@ -402,7 +402,6 @@ describe('getErrorConnectionTransition', () => {
   });
 
   test.each([
-    ErrorKind.InvalidPush,
     ErrorKind.Rebalance,
     ErrorKind.Rehome,
     ErrorKind.ServerOverloaded,
@@ -423,6 +422,37 @@ describe('getErrorConnectionTransition', () => {
       });
     },
   );
+
+  test('InvalidPush with OutOfOrderMutation reason retries', () => {
+    const error = new ProtocolError({
+      kind: ErrorKind.InvalidPush,
+      reason: ErrorReason.OutOfOrderMutation,
+      message: 'out of order',
+      origin: ErrorOrigin.ZeroCache,
+    });
+
+    expect(getErrorConnectionTransition(error)).toEqual({
+      status: NO_STATUS_TRANSITION,
+      reason: error,
+    });
+  });
+
+  test.each([
+    {reason: ErrorReason.Internal, label: 'Internal reason'},
+    {reason: undefined, label: 'no reason (legacy)'},
+  ] as const)('InvalidPush with $label transitions to Error', ({reason}) => {
+    const error = new ProtocolError({
+      kind: ErrorKind.InvalidPush,
+      ...(reason !== undefined ? {reason} : {}),
+      message: 'invalid push',
+      origin: ErrorOrigin.ZeroCache,
+    });
+
+    expect(getErrorConnectionTransition(error)).toEqual({
+      status: ConnectionStatus.Error,
+      reason: error,
+    });
+  });
 
   test.each([ErrorKind.AuthInvalidated, ErrorKind.Unauthorized] as const)(
     'returns needs auth status for auth error %s',

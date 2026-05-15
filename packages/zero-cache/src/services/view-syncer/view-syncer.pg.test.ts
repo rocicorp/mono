@@ -1303,7 +1303,7 @@ describe('view-syncer/service', () => {
               "url": undefined,
             },
             "profileID": "p0000g00000003203",
-            "protocolVersion": 51,
+            "protocolVersion": 52,
             "queryContext": {
               "allowedUrlPatterns": [
                 URLPattern {},
@@ -1593,7 +1593,7 @@ describe('view-syncer/service', () => {
               "url": undefined,
             },
             "profileID": "p0000g00000003203",
-            "protocolVersion": 51,
+            "protocolVersion": 52,
             "queryContext": {
               "allowedUrlPatterns": [
                 URLPattern {},
@@ -2271,7 +2271,7 @@ describe('view-syncer/service', () => {
               "url": undefined,
             },
             "profileID": "p0000g00000003203",
-            "protocolVersion": 51,
+            "protocolVersion": 52,
             "queryContext": {
               "allowedUrlPatterns": [
                 URLPattern {},
@@ -2490,7 +2490,7 @@ describe('view-syncer/service', () => {
               "url": undefined,
             },
             "profileID": "p0000g00000003203",
-            "protocolVersion": 51,
+            "protocolVersion": 52,
             "queryContext": {
               "allowedUrlPatterns": [
                 URLPattern {},

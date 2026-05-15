@@ -6,6 +6,7 @@ import {version} from '../../../otel/src/version.ts';
 import {assert, unreachable} from '../../../shared/src/asserts.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
+import {ErrorReason} from '../../../zero-protocol/src/error-reason.ts';
 import type {ErrorBody} from '../../../zero-protocol/src/error.ts';
 import type {Upstream} from '../../../zero-protocol/src/up.ts';
 import type {Mutagen} from '../services/mutagen/mutagen.ts';
@@ -93,6 +94,7 @@ export class SyncerWsMessageHandler implements MessageHandler {
                     type: 'fatal',
                     error: {
                       kind: ErrorKind.InvalidPush,
+                      reason: ErrorReason.Internal,
                       message:
                         `clientGroupID in mutation "${clientGroupID}" does not match ` +
                         `clientGroupID of connection "${this.#clientGroupID}`,
@@ -120,6 +122,7 @@ export class SyncerWsMessageHandler implements MessageHandler {
                       type: 'fatal',
                       error: {
                         kind: ErrorKind.InvalidPush,
+                        reason: ErrorReason.Internal,
                         message:
                           'A ZERO_MUTATE_URL must be set in order to process custom mutations.',
                         origin: ErrorOrigin.ZeroCache,
@@ -139,6 +142,7 @@ export class SyncerWsMessageHandler implements MessageHandler {
                     type: 'fatal',
                     error: {
                       kind: ErrorKind.InvalidPush,
+                      reason: ErrorReason.Internal,
                       message: `Support for legacy CRUD mutations is disabled`,
                       origin: ErrorOrigin.ZeroCache,
                     },

@@ -193,7 +193,7 @@ export function getErrorConnectionTransition(
   }
 
   if (isServerError(ex)) {
-    switch (ex.kind) {
+    switch (ex.errorBody.kind) {
       // Errors that should transition to error state
       case ErrorKind.ClientNotFound:
       case ErrorKind.InvalidConnectionRequest:
@@ -210,12 +210,21 @@ export function getErrorConnectionTransition(
       case ErrorKind.TransformFailed:
         return {status: ConnectionStatus.Error, reason: ex} as const;
 
-      // InvalidPush is transient: lastMutationID updates can race between
-      // mutagen (CRUD) and the user's API server (custom mutators), or
-      // between multiple zero-cache replicas / multiple user API server
-      // instances. Replicache will re-push the same mutation IDs on
-      // reconnect, by which time the racing writer has usually caught up.
+      // InvalidPush with reason=OutOfOrderMutation is treated as transient
+      // while CRUD and custom mutators run side-by-side: mutagen (CRUD)
+      // and the user's API server (custom mutators) race to advance
+      // lastMutationID, and mutagen can observe a gap before the API
+      // server's write replicates back. Replicache re-pushes on reconnect
+      // by which point the racer has caught up. Once CRUD is removed this
+      // case should not occur in correct operation and can be reclassified
+      // as fatal. Other InvalidPush reasons (clientGroupID mismatch,
+      // misconfiguration) are already fatal protocol errors.
       case ErrorKind.InvalidPush:
+        if (ex.errorBody.reason === ErrorReason.OutOfOrderMutation) {
+          return {status: NO_STATUS_TRANSITION, reason: ex} as const;
+        }
+        return {status: ConnectionStatus.Error, reason: ex} as const;
+
       // Errors that should continue with backoff/retry
       case ErrorKind.Rebalance:
       case ErrorKind.Rehome:
@@ -236,7 +245,7 @@ export function getErrorConnectionTransition(
         return {status: NO_STATUS_TRANSITION, reason: ex} as const;
 
       default:
-        unreachable(ex.kind);
+        unreachable(ex.errorBody);
     }
   }
 

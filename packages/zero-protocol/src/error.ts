@@ -13,7 +13,6 @@ const basicErrorKindSchema = v.literalUnion(
   ErrorKind.InvalidConnectionRequestLastMutationID,
   ErrorKind.InvalidConnectionRequestClientDeleted,
   ErrorKind.InvalidMessage,
-  ErrorKind.InvalidPush,
   ErrorKind.MutationRateLimited,
   ErrorKind.MutationFailed,
   ErrorKind.Unauthorized,
@@ -27,6 +26,20 @@ const basicErrorBodySchema = v.object({
   message: v.string(),
   // this is optional for backwards compatibility
   origin: v.literalUnion(ErrorOrigin.Server, ErrorOrigin.ZeroCache).optional(),
+});
+
+const invalidPushBodySchema = v.object({
+  kind: v.literal(ErrorKind.InvalidPush),
+  message: v.string(),
+  origin: v.literalUnion(ErrorOrigin.Server, ErrorOrigin.ZeroCache).optional(),
+  // OutOfOrderMutation is treated as transient while CRUD and custom
+  // mutators coexist: mutagen and the user's API server race to advance
+  // lastMutationID. The client retries it. Anything else (or absent, for
+  // backwards compatibility with older servers) is treated as fatal.
+  reason: v
+    .literalUnion(ErrorReason.OutOfOrderMutation, ErrorReason.Internal)
+    .optional(),
+  details: jsonSchema.optional(),
 });
 
 const backoffErrorKindSchema = v.literalUnion(
@@ -59,6 +72,7 @@ export const errorKindSchema: v.Type<ErrorKind> = v.union(
   backoffErrorKindSchema,
   pushFailedErrorKindSchema,
   transformFailedErrorKindSchema,
+  v.literal(ErrorKind.InvalidPush),
 );
 
 const pushFailedBaseSchema = v.object({
@@ -139,11 +153,13 @@ export const errorBodySchema = v.union(
   backoffBodySchema,
   pushFailedBodySchema,
   transformFailedBodySchema,
+  invalidPushBodySchema,
 );
 
 export type BackoffBody = v.Infer<typeof backoffBodySchema>;
 export type PushFailedBody = v.Infer<typeof pushFailedBodySchema>;
 export type TransformFailedBody = v.Infer<typeof transformFailedBodySchema>;
+export type InvalidPushBody = v.Infer<typeof invalidPushBodySchema>;
 export type ErrorBody = v.Infer<typeof errorBodySchema>;
 
 export const errorMessageSchema: v.Type<ErrorMessage> = v.tuple([

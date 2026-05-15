@@ -378,7 +378,10 @@ export class MutationTracker {
         : new ProtocolError({
             kind: ErrorKind.InvalidPush,
             origin: ErrorOrigin.Server,
-            reason: ErrorReason.Internal,
+            reason:
+              error.error === 'oooMutation'
+                ? ErrorReason.OutOfOrderMutation
+                : ErrorReason.Internal,
             message:
               error.error === 'oooMutation'
                 ? 'Server reported an out-of-order mutation'
@@ -393,7 +396,7 @@ export class MutationTracker {
         new ProtocolError({
           kind: ErrorKind.InvalidPush,
           origin: ErrorOrigin.Server,
-          reason: ErrorReason.Internal,
+          reason: ErrorReason.OutOfOrderMutation,
           message: 'Server reported an out-of-order mutation',
           details: error.details,
         }),

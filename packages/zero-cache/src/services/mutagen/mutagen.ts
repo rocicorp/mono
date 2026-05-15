@@ -7,6 +7,7 @@ import {assert, unreachable} from '../../../../shared/src/asserts.ts';
 import * as v from '../../../../shared/src/valita.ts';
 import {ErrorKind} from '../../../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../../../zero-protocol/src/error-origin.ts';
+import {ErrorReason} from '../../../../zero-protocol/src/error-reason.ts';
 import {
   isProtocolError,
   ProtocolError,
@@ -269,7 +270,8 @@ export async function processMutation(
         if (
           isProtocolError(e) &&
           !errorMode &&
-          e.kind === ErrorKind.InvalidPush &&
+          e.errorBody.kind === ErrorKind.InvalidPush &&
+          e.errorBody.reason === ErrorReason.OutOfOrderMutation &&
           customMutatorsEnabled &&
           i < 2
         ) {
@@ -463,6 +465,7 @@ async function checkSchemaVersionAndIncrementLastMutationID(
   } else if (receivedMutationID > lastMutationID) {
     throw new ProtocolError({
       kind: ErrorKind.InvalidPush,
+      reason: ErrorReason.OutOfOrderMutation,
       message: `Push contains unexpected mutation id ${receivedMutationID} for client ${clientID}. Expected mutation id ${lastMutationID.toString()}.`,
       origin: ErrorOrigin.ZeroCache,
     });
