@@ -109,6 +109,15 @@ export type FetchRequest = {
    *   that sits between such an internal fetch and the source will still
    *   apply its own condition on the way through, so the source still gets
    *   the right WHERE.
+   * - `Cap` is *not* a pass-through: it intentionally builds fresh
+   *   `{constraint}` requests when replaying tracked PKs and drops any
+   *   incoming `req.filter`. This is sound only because `Cap`'s sole
+   *   consumer in production is a `Join`'s child fetch (see
+   *   `Join.#processParentNode` in `join.ts`), which itself never carries
+   *   `req.filter` — Join's child fetches are constructed with just
+   *   `{constraint}` derived from join keys. If `Cap` is ever wired below
+   *   something that does push a `req.filter`, this carve-out becomes a
+   *   correctness bug.
    */
   readonly filter?: NoSubqueryCondition | undefined;
 };
