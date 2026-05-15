@@ -415,14 +415,26 @@ export class PlannerJoin {
         // does its own index seek.
         //
         // `FLIP_IVM_PER_CHILD_OVERHEAD` adds the IVM tax (eager child
-        // load + chunk priming) that doesn't show up in SQL row
-        // costs. See the constant's docstring.
+        // load + chunk priming). It only applies when BOTH:
+        //   (a) there's a downstream limit — without one, semi has to
+        //       scan everything anyway, so flipped's eager load isn't
+        //       wasted work; AND
+        //   (b) child.scanEst exceeds chunk size — single-chunk flipped
+        //       joins skip merge-sort priming entirely, so they don't
+        //       deserve the penalty.
+        // This preserves flipped wins on full-scan queries (no limit)
+        // and on small child sets (≤ chunk size), while penalizing the
+        // case it's actually wrong for: limited TAKE queries with huge
+        // child cardinality.
         cost:
           child.cost +
           Math.ceil(child.scanEst / getMultiConstraintChunkSize()) *
             parent.startupCost +
-          child.scanEst *
-            (parent.cost + parent.scanEst + FLIP_IVM_PER_CHILD_OVERHEAD),
+          child.scanEst * (parent.cost + parent.scanEst) +
+          (parent.limit !== undefined &&
+          child.scanEst > getMultiConstraintChunkSize()
+            ? child.scanEst * FLIP_IVM_PER_CHILD_OVERHEAD
+            : 0),
         // the child selectivity is not relevant here because it has already been taken into account via the flipping.
         // I.e., `child.returnedRows` is the estimated number of rows produced by the child _after_ taking filtering into account.
         returnedRows: parent.returnedRows * child.returnedRows,
