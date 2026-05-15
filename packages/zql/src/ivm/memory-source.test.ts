@@ -342,6 +342,191 @@ describe('fetch with req.filter', () => {
   });
 });
 
+describe('fetch with req.filter during push (overlay)', () => {
+  // Filter on `b` so each test can vary `b` to flip the matching status of
+  // overlay rows independently of the primary key `a`.
+  const bEqX = {
+    type: 'simple',
+    op: '=',
+    left: {type: 'column', name: 'b'},
+    right: {type: 'literal', value: 'x'},
+  } as const;
+
+  // Wires a Catch-like output that, on each push, fetches the connection
+  // with `bEqX` as req.filter. The fetch runs *while the overlay is set*,
+  // exercising the overlay × req.filter interaction.
+  function captureFetchDuringPush(
+    conn: ReturnType<MemorySource['connect']>,
+    drive: () => void,
+  ): Row[] {
+    let captured: (Node | 'yield')[] = [];
+    conn.setOutput({
+      push(_change: Change) {
+        captured = [...conn.fetch({filter: bEqX})];
+        return emptyArray;
+      },
+    });
+    drive();
+    return captured.filter((n): n is Node => n !== 'yield').map(n => n.row);
+  }
+
+  function makeSource() {
+    return createSource(
+      lc,
+      testLogConfig,
+      'table',
+      {a: {type: 'string'}, b: {type: 'string'}, c: {type: 'string'}},
+      ['a'],
+    );
+  }
+
+  test('ADD overlay matching req.filter is visible to in-flight fetch', () => {
+    const ms = makeSource();
+    // Seed with a non-matching row so the overlay row is the only match.
+    consume(ms.push(makeSourceChangeAdd({a: 'a1', b: 'y', c: 'seed'})));
+    const conn = ms.connect([['a', 'asc']]);
+
+    const rows = captureFetchDuringPush(conn, () =>
+      consume(ms.push(makeSourceChangeAdd({a: 'a2', b: 'x', c: 'overlay'}))),
+    );
+
+    expect(rows).toEqual([{a: 'a2', b: 'x', c: 'overlay'}]);
+    conn.destroy();
+  });
+
+  test('ADD overlay NOT matching req.filter is invisible to in-flight fetch', () => {
+    // Regression: without filtering the overlay's add via req.filter, the
+    // non-matching add would leak into the result when conn has no filter.
+    const ms = makeSource();
+    consume(ms.push(makeSourceChangeAdd({a: 'a1', b: 'x', c: 'seed'})));
+    const conn = ms.connect([['a', 'asc']]);
+
+    const rows = captureFetchDuringPush(conn, () =>
+      consume(ms.push(makeSourceChangeAdd({a: 'a2', b: 'y', c: 'overlay'}))),
+    );
+
+    expect(rows).toEqual([{a: 'a1', b: 'x', c: 'seed'}]);
+    conn.destroy();
+  });
+
+  test('REMOVE overlay matching req.filter suppresses the row', () => {
+    const ms = makeSource();
+    consume(ms.push(makeSourceChangeAdd({a: 'a1', b: 'x', c: 'keep'})));
+    consume(ms.push(makeSourceChangeAdd({a: 'a2', b: 'x', c: 'drop'})));
+    const conn = ms.connect([['a', 'asc']]);
+
+    const rows = captureFetchDuringPush(conn, () =>
+      consume(ms.push(makeSourceChangeRemove({a: 'a2', b: 'x', c: 'drop'}))),
+    );
+
+    expect(rows).toEqual([{a: 'a1', b: 'x', c: 'keep'}]);
+    conn.destroy();
+  });
+
+  test('REMOVE overlay NOT matching req.filter is a no-op for filtered view', () => {
+    const ms = makeSource();
+    consume(ms.push(makeSourceChangeAdd({a: 'a1', b: 'x', c: 'keep'})));
+    consume(ms.push(makeSourceChangeAdd({a: 'a2', b: 'y', c: 'drop'})));
+    const conn = ms.connect([['a', 'asc']]);
+
+    const rows = captureFetchDuringPush(conn, () =>
+      consume(ms.push(makeSourceChangeRemove({a: 'a2', b: 'y', c: 'drop'}))),
+    );
+
+    expect(rows).toEqual([{a: 'a1', b: 'x', c: 'keep'}]);
+    conn.destroy();
+  });
+
+  test('EDIT overlay where both old and new match: shows the new row', () => {
+    const ms = makeSource();
+    consume(ms.push(makeSourceChangeAdd({a: 'a1', b: 'x', c: 'old'})));
+    const conn = ms.connect([['a', 'asc']]);
+
+    const rows = captureFetchDuringPush(conn, () =>
+      consume(
+        ms.push(
+          makeSourceChangeEdit(
+            {a: 'a1', b: 'x', c: 'new'},
+            {a: 'a1', b: 'x', c: 'old'},
+          ),
+        ),
+      ),
+    );
+
+    expect(rows).toEqual([{a: 'a1', b: 'x', c: 'new'}]);
+    conn.destroy();
+  });
+
+  test('EDIT overlay where old matches but new does not: row disappears', () => {
+    // Regression: in the in-flight view the BTreeSet still holds the old
+    // row. The overlay's remove suppresses it, and the add (now
+    // non-matching) must be dropped — otherwise the filtered view would
+    // briefly contain a row that does not satisfy req.filter.
+    const ms = makeSource();
+    consume(ms.push(makeSourceChangeAdd({a: 'a1', b: 'x', c: 'old'})));
+    const conn = ms.connect([['a', 'asc']]);
+
+    const rows = captureFetchDuringPush(conn, () =>
+      consume(
+        ms.push(
+          makeSourceChangeEdit(
+            {a: 'a1', b: 'y', c: 'new'},
+            {a: 'a1', b: 'x', c: 'old'},
+          ),
+        ),
+      ),
+    );
+
+    expect(rows).toEqual([]);
+    conn.destroy();
+  });
+
+  test('EDIT overlay where new matches but old did not: row appears', () => {
+    const ms = makeSource();
+    consume(ms.push(makeSourceChangeAdd({a: 'a1', b: 'y', c: 'old'})));
+    const conn = ms.connect([['a', 'asc']]);
+
+    const rows = captureFetchDuringPush(conn, () =>
+      consume(
+        ms.push(
+          makeSourceChangeEdit(
+            {a: 'a1', b: 'x', c: 'new'},
+            {a: 'a1', b: 'y', c: 'old'},
+          ),
+        ),
+      ),
+    );
+
+    expect(rows).toEqual([{a: 'a1', b: 'x', c: 'new'}]);
+    conn.destroy();
+  });
+
+  test('EDIT overlay where neither old nor new match: no-op for filtered view', () => {
+    // Regression: BTreeSet contains a separate matching row plus the row
+    // being edited (non-matching → non-matching). Without filtering the
+    // remove overlay via req.filter, the unrelated remove suppression
+    // mechanics still need to produce a correct filtered view.
+    const ms = makeSource();
+    consume(ms.push(makeSourceChangeAdd({a: 'a1', b: 'x', c: 'keep'})));
+    consume(ms.push(makeSourceChangeAdd({a: 'a2', b: 'y', c: 'old'})));
+    const conn = ms.connect([['a', 'asc']]);
+
+    const rows = captureFetchDuringPush(conn, () =>
+      consume(
+        ms.push(
+          makeSourceChangeEdit(
+            {a: 'a2', b: 'z', c: 'new'},
+            {a: 'a2', b: 'y', c: 'old'},
+          ),
+        ),
+      ),
+    );
+
+    expect(rows).toEqual([{a: 'a1', b: 'x', c: 'keep'}]);
+    conn.destroy();
+  });
+});
+
 describe('generateWithOverlayInner', () => {
   const rows = [
     {id: 1, s: 'a', n: 11},

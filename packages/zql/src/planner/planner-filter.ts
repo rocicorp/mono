@@ -36,6 +36,16 @@ import type {PlannerTerminus} from './planner-terminus.ts';
  * # Cost
  * Pass-through. The filter node itself adds no execution cost; the only
  * effect is at the connection layer (lower estimated rows).
+ *
+ * # Planner/runtime branch-count mismatch
+ * For OR with multiple simple branches and a flipped CSQ (e.g.
+ * `or(a=1, b=2, exists(...))`), the planner builds one `PlannerFilter` per
+ * simple branch, but at runtime `applyFilterWithFlips` bundles all
+ * non-flipped branches into a single source fetch with `(a=1 OR b=2)` —
+ * one source scan, not N. In UFI mode the planner therefore models N
+ * independent source scans against the runtime's 1, slightly inflating
+ * the cost of OR-with-many-simples shapes. Common `or(simple, exists)`
+ * shapes have only one simple branch and are unaffected.
  */
 export class PlannerFilter {
   readonly kind = 'filter' as const;
