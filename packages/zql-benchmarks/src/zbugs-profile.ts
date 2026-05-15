@@ -403,6 +403,13 @@ const variants: {
       assignee: 'aldasmith-predovic44',
     },
   },
+  {
+    label: 'issueListV2 — gatewaycore + labels=[api-gateway,async-processing]',
+    ctx: {
+      ...baseListContext,
+      labels: ['api-gateway', 'async-processing'],
+    },
+  },
 ];
 
 // Filter to a single variant by 1-based index via ZBUGS_VARIANT (e.g. =4
