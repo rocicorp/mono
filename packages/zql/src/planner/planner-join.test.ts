@@ -5,7 +5,11 @@ import {
 } from '../ivm/flipped-join.ts';
 import type {ConnectionCostModel} from './planner-connection.ts';
 import type {PlannerConstraint} from './planner-constraint.ts';
-import {PlannerJoin, UnflippableJoinError} from './planner-join.ts';
+import {
+  FLIP_IVM_PER_CHILD_OVERHEAD,
+  PlannerJoin,
+  UnflippableJoinError,
+} from './planner-join.ts';
 import {PlannerSource} from './planner-source.ts';
 import {CONSTRAINTS, createJoin, DEFAULT_SORT} from './test/helpers.ts';
 
@@ -116,8 +120,8 @@ suite('PlannerJoin', () => {
     });
   });
 
-  test('semi-join has overhead multiplier applied to cost', () => {
-    const {join} = createJoin();
+  test('flipped-join cost includes per-child IVM overhead', () => {
+    const {child, join} = createJoin();
 
     // Estimate cost for semi-join (not flipped)
     const semiCost = join.estimateCost(1, []);
@@ -127,23 +131,27 @@ suite('PlannerJoin', () => {
     join.flip();
     const flippedCost = join.estimateCost(1, []);
 
-    // In the new cost model, semi-join and flipped join have equal cost in base case
-    expect(semiCost.cost).toBe(flippedCost.cost);
+    // Flipped now carries an eager-load + chunk-priming penalty that semi
+    // doesn't pay (see FLIP_IVM_PER_CHILD_OVERHEAD docstring).
+    const childRows = child.estimateCost(1, []).returnedRows;
+    expect(flippedCost.cost).toBe(
+      semiCost.cost + childRows * FLIP_IVM_PER_CHILD_OVERHEAD,
+    );
   });
 
-  test('semi-join overhead allows planner to prefer flipped joins when row counts are equal', () => {
+  test('semi is preferred over flipped at equal row counts', () => {
     const {join} = createJoin();
 
-    // Get costs for both join types
     const semiCost = join.estimateCost(1, []);
 
     join.reset();
     join.flip();
     const flippedCost = join.estimateCost(1, []);
 
-    // In the new cost model, costs are equal in base case
-    const ratio = semiCost.cost / flippedCost.cost;
-    expect(ratio).toBe(1);
+    // The IVM overhead added to flipped means semi wins when row counts
+    // are equal — flipped should only be chosen when its row-count savings
+    // exceed the overhead.
+    expect(semiCost.cost).toBeLessThan(flippedCost.cost);
   });
 
   // Flipped join batches child→parent lookups into chunks of
@@ -184,17 +192,20 @@ suite('PlannerJoin', () => {
       return join.estimateCost(1, []).cost;
     }
 
+    // Per-child IVM overhead added by FLIP_IVM_PER_CHILD_OVERHEAD.
+    const OVH = FLIP_IVM_PER_CHILD_OVERHEAD;
+
     test('cost jumps by parent.startupCost at each chunk boundary', () => {
       // With chunk size = 2, ceil(N/2) gives [1,1,2,2,3] for N=[1,2,3,4,5].
-      // Expected cost = ceil(N/2) * 100 + N * (parent.cost + parent.scanEst)
-      //               = ceil(N/2) * 100 + N * 1
+      // Expected cost = ceil(N/2) * 100 + N * (parent.cost + parent.scanEst + OVH)
+      //               = ceil(N/2) * 100 + N * (1 + OVH)
       const restore = setMultiConstraintChunkSizeForTest(2);
       try {
-        expect(flippedCost(1)).toBe(1 * PARENT_STARTUP + 1);
-        expect(flippedCost(2)).toBe(1 * PARENT_STARTUP + 2);
-        expect(flippedCost(3)).toBe(2 * PARENT_STARTUP + 3);
-        expect(flippedCost(4)).toBe(2 * PARENT_STARTUP + 4);
-        expect(flippedCost(5)).toBe(3 * PARENT_STARTUP + 5);
+        expect(flippedCost(1)).toBe(1 * PARENT_STARTUP + 1 * (1 + OVH));
+        expect(flippedCost(2)).toBe(1 * PARENT_STARTUP + 2 * (1 + OVH));
+        expect(flippedCost(3)).toBe(2 * PARENT_STARTUP + 3 * (1 + OVH));
+        expect(flippedCost(4)).toBe(2 * PARENT_STARTUP + 4 * (1 + OVH));
+        expect(flippedCost(5)).toBe(3 * PARENT_STARTUP + 5 * (1 + OVH));
       } finally {
         restore();
       }
@@ -203,11 +214,13 @@ suite('PlannerJoin', () => {
     test('cost respects the default chunk size at the 256 boundary', () => {
       const C = getMultiConstraintChunkSize();
       // N=C uses 1 chunk; N=C+1 uses 2 chunks.
-      expect(flippedCost(1)).toBe(1 * PARENT_STARTUP + 1);
-      expect(flippedCost(C)).toBe(1 * PARENT_STARTUP + C);
-      expect(flippedCost(C + 1)).toBe(2 * PARENT_STARTUP + (C + 1));
-      expect(flippedCost(2 * C)).toBe(2 * PARENT_STARTUP + 2 * C);
-      expect(flippedCost(2 * C + 1)).toBe(3 * PARENT_STARTUP + (2 * C + 1));
+      expect(flippedCost(1)).toBe(1 * PARENT_STARTUP + 1 * (1 + OVH));
+      expect(flippedCost(C)).toBe(1 * PARENT_STARTUP + C * (1 + OVH));
+      expect(flippedCost(C + 1)).toBe(2 * PARENT_STARTUP + (C + 1) * (1 + OVH));
+      expect(flippedCost(2 * C)).toBe(2 * PARENT_STARTUP + 2 * C * (1 + OVH));
+      expect(flippedCost(2 * C + 1)).toBe(
+        3 * PARENT_STARTUP + (2 * C + 1) * (1 + OVH),
+      );
     });
 
     test('setMultiConstraintChunkSizeForTest is observed by planner cost', () => {
@@ -218,7 +231,7 @@ suite('PlannerJoin', () => {
       const restore = setMultiConstraintChunkSizeForTest(64);
       try {
         // 256 rows → 4 chunks at size 64 vs 1 chunk at size 256.
-        expect(flippedCost(256)).toBe(4 * PARENT_STARTUP + 256);
+        expect(flippedCost(256)).toBe(4 * PARENT_STARTUP + 256 * (1 + OVH));
       } finally {
         restore();
       }
