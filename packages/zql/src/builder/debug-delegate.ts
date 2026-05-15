@@ -14,6 +14,8 @@ export const runtimeDebugFlags = {
 type SourceName = string;
 type SQL = string;
 
+export type SQLitePlans = Record<SQL, string[]>;
+
 export interface DebugDelegate {
   initQuery(table: SourceName, query: SQL): void;
   rowVended(table: SourceName, query: SQL, row: Row): void;
@@ -21,6 +23,8 @@ export interface DebugDelegate {
   getVendedRows(): RowsBySource;
   recordNVisit(table: SourceName, query: SQL, nvisit: number): void;
   getNVisitCounts(): RowCountsBySource;
+  recordExplain(table: SourceName, query: SQL, plan: string[]): void;
+  getSQLitePlans(): SQLitePlans;
   // clears all internal state
   reset(): void;
 }
@@ -29,11 +33,13 @@ export class Debug implements DebugDelegate {
   #rowCountsBySource: RowCountsBySource;
   #rowsBySource: RowsBySource;
   #nvisitBySource: RowCountsBySource;
+  #plans: SQLitePlans;
 
   constructor() {
     this.#rowCountsBySource = {};
     this.#rowsBySource = {};
     this.#nvisitBySource = {};
+    this.#plans = {};
   }
 
   getVendedRowCounts(): RowCountsBySource {
@@ -46,6 +52,10 @@ export class Debug implements DebugDelegate {
 
   getNVisitCounts(): RowCountsBySource {
     return this.#nvisitBySource;
+  }
+
+  getSQLitePlans(): SQLitePlans {
+    return this.#plans;
   }
 
   initQuery(table: SourceName, query: SQL): void {
@@ -61,6 +71,7 @@ export class Debug implements DebugDelegate {
     this.#rowCountsBySource = {};
     this.#rowsBySource = {};
     this.#nvisitBySource = {};
+    this.#plans = {};
   }
 
   rowVended(table: SourceName, query: SQL, row: Row): void {
@@ -83,6 +94,10 @@ export class Debug implements DebugDelegate {
       nvisitCounts[query] = 0;
     }
     nvisitCounts[query] += nvisit;
+  }
+
+  recordExplain(_table: SourceName, query: SQL, plan: string[]): void {
+    this.#plans[query] = plan;
   }
 
   #getRowStats(source: SourceName) {

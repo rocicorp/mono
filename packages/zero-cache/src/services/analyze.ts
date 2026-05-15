@@ -106,7 +106,17 @@ export async function analyzeQuery(
     yieldProcess,
   );
 
-  result.sqlitePlans = explainQueries(result.readRowCountsByQuery ?? {}, db);
+  // Fill in plans for any queries SQLite did not actually execute (and thus
+  // did not populate scanStatus EXPLAIN for) using the substituted-binding
+  // fallback. Plans captured at execution time use the real bindings and win.
+  const fallback = explainQueries(result.readRowCountsByQuery ?? {}, db);
+  const captured = result.sqlitePlans ?? {};
+  for (const [query, plan] of Object.entries(fallback)) {
+    if (!captured[query]) {
+      captured[query] = plan;
+    }
+  }
+  result.sqlitePlans = captured;
 
   if (planDebugger) {
     result.joinPlans = serializePlanDebugEvents(planDebugger.events);

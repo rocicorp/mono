@@ -342,10 +342,10 @@ export class TableSource implements Source {
       rowIterator.return?.();
       if (debug) {
         let totalNvisit = 0;
-        let i = 0;
-        while (true) {
+        const planLines: string[] = [];
+        for (let i = 0; ; i++) {
           const nvisit = cachedStatement.statement.scanStatus(
-            i++,
+            i,
             SQLite3Database.SQLITE_SCANSTAT_NVISIT,
             1,
           );
@@ -353,9 +353,20 @@ export class TableSource implements Source {
             break;
           }
           totalNvisit += Number(nvisit);
+          const explain = cachedStatement.statement.scanStatus(
+            i,
+            SQLite3Database.SQLITE_SCANSTAT_EXPLAIN,
+            1,
+          );
+          if (typeof explain === 'string' && explain.length > 0) {
+            planLines.push(explain);
+          }
         }
         if (totalNvisit !== 0) {
           debug.recordNVisit(this.#table, sqlAndBindings.text, totalNvisit);
+        }
+        if (planLines.length > 0) {
+          debug.recordExplain(this.#table, sqlAndBindings.text, planLines);
         }
         cachedStatement.statement.scanStatusReset();
       }

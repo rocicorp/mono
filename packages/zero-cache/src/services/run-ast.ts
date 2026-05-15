@@ -187,6 +187,7 @@ export async function runAst(
   }
   result.readRowCount = readRowCount;
   result.dbScansByQuery = host.debug?.getNVisitCounts() ?? {};
+  result.sqlitePlans = host.debug?.getSQLitePlans() ?? {};
 
   if (options.vendedRows) {
     result.readRows = host.debug?.getVendedRows();
