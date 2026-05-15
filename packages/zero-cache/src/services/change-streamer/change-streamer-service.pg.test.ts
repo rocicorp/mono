@@ -1,12 +1,12 @@
 import {PG_LOCK_NOT_AVAILABLE} from '@drdgvhbh/postgres-error-codes';
-import type {LogContext} from '@rocicorp/logger';
+import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import postgres from 'postgres';
 import {beforeEach, describe, expect, vi, type Mock} from 'vitest';
 import {AbortError} from '../../../../shared/src/abort-error.ts';
 import {assert} from '../../../../shared/src/asserts.ts';
 import {BigIntJSON, stringify} from '../../../../shared/src/bigint-json.ts';
-import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
+import {TestLogSink} from '../../../../shared/src/logging-test-utils.ts';
 import {Queue} from '../../../../shared/src/queue.ts';
 import {sleep} from '../../../../shared/src/sleep.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
@@ -18,6 +18,7 @@ import {Subscription, type Result} from '../../types/subscription.ts';
 import type {ChangeSource} from '../change-source/change-source.ts';
 import {type ChangeStreamMessage} from '../change-source/protocol/current/downstream.ts';
 import type {UpstreamStatusMessage} from '../change-source/protocol/current/status.ts';
+import {exitAfter} from '../life-cycle.ts';
 import {ReplicationStatusPublisher} from '../replicator/replication-status.ts';
 import {
   getSubscriptionState,
@@ -52,6 +53,7 @@ describe('change-streamer/service', () => {
   let changes: Subscription<ChangeStreamMessage>;
   let acks: Queue<UpstreamStatusMessage>;
   let streamerDone: Promise<void>;
+  let logSink: TestLogSink;
 
   // vi.useFakeTimers() does not play well with the postgres client.
   // Inject a manual mock instead.
@@ -61,7 +63,8 @@ describe('change-streamer/service', () => {
   const shard = {appID: 'zoro', shardNum: 3};
 
   beforeEach<PgTest>(async ({testDBs}) => {
-    lc = createSilentLogContext();
+    logSink = new TestLogSink();
+    lc = new LogContext('debug', undefined, logSink);
 
     sql = await testDBs.create('change_streamer_test_change_db', {
       typeOpts: {sendStringAsJson: true},
@@ -121,6 +124,26 @@ describe('change-streamer/service', () => {
     const down = await sub.dequeue();
     assert(down[0] !== 'error', `Unexpected error ${stringify(down)}`);
     return down[1];
+  }
+
+  async function expectStreamerToExitNormallyWithoutErrorLog(
+    deleteChangeDBObjects: () => Promise<unknown>,
+  ) {
+    const exit = vi
+      .spyOn(process, 'exit')
+      .mockImplementation(() => undefined as never);
+    try {
+      const done = exitAfter(lc, () => streamerDone);
+      await deleteChangeDBObjects();
+      changes.cancel(new Error('disconnected'));
+      await done;
+      expect(exit).toHaveBeenCalledWith(0);
+      expect(logSink.messages.filter(([level]) => level === 'error')).toEqual(
+        [],
+      );
+    } finally {
+      exit.mockRestore();
+    }
   }
 
   async function verifyNoMoreChanges(sub: Queue<Downstream>) {
@@ -973,6 +996,18 @@ describe('change-streamer/service', () => {
     void streamer.run();
 
     expect(await hasRetried).toBe(true);
+  });
+
+  test('shutdown if ChangeDB CDC table is missing when restarting stream', async () => {
+    await expectStreamerToExitNormallyWithoutErrorLog(
+      () => sql`DROP TABLE "zoro_3/cdc"."replicationState"`,
+    );
+  });
+
+  test('shutdown if ChangeDB CDC schema is missing when restarting stream', async () => {
+    await expectStreamerToExitNormallyWithoutErrorLog(
+      () => sql`DROP SCHEMA "zoro_3/cdc" CASCADE`,
+    );
   });
 
   test('starting point', async () => {
