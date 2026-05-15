@@ -1,20 +1,15 @@
-import {resolver, type Resolver} from '@rocicorp/resolver';
 import {assert} from '../../../../shared/src/asserts.ts';
 import {BigIntJSON} from '../../../../shared/src/bigint-json.ts';
 import type {Enum} from '../../../../shared/src/enum.ts';
 import {must} from '../../../../shared/src/must.ts';
 import {max} from '../../types/lexi-version.ts';
 import type {Subscription} from '../../types/subscription.ts';
+import {CatchupBacklog} from './catchup-backlog.ts';
 import type {ChangeTag, WatermarkedChange} from './change-streamer-service.ts';
 import {type Downstream, type Status} from './change-streamer.ts';
 import * as ErrorType from './error-type-enum.ts';
 
 type ErrorType = Enum<typeof ErrorType>;
-
-type BacklogEntry = {
-  change: WatermarkedChange;
-  done: Resolver<void>;
-};
 
 /**
  * Encapsulates a subscriber to changes. All subscribers start in a
@@ -30,7 +25,7 @@ export class Subscriber {
   readonly #latestStatus: () => Status;
   #watermark: string;
   #acked: string;
-  #backlog: BacklogEntry[] | null;
+  #backlog: CatchupBacklog<WatermarkedChange> | null;
   #backlogFlush: Promise<void> | undefined;
 
   constructor(
@@ -46,7 +41,7 @@ export class Subscriber {
     this.#latestStatus = latestStatus;
     this.#watermark = watermark;
     this.#acked = watermark;
-    this.#backlog = [];
+    this.#backlog = new CatchupBacklog();
   }
 
   get watermark() {
@@ -61,9 +56,7 @@ export class Subscriber {
     const [watermark] = change;
     if (watermark > this.#watermark) {
       if (this.#backlog) {
-        const done = resolver<void>();
-        this.#backlog.push({change, done});
-        await done.promise;
+        await this.#backlog.enqueue(change);
       } else {
         await this.#sendChange(change);
       }
@@ -120,6 +113,11 @@ export class Subscriber {
     }
 
     const backlog = this.#backlog;
+    if (backlog.empty) {
+      this.#backlog = null;
+      return Promise.resolve();
+    }
+
     const flush = this.#flushBacklog(backlog).finally(() => {
       if (this.#backlogFlush === flush) {
         this.#backlogFlush = undefined;
@@ -130,34 +128,13 @@ export class Subscriber {
     return flush;
   }
 
-  async #flushBacklog(backlog: BacklogEntry[]) {
+  async #flushBacklog(backlog: CatchupBacklog<WatermarkedChange>) {
     // #5970: https://github.com/rocicorp/mono/pull/5970
-    // Keep catchup handoff flow-controlled so completion means the downstream
-    // subscriber consumed the buffered live messages. Previously, fire-and-
-    // forget Promise fanout could move a large backlog into downstream pending
-    // state and let catchup report success before that work was actually done.
-    //
-    //   catchup query -> backlog[0] -> downstream ACK
-    //                  -> backlog[1] -> downstream ACK
-    //                  -> ...
-    //                  -> live forwarding
-    let next = 0;
+    // Flow-control the catchup-to-live handoff so "caught up" means the
+    // receiving VS consumed the buffered live changes, not just that RM moved a
+    // recovery burst into downstream pending work.
     try {
-      while (next < backlog.length) {
-        const entry = backlog[next++];
-        try {
-          await this.#sendChange(entry.change);
-          entry.done.resolve();
-        } catch (err) {
-          entry.done.reject(err);
-          throw err;
-        }
-      }
-    } catch (err) {
-      while (next < backlog.length) {
-        backlog[next++].done.reject(err);
-      }
-      throw err;
+      await backlog.flushWith(change => this.#sendChange(change));
     } finally {
       if (this.#backlog === backlog) {
         this.#backlog = null;
