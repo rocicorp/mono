@@ -1,5 +1,6 @@
 import {resolver, type Resolver} from '@rocicorp/resolver';
 import {assert} from './asserts.ts';
+import {RingBuffer} from './ring-buffer.ts';
 
 /**
  * A Queue allows the consumers to await (possibly future) values,
@@ -7,9 +8,9 @@ import {assert} from './asserts.ts';
  */
 export class Queue<T> {
   // Consumers waiting for entries to be produced.
-  readonly #consumers: Consumer<T>[] = [];
+  readonly #consumers = new RingBuffer<Consumer<T>>();
   // Produced entries waiting to be consumed.
-  readonly #produced: Produced<T>[] = [];
+  readonly #produced = new RingBuffer<Produced<T>>();
 
   enqueue(value: T): void {
     const consumer = this.#consumers.shift();
@@ -43,12 +44,14 @@ export class Queue<T> {
   delete(value: T): number {
     assert(value !== undefined, 'Queue delete value must not be undefined');
 
+    // Drain, filter, and re-push. This is O(n) but delete() is rare.
+    const items = this.#produced.drain();
     let count = 0;
-    for (let i = this.#produced.length - 1; i >= 0; i--) {
-      const p = this.#produced[i];
+    for (const p of items) {
       if (p.value === value) {
-        this.#produced.splice(i, 1);
         count++;
+      } else {
+        this.#produced.push(p);
       }
     }
     return count;
@@ -66,17 +69,17 @@ export class Queue<T> {
       return produced.value ?? Promise.reject(produced.rejection);
     }
     const r = resolver<T>();
+    const consumer: Consumer<T> = {resolver: r, timeoutID: undefined};
     const timeoutID =
       timeoutValue === undefined
         ? undefined
         : setTimeout(() => {
-            const i = this.#consumers.findIndex(c => c.resolver === r);
-            if (i >= 0) {
-              const [consumer] = this.#consumers.splice(i, 1);
+            if (this.#consumers.delete(consumer) > 0) {
               consumer.resolver.resolve(timeoutValue);
             }
           }, timeoutMs);
-    this.#consumers.push({resolver: r, timeoutID});
+    consumer.timeoutID = timeoutID;
+    this.#consumers.push(consumer);
     return r.promise;
   }
 
@@ -95,13 +98,7 @@ export class Queue<T> {
    * ```
    */
   drain(): (T | undefined)[] {
-    const ret: (T | undefined)[] = [];
-    for (const p of this.#produced) {
-      ret.push(p.value);
-    }
-    this.#produced.length = 0;
-
-    return ret;
+    return this.#produced.drain().map(p => p.value);
   }
 
   /**
@@ -111,7 +108,7 @@ export class Queue<T> {
    *          handed to the consumer and the Queue's size remains 0.
    */
   size(): number {
-    return this.#produced.length;
+    return this.#produced.size;
   }
 
   asAsyncIterable(cleanup = NOOP): AsyncIterable<T> {
