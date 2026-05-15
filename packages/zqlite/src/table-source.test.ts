@@ -5,7 +5,10 @@ import type {JSONValue} from '../../shared/src/json.ts';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
 import {must} from '../../shared/src/must.ts';
 import type {Row, Value} from '../../zero-protocol/src/data.ts';
-import type {DebugDelegate} from '../../zql/src/builder/debug-delegate.ts';
+import {
+  Debug,
+  type DebugDelegate,
+} from '../../zql/src/builder/debug-delegate.ts';
 import {Catch} from '../../zql/src/ivm/catch.ts';
 import {
   makeAddChange,
@@ -967,6 +970,40 @@ describe('fromSQLiteTypes error messages', () => {
   });
 });
 
+test('debug.recordExplain captures the plan SQLite picked for the real bindings', () => {
+  const db = new Database(lc, ':memory:');
+  db.exec(`
+    CREATE TABLE users (id TEXT PRIMARY KEY, email TEXT);
+    CREATE UNIQUE INDEX idx_users_email ON users(email);
+  `);
+  db.prepare('INSERT INTO users (id, email) VALUES (?, ?)').run('1', 'a@b');
+  db.prepare('INSERT INTO users (id, email) VALUES (?, ?)').run('2', 'c@d');
+
+  const source = new TableSource(
+    lc,
+    testLogConfig,
+    db,
+    'users',
+    {id: {type: 'string'}, email: {type: 'string'}},
+    ['id'],
+  );
+
+  const debug = new Debug();
+  const input = source.connect([['id', 'asc']], undefined, undefined, debug);
+
+  // Drain the iterator with a constraint that uses the email index.
+  [...input.fetch({constraint: {email: 'a@b'}})];
+
+  const plans = debug.getSQLitePlans();
+  const entries = Object.entries(plans);
+  expect(entries).toHaveLength(1);
+  const [sql, planLines] = entries[0];
+  expect(sql).toContain('"email" = ?');
+  // The captured plan reflects what SQLite actually ran with email='a@b'.
+  // SQLite picks the unique index here (SEARCH ... USING INDEX), not a SCAN.
+  expect(planLines.join('\n')).toMatch(/SEARCH .* USING (COVERING )?INDEX/);
+});
+
 test('SQLite iterator is closed when an error occurs before #mapFromSQLiteTypes is iterated', () => {
   const db = new Database(lc, ':memory:');
   db.exec('CREATE TABLE test (id TEXT PRIMARY KEY, val INTEGER);');
@@ -1012,6 +1049,8 @@ test('SQLite iterator is closed when an error occurs before #mapFromSQLiteTypes 
       getVendedRows: () => ({}),
       recordNVisit() {},
       getNVisitCounts: () => ({}),
+      recordExplain() {},
+      getSQLitePlans: () => ({}),
       reset() {},
     };
 
