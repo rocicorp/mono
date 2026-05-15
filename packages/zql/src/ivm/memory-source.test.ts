@@ -31,6 +31,7 @@ import {
   makeSourceChangeAdd,
   makeSourceChangeEdit,
   makeSourceChangeRemove,
+  type SourceInput,
 } from './source.ts';
 const lc = createSilentLogContext();
 
@@ -340,6 +341,115 @@ describe('fetch with req.filter', () => {
     expect(rows.map(n => n.row)).toEqual([{a: '1', b: 'x', c: 'p'}]);
     conn.destroy();
   });
+
+  test('req.filter applies when fetching in reverse', () => {
+    const ms = createSource(
+      lc,
+      testLogConfig,
+      'table',
+      {a: {type: 'string'}, b: {type: 'string'}},
+      ['a'],
+    );
+    consume(ms.push(makeSourceChangeAdd({a: 'a1', b: 'x'})));
+    consume(ms.push(makeSourceChangeAdd({a: 'a2', b: 'y'})));
+    consume(ms.push(makeSourceChangeAdd({a: 'a3', b: 'x'})));
+    consume(ms.push(makeSourceChangeAdd({a: 'a4', b: 'y'})));
+    consume(ms.push(makeSourceChangeAdd({a: 'a5', b: 'x'})));
+
+    const conn = ms.connect([['a', 'asc']]);
+    const rows = [
+      ...conn.fetch({
+        reverse: true,
+        filter: {
+          type: 'simple',
+          op: '=',
+          left: {type: 'column', name: 'b'},
+          right: {type: 'literal', value: 'x'},
+        },
+      }),
+    ].filter(n => n !== 'yield');
+
+    expect(rows.map(n => n.row)).toEqual([
+      {a: 'a5', b: 'x'},
+      {a: 'a3', b: 'x'},
+      {a: 'a1', b: 'x'},
+    ]);
+    conn.destroy();
+  });
+
+  test('req.filter applies when fetching with start', () => {
+    const ms = createSource(
+      lc,
+      testLogConfig,
+      'table',
+      {a: {type: 'string'}, b: {type: 'string'}},
+      ['a'],
+    );
+    consume(ms.push(makeSourceChangeAdd({a: 'a1', b: 'x'})));
+    consume(ms.push(makeSourceChangeAdd({a: 'a2', b: 'y'})));
+    consume(ms.push(makeSourceChangeAdd({a: 'a3', b: 'x'})));
+    consume(ms.push(makeSourceChangeAdd({a: 'a4', b: 'y'})));
+    consume(ms.push(makeSourceChangeAdd({a: 'a5', b: 'x'})));
+
+    const conn = ms.connect([['a', 'asc']]);
+    const rows = [
+      ...conn.fetch({
+        start: {row: {a: 'a2', b: 'y'}, basis: 'after'},
+        filter: {
+          type: 'simple',
+          op: '=',
+          left: {type: 'column', name: 'b'},
+          right: {type: 'literal', value: 'x'},
+        },
+      }),
+    ].filter(n => n !== 'yield');
+
+    expect(rows.map(n => n.row)).toEqual([
+      {a: 'a3', b: 'x'},
+      {a: 'a5', b: 'x'},
+    ]);
+    conn.destroy();
+  });
+
+  test('req.filter applies along with multiConstraints', () => {
+    // FlippedJoin drives parent fetches with multiConstraints. The filter
+    // pushed from a FilterStart upstream must AND with the IN-list and
+    // narrow the result further. Regression: if `#fetchMulti` ever stops
+    // spreading `req` into its recursive `#fetch` call, `filter` would
+    // silently be dropped on this path.
+    const ms = createSource(
+      lc,
+      testLogConfig,
+      'table',
+      {a: {type: 'string'}, b: {type: 'string'}},
+      ['a'],
+    );
+    consume(ms.push(makeSourceChangeAdd({a: 'a1', b: 'x'})));
+    consume(ms.push(makeSourceChangeAdd({a: 'a2', b: 'y'})));
+    consume(ms.push(makeSourceChangeAdd({a: 'a3', b: 'x'})));
+    consume(ms.push(makeSourceChangeAdd({a: 'a4', b: 'x'})));
+
+    const conn = ms.connect([['a', 'asc']]);
+    const rows = [
+      ...conn.fetch({
+        multiConstraints: [[{a: 'a1'}, {a: 'a2'}, {a: 'a3'}]],
+        filter: {
+          type: 'simple',
+          op: '=',
+          left: {type: 'column', name: 'b'},
+          right: {type: 'literal', value: 'x'},
+        },
+      }),
+    ].filter(n => n !== 'yield');
+
+    // a1 (IN-list ✓, b=x ✓), a2 (IN-list ✓, b=y ✗), a3 (IN-list ✓, b=x ✓),
+    // a4 (IN-list ✗) → expect [a1, a3].
+    expect(rows.map(n => n.row)).toEqual([
+      {a: 'a1', b: 'x'},
+      {a: 'a3', b: 'x'},
+    ]);
+    conn.destroy();
+  });
 });
 
 describe('fetch with req.filter during push (overlay)', () => {
@@ -355,10 +465,10 @@ describe('fetch with req.filter during push (overlay)', () => {
   // Wires a Catch-like output that, on each push, fetches the connection
   // with `bEqX` as req.filter. The fetch runs *while the overlay is set*,
   // exercising the overlay × req.filter interaction.
-  function captureFetchDuringPush(
-    conn: ReturnType<MemorySource['connect']>,
-    drive: () => void,
-  ): Row[] {
+  //
+  // This runs against both MemorySource and TableSource — the zqlite-zql-test
+  // package re-runs this file with a TableSource-backed `createSource`.
+  function captureFetchDuringPush(conn: SourceInput, drive: () => void): Row[] {
     let captured: (Node | 'yield')[] = [];
     conn.setOutput({
       push(_change: Change) {
@@ -523,6 +633,45 @@ describe('fetch with req.filter during push (overlay)', () => {
     );
 
     expect(rows).toEqual([{a: 'a1', b: 'x', c: 'keep'}]);
+    conn.destroy();
+  });
+
+  // Unordered (`connect(undefined, …)`) — used in production by non-flipped
+  // EXISTS children via the `useCap` path in builder.ts. MemorySource still
+  // sorts internally by PK, but TableSource takes a separate code path
+  // (`generateWithOverlayUnordered`) that's only exercised when sort is
+  // omitted. These run via the zqlite-zql-test setup, locking in the
+  // overlay × req.filter contract on that path too.
+  test('unordered: ADD overlay NOT matching req.filter is invisible', () => {
+    const ms = makeSource();
+    consume(ms.push(makeSourceChangeAdd({a: 'a1', b: 'x', c: 'seed'})));
+    const conn = ms.connect(undefined);
+
+    const rows = captureFetchDuringPush(conn, () =>
+      consume(ms.push(makeSourceChangeAdd({a: 'a2', b: 'y', c: 'overlay'}))),
+    );
+
+    expect(rows).toEqual([{a: 'a1', b: 'x', c: 'seed'}]);
+    conn.destroy();
+  });
+
+  test('unordered: EDIT overlay where old matches but new does not: row disappears', () => {
+    const ms = makeSource();
+    consume(ms.push(makeSourceChangeAdd({a: 'a1', b: 'x', c: 'old'})));
+    const conn = ms.connect(undefined);
+
+    const rows = captureFetchDuringPush(conn, () =>
+      consume(
+        ms.push(
+          makeSourceChangeEdit(
+            {a: 'a1', b: 'y', c: 'new'},
+            {a: 'a1', b: 'x', c: 'old'},
+          ),
+        ),
+      ),
+    );
+
+    expect(rows).toEqual([]);
     conn.destroy();
   });
 });

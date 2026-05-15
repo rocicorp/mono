@@ -6,12 +6,15 @@ import type {NoSubqueryCondition} from '../builder/filter.ts';
 import {Catch} from './catch.ts';
 import {FilterEnd, FilterStart} from './filter-operators.ts';
 import {FlippedJoin} from './flipped-join.ts';
+import {Join} from './join.ts';
+import {MemoryStorage} from './memory-storage.ts';
 import {type FetchRequest, type Input, type Output} from './operator.ts';
 import type {SourceSchema} from './schema.ts';
 import {Skip} from './skip.ts';
 import {makeSourceChangeAdd} from './source.ts';
 import {consume} from './stream.ts';
 import type {Stream} from './stream.ts';
+import {Take} from './take.ts';
 import {createSource} from './test/source-factory.ts';
 import {UnionFanIn} from './union-fan-in.ts';
 import {UnionFanOut} from './union-fan-out.ts';
@@ -161,6 +164,74 @@ describe('req.filter contract (pass-through operators preserve it)', () => {
     }
 
     conn.destroy();
+  });
+
+  test('Take preserves req.filter via spread', () => {
+    const ms = createSource(
+      lc,
+      testLogConfig,
+      'table',
+      {a: {type: 'string'}, b: {type: 'string'}},
+      ['a'],
+    );
+    const conn = ms.connect([['a', 'asc']]);
+    const recorder = new RecordingInput(conn);
+    const take = new Take(recorder, new MemoryStorage(), 10);
+
+    const incomingFilter: NoSubqueryCondition = cmpEq('b', 'x');
+    [...take.fetch({filter: incomingFilter})];
+    expect(recorder.received).toHaveLength(1);
+    expect(recorder.received[0].filter).toBe(incomingFilter);
+
+    conn.destroy();
+  });
+
+  test('Join preserves req.filter on parent fetches', () => {
+    // Join forwards `req` whole to its parent input. The child fetch path
+    // (`#processParentNode`) constructs a fresh `{constraint}` request and
+    // intentionally drops `req.filter` — see the contract block in
+    // `operator.ts`.
+    const items = createSource(
+      lc,
+      testLogConfig,
+      'items',
+      {id: {type: 'string'}, status: {type: 'string'}},
+      ['id'],
+    );
+    const tags = createSource(
+      lc,
+      testLogConfig,
+      'tags',
+      {id: {type: 'string'}, itemID: {type: 'string'}},
+      ['id'],
+    );
+    consume(items.push(makeSourceChangeAdd({id: 'i1', status: 'open'})));
+    consume(tags.push(makeSourceChangeAdd({id: 't1', itemID: 'i1'})));
+
+    const parentConn = items.connect([['id', 'asc']]);
+    const recorder = new RecordingInput(parentConn);
+    const childConn = tags.connect([['id', 'asc']]);
+
+    const join = new Join({
+      parent: recorder,
+      child: childConn,
+      parentKey: ['id'],
+      childKey: ['itemID'],
+      relationshipName: 'tagged',
+      hidden: true,
+      system: 'client',
+    });
+
+    const incomingFilter: NoSubqueryCondition = cmpEq('status', 'open');
+    const sink = new Catch(join);
+    [...sink.fetch({filter: incomingFilter})];
+
+    // Exactly one parent fetch, and it must carry the original filter.
+    expect(recorder.received).toHaveLength(1);
+    expect(recorder.received[0].filter).toBe(incomingFilter);
+
+    parentConn.destroy();
+    childConn.destroy();
   });
 
   test('FlippedJoin spreads req (including req.filter) to parent fetches', () => {
