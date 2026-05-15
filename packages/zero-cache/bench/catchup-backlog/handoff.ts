@@ -13,7 +13,9 @@ export type HandoffResult = {
   mode: HandoffMode;
   producerMs: number;
   totalMs: number;
+  hiddenDrainMs: number;
   messagesPerSecond: number;
+  pendingAtProducerDone: number;
   maxAggregatePending: number;
   maxPendingPerSubscriber: number;
 };
@@ -44,9 +46,18 @@ async function run(
   const downstreams = Array.from({length: scenario.subscribers}, () =>
     Subscription.create<string>(),
   );
-  const consumed = Array.from({length: scenario.subscribers}, () => 0);
+  const consumed = Array<number>(scenario.subscribers).fill(0);
   let maxAggregatePending = 0;
   let maxPendingPerSubscriber = 0;
+
+  const aggregatePending = () => {
+    let aggregate = 0;
+    for (const downstream of downstreams) {
+      const pending = downstream.queued + downstream.consuming;
+      aggregate += pending;
+    }
+    return aggregate;
+  };
 
   const samplePending = () => {
     let aggregate = 0;
@@ -94,6 +105,7 @@ async function run(
 
   const start = performance.now();
   let producerMs: number;
+  let pendingAtProducerDone: number;
   if (mode === 'fire-and-forget handoff') {
     const pending: Promise<unknown>[] = [];
     for (let subscriber = 0; subscriber < downstreams.length; subscriber++) {
@@ -110,6 +122,7 @@ async function run(
       }
     }
     producerMs = performance.now() - start;
+    pendingAtProducerDone = aggregatePending();
     await Promise.all(pending);
   } else {
     await Promise.all(
@@ -126,6 +139,7 @@ async function run(
       }),
     );
     producerMs = performance.now() - start;
+    pendingAtProducerDone = aggregatePending();
   }
   await Promise.all(consumers);
   const totalMs = performance.now() - start;
@@ -137,7 +151,9 @@ async function run(
     mode,
     producerMs,
     totalMs,
+    hiddenDrainMs: totalMs - producerMs,
     messagesPerSecond: totalMessages / (totalMs / 1000),
+    pendingAtProducerDone,
     maxAggregatePending,
     maxPendingPerSubscriber,
   };

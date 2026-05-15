@@ -34,3 +34,8 @@ Memory probe for the 16-VS outage-recovery queue burst:
 ```bash
 npm --workspace=zero-cache run perf:catchup-backlog:memory
 ```
+
+In the benchmark output, `done ms` is when the handoff reports completion.
+For the old fire-and-forget shape this corresponds to enqueue completion;
+`pending at done` and `hidden ms` show how much downstream debt still remained
+after that reported completion.
