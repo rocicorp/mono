@@ -73,6 +73,7 @@ export class CVRPurger implements Service {
         const start = performance.now();
         const {purged, remaining} =
           await this.purgeInactiveCVRs(maxCVRsPerPurge);
+        this.#state.resetBackoff();
 
         if (purgeable !== undefined && remaining > purgeable) {
           // If the number of purgeable CVRs has grown even after the purge,
@@ -92,7 +93,7 @@ export class CVRPurger implements Service {
         );
         await this.#state.sleep(purgeInterval);
       } catch (e) {
-        this.#lc.warn?.(`error encountered while garbage collecting CVRs`, e);
+        await this.#state.backoff(this.#lc, e);
       }
     }
   }
