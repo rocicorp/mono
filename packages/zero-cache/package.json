@@ -28,6 +28,8 @@
     "start": "tsx ./src/server/runner/main.ts",
     "benchdb": "tsx ./bench/bench.ts",
     "double": "tsx ./bench/double.ts",
+    "perf:rm-vs-load": "tsx ./bench/rm-vs-load/index.ts",
+    "perf:rm-vs-load:e2e": "tsx ./bench/rm-vs-load/e2e.ts",
     "wal_bench": "tsx ./bench/wal-bench.ts",
     "wal2_bench": "tsx ./bench/wal2-bench.ts",
     "fmt": "oxfmt .",

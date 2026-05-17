@@ -66,7 +66,9 @@ type QueueEntry =
 type PendingTransaction = {
   pool: TransactionPool;
   preCommitWatermark: string;
+  lastWatermarkUpdatedTo: string;
   pos: number;
+  pendingChangeLogEntries: ChangeLogInsert[];
   startingReplicationState: Promise<ReplicationOwner>;
   ack: boolean;
 };
@@ -75,7 +77,15 @@ type ReplicationOwner = {
   owner: string | null;
 };
 
+type ChangeLogInsert = {
+  watermark: string;
+  precommit: string | null;
+  pos: number;
+  change: string;
+};
+
 const backfillRequestsSchema = v.array(backfillRequestSchema);
+const CHANGE_LOG_INSERT_BATCH_SIZE = 100;
 
 export type TuningOptions = {
   backPressureLimitHeapProportion: number;
@@ -463,17 +473,30 @@ export class Storer implements Service {
               },
             ),
             preCommitWatermark: watermark,
+            lastWatermarkUpdatedTo: watermark,
             pos: 0,
+            pendingChangeLogEntries: [],
             startingReplicationState: promise,
             ack: !change.skipAck,
           };
           tx.pool.run(this.#db);
-          // Acquire a lock on the replicationState row to detect and/or prevent
-          // a concurrent ownership change.
+          // #5976: https://github.com/rocicorp/mono/pull/5976
+          // Guarded UPDATE combines the ownership check with the watermark
+          // write to remove the previous SELECT-owner-then-UPDATE round trip.
+          // This was measured in the shared 1 RM / 16 view-syncer e2e suite as
+          // part of the ~13-35% rows/s improvement in #5976.
+          //
+          // Keep this inside the same transaction as the changeLog writes: if
+          // ownership was lost or a later write fails, no rows are ACKed and
+          // the advertised resume point rolls back with the changeLog rows.
           void tx.pool.process(tx => {
+            const lastWatermark = watermark;
             tx<ReplicationOwner[]> /*sql*/ `
-          SELECT "owner" FROM ${this.#cdc('replicationState')} FOR UPDATE`.then(
-              ([result]) => resolve(result),
+          UPDATE ${this.#cdc('replicationState')}
+             SET ${tx({lastWatermark})}
+           WHERE "owner" = ${this.#taskID}
+       RETURNING "owner"`.then(
+              ([result]) => resolve(result ?? {owner: null}),
               reject,
             );
             return [];
@@ -483,7 +506,7 @@ export class Storer implements Service {
           tx.pos++;
         }
 
-        const entry = {
+        const entry: ChangeLogInsert = {
           watermark: tag === 'commit' ? watermark : tx.preCommitWatermark,
           precommit: tag === 'commit' ? tx.preCommitWatermark : null,
           pos: tx.pos,
@@ -492,12 +515,22 @@ export class Storer implements Service {
           change: extractChangeSubstring(json, tag),
         };
 
-        const processed = tx.pool.process(sql => [
-          sql`INSERT INTO ${this.#cdc('changeLog')} ${sql(entry)}`,
-          ...(change !== null && isSchemaChange(change)
-            ? this.#trackBackfillMetadata(sql, change)
-            : []),
-        ]);
+        let processed = promiseVoid;
+        if (change !== null && isSchemaChange(change)) {
+          await this.#flushChangeLogEntries(tx);
+          processed = tx.pool.process(sql => [
+            sql`INSERT INTO ${this.#cdc('changeLog')} ${sql(entry)}`,
+            ...this.#trackBackfillMetadata(sql, change),
+          ]);
+        } else {
+          tx.pendingChangeLogEntries.push(entry);
+          if (
+            tag === 'commit' ||
+            tx.pendingChangeLogEntries.length >= CHANGE_LOG_INSERT_BATCH_SIZE
+          ) {
+            processed = this.#flushChangeLogEntries(tx);
+          }
+        }
 
         if (tx.pos % 100 === 0) {
           // Backpressure is exerted on commit when awaiting tx.pool.done().
@@ -510,19 +543,26 @@ export class Storer implements Service {
         if (tag === 'commit') {
           const {owner} = await tx.startingReplicationState;
           if (owner !== this.#taskID) {
-            // Ownership change reflected in the replicationState read in 'begin'.
+            // Ownership change reflected in the replicationState update in
+            // 'begin'.
             tx.pool.fail(
               new AbortError(
-                `changeLog ownership has been assumed by ${owner}`,
+                owner === null
+                  ? 'changeLog ownership is no longer held by this task'
+                  : `changeLog ownership has been assumed by ${owner}`,
               ),
             );
           } else {
-            // Update the replication state.
-            const lastWatermark = watermark;
-            void tx.pool.process(tx => [
-              tx`
-            UPDATE ${this.#cdc('replicationState')} SET ${tx({lastWatermark})}`,
-            ]);
+            if (watermark !== tx.lastWatermarkUpdatedTo) {
+              // Some callers begin with a precommit watermark and commit with
+              // the final watermark. The main change-streamer passes the
+              // commit watermark throughout, so this is normally skipped.
+              const lastWatermark = watermark;
+              void tx.pool.process(tx => [
+                tx`
+              UPDATE ${this.#cdc('replicationState')} SET ${tx({lastWatermark})}`,
+              ]);
+            }
             tx.pool.setDone();
           }
 
@@ -540,6 +580,7 @@ export class Storer implements Service {
         } else if (tag === 'rollback') {
           // Aborted transactions are not stored in the changeLog. Abort the current tx
           // and process catchup of subscribers that were waiting for it to end.
+          tx.pendingChangeLogEntries = [];
           tx.pool.abort();
           await tx.pool.done();
           tx = null;
@@ -585,6 +626,25 @@ export class Storer implements Service {
     void Promise.all(
       subs.map(sub => this.#catchup(sub, lastWatermark, reader)),
     ).finally(() => reader.setDone());
+  }
+
+  #flushChangeLogEntries(tx: PendingTransaction): Promise<void> {
+    if (tx.pendingChangeLogEntries.length === 0) {
+      return promiseVoid;
+    }
+    const entries = tx.pendingChangeLogEntries;
+    tx.pendingChangeLogEntries = [];
+    // #5976: https://github.com/rocicorp/mono/pull/5976
+    // Batch insert buffered data rows to reduce changeDB round trips.
+    // Previously, data-heavy upstream transactions issued one INSERT per
+    // changeLog row; batching was measured in the shared 1 RM / 16 view-syncer
+    // e2e suite as part of the ~13-35% rows/s improvement in #5976.
+    //
+    // Schema changes still flush immediately before metadata writes so their
+    // side effects remain ordered with the change that introduced them.
+    return tx.pool.process(sql => [
+      sql`INSERT INTO ${this.#cdc('changeLog')} ${sql(entries)}`,
+    ]);
   }
 
   async #catchup(
