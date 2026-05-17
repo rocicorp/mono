@@ -660,6 +660,7 @@ export class PipelineDriver {
     const diff = this.#snapshotter.advance(
       this.#tableSpecs,
       this.#allTableNames,
+      new Set(this.#tables.keys()),
     );
     const {prev, curr, changes} = diff;
     this.#lc.debug?.(
