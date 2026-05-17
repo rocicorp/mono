@@ -25,6 +25,7 @@ import {Storer} from '../../src/services/change-streamer/storer.ts';
 import {Subscriber} from '../../src/services/change-streamer/subscriber.ts';
 import {ChangeProcessor} from '../../src/services/replicator/change-processor.ts';
 import {initReplicationState} from '../../src/services/replicator/schema/replication-state.ts';
+import {ThreadWriteWorkerClient} from '../../src/services/replicator/write-worker-client.ts';
 import {postgresTypeConfig, type PostgresDB} from '../../src/types/pg.ts';
 import {cdcSchema, type ShardID} from '../../src/types/shards.ts';
 import {Subscription} from '../../src/types/subscription.ts';
@@ -33,6 +34,7 @@ import {
   argValue,
   envFlag,
   envInt,
+  envString,
   formatRate,
   percentile,
   sleep,
@@ -41,6 +43,7 @@ import {
 } from './perf-utils.ts';
 import {describeScenarios, loadScenarios} from './scenarios.ts';
 import type {
+  ConsumerApplyMode,
   ConsumerConfig,
   LoadConsumer,
   Scenario,
@@ -68,19 +71,41 @@ const shard: ShardID = {appID: 'bench', shardNum: 0};
 const replicaVersion = '000000000000';
 const sqlitePath = `/tmp/zero-cache-rm-vs-load-${process.pid}.db`;
 let cpuSink = 0;
+const workerBatchMessages = envInt('ZERO_RM_VS_WORKER_BATCH_MESSAGES', 64);
 
 const full = envFlag('ZERO_RM_VS_FULL');
 const durationMs = envInt('ZERO_RM_VS_DURATION_MS', full ? 2_500 : 1_000);
 const flushBytesThreshold = envInt('ZERO_RM_VS_FLUSH_BYTES', 16 * 1024);
 const reconnectLagTx = envInt('ZERO_RM_VS_RECONNECT_LAG_TX', 64);
+const applyMode = applyModeFromEnv();
 const consumerConfig: ConsumerConfig = {
   count: envInt('ZERO_RM_VS_SUBSCRIBERS', full ? 16 : 4),
   ackDelayMs: envInt('ZERO_RM_VS_ACK_DELAY_MS', 0),
-  applyMessages: envFlag('ZERO_RM_VS_APPLY_CLIENTS'),
+  applyMode,
+  applyMessages: applyMode !== 'none',
   clientCpuMicros: envInt('ZERO_RM_VS_CLIENT_CPU_US', 0),
   slowAckDelayMs: envInt('ZERO_RM_VS_SLOW_ACK_DELAY_MS', full ? 2 : 1),
   slowEvery: envInt('ZERO_RM_VS_SLOW_EVERY', full ? 4 : 2),
 };
+
+function applyModeFromEnv(): ConsumerApplyMode {
+  const mode = envString('ZERO_RM_VS_APPLY_MODE');
+  if (mode === undefined) {
+    return envFlag('ZERO_RM_VS_APPLY_CLIENTS') ? 'direct' : 'none';
+  }
+  switch (mode) {
+    case 'none':
+    case 'direct':
+    case 'worker-message':
+    case 'worker-batch':
+      return mode;
+    default:
+      throw new Error(
+        `Invalid ZERO_RM_VS_APPLY_MODE=${mode}; expected ` +
+          'none, direct, worker-message, or worker-batch',
+      );
+  }
+}
 
 const scenarios = loadScenarios(full);
 console.log(`scenario bytes: ${describeScenarios(scenarios)}`);
@@ -143,7 +168,7 @@ async function runScenario(
   const forwarder = new Forwarder(lc, {
     flowControlConsensusPaddingSeconds: 0.001,
   });
-  const consumers = createConsumers(consumerConfig);
+  const consumers = await createConsumers(consumerConfig);
   for (const {sub} of consumers) {
     forwarder.add(sub);
   }
@@ -228,7 +253,7 @@ async function runScenario(
       ) {
         const catchupTx = Math.max(2, tx - reconnectLagTx);
         reconnectCatchupFrom = watermarkFor(catchupTx);
-        reconnect = makeConsumer(
+        reconnect = await makeConsumer(
           `reconnect-${scenario.name}`,
           reconnectCatchupFrom,
           consumerConfig.ackDelayMs,
@@ -288,6 +313,7 @@ async function runScenario(
       reconnectCatchupFrom,
       reconnectMessages: reconnect?.stats().processed ?? 0,
       subscriberAckDelayMs: consumerConfig.ackDelayMs,
+      subscriberApplyMode: consumerConfig.applyMode,
       subscriberApplyMessages: consumerConfig.applyMessages,
       subscriberClientCpuMicros: consumerConfig.clientCpuMicros,
       slowSubscriberAckDelayMs: consumerConfig.slowAckDelayMs,
@@ -354,26 +380,28 @@ function initializeReplica(db: Database): ChangeProcessor {
   return processor;
 }
 
-function createConsumers(config: ConsumerConfig): LoadConsumer[] {
-  return Array.from({length: config.count}, (_, i) => {
-    const isSlow = config.slowEvery > 0 && (i + 1) % config.slowEvery === 0;
-    return makeConsumer(
-      `vs-${i}`,
-      replicaVersion,
-      isSlow ? config.slowAckDelayMs : config.ackDelayMs,
-      config,
-      true,
-    );
-  });
+function createConsumers(config: ConsumerConfig): Promise<LoadConsumer[]> {
+  return Promise.all(
+    Array.from({length: config.count}, (_, i) => {
+      const isSlow = config.slowEvery > 0 && (i + 1) % config.slowEvery === 0;
+      return makeConsumer(
+        `vs-${i}`,
+        replicaVersion,
+        isSlow ? config.slowAckDelayMs : config.ackDelayMs,
+        config,
+        true,
+      );
+    }),
+  );
 }
 
-function makeConsumer(
+async function makeConsumer(
   id: string,
   watermark: string,
   ackDelayMs: number,
   config: ConsumerConfig,
   caughtUp: boolean,
-): LoadConsumer {
+): Promise<LoadConsumer> {
   let active = true;
   let processed = 0;
   let maxAckLagMessages = 0;
@@ -381,14 +409,65 @@ function makeConsumer(
   let samples = 0;
   let consumerReplica: Database | undefined;
   let processor: ChangeProcessor | undefined;
+  let worker: ThreadWriteWorkerClient | undefined;
   let consumerSQLitePath: string | undefined;
-  if (config.applyMessages) {
+  if (config.applyMode !== 'none') {
     consumerSQLitePath = `${sqlitePath}-${id}`;
     cleanupSQLite(consumerSQLitePath);
     consumerReplica = new Database(lc, consumerSQLitePath);
-    consumerReplica.pragma('journal_mode = WAL');
+    consumerReplica.pragma('journal_mode = WAL2');
     processor = initializeReplica(consumerReplica);
+    if (config.applyMode !== 'direct') {
+      consumerReplica.close();
+      consumerReplica = undefined;
+      processor = undefined;
+      worker = new ThreadWriteWorkerClient();
+      await worker.init(
+        consumerSQLitePath,
+        'serving',
+        {
+          busyTimeout: 30000,
+          analysisLimit: 1000,
+        },
+        {level: 'error', format: 'text'},
+      );
+    }
   }
+
+  const workerBatch: ChangeStreamData[] = [];
+  const flushWorkerBatch = async () => {
+    if (!worker || workerBatch.length === 0) {
+      return;
+    }
+    await worker.processMessages(workerBatch.splice(0));
+  };
+
+  const applyChange = async (change: ChangeStreamData | undefined) => {
+    if (!change) {
+      return;
+    }
+    switch (config.applyMode) {
+      case 'none':
+        return;
+      case 'direct':
+        processor?.processMessage(lc, change);
+        return;
+      case 'worker-message':
+        await worker?.processMessage(change);
+        return;
+      case 'worker-batch':
+        workerBatch.push(change);
+        if (
+          change[0] === 'commit' ||
+          change[0] === 'rollback' ||
+          workerBatch.length >= workerBatchMessages
+        ) {
+          await flushWorkerBatch();
+        }
+        return;
+    }
+  };
+
   const downstream = Subscription.create<string>();
   const sub = new Subscriber(
     PROTOCOL_VERSION,
@@ -409,10 +488,7 @@ function makeConsumer(
         if (!active) {
           break;
         }
-        const change = parseChangeStreamData(message);
-        if (change && processor) {
-          processor.processMessage(lc, change);
-        }
+        await applyChange(parseChangeStreamData(message));
         burnCpu(config.clientCpuMicros);
         if (ackDelayMs > 0) {
           await sleep(ackDelayMs);
@@ -424,6 +500,10 @@ function makeConsumer(
         samples++;
       }
     } finally {
+      if (workerBatch.length > 0) {
+        worker?.abort();
+      }
+      await worker?.stop();
       consumerReplica?.close();
       if (consumerSQLitePath) {
         cleanupSQLite(consumerSQLitePath);

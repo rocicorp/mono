@@ -34,7 +34,14 @@ parameters with `ZERO_RM_VS_*` env vars.
 Useful view-syncer digestion knobs:
 
 - `ZERO_RM_VS_SUBSCRIBERS=4|8` changes the number of live VS consumers.
-- `ZERO_RM_VS_APPLY_CLIENTS=1` makes each simulated VS parse and apply the
-  downstream stream into its own SQLite replica instead of only ACKing.
+- `ZERO_RM_VS_APPLY_MODE=direct|worker-message|worker-batch` makes each
+  simulated VS parse and apply the downstream stream into its own SQLite
+  replica. `worker-message` models the old production shape of one
+  write-worker handoff per replication message; `worker-batch` models the
+  transaction-batched write-worker path.
+- `ZERO_RM_VS_APPLY_CLIENTS=1` is the legacy shorthand for
+  `ZERO_RM_VS_APPLY_MODE=direct`.
+- `ZERO_RM_VS_WORKER_BATCH_MESSAGES=N` caps the worker batch size for very
+  large upstream transactions.
 - `ZERO_RM_VS_CLIENT_CPU_US=N` burns `N` microseconds per downstream message to
   model client/query work sharing the VS event loop.

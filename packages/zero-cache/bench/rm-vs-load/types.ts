@@ -11,11 +11,18 @@ export type Scenario = {
 export type ConsumerConfig = {
   readonly count: number;
   readonly ackDelayMs: number;
+  readonly applyMode: ConsumerApplyMode;
   readonly applyMessages: boolean;
   readonly clientCpuMicros: number;
   readonly slowAckDelayMs: number;
   readonly slowEvery: number;
 };
+
+export type ConsumerApplyMode =
+  | 'none'
+  | 'direct'
+  | 'worker-message'
+  | 'worker-batch';
 
 export type ScenarioSummary = {
   readonly name: string;
@@ -41,6 +48,7 @@ export type ScenarioSummary = {
   readonly reconnectCatchupFrom: string | null;
   readonly reconnectMessages: number;
   readonly subscriberAckDelayMs: number;
+  readonly subscriberApplyMode: ConsumerApplyMode;
   readonly subscriberApplyMessages: boolean;
   readonly subscriberClientCpuMicros: number;
   readonly slowSubscriberAckDelayMs: number;

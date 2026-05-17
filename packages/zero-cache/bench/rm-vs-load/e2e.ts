@@ -28,6 +28,10 @@ console.log(
     '  rm: 1',
     `  view-syncers: ${process.env.ZERO_RM_VS_SUBSCRIBERS}`,
     `  duration-ms: ${process.env.ZERO_RM_VS_DURATION_MS}`,
+    `  apply-mode: ${
+      process.env.ZERO_RM_VS_APPLY_MODE ??
+      (process.env.ZERO_RM_VS_APPLY_CLIENTS === '1' ? 'direct' : 'none')
+    }`,
     `  apply-clients: ${process.env.ZERO_RM_VS_APPLY_CLIENTS}`,
     `  client-cpu-us: ${process.env.ZERO_RM_VS_CLIENT_CPU_US}`,
     `  target-tps: small=${process.env.ZERO_RM_VS_SMALL_TARGET_TPS}, ` +
