@@ -3,14 +3,19 @@ import {rmSync} from 'node:fs';
 import {performance} from 'node:perf_hooks';
 import {PostgreSqlContainer} from '@testcontainers/postgresql';
 import postgres from 'postgres';
+import {BigIntJSON} from '../../../shared/src/bigint-json.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {Database} from '../../../zqlite/src/db.ts';
 import {StatementRunner} from '../../src/db/statements.ts';
+import type {ChangeStreamData} from '../../src/services/change-source/protocol/current/downstream.ts';
 import {
   type ChangeTag,
   type WatermarkedChange,
 } from '../../src/services/change-streamer/change-streamer-service.ts';
-import {PROTOCOL_VERSION} from '../../src/services/change-streamer/change-streamer.ts';
+import {
+  type Downstream,
+  PROTOCOL_VERSION,
+} from '../../src/services/change-streamer/change-streamer.ts';
 import {Forwarder} from '../../src/services/change-streamer/forwarder.ts';
 import {
   ensureReplicationConfig,
@@ -62,6 +67,7 @@ const lc = createSilentLogContext();
 const shard: ShardID = {appID: 'bench', shardNum: 0};
 const replicaVersion = '000000000000';
 const sqlitePath = `/tmp/zero-cache-rm-vs-load-${process.pid}.db`;
+let cpuSink = 0;
 
 const full = envFlag('ZERO_RM_VS_FULL');
 const durationMs = envInt('ZERO_RM_VS_DURATION_MS', full ? 2_500 : 1_000);
@@ -70,6 +76,8 @@ const reconnectLagTx = envInt('ZERO_RM_VS_RECONNECT_LAG_TX', 64);
 const consumerConfig: ConsumerConfig = {
   count: envInt('ZERO_RM_VS_SUBSCRIBERS', full ? 16 : 4),
   ackDelayMs: envInt('ZERO_RM_VS_ACK_DELAY_MS', 0),
+  applyMessages: envFlag('ZERO_RM_VS_APPLY_CLIENTS'),
+  clientCpuMicros: envInt('ZERO_RM_VS_CLIENT_CPU_US', 0),
   slowAckDelayMs: envInt('ZERO_RM_VS_SLOW_ACK_DELAY_MS', full ? 2 : 1),
   slowEvery: envInt('ZERO_RM_VS_SLOW_EVERY', full ? 4 : 2),
 };
@@ -224,6 +232,7 @@ async function runScenario(
           `reconnect-${scenario.name}`,
           reconnectCatchupFrom,
           consumerConfig.ackDelayMs,
+          consumerConfig,
           false,
         );
         consumers.push(reconnect);
@@ -279,6 +288,8 @@ async function runScenario(
       reconnectCatchupFrom,
       reconnectMessages: reconnect?.stats().processed ?? 0,
       subscriberAckDelayMs: consumerConfig.ackDelayMs,
+      subscriberApplyMessages: consumerConfig.applyMessages,
+      subscriberClientCpuMicros: consumerConfig.clientCpuMicros,
       slowSubscriberAckDelayMs: consumerConfig.slowAckDelayMs,
       slowSubscriberEvery: consumerConfig.slowEvery,
       maxAckLagMessages,
@@ -350,6 +361,7 @@ function createConsumers(config: ConsumerConfig): LoadConsumer[] {
       `vs-${i}`,
       replicaVersion,
       isSlow ? config.slowAckDelayMs : config.ackDelayMs,
+      config,
       true,
     );
   });
@@ -359,6 +371,7 @@ function makeConsumer(
   id: string,
   watermark: string,
   ackDelayMs: number,
+  config: ConsumerConfig,
   caughtUp: boolean,
 ): LoadConsumer {
   let active = true;
@@ -366,6 +379,16 @@ function makeConsumer(
   let maxAckLagMessages = 0;
   let totalAckLagMessages = 0;
   let samples = 0;
+  let consumerReplica: Database | undefined;
+  let processor: ChangeProcessor | undefined;
+  let consumerSQLitePath: string | undefined;
+  if (config.applyMessages) {
+    consumerSQLitePath = `${sqlitePath}-${id}`;
+    cleanupSQLite(consumerSQLitePath);
+    consumerReplica = new Database(lc, consumerSQLitePath);
+    consumerReplica.pragma('journal_mode = WAL');
+    processor = initializeReplica(consumerReplica);
+  }
   const downstream = Subscription.create<string>();
   const sub = new Subscriber(
     PROTOCOL_VERSION,
@@ -381,18 +404,30 @@ function makeConsumer(
   }
 
   const done = (async () => {
-    for await (const _message of downstream) {
-      if (!active) {
-        break;
+    try {
+      for await (const message of downstream) {
+        if (!active) {
+          break;
+        }
+        const change = parseChangeStreamData(message);
+        if (change && processor) {
+          processor.processMessage(lc, change);
+        }
+        burnCpu(config.clientCpuMicros);
+        if (ackDelayMs > 0) {
+          await sleep(ackDelayMs);
+        }
+        processed++;
+        const lag = sub.numPending;
+        maxAckLagMessages = Math.max(maxAckLagMessages, lag);
+        totalAckLagMessages += lag;
+        samples++;
       }
-      if (ackDelayMs > 0) {
-        await sleep(ackDelayMs);
+    } finally {
+      consumerReplica?.close();
+      if (consumerSQLitePath) {
+        cleanupSQLite(consumerSQLitePath);
       }
-      processed++;
-      const lag = sub.numPending;
-      maxAckLagMessages = Math.max(maxAckLagMessages, lag);
-      totalAckLagMessages += lag;
-      samples++;
     }
   })();
 
@@ -410,6 +445,34 @@ function makeConsumer(
       samples,
     }),
   };
+}
+
+function parseChangeStreamData(message: string): ChangeStreamData | undefined {
+  const parsed = BigIntJSON.parse(message) as Downstream;
+  switch (parsed[0]) {
+    case 'status':
+      return undefined;
+    case 'error':
+      throw new Error(`subscription error: ${JSON.stringify(parsed[1])}`);
+    case 'begin':
+    case 'data':
+    case 'commit':
+    case 'rollback':
+      return parsed;
+  }
+}
+
+function burnCpu(micros: number) {
+  if (micros <= 0) {
+    return;
+  }
+
+  const end = performance.now() + micros / 1000;
+  let value = cpuSink;
+  while (performance.now() < end) {
+    value = (value + Math.imul(value + 1, 31)) % 1_000_003;
+  }
+  cpuSink = value;
 }
 
 function cleanupSQLite(path: string) {

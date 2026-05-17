@@ -30,3 +30,11 @@ npm --workspace=zero-cache run perf:rm-vs-load:e2e -- --out /tmp/rm-vs-load.json
 
 Use `perf:rm-vs-load` directly only when intentionally changing scenario
 parameters with `ZERO_RM_VS_*` env vars.
+
+Useful view-syncer digestion knobs:
+
+- `ZERO_RM_VS_SUBSCRIBERS=4|8` changes the number of live VS consumers.
+- `ZERO_RM_VS_APPLY_CLIENTS=1` makes each simulated VS parse and apply the
+  downstream stream into its own SQLite replica instead of only ACKing.
+- `ZERO_RM_VS_CLIENT_CPU_US=N` burns `N` microseconds per downstream message to
+  model client/query work sharing the VS event loop.
