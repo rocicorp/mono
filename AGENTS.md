@@ -16,10 +16,9 @@ mono/
 │   ├── zql            # IVM (Incremental View Maintenance) query engine and language
 │   ├── replicache     # Core client-side sync library
 │   └── shared         # Shared utilities and testing helpers
-├── apps/              # 3 applications
+├── apps/              # 2 applications
 │   ├── zbugs          # Reference app (React + Wouter + Zero + PostgreSQL)
-│   ├── otel-proxy     # OpenTelemetry proxy
-│   └── zql-viz        # Query visualization tool
+│   └── otel-proxy     # OpenTelemetry proxy
 ├── tools/             # 5 development tools
 └── prod/              # Production deployment (SST/Pulumi)
 ```

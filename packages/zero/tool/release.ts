@@ -569,10 +569,7 @@ function setVersionInWorkspace(version: string) {
   currentPackageData.version = version;
   writePackageData(zeroPackageJsonPathInTemp, currentPackageData);
 
-  const dependencyPaths = [
-    basePath('apps', 'zbugs', 'package.json'),
-    basePath('apps', 'zql-viz', 'package.json'),
-  ];
+  const dependencyPaths = [basePath('apps', 'zbugs', 'package.json')];
 
   dependencyPaths.forEach(p => {
     const data = getPackageData(p);
