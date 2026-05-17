@@ -1,11 +1,12 @@
 /* oxlint-disable no-console */
 import {Subscription} from '../../src/types/subscription.ts';
+import {messagesPerSubscriber} from './load-model.ts';
 import {createPayload} from './payload.ts';
 import {scenarios} from './scenarios.ts';
 
-const scenario = scenarios.find(s => s.name === '16-vs-outage-load');
+const scenario = scenarios.find(s => s.name === '16-vs-10s-1000tps');
 if (!scenario) {
-  throw new Error('missing 16-vs-outage-load scenario');
+  throw new Error('missing 16-vs-10s-1000tps scenario');
 }
 
 if (!globalThis.gc) {
@@ -16,9 +17,10 @@ if (!globalThis.gc) {
 
 globalThis.gc();
 const initialHeap = process.memoryUsage().heapUsed;
+const messageCount = messagesPerSubscriber(scenario);
 
 const backlogs = Array.from({length: scenario.subscribers}, (_, subscriber) =>
-  Array.from({length: scenario.messagesPerSubscriber}, (_, message) =>
+  Array.from({length: messageCount}, (_, message) =>
     createPayload(subscriber, message, scenario.payloadBytes),
   ),
 );
@@ -46,7 +48,7 @@ for (let subscriber = 0; subscriber < scenario.subscribers; subscriber++) {
 globalThis.gc();
 const newHandoffHeap = process.memoryUsage().heapUsed;
 
-const backlogEntries = scenario.subscribers * scenario.messagesPerSubscriber;
+const backlogEntries = scenario.subscribers * messageCount;
 const oldQueued = countPending(oldDownstreams);
 const newQueued = countPending(newDownstreams);
 const backlogDelta = backlogHeap - initialHeap;

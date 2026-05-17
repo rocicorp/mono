@@ -3,6 +3,7 @@ import {
   setTimeout as delay,
 } from 'node:timers/promises';
 import {Subscription} from '../../src/types/subscription.ts';
+import {assumedCatchupMs, messagesPerSubscriber} from './load-model.ts';
 import {createPayload} from './payload.ts';
 import {scenarios, type HandoffScenario} from './scenarios.ts';
 
@@ -11,8 +12,11 @@ export type HandoffMode = 'fire-and-forget handoff' | 'flow-controlled handoff';
 export type HandoffResult = {
   scenario: HandoffScenario;
   mode: HandoffMode;
+  assumedCatchupMs: number;
   producerMs: number;
   totalMs: number;
+  reportedCaughtUpMs: number;
+  actualCaughtUpMs: number;
   hiddenDrainMs: number;
   messagesPerSecond: number;
   pendingAtProducerDone: number;
@@ -43,6 +47,8 @@ async function run(
   scenario: HandoffScenario,
   mode: HandoffMode,
 ): Promise<HandoffResult> {
+  const messageCount = messagesPerSubscriber(scenario);
+  const catchupMs = assumedCatchupMs(scenario);
   const downstreams = Array.from({length: scenario.subscribers}, () =>
     Subscription.create<string>(),
   );
@@ -71,7 +77,7 @@ async function run(
 
   const consumers = downstreams.map(async (downstream, subscriber) => {
     const iter = downstream[Symbol.asyncIterator]();
-    while (consumed[subscriber] < scenario.messagesPerSubscriber) {
+    while (consumed[subscriber] < messageCount) {
       const next = await iter.next();
       if (next.done) {
         throw new Error(
@@ -110,11 +116,7 @@ async function run(
     const pending: Promise<unknown>[] = [];
     for (let subscriber = 0; subscriber < downstreams.length; subscriber++) {
       const downstream = downstreams[subscriber];
-      for (
-        let message = 0;
-        message < scenario.messagesPerSubscriber;
-        message++
-      ) {
+      for (let message = 0; message < messageCount; message++) {
         pending.push(pushPayload(downstream, subscriber, message));
         if (message % scenario.yieldEvery === 0) {
           samplePending();
@@ -127,11 +129,7 @@ async function run(
   } else {
     await Promise.all(
       downstreams.map(async (downstream, subscriber) => {
-        for (
-          let message = 0;
-          message < scenario.messagesPerSubscriber;
-          message++
-        ) {
+        for (let message = 0; message < messageCount; message++) {
           const result = pushPayload(downstream, subscriber, message);
           samplePending();
           await result;
@@ -144,13 +142,16 @@ async function run(
   await Promise.all(consumers);
   const totalMs = performance.now() - start;
 
-  const totalMessages = scenario.subscribers * scenario.messagesPerSubscriber;
+  const totalMessages = scenario.subscribers * messageCount;
 
   return {
     scenario,
     mode,
+    assumedCatchupMs: catchupMs,
     producerMs,
     totalMs,
+    reportedCaughtUpMs: catchupMs + producerMs,
+    actualCaughtUpMs: catchupMs + totalMs,
     hiddenDrainMs: totalMs - producerMs,
     messagesPerSecond: totalMessages / (totalMs / 1000),
     pendingAtProducerDone,

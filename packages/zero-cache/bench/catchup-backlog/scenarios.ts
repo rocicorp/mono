@@ -1,11 +1,16 @@
 export type HandoffScenario = {
   name: string;
   subscribers: number;
-  messagesPerSubscriber: number;
+  messagesPerSubscriber?: number;
   payloadBytes: number;
   yieldEvery: number;
   delayEvery?: number;
   delayMs?: number;
+  liveLoad?: {
+    transactionsPerSecond: number;
+    catchupSeconds: number;
+    messagesPerTransaction: number;
+  };
 };
 
 export const scenarios = [
@@ -54,5 +59,18 @@ export const scenarios = [
     yieldEvery: 256,
     delayEvery: 128,
     delayMs: 1,
+  },
+  {
+    name: '16-vs-10s-1000tps',
+    subscribers: 16,
+    payloadBytes: 512,
+    yieldEvery: 256,
+    delayEvery: 128,
+    delayMs: 1,
+    liveLoad: {
+      transactionsPerSecond: 1000,
+      catchupSeconds: 10,
+      messagesPerTransaction: 3,
+    },
   },
 ] as const satisfies readonly HandoffScenario[];
