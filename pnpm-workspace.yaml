@@ -3,6 +3,8 @@ packages:
   - 'packages/*'
   - 'prod'
   - 'tools/*'
+publicHoistPattern:
+  - '*'
 allowBuilds:
   '@prisma/engines': true
   '@rocicorp/zero-sqlite3': true
