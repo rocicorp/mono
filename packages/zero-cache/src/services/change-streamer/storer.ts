@@ -64,18 +64,42 @@ type QueueEntry =
   | 'stop';
 
 type PendingTransaction = {
-  pool: TransactionPool;
+  group: PendingGroup;
   preCommitWatermark: string;
   pos: number;
-  startingReplicationState: Promise<ReplicationOwner>;
+  pendingChangeLogEntries: ChangeLogInsert[];
+  hasSchemaChange: boolean;
   ack: boolean;
+};
+
+type PendingGroup = {
+  pool: TransactionPool;
+  startingReplicationState: Promise<ReplicationOwner>;
+  commitAcks: {commit: Commit; ack: boolean}[];
+  txCount: number;
+  lastWatermark: string | null;
 };
 
 type ReplicationOwner = {
   owner: string | null;
 };
 
+type ChangeLogInsert = {
+  watermark: string;
+  precommit: string | null;
+  pos: number;
+  change: string;
+};
+
 const backfillRequestsSchema = v.array(backfillRequestSchema);
+const CHANGE_LOG_INSERT_BATCH_SIZE = 100;
+// #5977: https://github.com/rocicorp/mono/pull/5977
+// Group up to this many upstream transactions per changeDB commit to remove
+// per-transaction commit/fsync overhead. The group remains a visibility
+// boundary: catchup, status, schema changes, rollback, ready checks, and full
+// groups flush before later work proceeds.
+const CHANGE_LOG_TX_GROUP_SIZE = 32;
+const CURRENT_TX_SAVEPOINT = 'zero_storer_current_tx';
 
 export type TuningOptions = {
   backPressureLimitHeapProportion: number;
@@ -412,21 +436,102 @@ export class Storer implements Service {
 
   async #processQueue() {
     let tx: PendingTransaction | null = null;
+    let group: PendingGroup | null = null;
     let msg: QueueEntry | false;
 
     const catchupQueue: SubscriberAndMode[] = [];
+    const startGroup = (watermark: string): PendingGroup => {
+      const {promise, resolve, reject} = resolver<ReplicationOwner>();
+      void promise.catch(() => {}); // handle rejections before the await
+      const pool = new TransactionPool(
+        this.#lc.withContext('watermark', watermark),
+        {
+          mode: Mode.READ_COMMITTED,
+          statementResponseTimeout: this.#statementTimeoutMs,
+        },
+      );
+      pool.run(this.#db);
+      // #5977: https://github.com/rocicorp/mono/pull/5977
+      // Check ownership once per group instead of once per upstream commit.
+      // The grouped transaction keeps pending rows private until flushGroup()
+      // commits, so ownership loss still prevents ACK release.
+      //
+      //   replicationState FOR UPDATE
+      //           |
+      //           v
+      //   tx1 savepoint -> tx2 savepoint -> ... -> update lastWatermark
+      void pool.process(tx => {
+        tx<ReplicationOwner[]> /*sql*/ `
+          SELECT "owner" FROM ${this.#cdc('replicationState')} FOR UPDATE`.then(
+          ([result]) => resolve(result),
+          reject,
+        );
+        return [];
+      });
+      return {
+        pool,
+        startingReplicationState: promise,
+        commitAcks: [],
+        txCount: 0,
+        lastWatermark: null,
+      };
+    };
+
+    const flushGroup = async () => {
+      if (group === null) {
+        return;
+      }
+      const flushing = group;
+      group = null;
+      // #5977: https://github.com/rocicorp/mono/pull/5977
+      // ACKs are intentionally released only after the grouped changeDB
+      // transaction is durable. Reordering this sequence can acknowledge
+      // upstream commits that would be lost after a crash.
+      //
+      //   1. verify owner
+      //   2. publish lastWatermark in the same DB transaction
+      //   3. commit changeLog rows
+      //   4. ACK upstream commits
+      //   5. run catchup against the committed snapshot
+      const {owner} = await flushing.startingReplicationState;
+      if (owner !== this.#taskID) {
+        flushing.pool.fail(
+          new AbortError(`changeLog ownership has been assumed by ${owner}`),
+        );
+      } else if (flushing.lastWatermark !== null) {
+        const lastWatermark = flushing.lastWatermark;
+        void flushing.pool.process(tx => [
+          tx`
+            UPDATE ${this.#cdc('replicationState')} SET ${tx({lastWatermark})}`,
+        ]);
+        flushing.pool.setDone();
+      } else {
+        flushing.pool.setDone();
+      }
+
+      await flushing.pool.done();
+      for (const {commit, ack} of flushing.commitAcks) {
+        if (ack) {
+          this.#onConsumed(commit);
+        }
+      }
+
+      await this.#startCatchup(catchupQueue.splice(0));
+    };
+
     try {
       while ((msg = await this.#queue.dequeue()) !== 'stop') {
         const [msgType] = msg;
         switch (msgType) {
           case 'ready': {
             const signalReady = msg[1];
+            await flushGroup();
             signalReady();
             continue;
           }
           case 'subscriber': {
             const subscriber = msg[1];
-            if (tx) {
+            if (tx || group) {
               catchupQueue.push(subscriber); // Wait for the current tx to complete.
             } else {
               await this.#startCatchup([subscriber]); // Catch up immediately.
@@ -434,12 +539,14 @@ export class Storer implements Service {
             continue;
           }
           case 'status':
+            await flushGroup();
             this.#onConsumed(msg);
             continue;
           case 'abort': {
-            if (tx) {
-              tx.pool.abort();
-              await tx.pool.done();
+            if (group) {
+              group.pool.abort();
+              await group.pool.done();
+              group = null;
               tx = null;
             }
             continue;
@@ -452,38 +559,36 @@ export class Storer implements Service {
 
         if (tag === 'begin') {
           assert(!tx, 'received BEGIN in the middle of a transaction');
-          const {promise, resolve, reject} = resolver<ReplicationOwner>();
-          void promise.catch(() => {}); // handle rejections before the await
+          group ??= startGroup(watermark);
           tx = {
-            pool: new TransactionPool(
-              this.#lc.withContext('watermark', watermark),
-              {
-                mode: Mode.READ_COMMITTED,
-                statementResponseTimeout: this.#statementTimeoutMs,
-              },
-            ),
+            group,
             preCommitWatermark: watermark,
             pos: 0,
-            startingReplicationState: promise,
+            pendingChangeLogEntries: [],
+            hasSchemaChange: false,
             ack: !change.skipAck,
           };
-          tx.pool.run(this.#db);
-          // Acquire a lock on the replicationState row to detect and/or prevent
-          // a concurrent ownership change.
-          void tx.pool.process(tx => {
-            tx<ReplicationOwner[]> /*sql*/ `
-          SELECT "owner" FROM ${this.#cdc('replicationState')} FOR UPDATE`.then(
-              ([result]) => resolve(result),
-              reject,
-            );
-            return [];
-          });
+          // #5977: https://github.com/rocicorp/mono/pull/5977
+          // Savepoints keep upstream rollbacks scoped to the current
+          // transaction while still allowing multiple upstream transactions to
+          // share one changeDB commit. ACKs and catchup wait for the group
+          // commit so subscribers never observe uncommitted group contents.
+          //
+          //   group tx
+          //     SAVEPOINT current upstream tx
+          //       buffered INSERT changeLog rows...
+          //     RELEASE SAVEPOINT
+          //     ...repeat up to CHANGE_LOG_TX_GROUP_SIZE...
+          //   UPDATE replicationState(lastWatermark) + COMMIT group tx
+          void tx.group.pool.process(sql => [
+            sql.unsafe(`SAVEPOINT ${CURRENT_TX_SAVEPOINT}`),
+          ]);
         } else {
           assert(tx, () => `received change outside of transaction: ${json}`);
           tx.pos++;
         }
 
-        const entry = {
+        const entry: ChangeLogInsert = {
           watermark: tag === 'commit' ? watermark : tx.preCommitWatermark,
           precommit: tag === 'commit' ? tx.preCommitWatermark : null,
           pos: tx.pos,
@@ -492,15 +597,26 @@ export class Storer implements Service {
           change: extractChangeSubstring(json, tag),
         };
 
-        const processed = tx.pool.process(sql => [
-          sql`INSERT INTO ${this.#cdc('changeLog')} ${sql(entry)}`,
-          ...(change !== null && isSchemaChange(change)
-            ? this.#trackBackfillMetadata(sql, change)
-            : []),
-        ]);
+        let processed = promiseVoid;
+        if (change !== null && isSchemaChange(change)) {
+          tx.hasSchemaChange = true;
+          await this.#flushChangeLogEntries(tx);
+          processed = tx.group.pool.process(sql => [
+            sql`INSERT INTO ${this.#cdc('changeLog')} ${sql(entry)}`,
+            ...this.#trackBackfillMetadata(sql, change),
+          ]);
+        } else {
+          tx.pendingChangeLogEntries.push(entry);
+          if (
+            tag === 'commit' ||
+            tx.pendingChangeLogEntries.length >= CHANGE_LOG_INSERT_BATCH_SIZE
+          ) {
+            processed = this.#flushChangeLogEntries(tx);
+          }
+        }
 
         if (tx.pos % 100 === 0) {
-          // Backpressure is exerted on commit when awaiting tx.pool.done().
+          // Backpressure is exerted when the group is flushed.
           // However, backpressure checks need to be regularly done for
           // very large transactions in order to avoid memory blowup.
           await processed;
@@ -508,45 +624,38 @@ export class Storer implements Service {
         this.#maybeReleaseBackPressure();
 
         if (tag === 'commit') {
-          const {owner} = await tx.startingReplicationState;
-          if (owner !== this.#taskID) {
-            // Ownership change reflected in the replicationState read in 'begin'.
-            tx.pool.fail(
-              new AbortError(
-                `changeLog ownership has been assumed by ${owner}`,
-              ),
-            );
-          } else {
-            // Update the replication state.
-            const lastWatermark = watermark;
-            void tx.pool.process(tx => [
-              tx`
-            UPDATE ${this.#cdc('replicationState')} SET ${tx({lastWatermark})}`,
-            ]);
-            tx.pool.setDone();
-          }
-
-          await tx.pool.done();
-
-          // ACK the LSN to the upstream Postgres.
-          if (tx.ack) {
-            this.#onConsumed(['commit', change, {watermark}]);
-          }
+          assert(change?.tag === 'commit', 'commit change should be retained');
+          void tx.group.pool.process(sql => [
+            sql.unsafe(`RELEASE SAVEPOINT ${CURRENT_TX_SAVEPOINT}`),
+          ]);
+          tx.group.lastWatermark = watermark;
+          tx.group.commitAcks.push({
+            commit: ['commit', change, {watermark}],
+            ack: tx.ack,
+          });
+          tx.group.txCount++;
+          const shouldFlushGroup =
+            tx.hasSchemaChange ||
+            catchupQueue.length > 0 ||
+            tx.group.txCount >= CHANGE_LOG_TX_GROUP_SIZE;
           tx = null;
-
-          // Before beginning the next transaction, open a READONLY snapshot to
-          // concurrently catchup any queued subscribers.
-          await this.#startCatchup(catchupQueue.splice(0));
+          if (shouldFlushGroup) {
+            await flushGroup();
+          }
         } else if (tag === 'rollback') {
-          // Aborted transactions are not stored in the changeLog. Abort the current tx
-          // and process catchup of subscribers that were waiting for it to end.
-          tx.pool.abort();
-          await tx.pool.done();
+          // Aborted transactions are not stored in the changeLog. Roll back
+          // only the current upstream transaction, preserving previous
+          // committed transactions in the group.
+          tx.pendingChangeLogEntries = [];
+          await tx.group.pool.process(sql => [
+            sql.unsafe(`ROLLBACK TO SAVEPOINT ${CURRENT_TX_SAVEPOINT}`),
+            sql.unsafe(`RELEASE SAVEPOINT ${CURRENT_TX_SAVEPOINT}`),
+          ]);
           tx = null;
-
-          await this.#startCatchup(catchupQueue.splice(0));
+          await flushGroup();
         }
       }
+      await flushGroup();
     } catch (e) {
       catchupQueue.forEach(({subscriber}) => subscriber.fail(e));
       throw e;
@@ -585,6 +694,25 @@ export class Storer implements Service {
     void Promise.all(
       subs.map(sub => this.#catchup(sub, lastWatermark, reader)),
     ).finally(() => reader.setDone());
+  }
+
+  #flushChangeLogEntries(tx: PendingTransaction): Promise<void> {
+    if (tx.pendingChangeLogEntries.length === 0) {
+      return promiseVoid;
+    }
+    const entries = tx.pendingChangeLogEntries;
+    tx.pendingChangeLogEntries = [];
+    // #5976: https://github.com/rocicorp/mono/pull/5976
+    // Batch insert buffered data rows to reduce changeDB round trips.
+    // Previously, data-heavy upstream transactions issued one INSERT per
+    // changeLog row; batching was measured in the shared 1 RM / 16 view-syncer
+    // e2e suite as part of the ~13-35% rows/s improvement in #5976.
+    //
+    // Schema changes still flush immediately before metadata writes so their
+    // side effects remain ordered with the change that introduced them.
+    return tx.group.pool.process(sql => [
+      sql`INSERT INTO ${this.#cdc('changeLog')} ${sql(entries)}`,
+    ]);
   }
 
   async #catchup(

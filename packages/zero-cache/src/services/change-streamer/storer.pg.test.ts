@@ -79,9 +79,9 @@ describe('change-streamer/storer', () => {
     fatalErrors = new Queue();
 
     return async () => {
-      await testDBs.drop(db);
       void storer?.stop();
       await done;
+      await testDBs.drop(db);
     };
   });
 
@@ -129,29 +129,84 @@ describe('change-streamer/storer', () => {
       ).toEqual([{ownerAddress: 'change-streamer:12345'}]);
     });
 
+    test('stores large transactions in batched changeLog inserts without reordering', async () => {
+      storer.store('08', ['begin', messages.begin(), {commitWatermark: '08'}]);
+      for (let i = 0; i < 250; i++) {
+        storer.store('08', [
+          'data',
+          messages.insert('issues', {id: `batched-${i}`}),
+        ]);
+      }
+      storer.store('08', ['commit', messages.commit(), {watermark: '08'}]);
+
+      await storer.allProcessed();
+      await expectConsumed('08');
+
+      const rows = await db<{pos: bigint; tag: string}[]>`
+        SELECT pos, change->>'tag' as tag
+          FROM "xero_5/cdc"."changeLog"
+         WHERE watermark = '08'
+         ORDER BY pos`;
+      expect(rows).toHaveLength(252);
+      expect(rows.at(0)).toEqual({pos: 0, tag: 'begin'});
+      expect(rows.at(-1)).toEqual({pos: 251, tag: 'commit'});
+      expect(rows.map(row => Number(row.pos))).toEqual(
+        Array.from({length: 252}, (_, i) => i),
+      );
+    });
+
+    test('rollback only discards the current transaction from a group', async () => {
+      storer.store('08', ['begin', messages.begin(), {commitWatermark: '08'}]);
+      storer.store('08', ['commit', messages.commit(), {watermark: '08'}]);
+
+      storer.store('09', ['begin', messages.begin(), {commitWatermark: '09'}]);
+      storer.store('09', [
+        'data',
+        messages.insert('issues', {id: 'rolled-back'}),
+      ]);
+      storer.store('09', ['rollback', messages.rollback()]);
+
+      await storer.allProcessed();
+      await expectConsumed('08');
+
+      expect(
+        await db`
+          SELECT watermark, pos, change->>'tag' as tag
+            FROM "xero_5/cdc"."changeLog"
+           WHERE watermark >= '08'
+           ORDER BY watermark, pos`,
+      ).toEqual([
+        {watermark: '08', pos: 0, tag: 'begin'},
+        {watermark: '08', pos: 1, tag: 'commit'},
+      ]);
+      expect(
+        await db`SELECT "lastWatermark" FROM "xero_5/cdc"."replicationState"`,
+      ).toEqual([{lastWatermark: '08'}]);
+    });
+
     test('purge', async () => {
       expect(await storer.purgeRecordsBefore('02')).toBe(2);
       expect(
         await db`SELECT watermark, pos FROM "xero_5/cdc"."changeLog"`,
       ).toEqual([
-        {watermark: '03', pos: 0n},
-        {watermark: '03', pos: 1n},
-        {watermark: '03', pos: 2n},
-        {watermark: '06', pos: 0n},
-        {watermark: '06', pos: 1n},
-        {watermark: '06', pos: 2n},
+        {watermark: '03', pos: 0},
+        {watermark: '03', pos: 1},
+        {watermark: '03', pos: 2},
+        {watermark: '06', pos: 0},
+        {watermark: '06', pos: 1},
+        {watermark: '06', pos: 2},
       ]);
 
       expect(await storer.purgeRecordsBefore('03')).toBe(0);
       expect(
         await db`SELECT watermark, pos FROM "xero_5/cdc"."changeLog"`,
       ).toEqual([
-        {watermark: '03', pos: 0n},
-        {watermark: '03', pos: 1n},
-        {watermark: '03', pos: 2n},
-        {watermark: '06', pos: 0n},
-        {watermark: '06', pos: 1n},
-        {watermark: '06', pos: 2n},
+        {watermark: '03', pos: 0},
+        {watermark: '03', pos: 1},
+        {watermark: '03', pos: 2},
+        {watermark: '06', pos: 0},
+        {watermark: '06', pos: 1},
+        {watermark: '06', pos: 2},
       ]);
 
       // TODO: Consider rejecting as an invalid watermark?
@@ -159,18 +214,18 @@ describe('change-streamer/storer', () => {
       expect(
         await db`SELECT watermark, pos FROM "xero_5/cdc"."changeLog"`,
       ).toEqual([
-        {watermark: '06', pos: 0n},
-        {watermark: '06', pos: 1n},
-        {watermark: '06', pos: 2n},
+        {watermark: '06', pos: 0},
+        {watermark: '06', pos: 1},
+        {watermark: '06', pos: 2},
       ]);
 
       expect(await storer.purgeRecordsBefore('06')).toBe(0);
       expect(
         await db`SELECT watermark, pos FROM "xero_5/cdc"."changeLog"`,
       ).toEqual([
-        {watermark: '06', pos: 0n},
-        {watermark: '06', pos: 1n},
-        {watermark: '06', pos: 2n},
+        {watermark: '06', pos: 0},
+        {watermark: '06', pos: 1},
+        {watermark: '06', pos: 2},
       ]);
     });
 
@@ -816,14 +871,14 @@ describe('change-streamer/storer', () => {
       expect(
         await db`SELECT watermark, pos FROM "xero_5/cdc"."changeLog"`,
       ).toEqual([
-        {watermark: '00', pos: 0n},
-        {watermark: '00', pos: 1n},
-        {watermark: '03', pos: 0n},
-        {watermark: '03', pos: 1n},
-        {watermark: '03', pos: 2n},
-        {watermark: '06', pos: 0n},
-        {watermark: '06', pos: 1n},
-        {watermark: '06', pos: 2n},
+        {watermark: '00', pos: 0},
+        {watermark: '00', pos: 1},
+        {watermark: '03', pos: 0},
+        {watermark: '03', pos: 1},
+        {watermark: '03', pos: 2},
+        {watermark: '06', pos: 0},
+        {watermark: '06', pos: 1},
+        {watermark: '06', pos: 2},
       ]);
     });
 
@@ -848,12 +903,12 @@ describe('change-streamer/storer', () => {
       expect(
         await db`SELECT watermark, pos FROM "xero_5/cdc"."changeLog"`,
       ).toEqual([
-        {watermark: '03', pos: 0n},
-        {watermark: '03', pos: 1n},
-        {watermark: '03', pos: 2n},
-        {watermark: '06', pos: 0n},
-        {watermark: '06', pos: 1n},
-        {watermark: '06', pos: 2n},
+        {watermark: '03', pos: 0},
+        {watermark: '03', pos: 1},
+        {watermark: '03', pos: 2},
+        {watermark: '06', pos: 0},
+        {watermark: '06', pos: 1},
+        {watermark: '06', pos: 2},
       ]);
 
       await lock?.release();
@@ -864,9 +919,9 @@ describe('change-streamer/storer', () => {
       expect(
         await db`SELECT watermark, pos FROM "xero_5/cdc"."changeLog"`,
       ).toEqual([
-        {watermark: '06', pos: 0n},
-        {watermark: '06', pos: 1n},
-        {watermark: '06', pos: 2n},
+        {watermark: '06', pos: 0},
+        {watermark: '06', pos: 1},
+        {watermark: '06', pos: 2},
       ]);
 
       // Redundant calls to release should be ignored (and not assert, e.g.)
@@ -922,6 +977,7 @@ describe('change-streamer/storer', () => {
 
       // Now send commit.
       storer.store('08', ['commit', messages.commit(), {watermark: '08'}]);
+      await storer.allProcessed();
 
       // Now an ownership change should succeed.
       expect(
@@ -947,6 +1003,7 @@ describe('change-streamer/storer', () => {
       storer.store('0a', ['data', messages.insert('issues', {id: 'bar'})]);
       storer.store('0a', ['commit', messages.commit(), {watermark: '0a'}]);
 
+      await storer.allProcessed();
       await expectConsumed('0a');
 
       expect(
@@ -956,7 +1013,7 @@ describe('change-streamer/storer', () => {
       ).toMatchObject([
         {
           change: {tag: 'begin'},
-          pos: 0n,
+          pos: 0,
           watermark: '0a',
         },
         {
@@ -964,12 +1021,12 @@ describe('change-streamer/storer', () => {
             tag: 'insert',
             new: {id: 'bar'},
           },
-          pos: 1n,
+          pos: 1,
           watermark: '0a',
         },
         {
           change: {tag: 'commit'},
-          pos: 2n,
+          pos: 2,
           watermark: '0a',
         },
       ]);
@@ -1278,7 +1335,7 @@ describe('change-streamer/storer', () => {
             "change": {
               "tag": "begin",
             },
-            "pos": 0n,
+            "pos": 0,
             "precommit": null,
             "watermark": "00",
           },
@@ -1286,7 +1343,7 @@ describe('change-streamer/storer', () => {
             "change": {
               "tag": "commit",
             },
-            "pos": 1n,
+            "pos": 1,
             "precommit": null,
             "watermark": "00",
           },
@@ -1295,7 +1352,7 @@ describe('change-streamer/storer', () => {
               "foo": "bar",
               "tag": "begin",
             },
-            "pos": 0n,
+            "pos": 0,
             "precommit": null,
             "watermark": "03",
           },
@@ -1303,7 +1360,7 @@ describe('change-streamer/storer', () => {
             "change": {
               "tag": "insert",
             },
-            "pos": 1n,
+            "pos": 1,
             "precommit": null,
             "watermark": "03",
           },
@@ -1312,7 +1369,7 @@ describe('change-streamer/storer', () => {
               "bar": "baz",
               "tag": "commit",
             },
-            "pos": 2n,
+            "pos": 2,
             "precommit": null,
             "watermark": "03",
           },
@@ -1321,7 +1378,7 @@ describe('change-streamer/storer', () => {
               "boo": "dar",
               "tag": "begin",
             },
-            "pos": 0n,
+            "pos": 0,
             "precommit": null,
             "watermark": "06",
           },
@@ -1329,7 +1386,7 @@ describe('change-streamer/storer', () => {
             "change": {
               "tag": "update",
             },
-            "pos": 1n,
+            "pos": 1,
             "precommit": null,
             "watermark": "06",
           },
@@ -1338,7 +1395,7 @@ describe('change-streamer/storer', () => {
               "boo": "far",
               "tag": "commit",
             },
-            "pos": 2n,
+            "pos": 2,
             "precommit": null,
             "watermark": "06",
           },
@@ -1346,7 +1403,7 @@ describe('change-streamer/storer', () => {
             "change": {
               "tag": "begin",
             },
-            "pos": 0n,
+            "pos": 0,
             "precommit": null,
             "watermark": "07",
           },
@@ -1355,7 +1412,7 @@ describe('change-streamer/storer', () => {
               "extra": "stuff",
               "tag": "commit",
             },
-            "pos": 1n,
+            "pos": 1,
             "precommit": "07",
             "watermark": "08",
           },
@@ -1501,7 +1558,7 @@ describe('change-streamer/storer', () => {
             "change": {
               "tag": "begin",
             },
-            "pos": 0n,
+            "pos": 0,
             "precommit": null,
             "watermark": "00",
           },
@@ -1509,7 +1566,7 @@ describe('change-streamer/storer', () => {
             "change": {
               "tag": "commit",
             },
-            "pos": 1n,
+            "pos": 1,
             "precommit": null,
             "watermark": "00",
           },
@@ -1518,7 +1575,7 @@ describe('change-streamer/storer', () => {
               "foo": "bar",
               "tag": "begin",
             },
-            "pos": 0n,
+            "pos": 0,
             "precommit": null,
             "watermark": "03",
           },
@@ -1526,7 +1583,7 @@ describe('change-streamer/storer', () => {
             "change": {
               "tag": "insert",
             },
-            "pos": 1n,
+            "pos": 1,
             "precommit": null,
             "watermark": "03",
           },
@@ -1535,7 +1592,7 @@ describe('change-streamer/storer', () => {
               "bar": "baz",
               "tag": "commit",
             },
-            "pos": 2n,
+            "pos": 2,
             "precommit": null,
             "watermark": "03",
           },
@@ -1544,7 +1601,7 @@ describe('change-streamer/storer', () => {
               "boo": "dar",
               "tag": "begin",
             },
-            "pos": 0n,
+            "pos": 0,
             "precommit": null,
             "watermark": "06",
           },
@@ -1552,7 +1609,7 @@ describe('change-streamer/storer', () => {
             "change": {
               "tag": "update",
             },
-            "pos": 1n,
+            "pos": 1,
             "precommit": null,
             "watermark": "06",
           },
@@ -1561,7 +1618,7 @@ describe('change-streamer/storer', () => {
               "boo": "far",
               "tag": "commit",
             },
-            "pos": 2n,
+            "pos": 2,
             "precommit": null,
             "watermark": "06",
           },
