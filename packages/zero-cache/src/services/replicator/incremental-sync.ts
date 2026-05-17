@@ -23,6 +23,13 @@ import type {WriteWorkerClient} from './write-worker-client.ts';
 
 type ErrorType = Enum<typeof ErrorType>;
 
+// Batch replication messages before crossing into the write worker so
+// data-heavy transactions do not pay one IPC round trip per row. The
+// rm-vs-load benchmark covers the 1 RM / 16 VS case this is meant to protect;
+// the cap keeps unusually large upstream transactions from sitting in the
+// syncer heap while the worker is idle.
+const MAX_WORKER_BATCH_MESSAGES = 64;
+
 /**
  * The {@link IncrementalSyncer} manages a logical replication stream from upstream,
  * handling application lifecycle events (start, stop) and retrying the
@@ -106,6 +113,19 @@ export class IncrementalSyncer {
         );
 
         let backfillStatus: DownloadStatus | undefined;
+        const workerBatch: ChangeStreamData[] = [];
+        const flushWorkerBatch = async () => {
+          if (workerBatch.length === 0) {
+            return;
+          }
+          const result = await this.#worker.processMessages(
+            workerBatch.splice(0),
+          );
+          this.#handleResult(lc, result);
+          if (result?.completedBackfill) {
+            backfillStatus = undefined;
+          }
+        };
 
         for await (const message of downstream) {
           this.#replicationEvents.add(1);
@@ -171,13 +191,13 @@ export class IncrementalSyncer {
                 backfillStatus = status; // Update the current status
               }
 
-              const result = await this.#worker.processMessage(
-                message as ChangeStreamData,
-              );
-
-              this.#handleResult(lc, result);
-              if (result?.completedBackfill) {
-                backfillStatus = undefined;
+              workerBatch.push(message as ChangeStreamData);
+              if (
+                message[0] === 'commit' ||
+                message[0] === 'rollback' ||
+                workerBatch.length >= MAX_WORKER_BATCH_MESSAGES
+              ) {
+                await flushWorkerBatch();
               }
               break;
             }

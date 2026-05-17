@@ -65,6 +65,14 @@ function createAPI(): API {
       return must(processor).processMessage(must(lc), downstream);
     },
 
+    processMessages(downstreams: readonly ChangeStreamData[]) {
+      let result = null;
+      for (const downstream of downstreams) {
+        result = must(processor).processMessage(must(lc), downstream);
+      }
+      return result;
+    },
+
     abort() {
       must(processor).abort(must(lc));
       createProcessor();
