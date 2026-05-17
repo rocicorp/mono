@@ -38,14 +38,17 @@ jobs:
       TURBO_TEAM: rocicorp
     steps:
       - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
       - uses: actions/setup-node@v6
         with:
           node-version: 24.x
-          cache: 'npm'
+          cache: 'pnpm'
       - uses: bencherdev/bencher@main
 
-      - run: npm ci
-      - run: npm run build
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run build
 
       - name: Build npm zero package
         working-directory: packages/zero

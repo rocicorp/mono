@@ -1,0 +1,15 @@
+packages:
+  - 'apps/*'
+  - 'packages/*'
+  - 'prod'
+  - 'tools/*'
+allowBuilds:
+  '@prisma/engines': true
+  '@rocicorp/zero-sqlite3': true
+  core-js: true
+  core-js-pure: true
+  cpu-features: true
+  esbuild: true
+  prisma: true
+  protobufjs: true
+  ssh2: true

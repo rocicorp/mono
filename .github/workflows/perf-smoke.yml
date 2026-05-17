@@ -16,15 +16,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
       - uses: actions/setup-node@v6
         with:
           node-version: 24.x
-          cache: 'npm'
-      - run: npm ci
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
       - uses: ./.github/actions/playwright-install
       - name: Run benchmark
         shell: bash
         working-directory: packages/replicache-perf
         run: |
-          npm run build
+          pnpm run build
           npx tsx src/runner.ts --format=json --run='populate 1024x1000 \(clean, indexes: 0\)'

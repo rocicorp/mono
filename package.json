@@ -2,12 +2,6 @@
   "name": "@rocicorp/mono",
   "version": "0.0.0",
   "private": true,
-  "workspaces": [
-    "apps/*",
-    "packages/*",
-    "prod",
-    "tools/*"
-  ],
   "type": "module",
   "scripts": {
     "download-deps": "bash ./deps/download.sh",
@@ -22,10 +16,10 @@
     "check-format": "oxfmt --check",
     "check-types": "npx turbo run check-types",
     "check-types:watch": "npx turbo watch check-types",
-    "build-ci": "npm install && npx turbo run build",
-    "start-zero-cache": "cd packages/zero-cache && npm run start",
-    "verify-deps": "cd tools/verify-package-deps && npm run verify",
-    "verify-deps:fix": "cd tools/verify-package-deps && npm run verify:fix",
+    "build-ci": "pnpm install && npx turbo run build",
+    "start-zero-cache": "pnpm --filter zero-cache run start",
+    "verify-deps": "pnpm --filter verify-package-deps run verify",
+    "verify-deps:fix": "pnpm --filter verify-package-deps run verify:fix",
     "api-snapshot": "vitest run --config tools/tsnapi/vitest.config.ts",
     "api-snapshot:update": "vitest run -u --config tools/tsnapi/vitest.config.ts",
     "bench": "npx turbo run bench --concurrency=1",
@@ -51,11 +45,13 @@
     "vitest": "^4.1.5",
     "zx": "^8.8.5"
   },
-  "overrides": {
-    "esbuild": "^0.27.4"
+  "pnpm": {
+    "overrides": {
+      "esbuild": "^0.27.4"
+    }
   },
   "engines": {
     "node": ">=22"
   },
-  "packageManager": "npm@10.9.2"
+  "packageManager": "pnpm@11.1.2"
 }

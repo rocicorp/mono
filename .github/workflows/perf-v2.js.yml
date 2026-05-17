@@ -7,7 +7,7 @@ on:
       - 'packages/replicache/**'
       - 'packages/replicache-perf/**'
       - '.github/**'
-      - 'package-lock.json'
+      - 'pnpm-lock.yaml'
 
 jobs:
   playwright-install:
@@ -15,11 +15,14 @@ jobs:
     runs-on: self-hosted
     steps:
       - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
       - uses: actions/setup-node@v6
         with:
           node-version: 24.x
-          cache: 'npm'
-      - run: npm ci
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
       - uses: ./.github/actions/playwright-install
 
   benchmark:
@@ -28,23 +31,26 @@ jobs:
     runs-on: self-hosted
     steps:
       - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
       - uses: actions/setup-node@v6
         with:
           node-version: 24.x
-          cache: 'npm'
+          cache: 'pnpm'
       # Clear out potential user data dirs left over from previous failures.
       - run: rm -rf /tmp/replicache-playwright-*
-      - run: npm ci
+      - run: pnpm install --frozen-lockfile
       - run: npx playwright install
 
-      - run: npm run build
+      - run: pnpm run build
         working-directory: packages/replicache-perf
 
       # Run benchmark and stores the output to a file
       - name: Run benchmark
         working-directory: packages/replicache-perf
         run: |
-          npm run build
+          pnpm run build
           npx tsx src/runner.ts --format=json | tee perf-temp-output.json
           npx tsx tool/split-perf.ts perf-temp-output.json perf-v2-output.json perf-v2-p95-output.json
         shell: bash

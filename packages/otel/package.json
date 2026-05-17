@@ -17,7 +17,7 @@
   },
   "devDependencies": {
     "oxfmt": "^0.45.0",
-    "shared": "0.0.0",
+    "shared": "workspace:*",
     "typescript": "~6.0.2"
   }
 }

@@ -34,16 +34,16 @@ Zero follows a **sync-first** model: client queries are reactive and automatical
 
 ```bash
 # Install and build everything
-npm install && npm run build
+pnpm install && pnpm run build
 
 # Run tests (uses vitest)
-npm run test              # All tests
-npm run test:watch        # Watch mode
+pnpm run test              # All tests
+pnpm run test:watch        # Watch mode
 
 # Type checking and linting
-npm run check-types       # TypeScript across all packages
-npm run lint              # oxlint with type-awareness
-npm run format            # oxfmt formatting
+pnpm run check-types       # TypeScript across all packages
+pnpm run lint              # oxlint with type-awareness
+pnpm run format            # oxfmt formatting
 ```
 
 **Always run `lint`, `format` and `check-types` after every change.**
@@ -53,25 +53,25 @@ npm run format            # oxfmt formatting
 Prefer package-level commands when possible. Each package supports: `test`, `check-types`, `lint`, `format`, `build`. e.g.:
 
 ```bash
-npm --workspace=zero-client run format
-npm --workspace=zero-cache run lint
-npm --workspace=zero-server run check-types
+pnpm --filter zero-client run format
+pnpm --filter zero-cache run lint
+pnpm --filter zero-server run check-types
 
 # Run with coverage (prefer using this flag when possible)
-npm --workspace=zero-client run test -- --coverage
+pnpm --filter zero-client run test -- --coverage
 
 # Run specific test file
-npm --workspace=zero-client run test -- zero.test
+pnpm --filter zero-client run test -- zero.test
 ```
 
 ### Zero Cache Development
 
 ```bash
 # Start Zero cache server for local development
-npm run start-zero-cache
+pnpm run start-zero-cache
 
 # In zbugs app - start Zero cache with schema hot-reload
-npm run zero-cache-dev
+pnpm run zero-cache-dev
 ```
 
 ## Code Conventions
@@ -254,11 +254,11 @@ git cherry-pick -x <commit>
 
 ```bash
 # Debug Zero cache with breakpoints
-npm run zero-brk
+pnpm run zero-brk
 
 # Transform/run queries for debugging
-npm run transform-query
-npm run run-query
+pnpm run transform-query
+pnpm run run-query
 ```
 
 ### Docker Development
@@ -266,8 +266,8 @@ npm run run-query
 Many apps include Docker Compose for local PostgreSQL:
 
 ```bash
-npm run db-up    # Start PostgreSQL
-npm run db-down  # Stop PostgreSQL
+pnpm run db-up    # Start PostgreSQL
+pnpm run db-down  # Stop PostgreSQL
 ```
 
 ## Package Dependencies
@@ -303,7 +303,7 @@ zbugs is the reference Zero application. To run it locally:
 2. If you've made changes to any Zero packages (`zero-client`, `zero-cache`, `zero-protocol`, etc.), you must first rebuild:
 
 ```bash
-npm --workspace=@rocicorp/zero run build
+pnpm --filter @rocicorp/zero run build
 ```
 
 ### Starting the Services
@@ -314,13 +314,13 @@ From `apps/zbugs`, start these three services (in background for AI, separate ta
 cd apps/zbugs
 
 # 1. Start PostgreSQL (Docker) - must complete before others
-npm run db-up
+pnpm run db-up
 
 # 2. Start zero-cache with hot-reload
-npm run zero-cache-dev
+pnpm run zero-cache-dev
 
 # 3. Start the Vite dev server
-npm run dev
+pnpm run dev
 ```
 
 **For AI assistants**: Run `db-up` in background, wait for PostgreSQL to be ready, then run `zero-cache-dev` and `dev` in background. Use `run_in_background` parameter or `&` suffix. Check logs with `tail` on the output files.
@@ -331,8 +331,8 @@ If the database is empty or schema has changed:
 
 ```bash
 cd apps/zbugs
-npm run db-migrate  # Apply schema migrations
-npm run db-seed     # Seed with test data
+pnpm run db-migrate  # Apply schema migrations
+pnpm run db-seed     # Seed with test data
 ```
 
 ### Troubleshooting

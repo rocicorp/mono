@@ -15,11 +15,15 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
 
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
       - name: Set up Node.js
         uses: actions/setup-node@v6
         with:
           node-version: 24.x
-          cache: 'npm'
+          cache: 'pnpm'
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v2
@@ -46,7 +50,7 @@ jobs:
           aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com
       - name: Install dependencies
         run: |
-          npm run build-ci
+          pnpm run build-ci
       - name: Resolve Zero protocol versions
         run: |
           node --experimental-strip-types -e "
@@ -91,5 +95,5 @@ jobs:
           OTEL_RESOURCE_ATTRIBUTES: ${{ vars.PROD_OTEL_RESOURCE_ATTRIBUTES }}
         run: |
           cd prod/sst
-          npm install
+          pnpm install --ignore-workspace
           npx sst deploy --stage production

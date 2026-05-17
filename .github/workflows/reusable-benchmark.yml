@@ -50,6 +50,9 @@ jobs:
       TURBO_TEAM: rocicorp
     steps:
       - uses: actions/checkout@v6
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
       - uses: actions/setup-node@v6
         with:
           node-version: 24.x
@@ -57,11 +60,11 @@ jobs:
 
       - uses: ./.github/actions/setup-docker
 
-      - run: npm ci
+      - run: pnpm install --frozen-lockfile
 
       - name: Run benchmarks
         working-directory: ${{ inputs.working_directory }}
-        run: npm run --silent bench:bmf:silent > output.json
+        run: pnpm run --silent bench:bmf:silent > output.json
 
       - name: Upload benchmark results (main)
         if: ${{ !inputs.is_pr }}

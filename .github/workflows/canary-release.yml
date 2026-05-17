@@ -15,10 +15,14 @@ jobs:
           fetch-depth: 0
           ref: ${{ github.event.pull_request.base.ref }}
 
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
       - uses: actions/setup-node@v6
         with:
           node-version: 24.x
-          cache: 'npm'
+          cache: 'pnpm'
           registry-url: 'https://registry.npmjs.org'
 
       - name: Set up Docker Buildx
@@ -30,7 +34,7 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - run: npm ci
+      - run: pnpm install --frozen-lockfile
 
       - name: Run canary release
         id: release
