@@ -237,13 +237,22 @@ type Streamed<T> = {
   id: number;
 };
 
+export type StringifiedStreamPayload = string | readonly string[];
+
 export function streamOut<T extends JSONValue>(
   lc: LogContext,
   source: Source<T>,
   sink: WebSocket,
   options: StreamOutOptions = {},
 ): Promise<void> {
-  return streamOutInternal(lc, source, sink, BigIntJSON.stringify, options);
+  return streamOutInternal<T, T>(
+    lc,
+    source,
+    sink,
+    BigIntJSON.stringify,
+    payload => [payload],
+    options,
+  );
 }
 
 /**
@@ -251,22 +260,30 @@ export function streamOut<T extends JSONValue>(
  */
 export function streamOutStringified(
   lc: LogContext,
-  source: Source<string>,
+  source: Source<StringifiedStreamPayload>,
   sink: WebSocket,
   options: StreamOutOptions = {},
 ): Promise<void> {
-  return streamOutInternal(lc, source, sink, json => json, options);
+  return streamOutInternal<StringifiedStreamPayload, string>(
+    lc,
+    source,
+    sink,
+    json => json,
+    payload => (typeof payload === 'string' ? [payload] : payload),
+    options,
+  );
 }
 
 type StreamOutOptions = {
   batch?: {maxMessages?: number | undefined} | undefined;
 };
 
-async function streamOutInternal<T extends JSONValue>(
+async function streamOutInternal<TPayload, TMessage extends JSONValue>(
   lc: LogContext,
-  source: Source<T>,
+  source: Source<TPayload>,
   sink: WebSocket,
-  stringify: (payload: T) => string,
+  stringify: (payload: TMessage) => string,
+  expandPayload: (payload: TPayload) => readonly TMessage[],
   options: StreamOutOptions,
 ): Promise<void> {
   sendPingsForLiveness(lc, sink, PING_INTERVAL_MS);
@@ -329,14 +346,30 @@ async function streamOutInternal<T extends JSONValue>(
           }
           batch.push(queued.value);
         }
-        const data = stringifyOutboundBatch(
-          batch.map(({value: msg, consumed}) => {
+        const outbound = [];
+        for (const {value, consumed} of batch) {
+          const messages = expandPayload(value);
+          if (messages.length === 0) {
+            consumed();
+            continue;
+          }
+          let remaining = messages.length;
+          const consumeOne = () => {
+            remaining--;
+            if (remaining === 0) {
+              consumed();
+            }
+          };
+          for (const msg of messages) {
             const id = ++nextID;
-            pending.set(id, consumed);
-            return {id, msg};
-          }),
-          stringify,
-        );
+            pending.set(id, consumeOne);
+            outbound.push({id, msg});
+          }
+        }
+        if (outbound.length === 0) {
+          continue;
+        }
+        const data = stringifyOutboundBatch(outbound, stringify);
         // Enable for debugging. Otherwise too verbose.
         // lc.debug?.(`pipelining`, data);
         sink.send(data);
@@ -353,16 +386,25 @@ async function streamOutInternal<T extends JSONValue>(
       });
 
       lc.debug?.(`started synchronous outbound stream`);
-      for await (const msg of source) {
-        const id = ++nextID;
-        const data = `{"id":${id},"msg":${stringify(msg)}}`;
+      for await (const payload of source) {
+        const messages = expandPayload(payload);
+        if (messages.length === 0) {
+          continue;
+        }
+        const outbound = messages.map(msg => ({
+          id: ++nextID,
+          msg,
+        }));
+        const data = stringifyOutboundBatch(outbound, stringify);
         // Enable for debugging. Otherwise too verbose.
         // lc.debug?.(`sending`, data);
         sink.send(data);
 
-        const {ack} = await acks.dequeue();
-        if (ack !== id) {
-          throw new Error(`Unexpected ack for ${id}: ${ack}`);
+        for (const {id} of outbound) {
+          const {ack} = await acks.dequeue();
+          if (ack !== id) {
+            throw new Error(`Unexpected ack for ${id}: ${ack}`);
+          }
         }
       }
     }

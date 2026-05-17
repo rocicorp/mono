@@ -22,6 +22,7 @@ import {
   streamOutStringified,
   type Sink,
   type Source,
+  type StringifiedStreamPayload,
 } from './streams.ts';
 import {Subscription, type Result} from './subscription.ts';
 
@@ -216,7 +217,7 @@ describe('streams with internal acks', () => {
 
   let server: FastifyInstance;
   let producer: Subscription<Message>;
-  let stringifiedProducer: Subscription<string>;
+  let stringifiedProducer: Subscription<StringifiedStreamPayload>;
   let consumed: Queue<Message>;
   let cleanedUp: Promise<Message[]>;
   let cleanup: (m: Message[]) => void;
@@ -640,6 +641,24 @@ describe('streams with internal acks', () => {
     expect(await drain(1, consumer)).toEqual([
       {from: 1, to: 2, str: 'foo', extra: 'bar'},
     ]);
+  });
+
+  test('stringified source flattens internal message batches', async () => {
+    const results = [
+      stringifiedProducer.push('{"from":1,"to":2,"str":"one"}').result,
+      stringifiedProducer.push([
+        '{"from":2,"to":3,"str":"two"}',
+        '{"from":3,"to":4,"str":"three"}',
+      ]).result,
+    ];
+
+    const {consumer} = await startReceiver();
+    expect(await drain(3, consumer)).toEqual([
+      {from: 1, to: 2, str: 'one'},
+      {from: 2, to: 3, str: 'two'},
+      {from: 3, to: 4, str: 'three'},
+    ]);
+    expect(await Promise.all(results)).toEqual(['consumed', 'consumed']);
   });
 
   test('bigints', async () => {

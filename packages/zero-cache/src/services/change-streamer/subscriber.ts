@@ -3,6 +3,7 @@ import {BigIntJSON} from '../../../../shared/src/bigint-json.ts';
 import type {Enum} from '../../../../shared/src/enum.ts';
 import {must} from '../../../../shared/src/must.ts';
 import {max} from '../../types/lexi-version.ts';
+import type {StringifiedStreamPayload} from '../../types/streams.ts';
 import type {Subscription} from '../../types/subscription.ts';
 import type {ChangeTag, WatermarkedChange} from './change-streamer-service.ts';
 import {type Downstream, type Status} from './change-streamer.ts';
@@ -20,7 +21,7 @@ type ErrorType = Enum<typeof ErrorType>;
 export class Subscriber {
   readonly #protocolVersion: number;
   readonly id: string;
-  readonly #downstream: Subscription<string>;
+  readonly #downstream: Subscription<StringifiedStreamPayload>;
   readonly #latestStatus: () => Status;
   #watermark: string;
   #acked: string;
@@ -30,7 +31,7 @@ export class Subscriber {
     protocolVersion: number,
     id: string,
     watermark: string,
-    downstream: Subscription<string>,
+    downstream: Subscription<StringifiedStreamPayload>,
     latestStatus: () => Status,
   ) {
     this.#protocolVersion = protocolVersion;
@@ -56,9 +57,21 @@ export class Subscriber {
       if (this.#backlog) {
         this.#backlog.push(change);
       } else {
-        await this.#sendChange(change);
+        await this.#sendChanges([change]);
       }
     }
+  }
+
+  async sendBatch(changes: readonly WatermarkedChange[]) {
+    if (this.#backlog) {
+      for (const change of changes) {
+        if (change[0] > this.#watermark) {
+          this.#backlog.push(change);
+        }
+      }
+      return;
+    }
+    await this.#sendChanges(changes);
   }
 
   #initialized = false;
@@ -83,7 +96,7 @@ export class Subscriber {
   /** catchup() is called on ChangeEntries loaded from the store. */
   async catchup(change: WatermarkedChange) {
     this.#initialize();
-    await this.#sendChange(change);
+    await this.#sendChanges([change]);
   }
 
   /**
@@ -100,26 +113,37 @@ export class Subscriber {
     // interpret the #backlog variable correctly. This is the only place
     // where I/O flow control is not heeded. However, it will be awaited
     // by the next caller to send().
-    for (const change of this.#backlog) {
-      void this.#sendChange(change);
+    for (let i = 0; i < this.#backlog.length; i += 64) {
+      void this.#sendChanges(this.#backlog.slice(i, i + 64));
     }
     this.#backlog = null;
   }
 
-  async #sendChange(change: WatermarkedChange) {
-    const [watermark, tag, json] = change;
-    if (watermark <= this.watermark) {
+  async #sendChanges(changes: readonly WatermarkedChange[]) {
+    const json: string[] = [];
+    let commitWatermark: string | undefined;
+    for (const change of changes) {
+      const [watermark, tag, payload] = change;
+      if (watermark <= this.watermark) {
+        continue;
+      }
+      if (!this.supportsMessage(tag)) {
+        continue;
+      }
+      if (tag === 'commit') {
+        this.#watermark = watermark;
+        commitWatermark = watermark;
+      }
+      json.push(payload);
+    }
+    if (json.length === 0) {
       return;
     }
-    if (!this.supportsMessage(tag)) {
-      return;
-    }
-    if (tag === 'commit') {
-      this.#watermark = watermark;
-    }
-    const result = await this.#sendStringifiedDownstream(json);
-    if (tag === 'commit' && result === 'consumed') {
-      this.#acked = max(this.#acked, watermark);
+    const result = await this.#sendStringifiedDownstream(
+      json.length === 1 ? json[0] : json,
+    );
+    if (commitWatermark !== undefined && result === 'consumed') {
+      this.#acked = max(this.#acked, commitWatermark);
     }
   }
 
@@ -127,14 +151,15 @@ export class Subscriber {
     return this.#sendStringifiedDownstream(BigIntJSON.stringify(downstream));
   }
 
-  async #sendStringifiedDownstream(json: string) {
-    this.#pending++;
-    const {result} = this.#downstream.push(json);
+  async #sendStringifiedDownstream(payload: StringifiedStreamPayload) {
+    const count = typeof payload === 'string' ? 1 : payload.length;
+    this.#pending += count;
+    const {result} = this.#downstream.push(payload);
     try {
       return await result;
     } finally {
-      this.#pending--;
-      this.#processed++;
+      this.#pending -= count;
+      this.#processed += count;
     }
   }
 

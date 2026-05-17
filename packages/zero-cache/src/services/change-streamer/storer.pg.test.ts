@@ -7,6 +7,7 @@ import {Queue} from '../../../../shared/src/queue.ts';
 import {sleep} from '../../../../shared/src/sleep.ts';
 import {type PgTest, test} from '../../test/db.ts';
 import type {PostgresDB} from '../../types/pg.ts';
+import type {StringifiedStreamPayload} from '../../types/streams.ts';
 import type {Subscription} from '../../types/subscription.ts';
 import {
   type ChangeStreamData,
@@ -93,13 +94,19 @@ describe('change-streamer/storer', () => {
 
   const messages = new ReplicationMessages({issues: 'id'});
 
-  async function drain(sub: Subscription<string>, untilWatermark?: string) {
+  async function drain(
+    sub: Subscription<StringifiedStreamPayload>,
+    untilWatermark?: string,
+  ) {
     const msgs: Downstream[] = [];
-    for await (const json of sub) {
-      const msg: Downstream = JSON.parse(json);
-      msgs.push(msg);
-      if (msg[0] === 'commit' && msg[2].watermark === untilWatermark) {
-        break;
+    for await (const payload of sub) {
+      const entries = typeof payload === 'string' ? [payload] : payload;
+      for (const json of entries) {
+        const msg: Downstream = JSON.parse(json);
+        msgs.push(msg);
+        if (msg[0] === 'commit' && msg[2].watermark === untilWatermark) {
+          return msgs;
+        }
       }
     }
     return msgs;

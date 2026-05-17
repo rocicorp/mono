@@ -9,12 +9,18 @@ export type ProgressMonitorOptions = {
   flowControlConsensusPaddingSeconds: number;
 };
 
+const FORWARD_BATCH_SIZE = 64;
+
 export class Forwarder {
   readonly #lc: LogContext;
   readonly #progressMonitorOptions: ProgressMonitorOptions;
   readonly #active = new Set<Subscriber>();
   readonly #queued = new Set<Subscriber>();
   #inTransaction = false;
+  // Batch the data-heavy middle of a transaction before fanning it out to
+  // every view-syncer. Transaction boundaries still flush immediately so
+  // subscriber handoff and catchup keep the same observable ordering.
+  readonly #pending: WatermarkedChange[] = [];
 
   #currentBroadcast: Broadcast | undefined;
   #progressMonitor: NodeJS.Timeout | undefined;
@@ -82,11 +88,20 @@ export class Forwarder {
    * occasionally to avoid memory blowup.
    */
   forward(entry: WatermarkedChange) {
-    Broadcast.withoutTracking(this.#active.values(), entry);
+    this.#pending.push(entry);
+    if (
+      this.#pending.length >= FORWARD_BATCH_SIZE ||
+      entry[1] === 'begin' ||
+      entry[1] === 'commit' ||
+      entry[1] === 'rollback'
+    ) {
+      this.#flushPendingWithoutTracking();
+    }
     this.#updateActiveSubscribers(entry[1]);
   }
 
   sendStatus(status: Status) {
+    this.#flushPendingWithoutTracking();
     for (const sub of this.#active.values()) {
       sub.sendStatus(status);
     }
@@ -100,9 +115,10 @@ export class Forwarder {
     const {flowControlConsensusPaddingSeconds} = this.#progressMonitorOptions;
     const flowControlConsensusPaddingMs =
       flowControlConsensusPaddingSeconds * 1000;
+    this.#pending.push(entry);
     const broadcast = new Broadcast(
       this.#active.values(),
-      entry,
+      this.#drainPending(),
       flowControlConsensusPaddingMs >= 0
         ? {lc: this.#lc, flowControlConsensusPaddingMs}
         : undefined,
@@ -119,6 +135,17 @@ export class Forwarder {
     if (this.#currentBroadcast === broadcast) {
       this.#currentBroadcast = undefined;
     }
+  }
+
+  #flushPendingWithoutTracking() {
+    const pending = this.#drainPending();
+    if (pending.length > 0) {
+      Broadcast.withoutTracking(this.#active.values(), pending);
+    }
+  }
+
+  #drainPending(): WatermarkedChange[] {
+    return this.#pending.splice(0);
   }
 
   #updateActiveSubscribers(tag: ChangeTag) {

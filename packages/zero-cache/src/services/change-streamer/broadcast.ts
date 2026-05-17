@@ -3,6 +3,8 @@ import {resolver} from '@rocicorp/resolver';
 import type {WatermarkedChange} from './change-streamer-service.ts';
 import type {Subscriber} from './subscriber.ts';
 
+type BroadcastChange = WatermarkedChange | readonly WatermarkedChange[];
+
 /**
  * Initiates and tracks the progress of a change broadcasted to
  * a set of subscribers.
@@ -21,10 +23,11 @@ export class Broadcast {
    */
   static withoutTracking(
     subscribers: Iterable<Subscriber>,
-    change: WatermarkedChange,
+    change: BroadcastChange,
   ) {
+    const changes = normalizeChanges(change);
     for (const sub of subscribers) {
-      void sub.send(change);
+      void sub.sendBatch(changes);
     }
   }
 
@@ -47,21 +50,22 @@ export class Broadcast {
    */
   constructor(
     subscribers: Iterable<Subscriber>,
-    change: WatermarkedChange,
+    change: BroadcastChange,
     flowControl: FlowControlOptions | undefined = undefined,
   ) {
+    const changes = normalizeChanges(change);
     this.#pending = new Set(subscribers);
     this.#completed = [];
     this.#flowControl = flowControl;
-    this.#watermark = change[0];
+    this.#watermark = changes.at(-1)?.[0] ?? 'none';
     this.#majority = Math.floor(this.#pending.size / 2) + 1;
 
     for (const sub of this.#pending) {
-      const changes = sub.numPending + 1; // add one for this `change`
+      const numChanges = sub.numPending + changes.length;
       void sub
-        .send(change)
+        .sendBatch(changes)
         .catch(() => {})
-        .finally(() => this.#markCompleted(sub, changes));
+        .finally(() => this.#markCompleted(sub, numChanges));
     }
 
     // set done if there are no subscribers (mainly for tests)
@@ -272,6 +276,18 @@ export class Broadcast {
       },
     );
   }
+}
+
+function normalizeChanges(
+  change: BroadcastChange,
+): readonly WatermarkedChange[] {
+  return isWatermarkedChange(change) ? [change] : change;
+}
+
+function isWatermarkedChange(
+  change: BroadcastChange,
+): change is WatermarkedChange {
+  return typeof change[0] === 'string';
 }
 
 /** Tracks the completed result of a single subscriber. */

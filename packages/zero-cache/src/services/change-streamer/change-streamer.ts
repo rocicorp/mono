@@ -1,6 +1,6 @@
 import type {Enum} from '../../../../shared/src/enum.ts';
 import * as v from '../../../../shared/src/valita.ts';
-import type {Source} from '../../types/streams.ts';
+import type {Source, StringifiedStreamPayload} from '../../types/streams.ts';
 import {changeStreamDataSchema} from '../change-source/protocol/current/downstream.ts';
 import type {ReplicatorMode} from '../replicator/replicator.ts';
 import {changeSourceTimingsSchema} from '../replicator/reporter/report-schema.ts';
@@ -198,9 +198,11 @@ export interface ChangeStreamerService
   extends Omit<ChangeStreamer, 'subscribe'>, Service {
   /**
    * The server-side interface overrides `subscribe()` to return a stream
-   * of already-stringified {@link Downstream} payloads.
+   * of already-stringified {@link Downstream} payloads. A payload can contain
+   * several ordered messages so the stream layer can flatten them into the
+   * normal wire format without adding one producer queue entry per message.
    */
-  subscribe(ctx: SubscriberContext): Promise<Source<string>>;
+  subscribe(ctx: SubscriberContext): Promise<Source<StringifiedStreamPayload>>;
 
   /**
    * Notifies the change streamer of a watermark that has been backed up,

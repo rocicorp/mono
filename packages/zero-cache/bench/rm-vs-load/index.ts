@@ -32,7 +32,11 @@ import {initReplicationState} from '../../src/services/replicator/schema/replica
 import {ThreadWriteWorkerClient} from '../../src/services/replicator/write-worker-client.ts';
 import {postgresTypeConfig, type PostgresDB} from '../../src/types/pg.ts';
 import {cdcSchema, type ShardID} from '../../src/types/shards.ts';
-import {streamIn, streamOutStringified} from '../../src/types/streams.ts';
+import {
+  streamIn,
+  streamOutStringified,
+  type StringifiedStreamPayload,
+} from '../../src/types/streams.ts';
 import {Subscription} from '../../src/types/subscription.ts';
 import {makeSchemaChanges, makeTransaction, watermarkFor} from './fixtures.ts';
 import {
@@ -542,7 +546,7 @@ async function makeConsumer(
     }
   };
 
-  const downstream = Subscription.create<string>();
+  const downstream = Subscription.create<StringifiedStreamPayload>();
   const sub = new Subscriber(
     PROTOCOL_VERSION,
     id,
@@ -637,7 +641,7 @@ async function makeConsumer(
 }
 
 async function createConsumerTransport(
-  downstream: Subscription<string>,
+  downstream: Subscription<StringifiedStreamPayload>,
   mode: ConsumerTransportMode,
   ackMode: ConsumerTransportAckMode,
   batchMessages: number,
@@ -647,7 +651,10 @@ async function createConsumerTransport(
 }> {
   switch (mode) {
     case 'in-process':
-      return {messages: downstream, close: () => Promise.resolve()};
+      return {
+        messages: flattenStringifiedMessages(downstream),
+        close: () => Promise.resolve(),
+      };
     case 'websocket': {
       const server = new WebSocketServer({host: '127.0.0.1', port: 0});
       server.on('connection', ws => {
@@ -678,6 +685,18 @@ async function createConsumerTransport(
           });
         },
       };
+    }
+  }
+}
+
+async function* flattenStringifiedMessages(
+  source: AsyncIterable<StringifiedStreamPayload>,
+): AsyncIterable<string> {
+  for await (const payload of source) {
+    if (typeof payload === 'string') {
+      yield payload;
+    } else {
+      yield* payload;
     }
   }
 }

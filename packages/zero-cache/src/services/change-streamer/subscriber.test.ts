@@ -1,8 +1,13 @@
 import {describe, expect, test} from 'vitest';
+import type {StringifiedStreamPayload} from '../../types/streams.ts';
 import {ReplicationMessages} from '../replicator/test-utils.ts';
 import {createSubscriber} from './test-utils.ts';
 
 const json = JSON.stringify;
+
+function expandPayload(payload: StringifiedStreamPayload): readonly string[] {
+  return typeof payload === 'string' ? [payload] : payload;
+}
 
 describe('change-streamer/subscriber', () => {
   const messages = new ReplicationMessages({issues: 'id'});
@@ -284,29 +289,35 @@ describe('change-streamer/subscriber', () => {
     expect(sub.numPending).toBe(pending);
 
     let txNum = 0;
-    for await (const json of receiver) {
-      const msg = JSON.parse(json);
-      expect(sub.numProcessed).toBe(processed++);
-      expect(sub.numPending).toBe(pending--);
-
-      if (msg[0] === 'begin') {
-        txNum++;
+    for await (const payload of receiver) {
+      const beforeProcessed = processed;
+      const beforePending = pending;
+      const messages = expandPayload(payload);
+      for (const json of messages) {
+        const msg = JSON.parse(json);
+        if (msg[0] === 'begin') {
+          txNum++;
+        }
+        switch (txNum) {
+          case 1:
+            expect(sub.acked).toBe('00');
+            break;
+          case 2:
+            expect(sub.acked).toBe('02');
+            break;
+          case 3:
+            expect(sub.acked).toBe('12');
+            break;
+          case 4:
+            expect(sub.acked).toBe('22');
+            sub.close();
+            break;
+        }
       }
-      switch (txNum) {
-        case 1:
-          expect(sub.acked).toBe('00');
-          break;
-        case 2:
-          expect(sub.acked).toBe('02');
-          break;
-        case 3:
-          expect(sub.acked).toBe('12');
-          break;
-        case 4:
-          expect(sub.acked).toBe('22');
-          sub.close();
-          break;
-      }
+      expect(sub.numProcessed).toBe(beforeProcessed);
+      expect(sub.numPending).toBe(beforePending);
+      processed += messages.length;
+      pending -= messages.length;
     }
     expect(sub.numProcessed).toBe(8);
     expect(
