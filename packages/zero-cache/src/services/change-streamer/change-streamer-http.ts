@@ -35,6 +35,7 @@ const MIN_SUPPORTED_PROTOCOL_VERSION = 1;
 const SNAPSHOT_PATH_PATTERN = '/replication/:version/snapshot';
 const CHANGES_PATH_PATTERN = '/replication/:version/changes';
 const PATH_REGEX = /\/replication\/v(?<version>\d+)\/(changes|snapshot)$/;
+const STREAM_BATCH_MESSAGES = 64;
 
 const SNAPSHOT_PATH = `/replication/v${PROTOCOL_VERSION}/snapshot`;
 const CHANGES_PATH = `/replication/v${PROTOCOL_VERSION}/changes`;
@@ -143,7 +144,18 @@ export class ChangeStreamerHttpServer extends HttpService {
         // end the reservation to safely resume scheduling cleanup.
         this.#backupMonitor.endReservation(ctx.taskID);
       }
-      void streamOutStringified(this._lc, downstream, ws);
+      const url = new URL(
+        req.url ?? '',
+        req.headers.origin ?? 'http://localhost',
+      );
+      void streamOutStringified(
+        this._lc,
+        downstream,
+        ws,
+        url.searchParams.get('streamBatch') === '1'
+          ? {batch: {maxMessages: STREAM_BATCH_MESSAGES}}
+          : undefined,
+      );
     } catch (err) {
       closeWithError(this._lc, ws, err, PROTOCOL_ERROR);
     }
@@ -236,6 +248,7 @@ export class ChangeStreamerHttpClient implements ChangeStreamer {
     const uri = await this.#resolveChangeStreamer(CHANGES_PATH);
 
     const params = getParams(ctx);
+    params.set('streamBatch', '1');
     const ws = new WebSocket(uri + `?${params.toString()}`);
 
     return streamIn(this.#lc, ws, downstreamSchema);

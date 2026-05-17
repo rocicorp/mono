@@ -6,6 +6,7 @@ import Fastify, {type FastifyInstance} from 'fastify';
 import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
 import WebSocket from 'ws';
 import {unreachable} from '../../../shared/src/asserts.ts';
+import type {JSONValue} from '../../../shared/src/bigint-json.ts';
 import {
   createSilentLogContext,
   TestLogSink,
@@ -219,6 +220,8 @@ describe('streams with internal acks', () => {
   let consumed: Queue<Message>;
   let cleanedUp: Promise<Message[]>;
   let cleanup: (m: Message[]) => void;
+  let ackMessages: number[];
+  let streamBatchMessages: number;
   let port: number;
 
   let ws: WebSocket;
@@ -231,6 +234,8 @@ describe('streams with internal acks', () => {
     cleanup = resolve;
 
     consumed = new Queue();
+    ackMessages = [];
+    streamBatchMessages = 1;
     producer = Subscription.create({
       consumed: m => consumed.enqueue(m),
       cleanup: resolve,
@@ -240,8 +245,22 @@ describe('streams with internal acks', () => {
     server = Fastify();
     await server.register(websocket);
     server.get('/', {websocket: true}, ws => {
-      void streamOut(lc, producer, ws);
-      void streamOutStringified(lc, stringifiedProducer, ws);
+      ws.on('message', data => {
+        const text = data.toString();
+        if (!text.startsWith('{"ack":')) {
+          return;
+        }
+        const {ack} = JSON.parse(text) as {ack?: unknown};
+        if (typeof ack === 'number') {
+          ackMessages.push(ack);
+        }
+      });
+      const batchOptions =
+        streamBatchMessages > 1
+          ? {batch: {maxMessages: streamBatchMessages}}
+          : undefined;
+      void streamOut(lc, producer, ws, batchOptions);
+      void streamOutStringified(lc, stringifiedProducer, ws, batchOptions);
     });
 
     // Run the server for real instead of using `injectWS()`, as that has a
@@ -260,11 +279,9 @@ describe('streams with internal acks', () => {
     ws = new WebSocket(`http://localhost:${port}/`);
     return {
       ws,
-      consumer: (await streamIn(
-        lc,
-        ws,
-        messageSchema,
-      )) as Subscription<Message>,
+      consumer: (await streamIn(lc, ws, messageSchema, {
+        ack: 'cumulative',
+      })) as Subscription<Message>,
     };
   }
 
@@ -346,6 +363,129 @@ describe('streams with internal acks', () => {
       'consumed',
       'consumed',
     ]);
+  });
+
+  test('pipelined cumulative ack batches consumed messages', async () => {
+    const messageCount = 96;
+    const results: Promise<Result>[] = [];
+    for (let i = 0; i < messageCount; i++) {
+      results.push(producer.push({from: i, to: i + 1, str: `msg-${i}`}).result);
+    }
+
+    const {consumer} = await startReceiver();
+    await vi.waitFor(() => expect(consumer.queued).toBe(messageCount));
+
+    const entries = await drainPipeline(messageCount, consumer);
+    for (const {consumed} of entries) {
+      consumed();
+    }
+
+    expect(await Promise.all(results)).toEqual(
+      Array<Result>(messageCount).fill('consumed'),
+    );
+    expect(ackMessages).toEqual([
+      8, 16, 24, 32, 40, 48, 56, 64, 72, 80, 88, 96,
+    ]);
+    consumer.cancel();
+    expect(await cleanedUp).toEqual([]);
+  });
+
+  test('pipelined outbound stream batches queued messages', async () => {
+    streamBatchMessages = 4;
+    const messageCount = 10;
+    for (let i = 0; i < messageCount; i++) {
+      producer.push({from: i, to: i + 1, str: `msg-${i}`});
+    }
+
+    const {consumer} = await startReceiver();
+    await vi.waitFor(() => expect(consumer.queued).toBe(messageCount));
+
+    const received: Message[] = [];
+    for await (const msg of consumer) {
+      received.push(msg);
+      if (received.length === messageCount) {
+        break;
+      }
+    }
+
+    expect(received).toEqual(
+      Array.from({length: messageCount}, (_, i) => ({
+        from: i,
+        to: i + 1,
+        str: `msg-${i}`,
+      })),
+    );
+    expect(await cleanedUp).toEqual([]);
+  });
+
+  test('pipelined outbound stream uses batch frames', async () => {
+    streamBatchMessages = 4;
+    const received: JSONValue[] = [];
+    const messageCount = 10;
+
+    ws = new WebSocket(`http://localhost:${port}/`);
+    ws.on('message', data =>
+      received.push(JSON.parse(data.toString()) as JSONValue),
+    );
+
+    for (let i = 0; i < messageCount; i++) {
+      producer.push({from: i, to: i + 1, str: `msg-${i}`});
+    }
+
+    await vi.waitFor(() => expect(received).toHaveLength(3));
+    expect(received).toMatchObject([
+      {batch: [{id: 1}, {id: 2}, {id: 3}, {id: 4}]},
+      {batch: [{id: 5}, {id: 6}, {id: 7}, {id: 8}]},
+      {batch: [{id: 9}, {id: 10}]},
+    ]);
+    ws.close();
+  });
+
+  test('pipelined cumulative ack flushes pending ack on cleanup', async () => {
+    const messageCount = 3;
+    const results: Promise<Result>[] = [];
+    for (let i = 0; i < messageCount; i++) {
+      results.push(producer.push({from: i, to: i + 1, str: `msg-${i}`}).result);
+    }
+
+    const {consumer} = await startReceiver();
+    await vi.waitFor(() => expect(consumer.queued).toBe(messageCount));
+
+    const entries = await drainPipeline(messageCount, consumer);
+    for (const {consumed} of entries) {
+      consumed();
+    }
+    expect(ackMessages).toEqual([]);
+
+    consumer.cancel();
+
+    expect(await Promise.all(results)).toEqual(
+      Array<Result>(messageCount).fill('consumed'),
+    );
+    expect(ackMessages).toEqual([3]);
+    expect(await cleanedUp).toEqual([]);
+  });
+
+  test('pipelined backwards ack closes connection', async () => {
+    const received: JSONValue[] = [];
+    const closed = resolver<void>();
+    const results: Promise<Result>[] = [];
+
+    ws = new WebSocket(`http://localhost:${port}/`);
+    ws.on('message', data =>
+      received.push(JSON.parse(data.toString()) as JSONValue),
+    );
+    ws.on('close', () => closed.resolve());
+
+    results.push(producer.push({from: 0, to: 1, str: 'foo'}).result);
+    results.push(producer.push({from: 1, to: 2, str: 'bar'}).result);
+
+    await vi.waitFor(() => expect(received).toHaveLength(2));
+    ws.send(JSON.stringify({ack: 2}));
+    expect(await Promise.all(results)).toEqual(['consumed', 'consumed']);
+
+    ws.send(JSON.stringify({ack: 1}));
+    await closed.promise;
   });
 
   test('pipelined (unconsumed)', async () => {
@@ -458,6 +598,28 @@ describe('streams with internal acks', () => {
       if (++i === num) {
         break;
       }
+    }
+    return drained;
+  }
+
+  async function drainPipeline(
+    num: number,
+    consumer: Source<Message>,
+  ): Promise<{value: Message; consumed: () => void}[]> {
+    const {pipeline} = consumer;
+    expect(pipeline).not.toBeUndefined();
+    if (!pipeline) {
+      unreachable();
+    }
+    const iterator = pipeline[Symbol.asyncIterator]();
+    const drained: {value: Message; consumed: () => void}[] = [];
+    for (let i = 0; i < num; i++) {
+      const result = await iterator.next();
+      expect(result.done).not.toBe(true);
+      if (result.done) {
+        unreachable();
+      }
+      drained.push(result.value);
     }
     return drained;
   }

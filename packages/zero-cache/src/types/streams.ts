@@ -28,6 +28,8 @@ import {
 // Consistent with Postgres keepalives, and shorter than the
 // commonly used default idle timeout of 1 minute.
 const PING_INTERVAL_MS = 30_000;
+const CUMULATIVE_ACK_EVERY = 8;
+const CUMULATIVE_ACK_INTERVAL_MS = 5;
 
 export type Source<T> = AsyncIterable<T> & {
   /**
@@ -216,6 +218,17 @@ const ackSchema = v.object({ack: v.number()});
 
 type Ack = v.Infer<typeof ackSchema>;
 
+function parseAck(data: unknown): Ack {
+  if (typeof data !== 'string') {
+    throw new Error('Expected string message');
+  }
+  const ack = v.parse(JSON.parse(data), ackSchema);
+  if (!Number.isSafeInteger(ack.ack) || ack.ack < 0) {
+    throw new Error(`Invalid ack ${ack.ack}`);
+  }
+  return ack;
+}
+
 type Streamed<T> = {
   /** Application-level message. */
   msg: T;
@@ -228,8 +241,9 @@ export function streamOut<T extends JSONValue>(
   lc: LogContext,
   source: Source<T>,
   sink: WebSocket,
+  options: StreamOutOptions = {},
 ): Promise<void> {
-  return streamOutInternal(lc, source, sink, BigIntJSON.stringify);
+  return streamOutInternal(lc, source, sink, BigIntJSON.stringify, options);
 }
 
 /**
@@ -239,55 +253,105 @@ export function streamOutStringified(
   lc: LogContext,
   source: Source<string>,
   sink: WebSocket,
+  options: StreamOutOptions = {},
 ): Promise<void> {
-  return streamOutInternal(lc, source, sink, json => json);
+  return streamOutInternal(lc, source, sink, json => json, options);
 }
+
+type StreamOutOptions = {
+  batch?: {maxMessages?: number | undefined} | undefined;
+};
 
 async function streamOutInternal<T extends JSONValue>(
   lc: LogContext,
   source: Source<T>,
   sink: WebSocket,
   stringify: (payload: T) => string,
+  options: StreamOutOptions,
 ): Promise<void> {
   sendPingsForLiveness(lc, sink, PING_INTERVAL_MS);
 
   const closer = WebSocketCloser.forSource(lc, sink, source);
 
-  const acks = new Queue<Ack>();
-  sink.addEventListener('message', ({data}) => {
-    try {
-      if (typeof data !== 'string') {
-        throw new Error('Expected string message');
-      }
-      acks.enqueue(v.parse(JSON.parse(data), ackSchema));
-    } catch (e) {
-      lc.error?.(`error parsing ack`, e);
-      closer.close(e);
-    }
-  });
-
   try {
     let nextID = 0;
     const {pipeline} = source;
     if (pipeline) {
+      const iterator = pipeline[Symbol.asyncIterator]();
+      const maxBatchMessages = Math.max(1, options.batch?.maxMessages ?? 1);
+      let lastAck = 0;
+      const pending = new Map<number, () => void>();
+      sink.addEventListener('message', ({data}) => {
+        try {
+          const {ack} = parseAck(data);
+          if (ack < lastAck) {
+            throw new Error(`Ack moved backwards from ${lastAck} to ${ack}`);
+          }
+          if (ack > nextID) {
+            if (nextID === 0 && pending.size === 0) {
+              return;
+            }
+            throw new Error(
+              `Unexpected ack ${ack}; only sent through ${nextID}`,
+            );
+          }
+          if (ack === lastAck) {
+            return;
+          }
+          lastAck = ack;
+          for (const [id, consumed] of pending) {
+            if (id <= ack) {
+              consumed();
+              pending.delete(id);
+            }
+          }
+        } catch (e) {
+          lc.error?.(`error handling ack`, e);
+          closer.close(e);
+        }
+      });
+
       lc.debug?.(`started pipelined outbound stream`);
-      for await (const {value: msg, consumed} of pipeline) {
-        const id = ++nextID;
-        const data = `{"id":${id},"msg":${stringify(msg)}}`;
+      for (;;) {
+        const next = await iterator.next();
+        if (next.done) {
+          break;
+        }
+        const batch = [next.value];
+        while (
+          batch.length < maxBatchMessages &&
+          source instanceof Subscription &&
+          source.queued > 0
+        ) {
+          const queued = await iterator.next();
+          if (queued.done) {
+            break;
+          }
+          batch.push(queued.value);
+        }
+        const data = stringifyOutboundBatch(
+          batch.map(({value: msg, consumed}) => {
+            const id = ++nextID;
+            pending.set(id, consumed);
+            return {id, msg};
+          }),
+          stringify,
+        );
         // Enable for debugging. Otherwise too verbose.
         // lc.debug?.(`pipelining`, data);
         sink.send(data);
-
-        void (async () => {
-          const {ack} = await acks.dequeue();
-          // lc.debug?.(`received ack`, ack);
-          if (ack !== id) {
-            throw new Error(`Unexpected ack for ${id}: ${ack}`);
-          }
-          consumed();
-        })();
       }
     } else {
+      const acks = new Queue<Ack>();
+      sink.addEventListener('message', ({data}) => {
+        try {
+          acks.enqueue(parseAck(data));
+        } catch (e) {
+          lc.error?.(`error parsing ack`, e);
+          closer.close(e);
+        }
+      });
+
       lc.debug?.(`started synchronous outbound stream`);
       for await (const msg of source) {
         const id = ++nextID;
@@ -308,10 +372,24 @@ async function streamOutInternal<T extends JSONValue>(
   }
 }
 
+function stringifyOutboundBatch<T extends JSONValue>(
+  batch: readonly {readonly id: number; readonly msg: T}[],
+  stringify: (payload: T) => string,
+) {
+  if (batch.length === 1) {
+    const [{id, msg}] = batch;
+    return `{"id":${id},"msg":${stringify(msg)}}`;
+  }
+  return `{"batch":[${batch
+    .map(({id, msg}) => `{"id":${id},"msg":${stringify(msg)}}`)
+    .join(',')}]}`;
+}
+
 export async function streamIn<T extends JSONValue>(
   lc: LogContext,
   source: WebSocket,
   schema: v.Type<T>,
+  options: StreamInOptions = {},
 ): Promise<Source<T>> {
   expectPingsForLiveness(lc, source, PING_INTERVAL_MS);
 
@@ -319,11 +397,15 @@ export async function streamIn<T extends JSONValue>(
     msg: schema,
     id: v.number(),
   });
+  const acker = new CumulativeAcker(source, options.ack === 'cumulative');
 
   const sink: Subscription<T, Streamed<T>> = new Subscription<T, Streamed<T>>(
     {
-      consumed: ({id}) => source.send(JSON.stringify({ack: id} satisfies Ack)),
-      cleanup: () => closer.close(),
+      consumed: ({id}) => acker.consumed(id),
+      cleanup: () => {
+        acker.close();
+        closer.close();
+      },
     },
     ({msg}) => msg,
   );
@@ -338,10 +420,12 @@ export async function streamIn<T extends JSONValue>(
     }
     try {
       const value = BigIntJSON.parse(data);
-      const msg = v.parse(value, streamedSchema, 'passthrough');
-      // Enable for debugging. Otherwise too verbose.
-      // lc.debug?.(`received`, data);
-      sink.push(msg);
+      for (const msg of parseStreamedMessages(value, streamedSchema)) {
+        acker.received(msg.id);
+        // Enable for debugging. Otherwise too verbose.
+        // lc.debug?.(`received`, data);
+        sink.push(msg);
+      }
     } catch (e) {
       closer.close(e);
     }
@@ -349,6 +433,119 @@ export async function streamIn<T extends JSONValue>(
 
   await closer.connected;
   return sink;
+}
+
+function parseStreamedMessages<T extends JSONValue>(
+  value: JSONValue,
+  streamedSchema: v.Type<Streamed<T>>,
+): Streamed<T>[] {
+  if (
+    typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value) &&
+    Object.hasOwn(value, 'batch')
+  ) {
+    const batch = (value as {readonly batch?: unknown}).batch;
+    if (!Array.isArray(batch)) {
+      throw new Error('Invalid stream batch');
+    }
+    return batch.map(msg => v.parse(msg, streamedSchema, 'passthrough'));
+  }
+  return [v.parse(value, streamedSchema, 'passthrough')];
+}
+
+type StreamInOptions = {
+  ack?: 'per-message' | 'cumulative' | undefined;
+};
+
+class CumulativeAcker {
+  readonly #ws: WebSocket;
+  readonly #batch: boolean;
+  readonly #outOfOrder = new Set<number>();
+  #highestReceived = 0;
+  #highestAckable = 0;
+  #lastSent = 0;
+  #pendingSinceLastSend = 0;
+
+  #timer: NodeJS.Timeout | undefined;
+
+  constructor(ws: WebSocket, batch: boolean) {
+    this.#ws = ws;
+    this.#batch = batch;
+  }
+
+  received(id: number) {
+    this.#validateID(id);
+    this.#highestReceived = Math.max(this.#highestReceived, id);
+  }
+
+  consumed(id: number) {
+    this.#validateID(id);
+    if (id <= this.#highestAckable) {
+      return;
+    }
+    const previous = this.#highestAckable;
+    if (id === this.#highestAckable + 1) {
+      this.#highestAckable = id;
+      while (this.#outOfOrder.delete(this.#highestAckable + 1)) {
+        this.#highestAckable++;
+      }
+    } else {
+      this.#outOfOrder.add(id);
+    }
+    const advanced = this.#highestAckable - previous;
+    if (advanced === 0) {
+      return;
+    }
+    this.#pendingSinceLastSend += advanced;
+    if (
+      this.#batch &&
+      this.#pendingSinceLastSend < CUMULATIVE_ACK_EVERY &&
+      !(
+        this.#pendingSinceLastSend > 1 &&
+        this.#highestAckable === this.#highestReceived
+      )
+    ) {
+      this.#schedule();
+    } else {
+      this.flush();
+    }
+  }
+
+  flush() {
+    this.#clearTimer();
+    if (this.#highestAckable <= this.#lastSent) {
+      return;
+    }
+    if (this.#ws.readyState !== this.#ws.OPEN) {
+      return;
+    }
+    this.#ws.send(JSON.stringify({ack: this.#highestAckable} satisfies Ack));
+    this.#lastSent = this.#highestAckable;
+    this.#pendingSinceLastSend = 0;
+  }
+
+  close() {
+    this.flush();
+    this.#clearTimer();
+  }
+
+  #schedule() {
+    this.#timer ??= setTimeout(() => this.flush(), CUMULATIVE_ACK_INTERVAL_MS);
+  }
+
+  #clearTimer() {
+    if (this.#timer !== undefined) {
+      clearTimeout(this.#timer);
+      this.#timer = undefined;
+    }
+  }
+
+  #validateID(id: number) {
+    if (!Number.isSafeInteger(id) || id <= 0) {
+      throw new Error(`Invalid stream message id ${id}`);
+    }
+  }
 }
 
 class WebSocketCloser {
