@@ -11,6 +11,11 @@ import * as ErrorType from './error-type-enum.ts';
 
 type ErrorType = Enum<typeof ErrorType>;
 
+type CatchupState = {
+  instance: CatchupBacklog<WatermarkedChange>;
+  flush: Promise<void> | undefined;
+};
+
 /**
  * Encapsulates a subscriber to changes. All subscribers start in a
  * "catchup" phase in which changes are buffered in a backlog while the
@@ -25,8 +30,7 @@ export class Subscriber {
   readonly #latestStatus: () => Status;
   #watermark: string;
   #acked: string;
-  #backlog: CatchupBacklog<WatermarkedChange> | null;
-  #backlogFlush: Promise<void> | undefined;
+  #backlog: CatchupState | null;
 
   constructor(
     protocolVersion: number,
@@ -41,7 +45,7 @@ export class Subscriber {
     this.#latestStatus = latestStatus;
     this.#watermark = watermark;
     this.#acked = watermark;
-    this.#backlog = new CatchupBacklog();
+    this.#backlog = {instance: new CatchupBacklog(), flush: undefined};
   }
 
   get watermark() {
@@ -56,7 +60,7 @@ export class Subscriber {
     const [watermark] = change;
     if (watermark > this.#watermark) {
       if (this.#backlog) {
-        await this.#backlog.enqueue(change);
+        await this.#backlog.instance.enqueue(change);
       } else {
         await this.#sendChange(change);
       }
@@ -82,8 +86,8 @@ export class Subscriber {
         'status',
         status,
       ] satisfies Downstream);
-      if (this.#backlogFlush) {
-        void this.#backlogFlush
+      if (this.#backlog?.flush) {
+        void this.#backlog.flush
           .then(() => this.#sendStringifiedDownstream(json))
           .catch(err => this.fail(err));
       } else {
@@ -108,33 +112,29 @@ export class Subscriber {
       this.#backlog,
       'setCaughtUp() called but subscriber is not in catchup mode',
     );
-    if (this.#backlogFlush) {
-      return this.#backlogFlush;
+    if (this.#backlog.flush) {
+      return this.#backlog.flush;
     }
 
     const backlog = this.#backlog;
-    if (backlog.empty) {
+    if (backlog.instance.empty) {
       this.#backlog = null;
       return Promise.resolve();
     }
 
-    const flush = this.#flushBacklog(backlog).finally(() => {
-      if (this.#backlogFlush === flush) {
-        this.#backlogFlush = undefined;
-      }
-    });
-    this.#backlogFlush = flush;
+    const flush = this.#flushBacklog(backlog);
+    backlog.flush = flush;
     void flush.catch(err => this.fail(err));
     return flush;
   }
 
-  async #flushBacklog(backlog: CatchupBacklog<WatermarkedChange>) {
+  async #flushBacklog(backlog: CatchupState) {
     // #5970: https://github.com/rocicorp/mono/pull/5970
     // Flow-control the catchup-to-live handoff so "caught up" means the
     // receiving VS consumed the buffered live changes, not just that RM moved a
     // recovery burst into downstream pending work.
     try {
-      await backlog.flushWith(change => this.#sendChange(change));
+      await backlog.instance.flushWith(change => this.#sendChange(change));
     } finally {
       if (this.#backlog === backlog) {
         this.#backlog = null;
