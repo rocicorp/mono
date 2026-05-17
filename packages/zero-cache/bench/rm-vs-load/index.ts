@@ -288,6 +288,12 @@ async function runScenario(
     const samples = sum(stats.map(s => s.samples));
     const avgAckLagMessages =
       samples === 0 ? 0 : sum(stats.map(s => s.totalAckLagMessages)) / samples;
+    const avgSubscriberParseMs =
+      samples === 0 ? 0 : sum(stats.map(s => s.totalParseMs)) / samples;
+    const avgSubscriberApplyMs =
+      samples === 0 ? 0 : sum(stats.map(s => s.totalApplyMs)) / samples;
+    const avgSubscriberClientCpuMs =
+      samples === 0 ? 0 : sum(stats.map(s => s.totalClientCpuMs)) / samples;
 
     summary = {
       name: scenario.name,
@@ -316,6 +322,9 @@ async function runScenario(
       subscriberApplyMode: consumerConfig.applyMode,
       subscriberApplyMessages: consumerConfig.applyMessages,
       subscriberClientCpuMicros: consumerConfig.clientCpuMicros,
+      avgSubscriberParseMs,
+      avgSubscriberApplyMs,
+      avgSubscriberClientCpuMs,
       slowSubscriberAckDelayMs: consumerConfig.slowAckDelayMs,
       slowSubscriberEvery: consumerConfig.slowEvery,
       maxAckLagMessages,
@@ -406,6 +415,9 @@ async function makeConsumer(
   let processed = 0;
   let maxAckLagMessages = 0;
   let totalAckLagMessages = 0;
+  let totalParseMs = 0;
+  let totalApplyMs = 0;
+  let totalClientCpuMs = 0;
   let samples = 0;
   let consumerReplica: Database | undefined;
   let processor: ChangeProcessor | undefined;
@@ -488,8 +500,15 @@ async function makeConsumer(
         if (!active) {
           break;
         }
-        await applyChange(parseChangeStreamData(message));
+        const parseStart = performance.now();
+        const change = parseChangeStreamData(message);
+        totalParseMs += performance.now() - parseStart;
+        const applyStart = performance.now();
+        await applyChange(change);
+        totalApplyMs += performance.now() - applyStart;
+        const cpuStart = performance.now();
         burnCpu(config.clientCpuMicros);
+        totalClientCpuMs += performance.now() - cpuStart;
         if (ackDelayMs > 0) {
           await sleep(ackDelayMs);
         }
@@ -522,6 +541,9 @@ async function makeConsumer(
       processed,
       maxAckLagMessages,
       totalAckLagMessages,
+      totalParseMs,
+      totalApplyMs,
+      totalClientCpuMs,
       samples,
     }),
   };

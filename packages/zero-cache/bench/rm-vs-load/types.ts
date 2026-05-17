@@ -51,6 +51,9 @@ export type ScenarioSummary = {
   readonly subscriberApplyMode: ConsumerApplyMode;
   readonly subscriberApplyMessages: boolean;
   readonly subscriberClientCpuMicros: number;
+  readonly avgSubscriberParseMs: number;
+  readonly avgSubscriberApplyMs: number;
+  readonly avgSubscriberClientCpuMs: number;
   readonly slowSubscriberAckDelayMs: number;
   readonly slowSubscriberEvery: number;
   readonly maxAckLagMessages: number;
@@ -74,6 +77,9 @@ export type LoadConsumer = {
     readonly processed: number;
     readonly maxAckLagMessages: number;
     readonly totalAckLagMessages: number;
+    readonly totalParseMs: number;
+    readonly totalApplyMs: number;
+    readonly totalClientCpuMs: number;
     readonly samples: number;
   };
 };
