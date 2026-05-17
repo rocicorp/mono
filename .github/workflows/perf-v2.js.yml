@@ -37,7 +37,7 @@ jobs:
       # Clear out potential user data dirs left over from previous failures.
       - run: rm -rf /tmp/replicache-playwright-*
       - run: pnpm install --frozen-lockfile
-      - run: npx playwright install
+      - run: pnpm exec playwright install
 
       - run: pnpm run build
         working-directory: packages/replicache-perf

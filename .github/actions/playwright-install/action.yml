@@ -6,7 +6,7 @@ runs:
   steps:
     - name: Get Playwright version
       id: playwright-version
-      run: echo "version=$(npx playwright --version | awk '{print $NF}')" >> "$GITHUB_OUTPUT"
+      run: echo "version=$(pnpm exec playwright --version | awk '{print $NF}')" >> "$GITHUB_OUTPUT"
       shell: bash
     - name: Cache Playwright browsers
       id: playwright-cache
@@ -16,9 +16,9 @@ runs:
         key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
     - name: Install Playwright browsers and system deps
       if: steps.playwright-cache.outputs.cache-hit != 'true'
-      run: npx playwright install --with-deps
+      run: pnpm exec playwright install --with-deps
       shell: bash
     - name: Install Playwright system deps only
       if: steps.playwright-cache.outputs.cache-hit == 'true'
-      run: npx playwright install-deps
+      run: pnpm exec playwright install-deps
       shell: bash
