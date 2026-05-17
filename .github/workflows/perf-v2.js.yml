@@ -14,8 +14,8 @@ jobs:
     name: Install Playwright
     runs-on: self-hosted
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
           node-version: 24.x
           cache: 'npm'
@@ -27,8 +27,8 @@ jobs:
     needs: playwright-install
     runs-on: self-hosted
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
           node-version: 24.x
           cache: 'npm'
@@ -55,7 +55,7 @@ jobs:
 
       # Run `github-action-benchmark` action
       - name: Store benchmark result
-        uses: rhysd/github-action-benchmark@v1
+        uses: rhysd/github-action-benchmark@52576c92bccf6ac60c8223ec7eb2565637cae9ba # v1
         with:
           # What benchmark tool the output.json came from
           tool: 'customSmallerIsBetter'
@@ -70,7 +70,7 @@ jobs:
           comment-on-alert: true
 
       - name: Store benchmark result p95
-        uses: rhysd/github-action-benchmark@v1
+        uses: rhysd/github-action-benchmark@52576c92bccf6ac60c8223ec7eb2565637cae9ba # v1
         with:
           # What benchmark tool the output.json came from
           tool: 'customSmallerIsBetter'
