@@ -119,13 +119,22 @@ const rawChangeLogEntrySchema = v.object({
 
 export type RawChangeLogEntry = v.Infer<typeof rawChangeLogEntrySchema>;
 
+export type BatchRowOp = {
+  readonly pos: number;
+  readonly table: string;
+  readonly rowKey: string;
+};
+
 export class ChangeLog {
+  readonly #db: Database;
   readonly #logRowOpStmt: Statement;
   readonly #logRowOpWithBackfillStmt: Statement;
   readonly #logTableWideOpStmt;
   readonly #getRowOpStmt: Statement;
+  readonly #logSetOpsStmts = new Map<number, Statement>();
 
   constructor(db: Database) {
+    this.#db = db;
     this.#logRowOpStmt = db.prepare(/*sql*/ `
       INSERT OR REPLACE INTO "_zero.changeLog2" 
         (stateVersion, pos, "table", rowKey, op)
@@ -183,6 +192,40 @@ export class ChangeLog {
     backfilled: string[] | undefined,
   ): string {
     return this.#logRowOp(version, pos, table, row, SET_OP, backfilled);
+  }
+
+  logSetOps(version: LexiVersion, entries: readonly BatchRowOp[]) {
+    if (entries.length === 0) {
+      return;
+    }
+    if (entries.length === 1) {
+      const {pos, table, rowKey} = entries[0];
+      this.#logRowOpStmt.run({version, pos, table, rowKey, op: SET_OP});
+      return;
+    }
+
+    let stmt = this.#logSetOpsStmts.get(entries.length);
+    if (!stmt) {
+      stmt = this.#db.prepare(/*sql*/ `
+        INSERT OR REPLACE INTO "_zero.changeLog2"
+          (stateVersion, pos, "table", rowKey, op)
+          VALUES ${Array.from({length: entries.length})
+            .map(() => `(?, ?, ?, JSON(?), '${SET_OP}')`)
+            .join(',')}
+      `);
+      this.#logSetOpsStmts.set(entries.length, stmt);
+    }
+
+    const values = [];
+    values.length = entries.length * 4;
+    let i = 0;
+    for (const {pos, table, rowKey} of entries) {
+      values[i++] = version;
+      values[i++] = pos;
+      values[i++] = table;
+      values[i++] = rowKey;
+    }
+    stmt.run(values);
   }
 
   logDeleteOp(

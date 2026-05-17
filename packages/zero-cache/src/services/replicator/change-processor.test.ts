@@ -3835,6 +3835,11 @@ describe('replicator/change-processor-errors', () => {
       'data',
       messages.insert('auto_rollback', {id: 123}),
     ]);
+    processor.processMessage(lc, [
+      'commit',
+      messages.commit(),
+      {watermark: '0e'},
+    ]);
 
     expect(failures).toHaveLength(1);
     expect(failures[0]).toBeInstanceOf(Error);

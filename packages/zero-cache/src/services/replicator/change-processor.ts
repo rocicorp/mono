@@ -32,6 +32,7 @@ import {
   type LiteValueType,
 } from '../../types/lite.ts';
 import {liteTableName} from '../../types/names.ts';
+import {normalizedKeyOrder} from '../../types/row-key.ts';
 import {id} from '../../types/sql.ts';
 import type {
   BackfillCompleted,
@@ -56,7 +57,12 @@ import type {
 } from '../change-source/protocol/current/data.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
 import type {ReplicatorMode} from './replicator.ts';
-import {ChangeLog, DEL_OP, SET_OP} from './schema/change-log.ts';
+import {
+  type BatchRowOp,
+  ChangeLog,
+  DEL_OP,
+  SET_OP,
+} from './schema/change-log.ts';
 import {ColumnMetadataStore} from './schema/column-metadata.ts';
 import {
   ZERO_VERSION_COLUMN_NAME,
@@ -92,6 +98,26 @@ type DeletePlan = {
   readonly keyColumns: readonly string[];
   readonly sql: string;
 };
+
+type PendingInsert = {
+  readonly row: LiteRow;
+  readonly logEntry: BatchRowOp | undefined;
+  readonly rowKey: string | undefined;
+};
+
+type PendingInsertBatch = {
+  readonly table: string;
+  readonly plan: UpsertPlan;
+  readonly maxRows: number;
+  readonly rows: PendingInsert[];
+  readonly rowKeys: Set<string>;
+};
+
+// Consecutive same-shape inserts are the common catch-up/load-test burst:
+// one upstream transaction can carry many rows, and each row used to cross
+// JS/SQLite separately. Batching only this narrow shape keeps ordering and
+// rollback behavior easy to reason about while reducing native calls.
+const MAX_BATCH_BINDINGS = 900;
 
 class DmlSqlPlanCache {
   readonly #enabled: boolean;
@@ -200,6 +226,21 @@ function createUpsertPlan(
         VALUES (${placeholders(insertColumns.length)})
       `,
   };
+}
+
+function createBatchUpsertSql(
+  table: string,
+  rowColumns: readonly string[],
+  rows: number,
+): string {
+  const insertColumns = [...rowColumns, ZERO_VERSION_COLUMN_NAME];
+  const columnsSQL = insertColumns.map(c => id(c)).join(',');
+  return /*sql*/ `
+    INSERT OR REPLACE INTO ${id(table)} (${columnsSQL})
+      VALUES ${Array.from({length: rows})
+        .map(() => `(${placeholders(insertColumns.length)})`)
+        .join(',')}
+    `;
 }
 
 function createUpdatePlan(
@@ -341,6 +382,10 @@ function keyValues(key: LiteRowKey, keyColumns: readonly string[]) {
     values[i] = key[keyColumns[i]];
   }
   return values;
+}
+
+function rowKeyString(key: LiteRowKey) {
+  return stringify(normalizedKeyOrder(key));
 }
 
 /**
@@ -505,11 +550,11 @@ export class ChangeProcessor {
     }
 
     if (msg.tag === 'commit') {
+      assert(watermark, 'watermark is required for commit messages');
+      const result = tx.processCommit(msg, watermark);
       // Undef this.#currentTx to allow the assembly of the next transaction.
       this.#currentTx = null;
-
-      assert(watermark, 'watermark is required for commit messages');
-      return tx.processCommit(msg, watermark);
+      return result;
     }
 
     if (msg.tag === 'rollback') {
@@ -523,45 +568,59 @@ export class ChangeProcessor {
         tx.processInsert(msg);
         break;
       case 'update':
+        tx.flushPendingInserts();
         tx.processUpdate(msg);
         break;
       case 'delete':
+        tx.flushPendingInserts();
         tx.processDelete(msg);
         break;
       case 'truncate':
+        tx.flushPendingInserts();
         tx.processTruncate(msg);
         break;
       case 'create-table':
+        tx.flushPendingInserts();
         tx.processCreateTable(msg);
         break;
       case 'rename-table':
+        tx.flushPendingInserts();
         tx.processRenameTable(msg);
         break;
       case 'update-table-metadata':
+        tx.flushPendingInserts();
         tx.processTableMetadata(msg);
         break;
       case 'add-column':
+        tx.flushPendingInserts();
         tx.processAddColumn(msg);
         break;
       case 'update-column':
+        tx.flushPendingInserts();
         tx.processUpdateColumn(msg);
         break;
       case 'drop-column':
+        tx.flushPendingInserts();
         tx.processDropColumn(msg);
         break;
       case 'drop-table':
+        tx.flushPendingInserts();
         tx.processDropTable(msg);
         break;
       case 'create-index':
+        tx.flushPendingInserts();
         tx.processCreateIndex(msg);
         break;
       case 'drop-index':
+        tx.flushPendingInserts();
         tx.processDropIndex(msg);
         break;
       case 'backfill':
+        tx.flushPendingInserts();
         tx.processBackfill(msg);
         break;
       case 'backfill-completed':
+        tx.flushPendingInserts();
         tx.processBackfillCompleted(msg);
         break;
       default:
@@ -609,6 +668,7 @@ class TransactionProcessor {
   #pos = 0;
   #schemaChanged = false;
   #numChangeLogEntries = 0;
+  #pendingInsertBatch: PendingInsertBatch | undefined;
 
   constructor(
     lc: LogContext,
@@ -725,8 +785,6 @@ class TransactionProcessor {
     const tableSpec = this.#tableSpec(table);
     const newRow = liteRow(insert.new, tableSpec, this.#jsonFormat);
 
-    this.#upsert(table, newRow);
-
     if (insert.relation.rowKey.columns.length === 0) {
       // INSERTs can be replicated for rows without a PRIMARY KEY or a
       // UNIQUE INDEX. These are written to the replica but not recorded
@@ -735,15 +793,110 @@ class TransactionProcessor {
       // (Once the table schema has been corrected to include a key, the
       //  associated schema change will reset pipelines and data can be
       //  loaded via hydration.)
+      this.#queueInsert(table, newRow, undefined, undefined);
       return;
     }
     const key = this.#getKey(newRow, insert);
-    this.#logSetOp(table, key, getBackfilledColumns(newRow.row, tableSpec));
+    const backfilledColumns = getBackfilledColumns(newRow.row, tableSpec);
+    if (backfilledColumns !== undefined) {
+      this.#flushPendingInserts();
+      this.#upsert(table, newRow);
+      this.#logSetOp(table, key, backfilledColumns);
+      return;
+    }
+    this.#queueInsert(table, newRow, key, rowKeyString(key));
   }
 
   #upsert(table: string, {row, numCols}: {row: LiteRow; numCols: number}) {
     const plan = this.#dmlSqlPlans.getUpsertPlan(table, row, numCols);
     this.#db.run(plan.sql, upsertValues(row, plan.rowColumns, this.#version));
+  }
+
+  #queueInsert(
+    table: string,
+    newRow: {row: LiteRow; numCols: number},
+    key: LiteRowKey | undefined,
+    rowKey: string | undefined,
+  ) {
+    const plan = this.#dmlSqlPlans.getUpsertPlan(
+      table,
+      newRow.row,
+      newRow.numCols,
+    );
+    const maxRows = Math.max(
+      1,
+      Math.floor(MAX_BATCH_BINDINGS / (plan.rowColumns.length + 1)),
+    );
+    const batch = this.#pendingInsertBatch;
+    if (
+      batch &&
+      (batch.table !== table ||
+        batch.plan.sql !== plan.sql ||
+        batch.rows.length >= batch.maxRows ||
+        (rowKey !== undefined && batch.rowKeys.has(rowKey)))
+    ) {
+      this.#flushPendingInserts();
+    }
+
+    const current =
+      this.#pendingInsertBatch ??
+      (this.#pendingInsertBatch = {
+        table,
+        plan,
+        maxRows,
+        rows: [],
+        rowKeys: new Set(),
+      });
+
+    if (rowKey !== undefined) {
+      current.rowKeys.add(rowKey);
+    }
+    const logEntry =
+      this.#mode === 'serving' && key !== undefined && rowKey !== undefined
+        ? {
+            pos: this.#pos++,
+            table,
+            rowKey,
+          }
+        : undefined;
+    if (logEntry) {
+      this.#numChangeLogEntries++;
+    }
+    current.rows.push({row: newRow.row, logEntry, rowKey});
+  }
+
+  #flushPendingInserts() {
+    const batch = this.#pendingInsertBatch;
+    if (!batch) {
+      return;
+    }
+    this.#pendingInsertBatch = undefined;
+
+    const values = [];
+    const rowValueCount = batch.plan.rowColumns.length + 1;
+    values.length = batch.rows.length * rowValueCount;
+    let i = 0;
+    for (const {row} of batch.rows) {
+      for (const col of batch.plan.rowColumns) {
+        values[i++] = row[col];
+      }
+      values[i++] = this.#version;
+    }
+
+    this.#db.run(
+      batch.rows.length === 1
+        ? batch.plan.sql
+        : createBatchUpsertSql(
+            batch.table,
+            batch.plan.rowColumns,
+            batch.rows.length,
+          ),
+      values,
+    );
+    this.#changeLog.logSetOps(
+      this.#version,
+      batch.rows.flatMap(({logEntry}) => (logEntry ? [logEntry] : [])),
+    );
   }
 
   // Updates by default are applied as UPDATE commands to support partial
@@ -822,6 +975,10 @@ class TransactionProcessor {
   #delete(table: string, rowKey: LiteRowKey, keyColumns: readonly string[]) {
     const plan = this.#dmlSqlPlans.getDeletePlan(table, keyColumns);
     this.#db.run(plan.sql, keyValues(rowKey, plan.keyColumns));
+  }
+
+  flushPendingInserts() {
+    this.#flushPendingInserts();
   }
 
   processTruncate(truncate: MessageTruncate) {
@@ -1172,6 +1329,7 @@ class TransactionProcessor {
         }: ${stringify(commit)}`,
       );
     }
+    this.#flushPendingInserts();
     updateReplicationWatermark(this.#db, watermark);
 
     if (this.#schemaChanged) {
