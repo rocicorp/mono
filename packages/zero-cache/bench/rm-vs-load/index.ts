@@ -1,8 +1,11 @@
 /* oxlint-disable no-console */
+import {once} from 'node:events';
 import {rmSync} from 'node:fs';
 import {performance} from 'node:perf_hooks';
 import {PostgreSqlContainer} from '@testcontainers/postgresql';
 import postgres from 'postgres';
+import WebSocket, {WebSocketServer} from 'ws';
+import {assert} from '../../../shared/src/asserts.ts';
 import {BigIntJSON} from '../../../shared/src/bigint-json.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {Database} from '../../../zqlite/src/db.ts';
@@ -13,6 +16,7 @@ import {
   type WatermarkedChange,
 } from '../../src/services/change-streamer/change-streamer-service.ts';
 import {
+  downstreamSchema,
   type Downstream,
   PROTOCOL_VERSION,
 } from '../../src/services/change-streamer/change-streamer.ts';
@@ -28,6 +32,7 @@ import {initReplicationState} from '../../src/services/replicator/schema/replica
 import {ThreadWriteWorkerClient} from '../../src/services/replicator/write-worker-client.ts';
 import {postgresTypeConfig, type PostgresDB} from '../../src/types/pg.ts';
 import {cdcSchema, type ShardID} from '../../src/types/shards.ts';
+import {streamIn, streamOutStringified} from '../../src/types/streams.ts';
 import {Subscription} from '../../src/types/subscription.ts';
 import {makeSchemaChanges, makeTransaction, watermarkFor} from './fixtures.ts';
 import {
@@ -45,6 +50,8 @@ import {describeScenarios, loadScenarios} from './scenarios.ts';
 import type {
   ConsumerApplyMode,
   ConsumerConfig,
+  ConsumerTransportAckMode,
+  ConsumerTransportMode,
   LoadConsumer,
   Scenario,
   ScenarioSummary,
@@ -83,6 +90,9 @@ const consumerConfig: ConsumerConfig = {
   ackDelayMs: envInt('ZERO_RM_VS_ACK_DELAY_MS', 0),
   applyMode,
   applyMessages: applyMode !== 'none',
+  transportMode: transportModeFromEnv(),
+  transportAckMode: transportAckModeFromEnv(),
+  transportBatchMessages: envInt('ZERO_RM_VS_WS_BATCH_MESSAGES', 64),
   clientCpuMicros: envInt('ZERO_RM_VS_CLIENT_CPU_US', 0),
   slowAckDelayMs: envInt('ZERO_RM_VS_SLOW_ACK_DELAY_MS', full ? 2 : 1),
   slowEvery: envInt('ZERO_RM_VS_SLOW_EVERY', full ? 4 : 2),
@@ -103,6 +113,38 @@ function applyModeFromEnv(): ConsumerApplyMode {
       throw new Error(
         `Invalid ZERO_RM_VS_APPLY_MODE=${mode}; expected ` +
           'none, direct, worker-message, or worker-batch',
+      );
+  }
+}
+
+function transportAckModeFromEnv(): ConsumerTransportAckMode {
+  const mode = envString('ZERO_RM_VS_WS_ACK');
+  if (mode === undefined) {
+    return 'per-message';
+  }
+  switch (mode) {
+    case 'per-message':
+    case 'cumulative':
+      return mode;
+    default:
+      throw new Error(
+        `Invalid ZERO_RM_VS_WS_ACK=${mode}; expected per-message or cumulative`,
+      );
+  }
+}
+
+function transportModeFromEnv(): ConsumerTransportMode {
+  const mode = envString('ZERO_RM_VS_TRANSPORT');
+  if (mode === undefined) {
+    return 'in-process';
+  }
+  switch (mode) {
+    case 'in-process':
+    case 'websocket':
+      return mode;
+    default:
+      throw new Error(
+        `Invalid ZERO_RM_VS_TRANSPORT=${mode}; expected in-process or websocket`,
       );
   }
 }
@@ -139,6 +181,7 @@ try {
           `${formatRate(result.ingestRowsPerSec)} rows/s | ` +
           `${formatRate(result.fanoutMessagesPerSec)} fanout msg/s | ` +
           `p95 ${result.p95TxLatencyMs.toFixed(3)} ms | ` +
+          `vs-tx ${result.avgSubscriberTxApplyMs.toFixed(3)} ms | ` +
           `drain ${result.storerDrainMs.toFixed(1)} ms | ` +
           `max lag ${result.maxAckLagMessages}`,
       );
@@ -292,6 +335,15 @@ async function runScenario(
       samples === 0 ? 0 : sum(stats.map(s => s.totalParseMs)) / samples;
     const avgSubscriberApplyMs =
       samples === 0 ? 0 : sum(stats.map(s => s.totalApplyMs)) / samples;
+    const txApplySamples = sum(stats.map(s => s.txApplySamples));
+    const avgSubscriberTxApplyMs =
+      txApplySamples === 0
+        ? 0
+        : sum(stats.map(s => s.totalTxApplyMs)) / txApplySamples;
+    const maxSubscriberTxApplyMs = Math.max(
+      0,
+      ...stats.map(s => s.maxTxApplyMs),
+    );
     const avgSubscriberClientCpuMs =
       samples === 0 ? 0 : sum(stats.map(s => s.totalClientCpuMs)) / samples;
 
@@ -321,9 +373,14 @@ async function runScenario(
       subscriberAckDelayMs: consumerConfig.ackDelayMs,
       subscriberApplyMode: consumerConfig.applyMode,
       subscriberApplyMessages: consumerConfig.applyMessages,
+      subscriberTransportMode: consumerConfig.transportMode,
+      subscriberTransportAckMode: consumerConfig.transportAckMode,
+      subscriberTransportBatchMessages: consumerConfig.transportBatchMessages,
       subscriberClientCpuMicros: consumerConfig.clientCpuMicros,
       avgSubscriberParseMs,
       avgSubscriberApplyMs,
+      avgSubscriberTxApplyMs,
+      maxSubscriberTxApplyMs,
       avgSubscriberClientCpuMs,
       slowSubscriberAckDelayMs: consumerConfig.slowAckDelayMs,
       slowSubscriberEvery: consumerConfig.slowEvery,
@@ -417,6 +474,10 @@ async function makeConsumer(
   let totalAckLagMessages = 0;
   let totalParseMs = 0;
   let totalApplyMs = 0;
+  let totalTxApplyMs = 0;
+  let maxTxApplyMs = 0;
+  let txApplySamples = 0;
+  let txApplyStart: number | undefined;
   let totalClientCpuMs = 0;
   let samples = 0;
   let consumerReplica: Database | undefined;
@@ -428,6 +489,7 @@ async function makeConsumer(
     cleanupSQLite(consumerSQLitePath);
     consumerReplica = new Database(lc, consumerSQLitePath);
     consumerReplica.pragma('journal_mode = WAL2');
+    consumerReplica.pragma('synchronous = NORMAL');
     processor = initializeReplica(consumerReplica);
     if (config.applyMode !== 'direct') {
       consumerReplica.close();
@@ -493,19 +555,40 @@ async function makeConsumer(
   if (caughtUp) {
     sub.setCaughtUp();
   }
+  const transport = await createConsumerTransport(
+    downstream,
+    config.transportMode,
+    config.transportAckMode,
+    config.transportBatchMessages,
+  );
 
   const done = (async () => {
     try {
-      for await (const message of downstream) {
+      for await (const message of transport.messages) {
         if (!active) {
           break;
         }
         const parseStart = performance.now();
-        const change = parseChangeStreamData(message);
+        const change =
+          typeof message === 'string'
+            ? parseChangeStreamData(message)
+            : downstreamToChangeStreamData(message);
         totalParseMs += performance.now() - parseStart;
+        if (change?.[0] === 'begin') {
+          txApplyStart = performance.now();
+        }
         const applyStart = performance.now();
         await applyChange(change);
         totalApplyMs += performance.now() - applyStart;
+        if (change?.[0] === 'commit' || change?.[0] === 'rollback') {
+          if (txApplyStart !== undefined) {
+            const elapsed = performance.now() - txApplyStart;
+            totalTxApplyMs += elapsed;
+            maxTxApplyMs = Math.max(maxTxApplyMs, elapsed);
+            txApplySamples++;
+            txApplyStart = undefined;
+          }
+        }
         const cpuStart = performance.now();
         burnCpu(config.clientCpuMicros);
         totalClientCpuMs += performance.now() - cpuStart;
@@ -522,6 +605,7 @@ async function makeConsumer(
       if (workerBatch.length > 0) {
         worker?.abort();
       }
+      await transport.close();
       await worker?.stop();
       consumerReplica?.close();
       if (consumerSQLitePath) {
@@ -543,14 +627,68 @@ async function makeConsumer(
       totalAckLagMessages,
       totalParseMs,
       totalApplyMs,
+      totalTxApplyMs,
+      maxTxApplyMs,
+      txApplySamples,
       totalClientCpuMs,
       samples,
     }),
   };
 }
 
+async function createConsumerTransport(
+  downstream: Subscription<string>,
+  mode: ConsumerTransportMode,
+  ackMode: ConsumerTransportAckMode,
+  batchMessages: number,
+): Promise<{
+  messages: AsyncIterable<string | Downstream>;
+  close: () => Promise<void>;
+}> {
+  switch (mode) {
+    case 'in-process':
+      return {messages: downstream, close: () => Promise.resolve()};
+    case 'websocket': {
+      const server = new WebSocketServer({host: '127.0.0.1', port: 0});
+      server.on('connection', ws => {
+        void streamOutStringified(
+          lc,
+          downstream,
+          ws,
+          batchMessages > 1 ? {batch: {maxMessages: batchMessages}} : undefined,
+        );
+      });
+      await once(server, 'listening');
+      const address = server.address();
+      assert(
+        typeof address === 'object' && address !== null,
+        'expected websocket server address',
+      );
+      const ws = new WebSocket(`ws://127.0.0.1:${address.port}`);
+      const messages = await streamIn(lc, ws, downstreamSchema, {
+        ack: ackMode,
+      });
+      return {
+        messages,
+        close: async () => {
+          messages.cancel();
+          ws.close();
+          await new Promise<void>((resolve, reject) => {
+            server.close(err => (err ? reject(err) : resolve()));
+          });
+        },
+      };
+    }
+  }
+}
+
 function parseChangeStreamData(message: string): ChangeStreamData | undefined {
-  const parsed = BigIntJSON.parse(message) as Downstream;
+  return downstreamToChangeStreamData(BigIntJSON.parse(message) as Downstream);
+}
+
+function downstreamToChangeStreamData(
+  parsed: Downstream,
+): ChangeStreamData | undefined {
   switch (parsed[0]) {
     case 'status':
       return undefined;

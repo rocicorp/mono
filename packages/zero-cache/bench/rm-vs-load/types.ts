@@ -13,6 +13,9 @@ export type ConsumerConfig = {
   readonly ackDelayMs: number;
   readonly applyMode: ConsumerApplyMode;
   readonly applyMessages: boolean;
+  readonly transportMode: ConsumerTransportMode;
+  readonly transportAckMode: ConsumerTransportAckMode;
+  readonly transportBatchMessages: number;
   readonly clientCpuMicros: number;
   readonly slowAckDelayMs: number;
   readonly slowEvery: number;
@@ -23,6 +26,9 @@ export type ConsumerApplyMode =
   | 'direct'
   | 'worker-message'
   | 'worker-batch';
+
+export type ConsumerTransportMode = 'in-process' | 'websocket';
+export type ConsumerTransportAckMode = 'per-message' | 'cumulative';
 
 export type ScenarioSummary = {
   readonly name: string;
@@ -50,9 +56,14 @@ export type ScenarioSummary = {
   readonly subscriberAckDelayMs: number;
   readonly subscriberApplyMode: ConsumerApplyMode;
   readonly subscriberApplyMessages: boolean;
+  readonly subscriberTransportMode: ConsumerTransportMode;
+  readonly subscriberTransportAckMode: ConsumerTransportAckMode;
+  readonly subscriberTransportBatchMessages: number;
   readonly subscriberClientCpuMicros: number;
   readonly avgSubscriberParseMs: number;
   readonly avgSubscriberApplyMs: number;
+  readonly avgSubscriberTxApplyMs: number;
+  readonly maxSubscriberTxApplyMs: number;
   readonly avgSubscriberClientCpuMs: number;
   readonly slowSubscriberAckDelayMs: number;
   readonly slowSubscriberEvery: number;
@@ -79,6 +90,9 @@ export type LoadConsumer = {
     readonly totalAckLagMessages: number;
     readonly totalParseMs: number;
     readonly totalApplyMs: number;
+    readonly totalTxApplyMs: number;
+    readonly maxTxApplyMs: number;
+    readonly txApplySamples: number;
     readonly totalClientCpuMs: number;
     readonly samples: number;
   };

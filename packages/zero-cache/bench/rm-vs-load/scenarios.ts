@@ -46,6 +46,12 @@ function fullScenarios(): Scenario[] {
       targetTxPerSec: envInt('ZERO_RM_VS_MEDIUM_TARGET_TPS', 400),
     },
     {
+      name: 'medium-wide-batch-pressure',
+      rowsPerTx: 20,
+      payload: medium,
+      targetTxPerSec: envInt('ZERO_RM_VS_MEDIUM_WIDE_TARGET_TPS', 1_000),
+    },
+    {
       name: 'large-row-burst',
       rowsPerTx: 50,
       payload: large,

@@ -32,6 +32,9 @@ console.log(
       process.env.ZERO_RM_VS_APPLY_MODE ??
       (process.env.ZERO_RM_VS_APPLY_CLIENTS === '1' ? 'direct' : 'none')
     }`,
+    `  transport: ${process.env.ZERO_RM_VS_TRANSPORT ?? 'in-process'}`,
+    `  ws-ack: ${process.env.ZERO_RM_VS_WS_ACK ?? 'per-message'}`,
+    `  ws-batch-messages: ${process.env.ZERO_RM_VS_WS_BATCH_MESSAGES ?? '64'}`,
     `  apply-clients: ${process.env.ZERO_RM_VS_APPLY_CLIENTS}`,
     `  client-cpu-us: ${process.env.ZERO_RM_VS_CLIENT_CPU_US}`,
     `  target-tps: small=${process.env.ZERO_RM_VS_SMALL_TARGET_TPS}, ` +

@@ -41,6 +41,15 @@ Useful view-syncer digestion knobs:
   transaction-batched write-worker path.
 - `ZERO_RM_VS_APPLY_CLIENTS=1` is the legacy shorthand for
   `ZERO_RM_VS_APPLY_MODE=direct`.
+- `ZERO_RM_VS_TRANSPORT=websocket` routes each simulated VS through the same
+  stringified WebSocket stream and ack protocol used between the change-streamer
+  and serving replicas. The default `in-process` mode is faster and useful when
+  isolating SQLite apply cost.
+- `ZERO_RM_VS_WS_ACK=per-message|cumulative` compares the deploy-safe
+  one-ack-per-frame stream shape against the cumulative ACK experiment.
+- `ZERO_RM_VS_WS_BATCH_MESSAGES=N` controls how many queued downstream messages
+  a WebSocket transport frame can carry. `1` models the old one-frame-per-change
+  stream shape.
 - `ZERO_RM_VS_WORKER_BATCH_MESSAGES=N` caps the worker batch size for very
   large upstream transactions.
 - `ZERO_RM_VS_CLIENT_CPU_US=N` burns `N` microseconds per downstream message to
