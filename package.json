@@ -28,9 +28,9 @@
   },
   "devDependencies": {
     "@e18e/eslint-plugin": "^0.4.1",
-    "@types/node": "^22.10.5",
     "@emnapi/core": "1.10.0",
     "@emnapi/runtime": "1.10.0",
+    "@types/node": "^22.10.5",
     "@vitest/browser": "^4.1.5",
     "@vitest/browser-playwright": "^4.1.5",
     "@vitest/coverage-v8": "^4.1.5",

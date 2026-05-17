@@ -538,6 +538,9 @@ importers:
 
   packages/replicache-perf:
     dependencies:
+      '@rocicorp/resolver':
+        specifier: ^1.0.2
+        version: 1.0.2
       '@types/command-line-args':
         specifier: ^5.2.3
         version: 5.2.3
@@ -550,6 +553,9 @@ importers:
       command-line-usage:
         specifier: ^7.0.3
         version: 7.0.4
+      compare-utf8:
+        specifier: ^0.2.0
+        version: 0.2.0
       esbuild:
         specifier: ^0.27.4
         version: 0.27.7
