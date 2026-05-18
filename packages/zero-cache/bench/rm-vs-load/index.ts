@@ -735,7 +735,9 @@ async function makeConsumer(
   }
 
   const workerBatcher = worker
-    ? new WorkerMessageBatcher(worker, workerBatchMessages)
+    ? new WorkerMessageBatcher(worker, workerBatchMessages, {
+        flushOnCommit: false,
+      })
     : undefined;
 
   const applyChange = (
@@ -807,6 +809,12 @@ async function makeConsumer(
           totalAckLagMessages += lag;
           samples++;
         }
+        const flushStart = performance.now();
+        const flushResult = workerBatcher?.flush();
+        if (flushResult) {
+          await flushResult;
+        }
+        totalApplyMs += performance.now() - flushStart;
       }
     } finally {
       if (workerBatcher !== undefined && workerBatcher.size > 0) {

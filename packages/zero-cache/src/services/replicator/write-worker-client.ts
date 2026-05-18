@@ -25,7 +25,7 @@ export interface WriteWorkerClient {
   processMessage(downstream: ChangeStreamData): Promise<CommitResult | null>;
   processMessages(
     downstreams: readonly ChangeStreamData[],
-  ): Promise<CommitResult | null>;
+  ): Promise<CommitResult | readonly CommitResult[] | null>;
   abort(): void;
   stop(): Promise<void>;
   onError(handler: ErrorHandler): void;
@@ -49,7 +49,7 @@ export type ResultMap = {
   init: void;
   getSubscriptionState: SubscriptionState;
   processMessage: CommitResult | null;
-  processMessages: CommitResult | null;
+  processMessages: CommitResult | readonly CommitResult[] | null;
   abort: void;
   stop: void;
 };
@@ -154,7 +154,7 @@ export class ThreadWriteWorkerClient implements WriteWorkerClient {
 
   processMessages(
     downstreams: readonly ChangeStreamData[],
-  ): Promise<CommitResult | null> {
+  ): Promise<CommitResult | readonly CommitResult[] | null> {
     return this.#call('processMessages', [downstreams]);
   }
 
@@ -177,6 +177,10 @@ export class ThreadWriteWorkerClient implements WriteWorkerClient {
 }
 
 function errorFromUnknown(err: unknown): Error {
+  return ensureError(err);
+}
+
+function ensureError(err: unknown): Error {
   if (err instanceof Error) {
     return err;
   }

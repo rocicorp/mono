@@ -126,7 +126,9 @@ async function run() {
   }
 
   const workerBatcher = writeWorker
-    ? new WorkerMessageBatcher(writeWorker, config.workerBatchMessages)
+    ? new WorkerMessageBatcher(writeWorker, config.workerBatchMessages, {
+        flushOnCommit: false,
+      })
     : undefined;
 
   const applyChange = (
@@ -164,7 +166,7 @@ async function run() {
       if (!active) {
         break;
       }
-      await consumeBatch(batch, applyChange);
+      await consumeBatch(batch, applyChange, () => workerBatcher?.flush());
     }
   } finally {
     clearInterval(interval);
@@ -186,6 +188,7 @@ async function consumeBatch(
   applyChange: (
     change: ChangeStreamData | undefined,
   ) => Promise<unknown> | undefined,
+  flushPendingChanges: () => Promise<unknown> | undefined,
 ) {
   const parseStart = performance.now();
   const changes = parseTransportBatch(batch);
@@ -219,6 +222,12 @@ async function consumeBatch(
     processed++;
     samples++;
   }
+  const flushStart = performance.now();
+  const flushResult = flushPendingChanges();
+  if (flushResult) {
+    await flushResult;
+  }
+  totalApplyMs += performance.now() - flushStart;
 }
 
 function burnCpu(micros: number) {

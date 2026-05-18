@@ -1,6 +1,10 @@
 import type {Enum} from '../../../../shared/src/enum.ts';
 import * as v from '../../../../shared/src/valita.ts';
-import type {Source, StringifiedStreamPayload} from '../../types/streams.ts';
+import type {
+  Source,
+  StreamInPayload,
+  StringifiedStreamPayload,
+} from '../../types/streams.ts';
 import {changeStreamDataSchema} from '../change-source/protocol/current/downstream.ts';
 import type {ReplicatorMode} from '../replicator/replicator.ts';
 import {changeSourceTimingsSchema} from '../replicator/reporter/report-schema.ts';
@@ -197,6 +201,20 @@ export type Error = v.Infer<typeof errorSchema>;
 export type Downstream = v.Infer<typeof downstreamSchema>;
 
 export type ChangeStreamerDownstream = Downstream | ChangeBatchMessage;
+export type ChangeStreamerDownstreamPayload =
+  StreamInPayload<ChangeStreamerDownstream>;
+
+export interface BatchedChangeStreamer extends ChangeStreamer {
+  subscribeBatched(
+    ctx: SubscriberContext,
+  ): Promise<Source<ChangeStreamerDownstreamPayload>>;
+}
+
+export function hasBatchedSubscribe(
+  changeStreamer: ChangeStreamer,
+): changeStreamer is BatchedChangeStreamer {
+  return 'subscribeBatched' in changeStreamer;
+}
 
 export function downstreamSchemaForProtocolVersion(
   protocolVersion: number,

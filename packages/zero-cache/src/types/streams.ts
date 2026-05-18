@@ -31,7 +31,7 @@ const PING_INTERVAL_MS = 30_000;
 // #6001: https://github.com/rocicorp/mono/pull/6001
 // Batch stream ACKs so row-heavy RM -> serving-replica traffic spends CPU on
 // apply work instead of ACK writes. Quiet streams still flush on the short timer.
-const CUMULATIVE_ACK_EVERY = 32;
+const CUMULATIVE_ACK_EVERY = 128;
 const CUMULATIVE_ACK_INTERVAL_MS = 5;
 
 export type Source<T> = AsyncIterable<T> & {
@@ -61,6 +61,24 @@ export type Source<T> = AsyncIterable<T> & {
 export type Sink<T> = {
   push(message: T): void;
 };
+
+export type StreamBatch<T> = {
+  readonly tag: 'stream-batch';
+  readonly messages: readonly T[];
+};
+
+export type StreamInPayload<T> = T | StreamBatch<T>;
+
+export function isStreamBatch<T>(
+  payload: StreamInPayload<T>,
+): payload is StreamBatch<T> {
+  return (
+    typeof payload === 'object' &&
+    payload !== null &&
+    !Array.isArray(payload) &&
+    (payload as {readonly tag?: unknown}).tag === 'stream-batch'
+  );
+}
 
 /**
  * Back-pressure-aware transformation of a WebSocket into
@@ -432,17 +450,48 @@ function stringifyOutboundBatch<T extends JSONValue>(
     const [{id, msg}] = batch;
     return `{"id":${id},"msg":${stringify(msg)}}`;
   }
-  return `{"batch":[${batch
-    .map(({id, msg}) => `{"id":${id},"msg":${stringify(msg)}}`)
-    .join(',')}]}`;
+  // #6001: https://github.com/rocicorp/mono/pull/6001
+  // RM -> VS catchup emits large websocket batches. Building the frame in one
+  // loop avoids the extra strings and array that `map().join()` creates in the
+  // hottest fanout path.
+  let data = '{"batch":[';
+  for (let i = 0; i < batch.length; i++) {
+    if (i > 0) {
+      data += ',';
+    }
+    const {id, msg} = batch[i];
+    data += `{"id":${id},"msg":${stringify(msg)}}`;
+  }
+  return `${data}]}`;
 }
 
-export async function streamIn<T extends JSONValue>(
+export function streamIn<T extends JSONValue>(
   lc: LogContext,
   source: WebSocket,
   schema: v.Type<T>,
   options: StreamInOptions = {},
 ): Promise<Source<T>> {
+  return streamInInternal(lc, source, schema, options, false) as Promise<
+    Source<T>
+  >;
+}
+
+export function streamInBatches<T extends JSONValue>(
+  lc: LogContext,
+  source: WebSocket,
+  schema: v.Type<T>,
+  options: StreamInOptions = {},
+): Promise<Source<StreamInPayload<T>>> {
+  return streamInInternal(lc, source, schema, options, true);
+}
+
+async function streamInInternal<T extends JSONValue>(
+  lc: LogContext,
+  source: WebSocket,
+  schema: v.Type<T>,
+  options: StreamInOptions,
+  preserveBatches: boolean,
+): Promise<Source<StreamInPayload<T>>> {
   expectPingsForLiveness(lc, source, PING_INTERVAL_MS);
 
   const streamedSchema = v.object({
@@ -451,15 +500,30 @@ export async function streamIn<T extends JSONValue>(
   });
   const acker = new CumulativeAcker(source, options.ack === 'cumulative');
 
-  const sink: Subscription<T, Streamed<T>> = new Subscription<T, Streamed<T>>(
+  const sink: Subscription<
+    StreamInPayload<T>,
+    Streamed<T> | readonly Streamed<T>[]
+  > = new Subscription(
     {
-      consumed: ({id}) => acker.consumed(id),
+      consumed: streamOrBatch => {
+        if (isStreamedBatch(streamOrBatch)) {
+          acker.consumedBatch(streamOrBatch.map(({id}) => id));
+        } else {
+          acker.consumed(streamOrBatch.id);
+        }
+      },
       cleanup: () => {
         acker.close();
         closer.close();
       },
     },
-    ({msg}) => msg,
+    streamOrBatch =>
+      isStreamedBatch(streamOrBatch)
+        ? {
+            tag: 'stream-batch',
+            messages: streamOrBatch.map(({msg}) => msg),
+          }
+        : streamOrBatch.msg,
   );
 
   const closer = WebSocketCloser.forSink(lc, source, sink, handleMessage);
@@ -472,8 +536,15 @@ export async function streamIn<T extends JSONValue>(
     }
     try {
       const value = BigIntJSON.parse(data);
-      for (const msg of parseStreamedMessages(value, streamedSchema)) {
+      const messages = parseStreamedMessages(value, streamedSchema);
+      for (const msg of messages) {
         acker.received(msg.id);
+      }
+      if (preserveBatches && messages.length > 1) {
+        sink.push(messages);
+        return;
+      }
+      for (const msg of messages) {
         // Enable for debugging. Otherwise too verbose.
         // lc.debug?.(`received`, data);
         sink.push(msg);
@@ -485,6 +556,12 @@ export async function streamIn<T extends JSONValue>(
 
   await closer.connected;
   return sink;
+}
+
+function isStreamedBatch<T>(
+  streamOrBatch: Streamed<T> | readonly Streamed<T>[],
+): streamOrBatch is readonly Streamed<T>[] {
+  return Array.isArray(streamOrBatch);
 }
 
 function parseStreamedMessages<T extends JSONValue>(
@@ -564,6 +641,37 @@ class CumulativeAcker {
     }
   }
 
+  consumedBatch(ids: readonly number[]) {
+    if (ids.length === 0) {
+      return;
+    }
+    let expected = this.#highestAckable + 1;
+    for (const id of ids) {
+      this.#validateID(id);
+      if (id !== expected) {
+        for (const fallbackID of ids) {
+          this.consumed(fallbackID);
+        }
+        return;
+      }
+      expected++;
+    }
+
+    const previous = this.#highestAckable;
+    const last = ids.at(-1);
+    assert(last !== undefined, 'non-empty batch must have a last id');
+    this.#highestAckable = last;
+    while (this.#outOfOrder.delete(this.#highestAckable + 1)) {
+      this.#highestAckable++;
+    }
+    const advanced = this.#highestAckable - previous;
+    if (advanced === 0) {
+      return;
+    }
+    this.#pendingSinceLastSend += advanced;
+    this.flush();
+  }
+
   flush() {
     this.#clearTimer();
     if (this.#highestAckable <= this.#lastSent) {
@@ -617,10 +725,10 @@ class WebSocketCloser {
     return new WebSocketCloser(lc, ws, () => stream.cancel());
   }
 
-  static forSink<T>(
+  static forSink<T, M>(
     lc: LogContext,
     ws: WebSocket,
-    stream: Subscription<T, Streamed<T>>,
+    stream: Subscription<T, M>,
     messageHandler: (e: MessageEvent) => void | undefined,
   ) {
     // If the websocket is closed, call end() to allow the downstream Sink

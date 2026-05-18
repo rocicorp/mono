@@ -10,6 +10,7 @@ import {initEventSink} from '../observability/events.ts';
 import {getOrCreateGauge} from '../observability/metrics.ts';
 import {ChangeStreamerHttpClient} from '../services/change-streamer/change-streamer-http.ts';
 import {exitAfter, runUntilKilled} from '../services/life-cycle.ts';
+import {LocalWriteWorkerClient} from '../services/replicator/local-write-worker-client.ts';
 import {ReplicationStatusPublisher} from '../services/replicator/replication-status.ts';
 import {
   ReplicatorService,
@@ -58,9 +59,15 @@ export default async function runWorker(
 
   setupMetrics(lc, dbPath, walMode);
 
-  // Create the write worker for async SQLite writes.
   const pragmas = getPragmaConfig(fileMode);
-  const workerClient = new ThreadWriteWorkerClient();
+  // #6001: Serving replicator workers already run off the user-facing syncer
+  // path, so keeping SQLite apply in this worker avoids an extra structured
+  // clone / IPC hop on row-heavy RM -> VS streams. Backup mode stays on the
+  // thread client so litestream/checkpoint work remains isolated.
+  const workerClient =
+    mode === 'serving'
+      ? new LocalWriteWorkerClient()
+      : new ThreadWriteWorkerClient();
   await workerClient.init(dbPath, mode, pragmas, config.log);
 
   const runningLocalChangeStreamer =

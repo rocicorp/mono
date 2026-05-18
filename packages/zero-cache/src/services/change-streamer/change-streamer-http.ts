@@ -10,6 +10,7 @@ import {type Worker} from '../../types/processes.ts';
 import {type ShardID} from '../../types/shards.ts';
 import {
   streamIn,
+  streamInBatches,
   streamOut,
   streamOutStringified,
   type Source,
@@ -22,6 +23,7 @@ import type {BackupMonitor} from './backup-monitor.ts';
 import {
   downstreamSchemaForProtocolVersion,
   PROTOCOL_VERSION,
+  type ChangeStreamerDownstreamPayload,
   type ChangeStreamer,
   type ChangeStreamerDownstream,
   type ChangeStreamerService,
@@ -35,7 +37,7 @@ const MIN_SUPPORTED_PROTOCOL_VERSION = 1;
 const SNAPSHOT_PATH_PATTERN = '/replication/:version/snapshot';
 const CHANGES_PATH_PATTERN = '/replication/:version/changes';
 const PATH_REGEX = /\/replication\/v(?<version>\d+)\/(changes|snapshot)$/;
-const STREAM_BATCH_MESSAGES = 64;
+const STREAM_BATCH_MESSAGES = 256;
 
 const SNAPSHOT_PATH = `/replication/v${PROTOCOL_VERSION}/snapshot`;
 const changesPath = (protocolVersion: number) =>
@@ -248,20 +250,35 @@ export class ChangeStreamerHttpClient implements ChangeStreamer {
   async subscribe(
     ctx: SubscriberContext,
   ): Promise<Source<ChangeStreamerDownstream>> {
-    const uri = await this.#resolveChangeStreamer(
-      changesPath(ctx.protocolVersion),
-    );
-
-    const params = getParams(ctx);
-    params.set('streamBatch', '1');
-    const ws = new WebSocket(uri + `?${params.toString()}`);
-
+    const ws = await this.#openChangesWebSocket(ctx);
     return streamIn(
       this.#lc,
       ws,
       downstreamSchemaForProtocolVersion(ctx.protocolVersion),
       {ack: 'cumulative'},
     );
+  }
+
+  async subscribeBatched(
+    ctx: SubscriberContext,
+  ): Promise<Source<ChangeStreamerDownstreamPayload>> {
+    const ws = await this.#openChangesWebSocket(ctx);
+    return streamInBatches(
+      this.#lc,
+      ws,
+      downstreamSchemaForProtocolVersion(ctx.protocolVersion),
+      {ack: 'cumulative'},
+    );
+  }
+
+  async #openChangesWebSocket(ctx: SubscriberContext) {
+    const uri = await this.#resolveChangeStreamer(
+      changesPath(ctx.protocolVersion),
+    );
+
+    const params = getParams(ctx);
+    params.set('streamBatch', '1');
+    return new WebSocket(uri + `?${params.toString()}`);
   }
 }
 

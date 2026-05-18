@@ -204,6 +204,7 @@ describe('types/lite', () => {
     ['bytea', Buffer.from('hello world'), Buffer.from('hello world')],
     ['json', {custom: {json: 'object'}}, '{"custom":{"json":"object"}}'],
     ['jsonb', [1, 2], '[1,2]'],
+    ['JSON|NOT_NULL', {upper: true}, '{"upper":true}'],
     ['json', ['two', 'three'], '["two","three"]'],
     ['json', [null, null], '[null,null]'],
     [

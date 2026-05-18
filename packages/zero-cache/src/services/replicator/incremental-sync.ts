@@ -2,14 +2,16 @@ import type {LogContext} from '@rocicorp/logger';
 import {AbortError} from '../../../../shared/src/abort-error.ts';
 import type {Enum} from '../../../../shared/src/enum.ts';
 import {getOrCreateCounter} from '../../observability/metrics.ts';
-import type {Source} from '../../types/streams.ts';
+import {isStreamBatch, type Source} from '../../types/streams.ts';
 import type {DownloadStatus} from '../change-source/protocol/current.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
 import {
   errorTypeToReadableName,
+  hasBatchedSubscribe,
   PROTOCOL_VERSION,
   type ChangeStreamer,
   type ChangeStreamerDownstream,
+  type ChangeStreamerDownstreamPayload,
 } from '../change-streamer/change-streamer.ts';
 import type * as ErrorType from '../change-streamer/error-type-enum.ts';
 import {RunningState} from '../running-state.ts';
@@ -91,12 +93,12 @@ export class IncrementalSyncer {
       const {replicaVersion, watermark} =
         await this.#worker.getSubscriptionState();
 
-      let downstream: Source<ChangeStreamerDownstream> | undefined;
+      let downstream: Source<ChangeStreamerDownstreamPayload> | undefined;
       let unregister = () => {};
       let err: unknown | undefined;
 
       try {
-        downstream = await this.#changeStreamer.subscribe({
+        const ctx = {
           protocolVersion: PROTOCOL_VERSION,
           taskID: this.#taskID,
           id: this.#id,
@@ -104,7 +106,11 @@ export class IncrementalSyncer {
           watermark,
           replicaVersion,
           initial: watermark === initialWatermark,
-        });
+        };
+        const useBatchedSubscribe = hasBatchedSubscribe(this.#changeStreamer);
+        downstream = useBatchedSubscribe
+          ? await this.#changeStreamer.subscribeBatched(ctx)
+          : await this.#changeStreamer.subscribe(ctx);
         this.#state.resetBackoff();
         unregister = this.#state.cancelOnStop(downstream);
         this.#statusPublisher?.publish(
@@ -117,11 +123,23 @@ export class IncrementalSyncer {
         const workerBatch = new WorkerMessageBatcher(
           this.#worker,
           MAX_WORKER_BATCH_MESSAGES,
+          {flushOnCommit: !useBatchedSubscribe},
         );
-        const handleWorkerResult = (result: CommitResult | null) => {
-          this.#handleResult(lc, result);
-          if (result?.completedBackfill) {
-            backfillStatus = undefined;
+        const handleWorkerResult = (
+          result: CommitResult | readonly CommitResult[] | null,
+        ) => {
+          const results = Array.isArray(result) ? result : [result];
+          for (const commitResult of results) {
+            this.#handleResult(lc, commitResult);
+            if (commitResult?.completedBackfill) {
+              backfillStatus = undefined;
+            }
+          }
+        };
+        const flushWorkerBatch = async () => {
+          const result = workerBatch.flush();
+          if (result) {
+            handleWorkerResult(await result);
           }
         };
         const processChangeStreamData = (
@@ -171,7 +189,9 @@ export class IncrementalSyncer {
           }
         };
 
-        for await (const message of downstream) {
+        const processChangeStreamerMessage = async (
+          message: ChangeStreamerDownstream,
+        ) => {
           this.#replicationEvents.add(
             message[0] === 'change-batch' ? message[1].changes.length : 1,
           );
@@ -222,7 +242,22 @@ export class IncrementalSyncer {
               break;
             }
           }
+        };
+
+        for await (const payload of downstream) {
+          if (isStreamBatch(payload)) {
+            for (const message of payload.messages) {
+              await processChangeStreamerMessage(message);
+            }
+            await flushWorkerBatch();
+          } else {
+            await processChangeStreamerMessage(payload);
+            if (useBatchedSubscribe) {
+              await flushWorkerBatch();
+            }
+          }
         }
+        await flushWorkerBatch();
         this.#worker.abort();
       } catch (e) {
         err = e;

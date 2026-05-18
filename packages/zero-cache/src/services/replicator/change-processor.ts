@@ -522,6 +522,42 @@ export class ChangeProcessor {
     return null;
   }
 
+  processMessages(
+    lc: LogContext,
+    downstreams: readonly ChangeStreamData[],
+  ): CommitResult | readonly CommitResult[] | null {
+    if (this.#failure) {
+      return null;
+    }
+
+    // #6001: https://github.com/rocicorp/mono/pull/6001
+    // RM -> VS streams are row-heavy, so the common path should pay the public
+    // failure/try wrapper once per stream batch rather than once per row.
+    const results: CommitResult[] = [];
+    try {
+      for (const downstream of downstreams) {
+        const [type, message] = downstream;
+        const watermark =
+          type === 'begin'
+            ? downstream[2].commitWatermark
+            : type === 'commit'
+              ? downstream[2].watermark
+              : undefined;
+        const result = this.#processMessage(lc, message, watermark);
+        if (result) {
+          results.push(result);
+        }
+      }
+    } catch (e) {
+      this.#fail(lc, e);
+    }
+
+    if (results.length === 0) {
+      return null;
+    }
+    return results.length === 1 ? results[0] : results;
+  }
+
   #beginTransaction(
     lc: LogContext,
     commitVersion: string,

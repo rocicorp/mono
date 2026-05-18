@@ -53,6 +53,25 @@ test('flushes large batches before commit', async () => {
   expect(batcher.size).toBe(0);
 });
 
+test('can defer commit flush until caller finishes a stream batch', async () => {
+  const worker = mockWorker();
+  const batcher = new WorkerMessageBatcher(worker, 64, {
+    flushOnCommit: false,
+  });
+
+  expect(batcher.push(begin)).toBeUndefined();
+  expect(batcher.push(row)).toBeUndefined();
+  expect(batcher.push(commit)).toBeUndefined();
+  expect(worker.processMessages).not.toHaveBeenCalled();
+  expect(batcher.size).toBe(3);
+
+  await batcher.flush();
+
+  expect(worker.processMessages).toHaveBeenCalledTimes(1);
+  expect(worker.processMessages).toHaveBeenCalledWith([begin, row, commit]);
+  expect(batcher.size).toBe(0);
+});
+
 function mockWorker(): WriteWorkerClient {
   return {
     getSubscriptionState: vi.fn(),

@@ -13,8 +13,10 @@ import {
   type Downstream,
 } from '../../src/services/change-streamer/change-streamer.ts';
 import {
-  streamIn,
+  isStreamBatch,
+  streamInBatches,
   streamOutStringified,
+  type StreamInPayload,
   type StringifiedStreamPayload,
 } from '../../src/types/streams.ts';
 import {Subscription} from '../../src/types/subscription.ts';
@@ -158,7 +160,7 @@ export async function connectConsumerWebSocket(
   let cancelMessages: () => void;
   let messages: AsyncIterable<TransportBatch>;
   if (usesProductionStream(protocolMode)) {
-    const stream = await streamIn(
+    const stream = await streamInBatches(
       lc,
       ws,
       protocolMode === 'v7'
@@ -169,7 +171,7 @@ export async function connectConsumerWebSocket(
       {ack: ackMode},
     );
     cancelMessages = () => stream.cancel();
-    messages = batchSingletonMessages(stream);
+    messages = productionTransportBatches(stream);
   } else {
     const stream = await streamInBatchFrames(ws, protocolMode);
     cancelMessages = () => stream.cancel();
@@ -235,6 +237,18 @@ async function* batchSingletonMessages(
 ): AsyncIterable<TransportBatch> {
   for await (const message of source) {
     yield {kind: 'messages', messages: [message]};
+  }
+}
+
+async function* productionTransportBatches(
+  source: AsyncIterable<StreamInPayload<ChangeStreamerDownstream>>,
+): AsyncIterable<TransportBatch> {
+  for await (const payload of source) {
+    if (isStreamBatch(payload)) {
+      yield {kind: 'messages', messages: payload.messages};
+    } else {
+      yield {kind: 'messages', messages: [payload]};
+    }
   }
 }
 

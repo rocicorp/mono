@@ -78,8 +78,7 @@ export function liteValue(
   if (val instanceof Uint8Array || val === null) {
     return val;
   }
-  const valueType = liteTypeToZqlValueType(pgType);
-  if (valueType === 'json') {
+  if (shouldStoreAsJson(pgType)) {
     if (jsonFormat === JSON_STRINGIFIED && typeof val === 'string') {
       // JSON and JSONB values are already strings if the JSON was not parsed.
       return val;
@@ -87,8 +86,39 @@ export function liteValue(
     // Non-JSON/JSONB values will always appear as objects / arrays.
     return stringify(val);
   }
+  if (typeof val === 'boolean') {
+    return val ? 1 : 0;
+  }
+  if (
+    typeof val === 'string' ||
+    typeof val === 'number' ||
+    typeof val === 'bigint'
+  ) {
+    return val;
+  }
   const obj = toLiteValue(val);
   return obj && typeof obj === 'object' ? stringify(obj) : obj;
+}
+
+function shouldStoreAsJson(liteTypeString: string) {
+  // #6001: https://github.com/rocicorp/mono/pull/6001
+  // Row-heavy serving apply calls liteValue for every column. Most columns are
+  // scalar non-JSON, so check the common `json`/`jsonb` prefix before falling
+  // back to the array markers that also store as JSON in SQLite.
+  const first = liteTypeString.charCodeAt(0);
+  if (first === 106 || first === 74) {
+    const delim = liteTypeString.indexOf('|');
+    const upstream =
+      delim > 0 ? liteTypeString.substring(0, delim) : liteTypeString;
+    const lower = upstream.toLowerCase();
+    if (lower === 'json' || lower === 'jsonb') {
+      return true;
+    }
+  }
+  return (
+    liteTypeString.includes(TEXT_ARRAY_ATTRIBUTE) ||
+    liteTypeString.includes('[]')
+  );
 }
 
 function toLiteValue(val: JSONValue): Exclude<JSONValue, boolean> {

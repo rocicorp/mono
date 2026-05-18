@@ -2,32 +2,43 @@ import type {ChangeStreamData} from '../change-source/protocol/current/downstrea
 import type {CommitResult} from './change-processor.ts';
 import type {WriteWorkerClient} from './write-worker-client.ts';
 
+type ProcessMessagesResult = CommitResult | readonly CommitResult[] | null;
+
+type WorkerMessageBatcherOptions = {
+  readonly flushOnCommit?: boolean | undefined;
+};
+
 // #6001: https://github.com/rocicorp/mono/pull/6001
-// The v7 RM -> VS protocol reduces repeated stream overhead; this keeps the VS
-// digestion side aligned by batching write-worker handoff around the same
-// row-heavy transaction shape. Commit and rollback remain flush points so
-// watermarks are only ACKed after the worker durably applies the ordered
-// transaction segment.
+// RM -> VS traffic arrives in ordered stream batches. Grouping write-worker
+// handoff around those batches keeps row-heavy transactions from paying a
+// promise/IPC boundary per row; callers that need per-commit ACKs can leave
+// flushOnCommit enabled.
 export class WorkerMessageBatcher {
   readonly #worker: WriteWorkerClient;
   readonly #maxMessages: number;
+  readonly #flushOnCommit: boolean;
   #messages: ChangeStreamData[] = [];
 
-  constructor(worker: WriteWorkerClient, maxMessages: number) {
+  constructor(
+    worker: WriteWorkerClient,
+    maxMessages: number,
+    options: WorkerMessageBatcherOptions = {},
+  ) {
     this.#worker = worker;
     this.#maxMessages = maxMessages;
+    this.#flushOnCommit = options.flushOnCommit ?? true;
   }
 
   get size() {
     return this.#messages.length;
   }
 
-  push(message: ChangeStreamData): Promise<CommitResult | null> | undefined {
+  push(message: ChangeStreamData): Promise<ProcessMessagesResult> | undefined {
     this.#messages.push(message);
     return this.#shouldFlush(message) ? this.flush() : undefined;
   }
 
-  flush(): Promise<CommitResult | null> | undefined {
+  flush(): Promise<ProcessMessagesResult> | undefined {
     if (this.#messages.length === 0) {
       return undefined;
     }
@@ -42,7 +53,7 @@ export class WorkerMessageBatcher {
 
   #shouldFlush(message: ChangeStreamData) {
     return (
-      message[0] === 'commit' ||
+      (this.#flushOnCommit && message[0] === 'commit') ||
       message[0] === 'rollback' ||
       this.#messages.length >= this.#maxMessages
     );

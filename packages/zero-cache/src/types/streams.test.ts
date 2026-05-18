@@ -18,8 +18,10 @@ import * as v from '../../../shared/src/valita.ts';
 import {
   stream,
   streamIn,
+  streamInBatches,
   streamOut,
   streamOutStringified,
+  type StreamInPayload,
   type Sink,
   type Source,
   type StringifiedStreamPayload,
@@ -286,6 +288,16 @@ describe('streams with internal acks', () => {
     };
   }
 
+  async function startBatchReceiver() {
+    ws = new WebSocket(`http://localhost:${port}/`);
+    return {
+      ws,
+      consumer: (await streamInBatches(lc, ws, messageSchema, {
+        ack: 'cumulative',
+      })) as Subscription<StreamInPayload<Message>>,
+    };
+  }
+
   test('one at a time', async () => {
     let num = 0;
 
@@ -384,7 +396,7 @@ describe('streams with internal acks', () => {
     expect(await Promise.all(results)).toEqual(
       Array<Result>(messageCount).fill('consumed'),
     );
-    expect(ackMessages).toEqual([32, 64, 96]);
+    expect(ackMessages).toEqual([96]);
     consumer.cancel();
     expect(await cleanedUp).toEqual([]);
   });
@@ -438,6 +450,51 @@ describe('streams with internal acks', () => {
       {batch: [{id: 9}, {id: 10}]},
     ]);
     ws.close();
+  });
+
+  test('streamInBatches preserves received batch frames', async () => {
+    streamBatchMessages = 4;
+    const messageCount = 6;
+    for (let i = 0; i < messageCount; i++) {
+      producer.push({from: i, to: i + 1, str: `msg-${i}`});
+    }
+
+    const {consumer} = await startBatchReceiver();
+
+    const received: StreamInPayload<Message>[] = [];
+    for await (const payload of consumer) {
+      received.push(payload);
+      if (
+        received.reduce(
+          (sum, payload) =>
+            sum + ('messages' in payload ? payload.messages.length : 1),
+          0,
+        ) === messageCount
+      ) {
+        break;
+      }
+    }
+
+    expect(received).toEqual([
+      {
+        tag: 'stream-batch',
+        messages: [
+          {from: 0, to: 1, str: 'msg-0'},
+          {from: 1, to: 2, str: 'msg-1'},
+          {from: 2, to: 3, str: 'msg-2'},
+          {from: 3, to: 4, str: 'msg-3'},
+        ],
+      },
+      {
+        tag: 'stream-batch',
+        messages: [
+          {from: 4, to: 5, str: 'msg-4'},
+          {from: 5, to: 6, str: 'msg-5'},
+        ],
+      },
+    ]);
+    await vi.waitFor(() => expect(ackMessages).toEqual([4, 6]));
+    expect(await cleanedUp).toEqual([]);
   });
 
   test('pipelined cumulative ack flushes pending ack on cleanup', async () => {
