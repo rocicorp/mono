@@ -13,6 +13,7 @@ const defaults = {
   ZERO_RM_VS_APPLY_MODE: 'worker-batch',
   ZERO_RM_VS_CONSUMER_RUNTIME: 'worker',
   ZERO_RM_VS_TRANSPORT: 'websocket',
+  ZERO_RM_VS_WS_ACK: 'cumulative',
   ZERO_RM_VS_CLIENT_CPU_US: '0',
   ZERO_RM_VS_SOURCE_APPLY: '0',
   ZERO_RM_VS_SLOW_EVERY: '0',

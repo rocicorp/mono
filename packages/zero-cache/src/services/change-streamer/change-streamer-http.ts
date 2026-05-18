@@ -260,6 +260,7 @@ export class ChangeStreamerHttpClient implements ChangeStreamer {
       this.#lc,
       ws,
       downstreamSchemaForProtocolVersion(ctx.protocolVersion),
+      {ack: 'cumulative'},
     );
   }
 }

@@ -384,9 +384,7 @@ describe('streams with internal acks', () => {
     expect(await Promise.all(results)).toEqual(
       Array<Result>(messageCount).fill('consumed'),
     );
-    expect(ackMessages).toEqual([
-      8, 16, 24, 32, 40, 48, 56, 64, 72, 80, 88, 96,
-    ]);
+    expect(ackMessages).toEqual([32, 64, 96]);
     consumer.cancel();
     expect(await cleanedUp).toEqual([]);
   });
