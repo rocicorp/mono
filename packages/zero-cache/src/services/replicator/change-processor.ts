@@ -5,6 +5,7 @@ import {assert, unreachable} from '../../../../shared/src/asserts.ts';
 import {stringify} from '../../../../shared/src/bigint-json.ts';
 import {must} from '../../../../shared/src/must.ts';
 import type {DownloadStatus} from '../../../../zero-events/src/status.ts';
+import type {Statement} from '../../../../zqlite/src/db.ts';
 import {
   createLiteIndexStatement,
   createLiteTableStatement,
@@ -86,6 +87,8 @@ type ChangeProcessorOptions = {
 type UpsertPlan = {
   readonly rowColumns: readonly string[];
   readonly sql: string;
+  statement: Statement | undefined;
+  readonly batchStatements: Map<number, Statement>;
 };
 
 type UpdatePlan = {
@@ -101,8 +104,6 @@ type DeletePlan = {
 
 type PendingInsert = {
   readonly row: LiteRow;
-  readonly logEntry: BatchRowOp | undefined;
-  readonly rowKey: string | undefined;
 };
 
 type PendingInsertBatch = {
@@ -110,6 +111,7 @@ type PendingInsertBatch = {
   readonly plan: UpsertPlan;
   readonly maxRows: number;
   readonly rows: PendingInsert[];
+  readonly logEntries: BatchRowOp[];
   readonly rowKeys: Set<string>;
 };
 
@@ -225,6 +227,8 @@ function createUpsertPlan(
       INSERT OR REPLACE INTO ${id(table)} (${columnsSQL})
         VALUES (${placeholders(insertColumns.length)})
       `,
+    statement: undefined,
+    batchStatements: new Map(),
   };
 }
 
@@ -241,6 +245,24 @@ function createBatchUpsertSql(
         .map(() => `(${placeholders(insertColumns.length)})`)
         .join(',')}
     `;
+}
+
+function upsertStatement(
+  db: StatementRunner,
+  table: string,
+  plan: UpsertPlan,
+  rows: number,
+): Statement {
+  if (rows === 1) {
+    return (plan.statement ??= db.db.prepare(plan.sql));
+  }
+
+  let stmt = plan.batchStatements.get(rows);
+  if (!stmt) {
+    stmt = db.db.prepare(createBatchUpsertSql(table, plan.rowColumns, rows));
+    plan.batchStatements.set(rows, stmt);
+  }
+  return stmt;
 }
 
 function createUpdatePlan(
@@ -386,7 +408,7 @@ function keyValues(key: LiteRowKey, keyColumns: readonly string[]) {
 
 function rowKeyString(key: LiteRowKey) {
   let singleColumn: string | undefined;
-  let singleValue: LiteValueType | undefined;
+  let singleValue: LiteValueType = null;
   for (const col in key) {
     if (singleColumn !== undefined) {
       return stringify(normalizedKeyOrder(key));
@@ -395,9 +417,16 @@ function rowKeyString(key: LiteRowKey) {
     singleValue = key[col];
   }
   if (singleColumn !== undefined) {
-    return `{${JSON.stringify(singleColumn)}:${stringify(singleValue)}}`;
+    return `{${JSON.stringify(singleColumn)}:${valueKeyString(singleValue)}}`;
   }
   return stringify(normalizedKeyOrder(key));
+}
+
+function valueKeyString(value: LiteValueType) {
+  if (typeof value === 'string') {
+    return JSON.stringify(value);
+  }
+  return stringify(value);
 }
 
 /**
@@ -857,6 +886,7 @@ class TransactionProcessor {
         plan,
         maxRows,
         rows: [],
+        logEntries: [],
         rowKeys: new Set(),
       });
 
@@ -873,8 +903,9 @@ class TransactionProcessor {
         : undefined;
     if (logEntry) {
       this.#numChangeLogEntries++;
+      current.logEntries.push(logEntry);
     }
-    current.rows.push({row: newRow.row, logEntry, rowKey});
+    current.rows.push({row: newRow.row});
   }
 
   #flushPendingInserts() {
@@ -895,20 +926,10 @@ class TransactionProcessor {
       values[i++] = this.#version;
     }
 
-    this.#db.run(
-      batch.rows.length === 1
-        ? batch.plan.sql
-        : createBatchUpsertSql(
-            batch.table,
-            batch.plan.rowColumns,
-            batch.rows.length,
-          ),
+    upsertStatement(this.#db, batch.table, batch.plan, batch.rows.length).run(
       values,
     );
-    this.#changeLog.logSetOps(
-      this.#version,
-      batch.rows.flatMap(({logEntry}) => (logEntry ? [logEntry] : [])),
-    );
+    this.#changeLog.logSetOps(this.#version, batch.logEntries);
   }
 
   // Updates by default are applied as UPDATE commands to support partial

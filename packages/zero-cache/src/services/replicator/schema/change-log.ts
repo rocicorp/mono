@@ -138,13 +138,13 @@ export class ChangeLog {
     this.#logRowOpStmt = db.prepare(/*sql*/ `
       INSERT OR REPLACE INTO "_zero.changeLog2" 
         (stateVersion, pos, "table", rowKey, op)
-        VALUES (@version, @pos, @table, JSON(@rowKey), @op)
+        VALUES (@version, @pos, @table, @rowKey, @op)
     `);
 
     this.#logRowOpWithBackfillStmt = db.prepare(/*sql*/ `
       INSERT INTO "_zero.changeLog2" 
         (stateVersion, pos, "table", rowKey, op, backfillingColumnVersions)
-        VALUES (@version, @pos, @table, JSON(@rowKey), @op, 
+        VALUES (@version, @pos, @table, @rowKey, @op,
                 JSON(@backfillingColumnVersions))
         ON CONFLICT ("table", rowKey) DO UPDATE 
                    SET stateVersion = excluded.stateVersion,
@@ -169,7 +169,7 @@ export class ChangeLog {
 
     // oxlint-disable-next-line zero/no-select-star -- Local SQLite replica query; not run through pg prepared statements.
     this.#getRowOpStmt = db.prepare(/*sql*/ `
-      SELECT * FROM "_zero.changeLog2" WHERE "table" = ? AND "rowKey" = JSON(?)
+      SELECT * FROM "_zero.changeLog2" WHERE "table" = ? AND "rowKey" = ?
     `);
   }
 
@@ -210,7 +210,7 @@ export class ChangeLog {
         INSERT OR REPLACE INTO "_zero.changeLog2"
           (stateVersion, pos, "table", rowKey, op)
           VALUES ${Array.from({length: entries.length})
-            .map(() => `(?, ?, ?, JSON(?), '${SET_OP}')`)
+            .map(() => `(?, ?, ?, ?, '${SET_OP}')`)
             .join(',')}
       `);
       this.#logSetOpsStmts.set(entries.length, stmt);

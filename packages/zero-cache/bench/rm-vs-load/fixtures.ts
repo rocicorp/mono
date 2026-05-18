@@ -1,4 +1,3 @@
-import {BigIntJSON} from '../../../shared/src/bigint-json.ts';
 import type {TableSpec} from '../../src/db/specs.ts';
 import type {
   DataOrSchemaChange,
@@ -11,7 +10,6 @@ import type {
   Commit,
   Data,
 } from '../../src/services/change-source/protocol/current/downstream.ts';
-import type {WatermarkedChange} from '../../src/services/change-streamer/change-streamer-service.ts';
 import {ReplicationMessages} from '../../src/services/replicator/test-utils.ts';
 
 type PayloadSize = 'small' | 'medium' | 'large';
@@ -46,9 +44,7 @@ export type LoadScenario = {
 export type GeneratedTransaction = {
   readonly watermark: string;
   readonly changes: TransactionMessage[];
-  readonly watermarked: WatermarkedChange[];
   readonly rows: number;
-  readonly bytes: number;
 };
 
 const tableName = 'bench_rows';
@@ -134,19 +130,10 @@ export function makeTransaction(
 
   changes.push(['commit', messages.commit(), {watermark}]);
 
-  let bytes = 0;
-  const watermarked = changes.map(change => {
-    const json = BigIntJSON.stringify(change);
-    bytes += Buffer.byteLength(json);
-    return [watermark, change[1].tag, json] satisfies WatermarkedChange;
-  });
-
   return {
     watermark,
     changes,
-    watermarked,
     rows: rowsPerTx,
-    bytes,
   };
 }
 
