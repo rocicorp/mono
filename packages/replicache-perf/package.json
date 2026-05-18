@@ -16,7 +16,7 @@
   "dependencies": {
     "@rocicorp/resolver": "^1.0.2",
     "@types/command-line-args": "^5.2.3",
-    "@types/command-line-usage": "^5.0.2",
+    "@types/command-line-usage": "^5.0.4",
     "command-line-args": "^6.0.1",
     "command-line-usage": "^7.0.3",
     "compare-utf8": "^0.2.0",
