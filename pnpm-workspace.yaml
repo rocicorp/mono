@@ -13,5 +13,5 @@ allowBuilds:
   prisma: true
   protobufjs: true
   ssh2: false
-patchedDependencies:
-  webpackbar@6.0.1: patches/webpackbar@6.0.1.patch
+overrides:
+  webpackbar: ^7.0.0

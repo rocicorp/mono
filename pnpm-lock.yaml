@@ -4,8 +4,8 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
-patchedDependencies:
-  webpackbar@6.0.1: e05f8f253dbb7a6872f47bea61e9b6e8c37077222bf2a36b8ffea2defdfb8878
+overrides:
+  webpackbar: ^7.0.0
 
 importers:
 
@@ -8712,10 +8712,6 @@ packages:
   fetch-nodeshim@0.4.10:
     resolution: {integrity: sha512-m6I8ALe4L4XpdETy7MJZWs6L1IVMbjs99bwbpIKphxX+0CTns4IKDWJY0LWfr4YsFjfg+z1TjzTMU8lKl8rG0w==}
 
-  figures@3.2.0:
-    resolution: {integrity: sha512-yaduQFRKLXYOGgEn6AZau90j3ggSOyiqXU0F9JZfeXYhNa+Jk4X+s45A2zg5jns87GAFa34BBm2kXw4XpNcbdg==}
-    engines: {node: '>=8'}
-
   file-loader@6.2.0:
     resolution: {integrity: sha512-qo3glqyTa61Ytg4u73GultjHGjdRyig3tG6lPtyX/jOEJvHif9uB0/OCI2Kif6ctF3caQTW2G5gym21oAsI4pw==}
     engines: {node: '>= 10.13.0'}
@@ -9849,9 +9845,6 @@ packages:
   markdown-it@14.1.1:
     resolution: {integrity: sha512-BuU2qnTti9YKgK5N+IeMubp14ZUKUUw7yeJbkjtosvHiP0AZ5c8IAgEMk79D0eC8F23r4Ac/q8cAIFdm2FtyoA==}
     hasBin: true
-
-  markdown-table@2.0.0:
-    resolution: {integrity: sha512-Ezda85ToJUBhM6WGaG6veasyym+Tbs3cMAw/ZhOPqXiYsr0jgocBV3j3nx+4lk47plLlIqjwuTm/ywVI+zjJ/A==}
 
   markdown-table@3.0.4:
     resolution: {integrity: sha512-wiYz4+JrLyb/DqW2hkFJxP7Vd7JuTDm77fvbM8VfEQdmSMqcImWeeRbHwZjBjIFki/VaMK2BhFi7oUUZeM5bqw==}
@@ -11854,10 +11847,6 @@ packages:
   renderkid@3.0.0:
     resolution: {integrity: sha512-q/7VIQA8lmM1hF+jn+sFSPWGlMkSAeNYcPLmDQx2zzuiDfaLrOmumR8iaUKlenFgh0XRPIUeSPlH3A+AW3Z5pg==}
 
-  repeat-string@1.6.1:
-    resolution: {integrity: sha512-PV0dzCYDNfRi1jCDbJzpW7jNNDRuCOG/jI5ctQcGKt/clZD+YcPS3yIlWuTJMmESC8aevCFmWJy5wjAFgNqN6w==}
-    engines: {node: '>=0.10'}
-
   replicache@15.2.1:
     resolution: {integrity: sha512-FhKA6Icjb7tHoKVslkq2OGGk1QbGqn6NotIaVJv+sD/atbeC6KJ9iS6eDQ7fNwISWc1MMPRuP5qJcw1nP0Dayg==}
     engines: {node: '>=14.8.0'}
@@ -13126,12 +13115,6 @@ packages:
     peerDependenciesMeta:
       webpack-cli:
         optional: true
-
-  webpackbar@6.0.1:
-    resolution: {integrity: sha512-TnErZpmuKdwWBdMoexjio3KKX6ZtoKHRVvLIU0A47R0VVBDtx3ZyOJDktgYixhoJokZTYTt1Z37OkO9pnGJa9Q==}
-    engines: {node: '>=14.21.3'}
-    peerDependencies:
-      webpack: 3 || 4 || 5
 
   webpackbar@7.0.0:
     resolution: {integrity: sha512-aS9soqSO2iCHgqHoCrj4LbfGQUboDCYJPSFOAchEK+9psIjNrfSWW4Y0YEz67MKURNvMmfo0ycOg9d/+OOf9/Q==}
@@ -15142,7 +15125,7 @@ snapshots:
       tslib: 2.8.1
       url-loader: 4.1.1(file-loader@6.2.0(webpack@5.106.2(esbuild@0.28.0)(postcss@8.5.14)))(webpack@5.106.2(esbuild@0.28.0)(postcss@8.5.14))
       webpack: 5.106.2(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.14))(esbuild@0.28.0)(html-minifier-terser@7.2.0)(postcss@8.5.14)
-      webpackbar: 6.0.1(patch_hash=e05f8f253dbb7a6872f47bea61e9b6e8c37077222bf2a36b8ffea2defdfb8878)(webpack@5.106.2(esbuild@0.28.0)(postcss@8.5.14))
+      webpackbar: 7.0.0(webpack@5.106.2(esbuild@0.28.0)(postcss@8.5.14))
     transitivePeerDependencies:
       - '@minify-html/node'
       - '@parcel/css'
@@ -22513,10 +22496,6 @@ snapshots:
 
   fetch-nodeshim@0.4.10: {}
 
-  figures@3.2.0:
-    dependencies:
-      escape-string-regexp: 1.0.5
-
   file-loader@6.2.0(webpack@5.106.2(esbuild@0.28.0)(postcss@8.5.14)):
     dependencies:
       loader-utils: 2.0.4
@@ -23653,10 +23632,6 @@ snapshots:
       mdurl: 2.0.0
       punycode.js: 2.3.1
       uc.micro: 2.1.0
-
-  markdown-table@2.0.0:
-    dependencies:
-      repeat-string: 1.6.1
 
   markdown-table@3.0.4: {}
 
@@ -26569,8 +26544,6 @@ snapshots:
       lodash: 4.18.1
       strip-ansi: 6.0.1
 
-  repeat-string@1.6.1: {}
-
   replicache@15.2.1:
     dependencies:
       '@badrap/valita': 0.3.11
@@ -28033,18 +28006,6 @@ snapshots:
       - lightningcss
       - postcss
       - uglify-js
-
-  webpackbar@6.0.1(patch_hash=e05f8f253dbb7a6872f47bea61e9b6e8c37077222bf2a36b8ffea2defdfb8878)(webpack@5.106.2(esbuild@0.28.0)(postcss@8.5.14)):
-    dependencies:
-      ansi-escapes: 4.3.2
-      chalk: 4.1.2
-      consola: 3.4.2
-      figures: 3.2.0
-      markdown-table: 2.0.0
-      pretty-time: 1.1.0
-      std-env: 3.10.0
-      webpack: 5.106.2(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.14))(esbuild@0.28.0)(html-minifier-terser@7.2.0)(postcss@8.5.14)
-      wrap-ansi: 7.0.0
 
   webpackbar@7.0.0(webpack@5.106.2(esbuild@0.28.0)(postcss@8.5.14)):
     dependencies:
