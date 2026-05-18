@@ -6,6 +6,8 @@ settings:
 
 overrides:
   webpackbar: ^7.0.0
+  playwright: 1.58.2
+  playwright-core: 1.58.2
 
 importers:
 
@@ -28,7 +30,7 @@ importers:
         version: 4.1.6(vite@8.0.13(@types/node@22.19.19)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))(vitest@4.1.6)
       '@vitest/browser-playwright':
         specifier: ^4.1.5
-        version: 4.1.6(playwright@1.60.0)(vite@8.0.13(@types/node@22.19.19)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))(vitest@4.1.6)
+        version: 4.1.6(playwright@1.58.2)(vite@8.0.13(@types/node@22.19.19)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))(vitest@4.1.6)
       '@vitest/coverage-v8':
         specifier: ^4.1.5
         version: 4.1.6(@vitest/browser@4.1.6)(vitest@4.1.6)
@@ -501,8 +503,8 @@ importers:
         specifier: ^0.45.0
         version: 0.45.0
       playwright:
-        specifier: ^1.53.2
-        version: 1.60.0
+        specifier: 1.58.2
+        version: 1.58.2
       shared:
         specifier: workspace:*
         version: link:../shared
@@ -601,11 +603,11 @@ importers:
         specifier: ^7.0.1
         version: 7.1.1
       playwright:
-        specifier: ^1.53.2
-        version: 1.60.0
+        specifier: 1.58.2
+        version: 1.58.2
       playwright-core:
-        specifier: ^1.53.2
-        version: 1.60.0
+        specifier: 1.58.2
+        version: 1.58.2
       replicache:
         specifier: workspace:*
         version: link:../replicache
@@ -708,8 +710,8 @@ importers:
         specifier: ^5.0.0
         version: 5.0.0
       playwright:
-        specifier: ^1.53.2
-        version: 1.60.0
+        specifier: 1.58.2
+        version: 1.58.2
       type-fest:
         specifier: ^4.30.0
         version: 4.41.0
@@ -1201,8 +1203,8 @@ importers:
         specifier: ^0.45.0
         version: 0.45.0
       playwright:
-        specifier: ^1.53.2
-        version: 1.60.0
+        specifier: 1.58.2
+        version: 1.58.2
       replicache:
         specifier: workspace:*
         version: link:../replicache
@@ -6689,7 +6691,7 @@ packages:
   '@vitest/browser-playwright@4.1.6':
     resolution: {integrity: sha512-4csoeyl/qwHyxU2zNL0++WaoDr8YJDXOQPwWPNJoTZ+QzcdO3INYKgF5Zfz730Io7zbkuv914aZmfQ+QE+1Hvw==}
     peerDependencies:
-      playwright: '*'
+      playwright: 1.58.2
       vitest: 4.1.6
 
   '@vitest/browser@4.1.6':
@@ -10800,13 +10802,13 @@ packages:
     resolution: {integrity: sha512-emEcLuomt2j03vxD54giVB4SxTjnsqkU692xZOZXHDVoYyypEm+b3jpiTcc+Cf+myooc+/Ly0z01jqeNHVgJGw==}
     engines: {node: '>=16.0.0'}
 
-  playwright-core@1.60.0:
-    resolution: {integrity: sha512-9bW6zvX/m0lEbgTKJ6YppOKx8H3VOPBMOCFh2irXFOT4BbHgrx5hPjwJYLT40Lu+4qtD36qKc/Hn56StUW57IA==}
+  playwright-core@1.58.2:
+    resolution: {integrity: sha512-yZkEtftgwS8CsfYo7nm0KE8jsvm6i/PTgVtB8DL726wNf6H2IMsDuxCpJj59KDaxCtSnrWan2AeDqM7JBaultg==}
     engines: {node: '>=18'}
     hasBin: true
 
-  playwright@1.60.0:
-    resolution: {integrity: sha512-hheHdokM8cdqCb0lcE3s+zT4t4W+vvjpGxsZlDnikarzx8tSzMebh3UiFtgqwFwnTnjYQcsyMF8ei2mCO/tpeA==}
+  playwright@1.58.2:
+    resolution: {integrity: sha512-vA30H8Nvkq/cPBnNw4Q8TWz1EJyqgpuinBcHET0YVJVFldr8JDNiU9LaWAE1KqSkRYazuaBhTpB5ZzShOezQ6A==}
     engines: {node: '>=18'}
     hasBin: true
 
@@ -20049,11 +20051,11 @@ snapshots:
     optionalDependencies:
       babel-plugin-react-compiler: 1.0.0
 
-  '@vitest/browser-playwright@4.1.6(playwright@1.60.0)(vite@8.0.13(@types/node@22.19.19)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))(vitest@4.1.6)':
+  '@vitest/browser-playwright@4.1.6(playwright@1.58.2)(vite@8.0.13(@types/node@22.19.19)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))(vitest@4.1.6)':
     dependencies:
       '@vitest/browser': 4.1.6(vite@8.0.13(@types/node@22.19.19)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))(vitest@4.1.6)
       '@vitest/mocker': 4.1.6(vite@8.0.13(@types/node@22.19.19)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))
-      playwright: 1.60.0
+      playwright: 1.58.2
       tinyrainbow: 3.1.0
       vitest: 4.1.6(@opentelemetry/api@1.9.1)(@types/node@22.19.19)(@vitest/browser-playwright@4.1.6)(@vitest/coverage-v8@4.1.6)(vite@8.0.13(@types/node@22.19.19)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))
     transitivePeerDependencies:
@@ -20063,11 +20065,11 @@ snapshots:
       - vite
     optional: true
 
-  '@vitest/browser-playwright@4.1.6(playwright@1.60.0)(vite@8.0.13(@types/node@22.19.19)(esbuild@0.28.0)(jiti@1.21.7)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))(vitest@4.1.6)':
+  '@vitest/browser-playwright@4.1.6(playwright@1.58.2)(vite@8.0.13(@types/node@22.19.19)(esbuild@0.28.0)(jiti@1.21.7)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))(vitest@4.1.6)':
     dependencies:
       '@vitest/browser': 4.1.6(vite@8.0.13(@types/node@22.19.19)(esbuild@0.28.0)(jiti@1.21.7)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))(vitest@4.1.6)
       '@vitest/mocker': 4.1.6(vite@8.0.13(@types/node@22.19.19)(esbuild@0.28.0)(jiti@1.21.7)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))
-      playwright: 1.60.0
+      playwright: 1.58.2
       tinyrainbow: 3.1.0
       vitest: 4.1.6(@opentelemetry/api@1.9.1)(@types/node@22.19.19)(@vitest/browser-playwright@4.1.6)(@vitest/coverage-v8@4.1.6)(vite@8.0.13(@types/node@22.19.19)(esbuild@0.28.0)(jiti@1.21.7)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))
     transitivePeerDependencies:
@@ -20077,11 +20079,11 @@ snapshots:
       - vite
     optional: true
 
-  '@vitest/browser-playwright@4.1.6(playwright@1.60.0)(vite@8.0.13(@types/node@22.19.19)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))(vitest@4.1.6)':
+  '@vitest/browser-playwright@4.1.6(playwright@1.58.2)(vite@8.0.13(@types/node@22.19.19)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))(vitest@4.1.6)':
     dependencies:
       '@vitest/browser': 4.1.6(vite@8.0.13(@types/node@22.19.19)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))(vitest@4.1.6)
       '@vitest/mocker': 4.1.6(vite@8.0.13(@types/node@22.19.19)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))
-      playwright: 1.60.0
+      playwright: 1.58.2
       tinyrainbow: 3.1.0
       vitest: 4.1.6(@opentelemetry/api@1.9.1)(@types/node@22.19.19)(@vitest/browser-playwright@4.1.6)(@vitest/coverage-v8@4.1.6)(vite@8.0.13(@types/node@22.19.19)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))
     transitivePeerDependencies:
@@ -25215,11 +25217,11 @@ snapshots:
       pvutils: 1.1.5
       tslib: 2.8.1
 
-  playwright-core@1.60.0: {}
+  playwright-core@1.58.2: {}
 
-  playwright@1.60.0:
+  playwright@1.58.2:
     dependencies:
-      playwright-core: 1.60.0
+      playwright-core: 1.58.2
     optionalDependencies:
       fsevents: 2.3.2
 
@@ -27795,7 +27797,7 @@ snapshots:
     optionalDependencies:
       '@opentelemetry/api': 1.9.1
       '@types/node': 22.19.19
-      '@vitest/browser-playwright': 4.1.6(playwright@1.60.0)(vite@8.0.13(@types/node@22.19.19)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))(vitest@4.1.6)
+      '@vitest/browser-playwright': 4.1.6(playwright@1.58.2)(vite@8.0.13(@types/node@22.19.19)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))(vitest@4.1.6)
       '@vitest/coverage-v8': 4.1.6(@vitest/browser@4.1.6)(vitest@4.1.6)
     transitivePeerDependencies:
       - msw
@@ -27825,7 +27827,7 @@ snapshots:
     optionalDependencies:
       '@opentelemetry/api': 1.9.1
       '@types/node': 22.19.19
-      '@vitest/browser-playwright': 4.1.6(playwright@1.60.0)(vite@8.0.13(@types/node@22.19.19)(esbuild@0.28.0)(jiti@1.21.7)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))(vitest@4.1.6)
+      '@vitest/browser-playwright': 4.1.6(playwright@1.58.2)(vite@8.0.13(@types/node@22.19.19)(esbuild@0.28.0)(jiti@1.21.7)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))(vitest@4.1.6)
       '@vitest/coverage-v8': 4.1.6(@vitest/browser@4.1.6)(vitest@4.1.6)
     transitivePeerDependencies:
       - msw
@@ -27855,7 +27857,7 @@ snapshots:
     optionalDependencies:
       '@opentelemetry/api': 1.9.1
       '@types/node': 22.19.19
-      '@vitest/browser-playwright': 4.1.6(playwright@1.60.0)(vite@8.0.13(@types/node@22.19.19)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))(vitest@4.1.6)
+      '@vitest/browser-playwright': 4.1.6(playwright@1.58.2)(vite@8.0.13(@types/node@22.19.19)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))(vitest@4.1.6)
       '@vitest/coverage-v8': 4.1.6(@vitest/browser@4.1.6)(vitest@4.1.6)
     transitivePeerDependencies:
       - msw
