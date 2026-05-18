@@ -81,7 +81,7 @@
     "@op-engineering/op-sqlite": ">=15",
     "@rocicorp/zero-sqlite3": "^1.0.18",
     "@types/command-line-usage": "^5.0.2",
-    "@vitest/runner": "^4.1.5",
+    "@vitest/runner": "^4.1.6",
     "command-line-args": "^6.0.1",
     "command-line-usage": "^7.0.3",
     "compare-utf8": "^0.2.0",
@@ -91,7 +91,7 @@
     "playwright": "^1.53.2",
     "shared": "0.0.0",
     "typescript": "~6.0.2",
-    "vitest": "^4.1.5"
+    "vitest": "^4.1.6"
   },
   "peerDependencies": {
     "@op-engineering/op-sqlite": ">=15",

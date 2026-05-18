@@ -1,0 +1,281 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Package Lock Dependency Changes</title>
+  <style>
+    :root {
+      color-scheme: light;
+      font-family: Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    }
+    body {
+      margin: 0;
+      background: #f7f7fb;
+      color: #20242b;
+    }
+    .container {
+      padding: 24px;
+    }
+    h1 {
+      margin-top: 0;
+      font-size: 24px;
+    }
+    .meta {
+      margin-bottom: 16px;
+      font-size: 13px;
+      line-height: 1.6;
+      color: #4d5562;
+    }
+    .table-wrap {
+      overflow: auto;
+      border: 1px solid #d8dde8;
+      border-radius: 8px;
+      background: #fff;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 1400px;
+      font-size: 12px;
+    }
+    th,
+    td {
+      border-bottom: 1px solid #eef1f6;
+      padding: 8px;
+      text-align: left;
+      vertical-align: top;
+    }
+    th {
+      position: sticky;
+      top: 0;
+      background: #f0f4fb;
+      font-weight: 700;
+      z-index: 1;
+    }
+    tr:nth-child(even) td {
+      background: #fbfdff;
+    }
+    tr.vuln-row td {
+      background: #fff4f1;
+    }
+    tr.vuln-resolved-row td {
+      background: #eef9eb;
+    }
+    a {
+      color: #0d4aa8;
+      text-decoration: none;
+    }
+    a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Package Lock Dependency Changes</h1>
+    <div class="meta">
+      <div><strong>Generated:</strong> 2026-05-18T08:59:01.816Z</div>
+      <div><strong>Since:</strong> 6 months ago</div>
+      <div><strong>Commits scanned:</strong> 88</div>
+      <div><strong>Rows:</strong> 8</div>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>SHA</th>
+            <th>Date</th>
+            <th>Lockfile</th>
+            <th>Workspace</th>
+            <th>Section</th>
+            <th>Dependency</th>
+            <th>Change</th>
+            <th>Spec Before</th>
+            <th>Spec After</th>
+            <th>Resolved Before</th>
+            <th>Resolved After</th>
+            <th>Present Date Start</th>
+            <th>Present Date End</th>
+            <th>Present Commit Start</th>
+            <th>Present Commit End</th>
+            <th>Known Vulns Before</th>
+            <th>Known Vulns After</th>
+            <th>Subject</th>
+          </tr>
+        </thead>
+        <tbody>
+
+      <tr class="vuln-resolved-row">
+        <td><a href="https://github.com/rocicorp/mono/commit/7bb25381469a4c7bd9e3f1603df8853d482e0bd4" target="_blank" rel="noopener noreferrer">7bb25381469a</a></td>
+        <td>2026-05-17</td>
+        <td>package-lock.json</td>
+        <td>packages/zero</td>
+        <td>dependencies</td>
+        <td>@opentelemetry/auto-instrumentations-node</td>
+        <td>updated</td>
+        <td>^0.62.0</td>
+        <td>^0.76.0</td>
+        <td>0.62.2</td>
+        <td>0.76.0</td>
+        <td></td>
+        <td>2026-05-17</td>
+        <td></td>
+        <td><a href="https://github.com/rocicorp/mono/commit/7bb25381469a4c7bd9e3f1603df8853d482e0bd4" target="_blank" rel="noopener noreferrer">7bb25381469a</a></td>
+        <td><a href="https://github.com/advisories/GHSA-q7rr-3cgh-j5r3" target="_blank" rel="noopener noreferrer">GHSA-q7rr-3cgh-j5r3</a></td>
+        <td></td>
+        <td>chore(deps): bump OpenTelemetry chain to 0.218 / 2.7.1 (#5994)</td>
+      </tr>
+
+      <tr class="vuln-resolved-row">
+        <td><a href="https://github.com/rocicorp/mono/commit/7bb25381469a4c7bd9e3f1603df8853d482e0bd4" target="_blank" rel="noopener noreferrer">7bb25381469a</a></td>
+        <td>2026-05-17</td>
+        <td>package-lock.json</td>
+        <td>packages/zero</td>
+        <td>dependencies</td>
+        <td>@opentelemetry/sdk-node</td>
+        <td>updated</td>
+        <td>^0.203.0</td>
+        <td>^0.218.0</td>
+        <td>0.203.0</td>
+        <td>0.218.0</td>
+        <td></td>
+        <td>2026-05-17</td>
+        <td></td>
+        <td><a href="https://github.com/rocicorp/mono/commit/7bb25381469a4c7bd9e3f1603df8853d482e0bd4" target="_blank" rel="noopener noreferrer">7bb25381469a</a></td>
+        <td><a href="https://github.com/advisories/GHSA-q7rr-3cgh-j5r3" target="_blank" rel="noopener noreferrer">GHSA-q7rr-3cgh-j5r3</a></td>
+        <td></td>
+        <td>chore(deps): bump OpenTelemetry chain to 0.218 / 2.7.1 (#5994)</td>
+      </tr>
+
+      <tr class="vuln-row">
+        <td><a href="https://github.com/rocicorp/mono/commit/118f4ea975f7b3b0520dbfca51610cf3282dfadb" target="_blank" rel="noopener noreferrer">118f4ea975f7</a></td>
+        <td>2026-04-23</td>
+        <td>package-lock.json</td>
+        <td>packages/zero</td>
+        <td>peerDependencies</td>
+        <td>kysely</td>
+        <td>added</td>
+        <td></td>
+        <td>^0.28.16</td>
+        <td></td>
+        <td>0.28.16</td>
+        <td>2026-04-23</td>
+        <td></td>
+        <td><a href="https://github.com/rocicorp/mono/commit/118f4ea975f7b3b0520dbfca51610cf3282dfadb" target="_blank" rel="noopener noreferrer">118f4ea975f7</a></td>
+        <td></td>
+        <td></td>
+        <td><a href="https://github.com/advisories/GHSA-pv5w-4p9q-p3v2" target="_blank" rel="noopener noreferrer">GHSA-pv5w-4p9q-p3v2</a></td>
+        <td>feat(zero-server): add kysely db adapter (#5839)</td>
+      </tr>
+
+      <tr class="vuln-row">
+        <td><a href="https://github.com/rocicorp/mono/commit/b60a96705ac4f1b177c86c4ad66c52f343d83e7d" target="_blank" rel="noopener noreferrer">b60a96705ac4</a></td>
+        <td>2026-03-26</td>
+        <td>package-lock.json</td>
+        <td>apps/zbugs</td>
+        <td>devDependencies</td>
+        <td>vite</td>
+        <td>updated</td>
+        <td>8.0.0</td>
+        <td>8.0.3</td>
+        <td>8.0.0</td>
+        <td>8.0.3</td>
+        <td>2026-03-26</td>
+        <td></td>
+        <td><a href="https://github.com/rocicorp/mono/commit/b60a96705ac4f1b177c86c4ad66c52f343d83e7d" target="_blank" rel="noopener noreferrer">b60a96705ac4</a></td>
+        <td></td>
+        <td><a href="https://github.com/advisories/GHSA-4w7w-66w2-5vf9" target="_blank" rel="noopener noreferrer">GHSA-4w7w-66w2-5vf9</a><br><a href="https://github.com/advisories/GHSA-p9ff-h696-f583" target="_blank" rel="noopener noreferrer">GHSA-p9ff-h696-f583</a><br><a href="https://github.com/advisories/GHSA-v2wj-q39q-566r" target="_blank" rel="noopener noreferrer">GHSA-v2wj-q39q-566r</a></td>
+        <td><a href="https://github.com/advisories/GHSA-4w7w-66w2-5vf9" target="_blank" rel="noopener noreferrer">GHSA-4w7w-66w2-5vf9</a><br><a href="https://github.com/advisories/GHSA-p9ff-h696-f583" target="_blank" rel="noopener noreferrer">GHSA-p9ff-h696-f583</a><br><a href="https://github.com/advisories/GHSA-v2wj-q39q-566r" target="_blank" rel="noopener noreferrer">GHSA-v2wj-q39q-566r</a></td>
+        <td>chore: Fix lint script in packages (#5684)</td>
+      </tr>
+
+      <tr class="vuln-row">
+        <td><a href="https://github.com/rocicorp/mono/commit/9355886be0bca4670a9f59e912c1f90c8d0cd09a" target="_blank" rel="noopener noreferrer">9355886be0bc</a></td>
+        <td>2026-03-17</td>
+        <td>package-lock.json</td>
+        <td>apps/zbugs</td>
+        <td>devDependencies</td>
+        <td>drizzle-orm</td>
+        <td>updated</td>
+        <td>^0.44.2</td>
+        <td>^0.45.1</td>
+        <td>0.44.5</td>
+        <td>0.45.1</td>
+        <td>2026-03-17</td>
+        <td></td>
+        <td><a href="https://github.com/rocicorp/mono/commit/9355886be0bca4670a9f59e912c1f90c8d0cd09a" target="_blank" rel="noopener noreferrer">9355886be0bc</a></td>
+        <td></td>
+        <td><a href="https://github.com/advisories/GHSA-gpj5-g38j-94v9" target="_blank" rel="noopener noreferrer">GHSA-gpj5-g38j-94v9</a></td>
+        <td><a href="https://github.com/advisories/GHSA-gpj5-g38j-94v9" target="_blank" rel="noopener noreferrer">GHSA-gpj5-g38j-94v9</a></td>
+        <td>chore: update vitest and oxlint (#5654)</td>
+      </tr>
+
+      <tr class="vuln-row">
+        <td><a href="https://github.com/rocicorp/mono/commit/9355886be0bca4670a9f59e912c1f90c8d0cd09a" target="_blank" rel="noopener noreferrer">9355886be0bc</a></td>
+        <td>2026-03-17</td>
+        <td>package-lock.json</td>
+        <td>apps/zbugs</td>
+        <td>devDependencies</td>
+        <td>vite</td>
+        <td>updated</td>
+        <td>7.2.7</td>
+        <td>8.0.0</td>
+        <td>7.2.7</td>
+        <td>8.0.0</td>
+        <td>2026-03-17</td>
+        <td></td>
+        <td><a href="https://github.com/rocicorp/mono/commit/9355886be0bca4670a9f59e912c1f90c8d0cd09a" target="_blank" rel="noopener noreferrer">9355886be0bc</a></td>
+        <td></td>
+        <td><a href="https://github.com/advisories/GHSA-4w7w-66w2-5vf9" target="_blank" rel="noopener noreferrer">GHSA-4w7w-66w2-5vf9</a><br><a href="https://github.com/advisories/GHSA-p9ff-h696-f583" target="_blank" rel="noopener noreferrer">GHSA-p9ff-h696-f583</a><br><a href="https://github.com/advisories/GHSA-v2wj-q39q-566r" target="_blank" rel="noopener noreferrer">GHSA-v2wj-q39q-566r</a></td>
+        <td><a href="https://github.com/advisories/GHSA-4w7w-66w2-5vf9" target="_blank" rel="noopener noreferrer">GHSA-4w7w-66w2-5vf9</a><br><a href="https://github.com/advisories/GHSA-p9ff-h696-f583" target="_blank" rel="noopener noreferrer">GHSA-p9ff-h696-f583</a><br><a href="https://github.com/advisories/GHSA-v2wj-q39q-566r" target="_blank" rel="noopener noreferrer">GHSA-v2wj-q39q-566r</a></td>
+        <td>chore: update vitest and oxlint (#5654)</td>
+      </tr>
+
+      <tr class="vuln-row">
+        <td><a href="https://github.com/rocicorp/mono/commit/31689262e18eeff2d83943563a1a7f7548947525" target="_blank" rel="noopener noreferrer">31689262e18e</a></td>
+        <td>2025-12-12</td>
+        <td>package-lock.json</td>
+        <td>apps/zbugs</td>
+        <td>devDependencies</td>
+        <td>vite</td>
+        <td>updated</td>
+        <td>6.2.1</td>
+        <td>7.2.7</td>
+        <td>6.2.1</td>
+        <td>7.2.7</td>
+        <td>2025-12-12</td>
+        <td></td>
+        <td><a href="https://github.com/rocicorp/mono/commit/31689262e18eeff2d83943563a1a7f7548947525" target="_blank" rel="noopener noreferrer">31689262e18e</a></td>
+        <td></td>
+        <td><a href="https://github.com/advisories/GHSA-356w-63v5-8wf4" target="_blank" rel="noopener noreferrer">GHSA-356w-63v5-8wf4</a><br><a href="https://github.com/advisories/GHSA-4r4m-qw57-chr8" target="_blank" rel="noopener noreferrer">GHSA-4r4m-qw57-chr8</a><br><a href="https://github.com/advisories/GHSA-4w7w-66w2-5vf9" target="_blank" rel="noopener noreferrer">GHSA-4w7w-66w2-5vf9</a><br><a href="https://github.com/advisories/GHSA-859w-5945-r5v3" target="_blank" rel="noopener noreferrer">GHSA-859w-5945-r5v3</a><br><a href="https://github.com/advisories/GHSA-93m4-6634-74q7" target="_blank" rel="noopener noreferrer">GHSA-93m4-6634-74q7</a><br><a href="https://github.com/advisories/GHSA-g4jq-h2w9-997c" target="_blank" rel="noopener noreferrer">GHSA-g4jq-h2w9-997c</a><br><a href="https://github.com/advisories/GHSA-jqfw-vq24-v9c3" target="_blank" rel="noopener noreferrer">GHSA-jqfw-vq24-v9c3</a><br><a href="https://github.com/advisories/GHSA-p9ff-h696-f583" target="_blank" rel="noopener noreferrer">GHSA-p9ff-h696-f583</a><br><a href="https://github.com/advisories/GHSA-x574-m823-4x7w" target="_blank" rel="noopener noreferrer">GHSA-x574-m823-4x7w</a><br><a href="https://github.com/advisories/GHSA-xcj6-pq6g-qj4x" target="_blank" rel="noopener noreferrer">GHSA-xcj6-pq6g-qj4x</a></td>
+        <td><a href="https://github.com/advisories/GHSA-4w7w-66w2-5vf9" target="_blank" rel="noopener noreferrer">GHSA-4w7w-66w2-5vf9</a><br><a href="https://github.com/advisories/GHSA-p9ff-h696-f583" target="_blank" rel="noopener noreferrer">GHSA-p9ff-h696-f583</a><br><a href="https://github.com/advisories/GHSA-v2wj-q39q-566r" target="_blank" rel="noopener noreferrer">GHSA-v2wj-q39q-566r</a></td>
+        <td>chore: upgrade vite and vitest (#5329)</td>
+      </tr>
+
+      <tr class="vuln-row">
+        <td><a href="https://github.com/rocicorp/mono/commit/31689262e18eeff2d83943563a1a7f7548947525" target="_blank" rel="noopener noreferrer">31689262e18e</a></td>
+        <td>2025-12-12</td>
+        <td>package-lock.json</td>
+        <td>apps/zql-viz</td>
+        <td>devDependencies</td>
+        <td>vite</td>
+        <td>updated</td>
+        <td>6.2.1</td>
+        <td>7.2.7</td>
+        <td>7.1.2</td>
+        <td>7.2.7</td>
+        <td>2025-12-12</td>
+        <td></td>
+        <td><a href="https://github.com/rocicorp/mono/commit/31689262e18eeff2d83943563a1a7f7548947525" target="_blank" rel="noopener noreferrer">31689262e18e</a></td>
+        <td></td>
+        <td><a href="https://github.com/advisories/GHSA-4w7w-66w2-5vf9" target="_blank" rel="noopener noreferrer">GHSA-4w7w-66w2-5vf9</a><br><a href="https://github.com/advisories/GHSA-93m4-6634-74q7" target="_blank" rel="noopener noreferrer">GHSA-93m4-6634-74q7</a><br><a href="https://github.com/advisories/GHSA-g4jq-h2w9-997c" target="_blank" rel="noopener noreferrer">GHSA-g4jq-h2w9-997c</a><br><a href="https://github.com/advisories/GHSA-jqfw-vq24-v9c3" target="_blank" rel="noopener noreferrer">GHSA-jqfw-vq24-v9c3</a><br><a href="https://github.com/advisories/GHSA-p9ff-h696-f583" target="_blank" rel="noopener noreferrer">GHSA-p9ff-h696-f583</a><br><a href="https://github.com/advisories/GHSA-v2wj-q39q-566r" target="_blank" rel="noopener noreferrer">GHSA-v2wj-q39q-566r</a></td>
+        <td><a href="https://github.com/advisories/GHSA-4w7w-66w2-5vf9" target="_blank" rel="noopener noreferrer">GHSA-4w7w-66w2-5vf9</a><br><a href="https://github.com/advisories/GHSA-p9ff-h696-f583" target="_blank" rel="noopener noreferrer">GHSA-p9ff-h696-f583</a><br><a href="https://github.com/advisories/GHSA-v2wj-q39q-566r" target="_blank" rel="noopener noreferrer">GHSA-v2wj-q39q-566r</a></td>
+        <td>chore: upgrade vite and vitest (#5329)</td>
+      </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</body>
+</html>
