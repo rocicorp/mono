@@ -39,6 +39,7 @@
     "oxfmt": "^0.45.0",
     "oxlint": "^1.63.0",
     "oxlint-tsgolint": "^0.22.1",
+    "playwright": "1.58.2",
     "syncpack": "^14.3.0",
     "tsnapi": "^0.3.2",
     "tsx": "^4.21.0",
