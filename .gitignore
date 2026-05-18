@@ -105,3 +105,4 @@ bun.lock
 packages/zql-integration-tests/Chinook_Sqlite.sqlite
 
 *.ignore.*
+package-lock-commit-deps-report.html
