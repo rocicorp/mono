@@ -214,19 +214,21 @@ function ensureError(err: unknown) {
   return err instanceof Error ? err : new Error(String(err));
 }
 
-const ackSchema = v.object({ack: v.number()});
-
-type Ack = v.Infer<typeof ackSchema>;
+type Ack = {ack: number};
 
 function parseAck(data: unknown): Ack {
   if (typeof data !== 'string') {
     throw new Error('Expected string message');
   }
-  const ack = v.parse(JSON.parse(data), ackSchema);
-  if (!Number.isSafeInteger(ack.ack) || ack.ack < 0) {
-    throw new Error(`Invalid ack ${ack.ack}`);
+  const ack = JSON.parse(data) as {ack?: unknown};
+  if (
+    typeof ack.ack !== 'number' ||
+    !Number.isSafeInteger(ack.ack) ||
+    ack.ack < 0
+  ) {
+    throw new Error(`Invalid ack ${String(ack.ack)}`);
   }
-  return ack;
+  return {ack: ack.ack};
 }
 
 type Streamed<T> = {
@@ -316,11 +318,16 @@ async function streamOutInternal<TPayload, TMessage extends JSONValue>(
             return;
           }
           lastAck = ack;
+          // #6001: https://github.com/rocicorp/mono/pull/6001
+          // RM -> VS catchup can keep thousands of future stream IDs pending;
+          // ACK cleanup stops at the first future ID so each ACK only pays for
+          // frames that can actually be released.
           for (const [id, consumed] of pending) {
-            if (id <= ack) {
-              consumed();
-              pending.delete(id);
+            if (id > ack) {
+              break;
             }
+            consumed();
+            pending.delete(id);
           }
         } catch (e) {
           lc.error?.(`error handling ack`, e);

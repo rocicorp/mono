@@ -53,7 +53,7 @@ export type GeneratedTransaction = {
 
 const tableName = 'bench_rows';
 const messages = new ReplicationMessages({[tableName]: 'id'});
-const relation: MessageRelation = {
+export const benchRelation: MessageRelation = {
   schema: 'public',
   name: tableName,
   rowKey: {type: 'default', columns: ['id']},
@@ -107,7 +107,7 @@ export function makeInsert(
 ): MessageInsert {
   return {
     tag: 'insert',
-    relation,
+    relation: benchRelation,
     new: {
       id: `${tx.toString(36)}-${seq.toString(36)}`,
       tx,

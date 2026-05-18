@@ -26,12 +26,13 @@ import {
   type SubscriptionState,
 } from '../replicator/schema/replication-state.ts';
 import {ReplicationMessages} from '../replicator/test-utils.ts';
+import {CHANGE_STREAMER_V6_PROTOCOL_VERSION} from './change-streamer-protocol.ts';
 import {
   initializeStreamer,
   type TuningOptions,
 } from './change-streamer-service.ts';
 import {
-  PROTOCOL_VERSION,
+  type ChangeStreamerDownstream,
   type ChangeStreamerService,
   type Downstream,
 } from './change-streamer.ts';
@@ -44,6 +45,8 @@ const opts: TuningOptions = {
   flowControlConsensusPaddingSeconds: 1,
   statementTimeoutMs: 20_000,
 };
+
+const SERVICE_TEST_PROTOCOL_VERSION = CHANGE_STREAMER_V6_PROTOCOL_VERSION;
 
 describe('change-streamer/service', () => {
   let lc: LogContext;
@@ -118,11 +121,18 @@ describe('change-streamer/service', () => {
       for await (const payload of sub) {
         const entries = typeof payload === 'string' ? [payload] : payload;
         for (const msg of entries) {
-          queue.enqueue(BigIntJSON.parse(msg) as Downstream);
+          for (const downstream of parseDownstreamPayload(msg)) {
+            queue.enqueue(downstream);
+          }
         }
       }
     })();
     return queue;
+  }
+
+  function parseDownstreamPayload(msg: string): Downstream[] {
+    const parsed = BigIntJSON.parse(msg) as ChangeStreamerDownstream;
+    return parsed[0] === 'change-batch' ? parsed[1].changes : [parsed];
   }
 
   async function nextChange(sub: Queue<Downstream>) {
@@ -176,7 +186,7 @@ describe('change-streamer/service', () => {
 
   test('immediate forwarding, transaction storage', async () => {
     const sub = await streamer.subscribe({
-      protocolVersion: PROTOCOL_VERSION,
+      protocolVersion: SERVICE_TEST_PROTOCOL_VERSION,
       taskID: 'task-id',
       id: 'myid',
       mode: 'serving',
@@ -303,7 +313,7 @@ describe('change-streamer/service', () => {
 
     // Subscribe to the original watermark.
     const sub = await streamer.subscribe({
-      protocolVersion: PROTOCOL_VERSION,
+      protocolVersion: SERVICE_TEST_PROTOCOL_VERSION,
       taskID: 'task-id',
       id: 'myid',
       mode: 'serving',
@@ -421,7 +431,7 @@ describe('change-streamer/service', () => {
 
     // Subscribe to the original watermark.
     const sub = await streamer.subscribe({
-      protocolVersion: PROTOCOL_VERSION,
+      protocolVersion: SERVICE_TEST_PROTOCOL_VERSION,
       taskID: 'task-id',
       id: 'myid',
       mode: 'serving',
@@ -519,7 +529,7 @@ describe('change-streamer/service', () => {
 
     // Subscribe to a watermark from "the future".
     const sub = await streamer.subscribe({
-      protocolVersion: PROTOCOL_VERSION,
+      protocolVersion: SERVICE_TEST_PROTOCOL_VERSION,
       taskID: 'task-id',
       id: 'myid',
       mode: 'serving',
@@ -630,7 +640,7 @@ describe('change-streamer/service', () => {
 
   test('data types (forwarded and catchup)', async () => {
     const sub = await streamer.subscribe({
-      protocolVersion: PROTOCOL_VERSION,
+      protocolVersion: SERVICE_TEST_PROTOCOL_VERSION,
       taskID: 'task-id',
       id: 'myid',
       mode: 'serving',
@@ -734,7 +744,7 @@ describe('change-streamer/service', () => {
 
     // Also verify when loading from the Store as opposed to direct forwarding.
     const catchupSub = await streamer.subscribe({
-      protocolVersion: PROTOCOL_VERSION,
+      protocolVersion: SERVICE_TEST_PROTOCOL_VERSION,
       taskID: 'task-id',
       id: 'myid2',
       mode: 'serving',
@@ -785,7 +795,7 @@ describe('change-streamer/service', () => {
 
     const sub04 = drainToQueue(
       await streamer.subscribe({
-        protocolVersion: PROTOCOL_VERSION,
+        protocolVersion: SERVICE_TEST_PROTOCOL_VERSION,
         taskID: 'task-id',
         id: 'myid1',
         mode: 'serving',
@@ -798,7 +808,7 @@ describe('change-streamer/service', () => {
 
     const sub08 = drainToQueue(
       await streamer.subscribe({
-        protocolVersion: PROTOCOL_VERSION,
+        protocolVersion: SERVICE_TEST_PROTOCOL_VERSION,
         taskID: 'task-id',
         id: 'myid1',
         mode: 'serving',
@@ -811,7 +821,7 @@ describe('change-streamer/service', () => {
 
     const sub02 = drainToQueue(
       await streamer.subscribe({
-        protocolVersion: PROTOCOL_VERSION,
+        protocolVersion: SERVICE_TEST_PROTOCOL_VERSION,
         taskID: 'task-id',
         id: 'myid1',
         mode: 'serving',
@@ -848,7 +858,7 @@ describe('change-streamer/service', () => {
 
     // Start two subscribers: one at 06 and one at 04
     const sub1 = await streamer.subscribe({
-      protocolVersion: PROTOCOL_VERSION,
+      protocolVersion: SERVICE_TEST_PROTOCOL_VERSION,
       taskID: 'task-id',
       id: 'myid1',
       mode: 'serving',
@@ -858,7 +868,7 @@ describe('change-streamer/service', () => {
     });
 
     const sub2 = await streamer.subscribe({
-      protocolVersion: PROTOCOL_VERSION,
+      protocolVersion: SERVICE_TEST_PROTOCOL_VERSION,
       taskID: 'task-id',
       id: 'myid2',
       mode: 'serving',
@@ -896,21 +906,20 @@ describe('change-streamer/service', () => {
     expect(setTimeoutFn).toHaveBeenCalledTimes(3);
 
     drainToQueue(sub1);
-    nextPayload: for await (const payload of sub2) {
-      const entries = typeof payload === 'string' ? [payload] : payload;
-      for (const json of entries) {
-        const msg: Downstream = BigIntJSON.parse(json) as Downstream;
-        if (msg[0] === 'commit' && msg[2].watermark === '08') {
-          // Now that sub2 has consumed past '06',
-          // a purge should successfully clear records before '06'
-          await (setTimeoutFn.mock.calls[2][0]() as unknown as Promise<void>);
-          expect(
-            await sql`SELECT watermark FROM "zoro_3/cdc"."changeLog"`.values(),
-          ).toEqual([['06'], ['07'], ['08']]);
-          break nextPayload;
-        }
+    const sub2Queue = drainToQueue(sub2);
+    for (;;) {
+      const msg = await sub2Queue.dequeue();
+      if (msg[0] === 'commit' && msg[2].watermark === '08') {
+        break;
       }
     }
+    // Now that sub2 has consumed past '06',
+    // a purge should successfully clear records before '06'
+    await (setTimeoutFn.mock.calls[2][0]() as unknown as Promise<void>);
+    expect(
+      await sql`SELECT watermark FROM "zoro_3/cdc"."changeLog"`.values(),
+    ).toEqual([['06'], ['07'], ['08']]);
+
     // replicationState is unaffected
     await expectTables(sql, {
       ['zoro_3/cdc.replicationState']: [
@@ -934,7 +943,7 @@ describe('change-streamer/service', () => {
 
     // New connections earlier than 06 should now be rejected.
     const sub3 = await streamer.subscribe({
-      protocolVersion: PROTOCOL_VERSION,
+      protocolVersion: SERVICE_TEST_PROTOCOL_VERSION,
       taskID: 'task-id',
       id: 'myid2',
       mode: 'serving',
@@ -955,7 +964,7 @@ describe('change-streamer/service', () => {
 
   test('wrong replica version', async () => {
     const sub = await streamer.subscribe({
-      protocolVersion: PROTOCOL_VERSION,
+      protocolVersion: SERVICE_TEST_PROTOCOL_VERSION,
       taskID: 'task-id',
       id: 'myid1',
       mode: 'serving',
@@ -1327,7 +1336,7 @@ describe('change-streamer/service', () => {
     void streamer.run();
 
     const sub = await streamer.subscribe({
-      protocolVersion: PROTOCOL_VERSION,
+      protocolVersion: SERVICE_TEST_PROTOCOL_VERSION,
       taskID: 'task-id',
       id: 'myid',
       mode: 'serving',
@@ -1484,7 +1493,7 @@ describe('change-streamer/service', () => {
     `.simple();
 
     void streamer.subscribe({
-      protocolVersion: PROTOCOL_VERSION,
+      protocolVersion: SERVICE_TEST_PROTOCOL_VERSION,
       taskID: 'task-id',
       id: 'backup-id',
       mode: 'backup',
@@ -1519,7 +1528,7 @@ describe('change-streamer/service', () => {
 
   test('transaction aborted on unexpected termination', async () => {
     const sub = await streamer.subscribe({
-      protocolVersion: PROTOCOL_VERSION,
+      protocolVersion: SERVICE_TEST_PROTOCOL_VERSION,
       taskID: 'task-id',
       id: 'myid1',
       mode: 'serving',
@@ -1546,7 +1555,7 @@ describe('change-streamer/service', () => {
 
   test('transaction aborted only once', async () => {
     const sub = await streamer.subscribe({
-      protocolVersion: PROTOCOL_VERSION,
+      protocolVersion: SERVICE_TEST_PROTOCOL_VERSION,
       taskID: 'task-id',
       id: 'myid1',
       mode: 'serving',

@@ -61,6 +61,7 @@ type QueueEntry =
   | ['subscriber', SubscriberAndMode]
   | DownstreamStatusMessage
   | ['abort']
+  | ['flush-idle-group']
   | 'stop';
 
 type PendingTransaction = {
@@ -519,10 +520,23 @@ export class Storer implements Service {
       await this.#startCatchup(catchupQueue.splice(0));
     };
 
+    const dequeueEntry = () =>
+      group !== null && tx === null
+        ? this.#queue.dequeue(['flush-idle-group'], 0)
+        : this.#queue.dequeue();
+
     try {
-      while ((msg = await this.#queue.dequeue()) !== 'stop') {
+      while ((msg = await dequeueEntry()) !== 'stop') {
         const [msgType] = msg;
         switch (msgType) {
+          case 'flush-idle-group':
+            // #5977: https://github.com/rocicorp/mono/pull/5977
+            // Grouping optimizes bursts, but an idle upstream must not leave
+            // durable commits unacked until an unrelated status/subscriber
+            // event arrives. Flushing here bounds ACK latency while preserving
+            // grouping whenever the storer already has queued work.
+            await flushGroup();
+            continue;
           case 'ready': {
             const signalReady = msg[1];
             await flushGroup();
@@ -750,13 +764,14 @@ export class Storer implements Service {
             );
           }
 
+          const catchupChanges: WatermarkedChange[] = [];
           for (const entry of entries) {
             if (entry.watermark === sub.watermark) {
               // This should be the first entry.
               // Catchup starts from *after* the watermark.
               watermarkFound = true;
             } else if (watermarkFound) {
-              lastBatchConsumed = sub.catchup(toDownstream(entry));
+              catchupChanges.push(toDownstream(entry));
               count++;
             } else if (mode === 'backup') {
               throw new AutoResetSignal(
@@ -772,6 +787,9 @@ export class Storer implements Service {
               );
               return;
             }
+          }
+          if (catchupChanges.length > 0) {
+            lastBatchConsumed = sub.catchupBatch(catchupChanges);
           }
         }
         if (watermarkFound) {

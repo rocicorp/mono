@@ -1,6 +1,7 @@
 import {describe, expect, test} from 'vitest';
 import type {StringifiedStreamPayload} from '../../types/streams.ts';
 import {ReplicationMessages} from '../replicator/test-utils.ts';
+import {CHANGE_STREAMER_V7_PROTOCOL_VERSION} from './change-streamer-protocol.ts';
 import {createSubscriber} from './test-utils.ts';
 
 const json = JSON.stringify;
@@ -232,6 +233,74 @@ describe('change-streamer/subscriber', () => {
         ],
       ]
     `);
+  });
+
+  test('v7 sends ordered changes as named batches', async () => {
+    const [sub, _, receiver] = createSubscriber(
+      '00',
+      true,
+      CHANGE_STREAMER_V7_PROTOCOL_VERSION,
+    );
+
+    const pipeline = receiver.pipeline;
+    expect(pipeline).toBeDefined();
+    const iterator = pipeline![Symbol.asyncIterator]();
+    const status = await iterator.next();
+    expect(status.done).not.toBe(true);
+    expect(JSON.parse(status.value.value as string)).toEqual([
+      'status',
+      {tag: 'status'},
+    ]);
+    status.value.consumed();
+
+    const send = sub.sendBatch([
+      [
+        '11',
+        'begin',
+        json(['begin', messages.begin(), {commitWatermark: '12'}]),
+      ],
+      ['12', 'commit', json(['commit', messages.commit(), {watermark: '12'}])],
+    ]);
+
+    const next = await iterator.next();
+    expect(next.done).not.toBe(true);
+    const frame = next.value.value;
+    expect(typeof frame).toBe('string');
+    expect(JSON.parse(frame as string)).toMatchInlineSnapshot(`
+      [
+        "change-batch",
+        {
+          "changes": [
+            [
+              "begin",
+              {
+                "tag": "begin",
+              },
+              {
+                "commitWatermark": "12",
+              },
+            ],
+            [
+              "commit",
+              {
+                "tag": "commit",
+              },
+              {
+                "watermark": "12",
+              },
+            ],
+          ],
+          "tag": "change-batch",
+        },
+      ]
+    `);
+
+    expect(sub.acked).toBe('00');
+    next.value.consumed();
+    await send;
+    expect(sub.acked).toBe('12');
+
+    sub.close();
   });
 
   test('acks, pending, processed, stats', async () => {

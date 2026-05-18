@@ -20,6 +20,7 @@ import {Subscription} from '../../types/subscription.ts';
 import {orTimeoutWith} from '../../types/timeout.ts';
 import {
   PROTOCOL_VERSION,
+  type ChangeStreamerDownstream,
   type Downstream,
   type SubscriberContext,
 } from '../change-streamer/change-streamer.ts';
@@ -45,10 +46,10 @@ describe('replicator/incremental-sync', () => {
   let worker: ThreadWriteWorkerClient;
   let syncer: IncrementalSyncer;
   let syncing: Promise<void> | undefined;
-  let downstream: Subscription<Downstream>;
+  let downstream: Subscription<ChangeStreamerDownstream>;
   let eventSink: ZeroEvent[];
   let subscribeFn: MockedFunction<
-    (ctx: SubscriberContext) => Promise<Subscription<Downstream>>
+    (ctx: SubscriberContext) => Promise<Subscription<ChangeStreamerDownstream>>
   >;
 
   beforeEach(async () => {
@@ -380,6 +381,108 @@ describe('replicator/incremental-sync', () => {
         },
       ]
     `);
+  });
+
+  test('replicates v7 change batches', async () => {
+    const issues = new ReplicationMessages({issues: 'issueID'});
+
+    initReplicationState(mainDb, ['zero_data'], '02', {}, false);
+
+    initDB(
+      mainDb,
+      `
+    CREATE TABLE issues(
+      issueID TEXT PRIMARY KEY,
+      description TEXT,
+      _0_version TEXT
+    );
+      `,
+    );
+
+    syncing = syncer.run();
+    const notifications = syncer.subscribe();
+    const versionReady = notifications[Symbol.asyncIterator]();
+    await versionReady.next();
+    await vi.waitFor(() => expect(subscribeFn).toHaveBeenCalled());
+
+    downstream.push([
+      'change-batch',
+      {
+        tag: 'change-batch',
+        changes: [
+          ['begin', issues.begin(), {commitWatermark: '06'}],
+          [
+            'data',
+            issues.insert('issues', {
+              issueID: 'ISS-1',
+              description: 'batched',
+            }),
+          ],
+          ['commit', issues.commit(), {watermark: '06'}],
+        ],
+      },
+    ]);
+    await Promise.race([versionReady.next(), syncing]);
+
+    expectTables(mainDb, {
+      issues: [
+        {
+          issueID: 'ISS-1',
+          description: 'batched',
+          _0_version: '06',
+        },
+      ],
+    });
+  });
+
+  test('replicates v7 schema change batches', async () => {
+    const issues = new ReplicationMessages({issues: ['issueID', 'bool']});
+
+    initReplicationState(mainDb, ['zero_data'], '09', {}, false);
+
+    initDB(
+      mainDb,
+      `
+    CREATE TABLE issues(
+      issueID INTEGER,
+      bool BOOL,
+      big INTEGER,
+      _0_version TEXT,
+      PRIMARY KEY(issueID, bool)
+    );
+      `,
+    );
+
+    syncing = syncer.run();
+    const notifications = syncer.subscribe();
+    const versionReady = notifications[Symbol.asyncIterator]();
+    await versionReady.next();
+    await vi.waitFor(() => expect(subscribeFn).toHaveBeenCalled());
+
+    downstream.push([
+      'change-batch',
+      {
+        tag: 'change-batch',
+        changes: [
+          ['begin', issues.begin(), {commitWatermark: '110'}],
+          [
+            'data',
+            issues.addColumn('issues', 'new_column', {
+              pos: 4,
+              dataType: 'int8',
+            }),
+          ],
+          ['commit', issues.commit(), {watermark: '110'}],
+        ],
+      },
+    ]);
+    await Promise.race([versionReady.next(), syncing]);
+
+    expect(
+      (
+        mainDb.prepare('PRAGMA table_info(issues)').all() as {name: string}[]
+      ).map(row => row.name),
+    ).toContain('new_column');
   });
 
   test('replicates schema changes', async () => {

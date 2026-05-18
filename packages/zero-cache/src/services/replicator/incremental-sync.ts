@@ -9,7 +9,7 @@ import {
   errorTypeToReadableName,
   PROTOCOL_VERSION,
   type ChangeStreamer,
-  type Downstream,
+  type ChangeStreamerDownstream,
 } from '../change-streamer/change-streamer.ts';
 import type * as ErrorType from '../change-streamer/error-type-enum.ts';
 import {RunningState} from '../running-state.ts';
@@ -19,6 +19,7 @@ import type {ReplicationStatusPublisher} from './replication-status.ts';
 import type {ReplicaState, ReplicatorMode} from './replicator.ts';
 import {ReplicationReportRecorder} from './reporter/recorder.ts';
 import type {ReplicationReport} from './reporter/report-schema.ts';
+import {WorkerMessageBatcher} from './worker-message-batcher.ts';
 import type {WriteWorkerClient} from './write-worker-client.ts';
 
 type ErrorType = Enum<typeof ErrorType>;
@@ -90,7 +91,7 @@ export class IncrementalSyncer {
       const {replicaVersion, watermark} =
         await this.#worker.getSubscriptionState();
 
-      let downstream: Source<Downstream> | undefined;
+      let downstream: Source<ChangeStreamerDownstream> | undefined;
       let unregister = () => {};
       let err: unknown | undefined;
 
@@ -113,22 +114,67 @@ export class IncrementalSyncer {
         );
 
         let backfillStatus: DownloadStatus | undefined;
-        const workerBatch: ChangeStreamData[] = [];
-        const flushWorkerBatch = async () => {
-          if (workerBatch.length === 0) {
-            return;
-          }
-          const result = await this.#worker.processMessages(
-            workerBatch.splice(0),
-          );
+        const workerBatch = new WorkerMessageBatcher(
+          this.#worker,
+          MAX_WORKER_BATCH_MESSAGES,
+        );
+        const handleWorkerResult = (result: CommitResult | null) => {
           this.#handleResult(lc, result);
           if (result?.completedBackfill) {
             backfillStatus = undefined;
           }
         };
+        const processChangeStreamData = (
+          message: ChangeStreamData,
+        ): Promise<void> | undefined => {
+          const msg = message[1];
+          if (msg.tag === 'backfill' && msg.status) {
+            const {status} = msg;
+            if (!backfillStatus) {
+              // Start publishing the status every 3 seconds.
+              backfillStatus = status;
+              this.#statusPublisher?.publish(
+                lc,
+                'Replicating',
+                `Backfilling ${msg.relation.name} table`,
+                3000,
+                () =>
+                  backfillStatus
+                    ? {
+                        downloadStatus: [
+                          {
+                            ...backfillStatus,
+                            table: msg.relation.name,
+                            columns: [
+                              ...msg.relation.rowKey.columns,
+                              ...msg.columns,
+                            ],
+                          },
+                        ],
+                      }
+                    : {},
+              );
+            }
+            backfillStatus = status; // Update the current status
+          }
+
+          return workerBatch.push(message)?.then(handleWorkerResult);
+        };
+        const processChangeStreamDataBatch = async (
+          messages: readonly ChangeStreamData[],
+        ) => {
+          for (const message of messages) {
+            const result = processChangeStreamData(message);
+            if (result) {
+              await result;
+            }
+          }
+        };
 
         for await (const message of downstream) {
-          this.#replicationEvents.add(1);
+          this.#replicationEvents.add(
+            message[0] === 'change-batch' ? message[1].changes.length : 1,
+          );
           switch (message[0]) {
             case 'status': {
               const {lagReport} = message[1];
@@ -159,45 +205,19 @@ export class IncrementalSyncer {
               );
               break;
             }
+            case 'change-batch':
+              // #6001: https://github.com/rocicorp/mono/pull/6001
+              // The v7 RM -> VS protocol sends row-heavy traffic as one
+              // ordered batch, so a VS applies the same changes with fewer
+              // parse/ACK/worker-dispatch units. The outer stream message is
+              // not ACKed until this loop finishes applying the batch and
+              // requests the next message.
+              await processChangeStreamDataBatch(message[1].changes);
+              break;
             default: {
-              const msg = message[1];
-              if (msg.tag === 'backfill' && msg.status) {
-                const {status} = msg;
-                if (!backfillStatus) {
-                  // Start publishing the status every 3 seconds.
-                  backfillStatus = status;
-                  this.#statusPublisher?.publish(
-                    lc,
-                    'Replicating',
-                    `Backfilling ${msg.relation.name} table`,
-                    3000,
-                    () =>
-                      backfillStatus
-                        ? {
-                            downloadStatus: [
-                              {
-                                ...backfillStatus,
-                                table: msg.relation.name,
-                                columns: [
-                                  ...msg.relation.rowKey.columns,
-                                  ...msg.columns,
-                                ],
-                              },
-                            ],
-                          }
-                        : {},
-                  );
-                }
-                backfillStatus = status; // Update the current status
-              }
-
-              workerBatch.push(message as ChangeStreamData);
-              if (
-                message[0] === 'commit' ||
-                message[0] === 'rollback' ||
-                workerBatch.length >= MAX_WORKER_BATCH_MESSAGES
-              ) {
-                await flushWorkerBatch();
+              const result = processChangeStreamData(message);
+              if (result) {
+                await result;
               }
               break;
             }

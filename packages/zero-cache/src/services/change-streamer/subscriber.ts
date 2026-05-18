@@ -5,6 +5,10 @@ import {must} from '../../../../shared/src/must.ts';
 import {max} from '../../types/lexi-version.ts';
 import type {StringifiedStreamPayload} from '../../types/streams.ts';
 import type {Subscription} from '../../types/subscription.ts';
+import {
+  CHANGE_STREAMER_V7_PROTOCOL_VERSION,
+  stringifyChangeBatch,
+} from './change-streamer-protocol.ts';
 import type {ChangeTag, WatermarkedChange} from './change-streamer-service.ts';
 import {type Downstream, type Status} from './change-streamer.ts';
 import * as ErrorType from './error-type-enum.ts';
@@ -99,6 +103,12 @@ export class Subscriber {
     await this.#sendChanges([change]);
   }
 
+  /** catchupBatch() is called on ChangeEntries loaded from the store. */
+  async catchupBatch(changes: readonly WatermarkedChange[]) {
+    this.#initialize();
+    await this.#sendChanges(changes);
+  }
+
   /**
    * Marks the Subscribe as "caught up" and flushes any backlog of
    * entries that were received during the catchup.
@@ -139,9 +149,13 @@ export class Subscriber {
     if (json.length === 0) {
       return;
     }
-    const result = await this.#sendStringifiedDownstream(
-      json.length === 1 ? json[0] : json,
-    );
+    const payload =
+      this.#protocolVersion >= CHANGE_STREAMER_V7_PROTOCOL_VERSION
+        ? stringifyChangeBatch(json)
+        : json.length === 1
+          ? json[0]
+          : json;
+    const result = await this.#sendStringifiedDownstream(payload, json.length);
     if (commitWatermark !== undefined && result === 'consumed') {
       this.#acked = max(this.#acked, commitWatermark);
     }
@@ -151,8 +165,11 @@ export class Subscriber {
     return this.#sendStringifiedDownstream(BigIntJSON.stringify(downstream));
   }
 
-  async #sendStringifiedDownstream(payload: StringifiedStreamPayload) {
-    const count = typeof payload === 'string' ? 1 : payload.length;
+  async #sendStringifiedDownstream(
+    payload: StringifiedStreamPayload,
+    messageCount = typeof payload === 'string' ? 1 : payload.length,
+  ) {
+    const count = messageCount;
     this.#pending += count;
     const {result} = this.#downstream.push(payload);
     try {

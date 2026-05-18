@@ -1,25 +1,18 @@
 /* oxlint-disable no-console */
-import {once} from 'node:events';
 import {rmSync} from 'node:fs';
 import {performance} from 'node:perf_hooks';
 import {PostgreSqlContainer} from '@testcontainers/postgresql';
 import postgres from 'postgres';
-import WebSocket, {WebSocketServer} from 'ws';
-import {assert} from '../../../shared/src/asserts.ts';
-import {BigIntJSON} from '../../../shared/src/bigint-json.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {Database} from '../../../zqlite/src/db.ts';
 import {StatementRunner} from '../../src/db/statements.ts';
 import type {ChangeStreamData} from '../../src/services/change-source/protocol/current/downstream.ts';
+import {CHANGE_STREAMER_V6_PROTOCOL_VERSION} from '../../src/services/change-streamer/change-streamer-protocol.ts';
 import {
   type ChangeTag,
   type WatermarkedChange,
 } from '../../src/services/change-streamer/change-streamer-service.ts';
-import {
-  downstreamSchema,
-  type Downstream,
-  PROTOCOL_VERSION,
-} from '../../src/services/change-streamer/change-streamer.ts';
+import {PROTOCOL_VERSION} from '../../src/services/change-streamer/change-streamer.ts';
 import {Forwarder} from '../../src/services/change-streamer/forwarder.ts';
 import {
   ensureReplicationConfig,
@@ -29,14 +22,11 @@ import {Storer} from '../../src/services/change-streamer/storer.ts';
 import {Subscriber} from '../../src/services/change-streamer/subscriber.ts';
 import {ChangeProcessor} from '../../src/services/replicator/change-processor.ts';
 import {initReplicationState} from '../../src/services/replicator/schema/replication-state.ts';
+import {WorkerMessageBatcher} from '../../src/services/replicator/worker-message-batcher.ts';
 import {ThreadWriteWorkerClient} from '../../src/services/replicator/write-worker-client.ts';
 import {postgresTypeConfig, type PostgresDB} from '../../src/types/pg.ts';
 import {cdcSchema, type ShardID} from '../../src/types/shards.ts';
-import {
-  streamIn,
-  streamOutStringified,
-  type StringifiedStreamPayload,
-} from '../../src/types/streams.ts';
+import type {StringifiedStreamPayload} from '../../src/types/streams.ts';
 import {Subscription} from '../../src/types/subscription.ts';
 import {makeSchemaChanges, makeTransaction, watermarkFor} from './fixtures.ts';
 import {
@@ -50,10 +40,12 @@ import {
   sum,
   writeJsonSummary,
 } from './perf-utils.ts';
+import {createConsumerTransport, parseTransportBatch} from './protocol.ts';
 import {describeScenarios, loadScenarios} from './scenarios.ts';
 import type {
   ConsumerApplyMode,
   ConsumerConfig,
+  ConsumerProtocolMode,
   ConsumerTransportAckMode,
   ConsumerTransportMode,
   LoadConsumer,
@@ -88,6 +80,10 @@ const full = envFlag('ZERO_RM_VS_FULL');
 const durationMs = envInt('ZERO_RM_VS_DURATION_MS', full ? 2_500 : 1_000);
 const flushBytesThreshold = envInt('ZERO_RM_VS_FLUSH_BYTES', 16 * 1024);
 const reconnectLagTx = envInt('ZERO_RM_VS_RECONNECT_LAG_TX', 64);
+const reconnectFinalCatchupTimeoutMs = envInt(
+  'ZERO_RM_VS_FINAL_CATCHUP_TIMEOUT_MS',
+  full ? 15_000 : 5_000,
+);
 const applyMode = applyModeFromEnv();
 const consumerConfig: ConsumerConfig = {
   count: envInt('ZERO_RM_VS_SUBSCRIBERS', full ? 16 : 4),
@@ -97,6 +93,7 @@ const consumerConfig: ConsumerConfig = {
   transportMode: transportModeFromEnv(),
   transportAckMode: transportAckModeFromEnv(),
   transportBatchMessages: envInt('ZERO_RM_VS_WS_BATCH_MESSAGES', 64),
+  protocolMode: protocolModeFromEnv(),
   clientCpuMicros: envInt('ZERO_RM_VS_CLIENT_CPU_US', 0),
   slowAckDelayMs: envInt('ZERO_RM_VS_SLOW_ACK_DELAY_MS', full ? 2 : 1),
   slowEvery: envInt('ZERO_RM_VS_SLOW_EVERY', full ? 4 : 2),
@@ -153,6 +150,27 @@ function transportModeFromEnv(): ConsumerTransportMode {
   }
 }
 
+function protocolModeFromEnv(): ConsumerProtocolMode {
+  const mode = envString('ZERO_RM_VS_PROTOCOL') ?? 'v7';
+  switch (mode) {
+    case 'v6':
+    case 'v7':
+    case 'message-json':
+    case 'batch-json':
+    case 'batch-compact':
+      return mode;
+    default:
+      throw new Error(
+        `Invalid ZERO_RM_VS_PROTOCOL=${mode}; expected ` +
+          'v6, v7, message-json, batch-json, or batch-compact',
+      );
+  }
+}
+
+function protocolVersionForMode(mode: ConsumerProtocolMode): number {
+  return mode === 'v7' ? PROTOCOL_VERSION : CHANGE_STREAMER_V6_PROTOCOL_VERSION;
+}
+
 const scenarios = loadScenarios(full);
 console.log(`scenario bytes: ${describeScenarios(scenarios)}`);
 const container = await new PostgreSqlContainer(
@@ -181,13 +199,14 @@ try {
 
     for (const result of summary.scenarios) {
       console.log(
-        `${result.name}: ${formatRate(result.ingestTxPerSec)} tx/s | ` +
-          `${formatRate(result.ingestRowsPerSec)} rows/s | ` +
+        `${result.name}: ${formatRate(result.writeLoopTxPerSec)} tx/s load | ` +
+          `${formatRate(result.writeLoopRowsPerSec)} rows/s load | ` +
           `${formatRate(result.fanoutMessagesPerSec)} fanout msg/s | ` +
           `p95 ${result.p95TxLatencyMs.toFixed(3)} ms | ` +
           `vs-tx ${result.avgSubscriberTxApplyMs.toFixed(3)} ms | ` +
           `drain ${result.storerDrainMs.toFixed(1)} ms | ` +
-          `max lag ${result.maxAckLagMessages}`,
+          `max lag ${result.maxAckLagMessages}` +
+          formatReconnectSummary(result),
       );
     }
     console.log(JSON.stringify(summary));
@@ -251,7 +270,27 @@ async function runScenario(
   let unflushedBytes = 0;
   let reconnect: LoadConsumer | undefined;
   let reconnectCatchupFrom: string | null = null;
+  let latestGeneratedWatermark: string | null = null;
+  let loadPhaseMs = 0;
+  let reconnectStartedAtTx: number | null = null;
+  let reconnectStartedAtMs: number | null = null;
+  let reconnectStartAbsoluteMs: number | null = null;
+  let reconnectJoinWatermark: string | null = null;
+  let reconnectCaughtUpToJoinMs: number | null = null;
+  let reconnectCaughtUpToJoinDuringLoad = false;
+  let reconnectCaughtUpToFinalMs: number | null = null;
+  let reconnectFinalCatchupWaitMs: number | null = null;
   let summary: ScenarioSummary | undefined;
+  const cpuStart = process.cpuUsage();
+  const memoryStart = process.memoryUsage();
+  let maxHeapUsedBytes = memoryStart.heapUsed;
+  let maxRssBytes = memoryStart.rss;
+  const sampleMemory = () => {
+    const memory = process.memoryUsage();
+    maxHeapUsedBytes = Math.max(maxHeapUsedBytes, memory.heapUsed);
+    maxRssBytes = Math.max(maxRssBytes, memory.rss);
+    return memory;
+  };
   const start = performance.now();
   let nextDue = start;
 
@@ -263,6 +302,7 @@ async function runScenario(
         scenario.rowsPerTx,
         scenario.payload,
       );
+      latestGeneratedWatermark = generated.watermark;
       const txStart = performance.now();
 
       for (const change of generated.changes) {
@@ -276,11 +316,15 @@ async function runScenario(
         ];
 
         unflushedBytes += Buffer.byteLength(json);
-        if (unflushedBytes < flushBytesThreshold) {
-          forwarder.forward(entry);
-        } else {
+        const shouldWaitForFanout =
+          unflushedBytes >= flushBytesThreshold &&
+          (consumerConfig.protocolMode === 'message-json' ||
+            change[0] === 'commit');
+        if (shouldWaitForFanout) {
           await forwarder.forwardWithFlowControl(entry);
           unflushedBytes = 0;
+        } else {
+          forwarder.forward(entry);
         }
         const readyForMore = storer.readyForMore();
         if (readyForMore !== undefined) {
@@ -292,6 +336,9 @@ async function runScenario(
       latencies.push(performance.now() - txStart);
       rows += generated.rows;
       fanoutMessages += generated.changes.length * consumers.length;
+      if (tx % 10 === 0) {
+        sampleMemory();
+      }
 
       if (
         reconnect === undefined &&
@@ -300,6 +347,10 @@ async function runScenario(
       ) {
         const catchupTx = Math.max(2, tx - reconnectLagTx);
         reconnectCatchupFrom = watermarkFor(catchupTx);
+        reconnectStartedAtTx = tx;
+        reconnectStartAbsoluteMs = performance.now();
+        reconnectStartedAtMs = reconnectStartAbsoluteMs - start;
+        reconnectJoinWatermark = generated.watermark;
         reconnect = await makeConsumer(
           `reconnect-${scenario.name}`,
           reconnectCatchupFrom,
@@ -312,22 +363,70 @@ async function runScenario(
         forwarder.add(reconnect.sub);
       }
 
+      if (
+        reconnect !== undefined &&
+        reconnectJoinWatermark !== null &&
+        reconnectStartAbsoluteMs !== null &&
+        reconnectCaughtUpToJoinMs === null &&
+        reconnect.sub.acked >= reconnectJoinWatermark
+      ) {
+        reconnectCaughtUpToJoinMs =
+          performance.now() - reconnectStartAbsoluteMs;
+        reconnectCaughtUpToJoinDuringLoad = true;
+      }
+
       nextDue += 1000 / scenario.targetTxPerSec;
       const waitMs = nextDue - performance.now();
       if (waitMs > 0) {
         await sleep(waitMs);
       }
     }
+    loadPhaseMs = performance.now() - start;
 
     const beforeDrain = performance.now();
     await storer.allProcessed();
     const storerDrainMs = performance.now() - beforeDrain;
+
+    if (reconnect !== undefined && latestGeneratedWatermark !== null) {
+      const finalCatchupStart = performance.now();
+      if (reconnect.sub.acked < latestGeneratedWatermark) {
+        await waitForConsumerWatermark(
+          reconnect,
+          latestGeneratedWatermark,
+          reconnectFinalCatchupTimeoutMs,
+        );
+      }
+      reconnectFinalCatchupWaitMs = performance.now() - finalCatchupStart;
+      if (
+        reconnectStartAbsoluteMs !== null &&
+        reconnect.sub.acked >= latestGeneratedWatermark
+      ) {
+        reconnectCaughtUpToFinalMs =
+          performance.now() - reconnectStartAbsoluteMs;
+      }
+      if (
+        reconnectJoinWatermark !== null &&
+        reconnectStartAbsoluteMs !== null &&
+        reconnectCaughtUpToJoinMs === null &&
+        reconnect.sub.acked >= reconnectJoinWatermark
+      ) {
+        reconnectCaughtUpToJoinMs =
+          performance.now() - reconnectStartAbsoluteMs;
+      }
+    }
+
     const settleMs = envInt('ZERO_RM_VS_SETTLE_MS', 100);
     if (settleMs > 0) {
       await sleep(settleMs);
     }
     const elapsedMs = performance.now() - start;
+    const memoryEnd = sampleMemory();
+    const cpu = process.cpuUsage(cpuStart);
     const stats = consumers.map(consumer => consumer.stats());
+    const websocketMessages = sum(stats.map(s => s.transportMessages));
+    const websocketBytes = sum(stats.map(s => s.transportBytes));
+    const websocketAcks = sum(stats.map(s => s.transportAcks));
+    const websocketAckBytes = sum(stats.map(s => s.transportAckBytes));
     const maxAckLagMessages = Math.max(
       0,
       ...stats.map(s => s.maxAckLagMessages),
@@ -350,6 +449,7 @@ async function runScenario(
     );
     const avgSubscriberClientCpuMs =
       samples === 0 ? 0 : sum(stats.map(s => s.totalClientCpuMs)) / samples;
+    const reconnectStats = reconnect?.stats();
 
     summary = {
       name: scenario.name,
@@ -361,25 +461,63 @@ async function runScenario(
       tx,
       rows,
       storerBytes,
+      loadPhaseMs,
       elapsedMs,
       storerDrainMs,
+      writeLoopTxPerSec: tx / (loadPhaseMs / 1000),
+      writeLoopRowsPerSec: rows / (loadPhaseMs / 1000),
       ingestTxPerSec: tx / (elapsedMs / 1000),
       ingestRowsPerSec: rows / (elapsedMs / 1000),
       fanoutMessages,
       fanoutMessagesPerSec: fanoutMessages / (elapsedMs / 1000),
+      websocketMessages,
+      websocketMessagesPerSec: websocketMessages / (elapsedMs / 1000),
+      websocketBytes,
+      websocketBytesPerSec: websocketBytes / (elapsedMs / 1000),
+      websocketAcks,
+      websocketAckBytes,
+      processCpuUserMs: cpu.user / 1000,
+      processCpuSystemMs: cpu.system / 1000,
+      processCpuTotalMs: (cpu.user + cpu.system) / 1000,
+      processCpuUtilization: (cpu.user + cpu.system) / 1000 / elapsedMs,
+      startHeapUsedBytes: memoryStart.heapUsed,
+      maxHeapUsedBytes,
+      endHeapUsedBytes: memoryEnd.heapUsed,
+      startRssBytes: memoryStart.rss,
+      maxRssBytes,
+      endRssBytes: memoryEnd.rss,
       p50TxLatencyMs: percentile(latencies, 50),
       p95TxLatencyMs: percentile(latencies, 95),
       p99TxLatencyMs: percentile(latencies, 99),
       subscriberCount: consumerConfig.count,
       reconnectCatchup: reconnect !== undefined,
       reconnectCatchupFrom,
-      reconnectMessages: reconnect?.stats().processed ?? 0,
+      reconnectMessages: reconnectStats?.processed ?? 0,
+      reconnectLagTx,
+      reconnectStartedAtTx,
+      reconnectStartedAtMs,
+      reconnectJoinWatermark,
+      reconnectCaughtUpToJoinMs,
+      reconnectCaughtUpToJoinDuringLoad,
+      reconnectFinalWatermark: latestGeneratedWatermark,
+      reconnectCaughtUpToFinalMs,
+      reconnectFinalCatchupWaitMs,
+      reconnectFinalAckedWatermark: reconnectStats?.ackedWatermark ?? null,
+      reconnectEndLagTx:
+        reconnectStats === undefined || latestGeneratedWatermark === null
+          ? null
+          : watermarkLagTx(
+              reconnectStats.ackedWatermark,
+              latestGeneratedWatermark,
+            ),
+      reconnectMaxAckLagMessages: reconnectStats?.maxAckLagMessages ?? null,
       subscriberAckDelayMs: consumerConfig.ackDelayMs,
       subscriberApplyMode: consumerConfig.applyMode,
       subscriberApplyMessages: consumerConfig.applyMessages,
       subscriberTransportMode: consumerConfig.transportMode,
       subscriberTransportAckMode: consumerConfig.transportAckMode,
       subscriberTransportBatchMessages: consumerConfig.transportBatchMessages,
+      subscriberProtocolMode: consumerConfig.protocolMode,
       subscriberClientCpuMicros: consumerConfig.clientCpuMicros,
       avgSubscriberParseMs,
       avgSubscriberApplyMs,
@@ -512,15 +650,13 @@ async function makeConsumer(
     }
   }
 
-  const workerBatch: ChangeStreamData[] = [];
-  const flushWorkerBatch = async () => {
-    if (!worker || workerBatch.length === 0) {
-      return;
-    }
-    await worker.processMessages(workerBatch.splice(0));
-  };
+  const workerBatcher = worker
+    ? new WorkerMessageBatcher(worker, workerBatchMessages)
+    : undefined;
 
-  const applyChange = async (change: ChangeStreamData | undefined) => {
+  const applyChange = (
+    change: ChangeStreamData | undefined,
+  ): Promise<unknown> | undefined => {
     if (!change) {
       return;
     }
@@ -531,24 +667,15 @@ async function makeConsumer(
         processor?.processMessage(lc, change);
         return;
       case 'worker-message':
-        await worker?.processMessage(change);
-        return;
+        return worker?.processMessage(change);
       case 'worker-batch':
-        workerBatch.push(change);
-        if (
-          change[0] === 'commit' ||
-          change[0] === 'rollback' ||
-          workerBatch.length >= workerBatchMessages
-        ) {
-          await flushWorkerBatch();
-        }
-        return;
+        return workerBatcher?.push(change);
     }
   };
 
   const downstream = Subscription.create<StringifiedStreamPayload>();
   const sub = new Subscriber(
-    PROTOCOL_VERSION,
+    protocolVersionForMode(config.protocolMode),
     id,
     watermark,
     downstream,
@@ -560,53 +687,59 @@ async function makeConsumer(
     sub.setCaughtUp();
   }
   const transport = await createConsumerTransport(
+    lc,
     downstream,
     config.transportMode,
     config.transportAckMode,
     config.transportBatchMessages,
+    config.protocolMode,
   );
 
   const done = (async () => {
     try {
-      for await (const message of transport.messages) {
+      for await (const batch of transport.messages) {
         if (!active) {
           break;
         }
         const parseStart = performance.now();
-        const change =
-          typeof message === 'string'
-            ? parseChangeStreamData(message)
-            : downstreamToChangeStreamData(message);
+        const changes = parseTransportBatch(batch);
         totalParseMs += performance.now() - parseStart;
-        if (change?.[0] === 'begin') {
-          txApplyStart = performance.now();
-        }
-        const applyStart = performance.now();
-        await applyChange(change);
-        totalApplyMs += performance.now() - applyStart;
-        if (change?.[0] === 'commit' || change?.[0] === 'rollback') {
-          if (txApplyStart !== undefined) {
-            const elapsed = performance.now() - txApplyStart;
-            totalTxApplyMs += elapsed;
-            maxTxApplyMs = Math.max(maxTxApplyMs, elapsed);
-            txApplySamples++;
-            txApplyStart = undefined;
+
+        for (const change of changes) {
+          if (change?.[0] === 'begin') {
+            txApplyStart = performance.now();
           }
+          const applyStart = performance.now();
+          const applyResult = applyChange(change);
+          if (applyResult) {
+            await applyResult;
+          }
+          totalApplyMs += performance.now() - applyStart;
+          if (change?.[0] === 'commit' || change?.[0] === 'rollback') {
+            if (txApplyStart !== undefined) {
+              const elapsed = performance.now() - txApplyStart;
+              totalTxApplyMs += elapsed;
+              maxTxApplyMs = Math.max(maxTxApplyMs, elapsed);
+              txApplySamples++;
+              txApplyStart = undefined;
+            }
+          }
+          const cpuStart = performance.now();
+          burnCpu(config.clientCpuMicros);
+          totalClientCpuMs += performance.now() - cpuStart;
+          if (ackDelayMs > 0) {
+            await sleep(ackDelayMs);
+          }
+          processed++;
+          const lag = sub.numPending;
+          maxAckLagMessages = Math.max(maxAckLagMessages, lag);
+          totalAckLagMessages += lag;
+          samples++;
         }
-        const cpuStart = performance.now();
-        burnCpu(config.clientCpuMicros);
-        totalClientCpuMs += performance.now() - cpuStart;
-        if (ackDelayMs > 0) {
-          await sleep(ackDelayMs);
-        }
-        processed++;
-        const lag = sub.numPending;
-        maxAckLagMessages = Math.max(maxAckLagMessages, lag);
-        totalAckLagMessages += lag;
-        samples++;
       }
     } finally {
-      if (workerBatch.length > 0) {
+      if (workerBatcher !== undefined && workerBatcher.size > 0) {
+        workerBatcher.clear();
         worker?.abort();
       }
       await transport.close();
@@ -627,6 +760,13 @@ async function makeConsumer(
     },
     stats: () => ({
       processed,
+      ackedWatermark: sub.acked,
+      watermark: sub.watermark,
+      pending: sub.numPending,
+      transportMessages: transport.stats().messages,
+      transportBytes: transport.stats().bytes,
+      transportAcks: transport.stats().acks,
+      transportAckBytes: transport.stats().ackBytes,
       maxAckLagMessages,
       totalAckLagMessages,
       totalParseMs,
@@ -640,87 +780,6 @@ async function makeConsumer(
   };
 }
 
-async function createConsumerTransport(
-  downstream: Subscription<StringifiedStreamPayload>,
-  mode: ConsumerTransportMode,
-  ackMode: ConsumerTransportAckMode,
-  batchMessages: number,
-): Promise<{
-  messages: AsyncIterable<string | Downstream>;
-  close: () => Promise<void>;
-}> {
-  switch (mode) {
-    case 'in-process':
-      return {
-        messages: flattenStringifiedMessages(downstream),
-        close: () => Promise.resolve(),
-      };
-    case 'websocket': {
-      const server = new WebSocketServer({host: '127.0.0.1', port: 0});
-      server.on('connection', ws => {
-        void streamOutStringified(
-          lc,
-          downstream,
-          ws,
-          batchMessages > 1 ? {batch: {maxMessages: batchMessages}} : undefined,
-        );
-      });
-      await once(server, 'listening');
-      const address = server.address();
-      assert(
-        typeof address === 'object' && address !== null,
-        'expected websocket server address',
-      );
-      const ws = new WebSocket(`ws://127.0.0.1:${address.port}`);
-      const messages = await streamIn(lc, ws, downstreamSchema, {
-        ack: ackMode,
-      });
-      return {
-        messages,
-        close: async () => {
-          messages.cancel();
-          ws.close();
-          await new Promise<void>((resolve, reject) => {
-            server.close(err => (err ? reject(err) : resolve()));
-          });
-        },
-      };
-    }
-  }
-}
-
-async function* flattenStringifiedMessages(
-  source: AsyncIterable<StringifiedStreamPayload>,
-): AsyncIterable<string> {
-  for await (const payload of source) {
-    if (typeof payload === 'string') {
-      yield payload;
-    } else {
-      yield* payload;
-    }
-  }
-}
-
-function parseChangeStreamData(message: string): ChangeStreamData | undefined {
-  return downstreamToChangeStreamData(BigIntJSON.parse(message) as Downstream);
-}
-
-function downstreamToChangeStreamData(
-  parsed: Downstream,
-): ChangeStreamData | undefined {
-  switch (parsed[0]) {
-    case 'status':
-      return undefined;
-    case 'error':
-      throw new Error(`subscription error: ${JSON.stringify(parsed[1])}`);
-    case 'begin':
-    case 'data':
-    case 'commit':
-    case 'rollback':
-      return parsed;
-  }
-}
-
 function burnCpu(micros: number) {
   if (micros <= 0) {
     return;
@@ -732,6 +791,39 @@ function burnCpu(micros: number) {
     value = (value + Math.imul(value + 1, 31)) % 1_000_003;
   }
   cpuSink = value;
+}
+
+async function waitForConsumerWatermark(
+  consumer: LoadConsumer,
+  targetWatermark: string,
+  timeoutMs: number,
+) {
+  const deadline = performance.now() + timeoutMs;
+  while (consumer.sub.acked < targetWatermark && performance.now() < deadline) {
+    await sleep(5);
+  }
+}
+
+function watermarkLagTx(ackedWatermark: string, finalWatermark: string) {
+  return Math.max(
+    0,
+    Number.parseInt(finalWatermark, 36) - Number.parseInt(ackedWatermark, 36),
+  );
+}
+
+function formatReconnectSummary(result: ScenarioSummary) {
+  if (!result.reconnectCatchup) {
+    return '';
+  }
+  return (
+    ` | catchup join ${formatOptionalMs(result.reconnectCaughtUpToJoinMs)}` +
+    ` final ${formatOptionalMs(result.reconnectCaughtUpToFinalMs)}` +
+    ` end lag ${result.reconnectEndLagTx ?? 'n/a'} tx`
+  );
+}
+
+function formatOptionalMs(ms: number | null) {
+  return ms === null ? 'n/a' : `${ms.toFixed(1)} ms`;
 }
 
 function cleanupSQLite(path: string) {

@@ -18,7 +18,15 @@ import {
   ChangeStreamerHttpClient,
   ChangeStreamerHttpServer,
 } from './change-streamer-http.ts';
-import type {Downstream, SubscriberContext} from './change-streamer.ts';
+import {
+  CHANGE_STREAMER_V6_PROTOCOL_VERSION,
+  stringifyChangeBatch,
+} from './change-streamer-protocol.ts';
+import type {
+  ChangeStreamerDownstream,
+  Downstream,
+  SubscriberContext,
+} from './change-streamer.ts';
 import {PROTOCOL_VERSION} from './change-streamer.ts';
 import {setupCDCTables} from './schema/tables.ts';
 import {type SnapshotMessage} from './snapshot.ts';
@@ -65,8 +73,7 @@ describe('change-streamer/http', () => {
     const {promise, resolve: cleanup} = resolver<Downstream[]>();
     connectionClosed = promise;
     downstream = Subscription.create({
-      cleanup: msgs =>
-        cleanup(msgs.map(m => BigIntJSON.parse(m) as Downstream)),
+      cleanup: msgs => cleanup(msgs.flatMap(parseDownstreamPayload)),
     });
     snapshotStream = Subscription.create();
     subscribeFn = vi.fn();
@@ -145,6 +152,11 @@ describe('change-streamer/http', () => {
     return drained;
   }
 
+  function parseDownstreamPayload(msg: string): Downstream[] {
+    const parsed = BigIntJSON.parse(msg) as ChangeStreamerDownstream;
+    return parsed[0] === 'change-batch' ? parsed[1].changes : [parsed];
+  }
+
   test('health checks and keepalives', async () => {
     const [parent] = inProcChannel();
     const service = resolver();
@@ -202,13 +214,13 @@ describe('change-streamer/http', () => {
       ],
       [
         // Change the error message as necessary
-        `Cannot service client at protocol v7. Supported protocols: [v1 ... v6]`,
+        `Cannot service client at protocol v8. Supported protocols: [v1 ... v7]`,
         `/replication/v${PROTOCOL_VERSION + 1}/changes` +
           `?id=foo&replicaVersion=bar&watermark=123&initial=true`,
       ],
       [
         // Change the error message as necessary
-        `Cannot service client at protocol v7. Supported protocols: [v1 ... v6]`,
+        `Cannot service client at protocol v8. Supported protocols: [v1 ... v7]`,
         `/replication/v${PROTOCOL_VERSION + 1}/snapshot` +
           `?id=foo&replicaVersion=bar&watermark=123&initial=true`,
       ],
@@ -270,7 +282,7 @@ describe('change-streamer/http', () => {
     'basic changes streamed over websocket: %s',
     async (_name, autoDiscover, addr) => {
       const ctx = {
-        protocolVersion: PROTOCOL_VERSION,
+        protocolVersion: CHANGE_STREAMER_V6_PROTOCOL_VERSION,
         taskID: 'foo-task',
         id: 'foo',
         mode: 'serving',
@@ -316,10 +328,125 @@ describe('change-streamer/http', () => {
     },
   );
 
+  test.each([
+    ['hostname', false, () => serverAddress],
+    ['websocket handoff', false, () => dispatcherAddress],
+    ['hostname auto-discover', true, () => serverAddress],
+    ['websocket handoff auto-discover', true, () => dispatcherAddress],
+  ])(
+    'v7 change-batches streamed over websocket: %s',
+    async (_name, autoDiscover, addr) => {
+      const ctx = {
+        protocolVersion: PROTOCOL_VERSION,
+        taskID: 'foo-task',
+        id: 'foo',
+        mode: 'serving',
+        replicaVersion: 'abc',
+        watermark: '123',
+        initial: true,
+      } as const;
+      await setChangeStreamerAddress(addr());
+      const client = autoDiscover
+        ? changeStreamerClient
+        : new ChangeStreamerHttpClient(
+            lc,
+            SHARD_ID,
+            getConnectionURI(changeDB),
+            `http://${addr()}`,
+          );
+      const sub = await client.subscribe(ctx);
+
+      const begin = [
+        'begin',
+        {tag: 'begin'},
+        {commitWatermark: '456'},
+      ] satisfies Downstream;
+      const commit = [
+        'commit',
+        {tag: 'commit'},
+        {watermark: '456'},
+      ] satisfies Downstream;
+      downstream.push(
+        stringifyChangeBatch([
+          BigIntJSON.stringify(begin),
+          BigIntJSON.stringify(commit),
+        ]),
+      );
+
+      expect(await drain(1, sub)).toEqual([
+        ['change-batch', {tag: 'change-batch', changes: [begin, commit]}],
+      ]);
+
+      expect(await connectionClosed).toEqual([]);
+      expect(subscribeFn).toHaveBeenCalledOnce();
+      expect(subscribeFn.mock.calls[0][0]).toEqual(ctx);
+    },
+  );
+
   test('bigint fields', async () => {
     await setChangeStreamerAddress(serverAddress);
     const sub = await changeStreamerClient.subscribe({
       protocolVersion: PROTOCOL_VERSION,
+      taskID: 'foo-task',
+      id: 'foo',
+      mode: 'serving',
+      replicaVersion: 'abc',
+      watermark: '123',
+      initial: true,
+    });
+
+    const messages = new ReplicationMessages({issues: 'id'});
+    const insert = messages.insert('issues', {
+      id: 'foo',
+      big1: BigInt(Number.MAX_SAFE_INTEGER) + 1n,
+      big2: BigInt(Number.MAX_SAFE_INTEGER) + 2n,
+      big3: BigInt(Number.MAX_SAFE_INTEGER) + 3n,
+    });
+
+    downstream.push(
+      stringifyChangeBatch([BigIntJSON.stringify(['data', insert])]),
+    );
+    expect(await drain(1, sub)).toMatchInlineSnapshot(`
+      [
+        [
+          "change-batch",
+          {
+            "changes": [
+              [
+                "data",
+                {
+                  "new": {
+                    "big1": 9007199254740992n,
+                    "big2": 9007199254740993n,
+                    "big3": 9007199254740994n,
+                    "id": "foo",
+                  },
+                  "relation": {
+                    "name": "issues",
+                    "rowKey": {
+                      "columns": [
+                        "id",
+                      ],
+                      "type": "default",
+                    },
+                    "schema": "public",
+                    "tag": "relation",
+                  },
+                  "tag": "insert",
+                },
+              ],
+            ],
+            "tag": "change-batch",
+          },
+        ],
+      ]
+    `);
+  });
+
+  test('v6 bigint fields remain backwards compatible', async () => {
+    await setChangeStreamerAddress(serverAddress);
+    const sub = await changeStreamerClient.subscribe({
+      protocolVersion: CHANGE_STREAMER_V6_PROTOCOL_VERSION,
       taskID: 'foo-task',
       id: 'foo',
       mode: 'serving',

@@ -5,6 +5,11 @@ import {changeStreamDataSchema} from '../change-source/protocol/current/downstre
 import type {ReplicatorMode} from '../replicator/replicator.ts';
 import {changeSourceTimingsSchema} from '../replicator/reporter/report-schema.ts';
 import type {Service} from '../service.ts';
+import {
+  CHANGE_STREAMER_V7_PROTOCOL_VERSION,
+  changeBatchMessageSchema,
+  type ChangeBatchMessage,
+} from './change-streamer-protocol.ts';
 import * as ErrorType from './error-type-enum.ts';
 
 type ErrorType = Enum<typeof ErrorType>;
@@ -49,7 +54,7 @@ export interface ChangeStreamer {
    * which indicates the watermark at which the subscriber is up to
    * date.
    */
-  subscribe(ctx: SubscriberContext): Promise<Source<Downstream>>;
+  subscribe(ctx: SubscriberContext): Promise<Source<ChangeStreamerDownstream>>;
 }
 
 // v1: v0.18
@@ -75,8 +80,12 @@ export interface ChangeStreamer {
 //   - Adds support for `backfill` messages
 // v6: v1.0.1  (backwards compatible, no version change)
 //   - Adds lag reporting to status messages
+// v7:
+//   - Sends row-heavy replication traffic as named `change-batch` stream
+//     messages. v6 remains supported as the compatibility path for RM-first
+//     rollout with old view-syncers.
 
-export const PROTOCOL_VERSION = 6;
+export const PROTOCOL_VERSION = CHANGE_STREAMER_V7_PROTOCOL_VERSION;
 
 export type SubscriberContext = {
   /**
@@ -166,20 +175,13 @@ export const downstreamSchema = v.union(
   errorSchema,
 );
 
-export type Error = v.Infer<typeof errorSchema>;
+export const downstreamV7Schema = v.union(
+  statusMessageSchema,
+  changeBatchMessageSchema,
+  errorSchema,
+);
 
-export function errorTypeToReadableName(val: ErrorType) {
-  switch (val) {
-    case ErrorType.WrongReplicaVersion:
-      return 'WrongReplicaVersion';
-    case ErrorType.WatermarkTooOld:
-      return 'WatermarkTooOld';
-    case ErrorType.Unknown:
-      return 'Unknown';
-    default:
-      return 'Unknown';
-  }
-}
+export type Error = v.Infer<typeof errorSchema>;
 
 /**
  * A stream of transactions, each starting with a {@link Begin} message,
@@ -193,6 +195,29 @@ export function errorTypeToReadableName(val: ErrorType) {
  * manual intervention (e.g. configuration / operational error).
  */
 export type Downstream = v.Infer<typeof downstreamSchema>;
+
+export type ChangeStreamerDownstream = Downstream | ChangeBatchMessage;
+
+export function downstreamSchemaForProtocolVersion(
+  protocolVersion: number,
+): v.Type<ChangeStreamerDownstream> {
+  return protocolVersion >= CHANGE_STREAMER_V7_PROTOCOL_VERSION
+    ? (downstreamV7Schema as v.Type<ChangeStreamerDownstream>)
+    : (downstreamSchema as v.Type<ChangeStreamerDownstream>);
+}
+
+export function errorTypeToReadableName(val: ErrorType) {
+  switch (val) {
+    case ErrorType.WrongReplicaVersion:
+      return 'WrongReplicaVersion';
+    case ErrorType.WatermarkTooOld:
+      return 'WatermarkTooOld';
+    case ErrorType.Unknown:
+      return 'Unknown';
+    default:
+      return 'Unknown';
+  }
+}
 
 export interface ChangeStreamerService
   extends Omit<ChangeStreamer, 'subscribe'>, Service {

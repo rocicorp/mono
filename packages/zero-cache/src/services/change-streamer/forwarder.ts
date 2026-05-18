@@ -24,6 +24,7 @@ export class Forwarder {
 
   #currentBroadcast: Broadcast | undefined;
   #progressMonitor: NodeJS.Timeout | undefined;
+  #pendingFlush: NodeJS.Timeout | undefined;
 
   constructor(
     lc: LogContext,
@@ -57,6 +58,7 @@ export class Forwarder {
 
   stopProgressMonitor() {
     clearInterval(this.#progressMonitor);
+    this.#clearPendingFlush();
   }
 
   /**
@@ -96,6 +98,8 @@ export class Forwarder {
       entry[1] === 'rollback'
     ) {
       this.#flushPendingWithoutTracking();
+    } else {
+      this.#schedulePendingFlush();
     }
     this.#updateActiveSubscribers(entry[1]);
   }
@@ -116,6 +120,7 @@ export class Forwarder {
     const flowControlConsensusPaddingMs =
       flowControlConsensusPaddingSeconds * 1000;
     this.#pending.push(entry);
+    this.#clearPendingFlush();
     const broadcast = new Broadcast(
       this.#active.values(),
       this.#drainPending(),
@@ -138,9 +143,26 @@ export class Forwarder {
   }
 
   #flushPendingWithoutTracking() {
+    this.#clearPendingFlush();
     const pending = this.#drainPending();
     if (pending.length > 0) {
       Broadcast.withoutTracking(this.#active.values(), pending);
+    }
+  }
+
+  #schedulePendingFlush() {
+    if (this.#pendingFlush === undefined) {
+      this.#pendingFlush = setTimeout(
+        () => this.#flushPendingWithoutTracking(),
+        0,
+      );
+    }
+  }
+
+  #clearPendingFlush() {
+    if (this.#pendingFlush !== undefined) {
+      clearTimeout(this.#pendingFlush);
+      this.#pendingFlush = undefined;
     }
   }
 

@@ -20,11 +20,11 @@ import {closeWithError, PROTOCOL_ERROR} from '../../types/ws.ts';
 import {HttpService} from '../http-service.ts';
 import type {BackupMonitor} from './backup-monitor.ts';
 import {
-  downstreamSchema,
+  downstreamSchemaForProtocolVersion,
   PROTOCOL_VERSION,
   type ChangeStreamer,
+  type ChangeStreamerDownstream,
   type ChangeStreamerService,
-  type Downstream,
   type SubscriberContext,
 } from './change-streamer.ts';
 import {discoverChangeStreamerAddress} from './schema/tables.ts';
@@ -38,7 +38,8 @@ const PATH_REGEX = /\/replication\/v(?<version>\d+)\/(changes|snapshot)$/;
 const STREAM_BATCH_MESSAGES = 64;
 
 const SNAPSHOT_PATH = `/replication/v${PROTOCOL_VERSION}/snapshot`;
-const CHANGES_PATH = `/replication/v${PROTOCOL_VERSION}/changes`;
+const changesPath = (protocolVersion: number) =>
+  `/replication/v${protocolVersion}/changes`;
 
 type Options = {
   port: number;
@@ -244,14 +245,22 @@ export class ChangeStreamerHttpClient implements ChangeStreamer {
     return streamIn(this.#lc, ws, snapshotMessageSchema);
   }
 
-  async subscribe(ctx: SubscriberContext): Promise<Source<Downstream>> {
-    const uri = await this.#resolveChangeStreamer(CHANGES_PATH);
+  async subscribe(
+    ctx: SubscriberContext,
+  ): Promise<Source<ChangeStreamerDownstream>> {
+    const uri = await this.#resolveChangeStreamer(
+      changesPath(ctx.protocolVersion),
+    );
 
     const params = getParams(ctx);
     params.set('streamBatch', '1');
     const ws = new WebSocket(uri + `?${params.toString()}`);
 
-    return streamIn(this.#lc, ws, downstreamSchema);
+    return streamIn(
+      this.#lc,
+      ws,
+      downstreamSchemaForProtocolVersion(ctx.protocolVersion),
+    );
   }
 }
 
@@ -294,11 +303,11 @@ function checkProtocolVersion(pathname: string): number {
 
 // This is called from the client-side (i.e. the replicator).
 function getParams(ctx: SubscriberContext): URLSearchParams {
-  // The protocolVersion is hard-coded into the CHANGES_PATH.
   const {protocolVersion, ...stringParams} = ctx;
   assert(
-    protocolVersion === PROTOCOL_VERSION,
-    `replicator should be setting protocolVersion to ${PROTOCOL_VERSION}`,
+    protocolVersion >= MIN_SUPPORTED_PROTOCOL_VERSION &&
+      protocolVersion <= PROTOCOL_VERSION,
+    `replicator should be setting a supported change-streamer protocolVersion`,
   );
   return new URLSearchParams({
     ...stringParams,
