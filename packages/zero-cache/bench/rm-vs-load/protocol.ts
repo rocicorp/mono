@@ -71,74 +71,131 @@ export async function createConsumerTransport(
         stats: () => stats,
       };
     case 'websocket': {
-      const server = new WebSocketServer({host: '127.0.0.1', port: 0});
-      server.on('connection', ws => {
-        trackWebSocketSend(ws, data => {
-          stats.messages++;
-          stats.bytes += byteLength(data);
-        });
-        if (usesProductionStream(protocolMode)) {
-          void streamOutStringified(
-            lc,
-            downstream,
-            ws,
-            batchMessages > 1
-              ? {batch: {maxMessages: batchMessages}}
-              : undefined,
-          );
-        } else {
-          void streamOutBatchFrames(
-            downstream,
-            ws,
-            batchMessages,
-            protocolMode,
-          );
-        }
-      });
-      await once(server, 'listening');
-      const address = server.address();
-      assert(
-        address !== null && typeof address !== 'string',
-        'expected websocket server address',
+      const server = await createConsumerWebSocketServer(
+        lc,
+        downstream,
+        batchMessages,
+        protocolMode,
       );
-      const ws = new WebSocket(`ws://127.0.0.1:${address.port}`);
-      trackWebSocketSend(ws, data => {
-        stats.acks++;
-        stats.ackBytes += byteLength(data);
-      });
-      let cancelMessages: () => void;
-      let messages: AsyncIterable<TransportBatch>;
-      if (usesProductionStream(protocolMode)) {
-        const stream = await streamIn(
-          lc,
-          ws,
-          protocolMode === 'v7'
-            ? downstreamSchemaForProtocolVersion(
-                CHANGE_STREAMER_V7_PROTOCOL_VERSION,
-              )
-            : downstreamSchema,
-          {ack: ackMode},
-        );
-        cancelMessages = () => stream.cancel();
-        messages = batchSingletonMessages(stream);
-      } else {
-        const stream = await streamInBatchFrames(ws, protocolMode);
-        cancelMessages = () => stream.cancel();
-        messages = stream;
-      }
+      const client = await connectConsumerWebSocket(
+        lc,
+        server.url,
+        ackMode,
+        protocolMode,
+      );
       return {
-        messages,
+        messages: client.messages,
         close: async () => {
-          cancelMessages();
-          ws.close();
-          await new Promise<void>((resolve, reject) => {
-            server.close(err => (err ? reject(err) : resolve()));
-          });
+          await client.close();
+          await server.close();
         },
-        stats: () => stats,
+        stats: () => mergeTransportStats(server.stats(), client.stats()),
       };
     }
   }
+}
+
+export async function createConsumerWebSocketServer(
+  lc: LogContext,
+  downstream: Subscription<StringifiedStreamPayload>,
+  batchMessages: number,
+  protocolMode: ConsumerProtocolMode,
+): Promise<{
+  url: string;
+  close: () => Promise<void>;
+  stats: () => ConsumerTransportStats;
+}> {
+  const stats = {messages: 0, bytes: 0, acks: 0, ackBytes: 0};
+  const server = new WebSocketServer({host: '127.0.0.1', port: 0});
+  server.on('connection', ws => {
+    trackWebSocketSend(ws, data => {
+      stats.messages++;
+      stats.bytes += byteLength(data);
+    });
+    if (usesProductionStream(protocolMode)) {
+      void streamOutStringified(
+        lc,
+        downstream,
+        ws,
+        batchMessages > 1 ? {batch: {maxMessages: batchMessages}} : undefined,
+      );
+    } else {
+      void streamOutBatchFrames(downstream, ws, batchMessages, protocolMode);
+    }
+  });
+  await once(server, 'listening');
+  const address = server.address();
+  assert(
+    address !== null && typeof address !== 'string',
+    'expected websocket server address',
+  );
+  return {
+    url: `ws://127.0.0.1:${address.port}`,
+    close: () =>
+      new Promise<void>((resolve, reject) => {
+        server.close(err => (err ? reject(err) : resolve()));
+      }),
+    stats: () => stats,
+  };
+}
+
+export async function connectConsumerWebSocket(
+  lc: LogContext,
+  url: string,
+  ackMode: ConsumerTransportAckMode,
+  protocolMode: ConsumerProtocolMode,
+): Promise<{
+  messages: AsyncIterable<TransportBatch>;
+  close: () => Promise<void>;
+  stats: () => ConsumerTransportStats;
+}> {
+  const stats = {messages: 0, bytes: 0, acks: 0, ackBytes: 0};
+  const ws = new WebSocket(url);
+  trackWebSocketSend(ws, data => {
+    stats.acks++;
+    stats.ackBytes += byteLength(data);
+  });
+  let cancelMessages: () => void;
+  let messages: AsyncIterable<TransportBatch>;
+  if (usesProductionStream(protocolMode)) {
+    const stream = await streamIn(
+      lc,
+      ws,
+      protocolMode === 'v7'
+        ? downstreamSchemaForProtocolVersion(
+            CHANGE_STREAMER_V7_PROTOCOL_VERSION,
+          )
+        : downstreamSchema,
+      {ack: ackMode},
+    );
+    cancelMessages = () => stream.cancel();
+    messages = batchSingletonMessages(stream);
+  } else {
+    const stream = await streamInBatchFrames(ws, protocolMode);
+    cancelMessages = () => stream.cancel();
+    messages = stream;
+  }
+  return {
+    messages,
+    close: () => {
+      cancelMessages();
+      ws.close();
+      return Promise.resolve();
+    },
+    stats: () => stats,
+  };
+}
+
+export function mergeTransportStats(
+  a: ConsumerTransportStats,
+  b: ConsumerTransportStats,
+): ConsumerTransportStats {
+  return {
+    messages: a.messages + b.messages,
+    bytes: a.bytes + b.bytes,
+    acks: a.acks + b.acks,
+    ackBytes: a.ackBytes + b.ackBytes,
+  };
 }
 
 function trackWebSocketSend(ws: WebSocket, onSend: (data: unknown) => void) {

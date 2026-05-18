@@ -11,6 +11,7 @@ export type Scenario = {
 export type ConsumerConfig = {
   readonly count: number;
   readonly ackDelayMs: number;
+  readonly runtime: ConsumerRuntime;
   readonly applyMode: ConsumerApplyMode;
   readonly applyMessages: boolean;
   readonly transportMode: ConsumerTransportMode;
@@ -21,6 +22,8 @@ export type ConsumerConfig = {
   readonly slowAckDelayMs: number;
   readonly slowEvery: number;
 };
+
+export type ConsumerRuntime = 'inline' | 'worker';
 
 export type ConsumerApplyMode =
   | 'none'
@@ -119,27 +122,42 @@ export type Summary = {
   readonly scenarios: readonly ScenarioSummary[];
 };
 
+export type LoadConsumerStats = {
+  readonly processed: number;
+  readonly ackedWatermark: string;
+  readonly watermark: string;
+  readonly pending: number;
+  readonly transportMessages: number;
+  readonly transportBytes: number;
+  readonly transportAcks: number;
+  readonly transportAckBytes: number;
+  readonly maxAckLagMessages: number;
+  readonly totalAckLagMessages: number;
+  readonly totalParseMs: number;
+  readonly totalApplyMs: number;
+  readonly totalTxApplyMs: number;
+  readonly maxTxApplyMs: number;
+  readonly txApplySamples: number;
+  readonly totalClientCpuMs: number;
+  readonly samples: number;
+};
+
+export type ConsumerWorkerData = {
+  readonly id: string;
+  readonly url: string;
+  readonly sqlitePath: string | undefined;
+  readonly replicaVersion: string;
+  readonly protocolMode: ConsumerProtocolMode;
+  readonly transportAckMode: ConsumerTransportAckMode;
+  readonly applyMode: ConsumerApplyMode;
+  readonly workerBatchMessages: number;
+  readonly clientCpuMicros: number;
+  readonly ackDelayMs: number;
+};
+
 export type LoadConsumer = {
   readonly sub: Subscriber;
   readonly stop: () => void;
   readonly done: Promise<void>;
-  readonly stats: () => {
-    readonly processed: number;
-    readonly ackedWatermark: string;
-    readonly watermark: string;
-    readonly pending: number;
-    readonly transportMessages: number;
-    readonly transportBytes: number;
-    readonly transportAcks: number;
-    readonly transportAckBytes: number;
-    readonly maxAckLagMessages: number;
-    readonly totalAckLagMessages: number;
-    readonly totalParseMs: number;
-    readonly totalApplyMs: number;
-    readonly totalTxApplyMs: number;
-    readonly maxTxApplyMs: number;
-    readonly txApplySamples: number;
-    readonly totalClientCpuMs: number;
-    readonly samples: number;
-  };
+  readonly stats: () => LoadConsumerStats;
 };

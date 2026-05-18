@@ -1,11 +1,10 @@
 /* oxlint-disable no-console */
-import {rmSync} from 'node:fs';
 import {performance} from 'node:perf_hooks';
+import {Worker} from 'node:worker_threads';
 import {PostgreSqlContainer} from '@testcontainers/postgresql';
 import postgres from 'postgres';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {Database} from '../../../zqlite/src/db.ts';
-import {StatementRunner} from '../../src/db/statements.ts';
 import type {ChangeStreamData} from '../../src/services/change-source/protocol/current/downstream.ts';
 import {CHANGE_STREAMER_V6_PROTOCOL_VERSION} from '../../src/services/change-streamer/change-streamer-protocol.ts';
 import {
@@ -20,15 +19,13 @@ import {
 } from '../../src/services/change-streamer/schema/tables.ts';
 import {Storer} from '../../src/services/change-streamer/storer.ts';
 import {Subscriber} from '../../src/services/change-streamer/subscriber.ts';
-import {ChangeProcessor} from '../../src/services/replicator/change-processor.ts';
-import {initReplicationState} from '../../src/services/replicator/schema/replication-state.ts';
 import {WorkerMessageBatcher} from '../../src/services/replicator/worker-message-batcher.ts';
 import {ThreadWriteWorkerClient} from '../../src/services/replicator/write-worker-client.ts';
 import {postgresTypeConfig, type PostgresDB} from '../../src/types/pg.ts';
 import {cdcSchema, type ShardID} from '../../src/types/shards.ts';
 import type {StringifiedStreamPayload} from '../../src/types/streams.ts';
 import {Subscription} from '../../src/types/subscription.ts';
-import {makeSchemaChanges, makeTransaction, watermarkFor} from './fixtures.ts';
+import {makeTransaction, watermarkFor} from './fixtures.ts';
 import {
   argValue,
   envFlag,
@@ -40,15 +37,24 @@ import {
   sum,
   writeJsonSummary,
 } from './perf-utils.ts';
-import {createConsumerTransport, parseTransportBatch} from './protocol.ts';
+import {
+  createConsumerTransport,
+  createConsumerWebSocketServer,
+  mergeTransportStats,
+  parseTransportBatch,
+} from './protocol.ts';
+import {cleanupSQLite, initializeReplica} from './replica.ts';
 import {describeScenarios, loadScenarios} from './scenarios.ts';
 import type {
   ConsumerApplyMode,
   ConsumerConfig,
   ConsumerProtocolMode,
+  ConsumerRuntime,
   ConsumerTransportAckMode,
   ConsumerTransportMode,
+  ConsumerWorkerData,
   LoadConsumer,
+  LoadConsumerStats,
   Scenario,
   ScenarioSummary,
   Summary,
@@ -88,6 +94,7 @@ const applyMode = applyModeFromEnv();
 const consumerConfig: ConsumerConfig = {
   count: envInt('ZERO_RM_VS_SUBSCRIBERS', full ? 16 : 4),
   ackDelayMs: envInt('ZERO_RM_VS_ACK_DELAY_MS', 0),
+  runtime: runtimeFromEnv(),
   applyMode,
   applyMessages: applyMode !== 'none',
   transportMode: transportModeFromEnv(),
@@ -98,6 +105,8 @@ const consumerConfig: ConsumerConfig = {
   slowAckDelayMs: envInt('ZERO_RM_VS_SLOW_ACK_DELAY_MS', full ? 2 : 1),
   slowEvery: envInt('ZERO_RM_VS_SLOW_EVERY', full ? 4 : 2),
 };
+
+const CONSUMER_WORKER_URL = new URL('./consumer-worker.ts', import.meta.url);
 
 function applyModeFromEnv(): ConsumerApplyMode {
   const mode = envString('ZERO_RM_VS_APPLY_MODE');
@@ -114,6 +123,20 @@ function applyModeFromEnv(): ConsumerApplyMode {
       throw new Error(
         `Invalid ZERO_RM_VS_APPLY_MODE=${mode}; expected ` +
           'none, direct, worker-message, or worker-batch',
+      );
+  }
+}
+
+function runtimeFromEnv(): ConsumerRuntime {
+  const runtime = envString('ZERO_RM_VS_CONSUMER_RUNTIME') ?? 'inline';
+  switch (runtime) {
+    case 'inline':
+    case 'worker':
+      return runtime;
+    default:
+      throw new Error(
+        `Invalid ZERO_RM_VS_CONSUMER_RUNTIME=${runtime}; expected ` +
+          'inline or worker',
       );
   }
 }
@@ -230,7 +253,7 @@ async function runScenario(
   cleanupSQLite(sqlitePath);
   const replica = new Database(lc, sqlitePath);
   replica.pragma('journal_mode = WAL');
-  const processor = initializeReplica(replica);
+  const processor = initializeReplica(lc, replica, replicaVersion);
   const forwarder = new Forwarder(lc, {
     flowControlConsensusPaddingSeconds: 0.001,
   });
@@ -563,31 +586,6 @@ async function resetChangeDB(db: PostgresDB) {
   );
 }
 
-function initializeReplica(db: Database): ChangeProcessor {
-  initReplicationState(db, ['zero-cache-rm-vs-load'], replicaVersion);
-  const processor = new ChangeProcessor(
-    new StatementRunner(db),
-    'serving',
-    (_, err) => {
-      throw err;
-    },
-  );
-  processor.processMessage(lc, [
-    'begin',
-    {tag: 'begin'},
-    {commitWatermark: '000000000001'},
-  ]);
-  for (const change of makeSchemaChanges()) {
-    processor.processMessage(lc, ['data', change]);
-  }
-  processor.processMessage(lc, [
-    'commit',
-    {tag: 'commit'},
-    {watermark: '000000000001'},
-  ]);
-  return processor;
-}
-
 function createConsumers(config: ConsumerConfig): Promise<LoadConsumer[]> {
   return Promise.all(
     Array.from({length: config.count}, (_, i) => {
@@ -610,6 +608,23 @@ async function makeConsumer(
   config: ConsumerConfig,
   caughtUp: boolean,
 ): Promise<LoadConsumer> {
+  const downstream = Subscription.create<StringifiedStreamPayload>();
+  const sub = new Subscriber(
+    protocolVersionForMode(config.protocolMode),
+    id,
+    watermark,
+    downstream,
+    () => ({
+      tag: 'status',
+    }),
+  );
+  if (caughtUp) {
+    sub.setCaughtUp();
+  }
+  if (config.runtime === 'worker') {
+    return makeWorkerRuntimeConsumer(id, sub, downstream, ackDelayMs, config);
+  }
+
   let active = true;
   let processed = 0;
   let maxAckLagMessages = 0;
@@ -623,7 +638,7 @@ async function makeConsumer(
   let totalClientCpuMs = 0;
   let samples = 0;
   let consumerReplica: Database | undefined;
-  let processor: ChangeProcessor | undefined;
+  let processor: ReturnType<typeof initializeReplica> | undefined;
   let worker: ThreadWriteWorkerClient | undefined;
   let consumerSQLitePath: string | undefined;
   if (config.applyMode !== 'none') {
@@ -632,7 +647,7 @@ async function makeConsumer(
     consumerReplica = new Database(lc, consumerSQLitePath);
     consumerReplica.pragma('journal_mode = WAL2');
     consumerReplica.pragma('synchronous = NORMAL');
-    processor = initializeReplica(consumerReplica);
+    processor = initializeReplica(lc, consumerReplica, replicaVersion);
     if (config.applyMode !== 'direct') {
       consumerReplica.close();
       consumerReplica = undefined;
@@ -673,19 +688,6 @@ async function makeConsumer(
     }
   };
 
-  const downstream = Subscription.create<StringifiedStreamPayload>();
-  const sub = new Subscriber(
-    protocolVersionForMode(config.protocolMode),
-    id,
-    watermark,
-    downstream,
-    () => ({
-      tag: 'status',
-    }),
-  );
-  if (caughtUp) {
-    sub.setCaughtUp();
-  }
   const transport = await createConsumerTransport(
     lc,
     downstream,
@@ -780,6 +782,185 @@ async function makeConsumer(
   };
 }
 
+async function makeWorkerRuntimeConsumer(
+  id: string,
+  sub: Subscriber,
+  downstream: Subscription<StringifiedStreamPayload>,
+  ackDelayMs: number,
+  config: ConsumerConfig,
+): Promise<LoadConsumer> {
+  if (config.transportMode !== 'websocket') {
+    throw new Error(
+      'ZERO_RM_VS_CONSUMER_RUNTIME=worker requires ' +
+        'ZERO_RM_VS_TRANSPORT=websocket',
+    );
+  }
+
+  const server = await createConsumerWebSocketServer(
+    lc,
+    downstream,
+    config.transportBatchMessages,
+    config.protocolMode,
+  );
+  const consumerSQLitePath =
+    config.applyMode === 'none' ? undefined : `${sqlitePath}-${id}`;
+  const worker = new Worker(CONSUMER_WORKER_URL, {
+    workerData: {
+      id,
+      url: server.url,
+      sqlitePath: consumerSQLitePath,
+      replicaVersion,
+      protocolMode: config.protocolMode,
+      transportAckMode: config.transportAckMode,
+      applyMode: config.applyMode,
+      workerBatchMessages,
+      clientCpuMicros: config.clientCpuMicros,
+      ackDelayMs,
+    } satisfies ConsumerWorkerData,
+  });
+
+  let latestWorkerStats = emptyConsumerStats();
+  let maxAckLagMessages = 0;
+  let totalAckLagMessages = 0;
+  let ackLagSamples = 0;
+  let lastObservedSamples = 0;
+  let complete = false;
+
+  const observeAckLag = () => {
+    const lag = sub.numPending;
+    maxAckLagMessages = Math.max(maxAckLagMessages, lag);
+    const delta = Math.max(0, latestWorkerStats.samples - lastObservedSamples);
+    if (delta > 0) {
+      totalAckLagMessages += lag * delta;
+      ackLagSamples += delta;
+      lastObservedSamples = latestWorkerStats.samples;
+    }
+  };
+  const ackLagInterval = setInterval(observeAckLag, 10);
+  ackLagInterval.unref();
+
+  let resolveReady!: () => void;
+  let rejectReady!: (err: Error) => void;
+  const ready = new Promise<void>((resolve, reject) => {
+    resolveReady = resolve;
+    rejectReady = reject;
+  });
+
+  let resolveDone!: () => void;
+  let rejectDone!: (err: Error) => void;
+  const workerDone = new Promise<void>((resolve, reject) => {
+    resolveDone = resolve;
+    rejectDone = reject;
+  });
+
+  const fail = (err: Error) => {
+    rejectReady(err);
+    rejectDone(err);
+  };
+
+  worker.on('message', msg => {
+    if (typeof msg !== 'object' || msg === null || !('type' in msg)) {
+      return;
+    }
+    switch (msg.type) {
+      case 'ready':
+        resolveReady();
+        break;
+      case 'stats':
+        latestWorkerStats = msg.stats as LoadConsumerStats;
+        observeAckLag();
+        break;
+      case 'done':
+        latestWorkerStats = msg.stats as LoadConsumerStats;
+        observeAckLag();
+        complete = true;
+        resolveDone();
+        break;
+      case 'error': {
+        const error = msg.error as {message?: unknown; stack?: unknown};
+        const message =
+          typeof error.message === 'string'
+            ? error.message
+            : 'consumer worker error';
+        const err = new Error(message);
+        if (typeof error.stack === 'string') {
+          err.stack = error.stack;
+        }
+        fail(err);
+        break;
+      }
+    }
+  });
+  worker.on('error', fail);
+  worker.on('exit', code => {
+    if (!complete && code !== 0) {
+      fail(new Error(`consumer worker ${id} exited with code ${code}`));
+    }
+  });
+
+  await ready;
+
+  const done = workerDone.finally(async () => {
+    clearInterval(ackLagInterval);
+    await server.close();
+    await worker.terminate();
+  });
+
+  return {
+    sub,
+    done,
+    stop: () => {
+      sub.close();
+      worker.postMessage({type: 'stop'});
+    },
+    stats: () => {
+      observeAckLag();
+      const serverStats = server.stats();
+      const transportStats = mergeTransportStats(serverStats, {
+        messages: 0,
+        bytes: 0,
+        acks: latestWorkerStats.transportAcks,
+        ackBytes: latestWorkerStats.transportAckBytes,
+      });
+      return {
+        ...latestWorkerStats,
+        ackedWatermark: sub.acked,
+        watermark: sub.watermark,
+        pending: sub.numPending,
+        transportMessages: transportStats.messages,
+        transportBytes: transportStats.bytes,
+        transportAcks: transportStats.acks,
+        transportAckBytes: transportStats.ackBytes,
+        maxAckLagMessages,
+        totalAckLagMessages,
+        samples: Math.max(latestWorkerStats.samples, ackLagSamples),
+      };
+    },
+  };
+}
+
+function emptyConsumerStats(): LoadConsumerStats {
+  return {
+    processed: 0,
+    ackedWatermark: '',
+    watermark: '',
+    pending: 0,
+    transportMessages: 0,
+    transportBytes: 0,
+    transportAcks: 0,
+    transportAckBytes: 0,
+    maxAckLagMessages: 0,
+    totalAckLagMessages: 0,
+    totalParseMs: 0,
+    totalApplyMs: 0,
+    totalTxApplyMs: 0,
+    maxTxApplyMs: 0,
+    txApplySamples: 0,
+    totalClientCpuMs: 0,
+    samples: 0,
+  };
+}
+
 function burnCpu(micros: number) {
   if (micros <= 0) {
     return;
@@ -824,11 +1005,4 @@ function formatReconnectSummary(result: ScenarioSummary) {
 
 function formatOptionalMs(ms: number | null) {
   return ms === null ? 'n/a' : `${ms.toFixed(1)} ms`;
-}
-
-function cleanupSQLite(path: string) {
-  rmSync(path, {force: true});
-  rmSync(`${path}-shm`, {force: true});
-  rmSync(`${path}-wal`, {force: true});
-  rmSync(`${path}-wal2`, {force: true});
 }

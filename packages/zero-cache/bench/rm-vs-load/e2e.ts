@@ -36,6 +36,7 @@ console.log(
       process.env.ZERO_RM_VS_APPLY_MODE ??
       (process.env.ZERO_RM_VS_APPLY_CLIENTS === '1' ? 'direct' : 'none')
     }`,
+    `  consumer-runtime: ${process.env.ZERO_RM_VS_CONSUMER_RUNTIME ?? 'inline'}`,
     `  transport: ${process.env.ZERO_RM_VS_TRANSPORT ?? 'in-process'}`,
     `  protocol: ${process.env.ZERO_RM_VS_PROTOCOL ?? 'v7'}`,
     `  ws-ack: ${process.env.ZERO_RM_VS_WS_ACK ?? 'per-message'}`,

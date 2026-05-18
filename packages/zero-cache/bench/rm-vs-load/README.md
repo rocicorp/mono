@@ -63,6 +63,12 @@ Useful view-syncer digestion knobs:
   replica. `worker-message` models the old production shape of one
   write-worker handoff per replication message; `worker-batch` models the
   transaction-batched write-worker path.
+- `ZERO_RM_VS_CONSUMER_RUNTIME=inline|worker` controls where the simulated VS
+  websocket/parse/ACK loop runs. Use `worker` for host-shape experiments where
+  each VS instance should get its own JS thread, matching deployments that run
+  one VS process per vCPU. The default `inline` mode is faster to start and is
+  useful for small comparisons, but it intentionally shares one benchmark event
+  loop across all VS consumers.
 - `ZERO_RM_VS_APPLY_CLIENTS=1` is the legacy shorthand for
   `ZERO_RM_VS_APPLY_MODE=direct`.
 - `ZERO_RM_VS_TRANSPORT=websocket` routes each simulated VS through the same
