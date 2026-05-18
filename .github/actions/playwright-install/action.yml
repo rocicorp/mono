@@ -4,23 +4,25 @@ description: 'Install Playwright browsers and system dependencies with caching. 
 runs:
   using: 'composite'
   steps:
-    - name: Get Playwright version and browsers path
+    - name: Get Playwright version
       id: playwright-version
-      run: |
-        echo "version=$(pnpm exec playwright --version | awk '{print $NF}')" >> "$GITHUB_OUTPUT"
-        echo "browsers-path=${PLAYWRIGHT_BROWSERS_PATH:-$HOME/.cache/ms-playwright}" >> "$GITHUB_OUTPUT"
+      run: echo "version=$(pnpm exec playwright --version | awk '{print $NF}')" >> "$GITHUB_OUTPUT"
       shell: bash
     - name: Cache Playwright browsers
       id: playwright-cache
       uses: actions/cache@v5
       with:
-        path: ${{ steps.playwright-version.outputs.browsers-path }}
-        key: playwright-v2-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+        path: ~/.cache/ms-playwright
+        key: playwright-v3-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
     - name: Install Playwright browsers and system deps
       if: steps.playwright-cache.outputs.cache-hit != 'true'
       run: pnpm exec playwright install --with-deps
       shell: bash
+      env:
+        PLAYWRIGHT_BROWSERS_PATH: ''
     - name: Install Playwright system deps only
       if: steps.playwright-cache.outputs.cache-hit == 'true'
       run: pnpm exec playwright install-deps
       shell: bash
+      env:
+        PLAYWRIGHT_BROWSERS_PATH: ''
