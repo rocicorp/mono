@@ -117,7 +117,7 @@ describe('view-syncer/auth maintenance', () => {
     delay: number,
   ) {
     return setTimeoutFn.mock.calls.some(
-      ([, scheduledDelay]) => scheduledDelay === delay,
+      ([, scheduledDelay]: [unknown, number]) => scheduledDelay === delay,
     );
   }
 

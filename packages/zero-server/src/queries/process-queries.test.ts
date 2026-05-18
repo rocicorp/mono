@@ -229,7 +229,7 @@ describe('handleQueryRequest', () => {
       table: 'basic',
     };
 
-    const cb = vi.fn(name => {
+    const cb = vi.fn((name: string) => {
       if (name === 'first') {
         throw new Error('callback failed');
       }
@@ -377,7 +377,7 @@ describe('handleQueryRequest', () => {
       table: 'basic',
     };
 
-    const cb = vi.fn(name => {
+    const cb = vi.fn((name: string) => {
       if (name === 'parseErrorQuery') {
         throw new QueryParseError({
           cause: new Error('Invalid args'),

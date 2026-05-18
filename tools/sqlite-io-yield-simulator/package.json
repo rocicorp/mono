@@ -19,6 +19,7 @@
     "zqlite": "workspace:*"
   },
   "devDependencies": {
+    "@types/ws": "^8.5.12",
     "oxfmt": "^0.45.0",
     "shared": "workspace:*"
   }

@@ -19,6 +19,7 @@
     "ws": "^8.18.1"
   },
   "devDependencies": {
+    "@types/ws": "^8.5.12",
     "oxfmt": "^0.45.0",
     "shared": "workspace:*",
     "zero-protocol": "workspace:*"

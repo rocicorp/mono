@@ -4845,7 +4845,7 @@ describe('view-syncer/service', () => {
       // in hydrateUnchangedQueries produces exactly one call. Drift would add
       // an explicit removeQuery plus a second hydration (3 total).
       const callsForHash1 = removeSpy.mock.calls.filter(
-        ([id]) => id === 'query-hash1',
+        ([id]: [string]) => id === 'query-hash1',
       ).length;
       expect(callsForHash1).toBe(1);
     } finally {
@@ -4915,7 +4915,7 @@ describe('view-syncer/service', () => {
       // removeQuery + second hydration's internal = 3 calls.
       // B was kept (no drift): just the single hydrateUnchangedQueries call = 1.
       const callsFor = (id: string) =>
-        removeSpy.mock.calls.filter(([q]) => q === id).length;
+        removeSpy.mock.calls.filter(([q]: [string]) => q === id).length;
       expect(callsFor('query-hash-A')).toBe(3);
       expect(callsFor('query-hash-B')).toBe(1);
     } finally {
@@ -5076,7 +5076,7 @@ describe('view-syncer/service', () => {
       // Single call = internal removeQuery from the one addQuery in
       // hydrateUnchangedQueries. Drift would be 3.
       const calls = removeSpy.mock.calls.filter(
-        ([id]) => id === 'query-hash1',
+        ([id]: [string]) => id === 'query-hash1',
       ).length;
       expect(calls).toBe(1);
     } finally {
@@ -5162,7 +5162,7 @@ describe('view-syncer/service', () => {
       // addQuery fires one internal removeQuery. Total: 1.
       // The drift path for this same query would produce 3 calls.
       const calls = removeSpy.mock.calls.filter(
-        ([id]) => id === 'custom-1',
+        ([id]: [string]) => id === 'custom-1',
       ).length;
       expect(calls).toBe(1);
 

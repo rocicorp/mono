@@ -25,6 +25,7 @@
     "hash-wasm": "^4.9.0",
     "idb": "^7.0.1",
     "playwright": "^1.53.2",
+    "playwright-core": "^1.53.2",
     "replicache": "workspace:*",
     "shared": "workspace:*",
     "tsx": "^4.21.0",

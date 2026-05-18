@@ -2,7 +2,6 @@
 import {
   afterAll,
   afterEach,
-  assert,
   beforeEach,
   describe,
   expect,
@@ -14,7 +13,7 @@ let receiver: WebSocketReceiver<any>;
 vi.mock('../types/websocket-handoff.ts', () => ({
   installWebSocketReceiver: vi
     .fn()
-    .mockImplementation((_lc, _server, receive, _sender) => {
+    .mockImplementation((_lc: unknown, _server: unknown, receive: WebSocketReceiver<any>, _sender: unknown) => {
       receiver = receive;
     }),
 }));
@@ -674,7 +673,8 @@ describe('connection hijacking prevention', () => {
     );
 
     const connContextManager = contextManagers.get('1');
-    assert(connContextManager);
+    if (connContextManager === undefined)
+      throw new Error('connContextManager not found');
     connContextManager.validateConnection(
       {clientID: 'target-client', wsID: 'ws-1'},
       0,

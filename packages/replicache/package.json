@@ -80,6 +80,7 @@
   "devDependencies": {
     "@op-engineering/op-sqlite": ">=15",
     "@rocicorp/zero-sqlite3": "^1.0.18",
+    "@types/command-line-args": "^5.2.3",
     "@types/command-line-usage": "^5.0.2",
     "@vitest/runner": "^4.1.5",
     "command-line-args": "^6.0.1",

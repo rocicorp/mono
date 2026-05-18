@@ -20,7 +20,7 @@ import {inProcChannel} from '../types/processes.ts';
 import {orTimeout} from '../types/timeout.ts';
 import runWorker from './change-streamer.ts';
 
-vi.mock('../services/litestream/commands.ts', async importOriginal => {
+vi.mock('../services/litestream/commands.ts', async (importOriginal: <T>() => Promise<T>) => {
   const actual = await importOriginal<typeof LitestreamCommands>();
   return {
     ...actual,
@@ -28,7 +28,7 @@ vi.mock('../services/litestream/commands.ts', async importOriginal => {
   };
 });
 
-vi.mock('../services/life-cycle.ts', async importOriginal => {
+vi.mock('../services/life-cycle.ts', async (importOriginal: <T>() => Promise<T>) => {
   const actual = await importOriginal<typeof LifeCycle>();
   return {
     ...actual,

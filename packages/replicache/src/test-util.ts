@@ -56,7 +56,9 @@ export class ReplicacheTest<
     super(options);
     restoreMakeImplForTest();
     this.#impl = must<ReplicacheImpl<MD>>(impl);
-    this.recoverMutationsFake = this.onRecoverMutations = vi.fn(r => r);
+    this.recoverMutationsFake = this.onRecoverMutations = vi.fn(
+      (r: Promise<boolean>) => r,
+    );
   }
 
   pullIgnorePromise(opts?: Parameters<Replicache['pull']>[0]): void {

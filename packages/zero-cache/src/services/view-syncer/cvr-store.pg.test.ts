@@ -633,7 +633,7 @@ describe('view-syncer/cvr-store', () => {
     let cvr = await store.load(lc, CONNECT_TIME);
 
     // Use real setTimeout.
-    setTimeoutFn.mockImplementation((cb, ms) => setTimeout(cb, ms));
+    setTimeoutFn.mockImplementation((cb: () => void, ms: number) => setTimeout(cb, ms));
 
     // 12 rows set up in beforeEach().
     expect(await db`SELECT COUNT(*) FROM "roze_1/cvr".rows`).toEqual([
@@ -710,7 +710,7 @@ describe('view-syncer/cvr-store', () => {
     let cvr = await store.load(lc, CONNECT_TIME);
 
     // Use real setTimeout.
-    setTimeoutFn.mockImplementation((cb, ms) => setTimeout(cb, ms));
+    setTimeoutFn.mockImplementation((cb: () => void, ms: number) => setTimeout(cb, ms));
 
     // 12 rows set up in beforeEach().
     expect(await db`SELECT COUNT(*) FROM "roze_1/cvr".rows`).toEqual([

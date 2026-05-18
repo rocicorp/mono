@@ -99,7 +99,7 @@ export const benchConfig = defineConfig({
     include: ['src/**/*.bench{,.node}.?(c|m)[jt]s?(x)'],
     disableConsoleIntercept: true,
     silent: false,
-    onConsoleLog(str, type, _entity) {
+    onConsoleLog(str: string, type: 'stdout' | 'stderr', _entity: unknown) {
       if (externalizedWarningRegExp.test(str)) {
         return false;
       }

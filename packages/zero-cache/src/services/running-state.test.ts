@@ -42,7 +42,7 @@ test('backoff', () => {
   void state.backoff(lc, 'any error');
   void state.backoff(lc, 'any error');
 
-  expect(mockSleep.mock.calls.map(call => call[0])).toEqual([
+  expect(mockSleep.mock.calls.map((call: unknown[]) => call[0])).toEqual([
     1000, 2000, 4000, 8000, 13_000, 13_000, 13_000, 13_000, 1000, 2000,
   ]);
 });

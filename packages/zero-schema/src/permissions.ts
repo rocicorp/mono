@@ -110,7 +110,7 @@ export async function definePermissions<TAuthDataShape, TSchema extends Schema>(
     ExpressionBuilder<string, TSchema>
   >;
   for (const name of Object.keys(schema.tables)) {
-    expressionBuilders[name] = newExpressionBuilder(schema, name);
+    expressionBuilders[name] = newExpressionBuilder(schema, name) as ExpressionBuilder<string, TSchema>;
   }
 
   const config = await definer();

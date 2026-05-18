@@ -300,7 +300,7 @@ export class QueryImpl<
             },
             this.customQueryID,
             relationship,
-          ),
+          ) as unknown as AnyQuery,
         ),
       );
 
@@ -363,7 +363,7 @@ export class QueryImpl<
     let cond: Condition;
 
     if (typeof fieldOrExpressionFactory === 'function') {
-      cond = fieldOrExpressionFactory(this.expressionBuilder());
+      cond = fieldOrExpressionFactory(this.expressionBuilder() as ExpressionBuilder<TTable, TSchema>);
     } else {
       assert(arguments.length >= 2, 'Invalid condition. Too few arguments.');
       // Distinguish between 2-arg form (field, value) and 3-arg form (field, op, value)
@@ -487,7 +487,7 @@ export class QueryImpl<
             defaultFormat,
             this.customQueryID,
             undefined,
-          ),
+          ) as unknown as AnyQuery,
         ),
       );
       return {

@@ -264,7 +264,7 @@ describe('shutdown', () => {
 
 describe('exitAfter', () => {
   test('exits 0 for configuration errors', async () => {
-    const exit = vi.spyOn(process, 'exit').mockImplementation(code => {
+    const exit = vi.spyOn(process, 'exit').mockImplementation((code: unknown) => {
       throw Object.assign(new Error('process.exit'), {code});
     });
 

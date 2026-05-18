@@ -1249,7 +1249,7 @@ describe.each(mutatorInvokers)(
         '~standard': {
           version: 1,
           vendor: 'test',
-          validate: vi.fn(input => ({value: input})),
+          validate: vi.fn((input: {id: string}) => ({value: input})),
         },
       };
 
@@ -1382,7 +1382,7 @@ describe.each(mutatorInvokers)(
         '~standard': {
           version: 1,
           vendor: 'test',
-          validate: input => ({
+          validate: (input: unknown) => ({
             value: {id: ((input as {id: string}).id ?? '').toUpperCase()},
           }),
         },

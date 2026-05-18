@@ -3,15 +3,13 @@ packages:
   - 'packages/*'
   - 'prod'
   - 'tools/*'
-publicHoistPattern:
-  - '*'
 allowBuilds:
   '@prisma/engines': true
   '@rocicorp/zero-sqlite3': true
-  core-js: true
-  core-js-pure: true
-  cpu-features: true
+  core-js: false
+  core-js-pure: false
+  cpu-features: false
   esbuild: true
   prisma: true
   protobufjs: true
-  ssh2: true
+  ssh2: false

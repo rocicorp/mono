@@ -15,9 +15,11 @@
     "check-fmt": "oxfmt --check ."
   },
   "dependencies": {
-    "@badrap/valita": "0.3.11"
+    "@badrap/valita": "0.3.11",
+    "compare-utf8": "^0.2.0"
   },
   "devDependencies": {
+    "fast-check": "^3.18.0",
     "oxfmt": "^0.45.0",
     "shared": "workspace:*",
     "typescript": "~6.0.2",

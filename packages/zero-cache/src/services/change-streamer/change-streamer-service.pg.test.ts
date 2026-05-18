@@ -1013,7 +1013,7 @@ describe('change-streamer/service', () => {
   test('starting point', async () => {
     const requests = new Queue<string>();
     const source = {
-      startStream: vi.fn().mockImplementation(req => {
+      startStream: vi.fn().mockImplementation((req: string) => {
         requests.enqueue(req);
         return resolver().promise;
       }),

@@ -555,7 +555,7 @@ function build(version: string) {
   execute('pnpm install');
   execute('pnpm run build');
   execute('pnpm run format');
-  execute('npx -y syncpack fix');
+  execute('pnpmx syncpack fix');
   execute('git status');
 }
 

@@ -20,6 +20,7 @@
     "postgres": "3.4.7"
   },
   "devDependencies": {
+    "@types/pg-format": "^1.0.5",
     "oxfmt": "^0.45.0",
     "shared": "workspace:*"
   }

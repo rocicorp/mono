@@ -314,6 +314,9 @@ importers:
       '@dotenvx/dotenvx':
         specifier: ^1.39.0
         version: 1.66.0
+      '@rocicorp/logger':
+        specifier: ^5.4.0
+        version: 5.4.0
       ws:
         specifier: ^8.18.1
         version: 8.20.1
@@ -391,6 +394,9 @@ importers:
       '@rocicorp/logger':
         specifier: ^5.4.0
         version: 5.4.0
+      '@rocicorp/resolver':
+        specifier: ^1.0.2
+        version: 1.0.2
       '@vitest/runner':
         specifier: ^4.1.5
         version: 4.1.6
@@ -412,6 +418,18 @@ importers:
       '@opentelemetry/api':
         specifier: ^1.9.0
         version: 1.9.1
+      '@opentelemetry/core':
+        specifier: ^2.0.0
+        version: 2.7.1(@opentelemetry/api@1.9.1)
+      '@opentelemetry/sdk-metrics':
+        specifier: ^2.7.1
+        version: 2.7.1(@opentelemetry/api@1.9.1)
+      '@opentelemetry/sdk-trace-node':
+        specifier: ^2.7.1
+        version: 2.7.1(@opentelemetry/api@1.9.1)
+      '@rocicorp/logger':
+        specifier: ^5.4.0
+        version: 5.4.0
     devDependencies:
       oxfmt:
         specifier: ^0.45.0
@@ -444,6 +462,9 @@ importers:
       '@rocicorp/zero-sqlite3':
         specifier: ^1.0.18
         version: 1.0.18
+      '@types/command-line-args':
+        specifier: ^5.2.3
+        version: 5.2.3
       '@types/command-line-usage':
         specifier: ^5.0.2
         version: 5.0.4
@@ -571,6 +592,9 @@ importers:
       playwright:
         specifier: ^1.53.2
         version: 1.60.0
+      playwright-core:
+        specifier: ^1.53.2
+        version: 1.60.0
       replicache:
         specifier: workspace:*
         version: link:../replicache
@@ -623,6 +647,9 @@ importers:
       js-xxhash:
         specifier: ^4.0.0
         version: 4.0.0
+      json-custom-numbers:
+        specifier: ^3.1.1
+        version: 3.1.1
       kasi:
         specifier: ^1.1.0
         version: 1.1.2
@@ -630,9 +657,21 @@ importers:
         specifier: ^7.5.4
         version: 7.8.0
     devDependencies:
+      '@faker-js/faker':
+        specifier: ^9.6.0
+        version: 9.9.0
       '@mitata/counters':
         specifier: ^0.0.8
         version: 0.0.8
+      '@types/command-line-args':
+        specifier: ^5.2.3
+        version: 5.2.3
+      '@types/command-line-usage':
+        specifier: ^5.0.4
+        version: 5.0.4
+      '@types/node':
+        specifier: ^22.10.5
+        version: 22.19.19
       '@types/semver':
         specifier: ^7.5.1
         version: 7.7.1
@@ -648,6 +687,9 @@ importers:
       fast-check:
         specifier: ^3.18.0
         version: 3.23.2
+      mitata:
+        specifier: ^1.0.34
+        version: 1.0.34
       oxfmt:
         specifier: ^0.45.0
         version: 0.45.0
@@ -691,6 +733,9 @@ importers:
       pg:
         specifier: ^8.16.3
         version: 8.20.0
+      postgres:
+        specifier: 3.4.7
+        version: 3.4.7
       shared:
         specifier: workspace:*
         version: link:../shared
@@ -929,6 +974,9 @@ importers:
 
   packages/zero-cache:
     dependencies:
+      '@badrap/valita':
+        specifier: 0.3.11
+        version: 0.3.11
       '@databases/sql':
         specifier: ^3.3.0
         version: 3.3.0
@@ -956,6 +1004,9 @@ importers:
       '@opentelemetry/exporter-metrics-otlp-http':
         specifier: ^0.218.0
         version: 0.218.0(@opentelemetry/api@1.9.1)
+      '@opentelemetry/otlp-exporter-base':
+        specifier: ^0.218.0
+        version: 0.218.0(@opentelemetry/api@1.9.1)
       '@opentelemetry/resources':
         specifier: ^2.7.1
         version: 2.7.1(@opentelemetry/api@1.9.1)
@@ -968,6 +1019,9 @@ importers:
       '@opentelemetry/sdk-trace-node':
         specifier: ^2.7.1
         version: 2.7.1(@opentelemetry/api@1.9.1)
+      '@opentelemetry/semantic-conventions':
+        specifier: ^1.41.1
+        version: 1.41.1
       '@postgresql-typed/oids':
         specifier: ^0.2.0
         version: 0.2.0
@@ -1071,6 +1125,9 @@ importers:
       '@vitest/runner':
         specifier: ^4.1.5
         version: 4.1.6
+      esbuild:
+        specifier: ^0.25.0
+        version: 0.25.12
       mockttp:
         specifier: ^4.2.1
         version: 4.4.1
@@ -1086,12 +1143,15 @@ importers:
       shared:
         specifier: workspace:*
         version: link:../shared
+      testcontainers:
+        specifier: ^10.28.0
+        version: 10.28.0
       typescript:
         specifier: ~6.0.2
         version: 6.0.3
       vitest:
         specifier: ^4.1.5
-        version: 4.1.6(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@22.19.19)(@vitest/browser-playwright@4.1.6)(@vitest/coverage-v8@4.1.6)(vite@8.0.3(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)(@types/node@22.19.19)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))
+        version: 4.1.6(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@22.19.19)(@vitest/browser-playwright@4.1.6)(@vitest/coverage-v8@4.1.6)(vite@8.0.3(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)(@types/node@22.19.19)(esbuild@0.25.12)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))
       zero-schema:
         specifier: workspace:*
         version: link:../zero-schema
@@ -1187,7 +1247,13 @@ importers:
       '@badrap/valita':
         specifier: 0.3.11
         version: 0.3.11
+      compare-utf8:
+        specifier: ^0.2.0
+        version: 0.2.0
     devDependencies:
+      fast-check:
+        specifier: ^3.18.0
+        version: 3.23.2
       oxfmt:
         specifier: ^0.45.0
         version: 0.45.0
@@ -1203,6 +1269,9 @@ importers:
 
   packages/zero-react:
     dependencies:
+      '@rocicorp/resolver':
+        specifier: ^1.0.2
+        version: 1.0.2
       react-dom:
         specifier: ^18.3.1
         version: 18.3.1(react@18.3.1)
@@ -1213,6 +1282,9 @@ importers:
       '@types/react':
         specifier: ^18.3.18
         version: 18.3.28
+      '@types/react-dom':
+        specifier: 18.3.5
+        version: 18.3.5(@types/react@18.3.28)
       oxfmt:
         specifier: ^0.45.0
         version: 0.45.0
@@ -1222,6 +1294,9 @@ importers:
       shared:
         specifier: workspace:*
         version: link:../shared
+      vitest:
+        specifier: ^4.1.5
+        version: 4.1.6(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@22.19.19)(@vitest/browser-playwright@4.1.6)(@vitest/coverage-v8@4.1.6)(vite@8.0.3(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)(@types/node@22.19.19)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))
       zero-client:
         specifier: workspace:*
         version: link:../zero-client
@@ -1278,6 +1353,12 @@ importers:
       '@prisma/client':
         specifier: ^7.7.0
         version: 7.8.0(prisma@7.8.0(@types/react-dom@18.3.5(@types/react@18.3.28))(@types/react@18.3.28)(magicast@0.5.3)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)(typescript@6.0.3))(typescript@6.0.3)
+      '@standard-schema/spec':
+        specifier: ^1.0.0
+        version: 1.1.0
+      '@types/pg':
+        specifier: ^8.20.0
+        version: 8.20.0
       '@vitest/runner':
         specifier: ^4.1.5
         version: 4.1.6
@@ -1396,6 +1477,9 @@ importers:
       typescript:
         specifier: ~6.0.2
         version: 6.0.3
+      vitest:
+        specifier: ^4.1.5
+        version: 4.1.6(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@22.19.19)(@vitest/browser-playwright@4.1.6)(@vitest/coverage-v8@4.1.6)(vite@8.0.3(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)(@types/node@22.19.19)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))
       zero-protocol:
         specifier: workspace:*
         version: link:../zero-protocol
@@ -1447,6 +1531,9 @@ importers:
 
   packages/zql-integration-tests:
     devDependencies:
+      '@faker-js/faker':
+        specifier: ^9.6.0
+        version: 9.9.0
       '@types/tmp':
         specifier: ^0.2.6
         version: 0.2.6
@@ -1495,6 +1582,9 @@ importers:
       '@databases/sql':
         specifier: ^3.3.0
         version: 3.3.0
+      '@opentelemetry/api':
+        specifier: ^1.9.0
+        version: 1.9.1
       '@rocicorp/logger':
         specifier: ^5.4.0
         version: 5.4.0
@@ -1579,6 +1669,9 @@ importers:
         specifier: ^8.18.1
         version: 8.20.1
     devDependencies:
+      '@types/ws':
+        specifier: ^8.5.12
+        version: 8.18.1
       oxfmt:
         specifier: ^0.45.0
         version: 0.45.0
@@ -1607,6 +1700,9 @@ importers:
         specifier: 3.4.7
         version: 3.4.7
     devDependencies:
+      '@types/pg-format':
+        specifier: ^1.0.5
+        version: 1.0.5
       oxfmt:
         specifier: ^0.45.0
         version: 0.45.0
@@ -1651,6 +1747,9 @@ importers:
         specifier: workspace:*
         version: link:../../packages/zqlite
     devDependencies:
+      '@types/ws':
+        specifier: ^8.5.12
+        version: 8.18.1
       oxfmt:
         specifier: ^0.45.0
         version: 0.45.0
@@ -20155,7 +20254,7 @@ snapshots:
 
   '@types/pg-pool@2.0.7':
     dependencies:
-      '@types/pg': 8.15.6
+      '@types/pg': 8.20.0
 
   '@types/pg@8.15.6':
     dependencies:
@@ -20343,6 +20442,20 @@ snapshots:
     optionalDependencies:
       babel-plugin-react-compiler: 1.0.0
 
+  '@vitest/browser-playwright@4.1.6(playwright@1.60.0)(vite@8.0.3(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)(@types/node@22.19.19)(esbuild@0.25.12)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))(vitest@4.1.6)':
+    dependencies:
+      '@vitest/browser': 4.1.6(vite@8.0.3(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)(@types/node@22.19.19)(esbuild@0.25.12)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))(vitest@4.1.6)
+      '@vitest/mocker': 4.1.6(vite@8.0.3(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)(@types/node@22.19.19)(esbuild@0.25.12)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))
+      playwright: 1.60.0
+      tinyrainbow: 3.1.0
+      vitest: 4.1.6(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@22.19.19)(@vitest/browser-playwright@4.1.6)(@vitest/coverage-v8@4.1.6)(vite@8.0.3(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)(@types/node@22.19.19)(esbuild@0.25.12)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))
+    transitivePeerDependencies:
+      - bufferutil
+      - msw
+      - utf-8-validate
+      - vite
+    optional: true
+
   '@vitest/browser-playwright@4.1.6(playwright@1.60.0)(vite@8.0.3(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)(@types/node@22.19.19)(esbuild@0.27.7)(jiti@1.21.7)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))(vitest@4.1.6)':
     dependencies:
       '@vitest/browser': 4.1.6(vite@8.0.3(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)(@types/node@22.19.19)(esbuild@0.27.7)(jiti@1.21.7)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))(vitest@4.1.6)
@@ -20369,6 +20482,24 @@ snapshots:
       - msw
       - utf-8-validate
       - vite
+
+  '@vitest/browser@4.1.6(vite@8.0.3(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)(@types/node@22.19.19)(esbuild@0.25.12)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))(vitest@4.1.6)':
+    dependencies:
+      '@blazediff/core': 1.9.1
+      '@vitest/mocker': 4.1.6(vite@8.0.3(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)(@types/node@22.19.19)(esbuild@0.25.12)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))
+      '@vitest/utils': 4.1.6
+      magic-string: 0.30.21
+      pngjs: 7.0.0
+      sirv: 3.0.2
+      tinyrainbow: 3.1.0
+      vitest: 4.1.6(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@22.19.19)(@vitest/browser-playwright@4.1.6)(@vitest/coverage-v8@4.1.6)(vite@8.0.3(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)(@types/node@22.19.19)(esbuild@0.25.12)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))
+      ws: 8.20.1
+    transitivePeerDependencies:
+      - bufferutil
+      - msw
+      - utf-8-validate
+      - vite
+    optional: true
 
   '@vitest/browser@4.1.6(vite@8.0.3(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)(@types/node@22.19.19)(esbuild@0.27.7)(jiti@1.21.7)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))(vitest@4.1.6)':
     dependencies:
@@ -20429,6 +20560,14 @@ snapshots:
       '@vitest/utils': 4.1.6
       chai: 6.2.2
       tinyrainbow: 3.1.0
+
+  '@vitest/mocker@4.1.6(vite@8.0.3(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)(@types/node@22.19.19)(esbuild@0.25.12)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))':
+    dependencies:
+      '@vitest/spy': 4.1.6
+      estree-walker: 3.0.3
+      magic-string: 0.30.21
+    optionalDependencies:
+      vite: 8.0.3(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)(@types/node@22.19.19)(esbuild@0.25.12)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0)
 
   '@vitest/mocker@4.1.6(vite@8.0.3(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)(@types/node@22.19.19)(esbuild@0.27.7)(jiti@1.21.7)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))':
     dependencies:
@@ -28219,6 +28358,25 @@ snapshots:
       - supports-color
       - typescript
 
+  vite@8.0.3(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)(@types/node@22.19.19)(esbuild@0.25.12)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0):
+    dependencies:
+      lightningcss: 1.32.0
+      picomatch: 4.0.4
+      postcss: 8.5.14
+      rolldown: 1.0.0-rc.12(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)
+      tinyglobby: 0.2.16
+    optionalDependencies:
+      '@types/node': 22.19.19
+      esbuild: 0.25.12
+      fsevents: 2.3.3
+      jiti: 2.7.0
+      terser: 5.47.1
+      tsx: 4.22.0
+      yaml: 2.9.0
+    transitivePeerDependencies:
+      - '@emnapi/core'
+      - '@emnapi/runtime'
+
   vite@8.0.3(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)(@types/node@22.19.19)(esbuild@0.27.7)(jiti@1.21.7)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0):
     dependencies:
       lightningcss: 1.32.0
@@ -28260,6 +28418,37 @@ snapshots:
   vitefu@1.1.3(vite@8.0.3(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)(@types/node@22.19.19)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0)):
     optionalDependencies:
       vite: 8.0.3(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)(@types/node@22.19.19)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0)
+
+  vitest@4.1.6(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@22.19.19)(@vitest/browser-playwright@4.1.6)(@vitest/coverage-v8@4.1.6)(vite@8.0.3(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)(@types/node@22.19.19)(esbuild@0.25.12)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0)):
+    dependencies:
+      '@vitest/expect': 4.1.6
+      '@vitest/mocker': 4.1.6(vite@8.0.3(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)(@types/node@22.19.19)(esbuild@0.25.12)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))
+      '@vitest/pretty-format': 4.1.6
+      '@vitest/runner': 4.1.6
+      '@vitest/snapshot': 4.1.6
+      '@vitest/spy': 4.1.6
+      '@vitest/utils': 4.1.6
+      es-module-lexer: 2.1.0
+      expect-type: 1.3.0
+      magic-string: 0.30.21
+      obug: 2.1.1
+      pathe: 2.0.3
+      picomatch: 4.0.4
+      std-env: 4.1.0
+      tinybench: 2.9.0
+      tinyexec: 1.1.2
+      tinyglobby: 0.2.16
+      tinyrainbow: 3.1.0
+      vite: 8.0.3(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)(@types/node@22.19.19)(esbuild@0.25.12)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0)
+      why-is-node-running: 2.3.0
+    optionalDependencies:
+      '@edge-runtime/vm': 3.2.0
+      '@opentelemetry/api': 1.9.1
+      '@types/node': 22.19.19
+      '@vitest/browser-playwright': 4.1.6(playwright@1.60.0)(vite@8.0.3(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)(@types/node@22.19.19)(esbuild@0.25.12)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))(vitest@4.1.6)
+      '@vitest/coverage-v8': 4.1.6(@vitest/browser@4.1.6)(vitest@4.1.6)
+    transitivePeerDependencies:
+      - msw
 
   vitest@4.1.6(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@22.19.19)(@vitest/browser-playwright@4.1.6)(@vitest/coverage-v8@4.1.6)(vite@8.0.3(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)(@types/node@22.19.19)(esbuild@0.27.7)(jiti@1.21.7)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0)):
     dependencies:

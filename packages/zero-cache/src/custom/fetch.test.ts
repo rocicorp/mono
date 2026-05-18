@@ -1,7 +1,6 @@
 import {LogContext} from '@rocicorp/logger';
 import {
   afterAll,
-  assert,
   beforeEach,
   describe,
   expect,
@@ -404,18 +403,14 @@ describe('fetchFromAPIServer', () => {
     }
 
     expect(caught).toBeInstanceOf(ProtocolError);
-    assert(isProtocolError(caught), 'Expected protocol error');
+    if (!isProtocolError(caught)) throw new Error('Expected protocol error');
     expect(caught.kind).toBe(ErrorKind.PushFailed);
-    assert(
-      caught.errorBody.kind === ErrorKind.PushFailed,
-      'Expected zeroCache PushFailed error',
-    );
+    if (caught.errorBody.kind !== ErrorKind.PushFailed)
+      throw new Error('Expected zeroCache PushFailed error');
 
     expect(caught.errorBody.reason).toBe(ErrorReason.HTTP);
-    assert(
-      caught.errorBody.reason === ErrorReason.HTTP,
-      'Expected zeroCache HTTP error',
-    );
+    if (caught.errorBody.reason !== ErrorReason.HTTP)
+      throw new Error('Expected zeroCache HTTP error');
     expect(caught.errorBody.status).toBe(503);
     expect(caught.errorBody.bodyPreview).toBe('failure-body');
     expect(caught.errorBody.message).toMatch(/non-OK status 503/);
@@ -437,12 +432,10 @@ describe('fetchFromAPIServer', () => {
 
     expect(caught).toBeInstanceOf(ProtocolError);
 
-    assert(isProtocolError(caught), 'Expected protocol error');
+    if (!isProtocolError(caught)) throw new Error('Expected protocol error');
     expect(caught.kind).toBe(ErrorKind.PushFailed);
-    assert(
-      caught.errorBody.kind === ErrorKind.PushFailed,
-      'Expected zeroCache PushFailed error',
-    );
+    if (caught.errorBody.kind !== ErrorKind.PushFailed)
+      throw new Error('Expected zeroCache PushFailed error');
     expect(caught.errorBody.reason).toBe(ErrorReason.Parse);
     expect(caught.errorBody.message).toMatch(/Failed to parse response/);
   });
@@ -463,12 +456,10 @@ describe('fetchFromAPIServer', () => {
 
     expect(caught).toBeInstanceOf(ProtocolError);
 
-    assert(isProtocolError(caught), 'Expected protocol error');
+    if (!isProtocolError(caught)) throw new Error('Expected protocol error');
     expect(caught.kind).toBe(ErrorKind.TransformFailed);
-    assert(
-      caught.errorBody.kind === ErrorKind.TransformFailed,
-      'Expected zeroCache TransformFailed error',
-    );
+    if (caught.errorBody.kind !== ErrorKind.TransformFailed)
+      throw new Error('Expected zeroCache TransformFailed error');
     expect(caught.errorBody.reason).toBe(ErrorReason.Parse);
     expect(caught.errorBody.message).toMatch(/Failed to parse response/);
   });
@@ -486,12 +477,10 @@ describe('fetchFromAPIServer', () => {
 
     expect(caught).toBeInstanceOf(ProtocolError);
 
-    assert(isProtocolError(caught), 'Expected protocol error');
+    if (!isProtocolError(caught)) throw new Error('Expected protocol error');
     expect(caught.kind).toBe(ErrorKind.TransformFailed);
-    assert(
-      caught.errorBody.kind === ErrorKind.TransformFailed,
-      'Expected zeroCache TransformFailed error',
-    );
+    if (caught.errorBody.kind !== ErrorKind.TransformFailed)
+      throw new Error('Expected zeroCache TransformFailed error');
     expect(caught.errorBody.reason).toBe(ErrorReason.HTTP);
     expect(caught.errorBody.message).toMatch(
       /Fetch from API server returned non-OK status 400/,
@@ -512,13 +501,11 @@ describe('fetchFromAPIServer', () => {
     }
 
     expect(caught).toBeInstanceOf(ProtocolError);
-    assert(isProtocolError(caught), 'Expected protocol error');
+    if (!isProtocolError(caught)) throw new Error('Expected protocol error');
 
     expect(caught.kind).toBe(ErrorKind.PushFailed);
-    assert(
-      caught.errorBody.kind === ErrorKind.PushFailed,
-      'Expected zeroCache PushFailed error',
-    );
+    if (caught.errorBody.kind !== ErrorKind.PushFailed)
+      throw new Error('Expected zeroCache PushFailed error');
     expect(caught.errorBody.reason).toBe(ErrorReason.Parse);
     expect(caught.errorBody.message).toMatch(/Failed to parse response/);
   });
@@ -537,13 +524,11 @@ describe('fetchFromAPIServer', () => {
     }
 
     expect(caught).toBeInstanceOf(ProtocolError);
-    assert(isProtocolError(caught), 'Expected protocol error');
+    if (!isProtocolError(caught)) throw new Error('Expected protocol error');
 
     expect(caught.kind).toBe(ErrorKind.TransformFailed);
-    assert(
-      caught.errorBody.kind === ErrorKind.TransformFailed,
-      'Expected zeroCache TransformFailed error',
-    );
+    if (caught.errorBody.kind !== ErrorKind.TransformFailed)
+      throw new Error('Expected zeroCache TransformFailed error');
     expect(caught.errorBody.reason).toBe(ErrorReason.Parse);
     expect(caught.errorBody.message).toMatch(/Failed to parse response/);
   });
@@ -559,13 +544,11 @@ describe('fetchFromAPIServer', () => {
     }
 
     expect(caught).toBeInstanceOf(ProtocolError);
-    assert(isProtocolError(caught), 'Expected protocol error');
+    if (!isProtocolError(caught)) throw new Error('Expected protocol error');
 
     expect(caught.kind).toBe(ErrorKind.PushFailed);
-    assert(
-      caught.errorBody.kind === ErrorKind.PushFailed,
-      'Expected zeroCache PushFailed error',
-    );
+    if (caught.errorBody.kind !== ErrorKind.PushFailed)
+      throw new Error('Expected zeroCache PushFailed error');
     expect(caught.errorBody.reason).toBe(ErrorReason.Internal);
     expect(caught.errorBody.message).toMatch(/threw error: boom/);
   });
@@ -581,13 +564,11 @@ describe('fetchFromAPIServer', () => {
     }
 
     expect(caught).toBeInstanceOf(ProtocolError);
-    assert(isProtocolError(caught), 'Expected protocol error');
+    if (!isProtocolError(caught)) throw new Error('Expected protocol error');
 
     expect(caught.kind).toBe(ErrorKind.TransformFailed);
-    assert(
-      caught.errorBody.kind === ErrorKind.TransformFailed,
-      'Expected zeroCache TransformFailed error',
-    );
+    if (caught.errorBody.kind !== ErrorKind.TransformFailed)
+      throw new Error('Expected zeroCache TransformFailed error');
     expect(caught.errorBody.reason).toBe(ErrorReason.Internal);
     expect(caught.errorBody.message).toMatch(/threw error: network failure/);
   });
