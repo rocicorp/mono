@@ -35,6 +35,7 @@
     "zero-types": "workspace:*",
     "zql": "workspace:*",
     "zql-integration-tests": "workspace:*",
-    "zqlite": "workspace:*"
+    "zqlite": "workspace:*",
+    "vitest": "^4.1.5"
   }
 }

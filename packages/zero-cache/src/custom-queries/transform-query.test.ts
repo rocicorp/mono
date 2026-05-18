@@ -1,5 +1,6 @@
 import {
   afterEach,
+  assert,
   beforeEach,
   describe,
   expect,
@@ -546,7 +547,7 @@ describe('CustomQueryTransformer', () => {
     expectLastTransformFetch([mockQueries[1]]);
 
     // Verify combined result includes both cached and fresh data
-    if (result.kind !== 'success') throw new Error('Expected success result');
+    assert(result.kind === 'success');
     expect(result.cached).toBe(false);
     expect(result.result).toHaveLength(2);
     expect(result.result).toEqual(expect.arrayContaining(transformResults));

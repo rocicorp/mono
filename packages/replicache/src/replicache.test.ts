@@ -1072,19 +1072,13 @@ test('logLevel', async () => {
   expect(debug.mock.calls.length).toBeGreaterThan(0);
 
   expect(
-    debug.mock.calls.some((args: unknown[]) =>
-      String(args[0]).startsWith(`name=${rep.name}`),
-    ),
+    debug.mock.calls.some(args => args[0].startsWith(`name=${rep.name}`)),
   ).toBe(true);
   expect(
-    debug.mock.calls.some(
-      (args: unknown[]) => args.length > 0 && String(args[1]).endsWith('PULL'),
-    ),
+    debug.mock.calls.some(args => args.length > 0 && args[1].endsWith('PULL')),
   ).toBe(true);
   expect(
-    debug.mock.calls.some(
-      (args: unknown[]) => args.length > 0 && String(args[1]).endsWith('PUSH'),
-    ),
+    debug.mock.calls.some(args => args.length > 0 && args[1].endsWith('PUSH')),
   ).toBe(true);
 
   await rep.close();
@@ -1845,7 +1839,7 @@ test('online', async () => {
 
   expect(rep.online).toBe(false);
   expect(
-    consoleDebugStub.mock.calls.some((args: unknown[]) =>
+    consoleDebugStub.mock.calls.some(args =>
       args.join('\n').includes('Push threw'),
     ),
   );
@@ -1859,7 +1853,7 @@ test('online', async () => {
   await tickAFewTimes(vi, 20);
 
   expect(
-    !consoleDebugStub.mock.calls.some((args: unknown[]) =>
+    !consoleDebugStub.mock.calls.some(args =>
       args.join('\n').includes('Push threw'),
     ),
   );

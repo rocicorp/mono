@@ -163,7 +163,7 @@ test('mutator.fn validates args when validator is provided', async () => {
     '~standard': {
       version: 1,
       vendor: 'test',
-      validate: vi.fn((input: {id: string}) => ({value: input})),
+      validate: vi.fn(input => ({value: input})),
     },
   };
 

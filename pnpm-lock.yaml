@@ -180,6 +180,12 @@ importers:
       remark-gfm:
         specifier: ^4.0.0
         version: 4.0.1
+      unified:
+        specifier: ^11.0.5
+        version: 11.0.5
+      unist-util-visit:
+        specifier: ^5.1.0
+        version: 5.1.0
       use-debounce:
         specifier: ^10.0.4
         version: 10.1.1(react@18.3.1)
@@ -196,6 +202,9 @@ importers:
       '@tailwindcss/forms':
         specifier: ^0.5.0
         version: 0.5.11(tailwindcss@3.4.19(tsx@4.22.0)(yaml@2.9.0))
+      '@types/hast':
+        specifier: ^3.0.4
+        version: 3.0.4
       '@types/js-cookie':
         specifier: ^3.0.6
         version: 3.0.6
@@ -373,6 +382,9 @@ importers:
       shared:
         specifier: workspace:*
         version: link:../shared
+      vitest:
+        specifier: ^4.1.5
+        version: 4.1.6(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@22.19.19)(@vitest/browser-playwright@4.1.6)(@vitest/coverage-v8@4.1.6)(vite@8.0.3(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)(@types/node@22.19.19)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))
       zero-cache:
         specifier: workspace:*
         version: link:../zero-cache
@@ -545,8 +557,8 @@ importers:
         specifier: ^1.4.2
         version: 1.4.2(typedoc-plugin-markdown@4.11.0(typedoc@0.28.19(typescript@6.0.3)))
       replicache:
-        specifier: workspace:*
-        version: link:../replicache
+        specifier: 15.2.1
+        version: 15.2.1
       typedoc:
         specifier: ^0.28.17
         version: 0.28.19(typescript@6.0.3)
@@ -1168,6 +1180,12 @@ importers:
         specifier: ^1.0.2
         version: 1.0.2
     devDependencies:
+      '@faker-js/faker':
+        specifier: ^9.6.0
+        version: 9.9.0
+      '@standard-schema/spec':
+        specifier: ^1.0.0
+        version: 1.1.0
       ast-to-zql:
         specifier: workspace:*
         version: link:../ast-to-zql
@@ -1177,6 +1195,9 @@ importers:
       esbuild:
         specifier: ^0.27.4
         version: 0.27.7
+      fast-check:
+        specifier: ^3.18.0
+        version: 3.23.2
       oxfmt:
         specifier: ^0.45.0
         version: 0.45.0
@@ -1192,6 +1213,9 @@ importers:
       typescript:
         specifier: ~6.0.2
         version: 6.0.3
+      vitest:
+        specifier: ^4.1.5
+        version: 4.1.6(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@22.19.19)(@vitest/browser-playwright@4.1.6)(@vitest/coverage-v8@4.1.6)(vite@8.0.3(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)(@types/node@22.19.19)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))
       zero-protocol:
         specifier: workspace:*
         version: link:../zero-protocol
@@ -1219,6 +1243,9 @@ importers:
       typescript:
         specifier: ~6.0.2
         version: 6.0.3
+      vitest:
+        specifier: ^4.1.5
+        version: 4.1.6(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@22.19.19)(@vitest/browser-playwright@4.1.6)(@vitest/coverage-v8@4.1.6)(vite@8.0.3(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)(@types/node@22.19.19)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))
 
   packages/zero-pg:
     dependencies:
@@ -1263,6 +1290,9 @@ importers:
       typescript:
         specifier: ~6.0.2
         version: 6.0.3
+      vitest:
+        specifier: ^4.1.5
+        version: 4.1.6(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@22.19.19)(@vitest/browser-playwright@4.1.6)(@vitest/coverage-v8@4.1.6)(vite@8.0.3(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)(@types/node@22.19.19)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))
       zero-types:
         specifier: workspace:*
         version: link:../zero-types
@@ -1331,6 +1361,9 @@ importers:
       shared:
         specifier: workspace:*
         version: link:../shared
+      vitest:
+        specifier: ^4.1.5
+        version: 4.1.6(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@22.19.19)(@vitest/browser-playwright@4.1.6)(@vitest/coverage-v8@4.1.6)(vite@8.0.3(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)(@types/node@22.19.19)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))
       zero-protocol:
         specifier: workspace:*
         version: link:../zero-protocol
@@ -1407,6 +1440,9 @@ importers:
 
   packages/zero-solid:
     devDependencies:
+      '@rocicorp/resolver':
+        specifier: ^1.0.2
+        version: 1.0.2
       '@solidjs/testing-library':
         specifier: ^0.8.10
         version: 0.8.10(solid-js@1.9.13)
@@ -1422,6 +1458,9 @@ importers:
       vite-plugin-solid:
         specifier: ^2.11.11
         version: 2.11.12(solid-js@1.9.13)(vite@8.0.3(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)(@types/node@22.19.19)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))
+      vitest:
+        specifier: ^4.1.5
+        version: 4.1.6(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@22.19.19)(@vitest/browser-playwright@4.1.6)(@vitest/coverage-v8@4.1.6)(vite@8.0.3(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)(@types/node@22.19.19)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))
       zero-client:
         specifier: workspace:*
         version: link:../zero-client
@@ -1507,6 +1546,9 @@ importers:
       typescript:
         specifier: ~6.0.2
         version: 6.0.3
+      vitest:
+        specifier: ^4.1.5
+        version: 4.1.6(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@22.19.19)(@vitest/browser-playwright@4.1.6)(@vitest/coverage-v8@4.1.6)(vite@8.0.3(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)(@types/node@22.19.19)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))
       zero-cache:
         specifier: workspace:*
         version: link:../zero-cache
@@ -1534,6 +1576,12 @@ importers:
       '@faker-js/faker':
         specifier: ^9.6.0
         version: 9.9.0
+      '@rocicorp/logger':
+        specifier: ^5.4.0
+        version: 5.4.0
+      '@types/pg':
+        specifier: ^8.11.11
+        version: 8.20.0
       '@types/tmp':
         specifier: ^0.2.6
         version: 0.2.6
@@ -1543,12 +1591,18 @@ importers:
       oxfmt:
         specifier: ^0.45.0
         version: 0.45.0
+      pg:
+        specifier: ^8.16.3
+        version: 8.20.0
       shared:
         specifier: workspace:*
         version: link:../shared
       typescript:
         specifier: ~6.0.2
         version: 6.0.3
+      vitest:
+        specifier: ^4.1.5
+        version: 4.1.6(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@22.19.19)(@vitest/browser-playwright@4.1.6)(@vitest/coverage-v8@4.1.6)(vite@8.0.3(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)(@types/node@22.19.19)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))
       z2s:
         specifier: workspace:*
         version: link:../z2s
@@ -1613,6 +1667,9 @@ importers:
       typescript:
         specifier: ~6.0.2
         version: 6.0.3
+      vitest:
+        specifier: ^4.1.5
+        version: 4.1.6(@edge-runtime/vm@3.2.0)(@opentelemetry/api@1.9.1)(@types/node@22.19.19)(@vitest/browser-playwright@4.1.6)(@vitest/coverage-v8@4.1.6)(vite@8.0.3(@emnapi/core@1.10.0)(@emnapi/runtime@1.10.0)(@types/node@22.19.19)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))
       zero-protocol:
         specifier: workspace:*
         version: link:../zero-protocol
@@ -12148,6 +12205,11 @@ packages:
   repeat-string@1.6.1:
     resolution: {integrity: sha512-PV0dzCYDNfRi1jCDbJzpW7jNNDRuCOG/jI5ctQcGKt/clZD+YcPS3yIlWuTJMmESC8aevCFmWJy5wjAFgNqN6w==}
     engines: {node: '>=0.10'}
+
+  replicache@15.2.1:
+    resolution: {integrity: sha512-FhKA6Icjb7tHoKVslkq2OGGk1QbGqn6NotIaVJv+sD/atbeC6KJ9iS6eDQ7fNwISWc1MMPRuP5qJcw1nP0Dayg==}
+    engines: {node: '>=14.8.0'}
+    hasBin: true
 
   require-directory@2.1.1:
     resolution: {integrity: sha512-fGxEI7+wsG9xrvdjsrlmL22OMTTiHRwAMroiEeMgq8gzoLC/PQr7RsRDSTLUg/bZAZtF+TVIkHc6/4RIKrui+Q==}
@@ -27135,6 +27197,13 @@ snapshots:
       strip-ansi: 6.0.1
 
   repeat-string@1.6.1: {}
+
+  replicache@15.2.1:
+    dependencies:
+      '@badrap/valita': 0.3.11
+      '@rocicorp/lock': 1.0.4
+      '@rocicorp/logger': 5.4.0
+      '@rocicorp/resolver': 1.0.2
 
   require-directory@2.1.1: {}
 

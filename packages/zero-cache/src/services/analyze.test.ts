@@ -63,7 +63,7 @@ vi.mock('../../../zql/src/planner/planner-debug.ts', () => ({
       events: [],
     };
   }),
-  serializePlanDebugEvents: vi.fn((events: unknown[]) => events),
+  serializePlanDebugEvents: vi.fn(events => events),
 }));
 
 vi.mock('../../../zqlite/src/sqlite-cost-model.ts', () => ({

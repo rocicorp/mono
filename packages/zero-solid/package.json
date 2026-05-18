@@ -28,7 +28,9 @@
     "solid-js": "^1.9.4",
     "vite-plugin-solid": "^2.11.11",
     "zero-client": "workspace:*",
-    "zql": "workspace:*"
+    "zql": "workspace:*",
+    "vitest": "^4.1.5",
+    "@rocicorp/resolver": "^1.0.2"
   },
   "peerDependencies": {
     "solid-js": "^1.9.4"

@@ -65,10 +65,7 @@ export class FetchMocker {
   constructor(vi: {spyOn: typeof vitest.vi.spyOn}) {
     this.spy = vi
       .spyOn(globalThis, 'fetch')
-      .mockImplementation(
-        (input: string | Request | URL, init?: RequestInit) =>
-          this.#handle(input, init),
-      );
+      .mockImplementation((input, init) => this.#handle(input, init));
   }
 
   async #handle(
@@ -137,12 +134,9 @@ export class FetchMocker {
   /** Get parsed JSON bodies of requests matching the URL substring. */
   bodies(urlSubstring: string): unknown[] {
     return this.spy.mock.calls
-      .map(([input]: [string | Request | URL], i: number) => ({
-        url: getUrl(input),
-        body: this.#bodies[i],
-      }))
-      .filter(({url}: {url: string; body: unknown}) => url.includes(urlSubstring))
-      .map(({body}: {url: string; body: unknown}) => body);
+      .map(([input], i) => ({url: getUrl(input), body: this.#bodies[i]}))
+      .filter(({url}) => url.includes(urlSubstring))
+      .map(({body}) => body);
   }
 
   /** Get the parsed JSON body of the last request. */

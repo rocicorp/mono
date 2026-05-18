@@ -482,6 +482,7 @@ test('too many relationships', () => {
   // but more importantly it used to raise:
   // TS2589: Type instantiation is excessively deep and possibly infinite
 
+  // @ts-expect-error type 'number' does not satisfy the constraint
   expectTypeOf(q2).toEqualTypeOf<123>();
 });
 

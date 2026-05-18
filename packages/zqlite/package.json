@@ -38,6 +38,7 @@
     "zero-protocol": "workspace:*",
     "zero-schema": "workspace:*",
     "zero-types": "workspace:*",
-    "zql": "workspace:*"
+    "zql": "workspace:*",
+    "vitest": "^4.1.5"
   }
 }

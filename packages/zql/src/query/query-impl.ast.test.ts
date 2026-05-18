@@ -2101,7 +2101,7 @@ test('one in schema should not imply limit 1 in the ast -- the user needs to get
     table: 'issue',
     related: [
       {
-        subquery: expect.toSatisfy((sq: unknown) => !('limit' in (sq as object))),
+        subquery: expect.toSatisfy(sq => !('limit' in sq)),
       },
     ],
   });

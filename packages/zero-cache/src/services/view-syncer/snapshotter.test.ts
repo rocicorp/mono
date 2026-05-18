@@ -685,7 +685,7 @@ describe('view-syncer/snapshotter', () => {
 
     // Find the getRows query (SELECT from users with WHERE clause)
     const getRowsCalls = getSpy.mock.calls.filter(
-      (call: unknown[]) =>
+      call =>
         typeof call[0] === 'string' &&
         call[0].includes('FROM "users"') &&
         call[0].includes('WHERE'),

@@ -252,7 +252,7 @@ describe('streams with internal acks', () => {
   });
 
   afterEach(async () => {
-    expect(ws.readyState).toSatisfy((x: unknown) => x === ws.CLOSING || x === ws.CLOSED);
+    expect(ws.readyState).toSatisfy(x => x === ws.CLOSING || x === ws.CLOSED);
     await server.close();
   });
 

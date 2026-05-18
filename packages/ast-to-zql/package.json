@@ -23,6 +23,7 @@
     "zero-cache": "workspace:*",
     "zero-protocol": "workspace:*",
     "zero-schema": "workspace:*",
-    "zero-types": "workspace:*"
+    "zero-types": "workspace:*",
+    "vitest": "^4.1.5"
   }
 }
