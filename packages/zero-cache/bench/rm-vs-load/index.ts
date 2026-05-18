@@ -98,10 +98,12 @@ const consumerConfig: ConsumerConfig = {
   runtime: runtimeFromEnv(),
   applyMode,
   applyMessages: applyMode !== 'none',
+  applyLimit: optionalEnvInt('ZERO_RM_VS_APPLY_LIMIT'),
   transportMode: transportModeFromEnv(),
   transportAckMode: transportAckModeFromEnv(),
   transportBatchMessages: envInt('ZERO_RM_VS_WS_BATCH_MESSAGES', 64),
   protocolMode: protocolModeFromEnv(),
+  synchronous: synchronousFromEnv(),
   walAutocheckpoint: optionalEnvInt(
     'ZERO_RM_VS_WAL_AUTOCHECKPOINT',
     SERVING_REPLICA_WAL_AUTOCHECKPOINT_PAGES,
@@ -148,13 +150,28 @@ function runtimeFromEnv(): ConsumerRuntime {
 
 function optionalEnvInt(
   name: string,
-  defaultValue: number,
+  defaultValue?: number,
 ): number | undefined {
   const value = envString(name);
   if (value === undefined || value === '') {
     return defaultValue;
   }
   return envInt(name, 0);
+}
+
+function synchronousFromEnv(): 'OFF' | 'NORMAL' | 'FULL' | undefined {
+  const value = envString('ZERO_RM_VS_SQLITE_SYNCHRONOUS');
+  switch (value) {
+    case undefined:
+    case '':
+      return undefined;
+    case 'OFF':
+    case 'NORMAL':
+    case 'FULL':
+      return value;
+    default:
+      throw new Error(`Invalid ZERO_RM_VS_SQLITE_SYNCHRONOUS ${value}`);
+  }
 }
 
 function transportAckModeFromEnv(): ConsumerTransportAckMode {
@@ -390,11 +407,15 @@ async function runScenario(
         reconnectStartAbsoluteMs = performance.now();
         reconnectStartedAtMs = reconnectStartAbsoluteMs - start;
         reconnectJoinWatermark = generated.watermark;
+        const reconnectConfig = configForApplySlot(
+          consumerConfig,
+          consumers.length,
+        );
         reconnect = await makeConsumer(
           `reconnect-${scenario.name}`,
           reconnectCatchupFrom,
-          consumerConfig.ackDelayMs,
-          consumerConfig,
+          reconnectConfig.ackDelayMs,
+          reconnectConfig,
           false,
         );
         consumers.push(reconnect);
@@ -553,10 +574,12 @@ async function runScenario(
       subscriberAckDelayMs: consumerConfig.ackDelayMs,
       subscriberApplyMode: consumerConfig.applyMode,
       subscriberApplyMessages: consumerConfig.applyMessages,
+      subscriberApplyLimit: consumerConfig.applyLimit,
       subscriberTransportMode: consumerConfig.transportMode,
       subscriberTransportAckMode: consumerConfig.transportAckMode,
       subscriberTransportBatchMessages: consumerConfig.transportBatchMessages,
       subscriberProtocolMode: consumerConfig.protocolMode,
+      subscriberSynchronous: consumerConfig.synchronous,
       subscriberWalAutocheckpoint: consumerConfig.walAutocheckpoint,
       subscriberClientCpuMicros: consumerConfig.clientCpuMicros,
       avgSubscriberParseMs,
@@ -607,15 +630,30 @@ function createConsumers(config: ConsumerConfig): Promise<LoadConsumer[]> {
   return Promise.all(
     Array.from({length: config.count}, (_, i) => {
       const isSlow = config.slowEvery > 0 && (i + 1) % config.slowEvery === 0;
+      const consumerConfig = configForApplySlot(config, i);
       return makeConsumer(
         `vs-${i}`,
         replicaVersion,
-        isSlow ? config.slowAckDelayMs : config.ackDelayMs,
-        config,
+        isSlow ? consumerConfig.slowAckDelayMs : consumerConfig.ackDelayMs,
+        consumerConfig,
         true,
       );
     }),
   );
+}
+
+function configForApplySlot(
+  config: ConsumerConfig,
+  index: number,
+): ConsumerConfig {
+  if (config.applyLimit === undefined || index < config.applyLimit) {
+    return config;
+  }
+  return {
+    ...config,
+    applyMode: 'none',
+    applyMessages: false,
+  };
 }
 
 async function makeConsumer(
@@ -663,7 +701,7 @@ async function makeConsumer(
     cleanupSQLite(consumerSQLitePath);
     consumerReplica = new Database(lc, consumerSQLitePath);
     consumerReplica.pragma('journal_mode = WAL2');
-    consumerReplica.pragma('synchronous = NORMAL');
+    consumerReplica.pragma(`synchronous = ${config.synchronous ?? 'NORMAL'}`);
     processor = initializeReplica(lc, consumerReplica, replicaVersion);
     if (config.applyMode !== 'direct') {
       consumerReplica.close();
@@ -676,6 +714,7 @@ async function makeConsumer(
         {
           busyTimeout: 30000,
           analysisLimit: 1000,
+          synchronous: config.synchronous,
           walAutocheckpoint: config.walAutocheckpoint,
         },
         {level: 'error', format: 'text'},
@@ -831,6 +870,7 @@ async function makeWorkerRuntimeConsumer(
       protocolMode: config.protocolMode,
       transportAckMode: config.transportAckMode,
       applyMode: config.applyMode,
+      synchronous: config.synchronous,
       walAutocheckpoint: config.walAutocheckpoint,
       workerBatchMessages,
       clientCpuMicros: config.clientCpuMicros,

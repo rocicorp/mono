@@ -36,11 +36,13 @@ console.log(
       process.env.ZERO_RM_VS_APPLY_MODE ??
       (process.env.ZERO_RM_VS_APPLY_CLIENTS === '1' ? 'direct' : 'none')
     }`,
+    `  apply-limit: ${process.env.ZERO_RM_VS_APPLY_LIMIT ?? 'all'}`,
     `  consumer-runtime: ${process.env.ZERO_RM_VS_CONSUMER_RUNTIME ?? 'inline'}`,
     `  transport: ${process.env.ZERO_RM_VS_TRANSPORT ?? 'in-process'}`,
     `  protocol: ${process.env.ZERO_RM_VS_PROTOCOL ?? 'v7'}`,
     `  ws-ack: ${process.env.ZERO_RM_VS_WS_ACK ?? 'per-message'}`,
     `  ws-batch-messages: ${process.env.ZERO_RM_VS_WS_BATCH_MESSAGES ?? '64'}`,
+    `  sqlite-synchronous: ${process.env.ZERO_RM_VS_SQLITE_SYNCHRONOUS ?? 'NORMAL'}`,
     `  wal-autocheckpoint: ${process.env.ZERO_RM_VS_WAL_AUTOCHECKPOINT ?? 'serving-default'}`,
     `  apply-clients: ${process.env.ZERO_RM_VS_APPLY_CLIENTS}`,
     `  client-cpu-us: ${process.env.ZERO_RM_VS_CLIENT_CPU_US}`,

@@ -385,6 +385,18 @@ function keyValues(key: LiteRowKey, keyColumns: readonly string[]) {
 }
 
 function rowKeyString(key: LiteRowKey) {
+  let singleColumn: string | undefined;
+  let singleValue: LiteValueType | undefined;
+  for (const col in key) {
+    if (singleColumn !== undefined) {
+      return stringify(normalizedKeyOrder(key));
+    }
+    singleColumn = col;
+    singleValue = key[col];
+  }
+  if (singleColumn !== undefined) {
+    return `{${JSON.stringify(singleColumn)}:${stringify(singleValue)}}`;
+  }
   return stringify(normalizedKeyOrder(key));
 }
 

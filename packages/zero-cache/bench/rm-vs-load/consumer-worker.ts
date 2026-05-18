@@ -104,7 +104,7 @@ async function run() {
     cleanupSQLite(config.sqlitePath);
     consumerReplica = new Database(lc, config.sqlitePath);
     consumerReplica.pragma('journal_mode = WAL2');
-    consumerReplica.pragma('synchronous = NORMAL');
+    consumerReplica.pragma(`synchronous = ${config.synchronous ?? 'NORMAL'}`);
     processor = initializeReplica(lc, consumerReplica, config.replicaVersion);
     if (config.applyMode !== 'direct') {
       consumerReplica.close();
@@ -117,6 +117,7 @@ async function run() {
         {
           busyTimeout: 30000,
           analysisLimit: 1000,
+          synchronous: config.synchronous,
           walAutocheckpoint: config.walAutocheckpoint,
         },
         {level: 'error', format: 'text'},

@@ -14,10 +14,12 @@ export type ConsumerConfig = {
   readonly runtime: ConsumerRuntime;
   readonly applyMode: ConsumerApplyMode;
   readonly applyMessages: boolean;
+  readonly applyLimit: number | undefined;
   readonly transportMode: ConsumerTransportMode;
   readonly transportAckMode: ConsumerTransportAckMode;
   readonly transportBatchMessages: number;
   readonly protocolMode: ConsumerProtocolMode;
+  readonly synchronous: 'OFF' | 'NORMAL' | 'FULL' | undefined;
   readonly walAutocheckpoint: number | undefined;
   readonly clientCpuMicros: number;
   readonly slowAckDelayMs: number;
@@ -98,10 +100,12 @@ export type ScenarioSummary = {
   readonly subscriberAckDelayMs: number;
   readonly subscriberApplyMode: ConsumerApplyMode;
   readonly subscriberApplyMessages: boolean;
+  readonly subscriberApplyLimit: number | undefined;
   readonly subscriberTransportMode: ConsumerTransportMode;
   readonly subscriberTransportAckMode: ConsumerTransportAckMode;
   readonly subscriberTransportBatchMessages: number;
   readonly subscriberProtocolMode: ConsumerProtocolMode;
+  readonly subscriberSynchronous: 'OFF' | 'NORMAL' | 'FULL' | undefined;
   readonly subscriberWalAutocheckpoint: number | undefined;
   readonly subscriberClientCpuMicros: number;
   readonly avgSubscriberParseMs: number;
@@ -152,6 +156,7 @@ export type ConsumerWorkerData = {
   readonly protocolMode: ConsumerProtocolMode;
   readonly transportAckMode: ConsumerTransportAckMode;
   readonly applyMode: ConsumerApplyMode;
+  readonly synchronous: 'OFF' | 'NORMAL' | 'FULL' | undefined;
   readonly walAutocheckpoint: number | undefined;
   readonly workerBatchMessages: number;
   readonly clientCpuMicros: number;

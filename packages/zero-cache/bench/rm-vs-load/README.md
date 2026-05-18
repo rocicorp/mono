@@ -63,6 +63,10 @@ Useful view-syncer digestion knobs:
   replica. `worker-message` models the old production shape of one
   write-worker handoff per replication message; `worker-batch` models the
   transaction-batched write-worker path.
+- `ZERO_RM_VS_APPLY_LIMIT=N` keeps all simulated VSs connected but only lets
+  the first N apply into SQLite. This is a benchmark-only way to estimate the
+  upside of host-level shared-apply designs without changing the stream fanout
+  or ACK shape.
 - `ZERO_RM_VS_CONSUMER_RUNTIME=inline|worker` controls where the simulated VS
   websocket/parse/ACK loop runs. Use `worker` for host-shape experiments where
   each VS instance should get its own JS thread, matching deployments that run
@@ -97,5 +101,8 @@ Useful view-syncer digestion knobs:
   `wal_autocheckpoint` pragma applied to each simulated VS write worker. The
   default follows the production serving-replica pragma so the review scenario
   includes the same bounded checkpoint window.
+- `ZERO_RM_VS_SQLITE_SYNCHRONOUS=OFF|NORMAL|FULL` overrides the SQLite
+  `synchronous` pragma on each simulated VS replica connection. The default
+  remains `NORMAL`; use this only to measure durability/performance headroom.
 - `ZERO_RM_VS_CLIENT_CPU_US=N` burns `N` microseconds per downstream message to
   model client/query work sharing the VS event loop.
