@@ -7,7 +7,7 @@ runs:
     - name: Get Playwright version and browser path
       id: playwright-info
       run: |
-        echo "version=$(pnpmx playwright --version | awk '{print $NF}')" >> "$GITHUB_OUTPUT"
+        echo "version=$(pnpm exec playwright --version | awk '{print $NF}')" >> "$GITHUB_OUTPUT"
         echo "browsers-path=${PLAYWRIGHT_BROWSERS_PATH:-$HOME/.cache/ms-playwright}" >> "$GITHUB_OUTPUT"
       shell: bash
     - name: Cache Playwright browsers
@@ -18,9 +18,9 @@ runs:
         key: playwright-v4-${{ runner.os }}-${{ steps.playwright-info.outputs.version }}
     - name: Install Playwright browsers and system deps
       if: steps.playwright-cache.outputs.cache-hit != 'true'
-      run: pnpmx playwright install --with-deps
+      run: pnpm exec playwright install --with-deps
       shell: bash
     - name: Install Playwright system deps only
       if: steps.playwright-cache.outputs.cache-hit == 'true'
-      run: pnpmx playwright install-deps
+      run: pnpm exec playwright install-deps
       shell: bash
