@@ -53,7 +53,9 @@
   "packageManager": "pnpm@11.1.2",
   "pnpm": {
     "overrides": {
-      "esbuild": "^0.27.4"
+      "webpackbar": "^7.0.0",
+      "playwright": "1.58.2",
+      "playwright-core": "1.58.2"
     }
   }
 }
