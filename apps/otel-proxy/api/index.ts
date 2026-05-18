@@ -1,5 +1,18 @@
 /* oxlint-disable no-console */
-import type {VercelRequest, VercelResponse} from '@vercel/node';
+
+// Minimal subset of Vercel's request/response shapes that this handler uses.
+// Avoids depending on @vercel/node, which bundles unrelated build tooling.
+export interface ProxyRequest {
+  method?: string | undefined;
+  body?: unknown;
+  headers?: Record<string, string | undefined> | undefined;
+}
+
+export interface ProxyResponse {
+  status(code: number): ProxyResponse;
+  json(body: unknown): ProxyResponse;
+  send(body: unknown): ProxyResponse;
+}
 
 /**
  * Simple assertion function for validation
@@ -36,8 +49,8 @@ function validateOtelData(data: unknown): boolean {
  * Only accepts JSON requests and validates for OTEL data.
  */
 export default async function handler(
-  req: VercelRequest,
-  res: VercelResponse,
+  req: ProxyRequest,
+  res: ProxyResponse,
 ): Promise<void> {
   console.log(`OTEL Proxy: ${req.method} request received`);
 
