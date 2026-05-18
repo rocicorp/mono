@@ -117,7 +117,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - uses: ./.github/actions/playwright-install
       - name: Run tests
-        run: TEST_PG_MODE=nopg pnpm run test -- --shard=${{ matrix.shard }}/3
+        run: TEST_PG_MODE=nopg pnpm run test --shard=${{ matrix.shard }}/3
 
   test-pg:
     name: Test PG ${{ matrix.pg-version }} (Shard ${{ matrix.shard }}/2)
@@ -146,4 +146,4 @@ jobs:
         with:
           timeout_minutes: 10
           max_attempts: 3
-          command: TEST_PG_MODE=pg-${{ matrix.pg-version }} pnpm run test -- --shard=${{ matrix.shard }}/2
+          command: TEST_PG_MODE=pg-${{ matrix.pg-version }} pnpm run test --shard=${{ matrix.shard }}/2
