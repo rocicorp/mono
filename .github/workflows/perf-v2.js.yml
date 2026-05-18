@@ -39,7 +39,7 @@ jobs:
       # Clear out potential user data dirs left over from previous failures.
       - run: rm -rf /tmp/replicache-playwright-*
       - run: pnpm install --frozen-lockfile
-      - run: pnpmx playwright install
+      - run: pnpm exec playwright install
 
       - run: pnpm run build
         working-directory: packages/replicache-perf
@@ -49,8 +49,8 @@ jobs:
         working-directory: packages/replicache-perf
         run: |
           pnpm run build
-          pnpmx tsx src/runner.ts --format=json | tee perf-temp-output.json
-          pnpmx tsx tool/split-perf.ts perf-temp-output.json perf-v2-output.json perf-v2-p95-output.json
+          pnpm exec tsx src/runner.ts --format=json | tee perf-temp-output.json
+          pnpm exec tsx tool/split-perf.ts perf-temp-output.json perf-v2-output.json perf-v2-p95-output.json
         shell: bash
 
       # Disable git hooks so github-action-benchmark can commit to gh-pages
