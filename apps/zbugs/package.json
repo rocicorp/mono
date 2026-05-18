@@ -85,7 +85,7 @@
     "@vitejs/plugin-react": "^6.0.1",
     "@vitest/runner": "^4.1.5",
     "drizzle-kit": "^0.31.10",
-    "drizzle-orm": "^0.45.1",
+    "drizzle-orm": "^0.45.2",
     "oxfmt": "^0.45.0",
     "postcss-preset-env": "^7.4.3",
     "rehype-video": "^2.3.0",
