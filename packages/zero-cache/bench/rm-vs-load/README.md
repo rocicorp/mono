@@ -8,14 +8,15 @@ inventing a new local script for every hypothesis.
 one replication-manager
         |
         v
-   Storer/changeLog  ---->  N live view-syncers
+   Storer/changeLog  ---->  serving replica stream consumer(s)
         |
         `---------------->  optional reconnect catchup
 ```
 
 Files:
 
-- `e2e.ts` pins the PR-review scenario: 1 RM, 16 view-syncers, heavy load.
+- `e2e.ts` pins the PR-review scenario: 1 RM stream consumer, 1 shared serving
+  replica applier, and a reconnecting consumer under heavy load.
 - `index.ts` owns the runner and emits JSON summaries.
 - `protocol.ts` isolates WebSocket/protocol experiments from the load driver.
 - `scenarios.ts` defines named load scenarios and env overrides.
@@ -33,19 +34,23 @@ The default `e2e` wrapper focuses on the steady-state pressure point this
 folder is meant to protect:
 
 ```text
-             6s target: 1k tx/s, 20 rows/tx
+             15s target: 4k tx/s, 20 rows/tx
 
-  RM -> Storer/changeLog -> 16 live VSs
+  RM -> Storer/changeLog -> live serving-replica stream consumer
           |                    |
           |                    `-> parse + websocket ACK + SQLite apply
           |
-          `-> 1 reconnecting VS starts 500 tx behind during the load window
+          `-> 1 reconnecting consumer starts 500 tx behind during load
+              and shares the existing serving replica model
 ```
 
 The headline question is not whether a quiet recovery path is faster. It is
-whether the system can keep accepting writes while the live VSs are busy, and
-whether a VS that fell behind can close its starting gap instead of adding
-unbounded lag.
+whether one serving process can keep accepting RM changes while a reconnecting
+consumer closes its starting gap instead of adding unbounded lag. Syncer workers
+inside that serving process share the serving replica file, so the default
+review scenario uses `ZERO_RM_VS_SUBSCRIBERS=1` and
+`ZERO_RM_VS_APPLY_LIMIT=1` rather than treating every syncer worker as an
+independent SQLite writer.
 
 The JSON summary includes the review metrics that tend to regress when this
 path gets changed: load-phase rows/s, reconnect catchup time, VS parse/apply
@@ -57,16 +62,18 @@ parameters with `ZERO_RM_VS_*` env vars.
 
 Useful view-syncer digestion knobs:
 
-- `ZERO_RM_VS_SUBSCRIBERS=4|8` changes the number of live VS consumers.
+- `ZERO_RM_VS_SUBSCRIBERS=4|8` changes the number of live RM stream consumers.
+  Use `1` for the corrected one-serving-process topology; larger values model
+  multiple independent serving replicas consuming the same RM stream.
 - `ZERO_RM_VS_APPLY_MODE=direct|worker-message|worker-batch` makes each
   simulated VS parse and apply the downstream stream into its own SQLite
   replica. `worker-message` models the old production shape of one
   write-worker handoff per replication message; `worker-batch` models the
   transaction-batched write-worker path.
-- `ZERO_RM_VS_APPLY_LIMIT=N` keeps all simulated VSs connected but only lets
-  the first N apply into SQLite. This is a benchmark-only way to estimate the
-  upside of host-level shared-apply designs without changing the stream fanout
-  or ACK shape.
+- `ZERO_RM_VS_APPLY_LIMIT=N` keeps all simulated stream consumers connected but
+  only lets the first N apply into SQLite. The default `1` keeps the live
+  serving replica applying while the reconnecting consumer exercises stream
+  catchup without pretending it owns a second replica file.
 - `ZERO_RM_VS_CONSUMER_RUNTIME=inline|worker` controls where the simulated VS
   websocket/parse/ACK loop runs. Use `worker` for host-shape experiments where
   each VS instance should get its own JS thread, matching deployments that run
