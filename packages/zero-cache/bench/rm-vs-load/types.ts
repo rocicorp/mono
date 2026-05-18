@@ -115,6 +115,8 @@ export type ScenarioSummary = {
   readonly avgSubscriberClientCpuMs: number;
   readonly slowSubscriberAckDelayMs: number;
   readonly slowSubscriberEvery: number;
+  readonly sourceApply: boolean;
+  readonly forwardFlushBytesThreshold: number;
   readonly maxAckLagMessages: number;
   readonly avgAckLagMessages: number;
 };

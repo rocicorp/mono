@@ -1,4 +1,3 @@
-import {getDefaultHighWaterMark} from 'node:stream';
 import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {unreachable} from '../../../../shared/src/asserts.ts';
@@ -57,6 +56,12 @@ import {Subscriber} from './subscriber.ts';
 export type TuningOptions = StorerOptions & {
   flowControlConsensusPaddingSeconds: number;
 };
+
+// #6001: https://github.com/rocicorp/mono/pull/6001
+// The default 16 KiB stream high-water mark made the RM wait before a
+// row-heavy transaction could fill the serving-replica write pipeline. This
+// window still bounds queued JSON while giving the applier enough work to batch.
+export const FORWARDER_FLOW_CONTROL_BYTES_THRESHOLD = 2 * 1024 * 1024;
 
 /**
  * Performs initialization and schema migrations to initialize a ChangeStreamerImpl.
@@ -366,9 +371,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     await this.#storer.assumeOwnership(this.#purgeLock);
     this.#purgeLock = null;
 
-    // The threshold in (estimated number of) bytes to send() on subscriber
-    // websockets before `await`-ing the I/O buffers to be ready for more.
-    const flushBytesThreshold = getDefaultHighWaterMark(false);
+    const flushBytesThreshold = FORWARDER_FLOW_CONTROL_BYTES_THRESHOLD;
 
     while (this.#state.shouldRun()) {
       let err: unknown;

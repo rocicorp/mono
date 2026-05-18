@@ -8,6 +8,7 @@ import {Database} from '../../../zqlite/src/db.ts';
 import type {ChangeStreamData} from '../../src/services/change-source/protocol/current/downstream.ts';
 import {CHANGE_STREAMER_V6_PROTOCOL_VERSION} from '../../src/services/change-streamer/change-streamer-protocol.ts';
 import {
+  FORWARDER_FLOW_CONTROL_BYTES_THRESHOLD,
   type ChangeTag,
   type WatermarkedChange,
 } from '../../src/services/change-streamer/change-streamer-service.ts';
@@ -85,8 +86,12 @@ const workerBatchMessages = envInt('ZERO_RM_VS_WORKER_BATCH_MESSAGES', 64);
 
 const full = envFlag('ZERO_RM_VS_FULL');
 const durationMs = envInt('ZERO_RM_VS_DURATION_MS', full ? 2_500 : 1_000);
-const flushBytesThreshold = envInt('ZERO_RM_VS_FLUSH_BYTES', 16 * 1024);
+const flushBytesThreshold = envInt(
+  'ZERO_RM_VS_FLUSH_BYTES',
+  FORWARDER_FLOW_CONTROL_BYTES_THRESHOLD,
+);
 const reconnectLagTx = envInt('ZERO_RM_VS_RECONNECT_LAG_TX', 64);
+const sourceApply = envFlag('ZERO_RM_VS_SOURCE_APPLY');
 const reconnectFinalCatchupTimeoutMs = envInt(
   'ZERO_RM_VS_FINAL_CATCHUP_TIMEOUT_MS',
   full ? 15_000 : 5_000,
@@ -284,9 +289,13 @@ async function runScenario(
   scenario: Scenario,
 ): Promise<ScenarioSummary> {
   cleanupSQLite(sqlitePath);
-  const replica = new Database(lc, sqlitePath);
-  replica.pragma('journal_mode = WAL');
-  const processor = initializeReplica(lc, replica, replicaVersion);
+  let replica: Database | undefined;
+  let processor: ReturnType<typeof initializeReplica> | undefined;
+  if (sourceApply) {
+    replica = new Database(lc, sqlitePath);
+    replica.pragma('journal_mode = WAL');
+    processor = initializeReplica(lc, replica, replicaVersion);
+  }
   const forwarder = new Forwarder(lc, {
     flowControlConsensusPaddingSeconds: 0.001,
   });
@@ -362,16 +371,17 @@ async function runScenario(
       const txStart = performance.now();
 
       for (const change of generated.changes) {
-        processor.processMessage(lc, change);
+        processor?.processMessage(lc, change);
         const watermark = generated.watermark;
         const json = storer.store(watermark, change);
+        const jsonBytes = Buffer.byteLength(json);
         const entry: WatermarkedChange = [
           watermark,
           change[1].tag as ChangeTag,
           json,
         ];
 
-        unflushedBytes += Buffer.byteLength(json);
+        unflushedBytes += jsonBytes;
         const shouldWaitForFanout =
           unflushedBytes >= flushBytesThreshold &&
           (consumerConfig.protocolMode === 'message-json' ||
@@ -386,7 +396,7 @@ async function runScenario(
         if (readyForMore !== undefined) {
           await readyForMore;
         }
-        storerBytes += Buffer.byteLength(json);
+        storerBytes += jsonBytes;
       }
 
       latencies.push(performance.now() - txStart);
@@ -589,6 +599,8 @@ async function runScenario(
       avgSubscriberClientCpuMs,
       slowSubscriberAckDelayMs: consumerConfig.slowAckDelayMs,
       slowSubscriberEvery: consumerConfig.slowEvery,
+      sourceApply,
+      forwardFlushBytesThreshold: flushBytesThreshold,
       maxAckLagMessages,
       avgAckLagMessages,
     };
@@ -599,7 +611,7 @@ async function runScenario(
     await Promise.all(consumers.map(consumer => consumer.done));
     await storer.stop();
     await storerDone;
-    replica.close();
+    replica?.close();
   }
   if (fatalErrors.length > 0) {
     throw fatalErrors[0];

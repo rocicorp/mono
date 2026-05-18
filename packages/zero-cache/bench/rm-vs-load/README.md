@@ -113,3 +113,10 @@ Useful view-syncer digestion knobs:
   remains `NORMAL`; use this only to measure durability/performance headroom.
 - `ZERO_RM_VS_CLIENT_CPU_US=N` burns `N` microseconds per downstream message to
   model client/query work sharing the VS event loop.
+- `ZERO_RM_VS_FLUSH_BYTES=N` controls how many stream payload bytes the RM can
+  fan out before awaiting serving-replica flow control. The default mirrors the
+  production RM threshold.
+- `ZERO_RM_VS_SOURCE_APPLY=1` additionally applies every generated change into
+  a local benchmark SQLite replica before storer/fanout. Leave this off for the
+  default RM -> serving-replica stream benchmark; enable it only when
+  intentionally measuring an extra local apply path.

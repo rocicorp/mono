@@ -14,6 +14,7 @@ const defaults = {
   ZERO_RM_VS_CONSUMER_RUNTIME: 'worker',
   ZERO_RM_VS_TRANSPORT: 'websocket',
   ZERO_RM_VS_CLIENT_CPU_US: '0',
+  ZERO_RM_VS_SOURCE_APPLY: '0',
   ZERO_RM_VS_SLOW_EVERY: '0',
   ZERO_RM_VS_RECONNECT_LAG_TX: '500',
   ZERO_RM_VS_FINAL_CATCHUP_TIMEOUT_MS: '15000',
@@ -22,7 +23,7 @@ const defaults = {
   ZERO_RM_VS_MEDIUM_TARGET_TPS: '2000',
   ZERO_RM_VS_MEDIUM_WIDE_TARGET_TPS: '4000',
   ZERO_RM_VS_LARGE_TARGET_TPS: '600',
-  ZERO_RM_VS_FLUSH_BYTES: '65536',
+  ZERO_RM_VS_FLUSH_BYTES: String(2 * 1024 * 1024),
 } as const;
 
 for (const [name, value] of Object.entries(defaults)) {
@@ -45,10 +46,12 @@ console.log(
     `  protocol: ${process.env.ZERO_RM_VS_PROTOCOL ?? 'v7'}`,
     `  ws-ack: ${process.env.ZERO_RM_VS_WS_ACK ?? 'per-message'}`,
     `  ws-batch-messages: ${process.env.ZERO_RM_VS_WS_BATCH_MESSAGES ?? '64'}`,
+    `  flush-bytes: ${process.env.ZERO_RM_VS_FLUSH_BYTES}`,
     `  sqlite-synchronous: ${process.env.ZERO_RM_VS_SQLITE_SYNCHRONOUS ?? 'NORMAL'}`,
     `  wal-autocheckpoint: ${process.env.ZERO_RM_VS_WAL_AUTOCHECKPOINT ?? 'serving-default'}`,
     `  apply-clients: ${process.env.ZERO_RM_VS_APPLY_CLIENTS}`,
     `  client-cpu-us: ${process.env.ZERO_RM_VS_CLIENT_CPU_US}`,
+    `  source-apply: ${process.env.ZERO_RM_VS_SOURCE_APPLY}`,
     `  reconnect-lag-tx: ${process.env.ZERO_RM_VS_RECONNECT_LAG_TX}`,
     `  target-tps: small=${process.env.ZERO_RM_VS_SMALL_TARGET_TPS}, ` +
       `medium=${process.env.ZERO_RM_VS_MEDIUM_TARGET_TPS}, ` +
