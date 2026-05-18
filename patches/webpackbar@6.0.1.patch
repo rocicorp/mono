@@ -1,0 +1,65 @@
+diff --git a/dist/index.cjs b/dist/index.cjs
+index a8545682e5112d9fd9bd51cc738358fe96c0a36a..2c96b0a75bb2db02da9c2c05adf89bc23e0e038f 100644
+--- a/dist/index.cjs
++++ b/dist/index.cjs
+@@ -504,15 +504,17 @@ const globalStates = {};
+ class WebpackBarPlugin extends Webpack__default.ProgressPlugin {
+   constructor(options) {
+     super({ activeModules: true });
+-    __publicField(this, "options");
++    __publicField(this, "_opts");
+     __publicField(this, "reporters");
+-    this.options = Object.assign({}, DEFAULTS, options);
++    // Store webpackbar options separately to avoid polluting webpack's this.options
++    // which is validated against the ProgressPlugin schema in webpack >= 5.106
++    this._opts = Object.assign({}, DEFAULTS, options);
+     this.handler = (percent, message, ...details) => {
+       this.updateProgress(percent, message, details);
+     };
+     const _reporters = [
+-      ...this.options.reporters || [],
+-      this.options.reporter
++      ...this._opts.reporters || [],
++      this._opts.reporter
+     ].filter(Boolean).map((reporter) => {
+       if (Array.isArray(reporter)) {
+         return { reporter: reporter[0], options: reporter[1] };
+@@ -522,15 +524,15 @@ class WebpackBarPlugin extends Webpack__default.ProgressPlugin {
+       }
+       return { reporter };
+     });
+-    if (this.options.profile && !_reporters.some(({ reporter }) => reporter === "profile")) {
++    if (this._opts.profile && !_reporters.some(({ reporter }) => reporter === "profile")) {
+       _reporters.push({ reporter: "profile" });
+     }
+     this.reporters = _reporters.map(({ reporter, options: options2 = {} }) => {
+       if (typeof reporter === "string") {
+-        if (this.options[reporter] === false) {
++        if (this._opts[reporter] === false) {
+           return void 0;
+         }
+-        options2 = { ...this.options[reporter], ...options2 };
++        options2 = { ...this._opts[reporter], ...options2 };
+         reporter = reporters[reporter] || require(reporter);
+       }
+       if (typeof reporter === "function") {
+@@ -569,14 +571,14 @@ class WebpackBarPlugin extends Webpack__default.ProgressPlugin {
+     return globalStates;
+   }
+   get state() {
+-    return globalStates[this.options.name];
++    return globalStates[this._opts.name];
+   }
+   _ensureState() {
+-    if (!this.states[this.options.name]) {
+-      this.states[this.options.name] = {
++    if (!this.states[this._opts.name]) {
++      this.states[this._opts.name] = {
+         ...DEFAULT_STATE,
+-        color: this.options.color,
+-        name: startCase(this.options.name)
++        color: this._opts.color,
++        name: startCase(this._opts.name)
+       };
+     }
+   }
