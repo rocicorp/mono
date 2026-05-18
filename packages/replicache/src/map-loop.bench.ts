@@ -1,4 +1,4 @@
-import {bench, describe} from '../../shared/src/bench.ts';
+import {bench, describe, use} from '../../shared/src/bench.ts';
 
 const COUNT = 1_000;
 
@@ -12,8 +12,7 @@ describe('map-loop', () => {
         sum += key + value;
       }
     }
-    // oxlint-disable-next-line no-console
-    console.log(sum);
+    use(sum);
   });
 
   bench('map forEach', () => {
@@ -23,7 +22,6 @@ describe('map-loop', () => {
         sum += key + value;
       });
     }
-    // oxlint-disable-next-line no-console
-    console.log(sum);
+    use(sum);
   });
 });

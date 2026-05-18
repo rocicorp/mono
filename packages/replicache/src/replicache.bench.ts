@@ -1,8 +1,7 @@
-// oxlint-disable no-console
 import {resolver} from '@rocicorp/resolver';
 import {afterAll, beforeAll} from 'vitest';
 import {assert} from '../../shared/src/asserts.ts';
-import {bench, describe} from '../../shared/src/bench.ts';
+import {bench, describe, use} from '../../shared/src/bench.ts';
 import {deepEqual} from '../../shared/src/json.ts';
 import type {JSONValue} from '../../shared/src/json.ts';
 import {
@@ -243,7 +242,7 @@ describe('replicache', () => {
           for await (const value of tx.scan()) {
             count += (value as ArrayLike<unknown>).length;
           }
-          console.log(count);
+          use(count);
         });
       });
     });
@@ -318,7 +317,7 @@ describe('replicache', () => {
               ).length;
             }
           });
-          console.log(getCount);
+          use(getCount);
         };
 
         // Close all reps opened during measurement to stop heartbeat timers
@@ -368,7 +367,7 @@ describe('replicache', () => {
             })) {
               count += Object.keys(value as TestDataObject).length;
             }
-            console.log(count);
+            use(count);
           });
         };
 
@@ -696,7 +695,8 @@ describe('replicache', () => {
         return rep;
       }
 
-      // 1 warmup call + min_samples (1) measurement call = 2 total calls.
+      // Mitata can invoke yielded benches more than once for setup/warmup/probing,
+      // so pre-create a couple of reps and lazily create extras if needed.
       const [warmupRep, ...measureReps] = await Promise.all([
         createRebaseRep(),
         createRebaseRep(),
@@ -705,7 +705,11 @@ describe('replicache', () => {
       let idx = 0;
 
       yield async () => {
-        const rep = allReps[idx++];
+        const rep = allReps[idx] ?? (await createRebaseRep());
+        if (idx >= allReps.length) {
+          allReps.push(rep);
+        }
+        idx++;
         const {promise, resolve} = resolver<void>();
         const cancel = rep.subscribe(tx => tx.get('pull-done'), {
           onData: r => {

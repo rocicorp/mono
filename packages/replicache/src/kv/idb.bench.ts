@@ -1,8 +1,7 @@
-// oxlint-disable no-console
 import {deleteDB, type IDBPDatabase, openDB} from 'idb/with-async-ittr';
 import {afterAll, beforeAll} from 'vitest';
 import xbytes from 'xbytes';
-import {bench, describe} from '../../../shared/src/bench.ts';
+import {bench, describe, use} from '../../../shared/src/bench.ts';
 import {
   randomData,
   type RandomDataType,
@@ -74,7 +73,7 @@ function makeIDBReadGetAllBench(opts: IDBBenchOpts) {
           });
           const store = tx.objectStore(storeName);
           const values = await store.getAll(IDBKeyRange.bound(0, numKeys - 1));
-          console.log(`Read ${values.length} values`);
+          use(values.length);
         };
       } finally {
         db.close();
@@ -121,7 +120,8 @@ function makeIDBReadGetAllGetAllKeysBench(opts: IDBBenchOpts) {
             store.getAll(query),
             store.getAllKeys(query),
           ]);
-          console.log(`Read ${values.length} values and ${keys.length} keys`);
+          use(values.length);
+          use(keys.length);
         };
       } finally {
         db.close();
@@ -166,7 +166,7 @@ function makeIDBReadGetBench(opts: IDBBenchOpts) {
           const values = await Promise.all(
             Array.from({length: numKeys}, (_, i) => store.get(i)),
           );
-          console.log(`Read ${values.length} values`);
+          use(values.length);
         };
       } finally {
         db.close();
@@ -248,7 +248,7 @@ function makeIDBReadGetWithInlineKeysBench(opts: IDBBenchOpts) {
           const vals = await Promise.all(
             Array.from({length: numKeys}, (_, i) => store.get(i)),
           );
-          console.log(`Read ${vals.length} values`);
+          use(vals.length);
         };
       } finally {
         db.close();
@@ -295,7 +295,7 @@ function makeIDBReadGetAllWithInlineKeyBench(opts: IDBBenchOpts) {
           });
           const store = tx.objectStore(storeName);
           const values = await store.getAll(IDBKeyRange.bound(0, numKeys - 1));
-          console.log(`Read ${values.length} values`);
+          use(values.length);
         };
       } finally {
         db.close();
