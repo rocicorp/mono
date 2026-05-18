@@ -93,5 +93,9 @@ Useful view-syncer digestion knobs:
   `batch-json`/`batch-compact`, it controls the bounded protocol frame size.
 - `ZERO_RM_VS_WORKER_BATCH_MESSAGES=N` caps the worker batch size for very
   large upstream transactions.
+- `ZERO_RM_VS_WAL_AUTOCHECKPOINT=N` overrides the serving-replica
+  `wal_autocheckpoint` pragma applied to each simulated VS write worker. The
+  default follows the production serving-replica pragma so the review scenario
+  includes the same bounded checkpoint window.
 - `ZERO_RM_VS_CLIENT_CPU_US=N` burns `N` microseconds per downstream message to
   model client/query work sharing the VS event loop.

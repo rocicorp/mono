@@ -1,4 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
+import {unreachable} from '../../../shared/src/asserts.ts';
 import {sleep} from '../../../shared/src/sleep.ts';
 import * as v from '../../../shared/src/valita.ts';
 import {Database} from '../../../zqlite/src/db.ts';
@@ -37,6 +38,7 @@ export function replicaFileName(replicaFile: string, mode: ReplicaFileMode) {
 
 const MILLIS_PER_HOUR = 1000 * 60 * 60;
 const MB = 1024 * 1024;
+export const SERVING_REPLICA_WAL_AUTOCHECKPOINT_PAGES = 8 * 1024;
 
 async function prepare(
   lc: LogContext,
@@ -132,7 +134,12 @@ export function getPragmaConfig(mode: ReplicaFileMode): PragmaConfig {
   return {
     busyTimeout: 30000,
     analysisLimit: 1000,
-    walAutocheckpoint: mode === 'backup' ? 0 : undefined,
+    // #6001: Serving replicas apply row-heavy RM -> VS streams on the write
+    // worker path; raising SQLite's default checkpoint window to roughly 32 MiB
+    // reduced hot-path checkpoint/fsync spikes in rm-vs-load while keeping WAL
+    // growth bounded. Backup replicas keep checkpointing under litestream.
+    walAutocheckpoint:
+      mode === 'backup' ? 0 : SERVING_REPLICA_WAL_AUTOCHECKPOINT_PAGES,
   };
 }
 
@@ -168,7 +175,7 @@ export function setupReplica(
       return prepare(lc, replicaOptions, 'wal2', mode);
 
     default:
-      throw new Error(`Invalid ReplicaMode ${mode}`);
+      unreachable(mode);
   }
 }
 

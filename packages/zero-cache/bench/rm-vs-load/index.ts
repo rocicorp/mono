@@ -25,6 +25,7 @@ import {postgresTypeConfig, type PostgresDB} from '../../src/types/pg.ts';
 import {cdcSchema, type ShardID} from '../../src/types/shards.ts';
 import type {StringifiedStreamPayload} from '../../src/types/streams.ts';
 import {Subscription} from '../../src/types/subscription.ts';
+import {SERVING_REPLICA_WAL_AUTOCHECKPOINT_PAGES} from '../../src/workers/replicator.ts';
 import {makeTransaction, watermarkFor} from './fixtures.ts';
 import {
   argValue,
@@ -101,6 +102,10 @@ const consumerConfig: ConsumerConfig = {
   transportAckMode: transportAckModeFromEnv(),
   transportBatchMessages: envInt('ZERO_RM_VS_WS_BATCH_MESSAGES', 64),
   protocolMode: protocolModeFromEnv(),
+  walAutocheckpoint: optionalEnvInt(
+    'ZERO_RM_VS_WAL_AUTOCHECKPOINT',
+    SERVING_REPLICA_WAL_AUTOCHECKPOINT_PAGES,
+  ),
   clientCpuMicros: envInt('ZERO_RM_VS_CLIENT_CPU_US', 0),
   slowAckDelayMs: envInt('ZERO_RM_VS_SLOW_ACK_DELAY_MS', full ? 2 : 1),
   slowEvery: envInt('ZERO_RM_VS_SLOW_EVERY', full ? 4 : 2),
@@ -139,6 +144,17 @@ function runtimeFromEnv(): ConsumerRuntime {
           'inline or worker',
       );
   }
+}
+
+function optionalEnvInt(
+  name: string,
+  defaultValue: number,
+): number | undefined {
+  const value = envString(name);
+  if (value === undefined || value === '') {
+    return defaultValue;
+  }
+  return envInt(name, 0);
 }
 
 function transportAckModeFromEnv(): ConsumerTransportAckMode {
@@ -541,6 +557,7 @@ async function runScenario(
       subscriberTransportAckMode: consumerConfig.transportAckMode,
       subscriberTransportBatchMessages: consumerConfig.transportBatchMessages,
       subscriberProtocolMode: consumerConfig.protocolMode,
+      subscriberWalAutocheckpoint: consumerConfig.walAutocheckpoint,
       subscriberClientCpuMicros: consumerConfig.clientCpuMicros,
       avgSubscriberParseMs,
       avgSubscriberApplyMs,
@@ -659,6 +676,7 @@ async function makeConsumer(
         {
           busyTimeout: 30000,
           analysisLimit: 1000,
+          walAutocheckpoint: config.walAutocheckpoint,
         },
         {level: 'error', format: 'text'},
       );
@@ -813,6 +831,7 @@ async function makeWorkerRuntimeConsumer(
       protocolMode: config.protocolMode,
       transportAckMode: config.transportAckMode,
       applyMode: config.applyMode,
+      walAutocheckpoint: config.walAutocheckpoint,
       workerBatchMessages,
       clientCpuMicros: config.clientCpuMicros,
       ackDelayMs,

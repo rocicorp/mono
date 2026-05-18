@@ -18,6 +18,7 @@ export type ConsumerConfig = {
   readonly transportAckMode: ConsumerTransportAckMode;
   readonly transportBatchMessages: number;
   readonly protocolMode: ConsumerProtocolMode;
+  readonly walAutocheckpoint: number | undefined;
   readonly clientCpuMicros: number;
   readonly slowAckDelayMs: number;
   readonly slowEvery: number;
@@ -101,6 +102,7 @@ export type ScenarioSummary = {
   readonly subscriberTransportAckMode: ConsumerTransportAckMode;
   readonly subscriberTransportBatchMessages: number;
   readonly subscriberProtocolMode: ConsumerProtocolMode;
+  readonly subscriberWalAutocheckpoint: number | undefined;
   readonly subscriberClientCpuMicros: number;
   readonly avgSubscriberParseMs: number;
   readonly avgSubscriberApplyMs: number;
@@ -150,6 +152,7 @@ export type ConsumerWorkerData = {
   readonly protocolMode: ConsumerProtocolMode;
   readonly transportAckMode: ConsumerTransportAckMode;
   readonly applyMode: ConsumerApplyMode;
+  readonly walAutocheckpoint: number | undefined;
   readonly workerBatchMessages: number;
   readonly clientCpuMicros: number;
   readonly ackDelayMs: number;

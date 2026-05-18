@@ -117,6 +117,7 @@ async function run() {
         {
           busyTimeout: 30000,
           analysisLimit: 1000,
+          walAutocheckpoint: config.walAutocheckpoint,
         },
         {level: 'error', format: 'text'},
       );

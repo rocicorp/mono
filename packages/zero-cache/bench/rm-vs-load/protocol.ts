@@ -1,6 +1,6 @@
 import {once} from 'node:events';
 import type {LogContext} from '@rocicorp/logger';
-import WebSocket, {WebSocketServer} from 'ws';
+import WebSocket, {type RawData, WebSocketServer} from 'ws';
 import {assert} from '../../../shared/src/asserts.ts';
 import {BigIntJSON} from '../../../shared/src/bigint-json.ts';
 import * as v from '../../../shared/src/valita.ts';
@@ -265,7 +265,7 @@ async function streamOutBatchFrames(
 
   sink.on('message', data => {
     try {
-      const {ack} = parseTransportAck(data.toString());
+      const {ack} = parseTransportAck(rawDataToString(data));
       if (ack < lastAck) {
         throw new Error(`Ack moved backwards from ${lastAck} to ${ack}`);
       }
@@ -450,7 +450,10 @@ async function streamInBatchFrames(
       return;
     }
     try {
-      const {id, messages} = parseBatchFrame(data.toString(), protocolMode);
+      const {id, messages} = parseBatchFrame(
+        rawDataToString(data),
+        protocolMode,
+      );
       sink.push({id, batch: {kind: 'downstreams', messages}});
     } catch (e) {
       sink.fail(e instanceof Error ? e : new Error(String(e)));
@@ -459,6 +462,16 @@ async function streamInBatchFrames(
   source.on('error', err => sink.fail(err));
   source.on('close', () => sink.cancel());
   return sink;
+}
+
+function rawDataToString(data: RawData): string {
+  if (data instanceof ArrayBuffer) {
+    return Buffer.from(data).toString('utf8');
+  }
+  if (Array.isArray(data)) {
+    return Buffer.concat(data).toString('utf8');
+  }
+  return data.toString('utf8');
 }
 
 function parseTransportAck(data: string): {ack: number} {
