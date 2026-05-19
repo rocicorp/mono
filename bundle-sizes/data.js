@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779198380380,
+  "lastUpdate": 1779222331301,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -56137,6 +56137,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/rocicorp/mono/commit/15e3d6b9f817db1286e2f0a16bfcbf3e790d8c7c"
         },
         "date": 1779198366773,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 317161,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 57049,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 117187,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 33481,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "c@cadams.io",
+            "name": "Chase Adams",
+            "username": "0xcadams"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": false,
+          "id": "6e53b5b92963aea435ded1f16b017057d9a75c76",
+          "message": "chore(ci): remove npx usage (#6025)\n\n- Replace CI `npx` usage with lockfile-backed local binaries via `pnpm\nexec`.\n- Run SST deploy commands from `prod/sst` with the workspace-installed\n`sst` binary.\n- Remove CI-invoked `npx` from package scripts, add explicit `tsx` dev\ndependencies, and update the lockfile.",
+          "timestamp": "2026-05-19T20:14:42Z",
+          "tree_id": "538597fcf216680ffd9e179cfe47507c4a365616",
+          "url": "https://github.com/rocicorp/mono/commit/6e53b5b92963aea435ded1f16b017057d9a75c76"
+        },
+        "date": 1779222318504,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
