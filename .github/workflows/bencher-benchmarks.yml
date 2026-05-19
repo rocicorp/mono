@@ -31,16 +31,13 @@ jobs:
       fail-fast: false
       matrix:
         package:
-          - name: 'shared'
-            directory: 'packages/shared'
-          - name: 'zero-client'
-            directory: 'packages/zero-client'
-          - name: 'zero-cache'
-            directory: 'packages/zero-cache'
-          - name: 'zql-benchmarks'
-            directory: 'packages/zql-benchmarks'
+          - 'replicache'
+          - 'shared'
+          - 'zero-client'
+          - 'zero-cache'
+          - 'zql-benchmarks'
     with:
-      package_name: ${{ matrix.package.name }}
-      working_directory: ${{ matrix.package.directory }}
+      package_name: ${{ matrix.package }}
+      working_directory: packages/${{ matrix.package }}
     secrets:
       BENCHER_API_TOKEN: ${{ secrets.BENCHER_API_TOKEN }}

@@ -1,18 +1,27 @@
 import {resolver} from '@rocicorp/resolver';
-import {ReplicacheImpl} from '../../../replicache/src/impl.ts';
+import {
+  closeAndCleanupRep,
+  createIndexDefinitions,
+  makeRep,
+  makeRepName,
+  makeRepWithPopulate,
+  putMap,
+  range,
+  ReplicachePerfTest,
+  sampleSize,
+  setupPersistedData,
+  sleep,
+  type ReplicacheImpl,
+  type ReplicacheWithPopulate,
+  valSize,
+} from '../../../replicache/src/bench-util.ts';
 import type {IndexDefinitions} from '../../../replicache/src/index-defs.ts';
-import {dropIDBStoreWithMemFallback} from '../../../replicache/src/kv/idb-store-with-mem-fallback.ts';
-import type {PatchOperation} from '../../../replicache/src/patch-operation.ts';
-import type {ReplicacheOptions} from '../../../replicache/src/replicache-options.ts';
 import type {
   ReadTransaction,
   WriteTransaction,
 } from '../../../replicache/src/transactions.ts';
-import type {MutatorDefs} from '../../../replicache/src/types.ts';
 import {assert} from '../../../shared/src/asserts.ts';
 import {deepEqual, type JSONValue} from '../../../shared/src/json.ts';
-import {randomUint64} from '../../../shared/src/random-uint64.ts';
-import type {Writable} from '../../../shared/src/writable.ts';
 import type {Bencher, Benchmark} from '../benchmark.ts';
 import {
   getTmcwData,
@@ -20,8 +29,6 @@ import {
   jsonObjectTestData,
   type TestDataObject,
 } from '../data.ts';
-
-const valSize = 1024;
 
 export function benchmarkPopulate(opts: {
   numKeys: number;
@@ -320,71 +327,6 @@ export function benchmarkRebase(opts: {
   };
 }
 
-class ReplicachePerfTest<MD extends MutatorDefs> extends ReplicacheImpl<MD> {
-  constructor(options: Omit<ReplicacheOptions<MD>, 'licenseKey'>) {
-    super(
-      {
-        ...options,
-      },
-      {
-        enableMutationRecovery: false,
-        enableScheduledRefresh: false,
-        enableScheduledPersist: false,
-      },
-    );
-  }
-}
-
-async function setupPersistedData(
-  replicacheName: string,
-  numKeys: number,
-  indexes: IndexDefinitions = {},
-): Promise<void> {
-  const randomValues = jsonArrayTestData(numKeys, valSize);
-  const patch: PatchOperation[] = [];
-  for (let i = 0; i < numKeys; i++) {
-    patch.push({
-      op: 'put',
-      key: `key${i}`,
-      value: randomValues[i],
-    });
-  }
-
-  let repToClose;
-  try {
-    // populate store using pull (as opposed to mutators)
-    // so that a snapshot commit is created, which new clients
-    // can use to bootstrap.
-    const rep = (repToClose = new ReplicachePerfTest({
-      name: replicacheName,
-      indexes,
-      pullInterval: null,
-      // oxlint-disable-next-line require-await
-      puller: async () => ({
-        response: {
-          cookie: 1,
-          lastMutationIDChanges: {},
-          patch,
-        },
-        httpRequestInfo: {
-          httpStatusCode: 200,
-          errorMessage: '',
-        },
-      }),
-    }));
-
-    const initialPullResolver = resolver<void>();
-    rep.subscribe(tx => tx.get('key0'), {
-      onData: r => r && initialPullResolver.resolve(),
-    });
-    await initialPullResolver.promise;
-
-    await rep.persist();
-  } finally {
-    await repToClose?.close();
-  }
-}
-
 export function benchmarkStartupUsingBasicReadsFromPersistedData(opts: {
   numKeysPersisted: number;
   numKeysToRead: number;
@@ -595,12 +537,6 @@ export function benchmarkCreateIndex(opts: {numKeys: number}): Benchmark {
   };
 }
 
-export function sleep(ms: number): Promise<void> {
-  return new Promise<void>(resolve => {
-    setTimeout(resolve, ms);
-  });
-}
-
 // goal: 95% of writes/sub/read cycle complete in <1ms with 100 active subscriptions, 5 of which are dirty, which each read 10KB > each, while there is 100MB of data in Replicache.
 export function benchmarkWriteSubRead(opts: {
   valueSize: number;
@@ -749,75 +685,6 @@ function benchmarkTmcw(kind: 'populate' | 'persist'): Benchmark {
   };
 }
 
-function makeRepName(): string {
-  return `bench${randomUint64()}`;
-}
-
-function makeRep<MD extends MutatorDefs>(
-  options: Omit<ReplicacheOptions<MD>, 'name' | 'licenseKey'> & {
-    name?: string;
-  } = {},
-) {
-  const name = makeRepName();
-  return new ReplicachePerfTest<MD>({
-    name,
-    pullInterval: null,
-    ...options,
-  });
-}
-
-type PopulateMutatorDefs = {
-  populate: typeof populate;
-};
-
-type ReplicacheWithPopulate = ReplicachePerfTest<PopulateMutatorDefs>;
-
-async function populate(
-  tx: WriteTransaction,
-  {numKeys, randomValues}: {numKeys: number; randomValues: TestDataObject[]},
-) {
-  for (let i = 0; i < numKeys; i++) {
-    await tx.set(`key${i}`, randomValues[i]);
-  }
-}
-
-async function putMap(
-  tx: WriteTransaction,
-  map: Record<string, TestDataObject>,
-) {
-  for (const [key, value] of Object.entries(map)) {
-    await tx.set(key, value);
-  }
-}
-
-function makeRepWithPopulate<MD extends PopulateMutatorDefs>(
-  options: Partial<ReplicacheOptions<MD>> = {},
-) {
-  return makeRep({
-    ...options,
-    mutators: {...options.mutators, populate},
-  });
-}
-
-function createIndexDefinitions(numIndexes: number): IndexDefinitions {
-  const indexes: Writable<IndexDefinitions> = {};
-  for (let i = 0; i < numIndexes; i++) {
-    indexes[`idx${i}`] = {
-      jsonPointer: '/ascii',
-    };
-  }
-  return indexes;
-}
-
-async function closeAndCleanupRep(
-  rep: ReplicacheImpl | undefined,
-): Promise<void> {
-  if (rep) {
-    await rep.close();
-    await dropIDBStoreWithMemFallback(rep.idbName);
-  }
-}
-
 export function benchmarks(): Benchmark[] {
   return [
     // write/sub/read 1mb
@@ -920,27 +787,4 @@ export function benchmarks(): Benchmark[] {
       targetSizePerMutation: 1024,
     }),
   ];
-}
-
-function* rangeIter(end: number) {
-  for (let i = 0; i < end; i++) {
-    yield i;
-  }
-}
-
-function range(end: number): number[] {
-  return [...rangeIter(end)];
-}
-
-function sampleSize<T>(arr: Iterable<T>, n: number): T[] {
-  return shuffle(arr).slice(0, n);
-}
-
-function shuffle<T>(arr: Iterable<T>): T[] {
-  const shuffled = [...arr];
-  for (let i = shuffled.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-  }
-  return shuffled;
 }
