@@ -50,10 +50,5 @@
   "engines": {
     "node": ">=22"
   },
-  "packageManager": "pnpm@11.1.2",
-  "pnpm": {
-    "overrides": {
-      "webpackbar": "^7.0.0"
-    }
-  }
+  "packageManager": "pnpm@11.1.2"
 }
