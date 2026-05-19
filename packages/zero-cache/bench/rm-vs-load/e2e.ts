@@ -25,6 +25,7 @@ const defaults = {
   ZERO_RM_VS_SMALL_TARGET_TPS: '5000',
   ZERO_RM_VS_MEDIUM_TARGET_TPS: '2000',
   ZERO_RM_VS_MEDIUM_WIDE_TARGET_TPS: '4000',
+  ZERO_RM_VS_MIXED_TARGET_TPS: '4000',
   ZERO_RM_VS_LARGE_TARGET_TPS: '600',
   ZERO_RM_VS_FLUSH_BYTES: String(2 * 1024 * 1024),
 } as const;
@@ -59,6 +60,7 @@ console.log(
     `  target-tps: small=${process.env.ZERO_RM_VS_SMALL_TARGET_TPS}, ` +
       `medium=${process.env.ZERO_RM_VS_MEDIUM_TARGET_TPS}, ` +
       `medium-wide=${process.env.ZERO_RM_VS_MEDIUM_WIDE_TARGET_TPS}, ` +
+      `mixed=${process.env.ZERO_RM_VS_MIXED_TARGET_TPS}, ` +
       `large=${process.env.ZERO_RM_VS_LARGE_TARGET_TPS}`,
     '',
     'flow:',

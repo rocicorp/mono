@@ -1,12 +1,22 @@
 import type {Subscriber} from '../../src/services/change-streamer/subscriber.ts';
-import type {PayloadProfile} from './fixtures.ts';
+import type {OperationCounts, PayloadProfile} from './fixtures.ts';
 
 export type Scenario = {
   readonly name: string;
   readonly rowsPerTx: number;
   readonly payload: PayloadProfile;
   readonly targetTxPerSec: number;
+  readonly workload: ScenarioWorkload;
 };
+
+export type ScenarioWorkload =
+  | {readonly kind: 'insert-only'}
+  | {
+      readonly kind: 'mixed-row-churn';
+      readonly insertWeight: number;
+      readonly updateWeight: number;
+      readonly deleteWeight: number;
+    };
 
 export type ConsumerConfig = {
   readonly count: number;
@@ -47,6 +57,8 @@ export type ScenarioSummary = {
   readonly rowsPerTx: number;
   readonly payload: string;
   readonly payloadBytes: number;
+  readonly workload: string;
+  readonly operationCounts: OperationCounts;
   readonly targetTxPerSec: number;
   readonly durationMs: number;
   readonly tx: number;

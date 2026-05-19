@@ -26,7 +26,7 @@ import {cdcSchema, type ShardID} from '../../src/types/shards.ts';
 import type {StringifiedStreamPayload} from '../../src/types/streams.ts';
 import {Subscription} from '../../src/types/subscription.ts';
 import {SERVING_REPLICA_WAL_AUTOCHECKPOINT_PAGES} from '../../src/workers/replicator.ts';
-import {makeTransaction, watermarkFor} from './fixtures.ts';
+import {emptyOperationCounts, watermarkFor} from './fixtures.ts';
 import {
   argValue,
   envFlag,
@@ -60,6 +60,11 @@ import type {
   ScenarioSummary,
   Summary,
 } from './types.ts';
+import {
+  addOperationCounts,
+  createTransactionGenerator,
+  workloadName,
+} from './workloads.ts';
 
 // End-to-end load driver for reviewing storer/changeLog throughput changes.
 //
@@ -260,6 +265,7 @@ try {
       console.log(
         `${result.name}: ${formatRate(result.writeLoopTxPerSec)} tx/s load | ` +
           `${formatRate(result.writeLoopRowsPerSec)} rows/s load | ` +
+          `ops ${formatOperationCounts(result.operationCounts)} | ` +
           `${formatRate(result.fanoutMessagesPerSec)} fanout msg/s | ` +
           `p95 ${result.p95TxLatencyMs.toFixed(3)} ms | ` +
           `vs-tx ${result.avgSubscriberTxApplyMs.toFixed(3)} ms | ` +
@@ -280,6 +286,14 @@ try {
 } finally {
   await container.stop();
   cleanupSQLite(sqlitePath);
+}
+
+function formatOperationCounts(counts: {
+  readonly insert: number;
+  readonly update: number;
+  readonly delete: number;
+}) {
+  return `i=${counts.insert} u=${counts.update} d=${counts.delete}`;
 }
 
 async function runScenario(
@@ -328,6 +342,7 @@ async function runScenario(
   const latencies: number[] = [];
   let tx = 0;
   let rows = 0;
+  const operationCounts = emptyOperationCounts();
   let storerBytes = 0;
   let fanoutMessages = 0;
   let unflushedBytes = 0;
@@ -356,15 +371,12 @@ async function runScenario(
   };
   const start = performance.now();
   let nextDue = start;
+  const generator = createTransactionGenerator(scenario);
 
   try {
     while (performance.now() - start < durationMs) {
       tx++;
-      const generated = makeTransaction(
-        tx + 1,
-        scenario.rowsPerTx,
-        scenario.payload,
-      );
+      const generated = generator.next(tx + 1);
       latestGeneratedWatermark = generated.watermark;
       const txStart = performance.now();
 
@@ -399,6 +411,7 @@ async function runScenario(
 
       latencies.push(performance.now() - txStart);
       rows += generated.rows;
+      addOperationCounts(operationCounts, generated.operationCounts);
       fanoutMessages += generated.changes.length * consumers.length;
       if (tx % 10 === 0) {
         sampleMemory();
@@ -524,6 +537,8 @@ async function runScenario(
       rowsPerTx: scenario.rowsPerTx,
       payload: scenario.payload.size,
       payloadBytes: scenario.payload.bytes,
+      workload: workloadName(scenario.workload),
+      operationCounts: {...operationCounts},
       targetTxPerSec: scenario.targetTxPerSec,
       durationMs,
       tx,

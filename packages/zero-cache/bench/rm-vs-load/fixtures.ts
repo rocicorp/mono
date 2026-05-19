@@ -1,9 +1,11 @@
 import type {TableSpec} from '../../src/db/specs.ts';
 import type {
   DataOrSchemaChange,
+  MessageDelete,
   IndexCreate,
   MessageInsert,
   MessageRelation,
+  MessageUpdate,
 } from '../../src/services/change-source/protocol/current/data.ts';
 import type {
   Begin,
@@ -45,7 +47,18 @@ export type GeneratedTransaction = {
   readonly watermark: string;
   readonly changes: TransactionMessage[];
   readonly rows: number;
+  readonly operationCounts: OperationCounts;
 };
+
+export type OperationCounts = {
+  insert: number;
+  update: number;
+  delete: number;
+};
+
+export function emptyOperationCounts(): OperationCounts {
+  return {insert: 0, update: 0, delete: 0};
+}
 
 const tableName = 'bench_rows';
 const messages = new ReplicationMessages({[tableName]: 'id'});
@@ -100,17 +113,39 @@ export function makeInsert(
   tx: number,
   seq: number,
   bytes: number,
+  id = rowID(tx, seq),
 ): MessageInsert {
   return {
     tag: 'insert',
     relation: benchRelation,
-    new: {
-      id: `${tx.toString(36)}-${seq.toString(36)}`,
-      tx,
-      seq,
-      bucket: seq % 32,
-      payload: payloadFor(bytes),
-    },
+    new: makeRow(id, tx, seq, bytes),
+  };
+}
+
+export function makeUpdate(
+  id: string,
+  tx: number,
+  seq: number,
+  bytes: number,
+): MessageUpdate {
+  return messages.update(tableName, makeRow(id, tx, seq, bytes));
+}
+
+export function makeDelete(id: string): MessageDelete {
+  return messages.delete(tableName, {id});
+}
+
+function rowID(tx: number, seq: number): string {
+  return `${tx.toString(36)}-${seq.toString(36)}`;
+}
+
+function makeRow(id: string, tx: number, seq: number, bytes: number) {
+  return {
+    id,
+    tx,
+    seq,
+    bucket: seq % 32,
+    payload: payloadFor(bytes),
   };
 }
 
@@ -134,6 +169,7 @@ export function makeTransaction(
     watermark,
     changes,
     rows: rowsPerTx,
+    operationCounts: {insert: rowsPerTx, update: 0, delete: 0},
   };
 }
 

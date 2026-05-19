@@ -55,7 +55,32 @@ independent SQLite writer.
 The JSON summary includes the review metrics that tend to regress when this
 path gets changed: load-phase rows/s, reconnect catchup time, VS parse/apply
 timings, process CPU, heap/RSS pressure, websocket bytes, websocket frames, and
-ACK counts.
+ACK counts. It also reports insert/update/delete counts so reviewers can tell
+whether a run exercised the insert-only ingestion path or the mixed row-churn
+path.
+
+Real serving-replica load is not only new rows. Use the mixed scenario when a
+change might move costs between SQLite inserts, updates, deletes, and stream
+flow control:
+
+```bash
+ZERO_RM_VS_SCENARIO=mixed-hot-row-churn \
+  npm --workspace=zero-cache run perf:rm-vs-load:e2e -- \
+  --out /tmp/rm-vs-load-mixed.json
+```
+
+That scenario keeps the same 1 RM / 1 serving-replica applier / reconnecting
+consumer shape as the default review run, but the data rows follow a
+deterministic 40/40/20 insert/update/delete pattern after the first row exists:
+
+```text
+  tx stream: begin -> insert/update/delete x 20 -> commit
+
+  row churn:
+    insert: creates a new active row
+    update: rewrites an active row with the current tx payload
+    delete: removes an active row from the update/delete target set
+```
 
 Use `perf:rm-vs-load` directly only when intentionally changing scenario
 parameters with `ZERO_RM_VS_*` env vars.
@@ -102,6 +127,10 @@ Useful view-syncer digestion knobs:
   bounded protocol frame size.
 - `ZERO_RM_VS_WORKER_BATCH_MESSAGES=N` caps the worker batch size for very
   large upstream transactions.
+- `ZERO_RM_VS_MIXED_INSERT_WEIGHT`, `ZERO_RM_VS_MIXED_UPDATE_WEIGHT`, and
+  `ZERO_RM_VS_MIXED_DELETE_WEIGHT` adjust the deterministic operation mix for
+  `mixed-hot-row-churn`. The default is `4/4/2`, i.e. roughly 40% inserts, 40%
+  updates, and 20% deletes.
 - `ZERO_RM_VS_WAL_AUTOCHECKPOINT=N` overrides the serving-replica
   `wal_autocheckpoint` pragma applied to each simulated VS write worker. The
   default follows the production serving-replica pragma so the review scenario
