@@ -30,7 +30,6 @@
     "double": "node ./bench/double.ts",
     "perf:rm-vs-load": "node ./bench/rm-vs-load/index.ts",
     "perf:rm-vs-load:e2e": "node ./bench/rm-vs-load/e2e.ts",
-    "perf:vs-digestion": "node ./bench/view-syncer-digestion/index.ts",
     "wal_bench": "node ./bench/wal-bench.ts",
     "wal2_bench": "node ./bench/wal2-bench.ts",
     "fmt": "oxfmt .",

@@ -20,7 +20,6 @@ import {Subscription} from '../../types/subscription.ts';
 import {orTimeoutWith} from '../../types/timeout.ts';
 import {
   PROTOCOL_VERSION,
-  type ChangeStreamerDownstream,
   type Downstream,
   type SubscriberContext,
 } from '../change-streamer/change-streamer.ts';
@@ -46,10 +45,10 @@ describe('replicator/incremental-sync', () => {
   let worker: ThreadWriteWorkerClient;
   let syncer: IncrementalSyncer;
   let syncing: Promise<void> | undefined;
-  let downstream: Subscription<ChangeStreamerDownstream>;
+  let downstream: Subscription<Downstream>;
   let eventSink: ZeroEvent[];
   let subscribeFn: MockedFunction<
-    (ctx: SubscriberContext) => Promise<Subscription<ChangeStreamerDownstream>>
+    (ctx: SubscriberContext) => Promise<Subscription<Downstream>>
   >;
 
   beforeEach(async () => {

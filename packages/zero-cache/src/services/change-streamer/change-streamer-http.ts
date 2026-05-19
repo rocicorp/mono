@@ -14,6 +14,7 @@ import {
   streamOut,
   streamOutStringified,
   type Source,
+  type StreamInPayload,
 } from '../../types/streams.ts';
 import {URLParams} from '../../types/url-params.ts';
 import {installWebSocketReceiver} from '../../types/websocket-handoff.ts';
@@ -21,12 +22,11 @@ import {closeWithError, PROTOCOL_ERROR} from '../../types/ws.ts';
 import {HttpService} from '../http-service.ts';
 import type {BackupMonitor} from './backup-monitor.ts';
 import {
-  downstreamSchemaForProtocolVersion,
+  downstreamSchema,
   PROTOCOL_VERSION,
-  type ChangeStreamerDownstreamPayload,
   type ChangeStreamer,
-  type ChangeStreamerDownstream,
   type ChangeStreamerService,
+  type Downstream,
   type SubscriberContext,
 } from './change-streamer.ts';
 import {discoverChangeStreamerAddress} from './schema/tables.ts';
@@ -40,8 +40,7 @@ const PATH_REGEX = /\/replication\/v(?<version>\d+)\/(changes|snapshot)$/;
 const STREAM_BATCH_MESSAGES = 256;
 
 const SNAPSHOT_PATH = `/replication/v${PROTOCOL_VERSION}/snapshot`;
-const changesPath = (protocolVersion: number) =>
-  `/replication/v${protocolVersion}/changes`;
+const CHANGES_PATH = `/replication/v${PROTOCOL_VERSION}/changes`;
 
 type Options = {
   port: number;
@@ -247,34 +246,22 @@ export class ChangeStreamerHttpClient implements ChangeStreamer {
     return streamIn(this.#lc, ws, snapshotMessageSchema);
   }
 
-  async subscribe(
-    ctx: SubscriberContext,
-  ): Promise<Source<ChangeStreamerDownstream>> {
+  async subscribe(ctx: SubscriberContext): Promise<Source<Downstream>> {
     const ws = await this.#openChangesWebSocket(ctx);
-    return streamIn(
-      this.#lc,
-      ws,
-      downstreamSchemaForProtocolVersion(ctx.protocolVersion),
-      {ack: 'cumulative'},
-    );
+    return streamIn(this.#lc, ws, downstreamSchema, {ack: 'cumulative'});
   }
 
   async subscribeBatched(
     ctx: SubscriberContext,
-  ): Promise<Source<ChangeStreamerDownstreamPayload>> {
+  ): Promise<Source<StreamInPayload<Downstream>>> {
     const ws = await this.#openChangesWebSocket(ctx);
-    return streamInBatches(
-      this.#lc,
-      ws,
-      downstreamSchemaForProtocolVersion(ctx.protocolVersion),
-      {ack: 'cumulative'},
-    );
+    return streamInBatches(this.#lc, ws, downstreamSchema, {
+      ack: 'cumulative',
+    });
   }
 
   async #openChangesWebSocket(ctx: SubscriberContext) {
-    const uri = await this.#resolveChangeStreamer(
-      changesPath(ctx.protocolVersion),
-    );
+    const uri = await this.#resolveChangeStreamer(CHANGES_PATH);
 
     const params = getParams(ctx);
     params.set('streamBatch', '1');
@@ -321,11 +308,11 @@ function checkProtocolVersion(pathname: string): number {
 
 // This is called from the client-side (i.e. the replicator).
 function getParams(ctx: SubscriberContext): URLSearchParams {
+  // The protocolVersion is hard-coded into the CHANGES_PATH.
   const {protocolVersion, ...stringParams} = ctx;
   assert(
-    protocolVersion >= MIN_SUPPORTED_PROTOCOL_VERSION &&
-      protocolVersion <= PROTOCOL_VERSION,
-    `replicator should be setting a supported change-streamer protocolVersion`,
+    protocolVersion === PROTOCOL_VERSION,
+    `replicator should be setting protocolVersion to ${PROTOCOL_VERSION}`,
   );
   return new URLSearchParams({
     ...stringParams,

@@ -2,7 +2,11 @@ import type {LogContext} from '@rocicorp/logger';
 import {AbortError} from '../../../../shared/src/abort-error.ts';
 import type {Enum} from '../../../../shared/src/enum.ts';
 import {getOrCreateCounter} from '../../observability/metrics.ts';
-import {isStreamBatch, type Source} from '../../types/streams.ts';
+import {
+  isStreamBatch,
+  type Source,
+  type StreamInPayload,
+} from '../../types/streams.ts';
 import type {DownloadStatus} from '../change-source/protocol/current.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
 import {
@@ -10,8 +14,7 @@ import {
   hasBatchedSubscribe,
   PROTOCOL_VERSION,
   type ChangeStreamer,
-  type ChangeStreamerDownstream,
-  type ChangeStreamerDownstreamPayload,
+  type Downstream,
 } from '../change-streamer/change-streamer.ts';
 import type * as ErrorType from '../change-streamer/error-type-enum.ts';
 import {RunningState} from '../running-state.ts';
@@ -93,7 +96,7 @@ export class IncrementalSyncer {
       const {replicaVersion, watermark} =
         await this.#worker.getSubscriptionState();
 
-      let downstream: Source<ChangeStreamerDownstreamPayload> | undefined;
+      let downstream: Source<StreamInPayload<Downstream>> | undefined;
       let unregister = () => {};
       let err: unknown | undefined;
 
@@ -178,9 +181,7 @@ export class IncrementalSyncer {
 
           return workerBatch.push(message)?.then(handleWorkerResult);
         };
-        const processChangeStreamerMessage = async (
-          message: ChangeStreamerDownstream,
-        ) => {
+        const processChangeStreamerMessage = async (message: Downstream) => {
           this.#replicationEvents.add(1);
           switch (message[0]) {
             case 'status': {

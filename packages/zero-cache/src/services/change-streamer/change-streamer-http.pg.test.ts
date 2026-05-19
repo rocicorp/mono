@@ -18,7 +18,6 @@ import {
   ChangeStreamerHttpClient,
   ChangeStreamerHttpServer,
 } from './change-streamer-http.ts';
-import {CHANGE_STREAMER_V6_PROTOCOL_VERSION} from './change-streamer-protocol.ts';
 import type {Downstream, SubscriberContext} from './change-streamer.ts';
 import {PROTOCOL_VERSION} from './change-streamer.ts';
 import {setupCDCTables} from './schema/tables.ts';
@@ -274,7 +273,7 @@ describe('change-streamer/http', () => {
     'basic changes streamed over websocket: %s',
     async (_name, autoDiscover, addr) => {
       const ctx = {
-        protocolVersion: CHANGE_STREAMER_V6_PROTOCOL_VERSION,
+        protocolVersion: PROTOCOL_VERSION,
         taskID: 'foo-task',
         id: 'foo',
         mode: 'serving',
@@ -320,10 +319,10 @@ describe('change-streamer/http', () => {
     },
   );
 
-  test('v6 bigint fields remain backwards compatible', async () => {
+  test('bigint fields', async () => {
     await setChangeStreamerAddress(serverAddress);
     const sub = await changeStreamerClient.subscribe({
-      protocolVersion: CHANGE_STREAMER_V6_PROTOCOL_VERSION,
+      protocolVersion: PROTOCOL_VERSION,
       taskID: 'foo-task',
       id: 'foo',
       mode: 'serving',

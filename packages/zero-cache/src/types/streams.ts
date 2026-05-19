@@ -16,6 +16,7 @@ import {
 } from 'ws';
 import {assert} from '../../../shared/src/asserts.ts';
 import {BigIntJSON, type JSONValue} from '../../../shared/src/bigint-json.ts';
+import {HeadIndexedQueue} from '../../../shared/src/head-indexed-queue.ts';
 import {Queue} from '../../../shared/src/queue.ts';
 import * as v from '../../../shared/src/valita.ts';
 import {Subscription, type Options} from './subscription.ts';
@@ -178,7 +179,7 @@ type PipeOptions<T> = {
 export function pipe<T>({source, sink, parse, bufferMessages}: PipeOptions<T>) {
   bufferMessages ??= 0;
   assert(bufferMessages >= 0, 'bufferMessages must be non-negative');
-  const pending: Promise<unknown>[] = [];
+  const pending = new HeadIndexedQueue<Promise<unknown>>();
 
   pipeline(
     source,
@@ -204,12 +205,14 @@ export function pipe<T>({source, sink, parse, bufferMessages}: PipeOptions<T>) {
         pending.push(result);
         void result.then(() => pending.shift());
 
-        if (pending.length <= bufferMessages) {
+        if (pending.size <= bufferMessages) {
           // immediately allow more messages
           callback();
         } else {
           // wait for the oldest result in the pending queue
-          pending[0].then(
+          const oldest = pending.peek();
+          assert(oldest !== undefined, 'pending result expected');
+          oldest.then(
             () => callback(),
             err => callback(ensureError(err)),
           );

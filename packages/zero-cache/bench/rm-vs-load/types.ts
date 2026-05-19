@@ -46,11 +46,7 @@ export type ConsumerApplyMode =
 
 export type ConsumerTransportMode = 'in-process' | 'websocket';
 export type ConsumerTransportAckMode = 'per-message' | 'cumulative';
-export type ConsumerProtocolMode =
-  | 'v6'
-  | 'message-json'
-  | 'batch-json'
-  | 'batch-compact';
+export type ConsumerProtocolMode = 'v6';
 
 export type ScenarioSummary = {
   readonly name: string;

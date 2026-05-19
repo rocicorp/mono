@@ -26,15 +26,14 @@ import {
   type SubscriptionState,
 } from '../replicator/schema/replication-state.ts';
 import {ReplicationMessages} from '../replicator/test-utils.ts';
-import {CHANGE_STREAMER_V6_PROTOCOL_VERSION} from './change-streamer-protocol.ts';
 import {
   initializeStreamer,
   type TuningOptions,
 } from './change-streamer-service.ts';
 import {
-  type ChangeStreamerDownstream,
   type ChangeStreamerService,
   type Downstream,
+  PROTOCOL_VERSION,
 } from './change-streamer.ts';
 import * as ErrorType from './error-type-enum.ts';
 import {AutoResetSignal, ensureReplicationConfig} from './schema/tables.ts';
@@ -46,7 +45,7 @@ const opts: TuningOptions = {
   statementTimeoutMs: 20_000,
 };
 
-const SERVICE_TEST_PROTOCOL_VERSION = CHANGE_STREAMER_V6_PROTOCOL_VERSION;
+const SERVICE_TEST_PROTOCOL_VERSION = PROTOCOL_VERSION;
 
 describe('change-streamer/service', () => {
   let lc: LogContext;
@@ -131,7 +130,7 @@ describe('change-streamer/service', () => {
   }
 
   function parseDownstreamPayload(msg: string): Downstream[] {
-    return [BigIntJSON.parse(msg) as ChangeStreamerDownstream];
+    return [BigIntJSON.parse(msg) as Downstream];
   }
 
   async function nextChange(sub: Queue<Downstream>) {

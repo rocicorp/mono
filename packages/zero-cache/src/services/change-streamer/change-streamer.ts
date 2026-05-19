@@ -9,7 +9,6 @@ import {changeStreamDataSchema} from '../change-source/protocol/current/downstre
 import type {ReplicatorMode} from '../replicator/replicator.ts';
 import {changeSourceTimingsSchema} from '../replicator/reporter/report-schema.ts';
 import type {Service} from '../service.ts';
-import {CHANGE_STREAMER_V6_PROTOCOL_VERSION} from './change-streamer-protocol.ts';
 import * as ErrorType from './error-type-enum.ts';
 
 type ErrorType = Enum<typeof ErrorType>;
@@ -54,7 +53,7 @@ export interface ChangeStreamer {
    * which indicates the watermark at which the subscriber is up to
    * date.
    */
-  subscribe(ctx: SubscriberContext): Promise<Source<ChangeStreamerDownstream>>;
+  subscribe(ctx: SubscriberContext): Promise<Source<Downstream>>;
 }
 
 // v1: v0.18
@@ -80,7 +79,7 @@ export interface ChangeStreamer {
 //   - Adds support for `backfill` messages
 // v6: v1.0.1  (backwards compatible, no version change)
 //   - Adds lag reporting to status messages
-export const PROTOCOL_VERSION = CHANGE_STREAMER_V6_PROTOCOL_VERSION;
+export const PROTOCOL_VERSION = 6;
 
 export type SubscriberContext = {
   /**
@@ -185,26 +184,16 @@ export type Error = v.Infer<typeof errorSchema>;
  */
 export type Downstream = v.Infer<typeof downstreamSchema>;
 
-export type ChangeStreamerDownstream = Downstream;
-export type ChangeStreamerDownstreamPayload =
-  StreamInPayload<ChangeStreamerDownstream>;
-
 export interface BatchedChangeStreamer extends ChangeStreamer {
   subscribeBatched(
     ctx: SubscriberContext,
-  ): Promise<Source<ChangeStreamerDownstreamPayload>>;
+  ): Promise<Source<StreamInPayload<Downstream>>>;
 }
 
 export function hasBatchedSubscribe(
   changeStreamer: ChangeStreamer,
 ): changeStreamer is BatchedChangeStreamer {
   return 'subscribeBatched' in changeStreamer;
-}
-
-export function downstreamSchemaForProtocolVersion(
-  _protocolVersion: number,
-): v.Type<ChangeStreamerDownstream> {
-  return downstreamSchema;
 }
 
 export function errorTypeToReadableName(val: ErrorType) {

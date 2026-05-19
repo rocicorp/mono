@@ -1,5 +1,6 @@
 import {resolver, type Resolver} from '@rocicorp/resolver';
 import {assert} from '../../../shared/src/asserts.ts';
+import {HeadIndexedQueue} from '../../../shared/src/head-indexed-queue.ts';
 import type {Sink, Source} from './streams.ts';
 
 /**
@@ -74,13 +75,8 @@ export class Subscription<T, M = T> implements Source<T>, Sink<M> {
     return new Subscription(options, publish);
   }
 
-  // Consumers waiting to consume messages (i.e. an async iteration awaiting the next message).
-  readonly #consumers: (Resolver<Entry<M> | null> | undefined)[] = [];
-  #consumerHead = 0;
-  // Messages waiting to be dequeued.
-  readonly #messages: (Entry<M> | 'terminus' | undefined)[] = [];
-  #messageHead = 0;
-  #messageCount = 0;
+  readonly #consumers = new HeadIndexedQueue<Resolver<Entry<M> | null>>();
+  readonly #messages = new HeadIndexedQueue<Entry<M> | Terminus>();
   // Messages dequeued but not yet consumed.
   readonly #consuming = new Set<Entry<M>>();
   readonly #pipelineEnabled: boolean;
@@ -159,19 +155,15 @@ export class Subscription<T, M = T> implements Source<T>, Sink<M> {
       consumer.resolve(entry);
     } else if (
       this.#coalesce &&
-      this.#messageCount > 0 &&
-      this.#lastMessage() !== 'terminus'
+      this.#messages.size > 0 &&
+      this.#messages.last() !== TERMINUS
     ) {
-      // oxlint-disable-next-line typescript/no-non-null-assertion
-      const prev = this.#messages.at(-1)!;
-      assert(
-        prev !== undefined && prev !== 'terminus',
-        'prev should be an entry after check',
-      );
-      this.#messages[this.#messages.length - 1] = {
+      const prev = this.#messages.last();
+      assert(prev !== undefined && prev !== TERMINUS, 'expected an entry');
+      this.#messages.replaceLast({
         value: this.#coalesce(entry, prev),
         resolve,
-      };
+      });
     } else {
       this.#enqueueMessage(entry);
     }
@@ -185,7 +177,7 @@ export class Subscription<T, M = T> implements Source<T>, Sink<M> {
 
   /** The number of messages waiting to be dequeued. */
   get queued(): number {
-    return this.#messageCount;
+    return this.#messages.size;
   }
 
   /** The number of messages dequeued but not yet "consumed" */
@@ -208,10 +200,10 @@ export class Subscription<T, M = T> implements Source<T>, Sink<M> {
   end() {
     if (this.#sentinel) {
       // already terminated
-    } else if (this.#messageCount === 0) {
+    } else if (this.#messages.size === 0) {
       this.cancel();
     } else {
-      this.#enqueueMessage('terminus');
+      this.#enqueueMessage(TERMINUS);
     }
   }
 
@@ -240,7 +232,7 @@ export class Subscription<T, M = T> implements Source<T>, Sink<M> {
         [...this.#consuming, ...this.#pendingMessages()],
         sentinel instanceof Error ? sentinel : undefined,
       );
-      this.#resetMessages();
+      this.#messages.clear();
 
       for (
         let consumer = this.#dequeueConsumer();
@@ -264,7 +256,7 @@ export class Subscription<T, M = T> implements Source<T>, Sink<M> {
     return {
       next: async () => {
         const entry = this.#dequeueMessage();
-        if (entry === 'terminus') {
+        if (entry === TERMINUS) {
           this.cancel();
           return {value: undefined, done: true};
         }
@@ -335,93 +327,19 @@ export class Subscription<T, M = T> implements Source<T>, Sink<M> {
   }
 
   #dequeueConsumer(): Resolver<Entry<M> | null> | undefined {
-    while (this.#consumerHead < this.#consumers.length) {
-      const consumer = this.#consumers[this.#consumerHead];
-      this.#consumers[this.#consumerHead] = undefined;
-      this.#consumerHead++;
-      if (consumer) {
-        this.#maybeCompactConsumers();
-        return consumer;
-      }
-    }
-
-    this.#resetConsumers();
-    return undefined;
+    return this.#consumers.shift();
   }
 
-  #enqueueMessage(message: Entry<M> | 'terminus'): void {
+  #enqueueMessage(message: Entry<M> | Terminus): void {
     this.#messages.push(message);
-    this.#messageCount++;
   }
 
-  #dequeueMessage(): Entry<M> | 'terminus' | undefined {
-    if (this.#messageCount === 0) {
-      this.#resetMessages();
-      return undefined;
-    }
-
-    while (this.#messageHead < this.#messages.length) {
-      const message = this.#messages[this.#messageHead];
-      this.#messages[this.#messageHead] = undefined;
-      this.#messageHead++;
-      if (message) {
-        this.#messageCount--;
-        this.#maybeCompactMessages();
-        return message;
-      }
-    }
-
-    this.#messageCount = 0;
-    this.#resetMessages();
-    return undefined;
-  }
-
-  #lastMessage(): Entry<M> | 'terminus' | undefined {
-    return this.#messageCount === 0 ? undefined : this.#messages.at(-1);
+  #dequeueMessage(): Entry<M> | Terminus | undefined {
+    return this.#messages.shift();
   }
 
   #pendingMessages(): Entry<M>[] {
-    const pending: Entry<M>[] = [];
-    for (let i = this.#messageHead; i < this.#messages.length; i++) {
-      const message = this.#messages[i];
-      if (message && message !== 'terminus') {
-        pending.push(message);
-      }
-    }
-    return pending;
-  }
-
-  #maybeCompactConsumers(): void {
-    if (
-      this.#consumerHead > 1024 &&
-      this.#consumerHead * 2 > this.#consumers.length
-    ) {
-      this.#consumers.splice(0, this.#consumerHead);
-      this.#consumerHead = 0;
-    }
-  }
-
-  #maybeCompactMessages(): void {
-    if (this.#messageCount === 0) {
-      this.#resetMessages();
-    } else if (
-      this.#messageHead > 1024 &&
-      this.#messageHead * 2 > this.#messages.length
-    ) {
-      this.#messages.splice(0, this.#messageHead);
-      this.#messageHead = 0;
-    }
-  }
-
-  #resetConsumers(): void {
-    this.#consumers.length = 0;
-    this.#consumerHead = 0;
-  }
-
-  #resetMessages(): void {
-    this.#messages.length = 0;
-    this.#messageHead = 0;
-    this.#messageCount = 0;
+    return this.#messages.toArray().filter(isEntry);
   }
 }
 
@@ -489,3 +407,10 @@ type Entry<M> = {
   readonly value: M;
   readonly resolve: (r: Result) => void;
 };
+
+const TERMINUS = Symbol('terminus');
+type Terminus = typeof TERMINUS;
+
+function isEntry<M>(entry: Entry<M> | Terminus): entry is Entry<M> {
+  return entry !== TERMINUS;
+}

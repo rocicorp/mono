@@ -1,7 +1,6 @@
 import type {StringifiedStreamPayload} from '../../types/streams.ts';
 import {Subscription} from '../../types/subscription.ts';
-import {CHANGE_STREAMER_V6_PROTOCOL_VERSION} from './change-streamer-protocol.ts';
-import {type Downstream} from './change-streamer.ts';
+import {PROTOCOL_VERSION, type Downstream} from './change-streamer.ts';
 import {Subscriber} from './subscriber.ts';
 
 let nextID = 1;
@@ -9,7 +8,7 @@ let nextID = 1;
 export function createSubscriber(
   watermark = '00',
   caughtUp = false,
-  protocolVersion = CHANGE_STREAMER_V6_PROTOCOL_VERSION,
+  protocolVersion = PROTOCOL_VERSION,
 ): [Subscriber, Downstream[], Subscription<StringifiedStreamPayload>] {
   const id = '' + nextID++;
   const received: Downstream[] = [];

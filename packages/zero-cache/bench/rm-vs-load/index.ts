@@ -219,15 +219,9 @@ function protocolModeFromEnv(): ConsumerProtocolMode {
   const mode = envString('ZERO_RM_VS_PROTOCOL') ?? 'v6';
   switch (mode) {
     case 'v6':
-    case 'message-json':
-    case 'batch-json':
-    case 'batch-compact':
       return mode;
     default:
-      throw new Error(
-        `Invalid ZERO_RM_VS_PROTOCOL=${mode}; expected ` +
-          'v6, message-json, batch-json, or batch-compact',
-      );
+      throw new Error(`Invalid ZERO_RM_VS_PROTOCOL=${mode}; expected v6`);
   }
 }
 
@@ -393,9 +387,7 @@ async function runScenario(
 
         unflushedBytes += jsonBytes;
         const shouldWaitForFanout =
-          unflushedBytes >= flushBytesThreshold &&
-          (consumerConfig.protocolMode === 'message-json' ||
-            change[0] === 'commit');
+          unflushedBytes >= flushBytesThreshold && change[0] === 'commit';
         if (shouldWaitForFanout) {
           await forwarder.forwardWithFlowControl(entry);
           unflushedBytes = 0;
