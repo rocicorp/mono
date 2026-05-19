@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779195414354,
+  "lastUpdate": 1779198380380,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -56093,6 +56093,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/rocicorp/mono/commit/c4e6db1ce11357faacd2cc920c6f3c06d4b6d1de"
         },
         "date": 1779195400716,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 317161,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 57049,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 117187,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 33481,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "arv@roci.dev",
+            "name": "Erik Arvidsson",
+            "username": "arv"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "15e3d6b9f817db1286e2f0a16bfcbf3e790d8c7c",
+          "message": "refactor(replicache-perf): Move perf to replicache (#6009)\n\nThis pull request refactors and expands the benchmarking utilities and\nscripts in the `replicache` package. The main focus is on modularizing\nbenchmark helper functions, updating benchmarking scripts and\ndependencies, and adding new benchmarks for string comparison and\nhashing performance. Additionally, there are minor improvements to the\nworkflow configuration and package scripts.\n\n**Benchmark utilities refactor and new benchmarks:**\n\n* Moved benchmark helper functions (such as `ReplicachePerfTest`,\n`makeRep`, `populate`, `putMap`, `setupPersistedData`, `sleep`, `range`,\n`sampleSize`, etc.) from `replicache-perf/src/benchmarks/replicache.ts`\ninto a new file `replicache/src/bench-util.ts` for better modularity and\nreuse. All relevant imports and usages in benchmarking code were updated\naccordingly.\n[[1]](diffhunk://#diff-924c8d31071bb32c507a494c338c19b4d9dfd93e515bbf7cda69af04b85fa0eaL2-L15)\n[[2]](diffhunk://#diff-924c8d31071bb32c507a494c338c19b4d9dfd93e515bbf7cda69af04b85fa0eaL24-L25)\n[[3]](diffhunk://#diff-924c8d31071bb32c507a494c338c19b4d9dfd93e515bbf7cda69af04b85fa0eaL323-L387)\n[[4]](diffhunk://#diff-924c8d31071bb32c507a494c338c19b4d9dfd93e515bbf7cda69af04b85fa0eaL598-L603)\n[[5]](diffhunk://#diff-924c8d31071bb32c507a494c338c19b4d9dfd93e515bbf7cda69af04b85fa0eaL752-L820)\n[[6]](diffhunk://#diff-924c8d31071bb32c507a494c338c19b4d9dfd93e515bbf7cda69af04b85fa0eaL924-L946)\n[[7]](diffhunk://#diff-33589dfead65423516c466e02d72e9089b44472a49d99e1357ec3d5ea9d8fc59R1-R168)\n\n* Added new benchmarks:\n-\n[`compare-utf8.bench.ts`](diffhunk://#diff-a1905ce9bb4a177264053392f2d8f849485bb31ff2201465ab03f598f667c43fR1-R86):\nBenchmarks various string comparison methods, including `compare-utf8`,\n`Intl.Collator`, `localeCompare`, and byte-level comparisons, on both\nrandom and ASCII strings.\n-\n[`hash.bench.ts`](diffhunk://#diff-64c12f584cb1e9a852782eeaac6d6099fe42b6ac5a3fd45452c3e781f0abeba3R1-R103):\nBenchmarks SHA-512 hashing performance using both WASM (`hash-wasm`) and\nnative browser crypto APIs, with data encoded as UTF-8 and UTF-16.\n\n**Build and workflow improvements:**\n\n* Updated `bench` and `bench:watch` scripts in `replicache/package.json`\nto use a custom Vitest config file (`vitest.config.bench.ts`) for\nbenchmarks, instead of the default.\n* Added new dependencies required for benchmarks: `hash-wasm`, `idb`,\nand `xbytes`.\n* Simplified the matrix definition in\n`.github/workflows/bencher-benchmarks.yml` and improved how package\nnames and working directories are set for benchmarking jobs.\n\n**Minor code improvements:**\n\n* Fixed the placement of the `describe('BTreeWrite bulk load\nperformance', ...)` block in `btree/write.bench.ts` for clarity.\n[[1]](diffhunk://#diff-f2c99ee0e8559f629a38afd7a36430f8557ff74e4e91ed004516f743cba23c23L11-L15)\n[[2]](diffhunk://#diff-f2c99ee0e8559f629a38afd7a36430f8557ff74e4e91ed004516f743cba23c23R42-R46)\n* Removed a redundant helper function in `btree/write.bench.ts` that was\nno longer used.\n\nThese changes collectively improve the maintainability, extensibility,\nand performance coverage of the benchmarking infrastructure in the\n`replicache` package.\n\n---------\n\nCo-authored-by: Claude <noreply@anthropic.com>\nCo-authored-by: copilot-swe-agent[bot] <198982749+Copilot@users.noreply.github.com>\nCo-authored-by: arv <45845+arv@users.noreply.github.com>",
+          "timestamp": "2026-05-19T13:31:42Z",
+          "tree_id": "0bbed46d05b6e402801c6ff2d74c2c00d8e5ce88",
+          "url": "https://github.com/rocicorp/mono/commit/15e3d6b9f817db1286e2f0a16bfcbf3e790d8c7c"
+        },
+        "date": 1779198366773,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
