@@ -1,0 +1,19 @@
+packages:
+  - 'apps/*'
+  - 'packages/*'
+  - 'prod'
+  - 'tools/*'
+allowBuilds:
+  '@prisma/engines': true
+  '@rocicorp/zero-sqlite3': true
+  core-js: false
+  core-js-pure: false
+  cpu-features: false
+  esbuild: true
+  prisma: true
+  protobufjs: true
+  ssh2: false
+overrides:
+  '@types/node': '^22.10.5'
+  esbuild: '0.27.7'
+  webpackbar: ^7.0.0

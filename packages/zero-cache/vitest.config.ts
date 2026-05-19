@@ -54,7 +54,7 @@ export function configForNoPg(url: string) {
 // the connection string in the CUSTOM_PG environment variable, and optionally
 // limit the test runner to the "custom-pg" project:
 //
-// CUSTOM_PG=postgresql://... npm run test -- --project custom-pg
+// CUSTOM_PG=postgresql://... pnpm run test --project custom-pg
 export function configForCustomPg(url: string) {
   if (process.env['CUSTOM_PG']) {
     const name = nameFromURL(url);

@@ -22,7 +22,6 @@
     "noEmit": true,
     "forceConsistentCasingInFileNames": true,
     "allowJs": true,
-    "preserveSymlinks": true,
     "types": [],
     "resolveJsonModule": true,
     "incremental": true,

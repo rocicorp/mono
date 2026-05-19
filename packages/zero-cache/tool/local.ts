@@ -1,5 +1,5 @@
 /**
- * Script to run replication logical locally. Run with `npm run local`,
+ * Script to run replication logical locally. Run with `pnpm run local`,
  * optionally with Postgres Environment Variables to configure non-default
  * database connection values.
  *
@@ -8,7 +8,7 @@
  * Example:
  *
  * ```
- * $ PGPORT=5434 PGDATABASE=upstream npm run local
+ * $ PGPORT=5434 PGDATABASE=upstream pnpm run local
  * ```
  */
 

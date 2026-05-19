@@ -21,15 +21,20 @@
     "fmt": "oxfmt .",
     "check-fmt": "oxfmt --check ."
   },
+  "dependencies": {
+    "@rocicorp/resolver": "^1.0.2"
+  },
   "devDependencies": {
     "@testing-library/react": "^16.3.2",
     "@types/react": "^18.3.18",
+    "@types/react-dom": "18.3.5",
     "oxfmt": "^0.45.0",
     "react": "^18.3.1",
-    "shared": "0.0.0",
-    "zero-client": "0.0.0",
-    "zero-schema": "0.0.0",
-    "zql": "0.0.0"
+    "shared": "workspace:*",
+    "vitest": "^4.1.6",
+    "zero-client": "workspace:*",
+    "zero-schema": "workspace:*",
+    "zql": "workspace:*"
   },
   "peerDependencies": {
     "react": "^18.3.1",

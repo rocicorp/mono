@@ -20,7 +20,7 @@
   },
   "devDependencies": {
     "oxfmt": "^0.45.0",
-    "replicache": "15.2.1",
-    "shared": "0.0.0"
+    "replicache": "workspace:*",
+    "shared": "workspace:*"
   }
 }

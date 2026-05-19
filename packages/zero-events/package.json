@@ -23,7 +23,7 @@
   },
   "scripts": {
     "build": "rm -rf out && tsc && npx tsx tool/build.ts",
-    "prepack": "npm run build",
+    "prepack": "pnpm run build",
     "check-types": "tsc",
     "check-types:watch": "tsc --watch",
     "format": "oxfmt .",
@@ -34,8 +34,10 @@
     "check-fmt": "oxfmt --check ."
   },
   "devDependencies": {
+    "esbuild": "0.27.7",
     "oxfmt": "^0.45.0",
-    "shared": "0.0.0",
-    "typescript": "~6.0.2"
+    "shared": "workspace:*",
+    "typescript": "~6.0.2",
+    "vitest": "^4.1.6"
   }
 }
