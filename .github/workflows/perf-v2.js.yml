@@ -9,12 +9,17 @@ on:
       - '.github/**'
       - 'package-lock.json'
 
+permissions:
+  contents: read
+
 jobs:
   playwright-install:
     name: Install Playwright
-    runs-on: self-hosted
+    runs-on: [self-hosted, benchmark]
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
           node-version: 24.x
@@ -25,9 +30,13 @@ jobs:
   benchmark:
     name: Performance regression check
     needs: playwright-install
-    runs-on: self-hosted
+    permissions:
+      contents: read
+    runs-on: [self-hosted, benchmark]
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
           node-version: 24.x
@@ -49,6 +58,33 @@ jobs:
           npx tsx tool/split-perf.ts perf-temp-output.json perf-v2-output.json perf-v2-p95-output.json
         shell: bash
 
+      - name: Upload benchmark outputs
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: perf-v2-results
+          path: |
+            packages/replicache-perf/perf-v2-output.json
+            packages/replicache-perf/perf-v2-p95-output.json
+          if-no-files-found: error
+          retention-days: 1
+
+  publish:
+    name: Publish performance results
+    needs: benchmark
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
+
+      - name: Download benchmark outputs
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
+        with:
+          name: perf-v2-results
+          path: packages/replicache-perf
+
       # Disable git hooks so github-action-benchmark can commit to gh-pages
       # (the pre-commit hook references tools/ which doesn't exist on gh-pages)
       - run: git config core.hooksPath /dev/null
@@ -63,7 +99,7 @@ jobs:
           output-file-path: packages/replicache-perf/perf-v2-output.json
           # Workflow will fail when an alert happens
           fail-on-alert: true
-          github-token: ${{ secrets.PERSONAL_GITHUB_TOKEN }}
+          github-token: ${{ github.token }}
           benchmark-data-dir-path: perf-v2
           auto-push: true
           alert-threshold: '130%'
@@ -78,7 +114,7 @@ jobs:
           output-file-path: packages/replicache-perf/perf-v2-p95-output.json
           # Workflow will NOT fail when an alert happens
           fail-on-alert: false
-          github-token: ${{ secrets.PERSONAL_GITHUB_TOKEN }}
+          github-token: ${{ github.token }}
           benchmark-data-dir-path: perf-v2/p95
           auto-push: true
           alert-threshold: '1000%'
