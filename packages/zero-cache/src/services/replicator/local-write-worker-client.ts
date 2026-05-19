@@ -64,6 +64,9 @@ export class LocalWriteWorkerClient implements WriteWorkerClient {
   }
 
   abort(): void {
+    // Abort discards the ChangeProcessor's in-flight transaction/failure state,
+    // but keeps the already-open SQLite connection. That mirrors the thread
+    // worker contract without paying a reconnect cost on every stream retry.
     this.#mustProcessor().abort(this.#mustLogContext());
     this.#processor = new ChangeProcessor(
       this.#mustRunner(),

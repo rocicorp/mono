@@ -66,18 +66,27 @@ type QueueEntry =
 
 type PendingTransaction = {
   group: PendingGroup;
+  // Data changes are stored under the pre-commit watermark; the commit row then
+  // bridges that transaction to the post-commit watermark subscribers resume at.
   preCommitWatermark: string;
   pos: number;
+  // Data rows wait here until either the data batch is full or a schema/commit
+  // boundary needs them durable in the changeDB.
   pendingChangeLogEntries: ChangeLogInsert[];
   hasSchemaChange: boolean;
+  // skipAck lets internal/replayed commits become durable without advancing the
+  // upstream replication slot.
   ack: boolean;
 };
 
 type PendingGroup = {
   pool: TransactionPool;
+  // The owner check is started when the group opens and awaited before ACKs are
+  // released, so grouped commits still fail closed if another RM takes ownership.
   startingReplicationState: Promise<ReplicationOwner>;
   commitAcks: {commit: Commit; ack: boolean}[];
   txCount: number;
+  // Null until the group has at least one committed upstream transaction.
   lastWatermark: string | null;
 };
 
@@ -362,9 +371,11 @@ export class Storer implements Service {
   #maybeReleaseBackPressure() {
     if (
       this.#readyForMore !== null &&
-      // Wait for at least 20% of the threshold to free up.
       this.#approximateQueuedBytes < this.#backPressureThresholdBytes * 0.8
     ) {
+      // Keep hysteresis between "pause upstream" and "resume upstream". Without
+      // the 20% margin, a busy RM can bounce around the threshold and spend extra
+      // time scheduling backpressure transitions.
       this.#lc.info?.(
         `releasing back pressure with ${this.#queue.size()} queued changes (~${(this.#approximateQueuedBytes / 1024 ** 2).toFixed(2)} MB)`,
       );
@@ -648,10 +659,18 @@ export class Storer implements Service {
             ack: tx.ack,
           });
           tx.group.txCount++;
+          // Schema changes publish metadata side effects that must become
+          // visible with the commit that introduced them.
+          const hasSchemaSideEffects = tx.hasSchemaChange;
+          // Subscribers waiting for catchup need a committed snapshot to read;
+          // holding the group open would make new VSs wait behind unrelated
+          // future transactions.
+          const catchupWaiting = catchupQueue.length > 0;
+          // Transaction grouping removes per-commit round trips, but this cap
+          // bounds uncommitted changeDB work and ACK latency under sustained load.
+          const groupFull = tx.group.txCount >= CHANGE_LOG_TX_GROUP_SIZE;
           const shouldFlushGroup =
-            tx.hasSchemaChange ||
-            catchupQueue.length > 0 ||
-            tx.group.txCount >= CHANGE_LOG_TX_GROUP_SIZE;
+            hasSchemaSideEffects || catchupWaiting || groupFull;
           tx = null;
           if (shouldFlushGroup) {
             await flushGroup();
@@ -717,10 +736,9 @@ export class Storer implements Service {
     const entries = tx.pendingChangeLogEntries;
     tx.pendingChangeLogEntries = [];
     // #5976: https://github.com/rocicorp/mono/pull/5976
-    // Batch insert buffered data rows to reduce changeDB round trips.
-    // Previously, data-heavy upstream transactions issued one INSERT per
-    // changeLog row; batching was measured in the shared 1 RM / 16 view-syncer
-    // e2e suite as part of the ~13-35% rows/s improvement in #5976.
+    // Batch insert buffered data rows so the changeDB sees one multi-row INSERT
+    // instead of one INSERT per data change. In the shared 1 RM / 16 VS e2e
+    // suite, this was part of the measured ~13-35% rows/s improvement.
     //
     // Schema changes still flush immediately before metadata writes so their
     // side effects remain ordered with the change that introduced them.

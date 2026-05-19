@@ -103,10 +103,13 @@ export function liteValue(
 function shouldStoreAsJson(liteTypeString: string) {
   // #6001: https://github.com/rocicorp/mono/pull/6001
   // Row-heavy serving apply calls liteValue for every column. Most columns are
-  // scalar non-JSON, so check the common `json`/`jsonb` prefix before falling
-  // back to the array markers that also store as JSON in SQLite.
+  // scalar non-JSON, so the first-character check lets them skip delimiter
+  // parsing and lowercasing. The slower array-marker checks stay last because
+  // array columns are uncommon but still stored as JSON text in SQLite.
   const first = liteTypeString.charCodeAt(0);
   if (first === JSON_TYPE_PREFIX_LOWER || first === JSON_TYPE_PREFIX_UPPER) {
+    // Lite type strings append Zero attributes after "|"; only the upstream
+    // type before that delimiter decides whether json/jsonb is stored as text.
     const delim = liteTypeString.indexOf('|');
     const upstream =
       delim > 0 ? liteTypeString.substring(0, delim) : liteTypeString;
@@ -121,6 +124,8 @@ function shouldStoreAsJson(liteTypeString: string) {
   );
 }
 
+// Named constants keep the branch above readable without putting string
+// allocation or toLowerCase() on the common scalar path.
 const JSON_TYPE_PREFIX_LOWER = 'j'.charCodeAt(0);
 const JSON_TYPE_PREFIX_UPPER = 'J'.charCodeAt(0);
 

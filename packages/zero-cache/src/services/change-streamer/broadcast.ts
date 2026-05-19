@@ -31,7 +31,11 @@ export class Broadcast {
     }
   }
 
+  // Subscribers still gating this broadcast. A subscriber leaves this set when
+  // its downstream stream has consumed the batch.
   readonly #pending: Set<Subscriber>;
+  // Completion samples are retained for flow-control logs; they explain which
+  // subscribers were fast enough to form the majority.
   readonly #completed: Completed[];
   readonly #done = resolver();
   readonly #flowControl: FlowControlOptions | undefined;
@@ -57,10 +61,16 @@ export class Broadcast {
     this.#pending = new Set(subscribers);
     this.#completed = [];
     this.#flowControl = flowControl;
+    // The last change in the broadcast is the highest commit/order watermark
+    // represented by this batch, so it is the useful label for diagnostics.
     this.#watermark = changes.at(-1)?.[0] ?? 'none';
+    // "More than half" keeps one slow or broken minority from stalling the RM,
+    // while a one-subscriber topology still waits for that subscriber.
     this.#majority = Math.floor(this.#pending.size / 2) + 1;
 
     for (const sub of this.#pending) {
+      // Log the work visible to the subscriber at send time: its existing
+      // downstream backlog plus this broadcast's new logical messages.
       const numChanges = sub.numPending + changes.length;
       void sub
         .sendBatch(changes)
@@ -68,8 +78,9 @@ export class Broadcast {
         .finally(() => this.#markCompleted(sub, numChanges));
     }
 
-    // set done if there are no subscribers (mainly for tests)
     if (this.#pending.size === 0) {
+      // With no subscribers, there is nobody to apply flow control to; let the
+      // upstream continue immediately.
       this.#setDone();
     }
   }
@@ -102,6 +113,8 @@ export class Broadcast {
       !(this.#flowControl.flowControlConsensusPaddingMs >= 0) ||
       this.#completed.length < this.#majority
     ) {
+      // Timer starts only after majority completion and only when early release
+      // is enabled. Before that, releasing would let the RM outrun the VS fleet.
       return;
     }
     this.#clearConsensusTimer();
@@ -120,6 +133,8 @@ export class Broadcast {
       this.#pending.size === 0 ||
       this.#completed.length < this.#majority
     ) {
+      // The callback can race with normal completion or option changes; in
+      // those cases there is either nothing left to release or no consensus yet.
       return;
     }
     const now = performance.now();

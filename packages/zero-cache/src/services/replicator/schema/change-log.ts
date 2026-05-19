@@ -196,9 +196,13 @@ export class ChangeLog {
 
   logSetOps(version: LexiVersion, entries: readonly BatchRowOp[]) {
     if (entries.length === 0) {
+      // Some replicated INSERTs are intentionally unlogged, such as tables
+      // without a usable row key. They still update SQLite but cannot drive IVM.
       return;
     }
     if (entries.length === 1) {
+      // Keep the single-row path on the existing named statement; generating a
+      // VALUES-list statement only pays off once there is more than one row.
       const {pos, table, rowKey} = entries[0];
       this.#logRowOpStmt.run({version, pos, table, rowKey, op: SET_OP});
       return;
@@ -206,6 +210,8 @@ export class ChangeLog {
 
     let stmt = this.#logSetOpsStmts.get(entries.length);
     if (!stmt) {
+      // The number of rows is part of the SQL text because it changes the
+      // placeholder count, so cache one prepared statement per batch length.
       stmt = this.#db.prepare(/*sql*/ `
         INSERT OR REPLACE INTO "_zero.changeLog2"
           (stateVersion, pos, "table", rowKey, op)
@@ -217,6 +223,8 @@ export class ChangeLog {
     }
 
     const values = [];
+    // SET_OP is embedded as a SQL literal; the bind array is four values per
+    // row: stateVersion, pos, table, and rowKey.
     values.length = entries.length * 4;
     let i = 0;
     for (const {pos, table, rowKey} of entries) {

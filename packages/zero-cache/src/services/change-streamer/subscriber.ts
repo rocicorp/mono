@@ -23,8 +23,13 @@ export class Subscriber {
   readonly id: string;
   readonly #downstream: Subscription<StringifiedStreamPayload>;
   readonly #latestStatus: () => Status;
+  // #watermark is the latest commit sent to this subscriber. #acked lags until
+  // the downstream stream confirms that the commit frame was consumed.
   #watermark: string;
   #acked: string;
+  // Non-null while catchup is reading historical changeLog rows. Live forwarded
+  // changes are buffered here so the subscriber sees "historical, then live" in
+  // one ordered stream.
   #backlog: WatermarkedChange[] | null;
 
   constructor(
@@ -55,6 +60,8 @@ export class Subscriber {
     const [watermark] = change;
     if (watermark > this.#watermark) {
       if (this.#backlog) {
+        // Catchup has not finished; keep live traffic behind the historical
+        // replay so the subscriber never sees a gap.
         this.#backlog.push(change);
       } else {
         await this.#sendChanges([change]);
@@ -64,6 +71,8 @@ export class Subscriber {
 
   async sendBatch(changes: readonly WatermarkedChange[]) {
     if (this.#backlog) {
+      // Entries at or before the subscriber watermark were already represented
+      // in its replica and must not be replayed during catchup handoff.
       for (const change of changes) {
         if (change[0] > this.#watermark) {
           this.#backlog.push(change);
@@ -89,6 +98,8 @@ export class Subscriber {
 
   sendStatus(status: Status) {
     if (this.#protocolVersion >= 2 && this.#initialized) {
+      // Older protocol versions do not know status messages. Before initialize,
+      // the subscriber's requested watermark has not been validated yet.
       void this.#sendDownstream(['status', status]);
     }
   }
@@ -121,6 +132,9 @@ export class Subscriber {
     // by the next caller to send().
     const backlog = this.#backlog;
     for (let i = 0; i < backlog.length; i += 64) {
+      // Send fixed-size ranges from the existing array instead of slice()ing.
+      // Catchup handoff can hold thousands of live entries under load, and the
+      // range form avoids duplicating those references during the flush.
       void this.#sendChanges(backlog, i, i + 64);
     }
     this.#backlog = null;
@@ -137,23 +151,33 @@ export class Subscriber {
       const change = changes[i];
       const [watermark, tag, payload] = change;
       if (watermark <= this.watermark) {
+        // Catchup queries include the row at the requested watermark to prove
+        // continuity. The subscriber only needs changes after that point.
         continue;
       }
       if (!this.supportsMessage(tag)) {
+        // Protocol-version filtering happens before JSON write so old serving
+        // replicas can continue catching up through newer metadata events.
         continue;
       }
       if (tag === 'commit') {
+        // Only commit messages advance the public replication position; data
+        // messages carry an internal ordering watermark but are not resumable.
         this.#watermark = watermark;
         commitWatermark = watermark;
       }
       json.push(payload);
     }
     if (json.length === 0) {
+      // Nothing survived the watermark/protocol filters, so there is no commit
+      // ACK to wait for and no downstream flow-control work to track.
       return;
     }
     const payload = json.length === 1 ? json[0] : json;
     const result = await this.#sendStringifiedDownstream(payload, json.length);
     if (commitWatermark !== undefined && result === 'consumed') {
+      // Purge logic uses acked watermarks, so advance only after the downstream
+      // stream confirms that the commit frame was consumed.
       this.#acked = max(this.#acked, commitWatermark);
     }
   }
@@ -166,6 +190,8 @@ export class Subscriber {
     payload: StringifiedStreamPayload,
     messageCount = typeof payload === 'string' ? 1 : payload.length,
   ) {
+    // pending/processed track logical downstream messages, not websocket frames;
+    // a stringified array still represents several change-stream messages.
     const count = messageCount;
     this.#pending += count;
     const {result} = this.#downstream.push(payload);
@@ -234,7 +260,8 @@ export class Subscriber {
   supportsMessage(tag: ChangeTag) {
     switch (tag) {
       case 'update-table-metadata':
-        // update-table-row-key is only understood by subscribers >= protocol v5
+        // Protocol v5 introduced relation row-key/table-metadata updates.
+        // Earlier replicas must skip this message instead of failing catchup.
         return this.#protocolVersion >= 5;
     }
     return true;

@@ -38,6 +38,10 @@ export function replicaFileName(replicaFile: string, mode: ReplicaFileMode) {
 
 const MILLIS_PER_HOUR = 1000 * 60 * 60;
 const MB = 1024 * 1024;
+// SQLite's default WAL autocheckpoint is 1,000 pages, about 4 MiB with Zero's
+// normal page size. Serving replicas are write-heavy while catching up under
+// load, so that default can force frequent checkpoint work into the hot apply
+// path. This keeps the same automatic safety valve, just at about 32 MiB.
 export const SERVING_REPLICA_WAL_AUTOCHECKPOINT_PAGES = 8 * 1024;
 
 async function prepare(
@@ -134,10 +138,13 @@ export function getPragmaConfig(mode: ReplicaFileMode): PragmaConfig {
   return {
     busyTimeout: 30000,
     analysisLimit: 1000,
-    // #6001: Serving replicas apply row-heavy RM -> VS streams on the write
-    // worker path; raising SQLite's default checkpoint window to roughly 32 MiB
-    // reduced hot-path checkpoint/fsync spikes in rm-vs-load while keeping WAL
-    // growth bounded. Backup replicas keep checkpointing under litestream.
+    // #6001: wal_autocheckpoint tells SQLite how many WAL pages it may append
+    // before folding them back into the main db file. A small window keeps the
+    // WAL tiny, but makes the serving write path periodically pay checkpoint I/O
+    // while it is also trying to digest RM -> VS traffic. Serving replicas keep
+    // autocheckpointing enabled, just with a larger bounded window, because they
+    // have no litestream process responsible for checkpoint cadence. Backup
+    // replicas set this to 0 because litestream owns checkpoint timing there.
     walAutocheckpoint:
       mode === 'backup' ? 0 : SERVING_REPLICA_WAL_AUTOCHECKPOINT_PAGES,
   };

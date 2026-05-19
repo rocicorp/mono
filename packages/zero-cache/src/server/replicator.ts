@@ -60,10 +60,11 @@ export default async function runWorker(
   setupMetrics(lc, dbPath, walMode);
 
   const pragmas = getPragmaConfig(fileMode);
-  // #6001: Serving replicator workers already run off the user-facing syncer
-  // path, so keeping SQLite apply in this worker avoids an extra structured
-  // clone / IPC hop on row-heavy RM -> VS streams. Backup mode stays on the
-  // thread client so litestream/checkpoint work remains isolated.
+  // #6001: A serving replicator process already exists to isolate replica apply
+  // from the user-facing syncer. Running SQLite apply directly in that process
+  // removes the second structured-clone / worker-thread handoff that row-heavy
+  // RM -> VS traffic paid once per batch. Backup mode keeps the extra thread
+  // boundary because it shares a process with litestream/checkpoint supervision.
   const workerClient =
     mode === 'serving'
       ? new LocalWriteWorkerClient()

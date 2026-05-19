@@ -110,6 +110,10 @@ export class IncrementalSyncer {
           replicaVersion,
           initial: watermark === initialWatermark,
         };
+        // Batched subscribe preserves the RM websocket frame boundary. That is
+        // the unit that actually arrived together on the VS, so using it as the
+        // worker-flush boundary gives SQLite enough contiguous work to batch
+        // without changing the replication protocol or commit semantics.
         const useBatchedSubscribe = hasBatchedSubscribe(this.#changeStreamer);
         downstream = useBatchedSubscribe
           ? await this.#changeStreamer.subscribeBatched(ctx)
@@ -126,11 +130,17 @@ export class IncrementalSyncer {
         const workerBatch = new WorkerMessageBatcher(
           this.#worker,
           MAX_WORKER_BATCH_MESSAGES,
+          // Legacy subscribe() has no outer stream batch to flush at, so commits
+          // remain the visibility boundary. Batched subscribe() flushes after the
+          // transport batch, which keeps row-heavy transactions together.
           {flushOnCommit: !useBatchedSubscribe},
         );
         const handleWorkerResult = (
           result: CommitResult | readonly CommitResult[] | null,
         ) => {
+          if (result === null) {
+            return;
+          }
           const results = Array.isArray(result) ? result : [result];
           for (const commitResult of results) {
             this.#handleResult(lc, commitResult);
@@ -225,6 +235,9 @@ export class IncrementalSyncer {
 
         for await (const payload of downstream) {
           if (isStreamBatch(payload)) {
+            // This is the production fast path for RM -> VS traffic: apply the
+            // whole received websocket batch, then ACK/flush once after all of
+            // its messages have crossed into the write worker.
             for (const message of payload.messages) {
               await processChangeStreamerMessage(message);
             }
@@ -232,6 +245,9 @@ export class IncrementalSyncer {
           } else {
             await processChangeStreamerMessage(payload);
             if (useBatchedSubscribe) {
+              // Batched streams can still emit single messages. Flush them here
+              // so status/error/small frames do not sit behind a future batch
+              // that may never arrive.
               await flushWorkerBatch();
             }
           }

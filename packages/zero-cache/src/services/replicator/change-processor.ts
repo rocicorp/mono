@@ -85,9 +85,13 @@ type ChangeProcessorOptions = {
 };
 
 type UpsertPlan = {
+  // The row's present columns define the prepared INSERT shape; partial
+  // backfill/update rows must not reuse a statement for a different shape.
   readonly rowColumns: readonly string[];
   readonly sql: string;
   statement: Statement | undefined;
+  // Multi-row INSERT SQL has one placeholder group per row, so the row count is
+  // part of the prepared-statement shape.
   readonly batchStatements: Map<number, Statement>;
 };
 
@@ -104,10 +108,17 @@ type DeletePlan = {
 
 type PendingInsertBatch = {
   readonly table: string;
+  // All rows in a batch share a table and upsert plan so SQLite sees one
+  // multi-row INSERT with a fixed column list and placeholder layout.
   readonly plan: UpsertPlan;
+  // Bound by SQLite's parameter limit; the version column is included in the
+  // per-row binding count.
   readonly maxRows: number;
   readonly rows: LiteRow[];
   readonly logEntries: BatchRowOp[];
+  // A duplicate row key in the same multi-row INSERT would make "last write
+  // wins" depend on SQLite conflict behavior instead of stream order, so it
+  // forces a batch boundary.
   readonly rowKeys: Set<string>;
 };
 
@@ -119,9 +130,13 @@ const MAX_BATCH_BINDINGS = 900;
 
 class DmlSqlPlanCache {
   readonly #enabled: boolean;
+  // Full maps retain prepared SQL by table/column/key shape across transactions.
   readonly #upsertPlans = new Map<string, UpsertPlan>();
   readonly #updatePlans = new Map<string, UpdatePlan>();
   readonly #deletePlans = new Map<string, DeletePlan>();
+  // Logical replication usually emits long runs for the same table and shape.
+  // The one-entry per-table fast path avoids rebuilding a shape key for every
+  // row when the previous plan is still valid.
   readonly #lastUpsertPlan = new Map<string, UpsertPlan>();
   readonly #lastUpdatePlan = new Map<string, UpdatePlan>();
   readonly #lastDeletePlan = new Map<string, DeletePlan>();
@@ -146,6 +161,8 @@ class DmlSqlPlanCache {
 
     const last = this.#lastUpsertPlan.get(table);
     if (last && rowHasColumns(row, numCols, last.rowColumns)) {
+      // Reuse is safe only when the row still has every column the prepared
+      // INSERT binds. Otherwise values would be bound to the wrong column list.
       return last;
     }
 
@@ -176,6 +193,8 @@ class DmlSqlPlanCache {
       rowHasColumns(row, numCols, last.rowColumns) &&
       sameColumns(keyColumns, last.keyColumns)
     ) {
+      // UPDATE reuse also depends on the key column order because those
+      // placeholders are bound after the SET values.
       return last;
     }
 
@@ -197,6 +216,8 @@ class DmlSqlPlanCache {
 
     const last = this.#lastDeletePlan.get(table);
     if (last && sameColumns(keyColumns, last.keyColumns)) {
+      // DELETE statements bind only the key columns, so key order is the whole
+      // statement shape.
       return last;
     }
 
@@ -250,11 +271,15 @@ function upsertStatement(
   rows: number,
 ): Statement {
   if (rows === 1) {
+    // Single-row INSERTs are still common for small transactions and odd shapes;
+    // keep them on the compact prepared statement instead of generating batch SQL.
     return (plan.statement ??= db.db.prepare(plan.sql));
   }
 
   let stmt = plan.batchStatements.get(rows);
   if (!stmt) {
+    // Multi-row SQL changes with the row count because the placeholder list
+    // changes, so cache by rows inside the shared plan.
     stmt = db.db.prepare(createBatchUpsertSql(table, plan.rowColumns, rows));
     plan.batchStatements.set(rows, stmt);
   }
@@ -308,6 +333,9 @@ function rowHasColumns(
   numCols: number,
   columns: readonly string[],
 ) {
+  // The row object can be reused from parsed change-source payloads; this check
+  // proves the cached statement's column list still matches without allocating a
+  // new column array for the common same-shape row.
   if (numCols !== columns.length) {
     return false;
   }
@@ -344,6 +372,8 @@ function shapeKey(
 }
 
 function columnListKeyPart(columns: readonly string[]) {
+  // Length prefixes keep shapes unambiguous without allocating nested arrays;
+  // ["ab", "c"] and ["a", "bc"] must not collide.
   let key = `#${columns.length}`;
   for (const col of columns) {
     key += columnKeyPart(col);
@@ -403,6 +433,9 @@ function keyValues(key: LiteRowKey, keyColumns: readonly string[]) {
 }
 
 function rowKeyString(key: LiteRowKey) {
+  // Most replicated tables use a single-column key. Build that canonical JSON
+  // directly to avoid allocating a normalized copy on every row; composite keys
+  // still use normalizedKeyOrder() so column order remains stable.
   let singleColumn: string | undefined;
   let singleValue: LiteValueType = null;
   for (const col in key) {
@@ -420,6 +453,8 @@ function rowKeyString(key: LiteRowKey) {
 
 function valueKeyString(value: LiteValueType) {
   if (typeof value === 'string') {
+    // Strings need JSON escaping; BigIntJSON.stringify is only needed for
+    // bigint/null/number values.
     return JSON.stringify(value);
   }
   return stringify(value);
@@ -511,6 +546,9 @@ export class ChangeProcessor {
           : type === 'commit'
             ? downstream[2].watermark
             : undefined;
+      // Begin carries the future commit watermark used as this transaction's
+      // row version. Commit carries the durable replication watermark to persist.
+      // Data messages intentionally carry neither; they are ordered by the open tx.
       return this.#processMessage(lc, message, watermark);
     } catch (e) {
       this.#fail(lc, e);
@@ -539,6 +577,8 @@ export class ChangeProcessor {
             : type === 'commit'
               ? downstream[2].watermark
               : undefined;
+        // Same split as processMessage(): row versions come from begin, durable
+        // subscription progress comes from commit, and data stays within the tx.
         const result = this.#processMessage(lc, message, watermark);
         if (result) {
           results.push(result);
@@ -636,6 +676,9 @@ export class ChangeProcessor {
       return null;
     }
 
+    // Insert batches are deliberately narrow: consecutive INSERTs with the same
+    // table/shape. Every other mutation flushes first so change-log positions,
+    // metadata side effects, and rollback behavior remain in stream order.
     switch (msg.tag) {
       case 'insert':
         tx.processInsert(msg);
@@ -872,6 +915,8 @@ class TransactionProcessor {
     const key = this.#getKey(newRow, insert);
     const backfilledColumns = getBackfilledColumns(newRow.row, tableSpec);
     if (backfilledColumns !== undefined) {
+      // Backfill markers merge with column metadata in the change log, so this
+      // row takes the single-row path instead of the plain SET-op batch.
       this.#flushPendingInserts();
       this.#upsert(table, newRow);
       this.#logSetOp(table, key, backfilledColumns);
@@ -901,14 +946,19 @@ class TransactionProcessor {
       Math.floor(MAX_BATCH_BINDINGS / (plan.rowColumns.length + 1)),
     );
     const batch = this.#pendingInsertBatch;
-    if (
-      batch &&
-      (batch.table !== table ||
-        batch.plan.sql !== plan.sql ||
-        batch.rows.length >= batch.maxRows ||
-        (rowKey !== undefined && batch.rowKeys.has(rowKey)))
-    ) {
-      this.#flushPendingInserts();
+    if (batch) {
+      const tableChanged = batch.table !== table;
+      const shapeChanged = batch.plan.sql !== plan.sql;
+      const batchFull = batch.rows.length >= batch.maxRows;
+      const duplicateRowInBatch =
+        rowKey !== undefined && batch.rowKeys.has(rowKey);
+      if (tableChanged || shapeChanged || batchFull || duplicateRowInBatch) {
+        // A multi-row INSERT has one target table and one column shape. It also
+        // must not contain the same row key twice, because stream order should
+        // decide repeated writes to a row, not SQLite conflict resolution inside
+        // one statement.
+        this.#flushPendingInserts();
+      }
     }
 
     const current =
@@ -948,6 +998,8 @@ class TransactionProcessor {
     this.#pendingInsertBatch = undefined;
 
     const values = [];
+    // Each row contributes its data columns plus the synthetic _0_version
+    // column; the batch plan already captured the shared column order.
     const rowValueCount = batch.plan.rowColumns.length + 1;
     values.length = batch.rows.length * rowValueCount;
     let i = 0;

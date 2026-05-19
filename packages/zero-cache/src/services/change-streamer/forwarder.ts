@@ -14,6 +14,9 @@ const FORWARD_BATCH_SIZE = 64;
 export class Forwarder {
   readonly #lc: LogContext;
   readonly #progressMonitorOptions: ProgressMonitorOptions;
+  // Active subscribers receive new changes immediately. Queued subscribers
+  // connected in the middle of a transaction and must wait for catchup handoff
+  // so they do not see the tail of a transaction without its beginning.
   readonly #active = new Set<Subscriber>();
   readonly #queued = new Set<Subscriber>();
   #inTransaction = false;
@@ -46,8 +49,9 @@ export class Forwarder {
     }
 
     const {flowControlConsensusPaddingSeconds} = this.#progressMonitorOptions;
-    // A negative number disables early flow control release.
     if (flowControlConsensusPaddingSeconds >= 0) {
+      // Non-negative padding enables majority-based early release. Negative
+      // padding is the escape hatch for "wait for every subscriber" debugging.
       this.#currentBroadcast?.checkProgress(
         this.#lc,
         flowControlConsensusPaddingSeconds * 1000,
@@ -91,14 +95,17 @@ export class Forwarder {
    */
   forward(entry: WatermarkedChange) {
     this.#pending.push(entry);
-    if (
-      this.#pending.length >= FORWARD_BATCH_SIZE ||
-      entry[1] === 'begin' ||
-      entry[1] === 'commit' ||
-      entry[1] === 'rollback'
-    ) {
+    const batchFull = this.#pending.length >= FORWARD_BATCH_SIZE;
+    const transactionBoundary =
+      entry[1] === 'begin' || entry[1] === 'commit' || entry[1] === 'rollback';
+    if (batchFull || transactionBoundary) {
+      // Full batches bound queued JSON and event-loop delay. Transaction
+      // boundaries flush immediately so subscriber handoff, catchup, and
+      // rollback/commit visibility stay aligned with the Storer.
       this.#flushPendingWithoutTracking();
     } else {
+      // A quiet transaction may never hit the size threshold, so schedule a
+      // zero-delay flush to avoid waiting for unrelated future traffic.
       this.#schedulePendingFlush();
     }
     this.#updateActiveSubscribers(entry[1]);
@@ -167,6 +174,8 @@ export class Forwarder {
   }
 
   #drainPending(): WatermarkedChange[] {
+    // Transfer ownership of the backing array instead of copying it; this is on
+    // the fanout hot path and the next forward() can append to a fresh array.
     const pending = this.#pending;
     this.#pending = [];
     return pending;

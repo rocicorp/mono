@@ -4,7 +4,12 @@
 // type so hot queues can stay O(1) without spreading that machinery through
 // the caller.
 export class HeadIndexedQueue<T> {
+  // `undefined` is a valid queue value for some callers, so deleted slots use a
+  // private sentinel instead of overloading undefined.
   readonly #entries: (T | EmptySlot)[] = [];
+  // #head is the first slot worth scanning; #count is the number of live values
+  // after holes from deletes/shifts. Keeping both lets shift() stay O(1) while
+  // deleteMatching() can remove arbitrary pending entries.
   #head = 0;
   #count = 0;
 
@@ -38,6 +43,8 @@ export class HeadIndexedQueue<T> {
 
     while (this.#head < this.#entries.length) {
       const value = this.#entries[this.#head];
+      // Clear the reference before returning so long-lived streams do not keep
+      // consumed payloads alive until the next compaction.
       this.#entries[this.#head] = EMPTY_SLOT;
       this.#head++;
       if (value !== EMPTY_SLOT) {
@@ -88,6 +95,8 @@ export class HeadIndexedQueue<T> {
 
   deleteMatching(predicate: (value: T) => boolean): number {
     let deleted = 0;
+    // Scan backward so several deletions can create holes without changing the
+    // indexes of entries that have not been inspected yet.
     for (let i = this.#entries.length - 1; i >= this.#head; i--) {
       const value = this.#entries[i];
       if (value !== EMPTY_SLOT && predicate(value)) {
@@ -119,8 +128,12 @@ export class HeadIndexedQueue<T> {
 
   #maybeCompact(): void {
     if (this.#count === 0) {
+      // Empty queues should release the whole backing array immediately; this is
+      // the common state after a stream drains.
       this.clear();
     } else if (this.#head > 1024 && this.#head * 2 > this.#entries.length) {
+      // Compaction copies the live suffix, so wait until the dead prefix is both
+      // large and at least half the array.
       this.#entries.splice(0, this.#head);
       this.#head = 0;
     }

@@ -58,9 +58,11 @@ export type TuningOptions = StorerOptions & {
 };
 
 // #6001: https://github.com/rocicorp/mono/pull/6001
-// The default 16 KiB stream high-water mark made the RM wait before a
-// row-heavy transaction could fill the serving-replica write pipeline. This
-// window still bounds queued JSON while giving the applier enough work to batch.
+// This is the RM-side byte window for forwarded, already-stringified changes
+// waiting on serving-replica flow control. Node's default 16 KiB stream window
+// made the RM pause before a row-heavy transaction could fill the VS write
+// pipeline. 2 MiB is still a bounded queue, but large enough for the applier to
+// batch useful work instead of oscillating between RM sends and VS ACKs.
 export const FORWARDER_FLOW_CONTROL_BYTES_THRESHOLD = 2 * 1024 * 1024;
 
 /**

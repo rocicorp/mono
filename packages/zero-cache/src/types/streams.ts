@@ -31,7 +31,9 @@ import {
 const PING_INTERVAL_MS = 30_000;
 // #6001: https://github.com/rocicorp/mono/pull/6001
 // Batch stream ACKs so row-heavy RM -> serving-replica traffic spends CPU on
-// apply work instead of ACK writes. Quiet streams still flush on the short timer.
+// apply work instead of ACK writes. The count threshold keeps hot streams from
+// sending one ACK per frame; the short timer keeps quiet streams from waiting
+// for an arbitrary future frame before releasing sender-side backpressure.
 const CUMULATIVE_ACK_EVERY = 128;
 const CUMULATIVE_ACK_INTERVAL_MS = 5;
 
@@ -328,24 +330,31 @@ async function streamOutInternal<TPayload, TMessage extends JSONValue>(
         try {
           const {ack} = parseAck(data);
           if (ack < lastAck) {
+            // ACKs are cumulative and therefore monotonic. Moving backwards
+            // would mean the receiver is describing a different stream.
             throw new Error(`Ack moved backwards from ${lastAck} to ${ack}`);
           }
           if (ack > nextID) {
             if (nextID === 0 && pending.size === 0) {
+              // A reconnect can deliver a stale ACK before this side has sent
+              // anything on the new stream. It releases nothing, so ignore it.
               return;
             }
+            // After we have sent at least one frame, ACKing a future ID would
+            // release work the receiver could not have processed.
             throw new Error(
               `Unexpected ack ${ack}; only sent through ${nextID}`,
             );
           }
           if (ack === lastAck) {
+            // Duplicate cumulative ACK. Nothing new can be released.
             return;
           }
           lastAck = ack;
           // #6001: https://github.com/rocicorp/mono/pull/6001
           // RM -> VS catchup can keep thousands of future stream IDs pending;
-          // ACK cleanup stops at the first future ID so each ACK only pays for
-          // frames that can actually be released.
+          // pending is insertion-ordered by stream ID, so ACK cleanup stops at
+          // the first future ID and only pays for frames that can be released.
           for (const [id, consumed] of pending) {
             if (id > ack) {
               break;
@@ -371,6 +380,9 @@ async function streamOutInternal<TPayload, TMessage extends JSONValue>(
           source instanceof Subscription &&
           source.queued > 0
         ) {
+          // Only drain work that is already queued. Waiting for future messages
+          // just to fill a websocket frame would add latency to quiet streams
+          // and status/error delivery.
           const queued = await iterator.next();
           if (queued.done) {
             break;
@@ -381,6 +393,9 @@ async function streamOutInternal<TPayload, TMessage extends JSONValue>(
         for (const {value, consumed} of batch) {
           const messages = expandPayload(value);
           if (messages.length === 0) {
+            // Empty expansions still need to release the source payload;
+            // otherwise upstream flow control would wait on an ID that is never
+            // sent.
             consumed();
             continue;
           }
@@ -388,6 +403,8 @@ async function streamOutInternal<TPayload, TMessage extends JSONValue>(
           const consumeOne = () => {
             remaining--;
             if (remaining === 0) {
+              // A single source payload can expand to several websocket IDs.
+              // The source is consumed only after all IDs are cumulatively ACKed.
               consumed();
             }
           };
@@ -398,6 +415,8 @@ async function streamOutInternal<TPayload, TMessage extends JSONValue>(
           }
         }
         if (outbound.length === 0) {
+          // Every payload in this frame expanded to nothing; keep draining the
+          // source instead of emitting an empty websocket batch.
           continue;
         }
         const data = stringifyOutboundBatch(outbound, stringify);
@@ -544,6 +563,8 @@ async function streamInInternal<T extends JSONValue>(
         acker.received(msg.id);
       }
       if (preserveBatches && messages.length > 1) {
+        // The RM already grouped these messages into one websocket frame. Keep
+        // that boundary visible so the VS can batch one write-worker apply.
         sink.push(messages);
         return;
       }
@@ -577,6 +598,8 @@ function parseStreamedMessages<T extends JSONValue>(
     !Array.isArray(value) &&
     Object.hasOwn(value, 'batch')
   ) {
+    // A batch frame is a transport optimization only. Validate each child
+    // message against the normal streamed schema before handing it to callers.
     const batch = (value as {readonly batch?: unknown}).batch;
     if (!Array.isArray(batch)) {
       throw new Error('Invalid stream batch');
@@ -598,7 +621,12 @@ type StreamInOptions = {
 class CumulativeAcker {
   readonly #ws: WebSocket;
   readonly #batch: boolean;
+  // IDs that have been consumed after a gap. They become ACKable only when all
+  // earlier IDs are consumed.
   readonly #outOfOrder = new Set<number>();
+  // highestReceived is a parser-side fact; highestAckable is a consumer-side
+  // fact. Keeping them separate lets us flush early when the receiver has caught
+  // up to everything it has actually seen.
   #highestReceived = 0;
   #highestAckable = 0;
   #lastSent = 0;
@@ -619,6 +647,8 @@ class CumulativeAcker {
   consumed(id: number) {
     this.#validateID(id);
     if (id <= this.#highestAckable) {
+      // A late completion for an already-ackable ID cannot advance the
+      // cumulative watermark.
       return;
     }
     const previous = this.#highestAckable;
@@ -632,17 +662,20 @@ class CumulativeAcker {
     }
     const advanced = this.#highestAckable - previous;
     if (advanced === 0) {
+      // The receiver finished a future ID before a gap. Do not ACK past the
+      // missing ID; the sender may still need to retain it.
       return;
     }
     this.#pendingSinceLastSend += advanced;
-    if (
-      this.#batch &&
-      this.#pendingSinceLastSend < CUMULATIVE_ACK_EVERY &&
-      !(
-        this.#pendingSinceLastSend > 1 &&
-        this.#highestAckable === this.#highestReceived
-      )
-    ) {
+    const belowBatchThreshold =
+      this.#pendingSinceLastSend < CUMULATIVE_ACK_EVERY;
+    const receiverCaughtUp =
+      this.#pendingSinceLastSend > 1 &&
+      this.#highestAckable === this.#highestReceived;
+    if (this.#batch && belowBatchThreshold && !receiverCaughtUp) {
+      // Hot streams wait for the count threshold or timer so ACK traffic stays
+      // small. If the receiver has caught up to everything it has seen, flush
+      // now so the sender can release flow control promptly.
       this.#schedule();
     } else {
       this.flush();
@@ -657,6 +690,9 @@ class CumulativeAcker {
     for (const {id} of messages) {
       this.#validateID(id);
       if (id !== expected) {
+        // Contiguous transport batches are the hot path. If a caller hands us
+        // an out-of-order batch, fall back to the per-ID logic so gaps are
+        // tracked exactly.
         for (const fallback of messages) {
           this.consumed(fallback.id);
         }
@@ -683,9 +719,12 @@ class CumulativeAcker {
   flush() {
     this.#clearTimer();
     if (this.#highestAckable <= this.#lastSent) {
+      // Avoid duplicate ACK frames when a timer fires after an eager flush.
       return;
     }
     if (this.#ws.readyState !== this.#ws.OPEN) {
+      // The close path owns teardown now; sending an ACK to a closed websocket
+      // cannot release useful sender-side work.
       return;
     }
     this.#ws.send(JSON.stringify({ack: this.#highestAckable} satisfies Ack));
@@ -699,6 +738,7 @@ class CumulativeAcker {
   }
 
   #schedule() {
+    // One timer coalesces many small completions on quiet streams.
     this.#timer ??= setTimeout(() => this.flush(), CUMULATIVE_ACK_INTERVAL_MS);
   }
 

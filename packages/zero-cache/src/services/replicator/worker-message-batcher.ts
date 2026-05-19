@@ -5,6 +5,9 @@ import type {WriteWorkerClient} from './write-worker-client.ts';
 type ProcessMessagesResult = CommitResult | readonly CommitResult[] | null;
 
 type WorkerMessageBatcherOptions = {
+  // Legacy subscribe() delivers one message at a time, so commits still need to
+  // flush immediately to keep replication status and backfill completion moving.
+  // Batched subscribe() preserves RM websocket frames and flushes after the frame.
   readonly flushOnCommit?: boolean | undefined;
 };
 
@@ -52,10 +55,24 @@ export class WorkerMessageBatcher {
   }
 
   #shouldFlush(message: ChangeStreamData) {
-    return (
-      (this.#flushOnCommit && message[0] === 'commit') ||
-      message[0] === 'rollback' ||
-      this.#messages.length >= this.#maxMessages
-    );
+    const tag = message[0];
+    if (this.#flushOnCommit && tag === 'commit') {
+      // A commit is the first point where the write worker can return a durable
+      // watermark, schema-update, or backfill-complete result. Callers on the
+      // one-message-at-a-time path must see that result before later stream work.
+      return true;
+    }
+    if (tag === 'rollback') {
+      // Rollback terminates the current upstream transaction without a commit
+      // result. Flushing here keeps rolled-back rows from sharing a worker call
+      // with the next transaction, which preserves the stream's transaction shape.
+      return true;
+    }
+    if (this.#messages.length >= this.#maxMessages) {
+      // The batcher is meant to remove per-row worker calls, not to become an
+      // unbounded in-memory queue if a very large transaction arrives.
+      return true;
+    }
+    return false;
   }
 }

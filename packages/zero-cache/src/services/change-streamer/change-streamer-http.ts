@@ -150,14 +150,15 @@ export class ChangeStreamerHttpServer extends HttpService {
         req.url ?? '',
         req.headers.origin ?? 'http://localhost',
       );
-      void streamOutStringified(
-        this._lc,
-        downstream,
-        ws,
+      // Serving replicas request streamBatch=1 so the RM can preserve a
+      // websocket batch boundary instead of forcing the VS to rediscover
+      // batching after parse/ACK. Older clients omit the flag and keep the
+      // original one-message stream shape.
+      const streamBatchOptions =
         url.searchParams.get('streamBatch') === '1'
           ? {batch: {maxMessages: STREAM_BATCH_MESSAGES}}
-          : undefined,
-      );
+          : undefined;
+      void streamOutStringified(this._lc, downstream, ws, streamBatchOptions);
     } catch (err) {
       closeWithError(this._lc, ws, err, PROTOCOL_ERROR);
     }
@@ -255,6 +256,8 @@ export class ChangeStreamerHttpClient implements ChangeStreamer {
     ctx: SubscriberContext,
   ): Promise<Source<StreamInPayload<Downstream>>> {
     const ws = await this.#openChangesWebSocket(ctx);
+    // Keep websocket batches visible to the incremental syncer so it can hand a
+    // whole received frame to the write worker before sending the cumulative ACK.
     return streamInBatches(this.#lc, ws, downstreamSchema, {
       ack: 'cumulative',
     });
@@ -264,6 +267,8 @@ export class ChangeStreamerHttpClient implements ChangeStreamer {
     const uri = await this.#resolveChangeStreamer(CHANGES_PATH);
 
     const params = getParams(ctx);
+    // This is backwards-compatible because the server only batches when the VS
+    // opts in with this query parameter.
     params.set('streamBatch', '1');
     return new WebSocket(uri + `?${params.toString()}`);
   }
