@@ -20,10 +20,10 @@
   },
   "devDependencies": {
     "@rocicorp/logger": "^5.4.0",
-    "@vitest/runner": "^4.1.5",
+    "@vitest/runner": "^4.1.6",
     "oxfmt": "^0.45.0",
     "shared": "workspace:*",
     "typescript": "~6.0.2",
-    "vitest": "^4.1.5"
+    "vitest": "^4.1.6"
   }
 }

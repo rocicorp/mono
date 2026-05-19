@@ -31,7 +31,7 @@
     "oxfmt": "^0.45.0",
     "react": "^18.3.1",
     "shared": "workspace:*",
-    "vitest": "^4.1.5",
+    "vitest": "^4.1.6",
     "zero-client": "workspace:*",
     "zero-schema": "workspace:*",
     "zql": "workspace:*"

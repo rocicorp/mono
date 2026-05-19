@@ -18,6 +18,6 @@
     "oxfmt": "^0.45.0",
     "shared": "workspace:*",
     "typescript": "~6.0.2",
-    "vitest": "^4.1.5"
+    "vitest": "^4.1.6"
   }
 }

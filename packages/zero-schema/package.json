@@ -18,7 +18,7 @@
   "devDependencies": {
     "oxfmt": "^0.45.0",
     "shared": "workspace:*",
-    "vitest": "^4.1.5",
+    "vitest": "^4.1.6",
     "zero-protocol": "workspace:*",
     "zero-types": "workspace:*",
     "zql": "workspace:*"

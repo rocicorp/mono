@@ -28,7 +28,7 @@
     "shared": "workspace:*",
     "solid-js": "^1.9.4",
     "vite-plugin-solid": "^2.11.11",
-    "vitest": "^4.1.5",
+    "vitest": "^4.1.6",
     "zero-client": "workspace:*",
     "zql": "workspace:*"
   },
