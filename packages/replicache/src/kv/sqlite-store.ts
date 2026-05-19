@@ -213,17 +213,19 @@ function rejectAll(callbacks: unknown[], e: unknown): void {
   }
 }
 
+function parseRawValue(raw: string | undefined): ReadonlyJSONValue | undefined {
+  return raw === undefined
+    ? undefined
+    : deepFreeze(JSON.parse(raw) as ReadonlyJSONValue);
+}
+
 function resolveGet(
   resolve: GetResolve,
   reject: Reject,
   raw: string | undefined,
 ): void {
   try {
-    resolve(
-      raw === undefined
-        ? undefined
-        : deepFreeze(JSON.parse(raw) as ReadonlyJSONValue),
-    );
+    resolve(parseRawValue(raw));
   } catch (e) {
     reject(e);
   }

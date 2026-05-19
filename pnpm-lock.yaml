@@ -505,6 +505,12 @@ importers:
       expo-sqlite:
         specifier: '>=15'
         version: 55.0.16(expo@55.0.24)(react-native@0.85.3(@babel/core@7.29.0)(@types/react@19.2.14)(react@18.3.1))(react@18.3.1)
+      hash-wasm:
+        specifier: ^4.9.0
+        version: 4.12.0
+      idb:
+        specifier: ^7.0.1
+        version: 7.1.1
       oxfmt:
         specifier: ^0.45.0
         version: 0.45.0
@@ -520,6 +526,9 @@ importers:
       vitest:
         specifier: ^4.1.6
         version: 4.1.6(@opentelemetry/api@1.9.1)(@types/node@22.19.19)(@vitest/browser-playwright@4.1.6)(@vitest/coverage-v8@4.1.6)(vite@8.0.13(@types/node@22.19.19)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))
+      xbytes:
+        specifier: ^1.7.0
+        version: 1.9.1
 
   packages/replicache-doc:
     dependencies:

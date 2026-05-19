@@ -55,8 +55,8 @@
     "test:firefox:watch": "VITEST_BROWSER=firefox vitest --config vitest.config.web.ts",
     "test:webkit": "VITEST_BROWSER=webkit vitest run --config vitest.config.web.ts",
     "test:webkit:watch": "VITEST_BROWSER=webkit vitest --config vitest.config.web.ts",
-    "bench": "vitest bench --run",
-    "bench:watch": "vitest bench --watch",
+    "bench": "vitest run --config vitest.config.bench.ts",
+    "bench:watch": "vitest watch --config vitest.config.bench.ts",
     "format": "oxfmt .",
     "check-format": "oxfmt --check .",
     "check-types": "tsc -p tsconfig.json && tsc -p tsconfig.build.json && tsc -p tool/tsconfig.json",
@@ -88,11 +88,14 @@
     "compare-utf8": "^0.2.0",
     "esbuild": "0.27.7",
     "expo-sqlite": ">=15",
+    "hash-wasm": "^4.9.0",
+    "idb": "^7.0.1",
     "oxfmt": "^0.45.0",
     "playwright": "1.53.2",
     "shared": "workspace:*",
     "typescript": "~6.0.2",
-    "vitest": "^4.1.6"
+    "vitest": "^4.1.6",
+    "xbytes": "^1.7.0"
   },
   "peerDependencies": {
     "@op-engineering/op-sqlite": ">=15",
