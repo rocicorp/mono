@@ -5,10 +5,6 @@ import {must} from '../../../../shared/src/must.ts';
 import {max} from '../../types/lexi-version.ts';
 import type {StringifiedStreamPayload} from '../../types/streams.ts';
 import type {Subscription} from '../../types/subscription.ts';
-import {
-  CHANGE_STREAMER_V7_PROTOCOL_VERSION,
-  stringifyChangeBatch,
-} from './change-streamer-protocol.ts';
 import type {ChangeTag, WatermarkedChange} from './change-streamer-service.ts';
 import {type Downstream, type Status} from './change-streamer.ts';
 import * as ErrorType from './error-type-enum.ts';
@@ -149,12 +145,7 @@ export class Subscriber {
     if (json.length === 0) {
       return;
     }
-    const payload =
-      this.#protocolVersion >= CHANGE_STREAMER_V7_PROTOCOL_VERSION
-        ? stringifyChangeBatch(json)
-        : json.length === 1
-          ? json[0]
-          : json;
+    const payload = json.length === 1 ? json[0] : json;
     const result = await this.#sendStringifiedDownstream(payload, json.length);
     if (commitWatermark !== undefined && result === 'consumed') {
       this.#acked = max(this.#acked, commitWatermark);

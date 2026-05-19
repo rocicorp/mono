@@ -6,7 +6,6 @@ import postgres from 'postgres';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {Database} from '../../../zqlite/src/db.ts';
 import type {ChangeStreamData} from '../../src/services/change-source/protocol/current/downstream.ts';
-import {CHANGE_STREAMER_V6_PROTOCOL_VERSION} from '../../src/services/change-streamer/change-streamer-protocol.ts';
 import {
   FORWARDER_FLOW_CONTROL_BYTES_THRESHOLD,
   type ChangeTag,
@@ -212,10 +211,9 @@ function transportModeFromEnv(): ConsumerTransportMode {
 }
 
 function protocolModeFromEnv(): ConsumerProtocolMode {
-  const mode = envString('ZERO_RM_VS_PROTOCOL') ?? 'v7';
+  const mode = envString('ZERO_RM_VS_PROTOCOL') ?? 'v6';
   switch (mode) {
     case 'v6':
-    case 'v7':
     case 'message-json':
     case 'batch-json':
     case 'batch-compact':
@@ -223,13 +221,13 @@ function protocolModeFromEnv(): ConsumerProtocolMode {
     default:
       throw new Error(
         `Invalid ZERO_RM_VS_PROTOCOL=${mode}; expected ` +
-          'v6, v7, message-json, batch-json, or batch-compact',
+          'v6, message-json, batch-json, or batch-compact',
       );
   }
 }
 
-function protocolVersionForMode(mode: ConsumerProtocolMode): number {
-  return mode === 'v7' ? PROTOCOL_VERSION : CHANGE_STREAMER_V6_PROTOCOL_VERSION;
+function protocolVersionForMode(_mode: ConsumerProtocolMode): number {
+  return PROTOCOL_VERSION;
 }
 
 const scenarios = loadScenarios(full);

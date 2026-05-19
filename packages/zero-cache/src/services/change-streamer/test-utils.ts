@@ -31,8 +31,7 @@ export function createSubscriber(
 }
 
 function parsePayload(payload: StringifiedStreamPayload): Downstream[] {
-  return (typeof payload === 'string' ? [payload] : payload).flatMap(m => {
-    const parsed = JSON.parse(m);
-    return parsed[0] === 'change-batch' ? parsed[1].changes : [parsed];
-  });
+  return (typeof payload === 'string' ? [payload] : payload).map(
+    m => JSON.parse(m) as Downstream,
+  );
 }

@@ -131,8 +131,7 @@ describe('change-streamer/service', () => {
   }
 
   function parseDownstreamPayload(msg: string): Downstream[] {
-    const parsed = BigIntJSON.parse(msg) as ChangeStreamerDownstream;
-    return parsed[0] === 'change-batch' ? parsed[1].changes : [parsed];
+    return [BigIntJSON.parse(msg) as ChangeStreamerDownstream];
   }
 
   async function nextChange(sub: Queue<Downstream>) {

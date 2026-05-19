@@ -38,7 +38,6 @@ export type ConsumerTransportMode = 'in-process' | 'websocket';
 export type ConsumerTransportAckMode = 'per-message' | 'cumulative';
 export type ConsumerProtocolMode =
   | 'v6'
-  | 'v7'
   | 'message-json'
   | 'batch-json'
   | 'batch-compact';

@@ -5,9 +5,7 @@ import {assert} from '../../../shared/src/asserts.ts';
 import {BigIntJSON} from '../../../shared/src/bigint-json.ts';
 import * as v from '../../../shared/src/valita.ts';
 import type {ChangeStreamData} from '../../src/services/change-source/protocol/current/downstream.ts';
-import {CHANGE_STREAMER_V7_PROTOCOL_VERSION} from '../../src/services/change-streamer/change-streamer-protocol.ts';
 import {
-  downstreamSchemaForProtocolVersion,
   downstreamSchema,
   type ChangeStreamerDownstream,
   type Downstream,
@@ -160,16 +158,9 @@ export async function connectConsumerWebSocket(
   let cancelMessages: () => void;
   let messages: AsyncIterable<TransportBatch>;
   if (usesProductionStream(protocolMode)) {
-    const stream = await streamInBatches(
-      lc,
-      ws,
-      protocolMode === 'v7'
-        ? downstreamSchemaForProtocolVersion(
-            CHANGE_STREAMER_V7_PROTOCOL_VERSION,
-          )
-        : downstreamSchema,
-      {ack: ackMode},
-    );
+    const stream = await streamInBatches(lc, ws, downstreamSchema, {
+      ack: ackMode,
+    });
     cancelMessages = () => stream.cancel();
     messages = productionTransportBatches(stream);
   } else {
@@ -225,11 +216,7 @@ function byteLength(data: unknown): number {
 }
 
 function usesProductionStream(protocolMode: ConsumerProtocolMode) {
-  return (
-    protocolMode === 'v6' ||
-    protocolMode === 'v7' ||
-    protocolMode === 'message-json'
-  );
+  return protocolMode === 'v6' || protocolMode === 'message-json';
 }
 
 async function* batchSingletonMessages(
@@ -268,7 +255,7 @@ async function streamOutBatchFrames(
   source: Subscription<StringifiedStreamPayload>,
   sink: WebSocket,
   maxFrameMessages: number,
-  protocolMode: Exclude<ConsumerProtocolMode, 'message-json' | 'v6' | 'v7'>,
+  protocolMode: Exclude<ConsumerProtocolMode, 'message-json' | 'v6'>,
 ) {
   const pipeline = source.pipeline;
   assert(pipeline, 'batch frame transport requires a pipelined source');
@@ -372,7 +359,7 @@ function countStringifiedMessages(value: StringifiedStreamPayload) {
 function stringifyBatchFrame(
   id: number,
   messages: readonly QueuedStringifiedMessage[],
-  protocolMode: Exclude<ConsumerProtocolMode, 'message-json' | 'v6' | 'v7'>,
+  protocolMode: Exclude<ConsumerProtocolMode, 'message-json' | 'v6'>,
 ) {
   if (protocolMode === 'batch-compact') {
     const compact = compactBatchFrame(id, messages);
@@ -438,7 +425,7 @@ function compactBatchFrame(
 
 async function streamInBatchFrames(
   source: WebSocket,
-  protocolMode: Exclude<ConsumerProtocolMode, 'message-json' | 'v6' | 'v7'>,
+  protocolMode: Exclude<ConsumerProtocolMode, 'message-json' | 'v6'>,
 ): Promise<Subscription<TransportBatch, {id: number; batch: TransportBatch}>> {
   if (source.readyState === WebSocket.CONNECTING) {
     await once(source, 'open');
@@ -499,7 +486,7 @@ function parseTransportAck(data: string): {ack: number} {
 
 function parseBatchFrame(
   data: string,
-  protocolMode: Exclude<ConsumerProtocolMode, 'message-json' | 'v6' | 'v7'>,
+  protocolMode: Exclude<ConsumerProtocolMode, 'message-json' | 'v6'>,
 ): {id: number; messages: readonly Downstream[]} {
   const frame = BigIntJSON.parse(data) as {
     readonly id?: unknown;
@@ -630,8 +617,6 @@ function downstreamToChangeStreamData(
       return [undefined];
     case 'error':
       throw new Error(`subscription error: ${JSON.stringify(parsed[1])}`);
-    case 'change-batch':
-      return parsed[1].changes;
     case 'begin':
     case 'data':
     case 'commit':

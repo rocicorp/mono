@@ -178,23 +178,10 @@ export class IncrementalSyncer {
 
           return workerBatch.push(message)?.then(handleWorkerResult);
         };
-        const processChangeStreamDataBatch = async (
-          messages: readonly ChangeStreamData[],
-        ) => {
-          for (const message of messages) {
-            const result = processChangeStreamData(message);
-            if (result) {
-              await result;
-            }
-          }
-        };
-
         const processChangeStreamerMessage = async (
           message: ChangeStreamerDownstream,
         ) => {
-          this.#replicationEvents.add(
-            message[0] === 'change-batch' ? message[1].changes.length : 1,
-          );
+          this.#replicationEvents.add(1);
           switch (message[0]) {
             case 'status': {
               const {lagReport} = message[1];
@@ -225,15 +212,6 @@ export class IncrementalSyncer {
               );
               break;
             }
-            case 'change-batch':
-              // #6001: https://github.com/rocicorp/mono/pull/6001
-              // The v7 RM -> VS protocol sends row-heavy traffic as one
-              // ordered batch, so a VS applies the same changes with fewer
-              // parse/ACK/worker-dispatch units. The outer stream message is
-              // not ACKed until this loop finishes applying the batch and
-              // requests the next message.
-              await processChangeStreamDataBatch(message[1].changes);
-              break;
             default: {
               const result = processChangeStreamData(message);
               if (result) {

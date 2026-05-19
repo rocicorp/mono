@@ -46,7 +46,7 @@ console.log(
     `  apply-limit: ${process.env.ZERO_RM_VS_APPLY_LIMIT ?? 'all'}`,
     `  consumer-runtime: ${process.env.ZERO_RM_VS_CONSUMER_RUNTIME ?? 'inline'}`,
     `  transport: ${process.env.ZERO_RM_VS_TRANSPORT ?? 'in-process'}`,
-    `  protocol: ${process.env.ZERO_RM_VS_PROTOCOL ?? 'v7'}`,
+    `  protocol: ${process.env.ZERO_RM_VS_PROTOCOL ?? 'v6'}`,
     `  ws-ack: ${process.env.ZERO_RM_VS_WS_ACK ?? 'per-message'}`,
     `  ws-batch-messages: ${process.env.ZERO_RM_VS_WS_BATCH_MESSAGES ?? '256'}`,
     `  flush-bytes: ${process.env.ZERO_RM_VS_FLUSH_BYTES}`,
