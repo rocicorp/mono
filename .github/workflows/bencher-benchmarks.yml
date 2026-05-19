@@ -2,7 +2,7 @@ name: Bencher
 
 on:
   push:
-    branches: main
+    branches: [main]
 
 jobs:
   playwright-install:
@@ -26,6 +26,10 @@ jobs:
   perf:
     name: Perf
     needs: playwright-install
+    permissions:
+      contents: read
+      checks: write
+      pull-requests: write
     uses: ./.github/workflows/reusable-benchmark.yml
     strategy:
       fail-fast: false
