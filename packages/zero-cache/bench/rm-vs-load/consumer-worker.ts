@@ -18,7 +18,7 @@ if (parentPort === null) {
   throw new Error('consumer-worker must run inside a worker_thread');
 }
 
-const port = parentPort;
+const workerPort = parentPort;
 const config = workerData as ConsumerWorkerData;
 const lc = createSilentLogContext();
 let active = true;
@@ -64,7 +64,7 @@ function stats(): LoadConsumerStats {
 
 let transport: Awaited<ReturnType<typeof connectConsumerWebSocket>> | undefined;
 
-port.on('message', msg => {
+workerPort.on('message', msg => {
   if (typeof msg === 'object' && msg !== null && 'type' in msg) {
     switch (msg.type) {
       case 'stop':
@@ -72,27 +72,27 @@ port.on('message', msg => {
         void transport?.close();
         break;
       case 'stats':
-        port.postMessage({type: 'stats', stats: stats()});
+        workerPort.postMessage({type: 'stats', stats: stats()});
         break;
     }
   }
 });
 
 function postStats() {
-  port.postMessage({type: 'stats', stats: stats()});
+  workerPort.postMessage({type: 'stats', stats: stats()});
 }
 
 try {
   await run();
-  port.postMessage({type: 'done', stats: stats()});
-  port.close();
+  workerPort.postMessage({type: 'done', stats: stats()});
+  workerPort.close();
 } catch (e) {
   const error = e instanceof Error ? e : new Error(String(e));
-  port.postMessage({
+  workerPort.postMessage({
     type: 'error',
     error: {message: error.message, stack: error.stack},
   });
-  port.close();
+  workerPort.close();
 }
 
 async function run() {
@@ -160,7 +160,7 @@ async function run() {
       config.transportAckMode,
       config.protocolMode,
     );
-    port.postMessage({type: 'ready'});
+    workerPort.postMessage({type: 'ready'});
 
     for await (const batch of transport.messages) {
       if (!active) {

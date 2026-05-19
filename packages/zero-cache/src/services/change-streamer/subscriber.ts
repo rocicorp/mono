@@ -192,14 +192,13 @@ export class Subscriber {
   ) {
     // pending/processed track logical downstream messages, not websocket frames;
     // a stringified array still represents several change-stream messages.
-    const count = messageCount;
-    this.#pending += count;
+    this.#pending += messageCount;
     const {result} = this.#downstream.push(payload);
     try {
       return await result;
     } finally {
-      this.#pending -= count;
-      this.#processed += count;
+      this.#pending -= messageCount;
+      this.#processed += messageCount;
     }
   }
 

@@ -44,32 +44,39 @@ export class LocalWriteWorkerClient implements WriteWorkerClient {
   }
 
   getSubscriptionState() {
-    return Promise.resolve(getSubscriptionState(this.#mustRunner()));
+    assert(this.#runner, 'local write worker not initialized');
+    return Promise.resolve(getSubscriptionState(this.#runner));
   }
 
   processMessage(downstream: ChangeStreamData) {
+    assert(this.#processor, 'local write worker not initialized');
+    assert(this.#lc, 'local write worker not initialized');
     return Promise.resolve(
-      this.#mustProcessor().processMessage(this.#mustLogContext(), downstream),
+      this.#processor.processMessage(this.#lc, downstream),
     );
   }
 
   processMessages(downstreams: readonly ChangeStreamData[]) {
+    assert(this.#processor, 'local write worker not initialized');
+    assert(this.#lc, 'local write worker not initialized');
     return Promise.resolve(
-      this.#mustProcessor().processMessages(
-        this.#mustLogContext(),
-        downstreams,
-      ),
+      this.#processor.processMessages(this.#lc, downstreams),
     );
   }
 
   abort(): void {
+    assert(this.#processor, 'local write worker not initialized');
+    assert(this.#lc, 'local write worker not initialized');
+    assert(this.#runner, 'local write worker not initialized');
+    assert(this.#mode, 'local write worker not initialized');
+
     // Abort discards the ChangeProcessor's in-flight transaction/failure state,
     // but keeps the already-open SQLite connection. That mirrors the thread
     // worker contract without paying a reconnect cost on every stream retry.
-    this.#mustProcessor().abort(this.#mustLogContext());
+    this.#processor.abort(this.#lc);
     this.#processor = new ChangeProcessor(
-      this.#mustRunner(),
-      this.#mustMode(),
+      this.#runner,
+      this.#mode,
       (_lc, err) => this.#errorHandler(ensureError(err)),
     );
   }
@@ -85,26 +92,6 @@ export class LocalWriteWorkerClient implements WriteWorkerClient {
 
   onError(handler: ErrorHandler): void {
     this.#errorHandler = handler;
-  }
-
-  #mustLogContext() {
-    assert(this.#lc, 'local write worker not initialized');
-    return this.#lc;
-  }
-
-  #mustRunner() {
-    assert(this.#runner, 'local write worker not initialized');
-    return this.#runner;
-  }
-
-  #mustProcessor() {
-    assert(this.#processor, 'local write worker not initialized');
-    return this.#processor;
-  }
-
-  #mustMode() {
-    assert(this.#mode, 'local write worker not initialized');
-    return this.#mode;
   }
 }
 

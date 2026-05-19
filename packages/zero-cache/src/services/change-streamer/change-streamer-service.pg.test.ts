@@ -31,9 +31,9 @@ import {
   type TuningOptions,
 } from './change-streamer-service.ts';
 import {
+  PROTOCOL_VERSION,
   type ChangeStreamerService,
   type Downstream,
-  PROTOCOL_VERSION,
 } from './change-streamer.ts';
 import * as ErrorType from './error-type-enum.ts';
 import {AutoResetSignal, ensureReplicationConfig} from './schema/tables.ts';
@@ -44,8 +44,6 @@ const opts: TuningOptions = {
   flowControlConsensusPaddingSeconds: 1,
   statementTimeoutMs: 20_000,
 };
-
-const SERVICE_TEST_PROTOCOL_VERSION = PROTOCOL_VERSION;
 
 describe('change-streamer/service', () => {
   let lc: LogContext;
@@ -120,17 +118,11 @@ describe('change-streamer/service', () => {
       for await (const payload of sub) {
         const entries = typeof payload === 'string' ? [payload] : payload;
         for (const msg of entries) {
-          for (const downstream of parseDownstreamPayload(msg)) {
-            queue.enqueue(downstream);
-          }
+          queue.enqueue(BigIntJSON.parse(msg) as Downstream);
         }
       }
     })();
     return queue;
-  }
-
-  function parseDownstreamPayload(msg: string): Downstream[] {
-    return [BigIntJSON.parse(msg) as Downstream];
   }
 
   async function nextChange(sub: Queue<Downstream>) {
@@ -184,7 +176,7 @@ describe('change-streamer/service', () => {
 
   test('immediate forwarding, transaction storage', async () => {
     const sub = await streamer.subscribe({
-      protocolVersion: SERVICE_TEST_PROTOCOL_VERSION,
+      protocolVersion: PROTOCOL_VERSION,
       taskID: 'task-id',
       id: 'myid',
       mode: 'serving',
@@ -311,7 +303,7 @@ describe('change-streamer/service', () => {
 
     // Subscribe to the original watermark.
     const sub = await streamer.subscribe({
-      protocolVersion: SERVICE_TEST_PROTOCOL_VERSION,
+      protocolVersion: PROTOCOL_VERSION,
       taskID: 'task-id',
       id: 'myid',
       mode: 'serving',
@@ -429,7 +421,7 @@ describe('change-streamer/service', () => {
 
     // Subscribe to the original watermark.
     const sub = await streamer.subscribe({
-      protocolVersion: SERVICE_TEST_PROTOCOL_VERSION,
+      protocolVersion: PROTOCOL_VERSION,
       taskID: 'task-id',
       id: 'myid',
       mode: 'serving',
@@ -527,7 +519,7 @@ describe('change-streamer/service', () => {
 
     // Subscribe to a watermark from "the future".
     const sub = await streamer.subscribe({
-      protocolVersion: SERVICE_TEST_PROTOCOL_VERSION,
+      protocolVersion: PROTOCOL_VERSION,
       taskID: 'task-id',
       id: 'myid',
       mode: 'serving',
@@ -638,7 +630,7 @@ describe('change-streamer/service', () => {
 
   test('data types (forwarded and catchup)', async () => {
     const sub = await streamer.subscribe({
-      protocolVersion: SERVICE_TEST_PROTOCOL_VERSION,
+      protocolVersion: PROTOCOL_VERSION,
       taskID: 'task-id',
       id: 'myid',
       mode: 'serving',
@@ -742,7 +734,7 @@ describe('change-streamer/service', () => {
 
     // Also verify when loading from the Store as opposed to direct forwarding.
     const catchupSub = await streamer.subscribe({
-      protocolVersion: SERVICE_TEST_PROTOCOL_VERSION,
+      protocolVersion: PROTOCOL_VERSION,
       taskID: 'task-id',
       id: 'myid2',
       mode: 'serving',
@@ -793,7 +785,7 @@ describe('change-streamer/service', () => {
 
     const sub04 = drainToQueue(
       await streamer.subscribe({
-        protocolVersion: SERVICE_TEST_PROTOCOL_VERSION,
+        protocolVersion: PROTOCOL_VERSION,
         taskID: 'task-id',
         id: 'myid1',
         mode: 'serving',
@@ -806,7 +798,7 @@ describe('change-streamer/service', () => {
 
     const sub08 = drainToQueue(
       await streamer.subscribe({
-        protocolVersion: SERVICE_TEST_PROTOCOL_VERSION,
+        protocolVersion: PROTOCOL_VERSION,
         taskID: 'task-id',
         id: 'myid1',
         mode: 'serving',
@@ -819,7 +811,7 @@ describe('change-streamer/service', () => {
 
     const sub02 = drainToQueue(
       await streamer.subscribe({
-        protocolVersion: SERVICE_TEST_PROTOCOL_VERSION,
+        protocolVersion: PROTOCOL_VERSION,
         taskID: 'task-id',
         id: 'myid1',
         mode: 'serving',
@@ -856,7 +848,7 @@ describe('change-streamer/service', () => {
 
     // Start two subscribers: one at 06 and one at 04
     const sub1 = await streamer.subscribe({
-      protocolVersion: SERVICE_TEST_PROTOCOL_VERSION,
+      protocolVersion: PROTOCOL_VERSION,
       taskID: 'task-id',
       id: 'myid1',
       mode: 'serving',
@@ -866,7 +858,7 @@ describe('change-streamer/service', () => {
     });
 
     const sub2 = await streamer.subscribe({
-      protocolVersion: SERVICE_TEST_PROTOCOL_VERSION,
+      protocolVersion: PROTOCOL_VERSION,
       taskID: 'task-id',
       id: 'myid2',
       mode: 'serving',
@@ -941,7 +933,7 @@ describe('change-streamer/service', () => {
 
     // New connections earlier than 06 should now be rejected.
     const sub3 = await streamer.subscribe({
-      protocolVersion: SERVICE_TEST_PROTOCOL_VERSION,
+      protocolVersion: PROTOCOL_VERSION,
       taskID: 'task-id',
       id: 'myid2',
       mode: 'serving',
@@ -962,7 +954,7 @@ describe('change-streamer/service', () => {
 
   test('wrong replica version', async () => {
     const sub = await streamer.subscribe({
-      protocolVersion: SERVICE_TEST_PROTOCOL_VERSION,
+      protocolVersion: PROTOCOL_VERSION,
       taskID: 'task-id',
       id: 'myid1',
       mode: 'serving',
@@ -1334,7 +1326,7 @@ describe('change-streamer/service', () => {
     void streamer.run();
 
     const sub = await streamer.subscribe({
-      protocolVersion: SERVICE_TEST_PROTOCOL_VERSION,
+      protocolVersion: PROTOCOL_VERSION,
       taskID: 'task-id',
       id: 'myid',
       mode: 'serving',
@@ -1491,7 +1483,7 @@ describe('change-streamer/service', () => {
     `.simple();
 
     void streamer.subscribe({
-      protocolVersion: SERVICE_TEST_PROTOCOL_VERSION,
+      protocolVersion: PROTOCOL_VERSION,
       taskID: 'task-id',
       id: 'backup-id',
       mode: 'backup',
@@ -1526,7 +1518,7 @@ describe('change-streamer/service', () => {
 
   test('transaction aborted on unexpected termination', async () => {
     const sub = await streamer.subscribe({
-      protocolVersion: SERVICE_TEST_PROTOCOL_VERSION,
+      protocolVersion: PROTOCOL_VERSION,
       taskID: 'task-id',
       id: 'myid1',
       mode: 'serving',
@@ -1553,7 +1545,7 @@ describe('change-streamer/service', () => {
 
   test('transaction aborted only once', async () => {
     const sub = await streamer.subscribe({
-      protocolVersion: SERVICE_TEST_PROTOCOL_VERSION,
+      protocolVersion: PROTOCOL_VERSION,
       taskID: 'task-id',
       id: 'myid1',
       mode: 'serving',

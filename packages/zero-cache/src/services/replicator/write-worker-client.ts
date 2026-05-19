@@ -98,7 +98,7 @@ export class ThreadWriteWorkerClient implements WriteWorkerClient {
       if (!r) return; // stale abort response
       this.#pending = null;
       if (msg.error !== undefined) {
-        r.reject(errorFromUnknown(msg.error));
+        r.reject(ensureError(msg.error));
       } else {
         r.resolve(msg.result);
       }
@@ -174,10 +174,6 @@ export class ThreadWriteWorkerClient implements WriteWorkerClient {
   onError(handler: ErrorHandler): void {
     this.#errorHandler = handler;
   }
-}
-
-function errorFromUnknown(err: unknown): Error {
-  return ensureError(err);
 }
 
 function ensureError(err: unknown): Error {

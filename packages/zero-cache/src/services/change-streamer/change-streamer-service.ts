@@ -372,8 +372,6 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     await this.#storer.assumeOwnership(this.#purgeLock);
     this.#purgeLock = null;
 
-    const flushBytesThreshold = FORWARDER_FLOW_CONTROL_BYTES_THRESHOLD;
-
     while (this.#state.shouldRun()) {
       let err: unknown;
       let watermark: string | null = null;
@@ -447,8 +445,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
           const json = this.#storer.store(watermark, change);
           const entry: WatermarkedChange = [watermark, change[1].tag, json];
           unflushedBytes += json.length;
-          if (unflushedBytes < flushBytesThreshold) {
-            // pipeline changes until flushBytesThreshold
+          if (unflushedBytes < FORWARDER_FLOW_CONTROL_BYTES_THRESHOLD) {
             this.#forwarder.forward(entry);
           } else {
             // Wait for messages to clear socket buffers to ensure that they

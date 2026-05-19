@@ -68,7 +68,6 @@ import {
 
 // End-to-end load driver for reviewing storer/changeLog throughput changes.
 //
-// #5976/#5977: https://github.com/rocicorp/mono/pull/5976
 // This harness exists to keep storer performance work anchored to the same
 // production-shaped bottleneck: one replication-manager, fanout to live
 // view-syncers, optional reconnect catchup, SQLite apply, JSON serialization,
