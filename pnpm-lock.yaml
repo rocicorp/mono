@@ -28,7 +28,7 @@ importers:
         version: 4.1.6(vite@8.0.13(@types/node@22.19.19)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))(vitest@4.1.6)
       '@vitest/browser-playwright':
         specifier: ^4.1.5
-        version: 4.1.6(playwright@1.60.0)(vite@8.0.13(@types/node@22.19.19)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))(vitest@4.1.6)
+        version: 4.1.6(playwright@1.53.2)(vite@8.0.13(@types/node@22.19.19)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))(vitest@4.1.6)
       '@vitest/coverage-v8':
         specifier: ^4.1.5
         version: 4.1.6(@vitest/browser@4.1.6)(vitest@4.1.6)
@@ -48,8 +48,8 @@ importers:
         specifier: ^0.22.1
         version: 0.22.1
       playwright:
-        specifier: 1.60.0
-        version: 1.60.0
+        specifier: 1.53.2
+        version: 1.53.2
       syncpack:
         specifier: ^14.3.0
         version: 14.3.1
@@ -604,8 +604,8 @@ importers:
         specifier: ^7.0.1
         version: 7.1.1
       playwright:
-        specifier: 1.60.0
-        version: 1.60.0
+        specifier: 1.53.2
+        version: 1.53.2
       playwright-core:
         specifier: 1.58.2
         version: 1.58.2
@@ -711,8 +711,8 @@ importers:
         specifier: ^5.0.0
         version: 5.0.0
       playwright:
-        specifier: 1.60.0
-        version: 1.60.0
+        specifier: 1.53.2
+        version: 1.53.2
       type-fest:
         specifier: ^4.30.0
         version: 4.41.0
@@ -1204,8 +1204,8 @@ importers:
         specifier: ^0.45.0
         version: 0.45.0
       playwright:
-        specifier: 1.60.0
-        version: 1.60.0
+        specifier: 1.53.2
+        version: 1.53.2
       replicache:
         specifier: workspace:*
         version: link:../replicache
@@ -10803,6 +10803,11 @@ packages:
     resolution: {integrity: sha512-emEcLuomt2j03vxD54giVB4SxTjnsqkU692xZOZXHDVoYyypEm+b3jpiTcc+Cf+myooc+/Ly0z01jqeNHVgJGw==}
     engines: {node: '>=16.0.0'}
 
+  playwright-core@1.53.2:
+    resolution: {integrity: sha512-ox/OytMy+2w1jcYEYlOo1Hhp8hZkLCximMTUTMBXjGUA1KoFfiSZ+DU+3a739jsPY0yoKH2TFy9S2fsJas8yAw==}
+    engines: {node: '>=18'}
+    hasBin: true
+
   playwright-core@1.58.2:
     resolution: {integrity: sha512-yZkEtftgwS8CsfYo7nm0KE8jsvm6i/PTgVtB8DL726wNf6H2IMsDuxCpJj59KDaxCtSnrWan2AeDqM7JBaultg==}
     engines: {node: '>=18'}
@@ -10810,6 +10815,11 @@ packages:
 
   playwright-core@1.60.0:
     resolution: {integrity: sha512-9bW6zvX/m0lEbgTKJ6YppOKx8H3VOPBMOCFh2irXFOT4BbHgrx5hPjwJYLT40Lu+4qtD36qKc/Hn56StUW57IA==}
+    engines: {node: '>=18'}
+    hasBin: true
+
+  playwright@1.53.2:
+    resolution: {integrity: sha512-6K/qQxVFuVQhRQhFsVZ9fGeatxirtrpPgxzBYWyZLEXJzqYwuL4fuNmfOfD5et1tJE4GScKyPNeLhZeRwuTU3A==}
     engines: {node: '>=18'}
     hasBin: true
 
@@ -16822,6 +16832,7 @@ snapshots:
       - supports-color
       - typescript
       - utf-8-validate
+    optional: true
 
   '@expo/cli@55.0.30(@expo/dom-webview@55.0.6)(expo-constants@55.0.16(expo@55.0.24)(react-native@0.85.3(@babel/core@7.29.0)(@types/react@19.2.14)(react@18.3.1)))(expo-font@55.0.7(expo@55.0.24)(react-native@0.85.3(@babel/core@7.29.0)(@types/react@19.2.14)(react@18.3.1))(react@18.3.1))(expo@55.0.24)(react-dom@18.3.1(react@18.3.1))(react-native@0.85.3(@babel/core@7.29.0)(@types/react@19.2.14)(react@18.3.1))(react@18.3.1)(typescript@6.0.3)':
     dependencies:
@@ -16951,6 +16962,7 @@ snapshots:
     optionalDependencies:
       react: 18.3.1
       react-native: 0.85.3(@babel/core@7.29.0)(@types/react@18.3.28)(react@18.3.1)
+    optional: true
 
   '@expo/devtools@55.0.3(react-native@0.85.3(@babel/core@7.29.0)(@types/react@19.2.14)(react@18.3.1))(react@18.3.1)':
     dependencies:
@@ -16964,6 +16976,7 @@ snapshots:
       expo: 55.0.24(@babel/core@7.29.0)(@expo/dom-webview@55.0.6)(react-dom@18.3.1(react@18.3.1))(react-native@0.85.3(@babel/core@7.29.0)(@types/react@18.3.28)(react@18.3.1))(react@18.3.1)(typescript@6.0.3)
       react: 18.3.1
       react-native: 0.85.3(@babel/core@7.29.0)(@types/react@18.3.28)(react@18.3.1)
+    optional: true
 
   '@expo/dom-webview@55.0.6(expo@55.0.24)(react-native@0.85.3(@babel/core@7.29.0)(@types/react@19.2.14)(react@18.3.1))(react@18.3.1)':
     dependencies:
@@ -17029,6 +17042,7 @@ snapshots:
       react: 18.3.1
       react-native: 0.85.3(@babel/core@7.29.0)(@types/react@18.3.28)(react@18.3.1)
       stacktrace-parser: 0.1.11
+    optional: true
 
   '@expo/log-box@55.0.12(@expo/dom-webview@55.0.6)(expo@55.0.24)(react-native@0.85.3(@babel/core@7.29.0)(@types/react@19.2.14)(react@18.3.1))(react@18.3.1)':
     dependencies:
@@ -17061,7 +17075,7 @@ snapshots:
       postcss: 8.4.49
       resolve-from: 5.0.0
     optionalDependencies:
-      expo: 55.0.24(@babel/core@7.29.0)(@expo/dom-webview@55.0.6)(react-dom@18.3.1(react@18.3.1))(react-native@0.85.3(@babel/core@7.29.0)(@types/react@18.3.28)(react@18.3.1))(react@18.3.1)(typescript@6.0.3)
+      expo: 55.0.24(@babel/core@7.29.0)(@expo/dom-webview@55.0.6)(react-dom@18.3.1(react@18.3.1))(react-native@0.85.3(@babel/core@7.29.0)(@types/react@19.2.14)(react@18.3.1))(react@18.3.1)(typescript@6.0.3)
     transitivePeerDependencies:
       - bufferutil
       - supports-color
@@ -17117,7 +17131,7 @@ snapshots:
       '@expo/json-file': 10.0.14
       '@react-native/normalize-colors': 0.83.6
       debug: 4.4.3
-      expo: 55.0.24(@babel/core@7.29.0)(@expo/dom-webview@55.0.6)(react-dom@18.3.1(react@18.3.1))(react-native@0.85.3(@babel/core@7.29.0)(@types/react@18.3.28)(react@18.3.1))(react@18.3.1)(typescript@6.0.3)
+      expo: 55.0.24(@babel/core@7.29.0)(@expo/dom-webview@55.0.6)(react-dom@18.3.1(react@18.3.1))(react-native@0.85.3(@babel/core@7.29.0)(@types/react@19.2.14)(react@18.3.1))(react@18.3.1)(typescript@6.0.3)
       resolve-from: 5.0.0
       semver: 7.8.0
       xml2js: 0.6.0
@@ -17147,6 +17161,7 @@ snapshots:
       react-dom: 18.3.1(react@18.3.1)
     transitivePeerDependencies:
       - supports-color
+    optional: true
 
   '@expo/router-server@55.0.16(expo-constants@55.0.16(expo@55.0.24)(react-native@0.85.3(@babel/core@7.29.0)(@types/react@19.2.14)(react@18.3.1)))(expo-font@55.0.7(expo@55.0.24)(react-native@0.85.3(@babel/core@7.29.0)(@types/react@19.2.14)(react@18.3.1))(react@18.3.1))(expo-server@55.0.9)(expo@55.0.24)(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
     dependencies:
@@ -17176,6 +17191,7 @@ snapshots:
       expo-font: 55.0.7(expo@55.0.24)(react-native@0.85.3(@babel/core@7.29.0)(@types/react@18.3.28)(react@18.3.1))(react@18.3.1)
       react: 18.3.1
       react-native: 0.85.3(@babel/core@7.29.0)(@types/react@18.3.28)(react@18.3.1)
+    optional: true
 
   '@expo/vector-icons@15.1.1(expo-font@55.0.7(expo@55.0.24)(react-native@0.85.3(@babel/core@7.29.0)(@types/react@19.2.14)(react@18.3.1))(react@18.3.1))(react-native@0.85.3(@babel/core@7.29.0)(@types/react@19.2.14)(react@18.3.1))(react@18.3.1)':
     dependencies:
@@ -19284,6 +19300,7 @@ snapshots:
       react-native: 0.85.3(@babel/core@7.29.0)(@types/react@18.3.28)(react@18.3.1)
     optionalDependencies:
       '@types/react': 18.3.28
+    optional: true
 
   '@react-native/virtualized-lists@0.85.3(@types/react@19.2.14)(react-native@0.85.3(@babel/core@7.29.0)(@types/react@19.2.14)(react@18.3.1))(react@18.3.1)':
     dependencies:
@@ -20057,6 +20074,33 @@ snapshots:
     optionalDependencies:
       babel-plugin-react-compiler: 1.0.0
 
+  '@vitest/browser-playwright@4.1.6(playwright@1.53.2)(vite@8.0.13(@types/node@22.19.19)(esbuild@0.28.0)(jiti@1.21.7)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))(vitest@4.1.6)':
+    dependencies:
+      '@vitest/browser': 4.1.6(vite@8.0.13(@types/node@22.19.19)(esbuild@0.28.0)(jiti@1.21.7)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))(vitest@4.1.6)
+      '@vitest/mocker': 4.1.6(vite@8.0.13(@types/node@22.19.19)(esbuild@0.28.0)(jiti@1.21.7)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))
+      playwright: 1.53.2
+      tinyrainbow: 3.1.0
+      vitest: 4.1.6(@opentelemetry/api@1.9.1)(@types/node@22.19.19)(@vitest/browser-playwright@4.1.6)(@vitest/coverage-v8@4.1.6)(vite@8.0.13(@types/node@22.19.19)(esbuild@0.28.0)(jiti@1.21.7)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))
+    transitivePeerDependencies:
+      - bufferutil
+      - msw
+      - utf-8-validate
+      - vite
+    optional: true
+
+  '@vitest/browser-playwright@4.1.6(playwright@1.53.2)(vite@8.0.13(@types/node@22.19.19)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))(vitest@4.1.6)':
+    dependencies:
+      '@vitest/browser': 4.1.6(vite@8.0.13(@types/node@22.19.19)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))(vitest@4.1.6)
+      '@vitest/mocker': 4.1.6(vite@8.0.13(@types/node@22.19.19)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))
+      playwright: 1.53.2
+      tinyrainbow: 3.1.0
+      vitest: 4.1.6(@opentelemetry/api@1.9.1)(@types/node@22.19.19)(@vitest/browser-playwright@4.1.6)(@vitest/coverage-v8@4.1.6)(vite@8.0.13(@types/node@22.19.19)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))
+    transitivePeerDependencies:
+      - bufferutil
+      - msw
+      - utf-8-validate
+      - vite
+
   '@vitest/browser-playwright@4.1.6(playwright@1.60.0)(vite@8.0.13(@types/node@22.19.19)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))(vitest@4.1.6)':
     dependencies:
       '@vitest/browser': 4.1.6(vite@8.0.13(@types/node@22.19.19)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))(vitest@4.1.6)
@@ -20070,33 +20114,6 @@ snapshots:
       - utf-8-validate
       - vite
     optional: true
-
-  '@vitest/browser-playwright@4.1.6(playwright@1.60.0)(vite@8.0.13(@types/node@22.19.19)(esbuild@0.28.0)(jiti@1.21.7)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))(vitest@4.1.6)':
-    dependencies:
-      '@vitest/browser': 4.1.6(vite@8.0.13(@types/node@22.19.19)(esbuild@0.28.0)(jiti@1.21.7)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))(vitest@4.1.6)
-      '@vitest/mocker': 4.1.6(vite@8.0.13(@types/node@22.19.19)(esbuild@0.28.0)(jiti@1.21.7)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))
-      playwright: 1.60.0
-      tinyrainbow: 3.1.0
-      vitest: 4.1.6(@opentelemetry/api@1.9.1)(@types/node@22.19.19)(@vitest/browser-playwright@4.1.6)(@vitest/coverage-v8@4.1.6)(vite@8.0.13(@types/node@22.19.19)(esbuild@0.28.0)(jiti@1.21.7)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))
-    transitivePeerDependencies:
-      - bufferutil
-      - msw
-      - utf-8-validate
-      - vite
-    optional: true
-
-  '@vitest/browser-playwright@4.1.6(playwright@1.60.0)(vite@8.0.13(@types/node@22.19.19)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))(vitest@4.1.6)':
-    dependencies:
-      '@vitest/browser': 4.1.6(vite@8.0.13(@types/node@22.19.19)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))(vitest@4.1.6)
-      '@vitest/mocker': 4.1.6(vite@8.0.13(@types/node@22.19.19)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))
-      playwright: 1.60.0
-      tinyrainbow: 3.1.0
-      vitest: 4.1.6(@opentelemetry/api@1.9.1)(@types/node@22.19.19)(@vitest/browser-playwright@4.1.6)(@vitest/coverage-v8@4.1.6)(vite@8.0.13(@types/node@22.19.19)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))
-    transitivePeerDependencies:
-      - bufferutil
-      - msw
-      - utf-8-validate
-      - vite
 
   '@vitest/browser@4.1.6(vite@8.0.13(@types/node@22.19.19)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))(vitest@4.1.6)':
     dependencies:
@@ -20163,9 +20180,9 @@ snapshots:
       obug: 2.1.1
       std-env: 4.1.0
       tinyrainbow: 3.1.0
-      vitest: 4.1.6(@opentelemetry/api@1.9.1)(@types/node@22.19.19)(@vitest/browser-playwright@4.1.6)(@vitest/coverage-v8@4.1.6)(vite@8.0.13(@types/node@22.19.19)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))
+      vitest: 4.1.6(@opentelemetry/api@1.9.1)(@types/node@22.19.19)(@vitest/browser-playwright@4.1.6)(@vitest/coverage-v8@4.1.6)(vite@8.0.13(@types/node@22.19.19)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))
     optionalDependencies:
-      '@vitest/browser': 4.1.6(vite@8.0.13(@types/node@22.19.19)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))(vitest@4.1.6)
+      '@vitest/browser': 4.1.6(vite@8.0.13(@types/node@22.19.19)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))(vitest@4.1.6)
 
   '@vitest/expect@4.1.6':
     dependencies:
@@ -20704,7 +20721,7 @@ snapshots:
       resolve-from: 5.0.0
     optionalDependencies:
       '@babel/runtime': 7.29.2
-      expo: 55.0.24(@babel/core@7.29.0)(@expo/dom-webview@55.0.6)(react-dom@18.3.1(react@18.3.1))(react-native@0.85.3(@babel/core@7.29.0)(@types/react@18.3.28)(react@18.3.1))(react@18.3.1)(typescript@6.0.3)
+      expo: 55.0.24(@babel/core@7.29.0)(@expo/dom-webview@55.0.6)(react-dom@18.3.1(react@18.3.1))(react-native@0.85.3(@babel/core@7.29.0)(@types/react@19.2.14)(react@18.3.1))(react@18.3.1)(typescript@6.0.3)
     transitivePeerDependencies:
       - '@babel/core'
       - supports-color
@@ -22143,6 +22160,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
       - typescript
+    optional: true
 
   expo-asset@55.0.17(expo@55.0.24)(react-native@0.85.3(@babel/core@7.29.0)(@types/react@19.2.14)(react@18.3.1))(react@18.3.1)(typescript@6.0.3):
     dependencies:
@@ -22162,6 +22180,7 @@ snapshots:
       react-native: 0.85.3(@babel/core@7.29.0)(@types/react@18.3.28)(react@18.3.1)
     transitivePeerDependencies:
       - supports-color
+    optional: true
 
   expo-constants@55.0.16(expo@55.0.24)(react-native@0.85.3(@babel/core@7.29.0)(@types/react@19.2.14)(react@18.3.1)):
     dependencies:
@@ -22175,6 +22194,7 @@ snapshots:
     dependencies:
       expo: 55.0.24(@babel/core@7.29.0)(@expo/dom-webview@55.0.6)(react-dom@18.3.1(react@18.3.1))(react-native@0.85.3(@babel/core@7.29.0)(@types/react@18.3.28)(react@18.3.1))(react@18.3.1)(typescript@6.0.3)
       react-native: 0.85.3(@babel/core@7.29.0)(@types/react@18.3.28)(react@18.3.1)
+    optional: true
 
   expo-file-system@55.0.20(expo@55.0.24)(react-native@0.85.3(@babel/core@7.29.0)(@types/react@19.2.14)(react@18.3.1)):
     dependencies:
@@ -22187,6 +22207,7 @@ snapshots:
       fontfaceobserver: 2.3.0
       react: 18.3.1
       react-native: 0.85.3(@babel/core@7.29.0)(@types/react@18.3.28)(react@18.3.1)
+    optional: true
 
   expo-font@55.0.7(expo@55.0.24)(react-native@0.85.3(@babel/core@7.29.0)(@types/react@19.2.14)(react@18.3.1))(react@18.3.1):
     dependencies:
@@ -22197,7 +22218,7 @@ snapshots:
 
   expo-keep-awake@55.0.8(expo@55.0.24)(react@18.3.1):
     dependencies:
-      expo: 55.0.24(@babel/core@7.29.0)(@expo/dom-webview@55.0.6)(react-dom@18.3.1(react@18.3.1))(react-native@0.85.3(@babel/core@7.29.0)(@types/react@18.3.28)(react@18.3.1))(react@18.3.1)(typescript@6.0.3)
+      expo: 55.0.24(@babel/core@7.29.0)(@expo/dom-webview@55.0.6)(react-dom@18.3.1(react@18.3.1))(react-native@0.85.3(@babel/core@7.29.0)(@types/react@19.2.14)(react@18.3.1))(react@18.3.1)(typescript@6.0.3)
       react: 18.3.1
 
   expo-modules-autolinking@55.0.22(typescript@6.0.3):
@@ -22215,6 +22236,7 @@ snapshots:
       invariant: 2.2.4
       react: 18.3.1
       react-native: 0.85.3(@babel/core@7.29.0)(@types/react@18.3.28)(react@18.3.1)
+    optional: true
 
   expo-modules-core@55.0.25(react-native@0.85.3(@babel/core@7.29.0)(@types/react@19.2.14)(react@18.3.1))(react@18.3.1):
     dependencies:
@@ -22279,6 +22301,7 @@ snapshots:
       - supports-color
       - typescript
       - utf-8-validate
+    optional: true
 
   expo@55.0.24(@babel/core@7.29.0)(@expo/dom-webview@55.0.6)(react-dom@18.3.1(react@18.3.1))(react-native@0.85.3(@babel/core@7.29.0)(@types/react@19.2.14)(react@18.3.1))(react@18.3.1)(typescript@6.0.3):
     dependencies:
@@ -25223,9 +25246,17 @@ snapshots:
       pvutils: 1.1.5
       tslib: 2.8.1
 
+  playwright-core@1.53.2: {}
+
   playwright-core@1.58.2: {}
 
   playwright-core@1.60.0: {}
+
+  playwright@1.53.2:
+    dependencies:
+      playwright-core: 1.53.2
+    optionalDependencies:
+      fsevents: 2.3.2
 
   playwright@1.60.0:
     dependencies:
@@ -26227,6 +26258,7 @@ snapshots:
       - bufferutil
       - supports-color
       - utf-8-validate
+    optional: true
 
   react-native@0.85.3(@babel/core@7.29.0)(@types/react@19.2.14)(react@18.3.1):
     dependencies:
@@ -27835,7 +27867,7 @@ snapshots:
     optionalDependencies:
       '@opentelemetry/api': 1.9.1
       '@types/node': 22.19.19
-      '@vitest/browser-playwright': 4.1.6(playwright@1.60.0)(vite@8.0.13(@types/node@22.19.19)(esbuild@0.28.0)(jiti@1.21.7)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))(vitest@4.1.6)
+      '@vitest/browser-playwright': 4.1.6(playwright@1.53.2)(vite@8.0.13(@types/node@22.19.19)(esbuild@0.28.0)(jiti@1.21.7)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))(vitest@4.1.6)
       '@vitest/coverage-v8': 4.1.6(@vitest/browser@4.1.6)(vitest@4.1.6)
     transitivePeerDependencies:
       - msw
@@ -27865,7 +27897,7 @@ snapshots:
     optionalDependencies:
       '@opentelemetry/api': 1.9.1
       '@types/node': 22.19.19
-      '@vitest/browser-playwright': 4.1.6(playwright@1.60.0)(vite@8.0.13(@types/node@22.19.19)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))(vitest@4.1.6)
+      '@vitest/browser-playwright': 4.1.6(playwright@1.53.2)(vite@8.0.13(@types/node@22.19.19)(esbuild@0.28.0)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))(vitest@4.1.6)
       '@vitest/coverage-v8': 4.1.6(@vitest/browser@4.1.6)(vitest@4.1.6)
     transitivePeerDependencies:
       - msw
