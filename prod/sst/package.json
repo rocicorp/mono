@@ -16,6 +16,6 @@
   },
   "devDependencies": {
     "@types/aws-lambda": "8.10.147",
-    "oxfmt": "^0.43.0"
+    "oxfmt": "^0.45.0"
   }
 }
