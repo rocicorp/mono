@@ -1,5 +1,4 @@
 {
-  "installCommand": "corepack prepare pnpm@11.1.2 --activate && pnpm install",
   "rewrites": [
     {
       "source": "/",
