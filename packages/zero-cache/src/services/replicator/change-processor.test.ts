@@ -3684,6 +3684,53 @@ describe('replicator/change-processor', () => {
       'bigint',
     );
   });
+
+  test('processMessages applies a stream batch and returns each commit', () => {
+    initDB(
+      servingReplica,
+      `
+      CREATE TABLE foo(
+        id INTEGER PRIMARY KEY,
+        _0_version TEXT
+      );
+      `,
+    );
+
+    const foo = new ReplicationMessages({foo: 'id'});
+    const result = servingProcessor.processMessages(lc, [
+      ['begin', foo.begin(), {commitWatermark: '07'}],
+      ['data', foo.insert('foo', {id: 1})],
+      ['commit', foo.commit(), {watermark: '07'}],
+      ['begin', foo.begin(), {commitWatermark: '0a'}],
+      ['data', foo.insert('foo', {id: 2})],
+      ['commit', foo.commit(), {watermark: '0a'}],
+    ]);
+
+    expect(result).toEqual([
+      {
+        watermark: '07',
+        completedBackfill: undefined,
+        schemaUpdated: false,
+        changeLogUpdated: true,
+      },
+      {
+        watermark: '0a',
+        completedBackfill: undefined,
+        schemaUpdated: false,
+        changeLogUpdated: true,
+      },
+    ]);
+    expectTables(
+      servingReplica,
+      {
+        foo: [
+          {id: 1n, ['_0_version']: '07'},
+          {id: 2n, ['_0_version']: '0a'},
+        ],
+      },
+      'bigint',
+    );
+  });
 });
 
 describe('replicator/change-processor-errors', () => {

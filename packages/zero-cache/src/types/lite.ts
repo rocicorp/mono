@@ -106,7 +106,7 @@ function shouldStoreAsJson(liteTypeString: string) {
   // scalar non-JSON, so check the common `json`/`jsonb` prefix before falling
   // back to the array markers that also store as JSON in SQLite.
   const first = liteTypeString.charCodeAt(0);
-  if (first === 106 || first === 74) {
+  if (first === JSON_TYPE_PREFIX_LOWER || first === JSON_TYPE_PREFIX_UPPER) {
     const delim = liteTypeString.indexOf('|');
     const upstream =
       delim > 0 ? liteTypeString.substring(0, delim) : liteTypeString;
@@ -120,6 +120,9 @@ function shouldStoreAsJson(liteTypeString: string) {
     liteTypeString.includes('[]')
   );
 }
+
+const JSON_TYPE_PREFIX_LOWER = 'j'.charCodeAt(0);
+const JSON_TYPE_PREFIX_UPPER = 'J'.charCodeAt(0);
 
 function toLiteValue(val: JSONValue): Exclude<JSONValue, boolean> {
   switch (typeof val) {

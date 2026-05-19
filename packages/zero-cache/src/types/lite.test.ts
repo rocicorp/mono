@@ -205,6 +205,8 @@ describe('types/lite', () => {
     ['json', {custom: {json: 'object'}}, '{"custom":{"json":"object"}}'],
     ['jsonb', [1, 2], '[1,2]'],
     ['JSON|NOT_NULL', {upper: true}, '{"upper":true}'],
+    ['JSONB|NOT_NULL', true, 'true'],
+    ['jsonpath', true, 1],
     ['json', ['two', 'three'], '["two","three"]'],
     ['json', [null, null], '[null,null]'],
     [
@@ -214,6 +216,8 @@ describe('types/lite', () => {
     ],
     ['float[]', [123.456, 987.654], '[123.456,987.654]'],
     ['bool[]', [true, false], '[true,false]'],
+    ['int|TEXT_ARRAY', [1, 2], '[1,2]'],
+    ['varchar[]|NOT_NULL', ['a', 'b'], '["a","b"]'],
     [
       'json',
       [{custom: {json: 'object'}}, {another: {json: 'object'}}],

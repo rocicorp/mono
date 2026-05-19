@@ -150,7 +150,7 @@ export class Subscription<T, M = T> implements Source<T>, Sink<M> {
       entry.resolve('unconsumed');
       return {result};
     }
-    const consumer = this.#dequeueConsumer();
+    const consumer = this.#consumers.shift();
     if (consumer) {
       consumer.resolve(entry);
     } else if (
@@ -165,7 +165,7 @@ export class Subscription<T, M = T> implements Source<T>, Sink<M> {
         resolve,
       });
     } else {
-      this.#enqueueMessage(entry);
+      this.#messages.push(entry);
     }
     return {result};
   }
@@ -203,7 +203,7 @@ export class Subscription<T, M = T> implements Source<T>, Sink<M> {
     } else if (this.#messages.size === 0) {
       this.cancel();
     } else {
-      this.#enqueueMessage(TERMINUS);
+      this.#messages.push(TERMINUS);
     }
   }
 
@@ -228,20 +228,23 @@ export class Subscription<T, M = T> implements Source<T>, Sink<M> {
   #terminate(sentinel: 'canceled' | Error) {
     if (!this.#sentinel) {
       this.#sentinel = sentinel;
+      const pendingMessages = this.#messages.toArray().filter(isEntry);
       this.#cleanup(
-        [...this.#consuming, ...this.#pendingMessages()],
+        [...this.#consuming, ...pendingMessages],
         sentinel instanceof Error ? sentinel : undefined,
       );
       this.#messages.clear();
 
       for (
-        let consumer = this.#dequeueConsumer();
-        consumer;
-        consumer = this.#dequeueConsumer()
+        let consumer = this.#consumers.shift();
+        consumer !== undefined;
+        consumer = this.#consumers.shift()
       ) {
-        sentinel === 'canceled'
-          ? consumer.resolve(null)
-          : consumer.reject(sentinel);
+        if (sentinel === 'canceled') {
+          consumer.resolve(null);
+        } else {
+          consumer.reject(sentinel);
+        }
       }
     }
   }
@@ -255,7 +258,7 @@ export class Subscription<T, M = T> implements Source<T>, Sink<M> {
   #pipeline(): AsyncIterator<{value: T; consumed: () => void}> {
     return {
       next: async () => {
-        const entry = this.#dequeueMessage();
+        const entry = this.#messages.shift();
         if (entry === TERMINUS) {
           this.cancel();
           return {value: undefined, done: true};
@@ -324,22 +327,6 @@ export class Subscription<T, M = T> implements Source<T>, Sink<M> {
         return Promise.resolve({value, done: true});
       },
     };
-  }
-
-  #dequeueConsumer(): Resolver<Entry<M> | null> | undefined {
-    return this.#consumers.shift();
-  }
-
-  #enqueueMessage(message: Entry<M> | Terminus): void {
-    this.#messages.push(message);
-  }
-
-  #dequeueMessage(): Entry<M> | Terminus | undefined {
-    return this.#messages.shift();
-  }
-
-  #pendingMessages(): Entry<M>[] {
-    return this.#messages.toArray().filter(isEntry);
   }
 }
 
