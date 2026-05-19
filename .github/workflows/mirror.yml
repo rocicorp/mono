@@ -4,22 +4,33 @@ on:
     branches:
       - 'main'
 
+permissions:
+  contents: read
+
 jobs:
   mirror_job:
     runs-on: ubuntu-latest
     name: Mirror main branch to sandbox and terabugs branch
     steps:
-      - name: Mirror main to sandbox
-        id: mirror-sandbox
-        uses: google/mirror-branch-action@30c52ee21f5d3bd7fb28b95501c11aae7f17eebb # v2.0
+      - name: Create GitHub App token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
         with:
-          github-token: ${{ secrets.PERSONAL_GITHUB_TOKEN }}
-          source: 'main'
-          dest: 'sandbox'
-      - name: Mirror main to terabugs
-        id: mirror-terabugs
-        uses: google/mirror-branch-action@30c52ee21f5d3bd7fb28b95501c11aae7f17eebb # v2.0
-        with:
-          github-token: ${{ secrets.PERSONAL_GITHUB_TOKEN }}
-          source: 'main'
-          dest: 'terabugs'
+          client-id: ${{ vars.ROCICORP_MIRROR_APP_CLIENT_ID }}
+          private-key: ${{ secrets.ROCICORP_MIRROR_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: mono
+          permission-contents: write
+          permission-workflows: write
+
+      - name: Mirror main
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          for branch in sandbox terabugs; do
+            gh api \
+              --method PATCH \
+              "/repos/$GITHUB_REPOSITORY/git/refs/heads/$branch" \
+              -f "sha=$GITHUB_SHA" \
+              -F force=true
+          done
