@@ -9,6 +9,10 @@ jobs:
     name: File Sizes PR
     # DO NOT REMOVE: For handling Fork PRs see Pull Requests from Forks
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      contents: read
+      checks: write
+      pull-requests: write
     uses: ./.github/workflows/reusable-file-sizes.yml
     with:
       is_pr: true
