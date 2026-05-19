@@ -107,10 +107,10 @@ for (const packagePath of packageJsonFiles) {
 
 console.log(`✓ Updated ${updatedCount} dependent package(s)`);
 
-// Run npm install to update package-lock.json
-console.log('Running npm install to update package-lock.json...');
+// Run pnpm install to update pnpm-lock.yaml
+console.log('Running pnpm install to update pnpm-lock.yaml...');
 process.chdir(gitRoot);
-execute('npm install');
+execute('pnpm install');
 
 console.log('');
 console.log('Committing changes...');

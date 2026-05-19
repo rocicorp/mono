@@ -3,10 +3,10 @@
  * Does NOT require postgres or SQLite - uses MemorySource only.
  *
  * Run:
- *   npm --workspace=zql-benchmarks run bench -- memory-ivm-deopt
+ *   pnpm --filter zql-benchmarks run bench memory-ivm-deopt
  *
  * Run with deopt tracing (output goes to stderr inline):
- *   npm --workspace=zql-benchmarks run bench:deopt -- memory-ivm-deopt
+ *   pnpm --filter zql-benchmarks run bench:deopt memory-ivm-deopt
  */
 
 import {bench, describe} from '../../shared/src/bench.ts';

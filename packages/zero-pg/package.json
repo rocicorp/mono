@@ -22,7 +22,7 @@
     "@vitest/runner": "^4.1.6",
     "oxfmt": "^0.45.0",
     "vitest": "^4.1.6",
-    "zero-cache": "0.0.0",
-    "zero-server": "0.0.0"
+    "zero-cache": "workspace:*",
+    "zero-server": "workspace:*"
   }
 }

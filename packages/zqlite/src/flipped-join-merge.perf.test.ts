@@ -26,7 +26,7 @@ import {TableSource} from './table-source.ts';
  *
  * Gated on PERF=1 so it doesn't run in CI. To run:
  *
- *   PERF=1 npm --workspace=zqlite run test -- flipped-join-merge.perf
+ *   PERF=1 pnpm --filter zqlite run test flipped-join-merge.perf
  *
  * To compare against an earlier revision, check it out in a worktree
  * and port this file across — the FlippedJoin and TableSource

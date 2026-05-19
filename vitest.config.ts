@@ -28,7 +28,7 @@ function* getProjects(): Iterable<string> {
       if (basePath === '' && name === 'vitest.config.ts') continue;
       // If any suffixed config exists in this dir, exclude the base config
       if (name === 'vitest.config.ts' && hasSuffixed) continue;
-      // Skip bench configs — those are run separately via `npm run bench`
+      // Skip bench configs — those are run separately via `pnpm run bench`
       if (name.includes('.bench')) continue;
       yield `${basePath}${name}`;
     }
@@ -37,7 +37,7 @@ function* getProjects(): Iterable<string> {
     for (const e of entries) {
       if (!e.isDirectory()) continue;
       if (e.name === 'node_modules') continue;
-      // Skip tsnapi — run separately via `npm run api-snapshot`
+      // Skip tsnapi — run separately via `pnpm run api-snapshot`
       if (e.name === 'tsnapi') continue;
       if (depth > 0) {
         yield* walk(

@@ -3,73 +3,118 @@ name: Build and Deploy Sandbox Zero-Cache AWS SST
 on:
   push:
     branches: [sandbox]
+
 env:
-  # Setting an environment variable with the value of a configuration variable
   ECR_IMAGE_ZERO_CACHE: zero-zbugs-sandbox
   AWS_DEFAULT_REGION: ${{ vars.AWS_DEFAULT_REGION }}
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
 
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      sha: ${{ steps.pack.outputs.sha }}
+      zero_version: ${{ steps.pack.outputs.zero_version }}
+      zero_sync_protocol_version: ${{ steps.protocols.outputs.ZERO_SYNC_PROTOCOL_VERSION }}
+      zero_min_supported_sync_protocol_version: ${{ steps.protocols.outputs.ZERO_MIN_SUPPORTED_SYNC_PROTOCOL_VERSION }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
 
       - name: Set up Node.js
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
           node-version: 24.x
-          cache: 'npm'
+          cache: 'pnpm'
 
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@5fd3084fc36e372ff1fff382a39b10d03659f355 # v2
-        with:
-          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ vars.AWS_DEFAULT_REGION }}
-
-      - name: Set up QEMU for amd64
-        run: |
-          docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
-        if: runner.os == 'Linux'
-
-      - name: Set up Docker for amd64
-        uses: docker/setup-qemu-action@2b82ce82d56a2a04d2637cd93a637ae1b359c0a7 # v2
-        with:
-          platforms: linux/amd64
-
-      - name: Set up Docker
-        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
-
-      - name: Login to Amazon ECR
-        run: |
-          aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com
       - name: Install dependencies
-        run: |
-          npm run build-ci
+        run: pnpm install --frozen-lockfile
+
+      - name: Build packages
+        run: npx turbo run build
+
       - name: Resolve Zero protocol versions
+        id: protocols
         run: |
           node --experimental-strip-types -e "
             import {PROTOCOL_VERSION, MIN_SERVER_SUPPORTED_SYNC_PROTOCOL} from './packages/zero-protocol/src/protocol-version.ts';
             console.log('ZERO_SYNC_PROTOCOL_VERSION=' + PROTOCOL_VERSION);
             console.log('ZERO_MIN_SUPPORTED_SYNC_PROTOCOL_VERSION=' + MIN_SERVER_SUPPORTED_SYNC_PROTOCOL);
-          " >> "$GITHUB_ENV"
-      - name: Get Git SHA
-        id: git-sha
-        run: echo "SHA=$(git rev-parse --short HEAD)" >> $GITHUB_ENV
+          " >> "$GITHUB_OUTPUT"
+
       - name: Create package tarball
+        id: pack
         run: |
+          SHA="$(git rev-parse --short HEAD)"
           cd packages/zero
-          npm pack
-          ZERO_TARBALL="$(ls rocicorp-zero-*.tgz | xargs -- basename -s .tgz)+${{ env.SHA }}.tgz"
+          pnpm pack
+          ZERO_TARBALL="$(ls rocicorp-zero-*.tgz | xargs -- basename -s .tgz)+$SHA.tgz"
+          mkdir -p ./pkgs
           mv rocicorp-zero-*.tgz ./pkgs/$ZERO_TARBALL
-          echo "ZERO_VERSION=$ZERO_TARBALL" >> $GITHUB_ENV
+          echo "sha=$SHA" >> "$GITHUB_OUTPUT"
+          echo "zero_version=$ZERO_TARBALL" >> "$GITHUB_OUTPUT"
+
+      - name: Upload package tarball
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: zero-package-${{ steps.pack.outputs.sha }}
+          path: packages/zero/pkgs/${{ steps.pack.outputs.zero_version }}
+          if-no-files-found: error
+          retention-days: 1
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: 24.x
+          package-manager-cache: false
+
+      - name: Download package tarball
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
+        with:
+          name: zero-package-${{ needs.build.outputs.sha }}
+          path: packages/zero/pkgs
+
+      - name: Install deploy dependencies
+        working-directory: prod/sst
+        run: pnpm install --frozen-lockfile
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@5fd3084fc36e372ff1fff382a39b10d03659f355 # v2
+        with:
+          role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_SANDBOX_ARN }}
+          role-session-name: github-actions-zero-sandbox-deploy
+          aws-region: ${{ vars.AWS_DEFAULT_REGION }}
+
+      - name: Login to Amazon ECR
+        run: |
+          aws ecr get-login-password --region "$AWS_DEFAULT_REGION" | docker login --username AWS --password-stdin ${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com
+
       - name: Build and push Docker image
+        env:
+          ZERO_VERSION: ${{ needs.build.outputs.zero_version }}
+          ZERO_SYNC_PROTOCOL_VERSION: ${{ needs.build.outputs.zero_sync_protocol_version }}
+          ZERO_MIN_SUPPORTED_SYNC_PROTOCOL_VERSION: ${{ needs.build.outputs.zero_min_supported_sync_protocol_version }}
+          SHA: ${{ needs.build.outputs.sha }}
         run: |
           cd packages/zero
-          docker buildx create --use
-          docker buildx inspect --bootstrap
-          docker buildx build --platform linux/amd64 --build-arg ZERO_VERSION=${{ env.ZERO_VERSION }} --build-arg ZERO_SYNC_PROTOCOL_VERSION=${{ env.ZERO_SYNC_PROTOCOL_VERSION }} --build-arg ZERO_MIN_SUPPORTED_SYNC_PROTOCOL_VERSION=${{ env.ZERO_MIN_SUPPORTED_SYNC_PROTOCOL_VERSION }} -t ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$ECR_IMAGE_ZERO_CACHE:${{ env.SHA }} -f ./Dockerfile --push .
+          DOCKER_BUILDKIT=1 docker build --platform linux/amd64 --build-arg ZERO_VERSION="$ZERO_VERSION" --build-arg ZERO_SYNC_PROTOCOL_VERSION="$ZERO_SYNC_PROTOCOL_VERSION" --build-arg ZERO_MIN_SUPPORTED_SYNC_PROTOCOL_VERSION="$ZERO_MIN_SUPPORTED_SYNC_PROTOCOL_VERSION" -t ${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$ECR_IMAGE_ZERO_CACHE:$SHA -f ./Dockerfile .
+          docker push ${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$ECR_IMAGE_ZERO_CACHE:$SHA
+
       - name: Deploy SST app
         env:
           ZERO_UPSTREAM_DB: ${{ secrets.SANDBOX_ZERO_UPSTREAM_DB }}
@@ -81,12 +126,11 @@ jobs:
           ZERO_AUTH_JWK: ${{ secrets.SANDBOX_ZERO_AUTH_JWK }}
           ZERO_APP_PUBLICATIONS: ${{ vars.SANDBOX_ZERO_APP_PUBLICATIONS }}
           AWS_REGION: ${{ vars.AWS_DEFAULT_REGION }}
-          ZERO_IMAGE_URL: ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.AWS_DEFAULT_REGION }}.amazonaws.com/${{ env.ECR_IMAGE_ZERO_CACHE }}:${{ env.SHA }}
+          ZERO_IMAGE_URL: ${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.${{ vars.AWS_DEFAULT_REGION }}.amazonaws.com/${{ env.ECR_IMAGE_ZERO_CACHE }}:${{ needs.build.outputs.sha }}
           DOMAIN_NAME: 'zbugs-sync-sandbox.rocicorp.dev'
           DOMAIN_CERT: ${{ vars.SANDBOX_CERTIFICATE_ARN }}
           DATADOG_API_KEY: ${{ secrets.SANDBOX_DATADOG_API_KEY }}
           ZERO_ADMIN_PASSWORD: ${{ secrets.ZERO_ADMIN_PASSWORD }}
         run: |
           cd prod/sst
-          npm install
           npx sst deploy --stage sandbox

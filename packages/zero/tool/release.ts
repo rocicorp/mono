@@ -12,6 +12,9 @@ async function main() {
   const {mode, from, remote, allowLocalChanges, dockerOnly, yes} = parseArgs();
 
   try {
+    validateGitArg('ref', from);
+    validateGitArg('remote', remote);
+
     // Find the git root directory
     const gitRoot = execute('git rev-parse --show-toplevel', {stdio: 'pipe'});
 
@@ -327,6 +330,22 @@ function parseReleaseVersionFromTag(ref: string) {
   return match?.[1];
 }
 
+function validateGitArg(name: string, value: string) {
+  if (
+    value === '' ||
+    value.startsWith('-') ||
+    value.includes('..') ||
+    value.includes('//') ||
+    value.includes('@{') ||
+    value.endsWith('/') ||
+    value.endsWith('.') ||
+    value.endsWith('.lock') ||
+    !/^[A-Za-z0-9._/-]+$/.test(value)
+  ) {
+    throw new Error(`Invalid ${name}: ${value}`);
+  }
+}
+
 async function releaseCanary(
   currentVersion: string,
   remote: string,
@@ -549,13 +568,13 @@ async function confirmRelease(yes: boolean) {
 }
 
 function build(version: string) {
-  // Installs turbo and other build dependencies needed for npm packaging.
-  execute('npm install');
+  // Installs turbo and other build dependencies needed for packaging.
+  execute('pnpm install');
   setVersionInWorkspace(version);
-  execute('npm install');
-  execute('npm run build');
-  execute('npm run format');
-  execute('npx -y syncpack fix');
+  execute('pnpm install');
+  execute('pnpm run build');
+  execute('pnpm run format');
+  execute('pnpmx syncpack fix');
   execute('git status');
 }
 
@@ -591,7 +610,6 @@ function pushGit(commitHash: string, destTag: string, remote: string) {
 function pushNPM(version: string, isCanary: boolean) {
   if (isCanary) {
     execute('npm publish --tag=canary', {cwd: basePath('packages', 'zero')});
-    execute(`npm dist-tag rm @rocicorp/zero@${version} canary`);
     return;
   }
 

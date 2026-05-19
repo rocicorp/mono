@@ -4,8 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "verify": "node --experimental-strip-types src/verify-package-deps.ts",
-    "verify:fix": "node --experimental-strip-types src/verify-package-deps.ts --fix",
+    "package-lock-commit-deps": "node src/package-lock-commit-deps.ts",
+    "verify": "node src/verify-package-deps.ts",
+    "verify:fix": "node src/verify-package-deps.ts --fix",
     "check-types": "tsc",
     "format": "oxfmt .",
     "check-format": "oxfmt --check .",
@@ -24,5 +25,5 @@
   "engines": {
     "node": ">=22"
   },
-  "packageManager": "npm@10.9.2"
+  "packageManager": "pnpm@11.1.2"
 }

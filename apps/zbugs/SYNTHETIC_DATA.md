@@ -15,7 +15,7 @@ End-to-end process for generating large-scale synthetic data and loading it into
 Templates are LLM-generated pools of issue titles, descriptions, comments, project names, labels, and components across 10 software categories. They use `{{slot}}` placeholders that get filled with randomized values during CSV generation.
 
 ```bash
-ANTHROPIC_API_KEY=sk-... npm run generate-templates
+ANTHROPIC_API_KEY=sk-... pnpm run generate-templates
 ```
 
 Output: JSON files written to `db/seed-data/templates/` (one per category plus `summary.json`).
@@ -32,7 +32,7 @@ This step calls the Claude API in batches of 3 categories. Each category generat
 Self-contained generator that produces sharded CSV files based on configuration parameters and templates.
 
 ```bash
-npm run generate-synthetic
+pnpm run generate-synthetic
 ```
 
 Output: sharded CSV files in `db/seed-data/synthetic/` named `{table}_{shard}.csv` (e.g., `issue_000.csv`, `issue_001.csv`, ...).
@@ -63,13 +63,13 @@ The generator uses realistic distributions for data:
 
 ```bash
 # Small test dataset (~10K issues)
-NUM_ISSUES=10000 npm run generate-synthetic
+NUM_ISSUES=10000 pnpm run generate-synthetic
 
 # Medium dataset (~1M issues, default)
-npm run generate-synthetic
+pnpm run generate-synthetic
 
 # Large dataset (~100M issues)
-NUM_ISSUES=100000000 COMMENTS_PER_ISSUE=2.0 npm run generate-synthetic
+NUM_ISSUES=100000000 COMMENTS_PER_ISSUE=2.0 pnpm run generate-synthetic
 ```
 
 With default settings (`NUM_ISSUES=1000000`, `COMMENTS_PER_ISSUE=3.0`, `LABELS_PER_ISSUE=1.5`):
@@ -82,13 +82,13 @@ With default settings (`NUM_ISSUES=1000000`, `COMMENTS_PER_ISSUE=3.0`, `LABELS_P
 ## Step 3: Start PostgreSQL
 
 ```bash
-npm run db-up
+pnpm run db-up
 ```
 
 Once PostgreSQL is running, apply the schema migrations:
 
 ```bash
-npm run db-migrate
+pnpm run db-migrate
 ```
 
 ## Step 4: Load into PostgreSQL
@@ -96,7 +96,7 @@ npm run db-migrate
 The `db-seed-synthetic` script loads synthetic CSVs using PostgreSQL `COPY` with bulk optimizations:
 
 ```bash
-npm run db-seed-synthetic
+pnpm run db-seed-synthetic
 ```
 
 This runs `seed.ts` with `ZERO_SEED_BULK=true` and `ZERO_SEED_DATA_DIR=db/seed-data/synthetic`. Bulk mode:
@@ -113,7 +113,7 @@ This runs `seed.ts` with `ZERO_SEED_BULK=true` and `ZERO_SEED_DATA_DIR=db/seed-d
 To force re-seeding an already-seeded database:
 
 ```bash
-ZERO_SEED_FORCE=true npm run db-seed-synthetic
+ZERO_SEED_FORCE=true pnpm run db-seed-synthetic
 ```
 
 | Env Var              | Default           | Description                                     |
@@ -132,20 +132,20 @@ You can generate multiple batches of data that coexist in the same database with
 
 ```bash
 # Batch 1: generate and load the initial dataset
-NUM_ISSUES=100000000 NUM_PROJECTS=100 SEED=42 npm run generate-synthetic
-npm run db-seed-synthetic
+NUM_ISSUES=100000000 NUM_PROJECTS=100 SEED=42 pnpm run generate-synthetic
+pnpm run db-seed-synthetic
 
 # Batch 2: generate additional data with a different seed
 NUM_ISSUES=100000000 NUM_PROJECTS=1000 \
   SKIP_USERS=true \
   SEED=99 \
   OUTPUT_DIR=db/seed-data/synthetic-batch-2/ \
-  npm run generate-synthetic
+  pnpm run generate-synthetic
 
 # Load batch 2 in append mode
 ZERO_SEED_APPEND=true \
   ZERO_SEED_DATA_DIR=db/seed-data/synthetic-batch-2/ \
-  npm run db-seed-synthetic
+  pnpm run db-seed-synthetic
 ```
 
 ### Key points

@@ -24,6 +24,8 @@
   "devDependencies": {
     "@prisma/adapter-pg": "^7.7.0",
     "@prisma/client": "^7.7.0",
+    "@standard-schema/spec": "^1.0.0",
+    "@types/pg": "^8.20.0",
     "@vitest/runner": "^4.1.6",
     "drizzle-orm": "^0.45.2",
     "kysely": "^0.28.17",
@@ -31,13 +33,13 @@
     "pg": "^8.16.3",
     "postgres": "3.4.7",
     "prisma": "^7.7.0",
-    "shared": "0.0.0",
+    "shared": "workspace:*",
     "vitest": "^4.1.6",
-    "z2s": "0.0.0",
-    "zero-cache": "0.0.0",
-    "zero-protocol": "0.0.0",
-    "zero-schema": "0.0.0",
-    "zero-types": "0.0.0",
-    "zql": "0.0.0"
+    "z2s": "workspace:*",
+    "zero-cache": "workspace:*",
+    "zero-protocol": "workspace:*",
+    "zero-schema": "workspace:*",
+    "zero-types": "workspace:*",
+    "zql": "workspace:*"
   }
 }

@@ -4,7 +4,7 @@
  *
  * Usage:
  *   ZERO_UPSTREAM_DB="postgresql://user:password@127.0.0.1:6434/postgres" \
- *     npm --workspace=zero-cache run test -- --run initial-sync-bench
+ *     pnpm --filter zero-cache run test --run initial-sync-bench
  *
  * Requires a running PG with data (e.g. zbugs with gigabugs dataset).
  * Skipped automatically if ZERO_UPSTREAM_DB is not set.
