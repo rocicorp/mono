@@ -292,14 +292,14 @@ Environment:
   NOTION_TOKEN   Required when --output=notion or --notion is used
 
 Examples:
-  npm --workspace=verify-package-deps run package-lock-commit-deps
-  npm --workspace=verify-package-deps run package-lock-commit-deps -- --since='3 months ago'
-  npm --workspace=verify-package-deps run package-lock-commit-deps -- --all-deps
-  npm --workspace=verify-package-deps run package-lock-commit-deps -- --lockfile=package-lock.json
-  npm --workspace=verify-package-deps run package-lock-commit-deps -- --notion --notion-parent-page-id=<page-id>
-  npm --workspace=verify-package-deps run package-lock-commit-deps -- --output=html --html-file=dependency-report.html
-  npm --workspace=verify-package-deps run package-lock-commit-deps -- --output=md --md-file=dependency-report.md
-  npm --workspace=verify-package-deps run package-lock-commit-deps -- --output=json --json-file=dependency-report.json
+  pnpm --filter verify-package-deps run package-lock-commit-deps
+  pnpm --filter verify-package-deps run package-lock-commit-deps -- --since='3 months ago'
+  pnpm --filter verify-package-deps run package-lock-commit-deps -- --all-deps
+  pnpm --filter verify-package-deps run package-lock-commit-deps -- --lockfile=package-lock.json
+  pnpm --filter verify-package-deps run package-lock-commit-deps -- --notion --notion-parent-page-id=<page-id>
+  pnpm --filter verify-package-deps run package-lock-commit-deps -- --output=html --html-file=dependency-report.html
+  pnpm --filter verify-package-deps run package-lock-commit-deps -- --output=md --md-file=dependency-report.md
+  pnpm --filter verify-package-deps run package-lock-commit-deps -- --output=json --json-file=dependency-report.json
 `);
 }
 

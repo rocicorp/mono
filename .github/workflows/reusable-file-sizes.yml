@@ -49,10 +49,10 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm run build
 
-      - name: Build npm zero package
+      - name: Build pnpm zero package
         working-directory: packages/zero
         run: |
-          npm pack --pack-destination ./out
+          pnpm pack --pack-destination ./out
           mv ./out/*.tgz ./out/zero-package.tgz
 
       - name: Build zero client single file package

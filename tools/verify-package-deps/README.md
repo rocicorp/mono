@@ -8,20 +8,20 @@ From the workspace root:
 
 ```bash
 # Check for dependency issues
-npm run verify-deps
+pnpm run verify-deps
 
 # Check and automatically fix issues
-npm run verify-deps:fix
+pnpm run verify-deps:fix
 ```
 
 From this package directory:
 
 ```bash
 # Check for dependency issues
-npm run verify
+pnpm run verify
 
 # Check and automatically fix issues
-npm run verify:fix
+pnpm run verify:fix
 ```
 
 ## What it does
