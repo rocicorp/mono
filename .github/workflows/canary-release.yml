@@ -4,6 +4,11 @@ on:
   pull_request:
     types: [closed]
 
+permissions:
+  contents: write
+  id-token: write
+  pull-requests: write
+
 jobs:
   canary-release:
     name: Canary Release
@@ -38,15 +43,22 @@ jobs:
       - name: Run canary release
         id: release
         env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
         run: |
-          output=$(node packages/zero/tool/release.ts canary ${{ github.event.pull_request.base.ref }} --yes --skip-tests 2>&1 | tee /dev/stderr)
+          set -euo pipefail
+
+          if [[ ! "$BASE_REF" =~ ^[A-Za-z0-9._/-]+$ ]]; then
+            echo "Invalid base ref: $BASE_REF" >&2
+            exit 1
+          fi
+
+          output=$(node packages/zero/tool/release.ts canary "$BASE_REF" --yes 2>&1 | tee /dev/stderr)
           version=$(echo "$output" | grep -oP 'Published @rocicorp/zero@\K[^\s]+')
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
       - name: Comment on PR
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           gh pr comment ${{ github.event.pull_request.number }} --body "## Canary Release Published
 
