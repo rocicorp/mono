@@ -58,10 +58,10 @@ pnpm --filter zero-cache run lint
 pnpm --filter zero-server run check-types
 
 # Run with coverage (prefer using this flag when possible)
-pnpm --filter zero-client run test -- --coverage
+pnpm --filter zero-client run test --coverage
 
 # Run specific test file
-pnpm --filter zero-client run test -- zero.test
+pnpm --filter zero-client run test zero.test
 ```
 
 ### Zero Cache Development

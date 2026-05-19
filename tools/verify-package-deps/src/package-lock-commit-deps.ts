@@ -293,13 +293,13 @@ Environment:
 
 Examples:
   pnpm --filter verify-package-deps run package-lock-commit-deps
-  pnpm --filter verify-package-deps run package-lock-commit-deps -- --since='3 months ago'
-  pnpm --filter verify-package-deps run package-lock-commit-deps -- --all-deps
-  pnpm --filter verify-package-deps run package-lock-commit-deps -- --lockfile=package-lock.json
-  pnpm --filter verify-package-deps run package-lock-commit-deps -- --notion --notion-parent-page-id=<page-id>
-  pnpm --filter verify-package-deps run package-lock-commit-deps -- --output=html --html-file=dependency-report.html
-  pnpm --filter verify-package-deps run package-lock-commit-deps -- --output=md --md-file=dependency-report.md
-  pnpm --filter verify-package-deps run package-lock-commit-deps -- --output=json --json-file=dependency-report.json
+  pnpm --filter verify-package-deps run package-lock-commit-deps --since='3 months ago'
+  pnpm --filter verify-package-deps run package-lock-commit-deps --all-deps
+  pnpm --filter verify-package-deps run package-lock-commit-deps --lockfile=package-lock.json
+  pnpm --filter verify-package-deps run package-lock-commit-deps --notion --notion-parent-page-id=<page-id>
+  pnpm --filter verify-package-deps run package-lock-commit-deps --output=html --html-file=dependency-report.html
+  pnpm --filter verify-package-deps run package-lock-commit-deps --output=md --md-file=dependency-report.md
+  pnpm --filter verify-package-deps run package-lock-commit-deps --output=json --json-file=dependency-report.json
 `);
 }
 
