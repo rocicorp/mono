@@ -520,6 +520,9 @@ importers:
       shared:
         specifier: workspace:*
         version: link:../shared
+      tsx:
+        specifier: ^4.21.0
+        version: 4.22.0
       typescript:
         specifier: ~6.0.2
         version: 6.0.3
@@ -727,6 +730,9 @@ importers:
       playwright:
         specifier: 1.53.2
         version: 1.53.2
+      tsx:
+        specifier: ^4.21.0
+        version: 4.22.0
       type-fest:
         specifier: ^4.30.0
         version: 4.41.0
@@ -1226,6 +1232,9 @@ importers:
       shared:
         specifier: workspace:*
         version: link:../shared
+      tsx:
+        specifier: ^4.21.0
+        version: 4.22.0
       typescript:
         specifier: ~6.0.2
         version: 6.0.3
@@ -1256,6 +1265,9 @@ importers:
       shared:
         specifier: workspace:*
         version: link:../shared
+      tsx:
+        specifier: ^4.21.0
+        version: 4.22.0
       typescript:
         specifier: ~6.0.2
         version: 6.0.3
@@ -1559,6 +1571,9 @@ importers:
       shared:
         specifier: workspace:*
         version: link:../shared
+      tsx:
+        specifier: ^4.21.0
+        version: 4.22.0
       typescript:
         specifier: ~6.0.2
         version: 6.0.3

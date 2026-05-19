@@ -64,8 +64,8 @@
     "check-types:build:watch": "tsc -p tsconfig.build.json --watch",
     "check-types:tool:watch": "tsc -p tool/tsconfig.json --watch",
     "lint": "oxlint --quiet --config ../../oxlint.config.ts src/",
-    "build": "rm -rf out && tsc -p tsconfig.build.json && npx tsx tool/build.ts",
-    "build-bundle-sizes": "rm -rf out && npx tsx tool/build.ts --bundle-sizes",
+    "build": "rm -rf out && tsc -p tsconfig.build.json && tsx tool/build.ts",
+    "build-bundle-sizes": "rm -rf out && tsx tool/build.ts --bundle-sizes",
     "prepack": "pnpm run lint && pnpm run test && pnpm run build && mv README.md README-org.md && mv README-external.md README.md",
     "postpack": "mv README.md README-external.md && mv README-org.md README.md",
     "fmt": "oxfmt .",
@@ -93,6 +93,7 @@
     "oxfmt": "^0.45.0",
     "playwright": "1.53.2",
     "shared": "workspace:*",
+    "tsx": "^4.21.0",
     "typescript": "~6.0.2",
     "vitest": "^4.1.6",
     "xbytes": "^1.7.0"
