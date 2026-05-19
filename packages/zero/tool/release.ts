@@ -568,13 +568,13 @@ async function confirmRelease(yes: boolean) {
 }
 
 function build(version: string) {
-  // Installs turbo and other build dependencies needed for npm packaging.
-  execute('npm install');
+  // Installs turbo and other build dependencies needed for packaging.
+  execute('pnpm install');
   setVersionInWorkspace(version);
-  execute('npm install');
-  execute('npm run build');
-  execute('npm run format');
-  execute('npx -y syncpack fix');
+  execute('pnpm install');
+  execute('pnpm run build');
+  execute('pnpm run format');
+  execute('pnpmx syncpack fix');
   execute('git status');
 }
 

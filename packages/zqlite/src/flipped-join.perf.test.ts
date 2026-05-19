@@ -16,7 +16,7 @@ import {TableSource} from './table-source.ts';
  *
  * Gated on PERF=1 so it doesn't run in CI. To run:
  *
- *   PERF=1 npm --workspace=zqlite run test -- flipped-join.perf
+ *   PERF=1 pnpm --filter zqlite run test flipped-join.perf
  *
  * What we're measuring:
  *  - Steady-state throughput materializing N joined rows from N children.

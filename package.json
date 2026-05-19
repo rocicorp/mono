@@ -2,12 +2,6 @@
   "name": "@rocicorp/mono",
   "version": "0.0.0",
   "private": true,
-  "workspaces": [
-    "apps/*",
-    "packages/*",
-    "prod",
-    "tools/*"
-  ],
   "type": "module",
   "scripts": {
     "download-deps": "bash ./deps/download.sh",
@@ -22,9 +16,9 @@
     "check-format": "oxfmt --check",
     "check-types": "npx turbo run check-types",
     "check-types:watch": "npx turbo watch check-types",
-    "start-zero-cache": "cd packages/zero-cache && npm run start",
-    "verify-deps": "cd tools/verify-package-deps && npm run verify",
-    "verify-deps:fix": "cd tools/verify-package-deps && npm run verify:fix",
+    "start-zero-cache": "cd packages/zero-cache && pnpm run start",
+    "verify-deps": "cd tools/verify-package-deps && pnpm run verify",
+    "verify-deps:fix": "cd tools/verify-package-deps && pnpm run verify:fix",
     "api-snapshot": "vitest run --config tools/tsnapi/vitest.config.ts",
     "api-snapshot:update": "vitest run -u --config tools/tsnapi/vitest.config.ts",
     "bench": "npx turbo run bench --concurrency=1",
@@ -35,26 +29,26 @@
     "@e18e/eslint-plugin": "^0.4.1",
     "@emnapi/core": "1.10.0",
     "@emnapi/runtime": "1.10.0",
-    "@vitest/browser": "^4.1.5",
-    "@vitest/browser-playwright": "^4.1.5",
-    "@vitest/coverage-v8": "^4.1.5",
-    "@vitest/runner": "^4.1.5",
+    "@types/node": "^22.10.5",
+    "@vitest/browser": "^4.1.6",
+    "@vitest/browser-playwright": "^4.1.6",
+    "@vitest/coverage-v8": "^4.1.6",
+    "@vitest/runner": "^4.1.6",
     "baseline-browser-mapping": "^2.10.16",
     "oxfmt": "^0.45.0",
     "oxlint": "^1.63.0",
     "oxlint-tsgolint": "^0.22.1",
+    "playwright": "1.53.2",
     "syncpack": "^14.3.0",
     "tsnapi": "^0.3.2",
     "tsx": "^4.21.0",
     "turbo": "^2.4.4",
-    "vitest": "^4.1.5",
+    "typescript": "~6.0.2",
+    "vitest": "^4.1.6",
     "zx": "^8.8.5"
-  },
-  "overrides": {
-    "esbuild": "^0.27.4"
   },
   "engines": {
     "node": ">=22"
   },
-  "packageManager": "npm@10.9.2"
+  "packageManager": "pnpm@11.1.2"
 }

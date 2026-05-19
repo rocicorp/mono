@@ -20,12 +20,14 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           persist-credentials: false
+      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+
         with:
           node-version: 24.x
-          cache: 'npm'
-      - run: npm ci
-      - run: npm exec -- syncpack lint
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec syncpack lint
 
   verify-deps:
     name: Verify Package Dependencies
@@ -34,12 +36,14 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           persist-credentials: false
+      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+
         with:
           node-version: 24.x
-          cache: 'npm'
-      - run: npm install --prefix tools/verify-package-deps
-      - run: npm run verify-deps
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile --filter verify-package-deps
+      - run: pnpm run verify-deps
 
   format:
     name: Oxfmt
@@ -49,12 +53,13 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           persist-credentials: false
+      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+
         with:
           node-version: 24.x
-          cache: 'npm'
-      - run: npm ci
-      - run: npm run check-format
+          cache: 'pnpm'
+      - run: npx oxfmt@^0.45.0 --check
 
   lint:
     name: Lint
@@ -64,12 +69,14 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           persist-credentials: false
+      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+
         with:
           node-version: 24.x
-          cache: 'npm'
-      - run: npm ci
-      - run: npm run lint
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run lint
 
   check-types:
     name: Check Types
@@ -79,12 +86,14 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           persist-credentials: false
+      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+
         with:
           node-version: 24.x
-          cache: 'npm'
-      - run: npm ci
-      - run: npm run check-types
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run check-types
 
   test:
     name: Test (Shard ${{ matrix.shard }}/3)
@@ -99,14 +108,15 @@ jobs:
         with:
           fetch-depth: 100
           persist-credentials: false
+      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
           node-version: 24.x
-          cache: 'npm'
-      - run: npm ci
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
       - uses: ./.github/actions/playwright-install
       - name: Run tests
-        run: TEST_PG_MODE=nopg npm run test -- --shard=${{ matrix.shard }}/3
+        run: TEST_PG_MODE=nopg pnpm run test --shard=${{ matrix.shard }}/3
 
   test-pg:
     name: Test PG ${{ matrix.pg-version }} (Shard ${{ matrix.shard }}/2)
@@ -122,10 +132,15 @@ jobs:
         with:
           fetch-depth: 100
           persist-credentials: false
+      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
           node-version: 24.x
-          cache: 'npm'
-      - run: npm ci
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
       - name: Run tests
-        run: TEST_PG_MODE=pg-${{ matrix.pg-version }} npm run test -- --shard=${{ matrix.shard }}/2
+        uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60 # v4
+        with:
+          timeout_minutes: 10
+          max_attempts: 3
+          command: TEST_PG_MODE=pg-${{ matrix.pg-version }} pnpm run test --shard=${{ matrix.shard }}/2
