@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779174848399,
+  "lastUpdate": 1779195414354,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -56059,6 +56059,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "Size of replicache.mjs.br (Brotli compressed)",
             "value": 56979,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 117187,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 33481,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "arv@roci.dev",
+            "name": "Erik Arvidsson",
+            "username": "arv"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "c4e6db1ce11357faacd2cc920c6f3c06d4b6d1de",
+          "message": "chore: Migrate from npm to pnpm as package manager (#5997)\n\n## Summary\nThis PR migrates the monorepo from npm to pnpm as the primary package\nmanager. This includes updating all CI/CD workflows, documentation,\npackage.json files, and workspace configuration.\n\n## Key Changes\n\n### Package Manager Configuration\n- Updated root `package.json` to specify `pnpm@11.1.2` as the package\nmanager\n- Removed npm-style `workspaces` array from root `package.json`\n- Created new `pnpm-workspace.yaml` with workspace configuration and\nbuild allowlist for native dependencies\n- Added `.npmrc` with `link-workspace-packages=true` for proper\nworkspace linking\n\n### Workspace Dependencies\n- Updated all internal workspace dependencies across 40+ package.json\nfiles from `\"0.0.0\"` to `\"workspace:*\"` protocol\n- This applies to all packages including: zero-cache, zero-client,\nzero-server, zql, zqlite, shared, otel, and others\n\n### CI/CD Workflows\n- Added `pnpm/action-setup@v4` step to all GitHub Actions workflows\n(js.yml, api-snapshot.yml, bundle-sizes.js.yml, perf-smoke.yml,\nperf-v2.js.yml, bencher-benchmarks.yml, bencher-benchmarks-pr.yml,\ncanary-release.yml, reusable-benchmark.yml, reusable-file-sizes.yml,\nsst-*.yml)\n- Updated Node.js setup to use `cache: 'pnpm'` instead of `cache: 'npm'`\n- Replaced `npm ci` with `pnpm install --frozen-lockfile`\n- Replaced `npm install` with `pnpm install`\n- Updated all `npm run` commands to `pnpm run`\n- Updated workspace-specific commands from `npm --workspace=` to `pnpm\n--filter`\n\n### Documentation\n- Updated AGENTS.md with pnpm equivalents for all npm commands\n- Changed examples from `npm install`, `npm run`, `npm --workspace=` to\npnpm equivalents\n\n### Build Scripts\n- Updated package.json scripts in zero-cache, zero-client,\nzql-benchmarks, replicache-perf, and others to use `pnpm run` instead of\n`npm run`\n- Updated release.ts build script to use pnpm commands\n\n## Implementation Details\n- The migration maintains full feature parity with npm workspaces\n- All workspace dependencies now use the `workspace:*` protocol for\nproper monorepo resolution\n- The pnpm-workspace.yaml includes an allowlist for packages that\nrequire native builds (prisma, esbuild, ssh2, etc.)\n- Lock file changed from package-lock.json to pnpm-lock.yaml\n\nhttps://claude.ai/code/session_01D686NfZE6RZreuFbsYLywT\n\n---------\n\nCo-authored-by: Claude <noreply@anthropic.com>\nCo-authored-by: Chase Adams <c@cadams.io>",
+          "timestamp": "2026-05-19T12:46:23Z",
+          "tree_id": "266a596a71ee4cf2ba0bb17a4e64620506528a63",
+          "url": "https://github.com/rocicorp/mono/commit/c4e6db1ce11357faacd2cc920c6f3c06d4b6d1de"
+        },
+        "date": 1779195400716,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 317161,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 57049,
             "unit": "bytes"
           },
           {
