@@ -24,8 +24,6 @@ jobs:
         with:
           persist-credentials: false
 
-      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6
-
       - name: Set up Node.js
         uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
@@ -36,7 +34,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build packages
-        run: pnpm run build
+        run: npx turbo run build
 
       - name: Resolve Zero protocol versions
         id: protocols
@@ -135,7 +133,7 @@ jobs:
           ZERO_ADMIN_PASSWORD: ${{ secrets.ZERO_ADMIN_PASSWORD }}
         run: |
           cd prod/sst
-          pnpm exec sst deploy --stage gigabugs-ebs
+          npx sst deploy --stage gigabugs-ebs
 
       - name: Deploy SST app non ebs
         env:
