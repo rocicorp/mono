@@ -37,7 +37,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Build packages
-        run: npx turbo run build
+        run: pnpm exec turbo run build
 
       - name: Resolve Zero protocol versions
         id: protocols
@@ -122,6 +122,7 @@ jobs:
           docker push ${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com/$ECR_IMAGE_ZERO_CACHE:$SHA
 
       - name: Deploy SST app
+        working-directory: prod/sst
         env:
           ZERO_UPSTREAM_DB: ${{ secrets.SANDBOX_ZERO_UPSTREAM_DB }}
           ZERO_ENABLE_QUERY_PLANNER: 'true'
@@ -137,6 +138,4 @@ jobs:
           DOMAIN_CERT: ${{ vars.SANDBOX_CERTIFICATE_ARN }}
           DATADOG_API_KEY: ${{ secrets.SANDBOX_DATADOG_API_KEY }}
           ZERO_ADMIN_PASSWORD: ${{ secrets.ZERO_ADMIN_PASSWORD }}
-        run: |
-          cd prod/sst
-          npx sst deploy --stage sandbox
+        run: pnpm exec sst deploy --stage sandbox

@@ -59,7 +59,8 @@ jobs:
         with:
           node-version: 24.x
           cache: 'pnpm'
-      - run: npx oxfmt@^0.45.0 --check
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec oxfmt --check
 
   lint:
     name: Lint
