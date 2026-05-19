@@ -79,7 +79,6 @@ export class TableSource implements Source {
   readonly #columns: Record<string, SchemaValue>;
   // Maps sorted columns JSON string (e.g. '["a","b"]) to Set of columns.
   readonly #uniqueIndexes: Map<string, Set<string>>;
-  readonly #uniqueIndexColumns: readonly PrimaryKey[];
   readonly #primaryKey: PrimaryKey;
   readonly #logConfig: LogConfig;
   readonly #lc: LogContext;
@@ -108,12 +107,6 @@ export class TableSource implements Source {
     this.#table = tableName;
     this.#columns = columns;
     this.#uniqueIndexes = getUniqueIndexes(db, tableName);
-    // `keyMatchesPrimaryKey` requires the compared key to be pre-sorted and
-    // non-empty.  A unique index always has >= 1 column, hence the cast.
-    this.#uniqueIndexColumns = Array.from(
-      this.#uniqueIndexes.values(),
-      set => [...set].toSorted() as unknown as PrimaryKey,
-    );
     this.#primaryKey = primaryKey;
     this.#stmts = this.#getStatementsFor(db);
     this.#shouldYield = shouldYield;
@@ -220,7 +213,6 @@ export class TableSource implements Source {
       tableName: this.#table,
       columns: this.#columns,
       primaryKey: this.#primaryKey,
-      uniqueIndexes: this.#uniqueIndexColumns,
       sort: unordered ? undefined : connection.sort,
       relationships: {},
       isHidden: false,
@@ -350,10 +342,10 @@ export class TableSource implements Source {
       rowIterator.return?.();
       if (debug) {
         let totalNvisit = 0;
-        let i = 0;
-        while (true) {
+        const planLines: string[] = [];
+        for (let i = 0; ; i++) {
           const nvisit = cachedStatement.statement.scanStatus(
-            i++,
+            i,
             SQLite3Database.SQLITE_SCANSTAT_NVISIT,
             1,
           );
@@ -361,9 +353,20 @@ export class TableSource implements Source {
             break;
           }
           totalNvisit += Number(nvisit);
+          const explain = cachedStatement.statement.scanStatus(
+            i,
+            SQLite3Database.SQLITE_SCANSTAT_EXPLAIN,
+            1,
+          );
+          if (typeof explain === 'string' && explain.length > 0) {
+            planLines.push(explain);
+          }
         }
         if (totalNvisit !== 0) {
           debug.recordNVisit(this.#table, sqlAndBindings.text, totalNvisit);
+        }
+        if (planLines.length > 0) {
+          debug.recordExplain(this.#table, sqlAndBindings.text, planLines);
         }
         cachedStatement.statement.scanStatusReset();
       }

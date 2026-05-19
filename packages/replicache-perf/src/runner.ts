@@ -324,12 +324,6 @@ async function runInBrowser(
     if (data[0] === 'result') {
       const result = data[1];
 
-      if (options.format === 'json') {
-        jsonEntries.push(result);
-      } else if (options.format === 'bmf') {
-        bmf = {...bmf, ...toBencherMetricFormat(result)};
-      }
-
       switch (options.format) {
         case 'json':
           jsonEntries.push(...createGithubActionBenchmarkJSONEntries(result));
@@ -349,9 +343,9 @@ async function runInBrowser(
     await waitForBenchmarks();
   }
   if (options.format === 'json') {
-    process.stdout.write(JSON.stringify(jsonEntries, undefined, 2) + '\n');
+    process.stdout.write(JSON.stringify(jsonEntries, jsonReplacer, 2) + '\n');
   } else if (options.format === 'bmf') {
-    process.stdout.write(JSON.stringify(bmf, undefined, 2) + '\n');
+    process.stdout.write(JSON.stringify(bmf, jsonReplacer, 2) + '\n');
   }
 }
 
@@ -365,6 +359,15 @@ function logLine(s: string, options: commandLineArgs.CommandLineOptions) {
   if (options.format !== 'json' && options.format !== 'bmf') {
     process.stdout.write(s + '\n');
   }
+}
+
+function jsonReplacer(_key: string, value: unknown): unknown {
+  if (typeof value === 'number' && !Number.isFinite(value)) {
+    throw new Error(
+      `Non-finite number in benchmark output: ${value}. This indicates a bug in the benchmark runner.`,
+    );
+  }
+  return value;
 }
 
 function wait(n: number) {

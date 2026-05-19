@@ -1,10 +1,75 @@
+import postgres from 'postgres';
 import {describe, expect, test} from 'vitest';
 import {
+  isPostgresConfigError,
   millisecondsToPostgresTime,
   postgresTimeToMilliseconds,
   postgresTypeConfig,
   timestampToFpMillis,
 } from './pg.ts';
+
+function postgresError(code: string) {
+  return Object.assign(new postgres.PostgresError('test error'), {
+    code,
+    severity: 'ERROR',
+    severity_local: 'ERROR',
+  });
+}
+
+function connectionError(code: string) {
+  return Object.assign(new Error(`connection failed: ${code}`), {code});
+}
+
+describe('isPostgresConfigError', () => {
+  test.each([
+    '08000',
+    '08001',
+    '08003',
+    '08006',
+    '28000',
+    '28P01',
+    '3D000',
+    '42501',
+    '53300',
+    '53400',
+  ])('treats %s as configuration-related', code => {
+    expect(isPostgresConfigError(postgresError(code))).toBe(true);
+  });
+
+  test.each([
+    'CONNECT_TIMEOUT',
+    'ECONNREFUSED',
+    'ECONNRESET',
+    'EHOSTUNREACH',
+    'ENETUNREACH',
+    'ENOTFOUND',
+    'EAI_AGAIN',
+    'ETIMEDOUT',
+    'ERR_TLS_CERT_ALTNAME_INVALID',
+    'SELF_SIGNED_CERT_IN_CHAIN',
+    'DEPTH_ZERO_SELF_SIGNED_CERT',
+    'UNABLE_TO_VERIFY_LEAF_SIGNATURE',
+  ])('treats %s connection errors as configuration-related', code => {
+    expect(isPostgresConfigError(connectionError(code))).toBe(true);
+  });
+
+  test.each(['42P01', '42703', '57P01', '57P03', 'XX000'])(
+    'does not treat %s as configuration-related',
+    code => {
+      expect(isPostgresConfigError(postgresError(code))).toBe(false);
+    },
+  );
+
+  test('does not treat non-startup connection errors as configuration-related', () => {
+    expect(isPostgresConfigError(connectionError('CONNECTION_CLOSED'))).toBe(
+      false,
+    );
+  });
+
+  test('does not treat non-Postgres errors as configuration-related', () => {
+    expect(isPostgresConfigError(new Error('boom'))).toBe(false);
+  });
+});
 
 describe('timestampToFpMillis', () => {
   test.each([

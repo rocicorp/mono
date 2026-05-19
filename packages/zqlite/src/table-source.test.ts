@@ -5,7 +5,10 @@ import type {JSONValue} from '../../shared/src/json.ts';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
 import {must} from '../../shared/src/must.ts';
 import type {Row, Value} from '../../zero-protocol/src/data.ts';
-import type {DebugDelegate} from '../../zql/src/builder/debug-delegate.ts';
+import {
+  Debug,
+  type DebugDelegate,
+} from '../../zql/src/builder/debug-delegate.ts';
 import {Catch} from '../../zql/src/ivm/catch.ts';
 import {
   makeAddChange,
@@ -21,6 +24,7 @@ import {
 } from '../../zql/src/ivm/source.ts';
 import {consume} from '../../zql/src/ivm/stream.ts';
 import {Database, Statement} from './db.ts';
+import {explainQueries} from './explain-queries.ts';
 import {format} from './internal/sql.ts';
 import {filtersToSQL} from './query-builder.ts';
 import {
@@ -652,52 +656,6 @@ test('getByKey', () => {
   ).toBeUndefined();
 });
 
-test('schema.uniqueIndexes column lists are sorted alphabetically, regardless of DDL order', () => {
-  // SourceSchema.uniqueIndexes is consumed by FlippedJoin's #parentKeyIsUnique
-  // check, which calls keyMatchesPrimaryKey(parentKey, indexCols).  That
-  // function sorts its first argument internally but REQUIRES its second
-  // argument to be pre-sorted — set-equality is implemented as sorted-array
-  // equality.  Uniqueness is order-agnostic at the SQL level (a UNIQUE
-  // (orgId, slug) index is just as unique as UNIQUE (slug, orgId)), so
-  // canonicalizing to alphabetical order lets parentKey lists in any column
-  // order match without consumers needing to know the DDL.
-  const db = new Database(createSilentLogContext(), ':memory:');
-  db.exec(/* sql */ `
-    CREATE TABLE foo (id TEXT PRIMARY KEY, email TEXT, orgId TEXT, slug TEXT);
-    CREATE UNIQUE INDEX foo_email_key ON foo (email);
-    -- DDL order is (slug, orgId); schema entry must come back sorted.
-    CREATE UNIQUE INDEX foo_org_slug_key ON foo (slug, orgId);
-  `);
-
-  const source = new TableSource(
-    lc,
-    testLogConfig,
-    db,
-    'foo',
-    {
-      id: {type: 'string'},
-      email: {type: 'string'},
-      orgId: {type: 'string'},
-      slug: {type: 'string'},
-    },
-    ['id'],
-  );
-
-  const schema = source.connect([['id', 'asc']]).getSchema();
-
-  // PK + every UNIQUE INDEX is exposed.
-  expect(schema.uniqueIndexes).toHaveLength(3);
-  expect(schema.uniqueIndexes).toEqual(
-    expect.arrayContaining([['id'], ['email'], ['orgId', 'slug']]),
-  );
-
-  // Every entry is sorted alphabetically — the contract `keyMatchesPrimaryKey`
-  // depends on.  Compare each entry to a freshly-sorted copy.
-  for (const idx of schema.uniqueIndexes ?? []) {
-    expect(idx).toEqual([...idx].toSorted());
-  }
-});
-
 describe('optional filters to sql', () => {
   test('simple condition', () => {
     expect(
@@ -1013,6 +971,108 @@ describe('fromSQLiteTypes error messages', () => {
   });
 });
 
+test('debug.recordExplain captures the plan SQLite picked for the real bindings', () => {
+  const db = new Database(lc, ':memory:');
+  db.exec(`
+    CREATE TABLE users (id TEXT PRIMARY KEY, email TEXT);
+    CREATE UNIQUE INDEX idx_users_email ON users(email);
+  `);
+  db.prepare('INSERT INTO users (id, email) VALUES (?, ?)').run('1', 'a@b');
+  db.prepare('INSERT INTO users (id, email) VALUES (?, ?)').run('2', 'c@d');
+
+  const source = new TableSource(
+    lc,
+    testLogConfig,
+    db,
+    'users',
+    {id: {type: 'string'}, email: {type: 'string'}},
+    ['id'],
+  );
+
+  const debug = new Debug();
+  const input = source.connect([['id', 'asc']], undefined, undefined, debug);
+
+  // Drain the iterator with a constraint that uses the email index.
+  [...input.fetch({constraint: {email: 'a@b'}})];
+
+  const plans = debug.getSQLitePlans();
+  const entries = Object.entries(plans);
+  expect(entries).toHaveLength(1);
+  const [sql, planLines] = entries[0];
+  expect(sql).toContain('"email" = ?');
+  // The captured plan reflects what SQLite actually ran with email='a@b'.
+  // SQLite picks the unique index here (SEARCH ... USING INDEX), not a SCAN.
+  expect(planLines.join('\n')).toMatch(/SEARCH .* USING (COVERING )?INDEX/);
+});
+
+test('captured plan diverges from substituted-literal plan when bindings affect plan choice', () => {
+  // Demonstrates the bug explainQueries has: substituting 'sdfse' for ?
+  // can cause SQLite to pick a more optimistic plan than the prepared
+  // statement actually uses.
+  //
+  // For `WHERE name LIKE ?` with PRAGMA case_sensitive_like = 1, SQLite
+  // cannot know at prepare time whether the bound value contains wildcards,
+  // so it conservatively picks SCAN. When the literal 'sdfse' is substituted,
+  // SQLite sees a wildcard-free pattern and rewrites it to an index range
+  // search — a plan that bears no resemblance to what actually runs.
+  const db = new Database(lc, ':memory:');
+  db.exec(`
+    PRAGMA case_sensitive_like = 1;
+    CREATE TABLE items (id TEXT PRIMARY KEY, name TEXT);
+    CREATE INDEX idx_items_name ON items(name);
+  `);
+  for (let i = 0; i < 50; i++) {
+    db.prepare('INSERT INTO items (id, name) VALUES (?, ?)').run(
+      String(i),
+      `name_${i}`,
+    );
+  }
+  db.exec('ANALYZE');
+
+  const source = new TableSource(
+    lc,
+    testLogConfig,
+    db,
+    'items',
+    {id: {type: 'string'}, name: {type: 'string'}},
+    ['id'],
+  );
+
+  const likeFilter = {
+    type: 'simple',
+    left: {type: 'column', name: 'name'},
+    op: 'LIKE',
+    right: {type: 'literal', value: 'name_5%'},
+  } as const;
+
+  const debug = new Debug();
+  const input = source.connect([['id', 'asc']], likeFilter, undefined, debug);
+
+  [...input.fetch({})];
+
+  const plans = debug.getSQLitePlans();
+  const entries = Object.entries(plans);
+  expect(entries).toHaveLength(1);
+  const [sql, capturedPlan] = entries[0];
+  expect(sql).toContain('"name" LIKE ?');
+
+  // Captured plan reflects the real prepared statement: SCAN, since SQLite
+  // cannot prove the LIKE pattern is wildcard-free.
+  expect(capturedPlan.join('\n')).toMatch(/SCAN/);
+  expect(capturedPlan.join('\n')).not.toMatch(
+    /SEARCH .* USING (COVERING )?INDEX/,
+  );
+
+  // explainQueries substitutes 'sdfse' for ?, so SQLite sees a wildcard-free
+  // pattern and produces a range-scan plan that does not match reality.
+  const substitutedPlan = explainQueries({items: {[sql]: 1}}, db)[sql];
+  expect(substitutedPlan.join('\n')).toMatch(
+    /SEARCH .* USING (COVERING )?INDEX/,
+  );
+
+  expect(capturedPlan).not.toEqual(substitutedPlan);
+});
+
 test('SQLite iterator is closed when an error occurs before #mapFromSQLiteTypes is iterated', () => {
   const db = new Database(lc, ':memory:');
   db.exec('CREATE TABLE test (id TEXT PRIMARY KEY, val INTEGER);');
@@ -1058,6 +1118,8 @@ test('SQLite iterator is closed when an error occurs before #mapFromSQLiteTypes 
       getVendedRows: () => ({}),
       recordNVisit() {},
       getNVisitCounts: () => ({}),
+      recordExplain() {},
+      getSQLitePlans: () => ({}),
       reset() {},
     };
 

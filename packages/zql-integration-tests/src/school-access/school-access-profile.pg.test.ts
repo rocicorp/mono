@@ -271,7 +271,7 @@ function logHot(label: string, entries: HotEntry[]) {
 }
 
 // Gated on PROFILE=1 so CI doesn't burn time generating .cpuprofile files.
-//   PROFILE=1 npm --workspace=zql-integration-tests run test -- \
+//   PROFILE=1 pnpm --filter zql-integration-tests run test \
 //     --project=zero-cache/pg-18 school-access-profile
 describe.skipIf(!process.env.PROFILE)(
   'school access — CPU profile (normalized vs class-access denorm)',

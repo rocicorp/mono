@@ -3,6 +3,11 @@ name: Reusable File Sizes Workflow
 on:
   workflow_call:
     inputs:
+      upload_results:
+        required: false
+        type: boolean
+        default: true
+        description: 'Whether to upload file size results to Bencher'
       is_pr:
         required: false
         type: boolean
@@ -22,35 +27,32 @@ on:
         description: 'Base SHA for PR runs'
     secrets:
       BENCHER_API_TOKEN:
-        required: true
-      TURBO_TOKEN:
         required: false
 
 jobs:
-  file_sizes:
+  build_file_sizes:
     name: File Sizes
     permissions:
-      checks: write
-      pull-requests: write
+      contents: read
     runs-on: ubuntu-latest
-    env:
-      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
-      TURBO_TEAM: rocicorp
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
           node-version: 24.x
-          cache: 'npm'
-      - uses: bencherdev/bencher@main
+          cache: 'pnpm'
+      - uses: bencherdev/bencher@a495d2b34f9ab1f3b0f581848f85b389fb0bcda0 # main
 
-      - run: npm ci
-      - run: npm run build
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run build
 
-      - name: Build npm zero package
+      - name: Build pnpm zero package
         working-directory: packages/zero
         run: |
-          npm pack --pack-destination ./out
+          pnpm pack --pack-destination ./out
           mv ./out/*.tgz ./out/zero-package.tgz
 
       - name: Build zero client single file package
@@ -61,15 +63,46 @@ jobs:
         working-directory: packages/zero
         run: brotli out/zero.js
 
-      - name: Upload benchmarks results to bencher.dev (main)
+      - name: Upload file size outputs
+        uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        with:
+          name: file-size-output
+          path: |
+            packages/zero/out/zero-package.tgz
+            packages/zero/out/zero.js.br
+            packages/zero/out/zero.js
+          if-no-files-found: error
+          retention-days: 1
+
+  upload:
+    name: Upload File Sizes
+    if: ${{ inputs.upload_results }}
+    needs: build_file_sizes
+    runs-on: ubuntu-latest
+    permissions:
+      checks: write
+      pull-requests: write
+    steps:
+      - name: Download file size outputs
+        uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
+        with:
+          name: file-size-output
+          path: packages/zero/out
+
+      - uses: bencherdev/bencher@a495d2b34f9ab1f3b0f581848f85b389fb0bcda0 # main
+
+      - name: Upload benchmarks results to bencher.dev
         if: ${{ !inputs.is_pr }}
         working-directory: packages/zero
+        env:
+          BENCHER_API_TOKEN: ${{ secrets.BENCHER_API_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
           bencher run \
           --project zero \
-          --token '${{ secrets.BENCHER_API_TOKEN }}' \
+          --token "$BENCHER_API_TOKEN" \
           --adapter json \
-          --github-actions '${{ secrets.GITHUB_TOKEN }}' \
+          --github-actions "$GITHUB_TOKEN" \
           --start-point main \
           --threshold-measure file-size \
           --threshold-test percentage \
@@ -83,16 +116,22 @@ jobs:
       - name: Upload PR benchmarks results to bencher.dev
         if: ${{ inputs.is_pr }}
         working-directory: packages/zero
+        env:
+          BASE_REF: ${{ inputs.base_ref }}
+          BASE_SHA: ${{ inputs.base_sha }}
+          BENCHER_API_TOKEN: ${{ secrets.BENCHER_API_TOKEN }}
+          GITHUB_TOKEN: ${{ github.token }}
+          HEAD_REF: ${{ inputs.head_ref }}
         run: |
           bencher run \
           --project zero \
-          --token '${{ secrets.BENCHER_API_TOKEN }}' \
+          --token "$BENCHER_API_TOKEN" \
           --adapter json \
-          --github-actions '${{ secrets.GITHUB_TOKEN }}' \
+          --github-actions "$GITHUB_TOKEN" \
           --ci-id size \
-          --branch "${{ inputs.head_ref }}" \
-          --start-point "${{ inputs.base_ref }}" \
-          --start-point-hash '${{ inputs.base_sha }}' \
+          --branch "$HEAD_REF" \
+          --start-point "$BASE_REF" \
+          --start-point-hash "$BASE_SHA" \
           --start-point-clone-thresholds \
           --start-point-reset \
           --threshold-measure file-size \

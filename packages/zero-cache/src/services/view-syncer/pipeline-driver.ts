@@ -689,7 +689,7 @@ export class PipelineDriver {
       numChanges,
       pos: 0,
     };
-    this.#lc.info?.(
+    this.#lc.debug?.(
       `starting pipeline advancement of ${numChanges} changes with an ` +
         `advancement time limited based on total hydration time of ` +
         `${totalHydrationTimeMs} ms.`,

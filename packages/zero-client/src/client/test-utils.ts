@@ -260,9 +260,11 @@ export class TestZero<
     return this.triggerMessage(msg);
   }
 
-  async triggerClose(): Promise<void> {
+  async triggerClose(code?: number | undefined): Promise<void> {
     const socket = await this.socket;
-    socket.dispatchEvent(new CloseEvent('close'));
+    socket.dispatchEvent(
+      new CloseEvent('close', code !== undefined ? {code} : undefined),
+    );
   }
 
   async triggerGotQueriesPatch(

@@ -6,7 +6,7 @@
  * - Push (incremental update)
  *
  * Run with:
- *   npm --workspace=zql-benchmarks run bench:memory
+ *   pnpm --filter zql-benchmarks run bench ivm-memory
  */
 
 import {bench, describe} from '../../shared/src/bench.ts';
