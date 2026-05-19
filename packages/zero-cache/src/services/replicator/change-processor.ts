@@ -102,15 +102,11 @@ type DeletePlan = {
   readonly sql: string;
 };
 
-type PendingInsert = {
-  readonly row: LiteRow;
-};
-
 type PendingInsertBatch = {
   readonly table: string;
   readonly plan: UpsertPlan;
   readonly maxRows: number;
-  readonly rows: PendingInsert[];
+  readonly rows: LiteRow[];
   readonly logEntries: BatchRowOp[];
   readonly rowKeys: Set<string>;
 };
@@ -941,7 +937,7 @@ class TransactionProcessor {
       this.#numChangeLogEntries++;
       current.logEntries.push(logEntry);
     }
-    current.rows.push({row: newRow.row});
+    current.rows.push(newRow.row);
   }
 
   #flushPendingInserts() {
@@ -955,7 +951,7 @@ class TransactionProcessor {
     const rowValueCount = batch.plan.rowColumns.length + 1;
     values.length = batch.rows.length * rowValueCount;
     let i = 0;
-    for (const {row} of batch.rows) {
+    for (const row of batch.rows) {
       for (const col of batch.plan.rowColumns) {
         values[i++] = row[col];
       }

@@ -119,16 +119,22 @@ export class Subscriber {
     // interpret the #backlog variable correctly. This is the only place
     // where I/O flow control is not heeded. However, it will be awaited
     // by the next caller to send().
-    for (let i = 0; i < this.#backlog.length; i += 64) {
-      void this.#sendChanges(this.#backlog.slice(i, i + 64));
+    const backlog = this.#backlog;
+    for (let i = 0; i < backlog.length; i += 64) {
+      void this.#sendChanges(backlog, i, i + 64);
     }
     this.#backlog = null;
   }
 
-  async #sendChanges(changes: readonly WatermarkedChange[]) {
+  async #sendChanges(
+    changes: readonly WatermarkedChange[],
+    start = 0,
+    end = changes.length,
+  ) {
     const json: string[] = [];
     let commitWatermark: string | undefined;
-    for (const change of changes) {
+    for (let i = start; i < end && i < changes.length; i++) {
+      const change = changes[i];
       const [watermark, tag, payload] = change;
       if (watermark <= this.watermark) {
         continue;

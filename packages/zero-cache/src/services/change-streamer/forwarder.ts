@@ -20,7 +20,7 @@ export class Forwarder {
   // Batch the data-heavy middle of a transaction before fanning it out to
   // every view-syncer. Transaction boundaries still flush immediately so
   // subscriber handoff and catchup keep the same observable ordering.
-  readonly #pending: WatermarkedChange[] = [];
+  #pending: WatermarkedChange[] = [];
 
   #currentBroadcast: Broadcast | undefined;
   #progressMonitor: NodeJS.Timeout | undefined;
@@ -167,7 +167,9 @@ export class Forwarder {
   }
 
   #drainPending(): WatermarkedChange[] {
-    return this.#pending.splice(0);
+    const pending = this.#pending;
+    this.#pending = [];
+    return pending;
   }
 
   #updateActiveSubscribers(tag: ChangeTag) {

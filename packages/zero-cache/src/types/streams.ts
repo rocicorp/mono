@@ -510,7 +510,7 @@ async function streamInInternal<T extends JSONValue>(
     {
       consumed: streamOrBatch => {
         if (isStreamedBatch(streamOrBatch)) {
-          acker.consumedBatch(streamOrBatch.map(({id}) => id));
+          acker.consumedBatch(streamOrBatch);
         } else {
           acker.consumed(streamOrBatch.id);
         }
@@ -581,7 +581,12 @@ function parseStreamedMessages<T extends JSONValue>(
     if (!Array.isArray(batch)) {
       throw new Error('Invalid stream batch');
     }
-    return batch.map(msg => v.parse(msg, streamedSchema, 'passthrough'));
+    const messages: Streamed<T>[] = [];
+    messages.length = batch.length;
+    for (let i = 0; i < batch.length; i++) {
+      messages[i] = v.parse(batch[i], streamedSchema, 'passthrough');
+    }
+    return messages;
   }
   return [v.parse(value, streamedSchema, 'passthrough')];
 }
@@ -644,16 +649,16 @@ class CumulativeAcker {
     }
   }
 
-  consumedBatch(ids: readonly number[]) {
-    if (ids.length === 0) {
+  consumedBatch<T>(messages: readonly Streamed<T>[]) {
+    if (messages.length === 0) {
       return;
     }
     let expected = this.#highestAckable + 1;
-    for (const id of ids) {
+    for (const {id} of messages) {
       this.#validateID(id);
       if (id !== expected) {
-        for (const fallbackID of ids) {
-          this.consumed(fallbackID);
+        for (const fallback of messages) {
+          this.consumed(fallback.id);
         }
         return;
       }
@@ -661,9 +666,9 @@ class CumulativeAcker {
     }
 
     const previous = this.#highestAckable;
-    const last = ids.at(-1);
+    const last = messages.at(-1);
     assert(last !== undefined, 'non-empty batch must have a last id');
-    this.#highestAckable = last;
+    this.#highestAckable = last.id;
     while (this.#outOfOrder.delete(this.#highestAckable + 1)) {
       this.#highestAckable++;
     }
