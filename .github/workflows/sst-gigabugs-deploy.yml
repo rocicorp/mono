@@ -21,6 +21,15 @@ jobs:
           node-version: 24.x
           cache: 'npm'
 
+      - name: Install dependencies
+        run: |
+          npm run build-ci
+
+      - name: Install SST dependencies
+        run: |
+          cd prod/sst
+          npm install
+
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@5fd3084fc36e372ff1fff382a39b10d03659f355 # v2
         with:
@@ -44,9 +53,6 @@ jobs:
       - name: Login to Amazon ECR
         run: |
           aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.$AWS_DEFAULT_REGION.amazonaws.com
-      - name: Install dependencies
-        run: |
-          npm run build-ci
       - name: Resolve Zero protocol versions
         run: |
           node --experimental-strip-types -e "
@@ -93,7 +99,6 @@ jobs:
           ZERO_ADMIN_PASSWORD: ${{ secrets.ZERO_ADMIN_PASSWORD }}
         run: |
           cd prod/sst
-          npm install
           npx sst deploy --stage gigabugs-ebs
       - name: Deploy SST app non ebs
         env:
@@ -113,5 +118,4 @@ jobs:
           ZERO_ADMIN_PASSWORD: ${{ secrets.ZERO_ADMIN_PASSWORD }}
         run: |
           cd prod/sst
-          npm install
           npx sst deploy --stage gigabugs
