@@ -66,12 +66,8 @@ type QueueEntry =
 
 type PendingTransaction = {
   group: PendingGroup;
-  // Data changes are stored under the pre-commit watermark; the commit row then
-  // bridges that transaction to the post-commit watermark subscribers resume at.
   preCommitWatermark: string;
   pos: number;
-  // Data rows wait here until either the data batch is full or a schema/commit
-  // boundary needs them durable in the changeDB.
   pendingChangeLogEntries: ChangeLogInsert[];
   hasSchemaChange: boolean;
   // skipAck lets internal/replayed commits become durable without advancing the
@@ -81,12 +77,9 @@ type PendingTransaction = {
 
 type PendingGroup = {
   pool: TransactionPool;
-  // The owner check is started when the group opens and awaited before ACKs are
-  // released, so grouped commits still fail closed if another RM takes ownership.
   startingReplicationState: Promise<ReplicationOwner>;
   commitAcks: {commit: Commit; ack: boolean}[];
   txCount: number;
-  // Null until the group has at least one committed upstream transaction.
   lastWatermark: string | null;
 };
 
@@ -94,6 +87,19 @@ type ReplicationOwner = {
   owner: string | null;
 };
 
+/**
+ * A row in the RM's durable catchup journal.
+ *
+ * Connected VSs get changes live from the Forwarder. A new or lagging VS reads
+ * this log from its last commit watermark and replays rows in `(watermark, pos)`
+ * order:
+ *
+ *   begin/data/data -> stored at precommit watermark
+ *   commit          -> stored at commit watermark and makes that point resumable
+ *
+ * The `precommit` link on the commit row lets catchup include the whole
+ * transaction while still exposing only commit watermarks as subscriber progress.
+ */
 type ChangeLogInsert = {
   watermark: string;
   precommit: string | null;
@@ -103,7 +109,6 @@ type ChangeLogInsert = {
 
 const backfillRequestsSchema = v.array(backfillRequestSchema);
 const CHANGE_LOG_INSERT_BATCH_SIZE = 100;
-// #5977: https://github.com/rocicorp/mono/pull/5977
 // Group up to this many upstream transactions per changeDB commit to remove
 // per-transaction commit/fsync overhead. The group remains a visibility
 // boundary: catchup, status, schema changes, rollback, ready checks, and full
@@ -463,7 +468,6 @@ export class Storer implements Service {
         },
       );
       pool.run(this.#db);
-      // #5977: https://github.com/rocicorp/mono/pull/5977
       // Check ownership once per group instead of once per upstream commit.
       // The grouped transaction keeps pending rows private until flushGroup()
       // commits, so ownership loss still prevents ACK release.
@@ -495,7 +499,6 @@ export class Storer implements Service {
       }
       const flushing = group;
       group = null;
-      // #5977: https://github.com/rocicorp/mono/pull/5977
       // ACKs are intentionally released only after the grouped changeDB
       // transaction is durable. Reordering this sequence can acknowledge
       // upstream commits that would be lost after a crash.
@@ -541,7 +544,6 @@ export class Storer implements Service {
         const [msgType] = msg;
         switch (msgType) {
           case 'flush-idle-group':
-            // #5977: https://github.com/rocicorp/mono/pull/5977
             // Grouping optimizes bursts, but an idle upstream must not leave
             // durable commits unacked until an unrelated status/subscriber
             // event arrives. Flushing here bounds ACK latency while preserving
@@ -593,7 +595,6 @@ export class Storer implements Service {
             hasSchemaChange: false,
             ack: !change.skipAck,
           };
-          // #5977: https://github.com/rocicorp/mono/pull/5977
           // Savepoints keep upstream rollbacks scoped to the current
           // transaction while still allowing multiple upstream transactions to
           // share one changeDB commit. ACKs and catchup wait for the group
@@ -735,13 +736,12 @@ export class Storer implements Service {
     }
     const entries = tx.pendingChangeLogEntries;
     tx.pendingChangeLogEntries = [];
-    // #5976: https://github.com/rocicorp/mono/pull/5976
-    // Batch insert buffered data rows so the changeDB sees one multi-row INSERT
-    // instead of one INSERT per data change. In the shared 1 RM / 16 VS e2e
-    // suite, this was part of the measured ~13-35% rows/s improvement.
+    // Data changes are just replay-journal rows for future catchup, so they can
+    // be written as one multi-row INSERT without changing what any VS observes.
     //
-    // Schema changes still flush immediately before metadata writes so their
-    // side effects remain ordered with the change that introduced them.
+    // Schema changes are different: they also update metadata tables. Flush
+    // pending data rows before those metadata writes so a catchup reader sees
+    // the same story the live stream saw.
     return tx.group.pool.process(sql => [
       sql`INSERT INTO ${this.#cdc('changeLog')} ${sql(entries)}`,
     ]);

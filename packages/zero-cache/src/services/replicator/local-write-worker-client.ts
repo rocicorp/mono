@@ -15,7 +15,6 @@ import {
 
 type ErrorHandler = (err: Error) => void;
 
-// #6001: https://github.com/rocicorp/mono/pull/6001
 // Serving replicator workers are already off the browser/query path. Applying
 // serving writes directly inside that worker avoids the extra structured-clone
 // and worker-thread hop that dominated row-heavy v6 RM -> VS benchmarks.

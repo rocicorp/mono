@@ -10,25 +10,23 @@ import type {LiteRowKey} from '../../../types/lite.ts';
 import {normalizedKeyOrder} from '../../../types/row-key.ts';
 
 /**
- * The Change Log tracks the last operation (set or delete) for each row in the
- * data base, ordered by state version; in other words, a cross-table
- * index of row changes ordered by version. This facilitates a minimal "diff"
- * of row changes needed to advance a pipeline from one state version to another.
+ * The local Change Log is the view-syncer's "what became dirty?" index. It is
+ * not an audit log and it does not store row contents. When a pipeline advances
+ * from one state version to another, it needs to know which row keys to re-read;
+ * the before/after row values still come from SQLite snapshots.
  *
- * The Change Log stores identifiers only, i.e. it does not store contents.
- * A database snapshot at the previous version can be used to query a row's
- * old contents, if any, and the current snapshot can be used to query a row's
- * new contents. (In the common case, the new contents will have just been applied
- * and thus has a high likelihood of being in the SQLite cache.)
+ *   replicated row -> SQLite table has the value
+ *                  -> _zero.changeLog2 marks that row key dirty at a version
+ *
+ * Because only the latest operation for a row matters to the next diff,
+ * `_zero.changeLog2` is unique by `(table, rowKey)`.
  *
  * There are two table-wide operations:
  * - `t` corresponds to the postgres `TRUNCATE` operation
  * - `r` represents any schema (i.e. column) change
  *
- * For both operations, the corresponding row changes are not explicitly included
- * in the change log. The consumer has the option of simulating them be reading
- * from pre- and post- snapshots, or resetting their state entirely with the current
- * snapshot.
+ * For both operations, individual row changes are not expanded into the log.
+ * Consumers either compare pre/post snapshots or reset to the current snapshot.
  *
  * To achieve the desired ordering semantics when processing tables that have been
  * truncated, reset, and modified, the "rowKey" is set to `null` for resets and
@@ -196,13 +194,9 @@ export class ChangeLog {
 
   logSetOps(version: LexiVersion, entries: readonly BatchRowOp[]) {
     if (entries.length === 0) {
-      // Some replicated INSERTs are intentionally unlogged, such as tables
-      // without a usable row key. They still update SQLite but cannot drive IVM.
       return;
     }
     if (entries.length === 1) {
-      // Keep the single-row path on the existing named statement; generating a
-      // VALUES-list statement only pays off once there is more than one row.
       const {pos, table, rowKey} = entries[0];
       this.#logRowOpStmt.run({version, pos, table, rowKey, op: SET_OP});
       return;
@@ -210,8 +204,8 @@ export class ChangeLog {
 
     let stmt = this.#logSetOpsStmts.get(entries.length);
     if (!stmt) {
-      // The number of rows is part of the SQL text because it changes the
-      // placeholder count, so cache one prepared statement per batch length.
+      // Each dirty row contributes one VALUES tuple, so the batch length changes
+      // the SQL shape. Cache by length to keep repeated row-heavy batches cheap.
       stmt = this.#db.prepare(/*sql*/ `
         INSERT OR REPLACE INTO "_zero.changeLog2"
           (stateVersion, pos, "table", rowKey, op)
@@ -223,8 +217,6 @@ export class ChangeLog {
     }
 
     const values = [];
-    // SET_OP is embedded as a SQL literal; the bind array is four values per
-    // row: stateVersion, pos, table, and rowKey.
     values.length = entries.length * 4;
     let i = 0;
     for (const {pos, table, rowKey} of entries) {

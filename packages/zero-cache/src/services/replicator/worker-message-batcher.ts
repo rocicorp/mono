@@ -11,7 +11,6 @@ type WorkerMessageBatcherOptions = {
   readonly flushOnCommit?: boolean | undefined;
 };
 
-// #6001: https://github.com/rocicorp/mono/pull/6001
 // RM -> VS traffic arrives in ordered stream batches. Grouping write-worker
 // handoff around those batches keeps row-heavy transactions from paying a
 // promise/IPC boundary per row; callers that need per-commit ACKs can leave

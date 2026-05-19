@@ -138,13 +138,13 @@ export function getPragmaConfig(mode: ReplicaFileMode): PragmaConfig {
   return {
     busyTimeout: 30000,
     analysisLimit: 1000,
-    // #6001: wal_autocheckpoint tells SQLite how many WAL pages it may append
-    // before folding them back into the main db file. A small window keeps the
-    // WAL tiny, but makes the serving write path periodically pay checkpoint I/O
+    // wal_autocheckpoint tells SQLite how many WAL pages it may append before
+    // folding them back into the main db file. A small window keeps the WAL
+    // tiny, but makes the serving write path periodically pay checkpoint I/O
     // while it is also trying to digest RM -> VS traffic. Serving replicas keep
-    // autocheckpointing enabled, just with a larger bounded window, because they
-    // have no litestream process responsible for checkpoint cadence. Backup
-    // replicas set this to 0 because litestream owns checkpoint timing there.
+    // autocheckpointing enabled, just with a larger bounded window, because
+    // they have no litestream process responsible for checkpoint cadence.
+    // Backup replicas set this to 0 because litestream owns checkpoint timing.
     walAutocheckpoint:
       mode === 'backup' ? 0 : SERVING_REPLICA_WAL_AUTOCHECKPOINT_PAGES,
   };

@@ -271,8 +271,6 @@ function upsertStatement(
   rows: number,
 ): Statement {
   if (rows === 1) {
-    // Single-row INSERTs are still common for small transactions and odd shapes;
-    // keep them on the compact prepared statement instead of generating batch SQL.
     return (plan.statement ??= db.db.prepare(plan.sql));
   }
 
@@ -453,8 +451,6 @@ function rowKeyString(key: LiteRowKey) {
 
 function valueKeyString(value: LiteValueType) {
   if (typeof value === 'string') {
-    // Strings need JSON escaping; BigIntJSON.stringify is only needed for
-    // bigint/null/number values.
     return JSON.stringify(value);
   }
   return stringify(value);
@@ -564,7 +560,6 @@ export class ChangeProcessor {
       return null;
     }
 
-    // #6001: https://github.com/rocicorp/mono/pull/6001
     // RM -> VS streams are row-heavy, so the common path should pay the public
     // failure/try wrapper once per stream batch rather than once per row.
     const results: CommitResult[] = [];
@@ -577,8 +572,6 @@ export class ChangeProcessor {
             : type === 'commit'
               ? downstream[2].watermark
               : undefined;
-        // Same split as processMessage(): row versions come from begin, durable
-        // subscription progress comes from commit, and data stays within the tx.
         const result = this.#processMessage(lc, message, watermark);
         if (result) {
           results.push(result);
@@ -998,8 +991,6 @@ class TransactionProcessor {
     this.#pendingInsertBatch = undefined;
 
     const values = [];
-    // Each row contributes its data columns plus the synthetic _0_version
-    // column; the batch plan already captured the shared column order.
     const rowValueCount = batch.plan.rowColumns.length + 1;
     values.length = batch.rows.length * rowValueCount;
     let i = 0;

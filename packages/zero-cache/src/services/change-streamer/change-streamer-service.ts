@@ -57,7 +57,6 @@ export type TuningOptions = StorerOptions & {
   flowControlConsensusPaddingSeconds: number;
 };
 
-// #6001: https://github.com/rocicorp/mono/pull/6001
 // This is the RM-side byte window for forwarded, already-stringified changes
 // waiting on serving-replica flow control. Node's default 16 KiB stream window
 // made the RM pause before a row-heavy transaction could fill the VS write

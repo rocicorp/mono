@@ -29,7 +29,6 @@ import {
 // Consistent with Postgres keepalives, and shorter than the
 // commonly used default idle timeout of 1 minute.
 const PING_INTERVAL_MS = 30_000;
-// #6001: https://github.com/rocicorp/mono/pull/6001
 // Batch stream ACKs so row-heavy RM -> serving-replica traffic spends CPU on
 // apply work instead of ACK writes. The count threshold keeps hot streams from
 // sending one ACK per frame; the short timer keeps quiet streams from waiting
@@ -351,7 +350,6 @@ async function streamOutInternal<TPayload, TMessage extends JSONValue>(
             return;
           }
           lastAck = ack;
-          // #6001: https://github.com/rocicorp/mono/pull/6001
           // RM -> VS catchup can keep thousands of future stream IDs pending;
           // pending is insertion-ordered by stream ID, so ACK cleanup stops at
           // the first future ID and only pays for frames that can be released.
@@ -393,9 +391,6 @@ async function streamOutInternal<TPayload, TMessage extends JSONValue>(
         for (const {value, consumed} of batch) {
           const messages = expandPayload(value);
           if (messages.length === 0) {
-            // Empty expansions still need to release the source payload;
-            // otherwise upstream flow control would wait on an ID that is never
-            // sent.
             consumed();
             continue;
           }
@@ -415,8 +410,6 @@ async function streamOutInternal<TPayload, TMessage extends JSONValue>(
           }
         }
         if (outbound.length === 0) {
-          // Every payload in this frame expanded to nothing; keep draining the
-          // source instead of emitting an empty websocket batch.
           continue;
         }
         const data = stringifyOutboundBatch(outbound, stringify);
@@ -472,7 +465,6 @@ function stringifyOutboundBatch<T extends JSONValue>(
     const [{id, msg}] = batch;
     return `{"id":${id},"msg":${stringify(msg)}}`;
   }
-  // #6001: https://github.com/rocicorp/mono/pull/6001
   // RM -> VS catchup emits large websocket batches. Building the frame in one
   // loop avoids the extra strings and array that `map().join()` creates in the
   // hottest fanout path.
@@ -723,8 +715,6 @@ class CumulativeAcker {
       return;
     }
     if (this.#ws.readyState !== this.#ws.OPEN) {
-      // The close path owns teardown now; sending an ACK to a closed websocket
-      // cannot release useful sender-side work.
       return;
     }
     this.#ws.send(JSON.stringify({ack: this.#highestAckable} satisfies Ack));
@@ -738,7 +728,6 @@ class CumulativeAcker {
   }
 
   #schedule() {
-    // One timer coalesces many small completions on quiet streams.
     this.#timer ??= setTimeout(() => this.flush(), CUMULATIVE_ACK_INTERVAL_MS);
   }
 

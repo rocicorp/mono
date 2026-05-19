@@ -1,4 +1,3 @@
-// #6001: https://github.com/rocicorp/mono/pull/6001
 // High-volume RM -> VS streams should not make every FIFO dequeue move the
 // rest of the array. Keep the head-index/compaction bookkeeping in one small
 // type so hot queues can stay O(1) without spreading that machinery through

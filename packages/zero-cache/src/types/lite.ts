@@ -101,7 +101,6 @@ export function liteValue(
 }
 
 function shouldStoreAsJson(liteTypeString: string) {
-  // #6001: https://github.com/rocicorp/mono/pull/6001
   // Row-heavy serving apply calls liteValue for every column. Most columns are
   // scalar non-JSON, so the first-character check lets them skip delimiter
   // parsing and lowercasing. The slower array-marker checks stay last because
