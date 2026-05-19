@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1778667083928,
+  "lastUpdate": 1779174848399,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -56005,6 +56005,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/rocicorp/mono/commit/f271e5ed8ccb30288b3451b890ff4e90857b31cd"
         },
         "date": 1778667071666,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 316956,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 56979,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 117187,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 33481,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "c@cadams.io",
+            "name": "Chase Adams",
+            "username": "0xcadams"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "cb75a03f4af79551ec89f3a14936b9af591b5d8e",
+          "message": "chore(ci): update js checks (#6015)\n\nUpdates JS CI jobs to use installed dependencies consistently and aligns\ncheck commands with repository scripts. Also cleans up unused CI\nenvironment configuration in related workflows.",
+          "timestamp": "2026-05-19T00:12:07-07:00",
+          "tree_id": "be2af0c6d2bd5b204348a9098cbd7d983db696a1",
+          "url": "https://github.com/rocicorp/mono/commit/cb75a03f4af79551ec89f3a14936b9af591b5d8e"
+        },
+        "date": 1779174832300,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
