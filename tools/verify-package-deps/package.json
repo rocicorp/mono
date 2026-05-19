@@ -4,7 +4,6 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "package-lock-commit-deps": "node src/package-lock-commit-deps.ts",
     "verify": "node src/verify-package-deps.ts",
     "verify:fix": "node src/verify-package-deps.ts --fix",
     "check-types": "tsc",
