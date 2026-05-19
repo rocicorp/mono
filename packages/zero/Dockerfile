@@ -1,4 +1,4 @@
-FROM golang:1.23 AS litestream
+FROM golang:1.25 AS litestream
 
 WORKDIR /src/
 RUN git clone --depth 1 --branch zero@v0.0.9 https://github.com/rocicorp/litestream.git
@@ -12,7 +12,7 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
 
 FROM litestream/litestream:0.5.11 AS litestream-v5
 
-FROM node:22.15.0-alpine3.20
+FROM node:22-alpine
 
 ARG ZERO_VERSION
 
