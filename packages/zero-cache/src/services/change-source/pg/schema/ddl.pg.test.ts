@@ -71,6 +71,7 @@ describe('change-source/tables/ddl', () => {
     return async () => {
       sub.messages.cancel();
       await testDBs.drop(upstream);
+      await testDBs.sql`RESET ROLE; DROP ROLE IF EXISTS zero_ddl_actor`.simple();
     };
   });
 
@@ -105,6 +106,65 @@ describe('change-source/tables/ddl', () => {
     CREATE PUBLICATION zero_sum FOR TABLE pub.foo (id, name), pub.boo;
     CREATE PUBLICATION nonzeropub FOR TABLE pub.foo, pub.boo;
     `;
+
+  test('event trigger functions run as the shard owner', async ({testDBs}) => {
+    await testDBs.sql`DROP ROLE IF EXISTS zero_ddl_actor`.simple();
+    await upstream.unsafe(/*sql*/ `
+      CREATE ROLE zero_ddl_actor NOINHERIT;
+      CREATE SCHEMA actor;
+      GRANT USAGE, CREATE ON SCHEMA actor TO zero_ddl_actor;
+    `);
+
+    const eventTriggerFunctions = await upstream<
+      {
+        functionName: string;
+        securityDefiner: boolean;
+        config: string;
+      }[]
+    >`
+      SELECT
+        p.proname AS "functionName",
+        p.prosecdef AS "securityDefiner",
+        array_to_string(p.proconfig, ',') AS config
+      FROM pg_catalog.pg_proc p
+      JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+      WHERE n.nspname = ${APP_ID + '_' + SHARD_NUM}
+        AND p.proname IN ('emit_ddl_start', 'emit_ddl_end')
+      ORDER BY p.proname
+    `;
+
+    expect(eventTriggerFunctions).toEqual([
+      {
+        functionName: 'emit_ddl_end',
+        securityDefiner: true,
+        config: 'search_path=pg_catalog, pg_temp',
+      },
+      {
+        functionName: 'emit_ddl_start',
+        securityDefiner: true,
+        config: 'search_path=pg_catalog, pg_temp',
+      },
+    ]);
+
+    await expect(
+      upstream.begin(async tx => {
+        await tx.unsafe('SET LOCAL ROLE zero_ddl_actor');
+        await tx.unsafe(
+          'CREATE TABLE actor.created_by_actor(id TEXT PRIMARY KEY)',
+        );
+      }),
+    ).resolves.toBeUndefined();
+
+    expect(
+      await upstream<{owner: string}[]>`
+        SELECT pg_catalog.pg_get_userbyid(c.relowner) AS owner
+        FROM pg_catalog.pg_class c
+        JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = 'actor'
+          AND c.relname = 'created_by_actor'
+      `,
+    ).toEqual([{owner: 'zero_ddl_actor'}]);
+  });
 
   // For zero_all, zero_sum
   const DDL_START: Omit<DdlStartEvent, 'context'> = {
