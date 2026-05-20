@@ -54,6 +54,7 @@ jobs:
         uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
 
       - name: Login to Docker Hub
+        if: ${{ inputs.dry_run != true }}
         uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
@@ -79,7 +80,7 @@ jobs:
           fi
 
           output=$(node packages/zero/tool/release.ts "$MODE" "$REF" --yes $DRY_RUN 2>&1 | tee /dev/stderr)
-          version=$(echo "$output" | grep -oP 'Published @rocicorp/zero@\K[^\s]+')
+          version=$(echo "$output" | grep -oP '(?:Published|Would publish) @rocicorp/zero@\K[^\s]+')
           if [[ -z "$version" ]]; then
             echo "Could not parse released version from output" >&2
             exit 1
