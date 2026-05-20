@@ -111,20 +111,21 @@ async function main() {
 
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'zero-build-'));
 
-    // Copy the working directory to temp dir (faster than cloning)
-    console.log(`Copying repo from ${gitRoot} to ${tempDir}...`);
-    execute(
-      `rsync -a --progress --exclude=node_modules --exclude=.turbo ${gitRoot}/ ${tempDir}/`,
-    );
+    // Clone from the local repo (uses hardlinks, fast). Then re-point origin
+    // at the real remote so that git push/tag operations work correctly.
+    console.log(`Cloning repo to ${tempDir}...`);
+    execute(`git clone --local ${gitRoot} ${tempDir}`);
     process.chdir(tempDir);
 
-    // Discard any local changes and checkout the correct ref
-    execute('git reset --hard');
-    execute(`git fetch ${remote}`);
+    const remoteUrl = execute(`git -C ${gitRoot} remote get-url ${remote}`, {
+      stdio: 'pipe',
+    });
+    execute(`git remote set-url origin ${remoteUrl}`);
+    execute(`git fetch origin --tags`);
 
     // Try to checkout as remote/branch first, fall back to tag/commit
     try {
-      execute(`git checkout ${remote}/${from}`);
+      execute(`git checkout origin/${from}`);
     } catch {
       execute(`git checkout ${from}`);
     }
