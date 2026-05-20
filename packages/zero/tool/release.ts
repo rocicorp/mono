@@ -109,23 +109,27 @@ async function main() {
         : `✓ Ref ${from} matches between local and remote`,
     );
 
-    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'zero-build-'));
+    // In CI we build in the current directory — credentials from actions/checkout
+    // are already present and no working directory needs protecting.
+    // Locally we clone to a temp dir to avoid disturbing the developer's checkout.
+    if (process.env.CI) {
+      process.chdir(gitRoot);
+    } else {
+      const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'zero-build-'));
+      console.log(`Cloning repo to ${tempDir}...`);
+      execute(`git clone --local ${gitRoot} ${tempDir}`);
+      process.chdir(tempDir);
+      const remoteUrl = execute(`git -C ${gitRoot} remote get-url ${remote}`, {
+        stdio: 'pipe',
+      });
+      execute(`git remote set-url origin ${remoteUrl}`);
+    }
 
-    // Clone from the local repo (uses hardlinks, fast). Then re-point origin
-    // at the real remote so that git push/tag operations work correctly.
-    console.log(`Cloning repo to ${tempDir}...`);
-    execute(`git clone --local ${gitRoot} ${tempDir}`);
-    process.chdir(tempDir);
-
-    const remoteUrl = execute(`git -C ${gitRoot} remote get-url ${remote}`, {
-      stdio: 'pipe',
-    });
-    execute(`git remote set-url origin ${remoteUrl}`);
-    execute(`git fetch origin --tags`);
+    execute(`git fetch ${remote} --tags`);
 
     // Try to checkout as remote/branch first, fall back to tag/commit
     try {
-      execute(`git checkout origin/${from}`);
+      execute(`git checkout ${remote}/${from}`);
     } catch {
       execute(`git checkout ${from}`);
     }
