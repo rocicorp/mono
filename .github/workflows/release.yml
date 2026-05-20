@@ -79,7 +79,7 @@ jobs:
           fi
 
           output=$(node packages/zero/tool/release.ts "$MODE" "$REF" --yes $DRY_RUN 2>&1 | tee /dev/stderr)
-          version=$(echo "$output" | grep -oP 'Published @rocicorp/zero@\K[^\s]+')
+          version=$(echo "$output" | grep -oP '(?:Published|Would publish) @rocicorp/zero@\K[^\s]+')
           if [[ -z "$version" ]]; then
             echo "Could not parse released version from output" >&2
             exit 1
