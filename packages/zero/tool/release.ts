@@ -1,15 +1,16 @@
 import {execSync} from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
+import * as path from 'node:path';
 import {stdin as input, stdout as output} from 'node:process';
 import {createInterface} from 'node:readline/promises';
-import * as path from 'path';
 import commandLineArgs from 'command-line-args';
 
 void main();
 
 async function main() {
-  const {mode, from, remote, allowLocalChanges, dockerOnly, yes} = parseArgs();
+  const {mode, from, remote, allowLocalChanges, dockerOnly, yes, dryRun} =
+    parseArgs();
 
   try {
     validateGitArg('ref', from);
@@ -125,9 +126,9 @@ async function main() {
 
     let result: Release;
     if (mode === 'canary') {
-      result = await releaseCanary(currentVersion, remote, from, yes);
+      result = await releaseCanary(currentVersion, remote, from, yes, dryRun);
     } else if (mode === 'stable') {
-      result = await releaseStable(currentVersion, remote, from, yes);
+      result = await releaseStable(currentVersion, remote, from, yes, dryRun);
     } else {
       if (mode !== 'retry') {
         throw new Error(`Unexpected release mode: ${mode}`);
@@ -138,20 +139,27 @@ async function main() {
         fromReleaseVersion,
         dockerOnly,
         yes,
+        dryRun,
       );
     }
 
     console.log(``);
     console.log(``);
-    console.log(`🎉 Success!`);
+    console.log(`🎉 ${dryRun ? '[DRY RUN] ' : ''}Success!`);
     console.log(``);
     if (result.pushedGit) {
-      console.log(`* Pushed Git tag ${result.tagName} to ${remote}.`);
+      console.log(
+        `* ${dryRun ? 'Would push' : 'Pushed'} Git tag ${result.tagName} to ${remote}.`,
+      );
     }
     if (result.pushedNPM) {
-      console.log(`* Published @rocicorp/zero@${result.version} to npm.`);
+      console.log(
+        `* ${dryRun ? 'Would publish' : 'Published'} @rocicorp/zero@${result.version} to npm.`,
+      );
     }
-    console.log(`* Created Docker image rocicorp/zero:${result.version}.`);
+    console.log(
+      `* ${dryRun ? 'Would create' : 'Created'} Docker image rocicorp/zero:${result.version}.`,
+    );
     console.log(``);
     console.log(``);
     console.log(`Next steps:`);
@@ -221,6 +229,12 @@ function parseArgs() {
       description: 'Skip interactive confirmation prompt',
     },
     {
+      name: 'dry-run',
+      type: Boolean,
+      description:
+        'Build but skip git push, npm publish, and Docker push (for testing)',
+    },
+    {
       name: 'positionals',
       type: String,
       defaultOption: true,
@@ -278,6 +292,7 @@ function parseArgs() {
     allowLocalChanges: Boolean(options['allow-local-changes']),
     dockerOnly,
     yes: Boolean(options.yes),
+    dryRun: Boolean(options['dry-run']),
   };
 }
 
@@ -299,6 +314,7 @@ Options:
   --allow-local-changes      Allow running with local changes in working directory
   --docker-only              Retry mode only: skip npm and publish only docker
   --yes                      Skip interactive confirmation prompt
+  --dry-run                  Build but skip git push, npm publish, and Docker push
 `);
 
   console.log(`
@@ -351,27 +367,30 @@ async function releaseCanary(
   remote: string,
   from: string,
   yes: boolean,
+  dryRun: boolean,
 ): Promise<Release> {
   const version = bumpCanaryVersion(currentVersion, remote);
   const tagName = `zero/v${version}`;
 
   logReleaseHeader(
-    `Creating canary release from ${from}`,
+    `${dryRun ? '[DRY RUN] ' : ''}Creating canary release from ${from}`,
     currentVersion,
     version,
   );
-  await confirmRelease(yes);
+  await confirmRelease(yes || dryRun);
 
   build(version);
-  execute(`git commit -am "Bump version to ${version}"`);
+  if (!dryRun) {
+    execute(`git commit -am "Bump version to ${version}"`);
+  }
 
   const releaseCommitHash = execute('git rev-parse HEAD', {stdio: 'pipe'});
   if (!releaseCommitHash) {
     throw new Error('Could not resolve HEAD commit for git tag push');
   }
-  pushGit(releaseCommitHash, tagName, remote);
-  pushNPM(version, true);
-  await pushDocker(version);
+  pushGit(releaseCommitHash, tagName, remote, dryRun);
+  pushNpm(version, true, dryRun);
+  await pushDocker(version, dryRun);
 
   return {
     version,
@@ -386,15 +405,16 @@ async function releaseStable(
   remote: string,
   from: string,
   yes: boolean,
+  dryRun: boolean,
 ): Promise<Release> {
   const tagName = `zero/v${currentVersion}`;
 
   logReleaseHeader(
-    `Creating stable release from ${from}`,
+    `${dryRun ? '[DRY RUN] ' : ''}Creating stable release from ${from}`,
     currentVersion,
     currentVersion,
   );
-  await confirmRelease(yes);
+  await confirmRelease(yes || dryRun);
 
   build(currentVersion);
 
@@ -402,9 +422,9 @@ async function releaseStable(
   if (!releaseCommitHash) {
     throw new Error('Could not resolve HEAD commit for git tag push');
   }
-  pushGit(releaseCommitHash, tagName, remote);
-  pushNPM(currentVersion, false);
-  await pushDocker(currentVersion);
+  pushGit(releaseCommitHash, tagName, remote, dryRun);
+  pushNpm(currentVersion, false, dryRun);
+  await pushDocker(currentVersion, dryRun);
 
   return {
     version: currentVersion,
@@ -420,6 +440,7 @@ async function retryRelease(
   fromReleaseVersion: string | undefined,
   dockerOnly: boolean,
   yes: boolean,
+  dryRun: boolean,
 ): Promise<Release> {
   if (fromReleaseVersion === undefined) {
     throw new Error(
@@ -431,21 +452,21 @@ async function retryRelease(
   const tagName = `zero/v${fromReleaseVersion}`;
 
   logReleaseHeader(
-    `Retrying ${isCanary ? 'canary' : 'stable'} release from ${from}`,
+    `${dryRun ? '[DRY RUN] ' : ''}Retrying ${isCanary ? 'canary' : 'stable'} release from ${from}`,
     currentVersion,
     fromReleaseVersion,
     {skipGit: true, skipNPM: dockerOnly},
   );
-  await confirmRelease(yes);
+  await confirmRelease(yes || dryRun);
 
   if (dockerOnly) {
     console.log('Skipping npm publish (--docker-only)');
   } else {
     build(fromReleaseVersion);
-    pushNPM(fromReleaseVersion, isCanary);
+    pushNpm(fromReleaseVersion, isCanary, dryRun);
   }
 
-  await pushDocker(fromReleaseVersion);
+  await pushDocker(fromReleaseVersion, dryRun);
 
   return {
     version: fromReleaseVersion,
@@ -602,23 +623,51 @@ function setVersionInWorkspace(version: string) {
   });
 }
 
-function pushGit(commitHash: string, destTag: string, remote: string) {
+function pushGit(
+  commitHash: string,
+  destTag: string,
+  remote: string,
+  dryRun: boolean,
+) {
+  if (dryRun) {
+    console.log(
+      `[DRY RUN] Would run: git tag ${destTag} ${commitHash} && git push ${remote} refs/tags/${destTag}`,
+    );
+    return;
+  }
   execute(`git tag ${destTag} ${commitHash}`);
   execute(`git push ${remote} refs/tags/${destTag}`);
 }
 
-function pushNPM(version: string, isCanary: boolean) {
+function pushNpm(version: string, isCanary: boolean, dryRun: boolean) {
+  if (dryRun) {
+    const tag = isCanary ? 'canary' : 'staging';
+    console.log(
+      `[DRY RUN] Would run: npm publish --provenance --tag=${tag} (then remove staging tag for stable)`,
+    );
+    return;
+  }
   if (isCanary) {
-    execute('npm publish --tag=canary', {cwd: basePath('packages', 'zero')});
+    execute('npm publish --provenance --tag=canary', {
+      cwd: basePath('packages', 'zero'),
+    });
     return;
   }
 
   // For stable releases, publish without a dist-tag (we'll add 'latest' separately).
-  execute('npm publish --tag=staging', {cwd: basePath('packages', 'zero')});
+  execute('npm publish --provenance --tag=staging', {
+    cwd: basePath('packages', 'zero'),
+  });
   execute(`npm dist-tag rm @rocicorp/zero@${version} staging`);
 }
 
-async function pushDocker(version: string) {
+async function pushDocker(version: string, dryRun: boolean) {
+  if (dryRun) {
+    console.log(
+      `[DRY RUN] Would run: docker buildx build --platform linux/amd64,linux/arm64 --build-arg=ZERO_VERSION=${version} -t rocicorp/zero:${version} --sbom=true --provenance=mode=max --push .`,
+    );
+    return;
+  }
   try {
     // Check if our specific multiarch builder exists
     const builders = execute('docker buildx ls', {stdio: 'pipe'});
@@ -644,6 +693,8 @@ async function pushDocker(version: string) {
     --platform linux/amd64,linux/arm64 \\
     --build-arg=ZERO_VERSION=${version} \\
     -t rocicorp/zero:${version} \\
+    --sbom=true \\
+    --provenance=mode=max \\
     --push .`,
         {cwd: basePath('packages', 'zero')},
       );
