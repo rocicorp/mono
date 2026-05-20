@@ -270,7 +270,11 @@ $$ LANGUAGE plpgsql;
 
 
 CREATE OR REPLACE FUNCTION ${schema}.emit_ddl_start()
-RETURNS event_trigger AS $$
+RETURNS event_trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp
+AS $$
 DECLARE
   schema_specs JSON;
   message TEXT;
@@ -279,11 +283,15 @@ BEGIN
   PERFORM pg_advisory_xact_lock(${DDL_SERIALIZATION_LOCK});
   PERFORM ${schema}.update_schemas('ddlStart', TG_TAG, NULL);
 END
-$$ LANGUAGE plpgsql;
+$$;
 
 
 CREATE OR REPLACE FUNCTION ${schema}.emit_ddl_end()
-RETURNS event_trigger AS $$
+RETURNS event_trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = pg_catalog, pg_temp
+AS $$
 DECLARE
   publications TEXT[];
   target RECORD;
@@ -366,7 +374,7 @@ BEGIN
   END IF;
 
 END
-$$ LANGUAGE plpgsql;
+$$;
 `;
 }
 

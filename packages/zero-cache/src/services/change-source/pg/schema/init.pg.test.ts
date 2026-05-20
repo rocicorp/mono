@@ -12,6 +12,7 @@ import {
   test,
 } from '../../../../test/db.ts';
 import type {PostgresDB} from '../../../../types/pg.ts';
+import {upstreamSchema, type ShardConfig} from '../../../../types/shards.ts';
 import {id} from '../../../../types/sql.ts';
 import {
   CURRENT_SCHEMA_VERSION,
@@ -22,6 +23,15 @@ import {createReplica, initReplica, metadataPublicationName} from './shard.ts';
 
 const APP_ID = 'zappz';
 const SHARD_NUM = 23;
+const PRE_DEFINER_SCHEMA_VERSION = 23;
+const TEST_REPLICA_VERSION = 'ddl-trigger-security-definer-test';
+const DDL_END_FUNCTION = 'emit_ddl_end';
+const DDL_START_FUNCTION = 'emit_ddl_start';
+const DDL_EVENT_TRIGGER_FUNCTIONS = [
+  DDL_END_FUNCTION,
+  DDL_START_FUNCTION,
+] as const;
+const LOCKED_SEARCH_PATH_CONFIG = 'search_path=pg_catalog, pg_temp';
 
 // Update as necessary.
 const CURRENT_SCHEMA_VERSIONS = {
@@ -235,4 +245,68 @@ describe('change-streamer/pg/schema/init', () => {
       await expectTablesToMatch(upstream, c.upstreamPostState);
     });
   }
+
+  test('upgrades existing DDL hooks to security definers with a locked search path', async () => {
+    const shard: ShardConfig = {
+      appID: APP_ID,
+      shardNum: SHARD_NUM,
+      publications: [],
+    };
+    const schema = upstreamSchema(shard);
+
+    await ensureShardSchema(lc, upstream, shard);
+    await upstream.unsafe(/*sql*/ `
+      ALTER FUNCTION ${id(schema)}.${id(DDL_START_FUNCTION)}() SECURITY INVOKER;
+      ALTER FUNCTION ${id(schema)}.${id(DDL_START_FUNCTION)}() RESET ALL;
+      ALTER FUNCTION ${id(schema)}.${id(DDL_END_FUNCTION)}() SECURITY INVOKER;
+      ALTER FUNCTION ${id(schema)}.${id(DDL_END_FUNCTION)}() RESET ALL;
+    `);
+    await upstream`
+      UPDATE ${upstream(schema)}."versionHistory"
+      SET "dataVersion" = ${PRE_DEFINER_SCHEMA_VERSION},
+          "schemaVersion" = ${PRE_DEFINER_SCHEMA_VERSION}
+    `;
+
+    const getEventTriggerFunctions = () =>
+      upstream<
+        {
+          functionName: string;
+          securityDefiner: boolean;
+          config: string | null;
+        }[]
+      >`
+        SELECT
+          p.proname AS "functionName",
+          p.prosecdef AS "securityDefiner",
+          array_to_string(p.proconfig, ',') AS config
+        FROM pg_catalog.pg_proc p
+        JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+        WHERE n.nspname = ${schema}
+          AND p.proname IN (${DDL_END_FUNCTION}, ${DDL_START_FUNCTION})
+        ORDER BY p.proname
+      `;
+
+    const expectedEventTriggerFunctions = (
+      securityDefiner: boolean,
+      config: string | null,
+    ) =>
+      DDL_EVENT_TRIGGER_FUNCTIONS.map(functionName => ({
+        functionName,
+        securityDefiner,
+        config,
+      }));
+
+    expect(await getEventTriggerFunctions()).toEqual(
+      expectedEventTriggerFunctions(false, null),
+    );
+
+    await updateShardSchema(lc, upstream, shard, TEST_REPLICA_VERSION);
+
+    expect(await getEventTriggerFunctions()).toEqual(
+      expectedEventTriggerFunctions(true, LOCKED_SEARCH_PATH_CONFIG),
+    );
+    await expectTablesToMatch(upstream, {
+      [`${schema}.versionHistory`]: [CURRENT_SCHEMA_VERSIONS],
+    });
+  });
 });

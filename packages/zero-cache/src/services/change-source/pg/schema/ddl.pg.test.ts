@@ -5,6 +5,8 @@ import {Queue} from '../../../../../../shared/src/queue.ts';
 import * as v from '../../../../../../shared/src/valita.ts';
 import {test, type PgTest} from '../../../../test/db.ts';
 import type {PostgresDB} from '../../../../types/pg.ts';
+import {upstreamSchema, type ShardConfig} from '../../../../types/shards.ts';
+import {id} from '../../../../types/sql.ts';
 import type {
   Message,
   MessageMessage,
@@ -30,6 +32,35 @@ describe('change-source/tables/ddl', () => {
 
   const APP_ID = 'zap';
   const SHARD_NUM = 0;
+  const SHARD: ShardConfig = {
+    appID: APP_ID,
+    shardNum: SHARD_NUM,
+    publications: ['zero_all', 'zero_sum'],
+  };
+  const SHARD_SCHEMA = upstreamSchema(SHARD);
+  const RESTRICTED_ROLE = `${APP_ID}_app_migrator`;
+  const RESTRICTED_SCHEMA = `${APP_ID}_app_private`;
+  const UNPUBLISHED_TABLE = 'outside_zero';
+  const QUALIFIED_UNPUBLISHED_TABLE = `${RESTRICTED_SCHEMA}.${UNPUBLISHED_TABLE}`;
+  const PUBLISHED_SCHEMA_TABLE = 'publishedSchema';
+  const DDL_END_FUNCTION = 'emit_ddl_end';
+  const DDL_START_FUNCTION = 'emit_ddl_start';
+  const LOCKED_SEARCH_PATH_CONFIG = 'search_path=pg_catalog, pg_temp';
+  const EXPECTED_RESTRICTED_IDENTITY = [
+    {
+      currentUser: RESTRICTED_ROLE,
+      sessionUser: RESTRICTED_ROLE,
+    },
+  ];
+  const EXPECTED_NO_SHARD_PRIVILEGES = [
+    {
+      schemaUsage: false,
+      schemaCreate: false,
+      publishedSchemaSelect: false,
+      publishedSchemaUpdate: false,
+      memberOfShardOwner: false,
+    },
+  ];
 
   beforeEach<PgTest>(async ({testDBs}) => {
     notices = new Queue();
@@ -39,14 +70,8 @@ describe('change-source/tables/ddl', () => {
 
     await upstream.unsafe(STARTING_SCHEMA);
 
-    const shard = {
-      appID: APP_ID,
-      shardNum: SHARD_NUM,
-      publications: ['zero_all', 'zero_sum'],
-    };
-
-    await upstream.unsafe(createEventFunctionStatements(shard));
-    await upstream.unsafe(createEventTriggerStatements(shard));
+    await upstream.unsafe(createEventFunctionStatements(SHARD));
+    await upstream.unsafe(createEventTriggerStatements(SHARD));
 
     await upstream`SELECT pg_create_logical_replication_slot(${SLOT_NAME}, 'pgoutput')`;
 
@@ -71,6 +96,9 @@ describe('change-source/tables/ddl', () => {
     return async () => {
       sub.messages.cancel();
       await testDBs.drop(upstream);
+      await testDBs.sql
+        .unsafe(`RESET ROLE; DROP ROLE IF EXISTS ${id(RESTRICTED_ROLE)}`)
+        .simple();
     };
   });
 
@@ -105,6 +133,162 @@ describe('change-source/tables/ddl', () => {
     CREATE PUBLICATION zero_sum FOR TABLE pub.foo (id, name), pub.boo;
     CREATE PUBLICATION nonzeropub FOR TABLE pub.foo, pub.boo;
     `;
+
+  test('event trigger functions use the shard owner and locked search path', async () => {
+    const [{shardOwner}] = await upstream<{shardOwner: string}[]>`
+      SELECT current_user AS "shardOwner"
+    `;
+
+    const eventTriggers = await upstream<
+      {
+        triggerName: string;
+        event: string;
+        enabled: string;
+        functionName: string;
+        owner: string;
+        securityDefiner: boolean;
+        config: string | null;
+      }[]
+    >`
+      SELECT
+        e.evtname AS "triggerName",
+        e.evtevent AS event,
+        e.evtenabled AS enabled,
+        p.proname AS "functionName",
+        pg_catalog.pg_get_userbyid(p.proowner) AS owner,
+        p.prosecdef AS "securityDefiner",
+        array_to_string(p.proconfig, ',') AS config
+      FROM pg_catalog.pg_event_trigger e
+      JOIN pg_catalog.pg_proc p ON p.oid = e.evtfoid
+      JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+      WHERE n.nspname = ${SHARD_SCHEMA}
+        AND p.proname IN (${DDL_END_FUNCTION}, ${DDL_START_FUNCTION})
+      ORDER BY p.proname
+    `;
+
+    expect(eventTriggers).toEqual([
+      {
+        triggerName: `${APP_ID}_ddl_end_${SHARD_NUM}`,
+        event: 'ddl_command_end',
+        enabled: 'O',
+        functionName: DDL_END_FUNCTION,
+        owner: shardOwner,
+        securityDefiner: true,
+        config: LOCKED_SEARCH_PATH_CONFIG,
+      },
+      {
+        triggerName: `${APP_ID}_ddl_start_${SHARD_NUM}`,
+        event: 'ddl_command_start',
+        enabled: 'O',
+        functionName: DDL_START_FUNCTION,
+        owner: shardOwner,
+        securityDefiner: true,
+        config: LOCKED_SEARCH_PATH_CONFIG,
+      },
+    ]);
+  });
+
+  test('restricted roles can run unrelated DDL without Zero privileges', async ({
+    testDBs,
+  }) => {
+    await testDBs.sql
+      .unsafe(`DROP ROLE IF EXISTS ${id(RESTRICTED_ROLE)}`)
+      .simple();
+    const [{shardOwner}] = await upstream<{shardOwner: string}[]>`
+      SELECT current_user AS "shardOwner"
+    `;
+    await upstream.unsafe(/*sql*/ `
+      CREATE ROLE ${id(RESTRICTED_ROLE)} NOINHERIT;
+      CREATE SCHEMA ${id(RESTRICTED_SCHEMA)} AUTHORIZATION ${id(RESTRICTED_ROLE)};
+    `);
+
+    const getRestrictedRolePrivileges = () =>
+      upstream<
+        {
+          schemaUsage: boolean;
+          schemaCreate: boolean;
+          publishedSchemaSelect: boolean;
+          publishedSchemaUpdate: boolean;
+          memberOfShardOwner: boolean;
+        }[]
+      >`
+        SELECT
+          pg_catalog.has_schema_privilege(
+            ${RESTRICTED_ROLE}, ${SHARD_SCHEMA}, 'USAGE'
+          ) AS "schemaUsage",
+          pg_catalog.has_schema_privilege(
+            ${RESTRICTED_ROLE}, ${SHARD_SCHEMA}, 'CREATE'
+          ) AS "schemaCreate",
+          pg_catalog.has_table_privilege(
+            ${RESTRICTED_ROLE}, c.oid, 'SELECT'
+          ) AS "publishedSchemaSelect",
+          pg_catalog.has_table_privilege(
+            ${RESTRICTED_ROLE}, c.oid, 'UPDATE'
+          ) AS "publishedSchemaUpdate",
+          pg_catalog.pg_has_role(
+            ${RESTRICTED_ROLE}, ${shardOwner}, 'MEMBER'
+          ) AS "memberOfShardOwner"
+        FROM pg_catalog.pg_class c
+        JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = ${SHARD_SCHEMA}
+          AND c.relname = ${PUBLISHED_SCHEMA_TABLE}
+      `;
+
+    expect(await getRestrictedRolePrivileges()).toEqual(
+      EXPECTED_NO_SHARD_PRIVILEGES,
+    );
+    expect(
+      await upstream`
+        SELECT pubname, schemaname, tablename
+        FROM pg_catalog.pg_publication_tables
+        WHERE schemaname = ${RESTRICTED_SCHEMA}
+      `,
+    ).toEqual([]);
+
+    while (notices.size()) {
+      await notices.dequeue();
+    }
+
+    await expect(
+      upstream.begin(async tx => {
+        await tx.unsafe(
+          `SET LOCAL SESSION AUTHORIZATION ${id(RESTRICTED_ROLE)}`,
+        );
+        const getIdentity = () =>
+          tx<{currentUser: string; sessionUser: string}[]>`
+            SELECT
+              current_user AS "currentUser",
+              session_user AS "sessionUser"
+          `;
+
+        expect(await getIdentity()).toEqual(EXPECTED_RESTRICTED_IDENTITY);
+        await tx.unsafe(
+          `CREATE TABLE ${id(RESTRICTED_SCHEMA)}.${id(UNPUBLISHED_TABLE)}(id TEXT PRIMARY KEY)`,
+        );
+        expect(await getIdentity()).toEqual(EXPECTED_RESTRICTED_IDENTITY);
+      }),
+    ).resolves.toBeUndefined();
+
+    expect((await notices.dequeue()).message).toMatch(
+      /Emitted .* ddlStart for CREATE TABLE/,
+    );
+    const ddlEndNotice = (await notices.dequeue()).message;
+    expect(ddlEndNotice).toContain('ignoring irrelevant CREATE TABLE');
+    expect(ddlEndNotice).toContain(QUALIFIED_UNPUBLISHED_TABLE);
+
+    expect(
+      await upstream<{owner: string}[]>`
+        SELECT pg_catalog.pg_get_userbyid(c.relowner) AS owner
+        FROM pg_catalog.pg_class c
+        JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = ${RESTRICTED_SCHEMA}
+          AND c.relname = ${UNPUBLISHED_TABLE}
+      `,
+    ).toEqual([{owner: RESTRICTED_ROLE}]);
+    expect(await getRestrictedRolePrivileges()).toEqual(
+      EXPECTED_NO_SHARD_PRIVILEGES,
+    );
+  });
 
   // For zero_all, zero_sum
   const DDL_START: Omit<DdlStartEvent, 'context'> & {
