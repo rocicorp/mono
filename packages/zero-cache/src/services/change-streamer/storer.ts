@@ -79,6 +79,7 @@ type PendingGroup = {
   pool: TransactionPool;
   startingReplicationState: Promise<ReplicationOwner>;
   commitAcks: {commit: Commit; ack: boolean}[];
+  statusAcks: UpstreamStatusMessage[];
   txCount: number;
   lastWatermark: string | null;
 };
@@ -488,6 +489,7 @@ export class Storer implements Service {
         pool,
         startingReplicationState: promise,
         commitAcks: [],
+        statusAcks: [],
         txCount: 0,
         lastWatermark: null,
       };
@@ -530,6 +532,9 @@ export class Storer implements Service {
           this.#onConsumed(commit);
         }
       }
+      for (const status of flushing.statusAcks) {
+        this.#onConsumed(status);
+      }
 
       await this.#startCatchup(catchupQueue.splice(0));
     };
@@ -566,6 +571,10 @@ export class Storer implements Service {
             continue;
           }
           case 'status':
+            if (tx !== null) {
+              tx.group.statusAcks.push(msg);
+              continue;
+            }
             await flushGroup();
             this.#onConsumed(msg);
             continue;

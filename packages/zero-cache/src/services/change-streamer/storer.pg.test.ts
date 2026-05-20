@@ -191,6 +191,87 @@ describe('change-streamer/storer', () => {
       ).toEqual([{lastWatermark: '08'}]);
     });
 
+    test('status during an open transaction waits for grouped commit', async () => {
+      storer.store('07', ['begin', messages.begin(), {commitWatermark: '08'}]);
+      storer.store('07', [
+        'data',
+        messages.insert('issues', {id: 'mid-status'}),
+      ]);
+      storer.status(['status', {ack: true}, {watermark: '0e'}]);
+      storer.store('08', ['commit', messages.commit(), {watermark: '08'}]);
+
+      await storer.allProcessed();
+      await expectConsumed('08', '0e');
+
+      expect(
+        await db<{lastWatermark: string}[]>`
+          SELECT "lastWatermark" FROM "xero_5/cdc"."replicationState"`,
+      ).toEqual([{lastWatermark: '08'}]);
+      expect(
+        await db`
+          SELECT watermark, pos, precommit, change->>'tag' as tag
+            FROM "xero_5/cdc"."changeLog"
+           WHERE watermark >= '07'
+           ORDER BY watermark, pos`,
+      ).toEqual([
+        {watermark: '07', pos: 0n, precommit: null, tag: 'begin'},
+        {watermark: '07', pos: 1n, precommit: null, tag: 'insert'},
+        {watermark: '08', pos: 2n, precommit: '07', tag: 'commit'},
+      ]);
+
+      const [sub, _0, stream] = createSubscriber('06');
+      storer.catchup(sub, 'serving');
+
+      expect(await drain(stream, '08')).toMatchInlineSnapshot(`
+        [
+          [
+            "status",
+            {
+              "tag": "status",
+            },
+          ],
+          [
+            "begin",
+            {
+              "tag": "begin",
+            },
+            {
+              "commitWatermark": "07",
+            },
+          ],
+          [
+            "data",
+            {
+              "new": {
+                "id": "mid-status",
+              },
+              "relation": {
+                "name": "issues",
+                "rowKey": {
+                  "columns": [
+                    "id",
+                  ],
+                  "type": "default",
+                },
+                "schema": "public",
+                "tag": "relation",
+              },
+              "tag": "insert",
+            },
+          ],
+          [
+            "commit",
+            {
+              "tag": "commit",
+            },
+            {
+              "watermark": "08",
+            },
+          ],
+        ]
+      `);
+    });
+
     test('purge', async () => {
       expect(await storer.purgeRecordsBefore('02')).toBe(2);
       expect(

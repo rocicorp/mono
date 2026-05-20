@@ -38,6 +38,8 @@ const SNAPSHOT_PATH_PATTERN = '/replication/:version/snapshot';
 const CHANGES_PATH_PATTERN = '/replication/:version/changes';
 const PATH_REGEX = /\/replication\/v(?<version>\d+)\/(changes|snapshot)$/;
 const STREAM_BATCH_MESSAGES = 256;
+const ACK_MODE_PARAM = 'ack';
+const CUMULATIVE_ACK_MODE = 'cumulative';
 
 const SNAPSHOT_PATH = `/replication/v${PROTOCOL_VERSION}/snapshot`;
 const CHANGES_PATH = `/replication/v${PROTOCOL_VERSION}/changes`;
@@ -154,11 +156,15 @@ export class ChangeStreamerHttpServer extends HttpService {
       // websocket batch boundary instead of forcing the VS to rediscover
       // batching after parse/ACK. Older clients omit the flag and keep the
       // original one-message stream shape.
-      const streamBatchOptions =
-        url.searchParams.get('streamBatch') === '1'
-          ? {batch: {maxMessages: STREAM_BATCH_MESSAGES}}
-          : undefined;
-      void streamOutStringified(this._lc, downstream, ws, streamBatchOptions);
+      const streamBatchRequested = url.searchParams.get('streamBatch') === '1';
+      const cumulativeAckRequested =
+        url.searchParams.get(ACK_MODE_PARAM) === CUMULATIVE_ACK_MODE;
+      void streamOutStringified(this._lc, downstream, ws, {
+        ack: cumulativeAckRequested ? 'cumulative' : undefined,
+        batch: streamBatchRequested
+          ? {maxMessages: STREAM_BATCH_MESSAGES}
+          : undefined,
+      });
     } catch (err) {
       closeWithError(this._lc, ws, err, PROTOCOL_ERROR);
     }
@@ -249,7 +255,9 @@ export class ChangeStreamerHttpClient implements ChangeStreamer {
 
   async subscribe(ctx: SubscriberContext): Promise<Source<Downstream>> {
     const ws = await this.#openChangesWebSocket(ctx);
-    return streamIn(this.#lc, ws, downstreamSchema, {ack: 'cumulative'});
+    return streamIn(this.#lc, ws, downstreamSchema, {
+      ack: 'cumulative-if-supported',
+    });
   }
 
   async subscribeBatched(
@@ -259,7 +267,7 @@ export class ChangeStreamerHttpClient implements ChangeStreamer {
     // Keep websocket batches visible to the incremental syncer so it can hand a
     // whole received frame to the write worker before sending the cumulative ACK.
     return streamInBatches(this.#lc, ws, downstreamSchema, {
-      ack: 'cumulative',
+      ack: 'cumulative-if-supported',
     });
   }
 
@@ -267,9 +275,10 @@ export class ChangeStreamerHttpClient implements ChangeStreamer {
     const uri = await this.#resolveChangeStreamer(CHANGES_PATH);
 
     const params = getParams(ctx);
-    // This is backwards-compatible because the server only batches when the VS
-    // opts in with this query parameter.
+    // Cumulative ACKs require a positive capability frame from the server. Old
+    // v6 servers ignore these query params and keep per-message ACK semantics.
     params.set('streamBatch', '1');
+    params.set(ACK_MODE_PARAM, CUMULATIVE_ACK_MODE);
     return new WebSocket(uri + `?${params.toString()}`);
   }
 }

@@ -224,6 +224,7 @@ describe('streams with internal acks', () => {
   let cleanedUp: Promise<Message[]>;
   let cleanup: (m: Message[]) => void;
   let ackMessages: number[];
+  let enableCumulativeAckCapability: boolean;
   let streamBatchMessages: number;
   let port: number;
 
@@ -238,6 +239,7 @@ describe('streams with internal acks', () => {
 
     consumed = new Queue();
     ackMessages = [];
+    enableCumulativeAckCapability = false;
     streamBatchMessages = 1;
     producer = Subscription.create({
       consumed: m => consumed.enqueue(m),
@@ -260,10 +262,16 @@ describe('streams with internal acks', () => {
       });
       const batchOptions =
         streamBatchMessages > 1
-          ? {batch: {maxMessages: streamBatchMessages}}
+          ? {maxMessages: streamBatchMessages}
           : undefined;
-      void streamOut(lc, producer, ws, batchOptions);
-      void streamOutStringified(lc, stringifiedProducer, ws, batchOptions);
+      const streamOptions = {
+        ack: enableCumulativeAckCapability
+          ? ('cumulative' as const)
+          : undefined,
+        batch: batchOptions,
+      };
+      void streamOut(lc, producer, ws, streamOptions);
+      void streamOutStringified(lc, stringifiedProducer, ws, streamOptions);
     });
 
     // Run the server for real instead of using `injectWS()`, as that has a
@@ -278,22 +286,26 @@ describe('streams with internal acks', () => {
     await server.close();
   });
 
-  async function startReceiver() {
+  async function startReceiver(
+    ack: 'cumulative' | 'cumulative-if-supported' = 'cumulative',
+  ) {
     ws = new WebSocket(`http://localhost:${port}/`);
     return {
       ws,
       consumer: (await streamIn(lc, ws, messageSchema, {
-        ack: 'cumulative',
+        ack,
       })) as Subscription<Message>,
     };
   }
 
-  async function startBatchReceiver() {
+  async function startBatchReceiver(
+    ack: 'cumulative' | 'cumulative-if-supported' = 'cumulative',
+  ) {
     ws = new WebSocket(`http://localhost:${port}/`);
     return {
       ws,
       consumer: (await streamInBatches(lc, ws, messageSchema, {
-        ack: 'cumulative',
+        ack,
       })) as Subscription<StreamInPayload<Message>>,
     };
   }
@@ -386,6 +398,55 @@ describe('streams with internal acks', () => {
     }
 
     const {consumer} = await startReceiver();
+    await vi.waitFor(() => expect(consumer.queued).toBe(messageCount));
+
+    const entries = await drainPipeline(messageCount, consumer);
+    for (const {consumed} of entries) {
+      consumed();
+    }
+
+    expect(await Promise.all(results)).toEqual(
+      Array<Result>(messageCount).fill('consumed'),
+    );
+    expect(ackMessages).toEqual([96]);
+    consumer.cancel();
+    expect(await cleanedUp).toEqual([]);
+  });
+
+  test('negotiated cumulative ack falls back to per-message without capability', async () => {
+    const messageCount = 96;
+    const results: Promise<Result>[] = [];
+    for (let i = 0; i < messageCount; i++) {
+      results.push(producer.push({from: i, to: i + 1, str: `msg-${i}`}).result);
+    }
+
+    const {consumer} = await startReceiver('cumulative-if-supported');
+    await vi.waitFor(() => expect(consumer.queued).toBe(messageCount));
+
+    const entries = await drainPipeline(messageCount, consumer);
+    for (const {consumed} of entries) {
+      consumed();
+    }
+
+    expect(await Promise.all(results)).toEqual(
+      Array<Result>(messageCount).fill('consumed'),
+    );
+    expect(ackMessages).toEqual(
+      Array.from({length: messageCount}, (_, i) => i + 1),
+    );
+    consumer.cancel();
+    expect(await cleanedUp).toEqual([]);
+  });
+
+  test('negotiated cumulative ack batches consumed messages after capability', async () => {
+    enableCumulativeAckCapability = true;
+    const messageCount = 96;
+    const results: Promise<Result>[] = [];
+    for (let i = 0; i < messageCount; i++) {
+      results.push(producer.push({from: i, to: i + 1, str: `msg-${i}`}).result);
+    }
+
+    const {consumer} = await startReceiver('cumulative-if-supported');
     await vi.waitFor(() => expect(consumer.queued).toBe(messageCount));
 
     const entries = await drainPipeline(messageCount, consumer);

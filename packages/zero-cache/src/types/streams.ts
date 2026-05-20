@@ -35,6 +35,11 @@ const PING_INTERVAL_MS = 30_000;
 // for an arbitrary future frame before releasing sender-side backpressure.
 const CUMULATIVE_ACK_EVERY = 128;
 const CUMULATIVE_ACK_INTERVAL_MS = 5;
+const CUMULATIVE_ACK_STREAM_OPTION = 'cumulative-ack-v1';
+const CUMULATIVE_ACK_STREAM_OPTIONS_FRAME = BigIntJSON.stringify({
+  control: 'stream-options',
+  capabilities: [CUMULATIVE_ACK_STREAM_OPTION],
+});
 
 export type Source<T> = AsyncIterable<T> & {
   /**
@@ -302,6 +307,7 @@ export function streamOutStringified(
 }
 
 type StreamOutOptions = {
+  ack?: 'per-message' | 'cumulative' | undefined;
   batch?: {maxMessages?: number | undefined} | undefined;
 };
 
@@ -320,6 +326,12 @@ async function streamOutInternal<TPayload, TMessage extends JSONValue>(
   try {
     let nextID = 0;
     const {pipeline} = source;
+    if (options.ack === 'cumulative' && pipeline === undefined) {
+      throw new Error('Cumulative ACKs require a pipelined source');
+    }
+    if (options.ack === 'cumulative') {
+      sink.send(CUMULATIVE_ACK_STREAM_OPTIONS_FRAME);
+    }
     if (pipeline) {
       const iterator = pipeline[Symbol.asyncIterator]();
       const maxBatchMessages = Math.max(1, options.batch?.maxMessages ?? 1);
@@ -550,6 +562,15 @@ async function streamInInternal<T extends JSONValue>(
     }
     try {
       const value = BigIntJSON.parse(data);
+      if (isStreamOptionsFrame(value)) {
+        if (
+          options.ack === 'cumulative-if-supported' &&
+          value.capabilities.includes(CUMULATIVE_ACK_STREAM_OPTION)
+        ) {
+          acker.enableCumulative();
+        }
+        return;
+      }
       const messages = parseStreamedMessages(value, streamedSchema);
       for (const msg of messages) {
         acker.received(msg.id);
@@ -606,13 +627,28 @@ function parseStreamedMessages<T extends JSONValue>(
   return [v.parse(value, streamedSchema, 'passthrough')];
 }
 
+function isStreamOptionsFrame(
+  value: JSONValue,
+): value is {readonly capabilities: readonly string[]} {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value) &&
+    (value as {readonly control?: unknown}).control === 'stream-options' &&
+    Array.isArray((value as {readonly capabilities?: unknown}).capabilities) &&
+    (value as {readonly capabilities: readonly unknown[]}).capabilities.every(
+      capability => typeof capability === 'string',
+    )
+  );
+}
+
 type StreamInOptions = {
-  ack?: 'per-message' | 'cumulative' | undefined;
+  ack?: 'per-message' | 'cumulative' | 'cumulative-if-supported' | undefined;
 };
 
 class CumulativeAcker {
   readonly #ws: WebSocket;
-  readonly #batch: boolean;
+  #batch: boolean;
   // IDs that have been consumed after a gap. They become ACKable only when all
   // earlier IDs are consumed.
   readonly #outOfOrder = new Set<number>();
@@ -629,6 +665,10 @@ class CumulativeAcker {
   constructor(ws: WebSocket, batch: boolean) {
     this.#ws = ws;
     this.#batch = batch;
+  }
+
+  enableCumulative() {
+    this.#batch = true;
   }
 
   received(id: number) {
