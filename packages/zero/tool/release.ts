@@ -180,7 +180,7 @@ async function main() {
     console.log(``);
     console.log('* Run `git pull --tags` in your checkout to pull the tag.');
     console.log(
-      `* Test apps by installing: npm install @rocicorp/zero@${result.version}`,
+      `* Test apps by installing: pnpm install @rocicorp/zero@${result.version}`,
     );
     if (result.version.includes('-canary.')) {
       console.log('* When ready to promote to stable:');
@@ -189,11 +189,13 @@ async function main() {
       );
       console.log(`  2. Run: node release.ts stable <branch-or-commit>`);
       console.log(
-        `  3. When ready for users: npm dist-tag add @rocicorp/zero@X.Y.Z latest`,
+        `  3. When ready for users: pnpm dist-tag add @rocicorp/zero@X.Y.Z latest`,
       );
     } else {
       console.log('* When ready for users to install:');
-      console.log(`  npm dist-tag add @rocicorp/zero@${result.version} latest`);
+      console.log(
+        `  pnpm dist-tag add @rocicorp/zero@${result.version} latest`,
+      );
     }
     console.log(``);
   } catch (error) {

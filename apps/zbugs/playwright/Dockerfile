@@ -13,7 +13,7 @@ RUN echo '{ \
   }' > package.json
 
 # Install only Playwright and its dependencies
-RUN npm install
+RUN pnpm install
 
 # Copy your Playwright test scripts (adjust to your actual directory structure)
 COPY *.spec.ts .
