@@ -626,19 +626,6 @@ function setVersionInWorkspace(version: string) {
   const currentPackageData = getPackageData(zeroPackageJsonPathInTemp);
   currentPackageData.version = version;
   writePackageData(zeroPackageJsonPathInTemp, currentPackageData);
-
-  const dependencyPaths = [
-    basePath('apps', 'zbugs', 'package.json'),
-    basePath('apps', 'zql-viz', 'package.json'),
-  ];
-
-  dependencyPaths.forEach(p => {
-    const data = getPackageData(p);
-    if (data.dependencies && data.dependencies['@rocicorp/zero']) {
-      data.dependencies['@rocicorp/zero'] = version;
-      writePackageData(p, data);
-    }
-  });
 }
 
 function pushGit(
