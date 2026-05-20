@@ -172,7 +172,7 @@ export class QueryImpl<
 
   hash(): string {
     if (!this.#hash) {
-      this.#hash = hashOfAST(this.#ast);
+      this.#hash = hashOfAST(this.#ast) + (this.format.singular ? 't' : 'f');
     }
     return this.#hash;
   }
