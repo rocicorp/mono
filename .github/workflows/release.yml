@@ -62,6 +62,11 @@ jobs:
           username: ${{ vars.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      - name: Configure git identity
+        run: |
+          git config --global user.email "release-bot@rocicorp.dev"
+          git config --global user.name "Rocicorp Release Bot"
+
       - run: pnpm install --frozen-lockfile
 
       - name: Install cosign
