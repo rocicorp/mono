@@ -5,4 +5,4 @@ COPY packages/shared /app/packages/shared
 COPY tools/load-generator /app/tools/load-generator
 RUN npm install
 WORKDIR /app/tools/load-generator
-ENTRYPOINT ["npm", "run", "go", "--"]
+ENTRYPOINT ["pnpm", "run", "go", "--"]
