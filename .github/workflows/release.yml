@@ -13,7 +13,7 @@ on:
           - canary
           - stable
       ref:
-        description: Git ref to build the release from
+        description: Branch, tag, or commit SHA to build the release from
         required: true
         type: string
       promote_latest:
@@ -40,9 +40,12 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           fetch-depth: 0
-          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.event.pull_request.base.ref }}
+          # Always check out the workflow branch so pnpm tooling is current.
+          # release.ts handles checking out the target ref internally.
 
       - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6
+        with:
+          version: 11.1.2
 
       - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:

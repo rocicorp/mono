@@ -59,7 +59,6 @@ async function main() {
     );
 
     let localRefHash;
-    let remoteRefHash;
 
     // Get local ref hash
     try {
@@ -70,35 +69,45 @@ async function main() {
       process.exit(1);
     }
 
-    // Get remote ref hash
-    try {
-      // For branches, check remote/branch
-      // For tags, just check the tag (tags are fetched from remote)
-      remoteRefHash = execute(`git rev-parse ${remote}/${from}`, {
-        stdio: 'pipe',
-      });
-    } catch {
-      // If remote/from doesn't exist, try just the ref (works for tags)
+    // For full commit SHAs, skip remote ref lookup — the commit is present
+    // locally after a full fetch, which means it was pushed.
+    const isCommitSHA = /^[0-9a-f]{40}$/.test(from);
+    if (!isCommitSHA) {
+      let remoteRefHash;
       try {
-        // For tags, we need to ensure we have the latest from remote
-        execute(`git fetch ${remote} tag ${from}`, {stdio: 'pipe'});
-        remoteRefHash = execute(`git rev-parse ${from}`, {stdio: 'pipe'});
+        // For branches, check remote/branch
+        remoteRefHash = execute(`git rev-parse ${remote}/${from}`, {
+          stdio: 'pipe',
+        });
       } catch {
-        console.error(`Could not resolve remote ref: ${from}`);
-        console.error(`Make sure the branch/tag has been pushed to ${remote}`);
+        // If remote/from doesn't exist, try just the ref (works for tags)
+        try {
+          // For tags, we need to ensure we have the latest from remote
+          execute(`git fetch ${remote} tag ${from}`, {stdio: 'pipe'});
+          remoteRefHash = execute(`git rev-parse ${from}`, {stdio: 'pipe'});
+        } catch {
+          console.error(`Could not resolve remote ref: ${from}`);
+          console.error(
+            `Make sure the branch/tag has been pushed to ${remote}`,
+          );
+          process.exit(1);
+        }
+      }
+
+      if (localRefHash !== remoteRefHash) {
+        console.error(`Local and remote versions of ${from} do not match`);
+        console.error(`Local:  ${localRefHash}`);
+        console.error(`Remote: ${remoteRefHash}`);
+        console.error(`Perhaps you need to push your changes?`);
         process.exit(1);
       }
     }
 
-    if (localRefHash !== remoteRefHash) {
-      console.error(`Local and remote versions of ${from} do not match`);
-      console.error(`Local:  ${localRefHash}`);
-      console.error(`Remote: ${remoteRefHash}`);
-      console.error(`Perhaps you need to push your changes?`);
-      process.exit(1);
-    }
-
-    console.log(`✓ Ref ${from} matches between local and remote`);
+    console.log(
+      isCommitSHA
+        ? `✓ Commit ${from} exists locally`
+        : `✓ Ref ${from} matches between local and remote`,
+    );
 
     const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'zero-build-'));
 
@@ -589,13 +598,15 @@ async function confirmRelease(yes: boolean) {
 }
 
 function build(version: string) {
+  const usePnpm = fs.existsSync(basePath('pnpm-lock.yaml'));
+  const pnpm = (x: string) => execute(usePnpm ? `pnpm ${x}` : `npm ${x}`);
   // Installs turbo and other build dependencies needed for packaging.
-  execute('pnpm install');
+  pnpm('install');
   setVersionInWorkspace(version);
-  execute('pnpm install');
-  execute('pnpm run build');
-  execute('pnpm run format');
-  execute('pnpmx syncpack fix');
+  pnpm('install');
+  pnpm('run build');
+  pnpm('run format');
+  pnpm('exec syncpack fix');
   execute('git status');
 }
 
