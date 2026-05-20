@@ -1,10 +1,16 @@
-FROM golang:1.25 AS litestream
+FROM golang:1.25.10@sha256:cd05a378aaf011e8056745363e5c40f4f2bef0fa4d9bf19b9c38316079c332ff AS litestream
 
 WORKDIR /src/
 RUN git clone --depth 1 --branch zero@v0.0.9 https://github.com/rocicorp/litestream.git
 WORKDIR /src/litestream/
 
 ARG LITESTREAM_VERSION=0.3.13+z0.0.9  # upstream version + zero version
+
+# Force use of the toolchain bundled in the builder image so the resulting
+# binary is compiled with Go 1.25.10 stdlib (fixes CVE-2025-68121 and a
+# cluster of HIGH stdlib CVEs that affect any older toolchain pinned by
+# the cloned go.mod's `toolchain` directive).
+ENV GOTOOLCHAIN=local
 
 RUN --mount=type=cache,target=/root/.cache/go-build \
 	--mount=type=cache,target=/go/pkg \
