@@ -37,16 +37,14 @@ on:
         required: false
         type: string
         description: 'Base SHA for PR runs'
-    secrets:
-      BENCHER_API_TOKEN:
-        required: false
+permissions: {}
 
 jobs:
   benchmark:
     name: ${{ inputs.package_name }} Benchmarks
     permissions:
       contents: read
-    runs-on: [self-hosted, benchmark]
+    runs-on: [self-hosted, benchmark] # zizmor: ignore[self-hosted-runner] Benchmark jobs require dedicated hardware.
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
@@ -78,9 +76,10 @@ jobs:
     if: ${{ inputs.upload_results }}
     needs: benchmark
     runs-on: ubuntu-latest
+    environment: Benchmark
     permissions:
-      checks: write
-      pull-requests: write
+      checks: write # Required by Bencher to publish check runs.
+      pull-requests: write # Required by Bencher to publish PR results.
     steps:
       - name: Download benchmark output
         uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6

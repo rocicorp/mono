@@ -4,13 +4,13 @@ on:
   push:
     branches: [main]
 
+permissions: {}
+
 jobs:
   file_sizes:
     name: File Sizes
     permissions:
       contents: read
-      checks: write
-      pull-requests: write
+      checks: write # Required by Bencher to publish check runs.
+      pull-requests: write # Required by Bencher to publish PR results.
     uses: ./.github/workflows/reusable-file-sizes.yml
-    secrets:
-      BENCHER_API_TOKEN: ${{ secrets.BENCHER_API_TOKEN }}

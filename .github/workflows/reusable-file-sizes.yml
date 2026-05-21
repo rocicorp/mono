@@ -25,9 +25,7 @@ on:
         required: false
         type: string
         description: 'Base SHA for PR runs'
-    secrets:
-      BENCHER_API_TOKEN:
-        required: false
+permissions: {}
 
 jobs:
   build_file_sizes:
@@ -79,9 +77,10 @@ jobs:
     if: ${{ inputs.upload_results }}
     needs: build_file_sizes
     runs-on: ubuntu-latest
+    environment: Benchmark
     permissions:
-      checks: write
-      pull-requests: write
+      checks: write # Required by Bencher to publish check runs.
+      pull-requests: write # Required by Bencher to publish PR results.
     steps:
       - name: Download file size outputs
         uses: actions/download-artifact@018cc2cf5baa6db3ef3c5f8a56943fffe632ef53 # v6
