@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779289751967,
+  "lastUpdate": 1779361910602,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -56225,6 +56225,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/rocicorp/mono/commit/f02f76915b6f7c570fabbcae03836099f59cbb62"
         },
         "date": 1779289738715,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 317161,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 57049,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 117187,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 33481,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "arv@roci.dev",
+            "name": "Erik Arvidsson",
+            "username": "arv"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "035549bc61c314fad98ae05fc6737cb1f522ef13",
+          "message": "chore: Remove usage of tsx (#6044)\n\nModern nodejs can run typescript.",
+          "timestamp": "2026-05-21T10:53:37Z",
+          "tree_id": "f67ae46266e911b17bd2025a1c5f194468f2a693",
+          "url": "https://github.com/rocicorp/mono/commit/035549bc61c314fad98ae05fc6737cb1f522ef13"
+        },
+        "date": 1779361896847,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
