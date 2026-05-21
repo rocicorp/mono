@@ -4,7 +4,7 @@
 // https://rocicorp.github.io/mono/bundle-sizes/ and convert it to the bencher.dev format.
 // Then it uses the Bencher REST API to upload the data.
 //
-// BENCHER_API_KEY=... npx tsx convert-old-file-sizes.ts
+// BENCHER_API_KEY=... node convert-old-file-sizes.ts
 
 const branch = 'main';
 const testbed = 'localhost';

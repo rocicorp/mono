@@ -67,9 +67,6 @@ importers:
       tsnapi:
         specifier: ^0.3.2
         version: 0.3.3(vitest@4.1.6)
-      tsx:
-        specifier: ^4.21.0
-        version: 4.22.0
       turbo:
         specifier: ^2.4.4
         version: 2.9.14
@@ -266,9 +263,6 @@ importers:
       tailwindcss:
         specifier: ^3.0.23
         version: 3.4.19(tsx@4.22.0)(yaml@2.9.0)
-      tsx:
-        specifier: ^4.21.0
-        version: 4.22.0
       typescript:
         specifier: ~6.0.2
         version: 6.0.3
@@ -529,9 +523,6 @@ importers:
       shared:
         specifier: workspace:*
         version: link:../shared
-      tsx:
-        specifier: ^4.21.0
-        version: 4.22.0
       typescript:
         specifier: ~6.0.2
         version: 6.0.3
@@ -641,9 +632,6 @@ importers:
       shared:
         specifier: workspace:*
         version: link:../shared
-      tsx:
-        specifier: ^4.21.0
-        version: 4.22.0
       typescript:
         specifier: ~6.0.2
         version: 6.0.3
@@ -739,9 +727,6 @@ importers:
       playwright:
         specifier: ^1.55.1
         version: 1.60.0
-      tsx:
-        specifier: ^4.21.0
-        version: 4.22.0
       type-fest:
         specifier: ^4.30.0
         version: 4.41.0
@@ -956,9 +941,6 @@ importers:
       solid-js:
         specifier: ^1.9.4
         version: 1.9.13
-      tsx:
-        specifier: ^4.21.0
-        version: 4.22.0
       url-pattern:
         specifier: ^1.0.3
         version: 1.0.3
@@ -1137,9 +1119,6 @@ importers:
       postgres:
         specifier: 3.4.7
         version: 3.4.7
-      tsx:
-        specifier: ^4.21.0
-        version: 4.22.0
       url-pattern:
         specifier: ^1.0.3
         version: 1.0.3
@@ -1256,9 +1235,6 @@ importers:
       shared:
         specifier: workspace:*
         version: link:../shared
-      tsx:
-        specifier: ^4.21.0
-        version: 4.22.0
       typescript:
         specifier: ~6.0.2
         version: 6.0.3
@@ -1289,9 +1265,6 @@ importers:
       shared:
         specifier: workspace:*
         version: link:../shared
-      tsx:
-        specifier: ^4.21.0
-        version: 4.22.0
       typescript:
         specifier: ~6.0.2
         version: 6.0.3
@@ -1595,9 +1568,6 @@ importers:
       shared:
         specifier: workspace:*
         version: link:../shared
-      tsx:
-        specifier: ^4.21.0
-        version: 4.22.0
       typescript:
         specifier: ~6.0.2
         version: 6.0.3

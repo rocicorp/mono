@@ -62,8 +62,8 @@ jobs:
         working-directory: packages/replicache-perf
         run: |
           pnpm run build
-          pnpm exec tsx src/runner.ts --format=json | tee perf-temp-output.json
-          pnpm exec tsx tool/split-perf.ts perf-temp-output.json perf-v2-output.json perf-v2-p95-output.json
+          node src/runner.ts --format=json | tee perf-temp-output.json
+          node tool/split-perf.ts perf-temp-output.json perf-v2-output.json perf-v2-p95-output.json
         shell: bash
 
       - name: Upload benchmark outputs

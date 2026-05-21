@@ -8,8 +8,8 @@
     "check-types": "tsc",
     "check-types:watch": "tsc --watch",
     "lint": "oxlint --quiet --config ../../oxlint.config.ts src/",
-    "build": "tsx tool/build.ts",
-    "perf": "pnpm run build && tsx src/runner.ts",
+    "build": "node tool/build.ts",
+    "perf": "pnpm run build && node src/runner.ts",
     "fmt": "oxfmt .",
     "check-fmt": "oxfmt --check ."
   },
@@ -28,7 +28,6 @@
     "playwright-core": "1.53.2",
     "replicache": "workspace:*",
     "shared": "workspace:*",
-    "tsx": "^4.21.0",
     "typescript": "~6.0.2",
     "vite": "^8.0.13",
     "xbytes": "^1.7.0"
