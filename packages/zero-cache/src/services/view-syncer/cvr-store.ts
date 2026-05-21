@@ -6,6 +6,7 @@ import {version} from '../../../../otel/src/version.ts';
 import {assert} from '../../../../shared/src/asserts.ts';
 import {CustomKeyMap} from '../../../../shared/src/custom-key-map.ts';
 import {CustomKeySet} from '../../../../shared/src/custom-key-set.ts';
+import {some} from '../../../../shared/src/iterables.ts';
 import {
   deepEqual,
   type ReadonlyJSONValue,
@@ -1157,9 +1158,10 @@ export class CVRStore {
       (this.#pendingInstanceWrite ? 1 : 0) +
       this.#writes.size +
       (this.#pendingQueryUpdates.size > 0 ? 1 : 0) +
-      ([...this.#pendingQueryPartialUpdates.keys()].filter(
+      (some(
+        this.#pendingQueryPartialUpdates.keys(),
         key => !this.#pendingQueryUpdates.has(key),
-      ).length > 0
+      )
         ? 1
         : 0) +
       (this.#pendingDesireUpdates.size > 0 ? 1 : 0);
