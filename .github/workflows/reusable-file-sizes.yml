@@ -57,7 +57,7 @@ jobs:
 
       - name: Build zero client single file package
         working-directory: packages/zero
-        run: pnpm exec tsx tool/build.ts --bundle-sizes
+        run: node tool/build.ts --bundle-sizes
 
       - name: Compress
         working-directory: packages/zero

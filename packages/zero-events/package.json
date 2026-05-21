@@ -22,7 +22,7 @@
     }
   },
   "scripts": {
-    "build": "rm -rf out && tsc && tsx tool/build.ts",
+    "build": "rm -rf out && tsc && node tool/build.ts",
     "prepack": "pnpm run build",
     "check-types": "tsc",
     "check-types:watch": "tsc --watch",
@@ -37,7 +37,6 @@
     "esbuild": "0.27.7",
     "oxfmt": "^0.45.0",
     "shared": "workspace:*",
-    "tsx": "^4.21.0",
     "typescript": "~6.0.2",
     "vitest": "^4.1.6"
   }
