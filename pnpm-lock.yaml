@@ -1227,8 +1227,8 @@ importers:
         specifier: ^0.45.0
         version: 0.45.0
       playwright:
-        specifier: ^1.55.1
-        version: 1.60.0
+        specifier: 1.55.1
+        version: 1.55.1
       replicache:
         specifier: workspace:*
         version: link:../replicache
@@ -10383,8 +10383,18 @@ packages:
     engines: {node: '>=18'}
     hasBin: true
 
+  playwright-core@1.55.1:
+    resolution: {integrity: sha512-Z6Mh9mkwX+zxSlHqdr5AOcJnfp+xUWLCt9uKV18fhzA8eyxUd8NUWzAjxUh55RZKSYwDGX0cfaySdhZJGMoJ+w==}
+    engines: {node: '>=18'}
+    hasBin: true
+
   playwright-core@1.60.0:
     resolution: {integrity: sha512-9bW6zvX/m0lEbgTKJ6YppOKx8H3VOPBMOCFh2irXFOT4BbHgrx5hPjwJYLT40Lu+4qtD36qKc/Hn56StUW57IA==}
+    engines: {node: '>=18'}
+    hasBin: true
+
+  playwright@1.55.1:
+    resolution: {integrity: sha512-cJW4Xd/G3v5ovXtJJ52MAOclqeac9S/aGGgRzLabuF8TnIb6xHvMzKIa6JmrRzUkeXJgfL1MhukP0NK6l39h3A==}
     engines: {node: '>=18'}
     hasBin: true
 
@@ -24465,7 +24475,15 @@ snapshots:
 
   playwright-core@1.53.2: {}
 
+  playwright-core@1.55.1: {}
+
   playwright-core@1.60.0: {}
+
+  playwright@1.55.1:
+    dependencies:
+      playwright-core: 1.55.1
+    optionalDependencies:
+      fsevents: 2.3.2
 
   playwright@1.60.0:
     dependencies:
