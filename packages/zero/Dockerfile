@@ -27,31 +27,32 @@ RUN test -n "$ZERO_VERSION"
 RUN apk add --update curl
 RUN apk add --no-cache readline readline-dev
 
-# Install pnpm via corepack (bundled with Node). pnpm's onlyBuiltDependencies
-# allowlist (v10+) blocks lifecycle scripts from transitive deps unless
-# explicitly opted in, shrinking the postinstall supply-chain surface to
-# packages we name below.
-RUN corepack enable && corepack prepare pnpm@10 --activate
+# Install pnpm via corepack (bundled with Node). Matches the monorepo's
+# packageManager field. pnpm's build-script allowlist (v10+) blocks lifecycle
+# scripts from transitive deps unless explicitly opted in, shrinking the
+# postinstall supply-chain surface to packages we name below.
+RUN corepack enable && corepack prepare pnpm@11 --activate
 
 RUN mkdir -p /opt/app
 WORKDIR /opt/app
 
-# Allowlist for lifecycle scripts. zero-sqlite3 ships no native binary in its
-# tarball (see its package.json `files`) — its `install` script runs
-# prebuild-install to fetch one, so it must be allowed. esbuild is pulled in
-# transitively via tsx and downloads a platform binary in postinstall; keep it
-# allowlisted unless runtime testing confirms tsx is never invoked.
 RUN cat > package.json <<'EOF'
 {
   "name": "zero-runtime",
-  "private": true,
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "@rocicorp/zero-sqlite3",
-      "esbuild"
-    ]
-  }
+  "private": true
 }
+EOF
+
+# Allowlist for lifecycle scripts, in pnpm-workspace.yaml because pnpm 11 no
+# longer reads the `pnpm` field from package.json. zero-sqlite3 ships no native
+# binary in its tarball (see its package.json `files`) — its `install` script
+# runs prebuild-install to fetch one, so it must be allowed. esbuild is pulled
+# in transitively via tsx and downloads a platform binary in postinstall; keep
+# it allowlisted unless runtime testing confirms tsx is never invoked.
+RUN cat > pnpm-workspace.yaml <<'EOF'
+allowBuilds:
+  '@rocicorp/zero-sqlite3': true
+  esbuild: true
 EOF
 
 COPY pkgs/ /tmp/pkgs/
