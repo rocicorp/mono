@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779361910602,
+  "lastUpdate": 1779405101722,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -56269,6 +56269,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/rocicorp/mono/commit/035549bc61c314fad98ae05fc6737cb1f522ef13"
         },
         "date": 1779361896847,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 317161,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 57049,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 117187,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 33481,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "c@cadams.io",
+            "name": "Chase Adams",
+            "username": "0xcadams"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b80cced16ac4c75f01d5c2a71b24652ae1c2e8c8",
+          "message": "chore: bump playwright (#6051)\n\nFixes https://github.com/rocicorp/mono/security/dependabot/357",
+          "timestamp": "2026-05-21T22:57:26Z",
+          "tree_id": "52cada0768491d98a6826f3a8a30c5497a4d770e",
+          "url": "https://github.com/rocicorp/mono/commit/b80cced16ac4c75f01d5c2a71b24652ae1c2e8c8"
+        },
+        "date": 1779405086309,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
