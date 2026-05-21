@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779405101722,
+  "lastUpdate": 1779406796302,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -56313,6 +56313,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/rocicorp/mono/commit/b80cced16ac4c75f01d5c2a71b24652ae1c2e8c8"
         },
         "date": 1779405086309,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 317161,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 57049,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 117187,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 33481,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "c@cadams.io",
+            "name": "Chase Adams",
+            "username": "0xcadams"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": false,
+          "id": "a684c0c26bac983d2048a9ca24480be258a261ae",
+          "message": "ci: harden benchmark workflows (#6054)\n\n## Summary\n- Add explicit permissions and missing concurrency to benchmark-related\nworkflows.\n- Document Bencher and github-action-benchmark write permissions.\n- Keep intentional self-hosted benchmark runners with targeted `zizmor`\nignores and explanations.\n- Move Bencher upload jobs to the `Benchmark` environment.\n- Stop passing `BENCHER_API_TOKEN` through reusable workflow callers;\nthe reusable upload jobs now read it from the `Benchmark` environment.\n\n## Original zizmor findings\n- `.github/workflows/bencher-benchmarks-pr.yml`:\n`excessive-permissions`, `self-hosted-runner`,\n`undocumented-permissions`, and `concurrency-limits`.\n- `.github/workflows/bencher-benchmarks.yml`: `excessive-permissions`,\n`self-hosted-runner`, `undocumented-permissions`, and\n`concurrency-limits`.\n- `.github/workflows/bencher-file-sizes-pr.yml`: `excessive-permissions`\nand `undocumented-permissions`.\n- `.github/workflows/bencher-file-sizes.yml`: `excessive-permissions`\nand `undocumented-permissions`.\n- `.github/workflows/bundle-sizes.js.yml`: `concurrency-limits` and\n`undocumented-permissions` for `contents: write`.\n- `.github/workflows/perf-v2.js.yml`: `concurrency-limits`, two\n`self-hosted-runner` findings, and `undocumented-permissions` for\n`contents: write`.\n- `.github/workflows/reusable-benchmark.yml`: `excessive-permissions`,\n`self-hosted-runner`, and `undocumented-permissions`.\n- `.github/workflows/reusable-file-sizes.yml`: `excessive-permissions`\nand `undocumented-permissions`.\n\n## Environment secrets\n- Add `BENCHER_API_TOKEN` to the `Benchmark` environment before merging.\n\n## Verification\n- `zizmor --no-progress --color=never --persona=auditor\n.github/workflows/bencher-benchmarks-pr.yml\n.github/workflows/bencher-benchmarks.yml\n.github/workflows/bencher-file-sizes-pr.yml\n.github/workflows/bencher-file-sizes.yml\n.github/workflows/bundle-sizes.js.yml .github/workflows/perf-v2.js.yml\n.github/workflows/reusable-benchmark.yml\n.github/workflows/reusable-file-sizes.yml`",
+          "timestamp": "2026-05-21T23:29:57Z",
+          "tree_id": "900f14e62b0f75bba31228e46161295a319a4ac2",
+          "url": "https://github.com/rocicorp/mono/commit/a684c0c26bac983d2048a9ca24480be258a261ae"
+        },
+        "date": 1779406782660,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
