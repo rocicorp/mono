@@ -4,6 +4,10 @@ on:
     branches:
       - 'main'
 
+concurrency:
+  group: '${{ github.workflow }} @ ${{ github.event.pull_request.head.label || github.head_ref || github.ref }}'
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
@@ -11,6 +15,7 @@ jobs:
   mirror_job:
     runs-on: ubuntu-latest
     name: Mirror main branch to sandbox and terabugs branch
+    environment: Mirror
     steps:
       - name: Create GitHub App token
         id: app-token
