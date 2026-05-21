@@ -92,7 +92,7 @@
     "hash-wasm": "^4.9.0",
     "idb": "^7.0.1",
     "oxfmt": "^0.45.0",
-    "playwright": "1.53.2",
+    "playwright": "^1.60.0",
     "shared": "workspace:*",
     "typescript": "~6.0.2",
     "vitest": "^4.1.6",
