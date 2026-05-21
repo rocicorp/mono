@@ -4,13 +4,19 @@ on:
   pull_request:
     types: [opened, reopened, edited, synchronize]
 
+concurrency:
+  group: '${{ github.workflow }} @ ${{ github.event.pull_request.head.label || github.head_ref || github.ref }}'
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions: {}
+
 jobs:
   playwright-install:
     name: Install Playwright
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
     permissions:
       contents: read
-    runs-on: [self-hosted, benchmark]
+    runs-on: [self-hosted, benchmark] # zizmor: ignore[self-hosted-runner] Benchmark jobs require dedicated hardware.
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
@@ -32,8 +38,8 @@ jobs:
     needs: playwright-install
     permissions:
       contents: read
-      checks: write
-      pull-requests: write
+      checks: write # Required by Bencher to publish check runs.
+      pull-requests: write # Required by Bencher to publish PR results.
     uses: ./.github/workflows/reusable-benchmark.yml
     strategy:
       fail-fast: false
@@ -59,5 +65,3 @@ jobs:
       base_ref: ${{ github.event.pull_request.base.ref }}
       head_ref: ${{ github.event.pull_request.head.ref }}
       base_sha: ${{ github.event.pull_request.base.sha }}
-    secrets:
-      BENCHER_API_TOKEN: ${{ secrets.BENCHER_API_TOKEN }}
