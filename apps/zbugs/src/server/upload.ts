@@ -16,6 +16,14 @@ if (!process.env.AWS_SECRET_ACCESS_KEY) {
   console.warn('AWS_SECRET_ACCESS_KEY is not set');
 }
 
+// oxlint-disable-next-line no-console -- Configuration warning in demo app
+console.error('AWS_ACCESS_KEY_ID', process.env.AWS_ACCESS_KEY_ID);
+// oxlint-disable-next-line no-console -- Configuration warning in demo app
+console.error(
+  'AWS_SECRET_ACCESS_KEY',
+  process.env.AWS_SECRET_ACCESS_KEY?.substring(0, 10),
+);
+
 const s3 =
   process.env.AWS_REGION &&
   process.env.AWS_ACCESS_KEY_ID &&
