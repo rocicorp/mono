@@ -186,6 +186,16 @@ async function makeBinFilesExecutable() {
   }
 }
 
+async function assertNoNodeModulesInOut() {
+  const nodeModulesPath = resolve('out', 'node_modules');
+  if (existsSync(nodeModulesPath)) {
+    throw new Error(
+      `Build produced out/node_modules — a third-party package was bundled instead of externalized. ` +
+        `Add it to dependencies or peerDependencies of package.json. Path: ${nodeModulesPath}`,
+    );
+  }
+}
+
 async function copyStaticFiles() {
   // Copy litestream config.yml to output directory
   const relPath = 'zero-cache/src/services/litestream';
@@ -259,6 +269,7 @@ async function build() {
 
     await makeBinFilesExecutable();
     await copyStaticFiles();
+    await assertNoNodeModulesInOut();
   }
 
   const totalDuration = ((performance.now() - startTime) / 1000).toFixed(2);

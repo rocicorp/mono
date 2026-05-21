@@ -136,6 +136,7 @@
     "@opentelemetry/sdk-metrics": "^2.7.1",
     "@opentelemetry/sdk-node": "^0.218.0",
     "@opentelemetry/sdk-trace-node": "^2.7.1",
+    "@opentelemetry/semantic-conventions": "^1.41.1",
     "@postgresql-typed/oids": "^0.2.0",
     "@rocicorp/lock": "^1.0.4",
     "@rocicorp/logger": "^5.4.0",
@@ -194,17 +195,33 @@
   },
   "peerDependencies": {
     "@op-engineering/op-sqlite": ">=15",
+    "drizzle-orm": ">=0.45",
     "expo-sqlite": ">=15",
-    "kysely": "^0.28.17"
+    "kysely": ">=0.28.17",
+    "pg": ">=8.16",
+    "react": ">=18.3",
+    "solid-js": ">=1.9"
   },
   "peerDependenciesMeta": {
-    "kysely": {
+    "@op-engineering/op-sqlite": {
+      "optional": true
+    },
+    "drizzle-orm": {
       "optional": true
     },
     "expo-sqlite": {
       "optional": true
     },
-    "@op-engineering/op-sqlite": {
+    "kysely": {
+      "optional": true
+    },
+    "pg": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    },
+    "solid-js": {
       "optional": true
     }
   },
