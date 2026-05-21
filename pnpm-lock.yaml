@@ -67,9 +67,6 @@ importers:
       tsnapi:
         specifier: ^0.3.2
         version: 0.3.3(vitest@4.1.6)
-      tsx:
-        specifier: ^4.21.0
-        version: 4.22.0
       turbo:
         specifier: ^2.4.4
         version: 2.9.14

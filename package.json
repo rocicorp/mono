@@ -41,7 +41,6 @@
     "playwright": "1.53.2",
     "syncpack": "^14.3.0",
     "tsnapi": "^0.3.2",
-    "tsx": "^4.21.0",
     "turbo": "^2.4.4",
     "typescript": "~6.0.2",
     "vitest": "^4.1.6",
