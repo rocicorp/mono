@@ -11,7 +11,7 @@
  *   - 150 comment templates × ~50K slot combinations = 7.5M unique comments per project
  *
  * Usage:
- *   ANTHROPIC_API_KEY=sk-... npx tsx scripts/generate-templates.ts
+ *   ANTHROPIC_API_KEY=sk-... node scripts/generate-templates.ts
  *
  * Env vars:
  *   ANTHROPIC_API_KEY - required

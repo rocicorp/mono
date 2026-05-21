@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "go": "tsx src/main.ts",
+    "go": "node src/main.ts",
     "check-types": "tsc",
     "format": "oxfmt .",
     "check-format": "oxfmt --check .",

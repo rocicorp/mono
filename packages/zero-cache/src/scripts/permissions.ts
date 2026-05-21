@@ -1,7 +1,6 @@
 import {existsSync} from 'node:fs';
 import {basename, dirname, join, relative, resolve, sep} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {tsImport} from 'tsx/esm/api';
 import {logOptions} from '../../../otel/src/log-options.ts';
 import {colorConsole} from '../../../shared/src/logging.ts';
 import * as v from '../../../shared/src/valita.ts';
@@ -108,7 +107,7 @@ export async function loadSchemaAndPermissions(
 
   let module;
   try {
-    module = await tsImport(relativePath, import.meta.url);
+    module = await import(relativePath);
   } catch (e) {
     colorConsole.error(
       `Failed to load zero schema from ${absoluteSchemaPath}` +
