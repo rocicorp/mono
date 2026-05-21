@@ -27,10 +27,11 @@ RUN test -n "$ZERO_VERSION"
 RUN apk add --update curl
 RUN apk add --no-cache readline readline-dev
 
-# Install pnpm: its onlyBuiltDependencies allowlist (v10+) blocks lifecycle
-# scripts from transitive deps unless explicitly opted in, shrinking the
-# postinstall supply-chain surface to packages we name below.
-RUN npm install -g pnpm@10
+# Install pnpm via corepack (bundled with Node). pnpm's onlyBuiltDependencies
+# allowlist (v10+) blocks lifecycle scripts from transitive deps unless
+# explicitly opted in, shrinking the postinstall supply-chain surface to
+# packages we name below.
+RUN corepack enable && corepack prepare pnpm@10 --activate
 
 RUN mkdir -p /opt/app
 WORKDIR /opt/app
