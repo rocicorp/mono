@@ -45,9 +45,10 @@ jobs:
       pull-requests: write # Required to comment on canary release PRs.
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        # zizmor: ignore[artipacked] release.ts needs checkout credentials to push release tags.
         with:
           fetch-depth: 0
-          persist-credentials: false
+          persist-credentials: true
           # Always check out the workflow branch so pnpm tooling is current.
           # release.ts handles checking out the target ref internally.
 
@@ -86,9 +87,6 @@ jobs:
           MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'canary' }}
           REF: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.event.pull_request.base.ref }}
           DRY_RUN: ${{ inputs.dry_run == true && '--dry-run' || '' }}
-          GIT_CONFIG_COUNT: 1
-          GIT_CONFIG_KEY_0: 'url.https://x-access-token:${{ github.token }}@github.com/.insteadOf'
-          GIT_CONFIG_VALUE_0: https://github.com/
         run: |
           set -euo pipefail
 
