@@ -57,6 +57,17 @@ export class ReplicationReportRecorder {
           `time has exceeded the previous report's total lag.`,
         unit: 'millisecond',
       }).addCallback(this.reportTotalLag);
+
+      getOrCreateGauge('replication', 'last_total_lag', {
+        description:
+          'Latency from sending the most recently received upstream ' +
+          'replication report to its reaching the replica. Unlike ' +
+          'replication.total_lag, this value does not grow when reports ' +
+          'stop arriving — it reflects only the actual measured round-trip ' +
+          'of the last received report. Compare against replication.total_lag ' +
+          'to distinguish real lag from a stalled report stream.',
+        unit: 'millisecond',
+      }).addCallback(this.reportLastTotalLag);
     }
   }
 
@@ -83,6 +94,13 @@ export class ReplicationReportRecorder {
         ? timings.replicateTimeMs - timings.sendTimeMs
         : 0;
       o.observe(Math.max(lastLag, nextLagEstimate));
+    }
+  };
+
+  readonly reportLastTotalLag = (o: ObservableResult) => {
+    const last = this.#last?.lastTimings;
+    if (last) {
+      o.observe(last.replicateTimeMs - last.sendTimeMs);
     }
   };
 }
