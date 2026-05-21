@@ -48,6 +48,7 @@ export function* once<T>(stream: Iterable<T>): Iterable<T> {
 type IteratorWithHelpers<T> = Iterator<T> & {
   map<U>(f: (t: T, index: number) => U): IteratorWithHelpers<U>;
   filter(p: (t: T, index: number) => boolean): IteratorWithHelpers<T>;
+  some(p: (t: T, index: number) => boolean): boolean;
   [Symbol.iterator](): IteratorWithHelpers<T>;
 };
 
@@ -88,6 +89,10 @@ class IterWrapper<T> implements IteratorWithHelpers<T>, IterableIterator<T> {
   filter(p: (t: T, index: number) => boolean): IterWrapper<T> {
     return new IterWrapper(filterIter(this, p));
   }
+
+  some(p: (t: T, index: number) => boolean): boolean {
+    return some(this, p);
+  }
 }
 
 export function wrapIterable<T>(iter: Iterable<T>): IteratorWithHelpers<T> {
@@ -106,4 +111,17 @@ export function toSorted<T>(
 ): T[] {
   // oxlint-disable-next-line e18e/prefer-array-to-sorted
   return [...iter].sort(compare);
+}
+
+export function some<T>(
+  iterable: Iterable<T>,
+  predicate: (item: T, index: number) => boolean,
+): boolean {
+  let index = 0;
+  for (const item of iterable) {
+    if (predicate(item, index++)) {
+      return true;
+    }
+  }
+  return false;
 }

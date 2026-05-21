@@ -70,3 +70,45 @@ test('chaining filter and map', () => {
     .map(x => x * 2);
   expect([...result]).toEqual([0, 4, 8, 12, 16]);
 });
+
+test('some returns true when predicate matches', () => {
+  expect(wrapIterable(range(0, 5)).some(x => x === 3)).toBe(true);
+});
+
+test('some returns false when predicate never matches', () => {
+  expect(wrapIterable(range(0, 5)).some(x => x === 10)).toBe(false);
+});
+
+test('some returns false for empty iterable', () => {
+  expect(wrapIterable([]).some(() => true)).toBe(false);
+});
+
+test('some short-circuits on first match', () => {
+  let count = 0;
+  wrapIterable(range(0, 100)).some(x => {
+    count++;
+    return x === 2;
+  });
+  expect(count).toBe(3);
+});
+
+test('some index', () => {
+  expect(wrapIterable(['a', 'b', 'c']).some((_, i) => i === 1)).toBe(true);
+});
+
+test('some index short-circuits', () => {
+  let count = 0;
+  wrapIterable(range(0, 100)).some((_, i) => {
+    count++;
+    return i === 2;
+  });
+  expect(count).toBe(3);
+});
+
+test('some works after filter', () => {
+  expect(
+    wrapIterable(range(0, 10))
+      .filter(x => x % 2 === 0)
+      .some(x => x === 6),
+  ).toBe(true);
+});
