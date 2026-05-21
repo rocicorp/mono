@@ -36,10 +36,6 @@ RUN corepack enable && corepack prepare pnpm@10 --activate
 RUN mkdir -p /opt/app
 WORKDIR /opt/app
 
-# Flat node_modules so downstream paths (zero-sqlite3 symlink, config.yml) stay
-# resolvable without walking pnpm's virtual store.
-RUN printf 'node-linker=hoisted\n' > .npmrc
-
 # Allowlist for lifecycle scripts. zero-sqlite3 ships no native binary in its
 # tarball (see its package.json `files`) — its `install` script runs
 # prebuild-install to fetch one, so it must be allowed. esbuild is pulled in
@@ -71,9 +67,6 @@ RUN if echo "$ZERO_VERSION" | grep -q "\.tgz$"; then \
     echo "Installing from npm @rocicorp/zero@$ZERO_VERSION" && \
     pnpm add @rocicorp/zero@${ZERO_VERSION}; \
   fi
-
-# Add zero-sqlite3 to path
-RUN ln -s /opt/app/node_modules/@rocicorp/zero-sqlite3/build/Release/zero_sqlite3  /usr/local/bin/zero-sqlite3
 
 # Put zero's bin shims on PATH so `zero-cache` resolves without npx.
 ENV PATH="/opt/app/node_modules/.bin:${PATH}"
