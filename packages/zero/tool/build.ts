@@ -137,6 +137,7 @@ async function getViteConfig(): Promise<InlineConfig> {
           entryFileNames: '[name].js',
           chunkFileNames: 'chunks/[name]-[hash].js',
           preserveModules: true,
+          preserveModulesRoot: resolve('..'),
         },
       },
     },
