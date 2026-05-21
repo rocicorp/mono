@@ -186,7 +186,7 @@ async function makeBinFilesExecutable() {
   }
 }
 
-async function assertNoNodeModulesInOut() {
+function assertNoNodeModulesInOut() {
   const nodeModulesPath = resolve('out', 'node_modules');
   if (existsSync(nodeModulesPath)) {
     throw new Error(
@@ -269,7 +269,7 @@ async function build() {
 
     await makeBinFilesExecutable();
     await copyStaticFiles();
-    await assertNoNodeModulesInOut();
+    assertNoNodeModulesInOut();
   }
 
   const totalDuration = ((performance.now() - startTime) / 1000).toFixed(2);
