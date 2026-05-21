@@ -13,7 +13,7 @@
     "test:webkit": "VITEST_BROWSER=webkit vitest run --config vitest.config.web.ts",
     "test:webkit:watch": "VITEST_BROWSER=webkit vitest --config vitest.config.web.ts",
     "bench": "vitest run --config vitest.config.bench.ts",
-    "bench:bmf": "BENCH_OUTPUT_FORMAT=json pnpm run bench 2>&1 | tsx ./src/tool/mitata-json-to-bmf.ts",
+    "bench:bmf": "BENCH_OUTPUT_FORMAT=json pnpm run bench 2>&1 | node ./src/tool/mitata-json-to-bmf.ts",
     "bench:bmf:silent": "pnpm run bench:bmf --silent",
     "check-types": "tsc",
     "check-types:watch": "tsc --watch",
@@ -52,7 +52,6 @@
     "oxfmt": "^0.45.0",
     "package-up": "^5.0.0",
     "playwright": "1.53.2",
-    "tsx": "^4.21.0",
     "type-fest": "^4.30.0",
     "typescript": "~6.0.2",
     "vitest": "^4.1.6"

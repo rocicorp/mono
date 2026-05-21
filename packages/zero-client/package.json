@@ -19,7 +19,7 @@
     "test:webkit:watch": "VITEST_BROWSER=webkit vitest",
     "test:update": "vitest run -u",
     "bench": "vitest run --config vitest.config.bench.ts",
-    "bench:bmf": "BENCH_OUTPUT_FORMAT=json pnpm run bench 2>&1 | tsx ../shared/src/tool/mitata-json-to-bmf.ts",
+    "bench:bmf": "BENCH_OUTPUT_FORMAT=json pnpm run bench 2>&1 | node ../shared/src/tool/mitata-json-to-bmf.ts",
     "bench:bmf:silent": "pnpm run bench:bmf --silent",
     "check-types": "tsc",
     "check-types:watch": "tsc --watch"
@@ -40,7 +40,6 @@
     "playwright": "1.53.2",
     "replicache": "workspace:*",
     "shared": "workspace:*",
-    "tsx": "^4.21.0",
     "typescript": "~6.0.2",
     "vitest": "^4.1.6",
     "zero-protocol": "workspace:*",

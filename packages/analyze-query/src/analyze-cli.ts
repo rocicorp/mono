@@ -168,14 +168,14 @@ export async function runAnalyzeCLI(opts: AnalyzeCLIOptions): Promise<void> {
       },
       {
         header: 'Examples',
-        content: `  tsx cli.ts --zero-cache-url=https://zero.example.com \\
+        content: `  node cli.ts --zero-cache-url=https://zero.example.com \\
     --admin-password="$ZERO_ADMIN_PASSWORD" \\
     --query='issue.related("comments").limit(10)'
 
-  tsx cli.ts --zero-cache-url=http://localhost:4848 \\
+  node cli.ts --zero-cache-url=http://localhost:4848 \\
     --ast='\\{"table": "issue", "limit": 5\\}'
 
-  tsx cli.ts --zero-cache-url=http://localhost:4848 \\
+  node cli.ts --zero-cache-url=http://localhost:4848 \\
     --query-name=issueList --query-args='[]'`,
       },
     ],
@@ -194,7 +194,7 @@ export async function runAnalyzeCLI(opts: AnalyzeCLIOptions): Promise<void> {
   }
 
   // zero-client and replicache reference a build-time `TESTING` global that
-  // bundlers replace with a boolean literal; under tsx there's no replacement,
+  // bundlers replace with a boolean literal; under node there's no replacement,
   // so provide a runtime default.
   (globalThis as {TESTING?: boolean}).TESTING ??= false;
 
