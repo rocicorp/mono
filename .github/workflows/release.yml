@@ -27,19 +27,28 @@ on:
         type: boolean
         default: false
 
+permissions: {}
+
+concurrency:
+  group: '${{ github.workflow }} @ ${{ github.event.pull_request.head.label || github.head_ref || github.ref }}'
+  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
+
 jobs:
   release:
     name: Release
     if: github.event_name == 'workflow_dispatch' || (github.event.pull_request.merged == true && contains(github.event.pull_request.labels.*.name, 'release-canary'))
     runs-on: ubuntu-latest
+    environment: Release
     permissions:
-      contents: write
-      id-token: write
-      pull-requests: write
+      contents: write # Required to push release tags.
+      id-token: write # Required for cosign keyless signing.
+      pull-requests: write # Required to comment on canary release PRs.
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        # zizmor: ignore[artipacked] release.ts needs checkout credentials to push release tags.
         with:
           fetch-depth: 0
+          persist-credentials: true
           # Always check out the workflow branch so pnpm tooling is current.
           # release.ts handles checking out the target ref internally.
 
@@ -116,12 +125,15 @@ jobs:
         if: github.event_name == 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          VERSION: ${{ steps.release.outputs.version }}
         run: |
-          gh pr comment ${{ github.event.pull_request.number }} --body "## Canary Release Published
-
-          **npm:** \`@rocicorp/zero@${{ steps.release.outputs.version }}\`
-          \`\`\`
-          npm install @rocicorp/zero@${{ steps.release.outputs.version }}
-          \`\`\`
-
-          **Docker:** \`rocicorp/zero:${{ steps.release.outputs.version }}\`"
+          {
+            printf '## Canary Release Published\n\n'
+            printf '**npm:** `%s`\n' "@rocicorp/zero@$VERSION"
+            printf '```\n'
+            printf 'npm install @rocicorp/zero@%s\n' "$VERSION"
+            printf '```\n\n'
+            printf '**Docker:** `%s`\n' "rocicorp/zero:$VERSION"
+          } > release-comment.md
+          gh pr comment "$PR_NUMBER" --body-file release-comment.md
