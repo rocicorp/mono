@@ -4,9 +4,6 @@ description: 'Install Playwright browsers and system dependencies with caching. 
 runs:
   using: 'composite'
   steps:
-    - name: Set PLAYWRIGHT_BROWSERS_PATH
-      run: echo "PLAYWRIGHT_BROWSERS_PATH=$HOME/.cache/ms-playwright" >> "$GITHUB_ENV"
-      shell: bash
     - name: Get Playwright version
       id: playwright-version
       run: echo "version=$(pnpm exec playwright --version | awk '{print $NF}')" >> "$GITHUB_OUTPUT"

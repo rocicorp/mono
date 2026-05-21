@@ -11,6 +11,9 @@ concurrency:
   group: '${{ github.workflow }} @ ${{ github.event.pull_request.head.label || github.head_ref || github.ref }}'
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+permissions:
+  contents: read
+
 jobs:
   # Gate jobs - must pass before other jobs run
   syncpack:
@@ -117,7 +120,9 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - uses: ./.github/actions/playwright-install
       - name: Run tests
-        run: TEST_PG_MODE=nopg pnpm run test --shard=${{ matrix.shard }}/3
+        env:
+          SHARD: ${{ matrix.shard }}
+        run: TEST_PG_MODE=nopg pnpm run test --shard="$SHARD"/3
 
   test-pg:
     name: Test PG ${{ matrix.pg-version }} (Shard ${{ matrix.shard }}/2)
