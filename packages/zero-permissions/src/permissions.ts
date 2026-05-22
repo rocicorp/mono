@@ -5,17 +5,17 @@ import {
   type Condition,
   type Parameter,
 } from '../../zero-protocol/src/ast.ts';
-import type {Schema} from '../../zero-types/src/schema.ts';
-import type {ExpressionBuilder} from '../../zql/src/query/expression.ts';
-import type {Query} from '../../zql/src/query/query.ts';
-import {newExpressionBuilder} from '../../zql/src/query/static-query.ts';
 import type {
   AssetPermissions as CompiledAssetPermissions,
   PermissionsConfig as CompiledPermissionsConfig,
   TablePermissions,
-} from './compiled-permissions.ts';
-import type {NameMapper} from './name-mapper.ts';
-import {clientToServer} from './name-mapper.ts';
+} from '../../zero-schema/src/compiled-permissions.ts';
+import type {NameMapper} from '../../zero-schema/src/name-mapper.ts';
+import {clientToServer} from '../../zero-schema/src/name-mapper.ts';
+import type {Schema} from '../../zero-types/src/schema.ts';
+import type {ExpressionBuilder} from '../../zql/src/query/expression.ts';
+import type {Query} from '../../zql/src/query/query.ts';
+import {newExpressionBuilder} from '../../zql/src/query/static-query.ts';
 
 export const ANYONE_CAN = [
   (_: unknown, eb: ExpressionBuilder<never, Schema>) => eb.and(),

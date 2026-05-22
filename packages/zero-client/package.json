@@ -42,6 +42,7 @@
     "shared": "workspace:*",
     "typescript": "~6.0.2",
     "vitest": "^4.1.6",
+    "zero-permissions": "workspace:*",
     "zero-protocol": "workspace:*",
     "zero-schema": "workspace:*",
     "zero-types": "workspace:*",
