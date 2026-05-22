@@ -1,5 +1,3 @@
-import type {Row} from '@rocicorp/zero';
-import {useQuery, useZero} from '@rocicorp/zero/react';
 import type {Virtualizer} from '@tanstack/react-virtual';
 import {useWindowVirtualizer} from '@tanstack/react-virtual';
 import {nanoid} from 'nanoid';
@@ -23,6 +21,8 @@ import {difference} from '../../../../../packages/shared/src/set-utils.ts';
 import {INITIAL_COMMENT_LIMIT} from '../../../shared/consts.ts';
 import {mutators, type NotificationType} from '../../../shared/mutators.ts';
 import {queries, type ListContextParams} from '../../../shared/queries.ts';
+import {useQuery, useZero} from '../../../shared/zero-hooks.ts';
+import type {Row} from '../../../shared/zero.ts';
 import circle from '../../assets/icons/circle.svg';
 import statusClosed from '../../assets/icons/issue-closed.svg';
 import statusOpen from '../../assets/icons/issue-open.svg';

@@ -11,7 +11,6 @@ import {
   useRole,
   useTransitionStatus,
 } from '@floating-ui/react';
-import {useZero} from '@rocicorp/zero/react';
 import {nanoid} from 'nanoid';
 import {
   forwardRef,
@@ -22,6 +21,7 @@ import {
   type ForwardedRef,
 } from 'react';
 import {mutators} from '../../shared/mutators.ts';
+import {useZero} from '../../shared/zero-hooks.ts';
 import addEmojiIcon from '../assets/icons/add-emoji.svg';
 import {
   findEmojiForCreator,

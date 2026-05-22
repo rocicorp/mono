@@ -1,5 +1,4 @@
 import {useZeroVirtualizer} from '@rocicorp/zero-virtual/react';
-import {useQuery, useZero} from '@rocicorp/zero/react';
 import classNames from 'classnames';
 import Cookies from 'js-cookie';
 import React, {
@@ -20,6 +19,7 @@ import {
   type IssueRowSort,
   type ListContext,
 } from '../../../shared/queries.ts';
+import {useQuery, useZero} from '../../../shared/zero-hooks.ts';
 import InfoIcon from '../../assets/images/icon-info.svg?react';
 import {Button} from '../../components/button.tsx';
 import {Filter, type Selection} from '../../components/filter.tsx';

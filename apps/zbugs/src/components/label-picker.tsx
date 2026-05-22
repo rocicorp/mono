@@ -1,7 +1,7 @@
-import {useQuery} from '@rocicorp/zero/react';
 import classNames from 'classnames';
 import {useCallback, useRef, useState} from 'react';
 import {queries} from '../../shared/queries.ts';
+import {useQuery} from '../../shared/zero-hooks.ts';
 import {useClickOutside} from '../hooks/use-click-outside.ts';
 import {Button} from './button.tsx';
 import style from './label-picker.module.css';

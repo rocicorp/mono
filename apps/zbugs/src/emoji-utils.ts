@@ -1,5 +1,5 @@
-import type {Row} from '@rocicorp/zero';
 import {assert} from 'shared/src/asserts.js';
+import type {Row} from '../shared/zero.ts';
 
 export type Emoji = Row['emoji'] & {
   readonly creator: Row['user'] | undefined;

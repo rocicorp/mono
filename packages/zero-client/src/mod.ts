@@ -130,6 +130,7 @@ export type {
 } from '../../zql/src/mutate/crud.ts';
 export type {
   AnyTransaction,
+  ClientTransaction,
   Location,
   ServerTransaction,
   Transaction,
@@ -147,6 +148,7 @@ export {
   type MutatorDefinitions,
   type MutatorRegistry,
   type ToMutatorTree,
+  type TypedDefineMutators,
 } from '../../zql/src/mutate/mutator-registry.ts';
 export {
   defineMutator,
@@ -156,6 +158,7 @@ export {
   type MutateRequest,
   type Mutator,
   type MutatorDefinition,
+  type TypedDefineMutator,
 } from '../../zql/src/mutate/mutator.ts';
 export {createBuilder} from '../../zql/src/query/create-builder.ts';
 export {InputValidationError} from '../../zql/src/query/validate-input.ts';
@@ -196,6 +199,8 @@ export {
   type QueryOrQueryRequest,
   type QueryRegistry,
   type QueryRequest,
+  type TypedDefineQueries,
+  type TypedDefineQuery,
 } from '../../zql/src/query/query-registry.ts';
 export {type MaterializeOptions} from '../../zql/src/query/query.ts';
 export type {
@@ -244,3 +249,10 @@ export type {
   QueryErrorDetails,
   QueryResultDetails,
 } from './types/query-result.ts';
+export {
+  initZero,
+  type InitZeroOptions,
+  type InitZeroResult,
+  type InitZeroTypes,
+  type TypedZero,
+} from './init-zero.ts';

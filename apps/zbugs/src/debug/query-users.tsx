@@ -1,5 +1,5 @@
-import {useQuery} from '@rocicorp/zero/react';
 import {queries} from '../../shared/queries.ts';
+import {useQuery} from '../../shared/zero-hooks.ts';
 
 export function QueryUsers() {
   const [users, details] = useQuery(queries.allUsers());

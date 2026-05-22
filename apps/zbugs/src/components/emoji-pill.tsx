@@ -1,7 +1,7 @@
-import {useZero} from '@rocicorp/zero/react';
 import classNames from 'classnames';
 import {memo, useEffect, useState} from 'react';
 import {useIntersectionObserver} from 'usehooks-ts';
+import {useZero} from '../../shared/zero-hooks.ts';
 import type {Emoji} from '../emoji-utils.ts';
 import {
   findEmojiForCreator,

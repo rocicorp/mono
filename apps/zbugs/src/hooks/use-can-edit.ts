@@ -1,5 +1,5 @@
-import {useQuery} from '@rocicorp/zero/react';
 import {queries} from '../../shared/queries.ts';
+import {useQuery} from '../../shared/zero-hooks.ts';
 import {useLogin} from './use-login.tsx';
 
 export function useCanEdit(ownerUserID: string | undefined): boolean {

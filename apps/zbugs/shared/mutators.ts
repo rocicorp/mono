@@ -1,4 +1,3 @@
-import {defineMutator, defineMutators, type Transaction} from '@rocicorp/zero';
 import {z} from 'zod/mini';
 import {
   assertIsCreatorOrAdmin,
@@ -10,6 +9,7 @@ import {
 } from './auth.ts';
 import {MutationError, MutationErrorCode} from './error.ts';
 import {builder, ZERO_PROJECT_ID} from './schema.ts';
+import {defineMutator, defineMutators, type Transaction} from './zero.ts';
 
 function projectIDWithDefault(projectID: string | undefined): string {
   return projectID ?? ZERO_PROJECT_ID;

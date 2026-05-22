@@ -1,4 +1,4 @@
-import type {Row} from '@rocicorp/zero';
+import type {Row} from '../../shared/zero.ts';
 import rocketIcon from '../assets/icons/icon-rocket.svg';
 import projectIcon from '../assets/icons/project-box.svg';
 import zeroMarkIcon from '../assets/images/mark.svg';

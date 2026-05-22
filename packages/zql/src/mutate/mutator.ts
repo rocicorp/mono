@@ -160,7 +160,7 @@ export function defineMutatorWithType<
  * This is used as a workaround to using DefaultTypes (e.g. when using
  * multiple Zero instances).
  */
-type TypedDefineMutator<
+export type TypedDefineMutator<
   TSchema extends Schema,
   TContext,
   TWrappedTransaction,

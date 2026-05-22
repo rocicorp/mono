@@ -1,7 +1,7 @@
-import {useQuery} from '@rocicorp/zero/react';
 import classNames from 'classnames';
 import {memo, useMemo, useState} from 'react';
 import {queries} from '../../shared/queries.ts';
+import {useQuery} from '../../shared/zero-hooks.ts';
 import labelIcon from '../assets/icons/label.svg';
 import {Button} from './button.tsx';
 import {Combobox} from './combobox.tsx';

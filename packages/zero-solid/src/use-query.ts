@@ -55,6 +55,35 @@ export type UseQueryOptions = {
   ttl?: TTL | undefined;
 };
 
+export type TypedUseQuery<
+  S extends BaseDefaultSchema,
+  C extends BaseDefaultContext,
+> = {
+  <
+    TTable extends keyof S['tables'] & string,
+    TInput extends ReadonlyJSONValue | undefined,
+    TOutput extends ReadonlyJSONValue | undefined,
+    TReturn = PullRow<TTable, S>,
+  >(
+    querySignal: Accessor<
+      QueryOrQueryRequest<TTable, TInput, TOutput, S, TReturn, C>
+    >,
+    options?: UseQueryOptions | Accessor<UseQueryOptions>,
+  ): QueryResult<TReturn>;
+
+  <
+    TTable extends keyof S['tables'] & string,
+    TInput extends ReadonlyJSONValue | undefined,
+    TOutput extends ReadonlyJSONValue | undefined,
+    TReturn = PullRow<TTable, S>,
+  >(
+    querySignal: Accessor<
+      QueryOrQueryRequest<TTable, TInput, TOutput, S, TReturn, C> | Falsy
+    >,
+    options?: UseQueryOptions | Accessor<UseQueryOptions>,
+  ): MaybeQueryResult<TReturn>;
+};
+
 // Deprecated in 0.22
 /**
  * @deprecated Use {@linkcode useQuery} instead.

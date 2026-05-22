@@ -1,4 +1,5 @@
 export {useConnectionState} from './use-connection-state.ts';
+export {wrapZeroSolid, type WrapZeroSolidResult} from './init-zero.ts';
 export {
   createQuery,
   useQuery,

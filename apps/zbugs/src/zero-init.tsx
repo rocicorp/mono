@@ -1,8 +1,6 @@
-import type {ZeroOptions} from '@rocicorp/zero';
-import {ZeroProvider} from '@rocicorp/zero/react';
 import {useMemo, type ReactNode} from 'react';
 import {mutators} from '../shared/mutators.ts';
-import {schema} from '../shared/schema.ts';
+import {ZeroProvider} from '../shared/zero-hooks.ts';
 import {useLogin} from './hooks/use-login.tsx';
 
 export function ZeroInit({children}: {children: ReactNode}) {
@@ -11,7 +9,6 @@ export function ZeroInit({children}: {children: ReactNode}) {
   const options = useMemo(
     () =>
       ({
-        schema,
         cacheURL: import.meta.env.VITE_PUBLIC_SERVER,
         userID: login.loginState?.decoded?.sub,
         mutators,
@@ -21,7 +18,7 @@ export function ZeroInit({children}: {children: ReactNode}) {
         mutateURL: `${window.location.origin}/api/mutate`,
         queryURL: `${window.location.origin}/api/query`,
         context: login.loginState?.decoded,
-      }) as const satisfies ZeroOptions,
+      }) as const,
     [login.loginState],
   );
 

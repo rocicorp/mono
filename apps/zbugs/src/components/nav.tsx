@@ -1,10 +1,10 @@
-import {useConnectionState, useQuery} from '@rocicorp/zero/react';
 import {FPSMeter} from '@schickling/fps-meter';
 import classNames from 'classnames';
 import {memo, useCallback, useEffect, useMemo, useState} from 'react';
 import {useSearch} from 'wouter';
 import {navigate} from 'wouter/use-browser-location';
 import {queries, type ListContext} from '../../shared/queries.ts';
+import {useConnectionState, useQuery} from '../../shared/zero-hooks.ts';
 import logoGigabugsURL from '../assets/images/logo-gigabugs.svg';
 import logoURL from '../assets/images/logo.svg';
 import markURL from '../assets/images/mark.svg';

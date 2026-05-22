@@ -1,4 +1,5 @@
 export {useConnectionState} from './use-connection-state.tsx';
+export {wrapZeroReact, type WrapZeroReactResult} from './init-zero.tsx';
 export {
   useQuery,
   useSuspenseQuery,

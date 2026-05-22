@@ -1,8 +1,5 @@
 import {
-  defineQueries,
-  defineQuery,
   escapeLike,
-  type DefaultSchema,
   type Query,
   type QueryResultType,
   type Schema,
@@ -11,14 +8,15 @@ import * as z from 'zod/mini';
 import type {AuthData, Role} from './auth.ts';
 import {INITIAL_COMMENT_LIMIT} from './consts.ts';
 import {QueryError, QueryErrorCode} from './error.ts';
-import {builder, ZERO_PROJECT_NAME} from './schema.ts';
+import {builder, type schema, ZERO_PROJECT_NAME} from './schema.ts';
+import {defineQueries, defineQuery} from './zero.ts';
 
 function applyIssuePermissions<TQuery extends IssueQuery>(
   q: TQuery,
   role: Role | undefined,
 ): TQuery {
   return q.where(({or, cmp, cmpLit}) =>
-    or(cmp('visibility', '=', 'public'), cmpLit(role, '=', 'crew')),
+    or(cmp('visibility', '=', 'public'), cmpLit(role ?? null, '=', 'crew')),
   ) as TQuery;
 }
 
@@ -345,7 +343,7 @@ export type ListQueryArgs = {
 
 // TReturn must be any or the `.one()` case does not match
 // oxlint-disable-next-line no-explicit-any
-type IssueQuery = Query<'issue', DefaultSchema, any>;
+type IssueQuery = Query<'issue', typeof schema, any>;
 
 function alwaysFalse<
   TTable extends keyof TSchema['tables'] & string,

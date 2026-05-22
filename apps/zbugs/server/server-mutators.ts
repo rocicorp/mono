@@ -1,9 +1,3 @@
-import {
-  defineMutator,
-  defineMutators,
-  type ServerTransaction,
-  type Transaction,
-} from '@rocicorp/zero';
 import {assert} from 'shared/src/asserts.js';
 import {z} from 'zod/mini';
 import {MutationError, MutationErrorCode} from '../shared/error.ts';
@@ -13,13 +7,20 @@ import {
   updateIssueArgsSchema,
 } from '../shared/mutators.ts';
 import {builder} from '../shared/schema.ts';
+import {
+  defineMutator,
+  defineMutators,
+  type ServerTransaction,
+  type Transaction,
+} from '../shared/zero.ts';
 import {notify} from './notify.ts';
 
 export type PostCommitTask = () => Promise<void>;
 
-function asServerTransaction(tx: Transaction): ServerTransaction {
+function assertServerTransaction(
+  tx: Transaction,
+): asserts tx is ServerTransaction {
   assert(tx.location === 'server', 'Transaction is not a server transaction');
-  return tx;
 }
 
 export function createServerMutators(postCommitTasks: PostCommitTask[]) {
@@ -45,8 +46,10 @@ export function createServerMutators(postCommitTasks: PostCommitTask[]) {
             ctx: authData,
           });
 
+          assertServerTransaction(tx);
+
           await notify(
-            asServerTransaction(tx),
+            tx,
             authData,
             {kind: 'create-issue', issueID: id},
             postCommitTasks,
@@ -66,8 +69,10 @@ export function createServerMutators(postCommitTasks: PostCommitTask[]) {
             ctx: authData,
           });
 
+          assertServerTransaction(tx);
+
           await notify(
-            asServerTransaction(tx),
+            tx,
             authData,
             {
               kind: 'update-issue',
@@ -92,8 +97,10 @@ export function createServerMutators(postCommitTasks: PostCommitTask[]) {
             ctx: authData,
           });
 
+          assertServerTransaction(tx);
+
           await notify(
-            asServerTransaction(tx),
+            tx,
             authData,
             {
               kind: 'update-issue',
@@ -117,8 +124,10 @@ export function createServerMutators(postCommitTasks: PostCommitTask[]) {
             ctx: authData,
           });
 
+          assertServerTransaction(tx);
+
           await notify(
-            asServerTransaction(tx),
+            tx,
             authData,
             {
               kind: 'update-issue',
@@ -149,8 +158,10 @@ export function createServerMutators(postCommitTasks: PostCommitTask[]) {
             ctx: authData,
           });
 
+          assertServerTransaction(tx);
+
           await notify(
-            asServerTransaction(tx),
+            tx,
             authData,
             {
               kind: 'add-emoji-to-issue',
@@ -191,8 +202,10 @@ export function createServerMutators(postCommitTasks: PostCommitTask[]) {
             );
           }
 
+          assertServerTransaction(tx);
+
           await notify(
-            asServerTransaction(tx),
+            tx,
             authData,
             {
               kind: 'add-emoji-to-comment',
@@ -225,8 +238,10 @@ export function createServerMutators(postCommitTasks: PostCommitTask[]) {
             ctx: authData,
           });
 
+          assertServerTransaction(tx);
+
           await notify(
-            asServerTransaction(tx),
+            tx,
             authData,
             {
               kind: 'add-comment',
@@ -261,8 +276,10 @@ export function createServerMutators(postCommitTasks: PostCommitTask[]) {
             );
           }
 
+          assertServerTransaction(tx);
+
           await notify(
-            asServerTransaction(tx),
+            tx,
             authData,
             {
               kind: 'edit-comment',

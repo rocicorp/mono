@@ -1,4 +1,3 @@
-import {useZero} from '@rocicorp/zero/react';
 import 'emoji-picker-element';
 import Database from 'emoji-picker-element/database.js';
 import type Picker from 'emoji-picker-element/picker.js';
@@ -8,6 +7,7 @@ import type {
   SkinToneChangeEvent,
 } from 'emoji-picker-element/shared.js';
 import {createElement, memo, useRef, type RefCallback} from 'react';
+import {useZero} from '../../shared/zero-hooks.ts';
 import {setUserPref, useUserPref} from '../hooks/use-user-pref.ts';
 import {emojiDataSource} from './emoji-data-source.ts';
 
