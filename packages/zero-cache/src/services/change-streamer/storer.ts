@@ -78,8 +78,10 @@ type PendingTransaction = {
 type PendingGroup = {
   pool: TransactionPool;
   startingReplicationState: Promise<ReplicationOwner>;
-  commitAcks: {commit: Commit; ack: boolean}[];
-  statusAcks: UpstreamStatusMessage[];
+  upstreamAcks: (
+    | {type: 'commit'; commit: Commit; ack: boolean}
+    | {type: 'status'; status: UpstreamStatusMessage}
+  )[];
   txCount: number;
   lastWatermark: string | null;
 };
@@ -488,8 +490,7 @@ export class Storer implements Service {
       return {
         pool,
         startingReplicationState: promise,
-        commitAcks: [],
-        statusAcks: [],
+        upstreamAcks: [],
         txCount: 0,
         lastWatermark: null,
       };
@@ -527,13 +528,17 @@ export class Storer implements Service {
       }
 
       await flushing.pool.done();
-      for (const {commit, ack} of flushing.commitAcks) {
-        if (ack) {
-          this.#onConsumed(commit);
+      for (const pendingAck of flushing.upstreamAcks) {
+        switch (pendingAck.type) {
+          case 'commit':
+            if (pendingAck.ack) {
+              this.#onConsumed(pendingAck.commit);
+            }
+            break;
+          case 'status':
+            this.#onConsumed(pendingAck.status);
+            break;
         }
-      }
-      for (const status of flushing.statusAcks) {
-        this.#onConsumed(status);
       }
 
       await this.#startCatchup(catchupQueue.splice(0));
@@ -572,7 +577,7 @@ export class Storer implements Service {
           }
           case 'status':
             if (tx !== null) {
-              tx.group.statusAcks.push(msg);
+              tx.group.upstreamAcks.push({type: 'status', status: msg});
               continue;
             }
             await flushGroup();
@@ -664,7 +669,8 @@ export class Storer implements Service {
             sql.unsafe(`RELEASE SAVEPOINT ${CURRENT_TX_SAVEPOINT}`),
           ]);
           tx.group.lastWatermark = watermark;
-          tx.group.commitAcks.push({
+          tx.group.upstreamAcks.push({
+            type: 'commit',
             commit: ['commit', change, {watermark}],
             ack: tx.ack,
           });

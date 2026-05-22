@@ -197,11 +197,11 @@ describe('change-streamer/storer', () => {
         'data',
         messages.insert('issues', {id: 'mid-status'}),
       ]);
-      storer.status(['status', {ack: true}, {watermark: '0e'}]);
+      storer.status(['status', {ack: true}, {watermark: '07'}]);
       storer.store('08', ['commit', messages.commit(), {watermark: '08'}]);
 
       await storer.allProcessed();
-      await expectConsumed('08', '0e');
+      await expectConsumed('07', '08');
 
       expect(
         await db<{lastWatermark: string}[]>`
