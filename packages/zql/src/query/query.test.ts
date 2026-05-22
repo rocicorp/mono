@@ -1,5 +1,6 @@
 import {describe, expectTypeOf, test} from 'vitest';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
+import {staticParam} from '../../../zero-permissions/src/permissions.ts';
 import {toStaticParam} from '../../../zero-protocol/src/ast.ts';
 import {relationships} from '../../../zero-schema/src/builder/relationship-builder.ts';
 import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
@@ -11,7 +12,6 @@ import {
   string,
   table,
 } from '../../../zero-schema/src/builder/table-builder.ts';
-import {staticParam} from '../../../zero-schema/src/permissions.ts';
 import {type Opaque} from '../../../zero-schema/src/table-schema.ts';
 import type {TableSchema} from '../../../zero-types/src/schema.ts';
 import type {ExpressionFactory} from './expression.ts';
