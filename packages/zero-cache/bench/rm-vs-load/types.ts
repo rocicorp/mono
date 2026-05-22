@@ -48,6 +48,21 @@ export type ConsumerTransportMode = 'in-process' | 'websocket';
 export type ConsumerTransportAckMode = 'per-message' | 'cumulative';
 export type ConsumerProtocolMode = 'v6';
 
+export type BenchmarkConfig = {
+  readonly mode: 'smoke' | 'full';
+  readonly full: boolean;
+  readonly durationMs: number;
+  readonly settleMs: number;
+  readonly flushBytesThreshold: number;
+  readonly reconnectLagTx: number;
+  readonly reconnectFinalCatchupTimeoutMs: number;
+  readonly sourceApply: boolean;
+  readonly workerBatchMessages: number;
+  readonly pgImage: string;
+  readonly outputPath: string | undefined;
+  readonly consumer: ConsumerConfig;
+};
+
 export type ScenarioSummary = {
   readonly name: string;
   readonly rowsPerTx: number;

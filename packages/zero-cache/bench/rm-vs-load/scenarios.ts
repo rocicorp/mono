@@ -1,14 +1,23 @@
+import {EnvReader} from './config.ts';
 import {
   loadPayloadProfiles,
   smokePayloadProfiles,
   type PayloadProfile,
 } from './fixtures.ts';
-import {envInt, formatBytes} from './perf-utils.ts';
+import {formatBytes} from './perf-utils.ts';
 import type {Scenario} from './types.ts';
 import {workloadName} from './workloads.ts';
 
-export function loadScenarios(full: boolean): Scenario[] {
-  return filterScenarios(full ? fullScenarios() : smokeScenarios());
+export type ScenarioCatalogOptions = {
+  readonly full: boolean;
+  readonly env?: EnvReader | undefined;
+};
+
+export function loadScenarios({
+  full,
+  env = new EnvReader(),
+}: ScenarioCatalogOptions): Scenario[] {
+  return filterScenarios(full ? fullScenarios(env) : smokeScenarios(env), env);
 }
 
 export function describeScenarios(scenarios: readonly Scenario[]): string {
@@ -21,20 +30,20 @@ export function describeScenarios(scenarios: readonly Scenario[]): string {
     .join(', ');
 }
 
-function smokeScenarios(): Scenario[] {
+function smokeScenarios(env: EnvReader): Scenario[] {
   const small = profile('small', smokePayloadProfiles);
   return [
     {
       name: 'steady-small',
       rowsPerTx: 1,
       payload: small,
-      targetTxPerSec: envInt('ZERO_RM_VS_TARGET_TPS', 500),
+      targetTxPerSec: env.int('ZERO_RM_VS_TARGET_TPS', 500),
       workload: {kind: 'insert-only'},
     },
   ];
 }
 
-function fullScenarios(): Scenario[] {
+function fullScenarios(env: EnvReader): Scenario[] {
   const small = profile('small', loadPayloadProfiles);
   const medium = profile('medium', loadPayloadProfiles);
   const large = profile('large', loadPayloadProfiles);
@@ -43,40 +52,40 @@ function fullScenarios(): Scenario[] {
       name: 'single-row-flood',
       rowsPerTx: 1,
       payload: small,
-      targetTxPerSec: envInt('ZERO_RM_VS_SMALL_TARGET_TPS', 1_200),
+      targetTxPerSec: env.int('ZERO_RM_VS_SMALL_TARGET_TPS', 1_200),
       workload: {kind: 'insert-only'},
     },
     {
       name: 'medium-batch-pressure',
       rowsPerTx: 10,
       payload: medium,
-      targetTxPerSec: envInt('ZERO_RM_VS_MEDIUM_TARGET_TPS', 400),
+      targetTxPerSec: env.int('ZERO_RM_VS_MEDIUM_TARGET_TPS', 400),
       workload: {kind: 'insert-only'},
     },
     {
       name: 'medium-wide-batch-pressure',
       rowsPerTx: 20,
       payload: medium,
-      targetTxPerSec: envInt('ZERO_RM_VS_MEDIUM_WIDE_TARGET_TPS', 1_000),
+      targetTxPerSec: env.int('ZERO_RM_VS_MEDIUM_WIDE_TARGET_TPS', 1_000),
       workload: {kind: 'insert-only'},
     },
     {
       name: 'mixed-hot-row-churn',
       rowsPerTx: 20,
       payload: medium,
-      targetTxPerSec: envInt('ZERO_RM_VS_MIXED_TARGET_TPS', 4_000),
+      targetTxPerSec: env.int('ZERO_RM_VS_MIXED_TARGET_TPS', 4_000),
       workload: {
         kind: 'mixed-row-churn',
-        insertWeight: envInt('ZERO_RM_VS_MIXED_INSERT_WEIGHT', 4),
-        updateWeight: envInt('ZERO_RM_VS_MIXED_UPDATE_WEIGHT', 4),
-        deleteWeight: envInt('ZERO_RM_VS_MIXED_DELETE_WEIGHT', 2),
+        insertWeight: env.int('ZERO_RM_VS_MIXED_INSERT_WEIGHT', 4),
+        updateWeight: env.int('ZERO_RM_VS_MIXED_UPDATE_WEIGHT', 4),
+        deleteWeight: env.int('ZERO_RM_VS_MIXED_DELETE_WEIGHT', 2),
       },
     },
     {
       name: 'large-row-burst',
       rowsPerTx: 50,
       payload: large,
-      targetTxPerSec: envInt('ZERO_RM_VS_LARGE_TARGET_TPS', 80),
+      targetTxPerSec: env.int('ZERO_RM_VS_LARGE_TARGET_TPS', 80),
       workload: {kind: 'insert-only'},
     },
   ];
@@ -93,8 +102,8 @@ function profile(
   return payload;
 }
 
-function filterScenarios(scenarios: Scenario[]): Scenario[] {
-  const filter = process.env.ZERO_RM_VS_SCENARIO;
+function filterScenarios(scenarios: Scenario[], env: EnvReader): Scenario[] {
+  const filter = env.string('ZERO_RM_VS_SCENARIO');
   if (filter === undefined || filter === '') {
     return scenarios;
   }

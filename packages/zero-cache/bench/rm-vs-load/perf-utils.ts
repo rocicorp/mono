@@ -1,53 +1,5 @@
-import {writeFile} from 'node:fs/promises';
-
-export function argValue(name: string): string | undefined {
-  const long = `--${name}`;
-  const withEquals = `${long}=`;
-  for (let i = 2; i < process.argv.length; i++) {
-    const arg = process.argv[i];
-    if (arg === long) {
-      return process.argv[i + 1];
-    }
-    if (arg?.startsWith(withEquals)) {
-      return arg.slice(withEquals.length);
-    }
-  }
-  return undefined;
-}
-
-export function envString(name: string, fallback?: string): string | undefined {
-  const value = process.env[name];
-  return value === undefined || value === '' ? fallback : value;
-}
-
-export function envInt(name: string, fallback: number): number {
-  const value = envString(name);
-  if (value === undefined) {
-    return fallback;
-  }
-  const parsed = Number.parseInt(value, 10);
-  if (!Number.isFinite(parsed)) {
-    throw new Error(`Invalid integer ${name}=${value}`);
-  }
-  return parsed;
-}
-
-export function envNumber(name: string, fallback: number): number {
-  const value = envString(name);
-  if (value === undefined) {
-    return fallback;
-  }
-  const parsed = Number(value);
-  if (!Number.isFinite(parsed)) {
-    throw new Error(`Invalid number ${name}=${value}`);
-  }
-  return parsed;
-}
-
-export function envFlag(name: string): boolean {
-  const value = envString(name);
-  return value === '1' || value === 'true' || value === 'yes';
-}
+import {mkdir, writeFile} from 'node:fs/promises';
+import {dirname} from 'node:path';
 
 export function percentile(values: readonly number[], p: number): number {
   if (values.length === 0) {
@@ -96,6 +48,7 @@ export async function writeJsonSummary(
   outputPath: string | undefined,
 ): Promise<void> {
   if (outputPath !== undefined) {
+    await mkdir(dirname(outputPath), {recursive: true});
     await writeFile(outputPath, JSON.stringify(summary, null, 2) + '\n');
   }
 }
