@@ -20,7 +20,6 @@
     "shared": "workspace:*",
     "vitest": "^4.1.6",
     "zero-protocol": "workspace:*",
-    "zero-types": "workspace:*",
-    "zql": "workspace:*"
+    "zero-types": "workspace:*"
   }
 }

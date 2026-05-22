@@ -94,6 +94,7 @@
     "testcontainers": "^10.28.0",
     "typescript": "~6.0.2",
     "vitest": "^4.1.6",
+    "zero-permissions": "workspace:*",
     "zero-protocol": "workspace:*",
     "zero-schema": "workspace:*",
     "zql": "workspace:*"
