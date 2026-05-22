@@ -1,9 +1,8 @@
 {
-  "name": "zero-schema",
+  "name": "zero-permissions",
   "version": "0.0.0",
   "private": true,
   "type": "module",
-  "module": "true",
   "scripts": {
     "check-types": "tsc",
     "check-types:watch": "tsc --watch",
@@ -15,11 +14,16 @@
     "fmt": "oxfmt .",
     "check-fmt": "oxfmt --check ."
   },
+  "dependencies": {
+    "shared": "workspace:*",
+    "zero-protocol": "workspace:*",
+    "zero-schema": "workspace:*",
+    "zero-types": "workspace:*",
+    "zql": "workspace:*"
+  },
   "devDependencies": {
     "oxfmt": "^0.45.0",
-    "shared": "workspace:*",
-    "vitest": "^4.1.6",
-    "zero-protocol": "workspace:*",
-    "zero-types": "workspace:*"
+    "typescript": "~6.0.2",
+    "vitest": "^4.1.6"
   }
 }

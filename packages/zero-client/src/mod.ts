@@ -87,12 +87,12 @@ export {
   ANYONE_CAN_DO_ANYTHING,
   definePermissions,
   NOBODY_CAN,
-} from '../../zero-schema/src/permissions.ts';
+} from '../../zero-permissions/src/permissions.ts';
 export type {
   AssetPermissions,
   PermissionRule,
   PermissionsConfig,
-} from '../../zero-schema/src/permissions.ts';
+} from '../../zero-permissions/src/permissions.ts';
 export {type TableSchema} from '../../zero-schema/src/table-schema.ts';
 export type {
   SchemaValue,
