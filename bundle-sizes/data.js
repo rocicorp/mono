@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779406796302,
+  "lastUpdate": 1779551847325,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -56357,6 +56357,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/rocicorp/mono/commit/a684c0c26bac983d2048a9ca24480be258a261ae"
         },
         "date": 1779406782660,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 317161,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 57049,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 117187,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 33481,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "arv@roci.dev",
+            "name": "Erik Arvidsson",
+            "username": "arv"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "811a1d9d0fd74b56b4c3010bf045ec3af557468a",
+          "message": "refactor: Cross-package imports to use package names (#6060)\n\nThis pull request primarily updates import paths throughout the codebase\nto use package-based (workspace) imports instead of relative imports.\nThis change improves code maintainability, readability, and reduces the\nrisk of errors when moving files or refactoring directories.\nAdditionally, some dependencies in `package.json` files are updated to\nreflect these changes.",
+          "timestamp": "2026-05-23T15:46:33Z",
+          "tree_id": "80ec3a3e6ff7fada5c075824501c3474e64da86c",
+          "url": "https://github.com/rocicorp/mono/commit/811a1d9d0fd74b56b4c3010bf045ec3af557468a"
+        },
+        "date": 1779551834087,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
