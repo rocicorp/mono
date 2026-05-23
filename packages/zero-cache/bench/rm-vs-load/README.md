@@ -27,7 +27,7 @@ Files:
 Default review run:
 
 ```bash
-npm --workspace=zero-cache run perf:rm-vs-load:e2e -- --out /tmp/rm-vs-load.json
+pnpm --filter zero-cache run perf:rm-vs-load:e2e -- --out /tmp/rm-vs-load.json
 ```
 
 The default `e2e` wrapper focuses on the steady-state pressure point this
@@ -65,7 +65,7 @@ flow control:
 
 ```bash
 ZERO_RM_VS_SCENARIO=mixed-hot-row-churn \
-  npm --workspace=zero-cache run perf:rm-vs-load:e2e -- \
+  pnpm --filter zero-cache run perf:rm-vs-load:e2e -- \
   --out /tmp/rm-vs-load-mixed.json
 ```
 

@@ -555,7 +555,7 @@ async function streamInInternal<T extends JSONValue>(
   const closer = WebSocketCloser.forSink(lc, source, sink, handleMessage);
 
   function handleMessage(event: MessageEvent) {
-    const data = event.data.toString();
+    const data = webSocketMessageDataToString(event.data);
     if (!sink.active) {
       lc.warn?.('dropping ws message received after close', data);
       return;
@@ -593,6 +593,19 @@ async function streamInInternal<T extends JSONValue>(
 
   await closer.connected;
   return sink;
+}
+
+function webSocketMessageDataToString(data: MessageEvent['data']): string {
+  if (typeof data === 'string') {
+    return data;
+  }
+  if (Buffer.isBuffer(data)) {
+    return data.toString();
+  }
+  if (data instanceof ArrayBuffer) {
+    return Buffer.from(data).toString();
+  }
+  return Buffer.concat(data).toString();
 }
 
 function isStreamedBatch<T>(

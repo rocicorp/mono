@@ -98,7 +98,7 @@ export class IncrementalSyncer {
 
       let downstream: Source<StreamInPayload<Downstream>> | undefined;
       let unregister = () => {};
-      let err: unknown | undefined;
+      let err: unknown;
 
       try {
         const ctx = {

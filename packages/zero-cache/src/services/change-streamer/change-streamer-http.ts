@@ -106,13 +106,6 @@ export class ChangeStreamerHttpServer extends HttpService {
         return this.#reserveSnapshot(ws, msg);
       case 'changes':
         return this.#subscribe(ws, msg);
-      default:
-        closeWithError(
-          this._lc,
-          ws,
-          `invalid action "${action}" received in handoff`,
-        );
-        return;
     }
   };
 
