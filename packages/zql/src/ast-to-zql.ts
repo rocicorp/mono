@@ -1,6 +1,6 @@
-import {unreachable} from '../../shared/src/asserts.ts';
-import {toSorted} from '../../shared/src/iterables.ts';
-import {must} from '../../shared/src/must.ts';
+import {unreachable} from 'shared/src/asserts.ts';
+import {toSorted} from 'shared/src/iterables.ts';
+import {must} from 'shared/src/must.ts';
 import type {
   AST,
   Condition,
@@ -13,8 +13,8 @@ import type {
   Parameter,
   SimpleCondition,
   ValuePosition,
-} from '../../zero-protocol/src/ast.ts';
-import {SUBQ_PREFIX} from '../../zero-protocol/src/ast.ts';
+} from 'zero-protocol/src/ast.ts';
+import {SUBQ_PREFIX} from 'zero-protocol/src/ast.ts';
 
 /**
  * Converts an AST to the equivalent query builder code.

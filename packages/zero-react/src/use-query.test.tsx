@@ -10,7 +10,7 @@ import {
   vi,
   type Mock,
 } from 'vitest';
-import {newQuery} from '../../zql/src/query/query-impl.ts';
+import {newQuery} from 'zql/src/query/query-impl.ts';
 import {queryInternalsTag, type QueryImpl} from './bindings.ts';
 import {
   getAllViewsSizeForTesting,

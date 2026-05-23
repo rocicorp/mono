@@ -1,6 +1,6 @@
-import {jsonSchema} from '../../shared/src/json-schema.ts';
+import {jsonSchema} from 'shared/src/json-schema.ts';
+import type {NameMapper} from 'zero-types/src/name-mapper.ts';
 import * as v from '../../shared/src/valita.ts';
-import type {NameMapper} from '../../zero-types/src/name-mapper.ts';
 import {rowSchema} from './data.ts';
 import {mutationIDSchema} from './mutation-id.ts';
 import * as MutationType from './mutation-type-enum.ts';

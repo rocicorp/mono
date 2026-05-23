@@ -1,21 +1,22 @@
-import {assert} from '../../shared/src/asserts.ts';
+import {assert} from 'shared/src/asserts.ts';
 import {
   mapCondition,
+  staticParam,
   toStaticParam,
   type Condition,
   type Parameter,
-} from '../../zero-protocol/src/ast.ts';
+} from 'zero-protocol/src/ast.ts';
 import type {
   AssetPermissions as CompiledAssetPermissions,
   PermissionsConfig as CompiledPermissionsConfig,
   TablePermissions,
-} from '../../zero-schema/src/compiled-permissions.ts';
-import type {NameMapper} from '../../zero-schema/src/name-mapper.ts';
-import {clientToServer} from '../../zero-schema/src/name-mapper.ts';
-import type {Schema} from '../../zero-types/src/schema.ts';
-import type {ExpressionBuilder} from '../../zql/src/query/expression.ts';
-import type {Query} from '../../zql/src/query/query.ts';
-import {newExpressionBuilder} from '../../zql/src/query/static-query.ts';
+} from 'zero-schema/src/compiled-permissions.ts';
+import type {NameMapper} from 'zero-schema/src/name-mapper.ts';
+import {clientToServer} from 'zero-schema/src/name-mapper.ts';
+import type {Schema} from 'zero-types/src/schema.ts';
+import type {ExpressionBuilder} from 'zql/src/query/expression.ts';
+import type {Query} from 'zql/src/query/query.ts';
+import {newExpressionBuilder} from 'zql/src/query/static-query.ts';
 
 export const ANYONE_CAN = [
   (_: unknown, eb: ExpressionBuilder<never, Schema>) => eb.and(),
@@ -316,14 +317,3 @@ function baseTracker(anchor: Anchor) {
 
 export const authDataRef = baseTracker('authData');
 export const preMutationRowRef = baseTracker('preMutationRow');
-export function staticParam(
-  anchorClass: 'authData' | 'preMutationRow',
-  field: string | string[],
-): Parameter {
-  return {
-    type: 'static',
-    anchor: anchorClass,
-    // for backwards compatibility
-    field: field.length === 1 ? field[0] : field,
-  };
-}

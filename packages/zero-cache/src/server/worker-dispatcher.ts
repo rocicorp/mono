@@ -1,7 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
+import {assert} from 'shared/src/asserts.ts';
+import {h32} from 'shared/src/hash.ts';
 import UrlPattern from 'url-pattern';
-import {assert} from '../../../shared/src/asserts.ts';
-import {h32} from '../../../shared/src/hash.ts';
 import {getOrCreateGauge} from '../observability/metrics.ts';
 import {RunningState} from '../services/running-state.ts';
 import type {Service} from '../services/service.ts';

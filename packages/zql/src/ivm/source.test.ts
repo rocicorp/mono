@@ -1,12 +1,9 @@
+import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
 import {expect, suite, test} from 'vitest';
+import type {Condition, SimpleOperator} from 'zero-protocol/src/ast.ts';
+import type {Row} from 'zero-protocol/src/data.ts';
+import type {SchemaValue} from 'zero-schema/src/table-schema.ts';
 import {testLogConfig} from '../../../otel/src/test-log-config.ts';
-import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
-import type {
-  Condition,
-  SimpleOperator,
-} from '../../../zero-protocol/src/ast.ts';
-import type {Row} from '../../../zero-protocol/src/data.ts';
-import type {SchemaValue} from '../../../zero-schema/src/table-schema.ts';
 import {Catch, expandNode, type CaughtNode} from './catch.ts';
 import {ChangeType} from './change-type.ts';
 import type {Constraint} from './constraint.ts';

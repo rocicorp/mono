@@ -1,4 +1,6 @@
 import {resolver} from '@rocicorp/resolver';
+import {assert} from 'shared/src/asserts.ts';
+import {deepEqual, type JSONValue} from 'shared/src/json.ts';
 import {
   closeAndCleanupRep,
   createIndexDefinitions,
@@ -20,8 +22,6 @@ import type {
   ReadTransaction,
   WriteTransaction,
 } from '../../../replicache/src/transactions.ts';
-import {assert} from '../../../shared/src/asserts.ts';
-import {deepEqual, type JSONValue} from '../../../shared/src/json.ts';
 import type {Bencher, Benchmark} from '../benchmark.ts';
 import {
   getTmcwData,

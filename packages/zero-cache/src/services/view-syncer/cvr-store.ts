@@ -1,24 +1,21 @@
 import {trace} from '@opentelemetry/api';
 import type {LogContext} from '@rocicorp/logger';
 import type {MaybeRow, PendingQuery, Row} from 'postgres';
+import {assert} from 'shared/src/asserts.ts';
+import {CustomKeyMap} from 'shared/src/custom-key-map.ts';
+import {CustomKeySet} from 'shared/src/custom-key-set.ts';
+import {some} from 'shared/src/iterables.ts';
+import {deepEqual, type ReadonlyJSONValue} from 'shared/src/json.ts';
+import {sleep} from 'shared/src/sleep.ts';
+import {astSchema} from 'zero-protocol/src/ast.ts';
+import {clientSchemaSchema} from 'zero-protocol/src/client-schema.ts';
+import {ErrorKind} from 'zero-protocol/src/error-kind.ts';
+import {ErrorOrigin} from 'zero-protocol/src/error-origin.ts';
+import type {InspectQueryRow} from 'zero-protocol/src/inspect-down.ts';
+import {clampTTL, DEFAULT_TTL_MS} from 'zql/src/query/ttl.ts';
 import {startAsyncSpan} from '../../../../otel/src/span.ts';
 import {version} from '../../../../otel/src/version.ts';
-import {assert} from '../../../../shared/src/asserts.ts';
-import {CustomKeyMap} from '../../../../shared/src/custom-key-map.ts';
-import {CustomKeySet} from '../../../../shared/src/custom-key-set.ts';
-import {some} from '../../../../shared/src/iterables.ts';
-import {
-  deepEqual,
-  type ReadonlyJSONValue,
-} from '../../../../shared/src/json.ts';
-import {sleep} from '../../../../shared/src/sleep.ts';
 import * as v from '../../../../shared/src/valita.ts';
-import {astSchema} from '../../../../zero-protocol/src/ast.ts';
-import {clientSchemaSchema} from '../../../../zero-protocol/src/client-schema.ts';
-import {ErrorKind} from '../../../../zero-protocol/src/error-kind.ts';
-import {ErrorOrigin} from '../../../../zero-protocol/src/error-origin.ts';
-import type {InspectQueryRow} from '../../../../zero-protocol/src/inspect-down.ts';
-import {clampTTL, DEFAULT_TTL_MS} from '../../../../zql/src/query/ttl.ts';
 import * as Mode from '../../db/mode-enum.ts';
 import {runTx} from '../../db/run-transaction.ts';
 import {TransactionPool} from '../../db/transaction-pool.ts';

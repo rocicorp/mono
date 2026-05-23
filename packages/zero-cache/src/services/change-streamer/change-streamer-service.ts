@@ -1,8 +1,8 @@
 import {getDefaultHighWaterMark} from 'node:stream';
 import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
-import {unreachable} from '../../../../shared/src/asserts.ts';
-import {promiseVoid} from '../../../../shared/src/resolved-promises.ts';
+import {unreachable} from 'shared/src/asserts.ts';
+import {promiseVoid} from 'shared/src/resolved-promises.ts';
 import {publishCriticalEvent} from '../../observability/events.ts';
 import {getOrCreateCounter} from '../../observability/metrics.ts';
 import {

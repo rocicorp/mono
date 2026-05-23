@@ -1,28 +1,28 @@
 import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
-import {afterEach, beforeEach, describe, expect, type Mock, vi} from 'vitest';
 import {
   createSilentLogContext,
   TestLogSink,
-} from '../../../../shared/src/logging-test-utils.ts';
-import type {Queue} from '../../../../shared/src/queue.ts';
-import {sleep} from '../../../../shared/src/sleep.ts';
-import {type ClientSchema} from '../../../../zero-protocol/src/client-schema.ts';
-import type {TransformResponseBody} from '../../../../zero-protocol/src/custom-queries.ts';
-import type {Downstream} from '../../../../zero-protocol/src/down.ts';
-import {ErrorKind} from '../../../../zero-protocol/src/error-kind.ts';
-import {ErrorOrigin} from '../../../../zero-protocol/src/error-origin.ts';
-import {ErrorReason} from '../../../../zero-protocol/src/error-reason.ts';
-import type {ErrorBody} from '../../../../zero-protocol/src/error.ts';
-import {ProtocolError} from '../../../../zero-protocol/src/error.ts';
+} from 'shared/src/logging-test-utils.ts';
+import type {Queue} from 'shared/src/queue.ts';
+import {sleep} from 'shared/src/sleep.ts';
+import {afterEach, beforeEach, describe, expect, type Mock, vi} from 'vitest';
+import {type ClientSchema} from 'zero-protocol/src/client-schema.ts';
+import type {TransformResponseBody} from 'zero-protocol/src/custom-queries.ts';
+import type {Downstream} from 'zero-protocol/src/down.ts';
+import {ErrorKind} from 'zero-protocol/src/error-kind.ts';
+import {ErrorOrigin} from 'zero-protocol/src/error-origin.ts';
+import {ErrorReason} from 'zero-protocol/src/error-reason.ts';
+import type {ErrorBody} from 'zero-protocol/src/error.ts';
+import {ProtocolError} from 'zero-protocol/src/error.ts';
 import type {
   PokeEndBody,
   PokePartBody,
   PokeStartBody,
-} from '../../../../zero-protocol/src/poke.ts';
-import {PROTOCOL_VERSION} from '../../../../zero-protocol/src/protocol-version.ts';
-import type {UpQueriesPatch} from '../../../../zero-protocol/src/queries-patch.ts';
-import {DEFAULT_TTL_MS} from '../../../../zql/src/query/ttl.ts';
+} from 'zero-protocol/src/poke.ts';
+import {PROTOCOL_VERSION} from 'zero-protocol/src/protocol-version.ts';
+import type {UpQueriesPatch} from 'zero-protocol/src/queries-patch.ts';
+import {DEFAULT_TTL_MS} from 'zql/src/query/ttl.ts';
 import {type ClientGroupStorage} from '../../../../zqlite/src/database-storage.ts';
 import type {Database} from '../../../../zqlite/src/db.ts';
 import type {OpaqueAuth} from '../../auth/auth.ts';

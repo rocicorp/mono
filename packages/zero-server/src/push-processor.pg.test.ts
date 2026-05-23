@@ -1,23 +1,23 @@
+import {zip} from 'shared/src/arrays.ts';
 import {assert, beforeEach, describe, expect, test} from 'vitest';
-import {zip} from '../../shared/src/arrays.ts';
 import {
   getClientsTableDefinition,
   getMutationsTableDefinition,
-} from '../../zero-cache/src/services/change-source/pg/schema/shard.ts';
-import {MutationAlreadyProcessedError} from '../../zero-cache/src/services/mutagen/error.ts';
-import {testDBs} from '../../zero-cache/src/test/db.ts';
-import type {PostgresDB} from '../../zero-cache/src/types/pg.ts';
-import {ApplicationError} from '../../zero-protocol/src/application-error.ts';
-import {ErrorKind} from '../../zero-protocol/src/error-kind.ts';
-import {ErrorOrigin} from '../../zero-protocol/src/error-origin.ts';
-import {ErrorReason} from '../../zero-protocol/src/error-reason.ts';
-import type {MutateResponse} from '../../zero-protocol/src/mutate-server.ts';
+} from 'zero-cache/src/services/change-source/pg/schema/shard.ts';
+import {MutationAlreadyProcessedError} from 'zero-cache/src/services/mutagen/error.ts';
+import {testDBs} from 'zero-cache/src/test/db.ts';
+import type {PostgresDB} from 'zero-cache/src/types/pg.ts';
+import {ApplicationError} from 'zero-protocol/src/application-error.ts';
+import {ErrorKind} from 'zero-protocol/src/error-kind.ts';
+import {ErrorOrigin} from 'zero-protocol/src/error-origin.ts';
+import {ErrorReason} from 'zero-protocol/src/error-reason.ts';
+import type {MutateResponse} from 'zero-protocol/src/mutate-server.ts';
 import {
   CLEANUP_RESULTS_MUTATION_NAME,
   type MutationResult,
-} from '../../zero-protocol/src/mutation.ts';
-import {type PushBody} from '../../zero-protocol/src/push.ts';
-import {customMutatorKey} from '../../zql/src/mutate/custom.ts';
+} from 'zero-protocol/src/mutation.ts';
+import {type PushBody} from 'zero-protocol/src/push.ts';
+import {customMutatorKey} from 'zql/src/mutate/custom.ts';
 import {PostgresJSConnection} from './adapters/postgresjs.ts';
 import {OutOfOrderMutation} from './process-mutations.ts';
 import {PushProcessor} from './push-processor.ts';

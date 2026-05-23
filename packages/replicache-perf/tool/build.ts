@@ -3,7 +3,7 @@
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import * as esbuild from 'esbuild';
-import {makeDefine, sharedOptions} from '../../shared/src/build.ts';
+import {makeDefine, sharedOptions} from 'shared/src/build.ts';
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
 

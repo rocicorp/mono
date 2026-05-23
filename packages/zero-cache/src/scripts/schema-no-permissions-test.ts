@@ -1,6 +1,6 @@
-import {relationships} from '../../../zero-schema/src/builder/relationship-builder.ts';
-import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
-import {string, table} from '../../../zero-schema/src/builder/table-builder.ts';
+import {relationships} from 'zero-schema/src/builder/relationship-builder.ts';
+import {createSchema} from 'zero-schema/src/builder/schema-builder.ts';
+import {string, table} from 'zero-schema/src/builder/table-builder.ts';
 
 const member = table('member')
   .columns({

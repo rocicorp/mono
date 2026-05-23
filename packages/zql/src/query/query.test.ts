@@ -1,9 +1,8 @@
+import type {ReadonlyJSONValue} from 'shared/src/json.ts';
 import {describe, expectTypeOf, test} from 'vitest';
-import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
-import {staticParam} from '../../../zero-permissions/src/permissions.ts';
-import {toStaticParam} from '../../../zero-protocol/src/ast.ts';
-import {relationships} from '../../../zero-schema/src/builder/relationship-builder.ts';
-import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
+import {staticParam, toStaticParam} from 'zero-protocol/src/ast.ts';
+import {relationships} from 'zero-schema/src/builder/relationship-builder.ts';
+import {createSchema} from 'zero-schema/src/builder/schema-builder.ts';
 import {
   boolean,
   enumeration,
@@ -11,9 +10,9 @@ import {
   number,
   string,
   table,
-} from '../../../zero-schema/src/builder/table-builder.ts';
-import {type Opaque} from '../../../zero-schema/src/table-schema.ts';
-import type {TableSchema} from '../../../zero-types/src/schema.ts';
+} from 'zero-schema/src/builder/table-builder.ts';
+import {type Opaque} from 'zero-schema/src/table-schema.ts';
+import type {TableSchema} from 'zero-types/src/schema.ts';
 import type {ExpressionFactory} from './expression.ts';
 import {
   type Query,

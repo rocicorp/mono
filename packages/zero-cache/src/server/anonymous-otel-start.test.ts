@@ -3,8 +3,8 @@ import {
   MeterProvider,
   PeriodicExportingMetricReader,
 } from '@opentelemetry/sdk-metrics';
+import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
 import {afterAll, beforeAll, describe, expect, test, vi} from 'vitest';
-import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {getZeroConfig, type ZeroConfig} from '../config/zero-config.js';
 import {
   recordConnectionAttempted,

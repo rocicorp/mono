@@ -2,13 +2,13 @@
 import {readFile} from 'node:fs/promises';
 import process from 'node:process';
 import {createInterface} from 'node:readline';
-import {parseOptions} from '../../shared/src/options.ts';
+import {parseOptions} from 'shared/src/options.ts';
+import {loadSchemaAndPermissions} from 'zero-permissions/src/load-schema.ts';
+import {mapAST} from 'zero-protocol/src/ast.ts';
+import {serverToClient} from 'zero-schema/src/name-mapper.ts';
+import type {Schema} from 'zero-types/src/schema.ts';
+import {astToZQL} from 'zql/src/ast-to-zql.ts';
 import * as v from '../../shared/src/valita.ts';
-import {loadSchemaAndPermissions} from '../../zero-cache/src/scripts/permissions.ts';
-import {mapAST} from '../../zero-protocol/src/ast.ts';
-import {serverToClient} from '../../zero-schema/src/name-mapper.ts';
-import type {Schema} from '../../zero-types/src/schema.ts';
-import {astToZQL} from './ast-to-zql.ts';
 import {formatOutput} from './format.ts';
 
 const options = {

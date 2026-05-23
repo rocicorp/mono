@@ -1,13 +1,13 @@
 import {resolver} from '@rocicorp/resolver';
+import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
 import {beforeEach, describe, expect, test, vi} from 'vitest';
-import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
-import {ErrorKind} from '../../../../zero-protocol/src/error-kind.ts';
-import {ErrorOrigin} from '../../../../zero-protocol/src/error-origin.ts';
-import {ErrorReason} from '../../../../zero-protocol/src/error-reason.ts';
-import type {PushFailedBody} from '../../../../zero-protocol/src/error.ts';
-import type {MutateResponse} from '../../../../zero-protocol/src/mutate-server.ts';
-import type {Mutation} from '../../../../zero-protocol/src/mutation.ts';
-import type {PushBody} from '../../../../zero-protocol/src/push.ts';
+import {ErrorKind} from 'zero-protocol/src/error-kind.ts';
+import {ErrorOrigin} from 'zero-protocol/src/error-origin.ts';
+import {ErrorReason} from 'zero-protocol/src/error-reason.ts';
+import type {PushFailedBody} from 'zero-protocol/src/error.ts';
+import type {MutateResponse} from 'zero-protocol/src/mutate-server.ts';
+import type {Mutation} from 'zero-protocol/src/mutation.ts';
+import type {PushBody} from 'zero-protocol/src/push.ts';
 import {ProtocolErrorWithLevel} from '../../types/error-with-level.ts';
 import {
   type ConnectionContext,

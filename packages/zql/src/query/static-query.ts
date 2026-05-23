@@ -1,4 +1,4 @@
-import type {Schema} from '../../../zero-types/src/schema.ts';
+import type {Schema} from 'zero-types/src/schema.ts';
 import {defaultFormat} from '../ivm/default-format.ts';
 import {newQueryImpl, type QueryImpl} from './query-impl.ts';
 import type {PullRow, Query} from './query.ts';

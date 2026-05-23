@@ -1,6 +1,6 @@
+import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
 import {expect, test, vi} from 'vitest';
 import {testLogConfig} from '../../../otel/src/test-log-config.ts';
-import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import type {BuilderDelegate} from '../builder/builder.ts';
 import {Catch} from './catch.ts';
 import {FanIn} from './fan-in.ts';

@@ -1,3 +1,10 @@
+import {assert} from 'shared/src/asserts.ts';
+import {wrapIterable} from 'shared/src/iterables.ts';
+import {must} from 'shared/src/must.ts';
+import type {Row} from 'zero-protocol/src/data.ts';
+import type {TableSchema} from 'zero-schema/src/table-schema.ts';
+import {MemorySource} from 'zql/src/ivm/memory-source.ts';
+import {consume} from 'zql/src/ivm/stream.ts';
 import type {
   InternalDiff,
   InternalDiffOperation,
@@ -13,20 +20,13 @@ import {diffBinarySearch} from '../../../replicache/src/subscriptions.ts';
 import type {DiffsMap} from '../../../replicache/src/sync/diff.ts';
 import {diff} from '../../../replicache/src/sync/diff.ts';
 import {using, withRead} from '../../../replicache/src/with-transactions.ts';
-import {assert} from '../../../shared/src/asserts.ts';
-import {wrapIterable} from '../../../shared/src/iterables.ts';
-import {must} from '../../../shared/src/must.ts';
-import type {Row} from '../../../zero-protocol/src/data.ts';
-import type {TableSchema} from '../../../zero-schema/src/table-schema.ts';
-import {MemorySource} from '../../../zql/src/ivm/memory-source.ts';
-import {consume} from '../../../zql/src/ivm/stream.ts';
 import {ENTITIES_KEY_PREFIX, sourceNameFromKey} from './keys.ts';
 
 import {
   makeSourceChangeAdd,
   makeSourceChangeEdit,
   makeSourceChangeRemove,
-} from '../../../zql/src/ivm/source.ts';
+} from 'zql/src/ivm/source.ts';
 /**
  * Replicache needs to rebase mutations onto different
  * commits of it's b-tree. These mutations can have reads

@@ -1,5 +1,5 @@
+import {sleep} from 'shared/src/sleep.ts';
 import {expect, test} from 'vitest';
-import {sleep} from '../../../shared/src/sleep.ts';
 
 test('worker test', async () => {
   // Need to have the 'new URL' call inside `new Worker` for vite to

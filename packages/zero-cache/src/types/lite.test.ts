@@ -1,5 +1,5 @@
 import {describe, expect, test} from 'vitest';
-import type {ValueType} from '../../../zero-protocol/src/client-schema.ts';
+import type {ValueType} from 'zero-protocol/src/client-schema.ts';
 import type {LiteTableSpec} from '../db/specs.ts';
 import {
   JSON_PARSED,

@@ -1,5 +1,5 @@
 import {describe, expect, test} from 'vitest';
-import type {Row} from '../../../zql/src/mutate/custom.ts';
+import type {Row} from 'zql/src/mutate/custom.ts';
 
 import {toIterableRows} from './drizzle.ts';
 

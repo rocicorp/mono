@@ -9,17 +9,17 @@
  *   pnpm --filter zql-benchmarks run bench ivm-memory
  */
 
-import {bench, describe} from '../../shared/src/bench.ts';
-import type {Row} from '../../zero-protocol/src/data.ts';
-import {MemorySource} from '../../zql/src/ivm/memory-source.ts';
-import {QueryDelegateImpl} from '../../zql/src/query/test/query-delegate.ts';
+import {bench, describe} from 'shared/src/bench.ts';
+import type {Row} from 'zero-protocol/src/data.ts';
+import {MemorySource} from 'zql/src/ivm/memory-source.ts';
+import {QueryDelegateImpl} from 'zql/src/query/test/query-delegate.ts';
 import {builder, schema} from './schema.ts';
 
 import {
   makeSourceChangeAdd,
   makeSourceChangeEdit,
   makeSourceChangeRemove,
-} from '../../zql/src/ivm/source.ts';
+} from 'zql/src/ivm/source.ts';
 // ---- Data sizes -------------------------------------------------------------
 // Keep small to run fast; increase for more stable results.
 

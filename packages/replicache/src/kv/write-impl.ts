@@ -1,4 +1,4 @@
-import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
+import {promiseVoid} from 'shared/src/resolved-promises.ts';
 import type {FrozenJSONValue} from '../frozen-json.ts';
 import {ReadImpl} from './read-impl.ts';
 import type {Write} from './store.ts';

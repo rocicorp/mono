@@ -1,5 +1,5 @@
-import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
-import type {MaybePromise} from '../../shared/src/types.ts';
+import type {ReadonlyJSONValue} from 'shared/src/json.ts';
+import type {MaybePromise} from 'shared/src/types.ts';
 import type {Hash} from './hash.ts';
 import type {PullResponseV1, PullResponseV1Internal} from './puller.ts';
 import type {ReadTransactionImpl, WriteTransaction} from './transactions.ts';

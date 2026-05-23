@@ -1,26 +1,19 @@
 import type {LogContext} from '@rocicorp/logger';
-import {assert, unreachable} from '../../../../shared/src/asserts.ts';
-import {deepEqual, type JSONValue} from '../../../../shared/src/json.ts';
-import {must} from '../../../../shared/src/must.ts';
-import type {AST, LiteralValue} from '../../../../zero-protocol/src/ast.ts';
-import type {ClientSchema} from '../../../../zero-protocol/src/client-schema.ts';
-import type {Row} from '../../../../zero-protocol/src/data.ts';
-import type {PrimaryKey} from '../../../../zero-protocol/src/primary-key.ts';
-import {buildPipeline} from '../../../../zql/src/builder/builder.ts';
-import {
-  Debug,
-  runtimeDebugFlags,
-} from '../../../../zql/src/builder/debug-delegate.ts';
-import {ChangeIndex} from '../../../../zql/src/ivm/change-index.ts';
-import {ChangeType} from '../../../../zql/src/ivm/change-type.ts';
-import type {Change} from '../../../../zql/src/ivm/change.ts';
-import type {Node} from '../../../../zql/src/ivm/data.ts';
-import {
-  skipYields,
-  type Input,
-  type Storage,
-} from '../../../../zql/src/ivm/operator.ts';
-import type {SourceSchema} from '../../../../zql/src/ivm/schema.ts';
+import {assert, unreachable} from 'shared/src/asserts.ts';
+import {deepEqual, type JSONValue} from 'shared/src/json.ts';
+import {must} from 'shared/src/must.ts';
+import type {AST, LiteralValue} from 'zero-protocol/src/ast.ts';
+import type {ClientSchema} from 'zero-protocol/src/client-schema.ts';
+import type {Row} from 'zero-protocol/src/data.ts';
+import type {PrimaryKey} from 'zero-protocol/src/primary-key.ts';
+import {buildPipeline} from 'zql/src/builder/builder.ts';
+import {Debug, runtimeDebugFlags} from 'zql/src/builder/debug-delegate.ts';
+import {ChangeIndex} from 'zql/src/ivm/change-index.ts';
+import {ChangeType} from 'zql/src/ivm/change-type.ts';
+import type {Change} from 'zql/src/ivm/change.ts';
+import type {Node} from 'zql/src/ivm/data.ts';
+import {skipYields, type Input, type Storage} from 'zql/src/ivm/operator.ts';
+import type {SourceSchema} from 'zql/src/ivm/schema.ts';
 import {
   type Source,
   type SourceChange,
@@ -28,9 +21,9 @@ import {
   makeSourceChangeAdd,
   makeSourceChangeEdit,
   makeSourceChangeRemove,
-} from '../../../../zql/src/ivm/source.ts';
-import type {ConnectionCostModel} from '../../../../zql/src/planner/planner-connection.ts';
-import {MeasurePushOperator} from '../../../../zql/src/query/measure-push-operator.ts';
+} from 'zql/src/ivm/source.ts';
+import type {ConnectionCostModel} from 'zql/src/planner/planner-connection.ts';
+import {MeasurePushOperator} from 'zql/src/query/measure-push-operator.ts';
 import type {ClientGroupStorage} from '../../../../zqlite/src/database-storage.ts';
 import type {Database} from '../../../../zqlite/src/db.ts';
 import {

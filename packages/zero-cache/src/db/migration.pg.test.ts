@@ -1,8 +1,8 @@
 import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import postgres from 'postgres';
+import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
 import {beforeEach, describe, expect} from 'vitest';
-import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {type PgTest, test} from '../test/db.ts';
 import {postgresTypeConfig, type PostgresDB} from '../types/pg.ts';
 import {

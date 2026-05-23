@@ -1,6 +1,6 @@
+import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
 import {expect, suite, test} from 'vitest';
 import {testLogConfig} from '../../../otel/src/test-log-config.ts';
-import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {Catch} from './catch.ts';
 import type {FetchRequest} from './operator.ts';
 import {type Bound, Skip} from './skip.ts';

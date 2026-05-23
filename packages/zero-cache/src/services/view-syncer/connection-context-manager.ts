@@ -1,8 +1,8 @@
 import type {LogContext} from '@rocicorp/logger';
-import type {InitConnectionBody} from '../../../../zero-protocol/src/connect.ts';
-import {ErrorKind} from '../../../../zero-protocol/src/error-kind.ts';
-import {ErrorOrigin} from '../../../../zero-protocol/src/error-origin.ts';
-import type {UpdateAuthBody} from '../../../../zero-protocol/src/update-auth.ts';
+import type {InitConnectionBody} from 'zero-protocol/src/connect.ts';
+import {ErrorKind} from 'zero-protocol/src/error-kind.ts';
+import {ErrorOrigin} from 'zero-protocol/src/error-origin.ts';
+import type {UpdateAuthBody} from 'zero-protocol/src/update-auth.ts';
 import {
   authEquals,
   resolveAuth,

@@ -1,13 +1,13 @@
 /* oxlint-disable @typescript-eslint/no-explicit-any */
-import {must} from '../../../shared/src/must.ts';
+import {must} from 'shared/src/must.ts';
 import {
   toStaticParam,
   type Condition,
   type LiteralValue,
   type Parameter,
   type SimpleOperator,
-} from '../../../zero-protocol/src/ast.ts';
-import type {Schema as ZeroSchema} from '../../../zero-types/src/schema.ts';
+} from 'zero-protocol/src/ast.ts';
+import type {Schema as ZeroSchema} from 'zero-types/src/schema.ts';
 import type {
   AvailableRelationships,
   DestTableName,

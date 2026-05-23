@@ -1,24 +1,21 @@
-import {bench, describe} from '../../shared/src/bench.ts';
-import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
-import {must} from '../../shared/src/must.ts';
-import {computeZqlSpecs} from '../../zero-cache/src/db/lite-tables.ts';
-import type {LiteAndZqlSpec} from '../../zero-cache/src/db/specs.ts';
-import type {AST} from '../../zero-protocol/src/ast.ts';
-import {mapAST} from '../../zero-protocol/src/ast.ts';
-import {
-  clientToServer,
-  serverToClient,
-} from '../../zero-schema/src/name-mapper.ts';
-import type {TableSchema} from '../../zero-types/src/schema.ts';
+import {bench, describe} from 'shared/src/bench.ts';
+import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
+import {must} from 'shared/src/must.ts';
+import {computeZqlSpecs} from 'zero-cache/src/db/lite-tables.ts';
+import type {LiteAndZqlSpec} from 'zero-cache/src/db/specs.ts';
+import type {AST} from 'zero-protocol/src/ast.ts';
+import {mapAST} from 'zero-protocol/src/ast.ts';
+import {clientToServer, serverToClient} from 'zero-schema/src/name-mapper.ts';
+import type {TableSchema} from 'zero-types/src/schema.ts';
+import {defaultFormat} from 'zql/src/ivm/default-format.ts';
+import {planQuery} from 'zql/src/planner/planner-builder.ts';
+import {completeOrdering} from 'zql/src/query/complete-ordering.ts';
+import {newQueryImpl} from 'zql/src/query/query-impl.ts';
+import {asQueryInternals} from 'zql/src/query/query-internals.ts';
+import type {AnyQuery} from 'zql/src/query/query.ts';
 import {getChinook} from '../../zql-integration-tests/src/chinook/get-deps.ts';
 import {schema} from '../../zql-integration-tests/src/chinook/schema.ts';
 import {bootstrap} from '../../zql-integration-tests/src/helpers/runner.ts';
-import {defaultFormat} from '../../zql/src/ivm/default-format.ts';
-import {planQuery} from '../../zql/src/planner/planner-builder.ts';
-import {completeOrdering} from '../../zql/src/query/complete-ordering.ts';
-import {newQueryImpl} from '../../zql/src/query/query-impl.ts';
-import {asQueryInternals} from '../../zql/src/query/query-internals.ts';
-import type {AnyQuery} from '../../zql/src/query/query.ts';
 import {createSQLiteCostModel} from '../../zqlite/src/sqlite-cost-model.ts';
 
 const pgContent = await getChinook();

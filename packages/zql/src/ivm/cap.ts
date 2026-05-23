@@ -1,6 +1,6 @@
-import {assert} from '../../../shared/src/asserts.ts';
-import type {Row, Value} from '../../../zero-protocol/src/data.ts';
-import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
+import {assert} from 'shared/src/asserts.ts';
+import type {Row, Value} from 'zero-protocol/src/data.ts';
+import type {PrimaryKey} from 'zero-protocol/src/primary-key.ts';
 import {ChangeIndex} from './change-index.ts';
 import {ChangeType} from './change-type.ts';
 import {makeAddChange, type Change, type EditChange} from './change.ts';

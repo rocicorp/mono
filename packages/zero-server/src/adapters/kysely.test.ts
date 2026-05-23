@@ -1,6 +1,6 @@
 import type {Kysely} from 'kysely';
 import {describe, expect, test, vi} from 'vitest';
-import type {Row} from '../../../zql/src/mutate/custom.ts';
+import type {Row} from 'zql/src/mutate/custom.ts';
 import {KyselyConnection} from './kysely.ts';
 
 describe('KyselyConnection', () => {

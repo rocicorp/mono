@@ -1,8 +1,8 @@
 import type {SQLQuery} from '@databases/sql';
 import type {JSONValue} from 'postgres';
 import {afterAll, beforeAll, describe, expect, test} from 'vitest';
-import {testDBs} from '../../zero-cache/src/test/db.ts';
-import type {PostgresDB} from '../../zero-cache/src/types/pg.ts';
+import {testDBs} from 'zero-cache/src/test/db.ts';
+import type {PostgresDB} from 'zero-cache/src/types/pg.ts';
 import {formatPgInternalConvert, sql, sqlConvertColumnArg} from './sql.ts';
 
 const DB_NAME = 'sql-test';

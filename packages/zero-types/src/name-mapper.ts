@@ -1,4 +1,4 @@
-import type {JSONValue, ReadonlyJSONValue} from '../../shared/src/json.ts';
+import type {JSONValue, ReadonlyJSONValue} from 'shared/src/json.ts';
 
 // Value type from zero-protocol (JSONValue/ReadonlyJSONValue | undefined)
 // Defined here to avoid circular dependency with zero-protocol

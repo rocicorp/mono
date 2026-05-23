@@ -1,5 +1,5 @@
+import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
-import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {DbFile} from '../test/lite.ts';
 
 describe('db/begin-concurrent', () => {

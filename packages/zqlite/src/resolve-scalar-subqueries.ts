@@ -4,8 +4,8 @@ import type {
   CorrelatedSubqueryCondition,
   LiteralValue,
   SimpleCondition,
-} from '../../zero-protocol/src/ast.ts';
-import type {PrimaryKey} from '../../zero-protocol/src/primary-key.ts';
+} from 'zero-protocol/src/ast.ts';
+import type {PrimaryKey} from 'zero-protocol/src/primary-key.ts';
 
 type TableSpecWithUniqueKeys = {
   tableSpec: {

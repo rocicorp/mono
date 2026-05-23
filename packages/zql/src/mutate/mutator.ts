@@ -1,13 +1,13 @@
 import type {StandardSchemaV1} from '@standard-schema/spec';
-import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
-import {must} from '../../../shared/src/must.ts';
+import type {ReadonlyJSONValue} from 'shared/src/json.ts';
+import {must} from 'shared/src/must.ts';
 import type {
   DefaultContext,
   DefaultSchema,
   DefaultWrappedTransaction,
   IsUnknown,
-} from '../../../zero-types/src/default-types.ts';
-import type {Schema} from '../../../zero-types/src/schema.ts';
+} from 'zero-types/src/default-types.ts';
+import type {Schema} from 'zero-types/src/schema.ts';
 import type {AnyTransaction, Transaction} from './custom.ts';
 
 // ----------------------------------------------------------------------------

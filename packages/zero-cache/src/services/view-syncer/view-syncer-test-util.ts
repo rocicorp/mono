@@ -1,36 +1,36 @@
 import type {LogContext} from '@rocicorp/logger';
+import {h128} from 'shared/src/hash.ts';
+import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
+import {Queue} from 'shared/src/queue.ts';
 import {expect, vi} from 'vitest';
-import {testLogConfig} from '../../../../otel/src/test-log-config.ts';
-import {h128} from '../../../../shared/src/hash.ts';
-import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
-import {Queue} from '../../../../shared/src/queue.ts';
 import {
   ANYONE_CAN_DO_ANYTHING,
   definePermissions,
-} from '../../../../zero-permissions/src/permissions.ts';
-import type {AST} from '../../../../zero-protocol/src/ast.ts';
-import {type ClientSchema} from '../../../../zero-protocol/src/client-schema.ts';
+} from 'zero-permissions/src/permissions.ts';
+import type {AST} from 'zero-protocol/src/ast.ts';
+import {type ClientSchema} from 'zero-protocol/src/client-schema.ts';
 import type {
   TransformRequestMessage,
   TransformResponseBody,
   TransformResponseMessage,
-} from '../../../../zero-protocol/src/custom-queries.ts';
-import type {Downstream} from '../../../../zero-protocol/src/down.ts';
-import type {PokePartBody} from '../../../../zero-protocol/src/poke.ts';
-import type {UpQueriesPatch} from '../../../../zero-protocol/src/queries-patch.ts';
-import {relationships} from '../../../../zero-schema/src/builder/relationship-builder.ts';
+} from 'zero-protocol/src/custom-queries.ts';
+import type {Downstream} from 'zero-protocol/src/down.ts';
+import type {PokePartBody} from 'zero-protocol/src/poke.ts';
+import type {UpQueriesPatch} from 'zero-protocol/src/queries-patch.ts';
+import {relationships} from 'zero-schema/src/builder/relationship-builder.ts';
 import {
   clientSchemaFrom,
   createSchema,
-} from '../../../../zero-schema/src/builder/schema-builder.ts';
+} from 'zero-schema/src/builder/schema-builder.ts';
 import {
   json,
   number,
   string,
   table,
-} from '../../../../zero-schema/src/builder/table-builder.ts';
-import type {PermissionsConfig} from '../../../../zero-schema/src/compiled-permissions.ts';
-import type {ExpressionBuilder} from '../../../../zql/src/query/expression.ts';
+} from 'zero-schema/src/builder/table-builder.ts';
+import type {PermissionsConfig} from 'zero-schema/src/compiled-permissions.ts';
+import type {ExpressionBuilder} from 'zql/src/query/expression.ts';
+import {testLogConfig} from '../../../../otel/src/test-log-config.ts';
 import {
   CREATE_STORAGE_TABLE,
   DatabaseStorage,

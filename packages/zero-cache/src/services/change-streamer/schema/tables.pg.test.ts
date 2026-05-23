@@ -1,7 +1,7 @@
 import {resolver} from '@rocicorp/resolver';
 import postgres from 'postgres';
+import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
 import {beforeEach, describe, expect} from 'vitest';
-import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.ts';
 import {Database} from '../../../../../zqlite/src/db.ts';
 import {expectTables, type PgTest, test} from '../../../test/db.ts';
 import type {PostgresDB} from '../../../types/pg.ts';

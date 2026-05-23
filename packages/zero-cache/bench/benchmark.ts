@@ -1,11 +1,11 @@
 // create a zql query
 
+import {assert} from 'shared/src/asserts.ts';
+import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
+import type {Source} from 'zql/src/ivm/source.ts';
+import {QueryDelegateBase} from 'zql/src/query/query-delegate-base.ts';
+import {newQuery} from 'zql/src/query/query-impl.ts';
 import {testLogConfig} from '../../otel/src/test-log-config.ts';
-import {assert} from '../../shared/src/asserts.ts';
-import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
-import type {Source} from '../../zql/src/ivm/source.ts';
-import {QueryDelegateBase} from '../../zql/src/query/query-delegate-base.ts';
-import {newQuery} from '../../zql/src/query/query-impl.ts';
 import {Database} from '../../zqlite/src/db.ts';
 import {TableSource} from '../../zqlite/src/table-source.ts';
 import {computeZqlSpecs} from '../src/db/lite-tables.ts';
