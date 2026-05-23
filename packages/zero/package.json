@@ -172,7 +172,6 @@
   },
   "devDependencies": {
     "@op-engineering/op-sqlite": ">=15",
-    "@rocicorp/zero-events": "workspace:*",
     "@vitest/runner": "^4.1.6",
     "analyze-query": "workspace:*",
     "ast-to-zql": "workspace:*",
