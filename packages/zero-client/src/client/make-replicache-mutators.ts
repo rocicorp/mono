@@ -1,14 +1,14 @@
 import type {LogContext} from '@rocicorp/logger';
-import type {MutatorDefs} from '../../../replicache/src/types.ts';
-import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
-import {CRUD_MUTATION_NAME} from '../../../zero-protocol/src/mutation.ts';
-import type {Schema} from '../../../zero-types/src/schema.ts';
-import {customMutatorKey} from '../../../zql/src/mutate/custom.ts';
+import type {ReadonlyJSONValue} from 'shared/src/json.ts';
+import {CRUD_MUTATION_NAME} from 'zero-protocol/src/mutation.ts';
+import type {Schema} from 'zero-types/src/schema.ts';
+import {customMutatorKey} from 'zql/src/mutate/custom.ts';
 import {
   isMutatorRegistry,
   type AnyMutatorRegistry,
-} from '../../../zql/src/mutate/mutator-registry.ts';
-import {isMutator, type Mutator} from '../../../zql/src/mutate/mutator.ts';
+} from 'zql/src/mutate/mutator-registry.ts';
+import {isMutator, type Mutator} from 'zql/src/mutate/mutator.ts';
+import type {MutatorDefs} from '../../../replicache/src/types.ts';
 import {ClientErrorKind} from './client-error-kind.ts';
 import {makeCRUDMutator, type CRUDMutator} from './crud.ts';
 import type {CustomMutatorDefs, CustomMutatorImpl} from './custom.ts';

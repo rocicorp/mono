@@ -1,5 +1,5 @@
 import {consoleLogSink, LogContext} from '@rocicorp/logger';
-import {must} from '../../../shared/src/must.ts';
+import {must} from 'shared/src/must.ts';
 import {getNormalizedZeroConfig} from '../config/zero-config.ts';
 import {initEventSink} from '../observability/events.ts';
 import {exitAfter, runUntilKilled} from '../services/life-cycle.ts';

@@ -1,4 +1,4 @@
-import type {RowCountsBySource} from '../../zero-protocol/src/analyze-query-result.ts';
+import type {RowCountsBySource} from 'zero-protocol/src/analyze-query-result.ts';
 import type {Database} from './db.ts';
 
 export function explainQueries(counts: RowCountsBySource, db: Database) {

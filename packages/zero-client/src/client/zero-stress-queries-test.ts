@@ -5,11 +5,11 @@
 // this is the maximum that can be serialized by the compiler
 
 import type {StandardSchemaV1} from '@standard-schema/spec';
-import {createBuilder} from '../../../zql/src/query/create-builder.ts';
+import {createBuilder} from 'zql/src/query/create-builder.ts';
 import {
   defineQueriesWithType,
   defineQueryWithType,
-} from '../../../zql/src/query/query-registry.ts';
+} from 'zql/src/query/query-registry.ts';
 import {zeroStressSchema} from './zero-stress-schema-test.ts';
 import type {StressContext} from './zero-stress-shared-test.ts';
 

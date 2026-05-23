@@ -1,18 +1,13 @@
-import {assert} from '../../shared/src/asserts.ts';
-import {mapValues} from '../../shared/src/objects.ts';
-import {recordProxy} from '../../shared/src/record-proxy.ts';
-import {
-  formatPgInternalConvert,
-  sql,
-  sqlConvertColumnArg,
-} from '../../z2s/src/sql.ts';
-import type {TableSchema} from '../../zero-schema/src/table-schema.ts';
-import type {Schema} from '../../zero-types/src/schema.ts';
+import {assert} from 'shared/src/asserts.ts';
+import {mapValues} from 'shared/src/objects.ts';
+import {recordProxy} from 'shared/src/record-proxy.ts';
+import type {TableSchema} from 'zero-schema/src/table-schema.ts';
+import type {Schema} from 'zero-types/src/schema.ts';
 import type {
   ServerColumnSchema,
   ServerSchema,
   ServerTableSchema,
-} from '../../zero-types/src/server-schema.ts';
+} from 'zero-types/src/server-schema.ts';
 import {
   type CRUDExecutor,
   type CRUDKind,
@@ -21,21 +16,22 @@ import {
   type SchemaCRUD,
   type TableCRUD,
   type TransactionMutate,
-} from '../../zql/src/mutate/crud.ts';
+} from 'zql/src/mutate/crud.ts';
 import type {
   DBTransaction,
   MutateCRUD,
   ServerTransaction,
-} from '../../zql/src/mutate/custom.ts';
-import {createRunnableBuilder} from '../../zql/src/query/create-builder.ts';
-import {QueryDelegateBase} from '../../zql/src/query/query-delegate-base.ts';
-import {asQueryInternals} from '../../zql/src/query/query-internals.ts';
-import type {
-  HumanReadable,
-  Query,
-  RunOptions,
-} from '../../zql/src/query/query.ts';
-import type {ConditionalSchemaQuery} from '../../zql/src/query/schema-query.ts';
+} from 'zql/src/mutate/custom.ts';
+import {createRunnableBuilder} from 'zql/src/query/create-builder.ts';
+import {QueryDelegateBase} from 'zql/src/query/query-delegate-base.ts';
+import {asQueryInternals} from 'zql/src/query/query-internals.ts';
+import type {HumanReadable, Query, RunOptions} from 'zql/src/query/query.ts';
+import type {ConditionalSchemaQuery} from 'zql/src/query/schema-query.ts';
+import {
+  formatPgInternalConvert,
+  sql,
+  sqlConvertColumnArg,
+} from '../../z2s/src/sql.ts';
 import {getServerSchema} from './schema.ts';
 
 export type CustomMutatorDefs<TDBTransaction> = {

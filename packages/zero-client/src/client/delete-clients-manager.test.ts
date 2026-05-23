@@ -1,4 +1,6 @@
+import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
 import {beforeEach, expect, test, vi, type Mock} from 'vitest';
+import type {DeleteClientsMessage} from 'zero-protocol/src/delete-clients.ts';
 import type {Store} from '../../../replicache/src/dag/store.ts';
 import {TestStore} from '../../../replicache/src/dag/test-store.ts';
 import {
@@ -9,8 +11,6 @@ import {
   withRead,
   withWrite,
 } from '../../../replicache/src/with-transactions.ts';
-import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
-import type {DeleteClientsMessage} from '../../../zero-protocol/src/delete-clients.ts';
 import {DeleteClientsManager} from './delete-clients-manager.ts';
 
 let send: Mock<(msg: DeleteClientsMessage) => void>;

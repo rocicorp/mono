@@ -73,8 +73,6 @@
     "urlpattern-polyfill": "^10.1.0",
     "ws": "^8.18.1",
     "zero-protocol": "workspace:*",
-    "zero-types": "workspace:*",
-    "zql": "workspace:*",
     "zqlite": "workspace:*"
   },
   "devDependencies": {
@@ -85,6 +83,7 @@
     "@types/strip-ansi": "^3.0.0",
     "@types/ws": "^8.5.12",
     "@vitest/runner": "^4.1.6",
+    "ast-to-zql": "workspace:*",
     "esbuild": "0.27.7",
     "mockttp": "^4.2.1",
     "nock": "^14.0.4",
@@ -97,6 +96,7 @@
     "zero-permissions": "workspace:*",
     "zero-protocol": "workspace:*",
     "zero-schema": "workspace:*",
+    "zero-types": "workspace:*",
     "zql": "workspace:*"
   }
 }

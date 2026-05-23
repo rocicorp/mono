@@ -1,6 +1,6 @@
 import {compareUTF8} from 'compare-utf8';
-import {BTreeSet} from '../../../shared/src/btree-set.ts';
-import type {JSONValue} from '../../../shared/src/json.ts';
+import {BTreeSet} from 'shared/src/btree-set.ts';
+import type {JSONValue} from 'shared/src/json.ts';
 import type {Storage} from './operator.ts';
 import type {Stream} from './stream.ts';
 

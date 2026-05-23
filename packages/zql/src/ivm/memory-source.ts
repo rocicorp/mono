@@ -1,16 +1,12 @@
-import {assert, unreachable} from '../../../shared/src/asserts.ts';
-import {BTreeSet} from '../../../shared/src/btree-set.ts';
-import {hasOwn} from '../../../shared/src/has-own.ts';
-import {once, toSorted} from '../../../shared/src/iterables.ts';
-import {must} from '../../../shared/src/must.ts';
-import type {
-  Condition,
-  Ordering,
-  OrderPart,
-} from '../../../zero-protocol/src/ast.ts';
-import type {Row, Value} from '../../../zero-protocol/src/data.ts';
-import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
-import type {SchemaValue} from '../../../zero-types/src/schema-value.ts';
+import {assert, unreachable} from 'shared/src/asserts.ts';
+import {BTreeSet} from 'shared/src/btree-set.ts';
+import {hasOwn} from 'shared/src/has-own.ts';
+import {once, toSorted} from 'shared/src/iterables.ts';
+import {must} from 'shared/src/must.ts';
+import type {Condition, Ordering, OrderPart} from 'zero-protocol/src/ast.ts';
+import type {Row, Value} from 'zero-protocol/src/data.ts';
+import type {PrimaryKey} from 'zero-protocol/src/primary-key.ts';
+import type {SchemaValue} from 'zero-types/src/schema-value.ts';
 import type {DebugDelegate} from '../builder/debug-delegate.ts';
 import {
   createPredicate,

@@ -6,8 +6,8 @@ import {
   assertObject,
   assertString,
   unreachable,
-} from '../../../shared/src/asserts.ts';
-import {assertJSONValue} from '../../../shared/src/json.ts';
+} from 'shared/src/asserts.ts';
+import {assertJSONValue} from 'shared/src/json.ts';
 import {skipCommitDataAsserts} from '../config.ts';
 import {type FrozenCookie, compareCookies} from '../cookies.ts';
 import {type Chunk, type CreateChunk, type Refs, toRefs} from '../dag/chunk.ts';

@@ -1,4 +1,4 @@
-import {h64} from '../../../../shared/src/hash.ts';
+import {h64} from 'shared/src/hash.ts';
 import {rowIDString} from '../../types/row-key.ts';
 import type {RowID} from './schema/types.ts';
 

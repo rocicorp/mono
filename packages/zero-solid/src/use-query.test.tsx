@@ -7,12 +7,9 @@ import {
   type JSX,
 } from 'solid-js';
 import {afterEach, describe, expect, expectTypeOf, test, vi} from 'vitest';
-import {MemorySource} from '../../zql/src/ivm/memory-source.ts';
-import {
-  makeSourceChangeAdd,
-  makeSourceChangeEdit,
-} from '../../zql/src/ivm/source.ts';
-import {QueryDelegateImpl} from '../../zql/src/query/test/query-delegate.ts';
+import {MemorySource} from 'zql/src/ivm/memory-source.ts';
+import {makeSourceChangeAdd, makeSourceChangeEdit} from 'zql/src/ivm/source.ts';
+import {QueryDelegateImpl} from 'zql/src/query/test/query-delegate.ts';
 import {
   assert,
   consume,

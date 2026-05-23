@@ -1,11 +1,11 @@
 import {resolver} from '@rocicorp/resolver';
+import {BroadcastChannel} from 'shared/src/broadcast-channel.ts';
+import {getBrowserGlobal} from 'shared/src/browser-env.ts';
+import type {MaybePromise} from 'shared/src/types.ts';
 import type {
   ClientGroupID,
   ClientID,
 } from '../../../replicache/src/sync/ids.ts';
-import {BroadcastChannel} from '../../../shared/src/broadcast-channel.ts';
-import {getBrowserGlobal} from '../../../shared/src/browser-env.ts';
-import type {MaybePromise} from '../../../shared/src/types.ts';
 
 /**
  * The prefix for the keys used for the locks and the broadcast channels.

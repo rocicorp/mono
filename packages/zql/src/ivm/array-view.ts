@@ -1,7 +1,7 @@
-import {assert} from '../../../shared/src/asserts.ts';
-import type {Immutable} from '../../../shared/src/immutable.ts';
-import {emptyArray} from '../../../shared/src/sentinels.ts';
-import type {ErroredQuery} from '../../../zero-protocol/src/custom-queries.ts';
+import {assert} from 'shared/src/asserts.ts';
+import type {Immutable} from 'shared/src/immutable.ts';
+import {emptyArray} from 'shared/src/sentinels.ts';
+import type {ErroredQuery} from 'zero-protocol/src/custom-queries.ts';
 import type {TTL} from '../query/ttl.ts';
 import type {Listener, ResultType, TypedView} from '../query/typed-view.ts';
 import {ChangeIndex} from './change-index.ts';

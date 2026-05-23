@@ -1,5 +1,5 @@
+import {sleep} from 'shared/src/sleep.ts';
 import {expect, test, vi} from 'vitest';
-import {sleep} from '../../shared/src/sleep.ts';
 import {initReplicacheTesting, replicacheForTesting} from './test-util.ts';
 
 initReplicacheTesting();

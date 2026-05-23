@@ -1,37 +1,30 @@
 import type {LogContext} from '@rocicorp/logger';
-import type {ReplicacheImpl} from '../../../replicache/src/replicache-impl.ts';
-import type {ClientID} from '../../../replicache/src/sync/ids.ts';
-import {assert, unreachable} from '../../../shared/src/asserts.ts';
-import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
-import {must} from '../../../shared/src/must.ts';
-import {difference} from '../../../shared/src/set-utils.ts';
-import {TDigest} from '../../../shared/src/tdigest.ts';
-import {
-  mapAST,
-  normalizeAST,
-  type AST,
-} from '../../../zero-protocol/src/ast.ts';
-import type {ChangeDesiredQueriesMessage} from '../../../zero-protocol/src/change-desired-queries.ts';
-import type {ErroredQuery} from '../../../zero-protocol/src/custom-queries.ts';
-import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
-import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
-import {ErrorReason} from '../../../zero-protocol/src/error-reason.ts';
-import {ProtocolError} from '../../../zero-protocol/src/error.ts';
-import type {UpQueriesPatchOp} from '../../../zero-protocol/src/queries-patch.ts';
-import {
-  hashOfAST,
-  hashOfNameAndArgs,
-} from '../../../zero-protocol/src/query-hash.ts';
+import {assert, unreachable} from 'shared/src/asserts.ts';
+import type {ReadonlyJSONValue} from 'shared/src/json.ts';
+import {must} from 'shared/src/must.ts';
+import {difference} from 'shared/src/set-utils.ts';
+import {TDigest} from 'shared/src/tdigest.ts';
+import {mapAST, normalizeAST, type AST} from 'zero-protocol/src/ast.ts';
+import type {ChangeDesiredQueriesMessage} from 'zero-protocol/src/change-desired-queries.ts';
+import type {ErroredQuery} from 'zero-protocol/src/custom-queries.ts';
+import {ErrorKind} from 'zero-protocol/src/error-kind.ts';
+import {ErrorOrigin} from 'zero-protocol/src/error-origin.ts';
+import {ErrorReason} from 'zero-protocol/src/error-reason.ts';
+import {ProtocolError} from 'zero-protocol/src/error.ts';
+import type {UpQueriesPatchOp} from 'zero-protocol/src/queries-patch.ts';
+import {hashOfAST, hashOfNameAndArgs} from 'zero-protocol/src/query-hash.ts';
 import {
   clientToServer,
   serverToClient,
   type NameMapper,
-} from '../../../zero-schema/src/name-mapper.ts';
-import type {TableSchema} from '../../../zero-schema/src/table-schema.ts';
-import type {ClientMetricMap} from '../../../zql/src/query/metrics-delegate.ts';
-import type {CustomQueryID} from '../../../zql/src/query/named.ts';
-import type {GotCallback} from '../../../zql/src/query/query-delegate.ts';
-import {clampTTL, compareTTL, type TTL} from '../../../zql/src/query/ttl.ts';
+} from 'zero-schema/src/name-mapper.ts';
+import type {TableSchema} from 'zero-schema/src/table-schema.ts';
+import type {ClientMetricMap} from 'zql/src/query/metrics-delegate.ts';
+import type {CustomQueryID} from 'zql/src/query/named.ts';
+import type {GotCallback} from 'zql/src/query/query-delegate.ts';
+import {clampTTL, compareTTL, type TTL} from 'zql/src/query/ttl.ts';
+import type {ReplicacheImpl} from '../../../replicache/src/replicache-impl.ts';
+import type {ClientID} from '../../../replicache/src/sync/ids.ts';
 import type {ClientErrorKind} from './client-error-kind.ts';
 import type {ClientError} from './error.ts';
 import {type ZeroError} from './error.ts';

@@ -1,26 +1,23 @@
 import {context, propagation, ROOT_CONTEXT} from '@opentelemetry/api';
 import type {LogContext} from '@rocicorp/logger';
-import {groupBy} from '../../../../shared/src/arrays.ts';
-import {assert} from '../../../../shared/src/asserts.ts';
-import {getErrorMessage} from '../../../../shared/src/error.ts';
-import {must} from '../../../../shared/src/must.ts';
-import {Queue} from '../../../../shared/src/queue.ts';
-import type {Downstream} from '../../../../zero-protocol/src/down.ts';
-import {ErrorKind} from '../../../../zero-protocol/src/error-kind.ts';
-import {ErrorOrigin} from '../../../../zero-protocol/src/error-origin.ts';
-import {ErrorReason} from '../../../../zero-protocol/src/error-reason.ts';
-import {
-  isProtocolError,
-  type PushFailedBody,
-} from '../../../../zero-protocol/src/error.ts';
+import {groupBy} from 'shared/src/arrays.ts';
+import {assert} from 'shared/src/asserts.ts';
+import {getErrorMessage} from 'shared/src/error.ts';
+import {must} from 'shared/src/must.ts';
+import {Queue} from 'shared/src/queue.ts';
+import type {Downstream} from 'zero-protocol/src/down.ts';
+import {ErrorKind} from 'zero-protocol/src/error-kind.ts';
+import {ErrorOrigin} from 'zero-protocol/src/error-origin.ts';
+import {ErrorReason} from 'zero-protocol/src/error-reason.ts';
+import {isProtocolError, type PushFailedBody} from 'zero-protocol/src/error.ts';
 import {
   mutateResponseSchema,
   type MutateResponse,
-} from '../../../../zero-protocol/src/mutate-server.ts';
-import type {MutationID} from '../../../../zero-protocol/src/mutation-id.ts';
+} from 'zero-protocol/src/mutate-server.ts';
+import type {MutationID} from 'zero-protocol/src/mutation-id.ts';
+import {CLEANUP_RESULTS_MUTATION_NAME} from 'zero-protocol/src/mutation.ts';
+import {type PushBody} from 'zero-protocol/src/push.ts';
 import * as MutationType from '../../../../zero-protocol/src/mutation-type-enum.ts';
-import {CLEANUP_RESULTS_MUTATION_NAME} from '../../../../zero-protocol/src/mutation.ts';
-import {type PushBody} from '../../../../zero-protocol/src/push.ts';
 import {authEquals, isAuthErrorBody} from '../../auth/auth.ts';
 import {type ZeroConfig} from '../../config/zero-config.ts';
 import {fetchFromAPIServer} from '../../custom/fetch.ts';

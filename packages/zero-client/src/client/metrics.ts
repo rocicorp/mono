@@ -1,5 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
-import type {MaybePromise} from '../../../shared/src/types.ts';
+import type {MaybePromise} from 'shared/src/types.ts';
 import {ClientErrorKind} from './client-error-kind.ts';
 import {
   isClientError,

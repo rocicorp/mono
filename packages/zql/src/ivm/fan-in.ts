@@ -1,5 +1,5 @@
-import {assert} from '../../../shared/src/asserts.ts';
-import {emptyArray, identity} from '../../../shared/src/sentinels.ts';
+import {assert} from 'shared/src/asserts.ts';
+import {emptyArray, identity} from 'shared/src/sentinels.ts';
 import type {ChangeType} from './change-type.ts';
 import {type Change} from './change.ts';
 import {type Node} from './data.ts';

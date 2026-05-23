@@ -1,11 +1,11 @@
 import type {LogContext} from '@rocicorp/logger';
-import * as v from '../../../shared/src/valita.ts';
 import {
   permissionsConfigSchema,
   type PermissionsConfig,
-} from '../../../zero-schema/src/compiled-permissions.ts';
-import type {TableSchema} from '../../../zero-schema/src/table-schema.ts';
-import type {Schema} from '../../../zero-types/src/schema.ts';
+} from 'zero-schema/src/compiled-permissions.ts';
+import type {TableSchema} from 'zero-schema/src/table-schema.ts';
+import type {Schema} from 'zero-types/src/schema.ts';
+import * as v from '../../../shared/src/valita.ts';
 import type {Database} from '../../../zqlite/src/db.ts';
 import type {ZeroConfig} from '../config/zero-config.ts';
 import {computeZqlSpecs} from '../db/lite-tables.ts';

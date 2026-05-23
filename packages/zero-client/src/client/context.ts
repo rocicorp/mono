@@ -1,17 +1,17 @@
 import type {LogContext} from '@rocicorp/logger';
+import {assert} from 'shared/src/asserts.ts';
+import type {AST} from 'zero-protocol/src/ast.ts';
+import {ErrorKind} from 'zero-protocol/src/error-kind.ts';
+import type {DebugDelegate} from 'zql/src/builder/debug-delegate.ts';
+import type {Input} from 'zql/src/ivm/operator.ts';
+import type {Source, SourceInput} from 'zql/src/ivm/source.ts';
+import {MeasurePushOperator} from 'zql/src/query/measure-push-operator.ts';
+import type {MetricsDelegate} from 'zql/src/query/metrics-delegate.ts';
+import {QueryDelegateBase} from 'zql/src/query/query-delegate-base.ts';
+import type {CommitListener} from 'zql/src/query/query-delegate.ts';
+import type {RunOptions} from 'zql/src/query/query.ts';
 import type {NoIndexDiff} from '../../../replicache/src/btree/node.ts';
 import type {Hash} from '../../../replicache/src/hash.ts';
-import {assert} from '../../../shared/src/asserts.ts';
-import type {AST} from '../../../zero-protocol/src/ast.ts';
-import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
-import type {DebugDelegate} from '../../../zql/src/builder/debug-delegate.ts';
-import type {Input} from '../../../zql/src/ivm/operator.ts';
-import type {Source, SourceInput} from '../../../zql/src/ivm/source.ts';
-import {MeasurePushOperator} from '../../../zql/src/query/measure-push-operator.ts';
-import type {MetricsDelegate} from '../../../zql/src/query/metrics-delegate.ts';
-import {QueryDelegateBase} from '../../../zql/src/query/query-delegate-base.ts';
-import type {CommitListener} from '../../../zql/src/query/query-delegate.ts';
-import type {RunOptions} from '../../../zql/src/query/query.ts';
 import {type IVMSourceBranch} from './ivm-branch.ts';
 import type {QueryManager} from './query-manager.ts';
 

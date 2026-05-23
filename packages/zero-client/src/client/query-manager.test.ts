@@ -1,4 +1,6 @@
 import {LogContext, type LogSink} from '@rocicorp/logger';
+import type {ReadonlyJSONValue} from 'shared/src/json.ts';
+import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
 import {
   afterEach,
   beforeEach,
@@ -8,6 +10,14 @@ import {
   vi,
   type Mock,
 } from 'vitest';
+import type {AST} from 'zero-protocol/src/ast.ts';
+import type {ChangeDesiredQueriesMessage} from 'zero-protocol/src/change-desired-queries.ts';
+import type {ErroredQuery} from 'zero-protocol/src/custom-queries.ts';
+import {ErrorKind} from 'zero-protocol/src/error-kind.ts';
+import {upPutOpSchema} from 'zero-protocol/src/queries-patch.ts';
+import {hashOfAST, hashOfNameAndArgs} from 'zero-protocol/src/query-hash.ts';
+import {schema} from 'zql/src/query/test/test-schemas.ts';
+import {MAX_TTL_MS, type TTL} from 'zql/src/query/ttl.ts';
 import type {IndexKey} from '../../../replicache/src/db/index.ts';
 import {
   makeScanResult,
@@ -22,20 +32,7 @@ import {
   type DeepReadonly,
   type ReadTransaction,
 } from '../../../replicache/src/transactions.ts';
-import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
-import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import * as v from '../../../shared/src/valita.ts';
-import type {AST} from '../../../zero-protocol/src/ast.ts';
-import type {ChangeDesiredQueriesMessage} from '../../../zero-protocol/src/change-desired-queries.ts';
-import type {ErroredQuery} from '../../../zero-protocol/src/custom-queries.ts';
-import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
-import {upPutOpSchema} from '../../../zero-protocol/src/queries-patch.ts';
-import {
-  hashOfAST,
-  hashOfNameAndArgs,
-} from '../../../zero-protocol/src/query-hash.ts';
-import {schema} from '../../../zql/src/query/test/test-schemas.ts';
-import {MAX_TTL_MS, type TTL} from '../../../zql/src/query/ttl.ts';
 import {ClientErrorKind} from './client-error-kind.ts';
 import {ClientError} from './error.ts';
 import {toGotQueriesKey} from './keys.ts';

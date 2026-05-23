@@ -1,5 +1,5 @@
 import {resolver, type Resolver} from '@rocicorp/resolver';
-import {Subscribable} from '../../../shared/src/subscribable.ts';
+import {Subscribable} from 'shared/src/subscribable.ts';
 import {ClientErrorKind} from './client-error-kind.ts';
 import {ConnectionStatus} from './connection-status.ts';
 import {

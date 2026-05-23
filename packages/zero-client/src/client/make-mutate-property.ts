@@ -1,10 +1,7 @@
-import type {DeepMerge} from '../../../shared/src/deep-merge.ts';
-import {must} from '../../../shared/src/must.ts';
-import type {Schema} from '../../../zero-types/src/schema.ts';
-import {
-  customMutatorKey,
-  type Transaction,
-} from '../../../zql/src/mutate/custom.ts';
+import type {DeepMerge} from 'shared/src/deep-merge.ts';
+import {must} from 'shared/src/must.ts';
+import type {Schema} from 'zero-types/src/schema.ts';
+import {customMutatorKey, type Transaction} from 'zql/src/mutate/custom.ts';
 import type {DBMutator} from './crud.ts';
 import type {CustomMutatorDefs, MutatorResult} from './custom.ts';
 import type {MutatorProxy} from './mutator-proxy.ts';

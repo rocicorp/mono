@@ -1,17 +1,17 @@
-import {unreachable} from '../../../shared/src/asserts.ts';
-import {getErrorMessage} from '../../../shared/src/error.ts';
-import type {Expand} from '../../../shared/src/expand.ts';
-import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
-import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
-import {ErrorReason} from '../../../zero-protocol/src/error-reason.ts';
-import type {ProtocolError} from '../../../zero-protocol/src/error.ts';
+import {unreachable} from 'shared/src/asserts.ts';
+import {getErrorMessage} from 'shared/src/error.ts';
+import type {Expand} from 'shared/src/expand.ts';
+import {ErrorKind} from 'zero-protocol/src/error-kind.ts';
+import {ErrorOrigin} from 'zero-protocol/src/error-origin.ts';
+import {ErrorReason} from 'zero-protocol/src/error-reason.ts';
+import type {ProtocolError} from 'zero-protocol/src/error.ts';
 import {
   type BackoffBody,
   type ErrorBody,
   isProtocolError,
   type PushFailedBody,
   type TransformFailedBody,
-} from '../../../zero-protocol/src/error.ts';
+} from 'zero-protocol/src/error.ts';
 import {ClientErrorKind} from './client-error-kind.ts';
 import {ConnectionStatus} from './connection-status.ts';
 

@@ -1,15 +1,15 @@
 import {gzip} from 'node:zlib';
 import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
+import {type ZeroEvent} from '@rocicorp/zero-events';
 import {CloudEvent, emitterFor, httpTransport} from 'cloudevents';
 import {nanoid} from 'nanoid';
-import {stringify} from '../../../shared/src/bigint-json.ts';
-import {isJSONValue, type JSONObject} from '../../../shared/src/json.ts';
-import {must} from '../../../shared/src/must.ts';
-import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
-import {sleep} from '../../../shared/src/sleep.ts';
+import {stringify} from 'shared/src/bigint-json.ts';
+import {isJSONValue, type JSONObject} from 'shared/src/json.ts';
+import {must} from 'shared/src/must.ts';
+import {promiseVoid} from 'shared/src/resolved-promises.ts';
+import {sleep} from 'shared/src/sleep.ts';
 import * as v from '../../../shared/src/valita.ts';
-import {type ZeroEvent} from '../../../zero-events/src/index.ts';
 import type {NormalizedZeroConfig} from '../config/normalize.ts';
 
 const MAX_PUBLISH_ATTEMPTS = 6;

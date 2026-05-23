@@ -1,9 +1,9 @@
 import {compareUTF8} from 'compare-utf8';
-import {bench, describe} from '../../shared/src/bench.ts';
+import {bench, describe} from 'shared/src/bench.ts';
 import {
   makeRandomASCIIStrings,
   makeRandomStrings,
-} from '../../shared/src/test-data.ts';
+} from 'shared/src/test-data.ts';
 
 const NUM_STRINGS = 50_000;
 const STRING_LENGTH = 50;

@@ -1,10 +1,10 @@
+import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
 import {describe, expect, test, vi} from 'vitest';
+import type {Transaction} from 'zql/src/mutate/custom.ts';
+import {defineMutators} from 'zql/src/mutate/mutator-registry.ts';
+import {defineMutator} from 'zql/src/mutate/mutator.ts';
+import {schema as testSchema} from 'zql/src/query/test/test-schemas.ts';
 import {zeroData} from '../../../replicache/src/transactions.ts';
-import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
-import type {Transaction} from '../../../zql/src/mutate/custom.ts';
-import {defineMutators} from '../../../zql/src/mutate/mutator-registry.ts';
-import {defineMutator} from '../../../zql/src/mutate/mutator.ts';
-import {schema as testSchema} from '../../../zql/src/query/test/test-schemas.ts';
 import type {CustomMutatorDefs} from './custom.ts';
 import {extendReplicacheMutators} from './make-replicache-mutators.ts';
 import type {WriteTransaction} from './replicache-types.ts';

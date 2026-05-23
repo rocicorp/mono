@@ -1,5 +1,5 @@
-import {assert} from '../../../shared/src/asserts.ts';
-import {parseBigInt} from '../../../shared/src/parse-big-int.ts';
+import {assert} from 'shared/src/asserts.ts';
+import {parseBigInt} from 'shared/src/parse-big-int.ts';
 
 /**
  * A LexiVersion is a lexicographically sortable representation of

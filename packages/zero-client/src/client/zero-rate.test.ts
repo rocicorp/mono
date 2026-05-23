@@ -1,16 +1,12 @@
 import {beforeEach, expect, test, vi} from 'vitest';
+import {ErrorOrigin} from 'zero-protocol/src/error-origin.ts';
+import type {Mutation} from 'zero-protocol/src/mutation.ts';
+import {createSchema} from 'zero-schema/src/builder/schema-builder.ts';
+import {number, string, table} from 'zero-schema/src/builder/table-builder.ts';
+import {defineMutatorsWithType} from 'zql/src/mutate/mutator-registry.ts';
+import {defineMutatorWithType} from 'zql/src/mutate/mutator.ts';
 import type {PushRequest} from '../../../replicache/src/sync/push.ts';
 import * as ErrorKind from '../../../zero-protocol/src/error-kind-enum.ts';
-import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
-import type {Mutation} from '../../../zero-protocol/src/mutation.ts';
-import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
-import {
-  number,
-  string,
-  table,
-} from '../../../zero-schema/src/builder/table-builder.ts';
-import {defineMutatorsWithType} from '../../../zql/src/mutate/mutator-registry.ts';
-import {defineMutatorWithType} from '../../../zql/src/mutate/mutator.ts';
 import {ConnectionStatus} from './connection-status.ts';
 import {MockSocket, tickAFewTimes, zeroForTest} from './test-utils.ts';
 

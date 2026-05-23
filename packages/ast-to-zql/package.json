@@ -21,9 +21,10 @@
     "@faker-js/faker": "^9.6.0",
     "shared": "workspace:*",
     "vitest": "^4.1.6",
-    "zero-cache": "workspace:*",
+    "zero-permissions": "workspace:*",
     "zero-protocol": "workspace:*",
     "zero-schema": "workspace:*",
-    "zero-types": "workspace:*"
+    "zero-types": "workspace:*",
+    "zql": "workspace:*"
   }
 }

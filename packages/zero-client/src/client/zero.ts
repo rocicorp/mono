@@ -1,5 +1,90 @@
 import {LogContext, type LogLevel, type LogSink} from '@rocicorp/logger';
 import {type Resolver, resolver} from '@rocicorp/resolver';
+import {AbortError} from 'shared/src/abort-error.ts';
+import {assert, unreachable} from 'shared/src/asserts.ts';
+import {
+  getBrowserGlobal,
+  mustGetBrowserGlobal,
+} from 'shared/src/browser-env.ts';
+import {getDocumentVisibilityWatcher} from 'shared/src/document-visible.ts';
+import {getErrorMessage} from 'shared/src/error.ts';
+import {h64} from 'shared/src/hash.ts';
+import type {ReadonlyJSONValue} from 'shared/src/json.ts';
+import {must} from 'shared/src/must.ts';
+import {navigator} from 'shared/src/navigator.ts';
+import {promiseRace} from 'shared/src/promise-race.ts';
+import {emptyFunction} from 'shared/src/sentinels.ts';
+import {sleep, sleepWithAbort} from 'shared/src/sleep.ts';
+import {Subscribable} from 'shared/src/subscribable.ts';
+import {assertTesting, TESTING} from 'shared/src/testing.ts';
+import type {Writable} from 'shared/src/writable.ts';
+import {type ClientSchema} from 'zero-protocol/src/client-schema.ts';
+import type {ConnectedMessage} from 'zero-protocol/src/connect.ts';
+import {encodeSecProtocols} from 'zero-protocol/src/connect.ts';
+import type {DeleteClientsBody} from 'zero-protocol/src/delete-clients.ts';
+import type {Downstream} from 'zero-protocol/src/down.ts';
+import {downstreamSchema} from 'zero-protocol/src/down.ts';
+import {ErrorKind} from 'zero-protocol/src/error-kind.ts';
+import {type ErrorMessage, ProtocolError} from 'zero-protocol/src/error.ts';
+import type {MutationID} from 'zero-protocol/src/mutation-id.ts';
+import {
+  type CRUDMutation,
+  type CRUDMutationArg,
+  CRUD_MUTATION_NAME,
+  type CustomMutation,
+  mapCRUD,
+} from 'zero-protocol/src/mutation.ts';
+import type {PingMessage} from 'zero-protocol/src/ping.ts';
+import type {
+  PokeEndMessage,
+  PokePartMessage,
+  PokeStartMessage,
+} from 'zero-protocol/src/poke.ts';
+import {PROTOCOL_VERSION} from 'zero-protocol/src/protocol-version.ts';
+import type {
+  PullRequestMessage,
+  PullResponseBody,
+  PullResponseMessage,
+} from 'zero-protocol/src/pull.ts';
+import type {PushMessage} from 'zero-protocol/src/push.ts';
+import type {UpQueriesPatchOp} from 'zero-protocol/src/queries-patch.ts';
+import type {Upstream} from 'zero-protocol/src/up.ts';
+import type {NullableVersion} from 'zero-protocol/src/version.ts';
+import {nullableVersionSchema} from 'zero-protocol/src/version.ts';
+import {clientSchemaFrom} from 'zero-schema/src/builder/schema-builder.ts';
+import {type NameMapper, clientToServer} from 'zero-schema/src/name-mapper.ts';
+import type {
+  BaseDefaultContext,
+  BaseDefaultSchema,
+  DefaultContext,
+  DefaultSchema,
+} from 'zero-types/src/default-types.ts';
+import type {Schema} from 'zero-types/src/schema.ts';
+import type {ViewFactory} from 'zql/src/ivm/view.ts';
+import {
+  isMutatorRegistry,
+  iterateMutators,
+} from 'zql/src/mutate/mutator-registry.ts';
+import type {AnyMutator, MutateRequest} from 'zql/src/mutate/mutator.ts';
+import {createRunnableBuilder} from 'zql/src/query/create-builder.ts';
+import {
+  type ClientMetricMap,
+  type MetricMap,
+  isClientMetric,
+} from 'zql/src/query/metrics-delegate.ts';
+import type {QueryDelegate} from 'zql/src/query/query-delegate.ts';
+import {
+  type QueryOrQueryRequest,
+  addContextToQuery,
+} from 'zql/src/query/query-registry.ts';
+import {
+  type HumanReadable,
+  type MaterializeOptions,
+  type PreloadOptions,
+  type RunOptions,
+} from 'zql/src/query/query.ts';
+import type {ConditionalSchemaQuery} from 'zql/src/query/schema-query.ts';
+import type {TypedView} from 'zql/src/query/typed-view.ts';
 import {type DeletedClients} from '../../../replicache/src/deleted-clients.ts';
 import {getKVStoreProvider} from '../../../replicache/src/get-kv-store-provider.ts';
 import {
@@ -21,102 +106,8 @@ import type {
   MutatorDefs,
   UpdateNeededReason as ReplicacheUpdateNeededReason,
 } from '../../../replicache/src/types.ts';
-import {AbortError} from '../../../shared/src/abort-error.ts';
-import {assert, unreachable} from '../../../shared/src/asserts.ts';
-import {
-  getBrowserGlobal,
-  mustGetBrowserGlobal,
-} from '../../../shared/src/browser-env.ts';
-import {getDocumentVisibilityWatcher} from '../../../shared/src/document-visible.ts';
-import {getErrorMessage} from '../../../shared/src/error.ts';
-import {h64} from '../../../shared/src/hash.ts';
-import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
-import {must} from '../../../shared/src/must.ts';
-import {navigator} from '../../../shared/src/navigator.ts';
-import {promiseRace} from '../../../shared/src/promise-race.ts';
-import {emptyFunction} from '../../../shared/src/sentinels.ts';
-import {sleep, sleepWithAbort} from '../../../shared/src/sleep.ts';
-import {Subscribable} from '../../../shared/src/subscribable.ts';
-import {assertTesting, TESTING} from '../../../shared/src/testing.ts';
 import * as valita from '../../../shared/src/valita.ts';
-import type {Writable} from '../../../shared/src/writable.ts';
-import {type ClientSchema} from '../../../zero-protocol/src/client-schema.ts';
-import type {ConnectedMessage} from '../../../zero-protocol/src/connect.ts';
-import {encodeSecProtocols} from '../../../zero-protocol/src/connect.ts';
-import type {DeleteClientsBody} from '../../../zero-protocol/src/delete-clients.ts';
-import type {Downstream} from '../../../zero-protocol/src/down.ts';
-import {downstreamSchema} from '../../../zero-protocol/src/down.ts';
-import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
-import {
-  type ErrorMessage,
-  ProtocolError,
-} from '../../../zero-protocol/src/error.ts';
-import type {MutationID} from '../../../zero-protocol/src/mutation-id.ts';
 import * as MutationType from '../../../zero-protocol/src/mutation-type-enum.ts';
-import {
-  type CRUDMutation,
-  type CRUDMutationArg,
-  CRUD_MUTATION_NAME,
-  type CustomMutation,
-  mapCRUD,
-} from '../../../zero-protocol/src/mutation.ts';
-import type {PingMessage} from '../../../zero-protocol/src/ping.ts';
-import type {
-  PokeEndMessage,
-  PokePartMessage,
-  PokeStartMessage,
-} from '../../../zero-protocol/src/poke.ts';
-import {PROTOCOL_VERSION} from '../../../zero-protocol/src/protocol-version.ts';
-import type {
-  PullRequestMessage,
-  PullResponseBody,
-  PullResponseMessage,
-} from '../../../zero-protocol/src/pull.ts';
-import type {PushMessage} from '../../../zero-protocol/src/push.ts';
-import type {UpQueriesPatchOp} from '../../../zero-protocol/src/queries-patch.ts';
-import type {Upstream} from '../../../zero-protocol/src/up.ts';
-import type {NullableVersion} from '../../../zero-protocol/src/version.ts';
-import {nullableVersionSchema} from '../../../zero-protocol/src/version.ts';
-import {clientSchemaFrom} from '../../../zero-schema/src/builder/schema-builder.ts';
-import {
-  type NameMapper,
-  clientToServer,
-} from '../../../zero-schema/src/name-mapper.ts';
-import type {
-  BaseDefaultContext,
-  BaseDefaultSchema,
-  DefaultContext,
-  DefaultSchema,
-} from '../../../zero-types/src/default-types.ts';
-import type {Schema} from '../../../zero-types/src/schema.ts';
-import type {ViewFactory} from '../../../zql/src/ivm/view.ts';
-import {
-  isMutatorRegistry,
-  iterateMutators,
-} from '../../../zql/src/mutate/mutator-registry.ts';
-import type {
-  AnyMutator,
-  MutateRequest,
-} from '../../../zql/src/mutate/mutator.ts';
-import {createRunnableBuilder} from '../../../zql/src/query/create-builder.ts';
-import {
-  type ClientMetricMap,
-  type MetricMap,
-  isClientMetric,
-} from '../../../zql/src/query/metrics-delegate.ts';
-import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
-import {
-  type QueryOrQueryRequest,
-  addContextToQuery,
-} from '../../../zql/src/query/query-registry.ts';
-import {
-  type HumanReadable,
-  type MaterializeOptions,
-  type PreloadOptions,
-  type RunOptions,
-} from '../../../zql/src/query/query.ts';
-import type {ConditionalSchemaQuery} from '../../../zql/src/query/schema-query.ts';
-import type {TypedView} from '../../../zql/src/query/typed-view.ts';
 import {nanoid} from '../util/nanoid.ts';
 
 import {ActiveClientsManager} from './active-clients-manager.ts';

@@ -1,14 +1,14 @@
-import {astToZQL} from '../../../../ast-to-zql/src/ast-to-zql.ts';
-import type {ReadonlyJSONValue} from '../../../../shared/src/json.ts';
-import {must} from '../../../../shared/src/must.ts';
-import type {AnalyzeQueryResult} from '../../../../zero-protocol/src/analyze-query-result.ts';
-import type {AST} from '../../../../zero-protocol/src/ast.ts';
+import type {ReadonlyJSONValue} from 'shared/src/json.ts';
+import {must} from 'shared/src/must.ts';
+import type {AnalyzeQueryResult} from 'zero-protocol/src/analyze-query-result.ts';
+import type {AST} from 'zero-protocol/src/ast.ts';
 import {
   type InspectQueryRow,
   inspectAnalyzeQueryDownSchema,
-} from '../../../../zero-protocol/src/inspect-down.ts';
-import type {AnalyzeQueryOptions} from '../../../../zero-protocol/src/inspect-up.ts';
-import {type TTL, normalizeTTL} from '../../../../zql/src/query/ttl.ts';
+} from 'zero-protocol/src/inspect-down.ts';
+import type {AnalyzeQueryOptions} from 'zero-protocol/src/inspect-up.ts';
+import {astToZQL} from 'zql/src/ast-to-zql.ts';
+import {type TTL, normalizeTTL} from 'zql/src/query/ttl.ts';
 import {
   type ExtendedInspectorDelegate,
   type GetWebSocket,

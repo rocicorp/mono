@@ -1,12 +1,8 @@
 import {expectTypeOf, test} from 'vitest';
-import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
-import {
-  number,
-  string,
-  table,
-} from '../../../zero-schema/src/builder/table-builder.ts';
-import type {Query} from '../../../zql/src/query/query.ts';
-import type {SchemaQuery} from '../../../zql/src/query/schema-query.ts';
+import {createSchema} from 'zero-schema/src/builder/schema-builder.ts';
+import {number, string, table} from 'zero-schema/src/builder/table-builder.ts';
+import type {Query} from 'zql/src/query/query.ts';
+import type {SchemaQuery} from 'zql/src/query/schema-query.ts';
 import type {Zero} from './zero.ts';
 
 const schema = createSchema({

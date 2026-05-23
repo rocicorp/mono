@@ -1,11 +1,11 @@
-import {assert} from '../../../shared/src/asserts.ts';
-import type {AST} from '../../../zero-protocol/src/ast.ts';
+import {assert} from 'shared/src/asserts.ts';
+import type {AST} from 'zero-protocol/src/ast.ts';
 import type {
   DefaultSchema,
   DefaultWrappedTransaction,
-} from '../../../zero-types/src/default-types.ts';
-import type {Schema} from '../../../zero-types/src/schema.ts';
-import type {ServerSchema} from '../../../zero-types/src/server-schema.ts';
+} from 'zero-types/src/default-types.ts';
+import type {Schema} from 'zero-types/src/schema.ts';
+import type {ServerSchema} from 'zero-types/src/server-schema.ts';
 import type {Format} from '../ivm/view.ts';
 import type {HumanReadable, Query, RunOptions} from '../query/query.ts';
 import type {ConditionalSchemaQuery} from '../query/schema-query.ts';

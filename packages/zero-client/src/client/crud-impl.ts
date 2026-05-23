@@ -1,24 +1,24 @@
-import type {ReadonlyJSONObject} from '../../../shared/src/json.ts';
-import {must} from '../../../shared/src/must.ts';
-import type {Row} from '../../../zero-protocol/src/data.ts';
+import type {ReadonlyJSONObject} from 'shared/src/json.ts';
+import {must} from 'shared/src/must.ts';
+import type {Row} from 'zero-protocol/src/data.ts';
 import {
   type DeleteOp,
   type InsertOp,
   type UpdateOp,
   type UpsertOp,
-} from '../../../zero-protocol/src/mutation.ts';
-import type {TableSchema} from '../../../zero-schema/src/table-schema.ts';
-import type {Schema} from '../../../zero-types/src/schema.ts';
+} from 'zero-protocol/src/mutation.ts';
+import type {TableSchema} from 'zero-schema/src/table-schema.ts';
+import type {Schema} from 'zero-types/src/schema.ts';
 import {
   makeSourceChangeAdd,
   makeSourceChangeEdit,
   makeSourceChangeRemove,
-} from '../../../zql/src/ivm/source.ts';
-import {consume} from '../../../zql/src/ivm/stream.ts';
+} from 'zql/src/ivm/source.ts';
+import {consume} from 'zql/src/ivm/stream.ts';
 import type {IVMSourceBranch} from './ivm-branch.ts';
 import {toPrimaryKeyString} from './keys.ts';
 import type {WriteTransaction} from './replicache-types.ts';
-export type {TableMutator} from '../../../zql/src/mutate/crud.ts';
+export type {TableMutator} from 'zql/src/mutate/crud.ts';
 
 function defaultOptionalFieldsToNull(
   schema: TableSchema,

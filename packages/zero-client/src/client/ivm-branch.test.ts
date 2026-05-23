@@ -1,27 +1,27 @@
+import {must} from 'shared/src/must.ts';
 import {describe, expect, test} from 'vitest';
-import {newWriteLocal} from '../../../replicache/src/db/write.ts';
-import * as FormatVersion from '../../../replicache/src/format-version-enum.ts';
-import {SYNC_HEAD_NAME} from '../../../replicache/src/sync/sync-head-name.ts';
-import {must} from '../../../shared/src/must.ts';
 import {
   schema,
   type Issue,
   type IssueLabel,
   type Label,
   type Revision,
-} from '../../../zql/src/query/test/test-schemas.ts';
+} from 'zql/src/query/test/test-schemas.ts';
+import {newWriteLocal} from '../../../replicache/src/db/write.ts';
+import * as FormatVersion from '../../../replicache/src/format-version-enum.ts';
+import {SYNC_HEAD_NAME} from '../../../replicache/src/sync/sync-head-name.ts';
 import {initFromStore, IVMSourceBranch} from './ivm-branch.ts';
 
+import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
+import type {Node} from 'zql/src/ivm/data.ts';
+import {consume} from 'zql/src/ivm/stream.ts';
 import type {FrozenJSONValue} from '../../../replicache/src/frozen-json.ts';
 import type {Hash} from '../../../replicache/src/hash.ts';
 import type {Diff} from '../../../replicache/src/sync/patch.ts';
-import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
-import type {Node} from '../../../zql/src/ivm/data.ts';
-import {consume} from '../../../zql/src/ivm/stream.ts';
 import {ENTITIES_KEY_PREFIX} from './keys.ts';
 import {createDb} from './test/create-db.ts';
 
-import {makeSourceChangeAdd} from '../../../zql/src/ivm/source.ts';
+import {makeSourceChangeAdd} from 'zql/src/ivm/source.ts';
 test('fork', () => {
   const main = new IVMSourceBranch({
     users: {

@@ -1,8 +1,8 @@
 import {literal} from 'pg-format';
 import type postgres from 'postgres';
-import {assert} from '../../../../../../shared/src/asserts.ts';
-import {BigIntJSON} from '../../../../../../shared/src/bigint-json.ts';
-import {equals} from '../../../../../../shared/src/set-utils.ts';
+import {assert} from 'shared/src/asserts.ts';
+import {BigIntJSON} from 'shared/src/bigint-json.ts';
+import {equals} from 'shared/src/set-utils.ts';
 import * as v from '../../../../../../shared/src/valita.ts';
 import {computeZqlSpecsFromLiteSpecs} from '../../../../db/lite-tables.ts';
 import {

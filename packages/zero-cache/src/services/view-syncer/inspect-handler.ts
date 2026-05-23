@@ -1,7 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
-import {unreachable} from '../../../../shared/src/asserts.ts';
-import {must} from '../../../../shared/src/must.ts';
-import type {InspectUpBody} from '../../../../zero-protocol/src/inspect-up.ts';
+import {unreachable} from 'shared/src/asserts.ts';
+import {must} from 'shared/src/must.ts';
+import type {InspectUpBody} from 'zero-protocol/src/inspect-up.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {loadPermissions} from '../../auth/load-permissions.ts';
 import type {NormalizedZeroConfig} from '../../config/normalize.ts';

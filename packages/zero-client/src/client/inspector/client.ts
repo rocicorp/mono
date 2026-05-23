@@ -1,5 +1,5 @@
-import type {ReadonlyJSONValue} from '../../../../shared/src/json.ts';
-import type {Row} from '../../../../zero-protocol/src/data.ts';
+import type {ReadonlyJSONValue} from 'shared/src/json.ts';
+import type {Row} from 'zero-protocol/src/data.ts';
 import {ClientGroup} from './client-group.ts';
 import type {ExtendedInspectorDelegate} from './lazy-inspector.ts';
 import type {Query} from './query.ts';

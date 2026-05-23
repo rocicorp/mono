@@ -1,15 +1,15 @@
 import {LogContext} from '@rocicorp/logger';
 import {beforeEach, describe, expect, test, vi} from 'vitest';
-import type {AST} from '../../../zero-protocol/src/ast.ts';
-import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
-import {string, table} from '../../../zero-schema/src/builder/table-builder.ts';
-import type {MemorySource} from '../../../zql/src/ivm/memory-source.ts';
-import {consume} from '../../../zql/src/ivm/stream.ts';
-import type {MetricMap} from '../../../zql/src/query/metrics-delegate.ts';
-import type {CustomQueryID} from '../../../zql/src/query/named.ts';
-import {newQuery} from '../../../zql/src/query/query-impl.ts';
-import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
-import type {AnyQuery} from '../../../zql/src/query/query.ts';
+import type {AST} from 'zero-protocol/src/ast.ts';
+import {createSchema} from 'zero-schema/src/builder/schema-builder.ts';
+import {string, table} from 'zero-schema/src/builder/table-builder.ts';
+import type {MemorySource} from 'zql/src/ivm/memory-source.ts';
+import {consume} from 'zql/src/ivm/stream.ts';
+import type {MetricMap} from 'zql/src/query/metrics-delegate.ts';
+import type {CustomQueryID} from 'zql/src/query/named.ts';
+import {newQuery} from 'zql/src/query/query-impl.ts';
+import {asQueryInternals} from 'zql/src/query/query-internals.ts';
+import type {AnyQuery} from 'zql/src/query/query.ts';
 import {
   ZeroContext,
   type AddCustomQuery,
@@ -20,7 +20,7 @@ import {
 } from './context.ts';
 import {IVMSourceBranch} from './ivm-branch.ts';
 
-import {makeSourceChangeAdd} from '../../../zql/src/ivm/source.ts';
+import {makeSourceChangeAdd} from 'zql/src/ivm/source.ts';
 const testBatchViewUpdates = (applyViewUpdates: () => void) =>
   applyViewUpdates();
 

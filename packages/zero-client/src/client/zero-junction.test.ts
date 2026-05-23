@@ -1,10 +1,10 @@
 import {expect, test, vi} from 'vitest';
-import {relationships} from '../../../zero-schema/src/builder/relationship-builder.ts';
-import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
-import {string, table} from '../../../zero-schema/src/builder/table-builder.ts';
-import {defineMutatorsWithType} from '../../../zql/src/mutate/mutator-registry.ts';
-import {defineMutatorWithType} from '../../../zql/src/mutate/mutator.ts';
-import {createBuilder} from '../../../zql/src/query/create-builder.ts';
+import {relationships} from 'zero-schema/src/builder/relationship-builder.ts';
+import {createSchema} from 'zero-schema/src/builder/schema-builder.ts';
+import {string, table} from 'zero-schema/src/builder/table-builder.ts';
+import {defineMutatorsWithType} from 'zql/src/mutate/mutator-registry.ts';
+import {defineMutatorWithType} from 'zql/src/mutate/mutator.ts';
+import {createBuilder} from 'zql/src/query/create-builder.ts';
 import {zeroForTest} from './test-utils.ts';
 
 test('Zero Junction', async () => {

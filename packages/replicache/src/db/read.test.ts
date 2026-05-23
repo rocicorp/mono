@@ -1,6 +1,6 @@
 import {LogContext} from '@rocicorp/logger';
+import type {Enum} from 'shared/src/enum.ts';
 import {describe, expect, test} from 'vitest';
-import type {Enum} from '../../../shared/src/enum.ts';
 import {mustGetHeadHash} from '../dag/store.ts';
 import {TestStore} from '../dag/test-store.ts';
 import * as FormatVersion from '../format-version-enum.ts';

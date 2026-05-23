@@ -1,6 +1,6 @@
+import {assert} from 'shared/src/asserts.ts';
+import type {ReadonlyJSONValue} from 'shared/src/json.ts';
 import {describe, expect, test} from 'vitest';
-import {assert} from '../../../shared/src/asserts.ts';
-import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {deepFreeze} from '../frozen-json.ts';
 import {
   assertHash,
