@@ -3,8 +3,8 @@ import {
   assertNumber,
   assertObject,
   assertString,
-} from '../../../shared/src/asserts.ts';
-import {getBrowserGlobal} from '../../../shared/src/browser-env.ts';
+} from 'shared/src/asserts.ts';
+import {getBrowserGlobal} from 'shared/src/browser-env.ts';
 import {deepFreeze} from '../frozen-json.ts';
 import type {CreateStore, Read, Store} from '../kv/store.ts';
 import {withRead, withWrite} from '../with-transactions.ts';

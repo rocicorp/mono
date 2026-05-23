@@ -1,5 +1,5 @@
+import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
 import {expect, test} from 'vitest';
-import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {Database} from '../db.ts';
 import {type CachedStatement, StatementCache} from './statement-cache.ts';
 

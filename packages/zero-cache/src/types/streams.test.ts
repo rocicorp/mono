@@ -3,16 +3,16 @@ import websocket from '@fastify/websocket';
 import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import Fastify, {type FastifyInstance} from 'fastify';
-import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
-import WebSocket from 'ws';
-import {unreachable} from '../../../shared/src/asserts.ts';
+import {unreachable} from 'shared/src/asserts.ts';
 import {
   createSilentLogContext,
   TestLogSink,
-} from '../../../shared/src/logging-test-utils.ts';
-import {Queue} from '../../../shared/src/queue.ts';
-import {randInt} from '../../../shared/src/rand.ts';
-import {sleep} from '../../../shared/src/sleep.ts';
+} from 'shared/src/logging-test-utils.ts';
+import {Queue} from 'shared/src/queue.ts';
+import {randInt} from 'shared/src/rand.ts';
+import {sleep} from 'shared/src/sleep.ts';
+import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
+import WebSocket from 'ws';
 import * as v from '../../../shared/src/valita.ts';
 import {
   stream,

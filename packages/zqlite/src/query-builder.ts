@@ -1,17 +1,14 @@
 import type {SQLQuery} from '@databases/sql';
-import {assert} from '../../shared/src/asserts.ts';
+import {assert} from 'shared/src/asserts.ts';
 import type {
   Condition,
   Ordering,
   SimpleCondition,
   ValuePosition,
-} from '../../zero-protocol/src/ast.ts';
-import type {
-  SchemaValue,
-  ValueType,
-} from '../../zero-schema/src/table-schema.ts';
-import type {Constraint} from '../../zql/src/ivm/constraint.ts';
-import type {MultiConstraint, Start} from '../../zql/src/ivm/operator.ts';
+} from 'zero-protocol/src/ast.ts';
+import type {SchemaValue, ValueType} from 'zero-schema/src/table-schema.ts';
+import type {Constraint} from 'zql/src/ivm/constraint.ts';
+import type {MultiConstraint, Start} from 'zql/src/ivm/operator.ts';
 import {sql} from './internal/sql.ts';
 
 /**

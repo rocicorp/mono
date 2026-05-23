@@ -1,6 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
+import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
 import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
-import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import {computeZqlSpecs, listTables} from '../../db/lite-tables.ts';
 import type {LiteAndZqlSpec} from '../../db/specs.ts';
 import {DbFile, expectTables} from '../../test/lite.ts';

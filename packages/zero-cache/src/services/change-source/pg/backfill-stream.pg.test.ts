@@ -1,7 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
+import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
+import {must} from 'shared/src/must.ts';
 import {beforeEach, describe, expect} from 'vitest';
-import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.ts';
-import {must} from '../../../../../shared/src/must.ts';
 import {getConnectionURI, type PgTest, test} from '../../../test/db.ts';
 import type {PostgresDB} from '../../../types/pg.ts';
 import type {BackfillRequest} from '../protocol/current.ts';

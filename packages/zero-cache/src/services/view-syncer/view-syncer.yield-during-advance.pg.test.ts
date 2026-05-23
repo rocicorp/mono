@@ -1,3 +1,4 @@
+import type {Queue} from 'shared/src/queue.ts';
 import {
   afterEach,
   beforeEach,
@@ -6,10 +7,9 @@ import {
   type MockInstance,
   vi,
 } from 'vitest';
-import type {Queue} from '../../../../shared/src/queue.ts';
-import type {Downstream} from '../../../../zero-protocol/src/down.ts';
-import {PROTOCOL_VERSION} from '../../../../zero-protocol/src/protocol-version.ts';
-import type {UpQueriesPatch} from '../../../../zero-protocol/src/queries-patch.ts';
+import type {Downstream} from 'zero-protocol/src/down.ts';
+import {PROTOCOL_VERSION} from 'zero-protocol/src/protocol-version.ts';
+import type {UpQueriesPatch} from 'zero-protocol/src/queries-patch.ts';
 import {type PgTest, test} from '../../test/db.ts';
 import type {DbFile} from '../../test/lite.ts';
 import type {PostgresDB} from '../../types/pg.ts';

@@ -6,30 +6,26 @@ import {
   expectTypeOf,
   test,
 } from 'vitest';
-import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
+import {createSchema} from 'zero-schema/src/builder/schema-builder.ts';
 import {
   defineMutatorWithType,
   type MutateRequest,
-} from '../../../zql/src/mutate/mutator.ts';
+} from 'zql/src/mutate/mutator.ts';
 import type {DBMutator} from './crud.ts';
 import type {MutatorResult} from './custom.ts';
 import {zeroForTest} from './test-utils.ts';
 
-import type {ImmutableArray} from '../../../shared/src/immutable.ts';
-import {
-  number,
-  string,
-  table,
-} from '../../../zero-schema/src/builder/table-builder.ts';
-import {refCountSymbol} from '../../../zql/src/ivm/view-apply-change.ts';
-import type {SchemaCRUD} from '../../../zql/src/mutate/crud.ts';
-import type {Transaction} from '../../../zql/src/mutate/custom.ts';
-import {defineMutatorsWithType} from '../../../zql/src/mutate/mutator-registry.ts';
-import {createBuilder} from '../../../zql/src/query/create-builder.ts';
+import type {ImmutableArray} from 'shared/src/immutable.ts';
+import {number, string, table} from 'zero-schema/src/builder/table-builder.ts';
+import {refCountSymbol} from 'zql/src/ivm/view-apply-change.ts';
+import type {SchemaCRUD} from 'zql/src/mutate/crud.ts';
+import type {Transaction} from 'zql/src/mutate/custom.ts';
+import {defineMutatorsWithType} from 'zql/src/mutate/mutator-registry.ts';
+import {createBuilder} from 'zql/src/query/create-builder.ts';
 import {
   defineQueriesWithType,
   defineQueryWithType,
-} from '../../../zql/src/query/query-registry.ts';
+} from 'zql/src/query/query-registry.ts';
 
 const schema = createSchema({
   tables: [

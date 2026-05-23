@@ -1,13 +1,9 @@
+import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
 import {expect, test} from 'vitest';
+import {createSchema} from 'zero-schema/src/builder/schema-builder.ts';
+import {json, number, table} from 'zero-schema/src/builder/table-builder.ts';
+import {createBuilder} from 'zql/src/query/create-builder.ts';
 import {testLogConfig} from '../../otel/src/test-log-config.ts';
-import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
-import {createSchema} from '../../zero-schema/src/builder/schema-builder.ts';
-import {
-  json,
-  number,
-  table,
-} from '../../zero-schema/src/builder/table-builder.ts';
-import {createBuilder} from '../../zql/src/query/create-builder.ts';
 import {Database} from '../../zqlite/src/db.ts';
 import {newQueryDelegate} from '../../zqlite/src/test/source-factory.ts';
 

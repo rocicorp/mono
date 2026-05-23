@@ -1,13 +1,9 @@
-import {toSorted} from '../../../../shared/src/iterables.ts';
-import {must} from '../../../../shared/src/must.ts';
-import {
-  difference,
-  equals,
-  intersection,
-} from '../../../../shared/src/set-utils.ts';
-import type {ClientSchema} from '../../../../zero-protocol/src/client-schema.ts';
-import {ErrorOrigin} from '../../../../zero-protocol/src/error-origin.ts';
-import {ProtocolError} from '../../../../zero-protocol/src/error.ts';
+import {toSorted} from 'shared/src/iterables.ts';
+import {must} from 'shared/src/must.ts';
+import {difference, equals, intersection} from 'shared/src/set-utils.ts';
+import type {ClientSchema} from 'zero-protocol/src/client-schema.ts';
+import {ErrorOrigin} from 'zero-protocol/src/error-origin.ts';
+import {ProtocolError} from 'zero-protocol/src/error.ts';
 import type {LiteAndZqlSpec, LiteTableSpec} from '../../db/specs.ts';
 import {appSchema, upstreamSchema, type ShardID} from '../../types/shards.ts';
 import {ZERO_VERSION_COLUMN_NAME} from '../replicator/schema/constants.ts';

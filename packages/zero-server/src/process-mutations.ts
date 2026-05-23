@@ -1,39 +1,39 @@
 import type {LogContext, LogLevel} from '@rocicorp/logger';
-import {assert} from '../../shared/src/asserts.ts';
-import {getErrorDetails, getErrorMessage} from '../../shared/src/error.ts';
-import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
-import {promiseVoid} from '../../shared/src/resolved-promises.ts';
-import type {MaybePromise} from '../../shared/src/types.ts';
-import * as v from '../../shared/src/valita.ts';
-import {MutationAlreadyProcessedError} from '../../zero-cache/src/services/mutagen/error.ts';
-import type {ApplicationError} from '../../zero-protocol/src/application-error.ts';
+import {assert} from 'shared/src/asserts.ts';
+import {getErrorDetails, getErrorMessage} from 'shared/src/error.ts';
+import type {ReadonlyJSONValue} from 'shared/src/json.ts';
+import {promiseVoid} from 'shared/src/resolved-promises.ts';
+import type {MaybePromise} from 'shared/src/types.ts';
+import {MutationAlreadyProcessedError} from 'zero-cache/src/services/mutagen/error.ts';
+import type {ApplicationError} from 'zero-protocol/src/application-error.ts';
 import {
   isApplicationError,
   wrapWithApplicationError,
-} from '../../zero-protocol/src/application-error.ts';
-import {ErrorKind} from '../../zero-protocol/src/error-kind.ts';
-import {ErrorOrigin} from '../../zero-protocol/src/error-origin.ts';
-import {ErrorReason} from '../../zero-protocol/src/error-reason.ts';
-import type {PushFailedBody} from '../../zero-protocol/src/error.ts';
+} from 'zero-protocol/src/application-error.ts';
+import {ErrorKind} from 'zero-protocol/src/error-kind.ts';
+import {ErrorOrigin} from 'zero-protocol/src/error-origin.ts';
+import {ErrorReason} from 'zero-protocol/src/error-reason.ts';
+import type {PushFailedBody} from 'zero-protocol/src/error.ts';
 import {
   mutateParamsSchema,
   type MutateResponse,
-} from '../../zero-protocol/src/mutate-server.ts';
-import type {MutationID} from '../../zero-protocol/src/mutation-id.ts';
+} from 'zero-protocol/src/mutate-server.ts';
+import type {MutationID} from 'zero-protocol/src/mutation-id.ts';
 import {
   CLEANUP_RESULTS_MUTATION_NAME,
   cleanupResultsArgSchema,
   type CleanupResultsArg,
   type CustomMutation,
   type Mutation,
-} from '../../zero-protocol/src/mutation.ts';
+} from 'zero-protocol/src/mutation.ts';
 import {
   pushBodySchema,
   type MutationResponse,
   type PushBody,
-} from '../../zero-protocol/src/push.ts';
-import type {AnyMutatorRegistry} from '../../zql/src/mutate/mutator-registry.ts';
-import {isMutator} from '../../zql/src/mutate/mutator.ts';
+} from 'zero-protocol/src/push.ts';
+import type {AnyMutatorRegistry} from 'zql/src/mutate/mutator-registry.ts';
+import {isMutator} from 'zql/src/mutate/mutator.ts';
+import * as v from '../../shared/src/valita.ts';
 import type {CustomMutatorDefs, CustomMutatorImpl} from './custom.ts';
 import {createLogContext} from './logging.ts';
 import {separatorRe} from './push-processor.ts';

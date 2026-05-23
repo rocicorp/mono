@@ -1,15 +1,15 @@
 import type {JSONValue} from 'postgres';
 import {afterAll, beforeAll, describe, expect, test} from 'vitest';
-import {testDBs} from '../../zero-cache/src/test/db.ts';
-import type {PostgresDB} from '../../zero-cache/src/types/pg.ts';
-import {createSchema} from '../../zero-schema/src/builder/schema-builder.ts';
+import {testDBs} from 'zero-cache/src/test/db.ts';
+import type {PostgresDB} from 'zero-cache/src/types/pg.ts';
+import {createSchema} from 'zero-schema/src/builder/schema-builder.ts';
 import {
   json,
   number,
   string,
   table,
-} from '../../zero-schema/src/builder/table-builder.ts';
-import type {ServerSchema} from '../../zero-types/src/server-schema.ts';
+} from 'zero-schema/src/builder/table-builder.ts';
+import type {ServerSchema} from 'zero-types/src/server-schema.ts';
 import {compile, extractZqlResult} from './compiler.ts';
 import {formatPgInternalConvert} from './sql.ts';
 

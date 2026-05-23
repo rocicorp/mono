@@ -135,7 +135,7 @@ const user = table('user')
 
   ```typescript
   // Correct - import type at the top
-  import type {AST} from '../../../zero-protocol/src/ast.ts';
+  import type {AST} from 'zero-protocol/src/ast.ts';
   import type {TTL} from './ttl.ts';
 
   abstract addServerQuery(ast: AST, ttl: TTL): void;
@@ -151,7 +151,7 @@ const user = table('user')
 
   ```typescript
   // Correct - static import
-  import {createBuilder} from '../../../zql/src/query/named.ts';
+  import {createBuilder} from 'zql/src/query/named.ts';
 
   // Incorrect - unnecessary dynamic import
   const {createBuilder} = await import('../../../zql/src/query/named.ts');

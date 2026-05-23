@@ -1,7 +1,7 @@
 import {resolver} from '@rocicorp/resolver';
 import nock from 'nock';
+import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
 import {beforeAll, beforeEach, describe, expect, test, vi} from 'vitest';
-import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import {DbFile} from '../../test/lite.ts';
 import type {Subscription} from '../../types/subscription.ts';
 import {initReplicationState} from '../replicator/schema/replication-state.ts';

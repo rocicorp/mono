@@ -1,17 +1,13 @@
 // This test file is loaded by worker.test.ts
 
-import {assert} from '../../../shared/src/asserts.ts';
-import {deepEqual} from '../../../shared/src/json.ts';
-import {sleep} from '../../../shared/src/sleep.ts';
-import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
-import {
-  number,
-  string,
-  table,
-} from '../../../zero-schema/src/builder/table-builder.ts';
-import {defineMutatorsWithType} from '../../../zql/src/mutate/mutator-registry.ts';
-import {defineMutatorWithType} from '../../../zql/src/mutate/mutator.ts';
-import {createBuilder} from '../../../zql/src/query/create-builder.ts';
+import {assert} from 'shared/src/asserts.ts';
+import {deepEqual} from 'shared/src/json.ts';
+import {sleep} from 'shared/src/sleep.ts';
+import {createSchema} from 'zero-schema/src/builder/schema-builder.ts';
+import {number, string, table} from 'zero-schema/src/builder/table-builder.ts';
+import {defineMutatorsWithType} from 'zql/src/mutate/mutator-registry.ts';
+import {defineMutatorWithType} from 'zql/src/mutate/mutator.ts';
+import {createBuilder} from 'zql/src/query/create-builder.ts';
 import {MockSocket, zeroForTest} from './test-utils.ts';
 
 const {WebSocket} = globalThis;

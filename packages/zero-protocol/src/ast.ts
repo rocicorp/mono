@@ -7,11 +7,11 @@
  */
 
 import {compareUTF8} from 'compare-utf8';
-import {defined} from '../../shared/src/arrays.ts';
-import {assert} from '../../shared/src/asserts.ts';
-import {must} from '../../shared/src/must.ts';
+import {defined} from 'shared/src/arrays.ts';
+import {assert} from 'shared/src/asserts.ts';
+import {must} from 'shared/src/must.ts';
+import type {NameMapper} from 'zero-types/src/name-mapper.ts';
 import * as v from '../../shared/src/valita.ts';
-import type {NameMapper} from '../../zero-types/src/name-mapper.ts';
 import {rowSchema, type Row} from './data.ts';
 
 export const SUBQ_PREFIX = 'zsubq_';
@@ -104,6 +104,18 @@ const conditionValueSchema = v.union(
 );
 
 export type Parameter = v.Infer<typeof parameterReferenceSchema>;
+
+export function staticParam(
+  anchorClass: 'authData' | 'preMutationRow',
+  field: string | string[],
+): Parameter {
+  return {
+    type: 'static',
+    anchor: anchorClass,
+    // for backwards compatibility
+    field: field.length === 1 ? field[0] : field,
+  };
+}
 
 export const simpleConditionSchema: v.Type<SimpleCondition> = v.readonlyObject({
   type: v.literal('simple'),

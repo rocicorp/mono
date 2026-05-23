@@ -5,11 +5,11 @@ import {Writable} from 'node:stream';
 import {pipeline} from 'node:stream/promises';
 import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
-import {assert} from '../../../../../shared/src/asserts.ts';
-import type {JSONObject} from '../../../../../shared/src/bigint-json.ts';
-import {must} from '../../../../../shared/src/must.ts';
-import {equals} from '../../../../../shared/src/set-utils.ts';
-import type {DownloadStatus} from '../../../../../zero-events/src/status.ts';
+import type {DownloadStatus} from '@rocicorp/zero-events';
+import {assert} from 'shared/src/asserts.ts';
+import type {JSONObject} from 'shared/src/bigint-json.ts';
+import {must} from 'shared/src/must.ts';
+import {equals} from 'shared/src/set-utils.ts';
 import {Database} from '../../../../../zqlite/src/db.ts';
 import {
   createLiteIndexStatement,

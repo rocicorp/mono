@@ -1,16 +1,16 @@
 /* oxlint-disable @typescript-eslint/no-explicit-any */
-import type {Expand, ExpandRecursive} from '../../../shared/src/expand.ts';
-import {type SimpleOperator} from '../../../zero-protocol/src/ast.ts';
-import type {DefaultSchema} from '../../../zero-types/src/default-types.ts';
+import type {Expand, ExpandRecursive} from 'shared/src/expand.ts';
+import {type SimpleOperator} from 'zero-protocol/src/ast.ts';
+import type {DefaultSchema} from 'zero-types/src/default-types.ts';
 import type {
   SchemaValueToTSType,
   SchemaValueWithCustomType,
-} from '../../../zero-types/src/schema-value.ts';
+} from 'zero-types/src/schema-value.ts';
 import type {
   LastInTuple,
   TableSchema,
   Schema as ZeroSchema,
-} from '../../../zero-types/src/schema.ts';
+} from 'zero-types/src/schema.ts';
 import type {ViewFactory} from '../ivm/view.ts';
 import type {ExpressionFactory, ParameterReference} from './expression.ts';
 import type {TTL} from './ttl.ts';

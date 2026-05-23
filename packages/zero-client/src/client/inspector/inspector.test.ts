@@ -1,25 +1,22 @@
+import {assert} from 'shared/src/asserts.ts';
+import {TDigest, type ReadonlyTDigest} from 'shared/src/tdigest.ts';
 import {beforeEach, describe, expect, test, vi} from 'vitest';
-import {assert} from '../../../../shared/src/asserts.ts';
-import {TDigest, type ReadonlyTDigest} from '../../../../shared/src/tdigest.ts';
-import type {AnalyzeQueryResult} from '../../../../zero-protocol/src/analyze-query-result.ts';
-import type {AST} from '../../../../zero-protocol/src/ast.ts';
+import type {AnalyzeQueryResult} from 'zero-protocol/src/analyze-query-result.ts';
+import type {AST} from 'zero-protocol/src/ast.ts';
 import {
   type InspectDownMessage,
   type InspectMetricsDown,
   type InspectQueriesDown,
-} from '../../../../zero-protocol/src/inspect-down.ts';
-import type {AnalyzeQueryOptions} from '../../../../zero-protocol/src/inspect-up.ts';
-import {relationships} from '../../../../zero-schema/src/builder/relationship-builder.ts';
-import {createSchema} from '../../../../zero-schema/src/builder/schema-builder.ts';
-import {
-  string,
-  table,
-} from '../../../../zero-schema/src/builder/table-builder.ts';
-import type {Schema} from '../../../../zero-types/src/schema.ts';
-import {createBuilder} from '../../../../zql/src/query/create-builder.ts';
-import {asQueryInternals} from '../../../../zql/src/query/query-internals.ts';
-import type {AnyQuery} from '../../../../zql/src/query/query.ts';
-import {schema} from '../../../../zql/src/query/test/test-schemas.ts';
+} from 'zero-protocol/src/inspect-down.ts';
+import type {AnalyzeQueryOptions} from 'zero-protocol/src/inspect-up.ts';
+import {relationships} from 'zero-schema/src/builder/relationship-builder.ts';
+import {createSchema} from 'zero-schema/src/builder/schema-builder.ts';
+import {string, table} from 'zero-schema/src/builder/table-builder.ts';
+import type {Schema} from 'zero-types/src/schema.ts';
+import {createBuilder} from 'zql/src/query/create-builder.ts';
+import {asQueryInternals} from 'zql/src/query/query-internals.ts';
+import type {AnyQuery} from 'zql/src/query/query.ts';
+import {schema} from 'zql/src/query/test/test-schemas.ts';
 import {nanoid} from '../../util/nanoid.ts';
 import type {CustomMutatorDefs} from '../custom.ts';
 import type {TestZero} from '../test-utils.ts';

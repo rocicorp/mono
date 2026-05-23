@@ -2,16 +2,16 @@ import '../../../shared/src/dotenv.ts';
 
 import {writeFile} from 'node:fs/promises';
 import {ident as id, literal} from 'pg-format';
-import {colorConsole, createLogContext} from '../../../shared/src/logging.ts';
-import {parseOptions} from '../../../shared/src/options.ts';
-import {difference} from '../../../shared/src/set-utils.ts';
-import {mapCondition} from '../../../zero-protocol/src/ast.ts';
+import {colorConsole, createLogContext} from 'shared/src/logging.ts';
+import {parseOptions} from 'shared/src/options.ts';
+import {difference} from 'shared/src/set-utils.ts';
+import {mapCondition} from 'zero-protocol/src/ast.ts';
 import {
   type AssetPermissions,
   type PermissionsConfig,
   type Rule,
-} from '../../../zero-schema/src/compiled-permissions.ts';
-import {validator} from '../../../zero-schema/src/name-mapper.ts';
+} from 'zero-schema/src/compiled-permissions.ts';
+import {validator} from 'zero-schema/src/name-mapper.ts';
 import {ZERO_ENV_VAR_PREFIX} from '../config/zero-config.ts';
 import {runTx} from '../db/run-transaction.ts';
 import {getPublicationInfo} from '../services/change-source/pg/schema/published.ts';

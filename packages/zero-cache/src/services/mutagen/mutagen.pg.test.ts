@@ -1,17 +1,17 @@
 import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
-import {beforeEach, describe, expect} from 'vitest';
 import {
   createSilentLogContext,
   TestLogSink,
-} from '../../../../shared/src/logging-test-utils.ts';
-import {ErrorKind} from '../../../../zero-protocol/src/error-kind.ts';
-import * as MutationType from '../../../../zero-protocol/src/mutation-type-enum.ts';
+} from 'shared/src/logging-test-utils.ts';
+import {beforeEach, describe, expect} from 'vitest';
+import {ErrorKind} from 'zero-protocol/src/error-kind.ts';
 import {
   type CRUDMutation,
   type CRUDOp,
   type UpsertOp,
-} from '../../../../zero-protocol/src/mutation.ts';
+} from 'zero-protocol/src/mutation.ts';
+import * as MutationType from '../../../../zero-protocol/src/mutation-type-enum.ts';
 import type {WriteAuthorizer} from '../../auth/write-authorizer.ts';
 import * as Mode from '../../db/mode-enum.ts';
 import {expectTables, type PgTest, test} from '../../test/db.ts';

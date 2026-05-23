@@ -1,6 +1,6 @@
-import {assert} from '../../../shared/src/asserts.ts';
-import type {JSONObject} from '../../../shared/src/json.ts';
-import type {AST} from '../../../zero-protocol/src/ast.ts';
+import {assert} from 'shared/src/asserts.ts';
+import type {JSONObject} from 'shared/src/json.ts';
+import type {AST} from 'zero-protocol/src/ast.ts';
 import type {FilterInput} from '../ivm/filter-operators.ts';
 import {MemoryStorage} from '../ivm/memory-storage.ts';
 import type {Input, Storage} from '../ivm/operator.ts';

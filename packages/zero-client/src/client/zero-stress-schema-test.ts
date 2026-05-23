@@ -2,8 +2,8 @@
 // total, avg 14 per table) and 809 relationships to stress test the Zero types.
 // There are also ~10 recursive relationships.
 
-import {relationships} from '../../../zero-schema/src/builder/relationship-builder.ts';
-import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
+import {relationships} from 'zero-schema/src/builder/relationship-builder.ts';
+import {createSchema} from 'zero-schema/src/builder/schema-builder.ts';
 import {
   boolean,
   enumeration,
@@ -11,8 +11,8 @@ import {
   number,
   string,
   table,
-} from '../../../zero-schema/src/builder/table-builder.ts';
-import {createBuilder} from '../../../zql/src/query/create-builder.ts';
+} from 'zero-schema/src/builder/table-builder.ts';
+import {createBuilder} from 'zql/src/query/create-builder.ts';
 
 // ==================== TABLE DEFINITIONS ====================
 

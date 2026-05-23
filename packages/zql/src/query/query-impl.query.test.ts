@@ -1,11 +1,11 @@
+import {deepClone} from 'shared/src/deep-clone.ts';
+import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
+import {must} from 'shared/src/must.ts';
 import {describe, expect, test, vi} from 'vitest';
+import {relationships} from 'zero-schema/src/builder/relationship-builder.ts';
+import {createSchema} from 'zero-schema/src/builder/schema-builder.ts';
+import {number, table} from 'zero-schema/src/builder/table-builder.ts';
 import {testLogConfig} from '../../../otel/src/test-log-config.ts';
-import {deepClone} from '../../../shared/src/deep-clone.ts';
-import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
-import {must} from '../../../shared/src/must.ts';
-import {relationships} from '../../../zero-schema/src/builder/relationship-builder.ts';
-import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
-import {number, table} from '../../../zero-schema/src/builder/table-builder.ts';
 import {consume} from '../ivm/stream.ts';
 import {createSource} from '../ivm/test/source-factory.ts';
 import type {QueryDelegate} from './query-delegate.ts';

@@ -1,5 +1,5 @@
 import {describe, expect, test, vi} from 'vitest';
-import type {AST} from '../../../zero-protocol/src/ast.ts';
+import type {AST} from 'zero-protocol/src/ast.ts';
 import {isDevelopmentMode} from '../config/normalize.ts';
 import {InspectorDelegate} from './inspector-delegate.ts';
 

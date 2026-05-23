@@ -1,13 +1,13 @@
 import {ROOT_CONTEXT, context, propagation, trace} from '@opentelemetry/api';
 import {Lock} from '@rocicorp/lock';
 import type {LogContext} from '@rocicorp/logger';
+import {assert, unreachable} from 'shared/src/asserts.ts';
+import {ErrorKind} from 'zero-protocol/src/error-kind.ts';
+import {ErrorOrigin} from 'zero-protocol/src/error-origin.ts';
+import type {ErrorBody} from 'zero-protocol/src/error.ts';
+import type {Upstream} from 'zero-protocol/src/up.ts';
 import {startAsyncSpan, startSpan} from '../../../otel/src/span.ts';
 import {version} from '../../../otel/src/version.ts';
-import {assert, unreachable} from '../../../shared/src/asserts.ts';
-import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
-import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
-import type {ErrorBody} from '../../../zero-protocol/src/error.ts';
-import type {Upstream} from '../../../zero-protocol/src/up.ts';
 import type {Mutagen} from '../services/mutagen/mutagen.ts';
 import type {Pusher} from '../services/mutagen/pusher.ts';
 import {

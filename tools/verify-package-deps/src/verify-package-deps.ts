@@ -40,13 +40,8 @@ async function findTypeScriptFiles(dir: string): Promise<string[]> {
           files.push(...(await findTypeScriptFiles(fullPath)));
         }
       } else if (entry.isFile()) {
-        // Include TypeScript files, excluding test files
-        if (
-          entry.name.endsWith('.ts') &&
-          !entry.name.includes('.test.') &&
-          !entry.name.includes('.spec.') &&
-          !entry.name.endsWith('.d.ts')
-        ) {
+        // Include TypeScript files, excluding declaration files
+        if (entry.name.endsWith('.ts') && !entry.name.endsWith('.d.ts')) {
           files.push(fullPath);
         }
       }
@@ -226,11 +221,13 @@ async function analyzePackageDependencies(): Promise<AnalyzeResult> {
             targetPackage = getPackageName(resolvedPath);
           } else {
             // Check if this is a non-relative import that matches a workspace package
-            // Extract the package name (before any subpath)
-            const packageName = importInfo.path
-              .split('/')
-              .slice(0, 2)
-              .join('/');
+            // Extract the package name (before any subpath).
+            // Scoped packages start with '@' and use two segments (@scope/name);
+            // unscoped packages use only the first segment.
+            const pathParts = importInfo.path.split('/');
+            const packageName = pathParts[0].startsWith('@')
+              ? pathParts.slice(0, 2).join('/')
+              : pathParts[0];
             const targetPath = packageNameToPath.get(packageName);
             if (targetPath) {
               targetPackage = targetPath;
@@ -239,10 +236,12 @@ async function analyzePackageDependencies(): Promise<AnalyzeResult> {
           }
 
           if (targetPackage && targetPackage !== sourcePackage) {
-            if (!packageDeps.has(sourcePackage)) {
-              packageDeps.set(sourcePackage, new Set());
+            let pkgDeps = packageDeps.get(sourcePackage);
+            if (!pkgDeps) {
+              pkgDeps = new Set();
+              packageDeps.set(sourcePackage, pkgDeps);
             }
-            packageDeps.get(sourcePackage)!.add(targetPackage);
+            pkgDeps.add(targetPackage);
 
             // Store an example file pair for this dependency edge
             const edgeKey = `${sourcePackage} -> ${targetPackage}`;
@@ -251,19 +250,22 @@ async function analyzePackageDependencies(): Promise<AnalyzeResult> {
               exampleFiles.set(edgeKey, {
                 source: filePath,
                 sourceLine: importInfo.line,
-                target: normalizedPath!,
+                target: normalizedPath ?? '',
               });
             }
 
             // Track import location by target package path (not workspace name yet)
-            if (!importLocations.has(sourcePackage)) {
-              importLocations.set(sourcePackage, new Map());
+            let packageImports = importLocations.get(sourcePackage);
+            if (!packageImports) {
+              packageImports = new Map();
+              importLocations.set(sourcePackage, packageImports);
             }
-            const packageImports = importLocations.get(sourcePackage)!;
-            if (!packageImports.has(targetPackage)) {
-              packageImports.set(targetPackage, []);
+            let targetImports = packageImports.get(targetPackage);
+            if (!targetImports) {
+              targetImports = [];
+              packageImports.set(targetPackage, targetImports);
             }
-            packageImports.get(targetPackage)!.push({
+            targetImports.push({
               file: filePath,
               line: importInfo.line,
             });
@@ -534,7 +536,7 @@ async function verifyPackageJsonDependencies(fix: boolean) {
           if (!workspaceImportLocations.has(workspaceName)) {
             workspaceImportLocations.set(workspaceName, []);
           }
-          workspaceImportLocations.get(workspaceName)!.push(...locations);
+          workspaceImportLocations.get(workspaceName)?.push(...locations);
         }
       }
     }
@@ -638,7 +640,7 @@ async function verifyPackageJsonDependencies(fix: boolean) {
         if (!mismatchesByPackage.has(mismatch.package)) {
           mismatchesByPackage.set(mismatch.package, []);
         }
-        mismatchesByPackage.get(mismatch.package)!.push({
+        mismatchesByPackage.get(mismatch.package)?.push({
           name: mismatch.dependency,
           version: mismatch.expected,
         });
@@ -706,8 +708,8 @@ async function verifyPackageJsonDependencies(fix: boolean) {
                 pkgWorkspaceImportLocations.set(targetWorkspaceName, []);
               }
               pkgWorkspaceImportLocations
-                .get(targetWorkspaceName)!
-                .push(...packageImportLocs.get(targetPackage)!);
+                .get(targetWorkspaceName)
+                ?.push(...(packageImportLocs.get(targetPackage) ?? []));
             }
           }
         }

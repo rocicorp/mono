@@ -1,4 +1,4 @@
-import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
+import {promiseVoid} from 'shared/src/resolved-promises.ts';
 import type {Chunk} from '../dag/chunk.ts';
 import type {LazyRead} from '../dag/lazy-store.ts';
 import {Visitor} from '../dag/visitor.ts';

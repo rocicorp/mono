@@ -2,14 +2,11 @@ import {pid} from 'node:process';
 import type {MessagePort} from 'node:worker_threads';
 import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
+import {promiseVoid} from 'shared/src/resolved-promises.ts';
 import {WebSocketServer, type ServerOptions, type WebSocket} from 'ws';
-import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
-import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
-import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
-import {
-  isProtocolError,
-  ProtocolError,
-} from '../../../zero-protocol/src/error.ts';
+import {ErrorKind} from 'zero-protocol/src/error-kind.ts';
+import {ErrorOrigin} from 'zero-protocol/src/error-origin.ts';
+import {isProtocolError, ProtocolError} from 'zero-protocol/src/error.ts';
 import {resolveAuth, type Auth, type ValidateLegacyJWT} from '../auth/auth.ts';
 import {tokenConfigOptions} from '../auth/jwt.ts';
 import {type ZeroConfig} from '../config/zero-config.ts';

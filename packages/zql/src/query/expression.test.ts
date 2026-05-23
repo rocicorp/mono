@@ -1,11 +1,11 @@
 import fc from 'fast-check';
+import {assert} from 'shared/src/asserts.ts';
 import {describe, expect, test, vi} from 'vitest';
-import {assert} from '../../../shared/src/asserts.ts';
 import {
   type Condition,
   type Conjunction,
   type Disjunction,
-} from '../../../zero-protocol/src/ast.ts';
+} from 'zero-protocol/src/ast.ts';
 import {parse, stringify} from './expression-test-util.ts';
 import {
   and,

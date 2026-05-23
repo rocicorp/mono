@@ -1,13 +1,13 @@
-import {createSchema} from '../../zero-schema/src/builder/schema-builder.ts';
-import {string, table} from '../../zero-schema/src/builder/table-builder.ts';
-import {defineMutatorsWithType} from '../../zql/src/mutate/mutator-registry.ts';
-import {defineMutatorWithType} from '../../zql/src/mutate/mutator.ts';
-import {createBuilder} from '../../zql/src/query/create-builder.ts';
+import {createSchema} from 'zero-schema/src/builder/schema-builder.ts';
+import {string, table} from 'zero-schema/src/builder/table-builder.ts';
+import {defineMutatorsWithType} from 'zql/src/mutate/mutator-registry.ts';
+import {defineMutatorWithType} from 'zql/src/mutate/mutator.ts';
+import {createBuilder} from 'zql/src/query/create-builder.ts';
 import {
   defineQueriesWithType,
   defineQuery,
-} from '../../zql/src/query/query-registry.ts';
-import type {Row} from '../../zql/src/query/query.ts';
+} from 'zql/src/query/query-registry.ts';
+import type {Row} from 'zql/src/query/query.ts';
 
 export const schema = createSchema({
   tables: [

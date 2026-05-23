@@ -1,4 +1,4 @@
-import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
+import type {ReadonlyJSONValue} from 'shared/src/json.ts';
 import {QueryParseError} from './error.ts';
 import {asQueryInternals} from './query-internals.ts';
 import {type AnyQuery} from './query.ts';

@@ -1,8 +1,5 @@
-import {
-  assertJSONObject,
-  type ReadonlyJSONValue,
-} from '../../shared/src/json.ts';
-import {stringCompare} from '../../shared/src/string-compare.ts';
+import {assertJSONObject, type ReadonlyJSONValue} from 'shared/src/json.ts';
+import {stringCompare} from 'shared/src/string-compare.ts';
 import type {FrozenJSONValue} from './frozen-json.ts';
 
 /**

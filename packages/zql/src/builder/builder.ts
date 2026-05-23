@@ -1,7 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
-import {assert, unreachable} from '../../../shared/src/asserts.ts';
-import type {JSONValue} from '../../../shared/src/json.ts';
-import {must} from '../../../shared/src/must.ts';
+import {assert, unreachable} from 'shared/src/asserts.ts';
+import type {JSONValue} from 'shared/src/json.ts';
+import {must} from 'shared/src/must.ts';
 import type {
   AST,
   ColumnReference,
@@ -16,9 +16,9 @@ import type {
   Parameter,
   SimpleCondition,
   ValuePosition,
-} from '../../../zero-protocol/src/ast.ts';
-import type {Row} from '../../../zero-protocol/src/data.ts';
-import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
+} from 'zero-protocol/src/ast.ts';
+import type {Row} from 'zero-protocol/src/data.ts';
+import type {PrimaryKey} from 'zero-protocol/src/primary-key.ts';
 import {Cap} from '../ivm/cap.ts';
 import {Exists} from '../ivm/exists.ts';
 import {FanIn} from '../ivm/fan-in.ts';

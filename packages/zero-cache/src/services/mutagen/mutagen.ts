@@ -3,15 +3,10 @@ import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import type {JWTPayload} from 'jose';
 import postgres from 'postgres';
-import {assert, unreachable} from '../../../../shared/src/asserts.ts';
-import * as v from '../../../../shared/src/valita.ts';
-import {ErrorKind} from '../../../../zero-protocol/src/error-kind.ts';
-import {ErrorOrigin} from '../../../../zero-protocol/src/error-origin.ts';
-import {
-  isProtocolError,
-  ProtocolError,
-} from '../../../../zero-protocol/src/error.ts';
-import * as MutationType from '../../../../zero-protocol/src/mutation-type-enum.ts';
+import {assert, unreachable} from 'shared/src/asserts.ts';
+import {ErrorKind} from 'zero-protocol/src/error-kind.ts';
+import {ErrorOrigin} from 'zero-protocol/src/error-origin.ts';
+import {isProtocolError, ProtocolError} from 'zero-protocol/src/error.ts';
 import {
   type CRUDMutation,
   type DeleteOp,
@@ -19,11 +14,13 @@ import {
   type Mutation,
   type UpdateOp,
   type UpsertOp,
-} from '../../../../zero-protocol/src/mutation.ts';
+} from 'zero-protocol/src/mutation.ts';
 import {
   primaryKeyValueSchema,
   type PrimaryKeyValue,
-} from '../../../../zero-protocol/src/primary-key.ts';
+} from 'zero-protocol/src/primary-key.ts';
+import * as v from '../../../../shared/src/valita.ts';
+import * as MutationType from '../../../../zero-protocol/src/mutation-type-enum.ts';
 import type {DatabaseStorage} from '../../../../zqlite/src/database-storage.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {

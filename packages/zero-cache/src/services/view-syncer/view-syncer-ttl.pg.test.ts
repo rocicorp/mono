@@ -1,10 +1,10 @@
+import type {Queue} from 'shared/src/queue.ts';
+import {sleep} from 'shared/src/sleep.ts';
 import {beforeEach, describe, expect, type Mock, vi} from 'vitest';
-import type {Queue} from '../../../../shared/src/queue.ts';
-import {sleep} from '../../../../shared/src/sleep.ts';
-import {type ClientSchema} from '../../../../zero-protocol/src/client-schema.ts';
-import type {Downstream} from '../../../../zero-protocol/src/down.ts';
-import {PROTOCOL_VERSION} from '../../../../zero-protocol/src/protocol-version.ts';
-import type {UpQueriesPatch} from '../../../../zero-protocol/src/queries-patch.ts';
+import {type ClientSchema} from 'zero-protocol/src/client-schema.ts';
+import type {Downstream} from 'zero-protocol/src/down.ts';
+import {PROTOCOL_VERSION} from 'zero-protocol/src/protocol-version.ts';
+import type {UpQueriesPatch} from 'zero-protocol/src/queries-patch.ts';
 import type {InspectorDelegate} from '../../server/inspector-delegate.ts';
 import {type PgTest, test} from '../../test/db.ts';
 import type {DbFile} from '../../test/lite.ts';

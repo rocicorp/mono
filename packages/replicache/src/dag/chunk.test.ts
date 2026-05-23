@@ -1,5 +1,5 @@
+import type {ReadonlyJSONValue} from 'shared/src/json.ts';
 import {expect, test} from 'vitest';
-import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {deepFreeze} from '../frozen-json.ts';
 import {fakeHash, type Hash, makeNewFakeHashFunction} from '../hash.ts';
 import {Chunk, createChunk, type Refs, toRefs} from './chunk.ts';

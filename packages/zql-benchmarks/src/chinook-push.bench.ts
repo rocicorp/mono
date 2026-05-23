@@ -1,18 +1,15 @@
-import type {JSONValue} from '../../shared/src/json.ts';
-import {must} from '../../shared/src/must.ts';
-import type {Row} from '../../zero-protocol/src/data.ts';
+import type {JSONValue} from 'shared/src/json.ts';
+import {must} from 'shared/src/must.ts';
+import type {Row} from 'zero-protocol/src/data.ts';
+import type {PullRow} from 'zql/src/query/query.ts';
 import {getChinook} from '../../zql-integration-tests/src/chinook/get-deps.ts';
 import {schema} from '../../zql-integration-tests/src/chinook/schema.ts';
 import {
   runBenchmarks,
   type PushGenerator,
 } from '../../zql-integration-tests/src/helpers/runner.ts';
-import type {PullRow} from '../../zql/src/query/query.ts';
 
-import {
-  makeSourceChangeAdd,
-  makeSourceChangeEdit,
-} from '../../zql/src/ivm/source.ts';
+import {makeSourceChangeAdd, makeSourceChangeEdit} from 'zql/src/ivm/source.ts';
 const pgContent = await getChinook();
 
 function defaultTrack(id: number): PullRow<'track', typeof schema> {

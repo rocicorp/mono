@@ -1,9 +1,9 @@
+import type {ReadonlyJSONValue} from 'shared/src/json.ts';
 import {describe, expectTypeOf, test} from 'vitest';
-import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
-import {mustGetMutator} from '../../../zql/src/mutate/mutator-registry.ts';
-import type {Mutator} from '../../../zql/src/mutate/mutator.ts';
-import {mustGetQuery} from '../../../zql/src/query/query-registry.ts';
-import type {QueryResultType} from '../../../zql/src/query/query.ts';
+import {mustGetMutator} from 'zql/src/mutate/mutator-registry.ts';
+import type {Mutator} from 'zql/src/mutate/mutator.ts';
+import {mustGetQuery} from 'zql/src/query/query-registry.ts';
+import type {QueryResultType} from 'zql/src/query/query.ts';
 import type {MutatorResultDetails} from './custom.ts';
 import {zeroStress} from './zero-stress-client-test.ts';
 import {mutators} from './zero-stress-mutators-test.ts';

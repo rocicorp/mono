@@ -1,5 +1,5 @@
 import {test} from 'vitest';
-import {newStaticQuery} from '../../../zql/src/query/static-query.ts';
+import {newStaticQuery} from 'zql/src/query/static-query.ts';
 import '../helpers/comparePg.ts';
 import {bootstrap, runAndCompare} from '../helpers/runner.ts';
 import {getChinook} from './get-deps.ts';

@@ -395,9 +395,9 @@ importers:
       vitest:
         specifier: ^4.1.6
         version: 4.1.6(@opentelemetry/api@1.9.1)(@types/node@22.19.19)(@vitest/browser-playwright@4.1.6)(@vitest/coverage-v8@4.1.6)(vite@8.0.13(@types/node@22.19.19)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))
-      zero-cache:
+      zero-permissions:
         specifier: workspace:*
-        version: link:../zero-cache
+        version: link:../zero-permissions
       zero-protocol:
         specifier: workspace:*
         version: link:../zero-protocol
@@ -407,6 +407,9 @@ importers:
       zero-types:
         specifier: workspace:*
         version: link:../zero-types
+      zql:
+        specifier: workspace:*
+        version: link:../zql
 
   packages/datadog:
     devDependencies:
@@ -954,6 +957,9 @@ importers:
       '@op-engineering/op-sqlite':
         specifier: '>=15'
         version: 15.2.14(react-native@0.85.3(@babel/core@7.29.0)(@types/react@19.2.15)(react@18.3.1))(react@18.3.1)
+      '@rocicorp/zero-events':
+        specifier: workspace:*
+        version: link:../zero-events
       '@vitest/runner':
         specifier: ^4.1.6
         version: 4.1.6
@@ -1131,12 +1137,6 @@ importers:
       zero-protocol:
         specifier: workspace:*
         version: link:../zero-protocol
-      zero-types:
-        specifier: workspace:*
-        version: link:../zero-types
-      zql:
-        specifier: workspace:*
-        version: link:../zql
       zqlite:
         specifier: workspace:*
         version: link:../zqlite
@@ -1162,6 +1162,9 @@ importers:
       '@vitest/runner':
         specifier: ^4.1.6
         version: 4.1.6
+      ast-to-zql:
+        specifier: workspace:*
+        version: link:../ast-to-zql
       esbuild:
         specifier: 0.27.7
         version: 0.27.7
@@ -1195,6 +1198,12 @@ importers:
       zero-schema:
         specifier: workspace:*
         version: link:../zero-schema
+      zero-types:
+        specifier: workspace:*
+        version: link:../zero-types
+      zql:
+        specifier: workspace:*
+        version: link:../zql
 
   packages/zero-client:
     dependencies:
@@ -1214,9 +1223,6 @@ importers:
       '@standard-schema/spec':
         specifier: ^1.0.0
         version: 1.1.0
-      ast-to-zql:
-        specifier: workspace:*
-        version: link:../ast-to-zql
       datadog:
         specifier: workspace:*
         version: link:../datadog
@@ -1283,6 +1289,19 @@ importers:
       shared:
         specifier: workspace:*
         version: link:../shared
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.5
+        version: 22.19.19
+      oxfmt:
+        specifier: ^0.45.0
+        version: 0.45.0
+      typescript:
+        specifier: ~6.0.2
+        version: 6.0.3
+      vitest:
+        specifier: ^4.1.6
+        version: 4.1.6(@opentelemetry/api@1.9.1)(@types/node@22.19.19)(@vitest/browser-playwright@4.1.6)(@vitest/coverage-v8@4.1.6)(vite@8.0.13(@types/node@22.19.19)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))
       zero-protocol:
         specifier: workspace:*
         version: link:../zero-protocol
@@ -1295,16 +1314,6 @@ importers:
       zql:
         specifier: workspace:*
         version: link:../zql
-    devDependencies:
-      oxfmt:
-        specifier: ^0.45.0
-        version: 0.45.0
-      typescript:
-        specifier: ~6.0.2
-        version: 6.0.3
-      vitest:
-        specifier: ^4.1.6
-        version: 4.1.6(@opentelemetry/api@1.9.1)(@types/node@22.19.19)(@vitest/browser-playwright@4.1.6)(@vitest/coverage-v8@4.1.6)(vite@8.0.13(@types/node@22.19.19)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))
 
   packages/zero-pg:
     dependencies:
@@ -1481,6 +1490,9 @@ importers:
       zero-cache:
         specifier: workspace:*
         version: link:../zero-cache
+      zero-client:
+        specifier: workspace:*
+        version: link:../zero-client
       zero-protocol:
         specifier: workspace:*
         version: link:../zero-protocol
@@ -1502,6 +1514,9 @@ importers:
       '@solidjs/testing-library':
         specifier: ^0.8.10
         version: 0.8.10(solid-js@1.9.13)
+      otel:
+        specifier: workspace:*
+        version: link:../otel
       oxfmt:
         specifier: ^0.45.0
         version: 0.45.0
@@ -1563,6 +1578,9 @@ importers:
       nanoid:
         specifier: ^5.1.2
         version: 5.1.11
+      otel:
+        specifier: workspace:*
+        version: link:../otel
       oxfmt:
         specifier: ^0.45.0
         version: 0.45.0
@@ -1578,6 +1596,9 @@ importers:
       zero-protocol:
         specifier: workspace:*
         version: link:../zero-protocol
+      zero-schema:
+        specifier: workspace:*
+        version: link:../zero-schema
       zero-types:
         specifier: workspace:*
         version: link:../zero-types
@@ -1641,6 +1662,9 @@ importers:
       '@types/tmp':
         specifier: ^0.2.6
         version: 0.2.6
+      ast-to-zql:
+        specifier: workspace:*
+        version: link:../ast-to-zql
       otel:
         specifier: workspace:*
         version: link:../otel
@@ -1701,9 +1725,6 @@ importers:
       '@rocicorp/zero-sqlite3':
         specifier: ^1.0.18
         version: 1.0.18
-      zql:
-        specifier: workspace:*
-        version: link:../zql
     devDependencies:
       fast-check:
         specifier: ^3.18.0
@@ -1735,6 +1756,9 @@ importers:
       zero-types:
         specifier: workspace:*
         version: link:../zero-types
+      zql:
+        specifier: workspace:*
+        version: link:../zql
 
   packages/zqlite-zql-test:
     dependencies:

@@ -1,9 +1,11 @@
 import {expect, test} from 'vitest';
-import {createSchema} from '../../zero-schema/src/builder/schema-builder.ts';
-import {column, table} from '../../zero-schema/src/builder/table-builder.ts';
-import type {Schema as ZeroSchema} from '../../zero-types/src/schema.ts';
-import type {ExpressionBuilder} from '../../zql/src/query/expression.ts';
+import {createSchema} from 'zero-schema/src/builder/schema-builder.ts';
+import {column, table} from 'zero-schema/src/builder/table-builder.ts';
+import type {Schema as ZeroSchema} from 'zero-types/src/schema.ts';
 import {definePermissions} from './permissions.ts';
+
+// oxlint-disable-next-line typescript/no-explicit-any
+type ExpressionBuilder<_A, _B> = any;
 
 const {string} = column;
 

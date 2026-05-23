@@ -25,11 +25,13 @@
     "@standard-schema/spec": "^1.0.0",
     "fast-check": "^3.18.0",
     "nanoid": "^5.1.2",
+    "otel": "workspace:*",
     "oxfmt": "^0.45.0",
     "shared": "workspace:*",
     "typescript": "~6.0.2",
     "vitest": "^4.1.6",
     "zero-protocol": "workspace:*",
+    "zero-schema": "workspace:*",
     "zero-types": "workspace:*"
   }
 }

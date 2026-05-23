@@ -1,6 +1,4 @@
 import type {LogContext} from '@rocicorp/logger';
-import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
-import type {JSONObject} from '../../../../zero-events/src/json.ts';
 import type {
   ReplicatedIndex,
   ReplicatedTable,
@@ -8,7 +6,9 @@ import type {
   ReplicationState,
   ReplicationStatusEvent,
   Status,
-} from '../../../../zero-events/src/status.ts';
+} from '@rocicorp/zero-events';
+import type {JSONObject} from 'shared/src/json.ts';
+import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {computeZqlSpecs, listIndexes} from '../../db/lite-tables.ts';
 import type {LiteTableSpec} from '../../db/specs.ts';

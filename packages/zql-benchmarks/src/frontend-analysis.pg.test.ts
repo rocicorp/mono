@@ -1,14 +1,14 @@
 /* oxlint-disable no-console */
 import {B, do_not_optimize, type trial} from 'mitata';
+import type {JSONValue} from 'shared/src/json.ts';
+import {must} from 'shared/src/must.ts';
 import {expect, test} from 'vitest';
-import type {JSONValue} from '../../shared/src/json.ts';
-import {must} from '../../shared/src/must.ts';
-import type {Row} from '../../zero-protocol/src/data.ts';
+import type {Row} from 'zero-protocol/src/data.ts';
+import {makeSourceChangeEdit} from 'zql/src/ivm/source.ts';
+import type {AnyQuery} from 'zql/src/query/query.ts';
 import {getChinook} from '../../zql-integration-tests/src/chinook/get-deps.ts';
 import {schema} from '../../zql-integration-tests/src/chinook/schema.ts';
 import {bootstrap} from '../../zql-integration-tests/src/helpers/runner.ts';
-import {makeSourceChangeEdit} from '../../zql/src/ivm/source.ts';
-import type {AnyQuery} from '../../zql/src/query/query.ts';
 
 const pgContent = await getChinook();
 

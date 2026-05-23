@@ -1,6 +1,6 @@
 import {RWLock} from '@rocicorp/lock';
-import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
-import {stringCompare} from '../../../shared/src/string-compare.ts';
+import {promiseVoid} from 'shared/src/resolved-promises.ts';
+import {stringCompare} from 'shared/src/string-compare.ts';
 import type {FrozenJSONValue} from '../frozen-json.ts';
 import {ReadImpl} from './read-impl.ts';
 import type {Read, Store, Write} from './store.ts';
