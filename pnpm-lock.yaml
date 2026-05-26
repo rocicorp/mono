@@ -1002,33 +1002,18 @@ importers:
       zero-client:
         specifier: workspace:*
         version: link:../zero-client
-      zero-permissions:
-        specifier: workspace:*
-        version: link:../zero-permissions
       zero-pg:
         specifier: workspace:*
         version: link:../zero-pg
-      zero-protocol:
-        specifier: workspace:*
-        version: link:../zero-protocol
       zero-react:
         specifier: workspace:*
         version: link:../zero-react
-      zero-schema:
-        specifier: workspace:*
-        version: link:../zero-schema
       zero-server:
         specifier: workspace:*
         version: link:../zero-server
       zero-solid:
         specifier: workspace:*
         version: link:../zero-solid
-      zero-types:
-        specifier: workspace:*
-        version: link:../zero-types
-      zql:
-        specifier: workspace:*
-        version: link:../zql
       zqlite:
         specifier: workspace:*
         version: link:../zqlite
