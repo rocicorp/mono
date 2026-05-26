@@ -5,6 +5,8 @@ import {inProcChannel} from '../types/processes.ts';
 import {Subscription} from '../types/subscription.ts';
 import {
   createNotifierFrom,
+  getPragmaConfig,
+  SERVING_REPLICA_WAL_AUTOCHECKPOINT_PAGES,
   setUpMessageHandlers,
   subscribeTo,
 } from './replicator.ts';
@@ -47,5 +49,18 @@ describe('workers/replicator', () => {
       {state: 'version-ready', testSeqNum: 2},
       {state: 'version-ready', testSeqNum: 3},
     ]);
+  });
+
+  test('replica pragma config keeps serving checkpointing bounded off the hot path', () => {
+    expect(getPragmaConfig('serving').walAutocheckpoint).toBe(
+      SERVING_REPLICA_WAL_AUTOCHECKPOINT_PAGES,
+    );
+    expect(getPragmaConfig('serving-copy').walAutocheckpoint).toBe(
+      SERVING_REPLICA_WAL_AUTOCHECKPOINT_PAGES,
+    );
+
+    // Backup files are checkpointed by litestream; forcing SQLite's automatic
+    // writer-thread checkpoints back on would contend with that owner.
+    expect(getPragmaConfig('backup').walAutocheckpoint).toBe(0);
   });
 });
