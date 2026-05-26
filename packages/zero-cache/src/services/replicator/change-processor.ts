@@ -5,6 +5,7 @@ import {assert, unreachable} from '../../../../shared/src/asserts.ts';
 import {stringify} from '../../../../shared/src/bigint-json.ts';
 import {must} from '../../../../shared/src/must.ts';
 import type {DownloadStatus} from '../../../../zero-events/src/status.ts';
+import type {Statement} from '../../../../zqlite/src/db.ts';
 import {
   createLiteIndexStatement,
   createLiteTableStatement,
@@ -32,6 +33,7 @@ import {
   type LiteValueType,
 } from '../../types/lite.ts';
 import {liteTableName} from '../../types/names.ts';
+import {normalizedKeyOrder} from '../../types/row-key.ts';
 import {id} from '../../types/sql.ts';
 import type {
   BackfillCompleted,
@@ -56,7 +58,12 @@ import type {
 } from '../change-source/protocol/current/data.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
 import type {ReplicatorMode} from './replicator.ts';
-import {ChangeLog, DEL_OP, SET_OP} from './schema/change-log.ts';
+import {
+  type BatchRowOp,
+  ChangeLog,
+  DEL_OP,
+  SET_OP,
+} from './schema/change-log.ts';
 import {ColumnMetadataStore} from './schema/column-metadata.ts';
 import {
   ZERO_VERSION_COLUMN_NAME,
@@ -72,6 +79,382 @@ export type CommitResult = {
   schemaUpdated: boolean;
   changeLogUpdated: boolean;
 };
+
+type ChangeProcessorOptions = {
+  readonly cacheDmlSqlPlans?: boolean;
+};
+
+type UpsertPlan = {
+  // The row's present columns define the prepared INSERT shape; partial
+  // backfill/update rows must not reuse a statement for a different shape.
+  readonly rowColumns: readonly string[];
+  readonly sql: string;
+  statement: Statement | undefined;
+  // Multi-row INSERT SQL has one placeholder group per row, so the row count is
+  // part of the prepared-statement shape.
+  readonly batchStatements: Map<number, Statement>;
+};
+
+type UpdatePlan = {
+  readonly rowColumns: readonly string[];
+  readonly keyColumns: readonly string[];
+  readonly sql: string;
+};
+
+type DeletePlan = {
+  readonly keyColumns: readonly string[];
+  readonly sql: string;
+};
+
+type PendingInsertBatch = {
+  readonly table: string;
+  // All rows in a batch share a table and upsert plan so SQLite sees one
+  // multi-row INSERT with a fixed column list and placeholder layout.
+  readonly plan: UpsertPlan;
+  // Bound by SQLite's parameter limit; the version column is included in the
+  // per-row binding count.
+  readonly maxRows: number;
+  readonly rows: LiteRow[];
+  readonly logEntries: BatchRowOp[];
+  // A duplicate row key in the same multi-row INSERT would make "last write
+  // wins" depend on SQLite conflict behavior instead of stream order, so it
+  // forces a batch boundary.
+  readonly rowKeys: Set<string>;
+};
+
+// Consecutive same-shape inserts are the common catch-up/load-test burst:
+// one upstream transaction can carry many rows, and each row used to cross
+// JS/SQLite separately. Batching only this narrow shape keeps ordering and
+// rollback behavior easy to reason about while reducing native calls.
+const MAX_BATCH_BINDINGS = 900;
+
+class DmlSqlPlanCache {
+  readonly #enabled: boolean;
+  // Full maps retain prepared SQL by table/column/key shape across transactions.
+  readonly #upsertPlans = new Map<string, UpsertPlan>();
+  readonly #updatePlans = new Map<string, UpdatePlan>();
+  readonly #deletePlans = new Map<string, DeletePlan>();
+  // Logical replication usually emits long runs for the same table and shape.
+  // The one-entry per-table fast path avoids rebuilding a shape key for every
+  // row when the previous plan is still valid.
+  readonly #lastUpsertPlan = new Map<string, UpsertPlan>();
+  readonly #lastUpdatePlan = new Map<string, UpdatePlan>();
+  readonly #lastDeletePlan = new Map<string, DeletePlan>();
+
+  constructor(enabled: boolean) {
+    this.#enabled = enabled;
+  }
+
+  clear() {
+    this.#upsertPlans.clear();
+    this.#updatePlans.clear();
+    this.#deletePlans.clear();
+    this.#lastUpsertPlan.clear();
+    this.#lastUpdatePlan.clear();
+    this.#lastDeletePlan.clear();
+  }
+
+  getUpsertPlan(table: string, row: LiteRow, numCols: number): UpsertPlan {
+    if (!this.#enabled) {
+      return createUpsertPlan(table, columnsForRow(row, numCols));
+    }
+
+    const last = this.#lastUpsertPlan.get(table);
+    if (last && rowHasColumns(row, numCols, last.rowColumns)) {
+      // Reuse is safe only when the row still has every column the prepared
+      // INSERT binds. Otherwise values would be bound to the wrong column list.
+      return last;
+    }
+
+    const rowColumns = columnsForRow(row, numCols);
+    const cacheKey = shapeKey(table, rowColumns);
+    let plan = this.#upsertPlans.get(cacheKey);
+    if (!plan) {
+      plan = createUpsertPlan(table, rowColumns);
+      this.#upsertPlans.set(cacheKey, plan);
+    }
+    this.#lastUpsertPlan.set(table, plan);
+    return plan;
+  }
+
+  getUpdatePlan(
+    table: string,
+    row: LiteRow,
+    numCols: number,
+    keyColumns: readonly string[],
+  ): UpdatePlan {
+    if (!this.#enabled) {
+      return createUpdatePlan(table, columnsForRow(row, numCols), keyColumns);
+    }
+
+    const last = this.#lastUpdatePlan.get(table);
+    if (
+      last &&
+      rowHasColumns(row, numCols, last.rowColumns) &&
+      sameColumns(keyColumns, last.keyColumns)
+    ) {
+      // UPDATE reuse also depends on the key column order because those
+      // placeholders are bound after the SET values.
+      return last;
+    }
+
+    const rowColumns = columnsForRow(row, numCols);
+    const cacheKey = shapeKey(table, rowColumns, keyColumns);
+    let plan = this.#updatePlans.get(cacheKey);
+    if (!plan) {
+      plan = createUpdatePlan(table, rowColumns, keyColumns);
+      this.#updatePlans.set(cacheKey, plan);
+    }
+    this.#lastUpdatePlan.set(table, plan);
+    return plan;
+  }
+
+  getDeletePlan(table: string, keyColumns: readonly string[]): DeletePlan {
+    if (!this.#enabled) {
+      return createDeletePlan(table, keyColumns);
+    }
+
+    const last = this.#lastDeletePlan.get(table);
+    if (last && sameColumns(keyColumns, last.keyColumns)) {
+      // DELETE statements bind only the key columns, so key order is the whole
+      // statement shape.
+      return last;
+    }
+
+    const cacheKey = shapeKey(table, keyColumns);
+    let plan = this.#deletePlans.get(cacheKey);
+    if (!plan) {
+      plan = createDeletePlan(table, keyColumns);
+      this.#deletePlans.set(cacheKey, plan);
+    }
+    this.#lastDeletePlan.set(table, plan);
+    return plan;
+  }
+}
+
+function createUpsertPlan(
+  table: string,
+  rowColumns: readonly string[],
+): UpsertPlan {
+  const insertColumns = [...rowColumns, ZERO_VERSION_COLUMN_NAME];
+  const columnsSQL = insertColumns.map(c => id(c)).join(',');
+  return {
+    rowColumns,
+    sql: /*sql*/ `
+      INSERT OR REPLACE INTO ${id(table)} (${columnsSQL})
+        VALUES (${placeholders(insertColumns.length)})
+      `,
+    statement: undefined,
+    batchStatements: new Map(),
+  };
+}
+
+function createBatchUpsertSql(
+  table: string,
+  rowColumns: readonly string[],
+  rows: number,
+): string {
+  const insertColumns = [...rowColumns, ZERO_VERSION_COLUMN_NAME];
+  const columnsSQL = insertColumns.map(c => id(c)).join(',');
+  return /*sql*/ `
+    INSERT OR REPLACE INTO ${id(table)} (${columnsSQL})
+      VALUES ${Array.from({length: rows})
+        .map(() => `(${placeholders(insertColumns.length)})`)
+        .join(',')}
+    `;
+}
+
+function upsertStatement(
+  db: StatementRunner,
+  table: string,
+  plan: UpsertPlan,
+  rows: number,
+): Statement {
+  if (rows === 1) {
+    return (plan.statement ??= db.db.prepare(plan.sql));
+  }
+
+  let stmt = plan.batchStatements.get(rows);
+  if (!stmt) {
+    // Multi-row SQL changes with the row count because the placeholder list
+    // changes, so cache by rows inside the shared plan.
+    stmt = db.db.prepare(createBatchUpsertSql(table, plan.rowColumns, rows));
+    plan.batchStatements.set(rows, stmt);
+  }
+  return stmt;
+}
+
+function createUpdatePlan(
+  table: string,
+  rowColumns: readonly string[],
+  keyColumns: readonly string[],
+): UpdatePlan {
+  const setExprs = [...rowColumns, ZERO_VERSION_COLUMN_NAME].map(
+    col => `${id(col)}=?`,
+  );
+  const conds = keyColumns.map(col => `${id(col)}=?`);
+  return {
+    rowColumns,
+    keyColumns,
+    sql: /*sql*/ `
+      UPDATE ${id(table)}
+        SET ${setExprs.join(',')}
+        WHERE ${conds.join(' AND ')}
+      `,
+  };
+}
+
+function createDeletePlan(
+  table: string,
+  keyColumns: readonly string[],
+): DeletePlan {
+  const conds = keyColumns.map(col => `${id(col)}=?`);
+  return {
+    keyColumns,
+    sql: `DELETE FROM ${id(table)} WHERE ${conds.join(' AND ')}`,
+  };
+}
+
+function columnsForRow(row: LiteRow, numCols: number): string[] {
+  const columns: string[] = [];
+  columns.length = numCols;
+  let i = 0;
+  for (const col in row) {
+    columns[i++] = col;
+  }
+  assert(i === numCols, `Expected ${numCols} columns, got ${i}`);
+  return columns;
+}
+
+function rowHasColumns(
+  row: LiteRow,
+  numCols: number,
+  columns: readonly string[],
+) {
+  // The row object can be reused from parsed change-source payloads; this check
+  // proves the cached statement's column list still matches without allocating a
+  // new column array for the common same-shape row.
+  if (numCols !== columns.length) {
+    return false;
+  }
+  for (const col of columns) {
+    if (!Object.hasOwn(row, col)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function sameColumns(left: readonly string[], right: readonly string[]) {
+  if (left.length !== right.length) {
+    return false;
+  }
+  for (let i = 0; i < left.length; i++) {
+    if (left[i] !== right[i]) {
+      return false;
+    }
+  }
+  return true;
+}
+
+function shapeKey(
+  table: string,
+  columns: readonly string[],
+  extraColumns?: readonly string[],
+) {
+  let key = columnKeyPart(table) + columnListKeyPart(columns);
+  if (extraColumns) {
+    key += columnListKeyPart(extraColumns);
+  }
+  return key;
+}
+
+function columnListKeyPart(columns: readonly string[]) {
+  // Length prefixes keep shapes unambiguous without allocating nested arrays;
+  // ["ab", "c"] and ["a", "bc"] must not collide.
+  let key = `#${columns.length}`;
+  for (const col of columns) {
+    key += columnKeyPart(col);
+  }
+  return key;
+}
+
+function columnKeyPart(col: string) {
+  return `${col.length}:${col}`;
+}
+
+function placeholders(length: number) {
+  return Array.from({length}).fill('?').join(',');
+}
+
+function upsertValues(
+  row: LiteRow,
+  columns: readonly string[],
+  version: LexiVersion,
+) {
+  const values: (LiteValueType | LexiVersion)[] = [];
+  values.length = columns.length + 1;
+  for (let i = 0; i < columns.length; i++) {
+    values[i] = row[columns[i]];
+  }
+  values[columns.length] = version;
+  return values;
+}
+
+function updateValues(
+  row: LiteRow,
+  rowColumns: readonly string[],
+  key: LiteRowKey,
+  keyColumns: readonly string[],
+  version: LexiVersion,
+) {
+  const values: (LiteValueType | LexiVersion)[] = [];
+  values.length = rowColumns.length + keyColumns.length + 1;
+  let pos = 0;
+  for (const col of rowColumns) {
+    values[pos++] = row[col];
+  }
+  values[pos++] = version;
+  for (const col of keyColumns) {
+    values[pos++] = key[col];
+  }
+  return values;
+}
+
+function keyValues(key: LiteRowKey, keyColumns: readonly string[]) {
+  const values: LiteValueType[] = [];
+  values.length = keyColumns.length;
+  for (let i = 0; i < keyColumns.length; i++) {
+    values[i] = key[keyColumns[i]];
+  }
+  return values;
+}
+
+function rowKeyString(key: LiteRowKey) {
+  // Most replicated tables use a single-column key. Build that canonical JSON
+  // directly to avoid allocating a normalized copy on every row; composite keys
+  // still use normalizedKeyOrder() so column order remains stable.
+  let singleColumn: string | undefined;
+  let singleValue: LiteValueType = null;
+  for (const col in key) {
+    if (singleColumn !== undefined) {
+      return stringify(normalizedKeyOrder(key));
+    }
+    singleColumn = col;
+    singleValue = key[col];
+  }
+  if (singleColumn !== undefined) {
+    return `{${JSON.stringify(singleColumn)}:${valueKeyString(singleValue)}}`;
+  }
+  return stringify(normalizedKeyOrder(key));
+}
+
+function valueKeyString(value: LiteValueType) {
+  if (typeof value === 'string') {
+    return JSON.stringify(value);
+  }
+  return stringify(value);
+}
 
 /**
  * The ChangeProcessor partitions the stream of messages into transactions
@@ -95,6 +478,7 @@ export class ChangeProcessor {
   // and reloads them after a schema change. It is cached here to avoid
   // reading them from the DB on every transaction.
   readonly #tableSpecs = new Map<string, LiteTableSpecWithReplicationStatus>();
+  readonly #dmlSqlPlans: DmlSqlPlanCache;
 
   #currentTx: TransactionProcessor | null = null;
 
@@ -104,12 +488,14 @@ export class ChangeProcessor {
     db: StatementRunner,
     mode: ChangeProcessorMode,
     failService: (lc: LogContext, err: unknown) => void,
+    {cacheDmlSqlPlans = true}: ChangeProcessorOptions = {},
   ) {
     this.#db = db;
     this.#changeLog = new ChangeLog(db.db);
     this.#tableMetadata = new TableMetadataTracker(db.db);
     this.#mode = mode;
     this.#failService = failService;
+    this.#dmlSqlPlans = new DmlSqlPlanCache(cacheDmlSqlPlans);
   }
 
   #fail(lc: LogContext, err: unknown) {
@@ -156,11 +542,49 @@ export class ChangeProcessor {
           : type === 'commit'
             ? downstream[2].watermark
             : undefined;
+      // Begin carries the future commit watermark used as this transaction's
+      // row version. Commit carries the durable replication watermark to persist.
+      // Data messages intentionally carry neither; they are ordered by the open tx.
       return this.#processMessage(lc, message, watermark);
     } catch (e) {
       this.#fail(lc, e);
     }
     return null;
+  }
+
+  processMessages(
+    lc: LogContext,
+    downstreams: readonly ChangeStreamData[],
+  ): CommitResult | readonly CommitResult[] | null {
+    if (this.#failure) {
+      return null;
+    }
+
+    // RM -> VS streams are row-heavy, so the common path should pay the public
+    // failure/try wrapper once per stream batch rather than once per row.
+    const results: CommitResult[] = [];
+    try {
+      for (const downstream of downstreams) {
+        const [type, message] = downstream;
+        const watermark =
+          type === 'begin'
+            ? downstream[2].commitWatermark
+            : type === 'commit'
+              ? downstream[2].watermark
+              : undefined;
+        const result = this.#processMessage(lc, message, watermark);
+        if (result) {
+          results.push(result);
+        }
+      }
+    } catch (e) {
+      this.#fail(lc, e);
+    }
+
+    if (results.length === 0) {
+      return null;
+    }
+    return results.length === 1 ? results[0] : results;
   }
 
   #beginTransaction(
@@ -186,6 +610,7 @@ export class ChangeProcessor {
           this.#changeLog,
           this.#tableMetadata,
           this.#tableSpecs,
+          this.#dmlSqlPlans,
           commitVersion,
           jsonFormat,
         );
@@ -231,11 +656,11 @@ export class ChangeProcessor {
     }
 
     if (msg.tag === 'commit') {
+      assert(watermark, 'watermark is required for commit messages');
+      const result = tx.processCommit(msg, watermark);
       // Undef this.#currentTx to allow the assembly of the next transaction.
       this.#currentTx = null;
-
-      assert(watermark, 'watermark is required for commit messages');
-      return tx.processCommit(msg, watermark);
+      return result;
     }
 
     if (msg.tag === 'rollback') {
@@ -244,50 +669,67 @@ export class ChangeProcessor {
       return null;
     }
 
+    // Insert batches are deliberately narrow: consecutive INSERTs with the same
+    // table/shape. Every other mutation flushes first so change-log positions,
+    // metadata side effects, and rollback behavior remain in stream order.
     switch (msg.tag) {
       case 'insert':
         tx.processInsert(msg);
         break;
       case 'update':
+        tx.flushPendingInserts();
         tx.processUpdate(msg);
         break;
       case 'delete':
+        tx.flushPendingInserts();
         tx.processDelete(msg);
         break;
       case 'truncate':
+        tx.flushPendingInserts();
         tx.processTruncate(msg);
         break;
       case 'create-table':
+        tx.flushPendingInserts();
         tx.processCreateTable(msg);
         break;
       case 'rename-table':
+        tx.flushPendingInserts();
         tx.processRenameTable(msg);
         break;
       case 'update-table-metadata':
+        tx.flushPendingInserts();
         tx.processTableMetadata(msg);
         break;
       case 'add-column':
+        tx.flushPendingInserts();
         tx.processAddColumn(msg);
         break;
       case 'update-column':
+        tx.flushPendingInserts();
         tx.processUpdateColumn(msg);
         break;
       case 'drop-column':
+        tx.flushPendingInserts();
         tx.processDropColumn(msg);
         break;
       case 'drop-table':
+        tx.flushPendingInserts();
         tx.processDropTable(msg);
         break;
       case 'create-index':
+        tx.flushPendingInserts();
         tx.processCreateIndex(msg);
         break;
       case 'drop-index':
+        tx.flushPendingInserts();
         tx.processDropIndex(msg);
         break;
       case 'backfill':
+        tx.flushPendingInserts();
         tx.processBackfill(msg);
         break;
       case 'backfill-completed':
+        tx.flushPendingInserts();
         tx.processBackfillCompleted(msg);
         break;
       default:
@@ -328,12 +770,14 @@ class TransactionProcessor {
   readonly #changeLog: ChangeLog;
   readonly #tableMetadata: TableMetadataTracker;
   readonly #tableSpecs: Map<string, LiteTableSpecWithReplicationStatus>;
+  readonly #dmlSqlPlans: DmlSqlPlanCache;
   readonly #jsonFormat: JSONFormat;
   readonly #columnMetadata: ColumnMetadataStore;
 
   #pos = 0;
   #schemaChanged = false;
   #numChangeLogEntries = 0;
+  #pendingInsertBatch: PendingInsertBatch | undefined;
 
   constructor(
     lc: LogContext,
@@ -342,6 +786,7 @@ class TransactionProcessor {
     changeLog: ChangeLog,
     tableMetadata: TableMetadataTracker,
     tableSpecs: Map<string, LiteTableSpecWithReplicationStatus>,
+    dmlSqlPlans: DmlSqlPlanCache,
     commitVersion: LexiVersion,
     jsonFormat: JSONFormat,
   ) {
@@ -380,6 +825,7 @@ class TransactionProcessor {
     this.#changeLog = changeLog;
     this.#tableMetadata = tableMetadata;
     this.#tableSpecs = tableSpecs;
+    this.#dmlSqlPlans = dmlSqlPlans;
     // The column_metadata table is guaranteed to exist since the
     // replica-schema.ts migration to v8.
     this.#columnMetadata = must(ColumnMetadataStore.getInstance(db.db));
@@ -391,6 +837,7 @@ class TransactionProcessor {
 
   #reloadTableSpecs() {
     this.#tableSpecs.clear();
+    this.#dmlSqlPlans.clear();
     // zqlSpecs include the primary key derived from unique indexes
     const zqlSpecs = computeZqlSpecs(this.#lc, this.#db.db, {
       includeBackfillingColumns: true,
@@ -412,10 +859,7 @@ class TransactionProcessor {
     return must(this.#tableSpecs.get(name), `Unknown table ${name}`);
   }
 
-  #getKey(
-    {row, numCols}: {row: LiteRow; numCols: number},
-    {relation}: {relation: MessageRelation},
-  ): LiteRowKey {
+  #getKeyColumns({relation}: {relation: MessageRelation}) {
     const keyColumns =
       relation.rowKey.type !== 'full'
         ? relation.rowKey.columns // already a suitable key
@@ -425,6 +869,14 @@ class TransactionProcessor {
         `Cannot replicate table "${relation.name}" without a PRIMARY KEY or UNIQUE INDEX`,
       );
     }
+    return keyColumns;
+  }
+
+  #getKey(
+    {row, numCols}: {row: LiteRow; numCols: number},
+    {relation}: {relation: MessageRelation},
+    keyColumns = this.#getKeyColumns({relation}),
+  ): LiteRowKey {
     // For the common case (replica identity default), the row is already the
     // key for deletes and updates, in which case a new object can be avoided.
     if (numCols === keyColumns.length) {
@@ -442,11 +894,6 @@ class TransactionProcessor {
     const tableSpec = this.#tableSpec(table);
     const newRow = liteRow(insert.new, tableSpec, this.#jsonFormat);
 
-    this.#upsert(table, {
-      ...newRow.row,
-      [ZERO_VERSION_COLUMN_NAME]: this.#version,
-    });
-
     if (insert.relation.rowKey.columns.length === 0) {
       // INSERTs can be replicated for rows without a PRIMARY KEY or a
       // UNIQUE INDEX. These are written to the replica but not recorded
@@ -455,21 +902,109 @@ class TransactionProcessor {
       // (Once the table schema has been corrected to include a key, the
       //  associated schema change will reset pipelines and data can be
       //  loaded via hydration.)
+      this.#queueInsert(table, newRow, undefined, undefined);
       return;
     }
     const key = this.#getKey(newRow, insert);
-    this.#logSetOp(table, key, getBackfilledColumns(newRow.row, tableSpec));
+    const backfilledColumns = getBackfilledColumns(newRow.row, tableSpec);
+    if (backfilledColumns !== undefined) {
+      // Backfill markers merge with column metadata in the change log, so this
+      // row takes the single-row path instead of the plain SET-op batch.
+      this.#flushPendingInserts();
+      this.#upsert(table, newRow);
+      this.#logSetOp(table, key, backfilledColumns);
+      return;
+    }
+    this.#queueInsert(table, newRow, key, rowKeyString(key));
   }
 
-  #upsert(table: string, row: LiteRow) {
-    const columns = Object.keys(row).map(c => id(c));
-    this.#db.run(
-      `
-      INSERT OR REPLACE INTO ${id(table)} (${columns.join(',')})
-        VALUES (${Array.from({length: columns.length}).fill('?').join(',')})
-      `,
-      Object.values(row),
+  #upsert(table: string, {row, numCols}: {row: LiteRow; numCols: number}) {
+    const plan = this.#dmlSqlPlans.getUpsertPlan(table, row, numCols);
+    this.#db.run(plan.sql, upsertValues(row, plan.rowColumns, this.#version));
+  }
+
+  #queueInsert(
+    table: string,
+    newRow: {row: LiteRow; numCols: number},
+    key: LiteRowKey | undefined,
+    rowKey: string | undefined,
+  ) {
+    const plan = this.#dmlSqlPlans.getUpsertPlan(
+      table,
+      newRow.row,
+      newRow.numCols,
     );
+    const maxRows = Math.max(
+      1,
+      Math.floor(MAX_BATCH_BINDINGS / (plan.rowColumns.length + 1)),
+    );
+    const batch = this.#pendingInsertBatch;
+    if (batch) {
+      const tableChanged = batch.table !== table;
+      const shapeChanged = batch.plan.sql !== plan.sql;
+      const batchFull = batch.rows.length >= batch.maxRows;
+      const duplicateRowInBatch =
+        rowKey !== undefined && batch.rowKeys.has(rowKey);
+      if (tableChanged || shapeChanged || batchFull || duplicateRowInBatch) {
+        // A multi-row INSERT has one target table and one column shape. It also
+        // must not contain the same row key twice, because stream order should
+        // decide repeated writes to a row, not SQLite conflict resolution inside
+        // one statement.
+        this.#flushPendingInserts();
+      }
+    }
+
+    const current =
+      this.#pendingInsertBatch ??
+      (this.#pendingInsertBatch = {
+        table,
+        plan,
+        maxRows,
+        rows: [],
+        logEntries: [],
+        rowKeys: new Set(),
+      });
+
+    if (rowKey !== undefined) {
+      current.rowKeys.add(rowKey);
+    }
+    const logEntry =
+      this.#mode === 'serving' && key !== undefined && rowKey !== undefined
+        ? {
+            pos: this.#pos++,
+            table,
+            rowKey,
+          }
+        : undefined;
+    if (logEntry) {
+      this.#numChangeLogEntries++;
+      current.logEntries.push(logEntry);
+    }
+    current.rows.push(newRow.row);
+  }
+
+  #flushPendingInserts() {
+    const batch = this.#pendingInsertBatch;
+    if (!batch) {
+      return;
+    }
+    this.#pendingInsertBatch = undefined;
+
+    const values = [];
+    const rowValueCount = batch.plan.rowColumns.length + 1;
+    values.length = batch.rows.length * rowValueCount;
+    let i = 0;
+    for (const row of batch.rows) {
+      for (const col of batch.plan.rowColumns) {
+        values[i++] = row[col];
+      }
+      values[i++] = this.#version;
+    }
+
+    upsertStatement(this.#db, batch.table, batch.plan, batch.rows.length).run(
+      values,
+    );
+    this.#changeLog.logSetOps(this.#version, batch.logEntries);
   }
 
   // Updates by default are applied as UPDATE commands to support partial
@@ -488,16 +1023,17 @@ class TransactionProcessor {
     const table = liteTableName(update.relation);
     const tableSpec = this.#tableSpec(table);
     const newRow = liteRow(update.new, tableSpec, this.#jsonFormat);
-    const row = {...newRow.row, [ZERO_VERSION_COLUMN_NAME]: this.#version};
+    const keyColumns = this.#getKeyColumns(update);
 
     // update.key is set with the old values if the key has changed.
     const oldKey = update.key
       ? this.#getKey(
           liteRow(update.key, this.#tableSpec(table), this.#jsonFormat),
           update,
+          keyColumns,
         )
       : null;
-    const newKey = this.#getKey(newRow, update);
+    const newKey = this.#getKey(newRow, update, keyColumns);
 
     if (oldKey) {
       this.#logDeleteOp(table, oldKey, tableSpec.backfilling);
@@ -505,43 +1041,52 @@ class TransactionProcessor {
     this.#logSetOp(table, newKey, getBackfilledColumns(newRow.row, tableSpec));
 
     const currKey = oldKey ?? newKey;
-    const conds = Object.keys(currKey).map(col => `${id(col)}=?`);
-    const setExprs = Object.keys(row).map(col => `${id(col)}=?`);
+    const plan = this.#dmlSqlPlans.getUpdatePlan(
+      table,
+      newRow.row,
+      newRow.numCols,
+      keyColumns,
+    );
 
     const {changes} = this.#db.run(
-      `
-      UPDATE ${id(table)}
-        SET ${setExprs.join(',')}
-        WHERE ${conds.join(' AND ')}
-      `,
-      [...Object.values(row), ...Object.values(currKey)],
+      plan.sql,
+      updateValues(
+        newRow.row,
+        plan.rowColumns,
+        currKey,
+        plan.keyColumns,
+        this.#version,
+      ),
     );
 
     // If the UPDATE did not affect any rows, perform an UPSERT of the
     // new row for resumptive replication.
     if (changes === 0) {
-      this.#upsert(table, row);
+      this.#upsert(table, newRow);
     }
   }
 
   processDelete(del: MessageDelete) {
     const table = liteTableName(del.relation);
     const tableSpec = this.#tableSpec(table);
+    const keyColumns = this.#getKeyColumns(del);
     const rowKey = this.#getKey(
       liteRow(del.key, tableSpec, this.#jsonFormat),
       del,
+      keyColumns,
     );
 
-    this.#delete(table, rowKey);
+    this.#delete(table, rowKey, keyColumns);
     this.#logDeleteOp(table, rowKey, tableSpec.backfilling);
   }
 
-  #delete(table: string, rowKey: LiteRowKey) {
-    const conds = Object.keys(rowKey).map(col => `${id(col)}=?`);
-    this.#db.run(
-      `DELETE FROM ${id(table)} WHERE ${conds.join(' AND ')}`,
-      Object.values(rowKey),
-    );
+  #delete(table: string, rowKey: LiteRowKey, keyColumns: readonly string[]) {
+    const plan = this.#dmlSqlPlans.getDeletePlan(table, keyColumns);
+    this.#db.run(plan.sql, keyValues(rowKey, plan.keyColumns));
+  }
+
+  flushPendingInserts() {
+    this.#flushPendingInserts();
   }
 
   processTruncate(truncate: MessageTruncate) {
@@ -892,6 +1437,7 @@ class TransactionProcessor {
         }: ${stringify(commit)}`,
       );
     }
+    this.#flushPendingInserts();
     updateReplicationWatermark(this.#db, watermark);
 
     if (this.#schemaChanged) {
