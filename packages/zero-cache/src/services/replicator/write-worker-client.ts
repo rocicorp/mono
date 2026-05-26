@@ -11,6 +11,7 @@ import type {SubscriptionState} from './schema/replication-state.ts';
 export type PragmaConfig = {
   busyTimeout: number;
   analysisLimit: number;
+  synchronous?: 'OFF' | 'NORMAL' | 'FULL' | undefined;
   walAutocheckpoint?: number | undefined;
 };
 
@@ -22,6 +23,9 @@ type ErrorHandler = (err: Error) => void;
 export interface WriteWorkerClient {
   getSubscriptionState(): Promise<SubscriptionState>;
   processMessage(downstream: ChangeStreamData): Promise<CommitResult | null>;
+  processMessages(
+    downstreams: readonly ChangeStreamData[],
+  ): Promise<CommitResult | readonly CommitResult[] | null>;
   abort(): void;
   stop(): Promise<void>;
   onError(handler: ErrorHandler): void;
@@ -90,6 +94,7 @@ export type ArgsMap = {
   init: [string, ChangeProcessorMode, PragmaConfig, LogConfig];
   getSubscriptionState: [];
   processMessage: [ChangeStreamData];
+  processMessages: [readonly ChangeStreamData[]];
   abort: [];
   stop: [];
 };
@@ -102,6 +107,7 @@ export type ResultMap = {
   init: void;
   getSubscriptionState: SubscriptionState;
   processMessage: CommitResult | null;
+  processMessages: CommitResult | readonly CommitResult[] | null;
   abort: void;
   stop: void;
 };
@@ -115,6 +121,9 @@ export type WriteError = {writeError: SerializedError};
 export function applyPragmas(db: Database, pragmas: PragmaConfig) {
   db.pragma(`busy_timeout = ${pragmas.busyTimeout}`);
   db.pragma(`analysis_limit = ${pragmas.analysisLimit}`);
+  if (pragmas.synchronous !== undefined) {
+    db.pragma(`synchronous = ${pragmas.synchronous}`);
+  }
   if (pragmas.walAutocheckpoint !== undefined) {
     db.pragma(`wal_autocheckpoint = ${pragmas.walAutocheckpoint}`);
   }
@@ -196,6 +205,12 @@ export class ThreadWriteWorkerClient implements WriteWorkerClient {
 
   processMessage(downstream: ChangeStreamData): Promise<CommitResult | null> {
     return this.#call('processMessage', [downstream]);
+  }
+
+  processMessages(
+    downstreams: readonly ChangeStreamData[],
+  ): Promise<CommitResult | readonly CommitResult[] | null> {
+    return this.#call('processMessages', [downstreams]);
   }
 
   abort(): void {
