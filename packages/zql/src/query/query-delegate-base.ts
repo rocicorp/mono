@@ -182,7 +182,12 @@ export abstract class QueryDelegateBase implements QueryDelegate {
    * Default no-op implementation.
    * Override if you need to track server queries (e.g., ZeroContext, test delegates).
    */
-  addServerQuery(_ast: AST, _ttl: TTL, _gotCallback?: GotCallback): () => void {
+  addServerQuery(
+    _queryHash: string,
+    _ast: AST,
+    _ttl: TTL,
+    _gotCallback?: GotCallback,
+  ): () => void {
     return () => {};
   }
 
@@ -313,7 +318,7 @@ export function preloadImpl<
     };
   }
 
-  const cleanup = delegate.addServerQuery(ast, ttl, got => {
+  const cleanup = delegate.addServerQuery(qi.hash(), ast, ttl, got => {
     if (got) {
       resolve();
     }
@@ -386,7 +391,7 @@ export function materializeImpl<
 
   const removeAddedQuery = customQueryID
     ? delegate.addCustomQuery(ast, customQueryID, ttl, gotCallback)
-    : delegate.addServerQuery(ast, ttl, gotCallback);
+    : delegate.addServerQuery(queryHash, ast, ttl, gotCallback);
 
   const input = buildPipeline(ast, delegate, queryID);
 

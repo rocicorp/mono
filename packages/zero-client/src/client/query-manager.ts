@@ -291,11 +291,15 @@ export class QueryManager implements InspectorDelegate {
     return this.#add(queryId, normalized, name, args, ttl, gotCallback);
   }
 
-  addLegacy(ast: AST, ttl: TTL, gotCallback?: GotCallback): () => void {
+  addLegacy(
+    ast: AST,
+    ttl: TTL,
+    gotCallback?: GotCallback,
+    queryHash?: string,
+  ): () => void {
     const normalized = normalizeAST(ast);
-    const astHash = hashOfAST(normalized);
     return this.#add(
-      astHash,
+      queryHash ?? hashOfAST(normalized),
       normalized,
       undefined, // name is undefined for legacy queries
       undefined, // args are undefined for legacy queries
@@ -451,8 +455,11 @@ export class QueryManager implements InspectorDelegate {
         this.#queryMetrics.delete(lruQueryID);
         this.#queueQueryChange({op: 'del', hash: lruQueryID});
         assert(evictedAST, 'Expected evicted AST to exist');
-        assert(evictedMetrics, 'Expected evicted metrics to exist');
-        this.#queryEvictedCallback?.(lruQueryID, evictedAST, evictedMetrics);
+        this.#queryEvictedCallback?.(
+          lruQueryID,
+          evictedAST,
+          evictedMetrics ?? newPerQueryMetrics(),
+        );
       }
     }
   }

@@ -80,7 +80,12 @@ export class QueryDelegateImpl<TContext = undefined> extends QueryDelegateBase {
     return this.#addQuery({ast, ttl, ...customQueryID}, gotCallback);
   }
 
-  addServerQuery(ast: AST, ttl: TTL, gotCallback?: GotCallback): () => void {
+  addServerQuery(
+    _queryHash: string,
+    ast: AST,
+    ttl: TTL,
+    gotCallback?: GotCallback,
+  ): () => void {
     return this.#addQuery(
       {ast, name: undefined, args: undefined, ttl},
       gotCallback,

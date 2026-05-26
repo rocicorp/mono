@@ -8,14 +8,23 @@ import type {Source, SourceInput} from 'zql/src/ivm/source.ts';
 import {MeasurePushOperator} from 'zql/src/query/measure-push-operator.ts';
 import type {MetricsDelegate} from 'zql/src/query/metrics-delegate.ts';
 import {QueryDelegateBase} from 'zql/src/query/query-delegate-base.ts';
-import type {CommitListener} from 'zql/src/query/query-delegate.ts';
+import type {
+  CommitListener,
+  GotCallback,
+} from 'zql/src/query/query-delegate.ts';
 import type {RunOptions} from 'zql/src/query/query.ts';
+import type {TTL} from 'zql/src/query/ttl.ts';
 import type {NoIndexDiff} from '../../../replicache/src/btree/node.ts';
 import type {Hash} from '../../../replicache/src/hash.ts';
 import {type IVMSourceBranch} from './ivm-branch.ts';
 import type {QueryManager} from './query-manager.ts';
 
-export type AddQuery = QueryManager['addLegacy'];
+export type AddQuery = (
+  queryHash: string,
+  ast: AST,
+  ttl: TTL,
+  gotCallback?: GotCallback,
+) => () => void;
 export type AddCustomQuery = QueryManager['addCustom'];
 
 export type UpdateQuery = QueryManager['updateLegacy'];

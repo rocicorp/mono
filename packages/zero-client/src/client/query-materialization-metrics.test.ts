@@ -93,9 +93,14 @@ describe('query materialization metrics', () => {
 
     addServerQuerySpy = vi
       .fn<
-        (ast: AST, ttl: number, callback?: (got: boolean) => void) => () => void
+        (
+          queryHash: string,
+          ast: AST,
+          ttl: number,
+          callback?: (got: boolean) => void,
+        ) => () => void
       >()
-      .mockImplementation((_ast, _ttl, callback) => {
+      .mockImplementation((_queryHash, _ast, _ttl, callback) => {
         gotCallback = callback;
         return () => {};
       });

@@ -597,9 +597,9 @@ export class Zero<
     this.#zeroContext = new ZeroContext(
       lc,
       this.#ivmMain,
-      (ast, ttl, gotCallback) => {
+      (queryHash, ast, ttl, gotCallback) => {
         if (enableLegacyQueries) {
-          return this.#queryManager.addLegacy(ast, ttl, gotCallback);
+          return this.#queryManager.addLegacy(ast, ttl, gotCallback, queryHash);
         }
         // legacy queries are client side only. Do not track with the server
         return emptyFunction;

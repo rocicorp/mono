@@ -36,7 +36,12 @@ export interface NewQueryDelegate {
  * This interface contains the methods needed to execute queries and manage their lifecycle.
  */
 export interface QueryDelegate extends BuilderDelegate, MetricsDelegate {
-  addServerQuery(ast: AST, ttl: TTL, gotCallback?: GotCallback): () => void;
+  addServerQuery(
+    queryHash: string,
+    ast: AST,
+    ttl: TTL,
+    gotCallback?: GotCallback,
+  ): () => void;
 
   addCustomQuery(
     ast: AST,
