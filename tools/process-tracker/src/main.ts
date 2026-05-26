@@ -2,8 +2,8 @@ import {open} from 'node:fs/promises';
 import {consoleLogSink, LogContext} from '@rocicorp/logger';
 import find from 'find-process';
 import pidusage from 'pidusage';
-import {parseOptions} from 'shared/src/options.ts';
-import * as v from 'shared/src/valita.ts';
+import {parseOptions} from '../../../packages/shared/src/options.ts';
+import * as v from '../../../packages/shared/src/valita.ts';
 
 const options = {
   pids: v.array(v.number()),

@@ -1,6 +1,6 @@
-import {TDigest} from 'shared/src/tdigest.ts';
 import {describe, expect, test} from 'vitest';
-import type {QueryServerMetrics} from 'zero-protocol/src/inspect-down.ts';
+import {TDigest} from '../../../../shared/src/tdigest.ts';
+import type {QueryServerMetrics} from '../../../../zero-protocol/src/inspect-down.ts';
 import {metricsForProtocol} from './inspect-handler.ts';
 
 describe('metricsForProtocol', () => {

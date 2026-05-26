@@ -278,6 +278,9 @@ importers:
       vitest:
         specifier: ^4.1.6
         version: 4.1.6(@opentelemetry/api@1.9.1)(@types/node@22.19.19)(@vitest/browser-playwright@4.1.6)(@vitest/coverage-v8@4.1.6)(vite@8.0.13(@types/node@22.19.19)(esbuild@0.27.7)(jiti@1.21.7)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))
+      zero-cache:
+        specifier: workspace:*
+        version: link:../../packages/zero-cache
 
   apps/zql-viz:
     dependencies:
@@ -407,6 +410,9 @@ importers:
       zero-types:
         specifier: workspace:*
         version: link:../zero-types
+      zql:
+        specifier: workspace:*
+        version: link:../zql
 
   packages/datadog:
     devDependencies:
