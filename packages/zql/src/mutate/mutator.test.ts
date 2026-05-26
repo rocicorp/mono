@@ -1,8 +1,8 @@
 // oxlint-disable require-await
 import type {StandardSchemaV1} from '@standard-schema/spec';
-import type {ReadonlyJSONValue} from 'shared/src/json.ts';
 import {describe, expect, expectTypeOf, test, vi} from 'vitest';
-import type {Schema} from 'zero-types/src/schema.ts';
+import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
+import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {Transaction} from './custom.ts';
 import {defineMutators} from './mutator-registry.ts';
 import {

@@ -1,11 +1,6 @@
 import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {
-  clearBrowserOverrides,
-  overrideBrowserGlobal,
-} from 'shared/src/browser-env.ts';
-import {TestLogSink} from 'shared/src/logging-test-utils.ts';
-import {
   afterEach,
   assert,
   beforeEach,
@@ -15,36 +10,6 @@ import {
   test,
   vi,
 } from 'vitest';
-import {changeDesiredQueriesMessageSchema} from 'zero-protocol/src/change-desired-queries.ts';
-import type {ClientSchema} from 'zero-protocol/src/client-schema.ts';
-import {
-  decodeSecProtocols,
-  encodeSecProtocols,
-  initConnectionMessageSchema,
-} from 'zero-protocol/src/connect.ts';
-import type {Downstream} from 'zero-protocol/src/down.ts';
-import {ErrorKind} from 'zero-protocol/src/error-kind.ts';
-import {ErrorOrigin} from 'zero-protocol/src/error-origin.ts';
-import {ErrorReason} from 'zero-protocol/src/error-reason.ts';
-import {type CRUDOp, type Mutation} from 'zero-protocol/src/mutation.ts';
-import {PROTOCOL_VERSION} from 'zero-protocol/src/protocol-version.ts';
-import {pushMessageSchema} from 'zero-protocol/src/push.ts';
-import type {NullableVersion} from 'zero-protocol/src/version.ts';
-import {createSchema} from 'zero-schema/src/builder/schema-builder.ts';
-import {
-  boolean,
-  number,
-  string,
-  table,
-} from 'zero-schema/src/builder/table-builder.ts';
-import type {Schema} from 'zero-types/src/schema.ts';
-import {refCountSymbol} from 'zql/src/ivm/view-apply-change.ts';
-import type {DeleteID, UpdateValue} from 'zql/src/mutate/crud.ts';
-import type {Transaction} from 'zql/src/mutate/custom.ts';
-import {defineMutatorsWithType} from 'zql/src/mutate/mutator-registry.ts';
-import {defineMutator, defineMutatorWithType} from 'zql/src/mutate/mutator.ts';
-import {createBuilder} from 'zql/src/query/create-builder.ts';
-import type {Row} from 'zql/src/query/query.ts';
 import type {Write} from '../../../replicache/src/dag/store.ts';
 import {
   setDeletedClients,
@@ -64,8 +29,49 @@ import type {
 import type {PullRequest} from '../../../replicache/src/sync/pull.ts';
 import type {PushRequest} from '../../../replicache/src/sync/push.ts';
 import {withWrite} from '../../../replicache/src/with-transactions.ts';
+import {
+  clearBrowserOverrides,
+  overrideBrowserGlobal,
+} from '../../../shared/src/browser-env.ts';
+import {TestLogSink} from '../../../shared/src/logging-test-utils.ts';
 import * as valita from '../../../shared/src/valita.ts';
+import {changeDesiredQueriesMessageSchema} from '../../../zero-protocol/src/change-desired-queries.ts';
+import type {ClientSchema} from '../../../zero-protocol/src/client-schema.ts';
+import {
+  decodeSecProtocols,
+  encodeSecProtocols,
+  initConnectionMessageSchema,
+} from '../../../zero-protocol/src/connect.ts';
+import type {Downstream} from '../../../zero-protocol/src/down.ts';
+import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
+import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
+import {ErrorReason} from '../../../zero-protocol/src/error-reason.ts';
 import * as MutationType from '../../../zero-protocol/src/mutation-type-enum.ts';
+import {
+  type CRUDOp,
+  type Mutation,
+} from '../../../zero-protocol/src/mutation.ts';
+import {PROTOCOL_VERSION} from '../../../zero-protocol/src/protocol-version.ts';
+import {pushMessageSchema} from '../../../zero-protocol/src/push.ts';
+import type {NullableVersion} from '../../../zero-protocol/src/version.ts';
+import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
+import {
+  boolean,
+  number,
+  string,
+  table,
+} from '../../../zero-schema/src/builder/table-builder.ts';
+import type {Schema} from '../../../zero-types/src/schema.ts';
+import {refCountSymbol} from '../../../zql/src/ivm/view-apply-change.ts';
+import type {DeleteID, UpdateValue} from '../../../zql/src/mutate/crud.ts';
+import type {Transaction} from '../../../zql/src/mutate/custom.ts';
+import {defineMutatorsWithType} from '../../../zql/src/mutate/mutator-registry.ts';
+import {
+  defineMutator,
+  defineMutatorWithType,
+} from '../../../zql/src/mutate/mutator.ts';
+import {createBuilder} from '../../../zql/src/query/create-builder.ts';
+import type {Row} from '../../../zql/src/query/query.ts';
 import {nanoid} from '../util/nanoid.ts';
 import {ClientErrorKind} from './client-error-kind.ts';
 import {ConnectionStatus} from './connection-status.ts';

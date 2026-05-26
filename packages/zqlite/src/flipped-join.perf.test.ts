@@ -1,12 +1,12 @@
-import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
 /* oxlint-disable no-console */
 import {afterEach, describe, test} from 'vitest';
-import {Catch, type CaughtNode} from 'zql/src/ivm/catch.ts';
+import {testLogConfig} from '../../otel/src/test-log-config.ts';
+import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
+import {Catch, type CaughtNode} from '../../zql/src/ivm/catch.ts';
 import {
   FlippedJoin,
   setMultiConstraintChunkSizeForTest,
-} from 'zql/src/ivm/flipped-join.ts';
-import {testLogConfig} from '../../otel/src/test-log-config.ts';
+} from '../../zql/src/ivm/flipped-join.ts';
 import {Database} from './db.ts';
 import {TableSource} from './table-source.ts';
 

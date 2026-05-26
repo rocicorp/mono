@@ -1,8 +1,8 @@
 import {afterEach, beforeEach, expect, test, vi} from 'vitest';
-import {decodeSecProtocols} from 'zero-protocol/src/connect.ts';
-import {ErrorKind} from 'zero-protocol/src/error-kind.ts';
-import {ErrorOrigin} from 'zero-protocol/src/error-origin.ts';
-import {ProtocolError} from 'zero-protocol/src/error.ts';
+import {decodeSecProtocols} from '../../../zero-protocol/src/connect.ts';
+import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
+import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
+import {ProtocolError} from '../../../zero-protocol/src/error.ts';
 import {ClientErrorKind} from './client-error-kind.ts';
 import {ConnectionStatus} from './connection-status.ts';
 import {ClientError} from './error.ts';

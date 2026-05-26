@@ -6,8 +6,8 @@ import {
   type LogRecord,
 } from '@opentelemetry/api-logs';
 import type {Context, LogLevel, LogSink} from '@rocicorp/logger';
-import {stringify} from 'shared/src/bigint-json.ts';
-import {errorOrObject} from 'shared/src/logging.ts';
+import {stringify} from '../../../shared/src/bigint-json.ts';
+import {errorOrObject} from '../../../shared/src/logging.ts';
 
 export class OtelLogSink implements LogSink {
   readonly #logger: Logger;

@@ -1,11 +1,11 @@
-import {must} from 'shared/src/must.ts';
 // oxlint-disable valid-describe-callback
 // oxlint-disable expect-expect
 /* oxlint-disable @typescript-eslint/no-explicit-any */
 import {describe, test} from 'vitest';
-import type {SimpleOperator} from 'zero-protocol/src/ast.ts';
-import type {Row} from 'zero-protocol/src/data.ts';
-import type {AnyQuery, PullRow} from 'zql/src/query/query.ts';
+import {must} from '../../../shared/src/must.ts';
+import type {SimpleOperator} from '../../../zero-protocol/src/ast.ts';
+import type {Row} from '../../../zero-protocol/src/data.ts';
+import type {AnyQuery, PullRow} from '../../../zql/src/query/query.ts';
 import {createVitests} from '../helpers/runner.ts';
 import {getChinook} from './get-deps.ts';
 import {schema} from './schema.ts';

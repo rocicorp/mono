@@ -1,7 +1,7 @@
 import type postgres from 'postgres';
-import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
-import {Queue} from 'shared/src/queue.ts';
 import {beforeEach, describe, expect} from 'vitest';
+import {createSilentLogContext} from '../../../../../../shared/src/logging-test-utils.ts';
+import {Queue} from '../../../../../../shared/src/queue.ts';
 import * as v from '../../../../../../shared/src/valita.ts';
 import {test, type PgTest} from '../../../../test/db.ts';
 import type {PostgresDB} from '../../../../types/pg.ts';

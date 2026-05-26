@@ -1,4 +1,4 @@
-import type {Expand} from 'shared/src/expand.ts';
+import type {Expand} from '../../shared/src/expand.ts';
 import type {Schema} from './schema.ts';
 
 /**

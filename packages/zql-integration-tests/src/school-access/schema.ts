@@ -1,7 +1,11 @@
-import {relationships} from 'zero-schema/src/builder/relationship-builder.ts';
-import {createSchema} from 'zero-schema/src/builder/schema-builder.ts';
-import {number, string, table} from 'zero-schema/src/builder/table-builder.ts';
-import {createBuilder} from 'zql/src/query/create-builder.ts';
+import {relationships} from '../../../zero-schema/src/builder/relationship-builder.ts';
+import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
+import {
+  number,
+  string,
+  table,
+} from '../../../zero-schema/src/builder/table-builder.ts';
+import {createBuilder} from '../../../zql/src/query/create-builder.ts';
 
 const district = table('district')
   .columns({

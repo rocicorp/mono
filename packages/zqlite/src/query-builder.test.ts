@@ -1,6 +1,6 @@
-import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
 import {expect, test} from 'vitest';
-import type {SchemaValue} from 'zero-schema/src/table-schema.ts';
+import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
+import type {SchemaValue} from '../../zero-schema/src/table-schema.ts';
 import {Database} from './db.ts';
 import {format} from './internal/sql.ts';
 import {buildSelectQuery, multiConstraintToSQL} from './query-builder.ts';

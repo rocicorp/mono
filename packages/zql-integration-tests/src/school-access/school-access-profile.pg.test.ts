@@ -3,7 +3,7 @@ import {writeFileSync} from 'node:fs';
 import * as inspector from 'node:inspector';
 import {join} from 'node:path';
 import {describe, expect, test} from 'vitest';
-import type {AnyQuery, Query} from 'zql/src/query/query.ts';
+import type {AnyQuery, Query} from '../../../zql/src/query/query.ts';
 import '../helpers/comparePg.ts';
 import {bootstrap} from '../helpers/runner.ts';
 import {schema} from './schema.ts';

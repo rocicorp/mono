@@ -1,5 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
-import type {Enum} from 'shared/src/enum.ts';
+import type {Enum} from '../../../shared/src/enum.ts';
 import type {LazyStore} from '../dag/lazy-store.ts';
 import type {Store} from '../dag/store.ts';
 import type {Commit} from '../db/commit.ts';

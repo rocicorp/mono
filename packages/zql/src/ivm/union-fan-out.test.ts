@@ -1,6 +1,6 @@
-import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
 import {expect, test, vi} from 'vitest';
 import {testLogConfig} from '../../../otel/src/test-log-config.ts';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {Catch} from './catch.ts';
 import {consume} from './stream.ts';
 import {createSource} from './test/source-factory.ts';

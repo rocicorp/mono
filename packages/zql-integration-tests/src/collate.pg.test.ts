@@ -13,28 +13,28 @@
  * Kept in case we eventually align collations across all three environments.
  */
 import {Client} from 'pg';
-import type {JSONValue} from 'shared/src/json.ts';
-import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
 import {afterAll, beforeAll, describe, expect, test} from 'vitest';
-import {type PostgresDB} from 'zero-cache/src/types/pg.ts';
-import {type Row} from 'zero-protocol/src/data.ts';
-import {createSchema} from 'zero-schema/src/builder/schema-builder.ts';
+import {testLogConfig} from '../../otel/src/test-log-config.ts';
+import type {JSONValue} from '../../shared/src/json.ts';
+import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
+import {compile, extractZqlResult} from '../../z2s/src/compiler.ts';
+import {formatPgInternalConvert} from '../../z2s/src/sql.ts';
+import {type PostgresDB} from '../../zero-cache/src/types/pg.ts';
+import {type Row} from '../../zero-protocol/src/data.ts';
+import {createSchema} from '../../zero-schema/src/builder/schema-builder.ts';
 import {
   enumeration,
   string,
   table,
-} from 'zero-schema/src/builder/table-builder.ts';
-import type {ServerSchema} from 'zero-types/src/server-schema.ts';
-import {MemorySource} from 'zql/src/ivm/memory-source.ts';
-import {consume} from 'zql/src/ivm/stream.ts';
-import type {QueryDelegate} from 'zql/src/query/query-delegate.ts';
-import {newQuery} from 'zql/src/query/query-impl.ts';
-import {asQueryInternals} from 'zql/src/query/query-internals.ts';
-import {type Query} from 'zql/src/query/query.ts';
-import {QueryDelegateImpl as TestMemoryQueryDelegate} from 'zql/src/query/test/query-delegate.ts';
-import {testLogConfig} from '../../otel/src/test-log-config.ts';
-import {compile, extractZqlResult} from '../../z2s/src/compiler.ts';
-import {formatPgInternalConvert} from '../../z2s/src/sql.ts';
+} from '../../zero-schema/src/builder/table-builder.ts';
+import type {ServerSchema} from '../../zero-types/src/server-schema.ts';
+import {MemorySource} from '../../zql/src/ivm/memory-source.ts';
+import {consume} from '../../zql/src/ivm/stream.ts';
+import type {QueryDelegate} from '../../zql/src/query/query-delegate.ts';
+import {newQuery} from '../../zql/src/query/query-impl.ts';
+import {asQueryInternals} from '../../zql/src/query/query-internals.ts';
+import {type Query} from '../../zql/src/query/query.ts';
+import {QueryDelegateImpl as TestMemoryQueryDelegate} from '../../zql/src/query/test/query-delegate.ts';
 import type {Database} from '../../zqlite/src/db.ts';
 import {fromSQLiteTypes} from '../../zqlite/src/table-source.ts';
 import {
@@ -44,7 +44,7 @@ import {
 import './helpers/comparePg.ts';
 import {fillPgAndSync} from './helpers/setup.ts';
 
-import {makeSourceChangeAdd} from 'zql/src/ivm/source.ts';
+import {makeSourceChangeAdd} from '../../zql/src/ivm/source.ts';
 const lc = createSilentLogContext();
 
 const DB_NAME = 'collate-test';

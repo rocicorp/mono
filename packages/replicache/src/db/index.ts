@@ -1,5 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
-import type {Enum} from 'shared/src/enum.ts';
+import type {Enum} from '../../../shared/src/enum.ts';
 import type {BTreeRead} from '../btree/read.ts';
 import type {BTreeWrite} from '../btree/write.ts';
 import type {FrozenJSONObject, FrozenJSONValue} from '../frozen-json.ts';

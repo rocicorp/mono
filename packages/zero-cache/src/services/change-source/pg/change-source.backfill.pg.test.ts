@@ -1,10 +1,13 @@
 import type {LogContext} from '@rocicorp/logger';
-import {BigIntJSON, type JSONValue} from 'shared/src/bigint-json.ts';
-import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
-import {Queue} from 'shared/src/queue.ts';
-import {randInt} from 'shared/src/rand.ts';
-import {sleep} from 'shared/src/sleep.ts';
 import {beforeEach, describe, expect, test} from 'vitest';
+import {
+  BigIntJSON,
+  type JSONValue,
+} from '../../../../../shared/src/bigint-json.ts';
+import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.ts';
+import {Queue} from '../../../../../shared/src/queue.ts';
+import {randInt} from '../../../../../shared/src/rand.ts';
+import {sleep} from '../../../../../shared/src/sleep.ts';
 import type {Database} from '../../../../../zqlite/src/db.ts';
 import {computeZqlSpecs} from '../../../db/lite-tables.ts';
 import type {LiteTableSpec} from '../../../db/specs.ts';

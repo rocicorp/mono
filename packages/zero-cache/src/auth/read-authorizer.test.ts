@@ -1,18 +1,18 @@
-import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
-import {must} from 'shared/src/must.ts';
 import {describe, expect, test} from 'vitest';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import {must} from '../../../shared/src/must.ts';
 import {
   ANYONE_CAN,
   definePermissions,
-} from 'zero-permissions/src/permissions.ts';
-import type {AST} from 'zero-protocol/src/ast.ts';
-import {relationships} from 'zero-schema/src/builder/relationship-builder.ts';
-import {createSchema} from 'zero-schema/src/builder/schema-builder.ts';
-import {string, table} from 'zero-schema/src/builder/table-builder.ts';
-import type {ExpressionBuilder} from 'zql/src/query/expression.ts';
-import {asQueryInternals} from 'zql/src/query/query-internals.ts';
-import type {Query} from 'zql/src/query/query.ts';
-import {newStaticQuery} from 'zql/src/query/static-query.ts';
+} from '../../../zero-permissions/src/permissions.ts';
+import type {AST} from '../../../zero-protocol/src/ast.ts';
+import {relationships} from '../../../zero-schema/src/builder/relationship-builder.ts';
+import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
+import {string, table} from '../../../zero-schema/src/builder/table-builder.ts';
+import type {ExpressionBuilder} from '../../../zql/src/query/expression.ts';
+import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
+import type {Query} from '../../../zql/src/query/query.ts';
+import {newStaticQuery} from '../../../zql/src/query/static-query.ts';
 import type {Auth} from './auth.ts';
 import {transformQuery} from './read-authorizer.ts';
 

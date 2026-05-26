@@ -1,6 +1,6 @@
 import {resolver} from '@rocicorp/resolver';
-import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
 import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
+import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import {ShadowSyncService} from './shadow-sync-service.ts';
 
 const shadowInitialSyncMock = vi.hoisted(() => vi.fn());

@@ -1,16 +1,23 @@
 import type {LogContext} from '@rocicorp/logger';
-import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
-import {mapAST, type AST, type CompoundKey} from 'zero-protocol/src/ast.ts';
-import type {PrimaryKey} from 'zero-protocol/src/primary-key.ts';
-import {clientToServer, serverToClient} from 'zero-schema/src/name-mapper.ts';
-import type {SchemaValue} from 'zero-schema/src/table-schema.ts';
-import type {Schema} from 'zero-types/src/schema.ts';
-import type {Storage} from 'zql/src/ivm/operator.ts';
-import type {Source} from 'zql/src/ivm/source.ts';
-import type {SourceFactory} from 'zql/src/ivm/test/source-factory.ts';
-import {QueryDelegateBase} from 'zql/src/query/query-delegate-base.ts';
-import type {QueryDelegate} from 'zql/src/query/query-delegate.ts';
 import type {LogConfig} from '../../../otel/src/log-options.ts';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import {
+  mapAST,
+  type AST,
+  type CompoundKey,
+} from '../../../zero-protocol/src/ast.ts';
+import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
+import {
+  clientToServer,
+  serverToClient,
+} from '../../../zero-schema/src/name-mapper.ts';
+import type {SchemaValue} from '../../../zero-schema/src/table-schema.ts';
+import type {Schema} from '../../../zero-types/src/schema.ts';
+import type {Storage} from '../../../zql/src/ivm/operator.ts';
+import type {Source} from '../../../zql/src/ivm/source.ts';
+import type {SourceFactory} from '../../../zql/src/ivm/test/source-factory.ts';
+import {QueryDelegateBase} from '../../../zql/src/query/query-delegate-base.ts';
+import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
 import {CREATE_STORAGE_TABLE, DatabaseStorage} from '../database-storage.ts';
 import {Database} from '../db.ts';
 import {compile, sql} from '../internal/sql.ts';

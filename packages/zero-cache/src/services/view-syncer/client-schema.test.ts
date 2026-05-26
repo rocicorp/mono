@@ -1,9 +1,9 @@
-import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
 import {beforeAll, describe, expect, test} from 'vitest';
+import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import type {
   ClientSchema,
   TableSchema,
-} from 'zero-protocol/src/client-schema.ts';
+} from '../../../../zero-protocol/src/client-schema.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {computeZqlSpecs} from '../../db/lite-tables.ts';
 import type {LiteAndZqlSpec, LiteTableSpec} from '../../db/specs.ts';

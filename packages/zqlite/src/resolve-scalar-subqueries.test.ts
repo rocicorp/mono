@@ -4,12 +4,12 @@ import type {
   Condition,
   CorrelatedSubqueryCondition,
   SimpleCondition,
-} from 'zero-protocol/src/ast.ts';
-import type {PrimaryKey} from 'zero-protocol/src/primary-key.ts';
-import {newQuery} from 'zql/src/query/query-impl.ts';
-import {asQueryInternals} from 'zql/src/query/query-internals.ts';
-import type {AnyQuery} from 'zql/src/query/query.ts';
-import {schema} from 'zql/src/query/test/test-schemas.ts';
+} from '../../zero-protocol/src/ast.ts';
+import type {PrimaryKey} from '../../zero-protocol/src/primary-key.ts';
+import {newQuery} from '../../zql/src/query/query-impl.ts';
+import {asQueryInternals} from '../../zql/src/query/query-internals.ts';
+import type {AnyQuery} from '../../zql/src/query/query.ts';
+import {schema} from '../../zql/src/query/test/test-schemas.ts';
 import {
   extractLiteralEqualityConstraints,
   isSimpleSubquery,

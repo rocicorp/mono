@@ -1,15 +1,15 @@
-import {assert} from 'shared/src/asserts.ts';
-import type {Queue} from 'shared/src/queue.ts';
 import {beforeEach, describe, expect, vi} from 'vitest';
-import type {AST} from 'zero-protocol/src/ast.ts';
-import {type ClientSchema} from 'zero-protocol/src/client-schema.ts';
-import type {Downstream} from 'zero-protocol/src/down.ts';
+import {assert} from '../../../../shared/src/asserts.ts';
+import type {Queue} from '../../../../shared/src/queue.ts';
+import type {AST} from '../../../../zero-protocol/src/ast.ts';
+import {type ClientSchema} from '../../../../zero-protocol/src/client-schema.ts';
+import type {Downstream} from '../../../../zero-protocol/src/down.ts';
 import type {
   InspectAnalyzeQueryDown,
   InspectDownMessage,
-} from 'zero-protocol/src/inspect-down.ts';
-import {PROTOCOL_VERSION} from 'zero-protocol/src/protocol-version.ts';
-import type {UpQueriesPatch} from 'zero-protocol/src/queries-patch.ts';
+} from '../../../../zero-protocol/src/inspect-down.ts';
+import {PROTOCOL_VERSION} from '../../../../zero-protocol/src/protocol-version.ts';
+import type {UpQueriesPatch} from '../../../../zero-protocol/src/queries-patch.ts';
 import type {
   CustomQueryTransformer,
   HashedTransformResponse,

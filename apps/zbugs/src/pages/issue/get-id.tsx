@@ -1,5 +1,5 @@
-import {must} from 'shared/src/must.ts';
 import type {DefaultParams} from 'wouter';
+import {must} from '../../../../../packages/shared/src/must.ts';
 
 export function getID(params: DefaultParams) {
   const idStr = must(params.id);

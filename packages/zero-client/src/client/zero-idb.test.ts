@@ -1,8 +1,8 @@
-import {h64} from 'shared/src/hash.ts';
 import {expect, test} from 'vitest';
-import {createSchema} from 'zero-schema/src/builder/schema-builder.ts';
-import {string, table} from 'zero-schema/src/builder/table-builder.ts';
 import {hasMemStore} from '../../../replicache/src/kv/mem-store.ts';
+import {h64} from '../../../shared/src/hash.ts';
+import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
+import {string, table} from '../../../zero-schema/src/builder/table-builder.ts';
 import {LOGGED_OUT_STORAGE_USER_ID, Zero} from './zero.ts';
 
 const schema = createSchema({

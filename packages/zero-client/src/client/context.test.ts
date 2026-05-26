@@ -1,13 +1,13 @@
 import {LogContext} from '@rocicorp/logger';
-import {assert} from 'shared/src/asserts.ts';
 import {expect, test} from 'vitest';
-import {createSchema} from 'zero-schema/src/builder/schema-builder.ts';
-import {string, table} from 'zero-schema/src/builder/table-builder.ts';
-import {Catch} from 'zql/src/ivm/catch.ts';
-import {Join} from 'zql/src/ivm/join.ts';
-import {MemorySource} from 'zql/src/ivm/memory-source.ts';
 import type {NoIndexDiff} from '../../../replicache/src/btree/node.ts';
 import type {Hash} from '../../../replicache/src/hash.ts';
+import {assert} from '../../../shared/src/asserts.ts';
+import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
+import {string, table} from '../../../zero-schema/src/builder/table-builder.ts';
+import {Catch} from '../../../zql/src/ivm/catch.ts';
+import {Join} from '../../../zql/src/ivm/join.ts';
+import {MemorySource} from '../../../zql/src/ivm/memory-source.ts';
 import {
   ZeroContext,
   type AddCustomQuery,

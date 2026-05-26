@@ -1,9 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
-import type {ZeroEvent} from '@rocicorp/zero-events';
-import type {JSONObject} from 'shared/src/bigint-json.ts';
-import type {Enum} from 'shared/src/enum.ts';
-import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
 import {
   afterEach,
   beforeEach,
@@ -13,6 +9,10 @@ import {
   vi,
   type MockedFunction,
 } from 'vitest';
+import type {JSONObject} from '../../../../shared/src/bigint-json.ts';
+import type {Enum} from '../../../../shared/src/enum.ts';
+import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
+import type {ZeroEvent} from '../../../../zero-events/src/index.ts';
 import type {Database} from '../../../../zqlite/src/db.ts';
 import {initEventSinkForTesting} from '../../observability/events.ts';
 import {DbFile, expectTables, initDB} from '../../test/lite.ts';

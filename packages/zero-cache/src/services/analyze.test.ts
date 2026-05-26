@@ -1,15 +1,15 @@
-import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
 import {beforeEach, describe, expect, test, vi} from 'vitest';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import type {
   AnalyzeQueryResult,
   PlanDebugEventJSON,
-} from 'zero-protocol/src/analyze-query-result.ts';
-import type {AST} from 'zero-protocol/src/ast.ts';
-import type {ClientSchema} from 'zero-protocol/src/client-schema.ts';
+} from '../../../zero-protocol/src/analyze-query-result.ts';
+import type {AST} from '../../../zero-protocol/src/ast.ts';
+import type {ClientSchema} from '../../../zero-protocol/src/client-schema.ts';
 import {
   AccumulatorDebugger,
   serializePlanDebugEvents,
-} from 'zql/src/planner/planner-debug.ts';
+} from '../../../zql/src/planner/planner-debug.ts';
 import {explainQueries} from '../../../zqlite/src/explain-queries.ts';
 import {createSQLiteCostModel} from '../../../zqlite/src/sqlite-cost-model.ts';
 import {TableSource} from '../../../zqlite/src/table-source.ts';

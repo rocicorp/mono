@@ -1,10 +1,13 @@
-import {assert} from 'shared/src/asserts.ts';
-import {stringCompare} from 'shared/src/string-compare.ts';
-import {assertTesting} from 'shared/src/testing.ts';
-import type {Writable} from 'shared/src/writable.ts';
-import type {Condition, SimpleCondition} from 'zero-protocol/src/ast.ts';
-import type {Row, Value} from 'zero-protocol/src/data.ts';
-import type {PrimaryKey} from 'zero-protocol/src/primary-key.ts';
+import {assert} from '../../../shared/src/asserts.ts';
+import {stringCompare} from '../../../shared/src/string-compare.ts';
+import {assertTesting} from '../../../shared/src/testing.ts';
+import type {Writable} from '../../../shared/src/writable.ts';
+import type {
+  Condition,
+  SimpleCondition,
+} from '../../../zero-protocol/src/ast.ts';
+import type {Row, Value} from '../../../zero-protocol/src/data.ts';
+import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
 import {valuesEqual} from './data.ts';
 
 export type Constraint = {

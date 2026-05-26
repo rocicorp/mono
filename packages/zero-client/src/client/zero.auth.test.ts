@@ -1,9 +1,9 @@
 import {afterEach, beforeEach, expect, test, vi} from 'vitest';
-import {decodeSecProtocols} from 'zero-protocol/src/connect.ts';
-import {ErrorKind} from 'zero-protocol/src/error-kind.ts';
-import {ErrorOrigin} from 'zero-protocol/src/error-origin.ts';
-import {updateAuthMessageSchema} from 'zero-protocol/src/update-auth.ts';
 import * as valita from '../../../shared/src/valita.ts';
+import {decodeSecProtocols} from '../../../zero-protocol/src/connect.ts';
+import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
+import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
+import {updateAuthMessageSchema} from '../../../zero-protocol/src/update-auth.ts';
 import {ConnectionStatus} from './connection-status.ts';
 import {MockSocket, zeroForTest} from './test-utils.ts';
 

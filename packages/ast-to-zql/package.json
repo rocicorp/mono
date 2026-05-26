@@ -21,11 +21,10 @@
     "@faker-js/faker": "^9.6.0",
     "shared": "workspace:*",
     "vitest": "^4.1.6",
-    "zero-permissions": "workspace:*",
+    "zero-cache": "workspace:*",
     "zero-protocol": "workspace:*",
     "zero-schema": "workspace:*",
-    "zero-types": "workspace:*",
-    "zql": "workspace:*"
+    "zero-types": "workspace:*"
   },
   "packageManager": "pnpm@11.3.0"
 }

@@ -1,7 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
-import {assert} from 'shared/src/asserts.ts';
-import type {Enum} from 'shared/src/enum.ts';
-import {getOrInsert, getOrInsertComputed} from 'shared/src/map.ts';
+import {assert} from '../../../shared/src/asserts.ts';
+import type {Enum} from '../../../shared/src/enum.ts';
+import {getOrInsert, getOrInsertComputed} from '../../../shared/src/map.ts';
 import type {Chunk} from '../dag/chunk.ts';
 import type {LazyStore} from '../dag/lazy-store.ts';
 import type {Read, Store, Write} from '../dag/store.ts';

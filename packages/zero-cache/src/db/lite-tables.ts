@@ -1,8 +1,8 @@
 import type {LogContext} from '@rocicorp/logger';
-import {must} from 'shared/src/must.ts';
-import {difference} from 'shared/src/set-utils.ts';
-import {primaryKeySchema} from 'zero-protocol/src/primary-key.ts';
+import {must} from '../../../shared/src/must.ts';
+import {difference} from '../../../shared/src/set-utils.ts';
 import * as v from '../../../shared/src/valita.ts';
+import {primaryKeySchema} from '../../../zero-protocol/src/primary-key.ts';
 import type {Database} from '../../../zqlite/src/db.ts';
 import {
   ColumnMetadataStore,

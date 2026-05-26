@@ -1,7 +1,7 @@
 import {resolver} from '@rocicorp/resolver';
-import {assertNotNull} from 'shared/src/asserts.ts';
-import {mustGetBrowserGlobal} from 'shared/src/browser-env.ts';
-import {promiseVoid} from 'shared/src/resolved-promises.ts';
+import {assertNotNull} from '../../../shared/src/asserts.ts';
+import {mustGetBrowserGlobal} from '../../../shared/src/browser-env.ts';
+import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
 import {
   type FrozenJSONValue,
   deepFreezeAllowUndefined,

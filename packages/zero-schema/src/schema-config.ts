@@ -1,8 +1,8 @@
-import {compoundKeySchema} from 'zero-protocol/src/ast.ts';
-import {valueTypeSchema} from 'zero-protocol/src/client-schema.ts';
-import {primaryKeySchema} from 'zero-protocol/src/primary-key.ts';
-import type {Schema} from 'zero-types/src/schema.ts';
 import * as v from '../../shared/src/valita.ts';
+import {compoundKeySchema} from '../../zero-protocol/src/ast.ts';
+import {valueTypeSchema} from '../../zero-protocol/src/client-schema.ts';
+import {primaryKeySchema} from '../../zero-protocol/src/primary-key.ts';
+import type {Schema} from '../../zero-types/src/schema.ts';
 import {type PermissionsConfig} from './compiled-permissions.ts';
 import type {Relationship, TableSchema} from './table-schema.ts';
 

@@ -1,7 +1,7 @@
 import {resolver} from '@rocicorp/resolver';
-import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
-import {sleep} from 'shared/src/sleep.ts';
 import {describe, expect, test} from 'vitest';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import {sleep} from '../../../shared/src/sleep.ts';
 import {ServiceRunner} from './runner.ts';
 import type {Service} from './service.ts';
 

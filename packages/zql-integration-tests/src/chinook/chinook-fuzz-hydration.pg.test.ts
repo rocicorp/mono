@@ -2,12 +2,12 @@
 
 import {en, Faker, generateMersenne53Randomizer} from '@faker-js/faker';
 import {expect, test} from 'vitest';
-import {astToZQL} from 'zql/src/ast-to-zql.ts';
-import {createRandomYieldWrapper} from 'zql/src/ivm/test/random-yield-source.ts';
-import {asQueryInternals} from 'zql/src/query/query-internals.ts';
-import type {AnyQuery} from 'zql/src/query/query.ts';
-import {generateShrinkableQuery} from 'zql/src/query/test/query-gen.ts';
+import {astToZQL} from '../../../ast-to-zql/src/ast-to-zql.ts';
 import {formatOutput} from '../../../ast-to-zql/src/format.ts';
+import {createRandomYieldWrapper} from '../../../zql/src/ivm/test/random-yield-source.ts';
+import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
+import type {AnyQuery} from '../../../zql/src/query/query.ts';
+import {generateShrinkableQuery} from '../../../zql/src/query/test/query-gen.ts';
 import '../helpers/comparePg.ts';
 import {bootstrap, checkPush, runAndCompare} from '../helpers/runner.ts';
 import {getChinook} from './get-deps.ts';

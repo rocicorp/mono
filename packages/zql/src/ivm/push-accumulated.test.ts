@@ -1,6 +1,6 @@
-import {emptyArray, identity} from 'shared/src/sentinels.ts';
 /* oxlint-disable @typescript-eslint/no-explicit-any */
 import {beforeEach, describe, expect, test} from 'vitest';
+import {emptyArray, identity} from '../../../shared/src/sentinels.ts';
 import {ChangeIndex} from './change-index.js';
 import {ChangeType} from './change-type.js';
 import {

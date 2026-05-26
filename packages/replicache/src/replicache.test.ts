@@ -1,14 +1,14 @@
 import type {Context, LogLevel} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
-import {assert, unreachable} from 'shared/src/asserts.ts';
+import {beforeEach, describe, expect, test, vi} from 'vitest';
+import {assert, unreachable} from '../../shared/src/asserts.ts';
 import {
   clearBrowserOverrides,
   overrideBrowserGlobal,
-} from 'shared/src/browser-env.ts';
-import type {JSONValue, ReadonlyJSONValue} from 'shared/src/json.ts';
-import {promiseVoid} from 'shared/src/resolved-promises.ts';
-import {sleep} from 'shared/src/sleep.ts';
-import {beforeEach, describe, expect, test, vi} from 'vitest';
+} from '../../shared/src/browser-env.ts';
+import type {JSONValue, ReadonlyJSONValue} from '../../shared/src/json.ts';
+import {promiseVoid} from '../../shared/src/resolved-promises.ts';
+import {sleep} from '../../shared/src/sleep.ts';
 import {asyncIterableToArray} from './async-iterable-to-array.ts';
 import {Write} from './db/write.ts';
 import {httpStatusUnauthorized} from './http-status-unauthorized.ts';

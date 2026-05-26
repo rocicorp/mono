@@ -1,13 +1,13 @@
 import type {LogLevel, LogSink} from '@rocicorp/logger';
+import type {StoreProvider} from '../../../replicache/src/kv/store.ts';
+import * as v from '../../../shared/src/valita.ts';
 import type {
   BaseDefaultContext,
   BaseDefaultSchema,
   DefaultContext,
   DefaultSchema,
-} from 'zero-types/src/default-types.ts';
-import type {AnyMutatorRegistry} from 'zql/src/mutate/mutator-registry.ts';
-import type {StoreProvider} from '../../../replicache/src/kv/store.ts';
-import * as v from '../../../shared/src/valita.ts';
+} from '../../../zero-types/src/default-types.ts';
+import type {AnyMutatorRegistry} from '../../../zql/src/mutate/mutator-registry.ts';
 import type {CustomMutatorDefs} from './custom.ts';
 import {UpdateNeededReasonType} from './update-needed-reason-type.ts';
 

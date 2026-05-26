@@ -3,24 +3,24 @@ import websocket from '@fastify/websocket';
 import type {LogLevel} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import Fastify, {type FastifyInstance, type FastifyRequest} from 'fastify';
-import {assert} from 'shared/src/asserts.ts';
-import {h128} from 'shared/src/hash.ts';
-import type {JSONValue} from 'shared/src/json.ts';
-import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
-import {Queue} from 'shared/src/queue.ts';
-import {randInt} from 'shared/src/rand.ts';
 import {afterAll, beforeEach, describe, expect, vi} from 'vitest';
 import WebSocket from 'ws';
+import {assert} from '../../../shared/src/asserts.ts';
+import {h128} from '../../../shared/src/hash.ts';
+import type {JSONValue} from '../../../shared/src/json.ts';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import {Queue} from '../../../shared/src/queue.ts';
+import {randInt} from '../../../shared/src/rand.ts';
 import {
   ANYONE_CAN_DO_ANYTHING,
   definePermissions,
-} from 'zero-permissions/src/permissions.ts';
-import type {AST} from 'zero-protocol/src/ast.ts';
-import type {InitConnectionMessage} from 'zero-protocol/src/connect.ts';
-import type {PokeStartMessage} from 'zero-protocol/src/poke.ts';
-import {PROTOCOL_VERSION} from 'zero-protocol/src/protocol-version.ts';
-import {createSchema} from 'zero-schema/src/builder/schema-builder.ts';
-import {string, table} from 'zero-schema/src/builder/table-builder.ts';
+} from '../../../zero-permissions/src/permissions.ts';
+import type {AST} from '../../../zero-protocol/src/ast.ts';
+import type {InitConnectionMessage} from '../../../zero-protocol/src/connect.ts';
+import type {PokeStartMessage} from '../../../zero-protocol/src/poke.ts';
+import {PROTOCOL_VERSION} from '../../../zero-protocol/src/protocol-version.ts';
+import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
+import {string, table} from '../../../zero-schema/src/builder/table-builder.ts';
 import type {ChangeStreamMessage} from '../services/change-source/protocol/current/downstream.ts';
 import {
   changeSourceUpstreamSchema,

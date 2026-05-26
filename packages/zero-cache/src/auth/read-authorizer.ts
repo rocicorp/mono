@@ -1,10 +1,10 @@
 import type {LogContext} from '@rocicorp/logger';
-import type {JSONValue} from 'shared/src/json.ts';
-import type {AST, Condition} from 'zero-protocol/src/ast.ts';
-import {hashOfAST} from 'zero-protocol/src/query-hash.ts';
-import type {PermissionsConfig} from 'zero-schema/src/compiled-permissions.ts';
-import {bindStaticParameters} from 'zql/src/builder/builder.ts';
-import {simplifyCondition} from 'zql/src/query/expression.ts';
+import type {JSONValue} from '../../../shared/src/json.ts';
+import type {AST, Condition} from '../../../zero-protocol/src/ast.ts';
+import {hashOfAST} from '../../../zero-protocol/src/query-hash.ts';
+import type {PermissionsConfig} from '../../../zero-schema/src/compiled-permissions.ts';
+import {bindStaticParameters} from '../../../zql/src/builder/builder.ts';
+import {simplifyCondition} from '../../../zql/src/query/expression.ts';
 import type {JWTAuth} from './auth.ts';
 
 export type TransformedAndHashed = {

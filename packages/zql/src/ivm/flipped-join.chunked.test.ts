@@ -1,9 +1,9 @@
-import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
-import {must} from 'shared/src/must.ts';
 import {afterEach, describe, expect, test} from 'vitest';
-import type {Row} from 'zero-protocol/src/data.ts';
-import type {SchemaValue} from 'zero-schema/src/table-schema.ts';
 import {testLogConfig} from '../../../otel/src/test-log-config.ts';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import {must} from '../../../shared/src/must.ts';
+import type {Row} from '../../../zero-protocol/src/data.ts';
+import type {SchemaValue} from '../../../zero-schema/src/table-schema.ts';
 import type {CaughtNode} from './catch.ts';
 import {Catch} from './catch.ts';
 import type {Node} from './data.ts';

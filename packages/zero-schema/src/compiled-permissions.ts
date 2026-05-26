@@ -1,5 +1,5 @@
-import {conditionSchema} from 'zero-protocol/src/ast.ts';
 import * as v from '../../shared/src/valita.ts';
+import {conditionSchema} from '../../zero-protocol/src/ast.ts';
 
 const ruleSchema = v.tuple([v.literal('allow'), conditionSchema]);
 export type Rule = v.Infer<typeof ruleSchema>;

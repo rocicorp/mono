@@ -131,8 +131,6 @@ jobs:
           cache: 'pnpm'
       - run: pnpm install --frozen-lockfile
       - uses: ./.github/actions/playwright-install
-      - name: Build
-        run: pnpm run build
       - name: Run tests
         env:
           SHARD: ${{ matrix.shard }}
@@ -160,8 +158,6 @@ jobs:
           node-version: 24.x
           cache: 'pnpm'
       - run: pnpm install --frozen-lockfile
-      - name: Build
-        run: pnpm run build
       - name: Run tests
         uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60 # v4
         with:

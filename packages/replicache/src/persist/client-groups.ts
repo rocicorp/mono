@@ -1,4 +1,4 @@
-import {assert, assertObject} from 'shared/src/asserts.ts';
+import {assert, assertObject} from '../../../shared/src/asserts.ts';
 import * as valita from '../../../shared/src/valita.ts';
 import {toRefs} from '../dag/chunk.ts';
 import type {Read, Write} from '../dag/store.ts';

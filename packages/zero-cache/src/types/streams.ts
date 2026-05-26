@@ -7,9 +7,6 @@ import {
 } from 'node:stream';
 import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
-import {assert} from 'shared/src/asserts.ts';
-import {BigIntJSON, type JSONValue} from 'shared/src/bigint-json.ts';
-import {Queue} from 'shared/src/queue.ts';
 import {
   createWebSocketStream,
   type CloseEvent,
@@ -17,6 +14,9 @@ import {
   type MessageEvent,
   type WebSocket,
 } from 'ws';
+import {assert} from '../../../shared/src/asserts.ts';
+import {BigIntJSON, type JSONValue} from '../../../shared/src/bigint-json.ts';
+import {Queue} from '../../../shared/src/queue.ts';
 import * as v from '../../../shared/src/valita.ts';
 import {Subscription, type Options} from './subscription.ts';
 import {

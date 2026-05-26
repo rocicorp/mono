@@ -1,4 +1,4 @@
-import {jsonSchema} from 'shared/src/json-schema.ts';
+import {jsonSchema} from '../../shared/src/json-schema.ts';
 import * as v from '../../shared/src/valita.ts';
 import {astSchema} from './ast.ts';
 
