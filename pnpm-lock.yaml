@@ -281,6 +281,21 @@ importers:
       zero-cache:
         specifier: workspace:*
         version: link:../../packages/zero-cache
+      zero-permissions:
+        specifier: workspace:*
+        version: link:../../packages/zero-permissions
+      zero-protocol:
+        specifier: workspace:*
+        version: link:../../packages/zero-protocol
+      zero-schema:
+        specifier: workspace:*
+        version: link:../../packages/zero-schema
+      zero-types:
+        specifier: workspace:*
+        version: link:../../packages/zero-types
+      zql:
+        specifier: workspace:*
+        version: link:../../packages/zql
 
   apps/zql-viz:
     dependencies:

@@ -69,8 +69,15 @@ function getPackageName(filePath: string): string | undefined {
 async function extractImports(
   content: string,
   filePath: string,
-): Promise<{path: string; line: number; ignored: boolean}[]> {
-  const imports: {path: string; line: number; ignored: boolean}[] = [];
+): Promise<
+  {path: string; line: number; ignored: boolean; isReExport: boolean}[]
+> {
+  const imports: {
+    path: string;
+    line: number;
+    ignored: boolean;
+    isReExport: boolean;
+  }[] = [];
   const lines = content.split('\n');
 
   try {
@@ -98,6 +105,7 @@ async function extractImports(
         path: imp.moduleRequest.value,
         line: lineNumber,
         ignored,
+        isReExport: false,
       });
     }
 
@@ -124,6 +132,7 @@ async function extractImports(
             path: entry.moduleRequest.value,
             line: lineNumber,
             ignored,
+            isReExport: true,
           });
           break; // Only add once per export statement
         }
@@ -143,6 +152,7 @@ function getLineNumber(content: string, offset: number): number {
 
 type AnalyzeResult = {
   packageDeps: Map<string, Set<string>>;
+  reExports: Map<string, Set<string>>;
   exampleFiles: Map<
     string,
     {source: string; sourceLine: number; target: string}
@@ -179,6 +189,12 @@ async function analyzePackageDependencies(): Promise<AnalyzeResult> {
   }
 
   const packageDeps = new Map<string, Set<string>>();
+  // Re-export edges only (sourcePackage re-exports from targetPackage via
+  // `export * from` / `export { ... } from`). Used to compute the transitive
+  // type surface a package exposes — consumers of the source package may
+  // implicitly need any package in this transitive closure for type
+  // resolution.
+  const reExports = new Map<string, Set<string>>();
   // Map from "sourcePackage -> targetPackage" to an example file pair (source:line -> target)
   const exampleFiles = new Map<
     string,
@@ -243,6 +259,15 @@ async function analyzePackageDependencies(): Promise<AnalyzeResult> {
             }
             pkgDeps.add(targetPackage);
 
+            if (importInfo.isReExport) {
+              let pkgReExports = reExports.get(sourcePackage);
+              if (!pkgReExports) {
+                pkgReExports = new Set();
+                reExports.set(sourcePackage, pkgReExports);
+              }
+              pkgReExports.add(targetPackage);
+            }
+
             // Store an example file pair for this dependency edge
             const edgeKey = `${sourcePackage} -> ${targetPackage}`;
             if (!exampleFiles.has(edgeKey)) {
@@ -277,7 +302,7 @@ async function analyzePackageDependencies(): Promise<AnalyzeResult> {
     }),
   );
 
-  return {packageDeps, exampleFiles, importLocations};
+  return {packageDeps, reExports, exampleFiles, importLocations};
 }
 
 function findCircularDependencies(
@@ -446,10 +471,47 @@ async function removePackageJsonDeps(
   await writePackageJsonFile(pkgJsonPath, pkgJson);
 }
 
+/**
+ * Compute the transitive closure of workspace packages reachable from `seeds`
+ * by following `export ... from` edges (re-exports). The seeds themselves are
+ * not included in the returned set.
+ */
+function computeReExportClosure(
+  seeds: Iterable<string>,
+  reExports: Map<string, Set<string>>,
+): Set<string> {
+  const closure = new Set<string>();
+  const stack: string[] = [];
+  for (const seed of seeds) {
+    const seedReExports = reExports.get(seed);
+    if (seedReExports) {
+      for (const next of seedReExports) {
+        if (!closure.has(next)) {
+          closure.add(next);
+          stack.push(next);
+        }
+      }
+    }
+  }
+  while (stack.length > 0) {
+    const current = stack.pop();
+    if (current === undefined) break;
+    const next = reExports.get(current);
+    if (!next) continue;
+    for (const dep of next) {
+      if (!closure.has(dep)) {
+        closure.add(dep);
+        stack.push(dep);
+      }
+    }
+  }
+  return closure;
+}
+
 async function verifyPackageJsonDependencies(fix: boolean) {
   console.log('\nVerifying package.json dependencies...\n');
 
-  const {packageDeps, exampleFiles, importLocations} =
+  const {packageDeps, reExports, exampleFiles, importLocations} =
     await analyzePackageDependencies();
 
   // Check for circular dependencies first
@@ -581,13 +643,32 @@ async function verifyPackageJsonDependencies(fix: boolean) {
       });
     }
 
-    // Check for extra workspace dependencies (declared but not used)
+    // Check for extra workspace dependencies (declared but not used).
+    //
+    // A declared workspace dep is allowed if either:
+    //   1. The source package directly imports it (actualWorkspaceDeps), OR
+    //   2. The source package directly imports some workspace package X, and
+    //      the declared dep appears in the transitive `export ... from` chain
+    //      reachable from X. In that case the declared dep is part of the
+    //      type-level surface exposed via X's re-exports and the consumer
+    //      may need it available for TypeScript to resolve types.
+    const reExportClosurePaths = computeReExportClosure(deps, reExports);
+    const reExportClosureWorkspaceNames = new Set<string>();
+    for (const closurePkg of reExportClosurePaths) {
+      const closurePkgJson = await getPackageJson(
+        join(WORKSPACE_ROOT, closurePkg),
+      );
+      if (closurePkgJson?.name) {
+        reExportClosureWorkspaceNames.add(closurePkgJson.name);
+      }
+    }
     const extra: string[] = [];
     for (const declaredDep of Object.keys(allDeclaredDeps)) {
       // Only check workspace packages
       if (
         allWorkspacePackages.has(declaredDep) &&
-        !actualWorkspaceDeps.has(declaredDep)
+        !actualWorkspaceDeps.has(declaredDep) &&
+        !reExportClosureWorkspaceNames.has(declaredDep)
       ) {
         extra.push(declaredDep);
       }

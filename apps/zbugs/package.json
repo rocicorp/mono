@@ -99,7 +99,12 @@
     "vite-bundle-analyzer": "^1.3.8",
     "vite-plugin-svgr": "^5.2.0",
     "vitest": "^4.1.6",
-    "zero-cache": "workspace:*"
+    "zero-cache": "workspace:*",
+    "zero-permissions": "workspace:*",
+    "zero-protocol": "workspace:*",
+    "zero-schema": "workspace:*",
+    "zero-types": "workspace:*",
+    "zql": "workspace:*"
   },
   "packageManager": "pnpm@11.3.0"
 }
