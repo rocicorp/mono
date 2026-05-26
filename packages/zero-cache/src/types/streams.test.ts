@@ -224,6 +224,7 @@ describe('streams with internal acks', () => {
   let cleanedUp: Promise<Message[]>;
   let cleanup: (m: Message[]) => void;
   let ackMessages: number[];
+  let enableCumulativeAckCapability: boolean;
   let streamBatchMessages: number;
   let port: number;
 
@@ -238,6 +239,7 @@ describe('streams with internal acks', () => {
 
     consumed = new Queue();
     ackMessages = [];
+    enableCumulativeAckCapability = false;
     streamBatchMessages = 1;
     producer = Subscription.create({
       consumed: m => consumed.enqueue(m),
@@ -262,7 +264,12 @@ describe('streams with internal acks', () => {
         streamBatchMessages > 1
           ? {maxMessages: streamBatchMessages}
           : undefined;
-      const streamOptions = {batch: batchOptions};
+      const streamOptions = {
+        ack: enableCumulativeAckCapability
+          ? ('cumulative' as const)
+          : undefined,
+        batch: batchOptions,
+      };
       void streamOut(lc, producer, ws, streamOptions);
       void streamOutStringified(lc, stringifiedProducer, ws, streamOptions);
     });
@@ -279,25 +286,27 @@ describe('streams with internal acks', () => {
     await server.close();
   });
 
-  async function startReceiver() {
+  async function startReceiver(
+    ack: 'cumulative' | 'cumulative-if-supported' = 'cumulative',
+  ) {
     ws = new WebSocket(`http://localhost:${port}/`);
     return {
       ws,
-      consumer: (await streamIn(
-        lc,
-        ws,
-        messageSchema,
-      )) as Subscription<Message>,
+      consumer: (await streamIn(lc, ws, messageSchema, {
+        ack,
+      })) as Subscription<Message>,
     };
   }
 
-  async function startBatchReceiver() {
+  async function startBatchReceiver(
+    ack: 'cumulative' | 'cumulative-if-supported' = 'cumulative',
+  ) {
     ws = new WebSocket(`http://localhost:${port}/`);
     return {
       ws,
-      consumer: (await streamInBatches(lc, ws, messageSchema)) as Subscription<
-        StreamInPayload<Message>
-      >,
+      consumer: (await streamInBatches(lc, ws, messageSchema, {
+        ack,
+      })) as Subscription<StreamInPayload<Message>>,
     };
   }
 
@@ -381,7 +390,7 @@ describe('streams with internal acks', () => {
     ]);
   });
 
-  test('pipelined stream uses per-message acks', async () => {
+  test('pipelined cumulative ack batches consumed messages', async () => {
     const messageCount = 96;
     const results: Promise<Result>[] = [];
     for (let i = 0; i < messageCount; i++) {
@@ -399,9 +408,56 @@ describe('streams with internal acks', () => {
     expect(await Promise.all(results)).toEqual(
       Array<Result>(messageCount).fill('consumed'),
     );
+    expect(ackMessages).toEqual([96]);
+    consumer.cancel();
+    expect(await cleanedUp).toEqual([]);
+  });
+
+  test('negotiated cumulative ack falls back to per-message without capability', async () => {
+    const messageCount = 96;
+    const results: Promise<Result>[] = [];
+    for (let i = 0; i < messageCount; i++) {
+      results.push(producer.push({from: i, to: i + 1, str: `msg-${i}`}).result);
+    }
+
+    const {consumer} = await startReceiver('cumulative-if-supported');
+    await vi.waitFor(() => expect(consumer.queued).toBe(messageCount));
+
+    const entries = await drainPipeline(messageCount, consumer);
+    for (const {consumed} of entries) {
+      consumed();
+    }
+
+    expect(await Promise.all(results)).toEqual(
+      Array<Result>(messageCount).fill('consumed'),
+    );
     expect(ackMessages).toEqual(
       Array.from({length: messageCount}, (_, i) => i + 1),
     );
+    consumer.cancel();
+    expect(await cleanedUp).toEqual([]);
+  });
+
+  test('negotiated cumulative ack batches consumed messages after capability', async () => {
+    enableCumulativeAckCapability = true;
+    const messageCount = 96;
+    const results: Promise<Result>[] = [];
+    for (let i = 0; i < messageCount; i++) {
+      results.push(producer.push({from: i, to: i + 1, str: `msg-${i}`}).result);
+    }
+
+    const {consumer} = await startReceiver('cumulative-if-supported');
+    await vi.waitFor(() => expect(consumer.queued).toBe(messageCount));
+
+    const entries = await drainPipeline(messageCount, consumer);
+    for (const {consumed} of entries) {
+      consumed();
+    }
+
+    expect(await Promise.all(results)).toEqual(
+      Array<Result>(messageCount).fill('consumed'),
+    );
+    expect(ackMessages).toEqual([96]);
     consumer.cancel();
     expect(await cleanedUp).toEqual([]);
   });
@@ -498,11 +554,36 @@ describe('streams with internal acks', () => {
         ],
       },
     ]);
-    await vi.waitFor(() => expect(ackMessages).toEqual([1, 2, 3, 4, 5, 6]));
+    await vi.waitFor(() => expect(ackMessages).toEqual([4, 6]));
     expect(await cleanedUp).toEqual([]);
   });
 
-  test('pipelined unexpected ack closes connection', async () => {
+  test('pipelined cumulative ack flushes pending ack on cleanup', async () => {
+    const messageCount = 3;
+    const results: Promise<Result>[] = [];
+    for (let i = 0; i < messageCount; i++) {
+      results.push(producer.push({from: i, to: i + 1, str: `msg-${i}`}).result);
+    }
+
+    const {consumer} = await startReceiver();
+    await vi.waitFor(() => expect(consumer.queued).toBe(messageCount));
+
+    const entries = await drainPipeline(messageCount, consumer);
+    for (const {consumed} of entries) {
+      consumed();
+    }
+    expect(ackMessages).toEqual([]);
+
+    consumer.cancel();
+
+    expect(await Promise.all(results)).toEqual(
+      Array<Result>(messageCount).fill('consumed'),
+    );
+    expect(ackMessages).toEqual([3]);
+    expect(await cleanedUp).toEqual([]);
+  });
+
+  test('pipelined backwards ack closes connection', async () => {
     const received: JSONValue[] = [];
     const closed = resolver<void>();
     const results: Promise<Result>[] = [];
@@ -518,8 +599,10 @@ describe('streams with internal acks', () => {
 
     await vi.waitFor(() => expect(received).toHaveLength(2));
     ws.send(JSON.stringify({ack: 2}));
+    expect(await Promise.all(results)).toEqual(['consumed', 'consumed']);
+
+    ws.send(JSON.stringify({ack: 1}));
     await closed.promise;
-    expect(await Promise.all(results)).toEqual(['unconsumed', 'unconsumed']);
   });
 
   test('pipelined (unconsumed)', async () => {
