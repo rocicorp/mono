@@ -187,7 +187,7 @@ export function Root() {
                 <ListPage onReady={() => setContentReady(true)} />
               </Route>
               <Route path="/issue/:id">
-                {params => (
+                {(params: {id: string}) => (
                   <IssuePage
                     key={params.id}
                     onReady={() => setContentReady(true)}
