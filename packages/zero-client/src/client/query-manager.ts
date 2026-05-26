@@ -445,13 +445,13 @@ export class QueryManager implements InspectorDelegate {
         const lruQueryID = this.#recentQueries.values().next().value;
         assert(lruQueryID, 'Expected LRU query ID to exist');
         const evictedAST = this.getAST(lruQueryID);
-        const evictedMetrics = this.#queryMetrics.get(lruQueryID);
+        const evictedMetrics =
+          this.#queryMetrics.get(lruQueryID) ?? newPerQueryMetrics();
         this.#queries.delete(lruQueryID);
         this.#recentQueries.delete(lruQueryID);
         this.#queryMetrics.delete(lruQueryID);
         this.#queueQueryChange({op: 'del', hash: lruQueryID});
         assert(evictedAST, 'Expected evicted AST to exist');
-        assert(evictedMetrics, 'Expected evicted metrics to exist');
         this.#queryEvictedCallback?.(lruQueryID, evictedAST, evictedMetrics);
       }
     }
