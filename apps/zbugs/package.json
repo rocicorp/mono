@@ -100,5 +100,6 @@
     "vite-plugin-svgr": "^5.2.0",
     "vitest": "^4.1.6",
     "zero-cache": "workspace:*"
-  }
+  },
+  "packageManager": "pnpm@11.3.0"
 }

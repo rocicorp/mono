@@ -23,5 +23,6 @@
     "@types/pg-format": "^1.0.5",
     "oxfmt": "^0.45.0",
     "shared": "workspace:*"
-  }
+  },
+  "packageManager": "pnpm@11.3.0"
 }

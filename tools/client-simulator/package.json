@@ -23,5 +23,6 @@
     "oxfmt": "^0.45.0",
     "shared": "workspace:*",
     "zero-protocol": "workspace:*"
-  }
+  },
+  "packageManager": "pnpm@11.3.0"
 }
