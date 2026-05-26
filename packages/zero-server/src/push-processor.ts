@@ -1,22 +1,22 @@
 import {type LogLevel} from '@rocicorp/logger';
-import {assert} from 'shared/src/asserts.ts';
-import type {ReadonlyJSONValue} from 'shared/src/json.ts';
-import {must} from 'shared/src/must.ts';
-import {getValueAtPath} from 'shared/src/object-traversal.ts';
-import type {MutateResponse} from 'zero-protocol/src/mutate-server.ts';
-import type {CustomMutation} from 'zero-protocol/src/mutation.ts';
-import {type MutationResponse} from 'zero-protocol/src/push.ts';
-import type {Schema} from 'zero-types/src/schema.ts';
-import type {Transaction} from 'zql/src/mutate/custom.ts';
-import type {AnyMutatorRegistry} from 'zql/src/mutate/mutator-registry.ts';
-import {isMutator} from 'zql/src/mutate/mutator.ts';
-import type {CustomMutatorDefs} from './custom.ts';
+import {assert} from '../../shared/src/asserts.ts';
+import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
+import {must} from '../../shared/src/must.ts';
+import {getValueAtPath} from '../../shared/src/object-traversal.ts';
+import type {MutateResponse} from '../../zero-protocol/src/mutate-server.ts';
+import type {CustomMutation} from '../../zero-protocol/src/mutation.ts';
+import {type MutationResponse} from '../../zero-protocol/src/push.ts';
 import {
   type Database,
   type ExtractTransactionType,
   handleMutateRequest,
   type TransactFn,
-} from './process-mutations.ts';
+} from '../../zero-server/src/process-mutations.ts';
+import type {Schema} from '../../zero-types/src/schema.ts';
+import type {Transaction} from '../../zql/src/mutate/custom.ts';
+import type {AnyMutatorRegistry} from '../../zql/src/mutate/mutator-registry.ts';
+import {isMutator} from '../../zql/src/mutate/mutator.ts';
+import type {CustomMutatorDefs} from './custom.ts';
 
 export const separatorRe = /[.|]/;
 

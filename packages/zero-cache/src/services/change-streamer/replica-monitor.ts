@@ -1,5 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
-import {promiseVoid} from 'shared/src/resolved-promises.ts';
+import {promiseVoid} from '../../../../shared/src/resolved-promises.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {StatementRunner} from '../../db/statements.ts';
 import {getReplicationState} from '../replicator/schema/replication-state.ts';

@@ -1,5 +1,5 @@
-import {assert} from 'shared/src/asserts.ts';
 import {expect, test} from 'vitest';
+import {assert} from '../../../shared/src/asserts.ts';
 import {type Hash, fakeHash} from '../hash.ts';
 import {Chunk, toRefs} from './chunk.ts';
 import type {MustGetChunk} from './store.ts';

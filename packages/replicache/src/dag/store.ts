@@ -1,4 +1,4 @@
-import {assert} from 'shared/src/asserts.ts';
+import {assert} from '../../../shared/src/asserts.ts';
 import type {Hash} from '../hash.ts';
 import type {Release} from '../with-transactions.ts';
 import type {Chunk, Refs} from './chunk.ts';

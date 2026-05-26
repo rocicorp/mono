@@ -9,7 +9,7 @@ import {
   jsonObjectSchema,
   stringify,
   type JSONObject,
-} from 'shared/src/bigint-json.ts';
+} from '../../../../../shared/src/bigint-json.ts';
 import * as v from '../../../../../shared/src/valita.ts';
 import type {Database} from '../../../../../zqlite/src/db.ts';
 import type {StatementRunner} from '../../../db/statements.ts';

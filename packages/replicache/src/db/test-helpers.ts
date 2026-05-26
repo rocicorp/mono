@@ -1,8 +1,8 @@
 import {LogContext} from '@rocicorp/logger';
-import {assert, assertNotUndefined} from 'shared/src/asserts.ts';
-import type {Enum} from 'shared/src/enum.ts';
-import type {JSONValue} from 'shared/src/json.ts';
 import {expect} from 'vitest';
+import {assert, assertNotUndefined} from '../../../shared/src/asserts.ts';
+import type {Enum} from '../../../shared/src/enum.ts';
+import type {JSONValue} from '../../../shared/src/json.ts';
 import {emptyDataNode} from '../btree/node.ts';
 import {BTreeWrite} from '../btree/write.ts';
 import type {Cookie} from '../cookies.ts';

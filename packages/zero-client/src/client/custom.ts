@@ -1,25 +1,28 @@
 import type {LogContext} from '@rocicorp/logger';
-import {assert} from 'shared/src/asserts.ts';
-import type {ReadonlyJSONValue} from 'shared/src/json.ts';
-import {must} from 'shared/src/must.ts';
-import {emptyFunction} from 'shared/src/sentinels.ts';
-import type {DefaultSchema} from 'zero-types/src/default-types.ts';
-import type {Schema} from 'zero-types/src/schema.ts';
+import type {ZeroTxData} from '../../../replicache/src/replicache-options.ts';
+import type {WriteTransactionImpl} from '../../../replicache/src/transactions.ts';
+import {zeroData} from '../../../replicache/src/transactions.ts';
+import {assert} from '../../../shared/src/asserts.ts';
+import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
+import {must} from '../../../shared/src/must.ts';
+import {emptyFunction} from '../../../shared/src/sentinels.ts';
+import type {DefaultSchema} from '../../../zero-types/src/default-types.ts';
+import type {Schema} from '../../../zero-types/src/schema.ts';
 import {
   makeTransactionMutate,
   type TransactionMutate,
-} from 'zql/src/mutate/crud.ts';
-import type {ClientTransaction, Transaction} from 'zql/src/mutate/custom.ts';
-import {createRunnableBuilder} from 'zql/src/query/create-builder.ts';
+} from '../../../zql/src/mutate/crud.ts';
+import type {
+  ClientTransaction,
+  Transaction,
+} from '../../../zql/src/mutate/custom.ts';
+import {createRunnableBuilder} from '../../../zql/src/query/create-builder.ts';
 import {
   type HumanReadable,
   type Query,
   type RunOptions,
-} from 'zql/src/query/query.ts';
-import type {ConditionalSchemaQuery} from 'zql/src/query/schema-query.ts';
-import type {ZeroTxData} from '../../../replicache/src/replicache-options.ts';
-import type {WriteTransactionImpl} from '../../../replicache/src/transactions.ts';
-import {zeroData} from '../../../replicache/src/transactions.ts';
+} from '../../../zql/src/query/query.ts';
+import type {ConditionalSchemaQuery} from '../../../zql/src/query/schema-query.ts';
 import type {ClientID} from '../types/client-state.ts';
 import {ZeroContext} from './context.ts';
 import {makeCRUDExecutor} from './crud.ts';

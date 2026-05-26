@@ -2,36 +2,39 @@ import type {SQLQuery} from '@databases/sql';
 import type {MaybePromise} from '@opentelemetry/resources';
 import type {LogContext} from '@rocicorp/logger';
 import type {JWTPayload} from 'jose';
-import {assert} from 'shared/src/asserts.ts';
-import type {JSONValue, ReadonlyJSONValue} from 'shared/src/json.ts';
-import {must} from 'shared/src/must.ts';
-import type {Condition} from 'zero-protocol/src/ast.ts';
+import {assert} from '../../../shared/src/asserts.ts';
+import type {JSONValue, ReadonlyJSONValue} from '../../../shared/src/json.ts';
+import {must} from '../../../shared/src/must.ts';
+import * as v from '../../../shared/src/valita.ts';
+import type {Condition} from '../../../zero-protocol/src/ast.ts';
 import type {
   CRUDOp,
   DeleteOp,
   InsertOp,
   UpdateOp,
   UpsertOp,
-} from 'zero-protocol/src/mutation.ts';
+} from '../../../zero-protocol/src/mutation.ts';
 import {
   primaryKeyValueSchema,
   type PrimaryKeyValue,
-} from 'zero-protocol/src/primary-key.ts';
-import type {Policy} from 'zero-schema/src/compiled-permissions.ts';
-import type {Schema} from 'zero-types/src/schema.ts';
-import type {BuilderDelegate} from 'zql/src/builder/builder.ts';
-import {bindStaticParameters, buildPipeline} from 'zql/src/builder/builder.ts';
+} from '../../../zero-protocol/src/primary-key.ts';
+import type {Policy} from '../../../zero-schema/src/compiled-permissions.ts';
+import type {Schema} from '../../../zero-types/src/schema.ts';
+import type {BuilderDelegate} from '../../../zql/src/builder/builder.ts';
+import {
+  bindStaticParameters,
+  buildPipeline,
+} from '../../../zql/src/builder/builder.ts';
 import {
   makeSourceChangeAdd,
   makeSourceChangeEdit,
   makeSourceChangeRemove,
-} from 'zql/src/ivm/source.ts';
-import {consume} from 'zql/src/ivm/stream.ts';
-import {simplifyCondition} from 'zql/src/query/expression.ts';
-import {asQueryInternals} from 'zql/src/query/query-internals.ts';
-import type {Query} from 'zql/src/query/query.ts';
-import {newStaticQuery} from 'zql/src/query/static-query.ts';
-import * as v from '../../../shared/src/valita.ts';
+} from '../../../zql/src/ivm/source.ts';
+import {consume} from '../../../zql/src/ivm/stream.ts';
+import {simplifyCondition} from '../../../zql/src/query/expression.ts';
+import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
+import type {Query} from '../../../zql/src/query/query.ts';
+import {newStaticQuery} from '../../../zql/src/query/static-query.ts';
 import type {
   ClientGroupStorage,
   DatabaseStorage,

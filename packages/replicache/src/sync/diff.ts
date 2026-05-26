@@ -1,5 +1,5 @@
-import {assert} from 'shared/src/asserts.ts';
-import type {Enum} from 'shared/src/enum.ts';
+import {assert} from '../../../shared/src/asserts.ts';
+import type {Enum} from '../../../shared/src/enum.ts';
 import {diff as btreeDiff} from '../btree/diff.ts';
 import type {InternalDiff} from '../btree/node.ts';
 import {allEntriesAsDiff, BTreeRead} from '../btree/read.ts';

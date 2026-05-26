@@ -1,14 +1,14 @@
 import type {LogContext} from '@rocicorp/logger';
-import type {AnalyzeQueryResult} from 'zero-protocol/src/analyze-query-result.ts';
-import type {AST} from 'zero-protocol/src/ast.ts';
-import type {ClientSchema} from 'zero-protocol/src/client-schema.ts';
-import type {PermissionsConfig} from 'zero-schema/src/compiled-permissions.ts';
-import {Debug} from 'zql/src/builder/debug-delegate.ts';
-import {MemoryStorage} from 'zql/src/ivm/memory-storage.ts';
+import type {AnalyzeQueryResult} from '../../../zero-protocol/src/analyze-query-result.ts';
+import type {AST} from '../../../zero-protocol/src/ast.ts';
+import type {ClientSchema} from '../../../zero-protocol/src/client-schema.ts';
+import type {PermissionsConfig} from '../../../zero-schema/src/compiled-permissions.ts';
+import {Debug} from '../../../zql/src/builder/debug-delegate.ts';
+import {MemoryStorage} from '../../../zql/src/ivm/memory-storage.ts';
 import {
   AccumulatorDebugger,
   serializePlanDebugEvents,
-} from 'zql/src/planner/planner-debug.ts';
+} from '../../../zql/src/planner/planner-debug.ts';
 import {Database} from '../../../zqlite/src/db.ts';
 import {explainQueries} from '../../../zqlite/src/explain-queries.ts';
 import {createSQLiteCostModel} from '../../../zqlite/src/sqlite-cost-model.ts';

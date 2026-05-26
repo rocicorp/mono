@@ -1,7 +1,7 @@
 import {LogContext} from '@rocicorp/logger';
-import {assert} from 'shared/src/asserts.ts';
-import type {Enum} from 'shared/src/enum.ts';
 import {afterEach, describe, expect, test, vi} from 'vitest';
+import {assert} from '../../../shared/src/asserts.ts';
+import type {Enum} from '../../../shared/src/enum.ts';
 import {BTreeRead} from '../btree/read.ts';
 import type {Read} from '../dag/store.ts';
 import {TestStore} from '../dag/test-store.ts';

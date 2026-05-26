@@ -1,5 +1,4 @@
 import {LogContext} from '@rocicorp/logger';
-import {TestLogSink} from 'shared/src/logging-test-utils.ts';
 import {
   afterEach,
   beforeEach,
@@ -9,7 +8,8 @@ import {
   vi,
   type Mock,
 } from 'vitest';
-import {ErrorKind} from 'zero-protocol/src/error-kind.ts';
+import {TestLogSink} from '../../../shared/src/logging-test-utils.ts';
+import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {
   FALLBACK_RELOAD_INTERVAL_MS,
   MAX_RELOAD_INTERVAL_MS,

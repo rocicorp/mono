@@ -1,36 +1,36 @@
 import type {LogContext} from '@rocicorp/logger';
 import {resolver, type Resolver} from '@rocicorp/resolver';
-import {assert, unreachable} from 'shared/src/asserts.ts';
-import {getErrorDetails} from 'shared/src/error.ts';
-import {must} from 'shared/src/must.ts';
-import {emptyObject} from 'shared/src/sentinels.ts';
-import {
-  ApplicationError,
-  isApplicationError,
-  wrapWithApplicationError,
-} from 'zero-protocol/src/application-error.ts';
-import {ErrorKind} from 'zero-protocol/src/error-kind.ts';
-import {ErrorOrigin} from 'zero-protocol/src/error-origin.ts';
-import {ErrorReason} from 'zero-protocol/src/error-reason.ts';
-import {ProtocolError} from 'zero-protocol/src/error.ts';
-import type {MutationID} from 'zero-protocol/src/mutation-id.ts';
-import {
-  mutationResultSchema,
-  type MutationError,
-  type MutationOk,
-} from 'zero-protocol/src/mutation.ts';
-import type {
-  PushError,
-  PushOk,
-  PushResponseBody,
-} from 'zero-protocol/src/push.ts';
 import type {NoIndexDiff} from '../../../replicache/src/btree/node.ts';
 import type {ReplicacheImpl} from '../../../replicache/src/impl.ts';
 import type {
   EphemeralID,
   MutationTrackingData,
 } from '../../../replicache/src/replicache-options.ts';
+import {assert, unreachable} from '../../../shared/src/asserts.ts';
+import {getErrorDetails} from '../../../shared/src/error.ts';
+import {must} from '../../../shared/src/must.ts';
+import {emptyObject} from '../../../shared/src/sentinels.ts';
 import * as v from '../../../shared/src/valita.ts';
+import {
+  ApplicationError,
+  isApplicationError,
+  wrapWithApplicationError,
+} from '../../../zero-protocol/src/application-error.ts';
+import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
+import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
+import {ErrorReason} from '../../../zero-protocol/src/error-reason.ts';
+import {ProtocolError} from '../../../zero-protocol/src/error.ts';
+import type {MutationID} from '../../../zero-protocol/src/mutation-id.ts';
+import {
+  mutationResultSchema,
+  type MutationError,
+  type MutationOk,
+} from '../../../zero-protocol/src/mutation.ts';
+import type {
+  PushError,
+  PushOk,
+  PushResponseBody,
+} from '../../../zero-protocol/src/push.ts';
 import type {MutatorResultSuccessDetails} from './custom.ts';
 import {isZeroError, type ZeroError} from './error.ts';
 import {MUTATIONS_KEY_PREFIX} from './keys.ts';

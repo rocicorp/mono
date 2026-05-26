@@ -1,6 +1,9 @@
-import {assert} from 'shared/src/asserts.ts';
-import {stringify, type JSONValue} from 'shared/src/bigint-json.ts';
-import type {SchemaValue, ValueType} from 'zero-schema/src/table-schema.ts';
+import {assert} from '../../../shared/src/asserts.ts';
+import {stringify, type JSONValue} from '../../../shared/src/bigint-json.ts';
+import type {
+  SchemaValue,
+  ValueType,
+} from '../../../zero-schema/src/table-schema.ts';
 import type {ColumnSpec, LiteTableSpec} from '../db/specs.ts';
 import {dataTypeToZqlValueType as upstreamDataTypeToZqlValueType} from './pg-data-type.ts';
 import type {PostgresValueType} from './pg.ts';

@@ -1,4 +1,4 @@
-import {assertString} from 'shared/src/asserts.ts';
+import {assertString} from '../../../shared/src/asserts.ts';
 import type {NonNullValue, SimplePredicateNoNull} from './filter.ts';
 
 export function getLikePredicate(

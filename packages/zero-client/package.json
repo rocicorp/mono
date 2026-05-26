@@ -32,6 +32,7 @@
   "devDependencies": {
     "@faker-js/faker": "^9.6.0",
     "@standard-schema/spec": "^1.0.0",
+    "ast-to-zql": "workspace:*",
     "datadog": "workspace:*",
     "esbuild": "0.27.7",
     "fast-check": "^3.18.0",

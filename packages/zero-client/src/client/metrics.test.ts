@@ -1,8 +1,8 @@
 import {LogContext} from '@rocicorp/logger';
 import {beforeEach, describe, expect, test, vi} from 'vitest';
-import {ErrorKind} from 'zero-protocol/src/error-kind.ts';
-import {ErrorOrigin} from 'zero-protocol/src/error-origin.ts';
-import {ProtocolError} from 'zero-protocol/src/error.ts';
+import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
+import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
+import {ProtocolError} from '../../../zero-protocol/src/error.ts';
 import {ClientErrorKind} from './client-error-kind.ts';
 import {ClientError, type ZeroError} from './error.ts';
 import {

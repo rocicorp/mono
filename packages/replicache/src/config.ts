@@ -1,4 +1,4 @@
-import {isProd} from 'shared/src/config.ts';
+import {isProd} from '../../shared/src/config.ts';
 
 export {
   isProd as skipBTreeNodeAsserts,

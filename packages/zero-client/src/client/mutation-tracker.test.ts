@@ -1,18 +1,18 @@
-import {assert, unreachable} from 'shared/src/asserts.ts';
-import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
 import {describe, expect, test, vi} from 'vitest';
-import {ApplicationError} from 'zero-protocol/src/application-error.ts';
-import {ErrorKind} from 'zero-protocol/src/error-kind.ts';
-import {ErrorOrigin} from 'zero-protocol/src/error-origin.ts';
-import {ProtocolError} from 'zero-protocol/src/error.ts';
-import type {MutationPatch} from 'zero-protocol/src/mutations-patch.ts';
-import type {PushResponseBody} from 'zero-protocol/src/push.ts';
-import {createSchema} from 'zero-schema/src/builder/schema-builder.ts';
 import type {
   DiffOperation,
   NoIndexDiff,
 } from '../../../replicache/src/btree/node.ts';
 import {zeroData} from '../../../replicache/src/transactions.ts';
+import {assert, unreachable} from '../../../shared/src/asserts.ts';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import {ApplicationError} from '../../../zero-protocol/src/application-error.ts';
+import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
+import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
+import {ProtocolError} from '../../../zero-protocol/src/error.ts';
+import type {MutationPatch} from '../../../zero-protocol/src/mutations-patch.ts';
+import type {PushResponseBody} from '../../../zero-protocol/src/push.ts';
+import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {ClientErrorKind} from './client-error-kind.ts';
 import {makeReplicacheMutator} from './custom.ts';
 import {ClientError, isServerError} from './error.ts';

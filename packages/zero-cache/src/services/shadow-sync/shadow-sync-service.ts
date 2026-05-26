@@ -1,5 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
-import {promiseVoid} from 'shared/src/resolved-promises.ts';
+import {promiseVoid} from '../../../../shared/src/resolved-promises.ts';
 import {
   getOrCreateCounter,
   getOrCreateLatencyHistogram,

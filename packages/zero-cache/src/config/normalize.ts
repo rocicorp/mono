@@ -1,7 +1,7 @@
 import {availableParallelism} from 'node:os';
 import type {LogContext} from '@rocicorp/logger';
 import {nanoid} from 'nanoid';
-import {assert, assertNotUndefined} from 'shared/src/asserts.ts';
+import {assert, assertNotUndefined} from '../../../shared/src/asserts.ts';
 import {getHostIp} from './network.ts';
 import type {ZeroConfig} from './zero-config.ts';
 

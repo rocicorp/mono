@@ -24,7 +24,6 @@
   "devDependencies": {
     "@rocicorp/resolver": "^1.0.2",
     "@solidjs/testing-library": "^0.8.10",
-    "otel": "workspace:*",
     "oxfmt": "^0.45.0",
     "shared": "workspace:*",
     "solid-js": "^1.9.4",

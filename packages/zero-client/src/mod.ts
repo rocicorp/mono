@@ -15,21 +15,21 @@ export {
 } from '../../replicache/src/persist/collect-idb-databases.ts';
 export type {ClientGroupID, ClientID} from '../../replicache/src/sync/ids.ts';
 export {TransactionClosedError} from '../../replicache/src/transaction-closed-error.ts';
-export type {Expand} from 'shared/src/expand.ts';
-export type {Falsy} from 'shared/src/falsy.ts';
+export type {Expand} from '../../shared/src/expand.ts';
+export type {Falsy} from '../../shared/src/falsy.ts';
 export type {
   JSONObject,
   JSONValue,
   ReadonlyJSONObject,
   ReadonlyJSONValue,
-} from 'shared/src/json.ts';
-export type {MaybePromise} from 'shared/src/types.ts';
+} from '../../shared/src/json.ts';
+export type {MaybePromise} from '../../shared/src/types.ts';
 export type {
   AnalyzeQueryResult,
   PlanDebugEventJSON,
-} from 'zero-protocol/src/analyze-query-result.ts';
-export {ApplicationError} from 'zero-protocol/src/application-error.ts';
-export type {ApplicationErrorOptions} from 'zero-protocol/src/application-error.ts';
+} from '../../zero-protocol/src/analyze-query-result.ts';
+export {ApplicationError} from '../../zero-protocol/src/application-error.ts';
+export type {ApplicationErrorOptions} from '../../zero-protocol/src/application-error.ts';
 export type {
   AST,
   Bound,
@@ -53,7 +53,7 @@ export type {
   SimpleCondition,
   SimpleOperator,
   ValuePosition,
-} from 'zero-protocol/src/ast.ts';
+} from '../../zero-protocol/src/ast.ts';
 export {
   transformRequestMessageSchema,
   transformResponseMessageSchema,
@@ -62,10 +62,10 @@ export {
   type TransformRequestMessage,
   type TransformResponseBody,
   type TransformResponseMessage,
-} from 'zero-protocol/src/custom-queries.ts';
-export type {PrimaryKey} from 'zero-protocol/src/primary-key.ts';
-export {relationships} from 'zero-schema/src/builder/relationship-builder.ts';
-export {createSchema} from 'zero-schema/src/builder/schema-builder.ts';
+} from '../../zero-protocol/src/custom-queries.ts';
+export type {PrimaryKey} from '../../zero-protocol/src/primary-key.ts';
+export {relationships} from '../../zero-schema/src/builder/relationship-builder.ts';
+export {createSchema} from '../../zero-schema/src/builder/schema-builder.ts';
 export {
   boolean,
   enumeration,
@@ -75,30 +75,30 @@ export {
   table,
   type ColumnBuilder,
   type TableBuilderWithColumns,
-} from 'zero-schema/src/builder/table-builder.ts';
+} from '../../zero-schema/src/builder/table-builder.ts';
 export type {
   AssetPermissions as CompiledAssetPermissions,
   PermissionsConfig as CompiledPermissionsConfig,
   Policy as CompiledPermissionsPolicy,
   Rule as CompiledPermissionsRule,
-} from 'zero-schema/src/compiled-permissions.ts';
+} from '../../zero-schema/src/compiled-permissions.ts';
 export {
   ANYONE_CAN,
   ANYONE_CAN_DO_ANYTHING,
   definePermissions,
   NOBODY_CAN,
-} from 'zero-permissions/src/permissions.ts';
+} from '../../zero-permissions/src/permissions.ts';
 export type {
   AssetPermissions,
   PermissionRule,
   PermissionsConfig,
-} from 'zero-permissions/src/permissions.ts';
-export {type TableSchema} from 'zero-schema/src/table-schema.ts';
+} from '../../zero-permissions/src/permissions.ts';
+export {type TableSchema} from '../../zero-schema/src/table-schema.ts';
 export type {
   SchemaValue,
   SchemaValueWithCustomType,
   ValueType,
-} from 'zero-schema/src/table-schema.ts';
+} from '../../zero-schema/src/table-schema.ts';
 export type {
   BaseDefaultContext,
   BaseDefaultSchema,
@@ -106,12 +106,12 @@ export type {
   DefaultSchema,
   DefaultTypes,
   DefaultWrappedTransaction,
-} from 'zero-types/src/default-types.ts';
-export type {Schema} from 'zero-types/src/schema.ts';
-export type {Change} from 'zql/src/ivm/change.ts';
-export type {Node} from 'zql/src/ivm/data.ts';
-export type {Input, Output} from 'zql/src/ivm/operator.ts';
-export type {Stream} from 'zql/src/ivm/stream.ts';
+} from '../../zero-types/src/default-types.ts';
+export type {Schema} from '../../zero-types/src/schema.ts';
+export type {Change} from '../../zql/src/ivm/change.ts';
+export type {Node} from '../../zql/src/ivm/data.ts';
+export type {Input, Output} from '../../zql/src/ivm/operator.ts';
+export type {Stream} from '../../zql/src/ivm/stream.ts';
 export type {
   AnyViewFactory,
   Entry,
@@ -119,7 +119,7 @@ export type {
   Format,
   View,
   ViewFactory,
-} from 'zql/src/ivm/view.ts';
+} from '../../zql/src/ivm/view.ts';
 export type {
   CRUDMutator,
   DeleteID,
@@ -127,14 +127,14 @@ export type {
   TableMutator,
   UpdateValue,
   UpsertValue,
-} from 'zql/src/mutate/crud.ts';
+} from '../../zql/src/mutate/crud.ts';
 export type {
   AnyTransaction,
   Location,
   ServerTransaction,
   Transaction,
   TransactionReason,
-} from 'zql/src/mutate/custom.ts';
+} from '../../zql/src/mutate/custom.ts';
 export {
   defineMutators,
   defineMutatorsWithType,
@@ -147,7 +147,7 @@ export {
   type MutatorDefinitions,
   type MutatorRegistry,
   type ToMutatorTree,
-} from 'zql/src/mutate/mutator-registry.ts';
+} from '../../zql/src/mutate/mutator-registry.ts';
 export {
   defineMutator,
   defineMutatorWithType,
@@ -156,14 +156,14 @@ export {
   type MutateRequest,
   type Mutator,
   type MutatorDefinition,
-} from 'zql/src/mutate/mutator.ts';
-export {createBuilder} from 'zql/src/query/create-builder.ts';
-export {InputValidationError} from 'zql/src/query/validate-input.ts';
-export {escapeLike} from 'zql/src/query/escape-like.ts';
+} from '../../zql/src/mutate/mutator.ts';
+export {createBuilder} from '../../zql/src/query/create-builder.ts';
+export {InputValidationError} from '../../zql/src/query/validate-input.ts';
+export {escapeLike} from '../../zql/src/query/escape-like.ts';
 export type {
   ExpressionBuilder,
   ExpressionFactory,
-} from 'zql/src/query/expression.ts';
+} from '../../zql/src/query/expression.ts';
 export {
   syncedQuery,
   syncedQueryWithContext,
@@ -174,8 +174,8 @@ export {
   type Parser,
   type QueryFn,
   type SyncedQuery,
-} from 'zql/src/query/named.ts';
-export type {QueryInternals} from 'zql/src/query/query-internals.ts';
+} from '../../zql/src/query/named.ts';
+export type {QueryInternals} from '../../zql/src/query/query-internals.ts';
 export {
   defineQueries,
   defineQueriesWithType,
@@ -196,8 +196,8 @@ export {
   type QueryOrQueryRequest,
   type QueryRegistry,
   type QueryRequest,
-} from 'zql/src/query/query-registry.ts';
-export {type MaterializeOptions} from 'zql/src/query/query.ts';
+} from '../../zql/src/query/query-registry.ts';
+export {type MaterializeOptions} from '../../zql/src/query/query.ts';
 export type {
   AnyQuery,
   HumanReadable,
@@ -208,13 +208,13 @@ export type {
   Row,
   RunOptions,
   ZeRow,
-} from 'zql/src/query/query.ts';
+} from '../../zql/src/query/query.ts';
 export type {
   ConditionalSchemaQuery,
   SchemaQuery,
-} from 'zql/src/query/schema-query.ts';
-export {type TTL} from 'zql/src/query/ttl.ts';
-export type {ResultType, TypedView} from 'zql/src/query/typed-view.ts';
+} from '../../zql/src/query/schema-query.ts';
+export {type TTL} from '../../zql/src/query/ttl.ts';
+export type {ResultType, TypedView} from '../../zql/src/query/typed-view.ts';
 export {ConnectionStatus} from './client/connection-status.ts';
 export type {
   Connection,

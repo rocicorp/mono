@@ -1,4 +1,4 @@
-import type {ReadonlyJSONValue} from 'shared/src/json.ts';
+import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 
 export type QueryResultDetails =
   | {

@@ -1,13 +1,13 @@
 import type {LogContext} from '@rocicorp/logger';
-import {unreachable} from 'shared/src/asserts.ts';
-import {must} from 'shared/src/must.ts';
-import {TDigest} from 'shared/src/tdigest.ts';
+import {unreachable} from '../../../../shared/src/asserts.ts';
+import {must} from '../../../../shared/src/must.ts';
+import {TDigest} from '../../../../shared/src/tdigest.ts';
 import type {
   QueryServerMetrics,
   ServerMetrics,
-} from 'zero-protocol/src/inspect-down.ts';
-import type {InspectUpBody} from 'zero-protocol/src/inspect-up.ts';
-import {Database} from 'zqlite/src/db.ts';
+} from '../../../../zero-protocol/src/inspect-down.ts';
+import type {InspectUpBody} from '../../../../zero-protocol/src/inspect-up.ts';
+import {Database} from '../../../../zqlite/src/db.ts';
 import {loadPermissions} from '../../auth/load-permissions.ts';
 import type {NormalizedZeroConfig} from '../../config/normalize.ts';
 import {

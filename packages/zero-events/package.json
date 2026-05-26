@@ -22,7 +22,7 @@
     }
   },
   "scripts": {
-    "build": "tsc && node tool/build.ts",
+    "build": "rm -rf out && tsc && node tool/build.ts",
     "prepack": "pnpm run build",
     "check-types": "tsc",
     "check-types:watch": "tsc --watch",

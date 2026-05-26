@@ -1,7 +1,7 @@
-import {jsonValueSchema} from 'shared/src/bigint-json.ts';
-import {jsonSchema} from 'shared/src/json-schema.ts';
-import {astSchema} from 'zero-protocol/src/ast.ts';
+import {jsonValueSchema} from '../../../../../shared/src/bigint-json.ts';
+import {jsonSchema} from '../../../../../shared/src/json-schema.ts';
 import * as v from '../../../../../shared/src/valita.ts';
+import {astSchema} from '../../../../../zero-protocol/src/ast.ts';
 import {versionFromLexi, versionToLexi} from '../../../types/lexi-version.ts';
 import {
   majorVersionToString,

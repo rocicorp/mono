@@ -1,6 +1,6 @@
 import {LogContext} from '@rocicorp/logger';
-import {assert} from 'shared/src/asserts.ts';
-import type {Enum} from 'shared/src/enum.ts';
+import {assert} from '../../../shared/src/asserts.ts';
+import type {Enum} from '../../../shared/src/enum.ts';
 import type {Store} from '../dag/store.ts';
 import * as FormatVersion from '../format-version-enum.ts';
 import type {IndexDefinitions} from '../index-defs.ts';

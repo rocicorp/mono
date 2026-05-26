@@ -3,7 +3,7 @@ import {expect, test} from 'vitest';
 import type {
   PrimaryKey,
   PrimaryKeyValueRecord,
-} from 'zero-protocol/src/primary-key.ts';
+} from '../../../zero-protocol/src/primary-key.ts';
 import {
   toPrimaryKeyString as toPrimaryKeyStringImpl,
   toMutationResponseKey,

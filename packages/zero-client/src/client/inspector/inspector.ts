@@ -1,13 +1,13 @@
-import type {ReadonlyJSONValue} from 'shared/src/json.ts';
+import type {ReadonlyJSONValue} from '../../../../shared/src/json.ts';
 import type {
   AnalyzeQueryResult,
   PlanDebugEventJSON,
-} from 'zero-protocol/src/analyze-query-result.ts';
-import type {AST} from 'zero-protocol/src/ast.ts';
-import type {AnalyzeQueryOptions} from 'zero-protocol/src/inspect-up.ts';
-import {formatPlannerEvents} from 'zql/src/planner/planner-debug.ts';
-import type {QueryDelegate} from 'zql/src/query/query-delegate.ts';
-import type {AnyQuery} from 'zql/src/query/query.ts';
+} from '../../../../zero-protocol/src/analyze-query-result.ts';
+import type {AST} from '../../../../zero-protocol/src/ast.ts';
+import type {AnalyzeQueryOptions} from '../../../../zero-protocol/src/inspect-up.ts';
+import {formatPlannerEvents} from '../../../../zql/src/planner/planner-debug.ts';
+import type {QueryDelegate} from '../../../../zql/src/query/query-delegate.ts';
+import type {AnyQuery} from '../../../../zql/src/query/query.ts';
 import type {ClientGroup} from './client-group.ts';
 import {Client} from './client.ts';
 import type {

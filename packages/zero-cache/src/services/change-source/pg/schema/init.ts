@@ -1,5 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
-import {assert} from 'shared/src/asserts.ts';
+import {assert} from '../../../../../../shared/src/asserts.ts';
 import * as v from '../../../../../../shared/src/valita.ts';
 import {
   getVersionHistory,

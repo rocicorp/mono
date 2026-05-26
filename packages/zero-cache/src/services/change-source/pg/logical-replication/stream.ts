@@ -6,7 +6,7 @@ import {
 import type {LogContext} from '@rocicorp/logger';
 import {defu} from 'defu';
 import postgres, {type Options, type PostgresType} from 'postgres';
-import {sleep} from 'shared/src/sleep.ts';
+import {sleep} from '../../../../../../shared/src/sleep.ts';
 import {getTypeParsers} from '../../../../db/pg-type-parser.ts';
 import {type PostgresDB} from '../../../../types/pg.ts';
 import {id, lit} from '../../../../types/sql.ts';

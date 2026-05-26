@@ -1,10 +1,10 @@
 import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
-import {assert} from 'shared/src/asserts.ts';
-import {stringify} from 'shared/src/bigint-json.ts';
-import {CustomKeyMap} from 'shared/src/custom-key-map.ts';
-import {must} from 'shared/src/must.ts';
-import {randInt} from 'shared/src/rand.ts';
+import {assert} from '../../../../../shared/src/asserts.ts';
+import {stringify} from '../../../../../shared/src/bigint-json.ts';
+import {CustomKeyMap} from '../../../../../shared/src/custom-key-map.ts';
+import {must} from '../../../../../shared/src/must.ts';
+import {randInt} from '../../../../../shared/src/rand.ts';
 import {JSON_STRINGIFIED, type JSONFormat} from '../../../types/lite.ts';
 import {
   stateVersionFromString,

@@ -1,7 +1,7 @@
-import {assert} from 'shared/src/asserts.ts';
-import {must} from 'shared/src/must.ts';
-import type {AST, Condition, Ordering} from 'zero-protocol/src/ast.ts';
-import type {PrimaryKey} from 'zero-protocol/src/primary-key.ts';
+import {assert} from '../../../shared/src/asserts.ts';
+import {must} from '../../../shared/src/must.ts';
+import type {AST, Condition, Ordering} from '../../../zero-protocol/src/ast.ts';
+import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
 
 export function completeOrdering(
   ast: AST,

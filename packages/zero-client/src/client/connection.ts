@@ -1,7 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
-import {unreachable} from 'shared/src/asserts.ts';
-import {Subscribable} from 'shared/src/subscribable.ts';
-import {ErrorKind} from 'zero-protocol/src/error-kind.ts';
+import {unreachable} from '../../../shared/src/asserts.ts';
+import {Subscribable} from '../../../shared/src/subscribable.ts';
+import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {ClientErrorKind} from './client-error-kind.ts';
 import type {
   ConnectionManager,

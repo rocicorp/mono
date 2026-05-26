@@ -1,20 +1,20 @@
 import '../../shared/src/dotenv.ts';
 
 import {consoleLogSink, LogContext} from '@rocicorp/logger';
-import {must} from 'shared/src/must.ts';
-import {parseOptions} from 'shared/src/options.ts';
-import {transformAndHashQuery} from 'zero-cache/src/auth/read-authorizer.ts';
+import {astToZQL} from '../../ast-to-zql/src/ast-to-zql.ts';
+import {formatOutput} from '../../ast-to-zql/src/format.ts';
+import {must} from '../../shared/src/must.ts';
+import {parseOptions} from '../../shared/src/options.ts';
+import * as v from '../../shared/src/valita.ts';
+import {transformAndHashQuery} from '../../zero-cache/src/auth/read-authorizer.ts';
 import {
   appOptions,
   shardOptions,
   ZERO_ENV_VAR_PREFIX,
-} from 'zero-cache/src/config/zero-config.ts';
-import {loadSchemaAndPermissions} from 'zero-cache/src/scripts/permissions.ts';
-import {pgClient} from 'zero-cache/src/types/pg.ts';
-import {getShardID, upstreamSchema} from 'zero-cache/src/types/shards.ts';
-import {astToZQL} from 'zql/src/ast-to-zql.ts';
-import {formatOutput} from '../../ast-to-zql/src/format.ts';
-import * as v from '../../shared/src/valita.ts';
+} from '../../zero-cache/src/config/zero-config.ts';
+import {loadSchemaAndPermissions} from '../../zero-cache/src/scripts/permissions.ts';
+import {pgClient} from '../../zero-cache/src/types/pg.ts';
+import {getShardID, upstreamSchema} from '../../zero-cache/src/types/shards.ts';
 
 const options = {
   cvr: {db: v.string()},

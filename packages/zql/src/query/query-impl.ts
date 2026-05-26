@@ -1,6 +1,6 @@
 // oxlint-disable no-explicit-any
-import {assert} from 'shared/src/asserts.ts';
-import type {ReadonlyJSONValue} from 'shared/src/json.ts';
+import {assert} from '../../../shared/src/asserts.ts';
+import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {
   type AST,
   type CompoundKey,
@@ -9,9 +9,9 @@ import {
   type SimpleOperator,
   type System,
   SUBQ_PREFIX,
-} from 'zero-protocol/src/ast.ts';
-import {hashOfAST} from 'zero-protocol/src/query-hash.ts';
-import type {Schema} from 'zero-types/src/schema.ts';
+} from '../../../zero-protocol/src/ast.ts';
+import {hashOfAST} from '../../../zero-protocol/src/query-hash.ts';
+import type {Schema} from '../../../zero-types/src/schema.ts';
 import {NotImplementedError} from '../error.ts';
 import {defaultFormat} from '../ivm/default-format.ts';
 import type {Format, ViewFactory} from '../ivm/view.ts';

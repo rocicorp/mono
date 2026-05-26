@@ -1,17 +1,25 @@
 import type {SQLQuery} from '@databases/sql';
 import type {LogContext} from '@rocicorp/logger';
 import SQLite3Database from '@rocicorp/zero-sqlite3';
-import {assert, unreachable} from 'shared/src/asserts.ts';
-import {must} from 'shared/src/must.ts';
-import type {Writable} from 'shared/src/writable.ts';
-import type {Condition, Ordering} from 'zero-protocol/src/ast.ts';
-import type {Row, Value} from 'zero-protocol/src/data.ts';
-import type {PrimaryKey} from 'zero-protocol/src/primary-key.ts';
-import type {SchemaValue, ValueType} from 'zero-schema/src/table-schema.ts';
-import type {DebugDelegate} from 'zql/src/builder/debug-delegate.ts';
-import {createPredicate, transformFilters} from 'zql/src/builder/filter.ts';
-import {ChangeType} from 'zql/src/ivm/change-type.ts';
-import {makeComparator, type Node} from 'zql/src/ivm/data.ts';
+import type {LogConfig} from '../../otel/src/log-options.ts';
+import {timeSampled} from '../../otel/src/maybe-time.ts';
+import {assert, unreachable} from '../../shared/src/asserts.ts';
+import {must} from '../../shared/src/must.ts';
+import type {Writable} from '../../shared/src/writable.ts';
+import type {Condition, Ordering} from '../../zero-protocol/src/ast.ts';
+import type {Row, Value} from '../../zero-protocol/src/data.ts';
+import type {PrimaryKey} from '../../zero-protocol/src/primary-key.ts';
+import type {
+  SchemaValue,
+  ValueType,
+} from '../../zero-schema/src/table-schema.ts';
+import type {DebugDelegate} from '../../zql/src/builder/debug-delegate.ts';
+import {
+  createPredicate,
+  transformFilters,
+} from '../../zql/src/builder/filter.ts';
+import {ChangeType} from '../../zql/src/ivm/change-type.ts';
+import {makeComparator, type Node} from '../../zql/src/ivm/data.ts';
 import {
   generateWithOverlay,
   generateWithOverlayUnordered,
@@ -19,19 +27,17 @@ import {
   genPushAndWriteWithSplitEdit,
   type Connection,
   type Overlay,
-} from 'zql/src/ivm/memory-source.ts';
-import {type FetchRequest} from 'zql/src/ivm/operator.ts';
-import type {SourceSchema} from 'zql/src/ivm/schema.ts';
-import {SourceChangeIndex} from 'zql/src/ivm/source-change-index.ts';
+} from '../../zql/src/ivm/memory-source.ts';
+import {type FetchRequest} from '../../zql/src/ivm/operator.ts';
+import type {SourceSchema} from '../../zql/src/ivm/schema.ts';
+import {SourceChangeIndex} from '../../zql/src/ivm/source-change-index.ts';
 import {
   type Source,
   type SourceChange,
   type SourceInput,
-} from 'zql/src/ivm/source.ts';
-import type {Stream} from 'zql/src/ivm/stream.ts';
-import {assertOrderingIncludesPK} from 'zql/src/query/complete-ordering.ts';
-import type {LogConfig} from '../../otel/src/log-options.ts';
-import {timeSampled} from '../../otel/src/maybe-time.ts';
+} from '../../zql/src/ivm/source.ts';
+import type {Stream} from '../../zql/src/ivm/stream.ts';
+import {assertOrderingIncludesPK} from '../../zql/src/query/complete-ordering.ts';
 import type {Database, Statement} from './db.ts';
 import {compile, format, sql} from './internal/sql.ts';
 import {StatementCache} from './internal/statement-cache.ts';

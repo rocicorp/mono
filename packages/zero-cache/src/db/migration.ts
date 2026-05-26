@@ -1,7 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
 import type postgres from 'postgres';
-import {assert} from 'shared/src/asserts.ts';
-import {must} from 'shared/src/must.ts';
+import {assert} from '../../../shared/src/asserts.ts';
+import {must} from '../../../shared/src/must.ts';
 import * as v from '../../../shared/src/valita.ts';
 import {type PostgresDB, type PostgresTransaction} from '../types/pg.ts';
 import {runTx} from './run-transaction.ts';

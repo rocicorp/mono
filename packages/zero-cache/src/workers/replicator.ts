@@ -1,5 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
-import {sleep} from 'shared/src/sleep.ts';
+import {sleep} from '../../../shared/src/sleep.ts';
 import * as v from '../../../shared/src/valita.ts';
 import {Database} from '../../../zqlite/src/db.ts';
 import type {ReplicaOptions} from '../config/zero-config.ts';

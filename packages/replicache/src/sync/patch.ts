@@ -1,7 +1,10 @@
 import type {LogContext} from '@rocicorp/logger';
 import {compareUTF8} from 'compare-utf8';
-import {assertObject} from 'shared/src/asserts.ts';
-import type {ReadonlyJSONObject, ReadonlyJSONValue} from 'shared/src/json.ts';
+import {assertObject} from '../../../shared/src/asserts.ts';
+import type {
+  ReadonlyJSONObject,
+  ReadonlyJSONValue,
+} from '../../../shared/src/json.ts';
 import type {DiffOperation} from '../btree/node.ts';
 import type {Write} from '../db/write.ts';
 import {

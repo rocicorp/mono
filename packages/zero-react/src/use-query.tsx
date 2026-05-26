@@ -1,6 +1,6 @@
 import {resolver} from '@rocicorp/resolver';
 import React, {useSyncExternalStore} from 'react';
-import {TESTING} from 'shared/src/testing.ts';
+import {TESTING} from '../../shared/src/testing.ts';
 import {
   type Immutable,
   addContextToQuery,

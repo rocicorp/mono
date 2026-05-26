@@ -1,20 +1,23 @@
 import {pipeline, Readable, Writable} from 'node:stream';
 import type {LogContext, LogLevel} from '@rocicorp/logger';
-import {assert} from 'shared/src/asserts.ts';
 import type {CloseEvent, Data, ErrorEvent} from 'ws';
 import WebSocket, {createWebSocketStream} from 'ws';
-import type {ConnectedMessage} from 'zero-protocol/src/connect.ts';
-import type {Downstream} from 'zero-protocol/src/down.ts';
-import {ErrorKind} from 'zero-protocol/src/error-kind.ts';
-import {ErrorOrigin} from 'zero-protocol/src/error-origin.ts';
-import type {ErrorBody} from 'zero-protocol/src/error.ts';
-import {isProtocolError, type ProtocolError} from 'zero-protocol/src/error.ts';
+import {assert} from '../../../shared/src/asserts.ts';
+import * as valita from '../../../shared/src/valita.ts';
+import type {ConnectedMessage} from '../../../zero-protocol/src/connect.ts';
+import type {Downstream} from '../../../zero-protocol/src/down.ts';
+import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
+import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
+import type {ErrorBody} from '../../../zero-protocol/src/error.ts';
+import {
+  isProtocolError,
+  type ProtocolError,
+} from '../../../zero-protocol/src/error.ts';
 import {
   MIN_SERVER_SUPPORTED_SYNC_PROTOCOL,
   PROTOCOL_VERSION,
-} from 'zero-protocol/src/protocol-version.ts';
-import {upstreamSchema, type Upstream} from 'zero-protocol/src/up.ts';
-import * as valita from '../../../shared/src/valita.ts';
+} from '../../../zero-protocol/src/protocol-version.ts';
+import {upstreamSchema, type Upstream} from '../../../zero-protocol/src/up.ts';
 import {
   ProtocolErrorWithLevel,
   getLogLevel,

@@ -1,6 +1,6 @@
 import {LogContext} from '@rocicorp/logger';
-import {assertNotUndefined} from 'shared/src/asserts.ts';
 import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
+import {assertNotUndefined} from '../../../shared/src/asserts.ts';
 import type {Store} from '../dag/store.ts';
 import {TestStore} from '../dag/test-store.ts';
 import {getDeletedClients, setDeletedClients} from '../deleted-clients.ts';

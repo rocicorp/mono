@@ -1,5 +1,5 @@
-import {assert} from 'shared/src/asserts.ts';
 import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
+import {assert} from '../../../shared/src/asserts.ts';
 import {withRead, withWrite} from '../with-transactions.ts';
 import {dropIDBStoreWithMemFallback} from './idb-store-with-mem-fallback.ts';
 import {IDBNotFoundError, IDBStore} from './idb-store.ts';

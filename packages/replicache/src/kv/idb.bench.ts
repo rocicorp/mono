@@ -1,8 +1,11 @@
 import {deleteDB, type IDBPDatabase, openDB} from 'idb/with-async-ittr';
-import {bench, describe, use} from 'shared/src/bench.ts';
-import {randomData, type RandomDataType} from 'shared/src/test-data.ts';
 import {afterAll, beforeAll} from 'vitest';
 import xbytes from 'xbytes';
+import {bench, describe, use} from '../../../shared/src/bench.ts';
+import {
+  randomData,
+  type RandomDataType,
+} from '../../../shared/src/test-data.ts';
 
 async function idbPopulate(
   db: IDBPDatabase<unknown>,

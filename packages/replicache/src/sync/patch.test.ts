@@ -1,8 +1,8 @@
 import {LogContext} from '@rocicorp/logger';
-import {assert} from 'shared/src/asserts.ts';
-import type {Enum} from 'shared/src/enum.ts';
-import type {JSONValue} from 'shared/src/json.ts';
 import {describe, expect, test} from 'vitest';
+import {assert} from '../../../shared/src/asserts.ts';
+import type {Enum} from '../../../shared/src/enum.ts';
+import type {JSONValue} from '../../../shared/src/json.ts';
 import {TestStore} from '../dag/test-store.ts';
 import {ChainBuilder} from '../db/test-helpers.ts';
 import {newWriteSnapshotDD31} from '../db/write.ts';

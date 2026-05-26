@@ -1,6 +1,6 @@
 import {describe, expect, expectTypeOf, test} from 'vitest';
-import {createSchema} from 'zero-schema/src/builder/schema-builder.ts';
-import {string, table} from 'zero-schema/src/builder/table-builder.ts';
+import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
+import {string, table} from '../../../zero-schema/src/builder/table-builder.ts';
 import type {BatchMutator, DBMutator} from './crud.ts';
 import {zeroForTest} from './test-utils.ts';
 

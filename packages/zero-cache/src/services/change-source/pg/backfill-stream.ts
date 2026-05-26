@@ -4,8 +4,8 @@ import {
 } from '@drdgvhbh/postgres-error-codes';
 import type {LogContext} from '@rocicorp/logger';
 import postgres from 'postgres';
-import {assert} from 'shared/src/asserts.ts';
-import {equals} from 'shared/src/set-utils.ts';
+import {assert} from '../../../../../shared/src/asserts.ts';
+import {equals} from '../../../../../shared/src/set-utils.ts';
 import * as v from '../../../../../shared/src/valita.ts';
 import {READONLY} from '../../../db/mode-enum.ts';
 import {

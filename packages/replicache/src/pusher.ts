@@ -1,4 +1,4 @@
-import {assertObject} from 'shared/src/asserts.ts';
+import {assertObject} from '../../shared/src/asserts.ts';
 import {
   assertVersionNotSupportedResponse,
   type ClientStateNotFoundResponse,

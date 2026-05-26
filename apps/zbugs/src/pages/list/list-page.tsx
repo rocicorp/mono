@@ -12,9 +12,9 @@ import React, {
   type KeyboardEvent,
 } from 'react';
 import {toast} from 'react-toastify';
-import {must} from 'shared/src/must.ts';
 import {useDebouncedCallback} from 'use-debounce';
 import {useParams, useSearch} from 'wouter';
+import {must} from '../../../../../packages/shared/src/must.ts';
 import {
   queries,
   type IssueRowSort,

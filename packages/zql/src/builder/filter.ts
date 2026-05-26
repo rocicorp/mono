@@ -1,10 +1,10 @@
-import {assert, unreachable} from 'shared/src/asserts.ts';
+import {assert, unreachable} from '../../../shared/src/asserts.ts';
 import type {
   Condition,
   SimpleCondition,
   SimpleOperator,
-} from 'zero-protocol/src/ast.ts';
-import type {Row, Value} from 'zero-protocol/src/data.ts';
+} from '../../../zero-protocol/src/ast.ts';
+import type {Row, Value} from '../../../zero-protocol/src/data.ts';
 import {simplifyCondition} from '../query/expression.ts';
 import {getLikePredicate} from './like.ts';
 

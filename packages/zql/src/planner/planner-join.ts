@@ -1,4 +1,4 @@
-import {assert} from 'shared/src/asserts.ts';
+import {assert} from '../../../shared/src/asserts.ts';
 import {getMultiConstraintChunkSize} from '../ivm/flipped-join.ts';
 import {
   mergeConstraints,

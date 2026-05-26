@@ -1,10 +1,10 @@
 import type {LogContext} from '@rocicorp/logger';
 import {type Resolver, resolver} from '@rocicorp/resolver';
 import type {PendingQuery, Row} from 'postgres';
-import {CustomKeyMap} from 'shared/src/custom-key-map.ts';
-import {must} from 'shared/src/must.ts';
-import {promiseVoid} from 'shared/src/resolved-promises.ts';
 import {startAsyncSpan} from '../../../../otel/src/span.ts';
+import {CustomKeyMap} from '../../../../shared/src/custom-key-map.ts';
+import {must} from '../../../../shared/src/must.ts';
+import {promiseVoid} from '../../../../shared/src/resolved-promises.ts';
 import * as Mode from '../../db/mode-enum.ts';
 import {runTx} from '../../db/run-transaction.ts';
 import {TransactionPool} from '../../db/transaction-pool.ts';

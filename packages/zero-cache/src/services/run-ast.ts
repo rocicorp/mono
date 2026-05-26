@@ -1,23 +1,28 @@
 import type {LogContext} from '@rocicorp/logger';
-import {assert} from 'shared/src/asserts.ts';
-import {must} from 'shared/src/must.ts';
-import {sleep} from 'shared/src/sleep.ts';
-import type {AnalyzeQueryResult} from 'zero-protocol/src/analyze-query-result.ts';
-import type {AST, LiteralValue} from 'zero-protocol/src/ast.ts';
-import {mapAST} from 'zero-protocol/src/ast.ts';
-import type {ClientSchema} from 'zero-protocol/src/client-schema.ts';
-import type {Row} from 'zero-protocol/src/data.ts';
-import {hashOfAST} from 'zero-protocol/src/query-hash.ts';
-import type {PermissionsConfig} from 'zero-schema/src/compiled-permissions.ts';
-import type {NameMapper} from 'zero-schema/src/name-mapper.ts';
-import {astToZQL} from 'zql/src/ast-to-zql.ts';
-import {buildPipeline, type BuilderDelegate} from 'zql/src/builder/builder.ts';
-import {ChangeType} from 'zql/src/ivm/change-type.ts';
-import type {Node} from 'zql/src/ivm/data.ts';
-import {skipYields} from 'zql/src/ivm/operator.ts';
-import type {ConnectionCostModel} from 'zql/src/planner/planner-connection.ts';
-import type {PlanDebugger} from 'zql/src/planner/planner-debug.ts';
+// @circular-dep-ignore
+import {astToZQL} from '../../../ast-to-zql/src/ast-to-zql.ts';
+// @circular-dep-ignore
 import {formatOutput} from '../../../ast-to-zql/src/format.ts';
+import {assert} from '../../../shared/src/asserts.ts';
+import {must} from '../../../shared/src/must.ts';
+import {sleep} from '../../../shared/src/sleep.ts';
+import type {AnalyzeQueryResult} from '../../../zero-protocol/src/analyze-query-result.ts';
+import type {AST, LiteralValue} from '../../../zero-protocol/src/ast.ts';
+import {mapAST} from '../../../zero-protocol/src/ast.ts';
+import type {ClientSchema} from '../../../zero-protocol/src/client-schema.ts';
+import type {Row} from '../../../zero-protocol/src/data.ts';
+import {hashOfAST} from '../../../zero-protocol/src/query-hash.ts';
+import type {PermissionsConfig} from '../../../zero-schema/src/compiled-permissions.ts';
+import type {NameMapper} from '../../../zero-schema/src/name-mapper.ts';
+import {
+  buildPipeline,
+  type BuilderDelegate,
+} from '../../../zql/src/builder/builder.ts';
+import {ChangeType} from '../../../zql/src/ivm/change-type.ts';
+import type {Node} from '../../../zql/src/ivm/data.ts';
+import {skipYields} from '../../../zql/src/ivm/operator.ts';
+import type {ConnectionCostModel} from '../../../zql/src/planner/planner-connection.ts';
+import type {PlanDebugger} from '../../../zql/src/planner/planner-debug.ts';
 import type {Database} from '../../../zqlite/src/db.ts';
 import {resolveSimpleScalarSubqueries} from '../../../zqlite/src/resolve-scalar-subqueries.ts';
 import type {JWTAuth} from '../auth/auth.ts';

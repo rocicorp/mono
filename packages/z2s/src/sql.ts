@@ -4,13 +4,13 @@ import {
 } from '@databases/escape-identifier';
 import type {FormatConfig, SQLItem, SQLQuery} from '@databases/sql';
 import sql, {SQLItemType} from '@databases/sql';
-import {assert, unreachable} from 'shared/src/asserts.ts';
+import {assert, unreachable} from '../../shared/src/asserts.ts';
 import {
   isPgNumberType,
   isPgStringType,
-} from 'zero-cache/src/types/pg-data-type.ts';
-import type {LiteralValue} from 'zero-protocol/src/ast.ts';
-import type {ServerColumnSchema} from 'zero-types/src/server-schema.ts';
+} from '../../zero-cache/src/types/pg-data-type.ts';
+import type {LiteralValue} from '../../zero-protocol/src/ast.ts';
+import type {ServerColumnSchema} from '../../zero-types/src/server-schema.ts';
 
 export function formatPg(sql: SQLQuery) {
   const format = new ReusingFormat(escapePostgresIdentifier);

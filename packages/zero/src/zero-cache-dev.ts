@@ -5,14 +5,14 @@ import '../../shared/src/dotenv.ts';
 import {spawn, type ChildProcess} from 'node:child_process';
 import {resolver} from '@rocicorp/resolver';
 import {watch} from 'chokidar';
-import {createLogContext} from 'shared/src/logging.ts';
-import {parseOptionsAdvanced} from 'shared/src/options.ts';
+import {createLogContext} from '../../shared/src/logging.ts';
+import {parseOptionsAdvanced} from '../../shared/src/options.ts';
+import * as v from '../../shared/src/valita.ts';
 import {
   ZERO_ENV_VAR_PREFIX,
   zeroOptions,
-} from 'zero-cache/src/config/zero-config.ts';
-import {deployPermissionsOptions} from 'zero-cache/src/scripts/permissions.ts';
-import * as v from '../../shared/src/valita.ts';
+} from '../../zero-cache/src/config/zero-config.ts';
+import {deployPermissionsOptions} from '../../zero-cache/src/scripts/permissions.ts';
 
 const deployPermissionsScript = 'zero-deploy-permissions';
 const zeroCacheScript = 'zero-cache';

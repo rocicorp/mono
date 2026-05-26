@@ -12,7 +12,7 @@ import {
   PeriodicExportingMetricReader,
 } from '@opentelemetry/sdk-metrics';
 import type {LogContext} from '@rocicorp/logger';
-import {h64} from 'shared/src/hash.js';
+import {h64} from '../../../shared/src/hash.js';
 import {
   getServerVersion,
   getZeroConfig,

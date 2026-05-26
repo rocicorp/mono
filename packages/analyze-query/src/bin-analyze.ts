@@ -2,41 +2,44 @@ import '../../shared/src/dotenv.ts';
 
 import fs from 'node:fs';
 import {styleText} from 'node:util';
-import {colorConsole, createLogContext} from 'shared/src/logging.ts';
-import {must} from 'shared/src/must.ts';
-import {parseOptions} from 'shared/src/options.ts';
+import {astToZQL} from '../../ast-to-zql/src/ast-to-zql.ts';
+import {formatOutput} from '../../ast-to-zql/src/format.ts';
+import {logLevel, logOptions} from '../../otel/src/log-options.ts';
+import {colorConsole, createLogContext} from '../../shared/src/logging.ts';
+import {must} from '../../shared/src/must.ts';
+import {parseOptions} from '../../shared/src/options.ts';
+import * as v from '../../shared/src/valita.ts';
 import {
   appOptions,
   shardOptions,
   ZERO_ENV_VAR_PREFIX,
   zeroOptions,
-} from 'zero-cache/src/config/zero-config.ts';
+} from '../../zero-cache/src/config/zero-config.ts';
 import {
   computeZqlSpecs,
   mustGetTableSpec,
-} from 'zero-cache/src/db/lite-tables.ts';
+} from '../../zero-cache/src/db/lite-tables.ts';
 import {
   deployPermissionsOptions,
   loadSchemaAndPermissions,
-} from 'zero-cache/src/scripts/permissions.ts';
-import {runAst} from 'zero-cache/src/services/run-ast.ts';
-import {pgClient} from 'zero-cache/src/types/pg.ts';
-import {getShardID, upstreamSchema} from 'zero-cache/src/types/shards.ts';
-import type {AnalyzeQueryResult} from 'zero-protocol/src/analyze-query-result.ts';
-import {type AST} from 'zero-protocol/src/ast.ts';
-import {clientSchemaFrom} from 'zero-schema/src/builder/schema-builder.ts';
-import {clientToServer} from 'zero-schema/src/name-mapper.ts';
-import type {Schema} from 'zero-types/src/schema.ts';
-import {astToZQL} from 'zql/src/ast-to-zql.ts';
-import {Debug, runtimeDebugFlags} from 'zql/src/builder/debug-delegate.ts';
-import type {Source} from 'zql/src/ivm/source.ts';
-import {QueryDelegateBase} from 'zql/src/query/query-delegate-base.ts';
-import {newQuery} from 'zql/src/query/query-impl.ts';
-import {asQueryInternals} from 'zql/src/query/query-internals.ts';
-import {type PullRow, type Query} from 'zql/src/query/query.ts';
-import {formatOutput} from '../../ast-to-zql/src/format.ts';
-import {logLevel, logOptions} from '../../otel/src/log-options.ts';
-import * as v from '../../shared/src/valita.ts';
+} from '../../zero-cache/src/scripts/permissions.ts';
+import {runAst} from '../../zero-cache/src/services/run-ast.ts';
+import {pgClient} from '../../zero-cache/src/types/pg.ts';
+import {getShardID, upstreamSchema} from '../../zero-cache/src/types/shards.ts';
+import type {AnalyzeQueryResult} from '../../zero-protocol/src/analyze-query-result.ts';
+import {type AST} from '../../zero-protocol/src/ast.ts';
+import {clientSchemaFrom} from '../../zero-schema/src/builder/schema-builder.ts';
+import {clientToServer} from '../../zero-schema/src/name-mapper.ts';
+import type {Schema} from '../../zero-types/src/schema.ts';
+import {
+  Debug,
+  runtimeDebugFlags,
+} from '../../zql/src/builder/debug-delegate.ts';
+import type {Source} from '../../zql/src/ivm/source.ts';
+import {QueryDelegateBase} from '../../zql/src/query/query-delegate-base.ts';
+import {newQuery} from '../../zql/src/query/query-impl.ts';
+import {asQueryInternals} from '../../zql/src/query/query-internals.ts';
+import {type PullRow, type Query} from '../../zql/src/query/query.ts';
 import {Database} from '../../zqlite/src/db.ts';
 import {explainQueries} from '../../zqlite/src/explain-queries.ts';
 import {TableSource} from '../../zqlite/src/table-source.ts';

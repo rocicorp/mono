@@ -1,6 +1,6 @@
 import {LogContext} from '@rocicorp/logger';
-import {assert, assertNotUndefined} from 'shared/src/asserts.ts';
 import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
+import {assert, assertNotUndefined} from '../../../shared/src/asserts.ts';
 import {BTreeRead} from '../btree/read.ts';
 import type {Read, Write} from '../dag/store.ts';
 import {TestStore} from '../dag/test-store.ts';

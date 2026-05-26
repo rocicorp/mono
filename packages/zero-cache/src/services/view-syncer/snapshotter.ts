@@ -1,9 +1,9 @@
 import type {LogContext} from '@rocicorp/logger';
-import {assert} from 'shared/src/asserts.ts';
-import {stringify, type JSONValue} from 'shared/src/bigint-json.ts';
-import type {Row} from 'zero-protocol/src/data.ts';
-import type {PrimaryKey} from 'zero-types/src/schema.ts';
+import {assert} from '../../../../shared/src/asserts.ts';
+import {stringify, type JSONValue} from '../../../../shared/src/bigint-json.ts';
 import * as v from '../../../../shared/src/valita.ts';
+import type {Row} from '../../../../zero-protocol/src/data.ts';
+import type {PrimaryKey} from '../../../../zero-types/src/schema.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {fromSQLiteTypes} from '../../../../zqlite/src/table-source.ts';
 import type {

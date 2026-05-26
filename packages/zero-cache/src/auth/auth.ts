@@ -1,14 +1,14 @@
 import type {LogContext} from '@rocicorp/logger';
 import type {JWTPayload} from 'jose';
-import {ErrorKind} from 'zero-protocol/src/error-kind.ts';
-import {ErrorOrigin} from 'zero-protocol/src/error-origin.ts';
-import {ErrorReason} from 'zero-protocol/src/error-reason.ts';
+import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
+import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
+import {ErrorReason} from '../../../zero-protocol/src/error-reason.ts';
 import {
   isProtocolError,
   ProtocolError,
   type ErrorBody,
-} from 'zero-protocol/src/error.ts';
-import type {PushError} from 'zero-protocol/src/push.ts';
+} from '../../../zero-protocol/src/error.ts';
+import type {PushError} from '../../../zero-protocol/src/push.ts';
 
 /** @deprecated JWT auth is deprecated */
 export type JWTAuth = {

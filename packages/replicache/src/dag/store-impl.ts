@@ -1,5 +1,5 @@
-import {assertNumber} from 'shared/src/asserts.ts';
-import type {ReadonlyJSONValue} from 'shared/src/json.ts';
+import {assertNumber} from '../../../shared/src/asserts.ts';
+import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {type Hash, assertHash} from '../hash.ts';
 import type {
   Read as KVRead,

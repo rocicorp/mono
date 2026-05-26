@@ -5,14 +5,14 @@ import type {
   SchemaValueWithCustomType,
   TypeNameToTypeMap,
   ValueType,
-} from 'zero-types/src/schema-value.ts';
+} from '../../zero-types/src/schema-value.ts';
 import type {
   Cardinality,
   LastInTuple,
   Relationship,
   RelationshipsSchema,
   TableSchema,
-} from 'zero-types/src/schema.ts';
+} from '../../zero-types/src/schema.ts';
 
 export type {
   Cardinality,

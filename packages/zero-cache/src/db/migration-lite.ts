@@ -1,6 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
-import {assert} from 'shared/src/asserts.ts';
-import {randInt} from 'shared/src/rand.ts';
+import {assert} from '../../../shared/src/asserts.ts';
+import {randInt} from '../../../shared/src/rand.ts';
 import * as v from '../../../shared/src/valita.ts';
 import type {Database as Db} from '../../../zqlite/src/db.ts';
 import {Database} from '../../../zqlite/src/db.ts';

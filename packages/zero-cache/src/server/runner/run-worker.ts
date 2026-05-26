@@ -2,8 +2,8 @@ import '../../../../shared/src/dotenv.ts';
 
 import {styleText} from 'node:util';
 import {resolver, type Resolver} from '@rocicorp/resolver';
-import {colorConsole} from 'shared/src/logging.ts';
-import {PROTOCOL_VERSION} from 'zero-protocol/src/protocol-version.ts';
+import {colorConsole} from '../../../../shared/src/logging.ts';
+import {PROTOCOL_VERSION} from '../../../../zero-protocol/src/protocol-version.ts';
 import {normalizeZeroConfig} from '../../config/normalize.ts';
 import {getServerVersion, getZeroConfig} from '../../config/zero-config.ts';
 import {ProcessManager, runUntilKilled} from '../../services/life-cycle.ts';

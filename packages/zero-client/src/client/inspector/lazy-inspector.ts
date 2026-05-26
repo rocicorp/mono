@@ -1,30 +1,3 @@
-import {assert} from 'shared/src/asserts.ts';
-import type {ReadonlyJSONValue} from 'shared/src/json.ts';
-import {TDigest, type ReadonlyTDigest} from 'shared/src/tdigest.ts';
-import type {AnalyzeQueryResult} from 'zero-protocol/src/analyze-query-result.ts';
-import type {AST} from 'zero-protocol/src/ast.ts';
-import type {Row} from 'zero-protocol/src/data.ts';
-import {
-  inspectAnalyzeQueryDownSchema,
-  inspectAuthenticatedDownSchema,
-  inspectMetricsDownSchema,
-  inspectQueriesDownSchema,
-  inspectVersionDownSchema,
-  type InspectDownBody,
-  type InspectQueryRow,
-  type QueryServerMetrics as QueryServerMetricsJSON,
-} from 'zero-protocol/src/inspect-down.ts';
-import type {
-  AnalyzeQueryOptions,
-  InspectUpBody,
-} from 'zero-protocol/src/inspect-up.ts';
-import type {
-  ClientMetricMap,
-  ServerMetricMap,
-} from 'zql/src/query/metrics-delegate.ts';
-import type {QueryDelegate} from 'zql/src/query/query-delegate.ts';
-import {asQueryInternals} from 'zql/src/query/query-internals.ts';
-import type {AnyQuery} from 'zql/src/query/query.ts';
 import type {BTreeRead} from '../../../../replicache/src/btree/read.ts';
 import type {Read} from '../../../../replicache/src/dag/store.ts';
 import {readFromHash} from '../../../../replicache/src/db/read.ts';
@@ -37,7 +10,34 @@ import {
 } from '../../../../replicache/src/persist/clients.ts';
 import type {ReplicacheImpl} from '../../../../replicache/src/replicache-impl.ts';
 import {withRead} from '../../../../replicache/src/with-transactions.ts';
+import {assert} from '../../../../shared/src/asserts.ts';
+import type {ReadonlyJSONValue} from '../../../../shared/src/json.ts';
+import {TDigest, type ReadonlyTDigest} from '../../../../shared/src/tdigest.ts';
 import * as valita from '../../../../shared/src/valita.ts';
+import type {AnalyzeQueryResult} from '../../../../zero-protocol/src/analyze-query-result.ts';
+import type {AST} from '../../../../zero-protocol/src/ast.ts';
+import type {Row} from '../../../../zero-protocol/src/data.ts';
+import {
+  inspectAnalyzeQueryDownSchema,
+  inspectAuthenticatedDownSchema,
+  inspectMetricsDownSchema,
+  inspectQueriesDownSchema,
+  inspectVersionDownSchema,
+  type InspectDownBody,
+  type InspectQueryRow,
+  type QueryServerMetrics as QueryServerMetricsJSON,
+} from '../../../../zero-protocol/src/inspect-down.ts';
+import type {
+  AnalyzeQueryOptions,
+  InspectUpBody,
+} from '../../../../zero-protocol/src/inspect-up.ts';
+import type {
+  ClientMetricMap,
+  ServerMetricMap,
+} from '../../../../zql/src/query/metrics-delegate.ts';
+import type {QueryDelegate} from '../../../../zql/src/query/query-delegate.ts';
+import {asQueryInternals} from '../../../../zql/src/query/query-internals.ts';
+import type {AnyQuery} from '../../../../zql/src/query/query.ts';
 import {nanoid} from '../../util/nanoid.ts';
 import {ENTITIES_KEY_PREFIX} from '../keys.ts';
 import type {MutatorDefs} from '../replicache-types.ts';
