@@ -186,10 +186,15 @@
     "vitest": "^4.1.6",
     "zero-cache": "workspace:*",
     "zero-client": "workspace:*",
+    "zero-permissions": "workspace:*",
     "zero-pg": "workspace:*",
+    "zero-protocol": "workspace:*",
     "zero-react": "workspace:*",
+    "zero-schema": "workspace:*",
     "zero-server": "workspace:*",
     "zero-solid": "workspace:*",
+    "zero-types": "workspace:*",
+    "zql": "workspace:*",
     "zqlite": "workspace:*"
   },
   "peerDependencies": {

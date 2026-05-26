@@ -1,4 +1,4 @@
-import '../../../packages/shared/src/dotenv.ts';
+import 'shared/src/dotenv.ts';
 
 import * as fs from 'fs';
 import {dirname, join} from 'path';

@@ -3,8 +3,8 @@ import {Lock} from '@rocicorp/lock';
 import {consoleLogSink, LogContext} from '@rocicorp/logger';
 import {randInt} from 'shared/src/rand.ts';
 import {WebSocketServer} from 'ws';
-import type {Statement} from '../../../packages/zqlite/src/db.ts';
-import {Database} from '../../../packages/zqlite/src/db.ts';
+import type {Statement} from 'zqlite/src/db.ts';
+import {Database} from 'zqlite/src/db.ts';
 
 const lc = new LogContext('info', {}, consoleLogSink);
 

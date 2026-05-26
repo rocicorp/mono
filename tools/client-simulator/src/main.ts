@@ -1,4 +1,4 @@
-import '../../../packages/shared/src/dotenv.ts';
+import 'shared/src/dotenv.ts';
 
 import {pipeline, Writable} from 'node:stream';
 import {consoleLogSink, LogContext} from '@rocicorp/logger';
@@ -6,9 +6,9 @@ import {nanoid} from 'nanoid';
 import {parseOptions} from 'shared/src/options.ts';
 import * as v from 'shared/src/valita.ts';
 import WebSocket, {createWebSocketStream} from 'ws';
-import {initConnectionMessageSchema} from '../../../packages/zero-protocol/src/connect.ts';
-import {downstreamSchema} from '../../../packages/zero-protocol/src/down.ts';
-import {PROTOCOL_VERSION} from '../../../packages/zero-protocol/src/protocol-version.ts';
+import {initConnectionMessageSchema} from 'zero-protocol/src/connect.ts';
+import {downstreamSchema} from 'zero-protocol/src/down.ts';
+import {PROTOCOL_VERSION} from 'zero-protocol/src/protocol-version.ts';
 import initConnectionJSON from './init-connection.json' with {type: 'json'};
 
 const options = {
