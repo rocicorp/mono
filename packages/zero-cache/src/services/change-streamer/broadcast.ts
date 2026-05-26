@@ -3,6 +3,8 @@ import {resolver} from '@rocicorp/resolver';
 import type {WatermarkedChange} from './change-streamer-service.ts';
 import type {Subscriber} from './subscriber.ts';
 
+type BroadcastChange = WatermarkedChange | readonly WatermarkedChange[];
+
 /**
  * Initiates and tracks the progress of a change broadcasted to
  * a set of subscribers.
@@ -10,9 +12,9 @@ import type {Subscriber} from './subscriber.ts';
  * Creating a `Broadcast` automatically initiates the send.
  *
  * By default, {@link Broadcast.done} resolves when all subscribers
- * have acked the change. However, {@link Broadcast.checkProgress()}
- * can be called to resolve the broadcast earlier based on the flow
- * control policy.
+ * have acked the change. When flow control options are supplied,
+ * {@link Broadcast.done} resolves after majority consensus plus the
+ * configured padding.
  */
 export class Broadcast {
   /**
@@ -21,17 +23,24 @@ export class Broadcast {
    */
   static withoutTracking(
     subscribers: Iterable<Subscriber>,
-    change: WatermarkedChange,
+    change: BroadcastChange,
   ) {
+    const changes = normalizeChanges(change);
     for (const sub of subscribers) {
-      void sub.send(change);
+      void sub.sendBatch(changes);
     }
   }
 
+  // Subscribers still gating this broadcast. A subscriber leaves this set when
+  // its downstream stream has consumed the batch.
   readonly #pending: Set<Subscriber>;
+  // Completion samples are retained for flow-control logs; they explain which
+  // subscribers were fast enough to form the majority.
   readonly #completed: Completed[];
   readonly #done = resolver();
+  readonly #flowControl: FlowControlOptions | undefined;
   #isDone = false;
+  #flowControlTimer: ReturnType<typeof setTimeout> | undefined;
 
   readonly #watermark: string;
   readonly #majority: number;
@@ -43,22 +52,35 @@ export class Broadcast {
    * Broadcasts the `change` to the `subscribers` and tracks their
    * completion.
    */
-  constructor(subscribers: Iterable<Subscriber>, change: WatermarkedChange) {
+  constructor(
+    subscribers: Iterable<Subscriber>,
+    change: BroadcastChange,
+    flowControl?: FlowControlOptions,
+  ) {
+    const changes = normalizeChanges(change);
     this.#pending = new Set(subscribers);
     this.#completed = [];
-    this.#watermark = change[0];
+    this.#flowControl = flowControl;
+    // The last change in the broadcast is the highest commit/order watermark
+    // represented by this batch, so it is the useful label for diagnostics.
+    this.#watermark = changes.at(-1)?.[0] ?? 'none';
+    // "More than half" keeps one slow or broken minority from stalling the RM,
+    // while a one-subscriber topology still waits for that subscriber.
     this.#majority = Math.floor(this.#pending.size / 2) + 1;
 
     for (const sub of this.#pending) {
-      const changes = sub.numPending + 1; // add one for this `change`
+      // Log the work visible to the subscriber at send time: its existing
+      // downstream backlog plus this broadcast's new logical messages.
+      const numChanges = sub.numPending + changes.length;
       void sub
-        .send(change)
+        .sendBatch(changes)
         .catch(() => {})
-        .finally(() => this.#markCompleted(sub, changes));
+        .finally(() => this.#markCompleted(sub, numChanges));
     }
 
-    // set done if there are no subscribers (mainly for tests)
     if (this.#pending.size === 0) {
+      // With no subscribers, there is nobody to apply flow control to; let the
+      // upstream continue immediately.
       this.#setDone();
     }
   }
@@ -69,12 +91,71 @@ export class Broadcast {
     this.#pending.delete(sub);
     if (this.#pending.size === 0) {
       this.#setDone();
+    } else {
+      this.#resetConsensusTimer();
     }
   }
 
-  #setDone() {
+  #setDone(): boolean {
+    if (this.#isDone) {
+      return false;
+    }
     this.#isDone = true;
+    this.#clearConsensusTimer();
     this.#done.resolve();
+    return true;
+  }
+
+  #resetConsensusTimer() {
+    if (
+      this.#isDone ||
+      this.#flowControl === undefined ||
+      !(this.#flowControl.flowControlConsensusPaddingMs >= 0) ||
+      this.#completed.length < this.#majority
+    ) {
+      // Timer starts only after majority completion and only when early release
+      // is enabled. Before that, releasing would let the RM outrun the VS fleet.
+      return;
+    }
+    this.#clearConsensusTimer();
+    this.#flowControlTimer = setTimeout(
+      this.#releaseAfterConsensusPadding,
+      this.#flowControl.flowControlConsensusPaddingMs,
+    );
+  }
+
+  readonly #releaseAfterConsensusPadding = () => {
+    this.#flowControlTimer = undefined;
+    const flowControl = this.#flowControl;
+    if (
+      this.#isDone ||
+      flowControl === undefined ||
+      this.#pending.size === 0 ||
+      this.#completed.length < this.#majority
+    ) {
+      // The callback can race with normal completion or option changes; in
+      // those cases there is either nothing left to release or no consensus yet.
+      return;
+    }
+    const now = performance.now();
+    if (
+      now - this.#latestCompleted <
+      flowControl.flowControlConsensusPaddingMs
+    ) {
+      this.#resetConsensusTimer();
+      return;
+    }
+    this.#logWithState(
+      flowControl.lc,
+      `continuing with ${this.#pending.size} subscriber(s) still pending`,
+      now - this.#start,
+    );
+    this.#setDone();
+  };
+
+  #clearConsensusTimer() {
+    clearTimeout(this.#flowControlTimer);
+    this.#flowControlTimer = undefined;
   }
 
   get isDone(): boolean {
@@ -159,8 +240,14 @@ export class Broadcast {
     flowControlConsensusPaddingMs: number,
     now: number,
   ) {
+    if (this.#isDone) {
+      return true;
+    }
     if (this.#pending.size === 0) {
       return true;
+    }
+    if (!(flowControlConsensusPaddingMs >= 0)) {
+      return false;
     }
     const elapsed = now - this.#start;
     if (this.#completed.length < this.#majority) {
@@ -206,6 +293,18 @@ export class Broadcast {
   }
 }
 
+function normalizeChanges(
+  change: BroadcastChange,
+): readonly WatermarkedChange[] {
+  return isWatermarkedChange(change) ? [change] : change;
+}
+
+function isWatermarkedChange(
+  change: BroadcastChange,
+): change is WatermarkedChange {
+  return typeof change[0] === 'string';
+}
+
 /** Tracks the completed result of a single subscriber. */
 type Completed = {
   sub: Subscriber;
@@ -213,4 +312,9 @@ type Completed = {
   changes: number;
   /** The elapsed milliseconds. */
   elapsed: number;
+};
+
+export type FlowControlOptions = {
+  readonly lc: LogContext;
+  readonly flowControlConsensusPaddingMs: number;
 };

@@ -61,6 +61,18 @@ export class Subscriber {
     }
   }
 
+  async sendBatch(changes: readonly WatermarkedChange[]) {
+    if (this.#backlog) {
+      for (const change of changes) {
+        if (change[0] > this.#watermark) {
+          this.#backlog.push(change);
+        }
+      }
+      return;
+    }
+    await Promise.all(changes.map(change => this.#sendChange(change)));
+  }
+
   #initialized = false;
 
   /**
