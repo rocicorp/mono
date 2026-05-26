@@ -46,5 +46,6 @@
     "zero-schema": "workspace:*",
     "zero-types": "workspace:*",
     "zql": "workspace:*"
-  }
+  },
+  "packageManager": "pnpm@11.3.0"
 }
