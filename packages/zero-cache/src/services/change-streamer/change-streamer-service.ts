@@ -11,7 +11,7 @@ import {
 } from '../../types/lexi-version.ts';
 import type {PostgresDB} from '../../types/pg.ts';
 import type {ShardID} from '../../types/shards.ts';
-import type {Source} from '../../types/streams.ts';
+import type {Source, StringifiedStreamPayload} from '../../types/streams.ts';
 import {Subscription} from '../../types/subscription.ts';
 import type {
   ChangeSource,
@@ -523,12 +523,12 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     }
   }
 
-  subscribe(ctx: SubscriberContext): Promise<Source<string>> {
+  subscribe(ctx: SubscriberContext): Promise<Source<StringifiedStreamPayload>> {
     const {protocolVersion, id, mode, replicaVersion, watermark} = ctx;
     if (mode === 'serving') {
       this.#serving.resolve();
     }
-    const downstream = Subscription.create<string>({
+    const downstream = Subscription.create<StringifiedStreamPayload>({
       cleanup: () => this.#forwarder.remove(subscriber),
     });
     const subscriber = new Subscriber(

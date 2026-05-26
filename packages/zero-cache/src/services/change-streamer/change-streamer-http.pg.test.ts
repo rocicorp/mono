@@ -65,8 +65,7 @@ describe('change-streamer/http', () => {
     const {promise, resolve: cleanup} = resolver<Downstream[]>();
     connectionClosed = promise;
     downstream = Subscription.create({
-      cleanup: msgs =>
-        cleanup(msgs.map(m => BigIntJSON.parse(m) as Downstream)),
+      cleanup: msgs => cleanup(msgs.flatMap(parseDownstreamPayload)),
     });
     snapshotStream = Subscription.create();
     subscribeFn = vi.fn();
@@ -143,6 +142,10 @@ describe('change-streamer/http', () => {
       }
     }
     return drained;
+  }
+
+  function parseDownstreamPayload(msg: string): Downstream[] {
+    return [BigIntJSON.parse(msg) as Downstream];
   }
 
   test('health checks and keepalives', async () => {

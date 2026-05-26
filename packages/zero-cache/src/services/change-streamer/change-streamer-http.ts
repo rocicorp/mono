@@ -10,9 +10,11 @@ import {type Worker} from '../../types/processes.ts';
 import {type ShardID} from '../../types/shards.ts';
 import {
   streamIn,
+  streamInBatches,
   streamOut,
   streamOutStringified,
   type Source,
+  type StreamInPayload,
 } from '../../types/streams.ts';
 import {URLParams} from '../../types/url-params.ts';
 import {installWebSocketReceiver} from '../../types/websocket-handoff.ts';
@@ -35,6 +37,7 @@ const MIN_SUPPORTED_PROTOCOL_VERSION = 1;
 const SNAPSHOT_PATH_PATTERN = '/replication/:version/snapshot';
 const CHANGES_PATH_PATTERN = '/replication/:version/changes';
 const PATH_REGEX = /\/replication\/v(?<version>\d+)\/(changes|snapshot)$/;
+const STREAM_BATCH_MESSAGES = 256;
 
 const SNAPSHOT_PATH = `/replication/v${PROTOCOL_VERSION}/snapshot`;
 const CHANGES_PATH = `/replication/v${PROTOCOL_VERSION}/changes`;
@@ -101,13 +104,6 @@ export class ChangeStreamerHttpServer extends HttpService {
         return this.#reserveSnapshot(ws, msg);
       case 'changes':
         return this.#subscribe(ws, msg);
-      default:
-        closeWithError(
-          this._lc,
-          ws,
-          `invalid action "${action}" received in handoff`,
-        );
-        return;
     }
   };
 
@@ -143,7 +139,20 @@ export class ChangeStreamerHttpServer extends HttpService {
         // end the reservation to safely resume scheduling cleanup.
         this.#backupMonitor.endReservation(ctx.taskID);
       }
-      void streamOutStringified(this._lc, downstream, ws);
+      const url = new URL(
+        req.url ?? '',
+        req.headers.origin ?? 'http://localhost',
+      );
+      // Serving replicas request streamBatch=1 so the RM can preserve a
+      // websocket batch boundary instead of forcing the VS to rediscover
+      // batching after parse/ACK. Older clients omit the flag and keep the
+      // original one-message stream shape.
+      const streamBatchRequested = url.searchParams.get('streamBatch') === '1';
+      void streamOutStringified(this._lc, downstream, ws, {
+        batch: streamBatchRequested
+          ? {maxMessages: STREAM_BATCH_MESSAGES}
+          : undefined,
+      });
     } catch (err) {
       closeWithError(this._lc, ws, err, PROTOCOL_ERROR);
     }
@@ -233,12 +242,25 @@ export class ChangeStreamerHttpClient implements ChangeStreamer {
   }
 
   async subscribe(ctx: SubscriberContext): Promise<Source<Downstream>> {
+    const ws = await this.#openChangesWebSocket(ctx);
+    return streamIn(this.#lc, ws, downstreamSchema);
+  }
+
+  async subscribeBatched(
+    ctx: SubscriberContext,
+  ): Promise<Source<StreamInPayload<Downstream>>> {
+    const ws = await this.#openChangesWebSocket(ctx);
+    // Keep websocket batches visible to the incremental syncer so it can hand a
+    // whole received frame to the write worker before ACKing the frame messages.
+    return streamInBatches(this.#lc, ws, downstreamSchema);
+  }
+
+  async #openChangesWebSocket(ctx: SubscriberContext) {
     const uri = await this.#resolveChangeStreamer(CHANGES_PATH);
 
     const params = getParams(ctx);
-    const ws = new WebSocket(uri + `?${params.toString()}`);
-
-    return streamIn(this.#lc, ws, downstreamSchema);
+    params.set('streamBatch', '1');
+    return new WebSocket(uri + `?${params.toString()}`);
   }
 }
 

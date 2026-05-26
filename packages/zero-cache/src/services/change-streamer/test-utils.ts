@@ -1,3 +1,4 @@
+import type {StringifiedStreamPayload} from '../../types/streams.ts';
 import {Subscription} from '../../types/subscription.ts';
 import {PROTOCOL_VERSION, type Downstream} from './change-streamer.ts';
 import {Subscriber} from './subscriber.ts';
@@ -7,14 +8,15 @@ let nextID = 1;
 export function createSubscriber(
   watermark = '00',
   caughtUp = false,
-): [Subscriber, Downstream[], Subscription<string>] {
+  protocolVersion = PROTOCOL_VERSION,
+): [Subscriber, Downstream[], Subscription<StringifiedStreamPayload>] {
   const id = '' + nextID++;
   const received: Downstream[] = [];
-  const sub = Subscription.create<string>({
-    cleanup: unconsumed => received.push(...unconsumed.map(m => JSON.parse(m))),
+  const sub = Subscription.create<StringifiedStreamPayload>({
+    cleanup: unconsumed => received.push(...unconsumed.flatMap(parsePayload)),
   });
   const subscriber = new Subscriber(
-    PROTOCOL_VERSION,
+    protocolVersion,
     id,
     watermark,
     sub,
@@ -25,4 +27,10 @@ export function createSubscriber(
   }
 
   return [subscriber, received, sub];
+}
+
+function parsePayload(payload: StringifiedStreamPayload): Downstream[] {
+  return (typeof payload === 'string' ? [payload] : payload).map(
+    m => JSON.parse(m) as Downstream,
+  );
 }

@@ -16,6 +16,7 @@ import {
 } from 'ws';
 import {assert} from '../../../shared/src/asserts.ts';
 import {BigIntJSON, type JSONValue} from '../../../shared/src/bigint-json.ts';
+import {HeadIndexedQueue} from '../../../shared/src/head-indexed-queue.ts';
 import {Queue} from '../../../shared/src/queue.ts';
 import * as v from '../../../shared/src/valita.ts';
 import {Subscription, type Options} from './subscription.ts';
@@ -56,6 +57,24 @@ export type Source<T> = AsyncIterable<T> & {
 export type Sink<T> = {
   push(message: T): void;
 };
+
+export type StreamBatch<T> = {
+  readonly tag: 'stream-batch';
+  readonly messages: readonly T[];
+};
+
+export type StreamInPayload<T> = T | StreamBatch<T>;
+
+export function isStreamBatch<T>(
+  payload: StreamInPayload<T>,
+): payload is StreamBatch<T> {
+  return (
+    typeof payload === 'object' &&
+    payload !== null &&
+    !Array.isArray(payload) &&
+    (payload as {readonly tag?: unknown}).tag === 'stream-batch'
+  );
+}
 
 /**
  * Back-pressure-aware transformation of a WebSocket into
@@ -155,7 +174,7 @@ type PipeOptions<T> = {
 export function pipe<T>({source, sink, parse, bufferMessages}: PipeOptions<T>) {
   bufferMessages ??= 0;
   assert(bufferMessages >= 0, 'bufferMessages must be non-negative');
-  const pending: Promise<unknown>[] = [];
+  const pending = new HeadIndexedQueue<Promise<unknown>>();
 
   pipeline(
     source,
@@ -181,12 +200,14 @@ export function pipe<T>({source, sink, parse, bufferMessages}: PipeOptions<T>) {
         pending.push(result);
         void result.then(() => pending.shift());
 
-        if (pending.length <= bufferMessages) {
+        if (pending.size <= bufferMessages) {
           // immediately allow more messages
           callback();
         } else {
           // wait for the oldest result in the pending queue
-          pending[0].then(
+          const oldest = pending.peek();
+          assert(oldest !== undefined, 'pending result expected');
+          oldest.then(
             () => callback(),
             err => callback(ensureError(err)),
           );
@@ -212,9 +233,22 @@ function ensureError(err: unknown) {
   return err instanceof Error ? err : new Error(String(err));
 }
 
-const ackSchema = v.object({ack: v.number()});
+type Ack = {ack: number};
 
-type Ack = v.Infer<typeof ackSchema>;
+function parseAck(data: unknown): Ack {
+  if (typeof data !== 'string') {
+    throw new Error('Expected string message');
+  }
+  const ack = JSON.parse(data) as {ack?: unknown};
+  if (
+    typeof ack.ack !== 'number' ||
+    !Number.isSafeInteger(ack.ack) ||
+    ack.ack < 0
+  ) {
+    throw new Error(`Invalid ack ${String(ack.ack)}`);
+  }
+  return {ack: ack.ack};
+}
 
 type Streamed<T> = {
   /** Application-level message. */
@@ -224,12 +258,22 @@ type Streamed<T> = {
   id: number;
 };
 
+export type StringifiedStreamPayload = string | readonly string[];
+
 export function streamOut<T extends JSONValue>(
   lc: LogContext,
   source: Source<T>,
   sink: WebSocket,
+  options: StreamOutOptions = {},
 ): Promise<void> {
-  return streamOutInternal(lc, source, sink, BigIntJSON.stringify);
+  return streamOutInternal<T, T>(
+    lc,
+    source,
+    sink,
+    BigIntJSON.stringify,
+    payload => [payload],
+    options,
+  );
 }
 
 /**
@@ -237,29 +281,39 @@ export function streamOut<T extends JSONValue>(
  */
 export function streamOutStringified(
   lc: LogContext,
-  source: Source<string>,
+  source: Source<StringifiedStreamPayload>,
   sink: WebSocket,
+  options: StreamOutOptions = {},
 ): Promise<void> {
-  return streamOutInternal(lc, source, sink, json => json);
+  return streamOutInternal<StringifiedStreamPayload, string>(
+    lc,
+    source,
+    sink,
+    json => json,
+    payload => (typeof payload === 'string' ? [payload] : payload),
+    options,
+  );
 }
 
-async function streamOutInternal<T extends JSONValue>(
+type StreamOutOptions = {
+  batch?: {maxMessages?: number | undefined} | undefined;
+};
+
+async function streamOutInternal<TPayload, TMessage extends JSONValue>(
   lc: LogContext,
-  source: Source<T>,
+  source: Source<TPayload>,
   sink: WebSocket,
-  stringify: (payload: T) => string,
+  stringify: (payload: TMessage) => string,
+  expandPayload: (payload: TPayload) => readonly TMessage[],
+  options: StreamOutOptions,
 ): Promise<void> {
   sendPingsForLiveness(lc, sink, PING_INTERVAL_MS);
 
   const closer = WebSocketCloser.forSource(lc, sink, source);
-
   const acks = new Queue<Ack>();
   sink.addEventListener('message', ({data}) => {
     try {
-      if (typeof data !== 'string') {
-        throw new Error('Expected string message');
-      }
-      acks.enqueue(v.parse(JSON.parse(data), ackSchema));
+      acks.enqueue(parseAck(data));
     } catch (e) {
       lc.error?.(`error parsing ack`, e);
       closer.close(e);
@@ -270,35 +324,91 @@ async function streamOutInternal<T extends JSONValue>(
     let nextID = 0;
     const {pipeline} = source;
     if (pipeline) {
+      const iterator = pipeline[Symbol.asyncIterator]();
+      const maxBatchMessages = Math.max(1, options.batch?.maxMessages ?? 1);
+
       lc.debug?.(`started pipelined outbound stream`);
-      for await (const {value: msg, consumed} of pipeline) {
-        const id = ++nextID;
-        const data = `{"id":${id},"msg":${stringify(msg)}}`;
+      for (;;) {
+        const next = await iterator.next();
+        if (next.done) {
+          break;
+        }
+        const batch = [next.value];
+        while (
+          batch.length < maxBatchMessages &&
+          source instanceof Subscription &&
+          source.queued > 0
+        ) {
+          // Only drain work that is already queued. Waiting for future messages
+          // just to fill a websocket frame would add latency to quiet streams
+          // and status/error delivery.
+          const queued = await iterator.next();
+          if (queued.done) {
+            break;
+          }
+          batch.push(queued.value);
+        }
+        const outbound = [];
+        for (const {value, consumed} of batch) {
+          const messages = expandPayload(value);
+          if (messages.length === 0) {
+            consumed();
+            continue;
+          }
+          let remaining = messages.length;
+          const consumeOne = () => {
+            remaining--;
+            if (remaining === 0) {
+              // A single source payload can expand to several websocket IDs.
+              // The source is consumed only after all IDs are ACKed.
+              consumed();
+            }
+          };
+          for (const msg of messages) {
+            const id = ++nextID;
+            outbound.push({id, msg});
+            void (async () => {
+              const {ack} = await acks.dequeue();
+              // lc.debug?.(`received ack`, ack);
+              if (ack !== id) {
+                throw new Error(`Unexpected ack for ${id}: ${ack}`);
+              }
+              consumeOne();
+            })().catch(e => {
+              lc.error?.(`error handling ack`, e);
+              closer.close(e);
+            });
+          }
+        }
+        if (outbound.length === 0) {
+          continue;
+        }
+        const data = stringifyOutboundBatch(outbound, stringify);
         // Enable for debugging. Otherwise too verbose.
         // lc.debug?.(`pipelining`, data);
         sink.send(data);
-
-        void (async () => {
-          const {ack} = await acks.dequeue();
-          // lc.debug?.(`received ack`, ack);
-          if (ack !== id) {
-            throw new Error(`Unexpected ack for ${id}: ${ack}`);
-          }
-          consumed();
-        })();
       }
     } else {
       lc.debug?.(`started synchronous outbound stream`);
-      for await (const msg of source) {
-        const id = ++nextID;
-        const data = `{"id":${id},"msg":${stringify(msg)}}`;
+      for await (const payload of source) {
+        const messages = expandPayload(payload);
+        if (messages.length === 0) {
+          continue;
+        }
+        const outbound = messages.map(msg => ({
+          id: ++nextID,
+          msg,
+        }));
+        const data = stringifyOutboundBatch(outbound, stringify);
         // Enable for debugging. Otherwise too verbose.
         // lc.debug?.(`sending`, data);
         sink.send(data);
 
-        const {ack} = await acks.dequeue();
-        if (ack !== id) {
-          throw new Error(`Unexpected ack for ${id}: ${ack}`);
+        for (const {id} of outbound) {
+          const {ack} = await acks.dequeue();
+          if (ack !== id) {
+            throw new Error(`Unexpected ack for ${id}: ${ack}`);
+          }
         }
       }
     }
@@ -308,11 +418,50 @@ async function streamOutInternal<T extends JSONValue>(
   }
 }
 
-export async function streamIn<T extends JSONValue>(
+function stringifyOutboundBatch<T extends JSONValue>(
+  batch: readonly {readonly id: number; readonly msg: T}[],
+  stringify: (payload: T) => string,
+) {
+  if (batch.length === 1) {
+    const [{id, msg}] = batch;
+    return `{"id":${id},"msg":${stringify(msg)}}`;
+  }
+  // RM -> VS catchup emits large websocket batches. Building the frame in one
+  // loop avoids the extra strings and array that `map().join()` creates in the
+  // hottest fanout path.
+  let data = '{"batch":[';
+  for (let i = 0; i < batch.length; i++) {
+    if (i > 0) {
+      data += ',';
+    }
+    const {id, msg} = batch[i];
+    data += `{"id":${id},"msg":${stringify(msg)}}`;
+  }
+  return `${data}]}`;
+}
+
+export function streamIn<T extends JSONValue>(
   lc: LogContext,
   source: WebSocket,
   schema: v.Type<T>,
 ): Promise<Source<T>> {
+  return streamInInternal(lc, source, schema, false) as Promise<Source<T>>;
+}
+
+export function streamInBatches<T extends JSONValue>(
+  lc: LogContext,
+  source: WebSocket,
+  schema: v.Type<T>,
+): Promise<Source<StreamInPayload<T>>> {
+  return streamInInternal(lc, source, schema, true);
+}
+
+async function streamInInternal<T extends JSONValue>(
+  lc: LogContext,
+  source: WebSocket,
+  schema: v.Type<T>,
+  preserveBatches: boolean,
+): Promise<Source<StreamInPayload<T>>> {
   expectPingsForLiveness(lc, source, PING_INTERVAL_MS);
 
   const streamedSchema = v.object({
@@ -320,28 +469,53 @@ export async function streamIn<T extends JSONValue>(
     id: v.number(),
   });
 
-  const sink: Subscription<T, Streamed<T>> = new Subscription<T, Streamed<T>>(
+  const sink: Subscription<
+    StreamInPayload<T>,
+    Streamed<T> | readonly Streamed<T>[]
+  > = new Subscription(
     {
-      consumed: ({id}) => source.send(JSON.stringify({ack: id} satisfies Ack)),
+      consumed: streamOrBatch => {
+        if (isStreamedBatch(streamOrBatch)) {
+          for (const {id} of streamOrBatch) {
+            source.send(JSON.stringify({ack: id} satisfies Ack));
+          }
+        } else {
+          source.send(JSON.stringify({ack: streamOrBatch.id} satisfies Ack));
+        }
+      },
       cleanup: () => closer.close(),
     },
-    ({msg}) => msg,
+    streamOrBatch =>
+      isStreamedBatch(streamOrBatch)
+        ? {
+            tag: 'stream-batch',
+            messages: streamOrBatch.map(({msg}) => msg),
+          }
+        : streamOrBatch.msg,
   );
 
   const closer = WebSocketCloser.forSink(lc, source, sink, handleMessage);
 
   function handleMessage(event: MessageEvent) {
-    const data = event.data.toString();
+    const data = webSocketMessageDataToString(event.data);
     if (!sink.active) {
       lc.warn?.('dropping ws message received after close', data);
       return;
     }
     try {
       const value = BigIntJSON.parse(data);
-      const msg = v.parse(value, streamedSchema, 'passthrough');
-      // Enable for debugging. Otherwise too verbose.
-      // lc.debug?.(`received`, data);
-      sink.push(msg);
+      const messages = parseStreamedMessages(value, streamedSchema);
+      if (preserveBatches && messages.length > 1) {
+        // The RM already grouped these messages into one websocket frame. Keep
+        // that boundary visible so the VS can batch one write-worker apply.
+        sink.push(messages);
+        return;
+      }
+      for (const msg of messages) {
+        // Enable for debugging. Otherwise too verbose.
+        // lc.debug?.(`received`, data);
+        sink.push(msg);
+      }
     } catch (e) {
       closer.close(e);
     }
@@ -349,6 +523,51 @@ export async function streamIn<T extends JSONValue>(
 
   await closer.connected;
   return sink;
+}
+
+function webSocketMessageDataToString(data: MessageEvent['data']): string {
+  if (typeof data === 'string') {
+    return data;
+  }
+  if (Buffer.isBuffer(data)) {
+    return data.toString();
+  }
+  if (data instanceof ArrayBuffer) {
+    return Buffer.from(data).toString();
+  }
+  return Buffer.concat(data).toString();
+}
+
+function isStreamedBatch<T>(
+  streamOrBatch: Streamed<T> | readonly Streamed<T>[],
+): streamOrBatch is readonly Streamed<T>[] {
+  return Array.isArray(streamOrBatch);
+}
+
+function parseStreamedMessages<T extends JSONValue>(
+  value: JSONValue,
+  streamedSchema: v.Type<Streamed<T>>,
+): Streamed<T>[] {
+  if (
+    typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value) &&
+    Object.hasOwn(value, 'batch')
+  ) {
+    // A batch frame is a transport optimization only. Validate each child
+    // message against the normal streamed schema before handing it to callers.
+    const batch = (value as {readonly batch?: unknown}).batch;
+    if (!Array.isArray(batch)) {
+      throw new Error('Invalid stream batch');
+    }
+    const messages: Streamed<T>[] = [];
+    messages.length = batch.length;
+    for (let i = 0; i < batch.length; i++) {
+      messages[i] = v.parse(batch[i], streamedSchema, 'passthrough');
+    }
+    return messages;
+  }
+  return [v.parse(value, streamedSchema, 'passthrough')];
 }
 
 class WebSocketCloser {
@@ -368,10 +587,10 @@ class WebSocketCloser {
     return new WebSocketCloser(lc, ws, () => stream.cancel());
   }
 
-  static forSink<T>(
+  static forSink<T, M>(
     lc: LogContext,
     ws: WebSocket,
-    stream: Subscription<T, Streamed<T>>,
+    stream: Subscription<T, M>,
     messageHandler: (e: MessageEvent) => void | undefined,
   ) {
     // If the websocket is closed, call end() to allow the downstream Sink

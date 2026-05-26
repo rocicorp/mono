@@ -2,6 +2,7 @@ import {afterEach, describe, expect, test, vi} from 'vitest';
 import {BigIntJSON} from '../../../../shared/src/bigint-json.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import {sleep} from '../../../../shared/src/sleep.ts';
+import type {StringifiedStreamPayload} from '../../types/streams.ts';
 import type {Subscription} from '../../types/subscription.ts';
 import {ReplicationMessages} from '../replicator/test-utils.ts';
 import {Broadcast} from './broadcast.ts';
@@ -24,7 +25,9 @@ describe('change-streamer/broadcast', () => {
     vi.restoreAllMocks();
   });
 
-  async function consumeOne(downstream: Subscription<string>) {
+  async function consumeOne(
+    downstream: Subscription<StringifiedStreamPayload>,
+  ) {
     const pipeline = downstream.pipeline;
     if (pipeline === undefined) {
       throw new Error('Expected pipelined subscription');
@@ -43,7 +46,7 @@ describe('change-streamer/broadcast', () => {
 
   async function makeSubscribers(count: number) {
     const subscribers: Subscriber[] = [];
-    const downstreams: Subscription<string>[] = [];
+    const downstreams: Subscription<StringifiedStreamPayload>[] = [];
     for (let i = 0; i < count; i++) {
       const [subscriber, , downstream] = createSubscriber('00', true);
       subscribers.push(subscriber);
@@ -54,7 +57,9 @@ describe('change-streamer/broadcast', () => {
     return {subscribers, downstreams};
   }
 
-  async function consumeChange(downstream: Subscription<string>) {
+  async function consumeChange(
+    downstream: Subscription<StringifiedStreamPayload>,
+  ) {
     await consumeOne(downstream);
     await flushCompletions();
   }

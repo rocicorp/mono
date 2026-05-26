@@ -1,6 +1,10 @@
 import type {Enum} from '../../../../shared/src/enum.ts';
 import * as v from '../../../../shared/src/valita.ts';
-import type {Source} from '../../types/streams.ts';
+import type {
+  Source,
+  StreamInPayload,
+  StringifiedStreamPayload,
+} from '../../types/streams.ts';
 import {changeStreamDataSchema} from '../change-source/protocol/current/downstream.ts';
 import type {ReplicatorMode} from '../replicator/replicator.ts';
 import {changeSourceTimingsSchema} from '../replicator/reporter/report-schema.ts';
@@ -75,7 +79,6 @@ export interface ChangeStreamer {
 //   - Adds support for `backfill` messages
 // v6: v1.0.1  (backwards compatible, no version change)
 //   - Adds lag reporting to status messages
-
 export const PROTOCOL_VERSION = 6;
 
 export type SubscriberContext = {
@@ -168,19 +171,6 @@ export const downstreamSchema = v.union(
 
 export type Error = v.Infer<typeof errorSchema>;
 
-export function errorTypeToReadableName(val: ErrorType) {
-  switch (val) {
-    case ErrorType.WrongReplicaVersion:
-      return 'WrongReplicaVersion';
-    case ErrorType.WatermarkTooOld:
-      return 'WatermarkTooOld';
-    case ErrorType.Unknown:
-      return 'Unknown';
-    default:
-      return 'Unknown';
-  }
-}
-
 /**
  * A stream of transactions, each starting with a {@link Begin} message,
  * containing one or more {@link Data} messages, and ending with a
@@ -194,13 +184,40 @@ export function errorTypeToReadableName(val: ErrorType) {
  */
 export type Downstream = v.Infer<typeof downstreamSchema>;
 
+export interface BatchedChangeStreamer extends ChangeStreamer {
+  subscribeBatched(
+    ctx: SubscriberContext,
+  ): Promise<Source<StreamInPayload<Downstream>>>;
+}
+
+export function hasBatchedSubscribe(
+  changeStreamer: ChangeStreamer,
+): changeStreamer is BatchedChangeStreamer {
+  return 'subscribeBatched' in changeStreamer;
+}
+
+export function errorTypeToReadableName(val: ErrorType) {
+  switch (val) {
+    case ErrorType.WrongReplicaVersion:
+      return 'WrongReplicaVersion';
+    case ErrorType.WatermarkTooOld:
+      return 'WatermarkTooOld';
+    case ErrorType.Unknown:
+      return 'Unknown';
+    default:
+      return 'Unknown';
+  }
+}
+
 export interface ChangeStreamerService
   extends Omit<ChangeStreamer, 'subscribe'>, Service {
   /**
    * The server-side interface overrides `subscribe()` to return a stream
-   * of already-stringified {@link Downstream} payloads.
+   * of already-stringified {@link Downstream} payloads. A payload can contain
+   * several ordered messages so the stream layer can flatten them into the
+   * normal wire format without adding one producer queue entry per message.
    */
-  subscribe(ctx: SubscriberContext): Promise<Source<string>>;
+  subscribe(ctx: SubscriberContext): Promise<Source<StringifiedStreamPayload>>;
 
   /**
    * Notifies the change streamer of a watermark that has been backed up,
