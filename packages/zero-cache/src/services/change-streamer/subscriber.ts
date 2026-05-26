@@ -86,6 +86,14 @@ export class Subscriber {
     await this.#sendChange(change);
   }
 
+  /** catchupBatch() is called on ChangeEntries loaded from the store. */
+  async catchupBatch(changes: readonly WatermarkedChange[]) {
+    this.#initialize();
+    for (const change of changes) {
+      await this.#sendChange(change);
+    }
+  }
+
   /**
    * Marks the Subscribe as "caught up" and flushes any backlog of
    * entries that were received during the catchup.
