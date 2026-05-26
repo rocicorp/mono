@@ -149,7 +149,9 @@ export function useQuery<
     return asQueryInternals(query);
   });
 
-  const hash = createMemo(() => qi()?.hash());
+  const hash = createMemo(
+    () => qi()?.hash() + (qi()?.format.singular ? 't' : 'f') + zero().clientID,
+  );
   const ttl = createMemo(() => normalize(options)?.ttl ?? DEFAULT_TTL_MS);
 
   const initialTTL = ttl();

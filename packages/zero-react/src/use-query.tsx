@@ -449,7 +449,7 @@ export class ViewStore {
       };
     }
 
-    const hash = qi.hash() + zero.clientID;
+    const hash = qi.hash() + (qi.format.singular ? 't' : 'f') + zero.clientID;
     let existing = this.#views.get(hash);
     if (!existing) {
       existing = new ViewWrapper(q, zero, ttl, view => {

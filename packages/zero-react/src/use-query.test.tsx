@@ -327,6 +327,53 @@ describe('ViewStore', () => {
     });
   });
 
+  describe('singular vs plural', () => {
+    test('the same query hash with different singular flag creates different views', () => {
+      const viewStore = new ViewStore();
+
+      const zero = newMockZero('client1');
+      const view1 = viewStore.getView(
+        zero,
+        newMockQuery('query1', false),
+        true,
+        'forever',
+      );
+
+      const view2 = viewStore.getView(
+        zero,
+        newMockQuery('query1', true),
+        true,
+        'forever',
+      );
+
+      expect(view1).not.toBe(view2);
+      expect(getAllViewsSizeForTesting(viewStore)).toBe(2);
+    });
+
+    test('duplicate singular queries share a view', () => {
+      const viewStore = new ViewStore();
+
+      const zero1 = newMockZero('client1');
+      const view1 = viewStore.getView(
+        zero1,
+        newMockQuery('query1', true),
+        true,
+        'forever',
+      );
+
+      const zero2 = newMockZero('client1');
+      const view2 = viewStore.getView(
+        zero2,
+        newMockQuery('query1', true),
+        true,
+        'forever',
+      );
+
+      expect(view1).toBe(view2);
+      expect(getAllViewsSizeForTesting(viewStore)).toBe(1);
+    });
+  });
+
   describe('collapse multiple empty on data', () => {
     test('plural', () => {
       const viewStore = new ViewStore();
