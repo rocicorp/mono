@@ -1,6 +1,6 @@
 // https://vercel.com/templates/other/fastify-serverless-function
 
-import '../../../packages/shared/src/dotenv.ts';
+import 'shared/src/dotenv.ts';
 
 import type {IncomingHttpHeaders} from 'http';
 import cookie from '@fastify/cookie';
