@@ -1,7 +1,11 @@
 import classNames from 'classnames';
 import type {ReactNode} from 'react';
 import {useCallback, useState} from 'react';
-import {useDropzone, type FileRejection} from 'react-dropzone';
+import {
+  useDropzone,
+  type DropzoneOptions,
+  type FileRejection,
+} from 'react-dropzone';
 import {ALLOWED_CONTENT_TYPES} from '../../shared/consts.ts';
 import {useLogin} from '../hooks/use-login.tsx';
 import {Button} from './button.tsx';
@@ -198,7 +202,7 @@ export function ImageUploadArea({
     noClick: true,
     noKeyboard: true,
     onDrop,
-  });
+  } as DropzoneOptions);
 
   const handlePaste = async (e: React.ClipboardEvent) => {
     const items = [...e.clipboardData.items];
