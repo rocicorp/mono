@@ -16,10 +16,10 @@ import {
 import TextareaAutosize from 'react-textarea-autosize';
 import {toast} from 'react-toastify';
 import {assert} from 'shared/src/asserts.js';
+import {must} from 'shared/src/must.ts';
+import {difference} from 'shared/src/set-utils.ts';
 import {useParams} from 'wouter';
 import {navigate, useHistoryState} from 'wouter/use-browser-location';
-import {must} from '../../../../../packages/shared/src/must.ts';
-import {difference} from '../../../../../packages/shared/src/set-utils.ts';
 import {INITIAL_COMMENT_LIMIT} from '../../../shared/consts.ts';
 import {mutators, type NotificationType} from '../../../shared/mutators.ts';
 import {queries, type ListContextParams} from '../../../shared/queries.ts';
