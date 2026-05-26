@@ -7,7 +7,8 @@
       "@rocicorp/zero/server": ["../../packages/zero/src/server.ts"],
       "@rocicorp/zero/server/adapters/postgresjs": [
         "../../packages/zero/src/adapters/postgresjs.ts"
-      ]
+      ],
+      "shared/*": ["../../packages/shared/*"]
     }
   },
   "include": ["vite.config.ts", "api/index.ts", "env.d.ts"]
