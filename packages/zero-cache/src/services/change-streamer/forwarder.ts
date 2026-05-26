@@ -9,19 +9,29 @@ export type ProgressMonitorOptions = {
   flowControlConsensusPaddingSeconds: number;
 };
 
+const FORWARD_BATCH_SIZE = 64;
+
 export class Forwarder {
   readonly #lc: LogContext;
   readonly #progressMonitorOptions: ProgressMonitorOptions;
+  // Active subscribers receive new changes immediately. Queued subscribers
+  // connected in the middle of a transaction and must wait for catchup handoff
+  // so they do not see the tail of a transaction without its beginning.
   readonly #active = new Set<Subscriber>();
   readonly #queued = new Set<Subscriber>();
   #inTransaction = false;
+  // Batch the data-heavy middle of a transaction before fanning it out to
+  // every view-syncer. Transaction boundaries still flush immediately so
+  // subscriber handoff and catchup keep the same observable ordering.
+  #pending: WatermarkedChange[] = [];
 
   #currentBroadcast: Broadcast | undefined;
   #progressMonitor: NodeJS.Timeout | undefined;
+  #pendingFlush: NodeJS.Timeout | undefined;
 
   constructor(
     lc: LogContext,
-    opts: ProgressMonitorOptions = {flowControlConsensusPaddingSeconds: 1},
+    opts: ProgressMonitorOptions = {flowControlConsensusPaddingSeconds: 0.1},
   ) {
     this.#lc = lc.withContext('component', 'progress-monitor');
     this.#progressMonitorOptions = opts;
@@ -39,8 +49,9 @@ export class Forwarder {
     }
 
     const {flowControlConsensusPaddingSeconds} = this.#progressMonitorOptions;
-    // A negative number disables early flow control release.
     if (flowControlConsensusPaddingSeconds >= 0) {
+      // Non-negative padding enables majority-based early release. Negative
+      // padding is the escape hatch for "wait for every subscriber" debugging.
       this.#currentBroadcast?.checkProgress(
         this.#lc,
         flowControlConsensusPaddingSeconds * 1000,
@@ -51,6 +62,7 @@ export class Forwarder {
 
   stopProgressMonitor() {
     clearInterval(this.#progressMonitor);
+    this.#clearPendingFlush();
   }
 
   /**
@@ -82,11 +94,25 @@ export class Forwarder {
    * occasionally to avoid memory blowup.
    */
   forward(entry: WatermarkedChange) {
-    Broadcast.withoutTracking(this.#active.values(), entry);
+    this.#pending.push(entry);
+    const batchFull = this.#pending.length >= FORWARD_BATCH_SIZE;
+    const transactionBoundary =
+      entry[1] === 'begin' || entry[1] === 'commit' || entry[1] === 'rollback';
+    if (batchFull || transactionBoundary) {
+      // Full batches bound queued JSON and event-loop delay. Transaction
+      // boundaries flush immediately so subscriber handoff, catchup, and
+      // rollback/commit visibility stay aligned with the Storer.
+      this.#flushPendingWithoutTracking();
+    } else {
+      // A quiet transaction may never hit the size threshold, so schedule a
+      // zero-delay flush to avoid waiting for unrelated future traffic.
+      this.#schedulePendingFlush();
+    }
     this.#updateActiveSubscribers(entry[1]);
   }
 
   sendStatus(status: Status) {
+    this.#flushPendingWithoutTracking();
     for (const sub of this.#active.values()) {
       sub.sendStatus(status);
     }
@@ -97,7 +123,18 @@ export class Forwarder {
    * Promise that resolves when replication should continue.
    */
   async forwardWithFlowControl(entry: WatermarkedChange) {
-    const broadcast = new Broadcast(this.#active.values(), entry);
+    const {flowControlConsensusPaddingSeconds} = this.#progressMonitorOptions;
+    const flowControlConsensusPaddingMs =
+      flowControlConsensusPaddingSeconds * 1000;
+    this.#pending.push(entry);
+    this.#clearPendingFlush();
+    const broadcast = new Broadcast(
+      this.#active.values(),
+      this.#drainPending(),
+      flowControlConsensusPaddingMs >= 0
+        ? {lc: this.#lc, flowControlConsensusPaddingMs}
+        : undefined,
+    );
     this.#updateActiveSubscribers(entry[1]);
 
     // set for progress tracking
@@ -110,6 +147,38 @@ export class Forwarder {
     if (this.#currentBroadcast === broadcast) {
       this.#currentBroadcast = undefined;
     }
+  }
+
+  #flushPendingWithoutTracking() {
+    this.#clearPendingFlush();
+    const pending = this.#drainPending();
+    if (pending.length > 0) {
+      Broadcast.withoutTracking(this.#active.values(), pending);
+    }
+  }
+
+  #schedulePendingFlush() {
+    if (this.#pendingFlush === undefined) {
+      this.#pendingFlush = setTimeout(
+        () => this.#flushPendingWithoutTracking(),
+        0,
+      );
+    }
+  }
+
+  #clearPendingFlush() {
+    if (this.#pendingFlush !== undefined) {
+      clearTimeout(this.#pendingFlush);
+      this.#pendingFlush = undefined;
+    }
+  }
+
+  #drainPending(): WatermarkedChange[] {
+    // Transfer ownership of the backing array instead of copying it; this is on
+    // the fanout hot path and the next forward() can append to a fresh array.
+    const pending = this.#pending;
+    this.#pending = [];
+    return pending;
   }
 
   #updateActiveSubscribers(tag: ChangeTag) {

@@ -1,4 +1,3 @@
-import {getDefaultHighWaterMark} from 'node:stream';
 import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {unreachable} from '../../../../shared/src/asserts.ts';
@@ -57,6 +56,13 @@ import {Subscriber} from './subscriber.ts';
 export type TuningOptions = StorerOptions & {
   flowControlConsensusPaddingSeconds: number;
 };
+
+// This is the RM-side byte window for forwarded, already-stringified changes
+// waiting on serving-replica flow control. Node's default 16 KiB stream window
+// made the RM pause before a row-heavy transaction could fill the VS write
+// pipeline. 2 MiB is still a bounded queue, but large enough for the applier to
+// batch useful work instead of oscillating between RM sends and VS ACKs.
+export const FORWARDER_FLOW_CONTROL_BYTES_THRESHOLD = 2 * 1024 * 1024;
 
 /**
  * Performs initialization and schema migrations to initialize a ChangeStreamerImpl.
@@ -366,10 +372,6 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     await this.#storer.assumeOwnership(this.#purgeLock);
     this.#purgeLock = null;
 
-    // The threshold in (estimated number of) bytes to send() on subscriber
-    // websockets before `await`-ing the I/O buffers to be ready for more.
-    const flushBytesThreshold = getDefaultHighWaterMark(false);
-
     while (this.#state.shouldRun()) {
       let err: unknown;
       let watermark: string | null = null;
@@ -443,8 +445,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
           const json = this.#storer.store(watermark, change);
           const entry: WatermarkedChange = [watermark, change[1].tag, json];
           unflushedBytes += json.length;
-          if (unflushedBytes < flushBytesThreshold) {
-            // pipeline changes until flushBytesThreshold
+          if (unflushedBytes < FORWARDER_FLOW_CONTROL_BYTES_THRESHOLD) {
             this.#forwarder.forward(entry);
           } else {
             // Wait for messages to clear socket buffers to ensure that they

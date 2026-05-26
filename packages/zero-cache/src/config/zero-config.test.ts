@@ -406,11 +406,11 @@ test('zero-cache --help', () => {
                                                                         rather, it protects the system when the upstream throughput exceeds the downstream                                         
                                                                         throughput.                                                                                                                
                                                                                                                                                                                                    
-     --change-streamer-flow-control-consensus-padding-seconds number    default: 1                                                                                                                 
+     --change-streamer-flow-control-consensus-padding-seconds number    default: 0.1                                                                                                               
        ZERO_CHANGE_STREAMER_FLOW_CONTROL_CONSENSUS_PADDING_SECONDS env                                                                                                                             
-                                                                        During periodic flow control checks (every 64kb), the amount of time to wait after the                                     
-                                                                        majority of subscribers have acked, after which replication will continue even if                                          
-                                                                        some subscribers have yet to ack. (Note that this is not a timeout for the entire send,                                    
+                                                                        During flow control flushes, the amount of time to wait after the majority of                                              
+                                                                        subscribers have acked, after which replication will continue even if some subscribers                                     
+                                                                        have yet to ack. (Note that this is not a timeout for the entire send,                                                     
                                                                         but a timeout that starts after the majority of receivers have acked.)                                                     
                                                                                                                                                                                                    
                                                                         This allows a bounded amount of time for backlogged subscribers to catch up on each flush                                  

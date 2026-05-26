@@ -651,11 +651,11 @@ export const zeroOptions = {
     },
 
     flowControlConsensusPaddingSeconds: {
-      type: v.number().default(1),
+      type: v.number().default(0.1),
       desc: [
-        `During periodic flow control checks (every 64kb), the amount of time to wait after the`,
-        `majority of subscribers have acked, after which replication will continue even if`,
-        `some subscribers have yet to ack. (Note that this is not a timeout for the {italic entire} send,`,
+        `During flow control flushes, the amount of time to wait after the majority of`,
+        `subscribers have acked, after which replication will continue even if some subscribers`,
+        `have yet to ack. (Note that this is not a timeout for the {italic entire} send,`,
         `but a timeout that starts {italic after} the majority of receivers have acked.)`,
         ``,
         `This allows a bounded amount of time for backlogged subscribers to catch up on each flush`,
