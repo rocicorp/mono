@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779791117206,
+  "lastUpdate": 1779830401560,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -56445,6 +56445,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/rocicorp/mono/commit/699728e841be8d892b8d268d19ed8a6e768f9acf"
         },
         "date": 1779791104308,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 317161,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 57049,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 117187,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 33481,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "arv@roci.dev",
+            "name": "Erik Arvidsson",
+            "username": "arv"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "91257a51eeba8fafeebfbd9f2e199d6a0f6ec1f5",
+          "message": "chore: Revert cross-package imports refactor and fix paths (#6080)\n\nThis reverts commit\nhttps://github.com/rocicorp/mono/commit/811a1d9d0fd74b56b4c3010bf045ec3af557468a.\n\nThis pull request primarily updates import paths throughout the codebase\nto use relative paths instead of package-based paths. T",
+          "timestamp": "2026-05-26T23:18:36+02:00",
+          "tree_id": "889d8a55a45e82d43b40aacd7ff859dd83ac4e4c",
+          "url": "https://github.com/rocicorp/mono/commit/91257a51eeba8fafeebfbd9f2e199d6a0f6ec1f5"
+        },
+        "date": 1779830388291,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
