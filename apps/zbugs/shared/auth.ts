@@ -1,6 +1,6 @@
 import type {Query, Transaction} from '@rocicorp/zero';
-import {must} from '../../../packages/shared/src/must.ts';
-import * as v from '../../../packages/shared/src/valita.ts';
+import {must} from 'shared/src/must.ts';
+import * as v from 'shared/src/valita.ts';
 import {MutationError, MutationErrorCode} from './error.ts';
 import {builder, type schema} from './schema.ts';
 

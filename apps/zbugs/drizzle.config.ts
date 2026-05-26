@@ -1,5 +1,5 @@
 import {defineConfig} from 'drizzle-kit';
-import {must} from '../../packages/shared/src/must.ts';
+import {must} from 'shared/src/must.ts';
 
 const dbUrl = must(
   process.env.ZERO_UPSTREAM_DB,
