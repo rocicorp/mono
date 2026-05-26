@@ -202,7 +202,7 @@ export function ImageUploadArea({
     noClick: true,
     noKeyboard: true,
     onDrop,
-  } as DropzoneOptions);
+  } as unknown as DropzoneOptions);
 
   const handlePaste = async (e: React.ClipboardEvent) => {
     const items = [...e.clipboardData.items];
