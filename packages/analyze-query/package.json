@@ -33,5 +33,6 @@
     "zero-types": "workspace:*",
     "zql": "workspace:*",
     "zqlite": "workspace:*"
-  }
+  },
+  "packageManager": "pnpm@11.3.0"
 }

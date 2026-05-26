@@ -24,5 +24,6 @@
     "vitest": "^4.1.6",
     "zero-cache": "workspace:*",
     "zero-server": "workspace:*"
-  }
+  },
+  "packageManager": "pnpm@11.3.0"
 }

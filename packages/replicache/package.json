@@ -113,5 +113,6 @@
     "@rocicorp/zero-sqlite3": {
       "optional": true
     }
-  }
+  },
+  "packageManager": "pnpm@11.3.0"
 }
