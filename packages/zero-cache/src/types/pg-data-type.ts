@@ -1,4 +1,4 @@
-import type {ValueType} from 'zero-protocol/src/client-schema.ts';
+import type {ValueType} from '../../../zero-protocol/src/client-schema.ts';
 
 export const pgToZqlNumericTypeMap = Object.freeze({
   'smallint': 'number',

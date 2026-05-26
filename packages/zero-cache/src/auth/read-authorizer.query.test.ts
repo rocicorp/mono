@@ -1,36 +1,43 @@
 import {LogContext} from '@rocicorp/logger';
-import {assert} from 'shared/src/asserts.ts';
-import {h128} from 'shared/src/hash.ts';
-import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
-import {must} from 'shared/src/must.ts';
 import {beforeEach, describe, expect, test} from 'vitest';
+import {testLogConfig} from '../../../otel/src/test-log-config.ts';
+import {assert} from '../../../shared/src/asserts.ts';
+import {h128} from '../../../shared/src/hash.ts';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import {must} from '../../../shared/src/must.ts';
 import {
   ANYONE_CAN,
   ANYONE_CAN_DO_ANYTHING,
   definePermissions,
-} from 'zero-permissions/src/permissions.ts';
-import type {DeleteOp, InsertOp, UpdateOp} from 'zero-protocol/src/mutation.ts';
-import {relationships} from 'zero-schema/src/builder/relationship-builder.ts';
-import {createSchema} from 'zero-schema/src/builder/schema-builder.ts';
+} from '../../../zero-permissions/src/permissions.ts';
+import type {
+  DeleteOp,
+  InsertOp,
+  UpdateOp,
+} from '../../../zero-protocol/src/mutation.ts';
+import {relationships} from '../../../zero-schema/src/builder/relationship-builder.ts';
+import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {
   boolean,
   number,
   string,
   table,
-} from 'zero-schema/src/builder/table-builder.ts';
-import type {ValueType} from 'zero-schema/src/table-schema.ts';
-import type {Schema as ZeroSchema} from 'zero-types/src/schema.ts';
-import {bindStaticParameters, buildPipeline} from 'zql/src/builder/builder.ts';
-import {Catch, type CaughtNode} from 'zql/src/ivm/catch.ts';
-import {type Source, makeSourceChangeAdd} from 'zql/src/ivm/source.ts';
-import {consume} from 'zql/src/ivm/stream.ts';
-import type {ExpressionBuilder} from 'zql/src/query/expression.ts';
-import {QueryDelegateBase} from 'zql/src/query/query-delegate-base.ts';
-import type {QueryDelegate} from 'zql/src/query/query-delegate.ts';
-import {newQuery} from 'zql/src/query/query-impl.ts';
-import {asQueryInternals} from 'zql/src/query/query-internals.ts';
-import type {Query, Row} from 'zql/src/query/query.ts';
-import {testLogConfig} from '../../../otel/src/test-log-config.ts';
+} from '../../../zero-schema/src/builder/table-builder.ts';
+import type {ValueType} from '../../../zero-schema/src/table-schema.ts';
+import type {Schema as ZeroSchema} from '../../../zero-types/src/schema.ts';
+import {
+  bindStaticParameters,
+  buildPipeline,
+} from '../../../zql/src/builder/builder.ts';
+import {Catch, type CaughtNode} from '../../../zql/src/ivm/catch.ts';
+import {type Source, makeSourceChangeAdd} from '../../../zql/src/ivm/source.ts';
+import {consume} from '../../../zql/src/ivm/stream.ts';
+import type {ExpressionBuilder} from '../../../zql/src/query/expression.ts';
+import {QueryDelegateBase} from '../../../zql/src/query/query-delegate-base.ts';
+import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
+import {newQuery} from '../../../zql/src/query/query-impl.ts';
+import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
+import type {Query, Row} from '../../../zql/src/query/query.ts';
 import {
   CREATE_STORAGE_TABLE,
   DatabaseStorage,

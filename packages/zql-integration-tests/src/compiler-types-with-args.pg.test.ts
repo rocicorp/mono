@@ -1,25 +1,29 @@
 import {Client} from 'pg';
-import type {JSONValue} from 'shared/src/json.ts';
-import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
 import {afterAll, beforeAll, describe, expect, test} from 'vitest';
-import {initialSync} from 'zero-cache/src/services/change-source/pg/initial-sync.ts';
-import {getConnectionURI, testDBs} from 'zero-cache/src/test/db.ts';
-import {type PostgresDB} from 'zero-cache/src/types/pg.ts';
-import {type Row} from 'zero-protocol/src/data.ts';
-import {relationships} from 'zero-schema/src/builder/relationship-builder.ts';
-import {createSchema} from 'zero-schema/src/builder/schema-builder.ts';
-import {number, string, table} from 'zero-schema/src/builder/table-builder.ts';
-import {clientToServer} from 'zero-schema/src/name-mapper.ts';
-import {getServerSchema} from 'zero-server/src/schema.ts';
-import {Transaction} from 'zero-server/src/test/util.ts';
-import type {ServerSchema} from 'zero-types/src/server-schema.ts';
-import type {QueryDelegate} from 'zql/src/query/query-delegate.ts';
-import {newQuery} from 'zql/src/query/query-impl.ts';
-import {asQueryInternals} from 'zql/src/query/query-internals.ts';
-import {type Query} from 'zql/src/query/query.ts';
 import {testLogConfig} from '../../otel/src/test-log-config.ts';
+import type {JSONValue} from '../../shared/src/json.ts';
+import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
 import {compile, extractZqlResult} from '../../z2s/src/compiler.ts';
 import {formatPgInternalConvert} from '../../z2s/src/sql.ts';
+import {initialSync} from '../../zero-cache/src/services/change-source/pg/initial-sync.ts';
+import {getConnectionURI, testDBs} from '../../zero-cache/src/test/db.ts';
+import {type PostgresDB} from '../../zero-cache/src/types/pg.ts';
+import {type Row} from '../../zero-protocol/src/data.ts';
+import {relationships} from '../../zero-schema/src/builder/relationship-builder.ts';
+import {createSchema} from '../../zero-schema/src/builder/schema-builder.ts';
+import {
+  number,
+  string,
+  table,
+} from '../../zero-schema/src/builder/table-builder.ts';
+import {clientToServer} from '../../zero-schema/src/name-mapper.ts';
+import {getServerSchema} from '../../zero-server/src/schema.ts';
+import {Transaction} from '../../zero-server/src/test/util.ts';
+import type {ServerSchema} from '../../zero-types/src/server-schema.ts';
+import type {QueryDelegate} from '../../zql/src/query/query-delegate.ts';
+import {newQuery} from '../../zql/src/query/query-impl.ts';
+import {asQueryInternals} from '../../zql/src/query/query-internals.ts';
+import {type Query} from '../../zql/src/query/query.ts';
 import {Database} from '../../zqlite/src/db.ts';
 import {fromSQLiteTypes} from '../../zqlite/src/table-source.ts';
 import {

@@ -1,12 +1,16 @@
-import {h128} from 'shared/src/hash.ts';
-import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
 import {beforeEach, describe, expect, test} from 'vitest';
-import type {DeleteOp, InsertOp, UpdateOp} from 'zero-protocol/src/mutation.ts';
+import {testLogConfig} from '../../../otel/src/test-log-config.ts';
+import {h128} from '../../../shared/src/hash.ts';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import type {
+  DeleteOp,
+  InsertOp,
+  UpdateOp,
+} from '../../../zero-protocol/src/mutation.ts';
 import type {
   PermissionsConfig,
   Rule,
-} from 'zero-schema/src/compiled-permissions.ts';
-import {testLogConfig} from '../../../otel/src/test-log-config.ts';
+} from '../../../zero-schema/src/compiled-permissions.ts';
 import {
   CREATE_STORAGE_TABLE,
   DatabaseStorage,

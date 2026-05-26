@@ -3,17 +3,17 @@ import {
   deepMerge,
   isPlainObject,
   type DeepMerge,
-} from 'shared/src/deep-merge.ts';
-import type {ReadonlyJSONValue} from 'shared/src/json.ts';
-import {must} from 'shared/src/must.ts';
-import {getValueAtPath} from 'shared/src/object-traversal.ts';
+} from '../../../shared/src/deep-merge.ts';
+import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
+import {must} from '../../../shared/src/must.ts';
+import {getValueAtPath} from '../../../shared/src/object-traversal.ts';
 import type {
   BaseDefaultSchema,
   DefaultContext,
   DefaultSchema,
   IsUnknown,
-} from 'zero-types/src/default-types.ts';
-import type {Schema} from 'zero-types/src/schema.ts';
+} from '../../../zero-types/src/default-types.ts';
+import type {Schema} from '../../../zero-types/src/schema.ts';
 import {asQueryInternals} from './query-internals.ts';
 import type {PullRow, Query} from './query.ts';
 import {validateInput} from './validate-input.ts';

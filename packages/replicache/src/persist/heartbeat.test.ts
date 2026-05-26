@@ -1,7 +1,7 @@
 import {LogContext, type LogSink} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
-import {assert, assertNotUndefined} from 'shared/src/asserts.ts';
 import {afterEach, beforeEach, expect, test, vi} from 'vitest';
+import {assert, assertNotUndefined} from '../../../shared/src/asserts.ts';
 import {StoreImpl} from '../dag/store-impl.ts';
 import type {Read} from '../dag/store.ts';
 import {TestStore} from '../dag/test-store.ts';

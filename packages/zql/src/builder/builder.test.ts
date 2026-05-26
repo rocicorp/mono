@@ -1,13 +1,13 @@
-import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
 import {expect, test, vi} from 'vitest';
+import {testLogConfig} from '../../../otel/src/test-log-config.ts';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import type {
   AST,
   Condition,
   Conjunction,
   CorrelatedSubqueryCondition,
   Disjunction,
-} from 'zero-protocol/src/ast.ts';
-import {testLogConfig} from '../../../otel/src/test-log-config.ts';
+} from '../../../zero-protocol/src/ast.ts';
 import {Catch} from '../ivm/catch.ts';
 import {consume} from '../ivm/stream.ts';
 import {createSource} from '../ivm/test/source-factory.ts';

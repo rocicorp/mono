@@ -1,7 +1,7 @@
 import {Writable} from 'node:stream';
 import {pipeline} from 'node:stream/promises';
-import {stringify} from 'shared/src/bigint-json.ts';
 import {beforeEach, describe, expect} from 'vitest';
+import {stringify} from '../../../shared/src/bigint-json.ts';
 import {type PgTest, test} from '../test/db.ts';
 import {
   JSON_STRINGIFIED,

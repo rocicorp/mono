@@ -1,12 +1,17 @@
 import type {LogLevel} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
-import {assert} from 'shared/src/asserts.ts';
-import type {JSONValue, ReadonlyJSONValue} from 'shared/src/json.ts';
-import {TestLogSink} from 'shared/src/logging-test-utils.ts';
-import {assertTesting} from 'shared/src/testing.ts';
-import type {ConnectedMessage} from 'zero-protocol/src/connect.ts';
-import type {Downstream} from 'zero-protocol/src/down.ts';
-import type {ErrorBody, ErrorMessage} from 'zero-protocol/src/error.ts';
+// import {type VitestUtils} from 'vitest';
+import type {Store} from '../../../replicache/src/dag/store.ts';
+import {assert} from '../../../shared/src/asserts.ts';
+import type {JSONValue, ReadonlyJSONValue} from '../../../shared/src/json.ts';
+import {TestLogSink} from '../../../shared/src/logging-test-utils.ts';
+import {assertTesting} from '../../../shared/src/testing.ts';
+import type {ConnectedMessage} from '../../../zero-protocol/src/connect.ts';
+import type {Downstream} from '../../../zero-protocol/src/down.ts';
+import type {
+  ErrorBody,
+  ErrorMessage,
+} from '../../../zero-protocol/src/error.ts';
 import type {
   PokeEndBody,
   PokeEndMessage,
@@ -14,23 +19,21 @@ import type {
   PokePartMessage,
   PokeStartBody,
   PokeStartMessage,
-} from 'zero-protocol/src/poke.ts';
-import type {PongMessage} from 'zero-protocol/src/pong.ts';
+} from '../../../zero-protocol/src/poke.ts';
+import type {PongMessage} from '../../../zero-protocol/src/pong.ts';
 import type {
   PullResponseBody,
   PullResponseMessage,
-} from 'zero-protocol/src/pull.ts';
+} from '../../../zero-protocol/src/pull.ts';
 import type {
   PushResponseBody,
   PushResponseMessage,
-} from 'zero-protocol/src/push.ts';
-import {hashOfNameAndArgs} from 'zero-protocol/src/query-hash.ts';
-import {upstreamSchema} from 'zero-protocol/src/up.ts';
-import type {Schema} from 'zero-types/src/schema.ts';
-import {asQueryInternals} from 'zql/src/query/query-internals.ts';
-import type {AnyQuery, Query} from 'zql/src/query/query.ts';
-// import {type VitestUtils} from 'vitest';
-import type {Store} from '../../../replicache/src/dag/store.ts';
+} from '../../../zero-protocol/src/push.ts';
+import {hashOfNameAndArgs} from '../../../zero-protocol/src/query-hash.ts';
+import {upstreamSchema} from '../../../zero-protocol/src/up.ts';
+import type {Schema} from '../../../zero-types/src/schema.ts';
+import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
+import type {AnyQuery, Query} from '../../../zql/src/query/query.ts';
 import {nanoid} from '../util/nanoid.ts';
 import type {
   ConnectionManager,

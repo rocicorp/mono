@@ -1,15 +1,15 @@
-import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
-import {must} from 'shared/src/must.ts';
 import {beforeEach, expect, expectTypeOf, test} from 'vitest';
+import {testLogConfig} from '../../otel/src/test-log-config.ts';
+import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
+import {must} from '../../shared/src/must.ts';
 import {
   makeSourceChangeAdd,
   makeSourceChangeRemove,
-} from 'zql/src/ivm/source.ts';
-import {consume} from 'zql/src/ivm/stream.ts';
-import type {QueryDelegate} from 'zql/src/query/query-delegate.ts';
-import {newQuery} from 'zql/src/query/query-impl.ts';
-import {schema} from 'zql/src/query/test/test-schemas.ts';
-import {testLogConfig} from '../../otel/src/test-log-config.ts';
+} from '../../zql/src/ivm/source.ts';
+import {consume} from '../../zql/src/ivm/stream.ts';
+import type {QueryDelegate} from '../../zql/src/query/query-delegate.ts';
+import {newQuery} from '../../zql/src/query/query-impl.ts';
+import {schema} from '../../zql/src/query/test/test-schemas.ts';
 import {Database} from './db.ts';
 import {
   mapResultToClientNames,

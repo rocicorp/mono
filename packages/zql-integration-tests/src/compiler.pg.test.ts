@@ -1,5 +1,5 @@
 import {test} from 'vitest';
-import {createTableSQL, schema} from 'zql/src/query/test/test-schemas.ts';
+import {createTableSQL, schema} from '../../zql/src/query/test/test-schemas.ts';
 import {createVitests} from './helpers/runner.ts';
 
 const BASE_TIMESTAMP = 1743127752952;

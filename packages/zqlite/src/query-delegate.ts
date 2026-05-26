@@ -1,9 +1,9 @@
 import type {LogContext} from '@rocicorp/logger';
-import type {Schema} from 'zero-types/src/schema.ts';
-import type {Source} from 'zql/src/ivm/source.ts';
-import {QueryDelegateBase} from 'zql/src/query/query-delegate-base.ts';
-import type {CommitListener} from 'zql/src/query/query-delegate.ts';
 import type {LogConfig} from '../../otel/src/log-options.ts';
+import type {Schema} from '../../zero-types/src/schema.ts';
+import type {Source} from '../../zql/src/ivm/source.ts';
+import {QueryDelegateBase} from '../../zql/src/query/query-delegate-base.ts';
+import type {CommitListener} from '../../zql/src/query/query-delegate.ts';
 import type {Database} from './db.ts';
 import {TableSource} from './table-source.ts';
 

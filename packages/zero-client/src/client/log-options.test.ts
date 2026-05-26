@@ -1,5 +1,4 @@
 import {consoleLogSink, type LogSink} from '@rocicorp/logger';
-import {TestLogSink} from 'shared/src/logging-test-utils.ts';
 import {
   afterEach,
   beforeEach,
@@ -11,6 +10,7 @@ import {
   type MockInstance,
 } from 'vitest';
 import type {DatadogLogSinkOptions} from '../../../datadog/src/datadog-log-sink.ts';
+import {TestLogSink} from '../../../shared/src/logging-test-utils.ts';
 import type {HTTPString} from './http-string.ts';
 import {createLogOptions} from './log-options.ts';
 

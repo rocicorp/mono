@@ -1,10 +1,14 @@
 import {expect, test} from 'vitest';
-import {mutateResponseSchema} from 'zero-protocol/src/mutate-server.ts';
-import {mapCRUD} from 'zero-protocol/src/mutation.ts';
-import {pushResponseSchema} from 'zero-protocol/src/push.ts';
-import {createSchema} from './builder/schema-builder.ts';
-import {boolean, string, table} from './builder/table-builder.ts';
-import {clientToServer} from './name-mapper.ts';
+import {createSchema} from '../../zero-schema/src/builder/schema-builder.ts';
+import {
+  boolean,
+  string,
+  table,
+} from '../../zero-schema/src/builder/table-builder.ts';
+import {clientToServer} from '../../zero-schema/src/name-mapper.ts';
+import {mutateResponseSchema} from './mutate-server.ts';
+import {mapCRUD} from './mutation.ts';
+import {pushResponseSchema} from './push.ts';
 
 const schema = createSchema({
   tables: [

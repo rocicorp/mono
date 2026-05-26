@@ -2,14 +2,14 @@ export {
   ApplicationError,
   isApplicationError,
   type ApplicationErrorOptions,
-} from 'zero-protocol/src/application-error.ts';
-export type {MutateResponse} from 'zero-protocol/src/mutate-server.ts';
-export type {QueryResponse} from 'zero-protocol/src/query-server.ts';
+} from '../../zero-protocol/src/application-error.ts';
+export type {MutateResponse} from '../../zero-protocol/src/mutate-server.ts';
+export type {QueryResponse} from '../../zero-protocol/src/query-server.ts';
 export type {
   ServerColumnSchema,
   ServerSchema,
   ServerTableSchema,
-} from 'zero-types/src/server-schema.ts';
+} from '../../zero-types/src/server-schema.ts';
 export type {
   AnyTransaction,
   ClientTransaction,
@@ -22,7 +22,7 @@ export type {
   Transaction,
   TransactionBase,
   TransactionReason,
-} from 'zql/src/mutate/custom.ts';
+} from '../../zql/src/mutate/custom.ts';
 export {
   CRUDMutatorFactory,
   makeSchemaCRUD,

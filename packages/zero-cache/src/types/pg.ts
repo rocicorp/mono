@@ -14,8 +14,8 @@ import {PreciseDate} from '@google-cloud/precise-date';
 import {OID} from '@postgresql-typed/oids';
 import type {LogContext} from '@rocicorp/logger';
 import postgres, {type Notice, type PostgresType} from 'postgres';
-import {BigIntJSON, type JSONValue} from 'shared/src/bigint-json.ts';
-import {randInt} from 'shared/src/rand.ts';
+import {BigIntJSON, type JSONValue} from '../../../shared/src/bigint-json.ts';
+import {randInt} from '../../../shared/src/rand.ts';
 import {ConfigurationError} from './configuration-error.ts';
 import {
   DATE,

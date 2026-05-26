@@ -1,7 +1,7 @@
 import {tmpdir} from 'node:os';
 import type {LogContext} from '@rocicorp/logger';
-import {randInt} from 'shared/src/rand.ts';
 import {expect} from 'vitest';
+import {randInt} from '../../../shared/src/rand.ts';
 import {Database} from '../../../zqlite/src/db.ts';
 import {deleteLiteDB} from '../db/delete-lite-db.ts';
 import {id} from '../types/sql.ts';

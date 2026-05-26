@@ -1,9 +1,9 @@
-import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
 import {beforeAll, describe, expect, test} from 'vitest';
-import {computeZqlSpecs} from 'zero-cache/src/db/lite-tables.ts';
-import type {LiteAndZqlSpec} from 'zero-cache/src/db/specs.ts';
-import type {NameMapper} from 'zero-schema/src/name-mapper.ts';
-import {clientToServer} from 'zero-schema/src/name-mapper.ts';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import {computeZqlSpecs} from '../../../zero-cache/src/db/lite-tables.ts';
+import type {LiteAndZqlSpec} from '../../../zero-cache/src/db/specs.ts';
+import type {NameMapper} from '../../../zero-schema/src/name-mapper.ts';
+import {clientToServer} from '../../../zero-schema/src/name-mapper.ts';
 import {createSQLiteCostModel} from '../../../zqlite/src/sqlite-cost-model.ts';
 import {makeGetPlanAST, pick} from '../helpers/planner.ts';
 import {bootstrap} from '../helpers/runner.ts';

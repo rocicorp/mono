@@ -1,5 +1,5 @@
 import {beforeEach, expect, test} from 'vitest';
-import {createSchema} from 'zero-schema/src/builder/schema-builder.ts';
+import {createSchema} from '../../zero-schema/src/builder/schema-builder.ts';
 import {
   boolean,
   enumeration,
@@ -7,9 +7,9 @@ import {
   number,
   string,
   table,
-} from 'zero-schema/src/builder/table-builder.ts';
-import {clientToServer} from 'zero-schema/src/name-mapper.ts';
-import type {ServerSchema} from 'zero-types/src/server-schema.ts';
+} from '../../zero-schema/src/builder/table-builder.ts';
+import {clientToServer} from '../../zero-schema/src/name-mapper.ts';
+import type {ServerSchema} from '../../zero-types/src/server-schema.ts';
 import {
   any,
   compile,

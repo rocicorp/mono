@@ -1,11 +1,11 @@
 import {PG_UNIQUE_VIOLATION} from '@drdgvhbh/postgres-error-codes';
 import type {LogContext} from '@rocicorp/logger';
 import postgres from 'postgres';
-import type {Enum} from 'shared/src/enum.ts';
-import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
-import {Queue} from 'shared/src/queue.ts';
-import {sleep} from 'shared/src/sleep.ts';
 import {beforeEach, describe, expect} from 'vitest';
+import type {Enum} from '../../../shared/src/enum.ts';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import {Queue} from '../../../shared/src/queue.ts';
+import {sleep} from '../../../shared/src/sleep.ts';
 import {expectTables, test, type PgTest} from '../test/db.ts';
 import type {PostgresDB} from '../types/pg.ts';
 import * as Mode from './mode-enum.ts';

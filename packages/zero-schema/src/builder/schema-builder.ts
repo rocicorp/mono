@@ -1,11 +1,15 @@
 /* oxlint-disable @typescript-eslint/no-explicit-any */
-import {h64} from 'shared/src/hash.ts';
-import {mapEntries} from 'shared/src/objects.ts';
+import {h64} from '../../../shared/src/hash.ts';
+import {mapEntries} from '../../../shared/src/objects.ts';
 import {
   normalizeClientSchema,
   type ClientSchema,
-} from 'zero-protocol/src/client-schema.ts';
-import type {Relationship, Schema, TableSchema} from 'zero-types/src/schema.ts';
+} from '../../../zero-protocol/src/client-schema.ts';
+import type {
+  Relationship,
+  Schema,
+  TableSchema,
+} from '../../../zero-types/src/schema.ts';
 import type {Relationships} from './relationship-builder.ts';
 import {type TableBuilderWithColumns} from './table-builder.ts';
 

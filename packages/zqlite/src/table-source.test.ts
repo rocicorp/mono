@@ -1,25 +1,28 @@
-import {assert} from 'shared/src/asserts.ts';
-import type {JSONValue} from 'shared/src/json.ts';
-import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
-import {must} from 'shared/src/must.ts';
 import {describe, expect, test} from 'vitest';
-import type {Row, Value} from 'zero-protocol/src/data.ts';
-import {Debug, type DebugDelegate} from 'zql/src/builder/debug-delegate.ts';
-import {Catch} from 'zql/src/ivm/catch.ts';
+import {testLogConfig} from '../../otel/src/test-log-config.ts';
+import {assert} from '../../shared/src/asserts.ts';
+import type {JSONValue} from '../../shared/src/json.ts';
+import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
+import {must} from '../../shared/src/must.ts';
+import type {Row, Value} from '../../zero-protocol/src/data.ts';
+import {
+  Debug,
+  type DebugDelegate,
+} from '../../zql/src/builder/debug-delegate.ts';
+import {Catch} from '../../zql/src/ivm/catch.ts';
 import {
   makeAddChange,
   makeEditChange,
   makeRemoveChange,
   type Change,
-} from 'zql/src/ivm/change.ts';
-import {makeComparator} from 'zql/src/ivm/data.ts';
+} from '../../zql/src/ivm/change.ts';
+import {makeComparator} from '../../zql/src/ivm/data.ts';
 import {
   makeSourceChangeAdd,
   makeSourceChangeEdit,
   makeSourceChangeRemove,
-} from 'zql/src/ivm/source.ts';
-import {consume} from 'zql/src/ivm/stream.ts';
-import {testLogConfig} from '../../otel/src/test-log-config.ts';
+} from '../../zql/src/ivm/source.ts';
+import {consume} from '../../zql/src/ivm/stream.ts';
 import {Database, Statement} from './db.ts';
 import {explainQueries} from './explain-queries.ts';
 import {format} from './internal/sql.ts';

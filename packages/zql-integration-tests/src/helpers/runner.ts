@@ -1,58 +1,64 @@
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import {unreachable} from 'shared/src/asserts.ts';
-import {bench, describe} from 'shared/src/bench.ts';
-import {wrapIterable} from 'shared/src/iterables.ts';
-import type {JSONValue, ReadonlyJSONValue} from 'shared/src/json.ts';
-import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
-import {must} from 'shared/src/must.ts';
-import type {Writable} from 'shared/src/writable.ts';
 import {afterAll, expect} from 'vitest';
-import {initialSync} from 'zero-cache/src/services/change-source/pg/initial-sync.ts';
-import {getConnectionURI, testDBs} from 'zero-cache/src/test/db.ts';
-import type {PostgresDB} from 'zero-cache/src/types/pg.ts';
-import type {AST} from 'zero-protocol/src/ast.ts';
-import type {Row} from 'zero-protocol/src/data.ts';
-import {clientToServer, type NameMapper} from 'zero-schema/src/name-mapper.ts';
-import type {TableSchema} from 'zero-schema/src/table-schema.ts';
-import {makeServerTransaction} from 'zero-server/src/custom.ts';
-import {executePostgresQuery} from 'zero-server/src/pg-query-executor.ts';
-import {getServerSchema} from 'zero-server/src/schema.ts';
-import {Transaction} from 'zero-server/src/test/util.ts';
-import type {Schema} from 'zero-types/src/schema.ts';
-import type {ServerSchema} from 'zero-types/src/server-schema.ts';
-import {ChangeType} from 'zql/src/ivm/change-type.ts';
-import type {Change} from 'zql/src/ivm/change.ts';
-import type {Node} from 'zql/src/ivm/data.ts';
-import {defaultFormat, type Format} from 'zql/src/ivm/default-format.ts';
-import {MemorySource} from 'zql/src/ivm/memory-source.ts';
-import {skipYields} from 'zql/src/ivm/operator.ts';
-import type {SourceSchema} from 'zql/src/ivm/schema.ts';
-import {SourceChangeIndex} from 'zql/src/ivm/source-change-index.ts';
+import {testLogConfig} from '../../../otel/src/test-log-config.ts';
+import {unreachable} from '../../../shared/src/asserts.ts';
+import {bench, describe} from '../../../shared/src/bench.ts';
+import {wrapIterable} from '../../../shared/src/iterables.ts';
+import type {JSONValue, ReadonlyJSONValue} from '../../../shared/src/json.ts';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import {must} from '../../../shared/src/must.ts';
+import type {Writable} from '../../../shared/src/writable.ts';
+import {compile, extractZqlResult} from '../../../z2s/src/compiler.ts';
+import {formatPgInternalConvert} from '../../../z2s/src/sql.ts';
+import {initialSync} from '../../../zero-cache/src/services/change-source/pg/initial-sync.ts';
+import {getConnectionURI, testDBs} from '../../../zero-cache/src/test/db.ts';
+import type {PostgresDB} from '../../../zero-cache/src/types/pg.ts';
+import type {AST} from '../../../zero-protocol/src/ast.ts';
+import type {Row} from '../../../zero-protocol/src/data.ts';
+import {
+  clientToServer,
+  type NameMapper,
+} from '../../../zero-schema/src/name-mapper.ts';
+import type {TableSchema} from '../../../zero-schema/src/table-schema.ts';
+import {makeServerTransaction} from '../../../zero-server/src/custom.ts';
+import {executePostgresQuery} from '../../../zero-server/src/pg-query-executor.ts';
+import {getServerSchema} from '../../../zero-server/src/schema.ts';
+import {Transaction} from '../../../zero-server/src/test/util.ts';
+import type {Schema} from '../../../zero-types/src/schema.ts';
+import type {ServerSchema} from '../../../zero-types/src/server-schema.ts';
+import {ChangeType} from '../../../zql/src/ivm/change-type.ts';
+import type {Change} from '../../../zql/src/ivm/change.ts';
+import type {Node} from '../../../zql/src/ivm/data.ts';
+import {
+  defaultFormat,
+  type Format,
+} from '../../../zql/src/ivm/default-format.ts';
+import {MemorySource} from '../../../zql/src/ivm/memory-source.ts';
+import {skipYields} from '../../../zql/src/ivm/operator.ts';
+import type {SourceSchema} from '../../../zql/src/ivm/schema.ts';
+import {SourceChangeIndex} from '../../../zql/src/ivm/source-change-index.ts';
 import {
   makeSourceChangeAdd,
   makeSourceChangeEdit,
   makeSourceChangeRemove,
   type Source,
   type SourceChange,
-} from 'zql/src/ivm/source.ts';
-import {consume} from 'zql/src/ivm/stream.ts';
-import type {DBTransaction} from 'zql/src/mutate/custom.ts';
-import {QueryDelegateBase} from 'zql/src/query/query-delegate-base.ts';
-import type {QueryDelegate} from 'zql/src/query/query-delegate.ts';
-import {newQueryImpl} from 'zql/src/query/query-impl.ts';
-import {asQueryInternals} from 'zql/src/query/query-internals.ts';
+} from '../../../zql/src/ivm/source.ts';
+import {consume} from '../../../zql/src/ivm/stream.ts';
+import type {DBTransaction} from '../../../zql/src/mutate/custom.ts';
+import {QueryDelegateBase} from '../../../zql/src/query/query-delegate-base.ts';
+import type {QueryDelegate} from '../../../zql/src/query/query-delegate.ts';
+import {newQueryImpl} from '../../../zql/src/query/query-impl.ts';
+import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
 import type {
   AnyQuery,
   HumanReadable,
   Query,
   RunOptions,
-} from 'zql/src/query/query.ts';
-import {QueryDelegateImpl as TestMemoryQueryDelegate} from 'zql/src/query/test/query-delegate.ts';
-import {testLogConfig} from '../../../otel/src/test-log-config.ts';
-import {compile, extractZqlResult} from '../../../z2s/src/compiler.ts';
-import {formatPgInternalConvert} from '../../../z2s/src/sql.ts';
+} from '../../../zql/src/query/query.ts';
+import {QueryDelegateImpl as TestMemoryQueryDelegate} from '../../../zql/src/query/test/query-delegate.ts';
 import {Database} from '../../../zqlite/src/db.ts';
 import {
   mapResultToClientNames,

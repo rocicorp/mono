@@ -1,22 +1,25 @@
 import {Lock} from '@rocicorp/lock';
 import type {LogContext} from '@rocicorp/logger';
-import {unreachable} from 'shared/src/asserts.ts';
-import type {MutationPatch} from 'zero-protocol/src/mutations-patch.ts';
-import type {
-  PokeEndBody,
-  PokePartBody,
-  PokeStartBody,
-} from 'zero-protocol/src/poke.ts';
-import type {QueriesPatchOp} from 'zero-protocol/src/queries-patch.ts';
-import type {RowPatchOp} from 'zero-protocol/src/row-patch.ts';
-import {serverToClient, type NameMapper} from 'zero-schema/src/name-mapper.ts';
-import type {Schema} from 'zero-types/src/schema.ts';
 import type {
   PatchOperationInternal,
   PokeInternal,
 } from '../../../replicache/src/impl.ts';
 import type {PatchOperation} from '../../../replicache/src/patch-operation.ts';
 import type {ClientID} from '../../../replicache/src/sync/ids.ts';
+import {unreachable} from '../../../shared/src/asserts.ts';
+import type {MutationPatch} from '../../../zero-protocol/src/mutations-patch.ts';
+import type {
+  PokeEndBody,
+  PokePartBody,
+  PokeStartBody,
+} from '../../../zero-protocol/src/poke.ts';
+import type {QueriesPatchOp} from '../../../zero-protocol/src/queries-patch.ts';
+import type {RowPatchOp} from '../../../zero-protocol/src/row-patch.ts';
+import {
+  serverToClient,
+  type NameMapper,
+} from '../../../zero-schema/src/name-mapper.ts';
+import type {Schema} from '../../../zero-types/src/schema.ts';
 import {
   toDesiredQueriesKey,
   toGotQueriesKey,

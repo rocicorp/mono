@@ -1,9 +1,9 @@
 import {LogContext} from '@rocicorp/logger';
+import {expect, test, vi} from 'vitest';
 import {
   createSilentLogContext,
   TestLogSink,
-} from 'shared/src/logging-test-utils.ts';
-import {expect, test, vi} from 'vitest';
+} from '../../shared/src/logging-test-utils.ts';
 import {Database} from './db.ts';
 
 test('slow queries are logged', () => {

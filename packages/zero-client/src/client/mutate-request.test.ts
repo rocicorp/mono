@@ -1,16 +1,16 @@
 import {afterEach, describe, expect, expectTypeOf, test, vi} from 'vitest';
-import {createSchema} from 'zero-schema/src/builder/schema-builder.ts';
-import {string, table} from 'zero-schema/src/builder/table-builder.ts';
+import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
+import {string, table} from '../../../zero-schema/src/builder/table-builder.ts';
 import type {
   DeleteID,
   InsertValue,
   SchemaCRUD,
   UpdateValue,
   UpsertValue,
-} from 'zql/src/mutate/crud.ts';
-import type {Transaction} from 'zql/src/mutate/custom.ts';
-import {defineMutatorsWithType} from 'zql/src/mutate/mutator-registry.ts';
-import {defineMutatorWithType} from 'zql/src/mutate/mutator.ts';
+} from '../../../zql/src/mutate/crud.ts';
+import type {Transaction} from '../../../zql/src/mutate/custom.ts';
+import {defineMutatorsWithType} from '../../../zql/src/mutate/mutator-registry.ts';
+import {defineMutatorWithType} from '../../../zql/src/mutate/mutator.ts';
 import type {MutatorResult} from './custom.ts';
 import {zeroForTest} from './test-utils.ts';
 

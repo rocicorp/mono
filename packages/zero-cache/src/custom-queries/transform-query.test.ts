@@ -1,4 +1,3 @@
-import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
 import {
   afterEach,
   assert,
@@ -9,18 +8,19 @@ import {
   test,
   vi,
 } from 'vitest';
-import type {TransformResponseMessage} from 'zero-protocol/src/custom-queries.ts';
-import {ErrorKind} from 'zero-protocol/src/error-kind.ts';
-import {ErrorOrigin} from 'zero-protocol/src/error-origin.ts';
-import {ErrorReason} from 'zero-protocol/src/error-reason.ts';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import type {TransformResponseMessage} from '../../../zero-protocol/src/custom-queries.ts';
+import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
+import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
+import {ErrorReason} from '../../../zero-protocol/src/error-reason.ts';
 import {
   ProtocolError,
   type TransformFailedBody,
-} from 'zero-protocol/src/error.ts';
+} from '../../../zero-protocol/src/error.ts';
 import type {
   QueryResponse,
   QueryResponseBody,
-} from 'zero-protocol/src/query-server.ts';
+} from '../../../zero-protocol/src/query-server.ts';
 import type {TransformedAndHashed} from '../auth/read-authorizer.ts';
 import {fetchFromAPIServer} from '../custom/fetch.ts';
 import type {

@@ -2,39 +2,39 @@ import {Lock} from '@rocicorp/lock';
 import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import type {Row} from 'postgres';
-import {assert, unreachable} from 'shared/src/asserts.ts';
-import {stringify} from 'shared/src/bigint-json.ts';
-import {CustomKeyMap} from 'shared/src/custom-key-map.ts';
-import {must} from 'shared/src/must.ts';
-import {randInt} from 'shared/src/rand.ts';
-import type {AST} from 'zero-protocol/src/ast.ts';
-import type {ChangeDesiredQueriesMessage} from 'zero-protocol/src/change-desired-queries.ts';
-import type {
-  InitConnectionBody,
-  InitConnectionMessage,
-} from 'zero-protocol/src/connect.ts';
-import type {ErroredQuery} from 'zero-protocol/src/custom-queries.ts';
-import type {DeleteClientsMessage} from 'zero-protocol/src/delete-clients.ts';
-import type {Downstream} from 'zero-protocol/src/down.ts';
-import {ErrorKind} from 'zero-protocol/src/error-kind.ts';
-import {ErrorOrigin} from 'zero-protocol/src/error-origin.ts';
-import {
-  isProtocolError,
-  ProtocolError,
-  type TransformFailedBody,
-} from 'zero-protocol/src/error.ts';
-import type {
-  InspectUpBody,
-  InspectUpMessage,
-} from 'zero-protocol/src/inspect-up.ts';
-import type {UpdateAuthMessage} from 'zero-protocol/src/update-auth.ts';
-import {ChangeType} from 'zql/src/ivm/change-type.ts';
-import {clampTTL, MAX_TTL_MS} from 'zql/src/query/ttl.ts';
 import {
   manualSpan,
   startAsyncSpan,
   startSpan,
 } from '../../../../otel/src/span.ts';
+import {assert, unreachable} from '../../../../shared/src/asserts.ts';
+import {stringify} from '../../../../shared/src/bigint-json.ts';
+import {CustomKeyMap} from '../../../../shared/src/custom-key-map.ts';
+import {must} from '../../../../shared/src/must.ts';
+import {randInt} from '../../../../shared/src/rand.ts';
+import type {AST} from '../../../../zero-protocol/src/ast.ts';
+import type {ChangeDesiredQueriesMessage} from '../../../../zero-protocol/src/change-desired-queries.ts';
+import type {
+  InitConnectionBody,
+  InitConnectionMessage,
+} from '../../../../zero-protocol/src/connect.ts';
+import type {ErroredQuery} from '../../../../zero-protocol/src/custom-queries.ts';
+import type {DeleteClientsMessage} from '../../../../zero-protocol/src/delete-clients.ts';
+import type {Downstream} from '../../../../zero-protocol/src/down.ts';
+import {ErrorKind} from '../../../../zero-protocol/src/error-kind.ts';
+import {ErrorOrigin} from '../../../../zero-protocol/src/error-origin.ts';
+import {
+  isProtocolError,
+  ProtocolError,
+  type TransformFailedBody,
+} from '../../../../zero-protocol/src/error.ts';
+import type {
+  InspectUpBody,
+  InspectUpMessage,
+} from '../../../../zero-protocol/src/inspect-up.ts';
+import type {UpdateAuthMessage} from '../../../../zero-protocol/src/update-auth.ts';
+import {ChangeType} from '../../../../zql/src/ivm/change-type.ts';
+import {clampTTL, MAX_TTL_MS} from '../../../../zql/src/query/ttl.ts';
 import {isAuthErrorBody, type Auth} from '../../auth/auth.ts';
 import {
   transformAndHashQuery,

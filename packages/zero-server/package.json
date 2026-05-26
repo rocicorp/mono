@@ -37,7 +37,6 @@
     "vitest": "^4.1.6",
     "z2s": "workspace:*",
     "zero-cache": "workspace:*",
-    "zero-client": "workspace:*",
     "zero-protocol": "workspace:*",
     "zero-schema": "workspace:*",
     "zero-types": "workspace:*",

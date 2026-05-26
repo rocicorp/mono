@@ -15,17 +15,16 @@
     "check-fmt": "oxfmt --check ."
   },
   "dependencies": {
-    "shared": "workspace:*"
-  },
-  "devDependencies": {
-    "@types/node": "^22.10.5",
-    "oxfmt": "^0.45.0",
-    "typescript": "~6.0.2",
-    "vitest": "^4.1.6",
+    "shared": "workspace:*",
     "zero-protocol": "workspace:*",
     "zero-schema": "workspace:*",
     "zero-types": "workspace:*",
     "zql": "workspace:*"
+  },
+  "devDependencies": {
+    "oxfmt": "^0.45.0",
+    "typescript": "~6.0.2",
+    "vitest": "^4.1.6"
   },
   "packageManager": "pnpm@11.3.0"
 }

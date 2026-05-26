@@ -1,5 +1,5 @@
-import {promiseVoid} from 'shared/src/resolved-promises.ts';
-import type {MaybePromise} from 'shared/src/types.ts';
+import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
+import type {MaybePromise} from '../../../shared/src/types.ts';
 import {
   CRUD_MUTATION_NAME,
   type CRUDMutationArg,
@@ -8,9 +8,9 @@ import {
   type InsertOp,
   type UpdateOp,
   type UpsertOp,
-} from 'zero-protocol/src/mutation.ts';
-import type {TableSchema} from 'zero-schema/src/table-schema.ts';
-import type {Schema} from 'zero-types/src/schema.ts';
+} from '../../../zero-protocol/src/mutation.ts';
+import type {TableSchema} from '../../../zero-schema/src/table-schema.ts';
+import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {
   CRUDExecutor,
   DeleteID,
@@ -18,7 +18,7 @@ import type {
   TableMutator,
   UpdateValue,
   UpsertValue,
-} from 'zql/src/mutate/crud.ts';
+} from '../../../zql/src/mutate/crud.ts';
 import * as crudImpl from './crud-impl.ts';
 import type {IVMSourceBranch} from './ivm-branch.ts';
 import type {MutatorDefs, WriteTransaction} from './replicache-types.ts';

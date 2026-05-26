@@ -10,10 +10,10 @@ import {
   test,
   vi,
 } from 'vitest';
-import type {MutationPatch} from 'zero-protocol/src/mutations-patch.ts';
-import {createSchema} from 'zero-schema/src/builder/schema-builder.ts';
-import {string, table} from 'zero-schema/src/builder/table-builder.ts';
-import {serverToClient} from 'zero-schema/src/name-mapper.ts';
+import type {MutationPatch} from '../../../zero-protocol/src/mutations-patch.ts';
+import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
+import {string, table} from '../../../zero-schema/src/builder/table-builder.ts';
+import {serverToClient} from '../../../zero-schema/src/name-mapper.ts';
 import {MutationTracker} from './mutation-tracker.ts';
 import {PokeHandler, mergePokes} from './zero-poke-handler.ts';
 

@@ -1,20 +1,20 @@
 import {describe, expect, expectTypeOf, test, vi} from 'vitest';
-import type {CustomMutatorDefs as CustomMutatorClientDefs} from 'zero-client/src/client/custom.ts';
-import {createSchema} from 'zero-schema/src/builder/schema-builder.ts';
+import type {CustomMutatorDefs as CustomMutatorClientDefs} from '../../zero-client/src/client/custom.ts';
+import {createSchema} from '../../zero-schema/src/builder/schema-builder.ts';
 import {
   boolean,
   number,
   string,
   table,
-} from 'zero-schema/src/builder/table-builder.ts';
-import type {ServerSchema} from 'zero-types/src/server-schema.ts';
+} from '../../zero-schema/src/builder/table-builder.ts';
+import type {ServerSchema} from '../../zero-types/src/server-schema.ts';
 import type {
   DeleteID,
   InsertValue,
   UpdateValue,
   UpsertValue,
-} from 'zql/src/mutate/crud.ts';
-import type {DBTransaction} from 'zql/src/mutate/custom.ts';
+} from '../../zql/src/mutate/crud.ts';
+import type {DBTransaction} from '../../zql/src/mutate/custom.ts';
 import type {CustomMutatorDefs} from './custom.ts';
 import {CRUDMutatorFactory, makeSchemaCRUD} from './custom.ts';
 import {schema} from './test/schema.ts';

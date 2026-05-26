@@ -1,12 +1,12 @@
-import {mapAST} from 'zero-protocol/src/ast.ts';
-import type {NameMapper} from 'zero-types/src/name-mapper.ts';
-import type {Schema} from 'zero-types/src/schema.ts';
-import {planQuery} from 'zql/src/planner/planner-builder.ts';
-import type {ConnectionCostModel} from 'zql/src/planner/planner-connection.ts';
-import type {PlanDebugger} from 'zql/src/planner/planner-debug.ts';
-import {completeOrdering} from 'zql/src/query/complete-ordering.ts';
-import {asQueryInternals} from 'zql/src/query/query-internals.ts';
-import type {AnyQuery} from 'zql/src/query/query.ts';
+import {mapAST} from '../../../zero-protocol/src/ast.ts';
+import type {NameMapper} from '../../../zero-types/src/name-mapper.ts';
+import type {Schema} from '../../../zero-types/src/schema.ts';
+import {planQuery} from '../../../zql/src/planner/planner-builder.ts';
+import type {ConnectionCostModel} from '../../../zql/src/planner/planner-connection.ts';
+import type {PlanDebugger} from '../../../zql/src/planner/planner-debug.ts';
+import {completeOrdering} from '../../../zql/src/query/complete-ordering.ts';
+import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
+import type {AnyQuery} from '../../../zql/src/query/query.ts';
 
 export function makeGetPlanAST(
   schema: Schema,

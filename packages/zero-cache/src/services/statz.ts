@@ -3,7 +3,7 @@ import os from 'os';
 import type {LogContext} from '@rocicorp/logger';
 import auth from 'basic-auth';
 import type {FastifyReply, FastifyRequest} from 'fastify';
-import {BigIntJSON} from 'shared/src/bigint-json.ts';
+import {BigIntJSON} from '../../../shared/src/bigint-json.ts';
 import {Database} from '../../../zqlite/src/db.ts';
 import type {NormalizedZeroConfig as ZeroConfig} from '../config/normalize.ts';
 import {isAdminPasswordValid} from '../config/zero-config.ts';

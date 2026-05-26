@@ -5,8 +5,8 @@ import {
   type JSONObject,
   type JSONValue,
   stringify,
-} from 'shared/src/bigint-json.ts';
-import {stringCompare} from 'shared/src/string-compare.ts';
+} from '../../../../../../shared/src/bigint-json.ts';
+import {stringCompare} from '../../../../../../shared/src/string-compare.ts';
 import {normalizedKeyOrder, type RowKey} from '../../../../types/row-key.ts';
 import {cvrSchema, type ShardID} from '../../../../types/shards.ts';
 import {

@@ -1,7 +1,7 @@
-import {unreachable} from 'shared/src/asserts.ts';
 import {describe, expect, test} from 'vitest';
-import {pgToZqlTypeMap} from 'zero-cache/src/types/pg-data-type.ts';
-import {createSchema} from 'zero-schema/src/builder/schema-builder.ts';
+import {unreachable} from '../../shared/src/asserts.ts';
+import {pgToZqlTypeMap} from '../../zero-cache/src/types/pg-data-type.ts';
+import {createSchema} from '../../zero-schema/src/builder/schema-builder.ts';
 import {
   boolean,
   json,
@@ -9,12 +9,15 @@ import {
   string,
   table,
   type ColumnBuilder,
-} from 'zero-schema/src/builder/table-builder.ts';
-import type {SchemaValue, ValueType} from 'zero-schema/src/table-schema.ts';
+} from '../../zero-schema/src/builder/table-builder.ts';
+import type {
+  SchemaValue,
+  ValueType,
+} from '../../zero-schema/src/table-schema.ts';
 import type {
   ServerColumnSchema,
   ServerSchema,
-} from 'zero-types/src/server-schema.ts';
+} from '../../zero-types/src/server-schema.ts';
 import {
   checkSchemasAreCompatible,
   type SchemaIncompatibilityError,

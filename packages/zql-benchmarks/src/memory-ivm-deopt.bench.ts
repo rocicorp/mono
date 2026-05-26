@@ -9,21 +9,21 @@
  *   pnpm --filter zql-benchmarks run bench:deopt memory-ivm-deopt
  */
 
-import {bench, describe} from 'shared/src/bench.ts';
-import type {Row} from 'zero-protocol/src/data.ts';
-import type {BuilderDelegate} from 'zql/src/builder/builder.ts';
-import {Catch} from 'zql/src/ivm/catch.ts';
-import {compareValues} from 'zql/src/ivm/data.ts';
-import {buildFilterPipeline} from 'zql/src/ivm/filter-operators.ts';
-import {Filter} from 'zql/src/ivm/filter.ts';
-import {Join} from 'zql/src/ivm/join.ts';
-import {MemorySource} from 'zql/src/ivm/memory-source.ts';
+import {bench, describe} from '../../shared/src/bench.ts';
+import type {Row} from '../../zero-protocol/src/data.ts';
+import type {BuilderDelegate} from '../../zql/src/builder/builder.ts';
+import {Catch} from '../../zql/src/ivm/catch.ts';
+import {compareValues} from '../../zql/src/ivm/data.ts';
+import {buildFilterPipeline} from '../../zql/src/ivm/filter-operators.ts';
+import {Filter} from '../../zql/src/ivm/filter.ts';
+import {Join} from '../../zql/src/ivm/join.ts';
+import {MemorySource} from '../../zql/src/ivm/memory-source.ts';
 
 import {
   makeSourceChangeAdd,
   makeSourceChangeEdit,
   makeSourceChangeRemove,
-} from 'zql/src/ivm/source.ts';
+} from '../../zql/src/ivm/source.ts';
 const noopDelegate = {addEdge() {}} as unknown as BuilderDelegate;
 
 // ---- Schema definitions ----

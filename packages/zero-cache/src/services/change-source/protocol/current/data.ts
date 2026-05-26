@@ -4,8 +4,11 @@
  * stored in the Change DB for catchup of old subscribers.
  */
 
-import {jsonValueSchema, type JSONObject} from 'shared/src/bigint-json.ts';
-import {must} from 'shared/src/must.ts';
+import {
+  jsonValueSchema,
+  type JSONObject,
+} from '../../../../../../shared/src/bigint-json.ts';
+import {must} from '../../../../../../shared/src/must.ts';
 import * as v from '../../../../../../shared/src/valita.ts';
 import {columnSpec, indexSpec, tableSpec} from '../../../../db/specs.ts';
 import type {Satisfies} from '../../../../types/satisfies.ts';

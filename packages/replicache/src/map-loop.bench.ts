@@ -1,4 +1,4 @@
-import {bench, describe, use} from 'shared/src/bench.ts';
+import {bench, describe, use} from '../../shared/src/bench.ts';
 
 const COUNT = 1_000;
 

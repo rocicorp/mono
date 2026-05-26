@@ -1,6 +1,6 @@
-import {assert} from 'shared/src/asserts.ts';
-import type {Enum} from 'shared/src/enum.ts';
 import {describe, expect, test} from 'vitest';
+import {assert} from '../../../shared/src/asserts.ts';
+import type {Enum} from '../../../shared/src/enum.ts';
 import {Chunk, type Refs, toRefs} from '../dag/chunk.ts';
 import {TestStore} from '../dag/test-store.ts';
 import * as FormatVersion from '../format-version-enum.ts';

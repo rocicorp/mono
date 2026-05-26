@@ -1,5 +1,5 @@
-import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
 import {describe, expect, test} from 'vitest';
+import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import type {Auth} from '../../auth/auth.ts';
 import type {ConnectParams} from '../../workers/connect-params.ts';
 import {

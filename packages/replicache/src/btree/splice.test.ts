@@ -1,5 +1,5 @@
-import type {ReadonlyJSONValue} from 'shared/src/json.ts';
 import {expect, test} from 'vitest';
+import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {computeSplices, type Splice} from './splice.ts';
 
 type Entry<V> = readonly [string, V];

@@ -2,13 +2,13 @@ import {mkdtemp, readdir, rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {LogContext} from '@rocicorp/logger';
-import type {ZeroEvent} from '@rocicorp/zero-events';
 import {nanoid} from 'nanoid/non-secure';
+import {beforeEach, describe, expect} from 'vitest';
 import {
   createSilentLogContext,
   TestLogSink,
-} from 'shared/src/logging-test-utils.ts';
-import {beforeEach, describe, expect} from 'vitest';
+} from '../../../../../shared/src/logging-test-utils.ts';
+import type {ZeroEvent} from '../../../../../zero-events/src/index.ts';
 import {Database} from '../../../../../zqlite/src/db.ts';
 import {listIndexes, listTables} from '../../../db/lite-tables.ts';
 import {mapPostgresToLiteIndex} from '../../../db/pg-to-lite.ts';

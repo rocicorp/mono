@@ -1,3 +1,4 @@
+import type * as v from '../../../shared/src/valita.ts';
 import type {
   attemptStartEventJSONSchema,
   bestPlanSelectedEventJSONSchema,
@@ -5,13 +6,12 @@ import type {
   nodeConstraintEventJSONSchema,
   PlanDebugEventJSON,
   planFailedEventJSONSchema,
-} from 'zero-protocol/src/analyze-query-result.ts';
+} from '../../../zero-protocol/src/analyze-query-result.ts';
 import type {
   Condition,
   Ordering,
   ValuePosition,
-} from 'zero-protocol/src/ast.ts';
-import type * as v from '../../../shared/src/valita.ts';
+} from '../../../zero-protocol/src/ast.ts';
 import type {PlannerConstraint} from './planner-constraint.ts';
 import type {PlanState} from './planner-graph.ts';
 import type {CostEstimate, JoinType} from './planner-node.ts';

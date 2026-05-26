@@ -1,13 +1,13 @@
 import {describe, expect, test, vi} from 'vitest';
 
-import type {ReadonlyJSONValue} from 'shared/src/json.ts';
-import {ApplicationError} from 'zero-protocol/src/application-error.ts';
-import type {AST} from 'zero-protocol/src/ast.ts';
-import {ErrorReason} from 'zero-protocol/src/error-reason.ts';
-import {QueryParseError} from 'zql/src/query/error.ts';
-import {queryInternalsTag} from 'zql/src/query/query-internals.ts';
-import type {AnyQuery} from 'zql/src/query/query.ts';
+import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
+import {ApplicationError} from '../../../zero-protocol/src/application-error.ts';
+import type {AST} from '../../../zero-protocol/src/ast.ts';
+import {ErrorReason} from '../../../zero-protocol/src/error-reason.ts';
 import * as nameMapperModule from '../../../zero-schema/src/name-mapper.ts';
+import {QueryParseError} from '../../../zql/src/query/error.ts';
+import {queryInternalsTag} from '../../../zql/src/query/query-internals.ts';
+import type {AnyQuery} from '../../../zql/src/query/query.ts';
 import {schema} from '../test/schema.ts';
 import {handleQueryRequest} from './process-queries.ts';
 

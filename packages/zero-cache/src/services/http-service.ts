@@ -1,6 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 import Fastify, {type FastifyInstance} from 'fastify';
-import {promiseVoid} from 'shared/src/resolved-promises.ts';
+import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
 import {HeartbeatMonitor} from './life-cycle.ts';
 import {RunningState} from './running-state.ts';
 import type {Service} from './service.ts';

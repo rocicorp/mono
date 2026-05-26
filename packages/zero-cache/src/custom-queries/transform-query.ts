@@ -1,26 +1,26 @@
 import {trace} from '@opentelemetry/api';
 import type {LogContext} from '@rocicorp/logger';
-import {TimedCache} from 'shared/src/cache.ts';
-import {getErrorMessage} from 'shared/src/error.ts';
-import {sortedEntries} from 'shared/src/sorted-entries.ts';
+import {startAsyncSpan} from '../../../otel/src/span.ts';
+import {TimedCache} from '../../../shared/src/cache.ts';
+import {getErrorMessage} from '../../../shared/src/error.ts';
+import {sortedEntries} from '../../../shared/src/sorted-entries.ts';
 import {
   type ErroredQuery,
   type TransformRequestBody,
   type TransformRequestMessage,
-} from 'zero-protocol/src/custom-queries.ts';
-import {ErrorKind} from 'zero-protocol/src/error-kind.ts';
-import {ErrorOrigin} from 'zero-protocol/src/error-origin.ts';
-import {ErrorReason} from 'zero-protocol/src/error-reason.ts';
+} from '../../../zero-protocol/src/custom-queries.ts';
+import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
+import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
+import {ErrorReason} from '../../../zero-protocol/src/error-reason.ts';
 import {
   isProtocolError,
   type TransformFailedBody,
-} from 'zero-protocol/src/error.ts';
-import {hashOfAST} from 'zero-protocol/src/query-hash.ts';
+} from '../../../zero-protocol/src/error.ts';
+import {hashOfAST} from '../../../zero-protocol/src/query-hash.ts';
 import {
   queryResponseSchema,
   type QueryResponseBody,
-} from 'zero-protocol/src/query-server.ts';
-import {startAsyncSpan} from '../../../otel/src/span.ts';
+} from '../../../zero-protocol/src/query-server.ts';
 import type {TransformedAndHashed} from '../auth/read-authorizer.ts';
 import {fetchFromAPIServer} from '../custom/fetch.ts';
 import type {

@@ -1,5 +1,5 @@
-import {getErrorDetails, getErrorMessage} from 'shared/src/error.ts';
-import type {ReadonlyJSONValue} from 'shared/src/json.ts';
+import {getErrorDetails, getErrorMessage} from '../../shared/src/error.ts';
+import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
 
 /**
  * Options accepted by {@link ApplicationError}.

@@ -1,4 +1,3 @@
-import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
 import {
   type MockedFunction,
   beforeEach,
@@ -7,6 +6,7 @@ import {
   test,
   vi,
 } from 'vitest';
+import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.ts';
 import type {
   ChangeStreamMessage,
   DownstreamStatusMessage,

@@ -1,11 +1,11 @@
-import {assertArray, unreachable} from 'shared/src/asserts.ts';
-import type {ReadonlyJSONValue} from 'shared/src/json.ts';
-import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
-import {stringCompare} from 'shared/src/string-compare.ts';
 import {expect, test} from 'vitest';
-import type {AST} from 'zero-protocol/src/ast.ts';
-import type {ErroredQuery} from 'zero-protocol/src/custom-queries.ts';
 import {testLogConfig} from '../../../otel/src/test-log-config.ts';
+import {assertArray, unreachable} from '../../../shared/src/asserts.ts';
+import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import {stringCompare} from '../../../shared/src/string-compare.ts';
+import type {AST} from '../../../zero-protocol/src/ast.ts';
+import type {ErroredQuery} from '../../../zero-protocol/src/custom-queries.ts';
 import {buildPipeline} from '../builder/builder.ts';
 import {TestBuilderDelegate} from '../builder/test-builder-delegate.ts';
 import type {ResultType} from '../query/typed-view.ts';

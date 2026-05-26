@@ -1,5 +1,5 @@
-import {h64} from 'shared/src/hash.ts';
 import {expect, test} from 'vitest';
+import {h64} from '../../shared/src/hash.ts';
 import {downstreamSchema} from './down.ts';
 import {PROTOCOL_VERSION} from './protocol-version.ts';
 import {upstreamSchema} from './up.ts';

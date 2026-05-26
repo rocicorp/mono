@@ -1,4 +1,4 @@
-import {randomUint64} from 'shared/src/random-uint64.ts';
+import {randomUint64} from '../../../shared/src/random-uint64.ts';
 import {dropIDBStoreWithMemFallback} from '../kv/idb-store-with-mem-fallback.ts';
 
 const IDB_DATABASES_VERSION = 0;

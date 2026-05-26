@@ -1,10 +1,14 @@
 import {expect, test} from 'vitest';
-import {createSchema} from 'zero-schema/src/builder/schema-builder.ts';
-import {json, string, table} from 'zero-schema/src/builder/table-builder.ts';
-import {refCountSymbol} from 'zql/src/ivm/view-apply-change.ts';
-import {defineMutatorsWithType} from 'zql/src/mutate/mutator-registry.ts';
-import {defineMutatorWithType} from 'zql/src/mutate/mutator.ts';
-import {createBuilder} from 'zql/src/query/create-builder.ts';
+import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
+import {
+  json,
+  string,
+  table,
+} from '../../../zero-schema/src/builder/table-builder.ts';
+import {refCountSymbol} from '../../../zql/src/ivm/view-apply-change.ts';
+import {defineMutatorsWithType} from '../../../zql/src/mutate/mutator-registry.ts';
+import {defineMutatorWithType} from '../../../zql/src/mutate/mutator.ts';
+import {createBuilder} from '../../../zql/src/query/create-builder.ts';
 import {zeroForTest} from './test-utils.ts';
 
 test('we can create rows with json columns and query those rows', async () => {
