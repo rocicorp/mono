@@ -136,85 +136,12 @@ importers:
       '@schickling/fps-meter':
         specifier: ^0.1.2
         version: 0.1.2(react@19.2.6)
-      '@tanstack/react-virtual':
-        specifier: ^3.13.19
-        version: 3.13.24(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
-      classnames:
-        specifier: ^2.5.1
-        version: 2.5.1
-      emoji-picker-element:
-        specifier: ^1.22.8
-        version: 1.29.1
-      emoji-picker-element-data:
-        specifier: ^1.6.1
-        version: 1.8.0
-      fastify:
-        specifier: ^5.0.0
-        version: 5.8.5
-      jose:
-        specifier: ^5.9.3
-        version: 5.10.0
-      js-cookie:
-        specifier: ^3.0.5
-        version: 3.0.7
-      nanoid:
-        specifier: ^5.1.2
-        version: 5.1.11
-      pg:
-        specifier: ^8.16.3
-        version: 8.20.0
-      postgres:
-        specifier: 3.4.7
-        version: 3.4.7
-      react:
-        specifier: ^19.2.6
-        version: 19.2.6
-      react-dom:
-        specifier: ^19.2.6
-        version: 19.2.6(react@19.2.6)
-      react-dropzone:
-        specifier: ^14.3.8
-        version: 14.4.1(react@19.2.6)
-      react-markdown:
-        specifier: ^9.0.1
-        version: 9.1.0(@types/react@19.2.15)(react@19.2.6)
-      react-textarea-autosize:
-        specifier: ^8.5.3
-        version: 8.5.9(@types/react@19.2.15)(react@19.2.6)
-      react-toastify:
-        specifier: ^10.0.6
-        version: 10.0.6(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
-      rehype-raw:
-        specifier: ^7.0.0
-        version: 7.0.0
-      rehype-sanitize:
-        specifier: ^6.0.0
-        version: 6.0.0
-      remark-gfm:
-        specifier: ^4.0.0
-        version: 4.0.1
-      unified:
-        specifier: ^11.0.5
-        version: 11.0.5
-      unist-util-visit:
-        specifier: ^5.1.0
-        version: 5.1.0
-      use-debounce:
-        specifier: ^10.0.4
-        version: 10.1.1(react@19.2.6)
-      usehooks-ts:
-        specifier: ^3.1.0
-        version: 3.1.1(react@19.2.6)
-      wouter:
-        specifier: ^3.7.1
-        version: 3.9.0(react@19.2.6)
-      zod:
-        specifier: ^4.1.11
-        version: 4.4.3
-    devDependencies:
       '@tailwindcss/forms':
         specifier: ^0.5.0
         version: 0.5.11(tailwindcss@3.4.19(tsx@4.22.0)(yaml@2.9.0))
+      '@tanstack/react-virtual':
+        specifier: ^3.13.19
+        version: 3.13.24(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
       '@types/hast':
         specifier: ^3.0.4
         version: 3.0.4
@@ -242,21 +169,75 @@ importers:
       '@vitest/runner':
         specifier: ^4.1.6
         version: 4.1.6
+      classnames:
+        specifier: ^2.5.1
+        version: 2.5.1
       drizzle-kit:
         specifier: ^0.31.10
         version: 0.31.10
       drizzle-orm:
         specifier: ^0.45.2
         version: 0.45.2(@electric-sql/pglite@0.4.1)(@op-engineering/op-sqlite@15.2.14(react-native@0.85.3(@babel/core@7.29.0)(@types/react@19.2.15)(react@19.2.6))(react@19.2.6))(@opentelemetry/api@1.9.1)(@prisma/client@7.8.0(prisma@7.8.0(@types/react-dom@19.2.3(@types/react@19.2.15))(@types/react@19.2.15)(magicast@0.5.3)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(typescript@6.0.3))(typescript@6.0.3))(@types/pg@8.20.0)(expo-sqlite@55.0.16(expo@55.0.24)(react-native@0.85.3(@babel/core@7.29.0)(@types/react@19.2.15)(react@19.2.6))(react@19.2.6))(kysely@0.28.17)(mysql2@3.15.3)(pg@8.20.0)(postgres@3.4.7)(prisma@7.8.0(@types/react-dom@19.2.3(@types/react@19.2.15))(@types/react@19.2.15)(magicast@0.5.3)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(typescript@6.0.3))
+      emoji-picker-element:
+        specifier: ^1.22.8
+        version: 1.29.1
+      emoji-picker-element-data:
+        specifier: ^1.6.1
+        version: 1.8.0
+      fastify:
+        specifier: ^5.0.0
+        version: 5.8.5
+      jose:
+        specifier: ^5.9.3
+        version: 5.10.0
+      js-cookie:
+        specifier: ^3.0.5
+        version: 3.0.7
+      nanoid:
+        specifier: ^5.1.2
+        version: 5.1.11
       oxfmt:
         specifier: ^0.45.0
         version: 0.45.0
+      pg:
+        specifier: ^8.16.3
+        version: 8.20.0
       postcss-preset-env:
         specifier: ^7.4.3
         version: 7.8.3(postcss@8.5.15)
+      postgres:
+        specifier: 3.4.7
+        version: 3.4.7
+      react:
+        specifier: ^19.2.6
+        version: 19.2.6
+      react-dom:
+        specifier: ^19.2.6
+        version: 19.2.6(react@19.2.6)
+      react-dropzone:
+        specifier: ^14.3.8
+        version: 14.4.1(react@19.2.6)
+      react-markdown:
+        specifier: ^9.0.1
+        version: 9.1.0(@types/react@19.2.15)(react@19.2.6)
+      react-textarea-autosize:
+        specifier: ^8.5.3
+        version: 8.5.9(@types/react@19.2.15)(react@19.2.6)
+      react-toastify:
+        specifier: ^10.0.6
+        version: 10.0.6(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
+      rehype-raw:
+        specifier: ^7.0.0
+        version: 7.0.0
+      rehype-sanitize:
+        specifier: ^6.0.0
+        version: 6.0.0
       rehype-video:
         specifier: ^2.3.0
         version: 2.3.1
+      remark-gfm:
+        specifier: ^4.0.0
+        version: 4.0.1
       shared:
         specifier: workspace:*
         version: link:../../packages/shared
@@ -266,6 +247,18 @@ importers:
       typescript:
         specifier: ~6.0.2
         version: 6.0.3
+      unified:
+        specifier: ^11.0.5
+        version: 11.0.5
+      unist-util-visit:
+        specifier: ^5.1.0
+        version: 5.1.0
+      use-debounce:
+        specifier: ^10.0.4
+        version: 10.1.1(react@19.2.6)
+      usehooks-ts:
+        specifier: ^3.1.0
+        version: 3.1.1(react@19.2.6)
       vite:
         specifier: ^8.0.13
         version: 8.0.13(@types/node@22.19.19)(esbuild@0.27.7)(jiti@1.21.7)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0)
@@ -278,24 +271,15 @@ importers:
       vitest:
         specifier: ^4.1.6
         version: 4.1.6(@opentelemetry/api@1.9.1)(@types/node@22.19.19)(@vitest/browser-playwright@4.1.6)(@vitest/coverage-v8@4.1.6)(vite@8.0.13(@types/node@22.19.19)(esbuild@0.27.7)(jiti@1.21.7)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))
+      wouter:
+        specifier: ^3.7.1
+        version: 3.9.0(react@19.2.6)
       zero-cache:
         specifier: workspace:*
         version: link:../../packages/zero-cache
-      zero-permissions:
-        specifier: workspace:*
-        version: link:../../packages/zero-permissions
-      zero-protocol:
-        specifier: workspace:*
-        version: link:../../packages/zero-protocol
-      zero-schema:
-        specifier: workspace:*
-        version: link:../../packages/zero-schema
-      zero-types:
-        specifier: workspace:*
-        version: link:../../packages/zero-types
-      zql:
-        specifier: workspace:*
-        version: link:../../packages/zql
+      zod:
+        specifier: ^4.1.11
+        version: 4.4.3
 
   apps/zql-viz:
     dependencies:
@@ -1017,18 +1001,33 @@ importers:
       zero-client:
         specifier: workspace:*
         version: link:../zero-client
+      zero-permissions:
+        specifier: workspace:*
+        version: link:../zero-permissions
       zero-pg:
         specifier: workspace:*
         version: link:../zero-pg
+      zero-protocol:
+        specifier: workspace:*
+        version: link:../zero-protocol
       zero-react:
         specifier: workspace:*
         version: link:../zero-react
+      zero-schema:
+        specifier: workspace:*
+        version: link:../zero-schema
       zero-server:
         specifier: workspace:*
         version: link:../zero-server
       zero-solid:
         specifier: workspace:*
         version: link:../zero-solid
+      zero-types:
+        specifier: workspace:*
+        version: link:../zero-types
+      zql:
+        specifier: workspace:*
+        version: link:../zql
       zqlite:
         specifier: workspace:*
         version: link:../zqlite

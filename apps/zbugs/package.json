@@ -97,12 +97,7 @@
     "vitest": "^4.1.6",
     "wouter": "^3.7.1",
     "zero-cache": "workspace:*",
-    "zero-permissions": "workspace:*",
-    "zero-protocol": "workspace:*",
-    "zero-schema": "workspace:*",
-    "zero-types": "workspace:*",
-    "zod": "^4.1.11",
-    "zql": "workspace:*"
+    "zod": "^4.1.11"
   },
   "packageManager": "pnpm@11.3.0"
 }
