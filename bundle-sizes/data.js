@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779551847325,
+  "lastUpdate": 1779791117206,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -56401,6 +56401,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/rocicorp/mono/commit/811a1d9d0fd74b56b4c3010bf045ec3af557468a"
         },
         "date": 1779551834087,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 317161,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 57049,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 117187,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 33481,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "198982749+Copilot@users.noreply.github.com",
+            "name": "Copilot",
+            "username": "Copilot"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "699728e841be8d892b8d268d19ed8a6e768f9acf",
+          "message": "chore(deps): bump pnpm pins to 11.3.0 across all package manifests and workflow YAMLs (#6061)\n\nThis updates the repository’s pnpm version pin to 11.3.0 and aligns CI\nwith that version so local and workflow package manager behavior stays\nconsistent.\n\n- **Workspace package manager pins**\n- Updated `packageManager` to `pnpm@11.3.0` in **all** `package.json`\nfiles in the repository.\n\n- **Workflow alignment**\n- Updated all workflow `.yml` files that use `pnpm/action-setup` to set:\n    - `with.version: 11.3.0`\n\n```json\n{\n  \"packageManager\": \"pnpm@11.3.0\"\n}\n```\n\n```yaml\n- uses: pnpm/action-setup@...\n  with:\n    version: 11.3.0\n```\n\n&gt; [!WARNING]\n&gt;\n&gt;\n\n<!-- START COPILOT ORIGINAL PROMPT -->\n\n\n\n<details>\n\n<summary>Original prompt</summary>\n\n> update to pnpm 11.3\n> \n> make sure to update all package.json and all yml (CI) files \n> \n> The user has attached the following file paths as relevant context:\n>  - AGENTS.md\n>  - CLAUDE.md\n\n\n</details>\n\n\n\n<!-- START COPILOT CODING AGENT SUFFIX -->\n\nCreated from [VS\nCode](https://code.visualstudio.com/docs/copilot/copilot-coding-agent).\n\n---------\n\nCo-authored-by: copilot-swe-agent[bot] <198982749+Copilot@users.noreply.github.com>\nCo-authored-by: arv <45845+arv@users.noreply.github.com>",
+          "timestamp": "2026-05-26T10:12:42Z",
+          "tree_id": "6685fb1e2b206cbe2771dbb157969e89fe012787",
+          "url": "https://github.com/rocicorp/mono/commit/699728e841be8d892b8d268d19ed8a6e768f9acf"
+        },
+        "date": 1779791104308,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
