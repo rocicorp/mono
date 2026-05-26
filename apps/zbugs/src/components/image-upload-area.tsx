@@ -190,7 +190,9 @@ export function ImageUploadArea({
   );
 
   const {getRootProps, getInputProps, isDragActive, open} = useDropzone({
-    accept: Object.fromEntries(ALLOWED_CONTENT_TYPES.map(t => [t, []])),
+    accept: Object.fromEntries(
+      ALLOWED_CONTENT_TYPES.map(t => [t, [] as string[]]),
+    ),
     multiple: true,
     maxSize: 10 * 1024 * 1024,
     noClick: true,
