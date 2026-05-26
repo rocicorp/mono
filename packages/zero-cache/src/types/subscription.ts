@@ -1,5 +1,6 @@
 import {resolver, type Resolver} from '@rocicorp/resolver';
 import {assert} from '../../../shared/src/asserts.ts';
+import {HeadIndexedQueue} from '../../../shared/src/head-indexed-queue.ts';
 import type {Sink, Source} from './streams.ts';
 
 /**
@@ -74,10 +75,8 @@ export class Subscription<T, M = T> implements Source<T>, Sink<M> {
     return new Subscription(options, publish);
   }
 
-  // Consumers waiting to consume messages (i.e. an async iteration awaiting the next message).
-  readonly #consumers: Resolver<Entry<M> | null>[] = [];
-  // Messages waiting to be dequeued.
-  readonly #messages: (Entry<M> | 'terminus')[] = [];
+  readonly #consumers = new HeadIndexedQueue<Resolver<Entry<M> | null>>();
+  readonly #messages = new HeadIndexedQueue<Entry<M> | Terminus>();
   // Messages dequeued but not yet consumed.
   readonly #consuming = new Set<Entry<M>>();
   readonly #pipelineEnabled: boolean;
@@ -156,16 +155,15 @@ export class Subscription<T, M = T> implements Source<T>, Sink<M> {
       consumer.resolve(entry);
     } else if (
       this.#coalesce &&
-      this.#messages.length &&
-      this.#messages.at(-1) !== 'terminus'
+      this.#messages.size > 0 &&
+      this.#messages.last() !== TERMINUS
     ) {
-      // oxlint-disable-next-line typescript/no-non-null-assertion
-      const prev = this.#messages.at(-1)!;
-      assert(prev !== 'terminus', 'prev should not be terminus after check');
-      this.#messages[this.#messages.length - 1] = {
+      const prev = this.#messages.last();
+      assert(prev !== undefined && prev !== TERMINUS, 'expected an entry');
+      this.#messages.replaceLast({
         value: this.#coalesce(entry, prev),
         resolve,
-      };
+      });
     } else {
       this.#messages.push(entry);
     }
@@ -179,7 +177,7 @@ export class Subscription<T, M = T> implements Source<T>, Sink<M> {
 
   /** The number of messages waiting to be dequeued. */
   get queued(): number {
-    return this.#messages.length;
+    return this.#messages.size;
   }
 
   /** The number of messages dequeued but not yet "consumed" */
@@ -202,10 +200,10 @@ export class Subscription<T, M = T> implements Source<T>, Sink<M> {
   end() {
     if (this.#sentinel) {
       // already terminated
-    } else if (this.#messages.length === 0) {
+    } else if (this.#messages.size === 0) {
       this.cancel();
     } else {
-      this.#messages.push('terminus');
+      this.#messages.push(TERMINUS);
     }
   }
 
@@ -230,20 +228,23 @@ export class Subscription<T, M = T> implements Source<T>, Sink<M> {
   #terminate(sentinel: 'canceled' | Error) {
     if (!this.#sentinel) {
       this.#sentinel = sentinel;
+      const pendingMessages = this.#messages.toArray().filter(isEntry);
       this.#cleanup(
-        [...this.#consuming, ...this.#messages.filter(m => m !== 'terminus')],
+        [...this.#consuming, ...pendingMessages],
         sentinel instanceof Error ? sentinel : undefined,
       );
-      this.#messages.splice(0);
+      this.#messages.clear();
 
       for (
         let consumer = this.#consumers.shift();
-        consumer;
+        consumer !== undefined;
         consumer = this.#consumers.shift()
       ) {
-        sentinel === 'canceled'
-          ? consumer.resolve(null)
-          : consumer.reject(sentinel);
+        if (sentinel === 'canceled') {
+          consumer.resolve(null);
+        } else {
+          consumer.reject(sentinel);
+        }
       }
     }
   }
@@ -258,7 +259,7 @@ export class Subscription<T, M = T> implements Source<T>, Sink<M> {
     return {
       next: async () => {
         const entry = this.#messages.shift();
-        if (entry === 'terminus') {
+        if (entry === TERMINUS) {
           this.cancel();
           return {value: undefined, done: true};
         }
@@ -393,3 +394,10 @@ type Entry<M> = {
   readonly value: M;
   readonly resolve: (r: Result) => void;
 };
+
+const TERMINUS = Symbol('terminus');
+type Terminus = typeof TERMINUS;
+
+function isEntry<M>(entry: Entry<M> | Terminus): entry is Entry<M> {
+  return entry !== TERMINUS;
+}
