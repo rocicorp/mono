@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779830401560,
+  "lastUpdate": 1779984855655,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -56489,6 +56489,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/rocicorp/mono/commit/91257a51eeba8fafeebfbd9f2e199d6a0f6ec1f5"
         },
         "date": 1779830388291,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 317161,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 57049,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 117187,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 33481,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "c@cadams.io",
+            "name": "Chase Adams",
+            "username": "0xcadams"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2ce4ee3e6d5178d15bd1ae8d0e12abbee68a3b7d",
+          "message": "chore: rm unused replicache ci workflow (#6081)\n\nIt gets pulled into our zizmor CI static analysis",
+          "timestamp": "2026-05-28T16:02:13Z",
+          "tree_id": "bfe3ae6b9416c59f0a6509ead1a1df41d26b22c0",
+          "url": "https://github.com/rocicorp/mono/commit/2ce4ee3e6d5178d15bd1ae8d0e12abbee68a3b7d"
+        },
+        "date": 1779984842424,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
