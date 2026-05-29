@@ -115,18 +115,21 @@ function createPredicateImpl(
       return lhs => lhs === rhs;
     case '!=':
       return lhs => lhs !== rhs;
-    // Use compareValues (UTF-8 / code-point order for strings) so range
-    // comparisons match ORDER BY and SQLite. Raw JS `<`/`>` compare strings by
-    // UTF-16 code unit, which disagrees for non-BMP characters (e.g. emoji),
-    // wrongly including/excluding rows relative to the sort order.
+    // Use compareValues for same-type comparisons so string ranges match ORDER
+    // BY and SQLite. Preserve the existing JS mixed-type behavior for
+    // compatibility instead of letting compareValues throw.
     case '<':
-      return lhs => compareValues(lhs, rhs) < 0;
+      return lhs =>
+        typeof lhs === typeof rhs ? compareValues(lhs, rhs) < 0 : lhs < rhs;
     case '<=':
-      return lhs => compareValues(lhs, rhs) <= 0;
+      return lhs =>
+        typeof lhs === typeof rhs ? compareValues(lhs, rhs) <= 0 : lhs <= rhs;
     case '>':
-      return lhs => compareValues(lhs, rhs) > 0;
+      return lhs =>
+        typeof lhs === typeof rhs ? compareValues(lhs, rhs) > 0 : lhs > rhs;
     case '>=':
-      return lhs => compareValues(lhs, rhs) >= 0;
+      return lhs =>
+        typeof lhs === typeof rhs ? compareValues(lhs, rhs) >= 0 : lhs >= rhs;
     case 'LIKE':
       return getLikePredicate(rhs, '');
     case 'NOT LIKE':
