@@ -21,6 +21,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read # Required to check out repository contents.
+      issues: read # Required to read PR timeline dismissal events.
       pull-requests: read # Required to read PR metadata, files, and reviews.
       checks: write # Required to upsert the `codeowners/approval` check run.
     steps:
@@ -173,12 +174,30 @@ jobs:
               per_page: 100,
             });
 
+            const timelineEvents = await github.paginate(
+              github.rest.issues.listEventsForTimeline,
+              {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr.number,
+                per_page: 100,
+              },
+            );
+
+            const dismissedReviewIDs = new Set(
+              timelineEvents
+                .filter(e => e.event === 'review_dismissed')
+                .map(e => e.dismissed_review?.review_id)
+                .filter(id => typeof id === 'number'),
+            );
+
             // Take the latest non-comment review per user.
             const latestByUser = new Map();
             for (const r of reviews) {
               const login = r.user?.login;
               if (!login) continue;
-              if (!['APPROVED', 'CHANGES_REQUESTED', 'DISMISSED'].includes(r.state)) continue;
+              if (!['APPROVED', 'CHANGES_REQUESTED'].includes(r.state)) continue;
+              if (dismissedReviewIDs.has(r.id)) continue;
               const prev = latestByUser.get(login);
               if (!prev || new Date(r.submitted_at) > new Date(prev.submitted_at)) {
                 latestByUser.set(login, r);
