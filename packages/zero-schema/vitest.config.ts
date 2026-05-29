@@ -1,8 +1,8 @@
-import config from 'shared/src/tool/vitest-config.ts';
+import {newConfig} from 'shared/src/tool/vitest-config.ts';
 import {defineConfig, mergeConfig} from 'vitest/config';
 
 export default mergeConfig(
-  config,
+  newConfig(),
   defineConfig({
     test: {
       browser: {
