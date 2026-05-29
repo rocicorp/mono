@@ -238,3 +238,36 @@ test('nested', () => {
   expect(predicate({a: 3, b: true})).false;
   expect(predicate({a: 5, b: false})).false;
 });
+
+test('string range comparisons use UTF-8 / code-point order (consistent with ORDER BY and SQLite)', () => {
+  // Raw JS string comparison uses UTF-16 code units, which disagree with the
+  // UTF-8 / code-point order used by ORDER BY (compareValues -> compareUTF8) and
+  // by SQLite for non-BMP characters. '｡' (U+FF61) sorts BEFORE
+  // '\u{1F600}' (U+1F600 emoji) by code point, but AFTER it by UTF-16 code unit.
+  const ltCondition: SimpleCondition = {
+    type: 'simple',
+    left: {type: 'column', name: 'foo'},
+    op: '<',
+    right: {type: 'literal', value: '\u{1F600}'},
+  };
+  expect(createPredicate(ltCondition)({foo: '｡'})).toBe(true);
+
+  const gtCondition: SimpleCondition = {
+    type: 'simple',
+    left: {type: 'column', name: 'foo'},
+    op: '>',
+    right: {type: 'literal', value: '\u{1F600}'},
+  };
+  expect(createPredicate(gtCondition)({foo: '｡'})).toBe(false);
+
+  // numeric comparisons are unaffected
+  const numCondition: SimpleCondition = {
+    type: 'simple',
+    left: {type: 'column', name: 'foo'},
+    op: '<',
+    right: {type: 'literal', value: 5},
+  };
+  const numPredicate = createPredicate(numCondition);
+  expect(numPredicate({foo: 3})).toBe(true);
+  expect(numPredicate({foo: 9})).toBe(false);
+});
