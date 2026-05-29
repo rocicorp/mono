@@ -76,7 +76,34 @@ export const cases: {
       ['fo', false],
       ['afoo', false],
       ['afoob', false],
-      ['fooa\nbar', true],
+      // 'fooa\nbar' is 8 chars; `foo_` matches exactly 4. Must be false (SQLite
+      // returns 0). The previous `true` came from the buggy `m`/multiline flag
+      // matching the interior line "fooa".
+      ['fooa\nbar', false],
+    ],
+  },
+  {
+    // `%` and `_` must match newline characters (dotall), and the pattern must
+    // match the whole string. A `m`/multiline flag would wrongly match a single
+    // interior line. All verified against SQLite.
+    pattern: 'a%b',
+    flags: '',
+    inputs: [
+      ['a\nb', true],
+      ['axb', true],
+      ['ab', true],
+      ['z\nab', false],
+      ['a\nbz', false],
+    ],
+  },
+  {
+    pattern: 'a_b',
+    flags: '',
+    inputs: [
+      ['a\nb', true],
+      ['axb', true],
+      ['ab', false],
+      ['a\nbc', false],
     ],
   },
   {
