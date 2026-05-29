@@ -1,0 +1,222 @@
+name: CODEOWNERS Approval
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  pull_request_review:
+    types: [submitted, dismissed, edited]
+
+permissions: {}
+
+concurrency:
+  group: '${{ github.workflow }} @ ${{ github.event.pull_request.number }}'
+  cancel-in-progress: true
+
+jobs:
+  evaluate:
+    # Always exits green; the real verdict is the `codeowners/approval`
+    # check this job creates via the Checks API. Require that check in
+    # branch protection, not this job.
+    name: Evaluate Code Owner Approval
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read # Required to check out repository contents.
+      pull-requests: read # Required to read PR metadata, files, and reviews.
+      checks: write # Required to upsert the `codeowners/approval` check run.
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
+          ref: ${{ github.event.pull_request.base.sha }}
+
+      - uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const fs = require('fs');
+
+            const pr = context.payload.pull_request;
+            if (!pr) {
+              core.setFailed('No pull_request payload.');
+              return;
+            }
+
+            const CHECK_NAME = 'codeowners/approval';
+
+            const writeCheck = async ({ conclusion, title, summary }) => {
+              const existing = await github.rest.checks.listForRef({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                ref: pr.head.sha,
+                check_name: CHECK_NAME,
+              });
+              const base = {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                status: 'completed',
+                conclusion,
+                output: { title, summary },
+              };
+              if (existing.data.check_runs.length) {
+                await github.rest.checks.update({
+                  ...base,
+                  check_run_id: existing.data.check_runs[0].id,
+                });
+              } else {
+                await github.rest.checks.create({
+                  ...base,
+                  name: CHECK_NAME,
+                  head_sha: pr.head.sha,
+                });
+              }
+            };
+
+            const candidates = ['CODEOWNERS', '.github/CODEOWNERS', 'docs/CODEOWNERS'];
+            let codeownersText = null;
+            for (const p of candidates) {
+              if (fs.existsSync(p)) {
+                codeownersText = fs.readFileSync(p, 'utf8');
+                core.info(`Using ${p}`);
+                break;
+              }
+            }
+            if (!codeownersText) {
+              await writeCheck({
+                conclusion: 'success',
+                title: 'No CODEOWNERS file',
+                summary: 'No CODEOWNERS file found; nothing to enforce.',
+              });
+              return;
+            }
+
+            const rules = [];
+            for (const raw of codeownersText.split('\n')) {
+              const line = raw.replace(/#.*/, '').trim();
+              if (!line) continue;
+              const parts = line.split(/\s+/);
+              rules.push({ pattern: parts[0], owners: parts.slice(1) });
+            }
+
+            // Convert a CODEOWNERS pattern to a regex matching repo-relative paths.
+            // CODEOWNERS uses gitignore-style globs; this covers the common cases:
+            // leading '/' anchors to repo root, trailing '/' matches a directory,
+            // '*' matches within a path segment, '**' matches across segments.
+            const patternToRegex = (raw) => {
+              let pat = raw;
+              const anchored = pat.startsWith('/');
+              if (anchored) pat = pat.slice(1);
+              const dirOnly = pat.endsWith('/');
+              if (dirOnly) pat = pat.slice(0, -1);
+
+              let re = '';
+              for (let i = 0; i < pat.length; i++) {
+                const c = pat[i];
+                if (c === '*' && pat[i + 1] === '*') {
+                  re += '.*';
+                  i++;
+                  if (pat[i + 1] === '/') i++;
+                } else if (c === '*') {
+                  re += '[^/]*';
+                } else if (c === '?') {
+                  re += '[^/]';
+                } else if ('.+^$()[]{}|\\'.includes(c)) {
+                  re += '\\' + c;
+                } else {
+                  re += c;
+                }
+              }
+
+              const prefix = anchored || pat.includes('/') ? '^' : '^(?:.*/)?';
+              const suffix = dirOnly ? '/.*$' : '(?:/.*)?$';
+              return new RegExp(prefix + re + suffix);
+            };
+
+            const compiled = rules.map(r => ({ ...r, re: patternToRegex(r.pattern) }));
+
+            // Last matching rule wins (CODEOWNERS semantics).
+            const ownersFor = (file) => {
+              for (let i = compiled.length - 1; i >= 0; i--) {
+                if (compiled[i].re.test(file)) return compiled[i].owners;
+              }
+              return null;
+            };
+
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pr.number,
+              per_page: 100,
+            });
+
+            const isSupportedOwner = (owner) => owner.startsWith('@') && !owner.includes('/');
+
+            const required = [];
+            for (const f of files) {
+              const owners = ownersFor(f.filename);
+              const supportedOwners = owners ? owners.filter(isSupportedOwner) : [];
+              if (supportedOwners.length) required.push({ file: f.filename, owners: supportedOwners });
+            }
+
+            if (required.length === 0) {
+              await writeCheck({
+                conclusion: 'success',
+                title: 'No owned files changed',
+                summary: 'No changed files match a CODEOWNERS pattern.',
+              });
+              return;
+            }
+
+            const reviews = await github.paginate(github.rest.pulls.listReviews, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pr.number,
+              per_page: 100,
+            });
+
+            // Take the latest non-comment review per user.
+            const latestByUser = new Map();
+            for (const r of reviews) {
+              const login = r.user?.login;
+              if (!login) continue;
+              if (!['APPROVED', 'CHANGES_REQUESTED', 'DISMISSED'].includes(r.state)) continue;
+              const prev = latestByUser.get(login);
+              if (!prev || new Date(r.submitted_at) > new Date(prev.submitted_at)) {
+                latestByUser.set(login, r);
+              }
+            }
+
+            const author = pr.user.login.toLowerCase();
+            const approvers = [...latestByUser.values()]
+              .filter(r => r.state === 'APPROVED')
+              .map(r => r.user.login.toLowerCase())
+              .filter(login => login !== author);
+
+            core.info(`Eligible approvers: ${approvers.join(', ') || '(none)'}`);
+
+            // Only @user owners are supported; team and email owners are ignored.
+            const ownerApproved = (owner) => {
+              if (!owner.startsWith('@') || owner.includes('/')) return false;
+              return approvers.includes(owner.slice(1).toLowerCase());
+            };
+
+            const failing = [];
+            for (const r of required) {
+              if (!r.owners.some(ownerApproved)) failing.push(r);
+            }
+
+            if (failing.length) {
+              const list = failing
+                .map(f => `- \`${f.file}\` (owners: ${f.owners.join(', ')})`)
+                .join('\n');
+              await writeCheck({
+                conclusion: 'failure',
+                title: `Awaiting code owner approval for ${failing.length} file(s)`,
+                summary: `Missing CODEOWNERS approval for:\n\n${list}`,
+              });
+            } else {
+              await writeCheck({
+                conclusion: 'success',
+                title: `Approved by code owner`,
+                summary: `${required.length} owned file(s) covered by an approving review.`,
+              });
+            }
