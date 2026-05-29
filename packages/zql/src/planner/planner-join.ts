@@ -14,6 +14,28 @@ import type {
 import type {PlannerTerminus} from './planner-terminus.ts';
 
 /**
+ * Per-child IVM overhead in the flipped path that isn't captured by SQL
+ * unit costs. Drives whether the planner prefers semi over flipped when
+ * children are numerous.
+ *
+ * Two things cost per-child but aren't visible to SQLite scanstatus:
+ *  1. Eager child load — `FlippedJoin.fetch` reads ALL children into an
+ *     array before doing any parent work, so even with a downstream
+ *     limit, every child pays IVM cost (generator yields, debug
+ *     accounting, btree overlay set inserts).
+ *  2. Chunk priming — `mergeSortedStreams` opens every chunk to seed its
+ *     heap before yielding the first row. Each open runs the IN-list
+ *     SQL to its first match, paying SQL + IVM cost per chunk.
+ *
+ * Empirically (zbugs `gatewaycore + labels=[api-gateway,
+ * async-processing]`): the picked flipped plan with cost=401k took 65 s
+ * while a same-pattern semi-semi (cost=1.2M in the current model) runs
+ * in 1.75 s in pure SQL. With `FLIP_IVM_PER_CHILD_OVERHEAD=3` the model
+ * computes 401k + 416k·3 ≈ 1.65M for flipped, putting semi-semi ahead.
+ */
+export const FLIP_IVM_PER_CHILD_OVERHEAD = 3;
+
+/**
  * Translate constraints for a flipped join from parent space to child space.
  * Matches the runtime behavior of FlippedJoin.fetch() which translates
  * parent constraints to child constraints using index-based key mapping.
@@ -391,11 +413,28 @@ export class PlannerJoin {
         // per-seek work (`parent.cost` index walk + `parent.scanEst`
         // rows) still scales with child row count: each IN value still
         // does its own index seek.
+        //
+        // `FLIP_IVM_PER_CHILD_OVERHEAD` adds the IVM tax (eager child
+        // load + chunk priming). It only applies when BOTH:
+        //   (a) there's a downstream limit — without one, semi has to
+        //       scan everything anyway, so flipped's eager load isn't
+        //       wasted work; AND
+        //   (b) child.scanEst exceeds chunk size — single-chunk flipped
+        //       joins skip merge-sort priming entirely, so they don't
+        //       deserve the penalty.
+        // This preserves flipped wins on full-scan queries (no limit)
+        // and on small child sets (≤ chunk size), while penalizing the
+        // case it's actually wrong for: limited TAKE queries with huge
+        // child cardinality.
         cost:
           child.cost +
           Math.ceil(child.scanEst / getMultiConstraintChunkSize()) *
             parent.startupCost +
-          child.scanEst * (parent.cost + parent.scanEst),
+          child.scanEst * (parent.cost + parent.scanEst) +
+          (parent.limit !== undefined &&
+          child.scanEst > getMultiConstraintChunkSize()
+            ? child.scanEst * FLIP_IVM_PER_CHILD_OVERHEAD
+            : 0),
         // the child selectivity is not relevant here because it has already been taken into account via the flipping.
         // I.e., `child.returnedRows` is the estimated number of rows produced by the child _after_ taking filtering into account.
         returnedRows: parent.returnedRows * child.returnedRows,
