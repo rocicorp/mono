@@ -167,9 +167,15 @@ async function main() {
       );
     }
     if (result.pushedNPM) {
-      console.log(
-        `* ${dryRun ? 'Would publish' : 'Published'} @rocicorp/zero@${result.version} to npm.`,
-      );
+      if (result.staged) {
+        console.log(
+          `* ${dryRun ? 'Would stage' : 'Staged'} @rocicorp/zero@${result.version} on npm (pending approval).`,
+        );
+      } else {
+        console.log(
+          `* ${dryRun ? 'Would publish' : 'Published'} @rocicorp/zero@${result.version} to npm.`,
+        );
+      }
     }
     console.log(
       `* ${dryRun ? 'Would create' : 'Created'} Docker image rocicorp/zero:${result.version}.`,
@@ -179,9 +185,11 @@ async function main() {
     console.log(`Next steps:`);
     console.log(``);
     console.log('* Run `git pull --tags` in your checkout to pull the tag.');
-    console.log(
-      `* Test apps by installing: pnpm install @rocicorp/zero@${result.version}`,
-    );
+    if (!result.staged) {
+      console.log(
+        `* Test apps by installing: pnpm install @rocicorp/zero@${result.version}`,
+      );
+    }
     if (result.version.includes('-canary.')) {
       console.log('* When ready to promote to stable:');
       console.log(
@@ -190,6 +198,13 @@ async function main() {
       console.log(`  2. Run: node release.ts stable <branch-or-commit>`);
       console.log(
         `  3. When ready for users: pnpm dist-tag add @rocicorp/zero@X.Y.Z latest`,
+      );
+    } else if (result.staged) {
+      console.log('* The stable release is staged on npm pending approval:');
+      console.log(`  1. Review: pnpm stage list @rocicorp/zero`);
+      console.log(`  2. Approve (requires 2FA): pnpm stage approve <stage-id>`);
+      console.log(
+        `  3. When ready for users: node packages/zero/tool/make-latest.js ${result.version}`,
       );
     } else {
       console.log('* When ready for users to install:');
@@ -211,6 +226,8 @@ type Release = {
   version: string;
   pushedGit: boolean;
   pushedNPM: boolean;
+  /** True when the npm package was staged for approval rather than published. */
+  staged: boolean;
   tagName: string;
 };
 
@@ -405,13 +422,14 @@ async function releaseCanary(
     throw new Error('Could not resolve HEAD commit for git tag push');
   }
   pushGit(releaseCommitHash, tagName, remote, dryRun);
-  pushNpm(version, true, dryRun);
+  pushNpm(true, dryRun);
   await pushDocker(version, dryRun);
 
   return {
     version,
     pushedGit: true,
     pushedNPM: true,
+    staged: false,
     tagName,
   };
 }
@@ -439,13 +457,14 @@ async function releaseStable(
     throw new Error('Could not resolve HEAD commit for git tag push');
   }
   pushGit(releaseCommitHash, tagName, remote, dryRun);
-  pushNpm(currentVersion, false, dryRun);
+  pushNpm(false, dryRun);
   await pushDocker(currentVersion, dryRun);
 
   return {
     version: currentVersion,
     pushedGit: true,
     pushedNPM: true,
+    staged: true,
     tagName,
   };
 }
@@ -479,7 +498,7 @@ async function retryRelease(
     console.log('Skipping npm publish (--docker-only)');
   } else {
     build(fromReleaseVersion);
-    pushNpm(fromReleaseVersion, isCanary, dryRun);
+    pushNpm(isCanary, dryRun);
   }
 
   await pushDocker(fromReleaseVersion, dryRun);
@@ -488,6 +507,7 @@ async function retryRelease(
     version: fromReleaseVersion,
     pushedGit: false,
     pushedNPM: !dockerOnly,
+    staged: !dockerOnly && !isCanary,
     tagName,
   };
 }
@@ -644,26 +664,31 @@ function pushGit(
   execute(`git push ${remote} refs/tags/${destTag}`);
 }
 
-function pushNpm(version: string, isCanary: boolean, dryRun: boolean) {
-  if (dryRun) {
-    const tag = isCanary ? 'canary' : 'staging';
-    console.log(
-      `[DRY RUN] Would run: npm publish --provenance --tag=${tag} (then remove staging tag for stable)`,
-    );
-    return;
-  }
+function pushNpm(isCanary: boolean, dryRun: boolean) {
   if (isCanary) {
+    if (dryRun) {
+      console.log('[DRY RUN] Would run: npm publish --provenance --tag=canary');
+      return;
+    }
     execute('npm publish --provenance --tag=canary', {
       cwd: basePath('packages', 'zero'),
     });
     return;
   }
 
-  // For stable releases, publish without a dist-tag (we'll add 'latest' separately).
-  execute('npm publish --provenance --tag=staging', {
+  // Stable releases are staged rather than published directly. The tarball is
+  // uploaded to npm's staging queue under the `staging` tag and a maintainer
+  // must approve it (with 2FA) via `pnpm stage approve` before it goes live.
+  // Promotion to `latest` happens afterwards via make-latest.js.
+  if (dryRun) {
+    console.log(
+      '[DRY RUN] Would run: pnpm stage publish --provenance --tag=staging --no-git-checks',
+    );
+    return;
+  }
+  execute('pnpm stage publish --provenance --tag=staging --no-git-checks', {
     cwd: basePath('packages', 'zero'),
   });
-  execute(`npm dist-tag rm @rocicorp/zero@${version} staging`);
 }
 
 async function pushDocker(version: string, dryRun: boolean) {

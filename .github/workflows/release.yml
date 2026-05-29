@@ -16,11 +16,6 @@ on:
         description: Branch, tag, or commit SHA to build the release from
         required: true
         type: string
-      promote_latest:
-        description: Promote the published version to npm and Docker latest (stable only)
-        required: false
-        type: boolean
-        default: true
       dry_run:
         description: Build but skip git push, npm publish, and Docker push
         required: false
@@ -96,7 +91,7 @@ jobs:
           fi
 
           output=$(node packages/zero/tool/release.ts "$MODE" "$REF" --yes $DRY_RUN 2>&1 | tee /dev/stderr)
-          version=$(echo "$output" | grep -oP '(?:Published|Would publish) @rocicorp/zero@\K[^\s]+')
+          version=$(echo "$output" | grep -oP '(?:Published|Staged|Would publish|Would stage) @rocicorp/zero@\K[^\s]+')
           if [[ -z "$version" ]]; then
             echo "Could not parse released version from output" >&2
             exit 1
@@ -108,18 +103,6 @@ jobs:
         env:
           VERSION: ${{ steps.release.outputs.version }}
         run: cosign sign --yes rocicorp/zero:$VERSION
-
-      - name: Promote latest tags
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'stable' && inputs.promote_latest && inputs.dry_run != true }}
-        env:
-          VERSION: ${{ steps.release.outputs.version }}
-        run: |
-          set -euo pipefail
-          node packages/zero/tool/make-latest.js "$VERSION"
-
-      - name: Sign Docker latest
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.mode == 'stable' && inputs.promote_latest && inputs.dry_run != true }}
-        run: cosign sign --yes rocicorp/zero:latest
 
       - name: Comment on PR
         if: github.event_name == 'pull_request'
