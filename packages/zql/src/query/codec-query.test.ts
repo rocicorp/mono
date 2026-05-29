@@ -72,3 +72,26 @@ test('where does not encode non-codec columns', () => {
     right: {type: 'literal', value: 'abc'},
   });
 });
+
+test('expression-builder cmp encodes codec literals', () => {
+  const q = newQuery(schema, 'event').where(({cmp, and}) =>
+    and(cmp('at', '<=', new Date(500)), cmp('id', '=', 'x')),
+  );
+  const where = ast(q).where;
+  expect(where).toMatchObject({
+    type: 'and',
+    conditions: [
+      {op: '<=', left: {name: 'at'}, right: {type: 'literal', value: 500}},
+      {op: '=', left: {name: 'id'}, right: {type: 'literal', value: 'x'}},
+    ],
+  });
+});
+
+test('expression-builder 2-arg cmp encodes codec literals', () => {
+  const q = newQuery(schema, 'event').where(({cmp}) => cmp('at', new Date(7)));
+  const where = ast(q).where;
+  expect(where).toMatchObject({
+    op: '=',
+    right: {type: 'literal', value: 7},
+  });
+});

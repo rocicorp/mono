@@ -5,7 +5,9 @@ import {ChangeType} from '../../zql/src/ivm/change-type.ts';
 import {
   applyChange,
   idSymbol,
+  schemaHasCodecs,
   skipYields,
+  type SourceSchema,
   type ViewChange,
 } from './bindings.ts';
 import {
@@ -50,6 +52,12 @@ export class SolidView implements Output {
   #pendingChanges: ViewChange[] = [];
   readonly #updateTTL: (ttl: TTL) => void;
 
+  // The (encoded) source schema and whether any column has a codec. The Solid
+  // store always holds encoded values (so the IVM comparator works); decoding
+  // happens as a projection in `useQuery` for codec queries only.
+  readonly schema: SourceSchema;
+  readonly hasCodecs: boolean;
+
   constructor(
     input: Input,
     onTransactionCommit: (cb: () => void) => void,
@@ -66,6 +74,8 @@ export class SolidView implements Output {
     this.#onDestroy = onDestroy;
     this.#updateTTL = updateTTL;
     this.#retry = retry;
+    this.schema = input.getSchema();
+    this.hasCodecs = schemaHasCodecs(this.schema);
 
     input.setOutput(this);
 
