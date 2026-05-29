@@ -2,6 +2,7 @@ import type {Expand} from '../../../shared/src/expand.ts';
 import {recordProxy} from '../../../shared/src/record-proxy.ts';
 import type {SchemaValueToTSType} from '../../../zero-types/src/schema-value.ts';
 import type {Schema, TableSchema} from '../../../zero-types/src/schema.ts';
+import {encodeRow} from '../ivm/codec.ts';
 import type {MutateCRUD} from './custom.ts';
 
 export type SchemaCRUD<S extends Schema> = {
@@ -152,7 +153,7 @@ export function makeCRUDMutate<
     // Wrap in proxy that lazily creates and caches table CRUD objects
     return recordProxy(
       mutate as unknown as Record<string, undefined>,
-      (_value, tableName) => makeTableCRUD(tableName, executor),
+      (_value, tableName) => makeTableCRUD(schema.tables[tableName], executor),
     ) as unknown as MutateCRUD<TSchema, TAddSchemaCRUD>;
   }
 
@@ -169,21 +170,29 @@ export function makeTransactionMutate<TSchema extends Schema>(
   }
 
   return recordProxy(target, (_value, tableName) =>
-    makeTableCRUD(tableName, executor),
+    makeTableCRUD(schema.tables[tableName], executor),
   ) as SchemaCRUD<TSchema>;
 }
 
 /**
- * Creates a TableCRUD object that delegates to the executor.
+ * Creates a TableCRUD object that delegates to the executor, encoding any
+ * codec columns to their stored representation before handing values off.
+ * When the table has no codecs this is a zero-copy pass-through.
  */
 function makeTableCRUD(
-  tableName: string,
+  tableSchema: TableSchema,
   executor: CRUDExecutor,
 ): TableCRUD<TableSchema> {
+  const {name, columns} = tableSchema;
   return Object.fromEntries(
     CRUD_KINDS.map(kind => [
       kind,
-      (value: unknown) => executor(tableName, kind, value),
+      (value: unknown) =>
+        executor(
+          name,
+          kind,
+          encodeRow(value as Record<string, unknown>, columns),
+        ),
     ]),
   ) as TableCRUD<TableSchema>;
 }

@@ -9,8 +9,10 @@ import {
   type SimpleOperator,
   type System,
   SUBQ_PREFIX,
+  toStaticParam,
 } from '../../../zero-protocol/src/ast.ts';
 import {hashOfAST} from '../../../zero-protocol/src/query-hash.ts';
+import {getCodec} from '../../../zero-types/src/schema-value.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import {NotImplementedError} from '../error.ts';
 import {defaultFormat} from '../ivm/default-format.ts';
@@ -369,9 +371,16 @@ export class QueryImpl<
       // Distinguish between 2-arg form (field, value) and 3-arg form (field, op, value)
       // using arguments.length to allow explicit undefined in 3-arg form.
       if (arguments.length === 2) {
-        cond = cmp(fieldOrExpressionFactory, opOrValue);
+        cond = cmp(
+          fieldOrExpressionFactory,
+          this.#encodeWhereValue(fieldOrExpressionFactory, opOrValue),
+        );
       } else {
-        cond = cmp(fieldOrExpressionFactory, opOrValue, value);
+        cond = cmp(
+          fieldOrExpressionFactory,
+          opOrValue as SimpleOperator,
+          this.#encodeWhereValue(fieldOrExpressionFactory, value),
+        );
       }
     }
 
@@ -568,6 +577,34 @@ export class QueryImpl<
 
   expressionBuilder() {
     return new ExpressionBuilder(this.#exists);
+  }
+
+  // Encodes a `where` literal for codec columns so that comparisons happen on
+  // the stored (encoded) value. Parameter references and `null`/`undefined`
+  // pass through; arrays (IN / NOT IN) are encoded element-wise. No-op when the
+  // column has no codec.
+  //
+  // Note: only the `where('field', op, value)` shorthand is encoded here. The
+  // expression-builder callback form is not yet codec-aware.
+  #encodeWhereValue(field: string, value: unknown): any {
+    if (value === null || value === undefined) {
+      return value;
+    }
+    const column = this.#schema.tables[this.#tableName]?.columns[field];
+    const codec = column && getCodec(column);
+    if (!codec) {
+      return value;
+    }
+    if (typeof value === 'object' && (value as any)[toStaticParam]) {
+      // Parameter reference - leave as-is.
+      return value;
+    }
+    if (Array.isArray(value)) {
+      return value.map(v =>
+        v === null || v === undefined ? v : codec.encode(v),
+      );
+    }
+    return codec.encode(value);
   }
 }
 

@@ -6,6 +6,7 @@ import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts'
 import {stringCompare} from '../../../shared/src/string-compare.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
 import type {ErroredQuery} from '../../../zero-protocol/src/custom-queries.ts';
+import type {SchemaValue} from '../../../zero-types/src/schema-value.ts';
 import {buildPipeline} from '../builder/builder.ts';
 import {TestBuilderDelegate} from '../builder/test-builder-delegate.ts';
 import type {ResultType} from '../query/typed-view.ts';
@@ -32,6 +33,56 @@ import {createSource} from './test/source-factory.ts';
 import {refCountSymbol} from './view-apply-change.ts';
 
 const lc = createSilentLogContext();
+
+test('codec columns are decoded in data and listeners', () => {
+  const ms = createSource(
+    lc,
+    testLogConfig,
+    'table',
+    {
+      a: {type: 'number'},
+      ts: {
+        type: 'number',
+        customType: null,
+        codec: {
+          decode: (n: number) => new Date(n),
+          encode: (d: Date) => d.getTime(),
+        },
+      } as SchemaValue,
+    },
+    ['a'],
+  );
+  // Stored/encoded values are numbers.
+  consume(ms.push(makeSourceChangeAdd({a: 1, ts: 1000})));
+  consume(ms.push(makeSourceChangeAdd({a: 2, ts: 2000})));
+
+  const view = new ArrayView(
+    ms.connect([['a', 'asc']]),
+    {singular: false, relationships: {}},
+    true,
+    () => {},
+  );
+
+  let last: ReadonlyJSONValue[] = [];
+  view.addListener(entries => {
+    assertArray(entries);
+    last = entries as ReadonlyJSONValue[];
+  });
+
+  // Decoded on read.
+  const data = view.data as unknown as Array<{a: number; ts: Date}>;
+  const seen = last as unknown as Array<{a: number; ts: Date}>;
+  expect(data[0].ts).toBeInstanceOf(Date);
+  expect(seen[0].ts.getTime()).toBe(1000);
+  expect(seen[1].ts.getTime()).toBe(2000);
+  // `a` (no codec) is untouched.
+  expect(seen[0].a).toBe(1);
+
+  // New decoded snapshot after a change.
+  consume(ms.push(makeSourceChangeAdd({a: 3, ts: 3000})));
+  view.flush();
+  expect((last as unknown as Array<{ts: Date}>)[2].ts.getTime()).toBe(3000);
+});
 
 test('basics', () => {
   const ms = createSource(

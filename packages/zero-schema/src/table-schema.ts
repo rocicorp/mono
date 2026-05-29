@@ -1,7 +1,9 @@
 import type {
+  Codec,
   ColumnTypeName,
   SchemaValue,
   SchemaValueToTSType,
+  SchemaValueWithCodec,
   SchemaValueWithCustomType,
   TypeNameToTypeMap,
   ValueType,
@@ -16,12 +18,14 @@ import type {
 
 export type {
   Cardinality,
+  Codec,
   ColumnTypeName,
   LastInTuple,
   Relationship,
   RelationshipsSchema,
   SchemaValue,
   SchemaValueToTSType,
+  SchemaValueWithCodec,
   SchemaValueWithCustomType,
   TableSchema,
   TypeNameToTypeMap,

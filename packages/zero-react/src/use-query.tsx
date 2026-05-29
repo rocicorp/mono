@@ -5,7 +5,7 @@ import {
   type Immutable,
   addContextToQuery,
   asQueryInternals,
-  deepClone,
+  deepCloneWithInstances,
   DEFAULT_TTL_MS,
 } from './bindings.ts';
 import {useZero} from './zero-provider.tsx';
@@ -542,7 +542,7 @@ class ViewWrapper<
     const data =
       snap === undefined
         ? snap
-        : (deepClone(snap as ReadonlyJSONValue) as HumanReadable<TReturn>);
+        : deepCloneWithInstances(snap as HumanReadable<TReturn>);
     this.#snapshot = getSnapshot(
       this.#singular,
       data,

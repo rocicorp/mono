@@ -7,6 +7,7 @@ import type {Listener, ResultType, TypedView} from '../query/typed-view.ts';
 import {ChangeIndex} from './change-index.ts';
 import {ChangeType} from './change-type.ts';
 import type {Change} from './change.ts';
+import {decodeView, schemaHasCodecs} from './codec.ts';
 import {skipYields, type Input, type Output} from './operator.ts';
 import type {SourceSchema} from './schema.ts';
 import {applyChange, type ViewChange} from './view-apply-change.ts';
@@ -64,6 +65,14 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
   #error: ErroredQuery | undefined;
   readonly #updateTTL: (ttl: TTL) => void;
 
+  // When the schema has codec columns, `data` returns a decoded copy of the
+  // raw (encoded) tree. The decoded snapshot is cached and invalidated on each
+  // flush. When there are no codecs this is a no-op and the raw tree is
+  // returned directly with no extra copy.
+  readonly #hasCodecs: boolean;
+  #decoded: V | undefined;
+  #decodedDirty = true;
+
   constructor(
     input: Input,
     format: Format,
@@ -74,6 +83,7 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
     this.#schema = input.getSchema();
     this.#format = format;
     this.#updateTTL = updateTTL;
+    this.#hasCodecs = schemaHasCodecs(this.#schema);
     this.#root = {'': format.singular ? undefined : []};
     input.setOutput(this);
 
@@ -98,7 +108,15 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
   }
 
   get data() {
-    return this.#root[''] as V;
+    const raw = this.#root[''] as V;
+    if (!this.#hasCodecs) {
+      return raw;
+    }
+    if (this.#decodedDirty) {
+      this.#decoded = decodeView(raw as View, this.#schema, this.#format) as V;
+      this.#decodedDirty = false;
+    }
+    return this.#decoded as V;
   }
 
   addListener(listener: Listener<V>) {
@@ -157,6 +175,7 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
       return;
     }
     this.#dirty = false;
+    this.#decodedDirty = true;
     this.#fireListeners();
   }
 
