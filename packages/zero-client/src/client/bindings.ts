@@ -3,10 +3,10 @@
 // They are only used by the binding packages.
 // This module should not export anything that is exported by ./zero.ts.
 
-export {assert, unreachable} from '../../../shared/src/asserts.ts';
-export {deepClone} from '../../../shared/src/deep-clone.ts';
-export type {Immutable} from '../../../shared/src/immutable.ts';
-export {must} from '../../../shared/src/must.ts';
+export {assert, unreachable} from 'shared/src/asserts.ts';
+export {deepClone} from 'shared/src/deep-clone.ts';
+export type {Immutable} from 'shared/src/immutable.ts';
+export {must} from 'shared/src/must.ts';
 export {skipYields} from '../../../zql/src/ivm/operator.ts';
 export {consume} from '../../../zql/src/ivm/stream.ts';
 export {

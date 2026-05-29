@@ -1,6 +1,6 @@
+import type {ReadonlyJSONValue} from 'shared/src/json.ts';
+import * as v from 'shared/src/valita.ts';
 import {describe, expect, expectTypeOf, test} from 'vitest';
-import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
-import * as v from '../../../shared/src/valita.ts';
 import {createBuilder} from './create-builder.ts';
 import {QueryParseError} from './error.ts';
 import {

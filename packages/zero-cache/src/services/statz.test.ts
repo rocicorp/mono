@@ -1,6 +1,6 @@
 import fastify, {type FastifyInstance} from 'fastify';
+import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
 import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
-import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import type {NormalizedZeroConfig} from '../config/normalize.ts';
 import {handleStatzRequest} from './statz.ts';
 

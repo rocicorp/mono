@@ -3,7 +3,7 @@
  * ChangeSource and ChangeStreamer. These are not forwarded to subscribers
  * of the ChangeStreamer.
  */
-import * as v from '../../../../../../shared/src/valita.ts';
+import * as v from 'shared/src/valita.ts';
 import {jsonObjectSchema} from './json.ts';
 
 /**

@@ -1,5 +1,5 @@
-import type {Enum} from '../../../shared/src/enum.ts';
-import type * as v from '../../../shared/src/valita.ts';
+import type {Enum} from 'shared/src/enum.ts';
+import type * as v from 'shared/src/valita.ts';
 import type * as PostgresTypeClass from './postgres-type-class-enum.ts';
 import type {pgTypeClassSchema} from './specs.ts';
 

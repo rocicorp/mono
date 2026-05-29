@@ -1,11 +1,11 @@
 import type {LogContext} from '@rocicorp/logger';
+import {assert, unreachable} from 'shared/src/asserts.ts';
+import type {ReadonlyJSONValue} from 'shared/src/json.ts';
+import {must} from 'shared/src/must.ts';
+import {difference} from 'shared/src/set-utils.ts';
+import {TDigest} from 'shared/src/tdigest.ts';
 import type {ReplicacheImpl} from '../../../replicache/src/replicache-impl.ts';
 import type {ClientID} from '../../../replicache/src/sync/ids.ts';
-import {assert, unreachable} from '../../../shared/src/asserts.ts';
-import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
-import {must} from '../../../shared/src/must.ts';
-import {difference} from '../../../shared/src/set-utils.ts';
-import {TDigest} from '../../../shared/src/tdigest.ts';
 import {
   mapAST,
   normalizeAST,

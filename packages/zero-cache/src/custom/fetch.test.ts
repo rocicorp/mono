@@ -1,5 +1,10 @@
 import {LogContext} from '@rocicorp/logger';
 import {
+  TestLogSink,
+  createSilentLogContext,
+} from 'shared/src/logging-test-utils.ts';
+import * as v from 'shared/src/valita.ts';
+import {
   afterAll,
   assert,
   beforeEach,
@@ -9,11 +14,6 @@ import {
   vi,
   type MockedFunction,
 } from 'vitest';
-import {
-  TestLogSink,
-  createSilentLogContext,
-} from '../../../shared/src/logging-test-utils.ts';
-import * as v from '../../../shared/src/valita.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {ErrorReason} from '../../../zero-protocol/src/error-reason.ts';
 import {

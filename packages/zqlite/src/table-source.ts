@@ -1,11 +1,11 @@
 import type {SQLQuery} from '@databases/sql';
 import type {LogContext} from '@rocicorp/logger';
 import SQLite3Database from '@rocicorp/zero-sqlite3';
+import {assert, unreachable} from 'shared/src/asserts.ts';
+import {must} from 'shared/src/must.ts';
+import type {Writable} from 'shared/src/writable.ts';
 import type {LogConfig} from '../../otel/src/log-options.ts';
 import {timeSampled} from '../../otel/src/maybe-time.ts';
-import {assert, unreachable} from '../../shared/src/asserts.ts';
-import {must} from '../../shared/src/must.ts';
-import type {Writable} from '../../shared/src/writable.ts';
 import type {Condition, Ordering} from '../../zero-protocol/src/ast.ts';
 import type {Row, Value} from '../../zero-protocol/src/data.ts';
 import type {PrimaryKey} from '../../zero-protocol/src/primary-key.ts';

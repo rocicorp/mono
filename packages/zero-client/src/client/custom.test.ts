@@ -1,3 +1,6 @@
+import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
+import {must} from 'shared/src/must.ts';
+import {promiseUndefined} from 'shared/src/resolved-promises.ts';
 import {
   afterEach,
   assert,
@@ -9,9 +12,6 @@ import {
   vi,
 } from 'vitest';
 import {zeroData} from '../../../replicache/src/transactions.ts';
-import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
-import {must} from '../../../shared/src/must.ts';
-import {promiseUndefined} from '../../../shared/src/resolved-promises.ts';
 import {refCountSymbol} from '../../../zql/src/ivm/view-apply-change.ts';
 import type {InsertValue} from '../../../zql/src/mutate/crud.ts';
 import type {Transaction} from '../../../zql/src/mutate/custom.ts';

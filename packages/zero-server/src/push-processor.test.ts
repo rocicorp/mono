@@ -1,7 +1,7 @@
 import type postgres from 'postgres';
+import type {MaybePromise} from 'shared/src/types.ts';
+import * as v from 'shared/src/valita.ts';
 import {assert, describe, expect, test, vi} from 'vitest';
-import type {MaybePromise} from '../../shared/src/types.ts';
-import * as v from '../../shared/src/valita.ts';
 import {ErrorKind} from '../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../zero-protocol/src/error-origin.ts';
 import {ErrorReason} from '../../zero-protocol/src/error-reason.ts';

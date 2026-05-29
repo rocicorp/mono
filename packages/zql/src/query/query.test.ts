@@ -1,5 +1,5 @@
+import type {ReadonlyJSONValue} from 'shared/src/json.ts';
 import {describe, expectTypeOf, test} from 'vitest';
-import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {staticParam} from '../../../zero-permissions/src/permissions.ts';
 import {toStaticParam} from '../../../zero-protocol/src/ast.ts';
 import {relationships} from '../../../zero-schema/src/builder/relationship-builder.ts';

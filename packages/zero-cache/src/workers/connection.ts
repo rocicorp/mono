@@ -1,9 +1,9 @@
 import {pipeline, Readable, Writable} from 'node:stream';
 import type {LogContext, LogLevel} from '@rocicorp/logger';
+import {assert} from 'shared/src/asserts.ts';
+import * as valita from 'shared/src/valita.ts';
 import type {CloseEvent, Data, ErrorEvent} from 'ws';
 import WebSocket, {createWebSocketStream} from 'ws';
-import {assert} from '../../../shared/src/asserts.ts';
-import * as valita from '../../../shared/src/valita.ts';
 import type {ConnectedMessage} from '../../../zero-protocol/src/connect.ts';
 import type {Downstream} from '../../../zero-protocol/src/down.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';

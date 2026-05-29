@@ -1,5 +1,5 @@
-import {assert} from '../../../shared/src/asserts.ts';
-import {stringify, type JSONValue} from '../../../shared/src/bigint-json.ts';
+import {assert} from 'shared/src/asserts.ts';
+import {stringify, type JSONValue} from 'shared/src/bigint-json.ts';
 import type {
   SchemaValue,
   ValueType,

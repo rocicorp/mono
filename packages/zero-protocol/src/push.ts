@@ -1,4 +1,4 @@
-import * as v from '../../shared/src/valita.ts';
+import * as v from 'shared/src/valita.ts';
 import {pushFailedBodySchema} from './error.ts';
 import {mutationIDSchema} from './mutation-id.ts';
 import {mutationResponseSchema, mutationSchema} from './mutation.ts';

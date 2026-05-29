@@ -1,7 +1,7 @@
+import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
 /* oxlint-disable no-console */
 import {afterEach, describe, test} from 'vitest';
 import {testLogConfig} from '../../otel/src/test-log-config.ts';
-import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
 import {Catch, type CaughtNode} from '../../zql/src/ivm/catch.ts';
 import {
   FlippedJoin,

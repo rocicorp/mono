@@ -1,5 +1,5 @@
+import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
 import {beforeEach, describe, expect} from 'vitest';
-import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.ts';
 import {
   expectTables,
   getConnectionURI,

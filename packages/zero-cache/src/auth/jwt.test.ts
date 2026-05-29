@@ -1,6 +1,6 @@
 import {SignJWT, type JWTPayload} from 'jose';
+import {must} from 'shared/src/must.ts';
 import {describe, expect, test} from 'vitest';
-import {must} from '../../../shared/src/must.ts';
 import type {AuthConfig, LegacyJWTAuthConfig} from '../config/zero-config.ts';
 import {createJwkPair, tokenConfigOptions, verifyToken} from './jwt.ts';
 

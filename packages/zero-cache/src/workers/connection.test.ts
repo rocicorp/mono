@@ -1,10 +1,10 @@
 import {LogContext, type LogLevel} from '@rocicorp/logger';
-import {beforeEach, describe, expect, test, vi} from 'vitest';
-import WebSocket from 'ws';
 import {
   createSilentLogContext,
   TestLogSink,
-} from '../../../shared/src/logging-test-utils.ts';
+} from 'shared/src/logging-test-utils.ts';
+import {beforeEach, describe, expect, test, vi} from 'vitest';
+import WebSocket from 'ws';
 import type {Downstream} from '../../../zero-protocol/src/down.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';

@@ -1,10 +1,10 @@
 import type {LogContext, LogLevel} from '@rocicorp/logger';
-import {assert} from '../../shared/src/asserts.ts';
-import {getErrorDetails, getErrorMessage} from '../../shared/src/error.ts';
-import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
-import {promiseVoid} from '../../shared/src/resolved-promises.ts';
-import type {MaybePromise} from '../../shared/src/types.ts';
-import * as v from '../../shared/src/valita.ts';
+import {assert} from 'shared/src/asserts.ts';
+import {getErrorDetails, getErrorMessage} from 'shared/src/error.ts';
+import type {ReadonlyJSONValue} from 'shared/src/json.ts';
+import {promiseVoid} from 'shared/src/resolved-promises.ts';
+import type {MaybePromise} from 'shared/src/types.ts';
+import * as v from 'shared/src/valita.ts';
 import {MutationAlreadyProcessedError} from '../../zero-cache/src/services/mutagen/error.ts';
 import type {ApplicationError} from '../../zero-protocol/src/application-error.ts';
 import {

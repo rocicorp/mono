@@ -1,5 +1,5 @@
+import config from 'shared/src/tool/vitest-config.ts';
 import {defineConfig} from 'vitest/config';
-import config from '../shared/src/tool/vitest-config.ts';
 
 const {define, esbuild} = config;
 

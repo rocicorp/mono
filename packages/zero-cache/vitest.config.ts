@@ -1,5 +1,5 @@
+import config, {CI} from 'shared/src/tool/vitest-config.ts';
 import {defineConfig, mergeConfig} from 'vitest/config';
-import config, {CI} from '../shared/src/tool/vitest-config.ts';
 
 function nameFromURL(url: string) {
   // importer looks like file://....../packages/NAME/... and we want the NAME

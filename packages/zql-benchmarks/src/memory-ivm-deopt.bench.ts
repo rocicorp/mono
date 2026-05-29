@@ -9,7 +9,7 @@
  *   pnpm --filter zql-benchmarks run bench:deopt memory-ivm-deopt
  */
 
-import {bench, describe} from '../../shared/src/bench.ts';
+import {bench, describe} from 'shared/src/bench.ts';
 import type {Row} from '../../zero-protocol/src/data.ts';
 import type {BuilderDelegate} from '../../zql/src/builder/builder.ts';
 import {Catch} from '../../zql/src/ivm/catch.ts';

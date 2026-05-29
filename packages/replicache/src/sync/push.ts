@@ -1,8 +1,8 @@
 import type {LogContext} from '@rocicorp/logger';
-import {assert} from '../../../shared/src/asserts.ts';
-import {jsonSchema} from '../../../shared/src/json-schema.ts';
-import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
-import * as valita from '../../../shared/src/valita.ts';
+import {assert} from 'shared/src/asserts.ts';
+import {jsonSchema} from 'shared/src/json-schema.ts';
+import type {ReadonlyJSONValue} from 'shared/src/json.ts';
+import * as valita from 'shared/src/valita.ts';
 import type {Store} from '../dag/store.ts';
 import {
   DEFAULT_HEAD_NAME,

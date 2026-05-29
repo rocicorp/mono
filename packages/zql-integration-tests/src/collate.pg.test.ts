@@ -13,10 +13,10 @@
  * Kept in case we eventually align collations across all three environments.
  */
 import {Client} from 'pg';
+import type {JSONValue} from 'shared/src/json.ts';
+import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
 import {afterAll, beforeAll, describe, expect, test} from 'vitest';
 import {testLogConfig} from '../../otel/src/test-log-config.ts';
-import type {JSONValue} from '../../shared/src/json.ts';
-import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
 import {compile, extractZqlResult} from '../../z2s/src/compiler.ts';
 import {formatPgInternalConvert} from '../../z2s/src/sql.ts';
 import {type PostgresDB} from '../../zero-cache/src/types/pg.ts';

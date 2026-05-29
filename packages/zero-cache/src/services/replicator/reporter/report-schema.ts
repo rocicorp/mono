@@ -1,4 +1,4 @@
-import * as v from '../../../../../shared/src/valita.ts';
+import * as v from 'shared/src/valita.ts';
 
 export const changeSourceTimingsSchema = v.object({
   sendTimeMs: v.number(),

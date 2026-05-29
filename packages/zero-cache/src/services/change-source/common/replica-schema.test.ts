@@ -1,6 +1,6 @@
+import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
+import {promiseVoid} from 'shared/src/resolved-promises.ts';
 import {beforeEach, describe, expect, test} from 'vitest';
-import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.ts';
-import {promiseVoid} from '../../../../../shared/src/resolved-promises.ts';
 import {
   DbFile,
   expectMatchingObjectsInTables,

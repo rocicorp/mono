@@ -1,5 +1,5 @@
-import {assert, unreachable} from '../../../shared/src/asserts.ts';
-import {hasOwn} from '../../../shared/src/has-own.ts';
+import {assert, unreachable} from 'shared/src/asserts.ts';
+import {hasOwn} from 'shared/src/has-own.ts';
 import type {Row, Value} from '../../../zero-protocol/src/data.ts';
 import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
 import {assertOrderingIncludesPK} from '../query/complete-ordering.ts';

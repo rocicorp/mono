@@ -1,6 +1,6 @@
 import type {ObservableResult} from '@opentelemetry/api';
+import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
 import {expect, test} from 'vitest';
-import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.ts';
 import {ReplicationReportRecorder} from './recorder.ts';
 
 test('replication report recorder', () => {

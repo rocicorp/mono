@@ -1,7 +1,7 @@
+import {assert} from 'shared/src/asserts.ts';
+import {must} from 'shared/src/must.ts';
 // cases with a controlled cost model
 import {describe, expect, test} from 'vitest';
-import {assert} from '../../../shared/src/asserts.ts';
-import {must} from '../../../shared/src/must.ts';
 import type {AST, Condition, Ordering} from '../../../zero-protocol/src/ast.ts';
 import {planQuery} from '../../../zql/src/planner/planner-builder.ts';
 import type {CostModelCost} from '../../../zql/src/planner/planner-connection.ts';

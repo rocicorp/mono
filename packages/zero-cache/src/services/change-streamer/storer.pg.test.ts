@@ -1,10 +1,10 @@
 import {PG_LOCK_NOT_AVAILABLE} from '@drdgvhbh/postgres-error-codes';
 import postgres from 'postgres';
+import {BigIntJSON} from 'shared/src/bigint-json.ts';
+import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
+import {Queue} from 'shared/src/queue.ts';
+import {sleep} from 'shared/src/sleep.ts';
 import {beforeEach, describe, expect} from 'vitest';
-import {BigIntJSON} from '../../../../shared/src/bigint-json.ts';
-import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
-import {Queue} from '../../../../shared/src/queue.ts';
-import {sleep} from '../../../../shared/src/sleep.ts';
 import {type PgTest, test} from '../../test/db.ts';
 import type {PostgresDB} from '../../types/pg.ts';
 import type {Subscription} from '../../types/subscription.ts';

@@ -1,6 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
-import {unreachable} from '../../../shared/src/asserts.ts';
-import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
+import {unreachable} from 'shared/src/asserts.ts';
+import type {ReadonlyJSONValue} from 'shared/src/json.ts';
 import type {ApplicationError} from '../../../zero-protocol/src/application-error.ts';
 import {wrapWithApplicationError} from '../../../zero-protocol/src/application-error.ts';
 import {ClientErrorKind} from './client-error-kind.ts';

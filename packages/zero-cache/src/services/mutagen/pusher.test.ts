@@ -1,6 +1,6 @@
 import {resolver} from '@rocicorp/resolver';
+import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
 import {beforeEach, describe, expect, test, vi} from 'vitest';
-import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import {ErrorKind} from '../../../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../../../zero-protocol/src/error-origin.ts';
 import {ErrorReason} from '../../../../zero-protocol/src/error-reason.ts';

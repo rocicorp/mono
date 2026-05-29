@@ -1,10 +1,10 @@
 import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import Fastify from 'fastify';
+import {BigIntJSON} from 'shared/src/bigint-json.ts';
+import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
 import {beforeEach, describe, expect, type MockedFunction, vi} from 'vitest';
 import WebSocket from 'ws';
-import {BigIntJSON} from '../../../../shared/src/bigint-json.ts';
-import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import {getConnectionURI, type PgTest, test} from '../../test/db.ts';
 import {type PostgresDB} from '../../types/pg.ts';
 import {inProcChannel} from '../../types/processes.ts';

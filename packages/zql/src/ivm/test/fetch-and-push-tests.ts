@@ -1,7 +1,7 @@
+import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
+import {must} from 'shared/src/must.ts';
 import {expect} from 'vitest';
 import {testLogConfig} from '../../../../otel/src/test-log-config.ts';
-import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
-import {must} from '../../../../shared/src/must.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import type {Row} from '../../../../zero-protocol/src/data.ts';
 import type {PrimaryKey} from '../../../../zero-protocol/src/primary-key.ts';

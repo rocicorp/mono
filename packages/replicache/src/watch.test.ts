@@ -1,6 +1,6 @@
+import type {JSONValue} from 'shared/src/json.ts';
+import {Queue} from 'shared/src/queue.ts';
 import {describe, expect, test, vi} from 'vitest';
-import type {JSONValue} from '../../shared/src/json.ts';
-import {Queue} from '../../shared/src/queue.ts';
 import {
   disableAllBackgroundProcesses,
   initReplicacheTesting,

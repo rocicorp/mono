@@ -1,6 +1,6 @@
 import {afterEach} from 'node:test';
+import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
 import {beforeEach, describe, expect, test} from 'vitest';
-import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
 import {
   CREATE_STORAGE_TABLE,
   DatabaseStorage,

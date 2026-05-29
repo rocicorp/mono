@@ -1,5 +1,5 @@
-import {assert} from '../../../shared/src/asserts.ts';
-import type {Writable} from '../../../shared/src/writable.ts';
+import {assert} from 'shared/src/asserts.ts';
+import type {Writable} from 'shared/src/writable.ts';
 import {ChangeIndex} from './change-index.ts';
 import {ChangeType} from './change-type.ts';
 import type {Change} from './change.ts';

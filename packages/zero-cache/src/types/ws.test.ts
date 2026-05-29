@@ -1,8 +1,8 @@
 import {resolver} from '@rocicorp/resolver';
+import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
+import {randInt} from 'shared/src/rand.ts';
 import {afterAll, beforeAll, describe, expect, test} from 'vitest';
 import WebSocket, {WebSocketServer} from 'ws';
-import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
-import {randInt} from '../../../shared/src/rand.ts';
 import {closeWithError, PROTOCOL_ERROR} from './ws.ts';
 
 describe('types/ws', () => {

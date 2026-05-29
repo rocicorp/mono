@@ -1,6 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
-import {navigator} from '../../../shared/src/navigator.ts';
-import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
+import {navigator} from 'shared/src/navigator.ts';
+import {promiseVoid} from 'shared/src/resolved-promises.ts';
 import {IDBStore} from './idb-store.ts';
 import {MemStore, dropMemStore} from './mem-store.ts';
 import type {Read, Store, Write} from './store.ts';

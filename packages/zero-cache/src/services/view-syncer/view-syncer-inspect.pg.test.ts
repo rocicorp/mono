@@ -1,6 +1,6 @@
+import {assert} from 'shared/src/asserts.ts';
+import type {Queue} from 'shared/src/queue.ts';
 import {beforeEach, describe, expect, vi} from 'vitest';
-import {assert} from '../../../../shared/src/asserts.ts';
-import type {Queue} from '../../../../shared/src/queue.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import {type ClientSchema} from '../../../../zero-protocol/src/client-schema.ts';
 import type {Downstream} from '../../../../zero-protocol/src/down.ts';

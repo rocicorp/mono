@@ -1,6 +1,6 @@
 import {LogContext} from '@rocicorp/logger';
+import {assert} from 'shared/src/asserts.ts';
 import {afterEach, expect, test, vi} from 'vitest';
-import {assert} from '../../../shared/src/asserts.ts';
 import {
   withRead,
   withWrite,

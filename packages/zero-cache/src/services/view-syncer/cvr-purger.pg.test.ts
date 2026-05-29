@@ -1,10 +1,10 @@
 import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
-import {beforeEach, describe, expect, vi} from 'vitest';
 import {
   createSilentLogContext,
   TestLogSink,
-} from '../../../../shared/src/logging-test-utils.ts';
+} from 'shared/src/logging-test-utils.ts';
+import {beforeEach, describe, expect, vi} from 'vitest';
 import {DEFAULT_TTL_MS} from '../../../../zql/src/query/ttl.ts';
 import {test, type PgTest} from '../../test/db.ts';
 import type {PostgresDB} from '../../types/pg.ts';

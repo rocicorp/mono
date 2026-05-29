@@ -1,14 +1,14 @@
 import {resolver} from '@rocicorp/resolver';
-import {afterAll, beforeAll} from 'vitest';
-import {assert} from '../../shared/src/asserts.ts';
-import {bench, describe, use} from '../../shared/src/bench.ts';
-import {deepEqual} from '../../shared/src/json.ts';
-import type {JSONValue} from '../../shared/src/json.ts';
+import {assert} from 'shared/src/asserts.ts';
+import {bench, describe, use} from 'shared/src/bench.ts';
+import {deepEqual} from 'shared/src/json.ts';
+import type {JSONValue} from 'shared/src/json.ts';
 import {
   jsonArrayTestData,
   jsonObjectTestData,
   type TestDataObject,
-} from '../../shared/src/test-data.ts';
+} from 'shared/src/test-data.ts';
+import {afterAll, beforeAll} from 'vitest';
 import {
   closeAndCleanupRep,
   createIndexDefinitions,

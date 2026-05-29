@@ -24,7 +24,7 @@
  *
  * ```
  * import * as E from './e-enum.ts';
- * import type {Enum} from '../shared/enum.ts';
+ * import type {Enum} from 'shared/enum.ts';
  *
  * type E = Enum<typeof E>;
  * ```

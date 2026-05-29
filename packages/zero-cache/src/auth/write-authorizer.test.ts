@@ -1,7 +1,7 @@
+import {h128} from 'shared/src/hash.ts';
+import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
 import {beforeEach, describe, expect, test} from 'vitest';
 import {testLogConfig} from '../../../otel/src/test-log-config.ts';
-import {h128} from '../../../shared/src/hash.ts';
-import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import type {
   DeleteOp,
   InsertOp,

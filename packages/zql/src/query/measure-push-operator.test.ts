@@ -1,5 +1,5 @@
+import {emptyArray} from 'shared/src/sentinels.ts';
 import {describe, expect, test, vi} from 'vitest';
-import {emptyArray} from '../../../shared/src/sentinels.ts';
 import type {Change} from '../ivm/change.ts';
 import {makeAddChange} from '../ivm/change.ts';
 import type {Node} from '../ivm/data.ts';

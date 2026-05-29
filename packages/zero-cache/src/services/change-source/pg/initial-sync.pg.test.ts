@@ -3,11 +3,11 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {LogContext} from '@rocicorp/logger';
 import {nanoid} from 'nanoid/non-secure';
-import {beforeEach, describe, expect} from 'vitest';
 import {
   createSilentLogContext,
   TestLogSink,
-} from '../../../../../shared/src/logging-test-utils.ts';
+} from 'shared/src/logging-test-utils.ts';
+import {beforeEach, describe, expect} from 'vitest';
 import type {ZeroEvent} from '../../../../../zero-events/src/index.ts';
 import {Database} from '../../../../../zqlite/src/db.ts';
 import {listIndexes, listTables} from '../../../db/lite-tables.ts';

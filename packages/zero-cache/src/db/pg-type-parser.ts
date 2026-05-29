@@ -1,5 +1,5 @@
-import {assert} from '../../../shared/src/asserts.ts';
-import {mapEntries} from '../../../shared/src/objects.ts';
+import {assert} from 'shared/src/asserts.ts';
+import {mapEntries} from 'shared/src/objects.ts';
 import {JSON, JSONB} from '../types/pg-types.ts';
 import type {PostgresDB} from '../types/pg.ts';
 
