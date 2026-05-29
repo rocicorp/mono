@@ -51,7 +51,7 @@ gh workflow run release.yml -f mode=stable -f ref=<40-char-sha>
 gh workflow run release.yml -f mode=canary -f ref=main -f dry_run=true
 ```
 
-By default a stable release sets both npm and Docker tags to `latest`. Pass `-f promote_latest=false` to skip that.
+Stable releases are staged first. After `pnpm stage approve`, run `node packages/zero/tool/make-latest.js <version>` to promote npm and Docker tags to `latest`.
 
 > **Note**: `-f ref=...` is the build target (branch, tag, or SHA). `--ref` selects which branch
 > the _workflow file itself_ is read from — only needed when running the workflow off a non-default branch.
