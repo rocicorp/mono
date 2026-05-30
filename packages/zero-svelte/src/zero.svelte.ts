@@ -3,6 +3,7 @@ import {
   deepClone,
   type Immutable,
 } from '../../zero-client/src/client/bindings.ts';
+import {Query as SvelteQuery, type QueryOptions} from './query.svelte.ts';
 import {
   Zero,
   type BaseDefaultContext,
@@ -28,7 +29,6 @@ import {
   type TypedView,
   type ZeroOptions,
 } from './zero-client.ts';
-import {Query as SvelteQuery, type QueryOptions} from './query.svelte.ts';
 
 export type QueryResult<TReturn> = readonly [
   HumanReadable<TReturn> | undefined,
@@ -39,7 +39,10 @@ const UNKNOWN: QueryResultDetails = Object.freeze({type: 'unknown'});
 const COMPLETE: QueryResultDetails = Object.freeze({type: 'complete'});
 const EMPTY_ARRAY: readonly [] = Object.freeze([]);
 
-type ZLike<TSchema extends BaseDefaultSchema, TContext extends BaseDefaultContext> = {
+type ZLike<
+  TSchema extends BaseDefaultSchema,
+  TContext extends BaseDefaultContext,
+> = {
   readonly clientID: string;
   readonly context: TContext;
   materialize<
@@ -48,7 +51,14 @@ type ZLike<TSchema extends BaseDefaultSchema, TContext extends BaseDefaultContex
     TOutput extends ReadonlyJSONValue | undefined,
     TReturn,
   >(
-    query: QueryOrQueryRequest<TTable, TInput, TOutput, TSchema, TReturn, TContext>,
+    query: QueryOrQueryRequest<
+      TTable,
+      TInput,
+      TOutput,
+      TSchema,
+      TReturn,
+      TContext
+    >,
     options?: MaterializeOptions | undefined,
   ): TypedView<HumanReadable<TReturn>>;
 };
@@ -62,7 +72,9 @@ export class ViewStore {
     TContext extends BaseDefaultContext,
   >(
     z: ZLike<TSchema, TContext>,
-    query: QueryDef<keyof TSchema['tables'] & string, TSchema, TReturn> | undefined,
+    query:
+      | QueryDef<keyof TSchema['tables'] & string, TSchema, TReturn>
+      | undefined,
     enabled: boolean,
     ttl: TTL,
   ): ViewWrapper<TSchema, TReturn, TContext> {
@@ -121,7 +133,9 @@ export class ViewWrapper<
     this.#enabled = enabled;
     this.#onDestroy = onDestroy;
     this.#ttl = ttl;
-    this.#singular = query ? asQueryInternals(query).format.singular : undefined;
+    this.#singular = query
+      ? asQueryInternals(query).format.singular
+      : undefined;
     this.#snapshot = [this.#emptyData(), UNKNOWN];
     this.#materialize();
   }
@@ -297,7 +311,14 @@ export class Z<
     TOutput extends ReadonlyJSONValue | undefined,
     TReturn = PullRow<TTable, TSchema>,
   >(
-    query: QueryOrQueryRequest<TTable, TInput, TOutput, TSchema, TReturn, TContext>,
+    query: QueryOrQueryRequest<
+      TTable,
+      TInput,
+      TOutput,
+      TSchema,
+      TReturn,
+      TContext
+    >,
     options?: {ttl?: TTL | undefined} | undefined,
   ): {cleanup: () => void; complete: Promise<void>} {
     return this.#zero.preload(query, options);
@@ -309,7 +330,14 @@ export class Z<
     TOutput extends ReadonlyJSONValue | undefined,
     TReturn = PullRow<TTable, TSchema>,
   >(
-    query: QueryOrQueryRequest<TTable, TInput, TOutput, TSchema, TReturn, TContext>,
+    query: QueryOrQueryRequest<
+      TTable,
+      TInput,
+      TOutput,
+      TSchema,
+      TReturn,
+      TContext
+    >,
     options?: RunOptions | undefined,
   ): Promise<HumanReadable<TReturn>> {
     return this.#zero.run(query, options);
@@ -321,7 +349,14 @@ export class Z<
     TOutput extends ReadonlyJSONValue | undefined,
     TReturn,
   >(
-    query: QueryOrQueryRequest<TTable, TInput, TOutput, TSchema, TReturn, TContext>,
+    query: QueryOrQueryRequest<
+      TTable,
+      TInput,
+      TOutput,
+      TSchema,
+      TReturn,
+      TContext
+    >,
     options?: MaterializeOptions | undefined,
   ): TypedView<HumanReadable<TReturn>> {
     return this.#zero.materialize(query, options);

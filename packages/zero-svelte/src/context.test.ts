@@ -14,7 +14,9 @@ import {useZero, setZero, createUseZero} from './context.ts';
 describe('context', () => {
   test('useZero throws when no context set', () => {
     contextStore.clear();
-    expect(() => useZero()).toThrow('useZero must be used within a ZeroProvider');
+    expect(() => useZero()).toThrow(
+      'useZero must be used within a ZeroProvider',
+    );
   });
 
   test('setZero + useZero round-trips', () => {

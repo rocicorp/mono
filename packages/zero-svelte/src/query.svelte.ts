@@ -1,3 +1,7 @@
+import {
+  DEFAULT_TTL_MS,
+  addContextToQuery,
+} from '../../zero-client/src/client/bindings.ts';
 import type {
   BaseDefaultContext,
   BaseDefaultSchema,
@@ -10,7 +14,6 @@ import type {
   ReadonlyJSONValue,
   TTL,
 } from './zero-client.ts';
-import {DEFAULT_TTL_MS, addContextToQuery} from '../../zero-client/src/client/bindings.ts';
 import type {QueryResult, ViewWrapper, Z} from './zero.svelte.ts';
 
 export type {QueryResultDetails};
@@ -25,7 +28,8 @@ export class Query<
   TReturn,
   TContext extends BaseDefaultContext,
   MD extends CustomMutatorDefs | undefined = undefined,
-  TTable extends keyof TSchema['tables'] & string = keyof TSchema['tables'] & string,
+  TTable extends keyof TSchema['tables'] & string = keyof TSchema['tables'] &
+    string,
   TInput extends ReadonlyJSONValue | undefined = ReadonlyJSONValue | undefined,
   TOutput extends ReadonlyJSONValue | undefined = ReadonlyJSONValue | undefined,
 > {

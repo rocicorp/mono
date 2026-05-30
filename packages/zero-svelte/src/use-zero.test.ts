@@ -3,7 +3,9 @@ import type {ConnectionState, Schema, ZeroOptions} from './zero-client.ts';
 
 function createMockZeroInstance(clientID = 'test-client') {
   const unsubscribe = vi.fn();
-  const subscribe = vi.fn((_cb: (state: ConnectionState) => void) => unsubscribe);
+  const subscribe = vi.fn(
+    (_cb: (state: ConnectionState) => void) => unsubscribe,
+  );
 
   return {
     instance: {
@@ -35,7 +37,7 @@ const {ZeroMock} = vi.hoisted(() => ({
   ZeroMock: vi.fn(),
 }));
 
-vi.mock('./zero-client.ts', async (importOriginal) => {
+vi.mock('./zero-client.ts', async importOriginal => {
   const orig = await importOriginal<typeof import('./zero-client.ts')>();
   return {
     ...orig,
@@ -105,7 +107,10 @@ describe('Z class', () => {
     const subscribeCb = mock.subscribe.mock.calls[0][0];
     subscribeCb({name: 'disconnected', reason: 'network'});
 
-    expect(z.connectionState).toEqual({name: 'disconnected', reason: 'network'});
+    expect(z.connectionState).toEqual({
+      name: 'disconnected',
+      reason: 'network',
+    });
   });
 
   test('online reflects connected state', () => {

@@ -183,8 +183,8 @@
     "expo-sqlite": ">=15",
     "replicache": "workspace:*",
     "shared": "workspace:*",
-    "syncpack": "^14.3.0",
     "svelte": "5.55.9",
+    "syncpack": "^14.3.0",
     "typedoc": "^0.28.17",
     "typedoc-plugin-markdown": "^4.10.0",
     "typescript": "~6.0.2",
@@ -195,8 +195,8 @@
     "zero-pg": "workspace:*",
     "zero-react": "workspace:*",
     "zero-server": "workspace:*",
-    "zero-svelte": "workspace:*",
     "zero-solid": "workspace:*",
+    "zero-svelte": "workspace:*",
     "zqlite": "workspace:*"
   },
   "peerDependencies": {

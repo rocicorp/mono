@@ -1,8 +1,6 @@
 import {afterEach, describe, expect, test, vi} from 'vitest';
 import {MemorySource} from '../../zql/src/ivm/memory-source.ts';
-import {
-  makeSourceChangeAdd,
-} from '../../zql/src/ivm/source.ts';
+import {makeSourceChangeAdd} from '../../zql/src/ivm/source.ts';
 import {QueryDelegateImpl} from '../../zql/src/query/test/query-delegate.ts';
 import {
   asQueryInternals,
@@ -11,6 +9,7 @@ import {
   newQuery,
   type QueryDelegate,
 } from './bindings.ts';
+import {Query as SvelteQuery} from './query.svelte.ts';
 import {
   createSchema,
   number,
@@ -21,7 +20,6 @@ import {
   type Schema,
 } from './zero-client.ts';
 import {ViewStore} from './zero.svelte.ts';
-import {Query as SvelteQuery} from './query.svelte.ts';
 import type {Z} from './zero.svelte.ts';
 
 function setupTestEnvironment() {
