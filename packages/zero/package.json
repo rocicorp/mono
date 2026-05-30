@@ -96,6 +96,11 @@
       "types": "./out/zero/src/solid.d.ts",
       "default": "./out/zero/src/solid.js"
     },
+    "./svelte": {
+      "types": "./out/zero/src/svelte.d.ts",
+      "svelte": "./out/zero/src/svelte.js",
+      "default": "./out/zero/src/svelte.js"
+    },
     "./sqlite": {
       "types": "./out/zero/src/sqlite.d.ts",
       "default": "./out/zero/src/sqlite.js"
@@ -179,6 +184,7 @@
     "replicache": "workspace:*",
     "shared": "workspace:*",
     "syncpack": "^14.3.0",
+    "svelte": "5.55.9",
     "typedoc": "^0.28.17",
     "typedoc-plugin-markdown": "^4.10.0",
     "typescript": "~6.0.2",
@@ -189,6 +195,7 @@
     "zero-pg": "workspace:*",
     "zero-react": "workspace:*",
     "zero-server": "workspace:*",
+    "zero-svelte": "workspace:*",
     "zero-solid": "workspace:*",
     "zqlite": "workspace:*"
   },
@@ -199,7 +206,8 @@
     "kysely": "^0.28.17",
     "pg": "^8.16.3",
     "react": "^19.2.6",
-    "solid-js": "^1.9.4"
+    "solid-js": "^1.9.4",
+    "svelte": "^5.0.0"
   },
   "peerDependenciesMeta": {
     "@op-engineering/op-sqlite": {
@@ -221,6 +229,9 @@
       "optional": true
     },
     "solid-js": {
+      "optional": true
+    },
+    "svelte": {
       "optional": true
     }
   },

@@ -1,0 +1,7 @@
+{
+  "extends": "../../tsconfig.json",
+  "compilerOptions": {
+    "types": ["svelte"]
+  },
+  "include": ["src", "../shared/src/env.d.ts"]
+}

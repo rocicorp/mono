@@ -10,6 +10,7 @@ allowBuilds:
   core-js-pure: false
   cpu-features: false
   esbuild: true
+  msgpackr-extract: set this to true or false
   prisma: true
   protobufjs: true
   ssh2: false
