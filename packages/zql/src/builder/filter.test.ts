@@ -83,18 +83,11 @@ test('basics', () => {
   expect(predicate({foo: true})).toBe(true);
   expect(predicate({foo: false})).toBe(true);
 
-  // basic operators
+  // equality operators work across types (they use === / !==)
   fc.assert(
     fc.property(
       fc.oneof(fc.boolean(), fc.double(), fc.string()),
-      fc.oneof(
-        fc.constant('='),
-        fc.constant('!='),
-        fc.constant('<'),
-        fc.constant('<='),
-        fc.constant('>'),
-        fc.constant('>='),
-      ),
+      fc.oneof(fc.constant('='), fc.constant('!=')),
       fc.oneof(fc.boolean(), fc.double(), fc.string()),
       (a, op, b) => {
         const condition: SimpleCondition = {
@@ -110,9 +103,43 @@ test('basics', () => {
           },
         };
         const predicate = createPredicate(condition);
-        const jsOp = {'=': '===', '!=': '!=='}[op] ?? op;
+        const jsOp = op === '=' ? '===' : '!==';
         // oxlint-disable-next-line no-eval -- legitimate use for dynamic test comparison
         expect(predicate({foo: a})).toBe(eval(`a ${jsOp} b`));
+      },
+    ),
+  );
+
+  // ordered operators compare same-typed values via compareValues. For numbers
+  // this matches JS ordering. String ordering uses UTF-8 (compareUTF8) and is
+  // covered separately below; mixed-type ordered comparisons are unsupported
+  // (compareValues throws), matching ORDER BY / SQLite, so they aren't exercised.
+  fc.assert(
+    fc.property(
+      fc.double(),
+      fc.oneof(
+        fc.constant('<'),
+        fc.constant('<='),
+        fc.constant('>'),
+        fc.constant('>='),
+      ),
+      fc.double(),
+      (a, op, b) => {
+        const condition: SimpleCondition = {
+          type: 'simple',
+          left: {
+            type: 'column',
+            name: 'foo',
+          },
+          op: op as SimpleOperator,
+          right: {
+            type: 'literal',
+            value: b,
+          },
+        };
+        const predicate = createPredicate(condition);
+        // oxlint-disable-next-line no-eval -- legitimate use for dynamic test comparison
+        expect(predicate({foo: a})).toBe(eval(`a ${op} b`));
       },
     ),
   );
