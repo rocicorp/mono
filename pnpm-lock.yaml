@@ -1556,9 +1556,6 @@ importers:
       zero-client:
         specifier: workspace:*
         version: link:../zero-client
-      zql:
-        specifier: workspace:*
-        version: link:../zql
 
   packages/zero-types:
     devDependencies:

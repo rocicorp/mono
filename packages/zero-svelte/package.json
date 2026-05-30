@@ -23,8 +23,7 @@
     "svelte-check": "^4.4.8",
     "typescript": "~6.0.2",
     "vitest": "^4.1.6",
-    "zero-client": "workspace:*",
-    "zql": "workspace:*"
+    "zero-client": "workspace:*"
   },
   "peerDependencies": {
     "svelte": "^5.0.0"
