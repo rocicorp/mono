@@ -1,7 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
-import {assert, assertNotUndefined} from '../../shared/src/asserts.ts';
-import type {Enum} from '../../shared/src/enum.ts';
-import type {MaybePromise} from '../../shared/src/types.ts';
+import {assert, assertNotUndefined} from 'shared/src/asserts.ts';
+import type {Enum} from 'shared/src/enum.ts';
+import type {MaybePromise} from 'shared/src/types.ts';
 import {throwChunkHasher} from './dag/chunk.ts';
 import {LazyStore} from './dag/lazy-store.ts';
 import {StoreImpl} from './dag/store-impl.ts';

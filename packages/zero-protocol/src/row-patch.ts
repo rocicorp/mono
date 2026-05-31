@@ -1,5 +1,5 @@
-import {jsonObjectSchema} from '../../shared/src/json-schema.ts';
-import * as v from '../../shared/src/valita.ts';
+import {jsonObjectSchema} from 'shared/src/json-schema.ts';
+import * as v from 'shared/src/valita.ts';
 import {rowSchema} from './data.ts';
 import {primaryKeyValueRecordSchema} from './primary-key.ts';
 

@@ -1,4 +1,4 @@
-import * as v from '../../../../../../shared/src/valita.ts';
+import * as v from 'shared/src/valita.ts';
 import {changeSourceReportSchema} from '../../../replicator/reporter/report-schema.ts';
 import {commitSchema} from './data.ts';
 

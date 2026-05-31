@@ -1,6 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
-import {AbortError} from '../../../../shared/src/abort-error.ts';
-import type {Enum} from '../../../../shared/src/enum.ts';
+import {AbortError} from 'shared/src/abort-error.ts';
+import type {Enum} from 'shared/src/enum.ts';
 import {getOrCreateCounter} from '../../observability/metrics.ts';
 import type {Source} from '../../types/streams.ts';
 import type {DownloadStatus} from '../change-source/protocol/current.ts';

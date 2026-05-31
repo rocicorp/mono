@@ -1,7 +1,7 @@
-import {assert} from '../../../../shared/src/asserts.ts';
-import {BigIntJSON} from '../../../../shared/src/bigint-json.ts';
-import type {Enum} from '../../../../shared/src/enum.ts';
-import {must} from '../../../../shared/src/must.ts';
+import {assert} from 'shared/src/asserts.ts';
+import {BigIntJSON} from 'shared/src/bigint-json.ts';
+import type {Enum} from 'shared/src/enum.ts';
+import {must} from 'shared/src/must.ts';
 import {max} from '../../types/lexi-version.ts';
 import type {Subscription} from '../../types/subscription.ts';
 import type {ChangeTag, WatermarkedChange} from './change-streamer-service.ts';

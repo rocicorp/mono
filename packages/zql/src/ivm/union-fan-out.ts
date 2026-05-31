@@ -1,5 +1,5 @@
-import {assert} from '../../../shared/src/asserts.ts';
-import {must} from '../../../shared/src/must.ts';
+import {assert} from 'shared/src/asserts.ts';
+import {must} from 'shared/src/must.ts';
 import {ChangeIndex} from './change-index.ts';
 import type {Change} from './change.ts';
 import type {Node} from './data.ts';

@@ -1,5 +1,5 @@
 /* oxlint-disable @typescript-eslint/no-explicit-any */
-import {must} from '../../../shared/src/must.ts';
+import {must} from 'shared/src/must.ts';
 import {
   toStaticParam,
   type Condition,

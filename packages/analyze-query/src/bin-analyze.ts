@@ -2,13 +2,13 @@ import '../../shared/src/dotenv.ts';
 
 import fs from 'node:fs';
 import {styleText} from 'node:util';
+import {colorConsole, createLogContext} from 'shared/src/logging.ts';
+import {must} from 'shared/src/must.ts';
+import {parseOptions} from 'shared/src/options.ts';
+import * as v from 'shared/src/valita.ts';
 import {astToZQL} from '../../ast-to-zql/src/ast-to-zql.ts';
 import {formatOutput} from '../../ast-to-zql/src/format.ts';
 import {logLevel, logOptions} from '../../otel/src/log-options.ts';
-import {colorConsole, createLogContext} from '../../shared/src/logging.ts';
-import {must} from '../../shared/src/must.ts';
-import {parseOptions} from '../../shared/src/options.ts';
-import * as v from '../../shared/src/valita.ts';
 import {
   appOptions,
   shardOptions,

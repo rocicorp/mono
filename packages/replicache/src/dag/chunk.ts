@@ -1,4 +1,4 @@
-import {assert, assertString} from '../../../shared/src/asserts.ts';
+import {assert, assertString} from 'shared/src/asserts.ts';
 import {assertDeepFrozen} from '../frozen-json.ts';
 import type {Hash} from '../hash.ts';
 

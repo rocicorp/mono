@@ -1,3 +1,7 @@
+import {assert} from 'shared/src/asserts.ts';
+import type {ReadonlyJSONValue} from 'shared/src/json.ts';
+import {TDigest, type ReadonlyTDigest} from 'shared/src/tdigest.ts';
+import * as valita from 'shared/src/valita.ts';
 import type {BTreeRead} from '../../../../replicache/src/btree/read.ts';
 import type {Read} from '../../../../replicache/src/dag/store.ts';
 import {readFromHash} from '../../../../replicache/src/db/read.ts';
@@ -10,10 +14,6 @@ import {
 } from '../../../../replicache/src/persist/clients.ts';
 import type {ReplicacheImpl} from '../../../../replicache/src/replicache-impl.ts';
 import {withRead} from '../../../../replicache/src/with-transactions.ts';
-import {assert} from '../../../../shared/src/asserts.ts';
-import type {ReadonlyJSONValue} from '../../../../shared/src/json.ts';
-import {TDigest, type ReadonlyTDigest} from '../../../../shared/src/tdigest.ts';
-import * as valita from '../../../../shared/src/valita.ts';
 import type {AnalyzeQueryResult} from '../../../../zero-protocol/src/analyze-query-result.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import type {Row} from '../../../../zero-protocol/src/data.ts';

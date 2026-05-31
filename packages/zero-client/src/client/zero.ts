@@ -1,5 +1,24 @@
 import {LogContext, type LogLevel, type LogSink} from '@rocicorp/logger';
 import {type Resolver, resolver} from '@rocicorp/resolver';
+import {AbortError} from 'shared/src/abort-error.ts';
+import {assert, unreachable} from 'shared/src/asserts.ts';
+import {
+  getBrowserGlobal,
+  mustGetBrowserGlobal,
+} from 'shared/src/browser-env.ts';
+import {getDocumentVisibilityWatcher} from 'shared/src/document-visible.ts';
+import {getErrorMessage} from 'shared/src/error.ts';
+import {h64} from 'shared/src/hash.ts';
+import type {ReadonlyJSONValue} from 'shared/src/json.ts';
+import {must} from 'shared/src/must.ts';
+import {navigator} from 'shared/src/navigator.ts';
+import {promiseRace} from 'shared/src/promise-race.ts';
+import {emptyFunction} from 'shared/src/sentinels.ts';
+import {sleep, sleepWithAbort} from 'shared/src/sleep.ts';
+import {Subscribable} from 'shared/src/subscribable.ts';
+import {assertTesting, TESTING} from 'shared/src/testing.ts';
+import * as valita from 'shared/src/valita.ts';
+import type {Writable} from 'shared/src/writable.ts';
 import {type DeletedClients} from '../../../replicache/src/deleted-clients.ts';
 import {getKVStoreProvider} from '../../../replicache/src/get-kv-store-provider.ts';
 import {
@@ -21,25 +40,6 @@ import type {
   MutatorDefs,
   UpdateNeededReason as ReplicacheUpdateNeededReason,
 } from '../../../replicache/src/types.ts';
-import {AbortError} from '../../../shared/src/abort-error.ts';
-import {assert, unreachable} from '../../../shared/src/asserts.ts';
-import {
-  getBrowserGlobal,
-  mustGetBrowserGlobal,
-} from '../../../shared/src/browser-env.ts';
-import {getDocumentVisibilityWatcher} from '../../../shared/src/document-visible.ts';
-import {getErrorMessage} from '../../../shared/src/error.ts';
-import {h64} from '../../../shared/src/hash.ts';
-import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
-import {must} from '../../../shared/src/must.ts';
-import {navigator} from '../../../shared/src/navigator.ts';
-import {promiseRace} from '../../../shared/src/promise-race.ts';
-import {emptyFunction} from '../../../shared/src/sentinels.ts';
-import {sleep, sleepWithAbort} from '../../../shared/src/sleep.ts';
-import {Subscribable} from '../../../shared/src/subscribable.ts';
-import {assertTesting, TESTING} from '../../../shared/src/testing.ts';
-import * as valita from '../../../shared/src/valita.ts';
-import type {Writable} from '../../../shared/src/writable.ts';
 import {type ClientSchema} from '../../../zero-protocol/src/client-schema.ts';
 import type {ConnectedMessage} from '../../../zero-protocol/src/connect.ts';
 import {encodeSecProtocols} from '../../../zero-protocol/src/connect.ts';

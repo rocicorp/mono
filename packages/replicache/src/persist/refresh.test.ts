@@ -1,7 +1,7 @@
 import {LogContext} from '@rocicorp/logger';
+import {assert, assertNotUndefined} from 'shared/src/asserts.ts';
+import type {JSONValue, ReadonlyJSONValue} from 'shared/src/json.ts';
 import {describe, expect, test} from 'vitest';
-import {assert, assertNotUndefined} from '../../../shared/src/asserts.ts';
-import type {JSONValue, ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import type {Entry} from '../btree/node.ts';
 import {BTreeWrite} from '../btree/write.ts';
 import type {Cookie} from '../cookies.ts';

@@ -1,10 +1,10 @@
+import {bench, describe} from './bench.ts';
+import {getSizeOfValue} from './size-of-value.ts';
 import {
   jsonArrayTestData,
   jsonObjectTestData,
   randomString,
-} from '../../shared/src/test-data.ts';
-import {bench, describe} from './bench.ts';
-import {getSizeOfValue} from './size-of-value.ts';
+} from './test-data.ts';
 
 describe('getSizeOfValue performance', () => {
   // Core primitive types - essential benchmarks

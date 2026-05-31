@@ -1,4 +1,4 @@
-import * as v from '../../../../../shared/src/valita.ts';
+import * as v from 'shared/src/valita.ts';
 
 // PG-specific messages passed in the table metadata and backfill ID
 // messages.

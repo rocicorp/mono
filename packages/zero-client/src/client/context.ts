@@ -1,7 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
+import {assert} from 'shared/src/asserts.ts';
 import type {NoIndexDiff} from '../../../replicache/src/btree/node.ts';
 import type {Hash} from '../../../replicache/src/hash.ts';
-import {assert} from '../../../shared/src/asserts.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import type {DebugDelegate} from '../../../zql/src/builder/debug-delegate.ts';

@@ -1,4 +1,4 @@
-import * as v from '../../shared/src/valita.ts';
+import * as v from 'shared/src/valita.ts';
 
 export const primaryKeySchema = v.readonly(
   // oxlint-disable-next-line e18e/prefer-spread-syntax

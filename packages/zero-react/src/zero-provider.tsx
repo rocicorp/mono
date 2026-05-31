@@ -7,7 +7,7 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import {stringCompare} from '../../shared/src/string-compare.ts';
+import {stringCompare} from 'shared/src/string-compare.ts';
 import {
   Zero,
   type BaseDefaultContext,

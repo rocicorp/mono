@@ -1,5 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
-import {promiseVoid} from '../../../../shared/src/resolved-promises.ts';
+import {promiseVoid} from 'shared/src/resolved-promises.ts';
 import {READ_COMMITTED} from '../../db/mode-enum.ts';
 import {runTx} from '../../db/run-transaction.ts';
 import {type PostgresDB} from '../../types/pg.ts';

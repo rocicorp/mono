@@ -1,6 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
-import {assert} from '../../../shared/src/asserts.ts';
-import type {Enum} from '../../../shared/src/enum.ts';
+import {assert} from 'shared/src/asserts.ts';
+import type {Enum} from 'shared/src/enum.ts';
 import {diff} from '../btree/diff.ts';
 import type {InternalDiff} from '../btree/node.ts';
 import {BTreeRead, allEntriesAsDiff} from '../btree/read.ts';

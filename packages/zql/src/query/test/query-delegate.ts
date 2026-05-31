@@ -1,10 +1,7 @@
+import {assert} from 'shared/src/asserts.ts';
+import {deepEqual, type ReadonlyJSONValue} from 'shared/src/json.ts';
+import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
 import {testLogConfig} from '../../../../otel/src/test-log-config.ts';
-import {assert} from '../../../../shared/src/asserts.ts';
-import {
-  deepEqual,
-  type ReadonlyJSONValue,
-} from '../../../../shared/src/json.ts';
-import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import type {Source} from '../../ivm/source.ts';
 import {createSource} from '../../ivm/test/source-factory.ts';

@@ -1,8 +1,8 @@
 import {type LogLevel} from '@rocicorp/logger';
-import {assert} from '../../shared/src/asserts.ts';
-import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
-import {must} from '../../shared/src/must.ts';
-import {getValueAtPath} from '../../shared/src/object-traversal.ts';
+import {assert} from 'shared/src/asserts.ts';
+import type {ReadonlyJSONValue} from 'shared/src/json.ts';
+import {must} from 'shared/src/must.ts';
+import {getValueAtPath} from 'shared/src/object-traversal.ts';
 import type {MutateResponse} from '../../zero-protocol/src/mutate-server.ts';
 import type {CustomMutation} from '../../zero-protocol/src/mutation.ts';
 import {type MutationResponse} from '../../zero-protocol/src/push.ts';

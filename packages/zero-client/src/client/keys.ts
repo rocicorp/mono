@@ -1,5 +1,5 @@
-import {h128} from '../../../shared/src/hash.ts';
-import * as v from '../../../shared/src/valita.ts';
+import {h128} from 'shared/src/hash.ts';
+import * as v from 'shared/src/valita.ts';
 import type {CompoundKey} from '../../../zero-protocol/src/ast.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import type {MutationID} from '../../../zero-protocol/src/mutation-id.ts';

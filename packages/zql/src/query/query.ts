@@ -1,5 +1,5 @@
 /* oxlint-disable @typescript-eslint/no-explicit-any */
-import type {Expand, ExpandRecursive} from '../../../shared/src/expand.ts';
+import type {Expand, ExpandRecursive} from 'shared/src/expand.ts';
 import {type SimpleOperator} from '../../../zero-protocol/src/ast.ts';
 import type {DefaultSchema} from '../../../zero-types/src/default-types.ts';
 import type {

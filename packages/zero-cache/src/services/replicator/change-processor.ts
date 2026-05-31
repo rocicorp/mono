@@ -1,9 +1,9 @@
 import type {LogContext} from '@rocicorp/logger';
 import {SqliteError} from '@rocicorp/zero-sqlite3';
-import {AbortError} from '../../../../shared/src/abort-error.ts';
-import {assert, unreachable} from '../../../../shared/src/asserts.ts';
-import {stringify} from '../../../../shared/src/bigint-json.ts';
-import {must} from '../../../../shared/src/must.ts';
+import {AbortError} from 'shared/src/abort-error.ts';
+import {assert, unreachable} from 'shared/src/asserts.ts';
+import {stringify} from 'shared/src/bigint-json.ts';
+import {must} from 'shared/src/must.ts';
 import type {DownloadStatus} from '../../../../zero-events/src/status.ts';
 import {
   createLiteIndexStatement,

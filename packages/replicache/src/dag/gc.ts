@@ -1,5 +1,5 @@
-import {assert, assertNumber} from '../../../shared/src/asserts.ts';
-import type {MaybePromise} from '../../../shared/src/types.ts';
+import {assert, assertNumber} from 'shared/src/asserts.ts';
+import type {MaybePromise} from 'shared/src/types.ts';
 import {skipGCAsserts} from '../config.ts';
 import {type Hash, emptyHash} from '../hash.ts';
 

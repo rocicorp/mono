@@ -2,16 +2,16 @@ import {Lock} from '@rocicorp/lock';
 import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import type {Row} from 'postgres';
+import {assert, unreachable} from 'shared/src/asserts.ts';
+import {stringify} from 'shared/src/bigint-json.ts';
+import {CustomKeyMap} from 'shared/src/custom-key-map.ts';
+import {must} from 'shared/src/must.ts';
+import {randInt} from 'shared/src/rand.ts';
 import {
   manualSpan,
   startAsyncSpan,
   startSpan,
 } from '../../../../otel/src/span.ts';
-import {assert, unreachable} from '../../../../shared/src/asserts.ts';
-import {stringify} from '../../../../shared/src/bigint-json.ts';
-import {CustomKeyMap} from '../../../../shared/src/custom-key-map.ts';
-import {must} from '../../../../shared/src/must.ts';
-import {randInt} from '../../../../shared/src/rand.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import type {ChangeDesiredQueriesMessage} from '../../../../zero-protocol/src/change-desired-queries.ts';
 import type {

@@ -1,6 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
+import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
 import type {LogConfig} from '../../../otel/src/log-options.ts';
-import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {
   mapAST,
   type AST,

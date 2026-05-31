@@ -1,7 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
-import {navigator} from '../../../shared/src/navigator.ts';
-import {sleep} from '../../../shared/src/sleep.ts';
+import {navigator} from 'shared/src/navigator.ts';
+import {sleep} from 'shared/src/sleep.ts';
 import {PROTOCOL_VERSION} from '../../../zero-protocol/src/protocol-version.ts';
 import {nanoid} from '../util/nanoid.ts';
 import {

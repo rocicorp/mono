@@ -1,11 +1,11 @@
 import type {LogContext} from '@rocicorp/logger';
+import {assert} from 'shared/src/asserts.ts';
+import type {ReadonlyJSONValue} from 'shared/src/json.ts';
+import {must} from 'shared/src/must.ts';
+import {emptyFunction} from 'shared/src/sentinels.ts';
 import type {ZeroTxData} from '../../../replicache/src/replicache-options.ts';
 import type {WriteTransactionImpl} from '../../../replicache/src/transactions.ts';
 import {zeroData} from '../../../replicache/src/transactions.ts';
-import {assert} from '../../../shared/src/asserts.ts';
-import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
-import {must} from '../../../shared/src/must.ts';
-import {emptyFunction} from '../../../shared/src/sentinels.ts';
 import type {DefaultSchema} from '../../../zero-types/src/default-types.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import {

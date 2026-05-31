@@ -1,4 +1,4 @@
-import * as v from '../../shared/src/valita.ts';
+import * as v from 'shared/src/valita.ts';
 import {nullableVersionSchema, versionSchema} from './version.ts';
 
 export const pullRequestBodySchema = v.object({

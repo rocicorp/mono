@@ -1,13 +1,13 @@
 import type {SQLQuery} from '@databases/sql';
-import {last, zip} from '../../shared/src/arrays.ts';
-import {assert, unreachable} from '../../shared/src/asserts.ts';
+import {last, zip} from 'shared/src/arrays.ts';
+import {assert, unreachable} from 'shared/src/asserts.ts';
 import {
   parse as parseBigIntJson,
   type JSONValue as BigIntJSONValue,
-} from '../../shared/src/bigint-json.ts';
-import {hasOwn} from '../../shared/src/has-own.ts';
-import {type JSONValue} from '../../shared/src/json.ts';
-import {must} from '../../shared/src/must.ts';
+} from 'shared/src/bigint-json.ts';
+import {hasOwn} from 'shared/src/has-own.ts';
+import {type JSONValue} from 'shared/src/json.ts';
+import {must} from 'shared/src/must.ts';
 import type {
   AST,
   Condition,

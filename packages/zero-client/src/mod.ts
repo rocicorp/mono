@@ -15,15 +15,15 @@ export {
 } from '../../replicache/src/persist/collect-idb-databases.ts';
 export type {ClientGroupID, ClientID} from '../../replicache/src/sync/ids.ts';
 export {TransactionClosedError} from '../../replicache/src/transaction-closed-error.ts';
-export type {Expand} from '../../shared/src/expand.ts';
-export type {Falsy} from '../../shared/src/falsy.ts';
+export type {Expand} from 'shared/src/expand.ts';
+export type {Falsy} from 'shared/src/falsy.ts';
 export type {
   JSONObject,
   JSONValue,
   ReadonlyJSONObject,
   ReadonlyJSONValue,
-} from '../../shared/src/json.ts';
-export type {MaybePromise} from '../../shared/src/types.ts';
+} from 'shared/src/json.ts';
+export type {MaybePromise} from 'shared/src/types.ts';
 export type {
   AnalyzeQueryResult,
   PlanDebugEventJSON,

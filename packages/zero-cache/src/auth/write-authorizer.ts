@@ -2,10 +2,10 @@ import type {SQLQuery} from '@databases/sql';
 import type {MaybePromise} from '@opentelemetry/resources';
 import type {LogContext} from '@rocicorp/logger';
 import type {JWTPayload} from 'jose';
-import {assert} from '../../../shared/src/asserts.ts';
-import type {JSONValue, ReadonlyJSONValue} from '../../../shared/src/json.ts';
-import {must} from '../../../shared/src/must.ts';
-import * as v from '../../../shared/src/valita.ts';
+import {assert} from 'shared/src/asserts.ts';
+import type {JSONValue, ReadonlyJSONValue} from 'shared/src/json.ts';
+import {must} from 'shared/src/must.ts';
+import * as v from 'shared/src/valita.ts';
 import type {Condition} from '../../../zero-protocol/src/ast.ts';
 import type {
   CRUDOp,

@@ -1,6 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 import parsePrometheusTextFormat from 'parse-prometheus-text-format';
-import {promiseVoid} from '../../../../shared/src/resolved-promises.ts';
+import {promiseVoid} from 'shared/src/resolved-promises.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {getOrCreateGauge} from '../../observability/metrics.ts';
 import {Subscription} from '../../types/subscription.ts';

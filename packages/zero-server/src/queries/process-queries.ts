@@ -1,9 +1,9 @@
 import type {LogLevel} from '@rocicorp/logger';
-import {assert} from '../../../shared/src/asserts.ts';
-import {getErrorDetails, getErrorMessage} from '../../../shared/src/error.ts';
-import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
-import type {MaybePromise} from '../../../shared/src/types.ts';
-import * as v from '../../../shared/src/valita.ts';
+import {assert} from 'shared/src/asserts.ts';
+import {getErrorDetails, getErrorMessage} from 'shared/src/error.ts';
+import type {ReadonlyJSONValue} from 'shared/src/json.ts';
+import type {MaybePromise} from 'shared/src/types.ts';
+import * as v from 'shared/src/valita.ts';
 import {mapAST} from '../../../zero-protocol/src/ast.ts';
 import {
   transformRequestMessageSchema,

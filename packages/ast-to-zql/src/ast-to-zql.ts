@@ -1,6 +1,6 @@
-import {unreachable} from '../../shared/src/asserts.ts';
-import {toSorted} from '../../shared/src/iterables.ts';
-import {must} from '../../shared/src/must.ts';
+import {unreachable} from 'shared/src/asserts.ts';
+import {toSorted} from 'shared/src/iterables.ts';
+import {must} from 'shared/src/must.ts';
 import type {
   AST,
   Condition,

@@ -1,4 +1,4 @@
-import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
+import type {ReadonlyJSONValue} from 'shared/src/json.ts';
 import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
 import type {SchemaValue, TableSchema} from '../table-schema.ts';
 

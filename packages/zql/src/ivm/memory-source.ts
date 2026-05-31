@@ -1,8 +1,8 @@
-import {assert, unreachable} from '../../../shared/src/asserts.ts';
-import {BTreeSet} from '../../../shared/src/btree-set.ts';
-import {hasOwn} from '../../../shared/src/has-own.ts';
-import {once, toSorted} from '../../../shared/src/iterables.ts';
-import {must} from '../../../shared/src/must.ts';
+import {assert, unreachable} from 'shared/src/asserts.ts';
+import {BTreeSet} from 'shared/src/btree-set.ts';
+import {hasOwn} from 'shared/src/has-own.ts';
+import {once, toSorted} from 'shared/src/iterables.ts';
+import {must} from 'shared/src/must.ts';
 import type {
   Condition,
   Ordering,

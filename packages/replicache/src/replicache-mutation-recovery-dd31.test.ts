@@ -1,8 +1,8 @@
+import {assert} from 'shared/src/asserts.ts';
+import type {Enum} from 'shared/src/enum.ts';
+import {type JSONObject, assertJSONObject} from 'shared/src/json.ts';
+import {randomUint64} from 'shared/src/random-uint64.ts';
 import {describe, expect, test, vi} from 'vitest';
-import {assert} from '../../shared/src/asserts.ts';
-import type {Enum} from '../../shared/src/enum.ts';
-import {type JSONObject, assertJSONObject} from '../../shared/src/json.ts';
-import {randomUint64} from '../../shared/src/random-uint64.ts';
 import {LazyStore} from './dag/lazy-store.ts';
 import {StoreImpl} from './dag/store-impl.ts';
 import * as FormatVersion from './format-version-enum.ts';

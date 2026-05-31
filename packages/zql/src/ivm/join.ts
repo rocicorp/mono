@@ -1,4 +1,4 @@
-import {assert, unreachable} from '../../../shared/src/asserts.ts';
+import {assert, unreachable} from 'shared/src/asserts.ts';
 import type {CompoundKey, System} from '../../../zero-protocol/src/ast.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import {ChangeIndex} from './change-index.ts';

@@ -1,5 +1,5 @@
 import type {SQLQuery} from '@databases/sql';
-import {assert} from '../../shared/src/asserts.ts';
+import {assert} from 'shared/src/asserts.ts';
 import type {
   Condition,
   Ordering,

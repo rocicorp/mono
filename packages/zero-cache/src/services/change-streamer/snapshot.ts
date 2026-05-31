@@ -12,7 +12,7 @@
  *   backed up changes.
  */
 
-import * as v from '../../../../shared/src/valita.ts';
+import * as v from 'shared/src/valita.ts';
 
 const statusSchema = v.object({
   tag: v.literal('status'),

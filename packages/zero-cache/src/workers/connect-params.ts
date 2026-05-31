@@ -1,5 +1,5 @@
 import type {IncomingHttpHeaders} from 'node:http2';
-import {must} from '../../../shared/src/must.ts';
+import {must} from 'shared/src/must.ts';
 import {
   decodeSecProtocols,
   type InitConnectionMessage,

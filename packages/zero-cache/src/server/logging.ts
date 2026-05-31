@@ -1,11 +1,11 @@
 import type {LogContext} from '@rocicorp/logger';
 import {type Context, type LogLevel, type LogSink} from '@rocicorp/logger';
-import {otelLogsEnabled} from '../../../otel/src/enabled.ts';
 import {
   createLogContext as createLogContextShared,
   getLogSink,
   type LogConfig,
-} from '../../../shared/src/logging.ts';
+} from 'shared/src/logging.ts';
+import {otelLogsEnabled} from '../../../otel/src/enabled.ts';
 import {UNHANDLED_EXCEPTION_ERROR_CODE} from '../services/life-cycle.ts';
 import {OtelLogSink} from './otel-log-sink.ts';
 

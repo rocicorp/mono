@@ -1,6 +1,6 @@
 /* oxlint-disable @typescript-eslint/no-explicit-any */
-import {h64} from '../../../shared/src/hash.ts';
-import {mapEntries} from '../../../shared/src/objects.ts';
+import {h64} from 'shared/src/hash.ts';
+import {mapEntries} from 'shared/src/objects.ts';
 import {
   normalizeClientSchema,
   type ClientSchema,

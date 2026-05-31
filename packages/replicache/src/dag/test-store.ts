@@ -1,5 +1,5 @@
-import {assertArray, assertString} from '../../../shared/src/asserts.ts';
-import {stringCompare} from '../../../shared/src/string-compare.ts';
+import {assertArray, assertString} from 'shared/src/asserts.ts';
+import {stringCompare} from 'shared/src/string-compare.ts';
 import type {Hash} from '../hash.ts';
 import {
   assertHash,

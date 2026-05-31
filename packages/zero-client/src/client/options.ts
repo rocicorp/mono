@@ -1,6 +1,6 @@
 import type {LogLevel, LogSink} from '@rocicorp/logger';
+import * as v from 'shared/src/valita.ts';
 import type {StoreProvider} from '../../../replicache/src/kv/store.ts';
-import * as v from '../../../shared/src/valita.ts';
 import type {
   BaseDefaultContext,
   BaseDefaultSchema,
