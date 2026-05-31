@@ -1,7 +1,7 @@
 import {mergeConfig} from 'vitest/config';
-import {newConfig} from '../shared/src/tool/vitest-config.ts';
+import config from '../shared/src/tool/vitest-config.ts';
 
-export default mergeConfig(newConfig(), {
+export default mergeConfig(config, {
   test: {
     name: 'ast-to-zql',
     browser: {

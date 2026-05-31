@@ -1,7 +1,7 @@
-import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
-import {emptyArray} from 'shared/src/sentinels.ts';
 import {describe, expect, test} from 'vitest';
 import {testLogConfig} from '../../../otel/src/test-log-config.ts';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import {emptyArray} from '../../../shared/src/sentinels.ts';
 import type {Ordering} from '../../../zero-protocol/src/ast.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import {Catch} from './catch.ts';

@@ -1,5 +1,5 @@
-import * as valita from 'shared/src/valita.ts';
 import {describe, expect, test} from 'vitest';
+import * as valita from '../../shared/src/valita.ts';
 import {
   analyzeQueryResultSchema,
   rowCountsByQuerySchema,

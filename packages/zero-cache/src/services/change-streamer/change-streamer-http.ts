@@ -1,9 +1,9 @@
 import type {IncomingMessage} from 'node:http';
 import websocket from '@fastify/websocket';
 import type {LogContext} from '@rocicorp/logger';
-import {assert} from 'shared/src/asserts.ts';
-import {must} from 'shared/src/must.ts';
 import WebSocket from 'ws';
+import {assert} from '../../../../shared/src/asserts.ts';
+import {must} from '../../../../shared/src/must.ts';
 import type {IncomingMessageSubset} from '../../types/http.ts';
 import {pgClient, type PostgresDB} from '../../types/pg.ts';
 import {type Worker} from '../../types/processes.ts';

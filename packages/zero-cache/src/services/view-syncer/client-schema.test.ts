@@ -1,5 +1,5 @@
-import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
 import {beforeAll, describe, expect, test} from 'vitest';
+import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import type {
   ClientSchema,
   TableSchema,

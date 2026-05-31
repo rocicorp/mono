@@ -1,5 +1,5 @@
-import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
 import {beforeEach, describe, expect, test} from 'vitest';
+import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.ts';
 import {Database} from '../../../../../zqlite/src/db.ts';
 import {StatementRunner} from '../../../db/statements.ts';
 import {expectTableExact} from '../../../test/lite.ts';

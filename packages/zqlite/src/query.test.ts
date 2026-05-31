@@ -1,7 +1,7 @@
-import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
-import {must} from 'shared/src/must.ts';
 import {beforeEach, expect, expectTypeOf, test} from 'vitest';
 import {testLogConfig} from '../../otel/src/test-log-config.ts';
+import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
+import {must} from '../../shared/src/must.ts';
 import {
   makeSourceChangeAdd,
   makeSourceChangeRemove,

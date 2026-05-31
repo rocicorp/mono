@@ -1,5 +1,5 @@
-import * as valita from 'shared/src/valita.ts';
 import {afterEach, beforeEach, expect, test, vi} from 'vitest';
+import * as valita from '../../../shared/src/valita.ts';
 import {decodeSecProtocols} from '../../../zero-protocol/src/connect.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';

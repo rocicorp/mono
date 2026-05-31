@@ -1,8 +1,8 @@
 import {consoleLogSink, LogContext} from '@rocicorp/logger';
-import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
-import {must} from 'shared/src/must.ts';
 import {beforeAll, expect, test} from 'vitest';
 import {testLogConfig} from '../../otel/src/test-log-config.ts';
+import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
+import {must} from '../../shared/src/must.ts';
 import {initialSync} from '../../zero-cache/src/services/change-source/pg/initial-sync.ts';
 import {getConnectionURI, testDBs} from '../../zero-cache/src/test/db.ts';
 import type {PostgresDB} from '../../zero-cache/src/types/pg.ts';

@@ -1,5 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
-import * as v from 'shared/src/valita.ts';
+import * as v from '../../../shared/src/valita.ts';
 import type {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {errorKindSchema} from '../../../zero-protocol/src/error.ts';
 import {updateNeededReasonTypeSchema} from './options.ts';

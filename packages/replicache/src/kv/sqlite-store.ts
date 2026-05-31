@@ -1,5 +1,5 @@
 import {RWLock} from '@rocicorp/lock';
-import type {ReadonlyJSONValue} from 'shared/src/json.ts';
+import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {deepFreeze} from '../frozen-json.ts';
 import type {Read, Store, Write} from './store.ts';
 import {

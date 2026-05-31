@@ -1,4 +1,4 @@
-import type {ReadonlyJSONValue} from 'shared/src/json.ts';
+import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
 import {mustGetHeadHash, type Read} from './dag/store.ts';
 import {DEFAULT_HEAD_NAME, localMutationsDD31} from './db/commit.ts';
 import type {ClientID} from './sync/ids.ts';

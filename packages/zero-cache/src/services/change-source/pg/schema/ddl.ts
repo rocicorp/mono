@@ -1,6 +1,6 @@
 import {literal as lit} from 'pg-format';
-import {assert} from 'shared/src/asserts.ts';
-import * as v from 'shared/src/valita.ts';
+import {assert} from '../../../../../../shared/src/asserts.ts';
+import * as v from '../../../../../../shared/src/valita.ts';
 import {upstreamSchema, type ShardConfig} from '../../../../types/shards.ts';
 import {id} from '../../../../types/sql.ts';
 import {publishedSchema, publishedSchemaQuery} from './published.ts';

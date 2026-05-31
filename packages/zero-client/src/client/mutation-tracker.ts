@@ -1,16 +1,16 @@
 import type {LogContext} from '@rocicorp/logger';
 import {resolver, type Resolver} from '@rocicorp/resolver';
-import {assert, unreachable} from 'shared/src/asserts.ts';
-import {getErrorDetails} from 'shared/src/error.ts';
-import {must} from 'shared/src/must.ts';
-import {emptyObject} from 'shared/src/sentinels.ts';
-import * as v from 'shared/src/valita.ts';
 import type {NoIndexDiff} from '../../../replicache/src/btree/node.ts';
 import type {ReplicacheImpl} from '../../../replicache/src/impl.ts';
 import type {
   EphemeralID,
   MutationTrackingData,
 } from '../../../replicache/src/replicache-options.ts';
+import {assert, unreachable} from '../../../shared/src/asserts.ts';
+import {getErrorDetails} from '../../../shared/src/error.ts';
+import {must} from '../../../shared/src/must.ts';
+import {emptyObject} from '../../../shared/src/sentinels.ts';
+import * as v from '../../../shared/src/valita.ts';
 import {
   ApplicationError,
   isApplicationError,

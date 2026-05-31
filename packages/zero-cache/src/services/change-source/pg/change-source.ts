@@ -5,18 +5,18 @@ import {
 import type {LogContext} from '@rocicorp/logger';
 import {nanoid} from 'nanoid';
 import postgres from 'postgres';
-import {AbortError} from 'shared/src/abort-error.ts';
-import {assert} from 'shared/src/asserts.ts';
-import {stringify} from 'shared/src/bigint-json.ts';
-import {deepEqual} from 'shared/src/json.ts';
-import {must} from 'shared/src/must.ts';
-import {mapValues} from 'shared/src/objects.ts';
+import {AbortError} from '../../../../../shared/src/abort-error.ts';
+import {assert} from '../../../../../shared/src/asserts.ts';
+import {stringify} from '../../../../../shared/src/bigint-json.ts';
+import {deepEqual} from '../../../../../shared/src/json.ts';
+import {must} from '../../../../../shared/src/must.ts';
+import {mapValues} from '../../../../../shared/src/objects.ts';
 import {
   equals,
   intersection,
   symmetricDifferences,
-} from 'shared/src/set-utils.ts';
-import * as v from 'shared/src/valita.ts';
+} from '../../../../../shared/src/set-utils.ts';
+import * as v from '../../../../../shared/src/valita.ts';
 import {Database} from '../../../../../zqlite/src/db.ts';
 import {
   mapPostgresToLiteColumn,

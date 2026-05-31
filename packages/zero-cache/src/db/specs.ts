@@ -1,5 +1,5 @@
-import type {DeepReadonly} from 'shared/src/json.ts';
-import * as v from 'shared/src/valita.ts';
+import type {DeepReadonly} from '../../../shared/src/json.ts';
+import * as v from '../../../shared/src/valita.ts';
 import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
 import type {SchemaValue} from '../../../zero-schema/src/table-schema.ts';
 import * as PostgresReplicaIdentity from './postgres-replica-identity-enum.ts';

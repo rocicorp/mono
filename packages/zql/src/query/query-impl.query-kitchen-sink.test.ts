@@ -1,5 +1,5 @@
-import {must} from 'shared/src/must.ts';
 import {describe, expect, test} from 'vitest';
+import {must} from '../../../shared/src/must.ts';
 import {consume} from '../ivm/stream.ts';
 import type {QueryDelegate} from './query-delegate.ts';
 import {newQuery} from './query-impl.ts';

@@ -1,4 +1,3 @@
-import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
 import type {LazyStore} from '../../../../replicache/src/dag/lazy-store.ts';
 import {mustGetHeadHash} from '../../../../replicache/src/dag/store.ts';
 import {TestStore} from '../../../../replicache/src/dag/test-store.ts';
@@ -7,6 +6,7 @@ import {newWriteLocal} from '../../../../replicache/src/db/write.ts';
 import * as FormatVersion from '../../../../replicache/src/format-version-enum.ts';
 import type {FrozenJSONValue} from '../../../../replicache/src/frozen-json.ts';
 import {SYNC_HEAD_NAME} from '../../../../replicache/src/sync/sync-head-name.ts';
+import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import {
   type Issue,
   type IssueLabel,

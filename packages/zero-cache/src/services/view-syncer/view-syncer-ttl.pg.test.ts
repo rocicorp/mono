@@ -1,6 +1,6 @@
-import type {Queue} from 'shared/src/queue.ts';
-import {sleep} from 'shared/src/sleep.ts';
 import {beforeEach, describe, expect, type Mock, vi} from 'vitest';
+import type {Queue} from '../../../../shared/src/queue.ts';
+import {sleep} from '../../../../shared/src/sleep.ts';
 import {type ClientSchema} from '../../../../zero-protocol/src/client-schema.ts';
 import type {Downstream} from '../../../../zero-protocol/src/down.ts';
 import {PROTOCOL_VERSION} from '../../../../zero-protocol/src/protocol-version.ts';

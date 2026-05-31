@@ -1,9 +1,9 @@
 import type {LogContext} from '@rocicorp/logger';
-import {h128} from 'shared/src/hash.ts';
-import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
-import {Queue} from 'shared/src/queue.ts';
 import {expect, vi} from 'vitest';
 import {testLogConfig} from '../../../../otel/src/test-log-config.ts';
+import {h128} from '../../../../shared/src/hash.ts';
+import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
+import {Queue} from '../../../../shared/src/queue.ts';
 import {
   ANYONE_CAN_DO_ANYTHING,
   definePermissions,

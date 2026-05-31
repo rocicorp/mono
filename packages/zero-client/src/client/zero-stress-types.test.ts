@@ -1,5 +1,5 @@
-import type {ReadonlyJSONValue} from 'shared/src/json.ts';
 import {describe, expectTypeOf, test} from 'vitest';
+import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {mustGetMutator} from '../../../zql/src/mutate/mutator-registry.ts';
 import type {Mutator} from '../../../zql/src/mutate/mutator.ts';
 import {mustGetQuery} from '../../../zql/src/query/query-registry.ts';

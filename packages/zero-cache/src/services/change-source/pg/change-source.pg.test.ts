@@ -1,13 +1,13 @@
 import {PG_OBJECT_IN_USE} from '@drdgvhbh/postgres-error-codes';
 import {LogContext} from '@rocicorp/logger';
 import {PostgresError} from 'postgres';
-import {AbortError} from 'shared/src/abort-error.ts';
-import {assert} from 'shared/src/asserts.ts';
-import {TestLogSink} from 'shared/src/logging-test-utils.ts';
-import {must} from 'shared/src/must.ts';
-import {Queue} from 'shared/src/queue.ts';
-import {sleep} from 'shared/src/sleep.ts';
 import {beforeEach, describe, expect, vi} from 'vitest';
+import {AbortError} from '../../../../../shared/src/abort-error.ts';
+import {assert} from '../../../../../shared/src/asserts.ts';
+import {TestLogSink} from '../../../../../shared/src/logging-test-utils.ts';
+import {must} from '../../../../../shared/src/must.ts';
+import {Queue} from '../../../../../shared/src/queue.ts';
+import {sleep} from '../../../../../shared/src/sleep.ts';
 import {Default, Index} from '../../../db/postgres-replica-identity-enum.ts';
 import {StatementRunner} from '../../../db/statements.ts';
 import {

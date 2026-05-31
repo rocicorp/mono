@@ -1,5 +1,5 @@
-import {jsonSchema} from 'shared/src/json-schema.ts';
-import * as v from 'shared/src/valita.ts';
+import {jsonSchema} from '../../shared/src/json-schema.ts';
+import * as v from '../../shared/src/valita.ts';
 import {astSchema} from './ast.ts';
 import {transformFailedBodySchema} from './error.ts';
 

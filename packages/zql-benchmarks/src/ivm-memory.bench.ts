@@ -9,7 +9,7 @@
  *   pnpm --filter zql-benchmarks run bench ivm-memory
  */
 
-import {bench, describe} from 'shared/src/bench.ts';
+import {bench, describe} from '../../shared/src/bench.ts';
 import type {Row} from '../../zero-protocol/src/data.ts';
 import {MemorySource} from '../../zql/src/ivm/memory-source.ts';
 import {QueryDelegateImpl} from '../../zql/src/query/test/query-delegate.ts';

@@ -1,4 +1,4 @@
-import * as v from 'shared/src/valita.ts';
+import * as v from '../../shared/src/valita.ts';
 import {upQueriesPatchSchema} from './queries-patch.ts';
 
 const changeDesiredQueriesBodySchema = v.object({

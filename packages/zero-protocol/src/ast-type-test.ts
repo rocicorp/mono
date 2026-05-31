@@ -1,4 +1,4 @@
-import type * as v from 'shared/src/valita.ts';
+import type * as v from '../../shared/src/valita.ts';
 import type {
   AST,
   Condition,

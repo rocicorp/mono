@@ -4,7 +4,7 @@ import * as path from 'node:path';
 import process from 'node:process';
 import {fileURLToPath} from 'node:url';
 import * as esbuild from 'esbuild';
-import {makeDefine, sharedOptions} from 'shared/src/build.ts';
+import {makeDefine, sharedOptions} from '../../shared/src/build.ts';
 
 const forBundleSizeDashboard = process.argv.includes('--bundle-sizes');
 const perf = process.argv.includes('--perf');

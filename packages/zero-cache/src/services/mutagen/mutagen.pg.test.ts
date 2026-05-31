@@ -1,10 +1,10 @@
 import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
+import {beforeEach, describe, expect} from 'vitest';
 import {
   createSilentLogContext,
   TestLogSink,
-} from 'shared/src/logging-test-utils.ts';
-import {beforeEach, describe, expect} from 'vitest';
+} from '../../../../shared/src/logging-test-utils.ts';
 import {ErrorKind} from '../../../../zero-protocol/src/error-kind.ts';
 import * as MutationType from '../../../../zero-protocol/src/mutation-type-enum.ts';
 import {

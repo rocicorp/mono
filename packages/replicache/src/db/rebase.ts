@@ -1,6 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
-import {assert} from 'shared/src/asserts.ts';
-import type {Enum} from 'shared/src/enum.ts';
+import {assert} from '../../../shared/src/asserts.ts';
+import type {Enum} from '../../../shared/src/enum.ts';
 import type {Write as DagWrite} from '../dag/store.ts';
 import * as FormatVersion from '../format-version-enum.ts';
 import type {Hash} from '../hash.ts';

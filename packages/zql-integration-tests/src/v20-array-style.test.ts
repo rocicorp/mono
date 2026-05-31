@@ -1,6 +1,6 @@
-import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
 import {expect, test} from 'vitest';
 import {testLogConfig} from '../../otel/src/test-log-config.ts';
+import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
 import {createSchema} from '../../zero-schema/src/builder/schema-builder.ts';
 import {
   json,

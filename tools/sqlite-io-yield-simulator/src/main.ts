@@ -1,8 +1,8 @@
 import {fork} from 'node:child_process';
 import {Lock} from '@rocicorp/lock';
 import {consoleLogSink, LogContext} from '@rocicorp/logger';
-import {randInt} from 'shared/src/rand.ts';
 import {WebSocketServer} from 'ws';
+import {randInt} from '../../../packages/shared/src/rand.ts';
 import type {Statement} from '../../../packages/zqlite/src/db.ts';
 import {Database} from '../../../packages/zqlite/src/db.ts';
 

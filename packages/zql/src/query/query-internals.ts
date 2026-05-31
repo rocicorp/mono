@@ -1,5 +1,5 @@
-import {assert} from 'shared/src/asserts.ts';
-import type {ReadonlyJSONValue} from 'shared/src/json.ts';
+import {assert} from '../../../shared/src/asserts.ts';
+import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
 import type {Schema as ZeroSchema} from '../../../zero-types/src/schema.ts';
 import type {Format} from '../ivm/view.ts';

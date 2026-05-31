@@ -1,7 +1,7 @@
-import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
 /* oxlint-disable no-console */
 import {describe, test} from 'vitest';
 import {testLogConfig} from '../../otel/src/test-log-config.ts';
+import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
 import {relationships} from '../../zero-schema/src/builder/relationship-builder.ts';
 import {createSchema} from '../../zero-schema/src/builder/schema-builder.ts';
 import {number, table} from '../../zero-schema/src/builder/table-builder.ts';

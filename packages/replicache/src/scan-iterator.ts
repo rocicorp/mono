@@ -1,5 +1,5 @@
 import {greaterThan} from 'compare-utf8';
-import type {ReadonlyJSONValue} from 'shared/src/json.ts';
+import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
 import {asyncIterableToArray} from './async-iterable-to-array.ts';
 import {type IndexKey, encodeIndexScanKey} from './db/index.ts';
 import type {IterableUnion} from './iterable-union.ts';

@@ -1,6 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
-import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
 import {beforeEach, describe, expect, expectTypeOf} from 'vitest';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {Database} from '../../../zqlite/src/db.ts';
 import type {ZeroConfig} from '../config/zero-config.ts';
 import {initialSync} from '../services/change-source/pg/initial-sync.ts';

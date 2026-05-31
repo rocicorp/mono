@@ -1,4 +1,4 @@
-import {stringify} from 'shared/src/bigint-json.ts';
+import {stringify} from '../../../shared/src/bigint-json.ts';
 import type {LiteValueType} from '../types/lite.ts';
 import {
   BOOL,

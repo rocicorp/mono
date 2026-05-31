@@ -1,4 +1,4 @@
-import * as v from 'shared/src/valita.ts';
+import * as v from '../../shared/src/valita.ts';
 import {changeDesiredQueriesMessageSchema} from './change-desired-queries.ts';
 import {closeConnectionMessageSchema} from './close-connection.ts';
 import {initConnectionMessageSchema} from './connect.ts';

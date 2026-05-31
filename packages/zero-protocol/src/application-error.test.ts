@@ -1,5 +1,5 @@
-import type {ReadonlyJSONValue} from 'shared/src/json.ts';
 import {describe, expect, expectTypeOf, test} from 'vitest';
+import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
 import {
   ApplicationError,
   isApplicationError,

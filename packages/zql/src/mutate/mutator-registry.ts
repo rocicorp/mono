@@ -2,9 +2,12 @@ import {
   deepMerge,
   isPlainObject,
   type DeepMerge,
-} from 'shared/src/deep-merge.ts';
-import type {ReadonlyJSONValue} from 'shared/src/json.ts';
-import {getValueAtPath, iterateLeaves} from 'shared/src/object-traversal.ts';
+} from '../../../shared/src/deep-merge.ts';
+import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
+import {
+  getValueAtPath,
+  iterateLeaves,
+} from '../../../shared/src/object-traversal.ts';
 import type {
   BaseDefaultSchema,
   DefaultSchema,

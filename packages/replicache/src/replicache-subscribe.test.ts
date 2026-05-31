@@ -1,8 +1,8 @@
 import {resolver} from '@rocicorp/resolver';
-import type {JSONValue, ReadonlyJSONValue} from 'shared/src/json.ts';
-import {TestLogSink} from 'shared/src/logging-test-utils.ts';
-import {sleep} from 'shared/src/sleep.ts';
 import {describe, expect, test, vi} from 'vitest';
+import type {JSONValue, ReadonlyJSONValue} from '../../shared/src/json.ts';
+import {TestLogSink} from '../../shared/src/logging-test-utils.ts';
+import {sleep} from '../../shared/src/sleep.ts';
 import type {IndexKey} from './db/index.ts';
 import type {IndexDefinitions} from './index-defs.ts';
 import type {PatchOperation} from './patch-operation.ts';

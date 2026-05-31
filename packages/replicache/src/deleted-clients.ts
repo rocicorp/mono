@@ -1,5 +1,5 @@
-import {stringCompare} from 'shared/src/string-compare.ts';
-import * as v from 'shared/src/valita.ts';
+import {stringCompare} from '../../shared/src/string-compare.ts';
+import * as v from '../../shared/src/valita.ts';
 import type {Read, Write} from './dag/store.ts';
 import {deepFreeze} from './frozen-json.ts';
 import {getClients, setClients} from './persist/clients.ts';

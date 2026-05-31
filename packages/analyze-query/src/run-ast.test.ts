@@ -1,5 +1,5 @@
-import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
 import {beforeEach, expect, test, vi} from 'vitest';
+import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
 import {CREATE_TABLE_METADATA_TABLE} from '../../zero-cache/src/services/replicator/schema/table-metadata.ts';
 import {
   runAst,

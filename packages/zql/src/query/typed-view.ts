@@ -1,4 +1,4 @@
-import type {Immutable} from 'shared/src/immutable.ts';
+import type {Immutable} from '../../../shared/src/immutable.ts';
 import type {ErroredQuery} from '../../../zero-protocol/src/custom-queries.ts';
 import type {TTL} from './ttl.ts';
 

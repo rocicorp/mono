@@ -1,7 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
-import {unreachable} from 'shared/src/asserts.ts';
-import {must} from 'shared/src/must.ts';
-import {TDigest} from 'shared/src/tdigest.ts';
+import {unreachable} from '../../../../shared/src/asserts.ts';
+import {must} from '../../../../shared/src/must.ts';
+import {TDigest} from '../../../../shared/src/tdigest.ts';
 import type {
   QueryServerMetrics,
   ServerMetrics,

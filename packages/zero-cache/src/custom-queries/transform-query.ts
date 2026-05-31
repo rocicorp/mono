@@ -1,9 +1,9 @@
 import {trace} from '@opentelemetry/api';
 import type {LogContext} from '@rocicorp/logger';
-import {TimedCache} from 'shared/src/cache.ts';
-import {getErrorMessage} from 'shared/src/error.ts';
-import {sortedEntries} from 'shared/src/sorted-entries.ts';
 import {startAsyncSpan} from '../../../otel/src/span.ts';
+import {TimedCache} from '../../../shared/src/cache.ts';
+import {getErrorMessage} from '../../../shared/src/error.ts';
+import {sortedEntries} from '../../../shared/src/sorted-entries.ts';
 import {
   type ErroredQuery,
   type TransformRequestBody,
