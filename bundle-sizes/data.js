@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780233956088,
+  "lastUpdate": 1780234483369,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -56577,6 +56577,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/rocicorp/mono/commit/79828be75537cd732ac3b4da545da24cccae9552"
         },
         "date": 1780233943206,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 317161,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 57049,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 117187,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 33481,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "arv@roci.dev",
+            "name": "Erik Arvidsson",
+            "username": "arv"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "e5f5a56b7ef60f7cca4cbf933e79bedca5edab37",
+          "message": "Revert \"refactor: update import paths to use shared module directly\" (#6091)\n\nReverts rocicorp/mono#6086",
+          "timestamp": "2026-05-31T15:33:25+02:00",
+          "tree_id": "9d47f0ae5f25aaf34334b03a663d587e537d5c7a",
+          "url": "https://github.com/rocicorp/mono/commit/e5f5a56b7ef60f7cca4cbf933e79bedca5edab37"
+        },
+        "date": 1780234469529,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
