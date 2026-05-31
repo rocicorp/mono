@@ -241,16 +241,12 @@ export class Z<
     this.#zero = this.#createZero(options);
   }
 
-  get query(): Zero<TSchema, MD, TContext>['query'] {
-    return this.#zero.query;
-  }
-
   get mutate(): Zero<TSchema, MD, TContext>['mutate'] {
     return this.#zero.mutate;
   }
 
-  get mutateBatch(): Zero<TSchema, MD, TContext>['mutateBatch'] {
-    return this.#zero.mutateBatch;
+  get schema(): TSchema {
+    return this.#zero.schema;
   }
 
   get clientID(): string {
