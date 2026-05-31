@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1779984855655,
+  "lastUpdate": 1780233956088,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -56533,6 +56533,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/rocicorp/mono/commit/2ce4ee3e6d5178d15bd1ae8d0e12abbee68a3b7d"
         },
         "date": 1779984842424,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 317161,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 57049,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 117187,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 33481,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "arv@roci.dev",
+            "name": "Erik Arvidsson",
+            "username": "arv"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "79828be75537cd732ac3b4da545da24cccae9552",
+          "message": "refactor: update import paths to use shared module directly (#6086)\n\n- Changed import paths in various files to reference the shared module\ndirectly instead of using relative paths.\n- This includes updates in test files, query files, and other utility\nfiles to improve maintainability and readability.\n\n---------\n\nCo-authored-by: Claude <noreply@anthropic.com>",
+          "timestamp": "2026-05-31T15:24:46+02:00",
+          "tree_id": "40c5dfe72ad65114558fbb7bf5484dd9cd25dbcd",
+          "url": "https://github.com/rocicorp/mono/commit/79828be75537cd732ac3b4da545da24cccae9552"
+        },
+        "date": 1780233943206,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
