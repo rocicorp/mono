@@ -1,6 +1,10 @@
-import {toSorted} from 'shared/src/iterables.ts';
-import {must} from 'shared/src/must.ts';
-import {difference, equals, intersection} from 'shared/src/set-utils.ts';
+import {toSorted} from '../../../../shared/src/iterables.ts';
+import {must} from '../../../../shared/src/must.ts';
+import {
+  difference,
+  equals,
+  intersection,
+} from '../../../../shared/src/set-utils.ts';
 import type {ClientSchema} from '../../../../zero-protocol/src/client-schema.ts';
 import {ErrorOrigin} from '../../../../zero-protocol/src/error-origin.ts';
 import {ProtocolError} from '../../../../zero-protocol/src/error.ts';

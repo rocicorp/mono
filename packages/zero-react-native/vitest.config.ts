@@ -1,3 +1,3 @@
-import {newConfig} from '../shared/src/tool/vitest-config.ts';
+import sharedConfig from '../shared/src/tool/vitest-config.ts';
 
-export default newConfig();
+export default sharedConfig;

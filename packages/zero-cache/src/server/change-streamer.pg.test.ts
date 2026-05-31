@@ -1,9 +1,9 @@
 import {gunzipSync} from 'node:zlib';
 import {getLocal, type Mockttp} from 'mockttp';
-import {assert} from 'shared/src/asserts.ts';
-import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
-import {must} from 'shared/src/must.ts';
 import {expect, vi} from 'vitest';
+import {assert} from '../../../shared/src/asserts.ts';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import {must} from '../../../shared/src/must.ts';
 import {StatementRunner} from '../db/statements.ts';
 import {publishCriticalEvent} from '../observability/events.ts';
 import {initializePostgresChangeSource} from '../services/change-source/pg/change-source.ts';

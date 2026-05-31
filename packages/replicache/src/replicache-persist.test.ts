@@ -1,6 +1,6 @@
-import {assert, assertNotUndefined} from 'shared/src/asserts.ts';
-import {sleep} from 'shared/src/sleep.ts';
 import {afterEach, describe, expect, test, vi} from 'vitest';
+import {assert, assertNotUndefined} from '../../shared/src/asserts.ts';
+import {sleep} from '../../shared/src/sleep.ts';
 import {StoreImpl} from './dag/store-impl.ts';
 import type {Store} from './dag/store.ts';
 import {assertHash, newRandomHash} from './hash.ts';

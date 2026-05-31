@@ -1,4 +1,3 @@
-import {Queue} from 'shared/src/queue.ts';
 import {
   afterEach,
   beforeEach,
@@ -8,6 +7,7 @@ import {
   vi,
   type MockInstance,
 } from 'vitest';
+import {Queue} from '../../../shared/src/queue.ts';
 import {nanoid} from '../util/nanoid.ts';
 import {ActiveClientsManager} from './active-clients-manager.ts';
 import {waitForPostMessage} from './test-utils.ts';

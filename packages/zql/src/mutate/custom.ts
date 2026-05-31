@@ -1,4 +1,4 @@
-import {assert} from 'shared/src/asserts.ts';
+import {assert} from '../../../shared/src/asserts.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
 import type {
   DefaultSchema,

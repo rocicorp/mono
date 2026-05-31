@@ -1,4 +1,4 @@
-import type {Enum} from 'shared/src/enum.ts';
+import type {Enum} from '../../../shared/src/enum.ts';
 import * as SourceChangeIndexEnum from './source-change-index-enum.ts';
 
 export {SourceChangeIndexEnum as SourceChangeIndex};

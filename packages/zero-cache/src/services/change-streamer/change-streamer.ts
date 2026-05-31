@@ -1,5 +1,5 @@
-import type {Enum} from 'shared/src/enum.ts';
-import * as v from 'shared/src/valita.ts';
+import type {Enum} from '../../../../shared/src/enum.ts';
+import * as v from '../../../../shared/src/valita.ts';
 import type {Source} from '../../types/streams.ts';
 import {changeStreamDataSchema} from '../change-source/protocol/current/downstream.ts';
 import type {ReplicatorMode} from '../replicator/replicator.ts';

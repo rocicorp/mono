@@ -15,7 +15,7 @@ import type {DBMutator} from './crud.ts';
 import type {MutatorResult} from './custom.ts';
 import {zeroForTest} from './test-utils.ts';
 
-import type {ImmutableArray} from 'shared/src/immutable.ts';
+import type {ImmutableArray} from '../../../shared/src/immutable.ts';
 import {
   number,
   string,

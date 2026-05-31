@@ -1,6 +1,6 @@
-import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
 // oxlint-disable no-console
 import {testLogConfig} from '../../../otel/src/test-log-config.ts';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {computeZqlSpecs} from '../../../zero-cache/src/db/lite-tables.ts';
 import type {LiteAndZqlSpec} from '../../../zero-cache/src/db/specs.ts';
 import {hydrate} from '../../../zero-cache/src/services/view-syncer/pipeline-driver.ts';

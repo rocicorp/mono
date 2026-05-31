@@ -2,8 +2,8 @@
 
 import '../../shared/src/dotenv.ts';
 
-import {createLogContext} from 'shared/src/logging.ts';
-import {parseOptions} from 'shared/src/options.ts';
+import {createLogContext} from '../../shared/src/logging.ts';
+import {parseOptions} from '../../shared/src/options.ts';
 import {ZERO_ENV_VAR_PREFIX as envNamePrefix} from '../../zero-cache/src/config/zero-config.ts';
 import {
   decommissionOptions,

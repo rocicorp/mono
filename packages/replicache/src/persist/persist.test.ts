@@ -1,9 +1,13 @@
 import {LogContext} from '@rocicorp/logger';
-import {assert, assertNotNull, assertNotUndefined} from 'shared/src/asserts.ts';
-import type {Enum} from 'shared/src/enum.ts';
-import type {JSONValue} from 'shared/src/json.ts';
-import {promiseVoid} from 'shared/src/resolved-promises.ts';
 import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
+import {
+  assert,
+  assertNotNull,
+  assertNotUndefined,
+} from '../../../shared/src/asserts.ts';
+import type {Enum} from '../../../shared/src/enum.ts';
+import type {JSONValue} from '../../../shared/src/json.ts';
+import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
 import {BTreeRead} from '../btree/read.ts';
 import {LazyStore, LazyWrite} from '../dag/lazy-store.ts';
 import {TestStore} from '../dag/test-store.ts';

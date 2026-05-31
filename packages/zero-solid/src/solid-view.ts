@@ -1,5 +1,5 @@
-import {emptyArray} from 'shared/src/sentinels.ts';
 import {produce, reconcile, type SetStoreFunction} from 'solid-js/store';
+import {emptyArray} from '../../shared/src/sentinels.ts';
 import {ChangeIndex} from '../../zql/src/ivm/change-index.ts';
 import {ChangeType} from '../../zql/src/ivm/change-type.ts';
 import {

@@ -1,5 +1,5 @@
-import {areEqual} from 'shared/src/arrays.ts';
-import {assert, unreachable} from 'shared/src/asserts.ts';
+import {areEqual} from '../../../shared/src/arrays.ts';
+import {assert, unreachable} from '../../../shared/src/asserts.ts';
 import type {CompoundKey} from '../../../zero-protocol/src/ast.ts';
 import {ChangeIndex} from './change-index.ts';
 import {ChangeType} from './change-type.ts';

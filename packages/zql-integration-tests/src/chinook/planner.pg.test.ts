@@ -1,5 +1,5 @@
-import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
 import {beforeAll, describe, expect, test} from 'vitest';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {computeZqlSpecs} from '../../../zero-cache/src/db/lite-tables.ts';
 import type {LiteAndZqlSpec} from '../../../zero-cache/src/db/specs.ts';
 import type {NameMapper} from '../../../zero-schema/src/name-mapper.ts';

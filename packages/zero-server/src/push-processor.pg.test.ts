@@ -1,5 +1,5 @@
-import {zip} from 'shared/src/arrays.ts';
 import {assert, beforeEach, describe, expect, test} from 'vitest';
+import {zip} from '../../shared/src/arrays.ts';
 import {
   getClientsTableDefinition,
   getMutationsTableDefinition,

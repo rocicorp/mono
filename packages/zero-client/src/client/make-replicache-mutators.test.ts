@@ -1,6 +1,6 @@
-import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
 import {describe, expect, test, vi} from 'vitest';
 import {zeroData} from '../../../replicache/src/transactions.ts';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import type {Transaction} from '../../../zql/src/mutate/custom.ts';
 import {defineMutators} from '../../../zql/src/mutate/mutator-registry.ts';
 import {defineMutator} from '../../../zql/src/mutate/mutator.ts';

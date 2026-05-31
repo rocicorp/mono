@@ -1,8 +1,8 @@
 /* oxlint-disable require-await */
 
-import {assert} from 'shared/src/asserts.ts';
-import type {ReadonlyJSONObject} from 'shared/src/json.ts';
 import {expectTypeOf, test} from 'vitest';
+import {assert} from '../../shared/src/asserts.ts';
+import type {ReadonlyJSONObject} from '../../shared/src/json.ts';
 import type {IndexKey} from './db/index.ts';
 import {Replicache} from './replicache.ts';
 import type {DeepReadonly, WriteTransaction} from './transactions.ts';

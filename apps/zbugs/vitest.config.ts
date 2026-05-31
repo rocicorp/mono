@@ -1,7 +1,7 @@
 import {dirname, resolve} from 'path';
 import {fileURLToPath} from 'url';
 import {defineConfig, mergeConfig} from 'vitest/config';
-import {newConfig} from '../../packages/shared/src/tool/vitest-config.ts';
+import config from '../../packages/shared/src/tool/vitest-config.ts';
 
 const ci = process.env['CI'] === 'true' || process.env['CI'] === '1';
 
@@ -14,7 +14,7 @@ export function configForVersion(version: number, url: string) {
   const rootDir = dirname(fileURLToPath(url));
   const packagesDir = resolve(rootDir, '../../packages');
 
-  return mergeConfig(newConfig(), {
+  return mergeConfig(config, {
     resolve: {
       tsconfigPaths: true,
       alias: [
@@ -46,7 +46,7 @@ export function configForVersion(version: number, url: string) {
 
 export function configForNoPg(url: string) {
   const name = nameFromURL(url);
-  return mergeConfig(newConfig(), {
+  return mergeConfig(config, {
     test: {
       name: `${name}/no-pg`,
       browser: {enabled: false},

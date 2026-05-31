@@ -1,6 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
-import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import type {Database as Db} from '../../../zqlite/src/db.ts';
 import {DbFile} from '../test/lite.ts';
 import {

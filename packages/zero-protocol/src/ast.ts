@@ -7,10 +7,10 @@
  */
 
 import {compareUTF8} from 'compare-utf8';
-import {defined} from 'shared/src/arrays.ts';
-import {assert} from 'shared/src/asserts.ts';
-import {must} from 'shared/src/must.ts';
-import * as v from 'shared/src/valita.ts';
+import {defined} from '../../shared/src/arrays.ts';
+import {assert} from '../../shared/src/asserts.ts';
+import {must} from '../../shared/src/must.ts';
+import * as v from '../../shared/src/valita.ts';
 import type {NameMapper} from '../../zero-types/src/name-mapper.ts';
 import {rowSchema, type Row} from './data.ts';
 

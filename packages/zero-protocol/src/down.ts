@@ -1,4 +1,4 @@
-import * as v from 'shared/src/valita.ts';
+import * as v from '../../shared/src/valita.ts';
 import {connectedMessageSchema} from './connect.ts';
 import {transformErrorMessageSchema} from './custom-queries.ts';
 import {deleteClientsMessageSchema} from './delete-clients.ts';

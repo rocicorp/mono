@@ -1,7 +1,10 @@
 import {resolver} from '@rocicorp/resolver';
-import {randomUint64} from 'shared/src/random-uint64.ts';
-import {jsonArrayTestData, type TestDataObject} from 'shared/src/test-data.ts';
-import type {Writable} from 'shared/src/writable.ts';
+import {randomUint64} from '../../shared/src/random-uint64.ts';
+import {
+  jsonArrayTestData,
+  type TestDataObject,
+} from '../../shared/src/test-data.ts';
+import type {Writable} from '../../shared/src/writable.ts';
 import {ReplicacheImpl} from './impl.ts';
 import type {IndexDefinitions} from './index-defs.ts';
 import {dropIDBStoreWithMemFallback} from './kv/idb-store-with-mem-fallback.ts';

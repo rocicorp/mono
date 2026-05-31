@@ -1,5 +1,5 @@
-import type {Enum} from 'shared/src/enum.ts';
 import {expect, test} from 'vitest';
+import type {Enum} from '../../../shared/src/enum.ts';
 import {BTreeWrite} from '../btree/write.ts';
 import type {Write} from '../dag/store.ts';
 import {TestStore} from '../dag/test-store.ts';

@@ -1,12 +1,12 @@
 import {gunzipSync} from 'zlib';
 import {LogContext} from '@rocicorp/logger';
 import {getLocal, type Mockttp} from 'mockttp';
+import {beforeEach, expect, test} from 'vitest';
 import {
   createSilentLogContext,
   TestLogSink,
-} from 'shared/src/logging-test-utils.ts';
-import {must} from 'shared/src/must.ts';
-import {beforeEach, expect, test} from 'vitest';
+} from '../../../shared/src/logging-test-utils.ts';
+import {must} from '../../../shared/src/must.ts';
 import {initEventSink, publishCriticalEvent} from './events.ts';
 
 let sink: Mockttp;

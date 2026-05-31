@@ -1,6 +1,6 @@
 // oxlint-disable no-explicit-any
-import {assert} from 'shared/src/asserts.ts';
-import type {ReadonlyJSONValue} from 'shared/src/json.ts';
+import {assert} from '../../../shared/src/asserts.ts';
+import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {
   type AST,
   type CompoundKey,

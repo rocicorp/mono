@@ -1,5 +1,5 @@
-import type {ReadonlyJSONObject} from 'shared/src/json.ts';
-import {must} from 'shared/src/must.ts';
+import type {ReadonlyJSONObject} from '../../../shared/src/json.ts';
+import {must} from '../../../shared/src/must.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import {
   type DeleteOp,

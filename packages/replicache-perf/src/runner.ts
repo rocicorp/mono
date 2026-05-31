@@ -7,9 +7,9 @@ import commandLineArgs from 'command-line-args';
 import commandLineUsage from 'command-line-usage';
 import getPort from 'get-port';
 import * as playwright from 'playwright';
-import {assert} from 'shared/src/asserts.ts';
-import {makeDefine} from 'shared/src/build.ts';
 import {createServer} from 'vite';
+import {assert} from '../../shared/src/asserts.ts';
+import {makeDefine} from '../../shared/src/build.ts';
 import {
   type BencherMetricsFormat,
   toBencherMetricFormat,

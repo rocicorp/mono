@@ -1,10 +1,10 @@
 import {playwright} from '@vitest/browser-playwright';
 import {defineConfig} from 'vitest/config';
-import type {BrowserConfigOptions, BrowserInstanceOption} from 'vitest/node';
+import type {BrowserConfigOptions} from 'vitest/node';
 import {makeDefine} from '../build.ts';
 
 export const CI = process.env['CI'] === 'true' || process.env['CI'] === '1';
-const browserEnv = process.env['VITEST_BROWSER'];
+const {VITEST_BROWSER} = process.env;
 
 function assertValidBrowser(
   browser: string | undefined,
@@ -20,7 +20,7 @@ function assertValidBrowser(
   }
 }
 
-assertValidBrowser(browserEnv);
+assertValidBrowser(VITEST_BROWSER);
 
 const define = {
   ...makeDefine(),
@@ -37,121 +37,95 @@ const logSilenceMessages = [
   'Zero starting up with no server URL',
 ];
 
-function newBrowserConfig(): BrowserConfigOptions {
-  if (browserEnv) {
-    const browser = browserEnv as 'chromium' | 'firefox' | 'webkit';
-    return {
-      enabled: true,
-      provider: playwright(),
-      headless: true,
-      screenshotFailures: false,
-      instances: [{browser}],
-    };
-  }
+const browser: BrowserConfigOptions = {
+  enabled: true,
+  provider: playwright(),
+  headless: true,
+  screenshotFailures: false,
+  instances: VITEST_BROWSER
+    ? ([{browser: VITEST_BROWSER}] as const)
+    : [
+        {browser: 'chromium'},
+        ...(CI ? ([{browser: 'firefox'}, {browser: 'webkit'}] as const) : []),
+      ],
+};
 
-  const instances: BrowserInstanceOption[] = [{browser: 'chromium'}];
+export default defineConfig({
+  define,
 
-  if (CI) {
-    instances.push({browser: 'firefox'}, {browser: 'webkit'});
-  }
-
-  return {
-    enabled: true,
-    provider: playwright(),
-    headless: true,
-    screenshotFailures: false,
-    instances,
-  };
-}
-
-export function newConfig() {
-  const browser = newBrowserConfig();
-
-  return defineConfig({
-    define,
-
-    test: {
-      onConsoleLog(log: string) {
-        for (const message of logSilenceMessages) {
-          if (log.includes(message)) {
-            return false;
-          }
+  test: {
+    onConsoleLog(log: string) {
+      for (const message of logSilenceMessages) {
+        if (log.includes(message)) {
+          return false;
         }
-        return undefined;
-      },
-      include: ['src/**/*.{test,spec}{,.node}.?(c|m)[jt]s?(x)'],
-      silent: 'passed-only',
-      browser,
-
-      coverage: {
-        provider: 'v8',
-        include: ['src/**'],
-      },
-      typecheck: {
-        enabled: false,
-      },
-      testTimeout: 10_000,
+      }
+      return undefined;
     },
-  });
-}
+    include: ['src/**/*.{test,spec}{,.node}.?(c|m)[jt]s?(x)'],
+    silent: 'passed-only',
+    browser,
 
-export default newConfig();
+    coverage: {
+      provider: 'v8',
+      include: ['src/**'],
+    },
+    typecheck: {
+      enabled: false,
+    },
+    testTimeout: 10_000,
+  },
+});
 
 const externalizedWarningRegExp =
   /has been externalized for browser compatibility/;
 
-export function newBenchConfig() {
-  const browser = newBrowserConfig();
+export const benchConfig = defineConfig({
+  define: {
+    ...define,
+    'process.env.NO_COLOR': JSON.stringify(process.env.NO_COLOR ?? ''),
+    'process.env.NODE_DISABLE_COLORS': JSON.stringify(
+      process.env.NODE_DISABLE_COLORS ?? '',
+    ),
+    'process.env.BENCH_OUTPUT_FORMAT': JSON.stringify(
+      process.env.BENCH_OUTPUT_FORMAT ?? '',
+    ),
+    'process.env.BENCH_SUMMARY': JSON.stringify(
+      process.env.BENCH_SUMMARY ?? '',
+    ),
+  },
 
-  return defineConfig({
-    define: {
-      ...define,
-      'process.env.NO_COLOR': JSON.stringify(process.env.NO_COLOR ?? ''),
-      'process.env.NODE_DISABLE_COLORS': JSON.stringify(
-        process.env.NODE_DISABLE_COLORS ?? '',
-      ),
-      'process.env.BENCH_OUTPUT_FORMAT': JSON.stringify(
-        process.env.BENCH_OUTPUT_FORMAT ?? '',
-      ),
-      'process.env.BENCH_SUMMARY': JSON.stringify(
-        process.env.BENCH_SUMMARY ?? '',
-      ),
-    },
-
-    test: {
-      include: ['src/**/*.bench{,.node}.?(c|m)[jt]s?(x)'],
-      disableConsoleIntercept: true,
-      silent: false,
-      onConsoleLog(str, type, _entity) {
-        if (externalizedWarningRegExp.test(str)) {
-          return false;
-        }
-        if (type === 'stderr') {
-          console.error(str);
-        } else {
-          console.log(str);
-        }
+  test: {
+    include: ['src/**/*.bench{,.node}.?(c|m)[jt]s?(x)'],
+    disableConsoleIntercept: true,
+    silent: false,
+    onConsoleLog(str, type, _entity) {
+      if (externalizedWarningRegExp.test(str)) {
         return false;
-      },
-      browser,
-      slowTestThreshold: 15_000,
-      testTimeout: 60_000,
-      hookTimeout: 60_000,
-      // Run bench files sequentially to avoid memory contention between workers.
-      maxWorkers: 1,
+      }
+      if (type === 'stderr') {
+        console.error(str);
+      } else {
+        console.log(str);
+      }
+      return false;
     },
+    browser,
+    slowTestThreshold: 15_000,
+    testTimeout: 60_000,
+    hookTimeout: 60_000,
+    // Run bench files sequentially to avoid memory contention between workers.
+    maxWorkers: 1,
+  },
 
-    optimizeDeps: {
-      exclude: ['@mitata/counters'],
+  optimizeDeps: {
+    exclude: ['@mitata/counters'],
+  },
+
+  server: {
+    headers: {
+      'Cross-Origin-Opener-Policy': 'same-origin',
+      'Cross-Origin-Embedder-Policy': 'require-corp',
     },
-
-    server: {
-      headers: {
-        'Cross-Origin-Opener-Policy': 'same-origin',
-        'Cross-Origin-Embedder-Policy': 'require-corp',
-      },
-    },
-  });
-}
-
-export const benchConfig = newBenchConfig();
+  },
+});

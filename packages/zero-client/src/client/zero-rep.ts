@@ -1,4 +1,3 @@
-import {must} from 'shared/src/must.ts';
 import type {
   InternalDiff,
   InternalDiffOperation,
@@ -14,6 +13,7 @@ import type {
   ZeroReadOptions,
 } from '../../../replicache/src/replicache-options.ts';
 import {withRead} from '../../../replicache/src/with-transactions.ts';
+import {must} from '../../../shared/src/must.ts';
 import type {ZeroContext} from './context.ts';
 import type {IVMSourceBranch} from './ivm-branch.ts';
 import {ENTITIES_KEY_PREFIX} from './keys.ts';

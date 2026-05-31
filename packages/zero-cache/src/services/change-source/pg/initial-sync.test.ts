@@ -1,6 +1,6 @@
 import type postgres from 'postgres';
-import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
 import {describe, expect, test, vi} from 'vitest';
+import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.ts';
 import type {PublishedTableSpec} from '../../../db/specs.ts';
 import type {PostgresDB} from '../../../types/pg.ts';
 import {

@@ -1,9 +1,9 @@
 import {Server} from 'node:http';
 import {resolver} from '@rocicorp/resolver';
-import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
-import {randInt} from 'shared/src/rand.ts';
 import {afterAll, afterEach, beforeAll, describe, expect, test} from 'vitest';
 import {WebSocket, WebSocketServer, type RawData} from 'ws';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import {randInt} from '../../../shared/src/rand.ts';
 import {inProcChannel} from './processes.ts';
 import {
   installWebSocketHandoff,

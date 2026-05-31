@@ -1,4 +1,4 @@
-import * as valita from 'shared/src/valita.ts';
+import * as valita from '../../shared/src/valita.ts';
 
 /**
  * The definition of a single index.

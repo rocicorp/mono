@@ -1,6 +1,6 @@
 import {describe, expect, test, vi} from 'vitest';
 
-import type {ReadonlyJSONValue} from 'shared/src/json.ts';
+import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {ApplicationError} from '../../../zero-protocol/src/application-error.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
 import {ErrorReason} from '../../../zero-protocol/src/error-reason.ts';

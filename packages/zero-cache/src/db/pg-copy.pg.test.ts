@@ -1,8 +1,8 @@
 import {Readable, Writable} from 'node:stream';
 import {pipeline} from 'node:stream/promises';
-import type {JSONValue} from 'shared/src/json.ts';
-import {randInt} from 'shared/src/rand.ts';
 import {beforeEach, describe, expect} from 'vitest';
+import type {JSONValue} from '../../../shared/src/json.ts';
+import {randInt} from '../../../shared/src/rand.ts';
 import {type PgTest, test} from '../test/db.ts';
 import {type PostgresDB} from '../types/pg.ts';
 import {NULL_BYTE, TextTransform} from './pg-copy.ts';

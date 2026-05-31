@@ -15,7 +15,7 @@ export {
   type RandomDataType,
   type RandomDatum,
   type TestDataObject,
-} from 'shared/src/test-data.ts';
+} from '../../shared/src/test-data.ts';
 
 type TmcwData = {
   type: string;

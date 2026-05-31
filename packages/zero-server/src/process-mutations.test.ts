@@ -1,9 +1,9 @@
 import type {StandardSchemaV1} from '@standard-schema/spec';
-import type {ReadonlyJSONValue} from 'shared/src/json.ts';
-import {promiseUndefined} from 'shared/src/resolved-promises.ts';
-import type {MaybePromise} from 'shared/src/types.ts';
 import type {MockInstance} from 'vitest';
 import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
+import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
+import {promiseUndefined} from '../../shared/src/resolved-promises.ts';
+import type {MaybePromise} from '../../shared/src/types.ts';
 import {ApplicationError} from '../../zero-protocol/src/application-error.ts';
 import {ErrorKind} from '../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../zero-protocol/src/error-origin.ts';

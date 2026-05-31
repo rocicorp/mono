@@ -1,10 +1,14 @@
-import {assertArray, assertObject, assertString} from 'shared/src/asserts.ts';
+import {
+  assertArray,
+  assertObject,
+  assertString,
+} from '../../shared/src/asserts.ts';
 import {
   type ReadonlyJSONObject,
   type ReadonlyJSONValue,
   assertJSONObject,
   assertJSONValue,
-} from 'shared/src/json.ts';
+} from '../../shared/src/json.ts';
 
 export type PatchOperationInternal =
   | {

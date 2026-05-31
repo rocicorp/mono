@@ -1,6 +1,6 @@
 import {resolver} from '@rocicorp/resolver';
-import type {Queue} from 'shared/src/queue.ts';
 import {afterEach, beforeEach, describe, expect, vi} from 'vitest';
+import type {Queue} from '../../../../shared/src/queue.ts';
 import type {Downstream} from '../../../../zero-protocol/src/down.ts';
 import {ErrorKind} from '../../../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../../../zero-protocol/src/error-origin.ts';

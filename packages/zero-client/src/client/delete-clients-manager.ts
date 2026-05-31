@@ -1,6 +1,4 @@
 import type {LogContext} from '@rocicorp/logger';
-import {assert} from 'shared/src/asserts.ts';
-import {promiseVoid} from 'shared/src/resolved-promises.ts';
 import type {Store} from '../../../replicache/src/dag/store.ts';
 import {
   confirmDeletedClients,
@@ -12,6 +10,8 @@ import {
   withRead,
   withWrite,
 } from '../../../replicache/src/with-transactions.ts';
+import {assert} from '../../../shared/src/asserts.ts';
+import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
 import type {
   DeleteClientsBody,
   DeleteClientsMessage,

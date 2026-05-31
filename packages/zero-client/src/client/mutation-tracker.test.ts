@@ -1,11 +1,11 @@
-import {assert, unreachable} from 'shared/src/asserts.ts';
-import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
 import {describe, expect, test, vi} from 'vitest';
 import type {
   DiffOperation,
   NoIndexDiff,
 } from '../../../replicache/src/btree/node.ts';
 import {zeroData} from '../../../replicache/src/transactions.ts';
+import {assert, unreachable} from '../../../shared/src/asserts.ts';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {ApplicationError} from '../../../zero-protocol/src/application-error.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';

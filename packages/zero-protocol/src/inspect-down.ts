@@ -1,6 +1,6 @@
-import {jsonSchema} from 'shared/src/json-schema.ts';
-import {tdigestSchema} from 'shared/src/tdigest-schema.ts';
-import * as v from 'shared/src/valita.ts';
+import {jsonSchema} from '../../shared/src/json-schema.ts';
+import {tdigestSchema} from '../../shared/src/tdigest-schema.ts';
+import * as v from '../../shared/src/valita.ts';
 import {analyzeQueryResultSchema} from './analyze-query-result.ts';
 import {astSchema} from './ast.ts';
 

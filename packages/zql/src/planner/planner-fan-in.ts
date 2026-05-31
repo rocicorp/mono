@@ -1,4 +1,4 @@
-import {assert} from 'shared/src/asserts.ts';
+import {assert} from '../../../shared/src/asserts.ts';
 import type {PlannerConstraint} from './planner-constraint.ts';
 import type {PlanDebugger} from './planner-debug.ts';
 import {omitFanout} from './planner-node.ts';

@@ -4,7 +4,7 @@ import {
 } from '@databases/escape-identifier';
 import type {FormatConfig, SQLItem, SQLQuery} from '@databases/sql';
 import sql, {SQLItemType} from '@databases/sql';
-import {assert, unreachable} from 'shared/src/asserts.ts';
+import {assert, unreachable} from '../../shared/src/asserts.ts';
 import {
   isPgNumberType,
   isPgStringType,

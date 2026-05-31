@@ -1,5 +1,5 @@
-import {assert, unreachable} from 'shared/src/asserts.ts';
-import {binarySearch} from 'shared/src/binary-search.ts';
+import {assert, unreachable} from '../../../shared/src/asserts.ts';
+import {binarySearch} from '../../../shared/src/binary-search.ts';
 import type {CompoundKey, System} from '../../../zero-protocol/src/ast.ts';
 import type {Row, Value} from '../../../zero-protocol/src/data.ts';
 import {ChangeIndex} from './change-index.ts';

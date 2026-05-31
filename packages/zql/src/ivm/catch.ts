@@ -1,5 +1,5 @@
-import {unreachable} from 'shared/src/asserts.ts';
-import {emptyArray} from 'shared/src/sentinels.ts';
+import {unreachable} from '../../../shared/src/asserts.ts';
+import {emptyArray} from '../../../shared/src/sentinels.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import {ChangeIndex} from './change-index.ts';
 import {ChangeType} from './change-type.ts';

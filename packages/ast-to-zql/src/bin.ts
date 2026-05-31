@@ -2,8 +2,8 @@
 import {readFile} from 'node:fs/promises';
 import process from 'node:process';
 import {createInterface} from 'node:readline';
-import {parseOptions} from 'shared/src/options.ts';
-import * as v from 'shared/src/valita.ts';
+import {parseOptions} from '../../shared/src/options.ts';
+import * as v from '../../shared/src/valita.ts';
 import {loadSchemaAndPermissions} from '../../zero-cache/src/scripts/permissions.ts';
 import {mapAST} from '../../zero-protocol/src/ast.ts';
 import {serverToClient} from '../../zero-schema/src/name-mapper.ts';

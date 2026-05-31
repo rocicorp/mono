@@ -1,5 +1,5 @@
-import * as valita from 'shared/src/valita.ts';
 import {expect, test} from 'vitest';
+import * as valita from '../../shared/src/valita.ts';
 import {
   STRING_LENGTH,
   emptyHash,

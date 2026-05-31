@@ -1,10 +1,10 @@
 import {PG_OBJECT_IN_USE} from '@drdgvhbh/postgres-error-codes';
 import type {LogContext} from '@rocicorp/logger';
 import {PostgresError} from 'postgres';
-import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
-import {Queue} from 'shared/src/queue.ts';
-import {sleep} from 'shared/src/sleep.ts';
 import {beforeEach, describe, expect} from 'vitest';
+import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.ts';
+import {Queue} from '../../../../../shared/src/queue.ts';
+import {sleep} from '../../../../../shared/src/sleep.ts';
 import {getConnectionURI, type PgTest, test} from '../../../test/db.ts';
 import {DbFile} from '../../../test/lite.ts';
 import {type PostgresDB} from '../../../types/pg.ts';

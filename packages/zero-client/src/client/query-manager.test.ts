@@ -1,7 +1,4 @@
 import {LogContext, type LogSink} from '@rocicorp/logger';
-import type {ReadonlyJSONValue} from 'shared/src/json.ts';
-import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
-import * as v from 'shared/src/valita.ts';
 import {
   afterEach,
   beforeEach,
@@ -25,6 +22,9 @@ import {
   type DeepReadonly,
   type ReadTransaction,
 } from '../../../replicache/src/transactions.ts';
+import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import * as v from '../../../shared/src/valita.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
 import type {ChangeDesiredQueriesMessage} from '../../../zero-protocol/src/change-desired-queries.ts';
 import type {ErroredQuery} from '../../../zero-protocol/src/custom-queries.ts';

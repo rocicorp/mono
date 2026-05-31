@@ -2,8 +2,8 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import * as esbuild from 'esbuild';
-import {makeDefine, sharedOptions} from 'shared/src/build.ts';
-import {getExternalFromPackageJSON} from 'shared/src/tool/get-external-from-package-json.ts';
+import {makeDefine, sharedOptions} from '../../shared/src/build.ts';
+import {getExternalFromPackageJSON} from '../../shared/src/tool/get-external-from-package-json.ts';
 
 function basePath(...parts: string[]): string {
   return path.join(

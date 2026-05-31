@@ -1,5 +1,5 @@
-import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
 import {describe, expect, test, vi} from 'vitest';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import type {ReplicaState} from '../services/replicator/replicator.ts';
 import {inProcChannel} from '../types/processes.ts';
 import {Subscription} from '../types/subscription.ts';

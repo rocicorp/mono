@@ -1,4 +1,4 @@
-import * as v from 'shared/src/valita.ts';
+import * as v from '../../shared/src/valita.ts';
 
 /**
  * We do not use the body yet.

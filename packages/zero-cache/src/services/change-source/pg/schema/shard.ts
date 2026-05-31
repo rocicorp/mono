@@ -2,13 +2,13 @@ import {PG_INSUFFICIENT_PRIVILEGE} from '@drdgvhbh/postgres-error-codes';
 import type {LogContext} from '@rocicorp/logger';
 import {literal} from 'pg-format';
 import postgres from 'postgres';
-import {assert} from 'shared/src/asserts.ts';
+import {assert} from '../../../../../../shared/src/asserts.ts';
 import {
   jsonObjectSchema,
   stringify,
   type JSONObject,
-} from 'shared/src/bigint-json.ts';
-import * as v from 'shared/src/valita.ts';
+} from '../../../../../../shared/src/bigint-json.ts';
+import * as v from '../../../../../../shared/src/valita.ts';
 import {Default} from '../../../../db/postgres-replica-identity-enum.ts';
 import type {PostgresDB, PostgresTransaction} from '../../../../types/pg.ts';
 import type {AppID, ShardConfig, ShardID} from '../../../../types/shards.ts';

@@ -1,12 +1,12 @@
 import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
+import {afterEach, beforeEach, describe, expect, type Mock, vi} from 'vitest';
 import {
   createSilentLogContext,
   TestLogSink,
-} from 'shared/src/logging-test-utils.ts';
-import type {Queue} from 'shared/src/queue.ts';
-import {sleep} from 'shared/src/sleep.ts';
-import {afterEach, beforeEach, describe, expect, type Mock, vi} from 'vitest';
+} from '../../../../shared/src/logging-test-utils.ts';
+import type {Queue} from '../../../../shared/src/queue.ts';
+import {sleep} from '../../../../shared/src/sleep.ts';
 import {type ClientSchema} from '../../../../zero-protocol/src/client-schema.ts';
 import type {TransformResponseBody} from '../../../../zero-protocol/src/custom-queries.ts';
 import type {Downstream} from '../../../../zero-protocol/src/down.ts';

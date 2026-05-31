@@ -1,6 +1,6 @@
 // oxlint-disable e18e/prefer-static-regex
 import type {Faker} from '@faker-js/faker';
-import type {JSONValue} from 'shared/src/json.ts';
+import type {JSONValue} from '../../../shared/src/json.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import {clientToServer} from '../../../zero-schema/src/name-mapper.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
