@@ -1,7 +1,7 @@
 import {resolver} from '@rocicorp/resolver';
+import type {JSONObject} from 'shared/src/bigint-json.ts';
+import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
 import {beforeEach, describe, expect, test} from 'vitest';
-import type {JSONObject} from '../../../../shared/src/bigint-json.ts';
-import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import type {Downstream} from '../../../../zero-protocol/src/down.ts';
 import type {
   PokeEndMessage,

@@ -1,4 +1,4 @@
-import * as v from '../../../../../../shared/src/valita.ts';
+import * as v from 'shared/src/valita.ts';
 import {resetRequiredSchema} from './control.ts';
 import {
   beginSchema,

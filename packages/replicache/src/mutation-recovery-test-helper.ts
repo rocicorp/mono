@@ -1,7 +1,7 @@
 import {LogContext} from '@rocicorp/logger';
-import {assert} from '../../shared/src/asserts.ts';
-import type {Enum} from '../../shared/src/enum.ts';
-import type {ReadonlyJSONObject} from '../../shared/src/json.ts';
+import {assert} from 'shared/src/asserts.ts';
+import type {Enum} from 'shared/src/enum.ts';
+import type {ReadonlyJSONObject} from 'shared/src/json.ts';
 import {LazyStore} from './dag/lazy-store.ts';
 import {StoreImpl} from './dag/store-impl.ts';
 import type {Store} from './dag/store.ts';

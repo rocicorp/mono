@@ -1,4 +1,4 @@
-import {assert} from '../../../shared/src/asserts.ts';
+import {assert} from 'shared/src/asserts.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import {ChangeIndex} from './change-index.ts';
 import {ChangeType} from './change-type.ts';

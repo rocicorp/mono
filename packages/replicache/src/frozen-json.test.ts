@@ -1,5 +1,5 @@
+import type {ReadonlyJSONValue} from 'shared/src/json.ts';
 import {expect, test} from 'vitest';
-import type {ReadonlyJSONValue} from '../../shared/src/json.ts';
 import {
   deepFreeze,
   deepFreezeAllowUndefined,

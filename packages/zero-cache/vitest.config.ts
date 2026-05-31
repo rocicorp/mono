@@ -1,5 +1,5 @@
 import {defineConfig, mergeConfig} from 'vitest/config';
-import config, {CI} from '../shared/src/tool/vitest-config.ts';
+import {CI, newConfig} from '../shared/src/tool/vitest-config.ts';
 
 function nameFromURL(url: string) {
   // importer looks like file://....../packages/NAME/... and we want the NAME
@@ -9,7 +9,7 @@ function nameFromURL(url: string) {
 export function configForVersion(version: number, url: string) {
   const TIMEOUT = (CI ? 2 : 1) * 30_000;
   const name = nameFromURL(url);
-  const merged = mergeConfig(config, {
+  const merged = mergeConfig(newConfig(), {
     test: {
       name: `${name}/pg-${version}`,
       browser: {enabled: false},
@@ -34,7 +34,7 @@ export function configForVersion(version: number, url: string) {
 
 export function configForNoPg(url: string) {
   const name = nameFromURL(url);
-  return mergeConfig(config, {
+  return mergeConfig(newConfig(), {
     test: {
       name: `${name}/no-pg`,
       include: ['src/**/*.test.?(c|m)[jt]s?(x)'],
@@ -59,7 +59,7 @@ export function configForCustomPg(url: string) {
   if (process.env['CUSTOM_PG']) {
     const name = nameFromURL(url);
     return [
-      mergeConfig(config, {
+      mergeConfig(newConfig(), {
         test: {
           name: `${name}/custom-pg`,
           browser: {enabled: false},

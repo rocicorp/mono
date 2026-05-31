@@ -1,8 +1,8 @@
 import {PG_UNDEFINED_TABLE} from '@drdgvhbh/postgres-error-codes';
 import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
-import {AbortError} from '../../../shared/src/abort-error.ts';
-import {sleepWithAbort} from '../../../shared/src/sleep.ts';
+import {AbortError} from 'shared/src/abort-error.ts';
+import {sleepWithAbort} from 'shared/src/sleep.ts';
 import {isPostgresError} from '../types/pg.ts';
 
 const DEFAULT_INITIAL_RETRY_DELAY_MS = 25;

@@ -1,6 +1,6 @@
 import {LogContext} from '@rocicorp/logger';
+import {TestLogSink} from 'shared/src/logging-test-utils.ts';
 import {beforeEach, describe, expect, test, vi} from 'vitest';
-import {TestLogSink} from '../../../shared/src/logging-test-utils.ts';
 import type {NormalizedZeroConfig} from './normalize.ts';
 import {isAdminPasswordValid, resetWarnOnceState} from './zero-config.ts';
 

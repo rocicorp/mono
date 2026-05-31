@@ -1,9 +1,6 @@
 import {stripVTControlCharacters as stripAnsi} from 'node:util';
+import {parseOptions, parseOptionsAdvanced} from 'shared/src/options.ts';
 import {expect, test, vi} from 'vitest';
-import {
-  parseOptions,
-  parseOptionsAdvanced,
-} from '../../../shared/src/options.ts';
 import {INVALID_APP_ID_MESSAGE} from '../types/shards.ts';
 import {zeroOptions} from './zero-config.ts';
 

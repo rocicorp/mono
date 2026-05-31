@@ -1,7 +1,7 @@
 import type {StandardSchemaV1} from '@standard-schema/spec';
+import {assert} from 'shared/src/asserts.ts';
+import type {ReadonlyJSONValue} from 'shared/src/json.ts';
 import {describe, expect, expectTypeOf, test, vi} from 'vitest';
-import {assert} from '../../../shared/src/asserts.ts';
-import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {
   number,

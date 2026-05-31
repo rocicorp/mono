@@ -1,5 +1,5 @@
-import {type Config} from '../../shared/src/options-types.ts';
-import * as v from '../../shared/src/valita.ts';
+import {type Config} from 'shared/src/options-types.ts';
+import * as v from 'shared/src/valita.ts';
 
 export const logLevel = v.literalUnion('debug', 'info', 'warn', 'error');
 

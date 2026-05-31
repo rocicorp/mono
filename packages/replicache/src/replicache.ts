@@ -1,4 +1,4 @@
-import type {MaybePromise} from '../../shared/src/types.ts';
+import type {MaybePromise} from 'shared/src/types.ts';
 import {makeIDBName} from './make-idb-name.ts';
 import type {PendingMutation} from './pending-mutations.ts';
 import type {Puller} from './puller.ts';

@@ -1,6 +1,12 @@
 import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {
+  clearBrowserOverrides,
+  overrideBrowserGlobal,
+} from 'shared/src/browser-env.ts';
+import {TestLogSink} from 'shared/src/logging-test-utils.ts';
+import * as valita from 'shared/src/valita.ts';
+import {
   afterEach,
   assert,
   beforeEach,
@@ -29,12 +35,6 @@ import type {
 import type {PullRequest} from '../../../replicache/src/sync/pull.ts';
 import type {PushRequest} from '../../../replicache/src/sync/push.ts';
 import {withWrite} from '../../../replicache/src/with-transactions.ts';
-import {
-  clearBrowserOverrides,
-  overrideBrowserGlobal,
-} from '../../../shared/src/browser-env.ts';
-import {TestLogSink} from '../../../shared/src/logging-test-utils.ts';
-import * as valita from '../../../shared/src/valita.ts';
 import {changeDesiredQueriesMessageSchema} from '../../../zero-protocol/src/change-desired-queries.ts';
 import type {ClientSchema} from '../../../zero-protocol/src/client-schema.ts';
 import {

@@ -1,7 +1,7 @@
 import {PG_LOCK_NOT_AVAILABLE} from '@drdgvhbh/postgres-error-codes';
 import postgres from 'postgres';
+import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
 import {beforeEach, describe, expect} from 'vitest';
-import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.ts';
 import {getConnectionURI, type PgTest, test} from '../../../test/db.ts';
 import {pgClient, type PostgresDB} from '../../../types/pg.ts';
 import type {ShardID} from '../../../types/shards.ts';

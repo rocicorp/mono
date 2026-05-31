@@ -1,7 +1,7 @@
+import {unreachable} from 'shared/src/asserts.ts';
+import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
+import {sleep} from 'shared/src/sleep.ts';
 import {beforeEach, describe, expect, vi} from 'vitest';
-import {unreachable} from '../../../../shared/src/asserts.ts';
-import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
-import {sleep} from '../../../../shared/src/sleep.ts';
 import {DEFAULT_TTL_MS} from '../../../../zql/src/query/ttl.ts';
 import {type PgTest, test} from '../../test/db.ts';
 import type {PostgresDB} from '../../types/pg.ts';

@@ -4,14 +4,14 @@
 
 import {timingSafeEqual} from 'node:crypto';
 import type {LogContext} from '@rocicorp/logger';
-import {logOptions} from '../../../otel/src/log-options.ts';
 import {
   flagToEnv,
   parseOptions,
   type Config,
   type ParseOptions,
-} from '../../../shared/src/options.ts';
-import * as v from '../../../shared/src/valita.ts';
+} from 'shared/src/options.ts';
+import * as v from 'shared/src/valita.ts';
+import {logOptions} from '../../../otel/src/log-options.ts';
 // @circular-dep-ignore - importing package.json for version info only
 import packageJson from '../../../zero/package.json' with {type: 'json'};
 import {runtimeDebugFlags} from '../../../zql/src/builder/debug-delegate.ts';

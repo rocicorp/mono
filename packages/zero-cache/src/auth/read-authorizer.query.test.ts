@@ -1,10 +1,10 @@
 import {LogContext} from '@rocicorp/logger';
+import {assert} from 'shared/src/asserts.ts';
+import {h128} from 'shared/src/hash.ts';
+import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
+import {must} from 'shared/src/must.ts';
 import {beforeEach, describe, expect, test} from 'vitest';
 import {testLogConfig} from '../../../otel/src/test-log-config.ts';
-import {assert} from '../../../shared/src/asserts.ts';
-import {h128} from '../../../shared/src/hash.ts';
-import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
-import {must} from '../../../shared/src/must.ts';
 import {
   ANYONE_CAN,
   ANYONE_CAN_DO_ANYTHING,

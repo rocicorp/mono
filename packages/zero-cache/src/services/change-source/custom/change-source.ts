@@ -1,11 +1,8 @@
 import type {LogContext} from '@rocicorp/logger';
+import {assert, unreachable} from 'shared/src/asserts.ts';
+import {stringify, type JSONObject} from 'shared/src/bigint-json.ts';
+import {deepEqual} from 'shared/src/json.ts';
 import {WebSocket} from 'ws';
-import {assert, unreachable} from '../../../../../shared/src/asserts.ts';
-import {
-  stringify,
-  type JSONObject,
-} from '../../../../../shared/src/bigint-json.ts';
-import {deepEqual} from '../../../../../shared/src/json.ts';
 import type {SchemaValue} from '../../../../../zero-schema/src/table-schema.ts';
 import {Database} from '../../../../../zqlite/src/db.ts';
 import {computeZqlSpecs} from '../../../db/lite-tables.ts';

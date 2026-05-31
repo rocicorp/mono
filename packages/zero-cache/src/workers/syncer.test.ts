@@ -31,11 +31,11 @@ import os from 'node:os';
 import path from 'node:path';
 import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
-import {type WebSocket} from 'ws';
 import {
   createSilentLogContext,
   TestLogSink,
-} from '../../../shared/src/logging-test-utils.ts';
+} from 'shared/src/logging-test-utils.ts';
+import {type WebSocket} from 'ws';
 import {
   CREATE_STORAGE_TABLE,
   DatabaseStorage,

@@ -1,6 +1,6 @@
 import {resolver} from '@rocicorp/resolver';
+import type {ReadonlyJSONObject} from 'shared/src/json.ts';
 import {afterEach, beforeEach, expect, test, vi} from 'vitest';
-import type {ReadonlyJSONObject} from '../../shared/src/json.ts';
 import {
   DatadogLogSink,
   FORCE_FLUSH_THRESHOLD,

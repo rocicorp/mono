@@ -1,5 +1,5 @@
+import * as v from 'shared/src/valita.ts';
 import {assert, expect, test} from 'vitest';
-import * as v from '../../../shared/src/valita.ts';
 import {QueryParseError} from './error.ts';
 
 test('QueryParseError preserves cause and message', () => {

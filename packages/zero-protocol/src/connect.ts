@@ -1,4 +1,4 @@
-import * as v from '../../shared/src/valita.ts';
+import * as v from 'shared/src/valita.ts';
 import {clientSchemaSchema} from './client-schema.ts';
 import {deleteClientsBodySchema} from './delete-clients.ts';
 import {upQueriesPatchSchema} from './queries-patch.ts';

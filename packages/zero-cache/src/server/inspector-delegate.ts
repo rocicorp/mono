@@ -1,7 +1,7 @@
-import {assert} from '../../../shared/src/asserts.ts';
-import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
-import {mapValues} from '../../../shared/src/objects.ts';
-import {TDigest} from '../../../shared/src/tdigest.ts';
+import {assert} from 'shared/src/asserts.ts';
+import type {ReadonlyJSONValue} from 'shared/src/json.ts';
+import {mapValues} from 'shared/src/objects.ts';
+import {TDigest} from 'shared/src/tdigest.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
 import type {QueryServerMetrics as QueryServerMetricsJSON} from '../../../zero-protocol/src/inspect-down.ts';
 import {hashOfNameAndArgs} from '../../../zero-protocol/src/query-hash.ts';

@@ -1,10 +1,10 @@
 import {LogContext} from '@rocicorp/logger';
-import {beforeEach, describe, expect} from 'vitest';
 import {
   createSilentLogContext,
   TestLogSink,
-} from '../../../../shared/src/logging-test-utils.ts';
-import {sleep} from '../../../../shared/src/sleep.ts';
+} from 'shared/src/logging-test-utils.ts';
+import {sleep} from 'shared/src/sleep.ts';
+import {beforeEach, describe, expect} from 'vitest';
 import {getConnectionURI, type PgTest, test} from '../../test/db.ts';
 import type {PostgresDB} from '../../types/pg.ts';
 import {ensureShardSchema} from '../change-source/pg/schema/init.ts';

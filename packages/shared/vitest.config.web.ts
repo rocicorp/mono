@@ -1,7 +1,7 @@
 import {mergeConfig} from 'vitest/config';
-import config from './src/tool/vitest-config.ts';
+import {newConfig} from './src/tool/vitest-config.ts';
 
-export default mergeConfig(config, {
+export default mergeConfig(newConfig(), {
   test: {
     name: 'shared/browser',
     exclude: ['src/logging.test.ts', 'src/options.test.ts'],

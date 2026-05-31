@@ -1,6 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 import {greaterThan} from 'compare-utf8';
-import type {JSONValue, ReadonlyJSONValue} from '../../shared/src/json.ts';
+import type {JSONValue, ReadonlyJSONValue} from 'shared/src/json.ts';
 import {type IndexKey, decodeIndexKey} from './db/index.ts';
 import type {Read} from './db/read.ts';
 import type {Write} from './db/write.ts';

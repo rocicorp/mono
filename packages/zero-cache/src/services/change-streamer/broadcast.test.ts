@@ -1,7 +1,7 @@
+import {BigIntJSON} from 'shared/src/bigint-json.ts';
+import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
+import {sleep} from 'shared/src/sleep.ts';
 import {describe, expect, test} from 'vitest';
-import {BigIntJSON} from '../../../../shared/src/bigint-json.ts';
-import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
-import {sleep} from '../../../../shared/src/sleep.ts';
 import {ReplicationMessages} from '../replicator/test-utils.ts';
 import {Broadcast} from './broadcast.ts';
 import {createSubscriber} from './test-utils.ts';

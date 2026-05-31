@@ -1,4 +1,4 @@
-import type {JSONValue} from '../../../shared/src/json.ts';
+import type {JSONValue} from 'shared/src/json.ts';
 import type {PostgresTransaction} from '../../../zero-cache/src/types/pg.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
 import type {Format} from '../../../zero-types/src/format.ts';

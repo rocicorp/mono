@@ -1,4 +1,7 @@
 import {resolver} from '@rocicorp/resolver';
+import type {JSONValue} from 'shared/src/json.ts';
+import {must} from 'shared/src/must.ts';
+import {randomUint64} from 'shared/src/random-uint64.ts';
 import {
   afterEach,
   beforeEach,
@@ -9,9 +12,6 @@ import {
   type MockInstance,
   type VitestUtils,
 } from 'vitest';
-import type {JSONValue} from '../../shared/src/json.ts';
-import {must} from '../../shared/src/must.ts';
-import {randomUint64} from '../../shared/src/random-uint64.ts';
 import type {Cookie} from './cookies.ts';
 import type {Store} from './dag/store.ts';
 import {FetchMocker} from './fetch-mocker.ts';

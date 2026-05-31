@@ -1,4 +1,4 @@
-import type {Enum} from '../../../shared/src/enum.ts';
+import type {Enum} from 'shared/src/enum.ts';
 import {type PostgresDB, type PostgresTransaction} from '../types/pg.ts';
 import type * as Mode from './mode-enum.ts';
 import {READ_COMMITTED} from './mode-enum.ts';

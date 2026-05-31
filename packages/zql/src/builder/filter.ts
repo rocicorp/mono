@@ -1,4 +1,4 @@
-import {assert, unreachable} from '../../../shared/src/asserts.ts';
+import {assert, unreachable} from 'shared/src/asserts.ts';
 import type {
   Condition,
   SimpleCondition,

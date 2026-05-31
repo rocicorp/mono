@@ -1,7 +1,7 @@
-import {assert} from '../../../shared/src/asserts.ts';
-import {stringCompare} from '../../../shared/src/string-compare.ts';
-import {assertTesting} from '../../../shared/src/testing.ts';
-import type {Writable} from '../../../shared/src/writable.ts';
+import {assert} from 'shared/src/asserts.ts';
+import {stringCompare} from 'shared/src/string-compare.ts';
+import {assertTesting} from 'shared/src/testing.ts';
+import type {Writable} from 'shared/src/writable.ts';
 import type {
   Condition,
   SimpleCondition,

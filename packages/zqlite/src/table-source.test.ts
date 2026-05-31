@@ -1,9 +1,9 @@
+import {assert} from 'shared/src/asserts.ts';
+import type {JSONValue} from 'shared/src/json.ts';
+import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
+import {must} from 'shared/src/must.ts';
 import {describe, expect, test} from 'vitest';
 import {testLogConfig} from '../../otel/src/test-log-config.ts';
-import {assert} from '../../shared/src/asserts.ts';
-import type {JSONValue} from '../../shared/src/json.ts';
-import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
-import {must} from '../../shared/src/must.ts';
 import type {Row, Value} from '../../zero-protocol/src/data.ts';
 import {
   Debug,

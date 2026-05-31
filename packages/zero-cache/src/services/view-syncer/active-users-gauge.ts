@@ -1,6 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
-import {must} from '../../../../shared/src/must.ts';
-import {mapValues} from '../../../../shared/src/objects.ts';
+import {must} from 'shared/src/must.ts';
+import {mapValues} from 'shared/src/objects.ts';
 import {
   setActiveUsersGetter,
   type ActiveUsers,

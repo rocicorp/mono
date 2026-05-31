@@ -1,8 +1,8 @@
+import {CustomKeyMap} from 'shared/src/custom-key-map.ts';
+import type {ReadonlyJSONValue} from 'shared/src/json.ts';
+import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
+import {sleep} from 'shared/src/sleep.ts';
 import {beforeEach, describe, expect, vi, type Mock} from 'vitest';
-import {CustomKeyMap} from '../../../../shared/src/custom-key-map.ts';
-import type {ReadonlyJSONValue} from '../../../../shared/src/json.ts';
-import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
-import {sleep} from '../../../../shared/src/sleep.ts';
 import {test, type PgTest} from '../../test/db.ts';
 import type {PostgresDB} from '../../types/pg.ts';
 import {rowIDString, type RowID} from '../../types/row-key.ts';

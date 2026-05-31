@@ -1,8 +1,8 @@
 import type {LogContext} from '@rocicorp/logger';
-import {assert, assertObject} from '../../../shared/src/asserts.ts';
-import type {Enum} from '../../../shared/src/enum.ts';
-import {hasOwn} from '../../../shared/src/has-own.ts';
-import * as valita from '../../../shared/src/valita.ts';
+import {assert, assertObject} from 'shared/src/asserts.ts';
+import type {Enum} from 'shared/src/enum.ts';
+import {hasOwn} from 'shared/src/has-own.ts';
+import * as valita from 'shared/src/valita.ts';
 import {emptyDataNode} from '../btree/node.ts';
 import {BTreeRead} from '../btree/read.ts';
 import {type FrozenCookie, compareCookies} from '../cookies.ts';

@@ -1,6 +1,6 @@
-import {bench, describe} from '../../shared/src/bench.ts';
-import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
-import {must} from '../../shared/src/must.ts';
+import {bench, describe} from 'shared/src/bench.ts';
+import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
+import {must} from 'shared/src/must.ts';
 import {computeZqlSpecs} from '../../zero-cache/src/db/lite-tables.ts';
 import type {LiteAndZqlSpec} from '../../zero-cache/src/db/specs.ts';
 import {mapAST} from '../../zero-protocol/src/ast.ts';

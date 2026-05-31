@@ -4,8 +4,8 @@ import {consoleLogSink, LogContext} from '@rocicorp/logger';
 import {nanoid} from 'nanoid/non-secure';
 import {ident as id, literal} from 'pg-format';
 import postgres from 'postgres';
-import {parseOptions} from '../../../packages/shared/src/options.ts';
-import * as v from '../../../packages/shared/src/valita.ts';
+import {parseOptions} from 'shared/src/options.ts';
+import * as v from 'shared/src/valita.ts';
 
 const options = {
   upstream: {

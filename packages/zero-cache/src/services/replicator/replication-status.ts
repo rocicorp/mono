@@ -1,5 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
-import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
+import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
 import type {JSONObject} from '../../../../zero-events/src/json.ts';
 import type {
   ReplicatedIndex,

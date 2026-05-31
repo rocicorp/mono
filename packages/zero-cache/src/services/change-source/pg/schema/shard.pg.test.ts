@@ -1,6 +1,6 @@
 import {LogContext} from '@rocicorp/logger';
+import {TestLogSink} from 'shared/src/logging-test-utils.ts';
 import {beforeEach, describe, expect} from 'vitest';
-import {TestLogSink} from '../../../../../../shared/src/logging-test-utils.ts';
 import {Index} from '../../../../db/postgres-replica-identity-enum.ts';
 import {
   expectTables,

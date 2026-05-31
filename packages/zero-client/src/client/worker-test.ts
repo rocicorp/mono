@@ -1,8 +1,8 @@
 // This test file is loaded by worker.test.ts
 
-import {assert} from '../../../shared/src/asserts.ts';
-import {deepEqual} from '../../../shared/src/json.ts';
-import {sleep} from '../../../shared/src/sleep.ts';
+import {assert} from 'shared/src/asserts.ts';
+import {deepEqual} from 'shared/src/json.ts';
+import {sleep} from 'shared/src/sleep.ts';
 import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {
   number,

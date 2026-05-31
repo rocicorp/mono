@@ -1,6 +1,6 @@
+import {assert} from 'shared/src/asserts.ts';
+import type {Enum} from 'shared/src/enum.ts';
 import {describe, expect, test} from 'vitest';
-import {assert} from '../../../shared/src/asserts.ts';
-import type {Enum} from '../../../shared/src/enum.ts';
 import {LazyStore} from '../dag/lazy-store.ts';
 import {TestLazyStore} from '../dag/test-lazy-store.ts';
 import {TestStore} from '../dag/test-store.ts';

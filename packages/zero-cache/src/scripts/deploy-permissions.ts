@@ -2,9 +2,9 @@ import '../../../shared/src/dotenv.ts';
 
 import {writeFile} from 'node:fs/promises';
 import {ident as id, literal} from 'pg-format';
-import {colorConsole, createLogContext} from '../../../shared/src/logging.ts';
-import {parseOptions} from '../../../shared/src/options.ts';
-import {difference} from '../../../shared/src/set-utils.ts';
+import {colorConsole, createLogContext} from 'shared/src/logging.ts';
+import {parseOptions} from 'shared/src/options.ts';
+import {difference} from 'shared/src/set-utils.ts';
 import {mapCondition} from '../../../zero-protocol/src/ast.ts';
 import {
   type AssetPermissions,

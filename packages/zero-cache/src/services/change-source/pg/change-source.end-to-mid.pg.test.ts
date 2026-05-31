@@ -1,9 +1,9 @@
 import type {LogContext} from '@rocicorp/logger';
 import {literal} from 'pg-format';
+import {type JSONValue} from 'shared/src/bigint-json.ts';
+import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
+import {Queue} from 'shared/src/queue.ts';
 import {afterAll, beforeAll, describe, expect, test} from 'vitest';
-import {type JSONValue} from '../../../../../shared/src/bigint-json.ts';
-import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.ts';
-import {Queue} from '../../../../../shared/src/queue.ts';
 import type {Database} from '../../../../../zqlite/src/db.ts';
 import {listIndexes, listTables} from '../../../db/lite-tables.ts';
 import type {LiteIndexSpec, LiteTableSpec} from '../../../db/specs.ts';

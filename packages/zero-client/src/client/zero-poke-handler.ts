@@ -1,12 +1,12 @@
 import {Lock} from '@rocicorp/lock';
 import type {LogContext} from '@rocicorp/logger';
+import {unreachable} from 'shared/src/asserts.ts';
 import type {
   PatchOperationInternal,
   PokeInternal,
 } from '../../../replicache/src/impl.ts';
 import type {PatchOperation} from '../../../replicache/src/patch-operation.ts';
 import type {ClientID} from '../../../replicache/src/sync/ids.ts';
-import {unreachable} from '../../../shared/src/asserts.ts';
 import type {MutationPatch} from '../../../zero-protocol/src/mutations-patch.ts';
 import type {
   PokeEndBody,
