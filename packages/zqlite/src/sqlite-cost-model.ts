@@ -1,6 +1,6 @@
 import SQLite3Database from '@rocicorp/zero-sqlite3';
-import {assert} from 'shared/src/asserts.ts';
-import {must} from 'shared/src/must.ts';
+import {assert} from '../../shared/src/asserts.ts';
+import {must} from '../../shared/src/must.ts';
 import type {Condition, Ordering} from '../../zero-protocol/src/ast.ts';
 import type {SchemaValue} from '../../zero-types/src/schema-value.ts';
 import type {

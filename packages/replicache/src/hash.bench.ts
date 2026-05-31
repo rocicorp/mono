@@ -1,7 +1,7 @@
 import {createSHA512} from 'hash-wasm';
-import {bench, describe} from 'shared/src/bench.ts';
-import {makeRandomStrings} from 'shared/src/test-data.ts';
 import {beforeAll} from 'vitest';
+import {bench, describe} from '../../shared/src/bench.ts';
+import {makeRandomStrings} from '../../shared/src/test-data.ts';
 
 const NUM_STRINGS = 100;
 const STRING_LENGTH = 100_000;

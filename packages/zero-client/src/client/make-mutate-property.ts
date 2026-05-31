@@ -1,5 +1,5 @@
-import type {DeepMerge} from 'shared/src/deep-merge.ts';
-import {must} from 'shared/src/must.ts';
+import type {DeepMerge} from '../../../shared/src/deep-merge.ts';
+import {must} from '../../../shared/src/must.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import {
   customMutatorKey,

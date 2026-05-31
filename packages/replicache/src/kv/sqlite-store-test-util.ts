@@ -1,5 +1,5 @@
-import {sleep} from 'shared/src/sleep.ts';
 import {afterEach, beforeEach, expect, test} from 'vitest';
+import {sleep} from '../../../shared/src/sleep.ts';
 import {withRead, withWrite} from '../with-transactions.ts';
 import {runAll} from './store-test-util.ts';
 import type {Store, StoreProvider} from './store.ts';

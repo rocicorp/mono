@@ -1,5 +1,5 @@
-import {assert} from 'shared/src/asserts.ts';
 import {expect} from 'vitest';
+import {assert} from '../../../shared/src/asserts.ts';
 import type {Store} from '../dag/store.ts';
 import type {Commit} from '../db/commit.ts';
 import {

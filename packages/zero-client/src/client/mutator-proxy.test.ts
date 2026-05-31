@@ -1,10 +1,10 @@
 import {LogContext} from '@rocicorp/logger';
-import type {ReadonlyJSONValue} from 'shared/src/json.ts';
+import {assert, describe, expect, test, vi} from 'vitest';
+import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {
   createSilentLogContext,
   TestLogSink,
-} from 'shared/src/logging-test-utils.ts';
-import {assert, describe, expect, test, vi} from 'vitest';
+} from '../../../shared/src/logging-test-utils.ts';
 import {ApplicationError} from '../../../zero-protocol/src/application-error.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';

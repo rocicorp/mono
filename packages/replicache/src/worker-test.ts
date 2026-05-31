@@ -1,7 +1,7 @@
 // This test file is loaded by worker.test.ts
 
-import {assert} from 'shared/src/asserts.ts';
-import {deepEqual, type JSONValue} from 'shared/src/json.ts';
+import {assert} from '../../shared/src/asserts.ts';
+import {deepEqual, type JSONValue} from '../../shared/src/json.ts';
 import {asyncIterableToArray} from './async-iterable-to-array.ts';
 import {Replicache} from './replicache.ts';
 import type {ReadTransaction, WriteTransaction} from './transactions.ts';

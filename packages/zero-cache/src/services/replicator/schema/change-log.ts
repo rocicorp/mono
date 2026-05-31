@@ -1,5 +1,9 @@
-import {jsonObjectSchema, parse, stringify} from 'shared/src/bigint-json.ts';
-import * as v from 'shared/src/valita.ts';
+import {
+  jsonObjectSchema,
+  parse,
+  stringify,
+} from '../../../../../shared/src/bigint-json.ts';
+import * as v from '../../../../../shared/src/valita.ts';
 import type {Database, Statement} from '../../../../../zqlite/src/db.ts';
 import type {LexiVersion} from '../../../types/lexi-version.ts';
 import type {LiteRowKey} from '../../../types/lite.ts';

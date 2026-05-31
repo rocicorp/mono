@@ -1,7 +1,7 @@
 import {parentPort} from 'node:worker_threads';
 import type {LogContext} from '@rocicorp/logger';
-import type {LogConfig} from 'shared/src/logging.ts';
-import {must} from 'shared/src/must.ts';
+import type {LogConfig} from '../../../../shared/src/logging.ts';
+import {must} from '../../../../shared/src/must.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {StatementRunner} from '../../db/statements.ts';
 import {createLogContext} from '../../server/logging.ts';

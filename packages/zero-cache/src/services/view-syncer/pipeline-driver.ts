@@ -1,7 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
-import {assert, unreachable} from 'shared/src/asserts.ts';
-import {deepEqual, type JSONValue} from 'shared/src/json.ts';
-import {must} from 'shared/src/must.ts';
+import {assert, unreachable} from '../../../../shared/src/asserts.ts';
+import {deepEqual, type JSONValue} from '../../../../shared/src/json.ts';
+import {must} from '../../../../shared/src/must.ts';
 import type {AST, LiteralValue} from '../../../../zero-protocol/src/ast.ts';
 import type {ClientSchema} from '../../../../zero-protocol/src/client-schema.ts';
 import type {Row} from '../../../../zero-protocol/src/data.ts';

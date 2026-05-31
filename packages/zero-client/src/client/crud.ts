@@ -1,5 +1,5 @@
-import {promiseVoid} from 'shared/src/resolved-promises.ts';
-import type {MaybePromise} from 'shared/src/types.ts';
+import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
+import type {MaybePromise} from '../../../shared/src/types.ts';
 import {
   CRUD_MUTATION_NAME,
   type CRUDMutationArg,

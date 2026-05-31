@@ -1,11 +1,11 @@
 import '../../shared/src/dotenv.ts';
 
 import {consoleLogSink, LogContext} from '@rocicorp/logger';
-import {must} from 'shared/src/must.ts';
-import {parseOptions} from 'shared/src/options.ts';
-import * as v from 'shared/src/valita.ts';
 import {astToZQL} from '../../ast-to-zql/src/ast-to-zql.ts';
 import {formatOutput} from '../../ast-to-zql/src/format.ts';
+import {must} from '../../shared/src/must.ts';
+import {parseOptions} from '../../shared/src/options.ts';
+import * as v from '../../shared/src/valita.ts';
 import {transformAndHashQuery} from '../../zero-cache/src/auth/read-authorizer.ts';
 import {
   appOptions,

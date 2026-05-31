@@ -1,5 +1,5 @@
 import type {LogLevel} from '@rocicorp/logger';
-import {getErrorMessage} from 'shared/src/error.ts';
+import {getErrorMessage} from '../../../shared/src/error.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
 import {

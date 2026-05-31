@@ -1,13 +1,20 @@
 import type {LogContext} from '@rocicorp/logger';
-import {assert} from 'shared/src/asserts.ts';
-import {type JSONObject} from 'shared/src/bigint-json.ts';
-import {CustomKeyMap} from 'shared/src/custom-key-map.ts';
-import {toSorted} from 'shared/src/iterables.ts';
-import {deepEqual, type ReadonlyJSONValue} from 'shared/src/json.ts';
-import {must} from 'shared/src/must.ts';
-import {difference, intersection, union} from 'shared/src/set-utils.ts';
-import {stringCompare} from 'shared/src/string-compare.ts';
 import {startAsyncSpan, startSpan} from '../../../../otel/src/span.ts';
+import {assert} from '../../../../shared/src/asserts.ts';
+import {type JSONObject} from '../../../../shared/src/bigint-json.ts';
+import {CustomKeyMap} from '../../../../shared/src/custom-key-map.ts';
+import {toSorted} from '../../../../shared/src/iterables.ts';
+import {
+  deepEqual,
+  type ReadonlyJSONValue,
+} from '../../../../shared/src/json.ts';
+import {must} from '../../../../shared/src/must.ts';
+import {
+  difference,
+  intersection,
+  union,
+} from '../../../../shared/src/set-utils.ts';
+import {stringCompare} from '../../../../shared/src/string-compare.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import type {ClientSchema} from '../../../../zero-protocol/src/client-schema.ts';
 import {ErrorOrigin} from '../../../../zero-protocol/src/error-origin.ts';

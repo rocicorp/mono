@@ -1,5 +1,5 @@
-import {assert} from 'shared/src/asserts.ts';
 import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
+import {assert} from '../../../shared/src/asserts.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
 import {ProtocolError} from '../../../zero-protocol/src/error.ts';

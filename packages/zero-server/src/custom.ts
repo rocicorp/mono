@@ -1,6 +1,6 @@
-import {assert} from 'shared/src/asserts.ts';
-import {mapValues} from 'shared/src/objects.ts';
-import {recordProxy} from 'shared/src/record-proxy.ts';
+import {assert} from '../../shared/src/asserts.ts';
+import {mapValues} from '../../shared/src/objects.ts';
+import {recordProxy} from '../../shared/src/record-proxy.ts';
 import {
   formatPgInternalConvert,
   sql,

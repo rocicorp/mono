@@ -1,7 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
-import {assert, unreachable} from 'shared/src/asserts.ts';
-import type {JSONValue} from 'shared/src/json.ts';
-import {must} from 'shared/src/must.ts';
+import {assert, unreachable} from '../../../shared/src/asserts.ts';
+import type {JSONValue} from '../../../shared/src/json.ts';
+import {must} from '../../../shared/src/must.ts';
 import type {
   AST,
   ColumnReference,

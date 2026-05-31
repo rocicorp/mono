@@ -1,6 +1,6 @@
-import type {Enum} from 'shared/src/enum.ts';
-import {deepEqual} from 'shared/src/json.ts';
-import {getSizeOfEntry} from 'shared/src/size-of-value.ts';
+import type {Enum} from '../../../shared/src/enum.ts';
+import {deepEqual} from '../../../shared/src/json.ts';
+import {getSizeOfEntry} from '../../../shared/src/size-of-value.ts';
 import type {Read} from '../dag/store.ts';
 import type * as FormatVersion from '../format-version-enum.ts';
 import type {FrozenJSONValue} from '../frozen-json.ts';

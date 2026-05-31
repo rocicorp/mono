@@ -1,11 +1,11 @@
 import type {LogContext} from '@rocicorp/logger';
-import {assert} from 'shared/src/asserts.ts';
-import {must} from 'shared/src/must.ts';
-import {sleep} from 'shared/src/sleep.ts';
 // @circular-dep-ignore
 import {astToZQL} from '../../../ast-to-zql/src/ast-to-zql.ts';
 // @circular-dep-ignore
 import {formatOutput} from '../../../ast-to-zql/src/format.ts';
+import {assert} from '../../../shared/src/asserts.ts';
+import {must} from '../../../shared/src/must.ts';
+import {sleep} from '../../../shared/src/sleep.ts';
 import type {AnalyzeQueryResult} from '../../../zero-protocol/src/analyze-query-result.ts';
 import type {AST, LiteralValue} from '../../../zero-protocol/src/ast.ts';
 import {mapAST} from '../../../zero-protocol/src/ast.ts';

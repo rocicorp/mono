@@ -1,6 +1,6 @@
 import {consoleLogSink, LogContext} from '@rocicorp/logger';
-import {assert} from 'shared/src/asserts.ts';
-import {must} from 'shared/src/must.ts';
+import {assert} from '../../../shared/src/asserts.ts';
+import {must} from '../../../shared/src/must.ts';
 import {DatabaseInitError} from '../../../zqlite/src/db.ts';
 import {getServerContext} from '../config/server-context.ts';
 import {getNormalizedZeroConfig} from '../config/zero-config.ts';

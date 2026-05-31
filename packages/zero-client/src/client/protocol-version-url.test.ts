@@ -1,7 +1,7 @@
-import {h64} from 'shared/src/hash.ts';
-import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
-import {stringCompare} from 'shared/src/string-compare.ts';
 import {expect, test, vi} from 'vitest';
+import {h64} from '../../../shared/src/hash.ts';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import {stringCompare} from '../../../shared/src/string-compare.ts';
 import {PROTOCOL_VERSION} from '../../../zero-protocol/src/protocol-version.ts';
 import {createConnectionURL} from './zero.ts';
 

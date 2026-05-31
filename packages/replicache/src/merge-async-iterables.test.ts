@@ -1,5 +1,5 @@
-import {stringCompare} from 'shared/src/string-compare.ts';
 import {expect, test} from 'vitest';
+import {stringCompare} from '../../shared/src/string-compare.ts';
 import {asyncIterableToArray} from './async-iterable-to-array.ts';
 import {makeAsyncIterable} from './make-async-iterable.ts';
 import {mergeAsyncIterables} from './merge-async-iterables.ts';

@@ -1,4 +1,4 @@
-import * as v from 'shared/src/valita.ts';
+import * as v from '../../shared/src/valita.ts';
 
 import {conditionSchema, orderingSchema} from './ast.ts';
 import {rowSchema} from './data.ts';

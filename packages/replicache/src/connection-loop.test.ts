@@ -1,8 +1,8 @@
 import {LogContext} from '@rocicorp/logger';
-import {getDocumentVisibilityWatcher} from 'shared/src/document-visible.ts';
-import {promiseTrue} from 'shared/src/resolved-promises.ts';
-import {sleep} from 'shared/src/sleep.ts';
 import {beforeEach, describe, expect, test, vi} from 'vitest';
+import {getDocumentVisibilityWatcher} from '../../shared/src/document-visible.ts';
+import {promiseTrue} from '../../shared/src/resolved-promises.ts';
+import {sleep} from '../../shared/src/sleep.ts';
 import {
   ConnectionLoop,
   type ConnectionLoopDelegate,

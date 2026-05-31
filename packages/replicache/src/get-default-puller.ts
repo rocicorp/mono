@@ -1,4 +1,8 @@
-import {assertNumber, assertObject, assertString} from 'shared/src/asserts.ts';
+import {
+  assertNumber,
+  assertObject,
+  assertString,
+} from '../../shared/src/asserts.ts';
 import {callDefaultFetch} from './call-default-fetch.ts';
 import {assertCookie} from './cookies.ts';
 import {

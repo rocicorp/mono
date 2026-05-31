@@ -1,6 +1,6 @@
-import {must} from 'shared/src/must.ts';
-import {mapAllEntries} from 'shared/src/objects.ts';
-import * as v from 'shared/src/valita.ts';
+import {must} from '../../shared/src/must.ts';
+import {mapAllEntries} from '../../shared/src/objects.ts';
+import * as v from '../../shared/src/valita.ts';
 
 export type ValueType = 'string' | 'number' | 'boolean' | 'null' | 'json';
 

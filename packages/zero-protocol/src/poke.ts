@@ -1,4 +1,4 @@
-import * as v from 'shared/src/valita.ts';
+import * as v from '../../shared/src/valita.ts';
 import {mutationsPatchSchema} from './mutations-patch.ts';
 import {queriesPatchSchema} from './queries-patch.ts';
 import {rowsPatchSchema} from './row-patch.ts';

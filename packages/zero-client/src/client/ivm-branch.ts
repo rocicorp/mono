@@ -1,6 +1,3 @@
-import {assert} from 'shared/src/asserts.ts';
-import {wrapIterable} from 'shared/src/iterables.ts';
-import {must} from 'shared/src/must.ts';
 import type {
   InternalDiff,
   InternalDiffOperation,
@@ -16,6 +13,9 @@ import {diffBinarySearch} from '../../../replicache/src/subscriptions.ts';
 import type {DiffsMap} from '../../../replicache/src/sync/diff.ts';
 import {diff} from '../../../replicache/src/sync/diff.ts';
 import {using, withRead} from '../../../replicache/src/with-transactions.ts';
+import {assert} from '../../../shared/src/asserts.ts';
+import {wrapIterable} from '../../../shared/src/iterables.ts';
+import {must} from '../../../shared/src/must.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import type {TableSchema} from '../../../zero-schema/src/table-schema.ts';
 import {MemorySource} from '../../../zql/src/ivm/memory-source.ts';

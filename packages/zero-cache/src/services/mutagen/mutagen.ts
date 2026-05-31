@@ -3,8 +3,8 @@ import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import type {JWTPayload} from 'jose';
 import postgres from 'postgres';
-import {assert, unreachable} from 'shared/src/asserts.ts';
-import * as v from 'shared/src/valita.ts';
+import {assert, unreachable} from '../../../../shared/src/asserts.ts';
+import * as v from '../../../../shared/src/valita.ts';
 import {ErrorKind} from '../../../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../../../zero-protocol/src/error-origin.ts';
 import {

@@ -1,6 +1,6 @@
-import {assert, unreachable} from 'shared/src/asserts.ts';
-import {must} from 'shared/src/must.ts';
-import {emptyArray} from 'shared/src/sentinels.ts';
+import {assert, unreachable} from '../../../shared/src/asserts.ts';
+import {must} from '../../../shared/src/must.ts';
+import {emptyArray} from '../../../shared/src/sentinels.ts';
 import {ChangeIndex} from './change-index.ts';
 import {ChangeType} from './change-type.ts';
 import {

@@ -1,4 +1,4 @@
-import {assert} from 'shared/src/asserts.ts';
+import {assert} from '../../shared/src/asserts.ts';
 
 /**
  * The current `PROTOCOL_VERSION` of the code.

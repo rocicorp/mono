@@ -5,10 +5,10 @@ import {chmod, copyFile, mkdir, readFile, rm} from 'node:fs/promises';
 import {builtinModules} from 'node:module';
 import {basename, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {assert} from 'shared/src/asserts.ts';
-import {makeDefine} from 'shared/src/build.ts';
-import {getExternalFromPackageJSON} from 'shared/src/tool/get-external-from-package-json.ts';
 import {type InlineConfig, build as viteBuild} from 'vite';
+import {assert} from '../../shared/src/asserts.ts';
+import {makeDefine} from '../../shared/src/build.ts';
+import {getExternalFromPackageJSON} from '../../shared/src/tool/get-external-from-package-json.ts';
 import * as workerUrls from '../../zero-cache/src/server/worker-urls.ts';
 
 const forBundleSizeDashboard = process.argv.includes('--bundle-sizes');

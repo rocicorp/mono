@@ -1,7 +1,7 @@
 import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
-import {TestLogSink} from 'shared/src/logging-test-utils.ts';
 import {afterEach, beforeEach, expect, test, vi} from 'vitest';
+import {TestLogSink} from '../../shared/src/logging-test-utils.ts';
 import {initBgIntervalProcess} from './bg-interval.ts';
 import {IDBNotFoundError} from './kv/idb-store.ts';
 

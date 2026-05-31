@@ -1,9 +1,9 @@
 import {existsSync} from 'node:fs';
 import {basename, dirname, join, relative, resolve, sep} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {colorConsole} from 'shared/src/logging.ts';
-import * as v from 'shared/src/valita.ts';
 import {logOptions} from '../../../otel/src/log-options.ts';
+import {colorConsole} from '../../../shared/src/logging.ts';
+import * as v from '../../../shared/src/valita.ts';
 import {
   permissionsConfigSchema,
   type PermissionsConfig,

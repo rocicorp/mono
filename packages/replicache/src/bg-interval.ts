@@ -1,6 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
-import {AbortError} from 'shared/src/abort-error.ts';
-import {sleep} from 'shared/src/sleep.ts';
+import {AbortError} from '../../shared/src/abort-error.ts';
+import {sleep} from '../../shared/src/sleep.ts';
 import {IDBNotFoundError} from './kv/idb-store.ts';
 
 export function initBgIntervalProcess(

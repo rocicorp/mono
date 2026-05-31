@@ -1,8 +1,11 @@
-import {assert} from 'shared/src/asserts.ts';
-import type {Enum} from 'shared/src/enum.ts';
-import type {ReadonlyJSONValue} from 'shared/src/json.ts';
-import {getSizeOfEntry, getSizeOfValue} from 'shared/src/size-of-value.ts';
 import {beforeEach, describe, expect, test} from 'vitest';
+import {assert} from '../../../shared/src/asserts.ts';
+import type {Enum} from '../../../shared/src/enum.ts';
+import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
+import {
+  getSizeOfEntry,
+  getSizeOfValue,
+} from '../../../shared/src/size-of-value.ts';
 import {toRefs} from '../dag/chunk.ts';
 import type {Read, Store, Write} from '../dag/store.ts';
 import {TestStore} from '../dag/test-store.ts';

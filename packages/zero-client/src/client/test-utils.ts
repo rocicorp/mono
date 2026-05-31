@@ -1,11 +1,11 @@
 import type {LogLevel} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
-import {assert} from 'shared/src/asserts.ts';
-import type {JSONValue, ReadonlyJSONValue} from 'shared/src/json.ts';
-import {TestLogSink} from 'shared/src/logging-test-utils.ts';
-import {assertTesting} from 'shared/src/testing.ts';
 // import {type VitestUtils} from 'vitest';
 import type {Store} from '../../../replicache/src/dag/store.ts';
+import {assert} from '../../../shared/src/asserts.ts';
+import type {JSONValue, ReadonlyJSONValue} from '../../../shared/src/json.ts';
+import {TestLogSink} from '../../../shared/src/logging-test-utils.ts';
+import {assertTesting} from '../../../shared/src/testing.ts';
 import type {ConnectedMessage} from '../../../zero-protocol/src/connect.ts';
 import type {Downstream} from '../../../zero-protocol/src/down.ts';
 import type {

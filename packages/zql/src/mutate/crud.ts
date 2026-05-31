@@ -1,5 +1,5 @@
-import type {Expand} from 'shared/src/expand.ts';
-import {recordProxy} from 'shared/src/record-proxy.ts';
+import type {Expand} from '../../../shared/src/expand.ts';
+import {recordProxy} from '../../../shared/src/record-proxy.ts';
 import type {SchemaValueToTSType} from '../../../zero-types/src/schema-value.ts';
 import type {Schema, TableSchema} from '../../../zero-types/src/schema.ts';
 import type {MutateCRUD} from './custom.ts';

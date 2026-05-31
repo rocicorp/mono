@@ -1,4 +1,4 @@
-import * as v from 'shared/src/valita.ts';
+import * as v from '../../shared/src/valita.ts';
 
 export const deleteClientsBodySchema = v.union(
   v.readonlyObject({

@@ -1,8 +1,8 @@
 import {LogContext} from '@rocicorp/logger';
-import type {Enum} from 'shared/src/enum.ts';
-import type {JSONValue} from 'shared/src/json.ts';
-import {stringCompare} from 'shared/src/string-compare.ts';
 import {expect, test} from 'vitest';
+import type {Enum} from '../../../shared/src/enum.ts';
+import type {JSONValue} from '../../../shared/src/json.ts';
+import {stringCompare} from '../../../shared/src/string-compare.ts';
 import {asyncIterableToArray} from '../async-iterable-to-array.ts';
 import {BTreeWrite} from '../btree/write.ts';
 import {TestStore} from '../dag/test-store.ts';

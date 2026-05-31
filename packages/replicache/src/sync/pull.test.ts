@@ -1,9 +1,13 @@
 import {LogContext} from '@rocicorp/logger';
-import {assert, assertObject, assertString} from 'shared/src/asserts.ts';
-import type {Enum} from 'shared/src/enum.ts';
-import type {ReadonlyJSONValue} from 'shared/src/json.ts';
-import {stringCompare} from 'shared/src/string-compare.ts';
 import {describe, expect, test} from 'vitest';
+import {
+  assert,
+  assertObject,
+  assertString,
+} from '../../../shared/src/asserts.ts';
+import type {Enum} from '../../../shared/src/enum.ts';
+import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
+import {stringCompare} from '../../../shared/src/string-compare.ts';
 import {asyncIterableToArray} from '../async-iterable-to-array.ts';
 import {BTreeRead} from '../btree/read.ts';
 import type {Cookie, FrozenCookie} from '../cookies.ts';

@@ -1,4 +1,4 @@
-import * as v from 'shared/src/valita.ts';
+import * as v from '../../shared/src/valita.ts';
 import {compoundKeySchema} from '../../zero-protocol/src/ast.ts';
 import {valueTypeSchema} from '../../zero-protocol/src/client-schema.ts';
 import {primaryKeySchema} from '../../zero-protocol/src/primary-key.ts';

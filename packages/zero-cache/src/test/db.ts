@@ -1,8 +1,6 @@
 /* oxlint-disable no-console */
 import {PostgreSqlContainer} from '@testcontainers/postgresql';
 import postgres from 'postgres';
-import {must} from 'shared/src/must.ts';
-import {sleep} from 'shared/src/sleep.ts';
 import {
   afterAll,
   test as baseTest,
@@ -10,6 +8,8 @@ import {
   inject,
   type ProvidedContext,
 } from 'vitest';
+import {must} from '../../../shared/src/must.ts';
+import {sleep} from '../../../shared/src/sleep.ts';
 import {
   type PostgresDB,
   postgresTypeConfig,

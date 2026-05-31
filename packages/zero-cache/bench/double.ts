@@ -1,6 +1,6 @@
 import '../../shared/src/dotenv.ts';
 
-import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
+import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
 import {Database} from '../../zqlite/src/db.ts';
 
 type Options = {

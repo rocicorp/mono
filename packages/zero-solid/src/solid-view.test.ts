@@ -1,10 +1,10 @@
 import {resolver} from '@rocicorp/resolver';
-import {createSilentLogContext} from 'shared/src/logging-test-utils.ts';
-import {stringCompare} from 'shared/src/string-compare.ts';
 import {createEffect} from 'solid-js';
 import {createStore} from 'solid-js/store';
 import {expect, test, vi} from 'vitest';
 import {testLogConfig} from '../../otel/src/test-log-config.ts';
+import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
+import {stringCompare} from '../../shared/src/string-compare.ts';
 import {
   makeAddChange,
   makeChildChange,

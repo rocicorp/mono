@@ -1,6 +1,6 @@
 import type {LogContext, LogLevel, LogSink} from '@rocicorp/logger';
-import {assert} from 'shared/src/asserts.ts';
-import type {MaybePromise} from 'shared/src/types.ts';
+import {assert} from '../../../shared/src/asserts.ts';
+import type {MaybePromise} from '../../../shared/src/types.ts';
 import {initBgIntervalProcess} from '../bg-interval.ts';
 import {StoreImpl} from '../dag/store-impl.ts';
 import type {Store} from '../dag/store.ts';

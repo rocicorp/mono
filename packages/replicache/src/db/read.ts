@@ -1,4 +1,4 @@
-import type {Enum} from 'shared/src/enum.ts';
+import type {Enum} from '../../../shared/src/enum.ts';
 import {BTreeRead} from '../btree/read.ts';
 import type {Read as DagRead} from '../dag/store.ts';
 import type * as FormatVersion from '../format-version-enum.ts';

@@ -1,5 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
-import {joinIterables, wrapIterable} from 'shared/src/iterables.ts';
+import {joinIterables, wrapIterable} from '../../../../shared/src/iterables.ts';
 import {Broadcast} from './broadcast.ts';
 import type {ChangeTag, WatermarkedChange} from './change-streamer-service.ts';
 import type {Status} from './change-streamer.ts';

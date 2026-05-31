@@ -1,5 +1,5 @@
-import {promiseVoid} from 'shared/src/resolved-promises.ts';
-import {getSizeOfValue} from 'shared/src/size-of-value.ts';
+import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
+import {getSizeOfValue} from '../../../shared/src/size-of-value.ts';
 import type {Chunk} from '../dag/chunk.ts';
 import type {LazyStore} from '../dag/lazy-store.ts';
 import type {Read} from '../dag/store.ts';

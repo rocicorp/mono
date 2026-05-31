@@ -1,4 +1,4 @@
-import {assert} from 'shared/src/asserts.ts';
+import {assert} from '../../../shared/src/asserts.ts';
 import type {Database, Statement} from '../db.ts';
 
 export type CachedStatementMap = Map<string, Statement[]>;

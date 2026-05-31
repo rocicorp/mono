@@ -1,6 +1,6 @@
 import {resolver} from '@rocicorp/resolver';
-import {BroadcastChannel} from 'shared/src/broadcast-channel.ts';
 import {afterEach, describe, expect, test} from 'vitest';
+import {BroadcastChannel} from '../../shared/src/broadcast-channel.ts';
 import {initOnPersistChannel, type PersistInfo} from './on-persist-channel.ts';
 
 describe('initOnPersistChannel', () => {

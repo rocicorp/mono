@@ -1,13 +1,13 @@
 import type {LogContext} from '@rocicorp/logger';
-import {assert, unreachable} from 'shared/src/asserts.ts';
-import type {JSONObject} from 'shared/src/bigint-json.ts';
+import {assert, unreachable} from '../../../../shared/src/asserts.ts';
+import type {JSONObject} from '../../../../shared/src/bigint-json.ts';
 import {
   assertJSONValue,
   type JSONObject as SafeJSONObject,
-} from 'shared/src/json.ts';
-import {promiseVoid} from 'shared/src/resolved-promises.ts';
-import * as v from 'shared/src/valita.ts';
-import type {Writable} from 'shared/src/writable.ts';
+} from '../../../../shared/src/json.ts';
+import {promiseVoid} from '../../../../shared/src/resolved-promises.ts';
+import * as v from '../../../../shared/src/valita.ts';
+import type {Writable} from '../../../../shared/src/writable.ts';
 import type {ErroredQuery} from '../../../../zero-protocol/src/custom-queries.ts';
 import {rowSchema} from '../../../../zero-protocol/src/data.ts';
 import type {DeleteClientsBody} from '../../../../zero-protocol/src/delete-clients.ts';

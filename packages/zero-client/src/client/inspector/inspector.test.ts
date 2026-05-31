@@ -1,6 +1,6 @@
-import {assert} from 'shared/src/asserts.ts';
-import {TDigest, type ReadonlyTDigest} from 'shared/src/tdigest.ts';
 import {beforeEach, describe, expect, test, vi} from 'vitest';
+import {assert} from '../../../../shared/src/asserts.ts';
+import {TDigest, type ReadonlyTDigest} from '../../../../shared/src/tdigest.ts';
 import type {AnalyzeQueryResult} from '../../../../zero-protocol/src/analyze-query-result.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import {

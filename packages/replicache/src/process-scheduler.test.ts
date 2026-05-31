@@ -1,6 +1,6 @@
 import {resolver, type Resolver} from '@rocicorp/resolver';
-import {AbortError} from 'shared/src/abort-error.ts';
 import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
+import {AbortError} from '../../shared/src/abort-error.ts';
 import {ProcessScheduler} from './process-scheduler.ts';
 import {expectPromiseToReject} from './test-util.ts';
 
