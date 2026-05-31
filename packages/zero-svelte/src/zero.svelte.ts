@@ -59,7 +59,7 @@ type ZLike<
       TReturn,
       TContext
     >,
-    options?: MaterializeOptions | undefined,
+    options?: MaterializeOptions,
   ): TypedView<HumanReadable<TReturn>>;
 };
 
@@ -315,7 +315,7 @@ export class Z<
       TReturn,
       TContext
     >,
-    options?: {ttl?: TTL | undefined} | undefined,
+    options?: {ttl?: TTL | undefined},
   ): {cleanup: () => void; complete: Promise<void>} {
     return this.#zero.preload(query, options);
   }
@@ -334,7 +334,7 @@ export class Z<
       TReturn,
       TContext
     >,
-    options?: RunOptions | undefined,
+    options?: RunOptions,
   ): Promise<HumanReadable<TReturn>> {
     return this.#zero.run(query, options);
   }
@@ -353,7 +353,7 @@ export class Z<
       TReturn,
       TContext
     >,
-    options?: MaterializeOptions | undefined,
+    options?: MaterializeOptions,
   ): TypedView<HumanReadable<TReturn>> {
     return this.#zero.materialize(query, options);
   }
