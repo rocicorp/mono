@@ -209,15 +209,44 @@ function simpleConditionToSQL(filter: SimpleCondition): SQLQuery {
         );
     }
   }
+  if (
+    op === 'LIKE' ||
+    op === 'NOT LIKE' ||
+    op === 'ILIKE' ||
+    op === 'NOT ILIKE'
+  ) {
+    return likeConditionToSQL(filter);
+  }
+
   return sql`${valuePositionToSQL(filter.left)} ${sql.__dangerous__rawValue(
-    // SQLite's LIKE operator is case-insensitive by default, so we
-    // convert ILIKE to LIKE and NOT ILIKE to NOT LIKE.
-    filter.op === 'ILIKE'
-      ? 'LIKE'
-      : filter.op === 'NOT ILIKE'
-        ? 'NOT LIKE'
-        : filter.op,
+    filter.op,
   )} ${valuePositionToSQL(filter.right)}`;
+}
+
+function likeConditionToSQL(filter: SimpleCondition): SQLQuery {
+  const {op} = filter;
+  // Mirror Postgres pattern-matching semantics:
+  //  * LIKE is case-sensitive. The replica connection runs with
+  //    `PRAGMA case_sensitive_like = ON` (see db.ts), so the bare LIKE
+  //    operator is case-sensitive.
+  //  * ILIKE is case-insensitive. We lower() both operands using the
+  //    Unicode-aware lower() that @rocicorp/zero-sqlite3 provides via ICU,
+  //    mirroring the toLowerCase() used by the in-memory IVM matcher
+  //    (see zql/src/builder/like.ts).
+  //  * Backslash is the default escape character in Postgres and in the IVM
+  //    matcher, but SQLite has no default, so we specify `ESCAPE '\'`
+  //    explicitly. The SQL literal '\' is a single backslash (SQLite does not
+  //    process backslash escapes inside string literals).
+  const caseInsensitive = op === 'ILIKE' || op === 'NOT ILIKE';
+  const negated = op === 'NOT LIKE' || op === 'NOT ILIKE';
+  const likeOp = sql.__dangerous__rawValue(negated ? 'NOT LIKE' : 'LIKE');
+
+  const left = valuePositionToSQL(filter.left);
+  const right = valuePositionToSQL(filter.right);
+  if (caseInsensitive) {
+    return sql`lower(${left}) ${likeOp} lower(${right}) ESCAPE '\\'`;
+  }
+  return sql`${left} ${likeOp} ${right} ESCAPE '\\'`;
 }
 
 function valuePositionToSQL(value: ValuePosition): SQLQuery {
