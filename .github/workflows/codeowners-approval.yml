@@ -44,7 +44,7 @@ jobs:
 
             const CHECK_NAME = 'codeowners/approval';
 
-            const canAccessChecksApi = (error) =>
+            const isChecksApiPermissionError = (error) =>
               error?.status === 403 ||
               /Resource not accessible by integration/i.test(
                 String(error?.message ?? ''),
@@ -78,7 +78,7 @@ jobs:
                   });
                 }
               } catch (error) {
-                if (canAccessChecksApi(error)) {
+                if (isChecksApiPermissionError(error)) {
                   core.warning(
                     `Skipping ${CHECK_NAME} check run because this workflow token cannot access the Checks API: ${error.message}`,
                   );
