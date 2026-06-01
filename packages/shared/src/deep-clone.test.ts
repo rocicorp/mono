@@ -1,26 +1,6 @@
 import {expect, test} from 'vitest';
-import {deepClone, deepCloneWithInstances} from './deep-clone.ts';
+import {deepClone} from './deep-clone.ts';
 import type {JSONValue, ReadonlyJSONValue} from './json.ts';
-
-test('deepCloneWithInstances - clones containers but preserves instances', () => {
-  const date = new Date(1000);
-  const input = {a: 1, nested: {when: date}, list: [date, {when: date}]};
-  const out = deepCloneWithInstances(input);
-
-  // Containers are fresh copies.
-  expect(out).not.toBe(input);
-  expect(out.nested).not.toBe(input.nested);
-  expect(out.list).not.toBe(input.list);
-  // Instances are preserved by reference (not turned into {}).
-  expect(out.nested.when).toBe(date);
-  expect(out.list[0]).toBe(date);
-  expect((out.list[1] as {when: Date}).when).toBe(date);
-});
-
-test('deepCloneWithInstances - matches deepClone for plain JSON', () => {
-  const input = {a: 1, b: [1, 2, {c: 'x'}], d: null};
-  expect(deepCloneWithInstances(input)).toEqual(deepClone(input));
-});
 
 test('deepClone', () => {
   const t = (v: ReadonlyJSONValue) => {

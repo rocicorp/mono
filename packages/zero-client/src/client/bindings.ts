@@ -4,10 +4,7 @@
 // This module should not export anything that is exported by ./zero.ts.
 
 export {assert, unreachable} from '../../../shared/src/asserts.ts';
-export {
-  deepClone,
-  deepCloneWithInstances,
-} from '../../../shared/src/deep-clone.ts';
+export {deepClone} from '../../../shared/src/deep-clone.ts';
 export type {Immutable} from '../../../shared/src/immutable.ts';
 export {must} from '../../../shared/src/must.ts';
 export {decodeView, schemaHasCodecs} from '../../../zql/src/ivm/codec.ts';

@@ -5,7 +5,6 @@ import {
   type Immutable,
   addContextToQuery,
   asQueryInternals,
-  deepCloneWithInstances,
   DEFAULT_TTL_MS,
 } from './bindings.ts';
 import {useZero} from './zero-provider.tsx';
@@ -539,10 +538,10 @@ class ViewWrapper<
     resultType: ResultType,
     error?: ErroredQuery,
   ) => {
-    const data =
-      snap === undefined
-        ? snap
-        : deepCloneWithInstances(snap as HumanReadable<TReturn>);
+    // applyChange now returns immutable data structures, so no deep clone needed.
+    // Unchanged rows preserve their object identity for React.memo optimization.
+    // Codec columns are already decoded by the view.
+    const data = snap as HumanReadable<TReturn>;
     this.#snapshot = getSnapshot(
       this.#singular,
       data,

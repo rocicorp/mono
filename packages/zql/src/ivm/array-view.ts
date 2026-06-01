@@ -56,7 +56,11 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
 
   // Synthetic "root" entry that has a single "" relationship, so that we can
   // treat all changes, including the root change, generically.
-  readonly #root: Entry;
+  //
+  // applyChange is immutable: it returns a new root, preserving the references
+  // of unchanged subtrees so consumers (React.memo / Solid) can skip them. We
+  // therefore reassign #root on every change rather than mutating in place.
+  #root: Entry;
 
   onDestroy: (() => void) | undefined;
 
@@ -66,12 +70,14 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
   readonly #updateTTL: (ttl: TTL) => void;
 
   // When the schema has codec columns, `data` returns a decoded copy of the
-  // raw (encoded) tree. The decoded snapshot is cached and invalidated on each
-  // flush. When there are no codecs this is a no-op and the raw tree is
-  // returned directly with no extra copy.
+  // raw (encoded) tree. The decoded snapshot is memoized against the `#root` it
+  // was produced from; since `applyChange` is immutable and reassigns `#root`
+  // on every change, an identity check suffices to invalidate it. When there
+  // are no codecs this is a no-op and the raw tree is returned directly with no
+  // extra copy.
   readonly #hasCodecs: boolean;
   #decoded: V | undefined;
-  #decodedDirty = true;
+  #decodedFrom: Entry | undefined;
 
   constructor(
     input: Input,
@@ -112,9 +118,9 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
     if (!this.#hasCodecs) {
       return raw;
     }
-    if (this.#decodedDirty) {
+    if (this.#decodedFrom !== this.#root) {
       this.#decoded = decodeView(raw as View, this.#schema, this.#format) as V;
-      this.#decodedDirty = false;
+      this.#decodedFrom = this.#root;
     }
     return this.#decoded as V;
   }
@@ -147,12 +153,17 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
   #hydrate() {
     this.#dirty = true;
     for (const node of skipYields(this.#input.fetch({}))) {
-      applyChange(
+      this.#root = applyChange(
         this.#root,
         {type: 'add', node},
         this.#schema,
         '',
         this.#format,
+        false /* withIDs */,
+        true /* mutate: #root is freshly created and not yet observed by any
+                 consumer, so build it in place to avoid O(N^2) array copies.
+                 Every later push() is immutable, preserving reference
+                 stability for unchanged subtrees. */,
       );
     }
     this.flush();
@@ -160,7 +171,7 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
 
   push(change: Change) {
     this.#dirty = true;
-    applyChange(
+    this.#root = applyChange(
       this.#root,
       changeToViewChange(change),
       this.#schema,
@@ -175,7 +186,6 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
       return;
     }
     this.#dirty = false;
-    this.#decodedDirty = true;
     this.#fireListeners();
   }
 
