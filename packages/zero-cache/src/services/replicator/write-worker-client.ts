@@ -11,6 +11,7 @@ import type {SubscriptionState} from './schema/replication-state.ts';
 export type PragmaConfig = {
   busyTimeout: number;
   analysisLimit: number;
+  synchronous?: 'OFF' | 'NORMAL' | 'FULL' | undefined;
   walAutocheckpoint?: number | undefined;
 };
 
@@ -22,6 +23,9 @@ type ErrorHandler = (err: Error) => void;
 export interface WriteWorkerClient {
   getSubscriptionState(): Promise<SubscriptionState>;
   processMessage(downstream: ChangeStreamData): Promise<CommitResult | null>;
+  processMessages(
+    downstreams: readonly ChangeStreamData[],
+  ): Promise<CommitResult | readonly CommitResult[] | null>;
   abort(): void;
   stop(): Promise<void>;
   onError(handler: ErrorHandler): void;
@@ -32,6 +36,7 @@ export type ArgsMap = {
   init: [string, ChangeProcessorMode, PragmaConfig, LogConfig];
   getSubscriptionState: [];
   processMessage: [ChangeStreamData];
+  processMessages: [readonly ChangeStreamData[]];
   abort: [];
   stop: [];
 };
@@ -44,6 +49,7 @@ export type ResultMap = {
   init: void;
   getSubscriptionState: SubscriptionState;
   processMessage: CommitResult | null;
+  processMessages: CommitResult | readonly CommitResult[] | null;
   abort: void;
   stop: void;
 };
@@ -57,6 +63,9 @@ export type WriteError = {writeError: Error};
 export function applyPragmas(db: Database, pragmas: PragmaConfig) {
   db.pragma(`busy_timeout = ${pragmas.busyTimeout}`);
   db.pragma(`analysis_limit = ${pragmas.analysisLimit}`);
+  if (pragmas.synchronous !== undefined) {
+    db.pragma(`synchronous = ${pragmas.synchronous}`);
+  }
   if (pragmas.walAutocheckpoint !== undefined) {
     db.pragma(`wal_autocheckpoint = ${pragmas.walAutocheckpoint}`);
   }
@@ -89,9 +98,7 @@ export class ThreadWriteWorkerClient implements WriteWorkerClient {
       if (!r) return; // stale abort response
       this.#pending = null;
       if (msg.error !== undefined) {
-        r.reject(
-          msg.error instanceof Error ? msg.error : new Error(String(msg.error)),
-        );
+        r.reject(ensureError(msg.error));
       } else {
         r.resolve(msg.result);
       }
@@ -145,6 +152,12 @@ export class ThreadWriteWorkerClient implements WriteWorkerClient {
     return this.#call('processMessage', [downstream]);
   }
 
+  processMessages(
+    downstreams: readonly ChangeStreamData[],
+  ): Promise<CommitResult | readonly CommitResult[] | null> {
+    return this.#call('processMessages', [downstreams]);
+  }
+
   abort(): void {
     if (!this.#terminated) {
       this.#worker.postMessage({method: 'abort', args: []} satisfies Request);
@@ -161,4 +174,14 @@ export class ThreadWriteWorkerClient implements WriteWorkerClient {
   onError(handler: ErrorHandler): void {
     this.#errorHandler = handler;
   }
+}
+
+function ensureError(err: unknown): Error {
+  if (err instanceof Error) {
+    return err;
+  }
+  if (typeof err === 'string') {
+    return new Error(err);
+  }
+  return new Error(JSON.stringify(err));
 }

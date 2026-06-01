@@ -1,9 +1,12 @@
-import {describe, expect, test} from 'vitest';
+import {afterEach, describe, expect, test, vi} from 'vitest';
 import {BigIntJSON} from '../../../../shared/src/bigint-json.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import {sleep} from '../../../../shared/src/sleep.ts';
+import type {StringifiedStreamPayload} from '../../types/streams.ts';
+import type {Subscription} from '../../types/subscription.ts';
 import {ReplicationMessages} from '../replicator/test-utils.ts';
 import {Broadcast} from './broadcast.ts';
+import type {Subscriber} from './subscriber.ts';
 import {createSubscriber} from './test-utils.ts';
 
 const json = BigIntJSON.stringify;
@@ -11,6 +14,62 @@ const json = BigIntJSON.stringify;
 describe('change-streamer/broadcast', () => {
   const messages = new ReplicationMessages({issues: 'id'});
   const lc = createSilentLogContext();
+  const change: [string, 'begin', string] = [
+    '11',
+    'begin',
+    json(['begin', messages.begin(), {commitWatermark: '13'}]),
+  ];
+
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.restoreAllMocks();
+  });
+
+  async function consumeOne(
+    downstream: Subscription<StringifiedStreamPayload>,
+  ) {
+    const pipeline = downstream.pipeline;
+    if (pipeline === undefined) {
+      throw new Error('Expected pipelined subscription');
+    }
+    const next = await pipeline[Symbol.asyncIterator]().next();
+    if (next.done) {
+      throw new Error('Expected subscription message');
+    }
+    next.value.consumed();
+  }
+
+  async function flushCompletions() {
+    await Promise.resolve();
+    await Promise.resolve();
+  }
+
+  async function makeSubscribers(count: number) {
+    const subscribers: Subscriber[] = [];
+    const downstreams: Subscription<StringifiedStreamPayload>[] = [];
+    for (let i = 0; i < count; i++) {
+      const [subscriber, , downstream] = createSubscriber('00', true);
+      subscribers.push(subscriber);
+      downstreams.push(downstream);
+    }
+    await Promise.all(downstreams.map(consumeOne));
+    await flushCompletions();
+    return {subscribers, downstreams};
+  }
+
+  async function consumeChange(
+    downstream: Subscription<StringifiedStreamPayload>,
+  ) {
+    await consumeOne(downstream);
+    await flushCompletions();
+  }
+
+  async function closeAll(subscribers: readonly Subscriber[]) {
+    for (const sub of subscribers) {
+      sub.close();
+    }
+    await flushCompletions();
+  }
 
   test('without tracking', () => {
     const [sub1, stream1] = createSubscriber('00', true);
@@ -74,6 +133,102 @@ describe('change-streamer/broadcast', () => {
         ['begin', {tag: 'begin'}, {commitWatermark: '13'}],
       ]);
     }
+  });
+
+  test('flow control releases after majority plus padding', async () => {
+    vi.useFakeTimers();
+    const {subscribers, downstreams} = await makeSubscribers(4);
+    const broadcast = new Broadcast(subscribers, change, {
+      lc,
+      flowControlConsensusPaddingMs: 50,
+    });
+
+    await consumeChange(downstreams[0]);
+    await consumeChange(downstreams[1]);
+    await vi.advanceTimersByTimeAsync(100);
+    expect(broadcast.isDone).toBe(false);
+
+    await consumeChange(downstreams[2]);
+    await vi.advanceTimersByTimeAsync(49);
+    expect(broadcast.isDone).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(1);
+    await broadcast.done;
+    expect(broadcast.isDone).toBe(true);
+
+    await closeAll(subscribers);
+  });
+
+  test('flow control timer resets after post-majority progress', async () => {
+    vi.useFakeTimers();
+    const {subscribers, downstreams} = await makeSubscribers(5);
+    const broadcast = new Broadcast(subscribers, change, {
+      lc,
+      flowControlConsensusPaddingMs: 50,
+    });
+
+    await consumeChange(downstreams[0]);
+    await consumeChange(downstreams[1]);
+    await consumeChange(downstreams[2]);
+    await vi.advanceTimersByTimeAsync(30);
+    await consumeChange(downstreams[3]);
+
+    await vi.advanceTimersByTimeAsync(49);
+    expect(broadcast.isDone).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(1);
+    await broadcast.done;
+    expect(broadcast.isDone).toBe(true);
+
+    await closeAll(subscribers);
+  });
+
+  test('flow control timer is cleared when all subscribers complete', async () => {
+    vi.useFakeTimers();
+    const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout');
+    const {subscribers, downstreams} = await makeSubscribers(4);
+    const broadcast = new Broadcast(subscribers, change, {
+      lc,
+      flowControlConsensusPaddingMs: 50,
+    });
+
+    await consumeChange(downstreams[0]);
+    await consumeChange(downstreams[1]);
+    await consumeChange(downstreams[2]);
+    expect(broadcast.isDone).toBe(false);
+
+    await consumeChange(downstreams[3]);
+    await broadcast.done;
+    expect(broadcast.isDone).toBe(true);
+    expect(clearTimeoutSpy).toHaveBeenCalled();
+
+    await vi.advanceTimersByTimeAsync(50);
+    expect(broadcast.isDone).toBe(true);
+    await closeAll(subscribers);
+  });
+
+  test('negative flow control padding disables early release', async () => {
+    vi.useFakeTimers();
+    const {subscribers, downstreams} = await makeSubscribers(4);
+    const broadcast = new Broadcast(subscribers, change, {
+      lc,
+      flowControlConsensusPaddingMs: -1,
+    });
+
+    await consumeChange(downstreams[0]);
+    await consumeChange(downstreams[1]);
+    await consumeChange(downstreams[2]);
+    expect(broadcast.checkProgress(lc, -1, performance.now() + 1000)).toBe(
+      false,
+    );
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(broadcast.isDone).toBe(false);
+
+    await consumeChange(downstreams[3]);
+    await broadcast.done;
+    expect(broadcast.isDone).toBe(true);
+
+    await closeAll(subscribers);
   });
 
   test('checkProgress', async () => {

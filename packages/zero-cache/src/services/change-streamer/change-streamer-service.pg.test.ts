@@ -13,7 +13,7 @@ import {Database} from '../../../../zqlite/src/db.ts';
 import {StatementRunner} from '../../db/statements.ts';
 import {expectTables, test, type PgTest} from '../../test/db.ts';
 import type {PostgresDB} from '../../types/pg.ts';
-import type {Source} from '../../types/streams.ts';
+import type {Source, StringifiedStreamPayload} from '../../types/streams.ts';
 import {Subscription, type Result} from '../../types/subscription.ts';
 import type {ChangeSource} from '../change-source/change-source.ts';
 import {type ChangeStreamMessage} from '../change-source/protocol/current/downstream.ts';
@@ -110,11 +110,16 @@ describe('change-streamer/service', () => {
     };
   });
 
-  function drainToQueue(sub: Source<string>): Queue<Downstream> {
+  function drainToQueue(
+    sub: Source<StringifiedStreamPayload>,
+  ): Queue<Downstream> {
     const queue = new Queue<Downstream>();
     void (async () => {
-      for await (const msg of sub) {
-        queue.enqueue(BigIntJSON.parse(msg) as Downstream);
+      for await (const payload of sub) {
+        const entries = typeof payload === 'string' ? [payload] : payload;
+        for (const msg of entries) {
+          queue.enqueue(BigIntJSON.parse(msg) as Downstream);
+        }
       }
     })();
     return queue;
@@ -891,18 +896,20 @@ describe('change-streamer/service', () => {
     expect(setTimeoutFn).toHaveBeenCalledTimes(3);
 
     drainToQueue(sub1);
-    for await (const json of sub2) {
-      const msg: Downstream = BigIntJSON.parse(json) as Downstream;
+    const sub2Queue = drainToQueue(sub2);
+    for (;;) {
+      const msg = await sub2Queue.dequeue();
       if (msg[0] === 'commit' && msg[2].watermark === '08') {
-        // Now that sub2 has consumed past '06',
-        // a purge should successfully clear records before '06'
-        await (setTimeoutFn.mock.calls[2][0]() as unknown as Promise<void>);
-        expect(
-          await sql`SELECT watermark FROM "zoro_3/cdc"."changeLog"`.values(),
-        ).toEqual([['06'], ['07'], ['08']]);
         break;
       }
     }
+    // Now that sub2 has consumed past '06',
+    // a purge should successfully clear records before '06'
+    await (setTimeoutFn.mock.calls[2][0]() as unknown as Promise<void>);
+    expect(
+      await sql`SELECT watermark FROM "zoro_3/cdc"."changeLog"`.values(),
+    ).toEqual([['06'], ['07'], ['08']]);
+
     // replicationState is unaffected
     await expectTables(sql, {
       ['zoro_3/cdc.replicationState']: [
