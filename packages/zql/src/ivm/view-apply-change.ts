@@ -249,7 +249,7 @@ export function applyChangeInternal<M extends Mutate>(
             childFormats,
             withIDs,
           );
-          return setRelation(true, parentEntry, relationship, newEntry);
+          return setRelation(mutate, parentEntry, relationship, newEntry);
         }
       } else {
         // Plural: binary search for position, insert or increment refCount
