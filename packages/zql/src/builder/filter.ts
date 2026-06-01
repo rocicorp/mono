@@ -5,6 +5,7 @@ import type {
   SimpleOperator,
 } from '../../../zero-protocol/src/ast.ts';
 import type {Row, Value} from '../../../zero-protocol/src/data.ts';
+import {compareValues} from '../ivm/data.ts';
 import {simplifyCondition} from '../query/expression.ts';
 import {getLikePredicate} from './like.ts';
 
@@ -114,14 +115,19 @@ function createPredicateImpl(
       return lhs => lhs === rhs;
     case '!=':
       return lhs => lhs !== rhs;
+    // Use compareValues (UTF-8 / code-point order for strings) so range
+    // comparisons match ORDER BY and SQLite. Raw JS `<`/`>` compare strings by
+    // UTF-16 code unit, which disagrees for non-BMP characters (e.g. emoji),
+    // wrongly including/excluding rows relative to the sort order. Mixed-type
+    // comparisons are unsupported (compareValues throws), matching SQLite.
     case '<':
-      return lhs => lhs < rhs;
+      return lhs => compareValues(lhs, rhs) < 0;
     case '<=':
-      return lhs => lhs <= rhs;
+      return lhs => compareValues(lhs, rhs) <= 0;
     case '>':
-      return lhs => lhs > rhs;
+      return lhs => compareValues(lhs, rhs) > 0;
     case '>=':
-      return lhs => lhs >= rhs;
+      return lhs => compareValues(lhs, rhs) >= 0;
     case 'LIKE':
       return getLikePredicate(rhs, '');
     case 'NOT LIKE':
