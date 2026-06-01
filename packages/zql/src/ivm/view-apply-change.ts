@@ -546,9 +546,9 @@ function applyEdit<M extends Mutate>(
 }
 
 /**
- * Initialize child relationships on a newly-added entry.
- * Returns the same entry reference if no relationships to initialize,
- * or a new entry (via spread) if relationships were added.
+ * Initialize child relationships on a newly-added entry by mutating it in place.
+ *
+ * New nodes don't exist in the view yet, so we can build in-place (no refs to preserve):
  *
  * New nodes don't exist in the view yet, so we can build in-place (no refs to preserve):
  *
