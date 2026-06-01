@@ -342,23 +342,35 @@ describe('push into relationship-heavy view', () => {
       const delegate = new QueryDelegateImpl({sources});
       const view = delegate.materialize(heavyQuery);
       let editCount = 0;
+      // Track the current row at each index so each timed sample performs
+      // exactly one push (the forward edit), matching the single-push-per-sample
+      // shape of the other push benches. The edits are rolled back in the
+      // cleanup section after the yield so the dataset stays stable for the next
+      // bench.
+      const current = issues.slice();
 
       yield () => {
         const idx = editCount % NUM_ISSUES;
-        const oldRow = issues[idx];
+        const oldRow = current[idx];
         const newRow = {...oldRow, title: `Edited ${editCount++}`};
         for (const _ of sources['issue'].push(
           makeSourceChangeEdit(newRow, oldRow as Row),
         )) {
           /* consume */
         }
-        // restore so the dataset is stable across samples
-        for (const _ of sources['issue'].push(
-          makeSourceChangeEdit(oldRow as Row, newRow),
-        )) {
-          /* consume */
-        }
+        current[idx] = newRow;
       };
+
+      // Restore any edited rows so the dataset is stable for the next bench.
+      for (let i = 0; i < NUM_ISSUES; i++) {
+        if (current[i] !== issues[i]) {
+          for (const _ of sources['issue'].push(
+            makeSourceChangeEdit(issues[i] as Row, current[i] as Row),
+          )) {
+            /* consume */
+          }
+        }
+      }
 
       view.destroy();
     },
