@@ -44,31 +44,48 @@ jobs:
 
             const CHECK_NAME = 'codeowners/approval';
 
+            const canAccessChecksApi = (error) =>
+              error?.status === 403 ||
+              /Resource not accessible by integration/i.test(
+                String(error?.message ?? ''),
+              );
+
             const writeCheck = async ({ conclusion, title, summary }) => {
-              const existing = await github.rest.checks.listForRef({
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                ref: pr.head.sha,
-                check_name: CHECK_NAME,
-              });
-              const base = {
-                owner: context.repo.owner,
-                repo: context.repo.repo,
-                status: 'completed',
-                conclusion,
-                output: { title, summary },
-              };
-              if (existing.data.check_runs.length) {
-                await github.rest.checks.update({
-                  ...base,
-                  check_run_id: existing.data.check_runs[0].id,
+              try {
+                const existing = await github.rest.checks.listForRef({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  ref: pr.head.sha,
+                  check_name: CHECK_NAME,
                 });
-              } else {
-                await github.rest.checks.create({
-                  ...base,
-                  name: CHECK_NAME,
-                  head_sha: pr.head.sha,
-                });
+                const base = {
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  status: 'completed',
+                  conclusion,
+                  output: { title, summary },
+                };
+                if (existing.data.check_runs.length) {
+                  await github.rest.checks.update({
+                    ...base,
+                    check_run_id: existing.data.check_runs[0].id,
+                  });
+                } else {
+                  await github.rest.checks.create({
+                    ...base,
+                    name: CHECK_NAME,
+                    head_sha: pr.head.sha,
+                  });
+                }
+              } catch (error) {
+                if (canAccessChecksApi(error)) {
+                  core.warning(
+                    `Skipping ${CHECK_NAME} check run because this workflow token cannot access the Checks API: ${error.message}`,
+                  );
+                  core.info(`${title}: ${summary}`);
+                  return;
+                }
+                throw error;
               }
             };
 
