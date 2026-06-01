@@ -16,10 +16,11 @@
     "check-fmt": "oxfmt --check ."
   },
   "devDependencies": {
-    "oxfmt": "^0.48.0",
-    "shared": "0.0.0",
-    "zero-protocol": "0.0.0",
-    "zero-types": "0.0.0",
-    "zql": "0.0.0"
-  }
+    "oxfmt": "^0.45.0",
+    "shared": "workspace:*",
+    "vitest": "^4.1.6",
+    "zero-protocol": "workspace:*",
+    "zero-types": "workspace:*"
+  },
+  "packageManager": "pnpm@11.3.0"
 }

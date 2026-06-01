@@ -5,7 +5,7 @@
  * based on configuration parameters and LLM-generated templates.
  *
  * Usage:
- *   npx tsx scripts/generate-synthetic.ts
+ *   node scripts/generate-synthetic.ts
  *
  * Env vars:
  *   NUM_ISSUES            - total issues to generate (default 1000000)

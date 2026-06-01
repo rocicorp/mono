@@ -17,8 +17,8 @@ Install and build dependencies the `mono` repository root:
 
 ```bash
 # In repository root
-npm install
-npm run build
+pnpm install
+pnpm run build
 ```
 
 ### 2. Create env file
@@ -36,17 +36,17 @@ cp .env.example .env
 
 ```bash
 # In apps/zbugs
-npm run db-up
+pnpm run db-up
 # In apps/zbugs in another tab
-npm run db-migrate
-npm run db-seed
+pnpm run db-migrate
+pnpm run db-seed
 ```
 
 ### 4. Run the zero-cache server
 
 ```bash
 # In apps/zbugs
-npm run zero-cache-dev
+pnpm run zero-cache-dev
 ```
 
 ### 5. Run the web app
@@ -55,7 +55,7 @@ npm run zero-cache-dev
 
 ```bash
 # In apps/zbugs
-npm run dev
+pnpm run dev
 ```
 
 After you have visited the local website and the sync / replica tables have populated.
@@ -80,8 +80,8 @@ docker compose down -v
 ./getData.sh
 
 # In apps/zbugs
-npm run db-up
+pnpm run db-up
 # In apps/zbugs in another tab
-npm run db-migrate
-ZERO_SEED_DATA_DIR=./db/seed-data/gigabugs/ npm run db-seed
+pnpm run db-migrate
+ZERO_SEED_DATA_DIR=./db/seed-data/gigabugs/ pnpm run db-seed
 ```

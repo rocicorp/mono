@@ -13,8 +13,8 @@
     "test:webkit": "VITEST_BROWSER=webkit vitest run --config vitest.config.web.ts",
     "test:webkit:watch": "VITEST_BROWSER=webkit vitest --config vitest.config.web.ts",
     "bench": "vitest run --config vitest.config.bench.ts",
-    "bench:bmf": "BENCH_OUTPUT_FORMAT=json npm run bench 2>&1 | npx tsx ./src/tool/mitata-json-to-bmf.ts",
-    "bench:bmf:silent": "npm run bench:bmf --silent",
+    "bench:bmf": "BENCH_OUTPUT_FORMAT=json pnpm run bench 2>&1 | node ./src/tool/mitata-json-to-bmf.ts",
+    "bench:bmf:silent": "pnpm run bench:bmf --silent",
     "check-types": "tsc",
     "check-types:watch": "tsc --watch",
     "format": "oxfmt .",
@@ -33,21 +33,28 @@
     "command-line-usage": "^7.0.3",
     "defu": "^6.1.4",
     "js-xxhash": "^4.0.0",
+    "json-custom-numbers": "^3.1.1",
     "kasi": "^1.1.0",
     "semver": "^7.5.4"
   },
   "devDependencies": {
+    "@faker-js/faker": "^9.6.0",
     "@mitata/counters": "^0.0.8",
+    "@types/command-line-args": "^5.2.3",
+    "@types/command-line-usage": "^5.0.4",
+    "@types/node": "^22.10.5",
     "@types/semver": "^7.5.1",
     "@types/strip-ansi": "^3.0.0",
-    "@vitest/runner": "^4.1.5",
+    "@vitest/runner": "^4.1.6",
     "compare-utf8": "^0.2.0",
     "fast-check": "^3.18.0",
-    "oxfmt": "^0.48.0",
+    "mitata": "^1.0.34",
+    "oxfmt": "^0.45.0",
     "package-up": "^5.0.0",
-    "playwright": "^1.53.2",
+    "playwright": "^1.60.0",
     "type-fest": "^4.30.0",
     "typescript": "~6.0.2",
-    "vitest": "^4.1.5"
-  }
+    "vitest": "^4.1.6"
+  },
+  "packageManager": "pnpm@11.3.0"
 }

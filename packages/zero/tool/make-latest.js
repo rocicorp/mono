@@ -36,7 +36,7 @@ execute(`git push --no-verify origin refs/tags/latest:refs/tags/latest`);
 execute(
   `docker buildx imagetools create -t rocicorp/zero:latest rocicorp/zero:${version}`,
 );
-execute(`npm dist-tag add @rocicorp/zero@${version} latest`);
+execute(`pnpm dist-tag add @rocicorp/zero@${version} latest`);
 
 const localLatest = execute('git rev-parse latest', {stdio: 'pipe'});
 const remoteLatest = execute('git ls-remote --tags origin refs/tags/latest', {
@@ -56,12 +56,12 @@ if (dockerVersionDigest !== dockerLatestDigest) {
   );
 }
 
-const npmLatest = execute('npm view @rocicorp/zero dist-tags.latest', {
+const npmLatest = execute('pnpm view @rocicorp/zero dist-tags.latest', {
   stdio: 'pipe',
 });
 if (npmLatest !== version) {
   throw new Error(
-    `Failed to update npm latest tag: ${npmLatest} !== ${version}`,
+    `Failed to update pnpm latest tag: ${npmLatest} !== ${version}`,
   );
 }
 

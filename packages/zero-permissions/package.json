@@ -1,0 +1,30 @@
+{
+  "name": "zero-permissions",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check-types": "tsc",
+    "check-types:watch": "tsc --watch",
+    "test": "vitest run",
+    "test:watch": "vitest watch",
+    "format": "oxfmt .",
+    "check-format": "oxfmt --check .",
+    "lint": "oxlint --quiet --config ../../oxlint.config.ts",
+    "fmt": "oxfmt .",
+    "check-fmt": "oxfmt --check ."
+  },
+  "dependencies": {
+    "shared": "workspace:*",
+    "zero-protocol": "workspace:*",
+    "zero-schema": "workspace:*",
+    "zero-types": "workspace:*",
+    "zql": "workspace:*"
+  },
+  "devDependencies": {
+    "oxfmt": "^0.45.0",
+    "typescript": "~6.0.2",
+    "vitest": "^4.1.6"
+  },
+  "packageManager": "pnpm@11.3.0"
+}

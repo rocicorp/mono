@@ -4,8 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "verify": "node --experimental-strip-types src/verify-package-deps.ts",
-    "verify:fix": "node --experimental-strip-types src/verify-package-deps.ts --fix",
+    "verify": "node src/verify-package-deps.ts",
+    "verify:fix": "node src/verify-package-deps.ts --fix",
     "check-types": "tsc",
     "format": "oxfmt .",
     "check-format": "oxfmt --check .",
@@ -18,11 +18,11 @@
   },
   "devDependencies": {
     "@types/node": "^22.10.5",
-    "oxfmt": "^0.48.0",
+    "oxfmt": "^0.45.0",
     "typescript": "~6.0.2"
   },
   "engines": {
     "node": ">=22"
   },
-  "packageManager": "npm@10.9.2"
+  "packageManager": "pnpm@11.3.0"
 }

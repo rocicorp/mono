@@ -36,6 +36,11 @@ const CONNECTION_URI = mustInject('pgConnectionString');
 
 export type OnNoticeFn = (n: postgres.Notice) => void;
 
+export type TestDBOptions = {
+  onNotice?: OnNoticeFn;
+  typeOpts?: TypeOptions | false;
+};
+
 const IGNORE_LEVELS = new Set(['DEBUG', 'INFO', 'NOTICE']);
 
 const defaultOnNotice: OnNoticeFn = n => {
@@ -57,9 +62,9 @@ export class TestDBs {
 
   async create(
     database: string,
-    onNotice?: OnNoticeFn,
-    typeOpts: TypeOptions | false = {},
+    opts: TestDBOptions = {},
   ): Promise<PostgresDB & AsyncDisposable> {
+    const {onNotice, typeOpts = {}} = opts;
     const exists = this.#dbs[database];
     if (exists !== undefined) {
       console.warn('dropping database', database);

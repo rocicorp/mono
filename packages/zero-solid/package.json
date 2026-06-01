@@ -22,15 +22,18 @@
     "check-fmt": "oxfmt --check ."
   },
   "devDependencies": {
+    "@rocicorp/resolver": "^1.0.2",
     "@solidjs/testing-library": "^0.8.10",
-    "oxfmt": "^0.48.0",
-    "shared": "0.0.0",
+    "oxfmt": "^0.45.0",
+    "shared": "workspace:*",
     "solid-js": "^1.9.4",
     "vite-plugin-solid": "^2.11.11",
-    "zero-client": "0.0.0",
-    "zql": "0.0.0"
+    "vitest": "^4.1.6",
+    "zero-client": "workspace:*",
+    "zql": "workspace:*"
   },
   "peerDependencies": {
     "solid-js": "^1.9.4"
-  }
+  },
+  "packageManager": "pnpm@11.3.0"
 }

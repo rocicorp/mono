@@ -1,17 +1,21 @@
 import {execSync} from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
+import * as path from 'node:path';
 import {stdin as input, stdout as output} from 'node:process';
 import {createInterface} from 'node:readline/promises';
-import * as path from 'path';
 import commandLineArgs from 'command-line-args';
 
 void main();
 
 async function main() {
-  const {mode, from, remote, allowLocalChanges, dockerOnly, yes} = parseArgs();
+  const {mode, from, remote, allowLocalChanges, dockerOnly, yes, dryRun} =
+    parseArgs();
 
   try {
+    validateGitArg('ref', from);
+    validateGitArg('remote', remote);
+
     // Find the git root directory
     const gitRoot = execute('git rev-parse --show-toplevel', {stdio: 'pipe'});
 
@@ -55,7 +59,6 @@ async function main() {
     );
 
     let localRefHash;
-    let remoteRefHash;
 
     // Get local ref hash
     try {
@@ -66,48 +69,63 @@ async function main() {
       process.exit(1);
     }
 
-    // Get remote ref hash
-    try {
-      // For branches, check remote/branch
-      // For tags, just check the tag (tags are fetched from remote)
-      remoteRefHash = execute(`git rev-parse ${remote}/${from}`, {
-        stdio: 'pipe',
-      });
-    } catch {
-      // If remote/from doesn't exist, try just the ref (works for tags)
+    // For full commit SHAs, skip remote ref lookup — the commit is present
+    // locally after a full fetch, which means it was pushed.
+    const isCommitSHA = /^[0-9a-f]{40}$/.test(from);
+    if (!isCommitSHA) {
+      let remoteRefHash;
       try {
-        // For tags, we need to ensure we have the latest from remote
-        execute(`git fetch ${remote} tag ${from}`, {stdio: 'pipe'});
-        remoteRefHash = execute(`git rev-parse ${from}`, {stdio: 'pipe'});
+        // For branches, check remote/branch
+        remoteRefHash = execute(`git rev-parse ${remote}/${from}`, {
+          stdio: 'pipe',
+        });
       } catch {
-        console.error(`Could not resolve remote ref: ${from}`);
-        console.error(`Make sure the branch/tag has been pushed to ${remote}`);
+        // If remote/from doesn't exist, try just the ref (works for tags)
+        try {
+          // For tags, we need to ensure we have the latest from remote
+          execute(`git fetch ${remote} tag ${from}`, {stdio: 'pipe'});
+          remoteRefHash = execute(`git rev-parse ${from}`, {stdio: 'pipe'});
+        } catch {
+          console.error(`Could not resolve remote ref: ${from}`);
+          console.error(
+            `Make sure the branch/tag has been pushed to ${remote}`,
+          );
+          process.exit(1);
+        }
+      }
+
+      if (localRefHash !== remoteRefHash) {
+        console.error(`Local and remote versions of ${from} do not match`);
+        console.error(`Local:  ${localRefHash}`);
+        console.error(`Remote: ${remoteRefHash}`);
+        console.error(`Perhaps you need to push your changes?`);
         process.exit(1);
       }
     }
 
-    if (localRefHash !== remoteRefHash) {
-      console.error(`Local and remote versions of ${from} do not match`);
-      console.error(`Local:  ${localRefHash}`);
-      console.error(`Remote: ${remoteRefHash}`);
-      console.error(`Perhaps you need to push your changes?`);
-      process.exit(1);
+    console.log(
+      isCommitSHA
+        ? `✓ Commit ${from} exists locally`
+        : `✓ Ref ${from} matches between local and remote`,
+    );
+
+    // In CI we build in the current directory — credentials from actions/checkout
+    // are already present and no working directory needs protecting.
+    // Locally we clone to a temp dir to avoid disturbing the developer's checkout.
+    if (process.env.CI) {
+      process.chdir(gitRoot);
+    } else {
+      const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'zero-build-'));
+      console.log(`Cloning repo to ${tempDir}...`);
+      execute(`git clone --local ${gitRoot} ${tempDir}`);
+      process.chdir(tempDir);
+      const remoteUrl = execute(`git -C ${gitRoot} remote get-url ${remote}`, {
+        stdio: 'pipe',
+      });
+      execute(`git remote set-url origin ${remoteUrl}`);
     }
 
-    console.log(`✓ Ref ${from} matches between local and remote`);
-
-    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'zero-build-'));
-
-    // Copy the working directory to temp dir (faster than cloning)
-    console.log(`Copying repo from ${gitRoot} to ${tempDir}...`);
-    execute(
-      `rsync -a --progress --exclude=node_modules --exclude=.turbo ${gitRoot}/ ${tempDir}/`,
-    );
-    process.chdir(tempDir);
-
-    // Discard any local changes and checkout the correct ref
-    execute('git reset --hard');
-    execute(`git fetch ${remote}`);
+    execute(`git fetch ${remote} --tags`);
 
     // Try to checkout as remote/branch first, fall back to tag/commit
     try {
@@ -122,9 +140,9 @@ async function main() {
 
     let result: Release;
     if (mode === 'canary') {
-      result = await releaseCanary(currentVersion, remote, from, yes);
+      result = await releaseCanary(currentVersion, remote, from, yes, dryRun);
     } else if (mode === 'stable') {
-      result = await releaseStable(currentVersion, remote, from, yes);
+      result = await releaseStable(currentVersion, remote, from, yes, dryRun);
     } else {
       if (mode !== 'retry') {
         throw new Error(`Unexpected release mode: ${mode}`);
@@ -135,28 +153,43 @@ async function main() {
         fromReleaseVersion,
         dockerOnly,
         yes,
+        dryRun,
       );
     }
 
     console.log(``);
     console.log(``);
-    console.log(`🎉 Success!`);
+    console.log(`🎉 ${dryRun ? '[DRY RUN] ' : ''}Success!`);
     console.log(``);
     if (result.pushedGit) {
-      console.log(`* Pushed Git tag ${result.tagName} to ${remote}.`);
+      console.log(
+        `* ${dryRun ? 'Would push' : 'Pushed'} Git tag ${result.tagName} to ${remote}.`,
+      );
     }
     if (result.pushedNPM) {
-      console.log(`* Published @rocicorp/zero@${result.version} to npm.`);
+      if (result.staged) {
+        console.log(
+          `* ${dryRun ? 'Would stage' : 'Staged'} @rocicorp/zero@${result.version} on npm (pending approval).`,
+        );
+      } else {
+        console.log(
+          `* ${dryRun ? 'Would publish' : 'Published'} @rocicorp/zero@${result.version} to npm.`,
+        );
+      }
     }
-    console.log(`* Created Docker image rocicorp/zero:${result.version}.`);
+    console.log(
+      `* ${dryRun ? 'Would create' : 'Created'} Docker image rocicorp/zero:${result.version}.`,
+    );
     console.log(``);
     console.log(``);
     console.log(`Next steps:`);
     console.log(``);
     console.log('* Run `git pull --tags` in your checkout to pull the tag.');
-    console.log(
-      `* Test apps by installing: npm install @rocicorp/zero@${result.version}`,
-    );
+    if (!result.staged) {
+      console.log(
+        `* Test apps by installing: pnpm install @rocicorp/zero@${result.version}`,
+      );
+    }
     if (result.version.includes('-canary.')) {
       console.log('* When ready to promote to stable:');
       console.log(
@@ -164,11 +197,20 @@ async function main() {
       );
       console.log(`  2. Run: node release.ts stable <branch-or-commit>`);
       console.log(
-        `  3. When ready for users: npm dist-tag add @rocicorp/zero@X.Y.Z latest`,
+        `  3. When ready for users: pnpm dist-tag add @rocicorp/zero@X.Y.Z latest`,
+      );
+    } else if (result.staged) {
+      console.log('* The stable release is staged on npm pending approval:');
+      console.log(`  1. Review: pnpm stage list @rocicorp/zero`);
+      console.log(`  2. Approve (requires 2FA): pnpm stage approve <stage-id>`);
+      console.log(
+        `  3. When ready for users: node packages/zero/tool/make-latest.js ${result.version}`,
       );
     } else {
       console.log('* When ready for users to install:');
-      console.log(`  npm dist-tag add @rocicorp/zero@${result.version} latest`);
+      console.log(
+        `  pnpm dist-tag add @rocicorp/zero@${result.version} latest`,
+      );
     }
     console.log(``);
   } catch (error) {
@@ -184,6 +226,8 @@ type Release = {
   version: string;
   pushedGit: boolean;
   pushedNPM: boolean;
+  /** True when the npm package was staged for approval rather than published. */
+  staged: boolean;
   tagName: string;
 };
 
@@ -216,6 +260,12 @@ function parseArgs() {
       name: 'yes',
       type: Boolean,
       description: 'Skip interactive confirmation prompt',
+    },
+    {
+      name: 'dry-run',
+      type: Boolean,
+      description:
+        'Build but skip git push, npm publish, and Docker push (for testing)',
     },
     {
       name: 'positionals',
@@ -275,6 +325,7 @@ function parseArgs() {
     allowLocalChanges: Boolean(options['allow-local-changes']),
     dockerOnly,
     yes: Boolean(options.yes),
+    dryRun: Boolean(options['dry-run']),
   };
 }
 
@@ -296,6 +347,7 @@ Options:
   --allow-local-changes      Allow running with local changes in working directory
   --docker-only              Retry mode only: skip npm and publish only docker
   --yes                      Skip interactive confirmation prompt
+  --dry-run                  Build but skip git push, npm publish, and Docker push
 `);
 
   console.log(`
@@ -327,37 +379,57 @@ function parseReleaseVersionFromTag(ref: string) {
   return match?.[1];
 }
 
+function validateGitArg(name: string, value: string) {
+  if (
+    value === '' ||
+    value.startsWith('-') ||
+    value.includes('..') ||
+    value.includes('//') ||
+    value.includes('@{') ||
+    value.endsWith('/') ||
+    value.endsWith('.') ||
+    value.endsWith('.lock') ||
+    !/^[A-Za-z0-9._/-]+$/.test(value)
+  ) {
+    throw new Error(`Invalid ${name}: ${value}`);
+  }
+}
+
 async function releaseCanary(
   currentVersion: string,
   remote: string,
   from: string,
   yes: boolean,
+  dryRun: boolean,
 ): Promise<Release> {
   const version = bumpCanaryVersion(currentVersion, remote);
   const tagName = `zero/v${version}`;
 
   logReleaseHeader(
-    `Creating canary release from ${from}`,
+    `${dryRun ? '[DRY RUN] ' : ''}Creating canary release from ${from}`,
     currentVersion,
     version,
   );
-  await confirmRelease(yes);
+  await confirmRelease(yes || dryRun);
 
   build(version);
-  execute(`git commit -am "Bump version to ${version}"`);
+  if (!dryRun) {
+    execute(`git commit -am "Bump version to ${version}"`);
+  }
 
   const releaseCommitHash = execute('git rev-parse HEAD', {stdio: 'pipe'});
   if (!releaseCommitHash) {
     throw new Error('Could not resolve HEAD commit for git tag push');
   }
-  pushGit(releaseCommitHash, tagName, remote);
-  pushNPM(version, true);
-  await pushDocker(version);
+  pushGit(releaseCommitHash, tagName, remote, dryRun);
+  pushNpm(true, dryRun);
+  await pushDocker(version, dryRun);
 
   return {
     version,
     pushedGit: true,
     pushedNPM: true,
+    staged: false,
     tagName,
   };
 }
@@ -367,15 +439,16 @@ async function releaseStable(
   remote: string,
   from: string,
   yes: boolean,
+  dryRun: boolean,
 ): Promise<Release> {
   const tagName = `zero/v${currentVersion}`;
 
   logReleaseHeader(
-    `Creating stable release from ${from}`,
+    `${dryRun ? '[DRY RUN] ' : ''}Creating stable release from ${from}`,
     currentVersion,
     currentVersion,
   );
-  await confirmRelease(yes);
+  await confirmRelease(yes || dryRun);
 
   build(currentVersion);
 
@@ -383,14 +456,15 @@ async function releaseStable(
   if (!releaseCommitHash) {
     throw new Error('Could not resolve HEAD commit for git tag push');
   }
-  pushGit(releaseCommitHash, tagName, remote);
-  pushNPM(currentVersion, false);
-  await pushDocker(currentVersion);
+  pushGit(releaseCommitHash, tagName, remote, dryRun);
+  pushNpm(false, dryRun);
+  await pushDocker(currentVersion, dryRun);
 
   return {
     version: currentVersion,
     pushedGit: true,
     pushedNPM: true,
+    staged: true,
     tagName,
   };
 }
@@ -401,6 +475,7 @@ async function retryRelease(
   fromReleaseVersion: string | undefined,
   dockerOnly: boolean,
   yes: boolean,
+  dryRun: boolean,
 ): Promise<Release> {
   if (fromReleaseVersion === undefined) {
     throw new Error(
@@ -412,26 +487,27 @@ async function retryRelease(
   const tagName = `zero/v${fromReleaseVersion}`;
 
   logReleaseHeader(
-    `Retrying ${isCanary ? 'canary' : 'stable'} release from ${from}`,
+    `${dryRun ? '[DRY RUN] ' : ''}Retrying ${isCanary ? 'canary' : 'stable'} release from ${from}`,
     currentVersion,
     fromReleaseVersion,
     {skipGit: true, skipNPM: dockerOnly},
   );
-  await confirmRelease(yes);
+  await confirmRelease(yes || dryRun);
 
   if (dockerOnly) {
     console.log('Skipping npm publish (--docker-only)');
   } else {
     build(fromReleaseVersion);
-    pushNPM(fromReleaseVersion, isCanary);
+    pushNpm(isCanary, dryRun);
   }
 
-  await pushDocker(fromReleaseVersion);
+  await pushDocker(fromReleaseVersion, dryRun);
 
   return {
     version: fromReleaseVersion,
     pushedGit: false,
     pushedNPM: !dockerOnly,
+    staged: !dockerOnly && !isCanary,
     tagName,
   };
 }
@@ -549,13 +625,15 @@ async function confirmRelease(yes: boolean) {
 }
 
 function build(version: string) {
-  // Installs turbo and other build dependencies needed for npm packaging.
-  execute('npm install');
+  const usePnpm = fs.existsSync(basePath('pnpm-lock.yaml'));
+  const pnpm = (x: string) => execute(usePnpm ? `pnpm ${x}` : `npm ${x}`);
+  // Installs turbo and other build dependencies needed for packaging.
+  pnpm('install');
   setVersionInWorkspace(version);
-  execute('npm install');
-  execute('npm run build');
-  execute('npm run format');
-  execute('npx -y syncpack fix');
+  pnpm('install');
+  pnpm('run build');
+  pnpm('run format');
+  pnpm('exec syncpack fix');
   execute('git status');
 }
 
@@ -568,39 +646,58 @@ function setVersionInWorkspace(version: string) {
   const currentPackageData = getPackageData(zeroPackageJsonPathInTemp);
   currentPackageData.version = version;
   writePackageData(zeroPackageJsonPathInTemp, currentPackageData);
-
-  const dependencyPaths = [
-    basePath('apps', 'zbugs', 'package.json'),
-    basePath('apps', 'zql-viz', 'package.json'),
-  ];
-
-  dependencyPaths.forEach(p => {
-    const data = getPackageData(p);
-    if (data.dependencies && data.dependencies['@rocicorp/zero']) {
-      data.dependencies['@rocicorp/zero'] = version;
-      writePackageData(p, data);
-    }
-  });
 }
 
-function pushGit(commitHash: string, destTag: string, remote: string) {
+function pushGit(
+  commitHash: string,
+  destTag: string,
+  remote: string,
+  dryRun: boolean,
+) {
+  if (dryRun) {
+    console.log(
+      `[DRY RUN] Would run: git tag ${destTag} ${commitHash} && git push ${remote} refs/tags/${destTag}`,
+    );
+    return;
+  }
   execute(`git tag ${destTag} ${commitHash}`);
   execute(`git push ${remote} refs/tags/${destTag}`);
 }
 
-function pushNPM(version: string, isCanary: boolean) {
+function pushNpm(isCanary: boolean, dryRun: boolean) {
   if (isCanary) {
-    execute('npm publish --tag=canary', {cwd: basePath('packages', 'zero')});
-    execute(`npm dist-tag rm @rocicorp/zero@${version} canary`);
+    if (dryRun) {
+      console.log('[DRY RUN] Would run: npm publish --provenance --tag=canary');
+      return;
+    }
+    execute('npm publish --provenance --tag=canary', {
+      cwd: basePath('packages', 'zero'),
+    });
     return;
   }
 
-  // For stable releases, publish without a dist-tag (we'll add 'latest' separately).
-  execute('npm publish --tag=staging', {cwd: basePath('packages', 'zero')});
-  execute(`npm dist-tag rm @rocicorp/zero@${version} staging`);
+  // Stable releases are staged rather than published directly. The tarball is
+  // uploaded to npm's staging queue under the `staging` tag and a maintainer
+  // must approve it (with 2FA) via `pnpm stage approve` before it goes live.
+  // Promotion to `latest` happens afterwards via make-latest.js.
+  if (dryRun) {
+    console.log(
+      '[DRY RUN] Would run: pnpm stage publish --provenance --tag=staging --no-git-checks',
+    );
+    return;
+  }
+  execute('pnpm stage publish --provenance --tag=staging --no-git-checks', {
+    cwd: basePath('packages', 'zero'),
+  });
 }
 
-async function pushDocker(version: string) {
+async function pushDocker(version: string, dryRun: boolean) {
+  if (dryRun) {
+    console.log(
+      `[DRY RUN] Would run: docker buildx build --platform linux/amd64,linux/arm64 --build-arg=ZERO_VERSION=${version} -t rocicorp/zero:${version} --sbom=true --provenance=mode=max --push .`,
+    );
+    return;
+  }
   try {
     // Check if our specific multiarch builder exists
     const builders = execute('docker buildx ls', {stdio: 'pipe'});
@@ -626,6 +723,8 @@ async function pushDocker(version: string) {
     --platform linux/amd64,linux/arm64 \\
     --build-arg=ZERO_VERSION=${version} \\
     -t rocicorp/zero:${version} \\
+    --sbom=true \\
+    --provenance=mode=max \\
     --push .`,
         {cwd: basePath('packages', 'zero')},
       );

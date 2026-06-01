@@ -10,14 +10,18 @@ import {ChangeType} from './change-type.ts';
 import type {Change} from './change.ts';
 import type {Node} from './data.ts';
 import {
+  generateWithOverlay,
   generateWithOverlayInner,
   generateWithOverlayInnerUnordered,
   generateWithOverlayUnordered,
   MemorySource,
   mergeSortedStreams,
   overlaysForConstraintForTest,
+  overlaysForMultiConstraintForTest,
   overlaysForStartAtForTest,
+  type Overlay,
 } from './memory-source.ts';
+import type {MultiConstraint} from './operator.ts';
 import type {Stream} from './stream.ts';
 import {consume} from './stream.ts';
 import {compareRowsTest} from './test/compare-rows-test.ts';
@@ -519,6 +523,95 @@ test('overlaysForStartAt', () => {
   ).toEqual({add: undefined, remove: undefined});
 });
 
+describe('overlaysForMultiConstraint', () => {
+  test('add overlay matching one IN entry is kept', () => {
+    expect(
+      overlaysForMultiConstraintForTest({add: {id: 'i2'}, remove: undefined}, [
+        {id: 'i1'},
+        {id: 'i2'},
+        {id: 'i3'},
+      ]),
+    ).toEqual({add: {id: 'i2'}, remove: undefined});
+  });
+
+  test('add overlay matching no IN entry is dropped', () => {
+    expect(
+      overlaysForMultiConstraintForTest({add: {id: 'i9'}, remove: undefined}, [
+        {id: 'i1'},
+        {id: 'i2'},
+      ]),
+    ).toEqual({add: undefined, remove: undefined});
+  });
+
+  test('remove overlay matching one IN entry is kept', () => {
+    expect(
+      overlaysForMultiConstraintForTest({add: undefined, remove: {id: 'i1'}}, [
+        {id: 'i1'},
+        {id: 'i2'},
+      ]),
+    ).toEqual({add: undefined, remove: {id: 'i1'}});
+  });
+
+  test('remove overlay matching no IN entry is dropped', () => {
+    expect(
+      overlaysForMultiConstraintForTest({add: undefined, remove: {id: 'i9'}}, [
+        {id: 'i1'},
+        {id: 'i2'},
+      ]),
+    ).toEqual({add: undefined, remove: undefined});
+  });
+
+  test('add and remove are filtered independently', () => {
+    // add matches, remove does not
+    expect(
+      overlaysForMultiConstraintForTest({add: {id: 'i1'}, remove: {id: 'i9'}}, [
+        {id: 'i1'},
+        {id: 'i2'},
+      ]),
+    ).toEqual({add: {id: 'i1'}, remove: undefined});
+
+    // remove matches, add does not
+    expect(
+      overlaysForMultiConstraintForTest({add: {id: 'i9'}, remove: {id: 'i2'}}, [
+        {id: 'i1'},
+        {id: 'i2'},
+      ]),
+    ).toEqual({add: undefined, remove: {id: 'i2'}});
+  });
+
+  test('compound-key IN entry — full match required per entry', () => {
+    // (a, b) IN ((1, 'x'), (2, 'y'))
+    const mc = [
+      {a: 1, b: 'x'},
+      {a: 2, b: 'y'},
+    ];
+    // matches entry 1 exactly
+    expect(
+      overlaysForMultiConstraintForTest(
+        {add: {a: 2, b: 'y', c: 'extra'}, remove: undefined},
+        mc,
+      ),
+    ).toEqual({add: {a: 2, b: 'y', c: 'extra'}, remove: undefined});
+    // partial match (a matches but b doesn't) → not in IN
+    expect(
+      overlaysForMultiConstraintForTest(
+        {add: {a: 1, b: 'y'}, remove: undefined},
+        mc,
+      ),
+    ).toEqual({add: undefined, remove: undefined});
+  });
+
+  test('row missing a constrained column does not match', () => {
+    // constraint requires `id`, but overlay row only has `name`
+    expect(
+      overlaysForMultiConstraintForTest(
+        {add: {name: 'foo'} as Row, remove: undefined},
+        [{id: 'i1'}],
+      ),
+    ).toEqual({add: undefined, remove: undefined});
+  });
+});
+
 describe('generateWithOverlayInnerUnordered', () => {
   const rows = [
     {id: 1, s: 'a', n: 11},
@@ -735,6 +828,158 @@ describe('generateWithOverlayUnordered', () => {
     );
     expect(actual).toEqual([{id: 2, s: 'b2', n: 225}, rows[0], rows[2]]);
   });
+});
+
+describe('multiConstraints overlay handling — both helpers', () => {
+  // Shared scenarios for `generateWithOverlay` (ordered) and
+  // `generateWithOverlayUnordered`. Both helpers accept `multiConstraints`
+  // and apply it to the overlay add/remove sides identically. They diverge
+  // only in *output ordering* (ordered emits at sort position; unordered
+  // prepends an ADD overlay), so each scenario specifies both expected
+  // shapes.
+  //
+  // The ordered helper is exercised in production by TableSource
+  // (table-source.ts:309); MemorySource's #fetchMulti post-filters at a
+  // higher layer and passes `multiConstraints: undefined` to the helper.
+  // These tests pin the helper's contract independently of either source.
+  type Scenario = {
+    name: string;
+    iteratorRows?: readonly Row[];
+    overlay: Overlay;
+    multiConstraints: readonly MultiConstraint[];
+    expectedUnordered: readonly Row[];
+    expectedOrdered: readonly Row[];
+  };
+
+  const rows: readonly Row[] = [
+    {id: 1, s: 'a', n: 11},
+    {id: 2, s: 'b', n: 22},
+    {id: 3, s: 'c', n: 33},
+  ];
+  const pk = ['id'] as const;
+  const compare = (a: Row, b: Row) => (a.id as number) - (b.id as number);
+
+  const ADD_4 = {id: 4, s: 'd', n: 44};
+  const ADD_2_b2 = {id: 2, s: 'b2', n: 225};
+
+  const scenarios: Scenario[] = [
+    {
+      name: 'add overlay matching IN list is yielded',
+      overlay: {epoch: 1, change: makeSourceChangeAdd(ADD_4)},
+      multiConstraints: [[{id: 1}, {id: 4}, {id: 7}]],
+      expectedUnordered: [ADD_4, ...rows],
+      expectedOrdered: [...rows, ADD_4],
+    },
+    {
+      name: 'add overlay outside IN list is dropped',
+      overlay: {epoch: 1, change: makeSourceChangeAdd(ADD_4)},
+      multiConstraints: [[{id: 1}, {id: 2}]],
+      expectedUnordered: rows,
+      expectedOrdered: rows,
+    },
+    {
+      name: 'remove overlay matching IN list suppresses row',
+      overlay: {epoch: 1, change: makeSourceChangeRemove(rows[1])},
+      multiConstraints: [[{id: 1}, {id: 2}]],
+      expectedUnordered: [rows[0], rows[2]],
+      expectedOrdered: [rows[0], rows[2]],
+    },
+    {
+      // The remove overlay's row is not in the IN list → multi filters it
+      // out. The underlying iterator already excludes the removed row
+      // from its scan (storage write happens after this generator), so
+      // we simulate that with `iteratorRows`.
+      name: 'remove overlay outside IN list does NOT suppress row',
+      iteratorRows: [rows[0], rows[2]],
+      overlay: {epoch: 1, change: makeSourceChangeRemove(rows[1])},
+      multiConstraints: [[{id: 99}]],
+      expectedUnordered: [rows[0], rows[2]],
+      expectedOrdered: [rows[0], rows[2]],
+    },
+    {
+      // ADD side {id:2,b2} matches IN → injected. REMOVE side {id:1}
+      // doesn't match → dropped, so rows[0] (id=1) survives. The ADD
+      // appears alongside the existing id=2 row in both orderings; the
+      // inner generator does not treat compare-equal as replacement
+      // (see `generateWithOverlayInner > Add overlay replace`).
+      name: 'edit overlay where new matches but old does not',
+      overlay: {
+        epoch: 1,
+        change: makeSourceChangeEdit(ADD_2_b2, {id: 1, s: 'a', n: 11}),
+      },
+      multiConstraints: [[{id: 2}, {id: 3}]],
+      expectedUnordered: [ADD_2_b2, ...rows],
+      expectedOrdered: [rows[0], rows[1], ADD_2_b2, rows[2]],
+    },
+    {
+      name: 'multiple entries are ANDed (match)',
+      overlay: {epoch: 1, change: makeSourceChangeAdd(ADD_4)},
+      multiConstraints: [[{id: 4}, {id: 5}], [{s: 'd'}]],
+      expectedUnordered: [ADD_4, ...rows],
+      expectedOrdered: [...rows, ADD_4],
+    },
+    {
+      name: 'multiple entries are ANDed (one IN list rejects)',
+      overlay: {epoch: 1, change: makeSourceChangeAdd(ADD_4)},
+      multiConstraints: [[{id: 4}, {id: 5}], [{s: 'q'}]],
+      expectedUnordered: rows,
+      expectedOrdered: rows,
+    },
+    {
+      // The mc.length > 0 guard means an empty MultiConstraint is a no-op.
+      name: 'empty entry (length 0) is ignored, not treated as mismatch',
+      overlay: {epoch: 1, change: makeSourceChangeAdd(ADD_4)},
+      multiConstraints: [[]],
+      expectedUnordered: [ADD_4, ...rows],
+      expectedOrdered: [...rows, ADD_4],
+    },
+  ];
+
+  describe.each(scenarios)(
+    '$name',
+    ({
+      iteratorRows,
+      overlay,
+      multiConstraints,
+      expectedUnordered,
+      expectedOrdered,
+    }) => {
+      const input = iteratorRows ?? rows;
+
+      test('unordered', () => {
+        const actual = Array.from(
+          generateWithOverlayUnordered(
+            input,
+            undefined,
+            overlay,
+            1,
+            pk,
+            undefined,
+            multiConstraints,
+          ),
+          ({row}) => row,
+        );
+        expect(actual).toEqual(expectedUnordered);
+      });
+
+      test('ordered', () => {
+        const actual = Array.from(
+          generateWithOverlay(
+            undefined,
+            input,
+            undefined,
+            overlay,
+            1,
+            compare,
+            undefined,
+            multiConstraints,
+          ),
+          ({row}) => row,
+        );
+        expect(actual).toEqual(expectedOrdered);
+      });
+    },
+  );
 });
 
 describe('mergeSortedStreams', () => {

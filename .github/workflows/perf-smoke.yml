@@ -10,21 +10,30 @@ concurrency:
   group: '${{ github.workflow }} @ ${{ github.event.pull_request.head.label || github.head_ref || github.ref }}'
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+permissions:
+  contents: read
+
 jobs:
   benchmark-smoke:
     name: Performance runner smoke test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6
+        with:
+          version: 11.3.0
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+
         with:
           node-version: 24.x
-          cache: 'npm'
-      - run: npm ci
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
       - uses: ./.github/actions/playwright-install
       - name: Run benchmark
         shell: bash
         working-directory: packages/replicache-perf
         run: |
-          npm run build
-          npx tsx src/runner.ts --format=json --run='populate 1024x1000 \(clean, indexes: 0\)'
+          pnpm run build
+          node src/runner.ts --format=json --run='populate 1024x1000 \(clean, indexes: 0\)'

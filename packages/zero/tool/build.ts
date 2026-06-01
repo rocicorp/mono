@@ -137,6 +137,7 @@ async function getViteConfig(): Promise<InlineConfig> {
           entryFileNames: '[name].js',
           chunkFileNames: 'chunks/[name]-[hash].js',
           preserveModules: true,
+          preserveModulesRoot: resolve('..'),
         },
       },
     },
@@ -182,6 +183,16 @@ async function makeBinFilesExecutable() {
       const fullPath = resolve(binPath as string);
       await chmod(fullPath, 0o755);
     }
+  }
+}
+
+function assertNoNodeModulesInOut() {
+  const nodeModulesPath = resolve('out', 'node_modules');
+  if (existsSync(nodeModulesPath)) {
+    throw new Error(
+      `Build produced out/node_modules — a third-party package was bundled instead of externalized. ` +
+        `Add it to dependencies or peerDependencies of package.json. Path: ${nodeModulesPath}`,
+    );
   }
 }
 
@@ -258,6 +269,7 @@ async function build() {
 
     await makeBinFilesExecutable();
     await copyStaticFiles();
+    assertNoNodeModulesInOut();
   }
 
   const totalDuration = ((performance.now() - startTime) / 1000).toFixed(2);

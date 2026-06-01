@@ -1,6 +1,6 @@
 # Running playwright tests locally
 
-- Add ZERO_AUTH_JWK. Set this to the public key that is output by `npm run create-keys` in `zbugs`
+- Add ZERO_AUTH_JWK. Set this to the public key that is output by `pnpm run create-keys` in `zbugs`
 
 ## Push docker container for AWS batch
 

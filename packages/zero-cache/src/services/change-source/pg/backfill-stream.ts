@@ -18,7 +18,7 @@ import {TsvParser} from '../../../db/pg-copy.ts';
 import {getTypeParsers} from '../../../db/pg-type-parser.ts';
 import type {PublishedTableSpec} from '../../../db/specs.ts';
 import {importSnapshot, TransactionPool} from '../../../db/transaction-pool.ts';
-import {pgClient, type PostgresDB} from '../../../types/pg.ts';
+import {connectPgClient, pgClient, type PostgresDB} from '../../../types/pg.ts';
 import {SchemaIncompatibilityError} from '../common/backfill-manager.ts';
 import type {
   BackfillCompleted,
@@ -32,12 +32,12 @@ import {
   tableMetadataSchema,
 } from './backfill-metadata.ts';
 import {
-  createReplicationSlot,
   makeBinarySelectExprs,
   makeDownloadStatements,
   type DownloadStatements,
 } from './initial-sync.ts';
 import {toStateVersionString} from './lsn.ts';
+import {createReplicationSlot} from './replication-slots.ts';
 import {getPublicationInfo} from './schema/published.ts';
 import type {Replica} from './schema/shard.ts';
 
@@ -88,7 +88,7 @@ export async function* streamBackfill(
 
   const {flushThresholdBytes = POSTGRES_COPY_CHUNK_SIZE, textCopy = false} =
     opts;
-  const db = pgClient(lc, upstreamURI, 'backfill-stream', {
+  const db = await connectPgClient(lc, upstreamURI, 'backfill-stream', {
     ['max_lifetime']: 120 * 60, // set a long (2h) limit for COPY streaming
   });
   let tx: TransactionPool | undefined;
@@ -299,15 +299,15 @@ async function createSnapshotTransaction(
       connection: {replication: 'database'}, // https://www.postgresql.org/docs/current/protocol-replication.html
     },
   );
-  const tempSlot = `${slotNamePrefix}_bf_${Date.now()}`;
+  const slotName = `${slotNamePrefix}_bf_${Date.now()}`;
   try {
     const {snapshot_name: snapshot, consistent_point: lsn} =
-      await createReplicationSlot(lc, replicationSession, tempSlot);
+      await createReplicationSlot(lc, replicationSession, {slotName});
 
     const {init, imported} = importSnapshot(snapshot);
     const tx = new TransactionPool(lc, {mode: READONLY, init}).run(db);
     await imported;
-    await replicationSession.unsafe(`DROP_REPLICATION_SLOT "${tempSlot}"`);
+    await replicationSession.unsafe(`DROP_REPLICATION_SLOT "${slotName}"`);
 
     const watermark = toStateVersionString(lsn);
     lc.info?.(`Opened snapshot transaction at LSN ${lsn} (${watermark})`);
@@ -317,7 +317,7 @@ async function createSnapshotTransaction(
     await replicationSession.unsafe(
       /*sql*/
       `SELECT pg_drop_replication_slot(slot_name) FROM pg_replication_slots
-         WHERE slot_name = '${tempSlot}'`,
+         WHERE slot_name = '${slotName}'`,
     );
     lc.warn?.(`Failed to create backfill snapshot`, e);
     throw e;

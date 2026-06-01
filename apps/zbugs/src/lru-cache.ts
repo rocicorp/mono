@@ -1,4 +1,4 @@
-import {must} from 'shared/src/must.js';
+import {must} from '../../../packages/shared/src/must.js';
 
 export class LRUCache<K, V> {
   readonly #maxSize: number;

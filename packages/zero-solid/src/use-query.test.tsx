@@ -14,6 +14,7 @@ import {
 } from '../../zql/src/ivm/source.ts';
 import {QueryDelegateImpl} from '../../zql/src/query/test/query-delegate.ts';
 import {
+  asQueryInternals,
   assert,
   consume,
   idSymbol,
@@ -920,6 +921,74 @@ test('useQuery when ZeroProvider is used, view is reused if query instance chang
   cleanup();
 
   expect(destroy0Spy).toHaveBeenCalledTimes(1);
+});
+
+test('useQuery plural and singular with same hash create different views', () => {
+  const {tableQuery, queryDelegate} = setupTestEnvironment();
+  // After the zql hash revert, .one() and .limit(1) produce the same AST hash
+  // because the singular flag is no longer included in the zql-level hash.
+  const pluralQuery = tableQuery.where('a', 1).limit(1);
+  const singularQuery = tableQuery.where('a', 1).one();
+  expect(asQueryInternals(pluralQuery).hash()).toBe(
+    asQueryInternals(singularQuery).hash(),
+  );
+
+  type AnyQuery = typeof pluralQuery | typeof singularQuery;
+  const [querySignal, setQuery] = createSignal<AnyQuery>(pluralQuery);
+
+  const clientID = 'useQuery-plural-singular-different-views';
+  const zero = newMockZero(clientID, queryDelegate);
+  const materializeSpy = vi.spyOn(queryDelegate, 'materialize');
+  const {
+    result: [rows],
+  } = useQueryWithZeroProvider(zero, querySignal as () => typeof pluralQuery);
+
+  expect(rows()).toEqual([
+    {a: 1, b: 'a', [refCountSymbol]: 1, [idSymbol]: '1'},
+  ]);
+  expect(materializeSpy).toHaveBeenCalledTimes(1);
+  expect(materializeSpy.mock.calls[0][0]).toBe(pluralQuery);
+
+  const view0 = materializeSpy.mock.results[0].value;
+  const destroy0Spy = vi.spyOn(view0, 'destroy');
+
+  // Switch to singular — hash changes because singular flag is included in
+  // the view hash even though the underlying zql hash is the same.
+  setQuery(singularQuery as unknown as AnyQuery);
+
+  expect(destroy0Spy).toHaveBeenCalledTimes(1);
+  expect(materializeSpy).toHaveBeenCalledTimes(2);
+  expect(materializeSpy.mock.calls[1][0]).toBe(singularQuery);
+});
+
+test('useQuery same query for different clientIDs creates different views', () => {
+  const {tableQuery, queryDelegate} = setupTestEnvironment();
+  const query = tableQuery.where('a', 1);
+  const querySignal = () => query;
+
+  const zero0 = newMockZero('client-a', queryDelegate);
+  const zero1 = newMockZero('client-b', queryDelegate);
+  const [zeroSignal, setZero] = createSignal(zero0);
+
+  const materializeSpy = vi.spyOn(queryDelegate, 'materialize');
+  const {
+    result: [rows],
+  } = useQueryWithZeroProvider(zeroSignal, querySignal);
+
+  expect(rows()).toEqual([
+    {a: 1, b: 'a', [refCountSymbol]: 1, [idSymbol]: '1'},
+  ]);
+  expect(materializeSpy).toHaveBeenCalledTimes(1);
+
+  const view0 = materializeSpy.mock.results[0].value;
+  const destroy0Spy = vi.spyOn(view0, 'destroy');
+
+  // Switching to a different Zero instance with a different clientID
+  // must create a new view because clientID is now part of the hash.
+  setZero(zero1);
+
+  expect(destroy0Spy).toHaveBeenCalledTimes(1);
+  expect(materializeSpy).toHaveBeenCalledTimes(2);
 });
 
 test('useQuery when ZeroProvider is not-used, view is not-reused if query instance changes even if hash does not change', () => {

@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "go": "tsx src/main.ts",
+    "go": "node src/main.ts",
     "check-types": "tsc",
     "format": "oxfmt .",
     "check-format": "oxfmt --check .",
@@ -19,7 +19,8 @@
   },
   "devDependencies": {
     "@types/pidusage": "^2.0.5",
-    "oxfmt": "^0.48.0",
-    "shared": "0.0.0"
-  }
+    "oxfmt": "^0.45.0",
+    "shared": "workspace:*"
+  },
+  "packageManager": "pnpm@11.3.0"
 }

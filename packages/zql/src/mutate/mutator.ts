@@ -203,10 +203,20 @@ export type MutatorExecutionFunction<
   TContext,
   TTransaction,
 > = (
-  options: IsUnknown<TContext> extends true
-    ? {args: TOutput; tx: TTransaction; ctx?: TContext}
-    : {args: TOutput; tx: TTransaction; ctx: TContext},
+  options: MutatorExecutionOptions<TOutput, TContext, TTransaction>,
 ) => Promise<ReadonlyJSONValue | void>;
+
+type MutatorExecutionOptions<
+  TOutput extends ReadonlyJSONValue | undefined,
+  TContext,
+  TTransaction,
+> = undefined extends TOutput
+  ? IsUnknown<TContext> extends true
+    ? {args?: TOutput | undefined; tx: TTransaction; ctx?: TContext | undefined}
+    : {args?: TOutput | undefined; tx: TTransaction; ctx: TContext}
+  : IsUnknown<TContext> extends true
+    ? {args: TOutput; tx: TTransaction; ctx?: TContext | undefined}
+    : {args: TOutput; tx: TTransaction; ctx: TContext};
 
 // ----------------------------------------------------------------------------
 // Mutator and MutateRequest types

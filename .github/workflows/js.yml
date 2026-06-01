@@ -11,77 +11,103 @@ concurrency:
   group: '${{ github.workflow }} @ ${{ github.event.pull_request.head.label || github.head_ref || github.ref }}'
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
+permissions:
+  contents: read
+
 jobs:
   # Gate jobs - must pass before other jobs run
   syncpack:
     name: Sync Package Versions
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6
+        with:
+          version: 11.3.0
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+
         with:
           node-version: 24.x
-          cache: 'npm'
-      - run: npx syncpack lint
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec syncpack lint
 
   verify-deps:
     name: Verify Package Dependencies
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6
+        with:
+          version: 11.3.0
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+
         with:
           node-version: 24.x
-          cache: 'npm'
-      - run: npm install --prefix tools/verify-package-deps
-      - run: npm run verify-deps
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile --filter verify-package-deps
+      - run: pnpm run verify-deps
 
   format:
     name: Oxfmt
     runs-on: ubuntu-latest
     needs: [syncpack, verify-deps]
-    env:
-      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
-      TURBO_TEAM: rocicorp
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6
+        with:
+          version: 11.3.0
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+
         with:
           node-version: 24.x
-          cache: 'npm'
-      - run: npx oxfmt@^0.45.0 --check
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec oxfmt --check
 
   lint:
     name: Lint
     runs-on: ubuntu-latest
     needs: [syncpack, verify-deps]
-    env:
-      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
-      TURBO_TEAM: rocicorp
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6
+        with:
+          version: 11.3.0
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+
         with:
           node-version: 24.x
-          cache: 'npm'
-      - run: npm ci
-      - run: npm run lint
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run lint
 
   check-types:
     name: Check Types
     runs-on: ubuntu-latest
     needs: [syncpack, verify-deps]
-    env:
-      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
-      TURBO_TEAM: rocicorp
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6
+        with:
+          version: 11.3.0
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+
         with:
           node-version: 24.x
-          cache: 'npm'
-      - run: npm ci
-      - run: npm run check-types
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run check-types
 
   test:
     name: Test (Shard ${{ matrix.shard }}/3)
@@ -91,21 +117,24 @@ jobs:
       fail-fast: false
       matrix:
         shard: [1, 2, 3]
-    env:
-      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
-      TURBO_TEAM: rocicorp
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           fetch-depth: 100
-      - uses: actions/setup-node@v6
+          persist-credentials: false
+      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6
+        with:
+          version: 11.3.0
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
           node-version: 24.x
-          cache: 'npm'
-      - run: npm ci
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
       - uses: ./.github/actions/playwright-install
       - name: Run tests
-        run: TEST_PG_MODE=nopg npm run test -- --shard=${{ matrix.shard }}/3
+        env:
+          SHARD: ${{ matrix.shard }}
+        run: TEST_PG_MODE=nopg pnpm run test --shard="$SHARD"/3
 
   test-pg:
     name: Test PG ${{ matrix.pg-version }} (Shard ${{ matrix.shard }}/2)
@@ -116,21 +145,22 @@ jobs:
       matrix:
         pg-version: [18, 17, 16, 15]
         shard: [1, 2]
-    env:
-      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
-      TURBO_TEAM: rocicorp
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           fetch-depth: 100
-      - uses: actions/setup-node@v6
+          persist-credentials: false
+      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6
+        with:
+          version: 11.3.0
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
         with:
           node-version: 24.x
-          cache: 'npm'
-      - run: npm ci
+          cache: 'pnpm'
+      - run: pnpm install --frozen-lockfile
       - name: Run tests
-        uses: nick-fields/retry@v4
+        uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60 # v4
         with:
           timeout_minutes: 10
           max_attempts: 3
-          command: TEST_PG_MODE=pg-${{ matrix.pg-version }} npm run test -- --shard=${{ matrix.shard }}/2
+          command: TEST_PG_MODE=pg-${{ matrix.pg-version }} pnpm run test --shard=${{ matrix.shard }}/2

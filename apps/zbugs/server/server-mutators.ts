@@ -4,8 +4,8 @@ import {
   type ServerTransaction,
   type Transaction,
 } from '@rocicorp/zero';
-import {assert} from 'shared/src/asserts.js';
 import {z} from 'zod/mini';
+import {assert} from '../../../packages/shared/src/asserts.js';
 import {MutationError, MutationErrorCode} from '../shared/error.ts';
 import {
   createIssueArgsSchema,

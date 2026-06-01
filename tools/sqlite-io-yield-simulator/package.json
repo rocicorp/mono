@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "go": "tsx src/main.ts",
+    "go": "node src/main.ts",
     "check-types": "tsc",
     "format": "oxfmt .",
     "check-format": "oxfmt --check .",
@@ -16,10 +16,12 @@
     "@rocicorp/lock": "^1.0.4",
     "@rocicorp/logger": "^5.4.0",
     "ws": "^8.18.1",
-    "zqlite": "0.0.0"
+    "zqlite": "workspace:*"
   },
   "devDependencies": {
-    "oxfmt": "^0.48.0",
-    "shared": "0.0.0"
-  }
+    "@types/ws": "^8.5.12",
+    "oxfmt": "^0.45.0",
+    "shared": "workspace:*"
+  },
+  "packageManager": "pnpm@11.3.0"
 }

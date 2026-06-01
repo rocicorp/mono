@@ -1,6 +1,5 @@
-import type {VercelRequest, VercelResponse} from '@vercel/node';
 import {describe, it, expect, vi, beforeEach} from 'vitest';
-import handler from './index';
+import handler, {type ProxyRequest, type ProxyResponse} from './index';
 
 // Mock fetch
 const mockFetch = vi.fn();
@@ -44,8 +43,8 @@ const validOtelData = {
 };
 
 describe('OTEL Proxy Handler', () => {
-  let req: Partial<VercelRequest>;
-  let res: Partial<VercelResponse>;
+  let req: Partial<ProxyRequest>;
+  let res: Partial<ProxyResponse>;
 
   beforeEach(() => {
     vi.clearAllMocks();
@@ -82,7 +81,7 @@ describe('OTEL Proxy Handler', () => {
     };
     mockFetch.mockResolvedValue(mockResponse);
 
-    await handler(req as VercelRequest, res as VercelResponse);
+    await handler(req as ProxyRequest, res as ProxyResponse);
 
     expect(mockFetch).toHaveBeenCalledWith(
       'https://test-grafana.com/otlp/v1/metrics',
@@ -110,7 +109,7 @@ describe('OTEL Proxy Handler', () => {
     };
     mockFetch.mockResolvedValue(mockResponse);
 
-    await handler(req as VercelRequest, res as VercelResponse);
+    await handler(req as ProxyRequest, res as ProxyResponse);
 
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.send).toHaveBeenCalledWith('OK');
@@ -119,7 +118,7 @@ describe('OTEL Proxy Handler', () => {
   it('should reject non-POST requests', async () => {
     req.method = 'GET';
 
-    await handler(req as VercelRequest, res as VercelResponse);
+    await handler(req as ProxyRequest, res as ProxyResponse);
 
     expect(res.status).toHaveBeenCalledWith(405);
     expect(res.json).toHaveBeenCalledWith({error: 'Method not allowed'});
@@ -129,7 +128,7 @@ describe('OTEL Proxy Handler', () => {
   it('should reject non-JSON content type', async () => {
     req.headers = {'content-type': 'application/x-protobuf'};
 
-    await handler(req as VercelRequest, res as VercelResponse);
+    await handler(req as ProxyRequest, res as ProxyResponse);
 
     expect(res.status).toHaveBeenCalledWith(400);
     expect(res.json).toHaveBeenCalledWith({error: 'Invalid request type'});
@@ -139,7 +138,7 @@ describe('OTEL Proxy Handler', () => {
   it('should reject requests with missing content type', async () => {
     req.headers = {};
 
-    await handler(req as VercelRequest, res as VercelResponse);
+    await handler(req as ProxyRequest, res as ProxyResponse);
 
     expect(res.status).toHaveBeenCalledWith(400);
     expect(res.json).toHaveBeenCalledWith({error: 'Invalid request type'});
@@ -149,7 +148,7 @@ describe('OTEL Proxy Handler', () => {
   it('should reject requests without OTEL data', async () => {
     req.body = {some: 'random', data: 'without otel fields'};
 
-    await handler(req as VercelRequest, res as VercelResponse);
+    await handler(req as ProxyRequest, res as ProxyResponse);
 
     expect(res.status).toHaveBeenCalledWith(400);
     expect(res.json).toHaveBeenCalledWith({error: 'Invalid request body'});
@@ -172,7 +171,7 @@ describe('OTEL Proxy Handler', () => {
     };
     mockFetch.mockResolvedValue(mockResponse);
 
-    await handler(req as VercelRequest, res as VercelResponse);
+    await handler(req as ProxyRequest, res as ProxyResponse);
 
     expect(res.status).toHaveBeenCalledWith(200);
     expect(mockFetch).toHaveBeenCalled();
@@ -181,7 +180,7 @@ describe('OTEL Proxy Handler', () => {
   it('should handle missing ROCICORP_TELEMETRY_TOKEN', async () => {
     vi.stubEnv('ROCICORP_TELEMETRY_TOKEN', '');
 
-    await handler(req as VercelRequest, res as VercelResponse);
+    await handler(req as ProxyRequest, res as ProxyResponse);
 
     expect(res.status).toHaveBeenCalledWith(500);
     expect(res.json).toHaveBeenCalledWith({
@@ -193,7 +192,7 @@ describe('OTEL Proxy Handler', () => {
   it('should handle fetch errors', async () => {
     mockFetch.mockRejectedValue(new Error('Network error'));
 
-    await handler(req as VercelRequest, res as VercelResponse);
+    await handler(req as ProxyRequest, res as ProxyResponse);
 
     expect(res.status).toHaveBeenCalledWith(500);
     expect(res.json).toHaveBeenCalledWith({error: 'Failed to forward metrics'});
@@ -209,7 +208,7 @@ describe('OTEL Proxy Handler', () => {
     };
     mockFetch.mockResolvedValue(mockResponse);
 
-    await handler(req as VercelRequest, res as VercelResponse);
+    await handler(req as ProxyRequest, res as ProxyResponse);
 
     expect(res.status).toHaveBeenCalledWith(400);
     expect(res.json).toHaveBeenCalledWith({error: 'Bad Request'});
@@ -227,7 +226,7 @@ describe('OTEL Proxy Handler', () => {
     };
     mockFetch.mockResolvedValue(mockResponse);
 
-    await handler(req as VercelRequest, res as VercelResponse);
+    await handler(req as ProxyRequest, res as ProxyResponse);
 
     expect(mockFetch).toHaveBeenCalledWith(
       'https://otlp-gateway-prod-us-east-2.grafana.net/otlp/v1/metrics',
@@ -238,7 +237,7 @@ describe('OTEL Proxy Handler', () => {
   it('should validate request body exists', async () => {
     req.body = undefined;
 
-    await handler(req as VercelRequest, res as VercelResponse);
+    await handler(req as ProxyRequest, res as ProxyResponse);
 
     expect(res.status).toHaveBeenCalledWith(500);
     expect(res.json).toHaveBeenCalledWith({error: 'Failed to forward metrics'});

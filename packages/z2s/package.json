@@ -29,16 +29,18 @@
   },
   "devDependencies": {
     "@faker-js/faker": "^9.6.0",
-    "@types/pg": "^8.11.11",
-    "@vitest/runner": "^4.1.5",
-    "oxfmt": "^0.48.0",
+    "@types/pg": "^8.20.0",
+    "@vitest/runner": "^4.1.6",
+    "oxfmt": "^0.45.0",
     "pg": "^8.16.3",
-    "shared": "0.0.0",
-    "vitest": "^4.1.5",
-    "zero-cache": "0.0.0",
-    "zero-protocol": "0.0.0",
-    "zero-schema": "0.0.0",
-    "zero-types": "0.0.0",
-    "zql": "0.0.0"
-  }
+    "postgres": "3.4.7",
+    "shared": "workspace:*",
+    "vitest": "^4.1.6",
+    "zero-cache": "workspace:*",
+    "zero-protocol": "workspace:*",
+    "zero-schema": "workspace:*",
+    "zero-types": "workspace:*",
+    "zql": "workspace:*"
+  },
+  "packageManager": "pnpm@11.3.0"
 }

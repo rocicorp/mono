@@ -1,0 +1,122 @@
+name: Release
+
+on:
+  pull_request:
+    types: [closed]
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: Release mode
+        required: true
+        type: choice
+        options:
+          - canary
+          - stable
+      ref:
+        description: Branch, tag, or commit SHA to build the release from
+        required: true
+        type: string
+      dry_run:
+        description: Build but skip git push, npm publish, and Docker push
+        required: false
+        type: boolean
+        default: false
+
+permissions: {}
+
+concurrency:
+  group: '${{ github.workflow }} @ ${{ github.event.pull_request.head.label || github.head_ref || github.ref }}'
+  cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
+
+jobs:
+  release:
+    name: Release
+    if: github.event_name == 'workflow_dispatch' || (github.event.pull_request.merged == true && contains(github.event.pull_request.labels.*.name, 'release-canary'))
+    runs-on: ubuntu-latest
+    environment: Release
+    permissions:
+      contents: write # Required to push release tags.
+      id-token: write # Required for cosign keyless signing.
+      pull-requests: write # Required to comment on canary release PRs.
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        # zizmor: ignore[artipacked] release.ts needs checkout credentials to push release tags.
+        with:
+          fetch-depth: 0
+          persist-credentials: true
+          # Always check out the workflow branch so pnpm tooling is current.
+          # release.ts handles checking out the target ref internally.
+
+      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6
+        with:
+          version: 11.3.0
+
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6
+        with:
+          node-version: 24.x
+          cache: 'pnpm'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3
+
+      - name: Login to Docker Hub
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Configure git identity
+        run: |
+          git config --global user.email "release-bot@rocicorp.dev"
+          git config --global user.name "Rocicorp Release Bot"
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@398d4b0eeef1380460a10c8013a76f728fb906ac # v3.9.1
+
+      - name: Run release
+        id: release
+        env:
+          MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'canary' }}
+          REF: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.event.pull_request.base.ref }}
+          DRY_RUN: ${{ inputs.dry_run == true && '--dry-run' || '' }}
+        run: |
+          set -euo pipefail
+
+          if [[ ! "$REF" =~ ^[A-Za-z0-9._/-]+$ ]]; then
+            echo "Invalid ref: $REF" >&2
+            exit 1
+          fi
+
+          output=$(node packages/zero/tool/release.ts "$MODE" "$REF" --yes $DRY_RUN 2>&1 | tee /dev/stderr)
+          version=$(echo "$output" | grep -oP '(?:Published|Staged|Would publish|Would stage) @rocicorp/zero@\K[^\s]+')
+          if [[ -z "$version" ]]; then
+            echo "Could not parse released version from output" >&2
+            exit 1
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Sign Docker image
+        if: ${{ inputs.dry_run != true }}
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+        run: cosign sign --yes rocicorp/zero:$VERSION
+
+      - name: Comment on PR
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          VERSION: ${{ steps.release.outputs.version }}
+        run: |
+          {
+            printf '## Canary Release Published\n\n'
+            printf '**npm:** `%s`\n' "@rocicorp/zero@$VERSION"
+            printf '```\n'
+            printf 'npm install @rocicorp/zero@%s\n' "$VERSION"
+            printf '```\n\n'
+            printf '**Docker:** `%s`\n' "rocicorp/zero:$VERSION"
+          } > release-comment.md
+          gh pr comment "$PR_NUMBER" --body-file release-comment.md

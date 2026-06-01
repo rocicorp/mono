@@ -33,22 +33,26 @@ test('replication report recorder', () => {
   expectObserved(recorder.reportUpstreamLag, 200);
   expectObserved(recorder.reportReplicaLag, 350);
   expectObserved(recorder.reportTotalLag, 550);
+  expectObserved(recorder.reportLastTotalLag, 550);
 
   now = 11_550;
 
   expectObserved(recorder.reportUpstreamLag, 200);
   expectObserved(recorder.reportReplicaLag, 350);
   expectObserved(recorder.reportTotalLag, 550);
+  expectObserved(recorder.reportLastTotalLag, 550);
 
   now = 12_123;
   expectObserved(recorder.reportUpstreamLag, 200);
   expectObserved(recorder.reportReplicaLag, 350);
   expectObserved(recorder.reportTotalLag, 1123);
+  expectObserved(recorder.reportLastTotalLag, 550);
 
   now = 12_246;
   expectObserved(recorder.reportUpstreamLag, 200);
   expectObserved(recorder.reportReplicaLag, 350);
   expectObserved(recorder.reportTotalLag, 1246);
+  expectObserved(recorder.reportLastTotalLag, 550);
 
   recorder.record({
     lastTimings: {
@@ -63,4 +67,5 @@ test('replication report recorder', () => {
   expectObserved(recorder.reportUpstreamLag, 250);
   expectObserved(recorder.reportReplicaLag, 400);
   expectObserved(recorder.reportTotalLag, 650);
+  expectObserved(recorder.reportLastTotalLag, 650);
 });

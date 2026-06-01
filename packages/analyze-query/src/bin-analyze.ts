@@ -375,7 +375,9 @@ colorConsole.log(
 );
 
 colorConsole.log(styleText(['blue', 'bold'], '\n\n=== Query Plans: ===\n'));
-const plans = explainQueries(debug.getVendedRowCounts() ?? {}, db);
+const fallbackPlans = explainQueries(debug.getVendedRowCounts() ?? {}, db);
+const capturedPlans = debug.getSQLitePlans();
+const plans: Record<string, string[]> = {...fallbackPlans, ...capturedPlans};
 for (const [query, plan] of Object.entries(plans)) {
   colorConsole.log(styleText('bold', 'query'), query);
   colorConsole.log(plan.map((row, i) => colorPlanRow(row, i)).join('\n'));

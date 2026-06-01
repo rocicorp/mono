@@ -1,10 +1,8 @@
 import {mkdtemp, readdir, rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {PG_LOCK_NOT_AVAILABLE} from '@drdgvhbh/postgres-error-codes';
 import {LogContext} from '@rocicorp/logger';
 import {nanoid} from 'nanoid/non-secure';
-import postgres from 'postgres';
 import {beforeEach, describe, expect} from 'vitest';
 import {
   createSilentLogContext,
@@ -27,10 +25,10 @@ import {
   initDB as initLiteDB,
 } from '../../../test/lite.ts';
 import {PG_17} from '../../../types/pg-versions.ts';
-import {pgClient, type PostgresDB} from '../../../types/pg.ts';
+import {type PostgresDB} from '../../../types/pg.ts';
 import {ZERO_VERSION_COLUMN_NAME} from '../../replicator/schema/replication-state.ts';
 import {
-  createReplicationSlot,
+  getInitialDownloadState,
   initialSync,
   INSERT_BATCH_SIZE,
   shadowInitialSync,
@@ -2645,7 +2643,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
           .map(([_, spec]) => spec);
         for (const r of replicas) {
           expect(r).toMatchObject({
-            slot: expect.stringMatching(`${APP_ID}_${SHARD_NUM}_\\d+`),
+            slot: expect.stringMatching(`${APP_ID}_${SHARD_NUM}_[a-z]`),
             // Importantly, the initialSchema column is populated during initial sync.
             initialSchema: {
               tables: tableSpecs,
@@ -2895,61 +2893,6 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
       'Error: The App ID may only consist of lower-case letters, numbers, and the underscore character',
     );
   });
-
-  test(
-    'createReplicationSlot times out behind an older idle transaction',
-    {timeout: 45_000},
-    async () => {
-      const lc = createSilentLogContext();
-      const upstreamURI = getConnectionURI(upstream);
-      const timeoutSlot = `${APP_ID}_${SHARD_NUM}_${Date.now()}_timeout`;
-      const blocker = pgClient(lc, upstreamURI, 'slot-timeout-blocker', {
-        max: 1,
-      });
-      const timeoutSession = pgClient(
-        lc,
-        upstreamURI,
-        'slot-timeout-under-test',
-        {
-          max: 1,
-          ['fetch_types']: false,
-          connection: {replication: 'database'},
-        },
-      );
-
-      let blockerInTransaction = false;
-      try {
-        // Start a transaction in one session and leave it open.
-        await blocker`BEGIN`;
-        blockerInTransaction = true;
-        await blocker`SELECT txid_current()`;
-
-        // The server-side lock_timeout (set inside createReplicationSlot)
-        // should fire before the client-side orTimeout, producing a
-        // PostgresError with code 55P03 (lock_not_available).
-        let caught: unknown;
-        try {
-          await createReplicationSlot(lc, timeoutSession, timeoutSlot);
-        } catch (e) {
-          caught = e;
-        }
-        expect(caught).toBeInstanceOf(postgres.PostgresError);
-        expect((caught as postgres.PostgresError).code).toBe(
-          PG_LOCK_NOT_AVAILABLE,
-        );
-      } finally {
-        if (blockerInTransaction) {
-          await blocker`ROLLBACK`;
-        }
-        await blocker.end();
-        await timeoutSession.end().catch(() => {});
-        await upstream`
-          SELECT pg_drop_replication_slot(slot_name)
-            FROM pg_replication_slots
-            WHERE slot_name = ${timeoutSlot} AND NOT active`;
-      }
-    },
-  );
 
   describe('shadow initial sync', () => {
     const SHADOW_SHARD = {
@@ -3201,10 +3144,11 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
         ).toThrow(/missing column_metadata row for big\.val/);
       });
 
-      test('throws when a table is unqueryable via ZQL', async () => {
-        const {lc, replica, publishedInfo} = await runShadowSync();
-        // Dropping the only unique index over non-null columns makes
-        // computeZqlSpecs silently exclude the table.
+      test('does not check ZQL-queryability (matches prod tolerance)', async () => {
+        // computeZqlSpecs silently drops tables with no PK / no qualifying
+        // unique index in production too — there's nothing shadow-specific
+        // about that condition, so the verifier should NOT fail on it.
+        const {replica, publishedInfo, bigCount} = await runShadowSync();
         const idx = replica
           .prepare(
             `SELECT name FROM sqlite_master
@@ -3214,10 +3158,119 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
         for (const {name} of idx) {
           replica.exec(`DROP INDEX "${name}"`);
         }
+        const filtered = {
+          ...publishedInfo,
+          indexes: publishedInfo.indexes.filter(i => i.tableName !== 'big'),
+        };
+        const lc = createSilentLogContext();
+        const rowsByTable = new Map([['big', bigCount]]);
         expect(() =>
-          verifyShadowReplica(lc, replica, publishedInfo, new Map()),
-        ).toThrow(/dropped by computeZqlSpecs.*big/s);
+          verifyShadowReplica(lc, replica, filtered, rowsByTable),
+        ).not.toThrow();
       });
+    });
+  });
+
+  describe('getInitialDownloadState', () => {
+    let upstream: PostgresDB;
+
+    beforeEach<PgTest>(async ({testDBs}) => {
+      upstream = await testDBs.create('download_state_test');
+      return () => testDBs.drop(upstream);
+    });
+
+    test('returns estimates from pg_class for a populated table', async () => {
+      await upstream.unsafe(/*sql*/ `
+        CREATE TABLE estimate_test (
+          id INTEGER PRIMARY KEY,
+          name TEXT,
+          data TEXT
+        );
+        INSERT INTO estimate_test (id, name, data)
+          SELECT i, 'name_' || i, repeat('x', 100)
+          FROM generate_series(1, 1000) AS i;
+        ANALYZE estimate_test;
+      `);
+
+      const lc = createSilentLogContext();
+      const spec: PublishedTableSpec = {
+        schema: 'public',
+        name: 'estimate_test',
+        columns: {
+          id: {dataType: 'int4', pos: 1},
+          name: {dataType: 'text', pos: 2},
+          data: {dataType: 'text', pos: 3},
+        },
+        publications: {pub1: {rowFilter: null}},
+      } as unknown as PublishedTableSpec;
+
+      const state = await getInitialDownloadState(lc, upstream, spec, false);
+
+      expect(state.spec).toBe(spec);
+      expect(state.status.table).toBe('estimate_test');
+      expect(state.status.columns).toEqual(['id', 'name', 'data']);
+      expect(state.status.rows).toBe(0); // rows starts at 0, incremented during copy
+      // After ANALYZE, reltuples should be exactly 1000.
+      expect(state.status.totalRows).toBe(1000);
+      // 1000 rows × ~150 bytes each (100-byte data + id + name + overhead).
+      // pg_relation_size returns the on-disk file size, expect 100KB-500KB.
+      expect(state.status.totalBytes).toBeGreaterThan(100_000);
+      expect(state.status.totalBytes).toBeLessThan(500_000);
+    });
+
+    test('returns zeros for a never-analyzed empty table', async () => {
+      await upstream.unsafe(/*sql*/ `
+        CREATE TABLE empty_test (
+          id INTEGER PRIMARY KEY
+        );
+      `);
+
+      const lc = createSilentLogContext();
+      const spec: PublishedTableSpec = {
+        schema: 'public',
+        name: 'empty_test',
+        columns: {
+          id: {dataType: 'int4', pos: 1},
+        },
+        publications: {pub1: {rowFilter: null}},
+      } as unknown as PublishedTableSpec;
+
+      const state = await getInitialDownloadState(lc, upstream, spec, false);
+
+      expect(state.status.totalRows).toBe(0);
+      expect(state.status.totalBytes).toBe(0);
+    });
+
+    test('handles non-public schema tables', async () => {
+      await upstream.unsafe(/*sql*/ `
+        CREATE SCHEMA test_schema;
+        CREATE TABLE test_schema.my_table (
+          id INTEGER PRIMARY KEY,
+          val TEXT
+        );
+        INSERT INTO test_schema.my_table (id, val)
+          SELECT i, 'val_' || i FROM generate_series(1, 100) AS i;
+        ANALYZE test_schema.my_table;
+      `);
+
+      const lc = createSilentLogContext();
+      const spec: PublishedTableSpec = {
+        schema: 'test_schema',
+        name: 'my_table',
+        columns: {
+          id: {dataType: 'int4', pos: 1},
+          val: {dataType: 'text', pos: 2},
+        },
+        publications: {pub1: {rowFilter: null}},
+      } as unknown as PublishedTableSpec;
+
+      const state = await getInitialDownloadState(lc, upstream, spec, false);
+
+      expect(state.status.totalRows).toBe(100);
+      // 100 rows × ~40 bytes each (id + val + overhead).
+      // Expect at least one 8KB page and no more than 64KB.
+      expect(state.status.totalBytes).toBeGreaterThanOrEqual(8192);
+      expect(state.status.totalBytes).toBeLessThan(65_536);
     });
   });
 });

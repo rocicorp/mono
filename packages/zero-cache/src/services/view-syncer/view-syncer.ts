@@ -161,6 +161,17 @@ function randomID() {
   return randInt(1, Number.MAX_SAFE_INTEGER).toString(36);
 }
 
+function shutdownBeforeInitializationError(): ProtocolErrorWithLevel {
+  return new ProtocolErrorWithLevel(
+    {
+      kind: ErrorKind.Internal,
+      message: 'shut down before initialization completed',
+      origin: ErrorOrigin.ZeroCache,
+    },
+    'warn',
+  );
+}
+
 type SetTimeout = (
   fn: (...args: unknown[]) => void,
   delay?: number,
@@ -405,7 +416,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         this.#lc.info?.(`closing clientGroupID=${this.id}`);
         // Reject #initialized so that run() unblocks if it is still
         // waiting on readyState(). This is a no-op if already resolved.
-        this.#initialized.reject('shut down before initialization completed');
+        this.#initialized.reject(shutdownBeforeInitializationError());
         this.#stateChanges.cancel(); // Note: #stateChanges.active becomes false.
         return;
       }
@@ -1507,6 +1518,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       this.#hydrations.add(1);
       this.#hydrationTime.recordMs(elapsed);
       this.#addQueryMaterializationServerMetric(transformationHash, elapsed);
+      this.#inspectorDelegate.addQuery(transformationHash, transformedAst);
       lc.debug?.(`hydrated ${count} rows for ${queryID} (${elapsed} ms)`);
 
       // Drift detection: compare the just-computed candidate signature against
@@ -2006,6 +2018,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           totalProcessTime += elapsed;
 
           self.#addQueryMaterializationServerMetric(q.id, elapsed);
+          self.#inspectorDelegate.addQuery(q.id, q.ast);
 
           if (elapsed > slowHydrateThreshold) {
             lc.warn?.('Slow query materialization', elapsed, q.ast);
@@ -2320,7 +2333,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
       const wallTime = performance.now() - start;
       const totalProcessTime = timer.totalElapsed();
-      lc.info?.(
+      lc.debug?.(
         `finished processing advancement of ${numChanges} changes ((process: ${totalProcessTime} ms, wall: ${wallTime} ms))`,
       );
       this.#transactionAdvanceTime.recordMs(totalProcessTime);
@@ -2497,7 +2510,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   stop(): Promise<void> {
     this.#lc.info?.('stopping view syncer');
     this.connContextManager.setSharedRetransformReady(false);
-    this.#initialized.reject('shut down before initialization completed');
+    this.#initialized.reject(shutdownBeforeInitializationError());
     this.#stateChanges.cancel();
     return this.#stopped.promise;
   }

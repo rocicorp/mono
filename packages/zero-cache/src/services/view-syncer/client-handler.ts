@@ -192,7 +192,7 @@ export class ClientHandler {
 
     const baseCookie = versionToNullableCookie(this.#baseVersion);
     const cookie = versionToCookie(tentativeVersion);
-    lc.info?.(`starting poke from ${baseCookie} to ${cookie}`);
+    lc.debug?.(`starting poke from ${baseCookie} to ${cookie}`);
 
     const start = performance.now();
 

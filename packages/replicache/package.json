@@ -55,8 +55,9 @@
     "test:firefox:watch": "VITEST_BROWSER=firefox vitest --config vitest.config.web.ts",
     "test:webkit": "VITEST_BROWSER=webkit vitest run --config vitest.config.web.ts",
     "test:webkit:watch": "VITEST_BROWSER=webkit vitest --config vitest.config.web.ts",
-    "bench": "vitest bench --run",
-    "bench:watch": "vitest bench --watch",
+    "bench": "vitest run --config vitest.config.bench.ts",
+    "bench:bmf": "BENCH_OUTPUT_FORMAT=json pnpm run bench 2>&1 | node ../shared/src/tool/mitata-json-to-bmf.ts",
+    "bench:bmf:silent": "pnpm run bench:bmf --silent",
     "format": "oxfmt .",
     "check-format": "oxfmt --check .",
     "check-types": "tsc -p tsconfig.json && tsc -p tsconfig.build.json && tsc -p tool/tsconfig.json",
@@ -64,9 +65,9 @@
     "check-types:build:watch": "tsc -p tsconfig.build.json --watch",
     "check-types:tool:watch": "tsc -p tool/tsconfig.json --watch",
     "lint": "oxlint --quiet --config ../../oxlint.config.ts src/",
-    "build": "rm -rf out && tsc -p tsconfig.build.json && npx tsx tool/build.ts",
-    "build-bundle-sizes": "rm -rf out && npx tsx tool/build.ts --bundle-sizes",
-    "prepack": "npm run lint && npm run test && npm run build && mv README.md README-org.md && mv README-external.md README.md",
+    "build": "rm -rf out && tsc -p tsconfig.build.json && node tool/build.ts",
+    "build-bundle-sizes": "rm -rf out && node tool/build.ts --bundle-sizes",
+    "prepack": "pnpm run lint && pnpm run test && pnpm run build && mv README.md README-org.md && mv README-external.md README.md",
     "postpack": "mv README.md README-external.md && mv README-org.md README.md",
     "fmt": "oxfmt .",
     "check-fmt": "oxfmt --check ."
@@ -80,18 +81,22 @@
   "devDependencies": {
     "@op-engineering/op-sqlite": ">=15",
     "@rocicorp/zero-sqlite3": "^1.0.18",
-    "@types/command-line-usage": "^5.0.2",
-    "@vitest/runner": "^4.1.5",
+    "@types/command-line-args": "^5.2.3",
+    "@types/command-line-usage": "^5.0.4",
+    "@vitest/runner": "^4.1.6",
     "command-line-args": "^6.0.1",
     "command-line-usage": "^7.0.3",
     "compare-utf8": "^0.2.0",
-    "esbuild": "^0.27.4",
+    "esbuild": "0.27.7",
     "expo-sqlite": ">=15",
-    "oxfmt": "^0.48.0",
-    "playwright": "^1.53.2",
-    "shared": "0.0.0",
+    "hash-wasm": "^4.9.0",
+    "idb": "^7.0.1",
+    "oxfmt": "^0.45.0",
+    "playwright": "^1.60.0",
+    "shared": "workspace:*",
     "typescript": "~6.0.2",
-    "vitest": "^4.1.5"
+    "vitest": "^4.1.6",
+    "xbytes": "^1.7.0"
   },
   "peerDependencies": {
     "@op-engineering/op-sqlite": ">=15",
@@ -108,5 +113,6 @@
     "@rocicorp/zero-sqlite3": {
       "optional": true
     }
-  }
+  },
+  "packageManager": "pnpm@11.3.0"
 }

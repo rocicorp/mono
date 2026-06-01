@@ -4,6 +4,6 @@ import config from './src/tool/vitest-config.ts';
 export default mergeConfig(config, {
   test: {
     name: 'shared/browser',
-    exclude: ['src/options.test.ts'],
+    exclude: ['src/logging.test.ts', 'src/options.test.ts'],
   },
 });

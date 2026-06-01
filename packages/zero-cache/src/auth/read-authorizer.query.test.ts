@@ -5,6 +5,11 @@ import {assert} from '../../../shared/src/asserts.ts';
 import {h128} from '../../../shared/src/hash.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {must} from '../../../shared/src/must.ts';
+import {
+  ANYONE_CAN,
+  ANYONE_CAN_DO_ANYTHING,
+  definePermissions,
+} from '../../../zero-permissions/src/permissions.ts';
 import type {
   DeleteOp,
   InsertOp,
@@ -18,11 +23,6 @@ import {
   string,
   table,
 } from '../../../zero-schema/src/builder/table-builder.ts';
-import {
-  ANYONE_CAN,
-  ANYONE_CAN_DO_ANYTHING,
-  definePermissions,
-} from '../../../zero-schema/src/permissions.ts';
 import type {ValueType} from '../../../zero-schema/src/table-schema.ts';
 import type {Schema as ZeroSchema} from '../../../zero-types/src/schema.ts';
 import {
