@@ -626,7 +626,7 @@ class Transactor<D extends Database<ExtractTransactionType<D>>> {
             )) as ReadonlyJSONValue | undefined;
             const successResult: MutationResponse = {
               id: {clientID: mutation.clientID, id: mutation.id},
-              result: returnData !== undefined ? {data: returnData} : {},
+              result: {data: returnData},
             };
             await transactionHooks.writeMutationResult(successResult);
             return successResult;
