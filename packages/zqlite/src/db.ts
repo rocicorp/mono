@@ -42,7 +42,7 @@ export class Database implements Disposable {
       // insensitive ILIKE is handled in query-builder.ts by lower()-ing both
       // operands (using the Unicode-aware lower() that @rocicorp/zero-sqlite3
       // provides via ICU).
-      this.#db.pragma('case_sensitive_like = ON');
+      this.pragma('case_sensitive_like = ON');
 
       const [{page_size: pageSize}] = this.pragma<{page_size: number}>(
         'page_size',
