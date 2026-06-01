@@ -369,7 +369,9 @@ describe('handleMutateRequest', () => {
       ),
     );
     expect(recordedLMIDs).toEqual([1]);
-    expect(recordedResults).toEqual([]);
+    expect(recordedResults).toEqual([
+      {id: {clientID: 'cid', id: 1}, result: {}},
+    ]);
   });
 
   test('logged-out undefined responses use null userID', async () => {
@@ -447,8 +449,11 @@ describe('handleMutateRequest', () => {
 
     // Post-commit errors: LMID is always updated
     expect(recordedLMIDs).toEqual([1, 2]);
-    // writeMutationResult is not called because they were successful mutations
-    expect(recordedResults).toEqual([]);
+    // writeMutationResult is called for successful mutations within the transaction
+    expect(recordedResults).toEqual([
+      {id: {clientID: 'cid', id: 1}, result: {}},
+      {id: {clientID: 'cid', id: 2}, result: {}},
+    ]);
 
     expect(consoleErrorSpy).toHaveBeenCalledWith(
       'PushProcessor',
@@ -483,7 +488,6 @@ describe('handleMutateRequest', () => {
 
     // Transaction errors: LMID is updated for all mutations
     expect(recordedLMIDs).toEqual([1, 2]);
-    // writeMutationResult is only called for the error
     expect(recordedResults).toEqual([
       {
         id: {clientID: 'cid', id: 1},
@@ -492,6 +496,7 @@ describe('handleMutateRequest', () => {
           message: expect.stringContaining('mutator exploded'),
         },
       },
+      {id: {clientID: 'cid', id: 2}, result: {}},
     ]);
   });
 
@@ -529,7 +534,6 @@ describe('handleMutateRequest', () => {
 
     // LMID is updated only once for each mutation
     expect(recordedLMIDs).toEqual([1, 2, 3, 4]);
-    // writeMutationResult is only called for failed mutations
     expect(recordedResults).toEqual([
       {
         id: {clientID: 'cid', id: 1},
@@ -538,6 +542,7 @@ describe('handleMutateRequest', () => {
           message: expect.stringContaining('first mutation failed'),
         },
       },
+      {id: {clientID: 'cid', id: 2}, result: {}},
       {
         id: {clientID: 'cid', id: 3},
         result: {
@@ -546,6 +551,7 @@ describe('handleMutateRequest', () => {
           details: {code: 'CUSTOM_ERROR'},
         },
       },
+      {id: {clientID: 'cid', id: 4}, result: {}},
     ]);
   });
 
@@ -616,7 +622,9 @@ describe('handleMutateRequest', () => {
 
     // The first mutation's LMID is persisted
     expect(recordedLMIDs).toEqual([1]);
-    expect(recordedResults).toEqual([]);
+    expect(recordedResults).toEqual([
+      {id: {clientID: 'cid', id: 1}, result: {}},
+    ]);
   });
 
   test('returns parse error when the push body validation fails', async () => {
@@ -828,7 +836,9 @@ describe('handleMutateRequest', () => {
     });
 
     expect(recordedLMIDs).toEqual([1]);
-    expect(recordedResults).toEqual([]);
+    expect(recordedResults).toEqual([
+      {id: {clientID: 'cid', id: 1}, result: {}},
+    ]);
   });
 
   test('returns already processed response when mutation ID is too low', async () => {
@@ -876,8 +886,10 @@ describe('handleMutateRequest', () => {
 
     // only the second mutation's LMID is persisted, since the first one is considered already processed
     expect(recordedLMIDs).toEqual([2]);
-    // Neither already processed nor successful mutations call writeMutationResult
-    expect(recordedResults).toEqual([]);
+    // already processed mutations don't write a result; successful ones do
+    expect(recordedResults).toEqual([
+      {id: {clientID: 'cid', id: 2}, result: {}},
+    ]);
   });
 
   test('returns database error when transaction fails during execute phase', async () => {
@@ -914,7 +926,9 @@ describe('handleMutateRequest', () => {
 
     // only the first mutation's LMID is persisted
     expect(recordedLMIDs).toEqual([1]);
-    expect(recordedResults).toEqual([]);
+    expect(recordedResults).toEqual([
+      {id: {clientID: 'cid', id: 1}, result: {}},
+    ]);
   });
 
   test.each([
@@ -981,8 +995,8 @@ describe('handleMutateRequest', () => {
 
       // Both LMIDs are persisted (first attempt for m1, retry for m2)
       expect(recordedLMIDs).toEqual([1, 2]);
-      // The retry persists the error result
       expect(recordedResults).toEqual([
+        {id: {clientID: 'cid', id: 1}, result: {}},
         {
           id: {clientID: 'cid', id: 2},
           result: {
@@ -1038,7 +1052,9 @@ describe('handleMutateRequest', () => {
 
       // First mutation's LMID is persisted, but the failing mutation's is not
       expect(recordedLMIDs).toEqual([1]);
-      expect(recordedResults).toEqual([]);
+      expect(recordedResults).toEqual([
+        {id: {clientID: 'cid', id: 1}, result: {}},
+      ]);
     },
   );
 
@@ -1111,8 +1127,9 @@ describe('handleMutateRequest', () => {
       ),
     );
     expect(recordedLMIDs).toEqual([1]);
-    // Successful mutations don't call writeMutationResult
-    expect(recordedResults).toEqual([]);
+    expect(recordedResults).toEqual([
+      {id: {clientID: 'cid', id: 1}, result: {}},
+    ]);
   });
 
   describe('legacy positional API', () => {

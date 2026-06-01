@@ -623,6 +623,10 @@ class Transactor<D extends Database<ExtractTransactionType<D>>> {
             returnData = (await cb(dbTx, mutation.name, mutation.args[0])) as
               | ReadonlyJSONValue
               | undefined;
+            await transactionHooks.writeMutationResult({
+              id: {clientID: mutation.clientID, id: mutation.id},
+              result: {data: returnData},
+            });
           } else {
             const mutationResult = makeAppErrorResponse(mutation, appError);
             await transactionHooks.writeMutationResult(mutationResult);
