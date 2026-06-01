@@ -55,7 +55,11 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
 
   // Synthetic "root" entry that has a single "" relationship, so that we can
   // treat all changes, including the root change, generically.
-  readonly #root: Entry;
+  //
+  // applyChange is immutable: it returns a new root, preserving the references
+  // of unchanged subtrees so consumers (React.memo / Solid) can skip them. We
+  // therefore reassign #root on every change rather than mutating in place.
+  #root: Entry;
 
   onDestroy: (() => void) | undefined;
 
@@ -129,7 +133,7 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
   #hydrate() {
     this.#dirty = true;
     for (const node of skipYields(this.#input.fetch({}))) {
-      applyChange(
+      this.#root = applyChange(
         this.#root,
         {type: 'add', node},
         this.#schema,
@@ -142,7 +146,7 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
 
   push(change: Change) {
     this.#dirty = true;
-    applyChange(
+    this.#root = applyChange(
       this.#root,
       changeToViewChange(change),
       this.#schema,
