@@ -324,12 +324,8 @@ export function applyChangeInternal<M extends Mutate>(
       } else {
         // Find the target row in the sorted array via binary search.
         const view = getChildEntryList(parentEntry, relationship);
-        const {pos, found} = binarySearch(
-          view,
-          change.node.row,
-          schema.compareRows,
-        );
-        assert(found, 'node does not exist');
+        const pos = binarySearch(view, change.node.row, schema.compareRows);
+        assert(pos >= 0, 'node does not exist');
         const existing = view[pos];
         const newExisting = applyChangeInternal(
           existing,
@@ -373,18 +369,12 @@ export function applyChangeInternal<M extends Mutate>(
         const view = getChildEntryList(parentEntry, relationship);
         // Sort key changed: row may need to move
         if (schema.compareRows(change.oldNode.row, change.node.row) !== 0) {
-          const {pos: oldPos, found: oldFound} = binarySearch(
-            view,
-            change.oldNode.row,
-            schema.compareRows,
-          );
-          assert(oldFound, 'old node does not exist');
+          const oldPos = binarySearch(view, change.oldNode.row, schema.compareRows);
+          assert(oldPos >= 0, 'old node does not exist');
           const oldEntry = view[oldPos];
-          const {pos, found} = binarySearch(
-            view,
-            change.node.row,
-            schema.compareRows,
-          );
+          const rawPos = binarySearch(view, change.node.row, schema.compareRows);
+          const found = rawPos >= 0;
+          const pos = found ? rawPos : ~rawPos;
           // A special case:
           // when refCount is 1 (so the row is being moved without leaving a
           // placeholder behind), and the new pos is the same as the old, or
@@ -465,12 +455,8 @@ export function applyChangeInternal<M extends Mutate>(
           }
         } else {
           // Sort key unchanged: edit in place
-          const {pos, found} = binarySearch(
-            view,
-            change.oldNode.row,
-            schema.compareRows,
-          );
-          assert(found, 'node does not exist');
+          const pos = binarySearch(view, change.oldNode.row, schema.compareRows);
+          assert(pos >= 0, 'node does not exist');
           const newEntry = applyEdit(
             view[pos],
             change,
@@ -608,16 +594,12 @@ function initializeRelationshipsForNewEntryIfAny(
           withIDs,
           1,
         );
-        const {pos, found} = binarySearch(
-          childArray,
-          childNode.row,
-          childSchema.compareRows,
-        );
+        const rawPos = binarySearch(childArray, childNode.row, childSchema.compareRows);
 
-        if (found) {
-          childArray[pos][refCountSymbol]++;
+        if (rawPos >= 0) {
+          childArray[rawPos][refCountSymbol]++;
         } else {
-          childArray.splice(pos, 0, newEntry);
+          childArray.splice(~rawPos, 0, newEntry);
           initializeRelationshipsForNewEntryIfAny(
             newEntry,
             childNode,
@@ -643,19 +625,19 @@ function add<M extends Mutate>(
   newEntry: MutableMetaEntry | undefined;
   newView: MutableMetaEntryList;
 } {
-  const {pos, found} = binarySearch(view, row, schema.compareRows);
+  const rawPos = binarySearch(view, row, schema.compareRows);
 
-  if (found) {
-    const existing = view[pos];
+  if (rawPos >= 0) {
+    const existing = view[rawPos];
 
     const updated = incRefCount(mutate, existing);
     return {
       newEntry: undefined,
-      newView: arrayWith(mutate, view, pos, updated),
+      newView: arrayWith(mutate, view, rawPos, updated),
     };
   }
   const newEntry = makeNewMetaEntry(row, schema, withIDs, 1);
-  return {newEntry, newView: insertAt(mutate, view, pos, newEntry)};
+  return {newEntry, newView: insertAt(mutate, view, ~rawPos, newEntry)};
 }
 
 function insertAt<M extends Mutate, T>(
@@ -689,8 +671,8 @@ function removeAndUpdateRefCount<M extends Mutate>(
   compareRows: Comparator,
   mutate: M,
 ): MutableMetaEntryList {
-  const {pos, found} = binarySearch(view, row, compareRows);
-  assert(found, 'node does not exist');
+  const pos = binarySearch(view, row, compareRows);
+  assert(pos >= 0, 'node does not exist');
   const oldEntry = view[pos];
   const rc = oldEntry[refCountSymbol];
   if (rc === 1) {
@@ -700,11 +682,17 @@ function removeAndUpdateRefCount<M extends Mutate>(
   return arrayWith(mutate, view, pos, newEntry);
 }
 
+/**
+ * Binary search returning a number.
+ * - If found at index `i`: returns `i` (>= 0).
+ * - If not found, insertion point is `low`: returns `~low` (< 0).
+ *   Recover insertion point with `~result`.
+ */
 function binarySearch(
   view: MetaEntryList<Mutate>,
   target: Row,
   comparator: Comparator,
-) {
+): number {
   let low = 0;
   let high = view.length - 1;
   while (low <= high) {
@@ -716,10 +704,10 @@ function binarySearch(
     } else if (comparison > 0) {
       high = mid - 1;
     } else {
-      return {pos: mid, found: true};
+      return mid;
     }
   }
-  return {pos: low, found: false};
+  return ~low;
 }
 
 /** Assert value is MetaEntry (has refCountSymbol). */
