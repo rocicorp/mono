@@ -7,11 +7,19 @@
  * transaction size K.
  *
  * Why this matters: with the immutable `applyChange`, every push path-copies a
- * new spine from the root down to the changed row. A top-level edit copies the
- * entire top-level array via `array.with()` — O(N). Within one transaction only
- * the final state is ever observed (listeners fire once, on flush), so the K-1
- * intermediate arrays are pure allocation/GC churn. Total transaction cost is
- * therefore O(K * N) today.
+ * new spine from the root down to the changed row. A top-level edit allocates a
+ * new entry and a fresh top-level array via `array.with()` — O(N). Within one
+ * transaction only the final state is ever observed (listeners fire once, on
+ * flush), so the K-1 intermediate arrays are pure allocation/GC churn. Total
+ * transaction cost is therefore O(K * N) today.
+ *
+ * The mutable baseline, by contrast, stays flat in N: an edit is an in-place
+ * `Object.assign` on the existing entry (the array is not touched at all), and
+ * adds/removes use `splice`/shift, which V8 optimizes to ~O(1) in the common
+ * cases (tail ops, front shift). The immutable `toSpliced()`/`with()` can't
+ * benefit from any of that because returning a new array forces a full copy.
+ * So the gap measured here is exactly the cost of allocating a new array per
+ * push that V8 would otherwise let us avoid.
  *
  * This is the guard/target for a future "mutate already-dirtied subtrees within
  * the open transaction" optimization: apply the first change immutably, then
