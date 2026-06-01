@@ -125,12 +125,14 @@ test('basics', () => {
   view.flush();
   expect(callCount).toBe(3);
   expect(view.data).toEqual([]);
-  // The data remains but the rc gets updated.
+  // applyChange is immutable: the snapshot captured by the (now removed)
+  // listener is frozen and is not mutated by the later remove, so it keeps the
+  // entry with its original refCount rather than seeing the in-place decrement.
   expect(data).toEqual([
     {
       a: 3,
       b: 'c',
-      [refCountSymbol]: 0,
+      [refCountSymbol]: 1,
     },
   ]);
 });
