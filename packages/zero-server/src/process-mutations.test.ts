@@ -1498,10 +1498,7 @@ describe('mutator return values', () => {
     });
 
     expect(response).toEqual(
-      makeSuccessResponse(
-        [{id: {clientID: 'cid', id: 1}, result: {data: undefined}}],
-        null,
-      ),
+      makeSuccessResponse([{id: {clientID: 'cid', id: 1}, result: {}}], null),
     );
   });
 
@@ -1569,10 +1566,7 @@ describe('mutator return values', () => {
     });
 
     expect(response).toEqual(
-      makeSuccessResponse(
-        [{id: {clientID: 'cid', id: 1}, result: {data: undefined}}],
-        null,
-      ),
+      makeSuccessResponse([{id: {clientID: 'cid', id: 1}, result: {}}], null),
     );
   });
 

@@ -193,9 +193,9 @@ export function makeReplicacheMutator<
   repTx: WriteTransaction,
   args: ReadonlyJSONValue,
 ) => Promise<ReadonlyJSONValue | void> {
-  return (repTx: WriteTransaction, args: ReadonlyJSONValue) => {
+  return async (repTx: WriteTransaction, args: ReadonlyJSONValue) => {
     const tx = new TransactionImpl(lc, repTx, schema);
-    return mutator(tx, args, context);
+    return await mutator(tx, args, context);
   };
 }
 

@@ -615,30 +615,26 @@ class Transactor<D extends Database<ExtractTransactionType<D>>> {
             mutation.id,
           );
 
-          let returnData: ReadonlyJSONValue | undefined;
           if (appError === undefined) {
             this.#lc.debug?.(
               `Executing mutator '${mutation.name}' (id=${mutation.id})`,
             );
-            returnData = (await cb(dbTx, mutation.name, mutation.args[0])) as
-              | ReadonlyJSONValue
-              | undefined;
-            await transactionHooks.writeMutationResult({
+            const returnData = (await cb(
+              dbTx,
+              mutation.name,
+              mutation.args[0],
+            )) as ReadonlyJSONValue | undefined;
+            const successResult: MutationResponse = {
               id: {clientID: mutation.clientID, id: mutation.id},
-              result: {data: returnData},
-            });
+              result: returnData !== undefined ? {data: returnData} : {},
+            };
+            await transactionHooks.writeMutationResult(successResult);
+            return successResult;
           } else {
             const mutationResult = makeAppErrorResponse(mutation, appError);
             await transactionHooks.writeMutationResult(mutationResult);
+            return mutationResult;
           }
-
-          return {
-            id: {
-              clientID: mutation.clientID,
-              id: mutation.id,
-            },
-            result: {data: returnData},
-          };
         },
         this.#getTransactionInput(mutation),
       );

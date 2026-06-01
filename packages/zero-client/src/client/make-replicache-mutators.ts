@@ -76,13 +76,13 @@ function makeReplicacheMutator<
   repTx: WriteTransaction,
   args: ReadonlyJSONValue,
 ) => Promise<ReadonlyJSONValue | void> {
-  return (
+  return async (
     repTx: WriteTransaction,
     args: ReadonlyJSONValue,
   ): Promise<ReadonlyJSONValue | void> => {
     const tx = new TransactionImpl(lc, repTx, schema);
     // fn does input validation internally
-    return mutator.fn({
+    return await mutator.fn({
       args: args as TArgs,
       ctx: context,
       tx: tx,
