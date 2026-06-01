@@ -369,10 +369,18 @@ export function applyChangeInternal<M extends Mutate>(
         const view = getChildEntryList(parentEntry, relationship);
         // Sort key changed: row may need to move
         if (schema.compareRows(change.oldNode.row, change.node.row) !== 0) {
-          const oldPos = binarySearch(view, change.oldNode.row, schema.compareRows);
+          const oldPos = binarySearch(
+            view,
+            change.oldNode.row,
+            schema.compareRows,
+          );
           assert(oldPos >= 0, 'old node does not exist');
           const oldEntry = view[oldPos];
-          const rawPos = binarySearch(view, change.node.row, schema.compareRows);
+          const rawPos = binarySearch(
+            view,
+            change.node.row,
+            schema.compareRows,
+          );
           const found = rawPos >= 0;
           const pos = found ? rawPos : ~rawPos;
           // A special case:
@@ -455,7 +463,11 @@ export function applyChangeInternal<M extends Mutate>(
           }
         } else {
           // Sort key unchanged: edit in place
-          const pos = binarySearch(view, change.oldNode.row, schema.compareRows);
+          const pos = binarySearch(
+            view,
+            change.oldNode.row,
+            schema.compareRows,
+          );
           assert(pos >= 0, 'node does not exist');
           const newEntry = applyEdit(
             view[pos],
@@ -594,7 +606,11 @@ function initializeRelationshipsForNewEntryIfAny(
           withIDs,
           1,
         );
-        const rawPos = binarySearch(childArray, childNode.row, childSchema.compareRows);
+        const rawPos = binarySearch(
+          childArray,
+          childNode.row,
+          childSchema.compareRows,
+        );
 
         if (rawPos >= 0) {
           childArray[rawPos][refCountSymbol]++;
