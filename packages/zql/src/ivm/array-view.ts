@@ -139,6 +139,11 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
         this.#schema,
         '',
         this.#format,
+        false /* withIDs */,
+        true /* mutate: #root is freshly created and not yet observed by any
+                 consumer, so build it in place to avoid O(N^2) array copies.
+                 Every later push() is immutable, preserving reference
+                 stability for unchanged subtrees. */,
       );
     }
     this.flush();
