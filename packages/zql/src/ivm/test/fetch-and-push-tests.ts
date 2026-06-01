@@ -112,7 +112,7 @@ export function runPushTest(t: PushTest) {
     data = v;
   });
 
-  // Note: With eager expansion of relationship generators at push time,
+  // Note: With lazy relationship generators evaluated on demand,
   // ArrayView and Catch may produce different fetch logs since they
   // iterate generators independently. We no longer compare logs.
   // The important invariant is that they produce the same storage state.
