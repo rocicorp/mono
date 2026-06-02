@@ -30,6 +30,13 @@ test('slow queries are logged', () => {
   }
 
   expect(sink.messages).toEqual([
+    // case_sensitive_like pragma, set in the Database constructor.
+    [
+      'warn',
+      {class: 'Database', path: ':memory:', method: 'pragma'},
+      ['Slow SQLite query', 0],
+    ],
+    // page_size pragma, also read in the constructor.
     [
       'warn',
       {class: 'Database', path: ':memory:', method: 'pragma'},

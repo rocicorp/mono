@@ -3,7 +3,12 @@ import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
 import type {SchemaValue} from '../../zero-schema/src/table-schema.ts';
 import {Database} from './db.ts';
 import {format} from './internal/sql.ts';
-import {buildSelectQuery, multiConstraintToSQL} from './query-builder.ts';
+import {
+  buildSelectQuery,
+  filtersToSQL,
+  multiConstraintToSQL,
+  type NoSubqueryCondition,
+} from './query-builder.ts';
 
 test('non-nullable cursor columns use range and equality operators without IS NULL guards', () => {
   const columns = {
@@ -257,4 +262,43 @@ test('multiConstraints compound row-value IN uses index (EXPLAIN QUERY PLAN)', (
     .map(r => r.detail)
     .join('\n');
   expect(plan).toMatch(/SEARCH pairs USING/);
+});
+
+function likeSQL(
+  op: 'LIKE' | 'NOT LIKE' | 'ILIKE' | 'NOT ILIKE',
+  pattern: string,
+) {
+  return format(
+    filtersToSQL({
+      type: 'simple',
+      left: {type: 'column', name: 'name'},
+      op,
+      right: {type: 'literal', value: pattern},
+    } as NoSubqueryCondition),
+  );
+}
+
+test('LIKE is case-sensitive and uses an explicit backslash escape', () => {
+  const {text, values} = likeSQL('LIKE', 'a%');
+  // Bare LIKE operator; case-sensitivity comes from PRAGMA case_sensitive_like.
+  expect(text).toBe(`"name" LIKE ? ESCAPE '\\'`);
+  expect(values).toEqual(['a%']);
+});
+
+test('NOT LIKE keeps the operator and the backslash escape', () => {
+  const {text, values} = likeSQL('NOT LIKE', 'a%');
+  expect(text).toBe(`"name" NOT LIKE ? ESCAPE '\\'`);
+  expect(values).toEqual(['a%']);
+});
+
+test('ILIKE lowers both operands for Unicode case-insensitive matching', () => {
+  const {text, values} = likeSQL('ILIKE', 'A%');
+  expect(text).toBe(`lower("name") LIKE lower(?) ESCAPE '\\'`);
+  expect(values).toEqual(['A%']);
+});
+
+test('NOT ILIKE lowers both operands and negates', () => {
+  const {text, values} = likeSQL('NOT ILIKE', 'A%');
+  expect(text).toBe(`lower("name") NOT LIKE lower(?) ESCAPE '\\'`);
+  expect(values).toEqual(['A%']);
 });
