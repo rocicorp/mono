@@ -1,3 +1,4 @@
+import {assert} from '../../../shared/src/asserts.ts';
 /* oxlint-disable @typescript-eslint/no-explicit-any */
 import {must} from '../../../shared/src/must.ts';
 import {
@@ -35,23 +36,20 @@ export type ParameterReference = {
 export function encodeFilterValue(
   value: ParameterReference | LiteralValue | undefined,
   column: SchemaValue | undefined,
+  op: SimpleOperator,
 ): ParameterReference | LiteralValue | undefined {
-  if (
-    value === null ||
-    value === undefined ||
-    column === undefined ||
-    isParameterReference(value)
-  ) {
+  // oxlint-disable-next-line eqeqeq
+  if (value == null || column === undefined || isParameterReference(value)) {
     return value;
   }
   const codec = getCodec(column);
   if (!codec) {
     return value;
   }
-  if (Array.isArray(value)) {
-    return value.map(v =>
-      v === null || v === undefined ? v : (codec.encode(v) as LiteralValue),
-    );
+  if (op === 'IN' || op === 'NOT IN') {
+    assert(Array.isArray(value), `Expected array value for operator ${op}`);
+    // oxlint-disable-next-line eqeqeq
+    return value.map(v => (v == null ? v : (codec.encode(v) as LiteralValue)));
   }
   return codec.encode(value) as LiteralValue;
 }
@@ -140,13 +138,14 @@ export class ExpressionBuilder<
         encodeFilterValue(
           opOrValue as ParameterReference | LiteralValue | undefined,
           column,
+          '=',
         ),
       );
     }
     return cmp(
       field,
       opOrValue as SimpleOperator,
-      encodeFilterValue(value, column),
+      encodeFilterValue(value, column, opOrValue as SimpleOperator),
     );
   }
 

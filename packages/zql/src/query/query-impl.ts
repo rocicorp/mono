@@ -374,13 +374,13 @@ export class QueryImpl<
       if (arguments.length === 2) {
         cond = cmp(
           fieldOrExpressionFactory,
-          encodeFilterValue(opOrValue, column),
+          encodeFilterValue(opOrValue, column, '='),
         );
       } else {
         cond = cmp(
           fieldOrExpressionFactory,
           opOrValue as SimpleOperator,
-          encodeFilterValue(value, column),
+          encodeFilterValue(value, column, opOrValue as SimpleOperator),
         );
       }
     }
