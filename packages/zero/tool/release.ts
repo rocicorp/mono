@@ -116,13 +116,9 @@ async function main() {
       process.chdir(gitRoot);
     } else {
       const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'zero-build-'));
-      console.log(`Cloning repo to ${tempDir}...`);
-      execute(`git clone --local ${gitRoot} ${tempDir}`);
+      console.log(`Creating temp worktree at ${tempDir}...`);
+      execute(`git worktree add --detach ${tempDir} ${localRefHash}`);
       process.chdir(tempDir);
-      const remoteUrl = execute(`git -C ${gitRoot} remote get-url ${remote}`, {
-        stdio: 'pipe',
-      });
-      execute(`git remote set-url origin ${remoteUrl}`);
     }
 
     execute(`git fetch ${remote} --tags`);

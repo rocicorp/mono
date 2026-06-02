@@ -101,7 +101,7 @@ test('runAst always returns vendedRowCounts regardless of vendedRows option', as
       "afterPermissions": undefined,
       "dbScansByQuery": {},
       "elapsed": 13,
-      "end": 1017,
+      "end": 1019,
       "readRowCount": 2,
       "readRowCountsByQuery": {
         "users": {
@@ -110,7 +110,7 @@ test('runAst always returns vendedRowCounts regardless of vendedRows option', as
       },
       "readRows": undefined,
       "sqlitePlans": {},
-      "start": 1004,
+      "start": 1006,
       "syncedRowCount": 0,
       "syncedRows": undefined,
       "warnings": [],
@@ -138,7 +138,7 @@ test('runAst always returns vendedRowCounts regardless of vendedRows option', as
       "afterPermissions": undefined,
       "dbScansByQuery": {},
       "elapsed": 13,
-      "end": 1031,
+      "end": 1033,
       "readRowCount": 2,
       "readRowCountsByQuery": {
         "users": {
@@ -160,7 +160,7 @@ test('runAst always returns vendedRowCounts regardless of vendedRows option', as
         },
       },
       "sqlitePlans": {},
-      "start": 1018,
+      "start": 1020,
       "syncedRowCount": 0,
       "syncedRows": undefined,
       "warnings": [],
@@ -188,7 +188,7 @@ test('runAst always returns vendedRowCounts regardless of vendedRows option', as
       "afterPermissions": undefined,
       "dbScansByQuery": {},
       "elapsed": 13,
-      "end": 1045,
+      "end": 1047,
       "readRowCount": 2,
       "readRowCountsByQuery": {
         "users": {
@@ -197,7 +197,7 @@ test('runAst always returns vendedRowCounts regardless of vendedRows option', as
       },
       "readRows": undefined,
       "sqlitePlans": {},
-      "start": 1032,
+      "start": 1034,
       "syncedRowCount": 0,
       "syncedRows": undefined,
       "warnings": [],
@@ -236,12 +236,12 @@ test('runAst returns empty object for vendedRowCounts when no debug tracking', a
       "afterPermissions": undefined,
       "dbScansByQuery": {},
       "elapsed": 13,
-      "end": 1017,
+      "end": 1019,
       "readRowCount": 0,
       "readRowCountsByQuery": {},
       "readRows": undefined,
       "sqlitePlans": {},
-      "start": 1004,
+      "start": 1006,
       "syncedRowCount": 0,
       "syncedRows": undefined,
       "warnings": [],
@@ -280,7 +280,7 @@ test('runAst basic structure and functionality', async () => {
       "afterPermissions": undefined,
       "dbScansByQuery": {},
       "elapsed": 13,
-      "end": 1017,
+      "end": 1019,
       "readRowCount": 2,
       "readRowCountsByQuery": {
         "users": {
@@ -289,7 +289,7 @@ test('runAst basic structure and functionality', async () => {
       },
       "readRows": undefined,
       "sqlitePlans": {},
-      "start": 1004,
+      "start": 1006,
       "syncedRowCount": 0,
       "syncedRows": undefined,
       "warnings": [],
