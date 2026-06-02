@@ -187,6 +187,14 @@ test('null compare', async () => {
         "owner_id": "0001",
         "title": "issue 1",
         Symbol(rc): 1,
+        Symbol(encodedRow): {
+          "closed": false,
+          "createdAt": null,
+          "description": "description 1",
+          "id": "0001",
+          "owner_id": "0001",
+          "title": "issue 1",
+        },
       },
       {
         "closed": false,
@@ -196,6 +204,14 @@ test('null compare', async () => {
         "owner_id": "0002",
         "title": "issue 2",
         Symbol(rc): 1,
+        Symbol(encodedRow): {
+          "closed": false,
+          "createdAt": null,
+          "description": "description 2",
+          "id": "0002",
+          "owner_id": "0002",
+          "title": "issue 2",
+        },
       },
     ]
   `);
