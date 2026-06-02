@@ -155,10 +155,18 @@ suite('EXISTS 1 to many', () => {
               "id": "i2",
               "title": "issue 2",
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "i2",
+                "title": "issue 2",
+              },
             },
           ],
           "issueID": "i2",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "c4",
+            "issueID": "i2",
+          },
         },
       ]
     `);
@@ -462,11 +470,20 @@ suite('EXISTS', () => {
               "issueID": "i1",
               "text": "i1 c1 text",
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "c1",
+                "issueID": "i1",
+                "text": "i1 c1 text",
+              },
             },
           ],
           "id": "i1",
           "text": "first issue",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i1",
+            "text": "first issue",
+          },
         },
         {
           "comments": [
@@ -475,17 +492,31 @@ suite('EXISTS', () => {
               "issueID": "i3",
               "text": "i3 c2 text",
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "c2",
+                "issueID": "i3",
+                "text": "i3 c2 text",
+              },
             },
             {
               "id": "c3",
               "issueID": "i3",
               "text": "i3 c3 text",
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "c3",
+                "issueID": "i3",
+                "text": "i3 c3 text",
+              },
             },
           ],
           "id": "i3",
           "text": "third issue",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i3",
+            "text": "third issue",
+          },
         },
       ]
     `);
@@ -525,11 +556,20 @@ suite('EXISTS', () => {
               "issueID": "i1",
               "text": "i1 c1 text",
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "c1",
+                "issueID": "i1",
+                "text": "i1 c1 text",
+              },
             },
           ],
           "id": "i1",
           "text": "first issue",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i1",
+            "text": "first issue",
+          },
         },
         {
           "comments": [
@@ -538,17 +578,31 @@ suite('EXISTS', () => {
               "issueID": "i3",
               "text": "i3 c2 text",
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "c2",
+                "issueID": "i3",
+                "text": "i3 c2 text",
+              },
             },
             {
               "id": "c3",
               "issueID": "i3",
               "text": "i3 c3 text",
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "c3",
+                "issueID": "i3",
+                "text": "i3 c3 text",
+              },
             },
           ],
           "id": "i3",
           "text": "third issue",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i3",
+            "text": "third issue",
+          },
         },
         {
           "comments": [
@@ -557,11 +611,20 @@ suite('EXISTS', () => {
               "issueID": "i5",
               "text": "i2 c54 text",
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "c4",
+                "issueID": "i5",
+                "text": "i2 c54 text",
+              },
             },
           ],
           "id": "i5",
           "text": "fifth issue",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i5",
+            "text": "fifth issue",
+          },
         },
       ]
     `);
@@ -634,11 +697,20 @@ suite('EXISTS', () => {
               "issueID": "i1",
               "text": "i1 c1 text",
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "c1",
+                "issueID": "i1",
+                "text": "i1 c1 text",
+              },
             },
           ],
           "id": "i1",
           "text": "first issue",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i1",
+            "text": "first issue",
+          },
         },
         {
           "comments": [
@@ -647,17 +719,31 @@ suite('EXISTS', () => {
               "issueID": "i3",
               "text": "i3 c2 text",
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "c2",
+                "issueID": "i3",
+                "text": "i3 c2 text",
+              },
             },
             {
               "id": "c3",
               "issueID": "i3",
               "text": "i3 c3 text",
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "c3",
+                "issueID": "i3",
+                "text": "i3 c3 text",
+              },
             },
           ],
           "id": "i3",
           "text": "third issue",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i3",
+            "text": "third issue",
+          },
         },
       ]
     `);
@@ -693,17 +779,31 @@ suite('EXISTS', () => {
               "issueID": "i3",
               "text": "i3 c2 text",
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "c2",
+                "issueID": "i3",
+                "text": "i3 c2 text",
+              },
             },
             {
               "id": "c3",
               "issueID": "i3",
               "text": "i3 c3 text",
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "c3",
+                "issueID": "i3",
+                "text": "i3 c3 text",
+              },
             },
           ],
           "id": "i3",
           "text": "third issue",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i3",
+            "text": "third issue",
+          },
         },
       ]
     `);
@@ -783,11 +883,20 @@ suite('EXISTS', () => {
               "issueID": "i1",
               "text": "i1 c1 text",
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "c1",
+                "issueID": "i1",
+                "text": "i1 c1 text",
+              },
             },
           ],
           "id": "i1",
           "text": "first issue",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i1",
+            "text": "first issue",
+          },
         },
         {
           "comments": [
@@ -796,17 +905,31 @@ suite('EXISTS', () => {
               "issueID": "i3",
               "text": "i3 c2 text",
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "c2",
+                "issueID": "i3",
+                "text": "i3 c2 text",
+              },
             },
             {
               "id": "c3",
               "issueID": "i3",
               "text": "i3 c3 text",
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "c3",
+                "issueID": "i3",
+                "text": "i3 c3 text",
+              },
             },
           ],
           "id": "i3",
           "text": "third issue",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i3",
+            "text": "third issue",
+          },
         },
       ]
     `);
@@ -848,11 +971,20 @@ suite('EXISTS', () => {
               "issueID": "i1",
               "text": "i1 c1 text",
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "c1",
+                "issueID": "i1",
+                "text": "i1 c1 text",
+              },
             },
           ],
           "id": "i1",
           "text": "first issue v2",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i1",
+            "text": "first issue v2",
+          },
         },
         {
           "comments": [
@@ -861,17 +993,31 @@ suite('EXISTS', () => {
               "issueID": "i3",
               "text": "i3 c2 text",
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "c2",
+                "issueID": "i3",
+                "text": "i3 c2 text",
+              },
             },
             {
               "id": "c3",
               "issueID": "i3",
               "text": "i3 c3 text",
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "c3",
+                "issueID": "i3",
+                "text": "i3 c3 text",
+              },
             },
           ],
           "id": "i3",
           "text": "third issue",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i3",
+            "text": "third issue",
+          },
         },
       ]
     `);
@@ -941,11 +1087,20 @@ suite('EXISTS', () => {
               "issueID": "i1",
               "text": "i1 c1 text",
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "c1",
+                "issueID": "i1",
+                "text": "i1 c1 text",
+              },
             },
           ],
           "id": "i1",
           "text": "first issue",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i1",
+            "text": "first issue",
+          },
         },
         {
           "comments": [
@@ -954,11 +1109,20 @@ suite('EXISTS', () => {
               "issueID": "i2",
               "text": "i2 c4 text",
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "c4",
+                "issueID": "i2",
+                "text": "i2 c4 text",
+              },
             },
           ],
           "id": "i2",
           "text": "second issue",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i2",
+            "text": "second issue",
+          },
         },
         {
           "comments": [
@@ -967,17 +1131,31 @@ suite('EXISTS', () => {
               "issueID": "i3",
               "text": "i3 c2 text",
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "c2",
+                "issueID": "i3",
+                "text": "i3 c2 text",
+              },
             },
             {
               "id": "c3",
               "issueID": "i3",
               "text": "i3 c3 text",
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "c3",
+                "issueID": "i3",
+                "text": "i3 c3 text",
+              },
             },
           ],
           "id": "i3",
           "text": "third issue",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i3",
+            "text": "third issue",
+          },
         },
       ]
     `);
@@ -1053,17 +1231,31 @@ suite('EXISTS', () => {
               "issueID": "i1",
               "text": "i1 c1 text",
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "c1",
+                "issueID": "i1",
+                "text": "i1 c1 text",
+              },
             },
             {
               "id": "c4",
               "issueID": "i1",
               "text": "i1 c4 text",
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "c4",
+                "issueID": "i1",
+                "text": "i1 c4 text",
+              },
             },
           ],
           "id": "i1",
           "text": "first issue",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i1",
+            "text": "first issue",
+          },
         },
         {
           "comments": [
@@ -1072,17 +1264,31 @@ suite('EXISTS', () => {
               "issueID": "i3",
               "text": "i3 c2 text",
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "c2",
+                "issueID": "i3",
+                "text": "i3 c2 text",
+              },
             },
             {
               "id": "c3",
               "issueID": "i3",
               "text": "i3 c3 text",
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "c3",
+                "issueID": "i3",
+                "text": "i3 c3 text",
+              },
             },
           ],
           "id": "i3",
           "text": "third issue",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i3",
+            "text": "third issue",
+          },
         },
       ]
     `);
@@ -1166,17 +1372,31 @@ suite('EXISTS', () => {
               "issueID": "i3",
               "text": "i3 c2 text",
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "c2",
+                "issueID": "i3",
+                "text": "i3 c2 text",
+              },
             },
             {
               "id": "c3",
               "issueID": "i3",
               "text": "i3 c3 text",
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "c3",
+                "issueID": "i3",
+                "text": "i3 c3 text",
+              },
             },
           ],
           "id": "i3",
           "text": "third issue",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i3",
+            "text": "third issue",
+          },
         },
       ]
     `);
@@ -1252,11 +1472,20 @@ suite('EXISTS', () => {
               "issueID": "i1",
               "text": "i1 c1 text",
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "c1",
+                "issueID": "i1",
+                "text": "i1 c1 text",
+              },
             },
           ],
           "id": "i1",
           "text": "first issue",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i1",
+            "text": "first issue",
+          },
         },
         {
           "comments": [
@@ -1265,11 +1494,20 @@ suite('EXISTS', () => {
               "issueID": "i3",
               "text": "i3 c2 text",
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "c2",
+                "issueID": "i3",
+                "text": "i3 c2 text",
+              },
             },
           ],
           "id": "i3",
           "text": "third issue",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i3",
+            "text": "third issue",
+          },
         },
       ]
     `);
@@ -1356,11 +1594,20 @@ suite('EXISTS', () => {
               "issueID": "i1",
               "text": "i1 c1 text",
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "c1",
+                "issueID": "i1",
+                "text": "i1 c1 text",
+              },
             },
           ],
           "id": "i1",
           "text": "first issue",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i1",
+            "text": "first issue",
+          },
         },
         {
           "comments": [
@@ -1369,17 +1616,31 @@ suite('EXISTS', () => {
               "issueID": "i3",
               "text": "i3 c2 text",
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "c2",
+                "issueID": "i3",
+                "text": "i3 c2 text",
+              },
             },
             {
               "id": "c3",
               "issueID": "i3",
               "text": "i3 c3 text v2",
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "c3",
+                "issueID": "i3",
+                "text": "i3 c3 text v2",
+              },
             },
           ],
           "id": "i3",
           "text": "third issue",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i3",
+            "text": "third issue",
+          },
         },
       ]
     `);
@@ -1473,11 +1734,20 @@ suite('EXISTS', () => {
               "issueID": "i2",
               "text": "i2 c1 text",
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "c1",
+                "issueID": "i2",
+                "text": "i2 c1 text",
+              },
             },
           ],
           "id": "i2",
           "text": "second issue",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i2",
+            "text": "second issue",
+          },
         },
         {
           "comments": [
@@ -1486,17 +1756,31 @@ suite('EXISTS', () => {
               "issueID": "i3",
               "text": "i3 c2 text",
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "c2",
+                "issueID": "i3",
+                "text": "i3 c2 text",
+              },
             },
             {
               "id": "c3",
               "issueID": "i3",
               "text": "i3 c3 text",
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "c3",
+                "issueID": "i3",
+                "text": "i3 c3 text",
+              },
             },
           ],
           "id": "i3",
           "text": "third issue",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i3",
+            "text": "third issue",
+          },
         },
       ]
     `);
@@ -1622,18 +1906,30 @@ suite('NOT EXISTS', () => {
           "id": "i2",
           "text": "second issue",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i2",
+            "text": "second issue",
+          },
         },
         {
           "comments": [],
           "id": "i4",
           "text": "fourth issue",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i4",
+            "text": "fourth issue",
+          },
         },
         {
           "comments": [],
           "id": "i5",
           "text": "fifth issue",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i5",
+            "text": "fifth issue",
+          },
         },
       ]
     `);
@@ -1700,12 +1996,20 @@ suite('NOT EXISTS', () => {
           "id": "i2",
           "text": "second issue",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i2",
+            "text": "second issue",
+          },
         },
         {
           "comments": [],
           "id": "i4",
           "text": "fourth issue",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i4",
+            "text": "fourth issue",
+          },
         },
       ]
     `);
@@ -1740,6 +2044,10 @@ suite('NOT EXISTS', () => {
           "id": "i4",
           "text": "fourth issue",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i4",
+            "text": "fourth issue",
+          },
         },
       ]
     `);
@@ -1803,12 +2111,20 @@ suite('NOT EXISTS', () => {
           "id": "i2",
           "text": "second issue",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i2",
+            "text": "second issue",
+          },
         },
         {
           "comments": [],
           "id": "i4",
           "text": "fourth issue",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i4",
+            "text": "fourth issue",
+          },
         },
       ]
     `);
@@ -1850,12 +2166,20 @@ suite('NOT EXISTS', () => {
           "id": "i2",
           "text": "second issue v2",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i2",
+            "text": "second issue v2",
+          },
         },
         {
           "comments": [],
           "id": "i4",
           "text": "fourth issue",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i4",
+            "text": "fourth issue",
+          },
         },
       ]
     `);
@@ -1927,12 +2251,20 @@ suite('NOT EXISTS', () => {
           "id": "i2",
           "text": "second issue",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i2",
+            "text": "second issue",
+          },
         },
         {
           "comments": [],
           "id": "i4",
           "text": "fourth issue",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i4",
+            "text": "fourth issue",
+          },
         },
       ]
     `);
@@ -1970,6 +2302,10 @@ suite('NOT EXISTS', () => {
           "id": "i4",
           "text": "fourth issue",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i4",
+            "text": "fourth issue",
+          },
         },
       ]
     `);
@@ -2035,12 +2371,20 @@ suite('NOT EXISTS', () => {
           "id": "i2",
           "text": "second issue",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i2",
+            "text": "second issue",
+          },
         },
         {
           "comments": [],
           "id": "i4",
           "text": "fourth issue",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i4",
+            "text": "fourth issue",
+          },
         },
       ]
     `);
@@ -2078,18 +2422,30 @@ suite('NOT EXISTS', () => {
           "id": "i1",
           "text": "first issue",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i1",
+            "text": "first issue",
+          },
         },
         {
           "comments": [],
           "id": "i2",
           "text": "second issue",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i2",
+            "text": "second issue",
+          },
         },
         {
           "comments": [],
           "id": "i4",
           "text": "fourth issue",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i4",
+            "text": "fourth issue",
+          },
         },
       ]
     `);
@@ -2155,12 +2511,20 @@ suite('NOT EXISTS', () => {
           "id": "i2",
           "text": "second issue",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i2",
+            "text": "second issue",
+          },
         },
         {
           "comments": [],
           "id": "i4",
           "text": "fourth issue",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i4",
+            "text": "fourth issue",
+          },
         },
       ]
     `);
@@ -2201,12 +2565,20 @@ suite('NOT EXISTS', () => {
           "id": "i2",
           "text": "second issue",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i2",
+            "text": "second issue",
+          },
         },
         {
           "comments": [],
           "id": "i4",
           "text": "fourth issue",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i4",
+            "text": "fourth issue",
+          },
         },
       ]
     `);
@@ -2247,12 +2619,20 @@ suite('NOT EXISTS', () => {
           "id": "i1",
           "text": "first issue",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i1",
+            "text": "first issue",
+          },
         },
         {
           "comments": [],
           "id": "i4",
           "text": "fourth issue",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i4",
+            "text": "fourth issue",
+          },
         },
       ]
     `);

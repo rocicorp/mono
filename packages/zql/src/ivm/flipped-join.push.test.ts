@@ -216,10 +216,17 @@ suite('push one:many', () => {
               "id": "c1",
               "issueID": "i1",
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "c1",
+                "issueID": "i1",
+              },
             },
           ],
           "id": "i1",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i1",
+          },
         },
       ]
     `);
@@ -314,15 +321,26 @@ suite('push one:many', () => {
               "id": "c1",
               "issueID": "i1",
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "c1",
+                "issueID": "i1",
+              },
             },
             {
               "id": "c2",
               "issueID": "i1",
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "c2",
+                "issueID": "i1",
+              },
             },
           ],
           "id": "i1",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i1",
+          },
         },
       ]
     `);
@@ -462,10 +480,17 @@ suite('push one:many', () => {
               "id": "c1",
               "issueID": "i1",
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "c1",
+                "issueID": "i1",
+              },
             },
           ],
           "id": "i1",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i1",
+          },
         },
       ]
     `);
@@ -1166,17 +1191,31 @@ suite('push one:many', () => {
                 "issueID": "i1",
                 "text": "comment 1",
                 Symbol(rc): 1,
+                Symbol(encodedRow): {
+                  "id": "c1",
+                  "issueID": "i1",
+                  "text": "comment 1",
+                },
               },
               {
                 "id": "c2",
                 "issueID": "i1",
                 "text": "comment 2",
                 Symbol(rc): 1,
+                Symbol(encodedRow): {
+                  "id": "c2",
+                  "issueID": "i1",
+                  "text": "comment 2",
+                },
               },
             ],
             "id": "i1",
             "text": "issue 1 edited",
             Symbol(rc): 1,
+            Symbol(encodedRow): {
+              "id": "i1",
+              "text": "issue 1 edited",
+            },
           },
         ]
       `);
@@ -1284,17 +1323,31 @@ suite('push one:many', () => {
                 "issueID": "i1",
                 "text": "comment 1 edited",
                 Symbol(rc): 1,
+                Symbol(encodedRow): {
+                  "id": "c1",
+                  "issueID": "i1",
+                  "text": "comment 1 edited",
+                },
               },
               {
                 "id": "c2",
                 "issueID": "i1",
                 "text": "comment 2",
                 Symbol(rc): 1,
+                Symbol(encodedRow): {
+                  "id": "c2",
+                  "issueID": "i1",
+                  "text": "comment 2",
+                },
               },
             ],
             "id": "i1",
             "text": "issue 1",
             Symbol(rc): 1,
+            Symbol(encodedRow): {
+              "id": "i1",
+              "text": "issue 1",
+            },
           },
         ]
       `);
@@ -1457,11 +1510,20 @@ suite('push one:many', () => {
                 "issueID": "i1",
                 "text": "comment 2",
                 Symbol(rc): 1,
+                Symbol(encodedRow): {
+                  "id": "c2",
+                  "issueID": "i1",
+                  "text": "comment 2",
+                },
               },
             ],
             "id": "i1",
             "text": "issue 1",
             Symbol(rc): 1,
+            Symbol(encodedRow): {
+              "id": "i1",
+              "text": "issue 1",
+            },
           },
           {
             "comments": [
@@ -1470,11 +1532,20 @@ suite('push one:many', () => {
                 "issueID": "i2",
                 "text": "comment 1.2",
                 Symbol(rc): 1,
+                Symbol(encodedRow): {
+                  "id": "c1",
+                  "issueID": "i2",
+                  "text": "comment 1.2",
+                },
               },
             ],
             "id": "i2",
             "text": "issue 2",
             Symbol(rc): 1,
+            Symbol(encodedRow): {
+              "id": "i2",
+              "text": "issue 2",
+            },
           },
         ]
       `);
@@ -1647,11 +1718,20 @@ suite('push one:many', () => {
                 "issueID": "i2",
                 "text": "comment 2",
                 Symbol(rc): 1,
+                Symbol(encodedRow): {
+                  "id": "c2",
+                  "issueID": "i2",
+                  "text": "comment 2",
+                },
               },
             ],
             "id": "i2",
             "text": "issue 2",
             Symbol(rc): 1,
+            Symbol(encodedRow): {
+              "id": "i2",
+              "text": "issue 2",
+            },
           },
           {
             "comments": [
@@ -1660,11 +1740,20 @@ suite('push one:many', () => {
                 "issueID": "i3",
                 "text": "comment 3",
                 Symbol(rc): 1,
+                Symbol(encodedRow): {
+                  "id": "c3",
+                  "issueID": "i3",
+                  "text": "comment 3",
+                },
               },
             ],
             "id": "i3",
             "text": "issue 1.3",
             Symbol(rc): 1,
+            Symbol(encodedRow): {
+              "id": "i3",
+              "text": "issue 1.3",
+            },
           },
         ]
       `);
@@ -1828,9 +1917,16 @@ suite('push many:one', () => {
           "owner": {
             "id": "u1",
             Symbol(rc): 1,
+            Symbol(encodedRow): {
+              "id": "u1",
+            },
           },
           "ownerID": "u1",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i1",
+            "ownerID": "u1",
+          },
         },
       ]
     `);
@@ -1963,9 +2059,16 @@ suite('push many:one', () => {
           "owner": {
             "id": "u1",
             Symbol(rc): 1,
+            Symbol(encodedRow): {
+              "id": "u1",
+            },
           },
           "ownerID": "u1",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i1",
+            "ownerID": "u1",
+          },
         },
       ]
     `);
@@ -2080,18 +2183,32 @@ suite('push many:one', () => {
           "owner": {
             "id": "u1",
             Symbol(rc): 1,
+            Symbol(encodedRow): {
+              "id": "u1",
+            },
           },
           "ownerID": "u1",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i1",
+            "ownerID": "u1",
+          },
         },
         {
           "id": "i2",
           "owner": {
             "id": "u1",
             Symbol(rc): 1,
+            Symbol(encodedRow): {
+              "id": "u1",
+            },
           },
           "ownerID": "u1",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i2",
+            "ownerID": "u1",
+          },
         },
       ]
     `);
@@ -2275,10 +2392,19 @@ suite('push many:one', () => {
               "id": "u1",
               "text": "user 1",
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "u1",
+                "text": "user 1",
+              },
             },
             "ownerID": "u1",
             "text": "item 1",
             Symbol(rc): 1,
+            Symbol(encodedRow): {
+              "id": "i1",
+              "ownerID": "u1",
+              "text": "item 1",
+            },
           },
           {
             "id": "i2",
@@ -2286,10 +2412,19 @@ suite('push many:one', () => {
               "id": "u1",
               "text": "user 1",
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "u1",
+                "text": "user 1",
+              },
             },
             "ownerID": "u1",
             "text": "item 2",
             Symbol(rc): 1,
+            Symbol(encodedRow): {
+              "id": "i2",
+              "ownerID": "u1",
+              "text": "item 2",
+            },
           },
         ]
       `);
@@ -2652,12 +2787,21 @@ suite('push many:one', () => {
                     "id": "c1",
                     "issueID": "i1",
                     Symbol(rc): 1,
+                    Symbol(encodedRow): {
+                      "id": "c1",
+                      "issueID": "i1",
+                    },
                   },
                 ],
                 "id": "i1",
                 "ownerID": "u1",
                 "text": "item 1",
                 Symbol(rc): 1,
+                Symbol(encodedRow): {
+                  "id": "i1",
+                  "ownerID": "u1",
+                  "text": "item 1",
+                },
               },
               {
                 "comments": [
@@ -2665,16 +2809,29 @@ suite('push many:one', () => {
                     "id": "c2",
                     "issueID": "i2",
                     Symbol(rc): 1,
+                    Symbol(encodedRow): {
+                      "id": "c2",
+                      "issueID": "i2",
+                    },
                   },
                 ],
                 "id": "i2",
                 "ownerID": "u1",
                 "text": "item 2",
                 Symbol(rc): 1,
+                Symbol(encodedRow): {
+                  "id": "i2",
+                  "ownerID": "u1",
+                  "text": "item 2",
+                },
               },
             ],
             "text": "user 1",
             Symbol(rc): 1,
+            Symbol(encodedRow): {
+              "id": "u1",
+              "text": "user 1",
+            },
           },
         ]
       `);
@@ -2909,10 +3066,19 @@ suite('push many:one', () => {
               "id": "u1",
               "text": "user 1 changed",
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "u1",
+                "text": "user 1 changed",
+              },
             },
             "ownerID": "u1",
             "text": "item 1",
             Symbol(rc): 1,
+            Symbol(encodedRow): {
+              "id": "i1",
+              "ownerID": "u1",
+              "text": "item 1",
+            },
           },
           {
             "id": "i2",
@@ -2920,10 +3086,19 @@ suite('push many:one', () => {
               "id": "u1",
               "text": "user 1 changed",
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "u1",
+                "text": "user 1 changed",
+              },
             },
             "ownerID": "u1",
             "text": "item 2",
             Symbol(rc): 1,
+            Symbol(encodedRow): {
+              "id": "i2",
+              "ownerID": "u1",
+              "text": "item 2",
+            },
           },
         ]
       `);
@@ -3170,13 +3345,24 @@ suite('push one:many:many', () => {
                   "commentID": "c1",
                   "id": "r1",
                   Symbol(rc): 1,
+                  Symbol(encodedRow): {
+                    "commentID": "c1",
+                    "id": "r1",
+                  },
                 },
               ],
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "c1",
+                "issueID": "i1",
+              },
             },
           ],
           "id": "i1",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i1",
+          },
         },
       ]
     `);
@@ -3334,13 +3520,24 @@ suite('push one:many:many', () => {
                   "commentID": "c1",
                   "id": "r1",
                   Symbol(rc): 1,
+                  Symbol(encodedRow): {
+                    "commentID": "c1",
+                    "id": "r1",
+                  },
                 },
               ],
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "c1",
+                "issueID": "i1",
+              },
             },
           ],
           "id": "i1",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i1",
+          },
         },
       ]
     `);
@@ -3489,13 +3686,24 @@ suite('push one:many:many', () => {
                   "commentID": "c1",
                   "id": "r1",
                   Symbol(rc): 1,
+                  Symbol(encodedRow): {
+                    "commentID": "c1",
+                    "id": "r1",
+                  },
                 },
               ],
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "c1",
+                "issueID": "i1",
+              },
             },
           ],
           "id": "i1",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i1",
+          },
         },
       ]
     `);
@@ -3863,11 +4071,21 @@ suite('push one:many:one', () => {
               "labels": {
                 "id": "l1",
                 Symbol(rc): 1,
+                Symbol(encodedRow): {
+                  "id": "l1",
+                },
               },
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "issueID": "i1",
+                "labelID": "l1",
+              },
             },
           ],
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i1",
+          },
         },
       ]
     `);
@@ -4025,11 +4243,21 @@ suite('push one:many:one', () => {
               "labels": {
                 "id": "l1",
                 Symbol(rc): 1,
+                Symbol(encodedRow): {
+                  "id": "l1",
+                },
               },
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "issueID": "i1",
+                "labelID": "l1",
+              },
             },
           ],
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i1",
+          },
         },
       ]
     `);
@@ -4256,11 +4484,21 @@ suite('push one:many:one', () => {
               "labels": {
                 "id": "l1",
                 Symbol(rc): 1,
+                Symbol(encodedRow): {
+                  "id": "l1",
+                },
               },
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "issueID": "i1",
+                "labelID": "l1",
+              },
             },
           ],
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i1",
+          },
         },
         {
           "id": "i2",
@@ -4271,11 +4509,21 @@ suite('push one:many:one', () => {
               "labels": {
                 "id": "l1",
                 Symbol(rc): 1,
+                Symbol(encodedRow): {
+                  "id": "l1",
+                },
               },
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "issueID": "i2",
+                "labelID": "l1",
+              },
             },
           ],
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i2",
+          },
         },
       ]
     `);
@@ -4546,6 +4794,10 @@ describe('edit assignee', () => {
               "name": "user 1",
               "userID": "u1",
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "name": "user 1",
+                "userID": "u1",
+              },
             },
           ],
           "creatorID": "u1",
@@ -4554,11 +4806,21 @@ describe('edit assignee', () => {
               "name": "user 1",
               "userID": "u1",
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "name": "user 1",
+                "userID": "u1",
+              },
             },
           ],
           "issueID": "i1",
           "text": "first issue",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "assigneeID": "u1",
+            "creatorID": "u1",
+            "issueID": "i1",
+            "text": "first issue",
+          },
         },
         {
           "assigneeID": "u2",
@@ -4567,6 +4829,10 @@ describe('edit assignee', () => {
               "name": "user 2",
               "userID": "u2",
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "name": "user 2",
+                "userID": "u2",
+              },
             },
           ],
           "creatorID": "u2",
@@ -4575,11 +4841,21 @@ describe('edit assignee', () => {
               "name": "user 2",
               "userID": "u2",
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "name": "user 2",
+                "userID": "u2",
+              },
             },
           ],
           "issueID": "i2",
           "text": "second issue",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "assigneeID": "u2",
+            "creatorID": "u2",
+            "issueID": "i2",
+            "text": "second issue",
+          },
         },
       ]
     `);
@@ -4852,12 +5128,22 @@ describe('edit assignee', () => {
               "name": "user 1",
               "userID": "u1",
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": 1,
+                "name": "user 1",
+                "userID": "u1",
+              },
             },
             {
               "id": 1.5,
               "name": "user 1.5",
               "userID": "u1",
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": 1.5,
+                "name": "user 1.5",
+                "userID": "u1",
+              },
             },
           ],
           "creatorID": "u1",
@@ -4867,17 +5153,33 @@ describe('edit assignee', () => {
               "name": "user 1",
               "userID": "u1",
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": 1,
+                "name": "user 1",
+                "userID": "u1",
+              },
             },
             {
               "id": 1.5,
               "name": "user 1.5",
               "userID": "u1",
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": 1.5,
+                "name": "user 1.5",
+                "userID": "u1",
+              },
             },
           ],
           "issueID": "i1",
           "text": "first issue",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "assigneeID": "u1",
+            "creatorID": "u1",
+            "issueID": "i1",
+            "text": "first issue",
+          },
         },
         {
           "assigneeID": "u2",
@@ -4887,6 +5189,11 @@ describe('edit assignee', () => {
               "name": "user 2",
               "userID": "u2",
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": 2,
+                "name": "user 2",
+                "userID": "u2",
+              },
             },
           ],
           "creatorID": "u2",
@@ -4896,11 +5203,22 @@ describe('edit assignee', () => {
               "name": "user 2",
               "userID": "u2",
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": 2,
+                "name": "user 2",
+                "userID": "u2",
+              },
             },
           ],
           "issueID": "i2",
           "text": "second issue",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "assigneeID": "u2",
+            "creatorID": "u2",
+            "issueID": "i2",
+            "text": "second issue",
+          },
         },
       ]
     `);
@@ -5128,6 +5446,10 @@ describe('edit assignee', () => {
               "name": "user 2",
               "userID": "u2",
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "name": "user 2",
+                "userID": "u2",
+              },
             },
           ],
           "creatorID": "u2",
@@ -5136,11 +5458,21 @@ describe('edit assignee', () => {
               "name": "user 2",
               "userID": "u2",
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "name": "user 2",
+                "userID": "u2",
+              },
             },
           ],
           "issueID": "i2",
           "text": "second issue",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "assigneeID": "u2",
+            "creatorID": "u2",
+            "issueID": "i2",
+            "text": "second issue",
+          },
         },
       ]
     `);
@@ -5414,6 +5746,11 @@ describe('edit assignee', () => {
               "name": "user 2",
               "userID": "u2",
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": 2,
+                "name": "user 2",
+                "userID": "u2",
+              },
             },
           ],
           "creatorID": "u2",
@@ -5423,11 +5760,22 @@ describe('edit assignee', () => {
               "name": "user 2",
               "userID": "u2",
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": 2,
+                "name": "user 2",
+                "userID": "u2",
+              },
             },
           ],
           "issueID": "i2",
           "text": "second issue",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "assigneeID": "u2",
+            "creatorID": "u2",
+            "issueID": "i2",
+            "text": "second issue",
+          },
         },
       ]
     `);
@@ -5701,10 +6049,22 @@ describe('joins with compound join keys', () => {
               "b3": 3,
               "id": 0,
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "b1": 2,
+                "b2": 1,
+                "b3": 3,
+                "id": 0,
+              },
             },
           ],
           "id": 0,
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "a1": 1,
+            "a2": 2,
+            "a3": 3,
+            "id": 0,
+          },
         },
         {
           "a1": 4,
@@ -5717,10 +6077,22 @@ describe('joins with compound join keys', () => {
               "b3": 6,
               "id": 1,
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "b1": 5,
+                "b2": 4,
+                "b3": 6,
+                "id": 1,
+              },
             },
           ],
           "id": 1,
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "a1": 4,
+            "a2": 5,
+            "a3": 6,
+            "id": 1,
+          },
         },
         {
           "a1": 7,
@@ -5733,10 +6105,22 @@ describe('joins with compound join keys', () => {
               "b3": 9,
               "id": 2,
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "b1": 8,
+                "b2": 7,
+                "b3": 9,
+                "id": 2,
+              },
             },
           ],
           "id": 2,
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "a1": 7,
+            "a2": 8,
+            "a3": 9,
+            "id": 2,
+          },
         },
       ]
     `);
@@ -5877,10 +6261,22 @@ describe('joins with compound join keys', () => {
               "b3": 3,
               "id": 0,
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "b1": 2,
+                "b2": 1,
+                "b3": 3,
+                "id": 0,
+              },
             },
           ],
           "id": 0,
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "a1": 1,
+            "a2": 2,
+            "a3": 33,
+            "id": 0,
+          },
         },
         {
           "a1": 4,
@@ -5893,10 +6289,22 @@ describe('joins with compound join keys', () => {
               "b3": 6,
               "id": 1,
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "b1": 5,
+                "b2": 4,
+                "b3": 6,
+                "id": 1,
+              },
             },
           ],
           "id": 1,
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "a1": 4,
+            "a2": 5,
+            "a3": 6,
+            "id": 1,
+          },
         },
       ]
     `);
@@ -6118,9 +6526,17 @@ suite('test overlay on many:one pushes', () => {
             "id": "u0",
             "name": "Fritz",
             Symbol(rc): 1,
+            Symbol(encodedRow): {
+              "id": "u0",
+              "name": "Fritz",
+            },
           },
           "ownerID": "u0",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i0",
+            "ownerID": "u0",
+          },
         },
         {
           "id": "i1",
@@ -6128,9 +6544,17 @@ suite('test overlay on many:one pushes', () => {
             "id": "u1",
             "name": "Aaron",
             Symbol(rc): 1,
+            Symbol(encodedRow): {
+              "id": "u1",
+              "name": "Aaron",
+            },
           },
           "ownerID": "u1",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i1",
+            "ownerID": "u1",
+          },
         },
         {
           "id": "i2",
@@ -6138,9 +6562,17 @@ suite('test overlay on many:one pushes', () => {
             "id": "u1",
             "name": "Aaron",
             Symbol(rc): 1,
+            Symbol(encodedRow): {
+              "id": "u1",
+              "name": "Aaron",
+            },
           },
           "ownerID": "u1",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i2",
+            "ownerID": "u1",
+          },
         },
         {
           "id": "i3",
@@ -6148,9 +6580,17 @@ suite('test overlay on many:one pushes', () => {
             "id": "u2",
             "name": "Arv",
             Symbol(rc): 1,
+            Symbol(encodedRow): {
+              "id": "u2",
+              "name": "Arv",
+            },
           },
           "ownerID": "u2",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i3",
+            "ownerID": "u2",
+          },
         },
       ]
     `);
@@ -6422,9 +6862,17 @@ suite('test overlay on many:one pushes', () => {
             "id": "u0",
             "name": "Fritz",
             Symbol(rc): 1,
+            Symbol(encodedRow): {
+              "id": "u0",
+              "name": "Fritz",
+            },
           },
           "ownerID": "u0",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i0",
+            "ownerID": "u0",
+          },
         },
         {
           "id": "i3",
@@ -6432,9 +6880,17 @@ suite('test overlay on many:one pushes', () => {
             "id": "u2",
             "name": "Arv",
             Symbol(rc): 1,
+            Symbol(encodedRow): {
+              "id": "u2",
+              "name": "Arv",
+            },
           },
           "ownerID": "u2",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i3",
+            "ownerID": "u2",
+          },
         },
       ]
     `);
@@ -6711,9 +7167,17 @@ suite('test overlay on many:one pushes', () => {
             "id": "u0",
             "name": "Fritz",
             Symbol(rc): 1,
+            Symbol(encodedRow): {
+              "id": "u0",
+              "name": "Fritz",
+            },
           },
           "ownerID": "u0",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i0",
+            "ownerID": "u0",
+          },
         },
         {
           "id": "i1",
@@ -6721,9 +7185,17 @@ suite('test overlay on many:one pushes', () => {
             "id": "u1",
             "name": "Boogs",
             Symbol(rc): 1,
+            Symbol(encodedRow): {
+              "id": "u1",
+              "name": "Boogs",
+            },
           },
           "ownerID": "u1",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i1",
+            "ownerID": "u1",
+          },
         },
         {
           "id": "i2",
@@ -6731,9 +7203,17 @@ suite('test overlay on many:one pushes', () => {
             "id": "u1",
             "name": "Boogs",
             Symbol(rc): 1,
+            Symbol(encodedRow): {
+              "id": "u1",
+              "name": "Boogs",
+            },
           },
           "ownerID": "u1",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i2",
+            "ownerID": "u1",
+          },
         },
         {
           "id": "i3",
@@ -6741,9 +7221,17 @@ suite('test overlay on many:one pushes', () => {
             "id": "u2",
             "name": "Arv",
             Symbol(rc): 1,
+            Symbol(encodedRow): {
+              "id": "u2",
+              "name": "Arv",
+            },
           },
           "ownerID": "u2",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i3",
+            "ownerID": "u2",
+          },
         },
       ]
     `);
@@ -7239,12 +7727,25 @@ suite('test overlay on many:one pushes', () => {
               "id": "s0",
               "name": "HI",
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "s0",
+                "name": "HI",
+              },
             },
             "stateID": "s0",
             Symbol(rc): 1,
+            Symbol(encodedRow): {
+              "id": "u0",
+              "name": "Fritz",
+              "stateID": "s0",
+            },
           },
           "ownerID": "u0",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i0",
+            "ownerID": "u0",
+          },
         },
         {
           "id": "i1",
@@ -7255,12 +7756,25 @@ suite('test overlay on many:one pushes', () => {
               "id": "s0",
               "name": "HI",
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "s0",
+                "name": "HI",
+              },
             },
             "stateID": "s0",
             Symbol(rc): 1,
+            Symbol(encodedRow): {
+              "id": "u1",
+              "name": "Aaron",
+              "stateID": "s0",
+            },
           },
           "ownerID": "u1",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i1",
+            "ownerID": "u1",
+          },
         },
         {
           "id": "i2",
@@ -7271,12 +7785,25 @@ suite('test overlay on many:one pushes', () => {
               "id": "s0",
               "name": "HI",
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "s0",
+                "name": "HI",
+              },
             },
             "stateID": "s0",
             Symbol(rc): 1,
+            Symbol(encodedRow): {
+              "id": "u1",
+              "name": "Aaron",
+              "stateID": "s0",
+            },
           },
           "ownerID": "u1",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i2",
+            "ownerID": "u1",
+          },
         },
         {
           "id": "i3",
@@ -7287,12 +7814,25 @@ suite('test overlay on many:one pushes', () => {
               "id": "s1",
               "name": "CA",
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "s1",
+                "name": "CA",
+              },
             },
             "stateID": "s1",
             Symbol(rc): 1,
+            Symbol(encodedRow): {
+              "id": "u2",
+              "name": "Arv",
+              "stateID": "s1",
+            },
           },
           "ownerID": "u2",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i3",
+            "ownerID": "u2",
+          },
         },
       ]
     `);
@@ -7906,10 +8446,19 @@ suite('test overlay on many:many (no junction) pushes', () => {
               "name": "Fritz",
               "num": 0,
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "u0",
+                "name": "Fritz",
+                "num": 0,
+              },
             },
           ],
           "ownerName": "Fritz",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i0",
+            "ownerName": "Fritz",
+          },
         },
         {
           "id": "i1",
@@ -7919,22 +8468,41 @@ suite('test overlay on many:many (no junction) pushes', () => {
               "name": "Aaron",
               "num": 1,
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "u1",
+                "name": "Aaron",
+                "num": 1,
+              },
             },
             {
               "id": "u2",
               "name": "Aaron",
               "num": 2,
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "u2",
+                "name": "Aaron",
+                "num": 2,
+              },
             },
             {
               "id": "u3",
               "name": "Aaron",
               "num": 3,
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "u3",
+                "name": "Aaron",
+                "num": 3,
+              },
             },
           ],
           "ownerName": "Aaron",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i1",
+            "ownerName": "Aaron",
+          },
         },
         {
           "id": "i2",
@@ -7944,22 +8512,41 @@ suite('test overlay on many:many (no junction) pushes', () => {
               "name": "Aaron",
               "num": 1,
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "u1",
+                "name": "Aaron",
+                "num": 1,
+              },
             },
             {
               "id": "u2",
               "name": "Aaron",
               "num": 2,
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "u2",
+                "name": "Aaron",
+                "num": 2,
+              },
             },
             {
               "id": "u3",
               "name": "Aaron",
               "num": 3,
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "u3",
+                "name": "Aaron",
+                "num": 3,
+              },
             },
           ],
           "ownerName": "Aaron",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i2",
+            "ownerName": "Aaron",
+          },
         },
         {
           "id": "i3",
@@ -7969,10 +8556,19 @@ suite('test overlay on many:many (no junction) pushes', () => {
               "name": "Arv",
               "num": 4,
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "u4",
+                "name": "Arv",
+                "num": 4,
+              },
             },
           ],
           "ownerName": "Arv",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i3",
+            "ownerName": "Arv",
+          },
         },
       ]
     `);
@@ -8341,10 +8937,19 @@ suite('test overlay on many:many (no junction) pushes', () => {
               "name": "Fritz",
               "num": 0,
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "u0",
+                "name": "Fritz",
+                "num": 0,
+              },
             },
           ],
           "ownerName": "Fritz",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i0",
+            "ownerName": "Fritz",
+          },
         },
         {
           "id": "i1",
@@ -8354,16 +8959,30 @@ suite('test overlay on many:many (no junction) pushes', () => {
               "name": "Aaron",
               "num": 1,
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "u1",
+                "name": "Aaron",
+                "num": 1,
+              },
             },
             {
               "id": "u3",
               "name": "Aaron",
               "num": 3,
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "u3",
+                "name": "Aaron",
+                "num": 3,
+              },
             },
           ],
           "ownerName": "Aaron",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i1",
+            "ownerName": "Aaron",
+          },
         },
         {
           "id": "i2",
@@ -8373,16 +8992,30 @@ suite('test overlay on many:many (no junction) pushes', () => {
               "name": "Aaron",
               "num": 1,
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "u1",
+                "name": "Aaron",
+                "num": 1,
+              },
             },
             {
               "id": "u3",
               "name": "Aaron",
               "num": 3,
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "u3",
+                "name": "Aaron",
+                "num": 3,
+              },
             },
           ],
           "ownerName": "Aaron",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i2",
+            "ownerName": "Aaron",
+          },
         },
         {
           "id": "i3",
@@ -8392,10 +9025,19 @@ suite('test overlay on many:many (no junction) pushes', () => {
               "name": "Arv",
               "num": 4,
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "u4",
+                "name": "Arv",
+                "num": 4,
+              },
             },
           ],
           "ownerName": "Arv",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i3",
+            "ownerName": "Arv",
+          },
         },
       ]
     `);
@@ -8760,10 +9402,19 @@ suite('test overlay on many:many (no junction) pushes', () => {
               "name": "Fritz",
               "num": 0,
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "u0",
+                "name": "Fritz",
+                "num": 0,
+              },
             },
           ],
           "ownerName": "Fritz",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i0",
+            "ownerName": "Fritz",
+          },
         },
         {
           "id": "i1",
@@ -8773,22 +9424,41 @@ suite('test overlay on many:many (no junction) pushes', () => {
               "name": "Aaron",
               "num": 1,
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "u1",
+                "name": "Aaron",
+                "num": 1,
+              },
             },
             {
               "id": "u3",
               "name": "Aaron",
               "num": 3,
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "u3",
+                "name": "Aaron",
+                "num": 3,
+              },
             },
             {
               "id": "u2",
               "name": "Aaron",
               "num": 5,
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "u2",
+                "name": "Aaron",
+                "num": 5,
+              },
             },
           ],
           "ownerName": "Aaron",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i1",
+            "ownerName": "Aaron",
+          },
         },
         {
           "id": "i2",
@@ -8798,22 +9468,41 @@ suite('test overlay on many:many (no junction) pushes', () => {
               "name": "Aaron",
               "num": 1,
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "u1",
+                "name": "Aaron",
+                "num": 1,
+              },
             },
             {
               "id": "u3",
               "name": "Aaron",
               "num": 3,
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "u3",
+                "name": "Aaron",
+                "num": 3,
+              },
             },
             {
               "id": "u2",
               "name": "Aaron",
               "num": 5,
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "u2",
+                "name": "Aaron",
+                "num": 5,
+              },
             },
           ],
           "ownerName": "Aaron",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i2",
+            "ownerName": "Aaron",
+          },
         },
         {
           "id": "i3",
@@ -8823,10 +9512,19 @@ suite('test overlay on many:many (no junction) pushes', () => {
               "name": "Arv",
               "num": 4,
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "u4",
+                "name": "Arv",
+                "num": 4,
+              },
             },
           ],
           "ownerName": "Arv",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i3",
+            "ownerName": "Arv",
+          },
         },
       ]
     `);
@@ -9432,13 +10130,26 @@ suite('test overlay on many:many (no junction) pushes', () => {
                 "id": "s1",
                 "name": "CA",
                 Symbol(rc): 1,
+                Symbol(encodedRow): {
+                  "id": "s1",
+                  "name": "CA",
+                },
               },
               "stateID": "s1",
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "u0",
+                "name": "Fritz",
+                "stateID": "s1",
+              },
             },
           ],
           "ownerName": "Fritz",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i0",
+            "ownerName": "Fritz",
+          },
         },
         {
           "id": "i1",
@@ -9450,9 +10161,18 @@ suite('test overlay on many:many (no junction) pushes', () => {
                 "id": "s1",
                 "name": "CA",
                 Symbol(rc): 1,
+                Symbol(encodedRow): {
+                  "id": "s1",
+                  "name": "CA",
+                },
               },
               "stateID": "s1",
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "u1",
+                "name": "Aaron",
+                "stateID": "s1",
+              },
             },
             {
               "id": "u2",
@@ -9461,9 +10181,18 @@ suite('test overlay on many:many (no junction) pushes', () => {
                 "id": "s0",
                 "name": "HI",
                 Symbol(rc): 1,
+                Symbol(encodedRow): {
+                  "id": "s0",
+                  "name": "HI",
+                },
               },
               "stateID": "s0",
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "u2",
+                "name": "Aaron",
+                "stateID": "s0",
+              },
             },
             {
               "id": "u3",
@@ -9472,13 +10201,26 @@ suite('test overlay on many:many (no junction) pushes', () => {
                 "id": "s0",
                 "name": "HI",
                 Symbol(rc): 1,
+                Symbol(encodedRow): {
+                  "id": "s0",
+                  "name": "HI",
+                },
               },
               "stateID": "s0",
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "u3",
+                "name": "Aaron",
+                "stateID": "s0",
+              },
             },
           ],
           "ownerName": "Aaron",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i1",
+            "ownerName": "Aaron",
+          },
         },
         {
           "id": "i2",
@@ -9490,9 +10232,18 @@ suite('test overlay on many:many (no junction) pushes', () => {
                 "id": "s1",
                 "name": "CA",
                 Symbol(rc): 1,
+                Symbol(encodedRow): {
+                  "id": "s1",
+                  "name": "CA",
+                },
               },
               "stateID": "s1",
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "u1",
+                "name": "Aaron",
+                "stateID": "s1",
+              },
             },
             {
               "id": "u2",
@@ -9501,9 +10252,18 @@ suite('test overlay on many:many (no junction) pushes', () => {
                 "id": "s0",
                 "name": "HI",
                 Symbol(rc): 1,
+                Symbol(encodedRow): {
+                  "id": "s0",
+                  "name": "HI",
+                },
               },
               "stateID": "s0",
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "u2",
+                "name": "Aaron",
+                "stateID": "s0",
+              },
             },
             {
               "id": "u3",
@@ -9512,13 +10272,26 @@ suite('test overlay on many:many (no junction) pushes', () => {
                 "id": "s0",
                 "name": "HI",
                 Symbol(rc): 1,
+                Symbol(encodedRow): {
+                  "id": "s0",
+                  "name": "HI",
+                },
               },
               "stateID": "s0",
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "u3",
+                "name": "Aaron",
+                "stateID": "s0",
+              },
             },
           ],
           "ownerName": "Aaron",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i2",
+            "ownerName": "Aaron",
+          },
         },
         {
           "id": "i3",
@@ -9530,13 +10303,26 @@ suite('test overlay on many:many (no junction) pushes', () => {
                 "id": "s1",
                 "name": "CA",
                 Symbol(rc): 1,
+                Symbol(encodedRow): {
+                  "id": "s1",
+                  "name": "CA",
+                },
               },
               "stateID": "s1",
               Symbol(rc): 1,
+              Symbol(encodedRow): {
+                "id": "u4",
+                "name": "Arv",
+                "stateID": "s1",
+              },
             },
           ],
           "ownerName": "Arv",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i3",
+            "ownerName": "Arv",
+          },
         },
       ]
     `);

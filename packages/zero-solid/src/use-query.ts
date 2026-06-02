@@ -11,7 +11,6 @@ import {createStore} from 'solid-js/store';
 import {
   addContextToQuery,
   asQueryInternals,
-  decodeView,
   DEFAULT_TTL_MS,
 } from './bindings.ts';
 import {createSolidViewFactory, UNKNOWN, type State} from './solid-view.ts';
@@ -199,19 +198,11 @@ export function useQuery<
     ),
   );
 
-  // For codec queries, project a decoded copy of the (encoded) store. Reading
-  // through the store proxy inside the memo keeps Solid's tracking intact, so
-  // the decoded result updates reactively. Codec-free queries return the store
-  // directly with no copy and full fine-grained reactivity.
+  // The view stores decoded values directly; read through the Solid store
+  // proxy to keep fine-grained reactivity intact.
   const data = createMemo(() => {
     const root = state[0][''];
-    const v = view();
-    const format = qi()?.format;
-    if (!v || !v.hasCodecs || !format) {
-      return root as HumanReadable<TReturn>;
-    }
-    // oxlint-disable-next-line no-explicit-any
-    return decodeView(root as any, v.schema, format) as HumanReadable<TReturn>;
+    return root as HumanReadable<TReturn>;
   });
 
   return [data, () => state[1]];

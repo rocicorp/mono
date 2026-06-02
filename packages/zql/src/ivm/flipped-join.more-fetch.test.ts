@@ -165,6 +165,9 @@ suite('one:many:one', () => {
         {
           "id": "i1",
           Symbol(rc): 1,
+          Symbol(encodedRow): {
+            "id": "i1",
+          },
         },
       ]
     `);

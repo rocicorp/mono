@@ -7,6 +7,7 @@ import {
 import {must} from '../../../shared/src/must.ts';
 import type {Writable} from '../../../shared/src/writable.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
+import {decodeRowFields} from './codec.ts';
 import {type Comparator, type Node} from './data.ts';
 import {skipYields} from './operator.ts';
 import type {SourceSchema} from './schema.ts';
@@ -14,10 +15,12 @@ import type {Entry, Format} from './view.ts';
 
 export const refCountSymbol = Symbol('rc');
 export const idSymbol = Symbol('id');
+export const encodedRowSymbol = Symbol('encodedRow');
 
 type ReadonlyMetaEntry = Entry & {
   readonly [refCountSymbol]: number;
   readonly [idSymbol]?: string | undefined;
+  readonly [encodedRowSymbol]: Row;
 };
 
 type MutableMetaEntry = Writable<ReadonlyMetaEntry>;
@@ -526,11 +529,15 @@ function applyEdit<M extends Mutate>(
   withIDs: WithIDs,
   mutate: Mutate,
 ): MetaEntry<M> {
+  // Decode new row fields; keep raw row as back-pointer for binary search.
+  const decodedRow = decodeRowFields(change.node.row, schema);
   const newEntry: MutableMetaEntry =
     // Even for mutate we want to create a new entry if the primary key changed.
     mutate && schema.compareRows(change.oldNode.row, change.node.row) === 0
-      ? Object.assign(existing, change.node.row)
-      : {...existing, ...change.node.row};
+      ? Object.assign(existing, decodedRow, {
+          [encodedRowSymbol]: change.node.row,
+        })
+      : {...existing, ...decodedRow, [encodedRowSymbol]: change.node.row};
 
   if (withIDs) {
     return setProperty(
@@ -713,8 +720,9 @@ function binarySearch(
   let high = view.length - 1;
   while (low <= high) {
     const mid = (low + high) >>> 1;
-    // MetaEntry has all Row props; comparator only reads string keys
-    const comparison = comparator(view[mid] as Row, target);
+    // Use the raw encoded row (back-pointer) so the comparator sees stored
+    // values even when the entry holds decoded (app-typed) values.
+    const comparison = comparator(view[mid][encodedRowSymbol], target);
     if (comparison < 0) {
       low = mid + 1;
     } else if (comparison > 0) {
@@ -767,18 +775,24 @@ function getChildEntryList<M extends Mutate>(
   return view as MetaEntryList<M>;
 }
 
-/** Create MetaEntry from row with given refCount. */
+/** Create MetaEntry from row with given refCount. Decodes codec columns. */
 function makeNewMetaEntry(
   row: Row,
   schema: SourceSchema,
   withIDs: WithIDs,
   rc: number,
 ): MutableMetaEntry {
-  // This creates a new MetaEntry from a Row. We never mutate Rows.
+  // Decode codec columns; raw row is stored as back-pointer for binary search.
+  const decodedRow = decodeRowFields(row, schema);
   if (withIDs) {
-    return {...row, [refCountSymbol]: rc, [idSymbol]: makeID(row, schema)};
+    return {
+      ...decodedRow,
+      [refCountSymbol]: rc,
+      [idSymbol]: makeID(row, schema),
+      [encodedRowSymbol]: row,
+    };
   }
-  return {...row, [refCountSymbol]: rc};
+  return {...decodedRow, [refCountSymbol]: rc, [encodedRowSymbol]: row};
 }
 
 function makeID(row: Row, schema: SourceSchema) {

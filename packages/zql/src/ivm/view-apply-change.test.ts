@@ -1,8 +1,10 @@
 import {describe, expect, test} from 'vitest';
+import type {Codec, SchemaValue} from '../../../zero-types/src/schema-value.ts';
 import {makeComparator} from './data.ts';
 import type {SourceSchema} from './schema.ts';
 import {
   applyChange,
+  encodedRowSymbol,
   idSymbol,
   refCountSymbol,
   type ViewChange,
@@ -198,12 +200,21 @@ describe('applyChange', () => {
                     "name": "Mason Ho",
                     Symbol(rc): 2,
                     Symbol(id): "["USA","a1"]",
+                    Symbol(encodedRow): {
+                      "country": "USA",
+                      "id": "a1",
+                      "name": "Mason Ho",
+                    },
                   },
                 ],
                 "id": "e1",
                 "name": "Buffalo Big Board Classic",
                 Symbol(rc): 1,
                 Symbol(id): ""e1"",
+                Symbol(encodedRow): {
+                  "id": "e1",
+                  "name": "Buffalo Big Board Classic",
+                },
               },
             ],
           }
@@ -262,12 +273,21 @@ describe('applyChange', () => {
                     "name": "Mason Ho",
                     Symbol(rc): 1,
                     Symbol(id): "["USA","a1"]",
+                    Symbol(encodedRow): {
+                      "country": "USA",
+                      "id": "a1",
+                      "name": "Mason Ho",
+                    },
                   },
                 ],
                 "id": "e1",
                 "name": "Buffalo Big Board Classic",
                 Symbol(rc): 1,
                 Symbol(id): ""e1"",
+                Symbol(encodedRow): {
+                  "id": "e1",
+                  "name": "Buffalo Big Board Classic",
+                },
               },
             ],
           }
@@ -324,6 +344,10 @@ describe('applyChange', () => {
                 "name": "Buffalo Big Board Classic",
                 Symbol(rc): 1,
                 Symbol(id): ""e1"",
+                Symbol(encodedRow): {
+                  "id": "e1",
+                  "name": "Buffalo Big Board Classic",
+                },
               },
             ],
           }
@@ -454,11 +478,20 @@ describe('applyChange', () => {
                   "name": "Mason Ho",
                   Symbol(rc): 2,
                   Symbol(id): "["USA","a1"]",
+                  Symbol(encodedRow): {
+                    "country": "USA",
+                    "id": "a1",
+                    "name": "Mason Ho",
+                  },
                 },
                 "id": "e1",
                 "name": "Buffalo Big Board Classic",
                 Symbol(rc): 1,
                 Symbol(id): ""e1"",
+                Symbol(encodedRow): {
+                  "id": "e1",
+                  "name": "Buffalo Big Board Classic",
+                },
               },
             ],
           }
@@ -516,11 +549,20 @@ describe('applyChange', () => {
                   "name": "Mason Ho",
                   Symbol(rc): 1,
                   Symbol(id): "["USA","a1"]",
+                  Symbol(encodedRow): {
+                    "country": "USA",
+                    "id": "a1",
+                    "name": "Mason Ho",
+                  },
                 },
                 "id": "e1",
                 "name": "Buffalo Big Board Classic",
                 Symbol(rc): 1,
                 Symbol(id): ""e1"",
+                Symbol(encodedRow): {
+                  "id": "e1",
+                  "name": "Buffalo Big Board Classic",
+                },
               },
             ],
           }
@@ -577,6 +619,10 @@ describe('applyChange', () => {
                 "name": "Buffalo Big Board Classic",
                 Symbol(rc): 1,
                 Symbol(id): ""e1"",
+                Symbol(encodedRow): {
+                  "id": "e1",
+                  "name": "Buffalo Big Board Classic",
+                },
               },
             ],
           }
@@ -636,6 +682,10 @@ describe('applyChange', () => {
               "name": "Aaron",
               Symbol(rc): 1,
               Symbol(id): ""1"",
+              Symbol(encodedRow): {
+                "id": "1",
+                "name": "Aaron",
+              },
             },
           ],
         }
@@ -661,12 +711,20 @@ describe('applyChange', () => {
               "name": "Aaron",
               Symbol(rc): 1,
               Symbol(id): ""1"",
+              Symbol(encodedRow): {
+                "id": "1",
+                "name": "Aaron",
+              },
             },
             {
               "id": "2",
               "name": "Greg",
               Symbol(rc): 5,
               Symbol(id): ""2"",
+              Symbol(encodedRow): {
+                "id": "2",
+                "name": "Greg",
+              },
             },
           ],
         }
@@ -692,12 +750,20 @@ describe('applyChange', () => {
               "name": "Aaron",
               Symbol(rc): 1,
               Symbol(id): ""1"",
+              Symbol(encodedRow): {
+                "id": "1",
+                "name": "Aaron",
+              },
             },
             {
               "id": "2",
               "name": "Greg",
               Symbol(rc): 1,
               Symbol(id): ""2"",
+              Symbol(encodedRow): {
+                "id": "2",
+                "name": "Greg",
+              },
             },
           ],
         }
@@ -722,6 +788,10 @@ describe('applyChange', () => {
               "name": "Aaron",
               Symbol(rc): 1,
               Symbol(id): ""1"",
+              Symbol(encodedRow): {
+                "id": "1",
+                "name": "Aaron",
+              },
             },
           ],
         }
@@ -790,6 +860,10 @@ describe('applyChange', () => {
             "name": "Aaron",
             Symbol(rc): 1,
             Symbol(id): ""1"",
+            Symbol(encodedRow): {
+              "id": "1",
+              "name": "Aaron",
+            },
           },
         }
       `);
@@ -828,6 +902,10 @@ describe('applyChange', () => {
             "name": "Aaron",
             Symbol(rc): 2,
             Symbol(id): ""1"",
+            Symbol(encodedRow): {
+              "id": "1",
+              "name": "Aaron",
+            },
           },
         }
       `);
@@ -851,6 +929,10 @@ describe('applyChange', () => {
             "name": "Aaron",
             Symbol(rc): 5,
             Symbol(id): ""1"",
+            Symbol(encodedRow): {
+              "id": "1",
+              "name": "Aaron",
+            },
           },
         }
       `);
@@ -874,6 +956,10 @@ describe('applyChange', () => {
             "name": "Aaron",
             Symbol(rc): 1,
             Symbol(id): ""1"",
+            Symbol(encodedRow): {
+              "id": "1",
+              "name": "Aaron",
+            },
           },
         }
       `);
@@ -958,6 +1044,10 @@ describe('applyChange', () => {
               "name": "Aaron",
               Symbol(rc): 1,
               Symbol(id): ""1"",
+              Symbol(encodedRow): {
+                "id": "1",
+                "name": "Aaron",
+              },
             },
           ],
         }
@@ -986,6 +1076,10 @@ describe('applyChange', () => {
               "name": "Greg",
               Symbol(rc): 1,
               Symbol(id): ""1"",
+              Symbol(encodedRow): {
+                "id": "1",
+                "name": "Greg",
+              },
             },
           ],
         }
@@ -1011,6 +1105,10 @@ describe('applyChange', () => {
               "name": "Greg",
               Symbol(rc): 3,
               Symbol(id): ""1"",
+              Symbol(encodedRow): {
+                "id": "1",
+                "name": "Greg",
+              },
             },
           ],
         }
@@ -1039,6 +1137,10 @@ describe('applyChange', () => {
               "name": "Aaron",
               Symbol(rc): 3,
               Symbol(id): ""1"",
+              Symbol(encodedRow): {
+                "id": "1",
+                "name": "Aaron",
+              },
             },
           ],
         }
@@ -1095,6 +1197,10 @@ describe('applyChange', () => {
               "name": "Aaron",
               Symbol(rc): 1,
               Symbol(id): ""1"",
+              Symbol(encodedRow): {
+                "id": "1",
+                "name": "Aaron",
+              },
             },
           ],
         }
@@ -1123,6 +1229,10 @@ describe('applyChange', () => {
               "name": "Greg",
               Symbol(rc): 1,
               Symbol(id): ""2"",
+              Symbol(encodedRow): {
+                "id": "2",
+                "name": "Greg",
+              },
             },
           ],
         }
@@ -1159,6 +1269,10 @@ describe('applyChange', () => {
               "name": "Aaron",
               Symbol(rc): 2,
               Symbol(id): ""1"",
+              Symbol(encodedRow): {
+                "id": "1",
+                "name": "Aaron",
+              },
             },
           ],
         }
@@ -1185,12 +1299,20 @@ describe('applyChange', () => {
               "name": "Aaron",
               Symbol(rc): 2,
               Symbol(id): ""1"",
+              Symbol(encodedRow): {
+                "id": "1",
+                "name": "Aaron",
+              },
             },
             {
               "id": "2",
               "name": "Greg",
               Symbol(rc): 2,
               Symbol(id): ""2"",
+              Symbol(encodedRow): {
+                "id": "2",
+                "name": "Greg",
+              },
             },
           ],
         }
@@ -1219,12 +1341,20 @@ describe('applyChange', () => {
               "name": "Aaron",
               Symbol(rc): 1,
               Symbol(id): ""1"",
+              Symbol(encodedRow): {
+                "id": "1",
+                "name": "Aaron",
+              },
             },
             {
               "id": "2",
               "name": "Greg",
               Symbol(rc): 3,
               Symbol(id): ""2"",
+              Symbol(encodedRow): {
+                "id": "2",
+                "name": "Greg",
+              },
             },
           ],
         }
@@ -1280,6 +1410,10 @@ describe('applyChange', () => {
             "name": "Aaron",
             Symbol(rc): 1,
             Symbol(id): ""1"",
+            Symbol(encodedRow): {
+              "id": "1",
+              "name": "Aaron",
+            },
           },
         }
       `);
@@ -1306,6 +1440,10 @@ describe('applyChange', () => {
             "name": "Greg",
             Symbol(rc): 1,
             Symbol(id): ""1"",
+            Symbol(encodedRow): {
+              "id": "1",
+              "name": "Greg",
+            },
           },
         }
       `);
@@ -1327,6 +1465,10 @@ describe('applyChange', () => {
             "name": "Greg",
             Symbol(rc): 2,
             Symbol(id): ""1"",
+            Symbol(encodedRow): {
+              "id": "1",
+              "name": "Greg",
+            },
           },
         }
       `);
@@ -1353,6 +1495,10 @@ describe('applyChange', () => {
             "name": "Aaron",
             Symbol(rc): 2,
             Symbol(id): ""1"",
+            Symbol(encodedRow): {
+              "id": "1",
+              "name": "Aaron",
+            },
           },
         }
       `);
@@ -1407,6 +1553,10 @@ describe('applyChange', () => {
             "name": "Aaron",
             Symbol(rc): 1,
             Symbol(id): ""1"",
+            Symbol(encodedRow): {
+              "id": "1",
+              "name": "Aaron",
+            },
           },
         }
       `);
@@ -1433,6 +1583,10 @@ describe('applyChange', () => {
             "name": "Greg",
             Symbol(rc): 1,
             Symbol(id): ""2"",
+            Symbol(encodedRow): {
+              "id": "2",
+              "name": "Greg",
+            },
           },
         }
       `);
@@ -1454,6 +1608,10 @@ describe('applyChange', () => {
             "name": "Greg",
             Symbol(rc): 2,
             Symbol(id): ""2"",
+            Symbol(encodedRow): {
+              "id": "2",
+              "name": "Greg",
+            },
           },
         }
       `);
@@ -1480,6 +1638,10 @@ describe('applyChange', () => {
             "name": "Aaron",
             Symbol(rc): 2,
             Symbol(id): ""1"",
+            Symbol(encodedRow): {
+              "id": "1",
+              "name": "Aaron",
+            },
           },
         }
       `);
@@ -1590,12 +1752,20 @@ describe('applyChange', () => {
                   "parentId": "a",
                   Symbol(rc): 1,
                   Symbol(id): ""c3"",
+                  Symbol(encodedRow): {
+                    "id": "c3",
+                    "parentId": "a",
+                  },
                 },
               ],
               "id": "a",
               "name": "Alice",
               Symbol(rc): 1,
               Symbol(id): ""a"",
+              Symbol(encodedRow): {
+                "id": "a",
+                "name": "Alice",
+              },
             },
             {
               "children": [
@@ -1604,12 +1774,20 @@ describe('applyChange', () => {
                   "parentId": "b",
                   Symbol(rc): 1,
                   Symbol(id): ""c1"",
+                  Symbol(encodedRow): {
+                    "id": "c1",
+                    "parentId": "b",
+                  },
                 },
               ],
               "id": "b",
               "name": "Bob",
               Symbol(rc): 1,
               Symbol(id): ""b"",
+              Symbol(encodedRow): {
+                "id": "b",
+                "name": "Bob",
+              },
             },
             {
               "children": [
@@ -1618,12 +1796,20 @@ describe('applyChange', () => {
                   "parentId": "d",
                   Symbol(rc): 1,
                   Symbol(id): ""c2"",
+                  Symbol(encodedRow): {
+                    "id": "c2",
+                    "parentId": "d",
+                  },
                 },
               ],
               "id": "d",
               "name": "Dave",
               Symbol(rc): 1,
               Symbol(id): ""d"",
+              Symbol(encodedRow): {
+                "id": "d",
+                "name": "Dave",
+              },
             },
           ],
         }
@@ -2646,6 +2832,121 @@ describe('applyChange', () => {
       expect(newRef).toEqual(
         expect.objectContaining({id: '1', name: 'Alicia'}),
       );
+    });
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // CODEC DECODING TESTS
+  // Verify that applyChange decodes row fields at entry-creation time and that
+  // encodedRowSymbol always holds the original raw (encoded) row.
+  // ═══════════════════════════════════════════════════════════════════════════
+  describe('codec decoding', () => {
+    const dateCodec: Codec<number, Date> = {
+      decode: (n: number) => new Date(n),
+      encode: (d: Date) => d.getTime(),
+    };
+
+    const codecSchema: SourceSchema = {
+      tableName: 'item',
+      columns: {
+        id: {type: 'string'},
+        createdAt: {
+          type: 'number',
+          customType: null,
+          codec: dateCodec,
+        } as SchemaValue,
+      },
+      primaryKey: ['id'],
+      sort: [['id', 'asc']],
+      system: 'client',
+      relationships: {},
+      isHidden: false,
+      compareRows: makeComparator([['id', 'asc']]),
+    } as const;
+
+    const format: Format = {singular: false, relationships: {}};
+
+    const apply = (root: Entry, change: ViewChange) =>
+      applyChange(root, change, codecSchema, '', format, WITH_IDS, NO_MUTATE);
+
+    test('add: entry fields are decoded, encodedRowSymbol holds raw row', () => {
+      let root: Entry = {'': []};
+      const rawRow = {id: 'a', createdAt: 1000};
+
+      root = apply(root, {
+        type: 'add',
+        node: {row: rawRow, relationships: {}},
+      });
+
+      const entry = (root[''] as Entry[])[0];
+      // Decoded value visible on the entry
+      expect(entry.createdAt).toBeInstanceOf(Date);
+      expect((entry.createdAt as unknown as Date).getTime()).toBe(1000);
+      // Raw encoded value preserved on the symbol
+      expect((entry as {[encodedRowSymbol]?: unknown})[encodedRowSymbol]).toBe(
+        rawRow,
+      );
+      expect(
+        (entry as {[encodedRowSymbol]?: {createdAt: number}})[encodedRowSymbol]
+          ?.createdAt,
+      ).toBe(1000);
+    });
+
+    test('edit: decoded fields and encodedRowSymbol are updated', () => {
+      let root: Entry = {'': []};
+      root = apply(root, {
+        type: 'add',
+        node: {row: {id: 'a', createdAt: 1000}, relationships: {}},
+      });
+
+      const newRawRow = {id: 'a', createdAt: 2000};
+      root = apply(root, {
+        type: 'edit',
+        oldNode: {row: {id: 'a', createdAt: 1000}},
+        node: {row: newRawRow},
+      });
+
+      const entry = (root[''] as Entry[])[0];
+      expect(entry.createdAt).toBeInstanceOf(Date);
+      expect((entry.createdAt as unknown as Date).getTime()).toBe(2000);
+      expect((entry as {[encodedRowSymbol]?: unknown})[encodedRowSymbol]).toBe(
+        newRawRow,
+      );
+    });
+
+    test('remove: entry is removed from the view', () => {
+      let root: Entry = {'': []};
+      const rawRow = {id: 'a', createdAt: 1000};
+      root = apply(root, {type: 'add', node: {row: rawRow, relationships: {}}});
+      root = apply(root, {
+        type: 'remove',
+        node: {row: rawRow, relationships: {}},
+      });
+      expect((root[''] as Entry[]).length).toBe(0);
+    });
+
+    test('binary search uses encodedRowSymbol for ordering with codec columns', () => {
+      // Insert two rows in reverse order of id. Binary search must correctly
+      // place each row using the encoded (raw) values stored in encodedRowSymbol.
+      let root: Entry = {'': []};
+
+      root = apply(root, {
+        type: 'add',
+        node: {row: {id: 'b', createdAt: 2000}, relationships: {}},
+      });
+      root = apply(root, {
+        type: 'add',
+        node: {row: {id: 'a', createdAt: 1000}, relationships: {}},
+      });
+
+      const list = root[''] as Entry[];
+      expect(list.length).toBe(2);
+      // Sorted by id asc — 'a' first, 'b' second
+      expect(list[0].id).toBe('a');
+      expect(list[1].id).toBe('b');
+      // Both entries carry decoded values
+      expect((list[0].createdAt as unknown as Date).getTime()).toBe(1000);
+      expect((list[1].createdAt as unknown as Date).getTime()).toBe(2000);
     });
   });
 });

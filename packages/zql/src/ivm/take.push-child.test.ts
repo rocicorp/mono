@@ -101,17 +101,31 @@ test('child change, parent is within bound', () => {
             "issueID": "i1",
             "text": "i1 c1 text",
             Symbol(rc): 1,
+            Symbol(encodedRow): {
+              "id": "c1",
+              "issueID": "i1",
+              "text": "i1 c1 text",
+            },
           },
           {
             "id": "c2",
             "issueID": "i1",
             "text": "i1 c2 text",
             Symbol(rc): 1,
+            Symbol(encodedRow): {
+              "id": "c2",
+              "issueID": "i1",
+              "text": "i1 c2 text",
+            },
           },
         ],
         "id": "i1",
         "text": "first issue",
         Symbol(rc): 1,
+        Symbol(encodedRow): {
+          "id": "i1",
+          "text": "first issue",
+        },
       },
       {
         "comments": [
@@ -120,11 +134,20 @@ test('child change, parent is within bound', () => {
             "issueID": "i2",
             "text": "i2 c3 text",
             Symbol(rc): 1,
+            Symbol(encodedRow): {
+              "id": "c3",
+              "issueID": "i2",
+              "text": "i2 c3 text",
+            },
           },
         ],
         "id": "i2",
         "text": "second issue",
         Symbol(rc): 1,
+        Symbol(encodedRow): {
+          "id": "i2",
+          "text": "second issue",
+        },
       },
     ]
   `);
@@ -209,23 +232,41 @@ test('child change, parent is after bound', () => {
             "issueID": "i1",
             "text": "i1 c1 text",
             Symbol(rc): 1,
+            Symbol(encodedRow): {
+              "id": "c1",
+              "issueID": "i1",
+              "text": "i1 c1 text",
+            },
           },
           {
             "id": "c2",
             "issueID": "i1",
             "text": "i1 c2 text",
             Symbol(rc): 1,
+            Symbol(encodedRow): {
+              "id": "c2",
+              "issueID": "i1",
+              "text": "i1 c2 text",
+            },
           },
         ],
         "id": "i1",
         "text": "first issue",
         Symbol(rc): 1,
+        Symbol(encodedRow): {
+          "id": "i1",
+          "text": "first issue",
+        },
       },
       {
         "comments": [],
         "id": "i2",
         "text": "second issue",
         Symbol(rc): 1,
+        Symbol(encodedRow): {
+          "id": "i2",
+          "text": "second issue",
+        },
       },
     ]
   `);
