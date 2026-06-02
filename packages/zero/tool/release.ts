@@ -96,17 +96,17 @@ async function main() {
 
     console.log(`✓ Ref ${from} matches between local and remote`);
 
-    const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'zero-build-'));
+    // In CI we build in the current directory. Locally, use a temp worktree to
+    // avoid copying the developer checkout and live .git files.
+    if (process.env.CI) {
+      process.chdir(gitRoot);
+    } else {
+      const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'zero-build-'));
+      console.log(`Creating temp worktree at ${tempDir}...`);
+      execute(`git worktree add --detach ${tempDir} ${localRefHash}`);
+      process.chdir(tempDir);
+    }
 
-    // Copy the working directory to temp dir (faster than cloning)
-    console.log(`Copying repo from ${gitRoot} to ${tempDir}...`);
-    execute(
-      `rsync -a --progress --exclude=node_modules --exclude=.turbo ${gitRoot}/ ${tempDir}/`,
-    );
-    process.chdir(tempDir);
-
-    // Discard any local changes and checkout the correct ref
-    execute('git reset --hard');
     execute(`git fetch ${remote}`);
 
     // Try to checkout as remote/branch first, fall back to tag/commit
