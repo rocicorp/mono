@@ -1075,7 +1075,9 @@ class ChangeMaker {
         ? prevEvent?.schema
         : event.previousSchema;
     if (!prevSchema) {
-      lc.info?.(`received ${msg.prefix}/${type} event`, {event});
+      lc.info?.(`received ${msg.prefix}/${type} event`, {
+        event: summarizeReplicationEventForLog(event),
+      });
       return [];
     }
 
@@ -1102,7 +1104,7 @@ class ChangeMaker {
           ? event.event.tag
           : 'UNKNOWN';
     lc.info?.(`processing ${effectiveTag} command from ${msg.prefix}/${type}`, {
-      event,
+      event: summarizeReplicationEventForLog(event),
     });
     const changes = this.#makeSchemaChanges(
       lc,
@@ -1633,6 +1635,26 @@ function makeRelation(relation: PostgresRelation): MessageRelation {
     // These can be removed when bumping the MIN_PROTOCOL_VERSION to 5.
     keyColumns,
     replicaIdentity,
+  };
+}
+
+function summarizeSchemaForLog(schema: ReplicationEvent['schema']) {
+  return {
+    tables: schema.tables.length,
+    indexes: schema.indexes.length,
+  };
+}
+
+function summarizeReplicationEventForLog(event: ReplicationEvent): JSONObject {
+  const {schema, ...rest} = event;
+  const {previousSchema, ...eventWithoutSchemas} = rest;
+  return {
+    ...eventWithoutSchemas,
+    schema: summarizeSchemaForLog(schema),
+    ...(previousSchema !== undefined && {
+      previousSchema:
+        previousSchema === null ? null : summarizeSchemaForLog(previousSchema),
+    }),
   };
 }
 
