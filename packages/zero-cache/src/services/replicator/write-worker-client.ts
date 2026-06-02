@@ -27,7 +27,65 @@ export interface WriteWorkerClient {
   onError(handler: ErrorHandler): void;
 }
 
-// Wire protocol types — errors are passed directly via structured clone
+export type SerializedError = {
+  name: string;
+  message: string;
+  stack?: string | undefined;
+  cause?: SerializedError | string | undefined;
+  details?: Record<string, unknown> | undefined;
+};
+
+export function serializeError(err: unknown): SerializedError {
+  if (!(err instanceof Error)) {
+    return {
+      name: 'Error',
+      message: String(err),
+      details: err && typeof err === 'object' ? {...err} : undefined,
+    };
+  }
+
+  // Error fields such as message, stack, and some native error details are
+  // non-enumerable, so JSON.stringify(err) would usually return "{}".
+  const details = Object.fromEntries(
+    Object.getOwnPropertyNames(err)
+      .filter(key => !['name', 'message', 'stack', 'cause'].includes(key))
+      .map(key => [key, (err as unknown as Record<string, unknown>)[key]]),
+  );
+  const cause =
+    err.cause instanceof Error
+      ? serializeError(err.cause)
+      : err.cause === undefined
+        ? undefined
+        : String(err.cause);
+
+  return {
+    name: err.name,
+    message: err.message,
+    stack: err.stack,
+    cause,
+    details: Object.keys(details).length ? details : undefined,
+  };
+}
+
+export function deserializeError(serialized: SerializedError): Error {
+  const err = new Error(serialized.message);
+  err.name = serialized.name;
+  if (serialized.stack !== undefined) {
+    err.stack = serialized.stack;
+  }
+  if (serialized.cause !== undefined) {
+    err.cause =
+      typeof serialized.cause === 'string'
+        ? serialized.cause
+        : deserializeError(serialized.cause);
+  }
+  if (serialized.details) {
+    Object.assign(err, serialized.details);
+  }
+  return err;
+}
+
+// Wire protocol types.
 export type ArgsMap = {
   init: [string, ChangeProcessorMode, PragmaConfig, LogConfig];
   getSubscriptionState: [];
@@ -50,9 +108,9 @@ export type ResultMap = {
 
 export type Response<M extends Method = Method> =
   | {method: M; result: ResultMap[M]; error?: undefined}
-  | {method: M; error: unknown; result?: undefined};
+  | {method: M; error: SerializedError; result?: undefined};
 
-export type WriteError = {writeError: Error};
+export type WriteError = {writeError: SerializedError};
 
 export function applyPragmas(db: Database, pragmas: PragmaConfig) {
   db.pragma(`busy_timeout = ${pragmas.busyTimeout}`);
@@ -77,10 +135,7 @@ export class ThreadWriteWorkerClient implements WriteWorkerClient {
 
     this.#worker.on('message', (msg: Response | WriteError) => {
       if ('writeError' in msg) {
-        const error =
-          msg.writeError instanceof Error
-            ? msg.writeError
-            : new Error(String(msg.writeError));
+        const error = deserializeError(msg.writeError);
         this.#rejectAll(error);
         this.#errorHandler(error);
         return;
@@ -89,9 +144,7 @@ export class ThreadWriteWorkerClient implements WriteWorkerClient {
       if (!r) return; // stale abort response
       this.#pending = null;
       if (msg.error !== undefined) {
-        r.reject(
-          msg.error instanceof Error ? msg.error : new Error(String(msg.error)),
-        );
+        r.reject(deserializeError(msg.error));
       } else {
         r.resolve(msg.result);
       }
