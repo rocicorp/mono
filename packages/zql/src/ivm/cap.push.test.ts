@@ -97,31 +97,17 @@ describe('Cap push - basic behavior', () => {
               "issueID": "i1",
               "text": "c1",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "id": "c1",
-                "issueID": "i1",
-                "text": "c1",
-              },
             },
             {
               "id": "c2",
               "issueID": "i1",
               "text": "c2",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "id": "c2",
-                "issueID": "i1",
-                "text": "c2",
-              },
             },
           ],
           "id": "i1",
           "text": "i1",
           Symbol(rc): 1,
-          Symbol(encodedRow): {
-            "id": "i1",
-            "text": "i1",
-          },
         },
       ]
     `);
@@ -217,42 +203,23 @@ describe('Cap push - basic behavior', () => {
               "issueID": "i1",
               "text": "c1",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "id": "c1",
-                "issueID": "i1",
-                "text": "c1",
-              },
             },
             {
               "id": "c2",
               "issueID": "i1",
               "text": "c2",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "id": "c2",
-                "issueID": "i1",
-                "text": "c2",
-              },
             },
             {
               "id": "c3",
               "issueID": "i1",
               "text": "c3",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "id": "c3",
-                "issueID": "i1",
-                "text": "c3",
-              },
             },
           ],
           "id": "i1",
           "text": "i1",
           Symbol(rc): 1,
-          Symbol(encodedRow): {
-            "id": "i1",
-            "text": "i1",
-          },
         },
       ]
     `);
@@ -306,42 +273,23 @@ describe('Cap push - basic behavior', () => {
               "issueID": "i1",
               "text": "c1",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "id": "c1",
-                "issueID": "i1",
-                "text": "c1",
-              },
             },
             {
               "id": "c3",
               "issueID": "i1",
               "text": "c3",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "id": "c3",
-                "issueID": "i1",
-                "text": "c3",
-              },
             },
             {
               "id": "c4",
               "issueID": "i1",
               "text": "c4",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "id": "c4",
-                "issueID": "i1",
-                "text": "c4",
-              },
             },
           ],
           "id": "i1",
           "text": "i1",
           Symbol(rc): 1,
-          Symbol(encodedRow): {
-            "id": "i1",
-            "text": "i1",
-          },
         },
       ]
     `);
@@ -482,20 +430,11 @@ describe('Cap push - basic behavior', () => {
               "issueID": "i1",
               "text": "c2",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "id": "c2",
-                "issueID": "i1",
-                "text": "c2",
-              },
             },
           ],
           "id": "i1",
           "text": "i1",
           Symbol(rc): 1,
-          Symbol(encodedRow): {
-            "id": "i1",
-            "text": "i1",
-          },
         },
       ]
     `);
@@ -674,42 +613,23 @@ describe('Cap push - basic behavior', () => {
               "issueID": "i1",
               "text": "c1",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "id": "c1",
-                "issueID": "i1",
-                "text": "c1",
-              },
             },
             {
               "id": "c2",
               "issueID": "i1",
               "text": "c2",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "id": "c2",
-                "issueID": "i1",
-                "text": "c2",
-              },
             },
             {
               "id": "c3",
               "issueID": "i1",
               "text": "c3",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "id": "c3",
-                "issueID": "i1",
-                "text": "c3",
-              },
             },
           ],
           "id": "i1",
           "text": "i1",
           Symbol(rc): 1,
-          Symbol(encodedRow): {
-            "id": "i1",
-            "text": "i1",
-          },
         },
       ]
     `);
@@ -764,31 +684,17 @@ describe('Cap push - basic behavior', () => {
               "issueID": "i1",
               "text": "c1 updated",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "id": "c1",
-                "issueID": "i1",
-                "text": "c1 updated",
-              },
             },
             {
               "id": "c2",
               "issueID": "i1",
               "text": "c2",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "id": "c2",
-                "issueID": "i1",
-                "text": "c2",
-              },
             },
           ],
           "id": "i1",
           "text": "i1",
           Symbol(rc): 1,
-          Symbol(encodedRow): {
-            "id": "i1",
-            "text": "i1",
-          },
         },
       ]
     `);
@@ -907,31 +813,17 @@ describe('Cap push - basic behavior', () => {
               "issueID": "i1",
               "text": "c1",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "id": "c1_renamed",
-                "issueID": "i1",
-                "text": "c1",
-              },
             },
             {
               "id": "c2",
               "issueID": "i1",
               "text": "c2",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "id": "c2",
-                "issueID": "i1",
-                "text": "c2",
-              },
             },
           ],
           "id": "i1",
           "text": "i1",
           Symbol(rc): 1,
-          Symbol(encodedRow): {
-            "id": "i1",
-            "text": "i1",
-          },
         },
       ]
     `);
@@ -1017,42 +909,23 @@ describe('Cap push - unordered overlay in join', () => {
               "id": "x2",
               "text": "x2",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "group": "g1",
-                "id": "x2",
-                "text": "x2",
-              },
             },
             {
               "group": "g1",
               "id": "x3",
               "text": "x3",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "group": "g1",
-                "id": "x3",
-                "text": "x3",
-              },
             },
             {
               "group": "g1",
               "id": "x4",
               "text": "x4",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "group": "g1",
-                "id": "x4",
-                "text": "x4",
-              },
             },
           ],
           "group": "g1",
           "id": "p1",
           Symbol(rc): 1,
-          Symbol(encodedRow): {
-            "group": "g1",
-            "id": "p1",
-          },
         },
         {
           "children": [
@@ -1061,42 +934,23 @@ describe('Cap push - unordered overlay in join', () => {
               "id": "x2",
               "text": "x2",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "group": "g1",
-                "id": "x2",
-                "text": "x2",
-              },
             },
             {
               "group": "g1",
               "id": "x3",
               "text": "x3",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "group": "g1",
-                "id": "x3",
-                "text": "x3",
-              },
             },
             {
               "group": "g1",
               "id": "x4",
               "text": "x4",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "group": "g1",
-                "id": "x4",
-                "text": "x4",
-              },
             },
           ],
           "group": "g1",
           "id": "p2",
           Symbol(rc): 1,
-          Symbol(encodedRow): {
-            "group": "g1",
-            "id": "p2",
-          },
         },
       ]
     `);
@@ -2044,42 +1898,23 @@ describe('Cap push - compound primary key', () => {
               "seq": "s2",
               "text": "b",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "groupId": "g1",
-                "seq": "s2",
-                "text": "b",
-              },
             },
             {
               "groupId": "g1",
               "seq": "s3",
               "text": "c",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "groupId": "g1",
-                "seq": "s3",
-                "text": "c",
-              },
             },
             {
               "groupId": "g1",
               "seq": "s4",
               "text": "d",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "groupId": "g1",
-                "seq": "s4",
-                "text": "d",
-              },
             },
           ],
           "groupId": "g1",
           "id": "p1",
           Symbol(rc): 1,
-          Symbol(encodedRow): {
-            "groupId": "g1",
-            "id": "p1",
-          },
         },
       ]
     `);

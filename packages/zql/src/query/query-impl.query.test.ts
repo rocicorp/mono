@@ -690,14 +690,6 @@ describe('joins and filters', () => {
                 },
                 "name": "Alice",
                 Symbol(rc): 1,
-                Symbol(encodedRow): {
-                  "id": "0001",
-                  "metadata": {
-                    "login": "alicegh",
-                    "registrar": "github",
-                  },
-                  "name": "Alice",
-                },
               },
               "authorId": "0001",
               "createdAt": 1,
@@ -710,23 +702,10 @@ describe('joins and filters', () => {
                   "id": "0001",
                   "text": "revision 1",
                   Symbol(rc): 1,
-                  Symbol(encodedRow): {
-                    "authorId": "0001",
-                    "commentId": "0001",
-                    "id": "0001",
-                    "text": "revision 1",
-                  },
                 },
               ],
               "text": "comment 1",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "authorId": "0001",
-                "createdAt": 1,
-                "id": "0001",
-                "issueId": "0001",
-                "text": "comment 1",
-              },
             },
             {
               "author": {
@@ -742,19 +721,6 @@ describe('joins and filters', () => {
                 },
                 "name": "Bob",
                 Symbol(rc): 1,
-                Symbol(encodedRow): {
-                  "id": "0002",
-                  "metadata": {
-                    "altContacts": [
-                      "bobwave",
-                      "bobyt",
-                      "bobplus",
-                    ],
-                    "login": "bob@gmail.com",
-                    "registar": "google",
-                  },
-                  "name": "Bob",
-                },
               },
               "authorId": "0002",
               "createdAt": 2,
@@ -763,13 +729,6 @@ describe('joins and filters', () => {
               "revisions": [],
               "text": "comment 2",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "authorId": "0002",
-                "createdAt": 2,
-                "id": "0002",
-                "issueId": "0001",
-                "text": "comment 2",
-              },
             },
           ],
           "createdAt": 1,
@@ -783,26 +742,10 @@ describe('joins and filters', () => {
             },
             "name": "Alice",
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "id": "0001",
-              "metadata": {
-                "login": "alicegh",
-                "registrar": "github",
-              },
-              "name": "Alice",
-            },
           },
           "ownerId": "0001",
           "title": "issue 1",
           Symbol(rc): 1,
-          Symbol(encodedRow): {
-            "closed": false,
-            "createdAt": 1,
-            "description": "description 1",
-            "id": "0001",
-            "ownerId": "0001",
-            "title": "issue 1",
-          },
         },
       ]
     `);
@@ -859,13 +802,6 @@ test('run', async () => {
             "issueId": "0001",
             "text": "comment 1",
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "authorId": "0001",
-              "createdAt": 1,
-              "id": "0001",
-              "issueId": "0001",
-              "text": "comment 1",
-            },
           },
           {
             "authorId": "0002",
@@ -874,13 +810,6 @@ test('run', async () => {
             "issueId": "0001",
             "text": "comment 2",
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "authorId": "0002",
-              "createdAt": 2,
-              "id": "0002",
-              "issueId": "0001",
-              "text": "comment 2",
-            },
           },
         ],
         "createdAt": 1,
@@ -891,10 +820,6 @@ test('run', async () => {
             "id": "0001",
             "name": "label 1",
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "id": "0001",
-              "name": "label 1",
-            },
           },
         ],
         "owner": {
@@ -905,26 +830,10 @@ test('run', async () => {
           },
           "name": "Alice",
           Symbol(rc): 1,
-          Symbol(encodedRow): {
-            "id": "0001",
-            "metadata": {
-              "login": "alicegh",
-              "registrar": "github",
-            },
-            "name": "Alice",
-          },
         },
         "ownerId": "0001",
         "title": "issue 1",
         Symbol(rc): 1,
-        Symbol(encodedRow): {
-          "closed": false,
-          "createdAt": 1,
-          "description": "description 1",
-          "id": "0001",
-          "ownerId": "0001",
-          "title": "issue 1",
-        },
       },
       {
         "closed": false,
@@ -946,31 +855,10 @@ test('run', async () => {
           },
           "name": "Bob",
           Symbol(rc): 1,
-          Symbol(encodedRow): {
-            "id": "0002",
-            "metadata": {
-              "altContacts": [
-                "bobwave",
-                "bobyt",
-                "bobplus",
-              ],
-              "login": "bob@gmail.com",
-              "registar": "google",
-            },
-            "name": "Bob",
-          },
         },
         "ownerId": "0002",
         "title": "issue 2",
         Symbol(rc): 1,
-        Symbol(encodedRow): {
-          "closed": false,
-          "createdAt": 2,
-          "description": "description 2",
-          "id": "0002",
-          "ownerId": "0002",
-          "title": "issue 2",
-        },
       },
       {
         "closed": false,
@@ -983,14 +871,6 @@ test('run', async () => {
         "ownerId": null,
         "title": "issue 3",
         Symbol(rc): 1,
-        Symbol(encodedRow): {
-          "closed": false,
-          "createdAt": 3,
-          "description": "description 3",
-          "id": "0003",
-          "ownerId": null,
-          "title": "issue 3",
-        },
       },
     ]
   `);
@@ -1015,14 +895,6 @@ describe('pk lookup optimization', () => {
           "ownerId": "0001",
           "title": "issue 1",
           Symbol(rc): 1,
-          Symbol(encodedRow): {
-            "closed": false,
-            "createdAt": 1,
-            "description": "description 1",
-            "id": "0001",
-            "ownerId": "0001",
-            "title": "issue 1",
-          },
         },
       ]
     `);
@@ -1037,14 +909,6 @@ describe('pk lookup optimization', () => {
           },
           "name": "Alice",
           Symbol(rc): 1,
-          Symbol(encodedRow): {
-            "id": "0001",
-            "metadata": {
-              "login": "alicegh",
-              "registrar": "github",
-            },
-            "name": "Alice",
-          },
         },
       ]
     `);
@@ -1064,14 +928,6 @@ describe('pk lookup optimization', () => {
           "ownerId": "0001",
           "title": "issue 1",
           Symbol(rc): 1,
-          Symbol(encodedRow): {
-            "closed": false,
-            "createdAt": 1,
-            "description": "description 1",
-            "id": "0001",
-            "ownerId": "0001",
-            "title": "issue 1",
-          },
         },
       ]
     `);
@@ -1089,14 +945,6 @@ describe('pk lookup optimization', () => {
           },
           "name": "Alice",
           Symbol(rc): 1,
-          Symbol(encodedRow): {
-            "id": "0001",
-            "metadata": {
-              "login": "alicegh",
-              "registrar": "github",
-            },
-            "name": "Alice",
-          },
         },
       ]
     `);
@@ -1118,13 +966,6 @@ describe('pk lookup optimization', () => {
               "issueId": "0001",
               "text": "comment 1",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "authorId": "0001",
-                "createdAt": 1,
-                "id": "0001",
-                "issueId": "0001",
-                "text": "comment 1",
-              },
             },
           ],
           "createdAt": 1,
@@ -1133,14 +974,6 @@ describe('pk lookup optimization', () => {
           "ownerId": "0001",
           "title": "issue 1",
           Symbol(rc): 1,
-          Symbol(encodedRow): {
-            "closed": false,
-            "createdAt": 1,
-            "description": "description 1",
-            "id": "0001",
-            "ownerId": "0001",
-            "title": "issue 1",
-          },
         },
       ]
     `);
@@ -1160,14 +993,6 @@ describe('pk lookup optimization', () => {
           "ownerId": "0001",
           "title": "issue 1",
           Symbol(rc): 1,
-          Symbol(encodedRow): {
-            "closed": false,
-            "createdAt": 1,
-            "description": "description 1",
-            "id": "0001",
-            "ownerId": "0001",
-            "title": "issue 1",
-          },
         },
       ]
     `);
@@ -1189,23 +1014,11 @@ describe('pk lookup optimization', () => {
               "id": "0001",
               "name": "label 1",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "id": "0001",
-                "name": "label 1",
-              },
             },
           ],
           "ownerId": "0001",
           "title": "issue 1",
           Symbol(rc): 1,
-          Symbol(encodedRow): {
-            "closed": false,
-            "createdAt": 1,
-            "description": "description 1",
-            "id": "0001",
-            "ownerId": "0001",
-            "title": "issue 1",
-          },
         },
       ]
     `);
@@ -1226,14 +1039,6 @@ describe('pk lookup optimization', () => {
             "ownerId": "0001",
             "title": "issue 1",
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "closed": false,
-              "createdAt": 1,
-              "description": "description 1",
-              "id": "0001",
-              "ownerId": "0001",
-              "title": "issue 1",
-            },
           },
         ]
       `);
@@ -1256,14 +1061,6 @@ describe('pk lookup optimization', () => {
           "ownerId": "0001",
           "title": "issue 1",
           Symbol(rc): 1,
-          Symbol(encodedRow): {
-            "closed": false,
-            "createdAt": 1,
-            "description": "description 1",
-            "id": "0001",
-            "ownerId": "0001",
-            "title": "issue 1",
-          },
         },
       ]
     `);
@@ -1283,14 +1080,6 @@ describe('pk lookup optimization', () => {
           "ownerId": "0001",
           "title": "issue 1",
           Symbol(rc): 1,
-          Symbol(encodedRow): {
-            "closed": false,
-            "createdAt": 1,
-            "description": "description 1",
-            "id": "0001",
-            "ownerId": "0001",
-            "title": "issue 1",
-          },
         },
       ]
     `);
@@ -1334,14 +1123,6 @@ describe('run with options', () => {
           "ownerId": "0001",
           "title": "issue 1",
           Symbol(rc): 1,
-          Symbol(encodedRow): {
-            "closed": false,
-            "createdAt": 1,
-            "description": "description 1",
-            "id": "0001",
-            "ownerId": "0001",
-            "title": "issue 1",
-          },
         },
       ]
     `);
@@ -1417,14 +1198,6 @@ test('json columns are returned as JS objects', async () => {
         },
         "name": "Alice",
         Symbol(rc): 1,
-        Symbol(encodedRow): {
-          "id": "0001",
-          "metadata": {
-            "login": "alicegh",
-            "registrar": "github",
-          },
-          "name": "Alice",
-        },
       },
       {
         "id": "0002",
@@ -1439,19 +1212,6 @@ test('json columns are returned as JS objects', async () => {
         },
         "name": "Bob",
         Symbol(rc): 1,
-        Symbol(encodedRow): {
-          "id": "0002",
-          "metadata": {
-            "altContacts": [
-              "bobwave",
-              "bobyt",
-              "bobplus",
-            ],
-            "login": "bob@gmail.com",
-            "registar": "google",
-          },
-          "name": "Bob",
-        },
       },
     ]
   `);
@@ -1475,14 +1235,6 @@ test('complex expression', async () => {
         "ownerId": "0001",
         "title": "issue 1",
         Symbol(rc): 1,
-        Symbol(encodedRow): {
-          "closed": false,
-          "createdAt": 1,
-          "description": "description 1",
-          "id": "0001",
-          "ownerId": "0001",
-          "title": "issue 1",
-        },
       },
       {
         "closed": false,
@@ -1492,14 +1244,6 @@ test('complex expression', async () => {
         "ownerId": "0002",
         "title": "issue 2",
         Symbol(rc): 1,
-        Symbol(encodedRow): {
-          "closed": false,
-          "createdAt": 2,
-          "description": "description 2",
-          "id": "0002",
-          "ownerId": "0002",
-          "title": "issue 2",
-        },
       },
     ]
   `);
@@ -1522,14 +1266,6 @@ test('complex expression', async () => {
         "ownerId": "0001",
         "title": "issue 1",
         Symbol(rc): 1,
-        Symbol(encodedRow): {
-          "closed": false,
-          "createdAt": 1,
-          "description": "description 1",
-          "id": "0001",
-          "ownerId": "0001",
-          "title": "issue 1",
-        },
       },
     ]
   `);
@@ -1551,14 +1287,6 @@ test('null compare', async () => {
         "ownerId": null,
         "title": "issue 3",
         Symbol(rc): 1,
-        Symbol(encodedRow): {
-          "closed": false,
-          "createdAt": 3,
-          "description": "description 3",
-          "id": "0003",
-          "ownerId": null,
-          "title": "issue 3",
-        },
       },
     ]
   `);
@@ -1576,14 +1304,6 @@ test('null compare', async () => {
         "ownerId": "0001",
         "title": "issue 1",
         Symbol(rc): 1,
-        Symbol(encodedRow): {
-          "closed": false,
-          "createdAt": 1,
-          "description": "description 1",
-          "id": "0001",
-          "ownerId": "0001",
-          "title": "issue 1",
-        },
       },
       {
         "closed": false,
@@ -1593,14 +1313,6 @@ test('null compare', async () => {
         "ownerId": "0002",
         "title": "issue 2",
         Symbol(rc): 1,
-        Symbol(encodedRow): {
-          "closed": false,
-          "createdAt": 2,
-          "description": "description 2",
-          "id": "0002",
-          "ownerId": "0002",
-          "title": "issue 2",
-        },
       },
     ]
   `);
@@ -1634,14 +1346,6 @@ test('where with undefined converts to null', async () => {
         "ownerId": null,
         "title": "issue 3",
         Symbol(rc): 1,
-        Symbol(encodedRow): {
-          "closed": false,
-          "createdAt": 3,
-          "description": "description 3",
-          "id": "0003",
-          "ownerId": null,
-          "title": "issue 3",
-        },
       },
     ]
   `);
@@ -1672,14 +1376,6 @@ test('literal filter', async () => {
         "ownerId": "0001",
         "title": "issue 1",
         Symbol(rc): 1,
-        Symbol(encodedRow): {
-          "closed": false,
-          "createdAt": 1,
-          "description": "description 1",
-          "id": "0001",
-          "ownerId": "0001",
-          "title": "issue 1",
-        },
       },
       {
         "closed": false,
@@ -1689,14 +1385,6 @@ test('literal filter', async () => {
         "ownerId": "0002",
         "title": "issue 2",
         Symbol(rc): 1,
-        Symbol(encodedRow): {
-          "closed": false,
-          "createdAt": 2,
-          "description": "description 2",
-          "id": "0002",
-          "ownerId": "0002",
-          "title": "issue 2",
-        },
       },
       {
         "closed": false,
@@ -1706,14 +1394,6 @@ test('literal filter', async () => {
         "ownerId": null,
         "title": "issue 3",
         Symbol(rc): 1,
-        Symbol(encodedRow): {
-          "closed": false,
-          "createdAt": 3,
-          "description": "description 3",
-          "id": "0003",
-          "ownerId": null,
-          "title": "issue 3",
-        },
       },
     ]
   `);
@@ -1804,12 +1484,6 @@ test('join with compound keys', async () => {
             "b3": 3,
             "id": 0,
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "b1": 1,
-              "b2": 2,
-              "b3": 3,
-              "id": 0,
-            },
           },
           {
             "b1": 1,
@@ -1817,22 +1491,10 @@ test('join with compound keys', async () => {
             "b3": 4,
             "id": 1,
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "b1": 1,
-              "b2": 2,
-              "b3": 4,
-              "id": 1,
-            },
           },
         ],
         "id": 0,
         Symbol(rc): 1,
-        Symbol(encodedRow): {
-          "a1": 1,
-          "a2": 2,
-          "a3": 3,
-          "id": 0,
-        },
       },
       {
         "a1": 2,
@@ -1845,22 +1507,10 @@ test('join with compound keys', async () => {
             "b3": 5,
             "id": 2,
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "b1": 2,
-              "b2": 3,
-              "b3": 5,
-              "id": 2,
-            },
           },
         ],
         "id": 1,
         Symbol(rc): 1,
-        Symbol(encodedRow): {
-          "a1": 2,
-          "a2": 3,
-          "a3": 4,
-          "id": 1,
-        },
       },
       {
         "a1": 2,
@@ -1873,22 +1523,10 @@ test('join with compound keys', async () => {
             "b3": 5,
             "id": 2,
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "b1": 2,
-              "b2": 3,
-              "b3": 5,
-              "id": 2,
-            },
           },
         ],
         "id": 2,
         Symbol(rc): 1,
-        Symbol(encodedRow): {
-          "a1": 2,
-          "a2": 3,
-          "a3": 5,
-          "id": 2,
-        },
       },
     ]
   `);
@@ -1962,23 +1600,11 @@ test('where exists', () => {
             "id": "0001",
             "name": "bug",
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "id": "0001",
-              "name": "bug",
-            },
           },
         ],
         "ownerId": "0002",
         "title": "issue 2",
         Symbol(rc): 1,
-        Symbol(encodedRow): {
-          "closed": true,
-          "createdAt": 20,
-          "description": "description 2",
-          "id": "0002",
-          "ownerId": "0002",
-          "title": "issue 2",
-        },
       },
     ]
   `);
@@ -2049,14 +1675,6 @@ test("flipped exists, or'ed", () => {
         "ownerId": "0001",
         "title": "issue 1",
         Symbol(rc): 1,
-        Symbol(encodedRow): {
-          "closed": false,
-          "createdAt": 10,
-          "description": "description 1",
-          "id": "0001",
-          "ownerId": "0001",
-          "title": "issue 1",
-        },
       },
     ]
   `);
@@ -2092,14 +1710,6 @@ test("flipped exists, or'ed", () => {
         "ownerId": "0001",
         "title": "issue 1",
         Symbol(rc): 1,
-        Symbol(encodedRow): {
-          "closed": false,
-          "createdAt": 10,
-          "description": "description 1",
-          "id": "0001",
-          "ownerId": "0001",
-          "title": "issue 1",
-        },
       },
     ]
   `);
@@ -2219,14 +1829,6 @@ test('broken flipped exists', async () => {
         "ownerId": "0001",
         "title": "issue 1",
         Symbol(rc): 1,
-        Symbol(encodedRow): {
-          "closed": false,
-          "createdAt": 10,
-          "description": "description 1",
-          "id": "0001",
-          "ownerId": "0001",
-          "title": "issue 1",
-        },
       },
     ]
   `);
@@ -2301,23 +1903,11 @@ test('duplicative where exists', () => {
             "id": "0001",
             "name": "bug",
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "id": "0001",
-              "name": "bug",
-            },
           },
         ],
         "ownerId": "0002",
         "title": "issue 2",
         Symbol(rc): 1,
-        Symbol(encodedRow): {
-          "closed": true,
-          "createdAt": 20,
-          "description": "description 2",
-          "id": "0002",
-          "ownerId": "0002",
-          "title": "issue 2",
-        },
       },
     ]
   `);

@@ -20,7 +20,7 @@ export const encodedRowSymbol = Symbol('encodedRow');
 type ReadonlyMetaEntry = Entry & {
   readonly [refCountSymbol]: number;
   readonly [idSymbol]?: string | undefined;
-  readonly [encodedRowSymbol]: Row;
+  readonly [encodedRowSymbol]?: Row | undefined;
 };
 
 type MutableMetaEntry = Writable<ReadonlyMetaEntry>;
@@ -529,15 +529,18 @@ function applyEdit<M extends Mutate>(
   withIDs: WithIDs,
   mutate: Mutate,
 ): MetaEntry<M> {
-  // Decode new row fields; keep raw row as back-pointer for binary search.
+  // Decode new row fields; keep raw row as back-pointer for binary search
+  // only when decoding actually changed the row (i.e. there are codecs).
   const decodedRow = decodeRowFields(change.node.row, schema);
+  const encodedRowProp =
+    decodedRow !== change.node.row
+      ? {[encodedRowSymbol]: change.node.row}
+      : undefined;
   const newEntry: MutableMetaEntry =
     // Even for mutate we want to create a new entry if the primary key changed.
     mutate && schema.compareRows(change.oldNode.row, change.node.row) === 0
-      ? Object.assign(existing, decodedRow, {
-          [encodedRowSymbol]: change.node.row,
-        })
-      : {...existing, ...decodedRow, [encodedRowSymbol]: change.node.row};
+      ? Object.assign(existing, decodedRow, encodedRowProp)
+      : {...existing, ...decodedRow, ...encodedRowProp};
 
   if (withIDs) {
     return setProperty(
@@ -722,7 +725,12 @@ function binarySearch(
     const mid = (low + high) >>> 1;
     // Use the raw encoded row (back-pointer) so the comparator sees stored
     // values even when the entry holds decoded (app-typed) values.
-    const comparison = comparator(view[mid][encodedRowSymbol], target);
+    // Use the raw encoded row back-pointer when present (codec schemas),
+    // otherwise the entry's own fields are already the raw stored values.
+    const comparison = comparator(
+      view[mid][encodedRowSymbol] ?? (view[mid] as unknown as Row),
+      target,
+    );
     if (comparison < 0) {
       low = mid + 1;
     } else if (comparison > 0) {
@@ -782,17 +790,23 @@ function makeNewMetaEntry(
   withIDs: WithIDs,
   rc: number,
 ): MutableMetaEntry {
-  // Decode codec columns; raw row is stored as back-pointer for binary search.
+  // Decode codec columns; raw row is stored as back-pointer for binary search
+  // only when decoding actually changed the row (i.e. there are codecs).
   const decodedRow = decodeRowFields(row, schema);
+  const hasCodecs = decodedRow !== row;
   if (withIDs) {
     return {
       ...decodedRow,
       [refCountSymbol]: rc,
       [idSymbol]: makeID(row, schema),
-      [encodedRowSymbol]: row,
+      ...(hasCodecs ? {[encodedRowSymbol]: row} : undefined),
     };
   }
-  return {...decodedRow, [refCountSymbol]: rc, [encodedRowSymbol]: row};
+  return {
+    ...decodedRow,
+    [refCountSymbol]: rc,
+    ...(hasCodecs ? {[encodedRowSymbol]: row} : undefined),
+  };
 }
 
 function makeID(row: Row, schema: SourceSchema) {

@@ -57,43 +57,24 @@ describe('take with no partition', () => {
             "created": 50,
             "id": "i4",
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "created": 50,
-              "id": "i4",
-            },
           },
           {
             "created": 100,
             "id": "i1",
             "text": null,
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "created": 100,
-              "id": "i1",
-              "text": null,
-            },
           },
           {
             "created": 200,
             "id": "i2",
             "text": null,
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "created": 200,
-              "id": "i2",
-              "text": null,
-            },
           },
           {
             "created": 300,
             "id": "i3",
             "text": null,
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "created": 300,
-              "id": "i3",
-              "text": null,
-            },
           },
         ]
       `);
@@ -173,42 +154,23 @@ describe('take with no partition', () => {
             "id": "i1",
             "text": null,
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "created": 100,
-              "id": "i1",
-              "text": null,
-            },
           },
           {
             "created": 200,
             "id": "i2",
             "text": null,
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "created": 200,
-              "id": "i2",
-              "text": null,
-            },
           },
           {
             "created": 300,
             "id": "i3",
             "text": null,
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "created": 300,
-              "id": "i3",
-              "text": null,
-            },
           },
           {
             "created": 350,
             "id": "i4",
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "created": 350,
-              "id": "i4",
-            },
           },
         ]
       `);
@@ -287,33 +249,18 @@ describe('take with no partition', () => {
             "id": "i1",
             "text": null,
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "created": 100,
-              "id": "i1",
-              "text": null,
-            },
           },
           {
             "created": 200,
             "id": "i2",
             "text": null,
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "created": 200,
-              "id": "i2",
-              "text": null,
-            },
           },
           {
             "created": 300,
             "id": "i3",
             "text": null,
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "created": 300,
-              "id": "i3",
-              "text": null,
-            },
           },
         ]
       `);
@@ -370,32 +317,18 @@ describe('take with no partition', () => {
             "created": 50,
             "id": "i5",
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "created": 50,
-              "id": "i5",
-            },
           },
           {
             "created": 100,
             "id": "i1",
             "text": null,
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "created": 100,
-              "id": "i1",
-              "text": null,
-            },
           },
           {
             "created": 200,
             "id": "i2",
             "text": null,
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "created": 200,
-              "id": "i2",
-              "text": null,
-            },
           },
         ]
       `);
@@ -561,10 +494,6 @@ describe('take with no partition', () => {
           "created": 50,
           "id": "i5",
           Symbol(rc): 1,
-          Symbol(encodedRow): {
-            "created": 50,
-            "id": "i5",
-          },
         }
       `);
       expect(messages).toMatchInlineSnapshot(`
@@ -696,31 +625,17 @@ describe('take with no partition', () => {
             "id": "i1",
             "text": null,
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "created": 100,
-              "id": "i1",
-              "text": null,
-            },
           },
           {
             "created": 200,
             "id": "i2",
             "text": null,
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "created": 200,
-              "id": "i2",
-              "text": null,
-            },
           },
           {
             "created": 250,
             "id": "i5",
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "created": 250,
-              "id": "i5",
-            },
           },
         ]
       `);
@@ -917,22 +832,12 @@ describe('take with no partition', () => {
             "id": "i2",
             "text": null,
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "created": 200,
-              "id": "i2",
-              "text": null,
-            },
           },
           {
             "created": 300,
             "id": "i3",
             "text": null,
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "created": 300,
-              "id": "i3",
-              "text": null,
-            },
           },
         ]
       `);
@@ -1043,22 +948,12 @@ describe('take with no partition', () => {
             "id": "i1",
             "text": null,
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "created": 100,
-              "id": "i1",
-              "text": null,
-            },
           },
           {
             "created": 200,
             "id": "i2",
             "text": null,
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "created": 200,
-              "id": "i2",
-              "text": null,
-            },
           },
         ]
       `);
@@ -1170,33 +1065,18 @@ describe('take with no partition', () => {
             "id": "i1",
             "text": null,
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "created": 100,
-              "id": "i1",
-              "text": null,
-            },
           },
           {
             "created": 200,
             "id": "i2",
             "text": null,
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "created": 200,
-              "id": "i2",
-              "text": null,
-            },
           },
           {
             "created": 300,
             "id": "i3",
             "text": null,
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "created": 300,
-              "id": "i3",
-              "text": null,
-            },
           },
         ]
       `);
@@ -1254,33 +1134,18 @@ describe('take with no partition', () => {
             "id": "i2",
             "text": null,
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "created": 200,
-              "id": "i2",
-              "text": null,
-            },
           },
           {
             "created": 300,
             "id": "i3",
             "text": null,
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "created": 300,
-              "id": "i3",
-              "text": null,
-            },
           },
           {
             "created": 400,
             "id": "i4",
             "text": null,
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "created": 400,
-              "id": "i4",
-              "text": null,
-            },
           },
         ]
       `);
@@ -1464,22 +1329,12 @@ describe('take with no partition', () => {
             "id": "i2",
             "text": null,
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "created": 200,
-              "id": "i2",
-              "text": null,
-            },
           },
           {
             "created": 300,
             "id": "i3",
             "text": null,
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "created": 300,
-              "id": "i3",
-              "text": null,
-            },
           },
         ]
       `);
@@ -1646,11 +1501,6 @@ describe('take with no partition', () => {
           "id": "i2",
           "text": null,
           Symbol(rc): 1,
-          Symbol(encodedRow): {
-            "created": 200,
-            "id": "i2",
-            "text": null,
-          },
         }
       `);
       expect(messages).toMatchInlineSnapshot(`
@@ -1798,22 +1648,12 @@ describe('take with no partition', () => {
             "id": "i2",
             "text": null,
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "created": 200,
-              "id": "i2",
-              "text": null,
-            },
           },
           {
             "created": 300,
             "id": "i3",
             "text": null,
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "created": 300,
-              "id": "i3",
-              "text": null,
-            },
           },
         ]
       `);
@@ -1926,33 +1766,18 @@ describe('take with no partition', () => {
             "id": "i1",
             "text": null,
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "created": 100,
-              "id": "i1",
-              "text": null,
-            },
           },
           {
             "created": 200,
             "id": "i2",
             "text": null,
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "created": 200,
-              "id": "i2",
-              "text": null,
-            },
           },
           {
             "created": 400,
             "id": "i4",
             "text": null,
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "created": 400,
-              "id": "i4",
-              "text": null,
-            },
           },
         ]
       `);
@@ -2134,22 +1959,12 @@ describe('take with no partition', () => {
             "id": "i1",
             "text": null,
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "created": 100,
-              "id": "i1",
-              "text": null,
-            },
           },
           {
             "created": 200,
             "id": "i2",
             "text": null,
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "created": 200,
-              "id": "i2",
-              "text": null,
-            },
           },
         ]
       `);
@@ -2310,44 +2125,24 @@ describe('take with no partition', () => {
               "id": "i1",
               "text": "a2",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "created": 100,
-                "id": "i1",
-                "text": "a2",
-              },
             },
             {
               "created": 200,
               "id": "i2",
               "text": "b",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "created": 200,
-                "id": "i2",
-                "text": "b",
-              },
             },
             {
               "created": 300,
               "id": "i3",
               "text": "c",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "created": 300,
-                "id": "i3",
-                "text": "c",
-              },
             },
             {
               "created": 400,
               "id": "i4",
               "text": "d",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "created": 400,
-                "id": "i4",
-                "text": "d",
-              },
             },
           ]
         `);
@@ -2443,44 +2238,24 @@ describe('take with no partition', () => {
               "id": "i1",
               "text": "a",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "created": 100,
-                "id": "i1",
-                "text": "a",
-              },
             },
             {
               "created": 200,
               "id": "i2",
               "text": "b",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "created": 200,
-                "id": "i2",
-                "text": "b",
-              },
             },
             {
               "created": 300,
               "id": "i3",
               "text": "c",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "created": 300,
-                "id": "i3",
-                "text": "c",
-              },
             },
             {
               "created": 400,
               "id": "i4",
               "text": "d2",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "created": 400,
-                "id": "i4",
-                "text": "d2",
-              },
             },
           ]
         `);
@@ -2578,33 +2353,18 @@ describe('take with no partition', () => {
               "id": "i1",
               "text": "a",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "created": 100,
-                "id": "i1",
-                "text": "a",
-              },
             },
             {
               "created": 200,
               "id": "i2",
               "text": "b",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "created": 200,
-                "id": "i2",
-                "text": "b",
-              },
             },
             {
               "created": 300,
               "id": "i3",
               "text": "c",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "created": 300,
-                "id": "i3",
-                "text": "c",
-              },
             },
           ]
         `);
@@ -2667,33 +2427,18 @@ describe('take with no partition', () => {
               "id": "i1",
               "text": "a",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "created": 100,
-                "id": "i1",
-                "text": "a",
-              },
             },
             {
               "created": 200,
               "id": "i2",
               "text": "b2",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "created": 200,
-                "id": "i2",
-                "text": "b2",
-              },
             },
             {
               "created": 300,
               "id": "i3",
               "text": "c",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "created": 300,
-                "id": "i3",
-                "text": "c",
-              },
             },
           ]
         `);
@@ -2789,33 +2534,18 @@ describe('take with no partition', () => {
               "id": "i1",
               "text": "a",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "created": 100,
-                "id": "i1",
-                "text": "a",
-              },
             },
             {
               "created": 200,
               "id": "i2",
               "text": "b",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "created": 200,
-                "id": "i2",
-                "text": "b",
-              },
             },
             {
               "created": 300,
               "id": "i3",
               "text": "c2",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "created": 300,
-                "id": "i3",
-                "text": "c2",
-              },
             },
           ]
         `);
@@ -2912,33 +2642,18 @@ describe('take with no partition', () => {
               "id": "i1",
               "text": "a",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "created": 100,
-                "id": "i1",
-                "text": "a",
-              },
             },
             {
               "created": 200,
               "id": "i2",
               "text": "b",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "created": 200,
-                "id": "i2",
-                "text": "b",
-              },
             },
             {
               "created": 400,
               "id": "i4",
               "text": "d",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "created": 400,
-                "id": "i4",
-                "text": "d",
-              },
             },
           ]
         `);
@@ -3113,33 +2828,18 @@ describe('take with no partition', () => {
               "id": "i2",
               "text": "b2",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "created": 50,
-                "id": "i2",
-                "text": "b2",
-              },
             },
             {
               "created": 100,
               "id": "i1",
               "text": "a",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "created": 100,
-                "id": "i1",
-                "text": "a",
-              },
             },
             {
               "created": 300,
               "id": "i3",
               "text": "c",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "created": 300,
-                "id": "i3",
-                "text": "c",
-              },
             },
           ]
         `);
@@ -3236,33 +2936,18 @@ describe('take with no partition', () => {
               "id": "i1",
               "text": "a",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "created": 100,
-                "id": "i1",
-                "text": "a",
-              },
             },
             {
               "created": 200,
               "id": "i2",
               "text": "b",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "created": 200,
-                "id": "i2",
-                "text": "b",
-              },
             },
             {
               "created": 250,
               "id": "i4",
               "text": "d",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "created": 250,
-                "id": "i4",
-                "text": "d",
-              },
             },
           ]
         `);
@@ -3438,33 +3123,18 @@ describe('take with no partition', () => {
               "id": "i1",
               "text": "a",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "created": 100,
-                "id": "i1",
-                "text": "a",
-              },
             },
             {
               "created": 300,
               "id": "i3",
               "text": "c",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "created": 300,
-                "id": "i3",
-                "text": "c",
-              },
             },
             {
               "created": 350,
               "id": "i2",
               "text": "b2",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "created": 350,
-                "id": "i2",
-                "text": "b2",
-              },
             },
           ]
         `);
@@ -3576,33 +3246,18 @@ describe('take with no partition', () => {
               "id": "i1",
               "text": "a",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "created": 100,
-                "id": "i1",
-                "text": "a",
-              },
             },
             {
               "created": 300,
               "id": "i3",
               "text": "c",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "created": 300,
-                "id": "i3",
-                "text": "c",
-              },
             },
             {
               "created": 400,
               "id": "i4",
               "text": "d",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "created": 400,
-                "id": "i4",
-                "text": "d",
-              },
             },
           ]
         `);
@@ -3777,11 +3432,6 @@ describe('take with no partition', () => {
           "id": "i1",
           "text": "a2",
           Symbol(rc): 1,
-          Symbol(encodedRow): {
-            "created": 50,
-            "id": "i1",
-            "text": "a2",
-          },
         }
       `);
       expect(messages).toMatchInlineSnapshot(`
@@ -3878,17 +3528,11 @@ describe('take with partition', () => {
             "comments": [],
             "id": "i1",
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "id": "i1",
-            },
           },
           {
             "comments": [],
             "id": "i2",
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "id": "i2",
-            },
           },
         ]
       `);
@@ -3934,12 +3578,6 @@ describe('take with partition', () => {
                 "issueID": "i1",
                 "text": null,
                 Symbol(rc): 1,
-                Symbol(encodedRow): {
-                  "created": 100,
-                  "id": "c1",
-                  "issueID": "i1",
-                  "text": null,
-                },
               },
               {
                 "created": 200,
@@ -3947,12 +3585,6 @@ describe('take with partition', () => {
                 "issueID": "i1",
                 "text": null,
                 Symbol(rc): 1,
-                Symbol(encodedRow): {
-                  "created": 200,
-                  "id": "c2",
-                  "issueID": "i1",
-                  "text": null,
-                },
               },
               {
                 "created": 300,
@@ -3960,19 +3592,10 @@ describe('take with partition', () => {
                 "issueID": "i1",
                 "text": null,
                 Symbol(rc): 1,
-                Symbol(encodedRow): {
-                  "created": 300,
-                  "id": "c3",
-                  "issueID": "i1",
-                  "text": null,
-                },
               },
             ],
             "id": "i1",
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "id": "i1",
-            },
           },
           {
             "comments": [
@@ -3981,11 +3604,6 @@ describe('take with partition', () => {
                 "id": "c6",
                 "issueID": "i2",
                 Symbol(rc): 1,
-                Symbol(encodedRow): {
-                  "created": 150,
-                  "id": "c6",
-                  "issueID": "i2",
-                },
               },
               {
                 "created": 400,
@@ -3993,12 +3611,6 @@ describe('take with partition', () => {
                 "issueID": "i2",
                 "text": null,
                 Symbol(rc): 1,
-                Symbol(encodedRow): {
-                  "created": 400,
-                  "id": "c4",
-                  "issueID": "i2",
-                  "text": null,
-                },
               },
               {
                 "created": 500,
@@ -4006,19 +3618,10 @@ describe('take with partition', () => {
                 "issueID": "i2",
                 "text": null,
                 Symbol(rc): 1,
-                Symbol(encodedRow): {
-                  "created": 500,
-                  "id": "c5",
-                  "issueID": "i2",
-                  "text": null,
-                },
               },
             ],
             "id": "i2",
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "id": "i2",
-            },
           },
         ]
       `);
@@ -4158,12 +3761,6 @@ describe('take with partition', () => {
                 "issueID": "i1",
                 "text": null,
                 Symbol(rc): 1,
-                Symbol(encodedRow): {
-                  "created": 100,
-                  "id": "c1",
-                  "issueID": "i1",
-                  "text": null,
-                },
               },
               {
                 "created": 200,
@@ -4171,12 +3768,6 @@ describe('take with partition', () => {
                 "issueID": "i1",
                 "text": null,
                 Symbol(rc): 1,
-                Symbol(encodedRow): {
-                  "created": 200,
-                  "id": "c2",
-                  "issueID": "i1",
-                  "text": null,
-                },
               },
               {
                 "created": 580,
@@ -4184,19 +3775,10 @@ describe('take with partition', () => {
                 "issueID": "i1",
                 "text": null,
                 Symbol(rc): 1,
-                Symbol(encodedRow): {
-                  "created": 580,
-                  "id": "c3",
-                  "issueID": "i1",
-                  "text": null,
-                },
               },
             ],
             "id": "i1",
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "id": "i1",
-            },
           },
           {
             "comments": [
@@ -4206,12 +3788,6 @@ describe('take with partition', () => {
                 "issueID": "i2",
                 "text": null,
                 Symbol(rc): 1,
-                Symbol(encodedRow): {
-                  "created": 400,
-                  "id": "c4",
-                  "issueID": "i2",
-                  "text": null,
-                },
               },
               {
                 "created": 500,
@@ -4219,30 +3795,16 @@ describe('take with partition', () => {
                 "issueID": "i2",
                 "text": null,
                 Symbol(rc): 1,
-                Symbol(encodedRow): {
-                  "created": 500,
-                  "id": "c5",
-                  "issueID": "i2",
-                  "text": null,
-                },
               },
               {
                 "created": 550,
                 "id": "c8",
                 "issueID": "i2",
                 Symbol(rc): 1,
-                Symbol(encodedRow): {
-                  "created": 550,
-                  "id": "c8",
-                  "issueID": "i2",
-                },
               },
             ],
             "id": "i2",
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "id": "i2",
-            },
           },
         ]
       `);
@@ -4599,12 +4161,6 @@ describe('take with partition', () => {
                 "issueID": "i1",
                 "text": null,
                 Symbol(rc): 1,
-                Symbol(encodedRow): {
-                  "created": 100,
-                  "id": "c1",
-                  "issueID": "i1",
-                  "text": null,
-                },
               },
               {
                 "created": 200,
@@ -4612,12 +4168,6 @@ describe('take with partition', () => {
                 "issueID": "i1",
                 "text": null,
                 Symbol(rc): 1,
-                Symbol(encodedRow): {
-                  "created": 200,
-                  "id": "c2",
-                  "issueID": "i1",
-                  "text": null,
-                },
               },
               {
                 "created": 300,
@@ -4625,19 +4175,10 @@ describe('take with partition', () => {
                 "issueID": "i1",
                 "text": null,
                 Symbol(rc): 1,
-                Symbol(encodedRow): {
-                  "created": 300,
-                  "id": "c3",
-                  "issueID": "i1",
-                  "text": null,
-                },
               },
             ],
             "id": "i1",
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "id": "i1",
-            },
           },
           {
             "comments": [
@@ -4647,12 +4188,6 @@ describe('take with partition', () => {
                 "issueID": "i2",
                 "text": null,
                 Symbol(rc): 1,
-                Symbol(encodedRow): {
-                  "created": 400,
-                  "id": "c4",
-                  "issueID": "i2",
-                  "text": null,
-                },
               },
               {
                 "created": 500,
@@ -4660,19 +4195,10 @@ describe('take with partition', () => {
                 "issueID": "i2",
                 "text": null,
                 Symbol(rc): 1,
-                Symbol(encodedRow): {
-                  "created": 500,
-                  "id": "c5",
-                  "issueID": "i2",
-                  "text": null,
-                },
               },
             ],
             "id": "i2",
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "id": "i2",
-            },
           },
         ]
       `);
@@ -4743,17 +4269,11 @@ describe('take with partition', () => {
             "comments": [],
             "id": "i1",
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "id": "i1",
-            },
           },
           {
             "comments": [],
             "id": "i2",
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "id": "i2",
-            },
           },
         ]
       `);
@@ -4801,12 +4321,6 @@ describe('take with partition', () => {
                 "issueID": "i1",
                 "text": null,
                 Symbol(rc): 1,
-                Symbol(encodedRow): {
-                  "created": 200,
-                  "id": "c2",
-                  "issueID": "i1",
-                  "text": null,
-                },
               },
               {
                 "created": 300,
@@ -4814,19 +4328,10 @@ describe('take with partition', () => {
                 "issueID": "i1",
                 "text": null,
                 Symbol(rc): 1,
-                Symbol(encodedRow): {
-                  "created": 300,
-                  "id": "c3",
-                  "issueID": "i1",
-                  "text": null,
-                },
               },
             ],
             "id": "i1",
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "id": "i1",
-            },
           },
           {
             "comments": [
@@ -4836,12 +4341,6 @@ describe('take with partition', () => {
                 "issueID": "i2",
                 "text": null,
                 Symbol(rc): 1,
-                Symbol(encodedRow): {
-                  "created": 400,
-                  "id": "c4",
-                  "issueID": "i2",
-                  "text": null,
-                },
               },
               {
                 "created": 500,
@@ -4849,19 +4348,10 @@ describe('take with partition', () => {
                 "issueID": "i2",
                 "text": null,
                 Symbol(rc): 1,
-                Symbol(encodedRow): {
-                  "created": 500,
-                  "id": "c5",
-                  "issueID": "i2",
-                  "text": null,
-                },
               },
             ],
             "id": "i2",
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "id": "i2",
-            },
           },
         ]
       `);
@@ -5036,12 +4526,6 @@ describe('take with partition', () => {
                 "issueID": "i1",
                 "text": null,
                 Symbol(rc): 1,
-                Symbol(encodedRow): {
-                  "created": 100,
-                  "id": "c1",
-                  "issueID": "i1",
-                  "text": null,
-                },
               },
               {
                 "created": 200,
@@ -5049,12 +4533,6 @@ describe('take with partition', () => {
                 "issueID": "i1",
                 "text": null,
                 Symbol(rc): 1,
-                Symbol(encodedRow): {
-                  "created": 200,
-                  "id": "c2",
-                  "issueID": "i1",
-                  "text": null,
-                },
               },
               {
                 "created": 300,
@@ -5062,19 +4540,10 @@ describe('take with partition', () => {
                 "issueID": "i1",
                 "text": null,
                 Symbol(rc): 1,
-                Symbol(encodedRow): {
-                  "created": 300,
-                  "id": "c3",
-                  "issueID": "i1",
-                  "text": null,
-                },
               },
             ],
             "id": "i1",
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "id": "i1",
-            },
           },
           {
             "comments": [
@@ -5084,12 +4553,6 @@ describe('take with partition', () => {
                 "issueID": "i2",
                 "text": null,
                 Symbol(rc): 1,
-                Symbol(encodedRow): {
-                  "created": 400,
-                  "id": "c4",
-                  "issueID": "i2",
-                  "text": null,
-                },
               },
               {
                 "created": 500,
@@ -5097,19 +4560,10 @@ describe('take with partition', () => {
                 "issueID": "i2",
                 "text": null,
                 Symbol(rc): 1,
-                Symbol(encodedRow): {
-                  "created": 500,
-                  "id": "c5",
-                  "issueID": "i2",
-                  "text": null,
-                },
               },
             ],
             "id": "i2",
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "id": "i2",
-            },
           },
         ]
       `);
@@ -5189,17 +4643,11 @@ describe('take with partition', () => {
             "comments": [],
             "id": "i1",
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "id": "i1",
-            },
           },
           {
             "comments": [],
             "id": "i2",
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "id": "i2",
-            },
           },
         ]
       `);
@@ -5252,12 +4700,6 @@ describe('take with partition', () => {
                   "issueID": "i1",
                   "text": "a2",
                   Symbol(rc): 1,
-                  Symbol(encodedRow): {
-                    "created": 100,
-                    "id": "c1",
-                    "issueID": "i1",
-                    "text": "a2",
-                  },
                 },
                 {
                   "created": 200,
@@ -5265,12 +4707,6 @@ describe('take with partition', () => {
                   "issueID": "i1",
                   "text": "b",
                   Symbol(rc): 1,
-                  Symbol(encodedRow): {
-                    "created": 200,
-                    "id": "c2",
-                    "issueID": "i1",
-                    "text": "b",
-                  },
                 },
                 {
                   "created": 300,
@@ -5278,19 +4714,10 @@ describe('take with partition', () => {
                   "issueID": "i1",
                   "text": "c",
                   Symbol(rc): 1,
-                  Symbol(encodedRow): {
-                    "created": 300,
-                    "id": "c3",
-                    "issueID": "i1",
-                    "text": "c",
-                  },
                 },
               ],
               "id": "i1",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "id": "i1",
-              },
             },
             {
               "comments": [
@@ -5300,12 +4727,6 @@ describe('take with partition', () => {
                   "issueID": "i2",
                   "text": "d",
                   Symbol(rc): 1,
-                  Symbol(encodedRow): {
-                    "created": 400,
-                    "id": "c4",
-                    "issueID": "i2",
-                    "text": "d",
-                  },
                 },
                 {
                   "created": 500,
@@ -5313,19 +4734,10 @@ describe('take with partition', () => {
                   "issueID": "i2",
                   "text": "e",
                   Symbol(rc): 1,
-                  Symbol(encodedRow): {
-                    "created": 500,
-                    "id": "c5",
-                    "issueID": "i2",
-                    "text": "e",
-                  },
                 },
               ],
               "id": "i2",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "id": "i2",
-              },
             },
           ]
         `);
@@ -5484,12 +4896,6 @@ describe('take with partition', () => {
                   "issueID": "i1",
                   "text": "a",
                   Symbol(rc): 1,
-                  Symbol(encodedRow): {
-                    "created": 100,
-                    "id": "c1",
-                    "issueID": "i1",
-                    "text": "a",
-                  },
                 },
                 {
                   "created": 200,
@@ -5497,12 +4903,6 @@ describe('take with partition', () => {
                   "issueID": "i1",
                   "text": "b",
                   Symbol(rc): 1,
-                  Symbol(encodedRow): {
-                    "created": 200,
-                    "id": "c2",
-                    "issueID": "i1",
-                    "text": "b",
-                  },
                 },
                 {
                   "created": 300,
@@ -5510,19 +4910,10 @@ describe('take with partition', () => {
                   "issueID": "i1",
                   "text": "c",
                   Symbol(rc): 1,
-                  Symbol(encodedRow): {
-                    "created": 300,
-                    "id": "c3",
-                    "issueID": "i1",
-                    "text": "c",
-                  },
                 },
               ],
               "id": "i1",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "id": "i1",
-              },
             },
             {
               "comments": [
@@ -5532,12 +4923,6 @@ describe('take with partition', () => {
                   "issueID": "i2",
                   "text": "d",
                   Symbol(rc): 1,
-                  Symbol(encodedRow): {
-                    "created": 400,
-                    "id": "c4",
-                    "issueID": "i2",
-                    "text": "d",
-                  },
                 },
                 {
                   "created": 500,
@@ -5545,19 +4930,10 @@ describe('take with partition', () => {
                   "issueID": "i2",
                   "text": "e2",
                   Symbol(rc): 1,
-                  Symbol(encodedRow): {
-                    "created": 500,
-                    "id": "c5",
-                    "issueID": "i2",
-                    "text": "e2",
-                  },
                 },
               ],
               "id": "i2",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "id": "i2",
-              },
             },
           ]
         `);
@@ -5718,12 +5094,6 @@ describe('take with partition', () => {
                   "issueID": "i1",
                   "text": "a",
                   Symbol(rc): 1,
-                  Symbol(encodedRow): {
-                    "created": 100,
-                    "id": "c1",
-                    "issueID": "i1",
-                    "text": "a",
-                  },
                 },
                 {
                   "created": 200,
@@ -5731,19 +5101,10 @@ describe('take with partition', () => {
                   "issueID": "i1",
                   "text": "b",
                   Symbol(rc): 1,
-                  Symbol(encodedRow): {
-                    "created": 200,
-                    "id": "c2",
-                    "issueID": "i1",
-                    "text": "b",
-                  },
                 },
               ],
               "id": "i1",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "id": "i1",
-              },
             },
             {
               "comments": [
@@ -5753,12 +5114,6 @@ describe('take with partition', () => {
                   "issueID": "i2",
                   "text": "d",
                   Symbol(rc): 1,
-                  Symbol(encodedRow): {
-                    "created": 400,
-                    "id": "c4",
-                    "issueID": "i2",
-                    "text": "d",
-                  },
                 },
                 {
                   "created": 500,
@@ -5766,19 +5121,10 @@ describe('take with partition', () => {
                   "issueID": "i2",
                   "text": "e",
                   Symbol(rc): 1,
-                  Symbol(encodedRow): {
-                    "created": 500,
-                    "id": "c5",
-                    "issueID": "i2",
-                    "text": "e",
-                  },
                 },
               ],
               "id": "i2",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "id": "i2",
-              },
             },
           ]
         `);
@@ -5857,12 +5203,6 @@ describe('take with partition', () => {
                   "issueID": "i1",
                   "text": "a",
                   Symbol(rc): 1,
-                  Symbol(encodedRow): {
-                    "created": 100,
-                    "id": "c1",
-                    "issueID": "i1",
-                    "text": "a",
-                  },
                 },
                 {
                   "created": 200,
@@ -5870,12 +5210,6 @@ describe('take with partition', () => {
                   "issueID": "i1",
                   "text": "b2",
                   Symbol(rc): 1,
-                  Symbol(encodedRow): {
-                    "created": 200,
-                    "id": "c2",
-                    "issueID": "i1",
-                    "text": "b2",
-                  },
                 },
                 {
                   "created": 300,
@@ -5883,19 +5217,10 @@ describe('take with partition', () => {
                   "issueID": "i1",
                   "text": "c",
                   Symbol(rc): 1,
-                  Symbol(encodedRow): {
-                    "created": 300,
-                    "id": "c3",
-                    "issueID": "i1",
-                    "text": "c",
-                  },
                 },
               ],
               "id": "i1",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "id": "i1",
-              },
             },
             {
               "comments": [
@@ -5905,12 +5230,6 @@ describe('take with partition', () => {
                   "issueID": "i2",
                   "text": "d",
                   Symbol(rc): 1,
-                  Symbol(encodedRow): {
-                    "created": 400,
-                    "id": "c4",
-                    "issueID": "i2",
-                    "text": "d",
-                  },
                 },
                 {
                   "created": 500,
@@ -5918,19 +5237,10 @@ describe('take with partition', () => {
                   "issueID": "i2",
                   "text": "e",
                   Symbol(rc): 1,
-                  Symbol(encodedRow): {
-                    "created": 500,
-                    "id": "c5",
-                    "issueID": "i2",
-                    "text": "e",
-                  },
                 },
               ],
               "id": "i2",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "id": "i2",
-              },
             },
           ]
         `);
@@ -6089,12 +5399,6 @@ describe('take with partition', () => {
                   "issueID": "i1",
                   "text": "a",
                   Symbol(rc): 1,
-                  Symbol(encodedRow): {
-                    "created": 100,
-                    "id": "c1",
-                    "issueID": "i1",
-                    "text": "a",
-                  },
                 },
                 {
                   "created": 200,
@@ -6102,12 +5406,6 @@ describe('take with partition', () => {
                   "issueID": "i1",
                   "text": "b",
                   Symbol(rc): 1,
-                  Symbol(encodedRow): {
-                    "created": 200,
-                    "id": "c2",
-                    "issueID": "i1",
-                    "text": "b",
-                  },
                 },
                 {
                   "created": 300,
@@ -6115,19 +5413,10 @@ describe('take with partition', () => {
                   "issueID": "i1",
                   "text": "c2",
                   Symbol(rc): 1,
-                  Symbol(encodedRow): {
-                    "created": 300,
-                    "id": "c3",
-                    "issueID": "i1",
-                    "text": "c2",
-                  },
                 },
               ],
               "id": "i1",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "id": "i1",
-              },
             },
             {
               "comments": [
@@ -6137,12 +5426,6 @@ describe('take with partition', () => {
                   "issueID": "i2",
                   "text": "d",
                   Symbol(rc): 1,
-                  Symbol(encodedRow): {
-                    "created": 400,
-                    "id": "c4",
-                    "issueID": "i2",
-                    "text": "d",
-                  },
                 },
                 {
                   "created": 500,
@@ -6150,19 +5433,10 @@ describe('take with partition', () => {
                   "issueID": "i2",
                   "text": "e",
                   Symbol(rc): 1,
-                  Symbol(encodedRow): {
-                    "created": 500,
-                    "id": "c5",
-                    "issueID": "i2",
-                    "text": "e",
-                  },
                 },
               ],
               "id": "i2",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "id": "i2",
-              },
             },
           ]
         `);
@@ -6321,12 +5595,6 @@ describe('take with partition', () => {
                   "issueID": "i1",
                   "text": "a",
                   Symbol(rc): 1,
-                  Symbol(encodedRow): {
-                    "created": 100,
-                    "id": "c1",
-                    "issueID": "i1",
-                    "text": "a",
-                  },
                 },
                 {
                   "created": 150,
@@ -6334,12 +5602,6 @@ describe('take with partition', () => {
                   "issueID": "i1",
                   "text": "c2",
                   Symbol(rc): 1,
-                  Symbol(encodedRow): {
-                    "created": 150,
-                    "id": "c3",
-                    "issueID": "i1",
-                    "text": "c2",
-                  },
                 },
                 {
                   "created": 200,
@@ -6347,19 +5609,10 @@ describe('take with partition', () => {
                   "issueID": "i1",
                   "text": "b",
                   Symbol(rc): 1,
-                  Symbol(encodedRow): {
-                    "created": 200,
-                    "id": "c2",
-                    "issueID": "i1",
-                    "text": "b",
-                  },
                 },
               ],
               "id": "i1",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "id": "i1",
-              },
             },
             {
               "comments": [
@@ -6369,12 +5622,6 @@ describe('take with partition', () => {
                   "issueID": "i2",
                   "text": "d",
                   Symbol(rc): 1,
-                  Symbol(encodedRow): {
-                    "created": 400,
-                    "id": "c4",
-                    "issueID": "i2",
-                    "text": "d",
-                  },
                 },
                 {
                   "created": 500,
@@ -6382,19 +5629,10 @@ describe('take with partition', () => {
                   "issueID": "i2",
                   "text": "e",
                   Symbol(rc): 1,
-                  Symbol(encodedRow): {
-                    "created": 500,
-                    "id": "c5",
-                    "issueID": "i2",
-                    "text": "e",
-                  },
                 },
               ],
               "id": "i2",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "id": "i2",
-              },
             },
           ]
         `);
@@ -6574,12 +5812,6 @@ describe('take with partition', () => {
                   "issueID": "i1",
                   "text": "a",
                   Symbol(rc): 1,
-                  Symbol(encodedRow): {
-                    "created": 100,
-                    "id": "c1",
-                    "issueID": "i1",
-                    "text": "a",
-                  },
                 },
                 {
                   "created": 300,
@@ -6587,19 +5819,10 @@ describe('take with partition', () => {
                   "issueID": "i1",
                   "text": "c",
                   Symbol(rc): 1,
-                  Symbol(encodedRow): {
-                    "created": 300,
-                    "id": "c3",
-                    "issueID": "i1",
-                    "text": "c",
-                  },
                 },
               ],
               "id": "i1",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "id": "i1",
-              },
             },
             {
               "comments": [
@@ -6609,12 +5832,6 @@ describe('take with partition', () => {
                   "issueID": "i2",
                   "text": "d",
                   Symbol(rc): 1,
-                  Symbol(encodedRow): {
-                    "created": 400,
-                    "id": "c4",
-                    "issueID": "i2",
-                    "text": "d",
-                  },
                 },
                 {
                   "created": 500,
@@ -6622,19 +5839,10 @@ describe('take with partition', () => {
                   "issueID": "i2",
                   "text": "e",
                   Symbol(rc): 1,
-                  Symbol(encodedRow): {
-                    "created": 500,
-                    "id": "c5",
-                    "issueID": "i2",
-                    "text": "e",
-                  },
                 },
               ],
               "id": "i2",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "id": "i2",
-              },
             },
           ]
         `);
@@ -6965,12 +6173,6 @@ describe('take with partition', () => {
                   "issueID": "i1",
                   "text": "b2",
                   Symbol(rc): 1,
-                  Symbol(encodedRow): {
-                    "created": 50,
-                    "id": "c2",
-                    "issueID": "i1",
-                    "text": "b2",
-                  },
                 },
                 {
                   "created": 100,
@@ -6978,12 +6180,6 @@ describe('take with partition', () => {
                   "issueID": "i1",
                   "text": "a",
                   Symbol(rc): 1,
-                  Symbol(encodedRow): {
-                    "created": 100,
-                    "id": "c1",
-                    "issueID": "i1",
-                    "text": "a",
-                  },
                 },
                 {
                   "created": 300,
@@ -6991,19 +6187,10 @@ describe('take with partition', () => {
                   "issueID": "i1",
                   "text": "c",
                   Symbol(rc): 1,
-                  Symbol(encodedRow): {
-                    "created": 300,
-                    "id": "c3",
-                    "issueID": "i1",
-                    "text": "c",
-                  },
                 },
               ],
               "id": "i1",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "id": "i1",
-              },
             },
             {
               "comments": [
@@ -7013,12 +6200,6 @@ describe('take with partition', () => {
                   "issueID": "i2",
                   "text": "d",
                   Symbol(rc): 1,
-                  Symbol(encodedRow): {
-                    "created": 400,
-                    "id": "c4",
-                    "issueID": "i2",
-                    "text": "d",
-                  },
                 },
                 {
                   "created": 500,
@@ -7026,19 +6207,10 @@ describe('take with partition', () => {
                   "issueID": "i2",
                   "text": "e",
                   Symbol(rc): 1,
-                  Symbol(encodedRow): {
-                    "created": 500,
-                    "id": "c5",
-                    "issueID": "i2",
-                    "text": "e",
-                  },
                 },
               ],
               "id": "i2",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "id": "i2",
-              },
             },
           ]
         `);
@@ -7199,12 +6371,6 @@ describe('take with partition', () => {
                   "issueID": "i1",
                   "text": "a",
                   Symbol(rc): 1,
-                  Symbol(encodedRow): {
-                    "created": 100,
-                    "id": "c1",
-                    "issueID": "i1",
-                    "text": "a",
-                  },
                 },
                 {
                   "created": 150,
@@ -7212,19 +6378,10 @@ describe('take with partition', () => {
                   "issueID": "i1",
                   "text": "c2",
                   Symbol(rc): 1,
-                  Symbol(encodedRow): {
-                    "created": 150,
-                    "id": "c3",
-                    "issueID": "i1",
-                    "text": "c2",
-                  },
                 },
               ],
               "id": "i1",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "id": "i1",
-              },
             },
             {
               "comments": [
@@ -7234,12 +6391,6 @@ describe('take with partition', () => {
                   "issueID": "i2",
                   "text": "d",
                   Symbol(rc): 1,
-                  Symbol(encodedRow): {
-                    "created": 400,
-                    "id": "c4",
-                    "issueID": "i2",
-                    "text": "d",
-                  },
                 },
                 {
                   "created": 500,
@@ -7247,19 +6398,10 @@ describe('take with partition', () => {
                   "issueID": "i2",
                   "text": "e",
                   Symbol(rc): 1,
-                  Symbol(encodedRow): {
-                    "created": 500,
-                    "id": "c5",
-                    "issueID": "i2",
-                    "text": "e",
-                  },
                 },
               ],
               "id": "i2",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "id": "i2",
-              },
             },
           ]
         `);
@@ -7591,12 +6733,6 @@ describe('take with partition', () => {
                   "issueID": "i1",
                   "text": "b",
                   Symbol(rc): 1,
-                  Symbol(encodedRow): {
-                    "created": 200,
-                    "id": "c2",
-                    "issueID": "i1",
-                    "text": "b",
-                  },
                 },
                 {
                   "created": 250,
@@ -7604,19 +6740,10 @@ describe('take with partition', () => {
                   "issueID": "i1",
                   "text": "a2",
                   Symbol(rc): 1,
-                  Symbol(encodedRow): {
-                    "created": 250,
-                    "id": "c1",
-                    "issueID": "i1",
-                    "text": "a2",
-                  },
                 },
               ],
               "id": "i1",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "id": "i1",
-              },
             },
             {
               "comments": [
@@ -7626,12 +6753,6 @@ describe('take with partition', () => {
                   "issueID": "i2",
                   "text": "d",
                   Symbol(rc): 1,
-                  Symbol(encodedRow): {
-                    "created": 400,
-                    "id": "c4",
-                    "issueID": "i2",
-                    "text": "d",
-                  },
                 },
                 {
                   "created": 500,
@@ -7639,19 +6760,10 @@ describe('take with partition', () => {
                   "issueID": "i2",
                   "text": "e",
                   Symbol(rc): 1,
-                  Symbol(encodedRow): {
-                    "created": 500,
-                    "id": "c5",
-                    "issueID": "i2",
-                    "text": "e",
-                  },
                 },
               ],
               "id": "i2",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "id": "i2",
-              },
             },
           ]
         `);
@@ -7830,12 +6942,6 @@ describe('take with partition', () => {
                   "issueID": "i1",
                   "text": "b",
                   Symbol(rc): 1,
-                  Symbol(encodedRow): {
-                    "created": 200,
-                    "id": "c2",
-                    "issueID": "i1",
-                    "text": "b",
-                  },
                 },
                 {
                   "created": 300,
@@ -7843,19 +6949,10 @@ describe('take with partition', () => {
                   "issueID": "i1",
                   "text": "c",
                   Symbol(rc): 1,
-                  Symbol(encodedRow): {
-                    "created": 300,
-                    "id": "c3",
-                    "issueID": "i1",
-                    "text": "c",
-                  },
                 },
               ],
               "id": "i1",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "id": "i1",
-              },
             },
             {
               "comments": [
@@ -7865,12 +6962,6 @@ describe('take with partition', () => {
                   "issueID": "i2",
                   "text": "d",
                   Symbol(rc): 1,
-                  Symbol(encodedRow): {
-                    "created": 400,
-                    "id": "c4",
-                    "issueID": "i2",
-                    "text": "d",
-                  },
                 },
                 {
                   "created": 500,
@@ -7878,19 +6969,10 @@ describe('take with partition', () => {
                   "issueID": "i2",
                   "text": "e",
                   Symbol(rc): 1,
-                  Symbol(encodedRow): {
-                    "created": 500,
-                    "id": "c5",
-                    "issueID": "i2",
-                    "text": "e",
-                  },
                 },
               ],
               "id": "i2",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "id": "i2",
-              },
             },
           ]
         `);
@@ -8225,12 +7307,6 @@ describe('take with partition', () => {
                   "issueID": "i1",
                   "text": "b",
                   Symbol(rc): 1,
-                  Symbol(encodedRow): {
-                    "created": 200,
-                    "id": "c2",
-                    "issueID": "i1",
-                    "text": "b",
-                  },
                 },
                 {
                   "created": 300,
@@ -8238,19 +7314,10 @@ describe('take with partition', () => {
                   "issueID": "i1",
                   "text": "c",
                   Symbol(rc): 1,
-                  Symbol(encodedRow): {
-                    "created": 300,
-                    "id": "c3",
-                    "issueID": "i1",
-                    "text": "c",
-                  },
                 },
               ],
               "id": "i1",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "id": "i1",
-              },
             },
             {
               "comments": [
@@ -8260,12 +7327,6 @@ describe('take with partition', () => {
                   "issueID": "i2",
                   "text": "a2",
                   Symbol(rc): 1,
-                  Symbol(encodedRow): {
-                    "created": 100,
-                    "id": "c1",
-                    "issueID": "i2",
-                    "text": "a2",
-                  },
                 },
                 {
                   "created": 400,
@@ -8273,19 +7334,10 @@ describe('take with partition', () => {
                   "issueID": "i2",
                   "text": "d",
                   Symbol(rc): 1,
-                  Symbol(encodedRow): {
-                    "created": 400,
-                    "id": "c4",
-                    "issueID": "i2",
-                    "text": "d",
-                  },
                 },
               ],
               "id": "i2",
               Symbol(rc): 1,
-              Symbol(encodedRow): {
-                "id": "i2",
-              },
             },
           ]
         `);

@@ -30,7 +30,7 @@ import {
 import {consume} from './stream.ts';
 import {Take} from './take.ts';
 import {createSource} from './test/source-factory.ts';
-import {encodedRowSymbol, refCountSymbol} from './view-apply-change.ts';
+import {refCountSymbol} from './view-apply-change.ts';
 
 const lc = createSilentLogContext();
 
@@ -119,13 +119,11 @@ test('basics', () => {
       a: 1,
       b: 'a',
       [refCountSymbol]: 1,
-      [encodedRowSymbol]: {a: 1, b: 'a'},
     },
     {
       a: 2,
       b: 'b',
       [refCountSymbol]: 1,
-      [encodedRowSymbol]: {a: 2, b: 'b'},
     },
   ]);
 
@@ -143,19 +141,16 @@ test('basics', () => {
       a: 1,
       b: 'a',
       [refCountSymbol]: 1,
-      [encodedRowSymbol]: {a: 1, b: 'a'},
     },
     {
       a: 2,
       b: 'b',
       [refCountSymbol]: 1,
-      [encodedRowSymbol]: {a: 2, b: 'b'},
     },
     {
       a: 3,
       b: 'c',
       [refCountSymbol]: 1,
-      [encodedRowSymbol]: {a: 3, b: 'c'},
     },
   ]);
 
@@ -171,7 +166,6 @@ test('basics', () => {
       a: 3,
       b: 'c',
       [refCountSymbol]: 1,
-      [encodedRowSymbol]: {a: 3, b: 'c'},
     },
   ]);
 
@@ -190,7 +184,6 @@ test('basics', () => {
       a: 3,
       b: 'c',
       [refCountSymbol]: 1,
-      [encodedRowSymbol]: {a: 3, b: 'c'},
     },
   ]);
 });
@@ -332,21 +325,11 @@ test('tree', () => {
             "id": 2,
             "name": "foobar",
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "childID": null,
-              "id": 2,
-              "name": "foobar",
-            },
           },
         ],
         "id": 1,
         "name": "foo",
         Symbol(rc): 1,
-        Symbol(encodedRow): {
-          "childID": 2,
-          "id": 1,
-          "name": "foo",
-        },
       },
       {
         "childID": null,
@@ -354,11 +337,6 @@ test('tree', () => {
         "id": 2,
         "name": "foobar",
         Symbol(rc): 1,
-        Symbol(encodedRow): {
-          "childID": null,
-          "id": 2,
-          "name": "foobar",
-        },
       },
       {
         "childID": 4,
@@ -368,21 +346,11 @@ test('tree', () => {
             "id": 4,
             "name": "monkey",
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "childID": null,
-              "id": 4,
-              "name": "monkey",
-            },
           },
         ],
         "id": 3,
         "name": "mon",
         Symbol(rc): 1,
-        Symbol(encodedRow): {
-          "childID": 4,
-          "id": 3,
-          "name": "mon",
-        },
       },
       {
         "childID": null,
@@ -390,11 +358,6 @@ test('tree', () => {
         "id": 4,
         "name": "monkey",
         Symbol(rc): 1,
-        Symbol(encodedRow): {
-          "childID": null,
-          "id": 4,
-          "name": "monkey",
-        },
       },
     ]
   `);
@@ -412,21 +375,11 @@ test('tree', () => {
             "id": 2,
             "name": "foobar",
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "childID": null,
-              "id": 2,
-              "name": "foobar",
-            },
           },
         ],
         "id": 5,
         "name": "chocolate",
         Symbol(rc): 1,
-        Symbol(encodedRow): {
-          "childID": 2,
-          "id": 5,
-          "name": "chocolate",
-        },
       },
       {
         "childID": 2,
@@ -436,21 +389,11 @@ test('tree', () => {
             "id": 2,
             "name": "foobar",
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "childID": null,
-              "id": 2,
-              "name": "foobar",
-            },
           },
         ],
         "id": 1,
         "name": "foo",
         Symbol(rc): 1,
-        Symbol(encodedRow): {
-          "childID": 2,
-          "id": 1,
-          "name": "foo",
-        },
       },
       {
         "childID": null,
@@ -458,11 +401,6 @@ test('tree', () => {
         "id": 2,
         "name": "foobar",
         Symbol(rc): 1,
-        Symbol(encodedRow): {
-          "childID": null,
-          "id": 2,
-          "name": "foobar",
-        },
       },
       {
         "childID": 4,
@@ -472,21 +410,11 @@ test('tree', () => {
             "id": 4,
             "name": "monkey",
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "childID": null,
-              "id": 4,
-              "name": "monkey",
-            },
           },
         ],
         "id": 3,
         "name": "mon",
         Symbol(rc): 1,
-        Symbol(encodedRow): {
-          "childID": 4,
-          "id": 3,
-          "name": "mon",
-        },
       },
       {
         "childID": null,
@@ -494,11 +422,6 @@ test('tree', () => {
         "id": 4,
         "name": "monkey",
         Symbol(rc): 1,
-        Symbol(encodedRow): {
-          "childID": null,
-          "id": 4,
-          "name": "monkey",
-        },
       },
     ]
   `);
@@ -518,21 +441,11 @@ test('tree', () => {
             "id": 2,
             "name": "foobar",
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "childID": null,
-              "id": 2,
-              "name": "foobar",
-            },
           },
         ],
         "id": 1,
         "name": "foo",
         Symbol(rc): 1,
-        Symbol(encodedRow): {
-          "childID": 2,
-          "id": 1,
-          "name": "foo",
-        },
       },
       {
         "childID": null,
@@ -540,11 +453,6 @@ test('tree', () => {
         "id": 2,
         "name": "foobar",
         Symbol(rc): 1,
-        Symbol(encodedRow): {
-          "childID": null,
-          "id": 2,
-          "name": "foobar",
-        },
       },
       {
         "childID": 4,
@@ -554,21 +462,11 @@ test('tree', () => {
             "id": 4,
             "name": "monkey",
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "childID": null,
-              "id": 4,
-              "name": "monkey",
-            },
           },
         ],
         "id": 3,
         "name": "mon",
         Symbol(rc): 1,
-        Symbol(encodedRow): {
-          "childID": 4,
-          "id": 3,
-          "name": "mon",
-        },
       },
       {
         "childID": null,
@@ -576,11 +474,6 @@ test('tree', () => {
         "id": 4,
         "name": "monkey",
         Symbol(rc): 1,
-        Symbol(encodedRow): {
-          "childID": null,
-          "id": 4,
-          "name": "monkey",
-        },
       },
     ]
   `);
@@ -604,11 +497,6 @@ test('tree', () => {
         "id": 1,
         "name": "foo",
         Symbol(rc): 1,
-        Symbol(encodedRow): {
-          "childID": 2,
-          "id": 1,
-          "name": "foo",
-        },
       },
       {
         "childID": 4,
@@ -618,21 +506,11 @@ test('tree', () => {
             "id": 4,
             "name": "monkey",
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "childID": null,
-              "id": 4,
-              "name": "monkey",
-            },
           },
         ],
         "id": 3,
         "name": "mon",
         Symbol(rc): 1,
-        Symbol(encodedRow): {
-          "childID": 4,
-          "id": 3,
-          "name": "mon",
-        },
       },
       {
         "childID": null,
@@ -640,11 +518,6 @@ test('tree', () => {
         "id": 4,
         "name": "monkey",
         Symbol(rc): 1,
-        Symbol(encodedRow): {
-          "childID": null,
-          "id": 4,
-          "name": "monkey",
-        },
       },
     ]
   `);
@@ -670,21 +543,11 @@ test('tree', () => {
             "id": 2,
             "name": "foobaz",
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "childID": null,
-              "id": 2,
-              "name": "foobaz",
-            },
           },
         ],
         "id": 1,
         "name": "foo",
         Symbol(rc): 1,
-        Symbol(encodedRow): {
-          "childID": 2,
-          "id": 1,
-          "name": "foo",
-        },
       },
       {
         "childID": null,
@@ -692,11 +555,6 @@ test('tree', () => {
         "id": 2,
         "name": "foobaz",
         Symbol(rc): 1,
-        Symbol(encodedRow): {
-          "childID": null,
-          "id": 2,
-          "name": "foobaz",
-        },
       },
       {
         "childID": 4,
@@ -706,21 +564,11 @@ test('tree', () => {
             "id": 4,
             "name": "monkey",
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "childID": null,
-              "id": 4,
-              "name": "monkey",
-            },
           },
         ],
         "id": 3,
         "name": "mon",
         Symbol(rc): 1,
-        Symbol(encodedRow): {
-          "childID": 4,
-          "id": 3,
-          "name": "mon",
-        },
       },
       {
         "childID": null,
@@ -728,11 +576,6 @@ test('tree', () => {
         "id": 4,
         "name": "monkey",
         Symbol(rc): 1,
-        Symbol(encodedRow): {
-          "childID": null,
-          "id": 4,
-          "name": "monkey",
-        },
       },
     ]
   `);
@@ -929,18 +772,10 @@ test('collapse', () => {
             "id": 1,
             "name": "label",
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "id": 1,
-              "name": "label",
-            },
           },
         ],
         "name": "issue",
         Symbol(rc): 1,
-        Symbol(encodedRow): {
-          "id": 1,
-          "name": "issue",
-        },
       },
     ]
   `);
@@ -1041,27 +876,15 @@ test('collapse', () => {
             "id": 1,
             "name": "label",
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "id": 1,
-              "name": "label",
-            },
           },
           {
             "id": 2,
             "name": "label2",
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "id": 2,
-              "name": "label2",
-            },
           },
         ],
         "name": "issue",
         Symbol(rc): 1,
-        Symbol(encodedRow): {
-          "id": 1,
-          "name": "issue",
-        },
       },
     ]
   `);
@@ -1175,27 +998,15 @@ test('collapse', () => {
             "id": 1,
             "name": "label",
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "id": 1,
-              "name": "label",
-            },
           },
           {
             "id": 2,
             "name": "label2",
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "id": 2,
-              "name": "label2",
-            },
           },
         ],
         "name": "issue",
         Symbol(rc): 1,
-        Symbol(encodedRow): {
-          "id": 1,
-          "name": "issue",
-        },
       },
     ]
   `);
@@ -1309,27 +1120,15 @@ test('collapse', () => {
             "id": 1,
             "name": "label",
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "id": 1,
-              "name": "label",
-            },
           },
           {
             "id": 2,
             "name": "label2x",
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "id": 2,
-              "name": "label2x",
-            },
           },
         ],
         "name": "issue",
         Symbol(rc): 1,
-        Symbol(encodedRow): {
-          "id": 1,
-          "name": "issue",
-        },
       },
     ]
   `);
@@ -1484,19 +1283,11 @@ test('basic with edit pushes', () => {
         "a": 1,
         "b": "a",
         Symbol(rc): 1,
-        Symbol(encodedRow): {
-          "a": 1,
-          "b": "a",
-        },
       },
       {
         "a": 2,
         "b": "b",
         Symbol(rc): 1,
-        Symbol(encodedRow): {
-          "a": 2,
-          "b": "b",
-        },
       },
     ]
   `);
@@ -1516,19 +1307,11 @@ test('basic with edit pushes', () => {
         "a": 1,
         "b": "a",
         Symbol(rc): 1,
-        Symbol(encodedRow): {
-          "a": 1,
-          "b": "a",
-        },
       },
       {
         "a": 2,
         "b": "b2",
         Symbol(rc): 1,
-        Symbol(encodedRow): {
-          "a": 2,
-          "b": "b2",
-        },
       },
     ]
   `);
@@ -1543,19 +1326,11 @@ test('basic with edit pushes', () => {
         "a": 1,
         "b": "a",
         Symbol(rc): 1,
-        Symbol(encodedRow): {
-          "a": 1,
-          "b": "a",
-        },
       },
       {
         "a": 3,
         "b": "b3",
         Symbol(rc): 1,
-        Symbol(encodedRow): {
-          "a": 3,
-          "b": "b3",
-        },
       },
     ]
   `);
@@ -1627,24 +1402,12 @@ test('tree edit', () => {
             "id": 2,
             "name": "foobar",
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "childID": null,
-              "data": "b",
-              "id": 2,
-              "name": "foobar",
-            },
           },
         ],
         "data": "a",
         "id": 1,
         "name": "foo",
         Symbol(rc): 1,
-        Symbol(encodedRow): {
-          "childID": 2,
-          "data": "a",
-          "id": 1,
-          "name": "foo",
-        },
       },
       {
         "childID": null,
@@ -1653,12 +1416,6 @@ test('tree edit', () => {
         "id": 2,
         "name": "foobar",
         Symbol(rc): 1,
-        Symbol(encodedRow): {
-          "childID": null,
-          "data": "b",
-          "id": 2,
-          "name": "foobar",
-        },
       },
       {
         "childID": 4,
@@ -1669,24 +1426,12 @@ test('tree edit', () => {
             "id": 4,
             "name": "monkey",
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "childID": null,
-              "data": "d",
-              "id": 4,
-              "name": "monkey",
-            },
           },
         ],
         "data": "c",
         "id": 3,
         "name": "mon",
         Symbol(rc): 1,
-        Symbol(encodedRow): {
-          "childID": 4,
-          "data": "c",
-          "id": 3,
-          "name": "mon",
-        },
       },
       {
         "childID": null,
@@ -1695,12 +1440,6 @@ test('tree edit', () => {
         "id": 4,
         "name": "monkey",
         Symbol(rc): 1,
-        Symbol(encodedRow): {
-          "childID": null,
-          "data": "d",
-          "id": 4,
-          "name": "monkey",
-        },
       },
     ]
   `);
@@ -1726,24 +1465,12 @@ test('tree edit', () => {
             "id": 2,
             "name": "foobar",
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "childID": null,
-              "data": "b",
-              "id": 2,
-              "name": "foobar",
-            },
           },
         ],
         "data": "a2",
         "id": 1,
         "name": "foo",
         Symbol(rc): 1,
-        Symbol(encodedRow): {
-          "childID": 2,
-          "data": "a2",
-          "id": 1,
-          "name": "foo",
-        },
       },
       {
         "childID": null,
@@ -1752,12 +1479,6 @@ test('tree edit', () => {
         "id": 2,
         "name": "foobar",
         Symbol(rc): 1,
-        Symbol(encodedRow): {
-          "childID": null,
-          "data": "b",
-          "id": 2,
-          "name": "foobar",
-        },
       },
       {
         "childID": 4,
@@ -1768,24 +1489,12 @@ test('tree edit', () => {
             "id": 4,
             "name": "monkey",
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "childID": null,
-              "data": "d",
-              "id": 4,
-              "name": "monkey",
-            },
           },
         ],
         "data": "c",
         "id": 3,
         "name": "mon",
         Symbol(rc): 1,
-        Symbol(encodedRow): {
-          "childID": 4,
-          "data": "c",
-          "id": 3,
-          "name": "mon",
-        },
       },
       {
         "childID": null,
@@ -1794,12 +1503,6 @@ test('tree edit', () => {
         "id": 4,
         "name": "monkey",
         Symbol(rc): 1,
-        Symbol(encodedRow): {
-          "childID": null,
-          "data": "d",
-          "id": 4,
-          "name": "monkey",
-        },
       },
     ]
   `);
@@ -1839,28 +1542,16 @@ test('edit to change the order', () => {
         "a": 10,
         "b": "a",
         Symbol(rc): 1,
-        Symbol(encodedRow): {
-          "a": 10,
-          "b": "a",
-        },
       },
       {
         "a": 20,
         "b": "b",
         Symbol(rc): 1,
-        Symbol(encodedRow): {
-          "a": 20,
-          "b": "b",
-        },
       },
       {
         "a": 30,
         "b": "c",
         Symbol(rc): 1,
-        Symbol(encodedRow): {
-          "a": 30,
-          "b": "c",
-        },
       },
     ]
   `);
@@ -1873,28 +1564,16 @@ test('edit to change the order', () => {
         "a": 5,
         "b": "b2",
         Symbol(rc): 1,
-        Symbol(encodedRow): {
-          "a": 5,
-          "b": "b2",
-        },
       },
       {
         "a": 10,
         "b": "a",
         Symbol(rc): 1,
-        Symbol(encodedRow): {
-          "a": 10,
-          "b": "a",
-        },
       },
       {
         "a": 30,
         "b": "c",
         Symbol(rc): 1,
-        Symbol(encodedRow): {
-          "a": 30,
-          "b": "c",
-        },
       },
     ]
   `);
@@ -1908,28 +1587,16 @@ test('edit to change the order', () => {
         "a": 4,
         "b": "b3",
         Symbol(rc): 1,
-        Symbol(encodedRow): {
-          "a": 4,
-          "b": "b3",
-        },
       },
       {
         "a": 10,
         "b": "a",
         Symbol(rc): 1,
-        Symbol(encodedRow): {
-          "a": 10,
-          "b": "a",
-        },
       },
       {
         "a": 30,
         "b": "c",
         Symbol(rc): 1,
-        Symbol(encodedRow): {
-          "a": 30,
-          "b": "c",
-        },
       },
     ]
   `);
@@ -1942,28 +1609,16 @@ test('edit to change the order', () => {
         "a": 10,
         "b": "a",
         Symbol(rc): 1,
-        Symbol(encodedRow): {
-          "a": 10,
-          "b": "a",
-        },
       },
       {
         "a": 20,
         "b": "b4",
         Symbol(rc): 1,
-        Symbol(encodedRow): {
-          "a": 20,
-          "b": "b4",
-        },
       },
       {
         "a": 30,
         "b": "c",
         Symbol(rc): 1,
-        Symbol(encodedRow): {
-          "a": 30,
-          "b": "c",
-        },
       },
     ]
   `);
@@ -2060,18 +1715,10 @@ test('edit to preserve relationships', () => {
             "id": 1,
             "name": "label1",
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "id": 1,
-              "name": "label1",
-            },
           },
         ],
         "title": "issue1",
         Symbol(rc): 1,
-        Symbol(encodedRow): {
-          "id": 1,
-          "title": "issue1",
-        },
       },
       {
         "id": 2,
@@ -2080,18 +1727,10 @@ test('edit to preserve relationships', () => {
             "id": 2,
             "name": "label2",
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "id": 2,
-              "name": "label2",
-            },
           },
         ],
         "title": "issue2",
         Symbol(rc): 1,
-        Symbol(encodedRow): {
-          "id": 2,
-          "title": "issue2",
-        },
       },
     ]
   `);
@@ -2117,18 +1756,10 @@ test('edit to preserve relationships', () => {
             "id": 1,
             "name": "label1",
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "id": 1,
-              "name": "label1",
-            },
           },
         ],
         "title": "issue1 changed",
         Symbol(rc): 1,
-        Symbol(encodedRow): {
-          "id": 1,
-          "title": "issue1 changed",
-        },
       },
       {
         "id": 2,
@@ -2137,18 +1768,10 @@ test('edit to preserve relationships', () => {
             "id": 2,
             "name": "label2",
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "id": 2,
-              "name": "label2",
-            },
           },
         ],
         "title": "issue2",
         Symbol(rc): 1,
-        Symbol(encodedRow): {
-          "id": 2,
-          "title": "issue2",
-        },
       },
     ]
   `);
@@ -2172,18 +1795,10 @@ test('edit to preserve relationships', () => {
             "id": 2,
             "name": "label2",
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "id": 2,
-              "name": "label2",
-            },
           },
         ],
         "title": "issue2",
         Symbol(rc): 1,
-        Symbol(encodedRow): {
-          "id": 2,
-          "title": "issue2",
-        },
       },
       {
         "id": 3,
@@ -2192,18 +1807,10 @@ test('edit to preserve relationships', () => {
             "id": 1,
             "name": "label1",
             Symbol(rc): 1,
-            Symbol(encodedRow): {
-              "id": 1,
-              "name": "label1",
-            },
           },
         ],
         "title": "issue1 is now issue3",
         Symbol(rc): 1,
-        Symbol(encodedRow): {
-          "id": 3,
-          "title": "issue1 is now issue3",
-        },
       },
     ]
   `);
@@ -2250,8 +1857,8 @@ test('listeners receive error when queryComplete rejects - plural', async () => 
   // Initial call should have unknown state with data
   expect(receivedResultType).toBe('unknown');
   expect(receivedData).toEqual([
-    {a: 1, b: 'a', [refCountSymbol]: 1, [encodedRowSymbol]: {a: 1, b: 'a'}},
-    {a: 2, b: 'b', [refCountSymbol]: 1, [encodedRowSymbol]: {a: 2, b: 'b'}},
+    {a: 1, b: 'a', [refCountSymbol]: 1},
+    {a: 2, b: 'b', [refCountSymbol]: 1},
   ]);
   expect(receivedError).toBeUndefined();
 
@@ -2261,8 +1868,8 @@ test('listeners receive error when queryComplete rejects - plural', async () => 
   // After rejection, should have error state
   expect(receivedResultType).toBe('error');
   expect(receivedData).toEqual([
-    {a: 1, b: 'a', [refCountSymbol]: 1, [encodedRowSymbol]: {a: 1, b: 'a'}},
-    {a: 2, b: 'b', [refCountSymbol]: 1, [encodedRowSymbol]: {a: 2, b: 'b'}},
+    {a: 1, b: 'a', [refCountSymbol]: 1},
+    {a: 2, b: 'b', [refCountSymbol]: 1},
   ]);
   expect(receivedError).toEqual(testError);
 });
@@ -2309,7 +1916,6 @@ test('listeners receive error when queryComplete rejects - singular', async () =
     a: 1,
     b: 'a',
     [refCountSymbol]: 1,
-    [encodedRowSymbol]: {a: 1, b: 'a'},
   });
   expect(receivedError).toBeUndefined();
 
@@ -2322,7 +1928,6 @@ test('listeners receive error when queryComplete rejects - singular', async () =
     a: 1,
     b: 'a',
     [refCountSymbol]: 1,
-    [encodedRowSymbol]: {a: 1, b: 'a'},
   });
   expect(receivedError).toEqual(testError);
 });
