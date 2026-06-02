@@ -1,6 +1,6 @@
 import {expect, expectTypeOf, test} from 'vitest';
 import type {SchemaValueToTSType} from '../../../zero-types/src/schema-value.ts';
-import {column, number, timestamp} from './table-builder.ts';
+import {number} from './table-builder.ts';
 
 test('.codec() attaches the codec and nulls customType at runtime', () => {
   const codec = {
@@ -23,14 +23,6 @@ test('codec round-trips through the attached functions', () => {
   }).schema;
   const d = new Date(1234);
   expect(codec.decode(codec.encode(d))).toEqual(d);
-});
-
-test('timestamp() preset decodes to Date', () => {
-  const {codec, type} = timestamp().schema;
-  expect(type).toBe('number');
-  expect(codec.decode(1000)).toEqual(new Date(1000));
-  expect(codec.encode(new Date(1000))).toBe(1000);
-  expect(column.timestamp).toBe(timestamp);
 });
 
 test('.codec() composes with .optional() and .from()', () => {

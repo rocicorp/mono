@@ -56,26 +56,12 @@ export function enumeration<T extends string>() {
   });
 }
 
-/**
- * A column stored as a `number` (epoch milliseconds) but read as a `Date`.
- *
- * Convenience preset built on top of {@linkcode ColumnBuilder.codec}. For other
- * representations (e.g. `Temporal`), define your own codec via `.codec()`.
- */
-export function timestamp() {
-  return number().codec<Date>({
-    decode: (value: number) => new Date(value),
-    encode: (value: Date) => value.getTime(),
-  });
-}
-
 export const column = {
   string,
   number,
   boolean,
   json,
   enumeration,
-  timestamp,
 };
 
 /**
