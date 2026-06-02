@@ -10,6 +10,7 @@ import {ChangeProcessor, type ChangeProcessorMode} from './change-processor.ts';
 import {getSubscriptionState} from './schema/replication-state.ts';
 import {
   applyPragmas,
+  serializeError,
   type ArgsMap,
   type Method,
   type PragmaConfig,
@@ -37,7 +38,7 @@ function createAPI(): API {
   function createProcessor() {
     processor = new ChangeProcessor(must(runner), must(mode), (_lc, err) => {
       port.postMessage({
-        writeError: err instanceof Error ? err : new Error(String(err)),
+        writeError: serializeError(err),
       } satisfies WriteError);
     });
   }
@@ -93,7 +94,10 @@ port.on('message', (msg: Request) => {
     }
   } catch (e) {
     if (msg.method !== 'abort') {
-      port.postMessage({method: msg.method, error: e} as Response);
+      port.postMessage({
+        method: msg.method,
+        error: serializeError(e),
+      } as Response);
     }
   }
 });
