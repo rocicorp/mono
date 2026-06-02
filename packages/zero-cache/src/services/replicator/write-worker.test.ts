@@ -5,7 +5,11 @@ import {DbFile, initDB} from '../../test/lite.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
 import {initReplicationState} from './schema/replication-state.ts';
 import {ReplicationMessages} from './test-utils.ts';
-import {ThreadWriteWorkerClient} from './write-worker-client.ts';
+import {
+  deserializeError,
+  serializeError,
+  ThreadWriteWorkerClient,
+} from './write-worker-client.ts';
 
 describe('write-worker', () => {
   let dbFile: DbFile;
@@ -175,5 +179,28 @@ describe('write-worker', () => {
     ).rejects.toThrow();
 
     expect(errorReceived).toBeDefined();
+  });
+
+  test('error serialization preserves useful fields', () => {
+    const sqliteError = new Error('database is locked', {
+      cause: new Error('checkpoint in progress'),
+    });
+    sqliteError.name = 'SqliteError';
+    Object.defineProperties(sqliteError, {
+      code: {value: 'SQLITE_BUSY'},
+      errno: {value: 5},
+    });
+
+    const deserialized = deserializeError(serializeError(sqliteError));
+
+    expect(deserialized).toMatchObject({
+      name: 'SqliteError',
+      message: 'database is locked',
+      code: 'SQLITE_BUSY',
+      errno: 5,
+    });
+    expect(deserialized.cause).toMatchObject({
+      message: 'checkpoint in progress',
+    });
   });
 });
