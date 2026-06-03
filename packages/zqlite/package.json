@@ -24,7 +24,7 @@
     "@databases/sql": "^3.3.0",
     "@opentelemetry/api": "^1.9.0",
     "@rocicorp/logger": "^5.4.0",
-    "@rocicorp/zero-sqlite3": "^1.0.18",
+    "@rocicorp/zero-sqlite3": "^1.1.1",
     "zql": "workspace:*"
   },
   "devDependencies": {

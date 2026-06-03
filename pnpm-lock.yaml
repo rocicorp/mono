@@ -482,8 +482,8 @@ importers:
         specifier: '>=15'
         version: 15.2.14(react-native@0.85.3(@babel/core@7.29.0)(@types/react@19.2.15)(react@19.2.6))(react@19.2.6)
       '@rocicorp/zero-sqlite3':
-        specifier: ^1.0.18
-        version: 1.0.18
+        specifier: ^1.1.1
+        version: 1.1.1
       '@types/command-line-args':
         specifier: ^5.2.3
         version: 5.2.3
@@ -852,8 +852,8 @@ importers:
         specifier: ^1.0.2
         version: 1.0.2
       '@rocicorp/zero-sqlite3':
-        specifier: ^1.0.18
-        version: 1.0.18
+        specifier: ^1.1.1
+        version: 1.1.1
       '@standard-schema/spec':
         specifier: ^1.0.0
         version: 1.1.0
@@ -1075,8 +1075,8 @@ importers:
         specifier: ^1.0.2
         version: 1.0.2
       '@rocicorp/zero-sqlite3':
-        specifier: ^1.0.18
-        version: 1.0.18
+        specifier: ^1.1.1
+        version: 1.1.1
       '@types/basic-auth':
         specifier: ^1.1.8
         version: 1.1.8
@@ -1699,8 +1699,8 @@ importers:
         specifier: ^5.4.0
         version: 5.4.0
       '@rocicorp/zero-sqlite3':
-        specifier: ^1.0.18
-        version: 1.0.18
+        specifier: ^1.1.1
+        version: 1.1.1
       zql:
         specifier: workspace:*
         version: link:../zql
@@ -5608,9 +5608,9 @@ packages:
     engines: {node: ^12.20.0 || ^14.13.1 || >=16.0.0}
     deprecated: Use Promise.withResolvers instead
 
-  '@rocicorp/zero-sqlite3@1.0.18':
-    resolution: {integrity: sha512-JwHcCijxKj94NDij5UDCJsGHo/D8z4j5De/5zphQ+NctQ4TWr9Zx7L+Q1JBfie4ewVS82Ingu+QKbIwWvdNFXg==}
-    engines: {bun: '>=1.1.0', node: 20.x || 22.x || 23.x || 24.x || 25.x}
+  '@rocicorp/zero-sqlite3@1.1.1':
+    resolution: {integrity: sha512-BZ9FkXADOOalBbvfPmSq3QD193O5QQz/zqs9xXsAjWx/lL0VyYfT4zNrSEZqMpyv/7vH7DhPEDvbIzV6bvl7TQ==}
+    engines: {bun: '>=1.1.0', node: 22.x || 24.x}
     hasBin: true
 
   '@rocicorp/zero-virtual@0.1.4':
@@ -18506,7 +18506,7 @@ snapshots:
 
   '@rocicorp/resolver@1.0.2': {}
 
-  '@rocicorp/zero-sqlite3@1.0.18':
+  '@rocicorp/zero-sqlite3@1.1.1':
     dependencies:
       bindings: 1.5.0
       prebuild-install: 7.1.3
