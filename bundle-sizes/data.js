@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780234483369,
+  "lastUpdate": 1780517760456,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -56621,6 +56621,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/rocicorp/mono/commit/e5f5a56b7ef60f7cca4cbf933e79bedca5edab37"
         },
         "date": 1780234469529,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 317161,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 57049,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 117187,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 33481,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "arv@roci.dev",
+            "name": "Erik Arvidsson",
+            "username": "arv"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "dc69d223241a91f6138748fa63e5b3291839f867",
+          "message": "zqlite: adopt @rocicorp/zero-sqlite3 1.1.1 (Unicode ILIKE, self-contained) (#6098)\n\nFixes https://bugs.rocicorp.dev/p/zero/issue/3043\n\n## What\n\nBump `@rocicorp/zero-sqlite3` to **1.1.1**, which ships Unicode-aware\n`lower()`/`upper()` built from an embedded case-mapping table (generated\nfrom Node's `String.prototype.toLowerCase`/`toUpperCase`, including the\nGreek final-sigma rule). zqlite compiles `ILIKE` to `lower(col) LIKE\nlower(pattern)`, so this is what makes `ILIKE` genuinely\ncase-insensitive beyond ASCII — e.g. `'MÜLLER' ILIKE 'müller'` now\nmatches.\n\nThe production wiring for this (`PRAGMA case_sensitive_like = ON`, the\n`lower(...) LIKE lower(...)` compilation in `query-builder.ts`) already\nlanded separately. This PR is the dependency bump plus the tests that\nlock the behavior in.\n\n## Why 1.1.1 and not the ICU build\n\nEarlier attempts linked SQLite's ICU extension. That turned out to be\nunshippable across Linux distros — distro static ICU archives aren't\n`-fPIC`, dynamic ICU couples the binary to a specific `libicu` soname\n(glibc/musl/version skew), QEMU arm64 crashed, and ICU pulls in ~28 MB\nof data. **1.1.1 drops ICU entirely** in favor of a self-contained\nUnicode table, so the prebuilt binaries are portable with **no extra\nruntime dependency** (no `apk add icu-libs`, no soname caveat) on every\nplatform including Windows and Alpine.\n\n## Changes\n\n- **Bump the floor** `^1.0.18 → ^1.1.1` (`zqlite`, `zero-cache`, `zero`,\n`replicache`) + lockfile.\n- **New behavioral test** in `query-builder.test.ts`: runs the actual\ncompiled `ILIKE` SQL against a Unicode row (`'MÜLLER' ILIKE 'müller'`).\nFails on an ASCII-only `lower()`, passes with the Unicode `lower()` in\n1.1.1.\n- **New `ilike-parity.test.ts`** (using `test.for`): asserts the\nclient-side IVM `ILIKE` matcher and the zqlite SQL `ILIKE` agree on the\nsame inputs, so the two sides of the query engine stay in sync.\n- **`pnpm-workspace.yaml`:** exclude `@rocicorp/zero-sqlite3` from\n`minimumReleaseAge` by package name. The version-pinned form\n(`@rocicorp/zero-sqlite3@1.1.1`) is not honored by pnpm's\nfrozen-lockfile supply-chain check, so a freshly published bump\notherwise trips `ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION` in CI.\nName-only matches and avoids per-version churn for our own first-party\npackage.\n\n🤖 Generated with [Claude Code](https://claude.com/claude-code)\n\n---------\n\nCo-authored-by: Claude Opus 4.8 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-06-03T20:05:15Z",
+          "tree_id": "992ef40ee326e55ae1d65f3001d6a008230ebe8d",
+          "url": "https://github.com/rocicorp/mono/commit/dc69d223241a91f6138748fa63e5b3291839f867"
+        },
+        "date": 1780517745695,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
