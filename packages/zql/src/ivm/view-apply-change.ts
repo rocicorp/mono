@@ -125,6 +125,47 @@ type Mutate = boolean;
 type WithIDs = boolean;
 
 /**
+ * Transaction-scoped copy-on-write.
+ *
+ * `applyChange` is immutable: it path-copies a new spine on every call so the
+ * previously-emitted snapshot is never mutated. But within a single transaction
+ * (a run of `push()` calls before `flush()`) only the final state is ever
+ * observed by a listener, so the intermediate spines are pure allocation/GC
+ * churn — making a K-change transaction O(K * spineSize).
+ *
+ * When the caller passes a WeakSet as the `mutate` argument, objects and arrays
+ * that were created or cloned during the current transaction are recorded in it.
+ * A helper that needs to modify such an object mutates it in place (it is not
+ * yet observed) instead of cloning again. The first touch of a node still
+ * copies-on-write (preserving the committed snapshot's references); subsequent
+ * touches in the same transaction are in-place. This brings a K-change
+ * transaction to O(spineSize + K) while keeping cross-transaction reference
+ * stability.
+ *
+ * The set is module-scoped for the duration of a single (synchronous,
+ * non-re-entrant) `applyChange` call and saved/restored around it.
+ *
+ * It is a WeakSet on purpose: it must not keep transiently-cloned arrays/entries
+ * alive. A strong Set would extend their lifetime to the end of the transaction,
+ * pushing large clones out of the young generation and adding GC pressure that
+ * shows up as a regression on single-change transactions over wide lists. A
+ * WeakSet gives the same identity test ("created this transaction?") while
+ * letting dead clones be collected as cheaply as in the plain immutable path.
+ */
+let activeDirty: WeakSet<object> | undefined;
+
+/** True if `o` was created/cloned during the current transaction. */
+function owns(o: object): boolean {
+  return activeDirty !== undefined && activeDirty.has(o);
+}
+
+/** Record `o` as owned by the current transaction (no-op outside a txn). */
+function track<T extends object>(o: T): T {
+  activeDirty?.add(o);
+  return o;
+}
+
+/**
  * Immutable view update. Returns new Entry on change, same Entry if unchanged.
  * Unchanged entries keep identity, enabling shallow comparison optimizations
  * in UI frameworks (React.memo, Solid's fine-grained reactivity, etc).
@@ -135,6 +176,13 @@ type WithIDs = boolean;
  *   root {users:[A,B], items:[C,D,E]}    --edit C-->    root' {users:[A,B], items':[C',D,E]}
  *         │ same ref        │                                  │              │
  *         └─────────────────┴── unchanged ──────────────┘     new array     C' new, D/E same
+ *
+ * `mutate` selects the update strategy:
+ * - `false` (default): fully immutable; every changed node is path-copied.
+ * - `true`: mutate the tree in place (only safe when it is not yet observed,
+ *   e.g. during initial hydration).
+ * - a `WeakSet`: transaction-scoped copy-on-write — copy on first touch, then
+ *   mutate in place for the rest of the transaction. See `activeDirty` above.
  */
 export function applyChange(
   parentEntry: Entry,
@@ -143,17 +191,25 @@ export function applyChange(
   relationship: string,
   format: Format,
   withIDs = false,
-  mutate = false,
+  mutate: boolean | WeakSet<object> = false,
 ): Entry {
-  return applyChangeInternal(
-    parentEntry as MetaEntry<typeof mutate>,
-    change,
-    schema,
-    relationship,
-    format,
-    withIDs,
-    mutate,
-  );
+  // A WeakSet selects copy-on-write; a boolean selects full mutate / immutable.
+  const inPlace = mutate === true;
+  const prevDirty = activeDirty;
+  activeDirty = typeof mutate === 'object' ? mutate : undefined;
+  try {
+    return applyChangeInternal(
+      parentEntry as MetaEntry<typeof inPlace>,
+      change,
+      schema,
+      relationship,
+      format,
+      withIDs,
+      inPlace,
+    );
+  } finally {
+    activeDirty = prevDirty;
+  }
 }
 
 export function applyChangeInternal<M extends Mutate>(
@@ -536,11 +592,14 @@ function applyEdit<M extends Mutate>(
     decodedRow !== change.node.row
       ? {[encodedRowSymbol]: change.node.row}
       : undefined;
+  // In-place edit is safe when fully mutating or when `existing` was already
+  // created/cloned in this transaction (copy-on-write). A primary-key change
+  // always needs a fresh entry so identity tracks the new key.
+  const canMutate = mutate || owns(existing);
   const newEntry: MutableMetaEntry =
-    // Even for mutate we want to create a new entry if the primary key changed.
-    mutate && schema.compareRows(change.oldNode.row, change.node.row) === 0
+    canMutate && schema.compareRows(change.oldNode.row, change.node.row) === 0
       ? Object.assign(existing, decodedRow, encodedRowProp)
-      : {...existing, ...decodedRow, ...encodedRowProp};
+      : track({...existing, ...decodedRow, ...encodedRowProp});
 
   if (withIDs) {
     return setProperty(
@@ -591,7 +650,7 @@ function initializeRelationshipsForNewEntryIfAny(
     if (childSchema.isHidden || childFormat.singular) {
       const newView = childFormat.singular
         ? undefined
-        : ([] as MutableMetaEntryList);
+        : track([] as MutableMetaEntryList);
       result[relationship] = newView;
 
       for (const childNode of getChildNodes(node, relationship)) {
@@ -607,7 +666,7 @@ function initializeRelationshipsForNewEntryIfAny(
       }
     } else {
       // Plural non-hidden: build array in-place for efficiency
-      const childArray: MutableMetaEntryList = [];
+      const childArray: MutableMetaEntryList = track([]);
 
       for (const childNode of getChildNodes(node, relationship)) {
         const newEntry = makeNewMetaEntry(
@@ -672,11 +731,11 @@ function insertAt<M extends Mutate, T>(
   index: number,
   item: T,
 ): T[] {
-  if (mutate) {
+  if (mutate || owns(array)) {
     (array as T[]).splice(index, 0, item);
     return array as T[];
   }
-  return array.toSpliced(index, 0, item);
+  return track(array.toSpliced(index, 0, item));
 }
 
 function removeAt<M extends Mutate, T>(
@@ -684,11 +743,11 @@ function removeAt<M extends Mutate, T>(
   array: MutableArray<M, T>,
   index: number,
 ): T[] {
-  if (mutate) {
+  if (mutate || owns(array)) {
     (array as T[]).splice(index, 1);
     return array as T[];
   }
-  return array.toSpliced(index, 1);
+  return track(array.toSpliced(index, 1));
 }
 
 function removeAndUpdateRefCount<M extends Mutate>(
@@ -795,18 +854,18 @@ function makeNewMetaEntry(
   const decodedRow = decodeRowFields(row, schema);
   const hasCodecs = decodedRow !== row;
   if (withIDs) {
-    return {
+    return track({
       ...decodedRow,
       [refCountSymbol]: rc,
       [idSymbol]: makeID(row, schema),
       ...(hasCodecs ? {[encodedRowSymbol]: row} : undefined),
-    };
+    });
   }
-  return {
+  return track({
     ...decodedRow,
     [refCountSymbol]: rc,
     ...(hasCodecs ? {[encodedRowSymbol]: row} : undefined),
-  };
+  });
 }
 
 function makeID(row: Row, schema: SourceSchema) {
@@ -836,11 +895,11 @@ function setRefCount<M extends Mutate>(
   entry: MetaEntry<M>,
   count: number,
 ): MutableMetaEntry {
-  if (mutate) {
+  if (mutate || owns(entry)) {
     (entry as MutableMetaEntry)[refCountSymbol] = count;
     return entry;
   }
-  return {...entry, [refCountSymbol]: count};
+  return track({...entry, [refCountSymbol]: count});
 }
 
 function arrayWith<M extends Mutate, T>(
@@ -849,11 +908,11 @@ function arrayWith<M extends Mutate, T>(
   index: number,
   value: T,
 ): T[] {
-  if (mutate) {
+  if (mutate || owns(array)) {
     (array as T[])[index] = value;
     return array as T[];
   }
-  return array.with(index, value);
+  return track(array.with(index, value));
 }
 
 function setProperty<
@@ -866,11 +925,11 @@ function setProperty<
   key: K,
   value: V,
 ): MutableMetaEntry & {[P in K]: V} {
-  if (mutate) {
+  if (mutate || owns(parentEntry)) {
     (parentEntry as {[P in K]: V})[key] = value;
     return parentEntry as MutableMetaEntry & {[P in K]: V};
   }
-  return {...parentEntry, [key]: value};
+  return track({...parentEntry, [key]: value});
 }
 
 const setRelation: <M extends Mutate>(
