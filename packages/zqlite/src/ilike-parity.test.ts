@@ -1,4 +1,4 @@
-import {expect, test} from 'vitest';
+import {beforeAll, test} from 'vitest';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
 import {getLikePredicate} from '../../zql/src/builder/like.ts';
 import {Database} from './db.ts';
@@ -62,16 +62,16 @@ const cases: ReadonlyArray<readonly [pattern: string, input: string]> = [
   ['straße', 'STRASSE'],
 ];
 
-test('client-side ILIKE and zqlite ILIKE agree (Unicode, wildcards, escapes)', () => {
-  const db = new Database(createSilentLogContext(), ':memory:');
-  for (const [pattern, input] of cases) {
+let db: Database;
+beforeAll(() => {
+  db = new Database(createSilentLogContext(), ':memory:');
+});
+
+test.for(cases)(
+  'client-side and zqlite ILIKE agree: %j vs %j',
+  ([pattern, input], {expect}) => {
     const ivm = ivmIlike(pattern, input);
     const sqlite = zqliteIlike(db, pattern, input);
-    expect(
-      sqlite,
-      `mismatch for pattern=${JSON.stringify(pattern)} input=${JSON.stringify(
-        input,
-      )}: ivm=${ivm} sqlite=${sqlite}`,
-    ).toBe(ivm);
-  }
-});
+    expect(sqlite, `ivm=${ivm} sqlite=${sqlite}`).toBe(ivm);
+  },
+);
