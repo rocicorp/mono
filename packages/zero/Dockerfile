@@ -26,6 +26,11 @@ RUN test -n "$ZERO_VERSION"
 
 RUN apk add --update curl
 RUN apk add --no-cache readline readline-dev
+# @rocicorp/zero-sqlite3 >= 1.1.0 dynamically links ICU on Linux (musl static
+# ICU is not -fPIC), so the runtime image must provide libicu or the native
+# module fails to load. icu-libs matches the ICU major the prebuilt binary was
+# built against (Alpine 3.x ships ICU 76).
+RUN apk add --no-cache icu-libs
 
 # Install pnpm via corepack (bundled with Node). Matches the monorepo's
 # packageManager field. pnpm's build-script allowlist (v10+) blocks lifecycle
