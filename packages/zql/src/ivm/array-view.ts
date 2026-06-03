@@ -68,6 +68,13 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
   #error: ErroredQuery | undefined;
   readonly #updateTTL: (ttl: TTL) => void;
 
+  // Objects/arrays created or cloned during the current (un-flushed)
+  // transaction. applyChange may mutate these in place rather than copying
+  // again, since they are not yet observed by any listener. Replaced at
+  // flush(), after which the committed snapshot must be copied-on-write again.
+  // A WeakSet (not a Set) so it never extends the lifetime of transient clones.
+  #txnDirty: WeakSet<object> = new WeakSet();
+
   constructor(
     input: Input,
     format: Format,
@@ -157,6 +164,8 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
       this.#schema,
       '',
       this.#format,
+      false /* withIDs */,
+      this.#txnDirty /* mutate: copy-on-write within this transaction */,
     );
     return emptyArray;
   }
@@ -167,6 +176,10 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
     }
     this.#dirty = false;
     this.#fireListeners();
+    // The snapshot just handed to listeners is now observed; the next
+    // transaction must copy-on-write rather than mutate these objects. A fresh
+    // WeakSet drops all "owned" marks (WeakSet has no clear()).
+    this.#txnDirty = new WeakSet();
   }
 
   updateTTL(ttl: TTL) {
