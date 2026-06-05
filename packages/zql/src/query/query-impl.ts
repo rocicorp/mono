@@ -652,27 +652,26 @@ export class QueryImpl<
       assert(isCompoundKey(secondDest), 'Invalid relationship');
 
       if (sq.format.aggregate) {
-        // Junction (many-to-many) count: count the association rows in the
-        // junction table — one per related entity — by collapsing to a
-        // single-hop count over the junction. Reuses the single-hop aggregate
-        // path (Aggregate operator + view projection + z2s).
-        //
-        // Only `count` is supported here: sum/avg would need the destination
-        // field, which lives past the junction, so the collapse does not apply.
-        // Filtering or nesting the destination is also not yet supported.
-        assert(
-          sq.format.aggregate.fn === 'count',
-          'only count() is supported over a junction (many-to-many) ' +
-            'relationship for now',
-        );
+        // Aggregate over a junction (many-to-many) relationship. Filtering or
+        // nesting the destination isn't supported yet.
         assert(
           sq.#ast.where === undefined &&
             sq.#ast.related === undefined &&
             sq.#ast.limit === undefined &&
             sq.#ast.start === undefined,
-          'count() over a junction relationship does not yet support ' +
+          'an aggregate over a junction relationship does not yet support ' +
             'where/related/limit/start on the destination',
         );
+        const {fn, field} = sq.format.aggregate;
+        const correlation = {parentField: firstSource, childField: firstDest};
+        const format = {
+          ...this.format,
+          relationships: {
+            ...this.format.relationships,
+            [relationship]: sq.format,
+          },
+        };
+
         return this.#derive(
           relatedKey(relationship),
           astID(sq.#ast),
@@ -682,23 +681,46 @@ export class QueryImpl<
               this.#tableName,
               {
                 ...this.#ast,
-                related: insertRelated(this.#ast.related, {
-                  correlation: {
-                    parentField: firstSource,
-                    childField: firstDest,
-                  },
-                  subquery: tableAST(junctionSchema, relationship),
-                  system: this.#system,
-                  aggregate: {fn: 'count'},
-                }),
+                related: insertRelated(
+                  this.#ast.related,
+                  fn === 'count'
+                    ? // count(*) collapses to a single-hop count over the
+                      // junction table — one association row per related
+                      // entity — so the destination table is never touched.
+                      {
+                        correlation,
+                        subquery: tableAST(junctionSchema, relationship),
+                        system: this.#system,
+                        aggregate: {fn: 'count'},
+                      }
+                    : // sum/avg/min/max need the destination field, one hop
+                      // past the junction. Build the two-hop pipeline
+                      // (junction → destination) and put the aggregate on the
+                      // junction subquery; the builder inserts a LiftField to
+                      // bring the destination field onto the junction row.
+                      {
+                        correlation,
+                        subquery: {
+                          ...tableAST(junctionSchema, relationship),
+                          // A single subquery is sorted.
+                          related: [
+                            normalizedRelated({
+                              correlation: {
+                                parentField: secondSource,
+                                childField: secondDest,
+                              },
+                              // The destination, without its (lifted) aggregate.
+                              subquery: {...sq.#ast, aggregate: undefined},
+                              system: this.#system,
+                            }),
+                          ],
+                        },
+                        system: this.#system,
+                        aggregate: {fn, field},
+                      },
+                ),
               },
-              {
-                ...this.format,
-                relationships: {
-                  ...this.format.relationships,
-                  [relationship]: sq.format,
-                },
-              },
+              format,
               this.customQueryID,
               this.#currentJunction,
             ),

@@ -42,7 +42,8 @@ issue.related('comments', c => c.sum('points'))                 // number | null
 issue.related('comments', c => c.avg('score'))                  // number | null
 issue.related('comments', c => c.max('createdAt'))              // <field type> | null
 issue.related('comments', c => c.where('approved', true).count()) // filtered
-issue.related('labels',   l => l.count())                       // junction (counts edges)
+issue.related('labels',   l => l.count())                       // junction: counts edges
+issue.related('labels',   l => l.sum('weight'))                 // junction: over the destination
 ```
 
 The same reducers apply at the **top level** of a query, where the whole query
@@ -105,6 +106,25 @@ single global group reducing all of the query's rows, wired at the root of the
 pipeline (after `where`) rather than under a join. Its one synthetic row is
 projected to the query's scalar result by the view; `where` still applies,
 `orderBy`/`limit`/`related` do not.
+
+### Junction (many-to-many) aggregates
+
+For a many-to-many relationship (`issue.labels` via the `issueLabel` junction):
+
+- **`count`** is a shortcut — counting `labels` equals counting `issueLabel`
+  edges — so it collapses to a single-hop `count` over the junction table and
+  never touches the destination.
+- **`sum`/`avg`/`min`/`max`** need a field on the *destination* (`label`), one
+  hop past the junction. A small `LiftField` operator sits between the
+  `junction → Join(destination)` pipeline and the Aggregate, projecting
+  `destination.<field>` onto the junction row as a synthetic column (translating
+  a destination change — which arrives as a CHILD change on the junction row —
+  into an edit of that column). That turns the two-hop problem back into the flat
+  single-hop the Aggregate already handles, including the `min`/`max` re-read.
+  The z2s surface compiles the same as an aggregate over the junction join;
+  synced read reuses the synthetic-source path (keyed by the junction's parent
+  correlation). Optimism is *not* applied to junction aggregates (the field
+  lives past the junction) — they're server-authoritative, like `min`/`max`.
 
 ### Two execution surfaces
 
@@ -305,8 +325,6 @@ Sync path:
   grouped case adds a new result shape (the result set is the synthetic group
   rows) and a `groupBy` API.
 - **`DISTINCT`** aggregates — require per-value reference counts.
-- **Junction `sum`/`avg`/`min`/`max`** — only `count` collapses across a junction
-  today; the rest need to aggregate the destination field through the junction.
 - **`sum` precision** — `Math.sumPrecise` gives an exact batch recompute (e.g.
   for the seed / a precise mode); it does not make the O(1) incremental path
   exact, which is inherent to running-sum maintenance under deletion.

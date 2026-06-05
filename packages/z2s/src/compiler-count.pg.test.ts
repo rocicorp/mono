@@ -166,3 +166,114 @@ describe('top-level (ungrouped) aggregates against PostgreSQL', () => {
     ).toBe(20);
   });
 });
+
+describe('junction (many-to-many) aggregates against PostgreSQL', () => {
+  const jSchema = createSchema({
+    tables: [
+      table('issue').columns({id: string(), title: string()}).primaryKey('id'),
+      table('label')
+        .columns({id: string(), name: string(), weight: number().optional()})
+        .primaryKey('id'),
+      table('issueLabel')
+        .columns({issueId: string(), labelId: string()})
+        .primaryKey('issueId', 'labelId'),
+    ],
+  });
+  const jServerSchema: ServerSchema = {
+    issue: {
+      id: {type: 'text', isArray: false, isEnum: false},
+      title: {type: 'text', isArray: false, isEnum: false},
+    },
+    label: {
+      id: {type: 'text', isArray: false, isEnum: false},
+      name: {type: 'text', isArray: false, isEnum: false},
+      weight: {type: 'numeric', isArray: false, isEnum: false},
+    },
+    issueLabel: {
+      issueId: {type: 'text', isArray: false, isEnum: false},
+      labelId: {type: 'text', isArray: false, isEnum: false},
+    },
+  };
+
+  // issue -> issueLabel -> label, aggregating label.<field> per issue.
+  function junctionAgg(fn: 'sum' | 'avg' | 'min' | 'max', field: string): AST {
+    return {
+      table: 'issue',
+      related: [
+        {
+          correlation: {parentField: ['id'], childField: ['issueId']},
+          aggregate: {fn, field},
+          subquery: {
+            table: 'issueLabel',
+            alias: 'labels',
+            related: [
+              {
+                correlation: {parentField: ['labelId'], childField: ['id']},
+                subquery: {table: 'label', alias: 'labels'},
+              },
+            ],
+          },
+        },
+      ],
+    };
+  }
+
+  let pg: PostgresDB;
+  beforeAll(async () => {
+    pg = await testDBs.create('compiler-junction-agg-test');
+    await pg.unsafe(`
+      CREATE TABLE issue (id TEXT PRIMARY KEY, title TEXT NOT NULL);
+      CREATE TABLE label (id TEXT PRIMARY KEY, name TEXT NOT NULL, weight INT);
+      CREATE TABLE "issueLabel" (
+        "issueId" TEXT NOT NULL, "labelId" TEXT NOT NULL,
+        PRIMARY KEY ("issueId", "labelId"));
+
+      INSERT INTO issue (id, title) VALUES ('1','i1'),('2','i2'),('3','i3');
+      INSERT INTO label (id, name, weight) VALUES
+        ('L1','bug',10),('L2','feat',20),('L3','wont',5);
+      -- issue 1 -> {L1(10), L2(20)} ; issue 2 -> {L3(5)} ; issue 3 -> {}
+      INSERT INTO "issueLabel" ("issueId","labelId") VALUES
+        ('1','L1'),('1','L2'),('2','L3');
+    `);
+  });
+  afterAll(async () => {
+    await testDBs.drop(pg);
+  });
+
+  async function run(ast: AST) {
+    const q = formatPgInternalConvert(compile(jServerSchema, jSchema, ast));
+    return extractZqlResult(await pg.unsafe(q.text, q.values as JSONValue[]));
+  }
+
+  test('sum over the destination field', async () => {
+    expect(await run(junctionAgg('sum', 'weight'))).toEqual([
+      {id: '1', title: 'i1', labels: 30},
+      {id: '2', title: 'i2', labels: 5},
+      {id: '3', title: 'i3', labels: null},
+    ]);
+  });
+
+  test('avg over the destination field', async () => {
+    expect(await run(junctionAgg('avg', 'weight'))).toEqual([
+      {id: '1', title: 'i1', labels: 15},
+      {id: '2', title: 'i2', labels: 5},
+      {id: '3', title: 'i3', labels: null},
+    ]);
+  });
+
+  test('min over the destination field', async () => {
+    expect(await run(junctionAgg('min', 'weight'))).toEqual([
+      {id: '1', title: 'i1', labels: 10},
+      {id: '2', title: 'i2', labels: 5},
+      {id: '3', title: 'i3', labels: null},
+    ]);
+  });
+
+  test('max over the destination field', async () => {
+    expect(await run(junctionAgg('max', 'weight'))).toEqual([
+      {id: '1', title: 'i1', labels: 20},
+      {id: '2', title: 'i2', labels: 5},
+      {id: '3', title: 'i3', labels: null},
+    ]);
+  });
+});

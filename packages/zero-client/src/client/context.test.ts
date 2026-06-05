@@ -5,7 +5,11 @@ import type {Hash} from '../../../replicache/src/hash.ts';
 import {assert} from '../../../shared/src/asserts.ts';
 import type {AST, CorrelatedSubquery} from '../../../zero-protocol/src/ast.ts';
 import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
-import {string, table} from '../../../zero-schema/src/builder/table-builder.ts';
+import {
+  number,
+  string,
+  table,
+} from '../../../zero-schema/src/builder/table-builder.ts';
 import {
   aggregateTableName,
   buildPipeline,
@@ -612,4 +616,118 @@ test('getOrCreateAggregateSource provisions a relationship aggregate source', ()
       ['issueID'],
     ),
   ).toBe(source);
+});
+
+test('synced junction (many-to-many) aggregate (sum) reads the server value', () => {
+  // issue.related('labels', l => l.sum('weight')) over a junction (issueLabel).
+  // On the synced client the read is identical to a direct relationship
+  // aggregate — it reads the precomputed per-issue value from the synthetic
+  // source, keyed by the junction's parent correlation (issueId). The junction
+  // and label rows never sync.
+  const jSchema = createSchema({
+    tables: [
+      table('issue').columns({id: string(), title: string()}).primaryKey('id'),
+      table('issueLabel')
+        .columns({issueId: string(), labelId: string()})
+        .primaryKey('issueId', 'labelId'),
+      table('label')
+        .columns({id: string(), name: string(), weight: number().optional()})
+        .primaryKey('id'),
+    ],
+  });
+  const context = new ZeroContext(
+    new LogContext('info'),
+    new IVMSourceBranch(jSchema.tables),
+    null as unknown as AddQuery,
+    null as unknown as AddCustomQuery,
+    null as unknown as UpdateQuery,
+    null as unknown as UpdateCustomQuery,
+    null as unknown as FlushQueryChanges,
+    testBatchViewUpdates,
+    () => {},
+    assertValidRunOptions,
+  );
+
+  const queryID = 'jq';
+  const relatedSq: CorrelatedSubquery = {
+    system: 'client',
+    correlation: {parentField: ['id'], childField: ['issueId']},
+    aggregate: {fn: 'sum', field: 'weight'},
+    subquery: {
+      table: 'issueLabel',
+      alias: 'labels',
+      related: [
+        {
+          system: 'client',
+          correlation: {parentField: ['labelId'], childField: ['id']},
+          subquery: {table: 'label', alias: 'labels'},
+        },
+      ],
+    },
+  };
+  const ast: AST = {
+    table: 'issue',
+    orderBy: [['id', 'asc']],
+    related: [relatedSq],
+  };
+  const aggTable = aggregateTableName(queryID, relatedSq);
+  expect(aggTable).toBe('aggregate:jq:labels');
+
+  const view = new ArrayView(
+    buildPipeline(ast, context, queryID),
+    {
+      ...defaultFormat,
+      relationships: {
+        labels: {
+          ...defaultFormat,
+          singular: true,
+          aggregate: {fn: 'sum', field: 'weight'},
+        },
+      },
+    },
+    true,
+    () => {},
+  );
+
+  context.processChanges(undefined, 'h1' as Hash, [
+    {
+      key: `${ENTITIES_KEY_PREFIX}issue/1`,
+      op: 'add',
+      newValue: {id: '1', title: 'a'},
+    },
+    {
+      key: `${ENTITIES_KEY_PREFIX}issue/2`,
+      op: 'add',
+      newValue: {id: '2', title: 'b'},
+    },
+  ]);
+  // Server-computed per-issue label-weight sums.
+  context.processChanges('h1' as Hash, 'h2' as Hash, [
+    {
+      key: `${ENTITIES_KEY_PREFIX}${aggTable}/1`,
+      op: 'add',
+      newValue: {issueId: '1', value: 30, ['_0_version']: '01'},
+    },
+    {
+      key: `${ENTITIES_KEY_PREFIX}${aggTable}/2`,
+      op: 'add',
+      newValue: {issueId: '2', value: 5, ['_0_version']: '01'},
+    },
+  ]);
+
+  const clean = (data: unknown) =>
+    (data as ReadonlyArray<Record<string, unknown>>).map(r => ({
+      id: r.id,
+      title: r.title,
+      labels: r.labels,
+    }));
+  expect(clean(view.data)).toEqual([
+    {id: '1', title: 'a', labels: 30},
+    {id: '2', title: 'b', labels: 5},
+  ]);
+
+  // No junction or label rows on the client.
+  const labels = context.getSource('label');
+  assert(labels, 'Expected label source');
+  expect([...labels.connect([['id', 'asc']]).fetch({})]).toEqual([]);
 });
