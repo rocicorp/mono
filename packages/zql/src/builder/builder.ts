@@ -37,6 +37,7 @@ import {
 import {Filter} from '../ivm/filter.ts';
 import {FlippedJoin} from '../ivm/flipped-join.ts';
 import {Join} from '../ivm/join.ts';
+import {LiftField, LIFTED_FIELD_COLUMN} from '../ivm/lift-field.ts';
 import type {Input, InputBase, Storage} from '../ivm/operator.ts';
 import {Skip} from '../ivm/skip.ts';
 import type {Source, SourceInput} from '../ivm/source.ts';
@@ -779,8 +780,26 @@ function applyCorrelatedSubQuery(
         if (!childSource) {
           throw new Error(`Source not found: ${sq.subquery.table}`);
         }
+        // For a junction (many-to-many) aggregate the key lives on the junction
+        // table but the aggregated field lives on the destination one hop past
+        // it — so merge the destination's columns in for the value-type lookup.
+        let inputColumns = childSource.tableSchema.columns;
+        const isJunction = !!(
+          sq.subquery.related && sq.subquery.related.length
+        );
+        if (isJunction) {
+          const destTable = must(sq.subquery.related)[0].subquery.table;
+          const destSource = delegate.getSource(destTable);
+          if (!destSource) {
+            throw new Error(`Source not found: ${destTable}`);
+          }
+          inputColumns = {
+            ...childSource.tableSchema.columns,
+            ...destSource.tableSchema.columns,
+          };
+        }
         const {columns} = aggregateSourceSchema(
-          childSource.tableSchema.columns,
+          inputColumns,
           sq.correlation.childField,
           sq.aggregate.fn,
           sq.aggregate.field,
@@ -789,14 +808,17 @@ function applyCorrelatedSubQuery(
           aggTable,
           columns,
           sq.correlation.childField,
-          // Optimistic deltas are only safe for the invertible, where-free case:
-          // `count` (±1), `sum`/`avg` (±field) per child add/remove. A `where` on
-          // the child would require evaluating the predicate per row, and
-          // `min`/`max` aren't invertible — those fall back to server values.
-          (sq.aggregate.fn === 'count' ||
-            sq.aggregate.fn === 'sum' ||
-            sq.aggregate.fn === 'avg') &&
-            sq.subquery.where === undefined
+          // Optimistic deltas are only safe for the invertible, where-free,
+          // direct (non-junction) case: `count` (±1), `sum`/`avg` (±field) per
+          // child add/remove. A `where` would need per-row predicate
+          // evaluation; `min`/`max` aren't invertible; and a junction's field
+          // lives past the junction (an edge mutation doesn't carry it). Those
+          // all fall back to the server-authoritative value.
+          !isJunction &&
+            sq.subquery.where === undefined &&
+            (sq.aggregate.fn === 'count' ||
+              sq.aggregate.fn === 'sum' ||
+              sq.aggregate.fn === 'avg')
             ? {
                 table: sq.subquery.table,
                 childField: sq.correlation.childField,
@@ -827,15 +849,31 @@ function applyCorrelatedSubQuery(
         fromCondition,
       );
       const aggName = `${name}:aggregate(${sq.subquery.alias})`;
+
+      // Junction (many-to-many) aggregate: the subquery is the junction table
+      // with a related() to the destination, and the aggregated field lives on
+      // that destination. Lift the field onto the junction row so the Aggregate
+      // (which reads a flat field) collapses it as a single hop. `count` never
+      // takes this path — it's collapsed to a plain count over the junction.
+      let aggInput = child;
+      let aggField = sq.aggregate.field;
+      if (sq.subquery.related && sq.subquery.related.length > 0) {
+        const destAlias = must(sq.subquery.related[0].subquery.alias);
+        const lift = new LiftField(child, destAlias, must(sq.aggregate.field));
+        delegate.addEdge(child, lift);
+        aggInput = lift;
+        aggField = LIFTED_FIELD_COLUMN;
+      }
+
       const aggregate = new Aggregate(
-        child,
+        aggInput,
         delegate.createStorage(aggName),
         sq.correlation.childField,
         sq.aggregate.fn,
-        sq.aggregate.field,
+        aggField,
         aggTable,
       );
-      delegate.addEdge(child, aggregate);
+      delegate.addEdge(aggInput, aggregate);
       childInput = delegate.decorateInput(aggregate, aggName);
     }
   } else {

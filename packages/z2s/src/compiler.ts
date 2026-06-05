@@ -257,20 +257,43 @@ function relationshipSubquery(
       default:
         unreachable(fn);
     }
-    return sql`(
-        SELECT ${aggExpr} FROM (${select(
+
+    let inner: SQLQuery;
+    if (relationship.subquery.related && relationship.subquery.related.length) {
+      // Junction (many-to-many) aggregate: the value lives on the destination,
+      // one hop past the junction. Aggregate over the junction join, exposing
+      // the destination field by its client name so `aggExpr` references it.
+      const {join, participatingTables} = makeJunctionJoin(spec, relationship);
+      const lastTable = must(last(participatingTables)).table;
+      inner = sql`SELECT ${
+        field
+          ? selectIdent(spec.server, {table: lastTable, zql: field})
+          : sql`NULL`
+      } FROM ${join} WHERE (${makeCorrelator(
+        spec,
+        relationship.correlation.parentField.map(f => ({
+          table: parentTable,
+          zql: f,
+        })),
+        relationship.correlation.childField,
+      )(participatingTables[0].table)})`;
+    } else {
+      inner = select(
+        spec,
+        relationship.subquery,
+        undefined,
+        makeCorrelator(
           spec,
-          relationship.subquery,
-          undefined,
-          makeCorrelator(
-            spec,
-            relationship.correlation.parentField.map(f => ({
-              table: parentTable,
-              zql: f,
-            })),
-            relationship.correlation.childField,
-          ),
-        )}) ${sql.ident(innerAlias)}
+          relationship.correlation.parentField.map(f => ({
+            table: parentTable,
+            zql: f,
+          })),
+          relationship.correlation.childField,
+        ),
+      );
+    }
+    return sql`(
+        SELECT ${aggExpr} FROM (${inner}) ${sql.ident(innerAlias)}
       ) as ${sql.ident(relationship.subquery.alias)}`;
   }
   if (relationship.hidden) {

@@ -13,7 +13,11 @@
  */
 import {expect, test} from 'vitest';
 import {must} from '../../../shared/src/must.ts';
-import {makeSourceChangeAdd, makeSourceChangeRemove} from '../ivm/source.ts';
+import {
+  makeSourceChangeAdd,
+  makeSourceChangeEdit,
+  makeSourceChangeRemove,
+} from '../ivm/source.ts';
 import {consume} from '../ivm/stream.ts';
 import type {QueryDelegate} from './query-delegate.ts';
 import {newQuery} from './query-impl.ts';
@@ -217,10 +221,58 @@ test('related(..., c => c.avg(field)) materializes a per-issue avg (null when em
   expect(avgOf(2)).toBe(null);
 });
 
-test('only count() is supported over a junction relationship (for now)', () => {
-  expect(() =>
-    newQuery(schema, 'issue').related('labels', l => l.sum('id')),
-  ).toThrow(/only count\(\) is supported over a junction/);
+test('junction (many-to-many) min/max over the destination field', () => {
+  const queryDelegate = new QueryDelegateImpl();
+  seed(queryDelegate); // issues 0001..0003
+  const labelSource = must(queryDelegate.getSource('label'));
+  const issueLabelSource = must(queryDelegate.getSource('issueLabel'));
+  for (const [id, name] of [
+    ['0001', 'bug'],
+    ['0002', 'feature'],
+    ['0003', 'wontfix'],
+  ]) {
+    consume(labelSource.push(makeSourceChangeAdd({id, name})));
+  }
+  // issue 0001 -> {bug, feature}, 0002 -> {wontfix}, 0003 -> {}.
+  for (const [issueId, labelId] of [
+    ['0001', '0001'],
+    ['0001', '0002'],
+    ['0002', '0003'],
+  ]) {
+    consume(issueLabelSource.push(makeSourceChangeAdd({issueId, labelId})));
+  }
+
+  const view = queryDelegate.materialize(
+    newQuery(schema, 'issue')
+      .related('labels', l => l.max('name'))
+      .orderBy('id', 'asc'),
+  );
+  const maxOf = (i: number) => (view.data[i] as {labels: string | null}).labels;
+  expect(maxOf(0)).toBe('feature'); // max('bug', 'feature')
+  expect(maxOf(1)).toBe('wontfix');
+  expect(maxOf(2)).toBe(null); // no labels
+
+  // Edit a destination field through the junction (a CHILD change on the
+  // junction row): 'feature' -> 'aaa'. issue 0001 was at the extreme, so this
+  // re-fetches the new max ('bug') — exercises LiftField's CHILD path + the
+  // Aggregate's non-invertible re-fetch.
+  consume(
+    labelSource.push(
+      makeSourceChangeEdit(
+        {id: '0002', name: 'aaa'},
+        {id: '0002', name: 'feature'},
+      ),
+    ),
+  );
+  expect(maxOf(0)).toBe('bug');
+
+  // Remove an edge (issue 0001 loses 'bug') -> max of {aaa} = 'aaa'.
+  consume(
+    issueLabelSource.push(
+      makeSourceChangeRemove({issueId: '0001', labelId: '0001'}),
+    ),
+  );
+  expect(maxOf(0)).toBe('aaa');
 });
 
 test('where on the aggregated relationship filters which rows are counted', () => {
