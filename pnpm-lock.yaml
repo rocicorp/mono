@@ -482,8 +482,8 @@ importers:
         specifier: '>=15'
         version: 15.2.14(react-native@0.85.3(@babel/core@7.29.0)(@types/react@19.2.15)(react@19.2.6))(react@19.2.6)
       '@rocicorp/zero-sqlite3':
-        specifier: ^1.1.1
-        version: 1.1.1
+        specifier: ^1.1.2
+        version: 1.1.2
       '@types/command-line-args':
         specifier: ^5.2.3
         version: 5.2.3
@@ -852,8 +852,8 @@ importers:
         specifier: ^1.0.2
         version: 1.0.2
       '@rocicorp/zero-sqlite3':
-        specifier: ^1.1.1
-        version: 1.1.1
+        specifier: ^1.1.2
+        version: 1.1.2
       '@standard-schema/spec':
         specifier: ^1.0.0
         version: 1.1.0
@@ -1075,8 +1075,8 @@ importers:
         specifier: ^1.0.2
         version: 1.0.2
       '@rocicorp/zero-sqlite3':
-        specifier: ^1.1.1
-        version: 1.1.1
+        specifier: ^1.1.2
+        version: 1.1.2
       '@types/basic-auth':
         specifier: ^1.1.8
         version: 1.1.8
@@ -1699,8 +1699,8 @@ importers:
         specifier: ^5.4.0
         version: 5.4.0
       '@rocicorp/zero-sqlite3':
-        specifier: ^1.1.1
-        version: 1.1.1
+        specifier: ^1.1.2
+        version: 1.1.2
       zql:
         specifier: workspace:*
         version: link:../zql
@@ -5608,8 +5608,8 @@ packages:
     engines: {node: ^12.20.0 || ^14.13.1 || >=16.0.0}
     deprecated: Use Promise.withResolvers instead
 
-  '@rocicorp/zero-sqlite3@1.1.1':
-    resolution: {integrity: sha512-BZ9FkXADOOalBbvfPmSq3QD193O5QQz/zqs9xXsAjWx/lL0VyYfT4zNrSEZqMpyv/7vH7DhPEDvbIzV6bvl7TQ==}
+  '@rocicorp/zero-sqlite3@1.1.2':
+    resolution: {integrity: sha512-bpxeS/JXENp8Wgo68wHsiMJjy41zePI0tCX0va/T4wAlUGfQ+gy4/Fr0TTfWWwHgDkVkAiQn5nb2EdN9xdOQWQ==}
     engines: {bun: '>=1.1.0', node: 22.x || 24.x}
     hasBin: true
 
@@ -18506,7 +18506,7 @@ snapshots:
 
   '@rocicorp/resolver@1.0.2': {}
 
-  '@rocicorp/zero-sqlite3@1.1.1':
+  '@rocicorp/zero-sqlite3@1.1.2':
     dependencies:
       bindings: 1.5.0
       prebuild-install: 7.1.3
