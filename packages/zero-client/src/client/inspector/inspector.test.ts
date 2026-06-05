@@ -4,6 +4,7 @@ import {TDigest, type ReadonlyTDigest} from '../../../../shared/src/tdigest.ts';
 import type {AnalyzeQueryResult} from '../../../../zero-protocol/src/analyze-query-result.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import {
+  type CheckIndexesResult,
   type InspectDownMessage,
   type InspectMetricsDown,
   type InspectQueriesDown,
@@ -695,6 +696,65 @@ test('server version', async () => {
   ] satisfies InspectDownMessage);
 
   expect(await p).toBe('1.2.34');
+
+  await z.close();
+});
+
+test('checkIndexes sends relationship requirements and returns the result', async () => {
+  const z = zeroForTest({schema});
+  await z.triggerConnected();
+
+  const idPromise = waitForID(z.socket, 'check-indexes');
+  const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  const resultP = z.inspector.checkIndexes();
+  const id = await idPromise;
+
+  // The client computes the relationship index requirements from the schema
+  // and sends them up to the server.
+  const socket = await z.socket;
+  const sent = socket.messages
+    .map(m => JSON.parse(m))
+    .find(d => d[0] === 'inspect' && d[1].op === 'check-indexes')?.[1];
+  assert(sent, 'expected a check-indexes message to be sent');
+  expect(sent.requirements.length).toBeGreaterThan(0);
+  for (const r of sent.requirements) {
+    expect(r).toMatchObject({
+      ownerTable: expect.any(String),
+      relationship: expect.any(String),
+      side: expect.stringMatching(/^(source|dest)$/),
+      clientTable: expect.any(String),
+      serverTable: expect.any(String),
+      serverColumns: expect.any(Array),
+    });
+  }
+
+  const value: CheckIndexesResult = {
+    missing: [
+      {
+        ownerTable: 'issue',
+        relationship: 'comments',
+        hop: 1,
+        hopCount: 1,
+        side: 'dest',
+        cardinality: 'many',
+        clientTable: 'comment',
+        clientColumns: ['issueID'],
+        serverTable: 'comment',
+        serverColumns: ['issueID'],
+        createIndexSQL: 'CREATE INDEX ON comment ("issueID");',
+      },
+    ],
+    unsyncedTables: [],
+  };
+  await z.triggerMessage([
+    'inspect',
+    {op: 'check-indexes', id, value},
+  ] satisfies InspectDownMessage);
+
+  expect(await resultP).toEqual(value);
+  // Missing indexes are logged as a console warning.
+  expect(warnSpy).toHaveBeenCalledOnce();
+  warnSpy.mockRestore();
 
   await z.close();
 });

@@ -5,18 +5,15 @@ import {string, table} from '../../../zero-schema/src/builder/table-builder.ts';
 import {
   type CheckIndexSpec,
   type CheckTableSpec,
-  createIndexSQL,
   findMissingRelationshipIndexes,
 } from './relationship-indexes.ts';
 
 const tbl = (name: string, primaryKey: string[]): CheckTableSpec => ({
-  schema: 'public',
-  name,
+  table: name,
   primaryKey,
 });
-const idx = (tableName: string, columns: string[]): CheckIndexSpec => ({
-  schema: 'public',
-  tableName,
+const idx = (table: string, columns: string[]): CheckIndexSpec => ({
+  table,
   columns,
 });
 
@@ -55,14 +52,12 @@ test('one-hop many: warns when the foreign-key (dest) side is unindexed', () => 
       hopCount: 1,
       side: 'dest',
       cardinality: 'many',
+      clientTable: 'comment',
       clientColumns: ['issueID'],
-      serverSchema: 'public',
       serverTable: 'comment',
       serverColumns: ['issueID'],
+      createIndexSQL: 'CREATE INDEX ON comment ("issueID");',
     },
-  ]);
-  expect(missing.map(createIndexSQL)).toEqual([
-    'CREATE INDEX ON comment ("issueID");',
   ]);
 });
 
@@ -124,13 +119,12 @@ test('one-hop one: warns when the source foreign-key side is unindexed', () => {
       relationship: 'project',
       side: 'source',
       cardinality: 'one',
+      clientTable: 'issue',
       serverTable: 'issue',
       serverColumns: ['projectID'],
+      createIndexSQL: 'CREATE INDEX ON issue ("projectID");',
     },
   ]);
-  expect(createIndexSQL(missing[0])).toBe(
-    'CREATE INDEX ON issue ("projectID");',
-  );
 });
 
 test('junction relationship: checks join fields across both hops', () => {
@@ -173,15 +167,13 @@ test('junction relationship: checks join fields across both hops', () => {
       hopCount: 2,
       side: 'source',
       cardinality: 'many',
+      clientTable: 'issueLabel',
       clientColumns: ['labelID'],
-      serverSchema: 'public',
       serverTable: 'issueLabel',
       serverColumns: ['labelID'],
+      createIndexSQL: 'CREATE INDEX ON "issueLabel" ("labelID");',
     },
   ]);
-  expect(createIndexSQL(missing[0])).toBe(
-    'CREATE INDEX ON "issueLabel" ("labelID");',
-  );
 });
 
 test('uses server names for the table and columns to index', () => {
@@ -214,14 +206,13 @@ test('uses server names for the table and columns to index', () => {
     {
       ownerTable: 'issue',
       side: 'dest',
+      clientTable: 'comment',
       clientColumns: ['issueID'],
       serverTable: 'comments',
       serverColumns: ['issue_id'],
+      createIndexSQL: 'CREATE INDEX ON comments (issue_id);',
     },
   ]);
-  expect(createIndexSQL(missing[0])).toBe(
-    'CREATE INDEX ON comments (issue_id);',
-  );
 });
 
 test('schema-qualifies the suggested index for non-public tables', () => {
@@ -245,24 +236,19 @@ test('schema-qualifies the suggested index for non-public tables', () => {
 
   const {missing} = findMissingRelationshipIndexes(
     schema,
-    [
-      {schema: 'analytics', name: 'events', primaryKey: ['id']},
-      tbl('user', ['id']),
-    ],
+    [tbl('analytics.events', ['id']), tbl('user', ['id'])],
     [],
   );
 
   expect(missing).toMatchObject([
     {
       side: 'source',
-      serverSchema: 'analytics',
-      serverTable: 'events',
+      clientTable: 'event',
+      serverTable: 'analytics.events',
       serverColumns: ['userID'],
+      createIndexSQL: 'CREATE INDEX ON analytics.events ("userID");',
     },
   ]);
-  expect(createIndexSQL(missing[0])).toBe(
-    'CREATE INDEX ON analytics.events ("userID");',
-  );
 });
 
 test('composite join keys are covered only when both are leading columns', () => {
@@ -294,9 +280,13 @@ test('composite join keys are covered only when both are leading columns', () =>
   );
 
   expect(missing).toMatchObject([
-    {side: 'source', serverTable: 'a', serverColumns: ['k1', 'k2']},
+    {
+      side: 'source',
+      serverTable: 'a',
+      serverColumns: ['k1', 'k2'],
+      createIndexSQL: 'CREATE INDEX ON a (k1, k2);',
+    },
   ]);
-  expect(createIndexSQL(missing[0])).toBe('CREATE INDEX ON a (k1, k2);');
 });
 
 test('deduplicates suggested CREATE INDEX statements', () => {
@@ -330,7 +320,7 @@ test('deduplicates suggested CREATE INDEX statements', () => {
   );
 
   expect(missing).toHaveLength(2);
-  expect(new Set(missing.map(createIndexSQL))).toEqual(
+  expect(new Set(missing.map(m => m.createIndexSQL))).toEqual(
     new Set(['CREATE INDEX ON comment ("issueID");']),
   );
 });

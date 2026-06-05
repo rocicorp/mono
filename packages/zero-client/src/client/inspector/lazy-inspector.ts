@@ -20,9 +20,11 @@ import type {Row} from '../../../../zero-protocol/src/data.ts';
 import {
   inspectAnalyzeQueryDownSchema,
   inspectAuthenticatedDownSchema,
+  inspectCheckIndexesDownSchema,
   inspectMetricsDownSchema,
   inspectQueriesDownSchema,
   inspectVersionDownSchema,
+  type CheckIndexesResult,
   type InspectDownBody,
   type InspectQueryRow,
   type QueryServerMetrics as QueryServerMetricsJSON,
@@ -31,6 +33,8 @@ import type {
   AnalyzeQueryOptions,
   InspectUpBody,
 } from '../../../../zero-protocol/src/inspect-up.ts';
+import {enumerateRelationshipIndexRequirements} from '../../../../zero-schema/src/relationship-index-requirements.ts';
+import type {Schema} from '../../../../zero-types/src/schema.ts';
 import type {
   ClientMetricMap,
   ServerMetricMap,
@@ -428,6 +432,62 @@ export async function authenticate(
     {op: 'authenticate', value: password},
     inspectAuthenticatedDownSchema,
   );
+}
+
+/**
+ * Checks that every relationship's join fields are backed by an index in the
+ * server's replica, in both directions. The relationship join-field
+ * requirements are computed from the schema on the client and sent to the
+ * server, which checks them against the replica's actual indexes. Logs a
+ * console warning (with `CREATE INDEX` suggestions) for any that are missing
+ * and returns the full result.
+ */
+export async function checkIndexes(
+  delegate: ExtendedInspectorDelegate,
+  schema: Schema,
+): Promise<CheckIndexesResult> {
+  const result = await rpc(
+    await delegate.getSocket(),
+    {
+      op: 'check-indexes',
+      requirements: enumerateRelationshipIndexRequirements(schema),
+    },
+    inspectCheckIndexesDownSchema,
+  );
+  if (result.missing.length > 0) {
+    // oxlint-disable-next-line no-console
+    console.warn(formatCheckIndexesResult(result));
+  }
+  return result;
+}
+
+function formatCheckIndexesResult(result: CheckIndexesResult): string {
+  const {missing, unsyncedTables} = result;
+  const lines = [
+    `Zero: ${missing.length} relationship join field${
+      missing.length === 1 ? ' is' : 's are'
+    } missing an index. This can cause full table scans as ` +
+      `related()/whereExists() queries are incrementally maintained. ` +
+      `An index is needed on BOTH sides of a relationship.`,
+  ];
+  for (const m of missing) {
+    const hop = m.hopCount > 1 ? ` (junction hop ${m.hop}/${m.hopCount})` : '';
+    lines.push(
+      `  • ${m.ownerTable}.${m.relationship}${hop}: ` +
+        `no index on ${m.serverTable}(${m.serverColumns.join(', ')})`,
+    );
+  }
+  const ddl = [...new Set(missing.map(m => m.createIndexSQL))];
+  lines.push('Add the following indexes (deduplicated):');
+  for (const sql of ddl) {
+    lines.push(`  ${sql}`);
+  }
+  if (unsyncedTables.length > 0) {
+    lines.push(
+      `(Skipped not-yet-synced tables: ${unsyncedTables.join(', ')}.)`,
+    );
+  }
+  return lines.join('\n');
 }
 
 class UnauthenticatedError extends Error {}

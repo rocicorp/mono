@@ -6,12 +6,12 @@ import * as v from '../../../shared/src/valita.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import {ZERO_ENV_VAR_PREFIX} from '../config/zero-config.ts';
 import {
-  createIndexSQL,
   findMissingRelationshipIndexes,
-  type RelationshipIndexCheck,
+  type CheckIndexesResult,
 } from '../db/relationship-indexes.ts';
 import {getPublicationInfo} from '../services/change-source/pg/schema/published.ts';
 import {SHARD_CONFIG_TABLE} from '../services/change-source/pg/schema/shard.ts';
+import {liteTableName} from '../types/names.ts';
 import {pgClient, type PostgresDB} from '../types/pg.ts';
 import {getShardID, upstreamSchema} from '../types/shards.ts';
 import {
@@ -68,7 +68,7 @@ async function getPublishedTablesAndIndexes(db: PostgresDB) {
   return getPublicationInfo(db, publications);
 }
 
-function report(result: RelationshipIndexCheck) {
+function report(result: CheckIndexesResult) {
   const {missing, unsyncedTables} = result;
   if (unsyncedTables.length > 0) {
     colorConsole.warn(
@@ -104,7 +104,7 @@ function report(result: RelationshipIndexCheck) {
     );
   }
   lines.push(``, `Add the following indexes (deduplicated):`);
-  for (const sql of new Set(missing.map(createIndexSQL))) {
+  for (const sql of new Set(missing.map(m => m.createIndexSQL))) {
     lines.push(`  ${sql}`);
   }
   colorConsole.warn(lines.join('\n'));
@@ -127,13 +127,11 @@ async function checkIndexes(schema: Schema, upstreamURI: string) {
       findMissingRelationshipIndexes(
         schema,
         published.tables.map(t => ({
-          schema: t.schema,
-          name: t.name,
+          table: liteTableName({schema: t.schema, name: t.name}),
           primaryKey: t.primaryKey ?? [],
         })),
         published.indexes.map(i => ({
-          schema: i.schema,
-          tableName: i.tableName,
+          table: liteTableName({schema: i.schema, name: i.tableName}),
           columns: Object.keys(i.columns),
         })),
       ),

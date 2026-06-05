@@ -3,6 +3,7 @@ import {tdigestSchema} from '../../shared/src/tdigest-schema.ts';
 import * as v from '../../shared/src/valita.ts';
 import {analyzeQueryResultSchema} from './analyze-query-result.ts';
 import {astSchema} from './ast.ts';
+import {indexRequirementSchema} from './inspect-up.ts';
 
 const serverMetricsSchema = v.object({
   'query-materialization-server': tdigestSchema,
@@ -92,12 +93,45 @@ export const inspectErrorDownSchema = inspectBaseDownSchema.extend({
 
 export type InspectErrorDown = v.Infer<typeof inspectErrorDownSchema>;
 
+/**
+ * A relationship join field that is not backed by an index, together with the
+ * `CREATE INDEX` statement that would fix it. Extends the requirement that the
+ * client sent up.
+ */
+export const missingIndexSchema = indexRequirementSchema.extend({
+  /** A ready-to-run `CREATE INDEX` statement (server-name, schema-qualified). */
+  createIndexSQL: v.string(),
+});
+
+export type MissingIndex = v.Infer<typeof missingIndexSchema>;
+
+export const checkIndexesResultSchema = v.object({
+  missing: v.array(missingIndexSchema),
+  /**
+   * Client table names referenced by a relationship but not present in the
+   * replica (not yet synced), so their indexes could not be checked.
+   */
+  unsyncedTables: v.array(v.string()),
+});
+
+export type CheckIndexesResult = v.Infer<typeof checkIndexesResultSchema>;
+
+export const inspectCheckIndexesDownSchema = inspectBaseDownSchema.extend({
+  op: v.literal('check-indexes'),
+  value: checkIndexesResultSchema,
+});
+
+export type InspectCheckIndexesDown = v.Infer<
+  typeof inspectCheckIndexesDownSchema
+>;
+
 export const inspectDownBodySchema = v.union(
   inspectQueriesDownSchema,
   inspectMetricsDownSchema,
   inspectVersionDownSchema,
   inspectAuthenticatedDownSchema,
   inspectAnalyzeQueryDownSchema,
+  inspectCheckIndexesDownSchema,
   inspectErrorDownSchema,
 );
 

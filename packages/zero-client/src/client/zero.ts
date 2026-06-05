@@ -2496,6 +2496,7 @@ export class Zero<
           await this.#connectResolver.promise;
           return must(this.#socket);
         },
+        this.#options.schema,
       ));
     }
   }

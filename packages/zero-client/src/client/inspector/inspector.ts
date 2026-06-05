@@ -4,7 +4,9 @@ import type {
   PlanDebugEventJSON,
 } from '../../../../zero-protocol/src/analyze-query-result.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
+import type {CheckIndexesResult} from '../../../../zero-protocol/src/inspect-down.ts';
 import type {AnalyzeQueryOptions} from '../../../../zero-protocol/src/inspect-up.ts';
+import type {Schema} from '../../../../zero-types/src/schema.ts';
 import {formatPlannerEvents} from '../../../../zql/src/planner/planner-debug.ts';
 import type {QueryDelegate} from '../../../../zql/src/query/query-delegate.ts';
 import type {AnyQuery} from '../../../../zql/src/query/query.ts';
@@ -31,12 +33,14 @@ export class Inspector {
   >();
   readonly client: Client;
   readonly clientGroup: ClientGroup;
+  readonly #schema: Schema;
 
   constructor(
     rep: Rep,
     inspectorDelegate: InspectorDelegate,
     queryDelegate: QueryDelegate,
     getSocket: () => Promise<WebSocket>,
+    schema: Schema,
   ) {
     const deletedQueries = this.#deletedQueries;
     inspectorDelegate.setQueryEvictedCallback((hash, ast, metrics) => {
@@ -68,6 +72,7 @@ export class Inspector {
 
     this.client = new Client(this.#delegate, rep.clientID, rep.clientGroupID);
     this.clientGroup = this.client.clientGroup;
+    this.#schema = schema;
   }
 
   async metrics(): Promise<Metrics> {
@@ -144,6 +149,23 @@ export class Inspector {
    */
   async authenticate(password: string): Promise<boolean> {
     return (await this.#delegate.lazy).authenticate(this.#delegate, password);
+  }
+
+  /**
+   * Checks that every relationship in the schema has the indexes it needs — in
+   * both directions — on the server's replica. A relationship's join over an
+   * unindexed field forces a full table scan each time Zero incrementally
+   * maintains a `related()`/`whereExists()` query that uses it.
+   *
+   * Logs a console warning with ready-to-run `CREATE INDEX` statements for any
+   * that are missing, and returns the full result. Intended for debugging slow
+   * queries.
+   */
+  async checkIndexes(): Promise<CheckIndexesResult> {
+    return (await this.#delegate.lazy).checkIndexes(
+      this.#delegate,
+      this.#schema,
+    );
   }
 
   /**

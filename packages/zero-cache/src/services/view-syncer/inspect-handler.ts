@@ -14,6 +14,7 @@ import {
   getServerVersion,
   isAdminPasswordValid,
 } from '../../config/zero-config.ts';
+import {findMissingIndexesInReplica} from '../../db/relationship-indexes-replica.ts';
 import {StatementRunner} from '../../db/statements.ts';
 import type {InspectorDelegate} from '../../server/inspector-delegate.ts';
 import {analyzeQuery} from '../analyze.ts';
@@ -161,6 +162,19 @@ export async function handleInspect(
           op: 'analyze-query',
           id: body.id,
           value: result,
+        });
+        break;
+      }
+
+      case 'check-indexes': {
+        // The client sends the relationship join-field requirements (it has
+        // the schema's relationships and the client->server name mapping). We
+        // check each against the replica's actual indexes.
+        using db = new Database(lc, config.replica.file);
+        client.sendInspectResponse(lc, {
+          op: 'check-indexes',
+          id: body.id,
+          value: findMissingIndexesInReplica(db, body.requirements),
         });
         break;
       }
