@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780517760456,
+  "lastUpdate": 1780699678806,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -56665,6 +56665,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/rocicorp/mono/commit/dc69d223241a91f6138748fa63e5b3291839f867"
         },
         "date": 1780517745695,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 317161,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 57049,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 117187,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 33481,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "aaron@aaronboodman.com",
+            "name": "Aaron Boodman",
+            "username": "aboodman"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "4b447e11adb33dd511b02e77c49962bab1acaf37",
+          "message": "bump zero-sqlite3 to 1.1.2 (#6101)\n\n## Summary\n\nBumps all workspace references to `@rocicorp/zero-sqlite3` from `^1.1.1`\nto `^1.1.2` and refreshes `pnpm-lock.yaml` so installs resolve the\npatched native package.\n\n## Why\n\n`@rocicorp/zero-sqlite3@1.1.1` can fail for users installing/building\nZero with newer Node versions because it may fall back to a source build\nwith an incomplete tarball. The `1.1.2` patch includes the upstream fix,\npreventing future users from hitting that install failure.\n\n## Validation\n\n- `pnpm why @rocicorp/zero-sqlite3` resolves a single version: `1.1.2`\n- `pnpm run format`\n- `pnpm run lint` on Node `24.11.1`\n- `pnpm run check-types` on Node `24.11.1`",
+          "timestamp": "2026-06-05T12:46:44-10:00",
+          "tree_id": "91a699015b36d8ce062176ef1c2966b11c572601",
+          "url": "https://github.com/rocicorp/mono/commit/4b447e11adb33dd511b02e77c49962bab1acaf37"
+        },
+        "date": 1780699665343,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
