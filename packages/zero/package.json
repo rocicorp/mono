@@ -20,6 +20,7 @@
     "zero-build-schema": "./out/zero/src/build-schema.js",
     "zero-cache": "./out/zero/src/cli.js",
     "zero-cache-dev": "./out/zero/src/zero-cache-dev.js",
+    "zero-check-indexes": "./out/zero/src/check-indexes.js",
     "zero-deploy-permissions": "./out/zero/src/deploy-permissions.js",
     "zero-out": "./out/zero/src/zero-out.js"
   },

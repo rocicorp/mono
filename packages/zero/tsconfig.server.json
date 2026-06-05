@@ -7,6 +7,7 @@
     "src/cli.ts",
     "src/build-schema.ts",
     "src/zero-cache-dev.ts",
+    "src/check-indexes.ts",
     "src/deploy-permissions.ts",
     "src/change-protocol/*",
     "src/pg.ts",
