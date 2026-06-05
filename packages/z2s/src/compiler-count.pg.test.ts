@@ -8,7 +8,7 @@ import type {JSONValue} from 'postgres';
 import {afterAll, beforeAll, describe, expect, test} from 'vitest';
 import {testDBs} from '../../zero-cache/src/test/db.ts';
 import type {PostgresDB} from '../../zero-cache/src/types/pg.ts';
-import type {AST} from '../../zero-protocol/src/ast.ts';
+import type {AST, Condition} from '../../zero-protocol/src/ast.ts';
 import {createSchema} from '../../zero-schema/src/builder/schema-builder.ts';
 import {
   number,
@@ -195,8 +195,13 @@ describe('junction (many-to-many) aggregates against PostgreSQL', () => {
     },
   };
 
-  // issue -> issueLabel -> label, aggregating label.<field> per issue.
-  function junctionAgg(fn: 'sum' | 'avg' | 'min' | 'max', field: string): AST {
+  // issue -> issueLabel -> label, aggregating label.<field> per issue. An
+  // optional `destWhere` filters the destination (label) before aggregating.
+  function junctionAgg(
+    fn: 'sum' | 'avg' | 'min' | 'max',
+    field: string,
+    destWhere?: Condition,
+  ): AST {
     return {
       table: 'issue',
       related: [
@@ -209,7 +214,11 @@ describe('junction (many-to-many) aggregates against PostgreSQL', () => {
             related: [
               {
                 correlation: {parentField: ['labelId'], childField: ['id']},
-                subquery: {table: 'label', alias: 'labels'},
+                subquery: {
+                  table: 'label',
+                  alias: 'labels',
+                  ...(destWhere ? {where: destWhere} : null),
+                },
               },
             ],
           },
@@ -217,6 +226,56 @@ describe('junction (many-to-many) aggregates against PostgreSQL', () => {
       ],
     };
   }
+
+  // count over the junction. A `destWhere` becomes an EXISTS on the junction row
+  // (keep only edges whose label matches), so the count never touches the label.
+  function junctionCount(destWhere?: Condition): AST {
+    return {
+      table: 'issue',
+      related: [
+        {
+          correlation: {parentField: ['id'], childField: ['issueId']},
+          aggregate: {fn: 'count'},
+          subquery: {
+            table: 'issueLabel',
+            alias: 'labels',
+            ...(destWhere
+              ? {
+                  where: {
+                    type: 'correlatedSubquery',
+                    op: 'EXISTS',
+                    related: {
+                      correlation: {
+                        parentField: ['labelId'],
+                        childField: ['id'],
+                      },
+                      subquery: {
+                        table: 'label',
+                        alias: 'labels',
+                        where: destWhere,
+                      },
+                    },
+                  },
+                }
+              : null),
+          },
+        },
+      ],
+    };
+  }
+
+  const weightGt5: Condition = {
+    type: 'simple',
+    op: '>',
+    left: {type: 'column', name: 'weight'},
+    right: {type: 'literal', value: 5},
+  };
+  const nameIsBug: Condition = {
+    type: 'simple',
+    op: '=',
+    left: {type: 'column', name: 'name'},
+    right: {type: 'literal', value: 'bug'},
+  };
 
   let pg: PostgresDB;
   beforeAll(async () => {
@@ -274,6 +333,57 @@ describe('junction (many-to-many) aggregates against PostgreSQL', () => {
       {id: '1', title: 'i1', labels: 20},
       {id: '2', title: 'i2', labels: 5},
       {id: '3', title: 'i3', labels: null},
+    ]);
+  });
+
+  // --- with a `where` on the destination (label). weight > 5 excludes L3(5),
+  // so issue 2's only label drops out (empty group -> null). ---
+  test('sum over the destination field with a where', async () => {
+    expect(await run(junctionAgg('sum', 'weight', weightGt5))).toEqual([
+      {id: '1', title: 'i1', labels: 30}, // L1(10) + L2(20)
+      {id: '2', title: 'i2', labels: null}, // L3(5) filtered out
+      {id: '3', title: 'i3', labels: null},
+    ]);
+  });
+
+  test('avg over the destination field with a where', async () => {
+    expect(await run(junctionAgg('avg', 'weight', weightGt5))).toEqual([
+      {id: '1', title: 'i1', labels: 15},
+      {id: '2', title: 'i2', labels: null},
+      {id: '3', title: 'i3', labels: null},
+    ]);
+  });
+
+  test('min over the destination field with a where', async () => {
+    expect(await run(junctionAgg('min', 'weight', weightGt5))).toEqual([
+      {id: '1', title: 'i1', labels: 10},
+      {id: '2', title: 'i2', labels: null},
+      {id: '3', title: 'i3', labels: null},
+    ]);
+  });
+
+  test('max over the destination field with a where', async () => {
+    expect(await run(junctionAgg('max', 'weight', weightGt5))).toEqual([
+      {id: '1', title: 'i1', labels: 20},
+      {id: '2', title: 'i2', labels: null},
+      {id: '3', title: 'i3', labels: null},
+    ]);
+  });
+
+  test('count over the junction (no filter) counts edges', async () => {
+    expect(await run(junctionCount())).toEqual([
+      {id: '1', title: 'i1', labels: 2},
+      {id: '2', title: 'i2', labels: 1},
+      {id: '3', title: 'i3', labels: 0},
+    ]);
+  });
+
+  test('count over the junction with a where (EXISTS on the edge)', async () => {
+    // Only edges whose label is named 'bug' (L1) count.
+    expect(await run(junctionCount(nameIsBug))).toEqual([
+      {id: '1', title: 'i1', labels: 1}, // L1(bug); L2(feat) excluded
+      {id: '2', title: 'i2', labels: 0}, // L3(wont) excluded
+      {id: '3', title: 'i3', labels: 0},
     ]);
   });
 });

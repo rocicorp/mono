@@ -731,3 +731,121 @@ test('synced junction (many-to-many) aggregate (sum) reads the server value', ()
   assert(labels, 'Expected label source');
   expect([...labels.connect([['id', 'asc']]).fetch({})]).toEqual([]);
 });
+
+test('synced junction (many-to-many) count with a where reads the server value', () => {
+  // issue.related('labels', l => l.where('name', 'bug').count()) — the
+  // destination filter compiles to an EXISTS on the junction row. On the synced
+  // client this still short-circuits to the precomputed per-issue value; the
+  // EXISTS is never evaluated locally (server-authoritative), and the value
+  // column is keyed by the junction's parent correlation (issueId).
+  const jSchema = createSchema({
+    tables: [
+      table('issue').columns({id: string(), title: string()}).primaryKey('id'),
+      table('issueLabel')
+        .columns({issueId: string(), labelId: string()})
+        .primaryKey('issueId', 'labelId'),
+      table('label').columns({id: string(), name: string()}).primaryKey('id'),
+    ],
+  });
+  const context = new ZeroContext(
+    new LogContext('info'),
+    new IVMSourceBranch(jSchema.tables),
+    null as unknown as AddQuery,
+    null as unknown as AddCustomQuery,
+    null as unknown as UpdateQuery,
+    null as unknown as UpdateCustomQuery,
+    null as unknown as FlushQueryChanges,
+    testBatchViewUpdates,
+    () => {},
+    assertValidRunOptions,
+  );
+
+  const queryID = 'jcq';
+  const relatedSq: CorrelatedSubquery = {
+    system: 'client',
+    correlation: {parentField: ['id'], childField: ['issueId']},
+    aggregate: {fn: 'count'},
+    subquery: {
+      table: 'issueLabel',
+      alias: 'labels',
+      where: {
+        type: 'correlatedSubquery',
+        op: 'EXISTS',
+        related: {
+          system: 'client',
+          correlation: {parentField: ['labelId'], childField: ['id']},
+          subquery: {
+            table: 'label',
+            alias: 'labels',
+            where: {
+              type: 'simple',
+              op: '=',
+              left: {type: 'column', name: 'name'},
+              right: {type: 'literal', value: 'bug'},
+            },
+          },
+        },
+      },
+    },
+  };
+  const ast: AST = {
+    table: 'issue',
+    orderBy: [['id', 'asc']],
+    related: [relatedSq],
+  };
+  const aggTable = aggregateTableName(queryID, relatedSq);
+  expect(aggTable).toBe('aggregate:jcq:labels');
+
+  const view = new ArrayView(
+    buildPipeline(ast, context, queryID),
+    {
+      ...defaultFormat,
+      relationships: {
+        labels: {...defaultFormat, singular: true, aggregate: {fn: 'count'}},
+      },
+    },
+    true,
+    () => {},
+  );
+
+  context.processChanges(undefined, 'h1' as Hash, [
+    {
+      key: `${ENTITIES_KEY_PREFIX}issue/1`,
+      op: 'add',
+      newValue: {id: '1', title: 'a'},
+    },
+    {
+      key: `${ENTITIES_KEY_PREFIX}issue/2`,
+      op: 'add',
+      newValue: {id: '2', title: 'b'},
+    },
+  ]);
+  // Server-computed per-issue counts of 'bug'-named labels.
+  context.processChanges('h1' as Hash, 'h2' as Hash, [
+    {
+      key: `${ENTITIES_KEY_PREFIX}${aggTable}/1`,
+      op: 'add',
+      newValue: {issueId: '1', value: 2, ['_0_version']: '01'},
+    },
+    {
+      key: `${ENTITIES_KEY_PREFIX}${aggTable}/2`,
+      op: 'add',
+      newValue: {issueId: '2', value: 0, ['_0_version']: '01'},
+    },
+  ]);
+
+  const clean = (data: unknown) =>
+    (data as ReadonlyArray<Record<string, unknown>>).map(r => ({
+      id: r.id,
+      labels: r.labels,
+    }));
+  expect(clean(view.data)).toEqual([
+    {id: '1', labels: 2},
+    {id: '2', labels: 0},
+  ]);
+
+  // The destination (label) never syncs to the client.
+  const labels = context.getSource('label');
+  assert(labels, 'Expected label source');
+  expect([...labels.connect([['id', 'asc']]).fetch({})]).toEqual([]);
+});
