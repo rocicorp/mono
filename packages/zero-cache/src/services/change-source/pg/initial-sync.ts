@@ -277,7 +277,7 @@ export async function initialSync(
         5000,
       );
       const indexStart = performance.now();
-      createLiteIndices(tx, indexes);
+      createLiteIndices(lc, tx, indexes);
       const index = performance.now() - indexStart;
       lc.info?.(`Created indexes (${index.toFixed(3)} ms)`);
 
@@ -567,9 +567,16 @@ function createLiteTables(
   }
 }
 
-function createLiteIndices(tx: Database, indices: IndexSpec[]) {
-  for (const index of indices) {
-    tx.exec(createLiteIndexStatement(mapPostgresToLiteIndex(index)));
+function createLiteIndices(lc: LogContext, tx: Database, indices: IndexSpec[]) {
+  for (const [i, index] of indices.entries()) {
+    const stmt = createLiteIndexStatement(mapPostgresToLiteIndex(index));
+    lc.info?.(`Creating index ${i + 1}/${indices.length}: ${stmt}`);
+    const start = performance.now();
+    tx.exec(stmt);
+    lc.info?.(
+      `Created index ${i + 1}/${indices.length} ` +
+        `(${(performance.now() - start).toFixed(3)} ms): ${stmt}`,
+    );
   }
 }
 
