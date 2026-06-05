@@ -463,6 +463,15 @@ textarea.autoResize {
   margin-right: 2rem;
 }
 
+/* DEV-only: per-issue comment count in the list (relationship-aggregate demo). */
+.issue-comment-count {
+  flex: 0 0 auto;
+  opacity: 0.6;
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
 .list-view-header input {
   background: rgba(255, 255, 255, 0.1);
   font-size: 2rem;

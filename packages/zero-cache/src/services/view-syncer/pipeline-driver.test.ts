@@ -2,6 +2,7 @@ import type {LogContext} from '@rocicorp/logger';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {testLogConfig} from '../../../../otel/src/test-log-config.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
+import {must} from '../../../../shared/src/must.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import {createSchema} from '../../../../zero-schema/src/builder/schema-builder.ts';
 import {
@@ -10,6 +11,11 @@ import {
   string,
   table,
 } from '../../../../zero-schema/src/builder/table-builder.ts';
+import {
+  aggregateTableName,
+  topLevelAggregateTableName,
+} from '../../../../zql/src/builder/builder.ts';
+import {AGGREGATE_KEY_COLUMN} from '../../../../zql/src/ivm/aggregate.ts';
 import {ChangeType} from '../../../../zql/src/ivm/change-type.ts';
 import {
   CREATE_STORAGE_TABLE,
@@ -23,6 +29,7 @@ import {DbFile} from '../../test/lite.ts';
 import type {RowKey} from '../../types/row-key.ts';
 import {upstreamSchema, type ShardID} from '../../types/shards.ts';
 import {populateFromExistingTables} from '../replicator/schema/column-metadata.ts';
+import {ZERO_VERSION_COLUMN_NAME} from '../replicator/schema/constants.ts';
 import {initReplicationState} from '../replicator/schema/replication-state.ts';
 import {
   fakeReplicator,
@@ -663,6 +670,116 @@ describe('view-syncer/pipeline-driver', () => {
         },
       ]
     `);
+  });
+
+  // A relationship aggregate: `issues.related('comments', q => q.count())`.
+  // The server computes the aggregate and streams synthetic rows to a synthetic
+  // table; the child (comment) rows are consumed by the Aggregate operator and
+  // never reach the client.
+  const ISSUES_WITH_COMMENT_COUNT: AST = {
+    table: 'issues',
+    orderBy: [['id', 'asc']],
+    related: [
+      {
+        system: 'client',
+        correlation: {
+          parentField: ['id'],
+          childField: ['issueID'],
+        },
+        aggregate: {fn: 'count'},
+        subquery: {
+          table: 'comments',
+          alias: 'comments',
+          orderBy: [['id', 'asc']],
+        },
+      },
+    ],
+  };
+
+  test('relationship aggregate: synthetic rows stream, child rows do not', () => {
+    pipelines.init(clientSchema);
+
+    const result = [
+      ...pipelines.addQuery(
+        'hash1',
+        'queryID1',
+        ISSUES_WITH_COMMENT_COUNT,
+        startTimer(),
+      ),
+    ].filter((c): c is RowChange => c !== 'yield');
+
+    const aggTable = aggregateTableName(
+      'queryID1',
+      must(ISSUES_WITH_COMMENT_COUNT.related)[0],
+    );
+    expect(aggTable).toBe('aggregate:queryID1:comments');
+
+    // The child (comment) rows are consumed by the Aggregate operator and are
+    // NOT synced to the client.
+    expect(result.some(c => c.table === 'comments')).toBe(false);
+
+    // The parent issue rows are synced as usual.
+    const issueKeys = result
+      .filter(c => c.table === 'issues')
+      .map(c => c.rowKey);
+    expect(issueKeys).toEqual(
+      expect.arrayContaining([{id: '1'}, {id: '2'}, {id: '3'}]),
+    );
+    expect(issueKeys).toHaveLength(3);
+
+    // The synthetic aggregate rows carry the per-issue count, keyed by the
+    // group key (issueID), and are stamped with the current state version
+    // (they have no replicated `_0_version`). Counts: issue 1 -> 1 comment,
+    // issue 2 -> 3, issue 3 -> 0.
+    const aggChanges = result.filter(c => c.table === aggTable);
+    expect(aggChanges.map(c => c.rowKey)).toEqual(
+      expect.arrayContaining([{issueID: '1'}, {issueID: '2'}, {issueID: '3'}]),
+    );
+    expect(aggChanges.map(c => c.row)).toEqual(
+      expect.arrayContaining([
+        {issueID: '1', value: 1, [ZERO_VERSION_COLUMN_NAME]: '123'},
+        {issueID: '2', value: 3, [ZERO_VERSION_COLUMN_NAME]: '123'},
+        {issueID: '3', value: 0, [ZERO_VERSION_COLUMN_NAME]: '123'},
+      ]),
+    );
+    expect(aggChanges).toHaveLength(3);
+    // Every synthetic row is an ADD.
+    expect(aggChanges.every(c => c.type === ChangeType.ADD)).toBe(true);
+  });
+
+  // A top-level (ungrouped) aggregate: `issues.count()`. The server reduces all
+  // issue rows to a single scalar and streams one synthetic row to
+  // `aggregate:<queryID>`; the issue rows themselves are consumed by the
+  // Aggregate operator and never sync.
+  const ISSUES_COUNT: AST = {
+    table: 'issues',
+    aggregate: {fn: 'count'},
+  };
+
+  test('top-level aggregate: one synthetic row streams, source rows do not', () => {
+    pipelines.init(clientSchema);
+
+    const result = [
+      ...pipelines.addQuery('hash1', 'queryID1', ISSUES_COUNT, startTimer()),
+    ].filter((c): c is RowChange => c !== 'yield');
+
+    const aggTable = topLevelAggregateTableName('queryID1');
+    expect(aggTable).toBe('aggregate:queryID1');
+
+    // The issue rows are consumed by the Aggregate operator and are NOT synced.
+    expect(result.some(c => c.table === 'issues')).toBe(false);
+
+    // Exactly one synthetic row: count of the 3 seeded issues, keyed by the
+    // singleton key and stamped with the current state version.
+    const aggChanges = result.filter(c => c.table === aggTable);
+    expect(aggChanges).toHaveLength(1);
+    expect(aggChanges[0].type).toBe(ChangeType.ADD);
+    expect(aggChanges[0].rowKey).toEqual({[AGGREGATE_KEY_COLUMN]: 0});
+    expect(aggChanges[0].row).toEqual({
+      [AGGREGATE_KEY_COLUMN]: 0,
+      value: 3,
+      [ZERO_VERSION_COLUMN_NAME]: '123',
+    });
   });
 
   test('insert', () => {

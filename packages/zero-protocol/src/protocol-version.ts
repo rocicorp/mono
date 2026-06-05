@@ -57,7 +57,11 @@ import {assert} from '../../shared/src/asserts.ts';
 // -- version 49 adds `scalar` to CorrelatedSubqueryCondition, removes scalarSubquery
 // -- version 50 adds OTEL headers to push and query messages
 // -- version 51 changes inspector metrics fields
-export const PROTOCOL_VERSION = 51;
+// -- version 52 adds `count` to CorrelatedSubquery (relationship count)
+// -- version 53 generalizes it to `aggregate` {fn,field} (count/sum/avg)
+// -- version 54 adds min/max to the aggregate fn set
+// -- version 55 adds top-level `aggregate` to AST (ungrouped query aggregates)
+export const PROTOCOL_VERSION = 55;
 
 /**
  * The minimum server-supported sync protocol version (i.e. the version

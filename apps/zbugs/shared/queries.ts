@@ -221,10 +221,46 @@ export const queries = defineQueries({
       start: z.nullable(issueRowSortSchema),
       dir: z.union([z.literal('forward'), z.literal('backward')]),
       inclusive: z.optional(z.boolean()),
+      // DEV-only (see list-page): also compute a per-issue comment count, to
+      // demo relationship aggregates. Off in prod.
+      withCommentCount: z.optional(z.boolean()),
     }),
 
-    ({ctx: auth, args: {listContext, limit, start, dir, inclusive}}) =>
-      issueListV2(listContext, limit, auth?.sub, auth, start, dir, inclusive),
+    ({
+      ctx: auth,
+      args: {listContext, limit, start, dir, inclusive, withCommentCount},
+    }) => {
+      const q = issueListV2(
+        listContext,
+        limit,
+        auth?.sub,
+        auth,
+        start,
+        dir,
+        inclusive,
+      );
+      if (withCommentCount) {
+        // Relationship aggregate: each issue gets `comments` = count(*) of its
+        // comments. Cast back to the base row type so the list's row type (and
+        // the virtualizer) is unaffected; read via a cast at the call site.
+        return q.related('comments', c => c.count()) as unknown as typeof q;
+      }
+      return q;
+    },
+  ),
+
+  /**
+   * The exact total number of issues matching a list's filters — a real
+   * server-computed `count()`, not the virtualizer's pagination estimate. The
+   * server reduces the filtered issues to a single value and syncs only that;
+   * the issue rows themselves are not synced for this query.
+   */
+  issueCount: defineQuery(
+    z.object({
+      listContext: listContextParams,
+    }),
+    ({ctx: auth, args: {listContext}}) =>
+      applyIssueListFilters(builder.issue, listContext, auth?.role).count(),
   ),
 
   /**
@@ -355,6 +391,74 @@ function alwaysFalse<
   return q.where(({or}) => or());
 }
 
+/**
+ * Applies the listContext filters (project / open / text / labels / creator /
+ * assignee) and read permissions to an issue query. Shared by
+ * {@link buildListQuery} and the `issueCount` query so the count reflects
+ * exactly the same set of issues the list shows — no ordering, pagination, or
+ * relationships, which don't affect (and aren't valid on) a scalar count.
+ */
+function applyIssueListFilters<TQuery extends IssueQuery>(
+  q: TQuery,
+  listContext: ListContextParams,
+  role: Role | undefined,
+): TQuery {
+  const {projectName = ZERO_PROJECT_NAME} = listContext;
+
+  q = q.whereExists(
+    'project',
+    pq => pq.where('lowerCaseName', projectName.toLocaleLowerCase()),
+    {scalar: true},
+  ) as TQuery;
+
+  const {open, creator, assignee, labels, textFilter} = listContext;
+  q = q.where(({and, cmp, exists, or}) =>
+    and(
+      // oxlint-disable-next-line eqeqeq
+      open != null ? cmp('open', open) : undefined,
+      textFilter
+        ? or(
+            cmp('title', 'ILIKE', `%${escapeLike(textFilter)}%`),
+            cmp('description', 'ILIKE', `%${escapeLike(textFilter)}%`),
+            exists('comments', cq =>
+              cq.where('body', 'ILIKE', `%${escapeLike(textFilter)}%`),
+            ),
+          )
+        : undefined,
+      ...(labels ?? []).map(label =>
+        exists('issueLabels', iq =>
+          iq.whereExists(
+            'label',
+            lq =>
+              lq
+                .where('name', label)
+                .whereExists(
+                  'project',
+                  pq =>
+                    pq.where('lowerCaseName', projectName.toLocaleLowerCase()),
+                  {scalar: true},
+                ),
+            {scalar: true},
+          ),
+        ),
+      ),
+    ),
+  ) as TQuery;
+
+  if (creator) {
+    q = q.whereExists('creator', cq => cq.where('login', creator), {
+      scalar: true,
+    }) as TQuery;
+  }
+  if (assignee) {
+    q = q.whereExists('assignee', aq => aq.where('login', assignee), {
+      scalar: true,
+    }) as TQuery;
+  }
+
+  return applyIssuePermissions(q, role);
+}
+
 export function buildListQuery(args: ListQueryArgs) {
   const {
     issueQuery = builder.issue,
@@ -367,22 +471,14 @@ export function buildListQuery(args: ListQueryArgs) {
   } = args;
 
   let q = issueQuery
-    .related('viewState', q =>
-      (args.userID ? q.where('userID', args.userID) : alwaysFalse(q)).one(),
+    .related('viewState', vq =>
+      (args.userID ? vq.where('userID', args.userID) : alwaysFalse(vq)).one(),
     )
     .related('labels');
 
   if (!listContext) {
     return alwaysFalse(q);
   }
-
-  const {projectName = ZERO_PROJECT_NAME} = listContext;
-
-  q = q.whereExists(
-    'project',
-    q => q.where('lowerCaseName', projectName.toLocaleLowerCase()),
-    {scalar: true},
-  );
 
   const {sortField, sortDirection} = listContext;
   const orderByDir =
@@ -400,52 +496,7 @@ export function buildListQuery(args: ListQueryArgs) {
     q = q.limit(limit);
   }
 
-  const {open, creator, assignee, labels, textFilter} = listContext;
-  q = q.where(({and, cmp, exists, or}) =>
-    and(
-      // oxlint-disable-next-line eqeqeq
-      open != null ? cmp('open', open) : undefined,
-      textFilter
-        ? or(
-            cmp('title', 'ILIKE', `%${escapeLike(textFilter)}%`),
-            cmp('description', 'ILIKE', `%${escapeLike(textFilter)}%`),
-            exists('comments', q =>
-              q.where('body', 'ILIKE', `%${escapeLike(textFilter)}%`),
-            ),
-          )
-        : undefined,
-      ...(labels ?? []).map(label =>
-        exists('issueLabels', q =>
-          q.whereExists(
-            'label',
-            q =>
-              q
-                .where('name', label)
-                .whereExists(
-                  'project',
-                  q =>
-                    q.where('lowerCaseName', projectName.toLocaleLowerCase()),
-                  {scalar: true},
-                ),
-            {scalar: true},
-          ),
-        ),
-      ),
-    ),
-  );
-
-  if (creator) {
-    q = q.whereExists('creator', q => q.where('login', creator), {
-      scalar: true,
-    });
-  }
-  if (assignee) {
-    q = q.whereExists('assignee', q => q.where('login', assignee), {
-      scalar: true,
-    });
-  }
-
-  return applyIssuePermissions(q, role);
+  return applyIssueListFilters(q, listContext, role);
 }
 
 export type Issues = QueryResultType<typeof queries.issueListV2>;

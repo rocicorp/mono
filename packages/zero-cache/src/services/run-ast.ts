@@ -134,6 +134,8 @@ export async function runAst(
     hashOfAST(resolvedAst),
     clientSchema,
     computeZqlSpecs(lc, db, {includeBackfillingColumns: false}),
+    // analyze-query inspects rows; synthetic aggregate version is irrelevant.
+    '00',
   )) {
     if (rowChange === 'yield') {
       await yieldProcess();

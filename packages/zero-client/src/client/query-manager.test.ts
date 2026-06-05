@@ -274,6 +274,7 @@ test('add renamed fields', () => {
           {
             "args": undefined,
             "ast": {
+              "aggregate": undefined,
               "alias": undefined,
               "limit": undefined,
               "orderBy": [
@@ -288,6 +289,7 @@ test('add renamed fields', () => {
               ],
               "related": [
                 {
+                  "aggregate": undefined,
                   "correlation": {
                     "childField": [
                       "id",
@@ -298,6 +300,7 @@ test('add renamed fields', () => {
                   },
                   "hidden": undefined,
                   "subquery": {
+                    "aggregate": undefined,
                     "alias": undefined,
                     "limit": undefined,
                     "orderBy": undefined,
@@ -345,6 +348,7 @@ test('add renamed fields', () => {
                         ],
                       },
                       "subquery": {
+                        "aggregate": undefined,
                         "alias": undefined,
                         "limit": undefined,
                         "orderBy": undefined,
@@ -942,6 +946,7 @@ describe('getQueriesPatch', () => {
                 {
                   "args": undefined,
                   "ast": {
+                    "aggregate": undefined,
                     "alias": undefined,
                     "limit": undefined,
                     "orderBy": [
@@ -979,6 +984,7 @@ describe('getQueriesPatch', () => {
                 {
                   "args": undefined,
                   "ast": {
+                    "aggregate": undefined,
                     "alias": undefined,
                     "limit": undefined,
                     "orderBy": [
@@ -1017,38 +1023,39 @@ describe('getQueriesPatch', () => {
       expect(await add('none')).toBe(0);
       expect(send).toBeCalledTimes(1);
       expect(send.mock.calls[0]).toMatchInlineSnapshot(`
-      [
         [
-          "changeDesiredQueries",
-          {
-            "desiredQueriesPatch": [
-              {
-                "args": undefined,
-                "ast": {
-                  "alias": undefined,
-                  "limit": undefined,
-                  "orderBy": [
-                    [
-                      "id",
-                      "desc",
+          [
+            "changeDesiredQueries",
+            {
+              "desiredQueriesPatch": [
+                {
+                  "args": undefined,
+                  "ast": {
+                    "aggregate": undefined,
+                    "alias": undefined,
+                    "limit": undefined,
+                    "orderBy": [
+                      [
+                        "id",
+                        "desc",
+                      ],
                     ],
-                  ],
-                  "related": undefined,
-                  "schema": undefined,
-                  "start": undefined,
-                  "table": "issues",
-                  "where": undefined,
+                    "related": undefined,
+                    "schema": undefined,
+                    "start": undefined,
+                    "table": "issues",
+                    "where": undefined,
+                  },
+                  "hash": "1hydj1t7t5yv4",
+                  "name": undefined,
+                  "op": "put",
+                  "ttl": 0,
                 },
-                "hash": "1hydj1t7t5yv4",
-                "name": undefined,
-                "op": "put",
-                "ttl": 0,
-              },
-            ],
-          },
-        ],
-      ]
-    `);
+              ],
+            },
+          ],
+        ]
+      `);
 
       send.mockClear();
       expect(await add('none')).toBe(0);
@@ -1066,6 +1073,7 @@ describe('getQueriesPatch', () => {
                 {
                   "args": undefined,
                   "ast": {
+                    "aggregate": undefined,
                     "alias": undefined,
                     "limit": undefined,
                     "orderBy": [
@@ -1156,61 +1164,63 @@ describe('getQueriesPatch', () => {
 
     const patch = await queryManager.getQueriesPatch(testReadTransaction);
     expect(patch).toMatchInlineSnapshot(`
-        Map {
-          "12hwg3ihkijhm" => {
-            "hash": "12hwg3ihkijhm",
-            "op": "del",
-          },
-          "shouldBeDeleted" => {
-            "hash": "shouldBeDeleted",
-            "op": "del",
-          },
-          "3c5d3uiyypuxu" => {
-            "args": undefined,
-            "ast": {
-              "alias": undefined,
-              "limit": undefined,
-              "orderBy": [
-                [
-                  "id",
-                  "asc",
-                ],
+      Map {
+        "12hwg3ihkijhm" => {
+          "hash": "12hwg3ihkijhm",
+          "op": "del",
+        },
+        "shouldBeDeleted" => {
+          "hash": "shouldBeDeleted",
+          "op": "del",
+        },
+        "3c5d3uiyypuxu" => {
+          "args": undefined,
+          "ast": {
+            "aggregate": undefined,
+            "alias": undefined,
+            "limit": undefined,
+            "orderBy": [
+              [
+                "id",
+                "asc",
               ],
-              "related": undefined,
-              "schema": undefined,
-              "start": undefined,
-              "table": "users",
-              "where": undefined,
-            },
-            "hash": "3c5d3uiyypuxu",
-            "name": undefined,
-            "op": "put",
-            "ttl": 600000,
+            ],
+            "related": undefined,
+            "schema": undefined,
+            "start": undefined,
+            "table": "users",
+            "where": undefined,
           },
-          "2q7cds8pild5w" => {
-            "args": undefined,
-            "ast": {
-              "alias": undefined,
-              "limit": undefined,
-              "orderBy": [
-                [
-                  "id",
-                  "desc",
-                ],
+          "hash": "3c5d3uiyypuxu",
+          "name": undefined,
+          "op": "put",
+          "ttl": 600000,
+        },
+        "2q7cds8pild5w" => {
+          "args": undefined,
+          "ast": {
+            "aggregate": undefined,
+            "alias": undefined,
+            "limit": undefined,
+            "orderBy": [
+              [
+                "id",
+                "desc",
               ],
-              "related": undefined,
-              "schema": undefined,
-              "start": undefined,
-              "table": "users",
-              "where": undefined,
-            },
-            "hash": "2q7cds8pild5w",
-            "name": undefined,
-            "op": "put",
-            "ttl": 600000,
+            ],
+            "related": undefined,
+            "schema": undefined,
+            "start": undefined,
+            "table": "users",
+            "where": undefined,
           },
-        }
-      `);
+          "hash": "2q7cds8pild5w",
+          "name": undefined,
+          "op": "put",
+          "ttl": 600000,
+        },
+      }
+    `);
     expect(testReadTransaction.scanCalls).toEqual([{prefix: 'd/client1/'}]);
   });
 });

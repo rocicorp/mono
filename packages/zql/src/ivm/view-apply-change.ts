@@ -7,6 +7,7 @@ import {
 import {must} from '../../../shared/src/must.ts';
 import type {Writable} from '../../../shared/src/writable.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
+import {AGGREGATE_VALUE_COLUMN} from './aggregate.ts';
 import {type Comparator, type Node} from './data.ts';
 import {skipYields} from './operator.ts';
 import type {SourceSchema} from './schema.ts';
@@ -203,6 +204,28 @@ export function applyChangeInternal<M extends Mutate>(
           mutate,
         );
       }
+      default:
+        unreachable(change);
+    }
+  }
+
+  // An `aggregate` relationship (see aggregate.ts) materializes as the bare
+  // scalar value rather than the synthetic child row. It is singular and
+  // childless, so add/edit set the value, remove clears it, no child changes.
+  if (format.aggregate) {
+    switch (change.type) {
+      case 'add':
+      case 'edit':
+        return setProperty(
+          mutate,
+          parentEntry,
+          relationship,
+          change.node.row[AGGREGATE_VALUE_COLUMN],
+        );
+      case 'remove':
+        return setProperty(mutate, parentEntry, relationship, undefined);
+      case 'child':
+        return parentEntry;
       default:
         unreachable(change);
     }

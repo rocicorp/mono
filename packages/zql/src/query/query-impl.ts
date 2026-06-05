@@ -2,6 +2,7 @@
 import {assert} from '../../../shared/src/asserts.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {
+  type AggregateFunction,
   type AST,
   type CompoundKey,
   type Condition,
@@ -26,7 +27,9 @@ import type {CustomQueryID} from './named.ts';
 import {type QueryInternals, queryInternalsTag} from './query-internals.ts';
 import type {
   AnyQuery,
+  AggregateResult,
   ExistsOptions,
+  FieldTSType,
   GetFilterType,
   HumanReadable,
   PreloadOptions,
@@ -192,6 +195,75 @@ export class QueryImpl<
       this.#currentJunction,
     );
 
+  #aggregate(fn: AggregateFunction, field?: string): AnyQuery {
+    // Set the aggregate on both the AST (so a top-level query reduces to a
+    // scalar) and the format (so the view projects the scalar and `related`
+    // can lift it). When used inside `related`, the parent strips the AST
+    // aggregate and lifts it onto the correlated-subquery entry instead.
+    return this.#newQuery(
+      this.#tableName,
+      {...this.#ast, aggregate: {fn, field}},
+      {
+        ...this.format,
+        singular: true,
+        aggregate: {fn, field},
+      },
+      this.customQueryID,
+      this.#currentJunction,
+    ) as AnyQuery;
+  }
+
+  count = (): Query<TTable, TSchema, AggregateResult<number>> =>
+    this.#aggregate('count') as unknown as Query<
+      TTable,
+      TSchema,
+      AggregateResult<number>
+    >;
+
+  sum = <TSelector extends keyof TSchema['tables'][TTable]['columns']>(
+    field: TSelector,
+  ): Query<TTable, TSchema, AggregateResult<number | null>> =>
+    this.#aggregate('sum', field as string) as unknown as Query<
+      TTable,
+      TSchema,
+      AggregateResult<number | null>
+    >;
+
+  avg = <TSelector extends keyof TSchema['tables'][TTable]['columns']>(
+    field: TSelector,
+  ): Query<TTable, TSchema, AggregateResult<number | null>> =>
+    this.#aggregate('avg', field as string) as unknown as Query<
+      TTable,
+      TSchema,
+      AggregateResult<number | null>
+    >;
+
+  min = <TSelector extends keyof TSchema['tables'][TTable]['columns']>(
+    field: TSelector,
+  ): Query<
+    TTable,
+    TSchema,
+    AggregateResult<FieldTSType<TTable, TSchema, TSelector & string> | null>
+  > =>
+    this.#aggregate('min', field as string) as unknown as Query<
+      TTable,
+      TSchema,
+      AggregateResult<FieldTSType<TTable, TSchema, TSelector & string> | null>
+    >;
+
+  max = <TSelector extends keyof TSchema['tables'][TTable]['columns']>(
+    field: TSelector,
+  ): Query<
+    TTable,
+    TSchema,
+    AggregateResult<FieldTSType<TTable, TSchema, TSelector & string> | null>
+  > =>
+    this.#aggregate('max', field as string) as unknown as Query<
+      TTable,
+      TSchema,
+      AggregateResult<FieldTSType<TTable, TSchema, TSelector & string> | null>
+    >;
+
   whereExists = (
     relationship: string,
     cbOrOptions?: ((q: AnyQuery) => AnyQuery) | ExistsOptions,
@@ -266,7 +338,15 @@ export class QueryImpl<
                 parentField: sourceField,
                 childField: destField,
               },
-              subquery: subQuery.#ast,
+              // A relationship aggregate lives on this correlated-subquery
+              // entry, not on the subquery's own AST — strip it so the subquery
+              // doesn't also reduce itself to a top-level scalar.
+              subquery: subQuery.format.aggregate
+                ? {...subQuery.#ast, aggregate: undefined}
+                : subQuery.#ast,
+              ...(subQuery.format.aggregate
+                ? {aggregate: subQuery.format.aggregate}
+                : null),
             },
           ],
         },
@@ -308,6 +388,60 @@ export class QueryImpl<
       assert(isCompoundKey(firstRelation.destField), 'Invalid relationship');
       assert(isCompoundKey(secondRelation.sourceField), 'Invalid relationship');
       assert(isCompoundKey(secondRelation.destField), 'Invalid relationship');
+
+      if (sq.format.aggregate) {
+        // Junction (many-to-many) count: count the association rows in the
+        // junction table — one per related entity — by collapsing to a
+        // single-hop count over the junction. Reuses the single-hop aggregate
+        // path (Aggregate operator + view projection + z2s).
+        //
+        // Only `count` is supported here: sum/avg would need the destination
+        // field, which lives past the junction, so the collapse does not apply.
+        // Filtering or nesting the destination is also not yet supported.
+        assert(
+          sq.format.aggregate.fn === 'count',
+          'only count() is supported over a junction (many-to-many) ' +
+            'relationship for now',
+        );
+        assert(
+          sq.#ast.where === undefined &&
+            sq.#ast.related === undefined &&
+            sq.#ast.limit === undefined &&
+            sq.#ast.start === undefined,
+          'count() over a junction relationship does not yet support ' +
+            'where/related/limit/start on the destination',
+        );
+        return this.#newQuery(
+          this.#tableName,
+          {
+            ...this.#ast,
+            related: [
+              ...(this.#ast.related ?? []),
+              {
+                system: this.#system,
+                correlation: {
+                  parentField: firstRelation.sourceField,
+                  childField: firstRelation.destField,
+                },
+                aggregate: {fn: 'count'},
+                subquery: {
+                  table: junctionSchema,
+                  alias: relationship,
+                },
+              },
+            ],
+          },
+          {
+            ...this.format,
+            relationships: {
+              ...this.format.relationships,
+              [relationship]: sq.format,
+            },
+          },
+          this.customQueryID,
+          this.#currentJunction,
+        ) as AnyQuery;
+      }
 
       return this.#newQuery(
         this.#tableName,

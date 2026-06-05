@@ -20,7 +20,9 @@ import {
   type NameMapper,
 } from '../../../zero-schema/src/name-mapper.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
+import {isAggregateTableName} from '../../../zql/src/builder/builder.ts';
 import {
+  aggregateRowKey,
   toDesiredQueriesKey,
   toGotQueriesKey,
   toMutationResponseKey,
@@ -349,6 +351,36 @@ export function mutationPatchOpToReplicachePatchOp(
   }
 }
 
+/**
+ * Routes a synced aggregate row to its synthetic client table
+ * (`aggregate:<queryID>[:<alias>]`). Such tables are not in the client schema,
+ * so the normal path would drop them. There is no server↔client name mapping
+ * for the synthetic columns, so the row passes through as-is.
+ */
+function aggregateRowsPatchOp(
+  op: Exclude<RowPatchOp, {op: 'clear'}>,
+): PatchOperationInternal {
+  switch (op.op) {
+    case 'del':
+      return {op: 'del', key: aggregateRowKey(op.tableName, op.id)};
+    case 'put':
+      return {
+        op: 'put',
+        key: aggregateRowKey(op.tableName, op.value),
+        value: op.value,
+      };
+    case 'update':
+      return {
+        op: 'update',
+        key: aggregateRowKey(op.tableName, op.id),
+        merge: op.merge,
+        constrain: op.constrain,
+      };
+    default:
+      unreachable(op);
+  }
+}
+
 function rowsPatchOpToReplicachePatchOp(
   op: RowPatchOp,
   schema: Schema,
@@ -356,6 +388,9 @@ function rowsPatchOpToReplicachePatchOp(
 ): PatchOperationInternal | undefined {
   if (op.op === 'clear') {
     return op;
+  }
+  if (isAggregateTableName(op.tableName)) {
+    return aggregateRowsPatchOp(op);
   }
   // Skip rows for tables not in the client schema. This can happen when
   // the server-side query AST references tables (e.g. issueNotifications)

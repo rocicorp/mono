@@ -169,10 +169,16 @@ const correlationSchema = v.readonlyObject({
 // is the only thing added in v.lazy.  The v.lazy is necessary due to the
 // mutually-recursive types, but v.lazy prevents inference of the resulting
 // type.
+const aggregateSchema = v.readonlyObject({
+  fn: v.literalUnion('count', 'sum', 'avg', 'min', 'max'),
+  field: v.string().optional(),
+});
+
 export const correlatedSubquerySchemaOmitSubquery = v.readonlyObject({
   correlation: correlationSchema,
   hidden: v.boolean().optional(),
   system: v.literalUnion('permissions', 'client', 'test').optional(),
+  aggregate: aggregateSchema.optional(),
 });
 
 export const correlatedSubquerySchema: v.Type<CorrelatedSubquery> =
@@ -194,6 +200,7 @@ export const astSchema: v.Type<AST> = v.readonlyObject({
       exclusive: v.boolean(),
     })
     .optional(),
+  aggregate: aggregateSchema.optional(),
 });
 
 export type Bound = {
@@ -240,6 +247,11 @@ export type AST = {
   readonly start?: Bound | undefined;
   readonly limit?: number | undefined;
   readonly orderBy?: Ordering | undefined;
+
+  // PROTOTYPE: when set, this query is reduced to a single top-level aggregate
+  // (count/sum/avg/min/max) over its rows; the query result is the scalar value
+  // rather than a list of rows. See ivm/aggregate.ts.
+  readonly aggregate?: Aggregate | undefined;
 };
 
 export type Correlation = {
@@ -262,6 +274,20 @@ export type CorrelatedSubquery = {
   // When `hidden` is set to true, this hop will not be included in the output view
   // but its children will be.
   readonly hidden?: boolean | undefined;
+
+  // PROTOTYPE: when set, this related subquery is reduced to a per-parent
+  // aggregate (count/sum/avg) instead of returning the child rows. The
+  // relationship materializes as a single scalar value. See ivm/aggregate.ts.
+  readonly aggregate?: Aggregate | undefined;
+};
+
+export type AggregateFunction = 'count' | 'sum' | 'avg' | 'min' | 'max';
+
+export type Aggregate = {
+  readonly fn: AggregateFunction;
+  // The column to aggregate. Required for `sum`/`avg`; absent for `count`
+  // (which is `count(*)`). Subject to client→server name mapping.
+  readonly field?: string | undefined;
 };
 
 export type ValuePosition = LiteralReference | Parameter | ColumnReference;
@@ -368,6 +394,15 @@ function transformAST(ast: AST, transform: ASTTransform): Required<AST> {
                 hidden: r.hidden,
                 subquery: transformAST(r.subquery, transform),
                 system: r.system,
+                aggregate: r.aggregate
+                  ? {
+                      fn: r.aggregate.fn,
+                      field:
+                        r.aggregate.field === undefined
+                          ? undefined
+                          : columnName(r.subquery.table, r.aggregate.field),
+                    }
+                  : undefined,
               }) satisfies Required<CorrelatedSubquery>,
           ),
         )
@@ -385,6 +420,15 @@ function transformAST(ast: AST, transform: ASTTransform): Required<AST> {
       : undefined,
     limit: ast.limit,
     orderBy: ast.orderBy?.map(([col, dir]) => [colName(col), dir] as const),
+    aggregate: ast.aggregate
+      ? {
+          fn: ast.aggregate.fn,
+          field:
+            ast.aggregate.field === undefined
+              ? undefined
+              : colName(ast.aggregate.field),
+        }
+      : undefined,
   };
 
   return transformed;

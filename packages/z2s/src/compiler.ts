@@ -81,6 +81,36 @@ export function compile(
     },
     zql: zqlSchema.tables,
   };
+  if (ast.aggregate) {
+    // Top-level (ungrouped) aggregate: the result is a single scalar, not rows.
+    const table = makeTable(spec, ast.table);
+    const {fn, field} = ast.aggregate;
+    const col = () => colIdent(spec.server, {table, zql: must(field)});
+    let aggExpr: SQLQuery;
+    switch (fn) {
+      case 'count':
+        aggExpr = sql`COUNT(*)::int`;
+        break;
+      case 'sum':
+        aggExpr = sql`SUM(${col()})::float8`;
+        break;
+      case 'avg':
+        aggExpr = sql`AVG(${col()})::float8`;
+        break;
+      case 'min':
+        aggExpr = sql`MIN(${col()})`;
+        break;
+      case 'max':
+        aggExpr = sql`MAX(${col()})`;
+        break;
+      default:
+        unreachable(fn);
+    }
+    return sql`SELECT to_json(${aggExpr})::text AS ${ZQL_RESULT_KEY_IDENT}
+      FROM ${fromIdent(spec.server, table)}
+      ${ast.where ? sql`WHERE ${where(spec, ast.where, table)}` : sql``}`;
+  }
+
   return sql`SELECT 
     ${toJSON(ZQL_RESULT_TABLE_KEY, format?.singular)}::text AS ${ZQL_RESULT_KEY_IDENT}
     FROM (${select(spec, ast, format)}) ${ZQL_RESULT_TABLE_IDENT}`;
@@ -201,6 +231,48 @@ function relationshipSubquery(
   parentTable: Table,
 ): SQLQuery {
   const innerAlias = `inner_${relationship.subquery.alias}`;
+  if (relationship.aggregate) {
+    // Aggregate relationship: emit a correlated scalar subquery returning the
+    // aggregate over the matching child rows, instead of aggregating the rows
+    // to JSON. No rows are materialized. The inner subquery exposes columns by
+    // their client names, so the aggregated field is referenced as-is.
+    const {fn, field} = relationship.aggregate;
+    let aggExpr: SQLQuery;
+    switch (fn) {
+      case 'count':
+        aggExpr = sql`COUNT(*)::int`;
+        break;
+      case 'sum':
+        aggExpr = sql`SUM(${sql.ident(must(field))})::float8`;
+        break;
+      case 'avg':
+        aggExpr = sql`AVG(${sql.ident(must(field))})::float8`;
+        break;
+      case 'min':
+        aggExpr = sql`MIN(${sql.ident(must(field))})`;
+        break;
+      case 'max':
+        aggExpr = sql`MAX(${sql.ident(must(field))})`;
+        break;
+      default:
+        unreachable(fn);
+    }
+    return sql`(
+        SELECT ${aggExpr} FROM (${select(
+          spec,
+          relationship.subquery,
+          undefined,
+          makeCorrelator(
+            spec,
+            relationship.correlation.parentField.map(f => ({
+              table: parentTable,
+              zql: f,
+            })),
+            relationship.correlation.childField,
+          ),
+        )}) ${sql.ident(innerAlias)}
+      ) as ${sql.ident(relationship.subquery.alias)}`;
+  }
   if (relationship.hidden) {
     const {join, participatingTables} = makeJunctionJoin(spec, relationship);
     const lastTable = must(last(participatingTables)).table;

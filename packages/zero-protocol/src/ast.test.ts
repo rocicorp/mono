@@ -282,6 +282,7 @@ test('related subqueries are sorted', () => {
   expect(normalizeAST(ast).related).toMatchInlineSnapshot(`
     [
       {
+        "aggregate": undefined,
         "correlation": {
           "childField": [
             "a",
@@ -292,6 +293,7 @@ test('related subqueries are sorted', () => {
         },
         "hidden": undefined,
         "subquery": {
+          "aggregate": undefined,
           "alias": "alias1",
           "limit": undefined,
           "orderBy": undefined,
@@ -304,6 +306,7 @@ test('related subqueries are sorted', () => {
         "system": "client",
       },
       {
+        "aggregate": undefined,
         "correlation": {
           "childField": [
             "a",
@@ -314,6 +317,7 @@ test('related subqueries are sorted', () => {
         },
         "hidden": undefined,
         "subquery": {
+          "aggregate": undefined,
           "alias": "alias2",
           "limit": undefined,
           "orderBy": undefined,
@@ -432,6 +436,7 @@ test('makeServerAST', () => {
 
   expect(serverAST).toMatchInlineSnapshot(`
     {
+      "aggregate": undefined,
       "alias": undefined,
       "limit": undefined,
       "orderBy": [
@@ -446,6 +451,7 @@ test('makeServerAST', () => {
       ],
       "related": [
         {
+          "aggregate": undefined,
           "correlation": {
             "childField": [
               "issue_id",
@@ -456,6 +462,7 @@ test('makeServerAST', () => {
           },
           "hidden": undefined,
           "subquery": {
+            "aggregate": undefined,
             "alias": "alias2",
             "limit": undefined,
             "orderBy": undefined,
@@ -468,6 +475,7 @@ test('makeServerAST', () => {
           "system": "client",
         },
         {
+          "aggregate": undefined,
           "correlation": {
             "childField": [
               "user_id",
@@ -478,6 +486,7 @@ test('makeServerAST', () => {
           },
           "hidden": undefined,
           "subquery": {
+            "aggregate": undefined,
             "alias": "alias1",
             "limit": undefined,
             "orderBy": undefined,
@@ -536,6 +545,7 @@ test('makeServerAST', () => {
                 ],
               },
               "subquery": {
+                "aggregate": undefined,
                 "alias": "alias2",
                 "limit": undefined,
                 "orderBy": undefined,
@@ -559,6 +569,7 @@ test('makeServerAST', () => {
   expect(clientAST).toEqual(ast);
   expect(clientAST).toMatchInlineSnapshot(`
     {
+      "aggregate": undefined,
       "alias": undefined,
       "limit": undefined,
       "orderBy": [
@@ -573,6 +584,7 @@ test('makeServerAST', () => {
       ],
       "related": [
         {
+          "aggregate": undefined,
           "correlation": {
             "childField": [
               "issueId",
@@ -583,6 +595,7 @@ test('makeServerAST', () => {
           },
           "hidden": undefined,
           "subquery": {
+            "aggregate": undefined,
             "alias": "alias2",
             "limit": undefined,
             "orderBy": undefined,
@@ -595,6 +608,7 @@ test('makeServerAST', () => {
           "system": "client",
         },
         {
+          "aggregate": undefined,
           "correlation": {
             "childField": [
               "id",
@@ -605,6 +619,7 @@ test('makeServerAST', () => {
           },
           "hidden": undefined,
           "subquery": {
+            "aggregate": undefined,
             "alias": "alias1",
             "limit": undefined,
             "orderBy": undefined,
@@ -663,6 +678,7 @@ test('makeServerAST', () => {
                 ],
               },
               "subquery": {
+                "aggregate": undefined,
                 "alias": "alias2",
                 "limit": undefined,
                 "orderBy": undefined,
@@ -690,6 +706,6 @@ test('protocol version', () => {
   // If this test fails because the AST schema has changed such that
   // old code will not understand the new schema, bump the
   // PROTOCOL_VERSION and update the expected values.
-  expect(hash).toEqual('1dsf0svqtvyhv');
-  expect(PROTOCOL_VERSION).toBe(51);
+  expect(hash).toEqual('jmwrpub8eiw5');
+  expect(PROTOCOL_VERSION).toBe(55);
 });

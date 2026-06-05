@@ -1474,6 +1474,107 @@ describe('poke handler', () => {
     });
   });
 
+  test('mergePokes routes synced top-level aggregate rows (not dropped)', () => {
+    const result = mergePokes(
+      [
+        {
+          pokeStart: {pokeID: 'p1', baseCookie: '1'},
+          parts: [
+            {
+              pokeID: 'p1',
+              rowsPatch: [
+                // A synced top-level count() result. Its synthetic table is not
+                // in the client schema, but must NOT be dropped: it is routed
+                // with identity name mapping and the synthetic singleton key.
+                {
+                  op: 'put',
+                  tableName: 'aggregate:q1',
+                  value: {'': 0, 'value': 5, ['_0_version']: '01'},
+                },
+                // A genuinely-unknown table is still dropped (regression guard).
+                {
+                  op: 'put',
+                  tableName: 'notInSchema',
+                  value: {id: 'x'},
+                },
+                // Removal of the aggregate row routes too.
+                {op: 'del', tableName: 'aggregate:q1', id: {'': 0}},
+              ],
+            },
+          ],
+          pokeEnd: {pokeID: 'p1', cookie: '2'},
+        },
+      ],
+      schema,
+      serverToClient(schema.tables),
+    );
+
+    expect(result).toEqual({
+      baseCookie: '1',
+      pullResponse: {
+        lastMutationIDChanges: {},
+        cookie: '2',
+        patch: [
+          {
+            op: 'put',
+            key: 'e/aggregate:q1/0',
+            value: {'': 0, 'value': 5, ['_0_version']: '01'},
+          },
+          // 'notInSchema' row dropped — not present.
+          {op: 'del', key: 'e/aggregate:q1/0'},
+        ],
+      },
+    });
+  });
+
+  test('mergePokes routes synced relationship aggregate rows', () => {
+    const result = mergePokes(
+      [
+        {
+          pokeStart: {pokeID: 'p1', baseCookie: '1'},
+          parts: [
+            {
+              pokeID: 'p1',
+              rowsPatch: [
+                // Per-parent count() result, keyed by the correlation child
+                // field (issueID) — derived from the row, not the schema.
+                {
+                  op: 'put',
+                  tableName: 'aggregate:q1:commentCount',
+                  value: {issueID: 'i5', value: 2, ['_0_version']: '01'},
+                },
+                {
+                  op: 'del',
+                  tableName: 'aggregate:q1:commentCount',
+                  id: {issueID: 'i5'},
+                },
+              ],
+            },
+          ],
+          pokeEnd: {pokeID: 'p1', cookie: '2'},
+        },
+      ],
+      schema,
+      serverToClient(schema.tables),
+    );
+
+    expect(result).toEqual({
+      baseCookie: '1',
+      pullResponse: {
+        lastMutationIDChanges: {},
+        cookie: '2',
+        patch: [
+          {
+            op: 'put',
+            key: 'e/aggregate:q1:commentCount/i5',
+            value: {issueID: 'i5', value: 2, ['_0_version']: '01'},
+          },
+          {op: 'del', key: 'e/aggregate:q1:commentCount/i5'},
+        ],
+      },
+    });
+  });
+
   test('mergePokes sparse', () => {
     const result = mergePokes(
       [

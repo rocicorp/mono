@@ -1368,6 +1368,192 @@ test('related w/o junction edge', () => {
   `);
 });
 
+test('related sum(field) compiles to a correlated SUM scalar', () => {
+  expect(
+    formatPgInternalConvert(
+      compile(serverSchema, schema, {
+        table: 'issue',
+        related: [
+          {
+            correlation: {parentField: ['ownerId'], childField: ['id']},
+            aggregate: {fn: 'sum', field: 'age'},
+            subquery: {table: 'user', alias: 'ownerAgeSum'},
+          },
+        ],
+      }),
+    ),
+  ).toMatchInlineSnapshot(`
+    {
+      "text": "SELECT 
+        COALESCE(json_agg(row_to_json("zql_root")), '[]'::json)::text AS "zql_result"
+        FROM (SELECT (
+            SELECT SUM("age")::float8 FROM (SELECT "user_1"."id" as "id","user_1"."name" as "name","user_1"."nameArray" as "nameArray","user_1"."age" as "age","user_1"."ageArray" as "ageArray"
+        FROM "user" AS "user_1"
+         
+        WHERE "issue_0"."ownerId" = "user_1"."id"
+        ORDER BY "user_1"."id" ASC NULLS FIRST
+        ) "inner_ownerAgeSum"
+          ) as "ownerAgeSum","issue_0"."id" as "id","issue_0"."title" as "title","issue_0"."description" as "description","issue_0"."closed" as "closed","issue_0"."ownerId" as "ownerId",EXTRACT(EPOCH FROM "issue_0"."created") * 1000 as "created"
+        FROM "issue" AS "issue_0"
+         
+         
+        ORDER BY "issue_0"."id" ASC NULLS FIRST
+        ) "zql_root"",
+      "values": [],
+    }
+  `);
+});
+
+test('related avg(field) compiles to a correlated AVG scalar', () => {
+  expect(
+    formatPgInternalConvert(
+      compile(serverSchema, schema, {
+        table: 'issue',
+        related: [
+          {
+            correlation: {parentField: ['ownerId'], childField: ['id']},
+            aggregate: {fn: 'avg', field: 'age'},
+            subquery: {table: 'user', alias: 'ownerAgeAvg'},
+          },
+        ],
+      }),
+    ),
+  ).toMatchInlineSnapshot(`
+    {
+      "text": "SELECT 
+        COALESCE(json_agg(row_to_json("zql_root")), '[]'::json)::text AS "zql_result"
+        FROM (SELECT (
+            SELECT AVG("age")::float8 FROM (SELECT "user_1"."id" as "id","user_1"."name" as "name","user_1"."nameArray" as "nameArray","user_1"."age" as "age","user_1"."ageArray" as "ageArray"
+        FROM "user" AS "user_1"
+         
+        WHERE "issue_0"."ownerId" = "user_1"."id"
+        ORDER BY "user_1"."id" ASC NULLS FIRST
+        ) "inner_ownerAgeAvg"
+          ) as "ownerAgeAvg","issue_0"."id" as "id","issue_0"."title" as "title","issue_0"."description" as "description","issue_0"."closed" as "closed","issue_0"."ownerId" as "ownerId",EXTRACT(EPOCH FROM "issue_0"."created") * 1000 as "created"
+        FROM "issue" AS "issue_0"
+         
+         
+        ORDER BY "issue_0"."id" ASC NULLS FIRST
+        ) "zql_root"",
+      "values": [],
+    }
+  `);
+});
+
+test('related min(field) compiles to a correlated MIN scalar', () => {
+  expect(
+    formatPgInternalConvert(
+      compile(serverSchema, schema, {
+        table: 'issue',
+        related: [
+          {
+            correlation: {parentField: ['ownerId'], childField: ['id']},
+            aggregate: {fn: 'min', field: 'age'},
+            subquery: {table: 'user', alias: 'ownerAgeMin'},
+          },
+        ],
+      }),
+    ),
+  ).toMatchInlineSnapshot(`
+    {
+      "text": "SELECT 
+        COALESCE(json_agg(row_to_json("zql_root")), '[]'::json)::text AS "zql_result"
+        FROM (SELECT (
+            SELECT MIN("age") FROM (SELECT "user_1"."id" as "id","user_1"."name" as "name","user_1"."nameArray" as "nameArray","user_1"."age" as "age","user_1"."ageArray" as "ageArray"
+        FROM "user" AS "user_1"
+         
+        WHERE "issue_0"."ownerId" = "user_1"."id"
+        ORDER BY "user_1"."id" ASC NULLS FIRST
+        ) "inner_ownerAgeMin"
+          ) as "ownerAgeMin","issue_0"."id" as "id","issue_0"."title" as "title","issue_0"."description" as "description","issue_0"."closed" as "closed","issue_0"."ownerId" as "ownerId",EXTRACT(EPOCH FROM "issue_0"."created") * 1000 as "created"
+        FROM "issue" AS "issue_0"
+         
+         
+        ORDER BY "issue_0"."id" ASC NULLS FIRST
+        ) "zql_root"",
+      "values": [],
+    }
+  `);
+});
+
+test('related max(field) compiles to a correlated MAX scalar', () => {
+  expect(
+    formatPgInternalConvert(
+      compile(serverSchema, schema, {
+        table: 'issue',
+        related: [
+          {
+            correlation: {parentField: ['ownerId'], childField: ['id']},
+            aggregate: {fn: 'max', field: 'age'},
+            subquery: {table: 'user', alias: 'ownerAgeMax'},
+          },
+        ],
+      }),
+    ),
+  ).toMatchInlineSnapshot(`
+    {
+      "text": "SELECT 
+        COALESCE(json_agg(row_to_json("zql_root")), '[]'::json)::text AS "zql_result"
+        FROM (SELECT (
+            SELECT MAX("age") FROM (SELECT "user_1"."id" as "id","user_1"."name" as "name","user_1"."nameArray" as "nameArray","user_1"."age" as "age","user_1"."ageArray" as "ageArray"
+        FROM "user" AS "user_1"
+         
+        WHERE "issue_0"."ownerId" = "user_1"."id"
+        ORDER BY "user_1"."id" ASC NULLS FIRST
+        ) "inner_ownerAgeMax"
+          ) as "ownerAgeMax","issue_0"."id" as "id","issue_0"."title" as "title","issue_0"."description" as "description","issue_0"."closed" as "closed","issue_0"."ownerId" as "ownerId",EXTRACT(EPOCH FROM "issue_0"."created") * 1000 as "created"
+        FROM "issue" AS "issue_0"
+         
+         
+        ORDER BY "issue_0"."id" ASC NULLS FIRST
+        ) "zql_root"",
+      "values": [],
+    }
+  `);
+});
+
+test('related count(*) compiles to a correlated COUNT scalar', () => {
+  expect(
+    formatPgInternalConvert(
+      compile(serverSchema, schema, {
+        table: 'issue',
+        related: [
+          {
+            correlation: {
+              parentField: ['ownerId'],
+              childField: ['id'],
+            },
+            aggregate: {fn: 'count'},
+            subquery: {
+              table: 'user',
+              alias: 'ownerCount',
+            },
+          },
+        ],
+      }),
+    ),
+  ).toMatchInlineSnapshot(`
+    {
+      "text": "SELECT 
+        COALESCE(json_agg(row_to_json("zql_root")), '[]'::json)::text AS "zql_result"
+        FROM (SELECT (
+            SELECT COUNT(*)::int FROM (SELECT "user_1"."id" as "id","user_1"."name" as "name","user_1"."nameArray" as "nameArray","user_1"."age" as "age","user_1"."ageArray" as "ageArray"
+        FROM "user" AS "user_1"
+         
+        WHERE "issue_0"."ownerId" = "user_1"."id"
+        ORDER BY "user_1"."id" ASC NULLS FIRST
+        ) "inner_ownerCount"
+          ) as "ownerCount","issue_0"."id" as "id","issue_0"."title" as "title","issue_0"."description" as "description","issue_0"."closed" as "closed","issue_0"."ownerId" as "ownerId",EXTRACT(EPOCH FROM "issue_0"."created") * 1000 as "created"
+        FROM "issue" AS "issue_0"
+         
+         
+        ORDER BY "issue_0"."id" ASC NULLS FIRST
+        ) "zql_root"",
+      "values": [],
+    }
+  `);
+});
+
 test('scalar subquery with EXISTS generates = operator', () => {
   expect(
     formatPgInternalConvert(
@@ -1477,4 +1663,44 @@ test('compound primary key ORDER BY preserves user-defined column order', () => 
   expect(result.text).not.toContain(
     'ORDER BY "connected_calls_0"."callId" ASC NULLS FIRST, "connected_calls_0"."connectionId" ASC NULLS FIRST, "connected_calls_0"."userId" ASC NULLS FIRST',
   );
+});
+
+test('top-level count() compiles to a scalar SELECT', () => {
+  expect(
+    formatPgInternalConvert(
+      compile(serverSchema, schema, {table: 'issue', aggregate: {fn: 'count'}}),
+    ),
+  ).toMatchInlineSnapshot(`
+    {
+      "text": "SELECT to_json(COUNT(*)::int)::text AS "zql_result"
+          FROM "issue" AS "issue_0"",
+      "values": [],
+    }
+  `);
+});
+
+test('top-level sum(field) with where compiles to a scalar SELECT', () => {
+  expect(
+    formatPgInternalConvert(
+      compile(serverSchema, schema, {
+        table: 'user',
+        where: {
+          type: 'simple',
+          left: {type: 'column', name: 'name'},
+          op: '=',
+          right: {type: 'literal', value: 'alice'},
+        },
+        aggregate: {fn: 'sum', field: 'age'},
+      }),
+    ),
+  ).toMatchInlineSnapshot(`
+    {
+      "text": "SELECT to_json(SUM("user_0"."age")::float8)::text AS "zql_result"
+          FROM "user" AS "user_0"
+          WHERE "user_0"."name" = $1::text",
+      "values": [
+        "alice",
+      ],
+    }
+  `);
 });

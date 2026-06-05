@@ -105,10 +105,28 @@ type DestRow<
   ? PullRow<DestTableName<TTable, TSchema, TRelationship>, TSchema>
   : PullRow<DestTableName<TTable, TSchema, TRelationship>, TSchema> | undefined;
 
+declare const aggregateResultBrand: unique symbol;
+/**
+ * Phantom return type of an aggregate subquery ({@linkcode Query.count} /
+ * {@linkcode Query.sum} / {@linkcode Query.avg}). A relationship whose subquery
+ * returns this is mapped by {@linkcode AddSubreturn} to the bare scalar `T`
+ * (the aggregate value), rather than an array of rows.
+ */
+export type AggregateResult<T> = {readonly [aggregateResultBrand]: T};
+
+/** The TypeScript type of a column, used as the result type of `min`/`max`. */
+export type FieldTSType<
+  TTable extends string,
+  TSchema extends ZeroSchema,
+  TField extends string,
+> = SchemaValueToTSType<PullTableSchema<TTable, TSchema>['columns'][TField]>;
+
 type AddSubreturn<TExistingReturn, TSubselectReturn, TAs extends string> = {
-  readonly [K in TAs]: undefined extends TSubselectReturn
-    ? TSubselectReturn
-    : readonly TSubselectReturn[];
+  readonly [K in TAs]: [TSubselectReturn] extends [AggregateResult<infer R>]
+    ? R
+    : undefined extends TSubselectReturn
+      ? TSubselectReturn
+      : readonly TSubselectReturn[];
 } extends infer TNewRelationship
   ? undefined extends TExistingReturn
     ? (Exclude<TExistingReturn, undefined> & TNewRelationship) | undefined
@@ -317,6 +335,56 @@ export interface Query<
   one(): Query<TTable, TSchema, TReturn | undefined>;
 
   /**
+   * Reduces this (sub)query to a `count(*)`. Intended for use inside
+   * {@linkcode related} to count a relationship without materializing its rows,
+   * e.g. `issue.related('comments', c => c.count())`. The relationship value on
+   * the parent becomes a bare `number`.
+   */
+  count(): Query<TTable, TSchema, AggregateResult<number>>;
+
+  /**
+   * Reduces this (sub)query to `sum(field)`. Like {@linkcode count}, but sums a
+   * numeric column, e.g. `issue.related('comments', c => c.sum('points'))`. The
+   * value is `null` for an empty (or all-null) group, matching SQL.
+   */
+  sum<TSelector extends Selector<PullTableSchema<TTable, TSchema>>>(
+    field: TSelector,
+  ): Query<TTable, TSchema, AggregateResult<number | null>>;
+
+  /**
+   * Reduces this (sub)query to `avg(field)`. The value is `null` for an empty
+   * (or all-null) group, matching SQL.
+   */
+  avg<TSelector extends Selector<PullTableSchema<TTable, TSchema>>>(
+    field: TSelector,
+  ): Query<TTable, TSchema, AggregateResult<number | null>>;
+
+  /**
+   * Reduces this (sub)query to `min(field)`. The result has the field's own
+   * type (so `min` of a string column is a string), and is `null` for an empty
+   * (or all-null) group, matching SQL.
+   */
+  min<TSelector extends Selector<PullTableSchema<TTable, TSchema>>>(
+    field: TSelector,
+  ): Query<
+    TTable,
+    TSchema,
+    AggregateResult<FieldTSType<TTable, TSchema, TSelector & string> | null>
+  >;
+
+  /**
+   * Reduces this (sub)query to `max(field)`. The result has the field's own
+   * type, and is `null` for an empty (or all-null) group, matching SQL.
+   */
+  max<TSelector extends Selector<PullTableSchema<TTable, TSchema>>>(
+    field: TSelector,
+  ): Query<
+    TTable,
+    TSchema,
+    AggregateResult<FieldTSType<TTable, TSchema, TSelector & string> | null>
+  >;
+
+  /**
    * @deprecated Use {@linkcode RunOptions} with {@linkcode zero.run} instead.
    */
   run(options?: RunOptions): Promise<HumanReadable<TReturn>>;
@@ -354,8 +422,16 @@ export type MaterializeOptions = PreloadOptions;
 
 /**
  * A helper type that tries to make the type more readable.
+ *
+ * A top-level aggregate query (e.g. `z.query.issue.count()`) has an
+ * {@linkcode AggregateResult} return type and resolves to the bare scalar
+ * rather than a list of rows.
  */
-export type HumanReadable<T> = undefined extends T ? Expand<T> : Expand<T>[];
+export type HumanReadable<T> = [T] extends [AggregateResult<infer R>]
+  ? R
+  : undefined extends T
+    ? Expand<T>
+    : Expand<T>[];
 
 /**
  * A helper type that tries to make the type more readable.

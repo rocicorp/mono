@@ -45,6 +45,11 @@ import {ToastContainer, ToastContent} from '../issue/toast-content.tsx';
 let firstRowRendered = false;
 export const ITEM_SIZE = 56;
 
+// DEV-only demo of relationship aggregates: show each issue's comment count in
+// the list. Compiled out of production builds (import.meta.env.DEV is false),
+// so the count is never queried or synced in prod.
+const SHOW_COMMENT_COUNTS = import.meta.env.DEV;
+
 export function ListPage({onReady}: {onReady: () => void}) {
   const login = useLogin();
   const search = useSearch();
@@ -125,6 +130,12 @@ export function ListPage({onReady}: {onReady: () => void}) {
     ],
   );
 
+  // The exact, server-computed total for the current filters. Reactive: it
+  // updates as issues are created/closed without syncing every matching row.
+  const [issueCount] = useQuery(
+    queries.issueCount({listContext: listContextParams}),
+  );
+
   let title;
   let shortTitle;
   if (creator || assignee || labels.length > 0 || textFilter) {
@@ -166,56 +177,50 @@ export function ListPage({onReady}: {onReady: () => void}) {
   const [permalinkState, setPermalinkState] =
     useWouterPermalinkState<IssueRowSort>();
 
-  const {
-    virtualizer,
-    rowAt,
-    complete,
-    rowsEmpty,
-    permalinkNotFound,
-    estimatedTotal,
-    total,
-  } = useZeroVirtualizer({
-    estimateSize: () => ITEM_SIZE,
-    getScrollElement: () => listRef.current,
-    getRowKey: row => row.id,
+  const {virtualizer, rowAt, complete, rowsEmpty, permalinkNotFound} =
+    useZeroVirtualizer({
+      estimateSize: () => ITEM_SIZE,
+      getScrollElement: () => listRef.current,
+      getRowKey: row => row.id,
 
-    listContextParams,
-    permalinkID,
+      listContextParams,
+      permalinkID,
 
-    getPageQuery: (
-      limit: number,
-      start: IssueRowSort | null,
-      dir: 'forward' | 'backward',
-    ) =>
-      queries.issueListV2({
-        listContext: listContextParams,
-        limit,
-        start,
-        dir,
-        inclusive: start === null,
+      getPageQuery: (
+        limit: number,
+        start: IssueRowSort | null,
+        dir: 'forward' | 'backward',
+      ) =>
+        queries.issueListV2({
+          listContext: listContextParams,
+          limit,
+          start,
+          dir,
+          inclusive: start === null,
+          withCommentCount: SHOW_COMMENT_COUNTS,
+        }),
+
+      getSingleQuery: (id: string) => {
+        // Allow short ID too.
+        const {idField, idValue} = getIDFromString(id);
+        return queries.listIssueByID({
+          idField,
+          idValue,
+          listContext: listContextParams,
+        });
+      },
+
+      toStartRow: row => ({
+        id: row.id,
+        modified: row.modified,
+        created: row.created,
       }),
 
-    getSingleQuery: (id: string) => {
-      // Allow short ID too.
-      const {idField, idValue} = getIDFromString(id);
-      return queries.listIssueByID({
-        idField,
-        idValue,
-        listContext: listContextParams,
-      });
-    },
+      options: textFilterQuery === textFilter ? CACHE_NAV : CACHE_NONE,
 
-    toStartRow: row => ({
-      id: row.id,
-      modified: row.modified,
-      created: row.created,
-    }),
-
-    options: textFilterQuery === textFilter ? CACHE_NAV : CACHE_NONE,
-
-    permalinkState,
-    onPermalinkStateChange: setPermalinkState,
-  });
+      permalinkState,
+      onPermalinkStateChange: setPermalinkState,
+    });
 
   useEffect(() => {
     if (permalinkNotFound) {
@@ -352,6 +357,14 @@ export function ListPage({onReady}: {onReady: () => void}) {
             </Link>
           ))}
         </div>
+        {SHOW_COMMENT_COUNTS && (
+          // DEV demo: per-issue comment count via a relationship aggregate
+          // (`issue.related('comments', c => c.count())`). The count rides on
+          // the issue row; its type was cast away in the query, so read it back.
+          <div className="issue-comment-count" title="comments (dev only)">
+            💬 {(issue as {comments?: number}).comments ?? 0}
+          </div>
+        )}
         <div className="issue-timestamp">
           <RelativeTime timestamp={timestamp} />
         </div>
@@ -432,14 +445,9 @@ export function ListPage({onReady}: {onReady: () => void}) {
               </span>
             </>
           )}
-          {complete || total || estimatedTotal ? (
+          {issueCount !== undefined ? (
             <>
-              <span className="issue-count">
-                {project?.issueCountEstimate
-                  ? `${(total ?? roundEstimatedTotal(estimatedTotal)).toLocaleString()} of ${formatIssueCountEstimate(project.issueCountEstimate)}`
-                  : (total?.toLocaleString() ??
-                    `${roundEstimatedTotal(estimatedTotal).toLocaleString()}+`)}
-              </span>
+              <span className="issue-count">{issueCount.toLocaleString()}</span>
               {isGigabugs(projectName) && (
                 <button
                   className="info-button"
@@ -539,17 +547,4 @@ export function ListPage({onReady}: {onReady: () => void}) {
       />
     </>
   );
-}
-
-function roundEstimatedTotal(estimatedTotal: number) {
-  return estimatedTotal < 50
-    ? estimatedTotal
-    : estimatedTotal - (estimatedTotal % 50);
-}
-
-function formatIssueCountEstimate(count: number) {
-  if (count < 1000) {
-    return count;
-  }
-  return `~${Math.floor(count / 1000).toLocaleString()}k`;
 }
