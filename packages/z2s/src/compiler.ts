@@ -262,9 +262,11 @@ function relationshipSubquery(
     if (relationship.subquery.related && relationship.subquery.related.length) {
       // Junction (many-to-many) aggregate: the value lives on the destination,
       // one hop past the junction. Aggregate over the junction join, exposing
-      // the destination field by its client name so `aggExpr` references it.
+      // the destination field by its client name so `aggExpr` references it. A
+      // `where` on the destination filters the joined rows before aggregating.
       const {join, participatingTables} = makeJunctionJoin(spec, relationship);
       const lastTable = must(last(participatingTables)).table;
+      const destWhere = relationship.subquery.related[0].subquery.where;
       inner = sql`SELECT ${
         field
           ? selectIdent(spec.server, {table: lastTable, zql: field})
@@ -276,7 +278,9 @@ function relationshipSubquery(
           zql: f,
         })),
         relationship.correlation.childField,
-      )(participatingTables[0].table)})`;
+      )(participatingTables[0].table)})${
+        destWhere ? sql` AND (${where(spec, destWhere, lastTable)})` : sql``
+      }`;
     } else {
       inner = select(
         spec,

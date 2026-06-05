@@ -44,6 +44,7 @@ issue.related('comments', c => c.max('createdAt'))              // <field type> 
 issue.related('comments', c => c.where('approved', true).count()) // filtered
 issue.related('labels',   l => l.count())                       // junction: counts edges
 issue.related('labels',   l => l.sum('weight'))                 // junction: over the destination
+issue.related('labels',   l => l.where('color','red').sum('weight')) // junction + filter
 ```
 
 The same reducers apply at the **top level** of a query, where the whole query
@@ -125,6 +126,24 @@ For a many-to-many relationship (`issue.labels` via the `issueLabel` junction):
   synced read reuses the synthetic-source path (keyed by the junction's parent
   correlation). Optimism is *not* applied to junction aggregates (the field
   lives past the junction) — they're server-authoritative, like `min`/`max`.
+
+A **`where` on the destination** is supported (e.g.
+`issue.related('labels', l => l.where('color', 'red').sum('points'))`):
+
+- For `sum`/`avg`/`min`/`max` the predicate rides along on the destination
+  subquery, so it's just a `Filter` on the destination before the lift/aggregate
+  — a label outside the filter contributes `null` (ignored), exactly like an
+  empty group.
+- For `count`, which never visits the destination, the predicate becomes an
+  `EXISTS` on the junction row (keep only edges whose destination matches), so
+  the count still collapses to a single hop and never materializes the
+  destination.
+
+Both work identically across materialization, z2s (the filter is an `AND` /
+`EXISTS` in the generated SQL), and synced read (server-authoritative; a
+filtered aggregate gets no optimism — the predicate can't be evaluated without
+the destination). Bounding the destination (`limit`/`start`) and nesting it
+(`related`) are not supported (`limit`/`orderBy` are rejected for any junction).
 
 ### Two execution surfaces
 

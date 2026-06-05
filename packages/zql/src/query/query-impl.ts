@@ -390,15 +390,17 @@ export class QueryImpl<
       assert(isCompoundKey(secondRelation.destField), 'Invalid relationship');
 
       if (sq.format.aggregate) {
-        // Aggregate over a junction (many-to-many) relationship. Filtering or
-        // nesting the destination isn't supported yet.
+        // Aggregate over a junction (many-to-many) relationship. A `where` on
+        // the destination is supported (e.g.
+        // `issue.related('labels', l => l.where('color', 'red').sum('points'))`);
+        // nesting (`related`) and bounding (`limit`/`start`, also rejected
+        // upstream for any junction) are not.
         assert(
-          sq.#ast.where === undefined &&
-            sq.#ast.related === undefined &&
+          sq.#ast.related === undefined &&
             sq.#ast.limit === undefined &&
             sq.#ast.start === undefined,
           'an aggregate over a junction relationship does not yet support ' +
-            'where/related/limit/start on the destination',
+            'related/limit/start on the destination',
         );
         const {fn, field} = sq.format.aggregate;
         const correlation = {
@@ -416,7 +418,24 @@ export class QueryImpl<
         if (fn === 'count') {
           // count(*) collapses to a single-hop count over the junction table —
           // one association row per related entity — so the destination table
-          // is never touched.
+          // is never touched. A `where` on the destination becomes an EXISTS on
+          // the junction row (keep only edges whose destination matches), so the
+          // count still never materializes the destination.
+          const junctionWhere: Condition | undefined =
+            sq.#ast.where === undefined
+              ? undefined
+              : {
+                  type: 'correlatedSubquery',
+                  op: 'EXISTS',
+                  related: {
+                    system: this.#system,
+                    correlation: {
+                      parentField: secondRelation.sourceField,
+                      childField: secondRelation.destField,
+                    },
+                    subquery: {...sq.#ast, aggregate: undefined},
+                  },
+                };
           return this.#newQuery(
             this.#tableName,
             {
@@ -427,7 +446,11 @@ export class QueryImpl<
                   system: this.#system,
                   correlation,
                   aggregate: {fn: 'count'},
-                  subquery: {table: junctionSchema, alias: relationship},
+                  subquery: {
+                    table: junctionSchema,
+                    alias: relationship,
+                    ...(junctionWhere ? {where: junctionWhere} : null),
+                  },
                 },
               ],
             },

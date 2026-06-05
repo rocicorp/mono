@@ -183,12 +183,92 @@ test('related(..., l => l.count()) counts junction (many-to-many) edges', () => 
   expect(labelsOf(0)).toBe(1);
 });
 
-test('filtering the destination of a junction count is rejected (for now)', () => {
-  expect(() =>
-    newQuery(schema, 'issue').related('labels', l =>
-      l.where('name', 'bug').count(),
+test('where on the destination of a junction count filters which edges count', () => {
+  const queryDelegate = new QueryDelegateImpl();
+  seed(queryDelegate);
+  const labelSource = must(queryDelegate.getSource('label'));
+  const issueLabelSource = must(queryDelegate.getSource('issueLabel'));
+  for (const [id, name] of [
+    ['0001', 'bug'],
+    ['0002', 'bug'],
+    ['0003', 'feature'],
+  ]) {
+    consume(labelSource.push(makeSourceChangeAdd({id, name})));
+  }
+  // issue 0001 -> {bug, bug, feature}, 0002 -> {feature}, 0003 -> {}.
+  for (const [issueId, labelId] of [
+    ['0001', '0001'],
+    ['0001', '0002'],
+    ['0001', '0003'],
+    ['0002', '0003'],
+  ]) {
+    consume(issueLabelSource.push(makeSourceChangeAdd({issueId, labelId})));
+  }
+
+  // count only the edges whose label is named 'bug' (applied as an EXISTS on the
+  // junction row — the destination is never materialized).
+  const view = queryDelegate.materialize(
+    newQuery(schema, 'issue')
+      .related('labels', l => l.where('name', 'bug').count())
+      .orderBy('id', 'asc'),
+  );
+  const bugCountOf = (i: number) => (view.data[i] as {labels: number}).labels;
+  expect(bugCountOf(0)).toBe(2); // bug, bug
+  expect(bugCountOf(1)).toBe(0); // only feature
+  expect(bugCountOf(2)).toBe(0); // no labels
+
+  // Flip a label feature -> bug: issue 0002's edge now matches.
+  consume(
+    labelSource.push(
+      makeSourceChangeEdit(
+        {id: '0003', name: 'bug'},
+        {id: '0003', name: 'feature'},
+      ),
     ),
-  ).toThrow(/junction relationship does not yet support/);
+  );
+  expect(bugCountOf(0)).toBe(3); // bug, bug, bug
+  expect(bugCountOf(1)).toBe(1); // now matches
+});
+
+test('where on the destination of a junction min/max filters the field', () => {
+  const queryDelegate = new QueryDelegateImpl();
+  seed(queryDelegate);
+  const labelSource = must(queryDelegate.getSource('label'));
+  const issueLabelSource = must(queryDelegate.getSource('issueLabel'));
+  for (const [id, name] of [
+    ['0001', 'bug'],
+    ['0002', 'feature'],
+    ['0003', 'wontfix'],
+  ]) {
+    consume(labelSource.push(makeSourceChangeAdd({id, name})));
+  }
+  // issue 0001 -> {bug, feature, wontfix}.
+  for (const labelId of ['0001', '0002', '0003']) {
+    consume(
+      issueLabelSource.push(makeSourceChangeAdd({issueId: '0001', labelId})),
+    );
+  }
+
+  // max('name') but only over labels whose name is not 'wontfix'. The filter is
+  // applied one hop past the junction, before the lift+aggregate.
+  const view = queryDelegate.materialize(
+    newQuery(schema, 'issue')
+      .related('labels', l => l.where('name', '!=', 'wontfix').max('name'))
+      .orderBy('id', 'asc'),
+  );
+  const maxOf = (i: number) => (view.data[i] as {labels: string | null}).labels;
+  expect(maxOf(0)).toBe('feature'); // max of {bug, feature} (wontfix excluded)
+
+  // A label leaving the filter (feature -> wontfix) drops it from the aggregate.
+  consume(
+    labelSource.push(
+      makeSourceChangeEdit(
+        {id: '0002', name: 'wontfix'},
+        {id: '0002', name: 'feature'},
+      ),
+    ),
+  );
+  expect(maxOf(0)).toBe('bug'); // only {bug} matches now
 });
 
 test('related(..., c => c.sum(field)) materializes a per-issue sum (null when empty)', () => {
