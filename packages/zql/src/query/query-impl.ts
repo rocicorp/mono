@@ -7,6 +7,7 @@ import {
 } from '../../../shared/src/json.ts';
 import {getOrInsertComputed, newMap} from '../../../shared/src/map.ts';
 import {
+  type AggregateFunction,
   type AST,
   type CompoundKey,
   type Condition,
@@ -45,7 +46,9 @@ import {
 } from './query-transitions.ts';
 import type {
   AnyQuery,
+  AggregateResult,
   ExistsOptions,
+  FieldTSType,
   GetFilterType,
   HumanReadable,
   PreloadOptions,
@@ -124,7 +127,8 @@ function isRootAST(ast: NormalizedAST, tableName: string): boolean {
     ast.related === undefined &&
     ast.start === undefined &&
     ast.limit === undefined &&
-    ast.orderBy === undefined
+    ast.orderBy === undefined &&
+    ast.aggregate === undefined
   );
 }
 
@@ -439,6 +443,77 @@ export class QueryImpl<
     );
   }
 
+  #aggregate(fn: AggregateFunction, field?: string): AnyQuery {
+    // Set the aggregate on both the AST (so a top-level query reduces to a
+    // scalar) and the format (so the view projects the scalar and `related`
+    // can lift it). When used inside `related`, the parent strips the AST
+    // aggregate and lifts it onto the correlated-subquery entry instead.
+    return this.#derive(AGGREGATE_KEYS[fn], field, undefined, () =>
+      this.#newQuery(
+        this.#tableName,
+        {...this.#ast, aggregate: {fn, field}},
+        {
+          ...this.format,
+          singular: true,
+          aggregate: {fn, field},
+        },
+        this.customQueryID,
+        this.#currentJunction,
+      ),
+    ) as AnyQuery;
+  }
+
+  count = (): Query<TTable, TSchema, AggregateResult<number>> =>
+    this.#aggregate('count') as unknown as Query<
+      TTable,
+      TSchema,
+      AggregateResult<number>
+    >;
+
+  sum = <TSelector extends keyof TSchema['tables'][TTable]['columns']>(
+    field: TSelector,
+  ): Query<TTable, TSchema, AggregateResult<number | null>> =>
+    this.#aggregate('sum', field as string) as unknown as Query<
+      TTable,
+      TSchema,
+      AggregateResult<number | null>
+    >;
+
+  avg = <TSelector extends keyof TSchema['tables'][TTable]['columns']>(
+    field: TSelector,
+  ): Query<TTable, TSchema, AggregateResult<number | null>> =>
+    this.#aggregate('avg', field as string) as unknown as Query<
+      TTable,
+      TSchema,
+      AggregateResult<number | null>
+    >;
+
+  min = <TSelector extends keyof TSchema['tables'][TTable]['columns']>(
+    field: TSelector,
+  ): Query<
+    TTable,
+    TSchema,
+    AggregateResult<FieldTSType<TTable, TSchema, TSelector & string> | null>
+  > =>
+    this.#aggregate('min', field as string) as unknown as Query<
+      TTable,
+      TSchema,
+      AggregateResult<FieldTSType<TTable, TSchema, TSelector & string> | null>
+    >;
+
+  max = <TSelector extends keyof TSchema['tables'][TTable]['columns']>(
+    field: TSelector,
+  ): Query<
+    TTable,
+    TSchema,
+    AggregateResult<FieldTSType<TTable, TSchema, TSelector & string> | null>
+  > =>
+    this.#aggregate('max', field as string) as unknown as Query<
+      TTable,
+      TSchema,
+      AggregateResult<FieldTSType<TTable, TSchema, TSelector & string> | null>
+    >;
+
   whereExists(
     relationship: string,
     cbOrOptions?: ((q: AnyQuery) => AnyQuery) | ExistsOptions,
@@ -523,8 +598,14 @@ export class QueryImpl<
                   parentField: sourceField,
                   childField: destField,
                 },
-                subquery: subQuery.#ast,
+                // A relationship aggregate lives on this correlated-subquery
+                // entry, not on the subquery's own AST — strip it so the
+                // subquery doesn't also reduce itself to a top-level scalar.
+                subquery: subQuery.format.aggregate
+                  ? {...subQuery.#ast, aggregate: undefined}
+                  : subQuery.#ast,
                 system: this.#system,
+                aggregate: subQuery.format.aggregate,
               }),
             },
             {
@@ -569,6 +650,60 @@ export class QueryImpl<
       assert(isCompoundKey(firstDest), 'Invalid relationship');
       assert(isCompoundKey(secondSource), 'Invalid relationship');
       assert(isCompoundKey(secondDest), 'Invalid relationship');
+
+      if (sq.format.aggregate) {
+        // Junction (many-to-many) count: count the association rows in the
+        // junction table — one per related entity — by collapsing to a
+        // single-hop count over the junction. Reuses the single-hop aggregate
+        // path (Aggregate operator + view projection + z2s).
+        //
+        // Only `count` is supported here: sum/avg would need the destination
+        // field, which lives past the junction, so the collapse does not apply.
+        // Filtering or nesting the destination is also not yet supported.
+        assert(
+          sq.format.aggregate.fn === 'count',
+          'only count() is supported over a junction (many-to-many) ' +
+            'relationship for now',
+        );
+        assert(
+          sq.#ast.where === undefined &&
+            sq.#ast.related === undefined &&
+            sq.#ast.limit === undefined &&
+            sq.#ast.start === undefined,
+          'count() over a junction relationship does not yet support ' +
+            'where/related/limit/start on the destination',
+        );
+        return this.#derive(
+          relatedKey(relationship),
+          astID(sq.#ast),
+          undefined,
+          () =>
+            this.#newQuery(
+              this.#tableName,
+              {
+                ...this.#ast,
+                related: insertRelated(this.#ast.related, {
+                  correlation: {
+                    parentField: firstSource,
+                    childField: firstDest,
+                  },
+                  subquery: tableAST(junctionSchema, relationship),
+                  system: this.#system,
+                  aggregate: {fn: 'count'},
+                }),
+              },
+              {
+                ...this.format,
+                relationships: {
+                  ...this.format.relationships,
+                  [relationship]: sq.format,
+                },
+              },
+              this.customQueryID,
+              this.#currentJunction,
+            ),
+        ) as AnyQuery;
+      }
 
       return this.#derive(
         relatedKey(relationship),
@@ -959,6 +1094,16 @@ function whereKey(column: string, op: string): string {
   const byOp = getOrInsertComputed(whereKeys, column, newMap);
   return getOrInsertComputed(byOp, op, op => `where:${column}:${op}`);
 }
+
+// One key per aggregate function; the aggregated column is the transition
+// value. Both are bounded by the schema.
+const AGGREGATE_KEYS: Record<AggregateFunction, string> = {
+  count: 'aggregate:count',
+  sum: 'aggregate:sum',
+  avg: 'aggregate:avg',
+  min: 'aggregate:min',
+  max: 'aggregate:max',
+};
 
 const relatedKeys = new Map<string, string>();
 

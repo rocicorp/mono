@@ -201,6 +201,7 @@ describe('unreadable tables', () => {
         start: undefined,
         limit: undefined,
         orderBy: undefined,
+        aggregate: undefined,
       });
     }
   });
@@ -213,11 +214,13 @@ describe('unreadable tables', () => {
     expect(transformQuery(lc, ast(query), permissionRules, authData))
       .toMatchInlineSnapshot(`
         {
+          "aggregate": undefined,
           "alias": undefined,
           "limit": undefined,
           "orderBy": undefined,
           "related": [
             {
+              "aggregate": undefined,
               "correlation": {
                 "childField": [
                   "id",
@@ -228,6 +231,7 @@ describe('unreadable tables', () => {
               },
               "hidden": undefined,
               "subquery": {
+                "aggregate": undefined,
                 "alias": "readable",
                 "limit": undefined,
                 "orderBy": undefined,
@@ -243,6 +247,7 @@ describe('unreadable tables', () => {
               "system": "permissions",
             },
             {
+              "aggregate": undefined,
               "correlation": {
                 "childField": [
                   "id",
@@ -253,6 +258,7 @@ describe('unreadable tables', () => {
               },
               "hidden": undefined,
               "subquery": {
+                "aggregate": undefined,
                 "alias": "unreadable",
                 "limit": undefined,
                 "orderBy": undefined,
@@ -280,11 +286,13 @@ describe('unreadable tables', () => {
     expect(transformQuery(lc, ast(query), permissionRules, undefined))
       .toMatchInlineSnapshot(`
         {
+          "aggregate": undefined,
           "alias": undefined,
           "limit": undefined,
           "orderBy": undefined,
           "related": [
             {
+              "aggregate": undefined,
               "correlation": {
                 "childField": [
                   "id",
@@ -295,6 +303,7 @@ describe('unreadable tables', () => {
               },
               "hidden": undefined,
               "subquery": {
+                "aggregate": undefined,
                 "alias": "readable",
                 "limit": undefined,
                 "orderBy": undefined,
@@ -310,6 +319,7 @@ describe('unreadable tables', () => {
               "system": "permissions",
             },
             {
+              "aggregate": undefined,
               "correlation": {
                 "childField": [
                   "id",
@@ -320,6 +330,7 @@ describe('unreadable tables', () => {
               },
               "hidden": undefined,
               "subquery": {
+                "aggregate": undefined,
                 "alias": "unreadable",
                 "limit": undefined,
                 "orderBy": undefined,
@@ -359,11 +370,13 @@ describe('unreadable tables', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
+        "aggregate": undefined,
         "alias": undefined,
         "limit": undefined,
         "orderBy": undefined,
         "related": [
           {
+            "aggregate": undefined,
             "correlation": {
               "childField": [
                 "id",
@@ -374,11 +387,13 @@ describe('unreadable tables', () => {
             },
             "hidden": undefined,
             "subquery": {
+              "aggregate": undefined,
               "alias": "readable",
               "limit": undefined,
               "orderBy": undefined,
               "related": [
                 {
+                  "aggregate": undefined,
                   "correlation": {
                     "childField": [
                       "id",
@@ -389,11 +404,13 @@ describe('unreadable tables', () => {
                   },
                   "hidden": undefined,
                   "subquery": {
+                    "aggregate": undefined,
                     "alias": "readable",
                     "limit": undefined,
                     "orderBy": undefined,
                     "related": [
                       {
+                        "aggregate": undefined,
                         "correlation": {
                           "childField": [
                             "id",
@@ -404,6 +421,7 @@ describe('unreadable tables', () => {
                         },
                         "hidden": undefined,
                         "subquery": {
+                          "aggregate": undefined,
                           "alias": "unreadable",
                           "limit": undefined,
                           "orderBy": undefined,
@@ -464,11 +482,13 @@ describe('unreadable tables', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
+        "aggregate": undefined,
         "alias": undefined,
         "limit": undefined,
         "orderBy": undefined,
         "related": [
           {
+            "aggregate": undefined,
             "correlation": {
               "childField": [
                 "id",
@@ -479,11 +499,13 @@ describe('unreadable tables', () => {
             },
             "hidden": undefined,
             "subquery": {
+              "aggregate": undefined,
               "alias": "readable",
               "limit": undefined,
               "orderBy": undefined,
               "related": [
                 {
+                  "aggregate": undefined,
                   "correlation": {
                     "childField": [
                       "id",
@@ -494,11 +516,13 @@ describe('unreadable tables', () => {
                   },
                   "hidden": undefined,
                   "subquery": {
+                    "aggregate": undefined,
                     "alias": "readable",
                     "limit": undefined,
                     "orderBy": undefined,
                     "related": [
                       {
+                        "aggregate": undefined,
                         "correlation": {
                           "childField": [
                             "id",
@@ -509,6 +533,7 @@ describe('unreadable tables', () => {
                         },
                         "hidden": undefined,
                         "subquery": {
+                          "aggregate": undefined,
                           "alias": "unreadable",
                           "limit": undefined,
                           "orderBy": undefined,
@@ -565,11 +590,13 @@ describe('unreadable tables', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
+        "aggregate": undefined,
         "alias": undefined,
         "limit": undefined,
         "orderBy": undefined,
         "related": [
           {
+            "aggregate": undefined,
             "correlation": {
               "childField": [
                 "id",
@@ -580,6 +607,7 @@ describe('unreadable tables', () => {
             },
             "hidden": undefined,
             "subquery": {
+              "aggregate": undefined,
               "alias": "unreadable",
               "limit": undefined,
               "orderBy": undefined,
@@ -613,6 +641,7 @@ describe('unreadable tables', () => {
     expect(transformQuery(lc, ast(query), permissionRules, undefined))
       .toMatchInlineSnapshot(`
         {
+          "aggregate": undefined,
           "alias": undefined,
           "limit": undefined,
           "orderBy": undefined,
@@ -626,6 +655,7 @@ describe('unreadable tables', () => {
                 "flip": undefined,
                 "op": "EXISTS",
                 "related": {
+                  "aggregate": undefined,
                   "correlation": {
                     "childField": [
                       "id",
@@ -636,6 +666,7 @@ describe('unreadable tables', () => {
                   },
                   "hidden": undefined,
                   "subquery": {
+                    "aggregate": undefined,
                     "alias": "zsubq_unreadable",
                     "limit": undefined,
                     "orderBy": undefined,
@@ -661,6 +692,7 @@ describe('unreadable tables', () => {
     expect(transformQuery(lc, ast(query), permissionRules, authData))
       .toMatchInlineSnapshot(`
         {
+          "aggregate": undefined,
           "alias": undefined,
           "limit": undefined,
           "orderBy": undefined,
@@ -674,6 +706,7 @@ describe('unreadable tables', () => {
                 "flip": undefined,
                 "op": "EXISTS",
                 "related": {
+                  "aggregate": undefined,
                   "correlation": {
                     "childField": [
                       "id",
@@ -684,6 +717,7 @@ describe('unreadable tables', () => {
                   },
                   "hidden": undefined,
                   "subquery": {
+                    "aggregate": undefined,
                     "alias": "zsubq_unreadable",
                     "limit": undefined,
                     "orderBy": undefined,
@@ -721,6 +755,7 @@ describe('unreadable tables', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
+        "aggregate": undefined,
         "alias": undefined,
         "limit": undefined,
         "orderBy": undefined,
@@ -734,6 +769,7 @@ describe('unreadable tables', () => {
               "flip": undefined,
               "op": "NOT EXISTS",
               "related": {
+                "aggregate": undefined,
                 "correlation": {
                   "childField": [
                     "id",
@@ -744,6 +780,7 @@ describe('unreadable tables', () => {
                 },
                 "hidden": undefined,
                 "subquery": {
+                  "aggregate": undefined,
                   "alias": "zsubq_unreadable",
                   "limit": undefined,
                   "orderBy": undefined,
@@ -779,6 +816,7 @@ describe('unreadable tables', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
+        "aggregate": undefined,
         "alias": undefined,
         "limit": undefined,
         "orderBy": undefined,
@@ -792,6 +830,7 @@ describe('unreadable tables', () => {
               "flip": undefined,
               "op": "NOT EXISTS",
               "related": {
+                "aggregate": undefined,
                 "correlation": {
                   "childField": [
                     "id",
@@ -802,6 +841,7 @@ describe('unreadable tables', () => {
                 },
                 "hidden": undefined,
                 "subquery": {
+                  "aggregate": undefined,
                   "alias": "zsubq_unreadable",
                   "limit": undefined,
                   "orderBy": undefined,
@@ -839,6 +879,7 @@ describe('unreadable tables', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
+        "aggregate": undefined,
         "alias": undefined,
         "limit": undefined,
         "orderBy": undefined,
@@ -852,6 +893,7 @@ describe('unreadable tables', () => {
               "flip": undefined,
               "op": "EXISTS",
               "related": {
+                "aggregate": undefined,
                 "correlation": {
                   "childField": [
                     "id",
@@ -862,6 +904,7 @@ describe('unreadable tables', () => {
                 },
                 "hidden": undefined,
                 "subquery": {
+                  "aggregate": undefined,
                   "alias": "zsubq_readable",
                   "limit": undefined,
                   "orderBy": undefined,
@@ -875,6 +918,7 @@ describe('unreadable tables', () => {
                         "flip": undefined,
                         "op": "EXISTS",
                         "related": {
+                          "aggregate": undefined,
                           "correlation": {
                             "childField": [
                               "id",
@@ -885,6 +929,7 @@ describe('unreadable tables', () => {
                           },
                           "hidden": undefined,
                           "subquery": {
+                            "aggregate": undefined,
                             "alias": "zsubq_unreadable",
                             "limit": undefined,
                             "orderBy": undefined,
@@ -930,6 +975,7 @@ describe('unreadable tables', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
+        "aggregate": undefined,
         "alias": undefined,
         "limit": undefined,
         "orderBy": undefined,
@@ -943,6 +989,7 @@ describe('unreadable tables', () => {
               "flip": undefined,
               "op": "EXISTS",
               "related": {
+                "aggregate": undefined,
                 "correlation": {
                   "childField": [
                     "id",
@@ -953,6 +1000,7 @@ describe('unreadable tables', () => {
                 },
                 "hidden": undefined,
                 "subquery": {
+                  "aggregate": undefined,
                   "alias": "zsubq_readable",
                   "limit": undefined,
                   "orderBy": undefined,
@@ -966,6 +1014,7 @@ describe('unreadable tables', () => {
                         "flip": undefined,
                         "op": "EXISTS",
                         "related": {
+                          "aggregate": undefined,
                           "correlation": {
                             "childField": [
                               "id",
@@ -976,6 +1025,7 @@ describe('unreadable tables', () => {
                           },
                           "hidden": undefined,
                           "subquery": {
+                            "aggregate": undefined,
                             "alias": "zsubq_unreadable",
                             "limit": undefined,
                             "orderBy": undefined,
@@ -1022,6 +1072,7 @@ describe('unreadable tables', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
+        "aggregate": undefined,
         "alias": undefined,
         "limit": undefined,
         "orderBy": undefined,
@@ -1035,6 +1086,7 @@ describe('unreadable tables', () => {
               "flip": undefined,
               "op": "EXISTS",
               "related": {
+                "aggregate": undefined,
                 "correlation": {
                   "childField": [
                     "id",
@@ -1045,6 +1097,7 @@ describe('unreadable tables', () => {
                 },
                 "hidden": undefined,
                 "subquery": {
+                  "aggregate": undefined,
                   "alias": "zsubq_readable",
                   "limit": undefined,
                   "orderBy": undefined,
@@ -1066,6 +1119,7 @@ describe('unreadable tables', () => {
               "flip": undefined,
               "op": "NOT EXISTS",
               "related": {
+                "aggregate": undefined,
                 "correlation": {
                   "childField": [
                     "id",
@@ -1076,6 +1130,7 @@ describe('unreadable tables', () => {
                 },
                 "hidden": undefined,
                 "subquery": {
+                  "aggregate": undefined,
                   "alias": "zsubq_unreadable",
                   "limit": undefined,
                   "orderBy": undefined,
@@ -1112,6 +1167,7 @@ describe('unreadable tables', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
+        "aggregate": undefined,
         "alias": undefined,
         "limit": undefined,
         "orderBy": undefined,
@@ -1125,6 +1181,7 @@ describe('unreadable tables', () => {
               "flip": undefined,
               "op": "EXISTS",
               "related": {
+                "aggregate": undefined,
                 "correlation": {
                   "childField": [
                     "id",
@@ -1135,6 +1192,7 @@ describe('unreadable tables', () => {
                 },
                 "hidden": undefined,
                 "subquery": {
+                  "aggregate": undefined,
                   "alias": "zsubq_readable",
                   "limit": undefined,
                   "orderBy": undefined,
@@ -1156,6 +1214,7 @@ describe('unreadable tables', () => {
               "flip": undefined,
               "op": "NOT EXISTS",
               "related": {
+                "aggregate": undefined,
                 "correlation": {
                   "childField": [
                     "id",
@@ -1166,6 +1225,7 @@ describe('unreadable tables', () => {
                 },
                 "hidden": undefined,
                 "subquery": {
+                  "aggregate": undefined,
                   "alias": "zsubq_unreadable",
                   "limit": undefined,
                   "orderBy": undefined,
@@ -1201,6 +1261,7 @@ test('exists rules in permissions are tagged as the permissions system', () => {
     ),
   ).toMatchInlineSnapshot(`
     {
+      "aggregate": undefined,
       "alias": undefined,
       "limit": undefined,
       "orderBy": undefined,
@@ -1220,6 +1281,7 @@ test('exists rules in permissions are tagged as the permissions system', () => {
             ],
           },
           "subquery": {
+            "aggregate": undefined,
             "alias": "zsubq_unreadable",
             "limit": undefined,
             "orderBy": undefined,
@@ -1245,11 +1307,13 @@ test('exists rules in permissions are tagged as the permissions system', () => {
     ),
   ).toMatchInlineSnapshot(`
     {
+      "aggregate": undefined,
       "alias": undefined,
       "limit": undefined,
       "orderBy": undefined,
       "related": [
         {
+          "aggregate": undefined,
           "correlation": {
             "childField": [
               "id",
@@ -1260,6 +1324,7 @@ test('exists rules in permissions are tagged as the permissions system', () => {
           },
           "hidden": undefined,
           "subquery": {
+            "aggregate": undefined,
             "alias": "readableThruUnreadable",
             "limit": undefined,
             "orderBy": undefined,
@@ -1279,6 +1344,7 @@ test('exists rules in permissions are tagged as the permissions system', () => {
                   ],
                 },
                 "subquery": {
+                  "aggregate": undefined,
                   "alias": "zsubq_unreadable",
                   "limit": undefined,
                   "orderBy": undefined,
@@ -1323,11 +1389,13 @@ describe('admin readable', () => {
       // all levels of the query (root, self1, self2) should have the admin policy applied.
     ).toMatchInlineSnapshot(`
       {
+        "aggregate": undefined,
         "alias": undefined,
         "limit": undefined,
         "orderBy": undefined,
         "related": [
           {
+            "aggregate": undefined,
             "correlation": {
               "childField": [
                 "id",
@@ -1338,6 +1406,7 @@ describe('admin readable', () => {
             },
             "hidden": undefined,
             "subquery": {
+              "aggregate": undefined,
               "alias": "self1",
               "limit": undefined,
               "orderBy": undefined,
@@ -1361,6 +1430,7 @@ describe('admin readable', () => {
             "system": "permissions",
           },
           {
+            "aggregate": undefined,
             "correlation": {
               "childField": [
                 "id",
@@ -1371,6 +1441,7 @@ describe('admin readable', () => {
             },
             "hidden": undefined,
             "subquery": {
+              "aggregate": undefined,
               "alias": "self2",
               "limit": undefined,
               "orderBy": undefined,
@@ -1429,11 +1500,13 @@ describe('admin readable', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
+        "aggregate": undefined,
         "alias": undefined,
         "limit": undefined,
         "orderBy": undefined,
         "related": [
           {
+            "aggregate": undefined,
             "correlation": {
               "childField": [
                 "id",
@@ -1444,6 +1517,7 @@ describe('admin readable', () => {
             },
             "hidden": undefined,
             "subquery": {
+              "aggregate": undefined,
               "alias": "self1",
               "limit": undefined,
               "orderBy": undefined,
@@ -1484,6 +1558,7 @@ describe('admin readable', () => {
             "system": "permissions",
           },
           {
+            "aggregate": undefined,
             "correlation": {
               "childField": [
                 "id",
@@ -1494,11 +1569,13 @@ describe('admin readable', () => {
             },
             "hidden": undefined,
             "subquery": {
+              "aggregate": undefined,
               "alias": "self2",
               "limit": undefined,
               "orderBy": undefined,
               "related": [
                 {
+                  "aggregate": undefined,
                   "correlation": {
                     "childField": [
                       "id",
@@ -1509,6 +1586,7 @@ describe('admin readable', () => {
                   },
                   "hidden": undefined,
                   "subquery": {
+                    "aggregate": undefined,
                     "alias": "self1",
                     "limit": undefined,
                     "orderBy": undefined,
@@ -1631,6 +1709,7 @@ describe('admin readable', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
+        "aggregate": undefined,
         "alias": undefined,
         "limit": undefined,
         "orderBy": undefined,
@@ -1644,6 +1723,7 @@ describe('admin readable', () => {
               "flip": undefined,
               "op": "EXISTS",
               "related": {
+                "aggregate": undefined,
                 "correlation": {
                   "childField": [
                     "id",
@@ -1654,6 +1734,7 @@ describe('admin readable', () => {
                 },
                 "hidden": undefined,
                 "subquery": {
+                  "aggregate": undefined,
                   "alias": "zsubq_self1",
                   "limit": undefined,
                   "orderBy": undefined,
@@ -1710,6 +1791,7 @@ describe('admin readable', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
+        "aggregate": undefined,
         "alias": undefined,
         "limit": undefined,
         "orderBy": undefined,
@@ -1723,6 +1805,7 @@ describe('admin readable', () => {
               "flip": undefined,
               "op": "EXISTS",
               "related": {
+                "aggregate": undefined,
                 "correlation": {
                   "childField": [
                     "id",
@@ -1733,6 +1816,7 @@ describe('admin readable', () => {
                 },
                 "hidden": undefined,
                 "subquery": {
+                  "aggregate": undefined,
                   "alias": "zsubq_self1",
                   "limit": undefined,
                   "orderBy": undefined,
@@ -1806,6 +1890,7 @@ describe('admin readable', () => {
       ),
     ).toMatchInlineSnapshot(`
       {
+        "aggregate": undefined,
         "alias": undefined,
         "limit": undefined,
         "orderBy": undefined,
@@ -1819,6 +1904,7 @@ describe('admin readable', () => {
               "flip": undefined,
               "op": "EXISTS",
               "related": {
+                "aggregate": undefined,
                 "correlation": {
                   "childField": [
                     "id",
@@ -1829,6 +1915,7 @@ describe('admin readable', () => {
                 },
                 "hidden": undefined,
                 "subquery": {
+                  "aggregate": undefined,
                   "alias": "zsubq_self1",
                   "limit": undefined,
                   "orderBy": undefined,
@@ -1842,6 +1929,7 @@ describe('admin readable', () => {
                         "flip": undefined,
                         "op": "EXISTS",
                         "related": {
+                          "aggregate": undefined,
                           "correlation": {
                             "childField": [
                               "id",
@@ -1852,6 +1940,7 @@ describe('admin readable', () => {
                           },
                           "hidden": undefined,
                           "subquery": {
+                            "aggregate": undefined,
                             "alias": "zsubq_self2",
                             "limit": undefined,
                             "orderBy": undefined,

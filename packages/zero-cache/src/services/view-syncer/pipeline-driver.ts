@@ -760,6 +760,7 @@ export class PipelineDriver {
         queryID,
         must(this.#primaryKeys),
         this.#tableSpecs,
+        this.currentVersion(),
       )) {
         if (change !== 'yield') {
           hydrationRowCount++;
@@ -1322,6 +1323,7 @@ export class PipelineDriver {
     this.#streamer = new Streamer(
       must(this.#primaryKeys),
       this.#tableSpecs,
+      this.currentVersion(),
       (queryID, error) =>
         this.#logQueryFailure(queryID, 'query pipeline failed', error),
     );
@@ -1350,6 +1352,9 @@ export class PipelineDriver {
 class Streamer {
   readonly #primaryKeys: Map<string, PrimaryKey>;
   readonly #tableSpecs: Map<string, LiteAndZqlSpec>;
+  // The current replica state version, stamped onto synthetic aggregate rows
+  // (which have no replicated `_0_version`).
+  readonly #version: string;
   readonly #logQueryFailure:
     | ((queryID: string, error: unknown) => void)
     | undefined;
@@ -1357,10 +1362,12 @@ class Streamer {
   constructor(
     primaryKeys: Map<string, PrimaryKey>,
     tableSpecs: Map<string, LiteAndZqlSpec>,
+    version: string,
     logQueryFailure?: (queryID: string, error: unknown) => void,
   ) {
     this.#primaryKeys = primaryKeys;
     this.#tableSpecs = tableSpecs;
+    this.#version = version;
     this.#logQueryFailure = logQueryFailure;
   }
 
@@ -1444,14 +1451,23 @@ class Streamer {
   ): Iterable<RowChange | 'yield'> {
     const {tableName: table, system} = schema;
 
-    const primaryKey = must(this.#primaryKeys.get(table));
-    const spec = must(this.#tableSpecs.get(table)).tableSpec;
-
     // We do not sync rows gathered by the permissions
     // system to the client.
     if (system === 'permissions') {
       return;
     }
+
+    // The Aggregate operator emits synthetic rows for a synthetic table that is
+    // not in the replica schema. Key them by the operator's own primary key and
+    // stamp the current state version (they have no replicated `_0_version`),
+    // rather than looking the table up in the replica's tableSpecs.
+    const isAggregate = schema.isAggregate ?? false;
+    const primaryKey = isAggregate
+      ? schema.primaryKey
+      : must(this.#primaryKeys.get(table));
+    const minRowVersion = isAggregate
+      ? undefined
+      : must(this.#tableSpecs.get(table)).tableSpec.minRowVersion;
 
     for (const node of nodes()) {
       if (node === 'yield') {
@@ -1462,12 +1478,16 @@ class Streamer {
       let {row} = node;
       const rowKey = getRowKey(primaryKey, row);
       if (op !== ChangeType.REMOVE) {
-        const rowVersion = row[ZERO_VERSION_COLUMN_NAME];
-        if (
-          typeof rowVersion === 'string' &&
-          rowVersion < (spec.minRowVersion ?? '00')
-        ) {
-          row = {...row, [ZERO_VERSION_COLUMN_NAME]: spec.minRowVersion};
+        if (isAggregate) {
+          row = {...row, [ZERO_VERSION_COLUMN_NAME]: this.#version};
+        } else {
+          const rowVersion = row[ZERO_VERSION_COLUMN_NAME];
+          if (
+            typeof rowVersion === 'string' &&
+            rowVersion < (minRowVersion ?? '00')
+          ) {
+            row = {...row, [ZERO_VERSION_COLUMN_NAME]: minRowVersion};
+          }
         }
       }
 
@@ -1590,11 +1610,13 @@ export function hydrate(
   hash: string,
   clientSchema: ClientSchema,
   tableSpecs: Map<string, LiteAndZqlSpec>,
+  version: string,
 ): Iterable<RowChange | 'yield'> {
   const res = input.fetch({});
   const streamer = new Streamer(
     buildPrimaryKeys(clientSchema),
     tableSpecs,
+    version,
   ).accumulate(hash, input.getSchema(), toAdds(res));
   return streamer.stream();
 }
@@ -1604,9 +1626,10 @@ export function hydrateInternal(
   hash: string,
   primaryKeys: Map<string, PrimaryKey>,
   tableSpecs: Map<string, LiteAndZqlSpec>,
+  version: string,
 ): Iterable<RowChange | 'yield'> {
   const res = input.fetch({});
-  const streamer = new Streamer(primaryKeys, tableSpecs).accumulate(
+  const streamer = new Streamer(primaryKeys, tableSpecs, version).accumulate(
     hash,
     input.getSchema(),
     toAdds(res),

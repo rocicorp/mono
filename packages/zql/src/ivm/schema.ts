@@ -22,4 +22,10 @@ export type SourceSchema = {
   readonly system: System;
   readonly compareRows: Comparator;
   readonly sort?: Ordering | undefined;
+
+  // True for the synthetic schema produced by the Aggregate operator. Its rows
+  // are not real table rows: the view-syncer keys them by this schema's own
+  // primary key and stamps a synthetic version, rather than looking the table up
+  // in the replica schema.
+  readonly isAggregate?: boolean | undefined;
 };

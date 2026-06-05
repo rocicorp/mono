@@ -57,6 +57,7 @@ import type {Format} from '../../zero-types/src/format.ts';
  * JSON: a literal's value and a bound's row.
  */
 import type {
+  Aggregate,
   AST,
   Condition,
   CorrelatedSubquery,
@@ -151,6 +152,7 @@ const TAG_SYSTEM_PERMISSIONS = 0x200a;
 const TAG_SYSTEM_CLIENT = 0x200b;
 const TAG_SYSTEM_TEST = 0x200c;
 const TAG_JUNCTION = 0x200d;
+const TAG_AGGREGATE = 0x200e;
 
 // Set on a string's length word. High enough that no array length reaches it.
 const STR_MARK = 0x40000000;
@@ -347,7 +349,26 @@ function visitCorrelatedSubquery(csq: CorrelatedSubquery): void {
   visitCompoundKey(csq.correlation.childField);
   mix(csq.hidden === undefined ? TAG_UNDEF : csq.hidden ? TAG_TRUE : TAG_FALSE);
   mixOptionalSystem(csq.system);
+  // Before the subquery, whose first word is TAG_OBJ, so an absent aggregate
+  // (which writes nothing) is never confusable with a present one.
+  visitAggregate(csq.aggregate);
   visitAST(csq.subquery);
+}
+
+/**
+ * An absent aggregate writes nothing, unlike the other optionals, so that the
+ * hash of every query without one is unchanged by the field's addition. That
+ * is unambiguous because of where it is written: an aggregate is always
+ * followed by a word no aggregate could begin with (TAG_END on an AST, TAG_OBJ
+ * on a correlated subquery), and a present one leads with its own tag.
+ */
+function visitAggregate(aggregate: Aggregate | undefined): void {
+  if (aggregate === undefined) {
+    return;
+  }
+  mix(TAG_AGGREGATE);
+  mixString(aggregate.fn);
+  visitOptionalString(aggregate.field);
 }
 
 function visitAST(ast: AST): void {
@@ -394,6 +415,7 @@ function visitAST(ast: AST): void {
   }
 
   visitOrdering(ast.orderBy);
+  visitAggregate(ast.aggregate);
   mix(TAG_END);
 }
 
