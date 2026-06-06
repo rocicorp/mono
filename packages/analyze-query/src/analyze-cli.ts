@@ -67,7 +67,7 @@ const options = {
     type: v.string().optional(),
     desc: [
       'Optional userID to report to zero-cache.',
-      'Has no functional effect on analysis; defaults to "analyze-cli".',
+      'Omit for anonymous analysis.',
     ],
   },
   ast: {
@@ -207,7 +207,7 @@ export async function runAnalyzeCLI(opts: AnalyzeCLIOptions): Promise<void> {
     schema: opts.schema,
     server: config.zeroCacheURL,
     auth: config.authToken,
-    userID: config.userId ?? 'analyze-cli',
+    userID: config.userId,
     kvStore: 'mem',
     logLevel: config.log.level,
     logSink: stderrLogSink,
