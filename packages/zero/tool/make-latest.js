@@ -21,17 +21,10 @@ if (process.argv.length < 3) {
 const version = process.argv[2];
 
 const gitTag = `zero/v${version}`;
-if (execute('git tag --list latest', {stdio: 'pipe'}) !== '') {
-  throw new Error(`Local git tag 'latest' already exists.`);
-}
-if (
-  execute('git ls-remote --tags origin refs/tags/latest', {stdio: 'pipe'}) !==
-  ''
-) {
-  throw new Error(`Remote git tag 'latest' already exists.`);
-}
-execute(`git tag latest ${gitTag}`);
-execute(`git push --no-verify origin refs/tags/latest:refs/tags/latest`);
+execute(`git tag --force latest ${gitTag}`);
+execute(
+  `git push --force --no-verify origin refs/tags/latest:refs/tags/latest`,
+);
 
 execute(
   `docker buildx imagetools create -t rocicorp/zero:latest rocicorp/zero:${version}`,
@@ -48,22 +41,26 @@ if (localLatest !== remoteLatest) {
   );
 }
 
-const dockerVersionDigest = dockerDigest(`rocicorp/zero:${version}`);
-const dockerLatestDigest = dockerDigest('rocicorp/zero:latest');
-if (dockerVersionDigest !== dockerLatestDigest) {
-  throw new Error(
-    `Failed to update Docker latest tag: ${dockerLatestDigest} !== ${dockerVersionDigest}`,
-  );
-}
-
-const npmLatest = execute('pnpm view @rocicorp/zero dist-tags.latest', {
-  stdio: 'pipe',
+retry(() => {
+  const dockerVersionDigest = dockerDigest(`rocicorp/zero:${version}`);
+  const dockerLatestDigest = dockerDigest('rocicorp/zero:latest');
+  if (dockerVersionDigest !== dockerLatestDigest) {
+    throw new Error(
+      `Failed to update Docker latest tag: ${dockerLatestDigest} !== ${dockerVersionDigest}`,
+    );
+  }
 });
-if (npmLatest !== version) {
-  throw new Error(
-    `Failed to update pnpm latest tag: ${npmLatest} !== ${version}`,
-  );
-}
+
+retry(() => {
+  const npmLatest = execute('pnpm view @rocicorp/zero dist-tags.latest', {
+    stdio: 'pipe',
+  });
+  if (npmLatest !== version) {
+    throw new Error(
+      `Failed to update pnpm latest tag: ${npmLatest} !== ${version}`,
+    );
+  }
+});
 
 console.log(``);
 console.log(``);
@@ -91,4 +88,33 @@ function dockerDigest(image) {
     throw new Error(`Unable to find digest for ${image}`);
   }
   return match[1];
+}
+
+/**
+ * @param {() => void} fn
+ */
+function retry(fn) {
+  /** @type {unknown} */
+  let lastError;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      fn();
+      return;
+    } catch (error) {
+      lastError = error;
+      if (attempt < 2) {
+        console.error(lastError);
+        console.log(`Retrying...`);
+        sleep(2000);
+      }
+    }
+  }
+  throw lastError;
+}
+
+/**
+ * @param {number} ms
+ */
+function sleep(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }
