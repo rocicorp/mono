@@ -1,6 +1,8 @@
 # Relationship aggregates in Zero
 
-Status: proposal · Audience: Zero engineering
+Status: implemented (foundational feature + sync path; optimism done for the
+invertible relationship functions — see Delivery plan) · Audience: Zero
+engineering
 
 ## Summary
 
@@ -15,7 +17,7 @@ z.query.issue.where('open', true).count()          // top-level: number
 
 Aggregates are incrementally maintained (IVM), available both in
 client-materialized queries and in server-side SQL execution, and — the part
-that needs real design — relationship aggregates can be **synced to a subscribed
+that needed real design — relationship aggregates can be **synced to a subscribed
 client without syncing the underlying rows**, with optimistic updates for the
 invertible functions.
 
@@ -239,26 +241,32 @@ mapping (the synthetic columns have no client↔server mapping).
   so the value updates only when the server's recompute syncs back. (This is a
   fundamental property of "don't sync the rows," not an implementation gap.)
 
-## Reference implementation (validation)
+## Test coverage
 
-A reference implementation exercises the core end to end:
+The feature is exercised end to end:
 
 - the operator for all five functions, including the `min`/`max` boundary
   re-read, add/remove/edit, and SQL-faithful null/empty handling (unit tests);
 - the client query API → materialized view for `count`/`sum`/`avg`/`min`/`max`,
-  `where`-filtered aggregates, junction `count`, and **top-level** aggregates
+  `where`-filtered aggregates, **junction** (many-to-many) aggregates for all
+  five functions — including a `where` on the destination (an `EXISTS` for
+  `count`, a destination filter for the rest) — and **top-level** aggregates
   (`z.query.issue.count()` → a reactive scalar, with incremental updates);
 - result-type inference (`count → number`, `sum`/`avg → number | null`,
   `min`/`max → field type | null`) for both relationship and top-level forms;
-- z2s SQL compilation and **execution against PostgreSQL** for all five;
-- an end-to-end simulation of the synced path at the dataflow level: the server
-  computes, only the aggregate rows cross the boundary, the client renders them
-  while holding zero child rows, and an incremental change propagates as an
-  update.
+- z2s SQL compilation and **execution against PostgreSQL** for all five,
+  including junction aggregates (filtered and unfiltered);
+- the synced path: an IVM-boundary simulation (the server computes, only the
+  aggregate rows cross the boundary, the client renders them while holding zero
+  child rows, and an incremental change propagates as an update); the
+  view-syncer pipeline-driver streaming the synthetic rows (and *not* the child
+  rows); the client read path (poke routing + source provisioning, top-level and
+  relationship, including a filtered junction read); and the optimistic-delta
+  layer for the invertible relationship functions (`crud-impl`).
 
 The sync-protocol integration (server streaming, client source provisioning, the
-optimistic delta layer) is the remaining build; everything it depends on is
-validated above.
+optimistic delta layer) has since landed — see chunks 8–10 of the Delivery plan
+below.
 
 ## Delivery plan (reviewable chunks)
 
@@ -333,6 +341,21 @@ Sync path:
     the server poke rather than optimistically. (Edge: optimistically deleting
     the last `sum` contributor shows `0` until the server reconciles it to
     `null`, since `sum` — unlike `avg` — doesn't carry a count.)
+
+Junction (many-to-many) aggregates:
+
+11. ✅ **Junction aggregates** — all five functions over a many-to-many
+    relationship (see *Junction aggregates* above). `count` collapses to a
+    single-hop count over the junction edges; `sum`/`avg`/`min`/`max` lift the
+    destination field onto the junction row (`LiftField`) so the Aggregate stays
+    a flat single-hop. A `where` on the destination is supported — a destination
+    `Filter` for `sum`/`avg`/`min`/`max`, an `EXISTS` on the junction edge for
+    `count`. Works across materialization, z2s (Postgres-verified), and synced
+    read (server-authoritative; no optimism, since the field/predicate live past
+    the junction). `LiftField` is unit-tested (incl. its CHILD path);
+    materialized, z2s PG, and synced reads are covered including the filtered
+    cases. Bounding (`limit`/`start`) and nesting (`related`) the destination are
+    not supported (`limit`/`orderBy` are rejected for any junction).
 
 ## Open questions / future work
 
