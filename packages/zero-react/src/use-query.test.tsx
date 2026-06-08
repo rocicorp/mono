@@ -10,6 +10,7 @@ import {
   vi,
   type Mock,
 } from 'vitest';
+import type {Format} from '../../zero-types/src/format.ts';
 import {newQuery} from '../../zql/src/query/query-impl.ts';
 import {queryInternalsTag, type QueryImpl} from './bindings.ts';
 import {
@@ -41,6 +42,20 @@ function newMockQuery(query: string, singular = false): Query<string, Schema> {
       return query;
     },
     format: {singular},
+  } as unknown as QueryImpl<string, Schema>;
+  return ret;
+}
+
+function newMockQueryWithFormat(
+  query: string,
+  format: Format,
+): Query<string, Schema> {
+  const ret = {
+    [queryInternalsTag]: true,
+    hash() {
+      return query;
+    },
+    format,
   } as unknown as QueryImpl<string, Schema>;
   return ret;
 }
@@ -365,6 +380,70 @@ describe('ViewStore', () => {
       const view2 = viewStore.getView(
         zero2,
         newMockQuery('query1', true),
+        true,
+        'forever',
+      );
+
+      expect(view1).toBe(view2);
+      expect(getAllViewsSizeForTesting(viewStore)).toBe(1);
+    });
+
+    test('queries that differ only in a nested relationship singular flag create different views', () => {
+      // `related('owner', q => q.one())` and `related('owner', q => q.limit(1))`
+      // produce the same AST (and therefore the same query hash) and the same
+      // top-level `format.singular`. They differ only in the *nested*
+      // `format.relationships.owner.singular`, so the cache key must fold the
+      // whole format, not just the top-level singular flag.
+      const viewStore = new ViewStore();
+      const zero = newMockZero('client1');
+
+      const oneFormat: Format = {
+        singular: false,
+        relationships: {owner: {singular: true, relationships: {}}},
+      };
+      const limitFormat: Format = {
+        singular: false,
+        relationships: {owner: {singular: false, relationships: {}}},
+      };
+
+      const view1 = viewStore.getView(
+        zero,
+        newMockQueryWithFormat('query1', oneFormat),
+        true,
+        'forever',
+      );
+      const view2 = viewStore.getView(
+        zero,
+        newMockQueryWithFormat('query1', limitFormat),
+        true,
+        'forever',
+      );
+
+      expect(view1).not.toBe(view2);
+      expect(getAllViewsSizeForTesting(viewStore)).toBe(2);
+    });
+
+    test('duplicate queries with matching nested formats share a view', () => {
+      const viewStore = new ViewStore();
+      const zero = newMockZero('client1');
+
+      const format: Format = {
+        singular: false,
+        relationships: {owner: {singular: true, relationships: {}}},
+      };
+
+      const view1 = viewStore.getView(
+        zero,
+        newMockQueryWithFormat('query1', format),
+        true,
+        'forever',
+      );
+      const view2 = viewStore.getView(
+        zero,
+        newMockQueryWithFormat('query1', {
+          singular: false,
+          relationships: {owner: {singular: true, relationships: {}}},
+        }),
         true,
         'forever',
       );
