@@ -69,6 +69,12 @@ const columnReferenceSchema: v.Type<ColumnReference> = v.readonlyObject({
   name: v.string(),
 });
 
+const jsonPathReferenceSchema: v.Type<JsonPathReference> = v.readonlyObject({
+  type: v.literal('json'),
+  value: columnReferenceSchema,
+  path: v.readonlyArray(v.union(v.string(), v.number())),
+});
+
 /**
  * A parameter is a value that is not known at the time the query is written
  * and is resolved at runtime.
@@ -100,6 +106,7 @@ const parameterReferenceSchema = v.readonlyObject({
 const conditionValueSchema = v.union(
   literalReferenceSchema,
   columnReferenceSchema,
+  jsonPathReferenceSchema,
   parameterReferenceSchema,
 );
 
@@ -264,16 +271,40 @@ export type CorrelatedSubquery = {
   readonly hidden?: boolean | undefined;
 };
 
-export type ValuePosition = LiteralReference | Parameter | ColumnReference;
+export type ValuePosition =
+  | LiteralReference
+  | Parameter
+  | ColumnReference
+  | JsonPathReference;
 
 export type ColumnReference = {
   readonly type: 'column';
   /**
-   * Not a path yet as we're currently not allowing
-   * comparisons across tables. This will need to
-   * be a path through the tree in the near future.
+   * The name of the column on the current table.
+   *
+   * Note: this is *not* a path through the relationship tree. Cross-table
+   * comparisons are not yet supported and would be modeled separately.
    */
   readonly name: string;
+};
+
+/**
+ * A reference to a value *inside* a `json()` column, produced by `eb.json()`.
+ *
+ * Wraps a {@link ColumnReference} and navigates into its JSON value via `path`:
+ * segments are applied left-to-right as object keys (string) and array indices
+ * (number). A `JsonPathReference` is allowed wherever a {@link ColumnReference} is
+ * (currently only the left operand of a filter predicate).
+ *
+ * A path references a value inside a single column; it never crosses tables.
+ * Because a path-extracted value is not a stored/indexed column, it can never
+ * be a primary-key or join constraint key (see {@link extractColumn}, which
+ * excludes it from constraint/PK lookups).
+ */
+export type JsonPathReference = {
+  readonly type: 'json';
+  readonly value: ColumnReference;
+  readonly path: readonly (string | number)[];
 };
 
 export type LiteralReference = {
@@ -308,7 +339,7 @@ export type SimpleCondition = {
    * `null` is absent since we do not have an `IS` or `IS NOT`
    * operator defined and `null != null` in SQL.
    */
-  readonly right: Exclude<ValuePosition, ColumnReference>;
+  readonly right: Exclude<ValuePosition, ColumnReference | JsonPathReference>;
 };
 
 export type Conjunction = {
@@ -397,8 +428,21 @@ function transformWhere(
 ): Condition {
   // Name mapping functions (e.g. to server names)
   const {columnName} = transform;
-  const condValue = (c: ConditionValue) =>
-    c.type !== 'column' ? c : {...c, name: columnName(table, c.name)};
+  const condValue = (c: ConditionValue): ConditionValue => {
+    switch (c.type) {
+      case 'column':
+        return {...c, name: columnName(table, c.name)};
+      case 'json':
+        // The column name maps client->server; the path is data and is
+        // preserved as-is.
+        return {
+          ...c,
+          value: {...c.value, name: columnName(table, c.value.name)},
+        };
+      default:
+        return c;
+    }
+  };
   const key = (table: string, k: CompoundKey) => {
     const serverKey = k.map(col => columnName(table, col));
     return mustCompoundKey(serverKey);
@@ -539,6 +583,12 @@ function compareValuePosition(a: ValuePosition, b: ValuePosition): number {
     case 'column':
       assert(b.type === 'column', 'Expected column type for comparison');
       return compareUTF8(a.name, b.name);
+    case 'json':
+      assert(b.type === 'json', 'Expected json type for comparison');
+      return (
+        compareValuePosition(a.value, b.value) ||
+        compareUTF8(JSON.stringify(a.path), JSON.stringify(b.path))
+      );
     case 'static':
       throw new Error(
         'Static parameters should be resolved before normalization',

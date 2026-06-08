@@ -166,6 +166,65 @@ test('like', () => {
   }
 });
 
+test('json path', () => {
+  const row = {
+    metadata: {
+      priority: 'high',
+      count: 3,
+      flagged: true,
+      nested: {zip: '94110'},
+      tags: ['a', 'b'],
+      maybeNull: null,
+    },
+  };
+
+  const p = (op: SimpleOperator, path: (string | number)[], value: unknown) =>
+    createPredicate({
+      type: 'simple',
+      op,
+      left: {type: 'json', value: {type: 'column', name: 'metadata'}, path},
+      // oxlint-disable-next-line no-explicit-any
+      right: {type: 'literal', value: value as any},
+    });
+
+  // string leaf
+  expect(p('=', ['priority'], 'high')(row)).toBe(true);
+  expect(p('=', ['priority'], 'low')(row)).toBe(false);
+  expect(p('!=', ['priority'], 'low')(row)).toBe(true);
+  // number leaf
+  expect(p('>', ['count'], 2)(row)).toBe(true);
+  expect(p('<', ['count'], 2)(row)).toBe(false);
+  // boolean leaf
+  expect(p('=', ['flagged'], true)(row)).toBe(true);
+  expect(p('=', ['flagged'], false)(row)).toBe(false);
+  // nested object
+  expect(p('=', ['nested', 'zip'], '94110')(row)).toBe(true);
+  // array index
+  expect(p('=', ['tags', 0], 'a')(row)).toBe(true);
+  expect(p('=', ['tags', 1], 'a')(row)).toBe(false);
+  // LIKE on a string leaf
+  expect(p('LIKE', ['priority'], 'hi%')(row)).toBe(true);
+  expect(p('LIKE', ['priority'], 'lo%')(row)).toBe(false);
+  // IN
+  expect(p('IN', ['priority'], ['high', 'med'])(row)).toBe(true);
+  expect(p('IN', ['priority'], ['low', 'med'])(row)).toBe(false);
+
+  // Missing key: non-match for value ops; treated as null for IS (parity with
+  // SQLite json_extract -> NULL).
+  expect(p('=', ['missing'], 'x')(row)).toBe(false);
+  expect(p('IS', ['missing'], null)(row)).toBe(true);
+  expect(p('IS NOT', ['missing'], null)(row)).toBe(false);
+  // Explicit JSON null leaf.
+  expect(p('IS', ['maybeNull'], null)(row)).toBe(true);
+  expect(p('IS NOT', ['maybeNull'], null)(row)).toBe(false);
+  // Navigating through a null/absent intermediate.
+  expect(p('=', ['maybeNull', 'deep'], 'x')(row)).toBe(false);
+  expect(p('IS', ['maybeNull', 'deep'], null)(row)).toBe(true);
+  // Top-level column entirely absent.
+  expect(p('=', ['priority'], 'high')({})).toBe(false);
+  expect(p('IS', ['priority'], null)({})).toBe(true);
+});
+
 test('and', () => {
   const predicate = createPredicate({
     type: 'and',

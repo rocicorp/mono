@@ -690,6 +690,49 @@ test('protocol version', () => {
   // If this test fails because the AST schema has changed such that
   // old code will not understand the new schema, bump the
   // PROTOCOL_VERSION and update the expected values.
-  expect(hash).toEqual('1dsf0svqtvyhv');
-  expect(PROTOCOL_VERSION).toBe(51);
+  expect(hash).toEqual('1o4i9x5jr78yy');
+  expect(PROTOCOL_VERSION).toBe(52);
+});
+
+test('json path column reference: hashing and name mapping', () => {
+  const ast = (path?: (string | number)[]): AST => ({
+    table: 'issue',
+    where: {
+      type: 'simple',
+      op: '=',
+      left: path
+        ? {type: 'json', value: {type: 'column', name: 'metadata'}, path}
+        : {type: 'column', name: 'metadata'},
+      right: {type: 'literal', value: 'x'},
+    },
+  });
+
+  // The path participates in the AST hash (so otherwise-identical queries on
+  // different paths are distinct queries).
+  const h = (a: AST) => h64(JSON.stringify(normalizeAST(a))).toString(36);
+  expect(h(ast(['a']))).not.toEqual(h(ast()));
+  expect(h(ast(['a']))).not.toEqual(h(ast(['b'])));
+  expect(h(ast(['a', 0]))).not.toEqual(h(ast(['a', 1])));
+  expect(h(ast(['a']))).toEqual(h(ast(['a'])));
+
+  // Name mapping rewrites the column name but leaves the JSON path (data, not
+  // a schema name) untouched.
+  const tables = {
+    issue: table('issue')
+      .from('issues')
+      .columns({id: string(), metadata: number().from('meta_data')})
+      .primaryKey('id')
+      .build(),
+  };
+  const mapped = mapAST(ast(['registrar']), clientToServer(tables));
+  expect(mapped.where).toEqual({
+    type: 'simple',
+    op: '=',
+    left: {
+      type: 'json',
+      value: {type: 'column', name: 'meta_data'},
+      path: ['registrar'],
+    },
+    right: {type: 'literal', value: 'x'},
+  });
 });

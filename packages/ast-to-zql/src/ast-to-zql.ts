@@ -269,6 +269,14 @@ function transformValuePosition(value: ValuePosition): string {
       return transformLiteral(value);
     case 'column':
       return `'${value.name}'`;
+    case 'json': {
+      const segs = value.path
+        .map(s =>
+          typeof s === 'number' ? String(s) : `'${s.replace(/'/g, "\\'")}'`,
+        )
+        .join(', ');
+      return `json('${value.value.name}', ${segs})`;
+    }
     case 'static':
       return transformParameter(value);
     default:

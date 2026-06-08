@@ -2,6 +2,11 @@ import type {JSONValue} from 'postgres';
 import {afterAll, beforeAll, describe, expect, test} from 'vitest';
 import {testDBs} from '../../zero-cache/src/test/db.ts';
 import type {PostgresDB} from '../../zero-cache/src/types/pg.ts';
+import type {
+  JsonPathReference,
+  LiteralValue,
+  SimpleCondition,
+} from '../../zero-protocol/src/ast.ts';
 import {createSchema} from '../../zero-schema/src/builder/schema-builder.ts';
 import {
   json,
@@ -46,7 +51,15 @@ const temporalsTable = table('temporalsTable')
   })
   .primaryKey('id');
 
-const schema = createSchema({tables: [timesTable, temporalsTable]});
+const docsTable = table('docsTable')
+  .from('docs')
+  .columns({
+    id: string(),
+    metadata: json(),
+  })
+  .primaryKey('id');
+
+const schema = createSchema({tables: [timesTable, temporalsTable, docsTable]});
 
 const serverSchema: ServerSchema = {
   times: {
@@ -79,6 +92,10 @@ const serverSchema: ServerSchema = {
       isArray: true,
       isEnum: false,
     },
+  },
+  docs: {
+    id: {type: 'text', isArray: false, isEnum: false},
+    metadata: {type: 'jsonb', isArray: false, isEnum: false},
   },
 };
 
@@ -125,6 +142,17 @@ describe('compiler with PostgreSQL', () => {
       );
 
       INSERT INTO temporals (id) VALUES ('row1');
+
+      CREATE TABLE docs (
+        id TEXT PRIMARY KEY,
+        metadata JSONB NOT NULL
+      );
+
+      INSERT INTO docs (id, metadata) VALUES
+        ('row1', '{"priority":"high","count":3,"flagged":true,"nested":{"zip":"94110"},"tags":["a","b"]}'),
+        ('row2', '{"priority":"low","count":10,"flagged":false}'),
+        ('row3', '{"priority":null}'),
+        ('row4', '{}');
     `);
   });
 
@@ -191,6 +219,92 @@ describe('compiler with PostgreSQL', () => {
         nullableTimestampArray: null,
         nullableTimestamptzArray: null,
       },
+    ]);
+  });
+
+  // JSON path filters compiled to `#>>` extraction, executed against real
+  // Postgres. Seed data (see beforeAll):
+  //   row1 {priority:'high', count:3, flagged:true, nested:{zip:'94110'}, tags:['a','b']}
+  //   row2 {priority:'low',  count:10, flagged:false}
+  //   row3 {priority:null}            -- explicit JSON null
+  //   row4 {}                         -- missing key
+  const jsonRef = (...path: (string | number)[]): JsonPathReference => ({
+    type: 'json',
+    value: {type: 'column', name: 'metadata'},
+    path,
+  });
+
+  const queryDocIds = async (
+    op: SimpleCondition['op'],
+    left: JsonPathReference,
+    right: LiteralValue,
+  ): Promise<string[]> => {
+    const sqlQuery = formatPgInternalConvert(
+      compile(serverSchema, schema, {
+        table: 'docsTable',
+        related: [],
+        where: {
+          type: 'simple',
+          op,
+          left,
+          right: {type: 'literal', value: right},
+        },
+      }),
+    );
+    const rows = extractZqlResult(
+      await pg.unsafe(sqlQuery.text, sqlQuery.values as JSONValue[]),
+    ) as Array<{id: string}>;
+    return rows.map(r => r.id).sort();
+  };
+
+  test('json path filter: string leaf equality', async () => {
+    expect(await queryDocIds('=', jsonRef('priority'), 'high')).toEqual([
+      'row1',
+    ]);
+    expect(await queryDocIds('!=', jsonRef('priority'), 'high')).toEqual([
+      'row2',
+    ]);
+  });
+
+  test('json path filter: numeric ordering', async () => {
+    // Text ordering would put '10' < '3'; the ::double precision cast makes
+    // this a real numeric comparison.
+    expect(await queryDocIds('>', jsonRef('count'), 5)).toEqual(['row2']);
+    expect(await queryDocIds('<', jsonRef('count'), 5)).toEqual(['row1']);
+  });
+
+  test('json path filter: boolean leaf equality', async () => {
+    expect(await queryDocIds('=', jsonRef('flagged'), true)).toEqual(['row1']);
+    expect(await queryDocIds('=', jsonRef('flagged'), false)).toEqual(['row2']);
+  });
+
+  test('json path filter: nested object and array index', async () => {
+    expect(await queryDocIds('=', jsonRef('nested', 'zip'), '94110')).toEqual([
+      'row1',
+    ]);
+    expect(await queryDocIds('=', jsonRef('tags', 0), 'a')).toEqual(['row1']);
+    expect(await queryDocIds('=', jsonRef('tags', 1), 'a')).toEqual([]);
+  });
+
+  test('json path filter: ILIKE / IN', async () => {
+    expect(await queryDocIds('ILIKE', jsonRef('priority'), 'HI%')).toEqual([
+      'row1',
+    ]);
+    expect(
+      await queryDocIds('IN', jsonRef('priority'), ['high', 'low']),
+    ).toEqual(['row1', 'row2']);
+  });
+
+  test('json path filter: IS NULL collapses missing key and JSON null', async () => {
+    // row3 has an explicit JSON null, row4 is missing the key entirely; `#>>`
+    // maps both to SQL NULL, matching SQLite/in-memory semantics.
+    expect(await queryDocIds('IS', jsonRef('priority'), null)).toEqual([
+      'row3',
+      'row4',
+    ]);
+    expect(await queryDocIds('IS NOT', jsonRef('priority'), null)).toEqual([
+      'row1',
+      'row2',
     ]);
   });
 });

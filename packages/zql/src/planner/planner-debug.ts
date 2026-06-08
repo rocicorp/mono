@@ -1,3 +1,4 @@
+import {unreachable} from '../../../shared/src/asserts.ts';
 import type * as v from '../../../shared/src/valita.ts';
 import type {
   attemptStartEventJSONSchema,
@@ -199,6 +200,10 @@ function formatValuePosition(value: ValuePosition): string {
   switch (value.type) {
     case 'column':
       return value.name;
+    case 'json':
+      return `${value.value.name}${value.path
+        .map(s => (typeof s === 'number' ? `[${s}]` : `.${s}`))
+        .join('')}`;
     case 'literal':
       // Format literal values with SQL-style quoting for strings
       if (typeof value.value === 'string') {
@@ -207,6 +212,8 @@ function formatValuePosition(value: ValuePosition): string {
       return JSON.stringify(value.value);
     case 'static':
       return `@${value.anchor}.${Array.isArray(value.field) ? value.field.join('.') : value.field}`;
+    default:
+      unreachable(value);
   }
 }
 

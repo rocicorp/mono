@@ -1,5 +1,5 @@
 import type {SQLQuery} from '@databases/sql';
-import {assert} from '../../shared/src/asserts.ts';
+import {assert, unreachable} from '../../shared/src/asserts.ts';
 import type {
   Condition,
   Ordering,
@@ -249,16 +249,37 @@ function likeConditionToSQL(filter: SimpleCondition): SQLQuery {
   return sql`${left} ${likeOp} ${right} ESCAPE '\\'`;
 }
 
+/**
+ * Builds a SQLite JSON path string (e.g. `$.a.b[0]`) from a path of object
+ * keys and array indices. Object keys are double-quoted (with `"` escaped) so
+ * arbitrary key names are handled.
+ */
+function jsonPathExpr(path: readonly (string | number)[]): string {
+  let s = '$';
+  for (const seg of path) {
+    s +=
+      typeof seg === 'number' ? `[${seg}]` : `."${seg.replaceAll('"', '""')}"`;
+  }
+  return s;
+}
+
 function valuePositionToSQL(value: ValuePosition): SQLQuery {
   switch (value.type) {
     case 'column':
       return sql.ident(value.name);
+    case 'json':
+      // The path string is passed as a bound parameter to json_extract.
+      return sql`json_extract(${sql.ident(value.value.name)}, ${jsonPathExpr(
+        value.path,
+      )})`;
     case 'literal':
       return sql`${toSQLiteType(value.value, getJsType(value.value))}`;
     case 'static':
       throw new Error(
         'Static parameters must be replaced before conversion to SQL',
       );
+    default:
+      unreachable(value);
   }
 }
 

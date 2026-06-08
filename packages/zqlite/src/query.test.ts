@@ -158,6 +158,82 @@ test('basic query', async () => {
   `);
 });
 
+test('json path filter', async () => {
+  // Self-contained delegate so `metadata` is stored as proper JSON (objects),
+  // not the double-encoded strings the shared beforeEach seeds.
+  const db = new Database(createSilentLogContext(), ':memory:');
+  const qd = newQueryDelegate(lc, testLogConfig, db, schema);
+  const users = must(qd.getSource('users'));
+  consume(
+    users.push(
+      makeSourceChangeAdd({
+        id: 'j1',
+        name: 'Alice',
+        metadata: {registrar: 'github', login: 'alicegh'},
+      }),
+    ),
+  );
+  consume(
+    users.push(
+      makeSourceChangeAdd({
+        id: 'j2',
+        name: 'Bob',
+        // typo key 'registar' => no 'registrar'
+        metadata: {
+          registar: 'google',
+          login: 'bob@gmail.com',
+          altContacts: ['bobwave', 'bobyt'],
+        },
+      }),
+    ),
+  );
+
+  const ids = async (
+    // oxlint-disable-next-line no-explicit-any
+    q: any,
+  ): Promise<string[]> => {
+    const rows = (await qd.run(q)) as ReadonlyArray<{id: string}>;
+    return rows.map(r => r.id);
+  };
+
+  // Object-key path.
+  expect(
+    await ids(
+      newQuery(schema, 'user').where(({cmp, json}) =>
+        cmp(json('metadata', 'registrar'), '=', 'github'),
+      ),
+    ),
+  ).toEqual(['j1']);
+
+  // Array-index segment.
+  expect(
+    await ids(
+      newQuery(schema, 'user').where(({cmp, json}) =>
+        cmp(json('metadata', 'altContacts', 0), '=', 'bobwave'),
+      ),
+    ),
+  ).toEqual(['j2']);
+
+  // LIKE on a string leaf.
+  expect(
+    await ids(
+      newQuery(schema, 'user').where(({cmp, json}) =>
+        cmp(json('metadata', 'login'), 'LIKE', 'alice%'),
+      ),
+    ),
+  ).toEqual(['j1']);
+
+  // IS NULL matches a missing key (Bob has no 'registrar'), with the same
+  // result on the SQL pushdown and the in-memory predicate.
+  expect(
+    await ids(
+      newQuery(schema, 'user').where(({cmp, json}) =>
+        cmp(json('metadata', 'registrar'), 'IS', null),
+      ),
+    ),
+  ).toEqual(['j2']);
+});
+
 test('null compare', async () => {
   let query = newQuery(schema, 'issue').where('ownerId', 'IS', null);
   let rows = await queryDelegate.run(query);

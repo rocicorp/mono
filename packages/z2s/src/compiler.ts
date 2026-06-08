@@ -14,6 +14,7 @@ import type {
   CorrelatedSubquery,
   CorrelatedSubqueryCondition,
   Correlation,
+  JsonPathReference,
   LiteralReference,
   Ordering,
   SimpleCondition,
@@ -463,6 +464,8 @@ function valueComparison(
       };
       return colIdent(spec.server, qualified);
     }
+    case 'json':
+      return jsonPathLeaf(spec, valuePos, table, otherValuePos);
     case 'literal':
       return literalValueComparison(
         spec,
@@ -477,7 +480,6 @@ function valueComparison(
       );
     default:
       unreachable(valuePosType);
-      break;
   }
 }
 
@@ -497,6 +499,26 @@ function literalValueComparison(
         plural,
         true,
       );
+    case 'json': {
+      // The other side is a JSON path leaf, which is dynamically typed. Render
+      // this literal by its OWN JS type so its cast matches the leaf's cast in
+      // `jsonPathLeaf` (`pgCastTypeForJsonLeaf`).
+      assert(
+        plural === Array.isArray(valuePos.value),
+        'Expected plural flag to match whether value is an array',
+      );
+      if (Array.isArray(valuePos.value)) {
+        return valuePos.value.length > 0
+          ? sqlConvertPluralLiteralArg(
+              typeof valuePos.value[0] as PluralLiteralType,
+              valuePos.value as PluralLiteralType[],
+            )
+          : sqlConvertPluralLiteralArg('string', []);
+      }
+      return sqlConvertSingularLiteralArg(
+        valuePos.value as string | number | boolean | null,
+      );
+    }
     case 'literal': {
       assert(
         plural === Array.isArray(valuePos.value),
@@ -541,6 +563,63 @@ function literalValueComparison(
       );
     default:
       unreachable(otherType);
+  }
+}
+
+/**
+ * Compiles a JSON path reference to a Postgres text extraction
+ * `("col" #>> ARRAY['a','b']::text[])`.
+ *
+ * `#>>` works on both `json` and `jsonb` columns and maps **both** a missing key
+ * and a JSON `null` to SQL `NULL` — matching the SQLite `json_extract` pushdown
+ * and the in-memory predicate, so `IS NULL` agrees across all three. The leaf is
+ * cast to the comparison type derived from the literal on the other side
+ * (`pgCastTypeForJsonLeaf`) so it lines up with that literal's own cast.
+ */
+function jsonPathLeaf(
+  spec: Spec,
+  ref: JsonPathReference,
+  table: Table,
+  other: ValuePosition,
+): SQLQuery {
+  const col = colIdent(spec.server, {table, zql: ref.value.name});
+  const path = sql.join(
+    ref.path.map(seg => sqlConvertSingularLiteralArg(String(seg))),
+    ',',
+  );
+  const leaf = sql`(${col} #>> ARRAY[${path}]::text[])`;
+  const castType = pgCastTypeForJsonLeaf(other);
+  return castType ? sql`${leaf}::${sql.__dangerous__rawValue(castType)}` : leaf;
+}
+
+/**
+ * The Postgres type to cast a JSON leaf to, derived from the literal on the
+ * other side of the comparison. JSON leaves are dynamically typed, so the
+ * comparison type comes from the literal's JS type — mirroring how
+ * `sqlConvert*LiteralArg` casts the literal itself, so the two sides line up.
+ *
+ * Returns `undefined` (no cast — leave the leaf as text) for a `null` literal
+ * (`IS NULL`: a missing key and a JSON null must both read as SQL NULL) and for
+ * an empty `IN` array (the comparison is constant-false regardless of type).
+ */
+function pgCastTypeForJsonLeaf(other: ValuePosition): string | undefined {
+  if (other.type !== 'literal' || other.value === null) {
+    return undefined;
+  }
+  const t = Array.isArray(other.value)
+    ? other.value.length > 0
+      ? typeof other.value[0]
+      : undefined
+    : typeof other.value;
+  switch (t) {
+    case 'string':
+      return 'text';
+    case 'number':
+      return 'double precision';
+    case 'boolean':
+      return 'boolean';
+    default:
+      return undefined;
   }
 }
 

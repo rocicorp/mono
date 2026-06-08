@@ -11,6 +11,7 @@ import type {
   CorrelatedSubquery,
   CorrelatedSubqueryCondition,
   Disjunction,
+  JsonPathReference,
   LiteralValue,
   Ordering,
   Parameter,
@@ -163,7 +164,7 @@ export function bindStaticParameters(
         left: bindValue(condition.left),
         right: bindValue(condition.right) as Exclude<
           ValuePosition,
-          ColumnReference
+          ColumnReference | JsonPathReference
         >,
       };
     }
@@ -644,7 +645,15 @@ function valuePosName(left: ValuePosition) {
       return left.value;
     case 'column':
       return left.name;
+    case 'json':
+      return `${left.value.name}${pathToJsonPath(left.path)}`;
+    default:
+      unreachable(left);
   }
+}
+
+function pathToJsonPath(path: readonly (string | number)[]): string {
+  return path.map(s => (typeof s === 'number' ? `[${s}]` : `.${s}`)).join('');
 }
 
 function applyCorrelatedSubQuery(

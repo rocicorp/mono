@@ -21,6 +21,7 @@ import {
   type QueryReturn,
   type QueryRowType,
   type Row,
+  type ValueAtPath,
 } from './query.ts';
 
 const mockQuery = {
@@ -128,6 +129,20 @@ const schemaWithArray = table('testWithArray')
   })
   .primaryKey('id');
 
+const schemaWithTypedJson = table('testWithTypedJson')
+  .columns({
+    id: string(),
+    metadata: json<{
+      priority: 'high' | 'low';
+      count: number;
+      flagged: boolean;
+      nested: {zip: string};
+      tags: string[];
+    }>(),
+    untyped: json(),
+  })
+  .primaryKey('id');
+
 const testWithRelationships = table('testWithRelationships')
   .columns({
     s: string(),
@@ -202,6 +217,7 @@ const schema = createSchema({
     schemaWithEnums,
     schemaWithJson,
     schemaWithArray,
+    schemaWithTypedJson,
     schemaWithAdvancedTypes,
     testWithRelationships,
     testWithMoreRelationships,
@@ -832,6 +848,96 @@ test('json type', () => {
   query.where('j', '=', {foo: 'bar'});
   // @ts-expect-error - json fields cannot be used in cmp yet
   query.where(({cmp}) => cmp('j', '=', {foo: 'bar'}));
+});
+
+type Metadata = {
+  priority: 'high' | 'low';
+  count: number;
+  flagged: boolean;
+  nested: {zip: string};
+  tags: string[];
+};
+
+test('json path: ValueAtPath leaf resolution (Tier 1)', () => {
+  // The leaf type drives the comparison value type in `cmp`.
+  expectTypeOf<ValueAtPath<Metadata, ['priority']>>().toEqualTypeOf<
+    'high' | 'low'
+  >();
+  expectTypeOf<ValueAtPath<Metadata, ['count']>>().toEqualTypeOf<number>();
+  expectTypeOf<ValueAtPath<Metadata, ['flagged']>>().toEqualTypeOf<boolean>();
+  expectTypeOf<
+    ValueAtPath<Metadata, ['nested', 'zip']>
+  >().toEqualTypeOf<string>();
+  // array-index segment resolves to the element type
+  expectTypeOf<ValueAtPath<Metadata, ['tags', 0]>>().toEqualTypeOf<string>();
+  // empty path is the whole column type
+  expectTypeOf<ValueAtPath<Metadata, []>>().toEqualTypeOf<Metadata>();
+  // untyped json() degrades to ReadonlyJSONValue at any depth
+  expectTypeOf<
+    ValueAtPath<ReadonlyJSONValue, ['whatever', 0]>
+  >().toEqualTypeOf<ReadonlyJSONValue>();
+});
+
+test('json path: leaf type inference in cmp (Tier 1)', () => {
+  const query = mockQuery as unknown as Query<'testWithTypedJson', Schema>;
+
+  query.where(({cmp, json}) => {
+    // string-union leaf
+    cmp(json('metadata', 'priority'), '=', 'high');
+    cmp(json('metadata', 'priority'), 'low'); // 2-arg form defaults to '='
+    cmp(json('metadata', 'priority'), 'IN', ['high', 'low']);
+    cmp(json('metadata', 'priority'), 'IS', null);
+    // @ts-expect-error - 'nope' is not 'high' | 'low'
+    cmp(json('metadata', 'priority'), '=', 'nope');
+
+    // number leaf
+    cmp(json('metadata', 'count'), '>', 5);
+    // @ts-expect-error - count is a number, not a string
+    cmp(json('metadata', 'count'), '>', 'five');
+
+    // boolean leaf
+    cmp(json('metadata', 'flagged'), '=', true);
+    // @ts-expect-error - flagged is a boolean, not a number
+    cmp(json('metadata', 'flagged'), '=', 1);
+
+    // nested object leaf
+    cmp(json('metadata', 'nested', 'zip'), '=', '94110');
+    // @ts-expect-error - zip is a string, not a number
+    cmp(json('metadata', 'nested', 'zip'), '=', 94110);
+
+    // array-index leaf
+    cmp(json('metadata', 'tags', 0), '=', 'a');
+    // @ts-expect-error - tags elements are strings, not numbers
+    cmp(json('metadata', 'tags', 0), '=', 5);
+
+    // untyped json() degrades to ReadonlyJSONValue (any path, loose value)
+    cmp(json('untyped', 'whatever', 0), '=', 'anything');
+
+    return cmp(json('metadata', 'priority'), '=', 'high');
+  });
+
+  // @ts-expect-error - 'id' is not a json() column
+  query.where(({cmp, json}) => cmp(json('id', 'x'), '=', 'y'));
+});
+
+test('json path: path segment validation (Tier 2)', () => {
+  const query = mockQuery as unknown as Query<'testWithTypedJson', Schema>;
+
+  query.where(({cmp, json}) => {
+    // valid paths
+    cmp(json('metadata', 'nested', 'zip'), '=', 'x');
+    cmp(json('metadata', 'tags', 0), '=', 'x');
+
+    // @ts-expect-error - 'nope' is not a key of metadata
+    cmp(json('metadata', 'nope'), '=', 'x');
+    // @ts-expect-error - 'nope' is not a key of metadata.nested
+    cmp(json('metadata', 'nested', 'nope'), '=', 'x');
+    // @ts-expect-error - cannot descend into the scalar leaf metadata.priority
+    cmp(json('metadata', 'priority', 'nope'), '=', 'x');
+
+    // untyped json() allows any segment
+    return cmp(json('untyped', 'anything', 0, 'deep'), '=', 'x');
+  });
 });
 
 test('array type', () => {

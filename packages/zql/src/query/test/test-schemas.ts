@@ -29,6 +29,7 @@ const user = table('user')
     metadata: json<{
       registrar: 'github' | 'google';
       email: string;
+      login?: string;
       altContacts?: string[];
     }>().optional(),
   })

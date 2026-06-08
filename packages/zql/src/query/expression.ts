@@ -1,26 +1,76 @@
 /* oxlint-disable @typescript-eslint/no-explicit-any */
+import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {must} from '../../../shared/src/must.ts';
 import {
   toStaticParam,
+  type ColumnReference,
   type Condition,
+  type JsonPathReference,
   type LiteralValue,
   type Parameter,
   type SimpleOperator,
 } from '../../../zero-protocol/src/ast.ts';
+import type {SchemaValueToTSType} from '../../../zero-types/src/schema-value.ts';
 import type {Schema as ZeroSchema} from '../../../zero-types/src/schema.ts';
 import type {
   AvailableRelationships,
   DestTableName,
   ExistsOptions,
   GetFilterType,
+  GetFilterTypeFromTSType,
+  JsonSelectors,
   NoCompoundTypeSelector,
   PullTableSchema,
   Query,
+  ValidJsonPath,
+  ValueAtPath,
 } from './query.ts';
 
 export type ParameterReference = {
   [toStaticParam](): Parameter;
 };
+
+const toColumnRef = Symbol();
+declare const columnRefBrand: unique symbol;
+
+/**
+ * A reference to a value *inside* a `json()` column, produced by
+ * {@link ExpressionBuilder.json} and accepted by `cmp` in the left position.
+ *
+ * It carries, as phantom type parameters (never present at runtime), the json
+ * column's resolved TypeScript type (`TColumnType`) and the path (`P`). `json`
+ * resolves `TColumnType` from the schema at the (concrete) call site, so `cmp`
+ * walks the path over a *concrete* type rather than a deferred schema lookup —
+ * a deferred path-walk in `cmp`'s signature is too complex for TypeScript's
+ * structural comparison of `ExpressionBuilder` and breaks it wholesale.
+ */
+export type ColumnRef<
+  TColumnType = unknown,
+  P extends readonly (string | number)[] = readonly (string | number)[],
+> = {
+  [toColumnRef](): ColumnReference | JsonPathReference;
+  // Phantom brand. Declared as a *method* (not a property) so the type
+  // parameters are bivariant: `json`'s return type embeds a schema-derived
+  // `TColumnType`, and a covariant brand would make a concrete-schema
+  // `ColumnRef` unassignable to a generic-schema one, breaking
+  // `ExpressionBuilder` assignability across the query builder. `cmp` still
+  // infers `TColumnType`/`P` from this position.
+  [columnRefBrand]?(brand: [TColumnType, P]): void;
+};
+
+function isColumnRef(v: unknown): v is ColumnRef {
+  return typeof v === 'object' && v !== null && toColumnRef in v;
+}
+
+function makeColumnRef(
+  name: string,
+  path: readonly (string | number)[],
+): ColumnRef {
+  const column: ColumnReference = {type: 'column', name};
+  const ref: ColumnReference | JsonPathReference =
+    path.length > 0 ? {type: 'json', value: column, path} : column;
+  return {[toColumnRef]: () => ref};
+}
 
 /**
  * A factory function that creates a condition. This is used to create
@@ -90,15 +140,70 @@ export class ExpressionBuilder<
       | ParameterReference
       | undefined,
   ): Condition;
+  cmp<
+    TColumnType,
+    const P extends readonly (string | number)[],
+    TOperator extends SimpleOperator,
+  >(
+    ref: ColumnRef<TColumnType, P>,
+    op: TOperator,
+    value:
+      | GetFilterTypeFromTSType<ValueAtPath<TColumnType, P>, TOperator>
+      | ParameterReference
+      | undefined,
+  ): Condition;
+  cmp<TColumnType, const P extends readonly (string | number)[]>(
+    ref: ColumnRef<TColumnType, P>,
+    value:
+      | GetFilterTypeFromTSType<ValueAtPath<TColumnType, P>, '='>
+      | ParameterReference
+      | undefined,
+  ): Condition;
+  // Implementation signature — intentionally loose. The typed contract is
+  // defined by the overloads above; this only needs to subsume them.
   cmp(
-    field: string,
-    opOrValue: SimpleOperator | ParameterReference | LiteralValue | undefined,
-    value?: ParameterReference | LiteralValue,
+    field: string | ColumnRef,
+    // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+    ...args: any[]
   ): Condition {
-    if (arguments.length === 2) {
-      return cmp(field, opOrValue);
+    if (args.length === 1) {
+      return cmp(field, args[0]);
     }
-    return cmp(field, opOrValue, value);
+    return cmp(field, args[0], args[1]);
+  }
+
+  /**
+   * References a value inside a `json()` column for use in `cmp`. Path
+   * segments are object keys or array indices, applied left-to-right.
+   *
+   * @example
+   * ```ts
+   * z.query.issue.where(({cmp, json}) =>
+   *   cmp(json('metadata', 'priority'), '=', 'high'));
+   * ```
+   */
+  json<
+    TColumn extends JsonSelectors<PullTableSchema<TTable, TSchema>> & string,
+    const P extends readonly (string | number)[],
+  >(
+    column: TColumn,
+    // `P` is inferred from the args; intersecting with `ValidJsonPath` rejects
+    // an out-of-shape segment at its position (and drives autocomplete).
+    ...path: P &
+      ValidJsonPath<
+        SchemaValueToTSType<
+          PullTableSchema<TTable, TSchema>['columns'][TColumn]
+        >,
+        P
+      >
+  ): ColumnRef<
+    SchemaValueToTSType<PullTableSchema<TTable, TSchema>['columns'][TColumn]>,
+    P
+  > {
+    return makeColumnRef(column, path) as ColumnRef<
+      SchemaValueToTSType<PullTableSchema<TTable, TSchema>['columns'][TColumn]>,
+      P
+    >;
   }
 
   cmpLit(
@@ -190,16 +295,23 @@ export function not(expression: Condition): Condition {
 }
 
 export function cmp(
-  field: string,
-  opOrValue: SimpleOperator | ParameterReference | LiteralValue | undefined,
-  value?: ParameterReference | LiteralValue,
+  field: string | ColumnRef,
+  opOrValue:
+    | SimpleOperator
+    | ParameterReference
+    | ReadonlyJSONValue
+    | undefined,
+  value?: ParameterReference | ReadonlyJSONValue,
 ): Condition {
   let op: SimpleOperator;
-  let actualValue: ParameterReference | LiteralValue | undefined;
+  let actualValue: ParameterReference | ReadonlyJSONValue | undefined;
 
   if (arguments.length === 2) {
     // 2-arg form: cmp(field, value) - defaults to '=' operator
-    actualValue = opOrValue as ParameterReference | LiteralValue | undefined;
+    actualValue = opOrValue as
+      | ParameterReference
+      | ReadonlyJSONValue
+      | undefined;
     op = '=';
   } else {
     // 3-arg form: cmp(field, op, value)
@@ -209,16 +321,18 @@ export function cmp(
 
   return {
     type: 'simple',
-    left: {type: 'column', name: field},
+    left: isColumnRef(field)
+      ? field[toColumnRef]()
+      : {type: 'column', name: field},
     right: isParameterReference(actualValue)
       ? actualValue[toStaticParam]()
-      : {type: 'literal', value: actualValue ?? null},
+      : {type: 'literal', value: (actualValue ?? null) as LiteralValue},
     op,
   };
 }
 
 function isParameterReference(
-  value: ParameterReference | LiteralValue | null | undefined,
+  value: ParameterReference | ReadonlyJSONValue | null | undefined,
 ): value is ParameterReference {
   return (
     value !== null &&

@@ -1,6 +1,8 @@
 import {assert, unreachable} from '../../../shared/src/asserts.ts';
 import type {
+  ColumnReference,
   Condition,
+  JsonPathReference,
   SimpleCondition,
   SimpleOperator,
 } from '../../../zero-protocol/src/ast.ts';
@@ -12,6 +14,40 @@ import {getLikePredicate} from './like.ts';
 export type NonNullValue = Exclude<Value, null | undefined>;
 export type SimplePredicate = (rhs: Value) => boolean;
 export type SimplePredicateNoNull = (rhs: NonNullValue) => boolean;
+
+/**
+ * Reads the left-hand value of a comparison out of a row, navigating into a
+ * JSON column for a {@link JsonPathReference}.
+ *
+ * For path navigation, a missing key (or a null/undefined encountered partway
+ * through the path) yields `null`. JSON has no `undefined`, so absence is
+ * treated as null — this matches SQLite `json_extract` (which returns SQL NULL
+ * for both a missing path and a JSON null), so `IS NULL` behaves identically
+ * on the client and against the replica. Plain column reads are unchanged.
+ */
+function readColumn(row: Row, ref: ColumnReference | JsonPathReference): Value {
+  if (ref.type === 'column') {
+    return row[ref.name];
+  }
+  return valueAtPath(row[ref.value.name], ref.path);
+}
+
+/**
+ * Navigates into a JSON value following `path`. A null/undefined encountered
+ * partway through the path, or a missing key at the end, yields `null`. See
+ * {@link readColumn} for why absence is treated as null.
+ */
+function valueAtPath(value: Value, path: readonly (string | number)[]): Value {
+  let v = value;
+  for (const seg of path) {
+    // oxlint-disable-next-line eqeqeq
+    if (v == null) {
+      return null;
+    }
+    v = (v as Record<string | number, Value>)[seg];
+  }
+  return v === undefined ? null : v;
+}
 
 export type NoSubqueryCondition =
   | SimpleCondition
@@ -68,7 +104,7 @@ export function createPredicate(
         const result = impl(left.value);
         return () => result;
       }
-      return (row: Row) => impl(row[left.name]);
+      return (row: Row) => impl(readColumn(row, left));
     }
   }
 
@@ -86,7 +122,7 @@ export function createPredicate(
   }
 
   return (row: Row) => {
-    const lhs = row[left.name];
+    const lhs = readColumn(row, left);
     if (lhs === null || lhs === undefined) {
       return false;
     }

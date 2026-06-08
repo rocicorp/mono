@@ -28,6 +28,44 @@ test('simple where condition with equality', () => {
   expect(astToZQL(ast)).toMatchInlineSnapshot(`".where('id', 123)"`);
 });
 
+test('where condition on a json path', () => {
+  const ast: AST = {
+    table: 'issue',
+    where: {
+      type: 'simple',
+      left: {
+        type: 'json',
+        value: {type: 'column', name: 'metadata'},
+        path: ['priority'],
+      },
+      op: '=',
+      right: {type: 'literal', value: 'high'},
+    },
+  };
+  expect(astToZQL(ast)).toMatchInlineSnapshot(
+    `".where(json('metadata', 'priority'), 'high')"`,
+  );
+});
+
+test('where condition on a json path with array index and operator', () => {
+  const ast: AST = {
+    table: 'issue',
+    where: {
+      type: 'simple',
+      left: {
+        type: 'json',
+        value: {type: 'column', name: 'metadata'},
+        path: ['tags', 0],
+      },
+      op: '!=',
+      right: {type: 'literal', value: 'x'},
+    },
+  };
+  expect(astToZQL(ast)).toMatchInlineSnapshot(
+    `".where(json('metadata', 'tags', 0), '!=', 'x')"`,
+  );
+});
+
 test('where condition with non-equality operator', () => {
   const ast: AST = {
     table: 'issue',
