@@ -1058,6 +1058,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           const pokers = startPoke(
             this.#getClients(cvr.version),
             newCVR.version,
+            newCVR.clientSchema,
           );
           for (const patch of patches) {
             await pokers.addPatch(patch);
@@ -1972,7 +1973,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       );
 
       const clients = this.#getClients();
-      const pokers = startPoke(clients, newVersion);
+      const pokers = startPoke(clients, newVersion, cvr.clientSchema);
       for (const patch of queryPatches) {
         // Bump patches' toVersion to the post-drift-bump version so that
         // pokers don't see them as belonging to a stale cookie.
@@ -2107,7 +2108,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     return startAsyncSpan(tracer, 'vs.#catchupClients', async span => {
       current ??= cvr.version;
       const clients = this.#getClients();
-      const pokers = usePokers ?? startPoke(clients, cvr.version);
+      const pokers =
+        usePokers ?? startPoke(clients, cvr.version, cvr.clientSchema);
       span.setAttribute('numClients', clients.length);
 
       const catchupFrom = clients
@@ -2303,6 +2305,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       const pokers = startPoke(
         this.#getClients(cvr.version),
         updater.updatedVersion(),
+        cvr.clientSchema,
       );
       lc.debug?.(`applying ${numChanges} to advance to ${version}`);
 

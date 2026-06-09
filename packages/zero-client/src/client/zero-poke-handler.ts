@@ -7,6 +7,7 @@ import type {
 import type {PatchOperation} from '../../../replicache/src/patch-operation.ts';
 import type {ClientID} from '../../../replicache/src/sync/ids.ts';
 import {unreachable} from '../../../shared/src/asserts.ts';
+import type {Row} from '../../../zero-protocol/src/data.ts';
 import type {MutationPatch} from '../../../zero-protocol/src/mutations-patch.ts';
 import type {
   PokeEndBody,
@@ -365,39 +366,123 @@ function rowsPatchOpToReplicachePatchOp(
     return undefined;
   }
   switch (op.op) {
-    case 'del':
+    case 'del': {
+      const tableSchema = schema.tables[tableName];
+      const delID = serverToClient.row(
+        op.tableName,
+        projectServerPrimaryKey(tableSchema, op.id),
+      );
       return {
         op: 'del',
-        key: toPrimaryKeyString(
-          tableName,
-          schema.tables[tableName].primaryKey,
-          serverToClient.row(op.tableName, op.id),
-        ),
+        key: toPrimaryKeyString(tableName, tableSchema.primaryKey, delID),
       };
-    case 'put':
+    }
+    case 'put': {
+      const tableSchema = schema.tables[tableName];
+      const value = serverToClient.row(
+        op.tableName,
+        projectServerRow(tableSchema, op.value),
+      );
       return {
         op: 'put',
-        key: toPrimaryKeyString(
-          tableName,
-          schema.tables[tableName].primaryKey,
-          serverToClient.row(op.tableName, op.value),
-        ),
-        value: serverToClient.row(op.tableName, op.value),
+        key: toPrimaryKeyString(tableName, tableSchema.primaryKey, value),
+        value,
       };
-    case 'update':
+    }
+    case 'update': {
+      const tableSchema = schema.tables[tableName];
+      const id = serverToClient.row(
+        op.tableName,
+        projectServerPrimaryKey(tableSchema, op.id),
+      );
+      const merge = op.merge
+        ? serverToClient.row(
+            op.tableName,
+            projectServerRow(tableSchema, op.merge),
+          )
+        : undefined;
       return {
         op: 'update',
-        key: toPrimaryKeyString(
-          tableName,
-          schema.tables[tableName].primaryKey,
-          serverToClient.row(op.tableName, op.id),
+        key: toPrimaryKeyString(tableName, tableSchema.primaryKey, id),
+        merge,
+        constrain: serverToClient.columns(
+          op.tableName,
+          projectServerColumns(tableSchema, op.constrain),
         ),
-        merge: op.merge
-          ? serverToClient.row(op.tableName, op.merge)
-          : undefined,
-        constrain: serverToClient.columns(op.tableName, op.constrain),
       };
+    }
     default:
       unreachable(op);
   }
+}
+
+function projectServerRow(
+  tableSchema: Schema['tables'][string],
+  row: Row,
+): Row {
+  return projectServerKeys(serverColumnNames(tableSchema), row);
+}
+
+function projectServerPrimaryKey(
+  tableSchema: Schema['tables'][string],
+  row: Row,
+): Row {
+  return projectServerKeys(serverPrimaryKeyNames(tableSchema), row);
+}
+
+function projectServerKeys(columns: readonly string[], row: Row): Row {
+  return Object.fromEntries(
+    columns
+      .filter(column => Object.hasOwn(row, column))
+      .map(column => [column, row[column]]),
+  ) as Row;
+}
+
+function projectServerColumns(
+  tableSchema: Schema['tables'][string],
+  cols: readonly string[] | undefined,
+): readonly string[] {
+  const visibleColumns = serverColumnNames(tableSchema);
+  if (!cols || cols.length === 0) {
+    return visibleColumns;
+  }
+  const columnSet = new Set(visibleColumns);
+  const projected = cols.filter(col => columnSet.has(col));
+  if (projected.length === cols.length) {
+    return withServerPrimaryKeyColumns(tableSchema, projected);
+  }
+  // Replicache treats an empty constrain list as unconstrained. If any changed
+  // column was hidden by the client schema, constrain to the visible row shape
+  // so old hidden fields are not retained locally without dropping unchanged
+  // visible fields.
+  return visibleColumns;
+}
+
+function withServerPrimaryKeyColumns(
+  tableSchema: Schema['tables'][string],
+  cols: readonly string[],
+): readonly string[] {
+  return [...new Set([...serverPrimaryKeyNames(tableSchema), ...cols])];
+}
+
+function serverColumnNames(tableSchema: Schema['tables'][string]): string[] {
+  const names = new Set<string>();
+  for (const columnName of serverPrimaryKeyNames(tableSchema)) {
+    names.add(columnName);
+  }
+  for (const [columnName, column] of Object.entries(tableSchema.columns)) {
+    names.add(column.serverName ?? columnName);
+  }
+  return [...names];
+}
+
+function serverPrimaryKeyNames(
+  tableSchema: Schema['tables'][string],
+): readonly string[] {
+  return tableSchema.primaryKey.map(columnName => {
+    const column = Object.hasOwn(tableSchema.columns, columnName)
+      ? tableSchema.columns[columnName]
+      : undefined;
+    return column?.serverName ?? columnName;
+  });
 }

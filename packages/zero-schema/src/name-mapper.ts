@@ -23,7 +23,7 @@ function createMapperFrom(
     Object.entries(tables).map(
       ([tableName, {serverName: serverTableName, columns}]) => {
         let allColumnsSame = true;
-        const names: Record<string, string> = {};
+        const names: Record<string, string> = Object.create(null);
         for (const [name, {serverName}] of Object.entries(columns)) {
           if (serverName && serverName !== name) {
             allColumnsSame = false;

@@ -2,6 +2,7 @@ import {resolver} from '@rocicorp/resolver';
 import {beforeEach, describe, expect, test} from 'vitest';
 import type {JSONObject} from '../../../../shared/src/bigint-json.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
+import type {ClientSchema} from '../../../../zero-protocol/src/client-schema.ts';
 import type {Downstream} from '../../../../zero-protocol/src/down.ts';
 import type {
   PokeEndMessage,
@@ -20,6 +21,58 @@ import {
 const APP_ID = 'zapp';
 const SHARD_NUM = 6;
 const SHARD = {appID: APP_ID, shardNum: SHARD_NUM};
+const CLIENT_SCHEMA = {
+  tables: {
+    issues: {
+      columns: {
+        id: {type: 'string'},
+        name: {type: 'string'},
+      },
+      primaryKey: ['id'],
+    },
+  },
+} satisfies ClientSchema;
+const CLIENT_SCHEMA_WITH_BIG = {
+  tables: {
+    issues: {
+      columns: {
+        id: {type: 'string'},
+        name: {type: 'string'},
+        big: {type: 'number'},
+      },
+      primaryKey: ['id'],
+    },
+  },
+} satisfies ClientSchema;
+const CLIENT_SCHEMA_WITH_NUMERIC_ID = {
+  tables: {
+    issues: {
+      columns: {
+        id: {type: 'number'},
+        name: {type: 'string'},
+      },
+      primaryKey: ['id'],
+    },
+  },
+} satisfies ClientSchema;
+const NON_PUBLIC_CLIENT_SCHEMA = {
+  tables: {
+    'issues': {
+      columns: {
+        id: {type: 'string'},
+        name: {type: 'string'},
+      },
+      primaryKey: ['id'],
+    },
+    'private.issues': {
+      columns: {
+        id: {type: 'string'},
+        alias: {type: 'string'},
+      },
+      primaryKey: ['id'],
+    },
+  },
+} satisfies ClientSchema;
 
 describe('view-syncer/client-handler', () => {
   const lc = createSilentLogContext();
@@ -166,7 +219,7 @@ describe('view-syncer/client-handler', () => {
       ),
     ];
 
-    let pokers = startPoke(handlers, poke1Version);
+    let pokers = startPoke(handlers, poke1Version, CLIENT_SCHEMA);
     await pokers.addPatch({
       toVersion: {stateVersion: '11z', configVersion: 1},
       patch: {
@@ -271,7 +324,7 @@ describe('view-syncer/client-handler', () => {
     await pokers.end(poke1Version);
 
     // Now send another (empty) poke with everyone at the same baseCookie.
-    pokers = startPoke(handlers, poke2Version);
+    pokers = startPoke(handlers, poke2Version, CLIENT_SCHEMA);
     await pokers.end(poke2Version);
 
     const results = await Promise.all(subscriptions.map(sub => sub.close()));
@@ -304,12 +357,12 @@ describe('view-syncer/client-handler', () => {
             {
               op: 'put',
               tableName: 'issues',
-              value: {id: 'bar', name: 'hello', num: 123},
+              value: {id: 'bar', name: 'hello'},
             },
             {
               op: 'put',
               tableName: 'issues',
-              value: {id: 'boo', name: 'world', num: 123456},
+              value: {id: 'boo', name: 'world'},
             },
           ],
         },
@@ -349,13 +402,13 @@ describe('view-syncer/client-handler', () => {
             {
               op: 'put',
               tableName: 'issues',
-              value: {id: 'bar', name: 'hello', num: 123},
+              value: {id: 'bar', name: 'hello'},
             },
             {op: 'del', tableName: 'issues', id: {id: 'foo'}},
             {
               op: 'put',
               tableName: 'issues',
-              value: {id: 'boo', name: 'world', num: 123456},
+              value: {id: 'boo', name: 'world'},
             },
           ],
         },
@@ -369,6 +422,509 @@ describe('view-syncer/client-handler', () => {
       ] satisfies PokeStartMessage,
       ['pokeEnd', {pokeID: '123', cookie: '123'}] satisfies PokeEndMessage,
     ]);
+  });
+
+  test('row patches are projected to the client schema', async () => {
+    const {subscription, close} = createSubscription();
+
+    const handler = new ClientHandler(
+      lc,
+      'g1',
+      'id1',
+      'ws1',
+      SHARD,
+      '121',
+      subscription,
+    );
+    const poker = handler.startPoke({stateVersion: '123'}, CLIENT_SCHEMA);
+    await poker.addPatch({
+      toVersion: {stateVersion: '123'},
+      patch: {
+        type: 'row',
+        op: 'put',
+        id: {schema: 'public', table: 'issues', rowKey: {id: 'bar'}},
+        contents: {
+          id: 'bar',
+          name: 'hello',
+          private: 'secret',
+          unsafePrivate: 983712341234123412348n,
+        },
+      },
+    });
+    await poker.addPatch({
+      toVersion: {stateVersion: '123'},
+      patch: {
+        type: 'row',
+        op: 'del',
+        id: {
+          schema: 'public',
+          table: 'issues',
+          rowKey: {id: 'foo', private: 'secret'},
+        },
+      },
+    });
+    await poker.addPatch({
+      toVersion: {stateVersion: '123'},
+      patch: {
+        type: 'row',
+        op: 'put',
+        id: {schema: 'public', table: 'hidden', rowKey: {id: 'secret'}},
+        contents: {
+          id: 'secret',
+          private: 'not sent',
+        },
+      },
+    });
+    await poker.end({stateVersion: '123'});
+
+    const {received, err} = await close();
+
+    expect(received).toEqual([
+      [
+        'pokeStart',
+        {
+          baseCookie: '121',
+          pokeID: '123',
+        },
+      ] satisfies PokeStartMessage,
+      [
+        'pokePart',
+        {
+          pokeID: '123',
+          rowsPatch: [
+            {
+              op: 'put',
+              tableName: 'issues',
+              value: {id: 'bar', name: 'hello'},
+            },
+            {
+              op: 'del',
+              tableName: 'issues',
+              id: {id: 'foo'},
+            },
+          ],
+        },
+      ] satisfies PokePartMessage,
+      [
+        'pokeEnd',
+        {
+          cookie: '123',
+          pokeID: '123',
+        },
+      ] satisfies PokeEndMessage,
+    ]);
+    expect(err).toBeUndefined();
+  });
+
+  test('safe bigint primary key deletes are converted', async () => {
+    const {subscription, close} = createSubscription();
+
+    const handler = new ClientHandler(
+      lc,
+      'g1',
+      'id1',
+      'ws1',
+      SHARD,
+      '121',
+      subscription,
+    );
+    const poker = handler.startPoke(
+      {stateVersion: '123'},
+      CLIENT_SCHEMA_WITH_NUMERIC_ID,
+    );
+    await poker.addPatch({
+      toVersion: {stateVersion: '123'},
+      patch: {
+        type: 'row',
+        op: 'del',
+        id: {
+          schema: 'public',
+          table: 'issues',
+          rowKey: {id: 123n},
+        },
+      },
+    });
+    await poker.end({stateVersion: '123'});
+
+    const {received, err} = await close();
+
+    expect(received).toEqual([
+      [
+        'pokeStart',
+        {
+          baseCookie: '121',
+          pokeID: '123',
+        },
+      ] satisfies PokeStartMessage,
+      [
+        'pokePart',
+        {
+          pokeID: '123',
+          rowsPatch: [
+            {
+              op: 'del',
+              tableName: 'issues',
+              id: {id: 123},
+            },
+          ],
+        },
+      ] satisfies PokePartMessage,
+      [
+        'pokeEnd',
+        {
+          cookie: '123',
+          pokeID: '123',
+        },
+      ] satisfies PokeEndMessage,
+    ]);
+    expect(err).toBeUndefined();
+  });
+
+  test('row projection preserves __proto__ primary key column', async () => {
+    const schemaWithProtoPrimaryKey = {
+      tables: {
+        issues: {
+          columns: Object.fromEntries([
+            ['__proto__', {type: 'string' as const}],
+            ['name', {type: 'string' as const}],
+          ]),
+          primaryKey: ['__proto__'],
+        },
+      },
+    } satisfies ClientSchema;
+    const {subscription, close} = createSubscription();
+
+    const handler = new ClientHandler(
+      lc,
+      'g1',
+      'id1',
+      'ws1',
+      SHARD,
+      '121',
+      subscription,
+    );
+    const poker = handler.startPoke(
+      {stateVersion: '123'},
+      schemaWithProtoPrimaryKey,
+    );
+    await poker.addPatch({
+      toVersion: {stateVersion: '123'},
+      patch: {
+        type: 'row',
+        op: 'put',
+        id: {
+          schema: 'public',
+          table: 'issues',
+          rowKey: Object.fromEntries([['__proto__', 'p1']]),
+        },
+        contents: Object.fromEntries([
+          ['__proto__', 'p1'],
+          ['name', 'hello'],
+          ['private', 'secret'],
+        ]),
+      },
+    });
+    await poker.addPatch({
+      toVersion: {stateVersion: '123'},
+      patch: {
+        type: 'row',
+        op: 'del',
+        id: {
+          schema: 'public',
+          table: 'issues',
+          rowKey: Object.fromEntries([
+            ['__proto__', 'p2'],
+            ['private', 'secret'],
+          ]),
+        },
+      },
+    });
+    await poker.end({stateVersion: '123'});
+
+    const {received, err} = await close();
+
+    expect(received).toEqual([
+      [
+        'pokeStart',
+        {
+          baseCookie: '121',
+          pokeID: '123',
+        },
+      ] satisfies PokeStartMessage,
+      [
+        'pokePart',
+        {
+          pokeID: '123',
+          rowsPatch: [
+            {
+              op: 'put',
+              tableName: 'issues',
+              value: Object.fromEntries([
+                ['__proto__', 'p1'],
+                ['name', 'hello'],
+              ]),
+            },
+            {
+              op: 'del',
+              tableName: 'issues',
+              id: Object.fromEntries([['__proto__', 'p2']]),
+            },
+          ],
+        },
+      ] satisfies PokePartMessage,
+      [
+        'pokeEnd',
+        {
+          cookie: '123',
+          pokeID: '123',
+        },
+      ] satisfies PokeEndMessage,
+    ]);
+    expect(err).toBeUndefined();
+  });
+
+  test('app row patches without client schema fail', async () => {
+    const {subscription, close} = createSubscription();
+
+    const handler = new ClientHandler(
+      lc,
+      'g1',
+      'id1',
+      'ws1',
+      SHARD,
+      '121',
+      subscription,
+    );
+    const poker = handler.startPoke({stateVersion: '123'});
+    await poker.addPatch({
+      toVersion: {stateVersion: '123'},
+      patch: {
+        type: 'row',
+        op: 'put',
+        id: {schema: 'public', table: 'issues', rowKey: {id: 'bar'}},
+        contents: {
+          id: 'bar',
+          name: 'hello',
+          private: 'secret',
+          unsafePrivate: 983712341234123412348n,
+        },
+      },
+    });
+
+    const {received, err} = await close();
+
+    expect(received).toEqual([
+      [
+        'pokeStart',
+        {
+          baseCookie: '121',
+          pokeID: '123',
+        },
+      ] satisfies PokeStartMessage,
+    ]);
+    expect(String(err)).toContain(
+      'Cannot send app row patch without clientSchema',
+    );
+  });
+
+  test('app row patches for inherited object table names are skipped', async () => {
+    const {subscription, close} = createSubscription();
+
+    const handler = new ClientHandler(
+      lc,
+      'g1',
+      'id1',
+      'ws1',
+      SHARD,
+      '121',
+      subscription,
+    );
+    const poker = handler.startPoke({stateVersion: '123'}, CLIENT_SCHEMA);
+    await poker.addPatch({
+      toVersion: {stateVersion: '123'},
+      patch: {
+        type: 'row',
+        op: 'put',
+        id: {schema: 'public', table: 'toString', rowKey: {id: 'x'}},
+        contents: {
+          id: 'x',
+          private: 'not sent',
+        },
+      },
+    });
+    await poker.end({stateVersion: '123'});
+
+    const {received, err} = await close();
+
+    expect(received).toEqual([
+      [
+        'pokeStart',
+        {
+          baseCookie: '121',
+          pokeID: '123',
+        },
+      ] satisfies PokeStartMessage,
+      [
+        'pokePart',
+        {
+          pokeID: '123',
+        },
+      ] satisfies PokePartMessage,
+      [
+        'pokeEnd',
+        {
+          cookie: '123',
+          pokeID: '123',
+        },
+      ] satisfies PokeEndMessage,
+    ]);
+    expect(err).toBeUndefined();
+  });
+
+  test('internal row patches bypass client schema projection', async () => {
+    const {subscription, close} = createSubscription();
+
+    const handler = new ClientHandler(
+      lc,
+      'g1',
+      'id1',
+      'ws1',
+      SHARD,
+      '121',
+      subscription,
+    );
+    const poker = handler.startPoke({stateVersion: '123'}, CLIENT_SCHEMA);
+    await poker.addPatch({
+      toVersion: {stateVersion: '123'},
+      patch: {
+        type: 'row',
+        op: 'put',
+        id: {
+          schema: '',
+          table: 'zapp_6.clients',
+          rowKey: {clientID: 'foo'},
+        },
+        contents: {
+          clientGroupID: 'g1',
+          clientID: 'foo',
+          lastMutationID: 124n,
+          userID: 'ignored',
+        },
+      },
+    });
+    await poker.end({stateVersion: '123'});
+
+    const {received, err} = await close();
+
+    expect(received).toEqual([
+      [
+        'pokeStart',
+        {
+          baseCookie: '121',
+          pokeID: '123',
+        },
+      ] satisfies PokeStartMessage,
+      [
+        'pokePart',
+        {
+          pokeID: '123',
+          lastMutationIDChanges: {foo: 124},
+        },
+      ] satisfies PokePartMessage,
+      [
+        'pokeEnd',
+        {
+          cookie: '123',
+          pokeID: '123',
+        },
+      ] satisfies PokeEndMessage,
+    ]);
+    expect(err).toBeUndefined();
+  });
+
+  test('row patches project by canonical server table key', async () => {
+    const {subscription, close} = createSubscription();
+
+    const handler = new ClientHandler(
+      lc,
+      'g1',
+      'id1',
+      'ws1',
+      SHARD,
+      '121',
+      subscription,
+    );
+    const poker = handler.startPoke(
+      {stateVersion: '123'},
+      NON_PUBLIC_CLIENT_SCHEMA,
+    );
+    await poker.addPatch({
+      toVersion: {stateVersion: '123'},
+      patch: {
+        type: 'row',
+        op: 'put',
+        id: {schema: '', table: 'issues', rowKey: {id: 'public'}},
+        contents: {
+          id: 'public',
+          name: 'hello',
+          alias: 'wrong table',
+          private: 'secret',
+        },
+      },
+    });
+    await poker.addPatch({
+      toVersion: {stateVersion: '123'},
+      patch: {
+        type: 'row',
+        op: 'put',
+        id: {schema: 'private', table: 'issues', rowKey: {id: 'private'}},
+        contents: {
+          id: 'private',
+          name: 'wrong table',
+          alias: 'hidden namespace',
+          private: 'secret',
+        },
+      },
+    });
+    await poker.end({stateVersion: '123'});
+
+    const {received, err} = await close();
+
+    expect(received).toEqual([
+      [
+        'pokeStart',
+        {
+          baseCookie: '121',
+          pokeID: '123',
+        },
+      ] satisfies PokeStartMessage,
+      [
+        'pokePart',
+        {
+          pokeID: '123',
+          rowsPatch: [
+            {
+              op: 'put',
+              tableName: 'issues',
+              value: {id: 'public', name: 'hello'},
+            },
+            {
+              op: 'put',
+              tableName: 'private.issues',
+              value: {id: 'private', alias: 'hidden namespace'},
+            },
+          ],
+        },
+      ] satisfies PokePartMessage,
+      [
+        'pokeEnd',
+        {
+          cookie: '123',
+          pokeID: '123',
+        },
+      ] satisfies PokeEndMessage,
+    ]);
+    expect(err).toBeUndefined();
   });
 
   describe('mutation results', () => {
@@ -576,33 +1132,89 @@ describe('view-syncer/client-handler', () => {
       `);
       expect(err).toBeUndefined();
     });
+
+    test('unsafe mutation result delete id fails instead of rounding', async () => {
+      await poker.addPatch({
+        toVersion: {stateVersion: '123'},
+        patch: {
+          type: 'row',
+          op: 'del',
+          id: {
+            schema: '',
+            table: 'zapp_6.mutations',
+            rowKey: {
+              clientGroupID: 'g1',
+              clientID: 'boo',
+              mutationID: 9007199254740993n,
+            },
+          },
+        },
+      });
+
+      const {received, err} = await closer();
+      expect(received).toMatchInlineSnapshot(`
+        [
+          [
+            "pokeStart",
+            {
+              "baseCookie": "121",
+              "pokeID": "123",
+            },
+          ],
+        ]
+      `);
+      expect(String(err)).toMatch(
+        /Error: Value of "mutationID" exceeds safe Number range \(\d+\)/,
+      );
+    });
   });
 
   test('error on unsafe integer', async () => {
-    for (const patch of [
+    for (const {patch, clientSchema} of [
       {
-        type: 'row',
-        op: 'put',
-        id: {schema: 'public', table: 'issues', rowKey: {id: 'boo'}},
-        contents: {id: 'boo', name: 'world', big: 12345231234123414n},
-      },
-      {
-        type: 'row',
-        op: 'put',
-        id: {schema: 'public', table: 'issues', rowKey: {id: 'boo'}},
-        contents: {id: 'boo', name: 'world', big: 983712341234123412348n},
-      },
-      {
-        type: 'row',
-        op: 'put',
-        id: {schema: '', table: 'zapp_6.clients', rowKey: {clientID: 'boo'}},
-        contents: {
-          clientGroupID: 'g1',
-          clientID: 'boo',
-          lastMutationID: 98371234123423412341238n,
+        clientSchema: CLIENT_SCHEMA_WITH_BIG,
+        patch: {
+          type: 'row',
+          op: 'put',
+          id: {schema: 'public', table: 'issues', rowKey: {id: 'boo'}},
+          contents: {id: 'boo', name: 'world', big: 12345231234123414n},
         },
       },
-    ] satisfies Patch[]) {
+      {
+        clientSchema: CLIENT_SCHEMA_WITH_BIG,
+        patch: {
+          type: 'row',
+          op: 'put',
+          id: {schema: 'public', table: 'issues', rowKey: {id: 'boo'}},
+          contents: {id: 'boo', name: 'world', big: 983712341234123412348n},
+        },
+      },
+      {
+        clientSchema: CLIENT_SCHEMA_WITH_NUMERIC_ID,
+        patch: {
+          type: 'row',
+          op: 'del',
+          id: {
+            schema: 'public',
+            table: 'issues',
+            rowKey: {id: 983712341234123412348n},
+          },
+        },
+      },
+      {
+        clientSchema: undefined,
+        patch: {
+          type: 'row',
+          op: 'put',
+          id: {schema: '', table: 'zapp_6.clients', rowKey: {clientID: 'boo'}},
+          contents: {
+            clientGroupID: 'g1',
+            clientID: 'boo',
+            lastMutationID: 98371234123423412341238n,
+          },
+        },
+      },
+    ] satisfies {patch: Patch; clientSchema?: ClientSchema | undefined}[]) {
       const {subscription, close} = createSubscription();
 
       const handler = new ClientHandler(
@@ -614,7 +1226,7 @@ describe('view-syncer/client-handler', () => {
         '121',
         subscription,
       );
-      const poker = handler.startPoke({stateVersion: '123'});
+      const poker = handler.startPoke({stateVersion: '123'}, clientSchema);
 
       await poker.addPatch({toVersion: {stateVersion: '123'}, patch});
       const {err} = await close();

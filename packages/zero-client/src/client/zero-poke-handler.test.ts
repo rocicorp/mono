@@ -10,10 +10,12 @@ import {
   test,
   vi,
 } from 'vitest';
+import {mergeUpdate} from '../../../replicache/src/sync/patch.ts';
 import type {MutationPatch} from '../../../zero-protocol/src/mutations-patch.ts';
 import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {string, table} from '../../../zero-schema/src/builder/table-builder.ts';
 import {serverToClient} from '../../../zero-schema/src/name-mapper.ts';
+import type {Schema} from '../../../zero-types/src/schema.ts';
 import {MutationTracker} from './mutation-tracker.ts';
 import {PokeHandler, mergePokes} from './zero-poke-handler.ts';
 
@@ -88,7 +90,7 @@ describe('poke handler', () => {
           value: {
             ['issue_id']: 'issue1',
             title: 'foo1',
-            description: 'columns not in client schema pass through',
+            private: 'columns not in client schema are projected out',
           },
         },
       ],
@@ -140,7 +142,6 @@ describe('poke handler', () => {
             value: {
               id: 'issue1',
               title: 'foo1',
-              description: 'columns not in client schema pass through',
             },
           },
           {
@@ -1658,6 +1659,603 @@ describe('poke handler', () => {
           },
         ],
       },
+    });
+  });
+
+  test('mergePokes projects row patches to the client schema', () => {
+    const result = mergePokes(
+      [
+        {
+          pokeStart: {
+            pokeID: 'poke1',
+            baseCookie: '1',
+          },
+          parts: [
+            {
+              pokeID: 'poke1',
+              rowsPatch: [
+                {
+                  op: 'put',
+                  tableName: 'issues',
+                  value: {
+                    ['issue_id']: 'issue1',
+                    title: 'foo1',
+                    private: 'secret',
+                  },
+                },
+                {
+                  op: 'del',
+                  tableName: 'issues',
+                  id: {['issue_id']: 'issue2', private: 'secret'},
+                },
+                {
+                  op: 'update',
+                  tableName: 'issues',
+                  id: {['issue_id']: 'issue3', private: 'secret'},
+                  merge: {
+                    ['issue_id']: 'issue3',
+                    title: 'baz1',
+                    private: 'secret',
+                  },
+                  constrain: ['issue_id', 'title', 'private'],
+                },
+              ],
+            },
+          ],
+          pokeEnd: {
+            pokeID: 'poke1',
+            cookie: '2',
+          },
+        },
+      ],
+      schema,
+      serverToClient(schema.tables),
+    );
+
+    expect(result).toEqual({
+      baseCookie: '1',
+      pullResponse: {
+        cookie: '2',
+        lastMutationIDChanges: {},
+        patch: [
+          {
+            op: 'put',
+            key: 'e/issue/issue1',
+            value: {id: 'issue1', title: 'foo1'},
+          },
+          {
+            op: 'del',
+            key: 'e/issue/issue2',
+          },
+          {
+            op: 'update',
+            key: 'e/issue/issue3',
+            merge: {id: 'issue3', title: 'baz1'},
+            constrain: ['id', 'title'],
+          },
+        ],
+      },
+    });
+  });
+
+  test('mergePokes projects server columns before name mapping', () => {
+    const result = mergePokes(
+      [
+        {
+          pokeStart: {
+            pokeID: 'poke1',
+            baseCookie: '1',
+          },
+          parts: [
+            {
+              pokeID: 'poke1',
+              rowsPatch: [
+                {
+                  op: 'put',
+                  tableName: 'issues',
+                  value: {
+                    ['issue_id']: 'issue1',
+                    id: 'hidden physical column',
+                    title: 'foo1',
+                  },
+                },
+                {
+                  op: 'del',
+                  tableName: 'issues',
+                  id: {
+                    ['issue_id']: 'issue2',
+                    id: 'hidden physical column',
+                  },
+                },
+                {
+                  op: 'update',
+                  tableName: 'issues',
+                  id: {
+                    ['issue_id']: 'issue3',
+                    id: 'hidden physical column',
+                  },
+                  merge: {
+                    ['issue_id']: 'issue3',
+                    id: 'hidden physical column',
+                    title: 'baz1',
+                  },
+                  constrain: ['issue_id', 'id', 'title'],
+                },
+              ],
+            },
+          ],
+          pokeEnd: {
+            pokeID: 'poke1',
+            cookie: '2',
+          },
+        },
+      ],
+      schema,
+      serverToClient(schema.tables),
+    );
+
+    expect(result).toEqual({
+      baseCookie: '1',
+      pullResponse: {
+        cookie: '2',
+        lastMutationIDChanges: {},
+        patch: [
+          {
+            op: 'put',
+            key: 'e/issue/issue1',
+            value: {id: 'issue1', title: 'foo1'},
+          },
+          {
+            op: 'del',
+            key: 'e/issue/issue2',
+          },
+          {
+            op: 'update',
+            key: 'e/issue/issue3',
+            merge: {id: 'issue3', title: 'baz1'},
+            constrain: ['id', 'title'],
+          },
+        ],
+      },
+    });
+  });
+
+  test('mergePokes preserves mapped __proto__ primary key column', () => {
+    const schemaWithProtoPrimaryKey = {
+      tables: {
+        issue: {
+          name: 'issue',
+          serverName: 'issues',
+          columns: Object.fromEntries([
+            ['__proto__', {type: 'string' as const, serverName: 'proto_id'}],
+            ['title', {type: 'string' as const}],
+          ]),
+          primaryKey: ['__proto__'],
+        },
+      },
+      relationships: {
+        issue: {},
+      },
+    } satisfies Schema;
+    const result = mergePokes(
+      [
+        {
+          pokeStart: {
+            pokeID: 'poke1',
+            baseCookie: '1',
+          },
+          parts: [
+            {
+              pokeID: 'poke1',
+              rowsPatch: [
+                {
+                  op: 'put',
+                  tableName: 'issues',
+                  value: Object.fromEntries([
+                    ['proto_id', 'p1'],
+                    ['title', 'hello'],
+                    ['private', 'secret'],
+                  ]),
+                },
+                {
+                  op: 'del',
+                  tableName: 'issues',
+                  id: Object.fromEntries([
+                    ['proto_id', 'p2'],
+                    ['private', 'secret'],
+                  ]),
+                },
+              ],
+            },
+          ],
+          pokeEnd: {
+            pokeID: 'poke1',
+            cookie: '2',
+          },
+        },
+      ],
+      schemaWithProtoPrimaryKey,
+      serverToClient(schemaWithProtoPrimaryKey.tables),
+    );
+
+    expect(result).toEqual({
+      baseCookie: '1',
+      pullResponse: {
+        cookie: '2',
+        lastMutationIDChanges: {},
+        patch: [
+          {
+            op: 'put',
+            key: 'e/issue/p1',
+            value: Object.fromEntries([
+              ['__proto__', 'p1'],
+              ['title', 'hello'],
+            ]),
+          },
+          {
+            op: 'del',
+            key: 'e/issue/p2',
+          },
+        ],
+      },
+    });
+  });
+
+  test('mergePokes keeps primary key constraints outside columns', () => {
+    const schemaWithPrimaryKeyOnly = {
+      tables: {
+        legacyIssue: {
+          name: 'legacyIssue',
+          serverName: 'legacy_issues',
+          columns: {
+            title: {type: 'string'},
+          },
+          primaryKey: ['id'],
+        },
+      },
+      relationships: {
+        legacyIssue: {},
+      },
+    } satisfies Schema;
+
+    const result = mergePokes(
+      [
+        {
+          pokeStart: {
+            pokeID: 'poke1',
+            baseCookie: '1',
+          },
+          parts: [
+            {
+              pokeID: 'poke1',
+              rowsPatch: [
+                {
+                  op: 'update',
+                  tableName: 'legacy_issues',
+                  id: {id: 'issue1'},
+                  merge: {
+                    private: 'secret',
+                  },
+                  constrain: ['id', 'private'],
+                },
+              ],
+            },
+          ],
+          pokeEnd: {
+            pokeID: 'poke1',
+            cookie: '2',
+          },
+        },
+      ],
+      schemaWithPrimaryKeyOnly,
+      serverToClient(schemaWithPrimaryKeyOnly.tables),
+    );
+
+    expect(result).toEqual({
+      baseCookie: '1',
+      pullResponse: {
+        cookie: '2',
+        lastMutationIDChanges: {},
+        patch: [
+          {
+            op: 'update',
+            key: 'e/legacyIssue/issue1',
+            merge: {},
+            constrain: ['id', 'title'],
+          },
+        ],
+      },
+    });
+  });
+
+  test('mergePokes constrains hidden-only updates to visible columns', () => {
+    const result = mergePokes(
+      [
+        {
+          pokeStart: {
+            pokeID: 'poke1',
+            baseCookie: '1',
+          },
+          parts: [
+            {
+              pokeID: 'poke1',
+              rowsPatch: [
+                {
+                  op: 'update',
+                  tableName: 'issues',
+                  id: {['issue_id']: 'issue1'},
+                  merge: {
+                    private: 'secret',
+                  },
+                  constrain: ['private'],
+                },
+              ],
+            },
+          ],
+          pokeEnd: {
+            pokeID: 'poke1',
+            cookie: '2',
+          },
+        },
+      ],
+      schema,
+      serverToClient(schema.tables),
+    );
+
+    expect(result).toEqual({
+      baseCookie: '1',
+      pullResponse: {
+        cookie: '2',
+        lastMutationIDChanges: {},
+        patch: [
+          {
+            op: 'update',
+            key: 'e/issue/issue1',
+            merge: {},
+            constrain: ['id', 'title'],
+          },
+        ],
+      },
+    });
+  });
+
+  test('mergePokes preserves visible fields when hidden constrain includes primary key', () => {
+    const result = mergePokes(
+      [
+        {
+          pokeStart: {
+            pokeID: 'poke1',
+            baseCookie: '1',
+          },
+          parts: [
+            {
+              pokeID: 'poke1',
+              rowsPatch: [
+                {
+                  op: 'update',
+                  tableName: 'issues',
+                  id: {['issue_id']: 'issue1'},
+                  merge: {
+                    ['issue_id']: 'issue1',
+                    private: 'new-secret',
+                  },
+                  constrain: ['issue_id', 'private'],
+                },
+              ],
+            },
+          ],
+          pokeEnd: {
+            pokeID: 'poke1',
+            cookie: '2',
+          },
+        },
+      ],
+      schema,
+      serverToClient(schema.tables),
+    );
+
+    if (!result || !('patch' in result.pullResponse)) {
+      throw new Error('Expected patch response');
+    }
+    const update = result.pullResponse.patch[0];
+    expect(update).toEqual({
+      op: 'update',
+      key: 'e/issue/issue1',
+      merge: {id: 'issue1'},
+      constrain: ['id', 'title'],
+    });
+    if (update?.op !== 'update') {
+      throw new Error('Expected update patch');
+    }
+    expect(
+      mergeUpdate(update, {
+        id: 'issue1',
+        title: 'old-title',
+        private: 'old-secret',
+      }),
+    ).toEqual({
+      id: 'issue1',
+      title: 'old-title',
+    });
+  });
+
+  test('mergePokes preserves primary keys for visible constrained updates', () => {
+    const result = mergePokes(
+      [
+        {
+          pokeStart: {
+            pokeID: 'poke1',
+            baseCookie: '1',
+          },
+          parts: [
+            {
+              pokeID: 'poke1',
+              rowsPatch: [
+                {
+                  op: 'update',
+                  tableName: 'issues',
+                  id: {['issue_id']: 'issue1'},
+                  merge: {
+                    title: 'new',
+                  },
+                  constrain: ['title'],
+                },
+              ],
+            },
+          ],
+          pokeEnd: {
+            pokeID: 'poke1',
+            cookie: '2',
+          },
+        },
+      ],
+      schema,
+      serverToClient(schema.tables),
+    );
+
+    if (!result || !('patch' in result.pullResponse)) {
+      throw new Error('Expected patch response');
+    }
+    const update = result.pullResponse.patch[0];
+    expect(update).toEqual({
+      op: 'update',
+      key: 'e/issue/issue1',
+      merge: {title: 'new'},
+      constrain: ['id', 'title'],
+    });
+    if (update?.op !== 'update') {
+      throw new Error('Expected update patch');
+    }
+    expect(
+      mergeUpdate(update, {
+        id: 'issue1',
+        title: 'old',
+        private: 'old-secret',
+      }),
+    ).toEqual({
+      id: 'issue1',
+      title: 'new',
+    });
+  });
+
+  test('mergePokes constrains updates with missing constrain to visible columns', () => {
+    const result = mergePokes(
+      [
+        {
+          pokeStart: {
+            pokeID: 'poke1',
+            baseCookie: '1',
+          },
+          parts: [
+            {
+              pokeID: 'poke1',
+              rowsPatch: [
+                {
+                  op: 'update',
+                  tableName: 'issues',
+                  id: {['issue_id']: 'issue1'},
+                  merge: {
+                    ['issue_id']: 'issue1',
+                    title: 'new',
+                    private: 'secret',
+                  },
+                },
+              ],
+            },
+          ],
+          pokeEnd: {
+            pokeID: 'poke1',
+            cookie: '2',
+          },
+        },
+      ],
+      schema,
+      serverToClient(schema.tables),
+    );
+
+    if (!result || !('patch' in result.pullResponse)) {
+      throw new Error('Expected patch response');
+    }
+    const update = result.pullResponse.patch[0];
+    expect(update).toEqual({
+      op: 'update',
+      key: 'e/issue/issue1',
+      merge: {id: 'issue1', title: 'new'},
+      constrain: ['id', 'title'],
+    });
+    if (update?.op !== 'update') {
+      throw new Error('Expected update patch');
+    }
+    expect(
+      mergeUpdate(update, {
+        id: 'issue1',
+        title: 'old',
+        private: 'old-secret',
+      }),
+    ).toEqual({
+      id: 'issue1',
+      title: 'new',
+    });
+  });
+
+  test('mergePokes constrains updates with empty constrain to visible columns', () => {
+    const result = mergePokes(
+      [
+        {
+          pokeStart: {
+            pokeID: 'poke1',
+            baseCookie: '1',
+          },
+          parts: [
+            {
+              pokeID: 'poke1',
+              rowsPatch: [
+                {
+                  op: 'update',
+                  tableName: 'issues',
+                  id: {['issue_id']: 'issue1'},
+                  merge: {
+                    ['issue_id']: 'issue1',
+                    title: 'new',
+                    private: 'secret',
+                  },
+                  constrain: [],
+                },
+              ],
+            },
+          ],
+          pokeEnd: {
+            pokeID: 'poke1',
+            cookie: '2',
+          },
+        },
+      ],
+      schema,
+      serverToClient(schema.tables),
+    );
+
+    if (!result || !('patch' in result.pullResponse)) {
+      throw new Error('Expected patch response');
+    }
+    const update = result.pullResponse.patch[0];
+    expect(update).toEqual({
+      op: 'update',
+      key: 'e/issue/issue1',
+      merge: {id: 'issue1', title: 'new'},
+      constrain: ['id', 'title'],
+    });
+    if (update?.op !== 'update') {
+      throw new Error('Expected update patch');
+    }
+    expect(
+      mergeUpdate(update, {
+        id: 'issue1',
+        title: 'old',
+        private: 'old-secret',
+      }),
+    ).toEqual({
+      id: 'issue1',
+      title: 'new',
     });
   });
 

@@ -38,7 +38,8 @@ export class NameMapper {
   }
 
   columnName(table: string, src: string, ctx?: JSONValue): string {
-    const dst = this.#getTable(table, ctx).columns[src];
+    const columns = this.#getTable(table, ctx).columns;
+    const dst = Object.hasOwn(columns, src) ? columns[src] : undefined;
     if (!dst) {
       throw new Error(
         `unknown column "${src}" of "${table}" table ${
@@ -58,12 +59,13 @@ export class NameMapper {
     if (allColumnsSame) {
       return row;
     }
-    const clientRow: Record<string, V> = {};
-    for (const col in row) {
-      // Note: columns with unknown names simply pass through.
-      clientRow[columns[col] ?? col] = row[col];
-    }
-    return clientRow;
+    // Note: columns with unknown names simply pass through.
+    return Object.fromEntries(
+      Object.entries(row).map(([col, value]) => [
+        Object.hasOwn(columns, col) ? columns[col] : col,
+        value,
+      ]),
+    ) as Record<string, V>;
   }
 
   columns<Columns extends readonly string[] | undefined>(
@@ -76,6 +78,8 @@ export class NameMapper {
     // Note: Columns not defined in the schema simply pass through.
     return cols === undefined || allColumnsSame
       ? cols
-      : (cols.map(col => columns[col] ?? col) as unknown as Columns);
+      : (cols.map(col =>
+          Object.hasOwn(columns, col) ? columns[col] : col,
+        ) as unknown as Columns);
   }
 }

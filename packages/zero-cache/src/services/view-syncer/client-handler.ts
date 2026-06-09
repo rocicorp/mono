@@ -8,6 +8,7 @@ import {
 import {promiseVoid} from '../../../../shared/src/resolved-promises.ts';
 import * as v from '../../../../shared/src/valita.ts';
 import type {Writable} from '../../../../shared/src/writable.ts';
+import type {ClientSchema} from '../../../../zero-protocol/src/client-schema.ts';
 import type {ErroredQuery} from '../../../../zero-protocol/src/custom-queries.ts';
 import {rowSchema} from '../../../../zero-protocol/src/data.ts';
 import type {DeleteClientsBody} from '../../../../zero-protocol/src/delete-clients.ts';
@@ -85,8 +86,9 @@ const NOOP: PokeHandler = {
 export function startPoke(
   clients: ClientHandler[],
   tentativeVersion: CVRVersion,
+  clientSchema?: ClientSchema | null,
 ): PokeHandler {
-  const pokers = clients.map(c => c.startPoke(tentativeVersion));
+  const pokers = clients.map(c => c.startPoke(tentativeVersion, clientSchema));
 
   // Promise.allSettled() ensures that a failed (e.g. disconnected) client
   // does not prevent other clients from receiving the pokes. However, the
@@ -181,7 +183,10 @@ export class ClientHandler {
     this.#downstream.cancel();
   }
 
-  startPoke(tentativeVersion: CVRVersion): PokeHandler {
+  startPoke(
+    tentativeVersion: CVRVersion,
+    clientSchema?: ClientSchema | null,
+  ): PokeHandler {
     const pokeID = versionToCookie(tentativeVersion);
     const lc = this.#lc.withContext('pokeID', pokeID);
 
@@ -258,26 +263,28 @@ export class ClientHandler {
                 },
               });
             } else {
-              const {clientID, mutationID} = patch.id.rowKey;
-              assert(
-                typeof clientID === 'string',
-                'client id must be a string',
+              const {clientID, mutationID} = v.parse(
+                ensureSafeJSON(patch.id.rowKey),
+                mutationDeleteRowKeySchema,
+                'passthrough',
               );
-              const id = Number(mutationID);
               assert(
-                !Number.isNaN(id) && Number.isFinite(id) && id >= 0,
-                'mutation id must be a finite number',
+                Number.isSafeInteger(mutationID) && mutationID >= 0,
+                'mutation id must be a non-negative safe integer',
               );
               patches.push({
                 op: 'del',
                 id: {
                   clientID,
-                  id,
+                  id: mutationID,
                 },
               });
             }
           } else {
-            (body.rowsPatch ??= []).push(makeRowPatch(patch));
+            const rowPatch = makeRowPatch(patch, clientSchema);
+            if (rowPatch) {
+              (body.rowsPatch ??= []).push(rowPatch);
+            }
           }
           break;
         default:
@@ -399,30 +406,94 @@ const mutationRowSchema = v.object({
   result: mutationResultSchema,
 });
 
-function makeRowPatch(patch: RowPatch): RowPatchOp {
+const mutationDeleteRowKeySchema = v.object({
+  clientID: v.string(),
+  mutationID: v.number(),
+});
+
+function makeRowPatch(
+  patch: RowPatch,
+  clientSchema: ClientSchema | null | undefined,
+): RowPatchOp | undefined {
   const {
     op,
-    id: {table: tableName, rowKey: id},
+    id: {rowKey: id},
   } = patch;
+  const tableName = tableNameForClientSchema(patch.id);
+
+  if (!clientSchema) {
+    throw new Error('Cannot send app row patch without clientSchema');
+  }
+
+  const tableSchema = Object.hasOwn(clientSchema.tables, tableName)
+    ? clientSchema.tables[tableName]
+    : undefined;
+  if (!tableSchema) {
+    return undefined;
+  }
 
   switch (op) {
     case 'put':
       return {
         op: 'put',
         tableName,
-        value: v.parse(ensureSafeJSON(patch.contents), rowSchema),
+        value: v.parse(
+          ensureSafeJSON(
+            tableSchema
+              ? projectRow(tableSchema, patch.contents)
+              : patch.contents,
+          ),
+          rowSchema,
+        ),
       };
 
     case 'del':
       return {
         op,
         tableName,
-        id: v.parse(id, primaryKeyValueRecordSchema),
+        id: v.parse(
+          ensureSafeJSON(projectPrimaryKey(tableSchema.primaryKey, id)),
+          primaryKeyValueRecordSchema,
+        ),
       };
 
     default:
       unreachable(op);
   }
+}
+
+function tableNameForClientSchema(id: RowID): string {
+  return id.schema === '' || id.schema === 'public'
+    ? id.table
+    : `${id.schema}.${id.table}`;
+}
+
+function projectRow(
+  tableSchema: ClientSchema['tables'][string],
+  row: JSONObject,
+): JSONObject {
+  return projectColumns(
+    [...Object.keys(tableSchema.columns), ...tableSchema.primaryKey],
+    row,
+  );
+}
+
+function projectPrimaryKey(
+  primaryKey: readonly string[],
+  row: JSONObject,
+): JSONObject {
+  return projectColumns(primaryKey, row);
+}
+
+function projectColumns(
+  columns: readonly string[],
+  row: JSONObject,
+): JSONObject {
+  return Object.fromEntries(
+    columns
+      .filter(column => Object.hasOwn(row, column))
+      .map(column => [column, row[column]]),
+  ) as JSONObject;
 }
 
 /**
