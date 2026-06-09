@@ -262,7 +262,9 @@ The feature is exercised end to end:
   view-syncer pipeline-driver streaming the synthetic rows (and *not* the child
   rows); the client read path (poke routing + source provisioning, top-level and
   relationship, including a filtered junction read); and the optimistic-delta
-  layer for the invertible relationship functions (`crud-impl`).
+  layer for the invertible relationship functions — including `where`-filtered
+  children via a compiled per-row predicate (`crud-impl`,
+  `aggregate-optimistic-delta`).
 
 The sync-protocol integration (server streaming, client source provisioning, the
 optimistic delta layer) has since landed — see chunks 8–10 of the Delivery plan
@@ -333,14 +335,22 @@ Sync path:
     when an eligible query materializes (`builder.ts` → `getAggregateSource`).
     For `avg` the operator emits `{sum, count}` components alongside `value` (you
     can't move an average from the final value alone); `aggregateRowKey` and the
-    reload inference treat those as payload, not key. Eligibility: **relationship
-    `count`/`sum`/`avg`, no `where` on the child** — the invertible, filter-free
-    case. Covered by `crud-impl.test.ts`. **Deferred:** `min`/`max` (non-
-    invertible), filtered children (need per-row predicate evaluation), and
-    top-level/filtered scalars. All of those remain correct — they just update on
-    the server poke rather than optimistically. (Edge: optimistically deleting
-    the last `sum` contributor shows `0` until the server reconciles it to
-    `null`, since `sum` — unlike `avg` — doesn't carry a count.)
+    reload inference treat those as payload, not key. Eligibility: **direct
+    (non-junction) relationship `count`/`sum`/`avg`** — the invertible functions.
+    A **`where` on the child is supported**: the builder compiles it to a per-row
+    predicate (`createPredicate`) and registers it with the delta, so a child
+    entering or leaving the filtered set on an insert/delete/update deltas
+    correctly — a non-matching row is treated as absent, which `nextAggregateRow`
+    folds into the same ±1 / ±field math. Covered by `crud-impl.test.ts` and
+    `aggregate-optimistic-delta.test.ts`. **Deferred** (still correct, just
+    updated on the server poke rather than optimistically): `min`/`max` (non-
+    invertible); a child `where` containing a **correlated subquery** (can't be
+    judged from a single child row — `transformFilters` flags it and we fall back
+    to server-authoritative); **junction** aggregates (the field/predicate live
+    past the junction, which an edge mutation doesn't carry); and top-level /
+    filtered scalars. (Edge: optimistically deleting the last `sum` contributor
+    shows `0` until the server reconciles it to `null`, since `sum` — unlike
+    `avg` — doesn't carry a count.)
 
 Junction (many-to-many) aggregates:
 

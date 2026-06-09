@@ -49,7 +49,11 @@ import type {ConnectionCostModel} from '../planner/planner-connection.ts';
 import type {PlanDebugger} from '../planner/planner-debug.ts';
 import {completeOrdering} from '../query/complete-ordering.ts';
 import type {DebugDelegate} from './debug-delegate.ts';
-import {createPredicate, type NoSubqueryCondition} from './filter.ts';
+import {
+  createPredicate,
+  transformFilters,
+  type NoSubqueryCondition,
+} from './filter.ts';
 
 export type StaticQueryParameters = {
   authData: Record<string, JSONValue>;
@@ -113,14 +117,20 @@ export interface BuilderDelegate {
     primaryKey: PrimaryKey,
     /**
      * When present, the client may optimistically update this aggregate when a
-     * child row in `table` is locally mutated (only supplied for the invertible,
-     * where-free cases — see the call site). Omitted ⇒ server-authoritative only.
+     * child row in `table` is locally mutated (only supplied for the invertible
+     * cases with a per-row-evaluable `where` — see the call site). Omitted ⇒
+     * server-authoritative only.
      */
     optimisticDelta?: {
       readonly table: string;
       readonly childField: CompoundKey;
       readonly fn: AggregateFunction;
       readonly field: string | undefined;
+      /**
+       * The child `where` compiled to a per-row predicate, or `undefined` when
+       * the aggregate has no `where` (every child contributes).
+       */
+      readonly predicate: ((row: Row) => boolean) | undefined;
     },
   ): Source;
 
@@ -804,26 +814,44 @@ function applyCorrelatedSubQuery(
           sq.aggregate.fn,
           sq.aggregate.field,
         );
+        const {fn} = sq.aggregate;
+        // count/sum/avg are invertible (a child add/remove maps to a fixed
+        // delta); min/max are not.
+        const invertible = fn === 'count' || fn === 'sum' || fn === 'avg';
+        // A `where` is honored optimistically by compiling it to a per-row
+        // predicate, but only when fully per-row evaluable. A correlated
+        // subquery in the `where` can't be judged from a single child row, so
+        // `transformFilters` flags it (`conditionsRemoved`) and the aggregate
+        // stays server-authoritative rather than risk over-counting.
+        let whereEvaluable = true;
+        let wherePredicate: ((row: Row) => boolean) | undefined;
+        if (!isJunction && invertible && sq.subquery.where !== undefined) {
+          const {filters, conditionsRemoved} = transformFilters(
+            sq.subquery.where,
+          );
+          if (conditionsRemoved || filters === undefined) {
+            whereEvaluable = false;
+          } else {
+            wherePredicate = createPredicate(filters);
+          }
+        }
         source = delegate.getAggregateSource(
           aggTable,
           columns,
           sq.correlation.childField,
-          // Optimistic deltas are only safe for the invertible, where-free,
-          // direct (non-junction) case: `count` (±1), `sum`/`avg` (±field) per
-          // child add/remove. A `where` would need per-row predicate
-          // evaluation; `min`/`max` aren't invertible; and a junction's field
-          // lives past the junction (an edge mutation doesn't carry it). Those
-          // all fall back to the server-authoritative value.
-          !isJunction &&
-            sq.subquery.where === undefined &&
-            (sq.aggregate.fn === 'count' ||
-              sq.aggregate.fn === 'sum' ||
-              sq.aggregate.fn === 'avg')
+          // Optimistic deltas are only safe for invertible, direct
+          // (non-junction) aggregates: `count` (±1), `sum`/`avg` (±field) per
+          // child add/remove. `min`/`max` aren't invertible, and a junction's
+          // field lives past the junction (an edge mutation doesn't carry it) —
+          // both fall back to the server-authoritative value, as does a `where`
+          // that isn't per-row evaluable (see above).
+          !isJunction && invertible && whereEvaluable
             ? {
                 table: sq.subquery.table,
                 childField: sq.correlation.childField,
-                fn: sq.aggregate.fn,
+                fn,
                 field: sq.aggregate.field,
+                predicate: wherePredicate,
               }
             : undefined,
         );

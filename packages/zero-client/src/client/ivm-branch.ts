@@ -75,6 +75,14 @@ export type OptimisticAggregate = {
   readonly fn: AggregateFunction;
   /** The aggregated field, for `sum`/`avg` (`undefined` for `count`). */
   readonly field: string | undefined;
+  /**
+   * The aggregate's `where`, compiled to a per-row predicate. A child row
+   * contributes only when it returns true; `undefined` means no filter (every
+   * child contributes). Only set when the whole `where` is per-row evaluable —
+   * a correlated subquery in the `where` makes the aggregate
+   * server-authoritative (it is never registered for optimism at all).
+   */
+  readonly predicate: ((row: Row) => boolean) | undefined;
 };
 
 export class IVMSourceBranch {
@@ -153,6 +161,7 @@ export class IVMSourceBranch {
       readonly childField: readonly string[];
       readonly fn: AggregateFunction;
       readonly field: string | undefined;
+      readonly predicate: ((row: Row) => boolean) | undefined;
     },
   ): MemorySource {
     if (optimistic) {
@@ -168,6 +177,7 @@ export class IVMSourceBranch {
         childField: optimistic.childField,
         fn: optimistic.fn,
         field: optimistic.field,
+        predicate: optimistic.predicate,
       });
     }
     const existing = this.#sources.get(name);
