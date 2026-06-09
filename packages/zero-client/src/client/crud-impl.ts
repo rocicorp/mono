@@ -46,9 +46,19 @@ function contributes(row: Row | undefined, field: string): boolean {
 function nextAggregateRow(
   agg: OptimisticAggregate,
   curRow: Row,
-  oldRow: Row | undefined,
-  newRow: Row | undefined,
+  oldRowRaw: Row | undefined,
+  newRowRaw: Row | undefined,
 ): Row | undefined {
+  // A child row contributes only if it matches the aggregate's `where`
+  // predicate (if any). Treating a non-matching row as absent lets all the
+  // delta math below — count ±1, sum/avg ±field — naturally handle rows
+  // entering or leaving the filtered set on an update (old matched / new
+  // doesn't ⇒ −delta, and vice versa).
+  const {predicate} = agg;
+  const oldRow =
+    predicate && oldRowRaw && !predicate(oldRowRaw) ? undefined : oldRowRaw;
+  const newRow =
+    predicate && newRowRaw && !predicate(newRowRaw) ? undefined : newRowRaw;
   const value = curRow[AGGREGATE_VALUE_COLUMN];
   switch (agg.fn) {
     case 'count': {

@@ -5,6 +5,7 @@ import {assert} from '../../../shared/src/asserts.ts';
 import {getBrowserGlobal} from '../../../shared/src/browser-env.ts';
 import type {DocumentVisibilityWatcher} from '../../../shared/src/document-visible.ts';
 import type {AggregateFunction, AST} from '../../../zero-protocol/src/ast.ts';
+import type {Row} from '../../../zero-protocol/src/data.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
 import type {SchemaValue} from '../../../zero-types/src/schema-value.ts';
@@ -269,6 +270,7 @@ export class ZeroContext extends QueryDelegateBase {
       readonly childField: readonly string[];
       readonly fn: AggregateFunction;
       readonly field: string | undefined;
+      readonly predicate: ((row: Row) => boolean) | undefined;
     },
   ): Source {
     return this.#mainSources.getOrCreateAggregateSource(
