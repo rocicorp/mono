@@ -12,10 +12,6 @@ on:
         options:
           - canary
           - stable
-      ref:
-        description: Branch, tag, or commit SHA to build the release from
-        required: true
-        type: string
       dry_run:
         description: Build but skip git push, npm publish, and Docker push
         required: false
@@ -80,7 +76,7 @@ jobs:
         id: release
         env:
           MODE: ${{ github.event_name == 'workflow_dispatch' && inputs.mode || 'canary' }}
-          REF: ${{ github.event_name == 'workflow_dispatch' && inputs.ref || github.event.pull_request.base.ref }}
+          REF: ${{ github.event_name == 'workflow_dispatch' && github.ref_name || github.event.pull_request.base.ref }}
           DRY_RUN: ${{ inputs.dry_run == true && '--dry-run' || '' }}
         run: |
           set -euo pipefail
