@@ -36,11 +36,11 @@ export function safeSet<T extends object>(
  * symbol-keyed).
  */
 export function safeAssign<T extends object, U>(target: T, source: U): T & U;
-export function safeAssign<T extends object, U, V>(
-  target: T,
-  source1: U,
-  source2: V,
-): T & U & V;
+export function safeAssign<
+  T extends object,
+  U extends object,
+  V extends object,
+>(target: T, source1: U, source2: V): T & U & V;
 export function safeAssign<T extends object>(
   target: T,
   ...sources: object[]
