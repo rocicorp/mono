@@ -1,8 +1,12 @@
 import type {LogContext} from '@rocicorp/logger';
 import parsePrometheusTextFormat from 'parse-prometheus-text-format';
+import {must} from '../../../../shared/src/must.ts';
 import {promiseVoid} from '../../../../shared/src/resolved-promises.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
-import {getOrCreateGauge} from '../../observability/metrics.ts';
+import {
+  getOrCreateCounter,
+  getOrCreateGauge,
+} from '../../observability/metrics.ts';
 import {Subscription} from '../../types/subscription.ts';
 import {RunningState} from '../running-state.ts';
 import type {Service} from '../service.ts';
@@ -11,6 +15,22 @@ import type {SnapshotMessage} from './snapshot.ts';
 
 export const CHECK_INTERVAL_MS = 60_000;
 const MIN_CLEANUP_DELAY_MS = 30_000;
+
+/**
+ * Allowance for clock skew between the machine reporting litestream metrics
+ * and the timestamps reported by the backup destination (e.g. S3).
+ */
+export const BACKUP_VERIFICATION_SLACK_MS = 60_000;
+
+/**
+ * Returns the time of the most recent object actually uploaded to the
+ * backup replica destination (e.g. as determined by listing the snapshots
+ * and WAL segments in S3). Rejects if the backup state cannot be determined.
+ *
+ * See `getLastBackupTime()` in `../litestream/commands.ts` for the
+ * production implementation.
+ */
+export type BackupStateVerifier = () => Promise<Date>;
 
 type Reservation = {
   start: Date;
@@ -47,6 +67,12 @@ type Reservation = {
  * Note that the reservation request is the primary mechanism by which
  * premature change log cleanup is prevented. The cleanup delay interval is
  * a secondary safeguard.
+ *
+ * Additionally, because the watermarks reported by litestream metrics
+ * reflect what litestream *believes* has been backed up (which has been
+ * observed to diverge from reality when uploads silently fail), the cleanup
+ * watermark is only advanced after verifying it against the actual backup
+ * state in the replica destination via a {@link BackupStateVerifier}.
  */
 export class BackupMonitor implements Service {
   readonly id = 'backup-monitor';
@@ -60,8 +86,18 @@ export class BackupMonitor implements Service {
   readonly #reservations = new Map<string, Reservation>();
   readonly #watermarks = new Map<string, Date>();
 
+  readonly #verifyBackupState: BackupStateVerifier;
+  readonly #purgesBlocked = getOrCreateCounter('replica', 'purge_blocked', {
+    description:
+      'Number of change-log purges blocked because the actual backup state ' +
+      '(as listed from the replica destination) could not be verified, or ' +
+      'is older than the backup progress claimed by litestream metrics. ' +
+      'A steadily increasing value indicates a wedged or failing backup.',
+  });
+
   #lastWatermark: string = '';
   #latestBackupTime: Date | null = null;
+  #lastVerifiedUploadTime: Date | null = null;
   #cleanupDelayMs: number;
   #checkMetricsTimer: NodeJS.Timeout | undefined;
 
@@ -72,12 +108,14 @@ export class BackupMonitor implements Service {
     metricsEndpoint: string,
     changeStreamer: ChangeStreamerService,
     initialCleanupDelayMs: number,
+    verifyBackupState: BackupStateVerifier,
   ) {
     this.#lc = lc.withContext('component', this.id);
     this.#replicaFile = replicaFile;
     this.#backupURL = backupURL;
     this.#metricsEndpoint = metricsEndpoint;
     this.#changeStreamer = changeStreamer;
+    this.#verifyBackupState = verifyBackupState;
     this.#cleanupDelayMs = Math.max(
       initialCleanupDelayMs,
       MIN_CLEANUP_DELAY_MS, // purely for peace of mind
@@ -157,7 +195,7 @@ export class BackupMonitor implements Service {
       this.#lc.warn?.(`unable to fetch metrics at ${this.#metricsEndpoint}`, e);
     }
     try {
-      this.#scheduleCleanup();
+      await this.#scheduleCleanup();
     } catch (e) {
       this.#lc.warn?.(`error scheduling cleanup`, e);
     }
@@ -223,7 +261,7 @@ export class BackupMonitor implements Service {
     return this.#latestBackupTime;
   }
 
-  #scheduleCleanup() {
+  async #scheduleCleanup() {
     if (this.#reservations.size > 0) {
       this.#lc.info?.(
         `watermark cleanup paused for snapshot(s): ${[...this.#reservations.keys()]}`,
@@ -231,24 +269,93 @@ export class BackupMonitor implements Service {
       return;
     }
     const latestCleanupTime = Date.now() - this.#cleanupDelayMs;
-    let maxWatermark = '';
-    for (const [watermark, backupTime] of this.#watermarks.entries()) {
-      if (
-        backupTime.getTime() <= latestCleanupTime &&
-        watermark > maxWatermark
-      ) {
-        maxWatermark = watermark;
+    const maxWatermark = this.#maxWatermarkUpTo(latestCleanupTime);
+    if (maxWatermark.length === 0) {
+      return;
+    }
+    // Purge guard: the watermarks (and their backup times) come from
+    // litestream metrics, which are exported when litestream *believes*
+    // an upload succeeded, and have been observed to advance even when
+    // nothing was actually written to the backup destination. Purging the
+    // change-log based on a falsely advancing watermark permanently breaks
+    // the ability to restore + catch up. Before advancing the cleanup
+    // watermark, verify it against the actual backup state: a claimed
+    // backup time is only trusted if an object was actually uploaded to
+    // the replica destination at (or after) that time, modulo clock skew.
+    const claimedTime = must(this.#watermarks.get(maxWatermark));
+    if (!this.#confirmedDurable(claimedTime)) {
+      try {
+        this.#lastVerifiedUploadTime = await this.#verifyBackupState();
+      } catch (e) {
+        this.#purgesBlocked.add(1, {reason: 'verification-failed'});
+        // Skipping the purge is safe: the change-log just grows.
+        this.#lc.warn?.(
+          `unable to verify backup state. skipping change-log cleanup ` +
+            `up to watermark ${maxWatermark} ` +
+            `(claimed backup time ${claimedTime.toISOString()})`,
+          e,
+        );
+        return;
       }
     }
-    if (maxWatermark.length) {
-      this.#changeStreamer.scheduleCleanup(maxWatermark);
-      for (const watermark of this.#watermarks.keys()) {
-        if (watermark <= maxWatermark) {
-          this.#watermarks.delete(watermark);
-        }
-      }
-      this.#lastWatermark = maxWatermark;
+    // Watermarks whose backup time isn't yet confirmed durable remain in the
+    // map and are re-evaluated at the next check.
+    const lastUpload = must(this.#lastVerifiedUploadTime);
+    const verifiedWatermark = this.#maxWatermarkUpTo(
+      Math.min(
+        latestCleanupTime,
+        lastUpload.getTime() + BACKUP_VERIFICATION_SLACK_MS,
+      ),
+    );
+    if (verifiedWatermark.length === 0) {
+      this.#purgesBlocked.add(1, {reason: 'backup-stale'});
+      this.#lc.warn?.(
+        `blocked change-log cleanup up to watermark ${maxWatermark}: ` +
+          `litestream claims it was backed up at ` +
+          `${claimedTime.toISOString()}, but the last object actually ` +
+          `uploaded to ${this.#backupURL} was at ` +
+          `${lastUpload.toISOString()}. ` +
+          `The backup may be wedged.`,
+      );
+      return;
     }
+    this.#changeStreamer.scheduleCleanup(verifiedWatermark);
+    for (const watermark of this.#watermarks.keys()) {
+      if (watermark <= verifiedWatermark) {
+        this.#watermarks.delete(watermark);
+      }
+    }
+    this.#lastWatermark = verifiedWatermark;
+  }
+
+  /**
+   * Returns the newest watermark whose backup time is at or before `cutoff`
+   * (epoch ms), or `''` if there is none.
+   */
+  #maxWatermarkUpTo(cutoff: number): string {
+    let max = '';
+    for (const [watermark, backupTime] of this.#watermarks) {
+      if (backupTime.getTime() <= cutoff && watermark > max) {
+        max = watermark;
+      }
+    }
+    return max;
+  }
+
+  /**
+   * Returns `true` if the actual backup state, as last verified against the
+   * backup destination, confirms that data claimed to be backed up at
+   * `claimedTime` is durable (i.e. an object was actually uploaded at or
+   * after `claimedTime`, allowing {@link BACKUP_VERIFICATION_SLACK_MS} of
+   * clock skew).
+   */
+  #confirmedDurable(claimedTime: Date): boolean {
+    const lastUpload = this.#lastVerifiedUploadTime;
+    return (
+      lastUpload !== null &&
+      claimedTime.getTime() <=
+        lastUpload.getTime() + BACKUP_VERIFICATION_SLACK_MS
+    );
   }
 
   stop(): Promise<void> {
