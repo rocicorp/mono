@@ -10,7 +10,7 @@
     "lint": "oxlint --quiet --config ../../oxlint.config.ts"
   },
   "dependencies": {
-    "@rocicorp/zero": "file:rocicorp-zero.tgz"
+    "@rocicorp/zero": "1.6.2"
   },
   "devDependencies": {
     "oxfmt": "^0.43.0"
