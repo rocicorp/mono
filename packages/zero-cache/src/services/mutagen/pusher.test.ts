@@ -40,6 +40,7 @@ type TestConnectionOptions = {
   userID?: string | undefined;
   userPushURL?: string | undefined;
   userPushHeaders?: Record<string, string> | undefined;
+  requestHeaders?: Record<string, string> | undefined;
 };
 
 const contextManagers = new WeakMap<
@@ -52,6 +53,7 @@ function newPusherService(pushConfig: {
   apiKey?: string | undefined;
   forwardCookies: boolean;
   allowedClientHeaders?: string[] | undefined;
+  allowedRequestHeaders?: string[] | undefined;
 }): PusherService {
   const connContextManager = new ConnectionContextManagerImpl(
     lc,
@@ -61,12 +63,14 @@ function newPusherService(pushConfig: {
       url: undefined,
       apiKey: undefined,
       allowedClientHeaders: undefined,
+      allowedRequestHeaders: undefined,
       forwardCookies: false,
     },
     {
       url: pushConfig.url,
       apiKey: pushConfig.apiKey,
       allowedClientHeaders: pushConfig.allowedClientHeaders,
+      allowedRequestHeaders: pushConfig.allowedRequestHeaders,
       forwardCookies: pushConfig.forwardCookies,
     },
   );
@@ -113,6 +117,7 @@ function registerConnection(
       initConnectionMsg: undefined,
       httpCookie: options.httpCookie,
       origin: options.origin,
+      requestHeaders: options.requestHeaders,
     },
     makeAuth(options.auth),
   );
@@ -548,6 +553,80 @@ describe('pusher service', () => {
       userPushHeaders: {
         'x-vercel-automation-bypass-secret': 'my-secret',
         'x-custom-header': 'custom-value',
+      },
+    });
+
+    pusher.enqueuePush(selector, makePush(1));
+
+    await pusher.stop();
+
+    expect(fetch.mock.calls[0][1]?.headers).toEqual({
+      'Content-Type': 'application/json',
+      'X-Api-Key': 'api-key',
+      'Authorization': 'Bearer jwt',
+    });
+
+    fetch.mockReset();
+  });
+
+  test('the service forwards request headers in allowedRequestHeaders', async () => {
+    const fetch = (global.fetch = vi.fn());
+    fetch.mockResolvedValue({
+      ok: true,
+    });
+
+    const pusher = newPusherService({
+      url: ['http://example.com'],
+      apiKey: 'api-key',
+      forwardCookies: false,
+      allowedRequestHeaders: ['x-forwarded-for', 'cf-ray'],
+    });
+    void pusher.run();
+    const {selector} = openConnection(pusher, {
+      clientID,
+      wsID,
+      auth: 'jwt',
+      requestHeaders: {
+        'x-forwarded-for': '203.0.113.1',
+        'cf-ray': 'abc123',
+        'x-not-allowed': 'secret',
+      },
+    });
+
+    pusher.enqueuePush(selector, makePush(1));
+
+    await pusher.stop();
+
+    expect(fetch.mock.calls[0][1]?.headers).toEqual({
+      'Content-Type': 'application/json',
+      'X-Api-Key': 'api-key',
+      'x-forwarded-for': '203.0.113.1',
+      'cf-ray': 'abc123',
+      'Authorization': 'Bearer jwt',
+    });
+
+    fetch.mockReset();
+  });
+
+  test('the service drops request headers not in allowedRequestHeaders', async () => {
+    const fetch = (global.fetch = vi.fn());
+    fetch.mockResolvedValue({
+      ok: true,
+    });
+
+    const pusher = newPusherService({
+      url: ['http://example.com'],
+      apiKey: 'api-key',
+      forwardCookies: false,
+      // allowedRequestHeaders not set - secure by default
+    });
+    void pusher.run();
+    const {selector} = openConnection(pusher, {
+      clientID,
+      wsID,
+      auth: 'jwt',
+      requestHeaders: {
+        'x-forwarded-for': '203.0.113.1',
       },
     });
 

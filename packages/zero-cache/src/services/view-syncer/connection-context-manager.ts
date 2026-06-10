@@ -43,8 +43,12 @@ type FetchConfig = ZeroConfig['query'];
 
 export type HeaderOptions = {
   readonly apiKey?: string | undefined;
+  /** Headers provided in the client options */
   readonly customHeaders?: Readonly<Record<string, string>> | undefined;
   readonly allowedClientHeaders?: readonly string[] | undefined;
+  /** Headers from the incoming HTTP request */
+  readonly requestHeaders?: Readonly<Record<string, string>> | undefined;
+  readonly allowedRequestHeaders?: readonly string[] | undefined;
   readonly cookie?: string | undefined;
   readonly origin?: string | undefined;
 };
@@ -242,6 +246,10 @@ export class ConnectionContextManagerImpl implements ConnectionContextManager {
           apiKey: config?.apiKey,
           allowedClientHeaders: cloneAllowedClientHeaders(
             config?.allowedClientHeaders,
+          ),
+          requestHeaders: cloneCustomHeaders(connectParams.requestHeaders),
+          allowedRequestHeaders: cloneAllowedClientHeaders(
+            config?.allowedRequestHeaders,
           ),
           cookie: config?.forwardCookies ? connectParams.httpCookie : undefined,
         },

@@ -258,7 +258,30 @@ function getCacheKey(ctx: ConnectionContext, queryID: string) {
     userID: ctx.user,
     url: ctx.queryContext.url,
     customHeaders: normalizedForwardedHeaders(ctx.queryContext.headerOptions),
+    requestHeaders: normalizedRequestHeaders(ctx.queryContext.headerOptions),
   });
+}
+
+function normalizedRequestHeaders(headerOptions: HeaderOptions) {
+  const {allowedRequestHeaders, requestHeaders} = headerOptions;
+  if (
+    !requestHeaders ||
+    !allowedRequestHeaders ||
+    allowedRequestHeaders.length === 0
+  ) {
+    return undefined;
+  }
+
+  const allowedHeaders = new Set(
+    allowedRequestHeaders.map(header => header.toLowerCase()),
+  );
+  const forwardedHeaders = sortedEntries(requestHeaders).filter(([header]) =>
+    allowedHeaders.has(header.toLowerCase()),
+  );
+
+  return forwardedHeaders.length === 0
+    ? undefined
+    : JSON.stringify(forwardedHeaders);
 }
 
 function normalizedForwardedHeaders(headerOptions: HeaderOptions) {

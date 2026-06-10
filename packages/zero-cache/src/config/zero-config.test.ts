@@ -113,6 +113,16 @@ test('zero-cache --help', () => {
                                                                         If not specified, no client-provided headers are forwarded (secure by default).                                            
                                                                         Example: ZERO_MUTATE_ALLOWED_CLIENT_HEADERS=x-request-id,x-correlation-id                                                  
                                                                                                                                                                                                    
+     --mutate-allowed-request-headers string[]                          optional                                                                                                                   
+       ZERO_MUTATE_ALLOWED_REQUEST_HEADERS env                                                                                                                                                     
+                                                                        A list of header names to forward from the incoming HTTP request to the push URL.                                          
+                                                                        Unlike allowed-client-headers (which forwards headers set by the client), these are taken                                  
+                                                                        from the HTTP request that established the connection (e.g. headers injected by a proxy or load balancer).                 
+                                                                        If a listed header is present on the request, its value is forwarded upstream under the same header name.                  
+                                                                        Header names are case-insensitive.                                                                                         
+                                                                        If not specified, no request headers are forwarded (secure by default).                                                    
+                                                                        Example: ZERO_MUTATE_ALLOWED_REQUEST_HEADERS=x-forwarded-for,cf-ray                                                        
+                                                                                                                                                                                                   
      --query-url string[]                                               optional                                                                                                                   
        ZERO_QUERY_URL env                                                                                                                                                                          
                                                                         The URL of the API server to which zero-cache will send synced queries.                                                    
@@ -172,6 +182,16 @@ test('zero-cache --help', () => {
                                                                         Header names are case-insensitive.                                                                                         
                                                                         If not specified, no client-provided headers are forwarded (secure by default).                                            
                                                                         Example: ZERO_QUERY_ALLOWED_CLIENT_HEADERS=x-request-id,x-correlation-id                                                   
+                                                                                                                                                                                                   
+     --query-allowed-request-headers string[]                           optional                                                                                                                   
+       ZERO_QUERY_ALLOWED_REQUEST_HEADERS env                                                                                                                                                      
+                                                                        A list of header names to forward from the incoming HTTP request to the query URL.                                         
+                                                                        Unlike allowed-client-headers (which forwards headers set by the client), these are taken                                  
+                                                                        from the HTTP request that established the connection (e.g. headers injected by a proxy or load balancer).                 
+                                                                        If a listed header is present on the request, its value is forwarded upstream under the same header name.                  
+                                                                        Header names are case-insensitive.                                                                                         
+                                                                        If not specified, no request headers are forwarded (secure by default).                                                    
+                                                                        Example: ZERO_QUERY_ALLOWED_REQUEST_HEADERS=x-forwarded-for,cf-ray                                                         
                                                                                                                                                                                                    
      --enable-crud-mutations boolean                                    default: true                                                                                                              
        ZERO_ENABLE_CRUD_MUTATIONS env                                                                                                                                                              

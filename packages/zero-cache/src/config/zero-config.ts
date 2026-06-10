@@ -301,6 +301,25 @@ const makeMutatorQueryOptions = (
         }
       : {}),
   },
+  allowedRequestHeaders: {
+    type: v.array(v.string()).optional(),
+    desc: [
+      `A list of header names to forward from the incoming HTTP request to the ${suffix === 'push mutations' ? 'push' : 'query'} URL.`,
+      `Unlike {bold allowed-client-headers} (which forwards headers set by the client), these are taken`,
+      `from the HTTP request that established the connection (e.g. headers injected by a proxy or load balancer).`,
+      `If a listed header is present on the request, its value is forwarded upstream under the same header name.`,
+      `Header names are case-insensitive.`,
+      `If not specified, no request headers are forwarded (secure by default).`,
+      `Example: ZERO_${replacement ? replacement.toUpperCase() : suffix === 'push mutations' ? 'MUTATE' : 'QUERY'}_ALLOWED_REQUEST_HEADERS=x-forwarded-for,cf-ray`,
+    ],
+    ...(replacement
+      ? {
+          deprecated: [
+            makeDeprecationMessage(`${replacement}-allowed-request-headers`),
+          ],
+        }
+      : {}),
+  },
 });
 
 const mutateOptions = makeMutatorQueryOptions(undefined, 'push mutations');

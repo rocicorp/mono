@@ -21,7 +21,26 @@ export type ConnectParams = {
   readonly initConnectionMsg: InitConnectionMessage | undefined;
   readonly httpCookie: string | undefined;
   readonly origin: string | undefined;
+  readonly requestHeaders?: Readonly<Record<string, string>> | undefined;
 };
+
+/**
+ * Normalizes Node's {@link IncomingHttpHeaders} (whose values are
+ * `string | string[] | undefined`) into a plain `Record<string, string>`,
+ * joining array values with `, ` and dropping `undefined` values.
+ */
+function normalizeHeaders(
+  headers: IncomingHttpHeaders,
+): Record<string, string> {
+  const normalized: Record<string, string> = {};
+  for (const [key, value] of Object.entries(headers)) {
+    if (value === undefined) {
+      continue;
+    }
+    normalized[key] = Array.isArray(value) ? value.join(', ') : value;
+  }
+  return normalized;
+}
 
 export function getConnectParams(
   protocolVersion: number,
@@ -68,6 +87,7 @@ export function getConnectParams(
         userID,
         httpCookie: headers.cookie,
         origin: headers.origin,
+        requestHeaders: normalizeHeaders(headers),
       },
       error: null,
     };

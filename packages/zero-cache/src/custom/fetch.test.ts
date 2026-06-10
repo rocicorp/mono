@@ -340,6 +340,49 @@ describe('fetchFromAPIServer', () => {
     });
   });
 
+  test('only forwards request headers in allowedRequestHeaders list', async () => {
+    mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({success: true}), {status: 200}),
+    );
+
+    await fetchWithContext(validator, 'push', {
+      headerOptions: {
+        requestHeaders: {
+          'x-forwarded-for': '203.0.113.1',
+          'cf-ray': 'abc123',
+          'x-not-allowed': 'secret',
+        },
+        allowedRequestHeaders: ['x-forwarded-for', 'cf-ray'],
+      },
+    });
+
+    const init = mockFetch.mock.calls[0]![1];
+    expect(init?.headers).toEqual({
+      'Content-Type': 'application/json',
+      'x-forwarded-for': '203.0.113.1',
+      'cf-ray': 'abc123',
+    });
+  });
+
+  test('drops request headers when allowedRequestHeaders is not set', async () => {
+    mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify({success: true}), {status: 200}),
+    );
+
+    await fetchWithContext(validator, 'push', {
+      headerOptions: {
+        requestHeaders: {
+          'x-forwarded-for': '203.0.113.1',
+        },
+      },
+    });
+
+    const init = mockFetch.mock.calls[0]![1];
+    expect(init?.headers).toEqual({
+      'Content-Type': 'application/json',
+    });
+  });
+
   test('rejects URLs that are not allowed by configuration for push', async () => {
     await expect(
       fetchFromAPIServer(

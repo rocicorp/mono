@@ -146,6 +146,14 @@ export async function fetchFromAPIServer<TValidator extends Type>(
       headerOptions.allowedClientHeaders,
     ),
   );
+  // Forward allowlisted headers from the incoming HTTP request.
+  Object.assign(
+    headers,
+    filterCustomHeaders(
+      headerOptions.requestHeaders,
+      headerOptions.allowedRequestHeaders,
+    ),
+  );
   if (ctx.auth?.raw) {
     headers['Authorization'] = `Bearer ${ctx.auth.raw}`;
   }
