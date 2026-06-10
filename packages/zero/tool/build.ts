@@ -282,3 +282,5 @@ const isMain = fileURLToPath(import.meta.url) === resolve(process.argv[1]);
 if (isMain) {
   await build();
 }
+
+// Bonjour le monde
