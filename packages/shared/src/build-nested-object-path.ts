@@ -39,7 +39,7 @@ export function buildNestedObjectPath<
   let current = target as Record<string, unknown>;
   for (let i = 0; i < parts.length - 1; i++) {
     const part = parts[i];
-    let next = current[part];
+    let next = Object.hasOwn(current, part) ? current[part] : undefined;
     if (next === undefined) {
       next = {};
       safeSet(current, part, next);
