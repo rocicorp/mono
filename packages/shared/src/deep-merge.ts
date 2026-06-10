@@ -1,4 +1,4 @@
-import {safeAssign, safeSet} from './objects.ts';
+import {safeSet} from './objects.ts';
 
 // Force TypeScript to evaluate/flatten a type
 type Simplify<T> = {[K in keyof T]: T[K]} & {};
@@ -62,7 +62,9 @@ export function deepMerge<
   const result: Record<string, unknown> = {};
 
   // Copy all keys from a
-  safeAssign(result, a);
+  for (const key of Object.keys(a)) {
+    safeSet(result, key, a[key]);
+  }
 
   // Merge/override with keys from b
   for (const key of Object.keys(b)) {
