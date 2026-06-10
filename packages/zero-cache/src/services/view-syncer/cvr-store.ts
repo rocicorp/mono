@@ -11,6 +11,7 @@ import {
   deepEqual,
   type ReadonlyJSONValue,
 } from '../../../../shared/src/json.ts';
+import {safeAssign} from '../../../../shared/src/objects.ts';
 import {sleep} from '../../../../shared/src/sleep.ts';
 import * as v from '../../../../shared/src/valita.ts';
 import {astSchema} from '../../../../zero-protocol/src/ast.ts';
@@ -764,7 +765,7 @@ export class CVRStore {
       const existing = this.#pendingQueryUpdates.get(queryHash);
       if (existing) {
         // Merge partial into full update
-        Object.assign(existing, partial);
+        safeAssign(existing, partial);
       } else {
         // Track partial-only updates to batch separately
         partialOnly.set(queryHash, partial);

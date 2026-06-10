@@ -6,6 +6,7 @@ import {nanoid} from 'nanoid';
 import {stringify} from '../../../shared/src/bigint-json.ts';
 import {isJSONValue, type JSONObject} from '../../../shared/src/json.ts';
 import {must} from '../../../shared/src/must.ts';
+import {safeSet} from '../../../shared/src/objects.ts';
 import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
 import {sleep} from '../../../shared/src/sleep.ts';
 import * as v from '../../../shared/src/valita.ts';
@@ -151,7 +152,7 @@ export function makeErrorDetails(e: unknown): JSONObject {
   // Include any enumerable properties (e.g. of Error subtypes).
   for (const [field, value] of Object.entries(err)) {
     if (isJSONValue(value, [])) {
-      errorDetails[field] = value;
+      safeSet(errorDetails, field, value);
     }
   }
   return errorDetails;

@@ -2,6 +2,7 @@ import EventEmitter from 'node:events';
 import {resolver} from '@rocicorp/resolver';
 import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import {safeAssign} from '../../../shared/src/objects.ts';
 import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
 import {
   exitAfter,
@@ -265,7 +266,7 @@ describe('shutdown', () => {
 describe('exitAfter', () => {
   test('exits 0 for configuration errors', async () => {
     const exit = vi.spyOn(process, 'exit').mockImplementation(code => {
-      throw Object.assign(new Error('process.exit'), {code});
+      throw safeAssign(new Error('process.exit'), {code});
     });
 
     await expect(

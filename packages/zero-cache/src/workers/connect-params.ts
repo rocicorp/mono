@@ -1,5 +1,6 @@
 import type {IncomingHttpHeaders} from 'node:http2';
 import {must} from '../../../shared/src/must.ts';
+import {safeSet} from '../../../shared/src/objects.ts';
 import {
   decodeSecProtocols,
   type InitConnectionMessage,
@@ -37,7 +38,7 @@ function normalizeHeaders(
     if (value === undefined) {
       continue;
     }
-    normalized[key] = Array.isArray(value) ? value.join(', ') : value;
+    safeSet(normalized, key, Array.isArray(value) ? value.join(', ') : value);
   }
   return normalized;
 }

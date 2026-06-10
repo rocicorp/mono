@@ -5,6 +5,7 @@ import {
   unreachable,
 } from '../../../shared/src/asserts.ts';
 import {must} from '../../../shared/src/must.ts';
+import {safeAssign} from '../../../shared/src/objects.ts';
 import type {Writable} from '../../../shared/src/writable.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import {type Comparator, type Node} from './data.ts';
@@ -588,7 +589,7 @@ function applyEdit<M extends Mutate>(
   const canMutate = mutate || owns(existing);
   const newEntry: MutableMetaEntry =
     canMutate && schema.compareRows(change.oldNode.row, change.node.row) === 0
-      ? Object.assign(existing, change.node.row)
+      ? safeAssign(existing, change.node.row)
       : track({...existing, ...change.node.row});
 
   if (withIDs) {

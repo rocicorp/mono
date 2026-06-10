@@ -2,6 +2,7 @@ import {Worker} from 'node:worker_threads';
 import {resolver, type Resolver} from '@rocicorp/resolver';
 import {assert} from '../../../../shared/src/asserts.ts';
 import type {LogConfig} from '../../../../shared/src/logging.ts';
+import {safeAssign} from '../../../../shared/src/objects.ts';
 import type {Database} from '../../../../zqlite/src/db.ts';
 import {WRITE_WORKER_URL} from '../../server/worker-urls.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
@@ -80,7 +81,7 @@ export function deserializeError(serialized: SerializedError): Error {
         : deserializeError(serialized.cause);
   }
   if (serialized.details) {
-    Object.assign(err, serialized.details);
+    safeAssign(err, serialized.details);
   }
   return err;
 }
