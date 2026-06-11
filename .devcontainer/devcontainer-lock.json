@@ -5,6 +5,11 @@
       "resolved": "ghcr.io/anthropics/devcontainer-features/claude-code@sha256:cfc2e7d3e9fd3b9b01f8d5cb158508a884c8c0ede2e23ed10f32dea5d4ffe69a",
       "integrity": "sha256:cfc2e7d3e9fd3b9b01f8d5cb158508a884c8c0ede2e23ed10f32dea5d4ffe69a"
     },
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {
+      "version": "2.17.0",
+      "resolved": "ghcr.io/devcontainers/features/docker-in-docker@sha256:25b9f05705ffba7dbe503230ac76081419306f8c8bc88e0ce78c4ecd99a0c78c",
+      "integrity": "sha256:25b9f05705ffba7dbe503230ac76081419306f8c8bc88e0ce78c4ecd99a0c78c"
+    },
     "ghcr.io/devcontainers/features/github-cli:1": {
       "version": "1.1.0",
       "resolved": "ghcr.io/devcontainers/features/github-cli@sha256:d22f50b70ed75339b4eed1ba9ecde3a1791f90e88d37936517e3bace0bbad671",
@@ -17,6 +22,14 @@
       "dependsOn": [
         "ghcr.io/anthropics/devcontainer-features/claude-code:1",
         "ghcr.io/devcontainers/features/github-cli:1"
+      ]
+    },
+    "ghcr.io/rocicorp/devcontainer-features/docker:1": {
+      "version": "1.0.0",
+      "resolved": "ghcr.io/rocicorp/devcontainer-features/docker@sha256:36fcab27b6c8727d3ac8df3818a213ea73339f17fa655090de81a83fa1907e64",
+      "integrity": "sha256:36fcab27b6c8727d3ac8df3818a213ea73339f17fa655090de81a83fa1907e64",
+      "dependsOn": [
+        "ghcr.io/devcontainers/features/docker-in-docker:2"
       ]
     },
     "ghcr.io/rocicorp/devcontainer-features/pnpm:1": {
