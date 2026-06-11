@@ -14,6 +14,22 @@ Web site and docs: https://zero.rocicorp.dev/.
 - [@rocicorp/zero-docs](https://github.com/rocicorp/zero-docs): The docs for zero is currently in a separate repo.
 - [apps/zbugs](./apps/zbugs): The bug tracker app.
 
+## Commit signing
+
+Add this to your ~/.gitconfig
+
+```ini
+[user]
+  signingkey = <your puiblic ssh key from 1password>
+
+[gpg]
+  format = ssh
+
+[commit]
+  gpgsign = true
+```
+
+
 ## Replicache
 
 Web site and docs https://replicache.dev/.
@@ -28,3 +44,4 @@ Web site and docs https://replicache.dev/.
 ### Reflect
 
 Reflect is no longer under development. The code lives in the [rocicorp/reflect-archive](https://github.com/rocicorp/reflect-archive) repo.
+
