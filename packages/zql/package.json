@@ -32,5 +32,5 @@
     "zero-protocol": "workspace:*",
     "zero-types": "workspace:*"
   },
-  "packageManager": "pnpm@11.3.0"
+  "packageManager": "pnpm@11.5.3"
 }
