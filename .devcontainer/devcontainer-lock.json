@@ -25,10 +25,12 @@
       ]
     },
     "ghcr.io/rocicorp/devcontainer-features/docker:1": {
-      "version": "1.0.0",
-      "resolved": "ghcr.io/rocicorp/devcontainer-features/docker@sha256:36fcab27b6c8727d3ac8df3818a213ea73339f17fa655090de81a83fa1907e64",
-      "integrity": "sha256:36fcab27b6c8727d3ac8df3818a213ea73339f17fa655090de81a83fa1907e64",
-      "dependsOn": ["ghcr.io/devcontainers/features/docker-in-docker:2"]
+      "version": "1.0.1",
+      "resolved": "ghcr.io/rocicorp/devcontainer-features/docker@sha256:0ff0b0ab52bfe3c2915741560d23f36a027767d63d25550f7e467ed6cdfd9578",
+      "integrity": "sha256:0ff0b0ab52bfe3c2915741560d23f36a027767d63d25550f7e467ed6cdfd9578",
+      "dependsOn": [
+        "ghcr.io/devcontainers/features/docker-in-docker:2"
+      ]
     },
     "ghcr.io/rocicorp/devcontainer-features/pnpm:1": {
       "version": "1.0.0",
