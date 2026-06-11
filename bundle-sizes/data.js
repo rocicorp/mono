@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781179169584,
+  "lastUpdate": 1781182901536,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -56753,6 +56753,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/rocicorp/mono/commit/616697338107e66903ff2bc7a664f6e50d4c1979"
         },
         "date": 1781179156325,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 317161,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 57049,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 117187,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 33481,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "arv@roci.dev",
+            "name": "Erik Arvidsson",
+            "username": "arv"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "65eeff2433b31ff09fcfb06f32175b9b88d4e3b4",
+          "message": "chore(deps): upgrade pnpm to 11.5.3 (#6115)\n\nBump the pinned packageManager version from 11.3.0 to 11.5.3 across all\npackage.json files in the monorepo.\n\n---------\n\nCo-authored-by: Claude Opus 4.8 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-06-11T12:50:26Z",
+          "tree_id": "7ceedfd88460075aaa4d4229d5a3bfa30cb7cf4a",
+          "url": "https://github.com/rocicorp/mono/commit/65eeff2433b31ff09fcfb06f32175b9b88d4e3b4"
+        },
+        "date": 1781182888733,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
