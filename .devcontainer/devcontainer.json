@@ -1,13 +1,20 @@
 // For format details, see https://aka.ms/devcontainer.json. For config options, see the
 // README at: https://github.com/devcontainers/templates/tree/main/src/typescript-node
 {
-  "name": "CloudZero App (Node 24)",
+  "name": "Mono (Node 24)",
   "image": "mcr.microsoft.com/devcontainers/javascript-node:24@sha256:5be6833735e290e26232abe2d65197942057fb5091f103c128ca454e2043c1d9",
   "remoteUser": "node",
   "mounts": [
-    // Mount the user's global .gitconfig to ensure git commands work correctly
     "source=${localEnv:HOME}/.gitconfig,target=/home/node/.gitconfig,type=bind,readonly"
   ],
+  "features": {
+    // Shared rocicorp features (https://github.com/rocicorp/devcontainer-features):
+    //  - agents: Codex (pinned) + Claude Code + gh; persists the Claude/gh logins
+    //    across rebuilds and sets CLAUDE_CONFIG_DIR.
+    //  - pnpm: corepack-managed pnpm; removes npm/npx to enforce pnpm.
+    "ghcr.io/rocicorp/devcontainer-features/agents:1": {},
+    "ghcr.io/rocicorp/devcontainer-features/pnpm:1": {}
+  },
   "customizations": {
     "vscode": {
       "extensions": ["oxc.oxc-vscode@1.57.0"],
@@ -18,7 +25,5 @@
         "extensions.autoCheckUpdates": false
       }
     }
-  },
-  "postCreateCommand": ".devcontainer/post-create.sh",
-  "postStartCommand": ".devcontainer/post-start.sh"
+  }
 }
