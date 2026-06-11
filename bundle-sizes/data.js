@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1780699678806,
+  "lastUpdate": 1781179169584,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -56709,6 +56709,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/rocicorp/mono/commit/4b447e11adb33dd511b02e77c49962bab1acaf37"
         },
         "date": 1780699665343,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 317161,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 57049,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 117187,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 33481,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "arv@roci.dev",
+            "name": "Erik Arvidsson",
+            "username": "arv"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": false,
+          "id": "616697338107e66903ff2bc7a664f6e50d4c1979",
+          "message": "chore(replicache): remove stale .vscode eslint/prettier config (#6114)\n\nThe monorepo standardized on oxlint/oxfmt (oxc.oxc-vscode); replicache's\n.vscode recommended dbaeumer.vscode-eslint + esbenp.prettier-vscode and\nset source.fixAll.eslint, which auto-installed unused extensions on\ncheckout.\n\nCo-authored-by: Claude Opus 4.8 (1M context) <noreply@anthropic.com>",
+          "timestamp": "2026-06-11T11:48:11Z",
+          "tree_id": "3942404814e5e22f6d2110784f7d92f908161fa6",
+          "url": "https://github.com/rocicorp/mono/commit/616697338107e66903ff2bc7a664f6e50d4c1979"
+        },
+        "date": 1781179156325,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
