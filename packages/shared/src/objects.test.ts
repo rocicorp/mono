@@ -136,6 +136,12 @@ test('safeAssign with a __proto__ source key sets an own property, not the proto
 
   // The key is set as a normal own property...
   expect(Object.hasOwn(target, '__proto__')).toBe(true);
+  expect(Object.getOwnPropertyDescriptor(target, '__proto__')).toEqual({
+    value: malicious.__proto__,
+    writable: true,
+    enumerable: true,
+    configurable: true,
+  });
   expect(Object.keys(target)).toEqual(['__proto__']);
   // ...and the prototype is left untouched (the object is not reparented).
   expect(Object.getPrototypeOf(target)).toBe(Object.prototype);
