@@ -9,6 +9,11 @@ updates:
     directory: '/'
     schedule:
       interval: 'weekly'
+    # Wait at least 7 days after a release before bumping, so a freshly published
+    # (and possibly compromised) Feature version isn't pulled in immediately
+    # (satisfies zizmor's dependabot-cooldown audit).
+    cooldown:
+      default-days: 7
     # Roll all Feature bumps into a single PR instead of one per Feature.
     groups:
       devcontainer-features:
