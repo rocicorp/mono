@@ -1,0 +1,21 @@
+# Keeps the dev container Feature pins in .devcontainer/devcontainer.json +
+# devcontainer-lock.json up to date. Dependabot opens a PR (bumping the resolved
+# digests in the lock file) whenever a newer version of a referenced Feature is
+# published — e.g. the rocicorp agents/pnpm/docker Features or their upstream
+# dependencies like docker-in-docker — so the lock no longer has to be edited by hand.
+version: 2
+updates:
+  - package-ecosystem: 'devcontainers'
+    directory: '/'
+    schedule:
+      interval: 'weekly'
+    # Wait at least 7 days after a release before bumping, so a freshly published
+    # (and possibly compromised) Feature version isn't pulled in immediately
+    # (satisfies zizmor's dependabot-cooldown audit).
+    cooldown:
+      default-days: 7
+    # Roll all Feature bumps into a single PR instead of one per Feature.
+    groups:
+      devcontainer-features:
+        patterns:
+          - '*'
