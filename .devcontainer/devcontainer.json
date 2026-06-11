@@ -12,8 +12,10 @@
     //  - agents: Codex (pinned) + Claude Code + gh; persists the Claude/gh logins
     //    across rebuilds and sets CLAUDE_CONFIG_DIR.
     //  - pnpm: corepack-managed pnpm; removes npm/npx to enforce pnpm.
+    //  - docker: Docker-in-Docker daemon so testcontainers (zero-cache pg tests) work.
     "ghcr.io/rocicorp/devcontainer-features/agents:1": {},
-    "ghcr.io/rocicorp/devcontainer-features/pnpm:1": {}
+    "ghcr.io/rocicorp/devcontainer-features/pnpm:1": {},
+    "ghcr.io/rocicorp/devcontainer-features/docker:1": {}
   },
   "customizations": {
     "vscode": {
