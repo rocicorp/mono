@@ -1,13 +1,20 @@
 import {describe, expect, test} from 'vitest';
+import {testLogConfig} from '../../../otel/src/test-log-config.ts';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
+import {Catch} from './catch.ts';
+import {makeEditChange} from './change.ts';
+import {MemoryStorage} from './memory-storage.ts';
 import {
   type SourceChange,
   makeSourceChangeAdd,
   makeSourceChangeEdit,
   makeSourceChangeRemove,
 } from './source.ts';
+import {Take} from './take.ts';
 import {runPushTest, type Sources} from './test/fetch-and-push-tests.ts';
+import {createSource} from './test/source-factory.ts';
 
 describe('take with no partition', () => {
   describe('add', () => {
@@ -3507,6 +3514,113 @@ describe('take with no partition', () => {
         ]
       `);
     });
+  });
+});
+
+describe('take with an empty window', () => {
+  // A self-consistent source cannot drive this state through the pipeline —
+  // hydrating against the same rows the pushes come from always fills the
+  // window before an in-window edit can arrive. The operator's input
+  // contract still admits it: a Skip (a `.start()` cursor) forwards an edit
+  // whenever the old and new rows both sort past its bound, and a source
+  // whose hydration disagreed with the IVM comparator — e.g. the zqlite
+  // start-constraint compilation of a NULL-valued cursor bound — hydrates
+  // the take empty while rows past the bound exist. The edit branch was the
+  // only change branch that did not tolerate the empty window: it asserted
+  // `Bound should be set`, which crashed the zero-cache view-syncer with an
+  // Internal ProtocolError.
+  test('an edit pushed onto an empty window surfaces the new row as an add', () => {
+    const lc = createSilentLogContext();
+    const source = createSource(
+      lc,
+      testLogConfig,
+      't',
+      {id: {type: 'string'}, created: {type: 'number'}},
+      ['id'],
+    );
+    const conn = source.connect([
+      ['created', 'asc'],
+      ['id', 'asc'],
+    ]);
+    const take = new Take(conn, new MemoryStorage(), 5);
+    const out = new Catch(take);
+
+    // Hydrate against the empty source: the take stores
+    // {size: 0, bound: undefined}.
+    expect(out.fetch({})).toEqual([]);
+
+    const oldNode = {row: {id: 'i1', created: 100}, relationships: {}};
+    const node = {row: {id: 'i1', created: 200}, relationships: {}};
+
+    expect(() => [...take.push(makeEditChange(node, oldNode))]).not.toThrow();
+    expect(out.pushes).toEqual([
+      {
+        type: 'add',
+        node: {row: {id: 'i1', created: 200}, relationships: {}},
+      },
+    ]);
+  });
+
+  test('a partitioned take handles the empty-window edit per partition and transitions to a normal bound', () => {
+    const lc = createSilentLogContext();
+    const source = createSource(
+      lc,
+      testLogConfig,
+      't',
+      {
+        id: {type: 'string'},
+        issueID: {type: 'string'},
+        created: {type: 'number'},
+        text: {type: 'string'},
+      },
+      ['id'],
+    );
+    const conn = source.connect([
+      ['created', 'asc'],
+      ['id', 'asc'],
+    ]);
+    const take = new Take(conn, new MemoryStorage(), 5, ['issueID']);
+    const out = new Catch(take);
+
+    // Hydrate the i1 partition against the empty source: its take state is
+    // {size: 0, bound: undefined}.
+    expect(out.fetch({constraint: {issueID: 'i1'}})).toEqual([]);
+
+    // First edit lands on the empty window: surfaced as an add.
+    const row = {id: 'c1', issueID: 'i1', created: 100, text: 'a'};
+    const edited = {...row, text: 'b'};
+    expect(() => [
+      ...take.push(
+        makeEditChange(
+          {row: edited, relationships: {}},
+          {row, relationships: {}},
+        ),
+      ),
+    ]).not.toThrow();
+
+    // The window now has a bound, so a second sort-stable edit of the same
+    // row flows the normal edit path instead of the empty-window branch.
+    const editedAgain = {...edited, text: 'c'};
+    expect(() => [
+      ...take.push(
+        makeEditChange(
+          {row: editedAgain, relationships: {}},
+          {row: edited, relationships: {}},
+        ),
+      ),
+    ]).not.toThrow();
+
+    expect(out.pushes).toEqual([
+      {
+        type: 'add',
+        node: {row: edited, relationships: {}},
+      },
+      {
+        type: 'edit',
+        oldRow: edited,
+        row: editedAgain,
+      },
+    ]);
   });
 });
 

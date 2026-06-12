@@ -445,7 +445,27 @@ export class Take implements Operator {
       return;
     }
 
-    assert(takeState.bound, 'Bound should be set');
+    if (takeState.bound === undefined) {
+      // The take window is empty (size 0). A Skip — the `.start()` cursor —
+      // forwards an edit whenever the old and new rows both sort past its
+      // bound, and an input can deliver such an edit while this take holds
+      // no rows (e.g. when the source's hydration disagreed with the IVM
+      // comparator about which rows sort past a NULL-valued cursor bound).
+      // The add-, remove-, and child-change branches all tolerate an
+      // undefined bound; the edit branch must too. The window has room
+      // (size 0 < limit), so surface the new row as an add — the same
+      // outcome the add-change path produces for a row entering an empty
+      // window.
+      this.#setTakeState(
+        takeStateKey,
+        takeState.size + 1,
+        change[ChangeIndex.NODE].row,
+        maxBound,
+      );
+      yield* this.#output.push(makeAddChange(change[ChangeIndex.NODE]), this);
+      return;
+    }
+
     const {compareRows} = this.getSchema();
     const oldCmp = compareRows(
       change[ChangeIndex.OLD_NODE].row,
