@@ -411,15 +411,19 @@ describe('computeZqlSpec', () => {
           },
           "zqlSpec": {
             "a": {
+              "optional": true,
               "type": "number",
             },
             "b": {
+              "optional": false,
               "type": "number",
             },
             "c": {
+              "optional": true,
               "type": "number",
             },
             "d": {
+              "optional": true,
               "type": "number",
             },
           },
@@ -494,15 +498,19 @@ describe('computeZqlSpec', () => {
           },
           "zqlSpec": {
             "a": {
+              "optional": true,
               "type": "number",
             },
             "b": {
+              "optional": false,
               "type": "number",
             },
             "c": {
+              "optional": true,
               "type": "number",
             },
             "d": {
+              "optional": true,
               "type": "number",
             },
           },
@@ -558,9 +566,11 @@ describe('computeZqlSpec', () => {
           },
           "zqlSpec": {
             "a": {
+              "optional": true,
               "type": "number",
             },
             "b": {
+              "optional": false,
               "type": "string",
             },
           },
@@ -578,7 +588,7 @@ describe('computeZqlSpec', () => {
     );
 
     expect(spec.tableSpec.columns.time_tz?.dataType).toBe('timetz|NOT_NULL');
-    expect(spec.zqlSpec.time_tz).toEqual({type: 'number'});
+    expect(spec.zqlSpec.time_tz).toEqual({type: 'number', optional: false});
   });
 
   test('indexes with unsupported columns (MACADDR8) are excluded', () => {
@@ -647,12 +657,15 @@ describe('computeZqlSpec', () => {
           },
           "zqlSpec": {
             "a": {
+              "optional": false,
               "type": "number",
             },
             "b": {
+              "optional": false,
               "type": "string",
             },
             "d": {
+              "optional": false,
               "type": "string",
             },
           },
@@ -735,15 +748,19 @@ describe('computeZqlSpec', () => {
           },
           "zqlSpec": {
             "a": {
+              "optional": false,
               "type": "number",
             },
             "b": {
+              "optional": false,
               "type": "string",
             },
             "c": {
+              "optional": true,
               "type": "string",
             },
             "d": {
+              "optional": false,
               "type": "string",
             },
           },
@@ -821,15 +838,19 @@ describe('computeZqlSpec', () => {
           },
           "zqlSpec": {
             "a": {
+              "optional": false,
               "type": "number",
             },
             "b": {
+              "optional": false,
               "type": "number",
             },
             "c": {
+              "optional": false,
               "type": "number",
             },
             "d": {
+              "optional": false,
               "type": "number",
             },
           },
@@ -924,15 +945,19 @@ describe('computeZqlSpec', () => {
           },
           "zqlSpec": {
             "a": {
+              "optional": false,
               "type": "number",
             },
             "b": {
+              "optional": false,
               "type": "number",
             },
             "c": {
+              "optional": false,
               "type": "number",
             },
             "d": {
+              "optional": true,
               "type": "number",
             },
           },
@@ -1013,15 +1038,19 @@ describe('computeZqlSpec', () => {
           },
           "zqlSpec": {
             "a": {
+              "optional": true,
               "type": "number",
             },
             "b": {
+              "optional": false,
               "type": "number",
             },
             "c": {
+              "optional": false,
               "type": "number",
             },
             "d": {
+              "optional": false,
               "type": "number",
             },
           },
@@ -1139,21 +1168,27 @@ describe('computeZqlSpec', () => {
           },
           "zqlSpec": {
             "createdAt": {
+              "optional": false,
               "type": "number",
             },
             "id": {
+              "optional": false,
               "type": "string",
             },
             "name": {
+              "optional": false,
               "type": "string",
             },
             "order": {
+              "optional": false,
               "type": "number",
             },
             "title": {
+              "optional": true,
               "type": "string",
             },
             "updatedAt": {
+              "optional": false,
               "type": "number",
             },
           },
@@ -1333,9 +1368,11 @@ describe('metadata table integration', () => {
         },
         "zqlSpec": {
           "id": {
+            "optional": false,
             "type": "number",
           },
           "name": {
+            "optional": true,
             "type": "string",
           },
         },
@@ -1396,12 +1433,15 @@ describe('metadata table integration', () => {
         },
         "zqlSpec": {
           "blob": {
+            "optional": true,
             "type": "string",
           },
           "id": {
+            "optional": false,
             "type": "number",
           },
           "name": {
+            "optional": true,
             "type": "string",
           },
         },
@@ -1524,12 +1564,15 @@ describe('metadata table integration', () => {
         },
         "zqlSpec": {
           "blob": {
+            "optional": true,
             "type": "string",
           },
           "id": {
+            "optional": false,
             "type": "number",
           },
           "name": {
+            "optional": true,
             "type": "string",
           },
         },
