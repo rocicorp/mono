@@ -17,6 +17,7 @@
     "ghcr.io/rocicorp/devcontainer-features/agents:1": {},
     "ghcr.io/rocicorp/devcontainer-features/pnpm:1": {}
   },
+  "postCreateCommand": "pnpm install",
   "customizations": {
     "vscode": {
       "extensions": ["oxc.oxc-vscode@1.57.0"],

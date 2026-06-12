@@ -7,6 +7,12 @@
 # no Docker daemon and no host Docker socket, so it can reach these services
 # over the Compose network but cannot create or control containers.
 #
+# Open this with "Dev Containers: Clone Repository in Container Volume…".
+# The repo lives in a Docker volume that the Dev Containers tooling mounts at
+# /workspaces; the `dev` service deliberately has no host bind mounts, so the
+# setup needs nothing on the host but Docker + VS Code (no host git clone, no
+# host Node). See README.md.
+#
 # The Postgres server settings below must match the testcontainers setup in
 # packages/zero-cache/test/pg-container-setup.ts and the timezones in
 # packages/zero-cache/test/pg-1*.ts.
@@ -28,12 +34,11 @@ services:
   dev:
     image: mcr.microsoft.com/devcontainers/javascript-node:24@sha256:5be6833735e290e26232abe2d65197942057fb5091f103c128ca454e2043c1d9
     command: sleep infinity
-    volumes:
-      - ..:/workspaces/mono:cached
-      - type: bind
-        source: ${HOME}/.gitconfig
-        target: /home/node/.gitconfig
-        read_only: true
+    # No host bind mounts on purpose. The workspace is the repo volume that
+    # "Clone Repository in Container Volume" mounts at /workspaces. Adding a
+    # `..:/workspaces/mono` host bind here would break that flow (there is no
+    # host checkout to bind) and is unnecessary — git identity comes from the
+    # gh login the `agents` feature persists, not a mounted ~/.gitconfig.
     environment:
       # Points the zero-cache pg tests at the sibling services below instead
       # of testcontainers (which would need a Docker daemon).
