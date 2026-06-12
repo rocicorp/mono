@@ -1,0 +1,31 @@
+// Dev container profile for local zbugs development/testing.
+//
+// Same workspace as the default profile, plus the zbugs Postgres services
+// (apps/zbugs/docker/docker-compose.yml) started as sibling containers.
+// Inside this container there is no need to run `pnpm run db-up` — Postgres
+// is already running. The workspace still has no Docker daemon and no host
+// Docker socket. See README.md in the parent directory.
+{
+  "name": "Mono — zbugs (sibling Postgres)",
+  "dockerComposeFile": ["../docker-compose.yml", "docker-compose.yml"],
+  "service": "dev",
+  "workspaceFolder": "/workspaces/mono",
+  "shutdownAction": "stopCompose",
+  "remoteUser": "node",
+  "features": {
+    // Keep in sync with ../devcontainer.json.
+    "ghcr.io/rocicorp/devcontainer-features/agents:1": {},
+    "ghcr.io/rocicorp/devcontainer-features/pnpm:1": {}
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": ["oxc.oxc-vscode@1.57.0"],
+      "settings": {
+        "editor.defaultFormatter": "oxc.oxc-vscode",
+        "editor.formatOnSave": true,
+        "extensions.autoUpdate": false,
+        "extensions.autoCheckUpdates": false
+      }
+    }
+  }
+}
