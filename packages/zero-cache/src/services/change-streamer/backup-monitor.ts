@@ -1,4 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
+import {resolver} from '@rocicorp/resolver';
 import parsePrometheusTextFormat from 'parse-prometheus-text-format';
 import {must} from '../../../../shared/src/must.ts';
 import {promiseVoid} from '../../../../shared/src/resolved-promises.ts';
@@ -8,7 +9,7 @@ import {
   getOrCreateGauge,
 } from '../../observability/metrics.ts';
 import {Subscription} from '../../types/subscription.ts';
-import {RunningState} from '../running-state.ts';
+import {RunningState, UnrecoverableError} from '../running-state.ts';
 import type {Service} from '../service.ts';
 import type {ChangeStreamerService} from './change-streamer.ts';
 import type {SnapshotMessage} from './snapshot.ts';
@@ -21,6 +22,29 @@ const MIN_CLEANUP_DELAY_MS = 30_000;
  * and the timestamps reported by the backup destination (e.g. S3).
  */
 export const BACKUP_VERIFICATION_SLACK_MS = 60_000;
+
+/**
+ * How long the actual backup state may remain *continuously* behind the
+ * backup progress claimed by litestream metrics before the backup is
+ * considered genuinely wedged and the process is shut down.
+ *
+ * A wedged backup is dangerous: litestream believes it is making durable
+ * progress when it is not, which can silently corrupt the backup (the WAL
+ * format only makes *some* such gaps detectable). Once that is confirmed to
+ * be the persistent state, continuing to run is worse than crashing, so the
+ * process exits loudly (non-zero, with a logged error) and the wedged backup
+ * destination becomes the priority to investigate.
+ *
+ * The change-log is conservatively *not* purged for the entire time the
+ * backup is stale, so the only cost of a generous grace period is unbounded
+ * change-log growth. We therefore err well on the side of slack: the backup
+ * must stay stuck across many {@link CHECK_INTERVAL_MS} checks before we tear
+ * the server down, so that a transient hiccup (a slow or briefly unreachable
+ * destination, or litestream restarting) does not trigger a shutdown. The
+ * staleness clock is reset the moment a purge is confirmed against a real
+ * upload.
+ */
+export const WEDGED_SHUTDOWN_GRACE_MS = 15 * 60_000; // 15 minutes
 
 /**
  * Returns the time of the most recent object actually uploaded to the
@@ -72,7 +96,10 @@ type Reservation = {
  * reflect what litestream *believes* has been backed up (which has been
  * observed to diverge from reality when uploads silently fail), the cleanup
  * watermark is only advanced after verifying it against the actual backup
- * state in the replica destination via a {@link BackupStateVerifier}.
+ * state in the replica destination via a {@link BackupStateVerifier}. If the
+ * actual backup state stays behind the claimed progress for longer than
+ * {@link WEDGED_SHUTDOWN_GRACE_MS}, the backup is treated as wedged and the
+ * process is shut down rather than risk corrupting the backup.
  */
 export class BackupMonitor implements Service {
   readonly id = 'backup-monitor';
@@ -92,12 +119,23 @@ export class BackupMonitor implements Service {
       'Number of change-log purges blocked because the actual backup state ' +
       '(as listed from the replica destination) could not be verified, or ' +
       'is older than the backup progress claimed by litestream metrics. ' +
-      'A steadily increasing value indicates a wedged or failing backup.',
+      'A steadily increasing value indicates a wedged or failing backup. ' +
+      'The "backup-wedged" reason is emitted once just before the process ' +
+      'shuts itself down due to a persistently stale backup.',
   });
+
+  // Rejected when the backup is determined to be genuinely wedged, which
+  // surfaces as a rejection of the `run()` promise and shuts the process down.
+  readonly #fatal = resolver<void>();
 
   #lastWatermark: string = '';
   #latestBackupTime: Date | null = null;
   #lastVerifiedUploadTime: Date | null = null;
+  // Epoch ms at which the actual backup state was first observed to be
+  // continuously behind the watermark litestream claims to have backed up,
+  // or `null` while the backup is keeping up. Reset whenever a purge is
+  // confirmed against a real upload.
+  #backupStaleSince: number | null = null;
   #cleanupDelayMs: number;
   #checkMetricsTimer: NodeJS.Timeout | undefined;
 
@@ -136,7 +174,8 @@ export class BackupMonitor implements Service {
       CHECK_INTERVAL_MS,
     );
     this.#initBackupLagMetric();
-    return this.#state.stopped();
+    // Resolves on a normal stop; rejects if the backup is found to be wedged.
+    return Promise.race([this.#state.stopped(), this.#fatal.promise]);
   }
 
   startSnapshotReservation(taskID: string): Subscription<SnapshotMessage> {
@@ -309,16 +348,27 @@ export class BackupMonitor implements Service {
     );
     if (verifiedWatermark.length === 0) {
       this.#purgesBlocked.add(1, {reason: 'backup-stale'});
+      const now = Date.now();
+      if (this.#backupStaleSince === null) {
+        this.#backupStaleSince = now;
+      }
+      const staleForMs = now - this.#backupStaleSince;
       this.#lc.warn?.(
         `blocked change-log cleanup up to watermark ${maxWatermark}: ` +
           `litestream claims it was backed up at ` +
           `${claimedTime.toISOString()}, but the last object actually ` +
           `uploaded to ${this.#backupURL} was at ` +
           `${lastUpload.toISOString()}. ` +
-          `The backup may be wedged.`,
+          `The backup has been stale for ${staleForMs} ms.`,
       );
+      if (staleForMs >= WEDGED_SHUTDOWN_GRACE_MS) {
+        this.#shutDownOnWedgedBackup(staleForMs, claimedTime, lastUpload);
+      }
       return;
     }
+    // The cleanup watermark advanced past a real upload, so the backup is
+    // keeping up: clear the staleness clock.
+    this.#backupStaleSince = null;
     this.#changeStreamer.scheduleCleanup(verifiedWatermark);
     for (const watermark of this.#watermarks.keys()) {
       if (watermark <= verifiedWatermark) {
@@ -326,6 +376,33 @@ export class BackupMonitor implements Service {
       }
     }
     this.#lastWatermark = verifiedWatermark;
+  }
+
+  /**
+   * Called when the backup has been continuously stale for longer than
+   * {@link WEDGED_SHUTDOWN_GRACE_MS}. Continuing to run risks corrupting the
+   * backup, so the process is shut down by rejecting the {@link run()}
+   * promise. The exit is non-zero and logged at ERROR for alerting; on
+   * restart the monitor re-verifies, so a still-wedged backup keeps the
+   * process down until the destination is fixed.
+   */
+  #shutDownOnWedgedBackup(
+    staleForMs: number,
+    claimedTime: Date,
+    lastUpload: Date,
+  ) {
+    this.#purgesBlocked.add(1, {reason: 'backup-wedged'});
+    const err = new UnrecoverableError(
+      `backup at ${this.#backupURL} is wedged: litestream claims a backup ` +
+        `at ${claimedTime.toISOString()}, but the last object actually ` +
+        `uploaded was at ${lastUpload.toISOString()}, and the backup has ` +
+        `not advanced for ${staleForMs} ms (grace period ` +
+        `${WEDGED_SHUTDOWN_GRACE_MS} ms). Shutting down to avoid corrupting ` +
+        `the backup; investigate the backup destination.`,
+    );
+    this.#lc.error?.(err.message);
+    clearInterval(this.#checkMetricsTimer);
+    this.#fatal.reject(err);
   }
 
   /**

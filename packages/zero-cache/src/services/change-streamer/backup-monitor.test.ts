@@ -5,7 +5,7 @@ import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.
 import {DbFile} from '../../test/lite.ts';
 import type {Subscription} from '../../types/subscription.ts';
 import {initReplicationState} from '../replicator/schema/replication-state.ts';
-import {BackupMonitor} from './backup-monitor.ts';
+import {BackupMonitor, WEDGED_SHUTDOWN_GRACE_MS} from './backup-monitor.ts';
 import type {ChangeStreamerService} from './change-streamer.ts';
 import type {SnapshotMessage} from './snapshot.ts';
 
@@ -445,5 +445,79 @@ litestream_replica_validation_total{db="/tmp/zbugs-sync-replica.db",name="file",
 
     // Since the fetch was aborted, no watermarks were processed.
     expect(scheduled).toEqual([]);
+  });
+
+  test('shuts down when the backup stays wedged past the grace period', async () => {
+    const time = Date.UTC(2025, 3, 24);
+    vi.setSystemTime(time);
+
+    // Litestream keeps claiming a fresh backup, but the last object actually
+    // uploaded is frozen 10 minutes in the past: the backup is wedged.
+    setMetricsResponse('618p0bw8', (time / 1000).toPrecision(9));
+    lastActualBackupTime = () => Promise.resolve(new Date(time - 10 * 60_000));
+
+    const runResult = monitor.run();
+    let rejection: unknown;
+    void runResult.catch(e => (rejection = e));
+
+    // First eligible check: the staleness clock starts, no shutdown yet.
+    vi.setSystemTime(time + 100_000);
+    await monitor.checkWatermarksAndScheduleCleanup();
+    await Promise.resolve();
+    expect(scheduled).toEqual([]);
+    expect(rejection).toBeUndefined();
+
+    // Still stale, but just shy of the grace period: still no shutdown.
+    vi.setSystemTime(time + 100_000 + WEDGED_SHUTDOWN_GRACE_MS - 1);
+    await monitor.checkWatermarksAndScheduleCleanup();
+    await Promise.resolve();
+    expect(rejection).toBeUndefined();
+
+    // The backup has now been continuously stale for the full grace period,
+    // so the process shuts down by rejecting the `run()` promise.
+    vi.setSystemTime(time + 100_000 + WEDGED_SHUTDOWN_GRACE_MS);
+    await monitor.checkWatermarksAndScheduleCleanup();
+    await expect(runResult).rejects.toThrow(/wedged/);
+    expect(scheduled).toEqual([]);
+  });
+
+  test('resets the staleness clock when the backup recovers', async () => {
+    const time = Date.UTC(2025, 3, 24);
+    vi.setSystemTime(time);
+
+    setMetricsResponse('618p0bw8', (time / 1000).toPrecision(9));
+    lastActualBackupTime = () => Promise.resolve(new Date(time - 10 * 60_000));
+
+    const runResult = monitor.run();
+    let rejection: unknown;
+    void runResult.catch(e => (rejection = e));
+
+    // Stale right up until the last moment before the grace period elapses.
+    vi.setSystemTime(time + 100_000);
+    await monitor.checkWatermarksAndScheduleCleanup();
+    vi.setSystemTime(time + 100_000 + WEDGED_SHUTDOWN_GRACE_MS - 1);
+    await monitor.checkWatermarksAndScheduleCleanup();
+    await Promise.resolve();
+    expect(rejection).toBeUndefined();
+    expect(scheduled).toEqual([]);
+
+    // The backup recovers before the grace period elapses: the purge proceeds
+    // and the staleness clock is reset.
+    lastActualBackupTime = () => Promise.resolve(new Date(time));
+    await monitor.checkWatermarksAndScheduleCleanup();
+    expect(scheduled).toEqual(['618p0bw8']);
+
+    // A subsequent wedge must endure a *fresh* full grace period. Even though
+    // the total time spent stale now far exceeds the grace period, it was not
+    // continuous, so the process keeps running.
+    setMetricsResponse('618p0bw9', ((time + 100_000) / 1000).toPrecision(9));
+    lastActualBackupTime = () => Promise.resolve(new Date(time));
+    vi.setSystemTime(time + 100_000 + WEDGED_SHUTDOWN_GRACE_MS + 100_000);
+    await monitor.checkWatermarksAndScheduleCleanup();
+    await Promise.resolve();
+    expect(rejection).toBeUndefined();
+    expect(scheduled).toEqual(['618p0bw8']);
+
+    await monitor.stop();
   });
 });
