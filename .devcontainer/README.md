@@ -58,6 +58,12 @@ locally: Clone in Container Volume as above, and when prompted for the
 configuration pick "Mono — zbugs" (or switch with "Dev Containers: Switch
 Container").
 
+**After switching from the other profile, run "Dev Containers: Rebuild
+Container".** Both profiles share the same Compose project and `dev`
+service, so the tooling may reattach to the existing workspace container
+instead of recreating it with this profile's environment. The symptom is a
+blank `ZERO_UPSTREAM_DB`; a rebuild fixes it.
+
 Inside this profile:
 
 - Do **not** run `pnpm run db-up` / `db-down` — Postgres is already running.
