@@ -11,6 +11,10 @@
   "service": "dev",
   "workspaceFolder": "/workspaces/mono",
   "shutdownAction": "stopCompose",
+  // Vite dev server (5173) and zero-cache (4848). The browser runs on the
+  // host and connects to zero-cache via VITE_PUBLIC_SERVER=http://localhost:4848,
+  // so 4848 must be forwarded too — not just the page port.
+  "forwardPorts": [5173, 4848],
   "remoteUser": "node",
   "features": {
     // Keep in sync with ../devcontainer.json.
