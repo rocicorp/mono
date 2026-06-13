@@ -111,6 +111,13 @@ const issueNotifications = table('issueNotifications')
   })
   .primaryKey('userID', 'issueID');
 
+const executionResults = table('execution_results')
+  .columns({
+    id: string(),
+    body: string(),
+  })
+  .primaryKey('id');
+
 // Relationships
 const userRelationships = relationships(user, ({many}) => ({
   createdIssues: many({
@@ -262,6 +269,7 @@ export const schema = createSchema({
     emoji,
     userPref,
     issueNotifications,
+    executionResults,
   ],
   relationships: [
     userRelationships,
