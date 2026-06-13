@@ -1,6 +1,6 @@
 import {beforeEach, describe, expect, test, vi} from 'vitest';
-import type {ConnectionState, Schema, ZeroOptions} from './zero-client.ts';
-import type * as ZeroClientModule from './zero-client.ts';
+import type {ConnectionState, Schema, ZeroOptions} from './zero.ts';
+import type * as ZeroClientModule from './zero.ts';
 
 function createMockZeroInstance(clientID = 'test-client') {
   const unsubscribe = vi.fn();
@@ -38,7 +38,7 @@ const {ZeroMock} = vi.hoisted(() => ({
   ZeroMock: vi.fn(),
 }));
 
-vi.mock('./zero-client.ts', async importOriginal => {
+vi.mock('./zero.ts', async importOriginal => {
   const orig = await importOriginal<typeof ZeroClientModule>();
   return {
     ...orig,

@@ -1,7 +1,7 @@
 import {
   DEFAULT_TTL_MS,
   addContextToQuery,
-} from '../../zero-client/src/client/bindings.ts';
+} from './bindings.ts';
 import type {
   BaseDefaultContext,
   BaseDefaultSchema,
@@ -13,7 +13,7 @@ import type {
   QueryResultDetails,
   ReadonlyJSONValue,
   TTL,
-} from './zero-client.ts';
+} from './zero.ts';
 import type {QueryResult, ViewWrapper, Z} from './zero.svelte.ts';
 
 export type {QueryResultDetails};
@@ -73,7 +73,9 @@ export class Query<
   ): void {
     const q = resolveQuery(this.#z, query);
     const opts = normalizeOptions(options);
+    const view = this.#view;
     this.#view = this.#z.viewStore.getView(this.#z, q, opts.enabled, opts.ttl);
+    view?.destroy();
   }
 
   destroy(): void {

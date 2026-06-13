@@ -2,7 +2,7 @@ import {
   asQueryInternals,
   deepClone,
   type Immutable,
-} from '../../zero-client/src/client/bindings.ts';
+} from './bindings.ts';
 import {Query as SvelteQuery, type QueryOptions} from './query.svelte.ts';
 import {
   Zero,
@@ -28,7 +28,7 @@ import {
   type TTL,
   type TypedView,
   type ZeroOptions,
-} from './zero-client.ts';
+} from './zero.ts';
 
 export type QueryResult<TReturn> = readonly [
   HumanReadable<TReturn> | undefined,
@@ -88,6 +88,7 @@ export class ViewStore {
       | ViewWrapper<TSchema, TReturn, TContext>
       | undefined;
     if (existing) {
+      existing.acquire();
       existing.updateTTL(ttl);
       return existing;
     }
@@ -110,6 +111,7 @@ export class ViewWrapper<
   #view: TypedView<HumanReadable<TReturn>> | undefined;
   #unsubscribe: (() => void) | undefined;
   #ttl: TTL;
+  #refs = 1;
   #snapshot = $state.raw<QueryResult<TReturn>>([undefined, UNKNOWN]);
   readonly #singular: boolean | undefined;
   readonly #z: ZLike<TSchema, TContext>;
@@ -157,7 +159,18 @@ export class ViewWrapper<
     this.#view?.updateTTL(ttl);
   }
 
+  acquire(): void {
+    this.#refs++;
+  }
+
   destroy(): void {
+    if (this.#refs === 0) {
+      return;
+    }
+    this.#refs--;
+    if (this.#refs > 0) {
+      return;
+    }
     this.#resetView();
     this.#onDestroy();
   }

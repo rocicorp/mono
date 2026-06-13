@@ -6,7 +6,7 @@ import type {
   DefaultContext,
   DefaultSchema,
   ZeroOptions,
-} from './zero-client.ts';
+} from './zero.ts';
 import {Z} from './zero.svelte.ts';
 
 const ZERO_CONTEXT = Symbol('zero');
@@ -27,7 +27,7 @@ export function useZero<
 >(): Z<TSchema, MD, TContext> {
   const z = getContext<Z<TSchema, MD, TContext> | undefined>(ZERO_CONTEXT);
   if (!z) {
-    throw new Error('useZero must be used within a ZeroProvider');
+    throw new Error('useZero must be called after setZero');
   }
   return z;
 }

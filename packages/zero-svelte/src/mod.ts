@@ -25,4 +25,4 @@ export type {
   TTL,
   TypedView,
   ZeroOptions,
-} from './zero-client.ts';
+} from './zero.ts';

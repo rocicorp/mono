@@ -18,7 +18,7 @@ import {
   type MaterializeOptions,
   type Query,
   type Schema,
-} from './zero-client.ts';
+} from './zero.ts';
 import {ViewStore} from './zero.svelte.ts';
 import type {Z} from './zero.svelte.ts';
 
@@ -337,6 +337,37 @@ describe('Query class', () => {
     expect(q.details).toEqual({type: 'unknown'});
   });
 
+  test('shared view stays alive until all consumers destroy it', () => {
+    const {tableQuery, queryDelegate} = setupTestEnvironment();
+    const mockZ = createMockZ(queryDelegate);
+    const materializeSpy = vi.spyOn(queryDelegate, 'materialize');
+
+    const q1 = new SvelteQuery(mockZ, tableQuery);
+    const q2 = new SvelteQuery(mockZ, tableQuery);
+    const view = materializeSpy.mock.results[0].value;
+    const destroySpy = vi.spyOn(view, 'destroy');
+
+    expect(materializeSpy).toHaveBeenCalledTimes(1);
+    expect(q1.data).toEqual([
+      {a: 1, b: 'a'},
+      {a: 2, b: 'b'},
+    ]);
+    expect(q2.data).toEqual(q1.data);
+
+    q1.destroy();
+
+    expect(q1.data).toBeUndefined();
+    expect(q2.data).toEqual([
+      {a: 1, b: 'a'},
+      {a: 2, b: 'b'},
+    ]);
+    expect(destroySpy).toHaveBeenCalledTimes(0);
+
+    q2.destroy();
+
+    expect(destroySpy).toHaveBeenCalledTimes(1);
+  });
+
   test('updateQuery switches to new query', () => {
     const {tableQuery, queryDelegate} = setupTestEnvironment();
     const mockZ = createMockZ(queryDelegate);
@@ -351,6 +382,21 @@ describe('Query class', () => {
     q.updateQuery(tableQuery.where('a', 1));
 
     expect(q.data).toEqual([{a: 1, b: 'a'}]);
+  });
+
+  test('updateQuery releases old view', () => {
+    const {tableQuery, queryDelegate} = setupTestEnvironment();
+    const mockZ = createMockZ(queryDelegate);
+    const materializeSpy = vi.spyOn(queryDelegate, 'materialize');
+
+    const q = new SvelteQuery(mockZ, tableQuery.where('a', 1));
+    const view = materializeSpy.mock.results[0].value;
+    const destroySpy = vi.spyOn(view, 'destroy');
+
+    q.updateQuery(tableQuery.where('a', 2));
+
+    expect(q.data).toEqual([{a: 2, b: 'b'}]);
+    expect(destroySpy).toHaveBeenCalledTimes(1);
   });
 
   test('disabled query returns empty array for plural', () => {
