@@ -1,0 +1,35 @@
+// For format details, see https://aka.ms/devcontainer.json.
+//
+// The workspace runs as a Docker Compose service beside static Postgres
+// containers used by the zero-cache pg tests (see docker-compose.yml).
+// Security invariant: the workspace must not be able to create or control
+// containers — no Docker daemon inside (Docker-in-Docker), no host Docker
+// socket mounted. See README.md in this directory.
+{
+  "name": "Mono (Node 24)",
+  "dockerComposeFile": ["docker-compose.yml"],
+  "service": "dev",
+  "workspaceFolder": "/workspaces/mono",
+  "shutdownAction": "stopCompose",
+  "remoteUser": "node",
+  "features": {
+    // Shared rocicorp features (https://github.com/rocicorp/devcontainer-features):
+    //  - agents: Codex (pinned) + Claude Code + gh; persists the Claude/gh logins
+    //    across rebuilds and sets CLAUDE_CONFIG_DIR.
+    //  - pnpm: corepack-managed pnpm; removes npm/npx to enforce pnpm.
+    "ghcr.io/rocicorp/devcontainer-features/agents:1": {},
+    "ghcr.io/rocicorp/devcontainer-features/pnpm:1": {}
+  },
+  "postCreateCommand": "pnpm install",
+  "customizations": {
+    "vscode": {
+      "extensions": ["oxc.oxc-vscode@1.57.0"],
+      "settings": {
+        "editor.defaultFormatter": "oxc.oxc-vscode",
+        "editor.formatOnSave": true,
+        "extensions.autoUpdate": false,
+        "extensions.autoCheckUpdates": false
+      }
+    }
+  }
+}

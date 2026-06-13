@@ -146,7 +146,7 @@
     "@rocicorp/lock": "^1.0.4",
     "@rocicorp/logger": "^5.4.0",
     "@rocicorp/resolver": "^1.0.2",
-    "@rocicorp/zero-sqlite3": "^1.0.18",
+    "@rocicorp/zero-sqlite3": "^1.1.2",
     "@standard-schema/spec": "^1.0.0",
     "@types/basic-auth": "^1.1.8",
     "@types/ws": "^8.5.12",
@@ -238,5 +238,5 @@
   "engines": {
     "node": ">=22"
   },
-  "packageManager": "pnpm@11.3.0"
+  "packageManager": "pnpm@11.5.3"
 }
