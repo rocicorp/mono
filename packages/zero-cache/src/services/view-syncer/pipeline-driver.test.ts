@@ -83,7 +83,7 @@ describe('view-syncer/pipeline-driver', () => {
       CREATE TABLE issues (
         id TEXT PRIMARY KEY,
         closed BOOL,
-        ignored INET,
+        ignored BYTEA,
         _0_version TEXT NOT NULL
       );
       CREATE TABLE comments (
