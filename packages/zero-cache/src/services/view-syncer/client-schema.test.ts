@@ -55,6 +55,12 @@ describe('client schemas', () => {
       CREATE INDEX not_unique ON nopk (id ASC);
       CREATE UNIQUE INDEX nullable ON nopk (d ASC);
 
+      CREATE TABLE unsupported_pk(
+        id BYTEA PRIMARY KEY,
+        val TEXT,
+        _0_version TEXT
+      );
+
       -- Not the full internal tables. Just declared here to confirm that
       -- they do not show up in the error messages.
       CREATE TABLE "zero.permissions" (lock bool PRIMARY KEY);
@@ -309,6 +315,29 @@ describe('client schemas', () => {
       ),
     ).toThrowErrorMatchingInlineSnapshot(
       `[ProtocolError: The "nopk" table is missing a primary key or non-null unique index and thus cannot be synced to the client]`,
+    );
+  });
+
+  test('table with unsupported primary key column', () => {
+    expect(() =>
+      checkClientSchema(
+        SHARD_ID,
+        {
+          tables: {
+            unsupported_pk: {
+              columns: {
+                id: {type: 'string'},
+                val: {type: 'string'},
+              },
+              primaryKey: ['id'],
+            },
+          },
+        },
+        tableSpecs,
+        fullTables,
+      ),
+    ).toThrowErrorMatchingInlineSnapshot(
+      `[ProtocolError: The "unsupported_pk" table's primary key contains unsupported columns: "id" (BYTEA). These columns must use Zero-supported data types to sync the table to the client.]`,
     );
   });
 
