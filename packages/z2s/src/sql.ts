@@ -6,8 +6,10 @@ import type {FormatConfig, SQLItem, SQLQuery} from '@databases/sql';
 import sql, {SQLItemType} from '@databases/sql';
 import {assert, unreachable} from '../../shared/src/asserts.ts';
 import {
+  isPgNativeStringType,
   isPgNumberType,
   isPgStringType,
+  isPgTextRepresentedType,
 } from '../../zero-cache/src/types/pg-data-type.ts';
 import type {LiteralValue} from '../../zero-protocol/src/ast.ts';
 import type {ServerColumnSchema} from '../../zero-types/src/server-schema.ts';
@@ -230,7 +232,7 @@ function formatCommonToSingularAndPlural(
   if (arg.isEnum) {
     return `${valuePlaceholder}::text::"${arg.type}"`;
   }
-  if (isPgStringType(arg.type)) {
+  if (isPgNativeStringType(arg.type)) {
     // For comparison cast to the general `text` type, not the
     // specific column type (i.e. `arg.type`), because we don't want to
     // force the value being compared to the size/max-size of the column
@@ -238,6 +240,9 @@ function formatCommonToSingularAndPlural(
     return arg.isComparison
       ? `${valuePlaceholder}::text`
       : `${valuePlaceholder}::text::${arg.type}`;
+  }
+  if (isPgTextRepresentedType(arg.type)) {
+    return `${valuePlaceholder}::text::${arg.type}`;
   }
   if (isPgNumberType(arg.type)) {
     // For comparison cast to `double precision` which uses IEEE 754 (the same

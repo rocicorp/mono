@@ -106,6 +106,11 @@ export async function getServerSchema<S extends Schema>(
       );
     } else if (isEnum) {
       type = row.typename;
+    } else if (
+      type === 'user-defined' &&
+      dataTypeToZqlValueType(row.typename, false, false) !== undefined
+    ) {
+      type = row.typename;
     }
     if (
       (type === 'bpchar' ||
