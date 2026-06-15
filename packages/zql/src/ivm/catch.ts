@@ -128,11 +128,6 @@ export function expandNode(node: Node | 'yield'): CaughtNode {
     : {
         row: node.row,
         relationships: mapValues(node.relationships, getChildren => {
-          // Manual push instead of Array.from(getChildren(), expandNode): both
-          // walk the same iterator, but Array.from's iterable+mapFn builtin
-          // carries per-element overhead (index tracking, generic mapFn call)
-          // that an inlined for-of + push avoids (~1.4x on the relationship-
-          // heavy memory-ivm-deopt Join hydration benchmark).
           const children: CaughtNode[] = [];
           for (const child of getChildren()) {
             children.push(expandNode(child));
