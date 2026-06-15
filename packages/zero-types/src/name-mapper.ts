@@ -60,7 +60,10 @@ export class NameMapper {
     if (allColumnsSame) {
       return row;
     }
-    if (Object.values(columns).includes('__proto__')) {
+    if (
+      Object.hasOwn(row, '__proto__') ||
+      Object.values(columns).includes('__proto__')
+    ) {
       return Object.fromEntries(
         Object.entries(row).map(([col, value]) => [
           Object.hasOwn(columns, col) ? columns[col] : col,

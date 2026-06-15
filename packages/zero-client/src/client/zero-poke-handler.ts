@@ -433,12 +433,16 @@ function projectWireKeys(columns: readonly string[], row: Row): Row {
   const projected: Record<string, Row[string]> = {};
   for (const column of columns) {
     if (Object.hasOwn(row, column)) {
-      Object.defineProperty(projected, column, {
-        value: row[column],
-        enumerable: true,
-        configurable: true,
-        writable: true,
-      });
+      if (column === '__proto__') {
+        Object.defineProperty(projected, column, {
+          value: row[column],
+          enumerable: true,
+          configurable: true,
+          writable: true,
+        });
+      } else {
+        projected[column] = row[column];
+      }
     }
   }
   return projected;
