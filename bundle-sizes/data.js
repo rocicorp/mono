@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781182901536,
+  "lastUpdate": 1781533732656,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -56817,6 +56817,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "Size of replicache.min.mjs.br (Brotli compressed)",
             "value": 33481,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "arv@roci.dev",
+            "name": "Erik Arvidsson",
+            "username": "arv"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "78df00486c9914a25a7a9a2b48e4a6381dc957bf",
+          "message": "chore: upgrade @rocicorp/logger to version 6.0.0 across all packages (#6125)\n\nTo pick up object allocation optimizations",
+          "timestamp": "2026-06-15T14:17:30Z",
+          "tree_id": "c30e334a22a5da037e799ea799b12fb9accd9370",
+          "url": "https://github.com/rocicorp/mono/commit/78df00486c9914a25a7a9a2b48e4a6381dc957bf"
+        },
+        "date": 1781533719433,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 317540,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 57067,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 117426,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 33511,
             "unit": "bytes"
           }
         ]
