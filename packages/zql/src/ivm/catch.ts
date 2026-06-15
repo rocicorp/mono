@@ -1,4 +1,5 @@
 import {unreachable} from '../../../shared/src/asserts.ts';
+import {mapValues} from '../../../shared/src/objects.ts';
 import {emptyArray} from '../../../shared/src/sentinels.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import {ChangeIndex} from './change-index.ts';
@@ -126,11 +127,12 @@ export function expandNode(node: Node | 'yield'): CaughtNode {
     ? node
     : {
         row: node.row,
-        relationships: Object.fromEntries(
-          Object.entries(node.relationships).map(([k, v]) => [
-            k,
-            Array.from(v(), expandNode),
-          ]),
-        ),
+        relationships: mapValues(node.relationships, getChildren => {
+          const children: CaughtNode[] = [];
+          for (const child of getChildren()) {
+            children.push(expandNode(child));
+          }
+          return children;
+        }),
       };
 }
