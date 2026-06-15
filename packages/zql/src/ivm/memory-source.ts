@@ -340,6 +340,33 @@ export class MemorySource implements Source {
       scanStart = startAt;
     }
 
+    // Fast path: no overlay to apply, no `start`, and no connection filters.
+    // This is the common shape for join child-lookups, plain scans, and source
+    // fetches that sit beneath a downstream `Filter` operator. In that case the
+    // whole generator stack (generateWithOverlay → generateWithStart →
+    // skipYields → generateWithConstraint) reduces to: walk rows from
+    // `scanStart`, wrap each as a Node, and stop once the constraint no longer
+    // matches (rows are sorted by the constraint key first, so matches are
+    // contiguous). Collapsing the five chained generators into one loop removes
+    // a large amount of per-row generator-resume overhead on the hottest path.
+    const overlayActive =
+      this.#overlay !== undefined &&
+      conn.lastPushedEpoch >= this.#overlay.epoch;
+    if (
+      !overlayActive &&
+      req.start === undefined &&
+      conn.filters === undefined
+    ) {
+      const {constraint} = req;
+      for (const row of generateRows(data, scanStart, req.reverse)) {
+        if (constraint && !constraintMatchesRow(constraint, row)) {
+          break;
+        }
+        yield {row, relationships: {}};
+      }
+      return;
+    }
+
     const rowsIterable = generateRows(data, scanStart, req.reverse);
     const withOverlay = generateWithOverlay(
       startAt,
