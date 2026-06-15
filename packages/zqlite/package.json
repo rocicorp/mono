@@ -23,12 +23,12 @@
     "@databases/escape-identifier": "^1.0.3",
     "@databases/sql": "^3.3.0",
     "@opentelemetry/api": "^1.9.0",
-    "@rocicorp/logger": "^5.4.0",
+    "@rocicorp/logger": "^6.0.0",
     "@rocicorp/zero-sqlite3": "^1.1.2",
     "zql": "workspace:*"
   },
   "devDependencies": {
-    "@rocicorp/logger": "^5.4.0",
+    "@rocicorp/logger": "^6.0.0",
     "fast-check": "^3.18.0",
     "nanoid": "^5.1.2",
     "otel": "workspace:*",

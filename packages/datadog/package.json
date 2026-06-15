@@ -16,7 +16,7 @@
   },
   "devDependencies": {
     "@rocicorp/lock": "^1.0.4",
-    "@rocicorp/logger": "^5.4.0",
+    "@rocicorp/logger": "^6.0.0",
     "@rocicorp/resolver": "^1.0.2",
     "@vitest/runner": "^4.1.6",
     "oxfmt": "^0.45.0",
