@@ -544,6 +544,17 @@ export class Storer implements Service {
       await this.#startCatchup(catchupQueue.splice(0));
     };
 
+    const abortGroup = async () => {
+      if (group === null) {
+        return;
+      }
+      const aborting = group;
+      group = null;
+      tx = null;
+      aborting.pool.abort();
+      await aborting.pool.done();
+    };
+
     const dequeueEntry = () =>
       group !== null && tx === null
         ? this.#queue.dequeue(['flush-idle-group'], 0)
@@ -584,12 +595,7 @@ export class Storer implements Service {
             this.#onConsumed(msg);
             continue;
           case 'abort': {
-            if (group) {
-              group.pool.abort();
-              await group.pool.done();
-              group = null;
-              tx = null;
-            }
+            await abortGroup();
             continue;
           }
         }
@@ -704,7 +710,11 @@ export class Storer implements Service {
           await flushGroup();
         }
       }
-      await flushGroup();
+      if (tx !== null) {
+        await abortGroup();
+      } else {
+        await flushGroup();
+      }
     } catch (e) {
       catchupQueue.forEach(({subscriber}) => subscriber.fail(e));
       throw e;

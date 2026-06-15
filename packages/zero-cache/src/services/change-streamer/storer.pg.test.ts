@@ -184,6 +184,30 @@ describe('change-streamer/storer', () => {
       ).toEqual([{lastWatermark: '08'}]);
     });
 
+    test('stop rolls back open transaction group', async () => {
+      storer.store('07', ['begin', messages.begin(), {commitWatermark: '08'}]);
+      for (let i = 0; i < 99; i++) {
+        storer.store('07', [
+          'data',
+          messages.insert('issues', {id: `partial-${i}`}),
+        ]);
+      }
+
+      await storer.stop();
+      await done;
+
+      expect(
+        await db`
+          SELECT watermark, pos, change->>'tag' as tag
+            FROM "xero_5/cdc"."changeLog"
+           WHERE watermark = '07'
+           ORDER BY watermark, pos`,
+      ).toEqual([]);
+      expect(
+        await db`SELECT "lastWatermark" FROM "xero_5/cdc"."replicationState"`,
+      ).toEqual([{lastWatermark: '06'}]);
+    });
+
     test('status during an open transaction waits for grouped commit', async () => {
       storer.store('07', ['begin', messages.begin(), {commitWatermark: '08'}]);
       storer.store('07', [
