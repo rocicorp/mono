@@ -21,6 +21,7 @@ export class HeadIndexedQueue<T> {
     this.#count++;
   }
 
+  // Like Array.shift(), these accessors return undefined for empty queues or stored undefined values; use size to disambiguate.
   peek(): T | undefined {
     if (this.#count === 0) {
       return undefined;
