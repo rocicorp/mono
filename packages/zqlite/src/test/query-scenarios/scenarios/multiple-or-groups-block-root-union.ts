@@ -176,8 +176,8 @@ export default {
       },
       {
         table: 'assignment_to_class',
-        sql: 'SELECT "assignment_id","class_id" FROM "assignment_to_class" WHERE "assignment_id" = ? AND "class_id" = ? ORDER BY "assignment_id" asc, "class_id" asc',
-        calls: 2001,
+        sql: 'SELECT "assignment_id","class_id" FROM "assignment_to_class" WHERE "assignment_id" = ? AND "class_id" = ?',
+        calls: 2000,
       },
       {
         table: 'assignment_to_student',
@@ -185,7 +185,11 @@ export default {
       },
       {
         table: 'assignment',
-        sql: 'SELECT "id","teacher_id","archived_at","created_at" FROM "assignment" WHERE "id" = ? AND TRUE ORDER BY "created_at" desc, "id" asc',
+        sql: 'SELECT "id","teacher_id","archived_at","created_at" FROM "assignment" WHERE "id" IN (?) AND TRUE ORDER BY "created_at" desc, "id" asc',
+      },
+      {
+        table: 'assignment_to_class',
+        sql: 'SELECT "assignment_id","class_id" FROM "assignment_to_class" WHERE "assignment_id" = ? AND "class_id" = ? AND "class_id" = ?',
       },
     ],
     engineIdea:

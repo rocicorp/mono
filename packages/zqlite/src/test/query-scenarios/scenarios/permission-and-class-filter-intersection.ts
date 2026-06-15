@@ -147,13 +147,16 @@ export default {
       },
       {
         table: 'assignment',
-        sql: 'SELECT "id","teacher_id","archived_at","created_at" FROM "assignment" WHERE "id" = ? AND "archived_at" IS ? ORDER BY "created_at" desc, "id" asc',
-        calls: 3,
+        sql: 'SELECT "id","teacher_id","archived_at","created_at" FROM "assignment" WHERE "id" IN (?,?,?) AND "archived_at" IS ? ORDER BY "created_at" desc, "id" asc',
       },
       {
         table: 'teacher_assignment_access',
-        sql: 'SELECT "assignment_id","teacher_id","access_kind" FROM "teacher_assignment_access" WHERE "assignment_id" = ? AND "teacher_id" = ? ORDER BY "assignment_id" asc, "teacher_id" asc',
-        calls: 3,
+        sql: 'SELECT "assignment_id","teacher_id","access_kind" FROM "teacher_assignment_access" WHERE "assignment_id" = ? AND "teacher_id" = ?',
+        calls: 2,
+      },
+      {
+        table: 'teacher_assignment_access',
+        sql: 'SELECT "assignment_id","teacher_id","access_kind" FROM "teacher_assignment_access" WHERE "assignment_id" = ? AND "teacher_id" = ? AND "teacher_id" = ?',
       },
     ],
     engineIdea:

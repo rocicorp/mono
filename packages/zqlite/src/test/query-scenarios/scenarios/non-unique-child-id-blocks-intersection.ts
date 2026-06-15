@@ -98,13 +98,17 @@ export default {
       },
       {
         table: 'assignment',
-        sql: 'SELECT "id","teacher_id","archived_at","created_at" FROM "assignment" WHERE "id" = ? AND TRUE ORDER BY "created_at" desc, "id" asc',
-        calls: 4,
+        sql: 'SELECT "id","teacher_id","archived_at","created_at" FROM "assignment" WHERE "id" IN (?,?,?) AND TRUE ORDER BY "created_at" desc, "id" asc',
       },
       {
         table: 'assignment_to_student',
-        sql: 'SELECT "assignment_id","student_id","created_at" FROM "assignment_to_student" WHERE "assignment_id" = ? AND "created_at" > ? ORDER BY "assignment_id" asc, "student_id" asc',
-        calls: 7,
+        sql: 'SELECT "assignment_id","student_id","created_at" FROM "assignment_to_student" WHERE "assignment_id" = ? AND "created_at" > ?',
+        calls: 3,
+      },
+      {
+        table: 'assignment_to_student',
+        sql: 'SELECT "assignment_id","student_id","created_at" FROM "assignment_to_student" WHERE "assignment_id" = ? AND "student_id" = ? AND "created_at" > ?',
+        calls: 3,
       },
     ],
     engineIdea:

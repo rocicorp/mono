@@ -119,17 +119,20 @@ export default {
       },
       {
         table: 'assignment_to_class',
-        sql: 'SELECT "assignment_id","class_id" FROM "assignment_to_class" WHERE "class_id" = ? ORDER BY "assignment_id" asc, "class_id" asc',
+        sql: 'SELECT "assignment_id","class_id" FROM "assignment_to_class" WHERE "class_id" IN (?) ORDER BY "assignment_id" asc, "class_id" asc',
       },
       {
         table: 'assignment',
-        sql: 'SELECT "id","teacher_id","archived_at","created_at" FROM "assignment" WHERE "id" = ? AND TRUE ORDER BY "created_at" desc, "id" asc',
+        sql: 'SELECT "id","teacher_id","archived_at","created_at" FROM "assignment" WHERE "id" IN (?,?) AND TRUE ORDER BY "created_at" desc, "id" asc',
+      },
+      {
+        table: 'teacher_assignment_access',
+        sql: 'SELECT "assignment_id","teacher_id","access_kind" FROM "teacher_assignment_access" WHERE "assignment_id" = ? AND "teacher_id" = ?',
         calls: 2,
       },
       {
         table: 'teacher_assignment_access',
-        sql: 'SELECT "assignment_id","teacher_id","access_kind" FROM "teacher_assignment_access" WHERE "assignment_id" = ? AND "teacher_id" = ? ORDER BY "assignment_id" asc, "teacher_id" asc',
-        calls: 3,
+        sql: 'SELECT "assignment_id","teacher_id","access_kind" FROM "teacher_assignment_access" WHERE "assignment_id" = ? AND "teacher_id" = ? AND "teacher_id" = ?',
       },
     ],
     rows: [{id: 102, teacher_id: 2, archived_at: null, created_at: 102}],

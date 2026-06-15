@@ -472,20 +472,16 @@ test('normalizes related subqueries recursively', () => {
 
 test('preserves simple filter semantics under generated rows', () => {
   fc.assert(
-    fc.property(
-      filterConditionArbitrary(),
-      rowArbitrary(),
-      (condition, row) => {
-        const normalized = normalizePlannerAST({
-          table: 'users',
-          where: condition,
-        }).where as NoSubqueryCondition | undefined;
-        const before = createPredicate(condition)(row);
-        const after = normalized ? createPredicate(normalized)(row) : true;
+    fc.property(filterCaseArbitrary(), ({condition, row}) => {
+      const normalized = normalizePlannerAST({
+        table: 'users',
+        where: condition,
+      }).where as NoSubqueryCondition | undefined;
+      const before = createPredicate(condition)(row);
+      const after = normalized ? createPredicate(normalized)(row) : true;
 
-        expect(after).toBe(before);
-      },
-    ),
+      expect(after).toBe(before);
+    }),
     {numRuns: 1_000},
   );
 });
@@ -610,6 +606,37 @@ function plannerConditionArbitrary(): fc.Arbitrary<Condition> {
   })).condition as fc.Arbitrary<Condition>;
 }
 
+type GeneratedColumnName = 'a' | 'b' | 'c';
+type GeneratedValue = string | number | boolean | null | undefined;
+type GeneratedRow = Record<GeneratedColumnName, GeneratedValue>;
+
+function filterCaseArbitrary(): fc.Arbitrary<{
+  readonly condition: NoSubqueryCondition;
+  readonly row: GeneratedRow;
+}> {
+  return rowArbitrary().chain(row =>
+    filterConditionArbitraryForRow(row).map(condition => ({condition, row})),
+  );
+}
+
+function filterConditionArbitraryForRow(
+  row: GeneratedRow,
+): fc.Arbitrary<NoSubqueryCondition> {
+  return fc.letrec(tie => ({
+    condition: fc.oneof(
+      simpleConditionArbitraryForRow(row),
+      fc.record({
+        type: fc.constant('and' as const),
+        conditions: fc.array(tie('condition'), {maxLength: 4}),
+      }),
+      fc.record({
+        type: fc.constant('or' as const),
+        conditions: fc.array(tie('condition'), {maxLength: 4}),
+      }),
+    ),
+  })).condition as fc.Arbitrary<NoSubqueryCondition>;
+}
+
 function correlatedSubqueryConditionArbitrary(): fc.Arbitrary<CorrelatedSubqueryCondition> {
   return fc.record({
     type: fc.constant('correlatedSubquery' as const),
@@ -662,6 +689,51 @@ function simpleConditionArbitrary(): fc.Arbitrary<NoSubqueryCondition> {
   );
 }
 
+function simpleConditionArbitraryForRow(
+  row: GeneratedRow,
+): fc.Arbitrary<NoSubqueryCondition> {
+  return fc.oneof(
+    fc.record({
+      type: fc.constant('simple' as const),
+      left: columnReferenceArbitrary(),
+      op: fc.constantFrom<SimpleOperator>('=', '!='),
+      right: fc.record({
+        type: fc.constant('literal' as const),
+        value: scalarLiteralArbitrary(),
+      }),
+    }),
+    columnNameArbitrary().chain(name =>
+      fc.record({
+        type: fc.constant('simple' as const),
+        left: fc.constant({type: 'column' as const, name}),
+        op: fc.constantFrom<SimpleOperator>('<', '<=', '>', '>='),
+        right: fc.record({
+          type: fc.constant('literal' as const),
+          value: comparableLiteralArbitrary(row[name]),
+        }),
+      }),
+    ),
+    fc.record({
+      type: fc.constant('simple' as const),
+      left: columnReferenceArbitrary(),
+      op: fc.constantFrom<SimpleOperator>('IS', 'IS NOT'),
+      right: fc.record({
+        type: fc.constant('literal' as const),
+        value: fc.constant(null),
+      }),
+    }),
+    fc.record({
+      type: fc.constant('simple' as const),
+      left: columnReferenceArbitrary(),
+      op: fc.constantFrom<SimpleOperator>('IN', 'NOT IN'),
+      right: fc.record({
+        type: fc.constant('literal' as const),
+        value: fc.array(inLiteralArbitrary(), {maxLength: 6}),
+      }),
+    }),
+  );
+}
+
 function rowArbitrary() {
   return fc.record({
     a: rowValueArbitrary(),
@@ -671,10 +743,29 @@ function rowArbitrary() {
 }
 
 function columnReferenceArbitrary() {
-  return fc.record({
-    type: fc.constant('column' as const),
-    name: fc.constantFrom('a', 'b', 'c'),
-  });
+  return columnNameArbitrary().map(name => ({
+    type: 'column' as const,
+    name,
+  }));
+}
+
+function columnNameArbitrary() {
+  return fc.constantFrom<GeneratedColumnName>('a', 'b', 'c');
+}
+
+function comparableLiteralArbitrary(
+  rowValue: GeneratedValue,
+): fc.Arbitrary<string | number | boolean> {
+  switch (typeof rowValue) {
+    case 'string':
+      return fc.string({maxLength: 8});
+    case 'number':
+      return fc.integer({min: -20, max: 20});
+    case 'boolean':
+      return fc.boolean();
+    default:
+      return inLiteralArbitrary();
+  }
 }
 
 function scalarLiteralArbitrary(): fc.Arbitrary<

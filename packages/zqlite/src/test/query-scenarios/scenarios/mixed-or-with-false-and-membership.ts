@@ -156,8 +156,7 @@ export default {
       },
       {
         table: 'assignment',
-        sql: 'SELECT "id","teacher_id","archived_at","created_at" FROM "assignment" WHERE "id" = ? AND "archived_at" IS ? ORDER BY "created_at" desc, "id" asc',
-        calls: 3,
+        sql: 'SELECT "id","teacher_id","archived_at","created_at" FROM "assignment" WHERE "id" IN (?,?,?) AND "archived_at" IS ? ORDER BY "created_at" desc, "id" asc',
       },
     ],
     engineIdea:
