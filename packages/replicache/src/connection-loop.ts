@@ -130,16 +130,16 @@ export class ConnectionLoop {
     // The number of active connections.
     let counter = 0;
     const delegate = this.#delegate;
-    const {debug} = this.#lc;
+    const lc = this.#lc;
     let delay = 0;
 
-    debug?.('Starting connection loop');
+    lc.debug?.('Starting connection loop');
 
     const sleepMaybeSkip: typeof sleep = ms =>
       Promise.race([this.#skipSleepsResolver.promise, sleep(ms)]);
 
     while (!this.#closed) {
-      debug?.(
+      lc.debug?.(
         didLastSendRequestFail(sendRecords)
           ? 'Last request failed. Trying again'
           : 'Waiting for a send',
@@ -155,26 +155,26 @@ export class ConnectionLoop {
       await Promise.race(races);
       if (this.#closed) break;
 
-      debug?.('Waiting for debounce');
+      lc.debug?.('Waiting for debounce');
       await sleepMaybeSkip(delegate.debounceDelay);
       if (this.#closed) break;
-      debug?.('debounced');
+      lc.debug?.('debounced');
 
       // This resolver is used to wait for incoming push calls.
       this.#pendingResolver = resolver();
 
       if (counter >= delegate.maxConnections) {
-        debug?.('Too many request in flight. Waiting until one finishes...');
+        lc.debug?.('Too many request in flight. Waiting until one finishes...');
         await this.#waitUntilAvailableConnection();
         if (this.#closed) break;
-        debug?.('...finished');
+        lc.debug?.('...finished');
       }
 
       // We need to delay the next request even if there are no active requests
       // in case of error.
       if (counter > 0 || didLastSendRequestFail(sendRecords)) {
         delay = computeDelayAndUpdateDurations(delay, delegate, sendRecords);
-        debug?.(
+        lc.debug?.(
           didLastSendRequestFail(sendRecords)
             ? 'Last connection errored. Sleeping for'
             : 'More than one outstanding connection (' +
@@ -213,20 +213,20 @@ export class ConnectionLoop {
         let error: unknown;
         try {
           lastSendTime = start;
-          debug?.('Sending request');
+          lc.debug?.('Sending request');
           this.#skipSleepsResolver = resolver();
           ok = await delegate.invokeSend();
-          debug?.('Send returned', ok);
+          lc.debug?.('Send returned', ok);
         } catch (e) {
-          debug?.('Send failed', e);
+          lc.debug?.('Send failed', e);
           error = e;
           ok = false;
         }
         if (this.#closed) {
-          debug?.('Closed after invokeSend');
+          lc.debug?.('Closed after invokeSend');
           return;
         }
-        debug?.('Request done', {duration: Date.now() - start, ok});
+        lc.debug?.('Request done', {duration: Date.now() - start, ok});
         sendRecords.push({duration: Date.now() - start, ok});
         if (recovered(sendRecords)) {
           recoverResolver.resolve();

@@ -75,7 +75,7 @@
   "dependencies": {
     "@badrap/valita": "0.3.11",
     "@rocicorp/lock": "^1.0.4",
-    "@rocicorp/logger": "^5.4.0",
+    "@rocicorp/logger": "^6.0.0",
     "@rocicorp/resolver": "^1.0.2"
   },
   "devDependencies": {
@@ -114,5 +114,5 @@
       "optional": true
     }
   },
-  "packageManager": "pnpm@11.3.0"
+  "packageManager": "pnpm@11.5.3"
 }

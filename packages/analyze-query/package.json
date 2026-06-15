@@ -16,7 +16,7 @@
   },
   "dependencies": {
     "@dotenvx/dotenvx": "^1.39.0",
-    "@rocicorp/logger": "^5.4.0",
+    "@rocicorp/logger": "^6.0.0",
     "ws": "^8.18.1"
   },
   "devDependencies": {
@@ -34,5 +34,5 @@
     "zql": "workspace:*",
     "zqlite": "workspace:*"
   },
-  "packageManager": "pnpm@11.3.0"
+  "packageManager": "pnpm@11.5.3"
 }

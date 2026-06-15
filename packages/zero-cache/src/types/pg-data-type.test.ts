@@ -1,10 +1,14 @@
 import {describe, expect, test} from 'vitest';
 import {
   dataTypeToZqlValueType,
+  isPgNativeStringType,
   isPgNumberType,
   isPgStringType,
+  isPgTextRepresentedType,
+  pgToZqlNativeStringTypeMap,
   pgToZqlNumericTypeMap,
   pgToZqlStringTypeMap,
+  pgToZqlTextRepresentedTypeMap,
 } from './pg-data-type.ts';
 
 describe('pg-data-type helpers', () => {
@@ -24,8 +28,26 @@ describe('pg-data-type helpers', () => {
     },
   );
 
+  test.each(Object.keys(pgToZqlNativeStringTypeMap))(
+    'identifies native string type %s',
+    pgType => {
+      expect(isPgNativeStringType(pgType)).toBe(true);
+      expect(isPgTextRepresentedType(pgType)).toBe(false);
+    },
+  );
+
+  test.each(Object.keys(pgToZqlTextRepresentedTypeMap))(
+    'identifies text-represented type %s',
+    pgType => {
+      expect(isPgTextRepresentedType(pgType)).toBe(true);
+      expect(isPgNativeStringType(pgType)).toBe(false);
+    },
+  );
+
   test('isPgStringType and isPgNumberType are case insensitive', () => {
     expect(isPgStringType('TEXT')).toBe(true);
+    expect(isPgNativeStringType('TEXT')).toBe(true);
+    expect(isPgTextRepresentedType('ISBN13')).toBe(true);
     expect(isPgNumberType('INTEGER')).toBe(true);
   });
 });
@@ -62,7 +84,20 @@ describe('dataTypeToZqlValueType', () => {
     ['bpchar', 'string'],
     ['character', 'string'],
     ['character varying', 'string'],
+    ['cidr', 'string'],
+    ['ean13', 'string'],
+    ['inet', 'string'],
+    ['isbn', 'string'],
+    ['isbn13', 'string'],
+    ['ismn', 'string'],
+    ['ismn13', 'string'],
+    ['issn', 'string'],
+    ['issn13', 'string'],
+    ['macaddr', 'string'],
+    ['macaddr8', 'string'],
+    ['pg_lsn', 'string'],
     ['text', 'string'],
+    ['upc', 'string'],
     ['uuid', 'string'],
     ['varchar', 'string'],
     ['bool', 'boolean'],

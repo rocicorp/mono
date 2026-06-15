@@ -19,12 +19,12 @@
     "zqlite": "workspace:*"
   },
   "devDependencies": {
-    "@rocicorp/logger": "^5.4.0",
+    "@rocicorp/logger": "^6.0.0",
     "@vitest/runner": "^4.1.6",
     "oxfmt": "^0.45.0",
     "shared": "workspace:*",
     "typescript": "~6.0.2",
     "vitest": "^4.1.6"
   },
-  "packageManager": "pnpm@11.3.0"
+  "packageManager": "pnpm@11.5.3"
 }

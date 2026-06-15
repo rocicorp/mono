@@ -1,0 +1,28 @@
+{
+  "features": {
+    "ghcr.io/anthropics/devcontainer-features/claude-code:1": {
+      "version": "1.0.5",
+      "resolved": "ghcr.io/anthropics/devcontainer-features/claude-code@sha256:cfc2e7d3e9fd3b9b01f8d5cb158508a884c8c0ede2e23ed10f32dea5d4ffe69a",
+      "integrity": "sha256:cfc2e7d3e9fd3b9b01f8d5cb158508a884c8c0ede2e23ed10f32dea5d4ffe69a"
+    },
+    "ghcr.io/devcontainers/features/github-cli:1": {
+      "version": "1.1.0",
+      "resolved": "ghcr.io/devcontainers/features/github-cli@sha256:d22f50b70ed75339b4eed1ba9ecde3a1791f90e88d37936517e3bace0bbad671",
+      "integrity": "sha256:d22f50b70ed75339b4eed1ba9ecde3a1791f90e88d37936517e3bace0bbad671"
+    },
+    "ghcr.io/rocicorp/devcontainer-features/agents:2": {
+      "version": "2.0.0",
+      "resolved": "ghcr.io/rocicorp/devcontainer-features/agents@sha256:172905cd57fbc946323644a52d5829415c77ff8c6f217594720966efcba11db6",
+      "integrity": "sha256:172905cd57fbc946323644a52d5829415c77ff8c6f217594720966efcba11db6",
+      "dependsOn": [
+        "ghcr.io/anthropics/devcontainer-features/claude-code:1",
+        "ghcr.io/devcontainers/features/github-cli:1"
+      ]
+    },
+    "ghcr.io/rocicorp/devcontainer-features/pnpm:1": {
+      "version": "1.0.0",
+      "resolved": "ghcr.io/rocicorp/devcontainer-features/pnpm@sha256:9ec391d0106040bf61d2ea2f7194cc935cf25fa43b4d542aee3514e23d437e0d",
+      "integrity": "sha256:9ec391d0106040bf61d2ea2f7194cc935cf25fa43b4d542aee3514e23d437e0d"
+    }
+  }
+}

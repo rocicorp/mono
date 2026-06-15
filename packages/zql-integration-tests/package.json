@@ -22,7 +22,7 @@
   },
   "devDependencies": {
     "@faker-js/faker": "^9.6.0",
-    "@rocicorp/logger": "^5.4.0",
+    "@rocicorp/logger": "^6.0.0",
     "@types/pg": "^8.20.0",
     "@types/tmp": "^0.2.6",
     "otel": "workspace:*",
@@ -40,5 +40,5 @@
     "zql": "workspace:*",
     "zqlite": "workspace:*"
   },
-  "packageManager": "pnpm@11.3.0"
+  "packageManager": "pnpm@11.5.3"
 }
