@@ -403,7 +403,7 @@ export class Storer implements Service {
           // reconnect and try again.
           const {subscriber} = entry[1];
           this.#lc.info?.(`disconnecting ${subscriber.id}`);
-          subscriber.fail(err);
+          subscriber.failAndCancel(err);
           break;
         }
       }
@@ -548,7 +548,7 @@ export class Storer implements Service {
         }
       }
     } catch (e) {
-      catchupQueue.forEach(({subscriber}) => subscriber.fail(e));
+      catchupQueue.forEach(({subscriber}) => subscriber.failAndCancel(e));
       throw e;
     }
   }

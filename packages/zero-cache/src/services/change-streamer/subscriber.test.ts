@@ -260,6 +260,24 @@ describe('change-streamer/subscriber', () => {
     await expect(pending).resolves.toBe(error);
   });
 
+  test('cancels immediately when failing without protocol ack', async () => {
+    const [sub, _received, stream] = createSubscriber('00');
+    const error = new Error('catchup failed');
+    const pending = sub
+      .send([
+        '11',
+        'begin',
+        json(['begin', messages.begin(), {commitWatermark: '12'}]),
+      ])
+      .catch(err => err);
+
+    await Promise.resolve();
+    sub.failAndCancel(error);
+
+    expect(stream.active).toBe(false);
+    await expect(pending).resolves.toBe(error);
+  });
+
   test('acks, pending, processed, stats', async () => {
     const [sub, _, receiver] = createSubscriber('00');
 

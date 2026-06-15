@@ -242,6 +242,12 @@ export class Subscriber {
     this.close(ErrorType.Unknown, message, err ?? new Error(message));
   }
 
+  failAndCancel(err?: unknown) {
+    const cause = err instanceof Error ? err : new Error(String(err));
+    this.#closeBacklog(cause);
+    this.#downstream.cancel(cause);
+  }
+
   close(error?: ErrorType, message?: string, cause?: unknown) {
     this.#closeBacklog(
       error !== undefined
