@@ -56,14 +56,6 @@ export class LocalWriteWorkerClient implements WriteWorkerClient {
     );
   }
 
-  processMessages(downstreams: readonly ChangeStreamData[]) {
-    assert(this.#processor, 'local write worker not initialized');
-    assert(this.#lc, 'local write worker not initialized');
-    return Promise.resolve(
-      this.#processor.processMessages(this.#lc, downstreams),
-    );
-  }
-
   abort(): void {
     assert(this.#processor, 'local write worker not initialized');
     assert(this.#lc, 'local write worker not initialized');
