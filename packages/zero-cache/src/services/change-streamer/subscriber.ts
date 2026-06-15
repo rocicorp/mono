@@ -242,6 +242,8 @@ export class Subscriber {
     this.close(ErrorType.Unknown, message, err ?? new Error(message));
   }
 
+  // Only for storer cleanup of queued catchup subscribers. This intentionally
+  // bypasses protocol error ACK waiting so cancellation can finish immediately.
   failAndCancel(err?: unknown) {
     const cause = err instanceof Error ? err : new Error(String(err));
     this.#closeBacklog(cause);
