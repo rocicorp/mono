@@ -127,6 +127,7 @@ type PendingInsertBatch = {
 // JS/SQLite separately. Batching only this narrow shape keeps ordering and
 // rollback behavior easy to reason about while reducing native calls.
 const MAX_BATCH_BINDINGS = 900;
+const CHANGE_LOG_SET_OP_BINDINGS = 4;
 
 class DmlSqlPlanCache {
   readonly #enabled: boolean;
@@ -934,10 +935,14 @@ class TransactionProcessor {
       newRow.row,
       newRow.numCols,
     );
-    const maxRows = Math.max(
-      1,
-      Math.floor(MAX_BATCH_BINDINGS / (plan.rowColumns.length + 1)),
+    const upsertMaxRows = Math.floor(
+      MAX_BATCH_BINDINGS / (plan.rowColumns.length + 1),
     );
+    const logMaxRows =
+      this.#mode === 'serving' && key !== undefined && rowKey !== undefined
+        ? Math.floor(MAX_BATCH_BINDINGS / CHANGE_LOG_SET_OP_BINDINGS)
+        : Number.POSITIVE_INFINITY;
+    const maxRows = Math.max(1, Math.min(upsertMaxRows, logMaxRows));
     const batch = this.#pendingInsertBatch;
     if (batch) {
       const tableChanged = batch.table !== table;

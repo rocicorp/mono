@@ -3685,6 +3685,67 @@ describe('replicator/change-processor', () => {
     );
   });
 
+  test('serving keyed insert batches respect change-log bind limit', () => {
+    initDB(
+      servingReplica,
+      `
+      CREATE TABLE foo(
+        id INTEGER PRIMARY KEY,
+        _0_version TEXT
+      );
+      `,
+    );
+
+    const maxBindings = 900;
+    let maxChangeLogBindings = 0;
+    const prepare = servingReplica.prepare.bind(servingReplica);
+    servingReplica.prepare = sql => {
+      const stmt = prepare(sql);
+      if (
+        !sql.includes('INSERT OR REPLACE INTO "_zero.changeLog2"') ||
+        !sql.includes(`'${SET_OP}'`)
+      ) {
+        return stmt;
+      }
+
+      const run = stmt.run.bind(stmt);
+      stmt.run = (...params) => {
+        const values = params[0];
+        if (Array.isArray(values)) {
+          maxChangeLogBindings = Math.max(maxChangeLogBindings, values.length);
+          expect(values.length).toBeLessThanOrEqual(maxBindings);
+        }
+        return run(...params);
+      };
+      return stmt;
+    };
+
+    const rowCount = 226;
+    const foo = new ReplicationMessages({foo: 'id'});
+    servingProcessor.processMessages(lc, [
+      ['begin', foo.begin(), {commitWatermark: '07'}],
+      ...Array.from(
+        {length: rowCount},
+        (_, id) => ['data', foo.insert('foo', {id})] satisfies ChangeStreamData,
+      ),
+      ['commit', foo.commit(), {watermark: '07'}],
+    ]);
+
+    expect(maxChangeLogBindings).toBe(maxBindings);
+    expect(
+      servingReplica
+        .prepare('SELECT COUNT(*) AS count FROM foo')
+        .get<{count: number}>(),
+    ).toEqual({count: rowCount});
+    expect(
+      servingReplica
+        .prepare(
+          'SELECT COUNT(*) AS count FROM "_zero.changeLog2" WHERE "table" = ? AND op = ?',
+        )
+        .get<{count: number}>('foo', SET_OP),
+    ).toEqual({count: rowCount});
+  });
+
   test('processMessages applies a stream batch and returns each commit', () => {
     initDB(
       servingReplica,
