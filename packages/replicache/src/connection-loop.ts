@@ -133,7 +133,7 @@ export class ConnectionLoop {
     const lc = this.#lc;
     let delay = 0;
 
-    lc.debug  ?.('Starting connection loop');
+    lc.debug?.('Starting connection loop');
 
     const sleepMaybeSkip: typeof sleep = ms =>
       Promise.race([this.#skipSleepsResolver.promise, sleep(ms)]);
