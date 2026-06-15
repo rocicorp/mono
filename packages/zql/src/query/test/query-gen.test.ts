@@ -124,7 +124,7 @@ test('stable generation', () => {
       "where": {
         "conditions": [
           {
-            "op": "NOT EXISTS",
+            "op": "EXISTS",
             "related": {
               "correlation": {
                 "childField": [
@@ -140,6 +140,7 @@ test('stable generation', () => {
                 "where": {
                   "conditions": [
                     {
+                      "flip": true,
                       "op": "EXISTS",
                       "related": {
                         "correlation": {
@@ -209,6 +210,7 @@ test('stable generation', () => {
                         },
                         "system": "permissions",
                       },
+                      "scalar": true,
                       "type": "correlatedSubquery",
                     },
                     {
