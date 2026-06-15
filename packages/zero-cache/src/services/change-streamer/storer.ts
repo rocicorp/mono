@@ -660,7 +660,7 @@ export class Storer implements Service {
         }
         // Flushes the backlog of messages buffered during catchup and
         // allows the subscription to forward subsequent messages immediately.
-        sub.setCaughtUp();
+        await sub.setCaughtUp();
       });
     } catch (err) {
       this.#lc.error?.(`error while catching up subscriber ${sub.id}`, err);
