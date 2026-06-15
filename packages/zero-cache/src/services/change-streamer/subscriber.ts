@@ -238,17 +238,36 @@ export class Subscriber {
   }
 
   fail(err?: unknown) {
-    this.close(ErrorType.Unknown, String(err));
+    const message = String(err);
+    this.close(ErrorType.Unknown, message, err ?? new Error(message));
   }
 
-  close(error?: ErrorType, message?: string) {
-    if (error) {
+  close(error?: ErrorType, message?: string, cause?: unknown) {
+    this.#closeBacklog(
+      error !== undefined
+        ? (cause ?? new Error(message ?? String(error)))
+        : null,
+    );
+    if (error !== undefined) {
       // Wait for the ACK of the error message before closing the connection.
       void this.#sendDownstream(['error', {type: error, message}]).finally(() =>
         this.#downstream.cancel(),
       );
     } else {
       this.#downstream.cancel();
+    }
+  }
+
+  #closeBacklog(cause: unknown | null) {
+    const backlog = this.#backlog;
+    if (!backlog) {
+      return;
+    }
+    this.#backlog = null;
+    if (cause !== null) {
+      backlog.instance.fail(cause);
+    } else {
+      backlog.instance.close();
     }
   }
 }

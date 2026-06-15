@@ -7,6 +7,8 @@ type Entry<T> = {
   consumed: Resolver<void>;
 };
 
+type Closed = {state: 'closed'} | {state: 'failed'; cause: unknown};
+
 /**
  * Buffers live changes that arrive while a subscriber is still replaying
  * historical catchup entries.
@@ -14,7 +16,7 @@ type Entry<T> = {
 export class CatchupBacklog<T> {
   readonly #entries: (Entry<T> | undefined)[] = [];
   #flush: Promise<void> | undefined;
-  #closed = false;
+  #closed: Closed | undefined;
 
   get empty() {
     return this.#entries.length === 0;
@@ -27,17 +29,32 @@ export class CatchupBacklog<T> {
    * in downstream pending work.
    */
   enqueue(entry: T) {
-    assert(!this.#closed, 'cannot enqueue into a closed catchup backlog');
+    if (this.#closed) {
+      return Promise.reject(this.#rejectionCause(this.#closed));
+    }
     const consumed = resolver<void>();
     this.#entries.push({change: entry, consumed});
     return consumed.promise;
   }
 
   flushWith(consume: (entry: T) => MaybePromise<void>) {
+    if (this.#closed) {
+      return this.#closed.state === 'failed'
+        ? Promise.reject(this.#closed.cause)
+        : Promise.resolve();
+    }
     if (!this.#flush) {
       this.#flush = this.#drain(consume);
     }
     return this.#flush;
+  }
+
+  close() {
+    this.#settle({state: 'closed'});
+  }
+
+  fail(cause: unknown) {
+    this.#settle({state: 'failed', cause});
   }
 
   async #drain(consume: (entry: T) => MaybePromise<void>) {
@@ -49,6 +66,13 @@ export class CatchupBacklog<T> {
         this.#entries[next++] = undefined;
         try {
           await consume(entry.change);
+          if (this.#closed) {
+            this.#settleEntry(entry, this.#closed);
+            if (this.#closed.state === 'failed') {
+              throw this.#closed.cause;
+            }
+            return;
+          }
           entry.consumed.resolve();
         } catch (err) {
           entry.consumed.reject(err);
@@ -63,8 +87,35 @@ export class CatchupBacklog<T> {
       }
       throw err;
     } finally {
-      this.#closed = true;
+      this.#closed ??= {state: 'closed'};
       this.#entries.length = 0;
     }
+  }
+
+  #settle(closed: Closed) {
+    if (this.#closed) {
+      return;
+    }
+    this.#closed = closed;
+    for (const entry of this.#entries) {
+      if (entry) {
+        this.#settleEntry(entry, closed);
+      }
+    }
+    this.#entries.length = 0;
+  }
+
+  #settleEntry(entry: Entry<T>, closed: Closed) {
+    if (closed.state === 'failed') {
+      entry.consumed.reject(closed.cause);
+    } else {
+      entry.consumed.resolve();
+    }
+  }
+
+  #rejectionCause(closed: Closed) {
+    return closed.state === 'failed'
+      ? closed.cause
+      : new Error('cannot enqueue into a closed catchup backlog');
   }
 }

@@ -243,6 +243,23 @@ describe('change-streamer/subscriber', () => {
     `);
   });
 
+  test('rejects pending backlog sends when failing before caught up', async () => {
+    const [sub] = createSubscriber('00');
+    const error = new Error('catchup failed');
+    const pending = sub
+      .send([
+        '11',
+        'begin',
+        json(['begin', messages.begin(), {commitWatermark: '12'}]),
+      ])
+      .catch(err => err);
+
+    await Promise.resolve();
+    sub.fail(error);
+
+    await expect(pending).resolves.toBe(error);
+  });
+
   test('acks, pending, processed, stats', async () => {
     const [sub, _, receiver] = createSubscriber('00');
 

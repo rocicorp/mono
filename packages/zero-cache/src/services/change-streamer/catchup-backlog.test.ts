@@ -57,4 +57,27 @@ describe('change-streamer/CatchupBacklog', () => {
     await expect(first).resolves.toBe(error);
     await expect(second).resolves.toBe(error);
   });
+
+  test('rejects pending and future enqueue receipts when failed before flushing', async () => {
+    const backlog = new CatchupBacklog<number>();
+    const error = new Error('catchup failed');
+    const first = backlog.enqueue(1).catch(err => err);
+    const second = backlog.enqueue(2).catch(err => err);
+
+    backlog.fail(error);
+
+    await expect(first).resolves.toBe(error);
+    await expect(second).resolves.toBe(error);
+    await expect(backlog.enqueue(3)).rejects.toBe(error);
+  });
+
+  test('resolves pending enqueue receipts when closed before flushing', async () => {
+    const backlog = new CatchupBacklog<number>();
+    const pending = backlog.enqueue(1);
+
+    backlog.close();
+
+    await expect(pending).resolves.toBeUndefined();
+    await expect(backlog.flushWith(() => {})).resolves.toBeUndefined();
+  });
 });
