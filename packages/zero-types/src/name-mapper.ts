@@ -1,4 +1,5 @@
 import type {JSONValue, ReadonlyJSONValue} from '../../shared/src/json.ts';
+import {mapEntries} from '../../shared/src/objects.ts';
 
 // Value type from zero-protocol (JSONValue/ReadonlyJSONValue | undefined)
 // Defined here to avoid circular dependency with zero-protocol
@@ -59,13 +60,19 @@ export class NameMapper {
     if (allColumnsSame) {
       return row;
     }
+    if (Object.values(columns).includes('__proto__')) {
+      return Object.fromEntries(
+        Object.entries(row).map(([col, value]) => [
+          Object.hasOwn(columns, col) ? columns[col] : col,
+          value,
+        ]),
+      ) as Record<string, V>;
+    }
     // Note: columns with unknown names simply pass through.
-    return Object.fromEntries(
-      Object.entries(row).map(([col, value]) => [
-        Object.hasOwn(columns, col) ? columns[col] : col,
-        value,
-      ]),
-    ) as Record<string, V>;
+    return mapEntries(row, (col, value) => [
+      Object.hasOwn(columns, col) ? columns[col] : col,
+      value,
+    ]);
   }
 
   columns<Columns extends readonly string[] | undefined>(

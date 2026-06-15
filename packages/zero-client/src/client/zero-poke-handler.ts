@@ -365,12 +365,14 @@ function rowsPatchOpToReplicachePatchOp(
   if (!tableName) {
     return undefined;
   }
+  // Row patches are wire data: table and column names are server names until
+  // they are mapped to the client schema shape for Replicache storage.
   switch (op.op) {
     case 'del': {
       const tableSchema = schema.tables[tableName];
       const delID = serverToClient.row(
         op.tableName,
-        projectServerPrimaryKey(tableSchema, op.id),
+        projectWirePrimaryKey(tableSchema, op.id),
       );
       return {
         op: 'del',
@@ -381,7 +383,7 @@ function rowsPatchOpToReplicachePatchOp(
       const tableSchema = schema.tables[tableName];
       const value = serverToClient.row(
         op.tableName,
-        projectServerRow(tableSchema, op.value),
+        projectWireRow(tableSchema, op.value),
       );
       return {
         op: 'put',
@@ -393,12 +395,12 @@ function rowsPatchOpToReplicachePatchOp(
       const tableSchema = schema.tables[tableName];
       const id = serverToClient.row(
         op.tableName,
-        projectServerPrimaryKey(tableSchema, op.id),
+        projectWirePrimaryKey(tableSchema, op.id),
       );
       const merge = op.merge
         ? serverToClient.row(
             op.tableName,
-            projectServerRow(tableSchema, op.merge),
+            projectWireRow(tableSchema, op.merge),
           )
         : undefined;
       return {
@@ -407,7 +409,7 @@ function rowsPatchOpToReplicachePatchOp(
         merge,
         constrain: serverToClient.columns(
           op.tableName,
-          projectServerColumns(tableSchema, op.constrain),
+          projectWireColumns(tableSchema, op.constrain),
         ),
       };
     }
@@ -416,40 +418,44 @@ function rowsPatchOpToReplicachePatchOp(
   }
 }
 
-function projectServerRow(
+function projectWireRow(tableSchema: Schema['tables'][string], row: Row): Row {
+  return projectWireKeys(wireColumnNames(tableSchema), row);
+}
+
+function projectWirePrimaryKey(
   tableSchema: Schema['tables'][string],
   row: Row,
 ): Row {
-  return projectServerKeys(serverColumnNames(tableSchema), row);
+  return projectWireKeys(wirePrimaryKeyNames(tableSchema), row);
 }
 
-function projectServerPrimaryKey(
-  tableSchema: Schema['tables'][string],
-  row: Row,
-): Row {
-  return projectServerKeys(serverPrimaryKeyNames(tableSchema), row);
+function projectWireKeys(columns: readonly string[], row: Row): Row {
+  const projected: Record<string, Row[string]> = {};
+  for (const column of columns) {
+    if (Object.hasOwn(row, column)) {
+      Object.defineProperty(projected, column, {
+        value: row[column],
+        enumerable: true,
+        configurable: true,
+        writable: true,
+      });
+    }
+  }
+  return projected;
 }
 
-function projectServerKeys(columns: readonly string[], row: Row): Row {
-  return Object.fromEntries(
-    columns
-      .filter(column => Object.hasOwn(row, column))
-      .map(column => [column, row[column]]),
-  ) as Row;
-}
-
-function projectServerColumns(
+function projectWireColumns(
   tableSchema: Schema['tables'][string],
   cols: readonly string[] | undefined,
 ): readonly string[] {
-  const visibleColumns = serverColumnNames(tableSchema);
+  const visibleColumns = wireColumnNames(tableSchema);
   if (!cols || cols.length === 0) {
     return visibleColumns;
   }
   const columnSet = new Set(visibleColumns);
   const projected = cols.filter(col => columnSet.has(col));
   if (projected.length === cols.length) {
-    return withServerPrimaryKeyColumns(tableSchema, projected);
+    return withWirePrimaryKeyColumns(tableSchema, projected);
   }
   // Replicache treats an empty constrain list as unconstrained. If any changed
   // column was hidden by the client schema, constrain to the visible row shape
@@ -458,16 +464,16 @@ function projectServerColumns(
   return visibleColumns;
 }
 
-function withServerPrimaryKeyColumns(
+function withWirePrimaryKeyColumns(
   tableSchema: Schema['tables'][string],
   cols: readonly string[],
 ): readonly string[] {
-  return [...new Set([...serverPrimaryKeyNames(tableSchema), ...cols])];
+  return [...new Set([...wirePrimaryKeyNames(tableSchema), ...cols])];
 }
 
-function serverColumnNames(tableSchema: Schema['tables'][string]): string[] {
+function wireColumnNames(tableSchema: Schema['tables'][string]): string[] {
   const names = new Set<string>();
-  for (const columnName of serverPrimaryKeyNames(tableSchema)) {
+  for (const columnName of wirePrimaryKeyNames(tableSchema)) {
     names.add(columnName);
   }
   for (const [columnName, column] of Object.entries(tableSchema.columns)) {
@@ -476,7 +482,7 @@ function serverColumnNames(tableSchema: Schema['tables'][string]): string[] {
   return [...names];
 }
 
-function serverPrimaryKeyNames(
+function wirePrimaryKeyNames(
   tableSchema: Schema['tables'][string],
 ): readonly string[] {
   return tableSchema.primaryKey.map(columnName => {
