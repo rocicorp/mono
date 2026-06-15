@@ -1,4 +1,4 @@
-import {describe, expect, test} from 'vitest';
+import {describe, expect, test, vi} from 'vitest';
 import {BigIntJSON} from '../../../../shared/src/bigint-json.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import {ReplicationMessages} from '../replicator/test-utils.ts';
@@ -303,5 +303,73 @@ describe('change-streamer/forwarder', () => {
         ],
       ]
     `);
+  });
+
+  test('sendStatus flushes pending data before queued subscribers activate', () => {
+    vi.useFakeTimers();
+
+    try {
+      const forwarder = new Forwarder(createSilentLogContext());
+
+      const [sub1, stream1] = createSubscriber('00', true);
+      const [sub2, stream2] = createSubscriber('00', true);
+
+      forwarder.add(sub1);
+      forwarder.forward([
+        '11',
+        'begin',
+        json(['begin', messages.begin(), {commitWatermark: '13'}]),
+      ]);
+      forwarder.add(sub2);
+      forwarder.forward([
+        '12',
+        'truncate',
+        json(['data', messages.truncate('issues')]),
+      ]);
+
+      expect(vi.getTimerCount()).toBe(1);
+      forwarder.sendStatus({
+        tag: 'status',
+        lagReport: {nextSendTimeMs: 123},
+      });
+      expect(vi.getTimerCount()).toBe(0);
+
+      forwarder.forward([
+        '13',
+        'commit',
+        json(['commit', messages.commit(), {watermark: '13'}]),
+      ]);
+      forwarder.sendStatus({
+        tag: 'status',
+        lagReport: {nextSendTimeMs: 456},
+      });
+
+      sub1.close();
+      sub2.close();
+
+      expect(stream1.map(([tag]) => tag)).toEqual([
+        'status',
+        'begin',
+        'data',
+        'status',
+        'commit',
+        'status',
+      ]);
+      expect(stream1[3]).toEqual([
+        'status',
+        {tag: 'status', lagReport: {nextSendTimeMs: 123}},
+      ]);
+      expect(stream1[5]).toEqual([
+        'status',
+        {tag: 'status', lagReport: {nextSendTimeMs: 456}},
+      ]);
+
+      expect(stream2).toEqual([
+        ['status', {tag: 'status'}],
+        ['status', {tag: 'status', lagReport: {nextSendTimeMs: 456}}],
+      ]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
