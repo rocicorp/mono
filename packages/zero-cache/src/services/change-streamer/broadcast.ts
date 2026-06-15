@@ -24,7 +24,7 @@ export class Broadcast {
     change: WatermarkedChange,
   ) {
     for (const sub of subscribers) {
-      void sub.send(change);
+      void sub.send(change).catch(() => {});
     }
   }
 

@@ -5,6 +5,7 @@ import type {MaybePromise} from '../../../../shared/src/types.ts';
 type Entry<T> = {
   change: T;
   consumed: Resolver<void>;
+  settled: boolean;
 };
 
 type Closed = {state: 'closed'} | {state: 'failed'; cause: unknown};
@@ -33,7 +34,7 @@ export class CatchupBacklog<T> {
       return Promise.reject(this.#rejectionCause(this.#closed));
     }
     const consumed = resolver<void>();
-    this.#entries.push({change: entry, consumed});
+    this.#entries.push({change: entry, consumed, settled: false});
     return consumed.promise;
   }
 
@@ -73,9 +74,9 @@ export class CatchupBacklog<T> {
             }
             return;
           }
-          entry.consumed.resolve();
+          this.#settleEntry(entry, {state: 'closed'});
         } catch (err) {
-          entry.consumed.reject(err);
+          this.#settleEntry(entry, {state: 'failed', cause: err});
           throw err;
         }
       }
@@ -106,6 +107,10 @@ export class CatchupBacklog<T> {
   }
 
   #settleEntry(entry: Entry<T>, closed: Closed) {
+    if (entry.settled) {
+      return;
+    }
+    entry.settled = true;
     if (closed.state === 'failed') {
       entry.consumed.reject(closed.cause);
     } else {
