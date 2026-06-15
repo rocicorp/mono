@@ -465,7 +465,7 @@ class Diff implements SnapshotDiff {
     this.#activeTableNames = activeTableNames;
     this.#tableFilter = activeTableNames
       ? {
-          tableNames: [...activeTableNames].sort(),
+          tableNames: [...activeTableNames].toSorted(),
           permissionsTable: this.#permissionsTable,
         }
       : undefined;
