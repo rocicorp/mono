@@ -5,7 +5,11 @@ import {Database} from '../../../../zqlite/src/db.ts';
 import {StatementRunner} from '../../db/statements.ts';
 import {createLogContext} from '../../server/logging.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
-import {ChangeProcessor, type ChangeProcessorMode} from './change-processor.ts';
+import {
+  ChangeProcessor,
+  type ChangeProcessorMode,
+  type CommitResult,
+} from './change-processor.ts';
 import {getSubscriptionState} from './schema/replication-state.ts';
 import {
   applyPragmas,
@@ -54,6 +58,25 @@ export class LocalWriteWorkerClient implements WriteWorkerClient {
     return Promise.resolve(
       this.#processor.processMessage(this.#lc, downstream),
     );
+  }
+
+  processMessages(
+    downstreams: readonly ChangeStreamData[],
+  ): Promise<CommitResult | readonly CommitResult[] | null> {
+    assert(this.#processor, 'local write worker not initialized');
+    assert(this.#lc, 'local write worker not initialized');
+
+    const results: CommitResult[] = [];
+    for (const downstream of downstreams) {
+      const result = this.#processor.processMessage(this.#lc, downstream);
+      if (result) {
+        results.push(result);
+      }
+    }
+    if (results.length === 0) {
+      return Promise.resolve(null);
+    }
+    return Promise.resolve(results.length === 1 ? results[0] : results);
   }
 
   abort(): void {
