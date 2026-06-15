@@ -172,6 +172,22 @@ describe('change-streamer/storer', () => {
         {watermark: '06', pos: 1n},
         {watermark: '06', pos: 2n},
       ]);
+
+      expect(await storer.purgeRecordsBefore('99')).toBe(0);
+      expect(
+        await db`SELECT watermark, pos FROM "xero_5/cdc"."changeLog"`,
+      ).toEqual([
+        {watermark: '06', pos: 0n},
+        {watermark: '06', pos: 1n},
+        {watermark: '06', pos: 2n},
+      ]);
+    });
+
+    test('purge does not delete anything when changeLog is empty', async () => {
+      await db`TRUNCATE "xero_5/cdc"."changeLog"`;
+
+      expect(await storer.purgeRecordsBefore('99')).toBe(0);
+      expect(await db`SELECT * FROM "xero_5/cdc"."changeLog"`).toEqual([]);
     });
 
     test('backfill metadata tracking', async () => {

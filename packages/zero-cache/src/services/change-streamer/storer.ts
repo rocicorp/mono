@@ -257,8 +257,18 @@ export class Storer implements Service {
       // in ownership to be reliably detected (and the transaction aborted)
       // in the subsequent check.
       const [{deleted}] = await sql<{deleted: bigint}[]>`
-        WITH purged AS (
+        -- The backup watermark can be ahead of the durable changeLog if the
+        -- storer is behind but the backup replica has consumed forwarded
+        -- changes. Preserve the latest durable changeLog transaction as the
+        -- catchup boundary instead of assuming the backup watermark exists.
+        -- The storer inserts each changeLog transaction atomically, so any
+        -- durable row for a watermark implies the full transaction is durable.
+        WITH keep AS (
+          SELECT max(watermark) AS watermark
+          FROM ${this.#cdc('changeLog')}
+        ), purged AS (
           DELETE FROM ${this.#cdc('changeLog')} WHERE watermark < ${watermark} 
+            AND watermark < (SELECT watermark FROM keep)
             RETURNING watermark, pos
         ) SELECT COUNT(*) as deleted FROM purged;`;
 
