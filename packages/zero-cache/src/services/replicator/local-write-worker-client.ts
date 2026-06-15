@@ -29,6 +29,7 @@ export class LocalWriteWorkerClient implements WriteWorkerClient {
   #lc: LogContext | undefined;
   #mode: ChangeProcessorMode | undefined;
   #errorHandler: ErrorHandler = () => {};
+  #processorFailure: Error | undefined;
 
   init(
     dbPath: string,
@@ -41,9 +42,9 @@ export class LocalWriteWorkerClient implements WriteWorkerClient {
     applyPragmas(this.#db, pragmas);
     this.#runner = new StatementRunner(this.#db);
     this.#mode = mode;
-    this.#processor = new ChangeProcessor(this.#runner, mode, (_lc, err) =>
-      this.#errorHandler(ensureError(err)),
-    );
+    this.#processor = new ChangeProcessor(this.#runner, mode, (_lc, err) => {
+      this.#processorFailure = ensureError(err);
+    });
     return Promise.resolve();
   }
 
@@ -55,8 +56,10 @@ export class LocalWriteWorkerClient implements WriteWorkerClient {
   processMessage(downstream: ChangeStreamData) {
     assert(this.#processor, 'local write worker not initialized');
     assert(this.#lc, 'local write worker not initialized');
-    return Promise.resolve(
-      this.#processor.processMessage(this.#lc, downstream),
+    const processor = this.#processor;
+    const lc = this.#lc;
+    return this.#processWithFailureCapture(() =>
+      processor.processMessage(lc, downstream),
     );
   }
 
@@ -65,18 +68,22 @@ export class LocalWriteWorkerClient implements WriteWorkerClient {
   ): Promise<CommitResult | readonly CommitResult[] | null> {
     assert(this.#processor, 'local write worker not initialized');
     assert(this.#lc, 'local write worker not initialized');
+    const processor = this.#processor;
+    const lc = this.#lc;
 
-    const results: CommitResult[] = [];
-    for (const downstream of downstreams) {
-      const result = this.#processor.processMessage(this.#lc, downstream);
-      if (result) {
-        results.push(result);
+    return this.#processWithFailureCapture(() => {
+      const results: CommitResult[] = [];
+      for (const downstream of downstreams) {
+        const result = processor.processMessage(lc, downstream);
+        if (result) {
+          results.push(result);
+        }
       }
-    }
-    if (results.length === 0) {
-      return Promise.resolve(null);
-    }
-    return Promise.resolve(results.length === 1 ? results[0] : results);
+      if (results.length === 0) {
+        return null;
+      }
+      return results.length === 1 ? results[0] : results;
+    });
   }
 
   abort(): void {
@@ -92,7 +99,9 @@ export class LocalWriteWorkerClient implements WriteWorkerClient {
     this.#processor = new ChangeProcessor(
       this.#runner,
       this.#mode,
-      (_lc, err) => this.#errorHandler(ensureError(err)),
+      (_lc, err) => {
+        this.#processorFailure = ensureError(err);
+      },
     );
   }
 
@@ -102,11 +111,33 @@ export class LocalWriteWorkerClient implements WriteWorkerClient {
     this.#runner = undefined;
     this.#processor = undefined;
     this.#mode = undefined;
+    this.#processorFailure = undefined;
     return Promise.resolve();
   }
 
   onError(handler: ErrorHandler): void {
     this.#errorHandler = handler;
+  }
+
+  #processWithFailureCapture<T>(process: () => T): Promise<T> {
+    this.#processorFailure = undefined;
+
+    let result: T;
+    try {
+      result = process();
+    } catch (err) {
+      this.#processorFailure = undefined;
+      return Promise.reject(ensureError(err));
+    }
+
+    const failure = this.#processorFailure;
+    this.#processorFailure = undefined;
+    if (failure) {
+      this.#errorHandler(failure);
+      return Promise.reject(failure);
+    }
+
+    return Promise.resolve(result);
   }
 }
 

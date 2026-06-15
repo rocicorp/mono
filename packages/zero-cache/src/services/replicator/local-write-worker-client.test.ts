@@ -86,4 +86,49 @@ describe('local-write-worker-client', () => {
       {issueID: 456, bool: 0, _0_version: '07'},
     ]);
   });
+
+  test('processMessage rejects processor failures', async () => {
+    let errorReceived: Error | undefined;
+    worker.onError(err => {
+      errorReceived = err;
+    });
+
+    await expect(worker.processMessage(invalidInsert())).rejects.toThrow(
+      'Received message outside of transaction',
+    );
+
+    expect(errorReceived?.message).toContain(
+      'Received message outside of transaction',
+    );
+  });
+
+  test('processMessages rejects processor failures', async () => {
+    let errorReceived: Error | undefined;
+    worker.onError(err => {
+      errorReceived = err;
+    });
+
+    await expect(worker.processMessages([invalidInsert()])).rejects.toThrow(
+      'Received message outside of transaction',
+    );
+
+    expect(errorReceived?.message).toContain(
+      'Received message outside of transaction',
+    );
+  });
 });
+
+function invalidInsert(): ChangeStreamData {
+  return [
+    'data',
+    {
+      tag: 'insert',
+      relation: {
+        schema: 'public',
+        name: 'nonexistent',
+        rowKey: {columns: ['id'], type: 'default'},
+      },
+      new: {id: [1, 'int4']},
+    },
+  ];
+}
