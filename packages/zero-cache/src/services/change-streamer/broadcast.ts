@@ -27,7 +27,7 @@ export class Broadcast {
   ) {
     const changes = normalizeChanges(change);
     for (const sub of subscribers) {
-      void sub.sendBatch(changes);
+      void sub.sendBatch(changes).catch(() => {});
     }
   }
 

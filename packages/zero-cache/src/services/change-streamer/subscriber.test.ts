@@ -1,5 +1,6 @@
-import {describe, expect, test} from 'vitest';
+import {describe, expect, test, vi} from 'vitest';
 import {ReplicationMessages} from '../replicator/test-utils.ts';
+import type {WatermarkedChange} from './change-streamer-service.ts';
 import {createSubscriber} from './test-utils.ts';
 
 const json = JSON.stringify;
@@ -227,6 +228,27 @@ describe('change-streamer/subscriber', () => {
         ],
       ]
     `);
+  });
+
+  test('sendBatch routes each change through send', async () => {
+    const [sub] = createSubscriber('00');
+    const changes: WatermarkedChange[] = [
+      [
+        '11',
+        'begin',
+        json(['begin', messages.begin(), {commitWatermark: '12'}]),
+      ],
+      ['12', 'commit', json(['commit', messages.commit(), {watermark: '12'}])],
+    ];
+    const sendSpy = vi.spyOn(sub, 'send');
+
+    const pending = sub.sendBatch(changes);
+    await Promise.resolve();
+
+    expect(sendSpy).toHaveBeenCalledTimes(2);
+    expect(sendSpy.mock.calls).toEqual([[changes[0]], [changes[1]]]);
+    sub.close();
+    await pending;
   });
 
   test('acks, pending, processed, stats', async () => {

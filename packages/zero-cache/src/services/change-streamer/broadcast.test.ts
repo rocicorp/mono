@@ -94,6 +94,20 @@ describe('change-streamer/broadcast', () => {
     }
   });
 
+  test('without tracking catches rejected sends', async () => {
+    const rejected = Promise.reject(new Error('send failed'));
+    const catchSpy = vi.spyOn(rejected, 'catch');
+    const subscriber = {
+      sendBatch: vi.fn(() => rejected),
+    } as unknown as Subscriber;
+
+    Broadcast.withoutTracking([subscriber], change);
+
+    expect(subscriber.sendBatch).toHaveBeenCalledWith([change]);
+    expect(catchSpy).toHaveBeenCalledTimes(1);
+    await rejected.catch(() => {});
+  });
+
   test('with tracking', async () => {
     const [sub1, stream1] = createSubscriber('00', true);
     const [sub2, stream2] = createSubscriber('00', true);
