@@ -1,22 +1,35 @@
-// For format details, see https://aka.ms/devcontainer.json. For config options, see the
-// README at: https://github.com/devcontainers/templates/tree/main/src/typescript-node
+// For format details, see https://aka.ms/devcontainer.json.
+//
+// The workspace runs as a Docker Compose service beside static Postgres
+// containers used by the zero-cache pg tests (see docker-compose.yml).
+// Security invariant: the workspace must not be able to create or control
+// containers — no Docker daemon inside (Docker-in-Docker), no host Docker
+// socket mounted. See README.md in this directory.
 {
   "name": "Mono (Node 24)",
-  "image": "mcr.microsoft.com/devcontainers/javascript-node:24@sha256:5be6833735e290e26232abe2d65197942057fb5091f103c128ca454e2043c1d9",
+  "dockerComposeFile": ["docker-compose.yml"],
+  "service": "dev",
+  "workspaceFolder": "/workspaces/mono",
+  "shutdownAction": "stopCompose",
   "remoteUser": "node",
-  "mounts": [
-    "source=${localEnv:HOME}/.gitconfig,target=/home/node/.gitconfig,type=bind,readonly"
-  ],
   "features": {
     // Shared rocicorp features (https://github.com/rocicorp/devcontainer-features):
-    //  - agents: Codex (pinned) + Claude Code + gh; persists the Claude/gh logins
-    //    across rebuilds and sets CLAUDE_CONFIG_DIR.
+    //  - agents: Codex (pinned) + Claude Code + gh. Persists the Claude login
+    //    across rebuilds (CLAUDE_CONFIG_DIR). gh auth is NOT persisted — it uses
+    //    GITHUB_TOKEN forwarded from the host (resolved there via 1Password).
     //  - pnpm: corepack-managed pnpm; removes npm/npx to enforce pnpm.
-    //  - docker: Docker-in-Docker daemon so testcontainers (zero-cache pg tests) work.
-    "ghcr.io/rocicorp/devcontainer-features/agents:1": {},
-    "ghcr.io/rocicorp/devcontainer-features/pnpm:1": {},
-    "ghcr.io/rocicorp/devcontainer-features/docker:1": {}
+    "ghcr.io/rocicorp/devcontainer-features/agents:2": {
+      "codexVersion": "0.139.0"
+    },
+    "ghcr.io/rocicorp/devcontainer-features/pnpm:1": {}
   },
+  // gh reads GITHUB_TOKEN directly. Resolve it on your HOST (1Password app /
+  // Touch ID) and forward it in — nothing is stored in the container or repo.
+  // Host setup: see https://github.com/rocicorp/devcontainer-features#gh-auth-via-1password-no-host-side-credentials
+  "remoteEnv": {
+    "GITHUB_TOKEN": "${localEnv:GITHUB_TOKEN}"
+  },
+  "postCreateCommand": "pnpm install",
   "customizations": {
     "vscode": {
       "extensions": ["oxc.oxc-vscode@1.57.0"],

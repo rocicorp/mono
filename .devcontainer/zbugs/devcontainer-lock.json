@@ -10,10 +10,10 @@
       "resolved": "ghcr.io/devcontainers/features/github-cli@sha256:d22f50b70ed75339b4eed1ba9ecde3a1791f90e88d37936517e3bace0bbad671",
       "integrity": "sha256:d22f50b70ed75339b4eed1ba9ecde3a1791f90e88d37936517e3bace0bbad671"
     },
-    "ghcr.io/rocicorp/devcontainer-features/agents:2": {
-      "version": "2.0.0",
-      "resolved": "ghcr.io/rocicorp/devcontainer-features/agents@sha256:172905cd57fbc946323644a52d5829415c77ff8c6f217594720966efcba11db6",
-      "integrity": "sha256:172905cd57fbc946323644a52d5829415c77ff8c6f217594720966efcba11db6",
+    "ghcr.io/rocicorp/devcontainer-features/agents:1": {
+      "version": "1.2.0",
+      "resolved": "ghcr.io/rocicorp/devcontainer-features/agents@sha256:b5161d2a6698717cb6cf804f47e682ceb07beac7aa425b4d33f7a92d9902dd84",
+      "integrity": "sha256:b5161d2a6698717cb6cf804f47e682ceb07beac7aa425b4d33f7a92d9902dd84",
       "dependsOn": [
         "ghcr.io/anthropics/devcontainer-features/claude-code:1",
         "ghcr.io/devcontainers/features/github-cli:1"
