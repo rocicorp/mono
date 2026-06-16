@@ -13,7 +13,7 @@
     "check-fmt": "oxfmt --check ."
   },
   "dependencies": {
-    "@rocicorp/logger": "^5.4.0",
+    "@rocicorp/logger": "^6.0.0",
     "find-process": "^1.4.10",
     "pidusage": "^4.0.0"
   },

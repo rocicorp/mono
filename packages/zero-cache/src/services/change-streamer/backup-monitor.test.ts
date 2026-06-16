@@ -5,7 +5,7 @@ import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.
 import {DbFile} from '../../test/lite.ts';
 import type {Subscription} from '../../types/subscription.ts';
 import {initReplicationState} from '../replicator/schema/replication-state.ts';
-import {BackupMonitor} from './backup-monitor.ts';
+import {BackupMonitor, WEDGED_SHUTDOWN_GRACE_MS} from './backup-monitor.ts';
 import type {ChangeStreamerService} from './change-streamer.ts';
 import type {SnapshotMessage} from './snapshot.ts';
 
@@ -22,6 +22,11 @@ describe('change-streamer/backup-monitor', () => {
   let metricsResponse = 'unconfigured';
   let monitor: BackupMonitor;
   let replica: DbFile;
+
+  // Mocks the verification of the actual backup state (i.e. the
+  // `getLastBackupTime()` litestream CLI invocation in production).
+  let lastActualBackupTime: () => Promise<Date>;
+  const verifyBackupState = vi.fn(() => lastActualBackupTime());
 
   function setMetricsResponse(watermark: string, timestamp: string) {
     // Sample response from prometheus metrics handler
@@ -54,6 +59,11 @@ litestream_replica_validation_total{db="/tmp/zbugs-sync-replica.db",name="file",
     vi.useFakeTimers();
     scheduled.splice(0);
 
+    // By default, verification confirms whatever litestream claims
+    // (i.e. the last actual upload happened "now").
+    verifyBackupState.mockClear();
+    lastActualBackupTime = () => Promise.resolve(new Date());
+
     monitor = new BackupMonitor(
       lc,
       replica.path,
@@ -61,6 +71,7 @@ litestream_replica_validation_total{db="/tmp/zbugs-sync-replica.db",name="file",
       'http://localhost:4850/metrics',
       changeStreamer as unknown as ChangeStreamerService,
       100_000, // 100 seconds
+      verifyBackupState,
     );
 
     nock('http://localhost:4850')
@@ -131,6 +142,129 @@ litestream_replica_validation_total{db="/tmp/zbugs-sync-replica.db",name="file",
     vi.setSystemTime(time + 110_000);
     await monitor.checkWatermarksAndScheduleCleanup();
     expect(scheduled).toEqual(['618p0bw8']);
+  });
+
+  test('blocks purge when actual backup is older than claimed', async () => {
+    const time = Date.UTC(2025, 3, 24);
+    vi.setSystemTime(time);
+    const nowSeconds = (Date.now() / 1000).toPrecision(9);
+    setMetricsResponse('618p0bw8', nowSeconds);
+
+    // Litestream claims the watermark was backed up "now", but the last
+    // object actually uploaded to the backup destination is 10 minutes old.
+    lastActualBackupTime = () => Promise.resolve(new Date(time - 10 * 60_000));
+
+    await monitor.checkWatermarksAndScheduleCleanup();
+    expect(scheduled).toEqual([]);
+    expect(verifyBackupState).toHaveBeenCalledTimes(0);
+
+    // The cleanup delay has passed, but the purge must be blocked because
+    // the claimed backup time is not corroborated by an actual upload.
+    vi.setSystemTime(time + 100_000);
+    await monitor.checkWatermarksAndScheduleCleanup();
+    expect(scheduled).toEqual([]);
+    expect(verifyBackupState).toHaveBeenCalledTimes(1);
+
+    vi.setSystemTime(time + 160_000);
+    await monitor.checkWatermarksAndScheduleCleanup();
+    expect(scheduled).toEqual([]);
+    expect(verifyBackupState).toHaveBeenCalledTimes(2);
+
+    // Once the backup destination reflects an upload at (or after) the
+    // claimed backup time, the purge proceeds.
+    lastActualBackupTime = () => Promise.resolve(new Date(time));
+    await monitor.checkWatermarksAndScheduleCleanup();
+    expect(scheduled).toEqual(['618p0bw8']);
+  });
+
+  test('purges only up to the verified backup state', async () => {
+    const time = Date.UTC(2025, 3, 24);
+    vi.setSystemTime(time);
+
+    // The last object actually uploaded to the backup destination was
+    // at `time`, regardless of what litestream metrics claim.
+    lastActualBackupTime = () => Promise.resolve(new Date(time));
+
+    const t1 = (Date.now() / 1000).toPrecision(9);
+    setMetricsResponse('618ocqq8', t1);
+    await monitor.checkWatermarksAndScheduleCleanup();
+    expect(scheduled).toEqual([]);
+
+    // The first watermark (claimed at `time`) becomes eligible and is
+    // confirmed by the actual backup state.
+    vi.setSystemTime(time + 10 * 60_000);
+    const t2 = (Date.now() / 1000).toPrecision(9);
+    setMetricsResponse('618p0bw8', t2);
+    await monitor.checkWatermarksAndScheduleCleanup();
+    expect(scheduled).toEqual(['618ocqq8']);
+
+    // Both watermarks have passed the cleanup delay, but the second one
+    // (claimed at time + 10 min) is not corroborated by the actual backup
+    // state (last actual upload at `time`), so it must not be purged.
+    vi.setSystemTime(time + 20 * 60_000);
+    await monitor.checkWatermarksAndScheduleCleanup();
+    expect(scheduled).toEqual(['618ocqq8']);
+
+    // Once the actual backup state catches up, the second one is purged.
+    lastActualBackupTime = () => Promise.resolve(new Date(time + 10 * 60_000));
+    await monitor.checkWatermarksAndScheduleCleanup();
+    expect(scheduled).toEqual(['618ocqq8', '618p0bw8']);
+  });
+
+  test('blocks purge when backup verification fails', async () => {
+    const time = Date.UTC(2025, 3, 24);
+    vi.setSystemTime(time);
+    const nowSeconds = (Date.now() / 1000).toPrecision(9);
+    setMetricsResponse('618p0bw8', nowSeconds);
+
+    lastActualBackupTime = () =>
+      Promise.reject(new Error('cannot list backup'));
+
+    await monitor.checkWatermarksAndScheduleCleanup();
+    expect(scheduled).toEqual([]);
+
+    // Verification fails, so the purge is conservatively skipped.
+    vi.setSystemTime(time + 100_000);
+    await monitor.checkWatermarksAndScheduleCleanup();
+    expect(scheduled).toEqual([]);
+    expect(verifyBackupState).toHaveBeenCalledTimes(1);
+
+    // When verification recovers (and confirms the claim), the purge
+    // proceeds.
+    lastActualBackupTime = () => Promise.resolve(new Date());
+    await monitor.checkWatermarksAndScheduleCleanup();
+    expect(scheduled).toEqual(['618p0bw8']);
+  });
+
+  test('skips verification confirmed by cached backup state', async () => {
+    const time = Date.UTC(2025, 3, 24);
+    vi.setSystemTime(time);
+
+    const t1 = (Date.now() / 1000).toPrecision(9);
+    setMetricsResponse('618ocqq8', t1);
+    await monitor.checkWatermarksAndScheduleCleanup();
+
+    vi.setSystemTime(time + 10_000);
+    const t2 = (Date.now() / 1000).toPrecision(9);
+    setMetricsResponse('618p0bw8', t2);
+    await monitor.checkWatermarksAndScheduleCleanup();
+
+    // The first purge verifies against the backup destination, which
+    // reports a last actual upload time that also covers the second
+    // watermark (within the clock-skew slack).
+    lastActualBackupTime = () => Promise.resolve(new Date(time + 10_000));
+    vi.setSystemTime(time + 100_000);
+    await monitor.checkWatermarksAndScheduleCleanup();
+    expect(scheduled).toEqual(['618ocqq8']);
+    expect(verifyBackupState).toHaveBeenCalledTimes(1);
+
+    // The second watermark's claimed backup time is already confirmed by
+    // the cached verification result, so the backup destination is not
+    // consulted again.
+    vi.setSystemTime(time + 110_000);
+    await monitor.checkWatermarksAndScheduleCleanup();
+    expect(scheduled).toEqual(['618ocqq8', '618p0bw8']);
+    expect(verifyBackupState).toHaveBeenCalledTimes(1);
   });
 
   test('only keeps one reservation per id', async () => {
@@ -311,5 +445,79 @@ litestream_replica_validation_total{db="/tmp/zbugs-sync-replica.db",name="file",
 
     // Since the fetch was aborted, no watermarks were processed.
     expect(scheduled).toEqual([]);
+  });
+
+  test('shuts down when the backup stays wedged past the grace period', async () => {
+    const time = Date.UTC(2025, 3, 24);
+    vi.setSystemTime(time);
+
+    // Litestream keeps claiming a fresh backup, but the last object actually
+    // uploaded is frozen 10 minutes in the past: the backup is wedged.
+    setMetricsResponse('618p0bw8', (time / 1000).toPrecision(9));
+    lastActualBackupTime = () => Promise.resolve(new Date(time - 10 * 60_000));
+
+    const runResult = monitor.run();
+    let rejection: unknown;
+    void runResult.catch(e => (rejection = e));
+
+    // First eligible check: the staleness clock starts, no shutdown yet.
+    vi.setSystemTime(time + 100_000);
+    await monitor.checkWatermarksAndScheduleCleanup();
+    await Promise.resolve();
+    expect(scheduled).toEqual([]);
+    expect(rejection).toBeUndefined();
+
+    // Still stale, but just shy of the grace period: still no shutdown.
+    vi.setSystemTime(time + 100_000 + WEDGED_SHUTDOWN_GRACE_MS - 1);
+    await monitor.checkWatermarksAndScheduleCleanup();
+    await Promise.resolve();
+    expect(rejection).toBeUndefined();
+
+    // The backup has now been continuously stale for the full grace period,
+    // so the process shuts down by rejecting the `run()` promise.
+    vi.setSystemTime(time + 100_000 + WEDGED_SHUTDOWN_GRACE_MS);
+    await monitor.checkWatermarksAndScheduleCleanup();
+    await expect(runResult).rejects.toThrow(/wedged/);
+    expect(scheduled).toEqual([]);
+  });
+
+  test('resets the staleness clock when the backup recovers', async () => {
+    const time = Date.UTC(2025, 3, 24);
+    vi.setSystemTime(time);
+
+    setMetricsResponse('618p0bw8', (time / 1000).toPrecision(9));
+    lastActualBackupTime = () => Promise.resolve(new Date(time - 10 * 60_000));
+
+    const runResult = monitor.run();
+    let rejection: unknown;
+    void runResult.catch(e => (rejection = e));
+
+    // Stale right up until the last moment before the grace period elapses.
+    vi.setSystemTime(time + 100_000);
+    await monitor.checkWatermarksAndScheduleCleanup();
+    vi.setSystemTime(time + 100_000 + WEDGED_SHUTDOWN_GRACE_MS - 1);
+    await monitor.checkWatermarksAndScheduleCleanup();
+    await Promise.resolve();
+    expect(rejection).toBeUndefined();
+    expect(scheduled).toEqual([]);
+
+    // The backup recovers before the grace period elapses: the purge proceeds
+    // and the staleness clock is reset.
+    lastActualBackupTime = () => Promise.resolve(new Date(time));
+    await monitor.checkWatermarksAndScheduleCleanup();
+    expect(scheduled).toEqual(['618p0bw8']);
+
+    // A subsequent wedge must endure a *fresh* full grace period. Even though
+    // the total time spent stale now far exceeds the grace period, it was not
+    // continuous, so the process keeps running.
+    setMetricsResponse('618p0bw9', ((time + 100_000) / 1000).toPrecision(9));
+    lastActualBackupTime = () => Promise.resolve(new Date(time));
+    vi.setSystemTime(time + 100_000 + WEDGED_SHUTDOWN_GRACE_MS + 100_000);
+    await monitor.checkWatermarksAndScheduleCleanup();
+    await Promise.resolve();
+    expect(rejection).toBeUndefined();
+    expect(scheduled).toEqual(['618p0bw8']);
+
+    await monitor.stop();
   });
 });

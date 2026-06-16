@@ -21,6 +21,7 @@ import {PurgeLocker} from '../services/change-streamer/storer.ts';
 import {exitAfter, runUntilKilled} from '../services/life-cycle.ts';
 import {
   BackupNotFoundException,
+  getLastBackupTime,
   restoreReplica,
 } from '../services/litestream/commands.ts';
 import {
@@ -223,6 +224,10 @@ export default async function runWorker(
         //
         // Consider: Also account for permanent volumes?
         Date.now() - workerStartTime,
+        // Verifies litestream's claimed backup progress against the actual
+        // backup state in the replica destination before advancing the
+        // change-log cleanup watermark.
+        () => getLastBackupTime(lc, config),
       )
     : new ReplicaMonitor(lc, replica.file, changeStreamer);
 
