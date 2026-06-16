@@ -1,9 +1,8 @@
 import {afterAll, beforeAll, expect, test} from 'vitest';
 import type {JSONValue} from '../../shared/src/json.ts';
+import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
 import {compileSQLite, extractZqlResult} from '../../z2s/src/compiler.ts';
 import {formatSqliteInternalConvert} from '../../z2s/src/sql.ts';
-import {testDBs} from '../../zero-cache/src/test/db.ts';
-import type {PostgresDB} from '../../zero-cache/src/types/pg.ts';
 import type {Row} from '../../zero-protocol/src/data.ts';
 import {relationships} from '../../zero-schema/src/builder/relationship-builder.ts';
 import {createSchema} from '../../zero-schema/src/builder/schema-builder.ts';
@@ -16,11 +15,9 @@ import {newQuery} from '../../zql/src/query/query-impl.ts';
 import {asQueryInternals} from '../../zql/src/query/query-internals.ts';
 import type {AnyQuery} from '../../zql/src/query/query.ts';
 import {QueryDelegateImpl as TestMemoryQueryDelegate} from '../../zql/src/query/test/query-delegate.ts';
-import type {Database} from '../../zqlite/src/db.ts';
-import {fillPgAndSync} from './helpers/setup.ts';
+import {Database} from '../../zqlite/src/db.ts';
 import './helpers/comparePg.ts';
 
-const DB_NAME = 'compiler-sqlite-oracle';
 
 const project = table('project')
   .columns({
@@ -150,14 +147,13 @@ const testData: Record<string, Row[]> = {
   ],
 };
 
-let pg: PostgresDB;
 let sqlite: Database;
 let memoryDelegate: TestMemoryQueryDelegate;
 
-beforeAll(async () => {
-  const setup = await fillPgAndSync(schema, createTableSQL, testData, DB_NAME);
-  pg = setup.pg;
-  sqlite = setup.sqlite;
+beforeAll(() => {
+  sqlite = new Database(createSilentLogContext(), ':memory:');
+  sqlite.exec(createTableSQL);
+  seedSQLite();
 
   const sources: Record<string, MemorySource> = Object.fromEntries(
     Object.entries(schema.tables).map(([key, tableSchema]) => [
@@ -178,9 +174,31 @@ beforeAll(async () => {
   }
 });
 
-afterAll(async () => {
+function seedSQLite() {
+  const insertProject = sqlite.prepare(
+    'INSERT INTO "project" ("id", "name") VALUES (?, ?)',
+  );
+  for (const row of testData.project) {
+    insertProject.run(row.id, row.name);
+  }
+
+  const insertTask = sqlite.prepare(
+    'INSERT INTO "task" ("id", "project_id", "assignee_id", "title") VALUES (?, ?, ?, ?)',
+  );
+  for (const row of testData.task) {
+    insertTask.run(row.id, row.projectId, row.assigneeId, row.title);
+  }
+
+  const insertAssignee = sqlite.prepare(
+    'INSERT INTO "assignee" ("id", "name") VALUES (?, ?)',
+  );
+  for (const row of testData.assignee) {
+    insertAssignee.run(row.id, row.name);
+  }
+}
+
+afterAll(() => {
   sqlite.close();
-  await testDBs.drop(pg);
 });
 
 test('basic query matches ZQL', async () => {
