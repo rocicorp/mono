@@ -46,6 +46,11 @@ const permissions = await definePermissions(schema, () => ({
 
 const APP_ID = 'e2e';
 
+type BookRow = {
+  id: string;
+  title: string;
+};
+
 function initialPGSetup() {
   return `
     CREATE TABLE book(
@@ -161,7 +166,7 @@ class ZeroE2EHarness {
     });
     return db
       .prepare('SELECT id, title FROM book ORDER BY id')
-      .all() as Array<{id: string; title: string}>;
+      .all() as BookRow[];
   }
 
   expectNamedQueryRouteWasUsed() {
@@ -209,6 +214,10 @@ function waitForComplete<T>(view: {
   });
 }
 
+function toBookRows(rows: readonly BookRow[]): BookRow[] {
+  return rows.map(({id, title}) => ({id, title}));
+}
+
 let harness: ZeroE2EHarness | undefined;
 
 afterEach(async () => {
@@ -254,7 +263,7 @@ test('e2e harness materializes a client query and checks it against the replica'
 
   try {
     const clientRows = await waitForComplete(view);
-    expect(clientRows).toEqual(harness.oracleBooks());
+    expect(toBookRows(clientRows)).toEqual(harness.oracleBooks());
     harness.expectNamedQueryRouteWasUsed();
   } finally {
     view.destroy();
