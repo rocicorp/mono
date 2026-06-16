@@ -45,6 +45,8 @@ type QualifiedColumn = {
   zql: string;
 };
 
+type Dialect = 'pg' | 'sqlite';
+
 type ServerSpec = {
   schema: ServerSchema;
   // maps zql names to server names
@@ -55,6 +57,7 @@ export type Spec = {
   server: ServerSpec;
   zql: Schema['tables'];
   aliasCount: number;
+  dialect?: Dialect | undefined;
 };
 
 const ZQL_RESULT_KEY = 'zql_result';
@@ -63,11 +66,21 @@ const ZQL_RESULT_KEY_IDENT = sql.ident(ZQL_RESULT_KEY);
 const ZQL_RESULT_TABLE_KEY = 'zql_root';
 const ZQL_RESULT_TABLE_IDENT = sql.ident(ZQL_RESULT_TABLE_KEY);
 
+export function compileSQLite(
+  serverSchema: ServerSchema,
+  zqlSchema: Schema,
+  ast: AST,
+  format?: Format,
+): SQLQuery {
+  return compile(serverSchema, zqlSchema, ast, format, 'sqlite');
+}
+
 export function compile(
   serverSchema: ServerSchema,
   zqlSchema: Schema,
   ast: AST,
   format?: Format,
+  dialect: Dialect = 'pg',
 ): SQLQuery {
   ast = completeOrdering(
     ast,
@@ -80,9 +93,11 @@ export function compile(
       mapper: clientToServer(zqlSchema.tables),
     },
     zql: zqlSchema.tables,
+    dialect,
   };
+  const rootKeys = resultKeys(spec, ast);
   return sql`SELECT 
-    ${toJSON(ZQL_RESULT_TABLE_KEY, format?.singular)}::text AS ${ZQL_RESULT_KEY_IDENT}
+    ${toJSON(spec, ZQL_RESULT_TABLE_KEY, rootKeys, format?.singular)} AS ${ZQL_RESULT_KEY_IDENT}
     FROM (${select(spec, ast, format)}) ${ZQL_RESULT_TABLE_IDENT}`;
 }
 
@@ -101,7 +116,7 @@ function select(
   for (const column of Object.keys(tableSchema.columns)) {
     if (!usedAliases.has(column)) {
       selectionSet.push(
-        selectIdent(spec.server, {
+        selectIdent(spec, {
           table,
           zql: column,
         }),
@@ -168,11 +183,11 @@ export function orderBy(
           sql`${colIdent(spec.server, {
             table,
             zql: col,
-          })} ASC NULLS FIRST`
+          })} ASC ${nulls(spec, 'FIRST')}`
         : sql`${colIdent(spec.server, {
             table,
             zql: col,
-          })} DESC NULLS LAST`,
+          })} DESC ${nulls(spec, 'LAST')}`,
     ),
     ', ',
   )}`;
@@ -219,7 +234,7 @@ function relationshipSubquery(
     const tableSchema = spec.zql[nestedAst.table];
     for (const column of Object.keys(tableSchema.columns)) {
       selectionSet.push(
-        selectIdent(spec.server, {
+        selectIdent(spec, {
           table: lastTable,
           zql: column,
         }),
@@ -227,7 +242,7 @@ function relationshipSubquery(
     }
 
     return sql`(
-        SELECT ${toJSON(innerAlias, format?.singular)} FROM (SELECT ${sql.join(
+        SELECT ${toJSON(spec, innerAlias, resultKeys(spec, nestedAst), format?.singular)} FROM (SELECT ${sql.join(
           selectionSet,
           ',',
         )} FROM ${join} WHERE (${makeCorrelator(
@@ -249,7 +264,7 @@ function relationshipSubquery(
   }
 
   return sql`(
-      SELECT ${toJSON(innerAlias, format?.singular)} FROM (${select(
+      SELECT ${toJSON(spec, innerAlias, resultKeys(spec, relationship.subquery), format?.singular)} FROM (${select(
         spec,
         relationship.subquery,
         format,
@@ -403,19 +418,7 @@ export function simple(
     case 'LIKE':
     case 'NOT ILIKE':
     case 'NOT LIKE':
-      return sql`${valueComparison(
-        spec,
-        condition.left,
-        table,
-        condition.right,
-        false,
-      )} ${sql.__dangerous__rawValue(condition.op)} ${valueComparison(
-        spec,
-        condition.right,
-        table,
-        condition.left,
-        false,
-      )}`;
+      return comparison(spec, condition, table);
     case 'NOT IN':
     case 'IN':
       return any(spec, condition, table);
@@ -430,9 +433,26 @@ export function any(
   condition: SimpleCondition,
   table: Table,
 ): SQLQuery {
+  if (dialect(spec) === 'sqlite') {
+    return sql`${valueComparison(
+      spec,
+      condition.left,
+      table,
+      condition.right,
+      false,
+    )} ${condition.op === 'NOT IN' ? sql`NOT` : sql``} IN (
+      SELECT value FROM json_each(${valueComparison(
+        spec,
+        condition.right,
+        table,
+        condition.left,
+        true,
+      )})
+    )`;
+  }
   return sql`${condition.op === 'NOT IN' ? sql`NOT` : sql``}
     (
-      ${valueComparison(spec, condition.left, table, condition.right, false)} = ANY 
+      ${valueComparison(spec, condition.left, table, condition.right, false)} = ANY
       (${valueComparison(spec, condition.right, table, condition.left, true)})
     )`;
 }
@@ -613,17 +633,97 @@ export function pullTablesForJunction(
   ];
 }
 
-function toJSON(table: string, singular = false): SQLQuery {
-  return sql`${
-    singular ? sql`` : sql`COALESCE(json_agg`
-  }(row_to_json(${sql.ident(table)}))${singular ? sql`` : sql`, '[]'::json)`}`;
+function toJSON(
+  spec: Spec,
+  table: string,
+  keys: ResultKey[],
+  singular = false,
+): SQLQuery {
+  if (dialect(spec) === 'pg') {
+    if (singular) {
+      return sql`row_to_json(${sql.ident(table)})::text`;
+    }
+    return sql`COALESCE(json_agg(row_to_json(${sql.ident(table)})), '[]'::json)::text`;
+  }
+
+  const object = sql`json_object(${sql.join(
+    keys.flatMap(key => [
+      sql`${key.name}`,
+      key.json
+        ? sql`json(${sql.ident(table, key.name)})`
+        : sql.ident(table, key.name),
+    ]),
+    ', ',
+  )})`;
+  return singular ? object : sql`COALESCE(json_group_array(${object}), '[]')`;
 }
 
-function selectIdent(server: ServerSpec, column: QualifiedColumn): SQLQuery {
+type ResultKey = {name: string; json: boolean};
+
+function resultKeys(spec: Spec, ast: AST): ResultKey[] {
+  const relationshipKeys: ResultKey[] = (ast.related ?? []).map(r => ({
+    name: must(r.subquery.alias),
+    json: true,
+  }));
+  const usedAliases = new Set(relationshipKeys.map(k => k.name));
+  const columnKeys: ResultKey[] = Object.keys(spec.zql[ast.table].columns)
+    .filter(name => !usedAliases.has(name))
+    .map(name => ({name, json: false}));
+  return [...relationshipKeys, ...columnKeys];
+}
+
+function dialect(spec: Spec): Dialect {
+  return spec.dialect ?? 'pg';
+}
+
+function nulls(spec: Spec, which: 'FIRST' | 'LAST'): SQLQuery {
+  return dialect(spec) === 'sqlite'
+    ? sql``
+    : sql.__dangerous__rawValue(`NULLS ${which}`);
+}
+
+function comparison(
+  spec: Spec,
+  condition: SimpleCondition,
+  table: Table,
+): SQLQuery {
+  const left = valueComparison(
+    spec,
+    condition.left,
+    table,
+    condition.right,
+    false,
+  );
+  const right = valueComparison(
+    spec,
+    condition.right,
+    table,
+    condition.left,
+    false,
+  );
+  switch (condition.op) {
+    case 'ILIKE':
+      return dialect(spec) === 'sqlite'
+        ? sql`LOWER(${left}) LIKE LOWER(${right})`
+        : sql`${left} ILIKE ${right}`;
+    case 'NOT ILIKE':
+      return dialect(spec) === 'sqlite'
+        ? sql`LOWER(${left}) NOT LIKE LOWER(${right})`
+        : sql`${left} NOT ILIKE ${right}`;
+    default:
+      return sql`${left} ${sql.__dangerous__rawValue(condition.op)} ${right}`;
+  }
+}
+
+function selectIdent(spec: Spec, column: QualifiedColumn): SQLQuery {
+  const {server} = spec;
   const serverColumnSchema =
     server.schema[server.mapper.tableName(column.table.zql)][
       server.mapper.columnName(column.table.zql, column.zql)
     ];
+  if (dialect(spec) === 'sqlite') {
+    return sql`${colIdent(server, column)} as ${sql.ident(column.zql)}`;
+  }
   const serverType = serverColumnSchema.type;
   if (!serverColumnSchema.isEnum) {
     let needsNormalization = false;

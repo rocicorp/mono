@@ -25,7 +25,12 @@ export function formatPgInternalConvert(sql: SQLQuery) {
 }
 
 export function formatSqlite(sql: SQLQuery) {
-  const format = new ReusingFormat(escapeSQLiteIdentifier);
+  const format = new ReusingFormat(escapeSQLiteIdentifier, '?');
+  return sql.format((items: readonly SQLItem[]) => formatFn(items, format));
+}
+
+export function formatSqliteInternalConvert(sql: SQLQuery) {
+  const format = new SQLiteConvertFormat(escapeSQLiteIdentifier);
   return sql.format((items: readonly SQLItem[]) => formatFn(items, format));
 }
 
@@ -101,11 +106,20 @@ class ReusingFormat implements FormatConfig {
   readonly #seen: Map<unknown, number> = new Map();
   readonly escapeIdentifier: (str: string) => string;
 
-  constructor(escapeIdentifier: (str: string) => string) {
+  readonly #placeholder: '?' | 'numbered';
+
+  constructor(
+    escapeIdentifier: (str: string) => string,
+    placeholder: '?' | 'numbered' = 'numbered',
+  ) {
     this.escapeIdentifier = escapeIdentifier;
+    this.#placeholder = placeholder;
   }
 
   formatValue = (value: unknown) => {
+    if (this.#placeholder === '?' && this.#seen.has(value)) {
+      return {placeholder: '?', value};
+    }
     if (this.#seen.has(value)) {
       return {
         placeholder: `$${this.#seen.get(value)}`,
@@ -113,7 +127,29 @@ class ReusingFormat implements FormatConfig {
       };
     }
     this.#seen.set(value, this.#seen.size + 1);
-    return {placeholder: `$${this.#seen.size}`, value};
+    return {
+      placeholder: this.#placeholder === '?' ? '?' : `$${this.#seen.size}`,
+      value,
+    };
+  };
+}
+
+class SQLiteConvertFormat implements FormatConfig {
+  readonly escapeIdentifier: (str: string) => string;
+
+  constructor(escapeIdentifier: (str: string) => string) {
+    this.escapeIdentifier = escapeIdentifier;
+  }
+
+  formatValue = (value: unknown) => {
+    assert(
+      isSqlConvert(value),
+      'SQLiteConvertFormat can only take SqlConvertArgs.',
+    );
+    return {
+      placeholder: '?',
+      value: stringify(value),
+    };
   };
 }
 

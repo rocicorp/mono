@@ -13,6 +13,7 @@ import type {ServerSchema} from '../../zero-types/src/server-schema.ts';
 import {
   any,
   compile,
+  compileSQLite,
   distinctFrom,
   limit,
   makeCorrelator,
@@ -22,7 +23,7 @@ import {
   simple,
   type Spec,
 } from './compiler.ts';
-import {formatPgInternalConvert} from './sql.ts';
+import {formatPgInternalConvert, formatSqliteInternalConvert} from './sql.ts';
 
 // Tests the output of basic primitives.
 // Top-level things like `SELECT` are tested by actually executing the SQL as inspecting
@@ -1477,4 +1478,131 @@ test('compound primary key ORDER BY preserves user-defined column order', () => 
   expect(result.text).not.toContain(
     'ORDER BY "connected_calls_0"."callId" ASC NULLS FIRST, "connected_calls_0"."connectionId" ASC NULLS FIRST, "connected_calls_0"."userId" ASC NULLS FIRST',
   );
+});
+
+test('compileSQLite emits full SQL for a basic query', () => {
+  const result = formatSqliteInternalConvert(
+    compileSQLite(serverSchema, schema, {
+      table: 'issue',
+      where: {
+        type: 'simple',
+        left: {type: 'column', name: 'ownerId'},
+        op: 'IN',
+        right: {type: 'literal', value: ['u1', 'u2']},
+      },
+      orderBy: [['title', 'asc']],
+      limit: 2,
+    }),
+  );
+
+  expect(result).toMatchInlineSnapshot(`
+    {
+      "text": "SELECT\n      COALESCE(json_group_array(json_object(?, \"zql_root\".\"id\", ?, \"zql_root\".\"title\", ?, \"zql_root\".\"description\", ?, \"zql_root\".\"closed\", ?, \"zql_root\".\"ownerId\", ?, \"zql_root\".\"created\")), '[]') AS \"zql_result\"\n      FROM (SELECT \"issue_0\".\"id\" as \"id\",\"issue_0\".\"title\" as \"title\",\"issue_0\".\"description\" as \"description\",\"issue_0\".\"closed\" as \"closed\",\"issue_0\".\"ownerId\" as \"ownerId\",\"issue_0\".\"created\" as \"created\"\n      FROM \"issue\" AS \"issue_0\"\n      WHERE \"issue_0\".\"ownerId\"  IN (\n      SELECT value FROM json_each(?)\n      )\n\n      ORDER BY \"issue_0\".\"title\" ASC , \"issue_0\".\"id\" ASC\n      LIMIT ?) \"zql_root\"",
+      "values": [
+        "id",
+        "title",
+        "description",
+        "closed",
+        "ownerId",
+        "created",
+        "[\\\"u1\\\",\\\"u2\\\"]",
+        2,
+      ],
+    }
+  `);
+});
+
+test('compileSQLite emits full SQL for a related query', () => {
+  const result = formatSqliteInternalConvert(
+    compileSQLite(serverSchema, schema, {
+      table: 'issue',
+      where: {
+        type: 'simple',
+        left: {type: 'column', name: 'title'},
+        op: 'ILIKE',
+        right: {type: 'literal', value: '%bug%'},
+      },
+      orderBy: [['created', 'desc']],
+      related: [
+        {
+          system: 'client',
+          correlation: {
+            parentField: ['id'],
+            childField: ['issueId'],
+          },
+          subquery: {
+            table: 'issueLabel',
+            alias: 'labels',
+          },
+        },
+      ],
+    }),
+  );
+
+  expect(result).toMatchInlineSnapshot(`
+    {
+      "text": "SELECT\n      COALESCE(json_group_array(json_object(?, json(\"zql_root\".\"labels\"), ?, \"zql_root\".\"id\", ?, \"zql_root\".\"title\", ?, \"zql_root\".\"description\", ?, \"zql_root\".\"closed\", ?, \"zql_root\".\"ownerId\", ?, \"zql_root\".\"created\")), '[]') AS \"zql_result\"\n      FROM (SELECT (\n      SELECT COALESCE(json_group_array(json_object(?, \"inner_labels\".\"issueId\", ?, \"inner_labels\".\"labelId\")), '[]') FROM (SELECT \"issueLabel_1\".\"issue_id\" as \"issueId\",\"issueLabel_1\".\"label_id\" as \"labelId\"\n      FROM \"issue_label\" AS \"issueLabel_1\"\n      WHERE \"issue_0\".\"id\" = \"issueLabel_1\".\"issue_id\"\n\n\n      ) \"inner_labels\"\n      ) as \"labels\",\"issue_0\".\"id\" as \"id\",\"issue_0\".\"title\" as \"title\",\"issue_0\".\"description\" as \"description\",\"issue_0\".\"closed\" as \"closed\",\"issue_0\".\"ownerId\" as \"ownerId\",\"issue_0\".\"created\" as \"created\"\n      FROM \"issue\" AS \"issue_0\"\n      WHERE LOWER(\"issue_0\".\"title\") LIKE LOWER(?)\n\n      ORDER BY \"issue_0\".\"created\" DESC , \"issue_0\".\"id\" ASC\n      ) \"zql_root\"",
+      "values": [
+        "labels",
+        "id",
+        "title",
+        "description",
+        "closed",
+        "ownerId",
+        "created",
+        "issueId",
+        "labelId",
+        "%bug%",
+      ],
+    }
+  `);
+});
+
+test('compileSQLite emits full SQL for a singular scalar subquery', () => {
+  const result = formatSqliteInternalConvert(
+    compileSQLite(
+      serverSchema,
+      schema,
+      {
+        table: 'issue',
+        where: {
+          type: 'correlatedSubquery',
+          op: 'NOT EXISTS',
+          scalar: true,
+          related: {
+            system: 'client',
+            correlation: {
+              parentField: ['ownerId'],
+              childField: ['id'],
+            },
+            subquery: {
+              table: 'user',
+              where: {
+                type: 'simple',
+                left: {type: 'column', name: 'name'},
+                op: '=',
+                right: {type: 'literal', value: 'Alice'},
+              },
+            },
+          },
+        },
+      },
+      {singular: true, relationships: {}},
+    ),
+  );
+
+  expect(result).toMatchInlineSnapshot(`
+    {
+      "text": "SELECT\n      json_object(?, \"zql_root\".\"id\", ?, \"zql_root\".\"title\", ?, \"zql_root\".\"description\", ?, \"zql_root\".\"closed\", ?, \"zql_root\".\"ownerId\", ?, \"zql_root\".\"created\") AS \"zql_result\"\n      FROM (SELECT \"issue_0\".\"id\" as \"id\",\"issue_0\".\"title\" as \"title\",\"issue_0\".\"description\" as \"description\",\"issue_0\".\"closed\" as \"closed\",\"issue_0\".\"ownerId\" as \"ownerId\",\"issue_0\".\"created\" as \"created\"\n      FROM \"issue\" AS \"issue_0\"\n      WHERE \"issue_0\".\"ownerId\" IS NOT (SELECT \"user_1\".\"id\" FROM \"user\" AS \"user_1\" WHERE \"user_1\".\"name\" = ? ORDER BY \"user_1\".\"id\" ASC  LIMIT 1)\n\n      ORDER BY \"issue_0\".\"id\" ASC\n      LIMIT 1) \"zql_root\"",
+      "values": [
+        "id",
+        "title",
+        "description",
+        "closed",
+        "ownerId",
+        "created",
+        "Alice",
+      ],
+    }
+  `);
 });
