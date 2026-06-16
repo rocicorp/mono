@@ -47,7 +47,7 @@ export async function runWorker(
 
   const defaultTaskID = await getTaskID(lc);
   const config = normalizeZeroConfig(lc, cfg, env, defaultTaskID);
-  const processes = new ProcessManager(lc, parent ?? process);
+  const processes = new ProcessManager(lc, parent ?? process, env);
 
   const {port, keepaliveTimeoutMs, lazyStartup} = config;
   const serverVersion = getServerVersion(config);

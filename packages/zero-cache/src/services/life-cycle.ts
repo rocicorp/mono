@@ -29,6 +29,8 @@ export type WorkerType = 'user-facing' | 'supporting';
 
 export const GRACEFUL_SHUTDOWN = ['SIGTERM', 'SIGINT'] as const;
 export const FORCEFUL_SHUTDOWN = ['SIGQUIT', 'SIGABRT'] as const;
+export const EXPECTED_GRACEFUL_SHUTDOWN_REASON_ENV =
+  'ZERO_EXPECTED_GRACEFUL_SHUTDOWN_REASON';
 
 type GracefulShutdownSignal = (typeof GRACEFUL_SHUTDOWN)[number];
 
@@ -51,14 +53,21 @@ export class ProcessManager {
   readonly #userFacing = new Set<Subprocess>();
   readonly #all = new Set<Subprocess>();
   readonly #exitImpl: (code: number) => never;
+  readonly #expectedGracefulShutdownReason: string | undefined;
   readonly #start = Date.now();
   readonly #ready: Promise<void>[] = [];
 
   #runningState = new RunningState('process-manager');
   #drainStart = 0;
 
-  constructor(lc: LogContext, proc: EventEmitter) {
+  constructor(
+    lc: LogContext,
+    proc: EventEmitter,
+    env: NodeJS.ProcessEnv = process.env,
+  ) {
     this.#lc = lc.withContext('component', 'process-manager');
+    this.#expectedGracefulShutdownReason =
+      getExpectedGracefulShutdownReason(env);
 
     // Propagate `SIGTERM` and `SIGINT` to all user-facing workers,
     // initiating a graceful shutdown. The parent process will
@@ -116,13 +125,25 @@ export class ProcessManager {
       this.#lc.info?.(`exiting on ${signal}`);
       this.#exit(0);
     }
-    this.#lc.info?.(`initiating drain (${signal})`);
+    this.#logInitiatingDrain(signal);
     this.#drainStart = Date.now();
     if (this.#userFacing.size) {
       this.#kill(this.#userFacing, signal);
     } else {
       this.#kill(this.#all, signal);
     }
+  }
+
+  #logInitiatingDrain(signal: GracefulShutdownSignal) {
+    if (this.#expectedGracefulShutdownReason) {
+      this.#lc.info?.(`initiating drain (${signal})`, {
+        intentionalDrain: true,
+        drainReason: this.#expectedGracefulShutdownReason,
+      });
+      return;
+    }
+
+    this.#lc.info?.(`initiating drain (${signal})`);
   }
 
   addSubprocess(proc: Subprocess, type: WorkerType, name: string) {
@@ -258,6 +279,11 @@ export class ProcessManager {
       }
     }
   }
+}
+
+function getExpectedGracefulShutdownReason(env: NodeJS.ProcessEnv) {
+  const reason = env[EXPECTED_GRACEFUL_SHUTDOWN_REASON_ENV]?.trim();
+  return reason === '' ? undefined : reason;
 }
 
 /**

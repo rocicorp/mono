@@ -1,10 +1,15 @@
 import EventEmitter from 'node:events';
+import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
-import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import {
+  createSilentLogContext,
+  TestLogSink,
+} from '../../../shared/src/logging-test-utils.ts';
 import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
 import {
   exitAfter,
+  EXPECTED_GRACEFUL_SHUTDOWN_REASON_ENV,
   INTENTIONAL_SHUTDOWN_ERROR_CODE,
   ProcessManager,
   runUntilKilled,
@@ -275,5 +280,32 @@ describe('exitAfter', () => {
     ).rejects.toMatchObject({code: 0});
 
     expect(exit).toHaveBeenCalledWith(0);
+  });
+});
+
+describe('drain logging', () => {
+  test('logs expected graceful shutdown reason', () => {
+    process.env['SINGLE_PROCESS'] = '1';
+
+    const sink = new TestLogSink();
+    const proc = new EventEmitter();
+    new ProcessManager(new LogContext('info', undefined, sink), proc, {
+      [EXPECTED_GRACEFUL_SHUTDOWN_REASON_ENV]:
+        'cloudzero-interruptible-deployment',
+    });
+
+    proc.emit('SIGTERM');
+
+    expect(sink.messages).toContainEqual([
+      'info',
+      {component: 'process-manager'},
+      [
+        'initiating drain (SIGTERM)',
+        {
+          intentionalDrain: true,
+          drainReason: 'cloudzero-interruptible-deployment',
+        },
+      ],
+    ]);
   });
 });

@@ -58,7 +58,7 @@ export default async function runWorker(
   lc = createLogContext(config, 'dispatcher');
   initEventSink(lc, config);
 
-  const processes = new ProcessManager(lc, parent);
+  const processes = new ProcessManager(lc, parent, env);
 
   const {numSyncWorkers: numSyncers} = config;
   if (config.enableCrudMutations && config.upstream.maxConns < numSyncers) {
