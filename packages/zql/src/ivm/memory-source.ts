@@ -340,6 +340,8 @@ export class MemorySource implements Source {
       scanStart = startAt;
     }
 
+    const rowsIterable = generateRows(data, scanStart, req.reverse);
+
     // Fast path: no overlay to apply, no `start`, and no connection filters.
     // This is the common shape for join child-lookups, plain scans, and source
     // fetches that sit beneath a downstream `Filter` operator. In that case the
@@ -350,15 +352,10 @@ export class MemorySource implements Source {
     // contiguous). Collapsing the five chained generators into one loop removes
     // a large amount of per-row generator-resume overhead on the hottest path.
     const overlayActive =
-      this.#overlay !== undefined &&
-      conn.lastPushedEpoch >= this.#overlay.epoch;
-    if (
-      !overlayActive &&
-      req.start === undefined &&
-      conn.filters === undefined
-    ) {
+      this.#overlay && conn.lastPushedEpoch >= this.#overlay.epoch;
+    if (!overlayActive && !req.start && !conn.filters) {
       const {constraint} = req;
-      for (const row of generateRows(data, scanStart, req.reverse)) {
+      for (const row of rowsIterable) {
         if (constraint && !constraintMatchesRow(constraint, row)) {
           break;
         }
@@ -367,7 +364,6 @@ export class MemorySource implements Source {
       return;
     }
 
-    const rowsIterable = generateRows(data, scanStart, req.reverse);
     const withOverlay = generateWithOverlay(
       startAt,
       pkConstraint ? once(rowsIterable) : rowsIterable,
