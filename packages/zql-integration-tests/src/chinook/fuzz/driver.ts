@@ -81,7 +81,8 @@ const SHRINK_BUDGET = 8;
 
 /**
  * The per-yield-point probability the random-yield interleave sweep injects a `'yield'`
- * marker into a source fetch/push stream (matches the old `chinook-fuzz-hydration` fuzzer).
+ * marker into a source fetch/push stream (matches the old random-only hydration fuzzer,
+ * `chinook-fuzz-hydration`, which this axis replaced).
  */
 const YIELD_P = 0.3;
 
@@ -543,8 +544,8 @@ export async function checkDecoratedPush(
 }
 
 /**
- * **Random-yield interleave sweep** (ported from the old `chinook-fuzz-hydration` fuzzer's
- * `createRandomYieldWrapper` axis): re-run hydrate + four-phase push parity for each
+ * **Random-yield interleave sweep** (ported from the now-removed `chinook-fuzz-hydration`
+ * fuzzer's `createRandomYieldWrapper` axis): re-run hydrate + four-phase push parity for each
  * skeleton with **both** IVM sources (memory + sqlite) wrapped in a `RandomYieldSource`
  * that injects `'yield'` markers at random fetch/push points (probability {@link YIELD_P}).
  *

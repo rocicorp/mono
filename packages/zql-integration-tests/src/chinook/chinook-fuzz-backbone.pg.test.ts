@@ -143,8 +143,9 @@ test(
     // Both IVM sources (memory + sqlite) are wrapped so a random fraction of fetch/push
     // stream items is preceded by a `'yield'`, perturbing the engine's cooperative
     // scheduling. The PG oracle stays straight, so the interleaved IVM must still match it
-    // at every step — the reentrancy axis inherited from the old `chinook-fuzz-hydration`
-    // fuzzer. Cheap mini smoke per-PR; the heavy full-chinook interleave rides nightly.
+    // at every step — the reentrancy axis inherited from the now-removed
+    // `chinook-fuzz-hydration` fuzzer. Cheap mini smoke per-PR; the heavy full-chinook
+    // interleave rides nightly.
     const skels = enumerate({depth: 1, related: 1, exists: 1});
     const report = await checkYield(
       harness.transact,
