@@ -19,9 +19,6 @@ import type {
 } from '../change-streamer/snapshot.ts';
 import {getSubscriptionState} from '../replicator/schema/replication-state.ts';
 
-// Retry for up to 3 minutes (60 times with 3 second delay).
-// Beyond that, let the container runner restart the task.
-const MAX_RETRIES = 60;
 const RETRY_INTERVAL_MS = 3000;
 
 type ReplicaConstraints = {
@@ -48,26 +45,41 @@ export async function restoreReplica(
   config: ZeroConfig,
   replicaConstraints: ReplicaConstraints | null,
 ) {
-  for (let i = 0; i < MAX_RETRIES; i++) {
+  // View-syncers (no replicaConstraints) wait indefinitely for the
+  // replication-manager to publish a restorable backup. On a fresh stack the
+  // first backup is not durable until the initial sync completes and litestream
+  // uploads the initial snapshot, which can take many minutes for a large
+  // replica. The platform's startup probe budget (which scales with replica
+  // size) is the backstop, so restoreReplica must not impose its own shorter
+  // cap and self-terminate while the backup is still being produced.
+  //
+  // `consecutiveErrors` distinguishes a transient restore *error* (e.g. the
+  // `replicate` process compacting a snapshot mid-restore) — which is retried
+  // once — from a "backup not found" result, which is expected while waiting.
+  let consecutiveErrors = 0;
+  for (;;) {
     try {
       if (await tryRestore(lc, config, replicaConstraints)) {
         return;
       }
+      consecutiveErrors = 0;
     } catch (e) {
-      if (i === 0) {
+      if (++consecutiveErrors <= 1) {
         // A restore will fail if the `replicate` process creates a new
         // snapshot (and compacts old files) at the same time. Snapshots are
         // infrequent (e.g. once every 12 hours), and the scenario is
         // recoverable with a retry.
-        lc.warn?.(`initial restore attempt failed. retrying once`, e);
+        lc.warn?.(`restore attempt failed. retrying once`, e);
         continue;
       }
       // If it fails again on the retry, though, bail.
       throw e;
     }
     if (replicaConstraints) {
-      // This can happen if the litestream URL is purposefully changed to
-      // force a resync.
+      // The replication-manager restores against explicit constraints, so a
+      // missing backup is fatal (e.g. the litestream URL was purposefully
+      // changed to force a resync). Only the view-syncer (no constraints)
+      // waits for a backup to appear.
       throw new BackupNotFoundException(config.litestream.backupURL);
     }
     lc.info?.(
@@ -75,7 +87,6 @@ export async function restoreReplica(
     );
     await sleep(RETRY_INTERVAL_MS);
   }
-  throw new Error(`max attempts exceeded restoring replica`);
 }
 
 function getLitestream(
