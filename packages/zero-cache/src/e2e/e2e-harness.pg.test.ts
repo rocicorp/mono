@@ -9,18 +9,18 @@ import {
 import {h128} from '../../../shared/src/hash.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {randInt} from '../../../shared/src/rand.ts';
+import {Zero} from '../../../zero-client/src/client/zero.ts';
 import {
   ANYONE_CAN_DO_ANYTHING,
   definePermissions,
 } from '../../../zero-permissions/src/permissions.ts';
-import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
-import {string, table} from '../../../zero-schema/src/builder/table-builder.ts';
-import {Zero} from '../../../zero-client/src/client/zero.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
 import type {
   TransformRequestMessage,
   TransformResponseMessage,
 } from '../../../zero-protocol/src/custom-queries.ts';
+import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
+import {string, table} from '../../../zero-schema/src/builder/table-builder.ts';
 import {createBuilder} from '../../../zql/src/query/named.ts';
 import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
 import {Database} from '../../../zqlite/src/db.ts';
@@ -161,9 +161,13 @@ class ZeroE2EHarness {
   }
 
   oracleBooks() {
-    using db = new Database(createSilentLogContext(), this.#replicaDbFile.path, {
-      readonly: true,
-    });
+    using db = new Database(
+      createSilentLogContext(),
+      this.#replicaDbFile.path,
+      {
+        readonly: true,
+      },
+    );
     return db
       .prepare('SELECT id, title FROM book ORDER BY id')
       .all() as BookRow[];
