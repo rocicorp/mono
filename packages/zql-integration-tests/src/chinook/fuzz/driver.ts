@@ -14,13 +14,25 @@
  * runs against the shared `delegates` (no per-case transaction needed).
  */
 
+import {expect} from 'vitest';
 import {astToZQL} from '../../../../ast-to-zql/src/ast-to-zql.ts';
 import {formatOutput} from '../../../../ast-to-zql/src/format.ts';
+import {must} from '../../../../shared/src/must.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
+import type {Row} from '../../../../zero-protocol/src/data.ts';
+import type {NameMapper} from '../../../../zero-schema/src/name-mapper.ts';
+import {makeServerTransaction} from '../../../../zero-server/src/custom.ts';
 import type {Format} from '../../../../zero-types/src/format.ts';
+import {
+  makeSourceChangeAdd,
+  makeSourceChangeEdit,
+  makeSourceChangeRemove,
+} from '../../../../zql/src/ivm/source.ts';
+import {consume} from '../../../../zql/src/ivm/stream.ts';
 import {newQueryImpl} from '../../../../zql/src/query/query-impl.ts';
 import {asQueryInternals} from '../../../../zql/src/query/query-internals.ts';
 import type {AnyQuery} from '../../../../zql/src/query/query.ts';
+import {mapResultToClientNames} from '../../../../zqlite/src/test/source-factory.ts';
 import {type Delegates, runAndCompare} from '../../helpers/runner.ts';
 import {schema} from '../schema.ts';
 import {relsOf} from './axes.ts';
@@ -33,8 +45,15 @@ import {
   rowLabel,
 } from './cover.ts';
 import {Coverage} from './coverage.ts';
+import type {Data} from './literals.ts';
+import {type Mutation, pushForSkeleton} from './push.ts';
 import {constructCount, shrinkAst} from './shrink.ts';
 import {enumerate, label, lower, type Skeleton} from './skeleton.ts';
+
+/** A delegate transaction-scoping function (from `bootstrap().transact`). */
+export type Transact = (
+  cb: (delegates: Delegates) => Promise<void>,
+) => Promise<void>;
 
 /**
  * The maximum number of divergences a single sweep will auto-minimize. Shrinking re-runs
@@ -219,6 +238,131 @@ export async function checkL1(
   }
 
   return {report: {total, failures}, coverage: cov};
+}
+
+// ── the four-phase push protocol (per-step parity) ────────────────────────────────────
+
+function mapRow(row: Row, table: string, mapper: NameMapper): Row {
+  const out: Record<string, Row[string]> = {};
+  for (const [col, value] of Object.entries(row)) {
+    out[mapper.columnName(table, col)] = value;
+  }
+  return out;
+}
+
+/** Apply one mutation to the Postgres oracle + both IVM sources (memory + sqlite). */
+async function applyMutation(
+  // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+  serverTx: any,
+  delegates: Delegates,
+  m: Mutation,
+): Promise<void> {
+  const memSrc = must(delegates.memory.getSource(m.table));
+  const sqlSrc = must(
+    delegates.sqlite.getSource(delegates.mapper.tableName(m.table)),
+  );
+  switch (m.kind) {
+    case 'remove':
+      await serverTx.mutate[m.table].delete(m.row);
+      consume(
+        sqlSrc.push(
+          makeSourceChangeRemove(mapRow(m.row, m.table, delegates.mapper)),
+        ),
+      );
+      consume(memSrc.push(makeSourceChangeRemove(m.row)));
+      break;
+    case 'add':
+      await serverTx.mutate[m.table].insert(m.row);
+      consume(
+        sqlSrc.push(
+          makeSourceChangeAdd(mapRow(m.row, m.table, delegates.mapper)),
+        ),
+      );
+      consume(memSrc.push(makeSourceChangeAdd(m.row)));
+      break;
+    case 'edit':
+      await serverTx.mutate[m.table].update(m.row);
+      consume(
+        sqlSrc.push(
+          makeSourceChangeEdit(
+            mapRow(m.row, m.table, delegates.mapper),
+            mapRow(m.old, m.table, delegates.mapper),
+          ),
+        ),
+      );
+      consume(memSrc.push(makeSourceChangeEdit(m.row, m.old)));
+      break;
+  }
+}
+
+/**
+ * Materialize the IVM memory + sqlite views once, then apply `mutations` one at a time,
+ * re-checking parity against the (recomputed) oracle **after every step** — catching an
+ * accumulation drift or a transient wrong state a single end-of-batch comparison would
+ * mask. Throws (a parity assertion) on the first divergence.
+ */
+async function pushWalk(
+  delegates: Delegates,
+  query: AnyQuery,
+  mutations: readonly Mutation[],
+): Promise<void> {
+  const table = asQueryInternals(query).ast.table;
+  const memView = delegates.memory.materialize(query);
+  const sqliteView = delegates.sqlite.materialize(query);
+  const serverTx = await makeServerTransaction(
+    delegates.pg.transaction,
+    'test-client',
+    0,
+    schema,
+  );
+  const compare = async () => {
+    const pg = await delegates.pg.run(query);
+    expect(
+      // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+      mapResultToClientNames(sqliteView.data, schema, table as any),
+    ).toEqualPg(pg);
+    expect(memView.data).toEqualPg(pg);
+  };
+  try {
+    await compare(); // initial (hydration) state
+    for (const m of mutations) {
+      await applyMutation(serverTx, delegates, m);
+      await compare();
+    }
+  } finally {
+    memView.destroy();
+    sqliteView.destroy();
+  }
+}
+
+/**
+ * **Push sweep:** lower each skeleton, generate its four-phase push history (root +
+ * deepest leaf), and check per-step push parity inside a rolled-back transaction. `n`
+ * rows per mutated table. The four-phase sequence is net-zero (it restores the seed), so
+ * a clean skeleton leaves the data pristine for the next.
+ */
+export async function checkPushWalk(
+  transact: Transact,
+  data: Data,
+  skels: readonly Skeleton[],
+  n: number,
+): Promise<Report> {
+  const failures: Array<[string, string]> = [];
+  let total = 0;
+  for (const s of skels) {
+    const mutations = pushForSkeleton(data, s, n);
+    if (mutations.length === 0) {
+      continue;
+    }
+    total += 1;
+    const msg = await capture(() =>
+      transact(d => pushWalk(d, lower(s), mutations)),
+    );
+    if (msg) {
+      failures.push([`push|${label(s)}`, msg]);
+    }
+  }
+  return {total, failures};
 }
 
 /**

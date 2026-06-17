@@ -26,6 +26,7 @@ import {
 import {Coverage, tags} from './coverage.ts';
 import {Data} from './literals.ts';
 import {miniData} from './mini.ts';
+import {fourPhase, pushForSkeleton} from './push.ts';
 import {constructCount, shrinkAst} from './shrink.ts';
 import {
   backboneBounds,
@@ -319,6 +320,48 @@ describe('shrinker', () => {
     ).ast as AST;
     // 1 simple condition + 1 limit = 2.
     expect(constructCount(q)).toBe(2);
+  });
+});
+
+// ── four-phase push generation ────────────────────────────────────────────────────────
+
+describe('push protocol', () => {
+  test('four-phase is consistent and restores the seed', () => {
+    const p = fourPhase(data, 'track', 2);
+    // 2 rows × 4 phases = 8 mutations: 2 remove, 2 add, 4 edit.
+    expect(p).toHaveLength(8);
+    expect(p.filter(m => m.kind === 'remove')).toHaveLength(2);
+    expect(p.filter(m => m.kind === 'add')).toHaveLength(2);
+    expect(p.filter(m => m.kind === 'edit')).toHaveLength(4);
+    // EditToRandom (first edit) changes a non-PK column but keeps the PK fixed.
+    const edit = p[4];
+    expect(edit.kind).toBe('edit');
+    if (edit.kind === 'edit') {
+      expect(edit.row.id).toBe(edit.old.id); // PK fixed
+      const changed = Object.keys(edit.row).some(
+        k => edit.row[k] !== edit.old[k],
+      );
+      expect(changed).toBe(true);
+    }
+    // Every mutated row carries the full track column set (no partial rows).
+    const cols = [...new Set(Object.keys(miniData.track[0]))].toSorted();
+    expect(cols.length).toBeGreaterThan(0);
+    for (const m of p) {
+      expect(Object.keys(m.row).toSorted()).toEqual(cols);
+    }
+  });
+
+  test('skeleton push targets both root and the deepest leaf', () => {
+    // album → tracks: pushes hit both album (root) and track (leaf).
+    const skel: Skeleton = {
+      table: 'album',
+      children: [
+        {rel: 'tracks', kind: 'related', sub: {table: 'track', children: []}},
+      ],
+    };
+    const tables = new Set(pushForSkeleton(data, skel, 1).map(m => m.table));
+    expect(tables.has('album')).toBe(true);
+    expect(tables.has('track')).toBe(true);
   });
 });
 

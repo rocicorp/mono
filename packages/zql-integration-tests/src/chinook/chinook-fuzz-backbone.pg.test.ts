@@ -10,9 +10,12 @@
  * - **L0** — every bounded-exhaustive skeleton (depth ≤ 2) hydrates identically through
  *   the IVM memory + sqlite views and the Postgres oracle (z2s).
  * - **L1** — the pairwise covering array of decorations (filter × exists × order ×
- *   limit × start), lowered onto every decoratable root and onto nested child
- *   collections, hydrates identically — and the realized assignments reach **100%
- *   pairwise** coverage (the design's headline backbone gate).
+ *   limit), lowered onto every decoratable root and onto nested child collections,
+ *   hydrates identically — and the realized assignments reach **100% pairwise** coverage
+ *   (the design's headline backbone gate).
+ * - **Push** — every single-level (depth ≤ 1) skeleton, driven through the four-phase
+ *   push protocol (root + leaf membership churn + boundary-crossing edits, incl. the
+ *   EXISTS-gate table), stays parity-clean at **every** step.
  *
  * The oracle, the IVM views, and the comparison all come from the existing harness;
  * this file only feeds it the generated cases.
@@ -21,8 +24,15 @@
 import {expect, test} from 'vitest';
 import '../helpers/comparePg.ts';
 import {bootstrap} from '../helpers/runner.ts';
-import {checkL0Hydrate, checkL1, panicIfFailed} from './fuzz/driver.ts';
-import {miniPgContent} from './fuzz/mini.ts';
+import {pkOf} from './fuzz/axes.ts';
+import {
+  checkL0Hydrate,
+  checkL1,
+  checkPushWalk,
+  panicIfFailed,
+} from './fuzz/driver.ts';
+import {Data} from './fuzz/literals.ts';
+import {miniData, miniPgContent} from './fuzz/mini.ts';
 import {backboneBounds, enumerate} from './fuzz/skeleton.ts';
 import {schema} from './schema.ts';
 
@@ -33,6 +43,8 @@ const harness = await bootstrap({
   zqlSchema: schema,
   pgContent: miniPgContent(),
 });
+
+const data = new Data(miniData, pkOf);
 
 // oxlint-disable-next-line expect-expect
 test(
@@ -61,6 +73,22 @@ test(
         coverage.missed(),
       )}`,
     ).toBe(1);
+    panicIfFailed(report, 12);
+  },
+  TIMEOUT_MS,
+);
+
+// oxlint-disable-next-line expect-expect
+test(
+  'Push — four-phase per-step parity over mini (D≤1)',
+  async () => {
+    // Depth ≤ 1: bare roots + single-level relationship/EXISTS fans — where add/remove/
+    // edit propagation and gate open-close live.
+    const skels = enumerate({depth: 1, related: 2, exists: 2});
+    const report = await checkPushWalk(harness.transact, data, skels, 1);
+    console.log(
+      `Push backbone (D≤1): ${report.total} cases, ${report.failures.length} failures`,
+    );
     panicIfFailed(report, 12);
   },
   TIMEOUT_MS,
