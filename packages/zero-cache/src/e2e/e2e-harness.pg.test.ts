@@ -7,6 +7,7 @@ import {
   overrideBrowserGlobal,
 } from '../../../shared/src/browser-env.ts';
 import {h128} from '../../../shared/src/hash.ts';
+import type {Immutable} from '../../../shared/src/immutable.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {randInt} from '../../../shared/src/rand.ts';
 import {Zero} from '../../../zero-client/src/client/zero.ts';
@@ -21,8 +22,9 @@ import type {
 } from '../../../zero-protocol/src/custom-queries.ts';
 import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {string, table} from '../../../zero-schema/src/builder/table-builder.ts';
-import {createBuilder} from '../../../zql/src/query/named.ts';
+import {createBuilder} from '../../../zql/src/query/create-builder.ts';
 import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
+import type {TypedView} from '../../../zql/src/query/typed-view.ts';
 import {Database} from '../../../zqlite/src/db.ts';
 import {getConnectionURI, test, type PgTest} from '../test/db.ts';
 import {DbFile} from '../test/lite.ts';
@@ -109,7 +111,7 @@ class ZeroE2EHarness {
   }
 
   async start() {
-    this.#apiServer.post('/query', async request => {
+    this.#apiServer.post('/query', request => {
       const message = request.body as TransformRequestMessage;
       this.#transformRequests.push(message);
       const [, queries] = message;
@@ -198,12 +200,8 @@ class ZeroE2EHarness {
   }
 }
 
-function waitForComplete<T>(view: {
-  addListener: (
-    listener: (data: T, resultType: 'unknown' | 'complete' | 'error') => void,
-  ) => () => void;
-}) {
-  return new Promise<T>((resolve, reject) => {
+function waitForComplete<T>(view: TypedView<T>) {
+  return new Promise<Immutable<T>>((resolve, reject) => {
     const timeout = setTimeout(
       () => reject(new Error('Timed out waiting for complete view result')),
       10_000,
