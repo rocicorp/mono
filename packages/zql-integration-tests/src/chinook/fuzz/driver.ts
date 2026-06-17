@@ -22,20 +22,18 @@ import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import type {Row} from '../../../../zero-protocol/src/data.ts';
 import type {NameMapper} from '../../../../zero-schema/src/name-mapper.ts';
 import {makeServerTransaction} from '../../../../zero-server/src/custom.ts';
-import type {Format} from '../../../../zero-types/src/format.ts';
 import {
   makeSourceChangeAdd,
   makeSourceChangeEdit,
   makeSourceChangeRemove,
 } from '../../../../zql/src/ivm/source.ts';
 import {consume} from '../../../../zql/src/ivm/stream.ts';
-import {newQueryImpl} from '../../../../zql/src/query/query-impl.ts';
 import {asQueryInternals} from '../../../../zql/src/query/query-internals.ts';
 import type {AnyQuery} from '../../../../zql/src/query/query.ts';
 import {mapResultToClientNames} from '../../../../zqlite/src/test/source-factory.ts';
 import {type Delegates, runAndCompare} from '../../helpers/runner.ts';
 import {schema} from '../schema.ts';
-import {relsOf} from './axes.ts';
+import type {CostModel} from './cost.ts';
 import {
   childDecorationPairs,
   decoratableRoots,
@@ -46,9 +44,14 @@ import {
 } from './cover.ts';
 import {Coverage} from './coverage.ts';
 import type {Data} from './literals.ts';
+import {mutate} from './mutate.ts';
 import {type Mutation, pushForSkeleton} from './push.ts';
+import {rng} from './rng.ts';
 import {constructCount, shrinkAst} from './shrink.ts';
 import {enumerate, label, lower, type Skeleton} from './skeleton.ts';
+import {Mask, swarmGen} from './swarm.ts';
+import {type DeepBounds, tailBounds, tailGen} from './tail.ts';
+import {wrapAst} from './wrap.ts';
 
 /** A delegate transaction-scoping function (from `bootstrap().transact`). */
 export type Transact = (
@@ -81,50 +84,15 @@ export async function capture(fn: () => Promise<void>): Promise<string | null> {
   }
 }
 
-/**
- * Derive a {@link Format} from an `AST` (singular from relationship cardinality;
- * junction hidden hops collapsed, mirroring the view), so a shrunk AST can be re-wrapped
- * as a runnable query. The format is used identically by the IVM and the oracle, so even
- * an imperfect derivation keeps the differential comparison valid.
- */
-function deriveFormat(ast: AST, singular: boolean): Format {
-  const relationships: Record<string, Format> = {};
-  for (const r of ast.related ?? []) {
-    if (r.hidden) {
-      // Junction hop: the visible relationship lives one level down (the view collapses
-      // the hidden level), so lift the child's relationships up.
-      Object.assign(
-        relationships,
-        deriveFormat(r.subquery, false).relationships,
-      );
-      continue;
-    }
-    const name = r.subquery.alias;
-    if (!name) {
-      continue;
-    }
-    const one = relsOf(ast.table).find(rl => rl.name === name)?.card === 'one';
-    relationships[name] = deriveFormat(r.subquery, one);
-  }
-  return {singular, relationships};
-}
-
 /** Whether `ast` (re-wrapped as a query) still diverges from the oracle. */
 async function divergesParity(
   delegates: Delegates,
   ast: AST,
 ): Promise<boolean> {
-  const q = newQueryImpl(
-    schema,
-    // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-    ast.table as any,
-    ast,
-    deriveFormat(ast, false),
-    'test',
-  ) as unknown as AnyQuery;
   return (
-    (await capture(() => runAndCompare(schema, delegates, q, undefined))) !==
-    null
+    (await capture(() =>
+      runAndCompare(schema, delegates, wrapAst(ast), undefined),
+    )) !== null
   );
 }
 
@@ -238,6 +206,122 @@ export async function checkL1(
   }
 
   return {report: {total, failures}, coverage: cov};
+}
+
+// ── the randomized layers (L2 swarm / L3 mutation / L4 random tail) ────────────────────
+
+/**
+ * **L2 swarm sweep:** draw `nMasks` random feature masks from `seed`, generate `perMask`
+ * masked-random queries per mask, and check hydrate parity. Bugs that surface only when a
+ * feature is *absent* live here. Deterministic in `seed` (printed on failure — the repro
+ * key).
+ */
+export async function checkSwarm(
+  delegates: Delegates,
+  seed: number,
+  nMasks: number,
+  perMask: number,
+): Promise<Report> {
+  const r = rng(seed);
+  const failures: Array<[string, string]> = [];
+  const budget = {remaining: SHRINK_BUDGET};
+  let total = 0;
+  for (let mi = 0; mi < nMasks; mi++) {
+    const mask = Mask.random(r);
+    for (let qi = 0; qi < perMask; qi++) {
+      const res = swarmGen(r, mask);
+      if (!res) {
+        continue;
+      }
+      total += 1;
+      await checkHydrate(
+        delegates,
+        res[0],
+        `swarm|seed${seed}|m${mi}q${qi}`,
+        failures,
+        budget,
+      );
+    }
+  }
+  return {total, failures};
+}
+
+/**
+ * **L3 mutation sweep:** apply one random mutation to each corpus skeleton ("simple + one
+ * twist"), checking hydrate parity. Each base is `lower(skeleton)`'s AST; the mutated AST
+ * is re-wrapped and run. Deterministic in `seed`.
+ */
+export async function checkMutate(
+  delegates: Delegates,
+  corpus: readonly Skeleton[],
+  seed: number,
+): Promise<Report> {
+  const r = rng(seed);
+  const failures: Array<[string, string]> = [];
+  const budget = {remaining: SHRINK_BUDGET};
+  for (const s of corpus) {
+    const baseAst = asQueryInternals(lower(s)).ast;
+    const mutated = mutate(r, baseAst);
+    await checkHydrate(
+      delegates,
+      wrapAst(mutated),
+      `mutate|${label(s)}`,
+      failures,
+      budget,
+    );
+  }
+  return {total: corpus.length, failures};
+}
+
+/** The L4 random-tail outcome — the gated (too-expensive, skipped) count reported, not
+ * silently dropped. */
+export type TailReport = {
+  readonly report: Report;
+  /** How many queries the generator produced (before the cost gate). */
+  readonly generated: number;
+  /** How many the static cost gate rejected (skipped, never run). */
+  readonly gated: number;
+};
+
+/**
+ * **L4 random-tail sweep:** generate `n` random deep queries from `seed`, skip + count the
+ * ones the static {@link CostModel} gate rejects, run the rest through hydrate parity, and
+ * collect any divergences. Deterministic in `seed`.
+ */
+export async function checkTail(
+  delegates: Delegates,
+  cost: CostModel,
+  seed: number,
+  n: number,
+  bounds: DeepBounds = tailBounds(),
+): Promise<TailReport> {
+  const r = rng(seed);
+  const failures: Array<[string, string]> = [];
+  const budget = {remaining: SHRINK_BUDGET};
+  let generated = 0;
+  let gated = 0;
+  let total = 0;
+  for (let i = 0; i < n; i++) {
+    const res = tailGen(r, bounds);
+    if (!res) {
+      continue;
+    }
+    generated += 1;
+    const ast = asQueryInternals(res[0]).ast;
+    if (cost.tooExpensive(ast)) {
+      gated += 1; // static gate: skip + count, never run
+      continue;
+    }
+    total += 1;
+    await checkHydrate(
+      delegates,
+      res[0],
+      `tail|seed${seed}|${i}`,
+      failures,
+      budget,
+    );
+  }
+  return {report: {total, failures}, generated, gated};
 }
 
 // ── the four-phase push protocol (per-step parity) ────────────────────────────────────

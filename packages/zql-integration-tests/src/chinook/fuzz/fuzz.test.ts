@@ -17,6 +17,7 @@ import type {AnyQuery} from '../../../../zql/src/query/query.ts';
 import {QueryDelegateImpl as TestMemoryQueryDelegate} from '../../../../zql/src/query/test/query-delegate.ts';
 import {schema} from '../schema.ts';
 import {hasText, pkOf, relsOf, tables} from './axes.ts';
+import {CostModel} from './cost.ts';
 import {
   decorate,
   decorateChild,
@@ -26,7 +27,9 @@ import {
 import {Coverage, tags} from './coverage.ts';
 import {Data} from './literals.ts';
 import {miniData} from './mini.ts';
+import {mutate} from './mutate.ts';
 import {fourPhase, pushForSkeleton} from './push.ts';
+import {rng} from './rng.ts';
 import {constructCount, shrinkAst} from './shrink.ts';
 import {
   backboneBounds,
@@ -37,6 +40,9 @@ import {
   nRelated,
   type Skeleton,
 } from './skeleton.ts';
+import {Mask, swarmGen} from './swarm.ts';
+import {tailBounds, tailGen} from './tail.ts';
+import {wrapAst} from './wrap.ts';
 
 const data = new Data(miniData, pkOf);
 
@@ -362,6 +368,187 @@ describe('push protocol', () => {
     const tables = new Set(pushForSkeleton(data, skel, 1).map(m => m.table));
     expect(tables.has('album')).toBe(true);
     expect(tables.has('track')).toBe(true);
+  });
+});
+
+// ── L2 swarm ──────────────────────────────────────────────────────────────────────────
+
+describe('swarm (L2)', () => {
+  test('random masks generate realizable, hydratable queries', async () => {
+    const delegate = memoryDelegate();
+    const r = rng(0xf00d);
+    let made = 0;
+    for (let i = 0; i < 400; i++) {
+      const mask = Mask.random(r);
+      const res = swarmGen(r, mask);
+      if (!res) {
+        continue; // unrealizable pick (text filter on a textless table) — retry
+      }
+      await hydrates(delegate, res[0]);
+      made += 1;
+    }
+    expect(
+      made,
+      `swarm produced too few realizable queries: ${made}`,
+    ).toBeGreaterThan(100);
+  });
+
+  test('a disabled axis is pinned to its baseline (none)', () => {
+    // Every axis off, no nesting ⇒ a bare decorated root: every axis at value 0 = none.
+    const mask = new Mask([false, false, false, false], false);
+    const res = swarmGen(rng(1), mask);
+    expect(res).not.toBeNull();
+    const ast = asQueryInternals(res![0]).ast;
+    expect(ast.where).toBeUndefined();
+    expect(ast.orderBy ?? []).toHaveLength(0);
+    expect(ast.limit).toBeUndefined();
+    expect(ast.related ?? []).toHaveLength(0);
+  });
+});
+
+// ── L3 mutation-from-corpus ───────────────────────────────────────────────────────────
+
+describe('mutation (L3)', () => {
+  test('one twist keeps corpus queries buildable (alias-collision guard)', async () => {
+    const delegate = memoryDelegate();
+    // A depth-2 corpus includes roots with a materialized `related` — the shape an
+    // AddExists twist must NOT collide with. Build through the REAL IVM (memory view) so
+    // a colliding alias fails here, not silently.
+    const corpus = enumerate({depth: 2, related: 1, exists: 1}).slice(0, 80);
+    expect(corpus.length).toBeGreaterThan(0);
+    for (const seed of [1, 2, 3, 7, 42]) {
+      const r = rng(seed);
+      for (const s of corpus) {
+        const base = asQueryInternals(lower(s)).ast;
+        const mutated = mutate(r, base);
+        await hydrates(delegate, wrapAst(mutated));
+      }
+    }
+  });
+
+  test('one twist grows a bare root by a small, bounded amount', () => {
+    // A bare `track` root (0 constructs) gains a single twist: a filter, an EXISTS (which
+    // may carry an AND/OR companion and, on a junction relationship, a hidden two-hop —
+    // a handful of nodes), an order term, or a limit. Small by construction, and the base
+    // AST is never mutated in place.
+    const base = asQueryInternals(lower({table: 'track', children: []})).ast;
+    expect(constructCount(base)).toBe(0);
+    for (const seed of [0, 1, 2, 3, 4, 5, 6, 7]) {
+      const grew = constructCount(mutate(rng(seed), base));
+      expect(grew).toBeGreaterThanOrEqual(1);
+      expect(grew).toBeLessThanOrEqual(8); // "simple + one twist" stays small
+      expect(constructCount(base)).toBe(0); // base untouched
+    }
+  });
+});
+
+// ── L4 random tail ────────────────────────────────────────────────────────────────────
+
+describe('random tail (L4)', () => {
+  test('generates deep, hydratable queries reaching past the enumerator backbone', async () => {
+    const delegate = memoryDelegate();
+    const r = rng(0xdeef);
+    let maxDepth = 0;
+    let made = 0;
+    for (let i = 0; i < 300; i++) {
+      const res = tailGen(r, tailBounds());
+      if (!res) {
+        continue;
+      }
+      await hydrates(delegate, res[0]);
+      maxDepth = Math.max(maxDepth, astDepth(asQueryInternals(res[0]).ast));
+      made += 1;
+    }
+    expect(made).toBeGreaterThan(100);
+    // The tail actually reaches deeper than the enumerator's D ≤ 2 backbone.
+    expect(
+      maxDepth,
+      `tail never went deep: max ${maxDepth}`,
+    ).toBeGreaterThanOrEqual(3);
+  });
+});
+
+/** Structural nesting depth (root = 0): deepest `related` child or EXISTS subquery. */
+function astDepth(ast: AST): number {
+  let m = 0;
+  if (ast.where) {
+    m = Math.max(m, condDepth(ast.where));
+  }
+  for (const r of ast.related ?? []) {
+    m = Math.max(m, 1 + astDepth(r.subquery));
+  }
+  return m;
+}
+
+function condDepth(c: Condition): number {
+  switch (c.type) {
+    case 'simple':
+      return 0;
+    case 'correlatedSubquery':
+      return 1 + astDepth(c.related.subquery);
+    case 'and':
+    case 'or':
+      return c.conditions.reduce((m, cc) => Math.max(m, condDepth(cc)), 0);
+  }
+}
+
+// ── static cost gate ──────────────────────────────────────────────────────────────────
+
+describe('cost gate', () => {
+  test('a deep materialized chain trips the static gate; a flat query does not', () => {
+    // Synthetic large fixture: every table 1000 rows.
+    const cost = CostModel.fromSizes(
+      tables().map(t => [t, 1000] as const),
+      100_000,
+    );
+    // artist → albums → tracks: 1000³ = 1e9 ≫ threshold → gated.
+    const deep = asQueryInternals(
+      lower({
+        table: 'artist',
+        children: [
+          {
+            rel: 'albums',
+            kind: 'related',
+            sub: {
+              table: 'album',
+              children: [
+                {
+                  rel: 'tracks',
+                  kind: 'related',
+                  sub: {table: 'track', children: []},
+                },
+              ],
+            },
+          },
+        ],
+      }),
+    ).ast;
+    expect(cost.tooExpensive(deep), `estimate ${cost.estimate(deep)}`).toBe(
+      true,
+    );
+
+    const flat = asQueryInternals(lower({table: 'artist', children: []})).ast;
+    expect(cost.tooExpensive(flat)).toBe(false);
+  });
+
+  test('an EXISTS adds its table size to the cost', () => {
+    const cost = CostModel.fromSizes(
+      [
+        ['album', 10],
+        ['track', 500],
+      ],
+      Number.MAX_SAFE_INTEGER,
+    );
+    const withExists = asQueryInternals(
+      lower({
+        table: 'album',
+        children: [
+          {rel: 'tracks', kind: 'exists', sub: {table: 'track', children: []}},
+        ],
+      }),
+    ).ast;
+    // 10 × (1 + 500) = 5010.
+    expect(cost.estimate(withExists)).toBe(5010);
   });
 });
 
