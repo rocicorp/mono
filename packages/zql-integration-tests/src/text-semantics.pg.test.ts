@@ -80,12 +80,7 @@ let sqlite: Database;
 let queryDelegate: QueryDelegate;
 
 beforeAll(async () => {
-  const setup = await fillPgAndSync(
-    schema,
-    createTableSQL,
-    testData,
-    DB_NAME,
-  );
+  const setup = await fillPgAndSync(schema, createTableSQL, testData, DB_NAME);
   pg = setup.pg;
   sqlite = setup.sqlite;
   queryDelegate = newQueryDelegate(lc, testLogConfig, sqlite, schema);
