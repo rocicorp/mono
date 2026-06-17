@@ -421,7 +421,7 @@ export class PipelineDriver {
     queryID: string,
     query: AST,
     timer: Timer,
-    queryName: string | undefined = undefined,
+    queryName?: string,
   ): Iterable<RowChange | 'yield'> {
     return this.#trackRowSetSignatures(
       this.#addQueryImpl(transformationHash, queryID, query, timer, queryName),
@@ -433,7 +433,7 @@ export class PipelineDriver {
     queryID: string,
     query: AST,
     timer: Timer,
-    queryName: string | undefined = undefined,
+    queryName?: string,
   ): Iterable<RowChange | 'yield'> {
     assert(
       this.initialized(),
@@ -455,7 +455,6 @@ export class PipelineDriver {
     this.#hydrateContext = {
       timer,
     };
-    const queryInfo = {queryHash: queryID, transformationHash, queryName};
     try {
       const {
         ast: resolvedQuery,
@@ -473,7 +472,13 @@ export class PipelineDriver {
           createStorage: () => this.#createStorage(),
           decorateSourceInput: (input: SourceInput, _queryID: string): Input =>
             new MeasurePushOperator(
-              new QueryFailureLoggingOperator(this.#lc, input, queryInfo),
+              new QueryFailureLoggingOperator(
+                this.#lc,
+                input,
+                queryID,
+                transformationHash,
+                queryName,
+              ),
               queryID,
               this.#inspectorDelegate,
               'query-update-server',
@@ -589,7 +594,12 @@ export class PipelineDriver {
         companions: liveCompanions,
       });
     } catch (e) {
-      logQueryFailure(this.#lc, queryInfo, 'query hydration failed', e);
+      logQueryFailure(
+        this.#lc,
+        {queryHash: queryID, transformationHash, queryName},
+        'query hydration failed',
+        e,
+      );
       throw e;
     } finally {
       this.#hydrateContext = null;
@@ -925,9 +935,7 @@ class Streamer {
   constructor(
     primaryKeys: Map<string, PrimaryKey>,
     tableSpecs: Map<string, LiteAndZqlSpec>,
-    logQueryFailure:
-      | ((queryID: string, error: unknown) => void)
-      | undefined = undefined,
+    logQueryFailure?: (queryID: string, error: unknown) => void,
   ) {
     this.#primaryKeys = primaryKeys;
     this.#tableSpecs = tableSpecs;
@@ -1060,13 +1068,23 @@ class Streamer {
 class QueryFailureLoggingOperator implements Input, Output {
   readonly #lc: LogContext;
   readonly #input: Input;
-  readonly #queryInfo: QueryLogInfo;
+  readonly #queryHash: string;
+  readonly #transformationHash: string;
+  readonly #queryName: string | undefined;
   #output: Output = throwOutput;
 
-  constructor(lc: LogContext, input: Input, queryInfo: QueryLogInfo) {
+  constructor(
+    lc: LogContext,
+    input: Input,
+    queryHash: string,
+    transformationHash: string,
+    queryName?: string,
+  ) {
     this.#lc = lc;
     this.#input = input;
-    this.#queryInfo = queryInfo;
+    this.#queryHash = queryHash;
+    this.#transformationHash = transformationHash;
+    this.#queryName = queryName;
     input.setOutput(this);
   }
 
@@ -1090,7 +1108,16 @@ class QueryFailureLoggingOperator implements Input, Output {
     try {
       yield* this.#output.push(change, this);
     } catch (e) {
-      logQueryFailure(this.#lc, this.#queryInfo, 'query pipeline failed', e);
+      logQueryFailure(
+        this.#lc,
+        {
+          queryHash: this.#queryHash,
+          transformationHash: this.#transformationHash,
+          queryName: this.#queryName,
+        },
+        'query pipeline failed',
+        e,
+      );
       throw e;
     }
   }
