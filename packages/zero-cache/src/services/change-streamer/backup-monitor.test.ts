@@ -5,7 +5,12 @@ import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.
 import {DbFile} from '../../test/lite.ts';
 import type {Subscription} from '../../types/subscription.ts';
 import {initReplicationState} from '../replicator/schema/replication-state.ts';
-import {BackupMonitor, WEDGED_SHUTDOWN_GRACE_MS} from './backup-monitor.ts';
+import {
+  BackupMonitor,
+  INITIAL_BACKUP_GRACE_MS_PER_UNIT,
+  RESTORABLE_BACKUP_POLL_INTERVAL_MS,
+  WEDGED_SHUTDOWN_GRACE_MS,
+} from './backup-monitor.ts';
 import type {ChangeStreamerService} from './change-streamer.ts';
 import type {SnapshotMessage} from './snapshot.ts';
 
@@ -308,6 +313,56 @@ litestream_replica_validation_total{db="/tmp/zbugs-sync-replica.db",name="file",
     expect(sub3.active).toBe(true);
   });
 
+  test('withholds the snapshot status until a restorable backup exists', async () => {
+    // Cold start: no restorable backup yet, so verification rejects (as the
+    // litestream listing would while the initial snapshot is still uploading).
+    lastActualBackupTime = () =>
+      Promise.reject(new Error('no snapshots or WAL segments listed'));
+
+    const sub = monitor.startSnapshotReservation('view-syncer-1');
+    let status: SnapshotMessage | undefined;
+    void getFirstMessage(sub).then(m => (status = m));
+
+    // While no backup exists, the reservation is held open (still active) and
+    // no status is pushed, so the view-syncer stays unready instead of being
+    // told to restore a backup that does not yet exist.
+    await vi.advanceTimersByTimeAsync(RESTORABLE_BACKUP_POLL_INTERVAL_MS * 3);
+    expect(status).toBeUndefined();
+    expect(sub.active).toBe(true);
+    expect(verifyBackupState.mock.calls.length).toBeGreaterThan(1);
+
+    // The first backup lands; the next poll confirms it and the status is
+    // finally pushed.
+    lastActualBackupTime = () => Promise.resolve(new Date());
+    await vi.advanceTimersByTimeAsync(RESTORABLE_BACKUP_POLL_INTERVAL_MS);
+
+    expect(status).toEqual([
+      'status',
+      {
+        tag: 'status',
+        backupURL: 's3://foo/bar',
+        replicaVersion: '123',
+        minWatermark: '1ab',
+      },
+    ]);
+    expect(sub.active).toBe(true);
+  });
+
+  test('pushes the snapshot status immediately on a warm start', async () => {
+    // A restorable backup already exists (verification succeeds), so the
+    // status is pushed without waiting on any poll interval.
+    const sub = monitor.startSnapshotReservation('view-syncer-1');
+    expect(await getFirstMessage(sub)).toEqual([
+      'status',
+      {
+        tag: 'status',
+        backupURL: 's3://foo/bar',
+        replicaVersion: '123',
+        minWatermark: '1ab',
+      },
+    ]);
+  });
+
   test('pauses cleanup during reservation', async () => {
     const time = Date.UTC(2025, 3, 24);
     vi.setSystemTime(time);
@@ -517,6 +572,81 @@ litestream_replica_validation_total{db="/tmp/zbugs-sync-replica.db",name="file",
     await Promise.resolve();
     expect(rejection).toBeUndefined();
     expect(scheduled).toEqual(['618p0bw8']);
+
+    await monitor.stop();
+  });
+
+  // Metrics with no `litestream_replica_progress` gauge: nothing has been
+  // backed up yet (a cold start whose initial snapshot is still uploading).
+  const noBackupMetrics = `# HELP litestream_db_size The current size of the real DB
+# TYPE litestream_db_size gauge
+litestream_db_size{db="/tmp/zbugs-sync-replica.db"} 1e+06`;
+
+  test('shuts down when no restorable backup appears within the grace period', async () => {
+    const time = Date.UTC(2025, 3, 24);
+    vi.setSystemTime(time);
+
+    metricsResponse = noBackupMetrics;
+    // The backup never becomes restorable (the listing keeps failing/empty).
+    lastActualBackupTime = () =>
+      Promise.reject(new Error('no snapshots or WAL segments listed'));
+
+    const runResult = monitor.run();
+    let rejection: unknown;
+    void runResult.catch(e => (rejection = e));
+
+    // The test replica is small, so the grace is the one-unit (~1 hour)
+    // minimum. Just before it elapses, the process keeps waiting.
+    vi.setSystemTime(time + INITIAL_BACKUP_GRACE_MS_PER_UNIT - 1);
+    await monitor.checkWatermarksAndScheduleCleanup();
+    await Promise.resolve();
+    expect(rejection).toBeUndefined();
+
+    // Once the grace period elapses with still no restorable backup, the
+    // producer shuts itself down by rejecting run() so that *it* is flagged as
+    // the cause rather than the view-syncers that are waiting on it.
+    vi.setSystemTime(time + INITIAL_BACKUP_GRACE_MS_PER_UNIT);
+    await monitor.checkWatermarksAndScheduleCleanup();
+    await expect(runResult).rejects.toThrow(/no restorable backup/);
+  });
+
+  test('does not shut down once a restorable backup is confirmed', async () => {
+    const time = Date.UTC(2025, 3, 24);
+    vi.setSystemTime(time);
+
+    metricsResponse = noBackupMetrics;
+    lastActualBackupTime = () =>
+      Promise.reject(new Error('no snapshots or WAL segments listed'));
+
+    const runResult = monitor.run();
+    let rejection: unknown;
+    void runResult.catch(e => (rejection = e));
+
+    // Still no backup partway through the wait: no shutdown yet.
+    vi.setSystemTime(time + INITIAL_BACKUP_GRACE_MS_PER_UNIT - 60_000);
+    await monitor.checkWatermarksAndScheduleCleanup();
+    await Promise.resolve();
+    expect(rejection).toBeUndefined();
+
+    // The first backup lands and a view-syncer reservation confirms it.
+    lastActualBackupTime = () => Promise.resolve(new Date());
+    const sub = monitor.startSnapshotReservation('view-syncer-1');
+    expect(await getFirstMessage(sub)).toEqual([
+      'status',
+      {
+        tag: 'status',
+        backupURL: 's3://foo/bar',
+        replicaVersion: '123',
+        minWatermark: '1ab',
+      },
+    ]);
+
+    // Past the deadline, but since a restorable backup has been confirmed the
+    // process keeps running.
+    vi.setSystemTime(time + INITIAL_BACKUP_GRACE_MS_PER_UNIT + 60_000);
+    await monitor.checkWatermarksAndScheduleCleanup();
+    await Promise.resolve();
+    expect(rejection).toBeUndefined();
 
     await monitor.stop();
   });

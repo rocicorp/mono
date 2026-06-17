@@ -1,8 +1,10 @@
+import {statSync} from 'node:fs';
 import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import parsePrometheusTextFormat from 'parse-prometheus-text-format';
 import {must} from '../../../../shared/src/must.ts';
 import {promiseVoid} from '../../../../shared/src/resolved-promises.ts';
+import {sleep} from '../../../../shared/src/sleep.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {
   getOrCreateCounter,
@@ -45,6 +47,32 @@ export const BACKUP_VERIFICATION_SLACK_MS = 60_000;
  * upload.
  */
 export const WEDGED_SHUTDOWN_GRACE_MS = 15 * 60_000; // 15 minutes
+
+const GiB = 1024 ** 3;
+
+/**
+ * How long the BackupMonitor waits for the *first* restorable backup to appear
+ * before concluding that the backup pipeline is broken and shutting the process
+ * down (see {@link BackupMonitor.#shutDownOnMissingInitialBackup}).
+ *
+ * On a fresh stack the first backup is not restorable until the initial
+ * Postgres->replica sync completes and litestream finishes uploading the
+ * initial snapshot — a multipart upload that is not listable in the destination
+ * until it is committed. The producer cannot observe that sub-snapshot progress,
+ * so this is necessarily a generous timeout. It is scaled by replica size to
+ * mirror the platform's storage-scaled startup-probe allowance (~1 hour per
+ * 50GB) so that it never fires before the platform would restart a view-syncer
+ * that is waiting on the backup.
+ */
+export const INITIAL_BACKUP_GRACE_MS_PER_UNIT = 60 * 60_000; // 1 hour ...
+const INITIAL_BACKUP_GRACE_UNIT_BYTES = 50 * GiB; // ... per 50 GiB
+
+/**
+ * How often the BackupMonitor re-checks whether the first restorable backup has
+ * appeared while a view-syncer holds a snapshot reservation open during a cold
+ * start.
+ */
+export const RESTORABLE_BACKUP_POLL_INTERVAL_MS = 10_000;
 
 /**
  * Returns the time of the most recent object actually uploaded to the
@@ -130,12 +158,20 @@ export class BackupMonitor implements Service {
 
   #lastWatermark: string = '';
   #latestBackupTime: Date | null = null;
+  // The time of the most recent object actually verified in the backup
+  // destination, or `null` if none has ever been verified. Only assigned from a
+  // successful verifyBackupState() and never cleared, so a non-null value also
+  // means a restorable backup has been confirmed to exist (which is what gates
+  // the snapshot `status` signal and satisfies the initial-backup deadline).
   #lastVerifiedUploadTime: Date | null = null;
   // Epoch ms at which the actual backup state was first observed to be
   // continuously behind the watermark litestream claims to have backed up,
   // or `null` while the backup is keeping up. Reset whenever a purge is
   // confirmed against a real upload.
   #backupStaleSince: number | null = null;
+  // Epoch ms at which run() started, used to bound how long to wait for the
+  // first restorable backup to appear. `null` until run() is called.
+  #runStartTime: number | null = null;
   #cleanupDelayMs: number;
   #checkMetricsTimer: NodeJS.Timeout | undefined;
 
@@ -165,6 +201,7 @@ export class BackupMonitor implements Service {
   }
 
   run(): Promise<void> {
+    this.#runStartTime = Date.now();
     this.#lc.info?.(
       `monitoring backups at ${this.#metricsEndpoint} with ` +
         `${this.#cleanupDelayMs} ms cleanup delay`,
@@ -191,20 +228,71 @@ export class BackupMonitor implements Service {
     });
     this.#reservations.set(taskID, {start: new Date(), sub});
     // Note: the Subscription must be returned immediately so that the
-    //       websocket can begin sending liveness pings.
-    void this.#changeStreamer
-      .getChangeLogState()
-      .then(changeLogState => {
+    //       websocket can begin sending liveness pings. The `status` signal
+    //       (which tells the view-syncer to restore) is withheld until a
+    //       restorable backup actually exists; see #pushStatusWhenRestorable.
+    void this.#pushStatusWhenRestorable(taskID, sub);
+    return sub;
+  }
+
+  /**
+   * Pushes the `status` snapshot signal once a restorable backup is confirmed
+   * to exist in the backup destination. On a warm start this is immediate; on a
+   * cold start (a fresh stack whose first backup is still being produced) the
+   * reservation is held open — kept alive by websocket liveness pings — and the
+   * view-syncer stays unready until the first backup lands, rather than being
+   * told to restore a backup that does not yet exist.
+   */
+  async #pushStatusWhenRestorable(
+    taskID: string,
+    sub: Subscription<SnapshotMessage>,
+  ): Promise<void> {
+    try {
+      while (this.#lastVerifiedUploadTime === null) {
+        if (!sub.active) {
+          return; // subscriber disconnected, or a newer reservation took over
+        }
+        if (await this.#confirmRestorableBackup()) {
+          break;
+        }
+        this.#lc.info?.(
+          `no restorable backup at ${this.#backupURL} yet; ` +
+            `holding ${taskID}'s reservation open until it lands`,
+        );
+        await sleep(RESTORABLE_BACKUP_POLL_INTERVAL_MS, this.#state.signal);
+      }
+      const changeLogState = await this.#changeStreamer.getChangeLogState();
+      if (sub.active) {
         sub.push([
           'status',
           {tag: 'status', backupURL: this.#backupURL, ...changeLogState},
         ]);
-      })
-      .catch(e => {
-        this.#lc.warn?.(`failing snapshot reservation`, e);
-        sub.fail(e);
-      });
-    return sub;
+      }
+    } catch (e) {
+      if (this.#state.signal.aborted) {
+        return; // shutting down; not an error
+      }
+      this.#lc.warn?.(`failing snapshot reservation`, e);
+      sub.fail(e instanceof Error ? e : new Error(String(e)));
+    }
+  }
+
+  /**
+   * Verifies whether a restorable backup actually exists in the destination
+   * (as opposed to what litestream metrics merely claim). On success the
+   * verified upload time is cached — seeding the cleanup-verification fast path
+   * ({@link #confirmedDurable}) — and the initial-backup deadline is satisfied.
+   * Returns false if no backup is listable yet (e.g. the initial snapshot is
+   * still uploading).
+   */
+  async #confirmRestorableBackup(): Promise<boolean> {
+    try {
+      this.#lastVerifiedUploadTime = await this.#verifyBackupState();
+      return true;
+    } catch (e) {
+      this.#lc.info?.(`backup not yet restorable at ${this.#backupURL}`, e);
+      return false;
+    }
   }
 
   endReservation(taskID: string, updateCleanupDelay = true) {
@@ -237,6 +325,11 @@ export class BackupMonitor implements Service {
       await this.#scheduleCleanup();
     } catch (e) {
       this.#lc.warn?.(`error scheduling cleanup`, e);
+    }
+    try {
+      await this.#checkInitialBackupDeadline();
+    } catch (e) {
+      this.#lc.warn?.(`error checking initial backup deadline`, e);
     }
   };
 
@@ -399,6 +492,72 @@ export class BackupMonitor implements Service {
         `not advanced for ${staleForMs} ms (grace period ` +
         `${WEDGED_SHUTDOWN_GRACE_MS} ms). Shutting down to avoid corrupting ` +
         `the backup; investigate the backup destination.`,
+    );
+    this.#lc.error?.(err.message);
+    clearInterval(this.#checkMetricsTimer);
+    this.#fatal.reject(err);
+  }
+
+  /**
+   * On a fresh stack, fails loudly if no restorable backup has appeared within
+   * a generous, replica-size-scaled grace period (see
+   * {@link INITIAL_BACKUP_GRACE_MS_PER_UNIT}). This moves the "give up" decision
+   * onto the replication-manager — the producer responsible for creating the
+   * backup — instead of leaving view-syncers to wait (and the platform to keep
+   * restarting them) while the real fault is here. Does nothing once a
+   * restorable backup has been confirmed.
+   */
+  async #checkInitialBackupDeadline() {
+    if (this.#lastVerifiedUploadTime !== null || this.#runStartTime === null) {
+      return;
+    }
+    const elapsed = Date.now() - this.#runStartTime;
+    if (elapsed < this.#initialBackupGraceMs()) {
+      return;
+    }
+    // The deadline has elapsed without a confirmed backup. Do one definitive
+    // check against the destination before giving up, in case a backup landed
+    // but was never exercised by a reservation or a cleanup verification.
+    if (await this.#confirmRestorableBackup()) {
+      return;
+    }
+    this.#shutDownOnMissingInitialBackup(elapsed);
+  }
+
+  /**
+   * The grace period for the first restorable backup, scaled by replica size to
+   * mirror the platform's storage-scaled startup-probe allowance. Falls back to
+   * the minimum (one unit) if the replica file size cannot be determined.
+   */
+  #initialBackupGraceMs(): number {
+    let bytes = 0;
+    try {
+      bytes = statSync(this.#replicaFile).size;
+    } catch {
+      // Replica file not present/readable yet; fall back to the minimum grace.
+    }
+    const units = Math.max(
+      1,
+      Math.ceil(bytes / INITIAL_BACKUP_GRACE_UNIT_BYTES),
+    );
+    return units * INITIAL_BACKUP_GRACE_MS_PER_UNIT;
+  }
+
+  /**
+   * Called when no restorable backup has appeared within
+   * {@link #initialBackupGraceMs}. Continuing to run is pointless — no
+   * view-syncer can restore — and the fault is the backup pipeline, so the
+   * process exits non-zero with a logged error for alerting, mirroring
+   * {@link #shutDownOnWedgedBackup}.
+   */
+  #shutDownOnMissingInitialBackup(elapsedMs: number) {
+    const err = new UnrecoverableError(
+      `no restorable backup has appeared at ${this.#backupURL} within ` +
+        `${elapsedMs} ms of startup (grace period ` +
+        `${this.#initialBackupGraceMs()} ms). The initial backup pipeline ` +
+        `appears to be broken; shutting down so that the replication-manager ` +
+        `is flagged as the cause rather than the view-syncers waiting on it. ` +
+        `Investigate litestream replication to ${this.#backupURL}.`,
     );
     this.#lc.error?.(err.message);
     clearInterval(this.#checkMetricsTimer);
