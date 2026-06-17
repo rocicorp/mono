@@ -1641,6 +1641,9 @@ importers:
       '@types/tmp':
         specifier: ^0.2.6
         version: 0.2.6
+      ast-to-zql:
+        specifier: workspace:*
+        version: link:../ast-to-zql
       otel:
         specifier: workspace:*
         version: link:../otel
