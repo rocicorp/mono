@@ -25,16 +25,26 @@ import {
   greedyCover,
 } from './cover.ts';
 import {Coverage, tags} from './coverage.ts';
+import {flipAssignments, flippableExistsCount, setFlips} from './flip.ts';
 import {Data} from './literals.ts';
+import {RELATIONS, transform} from './metamorphic.ts';
 import {miniData} from './mini.ts';
 import {mutate} from './mutate.ts';
 import {fourPhase, pushForSkeleton} from './push.ts';
+import {
+  loadRegressions,
+  parseRegression,
+  type Regression,
+  regressionsDir,
+  serializeRegression,
+} from './regressions.ts';
 import {rng} from './rng.ts';
 import {constructCount, shrinkAst} from './shrink.ts';
 import {
   backboneBounds,
   depthOf,
   enumerate,
+  label,
   lower,
   nExists,
   nRelated,
@@ -549,6 +559,140 @@ describe('cost gate', () => {
     ).ast;
     // 10 × (1 + 500) = 5010.
     expect(cost.estimate(withExists)).toBe(5010);
+  });
+});
+
+// ── metamorphic relations (IVM self-consistency, oracle-free) ─────────────────────────
+
+describe('metamorphic', () => {
+  test('semantically-invariant transforms leave the memory-IVM result unchanged', async () => {
+    const delegate = memoryDelegate();
+    const skels = enumerate({depth: 1, related: 1, exists: 1});
+    let checked = 0;
+    for (const s of skels) {
+      const base = lower(s);
+      const ast = asQueryInternals(base).ast;
+      const original = await delegate.run(base);
+      for (const r of RELATIONS) {
+        const t = transform(ast, r);
+        if (!t) {
+          continue;
+        }
+        const got = await delegate.run(wrapAst(t));
+        expect(
+          got,
+          `metamorphic ${r} changed the IVM result for ${label(s)}`,
+        ).toEqual(original);
+        checked += 1;
+      }
+    }
+    expect(checked).toBeGreaterThan(0);
+  });
+
+  test('each transform applies where expected on a bare root', () => {
+    const bare = asQueryInternals(lower({table: 'track', children: []})).ast;
+    // A bare query: redundant-conjunct / large-limit / start-before-first apply; and-
+    // reorder does not (no AND).
+    expect(transform(bare, 'redundantConjunct')).not.toBeNull();
+    expect(transform(bare, 'largeLimit')?.limit).toBe(100_000);
+    expect(transform(bare, 'startBeforeFirst')?.start).toEqual({
+      row: {id: -1_000_000},
+      exclusive: false,
+    });
+    expect(transform(bare, 'andReorder')).toBeNull();
+  });
+});
+
+// ── flip-invariance (plan-choice flag manipulation) ───────────────────────────────────
+
+describe('flip-invariance', () => {
+  test('flippableExistsCount counts only positive EXISTS; set(false/true) flips them', () => {
+    // track whereExists(album) AND not(exists(playlists)): one flippable gate.
+    const ast = asQueryInternals(
+      // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+      (lower({table: 'track', children: []}) as any)
+        .whereExists('album')
+        // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+        .where(({not, exists}: any) => not(exists('genre'))),
+    ).ast;
+    expect(flippableExistsCount(ast)).toBe(1);
+    expect(flipAssignments(1)).toEqual([[false], [true]]);
+
+    const flipped = setFlips(ast, [true]);
+    // Exactly one correlatedSubquery now carries flip=true; the NOT EXISTS is untouched.
+    let flippedCount = 0;
+    let untouched = 0;
+    // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+    const walk = (c: any): void => {
+      if (c.type === 'correlatedSubquery') {
+        if (c.op === 'EXISTS') {
+          expect(c.flip).toBe(true);
+          flippedCount += 1;
+        } else {
+          expect(c.flip).toBeUndefined();
+          untouched += 1;
+        }
+      } else if (c.type === 'and' || c.type === 'or') {
+        c.conditions.forEach(walk);
+      }
+    };
+    walk(flipped.where);
+    expect(flippedCount).toBe(1);
+    expect(untouched).toBe(1);
+  });
+
+  test('every flip plan of an EXISTS query hydrates identically (memory IVM)', async () => {
+    const delegate = memoryDelegate();
+    const skels = enumerate(backboneBounds());
+    let checked = 0;
+    for (const s of skels) {
+      const base = asQueryInternals(lower(s)).ast;
+      const k = flippableExistsCount(base);
+      if (k === 0 || k > 4) {
+        continue;
+      }
+      const variants = flipAssignments(k).map(bits => setFlips(base, bits));
+      const first = await delegate.run(wrapAst(variants[0]));
+      for (const v of variants.slice(1)) {
+        const got = await delegate.run(wrapAst(v));
+        expect(got, `flip plan diverged for ${label(s)}`).toEqual(first);
+        checked += 1;
+      }
+    }
+    expect(checked).toBeGreaterThan(0);
+  });
+});
+
+// ── regression replay machinery ───────────────────────────────────────────────────────
+
+describe('regressions', () => {
+  test('serialize → parse round-trips a regression', () => {
+    const ast = asQueryInternals(
+      // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+      (lower({table: 'track', children: []}) as any).where(
+        'milliseconds',
+        '>',
+        1,
+      ),
+    ).ast as AST;
+    const reg: Regression = {note: 'sample', ast};
+    const back = parseRegression(serializeRegression(reg));
+    expect(back.note).toBe('sample');
+    expect(back.ast).toEqual(ast);
+  });
+
+  test('a parsed regression AST re-wraps and hydrates through the memory IVM', async () => {
+    const delegate = memoryDelegate();
+    const ast = asQueryInternals(lower({table: 'album', children: []}))
+      .ast as AST;
+    const back = parseRegression(serializeRegression({note: 'h', ast}));
+    await hydrates(delegate, wrapAst(back.ast));
+  });
+
+  test('loadRegressions tolerates an absent/empty directory', () => {
+    // The committed directory may hold only the README (no *.json) — load returns [].
+    expect(Array.isArray(loadRegressions(regressionsDir()))).toBe(true);
+    expect(loadRegressions('/no/such/dir/at/all')).toEqual([]);
   });
 });
 

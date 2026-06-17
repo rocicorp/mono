@@ -26,6 +26,8 @@ import '../helpers/comparePg.ts';
 import {bootstrap} from '../helpers/runner.ts';
 import {pkOf} from './fuzz/axes.ts';
 import {
+  checkDecoratedPush,
+  checkFlipInvariance,
   checkL0Hydrate,
   checkL1,
   checkPushWalk,
@@ -88,6 +90,42 @@ test(
     const report = await checkPushWalk(harness.transact, data, skels, 1);
     console.log(
       `Push backbone (D≤1): ${report.total} cases, ${report.failures.length} failures`,
+    );
+    panicIfFailed(report, 12);
+  },
+  TIMEOUT_MS,
+);
+
+// oxlint-disable-next-line expect-expect
+test(
+  'Flip-invariance — every flip plan of an EXISTS query hydrate-equal over mini',
+  async () => {
+    // `flip` is a plan choice (semi-join vs FlippedJoin) the IVM honors and z2s ignores,
+    // so every 2^k flip assignment of an EXISTS-bearing skeleton must agree with the
+    // oracle — hence with each other. D≤1 (root single/double gates) is the cheap per-PR
+    // surface; deeper flip×flip nesting rides the nightly sweep.
+    const skels = enumerate({depth: 1, related: 1, exists: 2});
+    const report = await checkFlipInvariance(harness.delegates, skels);
+    console.log(
+      `Flip backbone: ${report.total} flip-variants, ${report.failures.length} failures`,
+    );
+    panicIfFailed(report, 12);
+  },
+  TIMEOUT_MS,
+);
+
+// oxlint-disable-next-line expect-expect
+test(
+  'Decorated push — top-N four-phase per-step parity over mini (D≤1)',
+  async () => {
+    // The order/limit × push cross-product the other sweeps miss: each depth-1 skeleton
+    // becomes a top-N (`orderBy` + small `limit`) and is pushed (incl. the EXISTS-gated
+    // leaf) with PER-STEP parity, so a top-N push that strands/drops in-window rows is
+    // caught between mutations.
+    const skels = enumerate({depth: 1, related: 2, exists: 2});
+    const report = await checkDecoratedPush(harness.transact, data, skels, 1);
+    console.log(
+      `Decorated push backbone (top-N, D≤1): ${report.total} cases, ${report.failures.length} failures`,
     );
     panicIfFailed(report, 12);
   },

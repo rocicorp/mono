@@ -35,6 +35,8 @@ import {type Delegates, runAndCompare} from '../../helpers/runner.ts';
 import {schema} from '../schema.ts';
 import type {CostModel} from './cost.ts';
 import {
+  applyLimit,
+  applyOrder,
   childDecorationPairs,
   decoratableRoots,
   decorate,
@@ -43,9 +45,11 @@ import {
   rowLabel,
 } from './cover.ts';
 import {Coverage} from './coverage.ts';
+import {flipAssignments, flippableExistsCount, setFlips} from './flip.ts';
 import type {Data} from './literals.ts';
 import {mutate} from './mutate.ts';
 import {type Mutation, pushForSkeleton} from './push.ts';
+import type {Regression} from './regressions.ts';
 import {rng} from './rng.ts';
 import {constructCount, shrinkAst} from './shrink.ts';
 import {enumerate, label, lower, type Skeleton} from './skeleton.ts';
@@ -324,6 +328,44 @@ export async function checkTail(
   return {report: {total, failures}, generated, gated};
 }
 
+// ── flip-invariance (plan-choice invariance of EXISTS gates) ──────────────────────────
+
+/**
+ * **Flip-invariance sweep:** for each EXISTS-bearing skeleton, lower it and hydrate it
+ * under **every** `2^k` flip assignment of its `k` positive EXISTS gates (semi-join vs
+ * `FlippedJoin`), checking each against the Postgres oracle. Since `flip` is a plan choice
+ * the oracle ignores, every assignment must agree with the oracle — hence with each other.
+ * Skeletons with no flippable gate (none / only NOT-EXISTS) are skipped. `k` is capped so
+ * the `2^k` fan-out stays bounded.
+ */
+export async function checkFlipInvariance(
+  delegates: Delegates,
+  skels: readonly Skeleton[],
+  maxFlips = 4,
+): Promise<Report> {
+  const failures: Array<[string, string]> = [];
+  const budget = {remaining: SHRINK_BUDGET};
+  let total = 0;
+  for (const s of skels) {
+    const base = asQueryInternals(lower(s)).ast;
+    const k = flippableExistsCount(base);
+    if (k === 0 || k > maxFlips) {
+      continue;
+    }
+    for (const bits of flipAssignments(k)) {
+      total += 1;
+      await checkHydrate(
+        delegates,
+        wrapAst(setFlips(base, bits)),
+        `flip|${label(s)}|${bits.map(b => (b ? 1 : 0)).join('')}`,
+        failures,
+        budget,
+      );
+    }
+  }
+  return {total, failures};
+}
+
 // ── the four-phase push protocol (per-step parity) ────────────────────────────────────
 
 function mapRow(row: Row, table: string, mapper: NameMapper): Row {
@@ -447,6 +489,69 @@ export async function checkPushWalk(
     }
   }
   return {total, failures};
+}
+
+/**
+ * **Decorated-push sweep:** push over **top-N** queries — the cross-product the rest of
+ * the fuzzer leaves uncovered. Elsewhere `order`/`limit` are hydrate-only (L1, swarm,
+ * tail) and the push sweep carries no decorations, so a `whereExists(...).orderBy().limit()`
+ * **push** is never exercised. Here each skeleton is lowered, given a root `orderBy` + a
+ * small `limit`, and pushed (root + EXISTS-gated leaf) with parity re-checked **after every
+ * mutation** — a top-N push that strands or drops an in-window row is wrong *between*
+ * mutations even when a later mutation restores the seed, a transient a final-state
+ * comparison misses.
+ */
+export async function checkDecoratedPush(
+  transact: Transact,
+  data: Data,
+  skels: readonly Skeleton[],
+  n: number,
+): Promise<Report> {
+  const failures: Array<[string, string]> = [];
+  let total = 0;
+  for (const s of skels) {
+    const mutations = pushForSkeleton(data, s, n);
+    if (mutations.length === 0) {
+      continue;
+    }
+    total += 1;
+    const topN = applyLimit(applyOrder(lower(s), s.table, 'asc1'), 'small');
+    const msg = await capture(() =>
+      transact(d => pushWalk(d, topN, mutations)),
+    );
+    if (msg) {
+      failures.push([`decpush|${label(s)}`, msg]);
+    }
+  }
+  return {total, failures};
+}
+
+/**
+ * **Corpus-first regression replay** (design §9): re-run every committed regression through
+ * the differential check it was filed under — hydrate parity, or per-step push parity when
+ * it carries a push history — so each past find is a permanent guard. A no-op when no
+ * regressions are committed yet.
+ */
+export async function checkRegressions(
+  delegates: Delegates,
+  transact: Transact,
+  regs: readonly Regression[],
+): Promise<Report> {
+  const failures: Array<[string, string]> = [];
+  for (const reg of regs) {
+    const hasPush = (reg.pushes?.length ?? 0) > 0;
+    const msg = hasPush
+      ? await capture(() =>
+          transact(d => pushWalk(d, wrapAst(reg.ast), reg.pushes ?? [])),
+        )
+      : await capture(() =>
+          runAndCompare(schema, delegates, wrapAst(reg.ast), undefined),
+        );
+    if (msg) {
+      failures.push([`regress|${reg.note}`, msg]);
+    }
+  }
+  return {total: regs.length, failures};
 }
 
 /**
