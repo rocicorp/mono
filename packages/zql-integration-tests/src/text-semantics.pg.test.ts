@@ -3,6 +3,23 @@
  *
  * These tests pin cases where ZQLite/SQLite and compiled ZQL SQL on
  * PostgreSQL must agree for text comparison, LIKE/ILIKE, and NULL logic.
+ *
+ * It also pins one *known divergence*: case-insensitive matching (ILIKE) folds
+ * case differently on the two sides.
+ *  - ZQLite compiles ILIKE to `lower(col) LIKE lower(pat)` using
+ *    @rocicorp/zero-sqlite3's ICU-backed `lower()`, which folds the *full
+ *    Unicode* range (Ω→ω) regardless of any column collation. The in-memory IVM
+ *    matcher folds the same way via JS `String.toLowerCase()` (see
+ *    zqlite/src/ilike-parity.test.ts and zql/src/builder/like.ts).
+ *  - Compiled ZQL SQL emits a bare `ILIKE`, so Postgres folds case according to
+ *    the *column collation*. Under `COLLATE "C"` that is ASCII-only, so non-ASCII
+ *    letters are not folded.
+ *
+ * The result is that ILIKE over non-ASCII text agrees under a Unicode-folding
+ * collation (the default `en_US.utf8`) but diverges under `COLLATE "C"`. The
+ * `textItemC` table pins the divergence; the `textItemDefault` table pins that
+ * it disappears under the default collation. See the "known divergence" and
+ * "collation control" describe blocks below.
  */
 import {afterAll, beforeAll, describe, expect, test} from 'vitest';
 import {testLogConfig} from '../../otel/src/test-log-config.ts';
@@ -30,7 +47,18 @@ import {fillPgAndSync} from './helpers/setup.ts';
 const lc = createSilentLogContext();
 const DB_NAME = 'text-semantics-test';
 
-const textItem = table('textItem')
+// Two tables with identical data but different `value` collations, so we can
+// pin both the parity cases and the collation-dependent ILIKE divergence.
+//  - textItemC:       value COLLATE "C"  (ASCII-only case folding in Postgres)
+//  - textItemDefault: value default collation (Unicode case folding in Postgres)
+const textItemC = table('textItemC')
+  .columns({
+    id: string(),
+    value: string().optional(),
+  })
+  .primaryKey('id');
+
+const textItemDefault = table('textItemDefault')
   .columns({
     id: string(),
     value: string().optional(),
@@ -38,41 +66,60 @@ const textItem = table('textItem')
   .primaryKey('id');
 
 const schema = createSchema({
-  tables: [textItem],
+  tables: [textItemC, textItemDefault],
 });
 type Schema = typeof schema;
 
 const serverSchema: ServerSchema = {
-  textItem: {
+  textItemC: {
+    id: {type: 'text', isEnum: false, isArray: false},
+    value: {type: 'text', isEnum: false, isArray: false},
+  },
+  textItemDefault: {
     id: {type: 'text', isEnum: false, isArray: false},
     value: {type: 'text', isEnum: false, isArray: false},
   },
 } as const;
 
 const createTableSQL = /*sql*/ `
-CREATE TABLE "textItem" (
+CREATE TABLE "textItemC" (
   "id" TEXT PRIMARY KEY,
   "value" TEXT COLLATE "C"
 );
+-- No COLLATE clause: inherits the database default collation, which is a
+-- Unicode-folding locale (en_US.utf8 in the test container).
+CREATE TABLE "textItemDefault" (
+  "id" TEXT PRIMARY KEY,
+  "value" TEXT
+);
 `;
 
+const rows: Row[] = [
+  {id: '01-null', value: null},
+  {id: '02-empty', value: ''},
+  {id: '03-lower', value: 'abc'},
+  {id: '04-upper', value: 'ABC'},
+  {id: '05-percent', value: 'a%z'},
+  {id: '06-underscore', value: 'a_z'},
+  {id: '07-backslash', value: 'a\\z'},
+  {id: '08-newline', value: 'a\nb'},
+  {id: '09-omega', value: 'Ωmega'},
+  {id: '10-emoji', value: 'emoji😀x'},
+  {id: '11-combining', value: 'é'},
+  {id: '12-composed', value: 'é'},
+  {id: '13-z', value: 'z'},
+  {id: '14-zz', value: 'zz'},
+  // Non-ASCII cased rows for the ILIKE folding cases below.
+  {id: '15-omega-lower', value: 'ωmega'},
+  {id: '16-cyrillic-upper', value: 'ПРИВЕТ'},
+  {id: '17-cyrillic-lower', value: 'привет'},
+  {id: '18-accent-upper', value: 'CAFÉ'},
+  {id: '19-accent-lower', value: 'café'},
+];
+
 const testData = {
-  textItem: [
-    {id: '01-null', value: null},
-    {id: '02-empty', value: ''},
-    {id: '03-lower', value: 'abc'},
-    {id: '04-upper', value: 'ABC'},
-    {id: '05-percent', value: 'a%z'},
-    {id: '06-underscore', value: 'a_z'},
-    {id: '07-backslash', value: 'a\\z'},
-    {id: '08-newline', value: 'a\nb'},
-    {id: '09-omega', value: 'Ωmega'},
-    {id: '10-emoji', value: 'emoji😀x'},
-    {id: '11-combining', value: 'e\u0301'},
-    {id: '12-composed', value: 'é'},
-    {id: '13-z', value: 'z'},
-    {id: '14-zz', value: 'zz'},
-  ],
+  textItemC: rows,
+  textItemDefault: rows,
 } satisfies Record<string, Row[]>;
 
 let pg: PostgresDB;
@@ -91,7 +138,7 @@ afterAll(() => {
 });
 
 describe('text semantics oracle corpus', () => {
-  const baseQuery = () => newQuery(schema, 'textItem');
+  const baseQuery = () => newQuery(schema, 'textItemC');
 
   test.each([
     [
@@ -150,26 +197,124 @@ describe('text semantics oracle corpus', () => {
         )
         .orderBy('id', 'asc'),
     ],
-  ] satisfies [string, Query<'textItem', Schema>][])(
+  ] satisfies [string, Query<'textItemC', Schema>][])(
     '%s',
-    async (_name: string, query: Query<'textItem', Schema>) => {
-      await expectZqliteToMatchPg(query);
+    async (_name: string, query: Query<'textItemC', Schema>) => {
+      await expectZqliteToMatchPg(query, 'textItemC');
     },
   );
 });
 
-async function expectZqliteToMatchPg(query: Query<'textItem', Schema>) {
+/**
+ * KNOWN DIVERGENCE. ZQLite folds the full Unicode range for ILIKE while
+ * Postgres under `COLLATE "C"` folds ASCII only, so ZQLite returns a superset
+ * for non-ASCII patterns. These tests pin the *current* divergent behavior:
+ * they assert the exact (different) id sets each side returns. If the engines
+ * are ever brought into agreement (e.g. ZQLite respects collation, or compiled
+ * ZQL lowercases per-collation), the pinned `pgIds` here will change and this
+ * block will fail — at which point move these cases up into the parity corpus.
+ */
+describe('known divergence: ILIKE folds Unicode in ZQLite but not under PG COLLATE "C"', () => {
+  const baseQuery = () => newQuery(schema, 'textItemC');
+
+  test.each([
+    [
+      'Greek omega: ZQLite folds Ω→ω, PG C does not',
+      baseQuery().where('value', 'ILIKE', 'ωmega').orderBy('id', 'asc'),
+      ['09-omega', '15-omega-lower'],
+      ['15-omega-lower'],
+    ],
+    [
+      'Cyrillic: ZQLite folds ПРИВЕТ→привет, PG C does not',
+      baseQuery().where('value', 'ILIKE', 'привет').orderBy('id', 'asc'),
+      ['16-cyrillic-upper', '17-cyrillic-lower'],
+      ['17-cyrillic-lower'],
+    ],
+    [
+      'Latin-1 accent: ZQLite folds É→é, PG C does not',
+      baseQuery().where('value', 'ILIKE', 'café').orderBy('id', 'asc'),
+      ['18-accent-upper', '19-accent-lower'],
+      ['19-accent-lower'],
+    ],
+  ] satisfies [string, Query<'textItemC', Schema>, string[], string[]][])(
+    '%s',
+    async (
+      _name: string,
+      query: Query<'textItemC', Schema>,
+      expectedZqliteIds: string[],
+      expectedPgIds: string[],
+    ) => {
+      const {zqliteIds, pgIds} = await runBothIds(query, 'textItemC');
+      expect(zqliteIds).toEqual(expectedZqliteIds);
+      expect(pgIds).toEqual(expectedPgIds);
+      // The point of this block: the two engines disagree here.
+      expect(zqliteIds).not.toEqual(pgIds);
+    },
+  );
+});
+
+/**
+ * COLLATION CONTROL. The same ILIKE patterns over the same data agree once the
+ * column uses a Unicode-folding collation (the database default), because
+ * Postgres then folds case the same way ZQLite always does. This isolates the
+ * divergence above to the `COLLATE "C"` choice rather than to the ILIKE
+ * operator itself.
+ */
+describe('collation control: ILIKE agrees under default (Unicode-folding) collation', () => {
+  const baseQuery = () => newQuery(schema, 'textItemDefault');
+
+  test.each([
+    [
+      'Greek omega folds on both sides',
+      baseQuery().where('value', 'ILIKE', 'ωmega').orderBy('id', 'asc'),
+    ],
+    [
+      'Cyrillic folds on both sides',
+      baseQuery().where('value', 'ILIKE', 'привет').orderBy('id', 'asc'),
+    ],
+    [
+      'Latin-1 accent folds on both sides',
+      baseQuery().where('value', 'ILIKE', 'café').orderBy('id', 'asc'),
+    ],
+  ] satisfies [string, Query<'textItemDefault', Schema>][])(
+    '%s',
+    async (_name: string, query: Query<'textItemDefault', Schema>) => {
+      await expectZqliteToMatchPg(query, 'textItemDefault');
+    },
+  );
+});
+
+async function expectZqliteToMatchPg(
+  query: Query<'textItemC' | 'textItemDefault', Schema>,
+  tableName: 'textItemC' | 'textItemDefault',
+) {
   const pgResult = await runAsSQL(query);
   const zqliteResult = mapResultToClientNames(
     await queryDelegate.run(query),
     schema,
-    'textItem',
+    tableName,
   );
 
   expect(zqliteResult).toEqualPg(pgResult);
 }
 
-async function runAsSQL(q: Query<'textItem', Schema>) {
+async function runBothIds(
+  query: Query<'textItemC' | 'textItemDefault', Schema>,
+  tableName: 'textItemC' | 'textItemDefault',
+) {
+  const pgResult = (await runAsSQL(query)) as Row[];
+  const zqliteResult = mapResultToClientNames(
+    await queryDelegate.run(query),
+    schema,
+    tableName,
+  ) as Row[];
+  return {
+    pgIds: pgResult.map(r => r.id as string),
+    zqliteIds: zqliteResult.map(r => r.id as string),
+  };
+}
+
+async function runAsSQL(q: Query<'textItemC' | 'textItemDefault', Schema>) {
   const c = compile(serverSchema, schema, asQueryInternals(q).ast);
   const sqlQuery = formatPgInternalConvert(c);
   return extractZqlResult(
