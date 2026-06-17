@@ -31,6 +31,7 @@ import {
   checkL0Hydrate,
   checkL1,
   checkPushWalk,
+  checkYield,
   panicIfFailed,
 } from './fuzz/driver.ts';
 import {Data} from './fuzz/literals.ts';
@@ -39,6 +40,9 @@ import {backboneBounds, enumerate} from './fuzz/skeleton.ts';
 import {schema} from './schema.ts';
 
 const TIMEOUT_MS = 120_000;
+
+/** The repro key for the random-yield interleave lane. */
+const YIELD_SEED = 0x00c0ffee;
 
 const harness = await bootstrap({
   suiteName: 'chinook_fuzz_backbone',
@@ -126,6 +130,31 @@ test(
     const report = await checkDecoratedPush(harness.transact, data, skels, 1);
     console.log(
       `Decorated push backbone (top-N, D≤1): ${report.total} cases, ${report.failures.length} failures`,
+    );
+    panicIfFailed(report, 12);
+  },
+  TIMEOUT_MS,
+);
+
+// oxlint-disable-next-line expect-expect
+test(
+  'Random-yield — hydrate + push parity under interleaved sources over mini (D≤1)',
+  async () => {
+    // Both IVM sources (memory + sqlite) are wrapped so a random fraction of fetch/push
+    // stream items is preceded by a `'yield'`, perturbing the engine's cooperative
+    // scheduling. The PG oracle stays straight, so the interleaved IVM must still match it
+    // at every step — the reentrancy axis inherited from the old `chinook-fuzz-hydration`
+    // fuzzer. Cheap mini smoke per-PR; the heavy full-chinook interleave rides nightly.
+    const skels = enumerate({depth: 1, related: 1, exists: 1});
+    const report = await checkYield(
+      harness.transact,
+      data,
+      skels,
+      1,
+      YIELD_SEED,
+    );
+    console.log(
+      `Random-yield backbone (D≤1): ${report.total} cases, ${report.failures.length} failures`,
     );
     panicIfFailed(report, 12);
   },

@@ -26,8 +26,10 @@ import {
   makeSourceChangeAdd,
   makeSourceChangeEdit,
   makeSourceChangeRemove,
+  type Source,
 } from '../../../../zql/src/ivm/source.ts';
 import {consume} from '../../../../zql/src/ivm/stream.ts';
+import {createRandomYieldWrapper} from '../../../../zql/src/ivm/test/random-yield-source.ts';
 import {asQueryInternals} from '../../../../zql/src/query/query-internals.ts';
 import type {AnyQuery} from '../../../../zql/src/query/query.ts';
 import {mapResultToClientNames} from '../../../../zqlite/src/test/source-factory.ts';
@@ -51,6 +53,12 @@ import {mutate} from './mutate.ts';
 import {type Mutation, pushForSkeleton} from './push.ts';
 import type {Regression} from './regressions.ts';
 import {rng} from './rng.ts';
+import {
+  buildScalar,
+  hasScalarSubquery,
+  resolveScalarForIvm,
+  scalarCandidates,
+} from './scalar.ts';
 import {constructCount, shrinkAst} from './shrink.ts';
 import {enumerate, label, lower, type Skeleton} from './skeleton.ts';
 import {Mask, swarmGen} from './swarm.ts';
@@ -60,6 +68,8 @@ import {wrapAst} from './wrap.ts';
 /** A delegate transaction-scoping function (from `bootstrap().transact`). */
 export type Transact = (
   cb: (delegates: Delegates) => Promise<void>,
+  /** Optionally wrap each IVM source (memory + sqlite) — used by the random-yield sweep. */
+  sourceWrapper?: (source: Source) => Source,
 ) => Promise<void>;
 
 /**
@@ -68,6 +78,12 @@ export type Transact = (
  * (a generator regression that fails everything must not turn into a shrink storm).
  */
 const SHRINK_BUDGET = 8;
+
+/**
+ * The per-yield-point probability the random-yield interleave sweep injects a `'yield'`
+ * marker into a source fetch/push stream (matches the old `chinook-fuzz-hydration` fuzzer).
+ */
+const YIELD_P = 0.3;
 
 /** The outcome of a batch of differential checks. */
 export type Report = {
@@ -521,6 +537,154 @@ export async function checkDecoratedPush(
     );
     if (msg) {
       failures.push([`decpush|${label(s)}`, msg]);
+    }
+  }
+  return {total, failures};
+}
+
+/**
+ * **Random-yield interleave sweep** (ported from the old `chinook-fuzz-hydration` fuzzer's
+ * `createRandomYieldWrapper` axis): re-run hydrate + four-phase push parity for each
+ * skeleton with **both** IVM sources (memory + sqlite) wrapped in a `RandomYieldSource`
+ * that injects `'yield'` markers at random fetch/push points (probability {@link YIELD_P}).
+ *
+ * This perturbs the IVM's cooperative scheduling — exercising the operators' yield handling
+ * during a live fetch *and* a live push, the reentrancy/interleaving failure class the rest
+ * of the fuzzer (which always pulls the sources straight) never probes. The PG oracle is not
+ * wrapped: it stays the ground truth the interleaved IVM must still match.
+ *
+ * Each skeleton runs under its own yield stream seeded from `(seed, index)`, so a divergence
+ * replays bit-for-bit. A skeleton with push history runs the four-phase walk (whose initial
+ * compare is the hydrate-under-yield check); a mutation-free one runs a plain hydrate.
+ */
+export async function checkYield(
+  transact: Transact,
+  data: Data,
+  skels: readonly Skeleton[],
+  n: number,
+  seed: number,
+): Promise<Report> {
+  const failures: Array<[string, string]> = [];
+  let total = 0;
+  let idx = 0;
+  for (const s of skels) {
+    const i = idx++;
+    // Per-skeleton deterministic yield stream so a failure replays from (seed, index).
+    const r = rng((seed ^ Math.imul(i + 1, 0x9e3779b9)) >>> 0);
+    const wrap = createRandomYieldWrapper(() => r.float(), YIELD_P);
+    const query = lower(s);
+    const mutations = pushForSkeleton(data, s, n);
+    total += 1;
+    const msg = await capture(() =>
+      transact(
+        d =>
+          mutations.length > 0
+            ? pushWalk(d, query, mutations)
+            : runAndCompare(schema, d, query, undefined),
+        wrap,
+      ),
+    );
+    if (msg) {
+      failures.push([`yield|${label(s)}`, msg]);
+    }
+  }
+  return {total, failures};
+}
+
+/**
+ * **Random-yield hydrate sweep (generator-fed):** generate `n` random deep tail queries from
+ * `seed`, skip the cost-gated ones, and hydrate each under **yield-wrapped** sources against
+ * the oracle. The scale-lane analogue of {@link checkYield}: over the large chinook fixture
+ * the deep fetches have many yield points, so the interleave is stressed on real fan-outs.
+ * Push is mini-fixture-only (the four-phase seed rows are mini rows), so this scale path is
+ * hydrate-only. Deterministic in `seed` — a divergence replays from `(seed, index)`.
+ */
+export async function checkYieldTail(
+  transact: Transact,
+  cost: CostModel,
+  seed: number,
+  n: number,
+  bounds: DeepBounds = tailBounds(),
+): Promise<TailReport> {
+  const r = rng(seed);
+  const failures: Array<[string, string]> = [];
+  let generated = 0;
+  let gated = 0;
+  let total = 0;
+  for (let i = 0; i < n; i++) {
+    const res = tailGen(r, bounds);
+    if (!res) {
+      continue;
+    }
+    generated += 1;
+    const ast = asQueryInternals(res[0]).ast;
+    if (cost.tooExpensive(ast)) {
+      gated += 1; // static gate: skip + count, never run
+      continue;
+    }
+    total += 1;
+    // A fresh per-case yield stream so a divergence replays from (seed, index).
+    const yr = rng((seed ^ Math.imul(i + 1, 0x85ebca6b)) >>> 0);
+    const wrap = createRandomYieldWrapper(() => yr.float(), YIELD_P);
+    const msg = await capture(() =>
+      transact(d => runAndCompare(schema, d, res[0], undefined), wrap),
+    );
+    if (msg) {
+      failures.push([`yieldtail|seed${seed}|${i}`, msg]);
+    }
+  }
+  return {report: {total, failures}, generated, gated};
+}
+
+/**
+ * **Scalar-subquery sweep:** for every one-hop relationship, build a PK-constrained (hence
+ * *simple*) scalar subquery and check that the production split agrees with the oracle — the
+ * original `scalar: true` AST through z2s (`parentField = (SELECT childField … LIMIT 1)`)
+ * vs the IVM over the **pre-resolved** AST (`parentField = <literal>`, the transform
+ * zero-cache's pipeline-driver applies via {@link resolveSimpleScalarSubqueries}).
+ *
+ * `rawRows` (client-named) backs the synchronous scalar executor; it must match the data
+ * loaded into the oracle so both sides pick the same row. A candidate whose subquery fails
+ * to resolve (would leave the base IVM treating `scalar` as a plain EXISTS — a generation
+ * regression, not an engine bug) is reported, not silently passed.
+ */
+export async function checkScalar(
+  delegates: Delegates,
+  rawRows: Record<string, readonly Row[]>,
+  data: Data,
+): Promise<Report> {
+  const failures: Array<[string, string]> = [];
+  let total = 0;
+  for (const cand of scalarCandidates()) {
+    const q = buildScalar(cand, data);
+    if (!q) {
+      continue; // empty child table — no present PK to constrain
+    }
+    total += 1;
+    const lbl = `scalar|${cand.table}.${cand.rel}`;
+    const msg = await capture(async () => {
+      const ast = asQueryInternals(q).ast;
+      const resolved = resolveScalarForIvm(ast, rawRows);
+      if (hasScalarSubquery(resolved)) {
+        throw new Error(
+          `scalar subquery did not resolve (would diverge spuriously) for ${lbl}`,
+        );
+      }
+      const resolvedQuery = wrapAst(resolved);
+      // Oracle runs the ORIGINAL scalar AST (z2s); the IVM runs the RESOLVED one.
+      const pgResult = await delegates.pg.run(q);
+      const sqliteResult = mapResultToClientNames(
+        await delegates.sqlite.run(resolvedQuery),
+        schema,
+        // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+        ast.table as any,
+      );
+      const memoryResult = await delegates.memory.run(resolvedQuery);
+      expect(memoryResult).toEqualPg(pgResult);
+      expect(sqliteResult).toEqualPg(pgResult);
+    });
+    if (msg) {
+      failures.push([lbl, msg]);
     }
   }
   return {total, failures};

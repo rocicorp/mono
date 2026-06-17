@@ -22,7 +22,12 @@ import {expect, test} from 'vitest';
 import '../helpers/comparePg.ts';
 import {bootstrap} from '../helpers/runner.ts';
 import {CostModel} from './fuzz/cost.ts';
-import {checkSwarm, checkTail, panicIfFailed} from './fuzz/driver.ts';
+import {
+  checkSwarm,
+  checkTail,
+  checkYieldTail,
+  panicIfFailed,
+} from './fuzz/driver.ts';
 import {getChinook} from './get-deps.ts';
 import {schema} from './schema.ts';
 
@@ -92,6 +97,32 @@ test.skipIf(!RUN)(
       `chinook swarm: ${report.total} cases, ${report.failures.length} failures`,
     );
     expect(report.total).toBeGreaterThan(40);
+    panicIfFailed(report, 12);
+  },
+  TIMEOUT_MS,
+);
+
+test.skipIf(!RUN)(
+  'scale random-yield — deep tail hydrate under interleaved sources over full chinook',
+  async () => {
+    // The reentrancy axis at scale: deep tail shapes hydrated with both IVM sources wrapped
+    // so a random fraction of fetch items is preceded by a `'yield'`. Over the thousands-of-
+    // rows chinook tables a deep fetch has many yield points, so the engine's cooperative
+    // scheduling is stressed on real fan-outs — the heavy interleave the mini per-PR lane
+    // only smoke-tests. Hydrate-only (the four-phase push seeds from mini rows). Cost-gated.
+    const cost = CostModel.fromSizes(CHINOOK_SIZES, 5_000_000);
+    const {report, generated, gated} = await checkYieldTail(
+      // oxlint-disable-next-line @typescript-eslint/no-non-null-assertion
+      harness!.transact,
+      cost,
+      SEED ^ 0x1eaf,
+      80,
+    );
+    console.log(
+      `chinook yield-tail: generated ${generated} | gated ${gated} | ${report.total} checked | ${report.failures.length} failures`,
+    );
+    expect(generated).toBeGreaterThan(40);
+    expect(report.total).toBeGreaterThan(10);
     panicIfFailed(report, 12);
   },
   TIMEOUT_MS,

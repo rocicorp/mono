@@ -7,11 +7,13 @@
  */
 
 import {describe, expect, test} from 'vitest';
+import {must} from '../../../../shared/src/must.ts';
 import type {AST, Condition} from '../../../../zero-protocol/src/ast.ts';
 import type {Row} from '../../../../zero-protocol/src/data.ts';
 import {MemorySource} from '../../../../zql/src/ivm/memory-source.ts';
 import {makeSourceChangeAdd} from '../../../../zql/src/ivm/source.ts';
 import {consume} from '../../../../zql/src/ivm/stream.ts';
+import {RandomYieldSource} from '../../../../zql/src/ivm/test/random-yield-source.ts';
 import {asQueryInternals} from '../../../../zql/src/query/query-internals.ts';
 import type {AnyQuery} from '../../../../zql/src/query/query.ts';
 import {QueryDelegateImpl as TestMemoryQueryDelegate} from '../../../../zql/src/query/test/query-delegate.ts';
@@ -39,6 +41,13 @@ import {
   serializeRegression,
 } from './regressions.ts';
 import {rng} from './rng.ts';
+import {
+  buildScalar,
+  hasScalarSubquery,
+  makeScalarExecutor,
+  resolveScalarForIvm,
+  scalarCandidates,
+} from './scalar.ts';
 import {constructCount, shrinkAst} from './shrink.ts';
 import {
   backboneBounds,
@@ -693,6 +702,99 @@ describe('regressions', () => {
     // The committed directory may hold only the README (no *.json) — load returns [].
     expect(Array.isArray(loadRegressions(regressionsDir()))).toBe(true);
     expect(loadRegressions('/no/such/dir/at/all')).toEqual([]);
+  });
+});
+
+// ── scalar subqueries (production resolve mirror) ─────────────────────────────────────
+
+describe('scalar subqueries', () => {
+  test('candidates are one-hop (no junctions) with a single-col-PK child', () => {
+    const cands = scalarCandidates();
+    expect(cands.length).toBeGreaterThan(0);
+    for (const c of cands) {
+      expect(relsOf(c.table).find(r => r.name === c.rel)?.junction).toBe(false);
+      expect(pkOf(c.child)).toEqual([c.childPk]);
+    }
+  });
+
+  test('a built gate carries scalar:true and the resolver rewrites it to a literal =', async () => {
+    const delegate = memoryDelegate();
+    let checked = 0;
+    for (const c of scalarCandidates()) {
+      const q = buildScalar(c, data);
+      if (!q) {
+        continue;
+      }
+      const ast = asQueryInternals(q).ast;
+      // The raw gate is a scalar correlated subquery …
+      expect(hasScalarSubquery(ast), `${c.table}.${c.rel} not scalar`).toBe(
+        true,
+      );
+      // … which the production resolver rewrites away to a plain comparison …
+      const resolved = resolveScalarForIvm(ast, miniData);
+      expect(
+        hasScalarSubquery(resolved),
+        `unresolved scalar for ${c.table}.${c.rel}`,
+      ).toBe(false);
+      expect(resolved.where?.type).toBe('simple');
+      // … and the resolved query hydrates through the IVM.
+      await hydrates(delegate, wrapAst(resolved));
+      checked += 1;
+    }
+    expect(checked).toBeGreaterThan(0);
+  });
+
+  test('the executor returns the childField of the constrained row', () => {
+    // album.tracks: SELECT track.albumId WHERE track.id = <mid> ⇒ that track's albumId
+    // (childField ≠ the constrained PK — the non-trivial direction).
+    const c = must(
+      scalarCandidates().find(x => x.table === 'album' && x.rel === 'tracks'),
+      'album.tracks candidate missing',
+    );
+    const mid = data.pkMid('track');
+    const wantRow = must(miniData.track.find(r => r.id === mid));
+    const gate = must(asQueryInternals(must(buildScalar(c, data))).ast.where);
+    expect(gate.type).toBe('correlatedSubquery');
+    if (gate.type !== 'correlatedSubquery') {
+      return;
+    }
+    const childField = gate.related.correlation.childField[0];
+    expect(childField).toBe('albumId');
+    expect(
+      makeScalarExecutor(miniData)(gate.related.subquery, childField),
+    ).toBe(wantRow.albumId);
+  });
+});
+
+// ── random-yield interleave (reentrancy axis) ─────────────────────────────────────────
+
+describe('random-yield interleave', () => {
+  test('wrapping the memory sources with random yields leaves hydration unchanged', async () => {
+    const plain = memoryDelegate();
+    // A second delegate whose sources inject a `'yield'` before a random half of items.
+    const r = rng(0xbead);
+    const wrapped = new TestMemoryQueryDelegate({
+      sources: Object.fromEntries(
+        Object.entries(schema.tables).map(([key, ts]) => {
+          const src = new MemorySource(ts.name, ts.columns, ts.primaryKey);
+          for (const row of miniData[key] ?? []) {
+            consume(src.push(makeSourceChangeAdd(row as Row)));
+          }
+          return [key, new RandomYieldSource(src, () => r.float(), 0.5)];
+        }),
+      ),
+    });
+    const skels = enumerate(backboneBounds());
+    let checked = 0;
+    for (const s of skels) {
+      const q = lower(s);
+      expect(
+        await wrapped.run(q),
+        `yield interleave changed ${label(s)}`,
+      ).toEqual(await plain.run(q));
+      checked += 1;
+    }
+    expect(checked).toBeGreaterThan(0);
   });
 });
 
