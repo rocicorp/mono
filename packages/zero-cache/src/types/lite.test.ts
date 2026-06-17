@@ -236,6 +236,8 @@ describe('types/lite', () => {
 describe('dataTypeToZqlValueType', () => {
   test.each([
     ['int', 'number'],
+    ['isbn13', 'string'],
+    ['macaddr8', 'string'],
     ['text', 'string'],
     ['float', 'number'],
     ['bool', 'boolean'],

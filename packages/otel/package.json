@@ -17,12 +17,12 @@
     "@opentelemetry/core": "^2.0.0",
     "@opentelemetry/sdk-metrics": "^2.7.1",
     "@opentelemetry/sdk-trace-node": "^2.7.1",
-    "@rocicorp/logger": "^5.4.0"
+    "@rocicorp/logger": "^6.0.0"
   },
   "devDependencies": {
     "oxfmt": "^0.45.0",
     "shared": "workspace:*",
     "typescript": "~6.0.2"
   },
-  "packageManager": "pnpm@11.3.0"
+  "packageManager": "pnpm@11.5.3"
 }

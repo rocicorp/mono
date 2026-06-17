@@ -1,0 +1,123 @@
+# Dev container workspace plus sibling Postgres services.
+#
+# The `dev` workspace runs beside static Postgres containers (one per major
+# version) that the zero-cache pg tests connect to via the TEST_PG_<major>
+# env vars (see packages/zero-cache/test/pg-container-setup.ts). Compose is
+# orchestrated by host-side Dev Containers tooling; the workspace itself has
+# no Docker daemon and no host Docker socket, so it can reach these services
+# over the Compose network but cannot create or control containers.
+#
+# Open this with "Dev Containers: Clone Repository in Container Volume…".
+# The repo lives in a Docker volume that the Dev Containers tooling mounts at
+# /workspaces; the `dev` service deliberately has no host bind mounts, so the
+# setup needs nothing on the host but Docker + VS Code (no host git clone, no
+# host Node). See README.md.
+#
+# The Postgres server settings below must match the testcontainers setup in
+# packages/zero-cache/test/pg-container-setup.ts and the timezones in
+# packages/zero-cache/test/pg-1*.ts.
+
+x-test-pg: &test-pg
+  shm_size: 1g
+  restart: unless-stopped
+  environment:
+    POSTGRES_USER: user
+    POSTGRES_PASSWORD: password
+    POSTGRES_DB: postgres
+  healthcheck:
+    test: 'pg_isready -h 127.0.0.1 -U user --dbname=postgres'
+    interval: 3s
+    timeout: 5s
+    retries: 20
+
+services:
+  dev:
+    image: mcr.microsoft.com/devcontainers/javascript-node:24@sha256:5be6833735e290e26232abe2d65197942057fb5091f103c128ca454e2043c1d9
+    command: sleep infinity
+    # No host bind mounts on purpose. The workspace is the repo volume that
+    # "Clone Repository in Container Volume" mounts at /workspaces. Adding a
+    # `..:/workspaces/mono` host bind here would break that flow (there is no
+    # host checkout to bind) and is unnecessary — git identity comes from the
+    # gh login the `agents` feature persists, not a mounted ~/.gitconfig.
+    environment:
+      # Points the zero-cache pg tests at the sibling services below instead
+      # of testcontainers (which would need a Docker daemon).
+      TEST_PG_15: postgres://user:password@pg15:5432/postgres
+      TEST_PG_16: postgres://user:password@pg16:5432/postgres
+      TEST_PG_17: postgres://user:password@pg17:5432/postgres
+      TEST_PG_18: postgres://user:password@pg18:5432/postgres
+    depends_on:
+      pg15:
+        condition: service_healthy
+      pg16:
+        condition: service_healthy
+      pg17:
+        condition: service_healthy
+      pg18:
+        condition: service_healthy
+
+  pg15:
+    <<: *test-pg
+    image: postgres:15-alpine
+    command:
+      - postgres
+      - -c
+      - wal_level=logical
+      - -c
+      - max_replication_slots=100
+      - -c
+      - max_wal_senders=100
+      - -c
+      - timezone=UTC
+    tmpfs:
+      # Test databases are throwaway; tmpfs keeps them fast and off disk.
+      - /var/lib/postgresql/data
+
+  pg16:
+    <<: *test-pg
+    image: postgres:16-alpine
+    command:
+      - postgres
+      - -c
+      - wal_level=logical
+      - -c
+      - max_replication_slots=100
+      - -c
+      - max_wal_senders=100
+      - -c
+      - timezone=UTC
+    tmpfs:
+      - /var/lib/postgresql/data
+
+  pg17:
+    <<: *test-pg
+    image: postgres:17-alpine
+    command:
+      - postgres
+      - -c
+      - wal_level=logical
+      - -c
+      - max_replication_slots=100
+      - -c
+      - max_wal_senders=100
+      - -c
+      - timezone=UTC+1
+    tmpfs:
+      - /var/lib/postgresql/data
+
+  pg18:
+    <<: *test-pg
+    image: postgres:18-alpine
+    command:
+      - postgres
+      - -c
+      - wal_level=logical
+      - -c
+      - max_replication_slots=100
+      - -c
+      - max_wal_senders=100
+      - -c
+      - timezone=UTC+1
+    tmpfs:
+      # postgres:18+ images moved the volume up to /var/lib/postgresql.
+      - /var/lib/postgresql
