@@ -1,0 +1,27 @@
+{
+  "name": "zero-migration-impact",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "analyze": "node src/main.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check-types": "tsc",
+    "format": "oxfmt .",
+    "check-format": "oxfmt --check .",
+    "lint": "oxlint --quiet --config ../../oxlint.config.ts",
+    "fmt": "oxfmt .",
+    "check-fmt": "oxfmt --check ."
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "oxfmt": "^0.45.0",
+    "typescript": "~6.0.2",
+    "vitest": "^4.1.6"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "packageManager": "pnpm@11.5.3"
+}
