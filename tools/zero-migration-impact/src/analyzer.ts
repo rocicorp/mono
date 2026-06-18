@@ -13,6 +13,10 @@ import {
   splitTopLevel,
   type SqlStatement,
 } from './sql.ts';
+import {
+  profileForZeroVersion,
+  type ZeroVersionProfile,
+} from './zero-version.ts';
 
 export type ImpactAnswer = 'no' | 'possible' | 'yes';
 export type LagRisk = 'low' | 'medium' | 'high';
@@ -52,9 +56,14 @@ export type ImpactSummary = {
 
 export type AnalysisResult = {
   summary: ImpactSummary;
+  zeroVersion: ZeroVersionProfile;
   files: string[];
   statementsAnalyzed: number;
   findings: Finding[];
+};
+
+export type AnalysisOptions = {
+  zeroVersion?: string | undefined;
 };
 
 type ColumnDefinition = {
@@ -148,27 +157,46 @@ const SUPPORTED_TYPES = new Map<string, string>([
   ['jsonb', 'json'],
 ]);
 
-export async function analyzeSqlPaths(paths: readonly string[]) {
+export async function analyzeSqlPaths(
+  paths: readonly string[],
+  options: AnalysisOptions = {},
+) {
   const files = await expandSqlPaths(paths);
   const statements: SqlStatement[] = [];
   for (const file of files) {
     statements.push(...splitSqlStatements(await readFile(file, 'utf8'), file));
   }
-  return analyzeStatements(files, statements);
+  return analyzeStatements(
+    files,
+    statements,
+    profileForZeroVersion(options.zeroVersion),
+  );
 }
 
-export function analyzeSql(sql: string, file?: string) {
+export function analyzeSql(
+  sql: string,
+  file?: string,
+  options: AnalysisOptions = {},
+) {
   const statements = splitSqlStatements(sql, file);
-  return analyzeStatements(file ? [file] : [], statements);
+  return analyzeStatements(
+    file ? [file] : [],
+    statements,
+    profileForZeroVersion(options.zeroVersion),
+  );
 }
 
 function analyzeStatements(
   files: readonly string[],
   statements: readonly SqlStatement[],
+  zeroVersion: ZeroVersionProfile,
 ): AnalysisResult {
-  const findings = statements.flatMap(analyzeStatement);
+  const findings = statements.flatMap(statement =>
+    analyzeStatement(statement, zeroVersion),
+  );
   return {
     summary: summarize(findings),
+    zeroVersion,
     files: [...files],
     statementsAnalyzed: statements.length,
     findings,
@@ -201,7 +229,10 @@ async function sqlFilesInDirectory(dir: string): Promise<string[]> {
   return files;
 }
 
-function analyzeStatement(statement: SqlStatement): Finding[] {
+function analyzeStatement(
+  statement: SqlStatement,
+  zeroVersion: ZeroVersionProfile,
+): Finding[] {
   const sql = normalizeSql(statement.sql);
   if (!sql) {
     return [];
@@ -209,7 +240,7 @@ function analyzeStatement(statement: SqlStatement): Finding[] {
 
   return [
     ...analyzeCreateTable(statement, sql),
-    ...analyzeAlterTable(statement, sql),
+    ...analyzeAlterTable(statement, sql, zeroVersion),
     ...analyzeDropTable(statement, sql),
     ...analyzePublication(statement, sql),
     ...analyzeIndex(statement, sql),
@@ -305,7 +336,11 @@ function analyzeCreateTable(statement: SqlStatement, sql: string): Finding[] {
   return findings;
 }
 
-function analyzeAlterTable(statement: SqlStatement, sql: string): Finding[] {
+function analyzeAlterTable(
+  statement: SqlStatement,
+  sql: string,
+  zeroVersion: ZeroVersionProfile,
+): Finding[] {
   const altered = parseAlterTable(sql);
   if (!altered) {
     return [];
@@ -313,7 +348,13 @@ function analyzeAlterTable(statement: SqlStatement, sql: string): Finding[] {
 
   const findings: Finding[] = [];
   for (const action of splitTopLevel(altered.actions, ',')) {
-    analyzeAlterTableAction(findings, statement, altered.table, action);
+    analyzeAlterTableAction(
+      findings,
+      statement,
+      altered.table,
+      action,
+      zeroVersion,
+    );
   }
   return findings;
 }
@@ -323,6 +364,7 @@ function analyzeAlterTableAction(
   statement: SqlStatement,
   table: string,
   action: string,
+  zeroVersion: ZeroVersionProfile,
 ) {
   const normalized = action.trim();
   if (/^drop\s+constraint\b/i.test(normalized)) {
@@ -372,25 +414,8 @@ function analyzeAlterTableAction(
       new Map([[column.name, column]]),
       table,
     );
-    if (column.defaultExpression && defaultRequiresBackfill(column)) {
-      findings.push(
-        finding(statement, {
-          id: 'add-column-backfill',
-          title: `Adding ${table}.${column.name} will require a Zero backfill`,
-          severity: 'warning',
-          details: `The default expression ${column.defaultExpression} is not one of the simple defaults Zero can apply with SQLite ADD COLUMN. Zero will hide the column and backfill values from Postgres before publishing it to clients.`,
-          impact: {
-            backfill: 'yes',
-            schemaVersionNotSupported: 'possible',
-            replicationLag: 'high',
-          },
-          remediations: [
-            'Add the column as nullable with no default, or with a simple constant default Zero can map directly.',
-            'Populate existing rows in small batches, then add the default or NOT NULL constraint in a later migration.',
-            'Schedule the migration during low write volume if the table is large.',
-          ],
-        }),
-      );
+    if (column.defaultExpression) {
+      addColumnDefaultFinding(findings, statement, table, column, zeroVersion);
     }
     if (column.notNull && !column.defaultExpression) {
       findings.push(
@@ -1036,6 +1061,83 @@ function addUnsupportedColumnFindings(
       }),
     );
   }
+}
+
+function addColumnDefaultFinding(
+  findings: Finding[],
+  statement: SqlStatement,
+  table: string,
+  column: ColumnDefinition,
+  zeroVersion: ZeroVersionProfile,
+) {
+  if (!zeroVersion.supportsAddColumnDefaults) {
+    findings.push(
+      finding(statement, {
+        id: 'add-column-default-unsupported-by-zero-version',
+        title: `Adding ${table}.${column.name} with a default is unsafe for Zero ${zeroVersion.label}`,
+        severity: 'error',
+        details:
+          `Zero ${zeroVersion.label} predates restored ADD COLUMN default handling. ` +
+          `The default expression ${column.defaultExpression} may not be represented correctly in the replica.`,
+        impact: {
+          backfill: 'no',
+          schemaVersionNotSupported: 'possible',
+          replicationLag: 'low',
+        },
+        remediations: [
+          'Upgrade zero-cache before running this migration.',
+          'Or add the column nullable with no default, backfill application data in batches, then add the default and NOT NULL in a later migration.',
+        ],
+      }),
+    );
+    return;
+  }
+
+  if (!defaultRequiresBackfill(column)) {
+    return;
+  }
+
+  if (!zeroVersion.autoBackfillsUnsupportedDefaults) {
+    findings.push(
+      finding(statement, {
+        id: 'add-column-default-unsupported-by-zero-version',
+        title: `Adding ${table}.${column.name} with this default is unsupported by Zero ${zeroVersion.label}`,
+        severity: 'error',
+        details: `The default expression ${column.defaultExpression} is not one of the simple defaults Zero can apply with SQLite ADD COLUMN, and Zero ${zeroVersion.label} predates auto-backfill for unsupported ADD COLUMN defaults.`,
+        impact: {
+          backfill: 'no',
+          schemaVersionNotSupported: 'possible',
+          replicationLag: 'low',
+        },
+        remediations: [
+          'Upgrade to Zero 0.26.0 or newer before running this migration.',
+          'Or use a two-phase migration: add the column nullable with no default, populate it in batches, then add the default or constraint later.',
+        ],
+      }),
+    );
+    return;
+  }
+
+  findings.push(
+    finding(statement, {
+      id: 'add-column-backfill',
+      title: `Adding ${table}.${column.name} will require a Zero backfill`,
+      severity: 'warning',
+      details:
+        `The default expression ${column.defaultExpression} is not one of the simple defaults Zero can apply with SQLite ADD COLUMN. ` +
+        'Zero will hide the column and backfill values from Postgres before publishing it to clients.',
+      impact: {
+        backfill: 'yes',
+        schemaVersionNotSupported: 'possible',
+        replicationLag: 'high',
+      },
+      remediations: [
+        'Add the column as nullable with no default, or with a simple constant default Zero can map directly.',
+        'Populate existing rows in small batches, then add the default or NOT NULL constraint in a later migration.',
+        'Schedule the migration during low write volume if the table is large.',
+      ],
+    }),
+  );
 }
 
 function defaultRequiresBackfill(column: ColumnDefinition): boolean {

@@ -19,6 +19,39 @@ describe('zero migration impact analyzer', () => {
     );
   });
 
+  test('flags unsupported defaults as unsafe before auto-backfill', () => {
+    const result = analyzeSql(
+      `ALTER TABLE issues ADD COLUMN created_at timestamptz DEFAULT now();`,
+      'migration.sql',
+      {zeroVersion: '0.25.0'},
+    );
+
+    expect(result.summary).toMatchObject({
+      backfill: 'no',
+      replicationLag: 'low',
+      safety: 'unsafe',
+    });
+    expect(result.findings.map(finding => finding.id)).toEqual([
+      'add-column-default-unsupported-by-zero-version',
+    ]);
+  });
+
+  test('flags any add-column default as unsafe before default support', () => {
+    const result = analyzeSql(
+      `ALTER TABLE groups ADD COLUMN "inviteLinkEnabled" boolean NOT NULL DEFAULT true;`,
+      undefined,
+      {zeroVersion: '0.0.202410010000'},
+    );
+
+    expect(result.summary).toMatchObject({
+      backfill: 'no',
+      safety: 'unsafe',
+    });
+    expect(result.findings.map(finding => finding.id)).toEqual([
+      'add-column-default-unsupported-by-zero-version',
+    ]);
+  });
+
   test('treats simple additive columns as safe', () => {
     const result = analyzeSql(`
       ALTER TABLE issues ADD COLUMN sort_order integer DEFAULT 0;

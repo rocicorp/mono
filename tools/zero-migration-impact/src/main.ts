@@ -8,6 +8,7 @@ import {
 type CliOptions = {
   json: boolean;
   failOn?: Severity | undefined;
+  zeroVersion?: string | undefined;
   paths: string[];
 };
 
@@ -19,7 +20,9 @@ async function main() {
     return;
   }
 
-  const result = await analyzeSqlPaths(options.paths.map(resolveInputPath));
+  const result = await analyzeSqlPaths(options.paths.map(resolveInputPath), {
+    zeroVersion: options.zeroVersion,
+  });
   if (options.json) {
     process.stdout.write(JSON.stringify(result, null, 2) + '\n');
   } else {
@@ -48,6 +51,18 @@ function parseArgs(args: readonly string[]): CliOptions {
         throw new Error('--fail-on must be one of: info, warning, error');
       }
       options.failOn = severity;
+      continue;
+    }
+    if (arg === '--zero-version') {
+      const version = args[++i];
+      if (!version) {
+        throw new Error('--zero-version requires a version');
+      }
+      options.zeroVersion = version;
+      continue;
+    }
+    if (arg.startsWith('--zero-version=')) {
+      options.zeroVersion = arg.slice('--zero-version='.length);
       continue;
     }
     if (arg.startsWith('--fail-on=')) {
@@ -90,6 +105,7 @@ function formatMarkdown(result: AnalysisResult): string {
   lines.push('');
   lines.push(`Files: ${result.files.length}`);
   lines.push(`Statements analyzed: ${result.statementsAnalyzed}`);
+  lines.push(`Zero version: ${result.zeroVersion.label}`);
   lines.push('');
   lines.push('## Summary');
   lines.push('');
@@ -141,6 +157,7 @@ function printUsage() {
 
 Options:
   --json                  Print machine-readable JSON.
+  --zero-version <ver>    Analyze against a Zero version, e.g. 0.25.0, 0.26.0, or current.
   --fail-on <severity>    Exit non-zero when a finding has severity info, warning, or error.
   -h, --help              Show this help.
 `);
