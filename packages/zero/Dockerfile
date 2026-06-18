@@ -31,7 +31,7 @@ RUN apk add --no-cache readline readline-dev
 # packageManager field. pnpm's build-script allowlist (v10+) blocks lifecycle
 # scripts from transitive deps unless explicitly opted in, shrinking the
 # postinstall supply-chain surface to packages we name below.
-RUN corepack enable && corepack prepare pnpm@11 --activate
+RUN corepack enable && corepack prepare pnpm@11.5.3 --activate
 
 RUN mkdir -p /opt/app
 WORKDIR /opt/app
@@ -48,11 +48,13 @@ EOF
 # binary in its tarball (see its package.json `files`) — its `install` script
 # runs prebuild-install to fetch one, so it must be allowed. esbuild is pulled
 # in transitively via tsx and downloads a platform binary in postinstall; keep
-# it allowlisted unless runtime testing confirms tsx is never invoked.
+# it allowlisted unless runtime testing confirms tsx is never invoked. protobufjs
+# is pulled in by OpenTelemetry's gRPC exporters and runs a postinstall script.
 RUN cat > pnpm-workspace.yaml <<'EOF'
 allowBuilds:
   '@rocicorp/zero-sqlite3': true
   esbuild: true
+  protobufjs: true
 EOF
 
 COPY pkgs/ /tmp/pkgs/

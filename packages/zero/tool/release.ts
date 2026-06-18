@@ -712,7 +712,8 @@ async function pushDocker(version: string, dryRun: boolean) {
     throw e;
   }
 
-  for (let i = 0; i < 3; i++) {
+  const dockerBuildAttempts = 3;
+  for (let i = 0; i < dockerBuildAttempts; i++) {
     try {
       execute(
         `docker buildx build \\
@@ -724,15 +725,14 @@ async function pushDocker(version: string, dryRun: boolean) {
     --push .`,
         {cwd: basePath('packages', 'zero')},
       );
+      return;
     } catch (e) {
-      if (i < 3) {
-        console.error(`Error building docker image, retrying in 10 seconds...`);
-        await new Promise(resolve => setTimeout(resolve, 10_000));
-        continue;
+      if (i === dockerBuildAttempts - 1) {
+        throw e;
       }
-      throw e;
+      console.error(`Error building docker image, retrying in 10 seconds...`);
+      await new Promise(resolve => setTimeout(resolve, 10_000));
     }
-    break;
   }
 }
 
