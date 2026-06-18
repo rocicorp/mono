@@ -664,8 +664,20 @@ export class Storer implements Service {
             } ms)`,
           );
         } else {
+          // The subscriber is ahead of the latest durable changeLog entry
+          // (lastWatermark). This can legitimately happen: changes are
+          // forwarded to subscribers (the backup replica and view-syncers)
+          // concurrently with — and can outrun — the durable store, so a
+          // replica may briefly lead the change DB after the storer falls
+          // behind or the change-streamer restarts. No catchup is possible or
+          // needed; once the change DB catches back up, forwarding resumes and
+          // the subscriber dedups any watermarks it already has. Unlike the
+          // AutoResetSignal / WatermarkTooOld cases above, this is not a gap in
+          // replication history, so the subscriber is simply marked caught up.
           this.#lc.warn?.(
-            `subscriber at watermark ${sub.watermark} is ahead of latest watermark`,
+            `subscriber ${sub.id} at watermark ${sub.watermark} is ahead of ` +
+              `the latest durable watermark ${lastWatermark}; waiting for the ` +
+              `change DB to catch up`,
           );
         }
         // Flushes the backlog of messages buffered during catchup and
