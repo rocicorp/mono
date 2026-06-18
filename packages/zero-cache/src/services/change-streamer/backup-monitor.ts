@@ -10,7 +10,7 @@ import {
 } from '../../observability/metrics.ts';
 import {Subscription} from '../../types/subscription.ts';
 import {RunningState, UnrecoverableError} from '../running-state.ts';
-import type {Service} from '../service.ts';
+import type {BackupCleanupMonitor} from './backup-monitor-interface.ts';
 import type {ChangeStreamerService} from './change-streamer.ts';
 import type {SnapshotMessage} from './snapshot.ts';
 
@@ -101,7 +101,7 @@ type Reservation = {
  * {@link WEDGED_SHUTDOWN_GRACE_MS}, the backup is treated as wedged and the
  * process is shut down rather than risk corrupting the backup.
  */
-export class BackupMonitor implements Service {
+export class BackupMonitor implements BackupCleanupMonitor {
   readonly id = 'backup-monitor';
   readonly #lc: LogContext;
   readonly #replicaFile: string;

@@ -18,7 +18,7 @@ import {URLParams} from '../../types/url-params.ts';
 import {installWebSocketReceiver} from '../../types/websocket-handoff.ts';
 import {closeWithError, PROTOCOL_ERROR} from '../../types/ws.ts';
 import {HttpService} from '../http-service.ts';
-import type {BackupMonitor} from './backup-monitor.ts';
+import type {SnapshotReservationMonitor} from './backup-monitor-interface.ts';
 import {
   downstreamSchema,
   PROTOCOL_VERSION,
@@ -50,14 +50,14 @@ export class ChangeStreamerHttpServer extends HttpService {
   readonly #lc: LogContext;
   readonly #opts: Options;
   readonly #changeStreamer: ChangeStreamerService;
-  readonly #backupMonitor: BackupMonitor | null;
+  readonly #backupMonitor: SnapshotReservationMonitor | null;
 
   constructor(
     lc: LogContext,
     opts: Options,
     parent: Worker,
     changeStreamer: ChangeStreamerService,
-    backupMonitor: BackupMonitor | null,
+    backupMonitor: SnapshotReservationMonitor | null,
   ) {
     super('change-streamer-http-server', lc, opts, async fastify => {
       await fastify.register(websocket);

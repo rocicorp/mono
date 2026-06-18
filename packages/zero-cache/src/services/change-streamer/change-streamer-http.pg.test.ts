@@ -13,7 +13,7 @@ import type {Source} from '../../types/streams.ts';
 import {Subscription} from '../../types/subscription.ts';
 import {installWebSocketHandoff} from '../../types/websocket-handoff.ts';
 import {ReplicationMessages} from '../replicator/test-utils.ts';
-import type {BackupMonitor} from './backup-monitor.ts';
+import type {SnapshotReservationMonitor} from './backup-monitor-interface.ts';
 import {
   ChangeStreamerHttpClient,
   ChangeStreamerHttpServer,
@@ -110,7 +110,7 @@ describe('change-streamer/http', () => {
       {
         startSnapshotReservation: snapshotFn.mockReturnValue(snapshotStream),
         endReservation: endReservationFn,
-      } as unknown as BackupMonitor,
+      } satisfies SnapshotReservationMonitor,
     );
 
     const [dispatcherURL, serverURL] = await Promise.all([
