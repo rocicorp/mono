@@ -1,7 +1,63 @@
 import {describe, expect, test} from 'vitest';
+import {mapPostgresToLiteDefault} from '../../../packages/zero-cache/src/db/pg-to-lite.ts';
+import {
+  dataTypeToZqlValueType,
+  pgToZqlTypeMap,
+} from '../../../packages/zero-cache/src/types/pg-data-type.ts';
 import {analyzeSql} from './analyzer.ts';
 
 describe('zero migration impact analyzer', () => {
+  test('current supported type rules match zero-cache', () => {
+    for (const [pgType, zqlType] of Object.entries(pgToZqlTypeMap)) {
+      const zeroType = dataTypeToZqlValueType(pgType, false, false);
+      expect(zeroType).toBe(zqlType);
+
+      const result = analyzeSql(
+        `CREATE TABLE test_table (id text PRIMARY KEY, value ${pgType});`,
+      );
+      expect(
+        result.findings.filter(
+          finding => finding.id === 'unsupported-column-type',
+        ),
+      ).toEqual([]);
+    }
+
+    const arrayResult = analyzeSql(
+      `CREATE TABLE test_table (id text PRIMARY KEY, value text[]);`,
+    );
+    expect(dataTypeToZqlValueType('text', false, true)).toBe('json');
+    expect(
+      arrayResult.findings.filter(
+        finding => finding.id === 'unsupported-column-type',
+      ),
+    ).toEqual([]);
+  });
+
+  test('current default rules match zero-cache', () => {
+    for (const defaultExpression of [
+      '0',
+      'true',
+      "'safe'::text",
+      'ARRAY[]::text[]',
+      "'{}'::text[]",
+      'now()',
+    ]) {
+      let zeroNeedsBackfill = false;
+      try {
+        mapPostgresToLiteDefault('test_table', 'value', defaultExpression);
+      } catch {
+        zeroNeedsBackfill = true;
+      }
+
+      const result = analyzeSql(
+        `ALTER TABLE test_table ADD COLUMN value text DEFAULT ${defaultExpression};`,
+      );
+      expect(
+        result.findings.some(finding => finding.id === 'add-column-backfill'),
+      ).toBe(zeroNeedsBackfill);
+    }
+  });
+
   test('flags backfill for volatile add-column defaults', () => {
     const result = analyzeSql(
       `ALTER TABLE issues ADD COLUMN created_at timestamptz DEFAULT now();`,
