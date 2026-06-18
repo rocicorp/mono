@@ -109,6 +109,44 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm run check-types
 
+  zero-docker:
+    name: Build Zero Docker Image
+    runs-on: ubuntu-latest
+    needs: [syncpack, verify-deps]
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@0e279bb959325dab635dd2c09392533439d90093 # v6.0.8
+        with:
+          version: 11.5.3
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 24.x
+          cache: 'pnpm'
+      - uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @rocicorp/zero run build
+      - name: Pack Zero
+        id: pack
+        working-directory: packages/zero
+        run: |
+          node <<'EOF'
+          const {execFileSync} = require('node:child_process');
+          const {appendFileSync} = require('node:fs');
+
+          const output = execFileSync(
+            'npm',
+            ['pack', '--pack-destination', 'pkgs', '--json'],
+            {encoding: 'utf8'},
+          );
+          const [{filename}] = JSON.parse(output);
+          appendFileSync(process.env.GITHUB_OUTPUT, `filename=${filename}\n`);
+          EOF
+      - name: Build Docker Image
+        working-directory: packages/zero
+        run: docker buildx build --platform linux/amd64 --build-arg=ZERO_VERSION="${{ steps.pack.outputs.filename }}" --progress=plain .
+
   test:
     name: Test (Shard ${{ matrix.shard }}/3)
     runs-on: ubuntu-latest
