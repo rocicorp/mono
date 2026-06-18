@@ -39,6 +39,8 @@ export interface BackupWatermarkSource {
   close?(): void;
 }
 
+export type BackupWatermarkSourceFactory = () => BackupWatermarkSource;
+
 let nextRequestID = 0;
 
 export function serializeVfsBackupWatermark(
@@ -68,11 +70,18 @@ export function deserializeVfsBackupWatermark(
 export function requestVfsBackupWatermark(
   worker: Worker,
   timeoutMs: number,
+  options: {
+    readonly killOnTimeout?: boolean | undefined;
+    readonly killSignal?: NodeJS.Signals | undefined;
+  } = {},
 ): Promise<VfsBackupWatermark> {
   const requestID = String(++nextRequestID);
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(() => {
       cleanup();
+      if (options.killOnTimeout) {
+        worker.kill(options.killSignal ?? 'SIGKILL');
+      }
       reject(
         new Error(
           `timed out waiting ${timeoutMs} ms for backup watermark response`,
@@ -121,19 +130,20 @@ export class VfsBackupWatermarkWorkerService implements Service {
   readonly id = 'vfs-backup-watermark-worker';
   readonly #lc: LogContext;
   readonly #parent: Worker | null;
-  readonly #source: BackupWatermarkSource;
+  readonly #sourceFactory: BackupWatermarkSourceFactory;
+  #source: BackupWatermarkSource | undefined;
   readonly #state = new RunningState(this.id);
   readonly #pollIntervalMs: number;
 
   constructor(
     lc: LogContext,
     parent: Worker | null,
-    source: BackupWatermarkSource,
+    source: BackupWatermarkSource | BackupWatermarkSourceFactory,
     pollIntervalMs: number,
   ) {
     this.#lc = lc.withContext('component', this.id);
     this.#parent = parent;
-    this.#source = source;
+    this.#sourceFactory = typeof source === 'function' ? source : () => source;
     this.#pollIntervalMs = pollIntervalMs;
   }
 
@@ -156,7 +166,7 @@ export class VfsBackupWatermarkWorkerService implements Service {
         try {
           this.#lc.info?.(
             `polled backup watermark`,
-            serializeVfsBackupWatermark(this.#source.readWatermark()),
+            serializeVfsBackupWatermark(this.#getSource().readWatermark()),
           );
         } catch (e) {
           this.#lc.warn?.(`error while polling backup watermark`, e);
@@ -164,7 +174,7 @@ export class VfsBackupWatermarkWorkerService implements Service {
         await this.#state.sleep(this.#pollIntervalMs);
       }
     } finally {
-      this.#source.close?.();
+      this.#source?.close?.();
     }
   }
 
@@ -182,7 +192,9 @@ export class VfsBackupWatermarkWorkerService implements Service {
         'backupWatermarkResponse',
         {
           requestID: msg.requestID,
-          result: serializeVfsBackupWatermark(this.#source.readWatermark()),
+          result: serializeVfsBackupWatermark(
+            this.#getSource().readWatermark(),
+          ),
         },
       ]);
     } catch (e) {
@@ -194,6 +206,10 @@ export class VfsBackupWatermarkWorkerService implements Service {
         },
       ]);
     }
+  }
+
+  #getSource(): BackupWatermarkSource {
+    return (this.#source ??= this.#sourceFactory());
   }
 }
 

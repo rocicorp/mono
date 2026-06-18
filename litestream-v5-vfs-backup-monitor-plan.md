@@ -12,17 +12,26 @@ durable backup, not on a metric, local state sample, or inferred txid mapping.
 
 ## Recommendation
 
-Use a long-lived out-of-process Node helper based on the working POC.
+Use a long-lived out-of-process Node helper based on the working POC, but make
+VFS initialization lazy and guarded by a parent-side timeout.
 
 The helper process loads the Litestream VFS extension once, opens the S3-backed
 SQLite database through `vfs=litestream`, and periodically queries
-`_zero.replicationState`.
+`_zero.replicationState` after the first successful probe.
+
+Important: in read-only mode the Litestream v0.5.12 VFS waits for initial backup
+files to become available. If the backup prefix does not exist yet, opening the
+database can block inside the VFS. Therefore the zero-cache process must never
+load/open the VFS in-process, and the helper must send `ready` before touching
+the VFS. Each probe request must have a timeout, and a timeout must kill and
+replace the helper process rather than leaving a stuck helper around.
 
 This keeps the native VFS extension out of the change-streamer process in
 production, while avoiding the repeated page-index setup cost of spawning
-`sqlite3` for every probe. In `SINGLE_PROCESS` dev mode, the helper can run
-in-process through the existing `childWorker()` behavior, which matches the POC
-and is acceptable for local development.
+`sqlite3` for every successful probe. Unlike normal zero-cache workers, this
+helper should remain out-of-process even in `SINGLE_PROCESS` mode when it is
+used against a real Litestream backup, because a missing backup can block the
+SQLite open call.
 
 Keep the `sqlite3` CLI approach as a fallback/debug path, not the primary
 design.
@@ -50,8 +59,9 @@ change-streamer process
 
 forked VFS helper process
   sets LITESTREAM_REPLICA_URL
-  loads litestream-vfs once
-  keeps one readonly VFS SQLite connection open
+  sends ready before opening the VFS
+  lazily loads litestream-vfs on first probe
+  keeps one readonly VFS SQLite connection open after the first successful probe
   returns {watermark, writeTimeMs, txid, lagSeconds, observedAt}
 ```
 
@@ -80,14 +90,17 @@ Before loading the extension, set the child process environment:
 - `LITESTREAM_LOG_FILE`: optional, to avoid native VFS logs mixing with
   zero-cache JSON logs on stdout.
 
-The helper should load the VFS exactly once per process. It can either:
+The helper should not load or open the VFS before sending its `ready` message.
+Once the first probe arrives, it should load the VFS exactly once per process.
+It can either:
 
 - keep the `:memory:` loader connection open for the worker lifetime, or
 - close it only after verifying that the extension remains registered for new
   connections on all supported platforms.
 
-The helper should keep the VFS `Database` connection open for the worker
-lifetime. That lets the VFS retain its page index and page cache across polls.
+After the first successful probe, the helper should keep the VFS `Database`
+connection open for the worker lifetime. That lets the VFS retain its page index
+and page cache across polls.
 
 Use a prepared statement:
 
@@ -123,8 +136,9 @@ Add request/response IPC messages with request IDs:
 - response: successful probe result or structured error
 
 The monitor should enforce a response timeout. On timeout or worker failure,
-cleanup is skipped and `replica.purge_blocked` is incremented. The process
-manager can restart the helper, or the monitor can recreate it, but no failure
+cleanup is skipped and `replica.purge_blocked` is incremented. On timeout, the
+monitor should kill the helper with `SIGKILL` and recreate it on a later probe,
+because the helper may be blocked inside native VFS open/read code. No failure
 path may advance cleanup.
 
 ## Monitor Behavior
@@ -215,9 +229,11 @@ The VFS extension should be version-pinned with the v5 Litestream binary.
 Add unit tests for:
 
 - VFS helper startup environment
+- helper `ready` before VFS open
 - VFS extension loading path
 - watermark row parsing
 - helper request/response IPC
+- request timeout that kills the helper
 - helper timeout behavior
 - helper process failure blocking cleanup
 - endpoint handling in `LITESTREAM_REPLICA_URL`

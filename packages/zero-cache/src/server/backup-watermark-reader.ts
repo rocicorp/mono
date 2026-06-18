@@ -34,12 +34,13 @@ export default async function runWorker(
     region: litestream.region,
   });
 
-  const reader = new VfsBackupWatermarkReader(lc, {
-    replicaURL,
-    extensionPath: litestream.vfsExtensionPath,
-    logLevel: litestream.logLevel,
-    logFile: litestream.vfsLogFile,
-  });
+  const createReader = () =>
+    new VfsBackupWatermarkReader(lc, {
+      replicaURL,
+      extensionPath: litestream.vfsExtensionPath,
+      logLevel: litestream.logLevel,
+      logFile: litestream.vfsLogFile,
+    });
 
   await runUntilKilled(
     lc,
@@ -47,7 +48,7 @@ export default async function runWorker(
     new VfsBackupWatermarkWorkerService(
       lc,
       parent,
-      reader,
+      createReader,
       litestream.vfsProbeIntervalMs,
     ),
   );
