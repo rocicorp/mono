@@ -530,6 +530,27 @@ test('zero-cache --help', () => {
                                                                         * ZERO_LITESTREAM_LOG_LEVEL for the log level                                                                              
                                                                         * ZERO_LOG_FORMAT for the log type                                                                                         
                                                                                                                                                                                                    
+     --litestream-vfs-extension-path string                             default: "/usr/local/lib/litestream-vfs.so"                                                                                
+       ZERO_LITESTREAM_VFS_EXTENSION_PATH env                                                                                                                                                      
+                                                                        Path to the Litestream v0.5.x SQLite VFS loadable extension used by                                                        
+                                                                        the backup watermark reader to query the backup directly.                                                                  
+                                                                                                                                                                                                   
+     --litestream-vfs-probe-interval-ms number                          default: 30000                                                                                                             
+       ZERO_LITESTREAM_VFS_PROBE_INTERVAL_MS env                                                                                                                                                   
+                                                                        Interval in milliseconds at which the standalone backup watermark reader                                                   
+                                                                        logs the watermark when it is run without a parent worker. The integrated                                                  
+                                                                        backup monitor requests watermarks on demand.                                                                              
+                                                                                                                                                                                                   
+     --litestream-vfs-probe-timeout-ms number                           default: 30000                                                                                                             
+       ZERO_LITESTREAM_VFS_PROBE_TIMEOUT_MS env                                                                                                                                                    
+                                                                        Timeout in milliseconds for requests to the Litestream VFS backup                                                          
+                                                                        watermark reader worker.                                                                                                   
+                                                                                                                                                                                                   
+     --litestream-vfs-log-file string                                   optional                                                                                                                   
+       ZERO_LITESTREAM_VFS_LOG_FILE env                                                                                                                                                            
+                                                                        Optional file path for logs emitted by the Litestream VFS native                                                           
+                                                                        extension. If unset, the extension writes to stdout.                                                                       
+                                                                                                                                                                                                   
      --litestream-log-level debug,info,warn,error                       default: "warn"                                                                                                            
        ZERO_LITESTREAM_LOG_LEVEL env                                                                                                                                                               
                                                                                                                                                                                                    
