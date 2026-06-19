@@ -104,8 +104,8 @@ describe('litestream/vfs-watermark-reader VfsBackupWatermarkReader', () => {
       txid: '0000000000000007',
       lagSeconds: 4,
     });
-    expect(watermark.observedAt.getTime()).toBeGreaterThanOrEqual(before);
-    expect(watermark.observedAt.getTime()).toBeLessThanOrEqual(after);
+    expect(watermark.observedAtMs).toBeGreaterThanOrEqual(before);
+    expect(watermark.observedAtMs).toBeLessThanOrEqual(after);
 
     reader.close();
     expect(db.close).toHaveBeenCalledTimes(1);

@@ -23,7 +23,7 @@ export type VfsBackupWatermark = {
   writeTimeMs: number | null;
   txid: string;
   lagSeconds: number;
-  observedAt: Date;
+  observedAtMs: number;
 };
 
 export type VfsBackupWatermarkReaderOptions = {
@@ -123,7 +123,7 @@ export class VfsBackupWatermarkReader implements Disposable {
     const row = v.parse(this.#stmt.get(), backupWatermarkRowSchema);
     return {
       ...row,
-      observedAt: new Date(),
+      observedAtMs: Date.now(),
     };
   }
 

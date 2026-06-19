@@ -19,7 +19,7 @@ describe('litestream/vfs-watermark-worker', () => {
         writeTimeMs: 123,
         txid: '0000000000000004',
         lagSeconds: 2,
-        observedAt: new Date(1000),
+        observedAtMs: 1000,
       })),
       close: vi.fn(),
     };
@@ -33,7 +33,7 @@ describe('litestream/vfs-watermark-worker', () => {
       writeTimeMs: 123,
       txid: '0000000000000004',
       lagSeconds: 2,
-      observedAt: new Date(1000),
+      observedAtMs: 1000,
     });
 
     expect(source.readWatermark).toHaveBeenCalledTimes(1);
@@ -50,7 +50,7 @@ describe('litestream/vfs-watermark-worker', () => {
         writeTimeMs: 123,
         txid: '0000000000000004',
         lagSeconds: 2,
-        observedAt: new Date(1000),
+        observedAtMs: 1000,
       })),
       close: vi.fn(),
     };

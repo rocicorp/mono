@@ -5,13 +5,6 @@ import {RunningState} from '../running-state.ts';
 import type {Service} from '../service.ts';
 import type {VfsBackupWatermark} from './vfs-watermark-reader.ts';
 
-export type SerializableVfsBackupWatermark = Omit<
-  VfsBackupWatermark,
-  'observedAt'
-> & {
-  readonly observedAtMs: number;
-};
-
 export type BackupWatermarkRequest = [
   'backupWatermarkRequest',
   {
@@ -23,7 +16,7 @@ export type BackupWatermarkResponse = [
   'backupWatermarkResponse',
   {
     readonly requestID: string;
-    readonly result?: SerializableVfsBackupWatermark | undefined;
+    readonly result?: VfsBackupWatermark | undefined;
     readonly error?:
       | {
           readonly name: string;
@@ -42,30 +35,6 @@ export interface BackupWatermarkSource {
 export type BackupWatermarkSourceFactory = () => BackupWatermarkSource;
 
 let nextRequestID = 0;
-
-export function serializeVfsBackupWatermark(
-  watermark: VfsBackupWatermark,
-): SerializableVfsBackupWatermark {
-  return {
-    watermark: watermark.watermark,
-    writeTimeMs: watermark.writeTimeMs,
-    txid: watermark.txid,
-    lagSeconds: watermark.lagSeconds,
-    observedAtMs: watermark.observedAt.getTime(),
-  };
-}
-
-export function deserializeVfsBackupWatermark(
-  watermark: SerializableVfsBackupWatermark,
-): VfsBackupWatermark {
-  return {
-    watermark: watermark.watermark,
-    writeTimeMs: watermark.writeTimeMs,
-    txid: watermark.txid,
-    lagSeconds: watermark.lagSeconds,
-    observedAt: new Date(watermark.observedAtMs),
-  };
-}
 
 export function requestVfsBackupWatermark(
   worker: Worker,
@@ -104,7 +73,7 @@ export function requestVfsBackupWatermark(
         reject(new Error(`backup watermark response missing result`));
         return;
       }
-      resolve(deserializeVfsBackupWatermark(result));
+      resolve(result);
     };
 
     const cleanup = () => {
@@ -166,7 +135,7 @@ export class VfsBackupWatermarkWorkerService implements Service {
         try {
           this.#lc.info?.(
             `polled backup watermark`,
-            serializeVfsBackupWatermark(this.#getSource().readWatermark()),
+            this.#getSource().readWatermark(),
           );
         } catch (e) {
           this.#lc.warn?.(`error while polling backup watermark`, e);
@@ -192,9 +161,7 @@ export class VfsBackupWatermarkWorkerService implements Service {
         'backupWatermarkResponse',
         {
           requestID: msg.requestID,
-          result: serializeVfsBackupWatermark(
-            this.#getSource().readWatermark(),
-          ),
+          result: this.#getSource().readWatermark(),
         },
       ]);
     } catch (e) {
