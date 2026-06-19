@@ -10,11 +10,11 @@ import {initEventSink, publishCriticalEvent} from '../observability/events.ts';
 import {upgradeReplica} from '../services/change-source/common/replica-schema.ts';
 import {initializeCustomChangeSource} from '../services/change-source/custom/change-source.ts';
 import {initializePostgresChangeSource} from '../services/change-source/pg/change-source.ts';
-import type {BackupCleanupMonitor} from '../services/change-streamer/backup-monitor-interface.ts';
-import {BackupMonitor} from '../services/change-streamer/backup-monitor.ts';
+import type {BackupMonitor} from '../services/change-streamer/backup-monitor.ts';
 import {ChangeStreamerHttpServer} from '../services/change-streamer/change-streamer-http.ts';
 import {initializeStreamer} from '../services/change-streamer/change-streamer-service.ts';
 import type {ChangeStreamerService} from '../services/change-streamer/change-streamer.ts';
+import {Litestream3BackupMonitor} from '../services/change-streamer/litestream3-backup-monitor.ts';
 import {ReplicaMonitor} from '../services/change-streamer/replica-monitor.ts';
 import {initChangeStreamerSchema} from '../services/change-streamer/schema/init.ts';
 import {AutoResetSignal} from '../services/change-streamer/schema/tables.ts';
@@ -210,9 +210,9 @@ export default async function runWorker(
   await upgradeReplica(lc, 'change-streamer-init', replica.file);
 
   const {backupURL, port: metricsPort} = litestream;
-  let backupMonitor: BackupCleanupMonitor | null = null;
+  let backupMonitor: BackupMonitor | null = null;
   if (backupURL) {
-    backupMonitor = new BackupMonitor(
+    backupMonitor = new Litestream3BackupMonitor(
       lc,
       replica.file,
       backupURL,

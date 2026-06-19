@@ -13,7 +13,7 @@ import type {Source} from '../../types/streams.ts';
 import {Subscription} from '../../types/subscription.ts';
 import {installWebSocketHandoff} from '../../types/websocket-handoff.ts';
 import {ReplicationMessages} from '../replicator/test-utils.ts';
-import type {SnapshotReservationMonitor} from './backup-monitor-interface.ts';
+import type {BackupMonitor} from './backup-monitor.ts';
 import {
   ChangeStreamerHttpClient,
   ChangeStreamerHttpServer,
@@ -108,9 +108,12 @@ describe('change-streamer/http', () => {
         getChangeLogState: vi.fn(),
       },
       {
+        id: 'backup-monitor',
+        run: vi.fn(() => Promise.resolve()),
+        stop: vi.fn(() => Promise.resolve()),
         startSnapshotReservation: snapshotFn.mockReturnValue(snapshotStream),
         endReservation: endReservationFn,
-      } satisfies SnapshotReservationMonitor,
+      } satisfies BackupMonitor,
     );
 
     const [dispatcherURL, serverURL] = await Promise.all([
