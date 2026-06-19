@@ -59,7 +59,7 @@ export interface ChangeStreamer {
 //     subscription is valid (i.e. starting at the requested watermark).
 // v3: v0.20
 //   - Adds the "taskID" to the subscription context, and support for
-//     the BackupMonitor-mediated "/snapshot" request.
+//     the backup monitor-mediated "/snapshot" request.
 // v4: v0.25
 //   - Adds the "replicaVersion" and "minWatermark" fields to the "/snapshot"
 //     status request so that a subscriber can verify whether its replica,

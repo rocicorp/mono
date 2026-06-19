@@ -394,7 +394,7 @@ function reserveAndGetSnapshotStatus(
         const stream = await reserveSnapshot(lc, config);
         for await (const msg of stream) {
           // Capture the value of the status message that the change-streamer
-          // (i.e. BackupMonitor) returns, and hold the connection open to
+          // backup monitor returns, and hold the connection open to
           // "reserve" the snapshot and prevent change log cleanup.
           resolve(msg[1]);
           resolved = true;
