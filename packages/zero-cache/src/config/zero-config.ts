@@ -810,6 +810,39 @@ export const zeroOptions = {
       ],
     },
 
+    vfsExtensionPath: {
+      type: v.string().default('/usr/local/lib/litestream-vfs.so'),
+      desc: [
+        `Path to the Litestream v0.5.x SQLite VFS loadable extension used by`,
+        `the backup watermark reader to query the backup directly.`,
+      ],
+    },
+
+    vfsProbeIntervalMs: {
+      type: v.number().default(30 * 1000),
+      desc: [
+        `Interval in milliseconds at which the standalone backup watermark reader`,
+        `logs the watermark when it is run without a parent worker. The integrated`,
+        `backup monitor requests watermarks on demand.`,
+      ],
+    },
+
+    vfsProbeTimeoutMs: {
+      type: v.number().default(30 * 1000),
+      desc: [
+        `Timeout in milliseconds for requests to the Litestream VFS backup`,
+        `watermark reader worker.`,
+      ],
+    },
+
+    vfsLogFile: {
+      type: v.string().optional(),
+      desc: [
+        `Optional file path for logs emitted by the Litestream VFS native`,
+        `extension. If unset, the extension writes to stdout.`,
+      ],
+    },
+
     logLevel: {
       type: v.literalUnion('debug', 'info', 'warn', 'error').default('warn'),
     },
