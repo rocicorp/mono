@@ -510,7 +510,13 @@ export const zeroOptions = {
     },
 
     logBatchSize: {
-      type: v.number().default(2000),
+      type: v
+        .number()
+        .assert(
+          n => Number.isInteger(n) && n >= 1,
+          `change.logBatchSize must be an integer >= 1`,
+        )
+        .default(2000),
       desc: [
         `The maximum number of change-log rows written per multi-row INSERT to the change`,
         `database. Larger upstream transactions are persisted in batches of this size rather`,
