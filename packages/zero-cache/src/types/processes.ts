@@ -7,6 +7,7 @@ import {
 import EventEmitter from 'node:events';
 import {platform} from 'node:os';
 import {pid} from 'node:process';
+import {safeAssign} from '../../../shared/src/objects.ts';
 
 /**
  * Central registry of message type names, which are used to identify
@@ -226,10 +227,10 @@ export function inProcChannel(): [Worker, Worker] {
 
   return [
     wrap(
-      Object.assign(worker1, {send: sendTo(worker2), kill: kill(worker2), pid}),
+      safeAssign(worker1, {send: sendTo(worker2), kill: kill(worker2), pid}),
     ),
     wrap(
-      Object.assign(worker2, {send: sendTo(worker1), kill: kill(worker1), pid}),
+      safeAssign(worker2, {send: sendTo(worker1), kill: kill(worker1), pid}),
     ),
   ];
 }

@@ -1,3 +1,5 @@
+import {safeSet} from './objects.ts';
+
 // Force TypeScript to evaluate/flatten a type
 type Simplify<T> = {[K in keyof T]: T[K]} & {};
 
@@ -61,7 +63,7 @@ export function deepMerge<
 
   // Copy all keys from a
   for (const key of Object.keys(a)) {
-    result[key] = a[key];
+    safeSet(result, key, a[key]);
   }
 
   // Merge/override with keys from b
@@ -69,19 +71,15 @@ export function deepMerge<
     const aVal = a[key];
     const bVal = b[key];
 
-    if (key in a && !isLeaf(aVal) && !isLeaf(bVal)) {
-      result[key] = deepMerge<
-        Record<string, unknown>,
-        Record<string, unknown>,
-        Leaf
-      >(
-        aVal as Record<string, unknown>,
-        bVal as Record<string, unknown>,
-        isLeaf,
-      );
-    } else {
-      result[key] = bVal;
-    }
+    const merged =
+      key in a && !isLeaf(aVal) && !isLeaf(bVal)
+        ? deepMerge<Record<string, unknown>, Record<string, unknown>, Leaf>(
+            aVal as Record<string, unknown>,
+            bVal as Record<string, unknown>,
+            isLeaf,
+          )
+        : bVal;
+    safeSet(result, key, merged);
   }
 
   return result as DeepMerge<A, B, Leaf>;

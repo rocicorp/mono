@@ -1,5 +1,5 @@
 import {assert} from '../../shared/src/asserts.ts';
-import {mapValues} from '../../shared/src/objects.ts';
+import {mapValues, safeSet} from '../../shared/src/objects.ts';
 import {recordProxy} from '../../shared/src/record-proxy.ts';
 import {
   formatPgInternalConvert,
@@ -300,7 +300,7 @@ function removeUndefined<T extends Record<string, unknown>>(value: T): T {
   const valueWithoutUndefined: Record<string, unknown> = {};
   for (const [key, val] of Object.entries(value)) {
     if (val !== undefined) {
-      valueWithoutUndefined[key] = val;
+      safeSet(valueWithoutUndefined, key, val);
     }
   }
   return valueWithoutUndefined as T;

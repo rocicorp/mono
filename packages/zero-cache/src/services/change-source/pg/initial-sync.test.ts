@@ -1,6 +1,7 @@
 import type postgres from 'postgres';
 import {describe, expect, test, vi} from 'vitest';
 import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.ts';
+import {safeAssign} from '../../../../../shared/src/objects.ts';
 import type {PublishedTableSpec} from '../../../db/specs.ts';
 import type {PostgresDB} from '../../../types/pg.ts';
 import {
@@ -97,7 +98,7 @@ describe('getInitialDownloadState', () => {
 
   test('skipTotals=true returns zeros without touching the DB', async () => {
     let called = false;
-    const sql = Object.assign(
+    const sql = safeAssign(
       () => {
         called = true;
         throw new Error('sql should not be called when skipTotals=true');
@@ -129,7 +130,7 @@ describe('getInitialDownloadState', () => {
   test('skipTotals=false uses pg_class estimates', async () => {
     // The tagged template sql`...` is called as a function with
     // (strings, ...values) when used as a template tag.
-    const sql = Object.assign(
+    const sql = safeAssign(
       (strings: TemplateStringsArray, ..._values: unknown[]) => {
         const query = strings.join('$1');
         if (query.includes('pg_class')) {

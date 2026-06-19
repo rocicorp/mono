@@ -1,3 +1,4 @@
+import {safeAssign} from '../../../shared/src/objects.ts';
 import {recordProxy} from '../../../shared/src/record-proxy.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {QueryDelegate} from './query-delegate.ts';
@@ -37,7 +38,7 @@ function createBuilderWithQueryFactory<S extends Schema>(
   // undefined instead of inherited Object.prototype methods (e.g., toString).
   // This fixes React 19 dev mode compatibility where accessing $$typeof should
   // return undefined rather than throwing.
-  const target = Object.assign(Object.create(null), schema.tables) as Record<
+  const target = safeAssign(Object.create(null), schema.tables) as Record<
     string,
     unknown
   >;

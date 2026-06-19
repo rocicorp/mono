@@ -5,6 +5,7 @@ import {assert, unreachable} from '../../../shared/src/asserts.ts';
 import {getErrorMessage} from '../../../shared/src/error.ts';
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import {must} from '../../../shared/src/must.ts';
+import {safeAssign, safeSet} from '../../../shared/src/objects.ts';
 import {randInt} from '../../../shared/src/rand.ts';
 import {sleep} from '../../../shared/src/sleep.ts';
 import {type Type} from '../../../shared/src/valita.ts';
@@ -54,10 +55,10 @@ function filterCustomHeaders(
   }
 
   const allowed = new Set(allowedHeaders.map(h => h.toLowerCase()));
-  const filtered: Record<string, string> = Object.create(null);
+  const filtered: Record<string, string> = {};
   for (const [key, value] of Object.entries(headers)) {
     if (allowed.has(key.toLowerCase())) {
-      filtered[key] = value;
+      safeSet(filtered, key, value);
     }
   }
   return filtered;
@@ -132,13 +133,14 @@ export async function fetchFromAPIServer<TValidator extends Type>(
       'warn',
     );
   }
-  const headers: Record<string, string> = Object.create(null);
-  headers['Content-Type'] = 'application/json';
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
 
   if (headerOptions.apiKey) {
     headers['X-Api-Key'] = headerOptions.apiKey;
   }
-  Object.assign(
+  safeAssign(
     headers,
     filterCustomHeaders(
       headerOptions.customHeaders,
@@ -146,7 +148,7 @@ export async function fetchFromAPIServer<TValidator extends Type>(
     ),
   );
   // Forward allowlisted headers from the incoming HTTP request.
-  Object.assign(
+  safeAssign(
     headers,
     filterCustomHeaders(
       headerOptions.requestHeaders,

@@ -1,4 +1,5 @@
 import type {DeepMerge} from './deep-merge.ts';
+import {safeSet} from './objects.ts';
 
 /**
  * Helper function to build nested object structure from a dot-separated key path.
@@ -38,15 +39,15 @@ export function buildNestedObjectPath<
   let current = target as Record<string, unknown>;
   for (let i = 0; i < parts.length - 1; i++) {
     const part = parts[i];
-    let next = current[part];
+    let next = Object.hasOwn(current, part) ? current[part] : undefined;
     if (next === undefined) {
       next = {};
-      current[part] = next;
+      safeSet(current, part, next);
     }
     current = next as Record<string, unknown>;
   }
   // oxlint-disable-next-line typescript/no-non-null-assertion
-  current[parts.at(-1)!] = value;
+  safeSet(current, parts.at(-1)!, value);
   return target as DeepMerge<T, BuildNested<Path, Separator, Value>>;
 }
 

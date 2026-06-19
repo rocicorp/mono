@@ -1,5 +1,6 @@
 import {hasOwn} from './has-own.ts';
 import type {JSONValue, ReadonlyJSONValue} from './json.ts';
+import {safeSet} from './objects.ts';
 
 export function deepClone(value: ReadonlyJSONValue): JSONValue {
   const seen: Array<ReadonlyJSONValue> = [];
@@ -36,7 +37,7 @@ export function internalDeepClone(
         if (hasOwn(value, k)) {
           const v = (value as Record<string, ReadonlyJSONValue>)[k];
           if (v !== undefined) {
-            obj[k] = internalDeepClone(v, seen);
+            safeSet(obj, k, internalDeepClone(v, seen));
           }
         }
       }

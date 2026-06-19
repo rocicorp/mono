@@ -1,5 +1,6 @@
 import postgres from 'postgres';
 import {describe, expect, test} from 'vitest';
+import {safeAssign} from '../../../shared/src/objects.ts';
 import {
   isPostgresConfigError,
   millisecondsToPostgresTime,
@@ -9,7 +10,7 @@ import {
 } from './pg.ts';
 
 function postgresError(code: string) {
-  return Object.assign(new postgres.PostgresError('test error'), {
+  return safeAssign(new postgres.PostgresError('test error'), {
     code,
     severity: 'ERROR',
     severity_local: 'ERROR',
@@ -17,7 +18,7 @@ function postgresError(code: string) {
 }
 
 function connectionError(code: string) {
-  return Object.assign(new Error(`connection failed: ${code}`), {code});
+  return safeAssign(new Error(`connection failed: ${code}`), {code});
 }
 
 describe('isPostgresConfigError', () => {

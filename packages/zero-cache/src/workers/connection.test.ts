@@ -5,6 +5,7 @@ import {
   createSilentLogContext,
   TestLogSink,
 } from '../../../shared/src/logging-test-utils.ts';
+import {safeAssign} from '../../../shared/src/objects.ts';
 import type {Downstream} from '../../../zero-protocol/src/down.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
@@ -97,7 +98,7 @@ describe('sendError', () => {
   });
 
   test('socket write errno errors are logged as warnings', () => {
-    const err = Object.assign(new Error('write EPIPE'), {
+    const err = safeAssign(new Error('write EPIPE'), {
       errno: -32,
       code: 'EPIPE',
     });
@@ -115,7 +116,7 @@ describe('sendError', () => {
   });
 
   test('ECANCELED error code is logged as warning', () => {
-    const err = Object.assign(new Error('write ECANCELED'), {
+    const err = safeAssign(new Error('write ECANCELED'), {
       code: 'ECANCELED',
     });
     sendError(
@@ -192,7 +193,7 @@ describe('sendError', () => {
   });
 
   test('ECONNRESET error code is logged as warning', () => {
-    const err = Object.assign(new Error('read ECONNRESET'), {
+    const err = safeAssign(new Error('read ECONNRESET'), {
       code: 'ECONNRESET',
     });
     sendError(
