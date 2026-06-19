@@ -508,6 +508,19 @@ export const zeroOptions = {
       ],
       hidden: true, // make visible if proven to be effective/necessary
     },
+
+    logBatchSize: {
+      type: v.number().default(2000),
+      desc: [
+        `The maximum number of change-log rows written per multi-row INSERT to the change`,
+        `database. Larger upstream transactions are persisted in batches of this size rather`,
+        `than one INSERT per change, which is the dominant cost when replicating large`,
+        `transactions (e.g. bulk backfills or migrations). Larger values increase throughput`,
+        `at the cost of higher transient memory; the effective batch is internally capped to`,
+        `stay within Postgres's bind-parameter limit. Set to {bold 1} to disable batching.`,
+      ],
+      hidden: true, // make visible if proven to be effective/necessary
+    },
   },
 
   replica: replicaOptions,

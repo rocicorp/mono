@@ -28,6 +28,7 @@ import {createSubscriber} from './test-utils.ts';
 const opts: TuningOptions = {
   backPressureLimitHeapProportion: 0.04,
   statementTimeoutMs: 20_000,
+  changeLogBatchSize: 2000,
 };
 
 const json = BigIntJSON.stringify;
