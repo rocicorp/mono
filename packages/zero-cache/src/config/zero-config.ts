@@ -797,6 +797,15 @@ export const zeroOptions = {
       ],
     },
 
+    backupUsingV5: {
+      type: v.boolean().default(false),
+      desc: [
+        `Backs up the replica using Litestream v0.5.x and monitors cleanup`,
+        `watermarks by reading the backup through the Litestream SQLite VFS.`,
+        `This requires {bold ZERO_LITESTREAM_RESTORE_USING_V5}.`,
+      ],
+    },
+
     configPath: {
       type: v.string().default('./src/services/litestream/config.yml'),
       desc: [

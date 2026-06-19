@@ -2,6 +2,7 @@ import EventEmitter from 'node:events';
 import {describe, expect, test, vi} from 'vitest';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import {inProcChannel, type Worker} from '../../types/processes.ts';
+import {VfsBackupWatermarkWorkerSource} from './vfs-watermark-worker-source.ts';
 import {
   requestVfsBackupWatermark,
   VfsBackupWatermarkWorkerService,
@@ -114,5 +115,69 @@ describe('litestream/vfs-watermark-worker', () => {
     ).rejects.toThrow('timed out waiting 1 ms for backup watermark response');
 
     expect(worker.kill).toHaveBeenCalledWith('SIGKILL');
+  });
+
+  test('worker source waits for ready and reads watermark', async () => {
+    const [parent, child] = inProcChannel();
+    const source: BackupWatermarkSource = {
+      readWatermark: vi.fn(() => ({
+        watermark: '04',
+        writeTimeMs: 123,
+        txid: '0000000000000004',
+        lagSeconds: 2,
+        observedAtMs: 1000,
+      })),
+      close: vi.fn(),
+    };
+    const workerFactory = vi.fn(() => parent);
+    const workerSource = new VfsBackupWatermarkWorkerSource(
+      lc,
+      workerFactory,
+      100,
+    );
+
+    const read = workerSource.readWatermark();
+    const svc = new VfsBackupWatermarkWorkerService(lc, child, source, 30_000);
+    const run = svc.run();
+
+    await expect(read).resolves.toEqual({
+      watermark: '04',
+      writeTimeMs: 123,
+      txid: '0000000000000004',
+      lagSeconds: 2,
+      observedAtMs: 1000,
+    });
+    expect(workerFactory).toHaveBeenCalledTimes(1);
+    expect(source.readWatermark).toHaveBeenCalledTimes(1);
+
+    workerSource.close();
+    await svc.stop();
+    await run;
+  });
+
+  test('worker source recreates worker after timeout', async () => {
+    const workers: Worker[] = [];
+    const workerFactory = vi.fn(() => {
+      const worker = Object.assign(new EventEmitter(), {
+        send: vi.fn(() => true),
+        kill: vi.fn(),
+      }) as unknown as Worker;
+      workers.push(worker);
+      queueMicrotask(() => worker.emit('message', ['ready', {ready: true}]));
+      return worker;
+    });
+    const source = new VfsBackupWatermarkWorkerSource(lc, workerFactory, 1);
+
+    await expect(source.readWatermark()).rejects.toThrow(
+      'timed out waiting 1 ms for backup watermark response',
+    );
+    expect(workers[0].kill).toHaveBeenCalledWith('SIGKILL');
+
+    await expect(source.readWatermark()).rejects.toThrow(
+      'timed out waiting 1 ms for backup watermark response',
+    );
+    expect(workerFactory).toHaveBeenCalledTimes(2);
+
+    source.close();
   });
 });

@@ -5,6 +5,7 @@ import {Subscription} from '../../types/subscription.ts';
 import {createBackupCleanupMonitor} from './backup-cleanup-monitor-factory.ts';
 import type {ChangeStreamerService} from './change-streamer.ts';
 import {Litestream3BackupMonitor} from './litestream3-backup-monitor.ts';
+import {VfsBackupMonitor} from './vfs-backup-monitor.ts';
 
 const changeStreamer = {
   id: 'change-streamer',
@@ -26,6 +27,10 @@ function configWithLitestream(
     litestream: {
       backupURL: undefined,
       port: 9090,
+      backupUsingV5: false,
+      restoreUsingV5: false,
+      vfsProbeIntervalMs: 30_000,
+      vfsProbeTimeoutMs: 30_000,
       ...litestream,
     },
   } as unknown as NormalizedZeroConfig;
@@ -56,6 +61,27 @@ describe('createBackupCleanupMonitor', () => {
 
     expect(monitor).toBeInstanceOf(Litestream3BackupMonitor);
     expect(monitor?.id).toBe('backup-monitor');
+    await monitor?.stop();
+  });
+
+  test('creates the v5 backup monitor when v5 backup is enabled', async () => {
+    const monitor = createBackupCleanupMonitor({
+      lc: createSilentLogContext(),
+      config: configWithLitestream({
+        backupURL: 's3://bucket/prefix',
+        backupUsingV5: true,
+        restoreUsingV5: true,
+      }),
+      replicaFile: '/tmp/replica.db',
+      changeStreamer,
+      initialCleanupDelayMs: 0,
+      vfsBackupWatermarkSource: {
+        readWatermark: vi.fn(),
+      },
+    });
+
+    expect(monitor).toBeInstanceOf(VfsBackupMonitor);
+    expect(monitor?.id).toBe('vfs-backup-monitor');
     await monitor?.stop();
   });
 });
