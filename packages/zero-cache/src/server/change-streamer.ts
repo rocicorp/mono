@@ -10,11 +10,10 @@ import {initEventSink, publishCriticalEvent} from '../observability/events.ts';
 import {upgradeReplica} from '../services/change-source/common/replica-schema.ts';
 import {initializeCustomChangeSource} from '../services/change-source/custom/change-source.ts';
 import {initializePostgresChangeSource} from '../services/change-source/pg/change-source.ts';
-import type {BackupMonitor} from '../services/change-streamer/backup-monitor.ts';
+import {createBackupCleanupMonitor} from '../services/change-streamer/backup-cleanup-monitor-factory.ts';
 import {ChangeStreamerHttpServer} from '../services/change-streamer/change-streamer-http.ts';
 import {initializeStreamer} from '../services/change-streamer/change-streamer-service.ts';
 import type {ChangeStreamerService} from '../services/change-streamer/change-streamer.ts';
-import {Litestream3BackupMonitor} from '../services/change-streamer/litestream3-backup-monitor.ts';
 import {ReplicaMonitor} from '../services/change-streamer/replica-monitor.ts';
 import {initChangeStreamerSchema} from '../services/change-streamer/schema/init.ts';
 import {AutoResetSignal} from '../services/change-streamer/schema/tables.ts';
@@ -22,7 +21,6 @@ import {PurgeLocker} from '../services/change-streamer/storer.ts';
 import {exitAfter, runUntilKilled} from '../services/life-cycle.ts';
 import {
   BackupNotFoundException,
-  getLastBackupTime,
   restoreReplica,
 } from '../services/litestream/commands.ts';
 import {
@@ -63,7 +61,6 @@ export default async function runWorker(
     change,
     replica,
     initialSync,
-    litestream,
     keepaliveTimeoutMs,
   } = config;
 
@@ -209,29 +206,20 @@ export default async function runWorker(
   // upgrade logic redundantly since it is idempotent.
   await upgradeReplica(lc, 'change-streamer-init', replica.file);
 
-  const {backupURL, port: metricsPort} = litestream;
-  let backupMonitor: BackupMonitor | null = null;
-  if (backupURL) {
-    backupMonitor = new Litestream3BackupMonitor(
-      lc,
-      replica.file,
-      backupURL,
-      `http://localhost:${metricsPort}/metrics`,
-      changeStreamer,
-      // The time between when the zero-cache was started to when the
-      // change-streamer is ready to start serves as the initial delay for
-      // watermark cleanup (as it either includes a similar replica
-      // restoration/preparation step, or an initial-sync, which
-      // generally takes longer).
-      //
-      // Consider: Also account for permanent volumes?
-      Date.now() - workerStartTime,
-      // Verifies litestream's claimed backup progress against the actual
-      // backup state in the replica destination before advancing the
-      // change-log cleanup watermark.
-      () => getLastBackupTime(lc, config),
-    );
-  }
+  const backupMonitor = createBackupCleanupMonitor({
+    lc,
+    config,
+    replicaFile: replica.file,
+    changeStreamer,
+    // The time between when the zero-cache was started to when the
+    // change-streamer is ready to start serves as the initial delay for
+    // watermark cleanup (as it either includes a similar replica
+    // restoration/preparation step, or an initial-sync, which
+    // generally takes longer).
+    //
+    // Consider: Also account for permanent volumes?
+    initialCleanupDelayMs: Date.now() - workerStartTime,
+  });
   const monitor =
     backupMonitor ?? new ReplicaMonitor(lc, replica.file, changeStreamer);
 
