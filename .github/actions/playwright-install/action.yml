@@ -4,16 +4,13 @@ description: 'Install Playwright browsers and system dependencies with caching. 
 runs:
   using: 'composite'
   steps:
-    - name: Set PLAYWRIGHT_BROWSERS_PATH
-      run: echo "PLAYWRIGHT_BROWSERS_PATH=$HOME/.cache/ms-playwright" >> "$GITHUB_ENV"
-      shell: bash
     - name: Get Playwright version
       id: playwright-version
       run: echo "version=$(pnpm exec playwright --version | awk '{print $NF}')" >> "$GITHUB_OUTPUT"
       shell: bash
     - name: Cache Playwright browsers
       id: playwright-cache
-      uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5
+      uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
       with:
         path: ~/.cache/ms-playwright
         key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ steps.playwright-version.outputs.version }}

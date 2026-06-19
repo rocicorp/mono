@@ -37,5 +37,6 @@
     "zql": "workspace:*",
     "zql-integration-tests": "workspace:*",
     "zqlite": "workspace:*"
-  }
+  },
+  "packageManager": "pnpm@11.5.3"
 }

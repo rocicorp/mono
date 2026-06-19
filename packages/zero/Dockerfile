@@ -27,8 +27,35 @@ RUN test -n "$ZERO_VERSION"
 RUN apk add --update curl
 RUN apk add --no-cache readline readline-dev
 
+# Install pnpm via corepack (bundled with Node). Matches the monorepo's
+# packageManager field. pnpm's build-script allowlist (v10+) blocks lifecycle
+# scripts from transitive deps unless explicitly opted in, shrinking the
+# postinstall supply-chain surface to packages we name below.
+RUN corepack enable && corepack prepare pnpm@11.5.3 --activate
+
 RUN mkdir -p /opt/app
 WORKDIR /opt/app
+
+RUN cat > package.json <<'EOF'
+{
+  "name": "zero-runtime",
+  "private": true
+}
+EOF
+
+# Allowlist for lifecycle scripts, in pnpm-workspace.yaml because pnpm 11 no
+# longer reads the `pnpm` field from package.json. zero-sqlite3 ships no native
+# binary in its tarball (see its package.json `files`) — its `install` script
+# runs prebuild-install to fetch one, so it must be allowed. esbuild is pulled
+# in transitively via tsx and downloads a platform binary in postinstall; keep
+# it allowlisted unless runtime testing confirms tsx is never invoked. protobufjs
+# is pulled in by OpenTelemetry's gRPC exporters and runs a postinstall script.
+RUN cat > pnpm-workspace.yaml <<'EOF'
+allowBuilds:
+  '@rocicorp/zero-sqlite3': true
+  esbuild: true
+  protobufjs: true
+EOF
 
 COPY pkgs/ /tmp/pkgs/
 
@@ -37,20 +64,20 @@ RUN if echo "$ZERO_VERSION" | grep -q "\.tgz$"; then \
     FILENAME=$(basename $ZERO_VERSION) && \
     echo "Installing from local tarball $FILENAME" && \
     cp /tmp/pkgs/$FILENAME . && \
-    npm install -g ./$FILENAME && \
-    rm -rf /tmp/pkgs; \
+    pnpm add ./$FILENAME && \
+    rm -rf /tmp/pkgs ./$FILENAME; \
   else \
     echo "Installing from npm @rocicorp/zero@$ZERO_VERSION" && \
-    npm install -g @rocicorp/zero@${ZERO_VERSION}; \
+    pnpm add @rocicorp/zero@${ZERO_VERSION}; \
   fi
 
-# Add zero-sqlite3 to path
-RUN ln -s /usr/local/lib/node_modules/@rocicorp/zero/node_modules/@rocicorp/zero-sqlite3/build/Release/zero_sqlite3  /usr/local/bin/zero-sqlite3
+# Put zero's bin shims on PATH so `zero-cache` resolves without npx.
+ENV PATH="/opt/app/node_modules/.bin:${PATH}"
 
 # Copy litestream executable and config.yml
 COPY --from=litestream /usr/local/bin/litestream /usr/local/bin/litestream
 COPY --from=litestream-v5 /usr/local/bin/litestream /usr/local/bin/litestream-v5
-RUN cp /usr/local/lib/node_modules/@rocicorp/zero/out/zero-cache/src/services/litestream/config.yml /etc/litestream.yml
+RUN cp /opt/app/node_modules/@rocicorp/zero/out/zero-cache/src/services/litestream/config.yml /etc/litestream.yml
 
 ENV ZERO_LITESTREAM_EXECUTABLE=/usr/local/bin/litestream
 ENV ZERO_LITESTREAM_EXECUTABLE_V5=/usr/local/bin/litestream-v5
@@ -61,4 +88,4 @@ ENV ZERO_IN_CONTAINER=1
 
 EXPOSE 4848 4849
 ENTRYPOINT ["/bin/sh", "-c"]
-CMD ["npx zero-cache"]
+CMD ["zero-cache"]

@@ -257,8 +257,18 @@ export class Storer implements Service {
       // in ownership to be reliably detected (and the transaction aborted)
       // in the subsequent check.
       const [{deleted}] = await sql<{deleted: bigint}[]>`
-        WITH purged AS (
+        -- The backup watermark can be ahead of the durable changeLog if the
+        -- storer is behind but the backup replica has consumed forwarded
+        -- changes. Preserve the latest durable changeLog transaction as the
+        -- catchup boundary instead of assuming the backup watermark exists.
+        -- The storer inserts each changeLog transaction atomically, so any
+        -- durable row for a watermark implies the full transaction is durable.
+        WITH keep AS (
+          SELECT max(watermark) AS watermark
+          FROM ${this.#cdc('changeLog')}
+        ), purged AS (
           DELETE FROM ${this.#cdc('changeLog')} WHERE watermark < ${watermark} 
+            AND watermark < (SELECT watermark FROM keep)
             RETURNING watermark, pos
         ) SELECT COUNT(*) as deleted FROM purged;`;
 
@@ -654,8 +664,20 @@ export class Storer implements Service {
             } ms)`,
           );
         } else {
+          // The subscriber is ahead of the latest durable changeLog entry
+          // (lastWatermark). This can legitimately happen: changes are
+          // forwarded to subscribers (the backup replica and view-syncers)
+          // concurrently with — and can outrun — the durable store, so a
+          // replica may briefly lead the change DB after the storer falls
+          // behind or the change-streamer restarts. No catchup is possible or
+          // needed; once the change DB catches back up, forwarding resumes and
+          // the subscriber dedups any watermarks it already has. Unlike the
+          // AutoResetSignal / WatermarkTooOld cases above, this is not a gap in
+          // replication history, so the subscriber is simply marked caught up.
           this.#lc.warn?.(
-            `subscriber at watermark ${sub.watermark} is ahead of latest watermark`,
+            `subscriber ${sub.id} at watermark ${sub.watermark} is ahead of ` +
+              `the latest durable watermark ${lastWatermark}; waiting for the ` +
+              `change DB to catch up`,
           );
         }
         // Flushes the backlog of messages buffered during catchup and

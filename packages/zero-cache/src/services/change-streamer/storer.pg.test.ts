@@ -172,6 +172,22 @@ describe('change-streamer/storer', () => {
         {watermark: '06', pos: 1n},
         {watermark: '06', pos: 2n},
       ]);
+
+      expect(await storer.purgeRecordsBefore('99')).toBe(0);
+      expect(
+        await db`SELECT watermark, pos FROM "xero_5/cdc"."changeLog"`,
+      ).toEqual([
+        {watermark: '06', pos: 0n},
+        {watermark: '06', pos: 1n},
+        {watermark: '06', pos: 2n},
+      ]);
+    });
+
+    test('purge does not delete anything when changeLog is empty', async () => {
+      await db`TRUNCATE "xero_5/cdc"."changeLog"`;
+
+      expect(await storer.purgeRecordsBefore('99')).toBe(0);
+      expect(await db`SELECT * FROM "xero_5/cdc"."changeLog"`).toEqual([]);
     });
 
     test('backfill metadata tracking', async () => {
@@ -1100,6 +1116,48 @@ describe('change-streamer/storer', () => {
         `[AutoResetSignal: backup replica at watermark 01 is behind change db: 03)]`,
       );
     });
+
+    // A subscriber can legitimately be ahead of the latest durable watermark
+    // ('06' here); see Storer.#catchup for why. It must NOT trigger a reset or
+    // a WatermarkTooOld error — the subscriber is marked caught up and resumes
+    // from forwarded changes. Regression test for INC-783 / the 2026-06-17
+    // Margins incident ("subscriber at watermark X is ahead of latest
+    // watermark").
+    test.for(['backup', 'serving'] as const)(
+      'subscriber ahead of latest durable watermark (%s)',
+      async mode => {
+        const [sub, _, stream] = createSubscriber('09');
+
+        // "Live" changes forwarded ahead of the durable store, buffered until
+        // catchup completes.
+        void sub.send([
+          '10',
+          'begin',
+          json(['begin', messages.begin(), {commitWatermark: '11'}]),
+        ]);
+        void sub.send([
+          '11',
+          'commit',
+          json(['commit', messages.commit(), {watermark: '11'}]),
+        ]);
+
+        // Catchup starts immediately (no tx in progress). The subscriber is
+        // ahead of '06', so no catchup changes are sent; the buffered '11'
+        // transaction is flushed once it is marked caught up.
+        storer.catchup(sub, mode);
+
+        expect(await drain(stream, '11')).toEqual([
+          ['status', {tag: 'status'}],
+          ['begin', {tag: 'begin'}, {commitWatermark: '11'}],
+          ['commit', {tag: 'commit'}, {watermark: '11'}],
+        ]);
+
+        // Critically, no AutoResetSignal / fatal error was raised, and (for
+        // 'serving') the subscriber was not closed with WatermarkTooOld.
+        await storer.allProcessed();
+        expect(fatalErrors.size()).toBe(0);
+      },
+    );
 
     test('queued if transaction in progress', async () => {
       const [sub1, _0, stream1] = createSubscriber('03');

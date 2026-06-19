@@ -251,6 +251,131 @@ export function startReplicaBackupProcess(
   });
 }
 
+// Listing the backup state requires a few S3 LIST requests, which should
+// normally complete well within this timeout.
+const LIST_BACKUP_TIMEOUT_MS = 30_000;
+
+const wsRe = /\s+/;
+
+/**
+ * Returns the time of the most recent object (snapshot or WAL segment)
+ * actually uploaded to the backup replica destination, as listed by the
+ * bundled litestream CLI (`litestream snapshots` / `litestream wal`).
+ *
+ * This queries the replica destination (e.g. S3) directly, and thus serves
+ * as a source of truth for backup durability. This is in contrast to the
+ * `litestream_replica_progress` metric, which is exported when litestream
+ * *believes* an upload has succeeded, and has been observed to advance even
+ * when nothing is actually written to the destination.
+ *
+ * Rejects if the backup state cannot be determined (spawn error, non-zero
+ * exit, timeout, or empty/unparseable listing).
+ */
+export async function getLastBackupTime(
+  lc: LogContext,
+  config: ZeroConfig,
+): Promise<Date> {
+  const [snapshots, wal] = await Promise.all([
+    listBackupCreatedTimes(lc, config, 'snapshots'),
+    listBackupCreatedTimes(lc, config, 'wal'),
+  ]);
+  const times = [...snapshots, ...wal];
+  if (times.length === 0) {
+    // Note: the litestream CLI exits with code 0 and logs listing errors
+    // (e.g. S3 failures) to stderr, so an empty listing cannot be
+    // distinguished from a failed one. Since a valid backup always contains
+    // at least one snapshot, an empty listing is treated as a failure.
+    throw new Error(
+      `no snapshots or WAL segments listed at ${config.litestream.backupURL}`,
+    );
+  }
+  return new Date(Math.max(...times.map(time => time.getTime())));
+}
+
+/**
+ * Runs `litestream <snapshots|wal> <replica-file>` with the same config /
+ * environment used by the `litestream replicate` process (so that the
+ * backupURL, endpoint, region, and credentials are identical), and parses
+ * the `created` column (RFC3339) of the tab-formatted output, e.g.:
+ *
+ * ```
+ * replica  generation        index  size     created
+ * s3       1862f44967b3863f  0      4546445  2026-06-10T01:11:32Z
+ * ```
+ */
+async function listBackupCreatedTimes(
+  lc: LogContext,
+  config: ZeroConfig,
+  command: 'snapshots' | 'wal',
+): Promise<Date[]> {
+  const {litestream, env} = getLitestream('replicate', config);
+  const proc = spawn(litestream, [command, config.replica.file], {
+    env,
+    stdio: ['ignore', 'pipe', 'inherit'],
+    windowsHide: true,
+  });
+  const {promise, resolve, reject} = resolver<string>();
+  let stdout = '';
+  proc.stdout.setEncoding('utf-8');
+  proc.stdout.on('data', chunk => (stdout += chunk));
+  proc.on('error', reject);
+  proc.on('close', (code, signal) => {
+    if (signal) {
+      reject(new Error(`litestream ${command} killed with ${signal}`));
+    } else if (code !== 0) {
+      reject(new Error(`litestream ${command} exited with code ${code}`));
+    } else {
+      resolve(stdout);
+    }
+  });
+  const timeout = setTimeout(() => {
+    reject(new Error(`timed out listing backup state (litestream ${command})`));
+    proc.kill('SIGKILL');
+  }, LIST_BACKUP_TIMEOUT_MS);
+
+  let output: string;
+  try {
+    output = await promise;
+  } finally {
+    clearTimeout(timeout);
+  }
+
+  return parseBackupCreatedTimes(lc, command, output);
+}
+
+/**
+ * Parses the `created` column (the last, RFC3339-formatted column) from the
+ * tab-formatted output of `litestream snapshots` / `litestream wal`. The
+ * header row and any unparseable lines are skipped.
+ *
+ * Exported for testing.
+ */
+export function parseBackupCreatedTimes(
+  lc: LogContext,
+  command: 'snapshots' | 'wal',
+  output: string,
+): Date[] {
+  const times: Date[] = [];
+  for (const line of output.split('\n')) {
+    const cols = line.trim().split(wsRe);
+    const created = cols.at(-1);
+    if (
+      cols.length < 2 ||
+      created === undefined ||
+      created === 'created' /* header row */
+    ) {
+      continue;
+    }
+    const time = new Date(created);
+    if (Number.isNaN(time.getTime())) {
+      lc.warn?.(`unexpected line in litestream ${command} output: ${line}`);
+      continue;
+    }
+    times.push(time);
+  }
+  return times;
+}
+
 function reserveAndGetSnapshotStatus(
   lc: LogContext,
   config: ZeroConfig,
@@ -269,7 +394,7 @@ function reserveAndGetSnapshotStatus(
         const stream = await reserveSnapshot(lc, config);
         for await (const msg of stream) {
           // Capture the value of the status message that the change-streamer
-          // (i.e. BackupMonitor) returns, and hold the connection open to
+          // backup monitor returns, and hold the connection open to
           // "reserve" the snapshot and prevent change log cleanup.
           resolve(msg[1]);
           resolved = true;

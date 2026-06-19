@@ -5,7 +5,6 @@ import {
   type Immutable,
   addContextToQuery,
   asQueryInternals,
-  deepClone,
   DEFAULT_TTL_MS,
 } from './bindings.ts';
 import {useZero} from './zero-provider.tsx';
@@ -449,7 +448,7 @@ export class ViewStore {
       };
     }
 
-    const hash = qi.hash() + zero.clientID;
+    const hash = qi.hash() + JSON.stringify(qi.format) + zero.clientID;
     let existing = this.#views.get(hash);
     if (!existing) {
       existing = new ViewWrapper(q, zero, ttl, view => {
@@ -539,10 +538,9 @@ class ViewWrapper<
     resultType: ResultType,
     error?: ErroredQuery,
   ) => {
-    const data =
-      snap === undefined
-        ? snap
-        : (deepClone(snap as ReadonlyJSONValue) as HumanReadable<TReturn>);
+    // applyChange now returns immutable data structures, so no deep clone needed.
+    // Unchanged rows preserve their object identity for React.memo optimization.
+    const data = snap as HumanReadable<TReturn>;
     this.#snapshot = getSnapshot(
       this.#singular,
       data,

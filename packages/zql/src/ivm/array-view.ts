@@ -55,7 +55,11 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
 
   // Synthetic "root" entry that has a single "" relationship, so that we can
   // treat all changes, including the root change, generically.
-  readonly #root: Entry;
+  //
+  // applyChange is immutable: it returns a new root, preserving the references
+  // of unchanged subtrees so consumers (React.memo / Solid) can skip them. We
+  // therefore reassign #root on every change rather than mutating in place.
+  #root: Entry;
 
   onDestroy: (() => void) | undefined;
 
@@ -63,6 +67,13 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
   #resultType: ResultType = 'unknown';
   #error: ErroredQuery | undefined;
   readonly #updateTTL: (ttl: TTL) => void;
+
+  // Objects/arrays created or cloned during the current (un-flushed)
+  // transaction. applyChange may mutate these in place rather than copying
+  // again, since they are not yet observed by any listener. Replaced at
+  // flush(), after which the committed snapshot must be copied-on-write again.
+  // A WeakSet (not a Set) so it never extends the lifetime of transient clones.
+  #txnDirty: WeakSet<object> = new WeakSet();
 
   constructor(
     input: Input,
@@ -129,12 +140,17 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
   #hydrate() {
     this.#dirty = true;
     for (const node of skipYields(this.#input.fetch({}))) {
-      applyChange(
+      this.#root = applyChange(
         this.#root,
         {type: 'add', node},
         this.#schema,
         '',
         this.#format,
+        false /* withIDs */,
+        true /* mutate: #root is freshly created and not yet observed by any
+                 consumer, so build it in place to avoid O(N^2) array copies.
+                 Every later push() is immutable, preserving reference
+                 stability for unchanged subtrees. */,
       );
     }
     this.flush();
@@ -142,12 +158,14 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
 
   push(change: Change) {
     this.#dirty = true;
-    applyChange(
+    this.#root = applyChange(
       this.#root,
       changeToViewChange(change),
       this.#schema,
       '',
       this.#format,
+      false /* withIDs */,
+      this.#txnDirty /* mutate: copy-on-write within this transaction */,
     );
     return emptyArray;
   }
@@ -158,6 +176,10 @@ export class ArrayView<V extends View> implements Output, TypedView<V> {
     }
     this.#dirty = false;
     this.#fireListeners();
+    // The snapshot just handed to listeners is now observed; the next
+    // transaction must copy-on-write rather than mutate these objects. A fresh
+    // WeakSet drops all "owned" marks (WeakSet has no clear()).
+    this.#txnDirty = new WeakSet();
   }
 
   updateTTL(ttl: TTL) {

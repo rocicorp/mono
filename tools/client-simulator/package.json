@@ -14,7 +14,7 @@
   },
   "dependencies": {
     "@dotenvx/dotenvx": "^1.39.0",
-    "@rocicorp/logger": "^5.4.0",
+    "@rocicorp/logger": "^6.0.0",
     "nanoid": "^5.1.2",
     "ws": "^8.18.1"
   },
@@ -23,5 +23,6 @@
     "oxfmt": "^0.45.0",
     "shared": "workspace:*",
     "zero-protocol": "workspace:*"
-  }
+  },
+  "packageManager": "pnpm@11.5.3"
 }

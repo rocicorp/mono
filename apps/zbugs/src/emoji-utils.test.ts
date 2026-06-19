@@ -1,5 +1,5 @@
-import type {Writable} from 'shared/src/writable.js';
 import {expect, test} from 'vitest';
+import type {Writable} from '../../../packages/shared/src/writable.js';
 import type {Emoji} from './emoji-utils.ts';
 import {formatEmojiCreatorList, formatEmojiTooltipText} from './emoji-utils.ts';
 

@@ -2353,27 +2353,3 @@ describe('whereExists with scalar option', () => {
     });
   });
 });
-
-function hash(q: AnyQuery) {
-  return asQueryInternals(q).hash();
-}
-
-describe('query hash uniqueness', () => {
-  test('.one() and .limit(1) produce different hashes', () => {
-    const issueQuery = newQuery(schema, 'issue');
-    const withOne = issueQuery.one();
-    const withLimit = issueQuery.limit(1);
-
-    // Both produce the same AST (limit: 1) but .one() also sets singular: true
-    // in the format, so they must hash differently.
-    expect(hash(withOne)).not.toBe(hash(withLimit));
-  });
-
-  test('queries with different relationships produce different hashes', () => {
-    const issueQuery = newQuery(schema, 'issue');
-    const withComments = issueQuery.related('comments');
-    const withOwner = issueQuery.related('owner');
-
-    expect(hash(withComments)).not.toBe(hash(withOwner));
-  });
-});

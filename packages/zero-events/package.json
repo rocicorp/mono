@@ -39,5 +39,6 @@
     "shared": "workspace:*",
     "typescript": "~6.0.2",
     "vitest": "^4.1.6"
-  }
+  },
+  "packageManager": "pnpm@11.5.3"
 }

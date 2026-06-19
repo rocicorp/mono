@@ -83,18 +83,11 @@ test('basics', () => {
   expect(predicate({foo: true})).toBe(true);
   expect(predicate({foo: false})).toBe(true);
 
-  // basic operators
+  // equality operators work across types (they use === / !==)
   fc.assert(
     fc.property(
       fc.oneof(fc.boolean(), fc.double(), fc.string()),
-      fc.oneof(
-        fc.constant('='),
-        fc.constant('!='),
-        fc.constant('<'),
-        fc.constant('<='),
-        fc.constant('>'),
-        fc.constant('>='),
-      ),
+      fc.oneof(fc.constant('='), fc.constant('!=')),
       fc.oneof(fc.boolean(), fc.double(), fc.string()),
       (a, op, b) => {
         const condition: SimpleCondition = {
@@ -110,9 +103,43 @@ test('basics', () => {
           },
         };
         const predicate = createPredicate(condition);
-        const jsOp = {'=': '===', '!=': '!=='}[op] ?? op;
+        const jsOp = op === '=' ? '===' : '!==';
         // oxlint-disable-next-line no-eval -- legitimate use for dynamic test comparison
         expect(predicate({foo: a})).toBe(eval(`a ${jsOp} b`));
+      },
+    ),
+  );
+
+  // ordered operators compare same-typed values via compareValues. For numbers
+  // this matches JS ordering. String ordering uses UTF-8 (compareUTF8) and is
+  // covered separately below; mixed-type ordered comparisons are unsupported
+  // (compareValues throws), matching ORDER BY / SQLite, so they aren't exercised.
+  fc.assert(
+    fc.property(
+      fc.double(),
+      fc.oneof(
+        fc.constant('<'),
+        fc.constant('<='),
+        fc.constant('>'),
+        fc.constant('>='),
+      ),
+      fc.double(),
+      (a, op, b) => {
+        const condition: SimpleCondition = {
+          type: 'simple',
+          left: {
+            type: 'column',
+            name: 'foo',
+          },
+          op: op as SimpleOperator,
+          right: {
+            type: 'literal',
+            value: b,
+          },
+        };
+        const predicate = createPredicate(condition);
+        // oxlint-disable-next-line no-eval -- legitimate use for dynamic test comparison
+        expect(predicate({foo: a})).toBe(eval(`a ${op} b`));
       },
     ),
   );
@@ -237,4 +264,37 @@ test('nested', () => {
   expect(predicate({a: 3, b: false})).true;
   expect(predicate({a: 3, b: true})).false;
   expect(predicate({a: 5, b: false})).false;
+});
+
+test('string range comparisons use UTF-8 / code-point order (consistent with ORDER BY and SQLite)', () => {
+  // Raw JS string comparison uses UTF-16 code units, which disagree with the
+  // UTF-8 / code-point order used by ORDER BY (compareValues -> compareUTF8) and
+  // by SQLite for non-BMP characters. '｡' (U+FF61) sorts BEFORE
+  // '\u{1F600}' (U+1F600 emoji) by code point, but AFTER it by UTF-16 code unit.
+  const ltCondition: SimpleCondition = {
+    type: 'simple',
+    left: {type: 'column', name: 'foo'},
+    op: '<',
+    right: {type: 'literal', value: '\u{1F600}'},
+  };
+  expect(createPredicate(ltCondition)({foo: '｡'})).toBe(true);
+
+  const gtCondition: SimpleCondition = {
+    type: 'simple',
+    left: {type: 'column', name: 'foo'},
+    op: '>',
+    right: {type: 'literal', value: '\u{1F600}'},
+  };
+  expect(createPredicate(gtCondition)({foo: '｡'})).toBe(false);
+
+  // numeric comparisons are unaffected
+  const numCondition: SimpleCondition = {
+    type: 'simple',
+    left: {type: 'column', name: 'foo'},
+    op: '<',
+    right: {type: 'literal', value: 5},
+  };
+  const numPredicate = createPredicate(numCondition);
+  expect(numPredicate({foo: 3})).toBe(true);
+  expect(numPredicate({foo: 9})).toBe(false);
 });

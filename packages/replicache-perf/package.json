@@ -24,7 +24,7 @@
     "get-port": "^7.0.0",
     "hash-wasm": "^4.9.0",
     "idb": "^7.0.1",
-    "playwright": "1.53.2",
+    "playwright": "^1.60.0",
     "playwright-core": "1.53.2",
     "replicache": "workspace:*",
     "shared": "workspace:*",
@@ -34,5 +34,6 @@
   },
   "devDependencies": {
     "oxfmt": "^0.45.0"
-  }
+  },
+  "packageManager": "pnpm@11.5.3"
 }

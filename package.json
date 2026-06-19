@@ -38,7 +38,7 @@
     "oxfmt": "^0.45.0",
     "oxlint": "^1.63.0",
     "oxlint-tsgolint": "^0.22.1",
-    "playwright": "1.53.2",
+    "playwright": "^1.60.0",
     "syncpack": "^14.3.0",
     "tsnapi": "^0.3.2",
     "turbo": "^2.4.4",
@@ -49,5 +49,5 @@
   "engines": {
     "node": ">=22"
   },
-  "packageManager": "pnpm@11.1.2"
+  "packageManager": "pnpm@11.5.3"
 }

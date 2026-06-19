@@ -22,5 +22,6 @@
     "oxfmt": "^0.45.0",
     "replicache": "workspace:*",
     "shared": "workspace:*"
-  }
+  },
+  "packageManager": "pnpm@11.5.3"
 }

@@ -511,10 +511,10 @@ describe('computeZqlSpec', () => {
     `);
   });
 
-  test('unsupported columns (MACADDR8) are excluded', () => {
+  test('unsupported columns (BYTEA) are excluded', () => {
     expect(
       t(`
-    CREATE TABLE foo(a INT, b "TEXT|NOT_NULL", c MACADDR8, d BYTEA);
+    CREATE TABLE foo(a INT, b "TEXT|NOT_NULL", c BYTEA);
     CREATE UNIQUE INDEX foo_pkey ON foo(b ASC);
     `),
     ).toMatchInlineSnapshot(`
@@ -581,10 +581,26 @@ describe('computeZqlSpec', () => {
     expect(spec.zqlSpec.time_tz).toEqual({type: 'number'});
   });
 
-  test('indexes with unsupported columns (MACADDR8) are excluded', () => {
+  test('text-represented scalar columns can be used as primary keys', () => {
+    const spec = must(
+      t(`
+    CREATE TABLE foo(id "MACADDR8|NOT_NULL", ip INET, book ISBN13);
+    CREATE UNIQUE INDEX foo_pkey ON foo(id ASC);
+    `)[0],
+    );
+
+    expect(spec.tableSpec.primaryKey).toEqual(['id']);
+    expect(spec.zqlSpec).toEqual({
+      id: {type: 'string'},
+      ip: {type: 'string'},
+      book: {type: 'string'},
+    });
+  });
+
+  test('indexes with unsupported columns (BYTEA) are excluded', () => {
     expect(
       t(`
-    CREATE TABLE foo(a "INT|NOT_NULL", b "TEXT|NOT_NULL", c "MACADDR8|NOT_NULL", d "TEXT|NOT_NULL");
+    CREATE TABLE foo(a "INT|NOT_NULL", b "TEXT|NOT_NULL", c "BYTEA|NOT_NULL", d "TEXT|NOT_NULL");
     CREATE UNIQUE INDEX foo_pkey ON foo(a ASC, c DESC);
     CREATE UNIQUE INDEX foo_other_key ON foo(b ASC, d ASC, a DESC);
     `),

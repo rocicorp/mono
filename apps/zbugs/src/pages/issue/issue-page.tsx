@@ -15,9 +15,9 @@ import {
 } from 'react';
 import TextareaAutosize from 'react-textarea-autosize';
 import {toast} from 'react-toastify';
-import {assert} from 'shared/src/asserts.js';
 import {useParams} from 'wouter';
 import {navigate, useHistoryState} from 'wouter/use-browser-location';
+import {assert} from '../../../../../packages/shared/src/asserts.js';
 import {must} from '../../../../../packages/shared/src/must.ts';
 import {difference} from '../../../../../packages/shared/src/set-utils.ts';
 import {INITIAL_COMMENT_LIMIT} from '../../../shared/consts.ts';
@@ -478,8 +478,12 @@ export function IssuePage({onReady}: {onReady: () => void}) {
                 value={rendering.title}
                 className="edit-title"
                 autoFocus
-                onChange={e => setEdits({...edits, title: e.target.value})}
-                onKeyDown={e => isCtrlEnter(e) && save()}
+                onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
+                  setEdits({...edits, title: e.target.value})
+                }
+                onKeyDown={(e: React.KeyboardEvent<HTMLTextAreaElement>) =>
+                  isCtrlEnter(e) && save()
+                }
                 maxLength={MAX_ISSUE_TITLE_LENGTH}
               />
             </div>
@@ -511,10 +515,12 @@ export function IssuePage({onReady}: {onReady: () => void}) {
                   disabled={isOffline}
                   className="edit-description"
                   value={rendering.description}
-                  onChange={e =>
+                  onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) =>
                     setEdits({...edits, description: e.target.value})
                   }
-                  onKeyDown={e => isCtrlEnter(e) && save()}
+                  onKeyDown={(e: React.KeyboardEvent<HTMLTextAreaElement>) =>
+                    isCtrlEnter(e) && save()
+                  }
                   maxLength={MAX_ISSUE_DESCRIPTION_LENGTH}
                   ref={editDescriptionRef}
                 />

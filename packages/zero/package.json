@@ -1,6 +1,6 @@
 {
   "name": "@rocicorp/zero",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "description": "Zero is a web framework for serverless web development.",
   "homepage": "https://zero.rocicorp.dev",
   "bugs": {
@@ -139,9 +139,9 @@
     "@opentelemetry/semantic-conventions": "^1.41.1",
     "@postgresql-typed/oids": "^0.2.0",
     "@rocicorp/lock": "^1.0.4",
-    "@rocicorp/logger": "^5.4.0",
+    "@rocicorp/logger": "^6.0.0",
     "@rocicorp/resolver": "^1.0.2",
-    "@rocicorp/zero-sqlite3": "^1.0.18",
+    "@rocicorp/zero-sqlite3": "^1.1.2",
     "@standard-schema/spec": "^1.0.0",
     "@types/basic-auth": "^1.1.8",
     "@types/ws": "^8.5.12",
@@ -198,7 +198,7 @@
     "expo-sqlite": ">=15",
     "kysely": "^0.28.17",
     "pg": "^8.16.3",
-    "react": "^18.3.1",
+    "react": "^19.2.6",
     "solid-js": "^1.9.4"
   },
   "peerDependenciesMeta": {
@@ -226,5 +226,6 @@
   },
   "engines": {
     "node": ">=22"
-  }
+  },
+  "packageManager": "pnpm@11.5.3"
 }

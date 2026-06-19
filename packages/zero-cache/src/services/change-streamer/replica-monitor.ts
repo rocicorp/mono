@@ -10,8 +10,8 @@ import type {ChangeStreamerService} from './change-streamer.ts';
 const CHECK_INTERVAL_MS = 30 * 1000;
 
 /**
- * The single-node equivalent of the {@link BackupMonitor} polls the replica
- * file every 30 seconds and schedules cleanup when the watermark
+ * The single-node equivalent of a backup monitor polls the replica file every
+ * 30 seconds and schedules cleanup when the watermark
  * (i.e. stateVersion) moves forward.
  */
 export class ReplicaMonitor implements Service {

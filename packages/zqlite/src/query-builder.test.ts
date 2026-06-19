@@ -3,7 +3,12 @@ import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
 import type {SchemaValue} from '../../zero-schema/src/table-schema.ts';
 import {Database} from './db.ts';
 import {format} from './internal/sql.ts';
-import {buildSelectQuery, multiConstraintToSQL} from './query-builder.ts';
+import {
+  buildSelectQuery,
+  filtersToSQL,
+  multiConstraintToSQL,
+  type NoSubqueryCondition,
+} from './query-builder.ts';
 
 test('non-nullable cursor columns use range and equality operators without IS NULL guards', () => {
   const columns = {
@@ -257,4 +262,69 @@ test('multiConstraints compound row-value IN uses index (EXPLAIN QUERY PLAN)', (
     .map(r => r.detail)
     .join('\n');
   expect(plan).toMatch(/SEARCH pairs USING/);
+});
+
+function likeSQL(
+  op: 'LIKE' | 'NOT LIKE' | 'ILIKE' | 'NOT ILIKE',
+  pattern: string,
+) {
+  return format(
+    filtersToSQL({
+      type: 'simple',
+      left: {type: 'column', name: 'name'},
+      op,
+      right: {type: 'literal', value: pattern},
+    } as NoSubqueryCondition),
+  );
+}
+
+test('LIKE is case-sensitive and uses an explicit backslash escape', () => {
+  const {text, values} = likeSQL('LIKE', 'a%');
+  // Bare LIKE operator; case-sensitivity comes from PRAGMA case_sensitive_like.
+  expect(text).toBe(`"name" LIKE ? ESCAPE '\\'`);
+  expect(values).toEqual(['a%']);
+});
+
+test('NOT LIKE keeps the operator and the backslash escape', () => {
+  const {text, values} = likeSQL('NOT LIKE', 'a%');
+  expect(text).toBe(`"name" NOT LIKE ? ESCAPE '\\'`);
+  expect(values).toEqual(['a%']);
+});
+
+test('ILIKE lowers both operands for Unicode case-insensitive matching', () => {
+  const {text, values} = likeSQL('ILIKE', 'A%');
+  expect(text).toBe(`lower("name") LIKE lower(?) ESCAPE '\\'`);
+  expect(values).toEqual(['A%']);
+});
+
+test('NOT ILIKE lowers both operands and negates', () => {
+  const {text, values} = likeSQL('NOT ILIKE', 'A%');
+  expect(text).toBe(`lower("name") NOT LIKE lower(?) ESCAPE '\\'`);
+  expect(values).toEqual(['A%']);
+});
+
+test('ILIKE matches case-insensitively across Unicode (needs ICU lower())', () => {
+  const lc = createSilentLogContext();
+  const db = new Database(lc, ':memory:');
+  db.exec(
+    `CREATE TABLE t (name TEXT);
+     INSERT INTO t VALUES ('MÜLLER'), ('Schmidt');`,
+  );
+
+  // Run the exact SQL the compiler emits for ILIKE.
+  const {text, values} = likeSQL('ILIKE', 'müller');
+  const rows = db
+    .prepare(`SELECT name FROM t WHERE ${text}`)
+    .all<{name: string}>(...values)
+    .map(r => r.name);
+
+  // ILIKE compiles to `lower(col) LIKE lower(pattern)`, so matching 'MÜLLER'
+  // against 'müller' depends on lower() folding Ü -> ü. Only the Unicode-aware
+  // lower() from @rocicorp/zero-sqlite3's ICU build (>= 1.1.0) does that; an
+  // ASCII-only lower() leaves Ü untouched and this returns no rows.
+  //
+  // (Note: ß is deliberately NOT a good example here — case *folding* maps ß to
+  // "ss", but lower() does not, so 'STRASSE' ILIKE 'straße' would not match even
+  // with ICU. Umlauts/accents/Cyrillic are the clean cases.)
+  expect(rows).toEqual(['MÜLLER']);
 });
