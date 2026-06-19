@@ -54,7 +54,7 @@ function filterCustomHeaders(
   }
 
   const allowed = new Set(allowedHeaders.map(h => h.toLowerCase()));
-  const filtered: Record<string, string> = {};
+  const filtered: Record<string, string> = Object.create(null);
   for (const [key, value] of Object.entries(headers)) {
     if (allowed.has(key.toLowerCase())) {
       filtered[key] = value;
@@ -132,9 +132,8 @@ export async function fetchFromAPIServer<TValidator extends Type>(
       'warn',
     );
   }
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  };
+  const headers: Record<string, string> = Object.create(null);
+  headers['Content-Type'] = 'application/json';
 
   if (headerOptions.apiKey) {
     headers['X-Api-Key'] = headerOptions.apiKey;
@@ -144,6 +143,14 @@ export async function fetchFromAPIServer<TValidator extends Type>(
     filterCustomHeaders(
       headerOptions.customHeaders,
       headerOptions.allowedClientHeaders,
+    ),
+  );
+  // Forward allowlisted headers from the incoming HTTP request.
+  Object.assign(
+    headers,
+    filterCustomHeaders(
+      headerOptions.requestHeaders,
+      headerOptions.allowedRequestHeaders,
     ),
   );
   if (ctx.auth?.raw) {

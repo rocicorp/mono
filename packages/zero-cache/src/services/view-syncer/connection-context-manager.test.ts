@@ -625,6 +625,88 @@ describe('ConnectionContextManager', () => {
     );
   });
 
+  test('stores incoming request headers and the allowlist for filtering at fetch time', () => {
+    const manager = new ConnectionContextManagerImpl(
+      lc,
+      undefined,
+      undefined,
+      {
+        url: ['https://default.example/query'],
+        apiKey: 'query-api-key',
+        allowedRequestHeaders: ['x-forwarded-for'],
+        forwardCookies: false,
+      },
+      {
+        url: ['https://default.example/push'],
+        apiKey: 'push-api-key',
+        allowedRequestHeaders: ['cf-ray'],
+        forwardCookies: false,
+      },
+    );
+
+    const requestHeaders = {
+      'x-forwarded-for': '203.0.113.1',
+      'cf-ray': 'abc123',
+      'x-not-allowed': 'secret',
+    };
+    const connection = manager.registerConnection(
+      selector('c1', 'ws1'),
+      {
+        ...makeConnectParams('c1', 'ws1'),
+        requestHeaders,
+      },
+      {type: 'opaque', raw: 'token-1'},
+    );
+
+    // The full set of request headers is carried through; the allowlist is
+    // applied later in fetchFromAPIServer.
+    expect(connection.queryContext.headerOptions.requestHeaders).toEqual(
+      requestHeaders,
+    );
+    expect(connection.queryContext.headerOptions.allowedRequestHeaders).toEqual(
+      ['x-forwarded-for'],
+    );
+    expect(connection.mutateContext.headerOptions.requestHeaders).toEqual(
+      requestHeaders,
+    );
+    expect(
+      connection.mutateContext.headerOptions.allowedRequestHeaders,
+    ).toEqual(['cf-ray']);
+  });
+
+  test('leaves allowedRequestHeaders undefined when not configured', () => {
+    const manager = new ConnectionContextManagerImpl(
+      lc,
+      undefined,
+      undefined,
+      {
+        url: ['https://default.example/query'],
+        forwardCookies: false,
+        // allowedRequestHeaders not set - secure by default
+      },
+      {
+        url: ['https://default.example/push'],
+        forwardCookies: false,
+      },
+    );
+
+    const connection = manager.registerConnection(
+      selector('c1', 'ws1'),
+      {
+        ...makeConnectParams('c1', 'ws1'),
+        requestHeaders: {'x-forwarded-for': '203.0.113.1'},
+      },
+      {type: 'opaque', raw: 'token-1'},
+    );
+
+    expect(
+      connection.queryContext.headerOptions.allowedRequestHeaders,
+    ).toBeUndefined();
+    expect(
+      connection.mutateContext.headerOptions.allowedRequestHeaders,
+    ).toBeUndefined();
+  });
+
   test('ignores stale revision-scoped validation and failure updates', () => {
     const manager = new ConnectionContextManagerImpl(lc);
     const registered = register(manager, 'c1', 'ws1');
