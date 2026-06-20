@@ -61,21 +61,63 @@ type QueueEntry =
   | ['subscriber', SubscriberAndMode]
   | DownstreamStatusMessage
   | ['abort']
+  | ['flush-idle-group']
   | 'stop';
 
 type PendingTransaction = {
-  pool: TransactionPool;
+  group: PendingGroup;
   preCommitWatermark: string;
   pos: number;
-  startingReplicationState: Promise<ReplicationOwner>;
+  pendingChangeLogEntries: ChangeLogInsert[];
+  hasSchemaChange: boolean;
+  // skipAck lets internal/replayed commits become durable without advancing the
+  // upstream replication slot.
   ack: boolean;
+};
+
+type PendingGroup = {
+  pool: TransactionPool;
+  startingReplicationState: Promise<ReplicationOwner>;
+  upstreamAcks: (
+    | {type: 'commit'; commit: Commit; ack: boolean}
+    | {type: 'status'; status: UpstreamStatusMessage}
+  )[];
+  txCount: number;
+  lastWatermark: string | null;
 };
 
 type ReplicationOwner = {
   owner: string | null;
 };
 
+/**
+ * A row in the RM's durable catchup journal.
+ *
+ * Connected VSs get changes live from the Forwarder. A new or lagging VS reads
+ * this log from its last commit watermark and replays rows in `(watermark, pos)`
+ * order:
+ *
+ *   begin/data/data -> stored at precommit watermark
+ *   commit          -> stored at commit watermark and makes that point resumable
+ *
+ * The `precommit` link on the commit row lets catchup include the whole
+ * transaction while still exposing only commit watermarks as subscriber progress.
+ */
+type ChangeLogInsert = {
+  watermark: string;
+  precommit: string | null;
+  pos: number;
+  change: string;
+};
+
 const backfillRequestsSchema = v.array(backfillRequestSchema);
+const CHANGE_LOG_INSERT_BATCH_SIZE = 100;
+// Group up to this many upstream transactions per changeDB commit to remove
+// per-transaction commit/fsync overhead. The group remains a visibility
+// boundary: catchup, status, schema changes, rollback, ready checks, and full
+// groups flush before later work proceeds.
+const CHANGE_LOG_TX_GROUP_SIZE = 32;
+const CURRENT_TX_SAVEPOINT = 'zero_storer_current_tx';
 
 export type TuningOptions = {
   backPressureLimitHeapProportion: number;
@@ -347,9 +389,11 @@ export class Storer implements Service {
   #maybeReleaseBackPressure() {
     if (
       this.#readyForMore !== null &&
-      // Wait for at least 20% of the threshold to free up.
       this.#approximateQueuedBytes < this.#backPressureThresholdBytes * 0.8
     ) {
+      // Keep hysteresis between "pause upstream" and "resume upstream". Without
+      // the 20% margin, a busy RM can bounce around the threshold and spend extra
+      // time scheduling backpressure transitions.
       this.#lc.info?.(
         `releasing back pressure with ${this.#queue.size()} queued changes (~${(this.#approximateQueuedBytes / 1024 ** 2).toFixed(2)} MB)`,
       );
@@ -422,21 +466,130 @@ export class Storer implements Service {
 
   async #processQueue() {
     let tx: PendingTransaction | null = null;
+    let group: PendingGroup | null = null;
     let msg: QueueEntry | false;
 
     const catchupQueue: SubscriberAndMode[] = [];
+    const startGroup = (watermark: string): PendingGroup => {
+      const {promise, resolve, reject} = resolver<ReplicationOwner>();
+      void promise.catch(() => {}); // handle rejections before the await
+      const pool = new TransactionPool(
+        this.#lc.withContext('watermark', watermark),
+        {
+          mode: Mode.READ_COMMITTED,
+          statementResponseTimeout: this.#statementTimeoutMs,
+        },
+      );
+      pool.run(this.#db);
+      // Check ownership once per group instead of once per upstream commit.
+      // The grouped transaction keeps pending rows private until flushGroup()
+      // commits, so ownership loss still prevents ACK release.
+      //
+      //   replicationState FOR UPDATE
+      //           |
+      //           v
+      //   tx1 savepoint -> tx2 savepoint -> ... -> update lastWatermark
+      void pool.process(tx => {
+        tx<ReplicationOwner[]> /*sql*/ `
+          SELECT "owner" FROM ${this.#cdc('replicationState')} FOR UPDATE`.then(
+          ([result]) => resolve(result),
+          reject,
+        );
+        return [];
+      });
+      return {
+        pool,
+        startingReplicationState: promise,
+        upstreamAcks: [],
+        txCount: 0,
+        lastWatermark: null,
+      };
+    };
+
+    const flushGroup = async () => {
+      if (group === null) {
+        return;
+      }
+      const flushing = group;
+      group = null;
+      // ACKs are intentionally released only after the grouped changeDB
+      // transaction is durable. Reordering this sequence can acknowledge
+      // upstream commits that would be lost after a crash.
+      //
+      //   1. verify owner
+      //   2. publish lastWatermark in the same DB transaction
+      //   3. commit changeLog rows
+      //   4. ACK upstream commits
+      //   5. run catchup against the committed snapshot
+      const {owner} = await flushing.startingReplicationState;
+      if (owner !== this.#taskID) {
+        flushing.pool.fail(
+          new AbortError(`changeLog ownership has been assumed by ${owner}`),
+        );
+      } else if (flushing.lastWatermark !== null) {
+        const lastWatermark = flushing.lastWatermark;
+        void flushing.pool.process(tx => [
+          tx`
+            UPDATE ${this.#cdc('replicationState')} SET ${tx({lastWatermark})}`,
+        ]);
+        flushing.pool.setDone();
+      } else {
+        flushing.pool.setDone();
+      }
+
+      await flushing.pool.done();
+      for (const pendingAck of flushing.upstreamAcks) {
+        switch (pendingAck.type) {
+          case 'commit':
+            if (pendingAck.ack) {
+              this.#onConsumed(pendingAck.commit);
+            }
+            break;
+          case 'status':
+            this.#onConsumed(pendingAck.status);
+            break;
+        }
+      }
+
+      await this.#startCatchup(catchupQueue.splice(0));
+    };
+
+    const abortGroup = async () => {
+      if (group === null) {
+        return;
+      }
+      const aborting = group;
+      group = null;
+      tx = null;
+      aborting.pool.abort();
+      await aborting.pool.done();
+    };
+
+    const dequeueEntry = () =>
+      group !== null && tx === null
+        ? this.#queue.dequeue(['flush-idle-group'], 0)
+        : this.#queue.dequeue();
+
     try {
-      while ((msg = await this.#queue.dequeue()) !== 'stop') {
+      while ((msg = await dequeueEntry()) !== 'stop') {
         const [msgType] = msg;
         switch (msgType) {
+          case 'flush-idle-group':
+            // Grouping optimizes bursts, but an idle upstream must not leave
+            // durable commits unacked until an unrelated status/subscriber
+            // event arrives. Flushing here bounds ACK latency while preserving
+            // grouping whenever the storer already has queued work.
+            await flushGroup();
+            continue;
           case 'ready': {
             const signalReady = msg[1];
+            await flushGroup();
             signalReady();
             continue;
           }
           case 'subscriber': {
             const subscriber = msg[1];
-            if (tx) {
+            if (tx || group) {
               catchupQueue.push(subscriber); // Wait for the current tx to complete.
             } else {
               await this.#startCatchup([subscriber]); // Catch up immediately.
@@ -444,14 +597,15 @@ export class Storer implements Service {
             continue;
           }
           case 'status':
+            if (tx !== null) {
+              tx.group.upstreamAcks.push({type: 'status', status: msg});
+              continue;
+            }
+            await flushGroup();
             this.#onConsumed(msg);
             continue;
           case 'abort': {
-            if (tx) {
-              tx.pool.abort();
-              await tx.pool.done();
-              tx = null;
-            }
+            await abortGroup();
             continue;
           }
         }
@@ -462,38 +616,35 @@ export class Storer implements Service {
 
         if (tag === 'begin') {
           assert(!tx, 'received BEGIN in the middle of a transaction');
-          const {promise, resolve, reject} = resolver<ReplicationOwner>();
-          void promise.catch(() => {}); // handle rejections before the await
+          group ??= startGroup(watermark);
           tx = {
-            pool: new TransactionPool(
-              this.#lc.withContext('watermark', watermark),
-              {
-                mode: Mode.READ_COMMITTED,
-                statementResponseTimeout: this.#statementTimeoutMs,
-              },
-            ),
+            group,
             preCommitWatermark: watermark,
             pos: 0,
-            startingReplicationState: promise,
+            pendingChangeLogEntries: [],
+            hasSchemaChange: false,
             ack: !change.skipAck,
           };
-          tx.pool.run(this.#db);
-          // Acquire a lock on the replicationState row to detect and/or prevent
-          // a concurrent ownership change.
-          void tx.pool.process(tx => {
-            tx<ReplicationOwner[]> /*sql*/ `
-          SELECT "owner" FROM ${this.#cdc('replicationState')} FOR UPDATE`.then(
-              ([result]) => resolve(result),
-              reject,
-            );
-            return [];
-          });
+          // Savepoints keep upstream rollbacks scoped to the current
+          // transaction while still allowing multiple upstream transactions to
+          // share one changeDB commit. ACKs and catchup wait for the group
+          // commit so subscribers never observe uncommitted group contents.
+          //
+          //   group tx
+          //     SAVEPOINT current upstream tx
+          //       buffered INSERT changeLog rows...
+          //     RELEASE SAVEPOINT
+          //     ...repeat up to CHANGE_LOG_TX_GROUP_SIZE...
+          //   UPDATE replicationState(lastWatermark) + COMMIT group tx
+          void tx.group.pool.process(sql => [
+            sql.unsafe(`SAVEPOINT ${CURRENT_TX_SAVEPOINT}`),
+          ]);
         } else {
           assert(tx, () => `received change outside of transaction: ${json}`);
           tx.pos++;
         }
 
-        const entry = {
+        const entry: ChangeLogInsert = {
           watermark: tag === 'commit' ? watermark : tx.preCommitWatermark,
           precommit: tag === 'commit' ? tx.preCommitWatermark : null,
           pos: tx.pos,
@@ -502,15 +653,26 @@ export class Storer implements Service {
           change: extractChangeSubstring(json, tag),
         };
 
-        const processed = tx.pool.process(sql => [
-          sql`INSERT INTO ${this.#cdc('changeLog')} ${sql(entry)}`,
-          ...(change !== null && isSchemaChange(change)
-            ? this.#trackBackfillMetadata(sql, change)
-            : []),
-        ]);
+        let processed = promiseVoid;
+        if (change !== null && isSchemaChange(change)) {
+          tx.hasSchemaChange = true;
+          await this.#flushChangeLogEntries(tx);
+          processed = tx.group.pool.process(sql => [
+            sql`INSERT INTO ${this.#cdc('changeLog')} ${sql(entry)}`,
+            ...this.#trackBackfillMetadata(sql, change),
+          ]);
+        } else {
+          tx.pendingChangeLogEntries.push(entry);
+          if (
+            tag === 'commit' ||
+            tx.pendingChangeLogEntries.length >= CHANGE_LOG_INSERT_BATCH_SIZE
+          ) {
+            processed = this.#flushChangeLogEntries(tx);
+          }
+        }
 
         if (tx.pos % 100 === 0) {
-          // Backpressure is exerted on commit when awaiting tx.pool.done().
+          // Backpressure is exerted when the group is flushed.
           // However, backpressure checks need to be regularly done for
           // very large transactions in order to avoid memory blowup.
           await processed;
@@ -518,44 +680,50 @@ export class Storer implements Service {
         this.#maybeReleaseBackPressure();
 
         if (tag === 'commit') {
-          const {owner} = await tx.startingReplicationState;
-          if (owner !== this.#taskID) {
-            // Ownership change reflected in the replicationState read in 'begin'.
-            tx.pool.fail(
-              new AbortError(
-                `changeLog ownership has been assumed by ${owner}`,
-              ),
-            );
-          } else {
-            // Update the replication state.
-            const lastWatermark = watermark;
-            void tx.pool.process(tx => [
-              tx`
-            UPDATE ${this.#cdc('replicationState')} SET ${tx({lastWatermark})}`,
-            ]);
-            tx.pool.setDone();
-          }
-
-          await tx.pool.done();
-
-          // ACK the LSN to the upstream Postgres.
-          if (tx.ack) {
-            this.#onConsumed(['commit', change, {watermark}]);
-          }
+          assert(change?.tag === 'commit', 'commit change should be retained');
+          void tx.group.pool.process(sql => [
+            sql.unsafe(`RELEASE SAVEPOINT ${CURRENT_TX_SAVEPOINT}`),
+          ]);
+          tx.group.lastWatermark = watermark;
+          tx.group.upstreamAcks.push({
+            type: 'commit',
+            commit: ['commit', change, {watermark}],
+            ack: tx.ack,
+          });
+          tx.group.txCount++;
+          // Schema changes publish metadata side effects that must become
+          // visible with the commit that introduced them.
+          const hasSchemaSideEffects = tx.hasSchemaChange;
+          // Subscribers waiting for catchup need a committed snapshot to read;
+          // holding the group open would make new VSs wait behind unrelated
+          // future transactions.
+          const catchupWaiting = catchupQueue.length > 0;
+          // Transaction grouping removes per-commit round trips, but this cap
+          // bounds uncommitted changeDB work and ACK latency under sustained load.
+          const groupFull = tx.group.txCount >= CHANGE_LOG_TX_GROUP_SIZE;
+          const shouldFlushGroup =
+            hasSchemaSideEffects || catchupWaiting || groupFull;
           tx = null;
-
-          // Before beginning the next transaction, open a READONLY snapshot to
-          // concurrently catchup any queued subscribers.
-          await this.#startCatchup(catchupQueue.splice(0));
+          if (shouldFlushGroup) {
+            await flushGroup();
+          }
         } else if (tag === 'rollback') {
-          // Aborted transactions are not stored in the changeLog. Abort the current tx
-          // and process catchup of subscribers that were waiting for it to end.
-          tx.pool.abort();
-          await tx.pool.done();
+          // Aborted transactions are not stored in the changeLog. Roll back
+          // only the current upstream transaction, preserving previous
+          // committed transactions in the group.
+          tx.pendingChangeLogEntries = [];
+          await tx.group.pool.process(sql => [
+            sql.unsafe(`ROLLBACK TO SAVEPOINT ${CURRENT_TX_SAVEPOINT}`),
+            sql.unsafe(`RELEASE SAVEPOINT ${CURRENT_TX_SAVEPOINT}`),
+          ]);
           tx = null;
-
-          await this.#startCatchup(catchupQueue.splice(0));
+          await flushGroup();
         }
+      }
+      if (tx !== null) {
+        await abortGroup();
+      } else {
+        await flushGroup();
       }
     } catch (e) {
       catchupQueue.forEach(({subscriber}) => subscriber.fail(e));
@@ -597,6 +765,23 @@ export class Storer implements Service {
     ).finally(() => reader.setDone());
   }
 
+  #flushChangeLogEntries(tx: PendingTransaction): Promise<void> {
+    if (tx.pendingChangeLogEntries.length === 0) {
+      return promiseVoid;
+    }
+    const entries = tx.pendingChangeLogEntries;
+    tx.pendingChangeLogEntries = [];
+    // Data changes are just replay-journal rows for future catchup, so they can
+    // be written as one multi-row INSERT without changing what any VS observes.
+    //
+    // Schema changes are different: they also update metadata tables. Flush
+    // pending data rows before those metadata writes so a catchup reader sees
+    // the same story the live stream saw.
+    return tx.group.pool.process(sql => [
+      sql`INSERT INTO ${this.#cdc('changeLog')} ${sql(entries)}`,
+    ]);
+  }
+
   async #catchup(
     {subscriber: sub, mode}: SubscriberAndMode,
     lastWatermark: string,
@@ -632,13 +817,14 @@ export class Storer implements Service {
             );
           }
 
+          const catchupChanges: WatermarkedChange[] = [];
           for (const entry of entries) {
             if (entry.watermark === sub.watermark) {
               // This should be the first entry.
               // Catchup starts from *after* the watermark.
               watermarkFound = true;
             } else if (watermarkFound) {
-              lastBatchConsumed = sub.catchup(toDownstream(entry));
+              catchupChanges.push(toDownstream(entry));
               count++;
             } else if (mode === 'backup') {
               throw new AutoResetSignal(
@@ -654,6 +840,9 @@ export class Storer implements Service {
               );
               return;
             }
+          }
+          if (catchupChanges.length > 0) {
+            lastBatchConsumed = sub.catchupBatch(catchupChanges);
           }
         }
         if (watermarkFound) {
