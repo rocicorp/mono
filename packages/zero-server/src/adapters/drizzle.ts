@@ -16,6 +16,7 @@ import type {
 import type {HumanReadable} from '../../../zql/src/query/query.ts';
 import {executePostgresQuery} from '../pg-query-executor.ts';
 import {ZQLDatabase} from '../zql-database.ts';
+import {drizzleUsesModeArg} from './detect-drizzle-version.ts';
 
 export type {ZQLDatabase};
 
@@ -92,16 +93,45 @@ class DrizzleInternalTransaction<
   }
 
   async query(sql: string, params: unknown[]): Promise<Iterable<Row>> {
-    const prepared = this.wrappedTransaction._.session.prepareQuery(
-      {sql, params},
-      undefined,
-      undefined,
-      false,
-    );
+    const {session} = this.wrappedTransaction._;
+    const query = {sql, params};
+    // `drizzleUsesModeArg` only introspects the function (`toString`/`length`),
+    // never invokes it, so the unbound reference is safe here.
+    // oxlint-disable-next-line unbound-method
+    const prepared = drizzleUsesModeArg(session.prepareQuery)
+      ? (session.prepareQuery as unknown as ModePrepareQuery)(
+          query,
+          'objects',
+          undefined,
+          undefined,
+        )
+      : session.prepareQuery(query, undefined, undefined, false);
     const result = await prepared.execute();
     return toIterableRows(result);
   }
 }
+
+/**
+ * `drizzle-orm`'s `PgSession.prepareQuery` signature changed in the 1.0 RC
+ * line:
+ * - `<= 1.0.0-beta`: `(query, fields, name, isResponseInArrayMode, customResultMapper?, queryMetadata?, cacheConfig?)`
+ * - `>= 1.0.0-rc.1`: `(query, mode: 'arrays' | 'objects' | 'raw', name, mapper?, queryMetadata?, cacheConfig?)`
+ *
+ * Passing the old positional form to a newer drizzle leaves `mode` undefined,
+ * so it returns rows as arrays instead of objects. That silently breaks
+ * `getServerSchema`'s `information_schema` introspection (it reads
+ * `row.dataType`, which is `undefined` on an array row) and every transaction
+ * fails with `Cannot read properties of undefined (reading 'toLowerCase')`.
+ *
+ * `zero` is built against `drizzle-orm@^0.45`, so the typed call uses the old
+ * signature; this detects a newer drizzle at runtime and calls the new one.
+ */
+type ModePrepareQuery = (
+  query: {sql: string; params: unknown[]},
+  mode: 'arrays' | 'objects' | 'raw',
+  name: undefined,
+  mapper: undefined,
+) => {execute(): Promise<unknown>};
 
 function isIterable(value: unknown): value is Iterable<unknown> {
   return (
