@@ -37,6 +37,9 @@ export type PluralLiteralType = Exclude<LiteralType, 'null'>;
 type ColumnSqlConvertArg = {
   [sqlConvert]: 'column';
   type: string;
+  // The Postgres namespace `type` lives in, when known. Used to schema-qualify
+  // casts to user-defined types (enums, domains, ...) outside of `public`.
+  typeSchema: string | undefined;
   value: unknown;
   plural: boolean;
   isEnum: boolean;
@@ -90,6 +93,7 @@ export function sqlConvertColumnArg(
   return sql.value({
     [sqlConvert]: 'column',
     type: serverColumnSchema.type,
+    typeSchema: serverColumnSchema.typeSchema,
     isEnum: serverColumnSchema.isEnum,
     value,
     plural: plural || serverColumnSchema.isArray,
@@ -150,7 +154,11 @@ class SQLConvertFormat implements FormatConfig {
     const byType = this.#seen.get(value.value);
     if (byType?.has(value.type)) {
       return {
-        placeholder: createPlaceholder(byType.get(value.type)!, value),
+        placeholder: createPlaceholder(
+          byType.get(value.type)!,
+          value,
+          this.escapeIdentifier,
+        ),
         value: PREVIOUSLY_SEEN_VALUE,
       };
     }
@@ -161,13 +169,48 @@ class SQLConvertFormat implements FormatConfig {
       this.#seen.set(value.value, new Map([[value.type, this.#size]]));
     }
     return {
-      placeholder: createPlaceholder(this.#size, value),
+      placeholder: createPlaceholder(this.#size, value, this.escapeIdentifier),
       value: stringify(value),
     };
   };
 }
 
-function createPlaceholder(index: number, arg: SqlConvertArg) {
+/**
+ * Renders the cast-target type reference for a (potentially user-defined) type.
+ *
+ * A type that lives in a non-public, non-catalog schema is schema-qualified
+ * using properly-escaped identifiers (e.g. `"app"."some_enum"`) so that it
+ * resolves regardless of the connection's `search_path`. Built-in types
+ * (`pg_catalog`) and types in `public` are left as-is so generated SQL stays
+ * byte-compatible with prior output.
+ *
+ * `quoteName` controls whether the unqualified type name is escaped/quoted:
+ * enums have always been emitted quoted (e.g. `::"some_enum"`); other types
+ * (e.g. `::isbn13`) are emitted bare. Schema-qualified output is always
+ * escaped on both segments regardless of `quoteName`.
+ */
+function typeCastTarget(
+  arg: ColumnSqlConvertArg,
+  escapeIdentifier: (str: string) => string,
+  quoteName: boolean,
+): string {
+  const {typeSchema} = arg;
+  if (
+    typeSchema !== undefined &&
+    typeSchema !== '' &&
+    typeSchema !== 'public' &&
+    typeSchema !== 'pg_catalog'
+  ) {
+    return `${escapeIdentifier(typeSchema)}.${escapeIdentifier(arg.type)}`;
+  }
+  return quoteName ? escapeIdentifier(arg.type) : arg.type;
+}
+
+function createPlaceholder(
+  index: number,
+  arg: SqlConvertArg,
+  escapeIdentifier: (str: string) => string,
+) {
   if (arg.type === 'null') {
     assert(arg.value === null, "Args of type 'null' must have value null");
     assert(!arg.plural, "Args of type 'null' must not be plural");
@@ -187,13 +230,14 @@ function createPlaceholder(index: number, arg: SqlConvertArg) {
     return `$${index}::text::${pgTypeForLiteralType(arg.type)}`;
   }
 
-  const common = formatCommonToSingularAndPlural(index, arg);
+  const common = formatCommonToSingularAndPlural(index, arg, escapeIdentifier);
   return arg.plural ? formatPlural(index, common) : common;
 }
 
 function formatCommonToSingularAndPlural(
   index: number,
   arg: ColumnSqlConvertArg,
+  escapeIdentifier: (str: string) => string,
 ) {
   // Ok, so what is with all the `::text` casts
   // before the final cast?
@@ -230,7 +274,7 @@ function formatCommonToSingularAndPlural(
       return `${valuePlaceholder}::text::uuid`;
   }
   if (arg.isEnum) {
-    return `${valuePlaceholder}::text::"${arg.type}"`;
+    return `${valuePlaceholder}::text::${typeCastTarget(arg, escapeIdentifier, true)}`;
   }
   if (isPgNativeStringType(arg.type)) {
     // For comparison cast to the general `text` type, not the
@@ -242,7 +286,7 @@ function formatCommonToSingularAndPlural(
       : `${valuePlaceholder}::text::${arg.type}`;
   }
   if (isPgTextRepresentedType(arg.type)) {
-    return `${valuePlaceholder}::text::${arg.type}`;
+    return `${valuePlaceholder}::text::${typeCastTarget(arg, escapeIdentifier, false)}`;
   }
   if (isPgNumberType(arg.type)) {
     // For comparison cast to `double precision` which uses IEEE 754 (the same
@@ -254,7 +298,7 @@ function formatCommonToSingularAndPlural(
       ? `${valuePlaceholder}::text::double precision`
       : `${valuePlaceholder}::text::${arg.type}`;
   }
-  return `${valuePlaceholder}::text::${arg.type}`;
+  return `${valuePlaceholder}::text::${typeCastTarget(arg, escapeIdentifier, false)}`;
 }
 
 function formatPlural(index: number, select: string) {
