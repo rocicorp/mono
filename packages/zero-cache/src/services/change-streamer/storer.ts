@@ -69,6 +69,11 @@ type PendingTransaction = {
   pos: number;
   startingReplicationState: Promise<ReplicationOwner>;
   ack: boolean;
+  // changeLog rows buffered for the next multi-row INSERT flush.
+  batch: ChangeLogRow[];
+  // The most recently issued flush (or metadata) process, awaited to bound
+  // pipeline depth and to order the commit-time replicationState update.
+  lastFlush: Promise<unknown> | undefined;
 };
 
 type ReplicationOwner = {
@@ -80,6 +85,18 @@ const backfillRequestsSchema = v.array(backfillRequestSchema);
 export type TuningOptions = {
   backPressureLimitHeapProportion: number;
   statementTimeoutMs: number;
+  changeLogBatchSize: number;
+};
+
+/**
+ * A single `changeLog` row, accumulated in {@link PendingTransaction.batch}
+ * and written via `json_to_recordset()` (see `#flushChangeLog()`).
+ */
+type ChangeLogRow = {
+  watermark: string;
+  precommit: string | null;
+  pos: number;
+  change: string;
 };
 
 /**
@@ -126,6 +143,7 @@ export class Storer implements Service {
   readonly #queue = new Queue<QueueEntry>();
   readonly #backPressureThresholdBytes: number;
   readonly #statementTimeoutMs: number;
+  readonly #changeLogBatchSize: number;
 
   #approximateQueuedBytes = 0;
   #running = false;
@@ -140,7 +158,11 @@ export class Storer implements Service {
     replicaVersion: string,
     onConsumed: (c: Commit | UpstreamStatusMessage) => void,
     onFatal: (err: Error) => void,
-    {backPressureLimitHeapProportion, statementTimeoutMs}: TuningOptions,
+    {
+      backPressureLimitHeapProportion,
+      statementTimeoutMs,
+      changeLogBatchSize,
+    }: TuningOptions,
   ) {
     this.#lc = lc.withContext('component', 'change-log');
     this.#shard = shard;
@@ -152,6 +174,7 @@ export class Storer implements Service {
     this.#onConsumed = onConsumed;
     this.#onFatal = onFatal;
     this.#statementTimeoutMs = statementTimeoutMs;
+    this.#changeLogBatchSize = Math.max(1, changeLogBatchSize);
 
     const heapStats = getHeapStatistics();
     this.#backPressureThresholdBytes =
@@ -358,6 +381,37 @@ export class Storer implements Service {
     }
   }
 
+  /**
+   * Flushes any buffered {@link PendingTransaction.batch} rows to the changeLog.
+   *
+   * Uses `json_to_recordset()` so the batch is a single JSON parameter: the
+   * statement text stays constant regardless of batch size, avoiding the
+   * unbounded prepared-statement variants (and Postgres memory growth) that a
+   * multi-row INSERT would produce. See rocicorp/mono#3511.
+   *
+   * Returns (and updates) {@link PendingTransaction.lastFlush}; a no-op when the
+   * batch is empty.
+   */
+  #flushChangeLog(tx: PendingTransaction): Promise<unknown> | undefined {
+    const {batch} = tx;
+    if (batch.length === 0) {
+      return tx.lastFlush;
+    }
+    tx.batch = [];
+    tx.lastFlush = tx.pool.process(sql => [
+      sql`
+        INSERT INTO ${this.#cdc('changeLog')} ("watermark", "pos", "change", "precommit")
+        SELECT "watermark", "pos", "change"::json, "precommit"
+          FROM json_to_recordset(${batch}) AS x(
+            "watermark" TEXT,
+            "pos" INT8,
+            "change" TEXT,
+            "precommit" TEXT
+          )`,
+    ]);
+    return tx.lastFlush;
+  }
+
   #stopped = promiseVoid;
 
   /**
@@ -476,6 +530,8 @@ export class Storer implements Service {
             pos: 0,
             startingReplicationState: promise,
             ack: !change.skipAck,
+            batch: [],
+            lastFlush: undefined,
           };
           tx.pool.run(this.#db);
           // Acquire a lock on the replicationState row to detect and/or prevent
@@ -493,7 +549,7 @@ export class Storer implements Service {
           tx.pos++;
         }
 
-        const entry = {
+        const entry: ChangeLogRow = {
           watermark: tag === 'commit' ? watermark : tx.preCommitWatermark,
           precommit: tag === 'commit' ? tx.preCommitWatermark : null,
           pos: tx.pos,
@@ -502,22 +558,42 @@ export class Storer implements Service {
           change: extractChangeSubstring(json, tag),
         };
 
-        const processed = tx.pool.process(sql => [
-          sql`INSERT INTO ${this.#cdc('changeLog')} ${sql(entry)}`,
-          ...(change !== null && isSchemaChange(change)
-            ? this.#trackBackfillMetadata(sql, change)
-            : []),
-        ]);
-
-        if (tx.pos % 100 === 0) {
-          // Backpressure is exerted on commit when awaiting tx.pool.done().
-          // However, backpressure checks need to be regularly done for
-          // very large transactions in order to avoid memory blowup.
-          await processed;
+        if (change !== null && isSchemaChange(change)) {
+          // Schema changes carry backfill / table-metadata statements that
+          // must be applied in stream order relative to the changeLog rows.
+          // Flush any buffered rows first, then write this row together with
+          // its metadata statements as a single unit (preserving the previous
+          // per-change ordering for schema changes).
+          await this.#flushChangeLog(tx);
+          tx.lastFlush = tx.pool.process(sql => [
+            sql`INSERT INTO ${this.#cdc('changeLog')} ${sql(entry)}`,
+            ...this.#trackBackfillMetadata(sql, change),
+          ]);
+        } else {
+          // Accumulate plain changeLog rows (begin, data changes, commit) and
+          // write them as a single multi-row INSERT. Collapsing the per-change
+          // single-row INSERTs into batches is the dominant cost reduction for
+          // large transactions, where the previous one-statement-per-change
+          // path dominated the upstream replication lag.
+          tx.batch.push(entry);
+          if (tx.batch.length >= this.#changeLogBatchSize) {
+            // Bound pipeline depth (and thus memory) by awaiting the previous
+            // flush before issuing the next. This is the batched analog of the
+            // previous per-100-statement backpressure await, and likewise
+            // guards against memory blowup on very large transactions.
+            const prevFlush = tx.lastFlush;
+            void this.#flushChangeLog(tx);
+            await prevFlush;
+          }
         }
         this.#maybeReleaseBackPressure();
 
         if (tag === 'commit') {
+          // Flush any remaining buffered changeLog rows (including this commit
+          // row) before updating the replication state, so the state update is
+          // ordered after all changeLog inserts for this transaction.
+          void this.#flushChangeLog(tx);
+
           const {owner} = await tx.startingReplicationState;
           if (owner !== this.#taskID) {
             // Ownership change reflected in the replicationState read in 'begin'.

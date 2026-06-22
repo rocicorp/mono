@@ -28,6 +28,7 @@ import {createSubscriber} from './test-utils.ts';
 const opts: TuningOptions = {
   backPressureLimitHeapProportion: 0.04,
   statementTimeoutMs: 20_000,
+  changeLogBatchSize: 2000,
 };
 
 const json = BigIntJSON.stringify;
@@ -104,6 +105,84 @@ describe('change-streamer/storer', () => {
     }
     return msgs;
   }
+
+  // Exercises the multi-row INSERT batching with a batch size small enough
+  // that a single transaction crosses several flush boundaries. The default
+  // opts (changeLogBatchSize: 2000) never trip the mid-transaction flush in
+  // these small tests, so the cross-flush ordering invariant is only covered
+  // here and in the opt-in storer-bench.
+  describe('changeLog batching (small batch size)', () => {
+    beforeEach(async () => {
+      storer = new Storer(
+        lc,
+        shard,
+        'task-id',
+        'change-streamer:12345',
+        'ws',
+        db,
+        REPLICA_VERSION,
+        msg => consumed.enqueue(msg),
+        err => fatalErrors.enqueue(err),
+        {...opts, changeLogBatchSize: 3},
+      );
+      await storer.assumeOwnership();
+      done = storer.run();
+    });
+
+    test('flushes preserve pos order across batches and a schema change', async () => {
+      // A transaction whose changes span multiple batch flushes (batch size 3),
+      // with a schema change interleaved (which forces a flush of the pending
+      // batch before writing the schema row + its backfill metadata).
+      storer.store('08', ['begin', messages.begin(), {commitWatermark: '08'}]);
+      // pos 1, 2 -> flush of [0,1,2] when pos 2 lands.
+      storer.store('08', ['data', messages.insert('issues', {id: 'a'})]);
+      storer.store('08', ['data', messages.insert('issues', {id: 'b'})]);
+      // pos 3 buffered, then the schema change at pos 4 flushes [3] first.
+      storer.store('08', ['data', messages.insert('issues', {id: 'c'})]);
+      storer.store('08', [
+        'data',
+        {
+          tag: 'create-table',
+          spec: {schema: 'my', name: 'foo', columns: {}},
+          backfill: {a: {fooID: 1, barID: 'x'}},
+        },
+      ]);
+      // pos 5, 6, 7 -> flush of [5,6,7] when pos 7 lands.
+      storer.store('08', ['data', messages.insert('issues', {id: 'd'})]);
+      storer.store('08', ['data', messages.insert('issues', {id: 'e'})]);
+      storer.store('08', ['data', messages.insert('issues', {id: 'f'})]);
+      // commit at pos 8 -> commit-time flush of the trailing [8].
+      storer.store('08', ['commit', messages.commit(), {watermark: '08'}]);
+
+      await storer.allProcessed();
+
+      const rows = await db<{pos: number; tag: string}[]>`
+        SELECT pos::int AS pos, change->>'tag' AS tag
+          FROM "xero_5/cdc"."changeLog"
+          WHERE watermark = '08'
+          ORDER BY pos`;
+
+      // Contiguous pos 0..8, no gaps or duplicates regardless of flush grouping.
+      expect(rows.map(r => r.pos)).toEqual([0, 1, 2, 3, 4, 5, 6, 7, 8]);
+      // Tags land in exact stream order, with the schema change at pos 4.
+      expect(rows.map(r => r.tag)).toEqual([
+        'begin',
+        'insert',
+        'insert',
+        'insert',
+        'create-table',
+        'insert',
+        'insert',
+        'insert',
+        'commit',
+      ]);
+
+      // The schema change's backfill metadata was tracked alongside the row.
+      expect(
+        await storer.getStartStreamInitializationParameters(),
+      ).toMatchObject({lastWatermark: '08'});
+    });
+  });
 
   describe('protocol: ws', () => {
     beforeEach(async () => {
