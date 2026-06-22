@@ -162,6 +162,7 @@ export default async function runWorker(
           backPressureLimitHeapProportion,
           flowControlConsensusPaddingSeconds,
           statementTimeoutMs: change.statementTimeoutMs,
+          changeLogBatchSize: change.logBatchSize,
         },
         setTimeout,
       );
