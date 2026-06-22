@@ -90,7 +90,7 @@ export type TuningOptions = {
 
 /**
  * A single `changeLog` row, accumulated in {@link PendingTransaction.batch}
- * and written as part of a multi-row INSERT.
+ * and written via `json_to_recordset()` (see `#flushChangeLog()`).
  */
 type ChangeLogRow = {
   watermark: string;
@@ -98,12 +98,6 @@ type ChangeLogRow = {
   pos: number;
   change: string;
 };
-
-// postgres.js binds one parameter per column per row, and Postgres allows at
-// most 65535 bind parameters per statement. With 4 columns that caps a single
-// multi-row INSERT at ~16k rows; stay well under it so a large configured
-// `changeLogBatchSize` is split into multiple statements rather than failing.
-const MAX_CHANGELOG_INSERT_ROWS = 5000;
 
 /**
  * Handles the storage of changes and the catchup of subscribers
@@ -388,10 +382,15 @@ export class Storer implements Service {
   }
 
   /**
-   * Writes any buffered {@link PendingTransaction.batch} rows to the changeLog
-   * as one (or, for very large batches, a few) multi-row INSERT(s), in `pos`
-   * order. Updates and returns {@link PendingTransaction.lastFlush}. A no-op
-   * (returning the prior `lastFlush`) when the batch is empty.
+   * Flushes any buffered {@link PendingTransaction.batch} rows to the changeLog.
+   *
+   * Uses `json_to_recordset()` so the batch is a single JSON parameter: the
+   * statement text stays constant regardless of batch size, avoiding the
+   * unbounded prepared-statement variants (and Postgres memory growth) that a
+   * multi-row INSERT would produce. See rocicorp/mono#3511.
+   *
+   * Returns (and updates) {@link PendingTransaction.lastFlush}; a no-op when the
+   * batch is empty.
    */
   #flushChangeLog(tx: PendingTransaction): Promise<unknown> | undefined {
     const {batch} = tx;
@@ -399,12 +398,17 @@ export class Storer implements Service {
       return tx.lastFlush;
     }
     tx.batch = [];
-    for (let i = 0; i < batch.length; i += MAX_CHANGELOG_INSERT_ROWS) {
-      const rows = batch.slice(i, i + MAX_CHANGELOG_INSERT_ROWS);
-      tx.lastFlush = tx.pool.process(sql => [
-        sql`INSERT INTO ${this.#cdc('changeLog')} ${sql(rows)}`,
-      ]);
-    }
+    tx.lastFlush = tx.pool.process(sql => [
+      sql`
+        INSERT INTO ${this.#cdc('changeLog')} ("watermark", "pos", "change", "precommit")
+        SELECT "watermark", "pos", "change"::json, "precommit"
+          FROM json_to_recordset(${batch}) AS x(
+            "watermark" TEXT,
+            "pos" INT8,
+            "change" TEXT,
+            "precommit" TEXT
+          )`,
+    ]);
     return tx.lastFlush;
   }
 
