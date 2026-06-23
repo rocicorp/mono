@@ -164,7 +164,7 @@ export function childWorker(
   env?: NodeJS.ProcessEnv,
   ...args: string[]
 ): Worker {
-  args.push(...process.argv.slice(2));
+  args = workerArgs(args);
 
   if (singleProcessMode()) {
     const [parent, child] = inProcChannel();
@@ -182,6 +182,26 @@ export function childWorker(
       .catch(err => child.emit('error', err));
     return child;
   }
+  return forkChildWorkerWithArgs(moduleUrl, env, args);
+}
+
+export function forkChildWorker(
+  moduleUrl: URL,
+  env?: NodeJS.ProcessEnv,
+  ...args: string[]
+): Worker {
+  return forkChildWorkerWithArgs(moduleUrl, env, workerArgs(args));
+}
+
+function workerArgs(args: string[]): string[] {
+  return [...args, ...process.argv.slice(2)];
+}
+
+function forkChildWorkerWithArgs(
+  moduleUrl: URL,
+  env: NodeJS.ProcessEnv | undefined,
+  args: string[],
+): Worker {
   const child = fork(moduleUrl, args, {
     // For production / non-windows, set `detached` to `true` so that SIGINT is
     // not automatically propagated and graceful shutdown happens as intended.

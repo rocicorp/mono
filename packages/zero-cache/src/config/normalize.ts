@@ -42,6 +42,10 @@ export function assertNormalized(
   assert(config.changeStreamer.port, 'missing --change-streamer-port');
   assert(config.changeStreamer.address, 'missing --change-streamer-address');
   assert(config.litestream.port, 'missing --litestream-port');
+  assert(
+    !config.litestream.backupUsingV5 || config.litestream.restoreUsingV5,
+    '--litestream-backup-using-v5 requires --litestream-restore-using-v5',
+  );
   assert(config.change.db, 'missing --change-db');
   assert(config.cvr.db, 'missing --cvr-db');
   assertNotUndefined(config.numSyncWorkers, 'missing --num-sync-workers');
