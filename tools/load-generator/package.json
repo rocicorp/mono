@@ -14,7 +14,7 @@
   },
   "dependencies": {
     "@dotenvx/dotenvx": "^1.39.0",
-    "@rocicorp/logger": "^6.0.0",
+    "@rocicorp/logger": "^6.1.0",
     "nanoid": "^5.1.2",
     "pg-format": "npm:pg-format-fix@^1.0.5",
     "postgres": "3.4.7"
