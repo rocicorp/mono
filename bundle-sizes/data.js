@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1781533732656,
+  "lastUpdate": 1782203243571,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -56851,6 +56851,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "Size of replicache.mjs.br (Brotli compressed)",
             "value": 57067,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 117426,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 33511,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "arv@roci.dev",
+            "name": "Erik Arvidsson",
+            "username": "arv"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a392cbede4c096f9b2c9e7ac5319d4b8521db2d9",
+          "message": "chore: update @rocicorp/logger to version 6.1.0 (#6150)\n\nThis is to get the type checking of non bound methods",
+          "timestamp": "2026-06-23T08:16:06Z",
+          "tree_id": "dde6deabd08a792aab53fad503249e549589c790",
+          "url": "https://github.com/rocicorp/mono/commit/a392cbede4c096f9b2c9e7ac5319d4b8521db2d9"
+        },
+        "date": 1782203230981,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 317540,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 57097,
             "unit": "bytes"
           },
           {
