@@ -36,6 +36,8 @@ export type BackupWatermarkSourceFactory = () => BackupWatermarkSource;
 
 let nextRequestID = 0;
 
+export class BackupWatermarkTimeoutError extends Error {}
+
 export function requestVfsBackupWatermark(
   worker: Worker,
   timeoutMs: number,
@@ -52,7 +54,7 @@ export function requestVfsBackupWatermark(
         worker.kill(options.killSignal ?? 'SIGKILL');
       }
       reject(
-        new Error(
+        new BackupWatermarkTimeoutError(
           `timed out waiting ${timeoutMs} ms for backup watermark response`,
         ),
       );

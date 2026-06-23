@@ -520,6 +520,12 @@ test('zero-cache --help', () => {
        ZERO_LITESTREAM_RESTORE_USING_V5 env                                                                                                                                                        
                                                                         Restores the backup using the ZERO_LITESTREAM_EXECUTABLE_V5 if specified.                                                  
                                                                                                                                                                                                    
+     --litestream-backup-using-v5 boolean                               default: false                                                                                                             
+       ZERO_LITESTREAM_BACKUP_USING_V5 env                                                                                                                                                         
+                                                                        Backs up the replica using Litestream v0.5.x and monitors cleanup                                                          
+                                                                        watermarks by reading the backup through the Litestream SQLite VFS.                                                        
+                                                                        This requires ZERO_LITESTREAM_RESTORE_USING_V5.                                                                            
+                                                                                                                                                                                                   
      --litestream-config-path string                                    default: "./src/services/litestream/config.yml"                                                                            
        ZERO_LITESTREAM_CONFIG_PATH env                                                                                                                                                             
                                                                         Path to the litestream yaml config file. zero-cache will run this with its                                                 

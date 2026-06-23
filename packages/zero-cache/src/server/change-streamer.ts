@@ -220,6 +220,7 @@ export default async function runWorker(
     //
     // Consider: Also account for permanent volumes?
     initialCleanupDelayMs: Date.now() - workerStartTime,
+    env,
   });
   const monitor =
     backupMonitor ?? new ReplicaMonitor(lc, replica.file, changeStreamer);
