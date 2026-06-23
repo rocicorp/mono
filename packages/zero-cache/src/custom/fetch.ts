@@ -37,32 +37,6 @@ export function compileUrlPattern(pattern: string): URLPattern {
   }
 }
 
-/**
- * Filters custom headers based on the allowed headers list.
- * If no allowedHeaders list is specified, no custom headers are forwarded (secure by default).
- * Header names are compared case-insensitively.
- */
-function filterCustomHeaders(
-  headers: Readonly<Record<string, string>> | undefined,
-  allowedHeaders: readonly string[] | undefined,
-): Record<string, string> {
-  if (!headers) {
-    return {};
-  }
-  if (!allowedHeaders || allowedHeaders.length === 0) {
-    return {};
-  }
-
-  const allowed = new Set(allowedHeaders.map(h => h.toLowerCase()));
-  const filtered: Record<string, string> = {};
-  for (const [key, value] of Object.entries(headers)) {
-    if (allowed.has(key.toLowerCase())) {
-      filtered[key] = value;
-    }
-  }
-  return filtered;
-}
-
 export const getBodyPreview = async (
   res: Response,
   lc: LogContext,
@@ -141,10 +115,8 @@ export async function fetchFromAPIServer<TValidator extends Type>(
   }
   Object.assign(
     headers,
-    filterCustomHeaders(
-      headerOptions.customHeaders,
-      headerOptions.allowedClientHeaders,
-    ),
+    headerOptions.customHeaders,
+    headerOptions.requestHeaders,
   );
   if (ctx.auth?.raw) {
     headers['Authorization'] = `Bearer ${ctx.auth.raw}`;

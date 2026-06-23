@@ -62,6 +62,7 @@ function getCustomQueryConfig(
     url: queryConfig.url,
     apiKey: queryConfig.apiKey,
     allowedClientHeaders: queryConfig.allowedClientHeaders,
+    allowedRequestHeaders: queryConfig.allowedRequestHeaders,
     forwardCookies: queryConfig.forwardCookies ?? false,
   };
 }

@@ -26,7 +26,6 @@ import {fetchFromAPIServer} from '../custom/fetch.ts';
 import type {
   ConnectionContext,
   ConnectionValidation,
-  HeaderOptions,
 } from '../services/view-syncer/connection-context-manager.ts';
 import type {CustomQueryRecord} from '../services/view-syncer/schema/types.ts';
 import type {ShardID} from '../types/shards.ts';
@@ -257,26 +256,23 @@ function getCacheKey(ctx: ConnectionContext, queryID: string) {
     origin: ctx.queryContext.headerOptions.origin,
     userID: ctx.user,
     url: ctx.queryContext.url,
-    customHeaders: normalizedForwardedHeaders(ctx.queryContext.headerOptions),
+    customHeaders: normalizedHeaders(
+      ctx.queryContext.headerOptions.customHeaders,
+    ),
+    requestHeaders: normalizedHeaders(
+      ctx.queryContext.headerOptions.requestHeaders,
+    ),
   });
 }
 
-function normalizedForwardedHeaders(headerOptions: HeaderOptions) {
-  const {allowedClientHeaders, customHeaders} = headerOptions;
-  if (
-    !customHeaders ||
-    !allowedClientHeaders ||
-    allowedClientHeaders.length === 0
-  ) {
+function normalizedHeaders(
+  headers: Readonly<Record<string, string>> | undefined,
+) {
+  if (!headers) {
     return undefined;
   }
 
-  const allowedHeaders = new Set(
-    allowedClientHeaders.map(header => header.toLowerCase()),
-  );
-  const forwardedHeaders = sortedEntries(customHeaders).filter(([header]) =>
-    allowedHeaders.has(header.toLowerCase()),
-  );
+  const forwardedHeaders = sortedEntries(headers);
 
   return forwardedHeaders.length === 0
     ? undefined
