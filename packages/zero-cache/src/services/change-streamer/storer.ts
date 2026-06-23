@@ -703,7 +703,7 @@ export class Storer implements Service {
           await lastBatchConsumed;
           const elapsed = performance.now() - start;
           if (lastBatchConsumed) {
-            (elapsed > 100 ? this.#lc.info : this.#lc.debug)?.(
+            this.#lc[elapsed > 100 ? 'info' : 'debug']?.(
               `waited ${elapsed.toFixed(3)} ms for ${sub.id} to consume last batch of catchup entries`,
             );
           }
