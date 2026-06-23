@@ -1,9 +1,3 @@
-import type {
-  PgDatabase,
-  PgQueryResultHKT,
-  PgTransaction,
-} from 'drizzle-orm/pg-core';
-import type {ExtractTablesWithRelations} from 'drizzle-orm/relations';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
 import type {Format} from '../../../zero-types/src/format.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
@@ -19,38 +13,75 @@ import {ZQLDatabase} from '../zql-database.ts';
 
 export type {ZQLDatabase};
 
+type DrizzleQuery = {sql: string; params: unknown[]};
+type DrizzlePreparedQuery = {execute(): Promise<unknown>};
+
+type DrizzlePrepareQueryV0 = (
+  query: DrizzleQuery,
+  fields: undefined,
+  name: undefined,
+  isResponseInArrayMode: false,
+) => DrizzlePreparedQuery;
+
+type DrizzlePrepareQueryV1 = (
+  query: DrizzleQuery,
+  mode: 'objects',
+  name: undefined,
+  mapper: undefined,
+) => DrizzlePreparedQuery;
+
+type DrizzleSession = {
+  prepareQuery: {length: number};
+};
+
+type DrizzleTransactionLike = {
+  _: {session: DrizzleSession};
+};
+
+type DrizzleQueryResult<TResult> = PromiseLike<TResult> & {
+  execute(): Promise<TResult>;
+};
+
+type DrizzleInferSelect<TTable> = TTable extends {$inferSelect: infer TSelect}
+  ? TSelect
+  : Record<string, unknown>;
+
+type DrizzleTransactionFromSchema<TSchema> = DrizzleTransactionLike & {
+  query: {
+    [TTable in keyof TSchema]: {
+      findFirst(
+        args?: unknown,
+      ): DrizzleQueryResult<DrizzleInferSelect<TSchema[TTable]> | undefined>;
+    };
+  };
+};
+
 export type DrizzleDatabase<
-  TQueryResult extends PgQueryResultHKT = PgQueryResultHKT,
-  TSchema extends Record<string, unknown> = Record<string, unknown>,
-> = PgDatabase<TQueryResult, TSchema>;
+  TTransaction extends DrizzleTransactionLike = DrizzleTransactionLike,
+> = {
+  transaction<T>(
+    transaction: (tx: TTransaction) => Promise<T>,
+    config?: never,
+  ): Promise<T>;
+};
 
 /**
  * Helper type for the wrapped transaction used by drizzle-orm.
  *
  * @remarks Use with `ServerTransaction` as `ServerTransaction<Schema, DrizzleTransaction<typeof drizzleDb>>`.
  */
-export type DrizzleTransaction<
-  TDbOrSchema extends DrizzleDatabase | Record<string, unknown>,
-  TSchema extends Record<string, unknown> = TDbOrSchema extends PgDatabase<
-    PgQueryResultHKT,
-    infer TInferredSchema
-  >
-    ? TInferredSchema
-    : TDbOrSchema,
-> = PgTransaction<
-  PgQueryResultHKT,
-  TSchema,
-  ExtractTablesWithRelations<TSchema>
->;
+export type DrizzleTransaction<TDbOrSchema = Record<string, unknown>> =
+  TDbOrSchema extends DrizzleDatabase<infer TTransaction>
+    ? TTransaction
+    : DrizzleTransactionFromSchema<TDbOrSchema>;
 
 export class DrizzleConnection<
-  TDrizzle extends DrizzleDatabase,
-  TTransaction extends DrizzleTransaction<TDrizzle> =
-    DrizzleTransaction<TDrizzle>,
+  TDrizzle,
+  TTransaction extends DrizzleTransactionLike = DrizzleTransaction<TDrizzle>,
 > implements DBConnection<TTransaction> {
-  readonly #drizzle: TDrizzle;
+  readonly #drizzle: DrizzleDatabase<TTransaction>;
 
-  constructor(drizzle: TDrizzle) {
+  constructor(drizzle: TDrizzle & DrizzleDatabase<TTransaction>) {
     this.#drizzle = drizzle;
   }
 
@@ -68,7 +99,7 @@ export class DrizzleConnection<
 }
 
 class DrizzleInternalTransaction<
-  TTransaction extends DrizzleTransaction<DrizzleDatabase>,
+  TTransaction extends DrizzleTransactionLike,
 > implements DBTransaction<TTransaction> {
   readonly wrappedTransaction: TTransaction;
 
@@ -92,12 +123,22 @@ class DrizzleInternalTransaction<
   }
 
   async query(sql: string, params: unknown[]): Promise<Iterable<Row>> {
-    const prepared = this.wrappedTransaction._.session.prepareQuery(
-      {sql, params},
-      undefined,
-      undefined,
-      false,
-    );
+    const {session} = this.wrappedTransaction._;
+    const query = {sql, params};
+    const prepared =
+      session.prepareQuery.length < 7
+        ? (session.prepareQuery as DrizzlePrepareQueryV1)(
+            query,
+            'objects',
+            undefined,
+            undefined,
+          )
+        : (session.prepareQuery as DrizzlePrepareQueryV0)(
+            query,
+            undefined,
+            undefined,
+            false,
+          );
     const result = await prepared.execute();
     return toIterableRows(result);
   }
@@ -176,13 +217,14 @@ export function toIterableRows(result: unknown): Iterable<Row> {
  */
 export function zeroDrizzle<
   TSchema extends Schema,
-  TDrizzle extends DrizzleDatabase,
+  TDrizzle,
+  TTransaction extends DrizzleTransactionLike = DrizzleTransaction<TDrizzle>,
 >(
   schema: TSchema,
-  client: TDrizzle,
-): ZQLDatabase<TSchema, DrizzleTransaction<TDrizzle>> {
+  client: TDrizzle & DrizzleDatabase<TTransaction>,
+): ZQLDatabase<TSchema, TTransaction> {
   return new ZQLDatabase(
-    new DrizzleConnection<TDrizzle, DrizzleTransaction<TDrizzle>>(client),
+    new DrizzleConnection<TDrizzle, TTransaction>(client),
     schema,
   );
 }
