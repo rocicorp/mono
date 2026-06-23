@@ -14,7 +14,7 @@
   },
   "dependencies": {
     "@rocicorp/lock": "^1.0.4",
-    "@rocicorp/logger": "^6.0.0",
+    "@rocicorp/logger": "^6.1.0",
     "ws": "^8.18.1",
     "zqlite": "workspace:*"
   },
