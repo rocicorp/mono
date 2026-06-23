@@ -1,6 +1,10 @@
+import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {beforeEach, describe, expect, test, vi} from 'vitest';
-import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
+import {
+  createSilentLogContext,
+  TestLogSink,
+} from '../../../../shared/src/logging-test-utils.ts';
 import type {Subscription} from '../../types/subscription.ts';
 import type {VfsBackupWatermark} from '../litestream/vfs-watermark-reader.ts';
 import type {ChangeStreamerService} from './change-streamer.ts';
@@ -12,6 +16,8 @@ import {
 
 describe('change-streamer/vfs-backup-monitor', () => {
   const scheduled: string[] = [];
+  const backupReported: string[] = [];
+  let consumedWatermark: string | null = null;
   const changeStreamer = {
     scheduleCleanup: (watermark: string) => scheduled.push(watermark),
     getChangeLogState: () =>
@@ -19,6 +25,8 @@ describe('change-streamer/vfs-backup-monitor', () => {
         replicaVersion: '123',
         minWatermark: '1ab',
       }),
+    getLastConsumedWatermark: () => consumedWatermark,
+    onBackupWatermark: (watermark: string) => backupReported.push(watermark),
   } as unknown as ChangeStreamerService;
 
   let readWatermark: ReturnType<
@@ -31,6 +39,8 @@ describe('change-streamer/vfs-backup-monitor', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     scheduled.splice(0);
+    backupReported.splice(0);
+    consumedWatermark = null;
     readWatermark = vi.fn<() => Promise<VfsBackupWatermark>>();
     closeSource = vi.fn<() => void>();
     source = {
@@ -84,6 +94,9 @@ describe('change-streamer/vfs-backup-monitor', () => {
 
     await monitor.checkWatermarkAndScheduleCleanup();
     expect(scheduled).toEqual([]);
+    // The fresh backup watermark is reported to the change-streamer on every
+    // probe (for backup-driven slot ACKs), independent of the cleanup delay.
+    expect(backupReported).toEqual(['04']);
 
     vi.setSystemTime(time + 99_999);
     await monitor.checkWatermarkAndScheduleCleanup();
@@ -154,5 +167,41 @@ describe('change-streamer/vfs-backup-monitor', () => {
     monitor.endReservation('foo-bar');
     await monitor.checkWatermarkAndScheduleCleanup();
     expect(scheduled).toEqual(['04']);
+  });
+
+  test('reports shadow ack lag between consumed and backup watermarks', async () => {
+    const sink = new TestLogSink();
+    const localMonitor = new VfsBackupMonitor(
+      new LogContext('debug', undefined, sink),
+      's3://foo/bar',
+      changeStreamer,
+      100_000,
+      30_000,
+      source,
+    );
+
+    const time = Date.UTC(2025, 3, 24);
+    vi.setSystemTime(time);
+    consumedWatermark = '08';
+    readWatermark.mockResolvedValue(backupWatermark('04', time));
+
+    await localMonitor.checkWatermarkAndScheduleCleanup();
+
+    const observed = sink.messages.find(
+      ([, , args]) =>
+        typeof args[0] === 'string' &&
+        args[0].includes('observed backup watermark'),
+    );
+    expect(observed).toBeDefined();
+    const fields = observed![2][1] as {
+      consumedWatermark: string | null;
+      shadowAckLagBytes: number | undefined;
+    };
+    expect(fields.consumedWatermark).toBe('08');
+    // major('08') - major('04') = 8 - 4 = 4 WAL bytes the slot would
+    // additionally retain under backup-driven ACK.
+    expect(fields.shadowAckLagBytes).toBe(4);
+
+    await localMonitor.stop();
   });
 });

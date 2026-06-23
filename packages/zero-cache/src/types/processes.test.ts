@@ -1,6 +1,6 @@
 import type {SendHandle} from 'child_process';
 import {describe, expect, test, vi} from 'vitest';
-import {inProcChannel} from './processes.ts';
+import {inProcChannel, shouldStartWorker, type Worker} from './processes.ts';
 
 describe('types/processes', () => {
   test('in-proc channel', () => {
@@ -88,5 +88,31 @@ describe('types/processes', () => {
       [{foo: 'bar'}, 'sendHandle'],
       [{foo: 'baz'}, undefined],
     ]);
+  });
+
+  describe('shouldStartWorker', () => {
+    const parent = {} as unknown as Worker;
+
+    // A forked child always starts, even when it inherited SINGLE_PROCESS from
+    // its parent — this is the case that previously hung re-forking the backup
+    // watermark reader.
+    test('forked child starts even in single-process mode', () => {
+      expect(shouldStartWorker(parent, true)).toBe(true);
+    });
+
+    test('forked child starts in multi-process mode', () => {
+      expect(shouldStartWorker(parent, false)).toBe(true);
+    });
+
+    // Standalone direct launch (no parent): start only outside single-process
+    // mode, otherwise childWorker invokes runWorker in-process and we must not
+    // self-start.
+    test('standalone launch starts in multi-process mode', () => {
+      expect(shouldStartWorker(null, false)).toBe(true);
+    });
+
+    test('standalone launch does not start in single-process mode', () => {
+      expect(shouldStartWorker(null, true)).toBe(false);
+    });
   });
 });

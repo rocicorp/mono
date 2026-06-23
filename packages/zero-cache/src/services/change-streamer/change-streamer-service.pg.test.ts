@@ -44,6 +44,7 @@ const opts: TuningOptions = {
   flowControlConsensusPaddingSeconds: 1,
   statementTimeoutMs: 20_000,
   changeLogBatchSize: 2000,
+  ackFromBackup: false,
 };
 
 describe('change-streamer/service', () => {

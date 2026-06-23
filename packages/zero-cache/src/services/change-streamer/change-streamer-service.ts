@@ -56,6 +56,9 @@ import {Subscriber} from './subscriber.ts';
 
 export type TuningOptions = StorerOptions & {
   flowControlConsensusPaddingSeconds: number;
+  // RMv2 Phase 2: cap the upstream replication-slot ACK at the litestream
+  // backup watermark (requires v5 backup monitoring). Off by default.
+  ackFromBackup: boolean;
 };
 
 /**
@@ -306,6 +309,14 @@ class ChangeStreamerImpl implements ChangeStreamerService {
   #latestStatus: Status;
   #purgeLock: PurgeLock | null;
   #stream: ChangeStream | undefined;
+  // The latest watermark confirmed durable to the change source (what
+  // currently drives the slot ACK). Read by the v5 backup monitor to report
+  // the shadow lag vs. the litestream backup watermark.
+  #lastConsumedWatermark: string | null = null;
+  // RMv2 Phase 2: when #ackFromBackup is set, the slot ACK is gated on the
+  // latest litestream backup watermark (fed via onBackupWatermark()).
+  readonly #ackFromBackup: boolean;
+  #latestBackupWatermark: string | null = null;
 
   constructor(
     lc: LogContext,
@@ -336,7 +347,10 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       discoveryProtocol,
       changeDB,
       replicaVersion,
-      consumed => this.#stream?.acks.push(['status', consumed[1], consumed[2]]),
+      consumed => {
+        this.#lastConsumedWatermark = consumed[2].watermark;
+        this.#stream?.acks.push(['status', consumed[1], consumed[2]]);
+      },
       err => this.stop(err),
       opts,
     );
@@ -349,6 +363,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     this.#autoReset = autoReset;
     this.#state = new RunningState(this.id, undefined, setTimeoutFn);
     this.#latestStatus = {tag: 'status'};
+    this.#ackFromBackup = opts.ackFromBackup;
   }
 
   async run() {
@@ -384,6 +399,12 @@ class ChangeStreamerImpl implements ChangeStreamerService {
         this.#storer.run().catch(e => stream.changes.cancel(e));
 
         this.#stream = stream;
+        if (this.#ackFromBackup) {
+          // Enable backup-gating for this stream from the start, so the slot is
+          // never ACKed past the backup — even before the first backup watermark
+          // is observed (an empty ceiling withholds all ACKs until one arrives).
+          stream.setBackupWatermark?.(this.#latestBackupWatermark ?? '');
+        }
         if (
           this.#state.resetBackoff() >
           REPLICATION_STATUS_ERROR_DELAY_THRESHOLD_MS
@@ -579,6 +600,18 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       replicaVersion: this.#replicaVersion,
       minWatermark: minWatermark ?? this.#replicaVersion,
     };
+  }
+
+  getLastConsumedWatermark(): string | null {
+    return this.#lastConsumedWatermark;
+  }
+
+  onBackupWatermark(watermark: string): void {
+    this.#latestBackupWatermark = watermark;
+    if (this.#ackFromBackup) {
+      // Raise the change source's ACK ceiling to the backed-up watermark.
+      this.#stream?.setBackupWatermark?.(watermark);
+    }
   }
 
   /**

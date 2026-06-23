@@ -14,6 +14,16 @@ export type ChangeStream = {
    * downstream {@link StatusMessage}s henceforth.
    */
   acks: Sink<ChangeSourceUpstream>;
+
+  /**
+   * Caps upstream acknowledgements at the given (backed-up) watermark, so the
+   * source never advances its position past what has been durably backed up
+   * (RMv2 backup-driven ACK). Calling it enables backup-gating; it is then
+   * called again whenever the backup watermark advances. Optional: only change
+   * sources with an externally-durable position (e.g. a Postgres replication
+   * slot) implement it.
+   */
+  setBackupWatermark?: ((watermark: string) => void) | undefined;
 }; /** Encapsulates an upstream-specific implementation of a stream of Changes. */
 
 export interface ChangeSource {

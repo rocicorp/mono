@@ -163,6 +163,7 @@ export default async function runWorker(
           flowControlConsensusPaddingSeconds,
           statementTimeoutMs: change.statementTimeoutMs,
           changeLogBatchSize: change.logBatchSize,
+          ackFromBackup: config.litestream.ackFromBackup,
         },
         setTimeout,
       );

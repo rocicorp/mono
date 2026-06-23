@@ -844,6 +844,21 @@ export const zeroOptions = {
       ],
     },
 
+    ackFromBackup: {
+      type: v.boolean().default(false),
+      desc: [
+        `{bold Experimental.} ACKs the upstream Postgres replication slot from`,
+        `the Litestream backup watermark instead of from change-log durability,`,
+        `so the slot's {bold confirmed_flush_lsn} (and thus the WAL Postgres`,
+        `retains) tracks what has actually been durably backed up. This is the`,
+        `precursor to removing the Postgres change-log entirely (RMv2). Requires`,
+        `{bold ZERO_LITESTREAM_BACKUP_USING_V5} (the VFS backup watermark is the`,
+        `ACK source). The change-log shadow lag is reported regardless via the`,
+        `{bold zero.replica.shadow_ack_lag_bytes} metric; enable this flag only`,
+        `after that lag has been verified to stay within WAL retention headroom.`,
+      ],
+    },
+
     configPath: {
       type: v.string().default('./src/services/litestream/config.yml'),
       desc: [

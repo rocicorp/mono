@@ -487,6 +487,7 @@ class PostgresChangeSource implements ChangeSource {
     return {
       changes: changes.asSource(),
       acks: {push: status => acker.ack(status[2].watermark)},
+      setBackupWatermark: watermark => acker.setBackupWatermark(watermark),
     };
   }
 
@@ -583,6 +584,22 @@ export class Acker implements Listener {
   #acks: Sink<bigint>;
   #waitingForDownstreamAck: string | null = null;
 
+  // Backup-gating (RMv2 Phase 2): when enabled, the replication slot is never
+  // ACKed past the litestream backup watermark, so that confirmed_flush_lsn —
+  // and thus the WAL Postgres retains — tracks what has actually been durably
+  // backed up rather than what has merely been forwarded/stored. Gating is
+  // enabled by the change-streamer calling setBackupWatermark() (only when
+  // --litestream-ack-from-backup is set); otherwise behavior is unchanged.
+  //
+  // While gated, connection liveness is unaffected: the replication stream's
+  // own keepalive timer sends standby status updates independently of these
+  // ACKs (see logical-replication/stream.ts), so withholding an advancing ACK
+  // simply pins the slot — it does not stall the connection.
+  #backupGated = false;
+  #backupWatermark = ''; // ceiling: highest watermark known to be backed up
+  #desiredAck = ''; // highest watermark we would ACK absent gating
+  #sentAck = ''; // highest watermark actually pushed (kept monotonic)
+
   constructor(acks: Sink<bigint>) {
     this.#acks = acks;
   }
@@ -619,6 +636,20 @@ export class Acker implements Listener {
     this.#waitingForDownstreamAck = watermark;
   }
 
+  /**
+   * Raises the backed-up watermark ceiling. The first call enables backup-gating
+   * (after which the slot is never ACKed past `watermark`); subsequent calls
+   * raise the ceiling and flush any ACK that was previously withheld because the
+   * backup had not yet caught up.
+   */
+  setBackupWatermark(watermark: string) {
+    this.#backupGated = true;
+    if (watermark > this.#backupWatermark) {
+      this.#backupWatermark = watermark;
+      this.#flushGated();
+    }
+  }
+
   ack(watermark: LexiVersion) {
     if (
       this.#waitingForDownstreamAck &&
@@ -636,8 +667,31 @@ export class Acker implements Listener {
   }
 
   #sendAck(watermark: LexiVersion) {
-    const lsn = majorVersionFromString(watermark);
-    this.#acks.push(lsn);
+    if (this.#backupGated) {
+      // Track what we'd ack absent gating, then flush min(desired, backup).
+      if (watermark > this.#desiredAck) {
+        this.#desiredAck = watermark;
+      }
+      this.#flushGated();
+      return;
+    }
+    this.#acks.push(majorVersionFromString(watermark));
+  }
+
+  // Pushes min(desiredAck, backupWatermark), never regressing. A no-op until
+  // both a desired ACK and a backup watermark are known.
+  #flushGated() {
+    if (!this.#desiredAck || !this.#backupWatermark) {
+      return;
+    }
+    const target =
+      this.#desiredAck < this.#backupWatermark
+        ? this.#desiredAck
+        : this.#backupWatermark;
+    if (target > this.#sentAck) {
+      this.#sentAck = target;
+      this.#acks.push(majorVersionFromString(target));
+    }
   }
 }
 
