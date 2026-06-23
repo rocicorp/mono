@@ -14,6 +14,7 @@ function configWith(litestream: Partial<ZeroConfig['litestream']>): ZeroConfig {
       port: 9090,
       backupUsingV5: false,
       restoreUsingV5: false,
+      ackFromBackup: false,
       executable: undefined,
       executableV5: undefined,
       ...litestream,
@@ -91,6 +92,35 @@ describe('config/normalize litestream v5 gating', () => {
           backupUsingV5: false,
           restoreUsingV5: true,
           executable: '/bin/litestream-v3',
+          executableV5: '/bin/litestream-v5',
+        }),
+      ),
+    ).not.toThrow();
+  });
+
+  test('ackFromBackup requires backupUsingV5', () => {
+    // The backup watermark that gates the slot ACK is produced by the v5 VFS
+    // monitor; without it the slot would never advance.
+    expect(() =>
+      assertNormalized(
+        configWith({
+          ackFromBackup: true,
+          backupUsingV5: false,
+        }),
+      ),
+    ).toThrow(
+      '--litestream-ack-from-backup requires --litestream-backup-using-v5',
+    );
+  });
+
+  test('allows ackFromBackup when backupUsingV5 is enabled', () => {
+    expect(() =>
+      assertNormalized(
+        configWith({
+          ackFromBackup: true,
+          backupUsingV5: true,
+          restoreUsingV5: true,
+          executable: '/bin/litestream-v5',
           executableV5: '/bin/litestream-v5',
         }),
       ),

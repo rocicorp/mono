@@ -16,6 +16,7 @@ import {
 
 describe('change-streamer/vfs-backup-monitor', () => {
   const scheduled: string[] = [];
+  const backupReported: string[] = [];
   let consumedWatermark: string | null = null;
   const changeStreamer = {
     scheduleCleanup: (watermark: string) => scheduled.push(watermark),
@@ -25,6 +26,7 @@ describe('change-streamer/vfs-backup-monitor', () => {
         minWatermark: '1ab',
       }),
     getLastConsumedWatermark: () => consumedWatermark,
+    onBackupWatermark: (watermark: string) => backupReported.push(watermark),
   } as unknown as ChangeStreamerService;
 
   let readWatermark: ReturnType<
@@ -37,6 +39,7 @@ describe('change-streamer/vfs-backup-monitor', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     scheduled.splice(0);
+    backupReported.splice(0);
     consumedWatermark = null;
     readWatermark = vi.fn<() => Promise<VfsBackupWatermark>>();
     closeSource = vi.fn<() => void>();
@@ -91,6 +94,9 @@ describe('change-streamer/vfs-backup-monitor', () => {
 
     await monitor.checkWatermarkAndScheduleCleanup();
     expect(scheduled).toEqual([]);
+    // The fresh backup watermark is reported to the change-streamer on every
+    // probe (for backup-driven slot ACKs), independent of the cleanup delay.
+    expect(backupReported).toEqual(['04']);
 
     vi.setSystemTime(time + 99_999);
     await monitor.checkWatermarkAndScheduleCleanup();

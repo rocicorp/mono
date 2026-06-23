@@ -147,6 +147,9 @@ export class VfsBackupMonitor implements BackupMonitor {
   async #checkWatermark(): Promise<void> {
     const watermark = await this.#source.readWatermark();
     this.#latestBackupWatermark = watermark;
+    // Report the backed-up watermark so the change-streamer can (when
+    // --litestream-ack-from-backup is set) cap the slot ACK at it.
+    this.#changeStreamer.onBackupWatermark(watermark.watermark);
     if (
       watermark.watermark > this.#lastWatermark &&
       !this.#watermarks.has(watermark.watermark)

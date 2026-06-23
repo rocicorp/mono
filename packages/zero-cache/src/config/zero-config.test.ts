@@ -546,6 +546,18 @@ test('zero-cache --help', () => {
                                                                         watermarks by reading the backup through the Litestream SQLite VFS.                                                        
                                                                         This requires ZERO_LITESTREAM_RESTORE_USING_V5.                                                                            
                                                                                                                                                                                                    
+     --litestream-ack-from-backup boolean                               default: false                                                                                                             
+       ZERO_LITESTREAM_ACK_FROM_BACKUP env                                                                                                                                                         
+                                                                        Experimental. ACKs the upstream Postgres replication slot from                                                             
+                                                                        the Litestream backup watermark instead of from change-log durability,                                                     
+                                                                        so the slot's confirmed_flush_lsn (and thus the WAL Postgres                                                               
+                                                                        retains) tracks what has actually been durably backed up. This is the                                                      
+                                                                        precursor to removing the Postgres change-log entirely (RMv2). Requires                                                    
+                                                                        ZERO_LITESTREAM_BACKUP_USING_V5 (the VFS backup watermark is the                                                           
+                                                                        ACK source). The change-log shadow lag is reported regardless via the                                                      
+                                                                        zero.replica.shadow_ack_lag_bytes metric; enable this flag only                                                            
+                                                                        after that lag has been verified to stay within WAL retention headroom.                                                    
+                                                                                                                                                                                                   
      --litestream-config-path string                                    default: "./src/services/litestream/config.yml"                                                                            
        ZERO_LITESTREAM_CONFIG_PATH env                                                                                                                                                             
                                                                         Path to the litestream yaml config file. zero-cache will run this with its                                                 

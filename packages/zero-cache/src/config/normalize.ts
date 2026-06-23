@@ -60,6 +60,13 @@ export function assertNormalized(
       'flipped to the v5 binary (--litestream-executable must equal ' +
       '--litestream-executable-v5)',
   );
+  // Acking the replication slot from the backup watermark requires the v5 VFS
+  // backup monitor to feed that watermark; without it the slot would gate on a
+  // watermark that never arrives and the WAL would grow unbounded.
+  assert(
+    !config.litestream.ackFromBackup || config.litestream.backupUsingV5,
+    '--litestream-ack-from-backup requires --litestream-backup-using-v5',
+  );
   assert(config.change.db, 'missing --change-db');
   assert(config.cvr.db, 'missing --cvr-db');
   assertNotUndefined(config.numSyncWorkers, 'missing --num-sync-workers');

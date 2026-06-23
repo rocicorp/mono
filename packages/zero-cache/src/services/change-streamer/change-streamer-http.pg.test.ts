@@ -107,6 +107,7 @@ describe('change-streamer/http', () => {
         scheduleCleanup: vi.fn(),
         getChangeLogState: vi.fn(),
         getLastConsumedWatermark: vi.fn(),
+        onBackupWatermark: vi.fn(),
       },
       {
         id: 'backup-monitor',
@@ -171,6 +172,7 @@ describe('change-streamer/http', () => {
         scheduleCleanup: vi.fn(),
         getChangeLogState: vi.fn(),
         getLastConsumedWatermark: vi.fn(),
+        onBackupWatermark: vi.fn(),
       },
       null,
     );

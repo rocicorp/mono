@@ -19,6 +19,7 @@ const changeStreamer = {
       minWatermark: 'min-watermark',
     }),
   getLastConsumedWatermark: () => null,
+  onBackupWatermark: vi.fn(),
 } satisfies ChangeStreamerService;
 
 function configWithLitestream(
