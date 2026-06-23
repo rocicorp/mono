@@ -18,6 +18,7 @@ const changeStreamer = {
       replicaVersion: 'replica-version',
       minWatermark: 'min-watermark',
     }),
+  getLastConsumedWatermark: () => null,
 } satisfies ChangeStreamerService;
 
 function configWithLitestream(

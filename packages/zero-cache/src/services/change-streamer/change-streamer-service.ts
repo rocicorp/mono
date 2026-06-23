@@ -306,6 +306,10 @@ class ChangeStreamerImpl implements ChangeStreamerService {
   #latestStatus: Status;
   #purgeLock: PurgeLock | null;
   #stream: ChangeStream | undefined;
+  // The latest watermark confirmed durable to the change source (what
+  // currently drives the slot ACK). Read by the v5 backup monitor to report
+  // the shadow lag vs. the litestream backup watermark.
+  #lastConsumedWatermark: string | null = null;
 
   constructor(
     lc: LogContext,
@@ -336,7 +340,10 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       discoveryProtocol,
       changeDB,
       replicaVersion,
-      consumed => this.#stream?.acks.push(['status', consumed[1], consumed[2]]),
+      consumed => {
+        this.#lastConsumedWatermark = consumed[2].watermark;
+        this.#stream?.acks.push(['status', consumed[1], consumed[2]]);
+      },
       err => this.stop(err),
       opts,
     );
@@ -579,6 +586,10 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       replicaVersion: this.#replicaVersion,
       minWatermark: minWatermark ?? this.#replicaVersion,
     };
+  }
+
+  getLastConsumedWatermark(): string | null {
+    return this.#lastConsumedWatermark;
   }
 
   /**

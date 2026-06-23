@@ -4,6 +4,7 @@ import {
   getOrCreateCounter,
   getOrCreateGauge,
 } from '../../observability/metrics.ts';
+import {majorVersionFromString} from '../../types/state-version.ts';
 import {Subscription} from '../../types/subscription.ts';
 import type {VfsBackupWatermark} from '../litestream/vfs-watermark-reader.ts';
 import {RunningState} from '../running-state.ts';
@@ -79,6 +80,7 @@ export class VfsBackupMonitor implements BackupMonitor {
       this.#probeIntervalMs,
     );
     this.#initBackupLagMetric();
+    this.#initShadowAckLagMetric();
     return this.#state.stopped();
   }
 
@@ -156,6 +158,8 @@ export class VfsBackupMonitor implements BackupMonitor {
           writeTimeMs: watermark.writeTimeMs,
           txid: watermark.txid,
           lagSeconds: watermark.lagSeconds,
+          consumedWatermark: this.#changeStreamer.getLastConsumedWatermark(),
+          shadowAckLagBytes: this.#shadowAckLagBytes(),
         },
       );
       this.#watermarks.set(watermark.watermark, watermark);
@@ -240,6 +244,43 @@ export class VfsBackupMonitor implements BackupMonitor {
             latestBackupWatermark.writeTimeMs,
         ),
       );
+    });
+  }
+
+  /**
+   * The number of WAL bytes the replication slot would *additionally* retain
+   * if it were ACKed from the litestream backup watermark instead of from
+   * change-log durability. LSN deltas are byte offsets in the WAL, and the
+   * change-log-durable watermark (≈ stream head) is normally at or ahead of
+   * the backup watermark, so the difference is the extra retention RMv2's
+   * backup-driven ACK would impose. Returns `undefined` until both watermarks
+   * are known; clamps to 0 to ignore transient skew.
+   */
+  #shadowAckLagBytes(): number | undefined {
+    const backupWatermark = this.#latestBackupWatermark?.watermark;
+    const consumedWatermark = this.#changeStreamer.getLastConsumedWatermark();
+    if (!backupWatermark || !consumedWatermark) {
+      return undefined;
+    }
+    const lag =
+      majorVersionFromString(consumedWatermark) -
+      majorVersionFromString(backupWatermark);
+    return Number(lag > 0n ? lag : 0n);
+  }
+
+  #initShadowAckLagMetric(): void {
+    getOrCreateGauge('replica', 'shadow_ack_lag_bytes', {
+      description:
+        'WAL bytes the replication slot would additionally retain if it were ' +
+        'ACKed from the litestream backup watermark instead of change-log ' +
+        'durability. Observation-only; sizes WAL retention ahead of the ' +
+        'cutover to backup-driven slot ACKs (RMv2).',
+      unit: 'byte',
+    }).addCallback(o => {
+      const lagBytes = this.#shadowAckLagBytes();
+      if (lagBytes !== undefined) {
+        o.observe(lagBytes);
+      }
     });
   }
 }

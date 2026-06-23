@@ -68,7 +68,7 @@ A surprising amount of the RMv2 substrate already exists. Phases below are mostl
 
 **(B) SQLite change-log and the new handoff are inseparable.** The PG change-log is globally shared and single-`owner`. Once it's process-local SQLite, an incoming RM can't read the outgoing RM's log to catch up — it must initialize via slot+backup (Resumption/Fork). And concurrent RMs (Fork) each need their own log → SQLite. You cannot ship SQLite-change-log with RMv1 handoff, nor Fork with a shared log. **They cut over together (Phase 6).** _(Confirmed with stakeholder.)_
 
-**(C) Cross-sibling watermark identity** makes multi-RM serving coherent: replicas of the same generation replicate the same WAL, so their commit watermarks and change-log entries are byte-identical. Therefore any RM of generation G can catch up any subscriber of generation G — this is what enables view-syncer failover and Fork (poll any sibling slot `confirmed_flush_lsn ≥ new_slot_start` ⟹ that sibling's backup is ≥ new_slot_start, since ACK happens _after_ backup).
+**(C) Cross-sibling watermark identity** makes multi-RM serving coherent: replicas of the same generation replicate the same WAL, so their commit watermarks and change-log entries are byte-identical. Therefore any RM of generation G can catch up any subscriber of generation G — this is what enables view-syncer failover and Fork (poll any sibling slot `confirmed_flush_lsn ≥ new_slot_start` ⟹ that sibling's backup is ≥ new*slot_start, since ACK happens \_after* backup).
 
 ### Load-bearing invariants to encode + test
 

@@ -213,4 +213,15 @@ export interface ChangeStreamerService
     replicaVersion: string;
     minWatermark: string;
   }>;
+
+  /**
+   * The watermark most recently confirmed durable to the upstream change
+   * source — i.e. what currently drives the replication slot ACK
+   * (`confirmed_flush_lsn`) — or `null` if nothing has been consumed yet.
+   *
+   * Used by the v5 backup monitor to report the observation-only "shadow"
+   * lag between change-log-durable progress and the litestream backup
+   * watermark, ahead of moving slot ACKs onto the backup watermark (RMv2).
+   */
+  getLastConsumedWatermark(): string | null;
 }
