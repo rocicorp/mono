@@ -777,10 +777,10 @@ type DownloadState = {
 };
 
 export function sortDownloadsForInitialCopy<
-  T extends {status: {totalBytes: number}},
+  T extends {status: {totalBytes?: number | undefined}},
 >(downloads: readonly T[]): T[] {
   return downloads.toSorted(
-    (a, b) => b.status.totalBytes - a.status.totalBytes,
+    (a, b) => (b.status.totalBytes ?? 0) - (a.status.totalBytes ?? 0),
   );
 }
 

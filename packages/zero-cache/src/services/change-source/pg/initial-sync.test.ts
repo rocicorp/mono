@@ -91,14 +91,16 @@ describe('sortDownloadsForInitialCopy', () => {
     const small = {status: {table: 'small', totalBytes: 10}};
     const large = {status: {table: 'large', totalBytes: 1000}};
     const medium = {status: {table: 'medium', totalBytes: 100}};
-    const downloads = [small, large, medium];
+    const unknown = {status: {table: 'unknown', totalBytes: undefined}};
+    const downloads = [small, unknown, large, medium];
 
     expect(sortDownloadsForInitialCopy(downloads)).toEqual([
       large,
       medium,
       small,
+      unknown,
     ]);
-    expect(downloads).toEqual([small, large, medium]);
+    expect(downloads).toEqual([small, unknown, large, medium]);
   });
 });
 
