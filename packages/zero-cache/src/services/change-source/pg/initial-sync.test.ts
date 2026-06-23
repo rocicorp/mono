@@ -6,6 +6,7 @@ import type {PostgresDB} from '../../../types/pg.ts';
 import {
   getInitialDownloadState,
   makeDownloadStatements,
+  sortDownloadsForInitialCopy,
 } from './initial-sync.ts';
 import {createReplicationSlot} from './replication-slots.ts';
 
@@ -82,6 +83,22 @@ describe('makeDownloadStatements', () => {
     expect(stmts.select).toMatch(
       /FROM "public"\."t" TABLESAMPLE BERNOULLI\(50\) WHERE a > 10/,
     );
+  });
+});
+
+describe('sortDownloadsForInitialCopy', () => {
+  test('orders table copies by estimated bytes descending', () => {
+    const small = {status: {table: 'small', totalBytes: 10}};
+    const large = {status: {table: 'large', totalBytes: 1000}};
+    const medium = {status: {table: 'medium', totalBytes: 100}};
+    const downloads = [small, large, medium];
+
+    expect(sortDownloadsForInitialCopy(downloads)).toEqual([
+      large,
+      medium,
+      small,
+    ]);
+    expect(downloads).toEqual([small, large, medium]);
   });
 });
 

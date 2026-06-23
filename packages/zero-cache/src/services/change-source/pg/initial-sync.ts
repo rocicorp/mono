@@ -244,7 +244,7 @@ export async function initialSync(
 
       void copyProfiler?.start();
       const rowCounts = await Promise.all(
-        downloads.map(table =>
+        sortDownloadsForInitialCopy(downloads).map(table =>
           copiers.processReadTask((db, lc) =>
             copy(
               lc,
@@ -775,6 +775,14 @@ type DownloadState = {
   spec: PublishedTableSpec;
   status: DownloadStatus;
 };
+
+export function sortDownloadsForInitialCopy<
+  T extends {status: {totalBytes: number}},
+>(downloads: readonly T[]): T[] {
+  return downloads.toSorted(
+    (a, b) => b.status.totalBytes - a.status.totalBytes,
+  );
+}
 
 // Exported for testing.
 export async function getInitialDownloadState(
