@@ -29,6 +29,28 @@ import {
   ZERO_VERSION_COLUMN_NAME as ROW_VERSION,
 } from '../replicator/schema/replication-state.ts';
 
+type ActiveTableFilter = {
+  readonly tableNames: readonly string[];
+  readonly permissionsTable: string;
+};
+
+function changeLogTableFilter(filter: ActiveTableFilter | undefined): string {
+  if (!filter) {
+    return '';
+  }
+  const activeTables =
+    filter.tableNames.length === 0
+      ? ''
+      : `"table" IN (${filter.tableNames.map(() => '?').join(',')}) OR `;
+  return ` AND (${activeTables}"table" = ? OR "op" IN ('${RESET_OP}', '${TRUNCATE_OP}'))`;
+}
+
+function changeLogTableFilterArgs(
+  filter: ActiveTableFilter | undefined,
+): readonly string[] {
+  return filter ? [...filter.tableNames, filter.permissionsTable] : [];
+}
+
 /**
  * A `Snapshotter` manages the progression of database snapshots for a
  * ViewSyncer.
@@ -171,13 +193,25 @@ export class Snapshotter {
    * change-applying iterations, the caller must (1) create a save point
    * on `prev` before each iteration, and (2) rollback to the save point after
    * the iteration.
+   *
+   * When supplied, `activeTableNames` limits data-row materialization to tables
+   * currently read by pipelines. Schema and permissions changes still pass
+   * through because they can change how future queries are interpreted.
    */
   advance(
     syncableTables: Map<string, LiteAndZqlSpec>,
     allTableNames: Set<string>,
+    activeTableNames?: ReadonlySet<string>,
   ): SnapshotDiff {
     const {prev, curr} = this.advanceWithoutDiff();
-    return new Diff(this.#appID, syncableTables, allTableNames, prev, curr);
+    return new Diff(
+      this.#appID,
+      syncableTables,
+      allTableNames,
+      prev,
+      curr,
+      activeTableNames,
+    );
   }
 
   advanceWithoutDiff() {
@@ -315,23 +349,35 @@ class Snapshot {
     this.version = stateVersion;
   }
 
-  numChangesSince(prevVersion: string) {
-    const {count} = this.db.get(
-      'SELECT COUNT(*) AS count FROM "_zero.changeLog2" WHERE stateVersion > ?',
-      prevVersion,
+  numChangesSince(prevVersion: string, tableFilter?: ActiveTableFilter) {
+    const cached = this.db.statementCache.get(
+      `SELECT COUNT(*) AS count FROM "_zero.changeLog2"
+         WHERE "stateVersion" > ?${changeLogTableFilter(tableFilter)}`,
     );
-    return count;
+    try {
+      const {count} = cached.statement.get(
+        prevVersion,
+        ...changeLogTableFilterArgs(tableFilter),
+      ) as {count: number};
+      return count;
+    } finally {
+      this.db.statementCache.return(cached);
+    }
   }
 
-  changesSince(prevVersion: string) {
+  changesSince(prevVersion: string, tableFilter?: ActiveTableFilter) {
     // Note: The queried fields are constrained to only those that are relevant
     // to the snapshot diff, i.e. those defined in the changeLogEntrySchema.
     const cached = this.db.statementCache.get(
       `SELECT "stateVersion", "table", "rowKey", "op" FROM "_zero.changeLog2"
-         WHERE "stateVersion" > ? ORDER BY "stateVersion" ASC, "pos" ASC`,
+         WHERE "stateVersion" > ?${changeLogTableFilter(tableFilter)}
+         ORDER BY "stateVersion" ASC, "pos" ASC`,
     );
     return {
-      changes: cached.statement.iterate(prevVersion),
+      changes: cached.statement.iterate(
+        prevVersion,
+        ...changeLogTableFilterArgs(tableFilter),
+      ),
       cleanup: () => this.db.statementCache.return(cached),
     };
   }
@@ -399,6 +445,8 @@ class Diff implements SnapshotDiff {
   readonly #permissionsTable: string;
   readonly #syncableTables: Map<string, LiteAndZqlSpec>;
   readonly #allTableNames: Set<string>;
+  readonly #activeTableNames: ReadonlySet<string> | undefined;
+  readonly #tableFilter: ActiveTableFilter | undefined;
   readonly prev: Snapshot;
   readonly curr: Snapshot;
   readonly changes: number;
@@ -409,17 +457,28 @@ class Diff implements SnapshotDiff {
     allTableNames: Set<string>,
     prev: Snapshot,
     curr: Snapshot,
+    activeTableNames: ReadonlySet<string> | undefined,
   ) {
     this.#permissionsTable = `${appID}.permissions`;
     this.#syncableTables = syncableTables;
     this.#allTableNames = allTableNames;
+    this.#activeTableNames = activeTableNames;
+    this.#tableFilter = activeTableNames
+      ? {
+          tableNames: [...activeTableNames].toSorted(),
+          permissionsTable: this.#permissionsTable,
+        }
+      : undefined;
     this.prev = prev;
     this.curr = curr;
-    this.changes = curr.numChangesSince(prev.version);
+    this.changes = curr.numChangesSince(prev.version, this.#tableFilter);
   }
 
   [Symbol.iterator](): Iterator<Change> {
-    const {changes, cleanup: done} = this.curr.changesSince(this.prev.version);
+    const {changes, cleanup: done} = this.curr.changesSince(
+      this.prev.version,
+      this.#tableFilter,
+    );
 
     const cleanup = () => {
       try {
@@ -463,6 +522,13 @@ class Diff implements SnapshotDiff {
               throw new Error(`change for unknown table ${table}`);
             }
             const {tableSpec, zqlSpec} = specs;
+            if (
+              table !== this.#permissionsTable &&
+              this.#activeTableNames &&
+              !this.#activeTableNames.has(table)
+            ) {
+              continue;
+            }
 
             // Sanity check: All change log ops should have a stateVersion
             // greater than minRowVersion in the table metadata. This is a
