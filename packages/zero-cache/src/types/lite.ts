@@ -78,8 +78,7 @@ export function liteValue(
   if (val instanceof Uint8Array || val === null) {
     return val;
   }
-  const valueType = liteTypeToZqlValueType(pgType);
-  if (valueType === 'json') {
+  if (shouldStoreAsJson(pgType)) {
     if (jsonFormat === JSON_STRINGIFIED && typeof val === 'string') {
       // JSON and JSONB values are already strings if the JSON was not parsed.
       return val;
@@ -87,9 +86,47 @@ export function liteValue(
     // Non-JSON/JSONB values will always appear as objects / arrays.
     return stringify(val);
   }
+  if (typeof val === 'boolean') {
+    return val ? 1 : 0;
+  }
+  if (
+    typeof val === 'string' ||
+    typeof val === 'number' ||
+    typeof val === 'bigint'
+  ) {
+    return val;
+  }
   const obj = toLiteValue(val);
   return obj && typeof obj === 'object' ? stringify(obj) : obj;
 }
+
+function shouldStoreAsJson(liteTypeString: string) {
+  // Row-heavy serving apply calls liteValue for every column. Most columns are
+  // scalar non-JSON, so the first-character check lets them skip delimiter
+  // parsing and lowercasing. The slower array-marker checks stay last because
+  // array columns are uncommon but still stored as JSON text in SQLite.
+  const first = liteTypeString.charCodeAt(0);
+  if (first === JSON_TYPE_PREFIX_LOWER || first === JSON_TYPE_PREFIX_UPPER) {
+    // Lite type strings append Zero attributes after "|"; only the upstream
+    // type before that delimiter decides whether json/jsonb is stored as text.
+    const delim = liteTypeString.indexOf('|');
+    const upstream =
+      delim > 0 ? liteTypeString.substring(0, delim) : liteTypeString;
+    const lower = upstream.toLowerCase();
+    if (lower === 'json' || lower === 'jsonb') {
+      return true;
+    }
+  }
+  return (
+    liteTypeString.includes(TEXT_ARRAY_ATTRIBUTE) ||
+    liteTypeString.includes('[]')
+  );
+}
+
+// Named constants keep the branch above readable without putting string
+// allocation or toLowerCase() on the common scalar path.
+const JSON_TYPE_PREFIX_LOWER = 'j'.charCodeAt(0);
+const JSON_TYPE_PREFIX_UPPER = 'J'.charCodeAt(0);
 
 function toLiteValue(val: JSONValue): Exclude<JSONValue, boolean> {
   switch (typeof val) {
