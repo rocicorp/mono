@@ -61,6 +61,12 @@ export class Subscriber {
     }
   }
 
+  async sendBatch(changes: readonly WatermarkedChange[]) {
+    // Delegate through send() so catchup backlog handling, receipt flow, and
+    // watermark filtering remain centralized.
+    await Promise.all(changes.map(change => this.send(change)));
+  }
+
   #initialized = false;
 
   /**
