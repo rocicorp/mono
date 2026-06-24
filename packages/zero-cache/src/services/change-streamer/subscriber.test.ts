@@ -1,14 +1,30 @@
 import {describe, expect, test} from 'vitest';
 import {ReplicationMessages} from '../replicator/test-utils.ts';
+import type {Downstream} from './change-streamer.ts';
 import {createSubscriber} from './test-utils.ts';
 
 const json = JSON.stringify;
 
+async function readMessages(
+  receiver: AsyncIterable<string>,
+  count: number,
+): Promise<Downstream[]> {
+  const iter = receiver[Symbol.asyncIterator]();
+  const messages: Downstream[] = [];
+  for (let i = 0; i < count; i++) {
+    const next = await iter.next();
+    expect(next.done).not.toBe(true);
+    messages.push(JSON.parse(next.value) as Downstream);
+  }
+  await iter.return?.();
+  return messages;
+}
+
 describe('change-streamer/subscriber', () => {
   const messages = new ReplicationMessages({issues: 'id'});
 
-  test('catchup and backlog', () => {
-    const [sub, stream] = createSubscriber('00');
+  test('catchup and backlog', async () => {
+    const [sub, _stream, receiver] = createSubscriber('00');
 
     // Send some messages while it is catching up.
     void sub.send([
@@ -42,7 +58,7 @@ describe('change-streamer/subscriber', () => {
       json(['commit', messages.commit(), {watermark: '02'}]),
     ]);
 
-    sub.setCaughtUp();
+    void sub.setCaughtUp();
 
     // Send some messages after catchup.
     void sub.send([
@@ -58,9 +74,7 @@ describe('change-streamer/subscriber', () => {
 
     sub.sendStatus({tag: 'status', lagReport: {nextSendTimeMs: 456}});
 
-    sub.close();
-
-    expect(stream).toMatchInlineSnapshot(`
+    expect(await readMessages(receiver, 9)).toMatchInlineSnapshot(`
       [
         [
           "status",
@@ -160,7 +174,7 @@ describe('change-streamer/subscriber', () => {
       'commit',
       json(['commit', messages.commit(), {watermark: '02'}]),
     ]);
-    sub.setCaughtUp();
+    void sub.setCaughtUp();
 
     // Still lower than the watermark ...
     void sub.send([
@@ -229,6 +243,41 @@ describe('change-streamer/subscriber', () => {
     `);
   });
 
+  test('rejects pending backlog sends when failing before caught up', async () => {
+    const [sub] = createSubscriber('00');
+    const error = new Error('catchup failed');
+    const pending = sub
+      .send([
+        '11',
+        'begin',
+        json(['begin', messages.begin(), {commitWatermark: '12'}]),
+      ])
+      .catch(err => err);
+
+    await Promise.resolve();
+    sub.fail(error);
+
+    await expect(pending).resolves.toBe(error);
+  });
+
+  test('cancels immediately when failing without protocol ack', async () => {
+    const [sub, _received, stream] = createSubscriber('00');
+    const error = new Error('catchup failed');
+    const pending = sub
+      .send([
+        '11',
+        'begin',
+        json(['begin', messages.begin(), {commitWatermark: '12'}]),
+      ])
+      .catch(err => err);
+
+    await Promise.resolve();
+    sub.failAndCancel(error);
+
+    expect(stream.active).toBe(false);
+    await expect(pending).resolves.toBe(error);
+  });
+
   test('acks, pending, processed, stats', async () => {
     const [sub, _, receiver] = createSubscriber('00');
 
@@ -256,7 +305,7 @@ describe('change-streamer/subscriber', () => {
       json(['commit', messages.commit(), {watermark: '02'}]),
     ]);
 
-    sub.setCaughtUp();
+    void sub.setCaughtUp();
 
     // Send some messages after catchup.
     void sub.send([
@@ -279,36 +328,28 @@ describe('change-streamer/subscriber', () => {
     expect(sub.acked).toBe('00');
 
     let processed = 0;
-    let pending = 8;
-    expect(sub.getStats()).toEqual({processRate: 0, pending: 8});
-    expect(sub.numPending).toBe(pending);
+    let maxPending = sub.numPending;
+    expect(sub.getStats()).toEqual({processRate: 0, pending: 4});
+    expect(sub.numPending).toBe(4);
 
+    const ackedByOpenTx = ['00', '00', '02', '12', '22'];
     let txNum = 0;
     for await (const json of receiver) {
       const msg = JSON.parse(json);
       expect(sub.numProcessed).toBe(processed++);
-      expect(sub.numPending).toBe(pending--);
+      maxPending = Math.max(maxPending, sub.numPending);
+      expect(sub.numPending).toBeLessThanOrEqual(4);
 
       if (msg[0] === 'begin') {
         txNum++;
       }
-      switch (txNum) {
-        case 1:
-          expect(sub.acked).toBe('00');
-          break;
-        case 2:
-          expect(sub.acked).toBe('02');
-          break;
-        case 3:
-          expect(sub.acked).toBe('12');
-          break;
-        case 4:
-          expect(sub.acked).toBe('22');
-          sub.close();
-          break;
+      expect(sub.acked).toBe(ackedByOpenTx[txNum]);
+      if (txNum === 4) {
+        sub.close();
       }
     }
     expect(sub.numProcessed).toBe(8);
+    expect(maxPending).toBeLessThanOrEqual(4);
     expect(
       sub.sampleProcessRate(performance.now()).getStats().processRate,
     ).toBeGreaterThan(0);

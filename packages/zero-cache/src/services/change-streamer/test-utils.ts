@@ -21,7 +21,7 @@ export function createSubscriber(
     () => ({tag: 'status'}),
   );
   if (caughtUp) {
-    subscriber.setCaughtUp();
+    void subscriber.setCaughtUp();
   }
 
   return [subscriber, received, sub];

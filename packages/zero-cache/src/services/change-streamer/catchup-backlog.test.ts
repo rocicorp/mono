@@ -1,0 +1,109 @@
+import {resolver} from '@rocicorp/resolver';
+import {describe, expect, test} from 'vitest';
+import {CatchupBacklog} from './catchup-backlog.ts';
+
+describe('change-streamer/CatchupBacklog', () => {
+  test('resolves an enqueue only after the entry is consumed', async () => {
+    const backlog = new CatchupBacklog<number>();
+    let consumed = false;
+
+    const enqueued = backlog.enqueue(1).then(() => {
+      consumed = true;
+    });
+
+    await Promise.resolve();
+    expect(consumed).toBe(false);
+
+    await backlog.flushWith(entry => {
+      expect(entry).toBe(1);
+    });
+    await enqueued;
+
+    expect(consumed).toBe(true);
+  });
+
+  test('includes entries enqueued while a flush is running', async () => {
+    const backlog = new CatchupBacklog<number>();
+    const first = backlog.enqueue(1);
+    const secondConsumed = resolver<void>();
+    const seen: number[] = [];
+
+    const flush = backlog.flushWith(entry => {
+      seen.push(entry);
+      if (entry === 1) {
+        void backlog.enqueue(2).then(() => secondConsumed.resolve());
+      }
+    });
+
+    await flush;
+    await first;
+    await secondConsumed.promise;
+
+    expect(seen).toEqual([1, 2]);
+  });
+
+  test('rejects all pending enqueue receipts when flushing fails', async () => {
+    const backlog = new CatchupBacklog<number>();
+    const error = new Error('downstream failed');
+    const first = backlog.enqueue(1).catch(err => err);
+    const second = backlog.enqueue(2).catch(err => err);
+
+    await expect(
+      backlog.flushWith(() => {
+        throw error;
+      }),
+    ).rejects.toBe(error);
+
+    await expect(first).resolves.toBe(error);
+    await expect(second).resolves.toBe(error);
+  });
+
+  test('rejects pending and future enqueue receipts when failed before flushing', async () => {
+    const backlog = new CatchupBacklog<number>();
+    const error = new Error('catchup failed');
+    const first = backlog.enqueue(1).catch(err => err);
+    const second = backlog.enqueue(2).catch(err => err);
+
+    backlog.fail(error);
+
+    await expect(first).resolves.toBe(error);
+    await expect(second).resolves.toBe(error);
+    await expect(backlog.enqueue(3)).rejects.toBe(error);
+  });
+
+  test('rejects an in-flight enqueue receipt when failed while flushing', async () => {
+    const backlog = new CatchupBacklog<number>();
+    const error = new Error('catchup failed');
+    const release = resolver<void>();
+    const receipt = backlog.enqueue(1).catch(err => err);
+    let consuming = false;
+
+    const flush = backlog
+      .flushWith(async entry => {
+        expect(entry).toBe(1);
+        consuming = true;
+        await release.promise;
+      })
+      .catch(err => err);
+
+    await Promise.resolve();
+    expect(consuming).toBe(true);
+
+    backlog.fail(error);
+    release.resolve();
+
+    await expect(receipt).resolves.toBe(error);
+    await expect(flush).resolves.toBe(error);
+    await expect(backlog.enqueue(2)).rejects.toBe(error);
+  });
+
+  test('resolves pending enqueue receipts when closed before flushing', async () => {
+    const backlog = new CatchupBacklog<number>();
+    const pending = backlog.enqueue(1);
+
+    backlog.close();
+
+    await expect(pending).resolves.toBeUndefined();
+    await expect(backlog.flushWith(() => {})).resolves.toBeUndefined();
+  });
+});

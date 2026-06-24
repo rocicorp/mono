@@ -4,11 +4,17 @@ import type {Enum} from '../../../../shared/src/enum.ts';
 import {must} from '../../../../shared/src/must.ts';
 import {max} from '../../types/lexi-version.ts';
 import type {Subscription} from '../../types/subscription.ts';
+import {CatchupBacklog} from './catchup-backlog.ts';
 import type {ChangeTag, WatermarkedChange} from './change-streamer-service.ts';
 import {type Downstream, type Status} from './change-streamer.ts';
 import * as ErrorType from './error-type-enum.ts';
 
 type ErrorType = Enum<typeof ErrorType>;
+
+type CatchupState = {
+  instance: CatchupBacklog<WatermarkedChange>;
+  flush: Promise<void> | undefined;
+};
 
 /**
  * Encapsulates a subscriber to changes. All subscribers start in a
@@ -24,7 +30,7 @@ export class Subscriber {
   readonly #latestStatus: () => Status;
   #watermark: string;
   #acked: string;
-  #backlog: WatermarkedChange[] | null;
+  #backlog: CatchupState | null;
 
   constructor(
     protocolVersion: number,
@@ -39,7 +45,7 @@ export class Subscriber {
     this.#latestStatus = latestStatus;
     this.#watermark = watermark;
     this.#acked = watermark;
-    this.#backlog = [];
+    this.#backlog = {instance: new CatchupBacklog(), flush: undefined};
   }
 
   get watermark() {
@@ -54,7 +60,7 @@ export class Subscriber {
     const [watermark] = change;
     if (watermark > this.#watermark) {
       if (this.#backlog) {
-        this.#backlog.push(change);
+        await this.#backlog.instance.enqueue(change);
       } else {
         await this.#sendChange(change);
       }
@@ -76,7 +82,17 @@ export class Subscriber {
 
   sendStatus(status: Status) {
     if (this.#protocolVersion >= 2 && this.#initialized) {
-      void this.#sendDownstream(['status', status]);
+      const json = BigIntJSON.stringify([
+        'status',
+        status,
+      ] satisfies Downstream);
+      if (this.#backlog?.flush) {
+        void this.#backlog.flush
+          .then(() => this.#sendStringifiedDownstream(json))
+          .catch(err => this.fail(err));
+      } else {
+        void this.#sendStringifiedDownstream(json);
+      }
     }
   }
 
@@ -96,14 +112,34 @@ export class Subscriber {
       this.#backlog,
       'setCaughtUp() called but subscriber is not in catchup mode',
     );
-    // Note that this method must be asynchronous in order for send() to
-    // interpret the #backlog variable correctly. This is the only place
-    // where I/O flow control is not heeded. However, it will be awaited
-    // by the next caller to send().
-    for (const change of this.#backlog) {
-      void this.#sendChange(change);
+    if (this.#backlog.flush) {
+      return this.#backlog.flush;
     }
-    this.#backlog = null;
+
+    const backlog = this.#backlog;
+    if (backlog.instance.empty) {
+      this.#backlog = null;
+      return Promise.resolve();
+    }
+
+    const flush = this.#flushBacklog(backlog);
+    backlog.flush = flush;
+    void flush.catch(err => this.fail(err));
+    return flush;
+  }
+
+  async #flushBacklog(backlog: CatchupState) {
+    // #5970: https://github.com/rocicorp/mono/pull/5970
+    // Flow-control the catchup-to-live handoff so "caught up" means the
+    // receiving VS consumed the buffered live changes, not just that RM moved a
+    // recovery burst into downstream pending work.
+    try {
+      await backlog.instance.flushWith(change => this.#sendChange(change));
+    } finally {
+      if (this.#backlog === backlog) {
+        this.#backlog = null;
+      }
+    }
   }
 
   async #sendChange(change: WatermarkedChange) {
@@ -202,17 +238,44 @@ export class Subscriber {
   }
 
   fail(err?: unknown) {
-    this.close(ErrorType.Unknown, String(err));
+    const message = String(err);
+    this.close(ErrorType.Unknown, message, err ?? new Error(message));
   }
 
-  close(error?: ErrorType, message?: string) {
-    if (error) {
+  // Only for storer cleanup of queued catchup subscribers. This intentionally
+  // bypasses protocol error ACK waiting so cancellation can finish immediately.
+  failAndCancel(err?: unknown) {
+    const cause = err instanceof Error ? err : new Error(String(err));
+    this.#closeBacklog(cause);
+    this.#downstream.cancel(cause);
+  }
+
+  close(error?: ErrorType, message?: string, cause?: unknown) {
+    this.#closeBacklog(
+      error !== undefined
+        ? (cause ?? new Error(message ?? String(error)))
+        : null,
+    );
+    if (error !== undefined) {
       // Wait for the ACK of the error message before closing the connection.
       void this.#sendDownstream(['error', {type: error, message}]).finally(() =>
         this.#downstream.cancel(),
       );
     } else {
       this.#downstream.cancel();
+    }
+  }
+
+  #closeBacklog(cause: unknown | null) {
+    const backlog = this.#backlog;
+    if (!backlog) {
+      return;
+    }
+    this.#backlog = null;
+    if (cause !== null) {
+      backlog.instance.fail(cause);
+    } else {
+      backlog.instance.close();
     }
   }
 }

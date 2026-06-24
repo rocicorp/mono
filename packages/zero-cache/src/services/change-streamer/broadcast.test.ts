@@ -40,6 +40,33 @@ describe('change-streamer/broadcast', () => {
     }
   });
 
+  test('without tracking handles failed catchup sends', async () => {
+    const [sub] = createSubscriber('00');
+    const error = new Error('catchup failed');
+    let unhandledRejection: unknown;
+    const onUnhandledRejection = (reason: unknown) => {
+      unhandledRejection = reason;
+    };
+
+    process.on('unhandledRejection', onUnhandledRejection);
+    try {
+      Broadcast.withoutTracking(
+        [sub],
+        [
+          '11',
+          'begin',
+          json(['begin', messages.begin(), {commitWatermark: '13'}]),
+        ],
+      );
+      sub.fail(error);
+
+      await sleep(1);
+      expect(unhandledRejection).toBeUndefined();
+    } finally {
+      process.off('unhandledRejection', onUnhandledRejection);
+    }
+  });
+
   test('with tracking', async () => {
     const [sub1, stream1] = createSubscriber('00', true);
     const [sub2, stream2] = createSubscriber('00', true);
