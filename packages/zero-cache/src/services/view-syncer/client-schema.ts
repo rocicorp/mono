@@ -9,6 +9,7 @@ import type {ClientSchema} from '../../../../zero-protocol/src/client-schema.ts'
 import {ErrorOrigin} from '../../../../zero-protocol/src/error-origin.ts';
 import {ProtocolError} from '../../../../zero-protocol/src/error.ts';
 import type {LiteAndZqlSpec, LiteTableSpec} from '../../db/specs.ts';
+import {liteTypeToZqlValueType} from '../../types/lite.ts';
 import {appSchema, upstreamSchema, type ShardID} from '../../types/shards.ts';
 import {ZERO_VERSION_COLUMN_NAME} from '../replicator/schema/constants.ts';
 
@@ -32,6 +33,23 @@ export function checkClientSchema(
   const missingTables = difference(clientTables, tableSpecs);
   for (const missing of toSorted(missingTables)) {
     if (fullTables.has(missing)) {
+      const fullTable = must(fullTables.get(missing));
+      const unsupportedPrimaryKeyColumns = (fullTable.primaryKey ?? []).filter(
+        col => !liteTypeToZqlValueType(fullTable.columns[col]?.dataType ?? ''),
+      );
+      if (unsupportedPrimaryKeyColumns.length) {
+        errors.push(
+          `The "${missing}" table's primary key contains unsupported columns: ` +
+            unsupportedPrimaryKeyColumns
+              .map(
+                col =>
+                  `"${col}" (${fullTable.columns[col]?.dataType ?? 'unknown'})`,
+              )
+              .join(', ') +
+            `. These columns must use Zero-supported data types to sync the table to the client.`,
+        );
+        continue;
+      }
       errors.push(
         `The "${missing}" table is missing a primary key or non-null ` +
           `unique index and thus cannot be synced to the client`,

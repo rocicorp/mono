@@ -1,6 +1,6 @@
 {
   "name": "@rocicorp/zero",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "description": "Zero is a web framework for serverless web development.",
   "homepage": "https://zero.rocicorp.dev",
   "bugs": {
@@ -144,7 +144,7 @@
     "@opentelemetry/semantic-conventions": "^1.41.1",
     "@postgresql-typed/oids": "^0.2.0",
     "@rocicorp/lock": "^1.0.4",
-    "@rocicorp/logger": "^5.4.0",
+    "@rocicorp/logger": "^6.1.0",
     "@rocicorp/resolver": "^1.0.2",
     "@rocicorp/zero-sqlite3": "^1.1.2",
     "@standard-schema/spec": "^1.0.0",
