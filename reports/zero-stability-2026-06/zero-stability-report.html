@@ -1,0 +1,1288 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Operational Analysis</title>
+    <link
+      rel="icon"
+      href="https://incident.io/favicon.ico"
+      type="image/x-icon"
+    />
+
+    <!-- Tailwind CSS (Play CDN — no build step) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+
+    <!-- Chart.js for interactive charts -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              alarmalade: '#F25533',
+              charcoal: '#161618',
+              burgundy: '#5A0A17',
+              sand: {light: '#F8F5F0', DEFAULT: '#F1EBE2', dark: '#E4D9C8'},
+            },
+            fontFamily: {
+              serif: [
+                '"STK Bureau Serif"',
+                'ui-serif',
+                'Georgia',
+                'Cambria',
+                'serif',
+              ],
+              sans: [
+                '"STK Bureau Sans"',
+                'ui-sans-serif',
+                'system-ui',
+                'sans-serif',
+              ],
+              mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace'],
+            },
+          },
+        },
+      };
+    </script>
+
+    <style>
+      @font-face {
+        font-family: 'STK Bureau Serif';
+        src: url('/fonts/stkbureau-serif-book.woff2') format('woff2');
+        font-weight: 400;
+        font-style: normal;
+        font-display: swap;
+      }
+      @font-face {
+        font-family: 'STK Bureau Serif';
+        src: url('/fonts/stkbureau-serif-medium.woff2') format('woff2');
+        font-weight: 500;
+        font-style: normal;
+        font-display: swap;
+      }
+      @font-face {
+        font-family: 'STK Bureau Sans';
+        src: url('/fonts/stkbureau-sans-book.woff2') format('woff2');
+        font-weight: 400;
+        font-style: normal;
+        font-display: swap;
+      }
+      @font-face {
+        font-family: 'STK Bureau Sans';
+        src: url('/fonts/stkbureau-sans-medium.woff2') format('woff2');
+        font-weight: 500;
+        font-style: normal;
+        font-display: swap;
+      }
+
+      .text-h2 {
+        font-size: 44px;
+        font-family: var(--font-serif, ui-serif);
+        font-weight: 400;
+        line-height: 1.1;
+        letter-spacing: -1.32px;
+      }
+      .text-h3 {
+        font-size: 36px;
+        font-family: var(--font-serif, ui-serif);
+        font-weight: 400;
+        line-height: 1.15;
+        letter-spacing: -0.9px;
+      }
+      .text-h4 {
+        font-size: 24px;
+        font-weight: 500;
+        line-height: 1.3;
+        letter-spacing: -0.24px;
+      }
+      .text-body {
+        font-size: 18px;
+        font-weight: 400;
+        line-height: 1.4;
+        letter-spacing: -0.18px;
+      }
+      .text-body-sm {
+        font-size: 16px;
+        font-weight: 400;
+        line-height: 1.4;
+        letter-spacing: -0.16px;
+      }
+      .text-body-xs {
+        font-size: 13px;
+        font-weight: 400;
+        line-height: 1.4;
+        letter-spacing: -0.13px;
+      }
+      .text-body-emphasis {
+        font-size: 18px;
+        font-weight: 500;
+        line-height: 1.4;
+        letter-spacing: -0.18px;
+      }
+
+      @media print {
+        body {
+          background: white !important;
+        }
+        .no-print {
+          display: none !important;
+        }
+        .page-break {
+          break-before: page;
+        }
+      }
+
+      /* Chart container sizing */
+      .chart-container {
+        position: relative;
+        width: 100%;
+        min-height: 250px;
+        max-height: 300px;
+      }
+      /* Chart.js requires content-box on canvases; Tailwind's universal border-box reset
+       (*, ::before, ::after) overrides by source order, so !important is needed here. */
+      .chart-container canvas {
+        box-sizing: content-box !important;
+      }
+
+      /* Expandable sections */
+      details summary {
+        cursor: pointer;
+        list-style: none;
+      }
+      details summary::-webkit-details-marker {
+        display: none;
+      }
+      details summary::before {
+        content: '';
+        display: inline-block;
+        width: 20px;
+        height: 20px;
+        margin-right: 8px;
+        background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%23161618' stroke-opacity='0.4' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M9 18l6-6-6-6'/%3E%3C/svg%3E")
+          no-repeat center;
+        vertical-align: middle;
+        transition: transform 0.2s;
+      }
+      details[open] summary::before {
+        transform: rotate(90deg);
+      }
+    </style>
+  </head>
+
+  <body class="bg-sand-light text-charcoal font-sans antialiased">
+    <header class="border-b border-sand-dark/30 bg-sand px-8 py-5">
+      <div class="max-w-5xl mx-auto flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <svg
+            width="28"
+            height="36"
+            viewBox="0 0 128 163"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <path
+              fill-rule="evenodd"
+              clip-rule="evenodd"
+              d="M48.7336 139.642V163C20.7585 156.323 0 131.711 0 102.372C0 85.4557 7.15792 72.0354 18.1053 58.8703C27.1831 47.9534 49.5985 19.0426 56.6543 3.08954C58.3673 -0.783473 62.7348 -0.633805 64.6182 1.44721C70.6432 8.10421 78.0694 22.6432 80.4983 39.135C80.9932 42.4953 81.1969 45.2388 81.3587 47.4184C81.706 52.0954 81.8604 54.1748 84.2854 54.1748C88.0955 54.1748 90.588 48.3977 91.1358 42.4345C91.4869 38.6136 95.2774 37.3346 97.8914 38.6136C110.463 44.7644 123.292 74.0426 126.393 88.4102C127.366 92.9158 128 97.5719 128 102.372C128 131.646 107.335 156.214 79.4537 162.955V139.642H48.7336ZM64.0002 130.333C73.8316 130.333 81.8016 122.789 81.8016 113.483C81.8016 98.6407 70.8577 88.0345 65.4048 84.8105C65.0364 84.5928 64.8523 84.4839 64.3512 84.4974C63.9843 84.5073 63.4429 84.7369 63.181 84.9935C62.8232 85.3441 62.7283 85.743 62.5387 86.5409C61.5721 90.6065 58.5292 93.5054 55.327 96.556C50.9141 100.76 46.1988 105.252 46.1988 113.483C46.1988 122.789 54.1688 130.333 64.0002 130.333Z"
+              fill="#F25533"
+            />
+          </svg>
+          <span class="text-body-emphasis">incident.io</span>
+        </div>
+        <span class="text-body-xs text-charcoal/40" id="generated-at"></span>
+      </div>
+    </header>
+
+    <main class="max-w-5xl mx-auto px-8 py-10 space-y-8">
+      <!-- Title block -->
+      <section>
+        <h1 class="text-h2 text-charcoal" id="report-title"></h1>
+        <p class="text-body text-charcoal/60 mt-2" id="report-subtitle"></p>
+      </section>
+
+      <!-- Headline metrics -->
+      <section
+        class="grid grid-cols-2 md:grid-cols-4 gap-4"
+        id="metrics-grid"
+      ></section>
+
+      <!-- Summary narrative -->
+      <section class="bg-white border border-sand-dark/30 rounded-xl p-6">
+        <h2 class="text-h4 text-charcoal mb-4">Summary</h2>
+        <div
+          class="text-body text-charcoal/60 space-y-3"
+          id="summary-content"
+        ></div>
+      </section>
+
+      <!-- Overview charts -->
+      <section
+        class="grid grid-cols-1 md:grid-cols-2 gap-4"
+        id="charts-grid"
+      ></section>
+
+      <!-- Data tables -->
+      <section id="tables-container" class="space-y-6"></section>
+
+      <!-- Deep-dive sections (from themes/) — each is an expandable card with
+         its own narrative, charts, tables, and incident links -->
+      <section id="sections-container" class="space-y-4"></section>
+
+      <!-- Recommendations with expandable evidence -->
+      <section class="bg-white border border-sand-dark/30 rounded-xl p-6">
+        <h2 class="text-h4 text-charcoal mb-4">Recommendations</h2>
+        <div class="space-y-6" id="recommendations-container"></div>
+      </section>
+
+      <!-- Raw data (expandable) -->
+      <section
+        class="bg-white border border-sand-dark/30 rounded-xl p-6 no-print"
+      >
+        <details>
+          <summary class="text-body-emphasis text-charcoal">
+            View raw data
+          </summary>
+          <pre
+            class="mt-4 p-4 bg-sand-light rounded-lg text-body-xs font-mono text-charcoal/60 overflow-x-auto max-h-96 overflow-y-auto"
+            id="raw-data"
+          ></pre>
+        </details>
+      </section>
+    </main>
+
+    <footer class="border-t border-sand-dark/30 bg-sand px-8 py-5 mt-10">
+      <div class="max-w-5xl mx-auto flex items-center justify-between">
+        <span class="text-body-xs text-charcoal/40"
+          >Generated by incident.io MCP</span
+        >
+        <a
+          href="https://incident.io"
+          class="text-body-xs text-alarmalade hover:underline"
+          target="_blank"
+          rel="noopener"
+          >incident.io</a
+        >
+      </div>
+    </footer>
+
+    <!-- ================================================================== -->
+    <!-- REPORT DATA                                                        -->
+    <!--                                                                    -->
+    <!-- Replace this block with the data from your MCP analysis. The shape -->
+    <!-- is flexible — all arrays are optional.                             -->
+    <!--                                                                    -->
+    <!-- Top-level keys:                                                    -->
+    <!--   title, subtitle, metrics[], summary[], charts[], tables[],       -->
+    <!--   sections[], recommendations[]                                    -->
+    <!--                                                                    -->
+    <!-- sections[] — expandable deep-dive cards (maps to themes/):         -->
+    <!--   { title, narrative[], charts[], tables[], incidents[] }          -->
+    <!--                                                                    -->
+    <!-- recommendations[] — with optional expandable evidence:             -->
+    <!--   { priority, title, detail,                                       -->
+    <!--     evidence?: { narrative, charts[], tables[], incidents[] } }    -->
+    <!--                                                                    -->
+    <!-- incidents[] — linked resource references:                          -->
+    <!--   { text: "INC-123", href: "https://...", summary: "..." }        -->
+    <!--                                                                    -->
+    <!-- table cells can be string or { text, href } for dashboard links.   -->
+    <!-- ================================================================== -->
+    <script id="report-data" type="application/json">
+      {
+        "title": "Zero stability review — worst offenders",
+        "subtitle": "17 Mar – 24 Jun 2026 (90 days) · Rocicorp · 123 real incidents",
+        "metrics": [
+          {
+            "label": "Real incidents",
+            "value": "123",
+            "trend": "of 159 filed · rising",
+            "sparkline": [5, 40, 58, 56]
+          },
+          {
+            "label": "Major / Critical",
+            "value": "24",
+            "trend": "1 Critical, 23 Major (~20%)"
+          },
+          {
+            "label": "Responder time",
+            "value": "~95h",
+            "trend": "Apr 34h · May 43h · Jun 12h"
+          },
+          {
+            "label": "Follow-up closure",
+            "value": "11%",
+            "trend": "2 of 18 done · 16 open, avg 41d"
+          },
+          {
+            "label": "From one alert source",
+            "value": "95%",
+            "trend": "cloudzero logs + amp (151/159)"
+          },
+          {
+            "label": "Concentrated in",
+            "value": "2 components",
+            "trend": "replication-manager + view-syncer"
+          }
+        ],
+        "summary": [
+          "Over the 90-day window the org filed 159 incidents; 123 were “real” (active / closed / post-incident) after dropping 36 triage-only records with no work. Volume is rising month over month (5 → 40 → 58 → 56), but this tracks customer / stack onboarding more than a reliability regression — the more important signal is how repetitive the failure mix is.",
+          "Stability pain is concentrated in the server-side sync path: replication-manager and view-syncer account for nearly every incident, all funnelled through a single alert source (cloudzero logs + amp). Severity is under-graded — only ~20% are Major+ and AI urgency was never assessed — so these should be triaged by content, not by severity field.",
+          "Four root-cause clusters dominate: (1) managed-Postgres failover / replication-slot loss forcing full Zero resyncs, (2) the replica failing to keep up with upstream write bursts, (3) fragile DDL / schema-change handling, and (4) recoverable conditions that crash the process or page on-call. IVM/ZQL engine bugs are fewer but are genuine product defects.",
+          "Most issues are mitigated or worked around, not root-fixed. Of the pivotal incidents reviewed, several recurred (slot-loss INC-331 → INC-556, missing PG event-triggers INC-485 → INC-487, ddl-ordering INC-143 repeated). Only 11% of follow-ups are closed and most Majors generated no follow-up at all — so recurrence is not being systematically prevented. The post-incident loop is the meta-finding."
+        ],
+        "charts": [
+          {
+            "title": "Incident volume by month",
+            "type": "line",
+            "colorScheme": "alarmalade",
+            "data": {
+              "labels": ["Mar", "Apr", "May", "Jun*"],
+              "datasets": [{"label": "Real incidents", "data": [5, 40, 58, 56]}]
+            }
+          },
+          {
+            "title": "Real incidents by severity",
+            "type": "doughnut",
+            "colorScheme": "alarmalade",
+            "data": {
+              "labels": ["Minor (99)", "Major (23)", "Critical (1)"],
+              "datasets": [{"data": [99, 23, 1]}]
+            }
+          },
+          {
+            "title": "Incidents by root-cause theme (analyst categorisation, approx)",
+            "type": "bar",
+            "horizontal": true,
+            "colorScheme": "alarmalade",
+            "data": {
+              "labels": [
+                "Managed-PG failover / slot / auth / limits",
+                "DDL & schema-change handling",
+                "Recoverable error → crash / false page",
+                "IVM / ZQL engine bugs",
+                "Customer DB reset / user error",
+                "S3 / litestream backup & restore",
+                "Replication lag (write bursts)",
+                "WebSocket payload size"
+              ],
+              "datasets": [
+                {"label": "Incidents (~)", "data": [26, 16, 13, 10, 8, 7, 4, 2]}
+              ]
+            }
+          },
+          {
+            "title": "Most incident-prone stacks (name match, approx)",
+            "type": "bar",
+            "horizontal": true,
+            "colorScheme": "alarmalade",
+            "data": {
+              "labels": [
+                "Goblins (PlanetScale)",
+                "Margins (Supabase)",
+                "Hinoki",
+                "Productlane",
+                "Chief",
+                "Interfere"
+              ],
+              "datasets": [
+                {"label": "Incidents (~)", "data": [17, 13, 7, 6, 4, 4]}
+              ]
+            }
+          }
+        ],
+        "tables": [
+          {
+            "title": "Root-cause themes, ranked — status reflects deepest fix found, not severity",
+            "columns": [
+              "Theme",
+              "~Incidents",
+              "Fix status",
+              "Representative incidents"
+            ],
+            "rows": [
+              [
+                "Managed-PG failover / slot loss / auth / connection limits",
+                "~26",
+                "Mitigated, recurring",
+                "INC-331 → 556, 476, 351, 347"
+              ],
+              [
+                "DDL & schema-change handling",
+                "~16",
+                "Mostly mitigated / in-progress, recurring",
+                "INC-477, 485 → 487, 143, 494, 146"
+              ],
+              [
+                "Recoverable error → crash or false page",
+                "~13",
+                "Partially fixed",
+                "INC-40 (done), 239, 16, 783, 209"
+              ],
+              [
+                "IVM / ZQL engine bugs",
+                "~10",
+                "Partially fixed in 1.6",
+                "INC-217 (done), 200, 234, 417"
+              ],
+              [
+                "S3 / litestream backup & restore",
+                "~7",
+                "Some fixes in flight",
+                "INC-783, 34, 33, 19, 192"
+              ],
+              [
+                "Replication lag from write bursts",
+                "~4",
+                "Root cause open",
+                "INC-793, 43, 21, 38"
+              ]
+            ],
+            "highlight_rows": [0, 1]
+          }
+        ],
+        "sections": [
+          {
+            "title": "Highest-leverage fix: survive managed-Postgres failover without a full resync",
+            "open": true,
+            "narrative": [
+              "The single largest incident generator is Zero's dependence on customer-managed Postgres (PlanetScale / Supabase / Neon). When the upstream fails over, resizes, or resets, the replication slot is lost and Zero is forced into a full resync — producing replication-lag alerts, container restart loops, and real downtime (INC-331 was ~30 minutes).",
+              "This class is recurring and only mitigated. INC-331 was closed by manually protecting the slot, then the same failure recurred as INC-556 (a PlanetScale resize) which is still unresolved. Two follow-ups target the root cause but are open: changing slot-cleanup logic on interrupted initial sync (INC-351) and adding automatic subscription retry (INC-347).",
+              "Fixing this once — retain/recreate the slot across failover, retry subscription automatically, and avoid dropping the slot on transient interruption — would remove a large fraction of both incidents and out-of-hours pages."
+            ],
+            "incidents": [
+              {
+                "text": "INC-331",
+                "href": "https://app.incident.io/rocicorp/incidents/331",
+                "summary": "PlanetScale failover → slot loss → Zero reset, ~30m downtime (mitigated by manual slot protection)"
+              },
+              {
+                "text": "INC-556",
+                "href": "https://app.incident.io/rocicorp/incidents/556",
+                "summary": "PlanetScale resize triggered reset → resync; recurrence of the slot-loss class, still unresolved"
+              },
+              {
+                "text": "INC-351",
+                "href": "https://app.incident.io/rocicorp/incidents/351",
+                "summary": "Open follow-up: don't drop the slot when initial sync is interrupted, to avoid restart loops"
+              },
+              {
+                "text": "INC-347",
+                "href": "https://app.incident.io/rocicorp/incidents/347",
+                "summary": "Open follow-up (Major): RM did not auto-retry subscription after slot issue"
+              },
+              {
+                "text": "INC-476",
+                "href": "https://app.incident.io/rocicorp/incidents/476",
+                "summary": "Supabase connection reset → RM crash-looped on startup, ~2.5h lag"
+              }
+            ]
+          },
+          {
+            "title": "Open right now — 16 outstanding follow-ups (avg 41 days old)",
+            "open": true,
+            "narrative": [
+              "Across 123 incidents only 18 follow-ups were ever created and just 2 are closed. The 16 open items below are the entire tracked remediation backlog — the oldest has been open 90 days. 30 incidents also remain in a non-closed state (active / investigating / monitoring / fixing).",
+              "Note the quality gap: the recent follow-ups (INC-783, 793, 794) are exemplary — full root cause, PR links, design notes — while most Majors generated no follow-up at all. The process works when used; it just isn't used consistently."
+            ],
+            "tables": [
+              {
+                "title": "Outstanding follow-ups",
+                "columns": ["Follow-up", "Incident", "Priority", "Age (d)"],
+                "rows": [
+                  [
+                    {
+                      "text": "Document privilege/ownership setup for custom roles",
+                      "href": "https://app.incident.io/rocicorp/incidents/11"
+                    },
+                    "INC-11 (Major)",
+                    "—",
+                    "90"
+                  ],
+                  [
+                    {
+                      "text": "Graceful handling for transient 'database is locked'",
+                      "href": "https://app.incident.io/rocicorp/incidents/16"
+                    },
+                    "INC-16",
+                    "—",
+                    "85"
+                  ],
+                  [
+                    {
+                      "text": "Add statement timeout to prevent replication deadlocks",
+                      "href": "https://app.incident.io/rocicorp/incidents/21"
+                    },
+                    "INC-21",
+                    "—",
+                    "82"
+                  ],
+                  [
+                    {
+                      "text": "Address recurring giant transactions causing lag",
+                      "href": "https://app.incident.io/rocicorp/incidents/43"
+                    },
+                    "INC-43",
+                    "—",
+                    "75"
+                  ],
+                  [
+                    {
+                      "text": "Verify SQL syntax fix is present in 1.4 release",
+                      "href": "https://app.incident.io/rocicorp/incidents/146"
+                    },
+                    "INC-146",
+                    "—",
+                    "62"
+                  ],
+                  [
+                    {
+                      "text": "Suppress recoverable Supavisor/Supabase crash alerts",
+                      "href": "https://app.incident.io/rocicorp/incidents/239"
+                    },
+                    "INC-239",
+                    "—",
+                    "47"
+                  ],
+                  [
+                    {
+                      "text": "Retry / graceful handling for Supavisor failures",
+                      "href": "https://app.incident.io/rocicorp/incidents/239"
+                    },
+                    "INC-239",
+                    "—",
+                    "47"
+                  ],
+                  [
+                    {
+                      "text": "Resolve deadlock during RM changeLog takeover",
+                      "href": "https://app.incident.io/rocicorp/incidents/275"
+                    },
+                    "INC-275",
+                    "—",
+                    "44"
+                  ],
+                  [
+                    {
+                      "text": "Fix missing auto-retry for RM subscription failures",
+                      "href": "https://app.incident.io/rocicorp/incidents/347"
+                    },
+                    "INC-347 (Major)",
+                    "—",
+                    "40"
+                  ],
+                  [
+                    {
+                      "text": "Change slot cleanup logic on initial-sync interruption",
+                      "href": "https://app.incident.io/rocicorp/incidents/351"
+                    },
+                    "INC-351",
+                    "—",
+                    "40"
+                  ],
+                  [
+                    {
+                      "text": "View-syncer cold-start: wait for 'restorable' signal",
+                      "href": "https://app.incident.io/rocicorp/incidents/783"
+                    },
+                    "INC-783",
+                    "—",
+                    "8"
+                  ],
+                  [
+                    {
+                      "text": "Handle/retry storer write-statement timeouts vs crashing",
+                      "href": "https://app.incident.io/rocicorp/incidents/793"
+                    },
+                    "INC-793",
+                    "—",
+                    "8"
+                  ],
+                  [
+                    {
+                      "text": "Keep catchup snapshot alive vs idle-in-transaction kill",
+                      "href": "https://app.incident.io/rocicorp/incidents/793"
+                    },
+                    "INC-793",
+                    "—",
+                    "8"
+                  ],
+                  [
+                    {
+                      "text": "Root cause: replica can't keep up w/ upstream volume",
+                      "href": "https://app.incident.io/rocicorp/incidents/793"
+                    },
+                    "INC-793",
+                    "High",
+                    "8"
+                  ],
+                  [
+                    {
+                      "text": "Avoid full-table backfill for ADD COLUMN w/ enum DEFAULT",
+                      "href": "https://app.incident.io/rocicorp/incidents/794"
+                    },
+                    "INC-794",
+                    "—",
+                    "7"
+                  ],
+                  [
+                    {
+                      "text": "Prevent column backfill from blocking replication stream",
+                      "href": "https://app.incident.io/rocicorp/incidents/794"
+                    },
+                    "INC-794",
+                    "—",
+                    "7"
+                  ]
+                ],
+                "highlight_rows": [13]
+              }
+            ]
+          },
+          {
+            "title": "Theme — Managed-Postgres instability (~26 incidents)",
+            "narrative": [
+              "Beyond failover/slot loss, this cluster includes password-auth failures (INC-393, 391, 388, 305, 12, 8), connection-refused / unreachable DB (INC-617, 474, 287), and superuser connection-slot exhaustion (INC-743, 600). Many are customer-config issues, but Zero amplifies them into crashes, restart loops, and pages rather than degrading gracefully."
+            ],
+            "incidents": [
+              {
+                "text": "INC-743",
+                "href": "https://app.incident.io/rocicorp/incidents/743",
+                "summary": "Connection limits — all slots reserved for superuser, view-syncer reaper can't connect"
+              },
+              {
+                "text": "INC-388",
+                "href": "https://app.incident.io/rocicorp/incidents/388",
+                "summary": "6 errors: Postgres password auth failures closing connections"
+              },
+              {
+                "text": "INC-617",
+                "href": "https://app.incident.io/rocicorp/incidents/617",
+                "summary": "Connection refused to DB host:5432, retrying every 10s"
+              }
+            ]
+          },
+          {
+            "title": "Theme — Replica can't keep up with upstream write bursts",
+            "narrative": [
+              "A distinct, recurring performance failure: large upstream transactions / write bursts build replication lag, the slot accumulates WAL until managed-Postgres caps or invalidates it, and recovery replaying the backlog overwhelms writes — looping back into lag. INC-793 captured backpressure hitting a ~184MB buffer cap with 300K+ queued changes. This root cause is explicitly the only open High-priority follow-up.",
+              "INC-43's follow-up notes two consecutive days of giant-transaction lag; INC-21 traced a stall to statement_timeout=0 allowing an indefinite deadlock."
+            ],
+            "incidents": [
+              {
+                "text": "INC-793",
+                "href": "https://app.incident.io/rocicorp/incidents/793",
+                "summary": "Margins/Supabase: slot exceeded max size + change-streamer crash storm, ~37m lag (High-pri root-cause follow-up open)"
+              },
+              {
+                "text": "INC-794",
+                "href": "https://app.incident.io/rocicorp/incidents/794",
+                "summary": "Hinoki: ADD COLUMN w/ enum default forced 384k-row backfill that blocked the stream"
+              },
+              {
+                "text": "INC-43",
+                "href": "https://app.incident.io/rocicorp/incidents/43",
+                "summary": "360s lag from a >1M-row transaction; second day running"
+              },
+              {
+                "text": "INC-21",
+                "href": "https://app.incident.io/rocicorp/incidents/21",
+                "summary": "Replicator stalled 16h: statement_timeout=0 allowed a back-pressure deadlock"
+              }
+            ]
+          },
+          {
+            "title": "Theme — DDL & schema-change fragility (~16 incidents)",
+            "narrative": [
+              "The change-streamer's handling of DDL is brittle and recurring. Failure modes: 'ddlUpdate received without ddlStart' halting replication (INC-143, 121); 'missing property event' TypeErrors (INC-166, 154, 153); new column arriving without DDL because PG event triggers weren't installed (INC-485, which recurred as INC-487); array/enum column SQL-syntax errors (INC-149, 148, 146, 140); and schema-change + backfill that crash-loops until an RM resync (INC-477). Most are mitigated by resync, not root-fixed."
+            ],
+            "incidents": [
+              {
+                "text": "INC-477",
+                "href": "https://app.incident.io/rocicorp/incidents/477",
+                "summary": "DDL table-recreation exposed an intermediate schema; backfill upsert crash-looped until RM resync (still Investigating)"
+              },
+              {
+                "text": "INC-485",
+                "href": "https://app.incident.io/rocicorp/incidents/485",
+                "summary": "New column w/o DDL — event triggers not installed; recurred as INC-487, no code fix"
+              },
+              {
+                "text": "INC-143",
+                "href": "https://app.incident.io/rocicorp/incidents/143",
+                "summary": "Replication halted: ddlUpdate without preceding ddlStart; noted as happened again"
+              },
+              {
+                "text": "INC-146",
+                "href": "https://app.incident.io/rocicorp/incidents/146",
+                "summary": "Array-column ALTER TABLE syntax error; follow-up to verify fix shipped is still open"
+              }
+            ]
+          },
+          {
+            "title": "Theme — Recoverable errors that crash or false-page (~13 incidents)",
+            "narrative": [
+              "A high-ROI cluster: recoverable or expected conditions surface as unhandled rejections / ERROR logs that crash a worker or page on-call. Examples: change-streamer write timeouts becoming unhandledRejection → exit 13 (INC-793); intentional resync logged as exit code 255 (INC-40, since fixed); Supavisor crashes paging unnecessarily (INC-239); bad connection string → unhandled exception (INC-209). A focused error-classification pass removes both incidents and noise at once."
+            ],
+            "incidents": [
+              {
+                "text": "INC-40",
+                "href": "https://app.incident.io/rocicorp/incidents/40",
+                "summary": "FIXED — intentional view-syncer shutdown was misclassified as a crash (exit 255)"
+              },
+              {
+                "text": "INC-239",
+                "href": "https://app.incident.io/rocicorp/incidents/239",
+                "summary": "Transient Supavisor crash paged on-call; two open follow-ups to suppress + handle gracefully"
+              },
+              {
+                "text": "INC-783",
+                "href": "https://app.incident.io/rocicorp/incidents/783",
+                "summary": "Cold-start restore self-timeout 29s before backup was ready; fixes #6134/#6135/#1082 in flight"
+              }
+            ]
+          },
+          {
+            "title": "Theme — IVM / ZQL engine bugs (~10 incidents)",
+            "narrative": [
+              "Fewer in number but the purest product-correctness signal — these are bugs in your own query engine, not the environment. Several are slated for or shipped in 1.6, but some root causes remain open behind error-trapping band-aids."
+            ],
+            "incidents": [
+              {
+                "text": "INC-217",
+                "href": "https://app.incident.io/rocicorp/incidents/217",
+                "summary": "FIXED (#5930, 1.6) — 'CVR concurrently modified' ProtocolError taking clients offline"
+              },
+              {
+                "text": "INC-200",
+                "href": "https://app.incident.io/rocicorp/incidents/200",
+                "summary": "Corrupt IVMBranch → 'row already exists' on reconnect; #5910/#5916 trap the symptom, root cause open"
+              },
+              {
+                "text": "INC-234",
+                "href": "https://app.incident.io/rocicorp/incidents/234",
+                "summary": "'UnionFanIn requires sorted input' closing connections (fix unconfirmed)"
+              },
+              {
+                "text": "INC-417",
+                "href": "https://app.incident.io/rocicorp/incidents/417",
+                "summary": "ZQL IVM Take operator bug terminated a client group's session"
+              }
+            ]
+          },
+          {
+            "title": "Post-incident process gap",
+            "narrative": [
+              "Only 18 follow-ups exist across 123 incidents, and just 2 are completed (11%). The mean open age is 41 days; the oldest is 90. Most Major incidents produced no follow-up, so the same failure classes recur without a tracked owner or fix. This is the meta-finding: the recurrence documented throughout this report is a direct consequence of an unused post-incident loop.",
+              "Recommendation in brief: require a follow-up on every Major, set priorities (15 of 16 open items have none), and burn down the existing backlog — several open items already have fixes in PRs and just need closing out."
+            ]
+          },
+          {
+            "title": "Known gaps — what this report does not tell you",
+            "narrative": [
+              "Severity is under-graded (only ~20% Major+) and AI escalation-urgency was never assessed, so impact ranking relies on incident content, not the severity field.",
+              "Root-cause theme counts and per-stack counts are analyst categorisations / name-match approximations (marked ~), not exact query aggregates — incident.io name search tokenises loosely. Treat them as proportions, not precise totals.",
+              "Postmortems are sparse and follow-ups cover only ~15% of incidents, so 'fix status' is drawn from investigation findings and fix-language in summaries; where neither existed it is marked unconfirmed.",
+              "June is a partial month (through the 24th). The window is 90 days with no prior baseline, so month-over-month trend is directional, not seasonal."
+            ]
+          }
+        ],
+        "recommendations": [
+          {
+            "priority": "High",
+            "title": "Make Zero survive managed-Postgres failover / slot loss without a full resync",
+            "detail": "Largest incident generator and the source of the worst downtime (INC-331 ~30m, INC-476 ~2.5h). Retain or auto-recreate the replication slot across failover/resize, auto-retry the subscription, and stop dropping the slot on transient initial-sync interruption. Two root-cause follow-ups (INC-351, INC-347) already exist but are open.",
+            "evidence": {
+              "narrative": "INC-331 was closed by manually protecting the slot, then recurred as INC-556 (resize) which is unresolved. The same coupling drives restart-loop and replication-lag alerts on Goblins (PlanetScale) and Margins (Supabase).",
+              "incidents": [
+                {
+                  "text": "INC-331",
+                  "href": "https://app.incident.io/rocicorp/incidents/331",
+                  "summary": "Failover → slot loss → reset, ~30m"
+                },
+                {
+                  "text": "INC-556",
+                  "href": "https://app.incident.io/rocicorp/incidents/556",
+                  "summary": "Resize → reset; recurrence, unresolved"
+                },
+                {
+                  "text": "INC-347",
+                  "href": "https://app.incident.io/rocicorp/incidents/347",
+                  "summary": "Open: add auto-retry for subscription failures"
+                }
+              ]
+            }
+          },
+          {
+            "priority": "High",
+            "title": "Fix replica throughput & backpressure under upstream write bursts",
+            "detail": "The replica can't sustain bursty upstream volume: lag builds, the slot caps/invalidates, recovery overwhelms writes, and it loops. This is the only open High-priority follow-up (INC-793). Investigate change-streamer write throughput vs upstream volume, buffer/slot sizing, and smoothing large transactions; make slow backfills stream incrementally instead of blocking the stream.",
+            "evidence": {
+              "incidents": [
+                {
+                  "text": "INC-793",
+                  "href": "https://app.incident.io/rocicorp/incidents/793",
+                  "summary": "Backpressure hit 184MB cap, 300K+ queued changes, crash storm"
+                },
+                {
+                  "text": "INC-794",
+                  "href": "https://app.incident.io/rocicorp/incidents/794",
+                  "summary": "Enum-default ADD COLUMN forced a 384k-row backfill blocking the stream"
+                },
+                {
+                  "text": "INC-43",
+                  "href": "https://app.incident.io/rocicorp/incidents/43",
+                  "summary": ">1M-row transaction, two days running"
+                }
+              ]
+            }
+          },
+          {
+            "priority": "Medium",
+            "title": "Harden the DDL / schema-change replication path",
+            "detail": "Make constant/enum-default ADD COLUMN metadata-only (no full backfill), fix array-column SQL generation, and make ddlUpdate/ddlStart ordering and missing event-triggers self-healing rather than replication-halting. This cluster (~16) is largely mitigated-by-resync and recurring.",
+            "evidence": {
+              "incidents": [
+                {
+                  "text": "INC-485",
+                  "href": "https://app.incident.io/rocicorp/incidents/485",
+                  "summary": "Event triggers not installed; recurred as INC-487"
+                },
+                {
+                  "text": "INC-143",
+                  "href": "https://app.incident.io/rocicorp/incidents/143",
+                  "summary": "ddlUpdate without ddlStart; repeated"
+                },
+                {
+                  "text": "INC-477",
+                  "href": "https://app.incident.io/rocicorp/incidents/477",
+                  "summary": "Schema-change backfill crash-loop until resync"
+                }
+              ]
+            }
+          },
+          {
+            "priority": "Medium",
+            "title": "Run an error-classification & alert-noise sweep",
+            "detail": "Audit which conditions log ERROR / throw unhandledRejection and crash or page. Downgrade recoverable/transient cases (Supavisor crashes, transient 'database is locked', intentional resync exits, slow-upstream write timeouts) to retry-or-warn. Removes incidents and out-of-hours pages simultaneously; INC-40 proves the pattern works.",
+            "evidence": {
+              "incidents": [
+                {
+                  "text": "INC-239",
+                  "href": "https://app.incident.io/rocicorp/incidents/239",
+                  "summary": "Two open follow-ups: suppress + gracefully handle Supavisor crashes"
+                },
+                {
+                  "text": "INC-16",
+                  "href": "https://app.incident.io/rocicorp/incidents/16",
+                  "summary": "Open: graceful handling for transient 'database is locked'"
+                }
+              ]
+            }
+          },
+          {
+            "priority": "Medium",
+            "title": "Close the post-incident loop",
+            "detail": "Only 11% of follow-ups are closed and most Majors have none. Require a follow-up on every Major, assign priorities (15 of 16 open items are unprioritised), and burn down the backlog — several open items already have fixes in PRs and just need closing.",
+            "evidence": {
+              "narrative": "18 follow-ups total across 123 incidents; 2 completed; mean open age 41 days, oldest 90. The recurrence seen across every theme above is downstream of this."
+            }
+          },
+          {
+            "priority": "Medium",
+            "title": "Burn down IVM / ZQL engine bugs and confirm 1.6 fixes landed",
+            "detail": "These are genuine engine-correctness defects (Take operator, UnionFanIn, IVMBranch corruption, CVR concurrent-modify). Confirm the 1.6 fixes (e.g. #5930) actually shipped and that band-aided cases (INC-200, #5910/#5916) get a real root-cause fix.",
+            "evidence": {
+              "incidents": [
+                {
+                  "text": "INC-217",
+                  "href": "https://app.incident.io/rocicorp/incidents/217",
+                  "summary": "Fixed in 1.6 (#5930)"
+                },
+                {
+                  "text": "INC-200",
+                  "href": "https://app.incident.io/rocicorp/incidents/200",
+                  "summary": "Symptom trapped; root cause open"
+                }
+              ]
+            }
+          }
+        ]
+      }
+    </script>
+
+    <!-- ================================================================== -->
+    <!-- RENDERING LOGIC                                                    -->
+    <!-- ================================================================== -->
+    <script>
+      const data = JSON.parse(
+        document.getElementById('report-data').textContent,
+      );
+      let chartCounter = 0;
+
+      // ================================================================
+      // Helpers (must be defined before rendering logic uses them)
+      // ================================================================
+
+      const chartColours = {
+        grid: 'rgba(228,217,200,0.5)',
+        tick: 'rgba(22,22,24,0.4)',
+      };
+
+      // Named colour palettes for chart datasets. Use "colorScheme" in chart
+      // JSON to auto-assign colours, or provide explicit colours per dataset.
+      const palettes = {
+        alarmalade: [
+          '#F25533',
+          '#5A0A17',
+          '#E4D9C8',
+          '#161618',
+          '#D4A574',
+          '#8B4513',
+          '#C7725A',
+          '#A0522D',
+        ],
+        sand: [
+          '#E4D9C8',
+          '#D4A574',
+          '#C7725A',
+          '#A0522D',
+          '#8B4513',
+          '#F1EBE2',
+          '#B8956A',
+          '#967050',
+        ],
+        mixed: [
+          '#F25533',
+          '#3B82F6',
+          '#10B981',
+          '#F59E0B',
+          '#8B5CF6',
+          '#EC4899',
+          '#06B6D4',
+          '#84CC16',
+        ],
+      };
+
+      const pendingCharts = [];
+      const lazyCharts = {}; // canvas ID → chart config, rendered on details toggle
+      const priorityColour = {
+        High: 'bg-red-50 text-red-700',
+        Medium: 'bg-amber-50 text-amber-700',
+        Low: 'bg-sky-50 text-sky-700',
+      };
+
+      function esc(str) {
+        const el = document.createElement('span');
+        el.textContent = str;
+        return el.innerHTML;
+      }
+
+      function renderChart(canvasId, chart) {
+        pendingCharts.push({canvasId, chart});
+      }
+
+      function renderPendingCharts() {
+        while (pendingCharts.length) {
+          const {canvasId, chart} = pendingCharts.shift();
+          const canvas = document.getElementById(canvasId);
+          if (!canvas || typeof Chart === 'undefined') continue;
+          try {
+            const pal = palettes[chart.colorScheme] || palettes.alarmalade;
+            const isStacked = chart.options?.stacked;
+            const isHorizontal = chart.horizontal;
+            const isDoughnut =
+              chart.type === 'doughnut' || chart.type === 'pie';
+            // For doughnut/pie, colours apply per-segment (one dataset, N points).
+            // For bar/line, colours apply per-dataset.
+            const datasets = chart.data.datasets.map((ds, i) => ({
+              ...ds,
+              tension: ds.tension ?? 0.3,
+              borderRadius: ds.borderRadius ?? 4,
+              backgroundColor:
+                ds.backgroundColor ||
+                (isDoughnut
+                  ? (chart.data.labels || []).map((_, j) => pal[j % pal.length])
+                  : pal[i % pal.length]),
+              borderColor:
+                ds.borderColor ||
+                (isDoughnut ? '#FBF7F0' : pal[i % pal.length]),
+              borderWidth: ds.borderWidth ?? (isDoughnut ? 2 : undefined),
+            }));
+            new Chart(canvas, {
+              type: chart.type,
+              data: {labels: chart.data.labels, datasets},
+              options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                  legend: {
+                    display: true,
+                    position: isDoughnut ? 'right' : 'bottom',
+                    labels: {
+                      boxWidth: 12,
+                      padding: isDoughnut ? 8 : 12,
+                      color: '#161618',
+                      font: {size: isDoughnut ? 11 : 12},
+                    },
+                  },
+                },
+                ...(isDoughnut
+                  ? {}
+                  : {
+                      indexAxis: isHorizontal ? 'y' : 'x',
+                      interaction: {mode: 'index', intersect: false},
+                      scales: {
+                        x: {
+                          stacked: isStacked,
+                          grid: {
+                            display: !isHorizontal,
+                            color: chartColours.grid,
+                          },
+                          ticks: {color: chartColours.tick, font: {size: 11}},
+                        },
+                        y: {
+                          stacked: isStacked,
+                          grid: {
+                            display: isHorizontal,
+                            color: chartColours.grid,
+                          },
+                          ticks: {color: chartColours.tick, font: {size: 11}},
+                        },
+                      },
+                    }),
+              },
+            });
+          } catch (e) {
+            /* Chart.js failed — text content still renders */
+          }
+        }
+      }
+
+      function renderCell(cell, ci) {
+        const align =
+          ci === 0 ? 'text-charcoal' : 'text-charcoal/60 text-right font-mono';
+        if (cell && typeof cell === 'object' && cell.href) {
+          return `<td class="px-4 py-2.5 text-body-sm ${align}"><a href="${esc(cell.href)}" class="text-alarmalade hover:underline" target="_blank" rel="noopener">${esc(cell.text)}</a></td>`;
+        }
+        return `<td class="px-4 py-2.5 text-body-sm ${align}">${esc(String(cell))}</td>`;
+      }
+
+      function renderTable(table) {
+        const highlightSet = new Set(table.highlight_rows || []);
+        const rows = table.rows
+          .map((row, ri) => {
+            const cls = highlightSet.has(ri) ? 'bg-alarmalade/5' : '';
+            const cells = row.map((cell, ci) => renderCell(cell, ci)).join('');
+            return `<tr class="${cls} border-t border-sand-dark/20">${cells}</tr>`;
+          })
+          .join('');
+        const headers = table.columns
+          .map(
+            (col, ci) =>
+              `<th class="px-4 py-2 text-body-xs text-charcoal/40 font-medium ${ci === 0 ? 'text-left' : 'text-right'}">${esc(col)}</th>`,
+          )
+          .join('');
+        return `
+        <div class="bg-sand-light/50 border border-sand-dark/20 rounded-lg overflow-hidden">
+          <div class="px-4 pt-4 pb-2"><span class="text-body-sm font-medium text-charcoal">${esc(table.title)}</span></div>
+          <table class="w-full">
+            <thead><tr class="border-b border-sand-dark/20">${headers}</tr></thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>`;
+      }
+
+      function renderSectionContent(section) {
+        let html = '';
+        if (section.narrative) {
+          const text = Array.isArray(section.narrative)
+            ? section.narrative
+            : [section.narrative];
+          html += `<div class="text-body-sm text-charcoal/60 space-y-2">${text.map(p => `<p>${esc(p)}</p>`).join('')}</div>`;
+        }
+        if (section.charts?.length) {
+          html += '<div class="grid grid-cols-1 md:grid-cols-2 gap-4">';
+          section.charts.forEach(chart => {
+            const id = `chart-${chartCounter}`;
+            // Store config in JS map for lazy rendering when details opens.
+            // Charts rendered inside a closed details get zero dimensions.
+            lazyCharts[id] = chart;
+            html += `
+            <div class="bg-sand-light/50 border border-sand-dark/20 rounded-lg p-4">
+              <span class="text-body-sm font-medium text-charcoal mb-3 block">${esc(chart.title)}</span>
+              <div class="chart-container"><canvas id="${id}" data-lazy-chart></canvas></div>
+            </div>`;
+            chartCounter++;
+          });
+          html += '</div>';
+        }
+        if (section.tables?.length) {
+          section.tables.forEach(table => {
+            html += renderTable(table);
+          });
+        }
+        if (section.incidents?.length) {
+          html += '<div class="space-y-2">';
+          html +=
+            '<span class="text-body-xs text-charcoal/40 font-medium">Related incidents</span>';
+          section.incidents.forEach(inc => {
+            html += `
+            <div class="flex items-start gap-3 py-2 border-t border-sand-dark/10">
+              <a href="${esc(inc.href)}" class="text-body-sm text-alarmalade hover:underline whitespace-nowrap" target="_blank" rel="noopener">${esc(inc.text)}</a>
+              ${inc.summary ? `<span class="text-body-xs text-charcoal/40">${esc(inc.summary)}</span>` : ''}
+            </div>`;
+          });
+          html += '</div>';
+        }
+        return html;
+      }
+
+      // ================================================================
+      // Render the report
+      // ================================================================
+
+      // -- Header --
+      document.getElementById('generated-at').textContent =
+        `Generated ${new Date().toLocaleDateString('en-GB', {day: 'numeric', month: 'long', year: 'numeric'})}`;
+
+      // -- Title --
+      document.getElementById('report-title').textContent = data.title;
+      document.getElementById('report-subtitle').textContent = data.subtitle;
+
+      // -- Headline metrics --
+      const metricsGrid = document.getElementById('metrics-grid');
+
+      function renderSparkline(values) {
+        if (!values || values.length < 2) return '';
+        const w = 80,
+          h = 24,
+          pad = 2;
+        const min = Math.min(...values),
+          max = Math.max(...values);
+        const range = max - min || 1;
+        const points = values
+          .map((v, i) => {
+            const x = pad + (i / (values.length - 1)) * (w - 2 * pad);
+            const y = pad + (1 - (v - min) / range) * (h - 2 * pad);
+            return `${x},${y}`;
+          })
+          .join(' ');
+        return `<svg width="${w}" height="${h}" class="inline-block ml-2 align-middle"><polyline points="${points}" fill="none" stroke="#F25533" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+      }
+
+      (data.metrics || []).forEach(m => {
+        const spark = m.sparkline ? renderSparkline(m.sparkline) : '';
+        metricsGrid.innerHTML += `
+        <div class="bg-white border border-sand-dark/30 rounded-xl p-5">
+          <div class="text-body-xs text-charcoal/40 mb-1">${esc(m.label)}</div>
+          <div class="text-h4 text-charcoal font-mono">${esc(m.value)}${spark}</div>
+          ${m.trend ? `<div class="text-body-xs text-charcoal/40 mt-1">${esc(m.trend)}</div>` : ''}
+        </div>`;
+      });
+
+      // -- Summary --
+      const summaryEl = document.getElementById('summary-content');
+      (data.summary || []).forEach(p => {
+        summaryEl.innerHTML += `<p>${esc(p)}</p>`;
+      });
+
+      // -- Overview charts --
+      const chartsGrid = document.getElementById('charts-grid');
+      (data.charts || []).forEach(chart => {
+        const card = document.createElement('div');
+        card.className = 'bg-white border border-sand-dark/30 rounded-xl p-6';
+        card.innerHTML = `
+        <h3 class="text-body-emphasis text-charcoal mb-4">${esc(chart.title)}</h3>
+        <div class="chart-container"><canvas id="chart-${chartCounter}"></canvas></div>`;
+        chartsGrid.appendChild(card);
+        renderChart(`chart-${chartCounter}`, chart);
+        chartCounter++;
+      });
+
+      // -- Data tables --
+      const tablesEl = document.getElementById('tables-container');
+      (data.tables || []).forEach(table => {
+        tablesEl.innerHTML += renderTable(table);
+      });
+
+      // -- Deep-dive sections --
+      const sectionsEl = document.getElementById('sections-container');
+      (data.sections || []).forEach(section => {
+        const content = renderSectionContent(section);
+        const openAttr = section.open ? ' open' : '';
+        sectionsEl.innerHTML += `
+        <div class="bg-white border border-sand-dark/30 rounded-xl overflow-hidden">
+          <details${openAttr}>
+            <summary class="px-6 py-4 text-body-emphasis text-charcoal hover:bg-sand-light/50 transition-colors">${esc(section.title)}</summary>
+            <div class="px-6 pb-6 space-y-4 border-t border-sand-dark/20 pt-4">
+              ${content}
+            </div>
+          </details>
+        </div>`;
+      });
+
+      // -- Recommendations --
+      const recsEl = document.getElementById('recommendations-container');
+      (data.recommendations || []).forEach((rec, i) => {
+        const hasEvidence =
+          rec.evidence &&
+          (rec.evidence.narrative ||
+            rec.evidence.charts?.length ||
+            rec.evidence.tables?.length ||
+            rec.evidence.incidents?.length);
+
+        let evidenceHTML = '';
+        if (hasEvidence) {
+          const content = renderSectionContent(rec.evidence);
+          evidenceHTML = `
+          <details class="mt-3">
+            <summary class="text-body-xs text-alarmalade cursor-pointer">View supporting evidence</summary>
+            <div class="mt-3 space-y-4 pl-0 border-t border-sand-dark/10 pt-3">
+              ${content}
+            </div>
+          </details>`;
+        }
+
+        recsEl.innerHTML += `
+        <div class="border-l-2 border-alarmalade/30 pl-4">
+          <div class="flex items-center gap-2 mb-1">
+            <span class="text-body-emphasis text-charcoal">${i + 1}. ${esc(rec.title)}</span>
+            <span class="inline-flex items-center px-2 py-0.5 rounded-full text-body-xs ${priorityColour[rec.priority] || ''}">${esc(rec.priority)}</span>
+          </div>
+          <div class="text-body-sm text-charcoal/60">${esc(rec.detail)}</div>
+          ${evidenceHTML}
+        </div>`;
+      });
+
+      // -- Raw data --
+      document.getElementById('raw-data').textContent = JSON.stringify(
+        data,
+        null,
+        2,
+      );
+
+      // -- Lazy chart rendering for <details> elements --
+      // Charts inside closed details get zero dimensions from Chart.js, so we
+      // render them on first open using configs stored in the lazyCharts map.
+      document.querySelectorAll('details').forEach(details => {
+        details.addEventListener('toggle', function () {
+          if (!this.open) return;
+          this.querySelectorAll('canvas[data-lazy-chart]').forEach(canvas => {
+            const config = lazyCharts[canvas.id];
+            if (!config) return;
+            delete lazyCharts[canvas.id]; // only render once
+            renderChart(canvas.id, config);
+            renderPendingCharts();
+          });
+        });
+      });
+
+      // Flush any remaining queued charts (e.g. overview charts queued before
+      // sections/recs triggered renderPendingCharts).
+      renderPendingCharts();
+    </script>
+  </body>
+</html>

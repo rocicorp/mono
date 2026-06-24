@@ -1,0 +1,618 @@
+{
+  "title": "Zero stability review — worst offenders",
+  "subtitle": "17 Mar – 24 Jun 2026 (90 days) · Rocicorp · 123 real incidents",
+  "metrics": [
+    {
+      "label": "Real incidents",
+      "value": "123",
+      "trend": "of 159 filed · rising",
+      "sparkline": [5, 40, 58, 56]
+    },
+    {
+      "label": "Major / Critical",
+      "value": "24",
+      "trend": "1 Critical, 23 Major (~20%)"
+    },
+    {
+      "label": "Responder time",
+      "value": "~95h",
+      "trend": "Apr 34h · May 43h · Jun 12h"
+    },
+    {
+      "label": "Follow-up closure",
+      "value": "11%",
+      "trend": "2 of 18 done · 16 open, avg 41d"
+    },
+    {
+      "label": "From one alert source",
+      "value": "95%",
+      "trend": "cloudzero logs + amp (151/159)"
+    },
+    {
+      "label": "Concentrated in",
+      "value": "2 components",
+      "trend": "replication-manager + view-syncer"
+    }
+  ],
+  "summary": [
+    "Over the 90-day window the org filed 159 incidents; 123 were “real” (active / closed / post-incident) after dropping 36 triage-only records with no work. Volume is rising month over month (5 → 40 → 58 → 56), but this tracks customer / stack onboarding more than a reliability regression — the more important signal is how repetitive the failure mix is.",
+    "Stability pain is concentrated in the server-side sync path: replication-manager and view-syncer account for nearly every incident, all funnelled through a single alert source (cloudzero logs + amp). Severity is under-graded — only ~20% are Major+ and AI urgency was never assessed — so these should be triaged by content, not by severity field.",
+    "Four root-cause clusters dominate: (1) managed-Postgres failover / replication-slot loss forcing full Zero resyncs, (2) the replica failing to keep up with upstream write bursts, (3) fragile DDL / schema-change handling, and (4) recoverable conditions that crash the process or page on-call. IVM/ZQL engine bugs are fewer but are genuine product defects.",
+    "Most issues are mitigated or worked around, not root-fixed. Of the pivotal incidents reviewed, several recurred (slot-loss INC-331 → INC-556, missing PG event-triggers INC-485 → INC-487, ddl-ordering INC-143 repeated). Only 11% of follow-ups are closed and most Majors generated no follow-up at all — so recurrence is not being systematically prevented. The post-incident loop is the meta-finding."
+  ],
+  "charts": [
+    {
+      "title": "Incident volume by month",
+      "type": "line",
+      "colorScheme": "alarmalade",
+      "data": {
+        "labels": ["Mar", "Apr", "May", "Jun*"],
+        "datasets": [{"label": "Real incidents", "data": [5, 40, 58, 56]}]
+      }
+    },
+    {
+      "title": "Real incidents by severity",
+      "type": "doughnut",
+      "colorScheme": "alarmalade",
+      "data": {
+        "labels": ["Minor (99)", "Major (23)", "Critical (1)"],
+        "datasets": [{"data": [99, 23, 1]}]
+      }
+    },
+    {
+      "title": "Incidents by root-cause theme (analyst categorisation, approx)",
+      "type": "bar",
+      "horizontal": true,
+      "colorScheme": "alarmalade",
+      "data": {
+        "labels": [
+          "Managed-PG failover / slot / auth / limits",
+          "DDL & schema-change handling",
+          "Recoverable error → crash / false page",
+          "IVM / ZQL engine bugs",
+          "Customer DB reset / user error",
+          "S3 / litestream backup & restore",
+          "Replication lag (write bursts)",
+          "WebSocket payload size"
+        ],
+        "datasets": [
+          {"label": "Incidents (~)", "data": [26, 16, 13, 10, 8, 7, 4, 2]}
+        ]
+      }
+    },
+    {
+      "title": "Most incident-prone stacks (name match, approx)",
+      "type": "bar",
+      "horizontal": true,
+      "colorScheme": "alarmalade",
+      "data": {
+        "labels": [
+          "Goblins (PlanetScale)",
+          "Margins (Supabase)",
+          "Hinoki",
+          "Productlane",
+          "Chief",
+          "Interfere"
+        ],
+        "datasets": [{"label": "Incidents (~)", "data": [17, 13, 7, 6, 4, 4]}]
+      }
+    }
+  ],
+  "tables": [
+    {
+      "title": "Root-cause themes, ranked — status reflects deepest fix found, not severity",
+      "columns": [
+        "Theme",
+        "~Incidents",
+        "Fix status",
+        "Representative incidents"
+      ],
+      "rows": [
+        [
+          "Managed-PG failover / slot loss / auth / connection limits",
+          "~26",
+          "Mitigated, recurring",
+          "INC-331 → 556, 476, 351, 347"
+        ],
+        [
+          "DDL & schema-change handling",
+          "~16",
+          "Mostly mitigated / in-progress, recurring",
+          "INC-477, 485 → 487, 143, 494, 146"
+        ],
+        [
+          "Recoverable error → crash or false page",
+          "~13",
+          "Partially fixed",
+          "INC-40 (done), 239, 16, 783, 209"
+        ],
+        [
+          "IVM / ZQL engine bugs",
+          "~10",
+          "Partially fixed in 1.6",
+          "INC-217 (done), 200, 234, 417"
+        ],
+        [
+          "S3 / litestream backup & restore",
+          "~7",
+          "Some fixes in flight",
+          "INC-783, 34, 33, 19, 192"
+        ],
+        [
+          "Replication lag from write bursts",
+          "~4",
+          "Root cause open",
+          "INC-793, 43, 21, 38"
+        ]
+      ],
+      "highlight_rows": [0, 1]
+    }
+  ],
+  "sections": [
+    {
+      "title": "Highest-leverage fix: survive managed-Postgres failover without a full resync",
+      "open": true,
+      "narrative": [
+        "The single largest incident generator is Zero's dependence on customer-managed Postgres (PlanetScale / Supabase / Neon). When the upstream fails over, resizes, or resets, the replication slot is lost and Zero is forced into a full resync — producing replication-lag alerts, container restart loops, and real downtime (INC-331 was ~30 minutes).",
+        "This class is recurring and only mitigated. INC-331 was closed by manually protecting the slot, then the same failure recurred as INC-556 (a PlanetScale resize) which is still unresolved. Two follow-ups target the root cause but are open: changing slot-cleanup logic on interrupted initial sync (INC-351) and adding automatic subscription retry (INC-347).",
+        "Fixing this once — retain/recreate the slot across failover, retry subscription automatically, and avoid dropping the slot on transient interruption — would remove a large fraction of both incidents and out-of-hours pages."
+      ],
+      "incidents": [
+        {
+          "text": "INC-331",
+          "href": "https://app.incident.io/rocicorp/incidents/331",
+          "summary": "PlanetScale failover → slot loss → Zero reset, ~30m downtime (mitigated by manual slot protection)"
+        },
+        {
+          "text": "INC-556",
+          "href": "https://app.incident.io/rocicorp/incidents/556",
+          "summary": "PlanetScale resize triggered reset → resync; recurrence of the slot-loss class, still unresolved"
+        },
+        {
+          "text": "INC-351",
+          "href": "https://app.incident.io/rocicorp/incidents/351",
+          "summary": "Open follow-up: don't drop the slot when initial sync is interrupted, to avoid restart loops"
+        },
+        {
+          "text": "INC-347",
+          "href": "https://app.incident.io/rocicorp/incidents/347",
+          "summary": "Open follow-up (Major): RM did not auto-retry subscription after slot issue"
+        },
+        {
+          "text": "INC-476",
+          "href": "https://app.incident.io/rocicorp/incidents/476",
+          "summary": "Supabase connection reset → RM crash-looped on startup, ~2.5h lag"
+        }
+      ]
+    },
+    {
+      "title": "Open right now — 16 outstanding follow-ups (avg 41 days old)",
+      "open": true,
+      "narrative": [
+        "Across 123 incidents only 18 follow-ups were ever created and just 2 are closed. The 16 open items below are the entire tracked remediation backlog — the oldest has been open 90 days. 30 incidents also remain in a non-closed state (active / investigating / monitoring / fixing).",
+        "Note the quality gap: the recent follow-ups (INC-783, 793, 794) are exemplary — full root cause, PR links, design notes — while most Majors generated no follow-up at all. The process works when used; it just isn't used consistently."
+      ],
+      "tables": [
+        {
+          "title": "Outstanding follow-ups",
+          "columns": ["Follow-up", "Incident", "Priority", "Age (d)"],
+          "rows": [
+            [
+              {
+                "text": "Document privilege/ownership setup for custom roles",
+                "href": "https://app.incident.io/rocicorp/incidents/11"
+              },
+              "INC-11 (Major)",
+              "—",
+              "90"
+            ],
+            [
+              {
+                "text": "Graceful handling for transient 'database is locked'",
+                "href": "https://app.incident.io/rocicorp/incidents/16"
+              },
+              "INC-16",
+              "—",
+              "85"
+            ],
+            [
+              {
+                "text": "Add statement timeout to prevent replication deadlocks",
+                "href": "https://app.incident.io/rocicorp/incidents/21"
+              },
+              "INC-21",
+              "—",
+              "82"
+            ],
+            [
+              {
+                "text": "Address recurring giant transactions causing lag",
+                "href": "https://app.incident.io/rocicorp/incidents/43"
+              },
+              "INC-43",
+              "—",
+              "75"
+            ],
+            [
+              {
+                "text": "Verify SQL syntax fix is present in 1.4 release",
+                "href": "https://app.incident.io/rocicorp/incidents/146"
+              },
+              "INC-146",
+              "—",
+              "62"
+            ],
+            [
+              {
+                "text": "Suppress recoverable Supavisor/Supabase crash alerts",
+                "href": "https://app.incident.io/rocicorp/incidents/239"
+              },
+              "INC-239",
+              "—",
+              "47"
+            ],
+            [
+              {
+                "text": "Retry / graceful handling for Supavisor failures",
+                "href": "https://app.incident.io/rocicorp/incidents/239"
+              },
+              "INC-239",
+              "—",
+              "47"
+            ],
+            [
+              {
+                "text": "Resolve deadlock during RM changeLog takeover",
+                "href": "https://app.incident.io/rocicorp/incidents/275"
+              },
+              "INC-275",
+              "—",
+              "44"
+            ],
+            [
+              {
+                "text": "Fix missing auto-retry for RM subscription failures",
+                "href": "https://app.incident.io/rocicorp/incidents/347"
+              },
+              "INC-347 (Major)",
+              "—",
+              "40"
+            ],
+            [
+              {
+                "text": "Change slot cleanup logic on initial-sync interruption",
+                "href": "https://app.incident.io/rocicorp/incidents/351"
+              },
+              "INC-351",
+              "—",
+              "40"
+            ],
+            [
+              {
+                "text": "View-syncer cold-start: wait for 'restorable' signal",
+                "href": "https://app.incident.io/rocicorp/incidents/783"
+              },
+              "INC-783",
+              "—",
+              "8"
+            ],
+            [
+              {
+                "text": "Handle/retry storer write-statement timeouts vs crashing",
+                "href": "https://app.incident.io/rocicorp/incidents/793"
+              },
+              "INC-793",
+              "—",
+              "8"
+            ],
+            [
+              {
+                "text": "Keep catchup snapshot alive vs idle-in-transaction kill",
+                "href": "https://app.incident.io/rocicorp/incidents/793"
+              },
+              "INC-793",
+              "—",
+              "8"
+            ],
+            [
+              {
+                "text": "Root cause: replica can't keep up w/ upstream volume",
+                "href": "https://app.incident.io/rocicorp/incidents/793"
+              },
+              "INC-793",
+              "High",
+              "8"
+            ],
+            [
+              {
+                "text": "Avoid full-table backfill for ADD COLUMN w/ enum DEFAULT",
+                "href": "https://app.incident.io/rocicorp/incidents/794"
+              },
+              "INC-794",
+              "—",
+              "7"
+            ],
+            [
+              {
+                "text": "Prevent column backfill from blocking replication stream",
+                "href": "https://app.incident.io/rocicorp/incidents/794"
+              },
+              "INC-794",
+              "—",
+              "7"
+            ]
+          ],
+          "highlight_rows": [13]
+        }
+      ]
+    },
+    {
+      "title": "Theme — Managed-Postgres instability (~26 incidents)",
+      "narrative": [
+        "Beyond failover/slot loss, this cluster includes password-auth failures (INC-393, 391, 388, 305, 12, 8), connection-refused / unreachable DB (INC-617, 474, 287), and superuser connection-slot exhaustion (INC-743, 600). Many are customer-config issues, but Zero amplifies them into crashes, restart loops, and pages rather than degrading gracefully."
+      ],
+      "incidents": [
+        {
+          "text": "INC-743",
+          "href": "https://app.incident.io/rocicorp/incidents/743",
+          "summary": "Connection limits — all slots reserved for superuser, view-syncer reaper can't connect"
+        },
+        {
+          "text": "INC-388",
+          "href": "https://app.incident.io/rocicorp/incidents/388",
+          "summary": "6 errors: Postgres password auth failures closing connections"
+        },
+        {
+          "text": "INC-617",
+          "href": "https://app.incident.io/rocicorp/incidents/617",
+          "summary": "Connection refused to DB host:5432, retrying every 10s"
+        }
+      ]
+    },
+    {
+      "title": "Theme — Replica can't keep up with upstream write bursts",
+      "narrative": [
+        "A distinct, recurring performance failure: large upstream transactions / write bursts build replication lag, the slot accumulates WAL until managed-Postgres caps or invalidates it, and recovery replaying the backlog overwhelms writes — looping back into lag. INC-793 captured backpressure hitting a ~184MB buffer cap with 300K+ queued changes. This root cause is explicitly the only open High-priority follow-up.",
+        "INC-43's follow-up notes two consecutive days of giant-transaction lag; INC-21 traced a stall to statement_timeout=0 allowing an indefinite deadlock."
+      ],
+      "incidents": [
+        {
+          "text": "INC-793",
+          "href": "https://app.incident.io/rocicorp/incidents/793",
+          "summary": "Margins/Supabase: slot exceeded max size + change-streamer crash storm, ~37m lag (High-pri root-cause follow-up open)"
+        },
+        {
+          "text": "INC-794",
+          "href": "https://app.incident.io/rocicorp/incidents/794",
+          "summary": "Hinoki: ADD COLUMN w/ enum default forced 384k-row backfill that blocked the stream"
+        },
+        {
+          "text": "INC-43",
+          "href": "https://app.incident.io/rocicorp/incidents/43",
+          "summary": "360s lag from a >1M-row transaction; second day running"
+        },
+        {
+          "text": "INC-21",
+          "href": "https://app.incident.io/rocicorp/incidents/21",
+          "summary": "Replicator stalled 16h: statement_timeout=0 allowed a back-pressure deadlock"
+        }
+      ]
+    },
+    {
+      "title": "Theme — DDL & schema-change fragility (~16 incidents)",
+      "narrative": [
+        "The change-streamer's handling of DDL is brittle and recurring. Failure modes: 'ddlUpdate received without ddlStart' halting replication (INC-143, 121); 'missing property event' TypeErrors (INC-166, 154, 153); new column arriving without DDL because PG event triggers weren't installed (INC-485, which recurred as INC-487); array/enum column SQL-syntax errors (INC-149, 148, 146, 140); and schema-change + backfill that crash-loops until an RM resync (INC-477). Most are mitigated by resync, not root-fixed."
+      ],
+      "incidents": [
+        {
+          "text": "INC-477",
+          "href": "https://app.incident.io/rocicorp/incidents/477",
+          "summary": "DDL table-recreation exposed an intermediate schema; backfill upsert crash-looped until RM resync (still Investigating)"
+        },
+        {
+          "text": "INC-485",
+          "href": "https://app.incident.io/rocicorp/incidents/485",
+          "summary": "New column w/o DDL — event triggers not installed; recurred as INC-487, no code fix"
+        },
+        {
+          "text": "INC-143",
+          "href": "https://app.incident.io/rocicorp/incidents/143",
+          "summary": "Replication halted: ddlUpdate without preceding ddlStart; noted as happened again"
+        },
+        {
+          "text": "INC-146",
+          "href": "https://app.incident.io/rocicorp/incidents/146",
+          "summary": "Array-column ALTER TABLE syntax error; follow-up to verify fix shipped is still open"
+        }
+      ]
+    },
+    {
+      "title": "Theme — Recoverable errors that crash or false-page (~13 incidents)",
+      "narrative": [
+        "A high-ROI cluster: recoverable or expected conditions surface as unhandled rejections / ERROR logs that crash a worker or page on-call. Examples: change-streamer write timeouts becoming unhandledRejection → exit 13 (INC-793); intentional resync logged as exit code 255 (INC-40, since fixed); Supavisor crashes paging unnecessarily (INC-239); bad connection string → unhandled exception (INC-209). A focused error-classification pass removes both incidents and noise at once."
+      ],
+      "incidents": [
+        {
+          "text": "INC-40",
+          "href": "https://app.incident.io/rocicorp/incidents/40",
+          "summary": "FIXED — intentional view-syncer shutdown was misclassified as a crash (exit 255)"
+        },
+        {
+          "text": "INC-239",
+          "href": "https://app.incident.io/rocicorp/incidents/239",
+          "summary": "Transient Supavisor crash paged on-call; two open follow-ups to suppress + handle gracefully"
+        },
+        {
+          "text": "INC-783",
+          "href": "https://app.incident.io/rocicorp/incidents/783",
+          "summary": "Cold-start restore self-timeout 29s before backup was ready; fixes #6134/#6135/#1082 in flight"
+        }
+      ]
+    },
+    {
+      "title": "Theme — IVM / ZQL engine bugs (~10 incidents)",
+      "narrative": [
+        "Fewer in number but the purest product-correctness signal — these are bugs in your own query engine, not the environment. Several are slated for or shipped in 1.6, but some root causes remain open behind error-trapping band-aids."
+      ],
+      "incidents": [
+        {
+          "text": "INC-217",
+          "href": "https://app.incident.io/rocicorp/incidents/217",
+          "summary": "FIXED (#5930, 1.6) — 'CVR concurrently modified' ProtocolError taking clients offline"
+        },
+        {
+          "text": "INC-200",
+          "href": "https://app.incident.io/rocicorp/incidents/200",
+          "summary": "Corrupt IVMBranch → 'row already exists' on reconnect; #5910/#5916 trap the symptom, root cause open"
+        },
+        {
+          "text": "INC-234",
+          "href": "https://app.incident.io/rocicorp/incidents/234",
+          "summary": "'UnionFanIn requires sorted input' closing connections (fix unconfirmed)"
+        },
+        {
+          "text": "INC-417",
+          "href": "https://app.incident.io/rocicorp/incidents/417",
+          "summary": "ZQL IVM Take operator bug terminated a client group's session"
+        }
+      ]
+    },
+    {
+      "title": "Post-incident process gap",
+      "narrative": [
+        "Only 18 follow-ups exist across 123 incidents, and just 2 are completed (11%). The mean open age is 41 days; the oldest is 90. Most Major incidents produced no follow-up, so the same failure classes recur without a tracked owner or fix. This is the meta-finding: the recurrence documented throughout this report is a direct consequence of an unused post-incident loop.",
+        "Recommendation in brief: require a follow-up on every Major, set priorities (15 of 16 open items have none), and burn down the existing backlog — several open items already have fixes in PRs and just need closing out."
+      ]
+    },
+    {
+      "title": "Known gaps — what this report does not tell you",
+      "narrative": [
+        "Severity is under-graded (only ~20% Major+) and AI escalation-urgency was never assessed, so impact ranking relies on incident content, not the severity field.",
+        "Root-cause theme counts and per-stack counts are analyst categorisations / name-match approximations (marked ~), not exact query aggregates — incident.io name search tokenises loosely. Treat them as proportions, not precise totals.",
+        "Postmortems are sparse and follow-ups cover only ~15% of incidents, so 'fix status' is drawn from investigation findings and fix-language in summaries; where neither existed it is marked unconfirmed.",
+        "June is a partial month (through the 24th). The window is 90 days with no prior baseline, so month-over-month trend is directional, not seasonal."
+      ]
+    }
+  ],
+  "recommendations": [
+    {
+      "priority": "High",
+      "title": "Make Zero survive managed-Postgres failover / slot loss without a full resync",
+      "detail": "Largest incident generator and the source of the worst downtime (INC-331 ~30m, INC-476 ~2.5h). Retain or auto-recreate the replication slot across failover/resize, auto-retry the subscription, and stop dropping the slot on transient initial-sync interruption. Two root-cause follow-ups (INC-351, INC-347) already exist but are open.",
+      "evidence": {
+        "narrative": "INC-331 was closed by manually protecting the slot, then recurred as INC-556 (resize) which is unresolved. The same coupling drives restart-loop and replication-lag alerts on Goblins (PlanetScale) and Margins (Supabase).",
+        "incidents": [
+          {
+            "text": "INC-331",
+            "href": "https://app.incident.io/rocicorp/incidents/331",
+            "summary": "Failover → slot loss → reset, ~30m"
+          },
+          {
+            "text": "INC-556",
+            "href": "https://app.incident.io/rocicorp/incidents/556",
+            "summary": "Resize → reset; recurrence, unresolved"
+          },
+          {
+            "text": "INC-347",
+            "href": "https://app.incident.io/rocicorp/incidents/347",
+            "summary": "Open: add auto-retry for subscription failures"
+          }
+        ]
+      }
+    },
+    {
+      "priority": "High",
+      "title": "Fix replica throughput & backpressure under upstream write bursts",
+      "detail": "The replica can't sustain bursty upstream volume: lag builds, the slot caps/invalidates, recovery overwhelms writes, and it loops. This is the only open High-priority follow-up (INC-793). Investigate change-streamer write throughput vs upstream volume, buffer/slot sizing, and smoothing large transactions; make slow backfills stream incrementally instead of blocking the stream.",
+      "evidence": {
+        "incidents": [
+          {
+            "text": "INC-793",
+            "href": "https://app.incident.io/rocicorp/incidents/793",
+            "summary": "Backpressure hit 184MB cap, 300K+ queued changes, crash storm"
+          },
+          {
+            "text": "INC-794",
+            "href": "https://app.incident.io/rocicorp/incidents/794",
+            "summary": "Enum-default ADD COLUMN forced a 384k-row backfill blocking the stream"
+          },
+          {
+            "text": "INC-43",
+            "href": "https://app.incident.io/rocicorp/incidents/43",
+            "summary": ">1M-row transaction, two days running"
+          }
+        ]
+      }
+    },
+    {
+      "priority": "Medium",
+      "title": "Harden the DDL / schema-change replication path",
+      "detail": "Make constant/enum-default ADD COLUMN metadata-only (no full backfill), fix array-column SQL generation, and make ddlUpdate/ddlStart ordering and missing event-triggers self-healing rather than replication-halting. This cluster (~16) is largely mitigated-by-resync and recurring.",
+      "evidence": {
+        "incidents": [
+          {
+            "text": "INC-485",
+            "href": "https://app.incident.io/rocicorp/incidents/485",
+            "summary": "Event triggers not installed; recurred as INC-487"
+          },
+          {
+            "text": "INC-143",
+            "href": "https://app.incident.io/rocicorp/incidents/143",
+            "summary": "ddlUpdate without ddlStart; repeated"
+          },
+          {
+            "text": "INC-477",
+            "href": "https://app.incident.io/rocicorp/incidents/477",
+            "summary": "Schema-change backfill crash-loop until resync"
+          }
+        ]
+      }
+    },
+    {
+      "priority": "Medium",
+      "title": "Run an error-classification & alert-noise sweep",
+      "detail": "Audit which conditions log ERROR / throw unhandledRejection and crash or page. Downgrade recoverable/transient cases (Supavisor crashes, transient 'database is locked', intentional resync exits, slow-upstream write timeouts) to retry-or-warn. Removes incidents and out-of-hours pages simultaneously; INC-40 proves the pattern works.",
+      "evidence": {
+        "incidents": [
+          {
+            "text": "INC-239",
+            "href": "https://app.incident.io/rocicorp/incidents/239",
+            "summary": "Two open follow-ups: suppress + gracefully handle Supavisor crashes"
+          },
+          {
+            "text": "INC-16",
+            "href": "https://app.incident.io/rocicorp/incidents/16",
+            "summary": "Open: graceful handling for transient 'database is locked'"
+          }
+        ]
+      }
+    },
+    {
+      "priority": "Medium",
+      "title": "Close the post-incident loop",
+      "detail": "Only 11% of follow-ups are closed and most Majors have none. Require a follow-up on every Major, assign priorities (15 of 16 open items are unprioritised), and burn down the backlog — several open items already have fixes in PRs and just need closing.",
+      "evidence": {
+        "narrative": "18 follow-ups total across 123 incidents; 2 completed; mean open age 41 days, oldest 90. The recurrence seen across every theme above is downstream of this."
+      }
+    },
+    {
+      "priority": "Medium",
+      "title": "Burn down IVM / ZQL engine bugs and confirm 1.6 fixes landed",
+      "detail": "These are genuine engine-correctness defects (Take operator, UnionFanIn, IVMBranch corruption, CVR concurrent-modify). Confirm the 1.6 fixes (e.g. #5930) actually shipped and that band-aided cases (INC-200, #5910/#5916) get a real root-cause fix.",
+      "evidence": {
+        "incidents": [
+          {
+            "text": "INC-217",
+            "href": "https://app.incident.io/rocicorp/incidents/217",
+            "summary": "Fixed in 1.6 (#5930)"
+          },
+          {
+            "text": "INC-200",
+            "href": "https://app.incident.io/rocicorp/incidents/200",
+            "summary": "Symptom trapped; root cause open"
+          }
+        ]
+      }
+    }
+  ]
+}
