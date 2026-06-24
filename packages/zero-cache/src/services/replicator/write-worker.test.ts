@@ -101,6 +101,47 @@ describe('write-worker', () => {
     expect(state.watermark).toBe('06');
   });
 
+  test('processMessages handles multiple full transactions', async () => {
+    const issues = new ReplicationMessages({issues: ['issueID', 'bool']});
+
+    const messages: ChangeStreamData[] = [
+      ['begin', issues.begin(), {commitWatermark: '06'}],
+      ['data', issues.insert('issues', {issueID: 123, bool: true})],
+      ['commit', issues.commit(), {watermark: '06'}],
+      ['begin', issues.begin(), {commitWatermark: '07'}],
+      ['data', issues.insert('issues', {issueID: 456, bool: false})],
+      ['commit', issues.commit(), {watermark: '07'}],
+    ];
+
+    const results = await worker.processMessages(messages);
+
+    expect(results).toEqual([
+      {
+        watermark: '06',
+        completedBackfill: undefined,
+        schemaUpdated: false,
+        changeLogUpdated: true,
+      },
+      {
+        watermark: '07',
+        completedBackfill: undefined,
+        schemaUpdated: false,
+        changeLogUpdated: true,
+      },
+    ]);
+
+    const rows = mainDb
+      .prepare('SELECT issueID, bool, _0_version FROM issues ORDER BY issueID')
+      .all();
+    expect(rows).toEqual([
+      {issueID: 123, bool: 1, _0_version: '06'},
+      {issueID: 456, bool: 0, _0_version: '07'},
+    ]);
+
+    const state = await worker.getSubscriptionState();
+    expect(state.watermark).toBe('07');
+  });
+
   test('abort rolls back pending transaction', async () => {
     const issues = new ReplicationMessages({issues: ['issueID', 'bool']});
 

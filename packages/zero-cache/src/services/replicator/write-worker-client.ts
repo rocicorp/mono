@@ -22,10 +22,18 @@ type ErrorHandler = (err: Error) => void;
 export interface WriteWorkerClient {
   getSubscriptionState(): Promise<SubscriptionState>;
   processMessage(downstream: ChangeStreamData): Promise<CommitResult | null>;
+  processMessages(
+    downstreams: readonly ChangeStreamData[],
+  ): Promise<ProcessMessagesResult>;
   abort(): void;
   stop(): Promise<void>;
   onError(handler: ErrorHandler): void;
 }
+
+export type ProcessMessagesResult =
+  | CommitResult
+  | readonly CommitResult[]
+  | null;
 
 export type SerializedError = {
   name: string;
@@ -90,6 +98,7 @@ export type ArgsMap = {
   init: [string, ChangeProcessorMode, PragmaConfig, LogConfig];
   getSubscriptionState: [];
   processMessage: [ChangeStreamData];
+  processMessages: [readonly ChangeStreamData[]];
   abort: [];
   stop: [];
 };
@@ -102,6 +111,7 @@ export type ResultMap = {
   init: void;
   getSubscriptionState: SubscriptionState;
   processMessage: CommitResult | null;
+  processMessages: ProcessMessagesResult;
   abort: void;
   stop: void;
 };
@@ -196,6 +206,12 @@ export class ThreadWriteWorkerClient implements WriteWorkerClient {
 
   processMessage(downstream: ChangeStreamData): Promise<CommitResult | null> {
     return this.#call('processMessage', [downstream]);
+  }
+
+  processMessages(
+    downstreams: readonly ChangeStreamData[],
+  ): Promise<ProcessMessagesResult> {
+    return this.#call('processMessages', [downstreams]);
   }
 
   abort(): void {
