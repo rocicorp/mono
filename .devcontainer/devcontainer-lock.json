@@ -9,9 +9,7 @@
       "version": "3.0.0",
       "resolved": "ghcr.io/rocicorp/devcontainer-features/agents@sha256:cb7bb04455faaab8fa55e5d57656be969f0f59657fee8a3320e61badb025a5a3",
       "integrity": "sha256:cb7bb04455faaab8fa55e5d57656be969f0f59657fee8a3320e61badb025a5a3",
-      "dependsOn": [
-        "ghcr.io/anthropics/devcontainer-features/claude-code:1"
-      ]
+      "dependsOn": ["ghcr.io/anthropics/devcontainer-features/claude-code:1"]
     },
     "ghcr.io/rocicorp/devcontainer-features/pnpm:1": {
       "version": "1.0.0",
