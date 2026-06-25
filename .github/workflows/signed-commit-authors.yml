@@ -1,10 +1,11 @@
 name: Signed Commit Authors
 
 # Require the "Verify Signed Commit Authors" check in branch protection to enforce this.
-# SSH signing keys are read from SIGNED_COMMIT_ALLOWED_SIGNERS_FILE at the PR's
-# protected base commit, so a PR cannot authorize itself by editing the key list.
-# This intentionally uses pull_request_target but only checks out the trusted
-# base commit and never executes code from the PR.
+# SSH signing keys are downloaded from the private security-policy repository.
+# SECURITY_POLICY_REPO_TOKEN must be a read-only token with contents access to
+# the same-owner security-policy repository. This intentionally uses
+# pull_request_target but only checks out trusted base code and never executes
+# code from the PR.
 
 on:
   pull_request_target:
@@ -18,7 +19,12 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # OpenSSH allowed signers file. Authorization is by key presence in this file.
+  # Source of the OpenSSH allowed signers file. Authorization is by key presence.
+  SIGNED_COMMIT_POLICY_REPOSITORY: ${{ github.repository_owner }}/security-policy
+  SIGNED_COMMIT_POLICY_REF: main
+  SIGNED_COMMIT_ALLOWED_SIGNERS_PATH: .github/signing/allowed_signers
+
+  # Local runtime copy downloaded from the private policy repository.
   SIGNED_COMMIT_ALLOWED_SIGNERS_FILE: .github/signing/allowed_signers
 
 jobs:
@@ -26,22 +32,74 @@ jobs:
     name: Verify Signed Commit Authors
     runs-on: ubuntu-latest
     permissions:
-      contents: read # Required to checkout the trusted policy and fetch commits.
+      contents: read # Required to checkout the trusted verifier and fetch commits.
     steps:
-      - name: Check out trusted signing policy
+      - name: Check out trusted verifier
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
 
-      - name: Fetch PR commits
+      - name: Download signing policy
+        env:
+          SECURITY_POLICY_REPO_TOKEN: ${{ secrets.SECURITY_POLICY_REPO_TOKEN }}
+        shell: bash
         run: |
           set -euo pipefail
 
-          depth=$(( ${{ github.event.pull_request.commits }} + 1 ))
-          git fetch --no-tags --depth="$depth" origin \
-            "+refs/pull/${{ github.event.pull_request.number }}/head:refs/remotes/pull/${{ github.event.pull_request.number }}/head"
+          if [[ -z "${SECURITY_POLICY_REPO_TOKEN:-}" ]]; then
+            echo "::error::Missing SECURITY_POLICY_REPO_TOKEN secret. It must read ${SIGNED_COMMIT_POLICY_REPOSITORY}."
+            exit 1
+          fi
 
-          git cat-file -e "${{ github.event.pull_request.head.sha }}^{commit}"
+          mkdir -p "$(dirname "$SIGNED_COMMIT_ALLOWED_SIGNERS_FILE")"
+
+          curl --fail-with-body --silent --show-error --location \
+            --header "Accept: application/vnd.github.raw+json" \
+            --header "Authorization: Bearer ${SECURITY_POLICY_REPO_TOKEN}" \
+            --header "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${SIGNED_COMMIT_POLICY_REPOSITORY}/contents/${SIGNED_COMMIT_ALLOWED_SIGNERS_PATH}?ref=${SIGNED_COMMIT_POLICY_REF}" \
+            --output "$SIGNED_COMMIT_ALLOWED_SIGNERS_FILE"
+
+          if [[ ! -s "$SIGNED_COMMIT_ALLOWED_SIGNERS_FILE" ]]; then
+            echo "::error::Downloaded signing policy is empty: ${SIGNED_COMMIT_POLICY_REPOSITORY}:${SIGNED_COMMIT_ALLOWED_SIGNERS_PATH}@${SIGNED_COMMIT_POLICY_REF}"
+            exit 1
+          fi
+
+      - name: Fetch PR commits
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PR_COMMIT_COUNT: ${{ github.event.pull_request.commits }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ ! "$PR_COMMIT_COUNT" =~ ^[0-9]+$ ]]; then
+            echo "::error::Invalid PR commit count: ${PR_COMMIT_COUNT}"
+            exit 1
+          fi
+          if [[ ! "$PR_NUMBER" =~ ^[0-9]+$ ]]; then
+            echo "::error::Invalid PR number: ${PR_NUMBER}"
+            exit 1
+          fi
+          if [[ ! "$PR_HEAD_SHA" =~ ^[0-9a-fA-F]{40}$ ]]; then
+            echo "::error::Invalid PR head SHA: ${PR_HEAD_SHA}"
+            exit 1
+          fi
+          if [[ -z "${GITHUB_TOKEN:-}" ]]; then
+            echo "::error::Missing GITHUB_TOKEN."
+            exit 1
+          fi
+
+          depth=$(( PR_COMMIT_COUNT + 1 ))
+          auth_header="$(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 -w 0)"
+          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic ${auth_header}" \
+            fetch --no-tags --depth="$depth" origin \
+            "+refs/pull/${PR_NUMBER}/head:refs/remotes/pull/${PR_NUMBER}/head"
+
+          git cat-file -e "${PR_HEAD_SHA}^{commit}"
 
       - uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
         with:
@@ -75,7 +133,7 @@ jobs:
 
             if (!fs.existsSync(allowedSignersPath)) {
               core.setFailed(
-                `Missing SSH allowed signers file at ${path.relative(workspace, allowedSignersPath)} on base commit ${pr.base.sha}.`,
+                `Missing SSH allowed signers file at ${path.relative(workspace, allowedSignersPath)}. It should have been downloaded from ${process.env.SIGNED_COMMIT_POLICY_REPOSITORY}:${process.env.SIGNED_COMMIT_ALLOWED_SIGNERS_PATH}.`,
               );
               return;
             }
