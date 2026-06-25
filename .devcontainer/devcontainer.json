@@ -14,20 +14,14 @@
   "remoteUser": "node",
   "features": {
     // Shared rocicorp features (https://github.com/rocicorp/devcontainer-features):
-    //  - agents: Codex (pinned) + Claude Code + gh. Persists the Claude login
-    //    across rebuilds (CLAUDE_CONFIG_DIR). gh auth is NOT persisted — it uses
-    //    GITHUB_TOKEN forwarded from the host (resolved there via 1Password).
+    //  - agents: Codex (pinned) + Claude Code. Persists the Claude login
+    //    across rebuilds (CLAUDE_CONFIG_DIR). v3 dropped the bundled GitHub CLI
+    //    (gh) and 1Password CLI (op); add github-cli explicitly if you need gh.
     //  - pnpm: corepack-managed pnpm; removes npm/npx to enforce pnpm.
-    "ghcr.io/rocicorp/devcontainer-features/agents:2": {
+    "ghcr.io/rocicorp/devcontainer-features/agents:3": {
       "codexVersion": "0.139.0"
     },
     "ghcr.io/rocicorp/devcontainer-features/pnpm:1": {}
-  },
-  // gh reads GITHUB_TOKEN directly. Resolve it on your HOST (1Password app /
-  // Touch ID) and forward it in — nothing is stored in the container or repo.
-  // Host setup: see https://github.com/rocicorp/devcontainer-features#gh-auth-via-1password-no-host-side-credentials
-  "remoteEnv": {
-    "GITHUB_TOKEN": "${localEnv:GITHUB_TOKEN}"
   },
   "postCreateCommand": "pnpm install",
   "customizations": {
