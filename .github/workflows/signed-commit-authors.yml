@@ -1,9 +1,13 @@
 name: Signed Commit Authors
 
 # Require the "Verify Signed Commit Authors" check in branch protection to enforce this.
+# SSH signing keys are read from SIGNED_COMMIT_ALLOWED_SIGNERS_FILE at the PR's
+# protected base commit, so a PR cannot authorize itself by editing the key list.
+# This intentionally uses pull_request_target but only checks out the trusted
+# base commit and never executes code from the PR.
 
 on:
-  pull_request:
+  pull_request_target:
     branches: [main]
     types: [opened, synchronize, reopened, ready_for_review]
 
@@ -14,10 +18,13 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  # Require the GitHub account linked to each verified commit signature to have
+  # OpenSSH allowed signers file. Principals must be GitHub logins.
+  SIGNED_COMMIT_ALLOWED_SIGNERS_FILE: .github/signing/allowed_signers
+  # Require the GitHub account linked to each signed commit to have
   # at least this repository permission. GitHub maps maintain to write here.
   SIGNED_COMMIT_MINIMUM_PERMISSION: write
-  # Add bot or service account logins here, separated by spaces, commas, or newlines.
+  # Add bot or service account logins here, separated by spaces, commas, or
+  # newlines. These logins still need an allowed SSH signing key.
   SIGNED_COMMIT_ALLOWED_LOGINS: ''
 
 jobs:
@@ -25,15 +32,34 @@ jobs:
     name: Verify Signed Commit Authors
     runs-on: ubuntu-latest
     permissions:
-      contents: read # Required to read commit verification metadata.
+      contents: read # Required to checkout the trusted policy and fetch commits.
       pull-requests: read # Required to list PR commits.
     steps:
+      - name: Check out trusted signing policy
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+
+      - name: Fetch PR commits
+        run: |
+          set -euo pipefail
+
+          depth=$(( ${{ github.event.pull_request.commits }} + 1 ))
+          git fetch --no-tags --depth="$depth" origin \
+            "+refs/pull/${{ github.event.pull_request.number }}/head:refs/remotes/pull/${{ github.event.pull_request.number }}/head"
+
+          git cat-file -e "${{ github.event.pull_request.head.sha }}^{commit}"
+
       - uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
         with:
           # Set SIGNED_COMMITS_TOKEN to a read-only GitHub App/PAT if github.token
           # cannot read collaborator permissions in this organization.
           github-token: ${{ secrets.SIGNED_COMMITS_TOKEN || github.token }}
           script: |
+            const fs = require('node:fs');
+            const path = require('node:path');
+            const {execFileSync} = require('node:child_process');
+
             const pr = context.payload.pull_request;
             if (!pr) {
               core.setFailed('No pull_request payload.');
@@ -48,6 +74,138 @@ jobs:
                 .split(/[\s,]+/)
                 .map(normalizeLogin)
                 .filter(Boolean);
+
+            const workspace = process.env.GITHUB_WORKSPACE || process.cwd();
+            const allowedSignersPath = path.resolve(
+              workspace,
+              process.env.SIGNED_COMMIT_ALLOWED_SIGNERS_FILE ||
+                '.github/signing/allowed_signers',
+            );
+            const workspaceRoot = path.resolve(workspace);
+            if (
+              allowedSignersPath !== workspaceRoot &&
+              !allowedSignersPath.startsWith(`${workspaceRoot}${path.sep}`)
+            ) {
+              core.setFailed(
+                `SIGNED_COMMIT_ALLOWED_SIGNERS_FILE must stay inside the workspace: ${allowedSignersPath}`,
+              );
+              return;
+            }
+
+            if (!fs.existsSync(allowedSignersPath)) {
+              core.setFailed(
+                `Missing SSH allowed signers file at ${path.relative(workspace, allowedSignersPath)} on base commit ${pr.base.sha}.`,
+              );
+              return;
+            }
+
+            const githubLoginPattern = /^[a-z\d](?:[a-z\d-]{0,37}[a-z\d])?$/i;
+            const activeSignerLines = fs
+              .readFileSync(allowedSignersPath, 'utf8')
+              .split(/\r?\n/)
+              .map((line, index) => ({line: line.trim(), lineNumber: index + 1}))
+              .filter(({line}) => line && !line.startsWith('#'));
+
+            if (!activeSignerLines.length) {
+              core.setFailed(
+                `${path.relative(workspace, allowedSignersPath)} has no active signing keys.`,
+              );
+              return;
+            }
+
+            const allowedKeyPrincipals = new Set();
+            for (const {line, lineNumber} of activeSignerLines) {
+              const principal = line.split(/\s+/)[0];
+              if (principal.includes(',') || !githubLoginPattern.test(principal)) {
+                core.setFailed(
+                  `${path.relative(workspace, allowedSignersPath)}:${lineNumber} must start with exactly one GitHub login principal.`,
+                );
+                return;
+              }
+              allowedKeyPrincipals.add(normalizeLogin(principal));
+            }
+
+            const git = args => {
+              try {
+                return {
+                  ok: true,
+                  stdout: execFileSync('git', args, {
+                    cwd: workspace,
+                    encoding: 'utf8',
+                    stdio: ['ignore', 'pipe', 'pipe'],
+                  }),
+                  stderr: '',
+                };
+              } catch (error) {
+                return {
+                  ok: false,
+                  stdout: String(error.stdout ?? ''),
+                  stderr: String(error.stderr ?? ''),
+                };
+              }
+            };
+
+            const signingGit = args =>
+              git([
+                '-c',
+                `gpg.ssh.allowedSignersFile=${allowedSignersPath}`,
+                '-c',
+                'gpg.minTrustLevel=fully',
+                ...args,
+              ]);
+
+            const verifyAllowedSignature = sha => {
+              const verify = signingGit(['verify-commit', sha]);
+              if (!verify.ok) {
+                const details = `${verify.stdout}\n${verify.stderr}`.trim();
+                return {
+                  allowed: false,
+                  detail: details || 'signature is missing or not made by an allowed SSH key',
+                };
+              }
+
+              const metadata = signingGit([
+                'show',
+                '-s',
+                '--format=%GS%x00%GK%x00%GT',
+                sha,
+              ]);
+              if (!metadata.ok) {
+                const details = `${metadata.stdout}\n${metadata.stderr}`.trim();
+                return {
+                  allowed: false,
+                  detail: details || 'could not read signature metadata',
+                };
+              }
+
+              const [principal = '', fingerprint = '', trust = ''] =
+                metadata.stdout.trimEnd().split('\0');
+              const normalizedPrincipal = normalizeLogin(principal);
+              if (trust !== 'fully') {
+                return {
+                  allowed: false,
+                  detail: `signature trust is ${trust || 'unknown'}, not fully trusted`,
+                };
+              }
+              if (!allowedKeyPrincipals.has(normalizedPrincipal)) {
+                return {
+                  allowed: false,
+                  detail: `key principal ${principal || '(none)'} is not in the allowed signers file`,
+                };
+              }
+              if (!fingerprint) {
+                return {
+                  allowed: false,
+                  detail: 'signature did not report a key fingerprint',
+                };
+              }
+
+              return {
+                allowed: true,
+                fingerprint,
+                principal: normalizedPrincipal,
+              };
+            };
 
             const permissionRank = new Map([
               ['none', 0],
@@ -76,6 +234,9 @@ jobs:
             core.info(`Minimum signer permission: ${minimumPermission}`);
             core.info(
               `Explicitly allowed signers: ${[...allowedLogins].join(', ') || '(none)'}`,
+            );
+            core.info(
+              `Allowed SSH signing principals: ${[...allowedKeyPrincipals].sort().join(', ')}`,
             );
             core.info(`Checking ${pr.commits} commit(s) on PR #${pr.number}.`);
 
@@ -151,15 +312,23 @@ jobs:
             for (const commit of commits) {
               const shortSha = commit.sha.slice(0, 12);
               const subject = commit.commit.message.split('\n')[0];
-              const verification = commit.commit.verification;
-              const reason = verification?.reason ?? 'missing verification metadata';
               const signer = normalizeLogin(commit.committer?.login);
+              const signatureCheck = verifyAllowedSignature(commit.sha);
 
-              if (!verification?.verified) {
+              if (!signatureCheck.allowed) {
                 failures.push({
                   sha: shortSha,
                   subject,
-                  problem: `signature is not verified (${reason})`,
+                  problem: `signature is not made by an allowed SSH signing key: ${signatureCheck.detail}`,
+                });
+                continue;
+              }
+
+              if (signatureCheck.principal !== signer) {
+                failures.push({
+                  sha: shortSha,
+                  subject,
+                  problem: `signature key principal ${signatureCheck.principal} does not match GitHub committer ${signer || '(none)'}`,
                 });
                 continue;
               }
@@ -169,13 +338,13 @@ jobs:
                 failures.push({
                   sha: shortSha,
                   subject,
-                  problem: `verified signer ${signer || '(none)'} is not allowed: ${signerCheck.detail}`,
+                  problem: `signed committer ${signer || '(none)'} is not allowed: ${signerCheck.detail}`,
                 });
                 continue;
               }
 
               core.info(
-                `${shortSha}: verified signature by ${signer} (${signerCheck.detail})`,
+                `${shortSha}: allowed SSH signature by ${signer} using ${signatureCheck.fingerprint} (${signerCheck.detail})`,
               );
             }
 
@@ -190,5 +359,5 @@ jobs:
             }
 
             core.notice(
-              `All ${commits.length} PR commit(s) are verified and signed by allowed accounts.`,
+              `All ${commits.length} PR commit(s) are signed by allowed SSH keys and allowed accounts.`,
             );

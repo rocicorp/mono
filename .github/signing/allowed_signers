@@ -1,0 +1,19 @@
+# SSH keys allowed to sign commits for pull requests.
+#
+# This file uses Git's gpg.ssh.allowedSignersFile format:
+#
+#   github-login ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI... optional-comment
+#
+# The first field must be exactly one GitHub login. The workflow also requires
+# the commit's linked GitHub committer login to match that principal and to have
+# the configured repository permission, unless the login is explicitly allowed
+# by SIGNED_COMMIT_ALLOWED_LOGINS.
+#
+# The workflow reads this file from the protected base commit, not from the PR
+# head, so PRs cannot authorize their own keys. Add keys in a dedicated PR,
+# merge it, then use those keys to sign subsequent commits.
+#
+# OpenSSH key lifetime options can be used to rotate keys without invalidating
+# older commits. For example:
+#
+#   alice valid-after="2026-01-01T00:00:00Z" ssh-ed25519 AAAAC3... alice-laptop-2026
