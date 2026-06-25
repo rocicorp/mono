@@ -2,12 +2,11 @@
 #
 # This file uses Git's gpg.ssh.allowedSignersFile format:
 #
-#   github-login ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI... optional-comment
+#   principal ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI... optional-comment
 #
-# The first field must be exactly one GitHub login. The workflow also requires
-# the commit's linked GitHub committer login to match that principal and to have
-# the configured repository permission, unless the login is explicitly allowed
-# by SIGNED_COMMIT_ALLOWED_LOGINS.
+# The principal is a label Git reports for the matched key. Authorization comes
+# from the public key being present in this file, not from a GitHub login or
+# repository permission.
 #
 # The workflow reads this file from the protected base commit, not from the PR
 # head, so PRs cannot authorize their own keys. Add keys in a dedicated PR,
