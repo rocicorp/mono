@@ -28,6 +28,7 @@ jobs:
   verify:
     name: Verify Signed Commit Authors
     runs-on: ubuntu-latest
+    environment: signed-commit-policy
     permissions:
       contents: read # Required to checkout the trusted verifier and fetch commits.
     steps:
