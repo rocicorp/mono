@@ -293,6 +293,12 @@ function nullableAwareEquality(
   value: unknown,
   columnType: SchemaValue,
 ): SQLQuery {
+  if (value === null) {
+    // A NULL bound value proves the column is nullable regardless of the
+    // column metadata, and `=` never matches NULL — `IS` selects the NULL
+    // tie-break group a cursor anchored on a NULL value needs.
+    return sql`${sql.ident(field)} IS ${value}`;
+  }
   // Use = instead of IS for non-nullable columns to enable better
   // index usage in SQLite.
   return columnType.optional === true
@@ -306,6 +312,16 @@ function nullableAwareRangeComparison(
   operator: '>' | '<',
   columnType: SchemaValue,
 ): SQLQuery {
+  if (value === null) {
+    // A NULL bound value proves the column is nullable regardless of the
+    // column metadata. SQLite sorts NULLs first, so the set strictly after
+    // a NULL bound is exactly the non-NULL values and the set strictly
+    // before it is empty. The generic forms below all mis-handle a NULL
+    // bound: `col > NULL` / `col < NULL` are never true (the cursor walk
+    // silently restarts), `? IS NULL OR col > ?` is always true, and
+    // `col IS NULL OR col < ?` matches the bound's own NULL group.
+    return operator === '>' ? sql`${sql.ident(field)} IS NOT NULL` : sql`FALSE`;
+  }
   // For non-nullable columns, skip IS NULL checks to avoid breaking
   // SQLite's MULTI-INDEX OR optimization, which falls back to a full
   // table scan when any OR branch involves NULL.
@@ -317,8 +333,12 @@ function nullableAwareRangeComparison(
     return comparison;
   }
 
+  // The bound is non-NULL here. NULLs sort before every non-NULL value, so
+  // `>` already excludes them and needs no guard, while `<` must admit the
+  // NULL group explicitly — a bare `col < ?` would silently drop NULL rows
+  // from a backward walk.
   return operator === '>'
-    ? sql`(${value} IS NULL OR ${comparison})`
+    ? comparison
     : sql`(${sql.ident(field)} IS NULL OR ${comparison})`;
 }
 

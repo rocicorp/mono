@@ -116,7 +116,10 @@ function toLiteValue(val: JSONValue): Exclude<JSONValue, boolean> {
 export function mapLiteDataTypeToZqlSchemaValue(
   liteDataType: LiteTypeString,
 ): SchemaValue {
-  return {type: mapLiteDataTypeToZqlValueType(liteDataType)};
+  return {
+    type: mapLiteDataTypeToZqlValueType(liteDataType),
+    optional: nullableUpstream(liteDataType),
+  };
 }
 
 function mapLiteDataTypeToZqlValueType(dataType: LiteTypeString): ValueType {

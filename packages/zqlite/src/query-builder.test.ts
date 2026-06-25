@@ -46,7 +46,7 @@ test('non-nullable cursor columns use range and equality operators without IS NU
   `);
 });
 
-test('optional cursor columns keep IS and IS NULL checks while non-nullable columns do not', () => {
+test('optional cursor columns keep IS equality for tie-break groups; a non-null range bound needs no NULL guard', () => {
   const columns = {
     owner: {type: 'string', optional: true},
     id: {type: 'string'},
@@ -72,12 +72,203 @@ test('optional cursor columns keep IS and IS NULL checks while non-nullable colu
     ),
   ).toMatchInlineSnapshot(`
     {
-      "text": "SELECT "owner","id" FROM "issues" WHERE (((? IS NULL OR "owner" > ?)) OR ("owner" IS ? AND "id" > ?) OR ("owner" IS ? AND "id" = ?)) ORDER BY "owner" asc, "id" asc",
+      "text": "SELECT "owner","id" FROM "issues" WHERE (("owner" > ?) OR ("owner" IS ? AND "id" > ?) OR ("owner" IS ? AND "id" = ?)) ORDER BY "owner" asc, "id" asc",
       "values": [
         "alice",
         "alice",
+        "issue-1",
         "alice",
         "issue-1",
+      ],
+    }
+  `);
+});
+
+test('a NULL cursor bound selects the strictly-after set, with or without column metadata', () => {
+  // Replica-introspected specs historically carried no `optional` flag, so
+  // the NULL handling must come from the bound value itself: strictly after
+  // a NULL bound under SQLite's NULLS-first ordering is exactly the
+  // non-NULL values, and the tie-break group needs the null-safe IS.
+  const columns = {
+    a: {type: 'number'},
+    id: {type: 'string'},
+  } as const satisfies Record<string, SchemaValue>;
+
+  expect(
+    format(
+      buildSelectQuery(
+        'issues',
+        columns,
+        undefined,
+        undefined,
+        [
+          ['a', 'asc'],
+          ['id', 'asc'],
+        ],
+        undefined,
+        {
+          row: {a: null, id: 'issue-5'},
+          basis: 'after',
+        },
+      ),
+    ),
+  ).toMatchInlineSnapshot(`
+    {
+      "text": "SELECT "a","id" FROM "issues" WHERE (("a" IS NOT NULL) OR ("a" IS ? AND "id" > ?)) ORDER BY "a" asc, "id" asc",
+      "values": [
+        null,
+        "issue-5",
+      ],
+    }
+  `);
+});
+
+test('a NULL cursor bound in a reverse walk yields the empty strictly-before set', () => {
+  // Nothing sorts strictly before NULL under NULLS-first ordering, so the
+  // range group must compile to FALSE — the previous `col < NULL` form was
+  // never true either, but `col IS NULL OR col < ?` (the optional-column
+  // form) would wrongly match the bound's own NULL group.
+  const columns = {
+    a: {type: 'number'},
+    id: {type: 'string'},
+  } as const satisfies Record<string, SchemaValue>;
+
+  expect(
+    format(
+      buildSelectQuery(
+        'issues',
+        columns,
+        undefined,
+        undefined,
+        [
+          ['a', 'asc'],
+          ['id', 'asc'],
+        ],
+        true,
+        {
+          row: {a: null, id: 'issue-5'},
+          basis: 'after',
+        },
+      ),
+    ),
+  ).toMatchInlineSnapshot(`
+    {
+      "text": "SELECT "a","id" FROM "issues" WHERE ((FALSE) OR ("a" IS ? AND "id" < ?)) ORDER BY "a" desc, "id" desc",
+      "values": [
+        null,
+        "issue-5",
+      ],
+    }
+  `);
+});
+
+test('a NULL cursor bound on a descending sort yields the empty strictly-after set', () => {
+  // Under `ORDER BY a DESC` NULLs sort last, so nothing sorts strictly after
+  // a NULL bound — the same truth-table cell as the reversed-ascending walk,
+  // reached through the declared sort direction instead of `reverse`.
+  const columns = {
+    a: {type: 'number'},
+    id: {type: 'string'},
+  } as const satisfies Record<string, SchemaValue>;
+
+  expect(
+    format(
+      buildSelectQuery(
+        'issues',
+        columns,
+        undefined,
+        undefined,
+        [
+          ['a', 'desc'],
+          ['id', 'desc'],
+        ],
+        undefined,
+        {
+          row: {a: null, id: 'issue-5'},
+          basis: 'after',
+        },
+      ),
+    ),
+  ).toMatchInlineSnapshot(`
+    {
+      "text": "SELECT "a","id" FROM "issues" WHERE ((FALSE) OR ("a" IS ? AND "id" < ?)) ORDER BY "a" desc, "id" desc",
+      "values": [
+        null,
+        "issue-5",
+      ],
+    }
+  `);
+});
+
+test('basis at with a NULL bound keeps the anchor row reachable', () => {
+  const columns = {
+    a: {type: 'number'},
+    id: {type: 'string'},
+  } as const satisfies Record<string, SchemaValue>;
+
+  expect(
+    format(
+      buildSelectQuery(
+        'issues',
+        columns,
+        undefined,
+        undefined,
+        [
+          ['a', 'asc'],
+          ['id', 'asc'],
+        ],
+        undefined,
+        {
+          row: {a: null, id: 'issue-5'},
+          basis: 'at',
+        },
+      ),
+    ),
+  ).toMatchInlineSnapshot(`
+    {
+      "text": "SELECT "a","id" FROM "issues" WHERE (("a" IS NOT NULL) OR ("a" IS ? AND "id" > ?) OR ("a" IS ? AND "id" = ?)) ORDER BY "a" asc, "id" asc",
+      "values": [
+        null,
+        "issue-5",
+        null,
+        "issue-5",
+      ],
+    }
+  `);
+});
+
+test('a non-null bound on an optional column admits the NULL group when walking backward', () => {
+  // NULLs sort before every non-NULL value, so the strictly-before set of a
+  // non-NULL bound includes the whole NULL group; a bare `col < ?` silently
+  // drops those rows from a reverse walk.
+  const columns = {
+    owner: {type: 'string', optional: true},
+    id: {type: 'string'},
+  } as const satisfies Record<string, SchemaValue>;
+
+  expect(
+    format(
+      buildSelectQuery(
+        'issues',
+        columns,
+        undefined,
+        undefined,
+        [
+          ['owner', 'asc'],
+          ['id', 'asc'],
+        ],
+        true,
+        {
+          row: {owner: 'alice', id: 'issue-1'},
+          basis: 'after',
+        },
+      ),
+    ),
+  ).toMatchInlineSnapshot(`
+    {
+      "text": "SELECT "owner","id" FROM "issues" WHERE ((("owner" IS NULL OR "owner" < ?)) OR ("owner" IS ? AND "id" < ?)) ORDER BY "owner" desc, "id" desc",
+      "values": [
+        "alice",
         "alice",
         "issue-1",
       ],
