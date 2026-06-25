@@ -1,0 +1,194 @@
+name: Signed Commit Authors
+
+# Require the "Verify Signed Commit Authors" check in branch protection to enforce this.
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions: {}
+
+concurrency:
+  group: '${{ github.workflow }} @ ${{ github.event.pull_request.number }}'
+  cancel-in-progress: true
+
+env:
+  # Require the GitHub account linked to each verified commit signature to have
+  # at least this repository permission. GitHub maps maintain to write here.
+  SIGNED_COMMIT_MINIMUM_PERMISSION: write
+  # Add bot or service account logins here, separated by spaces, commas, or newlines.
+  SIGNED_COMMIT_ALLOWED_LOGINS: ''
+
+jobs:
+  verify:
+    name: Verify Signed Commit Authors
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read # Required to read commit verification metadata.
+      pull-requests: read # Required to list PR commits.
+    steps:
+      - uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          # Set SIGNED_COMMITS_TOKEN to a read-only GitHub App/PAT if github.token
+          # cannot read collaborator permissions in this organization.
+          github-token: ${{ secrets.SIGNED_COMMITS_TOKEN || github.token }}
+          script: |
+            const pr = context.payload.pull_request;
+            if (!pr) {
+              core.setFailed('No pull_request payload.');
+              return;
+            }
+
+            const normalizeLogin = value =>
+              String(value ?? '').trim().replace(/^@/, '').toLowerCase();
+
+            const parseList = value =>
+              String(value ?? '')
+                .split(/[\s,]+/)
+                .map(normalizeLogin)
+                .filter(Boolean);
+
+            const permissionRank = new Map([
+              ['none', 0],
+              ['read', 1],
+              ['triage', 1],
+              ['write', 2],
+              ['maintain', 2],
+              ['admin', 3],
+            ]);
+
+            const minimumPermission = String(
+              process.env.SIGNED_COMMIT_MINIMUM_PERMISSION || 'write',
+            ).trim().toLowerCase();
+            if (!permissionRank.has(minimumPermission)) {
+              core.setFailed(
+                `Invalid SIGNED_COMMIT_MINIMUM_PERMISSION: ${minimumPermission}`,
+              );
+              return;
+            }
+
+            const minimumRank = permissionRank.get(minimumPermission);
+            const allowedLogins = new Set(
+              parseList(process.env.SIGNED_COMMIT_ALLOWED_LOGINS),
+            );
+
+            core.info(`Minimum signer permission: ${minimumPermission}`);
+            core.info(
+              `Explicitly allowed signers: ${[...allowedLogins].join(', ') || '(none)'}`,
+            );
+            core.info(`Checking ${pr.commits} commit(s) on PR #${pr.number}.`);
+
+            if (typeof pr.commits === 'number' && pr.commits > 250) {
+              core.setFailed(
+                `This PR has ${pr.commits} commits. GitHub's PR commits API returns at most 250 commits, so split the PR or extend this workflow before requiring it.`,
+              );
+              return;
+            }
+
+            const commits = await github.paginate(github.rest.pulls.listCommits, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pr.number,
+              per_page: 100,
+            });
+
+            const permissionCache = new Map();
+            const getRepositoryPermission = async login => {
+              const normalized = normalizeLogin(login);
+              if (permissionCache.has(normalized)) {
+                return permissionCache.get(normalized);
+              }
+
+              try {
+                const response = await github.request(
+                  'GET /repos/{owner}/{repo}/collaborators/{username}/permission',
+                  {
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    username: normalized,
+                  },
+                );
+                const result = {
+                  permission: String(response.data.permission ?? 'none').toLowerCase(),
+                  roleName: String(response.data.role_name ?? response.data.permission ?? 'none'),
+                };
+                permissionCache.set(normalized, result);
+                return result;
+              } catch (error) {
+                if (error.status === 404) {
+                  const result = {permission: 'none', roleName: 'none'};
+                  permissionCache.set(normalized, result);
+                  return result;
+                }
+                throw new Error(
+                  `Could not check repository permission for ${normalized}: ${error.message}`,
+                );
+              }
+            };
+
+            const isAllowedSigner = async login => {
+              const normalized = normalizeLogin(login);
+              if (!normalized) {
+                return {allowed: false, detail: 'no linked GitHub committer'};
+              }
+              if (allowedLogins.has(normalized)) {
+                return {allowed: true, detail: 'explicit allow-list'};
+              }
+
+              const {permission, roleName} = await getRepositoryPermission(normalized);
+              const rank = permissionRank.get(permission) ?? 0;
+              if (rank >= minimumRank) {
+                return {allowed: true, detail: `${roleName} repository permission`};
+              }
+              return {
+                allowed: false,
+                detail: `${roleName} repository permission is below ${minimumPermission}`,
+              };
+            };
+
+            const failures = [];
+            for (const commit of commits) {
+              const shortSha = commit.sha.slice(0, 12);
+              const subject = commit.commit.message.split('\n')[0];
+              const verification = commit.commit.verification;
+              const reason = verification?.reason ?? 'missing verification metadata';
+              const signer = normalizeLogin(commit.committer?.login);
+
+              if (!verification?.verified) {
+                failures.push({
+                  sha: shortSha,
+                  subject,
+                  problem: `signature is not verified (${reason})`,
+                });
+                continue;
+              }
+
+              const signerCheck = await isAllowedSigner(signer);
+              if (!signerCheck.allowed) {
+                failures.push({
+                  sha: shortSha,
+                  subject,
+                  problem: `verified signer ${signer || '(none)'} is not allowed: ${signerCheck.detail}`,
+                });
+                continue;
+              }
+
+              core.info(
+                `${shortSha}: verified signature by ${signer} (${signerCheck.detail})`,
+              );
+            }
+
+            if (failures.length) {
+              const details = failures
+                .map(f => `- ${f.sha}: ${f.problem} - ${f.subject}`)
+                .join('\n');
+              core.setFailed(
+                `Signed commit author check failed for ${failures.length}/${commits.length} commit(s):\n${details}`,
+              );
+              return;
+            }
+
+            core.notice(
+              `All ${commits.length} PR commit(s) are verified and signed by allowed accounts.`,
+            );
