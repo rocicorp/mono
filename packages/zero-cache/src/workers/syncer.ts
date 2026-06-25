@@ -43,6 +43,72 @@ export type SyncerWorkerData = {
   replicatorPort: MessagePort;
 };
 
+export type ReplicaReadyState = {
+  readonly watermark: string;
+  readonly replicaReadyTimeMs: number;
+};
+
+export type ServingLagViewSyncer = Pick<
+  ViewSyncer,
+  'createdAtMs' | 'servedVersion'
+>;
+
+export const MAX_REPLICA_READY_STATES = 10_000;
+
+function boundReplicaReadyStates(
+  replicaReadyStates: ReplicaReadyState[],
+): void {
+  if (replicaReadyStates.length > MAX_REPLICA_READY_STATES) {
+    replicaReadyStates.splice(
+      0,
+      replicaReadyStates.length - MAX_REPLICA_READY_STATES,
+    );
+  }
+}
+
+function pruneReplicaReadyStates(
+  replicaReadyStates: ReplicaReadyState[],
+  firstNeededIndex: number,
+): void {
+  if (firstNeededIndex > 0) {
+    replicaReadyStates.splice(0, firstNeededIndex);
+  }
+
+  boundReplicaReadyStates(replicaReadyStates);
+}
+
+export function computeMaxServingLagMs(
+  now: number,
+  replicaReadyStates: ReplicaReadyState[],
+  viewSyncers: Iterable<ServingLagViewSyncer>,
+): number {
+  let maxLagMs = 0;
+  let firstNeededIndex = replicaReadyStates.length;
+
+  for (const viewSyncer of viewSyncers) {
+    const firstUnservedIndex = replicaReadyStates.findIndex(
+      ({replicaReadyTimeMs, watermark}) =>
+        replicaReadyTimeMs >= viewSyncer.createdAtMs &&
+        (viewSyncer.servedVersion === null ||
+          viewSyncer.servedVersion < watermark),
+    );
+
+    if (firstUnservedIndex === -1) {
+      continue;
+    }
+
+    firstNeededIndex = Math.min(firstNeededIndex, firstUnservedIndex);
+    maxLagMs = Math.max(
+      maxLagMs,
+      now - replicaReadyStates[firstUnservedIndex].replicaReadyTimeMs,
+    );
+  }
+
+  pruneReplicaReadyStates(replicaReadyStates, firstNeededIndex);
+
+  return Math.max(0, maxLagMs);
+}
+
 function getWebSocketServerOptions(config: ZeroConfig): ServerOptions {
   const options: ServerOptions = {
     noServer: true,
@@ -89,6 +155,7 @@ export class Syncer implements SingletonService {
   readonly #stopped = resolver();
   readonly #config: ZeroConfig;
   readonly #validateLegacyJWT: ValidateLegacyJWT | undefined;
+  readonly #replicaReadyStates: ReplicaReadyState[] = [];
 
   constructor(
     lc: LogContext,
@@ -112,7 +179,9 @@ export class Syncer implements SingletonService {
     this.#validateLegacyJWT = validateLegacyJWT;
     // Relays notifications from the parent thread subscription
     // to ViewSyncers within this thread.
-    const notifier = createNotifierFrom(lc, parent);
+    const notifier = createNotifierFrom(lc, parent, state =>
+      this.#recordReplicaReadyState(state),
+    );
     subscribeTo(lc, parent);
 
     this.#lc = lc;
@@ -176,6 +245,44 @@ export class Syncer implements SingletonService {
       }
       result.observe(total);
     });
+
+    getOrCreateGauge('sync', 'serving-lag', {
+      description:
+        'Maximum time active ViewSyncer client groups have had unserved ' +
+        'replica changes. A change is served after IVM advancement, CVR flush, ' +
+        'and pokeEnd.',
+      unit: 'millisecond',
+    }).addCallback(result => {
+      result.observe(
+        computeMaxServingLagMs(
+          Date.now(),
+          this.#replicaReadyStates,
+          this.#viewSyncers.getServices(),
+        ),
+      );
+    });
+  }
+
+  #recordReplicaReadyState(state: ReplicaState): void {
+    if (
+      state.watermark === undefined ||
+      state.replicaReadyTimeMs === undefined
+    ) {
+      return;
+    }
+    const last = this.#replicaReadyStates.at(-1);
+    if (last && last.watermark >= state.watermark) {
+      return;
+    }
+    this.#replicaReadyStates.push({
+      watermark: state.watermark,
+      replicaReadyTimeMs: state.replicaReadyTimeMs,
+    });
+    if (this.#viewSyncers.size === 0) {
+      this.#replicaReadyStates.length = 0;
+      return;
+    }
+    boundReplicaReadyStates(this.#replicaReadyStates);
   }
 
   readonly #createConnection = async (ws: WebSocket, params: ConnectParams) => {

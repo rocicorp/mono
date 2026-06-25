@@ -56,7 +56,11 @@ import type {ConnectionContextManager} from '../services/view-syncer/connection-
 import {ConnectionContextManagerImpl} from '../services/view-syncer/connection-context-manager.ts';
 import type {ViewSyncer} from '../services/view-syncer/view-syncer.ts';
 import type {WebSocketReceiver} from '../types/websocket-handoff.ts';
-import {Syncer} from './syncer.ts';
+import {
+  computeMaxServingLagMs,
+  MAX_REPLICA_READY_STATES,
+  Syncer,
+} from './syncer.ts';
 
 const lc = createSilentLogContext();
 const tempDir = await fs.mkdtemp(
@@ -112,6 +116,8 @@ function makeFactories(
           keepalive: () => true,
           queryCount: 0,
           rowCount: 0,
+          createdAtMs: Date.now(),
+          servedVersion: null,
           stop() {
             stopped.resolve();
             return stopped.promise;
@@ -197,6 +203,68 @@ const baseParams = {
   wsID: '1',
   protocolVersion: 30,
 };
+
+describe('computeMaxServingLagMs', () => {
+  test('returns zero with no active view syncers', () => {
+    const states = [{watermark: '02', replicaReadyTimeMs: 100}];
+    expect(computeMaxServingLagMs(200, states, [])).toBe(0);
+    expect(states).toEqual([]);
+  });
+
+  test('uses oldest unserved replica-ready state across active view syncers', () => {
+    const states = [
+      {watermark: '02', replicaReadyTimeMs: 100},
+      {watermark: '03', replicaReadyTimeMs: 150},
+      {watermark: '04', replicaReadyTimeMs: 175},
+    ];
+
+    expect(
+      computeMaxServingLagMs(300, states, [
+        {createdAtMs: 0, servedVersion: '03'},
+        {createdAtMs: 0, servedVersion: '02'},
+      ]),
+    ).toBe(150);
+
+    expect(states).toEqual([
+      {watermark: '03', replicaReadyTimeMs: 150},
+      {watermark: '04', replicaReadyTimeMs: 175},
+    ]);
+  });
+
+  test('ignores replica states from before a view syncer was created', () => {
+    const states = [
+      {watermark: '02', replicaReadyTimeMs: 100},
+      {watermark: '03', replicaReadyTimeMs: 150},
+    ];
+
+    expect(
+      computeMaxServingLagMs(300, states, [
+        {createdAtMs: 125, servedVersion: null},
+      ]),
+    ).toBe(150);
+
+    expect(states).toEqual([{watermark: '03', replicaReadyTimeMs: 150}]);
+  });
+
+  test('bounds retained states even when a client group is behind', () => {
+    const states = Array.from(
+      {length: MAX_REPLICA_READY_STATES + 1},
+      (_, i) => ({
+        watermark: String(i).padStart(5, '0'),
+        replicaReadyTimeMs: i,
+      }),
+    );
+
+    expect(
+      computeMaxServingLagMs(20_000, states, [
+        {createdAtMs: 0, servedVersion: null},
+      ]),
+    ).toBe(20_000);
+
+    expect(states).toHaveLength(MAX_REPLICA_READY_STATES);
+    expect(states[0]).toEqual({watermark: '00001', replicaReadyTimeMs: 1});
+  });
+});
 
 function makeParams(clientID: number, params: any = {}) {
   return {
