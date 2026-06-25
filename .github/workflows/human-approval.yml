@@ -1,0 +1,190 @@
+name: Human Approval
+
+# Gate that prevents agent (bot) identities from landing changes unilaterally.
+#
+# Publishes a `human/approval` check that is green when EITHER:
+#   - the PR author is a @roci.dev human (org OWNER/MEMBER, not an agent), OR
+#   - a @roci.dev human other than the author has an active approving review.
+#
+# This is a *check*, not a required review, so it never blocks human-authored
+# PRs (post-commit review stays intact). It only gates agent-authored PRs,
+# which stay red until a human signs off — so agents can create PRs but can
+# never merge their own work.
+#
+# Mark `human/approval` as a required status check in the branch ruleset for
+# this to be enforced. This job always exits green; the verdict is the check
+# run it creates via the Checks API.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  pull_request_review:
+    types: [submitted, dismissed, edited]
+
+permissions: {}
+
+concurrency:
+  group: '${{ github.workflow }} @ ${{ github.event.pull_request.number }}'
+  cancel-in-progress: true
+
+jobs:
+  evaluate:
+    name: Evaluate Human Approval
+    runs-on: ubuntu-latest
+    permissions:
+      issues: read # Required to read PR timeline dismissal events.
+      pull-requests: read # Required to read PR metadata and reviews.
+      checks: write # Required to upsert the `human/approval` check run.
+    steps:
+      - uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const pr = context.payload.pull_request;
+            if (!pr) {
+              core.setFailed('No pull_request payload.');
+              return;
+            }
+
+            const CHECK_NAME = 'human/approval';
+
+            // Agent / bot identities that must never satisfy the gate on their
+            // own. `type === 'Bot'` covers GitHub App identities (e.g.
+            // claude[bot]); add any dedicated machine-account logins here.
+            const AGENT_LOGINS = new Set(
+              [
+                // 'claude[bot]',
+                // 'chatgpt-codex-connector[bot]',
+              ].map(s => s.toLowerCase()),
+            );
+
+            const isAgent = (login, type) =>
+              type === 'Bot' ||
+              (login ?? '').toLowerCase().endsWith('[bot]') ||
+              AGENT_LOGINS.has((login ?? '').toLowerCase());
+
+            // A "@roci.dev human": an org owner/member who is not an agent.
+            const TRUSTED_ASSOC = new Set(['OWNER', 'MEMBER']);
+            const isRociHuman = (login, type, association) =>
+              !isAgent(login, type) && TRUSTED_ASSOC.has(association);
+
+            const isChecksApiPermissionError = (error) =>
+              error?.status === 403 ||
+              /Resource not accessible by integration/i.test(
+                String(error?.message ?? ''),
+              );
+
+            const writeCheck = async ({ conclusion, title, summary }) => {
+              try {
+                const existing = await github.rest.checks.listForRef({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  ref: pr.head.sha,
+                  check_name: CHECK_NAME,
+                });
+                const base = {
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  status: 'completed',
+                  conclusion,
+                  output: { title, summary },
+                };
+                if (existing.data.check_runs.length) {
+                  await github.rest.checks.update({
+                    ...base,
+                    check_run_id: existing.data.check_runs[0].id,
+                  });
+                } else {
+                  await github.rest.checks.create({
+                    ...base,
+                    name: CHECK_NAME,
+                    head_sha: pr.head.sha,
+                  });
+                }
+              } catch (error) {
+                if (isChecksApiPermissionError(error)) {
+                  core.warning(
+                    `Skipping ${CHECK_NAME} check run because this workflow token cannot access the Checks API: ${error.message}`,
+                  );
+                  core.info(`${title}: ${summary}`);
+                  return;
+                }
+                throw error;
+              }
+            };
+
+            const author = pr.user?.login ?? '';
+
+            // 1. Author is a @roci.dev human -> green, no approval needed.
+            if (isRociHuman(author, pr.user?.type, pr.author_association)) {
+              await writeCheck({
+                conclusion: 'success',
+                title: 'Authored by a roci.dev human',
+                summary: `PR author @${author} is a roci.dev org member.`,
+              });
+              return;
+            }
+
+            // 2. Otherwise require an active approval from a @roci.dev human
+            //    other than the author.
+            const reviews = await github.paginate(github.rest.pulls.listReviews, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: pr.number,
+              per_page: 100,
+            });
+
+            const timelineEvents = await github.paginate(
+              github.rest.issues.listEventsForTimeline,
+              {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr.number,
+                per_page: 100,
+              },
+            );
+
+            const dismissedReviewIDs = new Set(
+              timelineEvents
+                .filter(e => e.event === 'review_dismissed')
+                .map(e => e.dismissed_review?.review_id)
+                .filter(id => typeof id === 'number'),
+            );
+
+            // Latest non-comment review per user (dismissed reviews excluded).
+            const latestByUser = new Map();
+            for (const r of reviews) {
+              const login = r.user?.login;
+              if (!login) continue;
+              if (!['APPROVED', 'CHANGES_REQUESTED'].includes(r.state)) continue;
+              if (dismissedReviewIDs.has(r.id)) continue;
+              const prev = latestByUser.get(login);
+              if (!prev || new Date(r.submitted_at) > new Date(prev.submitted_at)) {
+                latestByUser.set(login, r);
+              }
+            }
+
+            const approvers = [...latestByUser.values()].filter(
+              r =>
+                r.state === 'APPROVED' &&
+                r.user?.login?.toLowerCase() !== author.toLowerCase() &&
+                isRociHuman(r.user?.login, r.user?.type, r.author_association),
+            );
+
+            if (approvers.length) {
+              const who = approvers.map(r => `@${r.user.login}`).join(', ');
+              await writeCheck({
+                conclusion: 'success',
+                title: 'Approved by a roci.dev human',
+                summary: `Approving review from ${who}.`,
+              });
+            } else {
+              await writeCheck({
+                conclusion: 'failure',
+                title: 'Awaiting approval from a roci.dev human',
+                summary:
+                  `PR author @${author} is not a roci.dev human, so this PR ` +
+                  `requires an approving review from a roci.dev org member ` +
+                  `(other than the author) before it can be merged.`,
+              });
+            }
