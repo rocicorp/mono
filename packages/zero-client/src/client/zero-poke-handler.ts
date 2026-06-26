@@ -27,6 +27,7 @@ import {
   toPrimaryKeyString,
 } from './keys.ts';
 import type {MutationTracker} from './mutation-tracker.ts';
+import type {DecryptRow} from './options.ts';
 
 type PokeAccumulator = {
   readonly pokeStart: PokeStartBody;
@@ -58,6 +59,7 @@ export class PokeHandler {
   readonly #schema: Schema;
   readonly #serverToClient: NameMapper;
   readonly #mutationTracker: MutationTracker;
+  readonly #decryptRow: DecryptRow | undefined;
 
   constructor(
     replicachePoke: (poke: PokeInternal) => Promise<void>,
@@ -66,6 +68,7 @@ export class PokeHandler {
     schema: Schema,
     lc: LogContext,
     mutationTracker: MutationTracker,
+    decryptRow?: DecryptRow,
   ) {
     this.#replicachePoke = replicachePoke;
     this.#onPokeError = onPokeError;
@@ -74,6 +77,7 @@ export class PokeHandler {
     this.#serverToClient = serverToClient(schema.tables);
     this.#lc = lc.withContext('PokeHandler');
     this.#mutationTracker = mutationTracker;
+    this.#decryptRow = decryptRow;
   }
 
   handlePokeStart(pokeStart: PokeStartBody) {
@@ -164,10 +168,11 @@ export class PokeHandler {
       lc.debug?.('got poke lock at', now);
       lc.debug?.('merging', this.#pokeBuffer.length);
       try {
-        const merged = mergePokes(
+        const merged = await mergePokes(
           this.#pokeBuffer,
           this.#schema,
           this.#serverToClient,
+          this.#decryptRow,
         );
         this.#pokeBuffer.length = 0;
         if (merged === undefined) {
@@ -211,13 +216,15 @@ export class PokeHandler {
   }
 }
 
-export function mergePokes(
+export async function mergePokes(
   pokeBuffer: PokeAccumulator[],
   schema: Schema,
   serverToClient: NameMapper,
-):
+  decryptRow?: DecryptRow,
+): Promise<
   | (PokeInternal & {mutationResults?: MutationPatch[] | undefined})
-  | undefined {
+  | undefined
+> {
   if (pokeBuffer.length === 0) {
     return undefined;
   }
@@ -273,10 +280,11 @@ export function mergePokes(
       }
       if (pokePart.rowsPatch) {
         for (const p of pokePart.rowsPatch) {
-          const patchOp = rowsPatchOpToReplicachePatchOp(
+          const patchOp = await rowsPatchOpToReplicachePatchOp(
             p,
             schema,
             serverToClient,
+            decryptRow,
           );
           if (patchOp) {
             mergedPatch.push(patchOp);
@@ -349,11 +357,12 @@ export function mutationPatchOpToReplicachePatchOp(
   }
 }
 
-function rowsPatchOpToReplicachePatchOp(
+async function rowsPatchOpToReplicachePatchOp(
   op: RowPatchOp,
   schema: Schema,
   serverToClient: NameMapper,
-): PatchOperationInternal | undefined {
+  decryptRow?: DecryptRow,
+): Promise<PatchOperationInternal | undefined> {
   if (op.op === 'clear') {
     return op;
   }
@@ -374,17 +383,22 @@ function rowsPatchOpToReplicachePatchOp(
           serverToClient.row(op.tableName, op.id),
         ),
       };
-    case 'put':
+    case 'put': {
+      const value = serverToClient.row(op.tableName, op.value);
       return {
         op: 'put',
         key: toPrimaryKeyString(
           tableName,
           schema.tables[tableName].primaryKey,
-          serverToClient.row(op.tableName, op.value),
+          value,
         ),
-        value: serverToClient.row(op.tableName, op.value),
+        value: decryptRow ? await decryptRow(tableName, value) : value,
       };
-    case 'update':
+    }
+    case 'update': {
+      const merge = op.merge
+        ? serverToClient.row(op.tableName, op.merge)
+        : undefined;
       return {
         op: 'update',
         key: toPrimaryKeyString(
@@ -392,11 +406,13 @@ function rowsPatchOpToReplicachePatchOp(
           schema.tables[tableName].primaryKey,
           serverToClient.row(op.tableName, op.id),
         ),
-        merge: op.merge
-          ? serverToClient.row(op.tableName, op.merge)
-          : undefined,
+        merge:
+          merge && decryptRow
+            ? ((await decryptRow(tableName, merge)) as typeof merge)
+            : merge,
         constrain: serverToClient.columns(op.tableName, op.constrain),
       };
+    }
     default:
       unreachable(op);
   }

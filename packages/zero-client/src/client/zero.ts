@@ -819,6 +819,7 @@ export class Zero<
       schema,
       this.#lc,
       this.#mutationTracker,
+      options.decryptRow,
     );
 
     this.#visibilityWatcher = getDocumentVisibilityWatcher(

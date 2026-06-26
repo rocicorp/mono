@@ -8,10 +8,18 @@ import type {
   Row,
 } from '../../../zql/src/mutate/custom.ts';
 import type {HumanReadable} from '../../../zql/src/query/query.ts';
+import type {RowCrypto} from '../custom.ts';
 import {executePostgresQuery} from '../pg-query-executor.ts';
 import {ZQLDatabase} from '../zql-database.ts';
 
 export type {ZQLDatabase};
+export type {RowCrypto};
+
+/** Server-side encryption hooks applied to every Zero transaction read/write. */
+export interface ZeroServerCryptoOptions {
+  encryptRow?: RowCrypto | undefined;
+  decryptRow?: RowCrypto | undefined;
+}
 
 type DrizzleQuery = {sql: string; params: unknown[]};
 type DrizzlePreparedQuery = {execute(): Promise<unknown>};
@@ -80,18 +88,25 @@ export class DrizzleConnection<
   TTransaction extends DrizzleTransactionLike = DrizzleTransaction<TDrizzle>,
 > implements DBConnection<TTransaction> {
   readonly #drizzle: DrizzleDatabase<TTransaction>;
+  readonly #decryptRow: RowCrypto | undefined;
 
-  constructor(drizzle: TDrizzle & DrizzleDatabase<TTransaction>) {
+  constructor(
+    drizzle: TDrizzle & DrizzleDatabase<TTransaction>,
+    decryptRow?: RowCrypto,
+  ) {
     this.#drizzle = drizzle;
+    this.#decryptRow = decryptRow;
   }
 
   transaction<T>(
     fn: (tx: DBTransaction<TTransaction>) => Promise<T>,
   ): Promise<T> {
+    const decryptRow = this.#decryptRow;
     return this.#drizzle.transaction(drizzleTx =>
       fn(
         new DrizzleInternalTransaction(
           drizzleTx,
+          decryptRow,
         ) as DBTransaction<TTransaction>,
       ),
     );
@@ -102,9 +117,11 @@ class DrizzleInternalTransaction<
   TTransaction extends DrizzleTransactionLike,
 > implements DBTransaction<TTransaction> {
   readonly wrappedTransaction: TTransaction;
+  readonly #decryptRow: RowCrypto | undefined;
 
-  constructor(drizzleTx: TTransaction) {
+  constructor(drizzleTx: TTransaction, decryptRow?: RowCrypto) {
     this.wrappedTransaction = drizzleTx;
+    this.#decryptRow = decryptRow;
   }
 
   runQuery<TReturn>(
@@ -113,13 +130,21 @@ class DrizzleInternalTransaction<
     schema: Schema,
     serverSchema: ServerSchema,
   ): Promise<HumanReadable<TReturn>> {
-    return executePostgresQuery<TReturn>(
+    const result = executePostgresQuery<TReturn>(
       this,
       ast,
       format,
       schema,
       serverSchema,
     );
+    const decryptRow = this.#decryptRow;
+    if (!decryptRow) {
+      return result;
+    }
+    const decrypted = result.then(rows =>
+      decryptZqlResult(rows, ast, decryptRow),
+    );
+    return decrypted as Promise<HumanReadable<TReturn>>;
   }
 
   async query(sql: string, params: unknown[]): Promise<Iterable<Row>> {
@@ -178,6 +203,40 @@ export function toIterableRows(result: unknown): Iterable<Row> {
 }
 
 /**
+ * Recursively decrypt a ZQL query result, walking `related` subqueries so
+ * nested rows are decrypted with their own table name before the parent row.
+ */
+async function decryptZqlResult(
+  value: unknown,
+  ast: AST,
+  decryptRow: RowCrypto,
+): Promise<unknown> {
+  if (value === null || value === undefined) {
+    return value;
+  }
+  if (Array.isArray(value)) {
+    return Promise.all(
+      value.map(row => decryptZqlResult(row, ast, decryptRow)),
+    );
+  }
+  const row = value as Record<string, unknown>;
+  for (const relationship of ast.related ?? []) {
+    const {alias} = relationship.subquery;
+    // oxlint-disable-next-line eqeqeq
+    if (alias == null || row[alias] == null) {
+      continue;
+    }
+    const hiddenChild = relationship.subquery.related?.[0];
+    const childAst =
+      relationship.hidden && hiddenChild
+        ? hiddenChild.subquery
+        : relationship.subquery;
+    row[alias] = await decryptZqlResult(row[alias], childAst, decryptRow);
+  }
+  return decryptRow(ast.table, row as Row);
+}
+
+/**
  * Wrap a `drizzle-orm` database for Zero ZQL.
  *
  * Provides ZQL querying plus access to the underlying drizzle transaction.
@@ -222,9 +281,11 @@ export function zeroDrizzle<
 >(
   schema: TSchema,
   client: TDrizzle & DrizzleDatabase<TTransaction>,
+  options?: ZeroServerCryptoOptions,
 ): ZQLDatabase<TSchema, TTransaction> {
   return new ZQLDatabase(
-    new DrizzleConnection<TDrizzle, TTransaction>(client),
+    new DrizzleConnection<TDrizzle, TTransaction>(client, options?.decryptRow),
     schema,
+    options?.encryptRow,
   );
 }

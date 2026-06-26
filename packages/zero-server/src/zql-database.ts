@@ -8,7 +8,11 @@ import type {
   Query,
   RunOptions,
 } from '../../zql/src/query/query.ts';
-import {CRUDMutatorFactory, type TransactionImpl} from './custom.ts';
+import {
+  CRUDMutatorFactory,
+  type RowCrypto,
+  type TransactionImpl,
+} from './custom.ts';
 import type {
   Database,
   TransactionProviderHooks,
@@ -29,9 +33,13 @@ export class ZQLDatabase<
   readonly connection: DBConnection<TWrappedTransaction>;
   readonly #crudFactory: CRUDMutatorFactory<TSchema>;
 
-  constructor(connection: DBConnection<TWrappedTransaction>, schema: TSchema) {
+  constructor(
+    connection: DBConnection<TWrappedTransaction>,
+    schema: TSchema,
+    encryptRow?: RowCrypto,
+  ) {
     this.connection = connection;
-    this.#crudFactory = new CRUDMutatorFactory(schema);
+    this.#crudFactory = new CRUDMutatorFactory(schema, encryptRow);
   }
 
   transaction<R>(

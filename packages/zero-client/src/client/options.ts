@@ -1,6 +1,7 @@
 import type {LogLevel, LogSink} from '@rocicorp/logger';
 import type {StoreProvider} from '../../../replicache/src/kv/store.ts';
 import * as v from '../../../shared/src/valita.ts';
+import type {Row} from '../../../zero-protocol/src/data.ts';
 import type {
   BaseDefaultContext,
   BaseDefaultSchema,
@@ -10,6 +11,13 @@ import type {
 import type {AnyMutatorRegistry} from '../../../zql/src/mutate/mutator-registry.ts';
 import type {CustomMutatorDefs} from './custom.ts';
 import {UpdateNeededReasonType} from './update-needed-reason-type.ts';
+
+/**
+ * Async hook applied to each server row before it is written to the local
+ * store, e.g. to decrypt end-to-end encrypted columns. The returned row is
+ * stored in place of the original.
+ */
+export type DecryptRow = (tableName: string, row: Row) => Row | Promise<Row>;
 
 /**
  * Configuration for {@linkcode Zero}.
@@ -299,6 +307,12 @@ export type ZeroOptions<
    * allowing a custom implementation of the underlying storage layer.
    */
   kvStore?: 'mem' | 'idb' | StoreProvider | undefined;
+
+  /**
+   * Async hook to decrypt each server row before it is written to the local
+   * store. Applied in {@linkcode PokeHandler} to `put` and `update` ops.
+   */
+  decryptRow?: DecryptRow | undefined;
 
   /**
    * The maximum number of bytes to allow in a single header.

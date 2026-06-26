@@ -1293,13 +1293,13 @@ describe('poke handler', () => {
     expect(lastMutationIDChangeForSelf2).toBeUndefined();
   });
 
-  test('mergePokes with empty array returns undefined', () => {
-    const merged = mergePokes([], schema, serverToClient(schema.tables));
+  test('mergePokes with empty array returns undefined', async () => {
+    const merged = await mergePokes([], schema, serverToClient(schema.tables));
     expect(merged).toBeUndefined();
   });
 
-  test('mergePokes with all optionals defined', () => {
-    const result = mergePokes(
+  test('mergePokes with all optionals defined', async () => {
+    const result = await mergePokes(
       [
         {
           pokeStart: {
@@ -1474,8 +1474,8 @@ describe('poke handler', () => {
     });
   });
 
-  test('mergePokes sparse', () => {
-    const result = mergePokes(
+  test('mergePokes sparse', async () => {
+    const result = await mergePokes(
       [
         {
           pokeStart: {
@@ -1599,8 +1599,8 @@ describe('poke handler', () => {
     });
   });
 
-  test('mergePokes skips rows for tables not in client schema', () => {
-    const result = mergePokes(
+  test('mergePokes skips rows for tables not in client schema', async () => {
+    const result = await mergePokes(
       [
         {
           pokeStart: {
@@ -1661,8 +1661,8 @@ describe('poke handler', () => {
     });
   });
 
-  test('mergePokes skips del and update ops for tables not in client schema', () => {
-    const result = mergePokes(
+  test('mergePokes skips del and update ops for tables not in client schema', async () => {
+    const result = await mergePokes(
       [
         {
           pokeStart: {
@@ -1720,8 +1720,8 @@ describe('poke handler', () => {
     });
   });
 
-  test('mergePokes throws error on cookie gaps', () => {
-    expect(() => {
+  test('mergePokes throws error on cookie gaps', async () => {
+    await expect(
       mergePokes(
         [
           {
@@ -1759,8 +1759,8 @@ describe('poke handler', () => {
         ],
         schema,
         serverToClient(schema.tables),
-      );
-    }).toThrow();
+      ),
+    ).rejects.toThrow();
   });
 });
 

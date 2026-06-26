@@ -25,6 +25,7 @@ import {
 import type {
   DBTransaction,
   MutateCRUD,
+  Row,
   ServerTransaction,
 } from '../../zql/src/mutate/custom.ts';
 import {createRunnableBuilder} from '../../zql/src/query/create-builder.ts';
@@ -172,6 +173,12 @@ type WithHiddenTxAndSchema = {
 };
 
 /**
+ * Per-row column transform applied inside every Zero transaction:
+ * `encryptRow` before a write, `decryptRow` after a read.
+ */
+export type RowCrypto = (tableName: string, row: Row) => Row | Promise<Row>;
+
+/**
  * Factory for creating MutateCRUD instances efficiently.
  *
  * Pre-creates the SQL-generating TableCRUD methods once from the schema,
@@ -184,10 +191,12 @@ type WithHiddenTxAndSchema = {
 export class CRUDMutatorFactory<S extends Schema> {
   readonly #schema: S;
   readonly #tableCRUDs: Record<string, TableCRUD<TableSchema>>;
+  readonly #encryptRow: RowCrypto | undefined;
   #serverSchema: ServerSchema | undefined;
 
-  constructor(schema: S) {
+  constructor(schema: S, encryptRow?: RowCrypto) {
     this.#schema = schema;
+    this.#encryptRow = encryptRow;
     // Pre-create TableCRUD methods for each table once
     this.#tableCRUDs = {};
     for (const tableSchema of Object.values(schema.tables)) {
@@ -222,9 +231,16 @@ export class CRUDMutatorFactory<S extends Schema> {
     const boundCRUDs = recordProxy(this.#tableCRUDs, tableCRUD =>
       mapValues(tableCRUD, method => method.bind(txHolder)),
     ) as unknown as SchemaCRUD<S>;
+    const encryptRow = this.#encryptRow;
 
     return (table: string, kind: CRUDKind, args: unknown) => {
       const tableCRUD = boundCRUDs[table as keyof S['tables']];
+      if (encryptRow && kind !== 'delete') {
+        return Promise.resolve(encryptRow(table, args as Row)).then(
+          // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+          encrypted => (tableCRUD as any)[kind](encrypted),
+        );
+      }
       // oxlint-disable-next-line @typescript-eslint/no-explicit-any
       return (tableCRUD as any)[kind](args);
     };
