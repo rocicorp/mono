@@ -46,7 +46,7 @@ test('accepts pull request commits signed by allowed SSH keys', () => {
   const calls = readToolCalls(result.dir);
   expect(calls).toContainEqual({
     args: expect.arrayContaining([
-      'https://api.github.com/repos/rocicorp/security-policy/contents/.github/signing/allowed_signers?ref=main',
+      'https://api.github.com/repos/rocicorp/.github/contents/.github/signing/allowed_signers?ref=main',
     ]),
     command: 'curl',
   });

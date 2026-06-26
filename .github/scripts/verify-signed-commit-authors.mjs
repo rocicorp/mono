@@ -35,7 +35,7 @@ function main() {
 
   const policyRepository =
     process.env.SIGNED_COMMIT_POLICY_REPOSITORY ||
-    `${requiredEnv('GITHUB_REPOSITORY_OWNER')}/security-policy`;
+    `${requiredEnv('GITHUB_REPOSITORY_OWNER')}/.github`;
   validatePolicyRepository(policyRepository);
 
   const policyRef = process.env.SIGNED_COMMIT_POLICY_REF || 'main';

@@ -1,11 +1,12 @@
 name: Signed Commit Authors
 
 # Require the "Verify Signed Commit Authors" check in branch protection to enforce this.
-# SSH signing keys are downloaded from the private security-policy repository.
-# SECURITY_POLICY_REPO_TOKEN must be a read-only token with contents access to
-# the same-owner security-policy repository. This intentionally uses
-# pull_request_target but only checks out trusted base code and never executes
-# code from the PR.
+# SSH signing keys are downloaded from the private .github repository.
+# The workflow creates a short-lived installation token from a GitHub App with
+# read-only contents access to the same-owner .github repository. Store the app
+# private key in SECURITY_POLICY_APP_PRIVATE_KEY on the signed-commit-policy
+# environment. This intentionally uses pull_request_target but only checks out
+# trusted base code and never executes code from the PR.
 
 on:
   pull_request_target:
@@ -20,7 +21,7 @@ concurrency:
 
 env:
   # Source of the OpenSSH allowed signers file. Authorization is by key presence.
-  SIGNED_COMMIT_POLICY_REPOSITORY: ${{ github.repository_owner }}/security-policy
+  SIGNED_COMMIT_POLICY_REPOSITORY: ${{ github.repository_owner }}/.github
   SIGNED_COMMIT_POLICY_REF: main
   SIGNED_COMMIT_ALLOWED_SIGNERS_PATH: .github/signing/allowed_signers
 
@@ -38,8 +39,18 @@ jobs:
           ref: ${{ github.event.pull_request.base.sha }}
           persist-credentials: false
 
+      - name: Create security policy token
+        id: security-policy-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: 4155791
+          private-key: ${{ secrets.SECURITY_POLICY_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: .github
+          permission-contents: read
+
       - name: Verify signed commit authors
         env:
           GITHUB_TOKEN: ${{ github.token }}
-          SECURITY_POLICY_REPO_TOKEN: ${{ secrets.SECURITY_POLICY_REPO_TOKEN }}
+          SECURITY_POLICY_REPO_TOKEN: ${{ steps.security-policy-token.outputs.token }}
         run: node .github/scripts/verify-signed-commit-authors.mjs
