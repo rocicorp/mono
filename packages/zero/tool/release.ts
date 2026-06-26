@@ -174,7 +174,7 @@ async function main() {
       }
     }
     console.log(
-      `* ${dryRun ? 'Would create' : 'Created'} Docker image rocicorp/zero:${result.version}.`,
+      `* ${dryRun ? 'Would create' : 'Created'} Docker images rocicorp/zero:${result.version} and ghcr.io/rocicorp/zero:${result.version}.`,
     );
     console.log(``);
     console.log(``);
@@ -690,7 +690,7 @@ function pushNpm(isCanary: boolean, dryRun: boolean) {
 async function pushDocker(version: string, dryRun: boolean) {
   if (dryRun) {
     console.log(
-      `[DRY RUN] Would run: docker buildx build --platform linux/amd64,linux/arm64 --build-arg=ZERO_VERSION=${version} -t rocicorp/zero:${version} --sbom=true --provenance=mode=max --push .`,
+      `[DRY RUN] Would run: docker buildx build --platform linux/amd64,linux/arm64 --build-arg=ZERO_VERSION=${version} -t rocicorp/zero:${version} -t ghcr.io/rocicorp/zero:${version} --sbom=true --provenance=mode=max --push .`,
     );
     return;
   }
@@ -715,11 +715,14 @@ async function pushDocker(version: string, dryRun: boolean) {
   const dockerBuildAttempts = 3;
   for (let i = 0; i < dockerBuildAttempts; i++) {
     try {
+      // A single build pushed to both registries. The multiple -t flags share
+      // one build, so the SBOM and provenance attestations apply to both.
       execute(
         `docker buildx build \\
     --platform linux/amd64,linux/arm64 \\
     --build-arg=ZERO_VERSION=${version} \\
     -t rocicorp/zero:${version} \\
+    -t ghcr.io/rocicorp/zero:${version} \\
     --sbom=true \\
     --provenance=mode=max \\
     --push .`,
