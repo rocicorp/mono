@@ -72,8 +72,8 @@ type RowBatch = {
   compositeRows: BenchCompositeRow[];
 };
 
-// Creates deterministic variable-size text. This avoids random data while still
-// giving each table a spread of payload sizes across a benchmark run.
+// Creates deterministic variable-size ASCII text. Lengths are approximately
+// uniform across the inclusive byte range for each payload column.
 function makePayload(id: number, minBytes: number, maxBytes: number) {
   const range = maxBytes - minBytes + 1;
   const length = minBytes + ((id * 9973) % range);
@@ -83,10 +83,12 @@ function makePayload(id: number, minBytes: number, maxBytes: number) {
 }
 
 // The fixture uses id % 10 so every benchmark run gets the same table mix:
-// 50% bench_rows: medium text payloads and a single-column primary key.
-// 20% bench_wide: larger body/extra text payloads and a group_id index.
-// 20% bench_composite: composite primary keys plus a smaller payload.
-// 10% bench_lookup: tiny lookup rows with a boolean index.
+// 50% bench_rows: id primary key, payload 256-2048 B, ~1152 B average.
+// 20% bench_wide: id primary key, group_id 0-127 indexed, short title,
+// body 2048-8192 B (~5120 B average), extra 512-2048 B (~1280 B average).
+// 20% bench_composite: (account_id, seq) primary key, payload 128-1024 B,
+// ~576 B average, amount 0-99_999 indexed.
+// 10% bench_lookup: id primary key, label 8-11 B, active boolean indexed.
 function makeBenchmarkFixtureRow(id: number): BenchmarkFixtureRow {
   const kind = id % 10;
 
