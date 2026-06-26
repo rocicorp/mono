@@ -32,7 +32,7 @@ const shard = {
 };
 const benchmarkRecorder = createManualBenchmarkRecorder();
 
-let cleanup: (() => Promise<void>)[] = [];
+let cleanup: (() => Promise<void> | void)[] = [];
 
 async function runCleanup() {
   for (const fn of cleanup.reverse()) {
@@ -55,7 +55,7 @@ describe('zero-cache/initial-sync throughput', () => {
       for (let rep = 0; rep < WARMUP_REPS + REPS; rep++) {
         const upstream = await testDBs.create(`initial_sync_bench_${rep}`);
         const replicaDbFile = new DbFile('initial-sync-bench');
-        cleanup.push(async () => replicaDbFile.delete());
+        cleanup.push(() => replicaDbFile.delete());
         cleanup.push(async () => {
           await testDBs.drop(upstream);
         });
