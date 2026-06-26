@@ -5,7 +5,7 @@
 // 1. Suite (from describe afterAll): {"benchmarks":[{name, stats}]}
 // 2. Standalone (individual bench): {name, stats}
 //
-// Stats: {min, max, avg, p75, p99} in nanoseconds.
+// Stats: {min, max, avg, median, p75, p99} in nanoseconds.
 
 type BMFMetric = {
   [key: string]: {
@@ -23,17 +23,20 @@ interface Benchmark {
     min: number;
     max: number;
     avg: number;
+    median?: number;
     p75: number;
     p99: number;
   };
 }
 
 function benchmarkToBMF(bmf: BMFMetric, {name, stats}: Benchmark) {
-  // Convert from nanoseconds to operations per second
+  // Convert from nanoseconds to operations per second. Prefer median latency
+  // for the headline value because benchmark averages are sensitive to outliers.
   // Note: min latency → max throughput, max latency → min throughput
+  const value = stats.median ?? stats.avg;
   bmf[name] = {
     throughput: {
-      value: 1e9 / stats.avg,
+      value: 1e9 / value,
       lower_value: 1e9 / stats.max,
       upper_value: 1e9 / stats.min,
     },
