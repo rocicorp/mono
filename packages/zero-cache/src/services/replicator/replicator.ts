@@ -10,10 +10,20 @@ import type {WriteWorkerClient} from './write-worker-client.ts';
 /** See {@link ReplicaStateNotifier.subscribe()}. */
 export type ReplicaState = {
   readonly state: 'version-ready';
+  /**
+   * The replica watermark that became ready. Omitted for the initial
+   * "current state is ready" notification, which should not count as newly
+   * unserved work for a freshly-started ViewSyncer.
+   */
+  readonly watermark?: string | undefined;
+  /**
+   * Millisecond epoch when `watermark` became ready to read from the replica.
+   */
+  readonly replicaReadyTimeMs?: number | undefined;
 
   // Used in tests to verify behavior when additional information
   // is ferried in the future. Not set in production.
-  readonly testSeqNum?: number;
+  readonly testSeqNum?: number | undefined;
 };
 
 export interface ReplicaStateNotifier {

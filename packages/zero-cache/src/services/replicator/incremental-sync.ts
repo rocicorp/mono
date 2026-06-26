@@ -77,7 +77,12 @@ export class IncrementalSyncer {
       await this.#worker.getSubscriptionState();
 
     // Notify any waiting subscribers that the replica is ready to be read.
-    void this.#notifier.notifySubscribers();
+    // This initial notification intentionally omits replicaReadyTimeMs because
+    // it represents already-current state, not newly-unserved work.
+    void this.#notifier.notifySubscribers({
+      state: 'version-ready',
+      watermark: initialWatermark,
+    });
 
     while (this.#state.shouldRun()) {
       const {replicaVersion, watermark} =
@@ -215,7 +220,11 @@ export class IncrementalSyncer {
       this.#statusPublisher?.publish(lc, 'Replicating', 'Schema updated');
     }
     if (result.watermark && result.changeLogUpdated) {
-      void this.#notifier.notifySubscribers({state: 'version-ready'});
+      void this.#notifier.notifySubscribers({
+        state: 'version-ready',
+        watermark: result.watermark,
+        replicaReadyTimeMs: Date.now(),
+      });
     }
   }
 
