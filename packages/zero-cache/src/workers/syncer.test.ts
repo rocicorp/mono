@@ -246,6 +246,27 @@ describe('computeMaxServingLagMs', () => {
     expect(states).toEqual([{watermark: '03', replicaReadyTimeMs: 150}]);
   });
 
+  test('uses the later of creation time and served version as the first unserved state', () => {
+    const states = [
+      {watermark: '02', replicaReadyTimeMs: 100},
+      {watermark: '03', replicaReadyTimeMs: 150},
+      {watermark: '04', replicaReadyTimeMs: 200},
+      {watermark: '05', replicaReadyTimeMs: 250},
+    ];
+
+    expect(
+      computeMaxServingLagMs(300, states, [
+        {createdAtMs: 175, servedVersion: '02'},
+        {createdAtMs: 0, servedVersion: '04'},
+      ]),
+    ).toBe(100);
+
+    expect(states).toEqual([
+      {watermark: '04', replicaReadyTimeMs: 200},
+      {watermark: '05', replicaReadyTimeMs: 250},
+    ]);
+  });
+
   test('bounds retained states even when a client group is behind', () => {
     const states = Array.from(
       {length: MAX_REPLICA_READY_STATES + 1},

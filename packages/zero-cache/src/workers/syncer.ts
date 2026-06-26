@@ -77,6 +77,62 @@ function pruneReplicaReadyStates(
   boundReplicaReadyStates(replicaReadyStates);
 }
 
+function lowerBoundReplicaReadyTimeMs(
+  replicaReadyStates: readonly ReplicaReadyState[],
+  replicaReadyTimeMs: number,
+): number {
+  let low = 0;
+  let high = replicaReadyStates.length;
+  while (low < high) {
+    const mid = low + Math.floor((high - low) / 2);
+    if (replicaReadyStates[mid].replicaReadyTimeMs < replicaReadyTimeMs) {
+      low = mid + 1;
+    } else {
+      high = mid;
+    }
+  }
+  return low;
+}
+
+function upperBoundWatermark(
+  replicaReadyStates: readonly ReplicaReadyState[],
+  watermark: string,
+): number {
+  let low = 0;
+  let high = replicaReadyStates.length;
+  while (low < high) {
+    const mid = low + Math.floor((high - low) / 2);
+    if (replicaReadyStates[mid].watermark <= watermark) {
+      low = mid + 1;
+    } else {
+      high = mid;
+    }
+  }
+  return low;
+}
+
+function findFirstUnservedIndex(
+  replicaReadyStates: readonly ReplicaReadyState[],
+  viewSyncer: ServingLagViewSyncer,
+): number {
+  const firstReadyAfterCreation = lowerBoundReplicaReadyTimeMs(
+    replicaReadyStates,
+    viewSyncer.createdAtMs,
+  );
+  const firstAfterServedVersion =
+    viewSyncer.servedVersion === null
+      ? 0
+      : upperBoundWatermark(replicaReadyStates, viewSyncer.servedVersion);
+
+  const firstUnservedIndex = Math.max(
+    firstReadyAfterCreation,
+    firstAfterServedVersion,
+  );
+  return firstUnservedIndex < replicaReadyStates.length
+    ? firstUnservedIndex
+    : -1;
+}
+
 export function computeMaxServingLagMs(
   now: number,
   replicaReadyStates: ReplicaReadyState[],
@@ -86,13 +142,10 @@ export function computeMaxServingLagMs(
   let firstNeededIndex = replicaReadyStates.length;
 
   for (const viewSyncer of viewSyncers) {
-    const firstUnservedIndex = replicaReadyStates.findIndex(
-      ({replicaReadyTimeMs, watermark}) =>
-        replicaReadyTimeMs >= viewSyncer.createdAtMs &&
-        (viewSyncer.servedVersion === null ||
-          viewSyncer.servedVersion < watermark),
+    const firstUnservedIndex = findFirstUnservedIndex(
+      replicaReadyStates,
+      viewSyncer,
     );
-
     if (firstUnservedIndex === -1) {
       continue;
     }
