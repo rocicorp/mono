@@ -33,6 +33,7 @@ jobs:
     permissions:
       contents: write # Required to push release tags.
       id-token: write # Required for cosign keyless signing.
+      packages: write # Required to push images to GHCR (ghcr.io).
       pull-requests: write # Required to comment on canary release PRs.
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
@@ -61,6 +62,16 @@ jobs:
         with:
           username: ${{ vars.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Login to GHCR
+        # Authenticate with the ephemeral, run-scoped GITHUB_TOKEN rather than a
+        # stored PAT. The packages:write permission above grants it push access
+        # to ghcr.io/${{ github.repository_owner }}/*.
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Configure git identity
         run: |
@@ -94,11 +105,14 @@ jobs:
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
-      - name: Sign Docker image
+      - name: Sign Docker images
         if: ${{ inputs.dry_run != true }}
         env:
           VERSION: ${{ steps.release.outputs.version }}
-        run: cosign sign --yes rocicorp/zero:$VERSION
+        # Keyless signing via the OIDC identity token (id-token: write above).
+        run: |
+          cosign sign --yes rocicorp/zero:$VERSION
+          cosign sign --yes ghcr.io/rocicorp/zero:$VERSION
 
       - name: Comment on PR
         if: github.event_name == 'pull_request'
@@ -113,6 +127,7 @@ jobs:
             printf '```\n'
             printf 'npm install @rocicorp/zero@%s\n' "$VERSION"
             printf '```\n\n'
-            printf '**Docker:** `%s`\n' "rocicorp/zero:$VERSION"
+            printf '**Docker Hub:** `%s`\n' "rocicorp/zero:$VERSION"
+            printf '**GHCR:** `%s`\n' "ghcr.io/rocicorp/zero:$VERSION"
           } > release-comment.md
           gh pr comment "$PR_NUMBER" --body-file release-comment.md
