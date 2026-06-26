@@ -33,6 +33,26 @@ type BenchResult = {name: string; stats: Stats};
 const resultsStack: (BenchResult[] | undefined)[] = [];
 let currentResults: BenchResult[] | undefined;
 
+function percentile(sorted: readonly number[], p: number) {
+  return sorted[Math.floor((sorted.length - 1) * p)]!;
+}
+
+function statsFromSamples(samples: readonly number[]): Stats {
+  if (samples.length === 0) {
+    throw new Error('Cannot record benchmark stats without samples');
+  }
+
+  const sorted = samples.toSorted((a, b) => a - b);
+  return {
+    min: sorted[0]!,
+    max: sorted.at(-1)!,
+    avg: sorted.reduce((sum, sample) => sum + sample, 0) / sorted.length,
+    p75: percentile(sorted, 0.75),
+    p99: percentile(sorted, 0.99),
+    samples: sorted,
+  };
+}
+
 function benchResultToJson(name: string, stats: Stats) {
   return {
     name,
@@ -126,6 +146,37 @@ export const bench = wrapTest(vitest.test) as unknown as ((
   opts?: MeasureOptions,
 ) => void) &
   TestAPI;
+
+export function createManualBenchmarkRecorder() {
+  const results: BenchResult[] = [];
+
+  vitest.afterAll(() => {
+    if (results.length === 0) return;
+    if (benchOutputFormat === 'json') {
+      printJsonResults(results);
+    } else {
+      printResults(results);
+    }
+  });
+
+  return {
+    recordThroughput(
+      name: string,
+      elapsedMsSamples: readonly number[],
+      operations: number,
+    ) {
+      if (operations <= 0) {
+        throw new Error('Cannot record throughput without operations');
+      }
+      results.push({
+        name,
+        stats: statsFromSamples(
+          elapsedMsSamples.map(ms => (ms * 1e6) / operations),
+        ),
+      });
+    },
+  };
+}
 
 function wrapSuite(suiteFn: (...args: any[]) => any): typeof vitest.describe {
   const wrapped = ((...args: any[]) => {
