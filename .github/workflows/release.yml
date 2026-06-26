@@ -25,15 +25,23 @@ concurrency:
   cancel-in-progress: ${{ github.event_name != 'workflow_dispatch' }}
 
 jobs:
-  release:
-    name: Release
+  # Build job: runs all the heavy, untrusted code (pnpm install, the workspace
+  # build, and the Dockerfile build, which execute dependency lifecycle scripts).
+  # It deliberately does NOT have the long-lived Docker Hub credential. It uses
+  # only ephemeral, run-scoped credentials: OIDC for npm provenance + cosign, and
+  # GITHUB_TOKEN for the git tag push and the GHCR image push. The image is staged
+  # to GHCR; the publish job promotes it to Docker Hub.
+  build:
+    name: Build & stage to GHCR
     if: github.event_name == 'workflow_dispatch' || (github.event.pull_request.merged == true && contains(github.event.pull_request.labels.*.name, 'release-canary'))
     runs-on: ubuntu-latest
     environment: Release
+    outputs:
+      version: ${{ steps.release.outputs.version }}
     permissions:
       contents: write # Required to push release tags.
-      id-token: write # Required for cosign keyless signing.
-      pull-requests: write # Required to comment on canary release PRs.
+      id-token: write # Required for npm provenance and cosign keyless signing.
+      packages: write # Required to push the image to GHCR (ghcr.io).
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         # zizmor: ignore[artipacked] release.ts needs checkout credentials to push release tags.
@@ -56,11 +64,16 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
 
-      - name: Login to Docker Hub
+      - name: Login to GHCR
+        # Authenticate with the ephemeral, run-scoped GITHUB_TOKEN rather than a
+        # stored PAT. The packages:write permission above grants it push access
+        # to ghcr.io/${{ github.repository_owner }}/*. The long-lived Docker Hub
+        # token is intentionally not present in this job.
         uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
         with:
-          username: ${{ vars.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Configure git identity
         run: |
@@ -94,10 +107,54 @@ jobs:
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
-      - name: Sign Docker image
+      - name: Sign GHCR image
         if: ${{ inputs.dry_run != true }}
         env:
           VERSION: ${{ steps.release.outputs.version }}
+        # Keyless signing via the OIDC identity token (id-token: write above).
+        run: cosign sign --yes ghcr.io/rocicorp/zero:$VERSION
+
+  # Publish job: the ONLY job that holds the long-lived Docker Hub credential. It
+  # runs minimal, trusted code — it promotes the already-built GHCR image to
+  # Docker Hub (copying the manifest + SBOM/provenance attestations verbatim) and
+  # signs it. No checkout, no install, no build.
+  publish:
+    name: Promote to Docker Hub
+    needs: build
+    if: github.event_name == 'workflow_dispatch' || (github.event.pull_request.merged == true && contains(github.event.pull_request.labels.*.name, 'release-canary'))
+    runs-on: ubuntu-latest
+    environment: Release
+    permissions:
+      id-token: write # Required for cosign keyless signing.
+      packages: read # Required to pull the staged image from GHCR.
+      pull-requests: write # Required to comment on canary release PRs.
+    env:
+      VERSION: ${{ needs.build.outputs.version }}
+    steps:
+      - name: Login to Docker Hub
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Login to GHCR
+        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@6f9f17788090df1f26f669e9d70d6ae9567deba6 # v4.1.2
+
+      - name: Promote GHCR image to Docker Hub
+        if: ${{ inputs.dry_run != true }}
+        # Copies the multi-arch manifest and its SBOM/provenance attestations from
+        # GHCR to Docker Hub without rebuilding.
+        run: docker buildx imagetools create -t rocicorp/zero:$VERSION ghcr.io/rocicorp/zero:$VERSION
+
+      - name: Sign Docker Hub image
+        if: ${{ inputs.dry_run != true }}
         run: cosign sign --yes rocicorp/zero:$VERSION
 
       - name: Comment on PR
@@ -105,7 +162,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
-          VERSION: ${{ steps.release.outputs.version }}
         run: |
           {
             printf '## Canary Release Published\n\n'
@@ -113,6 +169,7 @@ jobs:
             printf '```\n'
             printf 'npm install @rocicorp/zero@%s\n' "$VERSION"
             printf '```\n\n'
-            printf '**Docker:** `%s`\n' "rocicorp/zero:$VERSION"
+            printf '**Docker Hub:** `%s`\n' "rocicorp/zero:$VERSION"
+            printf '**GHCR:** `%s`\n' "ghcr.io/rocicorp/zero:$VERSION"
           } > release-comment.md
           gh pr comment "$PR_NUMBER" --body-file release-comment.md
