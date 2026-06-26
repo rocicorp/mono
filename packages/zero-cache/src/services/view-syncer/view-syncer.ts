@@ -143,6 +143,8 @@ export interface ViewSyncer {
 
   readonly queryCount: number;
   readonly rowCount: number;
+  readonly createdAtMs: number;
+  readonly servedVersion: string | null;
 }
 
 export type SyncContext = ConnectionSelector & {
@@ -196,6 +198,7 @@ type CustomQueryTransformMode = 'all' | 'missing';
 
 export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   readonly id: string;
+  readonly createdAtMs = Date.now();
   // Centralized connection/group auth bookkeeping plus maintenance policy.
   // Network validation still happens in ViewSyncerService.
   readonly connContextManager: ConnectionContextManager;
@@ -254,6 +257,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
   #cvr: CVRSnapshot | undefined;
   #pipelinesSynced = false;
+  #servedVersion: string | null = null;
 
   #expiredQueriesTimer: ReturnType<SetTimeout> | 0 = 0;
   #authMaintenanceTimer: ReturnType<SetTimeout> | 0 = 0;
@@ -593,6 +597,14 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
   get rowCount(): number {
     return this.#cvrStore.rowCount;
+  }
+
+  get servedVersion(): string | null {
+    return this.#servedVersion;
+  }
+
+  #markVersionServed(version: CVRVersion) {
+    this.#servedVersion = version.stateVersion;
   }
 
   #keepAliveUntil: number = 0;
@@ -2081,6 +2093,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       await startAsyncSpan(tracer, 'vs.#syncQueryPipelineSet.pokeEnd', () =>
         pokers.end(finalVersion),
       );
+      this.#markVersionServed(finalVersion);
 
       const wallTime = performance.now() - start;
       lc.info?.(
@@ -2185,6 +2198,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
       if (!usePokers) {
         await pokers.end(cvr.version);
+        this.#markVersionServed(cvr.version);
       }
     });
   }
@@ -2341,6 +2355,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       await startAsyncSpan(tracer, 'vs.#advancePipelines.pokeEnd', () =>
         pokers.end(finalVersion),
       );
+      this.#markVersionServed(finalVersion);
 
       const wallTime = performance.now() - start;
       const totalProcessTime = timer.totalElapsed();
