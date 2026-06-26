@@ -33,6 +33,43 @@ type BenchResult = {name: string; stats: Stats};
 const resultsStack: (BenchResult[] | undefined)[] = [];
 let currentResults: BenchResult[] | undefined;
 
+function percentile(sorted: readonly number[], p: number) {
+  return sorted[Math.floor((sorted.length - 1) * p)]!;
+}
+
+function median(sorted: readonly number[]) {
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0
+    ? (sorted[mid - 1]! + sorted[mid]!) / 2
+    : sorted[mid]!;
+}
+
+type StatsWithOptionalMedian = Omit<Stats, 'median'> & {median?: number};
+
+function addMedian(stats: StatsWithOptionalMedian): Stats {
+  return {
+    ...stats,
+    median: stats.median ?? median(stats.samples.toSorted((a, b) => a - b)),
+  };
+}
+
+function statsFromSamples(samples: readonly number[]): Stats {
+  if (samples.length === 0) {
+    throw new Error('Cannot record benchmark stats without samples');
+  }
+
+  const sorted = samples.toSorted((a, b) => a - b);
+  return {
+    min: sorted[0]!,
+    max: sorted.at(-1)!,
+    avg: sorted.reduce((sum, sample) => sum + sample, 0) / sorted.length,
+    median: median(sorted),
+    p75: percentile(sorted, 0.75),
+    p99: percentile(sorted, 0.99),
+    samples: sorted,
+  };
+}
+
 function benchResultToJson(name: string, stats: Stats) {
   return {
     name,
@@ -40,6 +77,7 @@ function benchResultToJson(name: string, stats: Stats) {
       min: stats.min,
       max: stats.max,
       avg: stats.avg,
+      median: stats.median,
       p75: stats.p75,
       p99: stats.p99,
     },
@@ -103,7 +141,12 @@ function wrapTest(testFn: (...args: any[]) => any): TestAPI {
   const wrapped = ((name: string, fn: MeasureFn, opts?: MeasureOptions) =>
     testFn(name, async ({task}: {task: {fullName: string}}) => {
       const {fullName} = task;
-      const stats = await measure(fn, {...defaultMeasureOptions, ...opts});
+      const stats = addMedian(
+        (await measure(fn, {
+          ...defaultMeasureOptions,
+          ...opts,
+        })) as StatsWithOptionalMedian,
+      );
 
       if (currentResults) {
         currentResults.push({name: fullName, stats});
@@ -126,6 +169,37 @@ export const bench = wrapTest(vitest.test) as unknown as ((
   opts?: MeasureOptions,
 ) => void) &
   TestAPI;
+
+export function createManualBenchmarkRecorder() {
+  const results: BenchResult[] = [];
+
+  vitest.afterAll(() => {
+    if (results.length === 0) return;
+    if (benchOutputFormat === 'json') {
+      printJsonResults(results);
+    } else {
+      printResults(results);
+    }
+  });
+
+  return {
+    recordThroughput(
+      name: string,
+      elapsedMsSamples: readonly number[],
+      operations: number,
+    ) {
+      if (operations <= 0) {
+        throw new Error('Cannot record throughput without operations');
+      }
+      results.push({
+        name,
+        stats: statsFromSamples(
+          elapsedMsSamples.map(ms => (ms * 1e6) / operations),
+        ),
+      });
+    },
+  };
+}
 
 function wrapSuite(suiteFn: (...args: any[]) => any): typeof vitest.describe {
   const wrapped = ((...args: any[]) => {
