@@ -58,6 +58,7 @@ import type {ViewSyncer} from '../services/view-syncer/view-syncer.ts';
 import type {WebSocketReceiver} from '../types/websocket-handoff.ts';
 import {
   computeMaxServingLagMs,
+  computeServingLagStatsMs,
   MAX_REPLICA_READY_STATES,
   Syncer,
 } from './syncer.ts';
@@ -284,6 +285,54 @@ describe('computeMaxServingLagMs', () => {
 
     expect(states).toHaveLength(MAX_REPLICA_READY_STATES);
     expect(states[0]).toEqual({watermark: '00001', replicaReadyTimeMs: 1});
+  });
+});
+
+describe('computeServingLagStatsMs', () => {
+  test('returns distribution across active view syncers including zero-lag groups', () => {
+    const states = [
+      {watermark: '02', replicaReadyTimeMs: 100},
+      {watermark: '03', replicaReadyTimeMs: 150},
+      {watermark: '04', replicaReadyTimeMs: 200},
+      {watermark: '05', replicaReadyTimeMs: 250},
+    ];
+
+    expect(
+      computeServingLagStatsMs(300, states, [
+        {createdAtMs: 0, servedVersion: '05'},
+        {createdAtMs: 0, servedVersion: '03'},
+        {createdAtMs: 0, servedVersion: '04'},
+        {createdAtMs: 225, servedVersion: null},
+      ]),
+    ).toEqual({
+      activeClientGroups: 4,
+      laggingClientGroups: 3,
+      minMs: 0,
+      p50Ms: 50,
+      p75Ms: 50,
+      p99Ms: 100,
+      maxMs: 100,
+    });
+
+    expect(states).toEqual([
+      {watermark: '04', replicaReadyTimeMs: 200},
+      {watermark: '05', replicaReadyTimeMs: 250},
+    ]);
+  });
+
+  test('returns zero stats with no active view syncers', () => {
+    const states = [{watermark: '02', replicaReadyTimeMs: 100}];
+
+    expect(computeServingLagStatsMs(300, states, [])).toEqual({
+      activeClientGroups: 0,
+      laggingClientGroups: 0,
+      minMs: 0,
+      p50Ms: 0,
+      p75Ms: 0,
+      p99Ms: 0,
+      maxMs: 0,
+    });
+    expect(states).toEqual([]);
   });
 });
 
