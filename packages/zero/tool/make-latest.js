@@ -81,7 +81,9 @@ console.log(`🎉 Success!`);
 console.log(``);
 console.log(`* Added 'latest' tag to @rocicorp/zero@${version} on npm.`);
 console.log(`* Added 'latest' tag to rocicorp/zero:${version} on dockerhub.`);
-console.log(`* Added 'latest' tag to ghcr.io/rocicorp/zero:${version} on GHCR.`);
+console.log(
+  `* Added 'latest' tag to ghcr.io/rocicorp/zero:${version} on GHCR.`,
+);
 console.log(`* Added 'latest' git tag pointing to ${gitTag}.`);
 console.log(``);
 console.log(``);
