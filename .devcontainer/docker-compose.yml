@@ -38,7 +38,7 @@ services:
     # "Clone Repository in Container Volume" mounts at /workspaces. Adding a
     # `..:/workspaces/mono` host bind here would break that flow (there is no
     # host checkout to bind) and is unnecessary — git identity comes from the
-    # gh login the `agents` feature persists, not a mounted ~/.gitconfig.
+    # Dev Containers tooling's Git credential forwarding, not a mounted ~/.gitconfig.
     environment:
       # Points the zero-cache pg tests at the sibling services below instead
       # of testcontainers (which would need a Docker daemon).

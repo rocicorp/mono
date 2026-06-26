@@ -87,7 +87,6 @@ describe('CustomQueryTransformer', () => {
         allowedUrlPatterns: [],
         headerOptions: {
           apiKey: undefined,
-          allowedClientHeaders: undefined,
           customHeaders: undefined,
           cookie: undefined,
           origin: undefined,
@@ -658,6 +657,49 @@ describe('CustomQueryTransformer', () => {
     // Call again with original header options - should use cache
     mockFetchFromAPIServer.mockResolvedValue(mockSuccessResponse());
     await transformer.transform(headerOptions, [mockQueries[0]], undefined);
+    expect(mockFetchFromAPIServer).toHaveBeenCalledTimes(2);
+  });
+
+  test('should differentiate cache key by forwarded request headers', async () => {
+    const mockSuccessResponse = () =>
+      transformedMessage([mockQueryResponses[0]]);
+
+    mockFetchFromAPIServer.mockResolvedValue(mockSuccessResponse());
+
+    const transformer = makeTransformer();
+    // Cache with one set of forwarded request headers
+    await transformer.transform(
+      {
+        ...headerOptions,
+        requestHeaders: {'x-forwarded-for': '203.0.113.1'},
+      },
+      [mockQueries[0]],
+      undefined,
+    );
+    expect(mockFetchFromAPIServer).toHaveBeenCalledTimes(1);
+
+    // Different request header value - should fetch again
+    mockFetchFromAPIServer.mockResolvedValue(mockSuccessResponse());
+    await transformer.transform(
+      {
+        ...headerOptions,
+        requestHeaders: {'x-forwarded-for': '203.0.113.2'},
+      },
+      [mockQueries[0]],
+      undefined,
+    );
+    expect(mockFetchFromAPIServer).toHaveBeenCalledTimes(2);
+
+    // Original request headers again - should use cache
+    mockFetchFromAPIServer.mockResolvedValue(mockSuccessResponse());
+    await transformer.transform(
+      {
+        ...headerOptions,
+        requestHeaders: {'x-forwarded-for': '203.0.113.1'},
+      },
+      [mockQueries[0]],
+      undefined,
+    );
     expect(mockFetchFromAPIServer).toHaveBeenCalledTimes(2);
   });
 

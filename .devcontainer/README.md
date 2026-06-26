@@ -29,8 +29,8 @@ bind to on a machine without a checkout, which is exactly the failure mode
 this avoids. (Consequence: the source lives in the volume and is edited
 through VS Code, not browsable on the host filesystem. On macOS this is also
 substantially faster than a bind mount.) Git identity inside the container
-comes from the `gh` login the `agents` feature persists, not a mounted
-`~/.gitconfig`.
+comes from the Dev Containers tooling's Git credential forwarding (it shares
+the host's Git config and credentials), not a mounted `~/.gitconfig`.
 
 ## Profiles
 

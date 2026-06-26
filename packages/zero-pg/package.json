@@ -16,7 +16,7 @@
     "check-fmt": "oxfmt --check ."
   },
   "dependencies": {
-    "@rocicorp/logger": "^6.0.0"
+    "@rocicorp/logger": "^6.1.0"
   },
   "devDependencies": {
     "@vitest/runner": "^4.1.6",
