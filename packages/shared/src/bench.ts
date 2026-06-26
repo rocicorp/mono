@@ -37,6 +37,22 @@ function percentile(sorted: readonly number[], p: number) {
   return sorted[Math.floor((sorted.length - 1) * p)]!;
 }
 
+function median(sorted: readonly number[]) {
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2 === 0
+    ? (sorted[mid - 1]! + sorted[mid]!) / 2
+    : sorted[mid]!;
+}
+
+type StatsWithOptionalMedian = Omit<Stats, 'median'> & {median?: number};
+
+function addMedian(stats: StatsWithOptionalMedian): Stats {
+  return {
+    ...stats,
+    median: stats.median ?? median(stats.samples.toSorted((a, b) => a - b)),
+  };
+}
+
 function statsFromSamples(samples: readonly number[]): Stats {
   if (samples.length === 0) {
     throw new Error('Cannot record benchmark stats without samples');
@@ -47,6 +63,7 @@ function statsFromSamples(samples: readonly number[]): Stats {
     min: sorted[0]!,
     max: sorted.at(-1)!,
     avg: sorted.reduce((sum, sample) => sum + sample, 0) / sorted.length,
+    median: median(sorted),
     p75: percentile(sorted, 0.75),
     p99: percentile(sorted, 0.99),
     samples: sorted,
@@ -60,6 +77,7 @@ function benchResultToJson(name: string, stats: Stats) {
       min: stats.min,
       max: stats.max,
       avg: stats.avg,
+      median: stats.median,
       p75: stats.p75,
       p99: stats.p99,
     },
@@ -123,7 +141,12 @@ function wrapTest(testFn: (...args: any[]) => any): TestAPI {
   const wrapped = ((name: string, fn: MeasureFn, opts?: MeasureOptions) =>
     testFn(name, async ({task}: {task: {fullName: string}}) => {
       const {fullName} = task;
-      const stats = await measure(fn, {...defaultMeasureOptions, ...opts});
+      const stats = addMedian(
+        (await measure(fn, {
+          ...defaultMeasureOptions,
+          ...opts,
+        })) as StatsWithOptionalMedian,
+      );
 
       if (currentResults) {
         currentResults.push({name: fullName, stats});
