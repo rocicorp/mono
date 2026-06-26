@@ -46,6 +46,20 @@ export function assertNormalized(
     !config.litestream.backupUsingV5 || config.litestream.restoreUsingV5,
     '--litestream-backup-using-v5 requires --litestream-restore-using-v5',
   );
+  // The `litestream replicate` process always runs --litestream-executable, so
+  // enabling v5 backups (which write the LTX format read by the VFS monitor)
+  // requires --litestream-executable itself to have been flipped to the v5
+  // binary. Restoring is verified separately via --litestream-restore-using-v5,
+  // which is the prerequisite step that must roll out *before* the executable
+  // is flipped (so every replica can restore both WAL and LTX formats).
+  assert(
+    !config.litestream.backupUsingV5 ||
+      (config.litestream.executableV5 !== undefined &&
+        config.litestream.executable === config.litestream.executableV5),
+    '--litestream-backup-using-v5 requires --litestream-executable to be ' +
+      'flipped to the v5 binary (--litestream-executable must equal ' +
+      '--litestream-executable-v5)',
+  );
   assert(config.change.db, 'missing --change-db');
   assert(config.cvr.db, 'missing --cvr-db');
   assertNotUndefined(config.numSyncWorkers, 'missing --num-sync-workers');

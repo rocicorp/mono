@@ -9,6 +9,7 @@ import {
 import {VfsBackupWatermarkWorkerService} from '../services/litestream/vfs-watermark-worker.ts';
 import {
   parentWorker,
+  shouldStartWorker,
   singleProcessMode,
   type Worker,
 } from '../types/processes.ts';
@@ -54,7 +55,12 @@ export default async function runWorker(
   );
 }
 
-if (!singleProcessMode()) {
+// Unlike the other workers, the backup watermark reader is *always* run as its
+// own OS process — forked on demand by the `VfsBackupMonitor` (via
+// `forkChildWorker`), or launched directly as a standalone debug tool — so that
+// the native Litestream VFS extension and its process-global `LITESTREAM_*` env
+// stay isolated from the rest of zero-cache. See `shouldStartWorker`.
+if (shouldStartWorker(parentWorker, singleProcessMode())) {
   void exitAfter(lc, () =>
     runWorker(parentWorker, process.env, ...process.argv.slice(2)),
   );
