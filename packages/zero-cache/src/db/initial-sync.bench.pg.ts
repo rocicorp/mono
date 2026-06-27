@@ -10,6 +10,7 @@ import {getConnectionURI, type PgTest, test} from '../test/db.ts';
 import {DbFile} from '../test/lite.ts';
 import {
   BENCHMARK_FIXTURE_PUBLICATION,
+  benchmarkFixturePayloadMB,
   benchmarkFixtureReplicaRowCount,
   setupBenchmarkFixture,
 } from '../test/pg-bench.ts';
@@ -47,10 +48,11 @@ afterEach(async () => {
 
 describe('zero-cache/initial-sync throughput', () => {
   test(
-    'generated fixture rows/sec',
+    'generated fixture payload MB/sec',
     {timeout: TEST_TIMEOUT_MS},
     async ({testDBs}: PgTest) => {
       const samples: number[] = [];
+      const fixturePayloadMB = benchmarkFixturePayloadMB(1, FIXTURE_ROWS);
 
       for (let rep = 0; rep < WARMUP_REPS + REPS; rep++) {
         const upstream = await testDBs.create(`initial_sync_bench_${rep}`);
@@ -93,9 +95,9 @@ describe('zero-cache/initial-sync throughput', () => {
       }
 
       benchmarkRecorder.recordThroughput(
-        'zero-cache/initial-sync generated fixture rows',
+        'zero-cache/initial-sync generated fixture payload MB',
         samples,
-        FIXTURE_ROWS,
+        fixturePayloadMB,
       );
     },
   );

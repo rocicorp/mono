@@ -17,6 +17,7 @@ export const BENCHMARK_FIXTURE_TABLE_KEYS = {
   bench_wide: 'id',
   bench_composite: ['account_id', 'seq'],
 } satisfies Record<string, string | string[]>;
+export const BENCHMARK_FIXTURE_BYTES_PER_MB = 1_000_000;
 
 export type BenchmarkFixtureTable = (typeof BENCHMARK_FIXTURE_TABLES)[number];
 
@@ -75,11 +76,50 @@ type RowBatch = {
 // Creates deterministic variable-size ASCII text. Lengths are approximately
 // uniform across the inclusive byte range for each payload column.
 function makePayload(id: number, minBytes: number, maxBytes: number) {
-  const range = maxBytes - minBytes + 1;
-  const length = minBytes + ((id * 9973) % range);
+  const length = payloadLength(id, minBytes, maxBytes);
   const seed = Math.imul(id, 2654435761) >>> 0;
   const chunk = `${id.toString(36)}:${seed.toString(36)}:abcdefghijklmnopqrstuvwxyz0123456789:`;
   return chunk.repeat(Math.ceil(length / chunk.length)).slice(0, length);
+}
+
+function payloadLength(id: number, minBytes: number, maxBytes: number) {
+  const range = maxBytes - minBytes + 1;
+  return minBytes + ((id * 9973) % range);
+}
+
+function benchmarkFixtureRowPayloadBytes(id: number) {
+  const kind = id % 10;
+
+  if (kind < 5) {
+    return payloadLength(id, 256, 2048);
+  }
+  if (kind < 7) {
+    return (
+      `wide row ${id}`.length +
+      payloadLength(id, 2048, 8192) +
+      payloadLength(id + 17, 512, 2048)
+    );
+  }
+  if (kind < 9) {
+    return payloadLength(id, 128, 1024);
+  }
+  return `lookup-${id % 10_000}`.length;
+}
+
+export function benchmarkFixturePayloadBytes(startID: number, count: number) {
+  let total = 0;
+  for (let i = 0; i < count; i++) {
+    total += benchmarkFixtureRowPayloadBytes(startID + i);
+  }
+  return total;
+}
+
+// Decimal MB of generated text payload, not logical-replication or WAL bytes.
+export function benchmarkFixturePayloadMB(startID: number, count: number) {
+  return (
+    benchmarkFixturePayloadBytes(startID, count) /
+    BENCHMARK_FIXTURE_BYTES_PER_MB
+  );
 }
 
 // The fixture uses id % 10 so every benchmark run gets the same table mix:
