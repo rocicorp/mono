@@ -10,6 +10,7 @@ import {getConnectionURI, type PgTest, test} from '../../test/db.ts';
 import {DbFile} from '../../test/lite.ts';
 import {
   BENCHMARK_FIXTURE_PUBLICATION,
+  benchmarkFixturePayloadMB,
   benchmarkFixtureReplicaRowCount,
   insertBenchmarkFixtureRowBatches,
   insertBenchmarkFixtureRows,
@@ -186,11 +187,11 @@ async function startReplicationPipeline(testDBs: PgTest['testDBs']) {
 
 describe('replicator/logical replication throughput', () => {
   test(
-    'end-to-end rows/sec',
+    'end-to-end payload MB/sec',
     {timeout: TEST_TIMEOUT_MS},
     async ({testDBs}: PgTest) => {
       const {upstream, replicaPath} = await startReplicationPipeline(testDBs);
-      const samples: number[] = [];
+      const samples: {elapsedMs: number; operations: number}[] = [];
 
       expect(replicaRowCount(replicaPath)).toBe(0);
 
@@ -229,13 +230,15 @@ describe('replicator/logical replication throughput', () => {
         expect(await waitForReplicaRows(replicaPath, expectedRows)).toBe(
           expectedRows,
         );
-        samples.push(performance.now() - start);
+        samples.push({
+          elapsedMs: performance.now() - start,
+          operations: benchmarkFixturePayloadMB(startID, MEASURED_ROWS),
+        });
       }
 
-      benchmarkRecorder.recordThroughput(
-        'replicator/logical replication end-to-end rows',
+      benchmarkRecorder.recordThroughputSamples(
+        'replicator/logical replication end-to-end payload MB',
         samples,
-        MEASURED_ROWS,
       );
     },
   );

@@ -7,6 +7,7 @@ import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.
 import {type PgTest, test} from '../../test/db.ts';
 import {
   BENCHMARK_FIXTURE_TABLE_KEYS,
+  benchmarkFixturePayloadMB,
   makeBenchmarkFixtureRows,
   type BenchmarkFixtureRow,
 } from '../../test/pg-bench.ts';
@@ -126,15 +127,16 @@ async function changeLogRowCount(db: PostgresDB): Promise<number> {
 
 describe('change-streamer/storer throughput', () => {
   test(
-    'single transaction changes/sec',
+    'single transaction payload MB/sec',
     {timeout: TEST_TIMEOUT_MS},
     async ({testDBs}: PgTest) => {
-      const samples: number[] = [];
+      const samples: {elapsedMs: number; operations: number}[] = [];
 
       for (let rep = 0; rep < WARMUP_REPS + REPS; rep++) {
         const watermark = versionToLexi(1000 + rep);
+        const startID = rep * SINGLE_TRANSACTION_CHANGES + 1;
         const rows = makeBenchmarkFixtureRows(
-          rep * SINGLE_TRANSACTION_CHANGES + 1,
+          startID,
           SINGLE_TRANSACTION_CHANGES,
         );
         const {db, storer} = await makeStorer(testDBs, `bench_single_${rep}`);
@@ -147,32 +149,35 @@ describe('change-streamer/storer throughput', () => {
         const changeLogRows = (await changeLogRowCount(db)) - seed;
         expect(changeLogRows).toBe(SINGLE_TRANSACTION_CHANGES + 2);
         if (rep >= WARMUP_REPS) {
-          samples.push(elapsed);
+          samples.push({
+            elapsedMs: elapsed,
+            operations: benchmarkFixturePayloadMB(
+              startID,
+              SINGLE_TRANSACTION_CHANGES,
+            ),
+          });
         }
         await runCleanup();
       }
 
-      benchmarkRecorder.recordThroughput(
-        'change-streamer/storer single transaction changes',
+      benchmarkRecorder.recordThroughputSamples(
+        'change-streamer/storer single transaction payload MB',
         samples,
-        SINGLE_TRANSACTION_CHANGES,
       );
     },
   );
 
   test(
-    'sustained stream changes/sec and commits/sec',
+    'sustained stream payload MB/sec',
     {timeout: TEST_TIMEOUT_MS},
     async ({testDBs}: PgTest) => {
-      const samples: number[] = [];
+      const samples: {elapsedMs: number; operations: number}[] = [];
       const totalChanges =
         SUSTAINED_TRANSACTIONS * SUSTAINED_CHANGES_PER_TRANSACTION;
 
       for (let rep = 0; rep < WARMUP_REPS + REPS; rep++) {
-        const rows = makeBenchmarkFixtureRows(
-          rep * totalChanges + 1,
-          totalChanges,
-        );
+        const startID = rep * totalChanges + 1;
+        const rows = makeBenchmarkFixtureRows(startID, totalChanges);
         const transactions = Array.from(
           {length: SUSTAINED_TRANSACTIONS},
           (_, i) =>
@@ -202,20 +207,17 @@ describe('change-streamer/storer throughput', () => {
           SUSTAINED_TRANSACTIONS * (SUSTAINED_CHANGES_PER_TRANSACTION + 2),
         );
         if (rep >= WARMUP_REPS) {
-          samples.push(elapsed);
+          samples.push({
+            elapsedMs: elapsed,
+            operations: benchmarkFixturePayloadMB(startID, totalChanges),
+          });
         }
         await runCleanup();
       }
 
-      benchmarkRecorder.recordThroughput(
-        'change-streamer/storer sustained stream changes',
+      benchmarkRecorder.recordThroughputSamples(
+        'change-streamer/storer sustained stream payload MB',
         samples,
-        totalChanges,
-      );
-      benchmarkRecorder.recordThroughput(
-        'change-streamer/storer sustained stream commits',
-        samples,
-        SUSTAINED_TRANSACTIONS,
       );
     },
   );

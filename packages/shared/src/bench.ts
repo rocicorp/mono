@@ -30,6 +30,7 @@ const defaultMeasureOptions: MeasureOptions = {
 };
 
 type BenchResult = {name: string; stats: Stats};
+type ThroughputSample = {elapsedMs: number; operations: number};
 const resultsStack: (BenchResult[] | undefined)[] = [];
 let currentResults: BenchResult[] | undefined;
 
@@ -68,6 +69,15 @@ function statsFromSamples(samples: readonly number[]): Stats {
     p99: percentile(sorted, 0.99),
     samples: sorted,
   };
+}
+
+function statsFromThroughputSamples(samples: readonly ThroughputSample[]) {
+  if (samples.some(({operations}) => operations <= 0)) {
+    throw new Error('Cannot record throughput without operations');
+  }
+  return statsFromSamples(
+    samples.map(({elapsedMs, operations}) => (elapsedMs * 1e6) / operations),
+  );
 }
 
 function benchResultToJson(name: string, stats: Stats) {
@@ -188,14 +198,20 @@ export function createManualBenchmarkRecorder() {
       elapsedMsSamples: readonly number[],
       operations: number,
     ) {
-      if (operations <= 0) {
-        throw new Error('Cannot record throughput without operations');
-      }
       results.push({
         name,
-        stats: statsFromSamples(
-          elapsedMsSamples.map(ms => (ms * 1e6) / operations),
+        stats: statsFromThroughputSamples(
+          elapsedMsSamples.map(elapsedMs => ({elapsedMs, operations})),
         ),
+      });
+    },
+    recordThroughputSamples(
+      name: string,
+      samples: readonly ThroughputSample[],
+    ) {
+      results.push({
+        name,
+        stats: statsFromThroughputSamples(samples),
       });
     },
   };
