@@ -8,7 +8,7 @@ import {Debug} from '../../zql/src/builder/debug-delegate.ts';
 const TABLE = 'issue';
 const QUERY = 'SELECT * FROM issue WHERE projectID = ?';
 const ROW_COUNTS = [1_000, 5_000, 10_000, 20_000];
-const ROWS = Array.from<Row>({length: Math.max(...ROW_COUNTS)}, (_, i) => ({
+const ROWS: Row[] = Array.from({length: Math.max(...ROW_COUNTS)}, (_, i) => ({
   id: `issue-${i}`,
   projectID: 'proj-0',
   title: `Issue ${i}`,
