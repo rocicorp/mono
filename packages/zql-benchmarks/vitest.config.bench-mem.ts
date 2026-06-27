@@ -5,8 +5,8 @@ import {ChangeType} from '../zql/src/ivm/change-type.ts';
 import {SourceChangeIndex} from '../zql/src/ivm/source-change-index.ts';
 
 // Like vitest.config.bench.ts but WITHOUT the Postgres globalSetup, so the
-// pure in-memory IVM/ArrayView benchmarks can run in environments without a
-// container runtime. Only matches the memory/array-view bench files.
+// pure in-memory IVM/ArrayView/debug benchmarks can run in environments without
+// a container runtime. Only matches the memory/array-view/debug bench files.
 export default mergeConfig(benchConfig, {
   define: {
     ...defineFromEnum('ChangeType', ChangeType),
@@ -21,6 +21,7 @@ export default mergeConfig(benchConfig, {
       'src/memory-ivm-deopt.bench.ts',
       'src/array-view-relationships.bench.ts',
       'src/array-view-transaction.bench.ts',
+      'src/debug-row-vended.bench.ts',
     ],
     browser: {
       enabled: false,
