@@ -1,0 +1,29 @@
+# Overlay for the zbugs profile: wires the dev workspace to the zbugs
+# Postgres services from apps/zbugs/docker/docker-compose.yml, which run as
+# sibling containers on the same Compose network.
+#
+# The zbugs Compose file is pulled in via `include:` (not listed in
+# devcontainer.json's dockerComposeFile) so that any relative paths inside
+# it keep resolving against its own directory.
+#
+# Inside the workspace, connect via Compose service names (not localhost):
+#   upstream: postgres://user:password@postgres_primary:5432/postgres
+#   replica:  postgres://user:password@postgres_replica:5432/postgres
+# From the host, the published ports still work (localhost:6434 / 6435).
+
+include:
+  # Resolved from the Compose project directory (.devcontainer/, the folder
+  # of the first file in dockerComposeFile) — not from this file's folder.
+  - ../apps/zbugs/docker/docker-compose.yml
+
+services:
+  dev:
+    environment:
+      # Overrides the localhost URL in apps/zbugs/.env (dotenvx does not
+      # override variables that are already set in the environment).
+      ZERO_UPSTREAM_DB: postgres://user:password@postgres_primary:5432/postgres
+    depends_on:
+      postgres_primary:
+        condition: service_healthy
+      postgres_replica:
+        condition: service_healthy

@@ -24,6 +24,9 @@
     "bench": "vitest run --config vitest.config.bench.ts",
     "bench:bmf": "BENCH_OUTPUT_FORMAT=json pnpm run bench 2>&1 | node ../shared/src/tool/mitata-json-to-bmf.ts",
     "bench:bmf:silent": "pnpm run bench:bmf --silent",
+    "bench:pg": "vitest run --config vitest.config.bench.pg.ts",
+    "bench:pg:bmf": "BENCH_OUTPUT_FORMAT=json pnpm run bench:pg 2>&1 | node ../shared/src/tool/mitata-json-to-bmf.ts",
+    "bench:pg:bmf:silent": "pnpm run bench:pg:bmf --silent",
     "local": "node tool/local.ts",
     "start": "node ./src/server/runner/main.ts",
     "benchdb": "node ./bench/bench.ts",
@@ -52,9 +55,9 @@
     "@opentelemetry/semantic-conventions": "^1.41.1",
     "@postgresql-typed/oids": "^0.2.0",
     "@rocicorp/lock": "^1.0.4",
-    "@rocicorp/logger": "^5.4.0",
+    "@rocicorp/logger": "^6.1.0",
     "@rocicorp/resolver": "^1.0.2",
-    "@rocicorp/zero-sqlite3": "^1.0.18",
+    "@rocicorp/zero-sqlite3": "^1.1.2",
     "@types/basic-auth": "^1.1.8",
     "basic-auth": "^2.0.1",
     "cloudevents": "^10.0.0",
@@ -99,5 +102,5 @@
     "zero-schema": "workspace:*",
     "zql": "workspace:*"
   },
-  "packageManager": "pnpm@11.3.0"
+  "packageManager": "pnpm@11.5.3"
 }

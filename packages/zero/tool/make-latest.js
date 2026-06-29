@@ -21,20 +21,16 @@ if (process.argv.length < 3) {
 const version = process.argv[2];
 
 const gitTag = `zero/v${version}`;
-if (execute('git tag --list latest', {stdio: 'pipe'}) !== '') {
-  throw new Error(`Local git tag 'latest' already exists.`);
-}
-if (
-  execute('git ls-remote --tags origin refs/tags/latest', {stdio: 'pipe'}) !==
-  ''
-) {
-  throw new Error(`Remote git tag 'latest' already exists.`);
-}
-execute(`git tag latest ${gitTag}`);
-execute(`git push --no-verify origin refs/tags/latest:refs/tags/latest`);
+execute(`git tag --force latest ${gitTag}`);
+execute(
+  `git push --force --no-verify origin refs/tags/latest:refs/tags/latest`,
+);
 
 execute(
   `docker buildx imagetools create -t rocicorp/zero:latest rocicorp/zero:${version}`,
+);
+execute(
+  `docker buildx imagetools create -t ghcr.io/rocicorp/zero:latest ghcr.io/rocicorp/zero:${version}`,
 );
 execute(`pnpm dist-tag add @rocicorp/zero@${version} latest`);
 
@@ -48,22 +44,36 @@ if (localLatest !== remoteLatest) {
   );
 }
 
-const dockerVersionDigest = dockerDigest(`rocicorp/zero:${version}`);
-const dockerLatestDigest = dockerDigest('rocicorp/zero:latest');
-if (dockerVersionDigest !== dockerLatestDigest) {
-  throw new Error(
-    `Failed to update Docker latest tag: ${dockerLatestDigest} !== ${dockerVersionDigest}`,
-  );
-}
-
-const npmLatest = execute('pnpm view @rocicorp/zero dist-tags.latest', {
-  stdio: 'pipe',
+retry(() => {
+  const dockerVersionDigest = dockerDigest(`rocicorp/zero:${version}`);
+  const dockerLatestDigest = dockerDigest('rocicorp/zero:latest');
+  if (dockerVersionDigest !== dockerLatestDigest) {
+    throw new Error(
+      `Failed to update Docker latest tag: ${dockerLatestDigest} !== ${dockerVersionDigest}`,
+    );
+  }
 });
-if (npmLatest !== version) {
-  throw new Error(
-    `Failed to update pnpm latest tag: ${npmLatest} !== ${version}`,
-  );
-}
+
+retry(() => {
+  const ghcrVersionDigest = dockerDigest(`ghcr.io/rocicorp/zero:${version}`);
+  const ghcrLatestDigest = dockerDigest('ghcr.io/rocicorp/zero:latest');
+  if (ghcrVersionDigest !== ghcrLatestDigest) {
+    throw new Error(
+      `Failed to update GHCR latest tag: ${ghcrLatestDigest} !== ${ghcrVersionDigest}`,
+    );
+  }
+});
+
+retry(() => {
+  const npmLatest = execute('pnpm view @rocicorp/zero dist-tags.latest', {
+    stdio: 'pipe',
+  });
+  if (npmLatest !== version) {
+    throw new Error(
+      `Failed to update pnpm latest tag: ${npmLatest} !== ${version}`,
+    );
+  }
+});
 
 console.log(``);
 console.log(``);
@@ -71,6 +81,9 @@ console.log(`🎉 Success!`);
 console.log(``);
 console.log(`* Added 'latest' tag to @rocicorp/zero@${version} on npm.`);
 console.log(`* Added 'latest' tag to rocicorp/zero:${version} on dockerhub.`);
+console.log(
+  `* Added 'latest' tag to ghcr.io/rocicorp/zero:${version} on GHCR.`,
+);
 console.log(`* Added 'latest' git tag pointing to ${gitTag}.`);
 console.log(``);
 console.log(``);
@@ -91,4 +104,33 @@ function dockerDigest(image) {
     throw new Error(`Unable to find digest for ${image}`);
   }
   return match[1];
+}
+
+/**
+ * @param {() => void} fn
+ */
+function retry(fn) {
+  /** @type {unknown} */
+  let lastError;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      fn();
+      return;
+    } catch (error) {
+      lastError = error;
+      if (attempt < 2) {
+        console.error(lastError);
+        console.log(`Retrying...`);
+        sleep(2000);
+      }
+    }
+  }
+  throw lastError;
+}
+
+/**
+ * @param {number} ms
+ */
+function sleep(ms) {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 }

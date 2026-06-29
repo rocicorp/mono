@@ -1294,11 +1294,11 @@ describe('view-syncer/service', () => {
             "mutateContext": {
               "allowedUrlPatterns": undefined,
               "headerOptions": {
-                "allowedClientHeaders": undefined,
                 "apiKey": undefined,
                 "cookie": undefined,
                 "customHeaders": undefined,
                 "origin": undefined,
+                "requestHeaders": undefined,
               },
               "url": undefined,
             },
@@ -1309,11 +1309,11 @@ describe('view-syncer/service', () => {
                 URLPattern {},
               ],
               "headerOptions": {
-                "allowedClientHeaders": undefined,
                 "apiKey": undefined,
                 "cookie": undefined,
                 "customHeaders": undefined,
                 "origin": undefined,
+                "requestHeaders": undefined,
               },
               "url": "http://my-pull-endpoint.dev/api/zero/pull",
             },
@@ -1584,11 +1584,11 @@ describe('view-syncer/service', () => {
             "mutateContext": {
               "allowedUrlPatterns": undefined,
               "headerOptions": {
-                "allowedClientHeaders": undefined,
                 "apiKey": undefined,
                 "cookie": undefined,
                 "customHeaders": undefined,
                 "origin": undefined,
+                "requestHeaders": undefined,
               },
               "url": undefined,
             },
@@ -1599,11 +1599,11 @@ describe('view-syncer/service', () => {
                 URLPattern {},
               ],
               "headerOptions": {
-                "allowedClientHeaders": undefined,
                 "apiKey": undefined,
                 "cookie": undefined,
                 "customHeaders": undefined,
                 "origin": undefined,
+                "requestHeaders": undefined,
               },
               "url": "http://my-pull-endpoint.dev/api/zero/pull",
             },
@@ -2262,11 +2262,11 @@ describe('view-syncer/service', () => {
             "mutateContext": {
               "allowedUrlPatterns": undefined,
               "headerOptions": {
-                "allowedClientHeaders": undefined,
                 "apiKey": undefined,
                 "cookie": undefined,
                 "customHeaders": undefined,
                 "origin": undefined,
+                "requestHeaders": undefined,
               },
               "url": undefined,
             },
@@ -2277,11 +2277,11 @@ describe('view-syncer/service', () => {
                 URLPattern {},
               ],
               "headerOptions": {
-                "allowedClientHeaders": undefined,
                 "apiKey": undefined,
                 "cookie": undefined,
                 "customHeaders": undefined,
                 "origin": undefined,
+                "requestHeaders": undefined,
               },
               "url": "http://my-pull-endpoint.dev/api/zero/pull",
             },
@@ -2481,11 +2481,11 @@ describe('view-syncer/service', () => {
             "mutateContext": {
               "allowedUrlPatterns": undefined,
               "headerOptions": {
-                "allowedClientHeaders": undefined,
                 "apiKey": undefined,
                 "cookie": undefined,
                 "customHeaders": undefined,
                 "origin": undefined,
+                "requestHeaders": undefined,
               },
               "url": undefined,
             },
@@ -2496,11 +2496,11 @@ describe('view-syncer/service', () => {
                 URLPattern {},
               ],
               "headerOptions": {
-                "allowedClientHeaders": undefined,
                 "apiKey": undefined,
                 "cookie": undefined,
                 "customHeaders": undefined,
                 "origin": undefined,
+                "requestHeaders": undefined,
               },
               "url": "http://my-pull-endpoint.dev/api/zero/pull",
             },

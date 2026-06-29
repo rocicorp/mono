@@ -222,11 +222,16 @@ export function handleSubscriptionsFrom(
  * This does not send the initial subscription message. Use {@link subscribeTo}
  * to initiate the subscription.
  */
-export function createNotifierFrom(_lc: LogContext, source: Worker): Notifier {
+export function createNotifierFrom(
+  _lc: LogContext,
+  source: Worker,
+  onNotify?: (state: ReplicaState) => void,
+): Notifier {
   const notifier = new Notifier();
-  source.onMessageType<Notification>('notify', msg =>
-    notifier.notifySubscribers(msg),
-  );
+  source.onMessageType<Notification>('notify', msg => {
+    onNotify?.(msg);
+    void notifier.notifySubscribers(msg);
+  });
   return notifier;
 }
 

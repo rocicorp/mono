@@ -16,7 +16,7 @@
     "check-fmt": "oxfmt --check ."
   },
   "dependencies": {
-    "@rocicorp/logger": "^5.4.0"
+    "@rocicorp/logger": "^6.1.0"
   },
   "devDependencies": {
     "@vitest/runner": "^4.1.6",
@@ -25,5 +25,5 @@
     "zero-cache": "workspace:*",
     "zero-server": "workspace:*"
   },
-  "packageManager": "pnpm@11.3.0"
+  "packageManager": "pnpm@11.5.3"
 }

@@ -298,7 +298,11 @@ zbugs is the reference Zero application. To run it locally:
 
 ### Prerequisites
 
-1. **Docker must be running** - Start Docker Desktop before running `db-up`
+1. **Docker must be running** - Start Docker Desktop before running `db-up`.
+   Inside a dev container there is no Docker: use the zbugs dev container
+   profile (`.devcontainer/zbugs/`) instead, where Postgres already runs as
+   sibling containers and `db-up`/`db-down` are not needed. See
+   `.devcontainer/README.md`.
 
 2. If you've made changes to any Zero packages (`zero-client`, `zero-cache`, `zero-protocol`, etc.), you must first rebuild:
 

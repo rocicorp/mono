@@ -19,7 +19,7 @@
     "check-fmt": "oxfmt --check ."
   },
   "dependencies": {
-    "@rocicorp/logger": "^5.4.0"
+    "@rocicorp/logger": "^6.1.0"
   },
   "devDependencies": {
     "@prisma/adapter-pg": "^7.7.0",
@@ -42,5 +42,5 @@
     "zero-types": "workspace:*",
     "zql": "workspace:*"
   },
-  "packageManager": "pnpm@11.3.0"
+  "packageManager": "pnpm@11.5.3"
 }

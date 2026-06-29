@@ -788,6 +788,7 @@ export async function setup(
       url: query.url,
       apiKey: query.apiKey,
       allowedClientHeaders: query.allowedClientHeaders,
+      allowedRequestHeaders: query.allowedRequestHeaders,
       forwardCookies: query.forwardCookies,
     },
     {
@@ -796,6 +797,9 @@ export async function setup(
       allowedClientHeaders:
         config.push?.allowedClientHeaders ??
         config.mutate?.allowedClientHeaders,
+      allowedRequestHeaders:
+        config.push?.allowedRequestHeaders ??
+        config.mutate?.allowedRequestHeaders,
       forwardCookies:
         config.push?.forwardCookies ?? config.mutate?.forwardCookies ?? false,
     },
@@ -968,6 +972,7 @@ export function restartViewSyncer(params: {
       url: query.url,
       apiKey: query.apiKey,
       allowedClientHeaders: query.allowedClientHeaders,
+      allowedRequestHeaders: query.allowedRequestHeaders,
       forwardCookies: query.forwardCookies,
     },
     {
@@ -976,6 +981,9 @@ export function restartViewSyncer(params: {
       allowedClientHeaders:
         config.push?.allowedClientHeaders ??
         config.mutate?.allowedClientHeaders,
+      allowedRequestHeaders:
+        config.push?.allowedRequestHeaders ??
+        config.mutate?.allowedRequestHeaders,
       forwardCookies:
         config.push?.forwardCookies ?? config.mutate?.forwardCookies ?? false,
     },

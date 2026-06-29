@@ -13,6 +13,7 @@ import {Zero} from '../../zero-client/src/client/zero.ts';
 import type {AnalyzeQueryResult} from '../../zero-protocol/src/analyze-query-result.ts';
 import type {AST} from '../../zero-protocol/src/ast.ts';
 import type {Schema} from '../../zero-types/src/schema.ts';
+import {formatPlannerEvents} from '../../zql/src/planner/planner-debug.ts';
 import {createBuilder} from '../../zql/src/query/create-builder.ts';
 import type {AnyQuery} from '../../zql/src/query/query.ts';
 import type {SchemaQuery} from '../../zql/src/query/schema-query.ts';
@@ -66,7 +67,7 @@ const options = {
     type: v.string().optional(),
     desc: [
       'Optional userID to report to zero-cache.',
-      'Has no functional effect on analysis; defaults to "analyze-cli".',
+      'Omit for anonymous analysis.',
     ],
   },
   ast: {
@@ -106,6 +107,10 @@ const options = {
   outputSyncedRows: {
     type: v.boolean().default(false),
     desc: ['Include the rows that would be synced to the client.'],
+  },
+  joinPlans: {
+    type: v.boolean().default(false),
+    desc: ['Include join planner diagnostics.'],
   },
   log: {
     ...logOptions,
@@ -202,7 +207,7 @@ export async function runAnalyzeCLI(opts: AnalyzeCLIOptions): Promise<void> {
     schema: opts.schema,
     server: config.zeroCacheURL,
     auth: config.authToken,
-    userID: config.userId ?? 'analyze-cli',
+    userID: config.userId,
     kvStore: 'mem',
     logLevel: config.log.level,
     logSink: stderrLogSink,
@@ -220,6 +225,7 @@ export async function runAnalyzeCLI(opts: AnalyzeCLIOptions): Promise<void> {
     const rpcOptions = {
       vendedRows: config.outputVendedRows,
       syncedRows: config.outputSyncedRows,
+      joinPlans: config.joinPlans,
     };
 
     if (plan.kind === 'ast') {
@@ -412,6 +418,11 @@ function renderResult(
     for (const w of result.warnings) {
       colorConsole.log(styleText('yellow', w));
     }
+  }
+
+  if (result.joinPlans && result.joinPlans.length > 0) {
+    colorConsole.log(styleText(['blue', 'bold'], '\n=== Join Plans: ===\n'));
+    colorConsole.log(formatPlannerEvents(result.joinPlans));
   }
 }
 
