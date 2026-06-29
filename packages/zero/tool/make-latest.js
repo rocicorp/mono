@@ -29,6 +29,9 @@ execute(
 execute(
   `docker buildx imagetools create -t rocicorp/zero:latest rocicorp/zero:${version}`,
 );
+execute(
+  `docker buildx imagetools create -t ghcr.io/rocicorp/zero:latest ghcr.io/rocicorp/zero:${version}`,
+);
 execute(`pnpm dist-tag add @rocicorp/zero@${version} latest`);
 
 const localLatest = execute('git rev-parse latest', {stdio: 'pipe'});
@@ -52,6 +55,16 @@ retry(() => {
 });
 
 retry(() => {
+  const ghcrVersionDigest = dockerDigest(`ghcr.io/rocicorp/zero:${version}`);
+  const ghcrLatestDigest = dockerDigest('ghcr.io/rocicorp/zero:latest');
+  if (ghcrVersionDigest !== ghcrLatestDigest) {
+    throw new Error(
+      `Failed to update GHCR latest tag: ${ghcrLatestDigest} !== ${ghcrVersionDigest}`,
+    );
+  }
+});
+
+retry(() => {
   const npmLatest = execute('pnpm view @rocicorp/zero dist-tags.latest', {
     stdio: 'pipe',
   });
@@ -68,6 +81,9 @@ console.log(`🎉 Success!`);
 console.log(``);
 console.log(`* Added 'latest' tag to @rocicorp/zero@${version} on npm.`);
 console.log(`* Added 'latest' tag to rocicorp/zero:${version} on dockerhub.`);
+console.log(
+  `* Added 'latest' tag to ghcr.io/rocicorp/zero:${version} on GHCR.`,
+);
 console.log(`* Added 'latest' git tag pointing to ${gitTag}.`);
 console.log(``);
 console.log(``);

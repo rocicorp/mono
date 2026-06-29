@@ -174,7 +174,7 @@ async function main() {
       }
     }
     console.log(
-      `* ${dryRun ? 'Would create' : 'Created'} Docker image rocicorp/zero:${result.version}.`,
+      `* ${dryRun ? 'Would create' : 'Created'} Docker image ghcr.io/rocicorp/zero:${result.version} (promote to Docker Hub happens in the publish job).`,
     );
     console.log(``);
     console.log(``);
@@ -690,7 +690,7 @@ function pushNpm(isCanary: boolean, dryRun: boolean) {
 async function pushDocker(version: string, dryRun: boolean) {
   if (dryRun) {
     console.log(
-      `[DRY RUN] Would run: docker buildx build --platform linux/amd64,linux/arm64 --build-arg=ZERO_VERSION=${version} -t rocicorp/zero:${version} --sbom=true --provenance=mode=max --push .`,
+      `[DRY RUN] Would run: docker buildx build --platform linux/amd64,linux/arm64 --build-arg=ZERO_VERSION=${version} -t ghcr.io/rocicorp/zero:${version} --sbom=true --provenance=mode=max --push .`,
     );
     return;
   }
@@ -715,11 +715,17 @@ async function pushDocker(version: string, dryRun: boolean) {
   const dockerBuildAttempts = 3;
   for (let i = 0; i < dockerBuildAttempts; i++) {
     try {
+      // Build and push to GHCR only. The release pipeline keeps the long-lived
+      // Docker Hub credential out of this build (which runs untrusted dependency
+      // and Dockerfile code) and instead promotes this GHCR image to Docker Hub
+      // in a separate, minimal publish job via `docker buildx imagetools create`.
+      // SBOM and provenance attestations are produced here and copied verbatim
+      // during that promotion.
       execute(
         `docker buildx build \\
     --platform linux/amd64,linux/arm64 \\
     --build-arg=ZERO_VERSION=${version} \\
-    -t rocicorp/zero:${version} \\
+    -t ghcr.io/rocicorp/zero:${version} \\
     --sbom=true \\
     --provenance=mode=max \\
     --push .`,
