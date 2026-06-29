@@ -1286,6 +1286,7 @@ test('gotCallback, query already got', () => {
   );
   expect(experimentalWatch).toBeCalledTimes(1);
   const watchCallback = experimentalWatch.mock.calls[0][0];
+  queryManager.markGotQueriesAuthoritative();
   watchCallback([
     {
       op: 'add',
@@ -1358,6 +1359,7 @@ test('gotCallback, query got after add', () => {
   );
   expect(experimentalWatch).toBeCalledTimes(1);
   const watchCallback = experimentalWatch.mock.calls[0][0];
+  queryManager.markGotQueriesAuthoritative();
 
   const ast: AST = {
     table: 'issue',
@@ -1425,6 +1427,7 @@ test('gotCallback, query got after add then removed', () => {
   );
   expect(experimentalWatch).toBeCalledTimes(1);
   const watchCallback = experimentalWatch.mock.calls[0][0];
+  queryManager.markGotQueriesAuthoritative();
 
   const ast: AST = {
     table: 'issue',
@@ -1938,6 +1941,7 @@ test('gotCallback, add same got callback twice', () => {
   );
   expect(experimentalWatch).toBeCalledTimes(1);
   const watchCallback = experimentalWatch.mock.calls[0][0];
+  queryManager.markGotQueriesAuthoritative();
 
   const ast: AST = {
     table: 'issue',
@@ -2401,5 +2405,110 @@ test('Getting the AST of custom query', () => {
   const queryID = hashOfNameAndArgs('customQuery', [1]);
   expect(queryManager.getAST(queryID)).toEqual({
     table: 'issue',
+  });
+});
+
+// Regression test for https://bugs.rocicorp.dev/p/zero/issue/3796
+// A query that is 'got' in the persisted (IndexedDB) state must NOT be reported
+// as got/complete until the server has reconciled that state on (re)connect,
+// because the query may have been evicted server-side in the meantime.
+describe('gotCallback, persisted got is not trusted until authoritative', () => {
+  const queryHash = '12hwg3ihkijhm';
+  const ast: AST = {
+    table: 'issue',
+    orderBy: [['id', 'asc']],
+  };
+
+  function setup() {
+    const experimentalWatch = createExperimentalWatchMock();
+    const send = vi.fn<(msg: ChangeDesiredQueriesMessage) => void>();
+    const mutationTracker = new MutationTracker(lc, ackMutations, onFatalError);
+    const queryManager = new QueryManager(
+      lc,
+      mutationTracker,
+      'client1',
+      schema.tables,
+      send,
+      experimentalWatch,
+      0,
+      queryChangeThrottleMs,
+      slowMaterializeThreshold,
+      onFatalError,
+    );
+    const watchCallback = experimentalWatch.mock.calls[0][0];
+    // Simulate bootstrapping from IndexedDB state S1 in which the query is got.
+    watchCallback([
+      {
+        op: 'add',
+        key: toGotQueriesKey(queryHash) as string & IndexKey,
+        newValue: 'unused',
+      },
+    ]);
+    return {queryManager, watchCallback};
+  }
+
+  test('subscribing before authoritative reports not-got, then re-derives', () => {
+    const {queryManager} = setup();
+
+    // In the persisted got set, but not yet authoritative -> reported not-got.
+    const gotCallback = vi.fn<(got: boolean) => void>();
+    queryManager.addLegacy(ast, 200, gotCallback);
+    expect(gotCallback).toBeCalledTimes(1);
+    expect(gotCallback).nthCalledWith(1, false);
+
+    // First poke after connect, query is still got, so it is re-derived.
+    queryManager.markGotQueriesAuthoritative();
+    expect(gotCallback).toBeCalledTimes(2);
+    expect(gotCallback).nthCalledWith(2, true);
+  });
+
+  test('query evicted before authoritative is never reported got (the race)', () => {
+    const {queryManager, watchCallback} = setup();
+
+    const gotCallback = vi.fn<(got: boolean) => void>();
+    queryManager.addLegacy(ast, 200, gotCallback);
+    expect(gotCallback).nthCalledWith(1, false);
+
+    // The catch-up poke (state S2) reveals the query was evicted server-side.
+    watchCallback([
+      {
+        op: 'del',
+        key: toGotQueriesKey(queryHash) as string & IndexKey,
+        oldValue: 'unused',
+      },
+    ]);
+
+    // The bug: becoming authoritative must NOT report the evicted query as got
+    // (previously the stale persisted got made it 'complete' with empty rows).
+    queryManager.markGotQueriesAuthoritative();
+    expect(gotCallback.mock.calls.every(([got]) => got === false)).toBe(true);
+    const callsBeforeRefetch = gotCallback.mock.calls.length;
+
+    // When the server re-gets the query (state S3) it is finally reported got.
+    watchCallback([
+      {
+        op: 'add',
+        key: toGotQueriesKey(queryHash) as string & IndexKey,
+        newValue: 'unused',
+      },
+    ]);
+    expect(gotCallback).toBeCalledTimes(callsBeforeRefetch + 1);
+    expect(gotCallback).nthCalledWith(callsBeforeRefetch + 1, true);
+  });
+
+  test('disconnect re-gates trust for new subscriptions', () => {
+    const {queryManager} = setup();
+    queryManager.markGotQueriesAuthoritative();
+
+    // After disconnect the persisted got must not be trusted again until the
+    // next connect reconciles it.
+    queryManager.clearGotQueriesAuthoritative();
+
+    const gotCallback = vi.fn<(got: boolean) => void>();
+    queryManager.addLegacy(ast, 200, gotCallback);
+    expect(gotCallback).nthCalledWith(1, false);
+
+    queryManager.markGotQueriesAuthoritative();
+    expect(gotCallback).nthCalledWith(2, true);
   });
 });
