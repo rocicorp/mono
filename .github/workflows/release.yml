@@ -126,22 +126,28 @@ jobs:
         uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
 
       - name: Build Docker image archive
+        uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60 # v4.0.0
         env:
           TARBALL: ${{ steps.pack.outputs.filename }}
           TARBALL_PATH: ${{ runner.temp }}/npm/${{ steps.pack.outputs.filename }}
           IMAGE_ARCHIVE: ${{ runner.temp }}/docker/zero-image.tar
-        run: |
-          set -euo pipefail
-          mkdir -p source/packages/zero/pkgs "$(dirname "$IMAGE_ARCHIVE")"
-          cp "$TARBALL_PATH" "source/packages/zero/pkgs/$TARBALL"
-          docker buildx build \
-            --platform linux/amd64,linux/arm64 \
-            --build-arg ZERO_VERSION="$VERSION" \
-            --build-arg ZERO_PACKAGE="$TARBALL" \
-            --sbom=true \
-            --provenance=mode=max \
-            --output=type=oci,dest="$IMAGE_ARCHIVE" \
-            source/packages/zero
+        with:
+          timeout_minutes: 20
+          max_attempts: 3
+          retry_wait_seconds: 15
+          command: |
+            set -euo pipefail
+            mkdir -p source/packages/zero/pkgs "$(dirname "$IMAGE_ARCHIVE")"
+            cp "$TARBALL_PATH" "source/packages/zero/pkgs/$TARBALL"
+            rm -f "$IMAGE_ARCHIVE"
+            docker buildx build \
+              --platform linux/amd64,linux/arm64 \
+              --build-arg ZERO_VERSION="$VERSION" \
+              --build-arg ZERO_PACKAGE="$TARBALL" \
+              --sbom=true \
+              --provenance=mode=max \
+              --output=type=oci,dest="$IMAGE_ARCHIVE" \
+              source/packages/zero
 
       - name: Upload npm package artifact
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
