@@ -32,10 +32,22 @@ export class Notifier implements ReplicaStateNotifier {
   readonly #eventEmitter = new EventEmitter();
   #lastStateReceived: ReplicaState | undefined;
 
+  get latestState(): ReplicaState | undefined {
+    return this.#lastStateReceived;
+  }
+
   #newSubscription() {
     const notify = (state: ReplicaState) => subscription.push(state);
     const subscription = Subscription.create<ReplicaState>({
-      coalesce: curr => curr,
+      coalesce: (curr, prev) => ({
+        ...curr,
+        replicaReadyTimeMs:
+          curr.replicaReadyTimeMs === undefined
+            ? prev.replicaReadyTimeMs
+            : prev.replicaReadyTimeMs === undefined
+              ? curr.replicaReadyTimeMs
+              : Math.min(curr.replicaReadyTimeMs, prev.replicaReadyTimeMs),
+      }),
       cleanup: () => this.#eventEmitter.off('version', notify),
     });
     return {notify, subscription};

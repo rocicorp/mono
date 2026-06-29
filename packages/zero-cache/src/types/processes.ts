@@ -156,6 +156,34 @@ export function setSingleProcessMode(enabled: boolean = true): void {
 }
 
 /**
+ * Determines whether a module loaded as a worker process entry point should
+ * start its worker.
+ *
+ * Most workers are launched via {@link childWorker}, which in single-process
+ * mode runs them in-process (no real fork) by invoking their exported
+ * `runWorker` directly; those entry points must therefore *not* self-start in
+ * single-process mode, or they would run twice.
+ *
+ * A worker launched via {@link forkChildWorker}, however, is *always* a real
+ * forked OS process — even in single-process mode — and it inherits the
+ * parent's `SINGLE_PROCESS` env. So {@link singleProcessMode} alone would
+ * wrongly suppress its startup, leaving the parent to spin re-forking a child
+ * that immediately exits. Such a forked child has a non-null
+ * {@link parentWorker} (`process.send` is defined), which is the signal to
+ * start regardless. A standalone direct launch (no parent, not single-process)
+ * also starts.
+ *
+ * @param parent The entry point's {@link parentWorker} (non-null iff forked).
+ * @param isSingleProcessMode The result of {@link singleProcessMode}.
+ */
+export function shouldStartWorker(
+  parent: Worker | null,
+  isSingleProcessMode: boolean,
+): boolean {
+  return parent !== null || !isSingleProcessMode;
+}
+
+/**
  *
  * @param modulePath Path to the module file, relative to zero-cache/src/, or an absolute file:// URL
  */

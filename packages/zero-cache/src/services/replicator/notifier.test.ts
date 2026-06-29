@@ -54,4 +54,31 @@ describe('replicator/notifier', () => {
     await expectSingleMessage(sub2, {state: 'version-ready', testSeqNum: 456});
     expect(await Promise.all(results2)).toEqual(['consumed']);
   });
+
+  test('coalesced notifications keep earliest replica ready time', async () => {
+    const notifier = new Notifier();
+    const sub = notifier.subscribe();
+
+    void notifier.notifySubscribers({
+      state: 'version-ready',
+      watermark: '02',
+      replicaReadyTimeMs: 200,
+    });
+    void notifier.notifySubscribers({
+      state: 'version-ready',
+      watermark: '03',
+      replicaReadyTimeMs: 300,
+    });
+
+    await expectSingleMessage(sub, {
+      state: 'version-ready',
+      watermark: '03',
+      replicaReadyTimeMs: 200,
+    });
+    expect(notifier.latestState).toEqual({
+      state: 'version-ready',
+      watermark: '03',
+      replicaReadyTimeMs: 300,
+    });
+  });
 });
