@@ -149,6 +149,8 @@
     "chalk-template": "^1.1.0",
     "chokidar": "^4.0.1",
     "cloudevents": "^10.0.0",
+    "command-line-args": "^6.0.1",
+    "command-line-usage": "^7.0.3",
     "compare-utf8": "^0.2.0",
     "defu": "^6.1.4",
     "eventemitter3": "^5.0.1",
