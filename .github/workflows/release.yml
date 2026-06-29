@@ -243,27 +243,23 @@ jobs:
           name: zero-docker-${{ needs.plan.outputs.version }}
           path: dist/docker
 
-      - name: Install skopeo
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y skopeo
+      - name: Push GHCR Docker image
+        uses: docker://quay.io/containers/skopeo:v1.22.2@sha256:e268031b80e65ba25dd2020383232587daf0ae670727b5ccdbe7a0008e9216bc
+        with:
+          args: >-
+            copy --all
+            --dest-creds ${{ github.actor }}:${{ github.token }}
+            oci-archive:dist/docker/zero-image.tar
+            docker://ghcr.io/rocicorp/zero:${{ needs.plan.outputs.version }}
 
-      - name: Push Docker images
-        env:
-          DOCKERHUB_USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
-          DOCKERHUB_TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
-          GHCR_USERNAME: ${{ github.actor }}
-          GHCR_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          skopeo copy --all \
-            --dest-creds "$GHCR_USERNAME:$GHCR_TOKEN" \
-            "oci-archive:dist/docker/zero-image.tar" \
-            "docker://ghcr.io/rocicorp/zero:$VERSION"
-          skopeo copy --all \
-            --dest-creds "$DOCKERHUB_USERNAME:$DOCKERHUB_TOKEN" \
-            "oci-archive:dist/docker/zero-image.tar" \
-            "docker://docker.io/rocicorp/zero:$VERSION"
+      - name: Push Docker Hub image
+        uses: docker://quay.io/containers/skopeo:v1.22.2@sha256:e268031b80e65ba25dd2020383232587daf0ae670727b5ccdbe7a0008e9216bc
+        with:
+          args: >-
+            copy --all
+            --dest-creds ${{ vars.DOCKERHUB_USERNAME }}:${{ secrets.DOCKERHUB_TOKEN }}
+            oci-archive:dist/docker/zero-image.tar
+            docker://docker.io/rocicorp/zero:${{ needs.plan.outputs.version }}
 
       - name: Login to Docker Hub
         uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
