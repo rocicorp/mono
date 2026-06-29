@@ -2,6 +2,7 @@ packages:
   - 'apps/*'
   - 'packages/*'
   - 'prod/sst'
+  - 'scripts'
   - 'tools/*'
 allowBuilds:
   '@prisma/engines': true

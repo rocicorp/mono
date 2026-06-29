@@ -33,25 +33,23 @@ npm install /path/to/rocicorp-zero-<VERSION>.tgz
 
 ### Releasing
 
-Releases are driven by `packages/zero/tool/release.ts` via the `release` GitHub Actions workflow.
-Run `node packages/zero/tool/release.ts --help` for the full CLI reference.
+Releases are driven by the `release` GitHub Actions workflow. Run the workflow from `main`; use `release_branch` to choose the release source branch.
 
 To trigger a release via CI, use the [Actions UI](https://github.com/rocicorp/mono/actions/workflows/release.yml) or the `gh` CLI:
 
 ```bash
 # Canary from main
-gh workflow run release.yml -f mode=canary -f ref=main
+gh workflow run release.yml --ref main -f mode=canary -f release_branch=main
 
-# Stable from main (or a tag / commit SHA)
-gh workflow run release.yml -f mode=stable -f ref=main
-gh workflow run release.yml -f mode=stable -f ref=v1.2.3
-gh workflow run release.yml -f mode=stable -f ref=<40-char-sha>
+# Canary from a maintenance branch
+gh workflow run release.yml --ref main -f mode=canary -f release_branch=maint/zero/v1.7
 
-# Dry run — build and version-bump without publishing
-gh workflow run release.yml -f mode=canary -f ref=main -f dry_run=true
+# Stable from main
+gh workflow run release.yml --ref main -f mode=stable -f release_branch=main
 ```
 
-Stable releases are staged first. After `pnpm stage approve`, run `node packages/zero/tool/make-latest.js <version>` to promote npm and Docker tags to `latest`.
+Stable releases use npm staged publishing. After `pnpm stage approve`, promote the approved version with the [Promote Zero Release workflow](https://github.com/rocicorp/mono/actions/workflows/promote.yml):
 
-> **Note**: `-f ref=...` is the build target (branch, tag, or SHA). `--ref` selects which branch
-> the _workflow file itself_ is read from — only needed when running the workflow off a non-default branch.
+```bash
+gh workflow run promote.yml -f version=<VERSION>
+```
