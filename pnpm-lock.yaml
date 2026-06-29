@@ -875,12 +875,6 @@ importers:
       cloudevents:
         specifier: ^10.0.0
         version: 10.0.0
-      command-line-args:
-        specifier: ^6.0.1
-        version: 6.0.2
-      command-line-usage:
-        specifier: ^7.0.3
-        version: 7.0.4
       compare-utf8:
         specifier: ^0.2.0
         version: 0.2.0
@@ -1779,6 +1773,21 @@ importers:
       oxfmt:
         specifier: ^0.45.0
         version: 0.45.0
+
+  scripts:
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.5
+        version: 22.19.19
+      oxfmt:
+        specifier: ^0.45.0
+        version: 0.45.0
+      typescript:
+        specifier: ~6.0.2
+        version: 6.0.3
+      vitest:
+        specifier: ^4.1.6
+        version: 4.1.6(@opentelemetry/api@1.9.1)(@types/node@22.19.19)(@vitest/browser-playwright@4.1.6)(@vitest/coverage-v8@4.1.6)(vite@8.0.13(@types/node@22.19.19)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))
 
   tools/client-simulator:
     dependencies:
