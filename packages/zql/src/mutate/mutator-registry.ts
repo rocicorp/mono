@@ -240,7 +240,8 @@ export type ToMutatorTree<
         MD[K]['~']['$input'],
         TSchema,
         MD[K]['~']['$context'],
-        MD[K]['~']['$wrappedTransaction']
+        MD[K]['~']['$wrappedTransaction'],
+        MD[K]['~']['$callArgs']
       >
     : MD[K] extends MutatorDefinitions
       ? ToMutatorTree<MD[K], TSchema>
@@ -273,7 +274,9 @@ export type MutatorDefinitions = {
 
 function createMutator<
   ArgsInput extends ReadonlyJSONValue | undefined,
-  ArgsOutput extends ReadonlyJSONValue | undefined,
+  // ArgsOutput (the decoded args) may be a non-JSON app type when a codec is
+  // used, so it is unconstrained.
+  ArgsOutput,
   TSchema extends Schema,
   C,
   TWrappedTransaction,
@@ -281,20 +284,23 @@ function createMutator<
   name: string,
   definition: MutatorDefinition<ArgsInput, ArgsOutput, C, TWrappedTransaction>,
 ): Mutator<ArgsInput, TSchema, C, TWrappedTransaction> {
-  const {validator} = definition;
+  const {validator, codec} = definition;
 
   // fn takes ReadonlyJSONValue args because it's called during rebase (from
-  // stored JSON) and on the server (from wire format). Validation happens here.
+  // stored JSON) and on the server (from wire format). Validation / codec
+  // decoding happens here.
   const fn: MutatorExecutionFunction<
     ArgsInput,
     C,
     Transaction<TSchema, TWrappedTransaction>
   > = async options => {
-    const validatedArgs = validator
-      ? validateInput(name, options.args, validator, 'mutator')
-      : (options.args as unknown as ArgsOutput);
+    const decodedArgs = codec
+      ? codec.decode(options.args as ArgsInput)
+      : validator
+        ? validateInput(name, options.args, validator, 'mutator')
+        : (options.args as unknown as ArgsOutput);
     await definition.fn({
-      args: validatedArgs,
+      args: decodedArgs,
       ctx: options.ctx as C,
       tx: options.tx,
     });
@@ -303,7 +309,11 @@ function createMutator<
   const mutator = (
     args: ArgsInput,
   ): MutateRequest<ArgsInput, TSchema, C, TWrappedTransaction> => ({
-    args,
+    // Encode the decoded args to their JSON wire form before the mutation is
+    // queued/persisted/sent. No-op when there is no codec.
+    'args': codec
+      ? (codec.encode(args as unknown as ArgsOutput) as ArgsInput)
+      : args,
     '~': 'MutateRequest' as MutateRequestTypes<
       ArgsInput,
       TSchema,

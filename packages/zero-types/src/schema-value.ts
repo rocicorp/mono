@@ -44,6 +44,16 @@ export type Codec<Encoded, Decoded> = {
   encode: (value: Decoded) => Encoded;
 };
 
+/** True when `x` is a {@linkcode Codec} (has both `decode` and `encode`). */
+export function isCodec(x: unknown): x is Codec<unknown, unknown> {
+  return (
+    typeof x === 'object' &&
+    x !== null &&
+    typeof (x as Partial<Codec<unknown, unknown>>).decode === 'function' &&
+    typeof (x as Partial<Codec<unknown, unknown>>).encode === 'function'
+  );
+}
+
 /**
  * A {@linkcode SchemaValue} that carries a runtime {@linkcode Codec}. The
  * user-facing TypeScript type (via {@linkcode SchemaValueToTSType}) is the

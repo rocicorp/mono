@@ -7,6 +7,7 @@ import type {
   DefaultWrappedTransaction,
   IsUnknown,
 } from '../../../zero-types/src/default-types.ts';
+import {isCodec, type Codec} from '../../../zero-types/src/schema-value.ts';
 import type {Schema} from '../../../zero-types/src/schema.ts';
 import type {AnyTransaction, Transaction} from './custom.ts';
 
@@ -19,26 +20,36 @@ export type MutatorDefinitionTypes<
   TOutput,
   TContext,
   TWrappedTransaction,
+  // The type the generated mutator callable accepts. Equals TInput for plain /
+  // validator mutators; equals the decoded TOutput for codec mutators.
+  TCallArgs = TInput,
 > = 'MutatorDefinition' & {
   readonly $input: TInput;
   readonly $output: TOutput;
+  readonly $callArgs: TCallArgs;
   readonly $context: TContext;
   readonly $wrappedTransaction: TWrappedTransaction;
 };
 
 export type MutatorDefinition<
   TInput extends ReadonlyJSONValue | undefined,
-  TOutput extends ReadonlyJSONValue | undefined,
+  // TOutput (the decoded args type) is intentionally unconstrained: with a codec
+  // it may be a non-JSON app type (e.g. `Date`). TInput (the wire type) stays
+  // JSON-bound.
+  TOutput,
   TContext = DefaultContext,
   TWrappedTransaction = DefaultWrappedTransaction,
+  TCallArgs = TInput,
 > = {
   readonly 'fn': MutatorDefinitionFunction<TOutput, TContext, AnyTransaction>;
   readonly 'validator': StandardSchemaV1<TInput, TOutput> | undefined;
+  readonly 'codec': Codec<TInput, TOutput> | undefined;
   readonly '~': MutatorDefinitionTypes<
     TInput,
     TOutput,
     TContext,
-    TWrappedTransaction
+    TWrappedTransaction,
+    TCallArgs
   >;
 };
 
@@ -83,16 +94,36 @@ export function defineMutator<
   >,
 ): MutatorDefinition<TInput, TOutput, TContext, TWrappedTransaction>;
 
-// Implementation
+// Overload for codec. The codec encodes the decoded args (`TOutput`, e.g. a
+// `Date`) to its JSON wire form (`TInput`) before the mutation is queued/sent,
+// and decodes back before the recipe runs. Strictly an alternative to a
+// validator.
 export function defineMutator<
-  TInput extends ReadonlyJSONValue | undefined = undefined,
-  TOutput extends ReadonlyJSONValue | undefined = TInput,
+  TInput extends ReadonlyJSONValue | undefined,
+  TOutput,
   TSchema extends Schema = DefaultSchema,
   TContext = DefaultContext,
   TWrappedTransaction = DefaultWrappedTransaction,
 >(
-  validatorOrMutator:
+  codec: Codec<TInput, TOutput>,
+  mutator: MutatorDefinitionFunction<
+    TOutput,
+    TContext,
+    Transaction<TSchema, TWrappedTransaction>
+  >,
+): MutatorDefinition<TInput, TOutput, TContext, TWrappedTransaction, TOutput>;
+
+// Implementation
+export function defineMutator<
+  TInput extends ReadonlyJSONValue | undefined = undefined,
+  TOutput = TInput,
+  TSchema extends Schema = DefaultSchema,
+  TContext = DefaultContext,
+  TWrappedTransaction = DefaultWrappedTransaction,
+>(
+  validatorCodecOrMutator:
     | StandardSchemaV1<TInput, TOutput>
+    | Codec<TInput, TOutput>
     | MutatorDefinitionFunction<
         TOutput,
         TContext,
@@ -103,29 +134,44 @@ export function defineMutator<
     TContext,
     Transaction<TSchema, TWrappedTransaction>
   >,
-): MutatorDefinition<TInput, TOutput, TContext, TWrappedTransaction> {
+): MutatorDefinition<
+  TInput,
+  TOutput,
+  TContext,
+  TWrappedTransaction,
+  TInput | TOutput
+> {
   let validator: StandardSchemaV1<TInput, TOutput> | undefined;
+  let codec: Codec<TInput, TOutput> | undefined;
   let actualMutator: MutatorDefinitionFunction<
     TOutput,
     TContext,
     Transaction<TSchema, TWrappedTransaction>
   >;
 
-  if ('~standard' in validatorOrMutator) {
+  if (isCodec(validatorCodecOrMutator)) {
+    // defineMutator(codec, mutator)
+    codec = validatorCodecOrMutator as Codec<TInput, TOutput>;
+    actualMutator = must(mutator);
+  } else if ('~standard' in validatorCodecOrMutator) {
     // defineMutator(validator, mutator)
-    validator = validatorOrMutator;
+    validator = validatorCodecOrMutator;
     actualMutator = must(mutator);
   } else {
-    // defineMutator(mutator) - no validator
-    validator = undefined;
-    actualMutator = validatorOrMutator;
+    // defineMutator(mutator) - no validator or codec
+    actualMutator = validatorCodecOrMutator as MutatorDefinitionFunction<
+      TOutput,
+      TContext,
+      Transaction<TSchema, TWrappedTransaction>
+    >;
   }
 
   const mutatorDefinition: MutatorDefinition<
     TInput,
     TOutput,
     TContext,
-    TWrappedTransaction
+    TWrappedTransaction,
+    TInput | TOutput
   > = {
     'fn': actualMutator as MutatorDefinitionFunction<
       TOutput,
@@ -133,11 +179,13 @@ export function defineMutator<
       AnyTransaction
     >,
     'validator': validator,
+    'codec': codec,
     '~': 'MutatorDefinition' as unknown as MutatorDefinitionTypes<
       TInput,
       TOutput,
       TContext,
-      TWrappedTransaction
+      TWrappedTransaction,
+      TInput | TOutput
     >,
   };
   return mutatorDefinition;
@@ -186,10 +234,22 @@ type TypedDefineMutator<
       Transaction<TSchema, TWrappedTransaction>
     >,
   ): MutatorDefinition<TInput, TOutput, TContext, TWrappedTransaction>;
+
+  // With codec
+  <TInput extends ReadonlyJSONValue | undefined, TOutput>(
+    codec: Codec<TInput, TOutput>,
+    mutator: MutatorDefinitionFunction<
+      TOutput,
+      TContext,
+      Transaction<TSchema, TWrappedTransaction>
+    >,
+  ): MutatorDefinition<TInput, TOutput, TContext, TWrappedTransaction, TOutput>;
 };
 
 export type MutatorDefinitionFunction<
-  TOutput extends ReadonlyJSONValue | undefined,
+  // Unconstrained: the decoded args may be a non-JSON app type when a codec is
+  // used.
+  TOutput,
   TContext,
   TTransaction,
 > = (options: {
@@ -248,12 +308,16 @@ export type Mutator<
   TSchema extends Schema = DefaultSchema,
   TContext = DefaultContext,
   TWrappedTransaction = DefaultWrappedTransaction,
+  // The type the callable accepts. Equals TInput for plain / validator
+  // mutators; the decoded app type for codec mutators. The stored/wire args
+  // (in MutateRequest) and the internally-invoked `fn` stay on TInput.
+  TCallArgs = TInput,
 > = {
   readonly 'mutatorName': string;
   /**
    * Execute the mutation. Args are ReadonlyJSONValue because this is called
    * during rebase (from stored JSON) and on the server (from wire format).
-   * Validation happens internally before the recipe function runs.
+   * Validation / codec decoding happens internally before the recipe runs.
    */
   readonly 'fn': MutatorExecutionFunction<
     TInput,
@@ -261,34 +325,36 @@ export type Mutator<
     Transaction<TSchema, TWrappedTransaction>
   >;
   readonly '~': MutatorTypes<TInput, TSchema, TContext, TWrappedTransaction>;
-} & MutatorCallable<TInput, TSchema, TContext, TWrappedTransaction>;
+} & MutatorCallable<TCallArgs, TInput, TSchema, TContext, TWrappedTransaction>;
 
-// Helper type for the callable part of Mutator
-// When TInput is undefined, the function is callable with 0 args
-// When TInput includes undefined (optional), args is optional
-// Otherwise, args is required
+// Helper type for the callable part of Mutator.
+// `TCallArgs` is the type the user passes; `TInput` is the wire/stored type of
+// the resulting MutateRequest. When there is no codec they are the same.
+// When TCallArgs is undefined, the function is callable with 0 args;
+// when it includes undefined (optional), args is optional; otherwise required.
 type MutatorCallable<
+  TCallArgs,
   TInput extends ReadonlyJSONValue | undefined,
   TSchema extends Schema,
   TContext,
   TWrappedTransaction,
-> = [TInput] extends [undefined]
+> = [TCallArgs] extends [undefined]
   ? () => MutateRequest<TInput, TSchema, TContext, TWrappedTransaction>
-  : undefined extends TInput
+  : undefined extends TCallArgs
     ? {
         (): MutateRequest<TInput, TSchema, TContext, TWrappedTransaction>;
         (
-          args?: TInput,
+          args?: TCallArgs,
         ): MutateRequest<TInput, TSchema, TContext, TWrappedTransaction>;
       }
     : {
         (
-          args: TInput,
+          args: TCallArgs,
         ): MutateRequest<TInput, TSchema, TContext, TWrappedTransaction>;
       };
 
 // oxlint-disable-next-line no-explicit-any
-export type AnyMutator = Mutator<any, any, any, any>;
+export type AnyMutator = Mutator<any, any, any, any, any>;
 
 /**
  * Checks if a value is a Mutator (the result of processing a MutatorDefinition
