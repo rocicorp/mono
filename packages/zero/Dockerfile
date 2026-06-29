@@ -21,6 +21,7 @@ FROM litestream/litestream:0.5.11 AS litestream-v5
 FROM node:22.22.3-alpine3.23@sha256:968df39aedcea65eeb078fb336ed7191baf48f972b4479711397108be0966920
 
 ARG ZERO_VERSION
+ARG ZERO_PACKAGE
 
 RUN test -n "$ZERO_VERSION"
 
@@ -59,16 +60,17 @@ EOF
 
 COPY pkgs/ /tmp/pkgs/
 
-# Install zero package based on version format
-RUN if echo "$ZERO_VERSION" | grep -q "\.tgz$"; then \
-    FILENAME=$(basename $ZERO_VERSION) && \
+# Install zero package based on install source format (tarball or pnpm)
+RUN ZERO_INSTALL_SOURCE="${ZERO_PACKAGE:-$ZERO_VERSION}" && \
+  if echo "$ZERO_INSTALL_SOURCE" | grep -q "\.tgz$"; then \
+    FILENAME=$(basename "$ZERO_INSTALL_SOURCE") && \
     echo "Installing from local tarball $FILENAME" && \
-    cp /tmp/pkgs/$FILENAME . && \
+    cp "/tmp/pkgs/$FILENAME" . && \
     pnpm add ./$FILENAME && \
     rm -rf /tmp/pkgs ./$FILENAME; \
   else \
-    echo "Installing from npm @rocicorp/zero@$ZERO_VERSION" && \
-    pnpm add @rocicorp/zero@${ZERO_VERSION}; \
+    echo "Installing from npm @rocicorp/zero@$ZERO_INSTALL_SOURCE" && \
+    pnpm add @rocicorp/zero@${ZERO_INSTALL_SOURCE}; \
   fi
 
 # Put zero's bin shims on PATH so `zero-cache` resolves without npx.
