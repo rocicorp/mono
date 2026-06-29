@@ -120,6 +120,10 @@ export class ClientHandler {
   readonly #lc: LogContext;
   readonly #downstream: Subscription<Downstream>;
   #baseVersion: NullableCVRVersion;
+  // We will send a poke on connect even if the client is already caught up, so that it can learn its
+  // got-queries state has been reconciled with the server. After that, we will only send a poke if
+  // the client is behind.
+  #everPoked = false;
 
   readonly #pokeTime = getOrCreateLatencyHistogram(
     'sync',
@@ -185,7 +189,10 @@ export class ClientHandler {
     const pokeID = versionToCookie(tentativeVersion);
     const lc = this.#lc.withContext('pokeID', pokeID);
 
-    if (cmpVersions(this.#baseVersion, tentativeVersion) >= 0) {
+    // Force an (empty) initial poke even when already caught up; see #everPoked.
+    const forceInitialPoke = !this.#everPoked;
+    const cmp = cmpVersions(this.#baseVersion, tentativeVersion);
+    if (cmp > 0 || (cmp === 0 && !forceInitialPoke)) {
       lc.info?.(`already caught up, not sending poke.`);
       return NOOP;
     }
@@ -310,7 +317,10 @@ export class ClientHandler {
       end: async (finalVersion: CVRVersion) => {
         const cookie = versionToCookie(finalVersion);
         if (!pokeStarted) {
-          if (cmpVersions(this.#baseVersion, finalVersion) === 0) {
+          if (
+            cmpVersions(this.#baseVersion, finalVersion) === 0 &&
+            !forceInitialPoke
+          ) {
             return; // Nothing changed and nothing was sent.
           }
           await this.#push(['pokeStart', pokeStart]);
@@ -325,6 +335,7 @@ export class ClientHandler {
         await flushBody();
         await this.#push(['pokeEnd', {pokeID, cookie}]);
         this.#baseVersion = finalVersion;
+        this.#everPoked = true;
 
         const elapsed = performance.now() - start;
         this.#pokeTransactions.add(1);

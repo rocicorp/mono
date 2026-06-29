@@ -813,7 +813,12 @@ export class Zero<
     this.#metrics.tags.push(`version:${this.version}`);
 
     this.#pokeHandler = new PokeHandler(
-      poke => this.#rep.poke(poke),
+      async poke => {
+        await this.#rep.poke(poke);
+        // poke() fires the got-queries watch synchronously, so `#gotQueries` is
+        // up to date and safe to trust now that the server has caught us up.
+        this.#queryManager.markGotQueriesAuthoritative();
+      },
       e => this.#onPokeError(e),
       rep.clientID,
       schema,
@@ -1821,6 +1826,7 @@ export class Zero<
     this.#socket = undefined;
     this.#lastMutationIDSent = NULL_LAST_MUTATION_ID_SENT;
     this.#pokeHandler.handleDisconnect();
+    this.#queryManager.clearGotQueriesAuthoritative();
 
     const transition = getErrorConnectionTransition(reason);
 
