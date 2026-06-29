@@ -1,6 +1,6 @@
 {
   "name": "@rocicorp/zero",
-  "version": "1.7.0-canary.3",
+  "version": "1.7.0-canary.5",
   "description": "Zero is a web framework for serverless web development.",
   "homepage": "https://zero.rocicorp.dev",
   "bugs": {
