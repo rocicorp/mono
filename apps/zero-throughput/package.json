@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "start": "node src/main.ts",
+    "analyze": "node src/analyze.ts",
     "go": "node src/main.ts",
     "db-up": "cd docker && docker compose up",
     "db-down": "cd docker && docker compose down",

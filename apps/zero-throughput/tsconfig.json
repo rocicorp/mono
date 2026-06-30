@@ -3,6 +3,9 @@
   "compilerOptions": {
     "declaration": false,
     "declarationMap": false,
+    "paths": {
+      "@rocicorp/zero": ["../../packages/zero/src/zero.ts"]
+    },
     "types": ["node"]
   },
   "include": ["src"]

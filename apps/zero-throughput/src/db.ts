@@ -93,7 +93,7 @@ export async function resetBenchmarkDatabase(
   `;
   await sql`
     CREATE INDEX zero_throughput_event_bucket_seq_idx
-    ON zero_throughput_event (bucket, seq DESC)
+    ON zero_throughput_event (bucket, seq DESC, id ASC)
   `;
 
   await sql`
@@ -110,7 +110,7 @@ export async function resetBenchmarkDatabase(
   `;
   await sql`
     CREATE INDEX zero_throughput_email_thread_owner_mailbox_seq_idx
-    ON zero_throughput_email_thread (owner_id, mailbox, seq DESC)
+    ON zero_throughput_email_thread (owner_id, mailbox, seq DESC, id ASC)
   `;
   await sql`
     CREATE TABLE zero_throughput_email_message (
@@ -128,11 +128,11 @@ export async function resetBenchmarkDatabase(
   `;
   await sql`
     CREATE INDEX zero_throughput_email_message_owner_mailbox_seq_idx
-    ON zero_throughput_email_message (owner_id, mailbox, seq DESC)
+    ON zero_throughput_email_message (owner_id, mailbox, seq DESC, id ASC)
   `;
   await sql`
     CREATE INDEX zero_throughput_email_message_thread_seq_idx
-    ON zero_throughput_email_message (thread_id, seq DESC)
+    ON zero_throughput_email_message (thread_id, seq DESC, id ASC)
   `;
 
   await sql`
@@ -169,7 +169,7 @@ export async function resetBenchmarkDatabase(
   `;
   await sql`
     CREATE INDEX zero_throughput_forum_thread_category_seq_idx
-    ON zero_throughput_forum_thread (category_id, seq DESC)
+    ON zero_throughput_forum_thread (category_id, seq DESC, id ASC)
   `;
   await sql`
     CREATE TABLE zero_throughput_forum_post (
@@ -185,11 +185,11 @@ export async function resetBenchmarkDatabase(
   `;
   await sql`
     CREATE INDEX zero_throughput_forum_post_category_seq_idx
-    ON zero_throughput_forum_post (category_id, seq DESC)
+    ON zero_throughput_forum_post (category_id, seq DESC, id ASC)
   `;
   await sql`
     CREATE INDEX zero_throughput_forum_post_thread_seq_idx
-    ON zero_throughput_forum_post (thread_id, seq DESC)
+    ON zero_throughput_forum_post (thread_id, seq DESC, id ASC)
   `;
 
   await sql`
@@ -216,7 +216,7 @@ export async function resetBenchmarkDatabase(
   `;
   await sql`
     CREATE INDEX zero_throughput_rel_account_org_seq_idx
-    ON zero_throughput_rel_account (org_id, seq DESC)
+    ON zero_throughput_rel_account (org_id, seq DESC, id ASC)
   `;
   await sql`
     CREATE TABLE zero_throughput_rel_contact (
@@ -231,7 +231,7 @@ export async function resetBenchmarkDatabase(
   `;
   await sql`
     CREATE INDEX zero_throughput_rel_contact_account_idx
-    ON zero_throughput_rel_contact (account_id)
+    ON zero_throughput_rel_contact (account_id, id ASC)
   `;
   await sql`
     CREATE TABLE zero_throughput_rel_activity (
@@ -248,15 +248,15 @@ export async function resetBenchmarkDatabase(
   `;
   await sql`
     CREATE INDEX zero_throughput_rel_activity_org_seq_idx
-    ON zero_throughput_rel_activity (org_id, seq DESC)
+    ON zero_throughput_rel_activity (org_id, seq DESC, id ASC)
   `;
   await sql`
     CREATE INDEX zero_throughput_rel_activity_account_seq_idx
-    ON zero_throughput_rel_activity (account_id, seq DESC)
+    ON zero_throughput_rel_activity (account_id, seq DESC, id ASC)
   `;
   await sql`
     CREATE INDEX zero_throughput_rel_activity_contact_seq_idx
-    ON zero_throughput_rel_activity (contact_id, seq DESC)
+    ON zero_throughput_rel_activity (contact_id, seq DESC, id ASC)
   `;
 
   await seedEmail(sql);

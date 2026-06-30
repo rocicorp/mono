@@ -1,7 +1,7 @@
 import {Zero, type ConnectionState, type ResultType} from '@rocicorp/zero';
 import WebSocket from 'ws';
 import type {BenchmarkConfig} from './config.ts';
-import {FORUM_CATEGORY_ID, REL_ORG_ID, SHARED_OWNER_ID} from './profiles.ts';
+import {buildProfileQuery} from './profile-queries.ts';
 import {schema} from './schema.ts';
 import {nowMs, withTimeout} from './util.ts';
 
@@ -69,165 +69,14 @@ export class SyntheticClient {
   }
 
   #registerProfileQuery(config: BenchmarkConfig, queryIndex: number): void {
-    switch (config.profile) {
-      case 'feed-append': {
-        const query = this.#zero.query.event
-          .where('bucket', 0)
-          .orderBy('seq', 'desc')
-          .limit(config.rowsPerQuery);
-        const view = this.#zero.materialize(query);
-        this.#registerView('feed:recent-events', queryIndex, view);
-        return;
-      }
-      case 'email': {
-        this.#registerEmailQuery(config, queryIndex);
-        return;
-      }
-      case 'forum': {
-        this.#registerForumQuery(config, queryIndex);
-        return;
-      }
-      case 'relational': {
-        this.#registerRelationalQuery(config, queryIndex);
-        return;
-      }
-    }
-  }
-
-  #registerEmailQuery(config: BenchmarkConfig, queryIndex: number): void {
-    switch (queryIndex % 3) {
-      case 0: {
-        const query = this.#zero.query.emailThread
-          .where('ownerID', SHARED_OWNER_ID)
-          .where('mailbox', 'inbox')
-          .related('messages', q => q.orderBy('seq', 'desc').limit(5))
-          .orderBy('seq', 'desc')
-          .limit(config.rowsPerQuery);
-        const view = this.#zero.materialize(query);
-        this.#registerView('email:thread-list-with-messages', queryIndex, view);
-        return;
-      }
-      case 1: {
-        const query = this.#zero.query.emailMessage
-          .where('ownerID', SHARED_OWNER_ID)
-          .where('mailbox', 'inbox')
-          .related('thread')
-          .orderBy('seq', 'desc')
-          .limit(config.rowsPerQuery);
-        const view = this.#zero.materialize(query);
-        this.#registerView('email:message-list-with-thread', queryIndex, view);
-        return;
-      }
-      case 2: {
-        const query = this.#zero.query.emailThread
-          .where('ownerID', SHARED_OWNER_ID)
-          .where('mailbox', 'inbox')
-          .related('messages', q =>
-            q.where('unread', true).orderBy('seq', 'desc').limit(10),
-          )
-          .orderBy('seq', 'desc')
-          .limit(config.rowsPerQuery);
-        const view = this.#zero.materialize(query);
-        this.#registerView('email:unread-thread-list', queryIndex, view);
-        return;
-      }
-    }
-  }
-
-  #registerForumQuery(config: BenchmarkConfig, queryIndex: number): void {
-    switch (queryIndex % 3) {
-      case 0: {
-        const query = this.#zero.query.forumCategory
-          .where('id', FORUM_CATEGORY_ID)
-          .related('threads', q =>
-            q
-              .orderBy('seq', 'desc')
-              .limit(config.rowsPerQuery)
-              .related('author')
-              .related('posts', p =>
-                p.orderBy('seq', 'desc').limit(3).related('author'),
-              ),
-          );
-        const view = this.#zero.materialize(query);
-        this.#registerView('forum:category-thread-tree', queryIndex, view);
-        return;
-      }
-      case 1: {
-        const query = this.#zero.query.forumThread
-          .where('categoryID', FORUM_CATEGORY_ID)
-          .related('category')
-          .related('author')
-          .related('posts', q =>
-            q.orderBy('seq', 'desc').limit(5).related('author'),
-          )
-          .orderBy('seq', 'desc')
-          .limit(config.rowsPerQuery);
-        const view = this.#zero.materialize(query);
-        this.#registerView('forum:thread-list-with-posts', queryIndex, view);
-        return;
-      }
-      case 2: {
-        const query = this.#zero.query.forumPost
-          .where('categoryID', FORUM_CATEGORY_ID)
-          .related('thread', q => q.related('author').related('category'))
-          .related('author')
-          .orderBy('seq', 'desc')
-          .limit(config.rowsPerQuery);
-        const view = this.#zero.materialize(query);
-        this.#registerView('forum:post-list-with-thread', queryIndex, view);
-        return;
-      }
-    }
-  }
-
-  #registerRelationalQuery(config: BenchmarkConfig, queryIndex: number): void {
-    switch (queryIndex % 3) {
-      case 0: {
-        const query = this.#zero.query.relOrg
-          .where('id', REL_ORG_ID)
-          .related('accounts', q =>
-            q
-              .orderBy('seq', 'desc')
-              .limit(config.rowsPerQuery)
-              .related('contacts')
-              .related('activities', a =>
-                a.orderBy('seq', 'desc').limit(5).related('contact'),
-              ),
-          )
-          .related('activities', q =>
-            q.orderBy('seq', 'desc').limit(config.rowsPerQuery),
-          );
-        const view = this.#zero.materialize(query);
-        this.#registerView('relational:org-account-tree', queryIndex, view);
-        return;
-      }
-      case 1: {
-        const query = this.#zero.query.relAccount
-          .where('orgID', REL_ORG_ID)
-          .related('org')
-          .related('contacts')
-          .related('activities', q =>
-            q.orderBy('seq', 'desc').limit(5).related('contact'),
-          )
-          .orderBy('seq', 'desc')
-          .limit(config.rowsPerQuery);
-        const view = this.#zero.materialize(query);
-        this.#registerView('relational:account-list', queryIndex, view);
-        return;
-      }
-      case 2: {
-        const query = this.#zero.query.relActivity
-          .where('orgID', REL_ORG_ID)
-          .related('org')
-          .related('account', q => q.related('contacts'))
-          .related('contact')
-          .orderBy('seq', 'desc')
-          .limit(config.rowsPerQuery);
-        const view = this.#zero.materialize(query);
-        this.#registerView('relational:activity-list', queryIndex, view);
-        return;
-      }
-    }
+    const {name, query} = buildProfileQuery(
+      this.#zero.query,
+      config.profile,
+      queryIndex,
+      config.rowsPerQuery,
+    );
+    const view = this.#zero.materialize(query);
+    this.#registerView(name, queryIndex, view);
   }
 
   #registerView(
