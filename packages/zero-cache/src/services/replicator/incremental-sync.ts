@@ -19,9 +19,12 @@ import type {ReplicationStatusPublisher} from './replication-status.ts';
 import type {ReplicaState, ReplicatorMode} from './replicator.ts';
 import {ReplicationReportRecorder} from './reporter/recorder.ts';
 import type {ReplicationReport} from './reporter/report-schema.ts';
+import {WorkerMessageBatcher} from './worker-message-batcher.ts';
 import type {WriteWorkerClient} from './write-worker-client.ts';
 
 type ErrorType = Enum<typeof ErrorType>;
+
+const MAX_WORKER_BATCH_MESSAGES = 64;
 
 /**
  * The {@link IncrementalSyncer} manages a logical replication stream from upstream,
@@ -90,7 +93,7 @@ export class IncrementalSyncer {
 
       let downstream: Source<Downstream> | undefined;
       let unregister = () => {};
-      let err: unknown | undefined;
+      let err: unknown;
 
       try {
         downstream = await this.#changeStreamer.subscribe({
@@ -111,6 +114,66 @@ export class IncrementalSyncer {
         );
 
         let backfillStatus: DownloadStatus | undefined;
+        const workerBatch = new WorkerMessageBatcher(
+          this.#worker,
+          MAX_WORKER_BATCH_MESSAGES,
+        );
+        const handleWorkerResult = (
+          result: CommitResult | readonly CommitResult[] | null,
+        ) => {
+          if (result === null) {
+            return;
+          }
+          const results = Array.isArray(result) ? result : [result];
+          for (const commitResult of results) {
+            this.#handleResult(lc, commitResult);
+            if (commitResult?.completedBackfill) {
+              backfillStatus = undefined;
+            }
+          }
+        };
+        const flushWorkerBatch = async () => {
+          const result = workerBatch.flush();
+          if (result) {
+            handleWorkerResult(await result);
+          }
+        };
+        const processChangeStreamData = (
+          message: ChangeStreamData,
+        ): Promise<void> | undefined => {
+          const msg = message[1];
+          if (msg.tag === 'backfill' && msg.status) {
+            const {status} = msg;
+            if (!backfillStatus) {
+              // Start publishing the status every 3 seconds.
+              backfillStatus = status;
+              this.#statusPublisher?.publish(
+                lc,
+                'Replicating',
+                `Backfilling ${msg.relation.name} table`,
+                3000,
+                () =>
+                  backfillStatus
+                    ? {
+                        downloadStatus: [
+                          {
+                            ...backfillStatus,
+                            table: msg.relation.name,
+                            columns: [
+                              ...msg.relation.rowKey.columns,
+                              ...msg.columns,
+                            ],
+                          },
+                        ],
+                      }
+                    : {},
+              );
+            }
+            backfillStatus = status; // Update the current status
+          }
+
+          return workerBatch.push(message)?.then(handleWorkerResult);
+        };
 
         for await (const message of downstream) {
           this.#replicationEvents.add(1);
@@ -145,49 +208,15 @@ export class IncrementalSyncer {
               break;
             }
             default: {
-              const msg = message[1];
-              if (msg.tag === 'backfill' && msg.status) {
-                const {status} = msg;
-                if (!backfillStatus) {
-                  // Start publishing the status every 3 seconds.
-                  backfillStatus = status;
-                  this.#statusPublisher?.publish(
-                    lc,
-                    'Replicating',
-                    `Backfilling ${msg.relation.name} table`,
-                    3000,
-                    () =>
-                      backfillStatus
-                        ? {
-                            downloadStatus: [
-                              {
-                                ...backfillStatus,
-                                table: msg.relation.name,
-                                columns: [
-                                  ...msg.relation.rowKey.columns,
-                                  ...msg.columns,
-                                ],
-                              },
-                            ],
-                          }
-                        : {},
-                  );
-                }
-                backfillStatus = status; // Update the current status
-              }
-
-              const result = await this.#worker.processMessage(
-                message as ChangeStreamData,
-              );
-
-              this.#handleResult(lc, result);
-              if (result?.completedBackfill) {
-                backfillStatus = undefined;
+              const result = processChangeStreamData(message);
+              if (result) {
+                await result;
               }
               break;
             }
           }
         }
+        await flushWorkerBatch();
         this.#worker.abort();
       } catch (e) {
         err = e;
