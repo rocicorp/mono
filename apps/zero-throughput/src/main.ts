@@ -7,7 +7,9 @@ import {
   waitForPostgres,
 } from './db.ts';
 import {
+  analyzeProfileQueries,
   deployPermissions,
+  queryPlanAnalysisLogPath,
   removeReplicaFiles,
   startPostgres,
   startZeroCache,
@@ -85,6 +87,11 @@ async function main(): Promise<void> {
       config.zero.readyTimeoutMs,
       zeroCache,
     );
+
+    log('Analyzing profile query plans...');
+    log(`query-plan logs: ${queryPlanAnalysisLogPath(config)}`);
+    const queryPlanAnalysis = await analyzeProfileQueries(config);
+    processes.push(queryPlanAnalysis);
 
     log(`Starting ${config.users} synthetic clients...`);
     clients = await startSyntheticClients(config);

@@ -1,3 +1,5 @@
+import {mapAST, type AST} from '../../../packages/zero-protocol/src/ast.ts';
+import {clientToServer} from '../../../packages/zero-schema/src/name-mapper.ts';
 import {runAnalyzeCLI} from '../../../packages/zero/src/analyze.ts';
 import {createBuilder} from '../../../packages/zql/src/query/create-builder.ts';
 import type {BenchmarkProfile} from './config.ts';
@@ -51,7 +53,7 @@ if (config.help) {
     queryIndex,
     config.rowsPerQuery,
   );
-  const ast = queryAST(query);
+  const ast = mapAST(queryAST(query), clientToServer(schema.tables));
   if (config.printAst) {
     stdout(`${JSON.stringify(ast)}\n`);
   } else {
@@ -146,11 +148,11 @@ function parseArgs(argv: readonly string[]): AnalyzeConfig {
   };
 }
 
-function queryAST(query: unknown): unknown {
+function queryAST(query: unknown): AST {
   if (query === null || typeof query !== 'object' || !('ast' in query)) {
     throw new Error('Profile query did not expose an AST');
   }
-  return (query as {readonly ast: unknown}).ast;
+  return (query as {readonly ast: AST}).ast;
 }
 
 function parseOption(arg: string): {
