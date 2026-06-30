@@ -29,34 +29,26 @@ vi.mock('@op-engineering/op-sqlite', () => {
       // Create a new database connection - SQLite handles file locking and concurrency
       const db = sqlite3(filename);
 
+      // Mimic op-sqlite `>=17` executeRaw shape: `{rawRows, ...}`. See `RawResult`.
+      const exec = (sql: string, params: string[] = []) => {
+        const stmt = db.prepare(sql);
+        let rawRows: unknown[][] = [];
+        if (/^\s*select/i.test(sql)) {
+          const result = stmt.all(...params);
+          rawRows = Array.isArray(result)
+            ? result.map(row => Object.values(row as Record<string, unknown>))
+            : [];
+        } else {
+          stmt.run(...params);
+        }
+        return {rowsAffected: 0, insertId: 0, rawRows, columnNames: []};
+      };
+
       return {
         // oxlint-disable-next-line require-await
-        executeRaw: async (sql: string, params: string[] = []) => {
-          const stmt = db.prepare(sql);
-          const isSelectQuery = /^\s*select/i.test(sql);
-          if (isSelectQuery) {
-            const result = stmt.all(...params);
-            // Convert to raw format (array of arrays)
-            return Array.isArray(result)
-              ? result.map(row => Object.values(row as Record<string, unknown>))
-              : [];
-          }
-          stmt.run(...params);
-          return [];
-        },
-        executeRawSync: (sql: string, params: string[] = []) => {
-          const stmt = db.prepare(sql);
-          const isSelectQuery = /^\s*select/i.test(sql);
-          if (isSelectQuery) {
-            const result = stmt.all(...params);
-            // Convert to raw format (array of arrays)
-            return Array.isArray(result)
-              ? result.map(row => Object.values(row as Record<string, unknown>))
-              : [];
-          }
-          stmt.run(...params);
-          return [];
-        },
+        executeRaw: async (sql: string, params: string[] = []) =>
+          exec(sql, params),
+        executeRawSync: exec,
         close: () => {
           // SQLite handles this properly, just close the connection
           db.close();
