@@ -16,6 +16,11 @@ The default run:
 pnpm --filter zero-throughput start
 ```
 
+By default, the JSON result is written to `apps/zero-throughput/results/latest.json`
+and zero-cache logs are written to `apps/zero-throughput/results/logs/`. The
+summary is printed after child services are stopped so it is the final benchmark
+output in the terminal.
+
 Useful overrides:
 
 ```bash
@@ -27,6 +32,12 @@ pnpm --filter zero-throughput start -- \
   --batch-size 10 \
   --duration-ms 60000 \
   --output results/feed-append-10u-500rps.json
+```
+
+To stream zero-cache logs directly in the terminal:
+
+```bash
+pnpm --filter zero-throughput start -- --process-log-mode inherit
 ```
 
 Use an already-running PostgreSQL or Zero:

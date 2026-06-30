@@ -40,6 +40,19 @@ export function max(values: readonly number[]): number {
   return values.length === 0 ? 0 : Math.max(...values);
 }
 
+export function formatDuration(ms: number): string {
+  if (ms < 1000) {
+    return `${ms}ms`;
+  }
+  const seconds = ms / 1000;
+  if (seconds < 60) {
+    return `${seconds.toFixed(seconds % 1 === 0 ? 0 : 1)}s`;
+  }
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = Math.round(seconds % 60);
+  return `${minutes}m ${remainingSeconds}s`;
+}
+
 export async function withTimeout<T>(
   promise: Promise<T>,
   ms: number,

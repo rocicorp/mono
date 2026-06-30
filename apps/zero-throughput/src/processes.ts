@@ -1,15 +1,17 @@
 import {spawn, type ChildProcess} from 'node:child_process';
+import {createWriteStream, mkdirSync, type WriteStream} from 'node:fs';
 import {rm} from 'node:fs/promises';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import type {BenchmarkConfig} from './config.ts';
-import {appRoot, repoRoot} from './config.ts';
+import {appPath, appRoot, repoRoot} from './config.ts';
 import {sleep} from './util.ts';
 
 export type ProcessCommand = {
   readonly name: string;
   readonly command: readonly string[];
   readonly cwd: string;
+  readonly logPath?: string | undefined;
 };
 
 export type ManagedProcess = ProcessCommand & {
@@ -77,16 +79,31 @@ export function startZeroCache(config: BenchmarkConfig): ManagedProcess {
   );
   const command = [process.execPath, '--trace-warnings', zeroCacheMain];
   const env = zeroCacheEnv(config);
+  const logPath =
+    config.processLogMode === 'file'
+      ? join(processLogsDir(config), `${config.runID}-zero-cache.log`)
+      : undefined;
+  const logStream =
+    logPath === undefined ? undefined : createWriteStream(logPath);
   const child = spawn(command[0], command.slice(1), {
     cwd: repoRoot,
     env,
-    stdio: 'inherit',
+    stdio:
+      config.processLogMode === 'inherit'
+        ? 'inherit'
+        : [
+            'ignore',
+            config.processLogMode === 'file' ? 'pipe' : 'ignore',
+            config.processLogMode === 'file' ? 'pipe' : 'ignore',
+          ],
   });
+  pipeProcessLogs(child, logStream);
 
   return {
     name: 'zero-cache',
     command,
     cwd: repoRoot,
+    logPath,
     child,
     stop: () => stopChild(child, 'SIGQUIT'),
   };
@@ -168,6 +185,24 @@ async function runCommand(
       }
     });
   });
+}
+
+function processLogsDir(config: BenchmarkConfig): string {
+  const logsDir = appPath(config.logsDir);
+  mkdirSync(logsDir, {recursive: true});
+  return logsDir;
+}
+
+function pipeProcessLogs(
+  child: ChildProcess,
+  logStream: WriteStream | undefined,
+): void {
+  if (logStream === undefined) {
+    return;
+  }
+  child.stdout?.pipe(logStream, {end: false});
+  child.stderr?.pipe(logStream, {end: false});
+  child.once('close', () => logStream.end());
 }
 
 async function stopChild(

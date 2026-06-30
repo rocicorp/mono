@@ -1,5 +1,6 @@
 import '../../../packages/shared/src/dotenv.ts';
 
+import {isAbsolute, join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {parseOptions} from '../../../packages/shared/src/options.ts';
 import * as v from '../../../packages/shared/src/valita.ts';
@@ -23,8 +24,11 @@ const options = {
   warmupMs: v.number().default(10_000),
   settleMs: v.number().default(5_000),
   sampleIntervalMs: v.number().default(1_000),
+  progressIntervalMs: v.number().default(5_000),
   sloP99LagMs: v.number().default(2_000),
   output: v.string().default('results/latest.json'),
+  logsDir: v.string().default('results/logs'),
+  processLogMode: v.literalUnion('file', 'inherit', 'ignore').default('file'),
   reset: v.boolean().default(true),
   cacheURL: v.string().optional(),
 
@@ -64,8 +68,11 @@ export type BenchmarkConfig = {
   readonly warmupMs: number;
   readonly settleMs: number;
   readonly sampleIntervalMs: number;
+  readonly progressIntervalMs: number;
   readonly sloP99LagMs: number;
   readonly outputPath: string;
+  readonly logsDir: string;
+  readonly processLogMode: 'file' | 'inherit' | 'ignore';
   readonly reset: boolean;
   readonly cacheURL: string;
   readonly pg: {
@@ -104,6 +111,7 @@ export function loadConfig(): BenchmarkConfig {
   assertNonNegativeInteger('warmupMs', parsed.warmupMs);
   assertNonNegativeInteger('settleMs', parsed.settleMs);
   assertPositiveInteger('sampleIntervalMs', parsed.sampleIntervalMs);
+  assertNonNegativeInteger('progressIntervalMs', parsed.progressIntervalMs);
   assertPositiveInteger('sloP99LagMs', parsed.sloP99LagMs);
   assertValidAppID(parsed.zero.appID);
 
@@ -120,13 +128,20 @@ export function loadConfig(): BenchmarkConfig {
     warmupMs: parsed.warmupMs,
     settleMs: parsed.settleMs,
     sampleIntervalMs: parsed.sampleIntervalMs,
+    progressIntervalMs: parsed.progressIntervalMs,
     sloP99LagMs: parsed.sloP99LagMs,
     outputPath: parsed.output,
+    logsDir: parsed.logsDir,
+    processLogMode: parsed.processLogMode,
     reset: parsed.reset,
     cacheURL: parsed.cacheURL ?? `http://127.0.0.1:${parsed.zero.port}`,
     pg: parsed.pg,
     zero: parsed.zero,
   };
+}
+
+export function appPath(path: string): string {
+  return isAbsolute(path) ? path : join(appRoot, path);
 }
 
 function assertPositiveNumber(name: string, value: number): void {

@@ -1,3 +1,4 @@
+import {inspect} from 'node:util';
 import {startSyntheticClients, type SyntheticClient} from './client.ts';
 import {loadConfig} from './config.ts';
 import {
@@ -17,12 +18,14 @@ import {
 } from './processes.ts';
 import {
   buildResult,
+  resultOutputPath,
   sampleMetrics,
   writeResult,
+  type BenchmarkResult,
   type MetricSample,
 } from './results.ts';
-import {log, warn, sleep} from './util.ts';
-import {FixedRateWriter} from './writer.ts';
+import {formatDuration, log, warn, sleep} from './util.ts';
+import {FixedRateWriter, type WriterStats} from './writer.ts';
 
 async function main(): Promise<void> {
   const config = loadConfig();
@@ -30,6 +33,9 @@ async function main(): Promise<void> {
   const processes: ProcessCommand[] = [];
   let zeroCache: ManagedProcess | undefined;
   let clients: SyntheticClient[] = [];
+  let result: BenchmarkResult | undefined;
+  let outputPath: string | undefined;
+  let error: unknown;
 
   const onSigint = () => {
     warn('Interrupted. Cleaning up benchmark processes...');
@@ -39,6 +45,7 @@ async function main(): Promise<void> {
 
   try {
     log(`zero-throughput ${config.profile} run ${config.runID}`);
+    log(`Results will be written to ${resultOutputPath(config)}`);
 
     if (config.pg.start) {
       log('Starting PostgreSQL...');
@@ -67,6 +74,9 @@ async function main(): Promise<void> {
       zeroCache = startZeroCache(config);
       processes.push(zeroCache);
       cleanup.push(() => zeroCache?.stop() ?? Promise.resolve());
+      if (zeroCache.logPath !== undefined) {
+        log(`zero-cache logs: ${zeroCache.logPath}`);
+      }
     }
 
     log('Waiting for zero-cache...');
@@ -82,20 +92,34 @@ async function main(): Promise<void> {
       await Promise.all(clients.map(client => client.close()));
     });
 
-    log('Initial sync complete. Starting fixed-rate writer...');
+    log(
+      `Initial sync complete. Writing for ${formatDuration(config.durationMs)} at ${config.writeRate} rows/s...`,
+    );
     const writer = new FixedRateWriter(sql, config);
     const samples: MetricSample[] = [];
     const sampleStartedAtMs = Date.now();
-    const sampler = setInterval(() => {
-      samples.push(
-        sampleMetrics(sampleStartedAtMs, writer.highestCommittedSeq, clients),
+    let nextProgressAtMs = sampleStartedAtMs + config.progressIntervalMs;
+    const recordSample = () => {
+      const sample = sampleMetrics(
+        sampleStartedAtMs,
+        writer.highestCommittedSeq,
+        clients,
       );
-    }, config.sampleIntervalMs);
+      samples.push(sample);
+      if (config.progressIntervalMs > 0 && Date.now() >= nextProgressAtMs) {
+        printProgress(sample, config.durationMs, config.users);
+        nextProgressAtMs = Date.now() + config.progressIntervalMs;
+      }
+    };
+    const sampler = setInterval(recordSample, config.sampleIntervalMs);
 
-    const writerStats = await writer.run(config.durationMs);
-    samples.push(
-      sampleMetrics(sampleStartedAtMs, writer.highestCommittedSeq, clients),
-    );
+    let writerStats: WriterStats;
+    try {
+      writerStats = await writer.run(config.durationMs);
+      recordSample();
+    } finally {
+      clearInterval(sampler);
+    }
 
     if (config.settleMs > 0) {
       log(`Waiting ${config.settleMs}ms for final client observations...`);
@@ -104,21 +128,28 @@ async function main(): Promise<void> {
         sampleMetrics(sampleStartedAtMs, writer.highestCommittedSeq, clients),
       );
     }
-    clearInterval(sampler);
 
-    const result = buildResult({
+    result = buildResult({
       config,
       processes,
       writerStats,
       samples,
       clients,
     });
-    const outputPath = await writeResult(config, result);
-
-    printSummary(result.summary, outputPath);
+    outputPath = await writeResult(config, result);
+  } catch (caught) {
+    error = caught;
   } finally {
     process.off('SIGINT', onSigint);
     await cleanup.run();
+  }
+
+  if (result !== undefined && outputPath !== undefined) {
+    printSummary(result.summary, outputPath);
+  }
+  if (error !== undefined) {
+    warn(`Benchmark failed before writing results: ${formatError(error)}`);
+    throw error;
   }
 }
 
@@ -162,6 +193,26 @@ function printSummary(
     log(`failure reasons: ${summary.failureReasons.join('; ')}`);
   }
   log(`details: ${outputPath}`);
+}
+
+function printProgress(
+  sample: MetricSample,
+  durationMs: number,
+  expectedClients: number,
+): void {
+  log(
+    `Progress: ${formatDuration(Math.min(sample.elapsedMs, durationMs))} / ${formatDuration(durationMs)}, committed=${sample.committedSeq}, seqLag=${sample.seqLag}, connected=${sample.connectedClients}/${expectedClients}`,
+  );
+}
+
+function formatError(error: unknown): string {
+  if (error instanceof Error) {
+    return error.stack ?? error.message;
+  }
+  if (typeof error === 'string') {
+    return error;
+  }
+  return inspect(error);
 }
 
 await main();

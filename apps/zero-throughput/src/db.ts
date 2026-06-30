@@ -9,6 +9,7 @@ export function connectBenchmarkDB(url: string): BenchmarkDB {
     idle_timeout: 0,
     connect_timeout: 30,
     max_lifetime: null,
+    onnotice: () => undefined,
   });
 }
 
@@ -23,6 +24,7 @@ export async function waitForPostgres(
       max: 1,
       idle_timeout: 1,
       connect_timeout: 5,
+      onnotice: () => undefined,
     });
     try {
       await sql`SELECT 1`;
