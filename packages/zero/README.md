@@ -48,7 +48,7 @@ gh workflow run release.yml --ref main -f mode=canary -f release_branch=maint/ze
 gh workflow run release.yml --ref main -f mode=stable -f release_branch=main
 ```
 
-Stable releases use npm staged publishing. After `pnpm stage approve`, promote the approved version with the [Promote Zero Release workflow](https://github.com/rocicorp/mono/actions/workflows/promote.yml):
+Stable releases use npm staged publishing. After `pnpm stage approve`, promote the Docker and git `latest` tags with the [Promote Zero Release workflow](https://github.com/rocicorp/mono/actions/workflows/promote.yml). After the workflow succeeds, run the npm commands from its GitHub step summary to move the npm `latest` dist-tag and remove the npm `staging` dist-tag.
 
 ```bash
 gh workflow run promote.yml -f version=<VERSION>
