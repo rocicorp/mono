@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782203243571,
+  "lastUpdate": 1782851467221,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -56885,6 +56885,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/rocicorp/mono/commit/a392cbede4c096f9b2c9e7ac5319d4b8521db2d9"
         },
         "date": 1782203230981,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 317540,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 57097,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 117426,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 33511,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "arv@roci.dev",
+            "name": "Erik Arvidsson",
+            "username": "arv"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "261c7e64357642e1910d059cba6c7ce5946bec0a",
+          "message": "fix(react native): support op-sqlite v17 (#6180)\n\nop-sqlite v17.0.0 changed `executeRaw`/`executeRawSync` to resolve to\n`{rowsAffected, insertId, rawRows, columnNames}` instead of a bare array\nof row arrays. The op-sqlite KV adapter forwarded that result directly,\nso the get/has batching in `SQLiteStore` (`new Map(rows)`, `rows.map`)\niterated a plain object and threw \"iterator method is not callable\",\ncrashing reads at startup. Add a `RawResult` type and `rawResultRows()`\nhelper that handle both the <=16 (bare array) and >=17 ({rawRows})\nshapes, and use it in `OpSQLitePreparedStatement.all()`. Update the test\nmock to emit the v17 shape so the regression stays covered.",
+          "timestamp": "2026-06-30T20:19:17Z",
+          "tree_id": "2dab299ad5806db00878cdc75edfe3b5de431198",
+          "url": "https://github.com/rocicorp/mono/commit/261c7e64357642e1910d059cba6c7ce5946bec0a"
+        },
+        "date": 1782851454214,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
