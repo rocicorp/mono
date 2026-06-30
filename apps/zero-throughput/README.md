@@ -8,9 +8,10 @@ The default run:
 2. Resets the benchmark table and Zero metadata for app id `zero_throughput`.
 3. Deploys allow-read permissions for the benchmark table.
 4. Starts `zero-cache` on port `4848`.
-5. Starts synthetic Zero clients with live queries for the selected profile.
-6. Writes profile-shaped rows to PostgreSQL at a fixed target rate.
-7. Writes a JSON result file and prints a short summary.
+5. Runs analyze-query for each distinct live query shape in the selected profile.
+6. Starts synthetic Zero clients with live queries for the selected profile.
+7. Writes profile-shaped rows to PostgreSQL at a fixed target rate.
+8. Writes a JSON result file and prints a short summary.
 
 ```bash
 pnpm --filter zero-throughput start
@@ -18,8 +19,9 @@ pnpm --filter zero-throughput start
 
 By default, the JSON result is written to `apps/zero-throughput/results/latest.json`
 and zero-cache logs are written to `apps/zero-throughput/results/logs/`. The
-summary is printed after child services are stopped so it is the final benchmark
-output in the terminal.
+query plan analysis is written to the same logs directory as
+`<runID>-query-plans.log`. The summary is printed after child services are
+stopped so it is the final benchmark output in the terminal.
 
 Useful overrides:
 
@@ -85,6 +87,9 @@ pnpm --filter zero-throughput run analyze -- \
   --rows-per-query 50 \
   --print-ast
 ```
+
+`--print-ast` prints the server-mapped AST, so it can be passed directly to
+the underlying analyze-query `--ast` option.
 
 To stream zero-cache logs directly in the terminal:
 

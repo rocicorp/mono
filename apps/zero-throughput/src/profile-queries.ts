@@ -74,6 +74,23 @@ export function normalizeProfileQueryIndex(
   return ((queryIndex % names.length) + names.length) % names.length;
 }
 
+export function profileQueryIndexesForRun(
+  profile: BenchmarkProfile,
+  queriesPerUser: number,
+): readonly number[] {
+  const indexes: number[] = [];
+  const seen = new Set<string>();
+  for (let queryIndex = 0; queryIndex < queriesPerUser; queryIndex++) {
+    const normalized = normalizeProfileQueryIndex(profile, queryIndex);
+    const name = profileQueryName(profile, normalized);
+    if (!seen.has(name)) {
+      indexes.push(normalized);
+      seen.add(name);
+    }
+  }
+  return indexes;
+}
+
 export function findProfileQuery(
   name: string,
 ):

@@ -1,10 +1,15 @@
 import {spawn, type ChildProcess} from 'node:child_process';
+import {once} from 'node:events';
 import {createWriteStream, mkdirSync, type WriteStream} from 'node:fs';
 import {rm} from 'node:fs/promises';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import type {BenchmarkConfig} from './config.ts';
 import {appPath, appRoot, repoRoot} from './config.ts';
+import {
+  profileQueryIndexesForRun,
+  profileQueryName,
+} from './profile-queries.ts';
 import {sleep} from './util.ts';
 
 export type ProcessCommand = {
@@ -60,6 +65,89 @@ export async function startPostgres(): Promise<ProcessCommand> {
 
 export async function stopPostgres(): Promise<void> {
   await runCommand('docker', ['compose', 'down'], join(appRoot, 'docker'));
+}
+
+export async function analyzeProfileQueries(
+  config: BenchmarkConfig,
+): Promise<ProcessCommand> {
+  const analyzeMain = fileURLToPath(new URL('analyze.ts', import.meta.url));
+  const logPath = queryPlanAnalysisLogPath(config);
+  const logStream = createWriteStream(logPath, {flags: 'w'});
+  const indexes = profileQueryIndexesForRun(
+    config.profile,
+    config.queriesPerUser,
+  );
+  const command = [
+    process.execPath,
+    analyzeMain,
+    '--zero-cache-url',
+    config.cacheURL,
+    '--profile',
+    config.profile,
+    '--rows-per-query',
+    String(config.rowsPerQuery),
+    '--join-plans',
+  ];
+
+  try {
+    await writeLog(
+      logStream,
+      [
+        `zero-throughput query plan analysis`,
+        `runID: ${config.runID}`,
+        `profile: ${config.profile}`,
+        `queriesPerUser: ${config.queriesPerUser}`,
+        `rowsPerQuery: ${config.rowsPerQuery}`,
+        `cacheURL: ${config.cacheURL}`,
+        `distinctQueries: ${indexes.length}`,
+        '',
+      ].join('\n'),
+    );
+
+    for (const queryIndex of indexes) {
+      const queryName = profileQueryName(config.profile, queryIndex);
+      const args = [
+        '--zero-cache-url',
+        config.cacheURL,
+        '--profile',
+        config.profile,
+        '--query-index',
+        String(queryIndex),
+        '--rows-per-query',
+        String(config.rowsPerQuery),
+        '--join-plans',
+      ];
+      await writeLog(
+        logStream,
+        [
+          `\n================================================================================`,
+          `query: ${queryName}`,
+          `queryIndex: ${queryIndex}`,
+          `command: ${process.execPath} ${[analyzeMain, ...args].join(' ')}`,
+          `================================================================================\n`,
+        ].join('\n'),
+      );
+      await runCommandToLog(
+        process.execPath,
+        [analyzeMain, ...args],
+        repoRoot,
+        logStream,
+      );
+    }
+  } finally {
+    await closeLog(logStream);
+  }
+
+  return {
+    name: 'zero-analyze-profile-queries',
+    command,
+    cwd: repoRoot,
+    logPath,
+  };
+}
+
+export function queryPlanAnalysisLogPath(config: BenchmarkConfig): string {
+  return join(processLogsDir(config), `${config.runID}-query-plans.log`);
 }
 
 export async function removeReplicaFiles(replicaFile: string): Promise<void> {
@@ -185,6 +273,45 @@ async function runCommand(
       }
     });
   });
+}
+
+async function runCommandToLog(
+  command: string,
+  args: readonly string[],
+  cwd: string,
+  logStream: WriteStream,
+): Promise<void> {
+  await new Promise<void>((resolve, reject) => {
+    const child = spawn(command, args, {
+      cwd,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    child.stdout?.on('data', chunk => {
+      logStream.write(chunk);
+    });
+    child.stderr?.on('data', chunk => {
+      logStream.write(chunk);
+    });
+    child.once('error', reject);
+    child.once('exit', code => {
+      if (code === 0) {
+        resolve();
+      } else {
+        reject(new Error(`${command} ${args.join(' ')} exited with ${code}`));
+      }
+    });
+  });
+}
+
+async function writeLog(stream: WriteStream, text: string): Promise<void> {
+  if (!stream.write(text)) {
+    await once(stream, 'drain');
+  }
+}
+
+async function closeLog(stream: WriteStream): Promise<void> {
+  stream.end();
+  await once(stream, 'finish');
 }
 
 function processLogsDir(config: BenchmarkConfig): string {
