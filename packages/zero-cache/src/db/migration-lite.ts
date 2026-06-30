@@ -102,6 +102,7 @@ export async function runSchemaMigrations(
       }
       return versions;
     });
+    const initialDataVersion = versions.dataVersion;
 
     if (versions.dataVersion < codeVersion) {
       db.unsafeMode(true); // Enables journal_mode = OFF
@@ -145,6 +146,10 @@ export async function runSchemaMigrations(
 
       db.exec('ANALYZE main');
       log.info?.('ANALYZE completed');
+
+      if (initialDataVersion > 0) {
+        assertDatabaseIntegrity(log, debugName, db);
+      }
     } else {
       // Run optimize whenever opening an sqlite db file as recommended in
       // https://www.sqlite.org/pragma.html#pragma_optimize
@@ -154,9 +159,7 @@ export async function runSchemaMigrations(
       // similarly detected in the change-streamer, facilitating an eventual
       // recovery by resyncing the replica anew.
       db.pragma('optimize = 0x10002');
-
-      // TODO: Investigate running `integrity_check` or `quick_check` as well,
-      // provided that they are not inordinately expensive on large databases.
+      assertDatabaseIntegrity(log, debugName, db);
     }
 
     db.pragma('synchronous = NORMAL');
@@ -179,6 +182,37 @@ export async function runSchemaMigrations(
     db.close();
     void log.flush(); // Flush the logs but do not block server progress on it.
   }
+}
+
+export class DatabaseIntegrityError extends Error {
+  readonly name = 'DatabaseIntegrityError';
+  readonly issues: readonly string[];
+
+  constructor(debugName: string, issues: readonly string[]) {
+    super(`SQLite quick_check failed for ${debugName}: ${issues.join('; ')}`);
+    this.issues = issues;
+  }
+}
+
+export function assertDatabaseIntegrity(
+  log: LogContext,
+  debugName: string,
+  db: Db,
+) {
+  const start = Date.now();
+  const rows = db.pragma<{quick_check: string}>('quick_check');
+  const issues =
+    rows.length === 0
+      ? ['PRAGMA quick_check returned no rows']
+      : rows.map(row => row.quick_check).filter(issue => issue !== 'ok');
+
+  if (issues.length > 0) {
+    throw new DatabaseIntegrityError(debugName, issues);
+  }
+
+  log.info?.(
+    `quick_check completed for ${debugName} (${Date.now() - start} ms)`,
+  );
 }
 
 function sorted(

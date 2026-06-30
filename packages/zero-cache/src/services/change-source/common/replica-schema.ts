@@ -3,6 +3,7 @@ import {SqliteError} from '@rocicorp/zero-sqlite3';
 import type {Database} from '../../../../../zqlite/src/db.ts';
 import {listTables} from '../../../db/lite-tables.ts';
 import {
+  DatabaseIntegrityError,
   runSchemaMigrations,
   type IncrementalMigrationMap,
   type Migration,
@@ -34,10 +35,7 @@ export async function initReplica(
       schemaVersionMigrationMap,
     );
   } catch (e) {
-    if (e instanceof SqliteError && e.code === 'SQLITE_CORRUPT') {
-      throw new AutoResetSignal(e.message);
-    }
-    throw e;
+    throwAutoResetForCorruption(e);
   }
 }
 
@@ -46,20 +44,37 @@ export async function upgradeReplica(
   debugName: string,
   dbPath: string,
 ) {
-  await runSchemaMigrations(
-    log,
-    debugName,
-    dbPath,
-    // setupMigration should never be invoked
-    {
-      migrateSchema: () => {
-        throw new Error(
-          'This should only be called for already synced replicas',
-        );
+  try {
+    await runSchemaMigrations(
+      log,
+      debugName,
+      dbPath,
+      // setupMigration should never be invoked
+      {
+        migrateSchema: () => {
+          throw new Error(
+            'This should only be called for already synced replicas',
+          );
+        },
       },
-    },
-    schemaVersionMigrationMap,
-  );
+      schemaVersionMigrationMap,
+    );
+  } catch (e) {
+    throwAutoResetForCorruption(e);
+  }
+}
+
+function throwAutoResetForCorruption(e: unknown): never {
+  if (
+    e instanceof DatabaseIntegrityError ||
+    (e instanceof SqliteError && e.code === 'SQLITE_CORRUPT')
+  ) {
+    throw new AutoResetSignal(
+      `replica database failed integrity check: ${String(e)}`,
+      {cause: e},
+    );
+  }
+  throw e;
 }
 
 export const CREATE_V6_COLUMN_METADATA_TABLE = /*sql*/ `
