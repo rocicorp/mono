@@ -93,7 +93,7 @@ async function main(): Promise<void> {
     });
 
     log(
-      `Initial sync complete. Writing for ${formatDuration(config.durationMs)} at ${config.writeRate} rows/s...`,
+      `Initial sync complete. Writing for ${formatDuration(config.durationMs)} at ${config.writeRate} logical writes/s...`,
     );
     const writer = new FixedRateWriter(sql, config);
     const samples: MetricSample[] = [];
@@ -183,8 +183,12 @@ function printSummary(
 ): void {
   log('');
   log(`Result: ${summary.pass ? 'PASS' : 'FAIL'}`);
-  log(`Target write rate: ${summary.targetWriteRate.toFixed(2)} rows/s`);
-  log(`Achieved write rate: ${summary.achievedWriteRate.toFixed(2)} rows/s`);
+  log(
+    `Target write rate: ${summary.targetWriteRate.toFixed(2)} logical writes/s`,
+  );
+  log(
+    `Achieved write rate: ${summary.achievedWriteRate.toFixed(2)} logical writes/s`,
+  );
   log(`p95 client-visible lag: ${summary.p95ClientVisibleLagMs.toFixed(2)}ms`);
   log(`p99 client-visible lag: ${summary.p99ClientVisibleLagMs.toFixed(2)}ms`);
   log(`max seq lag: ${summary.maxSeqLag}`);

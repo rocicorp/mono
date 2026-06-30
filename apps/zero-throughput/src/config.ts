@@ -12,7 +12,9 @@ const DEFAULT_PG_URL = 'postgresql://user:password@127.0.0.1:6436/postgres';
 const APP_ID_PATTERN = /^[a-z0-9_]+$/;
 
 const options = {
-  profile: v.literalUnion('feed-append').default('feed-append'),
+  profile: v
+    .literalUnion('feed-append', 'email', 'forum', 'relational')
+    .default('feed-append'),
 
   users: v.number().default(1),
   queriesPerUser: v.number().default(1),
@@ -53,7 +55,7 @@ const options = {
   },
 };
 
-export type BenchmarkProfile = 'feed-append';
+export type BenchmarkProfile = 'feed-append' | 'email' | 'forum' | 'relational';
 
 export type BenchmarkConfig = {
   readonly runID: string;
