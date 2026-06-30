@@ -65,6 +65,27 @@ pnpm --filter zero-throughput start -- \
   --output results/relational-10u-250rps.json
 ```
 
+Analyze the exact profile query shapes against a running zero-cache:
+
+```bash
+pnpm --filter zero-throughput run analyze -- \
+  --zero-cache-url=http://127.0.0.1:4848 \
+  --profile relational \
+  --query-index 2 \
+  --rows-per-query 50 \
+  --join-plans
+```
+
+Useful profile query diagnostics:
+
+```bash
+pnpm --filter zero-throughput run analyze -- --list-profile-queries
+pnpm --filter zero-throughput run analyze -- \
+  --profile-query relational:activity-list \
+  --rows-per-query 50 \
+  --print-ast
+```
+
 To stream zero-cache logs directly in the terminal:
 
 ```bash

@@ -37,7 +37,11 @@ export function average(values: readonly number[]): number {
 }
 
 export function max(values: readonly number[]): number {
-  return values.length === 0 ? 0 : Math.max(...values);
+  let result = 0;
+  for (const value of values) {
+    result = Math.max(result, value);
+  }
+  return result;
 }
 
 export function formatDuration(ms: number): string {
