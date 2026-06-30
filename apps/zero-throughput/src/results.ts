@@ -1,9 +1,9 @@
 import {execFileSync} from 'node:child_process';
 import {mkdir, writeFile} from 'node:fs/promises';
-import {dirname, isAbsolute, join} from 'node:path';
+import {dirname} from 'node:path';
 import type {ClientStats, SyntheticClient} from './client.ts';
 import type {BenchmarkConfig} from './config.ts';
-import {appRoot} from './config.ts';
+import {appPath, appRoot} from './config.ts';
 import type {ProcessCommand} from './processes.ts';
 import {average, max, percentile} from './util.ts';
 import type {WriterStats} from './writer.ts';
@@ -135,12 +135,14 @@ export async function writeResult(
   config: BenchmarkConfig,
   result: BenchmarkResult,
 ): Promise<string> {
-  const outputPath = isAbsolute(config.outputPath)
-    ? config.outputPath
-    : join(appRoot, config.outputPath);
+  const outputPath = resultOutputPath(config);
   await mkdir(dirname(outputPath), {recursive: true});
   await writeFile(outputPath, `${JSON.stringify(result, null, 2)}\n`);
   return outputPath;
+}
+
+export function resultOutputPath(config: BenchmarkConfig): string {
+  return appPath(config.outputPath);
 }
 
 function failureReasonsFor(args: {
