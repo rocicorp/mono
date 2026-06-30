@@ -4,6 +4,7 @@
 import {afterEach, describe, expect} from 'vitest';
 import {createManualBenchmarkRecorder} from '../../../shared/src/bench.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import {createLogContext} from '../../../shared/src/logging.ts';
 import {initReplica} from '../services/change-source/common/replica-schema.ts';
 import {initialSync} from '../services/change-source/pg/initial-sync.ts';
 import {getConnectionURI, type PgTest, test} from '../test/db.ts';
@@ -15,9 +16,10 @@ import {
   setupBenchmarkFixture,
 } from '../test/pg-bench.ts';
 
-const FIXTURE_ROWS = 250_000;
+const FIXTURE_ROWS = 165_000;
 const ROWS_PER_TRANSACTION = 500;
 const TABLE_COPY_WORKERS = 4;
+const CHUNK_TARGET_BYTES = 64 * 1024 * 1024;
 const WARMUP_REPS = 1;
 const REPS = 10;
 
@@ -25,7 +27,12 @@ const APP_ID = 'initial_sync_bench_app';
 const SHARD_NUM = 0;
 const TEST_TIMEOUT_MS = 3_600_000;
 
-const lc = createSilentLogContext();
+const lc = process.env.ZERO_BENCH_LOG
+  ? createLogContext(
+      {log: {level: 'info', format: 'text'}},
+      {bench: 'initial-sync-throughput'},
+    )
+  : createSilentLogContext();
 const shard = {
   appID: APP_ID,
   shardNum: SHARD_NUM,
@@ -79,7 +86,10 @@ describe('zero-cache/initial-sync throughput', () => {
               shard,
               tx,
               getConnectionURI(upstream),
-              {tableCopyWorkers: TABLE_COPY_WORKERS},
+              {
+                tableCopyWorkers: TABLE_COPY_WORKERS,
+                chunkTargetBytes: CHUNK_TARGET_BYTES,
+              },
               {bench: 'initial-sync-throughput'},
             ),
         );

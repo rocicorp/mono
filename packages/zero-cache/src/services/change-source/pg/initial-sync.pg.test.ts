@@ -2867,6 +2867,45 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
     });
   });
 
+  test('copies CTID chunks without duplicates and preserves row filters', async () => {
+    const lc = createSilentLogContext();
+    await upstream.unsafe(/*sql*/ `
+      CREATE TABLE chunked(
+        id int4 PRIMARY KEY,
+        included bool NOT NULL,
+        val text NOT NULL
+      );
+      INSERT INTO chunked(id, included, val)
+        SELECT g, g % 2 = 0, repeat('x', 1000)
+          FROM generate_series(1, 200) g;
+      CREATE PUBLICATION zero_chunked FOR TABLE chunked WHERE (included);
+      ANALYZE chunked;
+    `);
+
+    const replica = new Database(lc, ':memory:');
+    await initialSync(
+      lc,
+      {
+        appID: APP_ID,
+        shardNum: SHARD_NUM,
+        publications: ['zero_chunked'],
+      },
+      replica,
+      getConnectionURI(upstream),
+      {tableCopyWorkers: 2, chunkTargetBytes: 1},
+      TEST_CONTEXT,
+    );
+
+    const rows = replica
+      .prepare('SELECT id, included FROM chunked ORDER BY id')
+      .all<{id: number; included: number}>();
+    expect(rows).toHaveLength(100);
+    expect(rows.every(({id, included}) => id % 2 === 0 && included === 1)).toBe(
+      true,
+    );
+    expect(new Set(rows.map(({id}) => id)).size).toBe(rows.length);
+  });
+
   test.each([
     'UPPERCASE',
     'dashes-not-allowed',
@@ -3179,7 +3218,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
       return () => testDBs.drop(upstream);
     });
 
-    test('returns estimates from pg_class for a populated table', async () => {
+    test('returns pg_class and sampled logical copy estimates for a populated table', async () => {
       await upstream.unsafe(/*sql*/ `
         CREATE TABLE estimate_test (
           id INTEGER PRIMARY KEY,
@@ -3216,6 +3255,39 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
       // pg_relation_size returns the on-disk file size, expect 100KB-500KB.
       expect(state.status.totalBytes).toBeGreaterThan(100_000);
       expect(state.status.totalBytes).toBeLessThan(500_000);
+      expect(state.copyBytesEstimate).toBeGreaterThan(100_000);
+    });
+
+    test('uses sampled logical bytes for TOAST-heavy copy planning', async () => {
+      await upstream.unsafe(/*sql*/ `
+        CREATE TABLE toast_estimate_test (
+          id INTEGER PRIMARY KEY,
+          data TEXT
+        );
+        INSERT INTO toast_estimate_test (id, data)
+          SELECT i, repeat('x', 10000)
+          FROM generate_series(1, 500) AS i;
+        ANALYZE toast_estimate_test;
+      `);
+
+      const lc = createSilentLogContext();
+      const spec: PublishedTableSpec = {
+        schema: 'public',
+        name: 'toast_estimate_test',
+        columns: {
+          id: {dataType: 'int4', pos: 1},
+          data: {dataType: 'text', pos: 2},
+        },
+        publications: {pub1: {rowFilter: null}},
+      } as unknown as PublishedTableSpec;
+
+      const state = await getInitialDownloadState(lc, upstream, spec, false);
+
+      expect(state.status.totalRows).toBe(500);
+      expect(state.copyBytesEstimate).toBeGreaterThan(
+        state.status.totalBytes ?? 0,
+      );
+      expect(state.copyBytesEstimate).toBeGreaterThan(4_000_000);
     });
 
     test('returns zeros for a never-analyzed empty table', async () => {
@@ -3239,6 +3311,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
 
       expect(state.status.totalRows).toBe(0);
       expect(state.status.totalBytes).toBe(0);
+      expect(state.copyBytesEstimate).toBe(0);
     });
 
     test('handles non-public schema tables', async () => {
@@ -3271,6 +3344,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
       // Expect at least one 8KB page and no more than 64KB.
       expect(state.status.totalBytes).toBeGreaterThanOrEqual(8192);
       expect(state.status.totalBytes).toBeLessThan(65_536);
+      expect(state.copyBytesEstimate).toBeGreaterThan(0);
     });
   });
 });

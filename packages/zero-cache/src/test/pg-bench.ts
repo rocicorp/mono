@@ -96,8 +96,8 @@ function benchmarkFixtureRowPayloadBytes(id: number) {
   if (kind < 7) {
     return (
       `wide row ${id}`.length +
-      payloadLength(id, 2048, 8192) +
-      payloadLength(id + 17, 512, 2048)
+      payloadLength(id, 24 * 1024, 32 * 1024) +
+      payloadLength(id + 17, 2 * 1024, 6 * 1024)
     );
   }
   if (kind < 9) {
@@ -125,7 +125,7 @@ export function benchmarkFixturePayloadMB(startID: number, count: number) {
 // The fixture uses id % 10 so every benchmark run gets the same table mix:
 // 50% bench_rows: id primary key, payload 256-2048 B, ~1152 B average.
 // 20% bench_wide: id primary key, group_id 0-127 indexed, short title,
-// body 2048-8192 B (~5120 B average), extra 512-2048 B (~1280 B average).
+// body 24-32 KiB (~28 KiB average), extra 2-6 KiB (~4 KiB average).
 // 20% bench_composite: (account_id, seq) primary key, payload 128-1024 B,
 // ~576 B average, amount 0-99_999 indexed.
 // 10% bench_lookup: id primary key, label 8-11 B, active boolean indexed.
@@ -145,8 +145,8 @@ function makeBenchmarkFixtureRow(id: number): BenchmarkFixtureRow {
         id,
         group_id: id % 128,
         title: `wide row ${id}`,
-        body: makePayload(id, 2048, 8192),
-        extra: makePayload(id + 17, 512, 2048),
+        body: makePayload(id, 24 * 1024, 32 * 1024),
+        extra: makePayload(id + 17, 2 * 1024, 6 * 1024),
       },
     };
   }

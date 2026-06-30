@@ -1025,6 +1025,33 @@ export const zeroOptions = {
       ],
     },
 
+    chunkTargetBytes: {
+      type: v
+        .number()
+        .assert(
+          n => Number.isInteger(n) && n >= 0,
+          `initialSync.chunkTargetBytes must be an integer >= 0`,
+        )
+        .default(0),
+      desc: [
+        `Target estimated logical COPY bytes per COPY task when splitting large initial-sync tables by CTID range.`,
+        `Set to 0 to disable CTID chunking.`,
+      ],
+    },
+
+    maxChunksPerTable: {
+      type: v
+        .number()
+        .assert(
+          n => Number.isInteger(n) && n >= 1,
+          `initialSync.maxChunksPerTable must be an integer >= 1`,
+        )
+        .default(64),
+      desc: [
+        `Maximum number of CTID COPY chunks to create per table during initial sync.`,
+      ],
+    },
+
     profileCopy: {
       type: v.boolean().optional(),
       hidden: true,

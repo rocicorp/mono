@@ -4,9 +4,14 @@ import {createSilentLogContext} from '../../../../../shared/src/logging-test-uti
 import type {PublishedTableSpec} from '../../../db/specs.ts';
 import type {PostgresDB} from '../../../types/pg.ts';
 import {
+  buildCopyTasks,
+  DEFAULT_MAX_CHUNKS_PER_TABLE,
   getInitialDownloadState,
   makeDownloadStatements,
+  sampledHeapBlocks,
+  sortCopyTasksForInitialCopy,
   sortDownloadsForInitialCopy,
+  type DownloadState,
 } from './initial-sync.ts';
 import {createReplicationSlot} from './replication-slots.ts';
 
@@ -84,13 +89,193 @@ describe('makeDownloadStatements', () => {
       /FROM "public"\."t" TABLESAMPLE BERNOULLI\(50\) WHERE a > 10/,
     );
   });
+
+  test('extra predicate combines safely with row filters', () => {
+    const stmts = makeDownloadStatements(
+      spec({
+        p1: {rowFilter: 'a > 10'},
+        p2: {rowFilter: 'b < 20'},
+      }),
+      ['a'],
+      undefined,
+      undefined,
+      undefined,
+      `ctid >= '(0,0)'::tid AND ctid < '(10,0)'::tid`,
+    );
+
+    expect(stmts.select).toContain(
+      `WHERE (a > 10 OR b < 20) AND (ctid >= '(0,0)'::tid AND ctid < '(10,0)'::tid)`,
+    );
+  });
+});
+
+function download(
+  table: string,
+  totalBytes: number | undefined,
+  heapPages: number,
+  copyBytesEstimate?: number | undefined,
+): DownloadState {
+  return {
+    spec: {schema: 'public', name: table, publications: {p: {rowFilter: null}}},
+    status: {table, columns: [], totalRows: 0, totalBytes, rows: 0},
+    copyBytesEstimate,
+    heapPages,
+  } as unknown as DownloadState;
+}
+
+describe('buildCopyTasks', () => {
+  test('chunking disabled creates one task per table', () => {
+    const tasks = buildCopyTasks(
+      createSilentLogContext(),
+      [download('a', 100, 10), download('b', 200, 20)],
+      0,
+      DEFAULT_MAX_CHUNKS_PER_TABLE,
+      false,
+    );
+
+    expect(tasks.map(t => t.chunk)).toEqual([undefined, undefined]);
+    expect(tasks.map(t => t.estimatedBytes)).toEqual([100, 200]);
+  });
+
+  test('table below target creates one task', () => {
+    const tasks = buildCopyTasks(
+      createSilentLogContext(),
+      [download('a', 99, 10)],
+      100,
+      DEFAULT_MAX_CHUNKS_PER_TABLE,
+      false,
+    );
+
+    expect(tasks).toHaveLength(1);
+    expect(tasks[0].chunk).toBeUndefined();
+  });
+
+  test('table above target creates CTID ranges without gaps or overlaps', () => {
+    const tasks = buildCopyTasks(
+      createSilentLogContext(),
+      [download('a', 10_000, 10)],
+      2_500,
+      DEFAULT_MAX_CHUNKS_PER_TABLE,
+      false,
+    );
+
+    expect(tasks.map(t => t.chunk)).toEqual([
+      {index: 1, total: 4, startBlock: 0, endBlock: 2},
+      {index: 2, total: 4, startBlock: 2, endBlock: 5},
+      {index: 3, total: 4, startBlock: 5, endBlock: 7},
+      {index: 4, total: 4, startBlock: 7, endBlock: 10},
+    ]);
+  });
+
+  test('copy byte estimate drives chunking when physical size is below target', () => {
+    const tasks = buildCopyTasks(
+      createSilentLogContext(),
+      [download('toast_heavy', 100, 10, 10_000)],
+      2_500,
+      DEFAULT_MAX_CHUNKS_PER_TABLE,
+      false,
+    );
+
+    expect(tasks).toHaveLength(4);
+    expect(tasks.map(t => t.estimatedBytes)).toEqual([
+      2_000, 3_000, 2_000, 3_000,
+    ]);
+    expect(tasks.map(t => t.chunk)).toEqual([
+      {index: 1, total: 4, startBlock: 0, endBlock: 2},
+      {index: 2, total: 4, startBlock: 2, endBlock: 5},
+      {index: 3, total: 4, startBlock: 5, endBlock: 7},
+      {index: 4, total: 4, startBlock: 7, endBlock: 10},
+    ]);
+  });
+
+  test('missing copy byte estimate falls back to total bytes', () => {
+    const tasks = buildCopyTasks(
+      createSilentLogContext(),
+      [download('a', 10_000, 10)],
+      2_500,
+      DEFAULT_MAX_CHUNKS_PER_TABLE,
+      false,
+    );
+
+    expect(tasks).toHaveLength(4);
+    expect(tasks.map(t => t.estimatedBytes)).toEqual([
+      2_000, 3_000, 2_000, 3_000,
+    ]);
+  });
+
+  test('chunk count caps at max chunks and heap pages', () => {
+    const byMax = buildCopyTasks(
+      createSilentLogContext(),
+      [download('a', 1_000, 1_000)],
+      1,
+      DEFAULT_MAX_CHUNKS_PER_TABLE,
+      false,
+    );
+    expect(byMax).toHaveLength(DEFAULT_MAX_CHUNKS_PER_TABLE);
+
+    const byHeapPages = buildCopyTasks(
+      createSilentLogContext(),
+      [download('a', 1_000, 3)],
+      1,
+      DEFAULT_MAX_CHUNKS_PER_TABLE,
+      false,
+    );
+    expect(byHeapPages).toHaveLength(3);
+  });
+
+  test('custom max chunks per table is respected', () => {
+    const tasks = buildCopyTasks(
+      createSilentLogContext(),
+      [download('a', 1_000, 1_000)],
+      1,
+      7,
+      false,
+    );
+
+    expect(tasks).toHaveLength(7);
+  });
+
+  test('missing estimates fall back to one task', () => {
+    const missingBytes = buildCopyTasks(
+      createSilentLogContext(),
+      [download('a', undefined, 10)],
+      1,
+      DEFAULT_MAX_CHUNKS_PER_TABLE,
+      false,
+    );
+    expect(missingBytes).toHaveLength(1);
+    expect(missingBytes[0].chunk).toBeUndefined();
+
+    const missingHeapPages = buildCopyTasks(
+      createSilentLogContext(),
+      [download('a', 1_000, 0)],
+      1,
+      DEFAULT_MAX_CHUNKS_PER_TABLE,
+      false,
+    );
+    expect(missingHeapPages).toHaveLength(1);
+    expect(missingHeapPages[0].chunk).toBeUndefined();
+  });
+
+  test('copy tasks sort by estimated bytes descending', () => {
+    const small = {estimatedBytes: 10};
+    const large = {estimatedBytes: 1000};
+    const medium = {estimatedBytes: 100};
+    const tasks = [small, large, medium];
+
+    expect(sortCopyTasksForInitialCopy(tasks)).toEqual([large, medium, small]);
+    expect(tasks).toEqual([small, large, medium]);
+  });
 });
 
 describe('sortDownloadsForInitialCopy', () => {
   test('orders table copies by estimated bytes descending', () => {
     const small = {status: {table: 'small', totalBytes: 10}};
     const large = {status: {table: 'large', totalBytes: 1000}};
-    const medium = {status: {table: 'medium', totalBytes: 100}};
+    const medium = {
+      copyBytesEstimate: 500,
+      status: {table: 'medium', totalBytes: 100},
+    };
     const unknown = {status: {table: 'unknown', totalBytes: undefined}};
     const downloads = [small, unknown, large, medium];
 
@@ -101,6 +286,21 @@ describe('sortDownloadsForInitialCopy', () => {
       unknown,
     ]);
     expect(downloads).toEqual([small, unknown, large, medium]);
+  });
+});
+
+describe('sampledHeapBlocks', () => {
+  test('samples every page for small heaps', () => {
+    expect(sampledHeapBlocks(4)).toEqual([0, 1, 2, 3]);
+  });
+
+  test('samples 16 pages spread across large heaps', () => {
+    const blocks = sampledHeapBlocks(1024);
+
+    expect(blocks).toHaveLength(16);
+    expect(blocks[0]).toBe(32);
+    expect(blocks.at(-1)).toBe(992);
+    expect(new Set(blocks).size).toBe(blocks.length);
   });
 });
 
@@ -143,22 +343,29 @@ describe('getInitialDownloadState', () => {
       totalRows: 0,
       totalBytes: 0,
     });
+    expect(state.copyBytesEstimate).toBe(0);
+    expect(state.heapPages).toBe(0);
   });
 
-  test('skipTotals=false uses pg_class estimates', async () => {
+  test('skipTotals=false uses pg_class and sampled logical copy estimate', async () => {
     // The tagged template sql`...` is called as a function with
     // (strings, ...values) when used as a template tag.
     const sql = Object.assign(
       (strings: TemplateStringsArray, ..._values: unknown[]) => {
         const query = strings.join('$1');
         if (query.includes('pg_class')) {
-          return Promise.resolve([{totalRows: 42, totalBytes: 8192}]);
+          return Promise.resolve([
+            {totalRows: 42, totalBytes: 8192, heapPages: 1},
+          ]);
         }
         return Promise.resolve([]);
       },
       {
-        unsafe() {
-          throw new Error('unsafe should not be called');
+        unsafe(query: string) {
+          expect(query).toContain(`ctid >= '(0,0)'::tid`);
+          expect(query).toContain(`octet_length("a"::text)`);
+          expect(query).toContain(`octet_length("b"::text)`);
+          return Promise.resolve([{sampleBytes: 1_000}]);
         },
       },
     ) as unknown as PostgresDB;
@@ -171,6 +378,8 @@ describe('getInitialDownloadState', () => {
     );
     expect(state.status.totalRows).toBe(42);
     expect(state.status.totalBytes).toBe(8192);
+    expect(state.copyBytesEstimate).toBe(8192);
+    expect(state.heapPages).toBe(1);
   });
 });
 

@@ -66,6 +66,12 @@ import {
 
 export type InitialSyncOptions = {
   tableCopyWorkers: number;
+  chunkTargetBytes?: number | undefined;
+  maxChunksPerTable?: number | undefined;
+  indexThreads?: number | undefined;
+  experimentalIndexMode?: 'all' | 'required' | 'none' | 'dedupe' | undefined;
+  sampleRate?: number | undefined;
+  maxRowsPerTable?: number | undefined;
   profileCopy?: boolean | undefined;
   textCopy?: boolean | undefined;
   replicationSlotFailover?: boolean | undefined;
@@ -107,11 +113,18 @@ export async function initialSync(
   }
   const {
     tableCopyWorkers,
+    chunkTargetBytes = 0,
+    maxChunksPerTable = DEFAULT_MAX_CHUNKS_PER_TABLE,
+    indexThreads,
+    experimentalIndexMode = 'all',
+    sampleRate: optionSampleRate,
+    maxRowsPerTable: optionMaxRowsPerTable,
     profileCopy,
     textCopy = false,
     replicationSlotFailover = false,
     shadow,
   } = syncOptions;
+  const shouldChunk = chunkTargetBytes > 0 && shadow === undefined;
   const copyProfiler = profileCopy ? await CpuProfiler.connect() : null;
   const sql = await connectPgClient(lc, upstreamURI, 'initial-sync');
   // Replication session is only needed to create a replication slot in the
@@ -204,8 +217,12 @@ export async function initialSync(
     }
     const numWorkers =
       platform() === 'win32'
-        ? numTables
-        : Math.min(tableCopyWorkers, numTables);
+        ? shouldChunk
+          ? Math.max(tableCopyWorkers, numTables)
+          : numTables
+        : shouldChunk
+          ? tableCopyWorkers
+          : Math.min(tableCopyWorkers, numTables);
 
     const copyPool = await connectPgClient(
       lc,
@@ -225,12 +242,18 @@ export async function initialSync(
     );
     try {
       createLiteTables(tx, tables, initialVersion);
-      const sampleRate = shadow?.sampleRate;
-      const maxRowsPerTable = shadow?.maxRowsPerTable;
+      const sampleRate = shadow?.sampleRate ?? optionSampleRate;
+      const maxRowsPerTable = shadow?.maxRowsPerTable ?? optionMaxRowsPerTable;
       const downloads = await Promise.all(
         tables.map(spec =>
           copiers.processReadTask((db, lc) =>
-            getInitialDownloadState(lc, db, spec, shadow !== undefined),
+            getInitialDownloadState(
+              lc,
+              db,
+              spec,
+              shadow !== undefined,
+              shouldChunk,
+            ),
           ),
         ),
       );
@@ -243,12 +266,27 @@ export async function initialSync(
       );
 
       void copyProfiler?.start();
+      const copyTasks = sortCopyTasksForInitialCopy(
+        buildCopyTasks(
+          lc,
+          downloads,
+          shouldChunk ? chunkTargetBytes : 0,
+          maxChunksPerTable,
+          shadow !== undefined,
+        ),
+      );
+      lc.info?.(
+        `initial-sync copy plan: tables=${numTables} tasks=${copyTasks.length} ` +
+          `workers=${numWorkers} chunkTargetBytes=${shouldChunk ? chunkTargetBytes : 0} ` +
+          `maxChunksPerTable=${maxChunksPerTable}`,
+      );
+
       const rowCounts = await Promise.all(
-        sortDownloadsForInitialCopy(downloads).map(table =>
+        copyTasks.map(task =>
           copiers.processReadTask((db, lc) =>
             copy(
               lc,
-              table,
+              task,
               copyPool,
               db,
               tx,
@@ -277,7 +315,15 @@ export async function initialSync(
         5000,
       );
       const indexStart = performance.now();
-      createLiteIndices(lc, tx, indexes);
+      if (indexThreads !== undefined) {
+        lc.info?.(`Setting SQLite PRAGMA threads=${indexThreads}`);
+        tx.pragma(`threads = ${indexThreads}`);
+      }
+      createLiteIndices(
+        lc,
+        tx,
+        filterInitialSyncIndexes(lc, indexes, experimentalIndexMode),
+      );
       const index = performance.now() - indexStart;
       lc.info?.(`Created indexes (${index.toFixed(3)} ms)`);
 
@@ -286,8 +332,8 @@ export async function initialSync(
       } else {
         assert(shadow, 'expected to be in shadow sync if there is no slotName');
         const rowsByTable = new Map<string, number>();
-        for (let i = 0; i < downloads.length; i++) {
-          rowsByTable.set(downloads[i].status.table, rowCounts[i].rows);
+        for (const {table, rows} of rowCounts) {
+          rowsByTable.set(table, (rowsByTable.get(table) ?? 0) + rows);
         }
         verifyShadowReplica(lc, tx, published, rowsByTable);
       }
@@ -567,6 +613,50 @@ function createLiteTables(
   }
 }
 
+function filterInitialSyncIndexes<
+  T extends IndexSpec & {isPrimaryKey?: boolean | undefined},
+>(
+  lc: LogContext,
+  indices: T[],
+  mode: InitialSyncOptions['experimentalIndexMode'],
+): T[] {
+  switch (mode) {
+    case 'all':
+      return indices;
+    case 'none':
+      lc.warn?.(`Skipping all ${indices.length} initial-sync indexes`);
+      return [];
+    case 'required': {
+      const filtered = indices.filter(index => index.unique || index.isPrimaryKey);
+      lc.warn?.(
+        `Using required-only initial-sync indexes: ${filtered.length}/${indices.length}`,
+      );
+      return filtered;
+    }
+    case 'dedupe': {
+      const seen = new Set<string>();
+      const filtered: T[] = [];
+      for (const index of indices) {
+        const key = `${index.tableName}:${Object.entries(index.columns)
+          .map(([col, dir]) => `${col}:${dir}`)
+          .join(',')}`;
+        if (!seen.has(key) || index.unique || index.isPrimaryKey) {
+          seen.add(key);
+          filtered.push(index);
+        } else {
+          lc.warn?.(`Skipping duplicate-equivalent index ${index.name}`);
+        }
+      }
+      lc.warn?.(
+        `Using deduped initial-sync indexes: ${filtered.length}/${indices.length}`,
+      );
+      return filtered;
+    }
+    case undefined:
+      return indices;
+  }
+}
+
 function createLiteIndices(lc: LogContext, tx: Database, indices: IndexSpec[]) {
   for (const [i, index] of indices.entries()) {
     const stmt = createLiteIndexStatement(mapPostgresToLiteIndex(index));
@@ -687,6 +777,11 @@ export function verifyShadowReplica(
 // Exported for testing.
 export const INSERT_BATCH_SIZE = 50;
 
+// Bound CTID chunk fanout so one very large table cannot create an unbounded
+// number of COPY tasks.
+export const DEFAULT_MAX_CHUNKS_PER_TABLE = 64;
+const COPY_BYTES_ESTIMATE_SAMPLE_PAGES = 16;
+
 const MB = 1024 * 1024;
 const MAX_BUFFERED_ROWS = 10_000;
 const BUFFERED_SIZE_THRESHOLD = 8 * MB;
@@ -739,14 +834,12 @@ export function makeDownloadStatements(
   sampleRate?: number | undefined,
   maxRowsPerTable?: number | undefined,
   selectExprs?: string[] | undefined,
+  extraPredicate?: string | undefined,
 ): DownloadStatements {
   const filterConditions = Object.values(table.publications)
     .map(({rowFilter}) => rowFilter)
-    .filter(f => !!f); // remove nulls
-  const where =
-    filterConditions.length === 0
-      ? ''
-      : /*sql*/ `WHERE ${filterConditions.join(' OR ')}`;
+    .filter((f): f is string => !!f); // remove nulls
+  const where = whereClause(filterConditions, extraPredicate);
   const sample = tableSampleClause(sampleRate);
   const limit = limitClause(maxRowsPerTable);
   const fromTable = /*sql*/ `FROM ${id(table.schema)}.${id(table.name)}${sample} ${where}`;
@@ -771,17 +864,130 @@ export function makeDownloadStatements(
   };
 }
 
-type DownloadState = {
+function whereClause(
+  filterConditions: string[],
+  extraPredicate: string | undefined,
+): string {
+  if (!extraPredicate) {
+    return filterConditions.length === 0
+      ? ''
+      : /*sql*/ `WHERE ${filterConditions.join(' OR ')}`;
+  }
+
+  const predicates: string[] = [];
+  if (filterConditions.length > 0) {
+    const rowFilter = filterConditions.join(' OR ');
+    predicates.push(
+      filterConditions.length > 1 || extraPredicate
+        ? `(${rowFilter})`
+        : rowFilter,
+    );
+  }
+  if (extraPredicate) {
+    predicates.push(`(${extraPredicate})`);
+  }
+  return predicates.length > 0
+    ? /*sql*/ `WHERE ${predicates.join(' AND ')}`
+    : '';
+}
+
+export type DownloadState = {
   spec: PublishedTableSpec;
   status: DownloadStatus;
+  copyBytesEstimate: number | undefined;
+  heapPages: number;
+};
+
+type CtidChunk = {
+  index: number;
+  total: number;
+  startBlock: number;
+  endBlock: number;
+};
+
+export type CopyTask = {
+  download: DownloadState;
+  estimatedBytes: number;
+  chunk?: CtidChunk | undefined;
 };
 
 export function sortDownloadsForInitialCopy<
-  T extends {status: {totalBytes?: number | undefined}},
+  T extends {
+    copyBytesEstimate?: number | undefined;
+    status: {totalBytes?: number | undefined};
+  },
 >(downloads: readonly T[]): T[] {
   return downloads.toSorted(
-    (a, b) => (b.status.totalBytes ?? 0) - (a.status.totalBytes ?? 0),
+    (a, b) => copyPlanningBytes(b) - copyPlanningBytes(a),
   );
+}
+
+function copyPlanningBytes(download: {
+  copyBytesEstimate?: number | undefined;
+  status: {totalBytes?: number | undefined};
+}): number {
+  return download.copyBytesEstimate ?? download.status.totalBytes ?? 0;
+}
+
+export function sortCopyTasksForInitialCopy<T extends {estimatedBytes: number}>(
+  copyTasks: readonly T[],
+): T[] {
+  return copyTasks.toSorted((a, b) => b.estimatedBytes - a.estimatedBytes);
+}
+
+export function buildCopyTasks(
+  lc: LogContext,
+  downloads: readonly DownloadState[],
+  chunkTargetBytes: number,
+  maxChunksPerTable: number,
+  shadow: boolean,
+): CopyTask[] {
+  const tasks: CopyTask[] = [];
+  for (const download of downloads) {
+    const estimatedCopyBytes = copyPlanningBytes(download);
+    const heapPages = Math.floor(download.heapPages);
+    if (
+      shadow ||
+      chunkTargetBytes <= 0 ||
+      estimatedCopyBytes <= chunkTargetBytes ||
+      heapPages <= 1
+    ) {
+      tasks.push({download, estimatedBytes: estimatedCopyBytes});
+      continue;
+    }
+
+    const chunkCount = Math.min(
+      Math.ceil(estimatedCopyBytes / chunkTargetBytes),
+      maxChunksPerTable,
+      heapPages,
+    );
+    if (chunkCount <= 1) {
+      tasks.push({download, estimatedBytes: estimatedCopyBytes});
+      continue;
+    }
+
+    lc.info?.(
+      `chunking table ${download.status.table}: estimatedCopyBytes=${estimatedCopyBytes} ` +
+        `totalBytes=${download.status.totalBytes ?? 'unknown'} ` +
+        `heapPages=${heapPages} chunks=${chunkCount}`,
+    );
+    for (let i = 0; i < chunkCount; i++) {
+      const startBlock = Math.floor((heapPages * i) / chunkCount);
+      const endBlock = Math.floor((heapPages * (i + 1)) / chunkCount);
+      tasks.push({
+        download,
+        estimatedBytes:
+          (estimatedCopyBytes * (endBlock - startBlock)) / heapPages,
+        chunk: {
+          index: i + 1,
+          total: chunkCount,
+          startBlock,
+          endBlock,
+        },
+      });
+    }
+  }
+  return tasks;
 }
 
 // Exported for testing.
@@ -790,6 +996,7 @@ export async function getInitialDownloadState(
   sql: PostgresDB,
   spec: PublishedTableSpec,
   skipTotals: boolean,
+  estimateCopyBytes = true,
 ): Promise<DownloadState> {
   const start = performance.now();
   const table = liteTableName(spec);
@@ -800,23 +1007,31 @@ export async function getInitialDownloadState(
     return {
       spec,
       status: {table, columns, rows: 0, totalRows: 0, totalBytes: 0},
+      copyBytesEstimate: 0,
+      heapPages: 0,
     };
   }
-  // Use pg_class estimates instead of expensive COUNT(*) and
-  // SUM(pg_column_size(...)) full table scans. The exact values are only
-  // used for progress reporting, so estimates are sufficient.
+  // Use pg_class plus a bounded logical-width sample instead of expensive
+  // COUNT(*) and SUM(pg_column_size(...)) full table scans. `totalBytes`
+  // remains a physical progress estimate, while `copyBytesEstimate` is a
+  // logical COPY-work proxy used only for CTID chunk planning.
   const qualifiedName = `${id(spec.schema)}.${id(spec.name)}`;
   const estimateResult = await sql<
-    {totalRows: number; totalBytes: number}[]
+    {totalRows: number; totalBytes: number; heapPages: number}[]
   >`SELECT GREATEST(reltuples, 0)::float8 AS "totalRows",
-         pg_table_size(oid)::float8 AS "totalBytes"
+         pg_table_size(oid)::float8 AS "totalBytes",
+         CEIL(pg_relation_size(oid)::float8 / current_setting('block_size')::int)::float8 AS "heapPages"
     FROM pg_class
     WHERE oid = ${qualifiedName}::regclass`;
 
-  const {totalRows, totalBytes} = estimateResult[0] ?? {
+  const {totalRows, totalBytes, heapPages} = estimateResult[0] ?? {
     totalRows: 0,
     totalBytes: 0,
+    heapPages: 0,
   };
+  const copyBytesEstimate = estimateCopyBytes
+    ? await estimateLogicalCopyBytes(sql, spec, columns, totalBytes, heapPages)
+    : undefined;
 
   const state: DownloadState = {
     spec,
@@ -827,17 +1042,80 @@ export async function getInitialDownloadState(
       totalRows,
       totalBytes,
     },
+    copyBytesEstimate,
+    heapPages,
   };
   const elapsed = (performance.now() - start).toFixed(3);
   lc.info?.(`Computed initial download state for ${table} (${elapsed} ms)`, {
     state: state.status,
+    copyBytesEstimate,
+    heapPages,
   });
   return state;
 }
 
+async function estimateLogicalCopyBytes(
+  sql: PostgresDB,
+  spec: PublishedTableSpec,
+  columns: string[],
+  totalBytes: number,
+  heapPages: number,
+): Promise<number> {
+  const physicalBytes = totalBytes ?? 0;
+  if (columns.length === 0 || heapPages <= 0) {
+    return physicalBytes;
+  }
+
+  const sampledBlocks = sampledHeapBlocks(heapPages);
+  if (sampledBlocks.length === 0) {
+    return physicalBytes;
+  }
+
+  const rowFilters = Object.values(spec.publications)
+    .map(({rowFilter}) => rowFilter)
+    .filter((f): f is string => !!f);
+  const sample = await sql.unsafe<{sampleBytes: number}[]>(/*sql*/ `
+    SELECT COALESCE(SUM(${logicalRowBytesExpression(columns)}), 0)::float8 AS "sampleBytes"
+    FROM ${id(spec.schema)}.${id(spec.name)}
+    ${whereClause(rowFilters, ctidBlocksPredicate(sampledBlocks))}`);
+  const sampleBytes = sample[0]?.sampleBytes ?? 0;
+  return Math.max(
+    physicalBytes,
+    (sampleBytes / sampledBlocks.length) * heapPages,
+  );
+}
+
+export function sampledHeapBlocks(heapPages: number): number[] {
+  const samplePages = Math.min(
+    Math.floor(heapPages),
+    COPY_BYTES_ESTIMATE_SAMPLE_PAGES,
+  );
+  if (samplePages <= 0) {
+    return [];
+  }
+  return Array.from({length: samplePages}, (_, i) =>
+    Math.min(Math.floor((heapPages * (i + 0.5)) / samplePages), heapPages - 1),
+  );
+}
+
+function logicalRowBytesExpression(columns: string[]): string {
+  return columns
+    .map(col => `COALESCE(octet_length(${id(col)}::text), 0)`)
+    .join(' + ');
+}
+
+function ctidBlocksPredicate(blocks: readonly number[]): string {
+  return blocks
+    .map(
+      block =>
+        /*sql*/ `(ctid >= '(${block},0)'::tid AND ctid < '(${block + 1},0)'::tid)`,
+    )
+    .join(' OR ');
+}
+
 function copy(
   lc: LogContext,
-  {spec: table, status}: DownloadState,
+  {download: {spec: table, status}, chunk}: CopyTask,
   dbClient: PostgresDB,
   from: PostgresTransaction,
   to: Database,
@@ -855,9 +1133,19 @@ function copy(
       to,
       sampleRate,
       maxRowsPerTable,
+      chunk,
     );
   }
-  return copyBinary(lc, table, status, from, to, sampleRate, maxRowsPerTable);
+  return copyBinary(
+    lc,
+    table,
+    status,
+    from,
+    to,
+    sampleRate,
+    maxRowsPerTable,
+    chunk,
+  );
 }
 
 async function copyBinary(
@@ -868,11 +1156,14 @@ async function copyBinary(
   to: Database,
   sampleRate?: number | undefined,
   maxRowsPerTable?: number | undefined,
+  chunk?: CtidChunk | undefined,
 ) {
   const start = performance.now();
   let flushTime = 0;
+  let copiedRows = 0;
 
   const tableName = liteTableName(table);
+  const copyName = copyTaskName(tableName, chunk);
   const orderedColumns = Object.entries(table.columns);
 
   const columnNames = orderedColumns.map(([c]) => c);
@@ -895,6 +1186,7 @@ async function copyBinary(
     sampleRate,
     maxRowsPerTable,
     makeBinarySelectExprs(table, columnNames),
+    ctidRangePredicate(chunk),
   ).select;
 
   const decoders = orderedColumns.map(([, spec]) =>
@@ -928,6 +1220,7 @@ async function copyBinary(
     }
     pendingSize = 0;
     status.rows += flushedRows;
+    copiedRows += flushedRows;
 
     const elapsed = performance.now() - start;
     flushTime += elapsed;
@@ -939,7 +1232,7 @@ async function copyBinary(
   const binaryParser = new BinaryCopyParser();
   let col = 0;
 
-  lc.info?.(`Starting binary copy stream of ${tableName}:`, select);
+  lc.info?.(`Starting binary copy stream of ${copyName}:`, select);
 
   await pipeline(
     await from
@@ -988,10 +1281,10 @@ async function copyBinary(
 
   const elapsed = performance.now() - start;
   lc.info?.(
-    `Finished copying ${status.rows} rows into ${tableName} ` +
+    `Finished copying ${copiedRows} rows into ${copyName} ` +
       `(flush: ${flushTime.toFixed(3)} ms) (total: ${elapsed.toFixed(3)} ms) `,
   );
-  return {rows: status.rows, flushTime};
+  return {table: tableName, rows: copiedRows, flushTime};
 }
 
 async function copyText(
@@ -1003,11 +1296,14 @@ async function copyText(
   to: Database,
   sampleRate?: number | undefined,
   maxRowsPerTable?: number | undefined,
+  chunk?: CtidChunk | undefined,
 ) {
   const start = performance.now();
   let flushTime = 0;
+  let copiedRows = 0;
 
   const tableName = liteTableName(table);
+  const copyName = copyTaskName(tableName, chunk);
   const orderedColumns = Object.entries(table.columns);
 
   const columnNames = orderedColumns.map(([c]) => c);
@@ -1028,6 +1324,8 @@ async function copyText(
     columnNames,
     sampleRate,
     maxRowsPerTable,
+    undefined,
+    ctidRangePredicate(chunk),
   );
   const valuesPerRow = columnSpecs.length;
   const valuesPerBatch = valuesPerRow * INSERT_BATCH_SIZE;
@@ -1056,6 +1354,7 @@ async function copyText(
     }
     pendingSize = 0;
     status.rows += flushedRows;
+    copiedRows += flushedRows;
 
     const elapsed = performance.now() - start;
     flushTime += elapsed;
@@ -1064,7 +1363,7 @@ async function copyText(
     );
   }
 
-  lc.info?.(`Starting text copy stream of ${tableName}:`, select);
+  lc.info?.(`Starting text copy stream of ${copyName}:`, select);
   const pgParsers = await getTypeParsers(dbClient, {returnJsonAsString: true});
   const parsers = columnSpecs.map(c => {
     const pgParse = pgParsers.getTypeParser(c.typeOID);
@@ -1124,8 +1423,20 @@ async function copyText(
 
   const elapsed = performance.now() - start;
   lc.info?.(
-    `Finished copying ${status.rows} rows into ${tableName} ` +
+    `Finished copying ${copiedRows} rows into ${copyName} ` +
       `(flush: ${flushTime.toFixed(3)} ms) (total: ${elapsed.toFixed(3)} ms) `,
   );
-  return {rows: status.rows, flushTime};
+  return {table: tableName, rows: copiedRows, flushTime};
+}
+
+function ctidRangePredicate(chunk: CtidChunk | undefined): string | undefined {
+  return chunk
+    ? `ctid >= '(${chunk.startBlock},0)'::tid AND ctid < '(${chunk.endBlock},0)'::tid`
+    : undefined;
+}
+
+function copyTaskName(tableName: string, chunk: CtidChunk | undefined): string {
+  return chunk
+    ? `${tableName} chunk ${chunk.index}/${chunk.total} blocks=${chunk.startBlock}-${chunk.endBlock}`
+    : tableName;
 }
