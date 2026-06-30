@@ -32,4 +32,5 @@ jobs:
       - name: Verify signed commit authors
         uses: rocicorp/.github/.github/actions/verify-signed-commit-authors@mlaw/signers # zizmor: ignore[unpinned-uses] Cross-repo staging branch; pin after the shared action lands.
         with:
+          enforce: false # Temporary until allowed_signers is populated
           github-token: ${{ github.token }}
