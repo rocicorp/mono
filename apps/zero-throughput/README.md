@@ -8,8 +8,8 @@ The default run:
 2. Resets the benchmark table and Zero metadata for app id `zero_throughput`.
 3. Deploys allow-read permissions for the benchmark table.
 4. Starts `zero-cache` on port `4848`.
-5. Starts synthetic Zero clients with live `feed-append` queries.
-6. Writes append-only rows to PostgreSQL at a fixed target rate.
+5. Starts synthetic Zero clients with live queries for the selected profile.
+6. Writes profile-shaped rows to PostgreSQL at a fixed target rate.
 7. Writes a JSON result file and prints a short summary.
 
 ```bash
@@ -25,6 +25,7 @@ Useful overrides:
 
 ```bash
 pnpm --filter zero-throughput start -- \
+  --profile feed-append \
   --users 10 \
   --queries-per-user 1 \
   --rows-per-query 100 \
@@ -32,6 +33,36 @@ pnpm --filter zero-throughput start -- \
   --batch-size 10 \
   --duration-ms 60000 \
   --output results/feed-append-10u-500rps.json
+```
+
+Profiles:
+
+| Profile       | Query shape                                                       | Write shape                                   |
+| ------------- | ----------------------------------------------------------------- | --------------------------------------------- |
+| `feed-append` | Recent append-only events                                         | Insert one event row                          |
+| `email`       | Inbox threads, message lists, and unread thread queries           | Insert message and update parent thread       |
+| `forum`       | Category/thread/post queries with author and thread relationships | Insert post and update parent thread/category |
+| `relational`  | Org/account/activity queries with nested account/contact joins    | Insert activity and update parent account/org |
+
+`queriesPerUser` cycles through the distinct query shapes for each profile, so
+setting `--queries-per-user 3` registers the full current mix for `email`,
+`forum`, and `relational`.
+
+`writeRate` is measured in logical writes per second. A logical write maps to
+one monotonic `seq`; non-feed profiles may touch additional parent rows so their
+list and relationship queries observe that `seq`.
+
+Example profile run:
+
+```bash
+pnpm --filter zero-throughput start -- \
+  --profile relational \
+  --users 10 \
+  --queries-per-user 3 \
+  --rows-per-query 50 \
+  --write-rate 250 \
+  --duration-ms 60000 \
+  --output results/relational-10u-250rps.json
 ```
 
 To stream zero-cache logs directly in the terminal:

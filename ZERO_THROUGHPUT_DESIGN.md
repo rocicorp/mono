@@ -77,13 +77,15 @@ seed data, standing queries, write operations, and scale parameters.
 
 Initial profiles:
 
-| Profile           | Shape                                                 | Purpose                                        |
-| ----------------- | ----------------------------------------------------- | ---------------------------------------------- |
-| `feed-append`     | Append-only rows with many users watching recent rows | Measures high-fanout insert throughput         |
-| `feed-update-hot` | Updates over a small hot working set                  | Measures invalidation and repeated diff cost   |
-| `issue-list`      | Users subscribe to filtered issue lists               | Models zbugs-style list views                  |
-| `dashboard`       | Each user registers several narrow standing queries   | Measures many-query-per-user overhead          |
-| `relational`      | Multi-table data with relationship queries            | Measures query planning and IVM cost for joins |
+| Profile           | Shape                                                             | Purpose                                             |
+| ----------------- | ----------------------------------------------------------------- | --------------------------------------------------- |
+| `feed-append`     | Append-only rows with many users watching recent rows             | Measures high-fanout insert throughput              |
+| `email`           | Inbox threads, message lists, unread thread/message relationships | Models email-client list/detail query fanout        |
+| `forum`           | Category, thread, post, and author relationship queries           | Models forum-style hierarchical discussion activity |
+| `relational`      | Org/account/contact/activity relationship queries                 | Measures query planning and IVM cost for joins      |
+| `feed-update-hot` | Updates over a small hot working set                              | Measures invalidation and repeated diff cost        |
+| `issue-list`      | Users subscribe to filtered issue lists                           | Models zbugs-style list views                       |
+| `dashboard`       | Each user registers several narrow standing queries               | Measures many-query-per-user overhead               |
 
 Scale dimensions:
 
