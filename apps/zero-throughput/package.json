@@ -1,0 +1,32 @@
+{
+  "name": "zero-throughput",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node src/main.ts",
+    "go": "node src/main.ts",
+    "db-up": "cd docker && docker compose up",
+    "db-down": "cd docker && docker compose down",
+    "check-types": "tsc",
+    "format": "oxfmt .",
+    "check-format": "oxfmt --check .",
+    "lint": "oxlint --quiet --config ../../oxlint.config.ts .",
+    "fmt": "oxfmt .",
+    "check-fmt": "oxfmt --check ."
+  },
+  "dependencies": {
+    "@dotenvx/dotenvx": "^1.39.0",
+    "@rocicorp/zero": "workspace:*",
+    "postgres": "3.4.7",
+    "ws": "^8.18.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "@types/ws": "^8.5.12",
+    "oxfmt": "^0.45.0",
+    "shared": "workspace:*",
+    "typescript": "~6.0.2"
+  },
+  "packageManager": "pnpm@11.5.3"
+}
