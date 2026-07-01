@@ -67,6 +67,33 @@ pnpm --filter zero-throughput start -- \
   --output results/relational-10u-250rps.json
 ```
 
+Run the recommended parameter sweep. The default sweep covers
+`relational,email,forum`, users `50,100,200,400`, rows per query `50`, sync
+workers `1,2,4`, and binary-searches the sustainable write rate from 1 to 100
+logical writes/s for each point. This keeps the first sweep focused on
+read-heavy fanout, profile complexity, and syncer concurrency without exploding
+the run count.
+
+```bash
+pnpm --filter zero-throughput run sweep -- --dry-run
+pnpm --filter zero-throughput run sweep -- \
+  --output-dir results/sweeps/read-heavy
+```
+
+To also sweep query window size, add `--rows-per-query 25,50,100`.
+
+Sweep output includes:
+
+- `manifest.json` with the exact matrix and git SHA
+- `attempts.jsonl` with every benchmark attempt
+- `points.jsonl` with one binary-search result per matrix point
+- `summary.csv` with the best sustainable write rate per point
+- `runs/` containing the normal per-run benchmark JSON outputs
+- `logs/` containing zero-cache and query-plan logs for each benchmark run
+
+Use `--limit 1` for a smoke run, `--pg-start false` when PostgreSQL is already
+running, and `--verbose-child-logs` to stream each benchmark's full output.
+
 Analyze the exact profile query shapes against a running zero-cache:
 
 ```bash
