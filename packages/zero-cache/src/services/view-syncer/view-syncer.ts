@@ -1508,9 +1508,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     );
 
     const driftedQueryIDs = new Set<string>();
-    const queryCoveringIndex = new QueryCoveringIndex(
-      this.#pipelines.queries(),
-    );
+    const queryCoveringIndex = this.#config.enableQueryCovering
+      ? new QueryCoveringIndex(this.#pipelines.queries())
+      : undefined;
     let totalHydratedQueries = 0;
     let coveredHydratedQueries = 0;
     let firstCoveredQuery: QueryCoverageShadowHit | undefined;
@@ -1522,13 +1522,15 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     } of transformedQueries) {
       const query = cvr.queries[queryID];
       const queryName = query.type === 'custom' ? query.name : undefined;
-      const covered = this.#findQueryCoverageShadowHit(
-        queryCoveringIndex,
-        queryID,
-        transformationHash,
-        transformedAst,
-        queryName,
-      );
+      const covered = queryCoveringIndex
+        ? this.#findQueryCoverageShadowHit(
+            queryCoveringIndex,
+            queryID,
+            transformationHash,
+            transformedAst,
+            queryName,
+          )
+        : undefined;
       totalHydratedQueries++;
       if (covered) {
         coveredHydratedQueries++;
@@ -1601,7 +1603,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         }
       }
 
-      if (!drifted) {
+      if (!drifted && queryCoveringIndex) {
         queryCoveringIndex.add(queryID, {
           transformedAst,
           transformationHash,
@@ -1737,7 +1739,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     coveredHydratedQueries: number,
     firstCoveredQuery: QueryCoverageShadowHit | undefined,
   ) {
-    if (totalHydratedQueries === 0) {
+    if (!this.#config.enableQueryCovering || totalHydratedQueries === 0) {
       return;
     }
 
@@ -2143,9 +2145,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       const pipelines = this.#pipelines;
       const hydrations = this.#hydrations;
       const hydrationTime = this.#hydrationTime;
-      const queryCoveringIndex = new QueryCoveringIndex(
-        this.#pipelines.queries(),
-      );
+      const queryCoveringIndex = this.#config.enableQueryCovering
+        ? new QueryCoveringIndex(this.#pipelines.queries())
+        : undefined;
       let totalHydratedQueries = 0;
       let coveredHydratedQueries = 0;
       let firstCoveredQuery: QueryCoverageShadowHit | undefined;
@@ -2167,13 +2169,15 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           }
           queryLC.debug?.(`adding pipeline for query`, q.ast);
 
-          const covered = self.#findQueryCoverageShadowHit(
-            queryCoveringIndex,
-            q.id,
-            q.transformationHash,
-            q.ast,
-            q.name,
-          );
+          const covered = queryCoveringIndex
+            ? self.#findQueryCoverageShadowHit(
+                queryCoveringIndex,
+                q.id,
+                q.transformationHash,
+                q.ast,
+                q.name,
+              )
+            : undefined;
           totalHydratedQueries++;
           if (covered) {
             coveredHydratedQueries++;
@@ -2191,7 +2195,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
           self.#addQueryMaterializationServerMetric(q.id, elapsed);
           self.#inspectorDelegate.addQuery(q.id, q.ast);
-          queryCoveringIndex.add(q.id, {
+          queryCoveringIndex?.add(q.id, {
             transformedAst: q.ast,
             transformationHash: q.transformationHash,
             ...(q.name !== undefined && {queryName: q.name}),
