@@ -90,7 +90,7 @@ import type {DrainCoordinator} from './drain-coordinator.ts';
 import {handleInspect} from './inspect-handler.ts';
 import type {PipelineDriver} from './pipeline-driver.ts';
 import {type RowChange} from './pipeline-driver.ts';
-import {findCoveringQuery} from './query-covering.ts';
+import {QueryCoveringIndex} from './query-covering.ts';
 import {parseSignature} from './row-set-signature.ts';
 import {
   cmpVersions,
@@ -1508,6 +1508,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     );
 
     const driftedQueryIDs = new Set<string>();
+    const queryCoveringIndex = new QueryCoveringIndex(
+      this.#pipelines.queries(),
+    );
     let totalHydratedQueries = 0;
     let coveredHydratedQueries = 0;
     let firstCoveredQuery: QueryCoverageShadowHit | undefined;
@@ -1520,6 +1523,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       const query = cvr.queries[queryID];
       const queryName = query.type === 'custom' ? query.name : undefined;
       const covered = this.#findQueryCoverageShadowHit(
+        queryCoveringIndex,
         queryID,
         transformationHash,
         transformedAst,
@@ -1565,6 +1569,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       this.#inspectorDelegate.addQuery(transformationHash, transformedAst);
       lc.debug?.(`hydrated ${count} rows for ${queryID} (${elapsed} ms)`);
 
+      let drifted = false;
       // Drift detection: compare the just-computed candidate signature against
       // the signature stored in the CVR. They should match for a deterministic
       // query at the same db state. A mismatch indicates a query containing
@@ -1592,7 +1597,16 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           this.#rowSetSignatureDrifts.add(1);
           this.#pipelines.removeQuery(queryID);
           driftedQueryIDs.add(queryID);
+          drifted = true;
         }
+      }
+
+      if (!drifted) {
+        queryCoveringIndex.add(queryID, {
+          transformedAst,
+          transformationHash,
+          ...(queryName !== undefined && {queryName}),
+        });
       }
     }
 
@@ -1693,12 +1707,13 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   }
 
   #findQueryCoverageShadowHit(
+    queryCoveringIndex: QueryCoveringIndex,
     queryID: string,
     transformationHash: string,
     ast: AST,
     queryName?: string | undefined,
   ): QueryCoverageShadowHit | undefined {
-    const covering = findCoveringQuery(queryID, ast, this.#pipelines.queries());
+    const covering = queryCoveringIndex.findCoveringQuery(queryID, ast);
     if (!covering) {
       return undefined;
     }
@@ -2128,6 +2143,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       const pipelines = this.#pipelines;
       const hydrations = this.#hydrations;
       const hydrationTime = this.#hydrationTime;
+      const queryCoveringIndex = new QueryCoveringIndex(
+        this.#pipelines.queries(),
+      );
       let totalHydratedQueries = 0;
       let coveredHydratedQueries = 0;
       let firstCoveredQuery: QueryCoverageShadowHit | undefined;
@@ -2150,6 +2168,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           queryLC.debug?.(`adding pipeline for query`, q.ast);
 
           const covered = self.#findQueryCoverageShadowHit(
+            queryCoveringIndex,
             q.id,
             q.transformationHash,
             q.ast,
@@ -2172,6 +2191,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
           self.#addQueryMaterializationServerMetric(q.id, elapsed);
           self.#inspectorDelegate.addQuery(q.id, q.ast);
+          queryCoveringIndex.add(q.id, {
+            transformedAst: q.ast,
+            transformationHash: q.transformationHash,
+            ...(q.name !== undefined && {queryName: q.name}),
+          });
 
           if (elapsed > slowHydrateThreshold) {
             queryLC.warn?.('Slow query materialization', elapsed, q.ast);

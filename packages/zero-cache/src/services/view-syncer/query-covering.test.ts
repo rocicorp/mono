@@ -4,7 +4,11 @@ import type {
   Condition,
   CorrelatedSubquery,
 } from '../../../../zero-protocol/src/ast.ts';
-import {findCoveringQuery, isQueryCoveredBy} from './query-covering.ts';
+import {
+  findCoveringQuery,
+  isQueryCoveredBy,
+  QueryCoveringIndex,
+} from './query-covering.ts';
 
 const allIssues: AST = {
   table: 'issues',
@@ -181,6 +185,23 @@ test('not exists coverage reverses subquery implication', () => {
   expect(isQueryCoveredBy(noHelloComments, noComments)).toBe(false);
 });
 
+test('correlated subquery flip does not affect coverage semantics', () => {
+  const unflipped: AST = where({
+    type: 'correlatedSubquery',
+    op: 'EXISTS',
+    related: commentsRelated(allComments),
+  });
+  const flipped: AST = where({
+    type: 'correlatedSubquery',
+    op: 'EXISTS',
+    flip: true,
+    related: commentsRelated(allComments),
+  });
+
+  expect(isQueryCoveredBy(unflipped, flipped)).toBe(true);
+  expect(isQueryCoveredBy(flipped, unflipped)).toBe(true);
+});
+
 test('findCoveringQuery returns the first active covering query', () => {
   const running = new Map([
     [
@@ -207,4 +228,60 @@ test('findCoveringQuery returns the first active covering query', () => {
       queryName: 'allIssues',
     },
   );
+});
+
+test('QueryCoveringIndex only considers matching root queries', () => {
+  const index = new QueryCoveringIndex(
+    new Map([
+      [
+        'query-1',
+        {
+          transformedAst: allComments,
+          transformationHash: 'hash-1',
+        },
+      ],
+    ]),
+  );
+
+  expect(index.findCoveringQuery('query-2', where(eq('id', '123')))).toBe(
+    undefined,
+  );
+});
+
+test('QueryCoveringIndex can be updated during a hydration batch', () => {
+  const index = new QueryCoveringIndex();
+
+  expect(index.findCoveringQuery('query-2', where(eq('id', '123')))).toBe(
+    undefined,
+  );
+
+  index.add('query-1', {
+    transformedAst: allIssues,
+    transformationHash: 'hash-1',
+  });
+
+  expect(index.findCoveringQuery('query-2', where(eq('id', '123')))).toEqual({
+    queryID: 'query-1',
+    transformationHash: 'hash-1',
+  });
+});
+
+test('QueryCoveringIndex replaces a query when its root changes', () => {
+  const index = new QueryCoveringIndex();
+  index.add('query-1', {
+    transformedAst: allIssues,
+    transformationHash: 'issues-hash',
+  });
+  index.add('query-1', {
+    transformedAst: allComments,
+    transformationHash: 'comments-hash',
+  });
+
+  expect(index.findCoveringQuery('query-2', where(eq('id', '123')))).toBe(
+    undefined,
+  );
+  expect(index.findCoveringQuery('query-2', allComments)).toEqual({
+    queryID: 'query-1',
+    transformationHash: 'comments-hash',
+  });
 });

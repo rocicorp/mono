@@ -26,6 +26,9 @@ export type CoveringQuery = {
 
 type NormalizedAST = Required<AST>;
 type NonNullScalarLiteralValue = string | number | boolean;
+type IndexedRunningQuery = RunningQuery & {
+  readonly normalizedAst: NormalizedAST;
+};
 
 /**
  * Returns true when every row that can be produced by `covered` is also
@@ -43,19 +46,84 @@ export function findCoveringQuery(
   coveredAst: AST,
   runningQueries: ReadonlyMap<string, RunningQuery>,
 ): CoveringQuery | undefined {
-  for (const [queryID, query] of runningQueries) {
-    if (queryID === coveredQueryID) {
-      continue;
-    }
-    if (isQueryCoveredBy(coveredAst, query.transformedAst)) {
-      return {
-        queryID,
-        transformationHash: query.transformationHash,
-        ...(query.queryName !== undefined && {queryName: query.queryName}),
-      };
+  return new QueryCoveringIndex(runningQueries).findCoveringQuery(
+    coveredQueryID,
+    coveredAst,
+  );
+}
+
+export class QueryCoveringIndex {
+  readonly #byRoot = new Map<string, Map<string, IndexedRunningQuery>>();
+  readonly #queryIDToRoot = new Map<string, string>();
+
+  constructor(runningQueries?: ReadonlyMap<string, RunningQuery>) {
+    if (runningQueries) {
+      for (const [queryID, query] of runningQueries) {
+        this.add(queryID, query);
+      }
     }
   }
-  return undefined;
+
+  add(queryID: string, query: RunningQuery): void {
+    this.remove(queryID);
+
+    const normalizedAst = normalizeAST(query.transformedAst);
+    const root = rootKey(normalizedAst);
+    let queries = this.#byRoot.get(root);
+    if (!queries) {
+      queries = new Map();
+      this.#byRoot.set(root, queries);
+    }
+    queries.set(queryID, {...query, normalizedAst});
+    this.#queryIDToRoot.set(queryID, root);
+  }
+
+  remove(queryID: string): void {
+    const root = this.#queryIDToRoot.get(queryID);
+    if (root === undefined) {
+      return;
+    }
+
+    this.#queryIDToRoot.delete(queryID);
+    const queries = this.#byRoot.get(root);
+    if (!queries) {
+      return;
+    }
+
+    queries.delete(queryID);
+    if (queries.size === 0) {
+      this.#byRoot.delete(root);
+    }
+  }
+
+  findCoveringQuery(
+    coveredQueryID: string,
+    coveredAst: AST,
+  ): CoveringQuery | undefined {
+    const normalizedCoveredAst = normalizeAST(coveredAst);
+    const queries = this.#byRoot.get(rootKey(normalizedCoveredAst));
+    if (!queries) {
+      return undefined;
+    }
+
+    for (const [queryID, query] of queries) {
+      if (queryID === coveredQueryID) {
+        continue;
+      }
+      if (astCoveredBy(normalizedCoveredAst, query.normalizedAst)) {
+        return {
+          queryID,
+          transformationHash: query.transformationHash,
+          ...(query.queryName !== undefined && {queryName: query.queryName}),
+        };
+      }
+    }
+    return undefined;
+  }
+}
+
+function rootKey(ast: NormalizedAST): string {
+  return JSON.stringify([ast.schema, ast.table, ast.alias]);
 }
 
 function astCoveredBy(
@@ -172,7 +240,6 @@ function correlatedConditionImplies(
 ): boolean {
   if (
     covered.op !== covering.op ||
-    covered.flip !== covering.flip ||
     covered.scalar !== covering.scalar ||
     !sameRelatedEdge(covered.related, covering.related)
   ) {
