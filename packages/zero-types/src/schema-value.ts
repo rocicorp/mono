@@ -21,6 +21,63 @@ export type SchemaValueWithCustomType<T> = {
   customType: T;
 };
 
+/**
+ * A bidirectional codec for a column.
+ *
+ * `Encoded` is the value as stored, synced, and processed by Zero: it must be
+ * one of the JSON-native {@linkcode ValueType}s so that it can be compared,
+ * sorted, persisted to IndexedDB, and sent over the wire.
+ *
+ * `Decoded` is the value the application sees and provides. It can be any
+ * JavaScript value (e.g. `Date`, `Temporal.Instant`, a branded id, ...).
+ *
+ * `decode` runs when reading query results; `encode` runs when writing
+ * (insert/update) and when comparing values in `where` clauses. The codec must
+ * be a stable bijection so that the encoded value preserves identity and
+ * ordering.
+ *
+ * `null`/`undefined` are never passed to `decode`/`encode`; they pass through
+ * unchanged.
+ */
+export type Codec<Encoded, Decoded> = {
+  decode: (value: Encoded) => Decoded;
+  encode: (value: Decoded) => Encoded;
+};
+
+/** True when `x` is a {@linkcode Codec} (has both `decode` and `encode`). */
+export function isCodec(x: unknown): x is Codec<unknown, unknown> {
+  return (
+    typeof x === 'object' &&
+    x !== null &&
+    typeof (x as Partial<Codec<unknown, unknown>>).decode === 'function' &&
+    typeof (x as Partial<Codec<unknown, unknown>>).encode === 'function'
+  );
+}
+
+/**
+ * A {@linkcode SchemaValue} that carries a runtime {@linkcode Codec}. The
+ * user-facing TypeScript type (via {@linkcode SchemaValueToTSType}) is the
+ * `Decoded` type, exactly as for {@linkcode SchemaValueWithCustomType}, while
+ * the `Encoded` type is what is stored/synced.
+ */
+export type SchemaValueWithCodec<Decoded = unknown, Encoded = unknown> = {
+  type: ValueType;
+  serverName?: string | undefined;
+  optional?: boolean | undefined;
+  customType: Decoded;
+  codec: Codec<Encoded, Decoded>;
+};
+
+/**
+ * Returns the runtime codec attached to a column, or `undefined` if the column
+ * has no codec.
+ */
+export function getCodec(
+  value: SchemaValue,
+): Codec<unknown, unknown> | undefined {
+  return (value as Partial<SchemaValueWithCodec>).codec;
+}
+
 export type TypeNameToTypeMap = {
   string: string;
   number: number;

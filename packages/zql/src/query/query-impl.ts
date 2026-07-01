@@ -20,6 +20,7 @@ import {
   ExpressionBuilder,
   and,
   cmp,
+  encodeFilterValue,
   simplifyCondition,
 } from './expression.ts';
 import type {CustomQueryID} from './named.ts';
@@ -366,12 +367,21 @@ export class QueryImpl<
       cond = fieldOrExpressionFactory(this.expressionBuilder());
     } else {
       assert(arguments.length >= 2, 'Invalid condition. Too few arguments.');
+      const column =
+        this.#schema.tables[this.#tableName]?.columns[fieldOrExpressionFactory];
       // Distinguish between 2-arg form (field, value) and 3-arg form (field, op, value)
       // using arguments.length to allow explicit undefined in 3-arg form.
       if (arguments.length === 2) {
-        cond = cmp(fieldOrExpressionFactory, opOrValue);
+        cond = cmp(
+          fieldOrExpressionFactory,
+          encodeFilterValue(opOrValue, column, '='),
+        );
       } else {
-        cond = cmp(fieldOrExpressionFactory, opOrValue, value);
+        cond = cmp(
+          fieldOrExpressionFactory,
+          opOrValue as SimpleOperator,
+          encodeFilterValue(value, column, opOrValue as SimpleOperator),
+        );
       }
     }
 
@@ -567,7 +577,10 @@ export class QueryImpl<
   }
 
   expressionBuilder() {
-    return new ExpressionBuilder(this.#exists);
+    return new ExpressionBuilder(
+      this.#exists,
+      this.#schema.tables[this.#tableName]?.columns,
+    );
   }
 }
 

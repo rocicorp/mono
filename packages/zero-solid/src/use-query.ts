@@ -198,7 +198,14 @@ export function useQuery<
     ),
   );
 
-  return [() => state[0][''] as HumanReadable<TReturn>, () => state[1]];
+  // The view stores decoded values directly; read through the Solid store
+  // proxy to keep fine-grained reactivity intact.
+  const data = createMemo(() => {
+    const root = state[0][''];
+    return root as HumanReadable<TReturn>;
+  });
+
+  return [data, () => state[1]];
 }
 
 function normalize<T>(options?: T | Accessor<T | undefined>): T | undefined {

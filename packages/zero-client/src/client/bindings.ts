@@ -8,6 +8,7 @@ export {deepClone} from '../../../shared/src/deep-clone.ts';
 export type {Immutable} from '../../../shared/src/immutable.ts';
 export {must} from '../../../shared/src/must.ts';
 export {skipYields} from '../../../zql/src/ivm/operator.ts';
+export type {SourceSchema} from '../../../zql/src/ivm/schema.ts';
 export {consume} from '../../../zql/src/ivm/stream.ts';
 export {
   applyChange,

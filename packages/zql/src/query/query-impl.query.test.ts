@@ -1030,18 +1030,18 @@ describe('pk lookup optimization', () => {
       .whereExists('labels', q => q.where('id', '=', '0001'));
     expect(await queryDelegate.run(junctionExistsPkQuery))
       .toMatchInlineSnapshot(`
-      [
-        {
-          "closed": false,
-          "createdAt": 1,
-          "description": "description 1",
-          "id": "0001",
-          "ownerId": "0001",
-          "title": "issue 1",
-          Symbol(rc): 1,
-        },
-      ]
-    `);
+        [
+          {
+            "closed": false,
+            "createdAt": 1,
+            "description": "description 1",
+            "id": "0001",
+            "ownerId": "0001",
+            "title": "issue 1",
+            Symbol(rc): 1,
+          },
+        ]
+      `);
   });
 
   test('pk constraints in or branches', async () => {
@@ -1114,18 +1114,18 @@ describe('run with options', () => {
     const singleFilterRowsComplete = await singleFilterRowsCompleteP;
 
     expect(singleFilterRowsUnknown).toMatchInlineSnapshot(`
-    [
-      {
-        "closed": false,
-        "createdAt": 1,
-        "description": "description 1",
-        "id": "0001",
-        "ownerId": "0001",
-        "title": "issue 1",
-        Symbol(rc): 1,
-      },
-    ]
-  `);
+      [
+        {
+          "closed": false,
+          "createdAt": 1,
+          "description": "description 1",
+          "id": "0001",
+          "ownerId": "0001",
+          "title": "issue 1",
+          Symbol(rc): 1,
+        },
+      ]
+    `);
     expect(singleFilterRowsComplete).toMatchInlineSnapshot(`[]`);
   });
 

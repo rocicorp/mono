@@ -1,5 +1,10 @@
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
 import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
+import type {
+  Codec,
+  TypeNameToTypeMap,
+  ValueType,
+} from '../../../zero-types/src/schema-value.ts';
 import type {SchemaValue, TableSchema} from '../table-schema.ts';
 
 /* oxlint-disable @typescript-eslint/no-explicit-any */
@@ -58,6 +63,18 @@ export const column = {
   json,
   enumeration,
 };
+
+/**
+ * The stored (encoded) TypeScript type of a column, i.e. the type before any
+ * codec is applied. This is always one of the JSON-native value types.
+ */
+type EncodedOf<TShape extends SchemaValue<any>> = TShape extends {
+  customType: infer C;
+}
+  ? C
+  : TShape extends {type: infer VT extends ValueType}
+    ? TypeNameToTypeMap[VT]
+    : never;
 
 export class TableBuilder<TShape extends TableSchema> {
   readonly #schema: TShape;
@@ -155,6 +172,31 @@ class ColumnBuilder<TShape extends SchemaValue<any>> {
       ...this.#schema,
       optional: true,
     });
+  }
+
+  /**
+   * Attaches a {@linkcode Codec} to the column. The column continues to be
+   * stored/synced as its underlying value type (`EncodedOf<TShape>`), but query
+   * results decode to `Decoded` and writes/`where` comparisons encode back. The
+   * codec must be a stable bijection so that ordering and identity are preserved
+   * on the encoded value.
+   */
+  codec<Decoded>(codec: Codec<EncodedOf<TShape>, Decoded>): ColumnBuilder<
+    Omit<TShape, 'customType'> & {
+      customType: Decoded;
+      codec: Codec<EncodedOf<TShape>, Decoded>;
+    }
+  > {
+    return new ColumnBuilder({
+      ...this.#schema,
+      customType: null as unknown as Decoded,
+      codec,
+    }) as ColumnBuilder<
+      Omit<TShape, 'customType'> & {
+        customType: Decoded;
+        codec: Codec<EncodedOf<TShape>, Decoded>;
+      }
+    >;
   }
 
   get schema() {

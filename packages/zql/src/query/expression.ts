@@ -1,3 +1,4 @@
+import {assert} from '../../../shared/src/asserts.ts';
 /* oxlint-disable @typescript-eslint/no-explicit-any */
 import {must} from '../../../shared/src/must.ts';
 import {
@@ -7,6 +8,10 @@ import {
   type Parameter,
   type SimpleOperator,
 } from '../../../zero-protocol/src/ast.ts';
+import {
+  getCodec,
+  type SchemaValue,
+} from '../../../zero-types/src/schema-value.ts';
 import type {Schema as ZeroSchema} from '../../../zero-types/src/schema.ts';
 import type {
   AvailableRelationships,
@@ -21,6 +26,33 @@ import type {
 export type ParameterReference = {
   [toStaticParam](): Parameter;
 };
+
+/**
+ * Encodes a `where`/filter literal for a codec column so that comparisons
+ * happen on the stored (encoded) value. Parameter references and
+ * `null`/`undefined` pass through; arrays (IN / NOT IN) are encoded
+ * element-wise. No-op when the column has no codec or is unknown.
+ */
+export function encodeFilterValue(
+  value: ParameterReference | LiteralValue | undefined,
+  column: SchemaValue | undefined,
+  op: SimpleOperator,
+): ParameterReference | LiteralValue | undefined {
+  // oxlint-disable-next-line eqeqeq
+  if (value == null || column === undefined || isParameterReference(value)) {
+    return value;
+  }
+  const codec = getCodec(column);
+  if (!codec) {
+    return value;
+  }
+  if (op === 'IN' || op === 'NOT IN') {
+    assert(Array.isArray(value), `Expected array value for operator ${op}`);
+    // oxlint-disable-next-line eqeqeq
+    return value.map(v => (v == null ? v : (codec.encode(v) as LiteralValue)));
+  }
+  return codec.encode(value) as LiteralValue;
+}
 
 /**
  * A factory function that creates a condition. This is used to create
@@ -54,6 +86,7 @@ export class ExpressionBuilder<
     cb?: (query: Query<TTable, TSchema>) => Query<TTable, TSchema, any>,
     options?: ExistsOptions,
   ) => Condition;
+  readonly #columns: Record<string, SchemaValue> | undefined;
 
   constructor(
     exists: (
@@ -61,9 +94,12 @@ export class ExpressionBuilder<
       cb?: (query: Query<TTable, TSchema>) => Query<TTable, TSchema, any>,
       options?: ExistsOptions,
     ) => Condition,
+    columns?: Record<string, SchemaValue> | undefined,
   ) {
     this.#exists = exists;
+    this.#columns = columns;
     this.exists = this.exists.bind(this);
+    this.cmp = this.cmp.bind(this);
   }
 
   get eb() {
@@ -95,10 +131,22 @@ export class ExpressionBuilder<
     opOrValue: SimpleOperator | ParameterReference | LiteralValue | undefined,
     value?: ParameterReference | LiteralValue,
   ): Condition {
+    const column = this.#columns?.[field];
     if (arguments.length === 2) {
-      return cmp(field, opOrValue);
+      return cmp(
+        field,
+        encodeFilterValue(
+          opOrValue as ParameterReference | LiteralValue | undefined,
+          column,
+          '=',
+        ),
+      );
     }
-    return cmp(field, opOrValue, value);
+    return cmp(
+      field,
+      opOrValue as SimpleOperator,
+      encodeFilterValue(value, column, opOrValue as SimpleOperator),
+    );
   }
 
   cmpLit(

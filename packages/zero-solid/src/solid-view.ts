@@ -6,6 +6,7 @@ import {
   applyChange,
   idSymbol,
   skipYields,
+  type SourceSchema,
   type ViewChange,
 } from './bindings.ts';
 import {
@@ -92,6 +93,9 @@ export class SolidView implements Output {
   #pendingChanges: ViewChange[] = [];
   readonly #updateTTL: (ttl: TTL) => void;
 
+  // The (encoded) source schema reachable from all children.
+  readonly schema: SourceSchema;
+
   constructor(
     input: Input,
     onTransactionCommit: (cb: () => void) => void,
@@ -108,6 +112,7 @@ export class SolidView implements Output {
     this.#onDestroy = onDestroy;
     this.#updateTTL = updateTTL;
     this.#retry = retry;
+    this.schema = input.getSchema();
 
     input.setOutput(this);
 

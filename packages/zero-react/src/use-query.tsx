@@ -540,6 +540,7 @@ class ViewWrapper<
   ) => {
     // applyChange now returns immutable data structures, so no deep clone needed.
     // Unchanged rows preserve their object identity for React.memo optimization.
+    // Codec columns are already decoded by the view.
     const data = snap as HumanReadable<TReturn>;
     this.#snapshot = getSnapshot(
       this.#singular,
