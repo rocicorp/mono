@@ -70,10 +70,20 @@ export type InitialSyncOptions = {
   maxChunksPerTable?: number | undefined;
   indexThreads?: number | undefined;
   experimentalIndexMode?: 'all' | 'required' | 'none' | 'dedupe' | undefined;
+  experimentalIndexTiming?: 'after-copy' | 'before-copy' | undefined;
+  experimentalIndexExcludeRegex?: string | undefined;
   sampleRate?: number | undefined;
   maxRowsPerTable?: number | undefined;
   profileCopy?: boolean | undefined;
   textCopy?: boolean | undefined;
+  importProfile?: boolean | undefined;
+  insertBatchSize?: number | undefined;
+  maxBufferedRows?: number | undefined;
+  bufferedSizeThresholdBytes?: number | undefined;
+  sqliteCacheSize?: number | undefined;
+  sqliteMmapSize?: number | undefined;
+  sqlitePageSize?: number | undefined;
+  sqliteTempStore?: 'default' | 'file' | 'memory' | undefined;
   replicationSlotFailover?: boolean | undefined;
   /**
    * When set, run initial sync in "shadow" mode for verification: skip all
@@ -117,14 +127,21 @@ export async function initialSync(
     maxChunksPerTable = DEFAULT_MAX_CHUNKS_PER_TABLE,
     indexThreads,
     experimentalIndexMode = 'all',
+    experimentalIndexTiming = 'after-copy',
+    experimentalIndexExcludeRegex,
     sampleRate: optionSampleRate,
     maxRowsPerTable: optionMaxRowsPerTable,
     profileCopy,
     textCopy = false,
+    sqliteCacheSize,
+    sqliteMmapSize,
+    sqlitePageSize,
+    sqliteTempStore,
     replicationSlotFailover = false,
     shadow,
   } = syncOptions;
   const shouldChunk = chunkTargetBytes > 0 && shadow === undefined;
+  const copyImportOptions = normalizeCopyImportOptions(syncOptions);
   const copyProfiler = profileCopy ? await CpuProfiler.connect() : null;
   const sql = await connectPgClient(lc, upstreamURI, 'initial-sync');
   // Replication session is only needed to create a replication slot in the
@@ -241,7 +258,13 @@ export async function initialSync(
       numTables,
     );
     try {
+      configureInitialSyncSqlitePageSize(lc, tx, sqlitePageSize);
       createLiteTables(tx, tables, initialVersion);
+      configureInitialSyncSqlite(lc, tx, {
+        sqliteCacheSize,
+        sqliteMmapSize,
+        sqliteTempStore,
+      });
       const sampleRate = shadow?.sampleRate ?? optionSampleRate;
       const maxRowsPerTable = shadow?.maxRowsPerTable ?? optionMaxRowsPerTable;
       const downloads = await Promise.all(
@@ -280,6 +303,35 @@ export async function initialSync(
           `workers=${numWorkers} chunkTargetBytes=${shouldChunk ? chunkTargetBytes : 0} ` +
           `maxChunksPerTable=${maxChunksPerTable}`,
       );
+      lc.info?.(
+        `initial-sync import options: insertBatchSize=${copyImportOptions.insertBatchSize} ` +
+          `maxBufferedRows=${copyImportOptions.maxBufferedRows} ` +
+          `bufferedSizeThresholdBytes=${copyImportOptions.bufferedSizeThresholdBytes}`,
+      );
+
+      const indexesToCreate = filterInitialSyncIndexes(
+        lc,
+        indexes,
+        experimentalIndexMode,
+        experimentalIndexExcludeRegex,
+      );
+      let index = 0;
+      if (experimentalIndexTiming === 'before-copy') {
+        statusPublisher.publish(
+          lc,
+          'Indexing',
+          `Creating ${indexesToCreate.length} indexes before copy`,
+          5000,
+        );
+        const indexStart = performance.now();
+        if (indexThreads !== undefined) {
+          lc.info?.(`Setting SQLite PRAGMA threads=${indexThreads}`);
+          tx.pragma(`threads = ${indexThreads}`);
+        }
+        createLiteIndices(lc, tx, indexesToCreate);
+        index += performance.now() - indexStart;
+        lc.info?.(`Created pre-copy indexes (${index.toFixed(3)} ms)`);
+      }
 
       const rowCounts = await Promise.all(
         copyTasks.map(task =>
@@ -291,6 +343,7 @@ export async function initialSync(
               db,
               tx,
               textCopy,
+              copyImportOptions,
               sampleRate,
               maxRowsPerTable,
             ),
@@ -311,21 +364,19 @@ export async function initialSync(
       statusPublisher.publish(
         lc,
         'Indexing',
-        `Creating ${indexes.length} indexes`,
+        `Creating ${indexesToCreate.length} indexes`,
         5000,
       );
-      const indexStart = performance.now();
-      if (indexThreads !== undefined) {
-        lc.info?.(`Setting SQLite PRAGMA threads=${indexThreads}`);
-        tx.pragma(`threads = ${indexThreads}`);
+      if (experimentalIndexTiming === 'after-copy') {
+        const indexStart = performance.now();
+        if (indexThreads !== undefined) {
+          lc.info?.(`Setting SQLite PRAGMA threads=${indexThreads}`);
+          tx.pragma(`threads = ${indexThreads}`);
+        }
+        createLiteIndices(lc, tx, indexesToCreate);
+        index += performance.now() - indexStart;
+        lc.info?.(`Created indexes (${index.toFixed(3)} ms)`);
       }
-      createLiteIndices(
-        lc,
-        tx,
-        filterInitialSyncIndexes(lc, indexes, experimentalIndexMode),
-      );
-      const index = performance.now() - indexStart;
-      lc.info?.(`Created indexes (${index.toFixed(3)} ms)`);
 
       if (slotName && replicaID) {
         await initReplica(sql, shard, replicaID, published, context);
@@ -619,42 +670,61 @@ function filterInitialSyncIndexes<
   lc: LogContext,
   indices: T[],
   mode: InitialSyncOptions['experimentalIndexMode'],
+  excludeRegex: string | undefined,
 ): T[] {
-  switch (mode) {
-    case 'all':
-      return indices;
-    case 'none':
-      lc.warn?.(`Skipping all ${indices.length} initial-sync indexes`);
-      return [];
-    case 'required': {
-      const filtered = indices.filter(index => index.unique || index.isPrimaryKey);
-      lc.warn?.(
-        `Using required-only initial-sync indexes: ${filtered.length}/${indices.length}`,
-      );
-      return filtered;
-    }
-    case 'dedupe': {
-      const seen = new Set<string>();
-      const filtered: T[] = [];
-      for (const index of indices) {
-        const key = `${index.tableName}:${Object.entries(index.columns)
-          .map(([col, dir]) => `${col}:${dir}`)
-          .join(',')}`;
-        if (!seen.has(key) || index.unique || index.isPrimaryKey) {
-          seen.add(key);
-          filtered.push(index);
-        } else {
-          lc.warn?.(`Skipping duplicate-equivalent index ${index.name}`);
-        }
+  const filtered = (() => {
+    switch (mode) {
+      case 'all':
+        return indices;
+      case 'none':
+        lc.warn?.(`Skipping all ${indices.length} initial-sync indexes`);
+        return [];
+      case 'required': {
+        const filtered = indices.filter(
+          index => index.unique || index.isPrimaryKey,
+        );
+        lc.warn?.(
+          `Using required-only initial-sync indexes: ${filtered.length}/${indices.length}`,
+        );
+        return filtered;
       }
-      lc.warn?.(
-        `Using deduped initial-sync indexes: ${filtered.length}/${indices.length}`,
-      );
-      return filtered;
+      case 'dedupe': {
+        const seen = new Set<string>();
+        const filtered: T[] = [];
+        for (const index of indices) {
+          const key = `${index.tableName}:${Object.entries(index.columns)
+            .map(([col, dir]) => `${col}:${dir}`)
+            .join(',')}`;
+          if (!seen.has(key) || index.unique || index.isPrimaryKey) {
+            seen.add(key);
+            filtered.push(index);
+          } else {
+            lc.warn?.(`Skipping duplicate-equivalent index ${index.name}`);
+          }
+        }
+        lc.warn?.(
+          `Using deduped initial-sync indexes: ${filtered.length}/${indices.length}`,
+        );
+        return filtered;
+      }
+      case undefined:
+        return indices;
     }
-    case undefined:
-      return indices;
+  })();
+
+  if (excludeRegex === undefined || excludeRegex === '') {
+    return filtered;
   }
+  const regex = new RegExp(excludeRegex);
+  const included = filtered.filter(index => {
+    const key = `${index.schema}.${index.tableName}.${index.name}`;
+    return !regex.test(key);
+  });
+  lc.warn?.(
+    `Excluded ${filtered.length - included.length}/${filtered.length} ` +
+      `initial-sync indexes with regex ${excludeRegex}`,
+  );
+  return included;
 }
 
 function createLiteIndices(lc: LogContext, tx: Database, indices: IndexSpec[]) {
@@ -668,6 +738,28 @@ function createLiteIndices(lc: LogContext, tx: Database, indices: IndexSpec[]) {
         `(${(performance.now() - start).toFixed(3)} ms): ${stmt}`,
     );
   }
+}
+
+function configureInitialSyncSqlitePageSize(
+  lc: LogContext,
+  tx: Database,
+  sqlitePageSize: number | undefined,
+) {
+  if (sqlitePageSize === undefined) {
+    return;
+  }
+  if (
+    !Number.isInteger(sqlitePageSize) ||
+    sqlitePageSize < 512 ||
+    sqlitePageSize > 65536 ||
+    (sqlitePageSize & (sqlitePageSize - 1)) !== 0
+  ) {
+    throw new Error(
+      `sqlitePageSize must be a power of two from 512 to 65536, got ${sqlitePageSize}`,
+    );
+  }
+  lc.info?.(`Setting SQLite PRAGMA page_size=${sqlitePageSize}`);
+  tx.pragma(`page_size = ${sqlitePageSize}`);
 }
 
 /**
@@ -785,6 +877,185 @@ const COPY_BYTES_ESTIMATE_SAMPLE_PAGES = 16;
 const MB = 1024 * 1024;
 const MAX_BUFFERED_ROWS = 10_000;
 const BUFFERED_SIZE_THRESHOLD = 8 * MB;
+
+type CopyImportOptions = {
+  importProfile: boolean;
+  insertBatchSize: number;
+  maxBufferedRows: number;
+  bufferedSizeThresholdBytes: number;
+};
+
+function normalizeCopyImportOptions({
+  importProfile,
+  insertBatchSize,
+  maxBufferedRows,
+  bufferedSizeThresholdBytes,
+}: Pick<
+  InitialSyncOptions,
+  | 'importProfile'
+  | 'insertBatchSize'
+  | 'maxBufferedRows'
+  | 'bufferedSizeThresholdBytes'
+>): CopyImportOptions {
+  const options = {
+    importProfile: !!importProfile,
+    insertBatchSize: positiveIntegerOption(
+      'insertBatchSize',
+      insertBatchSize,
+      INSERT_BATCH_SIZE,
+    ),
+    maxBufferedRows: positiveIntegerOption(
+      'maxBufferedRows',
+      maxBufferedRows,
+      MAX_BUFFERED_ROWS,
+    ),
+    bufferedSizeThresholdBytes: positiveIntegerOption(
+      'bufferedSizeThresholdBytes',
+      bufferedSizeThresholdBytes,
+      BUFFERED_SIZE_THRESHOLD,
+    ),
+  };
+  if (options.maxBufferedRows < options.insertBatchSize) {
+    throw new Error(
+      `maxBufferedRows (${options.maxBufferedRows}) must be >= ` +
+        `insertBatchSize (${options.insertBatchSize})`,
+    );
+  }
+  return options;
+}
+
+function positiveIntegerOption(
+  name: string,
+  value: number | undefined,
+  defaultValue: number,
+): number {
+  if (value === undefined) {
+    return defaultValue;
+  }
+  if (!Number.isInteger(value) || value <= 0) {
+    throw new Error(`${name} must be a positive integer, got ${value}`);
+  }
+  return value;
+}
+
+function configureInitialSyncSqlite(
+  lc: LogContext,
+  tx: Database,
+  {
+    sqliteCacheSize,
+    sqliteMmapSize,
+    sqliteTempStore,
+  }: Pick<
+    InitialSyncOptions,
+    'sqliteCacheSize' | 'sqliteMmapSize' | 'sqliteTempStore'
+  >,
+) {
+  if (sqliteCacheSize !== undefined) {
+    if (!Number.isInteger(sqliteCacheSize) || sqliteCacheSize === 0) {
+      throw new Error(`sqliteCacheSize must be a non-zero integer`);
+    }
+    lc.info?.(`Setting SQLite PRAGMA cache_size=${sqliteCacheSize}`);
+    tx.pragma(`cache_size = ${sqliteCacheSize}`);
+  }
+  if (sqliteMmapSize !== undefined) {
+    if (!Number.isInteger(sqliteMmapSize) || sqliteMmapSize < 0) {
+      throw new Error(`sqliteMmapSize must be a non-negative integer`);
+    }
+    lc.info?.(`Setting SQLite PRAGMA mmap_size=${sqliteMmapSize}`);
+    tx.pragma(`mmap_size = ${sqliteMmapSize}`);
+  }
+  if (sqliteTempStore !== undefined) {
+    const tempStore = sqliteTempStore.toUpperCase();
+    lc.info?.(`Setting SQLite PRAGMA temp_store=${tempStore}`);
+    tx.pragma(`temp_store = ${tempStore}`);
+  }
+}
+
+type CopyImportProfile = {
+  writeCalls: number;
+  inputBytes: number;
+  fields: number;
+  nullFields: number;
+  rows: number;
+  parserMs: number;
+  decodeMs: number;
+  valueStoreMs: number;
+  writeCallbackMs: number;
+  flushCalls: number;
+  flushedRows: number;
+  flushedBytes: number;
+  sliceMs: number;
+  insertBatchMs: number;
+  insertSingleMs: number;
+  clearMs: number;
+  statusMs: number;
+  batchStatements: number;
+  singleStatements: number;
+};
+
+function newCopyImportProfile(): CopyImportProfile {
+  return {
+    writeCalls: 0,
+    inputBytes: 0,
+    fields: 0,
+    nullFields: 0,
+    rows: 0,
+    parserMs: 0,
+    decodeMs: 0,
+    valueStoreMs: 0,
+    writeCallbackMs: 0,
+    flushCalls: 0,
+    flushedRows: 0,
+    flushedBytes: 0,
+    sliceMs: 0,
+    insertBatchMs: 0,
+    insertSingleMs: 0,
+    clearMs: 0,
+    statusMs: 0,
+    batchStatements: 0,
+    singleStatements: 0,
+  };
+}
+
+function logCopyImportProfile(
+  lc: LogContext,
+  copyName: string,
+  mode: 'binary' | 'text',
+  profile: CopyImportProfile | undefined,
+  elapsedMs: number,
+  flushMs: number,
+) {
+  if (!profile) {
+    return;
+  }
+  lc.info?.(`initial-sync import profile for ${copyName}`, {
+    mode,
+    elapsedMs,
+    flushMs,
+    streamWaitMs: elapsedMs - profile.writeCallbackMs,
+    writeCallbackMs: profile.writeCallbackMs,
+    parserMs: profile.parserMs,
+    decodeMs: profile.decodeMs,
+    valueStoreMs: profile.valueStoreMs,
+    rows: profile.rows,
+    fields: profile.fields,
+    nullFields: profile.nullFields,
+    writeCalls: profile.writeCalls,
+    inputBytes: profile.inputBytes,
+    flush: {
+      calls: profile.flushCalls,
+      rows: profile.flushedRows,
+      bytes: profile.flushedBytes,
+      sliceMs: profile.sliceMs,
+      insertBatchMs: profile.insertBatchMs,
+      insertSingleMs: profile.insertSingleMs,
+      clearMs: profile.clearMs,
+      statusMs: profile.statusMs,
+      batchStatements: profile.batchStatements,
+      singleStatements: profile.singleStatements,
+    },
+  });
+}
 
 export type DownloadStatements = {
   select: string;
@@ -1120,6 +1391,7 @@ function copy(
   from: PostgresTransaction,
   to: Database,
   textCopy: boolean,
+  copyImportOptions: CopyImportOptions,
   sampleRate?: number | undefined,
   maxRowsPerTable?: number | undefined,
 ) {
@@ -1131,6 +1403,7 @@ function copy(
       dbClient,
       from,
       to,
+      copyImportOptions,
       sampleRate,
       maxRowsPerTable,
       chunk,
@@ -1142,6 +1415,7 @@ function copy(
     status,
     from,
     to,
+    copyImportOptions,
     sampleRate,
     maxRowsPerTable,
     chunk,
@@ -1154,6 +1428,7 @@ async function copyBinary(
   status: DownloadStatus,
   from: PostgresTransaction,
   to: Database,
+  copyImportOptions: CopyImportOptions,
   sampleRate?: number | undefined,
   maxRowsPerTable?: number | undefined,
   chunk?: CtidChunk | undefined,
@@ -1165,10 +1440,15 @@ async function copyBinary(
   const tableName = liteTableName(table);
   const copyName = copyTaskName(tableName, chunk);
   const orderedColumns = Object.entries(table.columns);
+  const profile = copyImportOptions.importProfile
+    ? newCopyImportProfile()
+    : undefined;
 
   const columnNames = orderedColumns.map(([c]) => c);
   const columnSpecs = orderedColumns.map(([_name, spec]) => spec);
   const insertColumnList = columnNames.map(c => id(c)).join(',');
+  const {insertBatchSize, maxBufferedRows, bufferedSizeThresholdBytes} =
+    copyImportOptions;
 
   const valuesSql =
     columnNames.length > 0 ? `(${'?,'.repeat(columnNames.length - 1)}?)` : '()';
@@ -1176,7 +1456,7 @@ async function copyBinary(
     INSERT INTO "${tableName}" (${insertColumnList}) VALUES ${valuesSql}`;
   const insertStmt = to.prepare(insertSql);
   const insertBatchStmt = to.prepare(
-    insertSql + `,${valuesSql}`.repeat(INSERT_BATCH_SIZE - 1),
+    insertSql + `,${valuesSql}`.repeat(insertBatchSize - 1),
   );
 
   // Build SELECT with ::text casts for columns without a known binary decoder.
@@ -1194,38 +1474,100 @@ async function copyBinary(
   );
 
   const valuesPerRow = columnSpecs.length;
-  const valuesPerBatch = valuesPerRow * INSERT_BATCH_SIZE;
+  const valuesPerBatch = valuesPerRow * insertBatchSize;
 
   const pendingValues: LiteValueType[] = Array.from({
-    length: MAX_BUFFERED_ROWS * valuesPerRow,
+    length: maxBufferedRows * valuesPerRow,
   });
+  const pendingRowSizes = Array<number>(maxBufferedRows).fill(0);
   let pendingRows = 0;
   let pendingSize = 0;
 
-  function flush() {
+  function flush(final = false) {
+    const rowsToFlush = final
+      ? pendingRows
+      : Math.floor(pendingRows / insertBatchSize) * insertBatchSize;
+    if (rowsToFlush === 0) {
+      return;
+    }
     const start = performance.now();
-    const flushedRows = pendingRows;
-    const flushedSize = pendingSize;
+    let flushedSize = 0;
+    for (let i = 0; i < rowsToFlush; i++) {
+      flushedSize += pendingRowSizes[i];
+    }
+    profile && profile.flushCalls++;
+    if (profile) {
+      profile.flushedRows += rowsToFlush;
+      profile.flushedBytes += flushedSize;
+    }
 
     let l = 0;
-    for (; pendingRows > INSERT_BATCH_SIZE; pendingRows -= INSERT_BATCH_SIZE) {
-      insertBatchStmt.run(pendingValues.slice(l, (l += valuesPerBatch)));
+    let remainingRowsToFlush = rowsToFlush;
+    for (
+      ;
+      remainingRowsToFlush >= insertBatchSize;
+      remainingRowsToFlush -= insertBatchSize
+    ) {
+      let values: LiteValueType[];
+      if (profile) {
+        const sliceStart = performance.now();
+        values = pendingValues.slice(l, (l += valuesPerBatch));
+        profile.sliceMs += performance.now() - sliceStart;
+        const insertStart = performance.now();
+        insertBatchStmt.run(values);
+        profile.insertBatchMs += performance.now() - insertStart;
+        profile.batchStatements++;
+      } else {
+        insertBatchStmt.run(pendingValues.slice(l, (l += valuesPerBatch)));
+      }
     }
-    for (; pendingRows > 0; pendingRows--) {
-      insertStmt.run(pendingValues.slice(l, (l += valuesPerRow)));
+    for (; remainingRowsToFlush > 0; remainingRowsToFlush--) {
+      let values: LiteValueType[];
+      if (profile) {
+        const sliceStart = performance.now();
+        values = pendingValues.slice(l, (l += valuesPerRow));
+        profile.sliceMs += performance.now() - sliceStart;
+        const insertStart = performance.now();
+        insertStmt.run(values);
+        profile.insertSingleMs += performance.now() - insertStart;
+        profile.singleStatements++;
+      } else {
+        insertStmt.run(pendingValues.slice(l, (l += valuesPerRow)));
+      }
     }
-    const flushedValues = flushedRows * valuesPerRow;
-    for (let i = 0; i < flushedValues; i++) {
+    const previousRows = pendingRows;
+    const remainingRows = pendingRows - rowsToFlush;
+    const flushedValues = rowsToFlush * valuesPerRow;
+    const remainingValues = remainingRows * valuesPerRow;
+    const clearStart = profile ? performance.now() : 0;
+    for (let i = 0; i < remainingValues; i++) {
+      pendingValues[i] = pendingValues[flushedValues + i];
+    }
+    for (let i = 0; i < remainingRows; i++) {
+      pendingRowSizes[i] = pendingRowSizes[rowsToFlush + i];
+    }
+    for (let i = remainingValues; i < previousRows * valuesPerRow; i++) {
       pendingValues[i] = undefined as unknown as LiteValueType;
     }
-    pendingSize = 0;
-    status.rows += flushedRows;
-    copiedRows += flushedRows;
+    for (let i = remainingRows; i < previousRows; i++) {
+      pendingRowSizes[i] = 0;
+    }
+    if (profile) {
+      profile.clearMs += performance.now() - clearStart;
+    }
+    const statusStart = profile ? performance.now() : 0;
+    pendingRows = remainingRows;
+    pendingSize -= flushedSize;
+    status.rows += rowsToFlush;
+    copiedRows += rowsToFlush;
+    if (profile) {
+      profile.statusMs += performance.now() - statusStart;
+    }
 
     const elapsed = performance.now() - start;
     flushTime += elapsed;
     lc.debug?.(
-      `flushed ${flushedRows} ${tableName} rows (${flushedSize} bytes) in ${elapsed.toFixed(3)} ms`,
+      `flushed ${rowsToFlush} ${tableName} rows (${flushedSize} bytes) in ${elapsed.toFixed(3)} ms`,
     );
   }
 
@@ -1239,7 +1581,7 @@ async function copyBinary(
       .unsafe(`COPY (${select}) TO STDOUT WITH (FORMAT binary)`)
       .readable(),
     new Writable({
-      highWaterMark: BUFFERED_SIZE_THRESHOLD,
+      highWaterMark: bufferedSizeThresholdBytes,
 
       write(
         chunk: Buffer,
@@ -1247,18 +1589,64 @@ async function copyBinary(
         callback: (error?: Error) => void,
       ) {
         try {
-          for (const fieldBuf of binaryParser.parse(chunk)) {
-            pendingSize += fieldBuf === null ? 4 : fieldBuf.length;
-            pendingValues[pendingRows * valuesPerRow + col] =
-              fieldBuf === null ? null : decoders[col](fieldBuf);
+          if (profile) {
+            const writeStart = performance.now();
+            profile.writeCalls++;
+            profile.inputBytes += chunk.length;
+            const iterator = binaryParser.parse(chunk)[Symbol.iterator]();
+            for (;;) {
+              const parseStart = performance.now();
+              const next = iterator.next();
+              profile.parserMs += performance.now() - parseStart;
+              if (next.done) {
+                break;
+              }
+              const fieldBuf = next.value;
+              profile.fields++;
+              let value: LiteValueType | null;
+              if (fieldBuf === null) {
+                profile.nullFields++;
+                value = null;
+              } else {
+                const decodeStart = performance.now();
+                value = decoders[col](fieldBuf);
+                profile.decodeMs += performance.now() - decodeStart;
+              }
+              const storeStart = performance.now();
+              const fieldSize = fieldBuf === null ? 4 : fieldBuf.length;
+              pendingSize += fieldSize;
+              pendingRowSizes[pendingRows] += fieldSize;
+              pendingValues[pendingRows * valuesPerRow + col] = value;
+              profile.valueStoreMs += performance.now() - storeStart;
 
-            if (++col === decoders.length) {
-              col = 0;
-              if (
-                ++pendingRows >= MAX_BUFFERED_ROWS - valuesPerRow ||
-                pendingSize >= BUFFERED_SIZE_THRESHOLD
-              ) {
-                flush();
+              if (++col === decoders.length) {
+                col = 0;
+                profile.rows++;
+                if (
+                  ++pendingRows >= maxBufferedRows ||
+                  pendingSize >= bufferedSizeThresholdBytes
+                ) {
+                  flush();
+                }
+              }
+            }
+            profile.writeCallbackMs += performance.now() - writeStart;
+          } else {
+            for (const fieldBuf of binaryParser.parse(chunk)) {
+              const fieldSize = fieldBuf === null ? 4 : fieldBuf.length;
+              pendingSize += fieldSize;
+              pendingRowSizes[pendingRows] += fieldSize;
+              pendingValues[pendingRows * valuesPerRow + col] =
+                fieldBuf === null ? null : decoders[col](fieldBuf);
+
+              if (++col === decoders.length) {
+                col = 0;
+                if (
+                  ++pendingRows >= maxBufferedRows ||
+                  pendingSize >= bufferedSizeThresholdBytes
+                ) {
+                  flush();
+                }
               }
             }
           }
@@ -1270,7 +1658,7 @@ async function copyBinary(
 
       final: (callback: (error?: Error) => void) => {
         try {
-          flush();
+          flush(true);
           callback();
         } catch (e) {
           callback(e instanceof Error ? e : new Error(String(e)));
@@ -1280,6 +1668,7 @@ async function copyBinary(
   );
 
   const elapsed = performance.now() - start;
+  logCopyImportProfile(lc, copyName, 'binary', profile, elapsed, flushTime);
   lc.info?.(
     `Finished copying ${copiedRows} rows into ${copyName} ` +
       `(flush: ${flushTime.toFixed(3)} ms) (total: ${elapsed.toFixed(3)} ms) `,
@@ -1294,6 +1683,7 @@ async function copyText(
   dbClient: PostgresDB,
   from: PostgresTransaction,
   to: Database,
+  copyImportOptions: CopyImportOptions,
   sampleRate?: number | undefined,
   maxRowsPerTable?: number | undefined,
   chunk?: CtidChunk | undefined,
@@ -1305,10 +1695,15 @@ async function copyText(
   const tableName = liteTableName(table);
   const copyName = copyTaskName(tableName, chunk);
   const orderedColumns = Object.entries(table.columns);
+  const profile = copyImportOptions.importProfile
+    ? newCopyImportProfile()
+    : undefined;
 
   const columnNames = orderedColumns.map(([c]) => c);
   const columnSpecs = orderedColumns.map(([_name, spec]) => spec);
   const insertColumnList = columnNames.map(c => id(c)).join(',');
+  const {insertBatchSize, maxBufferedRows, bufferedSizeThresholdBytes} =
+    copyImportOptions;
 
   const valuesSql =
     columnNames.length > 0 ? `(${'?,'.repeat(columnNames.length - 1)}?)` : '()';
@@ -1316,7 +1711,7 @@ async function copyText(
     INSERT INTO "${tableName}" (${insertColumnList}) VALUES ${valuesSql}`;
   const insertStmt = to.prepare(insertSql);
   const insertBatchStmt = to.prepare(
-    insertSql + `,${valuesSql}`.repeat(INSERT_BATCH_SIZE - 1),
+    insertSql + `,${valuesSql}`.repeat(insertBatchSize - 1),
   );
 
   const {select} = makeDownloadStatements(
@@ -1328,38 +1723,100 @@ async function copyText(
     ctidRangePredicate(chunk),
   );
   const valuesPerRow = columnSpecs.length;
-  const valuesPerBatch = valuesPerRow * INSERT_BATCH_SIZE;
+  const valuesPerBatch = valuesPerRow * insertBatchSize;
 
   const pendingValues: LiteValueType[] = Array.from({
-    length: MAX_BUFFERED_ROWS * valuesPerRow,
+    length: maxBufferedRows * valuesPerRow,
   });
+  const pendingRowSizes = Array<number>(maxBufferedRows).fill(0);
   let pendingRows = 0;
   let pendingSize = 0;
 
-  function flush() {
+  function flush(final = false) {
+    const rowsToFlush = final
+      ? pendingRows
+      : Math.floor(pendingRows / insertBatchSize) * insertBatchSize;
+    if (rowsToFlush === 0) {
+      return;
+    }
     const start = performance.now();
-    const flushedRows = pendingRows;
-    const flushedSize = pendingSize;
+    let flushedSize = 0;
+    for (let i = 0; i < rowsToFlush; i++) {
+      flushedSize += pendingRowSizes[i];
+    }
+    profile && profile.flushCalls++;
+    if (profile) {
+      profile.flushedRows += rowsToFlush;
+      profile.flushedBytes += flushedSize;
+    }
 
     let l = 0;
-    for (; pendingRows > INSERT_BATCH_SIZE; pendingRows -= INSERT_BATCH_SIZE) {
-      insertBatchStmt.run(pendingValues.slice(l, (l += valuesPerBatch)));
+    let remainingRowsToFlush = rowsToFlush;
+    for (
+      ;
+      remainingRowsToFlush >= insertBatchSize;
+      remainingRowsToFlush -= insertBatchSize
+    ) {
+      let values: LiteValueType[];
+      if (profile) {
+        const sliceStart = performance.now();
+        values = pendingValues.slice(l, (l += valuesPerBatch));
+        profile.sliceMs += performance.now() - sliceStart;
+        const insertStart = performance.now();
+        insertBatchStmt.run(values);
+        profile.insertBatchMs += performance.now() - insertStart;
+        profile.batchStatements++;
+      } else {
+        insertBatchStmt.run(pendingValues.slice(l, (l += valuesPerBatch)));
+      }
     }
-    for (; pendingRows > 0; pendingRows--) {
-      insertStmt.run(pendingValues.slice(l, (l += valuesPerRow)));
+    for (; remainingRowsToFlush > 0; remainingRowsToFlush--) {
+      let values: LiteValueType[];
+      if (profile) {
+        const sliceStart = performance.now();
+        values = pendingValues.slice(l, (l += valuesPerRow));
+        profile.sliceMs += performance.now() - sliceStart;
+        const insertStart = performance.now();
+        insertStmt.run(values);
+        profile.insertSingleMs += performance.now() - insertStart;
+        profile.singleStatements++;
+      } else {
+        insertStmt.run(pendingValues.slice(l, (l += valuesPerRow)));
+      }
     }
-    const flushedValues = flushedRows * valuesPerRow;
-    for (let i = 0; i < flushedValues; i++) {
+    const previousRows = pendingRows;
+    const remainingRows = pendingRows - rowsToFlush;
+    const flushedValues = rowsToFlush * valuesPerRow;
+    const remainingValues = remainingRows * valuesPerRow;
+    const clearStart = profile ? performance.now() : 0;
+    for (let i = 0; i < remainingValues; i++) {
+      pendingValues[i] = pendingValues[flushedValues + i];
+    }
+    for (let i = 0; i < remainingRows; i++) {
+      pendingRowSizes[i] = pendingRowSizes[rowsToFlush + i];
+    }
+    for (let i = remainingValues; i < previousRows * valuesPerRow; i++) {
       pendingValues[i] = undefined as unknown as LiteValueType;
     }
-    pendingSize = 0;
-    status.rows += flushedRows;
-    copiedRows += flushedRows;
+    for (let i = remainingRows; i < previousRows; i++) {
+      pendingRowSizes[i] = 0;
+    }
+    if (profile) {
+      profile.clearMs += performance.now() - clearStart;
+    }
+    const statusStart = profile ? performance.now() : 0;
+    pendingRows = remainingRows;
+    pendingSize -= flushedSize;
+    status.rows += rowsToFlush;
+    copiedRows += rowsToFlush;
+    if (profile) {
+      profile.statusMs += performance.now() - statusStart;
+    }
 
     const elapsed = performance.now() - start;
     flushTime += elapsed;
     lc.debug?.(
-      `flushed ${flushedRows} ${tableName} rows (${flushedSize} bytes) in ${elapsed.toFixed(3)} ms`,
+      `flushed ${rowsToFlush} ${tableName} rows (${flushedSize} bytes) in ${elapsed.toFixed(3)} ms`,
     );
   }
 
@@ -1381,7 +1838,7 @@ async function copyText(
   await pipeline(
     await from.unsafe(`COPY (${select}) TO STDOUT`).readable(),
     new Writable({
-      highWaterMark: BUFFERED_SIZE_THRESHOLD,
+      highWaterMark: bufferedSizeThresholdBytes,
 
       write(
         chunk: Buffer,
@@ -1389,18 +1846,64 @@ async function copyText(
         callback: (error?: Error) => void,
       ) {
         try {
-          for (const text of tsvParser.parse(chunk)) {
-            pendingSize += text === null ? 4 : text.length;
-            pendingValues[pendingRows * valuesPerRow + col] =
-              text === null ? null : parsers[col](text);
+          if (profile) {
+            const writeStart = performance.now();
+            profile.writeCalls++;
+            profile.inputBytes += chunk.length;
+            const iterator = tsvParser.parse(chunk)[Symbol.iterator]();
+            for (;;) {
+              const parseStart = performance.now();
+              const next = iterator.next();
+              profile.parserMs += performance.now() - parseStart;
+              if (next.done) {
+                break;
+              }
+              const text = next.value;
+              profile.fields++;
+              let value: LiteValueType | null;
+              if (text === null) {
+                profile.nullFields++;
+                value = null;
+              } else {
+                const decodeStart = performance.now();
+                value = parsers[col](text);
+                profile.decodeMs += performance.now() - decodeStart;
+              }
+              const storeStart = performance.now();
+              const fieldSize = text === null ? 4 : text.length;
+              pendingSize += fieldSize;
+              pendingRowSizes[pendingRows] += fieldSize;
+              pendingValues[pendingRows * valuesPerRow + col] = value;
+              profile.valueStoreMs += performance.now() - storeStart;
 
-            if (++col === parsers.length) {
-              col = 0;
-              if (
-                ++pendingRows >= MAX_BUFFERED_ROWS - valuesPerRow ||
-                pendingSize >= BUFFERED_SIZE_THRESHOLD
-              ) {
-                flush();
+              if (++col === parsers.length) {
+                col = 0;
+                profile.rows++;
+                if (
+                  ++pendingRows >= maxBufferedRows ||
+                  pendingSize >= bufferedSizeThresholdBytes
+                ) {
+                  flush();
+                }
+              }
+            }
+            profile.writeCallbackMs += performance.now() - writeStart;
+          } else {
+            for (const text of tsvParser.parse(chunk)) {
+              const fieldSize = text === null ? 4 : text.length;
+              pendingSize += fieldSize;
+              pendingRowSizes[pendingRows] += fieldSize;
+              pendingValues[pendingRows * valuesPerRow + col] =
+                text === null ? null : parsers[col](text);
+
+              if (++col === parsers.length) {
+                col = 0;
+                if (
+                  ++pendingRows >= maxBufferedRows ||
+                  pendingSize >= bufferedSizeThresholdBytes
+                ) {
+                  flush();
+                }
               }
             }
           }
@@ -1412,7 +1915,7 @@ async function copyText(
 
       final: (callback: (error?: Error) => void) => {
         try {
-          flush();
+          flush(true);
           callback();
         } catch (e) {
           callback(e instanceof Error ? e : new Error(String(e)));
@@ -1422,6 +1925,7 @@ async function copyText(
   );
 
   const elapsed = performance.now() - start;
+  logCopyImportProfile(lc, copyName, 'text', profile, elapsed, flushTime);
   lc.info?.(
     `Finished copying ${copiedRows} rows into ${copyName} ` +
       `(flush: ${flushTime.toFixed(3)} ms) (total: ${elapsed.toFixed(3)} ms) `,

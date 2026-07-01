@@ -86,6 +86,7 @@ parameters.json
 
 playwright-report/
 test-results/
+tmp/results/
 debug-scratch.md
 
 repro/
