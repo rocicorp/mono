@@ -693,6 +693,128 @@ describe('view-syncer/pipeline-driver', () => {
     });
   });
 
+  test('logs query pipeline lifecycle', () => {
+    logSink.messages.length = 0;
+    lc = new LogContext(
+      'info',
+      {
+        taskID: 'task-a',
+        worker: 'syncer',
+        workerIndex: 2,
+        component: 'view-syncer',
+        clientGroupID: 'foo-client-group',
+        instance: 'view-syncer-instance',
+      },
+      logSink,
+    );
+
+    const storage = new Database(lc, ':memory:');
+    storage.prepare(CREATE_STORAGE_TABLE).run();
+    pipelines = new PipelineDriver(
+      lc,
+      testLogConfig,
+      new Snapshotter(lc, dbFile.path, {appID: shardID.appID}),
+      shardID,
+      new DatabaseStorage(storage).createClientGroupStorage('foo-client-group'),
+      'foo-client-group',
+      new InspectorDelegate(undefined),
+      () => 200 /** yield threshold */,
+    );
+    pipelines.init(clientSchema);
+
+    [
+      ...pipelines.addQuery(
+        'transformation-hash-1',
+        'queryID1',
+        ISSUES_AND_COMMENTS,
+        NO_TIME_ADVANCEMENT_TIMER,
+      ),
+    ];
+    [
+      ...pipelines.addQuery(
+        'transformation-hash-1',
+        'queryID2',
+        ISSUES_AND_COMMENTS,
+        NO_TIME_ADVANCEMENT_TIMER,
+      ),
+    ];
+    pipelines.removeQuery('queryID1');
+
+    const lifecycleContexts = logSink.messages
+      .filter(
+        ([level, context, args]) =>
+          level === 'info' &&
+          context?.zeroEvent !== undefined &&
+          args[0] === 'query pipeline lifecycle',
+      )
+      .map(([, context]) => context);
+
+    expect(lifecycleContexts.map(c => c?.zeroEvent)).toEqual([
+      'query-pipeline-hydrate-start',
+      'query-pipeline-hydrate-finish',
+      'query-pipeline-hydrate-start',
+      'query-pipeline-hydrate-finish',
+      'query-pipeline-stop',
+    ]);
+
+    const query1Start = lifecycleContexts.find(
+      c =>
+        c?.zeroEvent === 'query-pipeline-hydrate-start' &&
+        c.queryHash === 'queryID1',
+    );
+    const query1Finish = lifecycleContexts.find(
+      c =>
+        c?.zeroEvent === 'query-pipeline-hydrate-finish' &&
+        c.queryHash === 'queryID1',
+    );
+    const query1Stop = lifecycleContexts.find(
+      c => c?.zeroEvent === 'query-pipeline-stop' && c.queryHash === 'queryID1',
+    );
+    const query2Start = lifecycleContexts.find(
+      c =>
+        c?.zeroEvent === 'query-pipeline-hydrate-start' &&
+        c.queryHash === 'queryID2',
+    );
+    const query2Finish = lifecycleContexts.find(
+      c =>
+        c?.zeroEvent === 'query-pipeline-hydrate-finish' &&
+        c.queryHash === 'queryID2',
+    );
+
+    expect(query1Start).toMatchObject({
+      taskID: 'task-a',
+      worker: 'syncer',
+      workerIndex: 2,
+      component: 'view-syncer',
+      clientGroupID: 'foo-client-group',
+      instance: 'view-syncer-instance',
+      queryHash: 'queryID1',
+      transformationHash: 'transformation-hash-1',
+      hydrationReason: 'query-set-sync',
+    });
+    expect(query1Finish).toMatchObject({
+      queryHash: 'queryID1',
+      pipelineRunID: query1Start?.pipelineRunID,
+      hydrationRowCount: expect.any(Number),
+      hydrationTimeMs: expect.any(Number),
+    });
+    expect(query2Start).toMatchObject({
+      queryHash: 'queryID2',
+      transformationHash: 'transformation-hash-1',
+    });
+    expect(query2Finish).toMatchObject({
+      queryHash: 'queryID2',
+      pipelineRunID: query2Start?.pipelineRunID,
+    });
+    expect(query1Stop).toMatchObject({
+      zeroEvent: 'query-pipeline-stop',
+      queryHash: 'queryID1',
+      pipelineRunID: query1Start?.pipelineRunID,
+      stopReason: 'remove-query',
+      pipelineLifetimeMs: expect.any(Number),
+    });
+  });
+
   test('insert', () => {
     pipelines.init(clientSchema);
     [
