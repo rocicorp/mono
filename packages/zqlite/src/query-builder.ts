@@ -322,6 +322,22 @@ function nullableAwareRangeComparison(
     : sql`(${sql.ident(field)} IS NULL OR ${comparison})`;
 }
 
+function sargableLeadingStartBound(
+  field: string,
+  value: unknown,
+  operator: '>' | '<',
+  columnType: SchemaValue,
+): SQLQuery | undefined {
+  if (columnType.optional === true) {
+    return undefined;
+  }
+
+  const inclusiveOperator = operator === '>' ? '>=' : '<=';
+  return sql`${sql.ident(field)} ${sql.__dangerous__rawValue(
+    inclusiveOperator,
+  )} ${value}`;
+}
+
 /**
  * The ordering could be complex such as:
  * `ORDER BY a ASC, b DESC, c ASC`
@@ -346,6 +362,7 @@ function gatherStartConstraints(
 ): SQLQuery {
   const constraints: SQLQuery[] = [];
   const {row: from, basis} = start;
+  let leadingBound: SQLQuery | undefined;
 
   for (let i = 0; i < order.length; i++) {
     const group: SQLQuery[] = [];
@@ -356,6 +373,14 @@ function gatherStartConstraints(
         const constraintValue = toSQLiteType(from[iField], columnType.type);
         const operator =
           iDirection === 'asc' ? (reverse ? '<' : '>') : reverse ? '>' : '<';
+        if (i === 0) {
+          leadingBound = sargableLeadingStartBound(
+            iField,
+            constraintValue,
+            operator,
+            columnType,
+          );
+        }
         group.push(
           nullableAwareRangeComparison(
             iField,
@@ -387,5 +412,8 @@ function gatherStartConstraints(
     );
   }
 
-  return sql`(${sql.join(constraints, sql` OR `)})`;
+  const lexicographicStart = sql`(${sql.join(constraints, sql` OR `)})`;
+  return leadingBound === undefined
+    ? lexicographicStart
+    : sql`(${leadingBound} AND ${lexicographicStart})`;
 }
