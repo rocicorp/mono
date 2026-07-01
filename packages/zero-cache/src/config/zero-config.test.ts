@@ -248,6 +248,15 @@ test('zero-cache --help', () => {
                                                                                                                                                                                                    
                                                                         You can disable the planner if it is picking bad strategies.                                                               
                                                                                                                                                                                                    
+     --enable-query-covering boolean                                    default: true                                                                                                              
+       ZERO_ENABLE_QUERY_COVERING env                                                                                                                                                              
+                                                                        Enable shadow-mode query covering detection during query hydration.                                                        
+                                                                                                                                                                                                   
+                                                                        When enabled, view-syncers compare newly hydrated queries against running                                                  
+                                                                        queries with the same root table and log aggregate coverage stats.                                                         
+                                                                                                                                                                                                   
+                                                                        You can disable this if covering detection adds too much CPU overhead.                                                     
+                                                                                                                                                                                                   
      --yield-threshold-ms number                                        default: 10                                                                                                                
        ZERO_YIELD_THRESHOLD_MS env                                                                                                                                                                 
                                                                         The maximum amount of time in milliseconds that a sync worker will                                                         
@@ -773,6 +782,17 @@ test.each([['isok'], ['has_underscores'], ['1'], ['123']])(
     expect(config.app.id).toBe(appID);
   },
 );
+
+test('--enable-query-covering can be disabled', () => {
+  const {config} = parseOptionsAdvanced(zeroOptions, {
+    argv: ['--enable-query-covering', 'false'],
+    envNamePrefix: 'ZERO_',
+    allowUnknown: false,
+    allowPartial: true,
+  });
+
+  expect(config.enableQueryCovering).toBe(false);
+});
 
 test('--shard-id disallowed', () => {
   const logger = {info: vi.fn()};
