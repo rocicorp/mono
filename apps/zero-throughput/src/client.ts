@@ -1,3 +1,4 @@
+import {performance} from 'node:perf_hooks';
 import {Zero, type ConnectionState, type ResultType} from '@rocicorp/zero';
 import WebSocket from 'ws';
 import type {BenchmarkConfig} from './config.ts';
@@ -13,6 +14,10 @@ export type ClientQueryStats = {
   readonly updates: number;
   readonly observedSeq: number;
   readonly observedRows: number;
+  readonly observeTotalMs: number;
+  readonly observeMaxMs: number;
+  readonly collectSignalsTotalMs: number;
+  readonly collectSignalsMaxMs: number;
   readonly latencySamplesMs: readonly number[];
   readonly lastResultType: ResultType;
 };
@@ -160,6 +165,10 @@ class QueryState {
   #updates = 0;
   #observedSeq = 0;
   #observedRows = 0;
+  #observeTotalMs = 0;
+  #observeMaxMs = 0;
+  #collectSignalsTotalMs = 0;
+  #collectSignalsMaxMs = 0;
   #lastResultType: ResultType = 'unknown';
   readonly #latencySamplesMs: number[] = [];
 
@@ -200,6 +209,7 @@ class QueryState {
   }
 
   observe(rows: readonly unknown[], resultType: ResultType): void {
+    const observeStartedAtMs = performance.now();
     this.#updates++;
     this.#lastResultType = resultType;
     if (resultType === 'complete' && this.#initialSyncMs === undefined) {
@@ -211,7 +221,15 @@ class QueryState {
     const previousObservedSeq = this.#observedSeq;
     let maxSeq = this.#observedSeq;
     const newWrittenAtBySeq = new Map<number, number>();
-    for (const signal of collectSignals(rows)) {
+    const collectStartedAtMs = performance.now();
+    const signals = collectSignals(rows);
+    const collectElapsedMs = performance.now() - collectStartedAtMs;
+    this.#collectSignalsTotalMs += collectElapsedMs;
+    this.#collectSignalsMaxMs = Math.max(
+      this.#collectSignalsMaxMs,
+      collectElapsedMs,
+    );
+    for (const signal of signals) {
       if (signal.seq > previousObservedSeq) {
         const writtenAt = newWrittenAtBySeq.get(signal.seq);
         if (writtenAt === undefined || signal.writtenAt < writtenAt) {
@@ -225,6 +243,9 @@ class QueryState {
     }
     this.#observedSeq = maxSeq;
     this.#observedRows += rows.length;
+    const observeElapsedMs = performance.now() - observeStartedAtMs;
+    this.#observeTotalMs += observeElapsedMs;
+    this.#observeMaxMs = Math.max(this.#observeMaxMs, observeElapsedMs);
   }
 
   stats(): ClientQueryStats {
@@ -236,6 +257,10 @@ class QueryState {
       updates: this.#updates,
       observedSeq: this.#observedSeq,
       observedRows: this.#observedRows,
+      observeTotalMs: this.#observeTotalMs,
+      observeMaxMs: this.#observeMaxMs,
+      collectSignalsTotalMs: this.#collectSignalsTotalMs,
+      collectSignalsMaxMs: this.#collectSignalsMaxMs,
       latencySamplesMs: this.#latencySamplesMs,
       lastResultType: this.#lastResultType,
     };
