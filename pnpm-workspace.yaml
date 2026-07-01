@@ -2,6 +2,7 @@ packages:
   - 'apps/*'
   - 'packages/*'
   - 'prod/sst'
+  - 'scripts'
   - 'tools/*'
 allowBuilds:
   '@prisma/engines': true
@@ -24,7 +25,8 @@ minimumReleaseAgeExclude:
   - '@hono/node-server@1.19.13'
   - postcss@8.5.10
   - '@rocicorp/zero-sqlite3'
-  - '@rocicorp/logger@5.5.0 || 6.0.0'
+  - '@rocicorp/logger@6.1.0'
+
 overrides:
   '@hono/node-server@<1.19.13': ^1.19.13
   '@types/node': '^22.10.5'

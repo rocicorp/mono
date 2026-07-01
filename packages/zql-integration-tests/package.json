@@ -22,9 +22,10 @@
   },
   "devDependencies": {
     "@faker-js/faker": "^9.6.0",
-    "@rocicorp/logger": "^6.0.0",
+    "@rocicorp/logger": "^6.1.0",
     "@types/pg": "^8.20.0",
     "@types/tmp": "^0.2.6",
+    "ast-to-zql": "workspace:*",
     "otel": "workspace:*",
     "oxfmt": "^0.45.0",
     "pg": "^8.16.3",

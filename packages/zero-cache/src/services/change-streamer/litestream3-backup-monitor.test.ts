@@ -5,16 +5,16 @@ import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.
 import {DbFile} from '../../test/lite.ts';
 import type {Subscription} from '../../types/subscription.ts';
 import {initReplicationState} from '../replicator/schema/replication-state.ts';
+import type {ChangeStreamerService} from './change-streamer.ts';
 import {
-  BackupMonitor,
   INITIAL_BACKUP_GRACE_MS_PER_UNIT,
+  Litestream3BackupMonitor,
   RESTORABLE_BACKUP_POLL_INTERVAL_MS,
   WEDGED_SHUTDOWN_GRACE_MS,
-} from './backup-monitor.ts';
-import type {ChangeStreamerService} from './change-streamer.ts';
+} from './litestream3-backup-monitor.ts';
 import type {SnapshotMessage} from './snapshot.ts';
 
-describe('change-streamer/backup-monitor', () => {
+describe('change-streamer/litestream3-backup-monitor', () => {
   const scheduled: string[] = [];
   const changeStreamer = {
     scheduleCleanup: (watermark: string) => scheduled.push(watermark),
@@ -25,7 +25,7 @@ describe('change-streamer/backup-monitor', () => {
       }),
   };
   let metricsResponse = 'unconfigured';
-  let monitor: BackupMonitor;
+  let monitor: Litestream3BackupMonitor;
   let replica: DbFile;
 
   // Mocks the verification of the actual backup state (i.e. the
@@ -69,7 +69,7 @@ litestream_replica_validation_total{db="/tmp/zbugs-sync-replica.db",name="file",
     verifyBackupState.mockClear();
     lastActualBackupTime = () => Promise.resolve(new Date());
 
-    monitor = new BackupMonitor(
+    monitor = new Litestream3BackupMonitor(
       lc,
       replica.path,
       's3://foo/bar',

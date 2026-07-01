@@ -80,6 +80,7 @@ export interface Stats {
   min: number;
   max: number;
   avg: number;
+  median: number;
   p75: number;
   p99: number;
   samples: number[];
@@ -104,7 +105,7 @@ function histogramBins(stats: Stats, size: number, percentile: number): Bins {
 
   if (0 === step) {
     min = 0;
-    bins[clamp(0, Math.round((stats.avg - min) / step), size - 1)] = 1;
+    bins[clamp(0, Math.round((stats.median - min) / step), size - 1)] = 1;
   } else {
     for (let o = 0; o <= offset; o++) {
       bins[Math.round((stats.samples[o] - min) / step)]++;
@@ -117,7 +118,7 @@ function histogramBins(stats: Stats, size: number, percentile: number): Bins {
     step,
     bins,
     peak: arrMax(bins),
-    avg: clamp(0, Math.round((stats.avg - min) / step), size - 1),
+    avg: clamp(0, Math.round((stats.median - min) / step), size - 1),
   };
 }
 
@@ -199,7 +200,7 @@ export function printSummary(
 ) {
   if (results.length < 2) return;
 
-  const sorted = results.toSorted((a, b) => a.stats.avg - b.stats.avg);
+  const sorted = results.toSorted((a, b) => a.stats.median - b.stats.median);
   const fastest = sorted[0];
 
   const shortName = (name: string) =>
@@ -214,8 +215,8 @@ export function printSummary(
   for (const {name, stats} of sorted) {
     const sn = shortName(name);
     const isFastest = stats === fastest.stats;
-    const ratio = stats.avg / fastest.stats.avg;
-    const timeStr = fmtTime(stats.avg).padStart(9);
+    const ratio = stats.median / fastest.stats.median;
+    const timeStr = fmtTime(stats.median).padStart(9);
     const ratioStr = isFastest ? 'fastest' : `${ratio.toFixed(2)}x slower`;
     const paddedName = sn.padEnd(nameWidth);
     if (colors) {
@@ -240,7 +241,7 @@ export function printSummary(
 export function printBenchHeader(nameWidth: number, colors: boolean) {
   const print = console.log;
   const nameCol = 'benchmark'.padEnd(nameWidth);
-  const header = nameCol + ' avg (min … max) p75 / p99    (min … top 1%)';
+  const header = nameCol + ' median (min … max) p75 / p99 (min … top 1%)';
   const sep = '-'.repeat(nameWidth + 13) + ' ' + '-'.repeat(31);
   if (colors) {
     print(ansi.bold + header + ansi.reset);
@@ -258,7 +259,7 @@ export function printBenchResult(
   colors: boolean,
 ) {
   const print = console.log;
-  const avg = fmtTime(stats.avg).padStart(9);
+  const median = fmtTime(stats.median).padStart(9);
   const paddedName = fmtStr(name, nameWidth).padEnd(nameWidth);
 
   let l = paddedName + ' ';
@@ -267,12 +268,12 @@ export function printBenchResult(
   const histHeight = stats.heap ? 3 : 2;
   const histogram = histogramAscii(histBins, histHeight, colors);
 
-  if (!colors) l += avg + '/iter' + ' ' + p75 + ' ' + histogram[0];
+  if (!colors) l += median + '/iter' + ' ' + p75 + ' ' + histogram[0];
   else {
     l +=
       ansi.bold +
       ansi.yellow +
-      avg +
+      median +
       ansi.reset +
       ansi.bold +
       '/iter' +

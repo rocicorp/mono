@@ -95,11 +95,36 @@ export async function subscribe(
     lastAckTime = Date.now();
   }
 
+  // Postgres promises to send a keepalive at roughly wal_sender_timeout / 2.
+  // If we go long enough without receiving anything (data or keepalive), the
+  // inbound half of the connection is silently dead — our outbound acks keep
+  // flowing into the void, neither side errors, and the change-source sits
+  // there forever. Tear down the readable to force a reconnect.
+  //
+  // The threshold is 2x wal_sender_timeout — i.e. two consecutive keepalives
+  // missed — to avoid spurious reconnects from a single delayed keepalive
+  // (PG scheduling jitter under load, our own event-loop stalls, etc.).
+  const inboundTimeoutMs = walSenderTimeoutMs * 2;
+  let lastReceivedTime = Date.now();
+
   const livenessTimer = setInterval(() => {
     const now = Date.now();
     if (now - lastAckTime > manualKeepaliveTimeout) {
       sendAck(0n);
       lc.debug?.(`sent manual keepalive`);
+    }
+    const sinceLastReceived = now - lastReceivedTime;
+    if (sinceLastReceived > inboundTimeoutMs && !readable.destroyed) {
+      lc.warn?.(
+        `no message received from ${db.options.host} in ${sinceLastReceived}ms ` +
+          `(> 2x wal_sender_timeout ${walSenderTimeoutMs}ms). Destroying ` +
+          `replication stream to force reconnect.`,
+      );
+      readable.destroy(
+        new Error(
+          `replication stream inbound timeout after ${sinceLastReceived}ms`,
+        ),
+      );
     }
   }, manualKeepaliveTimeout / 5);
 
@@ -133,7 +158,10 @@ export async function subscribe(
   pipe({
     source: readable,
     sink: messages,
-    parse: buffer => parseStreamMessage(lc, buffer, parser),
+    parse: buffer => {
+      lastReceivedTime = Date.now();
+      return parseStreamMessage(lc, buffer, parser);
+    },
     // Allow a small buffer of messages to be queued in the subscription so
     // that the change-source loop can check the queue to determine if more
     // messages are immediately available.

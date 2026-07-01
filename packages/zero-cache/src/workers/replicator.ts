@@ -44,58 +44,60 @@ async function prepare(
   walMode: WalMode,
   mode: ReplicaFileMode,
 ): Promise<{file: string; walMode: WalMode}> {
-  const replica = new Database(lc, file);
-
   // Perform any upgrades to the replica in case the backup is an
   // earlier version.
   await upgradeReplica(lc, `${mode}-replica`, file);
 
-  // Start by folding any (e.g. restored) WAL(2) files into the main db.
-  await setJournalMode(lc, replica, 'delete');
+  const replica = new Database(lc, file);
+  try {
+    // Start by folding any (e.g. restored) WAL(2) files into the main db.
+    await setJournalMode(lc, replica, 'delete');
 
-  const [{page_size: pageSize}] = replica.pragma<{page_size: number}>(
-    'page_size',
-  );
-  const [{page_count: pageCount}] = replica.pragma<{page_count: number}>(
-    'page_count',
-  );
-  const [{freelist_count: freelistCount}] = replica.pragma<{
-    freelist_count: number;
-  }>('freelist_count');
+    const [{page_size: pageSize}] = replica.pragma<{page_size: number}>(
+      'page_size',
+    );
+    const [{page_count: pageCount}] = replica.pragma<{page_count: number}>(
+      'page_count',
+    );
+    const [{freelist_count: freelistCount}] = replica.pragma<{
+      freelist_count: number;
+    }>('freelist_count');
 
-  const dbSize = ((pageCount * pageSize) / MB).toFixed(2);
-  const freelistSize = ((freelistCount * pageSize) / MB).toFixed(2);
+    const dbSize = ((pageCount * pageSize) / MB).toFixed(2);
+    const freelistSize = ((freelistCount * pageSize) / MB).toFixed(2);
 
-  // TODO: Consider adding a freelist size or ratio based vacuum trigger.
-  lc.info?.(`Size of db ${file}: ${dbSize} MB (${freelistSize} MB freeable)`);
+    // TODO: Consider adding a freelist size or ratio based vacuum trigger.
+    lc.info?.(`Size of db ${file}: ${dbSize} MB (${freelistSize} MB freeable)`);
 
-  // Check for the VACUUM threshold.
-  const events = getAscendingEvents(replica);
-  lc.debug?.(`Runtime events for db ${file}`, {events});
-  if (vacuumIntervalHours !== undefined) {
-    const millisSinceLastEvent =
-      Date.now() - (events.at(-1)?.timestamp.getTime() ?? 0);
-    if (millisSinceLastEvent / MILLIS_PER_HOUR > vacuumIntervalHours) {
-      lc.info?.(`Performing maintenance cleanup on ${file}`);
-      const t0 = performance.now();
-      replica.unsafeMode(true);
-      replica.pragma('journal_mode = OFF');
-      replica.exec('VACUUM');
-      recordEvent(replica, 'vacuum');
-      replica.unsafeMode(false);
-      const t1 = performance.now();
-      lc.info?.(`VACUUM completed (${t1 - t0} ms)`);
+    // Check for the VACUUM threshold.
+    const events = getAscendingEvents(replica);
+    lc.debug?.(`Runtime events for db ${file}`, {events});
+    if (vacuumIntervalHours !== undefined) {
+      const millisSinceLastEvent =
+        Date.now() - (events.at(-1)?.timestamp.getTime() ?? 0);
+      if (millisSinceLastEvent / MILLIS_PER_HOUR > vacuumIntervalHours) {
+        lc.info?.(`Performing maintenance cleanup on ${file}`);
+        const t0 = performance.now();
+        replica.unsafeMode(true);
+        replica.pragma('journal_mode = OFF');
+        replica.exec('VACUUM');
+        recordEvent(replica, 'vacuum');
+        replica.unsafeMode(false);
+        const t1 = performance.now();
+        lc.info?.(`VACUUM completed (${t1 - t0} ms)`);
+      }
     }
+
+    await setJournalMode(lc, replica, walMode);
+
+    const pragmas = getPragmaConfig(mode);
+    applyPragmas(replica, pragmas);
+
+    replica.pragma('optimize = 0x10002');
+    lc.info?.(`optimized ${file}`);
+  } finally {
+    replica.close();
   }
-
-  await setJournalMode(lc, replica, walMode);
-
-  const pragmas = getPragmaConfig(mode);
-  applyPragmas(replica, pragmas);
-
-  replica.pragma('optimize = 0x10002');
-  lc.info?.(`optimized ${file}`);
-  replica.close();
   return {file, walMode};
 }
 
@@ -222,11 +224,16 @@ export function handleSubscriptionsFrom(
  * This does not send the initial subscription message. Use {@link subscribeTo}
  * to initiate the subscription.
  */
-export function createNotifierFrom(_lc: LogContext, source: Worker): Notifier {
+export function createNotifierFrom(
+  _lc: LogContext,
+  source: Worker,
+  onNotify?: (state: ReplicaState) => void,
+): Notifier {
   const notifier = new Notifier();
-  source.onMessageType<Notification>('notify', msg =>
-    notifier.notifySubscribers(msg),
-  );
+  source.onMessageType<Notification>('notify', msg => {
+    onNotify?.(msg);
+    void notifier.notifySubscribers(msg);
+  });
   return notifier;
 }
 

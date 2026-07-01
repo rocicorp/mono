@@ -1,3 +1,4 @@
+import {closeSync, openSync, writeSync} from 'node:fs';
 import type {LogContext} from '@rocicorp/logger';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
@@ -367,5 +368,58 @@ describe('db/migration-lite', () => {
 
     expect(err).toBeDefined();
     c.verify(err);
+  });
+
+  test('runs quick_check for existing databases', async () => {
+    const lc = createSilentLogContext();
+    const db = dbFile.connect(lc);
+    getVersionHistory(db);
+    db.prepare(
+      `
+      INSERT INTO "_zero.versionHistory" (dataVersion, schemaVersion, minSafeVersion)
+      VALUES (1, 1, 1)
+    `,
+    ).run();
+
+    db.exec(`CREATE TABLE "Payload" (id INTEGER PRIMARY KEY, value BLOB)`);
+    const insert = db.prepare(
+      `INSERT INTO "Payload" (value) VALUES (randomblob(2000))`,
+    );
+    db.transaction(() => {
+      for (let i = 0; i < 200; i++) {
+        insert.run();
+      }
+    });
+
+    const [{page_size: pageSize}] = db.pragma<{page_size: number}>('page_size');
+    const {pageno} = db
+      .prepare(
+        `
+      SELECT pageno FROM dbstat
+      WHERE name = 'Payload' AND pagetype = 'leaf'
+      ORDER BY pageno LIMIT 1 OFFSET 5
+    `,
+      )
+      .get<{pageno: number}>();
+    db.close();
+
+    const fd = openSync(dbFile.path, 'r+');
+    try {
+      writeSync(fd, Buffer.alloc(100, 0xff), 0, 100, (pageno - 1) * pageSize);
+    } finally {
+      closeSync(fd);
+    }
+
+    await expect(
+      runSchemaMigrations(
+        lc,
+        debugName,
+        dbFile.path,
+        {
+          migrateSchema: () => Promise.reject('not expected to run'),
+        },
+        {1: {}},
+      ),
+    ).rejects.toThrow(/database disk image is malformed|quick_check failed/);
   });
 });

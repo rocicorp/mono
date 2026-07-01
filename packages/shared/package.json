@@ -26,7 +26,7 @@
   "dependencies": {
     "@badrap/valita": "0.3.11",
     "@dotenvx/dotenvx": "^1.39.0",
-    "@rocicorp/logger": "^6.0.0",
+    "@rocicorp/logger": "^6.1.0",
     "@rocicorp/resolver": "^1.0.2",
     "chalk-template": "^1.1.0",
     "command-line-args": "^6.0.1",
