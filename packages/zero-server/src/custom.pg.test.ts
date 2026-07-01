@@ -193,6 +193,114 @@ describe('makeSchemaCRUD', () => {
     });
   });
 
+  // Regression test for schema-qualification of casts to user-defined types
+  // that live in a non-public Postgres schema. The `docReviewItem` table maps
+  // to `app.doc_review_item` and has enum columns (and an enum array column)
+  // whose enum types also live in the `app` schema, plus a domain-backed
+  // column. Previously the generated casts looked like `$1::text::"enum_name"`,
+  // which Postgres resolves through search_path and therefore fails with
+  // `type "enum_name" does not exist` under the default search_path. These
+  // CRUD paths must succeed WITHOUT touching search_path.
+  test('insert/update/upsert/delete with non-public-schema enum, enum[] and domain columns', async () => {
+    await pg.begin(async tx => {
+      // Sanity check: the non-public schema must NOT be on the search_path, so
+      // that an unqualified enum cast would genuinely fail. This guards the
+      // regression from being masked by a permissive search_path.
+      const [{search_path: searchPath}] = await tx`SHOW search_path`;
+      expect(searchPath).not.toContain('app');
+
+      const transaction = new Transaction(tx);
+      const crud = crudProvider(
+        transaction,
+        await getServerSchema(transaction, schema),
+      );
+
+      // postgres.js has no parser registered for the *custom* enum array type
+      // OID, so reading `kinds` directly yields a raw array literal string.
+      // Cast it to text[] so it round-trips back into a JS array. (This is a
+      // client read-back detail and unrelated to the write paths under test.)
+      const checkDocReview = async (expected: unknown[]) => {
+        const rows = await tx`
+          SELECT id, kind::text, state::text, kinds::text[] AS kinds, priority
+          FROM app.doc_review_item ORDER BY id`;
+        expect(rows).toEqual(expected);
+      };
+
+      const row = {
+        id: '1',
+        kind: 'edge_case' as const,
+        state: 'active' as const,
+        kinds: ['edge_case', 'normal'] as ('edge_case' | 'normal')[],
+        priority: 5,
+      };
+      await crud.docReviewItem.insert(row);
+      await checkDocReview([row]);
+
+      await crud.docReviewItem.update({
+        id: '1',
+        kind: 'normal',
+        state: 'archived',
+        kinds: ['normal'],
+        priority: 7,
+      });
+      await checkDocReview([
+        {
+          id: '1',
+          kind: 'normal',
+          state: 'archived',
+          kinds: ['normal'],
+          priority: 7,
+        },
+      ]);
+
+      await crud.docReviewItem.upsert({
+        id: '1',
+        kind: 'edge_case',
+        state: 'active',
+        kinds: null,
+        priority: null,
+      });
+      await checkDocReview([
+        {
+          id: '1',
+          kind: 'edge_case',
+          state: 'active',
+          kinds: null,
+          priority: null,
+        },
+      ]);
+
+      // upsert a brand new row to exercise the INSERT path of ON CONFLICT
+      await crud.docReviewItem.upsert({
+        id: '2',
+        kind: 'normal',
+        state: 'archived',
+        kinds: ['edge_case'],
+        priority: 0,
+      });
+      await checkDocReview([
+        {
+          id: '1',
+          kind: 'edge_case',
+          state: 'active',
+          kinds: null,
+          priority: null,
+        },
+        {
+          id: '2',
+          kind: 'normal',
+          state: 'archived',
+          kinds: ['edge_case'],
+          priority: 0,
+        },
+      ]);
+
+      await crud.docReviewItem.delete({id: '1'});
+      await crud.docReviewItem.delete({id: '2'});
+      await checkDocReview([]);
+    });
+  });
+
   test('insert/update/upsert/delete with text-represented scalar columns', async () => {
     await pg.begin(async tx => {
       const transaction = new Transaction(tx);
