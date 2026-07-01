@@ -90,6 +90,7 @@ import type {
 } from './logical-replication/pgoutput.types.ts';
 import {subscribe, type StreamMessage} from './logical-replication/stream.ts';
 import {fromBigInt, toBigInt, toStateVersionString, type LSN} from './lsn.ts';
+import {runPassiveReplicationPreflight} from './preflight.ts';
 import {dropOldReplicasAndSlots} from './replication-slots.ts';
 import {replicationEventSchema, type ReplicationEvent} from './schema/ddl.ts';
 import {updateShardSchema} from './schema/init.ts';
@@ -143,6 +144,9 @@ export async function initializePostgresChangeSource(
   // initial sync if not.
   const db = await connectPgClient(lc, upstreamURI, 'change-source-init');
   try {
+    await runPassiveReplicationPreflight(lc, db, upstreamURI, shard, {
+      replicationSlotFailover: syncOptions.replicationSlotFailover,
+    });
     const upstreamReplica = await checkAndUpdateUpstream(
       lc,
       db,

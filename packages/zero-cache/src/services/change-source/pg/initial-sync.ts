@@ -54,6 +54,7 @@ import {ReplicationStatusPublisher} from '../../replicator/replication-status.ts
 import {ColumnMetadataStore} from '../../replicator/schema/column-metadata.ts';
 import {initReplicationState} from '../../replicator/schema/replication-state.ts';
 import {toStateVersionString} from './lsn.ts';
+import {runPassiveReplicationPreflight} from './preflight.ts';
 import {createReplicaAndSlot} from './replication-slots.ts';
 import {ensureShardSchema} from './schema/init.ts';
 import {getPublicationInfo} from './schema/published.ts';
@@ -132,6 +133,9 @@ export async function initialSync(
   ).publish(lc, 'Initializing');
   let releaseShadowSnapshot: (() => Promise<void>) | undefined;
   try {
+    await runPassiveReplicationPreflight(lc, sql, upstreamURI, shard, {
+      replicationSlotFailover,
+    });
     const pgVersion = await checkUpstreamConfig(sql);
 
     // In shadow mode we assume the shard is already initialized and just
