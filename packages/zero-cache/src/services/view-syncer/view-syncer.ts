@@ -1522,6 +1522,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             transformedAst,
             await timer.start(),
             queryName,
+            'unchanged-query-rehydrate',
           )) {
             if (change === 'yield') {
               await timer.yieldProcess('yield in hydrateUnchangedQueries');
@@ -2036,6 +2037,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             q.ast,
             timer.startWithoutYielding(),
             q.name,
+            'query-set-sync',
           );
           const elapsed = timer.stop();
           totalProcessTime += elapsed;
