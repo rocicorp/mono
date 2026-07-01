@@ -90,6 +90,7 @@ import type {DrainCoordinator} from './drain-coordinator.ts';
 import {handleInspect} from './inspect-handler.ts';
 import type {PipelineDriver} from './pipeline-driver.ts';
 import {type RowChange} from './pipeline-driver.ts';
+import {findCoveringQuery} from './query-covering.ts';
 import {parseSignature} from './row-set-signature.ts';
 import {
   cmpVersions,
@@ -1516,6 +1517,13 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           if (queryName !== undefined) {
             span.setAttribute('queryName', queryName);
           }
+          this.#logCoveredQueryShadow(
+            lc,
+            queryID,
+            transformationHash,
+            transformedAst,
+            queryName,
+          );
           for (const change of this.#pipelines.addQuery(
             transformationHash,
             queryID,
@@ -1655,6 +1663,37 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       'query-materialization-server',
       elapsed,
       queryID,
+    );
+  }
+
+  #logCoveredQueryShadow(
+    lc: LogContext,
+    queryID: string,
+    transformationHash: string,
+    ast: AST,
+    queryName?: string | undefined,
+  ) {
+    const covering = findCoveringQuery(queryID, ast, this.#pipelines.queries());
+    if (!covering) {
+      return;
+    }
+
+    let coverageLC = lc
+      .withContext('coveredQueryHash', queryID)
+      .withContext('coveredTransformationHash', transformationHash)
+      .withContext('coveringQueryHash', covering.queryID)
+      .withContext('coveringTransformationHash', covering.transformationHash);
+    if (queryName !== undefined) {
+      coverageLC = coverageLC.withContext('coveredQueryName', queryName);
+    }
+    if (covering.queryName !== undefined) {
+      coverageLC = coverageLC.withContext(
+        'coveringQueryName',
+        covering.queryName,
+      );
+    }
+    coverageLC.info?.(
+      'query coverage shadow: newly hydrated query is covered by a running query',
     );
   }
 
@@ -2030,6 +2069,13 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           }
           queryLC.debug?.(`adding pipeline for query`, q.ast);
 
+          self.#logCoveredQueryShadow(
+            queryLC,
+            q.id,
+            q.transformationHash,
+            q.ast,
+            q.name,
+          );
           yield* pipelines.addQuery(
             q.transformationHash,
             q.id,
