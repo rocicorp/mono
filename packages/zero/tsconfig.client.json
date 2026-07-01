@@ -1,10 +1,14 @@
 {
   "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": ["svelte"]
+  },
   "include": [
     "src/zero.ts",
     "src/bindings.ts",
     "src/react.ts",
     "src/solid.ts",
+    "src/svelte.ts",
     "src/react-native.ts",
     "src/sqlite.ts",
     "src/expo-sqlite.ts",
