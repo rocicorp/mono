@@ -23,6 +23,8 @@ export const MESSAGE_TYPES = {
   subscribe: 'subscribe',
   notify: 'notify',
   ready: 'ready',
+  backupWatermarkRequest: 'backupWatermarkRequest',
+  backupWatermarkResponse: 'backupWatermarkResponse',
 } as const;
 
 export type Message<Payload> = [keyof typeof MESSAGE_TYPES, Payload];
@@ -154,6 +156,34 @@ export function setSingleProcessMode(enabled: boolean = true): void {
 }
 
 /**
+ * Determines whether a module loaded as a worker process entry point should
+ * start its worker.
+ *
+ * Most workers are launched via {@link childWorker}, which in single-process
+ * mode runs them in-process (no real fork) by invoking their exported
+ * `runWorker` directly; those entry points must therefore *not* self-start in
+ * single-process mode, or they would run twice.
+ *
+ * A worker launched via {@link forkChildWorker}, however, is *always* a real
+ * forked OS process — even in single-process mode — and it inherits the
+ * parent's `SINGLE_PROCESS` env. So {@link singleProcessMode} alone would
+ * wrongly suppress its startup, leaving the parent to spin re-forking a child
+ * that immediately exits. Such a forked child has a non-null
+ * {@link parentWorker} (`process.send` is defined), which is the signal to
+ * start regardless. A standalone direct launch (no parent, not single-process)
+ * also starts.
+ *
+ * @param parent The entry point's {@link parentWorker} (non-null iff forked).
+ * @param isSingleProcessMode The result of {@link singleProcessMode}.
+ */
+export function shouldStartWorker(
+  parent: Worker | null,
+  isSingleProcessMode: boolean,
+): boolean {
+  return parent !== null || !isSingleProcessMode;
+}
+
+/**
  *
  * @param modulePath Path to the module file, relative to zero-cache/src/, or an absolute file:// URL
  */
@@ -162,7 +192,7 @@ export function childWorker(
   env?: NodeJS.ProcessEnv,
   ...args: string[]
 ): Worker {
-  args.push(...process.argv.slice(2));
+  args = workerArgs(args);
 
   if (singleProcessMode()) {
     const [parent, child] = inProcChannel();
@@ -180,6 +210,26 @@ export function childWorker(
       .catch(err => child.emit('error', err));
     return child;
   }
+  return forkChildWorkerWithArgs(moduleUrl, env, args);
+}
+
+export function forkChildWorker(
+  moduleUrl: URL,
+  env?: NodeJS.ProcessEnv,
+  ...args: string[]
+): Worker {
+  return forkChildWorkerWithArgs(moduleUrl, env, workerArgs(args));
+}
+
+function workerArgs(args: string[]): string[] {
+  return [...args, ...process.argv.slice(2)];
+}
+
+function forkChildWorkerWithArgs(
+  moduleUrl: URL,
+  env: NodeJS.ProcessEnv | undefined,
+  args: string[],
+): Worker {
   const child = fork(moduleUrl, args, {
     // For production / non-windows, set `detached` to `true` so that SIGINT is
     // not automatically propagated and graceful shutdown happens as intended.

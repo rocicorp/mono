@@ -43,8 +43,10 @@ type FetchConfig = ZeroConfig['query'];
 
 export type HeaderOptions = {
   readonly apiKey?: string | undefined;
+  /** Allowlisted headers provided in the client options. */
   readonly customHeaders?: Readonly<Record<string, string>> | undefined;
-  readonly allowedClientHeaders?: readonly string[] | undefined;
+  /** Allowlisted headers from the incoming HTTP request. */
+  readonly requestHeaders?: Readonly<Record<string, string>> | undefined;
   readonly cookie?: string | undefined;
   readonly origin?: string | undefined;
 };
@@ -238,11 +240,12 @@ export class ConnectionContextManagerImpl implements ConnectionContextManager {
         allowedUrlPatterns: config?.url?.map(compileUrlPattern),
         headerOptions: {
           customHeaders: undefined,
+          requestHeaders: filterHeaders(
+            connectParams.requestHeaders,
+            config?.allowedRequestHeaders,
+          ),
           origin: connectParams.origin,
           apiKey: config?.apiKey,
-          allowedClientHeaders: cloneAllowedClientHeaders(
-            config?.allowedClientHeaders,
-          ),
           cookie: config?.forwardCookies ? connectParams.httpCookie : undefined,
         },
       };
@@ -300,7 +303,10 @@ export class ConnectionContextManagerImpl implements ConnectionContextManager {
         ...queryContext,
         headerOptions: {
           ...queryContext.headerOptions,
-          customHeaders: cloneCustomHeaders(body.userQueryHeaders),
+          customHeaders: filterHeaders(
+            body.userQueryHeaders,
+            this.#queryConfig?.allowedClientHeaders,
+          ),
         },
       };
     }
@@ -315,7 +321,10 @@ export class ConnectionContextManagerImpl implements ConnectionContextManager {
         ...mutateContext,
         headerOptions: {
           ...mutateContext.headerOptions,
-          customHeaders: cloneCustomHeaders(body.userPushHeaders),
+          customHeaders: filterHeaders(
+            body.userPushHeaders,
+            this.#pushConfig?.allowedClientHeaders,
+          ),
         },
       };
     }
@@ -863,12 +872,21 @@ function sameConnectionSelector(
   return a?.clientID === b?.clientID && a?.wsID === b?.wsID;
 }
 
-function cloneCustomHeaders(
+function filterHeaders(
   headers: Readonly<Record<string, string>> | undefined,
+  allowedHeaders: readonly string[] | undefined,
 ) {
-  return headers ? {...headers} : undefined;
-}
+  if (!headers || !allowedHeaders || allowedHeaders.length === 0) {
+    return undefined;
+  }
 
-function cloneAllowedClientHeaders(headers: readonly string[] | undefined) {
-  return headers ? [...headers] : undefined;
+  const allowed = new Set(allowedHeaders.map(header => header.toLowerCase()));
+  let filtered: Record<string, string> | undefined;
+  for (const [key, value] of Object.entries(headers)) {
+    if (allowed.has(key.toLowerCase())) {
+      filtered ??= {};
+      filtered[key] = value;
+    }
+  }
+  return filtered;
 }

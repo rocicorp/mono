@@ -276,8 +276,15 @@ describe('view-syncer/client-handler', () => {
 
     const results = await Promise.all(subscriptions.map(sub => sub.close()));
 
-    // Client 1 was already caught up. Only gets the second poke.
+    // Client 1 was already caught up, but a freshly connected client is always
+    // sent an initial (here empty) poke so it can learn its persisted got state
+    // has been reconciled with the server. It then gets the second poke.
     expect(results[0].received).toEqual([
+      [
+        'pokeStart',
+        {pokeID: '121', baseCookie: '121'},
+      ] satisfies PokeStartMessage,
+      ['pokeEnd', {pokeID: '121', cookie: '121'}] satisfies PokeEndMessage,
       [
         'pokeStart',
         {pokeID: '123', baseCookie: '121'},
@@ -366,6 +373,34 @@ describe('view-syncer/client-handler', () => {
       [
         'pokeStart',
         {pokeID: '123', baseCookie: '121'},
+      ] satisfies PokeStartMessage,
+      ['pokeEnd', {pokeID: '123', cookie: '123'}] satisfies PokeEndMessage,
+    ]);
+  });
+
+  test('freshly connected, caught-up client still gets an initial empty poke', async () => {
+    const version = {stateVersion: '123'};
+    const {subscription, close} = createSubscription();
+    const handler = new ClientHandler(
+      lc,
+      'g1',
+      'id1',
+      'ws1',
+      SHARD,
+      '123', // already caught up to the poke version
+      subscription,
+    );
+
+    // First poke: caught up, but forced because it is the client's first poke.
+    await startPoke([handler], version).end(version);
+    // Second poke at the same version: now a true no-op, nothing is sent.
+    await startPoke([handler], version).end(version);
+
+    const {received} = await close();
+    expect(received).toEqual([
+      [
+        'pokeStart',
+        {pokeID: '123', baseCookie: '123'},
       ] satisfies PokeStartMessage,
       ['pokeEnd', {pokeID: '123', cookie: '123'}] satisfies PokeEndMessage,
     ]);

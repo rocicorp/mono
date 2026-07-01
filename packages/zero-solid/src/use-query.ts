@@ -150,7 +150,7 @@ export function useQuery<
   });
 
   const hash = createMemo(
-    () => qi()?.hash() + (qi()?.format.singular ? 't' : 'f') + zero().clientID,
+    () => qi()?.hash() + JSON.stringify(qi()?.format ?? null) + zero().clientID,
   );
   const ttl = createMemo(() => normalize(options)?.ttl ?? DEFAULT_TTL_MS);
 

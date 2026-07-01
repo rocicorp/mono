@@ -68,6 +68,17 @@ describe('makeSchemaCRUD', () => {
     type: 'user' as const,
   };
 
+  const textRepresentedScalarRow = {
+    id: '9780306406157',
+    ip: '192.168.0.1/24',
+    mac: '08:00:2b:01:02:03',
+    title: 'initial',
+  };
+  const textRepresentedScalarCanonicalRow = {
+    ...textRepresentedScalarRow,
+    id: '978-0-306-40615-7',
+  };
+
   test('insert', async () => {
     await pg.begin(async tx => {
       const transaction = new Transaction(tx);
@@ -179,6 +190,48 @@ describe('makeSchemaCRUD', () => {
 
       await crud.arrayCases.upsert({id: '1', tags: null});
       await checkDb(tx, 'arrayCases', [{id: '1', tags: null}]);
+    });
+  });
+
+  test('insert/update/upsert/delete with text-represented scalar columns', async () => {
+    await pg.begin(async tx => {
+      const transaction = new Transaction(tx);
+      const crud = crudProvider(
+        transaction,
+        await getServerSchema(transaction, schema),
+      );
+
+      await crud.textRepresentedScalars.insert(textRepresentedScalarRow);
+      await checkDb(tx, 'textRepresentedScalars', [
+        textRepresentedScalarCanonicalRow,
+      ]);
+
+      const updatedRow = {
+        ...textRepresentedScalarRow,
+        ip: '192.168.0.2/24',
+        mac: '08:00:2b:01:02:04',
+        title: 'updated',
+      };
+      await crud.textRepresentedScalars.update(updatedRow);
+      await checkDb(tx, 'textRepresentedScalars', [
+        {...updatedRow, id: textRepresentedScalarCanonicalRow.id},
+      ]);
+
+      const upsertedRow = {
+        ...textRepresentedScalarRow,
+        ip: '192.168.0.3/24',
+        mac: '08:00:2b:01:02:05',
+        title: 'upserted',
+      };
+      await crud.textRepresentedScalars.upsert(upsertedRow);
+      await checkDb(tx, 'textRepresentedScalars', [
+        {...upsertedRow, id: textRepresentedScalarCanonicalRow.id},
+      ]);
+
+      await crud.textRepresentedScalars.delete({
+        id: textRepresentedScalarRow.id,
+      });
+      await checkDb(tx, 'textRepresentedScalars', []);
     });
   });
 

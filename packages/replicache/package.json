@@ -75,12 +75,12 @@
   "dependencies": {
     "@badrap/valita": "0.3.11",
     "@rocicorp/lock": "^1.0.4",
-    "@rocicorp/logger": "^5.4.0",
+    "@rocicorp/logger": "^6.1.0",
     "@rocicorp/resolver": "^1.0.2"
   },
   "devDependencies": {
     "@op-engineering/op-sqlite": ">=15",
-    "@rocicorp/zero-sqlite3": "^1.0.18",
+    "@rocicorp/zero-sqlite3": "^1.1.2",
     "@types/command-line-args": "^5.2.3",
     "@types/command-line-usage": "^5.0.4",
     "@vitest/runner": "^4.1.6",
@@ -100,7 +100,7 @@
   },
   "peerDependencies": {
     "@op-engineering/op-sqlite": ">=15",
-    "@rocicorp/zero-sqlite3": "^1.0.18",
+    "@rocicorp/zero-sqlite3": "^1.1.2",
     "expo-sqlite": ">=15"
   },
   "peerDependenciesMeta": {
@@ -114,5 +114,5 @@
       "optional": true
     }
   },
-  "packageManager": "pnpm@11.3.0"
+  "packageManager": "pnpm@11.5.3"
 }

@@ -108,9 +108,12 @@ describe('change-streamer/http', () => {
         getChangeLogState: vi.fn(),
       },
       {
+        id: 'backup-monitor',
+        run: vi.fn(() => Promise.resolve()),
+        stop: vi.fn(() => Promise.resolve()),
         startSnapshotReservation: snapshotFn.mockReturnValue(snapshotStream),
         endReservation: endReservationFn,
-      } as unknown as BackupMonitor,
+      } satisfies BackupMonitor,
     );
 
     const [dispatcherURL, serverURL] = await Promise.all([

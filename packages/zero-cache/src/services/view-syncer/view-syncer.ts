@@ -143,6 +143,8 @@ export interface ViewSyncer {
 
   readonly queryCount: number;
   readonly rowCount: number;
+  readonly createdAtMs: number;
+  readonly servedVersion: string | null;
 }
 
 export type SyncContext = ConnectionSelector & {
@@ -196,6 +198,7 @@ type CustomQueryTransformMode = 'all' | 'missing';
 
 export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   readonly id: string;
+  readonly createdAtMs = Date.now();
   // Centralized connection/group auth bookkeeping plus maintenance policy.
   // Network validation still happens in ViewSyncerService.
   readonly connContextManager: ConnectionContextManager;
@@ -254,6 +257,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
   #cvr: CVRSnapshot | undefined;
   #pipelinesSynced = false;
+  #servedVersion: string | null = null;
 
   #expiredQueriesTimer: ReturnType<SetTimeout> | 0 = 0;
   #authMaintenanceTimer: ReturnType<SetTimeout> | 0 = 0;
@@ -593,6 +597,14 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
   get rowCount(): number {
     return this.#cvrStore.rowCount;
+  }
+
+  get servedVersion(): string | null {
+    return this.#servedVersion;
+  }
+
+  #markVersionServed(version: CVRVersion) {
+    this.#servedVersion = version.stateVersion;
   }
 
   #keepAliveUntil: number = 0;
@@ -1490,6 +1502,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       transformationHash,
       transformedAst,
     } of transformedQueries) {
+      const query = cvr.queries[queryID];
+      const queryName = query.type === 'custom' ? query.name : undefined;
       const timer = new TimeSliceTimer(lc);
       let count = 0;
       await startAsyncSpan(
@@ -1499,11 +1513,15 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           span.setAttribute('queryHash', queryID);
           span.setAttribute('transformationHash', transformationHash);
           span.setAttribute('table', transformedAst.table);
+          if (queryName !== undefined) {
+            span.setAttribute('queryName', queryName);
+          }
           for (const change of this.#pipelines.addQuery(
             transformationHash,
             queryID,
             transformedAst,
             await timer.start(),
+            queryName,
           )) {
             if (change === 'yield') {
               await timer.yieldProcess('yield in hydrateUnchangedQueries');
@@ -2003,16 +2021,21 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
       function* generateRowChanges(slowHydrateThreshold: number) {
         for (const q of addQueries) {
-          lc = lc
+          let queryLC = lc
             .withContext('hash', q.id)
+            .withContext('queryHash', q.id)
             .withContext('transformationHash', q.transformationHash);
-          lc.debug?.(`adding pipeline for query`, q.ast);
+          if (q.name !== undefined) {
+            queryLC = queryLC.withContext('queryName', q.name);
+          }
+          queryLC.debug?.(`adding pipeline for query`, q.ast);
 
           yield* pipelines.addQuery(
             q.transformationHash,
             q.id,
             q.ast,
             timer.startWithoutYielding(),
+            q.name,
           );
           const elapsed = timer.stop();
           totalProcessTime += elapsed;
@@ -2021,7 +2044,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           self.#inspectorDelegate.addQuery(q.id, q.ast);
 
           if (elapsed > slowHydrateThreshold) {
-            lc.warn?.('Slow query materialization', elapsed, q.ast);
+            queryLC.warn?.('Slow query materialization', elapsed, q.ast);
           }
           manualSpan(tracer, 'vs.addAndConsumeQuery', elapsed, {
             hash: q.id,
@@ -2070,6 +2093,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       await startAsyncSpan(tracer, 'vs.#syncQueryPipelineSet.pokeEnd', () =>
         pokers.end(finalVersion),
       );
+      this.#markVersionServed(finalVersion);
 
       const wallTime = performance.now() - start;
       lc.info?.(
@@ -2174,6 +2198,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
       if (!usePokers) {
         await pokers.end(cvr.version);
+        this.#markVersionServed(cvr.version);
       }
     });
   }
@@ -2330,6 +2355,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       await startAsyncSpan(tracer, 'vs.#advancePipelines.pokeEnd', () =>
         pokers.end(finalVersion),
       );
+      this.#markVersionServed(finalVersion);
 
       const wallTime = performance.now() - start;
       const totalProcessTime = timer.totalElapsed();
