@@ -90,6 +90,7 @@ import type {DrainCoordinator} from './drain-coordinator.ts';
 import {handleInspect} from './inspect-handler.ts';
 import type {PipelineDriver} from './pipeline-driver.ts';
 import {type RowChange} from './pipeline-driver.ts';
+import {QueryCoveringIndex} from './query-covering.ts';
 import {parseSignature} from './row-set-signature.ts';
 import {
   cmpVersions,
@@ -114,6 +115,17 @@ import {
 } from './ttl-clock.ts';
 
 const PROTOCOL_VERSION_ATTR = 'protocol.version';
+
+type QueryCoverageHydrationPath = 'add' | 'hydrate-unchanged';
+
+type QueryCoverageShadowHit = {
+  readonly coveredQueryHash: string;
+  readonly coveredTransformationHash: string;
+  readonly coveredQueryName?: string | undefined;
+  readonly coveringQueryHash: string;
+  readonly coveringTransformationHash: string;
+  readonly coveringQueryName?: string | undefined;
+};
 
 export interface ViewSyncer {
   initConnection(
@@ -1496,6 +1508,12 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     );
 
     const driftedQueryIDs = new Set<string>();
+    const queryCoveringIndex = this.#config.enableQueryCovering
+      ? new QueryCoveringIndex(this.#pipelines.queries())
+      : undefined;
+    let totalHydratedQueries = 0;
+    let coveredHydratedQueries = 0;
+    let firstCoveredQuery: QueryCoverageShadowHit | undefined;
 
     for (const {
       id: queryID,
@@ -1504,6 +1522,20 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     } of transformedQueries) {
       const query = cvr.queries[queryID];
       const queryName = query.type === 'custom' ? query.name : undefined;
+      const covered = queryCoveringIndex
+        ? this.#findQueryCoverageShadowHit(
+            queryCoveringIndex,
+            queryID,
+            transformationHash,
+            transformedAst,
+            queryName,
+          )
+        : undefined;
+      totalHydratedQueries++;
+      if (covered) {
+        coveredHydratedQueries++;
+        firstCoveredQuery ??= covered;
+      }
       const timer = new TimeSliceTimer(lc);
       let count = 0;
       await startAsyncSpan(
@@ -1540,6 +1572,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       this.#inspectorDelegate.addQuery(transformationHash, transformedAst);
       lc.debug?.(`hydrated ${count} rows for ${queryID} (${elapsed} ms)`);
 
+      let drifted = false;
       // Drift detection: compare the just-computed candidate signature against
       // the signature stored in the CVR. They should match for a deterministic
       // query at the same db state. A mismatch indicates a query containing
@@ -1567,9 +1600,26 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           this.#rowSetSignatureDrifts.add(1);
           this.#pipelines.removeQuery(queryID);
           driftedQueryIDs.add(queryID);
+          drifted = true;
         }
       }
+
+      if (!drifted && queryCoveringIndex) {
+        queryCoveringIndex.add(queryID, {
+          transformedAst,
+          transformationHash,
+          ...(queryName !== undefined && {queryName}),
+        });
+      }
     }
+
+    this.#logQueryCoverageShadowSummary(
+      lc,
+      'hydrate-unchanged',
+      totalHydratedQueries,
+      coveredHydratedQueries,
+      firstCoveredQuery,
+    );
 
     return driftedQueryIDs;
   }
@@ -1657,6 +1707,89 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       elapsed,
       queryID,
     );
+  }
+
+  #findQueryCoverageShadowHit(
+    queryCoveringIndex: QueryCoveringIndex,
+    queryID: string,
+    transformationHash: string,
+    ast: AST,
+    queryName?: string | undefined,
+  ): QueryCoverageShadowHit | undefined {
+    const covering = queryCoveringIndex.findCoveringQuery(queryID, ast);
+    if (!covering) {
+      return undefined;
+    }
+
+    return {
+      coveredQueryHash: queryID,
+      coveredTransformationHash: transformationHash,
+      ...(queryName !== undefined && {coveredQueryName: queryName}),
+      coveringQueryHash: covering.queryID,
+      coveringTransformationHash: covering.transformationHash,
+      ...(covering.queryName !== undefined && {
+        coveringQueryName: covering.queryName,
+      }),
+    };
+  }
+
+  #logQueryCoverageShadowSummary(
+    lc: LogContext,
+    hydrationPath: QueryCoverageHydrationPath,
+    totalHydratedQueries: number,
+    coveredHydratedQueries: number,
+    firstCoveredQuery: QueryCoverageShadowHit | undefined,
+  ) {
+    if (!this.#config.enableQueryCovering || totalHydratedQueries === 0) {
+      return;
+    }
+
+    let coverageLC = lc
+      .withContext('appID', this.#shard.appID)
+      .withContext('shardNum', this.#shard.shardNum)
+      .withContext('clientGroupID', this.id)
+      .withContext('queryCoverageMode', 'shadow')
+      .withContext('hydrationPath', hydrationPath)
+      .withContext('totalHydratedQueries', totalHydratedQueries)
+      .withContext('coveredHydratedQueries', coveredHydratedQueries)
+      .withContext(
+        'uncoveredHydratedQueries',
+        totalHydratedQueries - coveredHydratedQueries,
+      );
+
+    if (firstCoveredQuery) {
+      coverageLC = coverageLC
+        .withContext(
+          'firstCoveredQueryHash',
+          firstCoveredQuery.coveredQueryHash,
+        )
+        .withContext(
+          'firstCoveredTransformationHash',
+          firstCoveredQuery.coveredTransformationHash,
+        )
+        .withContext(
+          'firstCoveringQueryHash',
+          firstCoveredQuery.coveringQueryHash,
+        )
+        .withContext(
+          'firstCoveringTransformationHash',
+          firstCoveredQuery.coveringTransformationHash,
+        );
+      if (firstCoveredQuery.coveredQueryName !== undefined) {
+        coverageLC = coverageLC.withContext(
+          'firstCoveredQueryName',
+          firstCoveredQuery.coveredQueryName,
+        );
+      }
+      if (firstCoveredQuery.coveringQueryName !== undefined) {
+        coverageLC = coverageLC.withContext(
+          'firstCoveringQueryName',
+          firstCoveredQuery.coveringQueryName,
+        );
+      }
+    }
+
+    coverageLC.info?.('query coverage shadow summary');
   }
 
   /**
@@ -2013,6 +2146,12 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       const pipelines = this.#pipelines;
       const hydrations = this.#hydrations;
       const hydrationTime = this.#hydrationTime;
+      const queryCoveringIndex = this.#config.enableQueryCovering
+        ? new QueryCoveringIndex(this.#pipelines.queries())
+        : undefined;
+      let totalHydratedQueries = 0;
+      let coveredHydratedQueries = 0;
+      let firstCoveredQuery: QueryCoverageShadowHit | undefined;
       // oxlint-disable-next-line @typescript-eslint/no-this-alias
       const self = this;
 
@@ -2031,6 +2170,20 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           }
           queryLC.debug?.(`adding pipeline for query`, q.ast);
 
+          const covered = queryCoveringIndex
+            ? self.#findQueryCoverageShadowHit(
+                queryCoveringIndex,
+                q.id,
+                q.transformationHash,
+                q.ast,
+                q.name,
+              )
+            : undefined;
+          totalHydratedQueries++;
+          if (covered) {
+            coveredHydratedQueries++;
+            firstCoveredQuery ??= covered;
+          }
           yield* pipelines.addQuery(
             q.transformationHash,
             q.id,
@@ -2044,6 +2197,11 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
           self.#addQueryMaterializationServerMetric(q.id, elapsed);
           self.#inspectorDelegate.addQuery(q.id, q.ast);
+          queryCoveringIndex?.add(q.id, {
+            transformedAst: q.ast,
+            transformationHash: q.transformationHash,
+            ...(q.name !== undefined && {queryName: q.name}),
+          });
 
           if (elapsed > slowHydrateThreshold) {
             queryLC.warn?.('Slow query materialization', elapsed, q.ast);
@@ -2065,6 +2223,13 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         generateRowChanges(this.#slowHydrateThreshold),
         updater,
         pokers,
+      );
+      this.#logQueryCoverageShadowSummary(
+        lc,
+        'add',
+        totalHydratedQueries,
+        coveredHydratedQueries,
+        firstCoveredQuery,
       );
 
       await startAsyncSpan(
