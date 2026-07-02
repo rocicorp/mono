@@ -15,6 +15,7 @@
  */
 
 import type {Condition} from '../../../../zero-protocol/src/ast.ts';
+import {asQueryInternals} from '../../../../zql/src/query/query-internals.ts';
 import type {AnyQuery} from '../../../../zql/src/query/query.ts';
 import {newStaticQuery} from '../../../../zql/src/query/static-query.ts';
 import {schema} from '../schema.ts';
@@ -34,9 +35,11 @@ import {
   type Rel,
   relsOf,
   rolesOf,
+  START_VALS,
+  type StartVal,
 } from './axes.ts';
 import {axisCombinations} from './coverage.ts';
-import {filterCondition, simple} from './literals.ts';
+import {type Data, filterCondition, simple} from './literals.ts';
 
 // ── the greedy covering-array builder ─────────────────────────────────────────────────
 
@@ -202,6 +205,34 @@ export function applyLimit(q: AnyQuery, lv: LimitVal): AnyQuery {
   }
 }
 
+/** Apply the `start` axis using a data-driven cursor row. */
+export function applyStart(
+  q: AnyQuery,
+  table: string,
+  sv: StartVal,
+  data: Data,
+): AnyQuery | null {
+  switch (sv) {
+    case 'none':
+      return q;
+    case 'mid_exclusive': {
+      const row = data.startRow(table, asQueryInternals(q).ast.orderBy);
+      // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+      return row ? (q as any).start(row) : null;
+    }
+    case 'mid_inclusive': {
+      const row = data.startRow(table, asQueryInternals(q).ast.orderBy);
+      // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+      return row ? (q as any).start(row, {inclusive: true}) : null;
+    }
+    case 'null_exclusive': {
+      const row = data.nullStartRow(table, asQueryInternals(q).ast.orderBy);
+      // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+      return row ? (q as any).start(row) : null;
+    }
+  }
+}
+
 /**
  * Build the EXISTS/NOT-EXISTS `where` condition for an {@link ExistsVal} on `table`:
  * gate on `rel`, at the requested boolean position. The AND/OR positions pair the gate
@@ -271,11 +302,13 @@ function applyDecorations(
   q: AnyQuery,
   table: string,
   a: readonly number[],
+  data: Data,
 ): AnyQuery | null {
   const fv = FILTER_VALS[a[axisIndex('filter')]] as FilterVal;
   const ev = EXISTS_VALS[a[axisIndex('exists')]] as ExistsVal;
   const ov = ORDER_VALS[a[axisIndex('order')]] as OrderVal;
   const lv = LIMIT_VALS[a[axisIndex('limit')]] as LimitVal;
+  const sv = START_VALS[a[axisIndex('start')]] as StartVal;
 
   if (!filterRealizable(table, fv)) {
     return null;
@@ -294,6 +327,11 @@ function applyDecorations(
 
   let out = applyWhere(q, table, filterCond, gateRel, ev);
   out = applyOrder(out, table, ov);
+  const started = applyStart(out, table, sv, data);
+  if (!started) {
+    return null;
+  }
+  out = started;
   out = applyLimit(out, lv);
   return out;
 }
@@ -305,11 +343,12 @@ function applyDecorations(
 export function decorate(
   table: string,
   a: readonly number[],
+  data: Data,
 ): [AnyQuery, boolean] | null {
   const ev = EXISTS_VALS[a[axisIndex('exists')]] as ExistsVal;
   // oxlint-disable-next-line @typescript-eslint/no-explicit-any
   const root = newStaticQuery(schema, table as any) as AnyQuery;
-  const q = applyDecorations(root, table, a);
+  const q = applyDecorations(root, table, a, data);
   return q ? [q, ev !== 'none'] : null;
 }
 
@@ -324,6 +363,7 @@ export function decorateChild(
   parent: string,
   rel: string,
   a: readonly number[],
+  data: Data,
 ): [AnyQuery, boolean] | null {
   const relInfo = relsOf(parent).find(r => r.name === rel);
   if (!relInfo) {
@@ -342,7 +382,8 @@ export function decorateChild(
   const root = (newStaticQuery(schema, parent as any) as any).related(
     rel,
     // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-    (sub: any) => applyDecorations(sub as AnyQuery, relInfo.child, a) ?? sub,
+    (sub: any) =>
+      applyDecorations(sub as AnyQuery, relInfo.child, a, data) ?? sub,
   );
   return [root as AnyQuery, ev !== 'none'];
 }
