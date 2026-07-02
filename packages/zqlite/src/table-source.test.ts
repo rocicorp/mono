@@ -4,11 +4,14 @@ import {assert} from '../../shared/src/asserts.ts';
 import type {JSONValue} from '../../shared/src/json.ts';
 import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
 import {must} from '../../shared/src/must.ts';
+import type {AST} from '../../zero-protocol/src/ast.ts';
 import type {Row, Value} from '../../zero-protocol/src/data.ts';
+import {buildPipeline} from '../../zql/src/builder/builder.ts';
 import {
   Debug,
   type DebugDelegate,
 } from '../../zql/src/builder/debug-delegate.ts';
+import {TestBuilderDelegate} from '../../zql/src/builder/test-builder-delegate.ts';
 import {Catch} from '../../zql/src/ivm/catch.ts';
 import {
   makeAddChange,
@@ -571,6 +574,75 @@ test('pushing values does the correct writes and outputs', () => {
       );
     }).toThrow('Row not found');
   }
+});
+
+test('edit after a null start cursor can reach take with an empty window', () => {
+  const db = new Database(createSilentLogContext(), ':memory:');
+  db.exec(`
+    CREATE TABLE t (
+      id TEXT PRIMARY KEY,
+      owner TEXT,
+      text TEXT
+    );
+    INSERT INTO t (id, owner, text) VALUES
+      ('a', NULL, 'a'),
+      ('b', 'z', 'b');
+  `);
+
+  const source = new TableSource(
+    lc,
+    testLogConfig,
+    db,
+    't',
+    {
+      id: {type: 'string'},
+      owner: {type: 'string'},
+      text: {type: 'string'},
+    },
+    ['id'],
+  );
+  const ast: AST = {
+    table: 't',
+    orderBy: [
+      ['owner', 'asc'],
+      ['id', 'asc'],
+    ],
+    start: {
+      row: {id: 'a', owner: null},
+      exclusive: true,
+    },
+    limit: 5,
+  };
+  const pipeline = buildPipeline(
+    ast,
+    new TestBuilderDelegate({t: source}),
+    'query-id',
+  );
+  const out = new Catch(pipeline);
+
+  // The Zero schema says `owner` is non-nullable, but the actual cursor row
+  // has NULL. SQLite hydrates nothing from the start constraint, while Skip's
+  // comparator still forwards later non-null rows during push.
+  expect(out.fetch({})).toEqual([]);
+
+  consume(
+    source.push(
+      makeSourceChangeEdit(
+        {id: 'b', owner: 'z', text: 'bb'},
+        {id: 'b', owner: 'z', text: 'b'},
+      ),
+    ),
+  );
+
+  expect(out.pushes).toEqual([
+    {
+      type: 'add',
+      node: {
+        row: {id: 'b', owner: 'z', text: 'bb'},
+        relationships: {},
+      },
+    },
+  ]);
 });
 
 test('getByKey', () => {

@@ -445,7 +445,17 @@ export class Take implements Operator {
       return;
     }
 
-    assert(takeState.bound, 'Bound should be set');
+    if (takeState.bound === undefined) {
+      this.#setTakeState(
+        takeStateKey,
+        takeState.size + 1,
+        change[ChangeIndex.NODE].row,
+        maxBound,
+      );
+      yield* this.#output.push(makeAddChange(change[ChangeIndex.NODE]), this);
+      return;
+    }
+
     const {compareRows} = this.getSchema();
     const oldCmp = compareRows(
       change[ChangeIndex.OLD_NODE].row,
