@@ -1,7 +1,8 @@
 import {en, Faker, generateMersenne53Randomizer} from '@faker-js/faker';
 import {describe, expect, test} from 'vitest';
+import type {Schema} from '../../../../zero-types/src/schema.ts';
 import {asQueryInternals} from '../query-internals.ts';
-import {generateQuery} from './query-gen.ts';
+import {generateQuery, type Dataset} from './query-gen.ts';
 import {generateSchema} from './schema-gen.ts';
 
 describe('random generation', () => {
@@ -30,6 +31,57 @@ describe('random generation', () => {
     ).not.toThrow();
   });
 });
+
+test('generates partial or nullish start cursors when data is available', () => {
+  const schema = {
+    tables: {
+      issue: {
+        name: 'issue',
+        columns: {
+          id: {type: 'string'},
+          owner: {type: 'string'},
+          created: {type: 'number'},
+        },
+        primaryKey: ['id'],
+      },
+    },
+    relationships: {
+      issue: {},
+    },
+  } as const satisfies Schema;
+  const data: Dataset = {
+    issue: [
+      {id: 'a', owner: 'alice', created: 1},
+      {id: 'b', owner: 'z', created: 2},
+    ],
+  };
+
+  for (let seed = 0; seed < 2_000; seed++) {
+    const randomizer = generateMersenne53Randomizer(seed);
+    const rng = () => randomizer.next();
+    const faker = new Faker({locale: en, randomizer});
+    const q = generateQuery(schema, data, rng, faker);
+    const {orderBy, start} = asQueryInternals(q).ast;
+    if (!orderBy || !start) {
+      continue;
+    }
+
+    if (
+      orderBy.some(
+        ([field]) =>
+          !(field in start.row) ||
+          start.row[field] === null ||
+          start.row[field] === undefined,
+      )
+    ) {
+      expect(start).toBeDefined();
+      return;
+    }
+  }
+
+  throw new Error('Expected a generated query with a nullish start cursor');
+});
+
 test('stable generation', () => {
   const randomizer = generateMersenne53Randomizer(42);
   const rng = () => randomizer.next();

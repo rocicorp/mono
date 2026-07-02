@@ -576,7 +576,7 @@ test('pushing values does the correct writes and outputs', () => {
   }
 });
 
-test('edit after a null start cursor can reach take with an empty window', () => {
+test('edit after a null start cursor fails closed when take has an empty window', () => {
   const db = new Database(createSilentLogContext(), ':memory:');
   db.exec(`
     CREATE TABLE t (
@@ -634,15 +634,8 @@ test('edit after a null start cursor can reach take with an empty window', () =>
     ),
   );
 
-  expect(out.pushes).toEqual([
-    {
-      type: 'add',
-      node: {
-        row: {id: 'b', owner: 'z', text: 'bb'},
-        relationships: {},
-      },
-    },
-  ]);
+  expect(out.pushes).toEqual([]);
+  expect(out.fetch({})).toEqual([]);
 });
 
 test('getByKey', () => {

@@ -75,11 +75,10 @@ function augmentQuery(
     // - limit
     // - order by
     // makes no sense.
-    // TODO: fuzzer does not fuzz start!
     return addWhere(addExists(query));
   }
 
-  return addLimit(addOrderBy(addWhere(addExists(addRelated(query)))));
+  return addLimit(addStart(addOrderBy(addWhere(addExists(addRelated(query))))));
 
   function addLimit(query: AnyQuery) {
     if (rng() < 0.2) {
@@ -130,6 +129,55 @@ function augmentQuery(
       throw e;
     }
 
+    return query;
+  }
+
+  function addStart(query: AnyQuery) {
+    const {ast} = asQueryInternals(query);
+    if (!ast.orderBy || ast.orderBy.length === 0) {
+      return query;
+    }
+
+    const tableName = ast.table;
+    const table = schema.tables[tableName];
+    const tableData = data[tableName];
+    if (!tableData || tableData.length === 0 || rng() < 0.8) {
+      return query;
+    }
+
+    const sourceRow = rng() < 0.7 ? selectRandom(rng, tableData) : undefined;
+    const row: Record<string, Row[string]> = {};
+
+    for (const [columnName] of ast.orderBy) {
+      const column = table.columns[columnName];
+      if (!column || column.type === 'json') {
+        continue;
+      }
+
+      // Generate partial and invalid cursors too. At runtime start rows are
+      // just data; missing/undefined fields compare as null in IVM, while SQL
+      // start compilation may use schema nullability for seek optimizations.
+      if (rng() < 0.15) {
+        continue;
+      }
+      if (rng() < 0.15) {
+        row[columnName] = undefined;
+      } else if (rng() < 0.15) {
+        row[columnName] = null;
+      } else if (sourceRow && rng() < 0.8) {
+        row[columnName] = sourceRow[columnName];
+      } else {
+        row[columnName] = randomValueForType(
+          rng,
+          faker,
+          column.type,
+          column.optional,
+        ) as Row[string];
+      }
+    }
+
+    query = query.start(row, {inclusive: rng() < 0.5});
+    generations.push(query);
     return query;
   }
 

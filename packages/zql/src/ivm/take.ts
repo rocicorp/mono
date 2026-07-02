@@ -446,13 +446,10 @@ export class Take implements Operator {
     }
 
     if (takeState.bound === undefined) {
-      this.#setTakeState(
-        takeStateKey,
-        takeState.size + 1,
-        change[ChangeIndex.NODE].row,
-        maxBound,
-      );
-      yield* this.#output.push(makeAddChange(change[ChangeIndex.NODE]), this);
+      // This should be unreachable for a self-consistent input: an edit can
+      // only be forwarded if the old row was visible, and fetching that row
+      // should have hydrated a bound. If fetch and push disagree, fail closed
+      // rather than fabricating a row that a fresh fetch would not return.
       return;
     }
 
