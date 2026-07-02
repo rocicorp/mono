@@ -277,6 +277,127 @@ test('a non-null bound on an optional column admits the NULL group when walking 
   `);
 });
 
+test('null cursor range starts after null with IS NOT NULL', () => {
+  const columns = {
+    owner: {type: 'string', optional: true},
+    id: {type: 'string'},
+  } as const satisfies Record<string, SchemaValue>;
+
+  expect(
+    format(
+      buildSelectQuery(
+        'issues',
+        columns,
+        undefined,
+        undefined,
+        [['owner', 'asc']],
+        undefined,
+        {
+          row: {owner: null},
+          basis: 'after',
+        },
+      ),
+    ),
+  ).toMatchInlineSnapshot(`
+    {
+      "text": "SELECT "owner","id" FROM "issues" WHERE (("owner" IS NOT NULL)) ORDER BY "owner" asc",
+      "values": [],
+    }
+  `);
+});
+
+test('null cursor descending range has no rows after null', () => {
+  const columns = {
+    owner: {type: 'string', optional: true},
+    id: {type: 'string'},
+  } as const satisfies Record<string, SchemaValue>;
+
+  expect(
+    format(
+      buildSelectQuery(
+        'issues',
+        columns,
+        undefined,
+        undefined,
+        [['owner', 'desc']],
+        undefined,
+        {
+          row: {owner: null},
+          basis: 'after',
+        },
+      ),
+    ),
+  ).toMatchInlineSnapshot(`
+    {
+      "text": "SELECT "owner","id" FROM "issues" WHERE ((FALSE)) ORDER BY "owner" desc",
+      "values": [],
+    }
+  `);
+});
+
+test('null cursor on first column preserves compound tie-breaker ranges', () => {
+  const columns = {
+    owner: {type: 'string', optional: true},
+    id: {type: 'string'},
+  } as const satisfies Record<string, SchemaValue>;
+
+  expect(
+    format(
+      buildSelectQuery(
+        'issues',
+        columns,
+        undefined,
+        undefined,
+        [
+          ['owner', 'desc'],
+          ['id', 'asc'],
+        ],
+        undefined,
+        {
+          row: {owner: null},
+          basis: 'after',
+        },
+      ),
+    ),
+  ).toMatchInlineSnapshot(`
+    {
+      "text": "SELECT "owner","id" FROM "issues" WHERE ((FALSE) OR ("owner" IS ? AND "id" IS NOT NULL)) ORDER BY "owner" desc, "id" asc",
+      "values": [
+        null,
+      ],
+    }
+  `);
+});
+
+test('omitted cursor fields are treated as null', () => {
+  const columns = {
+    id: {type: 'string'},
+    owner: {type: 'string', optional: true},
+  } as const satisfies Record<string, SchemaValue>;
+
+  expect(
+    format(
+      buildSelectQuery(
+        'issues',
+        columns,
+        undefined,
+        undefined,
+        [['id', 'asc']],
+        undefined,
+        {
+          row: {owner: null},
+          basis: 'after',
+        },
+      ),
+    ),
+  ).toMatchInlineSnapshot(`
+    {
+      "text": "SELECT "id","owner" FROM "issues" WHERE (("id" IS NOT NULL)) ORDER BY "id" asc",
+      "values": [],
+    }
+  `);
+});
+
 test('multiConstraints with single column emits IN list', () => {
   const columns = {
     id: {type: 'string'},

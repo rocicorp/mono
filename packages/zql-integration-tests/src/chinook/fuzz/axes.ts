@@ -14,16 +14,13 @@
  *    generalized to all 11 tables). These are the one hand-authored piece; they are
  *    pinned against the schema by `axes.test.ts`.
  * 3. The formal **decoration axes** ({@link AXES}) the t-wise covering array (L1)
- *    covers and `coverage.ts` measures: `filter × exists × order × limit`. Each axis
- *    value is self-contained, so the covering array needs no inter-axis constraint
+ *    covers and `coverage.ts` measures: `filter × exists × order × limit × start`. Each
+ *    axis value is self-contained, so the covering array needs no inter-axis constraint
  *    solver — the only realizability gate is per-table (a text filter needs a text
  *    column; an EXISTS needs an outgoing relationship).
  *
  * **Known-inert axes dropped vs the Rust port** (design §8): the Rust `select` axis
- * (mono ZQL has no projection — the AST returns all columns) and the `start` (keyset
- * paging) axis (z2s does not compile `start`, so the Postgres oracle silently ignores
- * it — it cannot validate paging, and every `start` case would diverge spuriously).
- * Re-add `start` here if z2s gains keyset support.
+ * (mono ZQL has no projection — the AST returns all columns).
  */
 
 import {must} from '../../../../shared/src/must.ts';
@@ -314,6 +311,14 @@ export type OrderVal = (typeof ORDER_VALS)[number];
 export const LIMIT_VALS = ['none', 'small', 'large'] as const;
 export type LimitVal = (typeof LIMIT_VALS)[number];
 
+export const START_VALS = [
+  'none',
+  'mid_exclusive',
+  'mid_inclusive',
+  'null_exclusive',
+] as const;
+export type StartVal = (typeof START_VALS)[number];
+
 /** One formal axis: a name + its ordered value-token domain. */
 export type AxisSpec = {
   readonly name: string;
@@ -330,6 +335,7 @@ export const AXES: readonly AxisSpec[] = [
   {name: 'exists', values: EXISTS_VALS},
   {name: 'order', values: ORDER_VALS},
   {name: 'limit', values: LIMIT_VALS},
+  {name: 'start', values: START_VALS},
 ];
 
 export const N_AXES = AXES.length;

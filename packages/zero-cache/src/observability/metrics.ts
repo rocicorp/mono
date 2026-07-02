@@ -20,6 +20,7 @@ export type Category =
 let meter: Meter | undefined;
 
 type Options = MetricOptions & {description: string};
+type HistogramOptions = Options & {bucketBoundaries: number[]};
 
 function getMeter() {
   if (!meter) {
@@ -107,7 +108,28 @@ const LATENCY_HISTOGRAM_BOUNDARIES_S = [
   0.001, 0.002, 0.005, 0.01, 0.02, 0.05, 0.1, 0.2, 0.5, 1, 2, 5, 10, 30,
 ];
 
-const latencyHistograms = cache<Histogram>();
+const histograms = cache<Histogram>();
+
+export function getOrCreateHistogram(
+  category: Category,
+  name: string,
+  opts: HistogramOptions,
+): LatencyHistogram {
+  const {bucketBoundaries, ...metricOptions} = opts;
+  const h = histograms(name, name =>
+    getMeter().createHistogram(`zero.${category}.${name}`, {
+      ...metricOptions,
+      advice: {
+        ...metricOptions.advice,
+        explicitBucketBoundaries: bucketBoundaries,
+      },
+    }),
+  );
+  return {
+    recordMs: (durationMs, attributes) =>
+      h.record(durationMs / 1000, attributes),
+  };
+}
 
 /**
  * Creates (or retrieves) a latency histogram for the given metric.
@@ -132,19 +154,11 @@ export function getOrCreateLatencyHistogram(
   name: string,
   description: string,
 ): LatencyHistogram {
-  const h = latencyHistograms(name, name =>
-    getMeter().createHistogram(`zero.${category}.${name}`, {
-      description,
-      unit: 's',
-      advice: {
-        explicitBucketBoundaries: LATENCY_HISTOGRAM_BOUNDARIES_S,
-      },
-    }),
-  );
-  return {
-    recordMs: (durationMs, attributes) =>
-      h.record(durationMs / 1000, attributes),
-  };
+  return getOrCreateHistogram(category, name, {
+    description,
+    unit: 's',
+    bucketBoundaries: LATENCY_HISTOGRAM_BOUNDARIES_S,
+  });
 }
 
 const counters = cache<Counter>();

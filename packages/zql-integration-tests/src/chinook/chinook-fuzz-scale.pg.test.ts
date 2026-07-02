@@ -21,6 +21,7 @@
 import {expect, test} from 'vitest';
 import '../helpers/comparePg.ts';
 import {bootstrap} from '../helpers/runner.ts';
+import {pkOf} from './fuzz/axes.ts';
 import {CostModel} from './fuzz/cost.ts';
 import {
   checkSwarm,
@@ -28,12 +29,15 @@ import {
   checkYieldTail,
   panicIfFailed,
 } from './fuzz/driver.ts';
+import {Data} from './fuzz/literals.ts';
+import {miniData} from './fuzz/mini.ts';
 import {getChinook} from './get-deps.ts';
 import {schema} from './schema.ts';
 
 const RUN = !!process.env.CHINOOK_SCALE;
 const SEED = 0x00c0ffee;
 const TIMEOUT_MS = 600_000;
+const startData = new Data(miniData, pkOf);
 
 /**
  * Approximate full-chinook table sizes (client names) for the static cost gate. Exact
@@ -92,7 +96,7 @@ test.skipIf(!RUN)(
   'scale swarm — masked-random over full chinook',
   async () => {
     // oxlint-disable-next-line @typescript-eslint/no-non-null-assertion
-    const report = await checkSwarm(harness!.delegates, SEED, 24, 6);
+    const report = await checkSwarm(harness!.delegates, startData, SEED, 24, 6);
     console.log(
       `chinook swarm: ${report.total} cases, ${report.failures.length} failures`,
     );

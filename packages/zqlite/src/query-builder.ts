@@ -313,15 +313,9 @@ function nullableAwareRangeComparison(
   columnType: SchemaValue,
 ): SQLQuery {
   if (value === null) {
-    // A NULL bound value proves the column is nullable regardless of the
-    // column metadata. SQLite sorts NULLs first, so the set strictly after
-    // a NULL bound is exactly the non-NULL values and the set strictly
-    // before it is empty. The generic forms below all mis-handle a NULL
-    // bound: `col > NULL` / `col < NULL` are never true (the cursor walk
-    // silently restarts), `? IS NULL OR col > ?` is always true, and
-    // `col IS NULL OR col < ?` matches the bound's own NULL group.
     return operator === '>' ? sql`${sql.ident(field)} IS NOT NULL` : sql`FALSE`;
   }
+
   // For non-nullable columns, skip IS NULL checks to avoid breaking
   // SQLite's MULTI-INDEX OR optimization, which falls back to a full
   // table scan when any OR branch involves NULL.
@@ -348,11 +342,11 @@ function sargableLeadingStartBound(
   operator: '>' | '<',
   columnType: SchemaValue,
 ): SQLQuery | undefined {
-  // A NULL bound value proves the column is nullable regardless of the
-  // column metadata, and a bare range bound is not sound there: `col >= NULL`
-  // is never true, so instead of being redundant it would annihilate the
-  // whole start constraint.
-  if (value === null || columnType.optional === true) {
+  if (value === null) {
+    return undefined;
+  }
+
+  if (columnType.optional === true) {
     return undefined;
   }
 
@@ -394,7 +388,10 @@ function gatherStartConstraints(
     for (let j = 0; j <= i; j++) {
       if (j === i) {
         const columnType = columnTypes[iField];
-        const constraintValue = toSQLiteType(from[iField], columnType.type);
+        const constraintValue = toSQLiteType(
+          from[iField] ?? null,
+          columnType.type,
+        );
         const operator =
           iDirection === 'asc' ? (reverse ? '<' : '>') : reverse ? '>' : '<';
         if (i === 0) {
@@ -416,7 +413,7 @@ function gatherStartConstraints(
       } else {
         const [jField] = order[j];
         const columnType = columnTypes[jField];
-        const value = toSQLiteType(from[jField], columnType.type);
+        const value = toSQLiteType(from[jField] ?? null, columnType.type);
         group.push(nullableAwareEquality(jField, value, columnType));
       }
     }
@@ -428,7 +425,7 @@ function gatherStartConstraints(
       sql`(${sql.join(
         order.map(([field]) => {
           const columnType = columnTypes[field];
-          const value = toSQLiteType(from[field], columnType.type);
+          const value = toSQLiteType(from[field] ?? null, columnType.type);
           return nullableAwareEquality(field, value, columnType);
         }),
         sql` AND `,

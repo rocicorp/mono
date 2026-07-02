@@ -180,6 +180,7 @@ export async function checkL0Hydrate(
  */
 export async function checkL1(
   delegates: Delegates,
+  data: Data,
 ): Promise<{report: Report; coverage: Coverage}> {
   const rows = greedyCover(2);
   const cov = new Coverage(2);
@@ -190,7 +191,7 @@ export async function checkL1(
   // Root decorations: each covering-array row × each decoratable root.
   for (const row of rows) {
     for (const root of decoratableRoots()) {
-      const res = decorate(root, row);
+      const res = decorate(root, row, data);
       if (!res) {
         continue;
       }
@@ -210,7 +211,7 @@ export async function checkL1(
   // child sort position) — the parity surface the root-only pass misses.
   for (const [parent, rel] of childDecorationPairs()) {
     for (const row of rows) {
-      const res = decorateChild(parent, rel, row);
+      const res = decorateChild(parent, rel, row, data);
       if (!res) {
         continue;
       }
@@ -239,6 +240,7 @@ export async function checkL1(
  */
 export async function checkSwarm(
   delegates: Delegates,
+  data: Data,
   seed: number,
   nMasks: number,
   perMask: number,
@@ -250,7 +252,7 @@ export async function checkSwarm(
   for (let mi = 0; mi < nMasks; mi++) {
     const mask = Mask.random(r);
     for (let qi = 0; qi < perMask; qi++) {
-      const res = swarmGen(r, mask);
+      const res = swarmGen(r, mask, data);
       if (!res) {
         continue;
       }
