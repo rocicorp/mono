@@ -843,7 +843,7 @@ function makeNewMetaEntry(
     });
   }
   return track({
-     ...row,
+    ...row,
     [refCountSymbol]: rc,
   });
 }
@@ -919,7 +919,7 @@ function setProperty<
     return parentEntry as MutableMetaEntry & {[P in K]: V};
   }
   return track({
-      ...parentEntry,
+    ...parentEntry,
     [key]: value,
   }) as MutableMetaEntry & {[P in K]: V};
 }
