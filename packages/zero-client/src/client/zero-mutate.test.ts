@@ -179,6 +179,44 @@ describe('mutate', () => {
     // Runtime test: CRUD methods should work
     await z.mutate.issues.insert({id: '1', title: 'test'});
   });
+
+  test('legacy mutators preserve __proto__ table names', async () => {
+    const protoName = '__proto__' as const;
+    const schema = createSchema({
+      tables: [
+        table(protoName)
+          .columns({
+            id: string(),
+          })
+          .primaryKey('id'),
+      ],
+      enableLegacyMutators: true,
+    });
+
+    const z = zeroForTest({schema});
+    const mutate = z.mutate as unknown as Record<
+      string,
+      {insert(value: {id: string}): Promise<void>}
+    >;
+
+    expect(Object.getPrototypeOf(z.mutate)).toBe(Function.prototype);
+    expect(Object.hasOwn(z.mutate, protoName)).toBe(true);
+    expect(Object.getOwnPropertyDescriptor(z.mutate, protoName)?.value).toBe(
+      mutate[protoName],
+    );
+    expect(typeof mutate[protoName].insert).toBe('function');
+    await mutate[protoName].insert({id: '1'});
+
+    await z.mutateBatch?.(async m => {
+      const batchMutate = m as unknown as Record<
+        string,
+        {insert(value: {id: string}): Promise<void>}
+      >;
+      expect(Object.getPrototypeOf(m)).toBe(Object.prototype);
+      expect(Object.hasOwn(m, protoName)).toBe(true);
+      await batchMutate[protoName].insert({id: '2'});
+    });
+  });
 });
 
 describe('both legacy flags undefined (default behavior)', () => {

@@ -5,6 +5,7 @@ import {
   unreachable,
 } from '../../../shared/src/asserts.ts';
 import {must} from '../../../shared/src/must.ts';
+import {assignProperty} from '../../../shared/src/objects.ts';
 import type {Writable} from '../../../shared/src/writable.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import {type Comparator, type Node} from './data.ts';
@@ -841,7 +842,10 @@ function makeNewMetaEntry(
       [idSymbol]: makeID(row, schema),
     });
   }
-  return track({...row, [refCountSymbol]: rc});
+  return track({
+    ...row,
+    [refCountSymbol]: rc,
+  });
 }
 
 function makeID(row: Row, schema: SourceSchema) {
@@ -875,7 +879,10 @@ function setRefCount<M extends Mutate>(
     (entry as MutableMetaEntry)[refCountSymbol] = count;
     return entry;
   }
-  return track({...entry, [refCountSymbol]: count});
+  return track({
+    ...entry,
+    [refCountSymbol]: count,
+  });
 }
 
 function arrayWith<M extends Mutate, T>(
@@ -902,10 +909,13 @@ function setProperty<
   value: V,
 ): MutableMetaEntry & {[P in K]: V} {
   if (mutate || owns(parentEntry)) {
-    (parentEntry as {[P in K]: V})[key] = value;
+    assignProperty(parentEntry as {[P in K]: V}, key, value);
     return parentEntry as MutableMetaEntry & {[P in K]: V};
   }
-  return track({...parentEntry, [key]: value});
+  return track({
+    ...parentEntry,
+    [key]: value,
+  }) as MutableMetaEntry & {[P in K]: V};
 }
 
 const setRelation: <M extends Mutate>(
