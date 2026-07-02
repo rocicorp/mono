@@ -7,7 +7,6 @@ export function mapValues<T extends Record<string, unknown>, U>(
   };
 }
 
-
 export function defineOwnDataProperty<T>(
   object: object,
   key: string,
@@ -25,8 +24,8 @@ export function mapEntries<T, U>(
   input: Record<string, T>,
   mapper: (key: string, val: T) => [key: string, val: U],
 ): Record<string, U> {
-  // Direct assignment is faster than Object.fromEntries()
-  // https://github.com/rocicorp/mono/pull/3927#issuecomment-2706059475
+  // Defining output properties in place is faster than Object.fromEntries()
+  // and safely creates own data properties for keys like "__proto__".
   const output: Record<string, U> = {};
 
   // In chrome Object.entries is faster than for-in (13x) or Object.keys (15x)
