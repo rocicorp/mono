@@ -33,6 +33,10 @@ import {runTx} from '../../../db/run-transaction.ts';
 import type {IndexSpec, PublishedTableSpec} from '../../../db/specs.ts';
 import {importSnapshot, TransactionPool} from '../../../db/transaction-pool.ts';
 import {
+  getOrCreateCounter,
+  getOrCreateHistogram,
+} from '../../../observability/metrics.ts';
+import {
   JSON_STRINGIFIED,
   liteValue,
   type LiteValueType,
@@ -112,18 +116,11 @@ export async function initialSync(
     replicationSlotFailover = false,
     shadow,
   } = syncOptions;
-  const copyProfiler = profileCopy ? await CpuProfiler.connect() : null;
-  const sql = await connectPgClient(lc, upstreamURI, 'initial-sync');
-  // Replication session is only needed to create a replication slot in the
-  // real path. In shadow mode we export a snapshot on a normal connection
-  // instead, so no replication session is opened.
-  const replicationSession = shadow
-    ? undefined
-    : pgClient(lc, upstreamURI, 'initial-sync-replication-session', {
-        ['fetch_types']: false, // Necessary for the streaming protocol
-        connection: {replication: 'database'}, // https://www.postgresql.org/docs/current/protocol-replication.html
-      });
-
+  const syncMode: InitialSyncMode = shadow ? 'shadow' : 'initial';
+  const copyFormat: CopyFormat = textCopy ? 'text' : 'binary';
+  const start = performance.now();
+  let sql: PostgresDB | undefined;
+  let replicationSession: PostgresDB | undefined;
   const replicaID = Date.now().toString();
   let slotName: string | undefined; // undefined === shadow
   const statusPublisher = ReplicationStatusPublisher.forRunningTransaction(
@@ -132,6 +129,18 @@ export async function initialSync(
   ).publish(lc, 'Initializing');
   let releaseShadowSnapshot: (() => Promise<void>) | undefined;
   try {
+    const copyProfiler = profileCopy ? await CpuProfiler.connect() : null;
+    sql = await connectPgClient(lc, upstreamURI, 'initial-sync');
+    // Replication session is only needed to create a replication slot in the
+    // real path. In shadow mode we export a snapshot on a normal connection
+    // instead, so no replication session is opened.
+    replicationSession = shadow
+      ? undefined
+      : pgClient(lc, upstreamURI, 'initial-sync-replication-session', {
+          ['fetch_types']: false, // Necessary for the streaming protocol
+          connection: {replication: 'database'}, // https://www.postgresql.org/docs/current/protocol-replication.html
+        });
+
     const pgVersion = await checkUpstreamConfig(sql);
 
     // In shadow mode we assume the shard is already initialized and just
@@ -180,7 +189,6 @@ export async function initialSync(
     initReplicationState(tx, publications, initialVersion, context);
 
     // Run up to MAX_WORKERS to copy of tables at the replication slot's snapshot.
-    const start = performance.now();
     // Retrieve the published schema at the consistent_point.
     const published = await runTx(
       sql,
@@ -243,7 +251,8 @@ export async function initialSync(
       );
 
       void copyProfiler?.start();
-      const rowCounts = await Promise.all(
+      const copyStart = performance.now();
+      const copyResults = await Promise.all(
         downloads.map(table =>
           copiers.processReadTask((db, lc) =>
             copy(
@@ -253,22 +262,18 @@ export async function initialSync(
               db,
               tx,
               textCopy,
+              syncMode,
               sampleRate,
               maxRowsPerTable,
             ),
           ),
         ),
       );
+      const copyElapsed = performance.now() - copyStart;
       void copyProfiler?.stopAndDispose(lc, 'initial-copy');
       copiers.setDone();
 
-      const total = rowCounts.reduce(
-        (acc, curr) => ({
-          rows: acc.rows + curr.rows,
-          flushTime: acc.flushTime + curr.flushTime,
-        }),
-        {rows: 0, flushTime: 0},
-      );
+      const copySummary = initialSyncCopySummary(copyResults, copyElapsed);
 
       statusPublisher.publish(
         lc,
@@ -287,22 +292,58 @@ export async function initialSync(
         assert(shadow, 'expected to be in shadow sync if there is no slotName');
         const rowsByTable = new Map<string, number>();
         for (let i = 0; i < downloads.length; i++) {
-          rowsByTable.set(downloads[i].status.table, rowCounts[i].rows);
+          rowsByTable.set(downloads[i].status.table, copyResults[i].rows);
         }
         verifyShadowReplica(lc, tx, published, rowsByTable);
       }
 
       const elapsed = performance.now() - start;
+      const copyOtherMs = Math.max(0, elapsed - copySummary.flushMs - index);
+      recordInitialSyncRunMetrics(
+        {
+          durationMs: elapsed,
+          rows: copySummary.rows,
+          copyBytes: copySummary.copyBytes,
+          copyMs: copySummary.copyMs,
+          copyOtherMs,
+          flushMs: copySummary.flushMs,
+          indexMs: index,
+        },
+        {
+          result: 'success',
+          syncMode,
+          copyFormat,
+        },
+      );
       lc.info?.(
-        `Synced ${total.rows.toLocaleString()} rows of ${numTables} tables in ${publications} up to ${lsn} ` +
-          `(flush: ${total.flushTime.toFixed(3)}, index: ${index.toFixed(3)}, total: ${elapsed.toFixed(3)} ms)`,
+        `Synced ${copySummary.rows.toLocaleString()} rows of ${numTables} tables in ${publications} up to ${lsn} ` +
+          `(flush: ${copySummary.flushMs.toFixed(3)}, index: ${index.toFixed(3)}, total: ${elapsed.toFixed(3)} ms)`,
+        {
+          syncMode,
+          copyFormat,
+          publications,
+          lsn,
+          ...copySummary,
+          indexes: indexes.length,
+          indexMs: index,
+          copyOtherMs,
+          totalMs: elapsed,
+        },
       );
     } finally {
       // All meaningful errors are handled at the processReadTask() call site.
       void copyPool.end().catch(e => lc.warn?.(`Error closing copyPool`, e));
     }
   } catch (e) {
-    if (slotName) {
+    recordInitialSyncRunMetrics(
+      {durationMs: performance.now() - start},
+      {
+        result: 'error',
+        syncMode,
+        copyFormat,
+      },
+    );
+    if (slotName && sql) {
       // If initial-sync did not succeed, make a best effort to drop the
       // orphaned replication slot to avoid running out of slots in
       // pathological cases that result in repeated failures.
@@ -323,7 +364,9 @@ export async function initialSync(
     if (replicationSession) {
       await replicationSession.end();
     }
-    await sql.end();
+    if (sql) {
+      await sql.end();
+    }
   }
 }
 
@@ -776,6 +819,227 @@ type DownloadState = {
   status: DownloadStatus;
 };
 
+type CopyFormat = 'binary' | 'text';
+type InitialSyncMode = 'initial' | 'shadow';
+
+type InitialSyncMetricAttrs = {
+  syncMode: InitialSyncMode;
+  copyFormat: CopyFormat;
+};
+
+type InitialSyncRunMetricAttrs = {
+  syncMode: InitialSyncMode;
+  copyFormat: CopyFormat;
+  result: 'success' | 'error';
+};
+
+type CopyResult = {
+  schema: string;
+  table: string;
+  replicaTable: string;
+  syncMode: InitialSyncMode;
+  copyFormat: CopyFormat;
+  columnCount: number;
+  rows: number;
+  estimatedRows: number;
+  estimatedBytes: number | undefined;
+  flushMs: number;
+  elapsedMs: number;
+  copyBytes: number;
+};
+
+const INITIAL_SYNC_DURATION_HISTOGRAM_BOUNDARIES_S = [
+  1, 2, 5, 10, 30, 60, 120, 300, 600, 1200, 2400, 3600, 7200,
+];
+const SLOW_COPY_FLUSH_MS = 10_000;
+
+// change-streamer imports this module before startOtelAuto() runs, so create
+// instruments lazily to avoid binding them to OTel's no-op meter provider.
+function initialSyncRuns() {
+  return getOrCreateCounter(
+    'replication',
+    'initial_sync_runs',
+    'Initial sync runs, labeled by result.',
+  );
+}
+
+function initialSyncDuration() {
+  return initialSyncDurationHistogram(
+    'initial_sync_duration',
+    'Wall-clock duration of an initial sync run, labeled by result.',
+  );
+}
+
+function initialSyncCopyDuration() {
+  return initialSyncDurationHistogram(
+    'initial_sync_copy_duration',
+    'Wall-clock duration of the COPY phase for a successful initial sync run.',
+  );
+}
+
+function initialSyncCopyOtherDuration() {
+  return initialSyncDurationHistogram(
+    'initial_sync_copy_other_duration',
+    'Initial sync total duration excluding SQLite flush and index time for a successful run.',
+  );
+}
+
+function initialSyncFlushDuration() {
+  return initialSyncDurationHistogram(
+    'initial_sync_flush_duration',
+    'Total SQLite flush time for a successful initial sync run.',
+  );
+}
+
+function initialSyncIndexDuration() {
+  return initialSyncDurationHistogram(
+    'initial_sync_index_duration',
+    'SQLite index creation time for a successful initial sync run.',
+  );
+}
+
+function initialSyncRows() {
+  return getOrCreateCounter(
+    'replication',
+    'initial_sync_rows',
+    'Rows copied during successful initial sync runs.',
+  );
+}
+
+function initialSyncCopyStream() {
+  return getOrCreateCounter('replication', 'initial_sync_copy_stream', {
+    description:
+      'PostgreSQL COPY stream bytes processed during initial sync, including in-progress and failed runs.',
+    unit: 'bytes',
+  });
+}
+
+function initialSyncCompletedCopyStream() {
+  return getOrCreateCounter(
+    'replication',
+    'initial_sync_completed_copy_stream',
+    {
+      description:
+        'PostgreSQL COPY stream bytes processed during successful initial sync runs.',
+      unit: 'bytes',
+    },
+  );
+}
+
+function initialSyncCopyChunks() {
+  return getOrCreateCounter(
+    'replication',
+    'initial_sync_copy_chunks',
+    'PostgreSQL COPY stream chunks processed during initial sync.',
+  );
+}
+
+function initialSyncDurationHistogram(name: string, description: string) {
+  return getOrCreateHistogram('replication', name, {
+    description,
+    unit: 's',
+    bucketBoundaries: INITIAL_SYNC_DURATION_HISTOGRAM_BOUNDARIES_S,
+  });
+}
+
+function initialSyncMetricAttrs(attrs: InitialSyncMetricAttrs) {
+  return {
+    sync_mode: attrs.syncMode,
+    copy_format: attrs.copyFormat,
+  };
+}
+
+function initialSyncRunMetricAttrs(attrs: InitialSyncRunMetricAttrs) {
+  return {
+    ...initialSyncMetricAttrs(attrs),
+    result: attrs.result,
+  };
+}
+
+function recordInitialSyncRunMetrics(
+  stats: {
+    durationMs: number;
+    rows?: number | undefined;
+    copyBytes?: number | undefined;
+    copyMs?: number | undefined;
+    copyOtherMs?: number | undefined;
+    flushMs?: number | undefined;
+    indexMs?: number | undefined;
+  },
+  attrs: InitialSyncRunMetricAttrs,
+) {
+  const labels = initialSyncRunMetricAttrs(attrs);
+  initialSyncRuns().add(1, labels);
+  initialSyncDuration().recordMs(stats.durationMs, labels);
+  if (attrs.result === 'success') {
+    if (stats.copyMs !== undefined) {
+      initialSyncCopyDuration().recordMs(stats.copyMs, labels);
+    }
+    if (stats.copyOtherMs !== undefined) {
+      initialSyncCopyOtherDuration().recordMs(stats.copyOtherMs, labels);
+    }
+    if (stats.flushMs !== undefined) {
+      initialSyncFlushDuration().recordMs(stats.flushMs, labels);
+    }
+    if (stats.indexMs !== undefined) {
+      initialSyncIndexDuration().recordMs(stats.indexMs, labels);
+    }
+    if (stats.rows !== undefined && stats.rows > 0) {
+      initialSyncRows().add(stats.rows, labels);
+    }
+    if (stats.copyBytes !== undefined && stats.copyBytes > 0) {
+      initialSyncCompletedCopyStream().add(stats.copyBytes, labels);
+    }
+  }
+}
+
+function initialSyncCopySummary(
+  results: readonly CopyResult[],
+  copyMs: number,
+) {
+  const totals = results.reduce(
+    (acc, curr) => {
+      acc.rows += curr.rows;
+      acc.flushMs += curr.flushMs;
+      acc.copyBytes += curr.copyBytes;
+      return acc;
+    },
+    {
+      rows: 0,
+      flushMs: 0,
+      copyBytes: 0,
+    },
+  );
+  return {
+    tables: results.length,
+    rows: totals.rows,
+    copyMs,
+    flushMs: totals.flushMs,
+    copyBytes: totals.copyBytes,
+  };
+}
+
+function logSlowCopyFlush(
+  lc: LogContext,
+  details: {
+    schema: string;
+    table: string;
+    replicaTable: string;
+    syncMode: InitialSyncMode;
+    copyFormat: CopyFormat;
+    elapsedMs: number;
+    flushedRows: number;
+    flushedBytes: number;
+    rows: number;
+    copyBytes: number;
+  },
+) {
+  if (details.elapsedMs < SLOW_COPY_FLUSH_MS || details.flushedRows === 0) {
+    return;
+  }
+  lc.info?.('initial-sync table copy slow flush', details);
+}
+
 // Exported for testing.
 export async function getInitialDownloadState(
   lc: LogContext,
@@ -834,9 +1098,10 @@ function copy(
   from: PostgresTransaction,
   to: Database,
   textCopy: boolean,
+  syncMode: InitialSyncMode,
   sampleRate?: number | undefined,
   maxRowsPerTable?: number | undefined,
-) {
+): Promise<CopyResult> {
   if (textCopy) {
     return copyText(
       lc,
@@ -845,11 +1110,21 @@ function copy(
       dbClient,
       from,
       to,
+      syncMode,
       sampleRate,
       maxRowsPerTable,
     );
   }
-  return copyBinary(lc, table, status, from, to, sampleRate, maxRowsPerTable);
+  return copyBinary(
+    lc,
+    table,
+    status,
+    from,
+    to,
+    syncMode,
+    sampleRate,
+    maxRowsPerTable,
+  );
 }
 
 async function copyBinary(
@@ -858,11 +1133,17 @@ async function copyBinary(
   status: DownloadStatus,
   from: PostgresTransaction,
   to: Database,
+  syncMode: InitialSyncMode,
   sampleRate?: number | undefined,
   maxRowsPerTable?: number | undefined,
-) {
+): Promise<CopyResult> {
   const start = performance.now();
-  let flushTime = 0;
+  const copyFormat: CopyFormat = 'binary';
+  const metricLabels = initialSyncMetricAttrs({syncMode, copyFormat});
+  const copyStreamMetric = initialSyncCopyStream();
+  const copyChunksMetric = initialSyncCopyChunks();
+  let flushMs = 0;
+  let copyBytes = 0;
 
   const tableName = liteTableName(table);
   const orderedColumns = Object.entries(table.columns);
@@ -903,7 +1184,7 @@ async function copyBinary(
   let pendingSize = 0;
 
   function flush() {
-    const start = performance.now();
+    const flushStart = performance.now();
     const flushedRows = pendingRows;
     const flushedSize = pendingSize;
 
@@ -921,11 +1202,23 @@ async function copyBinary(
     pendingSize = 0;
     status.rows += flushedRows;
 
-    const elapsed = performance.now() - start;
-    flushTime += elapsed;
+    const elapsed = performance.now() - flushStart;
+    flushMs += elapsed;
     lc.debug?.(
       `flushed ${flushedRows} ${tableName} rows (${flushedSize} bytes) in ${elapsed.toFixed(3)} ms`,
     );
+    logSlowCopyFlush(lc, {
+      schema: table.schema,
+      table: table.name,
+      replicaTable: tableName,
+      syncMode,
+      copyFormat,
+      elapsedMs: elapsed,
+      flushedRows,
+      flushedBytes: flushedSize,
+      rows: status.rows,
+      copyBytes,
+    });
   }
 
   const binaryParser = new BinaryCopyParser();
@@ -946,8 +1239,12 @@ async function copyBinary(
         callback: (error?: Error) => void,
       ) {
         try {
+          copyBytes += chunk.length;
+          copyStreamMetric.add(chunk.length, metricLabels);
+          copyChunksMetric.add(1, metricLabels);
           for (const fieldBuf of binaryParser.parse(chunk)) {
-            pendingSize += fieldBuf === null ? 4 : fieldBuf.length;
+            const fieldSize = fieldBuf === null ? 4 : fieldBuf.length;
+            pendingSize += fieldSize;
             pendingValues[pendingRows * valuesPerRow + col] =
               fieldBuf === null ? null : decoders[col](fieldBuf);
 
@@ -979,11 +1276,27 @@ async function copyBinary(
   );
 
   const elapsed = performance.now() - start;
+  const result = {
+    schema: table.schema,
+    table: table.name,
+    replicaTable: tableName,
+    syncMode,
+    copyFormat,
+    columnCount: columnNames.length,
+    rows: status.rows,
+    estimatedRows: status.totalRows,
+    estimatedBytes: status.totalBytes,
+    flushMs,
+    elapsedMs: elapsed,
+    copyBytes,
+  } satisfies CopyResult;
+
   lc.info?.(
     `Finished copying ${status.rows} rows into ${tableName} ` +
-      `(flush: ${flushTime.toFixed(3)} ms) (total: ${elapsed.toFixed(3)} ms) `,
+      `(flush: ${flushMs.toFixed(3)} ms) (total: ${elapsed.toFixed(3)} ms) `,
+    result,
   );
-  return {rows: status.rows, flushTime};
+  return result;
 }
 
 async function copyText(
@@ -993,11 +1306,17 @@ async function copyText(
   dbClient: PostgresDB,
   from: PostgresTransaction,
   to: Database,
+  syncMode: InitialSyncMode,
   sampleRate?: number | undefined,
   maxRowsPerTable?: number | undefined,
-) {
+): Promise<CopyResult> {
   const start = performance.now();
-  let flushTime = 0;
+  const copyFormat: CopyFormat = 'text';
+  const metricLabels = initialSyncMetricAttrs({syncMode, copyFormat});
+  const copyStreamMetric = initialSyncCopyStream();
+  const copyChunksMetric = initialSyncCopyChunks();
+  let flushMs = 0;
+  let copyBytes = 0;
 
   const tableName = liteTableName(table);
   const orderedColumns = Object.entries(table.columns);
@@ -1031,7 +1350,7 @@ async function copyText(
   let pendingSize = 0;
 
   function flush() {
-    const start = performance.now();
+    const flushStart = performance.now();
     const flushedRows = pendingRows;
     const flushedSize = pendingSize;
 
@@ -1049,11 +1368,23 @@ async function copyText(
     pendingSize = 0;
     status.rows += flushedRows;
 
-    const elapsed = performance.now() - start;
-    flushTime += elapsed;
+    const elapsed = performance.now() - flushStart;
+    flushMs += elapsed;
     lc.debug?.(
       `flushed ${flushedRows} ${tableName} rows (${flushedSize} bytes) in ${elapsed.toFixed(3)} ms`,
     );
+    logSlowCopyFlush(lc, {
+      schema: table.schema,
+      table: table.name,
+      replicaTable: tableName,
+      syncMode,
+      copyFormat,
+      elapsedMs: elapsed,
+      flushedRows,
+      flushedBytes: flushedSize,
+      rows: status.rows,
+      copyBytes,
+    });
   }
 
   lc.info?.(`Starting text copy stream of ${tableName}:`, select);
@@ -1082,8 +1413,12 @@ async function copyText(
         callback: (error?: Error) => void,
       ) {
         try {
+          copyBytes += chunk.length;
+          copyStreamMetric.add(chunk.length, metricLabels);
+          copyChunksMetric.add(1, metricLabels);
           for (const text of tsvParser.parse(chunk)) {
-            pendingSize += text === null ? 4 : text.length;
+            const fieldSize = text === null ? 4 : text.length;
+            pendingSize += fieldSize;
             pendingValues[pendingRows * valuesPerRow + col] =
               text === null ? null : parsers[col](text);
 
@@ -1115,9 +1450,24 @@ async function copyText(
   );
 
   const elapsed = performance.now() - start;
+  const result = {
+    schema: table.schema,
+    table: table.name,
+    replicaTable: tableName,
+    syncMode,
+    copyFormat,
+    columnCount: columnNames.length,
+    rows: status.rows,
+    estimatedRows: status.totalRows,
+    estimatedBytes: status.totalBytes,
+    flushMs,
+    elapsedMs: elapsed,
+    copyBytes,
+  } satisfies CopyResult;
   lc.info?.(
     `Finished copying ${status.rows} rows into ${tableName} ` +
-      `(flush: ${flushTime.toFixed(3)} ms) (total: ${elapsed.toFixed(3)} ms) `,
+      `(flush: ${flushMs.toFixed(3)} ms) (total: ${elapsed.toFixed(3)} ms) `,
+    result,
   );
-  return {rows: status.rows, flushTime};
+  return result;
 }
