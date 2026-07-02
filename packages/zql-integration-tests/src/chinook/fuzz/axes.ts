@@ -23,7 +23,8 @@
  * (mono ZQL has no projection — the AST returns all columns) and the `start` (keyset
  * paging) axis (z2s does not compile `start`, so the Postgres oracle silently ignores
  * it — it cannot validate paging, and every `start` case would diverge spuriously).
- * Re-add `start` here if z2s gains keyset support.
+ * `start` push/refetch consistency is checked separately by the driver; re-add it here
+ * only if z2s gains keyset support.
  */
 
 import {must} from '../../../../shared/src/must.ts';

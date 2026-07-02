@@ -2,7 +2,7 @@
  * **L1 — a t-wise covering array of decorations** (ported from rusty-ivm
  * `rindle-fuzz/src/cover.rs`, design §2 L1).
  *
- * The decorations (`filter / exists / order / limit / start`) form a combinatorial
+ * The decorations (`filter / exists / order / limit`) form a combinatorial
  * space we do **not** cross-product (that explodes). Instead {@link greedyCover} builds
  * a *t-wise covering array*: a small set of assignments such that every combination of
  * `t` `(axis, value)` pairs appears in at least one row (`t = 2`, pairwise, by default).

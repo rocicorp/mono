@@ -31,6 +31,7 @@ import {
   checkL0Hydrate,
   checkL1,
   checkPushWalk,
+  checkStartPushRefetch,
   checkYield,
   panicIfFailed,
 } from './fuzz/driver.ts';
@@ -131,6 +132,22 @@ test(
     console.log(
       `Decorated push backbone (top-N, D≤1): ${report.total} cases, ${report.failures.length} failures`,
     );
+    panicIfFailed(report, 12);
+  },
+  TIMEOUT_MS,
+);
+
+test(
+  'Start push/refetch — top-N edit pushes match fresh refetch over mini',
+  async () => {
+    // `start` cannot ride the PG-oracle fuzzer lanes because z2s ignores it. This lane is
+    // the direct incremental-vs-refetch property: hydrate a keyed top-N query with a null
+    // cursor, run normal source edit pushes, and compare each live IVM view to a fresh run.
+    const report = await checkStartPushRefetch(harness.transact, data, 1);
+    console.log(
+      `Start push/refetch backbone: ${report.total} cases, ${report.failures.length} failures`,
+    );
+    expect(report.total).toBeGreaterThan(0);
     panicIfFailed(report, 12);
   },
   TIMEOUT_MS,

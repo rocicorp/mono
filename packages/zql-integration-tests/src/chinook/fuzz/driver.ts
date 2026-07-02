@@ -35,6 +35,7 @@ import type {AnyQuery} from '../../../../zql/src/query/query.ts';
 import {mapResultToClientNames} from '../../../../zqlite/src/test/source-factory.ts';
 import {type Delegates, runAndCompare} from '../../helpers/runner.ts';
 import {schema} from '../schema.ts';
+import {pkOf, tables} from './axes.ts';
 import type {CostModel} from './cost.ts';
 import {
   applyLimit,
@@ -50,7 +51,7 @@ import {Coverage} from './coverage.ts';
 import {flipAssignments, flippableExistsCount, setFlips} from './flip.ts';
 import type {Data} from './literals.ts';
 import {mutate} from './mutate.ts';
-import {type Mutation, pushForSkeleton} from './push.ts';
+import {fourPhase, type Mutation, pushForSkeleton} from './push.ts';
 import type {Regression} from './regressions.ts';
 import {rng} from './rng.ts';
 import {
@@ -478,6 +479,59 @@ async function pushWalk(
   }
 }
 
+function nullPkStartTopN(table: string): AnyQuery {
+  const pk0 = must(pkOf(table)[0]);
+  return wrapAst({
+    table,
+    orderBy: [[pk0, 'asc']],
+    start: {
+      row: {[pk0]: null},
+      exclusive: true,
+    },
+    limit: 5,
+  });
+}
+
+async function pushRefetchWalk(
+  delegates: Delegates,
+  query: AnyQuery,
+  mutations: readonly Mutation[],
+): Promise<void> {
+  const table = asQueryInternals(query).ast.table;
+  const memView = delegates.memory.materialize(query);
+  const sqliteView = delegates.sqlite.materialize(query);
+  const serverTx = await makeServerTransaction(
+    delegates.pg.transaction,
+    'test-client',
+    0,
+    schema,
+  );
+  const compare = async () => {
+    expect(
+      // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+      mapResultToClientNames(sqliteView.data, schema, table as any),
+    ).toEqualPg(
+      mapResultToClientNames(
+        await delegates.sqlite.run(query),
+        schema,
+        // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+        table as any,
+      ),
+    );
+    expect(memView.data).toEqualPg(await delegates.memory.run(query));
+  };
+  try {
+    await compare();
+    for (const m of mutations) {
+      await applyMutation(serverTx, delegates, m);
+      await compare();
+    }
+  } finally {
+    memView.destroy();
+    sqliteView.destroy();
+  }
+}
+
 /**
  * **Push sweep:** lower each skeleton, generate its four-phase push history (root +
  * deepest leaf), and check per-step push parity inside a rolled-back transaction. `n`
@@ -503,6 +557,37 @@ export async function checkPushWalk(
     );
     if (msg) {
       failures.push([`push|${label(s)}`, msg]);
+    }
+  }
+  return {total, failures};
+}
+
+/**
+ * **Start push/refetch sweep:** `start` is deliberately excluded from the PG-oracle axes
+ * because z2s currently ignores it. This lane checks the property directly instead:
+ * materialize a top-N query with a null PK cursor, drive normal source edit pushes, and
+ * compare each live IVM view to a fresh run of the same delegate after every step.
+ */
+export async function checkStartPushRefetch(
+  transact: Transact,
+  data: Data,
+  n: number,
+  rootTables: readonly string[] = tables(),
+): Promise<Report> {
+  const failures: Array<[string, string]> = [];
+  let total = 0;
+  for (const table of rootTables) {
+    const mutations = fourPhase(data, table, n).filter(m => m.kind === 'edit');
+    if (mutations.length === 0) {
+      continue;
+    }
+    total += 1;
+    const query = nullPkStartTopN(table);
+    const msg = await capture(() =>
+      transact(d => pushRefetchWalk(d, query, mutations)),
+    );
+    if (msg) {
+      failures.push([`start-refetch|${table}`, msg]);
     }
   }
   return {total, failures};
