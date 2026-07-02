@@ -5,7 +5,7 @@ import {
   unreachable,
 } from '../../../shared/src/asserts.ts';
 import {must} from '../../../shared/src/must.ts';
-import {defineOwnDataProperty} from '../../../shared/src/objects.ts';
+import {assignProperty} from '../../../shared/src/objects.ts';
 import type {Writable} from '../../../shared/src/writable.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import {type Comparator, type Node} from './data.ts';
@@ -909,13 +909,7 @@ function setProperty<
   value: V,
 ): MutableMetaEntry & {[P in K]: V} {
   if (mutate || owns(parentEntry)) {
-    // Avoid triggering legacy __proto__ setter on parentEntry.
-    // We still want to set the property, so SolidJS's Proxy set trap is invoked
-    // below.
-    if (key === '__proto__' && !Object.hasOwn(parentEntry, '__proto__')) {
-      defineOwnDataProperty(parentEntry, '__proto__', null);
-    }
-    (parentEntry as {[P in K]: V})[key] = value;
+    assignProperty(parentEntry as {[P in K]: V}, key, value);
     return parentEntry as MutableMetaEntry & {[P in K]: V};
   }
   return track({

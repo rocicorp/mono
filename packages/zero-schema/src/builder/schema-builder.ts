@@ -1,9 +1,6 @@
 /* oxlint-disable @typescript-eslint/no-explicit-any */
 import {h64} from '../../../shared/src/hash.ts';
-import {
-  defineOwnDataProperty,
-  mapEntries,
-} from '../../../shared/src/objects.ts';
+import {assignProperty, mapEntries} from '../../../shared/src/objects.ts';
 import {
   normalizeClientSchema,
   type ClientSchema,
@@ -67,7 +64,7 @@ export function createSchema<
         `Table "${table.schema.name}" is defined more than once in the schema`,
       );
     }
-    defineOwnDataProperty(retTables, table.schema.name, table.build());
+    assignProperty(retTables, table.schema.name, table.build());
   });
   options.relationships?.forEach(relationships => {
     if (Object.hasOwn(retRelationships, relationships.name)) {
@@ -75,7 +72,7 @@ export function createSchema<
         `Relationships for table "${relationships.name}" are defined more than once in the schema`,
       );
     }
-    defineOwnDataProperty(
+    assignProperty(
       retRelationships,
       relationships.name,
       relationships.relationships,
