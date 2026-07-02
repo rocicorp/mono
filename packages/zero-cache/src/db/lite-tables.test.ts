@@ -601,9 +601,9 @@ describe('computeZqlSpec', () => {
 
     expect(spec.tableSpec.primaryKey).toEqual(['id']);
     expect(spec.zqlSpec).toEqual({
-      id: {type: 'string'},
-      ip: {type: 'string'},
-      book: {type: 'string'},
+      id: {type: 'string', optional: false},
+      ip: {type: 'string', optional: true},
+      book: {type: 'string', optional: true},
     });
   });
 
