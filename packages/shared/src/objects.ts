@@ -7,6 +7,20 @@ export function mapValues<T extends Record<string, unknown>, U>(
   };
 }
 
+
+export function defineOwnDataProperty<T>(
+  object: object,
+  key: string,
+  value: T,
+): void {
+  Object.defineProperty(object, key, {
+    value,
+    writable: true,
+    enumerable: true,
+    configurable: true,
+  });
+}
+
 export function mapEntries<T, U>(
   input: Record<string, T>,
   mapper: (key: string, val: T) => [key: string, val: U],
@@ -19,7 +33,7 @@ export function mapEntries<T, U>(
   // https://gist.github.com/arv/1b4e113724f6a14e2d4742bcc760d1fa
   for (const entry of Object.entries(input)) {
     const mapped = mapper(entry[0], entry[1]);
-    output[mapped[0]] = mapped[1];
+    defineOwnDataProperty(output, mapped[0], mapped[1]);
   }
   return output;
 }
@@ -32,7 +46,7 @@ export function mapAllEntries<T, U>(
   // https://github.com/rocicorp/mono/pull/3927#issuecomment-2706059475
   const output: Record<string, U> = {};
   for (const mapped of mapper(Object.entries(input))) {
-    output[mapped[0]] = mapped[1];
+    defineOwnDataProperty(output, mapped[0], mapped[1]);
   }
   return output;
 }

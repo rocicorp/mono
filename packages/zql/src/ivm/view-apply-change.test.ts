@@ -741,6 +741,176 @@ describe('applyChange', () => {
       ).toThrowError(new Error('node does not exist'));
     });
 
+    test('column named __proto__ with JSON array is preserved on Object.assign edit path', () => {
+      const columns: SourceSchema['columns'] = {
+        id: {type: 'string'},
+      };
+      Object.defineProperty(columns, '__proto__', {
+        value: {type: 'json'},
+        enumerable: true,
+      });
+
+      const schema = {
+        tableName: 'event',
+        columns,
+        primaryKey: ['id'],
+        sort: [['id', 'asc']],
+        system: 'client',
+        relationships: {},
+        isHidden: false,
+        compareRows: makeComparator([['id', 'asc']]),
+      } as const;
+      let root: Entry = {'': []};
+      const format = {
+        singular: false,
+        relationships: {},
+      };
+
+      const parseRow = (json: string) => JSON.parse(json) as {id: string};
+
+      root = applyChange(
+        root,
+        {
+          type: 'add',
+          node: {
+            row: parseRow('{"id":"1","__proto__":[1,"two",{"deep":true}]}'),
+            relationships: {},
+          },
+        },
+        schema,
+        '',
+        format,
+        WITH_IDS,
+        NO_MUTATE,
+      );
+
+      root = applyChange(
+        root,
+        {
+          type: 'edit',
+          oldNode: {
+            row: parseRow('{"id":"1","__proto__":[1,"two",{"deep":true}]}'),
+          },
+          node: {
+            row: parseRow('{"id":"1","__proto__":[3,"four",{"deep":false}]}'),
+          },
+        },
+        schema,
+        '',
+        format,
+        WITH_IDS,
+        MUTATE,
+      );
+
+      const row = at(root, '', 0) as Entry & {__proto__: unknown};
+      expect(row['__proto__']).toEqual([3, 'four', {deep: false}]);
+      expect(Object.getPrototypeOf(row)).toBeNull();
+    });
+
+    test('relationship named __proto__ is preserved and does not affect prototype', () => {
+      const childSchema: SourceSchema = {
+        tableName: 'child',
+        columns: {
+          id: {type: 'string'},
+          parentId: {type: 'string'},
+        },
+        primaryKey: ['id'],
+        sort: [['id', 'asc']],
+        system: 'client',
+        relationships: {},
+        isHidden: false,
+        compareRows: makeComparator([['id', 'asc']]),
+      };
+
+      const relationships: SourceSchema['relationships'] = {};
+      Object.defineProperty(relationships, '__proto__', {
+        value: childSchema,
+        enumerable: true,
+      });
+
+      const formatRelationships: Format['relationships'] = {};
+      Object.defineProperty(formatRelationships, '__proto__', {
+        value: {singular: false, relationships: {}},
+        enumerable: true,
+      });
+
+      const schema: SourceSchema = {
+        tableName: 'event',
+        columns: {
+          id: {type: 'string'},
+          name: {type: 'string'},
+        },
+        primaryKey: ['id'],
+        sort: [['id', 'asc']],
+        system: 'client',
+        relationships,
+        isHidden: false,
+        compareRows: makeComparator([['id', 'asc']]),
+      };
+
+      const format: Format = {
+        singular: false,
+        relationships: formatRelationships,
+      };
+
+      const makeProtoRelationships = <T>(value: T): Record<string, T> => {
+        const result: Record<string, T> = {};
+        Object.defineProperty(result, '__proto__', {
+          value,
+          enumerable: true,
+        });
+        return result;
+      };
+
+      let root: Entry = {'': []};
+
+      root = applyChange(
+        root,
+        {
+          type: 'add',
+          node: {
+            row: {id: '1', name: 'Aaron'},
+            relationships: makeProtoRelationships(() => []),
+          },
+        },
+        schema,
+        '',
+        format,
+        WITH_IDS,
+        NO_MUTATE,
+      );
+
+      root = applyChange(
+        root,
+        {
+          type: 'child',
+          node: {row: {id: '1', name: 'Aaron'}},
+          child: {
+            relationshipName: '__proto__',
+            change: {
+              type: 'add',
+              node: {
+                row: {id: 'c1', parentId: '1'},
+                relationships: {},
+              },
+            },
+          },
+        },
+        schema,
+        '',
+        format,
+        WITH_IDS,
+        NO_MUTATE,
+      );
+
+      const parent = at(root, '', 0);
+      expect(entries(parent, '__proto__')).toHaveLength(1);
+      expect(at(parent, '__proto__', 0)).toEqual(
+        expect.objectContaining({id: 'c1', parentId: '1'}),
+      );
+      expect(Object.getPrototypeOf(parent)).toBeNull();
+    });
+
     test('singular: true', () => {
       const schema = {
         tableName: 'event',
