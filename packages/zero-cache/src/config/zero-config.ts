@@ -488,6 +488,18 @@ export const zeroOptions = {
     ],
   },
 
+  enableQueryCovering: {
+    type: v.boolean().default(true),
+    desc: [
+      `Enable shadow-mode query covering detection during query hydration.`,
+      ``,
+      `When enabled, view-syncers compare newly hydrated queries against running`,
+      `queries with the same root table and log aggregate coverage stats.`,
+      ``,
+      `You can disable this if covering detection adds too much CPU overhead.`,
+    ],
+  },
+
   yieldThresholdMs: {
     type: v.number().default(10),
     desc: [
