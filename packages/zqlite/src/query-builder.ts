@@ -348,7 +348,11 @@ function sargableLeadingStartBound(
   operator: '>' | '<',
   columnType: SchemaValue,
 ): SQLQuery | undefined {
-  if (columnType.optional === true) {
+  // A NULL bound value proves the column is nullable regardless of the
+  // column metadata, and a bare range bound is not sound there: `col >= NULL`
+  // is never true, so instead of being redundant it would annihilate the
+  // whole start constraint.
+  if (value === null || columnType.optional === true) {
     return undefined;
   }
 
