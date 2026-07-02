@@ -5,7 +5,8 @@ import {chmod, copyFile, mkdir, readFile, rm} from 'node:fs/promises';
 import {builtinModules} from 'node:module';
 import {basename, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {type InlineConfig, build as viteBuild} from 'vite';
+import {compileModule} from 'svelte/compiler';
+import {type InlineConfig, type Plugin, build as viteBuild} from 'vite';
 import {assert} from '../../shared/src/asserts.ts';
 import {makeDefine} from '../../shared/src/build.ts';
 import {getExternalFromPackageJSON} from '../../shared/src/tool/get-external-from-package-json.ts';
@@ -26,10 +27,36 @@ async function getExternal(): Promise<string[]> {
 
 const external = await getExternal();
 
+const rollupExternal = [...external, /^svelte(?:\/.*)?$/];
+
 const define = {
   ...makeDefine('unknown'),
   'process.env.DISABLE_MUTATION_RECOVERY': 'true',
 };
+
+function entryFileName(chunk: {name: string}): string {
+  return `${chunk.name.replace(/\.svelte$/, '')}.js`;
+}
+
+function svelteModulePlugin(): Plugin {
+  return {
+    name: 'zero-svelte-module',
+    transform(code, id) {
+      if (!id.endsWith('.svelte.ts') && !id.endsWith('.svelte.js')) {
+        return undefined;
+      }
+
+      const compiled = compileModule(code, {
+        filename: id,
+        generate: 'client',
+      });
+      return {
+        code: compiled.js.code,
+        map: compiled.js.map,
+      };
+    },
+  };
+}
 
 // Vite config helper functions
 async function getPackageJSON() {
@@ -109,6 +136,7 @@ async function getAllEntryPoints(): Promise<Record<string, string>> {
 const baseConfig: InlineConfig = {
   configFile: false,
   logLevel: 'warn',
+  plugins: [svelteModulePlugin()],
   define,
   resolve: {
     conditions: ['import', 'module', 'default'],
@@ -130,11 +158,11 @@ async function getViteConfig(): Promise<InlineConfig> {
     build: {
       ...baseConfig.build,
       rollupOptions: {
-        external,
+        external: rollupExternal,
         input: await getAllEntryPoints(),
         output: {
           format: 'es',
-          entryFileNames: '[name].js',
+          entryFileNames: entryFileName,
           chunkFileNames: 'chunks/[name]-[hash].js',
           preserveModules: true,
           preserveModulesRoot: resolve('..'),
@@ -154,7 +182,7 @@ const bundleSizeConfig: InlineConfig = {
   build: {
     ...baseConfig.build,
     rollupOptions: {
-      external,
+      external: rollupExternal,
       input: {
         // Single entry point for bundle size measurement
         zero: resolve(import.meta.dirname, '../src/zero.ts'),

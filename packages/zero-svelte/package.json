@@ -1,0 +1,32 @@
+{
+  "name": "zero-svelte",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "module": "true",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check-types": "svelte-check --tsconfig ./tsconfig.json",
+    "check-types:watch": "svelte-check --tsconfig ./tsconfig.json --watch",
+    "format": "oxfmt .",
+    "check-format": "oxfmt --check .",
+    "lint": "oxlint --quiet --config ../../oxlint.config.ts",
+    "fmt": "oxfmt .",
+    "check-fmt": "oxfmt --check ."
+  },
+  "devDependencies": {
+    "@sveltejs/vite-plugin-svelte": "^6.0.0",
+    "oxfmt": "^0.45.0",
+    "shared": "workspace:*",
+    "svelte": "5.55.9",
+    "svelte-check": "^4.4.8",
+    "typescript": "~6.0.2",
+    "vitest": "^4.1.6",
+    "zero-client": "workspace:*"
+  },
+  "peerDependencies": {
+    "svelte": "^5.0.0"
+  },
+  "packageManager": "pnpm@11.3.0"
+}
