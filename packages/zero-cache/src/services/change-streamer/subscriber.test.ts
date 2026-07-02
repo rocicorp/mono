@@ -312,6 +312,45 @@ describe('change-streamer/subscriber', () => {
     await drained;
   });
 
+  test('post-catchup live sends accumulate without downstream consumption', async () => {
+    const [sub, _, receiver] = createSubscriber('00', true);
+
+    let completed = 0;
+    const sends: Promise<void>[] = [];
+    const count = 1000;
+
+    for (let i = 0; i < count; i++) {
+      const watermark = String(i + 1).padStart(4, '0');
+      sends.push(
+        sub
+          .send([
+            watermark,
+            'begin',
+            json(['begin', messages.begin(), {commitWatermark: watermark}]),
+          ])
+          .then(() => {
+            completed++;
+          }),
+      );
+    }
+
+    await Promise.resolve();
+
+    // Status initialization plus every live send is retained because nothing
+    // is consuming the downstream Subscription.
+    expect(receiver.queued).toBe(count + 1);
+    expect(sub.getStats()).toMatchObject({
+      pending: count + 1,
+      backlog: 0,
+      backlogBytes: 0,
+    });
+    expect(completed).toBe(0);
+
+    receiver.cancel();
+    await Promise.all(sends);
+    expect(completed).toBe(count);
+  });
+
   test('acks, pending, processed, stats', async () => {
     const [sub, _, receiver] = createSubscriber('00');
 
