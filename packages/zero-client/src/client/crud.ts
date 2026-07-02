@@ -1,3 +1,4 @@
+import {assignProperty, mapValues} from '../../../shared/src/objects.ts';
 import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
 import type {MaybePromise} from '../../../shared/src/types.ts';
 import {
@@ -60,11 +61,9 @@ export function makeCRUDMutateBatch<const S extends Schema>(
 
   const mutateBatch = async <R>(body: (m: DBMutator<S>) => R): Promise<R> => {
     const ops: CRUDOp[] = [];
-    const m = {} as Record<string, unknown>;
-    for (const name of Object.keys(schema.tables)) {
-      m[name] = makeBatchCRUDMutate(name, schema, ops);
-    }
-
+    const m = mapValues(schema.tables, (_, name) =>
+      makeBatchCRUDMutate(name, schema, ops),
+    );
     const rv = await body(m as DBMutator<S>);
     await zeroCRUD({ops});
     return rv;
@@ -80,10 +79,10 @@ export function addTableCRUDProperties<TSchema extends Schema>(
 ): void {
   const {[CRUD_MUTATION_NAME]: zeroCRUD} = repMutate;
   for (const [name, tableSchema] of Object.entries(schema.tables)) {
-    (mutate as Record<string, unknown>)[name] = makeEntityCRUDMutate(
+    assignProperty(
+      mutate as Record<string, unknown>,
       name,
-      tableSchema.primaryKey,
-      zeroCRUD,
+      makeEntityCRUDMutate(name, tableSchema.primaryKey, zeroCRUD),
     );
   }
 }

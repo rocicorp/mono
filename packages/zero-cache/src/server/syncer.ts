@@ -62,6 +62,7 @@ function getCustomQueryConfig(
     url: queryConfig.url,
     apiKey: queryConfig.apiKey,
     allowedClientHeaders: queryConfig.allowedClientHeaders,
+    allowedRequestHeaders: queryConfig.allowedRequestHeaders,
     forwardCookies: queryConfig.forwardCookies ?? false,
   };
 }
@@ -173,7 +174,10 @@ export default async function runWorker(
     drainCoordinator: DrainCoordinator,
   ) => {
     const logger = lc
+      .withContext('taskID', config.taskID)
       .withContext('component', 'view-syncer')
+      .withContext('appID', shard.appID)
+      .withContext('shardNum', shard.shardNum)
       .withContext('clientGroupID', id)
       .withContext('instance', randomID());
 

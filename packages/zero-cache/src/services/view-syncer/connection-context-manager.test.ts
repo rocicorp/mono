@@ -114,7 +114,13 @@ function validate(
 
 describe('ConnectionContextManager', () => {
   test('registers provisional connections, applies init metadata, and replaces prior sockets for a client', () => {
-    const manager = new ConnectionContextManagerImpl(lc);
+    const manager = new ConnectionContextManagerImpl(
+      lc,
+      undefined,
+      undefined,
+      {allowedClientHeaders: ['foo'], forwardCookies: false},
+      {allowedClientHeaders: ['baz'], forwardCookies: false},
+    );
 
     expect(register(manager, 'c1', 'ws1')).toMatchObject({
       clientID: 'c1',
@@ -322,7 +328,7 @@ describe('ConnectionContextManager', () => {
       lc,
       5,
       10,
-      undefined,
+      {allowedClientHeaders: ['foo'], forwardCookies: false},
       undefined,
       undefined,
       () => 1_000,
@@ -603,7 +609,6 @@ describe('ConnectionContextManager', () => {
           headerOptions: expect.objectContaining({
             apiKey: 'query-api-key',
             customHeaders: {'x-query-header': 'query-value'},
-            allowedClientHeaders: ['x-query-header'],
             cookie: 'cookie-ws1',
             origin: 'origin-ws1',
           }),
@@ -616,13 +621,115 @@ describe('ConnectionContextManager', () => {
           headerOptions: expect.objectContaining({
             apiKey: 'push-api-key',
             customHeaders: {'x-push-header': 'push-value'},
-            allowedClientHeaders: ['x-push-header'],
             cookie: undefined,
             origin: 'origin-ws1',
           }),
         }),
       }),
     );
+  });
+
+  test('stores only allowlisted forwarded headers on the fetch context', () => {
+    const manager = new ConnectionContextManagerImpl(
+      lc,
+      undefined,
+      undefined,
+      {
+        url: ['https://default.example/query'],
+        apiKey: 'query-api-key',
+        allowedClientHeaders: ['x-query-header'],
+        allowedRequestHeaders: ['x-forwarded-for'],
+        forwardCookies: false,
+      },
+      {
+        url: ['https://default.example/push'],
+        apiKey: 'push-api-key',
+        allowedClientHeaders: ['x-push-header'],
+        allowedRequestHeaders: ['cf-ray'],
+        forwardCookies: false,
+      },
+    );
+
+    const requestHeaders = {
+      'x-forwarded-for': '203.0.113.1',
+      'cf-ray': 'abc123',
+      'x-not-allowed': 'secret',
+    };
+    manager.registerConnection(
+      selector('c1', 'ws1'),
+      {
+        ...makeConnectParams('c1', 'ws1'),
+        requestHeaders,
+      },
+      {type: 'opaque', raw: 'token-1'},
+    );
+    const connection = manager.initConnection(selector('c1', 'ws1'), {
+      desiredQueriesPatch: [],
+      userQueryHeaders: {
+        'X-Query-Header': 'query-value',
+        'x-not-allowed': 'secret',
+      },
+      userPushHeaders: {
+        'X-Push-Header': 'push-value',
+        'x-not-allowed-2': 'secret-2',
+      },
+    });
+
+    expect(connection.queryContext.headerOptions.customHeaders).toEqual({
+      'X-Query-Header': 'query-value',
+    });
+    expect(connection.queryContext.headerOptions.requestHeaders).toEqual({
+      'x-forwarded-for': '203.0.113.1',
+    });
+    expect(connection.mutateContext.headerOptions.customHeaders).toEqual({
+      'X-Push-Header': 'push-value',
+    });
+    expect(connection.mutateContext.headerOptions.requestHeaders).toEqual({
+      'cf-ray': 'abc123',
+    });
+  });
+
+  test('drops forwarded headers when no allowlist is configured', () => {
+    const manager = new ConnectionContextManagerImpl(
+      lc,
+      undefined,
+      undefined,
+      {
+        url: ['https://default.example/query'],
+        forwardCookies: false,
+      },
+      {
+        url: ['https://default.example/push'],
+        forwardCookies: false,
+      },
+    );
+
+    const connection = manager.registerConnection(
+      selector('c1', 'ws1'),
+      {
+        ...makeConnectParams('c1', 'ws1'),
+        requestHeaders: {'x-forwarded-for': '203.0.113.1'},
+      },
+      {type: 'opaque', raw: 'token-1'},
+    );
+    const initialized = manager.initConnection(selector('c1', 'ws1'), {
+      desiredQueriesPatch: [],
+      userQueryHeaders: {'x-query-header': 'query-value'},
+      userPushHeaders: {'x-push-header': 'push-value'},
+    });
+
+    expect(
+      connection.queryContext.headerOptions.requestHeaders,
+    ).toBeUndefined();
+    expect(
+      connection.mutateContext.headerOptions.requestHeaders,
+    ).toBeUndefined();
+    expect(
+      initialized.queryContext.headerOptions.customHeaders,
+    ).toBeUndefined();
+    expect(
+      initialized.mutateContext.headerOptions.customHeaders,
+    ).toBeUndefined();
   });
 
   test('ignores stale revision-scoped validation and failure updates', () => {

@@ -529,11 +529,11 @@ describe('view-syncer/service', () => {
           URLPattern {},
         ],
         "headerOptions": {
-          "allowedClientHeaders": undefined,
           "apiKey": undefined,
           "cookie": undefined,
           "customHeaders": undefined,
           "origin": undefined,
+          "requestHeaders": undefined,
         },
         "url": "http://my-pull-endpoint.dev/api/zero/pull",
       }

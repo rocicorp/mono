@@ -21,6 +21,7 @@ FROM litestream/litestream:0.5.11 AS litestream-v5
 FROM node:22.22.3-alpine3.23@sha256:968df39aedcea65eeb078fb336ed7191baf48f972b4479711397108be0966920
 
 ARG ZERO_VERSION
+ARG ZERO_PACKAGE
 
 RUN test -n "$ZERO_VERSION"
 
@@ -31,7 +32,7 @@ RUN apk add --no-cache readline readline-dev
 # packageManager field. pnpm's build-script allowlist (v10+) blocks lifecycle
 # scripts from transitive deps unless explicitly opted in, shrinking the
 # postinstall supply-chain surface to packages we name below.
-RUN corepack enable && corepack prepare pnpm@11 --activate
+RUN corepack enable && corepack prepare pnpm@11.5.3 --activate
 
 RUN mkdir -p /opt/app
 WORKDIR /opt/app
@@ -48,25 +49,28 @@ EOF
 # binary in its tarball (see its package.json `files`) — its `install` script
 # runs prebuild-install to fetch one, so it must be allowed. esbuild is pulled
 # in transitively via tsx and downloads a platform binary in postinstall; keep
-# it allowlisted unless runtime testing confirms tsx is never invoked.
+# it allowlisted unless runtime testing confirms tsx is never invoked. protobufjs
+# is pulled in by OpenTelemetry's gRPC exporters and runs a postinstall script.
 RUN cat > pnpm-workspace.yaml <<'EOF'
 allowBuilds:
   '@rocicorp/zero-sqlite3': true
   esbuild: true
+  protobufjs: true
 EOF
 
 COPY pkgs/ /tmp/pkgs/
 
-# Install zero package based on version format
-RUN if echo "$ZERO_VERSION" | grep -q "\.tgz$"; then \
-    FILENAME=$(basename $ZERO_VERSION) && \
+# Install zero package based on install source format (tarball or pnpm)
+RUN ZERO_INSTALL_SOURCE="${ZERO_PACKAGE:-$ZERO_VERSION}" && \
+  if echo "$ZERO_INSTALL_SOURCE" | grep -q "\.tgz$"; then \
+    FILENAME=$(basename "$ZERO_INSTALL_SOURCE") && \
     echo "Installing from local tarball $FILENAME" && \
-    cp /tmp/pkgs/$FILENAME . && \
+    cp "/tmp/pkgs/$FILENAME" . && \
     pnpm add ./$FILENAME && \
     rm -rf /tmp/pkgs ./$FILENAME; \
   else \
-    echo "Installing from npm @rocicorp/zero@$ZERO_VERSION" && \
-    pnpm add @rocicorp/zero@${ZERO_VERSION}; \
+    echo "Installing from npm @rocicorp/zero@$ZERO_INSTALL_SOURCE" && \
+    pnpm add @rocicorp/zero@${ZERO_INSTALL_SOURCE}; \
   fi
 
 # Put zero's bin shims on PATH so `zero-cache` resolves without npx.

@@ -334,8 +334,8 @@ importers:
         specifier: ^1.39.0
         version: 1.66.0
       '@rocicorp/logger':
-        specifier: ^5.4.0
-        version: 5.4.0
+        specifier: ^6.1.0
+        version: 6.1.0
       ws:
         specifier: ^8.18.1
         version: 8.20.1
@@ -414,8 +414,8 @@ importers:
         specifier: ^1.0.4
         version: 1.0.4
       '@rocicorp/logger':
-        specifier: ^5.4.0
-        version: 5.4.0
+        specifier: ^6.1.0
+        version: 6.1.0
       '@rocicorp/resolver':
         specifier: ^1.0.2
         version: 1.0.2
@@ -450,8 +450,8 @@ importers:
         specifier: ^2.7.1
         version: 2.7.1(@opentelemetry/api@1.9.1)
       '@rocicorp/logger':
-        specifier: ^5.4.0
-        version: 5.4.0
+        specifier: ^6.1.0
+        version: 6.1.0
     devDependencies:
       oxfmt:
         specifier: ^0.45.0
@@ -472,8 +472,8 @@ importers:
         specifier: ^1.0.4
         version: 1.0.4
       '@rocicorp/logger':
-        specifier: ^5.4.0
-        version: 5.4.0
+        specifier: ^6.1.0
+        version: 6.1.0
       '@rocicorp/resolver':
         specifier: ^1.0.2
         version: 1.0.2
@@ -655,8 +655,8 @@ importers:
         specifier: ^1.39.0
         version: 1.66.0
       '@rocicorp/logger':
-        specifier: ^5.4.0
-        version: 5.4.0
+        specifier: ^6.1.0
+        version: 6.1.0
       '@rocicorp/resolver':
         specifier: ^1.0.2
         version: 1.0.2
@@ -846,8 +846,8 @@ importers:
         specifier: ^1.0.4
         version: 1.0.4
       '@rocicorp/logger':
-        specifier: ^5.4.0
-        version: 5.4.0
+        specifier: ^6.1.0
+        version: 6.1.0
       '@rocicorp/resolver':
         specifier: ^1.0.2
         version: 1.0.2
@@ -1069,8 +1069,8 @@ importers:
         specifier: ^1.0.4
         version: 1.0.4
       '@rocicorp/logger':
-        specifier: ^5.4.0
-        version: 5.4.0
+        specifier: ^6.1.0
+        version: 6.1.0
       '@rocicorp/resolver':
         specifier: ^1.0.2
         version: 1.0.2
@@ -1202,8 +1202,8 @@ importers:
         specifier: ^1.0.4
         version: 1.0.4
       '@rocicorp/logger':
-        specifier: ^5.4.0
-        version: 5.4.0
+        specifier: ^6.1.0
+        version: 6.1.0
       '@rocicorp/resolver':
         specifier: ^1.0.2
         version: 1.0.2
@@ -1309,8 +1309,8 @@ importers:
   packages/zero-pg:
     dependencies:
       '@rocicorp/logger':
-        specifier: ^5.4.0
-        version: 5.4.0
+        specifier: ^6.1.0
+        version: 6.1.0
     devDependencies:
       '@vitest/runner':
         specifier: ^4.1.6
@@ -1433,8 +1433,8 @@ importers:
   packages/zero-server:
     dependencies:
       '@rocicorp/logger':
-        specifier: ^5.4.0
-        version: 5.4.0
+        specifier: ^6.1.0
+        version: 6.1.0
     devDependencies:
       '@prisma/adapter-pg':
         specifier: ^7.7.0
@@ -1552,8 +1552,8 @@ importers:
         specifier: ^9.6.0
         version: 9.9.0
       '@rocicorp/logger':
-        specifier: ^5.4.0
-        version: 5.4.0
+        specifier: ^6.1.0
+        version: 6.1.0
       '@standard-schema/spec':
         specifier: ^1.0.0
         version: 1.1.0
@@ -1633,14 +1633,17 @@ importers:
         specifier: ^9.6.0
         version: 9.9.0
       '@rocicorp/logger':
-        specifier: ^5.4.0
-        version: 5.4.0
+        specifier: ^6.1.0
+        version: 6.1.0
       '@types/pg':
         specifier: ^8.20.0
         version: 8.20.0
       '@types/tmp':
         specifier: ^0.2.6
         version: 0.2.6
+      ast-to-zql:
+        specifier: workspace:*
+        version: link:../ast-to-zql
       otel:
         specifier: workspace:*
         version: link:../otel
@@ -1696,8 +1699,8 @@ importers:
         specifier: ^1.9.0
         version: 1.9.1
       '@rocicorp/logger':
-        specifier: ^5.4.0
-        version: 5.4.0
+        specifier: ^6.1.0
+        version: 6.1.0
       '@rocicorp/zero-sqlite3':
         specifier: ^1.1.2
         version: 1.1.2
@@ -1743,8 +1746,8 @@ importers:
         version: link:../zqlite
     devDependencies:
       '@rocicorp/logger':
-        specifier: ^5.4.0
-        version: 5.4.0
+        specifier: ^6.1.0
+        version: 6.1.0
       '@vitest/runner':
         specifier: ^4.1.6
         version: 4.1.6
@@ -1777,14 +1780,29 @@ importers:
         specifier: ^0.45.0
         version: 0.45.0
 
+  scripts:
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.5
+        version: 22.19.19
+      oxfmt:
+        specifier: ^0.45.0
+        version: 0.45.0
+      typescript:
+        specifier: ~6.0.2
+        version: 6.0.3
+      vitest:
+        specifier: ^4.1.6
+        version: 4.1.6(@opentelemetry/api@1.9.1)(@types/node@22.19.19)(@vitest/browser-playwright@4.1.6)(@vitest/coverage-v8@4.1.6)(vite@8.0.13(@types/node@22.19.19)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))
+
   tools/client-simulator:
     dependencies:
       '@dotenvx/dotenvx':
         specifier: ^1.39.0
         version: 1.66.0
       '@rocicorp/logger':
-        specifier: ^5.4.0
-        version: 5.4.0
+        specifier: ^6.1.0
+        version: 6.1.0
       nanoid:
         specifier: ^5.1.2
         version: 5.1.11
@@ -1811,8 +1829,8 @@ importers:
         specifier: ^1.39.0
         version: 1.66.0
       '@rocicorp/logger':
-        specifier: ^5.4.0
-        version: 5.4.0
+        specifier: ^6.1.0
+        version: 6.1.0
       nanoid:
         specifier: ^5.1.2
         version: 5.1.11
@@ -1836,8 +1854,8 @@ importers:
   tools/process-tracker:
     dependencies:
       '@rocicorp/logger':
-        specifier: ^5.4.0
-        version: 5.4.0
+        specifier: ^6.1.0
+        version: 6.1.0
       find-process:
         specifier: ^1.4.10
         version: 1.4.11
@@ -1861,8 +1879,8 @@ importers:
         specifier: ^1.0.4
         version: 1.0.4
       '@rocicorp/logger':
-        specifier: ^5.4.0
-        version: 5.4.0
+        specifier: ^6.1.0
+        version: 6.1.0
       ws:
         specifier: ^8.18.1
         version: 8.20.1
@@ -5600,8 +5618,11 @@ packages:
     resolution: {integrity: sha512-FavTiO8ETXFXDVfA87IThGduTTTR8iqzBnr/c60gUUmbk7knGEXPmf2B+yiNuluJD0ku0fL2V2r62UXnsLXl6w==}
     engines: {node: ^12.20.0 || ^14.13.1 || >=16.0.0}
 
-  '@rocicorp/logger@5.4.0':
-    resolution: {integrity: sha512-kmMR5iLrwRIsvPZ+UXnmyAM3Mlvz6rCHrYfMsrMPgFYKLfo7amUH1RwHo6tuuqJiAvUbeaCoDtc8e+V0Mr4PSA==}
+  '@rocicorp/logger@5.5.0':
+    resolution: {integrity: sha512-lBn0Y4FPKB/IOhcz+r3f9/Ig//LLjWiaQ66Z9tJ54uFib8juzBSXeuxZd/oRnvBt+Lu4epDmLsO1Pnl4mdkSFQ==}
+
+  '@rocicorp/logger@6.1.0':
+    resolution: {integrity: sha512-4jOOwem9veRxl7uH15PsmT48PRd3OzM7n3umkO8WCMt8M929MJml4kfeqAcga8feZAfUb/+DRjsvl4ySgPWqYQ==}
 
   '@rocicorp/resolver@1.0.2':
     resolution: {integrity: sha512-TfjMTQp9cNNqNtHFfa+XHEGdA7NnmDRu+ZJH4YF3dso0Xk/b9DMhg/sl+b6CR4ThFZArXXDsG1j8Mwl34wcOZQ==}
@@ -18502,7 +18523,9 @@ snapshots:
     dependencies:
       '@rocicorp/resolver': 1.0.2
 
-  '@rocicorp/logger@5.4.0': {}
+  '@rocicorp/logger@5.5.0': {}
+
+  '@rocicorp/logger@6.1.0': {}
 
   '@rocicorp/resolver@1.0.2': {}
 
@@ -25477,7 +25500,7 @@ snapshots:
     dependencies:
       '@badrap/valita': 0.3.11
       '@rocicorp/lock': 1.0.4
-      '@rocicorp/logger': 5.4.0
+      '@rocicorp/logger': 5.5.0
       '@rocicorp/resolver': 1.0.2
 
   require-directory@2.1.1: {}
