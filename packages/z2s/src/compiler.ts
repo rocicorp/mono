@@ -10,6 +10,7 @@ import {type JSONValue} from '../../shared/src/json.ts';
 import {must} from '../../shared/src/must.ts';
 import type {
   AST,
+  Bound,
   Condition,
   CorrelatedSubquery,
   CorrelatedSubqueryCondition,
@@ -110,7 +111,7 @@ function select(
   }
 
   let appliedWhere = false;
-  function maybeWhere(test: unknown | undefined) {
+  function maybeWhere(test: unknown) {
     if (!test) {
       return sql``;
     }
@@ -122,7 +123,12 @@ function select(
 
   return sql`SELECT ${sql.join(selectionSet, ',')}
     FROM ${fromIdent(spec.server, table)}
-    ${maybeWhere(ast.where)} ${where(spec, ast.where, table)}
+    ${maybeWhere(ast.where)} ${where(spec, ast.where, table)}${
+      ast.start
+        ? sql`
+    ${maybeWhere(ast.start)} ${start(spec, ast.start, ast.orderBy, table)}`
+        : sql``
+    }
     ${maybeWhere(correlate)} ${correlate ? correlate(table) : sql``}
     ${orderBy(spec, ast.orderBy, table)}
     ${limit(ast.limit, format?.singular)}`;
@@ -176,6 +182,57 @@ export function orderBy(
     ),
     ', ',
   )}`;
+}
+
+export function start(
+  spec: Spec,
+  bound: Bound | undefined,
+  orderBy: Ordering | undefined,
+  table: Table,
+): SQLQuery {
+  if (!bound) {
+    return sql``;
+  }
+  assert(
+    orderBy !== undefined && orderBy.length > 0,
+    'start requires ordering',
+  );
+
+  const constraints: SQLQuery[] = [];
+  for (let i = 0; i < orderBy.length; i++) {
+    const group: SQLQuery[] = [];
+    const [iField, iDirection] = orderBy[i];
+    for (let j = 0; j <= i; j++) {
+      const [field] = orderBy[j];
+      if (j === i) {
+        group.push(
+          startRangeComparison(
+            spec,
+            table,
+            iField,
+            bound.row[iField] ?? null,
+            iDirection === 'asc' ? '>' : '<',
+          ),
+        );
+      } else {
+        group.push(startEquality(spec, table, field, bound.row[field] ?? null));
+      }
+    }
+    constraints.push(sql`(${sql.join(group, ' AND ')})`);
+  }
+
+  if (!bound.exclusive) {
+    constraints.push(
+      sql`(${sql.join(
+        orderBy.map(([field]) =>
+          startEquality(spec, table, field, bound.row[field] ?? null),
+        ),
+        ' AND ',
+      )})`,
+    );
+  }
+
+  return sql`(${sql.join(constraints, ' OR ')})`;
 }
 
 function related(
@@ -240,6 +297,15 @@ function relationshipSubquery(
         )(participatingTables[0].table)}) ${
           nestedAst.where
             ? sql`AND ${where(spec, nestedAst.where, lastTable)}`
+            : sql``
+        }${
+          nestedAst.start
+            ? sql` AND ${start(
+                spec,
+                nestedAst.start,
+                nestedAst.orderBy,
+                lastTable,
+              )}`
             : sql``
         } ${orderBy(spec, nestedAst.orderBy, lastTable)} ${limit(
           last(participatingTables)?.limit,
@@ -356,12 +422,21 @@ function scalarSubquery(
     condition.op === 'EXISTS' ? '=' : 'IS NOT',
   );
 
-  const subqueryWhere = subqueryAST.where
-    ? sql`WHERE ${where(spec, subqueryAST.where, subqueryTable)}`
-    : sql``;
+  const subqueryConditions = subqueryAST.where
+    ? [where(spec, subqueryAST.where, subqueryTable)]
+    : [];
+  if (subqueryAST.start) {
+    subqueryConditions.push(
+      start(spec, subqueryAST.start, subqueryAST.orderBy, subqueryTable),
+    );
+  }
   const subqueryOrderBy = orderBy(spec, subqueryAST.orderBy, subqueryTable);
 
-  return sql`${parentCol} ${op} (SELECT ${childCol} FROM ${fromIdent(spec.server, subqueryTable)} ${subqueryWhere} ${subqueryOrderBy} LIMIT 1)`;
+  return sql`${parentCol} ${op} (SELECT ${childCol} FROM ${fromIdent(spec.server, subqueryTable)} ${
+    subqueryConditions.length > 0
+      ? sql`WHERE ${sql.join(subqueryConditions, ' AND ')}`
+      : sql``
+  } ${subqueryOrderBy} LIMIT 1)`;
 }
 
 export function makeCorrelator(
@@ -445,6 +520,49 @@ export function distinctFrom(
   return sql`${valueComparison(spec, condition.left, table, condition.right, false)} ${
     condition.op === 'IS' ? sql`IS NOT DISTINCT FROM` : sql`IS DISTINCT FROM`
   } ${valueComparison(spec, condition.right, table, condition.left, false)}`;
+}
+
+function startEquality(
+  spec: Spec,
+  table: Table,
+  field: string,
+  value: unknown,
+): SQLQuery {
+  return sql`${colIdent(spec.server, {
+    table,
+    zql: field,
+  })} IS NOT DISTINCT FROM ${startValue(spec, table, field, value)}`;
+}
+
+function startRangeComparison(
+  spec: Spec,
+  table: Table,
+  field: string,
+  value: unknown,
+  operator: '>' | '<',
+): SQLQuery {
+  const column = colIdent(spec.server, {table, zql: field});
+  if (value === null) {
+    return operator === '>' ? sql`${column} IS NOT NULL` : sql`FALSE`;
+  }
+  const typedValue = startValue(spec, table, field, value);
+  return operator === '>'
+    ? sql`${column} > ${typedValue}`
+    : sql`(${column} IS NULL OR ${column} < ${typedValue})`;
+}
+
+function startValue(
+  spec: Spec,
+  table: Table,
+  field: string,
+  value: unknown,
+): SQLQuery {
+  return sqlConvertColumnArg(
+    getServerColumn(spec.server, table, field),
+    value,
+    false,
+    true,
+  );
 }
 
 function valueComparison(
