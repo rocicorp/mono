@@ -1,4 +1,5 @@
 import type {ReadonlyJSONValue} from '../../../shared/src/json.ts';
+import {mapValues} from '../../../shared/src/objects.ts';
 import type {PrimaryKey} from '../../../zero-protocol/src/primary-key.ts';
 import type {SchemaValue, TableSchema} from '../table-schema.ts';
 
@@ -84,9 +85,7 @@ export class TableBuilder<TShape extends TableSchema> {
     columns: {[K in keyof TColumns]: TColumns[K]['schema']};
     primaryKey: TShape['primaryKey'];
   }> {
-    const columnSchemas = Object.fromEntries(
-      Object.entries(columns).map(([k, v]) => [k, v.schema]),
-    ) as {[K in keyof TColumns]: TColumns[K]['schema']};
+    const columnSchemas = mapValues(columns, column => column.schema);
     return new TableBuilderWithColumns({
       ...this.#schema,
       columns: columnSchemas,

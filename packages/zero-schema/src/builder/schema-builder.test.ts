@@ -593,6 +593,60 @@ test('schema with conflicting table names', () => {
   );
 });
 
+test('schema preserves __proto__ table, column, and relationship names', () => {
+  const protoName = '__proto__' as const;
+  const source = table(protoName)
+    .columns({
+      id: string(),
+      [protoName]: string(),
+    })
+    .primaryKey('id');
+  const relationshipSource = table('relationshipSource')
+    .columns({id: string()})
+    .primaryKey('id');
+  const dest = table('dest').columns({id: string()}).primaryKey('id');
+  const sourceRelationships = relationships(relationshipSource, ({one}) => ({
+    [protoName]: one({
+      sourceField: ['id'],
+      destField: ['id'],
+      destSchema: dest,
+    }),
+  }));
+
+  const schema = createSchema({
+    tables: [source, relationshipSource, dest],
+    relationships: [sourceRelationships],
+  });
+
+  expect(Object.getPrototypeOf(schema.tables)).toBe(Object.prototype);
+  expect(Object.hasOwn(schema.tables, protoName)).toBe(true);
+  expect(schema.tables[protoName].name).toBe(protoName);
+  expect(Object.getPrototypeOf(schema.tables[protoName].columns)).toBe(
+    Object.prototype,
+  );
+  expect(Object.hasOwn(schema.tables[protoName].columns, protoName)).toBe(true);
+  expect(Object.getPrototypeOf(schema.relationships)).toBe(Object.prototype);
+  expect(Object.getPrototypeOf(schema.relationships.relationshipSource)).toBe(
+    Object.prototype,
+  );
+  expect(
+    Object.hasOwn(schema.relationships.relationshipSource, protoName),
+  ).toBe(true);
+  expect(schema.relationships.relationshipSource[protoName][0].destSchema).toBe(
+    'dest',
+  );
+
+  const {clientSchema} = clientSchemaFrom(schema);
+  expect(Object.getPrototypeOf(clientSchema.tables)).toBe(Object.prototype);
+  expect(Object.hasOwn(clientSchema.tables, protoName)).toBe(true);
+  expect(Object.getPrototypeOf(clientSchema.tables[protoName].columns)).toBe(
+    Object.prototype,
+  );
+  expect(Object.hasOwn(clientSchema.tables[protoName].columns, protoName)).toBe(
+    true,
+  );
+});
+
 // Use JSON.stringify in expectations to preserve / verify key order.
 const stringify = (o: unknown) => JSON.stringify(o, null, 2);
 
