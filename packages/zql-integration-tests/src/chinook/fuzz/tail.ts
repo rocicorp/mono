@@ -7,8 +7,8 @@
  *
  * A random query is a random **skeleton** (deeper than the enumerator's caps — depth up
  * to 4, same "no `related` under EXISTS" invariant), lowered via the fluent builder and
- * given an optional random root filter + `order` / `limit`. (The Rust `start`/`select`
- * decorations are dropped — both are inert here; see `axes.ts`.)
+ * given an optional random root filter + `order` / `limit`. The data-driven `start` axis
+ * is covered by L1/swarm; `select` remains absent because mono ZQL has no projection.
  */
 
 import type {AnyQuery} from '../../../../zql/src/query/query.ts';

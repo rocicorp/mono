@@ -306,6 +306,10 @@ function nullableAwareRangeComparison(
   operator: '>' | '<',
   columnType: SchemaValue,
 ): SQLQuery {
+  if (value === null) {
+    return operator === '>' ? sql`${sql.ident(field)} IS NOT NULL` : sql`FALSE`;
+  }
+
   // For non-nullable columns, skip IS NULL checks to avoid breaking
   // SQLite's MULTI-INDEX OR optimization, which falls back to a full
   // table scan when any OR branch involves NULL.
@@ -328,6 +332,10 @@ function sargableLeadingStartBound(
   operator: '>' | '<',
   columnType: SchemaValue,
 ): SQLQuery | undefined {
+  if (value === null) {
+    return undefined;
+  }
+
   if (columnType.optional === true) {
     return undefined;
   }
@@ -370,7 +378,10 @@ function gatherStartConstraints(
     for (let j = 0; j <= i; j++) {
       if (j === i) {
         const columnType = columnTypes[iField];
-        const constraintValue = toSQLiteType(from[iField], columnType.type);
+        const constraintValue = toSQLiteType(
+          from[iField] ?? null,
+          columnType.type,
+        );
         const operator =
           iDirection === 'asc' ? (reverse ? '<' : '>') : reverse ? '>' : '<';
         if (i === 0) {
@@ -392,7 +403,7 @@ function gatherStartConstraints(
       } else {
         const [jField] = order[j];
         const columnType = columnTypes[jField];
-        const value = toSQLiteType(from[jField], columnType.type);
+        const value = toSQLiteType(from[jField] ?? null, columnType.type);
         group.push(nullableAwareEquality(jField, value, columnType));
       }
     }
@@ -404,7 +415,7 @@ function gatherStartConstraints(
       sql`(${sql.join(
         order.map(([field]) => {
           const columnType = columnTypes[field];
-          const value = toSQLiteType(from[field], columnType.type);
+          const value = toSQLiteType(from[field] ?? null, columnType.type);
           return nullableAwareEquality(field, value, columnType);
         }),
         sql` AND `,

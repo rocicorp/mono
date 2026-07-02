@@ -18,7 +18,7 @@ import {asQueryInternals} from '../../../../zql/src/query/query-internals.ts';
 import type {AnyQuery} from '../../../../zql/src/query/query.ts';
 import {QueryDelegateImpl as TestMemoryQueryDelegate} from '../../../../zql/src/query/test/query-delegate.ts';
 import {schema} from '../schema.ts';
-import {hasText, pkOf, relsOf, tables} from './axes.ts';
+import {AXES, hasText, pkOf, relsOf, tables} from './axes.ts';
 import {CostModel} from './cost.ts';
 import {
   decorate,
@@ -98,7 +98,7 @@ describe('coverage', () => {
     }
     expect(cov.fraction()).toBe(1);
     expect(cov.missed()).toEqual([]);
-    // Far smaller than the full cross-product (16·7·4·3 = 1344) …
+    // Far smaller than the full cross-product (16·7·4·3·4 = 5376) …
     expect(rows.length).toBeLessThan(200);
     // … but at least the largest single-pair domain product (filter·exists = 16·7).
     expect(rows.length).toBeGreaterThanOrEqual(16 * 7);
@@ -107,15 +107,20 @@ describe('coverage', () => {
   test('observe marks every t-subset; total is the pairwise tuple count', () => {
     const cov = new Coverage(2);
     expect(cov.hitCount()).toBe(0);
-    // domains [16,7,4,3] ⇒ Σ over the 6 axis-pairs of dom_i·dom_j = 285.
+    // Pairwise total is Σ over axis-pairs of dom_i·dom_j.
+    const domains = AXES.map(a => a.values.length);
+    const expected = domains.flatMap((d, i) =>
+      domains.slice(i + 1).map(e => d * e),
+    );
+    const pairCount = (AXES.length * (AXES.length - 1)) / 2;
     const total = cov.total();
-    expect(total).toBe(16 * 7 + 16 * 4 + 16 * 3 + 7 * 4 + 7 * 3 + 4 * 3);
-    cov.observe([0, 0, 0, 0]); // one assignment hits C(4,2) = 6 pairwise tuples
-    expect(cov.hitCount()).toBe(6);
-    cov.observe([1, 1, 1, 1]); // a fully-different assignment adds 6 fresh tuples
-    expect(cov.hitCount()).toBe(12);
-    cov.observe([0, 0, 0, 0]); // re-observing is idempotent
-    expect(cov.hitCount()).toBe(12);
+    expect(total).toBe(expected.reduce((acc, n) => acc + n, 0));
+    cov.observe([0, 0, 0, 0, 0]); // one assignment hits C(N_AXES,2) tuples
+    expect(cov.hitCount()).toBe(pairCount);
+    cov.observe([1, 1, 1, 1, 1]); // a fully-different assignment adds fresh tuples
+    expect(cov.hitCount()).toBe(pairCount * 2);
+    cov.observe([0, 0, 0, 0, 0]); // re-observing is idempotent
+    expect(cov.hitCount()).toBe(pairCount * 2);
   });
 });
 
@@ -171,7 +176,7 @@ describe('L1 covering array', () => {
     const delegate = memoryDelegate();
     const rows = greedyCover(2);
     for (const r of rows) {
-      const res = decorate('track', r);
+      const res = decorate('track', r, data);
       expect(res, `track could not realize ${r}`).not.toBeNull();
       await hydrates(delegate, res![0]);
     }
@@ -183,7 +188,7 @@ describe('L1 covering array', () => {
     const cov = new Coverage(2);
     for (const r of rows) {
       for (const root of decoratableRoots()) {
-        const res = decorate(root, r);
+        const res = decorate(root, r, data);
         if (!res) {
           continue; // unrealizable on this root (text filter on a textless table)
         }
@@ -199,7 +204,7 @@ describe('L1 covering array', () => {
     const rows = greedyCover(2);
     let realized = 0;
     for (const r of rows) {
-      const res = decorateChild('album', 'tracks', r);
+      const res = decorateChild('album', 'tracks', r, data);
       if (!res) {
         continue;
       }
@@ -225,6 +230,9 @@ describe('data-driven literals', () => {
     const comps = data.values('track', 'composer');
     expect(comps.length).toBeGreaterThan(0);
     expect(comps.every(v => v !== null)).toBe(true);
+    const start = data.startRow('track', [['milliseconds', 'asc']]);
+    expect(start?.id).toBeDefined();
+    expect(start?.milliseconds).toBeDefined();
   });
 
   test('text-filter realizability tracks the presence of a text column', () => {
@@ -399,7 +407,7 @@ describe('swarm (L2)', () => {
     let made = 0;
     for (let i = 0; i < 400; i++) {
       const mask = Mask.random(r);
-      const res = swarmGen(r, mask);
+      const res = swarmGen(r, mask, data);
       if (!res) {
         continue; // unrealizable pick (text filter on a textless table) — retry
       }
@@ -414,13 +422,14 @@ describe('swarm (L2)', () => {
 
   test('a disabled axis is pinned to its baseline (none)', () => {
     // Every axis off, no nesting ⇒ a bare decorated root: every axis at value 0 = none.
-    const mask = new Mask([false, false, false, false], false);
-    const res = swarmGen(rng(1), mask);
+    const mask = new Mask([false, false, false, false, false], false);
+    const res = swarmGen(rng(1), mask, data);
     expect(res).not.toBeNull();
     const ast = asQueryInternals(res![0]).ast;
     expect(ast.where).toBeUndefined();
     expect(ast.orderBy ?? []).toHaveLength(0);
     expect(ast.limit).toBeUndefined();
+    expect(ast.start).toBeUndefined();
     expect(ast.related ?? []).toHaveLength(0);
   });
 });

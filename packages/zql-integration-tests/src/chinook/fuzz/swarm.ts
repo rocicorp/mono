@@ -13,6 +13,7 @@
 import type {AnyQuery} from '../../../../zql/src/query/query.ts';
 import {AXES, N_AXES, tables} from './axes.ts';
 import {childDecorationPairs, decorate, decorateChild} from './cover.ts';
+import type {Data} from './literals.ts';
 import type {Rng} from './rng.ts';
 
 /**
@@ -57,12 +58,16 @@ function randomAssignment(rng: Rng, mask: Mask): number[] {
  * enables nesting — a decorated nested collection. `true` iff EXISTS-bearing. `null` if
  * the random pick is unrealizable on the chosen table (the caller retries / skips).
  */
-export function swarmGen(rng: Rng, mask: Mask): [AnyQuery, boolean] | null {
+export function swarmGen(
+  rng: Rng,
+  mask: Mask,
+  data: Data,
+): [AnyQuery, boolean] | null {
   const a = randomAssignment(rng, mask);
   if (mask.nest) {
     const pair = rng.choose(childDecorationPairs());
-    return pair ? decorateChild(pair[0], pair[1], a) : null;
+    return pair ? decorateChild(pair[0], pair[1], a, data) : null;
   }
   const root = rng.choose(tables());
-  return root ? decorate(root, a) : null;
+  return root ? decorate(root, a, data) : null;
 }
