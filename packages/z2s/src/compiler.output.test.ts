@@ -20,6 +20,7 @@ import {
   orderBy,
   pullTablesForJunction,
   simple,
+  start,
   type Spec,
 } from './compiler.ts';
 import {formatPgInternalConvert} from './sql.ts';
@@ -326,6 +327,86 @@ test('orderBy', () => {
   ).toMatchInlineSnapshot(`
     {
       "text": "",
+      "values": [],
+    }
+  `);
+});
+
+test('start', () => {
+  expect(
+    formatPgInternalConvert(
+      start(
+        spec,
+        {
+          row: {ownerId: 'alice', id: 'issue-1'},
+          exclusive: true,
+        },
+        [
+          ['ownerId', 'asc'],
+          ['id', 'asc'],
+        ],
+        {
+          zql: 'issue',
+          alias: 'issue',
+        },
+      ),
+    ),
+  ).toMatchInlineSnapshot(`
+    {
+      "text": "(("issue"."ownerId" > $1::text) OR ("issue"."ownerId" IS NOT DISTINCT FROM $1::text AND "issue"."id" > $2::text))",
+      "values": [
+        "alice",
+        "issue-1",
+      ],
+    }
+  `);
+
+  expect(
+    formatPgInternalConvert(
+      start(
+        spec,
+        {
+          row: {created: 100, id: 'issue-1'},
+          exclusive: false,
+        },
+        [
+          ['created', 'desc'],
+          ['id', 'asc'],
+        ],
+        {
+          zql: 'issue',
+          alias: 'issue',
+        },
+      ),
+    ),
+  ).toMatchInlineSnapshot(`
+    {
+      "text": "((("issue"."created" IS NULL OR "issue"."created" < to_timestamp($1::text::numeric / 1000.0) AT TIME ZONE 'UTC')) OR ("issue"."created" IS NOT DISTINCT FROM to_timestamp($1::text::numeric / 1000.0) AT TIME ZONE 'UTC' AND "issue"."id" > $2::text) OR ("issue"."created" IS NOT DISTINCT FROM to_timestamp($1::text::numeric / 1000.0) AT TIME ZONE 'UTC' AND "issue"."id" IS NOT DISTINCT FROM $2::text))",
+      "values": [
+        "100",
+        "issue-1",
+      ],
+    }
+  `);
+
+  expect(
+    formatPgInternalConvert(
+      start(
+        spec,
+        {
+          row: {id: null},
+          exclusive: true,
+        },
+        [['id', 'asc']],
+        {
+          zql: 'issue',
+          alias: 'issue',
+        },
+      ),
+    ),
+  ).toMatchInlineSnapshot(`
+    {
+      "text": "(("issue"."id" IS NOT NULL))",
       "values": [],
     }
   `);

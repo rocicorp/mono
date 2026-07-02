@@ -10,8 +10,7 @@
  * - **LargeLimit** — a `limit` ≥ the result size is a no-op (a non-binding take).
  * - **StartBeforeFirst** — a `start` key below every PK (bare-PK sort) is a no-op (a
  *   non-binding skip). Guarded to single-column numeric PKs. This exercises the IVM's
- *   `start` handling directly — it is oracle-free, so z2s's lack of `start` compilation
- *   (the inert axis dropped from the differential generator) does not apply here.
+ *   `start` handling directly and stays useful as an oracle-free semantic invariant.
  *
  * Each holds by query semantics, so a divergence is an engine bug found without a
  * hand-computed expectation.
