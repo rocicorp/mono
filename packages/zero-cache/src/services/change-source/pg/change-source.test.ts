@@ -1,5 +1,7 @@
 import {expect, test, vi} from 'vitest';
-import {Acker} from './change-source.ts';
+import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.ts';
+import type {PostgresDB} from '../../../types/pg.ts';
+import {Acker, LagReporter} from './change-source.ts';
 
 test('acker', () => {
   const sink = {push: vi.fn()};
@@ -49,4 +51,49 @@ test('acker', () => {
   // Now that downstream is caught up, this should respond
   acker.onChange(['status', {ack: false}, {watermark: '0h'}]);
   expectAck(17n);
+});
+
+test('lag reporter retries missing reports', async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(1_000);
+
+  const dbMock = vi.fn((strings: TemplateStringsArray) => {
+    if (strings.join('').includes('current_setting')) {
+      return [{pgVersion: 170000}];
+    }
+
+    return [
+      {
+        commitTimeMs: Date.now(),
+        lsn: `0/${dbMock.mock.calls.length.toString(16)}`,
+      },
+    ];
+  });
+  const db = dbMock as unknown as PostgresDB;
+
+  const reporter = new LagReporter(
+    createSilentLogContext(),
+    {appID: 'test', shardNum: 0},
+    db,
+    10,
+  );
+
+  try {
+    await expect(reporter.initiateLagReport()).resolves.toEqual({
+      nextSendTimeMs: 1_000,
+    });
+    expect(dbMock).toHaveBeenCalledTimes(2);
+
+    await vi.advanceTimersByTimeAsync(9);
+    expect(dbMock).toHaveBeenCalledTimes(2);
+
+    await vi.advanceTimersByTimeAsync(1);
+    expect(dbMock).toHaveBeenCalledTimes(3);
+
+    await vi.advanceTimersByTimeAsync(10);
+    expect(dbMock).toHaveBeenCalledTimes(4);
+  } finally {
+    reporter.stop();
+    vi.useRealTimers();
+  }
 });

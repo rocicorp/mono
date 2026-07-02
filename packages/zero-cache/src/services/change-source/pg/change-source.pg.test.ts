@@ -941,20 +941,14 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
       assert(lag1[0] === 'status', () => lag1[0]);
       assert(lag2[0] === 'status', () => lag1[0]);
 
-      expect(lag1[1].lagReport?.lastTimings.sendTimeMs).toBe(
-        initialSend?.nextSendTimeMs,
+      expect(lag1[1].lagReport?.lastTimings.sendTimeMs).toBeGreaterThanOrEqual(
+        must(initialSend).nextSendTimeMs,
       );
-      expect(
-        must(lag2[1].lagReport).lastTimings.sendTimeMs,
-      ).toBeGreaterThanOrEqual(must(lag1[1].lagReport).nextSendTimeMs);
 
       for (const status of [lag1[1], lag2[1]]) {
         const report1 = must(status.lagReport);
-        expect(report1.nextSendTimeMs).toBe(
-          Math.max(
-            report1.lastTimings.receiveTimeMs,
-            report1.lastTimings.sendTimeMs + 10,
-          ),
+        expect(report1.nextSendTimeMs).toBeGreaterThanOrEqual(
+          report1.lastTimings.sendTimeMs + 10,
         );
       }
 

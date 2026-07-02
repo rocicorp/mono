@@ -491,10 +491,10 @@ test('zero-cache --help', () => {
      --replication-lag-report-interval-ms number                        default: 30000                                                                                                             
        ZERO_REPLICATION_LAG_REPORT_INTERVAL_MS env                                                                                                                                                 
                                                                         The minimum interval at which replication lag reports are written upstream and                                             
-                                                                        reported via the zero.replication.total_lag opentelemetry metric. Because                                                  
-                                                                        replication lag reports are only issued after the previous one was received, the                                           
-                                                                        actual interval between reports may be longer when there is a backlog in the                                               
-                                                                        replication stream. A negative or 0 value disables lag reporting.                                                          
+                                                                        reported via the zero.replication.total_lag opentelemetry metric. If                                                       
+                                                                        an expected report is not received before the next interval, Zero retries with                                             
+                                                                        a new report and increments zero.replication.lag_report_retries. A                                                         
+                                                                        negative or 0 value disables lag reporting.                                                                                
                                                                                                                                                                                                    
                                                                         This monitoring feature is only support on the postgres upstream type.                                                     
                                                                                                                                                                                                    
