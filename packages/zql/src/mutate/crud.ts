@@ -1,5 +1,5 @@
 import type {Expand} from '../../../shared/src/expand.ts';
-import {mapValues} from '../../../shared/src/objects.ts';
+import {assignProperty, mapValues} from '../../../shared/src/objects.ts';
 import {recordProxy} from '../../../shared/src/record-proxy.ts';
 import type {SchemaValueToTSType} from '../../../zero-types/src/schema-value.ts';
 import type {Schema, TableSchema} from '../../../zero-types/src/schema.ts';
@@ -146,7 +146,13 @@ export function makeCRUDMutate<
   // Only add table properties when enableLegacyMutators is true
   if (addSchemaCRUD) {
     // Add table names as keys so the proxy can discover them
-    mapValues(schema.tables, () => undefined);
+    for (const tableName of Object.keys(schema.tables)) {
+      assignProperty(
+        mutate as unknown as Record<string, undefined>,
+        tableName,
+        undefined,
+      );
+    }
 
     // Wrap in proxy that lazily creates and caches table CRUD objects
     return recordProxy(
