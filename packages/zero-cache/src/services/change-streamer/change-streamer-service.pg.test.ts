@@ -43,6 +43,7 @@ const opts: TuningOptions = {
   backPressureLimitHeapProportion: 0.04,
   flowControlConsensusPaddingSeconds: 1,
   statementTimeoutMs: 20_000,
+  changeLogBatchSize: 2000,
 };
 
 describe('change-streamer/service', () => {

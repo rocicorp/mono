@@ -1,4 +1,5 @@
 import type {Expand} from '../../../shared/src/expand.ts';
+import {assignProperty, mapValues} from '../../../shared/src/objects.ts';
 import {recordProxy} from '../../../shared/src/record-proxy.ts';
 import type {SchemaValueToTSType} from '../../../zero-types/src/schema-value.ts';
 import type {Schema, TableSchema} from '../../../zero-types/src/schema.ts';
@@ -146,7 +147,11 @@ export function makeCRUDMutate<
   if (addSchemaCRUD) {
     // Add table names as keys so the proxy can discover them
     for (const tableName of Object.keys(schema.tables)) {
-      (mutate as unknown as Record<string, undefined>)[tableName] = undefined;
+      assignProperty(
+        mutate as unknown as Record<string, undefined>,
+        tableName,
+        undefined,
+      );
     }
 
     // Wrap in proxy that lazily creates and caches table CRUD objects
@@ -163,10 +168,7 @@ export function makeTransactionMutate<TSchema extends Schema>(
   schema: TSchema,
   executor: CRUDExecutor,
 ): TransactionMutate<TSchema> {
-  const target: Record<string, undefined> = {};
-  for (const tableName of Object.keys(schema.tables)) {
-    target[tableName] = undefined;
-  }
+  const target = mapValues(schema.tables, () => undefined);
 
   return recordProxy(target, (_value, tableName) =>
     makeTableCRUD(tableName, executor),

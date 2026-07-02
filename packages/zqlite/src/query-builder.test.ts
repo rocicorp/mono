@@ -36,8 +36,9 @@ test('non-nullable cursor columns use range and equality operators without IS NU
     ),
   ).toMatchInlineSnapshot(`
     {
-      "text": "SELECT "id","name" FROM "issues" WHERE (("id" > ?) OR ("id" = ? AND "name" < ?)) ORDER BY "id" asc, "name" desc",
+      "text": "SELECT "id","name" FROM "issues" WHERE ("id" >= ? AND (("id" > ?) OR ("id" = ? AND "name" < ?))) ORDER BY "id" asc, "name" desc",
       "values": [
+        "issue-1",
         "issue-1",
         "issue-1",
         "z",
@@ -390,16 +391,62 @@ test('multiConstraints + constraint + start + reverse compose into a single WHER
     ),
   ).toMatchInlineSnapshot(`
     {
-      "text": "SELECT "id","org","rank" FROM "issues" WHERE "org" = ? AND "id" IN (?,?,?) AND (("rank" < ?)) ORDER BY "rank" desc",
+      "text": "SELECT "id","org","rank" FROM "issues" WHERE "org" = ? AND "id" IN (?,?,?) AND ("rank" <= ? AND (("rank" < ?))) ORDER BY "rank" desc",
       "values": [
         "acme",
         "i1",
         "i2",
         "i3",
         100,
+        100,
       ],
     }
   `);
+});
+
+test('start constraint adds a sargable leading-column bound', () => {
+  const columns = {
+    workspaceID: {type: 'string'},
+    a: {type: 'number'},
+    b: {type: 'number'},
+    c: {type: 'number'},
+  } as const satisfies Record<string, SchemaValue>;
+  const lc = createSilentLogContext();
+  const db = new Database(lc, ':memory:');
+  db.exec(`
+    CREATE TABLE activity (
+      workspaceID TEXT NOT NULL,
+      a INTEGER NOT NULL,
+      b INTEGER NOT NULL,
+      c INTEGER NOT NULL
+    );
+    CREATE INDEX activity_sort ON activity(workspaceID, a DESC, b ASC, c ASC);
+  `);
+
+  const {text, values} = format(
+    buildSelectQuery(
+      'activity',
+      columns,
+      {workspaceID: 'w1'},
+      undefined,
+      [
+        ['a', 'desc'],
+        ['b', 'asc'],
+        ['c', 'asc'],
+      ],
+      true,
+      {row: {a: 500, b: 123, c: 99}, basis: 'after'},
+    ),
+  );
+  const plan = db
+    .prepare(`EXPLAIN QUERY PLAN ${text} LIMIT 2`)
+    .all<{detail: string}>(...values)
+    .map(r => r.detail)
+    .join('\n');
+
+  expect(text).toContain(`"workspaceID" = ? AND ("a" >= ? AND (("a" > ?)`);
+  expect(plan).toMatch(/SEARCH activity USING (COVERING )?INDEX/);
+  expect(plan).toMatch(/workspaceID=\? AND a>\?/);
 });
 
 test('multiConstraintToSQL asserts on empty multiConstraint', () => {

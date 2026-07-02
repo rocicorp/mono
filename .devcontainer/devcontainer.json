@@ -14,10 +14,13 @@
   "remoteUser": "node",
   "features": {
     // Shared rocicorp features (https://github.com/rocicorp/devcontainer-features):
-    //  - agents: Codex (pinned) + Claude Code + gh; persists the Claude/gh logins
-    //    across rebuilds and sets CLAUDE_CONFIG_DIR.
+    //  - agents: Codex (pinned) + Claude Code. Persists the Claude login
+    //    across rebuilds (CLAUDE_CONFIG_DIR). v3 dropped the bundled GitHub CLI
+    //    (gh) and 1Password CLI (op); add github-cli explicitly if you need gh.
     //  - pnpm: corepack-managed pnpm; removes npm/npx to enforce pnpm.
-    "ghcr.io/rocicorp/devcontainer-features/agents:1": {},
+    "ghcr.io/rocicorp/devcontainer-features/agents:3": {
+      "codexVersion": "0.139.0"
+    },
     "ghcr.io/rocicorp/devcontainer-features/pnpm:1": {}
   },
   "postCreateCommand": "pnpm install",

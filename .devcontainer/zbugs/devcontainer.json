@@ -18,7 +18,9 @@
   "remoteUser": "node",
   "features": {
     // Keep in sync with ../devcontainer.json.
-    "ghcr.io/rocicorp/devcontainer-features/agents:1": {},
+    "ghcr.io/rocicorp/devcontainer-features/agents:3": {
+      "codexVersion": "0.139.0"
+    },
     "ghcr.io/rocicorp/devcontainer-features/pnpm:1": {}
   },
   "postCreateCommand": "pnpm install",

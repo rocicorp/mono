@@ -55,14 +55,24 @@ const nopk = table('nopk')
   })
   .primaryKey('id');
 
+const book = table('book')
+  .columns({
+    id: string(),
+    ip: string(),
+    mac: string(),
+    title: string(),
+  })
+  .primaryKey('id');
+
 const schema = createSchema({
-  tables: [foo, bar, nopk],
+  tables: [foo, bar, nopk, book],
 });
 
 const permissions = await definePermissions(schema, () => ({
   'foo': ANYONE_CAN_DO_ANYTHING,
   'boo.far': ANYONE_CAN_DO_ANYTHING,
   'nopk': ANYONE_CAN_DO_ANYTHING,
+  'book': ANYONE_CAN_DO_ANYTHING,
 }));
 
 // Note: The NULL unicode character \u0000 is specifically used to verify
@@ -70,6 +80,8 @@ const permissions = await definePermissions(schema, () => ({
 //       JSONB storage of row contents would not be able to handle it.
 function initialPGSetup(replicaIdentity = 'DEFAULT') {
   return `
+      CREATE EXTENSION IF NOT EXISTS isn;
+
       CREATE TABLE foo(
         id TEXT PRIMARY KEY, 
         far_id TEXT,
@@ -97,7 +109,21 @@ function initialPGSetup(replicaIdentity = 'DEFAULT') {
       CREATE TABLE nopk(id TEXT NOT NULL, val TEXT);
       INSERT INTO nopk(id, val) VALUES ('foo', 'bar');
 
-      CREATE PUBLICATION zero_all FOR TABLE foo, TABLE boo.far, TABLE nopk;
+      CREATE TABLE book(
+        id ISBN13 PRIMARY KEY,
+        ip INET,
+        mac MACADDR,
+        title TEXT
+      );
+      ALTER TABLE book REPLICA IDENTITY ${replicaIdentity};
+      INSERT INTO book(id, ip, mac, title)
+        VALUES (
+          '9780306406157'::isbn13,
+          '192.168.0.1/24'::inet,
+          '08:00:2b:01:02:03'::macaddr,
+          'Zero book');
+
+      CREATE PUBLICATION zero_all FOR TABLE foo, TABLE boo.far, TABLE nopk, TABLE book;
 
       CREATE SCHEMA "123";
 
@@ -500,6 +526,11 @@ describe('integration', {timeout: 30000}, () => {
     ],
   };
 
+  const BOOK_QUERY: AST = {
+    table: 'book',
+    orderBy: [['id', 'asc']],
+  };
+
   // One or two zero-caches (i.e. multi-node)
   type Envs = [NodeJS.ProcessEnv] | [NodeJS.ProcessEnv, NodeJS.ProcessEnv];
 
@@ -548,6 +579,98 @@ describe('integration', {timeout: 30000}, () => {
 
   const WATERMARK_REGEX = /[0-9a-z]{4,}/;
   const BACKFILL_WATERMARK_REGEX = /[0-9a-z]{4,}\.[0-9a-z]{2,}/;
+
+  test('syncs text-represented scalar columns from Postgres', async () => {
+    await upDB.unsafe(initialPGSetup());
+    await startZero([env]);
+
+    const downstream = new Queue<unknown>();
+    const ws = new WebSocket(
+      `ws://localhost:${port}/zero/sync/v${PROTOCOL_VERSION}/connect` +
+        `?clientGroupID=abc&clientID=def&wsid=123&schemaVersion=1&baseCookie=&ts=123456789&lmid=1`,
+      encodeURIComponent(btoa('{}')),
+    );
+    ws.on('message', data =>
+      downstream.enqueue(JSON.parse(data.toString('utf-8'))),
+    );
+    ws.on('open', () =>
+      ws.send(
+        JSON.stringify([
+          'initConnection',
+          {
+            desiredQueriesPatch: [
+              {op: 'put', hash: 'book-query-hash', ast: BOOK_QUERY},
+            ],
+            clientSchema: {
+              tables: {
+                book: {
+                  primaryKey: ['id'],
+                  columns: {
+                    id: {type: 'string'},
+                    ip: {type: 'string'},
+                    mac: {type: 'string'},
+                    title: {type: 'string'},
+                  },
+                },
+              },
+            },
+          },
+        ] satisfies InitConnectionMessage),
+      ),
+    );
+
+    expect(await downstream.dequeue()).toMatchObject([
+      'connected',
+      {wsid: '123'},
+    ]);
+    expect(await downstream.dequeue()).toMatchObject([
+      'pokeStart',
+      {pokeID: '00:01'},
+    ]);
+    expect(await downstream.dequeue()).toMatchObject([
+      'pokePart',
+      {
+        pokeID: '00:01',
+        desiredQueriesPatches: {
+          def: [{op: 'put', hash: 'book-query-hash'}],
+        },
+      },
+    ]);
+    expect(await downstream.dequeue()).toMatchObject([
+      'pokeEnd',
+      {pokeID: '00:01'},
+    ]);
+
+    const contentPokeStart = (await downstream.dequeue()) as PokeStartMessage;
+    expect(contentPokeStart).toMatchObject([
+      'pokeStart',
+      {pokeID: /[0-9a-z]{2,}/},
+    ]);
+    const contentPokeID = contentPokeStart[1].pokeID;
+    expect(await downstream.dequeue()).toMatchObject([
+      'pokePart',
+      {
+        pokeID: contentPokeID,
+        gotQueriesPatch: [{op: 'put', hash: 'book-query-hash'}],
+        rowsPatch: [
+          {
+            op: 'put',
+            tableName: 'book',
+            value: {
+              id: '978-0-306-40615-7',
+              ip: '192.168.0.1/24',
+              mac: '08:00:2b:01:02:03',
+              title: 'Zero book',
+            },
+          },
+        ],
+      },
+    ]);
+    expect(await downstream.dequeue()).toMatchObject([
+      'pokeEnd',
+      {pokeID: contentPokeID},
+    ]);
+  });
 
   test.for([
     ['single-node', 'pg', () => [env], undefined],

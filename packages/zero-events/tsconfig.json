@@ -4,7 +4,8 @@
     "noEmit": false,
     "emitDeclarationOnly": true,
     "rootDir": "src",
-    "outDir": "out"
+    "outDir": "out",
+    "tsBuildInfoFile": "out/tsconfig.tsbuildinfo"
   },
   "include": ["src"],
   "exclude": ["src/**/*.test.ts"]

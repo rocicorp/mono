@@ -78,6 +78,10 @@ export class QueryManager implements InspectorDelegate {
   readonly #recentQueriesMaxSize: number;
   readonly #recentQueries: Set<string> = new Set();
   readonly #gotQueries: Set<string> = new Set();
+  // Whether `#gotQueries` can be trusted. The persisted set loaded from
+  // IndexedDB may be stale (a query 'got' in a previous session can be evicted
+  // server-side); see `markGotQueriesAuthoritative`.
+  #gotQueriesAuthoritative = false;
   readonly #mutationTracker: MutationTracker;
   readonly #pendingQueryChanges: UpQueriesPatchOp[] = [];
   readonly #queryChangeThrottleMs: number;
@@ -132,7 +136,9 @@ export class QueryManager implements InspectorDelegate {
           switch (diffOp.op) {
             case 'add':
               this.#gotQueries.add(queryHash);
-              this.#fireGotCallbacks(queryHash, true);
+              if (this.#gotQueriesAuthoritative) {
+                this.#fireGotCallbacks(queryHash, true);
+              }
               break;
             case 'del':
               this.#gotQueries.delete(queryHash);
@@ -168,6 +174,30 @@ export class QueryManager implements InspectorDelegate {
     for (const gotCallback of gotCallbacks) {
       gotCallback(got);
     }
+  }
+
+  /**
+   * Trust `#gotQueries`. Called once the first poke after a (re)connect has
+   * been applied. Because `gotQueriesPatch` is a diff, the server won't re-send
+   * `put`s for queries it thinks the client already has, so we re-derive and
+   * fire `got` for every subscribed query already in the set. Only fires
+   * `true`, so this never reverts a query from 'complete'. Idempotent.
+   */
+  markGotQueriesAuthoritative(): void {
+    if (this.#gotQueriesAuthoritative) {
+      return;
+    }
+    this.#gotQueriesAuthoritative = true;
+    for (const queryHash of this.#queries.keys()) {
+      if (this.#gotQueries.has(queryHash)) {
+        this.#fireGotCallbacks(queryHash, true);
+      }
+    }
+  }
+
+  /** Called on disconnect. The next connect must re-confirm `#gotQueries`. */
+  clearGotQueriesAuthoritative(): void {
+    this.#gotQueriesAuthoritative = false;
   }
 
   /**
@@ -356,7 +386,9 @@ export class QueryManager implements InspectorDelegate {
     }
 
     if (gotCallback) {
-      gotCallback(this.#gotQueries.has(queryId));
+      gotCallback(
+        this.#gotQueriesAuthoritative && this.#gotQueries.has(queryId),
+      );
     }
 
     let removed = false;
