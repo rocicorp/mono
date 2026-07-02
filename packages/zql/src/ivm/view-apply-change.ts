@@ -5,6 +5,7 @@ import {
   unreachable,
 } from '../../../shared/src/asserts.ts';
 import {must} from '../../../shared/src/must.ts';
+import {defineOwnDataProperty} from '../../../shared/src/objects.ts';
 import type {Writable} from '../../../shared/src/writable.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import {type Comparator, type Node} from './data.ts';
@@ -15,8 +16,6 @@ import type {Entry, Format} from './view.ts';
 export const refCountSymbol = Symbol('rc');
 export const idSymbol = Symbol('id');
 
-// ReadonlyMetaEntry has a `null` `[[Prototype]]` so that the legacy `__proto__`
-// setter is not invoked when `__proto__` is `[[Set]]`. 
 type ReadonlyMetaEntry = Entry & {
   readonly [refCountSymbol]: number;
   readonly [idSymbol]?: string | undefined;
@@ -838,15 +837,13 @@ function makeNewMetaEntry(
   // This creates a new MetaEntry from a Row. We never mutate Rows.
   if (withIDs) {
     return track({
-      __proto__: null,
       ...row,
       [refCountSymbol]: rc,
       [idSymbol]: makeID(row, schema),
     });
   }
   return track({
-    __proto__: null,
-    ...row,
+     ...row,
     [refCountSymbol]: rc,
   });
 }
@@ -883,7 +880,6 @@ function setRefCount<M extends Mutate>(
     return entry;
   }
   return track({
-    __proto__: null,
     ...entry,
     [refCountSymbol]: count,
   });
@@ -913,12 +909,17 @@ function setProperty<
   value: V,
 ): MutableMetaEntry & {[P in K]: V} {
   if (mutate || owns(parentEntry)) {
+    // Avoid triggering legacy __proto__ setter on parentEntry.
+    // We still want to set the property, so SolidJS's Proxy set trap is invoked
+    // below.
+    if (key === '__proto__' && !Object.hasOwn(parentEntry, '__proto__')) {
+      defineOwnDataProperty(parentEntry, '__proto__', null);
+    }
     (parentEntry as {[P in K]: V})[key] = value;
     return parentEntry as MutableMetaEntry & {[P in K]: V};
   }
   return track({
-    __proto__: null,
-    ...parentEntry,
+      ...parentEntry,
     [key]: value,
   }) as MutableMetaEntry & {[P in K]: V};
 }

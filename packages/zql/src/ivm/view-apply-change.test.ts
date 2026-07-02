@@ -804,7 +804,7 @@ describe('applyChange', () => {
 
       const row = at(root, '', 0) as Entry & {__proto__: unknown};
       expect(row['__proto__']).toEqual([3, 'four', {deep: false}]);
-      expect(Object.getPrototypeOf(row)).toBeNull();
+      expect(Object.getPrototypeOf(row)).toBe(Object.prototype);
     });
 
     test('relationship named __proto__ is preserved and does not affect prototype', () => {
@@ -908,7 +908,7 @@ describe('applyChange', () => {
       expect(at(parent, '__proto__', 0)).toEqual(
         expect.objectContaining({id: 'c1', parentId: '1'}),
       );
-      expect(Object.getPrototypeOf(parent)).toBeNull();
+      expect(Object.getPrototypeOf(parent)).toBe(Object.prototype);
     });
 
     test('singular: true', () => {
