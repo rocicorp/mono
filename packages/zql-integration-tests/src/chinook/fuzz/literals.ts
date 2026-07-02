@@ -18,6 +18,7 @@
 import type {
   Condition,
   LiteralValue,
+  Ordering,
   SimpleCondition,
   SimpleOperator,
 } from '../../../../zero-protocol/src/ast.ts';
@@ -53,13 +54,17 @@ function compareValues(a: Value, b: Value): number {
 export class Data {
   readonly #cols = new Map<string, Value[]>();
   readonly #pk0 = new Map<string, Value[]>();
+  readonly #rows = new Map<string, readonly Row[]>();
+  readonly #pkOf: (table: string) => readonly string[];
 
   /** Index the column values of every table in `data` (keyed by client table name). */
   constructor(
     data: Record<string, Row[]>,
     pkOf: (table: string) => readonly string[],
   ) {
+    this.#pkOf = pkOf;
     for (const [table, rows] of Object.entries(data)) {
+      this.#rows.set(table, rows);
       const columns = new Set<string>();
       for (const row of rows) {
         for (const c of Object.keys(row)) {
@@ -92,6 +97,26 @@ export class Data {
     }
     return vals[Math.floor(vals.length / 2)];
   }
+
+  /**
+   * A present row near the middle of `table` under `orderBy` completed with PK columns.
+   * This gives `start` a non-vacuous cursor that reflects an actual fixture row.
+   */
+  startRow(table: string, orderBy: Ordering | undefined): Row | undefined {
+    const rows = this.#rows.get(table);
+    if (!rows || rows.length === 0) {
+      return undefined;
+    }
+    const ordering = completeOrdering(this.#pkOf(table), orderBy);
+    const sorted = rows.toSorted((a, b) => compareRows(a, b, ordering));
+    return sorted[Math.floor(sorted.length / 2)];
+  }
+
+  /** A null cursor on the first completed ordering term, for null-bound paging cases. */
+  nullStartRow(table: string, orderBy: Ordering | undefined): Row | undefined {
+    const first = completeOrdering(this.#pkOf(table), orderBy)[0]?.[0];
+    return first ? {[first]: null} : undefined;
+  }
 }
 
 function distinctSorted(values: readonly (Value | undefined)[]): Value[] {
@@ -107,6 +132,30 @@ function distinctSorted(values: readonly (Value | undefined)[]): Value[] {
     }
   }
   return out;
+}
+
+function completeOrdering(
+  primaryKey: readonly string[],
+  orderBy: Ordering | undefined,
+): Ordering {
+  const completed = [...(orderBy ?? [])];
+  const seen = new Set(completed.map(([field]) => field));
+  for (const field of primaryKey) {
+    if (!seen.has(field)) {
+      completed.push([field, 'asc']);
+    }
+  }
+  return completed;
+}
+
+function compareRows(a: Row, b: Row, orderBy: Ordering): number {
+  for (const [field, direction] of orderBy) {
+    const comp = compareValues(a[field], b[field]);
+    if (comp !== 0) {
+      return direction === 'asc' ? comp : -comp;
+    }
+  }
+  return 0;
 }
 
 // ── filter lowering (the `filter` axis → a root `where` condition) ───────────────────

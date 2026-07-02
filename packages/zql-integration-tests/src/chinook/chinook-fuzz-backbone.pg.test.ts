@@ -10,7 +10,7 @@
  * - **L0** — every bounded-exhaustive skeleton (depth ≤ 2) hydrates identically through
  *   the IVM memory + sqlite views and the Postgres oracle (z2s).
  * - **L1** — the pairwise covering array of decorations (filter × exists × order ×
- *   limit), lowered onto every decoratable root and onto nested child collections,
+ *   limit × start), lowered onto every decoratable root and onto nested child collections,
  *   hydrates identically — and the realized assignments reach **100% pairwise** coverage
  *   (the design's headline backbone gate).
  * - **Push** — every single-level (depth ≤ 1) skeleton, driven through the four-phase
@@ -69,7 +69,7 @@ test(
 test(
   'L1 — pairwise covering array: 100% coverage + hydrate-equal over mini',
   async () => {
-    const {report, coverage} = await checkL1(harness.delegates);
+    const {report, coverage} = await checkL1(harness.delegates, data);
     console.log(
       `L1 backbone: ${report.total} cases, ${coverage.summary()}, ${report.failures.length} failures`,
     );
