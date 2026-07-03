@@ -22,6 +22,7 @@ export default mergeConfig(benchConfig, {
       'src/array-view-relationships.bench.ts',
       'src/array-view-transaction.bench.ts',
       'src/debug-row-vended.bench.ts',
+      'src/zero-throughput-relational.bench.ts',
     ],
     browser: {
       enabled: false,
