@@ -22,7 +22,7 @@ export const PROTOCOL_VERSION = 2;
 
 // Events from protocol v1 (i.e. emitted before the shard's triggers were
 // upgraded, but replayed from the WAL afterwards) remain parseable.
-const versionSchema = v.union(v.literal(1), v.literal(PROTOCOL_VERSION));
+const versionSchema = v.literalUnion(1, PROTOCOL_VERSION);
 
 const triggerEvent = v.object({
   context: v.object({query: v.string()}).rest(v.string()),
