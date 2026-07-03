@@ -40,3 +40,6 @@ overrides:
   serialize-javascript@<=7.0.2: ^7.0.3
   undici@<6.24.0: ^6.24.0
   webpackbar: ^7.0.0
+
+patchedDependencies:
+  postgres@3.4.7: patches/postgres@3.4.7.patch

@@ -1,0 +1,90 @@
+diff --git a/cf/src/connection.js b/cf/src/connection.js
+index 203af80d072552c32d5f748b8245c0052e2998bc..7524d01e43ca4bab9131bf7d40f13f4064bbe88b 100644
+--- a/cf/src/connection.js
++++ b/cf/src/connection.js
+@@ -157,6 +157,9 @@ function Connection(options, queues = {}, { onopen = noop, onend = noop, onclose
+     if (terminated)
+       return queryError(q, Errors.connection('CONNECTION_DESTROYED', options))
+ 
++    if (socket === null)
++      return queryError(q, Errors.connection('CONNECTION_CLOSED', options, socket))
++
+     if (q.cancelled)
+       return
+ 
+@@ -418,6 +421,7 @@ function Connection(options, queues = {}, { onopen = noop, onend = noop, onclose
+       error(Errors.connection('CONNECTION_DESTROYED', options))
+ 
+     clearImmediate(nextWriteTimer)
++    chunk = nextWriteTimer = null
+     if (socket) {
+       socket.removeListener('data', data)
+       socket.removeListener('connect', connected)
+@@ -431,6 +435,7 @@ function Connection(options, queues = {}, { onopen = noop, onend = noop, onclose
+     remaining = 0
+     incomings = null
+     clearImmediate(nextWriteTimer)
++    chunk = nextWriteTimer = null
+     socket.removeListener('data', data)
+     socket.removeListener('connect', connected)
+     idleTimer.cancel()
+diff --git a/cjs/src/connection.js b/cjs/src/connection.js
+index 589d36382ca943c90679dbe22aaff06d252f6532..e654b0359ca4ed6e67f9db5a789ebac0327cf451 100644
+--- a/cjs/src/connection.js
++++ b/cjs/src/connection.js
+@@ -155,6 +155,9 @@ function Connection(options, queues = {}, { onopen = noop, onend = noop, onclose
+     if (terminated)
+       return queryError(q, Errors.connection('CONNECTION_DESTROYED', options))
+ 
++    if (socket === null)
++      return queryError(q, Errors.connection('CONNECTION_CLOSED', options, socket))
++
+     if (q.cancelled)
+       return
+ 
+@@ -416,6 +419,7 @@ function Connection(options, queues = {}, { onopen = noop, onend = noop, onclose
+       error(Errors.connection('CONNECTION_DESTROYED', options))
+ 
+     clearImmediate(nextWriteTimer)
++    chunk = nextWriteTimer = null
+     if (socket) {
+       socket.removeListener('data', data)
+       socket.removeListener('connect', connected)
+@@ -429,6 +433,7 @@ function Connection(options, queues = {}, { onopen = noop, onend = noop, onclose
+     remaining = 0
+     incomings = null
+     clearImmediate(nextWriteTimer)
++    chunk = nextWriteTimer = null
+     socket.removeListener('data', data)
+     socket.removeListener('connect', connected)
+     idleTimer.cancel()
+diff --git a/src/connection.js b/src/connection.js
+index c3f554aada71a79dc3c3cb489b722e9cf53961f3..64cf790fc19bc52244f88145ed54a77f7bdd1b9b 100644
+--- a/src/connection.js
++++ b/src/connection.js
+@@ -155,6 +155,9 @@ function Connection(options, queues = {}, { onopen = noop, onend = noop, onclose
+     if (terminated)
+       return queryError(q, Errors.connection('CONNECTION_DESTROYED', options))
+ 
++    if (socket === null)
++      return queryError(q, Errors.connection('CONNECTION_CLOSED', options, socket))
++
+     if (q.cancelled)
+       return
+ 
+@@ -416,6 +419,7 @@ function Connection(options, queues = {}, { onopen = noop, onend = noop, onclose
+       error(Errors.connection('CONNECTION_DESTROYED', options))
+ 
+     clearImmediate(nextWriteTimer)
++    chunk = nextWriteTimer = null
+     if (socket) {
+       socket.removeListener('data', data)
+       socket.removeListener('connect', connected)
+@@ -429,6 +433,7 @@ function Connection(options, queues = {}, { onopen = noop, onend = noop, onclose
+     remaining = 0
+     incomings = null
+     clearImmediate(nextWriteTimer)
++    chunk = nextWriteTimer = null
+     socket.removeListener('data', data)
+     socket.removeListener('connect', connected)
+     idleTimer.cancel()
