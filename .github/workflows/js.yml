@@ -37,10 +37,10 @@ jobs:
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: ${{ steps.pnpm-store.outputs.path }}
-          key: pnpm-store-v11-${{ runner.os }}-${{ runner.arch }}-full-${{ hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml', 'package.json') }}
+          key: pnpm-store-v11-${{ runner.os }}-${{ runner.arch }}-root-tools-${{ hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml', 'package.json') }}
           restore-keys: |
-            pnpm-store-v11-${{ runner.os }}-${{ runner.arch }}-full-
-      - run: pnpm install --frozen-lockfile
+            pnpm-store-v11-${{ runner.os }}-${{ runner.arch }}-root-tools-
+      - run: pnpm install --frozen-lockfile --filter @rocicorp/mono --ignore-scripts
       - run: pnpm exec syncpack lint
 
   verify-deps:
@@ -67,7 +67,7 @@ jobs:
           key: pnpm-store-v11-${{ runner.os }}-${{ runner.arch }}-verify-deps-${{ hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml', 'package.json') }}
           restore-keys: |
             pnpm-store-v11-${{ runner.os }}-${{ runner.arch }}-verify-deps-
-      - run: pnpm install --frozen-lockfile --filter verify-package-deps
+      - run: pnpm install --frozen-lockfile --filter verify-package-deps --ignore-scripts
       - run: pnpm run verify-deps
 
   format:
@@ -91,10 +91,10 @@ jobs:
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: ${{ steps.pnpm-store.outputs.path }}
-          key: pnpm-store-v11-${{ runner.os }}-${{ runner.arch }}-full-${{ hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml', 'package.json') }}
+          key: pnpm-store-v11-${{ runner.os }}-${{ runner.arch }}-root-tools-${{ hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml', 'package.json') }}
           restore-keys: |
-            pnpm-store-v11-${{ runner.os }}-${{ runner.arch }}-full-
-      - run: pnpm install --frozen-lockfile
+            pnpm-store-v11-${{ runner.os }}-${{ runner.arch }}-root-tools-
+      - run: pnpm install --frozen-lockfile --filter @rocicorp/mono --ignore-scripts
       - run: pnpm exec oxfmt --check
 
   lint:
@@ -118,10 +118,10 @@ jobs:
         uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
         with:
           path: ${{ steps.pnpm-store.outputs.path }}
-          key: pnpm-store-v11-${{ runner.os }}-${{ runner.arch }}-full-${{ hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml', 'package.json') }}
+          key: pnpm-store-v11-${{ runner.os }}-${{ runner.arch }}-root-tools-${{ hashFiles('pnpm-lock.yaml', 'pnpm-workspace.yaml', 'package.json') }}
           restore-keys: |
-            pnpm-store-v11-${{ runner.os }}-${{ runner.arch }}-full-
-      - run: pnpm install --frozen-lockfile
+            pnpm-store-v11-${{ runner.os }}-${{ runner.arch }}-root-tools-
+      - run: pnpm install --frozen-lockfile --filter @rocicorp/mono --ignore-scripts
       - run: pnpm run lint
 
   check-types:
