@@ -7,6 +7,10 @@ import {createSubscriber} from './test-utils.ts';
 
 const json = BigIntJSON.stringify;
 
+function nextEventLoopTurn() {
+  return new Promise<void>(resolve => setImmediate(resolve));
+}
+
 describe('change-streamer/forwarder', () => {
   const messages = new ReplicationMessages({issues: 'id'});
 
@@ -29,11 +33,11 @@ describe('change-streamer/forwarder', () => {
         released = true;
       });
 
-    await Promise.resolve();
+    await nextEventLoopTurn();
     expect(released).toBe(false);
 
     const drained = sub.setCaughtUp();
-    await Promise.resolve();
+    await nextEventLoopTurn();
 
     // Status initialization plus the forwarded change are now queued
     // downstream, but the forwarder should still be waiting on consumption.
