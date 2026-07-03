@@ -28,7 +28,10 @@
     "@types/ws": "^8.5.12",
     "oxfmt": "^0.45.0",
     "shared": "workspace:*",
-    "typescript": "~6.0.2"
+    "typescript": "~6.0.2",
+    "zero-protocol": "workspace:*",
+    "zero-schema": "workspace:*",
+    "zql": "workspace:*"
   },
   "packageManager": "pnpm@11.5.3"
 }
