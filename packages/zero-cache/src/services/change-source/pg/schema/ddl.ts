@@ -209,13 +209,47 @@ RETURNS void AS $$
 DECLARE
   prev_schema_specs JSON;
   schema_specs JSON;
+  new_columns JSON;
   message TEXT;
 BEGIN
   SELECT current FROM ${schema}."publishedSchema" INTO prev_schema_specs;
   SELECT ${schema}.schema_specs() INTO schema_specs;
-  
+
   IF prev_schema_specs::text != schema_specs::text THEN
     UPDATE ${schema}."publishedSchema" SET current = schema_specs;
+
+    -- Report the published columns that were created in the current
+    -- transaction (i.e. pg_attribute rows inserted by this transaction).
+    -- All pre-existing rows of such columns are guaranteed to contain the
+    -- column default, allowing the zero-cache to replicate the default
+    -- directly (i.e. without backfill) if the default value is replicable.
+    --
+    -- Tables whose publication entries were touched in the same transaction
+    -- (e.g. ALTER PUBLICATION ... SET TABLE with a column list) are excluded,
+    -- as a newly *published* column may be a pre-existing column with
+    -- arbitrary values in existing rows, which requires a backfill.
+    SELECT json_object_agg(rel_oid, attnums) INTO new_columns FROM (
+      SELECT pc.oid::int8 AS rel_oid, json_agg(DISTINCT attnum) AS attnums
+        FROM pg_attribute
+        JOIN pg_class pc ON pc.oid = attrelid
+        JOIN pg_namespace pns ON pns.oid = pc.relnamespace
+        JOIN pg_publication_tables pb ON
+          pb.schemaname = pns.nspname AND
+          pb.tablename = pc.relname AND
+          attname = ANY(pb.attnames)
+        WHERE pb.pubname IN (${lit(publications)})
+          AND attnum > 0
+          AND NOT attisdropped
+          AND pg_attribute.xmin = pg_current_xact_id()::xid
+          AND NOT EXISTS (
+            SELECT 1 FROM pg_publication_rel rel
+              JOIN pg_publication pub ON pub.oid = rel.prpubid
+              WHERE rel.prrelid = pc.oid
+                AND pub.pubname IN (${lit(publications)})
+                AND rel.xmin = pg_current_xact_id()::xid
+          )
+        GROUP BY pc.oid
+    ) new_cols;
   ELSIF event_type = 'ddlStart' THEN
     -- ddlStart events are always be emitted to allow the zero-cache
     -- to track the context of the current command tag in the face of
@@ -234,6 +268,7 @@ BEGIN
     'version', ${PROTOCOL_VERSION},
     'previousSchema', prev_schema_specs,
     'schema', schema_specs,
+    'newColumns', new_columns,
     'event', json_build_object('tag', tag),
     'context', ${schema}.get_trigger_context()
   ) INTO message;
@@ -246,8 +281,11 @@ END
 $$ LANGUAGE plpgsql;
 
 
--- Hook/workaround to manually trigger replication of schema changes on DBs 
--- that do not support/allow event triggers.
+-- Hook/workaround to manually trigger replication of schema changes on DBs
+-- that do not support/allow event triggers. This should be invoked in the
+-- same transaction as the schema change statement(s); among other things,
+-- this allows columns added with replicable defaults (e.g. constants) to
+-- be replicated without a backfill.
 CREATE OR REPLACE FUNCTION ${schema}.update_schemas()
 RETURNS void AS $$
 BEGIN

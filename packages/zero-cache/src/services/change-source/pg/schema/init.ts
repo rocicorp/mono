@@ -276,6 +276,19 @@ function getIncrementalMigrations(
         lc.info?.(`Upgraded DDL event triggers`);
       },
     },
+
+    // v24: (1.8.0) DDL events report columns created in the same transaction
+    // (`newColumns`), allowing replicable column defaults to skip backfill
+    // when schema changes are replicated via the manual update_schemas()
+    // hook.
+    24: {
+      migrateSchema: async (lc, sql) => {
+        const [{publications}] = await sql<{publications: string[]}[]>`
+          SELECT publications FROM ${sql(shardConfigTable)}`;
+        await setupTriggers(lc, sql, {...shard, publications});
+        lc.info?.(`Upgraded DDL event triggers`);
+      },
+    },
   };
 }
 

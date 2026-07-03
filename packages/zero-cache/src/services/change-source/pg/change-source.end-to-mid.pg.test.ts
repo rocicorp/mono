@@ -2082,6 +2082,140 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
       [],
       [],
     ],
+    [
+      'insert into table created via update_schemas()',
+      /*sql*/ `
+      INSERT INTO your.new_table (id) VALUES (99);
+      `,
+      [[{tag: 'insert'}]],
+      {['your.new_table']: [{id: 99n}]},
+      [],
+      [],
+    ],
+    [
+      'column with replicable default covered by update_schemas() call',
+      /*sql*/ `
+      ALTER TABLE your.new_table ADD "enabled" BOOL DEFAULT true;
+      SELECT ${APP_ID}_0.update_schemas();
+      `,
+      [
+        [
+          {
+            tag: 'add-column',
+            table: {schema: 'your', name: 'new_table'},
+            column: {
+              name: 'enabled',
+              spec: {
+                pos: expect.any(Number),
+                dataType: 'bool',
+                dflt: 'true',
+              },
+            },
+            // Note: no `backfill` field. The column was created in the same
+            // transaction as the update_schemas() call, so the default value
+            // is replicated directly, without a backfill.
+          },
+        ],
+      ],
+      // The pre-existing row picks up the replicated default value
+      // immediately (i.e. within the schema change transaction). This would
+      // not (yet) be the case if the column were being backfilled, as
+      // backfilling columns start out hidden with a `null` value.
+      {['your.new_table']: [{id: 99n, enabled: 1n}]},
+      [
+        {
+          name: 'your.new_table',
+          columns: {
+            enabled: {
+              characterMaximumLength: null,
+              dataType: 'bool',
+              elemPgTypeClass: null,
+              dflt: '1',
+              notNull: false,
+              pos: 3,
+            },
+          },
+        },
+      ],
+      [],
+    ],
+    [
+      'column added without an update_schemas() call is not replicated',
+      /*sql*/ `
+      ALTER TABLE your.new_table ADD "num" INT4 DEFAULT 30;
+      `,
+      [],
+      {['your.new_table']: [{id: 99n, enabled: 1n}]},
+      [],
+      [],
+    ],
+    [
+      'column added in an earlier transaction than update_schemas() is backfilled',
+      /*sql*/ `
+      SELECT ${APP_ID}_0.update_schemas();
+      `,
+      [
+        [
+          {
+            tag: 'add-column',
+            table: {schema: 'your', name: 'new_table'},
+            column: {
+              name: 'num',
+              spec: {
+                pos: expect.any(Number),
+                dataType: 'int4',
+                dflt: null,
+              },
+            },
+            // Rows may have been modified between the transaction that
+            // added the column and the update_schemas() call, so the
+            // column values must be backfilled.
+            backfill: {attNum: expect.any(Number)},
+          },
+        ],
+        [{tag: 'backfill'}],
+        [{tag: 'backfill-completed'}],
+      ],
+      {['your.new_table']: [{id: 99n, enabled: 1n, num: 30n}]},
+      [],
+      [],
+    ],
+    [
+      'newly published column not covered by update_schemas() optimization',
+      /*sql*/ `
+      ALTER PUBLICATION zero_some_public SET TABLE existing, TABLE existing_full,
+        TABLE foo (id, int, flt, bool);
+      ALTER TABLE foo ALTER "bool" SET DEFAULT false;
+      SELECT ${APP_ID}_0.update_schemas();
+      `,
+      [
+        [
+          {
+            tag: 'add-column',
+            table: {schema: 'public', name: 'foo'},
+            column: {
+              name: 'bool',
+              spec: {
+                pos: expect.any(Number),
+                dataType: 'bool',
+                dflt: null,
+              },
+            },
+            // Even though the column has a replicable default and its
+            // pg_attribute row was touched in the same transaction as the
+            // update_schemas() call (by the SET DEFAULT), the column itself
+            // is not new; it is a pre-existing column added to the
+            // publication's column list, and thus must be backfilled to
+            // pick up the existing values.
+            backfill: {attNum: expect.any(Number)},
+          },
+        ],
+        [{tag: 'backfill-completed'}],
+      ],
+      {},
+      [],
+      [],
+    ],
   ] satisfies [
     name: string,
     statements: string | string[],

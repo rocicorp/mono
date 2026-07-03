@@ -1274,6 +1274,7 @@ class ChangeMaker {
             must(prevTbl.get(id)),
             must(nextTbl.get(id)),
             tag,
+            event.newColumns ?? null,
           ),
         );
       }
@@ -1318,6 +1319,7 @@ class ChangeMaker {
     oldTable: PublishedTableWithReplicaIdentity,
     newTable: PublishedTableWithReplicaIdentity,
     ddlTag: string,
+    newColumns: Record<string, number[]> | null,
   ): SchemaChange[] {
     const changes: SchemaChange[] = [];
     if (
@@ -1341,21 +1343,24 @@ class ChangeMaker {
       });
     }
     const table = {schema: newTable.schema, name: newTable.name};
-    const oldColumns = columnsByID(oldTable.columns);
-    const newColumns = columnsByID(newTable.columns);
+    const oldTableColumns = columnsByID(oldTable.columns);
+    const newTableColumns = columnsByID(newTable.columns);
 
     // DROP
-    const [dropped, added] = symmetricDifferences(oldColumns, newColumns);
+    const [dropped, added] = symmetricDifferences(
+      oldTableColumns,
+      newTableColumns,
+    );
     for (const id of dropped) {
-      const {name: column} = must(oldColumns.get(id));
+      const {name: column} = must(oldTableColumns.get(id));
       changes.push({tag: 'drop-column', table, column});
     }
 
     // ALTER
-    const both = intersection(oldColumns, newColumns);
+    const both = intersection(oldTableColumns, newTableColumns);
     for (const id of both) {
-      const {name: oldName, ...oldSpec} = must(oldColumns.get(id));
-      const {name: newName, ...newSpec} = must(newColumns.get(id));
+      const {name: oldName, ...oldSpec} = must(oldTableColumns.get(id));
+      const {name: newName, ...newSpec} = must(newTableColumns.get(id));
       // The three things that we care about are:
       // 1. name
       // 2. type
@@ -1374,19 +1379,24 @@ class ChangeMaker {
       }
     }
 
-    // Only columns introduced by `ALTER TABLE` statements can potentially
-    // skip backfill if they have non-constant defaults. All other scenarios
-    // in which columns are introduced, e.g.
+    // Only columns known to have been *created* by the current command can
+    // potentially skip backfill (if their defaults are replicable), namely:
+    // * columns introduced by an `ALTER TABLE` statement
+    // * columns reported by the event's `newColumns` field to have been
+    //   created in the same (upstream) transaction, which covers the manual
+    //   update_schemas() hook when invoked in the transaction that performed
+    //   the schema change.
+    // All other scenarios in which columns are introduced, e.g.
     // * ALTER PUBLICATION
     // * COMMENT
-    // * MANUAL
-    // * UNKNOWN
-    // must be backfilled.
-    const alwaysBackfill = ddlTag !== 'ALTER TABLE';
+    // * MANUAL / UNKNOWN commands predating the `newColumns` field
+    // must be backfilled, as a newly *published* column may contain
+    // arbitrary values in existing rows.
+    const newColAttNums = new Set(newColumns?.[String(newTable.oid)] ?? []);
 
     // ADD
     for (const id of added) {
-      const {name, ...spec} = must(newColumns.get(id));
+      const {name, ...spec} = must(newTableColumns.get(id));
       const column = {name, spec};
       const addColumn: ColumnAdd = {
         tag: 'add-column',
@@ -1394,6 +1404,8 @@ class ChangeMaker {
         column,
         tableMetadata: getMetadata(newTable),
       };
+      const alwaysBackfill =
+        ddlTag !== 'ALTER TABLE' && !newColAttNums.has(spec.pos);
       if (alwaysBackfill) {
         addColumn.column.spec.dflt = null;
         addColumn.backfill = {attNum: spec.pos} satisfies ColumnMetadata;
