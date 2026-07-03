@@ -11,28 +11,37 @@ import {publishedSchema, publishedSchemaQuery} from './published.ts';
 //
 // Increment this when changing the format of the contents of the "ddl" events.
 // This will allow old / incompatible code to detect the change and abort.
-export const PROTOCOL_VERSION = 1;
+//
+// v2: "ddlStart" events that are not associated with a schema change are
+//     context-only and omit the `schema` snapshot entirely. This avoids
+//     bloating the WAL with (large) redundant schema snapshots for DDL
+//     commands that do not affect the published schema, e.g. the
+//     CREATE/ALTER/DROP TABLE sub-commands executed by
+//     REFRESH MATERIALIZED VIEW CONCURRENTLY.
+export const PROTOCOL_VERSION = 2;
+
+// Events from protocol v1 (i.e. emitted before the shard's triggers were
+// upgraded, but replayed from the WAL afterwards) remain parseable.
+const versionSchema = v.union(v.literal(1), v.literal(PROTOCOL_VERSION));
 
 const triggerEvent = v.object({
   context: v.object({query: v.string()}).rest(v.string()),
 });
 
-// All DDL events contain a snapshot of the current tables and indexes that
-// are published / relevant to the shard.
 export const ddlEventSchema = triggerEvent.extend({
-  version: v.literal(PROTOCOL_VERSION),
-  schema: publishedSchema,
+  version: versionSchema,
   event: v.object({tag: v.string()}),
 });
 
 /**
- * A {@link DdlStartEvent} message is emitted before every DDL event, containing
- * the current `schema` and the command `tag`.
+ * A {@link DdlStartEvent} message is emitted before every DDL event,
+ * containing the command `tag`.
  *
  * In most cases, the `DdlStartEvent` itself will not be associated with a
- * schema change, in which case `previousSchema` will be `null`. However, the
- * message is still emitted, both for backwards compatibility and to provide
- * the command `tag` context in case an immediately following `DdlStartEvent`
+ * schema change, in which case the event is context-only (in protocol v2,
+ * both `previousSchema` and `schema` are absent; in v1, `schema` is set and
+ * `previousSchema` is `null`). The message is still emitted to provide the
+ * command `tag` context in case an immediately following `DdlStartEvent`
  * tag is emitted with a schema change (which can happen when another event
  * trigger results in a nested ddl statement).
  *
@@ -45,12 +54,12 @@ export const ddlEventSchema = triggerEvent.extend({
  */
 export const ddlStartEventSchema = ddlEventSchema.extend({
   type: v.literal('ddlStart'),
-  // For ddlStart messages, previousSchema is `null` if there was no change
-  // in schema detected. The `schema` field is always set to the current
-  // schema.
-  //
-  // In 1.5.0 it is always present, and can be made non-optional when
-  // rollback safe.
+  // Set (along with `previousSchema`) only if the ddlStart event itself is
+  // associated with a schema change. Absent in context-only (v2) events.
+  // v1 events always contain the current `schema`.
+  schema: publishedSchema.optional(),
+  // For ddlStart messages, previousSchema is `null` (v1) or absent (v2) if
+  // there was no change in schema detected.
   previousSchema: publishedSchema.nullable().optional(),
   // For backwards compatibility with previous versions of the trigger,
   // default an absent `event` field with a semantic equivalent. This
@@ -68,8 +77,10 @@ export type DdlStartEvent = v.Infer<typeof ddlStartEventSchema>;
  */
 export const ddlUpdateEventSchema = ddlEventSchema.extend({
   type: v.literal('ddlUpdate'),
-  // ddlUpdate messages are only emitted if the schema changed, with the
-  // `previousSchema` containing the schema before the change.
+  // ddlUpdate messages are only emitted if the schema changed. `schema`
+  // contains the current (i.e. post-change) snapshot.
+  schema: publishedSchema,
+  // The `previousSchema` contains the schema before the change.
   //
   // In 1.5.0 it is always set, and can be made non-optional when
   // rollback safe.
@@ -102,6 +113,7 @@ export type DdlUpdateEvent = v.Infer<typeof ddlUpdateEventSchema>;
  */
 export const schemaSnapshotEventSchema = ddlEventSchema.extend({
   type: v.literal('schemaSnapshot'),
+  schema: publishedSchema,
   previousSchema: publishedSchema.optional(),
 });
 
@@ -203,31 +215,50 @@ BEGIN
   
   IF prev_schema_specs::text != schema_specs::text THEN
     UPDATE ${schema}."publishedSchema" SET current = schema_specs;
+
+    SELECT json_build_object(
+      'type', event_type,
+      'version', ${PROTOCOL_VERSION},
+      'previousSchema', prev_schema_specs,
+      'schema', schema_specs,
+      'event', json_build_object('tag', tag),
+      'context', ${schema}.get_trigger_context()
+    ) INTO message;
   ELSIF event_type = 'ddlStart' THEN
-    -- ddlStart events are always be emitted to allow the zero-cache
+    -- ddlStart events are always emitted to allow the zero-cache
     -- to track the context of the current command tag in the face of
-    -- nested event triggers (e.g. start->start->end->end).
-    prev_schema_specs = NULL;
+    -- nested event triggers (e.g. start->start->end->end). When there is
+    -- no schema change, however, a context-only event (i.e. without the
+    -- schema snapshots) suffices. This avoids bloating the WAL with
+    -- redundant snapshots for DDL commands that do not affect the
+    -- published schema (e.g. REFRESH MATERIALIZED VIEW CONCURRENTLY).
+    SELECT json_build_object(
+      'type', event_type,
+      'version', ${PROTOCOL_VERSION},
+      'event', json_build_object('tag', tag),
+      'context', ${schema}.get_trigger_context()
+    ) INTO message;
   ELSIF event_type = 'ddlUpdate' THEN
     -- TODO: fold 'schemaSnapshot' into this condition too (i.e. make it "ELSE")
     -- when 1.5.0 is rollback safe. Until then, noop schemaSnapshots are sent
     -- for compatibility with 1.0.0 ~ 1.4.0.
     PERFORM ${schema}.notice_ignore('noop', tag, target);
     RETURN;
+  ELSE
+    -- noop schemaSnapshots are sent for compatibility with 1.0.0 ~ 1.4.0.
+    SELECT json_build_object(
+      'type', event_type,
+      'version', ${PROTOCOL_VERSION},
+      'previousSchema', prev_schema_specs,
+      'schema', schema_specs,
+      'event', json_build_object('tag', tag),
+      'context', ${schema}.get_trigger_context()
+    ) INTO message;
   END IF;
-
-  SELECT json_build_object(
-    'type', event_type,
-    'version', ${PROTOCOL_VERSION},
-    'previousSchema', prev_schema_specs,
-    'schema', schema_specs,
-    'event', json_build_object('tag', tag),
-    'context', ${schema}.get_trigger_context()
-  ) INTO message;
 
   PERFORM pg_logical_emit_message(true, '${appID}/${shardNum}/ddl', message);
 
-  RAISE NOTICE 'Emitted ${appID}_${shardNum} % for % %', event_type, tag, 
+  RAISE NOTICE 'Emitted ${appID}_${shardNum} % for % %', event_type, tag,
     COALESCE(row_to_json(target)::text, '');
 END
 $$ LANGUAGE plpgsql;
