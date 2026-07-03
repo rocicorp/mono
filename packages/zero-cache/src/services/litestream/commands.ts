@@ -43,9 +43,12 @@ type ReplicaConstraints = {
   minWatermark: string;
 };
 
+type RestoreResult = 'success' | 'no_backup' | 'invalid_replica' | 'error';
+
 type RestoreAttempt = {
   restored: boolean;
   backupURL: string | undefined;
+  result: RestoreResult;
 };
 
 export class BackupNotFoundException extends Error {
@@ -72,7 +75,7 @@ export async function restoreReplica(
     ? 'replication_manager'
     : 'view_syncer';
   let backupURL = config.litestream.backupURL;
-  let result: 'success' | 'no_backup' | 'error' = 'error';
+  let result: RestoreResult | undefined;
   // View-syncers (no replicaConstraints) wait indefinitely for the
   // replication-manager to publish a restorable backup. On a fresh stack the
   // first backup is not durable until the initial sync completes and litestream
@@ -91,11 +94,22 @@ export async function restoreReplica(
         const attempt = await tryRestore(lc, config, replicaConstraints, role);
         backupURL = attempt.backupURL;
         if (attempt.restored) {
-          result = 'success';
+          result = attempt.result;
           return;
         }
         consecutiveErrors = 0;
+        if (replicaConstraints) {
+          // The replication-manager restores against explicit constraints, so a
+          // missing backup is fatal (e.g. the litestream URL was purposefully
+          // changed to force a resync). Only the view-syncer (no constraints)
+          // waits for a backup to appear.
+          result = attempt.result;
+          throw new BackupNotFoundException(config.litestream.backupURL);
+        }
       } catch (e) {
+        if (e instanceof BackupNotFoundException) {
+          throw e;
+        }
         if (++consecutiveErrors <= 1) {
           // A restore will fail if the `replicate` process creates a new
           // snapshot (and compacts old files) at the same time. Snapshots are
@@ -107,26 +121,19 @@ export async function restoreReplica(
         // If it fails again on the retry, though, bail.
         throw e;
       }
-      if (replicaConstraints) {
-        // The replication-manager restores against explicit constraints, so a
-        // missing backup is fatal (e.g. the litestream URL was purposefully
-        // changed to force a resync). Only the view-syncer (no constraints)
-        // waits for a backup to appear.
-        throw new BackupNotFoundException(config.litestream.backupURL);
-      }
       lc.info?.(
         `replica not found. retrying in ${RETRY_INTERVAL_MS / 1000} seconds`,
       );
       await sleep(RETRY_INTERVAL_MS);
     }
   } catch (e) {
-    if (e instanceof BackupNotFoundException) {
+    if (e instanceof BackupNotFoundException && result === undefined) {
       result = 'no_backup';
     }
     throw e;
   } finally {
     const attrs = litestreamRestoreMetricAttrs(config, role, backupURL);
-    const labels = {...attrs, result};
+    const labels = {...attrs, result: result ?? 'error'};
     litestreamRestoreRuns().add(1, labels);
     litestreamRestoreDuration().recordMs(performance.now() - start, labels);
   }
@@ -222,7 +229,7 @@ async function tryRestore(
 
   const backupURL = snapshotStatus?.backupURL ?? config.litestream.backupURL;
   const attrs = litestreamRestoreMetricAttrs(config, role, backupURL);
-  let result: 'success' | 'no_backup' | 'invalid_replica' | 'error' = 'error';
+  let result: RestoreResult = 'error';
   try {
     const replicaExistedBeforeRestore = existsSync(config.replica.file);
     const {litestream, env} = getLitestream(
@@ -280,7 +287,7 @@ async function tryRestore(
     }
     if (!existsSync(config.replica.file)) {
       result = 'no_backup';
-      return {restored: false, backupURL};
+      return {restored: false, backupURL, result};
     }
     const validationStart = performance.now();
     const valid = replicaIsValid(lc, config.replica.file, replicaConstraints);
@@ -292,7 +299,7 @@ async function tryRestore(
       result = 'invalid_replica';
       lc.info?.(`Deleting local replica and retrying restore`);
       deleteLiteDB(config.replica.file);
-      return {restored: false, backupURL};
+      return {restored: false, backupURL, result};
     }
     result = 'success';
     if (!replicaExistedBeforeRestore) {
@@ -301,7 +308,7 @@ async function tryRestore(
         result: 'success',
       });
     }
-    return {restored: true, backupURL};
+    return {restored: true, backupURL, result};
   } finally {
     litestreamRestoreAttempts().add(1, {
       ...attrs,

@@ -269,7 +269,11 @@ describe('litestream/commands restoreReplica', () => {
     const source = join(dir, 'source.db');
     const replica = join(dir, 'replica.db');
     createRestorableReplica(source, '01');
+    const restoreRunsAdd = vi.fn();
     const restoreValidationRecordMs = vi.fn();
+    vi.spyOn(litestreamMetrics, 'litestreamRestoreRuns').mockReturnValue({
+      add: restoreRunsAdd,
+    } as unknown as ReturnType<typeof litestreamMetrics.litestreamRestoreRuns>);
     vi.spyOn(
       litestreamMetrics,
       'litestreamRestoreValidationDuration',
@@ -297,6 +301,10 @@ describe('litestream/commands restoreReplica', () => {
     expect(existsSync(replica)).toBe(false);
     expect(restoreValidationRecordMs).toHaveBeenCalledWith(
       expect.any(Number),
+      expect.objectContaining({result: 'invalid_replica'}),
+    );
+    expect(restoreRunsAdd).toHaveBeenCalledWith(
+      1,
       expect.objectContaining({result: 'invalid_replica'}),
     );
   });
