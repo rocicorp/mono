@@ -4,16 +4,16 @@ import {
 } from '@drdgvhbh/postgres-error-codes';
 import type {LogContext} from '@rocicorp/logger';
 import type postgres from 'postgres';
-import {runTx} from '../../../db/run-transaction';
-import {isPostgresError, type PostgresDB} from '../../../types/pg';
-import {upstreamSchema, type ShardID} from '../../../types/shards';
-import {orTimeout} from '../../../types/timeout';
-import {toStateVersionString} from './lsn';
+import {runTx} from '../../../db/run-transaction.ts';
+import {isPostgresError, type PostgresDB} from '../../../types/pg.ts';
+import {upstreamSchema, type ShardID} from '../../../types/shards.ts';
+import {orTimeout} from '../../../types/timeout.ts';
+import {toStateVersionString} from './lsn.ts';
 import {
   createReplica,
   replicationSlotExpression,
   replicationSlotPrefix,
-} from './schema/shard';
+} from './schema/shard.ts';
 
 // Record returned by `CREATE_REPLICATION_SLOT`
 export type ReplicationSlot = {
