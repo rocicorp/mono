@@ -11,6 +11,11 @@ import {
   getOrCreateGauge,
 } from '../../observability/metrics.ts';
 import {Subscription} from '../../types/subscription.ts';
+import {
+  litestreamBackupVerificationDuration,
+  litestreamMonitorMetricAttrs,
+  litestreamSnapshotReservationDuration,
+} from '../litestream/metrics.ts';
 import {RunningState, UnrecoverableError} from '../running-state.ts';
 import type {BackupMonitor} from './backup-monitor.ts';
 import type {ChangeStreamerService} from './change-streamer.ts';
@@ -287,7 +292,7 @@ export class Litestream3BackupMonitor implements BackupMonitor {
    */
   async #confirmRestorableBackup(): Promise<boolean> {
     try {
-      this.#lastVerifiedUploadTime = await this.#verifyBackupState();
+      this.#lastVerifiedUploadTime = await this.#verifyBackupStateTimed();
       return true;
     } catch (e) {
       this.#lc.info?.(`backup not yet restorable at ${this.#backupURL}`, e);
@@ -303,9 +308,13 @@ export class Litestream3BackupMonitor implements BackupMonitor {
     this.#reservations.delete(taskID);
     const {start, sub} = res;
     sub.cancel(); // closes the connection if still open
+    const duration = Date.now() - start.getTime();
+    litestreamSnapshotReservationDuration().recordMs(duration, {
+      ...litestreamMonitorMetricAttrs(this.#backupURL, 'legacy', 'view_syncer'),
+      result: updateCleanupDelay ? 'success' : 'cancelled',
+    });
 
     if (updateCleanupDelay) {
-      const duration = Date.now() - start.getTime();
       this.#lc.info?.(`snapshot initialized by ${taskID} in ${duration} ms`);
       if (duration > this.#cleanupDelayMs) {
         this.#cleanupDelayMs = duration;
@@ -417,7 +426,7 @@ export class Litestream3BackupMonitor implements BackupMonitor {
     const claimedTime = must(this.#watermarks.get(maxWatermark));
     if (!this.#confirmedDurable(claimedTime)) {
       try {
-        this.#lastVerifiedUploadTime = await this.#verifyBackupState();
+        this.#lastVerifiedUploadTime = await this.#verifyBackupStateTimed();
       } catch (e) {
         this.#purgesBlocked.add(1, {reason: 'verification-failed'});
         // Skipping the purge is safe: the change-log just grows.
@@ -469,6 +478,28 @@ export class Litestream3BackupMonitor implements BackupMonitor {
       }
     }
     this.#lastWatermark = verifiedWatermark;
+  }
+
+  async #verifyBackupStateTimed(): Promise<Date> {
+    const start = performance.now();
+    let result: 'success' | 'error' = 'error';
+    try {
+      const ret = await this.#verifyBackupState();
+      result = 'success';
+      return ret;
+    } finally {
+      litestreamBackupVerificationDuration().recordMs(
+        performance.now() - start,
+        {
+          ...litestreamMonitorMetricAttrs(
+            this.#backupURL,
+            'legacy',
+            'replication_manager',
+          ),
+          result,
+        },
+      );
+    }
   }
 
   /**
