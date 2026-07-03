@@ -27,10 +27,16 @@ export function litestreamRestoreMetricAttrs(
   role: LitestreamRole,
   backupURL = config.litestream.backupURL,
 ): LitestreamMetricAttrs & LitestreamMultipartMetricAttrs {
+  const {executable, executableV5, restoreUsingV5} = config.litestream;
+  const selectedExecutable =
+    (restoreUsingV5 ? executableV5 : executable) ?? executable;
   return {
     role,
     backup_scheme: litestreamBackupScheme(backupURL),
-    litestream: config.litestream.restoreUsingV5 ? 'v5' : 'legacy',
+    litestream:
+      executableV5 !== undefined && selectedExecutable === executableV5
+        ? 'v5'
+        : 'legacy',
     ...litestreamMultipartMetricAttrs(config),
   };
 }

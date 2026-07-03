@@ -224,6 +224,7 @@ async function tryRestore(
   const attrs = litestreamRestoreMetricAttrs(config, role, backupURL);
   let result: 'success' | 'no_backup' | 'invalid_replica' | 'error' = 'error';
   try {
+    const replicaExistedBeforeRestore = existsSync(config.replica.file);
     const {litestream, env} = getLitestream(
       'restore',
       config,
@@ -294,10 +295,12 @@ async function tryRestore(
       return {restored: false, backupURL};
     }
     result = 'success';
-    litestreamRestoredDbBytes().add(statSync(config.replica.file).size, {
-      ...attrs,
-      result: 'success',
-    });
+    if (!replicaExistedBeforeRestore) {
+      litestreamRestoredDbBytes().add(statSync(config.replica.file).size, {
+        ...attrs,
+        result: 'success',
+      });
+    }
     return {restored: true, backupURL};
   } finally {
     litestreamRestoreAttempts().add(1, {

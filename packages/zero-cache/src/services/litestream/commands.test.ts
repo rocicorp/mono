@@ -1,4 +1,4 @@
-import {existsSync, mkdtempSync, writeFileSync} from 'node:fs';
+import {existsSync, mkdtempSync, statSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {LogContext} from '@rocicorp/logger';
@@ -16,6 +16,7 @@ import {
   parseBackupCreatedTimes,
   restoreReplica,
 } from './commands.ts';
+import * as litestreamMetrics from './metrics.ts';
 
 // Writes a fake `litestream` executable that emits `sh` (a POSIX shell
 // snippet that can branch on `$1`, the litestream subcommand) and returns the
@@ -181,11 +182,21 @@ describe('litestream/commands getLastBackupTime', () => {
 describe('litestream/commands restoreReplica', () => {
   const lc = createSilentLogContext();
 
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   test('restores and validates a compatible replica', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'litestream-restore-test-'));
     const source = join(dir, 'source.db');
     const replica = join(dir, 'replica.db');
     createRestorableReplica(source, '01');
+    const restoredDbBytesAdd = vi.fn();
+    vi.spyOn(litestreamMetrics, 'litestreamRestoredDbBytes').mockReturnValue({
+      add: restoredDbBytesAdd,
+    } as unknown as ReturnType<
+      typeof litestreamMetrics.litestreamRestoredDbBytes
+    >);
     const config = configWithFakeLitestream(
       `if [ "$1" = "restore" ]; then\n` +
         `  cp "${source}" "$6"\n` +
@@ -201,6 +212,33 @@ describe('litestream/commands restoreReplica', () => {
     });
 
     expect(existsSync(replica)).toBe(true);
+    expect(restoredDbBytesAdd).toHaveBeenCalledWith(
+      statSync(replica).size,
+      expect.objectContaining({result: 'success'}),
+    );
+  });
+
+  test('does not record restored bytes when reusing an existing replica', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'litestream-restore-test-'));
+    const replica = join(dir, 'replica.db');
+    createRestorableReplica(replica, '01');
+    const restoredDbBytesAdd = vi.fn();
+    vi.spyOn(litestreamMetrics, 'litestreamRestoredDbBytes').mockReturnValue({
+      add: restoredDbBytesAdd,
+    } as unknown as ReturnType<
+      typeof litestreamMetrics.litestreamRestoredDbBytes
+    >);
+    const config = configWithFakeLitestream(
+      `if [ "$1" = "restore" ]; then\n` + `  exit 0\n` + `fi\n` + `exit 1`,
+      replica,
+    );
+
+    await restoreReplica(lc, config, {
+      replicaVersion: '01',
+      minWatermark: '01',
+    });
+
+    expect(restoredDbBytesAdd).not.toHaveBeenCalled();
   });
 
   test('reports a missing backup when restore exits without a replica', async () => {
