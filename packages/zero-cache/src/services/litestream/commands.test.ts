@@ -1,4 +1,4 @@
-import {mkdtempSync, writeFileSync} from 'node:fs';
+import {existsSync, mkdtempSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {LogContext} from '@rocicorp/logger';
@@ -7,8 +7,54 @@ import {
   createSilentLogContext,
   TestLogSink,
 } from '../../../../shared/src/logging-test-utils.ts';
+import {Database} from '../../../../zqlite/src/db.ts';
 import type {ZeroConfig} from '../../config/zero-config.ts';
-import {getLastBackupTime, parseBackupCreatedTimes} from './commands.ts';
+import {initReplicationState} from '../replicator/schema/replication-state.ts';
+import {
+  BackupNotFoundException,
+  getLastBackupTime,
+  parseBackupCreatedTimes,
+  restoreReplica,
+} from './commands.ts';
+
+// Writes a fake `litestream` executable that emits `sh` (a POSIX shell
+// snippet that can branch on `$1`, the litestream subcommand) and returns the
+// config pointing at it.
+function configWithFakeLitestream(
+  sh: string,
+  replicaFile?: string,
+): ZeroConfig {
+  const dir = mkdtempSync(join(tmpdir(), 'litestream-test-'));
+  const executable = join(dir, 'fake-litestream');
+  writeFileSync(executable, `#!/bin/sh\n${sh}\n`, {mode: 0o755});
+  return {
+    port: 4848,
+    log: {format: 'text'},
+    replica: {file: replicaFile ?? join(dir, 'replica.db')},
+    litestream: {
+      executable,
+      backupURL: 's3://fake-bucket/backup',
+      configPath: './src/services/litestream/config.yml',
+      logLevel: 'warn',
+      restoreUsingV5: false,
+      checkpointThresholdMB: 40,
+      incrementalBackupIntervalMinutes: 15,
+      snapshotBackupIntervalHours: 12,
+      multipartConcurrency: 48,
+      multipartSize: 16 * 1024 * 1024,
+      restoreParallelism: 48,
+    },
+  } as unknown as ZeroConfig;
+}
+
+function createRestorableReplica(file: string, watermark: string) {
+  const db = new Database(createSilentLogContext(), file);
+  try {
+    initReplicationState(db, ['zero_pub'], watermark);
+  } finally {
+    db.close();
+  }
+}
 
 describe('litestream/commands parseBackupCreatedTimes', () => {
   const lc = createSilentLogContext();
@@ -81,33 +127,6 @@ describe('litestream/commands getLastBackupTime', () => {
     vi.useRealTimers();
   });
 
-  // Writes a fake `litestream` executable that emits `sh` (a POSIX shell
-  // snippet that can branch on `$1`, the snapshots|wal subcommand) and
-  // returns the config pointing at it.
-  function configWithFakeLitestream(sh: string): ZeroConfig {
-    const dir = mkdtempSync(join(tmpdir(), 'litestream-test-'));
-    const executable = join(dir, 'fake-litestream');
-    writeFileSync(executable, `#!/bin/sh\n${sh}\n`, {mode: 0o755});
-    return {
-      port: 4848,
-      log: {format: 'text'},
-      replica: {file: join(dir, 'replica.db')},
-      litestream: {
-        executable,
-        backupURL: 's3://fake-bucket/backup',
-        configPath: './src/services/litestream/config.yml',
-        logLevel: 'warn',
-        restoreUsingV5: false,
-        checkpointThresholdMB: 40,
-        incrementalBackupIntervalMinutes: 15,
-        snapshotBackupIntervalHours: 12,
-        multipartConcurrency: 48,
-        multipartSize: 16 * 1024 * 1024,
-        restoreParallelism: 48,
-      },
-    } as unknown as ZeroConfig;
-  }
-
   const lc = createSilentLogContext();
 
   test('returns the most recent created time across snapshots and wal', async () => {
@@ -156,5 +175,68 @@ describe('litestream/commands getLastBackupTime', () => {
     expect(String(outcome.ok === false && outcome.e)).toMatch(
       /timed out listing backup state/,
     );
+  });
+});
+
+describe('litestream/commands restoreReplica', () => {
+  const lc = createSilentLogContext();
+
+  test('restores and validates a compatible replica', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'litestream-restore-test-'));
+    const source = join(dir, 'source.db');
+    const replica = join(dir, 'replica.db');
+    createRestorableReplica(source, '01');
+    const config = configWithFakeLitestream(
+      `if [ "$1" = "restore" ]; then\n` +
+        `  cp "${source}" "$6"\n` +
+        `  exit 0\n` +
+        `fi\n` +
+        `exit 1`,
+      replica,
+    );
+
+    await restoreReplica(lc, config, {
+      replicaVersion: '01',
+      minWatermark: '01',
+    });
+
+    expect(existsSync(replica)).toBe(true);
+  });
+
+  test('reports a missing backup when restore exits without a replica', async () => {
+    const config = configWithFakeLitestream(
+      `if [ "$1" = "restore" ]; then\n` + `  exit 0\n` + `fi\n` + `exit 1`,
+    );
+
+    await expect(
+      restoreReplica(lc, config, {
+        replicaVersion: '01',
+        minWatermark: '01',
+      }),
+    ).rejects.toThrow(BackupNotFoundException);
+  });
+
+  test('deletes an incompatible restored replica', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'litestream-restore-test-'));
+    const source = join(dir, 'source.db');
+    const replica = join(dir, 'replica.db');
+    createRestorableReplica(source, '01');
+    const config = configWithFakeLitestream(
+      `if [ "$1" = "restore" ]; then\n` +
+        `  cp "${source}" "$6"\n` +
+        `  exit 0\n` +
+        `fi\n` +
+        `exit 1`,
+      replica,
+    );
+
+    await expect(
+      restoreReplica(lc, config, {
+        replicaVersion: '02',
+        minWatermark: '02',
+      }),
+    ).rejects.toThrow(BackupNotFoundException);
+
+    expect(existsSync(replica)).toBe(false);
   });
 });
