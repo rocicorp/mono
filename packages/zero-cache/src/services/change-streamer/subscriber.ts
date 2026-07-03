@@ -4,6 +4,7 @@ import {BigIntJSON} from '../../../../shared/src/bigint-json.ts';
 import type {Enum} from '../../../../shared/src/enum.ts';
 import {must} from '../../../../shared/src/must.ts';
 import {promiseVoid} from '../../../../shared/src/resolved-promises.ts';
+import {RingBuffer} from '../../../../shared/src/ring-buffer.ts';
 import {max} from '../../types/lexi-version.ts';
 import type {Subscription} from '../../types/subscription.ts';
 import type {ChangeTag, WatermarkedChange} from './change-streamer-service.ts';
@@ -14,7 +15,6 @@ type ErrorType = Enum<typeof ErrorType>;
 
 const DEFAULT_BACKLOG_HIGH_WATER_BYTES = 16 * 1024 * 1024;
 const DEFAULT_BACKLOG_LOW_WATER_RATIO = 0.8;
-const BACKLOG_COMPACT_THRESHOLD = 1024;
 
 export type SubscriberOptions = {
   backlogHighWaterBytes?: number | undefined;
@@ -35,17 +35,14 @@ export class Subscriber {
   readonly #latestStatus: () => Status;
   #watermark: string;
   #acked: string;
-  #backlog: WatermarkedChange[] | null;
+  #backlog: RingBuffer<WatermarkedChange> | null;
   // While catchup is running, live changes are buffered here instead of being
-  // pushed downstream. The start cursor lets drainBacklog consume that array
-  // without shifting every entry, which matters when a subscriber is far behind.
-  #backlogStart = 0;
+  // pushed downstream. RingBuffer lets drainBacklog consume that backlog without
+  // shifting an array, which matters when a subscriber is far behind.
   #backlogBytes = 0;
   #backlogInFlightBytes = 0;
   #backlogDrain: Promise<void> | null = null;
-  readonly #backlogHighWaterBytes: number;
-  readonly #backlogLowWaterBytes: number;
-  readonly #backlogWaiters: Resolver<void>[] = [];
+  readonly #backlogBackpressure: ByteBackpressureGate;
 
   constructor(
     protocolVersion: number,
@@ -61,19 +58,11 @@ export class Subscriber {
     this.#latestStatus = latestStatus;
     this.#watermark = watermark;
     this.#acked = watermark;
-    this.#backlog = [];
-    this.#backlogHighWaterBytes = Math.max(
-      1,
+    this.#backlog = new RingBuffer();
+    this.#backlogBackpressure = new ByteBackpressureGate(
       options.backlogHighWaterBytes ?? DEFAULT_BACKLOG_HIGH_WATER_BYTES,
+      options.backlogLowWaterRatio ?? DEFAULT_BACKLOG_LOW_WATER_RATIO,
     );
-    const lowWaterRatio = Math.min(
-      1,
-      Math.max(
-        0,
-        options.backlogLowWaterRatio ?? DEFAULT_BACKLOG_LOW_WATER_RATIO,
-      ),
-    );
-    this.#backlogLowWaterBytes = this.#backlogHighWaterBytes * lowWaterRatio;
   }
 
   get watermark() {
@@ -134,9 +123,10 @@ export class Subscriber {
       return this.#backlogDrain ?? promiseVoid;
     }
     if (!this.#backlogDrain) {
-      // Keep #backlog non-null until the drain finishes. That preserves ordering
-      // for sends that race with setCaughtUp(): they append to the same backlog
-      // instead of bypassing older buffered changes.
+      // Keep #backlog non-null while queued entries are being handed to
+      // downstream. That preserves ordering for sends that race with
+      // setCaughtUp(): they append to the same backlog instead of bypassing
+      // older buffered changes.
       this.#backlogDrain = this.#drainBacklog();
       void this.#backlogDrain.catch(e => this.fail(e));
     }
@@ -261,9 +251,8 @@ export class Subscriber {
     // Closing the subscriber must also release producers that are blocked on
     // backlog capacity; there is no future drain that could wake them.
     this.#backlog = null;
-    this.#backlogStart = 0;
     this.#backlogBytes = 0;
-    this.#releaseBacklogWaiters();
+    this.#backlogBackpressure.releaseAll();
 
     if (error) {
       // Wait for the ACK of the error message before closing the connection.
@@ -276,7 +265,7 @@ export class Subscriber {
   }
 
   get #backlogCount() {
-    return this.#backlog ? this.#backlog.length - this.#backlogStart : 0;
+    return this.#backlog?.size ?? 0;
   }
 
   get #bufferedBacklogBytes() {
@@ -293,49 +282,7 @@ export class Subscriber {
   }
 
   #maybeWaitForBacklogSpace(): Promise<void> {
-    if (this.#bufferedBacklogBytes < this.#backlogHighWaterBytes) {
-      return promiseVoid;
-    }
-    // One waiter represents one send() call that has already appended its
-    // change. The producer is released when the backlog falls back below the low
-    // water mark or the subscriber closes.
-    const r = resolver<void>();
-    this.#backlogWaiters.push(r);
-    return r.promise;
-  }
-
-  #releaseBacklogWaiters() {
-    const waiters = this.#backlogWaiters.splice(0);
-    for (const waiter of waiters) {
-      waiter.resolve();
-    }
-  }
-
-  #maybeReleaseBacklogWaiters() {
-    if (
-      this.#backlogWaiters.length === 0 ||
-      this.#bufferedBacklogBytes > this.#backlogLowWaterBytes
-    ) {
-      return;
-    }
-
-    // Use a low water mark so waiting producers are released in batches instead
-    // of waking one at a time around the high water boundary.
-    this.#releaseBacklogWaiters();
-  }
-
-  #compactBacklog() {
-    const backlog = this.#backlog;
-    if (
-      backlog &&
-      this.#backlogStart > BACKLOG_COMPACT_THRESHOLD &&
-      this.#backlogStart * 2 > backlog.length
-    ) {
-      // The drain advances #backlogStart instead of shifting. Compact once the
-      // consumed prefix is large enough to otherwise keep memory alive.
-      backlog.splice(0, this.#backlogStart);
-      this.#backlogStart = 0;
-    }
+    return this.#backlogBackpressure.waitForSpace(this.#bufferedBacklogBytes);
   }
 
   async #drainBacklog() {
@@ -344,34 +291,36 @@ export class Subscriber {
 
     try {
       for (;;) {
-        const backlog = this.#backlog;
-        const change = backlog?.[this.#backlogStart];
+        const change = this.#backlog?.shift();
         if (!change) {
           this.#backlog = null;
-          this.#backlogStart = 0;
           this.#backlogBytes = 0;
-          this.#maybeReleaseBacklogWaiters();
+          this.#backlogBackpressure.releaseIfUnderLowWater(
+            this.#bufferedBacklogBytes,
+          );
           break;
         }
 
-        this.#backlogStart++;
         const bytes = change[2].length;
         this.#backlogBytes -= bytes;
         this.#backlogInFlightBytes += bytes;
-        this.#compactBacklog();
-        this.#maybeReleaseBacklogWaiters();
+        this.#backlogBackpressure.releaseIfUnderLowWater(
+          this.#bufferedBacklogBytes,
+        );
 
         // Send backlog entries in order, but keep only a bounded byte window in
         // flight. This avoids replacing one unbounded buffer with another inside
         // the downstream Subscription during catchup completion.
         const promise = this.#sendChange(change).finally(() => {
           this.#backlogInFlightBytes -= bytes;
-          this.#maybeReleaseBacklogWaiters();
+          this.#backlogBackpressure.releaseIfUnderLowWater(
+            this.#bufferedBacklogBytes,
+          );
         });
         inFlight.push({promise, bytes});
         inFlightBytes += bytes;
 
-        while (inFlightBytes >= this.#backlogHighWaterBytes) {
+        while (inFlightBytes >= this.#backlogBackpressure.highWaterBytes) {
           const next = must(inFlight.shift());
           await next.promise;
           inFlightBytes -= next.bytes;
@@ -383,7 +332,51 @@ export class Subscriber {
       }
     } finally {
       this.#backlogDrain = null;
-      this.#maybeReleaseBacklogWaiters();
+      this.#backlogBackpressure.releaseIfUnderLowWater(
+        this.#bufferedBacklogBytes,
+      );
+    }
+  }
+}
+
+class ByteBackpressureGate {
+  readonly highWaterBytes: number;
+  readonly #lowWaterBytes: number;
+  readonly #waiters: Resolver<void>[] = [];
+
+  constructor(highWaterBytes: number, lowWaterRatio: number) {
+    this.highWaterBytes = Math.max(1, highWaterBytes);
+    this.#lowWaterBytes =
+      this.highWaterBytes * Math.min(1, Math.max(0, lowWaterRatio));
+  }
+
+  waitForSpace(bufferedBytes: number): Promise<void> {
+    if (bufferedBytes < this.highWaterBytes) {
+      return promiseVoid;
+    }
+
+    // One waiter represents one send() call that has already appended its
+    // change. The producer is released when the backlog falls back below the low
+    // water mark or the subscriber closes.
+    const r = resolver<void>();
+    this.#waiters.push(r);
+    return r.promise;
+  }
+
+  releaseIfUnderLowWater(bufferedBytes: number) {
+    if (this.#waiters.length === 0 || bufferedBytes > this.#lowWaterBytes) {
+      return;
+    }
+
+    // Use a low water mark so waiting producers are released in batches instead
+    // of waking one at a time around the high water boundary.
+    this.releaseAll();
+  }
+
+  releaseAll() {
+    const waiters = this.#waiters.splice(0);
+    for (const waiter of waiters) {
+      waiter.resolve();
     }
   }
 }
