@@ -10,6 +10,42 @@ const json = BigIntJSON.stringify;
 describe('change-streamer/forwarder', () => {
   const messages = new ReplicationMessages({issues: 'id'});
 
+  test('flow control waits on catching-up subscriber backlog', async () => {
+    const forwarder = new Forwarder(createSilentLogContext());
+    const [sub, _, receiver] = createSubscriber('00', false, {
+      backlogHighWaterBytes: 1,
+    });
+
+    forwarder.add(sub);
+
+    let released = false;
+    const forwarded = forwarder
+      .forwardWithFlowControl([
+        '11',
+        'begin',
+        json(['begin', messages.begin(), {commitWatermark: '12'}]),
+      ])
+      .then(() => {
+        released = true;
+      });
+
+    await Promise.resolve();
+    expect(released).toBe(false);
+
+    const drained = sub.setCaughtUp();
+    await Promise.resolve();
+
+    // Status initialization plus the forwarded change are now queued
+    // downstream, but the forwarder should still be waiting on consumption.
+    expect(receiver.queued).toBe(2);
+    expect(released).toBe(false);
+
+    receiver.cancel();
+    await forwarded;
+    await drained;
+    expect(released).toBe(true);
+  });
+
   test('in transaction queueing', () => {
     const forwarder = new Forwarder(createSilentLogContext());
 
