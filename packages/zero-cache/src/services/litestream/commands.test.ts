@@ -242,6 +242,12 @@ describe('litestream/commands restoreReplica', () => {
   });
 
   test('reports a missing backup when restore exits without a replica', async () => {
+    const restoreAttemptsAdd = vi.fn();
+    vi.spyOn(litestreamMetrics, 'litestreamRestoreAttempts').mockReturnValue({
+      add: restoreAttemptsAdd,
+    } as unknown as ReturnType<
+      typeof litestreamMetrics.litestreamRestoreAttempts
+    >);
     const config = configWithFakeLitestream(
       `if [ "$1" = "restore" ]; then\n` + `  exit 0\n` + `fi\n` + `exit 1`,
     );
@@ -252,6 +258,10 @@ describe('litestream/commands restoreReplica', () => {
         minWatermark: '01',
       }),
     ).rejects.toThrow(BackupNotFoundException);
+    expect(restoreAttemptsAdd).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({result: 'no_backup'}),
+    );
   });
 
   test('deletes an incompatible restored replica', async () => {
@@ -259,6 +269,15 @@ describe('litestream/commands restoreReplica', () => {
     const source = join(dir, 'source.db');
     const replica = join(dir, 'replica.db');
     createRestorableReplica(source, '01');
+    const restoreValidationRecordMs = vi.fn();
+    vi.spyOn(
+      litestreamMetrics,
+      'litestreamRestoreValidationDuration',
+    ).mockReturnValue({
+      recordMs: restoreValidationRecordMs,
+    } as unknown as ReturnType<
+      typeof litestreamMetrics.litestreamRestoreValidationDuration
+    >);
     const config = configWithFakeLitestream(
       `if [ "$1" = "restore" ]; then\n` +
         `  cp "${source}" "$6"\n` +
@@ -276,5 +295,9 @@ describe('litestream/commands restoreReplica', () => {
     ).rejects.toThrow(BackupNotFoundException);
 
     expect(existsSync(replica)).toBe(false);
+    expect(restoreValidationRecordMs).toHaveBeenCalledWith(
+      expect.any(Number),
+      expect.objectContaining({result: 'invalid_replica'}),
+    );
   });
 });
