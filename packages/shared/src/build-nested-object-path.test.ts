@@ -252,4 +252,40 @@ describe('BuildNested type', () => {
     type Result = BuildNested<'a.b.c', '.', Fn>;
     expectTypeOf<Result>().toEqualTypeOf<{a: {b: {c: Fn}}}>();
   });
+
+  test('supports setting __proto__ key at top level', () => {
+    const target = {};
+    const result = buildNestedObjectPath(target, '__proto__', '.', 'value');
+
+    expect(Object.getPrototypeOf(result)).toBe(Object.prototype);
+    expect(Object.hasOwn(result, '__proto__')).toBe(true);
+    expect(result.__proto__).toBe('value');
+    expect(result).toBe(target); // Same reference
+  });
+
+  test('supports setting __proto__ key at second level', () => {
+    const target = {};
+    const result = buildNestedObjectPath(
+      target,
+      'test.__proto__',
+      '.',
+      'value',
+    );
+
+    expect(Object.getPrototypeOf(result.test)).toBe(Object.prototype);
+    expect(Object.hasOwn(result.test, '__proto__')).toBe(true);
+    expect(result.test.__proto__).toBe('value');
+    expect(result).toBe(target); // Same reference
+  });
+
+  test('supports setting values under a __proto__ key', () => {
+    const target = {};
+    const a = buildNestedObjectPath(target, '__proto__.test', '.', 'value');
+    const b = buildNestedObjectPath(a, '__proto__.test2', '.', 'value2');
+    const c = buildNestedObjectPath(b, 'test3.__proto__', '.', 'value3');
+
+    expect(c.__proto__).toEqual({test: 'value', test2: 'value2'});
+    expect(Object.getPrototypeOf(c.test3)).toBe(Object.prototype);
+    expect(c.test3.__proto__).toBe('value3');
+  });
 });
