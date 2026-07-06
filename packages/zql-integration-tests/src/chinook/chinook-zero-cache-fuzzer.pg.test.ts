@@ -25,8 +25,13 @@ import {
   getPragmaConfig,
   setupReplica,
 } from '../../../zero-cache/src/workers/replicator.ts';
+import type {Row} from '../../../zero-protocol/src/data.ts';
 import {getServerSchema} from '../../../zero-server/src/schema.ts';
 import {Transaction} from '../../../zero-server/src/test/util.ts';
+import type {
+  Schema as ZeroSchema,
+  TableSchema,
+} from '../../../zero-types/src/schema.ts';
 import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
 import type {AnyQuery} from '../../../zql/src/query/query.ts';
 import {Database} from '../../../zqlite/src/db.ts';
@@ -50,6 +55,8 @@ import {
 } from './fuzz/driver.ts';
 import {Data} from './fuzz/literals.ts';
 import {miniData, miniPgContent} from './fuzz/mini.ts';
+import {pushForSkeleton, type Mutation} from './fuzz/push.ts';
+import {label as skeletonLabel, lower, type Skeleton} from './fuzz/skeleton.ts';
 import {builder, schema} from './schema.ts';
 
 const lc = createSilentLogContext();
@@ -59,6 +66,7 @@ const SHARD_NUM = 0;
 const TASK_ID = 'zql-integration-zero-cache-fuzzer';
 const TIMEOUT_MS = 120_000;
 const SEED = 0x00c0ffee;
+const writeSchema: ZeroSchema = schema;
 
 const shard = {
   appID: APP_ID,
@@ -78,6 +86,25 @@ const L0_QUERY_CASES = skeletonQueryCases(
   enumerate({depth: 1, related: 1, exists: 1}),
 );
 const L1_QUERY_CASES = l1QueryCases(data);
+const WRITE_FUZZ_EXTRA_LABELS = [
+  'album(ex:track)',
+  'employee(ex:employee)',
+  'invoice(ex:invoiceLine)',
+  'playlist(ex:track)',
+  'track(ex:playlist)',
+];
+const WRITE_FUZZ_SKELETONS = selectWriteFuzzSkeletons(
+  enumerate({depth: 1, related: 1, exists: 1}),
+);
+const WRITE_FUZZ_CASES = WRITE_FUZZ_SKELETONS.map(s => ({
+  label: `write|${skeletonLabel(s)}`,
+  mutations: pushForSkeleton(data, s, 1),
+  query: lower(s),
+}));
+const WRITE_FUZZ_WRITE_COUNT = WRITE_FUZZ_CASES.reduce(
+  (n, c) => n + c.mutations.length,
+  0,
+);
 const ZERO_CACHE_QUERY_CASES = [
   ...L0_QUERY_CASES,
   ...L1_QUERY_CASES.cases,
@@ -90,6 +117,38 @@ const ZERO_CACHE_QUERY_CASES = [
 ];
 
 type ChinookSchema = typeof schema;
+
+function selectWriteFuzzSkeletons(
+  skeletons: readonly Skeleton[],
+): readonly Skeleton[] {
+  const out: Skeleton[] = [];
+  const seen = new Set<string>();
+
+  const add = (s: Skeleton | undefined) => {
+    if (!s) {
+      return;
+    }
+    const key = skeletonLabel(s);
+    if (!seen.has(key)) {
+      seen.add(key);
+      out.push(s);
+    }
+  };
+
+  const roots = new Set(skeletons.map(s => s.table));
+  for (const root of roots) {
+    add(
+      skeletons.find(
+        s => s.table === root && s.children.some(c => c.kind === 'related'),
+      ) ?? skeletons.find(s => s.table === root),
+    );
+  }
+  for (const label of WRITE_FUZZ_EXTRA_LABELS) {
+    add(skeletons.find(s => skeletonLabel(s) === label));
+  }
+
+  return out;
+}
 
 function parseStringifiedSource(source: Source<string>): Source<Downstream> {
   return {
@@ -273,6 +332,129 @@ async function expectReplicaMatchesPG({
   expect(sqliteResult).toEqualPg(pgResult);
 }
 
+function tableSchema(table: string): TableSchema {
+  const tableDef = writeSchema.tables[table];
+  if (!tableDef) {
+    throw new Error(`unknown table ${table}`);
+  }
+  return tableDef;
+}
+
+function serverTableName(table: string): string {
+  const tableDef = tableSchema(table);
+  return tableDef.serverName ?? table;
+}
+
+function serverColumnName(table: string, column: string): string {
+  const columnDef = tableSchema(table).columns[column];
+  if (!columnDef) {
+    throw new Error(`unknown column ${table}.${column}`);
+  }
+  return columnDef.serverName ?? column;
+}
+
+function toServerRow(table: string, row: Row): Row {
+  const out: Record<string, Row[string]> = {};
+  for (const [column, value] of Object.entries(row)) {
+    out[serverColumnName(table, column)] = value;
+  }
+  return out;
+}
+
+function definedRowValue(
+  table: string,
+  column: string,
+  row: Row,
+): Exclude<Row[string], undefined> {
+  const value = row[column];
+  if (value === undefined) {
+    throw new Error(`missing value for ${table}.${column}`);
+  }
+  return value;
+}
+
+function primaryKeyConditions(upstream: PostgresDB, table: string, row: Row) {
+  return tableSchema(table).primaryKey.flatMap((column, i) => {
+    const condition = upstream`${upstream(serverColumnName(table, column))} = ${definedRowValue(
+      table,
+      column,
+      row,
+    )}`;
+    return i === 0 ? [condition] : [upstream`AND`, condition];
+  });
+}
+
+function mutationDescription(mutation: Mutation): string {
+  const pks = tableSchema(mutation.table)
+    .primaryKey.map(column => `${column}=${String(mutation.row[column])}`)
+    .join(',');
+  return `${mutation.kind} ${mutation.table}(${pks})`;
+}
+
+function expectSingleAffectedRow(
+  result: readonly unknown[],
+  description: string,
+) {
+  expect(result.length, description).toBe(1);
+}
+
+async function applyWriteFuzzMutation(
+  upstream: PostgresDB,
+  mutation: Mutation,
+) {
+  const table = serverTableName(mutation.table);
+  switch (mutation.kind) {
+    case 'remove': {
+      const result = await upstream`
+        DELETE FROM ${upstream(table)}
+         WHERE ${primaryKeyConditions(upstream, mutation.table, mutation.row)}
+        RETURNING 1`;
+      expectSingleAffectedRow(result, mutationDescription(mutation));
+      break;
+    }
+    case 'add': {
+      const result = await upstream`
+        INSERT INTO ${upstream(table)}
+        ${upstream(toServerRow(mutation.table, mutation.row))}
+        RETURNING 1`;
+      expectSingleAffectedRow(result, mutationDescription(mutation));
+      break;
+    }
+    case 'edit': {
+      const result = await upstream`
+        UPDATE ${upstream(table)}
+           SET ${upstream(toServerRow(mutation.table, mutation.row))}
+         WHERE ${primaryKeyConditions(upstream, mutation.table, mutation.old)}
+        RETURNING 1`;
+      expectSingleAffectedRow(result, mutationDescription(mutation));
+      break;
+    }
+  }
+}
+
+async function checkWriteFuzzCases(
+  harness: Awaited<ReturnType<typeof startZeroCacheReplica>>,
+): Promise<number> {
+  let writeCount = 0;
+  for (const c of WRITE_FUZZ_CASES) {
+    await expectReplicaMatchesPG({...harness, query: c.query});
+    for (let i = 0; i < c.mutations.length; i++) {
+      const mutation = c.mutations[i];
+      const description = `${c.label}#${i}:${mutationDescription(mutation)}`;
+      await applyWriteFuzzMutation(harness.upstream, mutation);
+      writeCount += 1;
+      await harness.waitForReplicaVersion(description);
+      try {
+        await expectReplicaMatchesPG({...harness, query: c.query});
+      } catch (e) {
+        const msg = e instanceof Error ? (e.stack ?? e.message) : String(e);
+        throw new Error(`write fuzz divergence after ${description}\n${msg}`);
+      }
+    }
+  }
+  return writeCount;
+}
+
 async function insertTrack(upstream: PostgresDB) {
   await upstream`
     INSERT INTO track (
@@ -312,7 +494,7 @@ async function deleteTrack(upstream: PostgresDB) {
 }
 
 test(
-  `zero-cache replica stays query-equivalent to PostgreSQL for ${ZERO_CACHE_QUERY_CASES.length} generated query cases and replicated writes`,
+  `zero-cache replica stays query-equivalent to PostgreSQL for ${ZERO_CACHE_QUERY_CASES.length} generated query cases, ${WRITE_FUZZ_WRITE_COUNT} generated writes, and replicated writes`,
   {timeout: TIMEOUT_MS},
   async ({testDBs}: PgTest) => {
     const harness = await startZeroCacheReplica(testDBs);
@@ -323,6 +505,10 @@ test(
       );
       expect(report.total).toBeGreaterThan(500);
       panicIfFailed(report, 12);
+
+      expect(WRITE_FUZZ_CASES.length).toBeGreaterThan(10);
+      const writeCount = await checkWriteFuzzCases(harness);
+      expect(writeCount).toBe(WRITE_FUZZ_WRITE_COUNT);
 
       const query = builder.album
         .where('id', '=', 20)
