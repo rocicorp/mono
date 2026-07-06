@@ -22,6 +22,7 @@ import type {
 } from '../../../../zero-protocol/src/poke.ts';
 import {PROTOCOL_VERSION} from '../../../../zero-protocol/src/protocol-version.ts';
 import type {UpQueriesPatch} from '../../../../zero-protocol/src/queries-patch.ts';
+import {ChangeType} from '../../../../zql/src/ivm/change-type.ts';
 import {DEFAULT_TTL_MS} from '../../../../zql/src/query/ttl.ts';
 import {type ClientGroupStorage} from '../../../../zqlite/src/database-storage.ts';
 import type {Database} from '../../../../zqlite/src/db.ts';
@@ -45,7 +46,7 @@ import type {ConnectionValidation} from './connection-context-manager.ts';
 import {CVRStore} from './cvr-store.ts';
 import {CVRQueryDrivenUpdater, CVRUpdater} from './cvr.ts';
 import type {DrainCoordinator} from './drain-coordinator.ts';
-import {PipelineDriver} from './pipeline-driver.ts';
+import {type RowChange, PipelineDriver} from './pipeline-driver.ts';
 import {formatSignature, rowIDSignatureUnit} from './row-set-signature.ts';
 import type {RowID} from './schema/types.ts';
 import {ttlClockFromNumber} from './ttl-clock.ts';
@@ -4804,6 +4805,114 @@ describe('view-syncer/service', () => {
       );
     } finally {
       await cleanup();
+    }
+  });
+
+  test('same-hash rehydrate during deleteClients forces a version bump', async () => {
+    pruneIssues('3', '4', '5');
+
+    const ttl = 5000;
+    const {queue: client1} = connectWithQueueAndSource(SYNC_CONTEXT, [
+      {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY2, ttl},
+    ]);
+    const {queue: client2, source: connectSource2} = connectWithQueueAndSource(
+      {...SYNC_CONTEXT, clientID: 'bar', wsID: 'ws2'},
+      [{op: 'put', hash: 'query-hash2', ast: USERS_QUERY, ttl}],
+    );
+
+    await nextPoke(client1);
+    await nextPoke(client2);
+
+    stateChanges.push({state: 'version-ready'});
+
+    await nextPoke(client1);
+    await nextPoke(client1);
+    await nextPoke(client2);
+    await nextPoke(client2);
+
+    expect(await loadStoredSig('query-hash1')).toEqual(
+      expectedIssuesSig(issueRowID('1'), issueRowID('2')),
+    );
+
+    const originalQueries = PipelineDriver.prototype.queries;
+    const queriesSpy = vi
+      .spyOn(PipelineDriver.prototype, 'queries')
+      .mockImplementation(function (this: PipelineDriver) {
+        const queries = originalQueries.call(this);
+        const filtered = new Map(queries);
+        filtered.delete('query-hash1');
+        return filtered;
+      });
+    const originalAddQuery = PipelineDriver.prototype.addQuery;
+    const addQuerySpy = vi
+      .spyOn(PipelineDriver.prototype, 'addQuery')
+      .mockImplementation(function (
+        this: PipelineDriver,
+        ...args: Parameters<PipelineDriver['addQuery']>
+      ) {
+        const [, queryID] = args;
+        if (queryID !== 'query-hash1') {
+          return originalAddQuery.call(this, ...args);
+        }
+
+        const changes: RowChange[] = [
+          {
+            type: ChangeType.ADD,
+            queryID,
+            table: 'issues',
+            rowKey: {id: '2'},
+            row: {
+              id: '2',
+              title: 'parent issue bar',
+              owner: '101',
+              parent: null,
+              big: -9007199254740991,
+              json: null,
+              _0_version: '01',
+            },
+          },
+          {
+            type: ChangeType.ADD,
+            queryID,
+            table: 'issues',
+            rowKey: {id: '6'},
+            row: {
+              id: '6',
+              title: 'row C',
+              owner: '100',
+              parent: null,
+              big: 0,
+              json: null,
+              _0_version: '01',
+            },
+          },
+        ];
+        return changes;
+      });
+
+    connectSource2.cancel();
+    try {
+      await vs.deleteClients(SYNC_CONTEXT, [
+        'deleteClients',
+        {clientIDs: ['bar']},
+      ]);
+
+      const rowsPoke = await drainUntilRowsPatchOrQuiet(client1, 1000);
+      expect(rowsPoke).toBeDefined();
+
+      const {puts, dels} = rowOpsFor(rowsPoke!, 'issues');
+      expect(dels.map(p => p.id.id)).toEqual(['1']);
+      expect(puts.map(p => p.value.id)).toEqual(['6']);
+
+      if (!rowsPoke!.some(([cmd]) => cmd === 'deleteClients')) {
+        expect(await client1.dequeue()).toEqual([
+          'deleteClients',
+          {clientIDs: ['bar']},
+        ]);
+      }
+    } finally {
+      addQuerySpy.mockRestore();
+      queriesSpy.mockRestore();
     }
   });
 
