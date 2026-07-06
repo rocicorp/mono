@@ -341,6 +341,15 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       'persistent non-zero values indicate non-deterministic query execution ' +
       '(e.g. Cap operator picking different N-row subsets).',
   );
+  readonly #sameHashRehydrationVersionBumps = getOrCreateCounter(
+    'sync',
+    'query.same-hash-rehydrations-forced-bump',
+    'Number of times query-set reconciliation forced a configVersion bump ' +
+      'for already-gotten same-transformation-hash query rehydration because ' +
+      'trackQueries would not otherwise bump. Expected to be near-zero; ' +
+      'non-zero values indicate ' +
+      'pipeline/CVR row-set drift reached query-set reconciliation.',
+  );
 
   readonly #inspectorDelegate: InspectorDelegate;
 
@@ -2106,12 +2115,38 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         queryID => this.#pipelines.rowSetSignature(queryID),
       );
 
-      // For queries being re-executed solely due to rowSetSignature drift
-      // (not a transformationHash change), trackQueries does not bump
-      // configVersion. Force a bump so the row diff produced by received()
-      // gets propagated to the client via a poke. Must happen before
-      // startPoke so the pokers see the final cookie version.
-      if (addQueries.some(q => driftedQueryIDs.has(q.id))) {
+      const sameHashRehydratedQueryIDs = addQueries
+        .filter(
+          q => cvr.queries[q.id]?.transformationHash === q.transformationHash,
+        )
+        .map(q => q.id);
+      const trackQueriesWillBumpVersion =
+        stateVersion > cvr.version.stateVersion ||
+        removeQueries.length > 0 ||
+        addQueries.some(
+          q => cvr.queries[q.id]?.transformationHash !== q.transformationHash,
+        );
+
+      // For already-gotten queries being re-executed without a stateVersion
+      // or transformationHash change, trackQueries does not bump configVersion.
+      // Force a bump so any row diff produced by received() gets propagated to
+      // the client via a poke. Must happen before startPoke so the pokers see
+      // the final cookie version.
+      if (
+        sameHashRehydratedQueryIDs.length > 0 &&
+        !trackQueriesWillBumpVersion
+      ) {
+        const drifted = sameHashRehydratedQueryIDs.filter(id =>
+          driftedQueryIDs.has(id),
+        ).length;
+        const missing = sameHashRehydratedQueryIDs.length - drifted;
+        const reason =
+          drifted && missing
+            ? 'mixed'
+            : drifted
+              ? 'row-set-signature-drift'
+              : 'missing-pipeline';
+        this.#sameHashRehydrationVersionBumps.add(1, {reason});
         updater.ensureNewVersion();
       }
 
