@@ -4,12 +4,7 @@ import {createSilentLogContext} from '../../../../../shared/src/logging-test-uti
 import {ReplicationReportRecorder} from './recorder.ts';
 
 test('replication report recorder', () => {
-  let now: number = 10_000;
-
-  const recorder = new ReplicationReportRecorder(
-    createSilentLogContext(),
-    () => now,
-  );
+  const recorder = new ReplicationReportRecorder(createSilentLogContext());
 
   recorder.record({
     lastTimings: {
@@ -23,7 +18,7 @@ test('replication report recorder', () => {
 
   function expectObserved(
     observer: (o: ObservableResult) => void,
-    expected: number,
+    expected: number | undefined,
   ) {
     let observed: number | undefined;
     observer({observe: v => (observed = v)});
@@ -35,23 +30,19 @@ test('replication report recorder', () => {
   expectObserved(recorder.reportTotalLag, 550);
   expectObserved(recorder.reportLastTotalLag, 550);
 
-  now = 11_550;
+  expectObserved(recorder.reportUpstreamLag, 200);
+  expectObserved(recorder.reportReplicaLag, 350);
+  expectObserved(recorder.reportTotalLag, 550);
+  expectObserved(recorder.reportLastTotalLag, 550);
 
   expectObserved(recorder.reportUpstreamLag, 200);
   expectObserved(recorder.reportReplicaLag, 350);
   expectObserved(recorder.reportTotalLag, 550);
   expectObserved(recorder.reportLastTotalLag, 550);
 
-  now = 12_123;
   expectObserved(recorder.reportUpstreamLag, 200);
   expectObserved(recorder.reportReplicaLag, 350);
-  expectObserved(recorder.reportTotalLag, 1123);
-  expectObserved(recorder.reportLastTotalLag, 550);
-
-  now = 12_246;
-  expectObserved(recorder.reportUpstreamLag, 200);
-  expectObserved(recorder.reportReplicaLag, 350);
-  expectObserved(recorder.reportTotalLag, 1246);
+  expectObserved(recorder.reportTotalLag, 550);
   expectObserved(recorder.reportLastTotalLag, 550);
 
   recorder.record({
@@ -68,4 +59,26 @@ test('replication report recorder', () => {
   expectObserved(recorder.reportReplicaLag, 400);
   expectObserved(recorder.reportTotalLag, 650);
   expectObserved(recorder.reportLastTotalLag, 650);
+});
+
+test('replication report recorder ignores pending report without timings', () => {
+  const recorder = new ReplicationReportRecorder(createSilentLogContext());
+
+  recorder.record({
+    nextSendTimeMs: 1_000,
+  });
+
+  function expectObserved(
+    observer: (o: ObservableResult) => void,
+    expected: number | undefined,
+  ) {
+    let observed: number | undefined;
+    observer({observe: v => (observed = v)});
+    expect(observed).toBe(expected);
+  }
+
+  expectObserved(recorder.reportUpstreamLag, undefined);
+  expectObserved(recorder.reportReplicaLag, undefined);
+  expectObserved(recorder.reportTotalLag, undefined);
+  expectObserved(recorder.reportLastTotalLag, undefined);
 });
