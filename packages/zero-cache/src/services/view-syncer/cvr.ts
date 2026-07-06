@@ -982,7 +982,7 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
             continue;
           }
           const lastPatch = this.#lastPatches.get(deletedID);
-          if (lastPatch?.rowVersion === null) {
+          if (lastPatch !== undefined && lastPatch.rowVersion === null) {
             continue;
           }
           const toVersion = maxVersion(this._cvr.version, lastPatch?.toVersion);
