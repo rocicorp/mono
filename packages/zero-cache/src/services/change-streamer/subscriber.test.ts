@@ -42,7 +42,7 @@ describe('change-streamer/subscriber', () => {
       json(['commit', messages.commit(), {watermark: '02'}]),
     ]);
 
-    sub.setCaughtUp();
+    void sub.setCaughtUp();
 
     // Send some messages after catchup.
     void sub.send([
@@ -160,7 +160,7 @@ describe('change-streamer/subscriber', () => {
       'commit',
       json(['commit', messages.commit(), {watermark: '02'}]),
     ]);
-    sub.setCaughtUp();
+    void sub.setCaughtUp();
 
     // Still lower than the watermark ...
     void sub.send([
@@ -229,6 +229,128 @@ describe('change-streamer/subscriber', () => {
     `);
   });
 
+  test('backlog applies backpressure until drained', async () => {
+    const [sub, _, receiver] = createSubscriber('00', false, {
+      backlogHighWaterBytes: 1,
+    });
+
+    let released = false;
+    const blocked = sub
+      .send([
+        '11',
+        'begin',
+        json(['begin', messages.begin(), {commitWatermark: '12'}]),
+      ])
+      .then(() => {
+        released = true;
+      });
+
+    await Promise.resolve();
+    expect(released).toBe(false);
+
+    const drained = sub.setCaughtUp();
+    await Promise.resolve();
+    expect(released).toBe(false);
+
+    receiver.cancel();
+    await blocked;
+    await drained;
+    expect(released).toBe(true);
+  });
+
+  test('close releases backlog backpressure', async () => {
+    const [sub] = createSubscriber('00', false, {
+      backlogHighWaterBytes: 1,
+    });
+
+    let released = false;
+    const blocked = sub
+      .send([
+        '11',
+        'begin',
+        json(['begin', messages.begin(), {commitWatermark: '12'}]),
+      ])
+      .then(() => {
+        released = true;
+      });
+
+    await Promise.resolve();
+    expect(released).toBe(false);
+
+    sub.close();
+    await blocked;
+    expect(released).toBe(true);
+  });
+
+  test('setCaughtUp drains backlog with bounded in-flight sends', async () => {
+    const [sub, _, receiver] = createSubscriber('00', false, {
+      backlogHighWaterBytes: 1,
+    });
+
+    void sub.send([
+      '11',
+      'begin',
+      json(['begin', messages.begin(), {commitWatermark: '12'}]),
+    ]);
+    void sub.send([
+      '12',
+      'commit',
+      json(['commit', messages.commit(), {watermark: '12'}]),
+    ]);
+    void sub.send([
+      '21',
+      'begin',
+      json(['begin', messages.begin(), {commitWatermark: '22'}]),
+    ]);
+
+    const drained = sub.setCaughtUp();
+
+    // Status initialization plus the first backlog entry. The remaining
+    // backlog stays buffered until the receiver consumes this window.
+    expect(receiver.queued).toBe(2);
+    receiver.cancel();
+    await drained;
+  });
+
+  test('post-catchup live sends accumulate without downstream consumption', async () => {
+    const [sub, _, receiver] = createSubscriber('00', true);
+
+    let completed = 0;
+    const sends: Promise<void>[] = [];
+    const count = 1000;
+
+    for (let i = 0; i < count; i++) {
+      const watermark = String(i + 1).padStart(4, '0');
+      sends.push(
+        sub
+          .send([
+            watermark,
+            'begin',
+            json(['begin', messages.begin(), {commitWatermark: watermark}]),
+          ])
+          .then(() => {
+            completed++;
+          }),
+      );
+    }
+
+    await Promise.resolve();
+
+    // Status initialization plus every live send is retained because nothing
+    // is consuming the downstream Subscription.
+    expect(receiver.queued).toBe(count + 1);
+    expect(sub.getStats()).toMatchObject({
+      pending: count + 1,
+      backlog: 0,
+      backlogBytes: 0,
+    });
+    expect(completed).toBe(0);
+
+    receiver.cancel();
+    await Promise.all(sends);
+    expect(completed).toBe(count);
+  });
+
   test('acks, pending, processed, stats', async () => {
     const [sub, _, receiver] = createSubscriber('00');
 
@@ -256,7 +378,7 @@ describe('change-streamer/subscriber', () => {
       json(['commit', messages.commit(), {watermark: '02'}]),
     ]);
 
-    sub.setCaughtUp();
+    void sub.setCaughtUp();
 
     // Send some messages after catchup.
     void sub.send([
@@ -280,7 +402,11 @@ describe('change-streamer/subscriber', () => {
 
     let processed = 0;
     let pending = 8;
-    expect(sub.getStats()).toEqual({processRate: 0, pending: 8});
+    const initialStats = sub.getStats();
+    expect(initialStats.processRate).toBe(0);
+    expect(initialStats.pending).toBe(8);
+    expect(initialStats.backlog).toBe(0);
+    expect(initialStats.backlogBytes).toBeGreaterThan(0);
     expect(sub.numPending).toBe(pending);
 
     let txNum = 0;
