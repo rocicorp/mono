@@ -5,6 +5,7 @@ import {makeDefine} from '../build.ts';
 
 export const CI = process.env['CI'] === 'true' || process.env['CI'] === '1';
 const {VITEST_BROWSER} = process.env;
+const coverageInclude = ['src/**/*.{js,jsx,ts,tsx,mjs,mts,cjs,cts}'];
 
 function assertValidBrowser(
   browser: string | undefined,
@@ -68,7 +69,7 @@ export default defineConfig({
 
     coverage: {
       provider: 'v8',
-      include: ['src/**'],
+      include: coverageInclude,
     },
     typecheck: {
       enabled: false,
