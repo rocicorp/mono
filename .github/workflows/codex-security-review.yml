@@ -1,0 +1,124 @@
+name: Codex Security Review
+
+on:
+  pull_request:
+    branches: [main]
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions: {}
+
+concurrency:
+  group: '${{ github.workflow }} @ ${{ github.event.pull_request.number }}'
+  cancel-in-progress: true
+
+jobs:
+  security-review:
+    name: Review PR for Security Regressions
+    runs-on: ubuntu-latest
+    if: >-
+      !github.event.pull_request.draft &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.pull_request.author_association)
+    permissions:
+      contents: read
+    outputs:
+      final-message: ${{ steps.run-codex.outputs.final-message }}
+    env:
+      # Codex Security is a marketplace plugin. Set CODEX_SECURITY_CODEX_HOME
+      # to a Codex home on the runner where codex-security is installed.
+      CODEX_HOME: ${{ vars.CODEX_SECURITY_CODEX_HOME }}
+      TMPDIR: ${{ runner.temp }}/codex-security
+    steps:
+      - name: Checkout pull request head
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Verify Codex Security plugin home
+        run: |
+          if [ -z "$CODEX_HOME" ]; then
+            echo "::error::Set the CODEX_SECURITY_CODEX_HOME repository variable to a Codex home where codex-security is installed. The Codex GitHub Action installs the CLI, but not marketplace plugins."
+            exit 1
+          fi
+
+          if [ ! -d "$CODEX_HOME" ]; then
+            echo "::error::CODEX_SECURITY_CODEX_HOME does not exist on this runner: $CODEX_HOME"
+            exit 1
+          fi
+
+          mkdir -p "$TMPDIR"
+
+      - name: Run Codex Security review
+        id: run-codex
+        uses: openai/codex-action@52fe01ec70a42f454c9d2ebd47598f9fd6893d56 # v1
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          codex-home: ${{ env.CODEX_HOME }}
+          sandbox: workspace-write
+          output-file: ${{ runner.temp }}/codex-security-review.md
+          prompt: |
+            Use $codex-security:security-diff-scan to review changes from ${{ github.event.pull_request.base.sha }} to ${{ github.event.pull_request.head.sha }} for security regressions.
+
+            Do not modify the checkout. Focus on authentication, authorization,
+            input validation, SQL and query construction, filesystem access,
+            network requests, secrets, sync protocol boundaries, and GitHub
+            Actions changes.
+
+            Return the findings summary, reviewed surfaces, deferred coverage,
+            open questions, and the final report path. If there are no findings,
+            say that clearly and note any residual coverage gaps.
+
+  post-feedback:
+    name: Post Security Review
+    runs-on: ubuntu-latest
+    needs: security-review
+    if: needs.security-review.outputs.final-message != ''
+    permissions:
+      issues: write
+      pull-requests: read
+    steps:
+      - name: Post or update PR comment
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea # v7.0.1
+        env:
+          CODEX_FINAL_MESSAGE: ${{ needs.security-review.outputs.final-message }}
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            const marker = '<!-- codex-security-review -->';
+            const body = [
+              marker,
+              '## Codex Security Review',
+              '',
+              process.env.CODEX_FINAL_MESSAGE,
+            ].join('\n');
+
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.pull_request.number,
+              per_page: 100,
+            });
+
+            const previous = comments.find(
+              comment =>
+                comment.user?.type === 'Bot' &&
+                comment.body?.includes(marker),
+            );
+
+            if (previous) {
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: previous.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.payload.pull_request.number,
+                body,
+              });
+            }
