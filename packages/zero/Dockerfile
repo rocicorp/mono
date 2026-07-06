@@ -18,7 +18,7 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
 
 FROM litestream/litestream:0.5.11 AS litestream-v5
 
-FROM node:22.22.3-alpine3.23@sha256:968df39aedcea65eeb078fb336ed7191baf48f972b4479711397108be0966920
+FROM node:22.23.1-alpine3.23@sha256:8516dce0483394d5708d4b2ee6cacb79fb1d617ea4e2787c2120bcca92ce372e
 
 ARG ZERO_VERSION
 ARG ZERO_PACKAGE
