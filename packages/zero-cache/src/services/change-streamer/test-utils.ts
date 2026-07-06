@@ -1,12 +1,13 @@
 import {Subscription} from '../../types/subscription.ts';
 import {PROTOCOL_VERSION, type Downstream} from './change-streamer.ts';
-import {Subscriber} from './subscriber.ts';
+import {Subscriber, type SubscriberOptions} from './subscriber.ts';
 
 let nextID = 1;
 
 export function createSubscriber(
   watermark = '00',
   caughtUp = false,
+  options: SubscriberOptions = {},
 ): [Subscriber, Downstream[], Subscription<string>] {
   const id = '' + nextID++;
   const received: Downstream[] = [];
@@ -19,9 +20,10 @@ export function createSubscriber(
     watermark,
     sub,
     () => ({tag: 'status'}),
+    options,
   );
   if (caughtUp) {
-    subscriber.setCaughtUp();
+    void subscriber.setCaughtUp();
   }
 
   return [subscriber, received, sub];
