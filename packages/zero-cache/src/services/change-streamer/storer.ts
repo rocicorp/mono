@@ -756,9 +756,11 @@ export class Storer implements Service {
               `change DB to catch up`,
           );
         }
-        // Flushes the backlog of messages buffered during catchup and
-        // allows the subscription to forward subsequent messages immediately.
-        sub.setCaughtUp();
+        // Start draining messages buffered during catchup. The returned promise
+        // is intentionally not awaited here: while the drain is in progress,
+        // new sends keep appending to the subscriber backlog and inherit its
+        // byte-based backpressure.
+        void sub.setCaughtUp();
       });
     } catch (err) {
       this.#lc.error?.(`error while catching up subscriber ${sub.id}`, err);
