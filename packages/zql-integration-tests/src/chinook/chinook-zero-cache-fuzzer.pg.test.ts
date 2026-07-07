@@ -2,6 +2,9 @@ import {expect} from 'vitest';
 import {testLogConfig} from '../../../otel/src/test-log-config.ts';
 import {BigIntJSON} from '../../../shared/src/bigint-json.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import {Queue} from '../../../shared/src/queue.ts';
+import type {NormalizedZeroConfig} from '../../../zero-cache/src/config/normalize.ts';
+import {InspectorDelegate} from '../../../zero-cache/src/server/inspector-delegate.ts';
 import {initializePostgresChangeSource} from '../../../zero-cache/src/services/change-source/pg/change-source.ts';
 import {initializeStreamer} from '../../../zero-cache/src/services/change-streamer/change-streamer-service.ts';
 import type {
@@ -13,6 +16,19 @@ import {ReplicationStatusPublisher} from '../../../zero-cache/src/services/repli
 import type {ReplicaState} from '../../../zero-cache/src/services/replicator/replicator.ts';
 import {ReplicatorService} from '../../../zero-cache/src/services/replicator/replicator.ts';
 import {ThreadWriteWorkerClient} from '../../../zero-cache/src/services/replicator/write-worker-client.ts';
+import {ConnectionContextManagerImpl} from '../../../zero-cache/src/services/view-syncer/connection-context-manager.ts';
+import {DrainCoordinator} from '../../../zero-cache/src/services/view-syncer/drain-coordinator.ts';
+import {PipelineDriver} from '../../../zero-cache/src/services/view-syncer/pipeline-driver.ts';
+import {initViewSyncerSchema} from '../../../zero-cache/src/services/view-syncer/schema/init.ts';
+import {
+  cmpVersions,
+  versionFromString,
+} from '../../../zero-cache/src/services/view-syncer/schema/types.ts';
+import {Snapshotter} from '../../../zero-cache/src/services/view-syncer/snapshotter.ts';
+import {
+  type SyncContext,
+  ViewSyncerService,
+} from '../../../zero-cache/src/services/view-syncer/view-syncer.ts';
 import {
   getConnectionURI,
   test,
@@ -21,19 +37,35 @@ import {
 import {DbFile} from '../../../zero-cache/src/test/lite.ts';
 import type {PostgresDB} from '../../../zero-cache/src/types/pg.ts';
 import type {Source} from '../../../zero-cache/src/types/streams.ts';
+import type {Subscription} from '../../../zero-cache/src/types/subscription.ts';
 import {
   getPragmaConfig,
   setupReplica,
 } from '../../../zero-cache/src/workers/replicator.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
+import type {Downstream as ProtocolDownstream} from '../../../zero-protocol/src/down.ts';
+import {PROTOCOL_VERSION} from '../../../zero-protocol/src/protocol-version.ts';
+import type {UpQueriesPatch} from '../../../zero-protocol/src/queries-patch.ts';
+import {hashOfAST} from '../../../zero-protocol/src/query-hash.ts';
+import type {RowPatchOp} from '../../../zero-protocol/src/row-patch.ts';
+import {clientSchemaFrom} from '../../../zero-schema/src/builder/schema-builder.ts';
+import {serverToClient} from '../../../zero-schema/src/name-mapper.ts';
 import {getServerSchema} from '../../../zero-server/src/schema.ts';
 import {Transaction} from '../../../zero-server/src/test/util.ts';
 import type {
   Schema as ZeroSchema,
   TableSchema,
 } from '../../../zero-types/src/schema.ts';
+import {MemorySource} from '../../../zql/src/ivm/memory-source.ts';
+import {makeSourceChangeAdd} from '../../../zql/src/ivm/source.ts';
+import {consume} from '../../../zql/src/ivm/stream.ts';
 import {asQueryInternals} from '../../../zql/src/query/query-internals.ts';
 import type {AnyQuery} from '../../../zql/src/query/query.ts';
+import {QueryDelegateImpl as TestMemoryQueryDelegate} from '../../../zql/src/query/test/query-delegate.ts';
+import {
+  CREATE_STORAGE_TABLE,
+  DatabaseStorage,
+} from '../../../zqlite/src/database-storage.ts';
 import {Database} from '../../../zqlite/src/db.ts';
 import {
   mapResultToClientNames,
@@ -64,9 +96,13 @@ const lc = createSilentLogContext();
 const APP_ID = 'zql_integration_zero_cache_fuzzer';
 const SHARD_NUM = 0;
 const TASK_ID = 'zql-integration-zero-cache-fuzzer';
+const PROTOCOL_CLIENT_GROUP_ID = 'zql-integration-protocol-fuzzer-client-group';
+const PROTOCOL_CLIENT_ID = 'zql-integration-protocol-fuzzer-client';
+const PROTOCOL_WS_ID = 'zql-integration-protocol-fuzzer-ws';
 const TIMEOUT_MS = 120_000;
 const SEED = 0x00c0ffee;
 const writeSchema: ZeroSchema = schema;
+const {clientSchema: chinookClientSchema} = clientSchemaFrom(schema);
 
 const shard = {
   appID: APP_ID,
@@ -114,6 +150,17 @@ const ZERO_CACHE_QUERY_CASES = [
     SEED ^ 0x5eed,
   ),
   ...tailQueryCases(CostModel.fromData(miniData, 1_000_000), SEED, 150).cases,
+];
+const PROTOCOL_QUERY_CASES = [
+  ...L0_QUERY_CASES,
+  ...L1_QUERY_CASES.cases.slice(0, 80),
+  ...swarmQueryCases(data, SEED ^ 0x7070, 8, 2),
+  ...mutationQueryCases(
+    enumerate({depth: 1, related: 1, exists: 1}).slice(0, 30),
+    SEED ^ 0x7071,
+  ),
+  ...tailQueryCases(CostModel.fromData(miniData, 1_000_000), SEED ^ 0x7072, 40)
+    .cases,
 ];
 
 type ChinookSchema = typeof schema;
@@ -282,10 +329,93 @@ async function startZeroCacheReplica(testDBs: PgTest['testDBs']) {
     );
     const pg = new TestPGQueryDelegate(upstream, schema, serverSchema);
 
+    async function startProtocolClient() {
+      const cvrDB = await testDBs.create('chinook_zero_cache_fuzzer_cvr');
+      cleanup.push(() => testDBs.drop(cvrDB));
+      await initViewSyncerSchema(lc, cvrDB, shard);
+
+      const storageDB = new Database(lc, ':memory:');
+      storageDB.prepare(CREATE_STORAGE_TABLE).run();
+      cleanup.push(() => storageDB.close());
+
+      const databaseStorage = new DatabaseStorage(storageDB);
+      const operatorStorage = databaseStorage.createClientGroupStorage(
+        PROTOCOL_CLIENT_GROUP_ID,
+      );
+      const config = {
+        auth: {},
+        query: {url: []},
+        adminPassword: 'test-pwd',
+        app: {id: APP_ID},
+        replica: {file: replicaDbFile.path},
+        log: {level: 'error'},
+      } as unknown as NormalizedZeroConfig;
+      const inspectorDelegate = new InspectorDelegate(undefined);
+      const connContextManager = new ConnectionContextManagerImpl(
+        lc,
+        config.auth.revalidateIntervalSeconds,
+        config.auth.retransformIntervalSeconds,
+        {
+          url: config.query.url,
+          apiKey: config.query.apiKey,
+          allowedClientHeaders: config.query.allowedClientHeaders,
+          allowedRequestHeaders: config.query.allowedRequestHeaders,
+          forwardCookies: config.query.forwardCookies,
+        },
+        {
+          url: config.push?.url ?? config.mutate?.url,
+          apiKey: config.push?.apiKey ?? config.mutate?.apiKey,
+          allowedClientHeaders:
+            config.push?.allowedClientHeaders ??
+            config.mutate?.allowedClientHeaders,
+          allowedRequestHeaders:
+            config.push?.allowedRequestHeaders ??
+            config.mutate?.allowedRequestHeaders,
+          forwardCookies:
+            config.push?.forwardCookies ??
+            config.mutate?.forwardCookies ??
+            false,
+        },
+      );
+      const viewSyncer = new ViewSyncerService(
+        config,
+        lc,
+        shard,
+        TASK_ID,
+        PROTOCOL_CLIENT_GROUP_ID,
+        cvrDB,
+        new PipelineDriver(
+          lc.withContext('component', 'pipeline-driver'),
+          testLogConfig,
+          new Snapshotter(lc, replicaDbFile.path, shard),
+          shard,
+          operatorStorage,
+          PROTOCOL_CLIENT_GROUP_ID,
+          inspectorDelegate,
+          () => 200,
+        ),
+        replicator.subscribe() as Subscription<ReplicaState>,
+        new DrainCoordinator(),
+        100,
+        inspectorDelegate,
+        connContextManager,
+        undefined,
+        (_lc, _description, op) => op(),
+      );
+      const viewSyncerDone = viewSyncer.run();
+      cleanup.push(async () => {
+        await viewSyncer.stop();
+        await viewSyncerDone;
+      });
+
+      return ProtocolFuzzerClient.connect(viewSyncer);
+    }
+
     return {
       upstream,
       pg,
       sqlite,
+      startProtocolClient,
       async waitForReplicaVersion(description: string): Promise<ReplicaState> {
         const {done, value} = await withTimeout(
           versions.next(),
@@ -330,6 +460,278 @@ async function expectReplicaMatchesPG({
   );
 
   expect(sqliteResult).toEqualPg(pgResult);
+}
+
+class ProtocolRows {
+  readonly #names = serverToClient(schema.tables);
+  readonly #rows = new Map<string, Map<string, Row>>();
+
+  apply(poke: readonly ProtocolDownstream[]) {
+    for (const msg of poke) {
+      if (msg[0] !== 'pokePart') {
+        continue;
+      }
+      for (const patch of msg[1].rowsPatch ?? []) {
+        this.#applyRowPatch(patch);
+      }
+    }
+  }
+
+  run(query: AnyQuery) {
+    const sources = Object.fromEntries(
+      Object.entries(schema.tables).map(([table, tableSchema]) => {
+        const src = new MemorySource(
+          tableSchema.name,
+          tableSchema.columns,
+          tableSchema.primaryKey,
+        );
+        for (const row of this.#rows.get(table)?.values() ?? []) {
+          consume(src.push(makeSourceChangeAdd(row)));
+        }
+        return [table, src];
+      }),
+    );
+    const delegate = new TestMemoryQueryDelegate({sources});
+    return delegate.run(query);
+  }
+
+  #applyRowPatch(patch: RowPatchOp) {
+    if (patch.op === 'clear') {
+      this.#rows.clear();
+      return;
+    }
+
+    const table = this.#names.tableNameIfKnown(patch.tableName);
+    if (!table) {
+      return;
+    }
+    const rows = this.#tableRows(table);
+
+    switch (patch.op) {
+      case 'put': {
+        const row = {...this.#names.row(patch.tableName, patch.value)} as Row;
+        rows.set(primaryKeyKey(table, row), row);
+        break;
+      }
+      case 'del': {
+        const id = {...this.#names.row(patch.tableName, patch.id)} as Row;
+        rows.delete(primaryKeyKey(table, id));
+        break;
+      }
+      case 'update': {
+        const id = {...this.#names.row(patch.tableName, patch.id)} as Row;
+        const key = primaryKeyKey(table, id);
+        const existing = rows.get(key);
+        const merge =
+          patch.merge === undefined
+            ? undefined
+            : ({...this.#names.row(patch.tableName, patch.merge)} as Row);
+        const constrain = this.#names.columns(patch.tableName, patch.constrain);
+        const next: Record<string, Row[string]> = {};
+        const addConstrained = (row: Row) => {
+          for (const [column, value] of Object.entries(row)) {
+            if (!constrain?.length || constrain.includes(column)) {
+              next[column] = value;
+            }
+          }
+        };
+        if (existing) {
+          addConstrained(existing);
+        }
+        if (merge) {
+          addConstrained(merge);
+        }
+        for (const column of tableSchema(table).primaryKey) {
+          next[column] ??= id[column];
+        }
+        rows.set(key, next as Row);
+        break;
+      }
+    }
+  }
+
+  #tableRows(table: string): Map<string, Row> {
+    let rows = this.#rows.get(table);
+    if (!rows) {
+      rows = new Map();
+      this.#rows.set(table, rows);
+    }
+    return rows;
+  }
+}
+
+class ProtocolFuzzerClient {
+  readonly #rows = new ProtocolRows();
+  readonly #viewSyncer: ViewSyncerService;
+  readonly #ctx: SyncContext;
+  readonly #queue: Queue<ProtocolDownstream>;
+
+  private constructor(
+    viewSyncer: ViewSyncerService,
+    ctx: SyncContext,
+    queue: Queue<ProtocolDownstream>,
+  ) {
+    this.#viewSyncer = viewSyncer;
+    this.#ctx = ctx;
+    this.#queue = queue;
+  }
+
+  static connect(viewSyncer: ViewSyncerService): ProtocolFuzzerClient {
+    const ctx: SyncContext = {
+      clientID: PROTOCOL_CLIENT_ID,
+      profileID: 'p0000g00000000001',
+      wsID: PROTOCOL_WS_ID,
+      baseCookie: null,
+      protocolVersion: PROTOCOL_VERSION,
+      httpCookie: undefined,
+      origin: undefined,
+      userID: 'user-1',
+      auth: undefined,
+    };
+    const selector = {clientID: ctx.clientID, wsID: ctx.wsID};
+    viewSyncer.connContextManager.registerConnection(
+      selector,
+      {
+        protocolVersion: ctx.protocolVersion,
+        clientID: ctx.clientID,
+        clientGroupID: PROTOCOL_CLIENT_GROUP_ID,
+        profileID: ctx.profileID,
+        baseCookie: ctx.baseCookie,
+        timestamp: Date.now(),
+        lmID: 0,
+        wsID: ctx.wsID,
+        debugPerf: false,
+        auth: undefined,
+        userID: ctx.userID,
+        initConnectionMsg: undefined,
+        httpCookie: ctx.httpCookie,
+        origin: ctx.origin,
+      },
+      ctx.auth,
+    );
+    viewSyncer.connContextManager.initConnection(selector, {
+      desiredQueriesPatch: [],
+      clientSchema: chinookClientSchema,
+    });
+    const source = viewSyncer.initConnection(selector, [
+      'initConnection',
+      {
+        desiredQueriesPatch: [],
+        clientSchema: chinookClientSchema,
+      },
+    ]);
+    const queue = new Queue<ProtocolDownstream>();
+
+    void (async () => {
+      try {
+        for await (const msg of source) {
+          queue.enqueue(msg);
+        }
+      } catch (e) {
+        queue.enqueueRejection(e);
+      }
+    })();
+
+    return new ProtocolFuzzerClient(viewSyncer, ctx, queue);
+  }
+
+  async subscribe(query: AnyQuery, label: string) {
+    const ast = asQueryInternals(query).ast;
+    const hash = hashOfAST(ast);
+    const desiredQueriesPatch: UpQueriesPatch = [
+      {op: 'clear'},
+      {op: 'put', hash, ast},
+    ];
+    await this.#viewSyncer.changeDesiredQueries(
+      {clientID: this.#ctx.clientID, wsID: this.#ctx.wsID},
+      ['changeDesiredQueries', {desiredQueriesPatch}],
+    );
+    await this.#drainUntil(
+      poke =>
+        poke.some(
+          msg =>
+            msg[0] === 'pokePart' &&
+            msg[1].gotQueriesPatch?.some(
+              patch => patch.op === 'put' && patch.hash === hash,
+            ),
+        ),
+      `protocol got query ${label}`,
+    );
+  }
+
+  async waitForCookieAtOrBeyond(
+    stateVersion: string,
+    description: string,
+  ): Promise<void> {
+    await this.#drainUntil(poke => {
+      const cookie = pokeEndCookie(poke);
+      return (
+        cookie !== undefined &&
+        cmpVersions(versionFromString(cookie), {stateVersion}) >= 0
+      );
+    }, `protocol poke for ${description}`);
+  }
+
+  run(query: AnyQuery) {
+    return this.#rows.run(query);
+  }
+
+  async #drainUntil(
+    done: (poke: readonly ProtocolDownstream[]) => boolean,
+    description: string,
+  ) {
+    await withTimeout(
+      (async () => {
+        for (;;) {
+          const poke = await this.#nextPoke();
+          this.#rows.apply(poke);
+          if (done(poke)) {
+            return;
+          }
+        }
+      })(),
+      description,
+    );
+  }
+
+  async #nextPoke(): Promise<ProtocolDownstream[]> {
+    const poke: ProtocolDownstream[] = [];
+    for (;;) {
+      const msg = await this.#queue.dequeue();
+      switch (msg[0]) {
+        case 'pokeStart':
+        case 'pokePart':
+        case 'pokeEnd':
+          poke.push(msg);
+          if (msg[0] === 'pokeEnd') {
+            return poke;
+          }
+          break;
+        case 'transformError':
+        case 'error':
+          throw new Error(`unexpected protocol message ${JSON.stringify(msg)}`);
+      }
+    }
+  }
+}
+
+function pokeEndCookie(
+  poke: readonly ProtocolDownstream[],
+): string | undefined {
+  for (const msg of poke) {
+    if (msg[0] === 'pokeEnd' && !msg[1].cancel) {
+      return msg[1].cookie;
+    }
+  }
+  return undefined;
+}
+
+function primaryKeyKey(table: string, row: Row): string {
+  return JSON.stringify(
+    tableSchema(table).primaryKey.map(column =>
+      definedRowValue(table, column, row),
+    ),
+  );
 }
 
 function tableSchema(table: string): TableSchema {
@@ -386,7 +788,9 @@ function primaryKeyConditions(upstream: PostgresDB, table: string, row: Row) {
 
 function mutationDescription(mutation: Mutation): string {
   const pks = tableSchema(mutation.table)
-    .primaryKey.map(column => `${column}=${String(mutation.row[column])}`)
+    .primaryKey.map(
+      column => `${column}=${JSON.stringify(mutation.row[column])}`,
+    )
     .join(',');
   return `${mutation.kind} ${mutation.table}(${pks})`;
 }
@@ -395,7 +799,11 @@ function expectSingleAffectedRow(
   result: readonly unknown[],
   description: string,
 ) {
-  expect(result.length, description).toBe(1);
+  if (result.length !== 1) {
+    throw new Error(
+      `${description}: expected exactly one affected row, got ${result.length}`,
+    );
+  }
 }
 
 async function applyWriteFuzzMutation(
@@ -449,6 +857,52 @@ async function checkWriteFuzzCases(
       } catch (e) {
         const msg = e instanceof Error ? (e.stack ?? e.message) : String(e);
         throw new Error(`write fuzz divergence after ${description}\n${msg}`);
+      }
+    }
+  }
+  return writeCount;
+}
+
+async function expectProtocolMatchesPG({
+  pg,
+  client,
+  query,
+}: {
+  pg: TestPGQueryDelegate;
+  client: ProtocolFuzzerClient;
+  query: AnyQuery;
+}) {
+  const pgResult = await pg.run(query);
+  const protocolResult = await client.run(query);
+
+  expect(protocolResult).toEqualPg(pgResult);
+}
+
+async function checkProtocolWriteFuzzCases(
+  harness: Awaited<ReturnType<typeof startZeroCacheReplica>>,
+  client: ProtocolFuzzerClient,
+): Promise<number> {
+  let writeCount = 0;
+  for (const c of WRITE_FUZZ_CASES) {
+    await client.subscribe(c.query, c.label);
+    await expectProtocolMatchesPG({...harness, client, query: c.query});
+    for (let i = 0; i < c.mutations.length; i++) {
+      const mutation = c.mutations[i];
+      const description = `${c.label}#${i}:${mutationDescription(mutation)}`;
+      await applyWriteFuzzMutation(harness.upstream, mutation);
+      writeCount += 1;
+      const state = await harness.waitForReplicaVersion(description);
+      if (state.watermark === undefined) {
+        throw new Error(`missing replica watermark after ${description}`);
+      }
+      await client.waitForCookieAtOrBeyond(state.watermark, description);
+      try {
+        await expectProtocolMatchesPG({...harness, client, query: c.query});
+      } catch (e) {
+        const msg = e instanceof Error ? (e.stack ?? e.message) : String(e);
+        throw new Error(
+          `protocol write fuzz divergence after ${description}\n${msg}`,
+        );
       }
     }
   }
@@ -528,6 +982,64 @@ test(
       await deleteTrack(harness.upstream);
       await harness.waitForReplicaVersion('track delete');
       await expectReplicaMatchesPG({...harness, query});
+    } finally {
+      await harness.cleanup();
+    }
+  },
+);
+
+test(
+  `zero-cache protocol client stays query-equivalent to PostgreSQL for ${PROTOCOL_QUERY_CASES.length} generated query cases, ${WRITE_FUZZ_WRITE_COUNT} generated writes, and replicated writes`,
+  {timeout: TIMEOUT_MS},
+  async ({testDBs}: PgTest) => {
+    const harness = await startZeroCacheReplica(testDBs);
+    try {
+      const client = await harness.startProtocolClient();
+      const report = await checkQueryCases(
+        PROTOCOL_QUERY_CASES,
+        async (query, label) => {
+          await client.subscribe(query, label);
+          await expectProtocolMatchesPG({...harness, client, query});
+        },
+      );
+      expect(report.total).toBeGreaterThan(100);
+      panicIfFailed(report, 8);
+
+      expect(WRITE_FUZZ_CASES.length).toBeGreaterThan(10);
+      const writeCount = await checkProtocolWriteFuzzCases(harness, client);
+      expect(writeCount).toBe(WRITE_FUZZ_WRITE_COUNT);
+
+      const query = builder.album
+        .where('id', '=', 20)
+        .related('tracks', t => t.orderBy('id', 'asc'))
+        .one();
+
+      await client.subscribe(query, 'replicated writes');
+      await expectProtocolMatchesPG({...harness, client, query});
+
+      await insertTrack(harness.upstream);
+      let state = await harness.waitForReplicaVersion('track insert');
+      if (state.watermark === undefined) {
+        throw new Error('missing replica watermark after track insert');
+      }
+      await client.waitForCookieAtOrBeyond(state.watermark, 'track insert');
+      await expectProtocolMatchesPG({...harness, client, query});
+
+      await moveTrackOutOfQuery(harness.upstream);
+      state = await harness.waitForReplicaVersion('track update');
+      if (state.watermark === undefined) {
+        throw new Error('missing replica watermark after track update');
+      }
+      await client.waitForCookieAtOrBeyond(state.watermark, 'track update');
+      await expectProtocolMatchesPG({...harness, client, query});
+
+      await deleteTrack(harness.upstream);
+      state = await harness.waitForReplicaVersion('track delete');
+      if (state.watermark === undefined) {
+        throw new Error('missing replica watermark after track delete');
+      }
+      await client.waitForCookieAtOrBeyond(state.watermark, 'track delete');
+      await expectProtocolMatchesPG({...harness, client, query});
     } finally {
       await harness.cleanup();
     }
