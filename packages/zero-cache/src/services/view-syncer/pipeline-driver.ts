@@ -147,6 +147,7 @@ type AdvanceContext = {
   readonly timer: Timer;
   readonly totalHydrationTimeMs: number;
   readonly numChanges: number;
+  currentChangeStartMs: number | undefined;
   pos: number;
 };
 
@@ -219,6 +220,16 @@ function shouldFinishLateAdvancement(
   return (
     numChanges > 0 &&
     processedChanges / numChanges >= LATE_ADVANCEMENT_FINISH_PROGRESS
+  );
+}
+
+function shouldResetSlowCurrentChange(
+  currentChangeElapsedMs: number,
+  totalHydrationTimeMs: number,
+): boolean {
+  return (
+    currentChangeElapsedMs > MIN_ADVANCEMENT_TIME_LIMIT_MS &&
+    currentChangeElapsedMs > advancementResetTimeLimitMs(totalHydrationTimeMs)
   );
 }
 
@@ -936,6 +947,7 @@ export class PipelineDriver {
       timer,
       totalHydrationTimeMs,
       numChanges,
+      currentChangeStartMs: undefined,
       pos: 0,
     };
     this.#lc.debug?.(
@@ -953,50 +965,58 @@ export class PipelineDriver {
           yield 'yield';
         }
         const start = timer.totalElapsed();
+        const advanceContext = must(this.#advanceContext);
+        advanceContext.currentChangeStartMs = start;
 
         let type;
         try {
-          const tableSource = this.#tables.get(table);
-          if (!tableSource) {
-            // no pipelines read from this table, so no need to process the change
-            continue;
-          }
-          const primaryKey = mustGetPrimaryKey(this.#primaryKeys, table);
-          let editOldRow: Row | undefined = undefined;
-          for (const prevValue of prevValues) {
-            if (
-              nextValue &&
-              deepEqual(
-                getRowKey(primaryKey, prevValue as Row) as JSONValue,
-                getRowKey(primaryKey, nextValue as Row) as JSONValue,
-              )
-            ) {
-              editOldRow = prevValue;
-            } else {
-              if (nextValue) {
-                this.#conflictRowsDeleted.add(1);
+          try {
+            const tableSource = this.#tables.get(table);
+            if (!tableSource) {
+              // no pipelines read from this table, so no need to process the change
+              continue;
+            }
+            const primaryKey = mustGetPrimaryKey(this.#primaryKeys, table);
+            let editOldRow: Row | undefined = undefined;
+            for (const prevValue of prevValues) {
+              if (
+                nextValue &&
+                deepEqual(
+                  getRowKey(primaryKey, prevValue as Row) as JSONValue,
+                  getRowKey(primaryKey, nextValue as Row) as JSONValue,
+                )
+              ) {
+                editOldRow = prevValue;
+              } else {
+                if (nextValue) {
+                  this.#conflictRowsDeleted.add(1);
+                }
+                yield* this.#push(
+                  tableSource,
+                  makeSourceChangeRemove(prevValue as Row),
+                );
               }
-              yield* this.#push(
-                tableSource,
-                makeSourceChangeRemove(prevValue as Row),
-              );
             }
-          }
-          if (nextValue) {
-            if (editOldRow) {
-              yield* this.#push(
-                tableSource,
-                makeSourceChangeEdit(nextValue as Row, editOldRow),
-              );
-            } else {
-              yield* this.#push(
-                tableSource,
-                makeSourceChangeAdd(nextValue as Row),
-              );
+            if (nextValue) {
+              if (editOldRow) {
+                yield* this.#push(
+                  tableSource,
+                  makeSourceChangeEdit(nextValue as Row, editOldRow),
+                );
+              } else {
+                yield* this.#push(
+                  tableSource,
+                  makeSourceChangeAdd(nextValue as Row),
+                );
+              }
             }
+          } finally {
+            advanceContext.pos++;
           }
+
+          this.#shouldAdvanceYieldMaybeAbortAdvance();
         } finally {
-          this.#advanceContext.pos++;
+          advanceContext.currentChangeStartMs = undefined;
         }
 
         const elapsed = timer.totalElapsed() - start;
@@ -1054,26 +1074,36 @@ export class PipelineDriver {
   }
 
   /**
-   * Cancel the advancement processing, by throwing a ResetPipelinesSignal, if
-   * it has taken longer than half the total hydration time to make it through
-   * half of the advancement, or if processing time exceeds total hydration
-   * time.  This serves as both a circuit breaker for very large transactions,
-   * as well as a bound on the amount of time the previous connection locks
-   * the inactive WAL file (as the lock prevents WAL2 from switching to the
-   * free WAL when the current one is over the size limit, which can make
-   * the WAL grow continuously and compound slowness).
-   * This is checked:
-   * 1. before starting to process each change in an advancement is processed
-   * 2. whenever a row is fetched from a TableSource during push processing
+   * Cancel advancement processing when either the whole batch projects to be
+   * more expensive than hydration, or the current source change alone exceeds
+   * the hydration budget. The late-finish exception only applies to batch-level
+   * checks; a single pathological push always resets.
    */
   #shouldAdvanceYieldMaybeAbortAdvance(): boolean {
     const {
+      currentChangeStartMs,
       pos,
       numChanges,
       timer: advanceTimer,
       totalHydrationTimeMs,
     } = must(this.#advanceContext);
     const elapsed = advanceTimer.totalElapsed();
+    const currentChangeElapsedMs =
+      currentChangeStartMs === undefined
+        ? undefined
+        : elapsed - currentChangeStartMs;
+    if (
+      currentChangeElapsedMs !== undefined &&
+      shouldResetSlowCurrentChange(currentChangeElapsedMs, totalHydrationTimeMs)
+    ) {
+      this.#throwSlowCurrentChangeReset(
+        pos,
+        numChanges,
+        elapsed,
+        currentChangeElapsedMs,
+        totalHydrationTimeMs,
+      );
+    }
     const projectedTotalTimeMs = projectedAdvancementTimeMs(
       elapsed,
       pos,
@@ -1112,6 +1142,22 @@ export class PipelineDriver {
       );
     }
     return advanceTimer.elapsedLap() > this.#yieldThresholdMs();
+  }
+
+  #throwSlowCurrentChangeReset(
+    pos: number,
+    numChanges: number,
+    elapsed: number,
+    currentChangeElapsedMs: number,
+    totalHydrationTimeMs: number,
+  ): never {
+    throw new ResetPipelinesSignal(
+      `Advancement exceeded timeout processing current change at ${pos} of ` +
+        `${numChanges} changes after ${currentChangeElapsedMs} ms ` +
+        `(${elapsed} ms total). Advancement time limited based on total ` +
+        `hydration time of ${totalHydrationTimeMs} ms.`,
+      'advancement-timeout',
+    );
   }
 
   #throwProjectedAdvancementReset(
