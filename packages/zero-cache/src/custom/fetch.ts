@@ -16,6 +16,10 @@ import {
   isProtocolError,
   type ErrorBody,
 } from '../../../zero-protocol/src/error.ts';
+import {
+  pushErrorSchema,
+  type PushError,
+} from '../../../zero-protocol/src/push.ts';
 import type {ConnectionContext} from '../services/view-syncer/connection-context-manager.ts';
 import {ProtocolErrorWithLevel} from '../types/error-with-level.ts';
 import {upstreamSchema, type ShardID} from '../types/shards.ts';
@@ -256,20 +260,20 @@ export async function fetchFromAPIServer<TValidator extends Type>(
           const result = validator.parse(json, {
             mode: 'passthrough',
           });
-          const apiErrorBody = apiErrorBodyFromResult(result);
-          if (apiErrorBody) {
+          const apiError = apiErrorFromResult(result);
+          if (apiError) {
             recordApiAttempt(performance.now() - attemptStart, metricAttrs, {
               attempt,
               result: 'api_error',
               willRetry: false,
               response,
-              errorBody: apiErrorBody,
+              errorBody: apiError,
             });
             requestMetricAttrs = apiRequestMetricAttrs(metricAttrs, {
               result: 'api_error',
               attemptCount,
               response,
-              errorBody: apiErrorBody,
+              errorBody: apiError,
             });
           } else {
             recordApiAttempt(performance.now() - attemptStart, metricAttrs, {
@@ -450,9 +454,43 @@ function apiFailedBody(
       };
 }
 
-function apiErrorBodyFromResult(result: unknown): ErrorBody | undefined {
+type ApiErrorMetricBody = {
+  kind: ErrorBody['kind'];
+  reason?: string | undefined;
+};
+
+function apiErrorFromResult(result: unknown): ApiErrorMetricBody | undefined {
   const parsed = errorBodySchema.try(result, {mode: 'passthrough'});
-  return parsed.ok ? parsed.value : undefined;
+  if (parsed.ok) {
+    return parsed.value;
+  }
+
+  if (Array.isArray(result) && result[0] === 'transformFailed') {
+    const legacyTransformFailed = errorBodySchema.try(result[1], {
+      mode: 'passthrough',
+    });
+    return legacyTransformFailed.ok ? legacyTransformFailed.value : undefined;
+  }
+
+  const legacyPushError = pushErrorSchema.try(result, {mode: 'passthrough'});
+  return legacyPushError.ok
+    ? {
+        kind: ErrorKind.PushFailed,
+        reason: legacyPushErrorReason(legacyPushError.value.error),
+      }
+    : undefined;
+}
+
+function legacyPushErrorReason(error: PushError['error']): string {
+  switch (error) {
+    case 'http':
+      return ErrorReason.HTTP;
+    case 'unsupportedPushVersion':
+      return ErrorReason.UnsupportedPushVersion;
+    case 'unsupportedSchemaVersion':
+    case 'zeroPusher':
+      return ErrorReason.Internal;
+  }
 }
 
 type ApiResponseErrorMetricAttrs = Pick<
@@ -464,7 +502,7 @@ type ApiRequestMetricAttrsOptions = {
   result: ApiRequestResult;
   attemptCount: number;
   response?: Response | undefined;
-  errorBody?: ErrorBody | undefined;
+  errorBody?: ApiErrorMetricBody | undefined;
 };
 
 type ApiAttemptMetricAttrsOptions = {
@@ -472,7 +510,7 @@ type ApiAttemptMetricAttrsOptions = {
   result: ApiAttemptResult;
   willRetry: boolean;
   response?: Response | undefined;
-  errorBody?: ErrorBody | undefined;
+  errorBody?: ApiErrorMetricBody | undefined;
 };
 
 function apiRequestMetricAttrs(
@@ -489,7 +527,7 @@ function apiRequestMetricAttrs(
 
 function apiResponseErrorMetricAttrs(
   response: Response | undefined,
-  errorBody: ErrorBody | undefined,
+  errorBody: ApiErrorMetricBody | undefined,
 ): ApiResponseErrorMetricAttrs {
   const attrs: ApiResponseErrorMetricAttrs = {};
 
@@ -500,7 +538,7 @@ function apiResponseErrorMetricAttrs(
 
   if (errorBody) {
     attrs.error_kind = errorBody.kind;
-    if ('reason' in errorBody) {
+    if (errorBody.reason !== undefined) {
       attrs.error_reason = errorBody.reason;
     }
   }

@@ -510,6 +510,40 @@ describe('fetchFromAPIServer', () => {
     );
   });
 
+  test('records legacy push error responses as api_error', async () => {
+    const responsePayload = {
+      error: 'unsupportedPushVersion',
+      mutationIDs: [{clientID: 'client-1', id: 1}],
+    } as const;
+    mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify(responsePayload), {status: 200}),
+    );
+
+    const result = await fetchWithContext(mutateResponseSchema, 'push', {
+      operation: 'mutate',
+    });
+
+    expect(result).toEqual(responsePayload);
+    expect(metrics.attemptsAdd).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({
+        result: 'api_error',
+        http_status_code: 200,
+        error_kind: ErrorKind.PushFailed,
+        error_reason: ErrorReason.UnsupportedPushVersion,
+      }),
+    );
+    expect(metrics.requestsAdd).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({
+        result: 'api_error',
+        attempt_count: 1,
+        error_kind: ErrorKind.PushFailed,
+        error_reason: ErrorReason.UnsupportedPushVersion,
+      }),
+    );
+  });
+
   test('preserves unknown fields from successful API responses', async () => {
     mockFetch.mockResolvedValueOnce(
       new Response(JSON.stringify({success: true, ignored: 'value'}), {
@@ -547,6 +581,45 @@ describe('fetchFromAPIServer', () => {
     });
 
     expect(result).toEqual(legacyResponse);
+  });
+
+  test('records legacy transformFailed responses as api_error', async () => {
+    const transformFailedBody = {
+      kind: ErrorKind.TransformFailed,
+      origin: ErrorOrigin.Server,
+      reason: ErrorReason.Parse,
+      message: 'Unable to transform query',
+      queryIDs: ['q1'],
+    } as const;
+    const legacyResponse = ['transformFailed', transformFailedBody] as const;
+
+    mockFetch.mockResolvedValueOnce(
+      new Response(JSON.stringify(legacyResponse), {status: 200}),
+    );
+
+    const result = await fetchWithContext(queryResponseSchema, 'transform', {
+      operation: 'query',
+    });
+
+    expect(result).toEqual(legacyResponse);
+    expect(metrics.attemptsAdd).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({
+        result: 'api_error',
+        http_status_code: 200,
+        error_kind: ErrorKind.TransformFailed,
+        error_reason: ErrorReason.Parse,
+      }),
+    );
+    expect(metrics.requestsAdd).toHaveBeenCalledWith(
+      1,
+      expect.objectContaining({
+        result: 'api_error',
+        attempt_count: 1,
+        error_kind: ErrorKind.TransformFailed,
+        error_reason: ErrorReason.Parse,
+      }),
+    );
   });
 
   test('preserves existing query params when appending reserved ones', async () => {
