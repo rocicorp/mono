@@ -166,6 +166,8 @@ export type Timer = {
  */
 const MIN_ADVANCEMENT_TIME_LIMIT_MS = 50;
 const MIN_PROJECTED_ADVANCEMENT_SAMPLE_CHANGES = 8;
+const PROJECTED_ADVANCEMENT_SAMPLE_FRACTION = 0.25;
+const MAX_PROJECTED_ADVANCEMENT_SAMPLE_CHANGES = 50;
 const MIN_PROJECTED_ADVANCEMENT_SAMPLE_MS = 5;
 const MIN_PROJECTED_ADVANCEMENT_CHANGES = 16;
 const PROJECTED_ADVANCEMENT_RESET_MULTIPLIER = 1.5;
@@ -190,6 +192,16 @@ function advancementResetTimeLimitMs(totalHydrationTimeMs: number): number {
   return Math.max(totalHydrationTimeMs, 1);
 }
 
+function minProjectedAdvancementSampleChanges(numChanges: number): number {
+  return Math.max(
+    MIN_PROJECTED_ADVANCEMENT_SAMPLE_CHANGES,
+    Math.min(
+      MAX_PROJECTED_ADVANCEMENT_SAMPLE_CHANGES,
+      Math.ceil(numChanges * PROJECTED_ADVANCEMENT_SAMPLE_FRACTION),
+    ),
+  );
+}
+
 function shouldResetProjectedAdvancement(
   elapsedMs: number,
   projectedTotalTimeMs: number | undefined,
@@ -200,7 +212,7 @@ function shouldResetProjectedAdvancement(
   if (
     projectedTotalTimeMs === undefined ||
     numChanges < MIN_PROJECTED_ADVANCEMENT_CHANGES ||
-    processedChanges < MIN_PROJECTED_ADVANCEMENT_SAMPLE_CHANGES ||
+    processedChanges < minProjectedAdvancementSampleChanges(numChanges) ||
     elapsedMs < MIN_PROJECTED_ADVANCEMENT_SAMPLE_MS
   ) {
     return false;

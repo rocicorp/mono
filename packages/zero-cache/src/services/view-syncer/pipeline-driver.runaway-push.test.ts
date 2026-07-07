@@ -264,12 +264,12 @@ describe('view-syncer/pipeline-driver', () => {
     expect(changeCount).toEqual(5);
   });
 
-  test('projected timeout resets large advancement before minimum timeout', () => {
+  test('projected timeout waits for a meaningful fraction of the advancement', () => {
     pipelines.init(clientSchema);
     [
       ...pipelines.addQuery('hash1', 'queryID1', ISSUES_WITH_CREATOR, {
-        totalElapsed: () => 100,
-        elapsedLap: () => 100,
+        totalElapsed: () => 25,
+        elapsedLap: () => 25,
       }),
     ];
 
@@ -284,14 +284,14 @@ describe('view-syncer/pipeline-driver', () => {
     expect(() => {
       for (const _ of pipelines.advance({
         elapsedLap: () => 0,
-        totalElapsed: () => changeCount * 4,
+        totalElapsed: () => changeCount * 1.6,
       }).changes) {
         changeCount++;
       }
     }).toThrowErrorMatchingInlineSnapshot(
-      `[ResetPipelinesSignal: Advancement projected to exceed hydration time at 8 of 100 changes after 32 ms. Projected total advancement time is 400 ms. Advancement time limited based on total hydration time of 100 ms.]`,
+      `[ResetPipelinesSignal: Advancement projected to exceed hydration time at 25 of 100 changes after 40 ms. Projected total advancement time is 160 ms. Advancement time limited based on total hydration time of 25 ms.]`,
     );
-    expect(changeCount).toEqual(8);
+    expect(changeCount).toEqual(25);
   });
 
   test('does not timeout once advancement is mostly complete', () => {
