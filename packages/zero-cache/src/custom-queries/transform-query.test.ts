@@ -200,6 +200,7 @@ describe('CustomQueryTransformer', () => {
   function expectLastTransformFetch(
     queries: Iterable<CustomQueryRecord>,
     options: Parameters<typeof expectContext>[0] = {},
+    operation: 'query' | 'validate_auth' = 'query',
   ) {
     expect(mockFetchFromAPIServer).toHaveBeenLastCalledWith(
       expect.anything(),
@@ -208,6 +209,7 @@ describe('CustomQueryTransformer', () => {
       expectContext(options),
       mockShard,
       transformRequest(queries),
+      {operation},
     );
   }
 
@@ -370,7 +372,7 @@ describe('CustomQueryTransformer', () => {
     const transformer = makeTransformer();
     const result = await transformer.validate(headerOptions, undefined);
 
-    expectLastTransformFetch([]);
+    expectLastTransformFetch([], {}, 'validate_auth');
     expect(result).toEqual({
       kind: 'QueryResponse',
       validation: serverValidated('user-123'),

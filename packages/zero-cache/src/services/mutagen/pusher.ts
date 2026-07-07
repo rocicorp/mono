@@ -155,6 +155,7 @@ export class PusherService implements Service, Pusher {
         connCtx,
         {appID: this.#config.app.id, shardNum: this.#config.shard.num},
         cleanupBody,
+        {operation: 'cleanup', cleanupType: 'single'},
       );
     } catch (e) {
       this.#lc.warn?.('Failed to send cleanup mutation', {
@@ -214,6 +215,7 @@ export class PusherService implements Service, Pusher {
         connCtx,
         {appID: this.#config.app.id, shardNum: this.#config.shard.num},
         cleanupBody,
+        {operation: 'cleanup', cleanupType: 'bulk'},
       );
     } catch (e) {
       this.#lc.warn?.('Failed to send bulk cleanup mutation', {
@@ -527,6 +529,7 @@ class PushWorker {
           shardNum: this.#config.shard.num,
         },
         entry.push,
+        {operation: 'mutate'},
       );
       if (
         ('kind' in response && response.kind === ErrorKind.PushFailed) ||
