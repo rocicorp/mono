@@ -3,6 +3,8 @@ import {resolver} from '@rocicorp/resolver';
 import type {WatermarkedChange} from './change-streamer-service.ts';
 import type {Subscriber} from './subscriber.ts';
 
+export type BroadcastReleaseMode = 'all-subscribers' | 'consensus-timeout';
+
 /**
  * Initiates and tracks the progress of a change broadcasted to
  * a set of subscribers.
@@ -32,6 +34,7 @@ export class Broadcast {
   readonly #completed: Completed[];
   readonly #done = resolver();
   #isDone = false;
+  #releaseMode: BroadcastReleaseMode | undefined;
 
   readonly #watermark: string;
   readonly #majority: number;
@@ -59,7 +62,7 @@ export class Broadcast {
 
     // set done if there are no subscribers (mainly for tests)
     if (this.#pending.size === 0) {
-      this.#setDone();
+      this.#setDone('all-subscribers');
     }
   }
 
@@ -68,12 +71,16 @@ export class Broadcast {
     this.#completed.push({sub, changes, elapsed});
     this.#pending.delete(sub);
     if (this.#pending.size === 0) {
-      this.#setDone();
+      this.#setDone('all-subscribers');
     }
   }
 
-  #setDone() {
+  #setDone(releaseMode: BroadcastReleaseMode) {
+    if (this.#isDone) {
+      return;
+    }
     this.#isDone = true;
+    this.#releaseMode = releaseMode;
     this.#done.resolve();
   }
 
@@ -83,6 +90,10 @@ export class Broadcast {
 
   get done(): Promise<void> {
     return this.#done.promise;
+  }
+
+  get releaseMode(): BroadcastReleaseMode {
+    return this.#releaseMode ?? 'all-subscribers';
   }
 
   /**
@@ -159,6 +170,9 @@ export class Broadcast {
     flowControlConsensusPaddingMs: number,
     now: number,
   ) {
+    if (this.#isDone) {
+      return true;
+    }
     if (this.#pending.size === 0) {
       return true;
     }
@@ -182,7 +196,7 @@ export class Broadcast {
         `continuing with ${this.#pending.size} subscriber(s) still pending`,
         elapsed,
       );
-      this.#setDone();
+      this.#setDone('consensus-timeout');
       return true;
     }
     return false;
