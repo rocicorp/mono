@@ -258,7 +258,12 @@ export default async function runWorker(
 }
 
 if (parentWorker) {
+  const parent = parentWorker;
+  const [dbPath, failpointArg] = process.argv.slice(2);
+  if (!dbPath) {
+    throw new Error('replication resumption child requires a replica db path');
+  }
   void exitAfter(lc, () =>
-    runWorker(parentWorker, process.env, ...process.argv.slice(2)),
+    runWorker(parent, process.env, dbPath, failpointArg),
   );
 }
