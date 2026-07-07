@@ -34,6 +34,8 @@ import {
 import {tracer} from './tracer.ts';
 
 const FLUSH_TYPE_ATTRIBUTE = 'flush.type';
+const RESULT_ATTRIBUTE = 'result';
+const ERROR_KIND_ATTRIBUTE = 'error.kind';
 
 /**
  * The RowRecordCache is an in-memory cache of the `cvr.rows` tables that
@@ -114,6 +116,11 @@ export class RowRecordCache {
     'sync',
     'cvr.rows-flushed',
     'Number of (changed) rows flushed to a CVR',
+  );
+  readonly #cvrFlushes = getOrCreateCounter(
+    'sync',
+    'cvr.flush',
+    'CVR flush attempts, labeled by result and flush.type.',
   );
 
   constructor(
@@ -283,6 +290,10 @@ export class RowRecordCache {
           `flushed ${rows} rows@${versionString(rowsVersion)} (${elapsed} ms)`,
         );
         this.#recordAsyncFlushStats(rows, elapsed);
+        this.#cvrFlushes.add(1, {
+          [RESULT_ATTRIBUTE]: 'success',
+          [FLUSH_TYPE_ATTRIBUTE]: 'async',
+        });
         this.#flushedRowsVersion = rowsVersion;
         // Note: apply() may have called while the transaction was committing,
         //       which will result in looping to commit the next #pendingRowsVersion.
@@ -294,6 +305,11 @@ export class RowRecordCache {
       this.#flushing = null;
     } catch (e) {
       this.#lc.info?.(`row record flush failed`, e);
+      this.#cvrFlushes.add(1, {
+        [RESULT_ATTRIBUTE]: 'error',
+        [FLUSH_TYPE_ATTRIBUTE]: 'async',
+        [ERROR_KIND_ATTRIBUTE]: 'error',
+      });
       flushing.reject(e);
       this.#failService(e);
     }
