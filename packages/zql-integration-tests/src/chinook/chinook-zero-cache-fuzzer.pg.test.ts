@@ -164,6 +164,10 @@ const PROTOCOL_QUERY_CASES = [
 ];
 
 type ChinookSchema = typeof schema;
+type ProtocolQueryCase = {
+  readonly label: string;
+  readonly query: AnyQuery;
+};
 
 function selectWriteFuzzSkeletons(
   skeletons: readonly Skeleton[],
@@ -636,27 +640,81 @@ class ProtocolFuzzerClient {
   }
 
   async subscribe(query: AnyQuery, label: string) {
-    const ast = asQueryInternals(query).ast;
-    const hash = hashOfAST(ast);
-    const desiredQueriesPatch: UpQueriesPatch = [
-      {op: 'clear'},
-      {op: 'put', hash, ast},
-    ];
+    await this.setQueries([{label, query}], label);
+  }
+
+  async setQueries(cases: readonly ProtocolQueryCase[], label: string) {
+    const puts = cases.map(c => putPatchFor(c.query));
+    const desiredQueriesPatch: UpQueriesPatch = [{op: 'clear'}, ...puts];
+    await this.#changeDesiredQueries(
+      desiredQueriesPatch,
+      puts.map(p => p.hash),
+      [],
+      `protocol set queries ${label}`,
+    );
+  }
+
+  async changeQueries({
+    put = [],
+    del = [],
+    label,
+  }: {
+    put?: readonly ProtocolQueryCase[] | undefined;
+    del?: readonly ProtocolQueryCase[] | undefined;
+    label: string;
+  }) {
+    const puts = put.map(c => putPatchFor(c.query));
+    const dels = del.map(c => ({op: 'del' as const, hash: hashFor(c.query)}));
+    await this.#changeDesiredQueries(
+      [...dels, ...puts],
+      puts.map(p => p.hash),
+      dels.map(p => p.hash),
+      `protocol change queries ${label}`,
+    );
+  }
+
+  async #changeDesiredQueries(
+    desiredQueriesPatch: UpQueriesPatch,
+    expectGotPuts: readonly string[],
+    expectGotDels: readonly string[],
+    description: string,
+  ) {
     await this.#viewSyncer.changeDesiredQueries(
       {clientID: this.#ctx.clientID, wsID: this.#ctx.wsID},
       ['changeDesiredQueries', {desiredQueriesPatch}],
     );
-    await this.#drainUntil(
-      poke =>
-        poke.some(
-          msg =>
-            msg[0] === 'pokePart' &&
-            msg[1].gotQueriesPatch?.some(
-              patch => patch.op === 'put' && patch.hash === hash,
-            ),
-        ),
-      `protocol got query ${label}`,
+    await this.#waitForGotQueryPatches(
+      expectGotPuts,
+      expectGotDels,
+      description,
     );
+  }
+
+  async #waitForGotQueryPatches(
+    expectPuts: readonly string[],
+    expectDels: readonly string[],
+    description: string,
+  ) {
+    const seenPuts = new Set<string>();
+    const seenDels = new Set<string>();
+    await this.#drainUntil(poke => {
+      for (const msg of poke) {
+        if (msg[0] !== 'pokePart') {
+          continue;
+        }
+        for (const patch of msg[1].gotQueriesPatch ?? []) {
+          if (patch.op === 'put') {
+            seenPuts.add(patch.hash);
+          } else if (patch.op === 'del') {
+            seenDels.add(patch.hash);
+          }
+        }
+      }
+      return (
+        expectPuts.every(hash => seenPuts.has(hash)) &&
+        expectDels.every(hash => seenDels.has(hash))
+      );
+    }, description);
   }
 
   async waitForCookieAtOrBeyond(
@@ -724,6 +782,15 @@ function pokeEndCookie(
     }
   }
   return undefined;
+}
+
+function hashFor(query: AnyQuery): string {
+  return hashOfAST(asQueryInternals(query).ast);
+}
+
+function putPatchFor(query: AnyQuery) {
+  const ast = asQueryInternals(query).ast;
+  return {op: 'put' as const, hash: hashOfAST(ast), ast};
 }
 
 function primaryKeyKey(table: string, row: Row): string {
@@ -878,6 +945,37 @@ async function expectProtocolMatchesPG({
   expect(protocolResult).toEqualPg(pgResult);
 }
 
+async function expectProtocolCasesMatchPG({
+  harness,
+  client,
+  cases,
+}: {
+  harness: Awaited<ReturnType<typeof startZeroCacheReplica>>;
+  client: ProtocolFuzzerClient;
+  cases: readonly ProtocolQueryCase[];
+}) {
+  for (const c of cases) {
+    try {
+      await expectProtocolMatchesPG({...harness, client, query: c.query});
+    } catch (e) {
+      const msg = e instanceof Error ? (e.stack ?? e.message) : String(e);
+      throw new Error(`protocol divergence for ${c.label}\n${msg}`);
+    }
+  }
+}
+
+async function waitForProtocolAfterReplica(
+  harness: Awaited<ReturnType<typeof startZeroCacheReplica>>,
+  client: ProtocolFuzzerClient,
+  description: string,
+) {
+  const state = await harness.waitForReplicaVersion(description);
+  if (state.watermark === undefined) {
+    throw new Error(`missing replica watermark after ${description}`);
+  }
+  await client.waitForCookieAtOrBeyond(state.watermark, description);
+}
+
 async function checkProtocolWriteFuzzCases(
   harness: Awaited<ReturnType<typeof startZeroCacheReplica>>,
   client: ProtocolFuzzerClient,
@@ -945,6 +1043,49 @@ async function deleteTrack(upstream: PostgresDB) {
   await upstream`
     DELETE FROM track
      WHERE track_id = 105`;
+}
+
+async function deleteInsertedTrack(upstream: PostgresDB) {
+  await upstream`
+    DELETE FROM track
+     WHERE track_id = 108`;
+}
+
+function albumTracksCase(id: number): ProtocolQueryCase {
+  return {
+    label: `album-${id}-tracks`,
+    query: builder.album
+      .where('id', '=', id)
+      .related('tracks', t => t.orderBy('id', 'asc'))
+      .one(),
+  };
+}
+
+function tracksInAlbumCase(albumId: number): ProtocolQueryCase {
+  return {
+    label: `tracks-in-album-${albumId}`,
+    query: builder.track
+      .where('albumId', '=', albumId)
+      .orderBy('id', 'asc')
+      .related('album'),
+  };
+}
+
+function trackByIDCase(id: number): ProtocolQueryCase {
+  return {
+    label: `track-${id}`,
+    query: builder.track.where('id', '=', id).one(),
+  };
+}
+
+function playlistTracksCase(id: number): ProtocolQueryCase {
+  return {
+    label: `playlist-${id}-tracks`,
+    query: builder.playlist
+      .where('id', '=', id)
+      .related('tracks', t => t.orderBy('id', 'asc'))
+      .one(),
+  };
 }
 
 test(
@@ -1040,6 +1181,55 @@ test(
       }
       await client.waitForCookieAtOrBeyond(state.watermark, 'track delete');
       await expectProtocolMatchesPG({...harness, client, query});
+    } finally {
+      await harness.cleanup();
+    }
+  },
+);
+
+test(
+  'zero-cache protocol client maintains multiple queries through churn and batched writes',
+  {timeout: TIMEOUT_MS},
+  async ({testDBs}: PgTest) => {
+    const harness = await startZeroCacheReplica(testDBs);
+    try {
+      const client = await harness.startProtocolClient();
+      const album20 = albumTracksCase(20);
+      const album10 = albumTracksCase(10);
+      const tracks20 = tracksInAlbumCase(20);
+      const track108 = trackByIDCase(108);
+      const track105 = trackByIDCase(105);
+      const playlist1 = playlistTracksCase(1);
+
+      let active = [album20, album10, tracks20, track108];
+      await client.setQueries(active, 'initial overlapping query set');
+      await expectProtocolCasesMatchPG({harness, client, cases: active});
+
+      await insertTrack(harness.upstream);
+      await moveTrackOutOfQuery(harness.upstream);
+      await waitForProtocolAfterReplica(
+        harness,
+        client,
+        'batched track insert and move',
+      );
+      await expectProtocolCasesMatchPG({harness, client, cases: active});
+
+      await client.changeQueries({
+        del: [album20, tracks20],
+        put: [track105, playlist1],
+        label: 'remove album 20 queries and add track 105 plus playlist 1',
+      });
+      active = [album10, track108, track105, playlist1];
+      await expectProtocolCasesMatchPG({harness, client, cases: active});
+
+      await deleteInsertedTrack(harness.upstream);
+      await deleteTrack(harness.upstream);
+      await waitForProtocolAfterReplica(
+        harness,
+        client,
+        'batched track deletes',
+      );
+      await expectProtocolCasesMatchPG({harness, client, cases: active});
     } finally {
       await harness.cleanup();
     }
