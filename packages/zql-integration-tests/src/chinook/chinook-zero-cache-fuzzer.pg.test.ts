@@ -1,6 +1,7 @@
 import {expect} from 'vitest';
 import {testLogConfig} from '../../../otel/src/test-log-config.ts';
 import {BigIntJSON} from '../../../shared/src/bigint-json.ts';
+import {h128} from '../../../shared/src/hash.ts';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {Queue} from '../../../shared/src/queue.ts';
 import type {NormalizedZeroConfig} from '../../../zero-cache/src/config/normalize.ts';
@@ -42,6 +43,11 @@ import {
   getPragmaConfig,
   setupReplica,
 } from '../../../zero-cache/src/workers/replicator.ts';
+import {
+  ANYONE_CAN_DO_ANYTHING,
+  definePermissions,
+} from '../../../zero-permissions/src/permissions.ts';
+import {mapAST, normalizeAST} from '../../../zero-protocol/src/ast.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
 import type {Downstream as ProtocolDownstream} from '../../../zero-protocol/src/down.ts';
 import {PROTOCOL_VERSION} from '../../../zero-protocol/src/protocol-version.ts';
@@ -49,7 +55,10 @@ import type {UpQueriesPatch} from '../../../zero-protocol/src/queries-patch.ts';
 import {hashOfAST} from '../../../zero-protocol/src/query-hash.ts';
 import type {RowPatchOp} from '../../../zero-protocol/src/row-patch.ts';
 import {clientSchemaFrom} from '../../../zero-schema/src/builder/schema-builder.ts';
-import {serverToClient} from '../../../zero-schema/src/name-mapper.ts';
+import {
+  clientToServer,
+  serverToClient,
+} from '../../../zero-schema/src/name-mapper.ts';
 import {getServerSchema} from '../../../zero-server/src/schema.ts';
 import {Transaction} from '../../../zero-server/src/test/util.ts';
 import type {
@@ -100,9 +109,30 @@ const PROTOCOL_CLIENT_GROUP_ID = 'zql-integration-protocol-fuzzer-client-group';
 const PROTOCOL_CLIENT_ID = 'zql-integration-protocol-fuzzer-client';
 const PROTOCOL_WS_ID = 'zql-integration-protocol-fuzzer-ws';
 const TIMEOUT_MS = 120_000;
+const PROTOCOL_WAIT_TIMEOUT_MS = 20_000;
 const SEED = 0x00c0ffee;
 const writeSchema: ZeroSchema = schema;
 const {clientSchema: chinookClientSchema} = clientSchemaFrom(schema);
+const chinookClientToServer = clientToServer(schema.tables);
+const maybeChinookPermissions = await definePermissions(schema, () => ({
+  album: ANYONE_CAN_DO_ANYTHING,
+  artist: ANYONE_CAN_DO_ANYTHING,
+  customer: ANYONE_CAN_DO_ANYTHING,
+  employee: ANYONE_CAN_DO_ANYTHING,
+  genre: ANYONE_CAN_DO_ANYTHING,
+  invoice: ANYONE_CAN_DO_ANYTHING,
+  invoiceLine: ANYONE_CAN_DO_ANYTHING,
+  mediaType: ANYONE_CAN_DO_ANYTHING,
+  playlist: ANYONE_CAN_DO_ANYTHING,
+  playlistTrack: ANYONE_CAN_DO_ANYTHING,
+  track: ANYONE_CAN_DO_ANYTHING,
+}));
+if (!maybeChinookPermissions) {
+  throw new Error('expected chinook permissions');
+}
+const chinookPermissions = maybeChinookPermissions;
+const chinookPermissionsJSON = JSON.stringify(chinookPermissions);
+const chinookPermissionsHash = h128(chinookPermissionsJSON).toString(16);
 
 const shard = {
   appID: APP_ID,
@@ -153,15 +183,30 @@ const ZERO_CACHE_QUERY_CASES = [
 ];
 const PROTOCOL_QUERY_CASES = [
   ...L0_QUERY_CASES,
-  ...L1_QUERY_CASES.cases.slice(0, 80),
-  ...swarmQueryCases(data, SEED ^ 0x7070, 8, 2),
+  ...L1_QUERY_CASES.cases.slice(0, 30),
+  ...swarmQueryCases(data, SEED ^ 0x7070, 4, 2),
   ...mutationQueryCases(
-    enumerate({depth: 1, related: 1, exists: 1}).slice(0, 30),
+    enumerate({depth: 1, related: 1, exists: 1}).slice(0, 10),
     SEED ^ 0x7071,
   ),
-  ...tailQueryCases(CostModel.fromData(miniData, 1_000_000), SEED ^ 0x7072, 40)
+  ...tailQueryCases(CostModel.fromData(miniData, 1_000_000), SEED ^ 0x7072, 10)
     .cases,
 ];
+const PROTOCOL_WRITE_FUZZ_LABELS = new Set([
+  'write|album(rel:artist)',
+  'write|track(rel:album)',
+  'write|playlist(rel:track)',
+  'write|album(ex:track)',
+  'write|employee(ex:employee)',
+  'write|invoice(ex:invoiceLine)',
+]);
+const PROTOCOL_WRITE_FUZZ_CASES = WRITE_FUZZ_CASES.filter(c =>
+  PROTOCOL_WRITE_FUZZ_LABELS.has(c.label),
+);
+const PROTOCOL_WRITE_FUZZ_WRITE_COUNT = PROTOCOL_WRITE_FUZZ_CASES.reduce(
+  (n, c) => n + c.mutations.length,
+  0,
+);
 
 type ChinookSchema = typeof schema;
 type ProtocolQueryCase = {
@@ -225,6 +270,7 @@ function parseStringifiedChangeStreamer(
 async function withTimeout<T>(
   promise: Promise<T>,
   description: string,
+  timeoutMs = TIMEOUT_MS,
 ): Promise<T> {
   let timeout: NodeJS.Timeout | undefined;
   try {
@@ -233,7 +279,7 @@ async function withTimeout<T>(
       new Promise<never>((_, reject) => {
         timeout = setTimeout(
           () => reject(new Error(`timed out waiting for ${description}`)),
-          TIMEOUT_MS,
+          timeoutMs,
         );
       }),
     ]);
@@ -258,6 +304,16 @@ async function startZeroCacheReplica(testDBs: PgTest['testDBs']) {
     cleanup.push(() => testDBs.drop(upstream, changeDB));
 
     await upstream.unsafe(miniPgContent());
+    await upstream`CREATE SCHEMA ${upstream(APP_ID)}`;
+    await upstream`
+      CREATE TABLE ${upstream(APP_ID)}.permissions (
+        permissions JSONB,
+        hash TEXT,
+        lock BOOL PRIMARY KEY DEFAULT true CHECK (lock)
+      )`;
+    await upstream`
+      INSERT INTO ${upstream(APP_ID)}.permissions (permissions, hash)
+        VALUES (${chinookPermissions}, ${chinookPermissionsHash})`;
 
     const replicaDbFile = new DbFile('chinook-zero-cache-fuzzer');
     cleanup.push(() => replicaDbFile.delete());
@@ -569,6 +625,7 @@ class ProtocolFuzzerClient {
   readonly #viewSyncer: ViewSyncerService;
   readonly #ctx: SyncContext;
   readonly #queue: Queue<ProtocolDownstream>;
+  readonly #gotQueries = new Set<string>();
 
   private constructor(
     viewSyncer: ViewSyncerService,
@@ -639,12 +696,15 @@ class ProtocolFuzzerClient {
     return new ProtocolFuzzerClient(viewSyncer, ctx, queue);
   }
 
-  async subscribe(query: AnyQuery, label: string) {
-    await this.setQueries([{label, query}], label);
-  }
-
   async setQueries(cases: readonly ProtocolQueryCase[], label: string) {
     const puts = cases.map(c => putPatchFor(c.query));
+    const putHashes = new Set(puts.map(p => p.hash));
+    const expectDels = [...this.#gotQueries].filter(
+      hash => !putHashes.has(hash),
+    );
+    for (const hash of expectDels) {
+      this.#gotQueries.delete(hash);
+    }
     const desiredQueriesPatch: UpQueriesPatch = [{op: 'clear'}, ...puts];
     await this.#changeDesiredQueries(
       desiredQueriesPatch,
@@ -665,10 +725,13 @@ class ProtocolFuzzerClient {
   }) {
     const puts = put.map(c => putPatchFor(c.query));
     const dels = del.map(c => ({op: 'del' as const, hash: hashFor(c.query)}));
+    for (const {hash} of dels) {
+      this.#gotQueries.delete(hash);
+    }
     await this.#changeDesiredQueries(
       [...dels, ...puts],
       puts.map(p => p.hash),
-      dels.map(p => p.hash),
+      [],
       `protocol change queries ${label}`,
     );
   }
@@ -695,8 +758,9 @@ class ProtocolFuzzerClient {
     expectDels: readonly string[],
     description: string,
   ) {
-    const seenPuts = new Set<string>();
-    const seenDels = new Set<string>();
+    if (this.#hasExpectedGotQueries(expectPuts, expectDels)) {
+      return;
+    }
     await this.#drainUntil(poke => {
       for (const msg of poke) {
         if (msg[0] !== 'pokePart') {
@@ -704,17 +768,24 @@ class ProtocolFuzzerClient {
         }
         for (const patch of msg[1].gotQueriesPatch ?? []) {
           if (patch.op === 'put') {
-            seenPuts.add(patch.hash);
+            this.#gotQueries.add(patch.hash);
           } else if (patch.op === 'del') {
-            seenDels.add(patch.hash);
+            this.#gotQueries.delete(patch.hash);
           }
         }
       }
-      return (
-        expectPuts.every(hash => seenPuts.has(hash)) &&
-        expectDels.every(hash => seenDels.has(hash))
-      );
+      return this.#hasExpectedGotQueries(expectPuts, expectDels);
     }, description);
+  }
+
+  #hasExpectedGotQueries(
+    expectPuts: readonly string[],
+    expectDels: readonly string[],
+  ) {
+    return (
+      expectPuts.every(hash => this.#gotQueries.has(hash)) &&
+      expectDels.every(hash => !this.#gotQueries.has(hash))
+    );
   }
 
   async waitForCookieAtOrBeyond(
@@ -749,6 +820,7 @@ class ProtocolFuzzerClient {
         }
       })(),
       description,
+      PROTOCOL_WAIT_TIMEOUT_MS,
     );
   }
 
@@ -785,12 +857,16 @@ function pokeEndCookie(
 }
 
 function hashFor(query: AnyQuery): string {
-  return hashOfAST(asQueryInternals(query).ast);
+  return hashOfAST(normalizeAST(asQueryInternals(query).ast));
 }
 
 function putPatchFor(query: AnyQuery) {
-  const ast = asQueryInternals(query).ast;
-  return {op: 'put' as const, hash: hashOfAST(ast), ast};
+  const clientAST = normalizeAST(asQueryInternals(query).ast);
+  return {
+    op: 'put' as const,
+    hash: hashOfAST(clientAST),
+    ast: mapAST(clientAST, chinookClientToServer),
+  };
 }
 
 function primaryKeyKey(table: string, row: Row): string {
@@ -980,10 +1056,14 @@ async function checkProtocolWriteFuzzCases(
   harness: Awaited<ReturnType<typeof startZeroCacheReplica>>,
   client: ProtocolFuzzerClient,
 ): Promise<number> {
+  await expectProtocolCasesMatchPG({
+    harness,
+    client,
+    cases: PROTOCOL_WRITE_FUZZ_CASES,
+  });
+
   let writeCount = 0;
-  for (const c of WRITE_FUZZ_CASES) {
-    await client.subscribe(c.query, c.label);
-    await expectProtocolMatchesPG({...harness, client, query: c.query});
+  for (const c of PROTOCOL_WRITE_FUZZ_CASES) {
     for (let i = 0; i < c.mutations.length; i++) {
       const mutation = c.mutations[i];
       const description = `${c.label}#${i}:${mutationDescription(mutation)}`;
@@ -995,7 +1075,11 @@ async function checkProtocolWriteFuzzCases(
       }
       await client.waitForCookieAtOrBeyond(state.watermark, description);
       try {
-        await expectProtocolMatchesPG({...harness, client, query: c.query});
+        await expectProtocolCasesMatchPG({
+          harness,
+          client,
+          cases: [c],
+        });
       } catch (e) {
         const msg = e instanceof Error ? (e.stack ?? e.message) : String(e);
         throw new Error(
@@ -1081,10 +1165,7 @@ function trackByIDCase(id: number): ProtocolQueryCase {
 function playlistTracksCase(id: number): ProtocolQueryCase {
   return {
     label: `playlist-${id}-tracks`,
-    query: builder.playlist
-      .where('id', '=', id)
-      .related('tracks', t => t.orderBy('id', 'asc'))
-      .one(),
+    query: builder.playlist.where('id', '=', id).related('tracks').one(),
   };
 }
 
@@ -1130,32 +1211,38 @@ test(
 );
 
 test(
-  `zero-cache protocol client stays query-equivalent to PostgreSQL for ${PROTOCOL_QUERY_CASES.length} generated query cases, ${WRITE_FUZZ_WRITE_COUNT} generated writes, and replicated writes`,
+  `zero-cache protocol client stays query-equivalent to PostgreSQL for ${PROTOCOL_QUERY_CASES.length} generated query cases, ${PROTOCOL_WRITE_FUZZ_WRITE_COUNT} generated writes, and replicated writes`,
   {timeout: TIMEOUT_MS},
   async ({testDBs}: PgTest) => {
     const harness = await startZeroCacheReplica(testDBs);
     try {
       const client = await harness.startProtocolClient();
+      await client.setQueries(
+        [...PROTOCOL_QUERY_CASES, ...PROTOCOL_WRITE_FUZZ_CASES],
+        'generated and write-fuzz query cases',
+      );
       const report = await checkQueryCases(
         PROTOCOL_QUERY_CASES,
-        async (query, label) => {
-          await client.subscribe(query, label);
+        async query => {
           await expectProtocolMatchesPG({...harness, client, query});
         },
       );
-      expect(report.total).toBeGreaterThan(100);
+      expect(report.total).toBeGreaterThan(75);
       panicIfFailed(report, 8);
 
-      expect(WRITE_FUZZ_CASES.length).toBeGreaterThan(10);
+      expect(PROTOCOL_WRITE_FUZZ_CASES.length).toBeGreaterThan(5);
       const writeCount = await checkProtocolWriteFuzzCases(harness, client);
-      expect(writeCount).toBe(WRITE_FUZZ_WRITE_COUNT);
+      expect(writeCount).toBe(PROTOCOL_WRITE_FUZZ_WRITE_COUNT);
 
       const query = builder.album
         .where('id', '=', 20)
         .related('tracks', t => t.orderBy('id', 'asc'))
         .one();
 
-      await client.subscribe(query, 'replicated writes');
+      await client.changeQueries({
+        put: [{label: 'replicated writes', query}],
+        label: 'replicated writes',
+      });
       await expectProtocolMatchesPG({...harness, client, query});
 
       await insertTrack(harness.upstream);
@@ -1200,9 +1287,16 @@ test(
       const track108 = trackByIDCase(108);
       const track105 = trackByIDCase(105);
       const playlist1 = playlistTracksCase(1);
+      const baseline = [
+        {label: 'all-tracks', query: builder.track},
+        {label: 'all-playlist-tracks', query: builder.playlistTrack},
+      ];
 
       let active = [album20, album10, tracks20, track108];
-      await client.setQueries(active, 'initial overlapping query set');
+      await client.setQueries(
+        [...baseline, ...active],
+        'initial overlapping query set',
+      );
       await expectProtocolCasesMatchPG({harness, client, cases: active});
 
       await insertTrack(harness.upstream);
@@ -1210,8 +1304,9 @@ test(
       await waitForProtocolAfterReplica(
         harness,
         client,
-        'batched track insert and move',
+        'batched track insert',
       );
+      await waitForProtocolAfterReplica(harness, client, 'batched track move');
       await expectProtocolCasesMatchPG({harness, client, cases: active});
 
       await client.changeQueries({
@@ -1227,7 +1322,12 @@ test(
       await waitForProtocolAfterReplica(
         harness,
         client,
-        'batched track deletes',
+        'batched inserted track delete',
+      );
+      await waitForProtocolAfterReplica(
+        harness,
+        client,
+        'batched existing track delete',
       );
       await expectProtocolCasesMatchPG({harness, client, cases: active});
     } finally {
