@@ -18,6 +18,7 @@ import {
   PROTOCOL_VERSION,
 } from '../../../zero-protocol/src/protocol-version.ts';
 import {upstreamSchema, type Upstream} from '../../../zero-protocol/src/up.ts';
+import {getOrCreateCounter} from '../observability/metrics.ts';
 import {
   ProtocolErrorWithLevel,
   getLogLevel,
@@ -62,6 +63,8 @@ export interface MessageHandler {
 // replication stream (which can similarly be back-pressured):
 // https://github.com/rocicorp/mono/blob/f98cb369a2dbb15650328859c732db358f187ef0/packages/zero-cache/src/services/change-source/pg/logical-replication/stream.ts#L21
 const DOWNSTREAM_MSG_INTERVAL_MS = 6_000;
+const PROTOCOL_VERSION_ATTRIBUTE = 'protocol.version';
+const EVENT_TYPE_ATTRIBUTE = 'event.type';
 
 /**
  * Represents a connection between the client and server.
@@ -79,6 +82,11 @@ export class Connection {
   readonly #onClose: () => void;
   readonly #messageHandler: MessageHandler;
   readonly #downstreamMsgTimer: NodeJS.Timeout | undefined;
+  readonly #webSocketErrors = getOrCreateCounter(
+    'sync',
+    'websocket.errors',
+    'Client WebSocket error events.',
+  );
 
   #viewSyncerOutboundStream: Source<Downstream> | undefined;
   #pusherOutboundStream: Source<Downstream> | undefined;
@@ -251,12 +259,23 @@ export class Connection {
 
   #handleClose = (e: CloseEvent) => {
     const {code, reason, wasClean} = e;
+    if (!wasClean) {
+      this.#recordWebSocketError('unclean_close');
+    }
     this.close('WebSocket close event', {code, reason, wasClean});
   };
 
   #handleError = (e: ErrorEvent) => {
+    this.#recordWebSocketError('error_event');
     this.#lc.warn?.('WebSocket error event', e.message, e.error);
   };
+
+  #recordWebSocketError(eventType: string) {
+    this.#webSocketErrors.add(1, {
+      [PROTOCOL_VERSION_ATTRIBUTE]: this.#protocolVersion,
+      [EVENT_TYPE_ATTRIBUTE]: eventType,
+    });
+  }
 
   #proxyInbound() {
     pipeline(

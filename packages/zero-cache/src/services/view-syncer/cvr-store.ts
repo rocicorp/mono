@@ -22,6 +22,10 @@ import {clampTTL, DEFAULT_TTL_MS} from '../../../../zql/src/query/ttl.ts';
 import * as Mode from '../../db/mode-enum.ts';
 import {runTx} from '../../db/run-transaction.ts';
 import {TransactionPool} from '../../db/transaction-pool.ts';
+import {
+  getOrCreateCounter,
+  getOrCreateLatencyHistogram,
+} from '../../observability/metrics.ts';
 import {recordRowsSynced} from '../../server/anonymous-otel-start.ts';
 import {ProtocolErrorWithLevel} from '../../types/error-with-level.ts';
 import type {PostgresDB, PostgresTransaction} from '../../types/pg.ts';
@@ -71,6 +75,10 @@ export type CVRFlushStats = {
 };
 
 let flushCounter = 0;
+
+const RESULT_ATTRIBUTE = 'result';
+const ERROR_KIND_ATTRIBUTE = 'error.kind';
+const CVR_FLUSH_TYPE_ATTRIBUTE = 'flush.type';
 
 /**
  * Convert TTL/timestamp values for both old (seconds-based) and new (ms-based) columns.
@@ -196,6 +204,21 @@ export class CVRStore {
   );
   readonly #forceUpdates = new CustomKeySet<RowID>(rowIDString);
   readonly #rowCache: RowRecordCache;
+  readonly #cvrLoads = getOrCreateCounter(
+    'sync',
+    'cvr.load',
+    'CVR load attempts, labeled by result.',
+  );
+  readonly #cvrLoadTime = getOrCreateLatencyHistogram(
+    'sync',
+    'cvr.load-time',
+    'Time to load a CVR.',
+  );
+  readonly #cvrFlushes = getOrCreateCounter(
+    'sync',
+    'cvr.flush',
+    'CVR flush attempts, labeled by result and flush.type.',
+  );
   readonly #loadAttemptIntervalMs: number;
   readonly #maxLoadAttempts: number;
   #rowCount: number = 0;
@@ -249,25 +272,42 @@ export class CVRStore {
   }
 
   load(lc: LogContext, lastConnectTime: number): Promise<CVR> {
+    const start = performance.now();
     return startAsyncSpan(tracer, 'cvr.load', async () => {
-      let err: RowsVersionBehindError | undefined;
-      for (let i = 0; i < this.#maxLoadAttempts; i++) {
-        if (i > 0) {
-          await sleep(this.#loadAttemptIntervalMs);
+      try {
+        let err: RowsVersionBehindError | undefined;
+        for (let i = 0; i < this.#maxLoadAttempts; i++) {
+          if (i > 0) {
+            await sleep(this.#loadAttemptIntervalMs);
+          }
+          const result = await this.#load(lc, lastConnectTime);
+          if (result instanceof RowsVersionBehindError) {
+            lc.info?.(`attempt ${i + 1}: ${String(result)}`);
+            err = result;
+            continue;
+          }
+          this.#recordLoad(performance.now() - start, {
+            [RESULT_ATTRIBUTE]: 'success',
+          });
+          return result;
         }
-        const result = await this.#load(lc, lastConnectTime);
-        if (result instanceof RowsVersionBehindError) {
-          lc.info?.(`attempt ${i + 1}: ${String(result)}`);
-          err = result;
-          continue;
-        }
-        return result;
+        assert(err, 'Expected error to be set after retry loop exhausted');
+        throw new ClientNotFoundError(
+          `max attempts exceeded waiting for CVR@${err.cvrVersion} to catch up from ${err.rowsVersion}`,
+        );
+      } catch (e) {
+        this.#recordLoad(performance.now() - start, {
+          [RESULT_ATTRIBUTE]: 'error',
+          [ERROR_KIND_ATTRIBUTE]: cvrErrorKind(e),
+        });
+        throw e;
       }
-      assert(err, 'Expected error to be set after retry loop exhausted');
-      throw new ClientNotFoundError(
-        `max attempts exceeded waiting for CVR@${err.cvrVersion} to catch up from ${err.rowsVersion}`,
-      );
     });
+  }
+
+  #recordLoad(elapsedMs: number, attributes: Record<string, string>) {
+    this.#cvrLoads.add(1, attributes);
+    this.#cvrLoadTime.recordMs(elapsedMs, attributes);
   }
 
   async #load(
@@ -1211,8 +1251,17 @@ export class CVRStore {
         );
         this.#rowCache.recordSyncFlushStats(stats, elapsed);
       }
+      this.#cvrFlushes.add(1, {
+        [RESULT_ATTRIBUTE]: 'success',
+        [CVR_FLUSH_TYPE_ATTRIBUTE]: stats ? 'sync' : 'noop',
+      });
       return stats;
     } catch (e) {
+      this.#cvrFlushes.add(1, {
+        [RESULT_ATTRIBUTE]: 'error',
+        [CVR_FLUSH_TYPE_ATTRIBUTE]: 'sync',
+        [ERROR_KIND_ATTRIBUTE]: cvrErrorKind(e),
+      });
       // Clear cached state if an error (e.g. ConcurrentModificationException) is encountered.
       this.#rowCache.clear();
       throw e;
@@ -1367,6 +1416,22 @@ export class InvalidClientSchemaError extends ProtocolErrorWithLevel {
       {cause},
     );
   }
+}
+
+function cvrErrorKind(e: unknown): string {
+  if (e instanceof ClientNotFoundError) {
+    return 'client_not_found';
+  }
+  if (e instanceof ConcurrentModificationException) {
+    return 'concurrent_modification';
+  }
+  if (e instanceof OwnershipError) {
+    return 'ownership';
+  }
+  if (e instanceof InvalidClientSchemaError) {
+    return 'invalid_client_schema';
+  }
+  return 'error';
 }
 
 export class RowsVersionBehindError extends Error {
