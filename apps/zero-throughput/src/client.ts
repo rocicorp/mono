@@ -43,14 +43,16 @@ type Signal = {
 
 export class SyntheticClient {
   readonly userID: string;
+  readonly #clientIndex: number;
   readonly #zero: Zero<typeof schema>;
   readonly #queryStates: QueryState[] = [];
   readonly #createdAtMs = nowMs();
   #connectionState: ConnectionState;
   #unsubscribeConnection: (() => void) | undefined;
 
-  constructor(userID: string, config: BenchmarkConfig) {
+  constructor(userID: string, config: BenchmarkConfig, clientIndex: number) {
     this.userID = userID;
+    this.#clientIndex = clientIndex;
     installWebSocketPolyfill();
     this.#zero = new Zero({
       schema,
@@ -77,8 +79,10 @@ export class SyntheticClient {
     const {name, query} = buildProfileQuery(
       this.#zero.query,
       config.profile,
+      config.model,
       queryIndex,
       config.rowsPerQuery,
+      this.#clientIndex,
     );
     const view = this.#zero.materialize(query);
     this.#registerView(name, queryIndex, view);
@@ -145,7 +149,7 @@ export async function startSyntheticClients(
 ): Promise<SyntheticClient[]> {
   const clients: SyntheticClient[] = [];
   for (let i = 0; i < config.users; i++) {
-    clients.push(new SyntheticClient(`throughput-user-${i}`, config));
+    clients.push(new SyntheticClient(`throughput-user-${i}`, config, i));
   }
   await Promise.all(
     clients.map(client => client.waitForInitialSync(config.warmupMs)),

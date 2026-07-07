@@ -46,7 +46,9 @@ async function main(): Promise<void> {
   process.once('SIGINT', onSigint);
 
   try {
-    log(`zero-throughput ${config.profile} run ${config.runID}`);
+    log(
+      `zero-throughput ${config.profile}:${config.model} run ${config.runID}`,
+    );
     log(`Results will be written to ${resultOutputPath(config)}`);
 
     if (config.pg.start) {
@@ -195,6 +197,9 @@ function printSummary(
   );
   log(
     `Achieved write rate: ${summary.achievedWriteRate.toFixed(2)} logical writes/s`,
+  );
+  log(
+    `Active-query impact rate: ${(summary.writeImpact.affectedActiveClientGroupWriteRatio * 100).toFixed(2)}%`,
   );
   log(`p95 client-visible lag: ${summary.p95ClientVisibleLagMs.toFixed(2)}ms`);
   log(`p99 client-visible lag: ${summary.p99ClientVisibleLagMs.toFixed(2)}ms`);

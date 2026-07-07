@@ -4,13 +4,14 @@ import {createWriteStream, type WriteStream} from 'node:fs';
 import {access, appendFile, mkdir, readFile, writeFile} from 'node:fs/promises';
 import {dirname, join} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import type {BenchmarkProfile} from './config.ts';
+import type {BenchmarkModel, BenchmarkProfile} from './config.ts';
 import {appPath, appRoot, repoRoot} from './config.ts';
 import {startPostgres, stopPostgres} from './processes.ts';
 import type {BenchmarkResult} from './results.ts';
 import {formatDuration} from './util.ts';
 
 const DEFAULT_PROFILES = ['relational', 'email', 'forum'] as const;
+const DEFAULT_MODELS = ['hot'] as const;
 const DEFAULT_USERS = [50, 100, 200, 400] as const;
 const DEFAULT_ROWS_PER_QUERY = [50] as const;
 const DEFAULT_SYNC_WORKERS = [1, 2, 4] as const;
@@ -23,10 +24,12 @@ const PROFILE_VALUES = new Set<BenchmarkProfile>([
   'forum',
   'relational',
 ]);
+const MODEL_VALUES = new Set<BenchmarkModel>(['hot', 'realistic']);
 
 type SweepConfig = {
   readonly runID: string;
   readonly profiles: readonly BenchmarkProfile[];
+  readonly models: readonly BenchmarkModel[];
   readonly users: readonly number[];
   readonly rowsPerQuery: readonly number[];
   readonly syncWorkers: readonly number[];
@@ -56,6 +59,7 @@ type SweepConfig = {
 
 type SweepPoint = {
   readonly profile: BenchmarkProfile;
+  readonly model: BenchmarkModel;
   readonly users: number;
   readonly queriesPerUser: number;
   readonly rowsPerQuery: number;
@@ -374,6 +378,8 @@ function benchmarkCommand(
     main,
     '--profile',
     point.profile,
+    '--model',
+    point.model,
     '--users',
     String(point.users),
     '--queries-per-user',
@@ -458,18 +464,21 @@ async function runCommandToLog(args: {
 function sweepPoints(config: SweepConfig): readonly SweepPoint[] {
   const points: SweepPoint[] = [];
   for (const profile of config.profiles) {
-    for (const users of config.users) {
-      for (const rowsPerQuery of config.rowsPerQuery) {
-        for (const zeroNumSyncWorkers of config.syncWorkers) {
-          points.push({
-            profile,
-            users,
-            queriesPerUser: config.queriesPerUser,
-            rowsPerQuery,
-            zeroNumSyncWorkers,
-          });
-          if (config.limit !== undefined && points.length >= config.limit) {
-            return points;
+    for (const model of config.models) {
+      for (const users of config.users) {
+        for (const rowsPerQuery of config.rowsPerQuery) {
+          for (const zeroNumSyncWorkers of config.syncWorkers) {
+            points.push({
+              profile,
+              model,
+              users,
+              queriesPerUser: config.queriesPerUser,
+              rowsPerQuery,
+              zeroNumSyncWorkers,
+            });
+            if (config.limit !== undefined && points.length >= config.limit) {
+              return points;
+            }
           }
         }
       }
@@ -481,6 +490,7 @@ function sweepPoints(config: SweepConfig): readonly SweepPoint[] {
 function parseArgs(argv: readonly string[]): SweepConfig {
   const runID = new Date().toISOString().replace(/[:.]/g, '-');
   let profiles: readonly BenchmarkProfile[] = DEFAULT_PROFILES;
+  let models: readonly BenchmarkModel[] = DEFAULT_MODELS;
   let users: readonly number[] = DEFAULT_USERS;
   let rowsPerQuery: readonly number[] = DEFAULT_ROWS_PER_QUERY;
   let syncWorkers: readonly number[] = DEFAULT_SYNC_WORKERS;
@@ -517,6 +527,10 @@ function parseArgs(argv: readonly string[]): SweepConfig {
         break;
       case '--profiles':
         profiles = parseProfiles(readOptionValue(argv, option, i));
+        i += option.value === undefined ? 1 : 0;
+        break;
+      case '--models':
+        models = parseModels(readOptionValue(argv, option, i));
         i += option.value === undefined ? 1 : 0;
         break;
       case '--users':
@@ -701,6 +715,7 @@ function parseArgs(argv: readonly string[]): SweepConfig {
   return {
     runID,
     profiles,
+    models,
     users,
     rowsPerQuery,
     syncWorkers,
@@ -785,6 +800,20 @@ function parseProfiles(value: string): readonly BenchmarkProfile[] {
   return profiles;
 }
 
+function parseModels(value: string): readonly BenchmarkModel[] {
+  const models = value.split(',').map(part => {
+    const trimmed = part.trim();
+    if (!MODEL_VALUES.has(trimmed as BenchmarkModel)) {
+      throw new Error(`Invalid model "${trimmed}"`);
+    }
+    return trimmed as BenchmarkModel;
+  });
+  if (models.length === 0) {
+    throw new Error('--models must not be empty');
+  }
+  return models;
+}
+
 function parsePositiveIntegerList(
   name: string,
   value: string,
@@ -847,6 +876,7 @@ function printUsage(): void {
 
 Default matrix:
   --profiles relational,email,forum
+  --models hot
   --users 50,100,200,400
   --rows-per-query 50
   --sync-workers 1,2,4
@@ -862,6 +892,7 @@ Useful:
   --dry-run
   --limit 1
   --output-dir results/sweeps/my-run
+  --models hot,realistic
   --pg-start false
   --verbose-child-logs
 `);
@@ -906,6 +937,7 @@ async function closeLog(stream: WriteStream): Promise<void> {
 function csvHeader(): string {
   return [
     'profile',
+    'model',
     'users',
     'queriesPerUser',
     'rowsPerQuery',
@@ -915,6 +947,7 @@ function csvHeader(): string {
     'bestP99ClientVisibleLagMs',
     'bestMaxSeqLag',
     'bestLagSlopeSeqPerSec',
+    'bestAffectedActiveClientGroupWriteRatio',
     'bestOutputPath',
     'bestFailureReasons',
   ].join(',');
@@ -924,6 +957,7 @@ function csvRow(result: PointResult): string {
   const best = result.bestAttempt;
   return [
     result.point.profile,
+    result.point.model,
     result.point.users,
     result.point.queriesPerUser,
     result.point.rowsPerQuery,
@@ -933,6 +967,7 @@ function csvRow(result: PointResult): string {
     best?.summary?.p99ClientVisibleLagMs ?? '',
     best?.summary?.maxSeqLag ?? '',
     best?.summary?.lagSlopeSeqPerSec ?? '',
+    best?.summary?.writeImpact.affectedActiveClientGroupWriteRatio ?? '',
     best?.outputPath ?? '',
     best?.summary?.failureReasons.join('|') ?? '',
   ]
@@ -951,6 +986,7 @@ function csvCell(value: unknown): string {
 function pointID(point: SweepPoint): string {
   return [
     point.profile,
+    point.model,
     `${point.users}u`,
     `${point.queriesPerUser}q`,
     `${point.rowsPerQuery}rows`,
@@ -959,7 +995,7 @@ function pointID(point: SweepPoint): string {
 }
 
 function pointLabel(point: SweepPoint): string {
-  return `${point.profile} users=${point.users} queriesPerUser=${point.queriesPerUser} rowsPerQuery=${point.rowsPerQuery} syncWorkers=${point.zeroNumSyncWorkers}`;
+  return `${point.profile}:${point.model} users=${point.users} queriesPerUser=${point.queriesPerUser} rowsPerQuery=${point.rowsPerQuery} syncWorkers=${point.zeroNumSyncWorkers}`;
 }
 
 function gitCommit(): string | undefined {
