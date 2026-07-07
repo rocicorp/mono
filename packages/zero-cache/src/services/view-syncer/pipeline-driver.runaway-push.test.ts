@@ -294,7 +294,7 @@ describe('view-syncer/pipeline-driver', () => {
     expect(changeCount).toEqual(8);
   });
 
-  test('does not timeout late in advancement when finishing is cheaper than reset', () => {
+  test('does not timeout once advancement is mostly complete', () => {
     pipelines.init(clientSchema);
     [
       ...pipelines.addQuery('hash1', 'queryID1', ISSUES_WITH_CREATOR, {
@@ -314,7 +314,7 @@ describe('view-syncer/pipeline-driver', () => {
     expect(() => {
       for (const _ of pipelines.advance({
         elapsedLap: () => 0,
-        totalElapsed: () => (changeCount < 90 ? 0 : 60),
+        totalElapsed: () => (changeCount < 80 ? 0 : 1000),
       }).changes) {
         changeCount++;
       }
