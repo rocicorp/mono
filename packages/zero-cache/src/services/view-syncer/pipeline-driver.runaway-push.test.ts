@@ -263,4 +263,62 @@ describe('view-syncer/pipeline-driver', () => {
     );
     expect(changeCount).toEqual(5);
   });
+
+  test('projected timeout resets large advancement before minimum timeout', () => {
+    pipelines.init(clientSchema);
+    [
+      ...pipelines.addQuery('hash1', 'queryID1', ISSUES_WITH_CREATOR, {
+        totalElapsed: () => 100,
+        elapsedLap: () => 100,
+      }),
+    ];
+
+    replicator.processTransaction(
+      '134',
+      ...Array.from({length: 100}, (_, i) =>
+        messages.insert('issue', {id: `i${1001 + i}`}),
+      ),
+    );
+
+    let changeCount = 0;
+    expect(() => {
+      for (const _ of pipelines.advance({
+        elapsedLap: () => 0,
+        totalElapsed: () => changeCount * 4,
+      }).changes) {
+        changeCount++;
+      }
+    }).toThrowErrorMatchingInlineSnapshot(
+      `[ResetPipelinesSignal: Advancement projected to exceed hydration time at 8 of 100 changes after 32 ms. Projected total advancement time is 400 ms. Advancement time limited based on total hydration time of 100 ms.]`,
+    );
+    expect(changeCount).toEqual(8);
+  });
+
+  test('does not timeout late in advancement when finishing is cheaper than reset', () => {
+    pipelines.init(clientSchema);
+    [
+      ...pipelines.addQuery('hash1', 'queryID1', ISSUES_WITH_CREATOR, {
+        totalElapsed: () => 25,
+        elapsedLap: () => 25,
+      }),
+    ];
+
+    replicator.processTransaction(
+      '134',
+      ...Array.from({length: 100}, (_, i) =>
+        messages.insert('issue', {id: `i${1001 + i}`}),
+      ),
+    );
+
+    let changeCount = 0;
+    expect(() => {
+      for (const _ of pipelines.advance({
+        elapsedLap: () => 0,
+        totalElapsed: () => (changeCount < 90 ? 0 : 60),
+      }).changes) {
+        changeCount++;
+      }
+    }).not.toThrow();
+    expect(changeCount).toEqual(100);
+  });
 });

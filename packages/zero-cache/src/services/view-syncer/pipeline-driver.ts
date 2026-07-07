@@ -164,9 +164,72 @@ export type Timer = {
  * complete before doing a pipeline reset.
  */
 const MIN_ADVANCEMENT_TIME_LIMIT_MS = 50;
+const MIN_PROJECTED_ADVANCEMENT_SAMPLE_CHANGES = 8;
+const MIN_PROJECTED_ADVANCEMENT_SAMPLE_MS = 5;
+const MIN_PROJECTED_ADVANCEMENT_CHANGES = 16;
+const PROJECTED_ADVANCEMENT_RESET_MULTIPLIER = 1.5;
+const LATE_ADVANCEMENT_FINISH_PROGRESS = 0.75;
+const ADVANCE_TIME_EWMA_ALPHA = 0.2;
 
 function randomID() {
   return randInt(1, Number.MAX_SAFE_INTEGER).toString(36);
+}
+
+function projectedAdvancementTimeMs(
+  elapsedMs: number,
+  processedChanges: number,
+  numChanges: number,
+): number | undefined {
+  if (processedChanges <= 0 || numChanges <= 0) {
+    return undefined;
+  }
+  return (elapsedMs / processedChanges) * numChanges;
+}
+
+function advancementResetTimeLimitMs(totalHydrationTimeMs: number): number {
+  return Math.max(totalHydrationTimeMs, 1);
+}
+
+function shouldResetProjectedAdvancement(
+  elapsedMs: number,
+  projectedTotalTimeMs: number | undefined,
+  processedChanges: number,
+  numChanges: number,
+  totalHydrationTimeMs: number,
+): boolean {
+  if (
+    projectedTotalTimeMs === undefined ||
+    numChanges < MIN_PROJECTED_ADVANCEMENT_CHANGES ||
+    processedChanges < MIN_PROJECTED_ADVANCEMENT_SAMPLE_CHANGES ||
+    elapsedMs < MIN_PROJECTED_ADVANCEMENT_SAMPLE_MS
+  ) {
+    return false;
+  }
+
+  return (
+    projectedTotalTimeMs >
+    advancementResetTimeLimitMs(totalHydrationTimeMs) *
+      PROJECTED_ADVANCEMENT_RESET_MULTIPLIER
+  );
+}
+
+function shouldFinishLateAdvancement(
+  elapsedMs: number,
+  projectedTotalTimeMs: number,
+  processedChanges: number,
+  numChanges: number,
+  totalHydrationTimeMs: number,
+): boolean {
+  if (
+    numChanges <= 0 ||
+    processedChanges / numChanges < LATE_ADVANCEMENT_FINISH_PROGRESS
+  ) {
+    return false;
+  }
+  const projectedRemainingMs = Math.max(0, projectedTotalTimeMs - elapsedMs);
+  return (
+    projectedRemainingMs <= advancementResetTimeLimitMs(totalHydrationTimeMs)
+  );
 }
 
 /**
@@ -202,6 +265,7 @@ export class PipelineDriver {
   #replicaVersion: string | null = null;
   #primaryKeys: Map<string, PrimaryKey> | null = null;
   #permissions: LoadedPermissions | null = null;
+  #advanceMsPerChangeEwma: number | undefined;
 
   readonly #advanceTime = getOrCreateLatencyHistogram(
     'sync',
@@ -891,6 +955,7 @@ export class PipelineDriver {
         `${totalHydrationTimeMs} ms.`,
     );
     try {
+      this.#resetEarlyIfProjectedAdvancementExceedsHydrationTime();
       for (const {table, prevValues, nextValue} of diff) {
         // Advance progress is checked each time a row is fetched
         // from a TableSource during push processing, but some pushes
@@ -947,6 +1012,7 @@ export class PipelineDriver {
         }
 
         const elapsed = timer.totalElapsed() - start;
+        this.#recordAdvanceChangeTime(elapsed);
         this.#advanceTime.recordMs(elapsed, {
           table,
           type,
@@ -1021,7 +1087,40 @@ export class PipelineDriver {
       totalHydrationTimeMs,
     } = must(this.#advanceContext);
     const elapsed = advanceTimer.totalElapsed();
+    const projectedTotalTimeMs = projectedAdvancementTimeMs(
+      elapsed,
+      pos,
+      numChanges,
+    );
+    const shouldFinish =
+      projectedTotalTimeMs !== undefined &&
+      shouldFinishLateAdvancement(
+        elapsed,
+        projectedTotalTimeMs,
+        pos,
+        numChanges,
+        totalHydrationTimeMs,
+      );
     if (
+      !shouldFinish &&
+      shouldResetProjectedAdvancement(
+        elapsed,
+        projectedTotalTimeMs,
+        pos,
+        numChanges,
+        totalHydrationTimeMs,
+      )
+    ) {
+      this.#throwProjectedAdvancementReset(
+        pos,
+        numChanges,
+        elapsed,
+        projectedTotalTimeMs,
+        totalHydrationTimeMs,
+      );
+    }
+    if (
+      !shouldFinish &&
       elapsed > MIN_ADVANCEMENT_TIME_LIMIT_MS &&
       (elapsed > totalHydrationTimeMs ||
         (elapsed > totalHydrationTimeMs / 2 && pos <= numChanges / 2))
@@ -1034,6 +1133,63 @@ export class PipelineDriver {
       );
     }
     return advanceTimer.elapsedLap() > this.#yieldThresholdMs();
+  }
+
+  #resetEarlyIfProjectedAdvancementExceedsHydrationTime() {
+    const {numChanges, totalHydrationTimeMs} = must(this.#advanceContext);
+    const msPerChange = this.#advanceMsPerChangeEwma;
+    if (
+      msPerChange === undefined ||
+      numChanges < MIN_PROJECTED_ADVANCEMENT_CHANGES
+    ) {
+      return;
+    }
+    const projectedTotalTimeMs = msPerChange * numChanges;
+    if (
+      projectedTotalTimeMs >
+      advancementResetTimeLimitMs(totalHydrationTimeMs) *
+        PROJECTED_ADVANCEMENT_RESET_MULTIPLIER
+    ) {
+      this.#throwProjectedAdvancementReset(
+        0,
+        numChanges,
+        0,
+        projectedTotalTimeMs,
+        totalHydrationTimeMs,
+      );
+    }
+  }
+
+  #throwProjectedAdvancementReset(
+    pos: number,
+    numChanges: number,
+    elapsed: number,
+    projectedTotalTimeMs: number | undefined,
+    totalHydrationTimeMs: number,
+  ): never {
+    const projection =
+      projectedTotalTimeMs === undefined
+        ? ''
+        : ` Projected total advancement time is ${projectedTotalTimeMs} ms.`;
+    throw new ResetPipelinesSignal(
+      `Advancement projected to exceed hydration time at ${pos} of ` +
+        `${numChanges} changes after ${elapsed} ms.` +
+        projection +
+        ` Advancement time limited based on total hydration time of ` +
+        `${totalHydrationTimeMs} ms.`,
+      'advancement-timeout',
+    );
+  }
+
+  #recordAdvanceChangeTime(elapsedMs: number) {
+    if (!Number.isFinite(elapsedMs) || elapsedMs <= 0) {
+      return;
+    }
+    this.#advanceMsPerChangeEwma =
+      this.#advanceMsPerChangeEwma === undefined
+        ? elapsedMs
+        : this.#advanceMsPerChangeEwma * (1 - ADVANCE_TIME_EWMA_ALPHA) +
+          elapsedMs * ADVANCE_TIME_EWMA_ALPHA;
   }
 
   /** Implements `BuilderDelegate.createStorage()` */
