@@ -27,6 +27,10 @@ export const NATIVE_HISTOGRAM_INSTRUMENT_NAMES = [
   'zero.sync.view_syncer_hydration',
 ] as const;
 
+export const LONG_DURATION_HISTOGRAM_BOUNDARIES_S = [
+  1, 2, 5, 10, 30, 60, 120, 300, 600, 1200, 2400, 3600, 7200,
+];
+
 function getMeter() {
   if (!meter) {
     meter = metrics.getMeter('zero');
