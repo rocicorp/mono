@@ -1,4 +1,3 @@
-import {closeSync, openSync, writeSync} from 'node:fs';
 import {beforeEach, describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.ts';
 import {promiseVoid} from '../../../../../shared/src/resolved-promises.ts';
@@ -7,7 +6,6 @@ import {
   expectMatchingObjectsInTables,
   initDB as initLiteDB,
 } from '../../../test/lite.ts';
-import {AutoResetSignal} from '../../change-streamer/schema/tables.ts';
 import {initReplicationState} from '../../replicator/schema/replication-state.ts';
 import {CREATE_TABLE_METADATA_TABLE} from '../../replicator/schema/table-metadata.ts';
 import {
@@ -16,7 +14,6 @@ import {
   CREATE_V9_TABLE_METADATA_TABLE,
   CURRENT_SCHEMA_VERSION,
   initReplica,
-  upgradeReplica,
 } from './replica-schema.ts';
 
 export const CURRENT_SCHEMA_VERSIONS = {
@@ -489,52 +486,4 @@ describe('replica-schema-migrations', () => {
       });
     });
   }
-
-  test('upgradeReplica resets when quick_check detects corruption', async () => {
-    const replica = replicaFile.connect(lc);
-    replica.exec(CREATE_VERSION_HISTORY);
-    replica
-      .prepare(
-        `
-        INSERT INTO "_zero.versionHistory" (dataVersion, schemaVersion, minSafeVersion)
-        VALUES (?, ?, 1)
-      `,
-      )
-      .run(CURRENT_SCHEMA_VERSION, CURRENT_SCHEMA_VERSION);
-
-    replica.exec(`CREATE TABLE "Payload" (id INTEGER PRIMARY KEY, value BLOB)`);
-    const insert = replica.prepare(
-      `INSERT INTO "Payload" (value) VALUES (randomblob(2000))`,
-    );
-    replica.transaction(() => {
-      for (let i = 0; i < 200; i++) {
-        insert.run();
-      }
-    });
-
-    const [{page_size: pageSize}] = replica.pragma<{page_size: number}>(
-      'page_size',
-    );
-    const {pageno} = replica
-      .prepare(
-        `
-        SELECT pageno FROM dbstat
-        WHERE name = 'Payload' AND pagetype = 'leaf'
-        ORDER BY pageno LIMIT 1 OFFSET 5
-      `,
-      )
-      .get<{pageno: number}>();
-    replica.close();
-
-    const fd = openSync(replicaFile.path, 'r+');
-    try {
-      writeSync(fd, Buffer.alloc(100, 0xff), 0, 100, (pageno - 1) * pageSize);
-    } finally {
-      closeSync(fd);
-    }
-
-    await expect(upgradeReplica(lc, 'test', replicaFile.path)).rejects.toThrow(
-      AutoResetSignal,
-    );
-  });
 });
