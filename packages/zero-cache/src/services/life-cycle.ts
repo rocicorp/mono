@@ -36,9 +36,9 @@ export const FORCEFUL_SHUTDOWN = ['SIGQUIT', 'SIGABRT'] as const;
 
 type GracefulShutdownSignal = (typeof GRACEFUL_SHUTDOWN)[number];
 
-function workerStartupMetricName(name: string): string {
+function workerStartupMetricName(name: string) {
   if (name === 'zero-cache') {
-    return 'zero_cache';
+    return undefined;
   }
   if (name.startsWith('change-streamer')) {
     return 'change_streamer';
@@ -86,6 +86,15 @@ export const INTENTIONAL_SHUTDOWN_ERROR_CODE = 14;
  */
 export class ProcessManager {
   readonly #lc: LogContext;
+  readonly #startupDuration = getOrCreateHistogram(
+    'server',
+    'startup_duration',
+    {
+      description: 'Duration from starting zero-cache to its ready signal.',
+      unit: 's',
+      bucketBoundaries: LONG_DURATION_HISTOGRAM_BOUNDARIES_S,
+    },
+  );
   readonly #workerStartupDuration = getOrCreateHistogram(
     'server',
     'worker_startup_duration',
@@ -209,9 +218,16 @@ export class ProcessManager {
     this.#ready.push(promise);
 
     worker.onceMessageType('ready', () => {
-      this.#workerStartupDuration.recordMs(performance.now() - start, {
-        worker: workerStartupMetricName(name),
-      });
+      const elapsed = performance.now() - start;
+      const workerMetricName = workerStartupMetricName(name);
+      if (workerMetricName) {
+        this.#workerStartupDuration.recordMs(elapsed, {
+          worker: workerMetricName,
+          type,
+        });
+      } else {
+        this.#startupDuration.recordMs(elapsed, {component: 'dispatcher'});
+      }
       this.#lc.debug?.(`${name} ready (${Date.now() - this.#start} ms)`);
       this.#initializing.delete(id);
       resolve();

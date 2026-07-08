@@ -4,6 +4,7 @@ import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
 
+const startupRecordMs = vi.hoisted(() => vi.fn());
 const workerStartupRecordMs = vi.hoisted(() => vi.fn());
 
 vi.mock('../observability/metrics.ts', async importOriginal => {
@@ -11,7 +12,10 @@ vi.mock('../observability/metrics.ts', async importOriginal => {
     await importOriginal<typeof import('../observability/metrics.ts')>();
   return {
     ...actual,
-    getOrCreateHistogram: vi.fn(() => ({recordMs: workerStartupRecordMs})),
+    getOrCreateHistogram: vi.fn((_category, name) => ({
+      recordMs:
+        name === 'startup_duration' ? startupRecordMs : workerStartupRecordMs,
+    })),
   };
 });
 
@@ -82,6 +86,7 @@ describe('shutdown', () => {
   }
 
   beforeEach(async () => {
+    startupRecordMs.mockReset();
     workerStartupRecordMs.mockReset();
 
     // For testing process.exit()
@@ -285,6 +290,21 @@ describe('shutdown', () => {
       worker: 'backup_replicator',
       type: 'supporting',
     });
+  });
+
+  test('records top-level startup duration separately', () => {
+    const [parentPort, childPort] = inProcChannel();
+    processes.addWorker(parentPort, 'user-facing', 'zero-cache');
+
+    childPort.send(['ready', {ready: true}]);
+
+    expect(startupRecordMs).toHaveBeenCalledWith(expect.any(Number), {
+      component: 'dispatcher',
+    });
+    expect(workerStartupRecordMs).not.toHaveBeenCalledWith(
+      expect.any(Number),
+      expect.objectContaining({worker: 'zero_cache'}),
+    );
   });
 });
 
