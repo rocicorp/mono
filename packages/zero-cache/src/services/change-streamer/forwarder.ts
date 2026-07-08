@@ -21,12 +21,12 @@ export class Forwarder {
   readonly #queued = new Set<Subscriber>();
   readonly #flowControlWaits = getOrCreateCounter(
     'replication',
-    'flow-control.waits',
+    'flow_control.waits',
     'Flow-control checkpoints completed, labeled by release mode.',
   );
   readonly #flowControlWaitTime = getOrCreateLatencyHistogram(
     'replication',
-    'flow-control.wait-time',
+    'flow_control.wait_duration',
     'Time replication waits at flow-control checkpoints.',
   );
   #inTransaction = false;
@@ -43,19 +43,19 @@ export class Forwarder {
 
     getOrCreateGauge(
       'replication',
-      'flow-control.active-subscribers',
+      'flow_control.active_subscribers',
       'Active change-stream subscribers receiving live changes.',
     ).addCallback(result => result.observe(this.#active.size));
 
     getOrCreateGauge(
       'replication',
-      'flow-control.queued-subscribers',
+      'flow_control.queued_subscribers',
       'Change-stream subscribers waiting for the current transaction to finish before activation.',
     ).addCallback(result => result.observe(this.#queued.size));
 
     getOrCreateGauge(
       'replication',
-      'flow-control.pending-messages',
+      'flow_control.pending_messages',
       'Downstream change-stream messages not yet acked by subscribers.',
     ).addCallback(result =>
       result.observe(this.#subscriberStats().pendingMessages),
@@ -63,13 +63,13 @@ export class Forwarder {
 
     getOrCreateGauge(
       'replication',
-      'flow-control.backlog-messages',
+      'flow_control.backlog_messages',
       'Live change-stream messages buffered while subscribers catch up.',
     ).addCallback(result =>
       result.observe(this.#subscriberStats().backlogMessages),
     );
 
-    getOrCreateGauge('replication', 'flow-control.backlog-bytes', {
+    getOrCreateGauge('replication', 'flow_control.backlog_bytes', {
       description:
         'Live change-stream bytes buffered while subscribers catch up.',
       unit: 'By',
@@ -77,7 +77,7 @@ export class Forwarder {
       result.observe(this.#subscriberStats().backlogBytes),
     );
 
-    getOrCreateGauge('replication', 'flow-control.max-backlog-bytes', {
+    getOrCreateGauge('replication', 'flow_control.max_backlog_bytes', {
       description:
         'Maximum live change-stream bytes buffered by a single subscriber.',
       unit: 'By',
