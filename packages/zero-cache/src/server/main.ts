@@ -7,6 +7,7 @@ import {initEventSink} from '../observability/events.ts';
 import {
   exitAfter,
   ProcessManager,
+  recordStartupDurationMs,
   runUntilKilled,
   type WorkerType,
 } from '../services/life-cycle.ts';
@@ -197,7 +198,9 @@ export default async function runWorker(
   );
   await processes.allWorkersReady();
   clearInterval(logWaiting);
-  lc.info?.(`all workers ready (${Date.now() - startMs} ms)`);
+  const startupDurationMs = Date.now() - startMs;
+  lc.info?.(`all workers ready (${startupDurationMs} ms)`);
+  recordStartupDurationMs(startupDurationMs);
 
   parent.send(['ready', {ready: true}]);
 
