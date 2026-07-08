@@ -9,7 +9,6 @@ import {Database} from '../../../../zqlite/src/db.ts';
 import {assertNormalized} from '../../config/normalize.ts';
 import type {ZeroConfig} from '../../config/zero-config.ts';
 import {deleteLiteDB} from '../../db/delete-lite-db.ts';
-import {assertDatabaseIntegrity} from '../../db/migration-lite.ts';
 import {StatementRunner} from '../../db/statements.ts';
 import {getShardConfig} from '../../types/shards.ts';
 import type {Source} from '../../types/streams.ts';
@@ -325,7 +324,6 @@ function replicaIsValid(
   let db: Database | undefined;
   try {
     db = new Database(lc, replica);
-    assertDatabaseIntegrity(lc, 'restored replica', db);
     const {replicaVersion, watermark} = getSubscriptionState(
       new StatementRunner(db),
     );
