@@ -567,7 +567,26 @@ describe('integration', {timeout: 30000}, () => {
   async function expectNoPokes(client: Queue<unknown>) {
     // Use the dequeue() API that cancels the dequeue() request after a timeout.
     const timedOut = 'nothing';
-    expect(await client.dequeue(timedOut, 500)).toBe(timedOut);
+    for (;;) {
+      const msg = await client.dequeue(timedOut, 500);
+      if (msg === timedOut) {
+        return;
+      }
+      expect(isPong(msg)).toBe(true);
+    }
+  }
+
+  async function dequeueMessage(client: Queue<unknown>) {
+    for (;;) {
+      const msg = await client.dequeue();
+      if (!isPong(msg)) {
+        return msg;
+      }
+    }
+  }
+
+  function isPong(msg: unknown): boolean {
+    return Array.isArray(msg) && msg[0] === 'pong';
   }
 
   async function streamCustomChanges(changes: ChangeStreamMessage[]) {
@@ -619,15 +638,15 @@ describe('integration', {timeout: 30000}, () => {
       ),
     );
 
-    expect(await downstream.dequeue()).toMatchObject([
+    expect(await dequeueMessage(downstream)).toMatchObject([
       'connected',
       {wsid: '123'},
     ]);
-    expect(await downstream.dequeue()).toMatchObject([
+    expect(await dequeueMessage(downstream)).toMatchObject([
       'pokeStart',
       {pokeID: '00:01'},
     ]);
-    expect(await downstream.dequeue()).toMatchObject([
+    expect(await dequeueMessage(downstream)).toMatchObject([
       'pokePart',
       {
         pokeID: '00:01',
@@ -636,18 +655,20 @@ describe('integration', {timeout: 30000}, () => {
         },
       },
     ]);
-    expect(await downstream.dequeue()).toMatchObject([
+    expect(await dequeueMessage(downstream)).toMatchObject([
       'pokeEnd',
       {pokeID: '00:01'},
     ]);
 
-    const contentPokeStart = (await downstream.dequeue()) as PokeStartMessage;
+    const contentPokeStart = (await dequeueMessage(
+      downstream,
+    )) as PokeStartMessage;
     expect(contentPokeStart).toMatchObject([
       'pokeStart',
       {pokeID: /[0-9a-z]{2,}/},
     ]);
     const contentPokeID = contentPokeStart[1].pokeID;
-    expect(await downstream.dequeue()).toMatchObject([
+    expect(await dequeueMessage(downstream)).toMatchObject([
       'pokePart',
       {
         pokeID: contentPokeID,
@@ -666,7 +687,7 @@ describe('integration', {timeout: 30000}, () => {
         ],
       },
     ]);
-    expect(await downstream.dequeue()).toMatchObject([
+    expect(await dequeueMessage(downstream)).toMatchObject([
       'pokeEnd',
       {pokeID: contentPokeID},
     ]);
@@ -709,6 +730,7 @@ describe('integration', {timeout: 30000}, () => {
           ...env,
           ['ZERO_PORT']: `${port2}`,
           ['ZERO_NUM_SYNC_WORKERS']: '0',
+          ['ZERO_CHANGE_STREAMER_ADDRESS']: `localhost:${port2 + 1}`,
           ['ZERO_CHANGE_STREAMER_STARTUP_DELAY_MS']: '0',
         },
         // startZero() will then copy to replicaDbFile2 for the view-syncer
@@ -749,6 +771,7 @@ describe('integration', {timeout: 30000}, () => {
           ...env,
           ['ZERO_PORT']: `${port2}`,
           ['ZERO_NUM_SYNC_WORKERS']: '0',
+          ['ZERO_CHANGE_STREAMER_ADDRESS']: `localhost:${port2 + 1}`,
           ['ZERO_CHANGE_STREAMER_STARTUP_DELAY_MS']: '0',
         },
         // startZero() will then copy to replicaDbFile2 for the view-syncer
@@ -815,15 +838,15 @@ describe('integration', {timeout: 30000}, () => {
         ),
       );
 
-      expect(await downstream.dequeue()).toMatchObject([
+      expect(await dequeueMessage(downstream)).toMatchObject([
         'connected',
         {wsid: '123'},
       ]);
-      expect(await downstream.dequeue()).toMatchObject([
+      expect(await dequeueMessage(downstream)).toMatchObject([
         'pokeStart',
         {pokeID: '00:01'},
       ]);
-      expect(await downstream.dequeue()).toMatchObject([
+      expect(await dequeueMessage(downstream)).toMatchObject([
         'pokePart',
         {
           pokeID: '00:01',
@@ -832,17 +855,19 @@ describe('integration', {timeout: 30000}, () => {
           },
         },
       ]);
-      expect(await downstream.dequeue()).toMatchObject([
+      expect(await dequeueMessage(downstream)).toMatchObject([
         'pokeEnd',
         {pokeID: '00:01'},
       ]);
-      const contentPokeStart = (await downstream.dequeue()) as PokeStartMessage;
+      const contentPokeStart = (await dequeueMessage(
+        downstream,
+      )) as PokeStartMessage;
       expect(contentPokeStart).toMatchObject([
         'pokeStart',
         {pokeID: /[0-9a-z]{2,}/},
       ]);
       const contentPokeID = contentPokeStart[1].pokeID;
-      expect(await downstream.dequeue()).toMatchObject([
+      expect(await dequeueMessage(downstream)).toMatchObject([
         'pokePart',
         {
           pokeID: contentPokeID,
@@ -871,7 +896,7 @@ describe('integration', {timeout: 30000}, () => {
           ],
         },
       ]);
-      expect(await downstream.dequeue()).toMatchObject([
+      expect(await dequeueMessage(downstream)).toMatchObject([
         'pokeEnd',
         {pokeID: contentPokeID},
       ]);
@@ -936,11 +961,11 @@ describe('integration', {timeout: 30000}, () => {
         ]);
       }
 
-      expect(await downstream.dequeue()).toMatchObject([
+      expect(await dequeueMessage(downstream)).toMatchObject([
         'pokeStart',
         {pokeID: WATERMARK_REGEX},
       ]);
-      expect(await downstream.dequeue()).toMatchObject([
+      expect(await dequeueMessage(downstream)).toMatchObject([
         'pokePart',
         {
           pokeID: WATERMARK_REGEX,
@@ -982,7 +1007,7 @@ describe('integration', {timeout: 30000}, () => {
           ],
         },
       ]);
-      expect(await downstream.dequeue()).toMatchObject([
+      expect(await dequeueMessage(downstream)).toMatchObject([
         'pokeEnd',
         {pokeID: WATERMARK_REGEX},
       ]);
@@ -992,11 +1017,11 @@ describe('integration', {timeout: 30000}, () => {
         await upDB.unsafe(/*sql*/ `
           ALTER TABLE foo ADD COLUMN espresso INT DEFAULT (1 + 2 + 3) * 6;
       `);
-        expect(await downstream.dequeue()).toMatchObject([
+        expect(await dequeueMessage(downstream)).toMatchObject([
           'pokeStart',
           {pokeID: BACKFILL_WATERMARK_REGEX},
         ]);
-        expect(await downstream.dequeue()).toMatchObject([
+        expect(await dequeueMessage(downstream)).toMatchObject([
           'pokePart',
           {
             pokeID: BACKFILL_WATERMARK_REGEX,
@@ -1014,7 +1039,7 @@ describe('integration', {timeout: 30000}, () => {
             ],
           },
         ]);
-        expect(await downstream.dequeue()).toMatchObject([
+        expect(await dequeueMessage(downstream)).toMatchObject([
           'pokeEnd',
           {pokeID: BACKFILL_WATERMARK_REGEX},
         ]);
@@ -1045,11 +1070,11 @@ describe('integration', {timeout: 30000}, () => {
         ]);
       }
 
-      expect(await downstream.dequeue()).toMatchObject([
+      expect(await dequeueMessage(downstream)).toMatchObject([
         'pokeStart',
         {pokeID: WATERMARK_REGEX},
       ]);
-      expect(await downstream.dequeue()).toMatchObject([
+      expect(await dequeueMessage(downstream)).toMatchObject([
         'pokePart',
         {
           pokeID: WATERMARK_REGEX,
@@ -1067,7 +1092,7 @@ describe('integration', {timeout: 30000}, () => {
           ],
         },
       ]);
-      expect(await downstream.dequeue()).toMatchObject([
+      expect(await dequeueMessage(downstream)).toMatchObject([
         'pokeEnd',
         {pokeID: WATERMARK_REGEX},
       ]);

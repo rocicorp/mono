@@ -1026,7 +1026,7 @@ export class PipelineDriver {
             advanceContext.pos++;
           }
 
-          this.#shouldAdvanceYieldMaybeAbortAdvance();
+          this.#shouldAdvanceYieldMaybeAbortAdvance(false);
         } finally {
           advanceContext.currentChangeStartMs = undefined;
         }
@@ -1091,7 +1091,7 @@ export class PipelineDriver {
    * the hydration budget. The late-finish exception only applies to batch-level
    * checks; a single pathological push always resets.
    */
-  #shouldAdvanceYieldMaybeAbortAdvance(): boolean {
+  #shouldAdvanceYieldMaybeAbortAdvance(checkYield = true): boolean {
     const {
       currentChangeStartMs,
       pos,
@@ -1153,7 +1153,7 @@ export class PipelineDriver {
         'advancement-timeout',
       );
     }
-    return advanceTimer.elapsedLap() > this.#yieldThresholdMs();
+    return checkYield && advanceTimer.elapsedLap() > this.#yieldThresholdMs();
   }
 
   #throwSlowCurrentChangeReset(
