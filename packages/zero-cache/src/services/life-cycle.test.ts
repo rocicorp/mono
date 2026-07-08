@@ -3,6 +3,18 @@ import {resolver} from '@rocicorp/resolver';
 import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
+
+const workerStartupRecordMs = vi.hoisted(() => vi.fn());
+
+vi.mock('../observability/metrics.ts', async importOriginal => {
+  const actual =
+    await importOriginal<typeof import('../observability/metrics.ts')>();
+  return {
+    ...actual,
+    getOrCreateHistogram: vi.fn(() => ({recordMs: workerStartupRecordMs})),
+  };
+});
+
 import {
   exitAfter,
   INTENTIONAL_SHUTDOWN_ERROR_CODE,
@@ -70,6 +82,8 @@ describe('shutdown', () => {
   }
 
   beforeEach(async () => {
+    workerStartupRecordMs.mockReset();
+
     // For testing process.exit()
     process.env['SINGLE_PROCESS'] = '1';
 
@@ -259,6 +273,18 @@ describe('shutdown', () => {
 
     // sort() because order doesn't matter.
     expect(events.sort()).toEqual(expectedEvents.sort());
+  });
+
+  test('records worker startup duration when a worker is ready', () => {
+    const [parentPort, childPort] = inProcChannel();
+    processes.addWorker(parentPort, 'supporting', 'replicator.ts (backup)');
+
+    childPort.send(['ready', {ready: true}]);
+
+    expect(workerStartupRecordMs).toHaveBeenCalledWith(expect.any(Number), {
+      worker: 'backup_replicator',
+      type: 'supporting',
+    });
   });
 });
 

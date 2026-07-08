@@ -3,6 +3,10 @@ import {pid} from 'node:process';
 import type {EventEmitter} from 'stream';
 import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
+import {
+  getOrCreateHistogram,
+  LONG_DURATION_HISTOGRAM_BOUNDARIES_S,
+} from '../observability/metrics.ts';
 import {ConfigurationError} from '../types/configuration-error.ts';
 import {
   singleProcessMode,
@@ -32,6 +36,40 @@ export const FORCEFUL_SHUTDOWN = ['SIGQUIT', 'SIGABRT'] as const;
 
 type GracefulShutdownSignal = (typeof GRACEFUL_SHUTDOWN)[number];
 
+function workerStartupMetricName(name: string): string {
+  if (name === 'zero-cache') {
+    return 'zero_cache';
+  }
+  if (name.startsWith('change-streamer')) {
+    return 'change_streamer';
+  }
+  if (name.startsWith('replicator')) {
+    if (name.includes('(backup)')) {
+      return 'backup_replicator';
+    }
+    if (name.includes('(serving-copy)')) {
+      return 'serving_copy_replicator';
+    }
+    if (name.includes('(serving)')) {
+      return 'serving_replicator';
+    }
+    return 'other';
+  }
+  if (name.startsWith('syncer')) {
+    return 'syncer';
+  }
+  if (name.startsWith('reaper')) {
+    return 'reaper';
+  }
+  if (name.startsWith('shadow-syncer')) {
+    return 'shadow_syncer';
+  }
+  if (name.startsWith('mutator')) {
+    return 'mutator';
+  }
+  return 'other';
+}
+
 // An internal error code used to indicate that a message has already been
 // logged at level ERRROR. When a process exits with this error code, the
 // parent process logs the exit at level WARN instead of ERROR.
@@ -48,6 +86,15 @@ export const INTENTIONAL_SHUTDOWN_ERROR_CODE = 14;
  */
 export class ProcessManager {
   readonly #lc: LogContext;
+  readonly #workerStartupDuration = getOrCreateHistogram(
+    'server',
+    'worker_startup_duration',
+    {
+      description: 'Duration from starting a worker to its ready signal.',
+      unit: 's',
+      bucketBoundaries: LONG_DURATION_HISTOGRAM_BOUNDARIES_S,
+    },
+  );
   readonly #userFacing = new Set<Subprocess>();
   readonly #all = new Set<Subprocess>();
   readonly #exitImpl: (code: number) => never;
@@ -155,12 +202,16 @@ export class ProcessManager {
   addWorker(worker: Worker, type: WorkerType, name: string): Worker {
     this.addSubprocess(worker, type, name);
 
+    const start = performance.now();
     const id = ++this.#nextID;
     this.#initializing.set(id, name);
     const {promise, resolve} = resolver();
     this.#ready.push(promise);
 
     worker.onceMessageType('ready', () => {
+      this.#workerStartupDuration.recordMs(performance.now() - start, {
+        worker: workerStartupMetricName(name),
+      });
       this.#lc.debug?.(`${name} ready (${Date.now() - this.#start} ms)`);
       this.#initializing.delete(id);
       resolve();
