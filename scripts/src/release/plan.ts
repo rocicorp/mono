@@ -47,9 +47,6 @@ export function runReleasePlanCli() {
   const plan = planRelease({
     mode: mustEnv('MODE'),
     releaseBranch: mustEnv('RELEASE_BRANCH'),
-    // Set for push-triggered (head) runs so a queued run releases the commit
-    // that triggered it instead of whatever main has advanced to by the time
-    // the run leaves the concurrency queue.
     sourceSha: process.env.SOURCE_SHA || undefined,
     workflowRefName: mustEnv('WORKFLOW_REF_NAME'),
   });
