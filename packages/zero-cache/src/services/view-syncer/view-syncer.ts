@@ -48,6 +48,7 @@ import type {
 import {
   getOrCreateCounter,
   getOrCreateLatencyHistogram,
+  getOrCreateNativeHistogram,
   getOrCreateUpDownCounter,
 } from '../../observability/metrics.ts';
 import type {InspectorDelegate} from '../../server/inspector-delegate.ts';
@@ -284,6 +285,17 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     'sync',
     'hydration-time',
     'Time to hydrate a query.',
+  );
+  readonly #viewSyncerHydration = getOrCreateNativeHistogram(
+    'sync',
+    'view_syncer_hydration',
+    {
+      description:
+        'Time from ViewSyncer query sync requiring hydration to output for a ' +
+        'client group. Includes query transformation, query materialization, ' +
+        'CVR flush, catchup, and pokeEnd.',
+      unit: 's',
+    },
   );
   readonly #transactionAdvanceTime = getOrCreateLatencyHistogram(
     'sync',
@@ -1675,6 +1687,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     driftedQueryIDs: Set<string> = new Set(),
   ) {
     return startAsyncSpan(tracer, 'vs.#syncQueryPipelineSet', async span => {
+      const start = performance.now();
       span.setAttribute('clientGroupID', this.id);
       assert(
         this.#pipelines.initialized(),
@@ -1902,6 +1915,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           Array.from(removeQueriesQueryIds, id => ({id})),
           driftedQueryIDs,
         );
+        if (addQueries.length > 0) {
+          this.#viewSyncerHydration.recordMs(performance.now() - start);
+        }
       } else {
         await this.#catchupClients(lc, cvr);
       }
