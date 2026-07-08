@@ -16,6 +16,7 @@ import {type ZeroConfig} from '../config/zero-config.ts';
 import {
   getOrCreateCounter,
   getOrCreateGauge,
+  getOrCreateNativeHistogram,
   getOrCreateUpDownCounter,
 } from '../observability/metrics.ts';
 import {
@@ -67,7 +68,12 @@ export type ServingLagStats = {
   readonly maxMs: number;
 };
 
+type ServingLagSnapshot = ServingLagStats & {
+  readonly lagsMs: readonly number[];
+};
+
 export const MAX_REPLICA_READY_STATES = 10_000;
+const VIEW_SYNCER_LAG_SAMPLE_INTERVAL_MS = 60_000;
 
 const PROTOCOL_VERSION_ATTRIBUTE = 'protocol.version';
 const FAILURE_REASON_ATTRIBUTE = 'reason';
@@ -164,11 +170,11 @@ function percentileNearestRank(
   return sortedValues[index];
 }
 
-export function computeServingLagStatsMs(
+function computeServingLagSnapshotMs(
   now: number,
   replicaReadyStates: ReplicaReadyState[],
   viewSyncers: Iterable<ServingLagViewSyncer>,
-): ServingLagStats {
+): ServingLagSnapshot {
   const lags: number[] = [];
   let laggingClientGroups = 0;
   let firstNeededIndex = replicaReadyStates.length;
@@ -205,6 +211,28 @@ export function computeServingLagStatsMs(
     p75Ms: percentileNearestRank(lags, 75),
     p99Ms: percentileNearestRank(lags, 99),
     maxMs: lags.at(-1) ?? 0,
+    lagsMs: lags,
+  };
+}
+
+export function computeServingLagStatsMs(
+  now: number,
+  replicaReadyStates: ReplicaReadyState[],
+  viewSyncers: Iterable<ServingLagViewSyncer>,
+): ServingLagStats {
+  const snapshot = computeServingLagSnapshotMs(
+    now,
+    replicaReadyStates,
+    viewSyncers,
+  );
+  return {
+    activeClientGroups: snapshot.activeClientGroups,
+    laggingClientGroups: snapshot.laggingClientGroups,
+    minMs: snapshot.minMs,
+    p50Ms: snapshot.p50Ms,
+    p75Ms: snapshot.p75Ms,
+    p99Ms: snapshot.p99Ms,
+    maxMs: snapshot.maxMs,
   };
 }
 
@@ -283,8 +311,20 @@ export class Syncer implements SingletonService {
     'websocket.connection_failures',
     'Client WebSocket connection attempts that failed before initialization.',
   );
-  #servingLagStatsCache: ServingLagStats | undefined;
+  readonly #viewSyncerLag = getOrCreateNativeHistogram(
+    'sync',
+    'view_syncer_lag',
+    {
+      description:
+        'Lag from replica-ready change to ViewSyncer output for active ' +
+        'client groups. A change is output after IVM advancement, CVR flush, ' +
+        'and pokeEnd.',
+      unit: 's',
+    },
+  );
+  #servingLagStatsCache: ServingLagSnapshot | undefined;
   #servingLagStatsCacheClearQueued = false;
+  #viewSyncerLagSampleInterval: ReturnType<typeof setInterval> | undefined;
 
   constructor(
     lc: LogContext,
@@ -407,14 +447,20 @@ export class Syncer implements SingletonService {
     ).addCallback(result => {
       result.observe(this.#computeServingLagStats().laggingClientGroups);
     });
+
+    this.#viewSyncerLagSampleInterval = setInterval(
+      () => this.#recordViewSyncerLagSamples(),
+      VIEW_SYNCER_LAG_SAMPLE_INTERVAL_MS,
+    );
+    this.#viewSyncerLagSampleInterval.unref?.();
   }
 
-  #computeServingLagStats(): ServingLagStats {
+  #computeServingLagStats(): ServingLagSnapshot {
     if (this.#servingLagStatsCache) {
       return this.#servingLagStatsCache;
     }
 
-    const stats = computeServingLagStatsMs(
+    const stats = computeServingLagSnapshotMs(
       Date.now(),
       this.#replicaReadyStates,
       this.#viewSyncers.getServices(),
@@ -428,6 +474,13 @@ export class Syncer implements SingletonService {
       });
     }
     return stats;
+  }
+
+  #recordViewSyncerLagSamples(): void {
+    const {lagsMs} = this.#computeServingLagStats();
+    for (const lagMs of lagsMs) {
+      this.#viewSyncerLag.recordMs(lagMs);
+    }
   }
 
   #recordReplicaReadyState(state: ReplicaState): void {
@@ -687,6 +740,7 @@ export class Syncer implements SingletonService {
   }
 
   stop() {
+    clearInterval(this.#viewSyncerLagSampleInterval);
     this.#wss.close();
     this.#stopped.resolve();
     return promiseVoid;
