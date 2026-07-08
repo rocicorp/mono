@@ -2,7 +2,7 @@ import {mapAST, type AST} from '../../../packages/zero-protocol/src/ast.ts';
 import {clientToServer} from '../../../packages/zero-schema/src/name-mapper.ts';
 import {runAnalyzeCLI} from '../../../packages/zero/src/analyze.ts';
 import {createBuilder} from '../../../packages/zql/src/query/create-builder.ts';
-import type {BenchmarkProfile} from './config.ts';
+import type {BenchmarkModel, BenchmarkProfile} from './config.ts';
 import {
   buildProfileQuery,
   findProfileQuery,
@@ -11,21 +11,26 @@ import {
 import {schema} from './schema.ts';
 
 const DEFAULT_PROFILE = 'relational' satisfies BenchmarkProfile;
+const DEFAULT_MODEL = 'hot' satisfies BenchmarkModel;
 const DEFAULT_QUERY_INDEX = 0;
 const DEFAULT_ROWS_PER_QUERY = 100;
+const DEFAULT_CLIENT_INDEX = 0;
 const PROFILES = new Set<BenchmarkProfile>([
   'feed-append',
   'email',
   'forum',
   'relational',
 ]);
+const MODELS = new Set<BenchmarkModel>(['hot', 'realistic']);
 
 type AnalyzeConfig = {
   readonly passThroughArgs: readonly string[];
   readonly profile: BenchmarkProfile | undefined;
+  readonly model: BenchmarkModel;
   readonly profileQueryName: string | undefined;
   readonly queryIndex: number;
   readonly rowsPerQuery: number;
+  readonly clientIndex: number;
   readonly printAst: boolean;
   readonly listProfileQueries: boolean;
   readonly help: boolean;
@@ -50,8 +55,10 @@ if (config.help) {
   const {name, query} = buildProfileQuery(
     createBuilder(schema),
     profile,
+    config.model,
     queryIndex,
     config.rowsPerQuery,
+    config.clientIndex,
   );
   const ast = mapAST(queryAST(query), clientToServer(schema.tables));
   if (config.printAst) {
@@ -68,9 +75,11 @@ if (config.help) {
 function parseArgs(argv: readonly string[]): AnalyzeConfig {
   const passThroughArgs: string[] = [];
   let profile: BenchmarkProfile | undefined;
+  let model: BenchmarkModel = DEFAULT_MODEL;
   let profileQueryName: string | undefined;
   let queryIndex = DEFAULT_QUERY_INDEX;
   let rowsPerQuery = DEFAULT_ROWS_PER_QUERY;
+  let clientIndex = DEFAULT_CLIENT_INDEX;
   let printAst = false;
   let listProfileQueries = false;
   let help = false;
@@ -87,6 +96,12 @@ function parseArgs(argv: readonly string[]): AnalyzeConfig {
 
       case '--profile':
         profile = parseProfile(readOptionValue(argv, option, i));
+        i += option.value === undefined ? 1 : 0;
+        usesProfileOptions = true;
+        break;
+
+      case '--model':
+        model = parseModel(readOptionValue(argv, option, i));
         i += option.value === undefined ? 1 : 0;
         usesProfileOptions = true;
         break;
@@ -118,6 +133,16 @@ function parseArgs(argv: readonly string[]): AnalyzeConfig {
         usesProfileOptions = true;
         break;
 
+      case '--client-index':
+      case '--clientIndex':
+        clientIndex = parseNonNegativeInteger(
+          option.name,
+          readOptionValue(argv, option, i),
+        );
+        i += option.value === undefined ? 1 : 0;
+        usesProfileOptions = true;
+        break;
+
       case '--print-ast':
       case '--printAst':
         printAst = parseBooleanOption(option.value, true);
@@ -138,9 +163,11 @@ function parseArgs(argv: readonly string[]): AnalyzeConfig {
   return {
     passThroughArgs,
     profile,
+    model,
     profileQueryName,
     queryIndex,
     rowsPerQuery,
+    clientIndex,
     printAst,
     listProfileQueries,
     help,
@@ -187,6 +214,15 @@ function parseProfile(value: string): BenchmarkProfile {
   }
   throw new Error(
     `Invalid profile "${value}". Expected one of: ${[...PROFILES].join(', ')}`,
+  );
+}
+
+function parseModel(value: string): BenchmarkModel {
+  if (MODELS.has(value as BenchmarkModel)) {
+    return value as BenchmarkModel;
+  }
+  throw new Error(
+    `Invalid model "${value}". Expected one of: ${[...MODELS].join(', ')}`,
   );
 }
 
@@ -265,6 +301,7 @@ function printUsage(): void {
 
 Profile query options:
   --profile relational --query-index 2 --rows-per-query 50
+  --profile relational --model realistic --client-index 0
   --profile-query relational:activity-list
   --print-ast
   --list-profile-queries
@@ -274,8 +311,10 @@ Any other flags are passed through to analyze-query, such as --join-plans,
 
 Defaults:
   --profile ${DEFAULT_PROFILE}
+  --model ${DEFAULT_MODEL}
   --query-index ${DEFAULT_QUERY_INDEX}
   --rows-per-query ${DEFAULT_ROWS_PER_QUERY}
+  --client-index ${DEFAULT_CLIENT_INDEX}
 `);
   printProfileQueries();
 }

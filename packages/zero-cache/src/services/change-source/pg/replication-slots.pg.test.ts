@@ -1,6 +1,6 @@
 import {PG_LOCK_NOT_AVAILABLE} from '@drdgvhbh/postgres-error-codes';
 import postgres from 'postgres';
-import {beforeEach, describe, expect} from 'vitest';
+import {beforeEach, describe, expect, vi} from 'vitest';
 import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.ts';
 import {getConnectionURI, type PgTest, test} from '../../../test/db.ts';
 import {pgClient, type PostgresDB} from '../../../types/pg.ts';
@@ -238,6 +238,14 @@ describe('createReplicationSlot', () => {
     });
 
     stream.destroy();
+    await vi.waitFor(async () => {
+      expect(
+        await upstream<{active: boolean}[]> /*sql*/ `
+          SELECT active FROM pg_replication_slots
+            WHERE slot_name = 'zero_18_b'
+        `,
+      ).toEqual([{active: false}]);
+    });
 
     expect(await dropOldReplicasAndSlots(lc, upstream, shard, 4n)).toEqual({
       active: 0,

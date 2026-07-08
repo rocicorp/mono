@@ -12,6 +12,28 @@ import {
   SHARED_OWNER_ID,
 } from './profiles.ts';
 import {sleep} from './util.ts';
+import {
+  REALISTIC_EMAIL_ACTIVE_OWNER_LIMIT,
+  REALISTIC_EMAIL_ARCHIVE_THREAD_COUNT,
+  REALISTIC_EMAIL_COLD_OWNER_COUNT,
+  REALISTIC_EMAIL_INBOX_THREAD_COUNT,
+  REALISTIC_FORUM_CATEGORY_COUNT,
+  REALISTIC_REL_ACTIVE_ORG_LIMIT,
+  REALISTIC_REL_COLD_ORG_COUNT,
+  activeRealisticForumCategoryCount,
+  activeRealisticRelOrgCount,
+  realisticEmailActiveOwnerID,
+  realisticEmailArchiveThreadID,
+  realisticEmailColdOwnerID,
+  realisticEmailInboxThreadID,
+  realisticForumCategoryID,
+  realisticForumCategorySlug,
+  realisticForumThreadID,
+  realisticRelAccountID,
+  realisticRelActiveOrgID,
+  realisticRelColdOrgID,
+  realisticRelContactID,
+} from './workload-models.ts';
 
 export type BenchmarkDB = postgres.Sql;
 
@@ -259,9 +281,26 @@ export async function resetBenchmarkDatabase(
     ON zero_throughput_rel_activity (contact_id, seq DESC, id ASC)
   `;
 
-  await seedEmail(sql);
-  await seedForum(sql);
-  await seedRelational(sql);
+  if (config.model === 'hot') {
+    await seedEmail(sql);
+    await seedForum(sql);
+    await seedRelational(sql);
+    return;
+  }
+
+  switch (config.profile) {
+    case 'feed-append':
+      return;
+    case 'email':
+      await seedRealisticEmail(sql);
+      return;
+    case 'forum':
+      await seedRealisticForum(sql, config);
+      return;
+    case 'relational':
+      await seedRealisticRelational(sql, config);
+      return;
+  }
 }
 
 async function seedEmail(sql: BenchmarkDB): Promise<void> {
@@ -326,4 +365,156 @@ async function seedRelational(sql: BenchmarkDB): Promise<void> {
     })),
   );
   await sql`INSERT INTO zero_throughput_rel_contact ${sql(contacts)}`;
+}
+
+async function seedRealisticEmail(sql: BenchmarkDB): Promise<void> {
+  const activeOwners = Array.from(
+    {length: REALISTIC_EMAIL_ACTIVE_OWNER_LIMIT},
+    (_, index) => realisticEmailActiveOwnerID(index),
+  );
+  const coldOwners = Array.from(
+    {length: REALISTIC_EMAIL_COLD_OWNER_COUNT},
+    (_, index) => realisticEmailColdOwnerID(index),
+  );
+  const owners = [...activeOwners, ...coldOwners];
+  const threads = owners.flatMap(ownerID => [
+    ...Array.from({length: REALISTIC_EMAIL_INBOX_THREAD_COUNT}, (_, index) => ({
+      id: realisticEmailInboxThreadID(ownerID, index),
+      owner_id: ownerID,
+      mailbox: 'inbox',
+      subject: `Throughput inbox thread ${index}`,
+      participant_count: 3,
+      seq: -index,
+    })),
+    ...Array.from(
+      {length: REALISTIC_EMAIL_ARCHIVE_THREAD_COUNT},
+      (_, index) => ({
+        id: realisticEmailArchiveThreadID(ownerID, index),
+        owner_id: ownerID,
+        mailbox: 'archive',
+        subject: `Throughput archive thread ${index}`,
+        participant_count: 3,
+        seq: -index,
+      }),
+    ),
+  ]);
+
+  await insertChunks(
+    threads,
+    chunk => sql`
+    INSERT INTO zero_throughput_email_thread ${sql(chunk)}
+  `,
+  );
+}
+
+async function seedRealisticForum(
+  sql: BenchmarkDB,
+  config: BenchmarkConfig,
+): Promise<void> {
+  const users = Array.from({length: FORUM_USER_COUNT}, (_, index) => ({
+    id: `forum-user-${index}`,
+    name: `Forum User ${index}`,
+  }));
+  await sql`INSERT INTO zero_throughput_forum_user ${sql(users)}`;
+
+  const activeCategoryCount = activeRealisticForumCategoryCount(config.users);
+  const categories = Array.from(
+    {length: REALISTIC_FORUM_CATEGORY_COUNT},
+    (_, index) => ({
+      id: realisticForumCategoryID(index),
+      slug: realisticForumCategorySlug(index),
+      title:
+        index < activeCategoryCount
+          ? `Active Category ${index}`
+          : `Cold Category ${index}`,
+      seq: -index,
+    }),
+  );
+  await sql`INSERT INTO zero_throughput_forum_category ${sql(categories)}`;
+
+  const threads = categories.flatMap((category, categoryIndex) =>
+    Array.from({length: FORUM_THREAD_COUNT}, (_, index) => ({
+      id: realisticForumThreadID(categoryIndex, index),
+      category_id: category.id,
+      author_id: `forum-user-${index % FORUM_USER_COUNT}`,
+      title: `Throughput discussion ${categoryIndex}-${index}`,
+      pinned: index === 0,
+      seq: -index,
+    })),
+  );
+  await insertChunks(
+    threads,
+    chunk => sql`
+    INSERT INTO zero_throughput_forum_thread ${sql(chunk)}
+  `,
+  );
+}
+
+async function seedRealisticRelational(
+  sql: BenchmarkDB,
+  config: BenchmarkConfig,
+): Promise<void> {
+  const activeOrgCount = activeRealisticRelOrgCount(config.users);
+  const activeOrgIDs = Array.from(
+    {length: REALISTIC_REL_ACTIVE_ORG_LIMIT},
+    (_, index) => realisticRelActiveOrgID(index),
+  );
+  const coldOrgIDs = Array.from(
+    {length: REALISTIC_REL_COLD_ORG_COUNT},
+    (_, index) => realisticRelColdOrgID(index),
+  );
+  const orgIDs = [...activeOrgIDs, ...coldOrgIDs];
+  const orgs = orgIDs.map((id, index) => ({
+    id,
+    name:
+      index < activeOrgCount
+        ? `Active Throughput Org ${index}`
+        : `Cold Throughput Org ${index}`,
+    region: index % 2 === 0 ? 'na' : 'emea',
+    seq: -index,
+  }));
+  await sql`INSERT INTO zero_throughput_rel_org ${sql(orgs)}`;
+
+  const accounts = orgIDs.flatMap(orgID =>
+    Array.from({length: REL_ACCOUNT_COUNT}, (_, index) => ({
+      id: realisticRelAccountID(orgID, index),
+      org_id: orgID,
+      owner_id: `owner-${index % 8}`,
+      name: `Account ${index}`,
+      status: index % 3 === 0 ? 'risk' : 'active',
+      seq: -index,
+    })),
+  );
+  await insertChunks(
+    accounts,
+    chunk => sql`
+    INSERT INTO zero_throughput_rel_account ${sql(chunk)}
+  `,
+  );
+
+  const contacts = accounts.flatMap(account =>
+    Array.from({length: REL_CONTACTS_PER_ACCOUNT}, (_, index) => ({
+      id: realisticRelContactID(account.id, index),
+      account_id: account.id,
+      name: `Contact ${index} at ${account.name}`,
+      role: index === 0 ? 'buyer' : 'stakeholder',
+      seq: -index,
+    })),
+  );
+  await insertChunks(
+    contacts,
+    chunk => sql`
+    INSERT INTO zero_throughput_rel_contact ${sql(chunk)}
+  `,
+  );
+}
+
+async function insertChunks<T>(
+  rows: readonly T[],
+  insert: (chunk: T[]) => Promise<unknown>,
+): Promise<void> {
+  const chunkSize = 500;
+  for (let start = 0; start < rows.length; start += chunkSize) {
+    await insert(rows.slice(start, start + chunkSize));
+  }
 }
