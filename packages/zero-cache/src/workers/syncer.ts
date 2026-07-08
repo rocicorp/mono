@@ -68,7 +68,7 @@ export type ServingLagStats = {
   readonly maxMs: number;
 };
 
-type ServingLagSnapshot = ServingLagStats & {
+type ServingLagDistribution = ServingLagStats & {
   readonly lagsMs: readonly number[];
 };
 
@@ -170,11 +170,11 @@ function percentileNearestRank(
   return sortedValues[index];
 }
 
-function computeServingLagSnapshotMs(
+function computeServingLagDistributionMs(
   now: number,
   replicaReadyStates: ReplicaReadyState[],
   viewSyncers: Iterable<ServingLagViewSyncer>,
-): ServingLagSnapshot {
+): ServingLagDistribution {
   const lags: number[] = [];
   let laggingClientGroups = 0;
   let firstNeededIndex = replicaReadyStates.length;
@@ -220,19 +220,19 @@ export function computeServingLagStatsMs(
   replicaReadyStates: ReplicaReadyState[],
   viewSyncers: Iterable<ServingLagViewSyncer>,
 ): ServingLagStats {
-  const snapshot = computeServingLagSnapshotMs(
+  const distribution = computeServingLagDistributionMs(
     now,
     replicaReadyStates,
     viewSyncers,
   );
   return {
-    activeClientGroups: snapshot.activeClientGroups,
-    laggingClientGroups: snapshot.laggingClientGroups,
-    minMs: snapshot.minMs,
-    p50Ms: snapshot.p50Ms,
-    p75Ms: snapshot.p75Ms,
-    p99Ms: snapshot.p99Ms,
-    maxMs: snapshot.maxMs,
+    activeClientGroups: distribution.activeClientGroups,
+    laggingClientGroups: distribution.laggingClientGroups,
+    minMs: distribution.minMs,
+    p50Ms: distribution.p50Ms,
+    p75Ms: distribution.p75Ms,
+    p99Ms: distribution.p99Ms,
+    maxMs: distribution.maxMs,
   };
 }
 
@@ -322,8 +322,8 @@ export class Syncer implements SingletonService {
       unit: 's',
     },
   );
-  #servingLagStatsCache: ServingLagSnapshot | undefined;
-  #servingLagStatsCacheClearQueued = false;
+  #servingLagDistributionCache: ServingLagDistribution | undefined;
+  #servingLagDistributionCacheClearQueued = false;
   #viewSyncerLagSampleInterval: ReturnType<typeof setInterval> | undefined;
 
   constructor(
@@ -422,7 +422,7 @@ export class Syncer implements SingletonService {
         'and pokeEnd.',
       unit: 'millisecond',
     }).addCallback(result => {
-      result.observe(this.#computeServingLagStats().maxMs);
+      result.observe(this.#computeServingLagDistribution().maxMs);
     });
 
     getOrCreateGauge('sync', 'serving_lag_stats', {
@@ -432,7 +432,7 @@ export class Syncer implements SingletonService {
         'CVR flush, and pokeEnd.',
       unit: 'millisecond',
     }).addCallback(result => {
-      const stats = this.#computeServingLagStats();
+      const stats = this.#computeServingLagDistribution();
       result.observe(stats.minMs, {stat: 'min'});
       result.observe(stats.p50Ms, {stat: 'p50'});
       result.observe(stats.p75Ms, {stat: 'p75'});
@@ -445,7 +445,7 @@ export class Syncer implements SingletonService {
       'serving_lagging_client_groups',
       'Number of active client groups with unserved replica changes',
     ).addCallback(result => {
-      result.observe(this.#computeServingLagStats().laggingClientGroups);
+      result.observe(this.#computeServingLagDistribution().laggingClientGroups);
     });
 
     this.#viewSyncerLagSampleInterval = setInterval(
@@ -455,29 +455,29 @@ export class Syncer implements SingletonService {
     this.#viewSyncerLagSampleInterval.unref?.();
   }
 
-  #computeServingLagStats(): ServingLagSnapshot {
-    if (this.#servingLagStatsCache) {
-      return this.#servingLagStatsCache;
+  #computeServingLagDistribution(): ServingLagDistribution {
+    if (this.#servingLagDistributionCache) {
+      return this.#servingLagDistributionCache;
     }
 
-    const stats = computeServingLagSnapshotMs(
+    const distribution = computeServingLagDistributionMs(
       Date.now(),
       this.#replicaReadyStates,
       this.#viewSyncers.getServices(),
     );
-    this.#servingLagStatsCache = stats;
-    if (!this.#servingLagStatsCacheClearQueued) {
-      this.#servingLagStatsCacheClearQueued = true;
+    this.#servingLagDistributionCache = distribution;
+    if (!this.#servingLagDistributionCacheClearQueued) {
+      this.#servingLagDistributionCacheClearQueued = true;
       queueMicrotask(() => {
-        this.#servingLagStatsCache = undefined;
-        this.#servingLagStatsCacheClearQueued = false;
+        this.#servingLagDistributionCache = undefined;
+        this.#servingLagDistributionCacheClearQueued = false;
       });
     }
-    return stats;
+    return distribution;
   }
 
   #recordViewSyncerLagSamples(): void {
-    const {lagsMs} = this.#computeServingLagStats();
+    const {lagsMs} = this.#computeServingLagDistribution();
     for (const lagMs of lagsMs) {
       this.#viewSyncerLag.recordMs(lagMs);
     }
