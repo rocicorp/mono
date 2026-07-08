@@ -90,6 +90,7 @@ import type {
 } from './logical-replication/pgoutput.types.ts';
 import {subscribe, type StreamMessage} from './logical-replication/stream.ts';
 import {fromBigInt, toBigInt, toStateVersionString, type LSN} from './lsn.ts';
+import {registerReplicationSlotHealthMetrics} from './replication-slot-health.ts';
 import {dropOldReplicasAndSlots} from './replication-slots.ts';
 import {replicationEventSchema, type ReplicationEvent} from './schema/ddl.ts';
 import {updateShardSchema} from './schema/init.ts';
@@ -264,6 +265,7 @@ class PostgresChangeSource implements ChangeSource {
   readonly #context: ServerContext;
   readonly #lagReporter: LagReporter | null;
   readonly #textCopy: boolean;
+  #stopped = false;
 
   constructor(
     lc: LogContext,
@@ -294,9 +296,16 @@ class PostgresChangeSource implements ChangeSource {
             lagReportIntervalMs,
           )
         : null;
+    registerReplicationSlotHealthMetrics(
+      this.#lc,
+      this.#db,
+      replica.slot,
+      () => this.#stopped,
+    );
   }
 
   async stop(): Promise<void> {
+    this.#stopped = true;
     this.#lagReporter?.stop();
     clearTimeout(this.#cleanupTimer);
     await this.#db.end();
