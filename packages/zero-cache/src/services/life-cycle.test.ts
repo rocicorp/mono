@@ -3,13 +3,13 @@ import {resolver} from '@rocicorp/resolver';
 import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import {promiseVoid} from '../../../shared/src/resolved-promises.ts';
+import type * as Metrics from '../observability/metrics.ts';
 
 const startupRecordMs = vi.hoisted(() => vi.fn());
 const workerStartupRecordMs = vi.hoisted(() => vi.fn());
 
 vi.mock('../observability/metrics.ts', async importOriginal => {
-  const actual =
-    await importOriginal<typeof import('../observability/metrics.ts')>();
+  const actual = await importOriginal<typeof Metrics>();
   return {
     ...actual,
     getOrCreateHistogram: vi.fn((_category, name) => ({
