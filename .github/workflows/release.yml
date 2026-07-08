@@ -399,4 +399,4 @@ jobs:
       - name: Notify Cloud Zero image releaser
         # Skips green (with a log line) when no CLOUDZERO_* secrets are
         # configured, so head releases stay green until cloudzero ships.
-        run: node --experimental-strip-types --no-warnings "$SCRIPTS/release-notify-cloudzero.ts"
+        run: node "$SCRIPTS/release-notify-cloudzero.ts"
