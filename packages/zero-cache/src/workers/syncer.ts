@@ -13,7 +13,11 @@ import {
 import {resolveAuth, type Auth, type ValidateLegacyJWT} from '../auth/auth.ts';
 import {tokenConfigOptions} from '../auth/jwt.ts';
 import {type ZeroConfig} from '../config/zero-config.ts';
-import {getOrCreateGauge} from '../observability/metrics.ts';
+import {
+  getOrCreateCounter,
+  getOrCreateGauge,
+  getOrCreateUpDownCounter,
+} from '../observability/metrics.ts';
 import {
   recordConnectionAttempted,
   recordConnectionSuccess,
@@ -64,6 +68,9 @@ export type ServingLagStats = {
 };
 
 export const MAX_REPLICA_READY_STATES = 10_000;
+
+const PROTOCOL_VERSION_ATTRIBUTE = 'protocol.version';
+const FAILURE_REASON_ATTRIBUTE = 'reason';
 
 function boundReplicaReadyStates(
   replicaReadyStates: ReplicaReadyState[],
@@ -256,6 +263,26 @@ export class Syncer implements SingletonService {
   readonly #config: ZeroConfig;
   readonly #validateLegacyJWT: ValidateLegacyJWT | undefined;
   readonly #replicaReadyStates: ReplicaReadyState[] = [];
+  readonly #webSocketOpenConnections = getOrCreateUpDownCounter(
+    'sync',
+    'websocket.open_connections',
+    'Open client WebSocket connections.',
+  );
+  readonly #webSocketConnectionAttempts = getOrCreateCounter(
+    'sync',
+    'websocket.connection_attempts',
+    'Client WebSocket connection attempts.',
+  );
+  readonly #webSocketConnectionSuccesses = getOrCreateCounter(
+    'sync',
+    'websocket.connection_successes',
+    'Client WebSocket connections successfully initialized.',
+  );
+  readonly #webSocketConnectionFailures = getOrCreateCounter(
+    'sync',
+    'websocket.connection_failures',
+    'Client WebSocket connection attempts that failed before initialization.',
+  );
   #servingLagStatsCache: ServingLagStats | undefined;
   #servingLagStatsCacheClearQueued = false;
 
@@ -348,7 +375,7 @@ export class Syncer implements SingletonService {
       result.observe(total);
     });
 
-    getOrCreateGauge('sync', 'serving-lag', {
+    getOrCreateGauge('sync', 'serving_lag', {
       description:
         'Maximum time active ViewSyncer client groups have had unserved ' +
         'replica changes. A change is served after IVM advancement, CVR flush, ' +
@@ -358,7 +385,7 @@ export class Syncer implements SingletonService {
       result.observe(this.#computeServingLagStats().maxMs);
     });
 
-    getOrCreateGauge('sync', 'serving-lag-stats', {
+    getOrCreateGauge('sync', 'serving_lag_stats', {
       description:
         'Distribution of time active ViewSyncer client groups have had ' +
         'unserved replica changes. A change is served after IVM advancement, ' +
@@ -375,7 +402,7 @@ export class Syncer implements SingletonService {
 
     getOrCreateGauge(
       'sync',
-      'serving-lagging-client-groups',
+      'serving_lagging_client_groups',
       'Number of active client groups with unserved replica changes',
     ).addCallback(result => {
       result.observe(this.#computeServingLagStats().laggingClientGroups);
@@ -426,6 +453,34 @@ export class Syncer implements SingletonService {
   }
 
   readonly #createConnection = async (ws: WebSocket, params: ConnectParams) => {
+    const metricAttributes = {
+      [PROTOCOL_VERSION_ATTRIBUTE]: params.protocolVersion,
+    };
+    let connectionResultRecorded = false;
+    const recordConnectionFailure = (reason: string) => {
+      if (connectionResultRecorded) {
+        return;
+      }
+      connectionResultRecorded = true;
+      this.#webSocketConnectionFailures.add(1, {
+        ...metricAttributes,
+        [FAILURE_REASON_ATTRIBUTE]: reason,
+      });
+    };
+    const recordConnectionSuccessMetric = () => {
+      if (connectionResultRecorded) {
+        return;
+      }
+      connectionResultRecorded = true;
+      this.#webSocketConnectionSuccesses.add(1, metricAttributes);
+    };
+
+    this.#webSocketConnectionAttempts.add(1, metricAttributes);
+    this.#webSocketOpenConnections.add(1, metricAttributes);
+    ws.once('close', () => {
+      this.#webSocketOpenConnections.add(-1, metricAttributes);
+    });
+
     this.#lc.debug?.(
       'creating connection',
       params.clientGroupID,
@@ -450,6 +505,7 @@ export class Syncer implements SingletonService {
       const hasExactlyOneTokenOption = tokenOptions.length === 1;
       const hasCustomEndpoints = hasPushOrMutate && hasQueries;
       if (!hasExactlyOneTokenOption && !hasCustomEndpoints) {
+        recordConnectionFailure('configuration');
         throw new Error(
           'Exactly one of jwk, secret, or jwksUrl must be set in order to verify tokens but actually the following were set: ' +
             JSON.stringify(tokenOptions) +
@@ -486,10 +542,12 @@ export class Syncer implements SingletonService {
             errorKind: e.message,
           },
         );
+        recordConnectionFailure('auth');
         sendError(this.#lc, ws, e.errorBody);
         ws.close(3000, e.errorBody.message);
         return;
       }
+      recordConnectionFailure('internal');
       throw e;
     }
 
@@ -513,6 +571,7 @@ export class Syncer implements SingletonService {
           'Client groups are pinned to a single userID. Connection userID does not match existing client group userID.',
         origin: ErrorOrigin.ZeroCache,
       });
+      recordConnectionFailure('user_mismatch');
       sendError(this.#lc, ws, error.errorBody);
       ws.close(3000, error.message);
       return;
@@ -568,6 +627,7 @@ export class Syncer implements SingletonService {
         },
       );
     } catch (e) {
+      recordConnectionFailure('internal');
       connContextManager.closeConnection({clientID, wsID: params.wsID});
       mutagen?.unref();
       pusher?.unref();
@@ -576,7 +636,12 @@ export class Syncer implements SingletonService {
 
     this.#connections.set(clientID, connection);
 
-    connection.init() && recordConnectionSuccess();
+    if (connection.init()) {
+      recordConnectionSuccessMetric();
+      recordConnectionSuccess();
+    } else {
+      recordConnectionFailure('protocol_version');
+    }
 
     if (params.initConnectionMsg) {
       this.#lc.debug?.(
