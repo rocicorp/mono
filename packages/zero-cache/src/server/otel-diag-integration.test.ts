@@ -60,6 +60,12 @@ vi.mock('@opentelemetry/exporter-metrics-otlp-http', () => ({
 }));
 
 vi.mock('@opentelemetry/sdk-metrics', () => ({
+  AggregationType: {
+    EXPONENTIAL_HISTOGRAM: 5,
+  },
+  InstrumentType: {
+    HISTOGRAM: 4,
+  },
   MeterProvider: vi.fn(function () {
     return {
       getMeter: vi.fn().mockReturnValue({
