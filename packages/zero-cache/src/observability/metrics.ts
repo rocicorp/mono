@@ -24,6 +24,7 @@ type HistogramOptions = Options & {bucketBoundaries: number[]};
 
 export const NATIVE_HISTOGRAM_INSTRUMENT_NAMES = [
   'zero.sync.view_syncer_lag',
+  'zero.sync.view_syncer_hydration',
 ] as const;
 
 function getMeter() {
