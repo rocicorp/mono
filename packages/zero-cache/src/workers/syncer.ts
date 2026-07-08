@@ -206,6 +206,9 @@ function computeServingLagDistributionMs(
   return {
     activeClientGroups: lags.length,
     laggingClientGroups,
+    // The percentile fields are for the legacy serving_lag_stats gauge.
+    // The native view_syncer_lag histogram records lagsMs and computes
+    // percentiles in Prometheus/AMP.
     minMs: lags[0] ?? 0,
     p50Ms: percentileNearestRank(lags, 50),
     p75Ms: percentileNearestRank(lags, 75),
