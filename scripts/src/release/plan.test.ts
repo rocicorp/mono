@@ -1,4 +1,4 @@
-import {expect, test} from 'vitest';
+import {afterEach, expect, test, vi} from 'vitest';
 import {
   type Command,
   type Exec,
@@ -8,9 +8,14 @@ import {
 import {
   isAllowedReleaseBranch,
   planCanaryVersion,
+  planHeadVersion,
   planRelease,
   planStableVersion,
 } from './plan.ts';
+
+afterEach(() => {
+  vi.useRealTimers();
+});
 
 const sourceSha = 'e8cc6889fa6bc2a364e8cb80776991c308601212';
 
@@ -43,6 +48,22 @@ test('canary planning starts at zero and increments existing tags', () => {
       'zero/v1.9.0-canary.9',
     ]),
   ).toBe('1.8.0-canary.3');
+});
+
+test('head planning stamps the UTC minute onto the base version', () => {
+  const now = new Date('2026-07-08T21:53:45.123Z');
+  expect(planHeadVersion('1.8.0', now)).toBe('1.8.0-head.202607082153');
+  expect(planHeadVersion('1.8.0-canary.5', now)).toBe(
+    '1.8.0-head.202607082153',
+  );
+  expect(planHeadVersion('1.8.0-head.202601010000', now)).toBe(
+    '1.8.0-head.202607082153',
+  );
+  expect(() =>
+    planHeadVersion('not-a-version', now),
+  ).toThrowErrorMatchingInlineSnapshot(
+    `[Error: Cannot plan head from package version not-a-version. Expected X.Y.Z, X.Y.Z-canary.N, or X.Y.Z-head.N]`,
+  );
 });
 
 test('planRelease resolves source, checks tags and npm, and returns canary outputs', () => {
@@ -82,6 +103,97 @@ test('planRelease resolves source, checks tags and npm, and returns canary outpu
     args: ['view', '--silent', '@rocicorp/zero@1.8.0-canary.2', 'version'],
     options: {stdio: ['ignore', 'pipe', 'pipe']},
   });
+});
+
+test('planRelease returns head outputs and honors the source SHA override', () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date('2026-07-08T21:53:45.123Z'));
+
+  const overrideSha = '1111111111111111111111111111111111111111';
+  const {calls, exec} = makePlanExec({packageVersion: '1.8.0'});
+
+  expect(
+    planRelease({
+      exec,
+      mode: 'head',
+      releaseBranch: 'main',
+      sourceSha: overrideSha,
+      workflowRefName: 'main',
+    }),
+  ).toEqual({
+    mode: 'head',
+    release_branch: 'main',
+    version: '1.8.0-head.202607082153',
+    tag: 'zero/v1.8.0-head.202607082153',
+    source_sha: overrideSha,
+    is_canary: 'false',
+  });
+
+  // The pushed commit is used verbatim; origin/main HEAD is never resolved.
+  expect(calls).not.toContainEqual(
+    expect.objectContaining({
+      command: 'git',
+      args: ['rev-parse', 'refs/remotes/origin/main'],
+    }),
+  );
+  expect(calls).toContainEqual({
+    command: 'git',
+    args: ['show', `${overrideSha}:packages/zero/package.json`],
+    options: undefined,
+  });
+});
+
+test('planRelease resolves head from origin when no source SHA is given', () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date('2026-07-08T21:53:45.123Z'));
+
+  const plan = planRelease({
+    exec: makePlanExec({packageVersion: '1.8.0'}).exec,
+    mode: 'head',
+    releaseBranch: 'main',
+    workflowRefName: 'main',
+  });
+  expect(plan.source_sha).toBe(sourceSha);
+  expect(plan.version).toBe('1.8.0-head.202607082153');
+});
+
+test('planRelease rejects head releases from non-main branches and bad overrides', () => {
+  expect(() =>
+    planRelease({
+      exec: makePlanExec().exec,
+      mode: 'head',
+      releaseBranch: 'maint/zero/v1.8',
+      workflowRefName: 'main',
+    }),
+  ).toThrowErrorMatchingInlineSnapshot(
+    `[Error: Head releases are only supported from main, got maint/zero/v1.8]`,
+  );
+
+  expect(() =>
+    planRelease({
+      exec: makePlanExec().exec,
+      mode: 'head',
+      releaseBranch: 'main',
+      sourceSha: 'not-a-sha',
+      workflowRefName: 'main',
+    }),
+  ).toThrowErrorMatchingInlineSnapshot(`[Error: Invalid source SHA not-a-sha]`);
+});
+
+test('planRelease rejects a head version that already exists on npm', () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date('2026-07-08T21:53:45.123Z'));
+
+  expect(() =>
+    planRelease({
+      exec: makePlanExec({npmVersionExists: true}).exec,
+      mode: 'head',
+      releaseBranch: 'main',
+      workflowRefName: 'main',
+    }),
+  ).toThrowErrorMatchingInlineSnapshot(
+    `[Error: @rocicorp/zero@1.8.0-head.202607082153 already exists on npm]`,
+  );
 });
 
 test('planRelease rejects existing git tags and npm versions', () => {

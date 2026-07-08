@@ -17,6 +17,7 @@ import {
   zeroTag,
   type Exec,
   type CanaryZeroVersion,
+  type HeadZeroVersion,
   type ReleaseBranch,
   type ReleaseMode,
   type ZeroTag,
@@ -38,6 +39,7 @@ export type PlanReleaseOptions = {
   exec?: Exec | undefined;
   mode: string;
   releaseBranch: string;
+  sourceSha?: string | undefined;
   workflowRefName: string;
 };
 
@@ -45,6 +47,10 @@ export function runReleasePlanCli() {
   const plan = planRelease({
     mode: mustEnv('MODE'),
     releaseBranch: mustEnv('RELEASE_BRANCH'),
+    // Set for push-triggered (head) runs so a queued run releases the commit
+    // that triggered it instead of whatever main has advanced to by the time
+    // the run leaves the concurrency queue.
+    sourceSha: process.env.SOURCE_SHA || undefined,
     workflowRefName: mustEnv('WORKFLOW_REF_NAME'),
   });
 
@@ -60,6 +66,7 @@ export function planRelease({
   exec = defaultExec,
   mode: modeArg,
   releaseBranch,
+  sourceSha: sourceShaOverride,
   workflowRefName,
 }: PlanReleaseOptions): ReleasePlan {
   const mode = readReleaseMode(modeArg);
@@ -68,6 +75,11 @@ export function planRelease({
   if (!isAllowedReleaseBranch(releaseBranch)) {
     throw new Error(
       `Unsupported release branch ${releaseBranch}. Expected main or maint/zero/vX.Y`,
+    );
+  }
+  if (mode === 'head' && releaseBranch !== 'main') {
+    throw new Error(
+      `Head releases are only supported from main, got ${releaseBranch}`,
     );
   }
 
@@ -82,17 +94,28 @@ export function planRelease({
     {stdio: 'inherit'},
   );
 
-  const sourceSha = exec('git', [
-    'rev-parse',
-    `refs/remotes/origin/${releaseBranch}`,
-  ]).trim();
-  assertGitSha(sourceSha, 'source SHA');
+  let sourceSha: string;
+  if (sourceShaOverride) {
+    assertGitSha(sourceShaOverride, 'source SHA');
+    sourceSha = sourceShaOverride;
+  } else {
+    sourceSha = exec('git', [
+      'rev-parse',
+      `refs/remotes/origin/${releaseBranch}`,
+    ]).trim();
+    assertGitSha(sourceSha, 'source SHA');
+  }
 
   const currentVersion = readZeroPackageVersionAt(sourceSha, exec);
   const version =
     mode === 'stable'
       ? planStableVersion(currentVersion)
-      : planCanaryVersion(currentVersion, readCanaryTags(exec, currentVersion));
+      : mode === 'head'
+        ? planHeadVersion(currentVersion)
+        : planCanaryVersion(
+            currentVersion,
+            readCanaryTags(exec, currentVersion),
+          );
   const tag = zeroTag(version);
 
   if (gitTagExists(tag, exec)) {
@@ -150,6 +173,22 @@ export function planCanaryVersion(
   }
 
   return `${parsed.baseVersion}-canary.${maxAttempt + 1}` as CanaryZeroVersion;
+}
+
+export function planHeadVersion(
+  currentVersion: string,
+  now = new Date(),
+): HeadZeroVersion {
+  const parsed = parseZeroVersion(currentVersion);
+  if (!parsed) {
+    throw new Error(
+      `Cannot plan head from package version ${currentVersion}. Expected X.Y.Z, X.Y.Z-canary.N, or X.Y.Z-head.N`,
+    );
+  }
+  // UTC minute stamp (YYYYMMDDHHmm); the plan step's npm-exists check guards
+  // against two runs landing in the same minute.
+  const timestamp = now.toISOString().slice(0, 16).replace(/[-T:]/g, '');
+  return `${parsed.baseVersion}-head.${timestamp}` as HeadZeroVersion;
 }
 
 function readCanaryTags(exec: Exec, currentVersion: string) {

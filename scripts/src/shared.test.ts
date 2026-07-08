@@ -1,4 +1,4 @@
-import {mkdtempSync, readFileSync, rmSync} from 'node:fs';
+import {mkdtempSync, readFileSync, rmSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {afterEach, expect, test} from 'vitest';
@@ -9,6 +9,7 @@ import {
   npmZeroVersionExists,
   readReleaseMode,
   writeGithubOutput,
+  writeZeroPackageVersion,
   zeroTag,
   type Exec,
   type ExecError,
@@ -27,6 +28,7 @@ afterEach(() => {
 test('release mode validation accepts known modes', () => {
   expect(readReleaseMode('canary')).toBe('canary');
   expect(readReleaseMode('stable')).toBe('stable');
+  expect(readReleaseMode('head')).toBe('head');
   expect(() => readReleaseMode('latest')).toThrowErrorMatchingInlineSnapshot(
     `[Error: Unsupported release mode latest]`,
   );
@@ -35,15 +37,27 @@ test('release mode validation accepts known modes', () => {
 test('zero version and tag validation', () => {
   expect(() => assertZeroVersion('1.2.3')).not.toThrow();
   expect(() => assertZeroVersion('1.2.3-canary.4')).not.toThrow();
+  expect(() => assertZeroVersion('1.2.3-head.202607082153')).not.toThrow();
   expect(() => assertZeroVersion('v1.2.3')).toThrowErrorMatchingInlineSnapshot(
     `[Error: Invalid version v1.2.3]`,
   );
+  expect(() =>
+    assertZeroVersion('1.2.3-head'),
+  ).toThrowErrorMatchingInlineSnapshot(`[Error: Invalid version 1.2.3-head]`);
+  expect(() =>
+    assertZeroVersion('1.2.3-beta.1'),
+  ).toThrowErrorMatchingInlineSnapshot(`[Error: Invalid version 1.2.3-beta.1]`);
 
   expect(() => assertStableZeroVersion('1.2.3')).not.toThrow();
   expect(() =>
     assertStableZeroVersion('1.2.3-canary.4'),
   ).toThrowErrorMatchingInlineSnapshot(
     `[Error: Expected stable Zero version, got 1.2.3-canary.4]`,
+  );
+  expect(() =>
+    assertStableZeroVersion('1.2.3-head.202607082153'),
+  ).toThrowErrorMatchingInlineSnapshot(
+    `[Error: Expected stable Zero version, got 1.2.3-head.202607082153]`,
   );
 
   expect(zeroTag('1.2.3')).toBe('zero/v1.2.3');
@@ -86,6 +100,46 @@ test('writeGithubOutput rejects multiline values', () => {
   } finally {
     rmSync(tempDir, {recursive: true, force: true});
   }
+});
+
+test('writeZeroPackageVersion updates version and records gitHead', () => {
+  const tempDir = mkdtempSync(join(tmpdir(), 'zero-scripts-test-'));
+  try {
+    const packageJsonPath = join(tempDir, 'package.json');
+    writeFileSync(
+      packageJsonPath,
+      `${JSON.stringify({name: '@rocicorp/zero', version: '1.8.0'}, null, 2)}\n`,
+    );
+
+    const sourceSha = 'e8cc6889fa6bc2a364e8cb80776991c308601212';
+    const previousVersion = writeZeroPackageVersion(
+      '1.8.0-head.202607082153',
+      sourceSha,
+      packageJsonPath,
+    );
+
+    expect(previousVersion).toBe('1.8.0');
+    expect(JSON.parse(readFileSync(packageJsonPath, 'utf8'))).toEqual({
+      name: '@rocicorp/zero',
+      version: '1.8.0-head.202607082153',
+      gitHead: sourceSha,
+    });
+
+    writeZeroPackageVersion('1.8.1', undefined, packageJsonPath);
+    expect(JSON.parse(readFileSync(packageJsonPath, 'utf8'))).toEqual({
+      name: '@rocicorp/zero',
+      version: '1.8.1',
+      gitHead: sourceSha,
+    });
+  } finally {
+    rmSync(tempDir, {recursive: true, force: true});
+  }
+});
+
+test('writeZeroPackageVersion rejects an invalid gitHead', () => {
+  expect(() =>
+    writeZeroPackageVersion('1.8.0', 'not-a-sha', 'unused/package.json'),
+  ).toThrowErrorMatchingInlineSnapshot(`[Error: Invalid gitHead not-a-sha]`);
 });
 
 test('npmZeroVersionExists handles existing and missing npm versions', () => {

@@ -60,6 +60,12 @@ export function createReleaseTag({
     version,
   });
 
+  if (args.mode === 'head') {
+    // The release workflow skips the tag job for head releases; provenance
+    // lives in the npm packument (gitHead) and OCI revision label instead.
+    throw new Error('Head releases are not tagged');
+  }
+
   if (args.mode === 'stable') {
     createAndPushTag(exec, log, args.tag, args.sourceSha);
   } else {
