@@ -119,7 +119,7 @@ export class RowRecordCache {
   );
   readonly #cvrFlushes = getOrCreateCounter(
     'sync',
-    'cvr.flush',
+    'cvr.flush_attempts',
     'CVR flush attempts, labeled by result and flush.type.',
   );
 

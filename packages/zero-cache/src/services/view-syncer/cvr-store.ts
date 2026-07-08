@@ -206,17 +206,17 @@ export class CVRStore {
   readonly #rowCache: RowRecordCache;
   readonly #cvrLoads = getOrCreateCounter(
     'sync',
-    'cvr.load',
+    'cvr.load_attempts',
     'CVR load attempts, labeled by result.',
   );
   readonly #cvrLoadTime = getOrCreateLatencyHistogram(
     'sync',
-    'cvr.load-time',
+    'cvr.load_duration',
     'Time to load a CVR.',
   );
   readonly #cvrFlushes = getOrCreateCounter(
     'sync',
-    'cvr.flush',
+    'cvr.flush_attempts',
     'CVR flush attempts, labeled by result and flush.type.',
   );
   readonly #loadAttemptIntervalMs: number;
