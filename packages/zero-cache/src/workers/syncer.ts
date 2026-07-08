@@ -265,22 +265,22 @@ export class Syncer implements SingletonService {
   readonly #replicaReadyStates: ReplicaReadyState[] = [];
   readonly #webSocketOpenConnections = getOrCreateUpDownCounter(
     'sync',
-    'websocket.open-connections',
+    'websocket.open_connections',
     'Open client WebSocket connections.',
   );
   readonly #webSocketConnectionAttempts = getOrCreateCounter(
     'sync',
-    'websocket.connection-attempts',
+    'websocket.connection_attempts',
     'Client WebSocket connection attempts.',
   );
   readonly #webSocketConnectionSuccesses = getOrCreateCounter(
     'sync',
-    'websocket.connection-successes',
+    'websocket.connection_successes',
     'Client WebSocket connections successfully initialized.',
   );
   readonly #webSocketConnectionFailures = getOrCreateCounter(
     'sync',
-    'websocket.connection-failures',
+    'websocket.connection_failures',
     'Client WebSocket connection attempts that failed before initialization.',
   );
   #servingLagStatsCache: ServingLagStats | undefined;
@@ -375,7 +375,7 @@ export class Syncer implements SingletonService {
       result.observe(total);
     });
 
-    getOrCreateGauge('sync', 'serving-lag', {
+    getOrCreateGauge('sync', 'serving_lag', {
       description:
         'Maximum time active ViewSyncer client groups have had unserved ' +
         'replica changes. A change is served after IVM advancement, CVR flush, ' +
@@ -385,7 +385,7 @@ export class Syncer implements SingletonService {
       result.observe(this.#computeServingLagStats().maxMs);
     });
 
-    getOrCreateGauge('sync', 'serving-lag-stats', {
+    getOrCreateGauge('sync', 'serving_lag_stats', {
       description:
         'Distribution of time active ViewSyncer client groups have had ' +
         'unserved replica changes. A change is served after IVM advancement, ' +
@@ -402,7 +402,7 @@ export class Syncer implements SingletonService {
 
     getOrCreateGauge(
       'sync',
-      'serving-lagging-client-groups',
+      'serving_lagging_client_groups',
       'Number of active client groups with unserved replica changes',
     ).addCallback(result => {
       result.observe(this.#computeServingLagStats().laggingClientGroups);

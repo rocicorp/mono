@@ -102,7 +102,7 @@ function litestreamMultipartMetricAttrs(
 export function litestreamRestoreRuns() {
   return getOrCreateCounter(
     'replica',
-    'litestream_restore_runs',
+    'litestream.restore.runs',
     'Litestream restore runs, labeled by result.',
   );
 }
@@ -110,13 +110,13 @@ export function litestreamRestoreRuns() {
 export function litestreamRestoreAttempts() {
   return getOrCreateCounter(
     'replica',
-    'litestream_restore_attempts',
+    'litestream.restore.attempts',
     'Litestream restore subprocess attempts, labeled by result.',
   );
 }
 
 export function litestreamRestoredDbBytes() {
-  return getOrCreateCounter('replica', 'litestream_restored_db', {
+  return getOrCreateCounter('replica', 'litestream.restore.db_bytes', {
     description:
       'SQLite database bytes restored by successful litestream restores.',
     unit: 'bytes',
@@ -126,63 +126,63 @@ export function litestreamRestoredDbBytes() {
 export function litestreamBackupProcessRuns() {
   return getOrCreateCounter(
     'replica',
-    'litestream_backup_process_runs',
+    'litestream.backup.process_runs',
     'Litestream backup process exits, labeled by result.',
   );
 }
 
 export function litestreamRestoreDuration() {
   return litestreamDurationHistogram(
-    'litestream_restore_duration',
+    'litestream.restore.duration',
     'Wall-clock duration of a litestream restore run, labeled by result.',
   );
 }
 
 export function litestreamRestoreWaitDuration() {
   return litestreamDurationHistogram(
-    'litestream_restore_wait_duration',
+    'litestream.restore.wait_duration',
     'Time spent waiting for the replication-manager snapshot status before restoring.',
   );
 }
 
 export function litestreamRestoreProcessDuration() {
   return litestreamDurationHistogram(
-    'litestream_restore_process_duration',
+    'litestream.restore.process_duration',
     'Wall-clock duration of the litestream restore subprocess.',
   );
 }
 
 export function litestreamRestoreValidationDuration() {
   return litestreamDurationHistogram(
-    'litestream_restore_validation_duration',
+    'litestream.restore.validation_duration',
     'Time spent validating a restored replica database.',
   );
 }
 
 export function litestreamBackupProcessDuration() {
   return litestreamDurationHistogram(
-    'litestream_backup_process_duration',
+    'litestream.backup.process_duration',
     'Runtime duration of the litestream backup subprocess before it exits.',
   );
 }
 
 export function litestreamBackupListDuration() {
   return litestreamDurationHistogram(
-    'litestream_backup_list_duration',
+    'litestream.backup.list_duration',
     'Duration of litestream backup destination listing commands.',
   );
 }
 
 export function litestreamBackupVerificationDuration() {
   return litestreamDurationHistogram(
-    'litestream_backup_verification_duration',
+    'litestream.backup.verification_duration',
     'Duration of verifying the actual backup state in the backup destination.',
   );
 }
 
 export function litestreamSnapshotReservationDuration() {
   return litestreamDurationHistogram(
-    'litestream_snapshot_reservation_duration',
+    'litestream.snapshot.reservation_duration',
     'Duration of a snapshot reservation while a view-syncer restores and subscribes.',
   );
 }
