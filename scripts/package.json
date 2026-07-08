@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "check-types": "tsc",
-    "map-release": "node --experimental-strip-types --no-warnings src/release-map-release.ts",
+    "map-release": "node src/release-map-release.ts",
     "test": "vitest run",
     "test:watch": "vitest watch",
     "format": "oxfmt .",
