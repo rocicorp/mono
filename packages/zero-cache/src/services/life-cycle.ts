@@ -78,6 +78,10 @@ function startupDuration() {
   });
 }
 
+export function recordStartupDurationMs(durationMs: number) {
+  startupDuration().recordMs(durationMs, {component: 'dispatcher'});
+}
+
 function workerStartupDuration() {
   return getOrCreateHistogram('server', 'worker_startup_duration', {
     description: 'Duration from starting a worker to its ready signal.',
@@ -223,8 +227,6 @@ export class ProcessManager {
           worker: workerMetricName,
           type,
         });
-      } else {
-        startupDuration().recordMs(elapsed, {component: 'dispatcher'});
       }
       this.#lc.debug?.(`${name} ready (${Date.now() - this.#start} ms)`);
       this.#initializing.delete(id);

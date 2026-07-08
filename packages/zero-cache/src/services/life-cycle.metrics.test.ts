@@ -1,4 +1,3 @@
-import EventEmitter from 'node:events';
 import {metrics} from '@opentelemetry/api';
 import {
   AggregationTemporality,
@@ -8,19 +7,12 @@ import {
   PeriodicExportingMetricReader,
 } from '@opentelemetry/sdk-metrics';
 import {expect, test, vi} from 'vitest';
-import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 
-test('records startup_duration if OTel starts after ProcessManager construction', async () => {
+test('records startup_duration if OTel starts after module import', async () => {
   metrics.disable();
   vi.resetModules();
 
-  const {ProcessManager} = await import('./life-cycle.ts');
-  const {inProcChannel} = await import('../types/processes.ts');
-
-  const processes = new ProcessManager(
-    createSilentLogContext(),
-    new EventEmitter(),
-  );
+  const {recordStartupDurationMs} = await import('./life-cycle.ts');
   const exporter = new InMemoryMetricExporter(
     AggregationTemporality.CUMULATIVE,
   );
@@ -36,12 +28,7 @@ test('records startup_duration if OTel starts after ProcessManager construction'
   try {
     expect(metrics.setGlobalMeterProvider(provider)).toBe(true);
 
-    const [parentPort, childPort] = inProcChannel();
-    processes.addWorker(parentPort, 'user-facing', 'zero-cache');
-
-    childPort.send(['ready', {ready: true}]);
-
-    await processes.allWorkersReady();
+    recordStartupDurationMs(123);
     await provider.forceFlush();
 
     const startupDuration = exporter

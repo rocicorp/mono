@@ -23,6 +23,7 @@ import {
   exitAfter,
   INTENTIONAL_SHUTDOWN_ERROR_CODE,
   ProcessManager,
+  recordStartupDurationMs,
   runUntilKilled,
   type WorkerType,
 } from '../services/life-cycle.ts';
@@ -292,19 +293,22 @@ describe('shutdown', () => {
     });
   });
 
-  test('records top-level startup duration separately', () => {
+  test('does not record zero-cache as a worker startup duration', () => {
     const [parentPort, childPort] = inProcChannel();
     processes.addWorker(parentPort, 'user-facing', 'zero-cache');
 
     childPort.send(['ready', {ready: true}]);
 
-    expect(startupRecordMs).toHaveBeenCalledWith(expect.any(Number), {
+    expect(startupRecordMs).not.toHaveBeenCalled();
+    expect(workerStartupRecordMs).not.toHaveBeenCalled();
+  });
+
+  test('records top-level startup duration explicitly', () => {
+    recordStartupDurationMs(123);
+
+    expect(startupRecordMs).toHaveBeenCalledWith(123, {
       component: 'dispatcher',
     });
-    expect(workerStartupRecordMs).not.toHaveBeenCalledWith(
-      expect.any(Number),
-      expect.objectContaining({worker: 'zero_cache'}),
-    );
   });
 });
 
