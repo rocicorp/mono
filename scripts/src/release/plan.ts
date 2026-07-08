@@ -182,9 +182,9 @@ export function planHeadVersion(
       `Cannot plan head from package version ${currentVersion}. Expected X.Y.Z, X.Y.Z-canary.N, or X.Y.Z-head.N`,
     );
   }
-  // UTC minute stamp (YYYYMMDDHHmm); the plan step's npm-exists check guards
-  // against two runs landing in the same minute.
-  const timestamp = now.toISOString().slice(0, 16).replace(/[-T:]/g, '');
+  // UTC second stamp (YYYYMMDDHHmmss); the plan step's npm-exists check
+  // guards against two runs landing in the same second.
+  const timestamp = now.toISOString().slice(0, 19).replace(/[-T:]/g, '');
   return `${parsed.baseVersion}-head.${timestamp}` as HeadZeroVersion;
 }
 

@@ -50,14 +50,14 @@ test('canary planning starts at zero and increments existing tags', () => {
   ).toBe('1.8.0-canary.3');
 });
 
-test('head planning stamps the UTC minute onto the base version', () => {
+test('head planning stamps the UTC second onto the base version', () => {
   const now = new Date('2026-07-08T21:53:45.123Z');
-  expect(planHeadVersion('1.8.0', now)).toBe('1.8.0-head.202607082153');
+  expect(planHeadVersion('1.8.0', now)).toBe('1.8.0-head.20260708215345');
   expect(planHeadVersion('1.8.0-canary.5', now)).toBe(
-    '1.8.0-head.202607082153',
+    '1.8.0-head.20260708215345',
   );
   expect(planHeadVersion('1.8.0-head.202601010000', now)).toBe(
-    '1.8.0-head.202607082153',
+    '1.8.0-head.20260708215345',
   );
   expect(() =>
     planHeadVersion('not-a-version', now),
@@ -123,8 +123,8 @@ test('planRelease returns head outputs and honors the source SHA override', () =
   ).toEqual({
     mode: 'head',
     release_branch: 'main',
-    version: '1.8.0-head.202607082153',
-    tag: 'zero/v1.8.0-head.202607082153',
+    version: '1.8.0-head.20260708215345',
+    tag: 'zero/v1.8.0-head.20260708215345',
     source_sha: overrideSha,
     is_canary: 'false',
   });
@@ -154,7 +154,7 @@ test('planRelease resolves head from origin when no source SHA is given', () => 
     workflowRefName: 'main',
   });
   expect(plan.source_sha).toBe(sourceSha);
-  expect(plan.version).toBe('1.8.0-head.202607082153');
+  expect(plan.version).toBe('1.8.0-head.20260708215345');
 });
 
 test('planRelease rejects head releases from non-main branches and bad overrides', () => {
@@ -192,7 +192,7 @@ test('planRelease rejects a head version that already exists on npm', () => {
       workflowRefName: 'main',
     }),
   ).toThrowErrorMatchingInlineSnapshot(
-    `[Error: @rocicorp/zero@1.8.0-head.202607082153 already exists on npm]`,
+    `[Error: @rocicorp/zero@1.8.0-head.20260708215345 already exists on npm]`,
   );
 });
 
