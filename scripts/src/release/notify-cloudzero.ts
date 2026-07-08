@@ -128,32 +128,26 @@ async function notifyTarget({
       await sleep(retryDelayMs * (attempt - 1));
     }
     try {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), timeoutMs);
-      try {
-        const response = await fetchImpl(target.url, {
-          method: 'POST',
-          headers: {
-            'authorization': `Bearer ${target.token}`,
-            'content-type': 'application/json',
-          },
-          body: JSON.stringify({channel: 'head', imageUri}),
-          signal: controller.signal,
-        });
-        const body = (await response.text()).trim();
-        if (response.ok) {
-          log(`Notified Cloud Zero ${target.stage} of ${imageUri}: ${body}`);
-          return true;
-        }
-        log(
-          `Cloud Zero ${target.stage} responded ${response.status} for ${imageUri}: ${body}`,
-        );
-        if (response.status < 500) {
-          // 4xx (bad token, rejected payload) will not heal on retry.
-          return false;
-        }
-      } finally {
-        clearTimeout(timer);
+      const response = await fetchImpl(target.url, {
+        method: 'POST',
+        headers: {
+          'authorization': `Bearer ${target.token}`,
+          'content-type': 'application/json',
+        },
+        body: JSON.stringify({channel: 'head', imageUri}),
+        signal: AbortSignal.timeout(timeoutMs),
+      });
+      const body = (await response.text()).trim();
+      if (response.ok) {
+        log(`Notified Cloud Zero ${target.stage} of ${imageUri}: ${body}`);
+        return true;
+      }
+      log(
+        `Cloud Zero ${target.stage} responded ${response.status} for ${imageUri}: ${body}`,
+      );
+      if (response.status < 500) {
+        // 4xx (bad token, rejected payload) will not heal on retry.
+        return false;
       }
     } catch (error) {
       log(`Cloud Zero ${target.stage} request failed: ${String(error)}`);
