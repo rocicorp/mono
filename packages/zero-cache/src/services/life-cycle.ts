@@ -70,6 +70,22 @@ function workerStartupMetricName(name: string) {
   return 'other';
 }
 
+function startupDuration() {
+  return getOrCreateHistogram('server', 'startup_duration', {
+    description: 'Duration from starting zero-cache to its ready signal.',
+    unit: 's',
+    bucketBoundaries: LONG_DURATION_HISTOGRAM_BOUNDARIES_S,
+  });
+}
+
+function workerStartupDuration() {
+  return getOrCreateHistogram('server', 'worker_startup_duration', {
+    description: 'Duration from starting a worker to its ready signal.',
+    unit: 's',
+    bucketBoundaries: LONG_DURATION_HISTOGRAM_BOUNDARIES_S,
+  });
+}
+
 // An internal error code used to indicate that a message has already been
 // logged at level ERRROR. When a process exits with this error code, the
 // parent process logs the exit at level WARN instead of ERROR.
@@ -86,24 +102,6 @@ export const INTENTIONAL_SHUTDOWN_ERROR_CODE = 14;
  */
 export class ProcessManager {
   readonly #lc: LogContext;
-  readonly #startupDuration = getOrCreateHistogram(
-    'server',
-    'startup_duration',
-    {
-      description: 'Duration from starting zero-cache to its ready signal.',
-      unit: 's',
-      bucketBoundaries: LONG_DURATION_HISTOGRAM_BOUNDARIES_S,
-    },
-  );
-  readonly #workerStartupDuration = getOrCreateHistogram(
-    'server',
-    'worker_startup_duration',
-    {
-      description: 'Duration from starting a worker to its ready signal.',
-      unit: 's',
-      bucketBoundaries: LONG_DURATION_HISTOGRAM_BOUNDARIES_S,
-    },
-  );
   readonly #userFacing = new Set<Subprocess>();
   readonly #all = new Set<Subprocess>();
   readonly #exitImpl: (code: number) => never;
@@ -221,12 +219,12 @@ export class ProcessManager {
       const elapsed = performance.now() - start;
       const workerMetricName = workerStartupMetricName(name);
       if (workerMetricName) {
-        this.#workerStartupDuration.recordMs(elapsed, {
+        workerStartupDuration().recordMs(elapsed, {
           worker: workerMetricName,
           type,
         });
       } else {
-        this.#startupDuration.recordMs(elapsed, {component: 'dispatcher'});
+        startupDuration().recordMs(elapsed, {component: 'dispatcher'});
       }
       this.#lc.debug?.(`${name} ready (${Date.now() - this.#start} ms)`);
       this.#initializing.delete(id);
