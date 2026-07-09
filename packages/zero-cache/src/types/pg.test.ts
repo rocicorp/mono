@@ -1,6 +1,13 @@
-import postgres from 'postgres';
-import {describe, expect, test} from 'vitest';
 import {
+  createServer,
+  type AddressInfo,
+  type Server,
+  type Socket,
+} from 'node:net';
+import postgres from 'postgres';
+import {afterEach, describe, expect, test} from 'vitest';
+import {
+  inactivityTimeoutSocket,
   isPostgresConfigError,
   millisecondsToPostgresTime,
   postgresTimeToMilliseconds,
@@ -551,5 +558,91 @@ describe('serializeTime (via postgresTypeConfig)', () => {
       const serialized = time.serialize(ms) as string;
       expect(postgresTimeToMilliseconds(serialized)).toBe(ms);
     });
+  });
+});
+
+describe('inactivityTimeoutSocket', () => {
+  let server: Server;
+  let cleanup: (() => void)[] = [];
+
+  function listen(onConnection?: (socket: Socket) => void) {
+    server = createServer(socket => {
+      // The client resets (RSTs) the connection, which surfaces here as an
+      // ECONNRESET 'error' event on the server side of the socket.
+      socket.on('error', () => {});
+      onConnection?.(socket);
+    });
+    cleanup.push(() => server.close());
+    return new Promise<number>(resolve => {
+      server.listen(0, '127.0.0.1', () =>
+        resolve((server.address() as AddressInfo).port),
+      );
+    });
+  }
+
+  function factoryOptions(port: number) {
+    return {host: ['127.0.0.1'], port: [port]};
+  }
+
+  function connected(socket: Socket) {
+    cleanup.push(() => socket.destroy());
+    return new Promise<void>(resolve => socket.once('connect', resolve));
+  }
+
+  afterEach(() => {
+    cleanup.forEach(fn => fn());
+    cleanup = [];
+  });
+
+  test('connects and exposes host/port for TLS SNI', async () => {
+    const port = await listen();
+    const socket = inactivityTimeoutSocket(120_000)(factoryOptions(port));
+    await connected(socket);
+
+    // postgres.js reads socket.host as the SNI servername in secure().
+    expect(socket).toMatchObject({host: '127.0.0.1', port});
+    expect(socket.timeout).toBe(120_000);
+  });
+
+  test('resets the connection after inactivity', async () => {
+    const port = await listen(); // server accepts but never responds
+    const socket = inactivityTimeoutSocket(100)(factoryOptions(port));
+    await connected(socket);
+
+    // Simulate a query that never gets a response.
+    socket.write('BEGIN');
+    await new Promise<void>(resolve => socket.once('close', resolve));
+    expect(socket.destroyed).toBe(true);
+  });
+
+  test('activity resets the inactivity timer', async () => {
+    const port = await listen(socket => {
+      // Server echoes everything back, i.e. the connection has activity.
+      socket.on('data', data => socket.write(data));
+    });
+    const socket = inactivityTimeoutSocket(200)(factoryOptions(port));
+    await connected(socket);
+
+    let closed = false;
+    socket.once('close', () => (closed = true));
+
+    // Keep the wire active well past the 200ms timeout.
+    const ping = setInterval(() => socket.write('ping'), 50);
+    cleanup.push(() => clearInterval(ping));
+    await new Promise(resolve => setTimeout(resolve, 600));
+    expect(closed).toBe(false);
+
+    // Then go silent (the server never initiates) and expect the reset.
+    clearInterval(ping);
+    await new Promise<void>(resolve => socket.once('close', resolve));
+    expect(socket.destroyed).toBe(true);
+  });
+
+  test('timeout of 0 disables the timer', async () => {
+    const port = await listen();
+    const socket = inactivityTimeoutSocket(0)(factoryOptions(port));
+    await connected(socket);
+
+    expect(socket.timeout).toBeUndefined();
   });
 });
