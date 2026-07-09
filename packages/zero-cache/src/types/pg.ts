@@ -365,12 +365,22 @@ type SocketFactoryOptions = {
  * Exported for testing.
  */
 export function inactivityTimeoutSocket(
+  lc: LogContext,
   timeoutMs = SOCKET_INACTIVITY_TIMEOUT_MS,
 ) {
   return (options: SocketFactoryOptions): Socket => {
     const socket = new Socket();
+    const target = options.path
+      ? options.path
+      : `${options.host[0]}:${options.port[0]}`;
     if (timeoutMs > 0) {
-      socket.setTimeout(timeoutMs, () => socket.resetAndDestroy());
+      socket.setTimeout(timeoutMs, () => {
+        lc.warn?.(
+          `resetting connection to ${target} after ${timeoutMs} ms of inactivity ` +
+            `(likely half-open); in-flight queries will be rejected`,
+        );
+        socket.resetAndDestroy();
+      });
     }
     if (options.path) {
       socket.connect(options.path);
@@ -438,7 +448,9 @@ export function pgClient(
 
   // postgres.js supports a custom socket factory via the `socket` option,
   // but it is missing from its type declarations, hence the untyped spread.
-  const socketFactory = {socket: inactivityTimeoutSocket()};
+  const socketFactory = {
+    socket: inactivityTimeoutSocket(lc.withContext('appName', applicationName)),
+  };
 
   return postgres(connectionURI, {
     ...postgresTypeConfig(opts),

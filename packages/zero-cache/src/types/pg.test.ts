@@ -4,8 +4,13 @@ import {
   type Server,
   type Socket,
 } from 'node:net';
+import {LogContext} from '@rocicorp/logger';
 import postgres from 'postgres';
 import {afterEach, describe, expect, test} from 'vitest';
+import {
+  createSilentLogContext,
+  TestLogSink,
+} from '../../../shared/src/logging-test-utils.ts';
 import {
   inactivityTimeoutSocket,
   isPostgresConfigError,
@@ -562,6 +567,7 @@ describe('serializeTime (via postgresTypeConfig)', () => {
 });
 
 describe('inactivityTimeoutSocket', () => {
+  const lc = createSilentLogContext();
   let server: Server;
   let cleanup: (() => void)[] = [];
 
@@ -596,7 +602,7 @@ describe('inactivityTimeoutSocket', () => {
 
   test('connects and exposes host/port for TLS SNI', async () => {
     const port = await listen();
-    const socket = inactivityTimeoutSocket(120_000)(factoryOptions(port));
+    const socket = inactivityTimeoutSocket(lc, 120_000)(factoryOptions(port));
     await connected(socket);
 
     // postgres.js reads socket.host as the SNI servername in secure().
@@ -605,14 +611,25 @@ describe('inactivityTimeoutSocket', () => {
   });
 
   test('resets the connection after inactivity', async () => {
+    const logSink = new TestLogSink();
+    const warnLc = new LogContext('warn', undefined, logSink);
     const port = await listen(); // server accepts but never responds
-    const socket = inactivityTimeoutSocket(100)(factoryOptions(port));
+    const socket = inactivityTimeoutSocket(warnLc, 100)(factoryOptions(port));
     await connected(socket);
 
     // Simulate a query that never gets a response.
     socket.write('BEGIN');
     await new Promise<void>(resolve => socket.once('close', resolve));
     expect(socket.destroyed).toBe(true);
+
+    // The reset is logged so that occurrences are visible in production.
+    expect(logSink.messages).toMatchObject([
+      [
+        'warn',
+        undefined,
+        [expect.stringContaining('after 100 ms of inactivity')],
+      ],
+    ]);
   });
 
   test('activity resets the inactivity timer', async () => {
@@ -620,7 +637,7 @@ describe('inactivityTimeoutSocket', () => {
       // Server echoes everything back, i.e. the connection has activity.
       socket.on('data', data => socket.write(data));
     });
-    const socket = inactivityTimeoutSocket(200)(factoryOptions(port));
+    const socket = inactivityTimeoutSocket(lc, 200)(factoryOptions(port));
     await connected(socket);
 
     let closed = false;
@@ -640,7 +657,7 @@ describe('inactivityTimeoutSocket', () => {
 
   test('timeout of 0 disables the timer', async () => {
     const port = await listen();
-    const socket = inactivityTimeoutSocket(0)(factoryOptions(port));
+    const socket = inactivityTimeoutSocket(lc, 0)(factoryOptions(port));
     await connected(socket);
 
     expect(socket.timeout).toBeUndefined();
