@@ -46,6 +46,17 @@ Profiles:
 | `forum`       | Category/thread/post queries with author and thread relationships | Insert post and update parent thread/category |
 | `relational`  | Org/account/activity queries with nested account/contact joins    | Insert activity and update parent account/org |
 
+Models:
+
+| Model       | Behavior                                                                 |
+| ----------- | ------------------------------------------------------------------------ |
+| `hot`       | Existing pathological shape: every write targets every active query set. |
+| `realistic` | Clients watch spread-out partitions; writes mix active and cold targets. |
+
+`hot` is the default and preserves the original profile behavior. Use
+`--model realistic` to run the same profile query shapes with deterministic
+active/cold partitions and write-impact counters in the result summary.
+
 `queriesPerUser` cycles through the distinct query shapes for each profile, so
 setting `--queries-per-user 3` registers the full current mix for `email`,
 `forum`, and `relational`.
@@ -59,6 +70,7 @@ Example profile run:
 ```bash
 pnpm --filter zero-throughput start -- \
   --profile relational \
+  --model realistic \
   --users 10 \
   --queries-per-user 3 \
   --rows-per-query 50 \
@@ -69,7 +81,7 @@ pnpm --filter zero-throughput start -- \
 
 Run the recommended parameter sweep. The default sweep covers
 `relational,email,forum`, users `50,100,200,400`, rows per query `50`, sync
-workers `1,2,4`, and binary-searches the sustainable write rate from 1 to 100
+workers `1,2,4`, model `hot`, and binary-searches the sustainable write rate from 1 to 100
 logical writes/s for each point. This keeps the first sweep focused on
 read-heavy fanout, profile complexity, and syncer concurrency without exploding
 the run count.
@@ -81,6 +93,8 @@ pnpm --filter zero-throughput run sweep -- \
 ```
 
 To also sweep query window size, add `--rows-per-query 25,50,100`.
+To compare hot and realistic workloads for the same matrix, add
+`--models hot,realistic`.
 
 Sweep output includes:
 
@@ -100,6 +114,7 @@ Analyze the exact profile query shapes against a running zero-cache:
 pnpm --filter zero-throughput run analyze -- \
   --zero-cache-url=http://127.0.0.1:4848 \
   --profile relational \
+  --model realistic \
   --query-index 2 \
   --rows-per-query 50 \
   --join-plans
@@ -117,6 +132,11 @@ pnpm --filter zero-throughput run analyze -- \
 
 `--print-ast` prints the server-mapped AST, so it can be passed directly to
 the underlying analyze-query `--ast` option.
+
+Realistic runs intentionally include writes that no active client group should
+observe. The result JSON still records the existing global seq-lag fields, but
+realistic pass/fail uses client-visible lag and connection/initial-sync checks;
+write-impact counters report the active-query impact rate.
 
 To stream zero-cache logs directly in the terminal:
 

@@ -2,6 +2,7 @@ import type {ZeroConfig} from '../../config/zero-config.ts';
 import {
   getOrCreateCounter,
   getOrCreateHistogram,
+  LONG_DURATION_HISTOGRAM_BOUNDARIES_S,
 } from '../../observability/metrics.ts';
 
 export type LitestreamRole = 'replication_manager' | 'view_syncer';
@@ -17,10 +18,6 @@ type LitestreamMultipartMetricAttrs = {
   multipart_concurrency: number;
   multipart_size_mib: number;
 };
-
-const LITESTREAM_DURATION_HISTOGRAM_BOUNDARIES_S = [
-  1, 2, 5, 10, 30, 60, 120, 300, 600, 1200, 2400, 3600, 7200,
-];
 
 export function litestreamRestoreMetricAttrs(
   config: ZeroConfig,
@@ -191,6 +188,6 @@ function litestreamDurationHistogram(name: string, description: string) {
   return getOrCreateHistogram('replica', name, {
     description,
     unit: 's',
-    bucketBoundaries: LITESTREAM_DURATION_HISTOGRAM_BOUNDARIES_S,
+    bucketBoundaries: LONG_DURATION_HISTOGRAM_BOUNDARIES_S,
   });
 }

@@ -1,10 +1,15 @@
 import type {Query, SchemaQuery} from '@rocicorp/zero';
-import type {BenchmarkProfile} from './config.ts';
-import {FORUM_CATEGORY_ID, REL_ORG_ID, SHARED_OWNER_ID} from './profiles.ts';
+import type {BenchmarkModel, BenchmarkProfile} from './config.ts';
 import type {schema} from './schema.ts';
+import {
+  emailOwnerIDForClient,
+  feedBucketForClient,
+  forumCategoryIDForClient,
+  relOrgIDForClient,
+} from './workload-models.ts';
 
 type ThroughputSchema = typeof schema;
-type ThroughputTable = keyof ThroughputSchema['tables'] & string;
+type ThroughputTable = keyof ThroughputSchema['tables'];
 export type ThroughputQuery = Query<ThroughputTable, ThroughputSchema, object>;
 
 export type BuiltProfileQuery = {
@@ -34,27 +39,47 @@ export const PROFILE_QUERY_NAMES = {
 export function buildProfileQuery(
   builder: SchemaQuery<ThroughputSchema>,
   profile: BenchmarkProfile,
+  model: BenchmarkModel,
   queryIndex: number,
   rowsPerQuery: number,
+  clientIndex: number,
 ): BuiltProfileQuery {
   switch (profile) {
     case 'feed-append':
       return {
         name: profileQueryName(profile, queryIndex),
         query: builder.event
-          .where('bucket', 0)
+          .where('bucket', feedBucketForClient(model, clientIndex))
           .orderBy('seq', 'desc')
           .limit(rowsPerQuery) as ThroughputQuery,
       };
 
     case 'email':
-      return buildEmailQuery(builder, queryIndex, rowsPerQuery);
+      return buildEmailQuery(
+        builder,
+        model,
+        queryIndex,
+        rowsPerQuery,
+        clientIndex,
+      );
 
     case 'forum':
-      return buildForumQuery(builder, queryIndex, rowsPerQuery);
+      return buildForumQuery(
+        builder,
+        model,
+        queryIndex,
+        rowsPerQuery,
+        clientIndex,
+      );
 
     case 'relational':
-      return buildRelationalQuery(builder, queryIndex, rowsPerQuery);
+      return buildRelationalQuery(
+        builder,
+        model,
+        queryIndex,
+        rowsPerQuery,
+        clientIndex,
+      );
   }
 }
 
@@ -107,16 +132,19 @@ export function findProfileQuery(
 
 function buildEmailQuery(
   builder: SchemaQuery<ThroughputSchema>,
+  model: BenchmarkModel,
   queryIndex: number,
   rowsPerQuery: number,
+  clientIndex: number,
 ): BuiltProfileQuery {
   const name = profileQueryName('email', queryIndex);
+  const ownerID = emailOwnerIDForClient(model, clientIndex);
   switch (normalizeProfileQueryIndex('email', queryIndex)) {
     case 0:
       return {
         name,
         query: builder.emailThread
-          .where('ownerID', SHARED_OWNER_ID)
+          .where('ownerID', ownerID)
           .where('mailbox', 'inbox')
           .related('messages', q => q.orderBy('seq', 'desc').limit(5))
           .orderBy('seq', 'desc')
@@ -127,7 +155,7 @@ function buildEmailQuery(
       return {
         name,
         query: builder.emailMessage
-          .where('ownerID', SHARED_OWNER_ID)
+          .where('ownerID', ownerID)
           .where('mailbox', 'inbox')
           .related('thread')
           .orderBy('seq', 'desc')
@@ -138,7 +166,7 @@ function buildEmailQuery(
       return {
         name,
         query: builder.emailThread
-          .where('ownerID', SHARED_OWNER_ID)
+          .where('ownerID', ownerID)
           .where('mailbox', 'inbox')
           .related('messages', q =>
             q.where('unread', true).orderBy('seq', 'desc').limit(10),
@@ -152,16 +180,19 @@ function buildEmailQuery(
 
 function buildForumQuery(
   builder: SchemaQuery<ThroughputSchema>,
+  model: BenchmarkModel,
   queryIndex: number,
   rowsPerQuery: number,
+  clientIndex: number,
 ): BuiltProfileQuery {
   const name = profileQueryName('forum', queryIndex);
+  const categoryID = forumCategoryIDForClient(model, clientIndex);
   switch (normalizeProfileQueryIndex('forum', queryIndex)) {
     case 0:
       return {
         name,
         query: builder.forumCategory
-          .where('id', FORUM_CATEGORY_ID)
+          .where('id', categoryID)
           .related('threads', q =>
             q
               .orderBy('seq', 'desc')
@@ -177,7 +208,7 @@ function buildForumQuery(
       return {
         name,
         query: builder.forumThread
-          .where('categoryID', FORUM_CATEGORY_ID)
+          .where('categoryID', categoryID)
           .related('category')
           .related('author')
           .related('posts', q =>
@@ -191,7 +222,7 @@ function buildForumQuery(
       return {
         name,
         query: builder.forumPost
-          .where('categoryID', FORUM_CATEGORY_ID)
+          .where('categoryID', categoryID)
           .related('thread', q => q.related('author').related('category'))
           .related('author')
           .orderBy('seq', 'desc')
@@ -203,16 +234,19 @@ function buildForumQuery(
 
 function buildRelationalQuery(
   builder: SchemaQuery<ThroughputSchema>,
+  model: BenchmarkModel,
   queryIndex: number,
   rowsPerQuery: number,
+  clientIndex: number,
 ): BuiltProfileQuery {
   const name = profileQueryName('relational', queryIndex);
+  const orgID = relOrgIDForClient(model, clientIndex);
   switch (normalizeProfileQueryIndex('relational', queryIndex)) {
     case 0:
       return {
         name,
         query: builder.relOrg
-          .where('id', REL_ORG_ID)
+          .where('id', orgID)
           .related('accounts', q =>
             q
               .orderBy('seq', 'desc')
@@ -231,7 +265,7 @@ function buildRelationalQuery(
       return {
         name,
         query: builder.relAccount
-          .where('orgID', REL_ORG_ID)
+          .where('orgID', orgID)
           .related('org')
           .related('contacts')
           .related('activities', q =>
@@ -245,7 +279,7 @@ function buildRelationalQuery(
       return {
         name,
         query: builder.relActivity
-          .where('orgID', REL_ORG_ID)
+          .where('orgID', orgID)
           .related('org')
           .related('account', q => q.related('contacts'))
           .related('contact')

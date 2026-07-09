@@ -6,6 +6,7 @@ import type {BenchmarkConfig} from './config.ts';
 import {appPath, appRoot} from './config.ts';
 import type {ProcessCommand} from './processes.ts';
 import {average, max, percentile} from './util.ts';
+import type {WriteImpactTotals} from './workload-models.ts';
 import type {WriterStats} from './writer.ts';
 
 export type MetricSample = {
@@ -19,6 +20,7 @@ export type MetricSample = {
 export type BenchmarkResult = {
   readonly gitCommit: string | undefined;
   readonly profile: string;
+  readonly model: string;
   readonly config: BenchmarkConfig;
   readonly processes: readonly ProcessCommand[];
   readonly environment: {
@@ -45,9 +47,18 @@ export type BenchmarkResult = {
     readonly txLatencyP95Ms: number;
     readonly txLatencyP99Ms: number;
     readonly txLatencyAverageMs: number;
+    readonly writeImpact: WriteImpactSummary;
     readonly pass: boolean;
     readonly failureReasons: readonly string[];
   };
+};
+
+export type WriteImpactSummary = WriteImpactTotals & {
+  readonly activePartitionWriteRatio: number;
+  readonly zeroActiveClientGroupWriteRatio: number;
+  readonly affectedActiveClientGroupWriteRatio: number;
+  readonly visibleRowWriteRatio: number;
+  readonly nonVisibleRowWriteRatio: number;
 };
 
 export function sampleMetrics(
@@ -92,10 +103,12 @@ export function buildResult(args: {
     maxSeqLag,
     lagSlopeSeqPerSec: lagSlope(args.samples),
   });
+  const writeImpact = summarizeWriteImpact(args.writerStats.writeImpact);
 
   return {
     gitCommit: gitCommit(),
     profile: args.config.profile,
+    model: args.config.model,
     config: args.config,
     processes: args.processes,
     environment: {
@@ -125,6 +138,7 @@ export function buildResult(args: {
       txLatencyP95Ms: percentile(args.writerStats.transactionLatencyMs, 95),
       txLatencyP99Ms: percentile(args.writerStats.transactionLatencyMs, 99),
       txLatencyAverageMs: average(args.writerStats.transactionLatencyMs),
+      writeImpact,
       pass: failureReasons.length === 0,
       failureReasons,
     },
@@ -169,20 +183,52 @@ function failureReasonsFor(args: {
       `p99 client-visible lag ${args.p99ClientVisibleLagMs}ms exceeded SLO ${args.config.sloP99LagMs}ms`,
     );
   }
-  const allowedSeqLag = Math.ceil(
-    args.config.writeRate * (args.config.sloP99LagMs / 1000),
-  );
-  if (args.maxSeqLag > allowedSeqLag) {
-    reasons.push(
-      `max seq lag ${args.maxSeqLag} exceeded SLO-equivalent ${allowedSeqLag}`,
+  if (args.config.model === 'hot') {
+    const allowedSeqLag = Math.ceil(
+      args.config.writeRate * (args.config.sloP99LagMs / 1000),
     );
-  }
-  if (args.lagSlopeSeqPerSec > args.config.writeRate * 0.05) {
-    reasons.push(
-      `lag slope ${args.lagSlopeSeqPerSec.toFixed(2)} seq/s was positive`,
-    );
+    if (args.maxSeqLag > allowedSeqLag) {
+      reasons.push(
+        `max seq lag ${args.maxSeqLag} exceeded SLO-equivalent ${allowedSeqLag}`,
+      );
+    }
+    if (args.lagSlopeSeqPerSec > args.config.writeRate * 0.05) {
+      reasons.push(
+        `lag slope ${args.lagSlopeSeqPerSec.toFixed(2)} seq/s was positive`,
+      );
+    }
   }
   return reasons;
+}
+
+function summarizeWriteImpact(totals: WriteImpactTotals): WriteImpactSummary {
+  return {
+    ...totals,
+    activePartitionWriteRatio: ratio(
+      totals.activePartitionWrites,
+      totals.totalLogicalWrites,
+    ),
+    zeroActiveClientGroupWriteRatio: ratio(
+      totals.zeroActiveClientGroupWrites,
+      totals.totalLogicalWrites,
+    ),
+    affectedActiveClientGroupWriteRatio: ratio(
+      totals.affectedActiveClientGroupWrites,
+      totals.totalLogicalWrites,
+    ),
+    visibleRowWriteRatio: ratio(
+      totals.visibleRowWrites,
+      totals.totalLogicalWrites,
+    ),
+    nonVisibleRowWriteRatio: ratio(
+      totals.nonVisibleRowWrites,
+      totals.totalLogicalWrites,
+    ),
+  };
+}
+
+function ratio(numerator: number, denominator: number): number {
+  return denominator === 0 ? 0 : numerator / denominator;
 }
 
 function lagSlope(samples: readonly MetricSample[]): number {

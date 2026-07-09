@@ -15,6 +15,7 @@ const options = {
   profile: v
     .literalUnion('feed-append', 'email', 'forum', 'relational')
     .default('feed-append'),
+  model: v.literalUnion('hot', 'realistic').default('hot'),
 
   users: v.number().default(1),
   queriesPerUser: v.number().default(1),
@@ -56,10 +57,12 @@ const options = {
 };
 
 export type BenchmarkProfile = 'feed-append' | 'email' | 'forum' | 'relational';
+export type BenchmarkModel = 'hot' | 'realistic';
 
 export type BenchmarkConfig = {
   readonly runID: string;
   readonly profile: BenchmarkProfile;
+  readonly model: BenchmarkModel;
   readonly users: number;
   readonly queriesPerUser: number;
   readonly rowsPerQuery: number;
@@ -120,6 +123,7 @@ export function loadConfig(): BenchmarkConfig {
   return {
     runID: new Date().toISOString().replace(/[:.]/g, '-'),
     profile: parsed.profile,
+    model: parsed.model,
     users: parsed.users,
     queriesPerUser: parsed.queriesPerUser,
     rowsPerQuery: parsed.rowsPerQuery,
