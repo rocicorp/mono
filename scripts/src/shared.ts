@@ -21,7 +21,7 @@ export type ExecError = Error & {status?: number | undefined; stderr?: Buffer};
 
 export type StableZeroVersion = `${number}.${number}.${number}`;
 export type CanaryZeroVersion = `${StableZeroVersion}-canary.${number}`;
-export type HeadZeroVersion = `${StableZeroVersion}-head.${number}`;
+export type HeadZeroVersion = `${StableZeroVersion}-head-${string}`;
 export type ZeroVersion =
   | StableZeroVersion
   | CanaryZeroVersion
@@ -39,7 +39,19 @@ export const defaultExec: Exec = (command, args, options) =>
   );
 
 const stableZeroVersionPattern = /^\d+\.\d+\.\d+$/;
-const zeroVersionPattern = /^(\d+\.\d+\.\d+)(?:-(?:canary|head)\.(\d+))?$/;
+/**
+ * Length of the source-sha prefix embedded in head versions. Eight hex chars
+ * keep short-sha lookups (git, GitHub) unambiguous at this repo's size; six
+ * would collide with other objects a few percent of the time.
+ *
+ * The whole head suffix is joined with hyphens so it stays a single semver
+ * alphanumeric prerelease identifier: dot-separated segments would make an
+ * all-digit sha prefix with a leading zero (e.g. `.012345.`) invalid semver.
+ */
+export const headVersionShaLength = 8;
+const zeroVersionPattern = new RegExp(
+  `^(\\d+\\.\\d+\\.\\d+)(?:-canary\\.\\d+|-head-([0-9a-f]{${headVersionShaLength}})-\\d{8})?$`,
+);
 const gitShaPattern = /^[0-9a-f]{40}$/;
 
 export type ReleaseMode = 'canary' | 'stable' | 'head';
@@ -105,14 +117,20 @@ export function assertStableZeroVersion(
   }
 }
 
-export function parseZeroVersion(
-  version: string,
-): {baseVersion: StableZeroVersion} | undefined {
+export function parseZeroVersion(version: string):
+  | {
+      baseVersion: StableZeroVersion;
+      headSha: string | undefined;
+    }
+  | undefined {
   const match = version.match(zeroVersionPattern);
   if (!match) {
     return undefined;
   }
-  return {baseVersion: match[1] as StableZeroVersion};
+  return {
+    baseVersion: match[1] as StableZeroVersion,
+    headSha: match[2],
+  };
 }
 
 export function zeroTag<V extends ZeroVersion>(version: V): ZeroTag<V> {
@@ -144,24 +162,13 @@ export function readZeroPackageVersionAt(
 
 export function writeZeroPackageVersion(
   version: ZeroVersion,
-  gitHead?: string,
   packageJsonPath = zeroPackageJsonPath,
 ) {
-  if (gitHead !== undefined) {
-    assertGitSha(gitHead, 'gitHead');
-  }
   const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf8')) as {
     version?: string;
-    gitHead?: string;
   };
   const previousVersion = packageJson.version;
   packageJson.version = version;
-  if (gitHead !== undefined) {
-    // Recorded in the registry packument so `npm view @rocicorp/zero@<v>
-    // gitHead` maps a published version back to its source commit; npm does
-    // not compute it for tarball publishes made outside the source git repo.
-    packageJson.gitHead = gitHead;
-  }
   writeFileSync(packageJsonPath, `${JSON.stringify(packageJson, null, 2)}\n`);
   return previousVersion;
 }

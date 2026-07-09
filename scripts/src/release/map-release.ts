@@ -15,7 +15,7 @@ export type MapReleaseFetch = (
 
 export type MapReleaseMatch = {
   version: string;
-  gitHead: string | undefined;
+  sourceSha: string | undefined;
 };
 
 export type MapReleaseOptions = {
@@ -42,8 +42,8 @@ export async function mapRelease({
   if (matches.length === 0) {
     throw new Error(`No ${zeroPackageName} release found for ${query}`);
   }
-  for (const {version, gitHead} of matches) {
-    log(`${version} -> ${gitHead ?? '(no gitHead recorded)'}`);
+  for (const {version, sourceSha} of matches) {
+    log(`${version} -> ${sourceSha ?? '(unknown source commit)'}`);
     log(`  npm:   ${zeroPackageName}@${version}`);
     log(`  image: ${zeroGhcrImage}:${version}`);
   }
@@ -56,23 +56,50 @@ export function findMapReleaseMatches(
 ): MapReleaseMatch[] {
   if (parseZeroVersion(query)) {
     const entry = versions[query];
-    return entry ? [{version: query, gitHead: entry.gitHead}] : [];
+    return entry
+      ? [{version: query, sourceSha: sourceShaOf(query, entry)}]
+      : [];
   }
   if (shaPrefixPattern.test(query)) {
     return Object.entries(versions)
-      .filter(([, {gitHead}]) => gitHead?.startsWith(query))
-      .map(([version, {gitHead}]) => ({version, gitHead}));
+      .map(([version, entry]) => ({
+        version,
+        sourceSha: sourceShaOf(version, entry),
+      }))
+      .filter(({sourceSha}) => matchesShaQuery(sourceSha, query));
   }
   throw new Error(
     `Expected a Zero version, git SHA, or SHA prefix (6+ hex chars), got ${query}`,
   );
 }
 
+/**
+ * Head versions embed a source-sha prefix in the version string; stable and
+ * canary releases are mapped by their `zero/vX.Y.Z` git tags, but a
+ * packument-recorded gitHead is honored when present.
+ */
+function sourceShaOf(
+  version: string,
+  entry: {gitHead?: string | undefined},
+): string | undefined {
+  return parseZeroVersion(version)?.headSha ?? entry.gitHead;
+}
+
+// A stored sha may be shorter than the query (head versions embed a fixed
+// prefix, the query may be a full 40-char sha) or longer (short query
+// against a full packument gitHead) — either containment direction matches.
+function matchesShaQuery(sourceSha: string | undefined, query: string) {
+  return (
+    sourceSha !== undefined &&
+    (sourceSha.startsWith(query) || query.startsWith(sourceSha))
+  );
+}
+
 async function readPackumentVersions(
   fetchImpl: MapReleaseFetch,
 ): Promise<PackumentVersions> {
-  // The full packument (not the abbreviated install metadata) is required;
-  // only the full document carries per-version gitHead.
+  // The full packument (not the abbreviated install metadata) carries
+  // per-version gitHead when the registry recorded one.
   const response = await fetchImpl(npmPackumentUrl, {
     headers: {accept: 'application/json'},
   });

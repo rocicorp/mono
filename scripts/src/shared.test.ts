@@ -37,13 +37,31 @@ test('release mode validation accepts known modes', () => {
 test('zero version and tag validation', () => {
   expect(() => assertZeroVersion('1.2.3')).not.toThrow();
   expect(() => assertZeroVersion('1.2.3-canary.4')).not.toThrow();
-  expect(() => assertZeroVersion('1.2.3-head.202607082153')).not.toThrow();
+  expect(() => assertZeroVersion('1.2.3-head-e8cc6889-20260708')).not.toThrow();
+  // An all-digit sha prefix with a leading zero stays valid semver because
+  // the hyphen-joined suffix is a single alphanumeric identifier.
+  expect(() => assertZeroVersion('1.2.3-head-01234567-20260708')).not.toThrow();
   expect(() => assertZeroVersion('v1.2.3')).toThrowErrorMatchingInlineSnapshot(
     `[Error: Invalid version v1.2.3]`,
   );
   expect(() =>
     assertZeroVersion('1.2.3-head'),
   ).toThrowErrorMatchingInlineSnapshot(`[Error: Invalid version 1.2.3-head]`);
+  expect(() =>
+    assertZeroVersion('1.2.3-head.202607082153'),
+  ).toThrowErrorMatchingInlineSnapshot(
+    `[Error: Invalid version 1.2.3-head.202607082153]`,
+  );
+  expect(() =>
+    assertZeroVersion('1.2.3-head-e8cc68-20260708'),
+  ).toThrowErrorMatchingInlineSnapshot(
+    `[Error: Invalid version 1.2.3-head-e8cc68-20260708]`,
+  );
+  expect(() =>
+    assertZeroVersion('1.2.3-head-e8cc6889-2026'),
+  ).toThrowErrorMatchingInlineSnapshot(
+    `[Error: Invalid version 1.2.3-head-e8cc6889-2026]`,
+  );
   expect(() =>
     assertZeroVersion('1.2.3-beta.1'),
   ).toThrowErrorMatchingInlineSnapshot(`[Error: Invalid version 1.2.3-beta.1]`);
@@ -55,9 +73,9 @@ test('zero version and tag validation', () => {
     `[Error: Expected stable Zero version, got 1.2.3-canary.4]`,
   );
   expect(() =>
-    assertStableZeroVersion('1.2.3-head.202607082153'),
+    assertStableZeroVersion('1.2.3-head-e8cc6889-20260708'),
   ).toThrowErrorMatchingInlineSnapshot(
-    `[Error: Expected stable Zero version, got 1.2.3-head.202607082153]`,
+    `[Error: Expected stable Zero version, got 1.2.3-head-e8cc6889-20260708]`,
   );
 
   expect(zeroTag('1.2.3')).toBe('zero/v1.2.3');
@@ -102,7 +120,7 @@ test('writeGithubOutput rejects multiline values', () => {
   }
 });
 
-test('writeZeroPackageVersion updates version and records gitHead', () => {
+test('writeZeroPackageVersion updates the version in place', () => {
   const tempDir = mkdtempSync(join(tmpdir(), 'zero-scripts-test-'));
   try {
     const packageJsonPath = join(tempDir, 'package.json');
@@ -111,35 +129,19 @@ test('writeZeroPackageVersion updates version and records gitHead', () => {
       `${JSON.stringify({name: '@rocicorp/zero', version: '1.8.0'}, null, 2)}\n`,
     );
 
-    const sourceSha = 'e8cc6889fa6bc2a364e8cb80776991c308601212';
     const previousVersion = writeZeroPackageVersion(
-      '1.8.0-head.202607082153',
-      sourceSha,
+      '1.8.0-head-e8cc6889-20260708',
       packageJsonPath,
     );
 
     expect(previousVersion).toBe('1.8.0');
     expect(JSON.parse(readFileSync(packageJsonPath, 'utf8'))).toEqual({
       name: '@rocicorp/zero',
-      version: '1.8.0-head.202607082153',
-      gitHead: sourceSha,
-    });
-
-    writeZeroPackageVersion('1.8.1', undefined, packageJsonPath);
-    expect(JSON.parse(readFileSync(packageJsonPath, 'utf8'))).toEqual({
-      name: '@rocicorp/zero',
-      version: '1.8.1',
-      gitHead: sourceSha,
+      version: '1.8.0-head-e8cc6889-20260708',
     });
   } finally {
     rmSync(tempDir, {recursive: true, force: true});
   }
-});
-
-test('writeZeroPackageVersion rejects an invalid gitHead', () => {
-  expect(() =>
-    writeZeroPackageVersion('1.8.0', 'not-a-sha', 'unused/package.json'),
-  ).toThrowErrorMatchingInlineSnapshot(`[Error: Invalid gitHead not-a-sha]`);
 });
 
 test('npmZeroVersionExists handles existing and missing npm versions', () => {

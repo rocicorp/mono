@@ -7,6 +7,7 @@ import {
   defaultExec,
   escapeRegExp,
   gitTagExists,
+  headVersionShaLength,
   mustEnv,
   npmZeroVersionExists,
   parseZeroVersion,
@@ -108,7 +109,7 @@ export function planRelease({
     mode === 'stable'
       ? planStableVersion(currentVersion)
       : mode === 'head'
-        ? planHeadVersion(currentVersion)
+        ? planHeadVersion(currentVersion, sourceSha)
         : planCanaryVersion(
             currentVersion,
             readCanaryTags(exec, currentVersion),
@@ -174,18 +175,23 @@ export function planCanaryVersion(
 
 export function planHeadVersion(
   currentVersion: string,
+  sourceSha: string,
   now = new Date(),
 ): HeadZeroVersion {
   const parsed = parseZeroVersion(currentVersion);
   if (!parsed) {
     throw new Error(
-      `Cannot plan head from package version ${currentVersion}. Expected X.Y.Z, X.Y.Z-canary.N, or X.Y.Z-head.N`,
+      `Cannot plan head from package version ${currentVersion}. Expected X.Y.Z, X.Y.Z-canary.N, or X.Y.Z-head-SHA-DATE`,
     );
   }
-  // UTC second stamp (YYYYMMDDHHmmss); the plan step's npm-exists check
-  // guards against two runs landing in the same second.
-  const timestamp = now.toISOString().slice(0, 19).replace(/[-T:]/g, '');
-  return `${parsed.baseVersion}-head.${timestamp}` as HeadZeroVersion;
+  assertGitSha(sourceSha, 'source SHA');
+  // The source commit rides in the version itself, so provenance needs
+  // nothing written beyond the version; the UTC date is for humans. A
+  // re-release of the same commit on the same day plans the same version
+  // and is rejected by the caller's npm-exists check.
+  const shaPrefix = sourceSha.slice(0, headVersionShaLength);
+  const date = now.toISOString().slice(0, 10).replaceAll('-', '');
+  return `${parsed.baseVersion}-head-${shaPrefix}-${date}` as HeadZeroVersion;
 }
 
 function readCanaryTags(exec: Exec, currentVersion: string) {

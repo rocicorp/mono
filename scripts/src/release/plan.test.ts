@@ -50,20 +50,25 @@ test('canary planning starts at zero and increments existing tags', () => {
   ).toBe('1.8.0-canary.3');
 });
 
-test('head planning stamps the UTC second onto the base version', () => {
+test('head planning stamps the source sha and UTC date onto the base version', () => {
   const now = new Date('2026-07-08T21:53:45.123Z');
-  expect(planHeadVersion('1.8.0', now)).toBe('1.8.0-head.20260708215345');
-  expect(planHeadVersion('1.8.0-canary.5', now)).toBe(
-    '1.8.0-head.20260708215345',
+  expect(planHeadVersion('1.8.0', sourceSha, now)).toBe(
+    '1.8.0-head-e8cc6889-20260708',
   );
-  expect(planHeadVersion('1.8.0-head.202601010000', now)).toBe(
-    '1.8.0-head.20260708215345',
+  expect(planHeadVersion('1.8.0-canary.5', sourceSha, now)).toBe(
+    '1.8.0-head-e8cc6889-20260708',
+  );
+  expect(planHeadVersion('1.8.0-head-deadbeef-20260101', sourceSha, now)).toBe(
+    '1.8.0-head-e8cc6889-20260708',
   );
   expect(() =>
-    planHeadVersion('not-a-version', now),
+    planHeadVersion('not-a-version', sourceSha, now),
   ).toThrowErrorMatchingInlineSnapshot(
-    `[Error: Cannot plan head from package version not-a-version. Expected X.Y.Z, X.Y.Z-canary.N, or X.Y.Z-head.N]`,
+    `[Error: Cannot plan head from package version not-a-version. Expected X.Y.Z, X.Y.Z-canary.N, or X.Y.Z-head-SHA-DATE]`,
   );
+  expect(() =>
+    planHeadVersion('1.8.0', 'e8cc6889', now),
+  ).toThrowErrorMatchingInlineSnapshot(`[Error: Invalid source SHA e8cc6889]`);
 });
 
 test('planRelease resolves source, checks tags and npm, and returns canary outputs', () => {
@@ -123,8 +128,8 @@ test('planRelease returns head outputs and honors the source SHA override', () =
   ).toEqual({
     mode: 'head',
     release_branch: 'main',
-    version: '1.8.0-head.20260708215345',
-    tag: 'zero/v1.8.0-head.20260708215345',
+    version: '1.8.0-head-11111111-20260708',
+    tag: 'zero/v1.8.0-head-11111111-20260708',
     source_sha: overrideSha,
     is_canary: 'false',
   });
@@ -154,7 +159,7 @@ test('planRelease resolves head from origin when no source SHA is given', () => 
     workflowRefName: 'main',
   });
   expect(plan.source_sha).toBe(sourceSha);
-  expect(plan.version).toBe('1.8.0-head.20260708215345');
+  expect(plan.version).toBe('1.8.0-head-e8cc6889-20260708');
 });
 
 test('planRelease rejects head releases from non-main branches and bad overrides', () => {
@@ -192,7 +197,7 @@ test('planRelease rejects a head version that already exists on npm', () => {
       workflowRefName: 'main',
     }),
   ).toThrowErrorMatchingInlineSnapshot(
-    `[Error: @rocicorp/zero@1.8.0-head.20260708215345 already exists on npm]`,
+    `[Error: @rocicorp/zero@1.8.0-head-e8cc6889-20260708 already exists on npm]`,
   );
 });
 

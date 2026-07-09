@@ -111,7 +111,7 @@ jobs:
 
       - name: Set release version
         working-directory: source
-        run: node --experimental-strip-types --no-warnings "$SCRIPTS/release-set-version.ts" "$VERSION" "$SOURCE_SHA"
+        run: node --experimental-strip-types --no-warnings "$SCRIPTS/release-set-version.ts" "$VERSION"
 
       - name: Install dependencies
         working-directory: source
@@ -331,8 +331,8 @@ jobs:
     name: Push git tag
     runs-on: ubuntu-latest
     needs: [plan, publish-npm, publish-docker]
-    # Head releases are not tagged; npm gitHead and the OCI revision label
-    # carry the version <-> commit mapping.
+    # Head releases are not tagged; the version itself (source-sha prefix +
+    # date) and the OCI revision label carry the version <-> commit mapping.
     if: needs.plan.outputs.mode != 'head'
     permissions:
       contents: write # Required to push the Zero release tag.

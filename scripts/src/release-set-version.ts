@@ -6,18 +6,12 @@ import {
   zeroPackageJsonPath,
 } from './shared.ts';
 
-const [version, sourceSha] = process.argv.slice(2);
+const [version] = process.argv.slice(2);
 if (!version) {
-  throw new Error(`Usage: node release-set-version.ts <version> [source-sha]`);
+  throw new Error(`Usage: node release-set-version.ts <version>`);
 }
 assertZeroVersion(version);
 
-const previousVersion = writeZeroPackageVersion(
-  version,
-  sourceSha || undefined,
-);
+const previousVersion = writeZeroPackageVersion(version);
 
 console.log(`Updated ${zeroPackageJsonPath}: ${previousVersion} -> ${version}`);
-if (sourceSha) {
-  console.log(`Recorded gitHead ${sourceSha}`);
-}

@@ -85,8 +85,8 @@ test('createReleaseTag refuses to tag head releases', () => {
       exec,
       mode: 'head',
       sourceSha,
-      tag: 'zero/v1.8.0-head.202607082153',
-      version: '1.8.0-head.202607082153',
+      tag: 'zero/v1.8.0-head-e8cc6889-20260708',
+      version: '1.8.0-head-e8cc6889-20260708',
     }),
   ).toThrowErrorMatchingInlineSnapshot(`[Error: Head releases are not tagged]`);
   expect(calls).toEqual([]);
