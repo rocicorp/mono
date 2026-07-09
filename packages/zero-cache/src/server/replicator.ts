@@ -6,6 +6,7 @@ import {assert} from '../../../shared/src/asserts.ts';
 import {must} from '../../../shared/src/must.ts';
 import * as v from '../../../shared/src/valita.ts';
 import {getNormalizedZeroConfig} from '../config/zero-config.ts';
+import {registerSQLiteCorruptionDiagnosticTarget} from '../db/sqlite-corruption.ts';
 import {initEventSink} from '../observability/events.ts';
 import {getOrCreateGauge} from '../observability/metrics.ts';
 import {ChangeStreamerHttpClient} from '../services/change-streamer/change-streamer-http.ts';
@@ -48,6 +49,11 @@ export default async function runWorker(
   const workerName = `${mode}-replicator`;
   startOtelAuto(createLogContext(config, workerName, 0, false), workerName, 0);
   lc = createLogContext(config, workerName);
+  const unregisterInitialCorruptionDiagnosticTarget =
+    registerSQLiteCorruptionDiagnosticTarget({
+      debugName: `${workerName} replica`,
+      dbPath: config.replica.file,
+    });
   initEventSink(lc, config);
 
   const {file: dbPath, walMode} = await setupReplica(
@@ -55,6 +61,11 @@ export default async function runWorker(
     fileMode,
     config.replica,
   );
+  unregisterInitialCorruptionDiagnosticTarget();
+  registerSQLiteCorruptionDiagnosticTarget({
+    debugName: `${workerName} replica`,
+    dbPath,
+  });
 
   setupMetrics(lc, dbPath, walMode);
 

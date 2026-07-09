@@ -6,6 +6,7 @@ import {Database} from '../../../../zqlite/src/db.ts';
 import {
   isSQLiteCorruption,
   logSQLiteCorruptionDiagnostics,
+  registerSQLiteCorruptionDiagnosticTarget,
 } from '../../db/sqlite-corruption.ts';
 import {StatementRunner} from '../../db/statements.ts';
 import {createLogContext} from '../../server/logging.ts';
@@ -39,6 +40,7 @@ function createAPI(): API {
   let mode: ChangeProcessorMode | undefined;
   let lc: LogContext | undefined;
   let replicaDbPath: string | undefined;
+  let unregisterCorruptionDiagnosticTarget: (() => void) | undefined;
 
   function logCorruptionDiagnostics(err: unknown) {
     if (lc && replicaDbPath && isSQLiteCorruption(err)) {
@@ -64,6 +66,12 @@ function createAPI(): API {
     ) {
       replicaDbPath = dbPath;
       lc = createLogContext({log: logConfig}, 'write-worker');
+      unregisterCorruptionDiagnosticTarget?.();
+      unregisterCorruptionDiagnosticTarget =
+        registerSQLiteCorruptionDiagnosticTarget({
+          debugName: 'write-worker',
+          dbPath,
+        });
       try {
         db = new Database(lc, dbPath);
         applyPragmas(db, pragmas);
@@ -105,6 +113,8 @@ function createAPI(): API {
       runner = undefined;
       processor = undefined;
       replicaDbPath = undefined;
+      unregisterCorruptionDiagnosticTarget?.();
+      unregisterCorruptionDiagnosticTarget = undefined;
     },
   };
 }

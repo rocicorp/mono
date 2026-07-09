@@ -32,8 +32,37 @@ type CheckSummary = {
   readonly issues: string[];
 };
 
+type DiagnosticTarget = {
+  readonly debugName: string;
+  readonly dbPath: string;
+};
+
+const diagnosticTargets = new Map<number, DiagnosticTarget>();
+let nextDiagnosticTargetID = 0;
+
 export function isSQLiteCorruption(e: unknown): boolean {
   return getSQLiteCorruptionCode(e) !== undefined;
+}
+
+export function registerSQLiteCorruptionDiagnosticTarget(
+  target: DiagnosticTarget,
+): () => void {
+  const id = nextDiagnosticTargetID++;
+  diagnosticTargets.set(id, target);
+  return () => diagnosticTargets.delete(id);
+}
+
+export function logLastChanceSQLiteCorruptionDiagnostics(
+  lc: LogContext,
+  cause: unknown,
+): boolean {
+  if (!isSQLiteCorruption(cause) || diagnosticTargets.size === 0) {
+    return false;
+  }
+  for (const {debugName, dbPath} of diagnosticTargets.values()) {
+    logSQLiteCorruptionDiagnostics(lc, debugName, dbPath, cause);
+  }
+  return true;
 }
 
 export function logSQLiteCorruptionDiagnostics(
