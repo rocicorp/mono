@@ -77,6 +77,21 @@ test('createReleaseTag pushes stable tag at the source SHA', () => {
   expect(log).toHaveBeenCalledWith(`Pushed zero/v1.8.0 -> ${sourceSha}`);
 });
 
+test('createReleaseTag refuses to tag head releases', () => {
+  const {calls, exec} = makeTagExec();
+
+  expect(() =>
+    createReleaseTag({
+      exec,
+      mode: 'head',
+      sourceSha,
+      tag: 'zero/v1.8.0-head-e8cc6889-20260708',
+      version: '1.8.0-head-e8cc6889-20260708',
+    }),
+  ).toThrowErrorMatchingInlineSnapshot(`[Error: Head releases are not tagged]`);
+  expect(calls).toEqual([]);
+});
+
 test('createReleaseTag creates a canary version commit before tagging', () => {
   const {calls, exec} = makeTagExec();
   const log = vi.fn();

@@ -3,6 +3,7 @@ import {appendFileSync, readFileSync, writeFileSync} from 'node:fs';
 
 export const zeroPackageName = '@rocicorp/zero';
 export const zeroPackageJsonPath = 'packages/zero/package.json';
+export const zeroGhcrImage = 'ghcr.io/rocicorp/zero';
 
 export type Command = 'docker' | 'git' | 'npm' | 'tar';
 export type ExecOptions = {
@@ -20,7 +21,11 @@ export type ExecError = Error & {status?: number | undefined; stderr?: Buffer};
 
 export type StableZeroVersion = `${number}.${number}.${number}`;
 export type CanaryZeroVersion = `${StableZeroVersion}-canary.${number}`;
-export type ZeroVersion = StableZeroVersion | CanaryZeroVersion;
+export type HeadZeroVersion = `${StableZeroVersion}-head-${string}`;
+export type ZeroVersion =
+  | StableZeroVersion
+  | CanaryZeroVersion
+  | HeadZeroVersion;
 export type ZeroTag<V extends ZeroVersion = ZeroVersion> = `zero/v${V}`;
 export type MaintenanceZeroBranch = `maint/zero/v${number}.${number}`;
 export type ReleaseBranch = 'main' | MaintenanceZeroBranch;
@@ -34,10 +39,13 @@ export const defaultExec: Exec = (command, args, options) =>
   );
 
 const stableZeroVersionPattern = /^\d+\.\d+\.\d+$/;
-const zeroVersionPattern = /^(\d+\.\d+\.\d+)(?:-canary\.(\d+))?$/;
+export const headVersionShaLength = 8;
+const zeroVersionPattern = new RegExp(
+  `^(\\d+\\.\\d+\\.\\d+)(?:-canary\\.\\d+|-head-[0-9a-f]{${headVersionShaLength}}-\\d{8})?$`,
+);
 const gitShaPattern = /^[0-9a-f]{40}$/;
 
-export type ReleaseMode = 'canary' | 'stable';
+export type ReleaseMode = 'canary' | 'stable' | 'head';
 
 export function mustEnv(name: string) {
   const value = process.env[name];
@@ -63,7 +71,7 @@ export function writeGithubOutput(outputs: Record<string, string>) {
 }
 
 export function readReleaseMode(mode: string): ReleaseMode {
-  if (mode !== 'canary' && mode !== 'stable') {
+  if (mode !== 'canary' && mode !== 'stable' && mode !== 'head') {
     throw new Error(`Unsupported release mode ${mode}`);
   }
   return mode;
@@ -137,16 +145,16 @@ export function readZeroPackageVersionAt(
   return packageJson.version;
 }
 
-export function writeZeroPackageVersion(version: ZeroVersion) {
-  const packageJson = JSON.parse(readFileSync(zeroPackageJsonPath, 'utf8')) as {
+export function writeZeroPackageVersion(
+  version: ZeroVersion,
+  packageJsonPath = zeroPackageJsonPath,
+) {
+  const packageJson = JSON.parse(readFileSync(packageJsonPath, 'utf8')) as {
     version?: string;
   };
   const previousVersion = packageJson.version;
   packageJson.version = version;
-  writeFileSync(
-    zeroPackageJsonPath,
-    `${JSON.stringify(packageJson, null, 2)}\n`,
-  );
+  writeFileSync(packageJsonPath, `${JSON.stringify(packageJson, null, 2)}\n`);
   return previousVersion;
 }
 
