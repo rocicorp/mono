@@ -158,6 +158,7 @@ export interface ViewSyncer {
   readonly rowCount: number;
   readonly createdAtMs: number;
   readonly servedVersion: string | null;
+  readonly servingLagEligible: boolean;
 }
 
 export type SyncContext = ConnectionSelector & {
@@ -634,6 +635,13 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
   get servedVersion(): string | null {
     return this.#servedVersion;
+  }
+
+  get servingLagEligible(): boolean {
+    return (
+      this.#clients.size > 0 &&
+      this.connContextManager.getBackgroundConnectionContext() !== undefined
+    );
   }
 
   #markVersionServed(version: CVRVersion) {

@@ -55,7 +55,7 @@ export type ReplicaReadyState = {
 
 export type ServingLagViewSyncer = Pick<
   ViewSyncer,
-  'createdAtMs' | 'servedVersion'
+  'createdAtMs' | 'servedVersion' | 'servingLagEligible'
 >;
 
 export type ServingLagStats = {
@@ -180,6 +180,10 @@ function computeServingLagDistributionMs(
   let firstNeededIndex = replicaReadyStates.length;
 
   for (const viewSyncer of viewSyncers) {
+    if (!viewSyncer.servingLagEligible) {
+      continue;
+    }
+
     const firstUnservedIndex = findFirstUnservedIndex(
       replicaReadyStates,
       viewSyncer,
