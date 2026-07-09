@@ -374,13 +374,38 @@ export function inactivityTimeoutSocket(
       ? options.path
       : `${options.host[0]}:${options.port[0]}`;
     if (timeoutMs > 0) {
-      socket.setTimeout(timeoutMs, () => {
-        lc.warn?.(
-          `resetting connection to ${target} after ${timeoutMs} ms of inactivity ` +
-            `(likely half-open); in-flight queries will be rejected`,
-        );
-        socket.resetAndDestroy();
-      });
+      // socket.setTimeout() cannot be used here: it registers its callback
+      // as a 'timeout' event listener, and postgres.js removes all listeners
+      // from the raw socket when upgrading it to TLS (removeAllListeners()
+      // in secure()), which would silently disarm the watchdog on every TLS
+      // connection. An interval is not a socket listener, so it survives the
+      // upgrade, and encrypted traffic still flows through this raw socket,
+      // advancing its byte counters.
+      //
+      // The counters are sampled once per timeout period, so a half-open
+      // socket is reset after one to two timeout periods of inactivity.
+      let lastActivity = -1;
+      const watchdog = setInterval(() => {
+        if (socket.destroyed) {
+          clearInterval(watchdog);
+          return;
+        }
+        const activity = socket.bytesRead + socket.bytesWritten;
+        if (activity === lastActivity) {
+          lc.warn?.(
+            `resetting connection to ${target} after ${timeoutMs} ms of inactivity ` +
+              `(likely half-open); in-flight queries will be rejected`,
+          );
+          clearInterval(watchdog);
+          socket.resetAndDestroy();
+        } else {
+          lastActivity = activity;
+        }
+      }, timeoutMs);
+      watchdog.unref();
+      // Best-effort cleanup; removed on TLS upgrade, in which case the
+      // destroyed check above clears the (unref'ed) interval instead.
+      socket.once('close', () => clearInterval(watchdog));
     }
     if (options.path) {
       socket.connect(options.path);
