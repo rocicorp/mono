@@ -607,7 +607,6 @@ describe('inactivityTimeoutSocket', () => {
 
     // postgres.js reads socket.host as the SNI servername in secure().
     expect(socket).toMatchObject({host: '127.0.0.1', port});
-    expect(socket.timeout).toBe(120_000);
   });
 
   test('resets the connection after inactivity', async () => {
@@ -655,11 +654,27 @@ describe('inactivityTimeoutSocket', () => {
     expect(socket.destroyed).toBe(true);
   });
 
-  test('timeout of 0 disables the timer', async () => {
-    const port = await listen();
+  test('watchdog survives the removeAllListeners() of a TLS upgrade', async () => {
+    const port = await listen(); // server accepts but never responds
+    const socket = inactivityTimeoutSocket(lc, 100)(factoryOptions(port));
+    await connected(socket);
+
+    // postgres.js removes all listeners from the raw socket when upgrading
+    // it to TLS (secure() in connection.js). The watchdog must still fire.
+    socket.removeAllListeners();
+
+    socket.write('BEGIN');
+    await new Promise<void>(resolve => socket.once('close', resolve));
+    expect(socket.destroyed).toBe(true);
+  });
+
+  test('timeout of 0 disables the watchdog', async () => {
+    const port = await listen(); // server accepts but never responds
     const socket = inactivityTimeoutSocket(lc, 0)(factoryOptions(port));
     await connected(socket);
 
-    expect(socket.timeout).toBeUndefined();
+    // No amount of silence resets the connection.
+    await new Promise(resolve => setTimeout(resolve, 300));
+    expect(socket.destroyed).toBe(false);
   });
 });
