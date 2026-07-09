@@ -53,6 +53,7 @@ function createMockViewSyncer(
     rowCount: 0,
     createdAtMs: Date.now(),
     servedVersion: null,
+    servingLagEligible: true,
   } as unknown as MockViewSyncer;
 }
 
