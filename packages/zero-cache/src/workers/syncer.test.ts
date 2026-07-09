@@ -119,6 +119,7 @@ function makeFactories(
           rowCount: 0,
           createdAtMs: Date.now(),
           servedVersion: null,
+          servingLagEligible: true,
           stop() {
             stopped.resolve();
             return stopped.promise;
@@ -221,8 +222,8 @@ describe('computeMaxServingLagMs', () => {
 
     expect(
       computeMaxServingLagMs(300, states, [
-        {createdAtMs: 0, servedVersion: '03'},
-        {createdAtMs: 0, servedVersion: '02'},
+        {createdAtMs: 0, servedVersion: '03', servingLagEligible: true},
+        {createdAtMs: 0, servedVersion: '02', servingLagEligible: true},
       ]),
     ).toBe(150);
 
@@ -240,7 +241,7 @@ describe('computeMaxServingLagMs', () => {
 
     expect(
       computeMaxServingLagMs(300, states, [
-        {createdAtMs: 125, servedVersion: null},
+        {createdAtMs: 125, servedVersion: null, servingLagEligible: true},
       ]),
     ).toBe(150);
 
@@ -257,8 +258,8 @@ describe('computeMaxServingLagMs', () => {
 
     expect(
       computeMaxServingLagMs(300, states, [
-        {createdAtMs: 175, servedVersion: '02'},
-        {createdAtMs: 0, servedVersion: '04'},
+        {createdAtMs: 175, servedVersion: '02', servingLagEligible: true},
+        {createdAtMs: 0, servedVersion: '04', servingLagEligible: true},
       ]),
     ).toBe(100);
 
@@ -279,7 +280,7 @@ describe('computeMaxServingLagMs', () => {
 
     expect(
       computeMaxServingLagMs(20_000, states, [
-        {createdAtMs: 0, servedVersion: null},
+        {createdAtMs: 0, servedVersion: null, servingLagEligible: true},
       ]),
     ).toBe(20_000);
 
@@ -299,10 +300,10 @@ describe('computeServingLagStatsMs', () => {
 
     expect(
       computeServingLagStatsMs(300, states, [
-        {createdAtMs: 0, servedVersion: '05'},
-        {createdAtMs: 0, servedVersion: '03'},
-        {createdAtMs: 0, servedVersion: '04'},
-        {createdAtMs: 225, servedVersion: null},
+        {createdAtMs: 0, servedVersion: '05', servingLagEligible: true},
+        {createdAtMs: 0, servedVersion: '03', servingLagEligible: true},
+        {createdAtMs: 0, servedVersion: '04', servingLagEligible: true},
+        {createdAtMs: 225, servedVersion: null, servingLagEligible: true},
       ]),
     ).toEqual({
       activeClientGroups: 4,
@@ -324,6 +325,50 @@ describe('computeServingLagStatsMs', () => {
     const states = [{watermark: '02', replicaReadyTimeMs: 100}];
 
     expect(computeServingLagStatsMs(300, states, [])).toEqual({
+      activeClientGroups: 0,
+      laggingClientGroups: 0,
+      minMs: 0,
+      p50Ms: 0,
+      p75Ms: 0,
+      p99Ms: 0,
+      maxMs: 0,
+    });
+    expect(states).toEqual([]);
+  });
+
+  test('ignores view syncers without active validated clients', () => {
+    const states = [
+      {watermark: '02', replicaReadyTimeMs: 100},
+      {watermark: '03', replicaReadyTimeMs: 150},
+      {watermark: '04', replicaReadyTimeMs: 200},
+    ];
+
+    expect(
+      computeServingLagStatsMs(300, states, [
+        {createdAtMs: 0, servedVersion: null, servingLagEligible: false},
+        {createdAtMs: 0, servedVersion: '03', servingLagEligible: true},
+      ]),
+    ).toEqual({
+      activeClientGroups: 1,
+      laggingClientGroups: 1,
+      minMs: 100,
+      p50Ms: 100,
+      p75Ms: 100,
+      p99Ms: 100,
+      maxMs: 100,
+    });
+
+    expect(states).toEqual([{watermark: '04', replicaReadyTimeMs: 200}]);
+  });
+
+  test('clears retained replica-ready states when no view syncer is eligible', () => {
+    const states = [{watermark: '02', replicaReadyTimeMs: 100}];
+
+    expect(
+      computeServingLagStatsMs(300, states, [
+        {createdAtMs: 0, servedVersion: null, servingLagEligible: false},
+      ]),
+    ).toEqual({
       activeClientGroups: 0,
       laggingClientGroups: 0,
       minMs: 0,
