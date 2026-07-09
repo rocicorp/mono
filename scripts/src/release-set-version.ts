@@ -6,7 +6,7 @@ import {
   zeroPackageJsonPath,
 } from './shared.ts';
 
-const version = process.argv[2];
+const [version] = process.argv.slice(2);
 if (!version) {
   throw new Error(`Usage: node release-set-version.ts <version>`);
 }

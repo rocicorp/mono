@@ -60,6 +60,13 @@ export function createReleaseTag({
     version,
   });
 
+  if (args.mode === 'head') {
+    // The release workflow skips the tag job for head releases; provenance
+    // lives in the version itself (source-sha prefix + date) and the OCI
+    // revision label instead.
+    throw new Error('Head releases are not tagged');
+  }
+
   if (args.mode === 'stable') {
     createAndPushTag(exec, log, args.tag, args.sourceSha);
   } else {

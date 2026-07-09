@@ -7,6 +7,7 @@ import {
   defaultExec,
   escapeRegExp,
   gitTagExists,
+  headVersionShaLength,
   mustEnv,
   npmZeroVersionExists,
   parseZeroVersion,
@@ -17,6 +18,7 @@ import {
   zeroTag,
   type Exec,
   type CanaryZeroVersion,
+  type HeadZeroVersion,
   type ReleaseBranch,
   type ReleaseMode,
   type ZeroTag,
@@ -38,6 +40,7 @@ export type PlanReleaseOptions = {
   exec?: Exec | undefined;
   mode: string;
   releaseBranch: string;
+  sourceSha?: string | undefined;
   workflowRefName: string;
 };
 
@@ -45,6 +48,7 @@ export function runReleasePlanCli() {
   const plan = planRelease({
     mode: mustEnv('MODE'),
     releaseBranch: mustEnv('RELEASE_BRANCH'),
+    sourceSha: process.env.SOURCE_SHA || undefined,
     workflowRefName: mustEnv('WORKFLOW_REF_NAME'),
   });
 
@@ -60,6 +64,7 @@ export function planRelease({
   exec = defaultExec,
   mode: modeArg,
   releaseBranch,
+  sourceSha: sourceShaOverride,
   workflowRefName,
 }: PlanReleaseOptions): ReleasePlan {
   const mode = readReleaseMode(modeArg);
@@ -68,6 +73,11 @@ export function planRelease({
   if (!isAllowedReleaseBranch(releaseBranch)) {
     throw new Error(
       `Unsupported release branch ${releaseBranch}. Expected main or maint/zero/vX.Y`,
+    );
+  }
+  if (mode === 'head' && releaseBranch !== 'main') {
+    throw new Error(
+      `Head releases are only supported from main, got ${releaseBranch}`,
     );
   }
 
@@ -82,17 +92,28 @@ export function planRelease({
     {stdio: 'inherit'},
   );
 
-  const sourceSha = exec('git', [
-    'rev-parse',
-    `refs/remotes/origin/${releaseBranch}`,
-  ]).trim();
-  assertGitSha(sourceSha, 'source SHA');
+  let sourceSha: string;
+  if (sourceShaOverride) {
+    assertGitSha(sourceShaOverride, 'source SHA');
+    sourceSha = sourceShaOverride;
+  } else {
+    sourceSha = exec('git', [
+      'rev-parse',
+      `refs/remotes/origin/${releaseBranch}`,
+    ]).trim();
+    assertGitSha(sourceSha, 'source SHA');
+  }
 
   const currentVersion = readZeroPackageVersionAt(sourceSha, exec);
   const version =
     mode === 'stable'
       ? planStableVersion(currentVersion)
-      : planCanaryVersion(currentVersion, readCanaryTags(exec, currentVersion));
+      : mode === 'head'
+        ? planHeadVersion(currentVersion, sourceSha)
+        : planCanaryVersion(
+            currentVersion,
+            readCanaryTags(exec, currentVersion),
+          );
   const tag = zeroTag(version);
 
   if (gitTagExists(tag, exec)) {
@@ -150,6 +171,27 @@ export function planCanaryVersion(
   }
 
   return `${parsed.baseVersion}-canary.${maxAttempt + 1}` as CanaryZeroVersion;
+}
+
+export function planHeadVersion(
+  currentVersion: string,
+  sourceSha: string,
+  now = new Date(),
+): HeadZeroVersion {
+  const parsed = parseZeroVersion(currentVersion);
+  if (!parsed) {
+    throw new Error(
+      `Cannot plan head from package version ${currentVersion}. Expected X.Y.Z, X.Y.Z-canary.N, or X.Y.Z-head-SHA-DATE`,
+    );
+  }
+  assertGitSha(sourceSha, 'source SHA');
+  // The source commit rides in the version itself, so provenance needs
+  // nothing written beyond the version; the UTC date is for humans. A
+  // re-release of the same commit on the same day plans the same version
+  // and is rejected by the caller's npm-exists check.
+  const shaPrefix = sourceSha.slice(0, headVersionShaLength);
+  const date = now.toISOString().slice(0, 10).replaceAll('-', '');
+  return `${parsed.baseVersion}-head-${shaPrefix}-${date}` as HeadZeroVersion;
 }
 
 function readCanaryTags(exec: Exec, currentVersion: string) {
