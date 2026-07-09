@@ -39,18 +39,9 @@ export const defaultExec: Exec = (command, args, options) =>
   );
 
 const stableZeroVersionPattern = /^\d+\.\d+\.\d+$/;
-/**
- * Length of the source-sha prefix embedded in head versions. Eight hex chars
- * keep short-sha lookups (git, GitHub) unambiguous at this repo's size; six
- * would collide with other objects a few percent of the time.
- *
- * The whole head suffix is joined with hyphens so it stays a single semver
- * alphanumeric prerelease identifier: dot-separated segments would make an
- * all-digit sha prefix with a leading zero (e.g. `.012345.`) invalid semver.
- */
 export const headVersionShaLength = 8;
 const zeroVersionPattern = new RegExp(
-  `^(\\d+\\.\\d+\\.\\d+)(?:-canary\\.\\d+|-head-([0-9a-f]{${headVersionShaLength}})-\\d{8})?$`,
+  `^(\\d+\\.\\d+\\.\\d+)(?:-canary\\.\\d+|-head-[0-9a-f]{${headVersionShaLength}}-\\d{8})?$`,
 );
 const gitShaPattern = /^[0-9a-f]{40}$/;
 
@@ -117,20 +108,14 @@ export function assertStableZeroVersion(
   }
 }
 
-export function parseZeroVersion(version: string):
-  | {
-      baseVersion: StableZeroVersion;
-      headSha: string | undefined;
-    }
-  | undefined {
+export function parseZeroVersion(
+  version: string,
+): {baseVersion: StableZeroVersion} | undefined {
   const match = version.match(zeroVersionPattern);
   if (!match) {
     return undefined;
   }
-  return {
-    baseVersion: match[1] as StableZeroVersion,
-    headSha: match[2],
-  };
+  return {baseVersion: match[1] as StableZeroVersion};
 }
 
 export function zeroTag<V extends ZeroVersion>(version: V): ZeroTag<V> {

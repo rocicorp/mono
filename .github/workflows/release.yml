@@ -65,7 +65,7 @@ jobs:
           # queued run does not re-release a newer commit under a second
           # version.
           SOURCE_SHA: ${{ github.event_name == 'push' && github.sha || '' }}
-        run: node --experimental-strip-types --no-warnings scripts/src/release-plan.ts
+        run: node scripts/src/release-plan.ts
 
   build:
     name: Build artifacts
@@ -111,7 +111,7 @@ jobs:
 
       - name: Set release version
         working-directory: source
-        run: node --experimental-strip-types --no-warnings "$SCRIPTS/release-set-version.ts" "$VERSION"
+        run: node "$SCRIPTS/release-set-version.ts" "$VERSION"
 
       - name: Install dependencies
         working-directory: source
@@ -126,13 +126,13 @@ jobs:
         working-directory: source/packages/zero
         env:
           PACK_DEST: ${{ runner.temp }}/npm
-        run: node --experimental-strip-types --no-warnings "$SCRIPTS/release-pack.ts"
+        run: node "$SCRIPTS/release-pack.ts"
 
       - name: Verify npm tarball
         working-directory: source
         env:
           TARBALL: ${{ runner.temp }}/npm/${{ steps.pack.outputs.filename }}
-        run: node --experimental-strip-types --no-warnings "$SCRIPTS/release-verify-tarball.ts" "$TARBALL" "$VERSION"
+        run: node "$SCRIPTS/release-verify-tarball.ts" "$TARBALL" "$VERSION"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
@@ -216,7 +216,7 @@ jobs:
           path: dist/npm
 
       - name: Verify npm tarball
-        run: node --experimental-strip-types --no-warnings "$SCRIPTS/release-verify-tarball.ts" "dist/npm/$TARBALL_NAME" "$VERSION"
+        run: node "$SCRIPTS/release-verify-tarball.ts" "dist/npm/$TARBALL_NAME" "$VERSION"
 
       - name: Publish npm package
         run: |
@@ -364,4 +364,4 @@ jobs:
 
       - name: Create and push tag
         working-directory: source
-        run: node --experimental-strip-types --no-warnings "$SCRIPTS/release-create-tag.ts" "$MODE" "$VERSION" "$TAG" "$SOURCE_SHA"
+        run: node "$SCRIPTS/release-create-tag.ts" "$MODE" "$VERSION" "$TAG" "$SOURCE_SHA"
