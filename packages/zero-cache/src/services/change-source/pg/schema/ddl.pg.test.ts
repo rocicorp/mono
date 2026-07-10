@@ -106,189 +106,196 @@ describe('change-source/tables/ddl', () => {
     CREATE PUBLICATION nonzeropub FOR TABLE pub.foo, pub.boo;
     `;
 
-  // The starting published schema (for zero_all, zero_sum), used as the
-  // baseline for expected ddlUpdate event schemas.
-  const PUBLISHED: DdlUpdateEvent['schema'] = {
-    tables: [
-      {
-        oid: expect.any(Number),
-        schema: 'pub',
-        schemaOID: expect.any(Number),
-        name: 'boo',
-        replicaIdentity: 'd',
-        replicaIdentityColumns: ['id'],
-        columns: {
-          description: {
-            characterMaximumLength: null,
-            dataType: 'text',
-            typeOID: 25,
-            dflt: null,
-            notNull: false,
-            pos: 3,
+  // For zero_all, zero_sum
+  const DDL_START: Omit<DdlStartEvent, 'context'> & {
+    schema: NonNullable<DdlStartEvent['schema']>;
+  } = {
+    type: 'ddlStart',
+    version: 1,
+    event: {tag: 'UNUSED'},
+    previousSchema: null,
+    schema: {
+      tables: [
+        {
+          oid: expect.any(Number),
+          schema: 'pub',
+          schemaOID: expect.any(Number),
+          name: 'boo',
+          replicaIdentity: 'd',
+          replicaIdentityColumns: ['id'],
+          columns: {
+            description: {
+              characterMaximumLength: null,
+              dataType: 'text',
+              typeOID: 25,
+              dflt: null,
+              notNull: false,
+              pos: 3,
+            },
+            id: {
+              characterMaximumLength: null,
+              dataType: 'text',
+              typeOID: 25,
+              dflt: null,
+              notNull: true,
+              pos: 1,
+            },
+            name: {
+              characterMaximumLength: null,
+              dataType: 'text',
+              typeOID: 25,
+              dflt: null,
+              notNull: false,
+              pos: 2,
+            },
           },
-          id: {
-            characterMaximumLength: null,
-            dataType: 'text',
-            typeOID: 25,
-            dflt: null,
-            notNull: true,
-            pos: 1,
-          },
-          name: {
-            characterMaximumLength: null,
-            dataType: 'text',
-            typeOID: 25,
-            dflt: null,
-            notNull: false,
-            pos: 2,
-          },
-        },
-        primaryKey: ['id'],
-        publications: {
-          ['zero_all']: {rowFilter: null},
-          ['zero_sum']: {rowFilter: null},
-        },
-      },
-      {
-        oid: expect.any(Number),
-        schema: 'pub',
-        schemaOID: expect.any(Number),
-        name: 'foo',
-        replicaIdentity: 'd',
-        replicaIdentityColumns: ['id'],
-        columns: {
-          description: {
-            characterMaximumLength: null,
-            dataType: 'text',
-            typeOID: 25,
-            dflt: null,
-            notNull: false,
-            pos: 3,
-          },
-          id: {
-            characterMaximumLength: null,
-            dataType: 'text',
-            typeOID: 25,
-            dflt: null,
-            notNull: true,
-            pos: 1,
-          },
-          name: {
-            characterMaximumLength: null,
-            dataType: 'text',
-            typeOID: 25,
-            dflt: null,
-            notNull: false,
-            pos: 2,
+          primaryKey: ['id'],
+          publications: {
+            ['zero_all']: {rowFilter: null},
+            ['zero_sum']: {rowFilter: null},
           },
         },
-        primaryKey: ['id'],
-        publications: {
-          ['zero_all']: {rowFilter: null},
-          ['zero_sum']: {rowFilter: null},
-        },
-      },
-      {
-        oid: expect.any(Number),
-        schema: 'pub',
-        schemaOID: expect.any(Number),
-        name: 'yoo',
-        replicaIdentity: 'd',
-        replicaIdentityColumns: ['id'],
-        columns: {
-          description: {
-            characterMaximumLength: null,
-            dataType: 'text',
-            typeOID: 25,
-            dflt: null,
-            notNull: false,
-            pos: 3,
+        {
+          oid: expect.any(Number),
+          schema: 'pub',
+          schemaOID: expect.any(Number),
+          name: 'foo',
+          replicaIdentity: 'd',
+          replicaIdentityColumns: ['id'],
+          columns: {
+            description: {
+              characterMaximumLength: null,
+              dataType: 'text',
+              typeOID: 25,
+              dflt: null,
+              notNull: false,
+              pos: 3,
+            },
+            id: {
+              characterMaximumLength: null,
+              dataType: 'text',
+              typeOID: 25,
+              dflt: null,
+              notNull: true,
+              pos: 1,
+            },
+            name: {
+              characterMaximumLength: null,
+              dataType: 'text',
+              typeOID: 25,
+              dflt: null,
+              notNull: false,
+              pos: 2,
+            },
           },
-          id: {
-            characterMaximumLength: null,
-            dataType: 'text',
-            typeOID: 25,
-            dflt: null,
-            notNull: true,
-            pos: 1,
-          },
-          name: {
-            characterMaximumLength: null,
-            dataType: 'text',
-            typeOID: 25,
-            dflt: null,
-            notNull: false,
-            pos: 2,
+          primaryKey: ['id'],
+          publications: {
+            ['zero_all']: {rowFilter: null},
+            ['zero_sum']: {rowFilter: null},
           },
         },
-        primaryKey: ['id'],
-        publications: {['zero_all']: {rowFilter: null}},
-      },
-    ],
-    indexes: [
-      {
-        name: 'boo_name_key',
-        schema: 'pub',
-        tableName: 'boo',
-        columns: {name: 'ASC'},
-        unique: true,
-      },
-      {
-        name: 'boo_pkey',
-        schema: 'pub',
-        tableName: 'boo',
-        columns: {id: 'ASC'},
-        unique: true,
-      },
-      {
-        name: 'foo_custom_index',
-        schema: 'pub',
-        tableName: 'foo',
-        columns: {
-          description: 'ASC',
-          name: 'ASC',
+        {
+          oid: expect.any(Number),
+          schema: 'pub',
+          schemaOID: expect.any(Number),
+          name: 'yoo',
+          replicaIdentity: 'd',
+          replicaIdentityColumns: ['id'],
+          columns: {
+            description: {
+              characterMaximumLength: null,
+              dataType: 'text',
+              typeOID: 25,
+              dflt: null,
+              notNull: false,
+              pos: 3,
+            },
+            id: {
+              characterMaximumLength: null,
+              dataType: 'text',
+              typeOID: 25,
+              dflt: null,
+              notNull: true,
+              pos: 1,
+            },
+            name: {
+              characterMaximumLength: null,
+              dataType: 'text',
+              typeOID: 25,
+              dflt: null,
+              notNull: false,
+              pos: 2,
+            },
+          },
+          primaryKey: ['id'],
+          publications: {['zero_all']: {rowFilter: null}},
         },
-        unique: false,
-      },
-      {
-        name: 'foo_name_key',
-        schema: 'pub',
-        tableName: 'foo',
-        columns: {name: 'ASC'},
-        unique: true,
-      },
-      {
-        name: 'foo_pkey',
-        schema: 'pub',
-        tableName: 'foo',
-        columns: {id: 'ASC'},
-        unique: true,
-      },
-      {
-        name: 'yoo_custom_index',
-        schema: 'pub',
-        tableName: 'yoo',
-        columns: {
-          description: 'ASC',
-          name: 'ASC',
+      ],
+      indexes: [
+        {
+          name: 'boo_name_key',
+          schema: 'pub',
+          tableName: 'boo',
+          columns: {name: 'ASC'},
+          unique: true,
         },
-        unique: false,
-      },
-      {
-        name: 'yoo_name_key',
-        schema: 'pub',
-        tableName: 'yoo',
-        columns: {name: 'ASC'},
-        unique: true,
-      },
-      {
-        name: 'yoo_pkey',
-        schema: 'pub',
-        tableName: 'yoo',
-        columns: {id: 'ASC'},
-        unique: true,
-      },
-    ],
+        {
+          name: 'boo_pkey',
+          schema: 'pub',
+          tableName: 'boo',
+          columns: {id: 'ASC'},
+          unique: true,
+        },
+        {
+          name: 'foo_custom_index',
+          schema: 'pub',
+          tableName: 'foo',
+          columns: {
+            description: 'ASC',
+            name: 'ASC',
+          },
+          unique: false,
+        },
+        {
+          name: 'foo_name_key',
+          schema: 'pub',
+          tableName: 'foo',
+          columns: {name: 'ASC'},
+          unique: true,
+        },
+        {
+          name: 'foo_pkey',
+          schema: 'pub',
+          tableName: 'foo',
+          columns: {id: 'ASC'},
+          unique: true,
+        },
+        {
+          name: 'yoo_custom_index',
+          schema: 'pub',
+          tableName: 'yoo',
+          columns: {
+            description: 'ASC',
+            name: 'ASC',
+          },
+          unique: false,
+        },
+        {
+          name: 'yoo_name_key',
+          schema: 'pub',
+          tableName: 'yoo',
+          columns: {name: 'ASC'},
+          unique: true,
+        },
+        {
+          name: 'yoo_pkey',
+          schema: 'pub',
+          tableName: 'yoo',
+          columns: {id: 'ASC'},
+          unique: true,
+        },
+      ],
+    },
   } as const;
 
   function inserted<T>(arr: readonly T[], pos: number, ...items: T[]): T[] {
@@ -324,10 +331,10 @@ describe('change-source/tables/ddl', () => {
             'CREATE TABLE pub.bar(id TEXT PRIMARY KEY, a INT4 UNIQUE, b INT8 UNIQUE, UNIQUE(b, a))',
         },
         type: 'ddlUpdate',
-        version: 2,
+        version: 1,
         event: {tag: 'CREATE TABLE'},
         schema: {
-          tables: inserted(PUBLISHED.tables, 0, {
+          tables: inserted(DDL_START.schema.tables, 0, {
             oid: expect.any(Number),
             schema: 'pub',
             schemaOID: expect.any(Number),
@@ -364,7 +371,7 @@ describe('change-source/tables/ddl', () => {
             publications: {['zero_all']: {rowFilter: null}},
           }),
           indexes: inserted(
-            PUBLISHED.indexes,
+            DDL_START.schema.indexes,
             0,
             {
               columns: {a: 'ASC'},
@@ -409,11 +416,11 @@ describe('change-source/tables/ddl', () => {
           query: 'CREATE INDEX foo_name_index on pub.foo (name desc, id)',
         },
         type: 'ddlUpdate',
-        version: 2,
+        version: 1,
         event: {tag: 'CREATE INDEX'},
         schema: {
-          tables: PUBLISHED.tables,
-          indexes: inserted(PUBLISHED.indexes, 3, {
+          tables: DDL_START.schema.tables,
+          indexes: inserted(DDL_START.schema.indexes, 3, {
             columns: {
               name: 'DESC',
               id: 'ASC',
@@ -434,10 +441,10 @@ describe('change-source/tables/ddl', () => {
           query: 'ALTER TABLE pub.foo RENAME TO food',
         },
         type: 'ddlUpdate',
-        version: 2,
+        version: 1,
         event: {tag: 'ALTER TABLE'},
         schema: {
-          tables: replaced(PUBLISHED.tables, 1, 1, {
+          tables: replaced(DDL_START.schema.tables, 1, 1, {
             oid: expect.any(Number),
             schema: 'pub',
             schemaOID: expect.any(Number),
@@ -477,7 +484,7 @@ describe('change-source/tables/ddl', () => {
             },
           }),
           indexes: replaced(
-            PUBLISHED.indexes,
+            DDL_START.schema.indexes,
             2,
             3,
             {
@@ -516,11 +523,11 @@ describe('change-source/tables/ddl', () => {
           query: 'ALTER TABLE pub.yoo SET SCHEMA private',
         },
         type: 'ddlUpdate',
-        version: 2,
+        version: 1,
         event: {tag: 'ALTER TABLE'},
         schema: {
-          tables: dropped(PUBLISHED.tables, 2, 1),
-          indexes: dropped(PUBLISHED.indexes, 5, 3),
+          tables: dropped(DDL_START.schema.tables, 2, 1),
+          indexes: dropped(DDL_START.schema.indexes, 5, 3),
         },
       },
     ],
@@ -533,9 +540,9 @@ describe('change-source/tables/ddl', () => {
         },
         event: {tag: 'ALTER TABLE'},
         type: 'ddlUpdate',
-        version: 2,
+        version: 1,
         schema: {
-          tables: replaced(PUBLISHED.tables, 1, 1, {
+          tables: replaced(DDL_START.schema.tables, 1, 1, {
             oid: expect.any(Number),
             schema: 'pub',
             schemaOID: expect.any(Number),
@@ -582,7 +589,7 @@ describe('change-source/tables/ddl', () => {
               ['zero_sum']: {rowFilter: null},
             },
           }),
-          indexes: replaced(PUBLISHED.indexes, 5, 0, {
+          indexes: replaced(DDL_START.schema.indexes, 5, 0, {
             columns: {username: 'ASC'},
             name: 'foo_username_key',
             schema: 'pub',
@@ -600,11 +607,11 @@ describe('change-source/tables/ddl', () => {
           query: "ALTER TABLE pub.foo ADD bar text DEFAULT 'boo'",
         },
         type: 'ddlUpdate',
-        version: 2,
+        version: 1,
         event: {tag: 'ALTER TABLE'},
         schema: {
-          indexes: PUBLISHED.indexes,
-          tables: replaced(PUBLISHED.tables, 1, 1, {
+          indexes: DDL_START.schema.indexes,
+          tables: replaced(DDL_START.schema.tables, 1, 1, {
             oid: expect.any(Number),
             schema: 'pub',
             schemaOID: expect.any(Number),
@@ -662,11 +669,11 @@ describe('change-source/tables/ddl', () => {
           query: "ALTER TABLE pub.foo ALTER name SET DEFAULT 'alice'",
         },
         type: 'ddlUpdate',
-        version: 2,
+        version: 1,
         event: {tag: 'ALTER TABLE'},
         schema: {
-          indexes: PUBLISHED.indexes,
-          tables: replaced(PUBLISHED.tables, 1, 1, {
+          indexes: DDL_START.schema.indexes,
+          tables: replaced(DDL_START.schema.tables, 1, 1, {
             oid: expect.any(Number),
             schema: 'pub',
             schemaOID: expect.any(Number),
@@ -716,10 +723,10 @@ describe('change-source/tables/ddl', () => {
           query: 'ALTER TABLE pub.foo RENAME name to handle',
         },
         type: 'ddlUpdate',
-        version: 2,
+        version: 1,
         event: {tag: 'ALTER TABLE'},
         schema: {
-          tables: replaced(PUBLISHED.tables, 1, 1, {
+          tables: replaced(DDL_START.schema.tables, 1, 1, {
             oid: expect.any(Number),
             schema: 'pub',
             schemaOID: expect.any(Number),
@@ -759,7 +766,7 @@ describe('change-source/tables/ddl', () => {
             },
           }),
           indexes: replaced(
-            PUBLISHED.indexes,
+            DDL_START.schema.indexes,
             2,
             2,
             {
@@ -789,10 +796,10 @@ describe('change-source/tables/ddl', () => {
       {
         context: {query: 'ALTER TABLE pub.foo drop description'},
         type: 'ddlUpdate',
-        version: 2,
+        version: 1,
         event: {tag: 'ALTER TABLE'},
         schema: {
-          tables: replaced(PUBLISHED.tables, 1, 1, {
+          tables: replaced(DDL_START.schema.tables, 1, 1, {
             oid: expect.any(Number),
             schema: 'pub',
             schemaOID: expect.any(Number),
@@ -824,7 +831,7 @@ describe('change-source/tables/ddl', () => {
             },
           }),
           // "foo_custom_index" depended on the "description column"
-          indexes: dropped(PUBLISHED.indexes, 2, 1),
+          indexes: dropped(DDL_START.schema.indexes, 2, 1),
         },
       },
     ],
@@ -834,7 +841,7 @@ describe('change-source/tables/ddl', () => {
       {
         context: {query: 'DROP TABLE pub.foo, pub.yoo'},
         type: 'ddlUpdate',
-        version: 2,
+        version: 1,
         event: {tag: 'DROP TABLE'},
         schema: {
           tables: [
@@ -905,7 +912,7 @@ describe('change-source/tables/ddl', () => {
           query: 'DROP INDEX pub.foo_custom_index, pub.yoo_custom_index',
         },
         type: 'ddlUpdate',
-        version: 2,
+        version: 1,
         event: {tag: 'DROP INDEX'},
         schema: {
           indexes: [
@@ -952,7 +959,7 @@ describe('change-source/tables/ddl', () => {
               unique: true,
             },
           ],
-          tables: PUBLISHED.tables,
+          tables: DDL_START.schema.tables,
         },
       },
     ],
@@ -962,11 +969,11 @@ describe('change-source/tables/ddl', () => {
       {
         context: {query: 'ALTER PUBLICATION zero_sum ADD TABLE pub.yoo'},
         type: 'ddlUpdate',
-        version: 2,
+        version: 1,
         event: {tag: 'ALTER PUBLICATION'},
         schema: {
-          indexes: PUBLISHED.indexes,
-          tables: replaced(PUBLISHED.tables, 2, 1, {
+          indexes: DDL_START.schema.indexes,
+          tables: replaced(DDL_START.schema.tables, 2, 1, {
             oid: expect.any(Number),
             schema: 'pub',
             schemaOID: expect.any(Number),
@@ -1014,11 +1021,11 @@ describe('change-source/tables/ddl', () => {
       {
         context: {query: 'ALTER PUBLICATION zero_sum DROP TABLE pub.foo'},
         type: 'ddlUpdate',
-        version: 2,
+        version: 1,
         event: {tag: 'ALTER PUBLICATION'},
         schema: {
-          indexes: PUBLISHED.indexes,
-          tables: replaced(PUBLISHED.tables, 1, 1, {
+          indexes: DDL_START.schema.indexes,
+          tables: replaced(DDL_START.schema.tables, 1, 1, {
             oid: expect.any(Number),
             schema: 'pub',
             schemaOID: expect.any(Number),
@@ -1068,11 +1075,11 @@ describe('change-source/tables/ddl', () => {
           query: 'ALTER PUBLICATION zero_all ADD TABLES IN SCHEMA zero',
         },
         type: 'ddlUpdate',
-        version: 2,
+        version: 1,
         event: {tag: 'ALTER PUBLICATION'},
         schema: {
           indexes: [
-            ...PUBLISHED.indexes,
+            ...DDL_START.schema.indexes,
             {
               name: 'foo_pkey',
               schema: 'zero',
@@ -1082,7 +1089,7 @@ describe('change-source/tables/ddl', () => {
             },
           ],
           tables: [
-            ...PUBLISHED.tables,
+            ...DDL_START.schema.tables,
             {
               oid: expect.any(Number),
               schema: 'zero',
@@ -1117,7 +1124,7 @@ describe('change-source/tables/ddl', () => {
           query: 'ALTER SCHEMA pub RENAME TO bup',
         },
         type: 'ddlUpdate',
-        version: 2,
+        version: 1,
         event: {tag: 'ALTER SCHEMA'},
         schema: {
           tables: [
@@ -1333,17 +1340,11 @@ describe('change-source/tables/ddl', () => {
       ]);
 
       let msg = messages[3] as MessageMessage;
-      const ddlStart = parseDDLStartEvent(msg);
-      expect(ddlStart).toMatchObject({
-        type: 'ddlStart',
-        version: 2,
+      expect(parseDDLStartEvent(msg)).toMatchObject({
+        ...DDL_START,
         event: ddlUpdate.event,
         context: {query},
       } satisfies Partial<DdlStartEvent>);
-      // ddlStart events not associated with a schema change are
-      // context-only, i.e. they do not contain schema snapshots.
-      expect(ddlStart.schema).toBeUndefined();
-      expect(ddlStart.previousSchema).toBeUndefined();
 
       msg = messages[4] as MessageMessage;
       expect(parseDDLUpdateEvent(msg)).toMatchObject(ddlUpdate);
@@ -1365,15 +1366,15 @@ describe('change-source/tables/ddl', () => {
       `,
         },
         type: 'schemaSnapshot',
-        version: 2,
+        version: 1,
         event: {tag: 'COMMENT'},
         schema: {
-          tables: replaced(PUBLISHED.tables, 0, 1, {
-            ...PUBLISHED.tables[0],
+          tables: replaced(DDL_START.schema.tables, 0, 1, {
+            ...DDL_START.schema.tables[0],
             // No longer associated with the zero_sum publication.
             publications: {['zero_all']: {rowFilter: null}},
           }),
-          indexes: PUBLISHED.indexes,
+          indexes: DDL_START.schema.indexes,
         },
       },
     ],
@@ -1391,15 +1392,15 @@ describe('change-source/tables/ddl', () => {
       `,
         },
         type: 'schemaSnapshot',
-        version: 2,
+        version: 1,
         event: {tag: 'MANUAL'},
         schema: {
-          tables: replaced(PUBLISHED.tables, 1, 1, {
-            ...PUBLISHED.tables[1],
+          tables: replaced(DDL_START.schema.tables, 1, 1, {
+            ...DDL_START.schema.tables[1],
             // No longer associated with the zero_sum publication.
             publications: {['zero_all']: {rowFilter: null}},
           }),
-          indexes: PUBLISHED.indexes,
+          indexes: DDL_START.schema.indexes,
         },
       },
     ],
@@ -1631,7 +1632,7 @@ describe('change-source/tables/ddl', () => {
     let msg = messages[2] as MessageMessage;
     expect(parseDDLUpdateEvent(msg)).toMatchObject({
       type: 'ddlUpdate',
-      version: 2,
+      version: 1,
       // Top level query may not provide any information about the actual DDL command.
       context: {query: 'CALL procedure_name()'},
       event: {tag: 'ALTER TABLE'},
@@ -1640,7 +1641,7 @@ describe('change-source/tables/ddl', () => {
     msg = messages[6] as MessageMessage;
     expect(parseDDLUpdateEvent(msg)).toMatchObject({
       type: 'ddlUpdate',
-      version: 2,
+      version: 1,
       context: {
         // A compound top level query may contain more than one DDL command.
         query: `ALTER TABLE pub.foo ADD boo text; ALTER TABLE pub.foo DROP boo;`,
@@ -1650,7 +1651,7 @@ describe('change-source/tables/ddl', () => {
     msg = messages[8] as MessageMessage;
     expect(parseDDLUpdateEvent(msg)).toMatchObject({
       type: 'ddlUpdate',
-      version: 2,
+      version: 1,
       context: {
         // A compound top level query may contain more than one DDL command.
         query: `ALTER TABLE pub.foo ADD boo text; ALTER TABLE pub.foo DROP boo;`,
@@ -1676,6 +1677,9 @@ describe('change-source/tables/ddl', () => {
     });
   });
 
+  // Protocol v2 (planned): ddlStart events without a schema change are
+  // context-only. This release does not emit them yet, but must parse them
+  // so that the release that does can be rolled back to this one.
   test('parse context-only ddlStartEvent', () => {
     const contextOnlyDdlStartEvent: DdlStartEvent = {
       type: 'ddlStart',
@@ -1689,7 +1693,7 @@ describe('change-source/tables/ddl', () => {
     expect(parsed.previousSchema).toBeUndefined();
   });
 
-  test('REFRESH MATERIALIZED VIEW CONCURRENTLY emits only context-only ddlStart events', async () => {
+  test('REFRESH MATERIALIZED VIEW CONCURRENTLY emits only no-op ddlStart events', async () => {
     await upstream.unsafe(/*sql*/ `
       CREATE MATERIALIZED VIEW pub.mat AS SELECT id FROM pub.foo;
       CREATE UNIQUE INDEX mat_id_key ON pub.mat (id);
@@ -1715,13 +1719,11 @@ describe('change-source/tables/ddl', () => {
 
     // The CREATE UNIQUE INDEX (on the unpublished materialized view) and
     // the internal CREATE/ALTER/DROP TABLE sub-commands of the REFRESH
-    // each emit a context-only ddlStart event, and no ddlUpdate events.
+    // each emit a no-op ddlStart event, and no ddlUpdate events.
     expect(ddlEvents.length).toBeGreaterThan(1);
     expect(ddlEvents.map(e => e.context.query)).toContain(query);
     for (const event of ddlEvents) {
-      expect(event).toMatchObject({type: 'ddlStart', version: 2});
-      expect(event.schema).toBeUndefined();
-      expect(event.previousSchema).toBeUndefined();
+      expect(event).toMatchObject({type: 'ddlStart', previousSchema: null});
     }
   });
 });
