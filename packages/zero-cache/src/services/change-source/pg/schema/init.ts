@@ -276,25 +276,6 @@ function getIncrementalMigrations(
         lc.info?.(`Upgraded DDL event triggers`);
       },
     },
-
-    // v24: Upgrades the DDL event PROTOCOL_VERSION to 2, in which ddlStart
-    // events not associated with a schema change are context-only (i.e. they
-    // no longer embed the published schema). This eliminates WAL bloat from
-    // DDL commands that do not affect the published schema, e.g. the
-    // CREATE/ALTER/DROP TABLE sub-commands executed by
-    // REFRESH MATERIALIZED VIEW CONCURRENTLY.
-    //
-    // Note: Not rollback safe with respect to DDL events; zero-cache versions
-    // that only understand protocol v1 will halt replication upon receiving a
-    // v2 event (recoverable with a resync).
-    24: {
-      migrateSchema: async (lc, sql) => {
-        const [{publications}] = await sql<{publications: string[]}[]>`
-          SELECT publications FROM ${sql(shardConfigTable)}`;
-        await setupTriggers(lc, sql, {...shard, publications});
-        lc.info?.(`Upgraded DDL event triggers to protocol v2`);
-      },
-    },
   };
 }
 
