@@ -22,6 +22,15 @@ let meter: Meter | undefined;
 type Options = MetricOptions & {description: string};
 type HistogramOptions = Options & {bucketBoundaries: number[]};
 
+export const NATIVE_HISTOGRAM_INSTRUMENT_NAMES = [
+  'zero.sync.view_syncer_lag',
+  'zero.sync.view_syncer_hydration',
+] as const;
+
+export const LONG_DURATION_HISTOGRAM_BOUNDARIES_S = [
+  1, 2, 5, 10, 30, 60, 120, 300, 600, 1200, 2400, 3600, 7200,
+];
+
 function getMeter() {
   if (!meter) {
     meter = metrics.getMeter('zero');
@@ -124,6 +133,23 @@ export function getOrCreateHistogram(
         explicitBucketBoundaries: bucketBoundaries,
       },
     }),
+  );
+  return {
+    recordMs: (durationMs, attributes) =>
+      h.record(durationMs / 1000, attributes),
+  };
+}
+
+// Add instruments created through this helper to
+// NATIVE_HISTOGRAM_INSTRUMENT_NAMES so the SDK exports them as exponential
+// histograms.
+export function getOrCreateNativeHistogram(
+  category: Category,
+  name: string,
+  opts: Options,
+): LatencyHistogram {
+  const h = histograms(name, name =>
+    getMeter().createHistogram(`zero.${category}.${name}`, opts),
   );
   return {
     recordMs: (durationMs, attributes) =>

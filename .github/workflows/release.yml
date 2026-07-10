@@ -15,11 +15,18 @@ on:
         required: true
         type: string
         default: main
+  # Every commit to main publishes a head release (npm dist-tag `head` +
+  # ghcr.io/rocicorp/zero, no Docker Hub, no git tag).
+  push:
+    branches: [main]
 
 permissions: {}
 
 concurrency:
-  group: zero-release-${{ inputs.release_branch }}-${{ inputs.mode }}
+  # Push events have no inputs, so fall back to the head-release group. Bursts
+  # of merges coalesce: GitHub keeps only the newest queued run per group and
+  # cancel-in-progress: false protects the in-flight publish.
+  group: zero-release-${{ inputs.release_branch || 'main' }}-${{ inputs.mode || 'head' }}
   cancel-in-progress: false
 
 jobs:
@@ -51,10 +58,14 @@ jobs:
       - name: Plan release
         id: plan
         env:
-          MODE: ${{ inputs.mode }}
-          RELEASE_BRANCH: ${{ inputs.release_branch }}
+          MODE: ${{ github.event_name == 'push' && 'head' || inputs.mode }}
+          RELEASE_BRANCH: ${{ github.event_name == 'push' && 'main' || inputs.release_branch }}
           WORKFLOW_REF_NAME: ${{ github.ref_name }}
-        run: node --experimental-strip-types --no-warnings scripts/src/release-plan.ts
+          # Pin push-triggered runs to the commit that triggered them so a
+          # queued run does not re-release a newer commit under a second
+          # version.
+          SOURCE_SHA: ${{ github.event_name == 'push' && github.sha || '' }}
+        run: node scripts/src/release-plan.ts
 
   build:
     name: Build artifacts
@@ -66,6 +77,7 @@ jobs:
       tarball_name: ${{ steps.pack.outputs.filename }}
     env:
       SCRIPTS: ${{ github.workspace }}/ci/scripts/src
+      SOURCE_SHA: ${{ needs.plan.outputs.source_sha }}
       VERSION: ${{ needs.plan.outputs.version }}
     steps:
       - name: Checkout workflow scripts
@@ -99,7 +111,7 @@ jobs:
 
       - name: Set release version
         working-directory: source
-        run: node --experimental-strip-types --no-warnings "$SCRIPTS/release-set-version.ts" "$VERSION"
+        run: node "$SCRIPTS/release-set-version.ts" "$VERSION"
 
       - name: Install dependencies
         working-directory: source
@@ -114,13 +126,13 @@ jobs:
         working-directory: source/packages/zero
         env:
           PACK_DEST: ${{ runner.temp }}/npm
-        run: node --experimental-strip-types --no-warnings "$SCRIPTS/release-pack.ts"
+        run: node "$SCRIPTS/release-pack.ts"
 
       - name: Verify npm tarball
         working-directory: source
         env:
           TARBALL: ${{ runner.temp }}/npm/${{ steps.pack.outputs.filename }}
-        run: node --experimental-strip-types --no-warnings "$SCRIPTS/release-verify-tarball.ts" "$TARBALL" "$VERSION"
+        run: node "$SCRIPTS/release-verify-tarball.ts" "$TARBALL" "$VERSION"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4.0.0
@@ -138,6 +150,8 @@ jobs:
             --platform linux/amd64,linux/arm64 \
             --build-arg ZERO_VERSION="$VERSION" \
             --build-arg ZERO_PACKAGE="$TARBALL" \
+            --label org.opencontainers.image.revision="$SOURCE_SHA" \
+            --label org.opencontainers.image.version="$VERSION" \
             --sbom=true \
             --provenance=mode=max \
             --output=type=oci,dest="$IMAGE_ARCHIVE" \
@@ -202,15 +216,16 @@ jobs:
           path: dist/npm
 
       - name: Verify npm tarball
-        run: node --experimental-strip-types --no-warnings "$SCRIPTS/release-verify-tarball.ts" "dist/npm/$TARBALL_NAME" "$VERSION"
+        run: node "$SCRIPTS/release-verify-tarball.ts" "dist/npm/$TARBALL_NAME" "$VERSION"
 
       - name: Publish npm package
         run: |
           set -euo pipefail
-          if [ "$MODE" = 'canary' ]; then
-            pnpm publish "dist/npm/$TARBALL_NAME" --provenance --tag canary --access public --no-git-checks
-          else
+          if [ "$MODE" = 'stable' ]; then
             pnpm stage publish "dist/npm/$TARBALL_NAME" --provenance --tag staging --access public --no-git-checks --json
+          else
+            # canary and head publish directly under their mode's dist-tag.
+            pnpm publish "dist/npm/$TARBALL_NAME" --provenance --tag "$MODE" --access public --no-git-checks
           fi
 
       - name: Summarize npm release
@@ -221,7 +236,7 @@ jobs:
             if [ "$MODE" = 'stable' ]; then
               printf 'Stable release was staged. Approve it with `pnpm stage approve <stage-id>` or in the NPM Web UI, then run the Promote Zero Release workflow.\n'
             else
-              printf 'Canary release was published with the `canary` dist-tag.\n'
+              printf '%s release was published with the `%s` dist-tag.\n' "$MODE" "$MODE"
             fi
           } >> "$GITHUB_STEP_SUMMARY"
 
@@ -235,6 +250,7 @@ jobs:
       id-token: write # Required for cosign keyless signing.
       packages: write # Required to push the image to GHCR.
     env:
+      MODE: ${{ needs.plan.outputs.mode }}
       VERSION: ${{ needs.plan.outputs.version }}
     steps:
       - name: Download Docker image artifact
@@ -252,7 +268,20 @@ jobs:
             oci-archive:dist/docker/zero-image.tar
             docker://ghcr.io/rocicorp/zero:${{ needs.plan.outputs.version }}
 
+      - name: Push GHCR head tag
+        # Moving tag tracking the newest head release. The cosign signature
+        # below covers it because signatures attach to the digest.
+        if: needs.plan.outputs.mode == 'head'
+        uses: docker://quay.io/containers/skopeo:v1.22.2@sha256:e268031b80e65ba25dd2020383232587daf0ae670727b5ccdbe7a0008e9216bc
+        with:
+          args: >-
+            copy --all
+            --dest-creds ${{ github.actor }}:${{ github.token }}
+            oci-archive:dist/docker/zero-image.tar
+            docker://ghcr.io/rocicorp/zero:head
+
       - name: Push Docker Hub image
+        if: needs.plan.outputs.mode != 'head'
         uses: docker://quay.io/containers/skopeo:v1.22.2@sha256:e268031b80e65ba25dd2020383232587daf0ae670727b5ccdbe7a0008e9216bc
         with:
           args: >-
@@ -262,6 +291,7 @@ jobs:
             docker://docker.io/rocicorp/zero:${{ needs.plan.outputs.version }}
 
       - name: Login to Docker Hub
+        if: needs.plan.outputs.mode != 'head'
         uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4.1.0
         with:
           username: ${{ vars.DOCKERHUB_USERNAME }}
@@ -280,20 +310,30 @@ jobs:
       - name: Sign Docker images
         run: |
           cosign sign --yes "ghcr.io/rocicorp/zero:$VERSION"
-          cosign sign --yes "docker.io/rocicorp/zero:$VERSION"
+          if [ "$MODE" != 'head' ]; then
+            cosign sign --yes "docker.io/rocicorp/zero:$VERSION"
+          fi
 
       - name: Summarize Docker release
         run: |
           {
             printf '## Docker\n\n'
-            printf 'Docker Hub: `%s`\n\n' "rocicorp/zero:$VERSION"
+            if [ "$MODE" != 'head' ]; then
+              printf 'Docker Hub: `%s`\n\n' "rocicorp/zero:$VERSION"
+            fi
             printf 'GHCR: `%s`\n' "ghcr.io/rocicorp/zero:$VERSION"
+            if [ "$MODE" = 'head' ]; then
+              printf 'GHCR moving tag: `%s`\n' "ghcr.io/rocicorp/zero:head"
+            fi
           } >> "$GITHUB_STEP_SUMMARY"
 
   tag:
     name: Push git tag
     runs-on: ubuntu-latest
     needs: [plan, publish-npm, publish-docker]
+    # Head releases are not tagged; the version itself (source-sha prefix +
+    # date) and the OCI revision label carry the version <-> commit mapping.
+    if: needs.plan.outputs.mode != 'head'
     permissions:
       contents: write # Required to push the Zero release tag.
     env:
@@ -324,4 +364,4 @@ jobs:
 
       - name: Create and push tag
         working-directory: source
-        run: node --experimental-strip-types --no-warnings "$SCRIPTS/release-create-tag.ts" "$MODE" "$VERSION" "$TAG" "$SOURCE_SHA"
+        run: node "$SCRIPTS/release-create-tag.ts" "$MODE" "$VERSION" "$TAG" "$SOURCE_SHA"

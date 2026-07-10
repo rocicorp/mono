@@ -1,6 +1,8 @@
 import {defineConfig, mergeConfig} from 'vitest/config';
 import config, {CI} from '../shared/src/tool/vitest-config.ts';
 
+const coverageInclude = ['src/**/*.{js,jsx,ts,tsx,mjs,mts,cjs,cts}'];
+
 function nameFromURL(url: string) {
   // importer looks like file://....../packages/NAME/... and we want the NAME
   return url.match(/\/packages\/([^/]+)/)?.[1] ?? 'unknown';
@@ -18,7 +20,7 @@ export function configForVersion(version: number, url: string) {
       coverage: {
         enabled: !CI, // Don't run coverage in continuous integration.
         reporter: [['html'], ['clover', {file: 'coverage.xml'}]],
-        include: ['src/**'],
+        include: coverageInclude,
       },
       retry: CI ? 2 : 0,
       testTimeout: TIMEOUT,
@@ -44,7 +46,7 @@ export function configForNoPg(url: string) {
       coverage: {
         enabled: !CI, // Don't run coverage in continuous integration.
         reporter: [['html'], ['clover', {file: 'coverage.xml'}]],
-        include: ['src/**'],
+        include: coverageInclude,
       },
     },
   });

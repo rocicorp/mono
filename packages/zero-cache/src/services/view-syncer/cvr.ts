@@ -981,10 +981,16 @@ export class CVRQueryDrivenUpdater extends CVRUpdater {
           if (deletedID === null) {
             continue;
           }
+          const lastPatch = this.#lastPatches.get(deletedID);
+          if (lastPatch !== undefined && lastPatch.rowVersion === null) {
+            continue;
+          }
+          const toVersion = maxVersion(this._cvr.version, lastPatch?.toVersion);
           patches.push({
-            toVersion: this._cvr.version,
+            toVersion,
             patch: {type: 'row', op: 'del', id: deletedID},
           });
+          this.#lastPatches.set(deletedID, {rowVersion: null, toVersion});
         }
         lc?.debug?.(
           `computed ${patches.length} delete patches (${Date.now() - start} ms)`,

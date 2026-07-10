@@ -13,7 +13,12 @@ import {
 import {resolveAuth, type Auth, type ValidateLegacyJWT} from '../auth/auth.ts';
 import {tokenConfigOptions} from '../auth/jwt.ts';
 import {type ZeroConfig} from '../config/zero-config.ts';
-import {getOrCreateGauge} from '../observability/metrics.ts';
+import {
+  getOrCreateCounter,
+  getOrCreateGauge,
+  getOrCreateNativeHistogram,
+  getOrCreateUpDownCounter,
+} from '../observability/metrics.ts';
 import {
   recordConnectionAttempted,
   recordConnectionSuccess,
@@ -50,7 +55,7 @@ export type ReplicaReadyState = {
 
 export type ServingLagViewSyncer = Pick<
   ViewSyncer,
-  'createdAtMs' | 'servedVersion'
+  'createdAtMs' | 'servedVersion' | 'servingLagEligible'
 >;
 
 export type ServingLagStats = {
@@ -63,7 +68,15 @@ export type ServingLagStats = {
   readonly maxMs: number;
 };
 
+type ServingLagDistribution = ServingLagStats & {
+  readonly lagsMs: readonly number[];
+};
+
 export const MAX_REPLICA_READY_STATES = 10_000;
+const VIEW_SYNCER_LAG_SAMPLE_INTERVAL_MS = 60_000;
+
+const PROTOCOL_VERSION_ATTRIBUTE = 'protocol.version';
+const FAILURE_REASON_ATTRIBUTE = 'reason';
 
 function boundReplicaReadyStates(
   replicaReadyStates: ReplicaReadyState[],
@@ -157,16 +170,20 @@ function percentileNearestRank(
   return sortedValues[index];
 }
 
-export function computeServingLagStatsMs(
+function computeServingLagDistributionMs(
   now: number,
   replicaReadyStates: ReplicaReadyState[],
   viewSyncers: Iterable<ServingLagViewSyncer>,
-): ServingLagStats {
+): ServingLagDistribution {
   const lags: number[] = [];
   let laggingClientGroups = 0;
   let firstNeededIndex = replicaReadyStates.length;
 
   for (const viewSyncer of viewSyncers) {
+    if (!viewSyncer.servingLagEligible) {
+      continue;
+    }
+
     const firstUnservedIndex = findFirstUnservedIndex(
       replicaReadyStates,
       viewSyncer,
@@ -193,11 +210,36 @@ export function computeServingLagStatsMs(
   return {
     activeClientGroups: lags.length,
     laggingClientGroups,
+    // The percentile fields are for the legacy serving_lag_stats gauge.
+    // The native view_syncer_lag histogram records lagsMs and computes
+    // percentiles in Prometheus/AMP.
     minMs: lags[0] ?? 0,
     p50Ms: percentileNearestRank(lags, 50),
     p75Ms: percentileNearestRank(lags, 75),
     p99Ms: percentileNearestRank(lags, 99),
     maxMs: lags.at(-1) ?? 0,
+    lagsMs: lags,
+  };
+}
+
+export function computeServingLagStatsMs(
+  now: number,
+  replicaReadyStates: ReplicaReadyState[],
+  viewSyncers: Iterable<ServingLagViewSyncer>,
+): ServingLagStats {
+  const distribution = computeServingLagDistributionMs(
+    now,
+    replicaReadyStates,
+    viewSyncers,
+  );
+  return {
+    activeClientGroups: distribution.activeClientGroups,
+    laggingClientGroups: distribution.laggingClientGroups,
+    minMs: distribution.minMs,
+    p50Ms: distribution.p50Ms,
+    p75Ms: distribution.p75Ms,
+    p99Ms: distribution.p99Ms,
+    maxMs: distribution.maxMs,
   };
 }
 
@@ -256,8 +298,40 @@ export class Syncer implements SingletonService {
   readonly #config: ZeroConfig;
   readonly #validateLegacyJWT: ValidateLegacyJWT | undefined;
   readonly #replicaReadyStates: ReplicaReadyState[] = [];
-  #servingLagStatsCache: ServingLagStats | undefined;
-  #servingLagStatsCacheClearQueued = false;
+  readonly #webSocketOpenConnections = getOrCreateUpDownCounter(
+    'sync',
+    'websocket.open_connections',
+    'Open client WebSocket connections.',
+  );
+  readonly #webSocketConnectionAttempts = getOrCreateCounter(
+    'sync',
+    'websocket.connection_attempts',
+    'Client WebSocket connection attempts.',
+  );
+  readonly #webSocketConnectionSuccesses = getOrCreateCounter(
+    'sync',
+    'websocket.connection_successes',
+    'Client WebSocket connections successfully initialized.',
+  );
+  readonly #webSocketConnectionFailures = getOrCreateCounter(
+    'sync',
+    'websocket.connection_failures',
+    'Client WebSocket connection attempts that failed before initialization.',
+  );
+  readonly #viewSyncerLag = getOrCreateNativeHistogram(
+    'sync',
+    'view_syncer_lag',
+    {
+      description:
+        'Lag from replica-ready change to ViewSyncer output for active ' +
+        'client groups. A change is output after IVM advancement, CVR flush, ' +
+        'and pokeEnd.',
+      unit: 's',
+    },
+  );
+  #servingLagDistributionCache: ServingLagDistribution | undefined;
+  #servingLagDistributionCacheClearQueued = false;
+  #viewSyncerLagSampleInterval: ReturnType<typeof setInterval> | undefined;
 
   constructor(
     lc: LogContext,
@@ -348,24 +422,24 @@ export class Syncer implements SingletonService {
       result.observe(total);
     });
 
-    getOrCreateGauge('sync', 'serving-lag', {
+    getOrCreateGauge('sync', 'serving_lag', {
       description:
         'Maximum time active ViewSyncer client groups have had unserved ' +
         'replica changes. A change is served after IVM advancement, CVR flush, ' +
         'and pokeEnd.',
       unit: 'millisecond',
     }).addCallback(result => {
-      result.observe(this.#computeServingLagStats().maxMs);
+      result.observe(this.#computeServingLagDistribution().maxMs);
     });
 
-    getOrCreateGauge('sync', 'serving-lag-stats', {
+    getOrCreateGauge('sync', 'serving_lag_stats', {
       description:
         'Distribution of time active ViewSyncer client groups have had ' +
         'unserved replica changes. A change is served after IVM advancement, ' +
         'CVR flush, and pokeEnd.',
       unit: 'millisecond',
     }).addCallback(result => {
-      const stats = this.#computeServingLagStats();
+      const stats = this.#computeServingLagDistribution();
       result.observe(stats.minMs, {stat: 'min'});
       result.observe(stats.p50Ms, {stat: 'p50'});
       result.observe(stats.p75Ms, {stat: 'p75'});
@@ -375,32 +449,45 @@ export class Syncer implements SingletonService {
 
     getOrCreateGauge(
       'sync',
-      'serving-lagging-client-groups',
+      'serving_lagging_client_groups',
       'Number of active client groups with unserved replica changes',
     ).addCallback(result => {
-      result.observe(this.#computeServingLagStats().laggingClientGroups);
+      result.observe(this.#computeServingLagDistribution().laggingClientGroups);
     });
+
+    this.#viewSyncerLagSampleInterval = setInterval(
+      () => this.#recordViewSyncerLagSamples(),
+      VIEW_SYNCER_LAG_SAMPLE_INTERVAL_MS,
+    );
+    this.#viewSyncerLagSampleInterval.unref?.();
   }
 
-  #computeServingLagStats(): ServingLagStats {
-    if (this.#servingLagStatsCache) {
-      return this.#servingLagStatsCache;
+  #computeServingLagDistribution(): ServingLagDistribution {
+    if (this.#servingLagDistributionCache) {
+      return this.#servingLagDistributionCache;
     }
 
-    const stats = computeServingLagStatsMs(
+    const distribution = computeServingLagDistributionMs(
       Date.now(),
       this.#replicaReadyStates,
       this.#viewSyncers.getServices(),
     );
-    this.#servingLagStatsCache = stats;
-    if (!this.#servingLagStatsCacheClearQueued) {
-      this.#servingLagStatsCacheClearQueued = true;
+    this.#servingLagDistributionCache = distribution;
+    if (!this.#servingLagDistributionCacheClearQueued) {
+      this.#servingLagDistributionCacheClearQueued = true;
       queueMicrotask(() => {
-        this.#servingLagStatsCache = undefined;
-        this.#servingLagStatsCacheClearQueued = false;
+        this.#servingLagDistributionCache = undefined;
+        this.#servingLagDistributionCacheClearQueued = false;
       });
     }
-    return stats;
+    return distribution;
+  }
+
+  #recordViewSyncerLagSamples(): void {
+    const {lagsMs} = this.#computeServingLagDistribution();
+    for (const lagMs of lagsMs) {
+      this.#viewSyncerLag.recordMs(lagMs);
+    }
   }
 
   #recordReplicaReadyState(state: ReplicaState): void {
@@ -426,6 +513,34 @@ export class Syncer implements SingletonService {
   }
 
   readonly #createConnection = async (ws: WebSocket, params: ConnectParams) => {
+    const metricAttributes = {
+      [PROTOCOL_VERSION_ATTRIBUTE]: params.protocolVersion,
+    };
+    let connectionResultRecorded = false;
+    const recordConnectionFailure = (reason: string) => {
+      if (connectionResultRecorded) {
+        return;
+      }
+      connectionResultRecorded = true;
+      this.#webSocketConnectionFailures.add(1, {
+        ...metricAttributes,
+        [FAILURE_REASON_ATTRIBUTE]: reason,
+      });
+    };
+    const recordConnectionSuccessMetric = () => {
+      if (connectionResultRecorded) {
+        return;
+      }
+      connectionResultRecorded = true;
+      this.#webSocketConnectionSuccesses.add(1, metricAttributes);
+    };
+
+    this.#webSocketConnectionAttempts.add(1, metricAttributes);
+    this.#webSocketOpenConnections.add(1, metricAttributes);
+    ws.once('close', () => {
+      this.#webSocketOpenConnections.add(-1, metricAttributes);
+    });
+
     this.#lc.debug?.(
       'creating connection',
       params.clientGroupID,
@@ -450,6 +565,7 @@ export class Syncer implements SingletonService {
       const hasExactlyOneTokenOption = tokenOptions.length === 1;
       const hasCustomEndpoints = hasPushOrMutate && hasQueries;
       if (!hasExactlyOneTokenOption && !hasCustomEndpoints) {
+        recordConnectionFailure('configuration');
         throw new Error(
           'Exactly one of jwk, secret, or jwksUrl must be set in order to verify tokens but actually the following were set: ' +
             JSON.stringify(tokenOptions) +
@@ -486,10 +602,12 @@ export class Syncer implements SingletonService {
             errorKind: e.message,
           },
         );
+        recordConnectionFailure('auth');
         sendError(this.#lc, ws, e.errorBody);
         ws.close(3000, e.errorBody.message);
         return;
       }
+      recordConnectionFailure('internal');
       throw e;
     }
 
@@ -513,6 +631,7 @@ export class Syncer implements SingletonService {
           'Client groups are pinned to a single userID. Connection userID does not match existing client group userID.',
         origin: ErrorOrigin.ZeroCache,
       });
+      recordConnectionFailure('user_mismatch');
       sendError(this.#lc, ws, error.errorBody);
       ws.close(3000, error.message);
       return;
@@ -568,6 +687,7 @@ export class Syncer implements SingletonService {
         },
       );
     } catch (e) {
+      recordConnectionFailure('internal');
       connContextManager.closeConnection({clientID, wsID: params.wsID});
       mutagen?.unref();
       pusher?.unref();
@@ -576,7 +696,12 @@ export class Syncer implements SingletonService {
 
     this.#connections.set(clientID, connection);
 
-    connection.init() && recordConnectionSuccess();
+    if (connection.init()) {
+      recordConnectionSuccessMetric();
+      recordConnectionSuccess();
+    } else {
+      recordConnectionFailure('protocol_version');
+    }
 
     if (params.initConnectionMsg) {
       this.#lc.debug?.(
@@ -622,6 +747,7 @@ export class Syncer implements SingletonService {
   }
 
   stop() {
+    clearInterval(this.#viewSyncerLagSampleInterval);
     this.#wss.close();
     this.#stopped.resolve();
     return promiseVoid;

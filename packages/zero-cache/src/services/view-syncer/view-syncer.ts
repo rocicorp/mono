@@ -48,6 +48,7 @@ import type {
 import {
   getOrCreateCounter,
   getOrCreateLatencyHistogram,
+  getOrCreateNativeHistogram,
   getOrCreateUpDownCounter,
 } from '../../observability/metrics.ts';
 import type {InspectorDelegate} from '../../server/inspector-delegate.ts';
@@ -157,6 +158,7 @@ export interface ViewSyncer {
   readonly rowCount: number;
   readonly createdAtMs: number;
   readonly servedVersion: string | null;
+  readonly servingLagEligible: boolean;
 }
 
 export type SyncContext = ConnectionSelector & {
@@ -297,6 +299,17 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     'hydration-time',
     'Time to hydrate a query.',
   );
+  readonly #viewSyncerHydration = getOrCreateNativeHistogram(
+    'sync',
+    'view_syncer_hydration',
+    {
+      description:
+        'Time from ViewSyncer query sync requiring hydration to output for a ' +
+        'client group. Includes query transformation, query materialization, ' +
+        'CVR flush, catchup, and pokeEnd.',
+      unit: 's',
+    },
+  );
   readonly #transactionAdvanceTime = getOrCreateLatencyHistogram(
     'sync',
     'advance-time',
@@ -340,6 +353,15 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       'bump and full re-execution). Expected to be near-zero in steady state; ' +
       'persistent non-zero values indicate non-deterministic query execution ' +
       '(e.g. Cap operator picking different N-row subsets).',
+  );
+  readonly #sameHashRehydrationVersionBumps = getOrCreateCounter(
+    'sync',
+    'query.same-hash-rehydrations-forced-bump',
+    'Number of times query-set reconciliation forced a configVersion bump ' +
+      'for already-gotten same-transformation-hash query rehydration because ' +
+      'trackQueries would not otherwise bump. Expected to be near-zero; ' +
+      'non-zero values indicate ' +
+      'pipeline/CVR row-set drift reached query-set reconciliation.',
   );
 
   readonly #inspectorDelegate: InspectorDelegate;
@@ -613,6 +635,13 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
   get servedVersion(): string | null {
     return this.#servedVersion;
+  }
+
+  get servingLagEligible(): boolean {
+    return (
+      this.#clients.size > 0 &&
+      this.connContextManager.getBackgroundConnectionContext() !== undefined
+    );
   }
 
   #markVersionServed(version: CVRVersion) {
@@ -1808,6 +1837,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     driftedQueryIDs: Set<string> = new Set(),
   ) {
     return startAsyncSpan(tracer, 'vs.#syncQueryPipelineSet', async span => {
+      const start = performance.now();
       span.setAttribute('clientGroupID', this.id);
       assert(
         this.#pipelines.initialized(),
@@ -2035,6 +2065,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           Array.from(removeQueriesQueryIds, id => ({id})),
           driftedQueryIDs,
         );
+        if (addQueries.length > 0) {
+          this.#viewSyncerHydration.recordMs(performance.now() - start);
+        }
       } else {
         await this.#catchupClients(lc, cvr);
       }
@@ -2106,12 +2139,38 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         queryID => this.#pipelines.rowSetSignature(queryID),
       );
 
-      // For queries being re-executed solely due to rowSetSignature drift
-      // (not a transformationHash change), trackQueries does not bump
-      // configVersion. Force a bump so the row diff produced by received()
-      // gets propagated to the client via a poke. Must happen before
-      // startPoke so the pokers see the final cookie version.
-      if (addQueries.some(q => driftedQueryIDs.has(q.id))) {
+      const sameHashRehydratedQueryIDs = addQueries
+        .filter(
+          q => cvr.queries[q.id]?.transformationHash === q.transformationHash,
+        )
+        .map(q => q.id);
+      const trackQueriesWillBumpVersion =
+        stateVersion > cvr.version.stateVersion ||
+        removeQueries.length > 0 ||
+        addQueries.some(
+          q => cvr.queries[q.id]?.transformationHash !== q.transformationHash,
+        );
+
+      // For already-gotten queries being re-executed without a stateVersion
+      // or transformationHash change, trackQueries does not bump configVersion.
+      // Force a bump so any row diff produced by received() gets propagated to
+      // the client via a poke. Must happen before startPoke so the pokers see
+      // the final cookie version.
+      if (
+        sameHashRehydratedQueryIDs.length > 0 &&
+        !trackQueriesWillBumpVersion
+      ) {
+        const drifted = sameHashRehydratedQueryIDs.filter(id =>
+          driftedQueryIDs.has(id),
+        ).length;
+        const missing = sameHashRehydratedQueryIDs.length - drifted;
+        const reason =
+          drifted && missing
+            ? 'mixed'
+            : drifted
+              ? 'row-set-signature-drift'
+              : 'missing-pipeline';
+        this.#sameHashRehydrationVersionBumps.add(1, {reason});
         updater.ensureNewVersion();
       }
 

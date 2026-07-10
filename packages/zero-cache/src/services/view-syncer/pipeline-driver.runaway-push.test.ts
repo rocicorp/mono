@@ -263,4 +263,100 @@ describe('view-syncer/pipeline-driver', () => {
     );
     expect(changeCount).toEqual(5);
   });
+
+  test('projected timeout waits for a meaningful fraction of the advancement', () => {
+    pipelines.init(clientSchema);
+    [
+      ...pipelines.addQuery('hash1', 'queryID1', ISSUES_WITH_CREATOR, {
+        totalElapsed: () => 25,
+        elapsedLap: () => 25,
+      }),
+    ];
+
+    replicator.processTransaction(
+      '134',
+      ...Array.from({length: 100}, (_, i) =>
+        messages.insert('issue', {id: `i${1001 + i}`}),
+      ),
+    );
+
+    let changeCount = 0;
+    expect(() => {
+      for (const _ of pipelines.advance({
+        elapsedLap: () => 0,
+        totalElapsed: () => changeCount * 1.6,
+      }).changes) {
+        changeCount++;
+      }
+    }).toThrowErrorMatchingInlineSnapshot(
+      `[ResetPipelinesSignal: Advancement projected to exceed hydration time at 25 of 100 changes after 40 ms. Projected total advancement time is 160 ms. Advancement time limited based on total hydration time of 25 ms.]`,
+    );
+    expect(changeCount).toEqual(25);
+  });
+
+  test('does not timeout once advancement is mostly complete', () => {
+    pipelines.init(clientSchema);
+    [
+      ...pipelines.addQuery('hash1', 'queryID1', ISSUES_WITH_CREATOR, {
+        totalElapsed: () => 25,
+        elapsedLap: () => 25,
+      }),
+    ];
+
+    replicator.processTransaction(
+      '134',
+      ...Array.from({length: 100}, (_, i) =>
+        messages.insert('issue', {id: `i${1001 + i}`}),
+      ),
+    );
+
+    let changeCount = 0;
+    let lateFinish = false;
+    expect(() => {
+      for (const _ of pipelines.advance({
+        elapsedLap: () => {
+          if (changeCount >= 80) {
+            lateFinish = true;
+          }
+          return 0;
+        },
+        totalElapsed: () => (lateFinish ? 1000 : 0),
+      }).changes) {
+        changeCount++;
+      }
+    }).not.toThrow();
+    expect(changeCount).toEqual(100);
+  });
+
+  test('timeouts on a single slow change even when advancement is mostly complete', () => {
+    pipelines.init(clientSchema);
+    [
+      ...pipelines.addQuery('hash1', 'queryID1', ISSUES_WITH_CREATOR, {
+        totalElapsed: () => 100,
+        elapsedLap: () => 100,
+      }),
+    ];
+
+    replicator.processTransaction(
+      '134',
+      ...Array.from({length: 80}, (_, i) =>
+        messages.insert('issue', {id: `i${1001 + i}`}),
+      ),
+      messages.update('user', {id: 'u1', name: 'wuzzy'}),
+    );
+
+    let changeCount = 0;
+    let slowChangeElapsed = 0;
+    expect(() => {
+      for (const _ of pipelines.advance({
+        elapsedLap: () => 0,
+        totalElapsed: () => (changeCount < 80 ? 0 : slowChangeElapsed++),
+      }).changes) {
+        changeCount++;
+      }
+    }).toThrowError(
+      /Advancement exceeded timeout processing current change at 80 of 81 changes .* hydration time of 100 ms\./,
+    );
+    expect(changeCount).toEqual(80);
+  });
 });

@@ -3,7 +3,6 @@ import {SqliteError} from '@rocicorp/zero-sqlite3';
 import type {Database} from '../../../../../zqlite/src/db.ts';
 import {listTables} from '../../../db/lite-tables.ts';
 import {
-  DatabaseIntegrityError,
   runSchemaMigrations,
   type IncrementalMigrationMap,
   type Migration,
@@ -65,12 +64,9 @@ export async function upgradeReplica(
 }
 
 function throwAutoResetForCorruption(e: unknown): never {
-  if (
-    e instanceof DatabaseIntegrityError ||
-    (e instanceof SqliteError && e.code === 'SQLITE_CORRUPT')
-  ) {
+  if (e instanceof SqliteError && e.code === 'SQLITE_CORRUPT') {
     throw new AutoResetSignal(
-      `replica database failed integrity check: ${String(e)}`,
+      `replica database appears corrupt: ${String(e)}`,
       {cause: e},
     );
   }

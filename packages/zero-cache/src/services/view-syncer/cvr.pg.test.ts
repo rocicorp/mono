@@ -2253,6 +2253,108 @@ describe('view-syncer/cvr', () => {
     });
   });
 
+  test('deleteUnreferencedRows skips row deletes already emitted by received', async () => {
+    const initialState: DBState = {
+      instances: [
+        {
+          clientGroupID: 'abc123',
+          version: '1aa',
+          replicaVersion: '123',
+          lastActive: Date.UTC(2024, 3, 23),
+          ttlClock: ttlClockFromNumber(Date.UTC(2024, 3, 23)),
+          clientSchema: null,
+        },
+      ],
+      clients: [
+        {
+          clientGroupID: 'abc123',
+          clientID: 'fooClient',
+        },
+      ],
+      queries: [
+        {
+          clientGroupID: 'abc123',
+          queryArgs: null,
+          queryName: null,
+          queryHash: 'oneHash',
+          clientAST: {table: 'issues'},
+          transformationHash: 'serverOneHash',
+          transformationVersion: '1aa',
+          patchVersion: '1aa:01',
+          internal: null,
+          deleted: null,
+        },
+        {
+          clientGroupID: 'abc123',
+          queryArgs: null,
+          queryName: null,
+          queryHash: 'twoHash',
+          clientAST: {table: 'issues'},
+          transformationHash: 'serverTwoHash',
+          transformationVersion: '1aa',
+          patchVersion: '1aa:02',
+          internal: null,
+          deleted: null,
+        },
+      ],
+      desires: [
+        {
+          clientGroupID: 'abc123',
+          clientID: 'fooClient',
+          queryHash: 'oneHash',
+          patchVersion: '1a9:01',
+          deleted: null,
+          inactivatedAt: null,
+          ttl: DEFAULT_TTL_MS,
+        },
+      ],
+      rows: [
+        {
+          clientGroupID: 'abc123',
+          rowKey: ROW_KEY1,
+          rowVersion: '03',
+          refCounts: {oneHash: 1},
+          patchVersion: '1a0',
+          schema: 'public',
+          table: 'issues',
+        },
+      ],
+    };
+
+    await setInitialState(cvrDb, initialState);
+
+    const cvrStore = new CVRStore(
+      lc,
+      cvrDb,
+      SHARD,
+      'my-task',
+      'abc123',
+      ON_FAILURE,
+    );
+    const cvr = await cvrStore.load(lc, LAST_CONNECT);
+    const updater = new CVRQueryDrivenUpdater(cvrStore, cvr, '1aa', '123');
+
+    const {newVersion} = updater.trackQueries(
+      lc,
+      [{id: 'oneHash', transformationHash: 'serverOneHash'}],
+      [{id: 'twoHash'}],
+    );
+    expect(newVersion).toEqual({stateVersion: '1aa', configVersion: 1});
+
+    expect(
+      await updater.received(
+        lc,
+        new Map([[ROW_ID1, {refCounts: {oneHash: -1}}]]),
+      ),
+    ).toEqual([
+      {
+        toVersion: newVersion,
+        patch: {type: 'row', op: 'del', id: ROW_ID1},
+      },
+    ] satisfies PatchToVersion[]);
+    expect(await updater.deleteUnreferencedRows(lc)).toEqual([]);
+  });
+
   // ^^: just run this test twice? Once for executed once for transformed
   test('new transformation hash', async () => {
     const initialState: DBState = {

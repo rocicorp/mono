@@ -1,3 +1,4 @@
+import {Socket} from 'node:net';
 import {
   PG_CONFIGURATION_LIMIT_EXCEEDED,
   PG_CONNECTION_DOES_NOT_EXIST,
@@ -329,6 +330,96 @@ export type PostgresTransaction = postgres.TransactionSql<{
   json: JSONValue;
 }>;
 
+// Guards against half-open TCP connections, which otherwise hang the pool
+// indefinitely: a proxy can keep the client-facing socket alive (ACKing TCP
+// keepalives) after its backend is gone, so no 'close' or 'error' event ever
+// fires and statements like BEGIN / COMMIT — which are not covered by the
+// TransactionPool's statementResponseTimeout — await forever.
+// See https://github.com/porsager/postgres/issues/1089.
+//
+// If no bytes are read or written for this long, the socket is reset, which
+// rejects all in-flight queries and lets the pool recover. Wire activity
+// resets the timer, so streaming operations (e.g. COPY) are safe, but
+// statements that legitimately compute silently for longer (e.g. index
+// builds in migrations) must raise this. Settable as an emergency measure
+// (0 disables); deliberately not exposed as a server option.
+const SOCKET_INACTIVITY_TIMEOUT_MS = parseInt(
+  process.env.ZERO_PG_SOCKET_INACTIVITY_TIMEOUT ?? '120000',
+);
+
+type SocketFactoryOptions = {
+  host: string[];
+  port: number[];
+  path?: string | false;
+};
+
+/**
+ * Creates the custom socket factory passed to postgres.js via its (untyped)
+ * `socket` option. postgres.js does not call `connect()` on custom sockets,
+ * and its TLS upgrade reads `socket.host` for the SNI servername, so the
+ * factory must handle both itself.
+ *
+ * Note: unlike postgres.js's internal socket, reconnects do not rotate
+ * through multiple hosts; multi-host URIs are not used by the zero-cache.
+ *
+ * Exported for testing.
+ */
+export function inactivityTimeoutSocket(
+  lc: LogContext,
+  timeoutMs = SOCKET_INACTIVITY_TIMEOUT_MS,
+) {
+  return (options: SocketFactoryOptions): Socket => {
+    const socket = new Socket();
+    const target = options.path
+      ? options.path
+      : `${options.host[0]}:${options.port[0]}`;
+    if (timeoutMs > 0) {
+      // socket.setTimeout() cannot be used here: it registers its callback
+      // as a 'timeout' event listener, and postgres.js removes all listeners
+      // from the raw socket when upgrading it to TLS (removeAllListeners()
+      // in secure()), which would silently disarm the watchdog on every TLS
+      // connection. An interval is not a socket listener, so it survives the
+      // upgrade, and encrypted traffic still flows through this raw socket,
+      // advancing its byte counters.
+      //
+      // The counters are sampled once per timeout period, so a half-open
+      // socket is reset after one to two timeout periods of inactivity.
+      let lastActivity = -1;
+      const watchdog = setInterval(() => {
+        if (socket.destroyed) {
+          clearInterval(watchdog);
+          return;
+        }
+        const activity = socket.bytesRead + socket.bytesWritten;
+        if (activity === lastActivity) {
+          lc.warn?.(
+            `resetting connection to ${target} after ${timeoutMs} ms of inactivity ` +
+              `(likely half-open); in-flight queries will be rejected`,
+          );
+          clearInterval(watchdog);
+          socket.resetAndDestroy();
+        } else {
+          lastActivity = activity;
+        }
+      }, timeoutMs);
+      watchdog.unref();
+      // Best-effort cleanup; removed on TLS upgrade, in which case the
+      // destroyed check above clears the (unref'ed) interval instead.
+      socket.once('close', () => clearInterval(watchdog));
+    }
+    if (options.path) {
+      socket.connect(options.path);
+    } else {
+      const [host] = options.host;
+      const [port] = options.port;
+      socket.connect(port, host);
+      // Read by postgres.js for the TLS SNI servername.
+      Object.assign(socket, {host, port});
+    }
+    return socket;
+  };
+}
+
 export function pgClient(
   lc: LogContext,
   connectionURI: string,
@@ -380,11 +471,22 @@ export function pgClient(
   const maxLifetimeSeconds = randInt(5 * 60, 10 * 60);
   const providedConnection = options?.connection ?? {};
 
+  // postgres.js supports a custom socket factory via the `socket` option,
+  // but it is missing from its type declarations, hence the untyped spread.
+  const socketFactory = {
+    socket: inactivityTimeoutSocket(lc.withContext('appName', applicationName)),
+  };
+
   return postgres(connectionURI, {
     ...postgresTypeConfig(opts),
     onnotice,
     ['max_lifetime']: maxLifetimeSeconds,
+    // Close idle connections cleanly before the socket inactivity timer
+    // (which cannot distinguish an idle pool connection from a hung query)
+    // resets them.
+    ['idle_timeout']: 60,
     ssl,
+    ...socketFactory,
     ...options,
     connection: {
       ...providedConnection,

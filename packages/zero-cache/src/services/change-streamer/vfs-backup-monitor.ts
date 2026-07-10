@@ -5,6 +5,11 @@ import {
   getOrCreateGauge,
 } from '../../observability/metrics.ts';
 import {Subscription} from '../../types/subscription.ts';
+import {
+  litestreamBackupVerificationDuration,
+  litestreamMonitorMetricAttrs,
+  litestreamSnapshotReservationDuration,
+} from '../litestream/metrics.ts';
 import type {VfsBackupWatermark} from '../litestream/vfs-watermark-reader.ts';
 import {RunningState} from '../running-state.ts';
 import type {BackupMonitor} from './backup-monitor.ts';
@@ -114,9 +119,13 @@ export class VfsBackupMonitor implements BackupMonitor {
     this.#reservations.delete(taskID);
     const {start, sub} = res;
     sub.cancel();
+    const duration = Date.now() - start.getTime();
+    litestreamSnapshotReservationDuration().recordMs(duration, {
+      ...litestreamMonitorMetricAttrs(this.#backupURL, 'v5', 'view_syncer'),
+      result: updateCleanupDelay ? 'success' : 'cancelled',
+    });
 
     if (updateCleanupDelay) {
-      const duration = Date.now() - start.getTime();
       this.#lc.info?.(`snapshot initialized by ${taskID} in ${duration} ms`);
       if (duration > this.#cleanupDelayMs) {
         this.#cleanupDelayMs = duration;
@@ -143,7 +152,7 @@ export class VfsBackupMonitor implements BackupMonitor {
   };
 
   async #checkWatermark(): Promise<void> {
-    const watermark = await this.#source.readWatermark();
+    const watermark = await this.#readWatermarkTimed();
     this.#latestBackupWatermark = watermark;
     if (
       watermark.watermark > this.#lastWatermark &&
@@ -159,6 +168,28 @@ export class VfsBackupMonitor implements BackupMonitor {
         },
       );
       this.#watermarks.set(watermark.watermark, watermark);
+    }
+  }
+
+  async #readWatermarkTimed(): Promise<VfsBackupWatermark> {
+    const start = performance.now();
+    let result: 'success' | 'error' = 'error';
+    try {
+      const ret = await this.#source.readWatermark();
+      result = 'success';
+      return ret;
+    } finally {
+      litestreamBackupVerificationDuration().recordMs(
+        performance.now() - start,
+        {
+          ...litestreamMonitorMetricAttrs(
+            this.#backupURL,
+            'v5',
+            'replication_manager',
+          ),
+          result,
+        },
+      );
     }
   }
 

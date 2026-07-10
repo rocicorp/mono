@@ -282,6 +282,46 @@ importers:
         specifier: ^4.1.6
         version: 4.1.6(@opentelemetry/api@1.9.1)(@types/node@22.19.19)(@vitest/browser-playwright@4.1.6)(@vitest/coverage-v8@4.1.6)(vite@8.0.13(@types/node@22.19.19)(esbuild@0.27.7)(jiti@1.21.7)(terser@5.47.1)(tsx@4.22.0)(yaml@2.9.0))
 
+  apps/zero-throughput:
+    dependencies:
+      '@dotenvx/dotenvx':
+        specifier: ^1.39.0
+        version: 1.66.0
+      '@rocicorp/zero':
+        specifier: workspace:*
+        version: link:../../packages/zero
+      postgres:
+        specifier: 3.4.7
+        version: 3.4.7(patch_hash=2bd119d361250d5ee010b23af4c98504e9c6861b692d2e2ae23b9a9e5de4dbce)
+      ws:
+        specifier: ^8.18.1
+        version: 8.20.1
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.5
+        version: 22.19.19
+      '@types/ws':
+        specifier: ^8.5.12
+        version: 8.18.1
+      oxfmt:
+        specifier: ^0.45.0
+        version: 0.45.0
+      shared:
+        specifier: workspace:*
+        version: link:../../packages/shared
+      typescript:
+        specifier: ~6.0.2
+        version: 6.0.3
+      zero-protocol:
+        specifier: workspace:*
+        version: link:../../packages/zero-protocol
+      zero-schema:
+        specifier: workspace:*
+        version: link:../../packages/zero-schema
+      zql:
+        specifier: workspace:*
+        version: link:../../packages/zql
+
   apps/zql-viz:
     dependencies:
       '@monaco-editor/react':
@@ -1566,6 +1606,9 @@ importers:
       nanoid:
         specifier: ^5.1.2
         version: 5.1.11
+      otel:
+        specifier: workspace:*
+        version: link:../otel
       oxfmt:
         specifier: ^0.45.0
         version: 0.45.0
