@@ -1674,6 +1674,30 @@ describe('change-source/tables/ddl', () => {
       event: {tag: 'UNKNOWN'},
     });
   });
+
+  // Events from future versions of the upstream functions may report the
+  // columns created in the transaction that emitted the event.
+  test('parse ddlUpdateEvent with newColumns', () => {
+    const ddlUpdateEvent: DdlUpdateEvent = {
+      type: 'ddlUpdate',
+      version: 1,
+      context: {query: 'ALTER TABLE pub.foo ADD bar text'},
+      schema: {tables: [], indexes: []},
+      event: {tag: 'ALTER TABLE'},
+      newColumns: {'12345': [4, 7]},
+    };
+    expect(v.parse(ddlUpdateEvent, ddlUpdateEventSchema)).toEqual(
+      ddlUpdateEvent,
+    );
+    expect(
+      v.parse({...ddlUpdateEvent, newColumns: null}, ddlUpdateEventSchema),
+    ).toEqual({...ddlUpdateEvent, newColumns: null});
+
+    const {newColumns: _, ...withoutNewColumns} = ddlUpdateEvent;
+    expect(v.parse(withoutNewColumns, ddlUpdateEventSchema)).toEqual(
+      withoutNewColumns,
+    );
+  });
 });
 
 function parseDDLStartEvent(msg: MessageMessage) {
