@@ -1,0 +1,76 @@
+export function log(message = ''): void {
+  process.stdout.write(`${message}\n`);
+}
+
+export function warn(message = ''): void {
+  process.stderr.write(`${message}\n`);
+}
+
+export function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+export function nowMs(): number {
+  return Date.now();
+}
+
+export function percentile(
+  values: readonly number[],
+  percentileValue: number,
+): number {
+  if (values.length === 0) {
+    return 0;
+  }
+  const sorted = values.toSorted((a, b) => a - b);
+  const index = Math.min(
+    sorted.length - 1,
+    Math.max(0, Math.ceil((percentileValue / 100) * sorted.length) - 1),
+  );
+  return sorted[index];
+}
+
+export function average(values: readonly number[]): number {
+  if (values.length === 0) {
+    return 0;
+  }
+  return values.reduce((sum, value) => sum + value, 0) / values.length;
+}
+
+export function max(values: readonly number[]): number {
+  let result = 0;
+  for (const value of values) {
+    result = Math.max(result, value);
+  }
+  return result;
+}
+
+export function formatDuration(ms: number): string {
+  if (ms < 1000) {
+    return `${ms}ms`;
+  }
+  const seconds = ms / 1000;
+  if (seconds < 60) {
+    return `${seconds.toFixed(seconds % 1 === 0 ? 0 : 1)}s`;
+  }
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = Math.round(seconds % 60);
+  return `${minutes}m ${remainingSeconds}s`;
+}
+
+export async function withTimeout<T>(
+  promise: Promise<T>,
+  ms: number,
+  message: string,
+): Promise<T> {
+  let timeout: NodeJS.Timeout | undefined;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeout = setTimeout(() => reject(new Error(message)), ms);
+  });
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timeout !== undefined) {
+      clearTimeout(timeout);
+    }
+  }
+}

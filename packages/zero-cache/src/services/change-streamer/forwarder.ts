@@ -1,5 +1,10 @@
 import type {LogContext} from '@rocicorp/logger';
 import {joinIterables, wrapIterable} from '../../../../shared/src/iterables.ts';
+import {
+  getOrCreateCounter,
+  getOrCreateGauge,
+  getOrCreateLatencyHistogram,
+} from '../../observability/metrics.ts';
 import {Broadcast} from './broadcast.ts';
 import type {ChangeTag, WatermarkedChange} from './change-streamer-service.ts';
 import type {Status} from './change-streamer.ts';
@@ -14,6 +19,16 @@ export class Forwarder {
   readonly #progressMonitorOptions: ProgressMonitorOptions;
   readonly #active = new Set<Subscriber>();
   readonly #queued = new Set<Subscriber>();
+  readonly #flowControlWaits = getOrCreateCounter(
+    'replication',
+    'flow_control.waits',
+    'Flow-control checkpoints completed, labeled by release mode.',
+  );
+  readonly #flowControlWaitTime = getOrCreateLatencyHistogram(
+    'replication',
+    'flow_control.wait_duration',
+    'Time replication waits at flow-control checkpoints.',
+  );
   #inTransaction = false;
 
   #currentBroadcast: Broadcast | undefined;
@@ -25,6 +40,50 @@ export class Forwarder {
   ) {
     this.#lc = lc.withContext('component', 'progress-monitor');
     this.#progressMonitorOptions = opts;
+
+    getOrCreateGauge(
+      'replication',
+      'flow_control.active_subscribers',
+      'Active change-stream subscribers receiving live changes.',
+    ).addCallback(result => result.observe(this.#active.size));
+
+    getOrCreateGauge(
+      'replication',
+      'flow_control.queued_subscribers',
+      'Change-stream subscribers waiting for the current transaction to finish before activation.',
+    ).addCallback(result => result.observe(this.#queued.size));
+
+    getOrCreateGauge(
+      'replication',
+      'flow_control.pending_messages',
+      'Downstream change-stream messages not yet acked by subscribers.',
+    ).addCallback(result =>
+      result.observe(this.#subscriberStats().pendingMessages),
+    );
+
+    getOrCreateGauge(
+      'replication',
+      'flow_control.backlog_messages',
+      'Live change-stream messages buffered while subscribers catch up.',
+    ).addCallback(result =>
+      result.observe(this.#subscriberStats().backlogMessages),
+    );
+
+    getOrCreateGauge('replication', 'flow_control.backlog_bytes', {
+      description:
+        'Live change-stream bytes buffered while subscribers catch up.',
+      unit: 'By',
+    }).addCallback(result =>
+      result.observe(this.#subscriberStats().backlogBytes),
+    );
+
+    getOrCreateGauge('replication', 'flow_control.max_backlog_bytes', {
+      description:
+        'Maximum live change-stream bytes buffered by a single subscriber.',
+      unit: 'By',
+    }).addCallback(result =>
+      result.observe(this.#subscriberStats().maxBacklogBytes),
+    );
   }
 
   startProgressMonitor() {
@@ -97,19 +156,42 @@ export class Forwarder {
    * Promise that resolves when replication should continue.
    */
   async forwardWithFlowControl(entry: WatermarkedChange) {
+    const start = performance.now();
     const broadcast = new Broadcast(this.#active.values(), entry);
     this.#updateActiveSubscribers(entry[1]);
 
     // set for progress tracking
     this.#currentBroadcast = broadcast;
 
-    await broadcast.done;
-
-    // Technically #currentBroadcast may have changed, so only
-    // unset if it if is still the same.
-    if (this.#currentBroadcast === broadcast) {
-      this.#currentBroadcast = undefined;
+    try {
+      await broadcast.done;
+      const attributes = {'release.mode': broadcast.releaseMode};
+      this.#flowControlWaits.add(1, attributes);
+      this.#flowControlWaitTime.recordMs(performance.now() - start, attributes);
+    } finally {
+      // Technically #currentBroadcast may have changed, so only
+      // unset if it if is still the same.
+      if (this.#currentBroadcast === broadcast) {
+        this.#currentBroadcast = undefined;
+      }
     }
+  }
+
+  #subscriberStats() {
+    let pendingMessages = 0;
+    let backlogMessages = 0;
+    let backlogBytes = 0;
+    let maxBacklogBytes = 0;
+
+    for (const sub of joinIterables(this.#active, this.#queued)) {
+      const stats = sub.getStats();
+      pendingMessages += stats.pending;
+      backlogMessages += stats.backlog;
+      backlogBytes += stats.backlogBytes;
+      maxBacklogBytes = Math.max(maxBacklogBytes, stats.backlogBytes);
+    }
+
+    return {pendingMessages, backlogMessages, backlogBytes, maxBacklogBytes};
   }
 
   #updateActiveSubscribers(tag: ChangeTag) {

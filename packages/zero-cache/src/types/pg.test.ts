@@ -1,6 +1,18 @@
-import postgres from 'postgres';
-import {describe, expect, test} from 'vitest';
 import {
+  createServer,
+  type AddressInfo,
+  type Server,
+  type Socket,
+} from 'node:net';
+import {LogContext} from '@rocicorp/logger';
+import postgres from 'postgres';
+import {afterEach, describe, expect, test} from 'vitest';
+import {
+  createSilentLogContext,
+  TestLogSink,
+} from '../../../shared/src/logging-test-utils.ts';
+import {
+  inactivityTimeoutSocket,
   isPostgresConfigError,
   millisecondsToPostgresTime,
   postgresTimeToMilliseconds,
@@ -551,5 +563,118 @@ describe('serializeTime (via postgresTypeConfig)', () => {
       const serialized = time.serialize(ms) as string;
       expect(postgresTimeToMilliseconds(serialized)).toBe(ms);
     });
+  });
+});
+
+describe('inactivityTimeoutSocket', () => {
+  const lc = createSilentLogContext();
+  let server: Server;
+  let cleanup: (() => void)[] = [];
+
+  function listen(onConnection?: (socket: Socket) => void) {
+    server = createServer(socket => {
+      // The client resets (RSTs) the connection, which surfaces here as an
+      // ECONNRESET 'error' event on the server side of the socket.
+      socket.on('error', () => {});
+      onConnection?.(socket);
+    });
+    cleanup.push(() => server.close());
+    return new Promise<number>(resolve => {
+      server.listen(0, '127.0.0.1', () =>
+        resolve((server.address() as AddressInfo).port),
+      );
+    });
+  }
+
+  function factoryOptions(port: number) {
+    return {host: ['127.0.0.1'], port: [port]};
+  }
+
+  function connected(socket: Socket) {
+    cleanup.push(() => socket.destroy());
+    return new Promise<void>(resolve => socket.once('connect', resolve));
+  }
+
+  afterEach(() => {
+    cleanup.forEach(fn => fn());
+    cleanup = [];
+  });
+
+  test('connects and exposes host/port for TLS SNI', async () => {
+    const port = await listen();
+    const socket = inactivityTimeoutSocket(lc, 120_000)(factoryOptions(port));
+    await connected(socket);
+
+    // postgres.js reads socket.host as the SNI servername in secure().
+    expect(socket).toMatchObject({host: '127.0.0.1', port});
+  });
+
+  test('resets the connection after inactivity', async () => {
+    const logSink = new TestLogSink();
+    const warnLc = new LogContext('warn', undefined, logSink);
+    const port = await listen(); // server accepts but never responds
+    const socket = inactivityTimeoutSocket(warnLc, 100)(factoryOptions(port));
+    await connected(socket);
+
+    // Simulate a query that never gets a response.
+    socket.write('BEGIN');
+    await new Promise<void>(resolve => socket.once('close', resolve));
+    expect(socket.destroyed).toBe(true);
+
+    // The reset is logged so that occurrences are visible in production.
+    expect(logSink.messages).toMatchObject([
+      [
+        'warn',
+        undefined,
+        [expect.stringContaining('after 100 ms of inactivity')],
+      ],
+    ]);
+  });
+
+  test('activity resets the inactivity timer', async () => {
+    const port = await listen(socket => {
+      // Server echoes everything back, i.e. the connection has activity.
+      socket.on('data', data => socket.write(data));
+    });
+    const socket = inactivityTimeoutSocket(lc, 200)(factoryOptions(port));
+    await connected(socket);
+
+    let closed = false;
+    socket.once('close', () => (closed = true));
+
+    // Keep the wire active well past the 200ms timeout.
+    const ping = setInterval(() => socket.write('ping'), 50);
+    cleanup.push(() => clearInterval(ping));
+    await new Promise(resolve => setTimeout(resolve, 600));
+    expect(closed).toBe(false);
+
+    // Then go silent (the server never initiates) and expect the reset.
+    clearInterval(ping);
+    await new Promise<void>(resolve => socket.once('close', resolve));
+    expect(socket.destroyed).toBe(true);
+  });
+
+  test('watchdog survives the removeAllListeners() of a TLS upgrade', async () => {
+    const port = await listen(); // server accepts but never responds
+    const socket = inactivityTimeoutSocket(lc, 100)(factoryOptions(port));
+    await connected(socket);
+
+    // postgres.js removes all listeners from the raw socket when upgrading
+    // it to TLS (secure() in connection.js). The watchdog must still fire.
+    socket.removeAllListeners();
+
+    socket.write('BEGIN');
+    await new Promise<void>(resolve => socket.once('close', resolve));
+    expect(socket.destroyed).toBe(true);
+  });
+
+  test('timeout of 0 disables the watchdog', async () => {
+    const port = await listen(); // server accepts but never responds
+    const socket = inactivityTimeoutSocket(lc, 0)(factoryOptions(port));
+    await connected(socket);
+
+    // No amount of silence resets the connection.
+    await new Promise(resolve => setTimeout(resolve, 300));
+    expect(socket.destroyed).toBe(false);
   });
 });

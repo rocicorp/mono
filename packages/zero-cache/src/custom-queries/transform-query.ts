@@ -195,6 +195,7 @@ export class CustomQueryTransformer {
             ctx,
             this.#shard,
             ['transform', request] satisfies TransformRequestMessage,
+            {operation: operation === 'validate' ? 'validate_auth' : 'query'},
           ),
       );
 
