@@ -23,6 +23,19 @@ export const ddlEventSchema = triggerEvent.extend({
   version: v.literal(PROTOCOL_VERSION),
   schema: publishedSchema,
   event: v.object({tag: v.string()}),
+  // Maps the OID of each published table to the `attnum`s of published
+  // columns that were created in the (upstream) transaction that emitted
+  // the event. Such columns are guaranteed to have the column default in
+  // all pre-existing rows, and can thus be replicated without backfill if
+  // the default value itself is replicable. Tables whose publication
+  // entries (e.g. column lists) were modified in the same transaction are
+  // excluded, since a newly *published* (as opposed to newly *created*)
+  // column may hold arbitrary values in existing rows.
+  //
+  // The field is absent in messages from older versions of the upstream
+  // functions (in which case backfill decisions fall back to the command
+  // tag heuristic), and `null` when there are no such columns.
+  newColumns: v.record(v.array(v.number())).nullable().optional(),
 });
 
 /**
