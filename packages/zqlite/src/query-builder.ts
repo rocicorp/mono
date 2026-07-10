@@ -342,11 +342,13 @@ function sargableLeadingStartBound(
   operator: '>' | '<',
   columnType: SchemaValue,
 ): SQLQuery | undefined {
-  if (value === null) {
-    return undefined;
-  }
-
-  if (columnType.optional === true) {
+  // A NULL bound value proves the column is nullable regardless of the
+  // column metadata, and a bare range bound is not sound there: `col >= NULL`
+  // is never true, so instead of being redundant it would annihilate the
+  // whole start constraint. A nullable column also cannot use a `<` bound,
+  // because the start constraint must retain the NULL group. For `>`, NULLs
+  // sort before the non-NULL bound, so `col >= value` remains sound.
+  if (value === null || (columnType.optional === true && operator === '<')) {
     return undefined;
   }
 

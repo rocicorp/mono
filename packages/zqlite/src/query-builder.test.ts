@@ -73,8 +73,9 @@ test('optional cursor columns keep IS equality for tie-break groups; a non-null 
     ),
   ).toMatchInlineSnapshot(`
     {
-      "text": "SELECT "owner","id" FROM "issues" WHERE (("owner" > ?) OR ("owner" IS ? AND "id" > ?) OR ("owner" IS ? AND "id" = ?)) ORDER BY "owner" asc, "id" asc",
+      "text": "SELECT "owner","id" FROM "issues" WHERE ("owner" >= ? AND (("owner" > ?) OR ("owner" IS ? AND "id" > ?) OR ("owner" IS ? AND "id" = ?))) ORDER BY "owner" asc, "id" asc",
       "values": [
+        "alice",
         "alice",
         "alice",
         "issue-1",
@@ -568,6 +569,48 @@ test('start constraint adds a sargable leading-column bound', () => {
   expect(text).toContain(`"workspaceID" = ? AND ("a" >= ? AND (("a" > ?)`);
   expect(plan).toMatch(/SEARCH activity USING (COVERING )?INDEX/);
   expect(plan).toMatch(/workspaceID=\? AND a>\?/);
+});
+
+test('nullable forward cursor keeps a sargable leading-column bound', () => {
+  const columns = {
+    a: {type: 'number', optional: true},
+    id: {type: 'number'},
+  } as const satisfies Record<string, SchemaValue>;
+  const lc = createSilentLogContext();
+  const db = new Database(lc, ':memory:');
+  db.exec(`
+    CREATE TABLE items (
+      a INTEGER,
+      id INTEGER PRIMARY KEY
+    );
+    CREATE INDEX items_sort ON items(a, id);
+  `);
+
+  const {text, values} = format(
+    buildSelectQuery(
+      'items',
+      columns,
+      undefined,
+      undefined,
+      [
+        ['a', 'asc'],
+        ['id', 'asc'],
+      ],
+      undefined,
+      {row: {a: 500, id: 123}, basis: 'after'},
+    ),
+  );
+  const plan = db
+    .prepare(`EXPLAIN QUERY PLAN ${text} LIMIT 2`)
+    .all<{detail: string}>(...values)
+    .map(r => r.detail)
+    .join('\n');
+
+  expect(text).toContain(`"a" >= ? AND (("a" > ?)`);
+  expect(plan).toMatch(
+    /SEARCH items USING (COVERING )?INDEX items_sort \(a>\?\)/,
+  );
+  expect(plan).not.toMatch(/USE TEMP B-TREE FOR ORDER BY/);
 });
 
 test('multiConstraintToSQL asserts on empty multiConstraint', () => {
