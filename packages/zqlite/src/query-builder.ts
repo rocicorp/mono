@@ -293,6 +293,12 @@ function nullableAwareEquality(
   value: unknown,
   columnType: SchemaValue,
 ): SQLQuery {
+  if (value === null) {
+    // A NULL bound value proves the column is nullable regardless of the
+    // column metadata, and `=` never matches NULL — `IS` selects the NULL
+    // tie-break group a cursor anchored on a NULL value needs.
+    return sql`${sql.ident(field)} IS ${value}`;
+  }
   // Use = instead of IS for non-nullable columns to enable better
   // index usage in SQLite.
   return columnType.optional === true
@@ -321,8 +327,12 @@ function nullableAwareRangeComparison(
     return comparison;
   }
 
+  // The bound is non-NULL here. NULLs sort before every non-NULL value, so
+  // `>` already excludes them and needs no guard, while `<` must admit the
+  // NULL group explicitly — a bare `col < ?` would silently drop NULL rows
+  // from a backward walk.
   return operator === '>'
-    ? sql`(${value} IS NULL OR ${comparison})`
+    ? comparison
     : sql`(${sql.ident(field)} IS NULL OR ${comparison})`;
 }
 
@@ -332,11 +342,13 @@ function sargableLeadingStartBound(
   operator: '>' | '<',
   columnType: SchemaValue,
 ): SQLQuery | undefined {
-  if (value === null) {
-    return undefined;
-  }
-
-  if (columnType.optional === true) {
+  // A NULL bound value proves the column is nullable regardless of the
+  // column metadata, and a bare range bound is not sound there: `col >= NULL`
+  // is never true, so instead of being redundant it would annihilate the
+  // whole start constraint. A nullable column also cannot use a `<` bound,
+  // because the start constraint must retain the NULL group. For `>`, NULLs
+  // sort before the non-NULL bound, so `col >= value` remains sound.
+  if (value === null || (columnType.optional === true && operator === '<')) {
     return undefined;
   }
 
