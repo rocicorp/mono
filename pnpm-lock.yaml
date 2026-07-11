@@ -134,8 +134,8 @@ importers:
         specifier: workspace:*
         version: link:../../packages/zero
       '@rocicorp/zero-virtual':
-        specifier: ^0.1.1
-        version: 0.1.4(@rocicorp/zero@packages+zero)(@tanstack/react-virtual@3.13.24(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(@tanstack/virtual-core@3.14.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
+        specifier: 0.6.0
+        version: 0.6.0(@rocicorp/zero@packages+zero)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(solid-js@1.9.13)
       '@schickling/fps-meter':
         specifier: ^0.1.2
         version: 0.1.2(react@19.2.6)
@@ -5680,14 +5680,20 @@ packages:
     engines: {bun: '>=1.1.0', node: 22.x || 24.x}
     hasBin: true
 
-  '@rocicorp/zero-virtual@0.1.4':
-    resolution: {integrity: sha512-RrGhLyOostGP7IMj1sfiZ9S1MwycHmv4YPm26RMBSCAlcku23thFNeE7t0q3zwEK9ykdQ1LbZ0rZAveg4dFpiw==}
+  '@rocicorp/zero-virtual@0.6.0':
+    resolution: {integrity: sha512-47xDpyqm0PWXWUnfRUFF7RHLzv3midhmRQlCeoN2Xs81swPCcKhFLiHu5yhrI9fzNrCiYVTmYHJ9DfYGrK6/OA==}
     peerDependencies:
-      '@rocicorp/zero': '>=0.25'
-      '@tanstack/react-virtual': ^3.13.0
-      '@tanstack/virtual-core': ^3.13.0
-      react: ^18.0.0 || ^19.0.0
-      react-dom: ^18.0.0 || ^19.0.0
+      '@rocicorp/zero': ^1.7.0
+      react: ^19.2.4
+      react-dom: ^19.2.4
+      solid-js: ^1.9.4
+    peerDependenciesMeta:
+      react:
+        optional: true
+      react-dom:
+        optional: true
+      solid-js:
+        optional: true
 
   '@rolldown/binding-android-arm64@1.0.1':
     resolution: {integrity: sha512-fJI3I0r3C3Oj/zdBCpaCmBRZYf07xpaq4yCfDDoSFm+beWNzbIl26puW8RraUdugoJw/95zerNOn6jasAhzSmg==}
@@ -18580,13 +18586,13 @@ snapshots:
       bindings: 1.5.0
       prebuild-install: 7.1.3
 
-  '@rocicorp/zero-virtual@0.1.4(@rocicorp/zero@packages+zero)(@tanstack/react-virtual@3.13.24(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(@tanstack/virtual-core@3.14.0)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)':
+  '@rocicorp/zero-virtual@0.6.0(@rocicorp/zero@packages+zero)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(solid-js@1.9.13)':
     dependencies:
       '@rocicorp/zero': link:packages/zero
-      '@tanstack/react-virtual': 3.13.24(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
-      '@tanstack/virtual-core': 3.14.0
+    optionalDependencies:
       react: 19.2.6
       react-dom: 19.2.6(react@19.2.6)
+      solid-js: 1.9.13
 
   '@rolldown/binding-android-arm64@1.0.1':
     optional: true

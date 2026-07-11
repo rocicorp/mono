@@ -48,7 +48,7 @@
     "@headlessui/react": "^2.1.8",
     "@octokit/core": "^6.1.2",
     "@rocicorp/zero": "workspace:*",
-    "@rocicorp/zero-virtual": "^0.1.1",
+    "@rocicorp/zero-virtual": "0.6.0",
     "@schickling/fps-meter": "^0.1.2",
     "@tanstack/react-virtual": "^3.13.19",
     "classnames": "^2.5.1",

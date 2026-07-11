@@ -1,4 +1,8 @@
-import {useZeroVirtualizer} from '@rocicorp/zero-virtual/react';
+import {
+  rowAttributes,
+  useZeroVirtualizer,
+  type VirtualRow,
+} from '@rocicorp/zero-virtual/react';
 import {useQuery, useZero} from '@rocicorp/zero/react';
 import classNames from 'classnames';
 import Cookies from 'js-cookie';
@@ -9,7 +13,6 @@ import React, {
   useMemo,
   useRef,
   useState,
-  type CSSProperties,
   type KeyboardEvent,
 } from 'react';
 import {toast} from 'react-toastify';
@@ -34,7 +37,7 @@ import {useElementSize} from '../../hooks/use-element-size.ts';
 import {useHash} from '../../hooks/use-hash.ts';
 import {useKeypress} from '../../hooks/use-keypress.ts';
 import {useLogin} from '../../hooks/use-login.tsx';
-import {useWouterPermalinkState} from '../../hooks/use-wouter-permalink-state.ts';
+import {useWouterScrollState} from '../../hooks/use-wouter-scroll-state.ts';
 import {appendParam, navigate, removeParam, setParam} from '../../navigate.ts';
 import {recordPageLoad} from '../../page-load-stats.ts';
 import {mark} from '../../perf-log.ts';
@@ -55,8 +58,7 @@ function markFirstRowRendered() {
 export const ITEM_SIZE = 56;
 
 type RowProps = {
-  issue: Issue | undefined;
-  top: number;
+  item: VirtualRow<Issue>;
   sortField: 'created' | 'modified';
   permalinkID: string | null;
   projectName: string;
@@ -71,21 +73,19 @@ type RowProps = {
 // anchors. `memo` additionally skips re-rendering rows whose props are
 // unchanged.
 const Row = memo(function Row({
-  issue,
-  top,
+  item,
   sortField,
   permalinkID,
   projectName,
   listContext,
   isLoggedIn,
 }: RowProps) {
-  const style: CSSProperties = {transform: `translateY(${top}px)`};
-
+  const {index, key, row: issue} = item;
   if (issue === undefined) {
     return (
       <div
         className={classNames('row', 'skeleton-shimmer')}
-        style={style}
+        {...rowAttributes(index, key)}
       ></div>
     );
   }
@@ -106,7 +106,7 @@ const Row = memo(function Row({
             issue.id === permalinkID || String(issue.shortID) === permalinkID,
         },
       )}
-      style={style}
+      {...rowAttributes(index, key)}
     >
       <IssueLink
         className={classNames('issue-title', {'issue-closed': !issue.open})}
@@ -252,18 +252,20 @@ export function ListPage({onReady}: {onReady: () => void}) {
     navigate(`#issue-${id}`);
   };
 
-  const [permalinkState, setPermalinkState] =
-    useWouterPermalinkState<IssueRowSort>();
+  const [scrollState, setScrollState] = useWouterScrollState<IssueRowSort>();
+
+  const queryOptions = textFilterQuery === textFilter ? CACHE_NAV : CACHE_NONE;
 
   const {
-    virtualizer,
-    rowAt,
+    items,
+    spaceBefore,
+    spaceAfter,
     complete,
     rowsEmpty,
     permalinkNotFound,
     estimatedTotal,
     total,
-  } = useZeroVirtualizer({
+  } = useZeroVirtualizer<typeof listContextParams, Issue, IssueRowSort>({
     estimateSize: () => ITEM_SIZE,
     getScrollElement: () => listRef.current,
     getRowKey: row => row.id,
@@ -271,27 +273,28 @@ export function ListPage({onReady}: {onReady: () => void}) {
     listContextParams,
     permalinkID,
 
-    getPageQuery: (
-      limit: number,
-      start: IssueRowSort | null,
-      dir: 'forward' | 'backward',
-    ) =>
-      queries.issueListV2({
+    getPageQuery: ({limit, start, dir}) => ({
+      query: queries.issueListV2({
         listContext: listContextParams,
         limit,
         start,
         dir,
         inclusive: start === null,
       }),
+      options: queryOptions,
+    }),
 
-    getSingleQuery: (id: string) => {
+    getSingleQuery: ({id}) => {
       // Allow short ID too.
       const {idField, idValue} = getIDFromString(id);
-      return queries.listIssueByID({
-        idField,
-        idValue,
-        listContext: listContextParams,
-      });
+      return {
+        query: queries.listIssueByID({
+          idField,
+          idValue,
+          listContext: listContextParams,
+        }),
+        options: queryOptions,
+      };
     },
 
     toStartRow: row => ({
@@ -300,10 +303,8 @@ export function ListPage({onReady}: {onReady: () => void}) {
       created: row.created,
     }),
 
-    options: textFilterQuery === textFilter ? CACHE_NAV : CACHE_NONE,
-
-    permalinkState,
-    onPermalinkStateChange: setPermalinkState,
+    scrollState,
+    onScrollStateChange: setScrollState,
   });
 
   useEffect(() => {
@@ -538,15 +539,11 @@ export function ListPage({onReady}: {onReady: () => void}) {
             }}
             ref={listRef}
           >
-            <div
-              className="virtual-list"
-              style={{height: virtualizer.getTotalSize()}}
-            >
-              {virtualizer.getVirtualItems().map(virtualRow => (
+            <div style={{paddingTop: spaceBefore, paddingBottom: spaceAfter}}>
+              {items.map(item => (
                 <Row
-                  key={virtualRow.key + ''}
-                  issue={rowAt(virtualRow.index)}
-                  top={virtualRow.start}
+                  key={item.key}
+                  item={item}
                   sortField={sortField}
                   permalinkID={permalinkID}
                   projectName={projectName}
