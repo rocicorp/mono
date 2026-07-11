@@ -3,6 +3,7 @@ import {useQuery, useZero} from '@rocicorp/zero/react';
 import classNames from 'classnames';
 import Cookies from 'js-cookie';
 import React, {
+  memo,
   useCallback,
   useEffect,
   useMemo,
@@ -17,6 +18,7 @@ import {useParams, useSearch} from 'wouter';
 import {must} from '../../../../../packages/shared/src/must.ts';
 import {
   queries,
+  type Issue,
   type IssueRowSort,
   type ListContext,
 } from '../../../shared/queries.ts';
@@ -43,7 +45,94 @@ import {getIDFromString} from '../issue/get-id.tsx';
 import {ToastContainer, ToastContent} from '../issue/toast-content.tsx';
 
 let firstRowRendered = false;
+function markFirstRowRendered() {
+  if (firstRowRendered === false) {
+    mark('first issue row rendered');
+    firstRowRendered = true;
+  }
+}
+
 export const ITEM_SIZE = 56;
+
+type RowProps = {
+  issue: Issue | undefined;
+  top: number;
+  sortField: 'created' | 'modified';
+  permalinkID: string | null;
+  projectName: string;
+  listContext: ListContext;
+  isLoggedIn: boolean;
+};
+
+// Hoisted to module scope (not defined inside `ListPage`) so its component
+// identity is stable across `ListPage` renders. A component defined during
+// render has a new function identity each render, which makes React remount
+// the entire row subtree — churning DOM that the virtualizer measures and
+// anchors. `memo` additionally skips re-rendering rows whose props are
+// unchanged.
+const Row = memo(function Row({
+  issue,
+  top,
+  sortField,
+  permalinkID,
+  projectName,
+  listContext,
+  isLoggedIn,
+}: RowProps) {
+  const style: CSSProperties = {transform: `translateY(${top}px)`};
+
+  if (issue === undefined) {
+    return (
+      <div
+        className={classNames('row', 'skeleton-shimmer')}
+        style={style}
+      ></div>
+    );
+  }
+
+  markFirstRowRendered();
+
+  const timestamp = sortField === 'modified' ? issue.modified : issue.created;
+  return (
+    <div
+      className={classNames(
+        'row',
+        issue.modified > (issue.viewState?.viewed ?? 0) && isLoggedIn
+          ? 'unread'
+          : null,
+        {
+          // TODO(arv): Extract into something cleaner
+          permalink:
+            issue.id === permalinkID || String(issue.shortID) === permalinkID,
+        },
+      )}
+      style={style}
+    >
+      <IssueLink
+        className={classNames('issue-title', {'issue-closed': !issue.open})}
+        issue={{projectName, id: issue.id, shortID: issue.shortID}}
+        title={issue.title}
+        listContext={listContext}
+      >
+        {issue.title}
+      </IssueLink>
+      <div className="issue-taglist">
+        {issue.labels.map(label => (
+          <Link
+            key={label.id}
+            className="pill label"
+            href={`?label=${label.name}`}
+          >
+            {label.name}
+          </Link>
+        ))}
+      </div>
+      <div className="issue-timestamp">
+        <RelativeTime timestamp={timestamp} />
+      </div>
+    </div>
+  );
+});
 
 export function ListPage({onReady}: {onReady: () => void}) {
   const login = useLogin();
@@ -295,70 +384,6 @@ export function ListPage({onReady}: {onReady: () => void}) {
     }
   };
 
-  const Row = ({index, style}: {index: number; style: CSSProperties}) => {
-    const issue = rowAt(index);
-    if (issue === undefined) {
-      return (
-        <div
-          className={classNames('row', 'skeleton-shimmer')}
-          style={{
-            ...style,
-          }}
-        ></div>
-      );
-    }
-
-    if (firstRowRendered === false) {
-      mark('first issue row rendered');
-      firstRowRendered = true;
-    }
-
-    const timestamp = sortField === 'modified' ? issue.modified : issue.created;
-    return (
-      <div
-        key={issue.id}
-        className={classNames(
-          'row',
-          issue.modified > (issue.viewState?.viewed ?? 0) &&
-            login.loginState !== undefined
-            ? 'unread'
-            : null,
-          {
-            // TODO(arv): Extract into something cleaner
-            permalink:
-              issue.id === permalinkID || String(issue.shortID) === permalinkID,
-          },
-        )}
-        style={{
-          ...style,
-        }}
-      >
-        <IssueLink
-          className={classNames('issue-title', {'issue-closed': !issue.open})}
-          issue={{projectName, id: issue.id, shortID: issue.shortID}}
-          title={issue.title}
-          listContext={listContext}
-        >
-          {issue.title}
-        </IssueLink>
-        <div className="issue-taglist">
-          {issue.labels.map(label => (
-            <Link
-              key={label.id}
-              className="pill label"
-              href={`?label=${label.name}`}
-            >
-              {label.name}
-            </Link>
-          ))}
-        </div>
-        <div className="issue-timestamp">
-          <RelativeTime timestamp={timestamp} />
-        </div>
-      </div>
-    );
-  };
-
   const [forceSearchMode, setForceSearchMode] = useState(false);
   const searchMode = forceSearchMode || Boolean(textFilter);
   const searchBox = useRef<HTMLHeadingElement>(null);
@@ -520,10 +545,13 @@ export function ListPage({onReady}: {onReady: () => void}) {
               {virtualizer.getVirtualItems().map(virtualRow => (
                 <Row
                   key={virtualRow.key + ''}
-                  index={virtualRow.index}
-                  style={{
-                    transform: `translateY(${virtualRow.start}px)`,
-                  }}
+                  issue={rowAt(virtualRow.index)}
+                  top={virtualRow.start}
+                  sortField={sortField}
+                  permalinkID={permalinkID}
+                  projectName={projectName}
+                  listContext={listContext}
+                  isLoggedIn={login.loginState !== undefined}
                 />
               ))}
             </div>
