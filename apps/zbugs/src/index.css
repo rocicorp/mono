@@ -661,10 +661,7 @@ textarea.autoResize {
   gap: 1rem;
   box-shadow: 0px -1px 0px 0px var(--color-light-outline) inset;
   white-space: nowrap;
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
+  position: relative;
 }
 
 .primary-content .row:hover {
