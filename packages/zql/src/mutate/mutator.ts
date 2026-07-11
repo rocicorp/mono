@@ -28,7 +28,7 @@ export type MutatorDefinitionTypes<
 
 export type MutatorDefinition<
   TInput extends ReadonlyJSONValue | undefined,
-  TOutput extends ReadonlyJSONValue | undefined,
+  TOutput,
   TContext = DefaultContext,
   TWrappedTransaction = DefaultWrappedTransaction,
 > = {
@@ -70,7 +70,7 @@ export function defineMutator<
 // Overload for validator
 export function defineMutator<
   TInput extends ReadonlyJSONValue | undefined = undefined,
-  TOutput extends ReadonlyJSONValue | undefined = TInput,
+  TOutput = TInput,
   TSchema extends Schema = DefaultSchema,
   TContext = DefaultContext,
   TWrappedTransaction = DefaultWrappedTransaction,
@@ -86,7 +86,7 @@ export function defineMutator<
 // Implementation
 export function defineMutator<
   TInput extends ReadonlyJSONValue | undefined = undefined,
-  TOutput extends ReadonlyJSONValue | undefined = TInput,
+  TOutput = TInput,
   TSchema extends Schema = DefaultSchema,
   TContext = DefaultContext,
   TWrappedTransaction = DefaultWrappedTransaction,
@@ -177,7 +177,7 @@ type TypedDefineMutator<
   // With validator
   <
     TInput extends ReadonlyJSONValue | undefined,
-    TOutput extends ReadonlyJSONValue | undefined,
+    TOutput,
   >(
     validator: StandardSchemaV1<TInput, TOutput>,
     mutator: MutatorDefinitionFunction<
@@ -189,7 +189,7 @@ type TypedDefineMutator<
 };
 
 export type MutatorDefinitionFunction<
-  TOutput extends ReadonlyJSONValue | undefined,
+  TOutput,
   TContext,
   TTransaction,
 > = (options: {
