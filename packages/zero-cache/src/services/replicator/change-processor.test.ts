@@ -3589,6 +3589,49 @@ describe('replicator/change-processor', () => {
     },
   ];
 
+  test('SET NOT NULL preserves compound index column order', () => {
+    initDB(
+      backupReplica,
+      `
+        CREATE TABLE foo(
+          id INT8,
+          tenant_id TEXT,
+          _0_version TEXT
+        );
+        CREATE UNIQUE INDEX foo_pkey ON foo(id);
+        CREATE INDEX foo_tenant_id_id ON foo(tenant_id, id);
+      `,
+    );
+
+    const messages = new ReplicationMessages({foo: 'id'});
+    backupProcessor.processMessage(lc, [
+      'begin',
+      messages.begin(),
+      {commitWatermark: '03'},
+    ]);
+    backupProcessor.processMessage(lc, [
+      'data',
+      messages.updateColumn(
+        'foo',
+        {name: 'tenant_id', spec: {pos: 2, dataType: 'TEXT'}},
+        {
+          name: 'tenant_id',
+          spec: {pos: 2, dataType: 'TEXT', notNull: true},
+        },
+      ),
+    ]);
+    backupProcessor.processMessage(lc, [
+      'commit',
+      messages.commit(),
+      {watermark: '03'},
+    ]);
+
+    const index = must(
+      listIndexes(backupReplica).find(({name}) => name === 'foo_tenant_id_id'),
+    );
+    expect(Object.keys(index.columns)).toEqual(['tenant_id', 'id']);
+  });
+
   for (const c of cases) {
     test(c.name, () => {
       for (const [replica, processor, log] of [
