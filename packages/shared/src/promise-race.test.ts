@@ -1,6 +1,7 @@
+import {resolver} from '@rocicorp/resolver';
 import {describe, expect, expectTypeOf, test} from 'vitest';
 import {assert} from './asserts.ts';
-import {promiseRace} from './promise-race.ts';
+import {getSubscriberCountForTesting, promiseRace} from './promise-race.ts';
 import {sleep} from './sleep.ts';
 
 describe('promiseRace with record', () => {
@@ -116,5 +117,109 @@ describe('promiseRace with record', () => {
 
     expect(['first', 'second']).toContain(result.key);
     expect(['value1', 'value2']).toContain(result.result);
+  });
+
+  test('supports the same promise instance under multiple keys', async () => {
+    const shared = sleep(0).then(() => 'x');
+
+    const result = await promiseRace({a: shared, b: shared});
+
+    expect(result).toEqual({key: 'a', status: 'fulfilled', result: 'x'});
+  });
+});
+
+describe('promiseRace reaction reuse', () => {
+  // Regression test: promiseRace used to attach a new `.then` reaction to
+  // every promise on every call. A reaction on a pending promise is only
+  // released when the promise settles, so racing a memoized long-lived
+  // pending promise (as zero-client's run loop does on every server message)
+  // grew its reaction list without bound.
+  test('attaches at most one reaction to a promise raced repeatedly', async () => {
+    const {promise, resolve} = resolver<string>();
+    let thenCalls = 0;
+    const longLived: PromiseLike<string> = {
+      // oxlint-disable-next-line unicorn/no-thenable
+      then: (onFulfilled, onRejected) => {
+        thenCalls++;
+        return promise.then(onFulfilled, onRejected);
+      },
+    };
+
+    for (let i = 0; i < 25; i++) {
+      const result = await promiseRace({
+        longLived,
+        message: Promise.resolve(i),
+      });
+
+      expect(result).toEqual({key: 'message', status: 'fulfilled', result: i});
+      // The settled race unsubscribed itself from the pending loser.
+      expect(getSubscriberCountForTesting(longLived)).toBe(0);
+    }
+
+    expect(thenCalls).toBe(1);
+
+    // The single cached reaction still delivers the eventual settlement.
+    resolve('done');
+    const late = await promiseRace({longLived, slow: sleep(10)});
+    expect(late).toEqual({
+      key: 'longLived',
+      status: 'fulfilled',
+      result: 'done',
+    });
+
+    // The settlement is cached and replayed to later races.
+    const replay = await promiseRace({longLived, other: Promise.resolve('x')});
+    expect(replay).toEqual({
+      key: 'longLived',
+      status: 'fulfilled',
+      result: 'done',
+    });
+    expect(thenCalls).toBe(1);
+  });
+
+  test('unsubscribes settled races from pending losers', async () => {
+    const {promise: pendingForever} = resolver<void>();
+    const {promise: gate, resolve: openGate} = resolver<string>();
+
+    const race1 = promiseRace({pendingForever, gate});
+    const race2 = promiseRace({pendingForever, gate});
+
+    expect(getSubscriberCountForTesting(pendingForever)).toBe(2);
+
+    openGate('go');
+    expect(await race1).toEqual({
+      key: 'gate',
+      status: 'fulfilled',
+      result: 'go',
+    });
+    expect(await race2).toEqual({
+      key: 'gate',
+      status: 'fulfilled',
+      result: 'go',
+    });
+
+    expect(getSubscriberCountForTesting(pendingForever)).toBe(0);
+    expect(getSubscriberCountForTesting(gate)).toBe(0);
+  });
+
+  test('replays a cached rejection to later races', async () => {
+    const error = new Error('failed later');
+    const {promise, reject} = resolver<void>();
+
+    const first = await promiseRace({
+      pending: promise,
+      winner: Promise.resolve('w'),
+    });
+    expect(first.key).toBe('winner');
+
+    reject(error);
+
+    await expect(promiseRace({pending: promise, slow: sleep(10)})).rejects.toBe(
+      error,
+    );
+    // Again, once the settlement is cached.
+    await expect(promiseRace({pending: promise, slow: sleep(10)})).rejects.toBe(
+      error,
+    );
   });
 });
