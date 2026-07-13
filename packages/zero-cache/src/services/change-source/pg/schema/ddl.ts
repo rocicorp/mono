@@ -36,6 +36,33 @@ export const ddlEventSchema = triggerEvent.extend({
   // functions (in which case backfill decisions fall back to the command
   // tag heuristic), and `null` when there are no such columns.
   newColumns: v.record(v.array(v.number())).nullable().optional(),
+  // Maps the OID of each published table to the "missing value"
+  // (i.e. `pg_attribute.attmissingval`) of each column (keyed by `attnum`)
+  // in `newColumns` that has one. This is the value that all pre-existing
+  // rows contain for a column that was added with Postgres' fast "default
+  // for all rows" optimization, and it is unaffected by later changes to
+  // the column default (which only apply to subsequently created rows).
+  //
+  // A column can thus be replicated without backfill iff its current
+  // default is a replicable expression that evaluates to its missing
+  // value (see `defaultValueMatches()`), as replicating the default is
+  // then guaranteed to reproduce the contents of pre-existing rows.
+  // Columns without an entry (e.g. added without a default, with a
+  // volatile default, or with a default assigned in a later command) must
+  // be backfilled.
+  //
+  // Only values with scalar JSON encodings (numbers, strings, and
+  // booleans) are reported, as only those can provably match a
+  // replicable default expression; columns with other missing values
+  // (e.g. arrays) are not reported, and are thus backfilled.
+  //
+  // Like `newColumns`, the field is absent in messages from older
+  // versions of the upstream functions, and `null` when there are no such
+  // columns.
+  missingValues: v
+    .record(v.record(v.union(v.number(), v.string(), v.boolean())))
+    .nullable()
+    .optional(),
 });
 
 /**
@@ -210,6 +237,7 @@ DECLARE
   prev_schema_specs JSON;
   schema_specs JSON;
   new_columns JSON;
+  missing_values JSON;
   message TEXT;
 BEGIN
   SELECT current FROM ${schema}."publishedSchema" INTO prev_schema_specs;
@@ -219,17 +247,20 @@ BEGIN
     UPDATE ${schema}."publishedSchema" SET current = schema_specs;
 
     -- Report the published columns that were created in the current
-    -- transaction (i.e. pg_attribute rows inserted by this transaction).
-    -- All pre-existing rows of such columns are guaranteed to contain the
-    -- column default, allowing the zero-cache to replicate the default
-    -- directly (i.e. without backfill) if the default value is replicable.
+    -- transaction (i.e. pg_attribute rows inserted by this transaction),
+    -- along with the "missing value" (attmissingval) of each column that
+    -- has one. The missing value is what all pre-existing rows contain
+    -- for a column added with a non-volatile default, and is unaffected
+    -- by later changes to the column default; the zero-cache can thus
+    -- replicate such a column without backfill iff its current default
+    -- evaluates to its missing value.
     --
     -- Tables whose publication entries were touched in the same transaction
     -- (e.g. ALTER PUBLICATION ... SET TABLE with a column list) are excluded,
     -- as a newly *published* column may be a pre-existing column with
     -- arbitrary values in existing rows, which requires a backfill.
-    SELECT json_object_agg(rel_oid, attnums) INTO new_columns FROM (
-      SELECT pc.oid::int8 AS rel_oid, json_agg(DISTINCT attnum) AS attnums
+    WITH new_cols AS (
+      SELECT DISTINCT pc.oid AS rel_oid, attnum, atthasmissing
         FROM pg_attribute
         JOIN pg_class pc ON pc.oid = attrelid
         JOIN pg_namespace pns ON pns.oid = pc.relnamespace
@@ -248,8 +279,23 @@ BEGIN
                 AND pub.pubname IN (${lit(publications)})
                 AND rel.xmin = pg_current_xact_id()::xid
           )
-        GROUP BY pc.oid
-    ) new_cols;
+    )
+    SELECT
+      (SELECT json_object_agg(rel_oid::int8, attnums) FROM (
+        SELECT rel_oid, json_agg(attnum) AS attnums
+          FROM new_cols GROUP BY rel_oid
+      ) attnums_by_table),
+      (SELECT json_object_agg(rel_oid::int8, vals) FROM (
+        SELECT n.rel_oid,
+               json_object_agg(n.attnum, array_to_json(a.attmissingval)->0) AS vals
+          FROM new_cols n
+          JOIN pg_attribute a ON a.attrelid = n.rel_oid AND a.attnum = n.attnum
+          WHERE n.atthasmissing
+            AND json_typeof(array_to_json(a.attmissingval)->0) IN
+              ('number', 'string', 'boolean')
+          GROUP BY n.rel_oid
+      ) vals_by_table)
+      INTO new_columns, missing_values;
   ELSIF event_type = 'ddlStart' THEN
     -- ddlStart events are always be emitted to allow the zero-cache
     -- to track the context of the current command tag in the face of
@@ -269,6 +315,7 @@ BEGIN
     'previousSchema', prev_schema_specs,
     'schema', schema_specs,
     'newColumns', new_columns,
+    'missingValues', missing_values,
     'event', json_build_object('tag', tag),
     'context', ${schema}.get_trigger_context()
   ) INTO message;

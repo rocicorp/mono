@@ -142,6 +142,68 @@ export function mapPostgresToLiteDefault(
   );
 }
 
+/**
+ * Returns whether a column's default expression (as reported by
+ * `pg_get_expr(adbin, adrelid)` in the published schema) is a simple
+ * literal that evaluates to exactly `missingValue` — the JSON encoding of
+ * the column's `pg_attribute.attmissingval`, i.e. the value that all
+ * pre-existing rows contain for a column that was added with Postgres'
+ * fast "default for all rows" optimization.
+ *
+ * This is the condition under which an added column can be replicated by
+ * applying its default directly (i.e. without backfill): the default is
+ * both replicable and guaranteed to reproduce the contents of
+ * pre-existing rows. Note that the current default may differ from the
+ * missing value, e.g. if the default was changed (in the same transaction
+ * or a later one) after the column was added.
+ *
+ * The comparison is conservative: any expression or value that is not
+ * confidently understood compares as `false`, for which callers fall back
+ * to a backfill. In particular, integers outside of the safe range are
+ * never considered equal, since both sides may silently lose precision
+ * when parsed into a `number`.
+ */
+export function defaultValueMatches(
+  dflt: string | null | undefined,
+  missingValue: unknown,
+): boolean {
+  if (dflt == null || missingValue === undefined || missingValue === null) {
+    return false;
+  }
+  if (NUMERIC_LITERAL_REGEX.test(dflt)) {
+    return (
+      typeof missingValue === 'number' && numberMatches(missingValue, dflt)
+    );
+  }
+  if (BOOLEAN_LITERAL_REGEX.test(dflt)) {
+    return missingValue === (dflt === 'true');
+  }
+  const match = QUOTED_STRING_WITH_CAST_REGEX.exec(dflt);
+  if (match) {
+    const literal = match[1].slice(1, -1).replaceAll(`''`, `'`);
+    if (typeof missingValue === 'string') {
+      return missingValue === literal;
+    }
+    // Values of non-text types may be expressed as quoted literals with a
+    // cast (e.g. `'2147483648'::bigint`), while their missing values are
+    // JSON-encoded as numbers.
+    if (typeof missingValue === 'number') {
+      return numberMatches(missingValue, literal);
+    }
+    return false;
+  }
+  return false;
+}
+
+function numberMatches(missingValue: number, literal: string): boolean {
+  return (
+    (Number.isSafeInteger(missingValue) ||
+      (!Number.isInteger(missingValue) &&
+        Math.abs(missingValue) < Number.MAX_SAFE_INTEGER)) &&
+    String(missingValue) === literal
+  );
+}
+
 export function mapPostgresToLiteColumn(
   table: string,
   column: {name: string; spec: ColumnSpec},

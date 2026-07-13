@@ -2254,6 +2254,45 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
       [],
       [],
     ],
+    [
+      'column with unchanged text default covered by update_schemas()',
+      /*sql*/ `
+      ALTER TABLE your.new_table ADD "label" TEXT DEFAULT 'unlabeled';
+      SELECT ${APP_ID}_0.update_schemas();
+      `,
+      [
+        [
+          {
+            tag: 'add-column',
+            table: {schema: 'your', name: 'new_table'},
+            column: {
+              name: 'label',
+              spec: {
+                pos: expect.any(Number),
+                dataType: 'text',
+                dflt: `'unlabeled'::text`,
+              },
+            },
+            // No `backfill` field: the current default matches the value
+            // stamped into pre-existing rows when the column was created
+            // (i.e. attmissingval), so the default is replicated directly.
+          },
+        ],
+      ],
+      {
+        ['your.new_table']: [
+          {
+            id: 99n,
+            enabled: 1n,
+            num: 30n,
+            changed_default: 1n,
+            label: 'unlabeled',
+          },
+        ],
+      },
+      [],
+      [],
+    ],
   ] satisfies [
     name: string,
     statements: string | string[],

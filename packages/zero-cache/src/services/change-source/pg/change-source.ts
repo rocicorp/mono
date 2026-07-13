@@ -19,6 +19,7 @@ import {
 import * as v from '../../../../../shared/src/valita.ts';
 import {Database} from '../../../../../zqlite/src/db.ts';
 import {
+  defaultValueMatches,
   mapPostgresToLiteColumn,
   UnsupportedColumnDefaultError,
 } from '../../../db/pg-to-lite.ts';
@@ -1275,6 +1276,7 @@ class ChangeMaker {
             must(nextTbl.get(id)),
             tag,
             event.newColumns ?? null,
+            event.missingValues ?? null,
           ),
         );
       }
@@ -1320,6 +1322,7 @@ class ChangeMaker {
     newTable: PublishedTableWithReplicaIdentity,
     ddlTag: string,
     newColumns: Record<string, number[]> | null,
+    missingValues: Record<string, Record<string, unknown>> | null,
   ): SchemaChange[] {
     const changes: SchemaChange[] = [];
     if (
@@ -1379,13 +1382,19 @@ class ChangeMaker {
       }
     }
 
-    // Only columns known to have been *created* by the current command can
-    // potentially skip backfill (if their defaults are replicable), namely:
-    // * columns introduced by an `ALTER TABLE` statement
+    // Only columns known to hold a specific value in all pre-existing rows
+    // can potentially skip backfill, namely:
+    // * columns introduced by an `ALTER TABLE` statement, which diff as a
+    //   single command and thus hold the default reported in the schema.
     // * columns reported by the event's `newColumns` field to have been
-    //   created in the same (upstream) transaction, which covers the manual
-    //   update_schemas() hook when invoked in the transaction that performed
-    //   the schema change.
+    //   created in the same (upstream) transaction — which covers the
+    //   manual update_schemas() hook when invoked in the transaction that
+    //   performed the schema change — *provided that* the current default
+    //   matches the column's "missing value" (i.e. the value stamped into
+    //   pre-existing rows at creation, reported in `missingValues`). The
+    //   two can differ, e.g. if the default was changed after the column
+    //   was added but before the update_schemas() call, in which case the
+    //   column must be backfilled.
     // All other scenarios in which columns are introduced, e.g.
     // * ALTER PUBLICATION
     // * COMMENT
@@ -1393,6 +1402,7 @@ class ChangeMaker {
     // must be backfilled, as a newly *published* column may contain
     // arbitrary values in existing rows.
     const newColAttNums = new Set(newColumns?.[String(newTable.oid)] ?? []);
+    const tableMissingValues = missingValues?.[String(newTable.oid)];
 
     // ADD
     for (const id of added) {
@@ -1405,7 +1415,11 @@ class ChangeMaker {
         tableMetadata: getMetadata(newTable),
       };
       const alwaysBackfill =
-        ddlTag !== 'ALTER TABLE' && !newColAttNums.has(spec.pos);
+        ddlTag !== 'ALTER TABLE' &&
+        !(
+          newColAttNums.has(spec.pos) &&
+          defaultValueMatches(spec.dflt, tableMissingValues?.[spec.pos])
+        );
       if (alwaysBackfill) {
         addColumn.column.spec.dflt = null;
         addColumn.backfill = {attNum: spec.pos} satisfies ColumnMetadata;
