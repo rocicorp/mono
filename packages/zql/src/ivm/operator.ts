@@ -41,6 +41,55 @@ export interface Input extends InputBase {
    * 'yield', it must be yielded to the caller of push immediately.
    */
   fetch(req: FetchRequest): Stream<Node | 'yield'>;
+
+  /**
+   * Notifies this input that the rows matching `constraint` are permanently
+   * leaving the view of the pipeline above it (their partition is being
+   * discarded, e.g. because the parent row of a partitioned Take/Cap was
+   * removed). Operators that maintain per-partition state (Take, Cap) delete
+   * the state for that partition; Joins recursively clean up child-pipeline
+   * partitions keyed by the departing rows; other operators forward the call
+   * to their upstream input(s).
+   *
+   * Optional: an input without this method is treated as a leaf with no
+   * per-partition state (see {@link cleanupPartition}).
+   *
+   * The stream may contain 'yield' with the same contract as `fetch`/`push`.
+   */
+  cleanupPartition?: ((constraint: Constraint) => Stream<'yield'>) | undefined;
+
+  /**
+   * Whether this input's upstream chain contains per-partition state that
+   * {@link cleanupPartition} could delete. Used to skip cleanup work
+   * (including the fetches needed to drive it) for pipelines without
+   * partitioned operators.
+   *
+   * Optional: an input without this method is treated as having no
+   * per-partition state (see {@link inputNeedsPartitionCleanup}).
+   */
+  needsPartitionCleanup?: (() => boolean) | undefined;
+}
+
+/**
+ * Returns whether `input`'s upstream chain contains per-partition state that
+ * {@link Input.cleanupPartition} could delete. Inputs that do not implement
+ * `needsPartitionCleanup` (e.g. source connections or external custom
+ * sources) are leaves with no per-partition state.
+ */
+export function inputNeedsPartitionCleanup(input: Input): boolean {
+  return input.needsPartitionCleanup?.() ?? false;
+}
+
+/**
+ * Forwards {@link Input.cleanupPartition} to `input` if it implements it.
+ */
+export function* cleanupPartition(
+  input: Input,
+  constraint: Constraint,
+): Stream<'yield'> {
+  if (input.cleanupPartition) {
+    yield* input.cleanupPartition(constraint);
+  }
 }
 
 /**
@@ -137,4 +186,31 @@ export interface Storage {
    */
   scan(options?: {prefix: string}): Stream<[string, JSONValue]>;
   del(key: string): void;
+  /**
+   * Deletes all entries. Called when the operator owning this storage is
+   * destroyed. Optional: {@link clearStorage} falls back to scan + del.
+   */
+  truncate?: (() => void) | undefined;
+}
+
+/**
+ * Deletes all entries in `storage`, using {@link Storage.truncate} when
+ * available.
+ */
+export function clearStorage(storage: {
+  scan(options?: {prefix: string}): Stream<[key: string, value: unknown]>;
+  del(key: string): void;
+  truncate?: (() => void) | undefined;
+}): void {
+  if (storage.truncate) {
+    storage.truncate();
+    return;
+  }
+  const keys: string[] = [];
+  for (const [key] of storage.scan()) {
+    keys.push(key);
+  }
+  for (const key of keys) {
+    storage.del(key);
+  }
 }

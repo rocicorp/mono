@@ -15,8 +15,11 @@ import {
 import {ChangeIndex} from '../../../../zql/src/ivm/change-index.ts';
 import {ChangeType} from '../../../../zql/src/ivm/change-type.ts';
 import type {Change} from '../../../../zql/src/ivm/change.ts';
+import type {Constraint} from '../../../../zql/src/ivm/constraint.ts';
 import type {Node} from '../../../../zql/src/ivm/data.ts';
 import {
+  cleanupPartition,
+  inputNeedsPartitionCleanup,
   skipYields,
   throwOutput,
   type FetchRequest,
@@ -1427,6 +1430,14 @@ class QueryFailureLoggingOperator implements Input, Output {
 
   fetch(req: FetchRequest): Iterable<Node | 'yield'> {
     return this.#input.fetch(req);
+  }
+
+  needsPartitionCleanup(): boolean {
+    return inputNeedsPartitionCleanup(this.#input);
+  }
+
+  *cleanupPartition(constraint: Constraint): Iterable<'yield'> {
+    yield* cleanupPartition(this.#input, constraint);
   }
 
   *push(change: Change): Iterable<'yield'> {

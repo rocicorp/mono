@@ -1,7 +1,15 @@
 import type {BuilderDelegate} from '../builder/builder.ts';
 import type {Change} from './change.ts';
+import type {Constraint} from './constraint.ts';
 import {type Node} from './data.ts';
-import type {FetchRequest, Input, InputBase, Output} from './operator.ts';
+import {
+  cleanupPartition,
+  inputNeedsPartitionCleanup,
+  type FetchRequest,
+  type Input,
+  type InputBase,
+  type Output,
+} from './operator.ts';
 import type {SourceSchema} from './schema.ts';
 import {type Stream} from './stream.ts';
 
@@ -75,6 +83,14 @@ export class FilterStart implements FilterInput, Output {
     this.#input.destroy();
   }
 
+  needsPartitionCleanup(): boolean {
+    return inputNeedsPartitionCleanup(this.#input);
+  }
+
+  *cleanupPartition(constraint: Constraint): Stream<'yield'> {
+    yield* cleanupPartition(this.#input, constraint);
+  }
+
   getSchema(): SourceSchema {
     return this.#input.getSchema();
   }
@@ -138,6 +154,16 @@ export class FilterEnd implements Input, FilterOutput {
 
   getSchema(): SourceSchema {
     return this.#input.getSchema();
+  }
+
+  needsPartitionCleanup(): boolean {
+    // The filter sub-graph is stateless; partition state cleanup passes
+    // straight through to the input below FilterStart.
+    return this.#start.needsPartitionCleanup();
+  }
+
+  *cleanupPartition(constraint: Constraint): Stream<'yield'> {
+    yield* this.#start.cleanupPartition(constraint);
   }
 
   *push(change: Change) {

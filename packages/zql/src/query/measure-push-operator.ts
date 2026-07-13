@@ -1,6 +1,9 @@
 import type {Change} from '../ivm/change.ts';
+import type {Constraint} from '../ivm/constraint.ts';
 import type {Node} from '../ivm/data.ts';
 import {
+  cleanupPartition,
+  inputNeedsPartitionCleanup,
   throwOutput,
   type FetchRequest,
   type Input,
@@ -48,6 +51,14 @@ export class MeasurePushOperator implements Operator {
 
   destroy(): void {
     this.#input.destroy();
+  }
+
+  needsPartitionCleanup(): boolean {
+    return inputNeedsPartitionCleanup(this.#input);
+  }
+
+  *cleanupPartition(constraint: Constraint): Stream<'yield'> {
+    yield* cleanupPartition(this.#input, constraint);
   }
 
   *push(change: Change): Stream<'yield'> {

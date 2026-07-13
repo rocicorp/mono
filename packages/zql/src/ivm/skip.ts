@@ -8,9 +8,12 @@ import {
   type ChildChange,
   type RemoveChange,
 } from './change.ts';
+import type {Constraint} from './constraint.ts';
 import type {Comparator, Node} from './data.ts';
 import {maybeSplitAndPushEditChange} from './maybe-split-and-push-edit-change.ts';
 import {
+  cleanupPartition,
+  inputNeedsPartitionCleanup,
   throwOutput,
   type FetchRequest,
   type Input,
@@ -78,6 +81,14 @@ export class Skip implements Operator {
 
   destroy(): void {
     this.#input.destroy();
+  }
+
+  needsPartitionCleanup(): boolean {
+    return inputNeedsPartitionCleanup(this.#input);
+  }
+
+  *cleanupPartition(constraint: Constraint): Stream<'yield'> {
+    yield* cleanupPartition(this.#input, constraint);
   }
 
   #shouldBePresent(row: Row): boolean {

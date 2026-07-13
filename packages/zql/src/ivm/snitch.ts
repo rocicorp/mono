@@ -3,6 +3,7 @@ import type {Row} from '../../../zero-protocol/src/data.ts';
 import {ChangeIndex} from './change-index.ts';
 import {ChangeType} from './change-type.ts';
 import type {Change} from './change.ts';
+import type {Constraint} from './constraint.ts';
 import type {Node} from './data.ts';
 import type {
   FilterInput,
@@ -10,6 +11,8 @@ import type {
   FilterOutput,
 } from './filter-operators.ts';
 import {
+  cleanupPartition,
+  inputNeedsPartitionCleanup,
   type FetchRequest,
   type Input,
   type Operator,
@@ -53,6 +56,14 @@ export class Snitch implements Operator {
 
   getSchema(): SourceSchema {
     return this.#input.getSchema();
+  }
+
+  needsPartitionCleanup(): boolean {
+    return inputNeedsPartitionCleanup(this.#input);
+  }
+
+  *cleanupPartition(constraint: Constraint): Stream<'yield'> {
+    yield* cleanupPartition(this.#input, constraint);
   }
 
   #log(message: SnitchMessage) {

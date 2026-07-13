@@ -2,8 +2,16 @@ import {assert} from '../../../shared/src/asserts.ts';
 import {must} from '../../../shared/src/must.ts';
 import {ChangeIndex} from './change-index.ts';
 import type {Change} from './change.ts';
+import type {Constraint} from './constraint.ts';
 import type {Node} from './data.ts';
-import type {FetchRequest, Input, Operator, Output} from './operator.ts';
+import {
+  cleanupPartition,
+  inputNeedsPartitionCleanup,
+  type FetchRequest,
+  type Input,
+  type Operator,
+  type Output,
+} from './operator.ts';
 import type {SourceSchema} from './schema.ts';
 import type {Stream} from './stream.ts';
 import type {UnionFanIn} from './union-fan-in.ts';
@@ -42,6 +50,14 @@ export class UnionFanOut implements Operator {
 
   fetch(req: FetchRequest): Stream<Node | 'yield'> {
     return this.#input.fetch(req);
+  }
+
+  needsPartitionCleanup(): boolean {
+    return inputNeedsPartitionCleanup(this.#input);
+  }
+
+  *cleanupPartition(constraint: Constraint): Stream<'yield'> {
+    yield* cleanupPartition(this.#input, constraint);
   }
 
   destroy(): void {

@@ -15,12 +15,15 @@ import {constraintsAreCompatible, type Constraint} from './constraint.ts';
 import type {Node} from './data.ts';
 import {
   buildJoinConstraint,
+  cleanupChildJoinPartitionForRow,
+  cleanupJoinPartition,
   generateWithOverlayNoYield,
   isJoinMatch,
   rowEqualsForCompoundKey,
 } from './join-utils.ts';
 import {mergeSortedStreams} from './memory-source.ts';
 import {
+  inputNeedsPartitionCleanup,
   throwOutput,
   type FetchRequest,
   type Input,
@@ -156,6 +159,31 @@ export class FlippedJoin implements Input {
 
   getSchema(): SourceSchema {
     return this.#schema;
+  }
+
+  needsPartitionCleanup(): boolean {
+    return inputNeedsPartitionCleanup(this.#parent);
+  }
+
+  *cleanupPartition(constraint: Constraint): Stream<'yield'> {
+    yield* cleanupJoinPartition(
+      this.#parent,
+      this.#child,
+      this.#parentKey,
+      this.#childKey,
+      constraint,
+    );
+  }
+
+  *#cleanupChildPartitionForRow(row: Row): Stream<'yield'> {
+    yield* cleanupChildJoinPartitionForRow(
+      this.#parent,
+      this.#child,
+      this.#parentKey,
+      this.#childKey,
+      row,
+      undefined,
+    );
   }
 
   *fetch(req: FetchRequest): Stream<Node | 'yield'> {
@@ -517,6 +545,12 @@ export class FlippedJoin implements Input {
       }
     }
     if (!hasRelatedChild) {
+      // Even parents with no related children have child-pipeline partition
+      // state (fetching the child above creates an empty partition), so
+      // removes must still clean it up.
+      if (change[ChangeIndex.TYPE] === ChangeType.REMOVE) {
+        yield* this.#cleanupChildPartitionForRow(change[ChangeIndex.NODE].row);
+      }
       return;
     }
 
@@ -532,6 +566,7 @@ export class FlippedJoin implements Input {
           makeRemoveChange(flip(change[ChangeIndex.NODE])),
           this,
         );
+        yield* this.#cleanupChildPartitionForRow(change[ChangeIndex.NODE].row);
         break;
       case ChangeType.CHILD: {
         yield* this.#output.push(

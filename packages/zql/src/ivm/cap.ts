@@ -7,6 +7,7 @@ import {makeAddChange, type Change, type EditChange} from './change.ts';
 import type {Constraint} from './constraint.ts';
 import type {Comparator, Node} from './data.ts';
 import {
+  clearStorage,
   throwOutput,
   type FetchRequest,
   type Input,
@@ -31,6 +32,8 @@ interface CapStorage {
   get(key: string): CapState | undefined;
   set(key: string, value: CapState): void;
   del(key: string): void;
+  scan(options?: {prefix: string}): Stream<[key: string, value: unknown]>;
+  truncate?: (() => void) | undefined;
 }
 
 /**
@@ -292,8 +295,26 @@ export class Cap implements Operator {
     // If not in our set, drop
   }
 
+  needsPartitionCleanup(): boolean {
+    return this.#partitionKey !== undefined;
+  }
+
+  cleanupPartition(constraint: Constraint): Stream<'yield'> {
+    if (
+      this.#partitionKey &&
+      constraintMatchesPartitionKey(constraint, this.#partitionKey)
+    ) {
+      this.#storage.del(getCapStateKey(this.#partitionKey, constraint));
+    }
+    // Cap is a view boundary: rows upstream of it remain in their
+    // pipelines when a downstream partition is discarded, so the call is
+    // not forwarded to the input (see Take.cleanupPartition).
+    return [];
+  }
+
   destroy(): void {
     this.#input.destroy();
+    clearStorage(this.#storage);
   }
 }
 

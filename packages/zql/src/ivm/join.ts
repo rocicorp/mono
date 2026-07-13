@@ -10,15 +10,19 @@ import {
   makeRemoveChange,
   type Change,
 } from './change.ts';
+import type {Constraint} from './constraint.ts';
 import type {Node} from './data.ts';
 import {
   buildJoinConstraint,
+  cleanupChildJoinPartitionForRow,
+  cleanupJoinPartition,
   generateWithOverlay,
   generateWithOverlayUnordered,
   isJoinMatch,
   rowEqualsForCompoundKey,
 } from './join-utils.ts';
 import {
+  inputNeedsPartitionCleanup,
   throwOutput,
   type FetchRequest,
   type Input,
@@ -149,6 +153,7 @@ export class Join implements Input {
           ),
           this,
         );
+        yield* this.#cleanupChildPartitionForRow(change[ChangeIndex.NODE].row);
         break;
       case ChangeType.CHILD:
         yield* this.#output.push(
@@ -216,6 +221,31 @@ export class Join implements Input {
       default:
         unreachable(change);
     }
+  }
+
+  needsPartitionCleanup(): boolean {
+    return inputNeedsPartitionCleanup(this.#parent);
+  }
+
+  *cleanupPartition(constraint: Constraint): Stream<'yield'> {
+    yield* cleanupJoinPartition(
+      this.#parent,
+      this.#child,
+      this.#parentKey,
+      this.#childKey,
+      constraint,
+    );
+  }
+
+  *#cleanupChildPartitionForRow(row: Row): Stream<'yield'> {
+    yield* cleanupChildJoinPartitionForRow(
+      this.#parent,
+      this.#child,
+      this.#parentKey,
+      this.#childKey,
+      row,
+      undefined,
+    );
   }
 
   *#pushChildChange(childRow: Row, change: Change): Stream<'yield'> {

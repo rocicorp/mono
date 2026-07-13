@@ -4,9 +4,112 @@ import type {Row, Value} from '../../../zero-protocol/src/data.ts';
 import {ChangeIndex} from './change-index.ts';
 import {ChangeType} from './change-type.ts';
 import type {Change} from './change.ts';
+import {constraintMatchesRow, type Constraint} from './constraint.ts';
 import {compareValues, valuesEqual, type Node} from './data.ts';
+import {
+  cleanupPartition,
+  inputNeedsPartitionCleanup,
+  type Input,
+} from './operator.ts';
 import type {SourceSchema} from './schema.ts';
 import type {Stream} from './stream.ts';
+
+/**
+ * Implements `Input.cleanupPartition` for Join and FlippedJoin.
+ *
+ * The rows matching `constraint` are leaving the view of the pipeline above
+ * the join. They actually leave the join's parent input only if the parent
+ * chain maintains per-partition state for them (a partitioned Take/Cap).
+ * Otherwise they remain present upstream: any child-pipeline state keyed off
+ * them stays live, is maintained by pushes, and is cleaned up when the rows
+ * are removed upstream.
+ */
+export function* cleanupJoinPartition(
+  parent: Input,
+  child: Input,
+  parentKey: CompoundKey,
+  childKey: CompoundKey,
+  constraint: Constraint,
+): Stream<'yield'> {
+  if (!inputNeedsPartitionCleanup(parent)) {
+    return;
+  }
+  if (child.cleanupPartition && inputNeedsPartitionCleanup(child)) {
+    // Recursively clean up child partitions keyed off the departing rows.
+    // The departing rows are enumerated (deduped by parent key value)
+    // before the parent chain deletes its own partition state below, while
+    // they can still be fetched.
+    const departing = new Map<string, Row>();
+    for (const node of parent.fetch({constraint})) {
+      if (node === 'yield') {
+        yield node;
+        continue;
+      }
+      const key = JSON.stringify(parentKey.map(k => node.row[k] ?? null));
+      if (!departing.has(key)) {
+        departing.set(key, node.row);
+      }
+    }
+    for (const row of departing.values()) {
+      yield* cleanupChildJoinPartitionForRow(
+        parent,
+        child,
+        parentKey,
+        childKey,
+        row,
+        constraint,
+      );
+    }
+  }
+  yield* cleanupPartition(parent, constraint);
+}
+
+/**
+ * Deletes the child pipeline's partition state keyed off `row`'s parent key,
+ * unless some other row with the same parent key value is still present in
+ * the join's parent input (in which case the partition is still reachable
+ * and its state must be kept).
+ *
+ * Called after `row` was removed from the parent input, or, during
+ * {@link cleanupJoinPartition}, for each departing row. In the latter case
+ * `excludeConstraint` is the constraint identifying the departing rows,
+ * which have not been cleaned out of the parent chain yet and must be
+ * ignored when checking whether the parent key value is still present.
+ */
+export function* cleanupChildJoinPartitionForRow(
+  parent: Input,
+  child: Input,
+  parentKey: CompoundKey,
+  childKey: CompoundKey,
+  row: Row,
+  excludeConstraint: Constraint | undefined,
+): Stream<'yield'> {
+  if (!child.cleanupPartition || !inputNeedsPartitionCleanup(child)) {
+    return;
+  }
+  const parentConstraint = buildJoinConstraint(row, parentKey, parentKey);
+  const childConstraint = buildJoinConstraint(row, parentKey, childKey);
+  if (!parentConstraint || !childConstraint) {
+    // Null join key values: the child pipeline is never fetched for them,
+    // so there is no partition state to clean up.
+    return;
+  }
+  for (const node of parent.fetch({constraint: parentConstraint})) {
+    if (node === 'yield') {
+      yield node;
+      continue;
+    }
+    if (
+      excludeConstraint &&
+      constraintMatchesRow(excludeConstraint, node.row)
+    ) {
+      continue;
+    }
+    // Another parent row still maps to this child partition.
+    return;
+  }
+  yield* child.cleanupPartition(childConstraint);
+}
 
 export function generateWithOverlayNoYield(
   stream: Stream<Node>,

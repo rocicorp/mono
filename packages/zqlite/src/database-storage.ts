@@ -17,6 +17,7 @@ type Statements = {
   get: Statement;
   set: Statement;
   del: Statement;
+  truncate: Statement;
   scan: Statement;
   clear: Statement;
   commit: Statement;
@@ -85,6 +86,10 @@ export class DatabaseStorage {
         DELETE FROM storage WHERE
           clientGroupID = ? AND op = ? AND key = ?
       `),
+      truncate: db.prepare(`
+        DELETE FROM storage WHERE
+          clientGroupID = ? AND op = ?
+      `),
       scan: db.prepare(`
         SELECT key, val FROM storage WHERE
           clientGroupID = ? AND op = ? AND key >= ?
@@ -124,6 +129,11 @@ export class DatabaseStorage {
   #del(cgID: string, opID: number, key: string) {
     this.#maybeCheckpoint();
     this.#stmts.del.run(cgID, opID, key);
+  }
+
+  #truncate(cgID: string, opID: number) {
+    this.#maybeCheckpoint();
+    this.#stmts.truncate.run(cgID, opID);
   }
 
   /**
@@ -177,6 +187,7 @@ export class DatabaseStorage {
           get: (key, def?) => this.#get(cgID, opID, key, def),
           set: (key, val) => this.#set(cgID, opID, key, val),
           del: key => this.#del(cgID, opID, key),
+          truncate: () => this.#truncate(cgID, opID),
           scan: opts => this.#scan(cgID, opID, opts),
         };
       },

@@ -33,6 +33,10 @@ export class MemoryStorage implements Storage {
     this.#data.delete([key, null]);
   }
 
+  truncate() {
+    this.#data.clear();
+  }
+
   *scan(options?: {prefix: string}): Stream<[string, JSONValue]> {
     for (const entry of this.#data.valuesFrom(
       options && [options.prefix, null],

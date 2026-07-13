@@ -209,4 +209,35 @@ describe('view-syncer/database-storage', () => {
       ]
     `);
   });
+
+  test('truncate deletes only the operator rows', () => {
+    const cg = storage.createClientGroupStorage('foo-bar');
+    const op1 = cg.createStorage();
+    const op2 = cg.createStorage();
+
+    op1.set('a', 1);
+    op1.set('b', 2);
+    op2.set('a', 3);
+
+    op1.truncate?.();
+
+    expect([...op1.scan()]).toEqual([]);
+    expect(op1.get('a')).toBeUndefined();
+    expect(op2.get('a')).toBe(3);
+
+    // Idempotent.
+    op1.truncate?.();
+    expect([...op1.scan()]).toEqual([]);
+
+    expect(dumpDB()).toMatchInlineSnapshot(`
+      [
+        {
+          "clientGroupID": "foo-bar",
+          "key": "a",
+          "op": 2,
+          "val": "3",
+        },
+      ]
+    `);
+  });
 });

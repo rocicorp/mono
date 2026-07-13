@@ -14,6 +14,7 @@ import {
 import type {Constraint} from './constraint.ts';
 import {compareValues, type Comparator, type Node} from './data.ts';
 import {
+  clearStorage,
   throwOutput,
   type FetchRequest,
   type Input,
@@ -37,6 +38,8 @@ interface TakeStorage {
   set(key: typeof MAX_BOUND_KEY, value: Row): void;
   set(key: string, value: TakeState): void;
   del(key: string): void;
+  scan(options?: {prefix: string}): Stream<[key: string, value: unknown]>;
+  truncate?: (() => void) | undefined;
 }
 
 export type PartitionKey = PrimaryKey;
@@ -702,8 +705,28 @@ export class Take implements Operator {
     }
   }
 
+  needsPartitionCleanup(): boolean {
+    return this.#partitionKey !== undefined;
+  }
+
+  cleanupPartition(constraint: Constraint): Stream<'yield'> {
+    if (
+      this.#partitionKey &&
+      constraintMatchesPartitionKey(constraint, this.#partitionKey)
+    ) {
+      this.#storage.del(getTakeStateKey(this.#partitionKey, constraint));
+    }
+    // Take is a view boundary: rows upstream of it remain in their
+    // pipelines when a downstream partition is discarded (any per-partition
+    // state upstream is keyed off rows that still exist in the source and
+    // is cleaned up when those rows are removed), so the call is not
+    // forwarded to the input.
+    return [];
+  }
+
   destroy(): void {
     this.#input.destroy();
+    clearStorage(this.#storage);
   }
 }
 

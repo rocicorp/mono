@@ -6,6 +6,8 @@ import type {Change} from './change.ts';
 import type {Constraint} from './constraint.ts';
 import type {Node} from './data.ts';
 import {
+  cleanupPartition,
+  inputNeedsPartitionCleanup,
   throwOutput,
   type FetchRequest,
   type Input,
@@ -97,6 +99,19 @@ export class UnionFanIn implements Operator {
   destroy(): void {
     for (const input of this.#inputs) {
       input.destroy();
+    }
+  }
+
+  needsPartitionCleanup(): boolean {
+    return this.#inputs.some(inputNeedsPartitionCleanup);
+  }
+
+  *cleanupPartition(constraint: Constraint): Stream<'yield'> {
+    // Forwarded through every branch. The shared UnionFanOut below the
+    // branches receives the call once per branch; cleanup is idempotent so
+    // this is harmless.
+    for (const input of this.#inputs) {
+      yield* cleanupPartition(input, constraint);
     }
   }
 
