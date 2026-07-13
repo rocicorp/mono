@@ -50,26 +50,22 @@ test('streaming SET NOT NULL matches a fresh replica of the final PG schema', as
     `;
     await applyNextTransaction(lc, processor, changes);
 
-    const rebuilt = new Database(lc, ':memory:');
-    try {
-      await initialSync(
-        lc,
-        SHARD,
-        rebuilt,
-        getConnectionURI(upstream),
-        {
-          tableCopyWorkers: 1,
-          shadow: {sampleRate: 1, maxRowsPerTable: 100},
-        },
-        {test: 'schema-change-differential-reference'},
-      );
+    using rebuilt = new Database(lc, ':memory:');
+    await initialSync(
+      lc,
+      SHARD,
+      rebuilt,
+      getConnectionURI(upstream),
+      {
+        tableCopyWorkers: 1,
+        shadow: {sampleRate: 1, maxRowsPerTable: 100},
+      },
+      {test: 'schema-change-differential-reference'},
+    );
 
-      expect(canonicalReplicaState(streamed)).toEqual(
-        canonicalReplicaState(rebuilt),
-      );
-    } finally {
-      rebuilt.close();
-    }
+    expect(canonicalReplicaState(streamed)).toEqual(
+      canonicalReplicaState(rebuilt),
+    );
   } finally {
     changes?.cancel();
     streamed?.close();
