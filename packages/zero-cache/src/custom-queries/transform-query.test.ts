@@ -876,4 +876,27 @@ describe('CustomQueryTransformer', () => {
       queryIDs: ['query1'],
     });
   });
+
+  test('destroy stops the cache cleanup interval and is safe to use after', async () => {
+    mockFetchFromAPIServer.mockResolvedValue(
+      queryResponseMessage(mockQueryResponses, 'user-123'),
+    );
+
+    const transformer = new CustomQueryTransformer(lc, mockShard);
+    await transformer.transform(makeContext(), mockQueries);
+    expect(vi.getTimerCount()).toBe(1);
+
+    transformer.destroy();
+    expect(vi.getTimerCount()).toBe(0);
+
+    // destroy is idempotent.
+    transformer.destroy();
+    expect(vi.getTimerCount()).toBe(0);
+
+    // Use after destroy (e.g. by the InspectorDelegate racing view-syncer
+    // teardown) does not throw and does not restart the cleanup interval.
+    const result = await transformer.transform(makeContext(), mockQueries);
+    expect(result.kind).toBe('success');
+    expect(vi.getTimerCount()).toBe(0);
+  });
 });
