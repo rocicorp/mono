@@ -167,7 +167,12 @@ export function defaultValueMatches(
   dflt: string | null | undefined,
   missingValue: unknown,
 ): boolean {
-  if (dflt == null || missingValue === undefined || missingValue === null) {
+  if (
+    dflt === null ||
+    dflt === undefined ||
+    missingValue === undefined ||
+    missingValue === null
+  ) {
     return false;
   }
   if (NUMERIC_LITERAL_REGEX.test(dflt)) {
