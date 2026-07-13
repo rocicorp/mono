@@ -165,6 +165,34 @@ test('DocumentVisibleWatcher', async () => {
   }
 });
 
+test('waiters are memoized until they fire', async () => {
+  const doc = new Document();
+  const {signal} = new AbortController();
+  const w = getDocumentVisibilityWatcher(doc, 1_000, signal);
+
+  // While visible, repeated waitForHidden calls share one pending promise.
+  const hidden1 = w.waitForHidden();
+  const hidden2 = w.waitForHidden();
+  expect(hidden1).toBe(hidden2);
+
+  doc.visibilityState = 'hidden';
+  await vi.advanceTimersByTimeAsync(1_000);
+  await hidden1;
+
+  // Once hidden, waitForHidden resolves immediately with a new promise and
+  // waitForVisible waiters are shared again.
+  expect(w.waitForHidden()).not.toBe(hidden1);
+  const visible1 = w.waitForVisible();
+  const visible2 = w.waitForVisible();
+  expect(visible1).toBe(visible2);
+
+  doc.visibilityState = 'visible';
+  await visible1;
+
+  // A waiter that fired is not handed out again.
+  expect(w.waitForVisible()).not.toBe(visible1);
+});
+
 test('DocumentVisibleWatcher controller abort', async () => {
   const doc = new Document();
   doc.visibilityState = 'hidden';

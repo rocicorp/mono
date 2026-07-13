@@ -1,4 +1,4 @@
-import {resolver} from '@rocicorp/resolver';
+import {resolver, type Resolver} from '@rocicorp/resolver';
 
 type PartialDocument = Pick<
   Document,
@@ -31,10 +31,10 @@ class DocumentVisibilityWatcherImpl implements DocumentVisibilityWatcher {
   // considering as hidden.
   visibilityState: DocumentVisibilityState;
 
-  readonly #promises = new Set<{
-    resolve: () => void;
-    state: DocumentVisibilityState;
-  }>();
+  // At most one memoized waiter per target state. Callers waiting for the
+  // same state (e.g. a run loop racing waitForHidden on every iteration)
+  // share a single pending promise instead of allocating one per call.
+  readonly #waiters = new Map<DocumentVisibilityState, Resolver<void>>();
 
   constructor(
     doc: PartialDocument,
@@ -67,12 +67,10 @@ class DocumentVisibilityWatcherImpl implements DocumentVisibilityWatcher {
       return;
     }
     this.visibilityState = visibilityState;
-    for (const entry of this.#promises) {
-      const {resolve, state} = entry;
-      if (state === visibilityState) {
-        resolve();
-        this.#promises.delete(entry);
-      }
+    const waiter = this.#waiters.get(visibilityState);
+    if (waiter !== undefined) {
+      this.#waiters.delete(visibilityState);
+      waiter.resolve();
     }
   }
 
@@ -86,12 +84,15 @@ class DocumentVisibilityWatcherImpl implements DocumentVisibilityWatcher {
 
   #waitFor(state: DocumentVisibilityState): Promise<unknown> {
     if (this.visibilityState === state) {
-      return Promise.resolve();
+      return resolvedPromise;
     }
 
-    const {promise, resolve} = resolver();
-    this.#promises.add({resolve, state});
-    return promise;
+    let waiter = this.#waiters.get(state);
+    if (waiter === undefined) {
+      waiter = resolver();
+      this.#waiters.set(state, waiter);
+    }
+    return waiter.promise;
   }
 }
 
