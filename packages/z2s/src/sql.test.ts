@@ -1110,6 +1110,56 @@ describe('schema-qualified user-defined types', () => {
     `);
   });
 
+  test('enum whose name matches a builtin type is schema-qualified', () => {
+    expect(
+      formatPgInternalConvert(
+        sql`INSERT INTO "foo" VALUES (${sqlConvertColumnArg(
+          {
+            isArray: false,
+            isEnum: true,
+            type: 'uuid',
+            typeSchema: 'app',
+          },
+          'internal',
+          false,
+          false,
+        )})`,
+      ),
+    ).toMatchInlineSnapshot(`
+      {
+        "text": "INSERT INTO "foo" VALUES ($1::text::"app"."uuid")",
+        "values": [
+          "internal",
+        ],
+      }
+    `);
+  });
+
+  test('non-enum type whose name matches a builtin type is schema-qualified', () => {
+    expect(
+      formatPgInternalConvert(
+        sql`INSERT INTO "foo" VALUES (${sqlConvertColumnArg(
+          {
+            isArray: false,
+            isEnum: false,
+            type: 'numeric',
+            typeSchema: 'app',
+          },
+          1,
+          false,
+          false,
+        )})`,
+      ),
+    ).toMatchInlineSnapshot(`
+      {
+        "text": "INSERT INTO "foo" VALUES ($1::text::"app"."numeric")",
+        "values": [
+          "1",
+        ],
+      }
+    `);
+  });
+
   test('identifiers are safely escaped, not string-concatenated', () => {
     // A schema/type name containing a double quote must be escaped (the quote
     // doubled), never blindly wrapped in quotes which would break the cast.

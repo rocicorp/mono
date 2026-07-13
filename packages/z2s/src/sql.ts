@@ -246,37 +246,49 @@ function formatCommonToSingularAndPlural(
   // being bool/json/numeric/whatever and the bindings try to coerce
   // the inputs to those types.
   const valuePlaceholder = arg.plural ? 'value' : `$${index}`;
-  let atTimeZone = ` AT TIME ZONE 'UTC'`;
-  switch (arg.type) {
-    case 'timestamptz':
-    // @ts-expect-error Fallthrough intended
-    case 'timestamp with time zone':
-      atTimeZone = '';
-    // fallthrough
-
-    case 'date':
-    case 'timestamp':
-    case 'timestamp without time zone':
-      return `to_timestamp(${valuePlaceholder}::text::numeric / 1000.0)${atTimeZone}`;
-
-    case 'timetz':
-    // @ts-expect-error Fallthrough intended
-    case 'time with time zone':
-      atTimeZone = '';
-    // fallthrough
-
-    case 'time':
-    case 'time without time zone':
-      return `(${valuePlaceholder}::text::int * interval'1ms')::time${atTimeZone}`;
-
-    // uuid: cast to native uuid type for proper comparison and index usage
-    case 'uuid':
-      return `${valuePlaceholder}::text::uuid`;
-  }
   if (arg.isEnum) {
     return `${valuePlaceholder}::text::${typeCastTarget(arg, escapeIdentifier, true)}`;
   }
-  if (isPgNativeStringType(arg.type)) {
+
+  // Type names are only unique within a Postgres namespace. Only apply
+  // built-in conversion semantics when the catalog confirms that this is a
+  // pg_catalog type, or when legacy callers do not provide a namespace. A
+  // user-defined type can legally have a built-in name such as `uuid` or
+  // `numeric`; those values must be cast to the schema-qualified custom type.
+  const usesBuiltinTypeSemantics =
+    arg.typeSchema === undefined ||
+    arg.typeSchema === '' ||
+    arg.typeSchema === 'pg_catalog';
+  let atTimeZone = ` AT TIME ZONE 'UTC'`;
+  if (usesBuiltinTypeSemantics) {
+    switch (arg.type) {
+      case 'timestamptz':
+      // @ts-expect-error Fallthrough intended
+      case 'timestamp with time zone':
+        atTimeZone = '';
+      // fallthrough
+
+      case 'date':
+      case 'timestamp':
+      case 'timestamp without time zone':
+        return `to_timestamp(${valuePlaceholder}::text::numeric / 1000.0)${atTimeZone}`;
+
+      case 'timetz':
+      // @ts-expect-error Fallthrough intended
+      case 'time with time zone':
+        atTimeZone = '';
+      // fallthrough
+
+      case 'time':
+      case 'time without time zone':
+        return `(${valuePlaceholder}::text::int * interval'1ms')::time${atTimeZone}`;
+
+      // uuid: cast to native uuid type for proper comparison and index usage
+      case 'uuid':
+        return `${valuePlaceholder}::text::uuid`;
+    }
+  }
+  if (usesBuiltinTypeSemantics && isPgNativeStringType(arg.type)) {
     // For comparison cast to the general `text` type, not the
     // specific column type (i.e. `arg.type`), because we don't want to
     // force the value being compared to the size/max-size of the column
@@ -288,7 +300,7 @@ function formatCommonToSingularAndPlural(
   if (isPgTextRepresentedType(arg.type)) {
     return `${valuePlaceholder}::text::${typeCastTarget(arg, escapeIdentifier, false)}`;
   }
-  if (isPgNumberType(arg.type)) {
+  if (usesBuiltinTypeSemantics && isPgNumberType(arg.type)) {
     // For comparison cast to `double precision` which uses IEEE 754 (the same
     // representation as JavaScript numbers which will accurately
     // represent any number value from zql) not the specific column type
