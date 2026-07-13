@@ -333,6 +333,12 @@ $$ LANGUAGE plpgsql;
 -- same transaction as the schema change statement(s); among other things,
 -- this allows columns added with replicable defaults (e.g. constants) to
 -- be replicated without a backfill.
+--
+-- Note that it must be invoked *before* any subsequent DML on the altered
+-- tables: since this hook emits the schema change at the point of the
+-- call (rather than at each DDL statement, as event triggers do), row
+-- changes between a column's creation and the call reference a column
+-- that the replica does not yet know about, and fail replication.
 CREATE OR REPLACE FUNCTION ${schema}.update_schemas()
 RETURNS void AS $$
 BEGIN
