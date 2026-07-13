@@ -9,7 +9,11 @@ import {
 } from '../../../shared/src/logging-test-utils.ts';
 import {Database} from '../../../zqlite/src/db.ts';
 import {registerSQLiteCorruptionDiagnosticTarget} from '../db/sqlite-corruption.ts';
-import {logUncaughtException} from './logging.ts';
+import {
+  CompositeLogSink,
+  createLogContext,
+  logUncaughtException,
+} from './logging.ts';
 
 describe('server/logging', () => {
   test('logs last-chance SQLite corruption diagnostics before flushing', async () => {
@@ -68,6 +72,45 @@ describe('server/logging', () => {
     expect(serializedLogs).not.toContain('SQLite replica corruption detected');
     expect(serializedLogs).not.toContain('file-stats');
     expect(sink.flushCallCount).toBe(1);
+  });
+
+  test('flushes every sink in a composite', async () => {
+    const first = new TestLogSink();
+    const second = new TestLogSink();
+
+    await new CompositeLogSink([first, second]).flush();
+
+    expect(first.flushCallCount).toBe(1);
+    expect(second.flushCallCount).toBe(1);
+  });
+
+  test('replaces the bootstrap uncaught-exception handler', () => {
+    const existingHandlers = new Set(process.listeners('uncaughtException'));
+
+    try {
+      createLogContext(
+        {log: {level: 'error', format: 'json'}},
+        'test-worker',
+        0,
+        false,
+      );
+      const bootstrapHandler = process
+        .listeners('uncaughtException')
+        .find(handler => !existingHandlers.has(handler));
+      expect(bootstrapHandler).toBeDefined();
+
+      createLogContext({log: {level: 'error', format: 'json'}}, 'test-worker');
+
+      expect(process.listeners('uncaughtException')).not.toContain(
+        bootstrapHandler,
+      );
+    } finally {
+      for (const handler of process.listeners('uncaughtException')) {
+        if (!existingHandlers.has(handler)) {
+          process.off('uncaughtException', handler);
+        }
+      }
+    }
   });
 });
 

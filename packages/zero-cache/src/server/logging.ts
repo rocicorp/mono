@@ -10,6 +10,13 @@ import {logLastChanceSQLiteCorruptionDiagnostics} from '../db/sqlite-corruption.
 import {UNHANDLED_EXCEPTION_ERROR_CODE} from '../services/life-cycle.ts';
 import {OtelLogSink} from './otel-log-sink.ts';
 
+type UncaughtExceptionHandler = (
+  err: Error,
+  origin: NodeJS.UncaughtExceptionOrigin,
+) => Promise<void>;
+
+let bootstrapUncaughtExceptionHandler: UncaughtExceptionHandler | undefined;
+
 export function createLogContext(
   {log}: {log: LogConfig},
   worker: string,
@@ -18,13 +25,27 @@ export function createLogContext(
 ): LogContext {
   const logSink = createLogSink(log, includeOtel);
   const lc = createLogContextShared({log}, {worker, workerIndex}, logSink);
-  process.on('uncaughtException', async (err, origin) => {
+  const handleUncaughtException: UncaughtExceptionHandler = async (
+    err,
+    origin,
+  ) => {
     // Workers create an includeOtel=false context while bootstrapping OTel,
     // then a primary context. Run full corruption checks from the primary
     // handler only.
-    await logUncaughtException(lc, logSink, err, origin, includeOtel);
-    process.exit(UNHANDLED_EXCEPTION_ERROR_CODE);
-  });
+    try {
+      await logUncaughtException(lc, logSink, err, origin, includeOtel);
+    } finally {
+      process.exit(UNHANDLED_EXCEPTION_ERROR_CODE);
+    }
+  };
+  if (bootstrapUncaughtExceptionHandler) {
+    process.off('uncaughtException', bootstrapUncaughtExceptionHandler);
+    bootstrapUncaughtExceptionHandler = undefined;
+  }
+  process.on('uncaughtException', handleUncaughtException);
+  if (!includeOtel) {
+    bootstrapUncaughtExceptionHandler = handleUncaughtException;
+  }
   return lc;
 }
 
@@ -57,7 +78,7 @@ function createLogSink(config: LogConfig, includeOtel: boolean): LogSink {
   return sink;
 }
 
-class CompositeLogSink implements LogSink {
+export class CompositeLogSink implements LogSink {
   readonly #sinks: LogSink[];
 
   constructor(sinks: LogSink[]) {
@@ -68,5 +89,9 @@ class CompositeLogSink implements LogSink {
     for (const sink of this.#sinks) {
       sink.log(level, context, ...args);
     }
+  }
+
+  async flush(): Promise<void> {
+    await Promise.all(this.#sinks.map(sink => sink.flush?.()));
   }
 }

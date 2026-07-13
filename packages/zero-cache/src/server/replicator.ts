@@ -154,7 +154,8 @@ function observeFileSize(lc: LogContext, file: string): ObservableCallback {
 
 // fork()
 if (!singleProcessMode()) {
-  void exitAfter(lc, () =>
-    runWorker(must(parentWorker), process.env, ...process.argv.slice(2)),
+  void exitAfter(
+    () => lc,
+    () => runWorker(must(parentWorker), process.env, ...process.argv.slice(2)),
   );
 }

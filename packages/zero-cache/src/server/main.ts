@@ -230,5 +230,8 @@ export default async function runWorker(
 }
 
 if (!singleProcessMode()) {
-  void exitAfter(lc, () => runWorker(must(parentWorker), process.env));
+  void exitAfter(
+    () => lc,
+    () => runWorker(must(parentWorker), process.env),
+  );
 }
