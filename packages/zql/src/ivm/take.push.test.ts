@@ -1,13 +1,22 @@
 import {describe, expect, test} from 'vitest';
+import {testLogConfig} from '../../../otel/src/test-log-config.ts';
+import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
+import {buildPipeline} from '../builder/builder.ts';
+import {TestBuilderDelegate} from '../builder/test-builder-delegate.ts';
+import {Catch} from './catch.ts';
 import {
+  type Source,
   type SourceChange,
   makeSourceChangeAdd,
   makeSourceChangeEdit,
   makeSourceChangeRemove,
 } from './source.ts';
+import {consume} from './stream.ts';
 import {runPushTest, type Sources} from './test/fetch-and-push-tests.ts';
+import {createSource} from './test/source-factory.ts';
+import type {Format} from './view.ts';
 
 describe('take with no partition', () => {
   describe('add', () => {
@@ -8004,6 +8013,378 @@ describe('take limit 0 with related query', () => {
       expect(pushes).toEqual([]);
     },
   );
+});
+
+describe('take partition state cleanup on parent remove', () => {
+  // Take stores {size, bound} per distinct partition-key value ever
+  // fetched. Without cleanup, that state outlives the parent rows that
+  // reference it and operator storage grows without bound for
+  // related(x, q => q.limit(n)) queries. The Join deletes the state when
+  // the last parent row with a partition's key is removed.
+  const sources: Sources = {
+    issue: {
+      columns: {
+        id: {type: 'string'},
+      },
+      primaryKeys: ['id'],
+    },
+    comment: {
+      columns: {
+        id: {type: 'string'},
+        issueID: {type: 'string'},
+        created: {type: 'number'},
+      },
+      primaryKeys: ['id'],
+    },
+  };
+
+  const ast: AST = {
+    table: 'issue',
+    orderBy: [['id', 'asc']],
+    related: [
+      {
+        system: 'client',
+        correlation: {parentField: ['id'], childField: ['issueID']},
+        subquery: {
+          table: 'comment',
+          alias: 'comments',
+          orderBy: [
+            ['created', 'asc'],
+            ['id', 'asc'],
+          ],
+          limit: 2,
+        },
+      },
+    ],
+  } as const;
+
+  const format: Format = {
+    singular: false,
+    relationships: {
+      comments: {
+        singular: false,
+        relationships: {},
+      },
+    },
+  };
+
+  const sourceContents = {
+    issue: [{id: 'i1'}, {id: 'i2'}],
+    comment: [
+      {id: 'c1', issueID: 'i1', created: 100},
+      {id: 'c2', issueID: 'i1', created: 200},
+      {id: 'c3', issueID: 'i1', created: 300},
+      {id: 'c4', issueID: 'i2', created: 400},
+    ],
+  };
+
+  test('remove of last parent with key deletes partition state', () => {
+    const {data, actualStorage, pushes} = runPushTest({
+      sources,
+      sourceContents,
+      ast,
+      format,
+      pushes: [['issue', makeSourceChangeRemove({id: 'i1'})]],
+    });
+
+    // i1's partition state is gone; i2's and the maxBound remain
+    // (maxBound is a single entry and stays a valid conservative bound).
+    expect(actualStorage['.comments:take']).toMatchInlineSnapshot(`
+      {
+        "["take","i2"]": {
+          "bound": {
+            "created": 400,
+            "id": "c4",
+            "issueID": "i2",
+          },
+          "size": 1,
+        },
+        "maxBound": {
+          "created": 400,
+          "id": "c4",
+          "issueID": "i2",
+        },
+      }
+    `);
+    expect(data).toMatchInlineSnapshot(`
+      [
+        {
+          "comments": [
+            {
+              "created": 400,
+              "id": "c4",
+              "issueID": "i2",
+              Symbol(rc): 1,
+            },
+          ],
+          "id": "i2",
+          Symbol(rc): 1,
+        },
+      ]
+    `);
+    // The remove carries the materialized (limited) child relationship.
+    expect(pushes).toMatchInlineSnapshot(`
+      [
+        {
+          "node": {
+            "relationships": {
+              "comments": [
+                {
+                  "relationships": {},
+                  "row": {
+                    "created": 100,
+                    "id": "c1",
+                    "issueID": "i1",
+                  },
+                },
+                {
+                  "relationships": {},
+                  "row": {
+                    "created": 200,
+                    "id": "c2",
+                    "issueID": "i1",
+                  },
+                },
+              ],
+            },
+            "row": {
+              "id": "i1",
+            },
+          },
+          "type": "remove",
+        },
+      ]
+    `);
+  });
+
+  test('parent re-add after cleanup rebuilds partition state', () => {
+    const {data, actualStorage} = runPushTest({
+      sources,
+      sourceContents,
+      ast,
+      format,
+      pushes: [
+        ['issue', makeSourceChangeRemove({id: 'i1'})],
+        ['issue', makeSourceChangeAdd({id: 'i1'})],
+      ],
+    });
+
+    expect(actualStorage['.comments:take']).toMatchInlineSnapshot(`
+      {
+        "["take","i1"]": {
+          "bound": {
+            "created": 200,
+            "id": "c2",
+            "issueID": "i1",
+          },
+          "size": 2,
+        },
+        "["take","i2"]": {
+          "bound": {
+            "created": 400,
+            "id": "c4",
+            "issueID": "i2",
+          },
+          "size": 1,
+        },
+        "maxBound": {
+          "created": 400,
+          "id": "c4",
+          "issueID": "i2",
+        },
+      }
+    `);
+    expect(data).toMatchInlineSnapshot(`
+      [
+        {
+          "comments": [
+            {
+              "created": 100,
+              "id": "c1",
+              "issueID": "i1",
+              Symbol(rc): 1,
+            },
+            {
+              "created": 200,
+              "id": "c2",
+              "issueID": "i1",
+              Symbol(rc): 1,
+            },
+          ],
+          "id": "i1",
+          Symbol(rc): 1,
+        },
+        {
+          "comments": [
+            {
+              "created": 400,
+              "id": "c4",
+              "issueID": "i2",
+              Symbol(rc): 1,
+            },
+          ],
+          "id": "i2",
+          Symbol(rc): 1,
+        },
+      ]
+    `);
+  });
+
+  test('destroy deletes all stored state', () => {
+    const lc = createSilentLogContext();
+    const builtSources: Record<string, Source> = {};
+    for (const [name, {columns, primaryKeys}] of Object.entries(sources)) {
+      builtSources[name] = createSource(
+        lc,
+        testLogConfig,
+        name,
+        columns,
+        primaryKeys,
+      );
+    }
+    for (const [name, rows] of Object.entries(sourceContents)) {
+      for (const row of rows) {
+        consume(builtSources[name].push(makeSourceChangeAdd(row)));
+      }
+    }
+    const delegate = new TestBuilderDelegate(builtSources);
+    const pipeline = buildPipeline(ast, delegate, 'query-id');
+    const c = new Catch(pipeline);
+    c.fetch();
+
+    expect(
+      Object.keys(delegate.clonedStorage['.comments:take']).sort(),
+    ).toEqual(['["take","i1"]', '["take","i2"]', 'maxBound']);
+
+    pipeline.destroy();
+
+    expect(delegate.clonedStorage['.comments:take']).toEqual({});
+  });
+
+  test('cleanup works with a nested related stacked above the take', () => {
+    // In issue.related('comments', q => q.limit(2).related('author')) the
+    // comments Take is not at the top of the child pipeline — the author
+    // Join is stacked above it. The outer Join must still delete the
+    // Take's partition state when the issue is removed.
+    const nestedSources: Sources = {
+      issue: {
+        columns: {id: {type: 'string'}},
+        primaryKeys: ['id'],
+      },
+      comment: {
+        columns: {
+          id: {type: 'string'},
+          issueID: {type: 'string'},
+          authorID: {type: 'string'},
+          created: {type: 'number'},
+        },
+        primaryKeys: ['id'],
+      },
+      author: {
+        columns: {id: {type: 'string'}},
+        primaryKeys: ['id'],
+      },
+    };
+
+    const nestedAst: AST = {
+      table: 'issue',
+      orderBy: [['id', 'asc']],
+      related: [
+        {
+          system: 'client',
+          correlation: {parentField: ['id'], childField: ['issueID']},
+          subquery: {
+            table: 'comment',
+            alias: 'comments',
+            orderBy: [
+              ['created', 'asc'],
+              ['id', 'asc'],
+            ],
+            limit: 2,
+            related: [
+              {
+                system: 'client',
+                correlation: {parentField: ['authorID'], childField: ['id']},
+                subquery: {
+                  table: 'author',
+                  alias: 'author',
+                  orderBy: [['id', 'asc']],
+                },
+              },
+            ],
+          },
+        },
+      ],
+    } as const;
+
+    const {data, actualStorage} = runPushTest({
+      sources: nestedSources,
+      sourceContents: {
+        issue: [{id: 'i1'}, {id: 'i2'}],
+        comment: [
+          {id: 'c1', issueID: 'i1', authorID: 'a1', created: 100},
+          {id: 'c2', issueID: 'i2', authorID: 'a1', created: 200},
+        ],
+        author: [{id: 'a1'}],
+      },
+      ast: nestedAst,
+      format: {
+        singular: false,
+        relationships: {
+          comments: {
+            singular: false,
+            relationships: {
+              author: {singular: false, relationships: {}},
+            },
+          },
+        },
+      },
+      pushes: [['issue', makeSourceChangeRemove({id: 'i1'})]],
+    });
+
+    expect(actualStorage['.comments:take']).toMatchInlineSnapshot(`
+      {
+        "["take","i2"]": {
+          "bound": {
+            "authorID": "a1",
+            "created": 200,
+            "id": "c2",
+            "issueID": "i2",
+          },
+          "size": 1,
+        },
+        "maxBound": {
+          "authorID": "a1",
+          "created": 200,
+          "id": "c2",
+          "issueID": "i2",
+        },
+      }
+    `);
+    expect(data).toMatchInlineSnapshot(`
+      [
+        {
+          "comments": [
+            {
+              "author": [
+                {
+                  "id": "a1",
+                  Symbol(rc): 1,
+                },
+              ],
+              "authorID": "a1",
+              "created": 200,
+              "id": "c2",
+              "issueID": "i2",
+              Symbol(rc): 1,
+            },
+          ],
+          "id": "i2",
+          Symbol(rc): 1,
+        },
+      ]
+    `);
+  });
 });
 
 type TakeTest = {

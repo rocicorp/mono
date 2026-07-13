@@ -30,7 +30,12 @@ import {
 import {Filter} from '../ivm/filter.ts';
 import {FlippedJoin} from '../ivm/flipped-join.ts';
 import {Join} from '../ivm/join.ts';
-import type {Input, InputBase, Storage} from '../ivm/operator.ts';
+import type {
+  Input,
+  InputBase,
+  PartitionStateOperator,
+  Storage,
+} from '../ivm/operator.ts';
 import {Skip} from '../ivm/skip.ts';
 import type {Source, SourceInput} from '../ivm/source.ts';
 import {Take} from '../ivm/take.ts';
@@ -140,7 +145,7 @@ export function buildPipeline(
   if (costModel) {
     ast = planQuery(ast, costModel, planDebugger, lc);
   }
-  return buildPipelineInternal(ast, delegate, queryID, '');
+  return buildPipelineInternal(ast, delegate, queryID, '').input;
 }
 
 export function bindStaticParameters(
@@ -253,6 +258,17 @@ export function assertNoNotExists(condition: Condition): void {
   }
 }
 
+type BuiltPipeline = {
+  input: Input;
+  /**
+   * The Take or Cap created for the pipeline's top-level limit, if any.
+   * When the pipeline is the child of a Join, the Join uses this to delete
+   * per-partition state when the last parent row with a partition's key is
+   * removed.
+   */
+  partitionStateOp: PartitionStateOperator | undefined;
+};
+
 function buildPipelineInternal(
   ast: AST,
   delegate: BuilderDelegate,
@@ -260,7 +276,7 @@ function buildPipelineInternal(
   name: string,
   partitionKey?: CompoundKey,
   isNonFlippedExistsChild?: boolean | undefined,
-): Input {
+): BuiltPipeline {
   const source = delegate.getSource(ast.table);
   if (!source) {
     throw new Error(`Source not found: ${ast.table}`);
@@ -353,6 +369,7 @@ function buildPipelineInternal(
     end = applyWhere(end, ast.where, delegate, name);
   }
 
+  let partitionStateOp: PartitionStateOperator | undefined;
   if (ast.limit !== undefined) {
     // We end `exists` pipelines with `cap`
     // The reason is that `cap` does not care about the order of the pipeline.
@@ -369,6 +386,7 @@ function buildPipelineInternal(
       );
       delegate.addEdge(end, cap);
       end = delegate.decorateInput(cap, capName);
+      partitionStateOp = cap;
     } else {
       const takeName = `${name}:take`;
       const take = new Take(
@@ -379,6 +397,7 @@ function buildPipelineInternal(
       );
       delegate.addEdge(end, take);
       end = delegate.decorateInput(take, takeName);
+      partitionStateOp = take;
     }
   }
 
@@ -393,7 +412,10 @@ function buildPipelineInternal(
     }
   }
 
-  return end;
+  return {
+    input: end,
+    partitionStateOp: partitionKey && partitionStateOp,
+  };
 }
 
 function applyWhere(
@@ -487,7 +509,7 @@ function applyFilterWithFlips(
     }
     case 'correlatedSubquery': {
       const sq = condition.related;
-      const child = buildPipelineInternal(
+      const {input: child} = buildPipelineInternal(
         sq.subquery,
         delegate,
         '',
@@ -662,7 +684,7 @@ function applyCorrelatedSubQuery(
   }
 
   assert(sq.subquery.alias, 'Subquery must have an alias');
-  const child = buildPipelineInternal(
+  const {input: child, partitionStateOp} = buildPipelineInternal(
     sq.subquery,
     delegate,
     queryID,
@@ -680,6 +702,7 @@ function applyCorrelatedSubQuery(
     relationshipName: sq.subquery.alias,
     hidden: sq.hidden ?? false,
     system: sq.system ?? 'client',
+    childPartitionState: partitionStateOp,
   });
   delegate.addEdge(end, join);
   delegate.addEdge(child, join);

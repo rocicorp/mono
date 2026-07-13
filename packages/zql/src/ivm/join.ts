@@ -23,6 +23,7 @@ import {
   type FetchRequest,
   type Input,
   type Output,
+  type PartitionStateOperator,
 } from './operator.ts';
 import type {SourceSchema} from './schema.ts';
 import {type Stream} from './stream.ts';
@@ -36,6 +37,15 @@ type Args = {
   relationshipName: string;
   hidden: boolean;
   system: System;
+  /**
+   * The operator in the child pipeline (a Take or Cap created by the same
+   * limit as the child subquery) that stores per-partition state keyed by
+   * childKey values. When set, this Join deletes the state for a partition
+   * when the last parent row with the corresponding key is removed, since
+   * the partition can never be fetched again (until a parent with the same
+   * key is added, which rebuilds the state from scratch).
+   */
+  childPartitionState?: PartitionStateOperator | undefined;
 };
 
 /**
@@ -55,6 +65,10 @@ export class Join implements Input {
   readonly #childKey: CompoundKey;
   readonly #relationshipName: string;
   readonly #schema: SourceSchema;
+  readonly #childPartitionState: PartitionStateOperator | undefined;
+  // True when parentKey contains all of the parent's primary key columns,
+  // in which case at most one parent row can exist per parentKey value.
+  readonly #parentKeyCoversPrimaryKey: boolean;
 
   #output: Output = throwOutput;
 
@@ -69,6 +83,7 @@ export class Join implements Input {
     relationshipName,
     hidden,
     system,
+    childPartitionState,
   }: Args) {
     assert(parent !== child, 'Parent and child must be different operators');
     assert(
@@ -80,6 +95,10 @@ export class Join implements Input {
     this.#parentKey = parentKey;
     this.#childKey = childKey;
     this.#relationshipName = relationshipName;
+    this.#childPartitionState = childPartitionState;
+    this.#parentKeyCoversPrimaryKey = parent
+      .getSchema()
+      .primaryKey.every(col => parentKey.includes(col));
 
     const parentSchema = parent.getSchema();
     const childSchema = child.getSchema();
@@ -140,15 +159,7 @@ export class Join implements Input {
         );
         break;
       case ChangeType.REMOVE:
-        yield* this.#output.push(
-          makeRemoveChange(
-            this.#processParentNode(
-              change[ChangeIndex.NODE].row,
-              change[ChangeIndex.NODE].relationships,
-            ),
-          ),
-          this,
-        );
+        yield* this.#pushParentRemove(change[ChangeIndex.NODE]);
         break;
       case ChangeType.CHILD:
         yield* this.#output.push(
@@ -190,6 +201,83 @@ export class Join implements Input {
       default:
         unreachable(change);
     }
+  }
+
+  *#pushParentRemove(node: Node): Stream<'yield'> {
+    if (
+      this.#childPartitionState &&
+      (yield* this.#isLastParentWithKey(node.row))
+    ) {
+      const constraint = buildJoinConstraint(
+        node.row,
+        this.#parentKey,
+        this.#childKey,
+      );
+      // #isLastParentWithKey returned false if the key contains null.
+      assert(constraint, 'Constraint must exist for a non-null key');
+      // The child partition state is about to be deleted, after which
+      // fetching the partition would rebuild the state from scratch
+      // (recreating the leak, since no parent references it anymore).
+      // Consumers may fetch the removed node's relationship stream after
+      // this push returns (e.g. the view-syncer accumulates changes and
+      // consumes them later), so materialize the relationship now, while
+      // the state still exists.
+      const children: Node[] = [];
+      for (const childNode of this.#child.fetch({constraint})) {
+        if (childNode === 'yield') {
+          yield childNode;
+          continue;
+        }
+        children.push(childNode);
+      }
+      yield* this.#output.push(
+        makeRemoveChange({
+          row: node.row,
+          relationships: {
+            ...node.relationships,
+            [this.#relationshipName]: () => children,
+          },
+        }),
+        this,
+      );
+      this.#childPartitionState.deletePartitionState(constraint);
+      return;
+    }
+    yield* this.#output.push(
+      makeRemoveChange(this.#processParentNode(node.row, node.relationships)),
+      this,
+    );
+  }
+
+  /**
+   * Returns whether the parent row being removed is the last parent row
+   * with its parentKey value. Returns false for keys containing null,
+   * since null keys never match any child rows (so no child partition
+   * state exists for them).
+   */
+  *#isLastParentWithKey(parentRow: Row): Generator<'yield', boolean> {
+    const constraint = buildJoinConstraint(
+      parentRow,
+      this.#parentKey,
+      this.#parentKey,
+    );
+    if (!constraint) {
+      return false;
+    }
+    if (this.#parentKeyCoversPrimaryKey) {
+      return true;
+    }
+    // The parent source has already applied the remove (fetches during a
+    // push see post-change state), so any row returned here is another
+    // remaining parent with the same key.
+    for (const node of this.#parent.fetch({constraint})) {
+      if (node === 'yield') {
+        yield node;
+        continue;
+      }
+      return false;
+    }
+    return true;
   }
 
   *#pushChild(change: Change): Stream<'yield'> {

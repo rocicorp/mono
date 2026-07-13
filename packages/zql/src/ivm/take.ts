@@ -19,6 +19,7 @@ import {
   type Input,
   type Operator,
   type Output,
+  type PartitionStateOperator,
   type Storage,
 } from './operator.ts';
 import type {SourceSchema} from './schema.ts';
@@ -37,6 +38,7 @@ interface TakeStorage {
   set(key: typeof MAX_BOUND_KEY, value: Row): void;
   set(key: string, value: TakeState): void;
   del(key: string): void;
+  scan(): Stream<[key: string, value: unknown]>;
 }
 
 export type PartitionKey = PrimaryKey;
@@ -52,7 +54,7 @@ export type PartitionKey = PrimaryKey;
  * Maintains the invariant that its output size is always <= limit, even
  * mid processing of a push.
  */
-export class Take implements Operator {
+export class Take implements Operator, PartitionStateOperator {
   readonly #input: Input;
   readonly #storage: TakeStorage;
   readonly #limit: number;
@@ -702,7 +704,29 @@ export class Take implements Operator {
     }
   }
 
+  deletePartitionState(constraint: Constraint): void {
+    assert(
+      this.#partitionKey !== undefined &&
+        constraintMatchesPartitionKey(constraint, this.#partitionKey),
+      'deletePartitionState: constraint must match partition key',
+    );
+    // MAX_BOUND_KEY is intentionally left as is. It is a single entry (so
+    // it cannot grow without bound) and remains a valid, if conservative,
+    // upper bound for the unconstrained fetch path.
+    this.#storage.del(getTakeStateKey(this.#partitionKey, constraint));
+  }
+
   destroy(): void {
+    // Delete all stored state. Otherwise it would leak, e.g. in the
+    // client-group operator storage on the server, which outlives
+    // individual query pipelines.
+    const keys = [];
+    for (const [key] of this.#storage.scan()) {
+      keys.push(key);
+    }
+    for (const key of keys) {
+      this.#storage.del(key);
+    }
     this.#input.destroy();
   }
 }

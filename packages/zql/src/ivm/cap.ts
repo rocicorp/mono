@@ -12,6 +12,7 @@ import {
   type Input,
   type Operator,
   type Output,
+  type PartitionStateOperator,
   type Storage,
 } from './operator.ts';
 import type {SourceSchema} from './schema.ts';
@@ -31,6 +32,7 @@ interface CapStorage {
   get(key: string): CapState | undefined;
   set(key: string, value: CapState): void;
   del(key: string): void;
+  scan(): Stream<[key: string, value: unknown]>;
 }
 
 /**
@@ -49,7 +51,7 @@ interface CapStorage {
  * Cap can count rows globally or by unique value of some partition key
  * (same as Take).
  */
-export class Cap implements Operator {
+export class Cap implements Operator, PartitionStateOperator {
   readonly #input: Input;
   readonly #storage: CapStorage;
   readonly #limit: number;
@@ -292,7 +294,26 @@ export class Cap implements Operator {
     // If not in our set, drop
   }
 
+  deletePartitionState(constraint: Constraint): void {
+    assert(
+      this.#partitionKey !== undefined &&
+        constraintMatchesPartitionKey(constraint, this.#partitionKey),
+      'deletePartitionState: constraint must match partition key',
+    );
+    this.#storage.del(getCapStateKey(this.#partitionKey, constraint));
+  }
+
   destroy(): void {
+    // Delete all stored state. Otherwise it would leak, e.g. in the
+    // client-group operator storage on the server, which outlives
+    // individual query pipelines.
+    const keys = [];
+    for (const [key] of this.#storage.scan()) {
+      keys.push(key);
+    }
+    for (const key of keys) {
+      this.#storage.del(key);
+    }
     this.#input.destroy();
   }
 }

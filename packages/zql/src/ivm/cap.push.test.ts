@@ -9,10 +9,11 @@ import {asQueryInternals} from '../query/query-internals.ts';
 import type {AnyQuery} from '../query/query.ts';
 import {schema as testSchema} from '../query/test/test-schemas.ts';
 import {Cap} from './cap.ts';
-import {Catch} from './catch.ts';
+import {Catch, expandChange} from './catch.ts';
+import type {Change} from './change.ts';
 import {MemoryStorage} from './memory-storage.ts';
 import type {Source} from './source.ts';
-import {consume} from './stream.ts';
+import {consume, type Stream} from './stream.ts';
 import {
   runPushTest,
   type SourceContents,
@@ -1591,6 +1592,541 @@ function capKeysFromBuild(ast: AST): string[] {
     .sort();
 }
 
+describe('Cap partition state cleanup on parent remove', () => {
+  // Cap stores {size, pks} per distinct partition-key value ever fetched.
+  // Without cleanup, that state outlives the parent rows that reference it
+  // and operator storage grows without bound (one entry per parent
+  // join-key ever seen). The Join deletes the state when the last parent
+  // row with a partition's key is removed.
+  const sources: Sources = {
+    issue: {
+      columns: {
+        id: {type: 'string'},
+        text: {type: 'string'},
+      },
+      primaryKeys: ['id'],
+    },
+    comment: {
+      columns: {
+        id: {type: 'string'},
+        issueID: {type: 'string'},
+        text: {type: 'string'},
+      },
+      primaryKeys: ['id'],
+    },
+  };
+
+  const ast: AST = {
+    table: 'issue',
+    orderBy: [['id', 'asc']],
+    where: {
+      type: 'correlatedSubquery',
+      related: {
+        system: 'client',
+        correlation: {parentField: ['id'], childField: ['issueID']},
+        subquery: {
+          table: 'comment',
+          alias: 'comments',
+          orderBy: [['id', 'asc']],
+        },
+      },
+      op: 'EXISTS',
+    },
+  } as const;
+
+  const format: Format = {
+    singular: false,
+    relationships: {
+      comments: {
+        singular: false,
+        relationships: {},
+      },
+    },
+  };
+
+  test('remove of last parent with key deletes partition state', () => {
+    // parentField is the issue primary key, so a removed issue is by
+    // definition the last parent with that key — the fast path that
+    // needs no parent re-fetch.
+    const sourceContents: SourceContents = {
+      issue: [
+        {id: 'i1', text: 'i1'},
+        {id: 'i2', text: 'i2'},
+      ],
+      comment: [
+        {id: 'c1', issueID: 'i1', text: 'c1'},
+        {id: 'c2', issueID: 'i2', text: 'c2'},
+      ],
+    };
+    const {data, actualStorage, pushes} = runPushTest({
+      sources,
+      sourceContents,
+      ast,
+      format,
+      pushes: [['issue', makeSourceChangeRemove({id: 'i1', text: 'i1'})]],
+    });
+
+    // i1's partition state is gone; i2's remains.
+    expect(actualStorage['.comments:cap']).toMatchInlineSnapshot(`
+      {
+        "["cap","i2"]": {
+          "pks": [
+            "["c2"]",
+          ],
+          "size": 1,
+        },
+      }
+    `);
+    expect(data).toMatchInlineSnapshot(`
+      [
+        {
+          "comments": [
+            {
+              "id": "c2",
+              "issueID": "i2",
+              "text": "c2",
+              Symbol(rc): 1,
+            },
+          ],
+          "id": "i2",
+          "text": "i2",
+          Symbol(rc): 1,
+        },
+      ]
+    `);
+    // The remove carries the materialized child relationship.
+    expect(pushes).toMatchInlineSnapshot(`
+      [
+        {
+          "node": {
+            "relationships": {
+              "comments": [
+                {
+                  "relationships": {},
+                  "row": {
+                    "id": "c1",
+                    "issueID": "i1",
+                    "text": "c1",
+                  },
+                },
+              ],
+            },
+            "row": {
+              "id": "i1",
+              "text": "i1",
+            },
+          },
+          "type": "remove",
+        },
+      ]
+    `);
+  });
+
+  test('parent re-add after cleanup rebuilds partition state', () => {
+    const sourceContents: SourceContents = {
+      issue: [{id: 'i1', text: 'i1'}],
+      comment: [{id: 'c1', issueID: 'i1', text: 'c1'}],
+    };
+    const {data, actualStorage} = runPushTest({
+      sources,
+      sourceContents,
+      ast,
+      format,
+      pushes: [
+        ['issue', makeSourceChangeRemove({id: 'i1', text: 'i1'})],
+        ['issue', makeSourceChangeAdd({id: 'i1', text: 'i1'})],
+      ],
+    });
+
+    expect(actualStorage['.comments:cap']).toMatchInlineSnapshot(`
+      {
+        "["cap","i1"]": {
+          "pks": [
+            "["c1"]",
+          ],
+          "size": 1,
+        },
+      }
+    `);
+    expect(data).toMatchInlineSnapshot(`
+      [
+        {
+          "comments": [
+            {
+              "id": "c1",
+              "issueID": "i1",
+              "text": "c1",
+              Symbol(rc): 1,
+            },
+          ],
+          "id": "i1",
+          "text": "i1",
+          Symbol(rc): 1,
+        },
+      ]
+    `);
+  });
+});
+
+describe('Cap partition state cleanup with shared partition key', () => {
+  // The partition key ('group') is not unique among parents, so the Join
+  // must check for remaining parents with the same key before deleting
+  // the partition state.
+  const sources: Sources = {
+    parent: {
+      columns: {
+        id: {type: 'string'},
+        group: {type: 'string', optional: true},
+      },
+      primaryKeys: ['id'],
+    },
+    child: {
+      columns: {
+        id: {type: 'string'},
+        group: {type: 'string'},
+        text: {type: 'string'},
+      },
+      primaryKeys: ['id'],
+    },
+  };
+
+  const ast: AST = {
+    table: 'parent',
+    orderBy: [['id', 'asc']],
+    where: {
+      type: 'correlatedSubquery',
+      related: {
+        system: 'client',
+        correlation: {parentField: ['group'], childField: ['group']},
+        subquery: {
+          table: 'child',
+          alias: 'children',
+          orderBy: [['id', 'asc']],
+        },
+      },
+      op: 'EXISTS',
+    },
+  } as const;
+
+  const format: Format = {
+    singular: false,
+    relationships: {
+      children: {
+        singular: false,
+        relationships: {},
+      },
+    },
+  };
+
+  test('state is kept while other parents share the key, deleted with the last one', () => {
+    const sourceContents: SourceContents = {
+      parent: [
+        {id: 'p1', group: 'g1'},
+        {id: 'p2', group: 'g1'},
+      ],
+      child: [{id: 'x1', group: 'g1', text: 'x1'}],
+    };
+
+    // Removing p1 keeps the state alive — p2 still references g1.
+    const first = runPushTest({
+      sources,
+      sourceContents,
+      ast,
+      format,
+      pushes: [['parent', makeSourceChangeRemove({id: 'p1', group: 'g1'})]],
+    });
+    expect(first.actualStorage['.children:cap']).toMatchInlineSnapshot(`
+      {
+        "["cap","g1"]": {
+          "pks": [
+            "["x1"]",
+          ],
+          "size": 1,
+        },
+      }
+    `);
+
+    // Removing p2 as well deletes the state — no parent references g1.
+    const second = runPushTest({
+      sources,
+      sourceContents,
+      ast,
+      format,
+      pushes: [
+        ['parent', makeSourceChangeRemove({id: 'p1', group: 'g1'})],
+        ['parent', makeSourceChangeRemove({id: 'p2', group: 'g1'})],
+      ],
+    });
+    expect(second.actualStorage['.children:cap']).toMatchInlineSnapshot(`{}`);
+    expect(second.data).toMatchInlineSnapshot(`[]`);
+  });
+
+  test('split edit that changes the partition key moves the state', () => {
+    // Editing the parent's join key is split by the source into
+    // remove(old) + add(new). The remove deletes the old partition's
+    // state; processing the add rebuilds state for the new partition.
+    const sourceContents: SourceContents = {
+      parent: [{id: 'p1', group: 'g1'}],
+      child: [
+        {id: 'x1', group: 'g1', text: 'x1'},
+        {id: 'x2', group: 'g2', text: 'x2'},
+      ],
+    };
+    const {data, actualStorage} = runPushTest({
+      sources,
+      sourceContents,
+      ast,
+      format,
+      pushes: [
+        [
+          'parent',
+          makeSourceChangeEdit(
+            {id: 'p1', group: 'g2'},
+            {id: 'p1', group: 'g1'},
+          ),
+        ],
+      ],
+    });
+
+    expect(actualStorage['.children:cap']).toMatchInlineSnapshot(`
+      {
+        "["cap","g2"]": {
+          "pks": [
+            "["x2"]",
+          ],
+          "size": 1,
+        },
+      }
+    `);
+    expect(data).toMatchInlineSnapshot(`
+      [
+        {
+          "children": [
+            {
+              "group": "g2",
+              "id": "x2",
+              "text": "x2",
+              Symbol(rc): 1,
+            },
+          ],
+          "group": "g2",
+          "id": "p1",
+          Symbol(rc): 1,
+        },
+      ]
+    `);
+  });
+
+  test('remove of parent with null join key does not touch state', () => {
+    // null join keys never match children, so no partition state exists
+    // for them and no cleanup is attempted.
+    const sourceContents: SourceContents = {
+      parent: [
+        {id: 'p1', group: null},
+        {id: 'p2', group: 'g1'},
+      ],
+      child: [{id: 'x1', group: 'g1', text: 'x1'}],
+    };
+    const {data, actualStorage} = runPushTest({
+      sources,
+      sourceContents,
+      ast,
+      format,
+      pushes: [['parent', makeSourceChangeRemove({id: 'p1', group: null})]],
+    });
+
+    expect(actualStorage['.children:cap']).toMatchInlineSnapshot(`
+      {
+        "["cap","g1"]": {
+          "pks": [
+            "["x1"]",
+          ],
+          "size": 1,
+        },
+      }
+    `);
+    expect(data).toMatchInlineSnapshot(`
+      [
+        {
+          "children": [
+            {
+              "group": "g1",
+              "id": "x1",
+              "text": "x1",
+              Symbol(rc): 1,
+            },
+          ],
+          "group": "g1",
+          "id": "p2",
+          Symbol(rc): 1,
+        },
+      ]
+    `);
+  });
+});
+
+describe('Cap storage lifecycle', () => {
+  const sources: Sources = {
+    issue: {
+      columns: {
+        id: {type: 'string'},
+        text: {type: 'string'},
+      },
+      primaryKeys: ['id'],
+    },
+    comment: {
+      columns: {
+        id: {type: 'string'},
+        issueID: {type: 'string'},
+        text: {type: 'string'},
+      },
+      primaryKeys: ['id'],
+    },
+  };
+
+  const ast: AST = {
+    table: 'issue',
+    orderBy: [['id', 'asc']],
+    where: {
+      type: 'correlatedSubquery',
+      related: {
+        system: 'client',
+        correlation: {parentField: ['id'], childField: ['issueID']},
+        subquery: {
+          table: 'comment',
+          alias: 'comments',
+          orderBy: [['id', 'asc']],
+        },
+      },
+      op: 'EXISTS',
+    },
+  } as const;
+
+  function buildHydratedPipeline() {
+    const lc = createSilentLogContext();
+    const builtSources: Record<string, Source> = {};
+    for (const [name, {columns, primaryKeys}] of Object.entries(sources)) {
+      builtSources[name] = createSource(
+        lc,
+        testLogConfig,
+        name,
+        columns,
+        primaryKeys,
+      );
+    }
+    consume(
+      builtSources.issue.push(makeSourceChangeAdd({id: 'i1', text: 'i1'})),
+    );
+    consume(
+      builtSources.issue.push(makeSourceChangeAdd({id: 'i2', text: 'i2'})),
+    );
+    consume(
+      builtSources.comment.push(
+        makeSourceChangeAdd({id: 'c1', issueID: 'i1', text: 'c1'}),
+      ),
+    );
+    consume(
+      builtSources.comment.push(
+        makeSourceChangeAdd({id: 'c2', issueID: 'i2', text: 'c2'}),
+      ),
+    );
+    const delegate = new TestBuilderDelegate(builtSources);
+    const pipeline = buildPipeline(ast, delegate, 'query-id');
+    return {delegate, pipeline, sources: builtSources};
+  }
+
+  test('destroy deletes all stored state', () => {
+    const {delegate, pipeline} = buildHydratedPipeline();
+    const c = new Catch(pipeline);
+    c.fetch();
+
+    expect(delegate.clonedStorage['.comments:cap']).toMatchInlineSnapshot(`
+      {
+        "["cap","i1"]": {
+          "pks": [
+            "["c1"]",
+          ],
+          "size": 1,
+        },
+        "["cap","i2"]": {
+          "pks": [
+            "["c2"]",
+          ],
+          "size": 1,
+        },
+      }
+    `);
+
+    pipeline.destroy();
+
+    expect(delegate.clonedStorage['.comments:cap']).toEqual({});
+  });
+
+  test('deferred consumption of a removed parent does not recreate state', () => {
+    // The view-syncer accumulates pushed changes and consumes their
+    // relationship streams after the push has returned (pipeline-driver's
+    // Streamer). By then the partition state has been deleted; if the
+    // remove still carried a lazy stream, consuming it would re-run
+    // Cap#initialFetch and permanently recreate state for a partition
+    // that no parent references. The Join guards against this by
+    // materializing the relationship into the remove change.
+    const {delegate, pipeline, sources: builtSources} = buildHydratedPipeline();
+
+    const deferred: Change[] = [];
+    pipeline.setOutput({
+      push(change: Change): Stream<'yield'> {
+        // Do NOT consume the change's relationships here.
+        deferred.push(change);
+        return [];
+      },
+    });
+    // Hydrate.
+    consume(pipeline.fetch({}));
+
+    consume(
+      builtSources.issue.push(makeSourceChangeRemove({id: 'i1', text: 'i1'})),
+    );
+
+    // State for i1 is deleted by the time the push returns.
+    expect(Object.keys(delegate.clonedStorage['.comments:cap'])).toEqual([
+      '["cap","i2"]',
+    ]);
+
+    // Now consume the deferred remove, including its relationships,
+    // the way the view-syncer's Streamer does.
+    expect(deferred.length).toBe(1);
+    const caught = expandChange(deferred[0]);
+    expect(caught).toMatchInlineSnapshot(`
+      {
+        "node": {
+          "relationships": {
+            "comments": [
+              {
+                "relationships": {},
+                "row": {
+                  "id": "c1",
+                  "issueID": "i1",
+                  "text": "c1",
+                },
+              },
+            ],
+          },
+          "row": {
+            "id": "i1",
+            "text": "i1",
+          },
+        },
+        "type": "remove",
+      }
+    `);
+
+    // Consuming the relationship must not have recreated i1's state.
+    expect(Object.keys(delegate.clonedStorage['.comments:cap'])).toEqual([
+      '["cap","i2"]',
+    ]);
+  });
+});
+
 describe('Cap push - compound partition key', () => {
   // Compound correlation: parent.(region,org) → child.(region,org).
   // Exercises multi-column partitioning in getCapStateKey, serializePK,
@@ -1755,6 +2291,42 @@ describe('Cap push - compound partition key', () => {
         "["cap","us","wayne"]": {
           "pks": [
             "["c5"]",
+          ],
+          "size": 1,
+        },
+      }
+    `);
+  });
+
+  test('remove of last parent with compound key deletes only that partition', () => {
+    const sourceContents: SourceContents = {
+      parent: [
+        {id: 'p1', region: 'us', org: 'acme'},
+        {id: 'p2', region: 'us', org: 'wayne'},
+      ],
+      child: [
+        {id: 'cA', region: 'us', org: 'acme', text: 'A'},
+        {id: 'cB', region: 'us', org: 'wayne', text: 'B'},
+      ],
+    };
+    const {actualStorage} = runPushTest({
+      sources,
+      sourceContents,
+      ast,
+      format,
+      pushes: [
+        [
+          'parent',
+          makeSourceChangeRemove({id: 'p1', region: 'us', org: 'acme'}),
+        ],
+      ],
+    });
+
+    expect(actualStorage['.children:cap']).toMatchInlineSnapshot(`
+      {
+        "["cap","us","wayne"]": {
+          "pks": [
+            "["cB"]",
           ],
           "size": 1,
         },

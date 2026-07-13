@@ -126,6 +126,20 @@ export const throwOutput: Output = {
 export interface Operator extends Input, Output {}
 
 /**
+ * An operator that maintains state per distinct value of a partition key
+ * (e.g. Take and Cap, which store one entry per partition ever fetched).
+ *
+ * `deletePartitionState` is called by a downstream Join when the last
+ * parent row with the corresponding join-key value is removed. At that
+ * point the partition can no longer be fetched, so its state must be
+ * deleted or it leaks. The constraint's keys must be exactly the
+ * operator's partition key.
+ */
+export interface PartitionStateOperator {
+  deletePartitionState(constraint: Constraint): void;
+}
+
+/**
  * Operators get access to storage that they can store their internal
  * state in.
  */
