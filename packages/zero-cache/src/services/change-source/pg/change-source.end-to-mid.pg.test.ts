@@ -2216,6 +2216,44 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
       [],
       [],
     ],
+    [
+      'column whose default changed before update_schemas() is backfilled',
+      /*sql*/ `
+      ALTER TABLE your.new_table ADD "changed_default" INT4 DEFAULT 1;
+      ALTER TABLE your.new_table
+        ALTER "changed_default" SET DEFAULT 2;
+      SELECT ${APP_ID}_0.update_schemas();
+      `,
+      [
+        [
+          {
+            tag: 'add-column',
+            table: {schema: 'your', name: 'new_table'},
+            column: {
+              name: 'changed_default',
+              spec: {
+                pos: expect.any(Number),
+                dataType: 'int4',
+                dflt: null,
+              },
+            },
+            // The existing row contains the default from ADD COLUMN (1), not
+            // the current default (2), so replicating the current default
+            // directly would produce the wrong value.
+            backfill: {attNum: expect.any(Number)},
+          },
+        ],
+        [{tag: 'backfill'}],
+        [{tag: 'backfill-completed'}],
+      ],
+      {
+        ['your.new_table']: [
+          {id: 99n, enabled: 1n, num: 30n, changed_default: 1n},
+        ],
+      },
+      [],
+      [],
+    ],
   ] satisfies [
     name: string,
     statements: string | string[],
