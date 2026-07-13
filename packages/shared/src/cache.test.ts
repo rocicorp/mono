@@ -113,6 +113,76 @@ describe('TimedCache', () => {
     vi.advanceTimersByTime(10000);
   });
 
+  test('does not start the cleanup interval until the first set', () => {
+    const cache = new TimedCache<string>(1000);
+    expect(vi.getTimerCount()).toBe(0);
+
+    expect(cache.get('key1')).toBeUndefined();
+    expect(vi.getTimerCount()).toBe(0);
+
+    cache.set('key1', 'value1');
+    expect(vi.getTimerCount()).toBe(1);
+
+    // Subsequent sets reuse the same interval.
+    cache.set('key2', 'value2');
+    expect(vi.getTimerCount()).toBe(1);
+
+    cache.destroy();
+  });
+
+  test('unrefs the cleanup interval so it cannot hold the process open', () => {
+    const unref = vi.fn();
+    const setIntervalSpy = vi
+      .spyOn(globalThis, 'setInterval')
+      .mockReturnValue({unref} as unknown as ReturnType<typeof setInterval>);
+    const clearIntervalSpy = vi
+      .spyOn(globalThis, 'clearInterval')
+      .mockImplementation(() => undefined);
+
+    try {
+      const cache = new TimedCache<string>(1000);
+      expect(setIntervalSpy).not.toHaveBeenCalled();
+
+      cache.set('key1', 'value1');
+      expect(setIntervalSpy).toHaveBeenCalledTimes(1);
+      expect(unref).toHaveBeenCalledTimes(1);
+
+      cache.destroy();
+      expect(clearIntervalSpy).toHaveBeenCalledTimes(1);
+    } finally {
+      setIntervalSpy.mockRestore();
+      clearIntervalSpy.mockRestore();
+    }
+  });
+
+  test('destroy stops the cleanup interval and is idempotent', () => {
+    const cache = new TimedCache<string>(1000);
+
+    cache.set('key1', 'value1');
+    expect(vi.getTimerCount()).toBe(1);
+
+    cache.destroy();
+    expect(vi.getTimerCount()).toBe(0);
+
+    cache.destroy();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  test('set and get after destroy do not throw and do not restart the cleanup interval', () => {
+    const cache = new TimedCache<string>(1000);
+
+    cache.set('key1', 'value1');
+    cache.destroy();
+    expect(vi.getTimerCount()).toBe(0);
+
+    expect(() => cache.set('key2', 'value2')).not.toThrow();
+    expect(() => cache.get('key1')).not.toThrow();
+
+    // set() after destroy is a no-op and never restarts the interval.
+    expect(cache.get('key2')).toBeUndefined();
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   test('works with different value types', () => {
     const cache = new TimedCache<{id: number; name: string}>(1000);
 

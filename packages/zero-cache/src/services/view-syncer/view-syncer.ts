@@ -2772,6 +2772,10 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     this.#stopTTLClockInterval();
     this.#stopExpireTimer();
     this.#stopAuthMaintenanceTimer();
+    // The InspectorDelegate shares this transformer and may still use it
+    // after cleanup; a destroyed transformer is safe to use (it just stops
+    // caching and never restarts its cleanup interval).
+    this.#customQueryTransformer?.destroy();
 
     for (const client of this.#clients.values()) {
       if (err) {
