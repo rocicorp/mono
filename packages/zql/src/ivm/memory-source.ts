@@ -86,6 +86,10 @@ export type Connection = {
     | undefined;
   readonly debug?: DebugDelegate | undefined;
   lastPushedEpoch: number;
+  // Set by MemorySource#disconnect. A destroyed connection must never be
+  // (re-)registered in an index's usedBy set. Only used by MemorySource;
+  // other Connection users (e.g. zqlite's TableSource) have no indexes.
+  destroyed?: boolean | undefined;
 };
 
 /**
@@ -193,6 +197,7 @@ export class MemorySource implements Source {
           }
         : undefined,
       lastPushedEpoch: 0,
+      destroyed: false,
     };
     const schema = this.#getSchema(connection, unordered);
     if (!unordered) {
@@ -205,15 +210,26 @@ export class MemorySource implements Source {
   #disconnect(input: Input): void {
     const idx = this.#connections.findIndex(c => c.input === input);
     assert(idx !== -1, 'Connection not found');
-    this.#connections.splice(idx, 1);
+    const [connection] = this.#connections.splice(idx, 1);
+    connection.destroyed = true;
 
-    // TODO: We used to delete unused indexes here. But in common cases like
-    // navigating into issue detail pages it caused a ton of constantly
-    // building and destroying indexes.
+    // Remove the connection from every index's usedBy set (a connection can
+    // be registered in multiple indexes, one per distinct fetch
+    // constraint/sort) so destroyed pipelines are not kept alive via
+    // `connection.output`. Evict non-primary indexes that are no longer used
+    // by any connection. The primary index holds the source of truth data so
+    // it is never evicted.
     //
-    // Perhaps some intelligent LRU or something is needed here but for now,
-    // the opposite extreme of keeping all indexes for the lifetime of the
-    // page seems better.
+    // TODO: If connect/disconnect churn (e.g. navigating between pages) makes
+    // the index rebuilds expensive, an LRU of unused indexes could be added
+    // here.
+    const primaryIndexKey = JSON.stringify(this.#primaryIndexSort);
+    for (const [key, index] of this.#indexes) {
+      index.usedBy.delete(connection);
+      if (index.usedBy.size === 0 && key !== primaryIndexKey) {
+        this.#indexes.delete(key);
+      }
+    }
   }
 
   #getPrimaryIndex(): Index {
@@ -223,6 +239,11 @@ export class MemorySource implements Source {
   }
 
   #getOrCreateIndex(sort: Ordering, usedBy: Connection): Index {
+    // #fetch registers lazily, on the stream's first pull. A destroyed
+    // connection must not (re-)register: #disconnect has already run for it,
+    // so nothing would ever remove it again and it would pin its downstream
+    // pipeline and make the index permanently un-evictable.
+    assert(!usedBy.destroyed, 'Connection is destroyed');
     const key = JSON.stringify(sort);
     const index = this.#indexes.get(key);
     // Future optimization could use existing index if it's the same just sorted
@@ -252,6 +273,12 @@ export class MemorySource implements Source {
   // For unit testing that we correctly clean up indexes.
   getIndexKeys(): string[] {
     return [...this.#indexes.keys()];
+  }
+
+  // For unit testing that we correctly clean up index usedBy sets.
+  // Returns undefined if the index does not exist.
+  getIndexUsedByCountForTest(key: string): number | undefined {
+    return this.#indexes.get(key)?.usedBy.size;
   }
 
   *#fetch(req: FetchRequest, conn: Connection): Stream<Node | 'yield'> {
