@@ -91,6 +91,15 @@ export class CustomQueryTransformer {
   }
 
   /**
+   * Stops the cache's periodic cleanup so the transformer can be garbage
+   * collected. Idempotent, and the transformer remains safe to use after
+   * destroy (it just no longer caches).
+   */
+  destroy(): void {
+    this.#cache.destroy();
+  }
+
+  /**
    * Forces the empty `/query` validation request used by auth maintenance.
    *
    * This stays separate from `transform()` because `transform([], ...)`
