@@ -4,6 +4,7 @@ import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts'
 import {emptyArray} from '../../../shared/src/sentinels.ts';
 import type {Ordering} from '../../../zero-protocol/src/ast.ts';
 import type {Row} from '../../../zero-protocol/src/data.ts';
+import type {SchemaValue} from '../../../zero-types/src/schema-value.ts';
 import {Catch} from './catch.ts';
 import {ChangeIndex} from './change-index.ts';
 import {ChangeType} from './change-type.ts';
@@ -14,6 +15,7 @@ import {
   generateWithOverlayInner,
   generateWithOverlayInnerUnordered,
   generateWithOverlayUnordered,
+  MAX_UNUSED_INDEXES,
   MemorySource,
   mergeSortedStreams,
   overlaysForConstraintForTest,
@@ -43,7 +45,7 @@ test('schema', () => {
   });
 });
 
-test('unused non-primary indexes are evicted on disconnect', () => {
+test('unused non-primary indexes are retained warm on disconnect', () => {
   const ms = new MemorySource(
     'table',
     {a: {type: 'string'}, b: {type: 'string'}, c: {type: 'string'}},
@@ -87,18 +89,148 @@ test('unused non-primary indexes are evicted on disconnect', () => {
   expect(ms.getIndexKeys()).toEqual([primaryKey, abKey, acKey]);
   expect(ms.getIndexUsedByCountForTest(acKey)).toBe(1);
 
-  // The index used only by conn3 is evicted when conn3 is destroyed.
+  // The index used only by conn3 no longer references it after destroy, but
+  // stays retained (warm) for a future reconnect.
   conn3.destroy();
-  expect(ms.getIndexKeys()).toEqual([primaryKey, abKey]);
+  expect(ms.getIndexKeys()).toEqual([primaryKey, abKey, acKey]);
+  expect(ms.getIndexUsedByCountForTest(acKey)).toBe(0);
 
-  // The index shared by conn1 and conn2 is kept while conn1 is still alive.
   conn2.destroy();
-  expect(ms.getIndexKeys()).toEqual([primaryKey, abKey]);
   expect(ms.getIndexUsedByCountForTest(abKey)).toBe(1);
 
-  // ...and evicted when its last connection is destroyed.
   conn1.destroy();
-  expect(ms.getIndexKeys()).toEqual([primaryKey]);
+  expect(ms.getIndexKeys()).toEqual([primaryKey, abKey, acKey]);
+  expect(ms.getIndexUsedByCountForTest(abKey)).toBe(0);
+
+  // A reconnect takes the index back out of the unused pool. (That the
+  // index stays warm rather than being rebuilt is pinned by
+  // 'a retained index stays maintained while unused'.)
+  const conn4 = ms.connect([
+    ['a', 'asc'],
+    ['b', 'asc'],
+  ]);
+  const c4 = new Catch(conn4);
+  c4.fetch();
+  expect(ms.getIndexKeys()).toEqual([primaryKey, abKey, acKey]);
+  expect(ms.getIndexUsedByCountForTest(abKey)).toBe(1);
+});
+
+test('the longest-unused index is dropped beyond MAX_UNUSED_INDEXES', () => {
+  const columns: Record<string, SchemaValue> = {a: {type: 'string'}};
+  const row: Record<string, string> = {a: 'a1'};
+  const sorts: Ordering[] = [];
+  for (let i = 0; i <= MAX_UNUSED_INDEXES; i++) {
+    columns[`b${i}`] = {type: 'string'};
+    row[`b${i}`] = 'b';
+    sorts.push([
+      [`b${i}`, 'asc'],
+      ['a', 'asc'],
+    ]);
+  }
+  const ms = new MemorySource('table', columns, ['a']);
+  const primaryKey = JSON.stringify([['a', 'asc']]);
+  consume(ms.push(makeSourceChangeAdd(row)));
+
+  for (const sort of sorts) {
+    const conn = ms.connect(sort);
+    new Catch(conn).fetch();
+    conn.destroy();
+  }
+
+  // MAX_UNUSED_INDEXES + 1 indexes became unused; the one unused the longest
+  // was dropped, the rest are retained.
+  expect(ms.getIndexKeys()).toEqual([
+    primaryKey,
+    ...sorts.slice(1).map(s => JSON.stringify(s)),
+  ]);
+
+  // Reconnecting with the dropped sort rebuilds the index from primary data.
+  const conn = ms.connect(sorts[0]);
+  const c = new Catch(conn);
+  expect(c.fetch()).toEqual([{row, relationships: {}}]);
+  expect(ms.getIndexKeys()).toContain(JSON.stringify(sorts[0]));
+});
+
+test('multiple indexes dropped in one disconnect when the cap overflows', () => {
+  const columns: Record<string, SchemaValue> = {
+    a: {type: 'string'},
+    c: {type: 'string'},
+    d: {type: 'string'},
+  };
+  const sorts: Ordering[] = [];
+  for (let i = 0; i < MAX_UNUSED_INDEXES; i++) {
+    columns[`b${i}`] = {type: 'string'};
+    sorts.push([
+      [`b${i}`, 'asc'],
+      ['a', 'asc'],
+    ]);
+  }
+  const ms = new MemorySource('table', columns, ['a']);
+  const primaryKey = JSON.stringify([['a', 'asc']]);
+
+  for (const sort of sorts) {
+    const conn = ms.connect(sort);
+    new Catch(conn).fetch();
+    conn.destroy();
+  }
+  // The unused pool is exactly full.
+  expect(ms.getIndexKeys()).toHaveLength(1 + MAX_UNUSED_INDEXES);
+
+  // One connection is the sole user of two constraint-driven indexes...
+  const conn = ms.connect([['a', 'asc']]);
+  const c = new Catch(conn);
+  c.fetch({constraint: {c: 'c1'}});
+  c.fetch({constraint: {d: 'd1'}});
+  const cKey = JSON.stringify([
+    ['c', 'asc'],
+    ['a', 'asc'],
+  ]);
+  const dKey = JSON.stringify([
+    ['d', 'asc'],
+    ['a', 'asc'],
+  ]);
+  expect(ms.getIndexKeys()).toContain(cKey);
+  expect(ms.getIndexKeys()).toContain(dKey);
+
+  // ...so destroying it makes both unused at once, overflowing the cap by
+  // two: the two longest-unused indexes are dropped together.
+  conn.destroy();
+  expect(ms.getIndexKeys()).toEqual([
+    primaryKey,
+    ...sorts.slice(2).map(s => JSON.stringify(s)),
+    cKey,
+    dKey,
+  ]);
+});
+
+test('reconnecting refreshes an unused index in the LRU', () => {
+  const columns: Record<string, SchemaValue> = {a: {type: 'string'}};
+  const sorts: Ordering[] = [];
+  for (let i = 0; i <= MAX_UNUSED_INDEXES; i++) {
+    columns[`b${i}`] = {type: 'string'};
+    sorts.push([
+      [`b${i}`, 'asc'],
+      ['a', 'asc'],
+    ]);
+  }
+  const ms = new MemorySource('table', columns, ['a']);
+
+  const useAndDestroy = (sort: Ordering) => {
+    const conn = ms.connect(sort);
+    new Catch(conn).fetch();
+    conn.destroy();
+  };
+
+  useAndDestroy(sorts[0]);
+  useAndDestroy(sorts[1]);
+  // Reusing sorts[0] makes it more recently used than sorts[1]...
+  useAndDestroy(sorts[0]);
+  // ...so overflowing the cap drops sorts[1], not sorts[0].
+  for (const sort of sorts.slice(2)) {
+    useAndDestroy(sort);
+  }
+  expect(ms.getIndexKeys()).not.toContain(JSON.stringify(sorts[1]));
+  expect(ms.getIndexKeys()).toContain(JSON.stringify(sorts[0]));
 });
 
 test('destroy removes connection from primary index usedBy without evicting it', () => {
@@ -153,11 +285,13 @@ test('destroy removes connection from all indexes it is registered in', () => {
   expect(ms.getIndexUsedByCountForTest(caKey)).toBe(1);
 
   conn.destroy();
-  expect(ms.getIndexKeys()).toEqual([primaryKey]);
+  expect(ms.getIndexKeys()).toEqual([primaryKey, baKey, caKey]);
   expect(ms.getIndexUsedByCountForTest(primaryKey)).toBe(0);
+  expect(ms.getIndexUsedByCountForTest(baKey)).toBe(0);
+  expect(ms.getIndexUsedByCountForTest(caKey)).toBe(0);
 });
 
-test('a new connection after eviction rebuilds the index from primary data', () => {
+test('a retained index stays maintained while unused', () => {
   const ms = new MemorySource(
     'table',
     {a: {type: 'string'}, b: {type: 'string'}},
@@ -178,10 +312,10 @@ test('a new connection after eviction rebuilds the index from primary data', () 
     {row: {a: 'a1', b: 'b2'}, relationships: {}},
   ]);
   conn1.destroy();
-  expect(ms.getIndexKeys()).toEqual([primaryKey]);
+  expect(ms.getIndexKeys()).toEqual([primaryKey, JSON.stringify(sort)]);
 
-  // This push happens while the [b, a] index is evicted; the rebuilt index
-  // must still contain the row.
+  // This push happens while the [b, a] index is retained but unused; the
+  // warm index must still absorb it.
   consume(ms.push(makeSourceChangeAdd({a: 'a3', b: 'b0'})));
 
   const conn2 = ms.connect(sort);
@@ -219,7 +353,8 @@ test('destroying a connection that never fetched leaves other indexes untouched'
   expect(ms.getIndexUsedByCountForTest(abKey)).toBe(1);
 
   conn1.destroy();
-  expect(ms.getIndexKeys()).toEqual([primaryKey]);
+  expect(ms.getIndexKeys()).toEqual([primaryKey, abKey]);
+  expect(ms.getIndexUsedByCountForTest(abKey)).toBe(0);
 });
 
 test('fetching after destroy throws instead of re-registering the connection', () => {
@@ -242,7 +377,12 @@ test('fetching after destroy throws instead of re-registering the connection', (
   const stream = conn.fetch({});
   conn.destroy();
   expect(() => [...stream]).toThrow('Connection is destroyed');
-  expect(ms.getIndexKeys()).toEqual([primaryKey]);
+  const baKey = JSON.stringify([
+    ['b', 'asc'],
+    ['a', 'asc'],
+  ]);
+  expect(ms.getIndexKeys()).toEqual([primaryKey, baKey]);
+  expect(ms.getIndexUsedByCountForTest(baKey)).toBe(0);
 });
 
 test('push edit change', () => {

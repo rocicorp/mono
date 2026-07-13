@@ -72,6 +72,16 @@ type Index = {
   usedBy: Set<Connection>;
 };
 
+/**
+ * Maximum number of non-primary indexes (per source) retained after their
+ * last connection disconnects. Retained indexes are still maintained by
+ * writes, so reconnecting with the same sort (e.g. navigating back to a
+ * page) reuses a warm index instead of rebuilding it from the primary
+ * index. When the cap is exceeded the index that has been unused the
+ * longest is dropped.
+ */
+export const MAX_UNUSED_INDEXES = 8;
+
 export type Connection = {
   input: Input;
   output: Output | undefined;
@@ -105,6 +115,10 @@ export class MemorySource implements Source {
   readonly #primaryKey: PrimaryKey;
   readonly #primaryIndexSort: Ordering;
   readonly #indexes: Map<string, Index> = new Map();
+  // Keys of indexes in #indexes whose usedBy set is empty, in the order
+  // they became unused (longest-unused first). Bounded by
+  // MAX_UNUSED_INDEXES; never contains the primary index key.
+  readonly #unusedIndexKeys: Set<string> = new Set();
   readonly #connections: Connection[] = [];
 
   #overlay: Overlay | undefined;
@@ -216,19 +230,25 @@ export class MemorySource implements Source {
     // Remove the connection from every index's usedBy set (a connection can
     // be registered in multiple indexes, one per distinct fetch
     // constraint/sort) so destroyed pipelines are not kept alive via
-    // `connection.output`. Evict non-primary indexes that are no longer used
-    // by any connection. The primary index holds the source of truth data so
-    // it is never evicted.
-    //
-    // TODO: If connect/disconnect churn (e.g. navigating between pages) makes
-    // the index rebuilds expensive, an LRU of unused indexes could be added
-    // here.
+    // `connection.output`. Non-primary indexes left with no users are kept
+    // warm in a small LRU (still maintained by writes) so connect/disconnect
+    // churn (e.g. navigating between pages) does not rebuild them from
+    // scratch. The primary index holds the source of truth data so it is
+    // never dropped.
     const primaryIndexKey = JSON.stringify(this.#primaryIndexSort);
     for (const [key, index] of this.#indexes) {
-      index.usedBy.delete(connection);
-      if (index.usedBy.size === 0 && key !== primaryIndexKey) {
-        this.#indexes.delete(key);
+      if (
+        index.usedBy.delete(connection) &&
+        index.usedBy.size === 0 &&
+        key !== primaryIndexKey
+      ) {
+        this.#unusedIndexKeys.add(key);
       }
+    }
+    while (this.#unusedIndexKeys.size > MAX_UNUSED_INDEXES) {
+      const oldest = must(this.#unusedIndexKeys.values().next().value);
+      this.#unusedIndexKeys.delete(oldest);
+      this.#indexes.delete(oldest);
     }
   }
 
@@ -250,6 +270,7 @@ export class MemorySource implements Source {
     // in reverse of needed.
     if (index) {
       index.usedBy.add(usedBy);
+      this.#unusedIndexKeys.delete(key);
       return index;
     }
 
