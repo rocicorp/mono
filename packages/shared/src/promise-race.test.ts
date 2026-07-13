@@ -133,6 +133,7 @@ describe('promiseRace does not leak reactions on losing promises', () => {
     let thenCalls = 0;
     const pending = new Promise<never>(() => undefined);
     const loser: PromiseLike<never> = {
+      // oxlint-disable-next-line unicorn/no-thenable
       then: (onFulfilled, onRejected) => {
         thenCalls++;
         return pending.then(onFulfilled, onRejected);
@@ -218,5 +219,44 @@ describe('promiseRace does not leak reactions on losing promises', () => {
       error,
     );
     expect(raceWaiterCountForTesting(promise)).toBe(0);
+  });
+
+  test('an entry with an observed settlement wins over an earlier key settled this tick', async () => {
+    const {promise: cached, resolve} = resolver<string>();
+    await promiseRace({cached, quick: sleep(0)});
+    resolve('cached-result');
+    await cached;
+
+    // Native Promise.race would resolve with `fresh` (first key, also settled
+    // at call time); promiseRace picks the entry whose settlement it has
+    // already observed. Documented divergence — see the promiseRace jsdoc.
+    const result = await promiseRace({
+      fresh: Promise.resolve('fresh-result'),
+      cached,
+    });
+    expect(result).toEqual({
+      key: 'cached',
+      status: 'fulfilled',
+      result: 'cached-result',
+    });
+  });
+
+  test('losers that reject after the race settles are suppressed as handled', async () => {
+    const {promise: cached, resolve} = resolver<string>();
+    await promiseRace({cached, quick: sleep(0)});
+    resolve('cached-result');
+    await cached;
+
+    // `cached` wins via the already-settled fast path, so `lateLoser` never
+    // registers a waiter — but it must still be subscribed, otherwise its
+    // rejection below would surface as an unhandled rejection and fail the
+    // test run.
+    const {promise: lateLoser, reject} = resolver<never>();
+    const result = await promiseRace({cached, lateLoser});
+    expect(result.key).toBe('cached');
+    expect(raceWaiterCountForTesting(lateLoser)).toBe(0);
+
+    reject(new Error('late loser rejection'));
+    await sleep(10);
   });
 });

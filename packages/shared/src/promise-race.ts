@@ -87,6 +87,17 @@ function toRaceResult<T extends Record<string, PromiseLike<unknown>>>(
  * long-lived pending promise (e.g. in a loop) without leaking a reaction per
  * call.
  *
+ * Known divergences from `Promise.race`, inherent to sharing reactions:
+ * - Among entries that settled before the call, the winner is the first entry
+ *   in key order whose settlement has already been *observed* (by an earlier
+ *   race or an elapsed microtask), which may not be the entry `Promise.race`
+ *   would pick. In particular, an entry with an observed rejection can preempt
+ *   an entry that fulfilled in the same tick.
+ * - An entry's `then` method is only called the first time that entry is
+ *   raced, not once per race.
+ * - Entries must be objects (they are cached in a WeakMap); a non-object
+ *   `PromiseLike` throws a `TypeError`.
+ *
  * @param promises Record of promises to race.
  * @returns Promise resolving to a discriminated union of key/result pairs.
  * @throws An error if the record is empty or if a promise is rejected.
@@ -105,8 +116,10 @@ export async function promiseRace<
   // rejections for all entries.
   const subs = keys.map(key => getSubscription(promises[key]));
 
-  // If an entry has already settled, the first such entry in key order wins,
-  // mirroring Promise.race, and no waiters need to be registered.
+  // If an entry's settlement has already been observed, the first such entry
+  // in key order wins and no waiters need to be registered. Native
+  // Promise.race would pick by reaction order among already-settled entries
+  // instead; see the divergence note in the jsdoc above.
   for (let i = 0; i < keys.length; i++) {
     const {settlement} = subs[i];
     if (settlement !== undefined) {
