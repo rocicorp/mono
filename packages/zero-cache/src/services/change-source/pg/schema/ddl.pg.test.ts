@@ -1441,6 +1441,56 @@ describe('change-source/tables/ddl', () => {
     },
   );
 
+  test('manual snapshot excludes a column populated in the same transaction', async () => {
+    await upstream`INSERT INTO pub.foo(id) VALUES('populated')`;
+    await expectReplicationMessagesToMatchObject([
+      {tag: 'begin'},
+      {tag: 'relation'},
+      {tag: 'insert'},
+      {tag: 'commit'},
+    ]);
+
+    await upstream.begin(async tx => {
+      await tx.unsafe(/*sql*/ `
+        DROP EVENT TRIGGER ${APP_ID}_ddl_start_${SHARD_NUM};
+        DROP EVENT TRIGGER ${APP_ID}_ddl_end_${SHARD_NUM};
+
+        ALTER TABLE pub.foo ADD populated_status TEXT;
+        UPDATE pub.foo SET populated_status = 'active';
+        ALTER TABLE pub.foo ALTER populated_status SET NOT NULL;
+        SELECT ${APP_ID}_${SHARD_NUM}.update_schemas();
+      `);
+    });
+
+    expect(
+      await upstream<{populated_status: string}[]>`
+        SELECT populated_status FROM pub.foo WHERE id = 'populated'`,
+    ).toEqual([{populated_status: 'active'}]);
+
+    const replicated = await expectReplicationMessagesToMatchObject([
+      {tag: 'begin'},
+      {tag: 'relation'},
+      {tag: 'update'},
+      {
+        tag: 'message',
+        prefix: 'zap/0/ddl',
+        content: expect.any(Uint8Array),
+        flags: 1,
+        transactional: true,
+      },
+      {tag: 'commit'},
+    ]);
+
+    const msg = replicated[3] as MessageMessage;
+    expect(parseSchemaSnapshotEvent(msg)).toMatchObject({
+      type: 'schemaSnapshot',
+      event: {tag: 'MANUAL'},
+      // The column was populated after it was created, so existing rows no
+      // longer contain the column default and cannot skip backfill.
+      newColumns: null,
+    } satisfies Partial<SchemaSnapshotEvent>);
+  });
+
   // Run the same DDL commands on tables in the "private" schema
   // (or the "nonzeropub" publication) and verify that they do not trigger
   // "ddlUpdate" events.

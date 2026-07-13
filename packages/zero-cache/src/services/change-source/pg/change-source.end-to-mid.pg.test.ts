@@ -2254,6 +2254,42 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
       [],
       [],
     ],
+    [
+      'column whose temporary default was dropped before update_schemas() is backfilled',
+      /*sql*/ `
+      ALTER TABLE your.new_table
+        ADD "temporary_default" BOOL NOT NULL DEFAULT false;
+      ALTER TABLE your.new_table
+        ALTER "temporary_default" DROP DEFAULT;
+      SELECT ${APP_ID}_0.update_schemas();
+      `,
+      [
+        [
+          {
+            tag: 'add-column',
+            table: {schema: 'your', name: 'new_table'},
+            column: {
+              name: 'temporary_default',
+              spec: {
+                pos: expect.any(Number),
+                dataType: 'bool',
+                dflt: null,
+                notNull: true,
+              },
+            },
+            // DROP DEFAULT only affects future rows. The existing row still
+            // contains false and must not be represented by the final null
+            // default in the replica.
+            backfill: {attNum: expect.any(Number)},
+          },
+        ],
+        [{tag: 'backfill'}],
+        [{tag: 'backfill-completed'}],
+      ],
+      {['your.new_table']: [{id: 99n, temporary_default: 0n}]},
+      [],
+      [],
+    ],
   ] satisfies [
     name: string,
     statements: string | string[],
