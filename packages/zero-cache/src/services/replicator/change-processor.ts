@@ -647,33 +647,64 @@ class TransactionProcessor {
     const oldSpec = mapPostgresToLiteColumn(table, msg.old, 'ignore-default');
     const newSpec = mapPostgresToLiteColumn(table, msg.new, 'ignore-default');
 
-    // The only updates that are relevant are the column name and the data type.
+    // If neither the column name nor the SQLite data type changes, only the
+    // upstream metadata needs to be updated. This includes changes such as a
+    // varchar character limit, which SQLite does not enforce but a freshly
+    // built replica still records.
     if (oldName === newName && oldSpec.dataType === newSpec.dataType) {
-      this.#lc.info?.(msg.tag, 'no thing to update', oldSpec, newSpec);
+      this.#columnMetadata.update(
+        table,
+        msg.old.name,
+        msg.new.name,
+        msg.new.spec,
+      );
+      this.#lc.info?.(msg.tag, 'updated metadata only', oldSpec, newSpec);
       return;
     }
     // If the data type changes, we have to make a new column with the new data type
     // and copy the values over.
     if (oldSpec.dataType !== newSpec.dataType) {
-      // Remember (and drop) the indexes that reference the column.
-      const indexes = listIndexes(this.#db.db).filter(
-        idx => idx.tableName === table && oldName in idx.columns,
+      const tableSpec = must(
+        listTables(this.#db.db, false, false).find(
+          tableSpec => tableSpec.name === table,
+        ),
       );
-      const stmts = indexes.map(idx => `DROP INDEX IF EXISTS ${id(idx.name)};`);
-      const tmpName = `tmp.${newName}`;
-      stmts.push(`
-        ALTER TABLE ${id(table)} ADD ${id(tmpName)} ${liteColumnDef(newSpec)};
-        UPDATE ${id(table)} SET ${id(tmpName)} = ${id(oldName)};
-        ALTER TABLE ${id(table)} DROP ${id(oldName)};
-        `);
-      for (const idx of indexes) {
-        // Re-create the indexes to reference the new column.
-        idx.columns[tmpName] = idx.columns[oldName];
-        delete idx.columns[oldName];
-        stmts.push(createLiteIndexStatement(idx));
-      }
+      const indexes = listIndexes(this.#db.db).filter(
+        idx => idx.tableName === table,
+      );
+      const tmpTable = `tmp.${table}`;
+      const newColumns = Object.fromEntries(
+        Object.entries(tableSpec.columns).map(([column, spec]) => [
+          column === oldName ? newName : column,
+          column === oldName ? {...newSpec, pos: spec.pos} : spec,
+        ]),
+      );
+      const sourceColumns = Object.keys(tableSpec.columns);
+      const destinationColumns = Object.keys(newColumns);
+      const stmts = [
+        createLiteTableStatement({
+          ...tableSpec,
+          name: tmpTable,
+          columns: newColumns,
+        }),
+        `INSERT INTO ${id(tmpTable)} (${destinationColumns.map(id).join(',')})
+         SELECT ${sourceColumns.map(id).join(',')} FROM ${id(table)};`,
+        `DROP TABLE ${id(table)};`,
+        `ALTER TABLE ${id(tmpTable)} RENAME TO ${id(table)};`,
+        ...indexes.map(idx =>
+          createLiteIndexStatement({
+            ...idx,
+            columns: Object.fromEntries(
+              Object.entries(idx.columns).map(([column, direction]) => [
+                column === oldName ? newName : column,
+                direction,
+              ]),
+            ),
+          }),
+        ),
+      ];
       this.#db.db.exec(stmts.join(''));
-      oldName = tmpName;
+      oldName = newName;
     }
     if (oldName !== newName) {
       this.#db.db.exec(
