@@ -420,7 +420,7 @@ export class Zero<
    * It rejects if we hit an error or timeout before the connected message.
    * Used by push/pull helpers to queue work until the connection is usable.
    */
-  #connectResolver = resolver<void>();
+  #connectResolver = connectResolver();
 
   #closeAbortController = new AbortController();
 
@@ -1815,7 +1815,7 @@ export class Zero<
 
     this.#socketResolver = resolver();
     lc.debug?.('Creating new connect resolver');
-    this.#connectResolver = resolver();
+    this.#connectResolver = connectResolver();
     this.#messageCount = 0;
     this.#connectStart = undefined; // don't reset this._totalToConnectStart
     this.#connectedAt = 0;
@@ -2786,6 +2786,12 @@ function addWebSocketIDToLogContext(wsid: string, lc: LogContext): LogContext {
 }
 
 function assertValidRunOptions(_options?: RunOptions): void {}
+
+function connectResolver(): Resolver<void> {
+  const r = resolver<void>();
+  r.promise.catch(() => {}); // the connect timeout may reject before it's awaited
+  return r;
+}
 
 async function makeActiveClientsManager(
   clientGroupID: Promise<string>,

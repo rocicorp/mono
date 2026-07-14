@@ -73,6 +73,7 @@ import {
 import {createBuilder} from '../../../zql/src/query/create-builder.ts';
 import type {Row} from '../../../zql/src/query/query.ts';
 import {nanoid} from '../util/nanoid.ts';
+import {ActiveClientsManager} from './active-clients-manager.ts';
 import {ClientErrorKind} from './client-error-kind.ts';
 import {ConnectionStatus} from './connection-status.ts';
 import type {ConnectionState} from './connection.ts';
@@ -2684,6 +2685,36 @@ test('Connect timeout', async () => {
   ]);
 
   connectionStatusCleanup();
+});
+
+test('connect timeout while awaiting socket setup does not leak an unhandled rejection', async () => {
+  const unhandledRejections: PromiseRejectionEvent[] = [];
+  const onUnhandled = (event: PromiseRejectionEvent) => {
+    unhandledRejections.push(event);
+    event.preventDefault();
+  };
+  window.addEventListener('unhandledrejection', onUnhandled);
+
+  // Never resolve setup, so #connect is still parked before createSocket when
+  // the connect timeout rejects #connectResolver.
+  vi.spyOn(ActiveClientsManager, 'create').mockReturnValue(new Promise(() => {}));
+
+  try {
+    const z = zeroForTest();
+    await z.waitForConnectionStatus(ConnectionStatus.Connecting);
+    await vi.advanceTimersByTimeAsync(CONNECT_TIMEOUT_MS + 1);
+    await tickAFewTimes(vi);
+
+    expect(
+      unhandledRejections.filter(
+        e =>
+          e.reason instanceof ClientError &&
+          e.reason.kind === ClientErrorKind.ConnectTimeout,
+      ),
+    ).toEqual([]);
+  } finally {
+    window.removeEventListener('unhandledrejection', onUnhandled);
+  }
 });
 
 test('socketOrigin', async () => {
