@@ -14,7 +14,7 @@
     "check-fmt": "oxfmt --check ."
   },
   "dependencies": {
-    "oxc-parser": "^0.94.0"
+    "oxc-parser": "^0.129.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.5",

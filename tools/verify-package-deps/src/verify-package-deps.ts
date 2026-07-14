@@ -2,7 +2,7 @@
 import {readdir, readFile, writeFile} from 'node:fs/promises';
 import {dirname, join, relative} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {parseAsync} from 'oxc-parser';
+import {parse} from 'oxc-parser';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const WORKSPACE_ROOT = join(__dirname, '../../..');
@@ -79,7 +79,7 @@ async function extractImports(
   const lines = content.split('\n');
 
   try {
-    const result = await parseAsync(filePath, content);
+    const result = await parse(filePath, content);
 
     // Extract static imports from the module info
     for (const imp of result.module.staticImports) {
