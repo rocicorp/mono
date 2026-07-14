@@ -1127,6 +1127,17 @@ class ChangeMaker {
     // Store the new event to understand the context of the next event.
     this.#lastReplicationEvent = event;
 
+    const {schema} = event;
+    if (schema === undefined) {
+      // A schema-less (protocol v2) ddlStart event signifies that there was
+      // no schema change; it is stored (above) only to provide the command
+      // tag context for a subsequent event with a schema change.
+      lc.debug?.(`received context-only ${msg.prefix}/${type} event`, {
+        event: summarizeReplicationEventForLog(event),
+      });
+      return [];
+    }
+
     const prevSchema =
       event.previousSchema === undefined // pre-v21 event => use prevEvent
         ? prevEvent?.schema
@@ -1166,15 +1177,15 @@ class ChangeMaker {
     const changes = this.#makeSchemaChanges(
       lc,
       prevSchema,
+      schema,
       event,
       effectiveTag,
     ).map(change => ['data', change] satisfies Data);
 
     lc.info?.(`${changes.length} schema change(s)`, {changes});
 
-    const replicaIdentities = replicaIdentitiesForTablesWithoutPrimaryKeys(
-      event.schema,
-    );
+    const replicaIdentities =
+      replicaIdentitiesForTablesWithoutPrimaryKeys(schema);
     if (replicaIdentities) {
       this.#replicaIdentityTimer = setTimeout(async () => {
         try {
@@ -1218,12 +1229,13 @@ class ChangeMaker {
   #makeSchemaChanges(
     lc: LogContext,
     preSchema: PublishedSchema,
+    nextSchema: PublishedSchema,
     event: ReplicationEvent,
     tag: string,
   ): SchemaChange[] {
     try {
       const [prevTbl, prevIdx] = specsByID(preSchema);
-      const [nextTbl, nextIdx] = specsByID(event.schema);
+      const [nextTbl, nextIdx] = specsByID(nextSchema);
       const changes: SchemaChange[] = [];
 
       // Validate the new table schemas
@@ -1695,7 +1707,7 @@ function makeRelation(relation: PostgresRelation): MessageRelation {
   };
 }
 
-function summarizeSchemaForLog(schema: ReplicationEvent['schema']) {
+function summarizeSchemaForLog(schema: PublishedSchema) {
   return {
     tables: schema.tables.length,
     indexes: schema.indexes.length,
@@ -1707,7 +1719,7 @@ function summarizeReplicationEventForLog(event: ReplicationEvent): JSONObject {
   const {previousSchema, ...eventWithoutSchemas} = rest;
   return {
     ...eventWithoutSchemas,
-    schema: summarizeSchemaForLog(schema),
+    ...(schema !== undefined && {schema: summarizeSchemaForLog(schema)}),
     ...(previousSchema !== undefined && {
       previousSchema:
         previousSchema === null ? null : summarizeSchemaForLog(previousSchema),
