@@ -10,21 +10,83 @@ import {getConnectionURI, type PgTest, test} from '../test/db.ts';
 import {DbFile} from '../test/lite.ts';
 import {
   BENCHMARK_FIXTURE_PUBLICATION,
-  benchmarkFixturePayloadMB,
-  benchmarkFixtureReplicaRowCount,
-  setupBenchmarkFixture,
+  type InitialSyncBenchmarkFixture,
+  initialSyncBenchmarkPayloadMB,
+  setupInitialSyncBenchmarkFixture,
+  validateInitialSyncBenchmarkReplica,
 } from '../test/pg-bench.ts';
 
-const FIXTURE_ROWS = 250_000;
-const ROWS_PER_TRANSACTION = 500;
-const TABLE_COPY_WORKERS = 4;
-const WARMUP_REPS = 1;
-const REPS = 10;
+const PROFILE_ENV = 'ZERO_INITIAL_SYNC_BENCH_PROFILE';
+type Profile = {
+  fixture: InitialSyncBenchmarkFixture;
+  warmupReps: number;
+  reps: number;
+  tableCopyWorkers: number;
+  timeoutMs: number;
+};
+
+const PROFILES = {
+  'mixed-regression': {
+    fixture: {fixture: 'mixed', rows: 250_000},
+    warmupReps: 1,
+    reps: 10,
+    tableCopyWorkers: 4,
+    timeoutMs: 3_600_000,
+  },
+  'wide-text-scaled': {
+    fixture: {fixture: 'wide-text', rows: 1_000, payloadBytes: 683_000},
+    warmupReps: 1,
+    reps: 10,
+    tableCopyWorkers: 4,
+    timeoutMs: 3_600_000,
+  },
+  'wide-text-full': {
+    fixture: {fixture: 'wide-text', rows: 10_000, payloadBytes: 683_000},
+    warmupReps: 1,
+    reps: 10,
+    tableCopyWorkers: 4,
+    timeoutMs: 7_200_000,
+  },
+  'wide-text-narrow': {
+    fixture: {fixture: 'wide-text', rows: 250_000, payloadBytes: 128},
+    warmupReps: 1,
+    reps: 10,
+    tableCopyWorkers: 4,
+    timeoutMs: 3_600_000,
+  },
+  'large-payload-scaled': {
+    fixture: {fixture: 'large-payload', rows: 2_000, payloadBytes: 275_000},
+    warmupReps: 1,
+    reps: 10,
+    tableCopyWorkers: 4,
+    timeoutMs: 3_600_000,
+  },
+  'large-payload-full': {
+    fixture: {fixture: 'large-payload', rows: 10_000, payloadBytes: 275_000},
+    warmupReps: 1,
+    reps: 10,
+    tableCopyWorkers: 4,
+    timeoutMs: 7_200_000,
+  },
+  'large-payload-narrow': {
+    fixture: {fixture: 'large-payload', rows: 250_000, payloadBytes: 128},
+    warmupReps: 1,
+    reps: 10,
+    tableCopyWorkers: 4,
+    timeoutMs: 3_600_000,
+  },
+} as const satisfies Record<string, Profile>;
+
+const profileName = process.env[PROFILE_ENV] ?? 'mixed-regression';
+if (!Object.hasOwn(PROFILES, profileName)) {
+  throw new Error(
+    `${PROFILE_ENV} must be one of ${Object.keys(PROFILES).join(', ')}; got ${JSON.stringify(profileName)}`,
+  );
+}
+const profile = PROFILES[profileName as keyof typeof PROFILES];
 
 const APP_ID = 'initial_sync_bench_app';
 const SHARD_NUM = 0;
-const TEST_TIMEOUT_MS = 3_600_000;
-
 const lc = createSilentLogContext();
 const shard = {
   appID: APP_ID,
@@ -48,25 +110,27 @@ afterEach(async () => {
 
 describe('zero-cache/initial-sync throughput', () => {
   test(
-    'generated fixture payload MB/sec',
-    {timeout: TEST_TIMEOUT_MS},
+    `${profileName} generated fixture payload MB/sec`,
+    {timeout: profile.timeoutMs},
     async ({testDBs}: PgTest) => {
       const samples: number[] = [];
-      const fixturePayloadMB = benchmarkFixturePayloadMB(1, FIXTURE_ROWS);
+      const fixturePayloadMB = initialSyncBenchmarkPayloadMB(profile.fixture);
 
-      for (let rep = 0; rep < WARMUP_REPS + REPS; rep++) {
-        const upstream = await testDBs.create(`initial_sync_bench_${rep}`);
+      for (let rep = 0; rep < profile.warmupReps + profile.reps; rep++) {
+        const upstream = await testDBs.create(
+          `initial_sync_bench_${profileName.replaceAll('-', '_')}_${rep}`,
+        );
         const replicaDbFile = new DbFile('initial-sync-bench');
         cleanup.push(() => replicaDbFile.delete());
         cleanup.push(async () => {
           await testDBs.drop(upstream);
         });
 
-        await setupBenchmarkFixture(upstream, {
-          publication: BENCHMARK_FIXTURE_PUBLICATION,
-          rows: FIXTURE_ROWS,
-          rowsPerTransaction: ROWS_PER_TRANSACTION,
-        });
+        await setupInitialSyncBenchmarkFixture(
+          upstream,
+          profile.fixture,
+          BENCHMARK_FIXTURE_PUBLICATION,
+        );
 
         const start = performance.now();
         await initReplica(
@@ -79,23 +143,26 @@ describe('zero-cache/initial-sync throughput', () => {
               shard,
               tx,
               getConnectionURI(upstream),
-              {tableCopyWorkers: TABLE_COPY_WORKERS},
-              {bench: 'initial-sync-throughput'},
+              {tableCopyWorkers: profile.tableCopyWorkers},
+              {bench: 'initial-sync-throughput', profile: profileName},
             ),
         );
         const elapsed = performance.now() - start;
 
-        expect(benchmarkFixtureReplicaRowCount(lc, replicaDbFile.path)).toBe(
-          FIXTURE_ROWS,
+        const validation = validateInitialSyncBenchmarkReplica(
+          lc,
+          replicaDbFile.path,
+          profile.fixture,
         );
-        if (rep >= WARMUP_REPS) {
+        expect(validation.totalRows).toBe(profile.fixture.rows);
+        if (rep >= profile.warmupReps) {
           samples.push(elapsed);
         }
         await runCleanup();
       }
 
       benchmarkRecorder.recordThroughput(
-        'zero-cache/initial-sync generated fixture payload MB',
+        `zero-cache/initial-sync ${profileName} generated fixture payload MB`,
         samples,
         fixturePayloadMB,
       );
