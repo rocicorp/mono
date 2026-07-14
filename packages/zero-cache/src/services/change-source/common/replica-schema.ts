@@ -1,5 +1,4 @@
 import type {LogContext} from '@rocicorp/logger';
-import {SqliteError} from '@rocicorp/zero-sqlite3';
 import type {Database} from '../../../../../zqlite/src/db.ts';
 import {listTables} from '../../../db/lite-tables.ts';
 import {
@@ -7,6 +6,10 @@ import {
   type IncrementalMigrationMap,
   type Migration,
 } from '../../../db/migration-lite.ts';
+import {
+  isSQLiteCorruption,
+  logSQLiteCorruptionDiagnostics,
+} from '../../../db/sqlite-corruption.ts';
 import {AutoResetSignal} from '../../change-streamer/schema/tables.ts';
 import {populateFromExistingTables} from '../../replicator/schema/column-metadata.ts';
 import {
@@ -34,7 +37,7 @@ export async function initReplica(
       schemaVersionMigrationMap,
     );
   } catch (e) {
-    throwAutoResetForCorruption(e);
+    throwAutoResetForCorruption(log, debugName, dbPath, e);
   }
 }
 
@@ -59,12 +62,18 @@ export async function upgradeReplica(
       schemaVersionMigrationMap,
     );
   } catch (e) {
-    throwAutoResetForCorruption(e);
+    throwAutoResetForCorruption(log, debugName, dbPath, e);
   }
 }
 
-function throwAutoResetForCorruption(e: unknown): never {
-  if (e instanceof SqliteError && e.code === 'SQLITE_CORRUPT') {
+function throwAutoResetForCorruption(
+  log: LogContext,
+  debugName: string,
+  dbPath: string,
+  e: unknown,
+): never {
+  if (isSQLiteCorruption(e)) {
+    logSQLiteCorruptionDiagnostics(log, debugName, dbPath, e);
     throw new AutoResetSignal(
       `replica database appears corrupt: ${String(e)}`,
       {cause: e},

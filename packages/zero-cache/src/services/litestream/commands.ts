@@ -9,6 +9,10 @@ import {Database} from '../../../../zqlite/src/db.ts';
 import {assertNormalized} from '../../config/normalize.ts';
 import type {ZeroConfig} from '../../config/zero-config.ts';
 import {deleteLiteDB} from '../../db/delete-lite-db.ts';
+import {
+  isSQLiteCorruption,
+  logSQLiteCorruptionDiagnostics,
+} from '../../db/sqlite-corruption.ts';
 import {StatementRunner} from '../../db/statements.ts';
 import {getShardConfig} from '../../types/shards.ts';
 import type {Source} from '../../types/streams.ts';
@@ -346,6 +350,9 @@ function replicaIsValid(
     );
     return true;
   } catch (e) {
+    if (isSQLiteCorruption(e)) {
+      logSQLiteCorruptionDiagnostics(lc, 'restored replica', replica, e);
+    }
     lc.error?.('Error while validating restored replica', e);
     return false;
   } finally {
