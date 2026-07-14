@@ -5,6 +5,7 @@ import {DatabaseInitError} from '../../../zqlite/src/db.ts';
 import {getServerContext} from '../config/server-context.ts';
 import {getNormalizedZeroConfig} from '../config/zero-config.ts';
 import {deleteLiteDB} from '../db/delete-lite-db.ts';
+import {registerSQLiteCorruptionDiagnosticTarget} from '../db/sqlite-corruption.ts';
 import {warmupConnections} from '../db/warmup.ts';
 import {initEventSink, publishCriticalEvent} from '../observability/events.ts';
 import {upgradeReplica} from '../services/change-source/common/replica-schema.ts';
@@ -70,6 +71,10 @@ export default async function runWorker(
     0,
   );
   lc = createLogContext(config, 'change-streamer');
+  registerSQLiteCorruptionDiagnosticTarget({
+    debugName: 'change-streamer replica',
+    dbPath: replica.file,
+  });
   initEventSink(lc, config);
 
   // Kick off DB connection warmup in the background.
@@ -242,15 +247,19 @@ export default async function runWorker(
 
 // fork()
 if (!singleProcessMode()) {
-  void exitAfter(lc, () =>
-    runWorker(must(parentWorker), process.env, ...process.argv.slice(2)).catch(
-      async e => {
+  void exitAfter(
+    () => lc,
+    () =>
+      runWorker(
+        must(parentWorker),
+        process.env,
+        ...process.argv.slice(2),
+      ).catch(async e => {
         await publishCriticalEvent(
           lc,
           replicationStatusError(lc, 'Initializing', e),
         );
         throw e;
-      },
-    ),
+      }),
   );
 }
