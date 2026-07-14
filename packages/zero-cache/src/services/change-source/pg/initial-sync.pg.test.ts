@@ -2907,6 +2907,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
             typeof arg === 'object' &&
             arg !== null &&
             'sourceWaitMs' in arg &&
+            'replicaTable' in arg &&
             (arg.replicaTable === 'populated' || arg.replicaTable === 'empty'),
         );
       expect(timings).toHaveLength(2);
