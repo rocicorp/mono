@@ -2868,6 +2868,64 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
   });
 
   test.each([
+    {copyFormat: 'binary', textCopy: false},
+    {copyFormat: 'text', textCopy: true},
+  ] as const)(
+    'logs $copyFormat COPY phase timings',
+    async ({copyFormat, textCopy}) => {
+      await upstream`
+      CREATE TABLE populated(id int4 PRIMARY KEY);
+      INSERT INTO populated SELECT g FROM generate_series(1, 10) g;
+      CREATE TABLE empty(id int4 PRIMARY KEY);
+    `.simple();
+
+      const sink = new TestLogSink();
+      const lc = new LogContext('info', undefined, sink);
+      const replica = new Database(lc, ':memory:');
+      await initialSync(
+        lc,
+        {appID: APP_ID, shardNum: SHARD_NUM, publications: []},
+        replica,
+        getConnectionURI(upstream),
+        {tableCopyWorkers: 2, textCopy},
+        TEST_CONTEXT,
+      );
+
+      const timings = sink.messages
+        .flatMap(([, , args]) => args)
+        .filter(
+          (
+            arg,
+          ): arg is {
+            replicaTable: string;
+            copyFormat: string;
+            sourceWaitMs: number;
+            processingMs: number;
+            flushMs: number;
+            elapsedMs: number;
+          } =>
+            typeof arg === 'object' &&
+            arg !== null &&
+            'sourceWaitMs' in arg &&
+            (arg.replicaTable === 'populated' || arg.replicaTable === 'empty'),
+        );
+      expect(timings).toHaveLength(2);
+      for (const timing of timings) {
+        expect(timing.copyFormat).toBe(copyFormat);
+        expect(timing.sourceWaitMs).toEqual(expect.any(Number));
+        expect(timing.processingMs).toEqual(expect.any(Number));
+        expect(Number.isFinite(timing.sourceWaitMs)).toBe(true);
+        expect(Number.isFinite(timing.processingMs)).toBe(true);
+        expect(timing.sourceWaitMs).toBeGreaterThanOrEqual(0);
+        expect(timing.processingMs).toBeGreaterThanOrEqual(timing.flushMs);
+        expect(timing.sourceWaitMs + timing.processingMs).toBeLessThanOrEqual(
+          timing.elapsedMs,
+        );
+      }
+    },
+  );
+
+  test.each([
     'UPPERCASE',
     'dashes-not-allowed',
     'spaces not allowed',
