@@ -364,7 +364,7 @@ export class MemorySource implements Source {
     // a large amount of per-row generator-resume overhead on the hottest path.
     const overlayActive =
       this.#overlay && conn.lastPushedEpoch >= this.#overlay.epoch;
-    if (!overlayActive && !req.start && !conn.filters) {
+    if (!overlayActive && !req.start && !conn.filters && !req.filter) {
       const {constraint} = req;
       for (const row of rowsIterable) {
         if (constraint && !constraintMatchesRow(constraint, row)) {
