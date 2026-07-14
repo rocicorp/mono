@@ -851,6 +851,7 @@ type CopyResult = {
 const INITIAL_SYNC_DURATION_HISTOGRAM_BOUNDARIES_S = [
   1, 2, 5, 10, 30, 60, 120, 300, 600, 1200, 2400, 3600, 7200,
 ];
+export const COPY_METRIC_BATCH_BYTES = 8 * 1024 * 1024;
 const SLOW_COPY_FLUSH_MS = 10_000;
 
 // change-streamer imports this module before startOtelAuto() runs, so create
@@ -932,6 +933,43 @@ function initialSyncCopyChunks() {
     'initial_sync_copy_chunks',
     'PostgreSQL COPY stream chunks processed during initial sync.',
   );
+}
+
+export function createCopyMetricBatcher(
+  record: (bytes: number, chunks: number) => void,
+) {
+  let bytes = 0;
+  let chunks = 0;
+
+  function flush() {
+    if (chunks === 0) {
+      return;
+    }
+    record(bytes, chunks);
+    bytes = 0;
+    chunks = 0;
+  }
+
+  return {
+    add(chunkBytes: number) {
+      bytes += chunkBytes;
+      chunks++;
+      if (bytes >= COPY_METRIC_BATCH_BYTES) {
+        flush();
+      }
+    },
+    flush,
+  };
+}
+
+export function initialSyncCopyMetrics(attrs: InitialSyncMetricAttrs) {
+  const labels = initialSyncMetricAttrs(attrs);
+  const copyStreamMetric = initialSyncCopyStream();
+  const copyChunksMetric = initialSyncCopyChunks();
+  return createCopyMetricBatcher((bytes, chunks) => {
+    copyStreamMetric.add(bytes, labels);
+    copyChunksMetric.add(chunks, labels);
+  });
 }
 
 function initialSyncDurationHistogram(name: string, description: string) {
@@ -1139,9 +1177,7 @@ async function copyBinary(
 ): Promise<CopyResult> {
   const start = performance.now();
   const copyFormat: CopyFormat = 'binary';
-  const metricLabels = initialSyncMetricAttrs({syncMode, copyFormat});
-  const copyStreamMetric = initialSyncCopyStream();
-  const copyChunksMetric = initialSyncCopyChunks();
+  const copyMetrics = initialSyncCopyMetrics({syncMode, copyFormat});
   let flushMs = 0;
   let copyBytes = 0;
 
@@ -1240,8 +1276,7 @@ async function copyBinary(
       ) {
         try {
           copyBytes += chunk.length;
-          copyStreamMetric.add(chunk.length, metricLabels);
-          copyChunksMetric.add(1, metricLabels);
+          copyMetrics.add(chunk.length);
           for (const fieldBuf of binaryParser.parse(chunk)) {
             const fieldSize = fieldBuf === null ? 4 : fieldBuf.length;
             pendingSize += fieldSize;
@@ -1266,11 +1301,17 @@ async function copyBinary(
 
       final: (callback: (error?: Error) => void) => {
         try {
+          copyMetrics.flush();
           flush();
           callback();
         } catch (e) {
           callback(e instanceof Error ? e : new Error(String(e)));
         }
+      },
+
+      destroy(error, callback) {
+        copyMetrics.flush();
+        callback(error);
       },
     }),
   );
@@ -1312,9 +1353,7 @@ async function copyText(
 ): Promise<CopyResult> {
   const start = performance.now();
   const copyFormat: CopyFormat = 'text';
-  const metricLabels = initialSyncMetricAttrs({syncMode, copyFormat});
-  const copyStreamMetric = initialSyncCopyStream();
-  const copyChunksMetric = initialSyncCopyChunks();
+  const copyMetrics = initialSyncCopyMetrics({syncMode, copyFormat});
   let flushMs = 0;
   let copyBytes = 0;
 
@@ -1414,8 +1453,7 @@ async function copyText(
       ) {
         try {
           copyBytes += chunk.length;
-          copyStreamMetric.add(chunk.length, metricLabels);
-          copyChunksMetric.add(1, metricLabels);
+          copyMetrics.add(chunk.length);
           for (const text of tsvParser.parse(chunk)) {
             const fieldSize = text === null ? 4 : text.length;
             pendingSize += fieldSize;
@@ -1440,11 +1478,17 @@ async function copyText(
 
       final: (callback: (error?: Error) => void) => {
         try {
+          copyMetrics.flush();
           flush();
           callback();
         } catch (e) {
           callback(e instanceof Error ? e : new Error(String(e)));
         }
+      },
+
+      destroy(error, callback) {
+        copyMetrics.flush();
+        callback(error);
       },
     }),
   );
