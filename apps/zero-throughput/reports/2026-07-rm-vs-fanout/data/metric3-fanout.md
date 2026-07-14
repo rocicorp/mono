@@ -1,21 +1,24 @@
 # Metric (3): RM->VS fan-out (subscriber-sim, feed-append, writer 2000 changes/s on 4849)
 
 ## Fan-out to FAST subscribers is linear (no wire bottleneck when subscribers keep up)
-| K | per-subscriber changes/s | total delivered/s |
-|--:|--:|--:|
-| 1 | 2000 | 2000 |
-| 2 | 2000 | 4000 |
-| 4 | 2000 | 8000 |
-| 8 | 1976 | 15,809 |
+
+|   K | per-subscriber changes/s | total delivered/s |
+| --: | -----------------------: | ----------------: |
+|   1 |                     2000 |              2000 |
+|   2 |                     2000 |              4000 |
+|   4 |                     2000 |              8000 |
+|   8 |                     1976 |            15,809 |
+
 (K=1 raw wire ceiling measured separately ~18,900 changes/s.)
 
 ## One SLOW subscriber stalls ALL healthy subscribers (flow-control coupling)
+
 K=4, 1 slow subscriber (per-message ack delay), padding=1 (default). Fast-subscriber avg:
 | slow delay | fast subscribers changes/s | collapse vs 2000 |
 |--:|--:|--:|
-| 1 ms  | 768 | 2.6x |
-| 2 ms  | 48  | 42x  |
-| 5 ms  | 48-96 | ~30x |
+| 1 ms | 768 | 2.6x |
+| 2 ms | 48 | 42x |
+| 5 ms | 48-96 | ~30x |
 | 10 ms | 384 | 5x |
 | 20 ms | 1430 | 1.4x |
 | 50 ms | 2869 (catching up) | ~none |
@@ -27,17 +30,18 @@ the WHOLE stream. A very slow subscriber falls so far behind it stops mattering 
 majority and fast subscribers run free.
 
 => This is the "adding a (struggling) view-syncer degrades throughput for everyone"
-   mechanism, isolated. The global consensus gate couples all subscribers to the
-   slowest-in-majority. A view-syncer that briefly lags (GC pause, big advance, catchup)
-   drags the entire fan-out — and thus every other view-syncer and the RM's pipeline
-   advancement — down with it.
+mechanism, isolated. The global consensus gate couples all subscribers to the
+slowest-in-majority. A view-syncer that briefly lags (GC pause, big advance, catchup)
+drags the entire fan-out — and thus every other view-syncer and the RM's pipeline
+advancement — down with it.
 
 ## Padding knob gives only PARTIAL relief (the 1s tick still gates)
+
 K=4, 1 slow subscriber, fast-subscriber avg changes/s (writer=2000):
 | slow delay | padding=1 (default) | padding=0 (release on majority) |
 |--:|--:|--:|
-| 2 ms  | 48   | 412  |
-| 5 ms  | 48-96 | 97  |
+| 2 ms | 48 | 412 |
+| 5 ms | 48-96 | 97 |
 | 20 ms | 1430 | 2116 |
 
 padding=0 helps at 2ms (48->412) but fast subscribers are STILL throttled ~5x. Root cause:

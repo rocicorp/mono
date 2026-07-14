@@ -9,7 +9,7 @@ harness runs under `apps/zero-throughput/results/`.
 ## Question
 
 The team observed that "adding view-syncers eventually does nothing for pipeline
-advancement" — extra view-syncers add hydration capacity but *degrade*
+advancement" — extra view-syncers add hydration capacity but _degrade_
 replication throughput. This report runs Matt's throughput assets
 (`apps/zero-throughput`, the `zero-throughput-relational` IVM bench, and the
 `sqlite-change-log-ceiling` bench), localizes the bottleneck with CPU profiles +
@@ -31,7 +31,7 @@ efficiency**, (3) raw **RM→VS changes/s**.
    Under load the **load-shedding heuristic thrashes** — 189 pipeline resets vs
    201 hydrations — burning the syncer on rehydration instead of progress.
 3. **Adding view-syncers degrades throughput via a global flow-control gate.**
-   A single *mildly* slow subscriber (2–5 ms/msg) collapses every other
+   A single _mildly_ slow subscriber (2–5 ms/msg) collapses every other
    subscriber from 2000/s to ~48/s (40×). Fan-out to healthy subscribers is
    otherwise linear. The consensus-padding knob only partially helps because a
    coarse 1 s progress-monitor tick still gates the global broadcast.
@@ -44,12 +44,12 @@ efficiency**, (3) raw **RM→VS changes/s**.
 one logical write (insert activity + edit account + edit org) advancing **all 300
 hot views** (100 users × 3 queries, all spanning the one hot org).
 
-| backend | mode | ms/write | logical writes/s |
-|---|---|---:|---:|
-| zqlite (prod replica store) | push only | 192.2 | **5.2** |
-| zqlite | push + flush views | 203.4 | **4.9** |
-| memory | push only | 70.3 | 14.2 |
-| memory | push + flush views | 73.7 | 13.6 |
+| backend                     | mode               | ms/write | logical writes/s |
+| --------------------------- | ------------------ | -------: | ---------------: |
+| zqlite (prod replica store) | push only          |    192.2 |          **5.2** |
+| zqlite                      | push + flush views |    203.4 |          **4.9** |
+| memory                      | push only          |     70.3 |             14.2 |
+| memory                      | push + flush views |     73.7 |             13.6 |
 
 → Hot workload is **IVM-bound at ~5 writes/s/core** on zqlite. Flush adds ~5%.
 The memory backend is 2.7× faster → SQLite read/scan per advance is a big share.
@@ -60,10 +60,10 @@ The memory backend is 2.7× faster → SQLite read/scan per advance is a big sha
 combined mode (replica row write + change-log append), 1 KiB payload.
 
 | upstream tx fold | SQLite tx fold | µs/change | changes/s |
-|---:|---:|---:|---:|
-| 1 | 1 | 47.5 | 21,000 |
-| 1 | 1000 | 14.6 | 68,600 |
-| 100 | 10000 | 10.6 | 94,600 |
+| ---------------: | -------------: | --------: | --------: |
+|                1 |              1 |      47.5 |    21,000 |
+|                1 |           1000 |      14.6 |    68,600 |
+|              100 |          10000 |      10.6 |    94,600 |
 
 → RM apply+changelog sustains **21k–95k changes/s** — 3–4 orders of magnitude
 above the IVM ceiling. Batching SQLite commits ~3×'s it.
@@ -73,10 +73,10 @@ above the IVM ceiling. Batching SQLite commits ~3×'s it.
 relational hot, 50 users, 3 q/user, 50 rows/query, 45 s binary-searched runs:
 
 | sync workers | best sustainable wps | p99 client lag @ best | maxSeqLag |
-|---:|---:|---:|---:|
-| 1 | 3 | 1124 ms | 5 |
-| 2 | 6 | 1131 ms | 9 |
-| 4 | 6 | 1110 ms | 9 |
+| -----------: | -------------------: | --------------------: | --------: |
+|            1 |                    3 |               1124 ms |         5 |
+|            2 |                    6 |               1131 ms |         9 |
+|            4 |                    6 |               1110 ms |         9 |
 
 1→2 workers = 2.0×; **2→4 = 1.0× (no gain)**. On 4 vCPUs the box is CPU-saturated
 at 2 sync workers, so more workers do nothing — "adding capacity does nothing,"
@@ -89,11 +89,11 @@ Fan-out to **fast** subscribers is linear (wire is not the limit when subscriber
 keep up):
 
 | K subscribers | per-subscriber changes/s | total delivered/s |
-|--:|--:|--:|
-| 1 | 2000 | 2000 |
-| 2 | 2000 | 4000 |
-| 4 | 2000 | 8000 |
-| 8 | 1976 | 15,809 |
+| ------------: | -----------------------: | ----------------: |
+|             1 |                     2000 |              2000 |
+|             2 |                     2000 |              4000 |
+|             4 |                     2000 |              8000 |
+|             8 |                     1976 |            15,809 |
 
 (K=1 raw wire ceiling ~18,900 changes/s.)
 
@@ -101,15 +101,15 @@ keep up):
 fast-subscriber avg changes/s (writer = 2000):
 
 | slow delay | padding=1 (default) | padding=0 |
-|--:|--:|--:|
-| 1 ms | 768 | — |
-| 2 ms | **48** | 412 |
-| 5 ms | 48–96 | 97 |
-| 10 ms | 384 | — |
-| 20 ms | 1430 | 2116 |
-| 50 ms | 2869 (catch-up) | — |
+| ---------: | ------------------: | --------: |
+|       1 ms |                 768 |         — |
+|       2 ms |              **48** |       412 |
+|       5 ms |               48–96 |        97 |
+|      10 ms |                 384 |         — |
+|      20 ms |                1430 |      2116 |
+|      50 ms |     2869 (catch-up) |         — |
 
-Non-monotonic: a *mildly* slow subscriber (2–5 ms/msg) is worst — it stays in the
+Non-monotonic: a _mildly_ slow subscriber (2–5 ms/msg) is worst — it stays in the
 "pending" set at every 64 KiB flow-control checkpoint, so the RM waits the full
 consensus padding each time. `padding=0` only partially helps because
 `Forwarder` runs `checkProgress` on a **1 s progress-monitor tick**
@@ -129,14 +129,14 @@ serialization ~3%, `logger.withContext` 1.9%, IVM operators ~2%.
 
 Stage timings (OTLP, cumulative):
 
-| stage | per-op | count | total | note |
-|---|--:|--:|--:|---|
-| **cvr.flush-time** | 46 ms | 768 | **35.2 s** | flush CVR to Postgres — co-dominant |
-| **advance-time** (per client-group) | 58 ms | 542 | **31.2 s** | advance all queries for a CG |
-| hydration-time | 85 ms | 212 | 17.9 s | (re)materialize a pipeline |
-| ivm.advance-time (per change) | 3 ms | 4038 | 10.2 s | single-change advance |
-| cvr.load_duration | 172 ms | 28 | 4.8 s | CVR load |
-| view_syncer_lag (e2e) | 5.68 s | — | — | serving lag at saturation |
+| stage                               | per-op | count |      total | note                                |
+| ----------------------------------- | -----: | ----: | ---------: | ----------------------------------- |
+| **cvr.flush-time**                  |  46 ms |   768 | **35.2 s** | flush CVR to Postgres — co-dominant |
+| **advance-time** (per client-group) |  58 ms |   542 | **31.2 s** | advance all queries for a CG        |
+| hydration-time                      |  85 ms |   212 |     17.9 s | (re)materialize a pipeline          |
+| ivm.advance-time (per change)       |   3 ms |  4038 |     10.2 s | single-change advance               |
+| cvr.load_duration                   | 172 ms |    28 |      4.8 s | CVR load                            |
+| view_syncer_lag (e2e)               | 5.68 s |     — |          — | serving lag at saturation           |
 
 **Load-shedding thrash:** `pipeline-resets = 189` vs `hydration = 201` — the
 eac60e7 heuristic projects advance cost > hydration and resets pipelines on
@@ -146,19 +146,20 @@ out over the run.
 
 ## Hypothesis verdicts
 
-| # | hypothesis | verdict | evidence |
-|---|---|---|---|
-| a | ACK/consensus flow-control gating stalls the stream | **CONFIRMED (fan-out case)** | 1 slow subscriber → 40× collapse; 1 s tick gates even padding=0 |
-| b | per-change ws envelope + per-message ACK cost dominates | **REFUTED at realistic rates** | fan-out linear to K=8 fast subscribers; wire does ~19k/s vs ~24 changes/s needed |
-| c | storer PG change-DB writes are the bottleneck | **REFUTED** | R2 shows 21k–95k changes/s apply; RM idle in hot runs |
-| d | VS double-parse + thread clone dominates | **MINOR** | serialization ~3% of syncer CPU; real cost is SQLite reads |
-| e | per-client-group changelog re-read + IVM advance duplication | **CONFIRMED (primary)** | advance-time 58 ms/CG × 50 CGs; SQLite reads 16%+ of CPU; R1 ceiling |
-| f | CVR flush to PG is expensive | **CONFIRMED (co-primary)** | cvr.flush-time 46 ms × 768 = 35 s, co-dominant with advance |
-| — | load-shedding rehydration thrash | **CONFIRMED (new)** | 189 resets / 201 hydrations at saturation |
+| #   | hypothesis                                                   | verdict                        | evidence                                                                         |
+| --- | ------------------------------------------------------------ | ------------------------------ | -------------------------------------------------------------------------------- |
+| a   | ACK/consensus flow-control gating stalls the stream          | **CONFIRMED (fan-out case)**   | 1 slow subscriber → 40× collapse; 1 s tick gates even padding=0                  |
+| b   | per-change ws envelope + per-message ACK cost dominates      | **REFUTED at realistic rates** | fan-out linear to K=8 fast subscribers; wire does ~19k/s vs ~24 changes/s needed |
+| c   | storer PG change-DB writes are the bottleneck                | **REFUTED**                    | R2 shows 21k–95k changes/s apply; RM idle in hot runs                            |
+| d   | VS double-parse + thread clone dominates                     | **MINOR**                      | serialization ~3% of syncer CPU; real cost is SQLite reads                       |
+| e   | per-client-group changelog re-read + IVM advance duplication | **CONFIRMED (primary)**        | advance-time 58 ms/CG × 50 CGs; SQLite reads 16%+ of CPU; R1 ceiling             |
+| f   | CVR flush to PG is expensive                                 | **CONFIRMED (co-primary)**     | cvr.flush-time 46 ms × 768 = 35 s, co-dominant with advance                      |
+| —   | load-shedding rehydration thrash                             | **CONFIRMED (new)**            | 189 resets / 201 hydrations at saturation                                        |
 
 ## Fan-out efficiency (metric 2) — synthesis
 
 Two independent mechanisms cap fan-out scaling, both reproduced:
+
 - **Per-node**: each view-syncer redoes the full O(changes × client-groups ×
   views) advance + CVR flush against its own replica; nothing is shared, so N
   view-syncers multiply total system work rather than dividing it.

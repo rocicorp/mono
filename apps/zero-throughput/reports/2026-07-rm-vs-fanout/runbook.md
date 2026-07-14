@@ -75,7 +75,7 @@ then re-running the slow-subscriber sim.
 
 ## 4. Stage / CPU attribution
 
-Run a *saturating* hot run with CPU profiling and OTLP metrics:
+Run a _saturating_ hot run with CPU profiling and OTLP metrics:
 
 ```bash
 # a minimal OTLP/http-json sink (any collector works; a ~90-line one is in the
@@ -112,8 +112,9 @@ runuser -u postgres -- /usr/lib/postgresql/16/bin/pg_ctl -D <datadir> -o \
 ```
 
 Other gotchas seen on the bare container (none require code changes):
+
 - `@rocicorp/zero-sqlite3` needs `node deps/gen-unicode-case.mjs >
-  src/util/unicode_case_data.h` then `node-gyp rebuild --release --jobs 1`
+src/util/unicode_case_data.h` then `node-gyp rebuild --release --jobs 1`
   (serial, to avoid OOM) if no prebuilt binary downloads.
 - `pnpm install --ignore-scripts` links workspace bins without re-running the
   native build; `pnpm config set verify-deps-before-run false` stops per-command
