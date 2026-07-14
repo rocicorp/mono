@@ -1,4 +1,5 @@
 import EventEmitter from 'node:events';
+import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
@@ -7,6 +8,11 @@ import type * as Metrics from '../observability/metrics.ts';
 
 const startupRecordMs = vi.hoisted(() => vi.fn());
 const workerStartupRecordMs = vi.hoisted(() => vi.fn());
+const logLastChanceSQLiteCorruptionDiagnostics = vi.hoisted(() => vi.fn());
+
+vi.mock('../db/sqlite-corruption.ts', () => ({
+  logLastChanceSQLiteCorruptionDiagnostics,
+}));
 
 vi.mock('../observability/metrics.ts', async importOriginal => {
   const actual = await importOriginal<typeof Metrics>();
@@ -313,6 +319,11 @@ describe('shutdown', () => {
 });
 
 describe('exitAfter', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    logLastChanceSQLiteCorruptionDiagnostics.mockReset();
+  });
+
   test('exits 0 for configuration errors', async () => {
     const exit = vi.spyOn(process, 'exit').mockImplementation(code => {
       throw Object.assign(new Error('process.exit'), {code});
@@ -325,5 +336,43 @@ describe('exitAfter', () => {
     ).rejects.toMatchObject({code: 0});
 
     expect(exit).toHaveBeenCalledWith(0);
+  });
+
+  test('logs corruption diagnostics and flushes before a fatal exit', async () => {
+    const initialLC = createSilentLogContext();
+    const flushDone = resolver();
+    const flush = vi.fn(() => flushDone.promise);
+    const activeLC = new LogContext('debug', undefined, {
+      flush,
+      log: vi.fn(),
+    });
+    const error = Object.assign(new Error('database disk image is malformed'), {
+      code: 'SQLITE_CORRUPT',
+    });
+    let lc = initialLC;
+    const exit = vi.spyOn(process, 'exit').mockImplementation(code => {
+      throw Object.assign(new Error('process.exit'), {code});
+    });
+
+    const exiting = exitAfter(
+      () => lc,
+      () => {
+        lc = activeLC;
+        return Promise.reject(error);
+      },
+    );
+
+    await Promise.resolve();
+
+    expect(logLastChanceSQLiteCorruptionDiagnostics).toHaveBeenCalledWith(
+      activeLC,
+      error,
+    );
+    expect(flush).toHaveBeenCalledTimes(1);
+    expect(exit).not.toHaveBeenCalled();
+
+    flushDone.resolve();
+    await expect(exiting).rejects.toMatchObject({code: -1});
+    expect(exit).toHaveBeenCalledWith(-1);
   });
 });

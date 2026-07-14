@@ -3,6 +3,7 @@ import {pid} from 'node:process';
 import type {EventEmitter} from 'stream';
 import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
+import {logLastChanceSQLiteCorruptionDiagnostics} from '../db/sqlite-corruption.ts';
 import {
   getOrCreateHistogram,
   LONG_DURATION_HISTOGRAM_BOUNDARIES_S,
@@ -370,18 +371,36 @@ export async function runUntilKilled(
   }
 }
 
-export async function exitAfter(lc: LogContext, run: () => Promise<void>) {
+export async function exitAfter(
+  logContext: LogContext | (() => LogContext),
+  run: () => Promise<void>,
+) {
+  const getLogContext =
+    typeof logContext === 'function' ? logContext : () => logContext;
   try {
     await run();
+    const lc = getLogContext();
     lc.info?.(`pid ${pid} exiting normally`);
     process.exit(0);
   } catch (e) {
+    const lc = getLogContext();
     if (e instanceof ConfigurationError) {
       lc.error?.(`exiting with configuration error: ${String(e)}`, e);
       process.exit(0);
     }
     lc.error?.(`exiting with error: ${String(e)}`, e);
-    process.exit(-1);
+    try {
+      logLastChanceSQLiteCorruptionDiagnostics(lc, e);
+    } catch (diagnosticError) {
+      lc.error?.('SQLite corruption last-chance diagnostic failed', {
+        error: diagnosticError,
+      });
+    }
+    try {
+      await lc.flush();
+    } finally {
+      process.exit(-1);
+    }
   }
 }
 
