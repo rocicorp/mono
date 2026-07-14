@@ -3,6 +3,7 @@ import {expect, vi} from 'vitest';
 import {testLogConfig} from '../../../../otel/src/test-log-config.ts';
 import {h128} from '../../../../shared/src/hash.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
+import {must} from '../../../../shared/src/must.ts';
 import {Queue} from '../../../../shared/src/queue.ts';
 import {
   ANYONE_CAN_DO_ANYTHING,
@@ -18,6 +19,7 @@ import type {
 import type {Downstream} from '../../../../zero-protocol/src/down.ts';
 import type {PokePartBody} from '../../../../zero-protocol/src/poke.ts';
 import type {UpQueriesPatch} from '../../../../zero-protocol/src/queries-patch.ts';
+import type {RowPatchOp} from '../../../../zero-protocol/src/row-patch.ts';
 import {relationships} from '../../../../zero-schema/src/builder/relationship-builder.ts';
 import {
   clientSchemaFrom,
@@ -50,7 +52,11 @@ import {Subscription} from '../../types/subscription.ts';
 import {getMutationsTableDefinition} from '../change-source/pg/schema/shard.ts';
 import type {ReplicaState} from '../replicator/replicator.ts';
 import {initReplicationState} from '../replicator/schema/replication-state.ts';
-import {fakeReplicator, ReplicationMessages} from '../replicator/test-utils.ts';
+import {
+  fakeReplicator,
+  type FakeReplicator,
+  ReplicationMessages,
+} from '../replicator/test-utils.ts';
 import {ConnectionContextManagerImpl} from './connection-context-manager.ts';
 import {DrainCoordinator} from './drain-coordinator.ts';
 import {PipelineDriver} from './pipeline-driver.ts';
@@ -483,6 +489,44 @@ export async function expectNoPokes(client: Queue<Downstream>) {
   expect(await client.dequeue(timedOut, 10)).toBe(timedOut);
 }
 
+/**
+ * Extracts a poke's row patches (concatenated across its pokeParts), sorted
+ * into a canonical order. PokeIDs, cookies, and part boundaries are
+ * intentionally excluded: client groups running the same queries over the
+ * same replica emit the same row patches but may batch or version them
+ * differently.
+ */
+export function pokedRowPatches(poke: readonly Downstream[]): RowPatchOp[] {
+  const patches: RowPatchOp[] = [];
+  for (const msg of poke) {
+    if (msg[0] === 'pokePart') {
+      patches.push(...(msg[1].rowsPatch ?? []));
+    }
+  }
+  const key = (op: RowPatchOp) => JSON.stringify(op);
+  return patches.sort((a, b) => {
+    const [ka, kb] = [key(a), key(b)];
+    return ka < kb ? -1 : ka > kb ? 1 : 0;
+  });
+}
+
+/**
+ * Asserts that every poke carries the same canonicalized row patches (see
+ * {@link pokedRowPatches}) as the first, and returns them. Used to verify
+ * that client groups subscribed to equivalent queries observe equivalent
+ * row deltas.
+ */
+export function expectEquivalentPokes(
+  pokes: readonly (readonly Downstream[])[],
+): RowPatchOp[] {
+  expect(pokes.length).toBeGreaterThan(0);
+  const [first, ...rest] = pokes.map(pokedRowPatches);
+  for (const other of rest) {
+    expect(other).toEqual(first);
+  }
+  return first;
+}
+
 // Higher-level helper functions for TTL tests
 export function addQuery(
   vs: ViewSyncerService,
@@ -629,29 +673,16 @@ type InternalQueryFetchMock = QueryFetchMock & {
   consumeBehavior(): QueryFetchBehavior | undefined;
 };
 
-/** Shared PG view-syncer harness used by integration-style tests in this directory. */
-export async function setup(
-  testDBs: TestDBs,
+/**
+ * Creates the replica SQLite file with the schema and seed data shared by
+ * the view-syncer test harnesses. A `this_app_2.clients` row is seeded for
+ * each of `clientGroupIDs`.
+ */
+export function createTestReplica(
+  lc: LogContext,
   testName: string,
-  permissions: PermissionsConfig | undefined,
-  options: SetupOptions = {},
-) {
-  const {
-    authConfig = {},
-    lc = createSilentLogContext(),
-    queryFetchMode = 'none',
-  } = options;
-  const effectiveQueryConfig: ZeroConfig['query'] =
-    queryFetchMode === 'none' ? {...queryConfig, url: []} : queryConfig;
-  const queryFetch = createQueryFetchMock();
-  const restoreFetch = installQueryFetchStub(
-    queryFetchMode,
-    effectiveQueryConfig.url?.[0],
-    queryFetch,
-  );
-  const storageDB = new Database(lc, ':memory:');
-  storageDB.prepare(CREATE_STORAGE_TABLE).run();
-
+  clientGroupIDs: readonly string[] = [serviceID],
+): {replicaDbFile: DbFile; replica: Database} {
   const replicaDbFile = new DbFile(testName);
   const replica = replicaDbFile.connect(lc);
   initReplicationState(replica, ['zero_data'], REPLICA_VERSION);
@@ -713,8 +744,6 @@ export async function setup(
     _0_version TEXT NOT NULL
   );
 
-  INSERT INTO "this_app_2.clients" ("clientGroupID", "clientID", "lastMutationID", _0_version)
-    VALUES ('9876', 'foo', 42, '01');
   INSERT INTO "this_app.permissions" ("lock", "permissions", "hash", _0_version)
     VALUES (1, NULL, NULL, '01');
 
@@ -737,48 +766,50 @@ export async function setup(
   INSERT INTO "comments" (id, issueID, text, _0_version) VALUES ('2', '1', 'bar', '01');
   `);
 
-  const [cvrDB, upstreamDb] = await Promise.all([
-    testDBs.create(testName),
-    testDBs.create(testName + '-upstream'),
-  ]);
-  const shard = id(upstreamSchema(SHARD));
-  await upstreamDb.begin(tx =>
-    tx.unsafe(`
-          CREATE SCHEMA IF NOT EXISTS ${shard};
-          ${getMutationsTableDefinition(shard)}
-        `),
-  );
-  await initViewSyncerSchema(lc, cvrDB, SHARD);
+  for (const clientGroupID of clientGroupIDs) {
+    replica
+      .prepare(
+        `INSERT INTO "this_app_2.clients" ("clientGroupID", "clientID", "lastMutationID", _0_version)
+           VALUES (?, 'foo', 42, '01')`,
+      )
+      .run(clientGroupID);
+  }
+  return {replicaDbFile, replica};
+}
 
-  const setTimeoutFn = vi.fn<typeof setTimeout>();
-
-  const replicator = fakeReplicator(lc, replica);
-  const stateChanges: Subscription<ReplicaState> = Subscription.create();
-  const drainCoordinator = new DrainCoordinator();
-  const databaseStorage = new DatabaseStorage(storageDB);
-  const operatorStorage = databaseStorage.createClientGroupStorage(serviceID);
-
-  const config = {
-    auth: {...authConfig},
-    query: effectiveQueryConfig,
-    adminPassword: TEST_ADMIN_PASSWORD,
-    app: {
-      id: 'this_app',
-    },
-    replica: {
-      file: replicaDbFile.path,
-    },
-    log: {
-      level: 'error',
-    },
-  } as NormalizedZeroConfig;
-
-  // Create the custom query transformer if configured
+/**
+ * Creates a {@link ViewSyncerService} (and its connect helpers) for one
+ * client group over shared harness resources. Used by {@link setup},
+ * {@link setupMultiCG}, and {@link restartViewSyncer}.
+ */
+export function createClientGroupViewSyncer(params: {
+  lc: LogContext;
+  config: NormalizedZeroConfig;
+  cvrDB: PostgresDB;
+  replicaDbFile: DbFile;
+  databaseStorage: DatabaseStorage;
+  drainCoordinator: DrainCoordinator;
+  customQueryTransformer: CustomQueryTransformer | undefined;
+  clientGroupID?: string | undefined;
+  driverName?: string | undefined;
+  setTimeoutFn?: ReturnType<typeof vi.fn<typeof setTimeout>> | undefined;
+}) {
+  const {
+    lc,
+    config,
+    cvrDB,
+    replicaDbFile,
+    databaseStorage,
+    drainCoordinator,
+    customQueryTransformer,
+    clientGroupID = serviceID,
+    driverName = 'view-syncer.pg.test.ts',
+    setTimeoutFn = vi.fn<typeof setTimeout>(),
+  } = params;
   const {query} = config;
-  const queryURLs = query.url ?? [];
-  const customQueryTransformer =
-    queryURLs.length > 0 ? new CustomQueryTransformer(lc, SHARD) : undefined;
-
+  const stateChanges: Subscription<ReplicaState> = Subscription.create();
+  const operatorStorage =
+    databaseStorage.createClientGroupStorage(clientGroupID);
   const inspectorDelegate = new InspectorDelegate(customQueryTransformer);
   const connContextManager = new ConnectionContextManagerImpl(
     lc,
@@ -809,7 +840,7 @@ export async function setup(
     lc,
     SHARD,
     TASK_ID,
-    serviceID,
+    clientGroupID,
     cvrDB,
     new PipelineDriver(
       lc.withContext('component', 'pipeline-driver'),
@@ -817,7 +848,7 @@ export async function setup(
       new Snapshotter(lc, replicaDbFile.path, SHARD),
       SHARD,
       operatorStorage,
-      'view-syncer.pg.test.ts',
+      driverName,
       inspectorDelegate,
       () => YIELD_THRESHOLD_MS,
     ),
@@ -831,12 +862,6 @@ export async function setup(
     undefined,
     setTimeoutFn,
   );
-  if (permissions) {
-    const json = JSON.stringify(permissions);
-    replica
-      .prepare(`UPDATE "this_app.permissions" SET permissions = ?, hash = ?`)
-      .run(json, h128(json).toString(16));
-  }
   const viewSyncerDone = vs.run();
 
   function connectWithQueueAndSource(
@@ -851,7 +876,7 @@ export async function setup(
       {
         protocolVersion: ctx.protocolVersion,
         clientID: ctx.clientID,
-        clientGroupID: serviceID,
+        clientGroupID,
         profileID: ctx.profileID,
         baseCookie: ctx.baseCookie,
         timestamp: Date.now(),
@@ -904,29 +929,205 @@ export async function setup(
   }
 
   return {
+    clientGroupID,
+    vs,
+    viewSyncerDone,
+    stateChanges,
+    operatorStorage,
+    inspectorDelegate,
+    connContextManager,
+    setTimeoutFn,
+    connect,
+    connectWithQueueAndSource,
+  };
+}
+
+/** Per-client-group harness returned by {@link createClientGroupViewSyncer}. */
+export type ClientGroupHarness = ReturnType<typeof createClientGroupViewSyncer>;
+
+export type MultiCGSetupOptions = SetupOptions &
+  Readonly<{
+    /** Client groups to create ViewSyncers for. Defaults to `[serviceID]`. */
+    clientGroupIDs?: readonly string[] | undefined;
+  }>;
+
+/**
+ * Multi-client-group PG view-syncer harness: one replica, CVR db, and
+ * replicator shared by a {@link ViewSyncerService} per client group. This is
+ * the substrate for tests of cross-client-group behavior (e.g. shared
+ * pipeline advancement); {@link setup} is the single-client-group adapter
+ * used by most tests in this directory.
+ */
+export async function setupMultiCG(
+  testDBs: TestDBs,
+  testName: string,
+  permissions: PermissionsConfig | undefined,
+  options: MultiCGSetupOptions = {},
+) {
+  const {
+    authConfig = {},
+    lc = createSilentLogContext(),
+    queryFetchMode = 'none',
+    clientGroupIDs = [serviceID],
+  } = options;
+  const effectiveQueryConfig: ZeroConfig['query'] =
+    queryFetchMode === 'none' ? {...queryConfig, url: []} : queryConfig;
+  const queryFetch = createQueryFetchMock();
+  const restoreFetch = installQueryFetchStub(
+    queryFetchMode,
+    effectiveQueryConfig.url?.[0],
+    queryFetch,
+  );
+  const storageDB = new Database(lc, ':memory:');
+  storageDB.prepare(CREATE_STORAGE_TABLE).run();
+
+  const {replicaDbFile, replica} = createTestReplica(
+    lc,
+    testName,
+    clientGroupIDs,
+  );
+
+  const [cvrDB, upstreamDb] = await Promise.all([
+    testDBs.create(testName),
+    testDBs.create(testName + '-upstream'),
+  ]);
+  const shard = id(upstreamSchema(SHARD));
+  await upstreamDb.begin(tx =>
+    tx.unsafe(`
+          CREATE SCHEMA IF NOT EXISTS ${shard};
+          ${getMutationsTableDefinition(shard)}
+        `),
+  );
+  await initViewSyncerSchema(lc, cvrDB, SHARD);
+
+  const replicator = fakeReplicator(lc, replica);
+  const drainCoordinator = new DrainCoordinator();
+  const databaseStorage = new DatabaseStorage(storageDB);
+
+  const config = {
+    auth: {...authConfig},
+    query: effectiveQueryConfig,
+    adminPassword: TEST_ADMIN_PASSWORD,
+    app: {
+      id: 'this_app',
+    },
+    replica: {
+      file: replicaDbFile.path,
+    },
+    log: {
+      level: 'error',
+    },
+  } as NormalizedZeroConfig;
+
+  // Create the custom query transformer if configured
+  const queryURLs = config.query.url ?? [];
+  const customQueryTransformer =
+    queryURLs.length > 0 ? new CustomQueryTransformer(lc, SHARD) : undefined;
+
+  if (permissions) {
+    const json = JSON.stringify(permissions);
+    replica
+      .prepare(`UPDATE "this_app.permissions" SET permissions = ?, hash = ?`)
+      .run(json, h128(json).toString(16));
+  }
+
+  const clientGroups = new Map(
+    clientGroupIDs.map(clientGroupID => [
+      clientGroupID,
+      createClientGroupViewSyncer({
+        lc,
+        config,
+        cvrDB,
+        replicaDbFile,
+        databaseStorage,
+        drainCoordinator,
+        customQueryTransformer,
+        clientGroupID,
+      }),
+    ]),
+  );
+
+  /** Pushes 'version-ready' to every client group's ViewSyncer. */
+  const pushVersionReady = () => {
+    for (const cg of clientGroups.values()) {
+      cg.stateChanges.push({state: 'version-ready'});
+    }
+  };
+
+  /**
+   * Processes a replica transaction and notifies every client group, the
+   * multi-CG analogue of `replicator.processTransaction(...)` +
+   * `stateChanges.push({state: 'version-ready'})`.
+   */
+  const advanceAll: FakeReplicator['processTransaction'] = (
+    watermark,
+    ...msgs
+  ) => {
+    replicator.processTransaction(watermark, ...msgs);
+    pushVersionReady();
+  };
+
+  const stopAll = async () => {
+    for (const cg of clientGroups.values()) {
+      await cg.vs.stop();
+      await cg.viewSyncerDone;
+    }
+  };
+
+  return {
     storageDB,
     replicaDbFile,
     replica,
     cvrDB,
     upstreamDb,
-    stateChanges,
-    drainCoordinator,
-    operatorStorage,
-    vs,
-    viewSyncerDone,
     replicator,
-    connect,
-    connectWithQueueAndSource,
-    setTimeoutFn,
-    inspectorDelegate,
+    drainCoordinator,
+    databaseStorage,
+    config,
     customQueryTransformer,
     queryFetch,
+    clientGroups,
+    advanceAll,
+    pushVersionReady,
+    stopAll,
     clearMocks: () => {
       queryFetch.reset();
       restoreFetch();
     },
-    config,
-    databaseStorage,
+  };
+}
+
+/** Shared PG view-syncer harness used by integration-style tests in this directory. */
+export async function setup(
+  testDBs: TestDBs,
+  testName: string,
+  permissions: PermissionsConfig | undefined,
+  options: SetupOptions = {},
+) {
+  const multi = await setupMultiCG(testDBs, testName, permissions, options);
+  const cg = must(multi.clientGroups.get(serviceID));
+
+  return {
+    storageDB: multi.storageDB,
+    replicaDbFile: multi.replicaDbFile,
+    replica: multi.replica,
+    cvrDB: multi.cvrDB,
+    upstreamDb: multi.upstreamDb,
+    stateChanges: cg.stateChanges,
+    drainCoordinator: multi.drainCoordinator,
+    operatorStorage: cg.operatorStorage,
+    vs: cg.vs,
+    viewSyncerDone: cg.viewSyncerDone,
+    replicator: multi.replicator,
+    connect: cg.connect,
+    connectWithQueueAndSource: cg.connectWithQueueAndSource,
+    setTimeoutFn: cg.setTimeoutFn,
+    inspectorDelegate: cg.inspectorDelegate,
+    customQueryTransformer: multi.customQueryTransformer,
+    queryFetch: multi.queryFetch,
+    clearMocks: multi.clearMocks,
+    config: multi.config,
+    databaseStorage: multi.databaseStorage,
   };
 }
 
@@ -958,118 +1159,19 @@ export function restartViewSyncer(params: {
   } = params;
   const lc = createSilentLogContext();
 
-  const stateChanges: Subscription<ReplicaState> = Subscription.create();
   const drainCoordinator = new DrainCoordinator();
-  const operatorStorage = databaseStorage.createClientGroupStorage(serviceID);
-  const inspectorDelegate = new InspectorDelegate(customQueryTransformer);
-
-  const {query} = config;
-  const connContextManager = new ConnectionContextManagerImpl(
-    lc,
-    config.auth.revalidateIntervalSeconds,
-    config.auth.retransformIntervalSeconds,
-    {
-      url: query.url,
-      apiKey: query.apiKey,
-      allowedClientHeaders: query.allowedClientHeaders,
-      allowedRequestHeaders: query.allowedRequestHeaders,
-      forwardCookies: query.forwardCookies,
-    },
-    {
-      url: config.push?.url ?? config.mutate?.url,
-      apiKey: config.push?.apiKey ?? config.mutate?.apiKey,
-      allowedClientHeaders:
-        config.push?.allowedClientHeaders ??
-        config.mutate?.allowedClientHeaders,
-      allowedRequestHeaders:
-        config.push?.allowedRequestHeaders ??
-        config.mutate?.allowedRequestHeaders,
-      forwardCookies:
-        config.push?.forwardCookies ?? config.mutate?.forwardCookies ?? false,
-    },
-  );
-
-  const vs = new ViewSyncerService(
-    config,
-    lc,
-    SHARD,
-    TASK_ID,
-    serviceID,
-    cvrDB,
-    new PipelineDriver(
-      lc.withContext('component', 'pipeline-driver'),
-      testLogConfig,
-      new Snapshotter(lc, replicaDbFile.path, SHARD),
-      SHARD,
-      operatorStorage,
-      'view-syncer-restart',
-      inspectorDelegate,
-      () => YIELD_THRESHOLD_MS,
-    ),
-    stateChanges,
-    drainCoordinator,
-    100,
-    inspectorDelegate,
-    connContextManager,
-    customQueryTransformer,
-    (_lc, _description, op) => op(),
-    undefined,
-    setTimeoutFn,
-  );
-  const viewSyncerDone = vs.run();
-
-  function connect(
-    ctx: SyncContext,
-    desiredQueriesPatch: UpQueriesPatch,
-    clientSchema: ClientSchema | null = defaultClientSchema,
-    activeClients?: string[],
-  ): Queue<Downstream> {
-    const selector = {clientID: ctx.clientID, wsID: ctx.wsID};
-    vs.connContextManager.registerConnection(
-      selector,
-      {
-        protocolVersion: ctx.protocolVersion,
-        clientID: ctx.clientID,
-        clientGroupID: serviceID,
-        profileID: ctx.profileID,
-        baseCookie: ctx.baseCookie,
-        timestamp: Date.now(),
-        lmID: 0,
-        wsID: ctx.wsID,
-        debugPerf: false,
-        auth: ctx.auth?.raw,
-        userID: ctx.userID,
-        initConnectionMsg: undefined,
-        httpCookie: ctx.httpCookie,
-        origin: ctx.origin,
-      },
-      ctx.auth,
-    );
-    vs.connContextManager.initConnection(selector, {
-      desiredQueriesPatch,
-      clientSchema: clientSchema ?? undefined,
-      activeClients,
+  const {vs, stateChanges, viewSyncerDone, connect} =
+    createClientGroupViewSyncer({
+      lc,
+      config,
+      cvrDB,
+      replicaDbFile,
+      databaseStorage,
+      drainCoordinator,
+      customQueryTransformer,
+      driverName: 'view-syncer-restart',
+      setTimeoutFn,
     });
-    const source = vs.initConnection(selector, [
-      'initConnection',
-      {
-        desiredQueriesPatch,
-        clientSchema: clientSchema ?? undefined,
-        activeClients,
-      },
-    ]);
-    const queue = new Queue<Downstream>();
-    void (async function () {
-      try {
-        for await (const msg of source) {
-          queue.enqueue(msg);
-        }
-      } catch (e) {
-        queue.enqueueRejection(e);
-      }
-    })();
-    return queue;
-  }
 
   return {vs, stateChanges, viewSyncerDone, drainCoordinator, connect};
 }

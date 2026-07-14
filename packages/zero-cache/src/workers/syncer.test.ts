@@ -58,6 +58,7 @@ import type {ViewSyncer} from '../services/view-syncer/view-syncer.ts';
 import type {WebSocketReceiver} from '../types/websocket-handoff.ts';
 import {
   computeMaxServingLagMs,
+  computePipelineDedupStats,
   computeServingLagStatsMs,
   MAX_REPLICA_READY_STATES,
   Syncer,
@@ -120,6 +121,8 @@ function makeFactories(
           createdAtMs: Date.now(),
           servedVersion: null,
           servingLagEligible: true,
+          pipelineHashes: () => [],
+          clientSchemaKey: undefined,
           stop() {
             stopped.resolve();
             return stopped.promise;
@@ -378,6 +381,72 @@ describe('computeServingLagStatsMs', () => {
       maxMs: 0,
     });
     expect(states).toEqual([]);
+  });
+});
+
+describe('computePipelineDedupStats', () => {
+  test('empty', () => {
+    const stats = computePipelineDedupStats([]);
+    expect(stats.clientTotal).toBe(0);
+    expect(stats.internalTotal).toBe(0);
+    expect(stats.clientHashes.size).toBe(0);
+    expect(stats.internalUnique).toBe(0);
+    expect(stats.clientSchemas).toBe(0);
+  });
+
+  test('counts duplicates across client groups by (schemaKey, hash)', () => {
+    const stats = computePipelineDedupStats([
+      {
+        clientSchemaKey: 'schema1',
+        pipelineHashes: () => [
+          {transformationHash: 'aaa', internal: false, queryName: 'issues'},
+          {transformationHash: 'bbb', internal: false, queryName: undefined},
+          {transformationHash: 'lmids', internal: true, queryName: undefined},
+        ],
+      },
+      {
+        clientSchemaKey: 'schema1',
+        pipelineHashes: () => [
+          {transformationHash: 'aaa', internal: false, queryName: 'issues'},
+          {transformationHash: 'lmids', internal: true, queryName: undefined},
+        ],
+      },
+      // Same transformationHash but different clientSchema: not shareable,
+      // so it counts as a distinct unique pipeline.
+      {
+        clientSchemaKey: 'schema2',
+        pipelineHashes: () => [
+          {transformationHash: 'aaa', internal: false, queryName: 'issues'},
+        ],
+      },
+      // Not yet initialized: contributes nothing.
+      {
+        clientSchemaKey: undefined,
+        pipelineHashes: () => [],
+      },
+    ]);
+
+    expect(stats.clientTotal).toBe(4);
+    expect(stats.internalTotal).toBe(2);
+    expect(stats.clientHashes.size).toBe(3);
+    expect(stats.clientHashes.get('schema1/aaa')).toEqual({
+      count: 2,
+      queryName: 'issues',
+    });
+    expect(stats.clientHashes.get('schema1/bbb')).toEqual({
+      count: 1,
+      queryName: undefined,
+    });
+    expect(stats.clientHashes.get('schema2/aaa')).toEqual({
+      count: 1,
+      queryName: 'issues',
+    });
+    // The internal (lmids) hash collides across CGs of the same schema in
+    // this synthetic input, but real internal queries embed the
+    // clientGroupID in their AST and would never collide; the stat exists
+    // to keep them segmented out of the client dedup factor.
+    expect(stats.internalUnique).toBe(1);
+    expect(stats.clientSchemas).toBe(2);
   });
 });
 

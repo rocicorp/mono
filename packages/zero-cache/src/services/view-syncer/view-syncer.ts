@@ -10,10 +10,15 @@ import {
 import {assert, unreachable} from '../../../../shared/src/asserts.ts';
 import {stringify} from '../../../../shared/src/bigint-json.ts';
 import {CustomKeyMap} from '../../../../shared/src/custom-key-map.ts';
+import {h64} from '../../../../shared/src/hash.ts';
 import {must} from '../../../../shared/src/must.ts';
 import {randInt} from '../../../../shared/src/rand.ts';
 import type {AST} from '../../../../zero-protocol/src/ast.ts';
 import type {ChangeDesiredQueriesMessage} from '../../../../zero-protocol/src/change-desired-queries.ts';
+import {
+  normalizeClientSchema,
+  type ClientSchema,
+} from '../../../../zero-protocol/src/client-schema.ts';
 import type {
   InitConnectionBody,
   InitConnectionMessage,
@@ -159,7 +164,23 @@ export interface ViewSyncer {
   readonly createdAtMs: number;
   readonly servedVersion: string | null;
   readonly servingLagEligible: boolean;
+
+  // Shared-advance eligibility telemetry: which transformed queries this
+  // client group runs, and the identity of its client schema. Pipelines with
+  // the same (clientSchemaKey, transformationHash) across client groups do
+  // identical IVM advance work today; the ratio of total to unique pipelines
+  // on a sync worker is the dedup factor available to shared advancement.
+  pipelineHashes(): readonly PipelineHashInfo[];
+  readonly clientSchemaKey: string | undefined;
 }
+
+export type PipelineHashInfo = {
+  readonly transformationHash: string;
+  // Internal queries (lmids, mutationResults) embed the clientGroupID in
+  // their AST, so they can never be shared across client groups.
+  readonly internal: boolean;
+  readonly queryName: string | undefined;
+};
 
 export type SyncContext = ConnectionSelector & {
   readonly profileID: string | null;
@@ -627,6 +648,44 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
   get queryCount(): number {
     return this.#pipelines.initialized() ? this.#pipelines.queries().size : 0;
+  }
+
+  pipelineHashes(): readonly PipelineHashInfo[] {
+    if (!this.#pipelines.initialized()) {
+      return [];
+    }
+    const cvrQueries = this.#cvr?.queries;
+    const hashes: PipelineHashInfo[] = [];
+    for (const [queryID, {transformationHash, queryName}] of this.#pipelines
+      .queries()
+      .entries()) {
+      hashes.push({
+        transformationHash,
+        internal: cvrQueries?.[queryID]?.type === 'internal',
+        queryName,
+      });
+    }
+    return hashes;
+  }
+
+  // The clientSchema object survives CVR snapshot updates by reference, so
+  // cache the derived key on it.
+  #clientSchemaKeyCache:
+    | {readonly schema: ClientSchema; readonly key: string}
+    | undefined;
+
+  get clientSchemaKey(): string | undefined {
+    const schema = this.#cvr?.clientSchema;
+    if (!schema) {
+      return undefined;
+    }
+    if (this.#clientSchemaKeyCache?.schema !== schema) {
+      this.#clientSchemaKeyCache = {
+        schema,
+        key: h64(JSON.stringify(normalizeClientSchema(schema))).toString(36),
+      };
+    }
+    return this.#clientSchemaKeyCache.key;
   }
 
   get rowCount(): number {
