@@ -13,15 +13,24 @@ import {publishedSchema, publishedSchemaQuery} from './published.ts';
 // This will allow old / incompatible code to detect the change and abort.
 export const PROTOCOL_VERSION = 1;
 
+// In protocol v2 (planned, not yet emitted), "ddlStart" events that are not
+// associated with a schema change will be context-only, omitting the
+// `schema` snapshot entirely. This avoids bloating the WAL with (large)
+// redundant schema snapshots for DDL commands that do not affect the
+// published schema, e.g. the CREATE/ALTER/DROP TABLE sub-commands executed
+// by REFRESH MATERIALIZED VIEW CONCURRENTLY.
+//
+// This release already accepts v2 events so that the (subsequent) release
+// that upgrades the triggers to emit them remains rollback safe with respect
+// to this one.
+const versionSchema = v.literalUnion(PROTOCOL_VERSION, 2);
+
 const triggerEvent = v.object({
   context: v.object({query: v.string()}).rest(v.string()),
 });
 
-// All DDL events contain a snapshot of the current tables and indexes that
-// are published / relevant to the shard.
 export const ddlEventSchema = triggerEvent.extend({
-  version: v.literal(PROTOCOL_VERSION),
-  schema: publishedSchema,
+  version: versionSchema,
   event: v.object({tag: v.string()}),
   // Maps the OID of each published table to the `attnum`s of published
   // columns that were created in the (upstream) transaction that emitted
@@ -39,15 +48,16 @@ export const ddlEventSchema = triggerEvent.extend({
 });
 
 /**
- * A {@link DdlStartEvent} message is emitted before every DDL event, containing
- * the current `schema` and the command `tag`.
+ * A {@link DdlStartEvent} message is emitted before every DDL event,
+ * containing the command `tag`.
  *
  * In most cases, the `DdlStartEvent` itself will not be associated with a
- * schema change, in which case `previousSchema` will be `null`. However, the
- * message is still emitted, both for backwards compatibility and to provide
- * the command `tag` context in case an immediately following `DdlStartEvent`
- * tag is emitted with a schema change (which can happen when another event
- * trigger results in a nested ddl statement).
+ * schema change, in which case the event is context-only (in protocol v2,
+ * planned, both `previousSchema` and `schema` will be absent; in v1,
+ * `schema` is set and `previousSchema` is `null`). The message is still
+ * emitted to provide the command `tag` context in case an immediately
+ * following `DdlStartEvent` tag is emitted with a schema change (which can
+ * happen when another event trigger results in a nested ddl statement).
  *
  * In such cases, the `previousSchema` and `schema` fields of the latter event
  * are used to determine the necessary schema change operations (as they are
@@ -58,12 +68,12 @@ export const ddlEventSchema = triggerEvent.extend({
  */
 export const ddlStartEventSchema = ddlEventSchema.extend({
   type: v.literal('ddlStart'),
-  // For ddlStart messages, previousSchema is `null` if there was no change
-  // in schema detected. The `schema` field is always set to the current
-  // schema.
-  //
-  // In 1.5.0 it is always present, and can be made non-optional when
-  // rollback safe.
+  // Set (along with `previousSchema`) only if the ddlStart event itself is
+  // associated with a schema change. Absent in context-only (protocol v2,
+  // planned) events. v1 events always contain the current `schema`.
+  schema: publishedSchema.optional(),
+  // For ddlStart messages, previousSchema is `null` (v1) or absent
+  // (protocol v2, planned) if there was no change in schema detected.
   previousSchema: publishedSchema.nullable().optional(),
   // For backwards compatibility with previous versions of the trigger,
   // default an absent `event` field with a semantic equivalent. This
@@ -81,8 +91,10 @@ export type DdlStartEvent = v.Infer<typeof ddlStartEventSchema>;
  */
 export const ddlUpdateEventSchema = ddlEventSchema.extend({
   type: v.literal('ddlUpdate'),
-  // ddlUpdate messages are only emitted if the schema changed, with the
-  // `previousSchema` containing the schema before the change.
+  // ddlUpdate messages are only emitted if the schema changed. `schema`
+  // contains the current (i.e. post-change) snapshot.
+  schema: publishedSchema,
+  // The `previousSchema` contains the schema before the change.
   //
   // In 1.5.0 it is always set, and can be made non-optional when
   // rollback safe.
@@ -115,6 +127,7 @@ export type DdlUpdateEvent = v.Infer<typeof ddlUpdateEventSchema>;
  */
 export const schemaSnapshotEventSchema = ddlEventSchema.extend({
   type: v.literal('schemaSnapshot'),
+  schema: publishedSchema,
   previousSchema: publishedSchema.optional(),
 });
 
@@ -240,7 +253,7 @@ BEGIN
 
   PERFORM pg_logical_emit_message(true, '${appID}/${shardNum}/ddl', message);
 
-  RAISE NOTICE 'Emitted ${appID}_${shardNum} % for % %', event_type, tag, 
+  RAISE NOTICE 'Emitted ${appID}_${shardNum} % for % %', event_type, tag,
     COALESCE(row_to_json(target)::text, '');
 END
 $$ LANGUAGE plpgsql;
