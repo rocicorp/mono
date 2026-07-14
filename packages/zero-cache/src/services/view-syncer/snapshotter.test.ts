@@ -696,9 +696,29 @@ describe('view-syncer/snapshotter', () => {
 
     // Snapshot the entire query - it should only have "id"=? in WHERE,
     // not "handle"=? since handle is NULL
-    expect(getRowsCalls[0][0]).toBe(
+    const [query] = getRowsCalls[0]!;
+    expect(query).toBe(
       'SELECT "id","handle","_0_version" FROM "users" WHERE "id"=?',
     );
+
+    // Keep this lookup index-driven. The legacy `id = ? OR handle = ?` shape
+    // becomes a table scan when the handle parameter is NULL.
+    const plan = diff.prev.db.db
+      .prepare(`EXPLAIN QUERY PLAN ${query}`)
+      .all<{detail: string}>(30)
+      .map(row => row.detail)
+      .join('\n');
+    expect(plan).toMatch(/SEARCH users USING/);
+    expect(plan).not.toMatch(/\bSCAN users\b/);
+
+    const legacyPlan = diff.prev.db.db
+      .prepare(
+        'EXPLAIN QUERY PLAN SELECT "id","handle","_0_version" FROM "users" WHERE "id"=? OR "handle"=?',
+      )
+      .all<{detail: string}>(30, null)
+      .map(row => row.detail)
+      .join('\n');
+    expect(legacyPlan).toMatch(/\bSCAN users\b/);
 
     getSpy.mockRestore();
   });
