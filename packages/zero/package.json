@@ -176,6 +176,7 @@
     "analyze-query": "workspace:*",
     "ast-to-zql": "workspace:*",
     "expo-sqlite": ">=15",
+    "oxc-parser": "^0.129.0",
     "replicache": "workspace:*",
     "shared": "workspace:*",
     "syncpack": "^14.3.0",
@@ -191,38 +192,6 @@
     "zero-server": "workspace:*",
     "zero-solid": "workspace:*",
     "zqlite": "workspace:*"
-  },
-  "peerDependencies": {
-    "@op-engineering/op-sqlite": ">=15",
-    "drizzle-orm": "^0.45.2",
-    "expo-sqlite": ">=15",
-    "kysely": "^0.28.17",
-    "pg": "^8.16.3",
-    "react": "^19.2.6",
-    "solid-js": "^1.9.4"
-  },
-  "peerDependenciesMeta": {
-    "@op-engineering/op-sqlite": {
-      "optional": true
-    },
-    "drizzle-orm": {
-      "optional": true
-    },
-    "expo-sqlite": {
-      "optional": true
-    },
-    "kysely": {
-      "optional": true
-    },
-    "pg": {
-      "optional": true
-    },
-    "react": {
-      "optional": true
-    },
-    "solid-js": {
-      "optional": true
-    }
   },
   "engines": {
     "node": ">=22"
