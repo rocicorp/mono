@@ -691,7 +691,7 @@ test('protocol version', () => {
   // old code will not understand the new schema, bump the
   // PROTOCOL_VERSION and update the expected values.
   expect(hash).toEqual('1dsf0svqtvyhv');
-  expect(PROTOCOL_VERSION).toBe(52);
+  expect(PROTOCOL_VERSION).toBe(53);
 });
 
 test('normalizedAST matches normalizeAST', () => {
