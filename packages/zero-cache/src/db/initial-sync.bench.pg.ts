@@ -29,7 +29,7 @@ const PROFILES = {
   'mixed-regression': {
     fixture: {fixture: 'mixed', rows: 250_000},
     warmupReps: 1,
-    reps: 10,
+    reps: 5,
     tableCopyWorkers: 4,
     timeoutMs: 3_600_000,
   },
@@ -43,7 +43,7 @@ const PROFILES = {
   'wide-text-full': {
     fixture: {fixture: 'wide-text', rows: 10_000, payloadBytes: 683_000},
     warmupReps: 1,
-    reps: 10,
+    reps: 3,
     tableCopyWorkers: 4,
     timeoutMs: 7_200_000,
   },
@@ -64,7 +64,7 @@ const PROFILES = {
   'large-payload-full': {
     fixture: {fixture: 'large-payload', rows: 10_000, payloadBytes: 275_000},
     warmupReps: 1,
-    reps: 10,
+    reps: 3,
     tableCopyWorkers: 4,
     timeoutMs: 7_200_000,
   },
