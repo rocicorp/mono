@@ -107,7 +107,9 @@ describe('change-source/tables/ddl', () => {
     `;
 
   // For zero_all, zero_sum
-  const DDL_START: Omit<DdlStartEvent, 'context'> = {
+  const DDL_START: Omit<DdlStartEvent, 'context'> & {
+    schema: NonNullable<DdlStartEvent['schema']>;
+  } = {
     type: 'ddlStart',
     version: 1,
     event: {tag: 'UNUSED'},
@@ -1697,6 +1699,56 @@ describe('change-source/tables/ddl', () => {
     expect(v.parse(withoutNewColumns, ddlUpdateEventSchema)).toEqual(
       withoutNewColumns,
     );
+  });
+
+  // Protocol v2 (planned): ddlStart events without a schema change are
+  // context-only. This release does not emit them yet, but must parse them
+  // so that the release that does can be rolled back to this one.
+  test('parse context-only ddlStartEvent', () => {
+    const contextOnlyDdlStartEvent: DdlStartEvent = {
+      type: 'ddlStart',
+      version: 2,
+      context: {query: 'REFRESH MATERIALIZED VIEW CONCURRENTLY foo'},
+      event: {tag: 'CREATE TABLE'},
+    };
+    const parsed = v.parse(contextOnlyDdlStartEvent, ddlStartEventSchema);
+    expect(parsed).toMatchObject(contextOnlyDdlStartEvent);
+    expect(parsed.schema).toBeUndefined();
+    expect(parsed.previousSchema).toBeUndefined();
+  });
+
+  test('REFRESH MATERIALIZED VIEW CONCURRENTLY emits only no-op ddlStart events', async () => {
+    await upstream.unsafe(/*sql*/ `
+      CREATE MATERIALIZED VIEW pub.mat AS SELECT id FROM pub.foo;
+      CREATE UNIQUE INDEX mat_id_key ON pub.mat (id);
+    `);
+
+    const query = 'REFRESH MATERIALIZED VIEW CONCURRENTLY pub.mat';
+    await upstream.unsafe(query);
+
+    // Marker transaction to bound the message scan.
+    await upstream`INSERT INTO pub.boo(id) VALUES('refresh-done')`;
+
+    const ddlEvents: DdlStartEvent[] = [];
+    for (;;) {
+      const msg = await messages.dequeue();
+      if (msg.tag === 'insert') {
+        break;
+      }
+      if (msg.tag === 'message') {
+        // parseDDLStartEvent() fails if a ddlUpdate event was emitted.
+        ddlEvents.push(parseDDLStartEvent(msg));
+      }
+    }
+
+    // The CREATE UNIQUE INDEX (on the unpublished materialized view) and
+    // the internal CREATE/ALTER/DROP TABLE sub-commands of the REFRESH
+    // each emit a no-op ddlStart event, and no ddlUpdate events.
+    expect(ddlEvents.length).toBeGreaterThan(1);
+    expect(ddlEvents.map(e => e.context.query)).toContain(query);
+    for (const event of ddlEvents) {
+      expect(event).toMatchObject({type: 'ddlStart', previousSchema: null});
+    }
   });
 });
 
