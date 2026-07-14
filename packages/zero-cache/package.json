@@ -89,6 +89,7 @@
     "@types/ws": "^8.5.12",
     "@vitest/runner": "^4.1.6",
     "esbuild": "0.27.7",
+    "fast-check": "^3.18.0",
     "mockttp": "^4.2.1",
     "nock": "^14.0.4",
     "otel": "workspace:*",
