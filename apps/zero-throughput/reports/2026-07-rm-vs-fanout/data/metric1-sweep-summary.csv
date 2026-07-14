@@ -1,0 +1,4 @@
+profile,model,users,queriesPerUser,rowsPerQuery,zeroNumSyncWorkers,bestWriteRate,attemptedWriteRates,bestP99ClientVisibleLagMs,bestMaxSeqLag,bestLagSlopeSeqPerSec,bestAffectedActiveClientGroupWriteRatio,bestOutputPath,bestFailureReasons
+relational,hot,50,3,50,1,3,16|8|4|2|3,1124.498046875,5,0,1,/home/user/mono/apps/zero-throughput/results/sweeps/baseline-4vcpu-50u/runs/relational-hot-50u-3q-50rows-1sync-rate3-rep1.json,
+relational,hot,50,3,50,2,6,16|8|4|6|7,1130.85302734375,9,-0.04145335461272204,1,/home/user/mono/apps/zero-throughput/results/sweeps/baseline-4vcpu-50u/runs/relational-hot-50u-3q-50rows-2sync-rate6-rep1.json,
+relational,hot,50,3,50,4,6,16|8|4|6|7,1110.031982421875,9,-0.020843755210938803,1,/home/user/mono/apps/zero-throughput/results/sweeps/baseline-4vcpu-50u/runs/relational-hot-50u-3q-50rows-4sync-rate6-rep1.json,
