@@ -61,7 +61,8 @@ export default async function runWorker(
 // the native Litestream VFS extension and its process-global `LITESTREAM_*` env
 // stay isolated from the rest of zero-cache. See `shouldStartWorker`.
 if (shouldStartWorker(parentWorker, singleProcessMode())) {
-  void exitAfter(lc, () =>
-    runWorker(parentWorker, process.env, ...process.argv.slice(2)),
+  void exitAfter(
+    () => lc,
+    () => runWorker(parentWorker, process.env, ...process.argv.slice(2)),
   );
 }
