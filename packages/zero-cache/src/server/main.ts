@@ -3,6 +3,7 @@ import {consoleLogSink, LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {must} from '../../../shared/src/must.ts';
 import {getNormalizedZeroConfig} from '../config/zero-config.ts';
+import {registerSQLiteCorruptionDiagnosticTarget} from '../db/sqlite-corruption.ts';
 import {initEventSink} from '../observability/events.ts';
 import {
   exitAfter,
@@ -57,6 +58,10 @@ export default async function runWorker(
     0,
   );
   lc = createLogContext(config, 'dispatcher');
+  registerSQLiteCorruptionDiagnosticTarget({
+    debugName: 'dispatcher replica',
+    dbPath: config.replica.file,
+  });
   initEventSink(lc, config);
 
   const processes = new ProcessManager(lc, parent);
@@ -225,5 +230,8 @@ export default async function runWorker(
 }
 
 if (!singleProcessMode()) {
-  void exitAfter(lc, () => runWorker(must(parentWorker), process.env));
+  void exitAfter(
+    () => lc,
+    () => runWorker(must(parentWorker), process.env),
+  );
 }

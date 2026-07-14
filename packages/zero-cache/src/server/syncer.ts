@@ -14,6 +14,7 @@ import {tokenConfigOptions, verifyToken} from '../auth/jwt.ts';
 import type {NormalizedZeroConfig} from '../config/normalize.ts';
 import {getNormalizedZeroConfig} from '../config/zero-config.ts';
 import {CustomQueryTransformer} from '../custom-queries/transform-query.ts';
+import {registerSQLiteCorruptionDiagnosticTarget} from '../db/sqlite-corruption.ts';
 import {warmupConnections} from '../db/warmup.ts';
 import {initEventSink} from '../observability/events.ts';
 import {exitAfter, runUntilKilled} from '../services/life-cycle.ts';
@@ -91,6 +92,10 @@ export default async function runWorker(
   const {cvr, upstream, enableCrudMutations} = config;
 
   const replicaFile = replicaFileName(config.replica.file, fileMode);
+  registerSQLiteCorruptionDiagnosticTarget({
+    debugName: 'syncer replica',
+    dbPath: replicaFile,
+  });
   lc.debug?.(`running view-syncer on ${replicaFile}`);
 
   const cvrDB = await connectPgClient(lc, cvr.db, `sync-worker-${pid}-cvr`, {
@@ -280,7 +285,8 @@ export default async function runWorker(
 
 // fork()
 if (!singleProcessMode()) {
-  void exitAfter(lc, () =>
-    runWorker(must(parentWorker), process.env, ...process.argv.slice(2)),
+  void exitAfter(
+    () => lc,
+    () => runWorker(must(parentWorker), process.env, ...process.argv.slice(2)),
   );
 }
