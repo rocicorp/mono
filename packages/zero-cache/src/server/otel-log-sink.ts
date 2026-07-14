@@ -3,17 +3,26 @@ import {
   SeverityNumber,
   type AnyValueMap,
   type Logger,
+  type LoggerProvider,
   type LogRecord,
 } from '@opentelemetry/api-logs';
 import type {Context, LogLevel, LogSink} from '@rocicorp/logger';
 import {stringify} from '../../../shared/src/bigint-json.ts';
 import {errorOrObject} from '../../../shared/src/logging.ts';
 
+type FlushableLoggerProvider = LoggerProvider & {
+  forceFlush?: (() => Promise<void>) | undefined;
+};
+
 export class OtelLogSink implements LogSink {
   readonly #logger: Logger;
+  readonly #loggerProvider: FlushableLoggerProvider;
 
-  constructor() {
-    this.#logger = logs.getLogger('zero-cache');
+  constructor(
+    loggerProvider = logs.getLoggerProvider() as FlushableLoggerProvider,
+  ) {
+    this.#loggerProvider = loggerProvider;
+    this.#logger = loggerProvider.getLogger('zero-cache');
   }
 
   log(level: LogLevel, context: Context | undefined, ...args: unknown[]): void {
@@ -39,6 +48,10 @@ export class OtelLogSink implements LogSink {
       payload.attributes = context as AnyValueMap;
     }
     this.#logger.emit(payload);
+  }
+
+  async flush(): Promise<void> {
+    await this.#loggerProvider.forceFlush?.();
   }
 }
 
