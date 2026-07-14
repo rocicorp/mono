@@ -3,6 +3,11 @@ import type {LogContext} from '@rocicorp/logger';
 import type {LogConfig} from '../../../../shared/src/logging.ts';
 import {must} from '../../../../shared/src/must.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
+import {
+  isSQLiteCorruption,
+  logSQLiteCorruptionDiagnostics,
+  registerSQLiteCorruptionDiagnosticTarget,
+} from '../../db/sqlite-corruption.ts';
 import {StatementRunner} from '../../db/statements.ts';
 import {createLogContext} from '../../server/logging.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
@@ -34,9 +39,18 @@ function createAPI(): API {
   let processor: ChangeProcessor | undefined;
   let mode: ChangeProcessorMode | undefined;
   let lc: LogContext | undefined;
+  let replicaDbPath: string | undefined;
+  let unregisterCorruptionDiagnosticTarget: (() => void) | undefined;
+
+  function logCorruptionDiagnostics(err: unknown) {
+    if (lc && replicaDbPath && isSQLiteCorruption(err)) {
+      logSQLiteCorruptionDiagnostics(lc, 'write-worker', replicaDbPath, err);
+    }
+  }
 
   function createProcessor() {
     processor = new ChangeProcessor(must(runner), must(mode), (_lc, err) => {
+      logCorruptionDiagnostics(err);
       port.postMessage({
         writeError: serializeError(err),
       } satisfies WriteError);
@@ -50,20 +64,42 @@ function createAPI(): API {
       pragmas: PragmaConfig,
       logConfig: LogConfig,
     ) {
+      replicaDbPath = dbPath;
       lc = createLogContext({log: logConfig}, 'write-worker');
-      db = new Database(lc, dbPath);
-      applyPragmas(db, pragmas);
-      runner = new StatementRunner(db);
-      mode = cpMode;
-      createProcessor();
+      unregisterCorruptionDiagnosticTarget?.();
+      unregisterCorruptionDiagnosticTarget =
+        registerSQLiteCorruptionDiagnosticTarget({
+          debugName: 'write-worker',
+          dbPath,
+        });
+      try {
+        db = new Database(lc, dbPath);
+        applyPragmas(db, pragmas);
+        runner = new StatementRunner(db);
+        mode = cpMode;
+        createProcessor();
+      } catch (e) {
+        logCorruptionDiagnostics(e);
+        throw e;
+      }
     },
 
     getSubscriptionState() {
-      return getSubscriptionState(must(runner));
+      try {
+        return getSubscriptionState(must(runner));
+      } catch (e) {
+        logCorruptionDiagnostics(e);
+        throw e;
+      }
     },
 
     processMessage(downstream: ChangeStreamData) {
-      return must(processor).processMessage(must(lc), downstream);
+      try {
+        return must(processor).processMessage(must(lc), downstream);
+      } catch (e) {
+        logCorruptionDiagnostics(e);
+        throw e;
+      }
     },
 
     abort() {
@@ -76,6 +112,9 @@ function createAPI(): API {
       db = undefined;
       runner = undefined;
       processor = undefined;
+      replicaDbPath = undefined;
+      unregisterCorruptionDiagnosticTarget?.();
+      unregisterCorruptionDiagnosticTarget = undefined;
     },
   };
 }
