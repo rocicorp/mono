@@ -3,8 +3,8 @@ import {SqliteError} from '@rocicorp/zero-sqlite3';
 import {AbortError} from '../../../../shared/src/abort-error.ts';
 import {assert, unreachable} from '../../../../shared/src/asserts.ts';
 import {stringify} from '../../../../shared/src/bigint-json.ts';
-import {mapEntries} from '../../../../shared/src/objects.ts';
 import {must} from '../../../../shared/src/must.ts';
+import {mapEntries} from '../../../../shared/src/objects.ts';
 import type {DownloadStatus} from '../../../../zero-events/src/status.ts';
 import {
   createLiteIndexStatement,
@@ -674,13 +674,10 @@ class TransactionProcessor {
         idx => idx.tableName === table,
       );
       const tmpTable = `tmp.${table}`;
-      const newColumns = mapEntries(
-        tableSpec.columns,
-        (column, spec) => [
-          column === oldName ? newName : column,
-          column === oldName ? {...newSpec, pos: spec.pos} : spec,
-        ],
-      );
+      const newColumns = mapEntries(tableSpec.columns, (column, spec) => [
+        column === oldName ? newName : column,
+        column === oldName ? {...newSpec, pos: spec.pos} : spec,
+      ]);
       const sourceColumns = Object.keys(tableSpec.columns);
       const destinationColumns = Object.keys(newColumns);
       const stmts = [
@@ -696,13 +693,10 @@ class TransactionProcessor {
         ...indexes.map(idx =>
           createLiteIndexStatement({
             ...idx,
-            columns: mapEntries(
-              idx.columns,
-              (column, direction) => [
-                column === oldName ? newName : column,
-                direction,
-              ],
-            ),
+            columns: mapEntries(idx.columns, (column, direction) => [
+              column === oldName ? newName : column,
+              direction,
+            ]),
           }),
         ),
       ];
