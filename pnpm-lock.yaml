@@ -1196,6 +1196,9 @@ importers:
       esbuild:
         specifier: 0.27.7
         version: 0.27.7
+      fast-check:
+        specifier: ^3.18.0
+        version: 3.23.2
       mockttp:
         specifier: ^4.2.1
         version: 4.4.1
