@@ -1,30 +1,67 @@
 // Build script for @rocicorp/zero package
 import {spawn} from 'node:child_process';
 import {existsSync} from 'node:fs';
-import {chmod, copyFile, mkdir, readFile, rm} from 'node:fs/promises';
+import {chmod, copyFile, mkdir, readdir, readFile, rm} from 'node:fs/promises';
 import {builtinModules} from 'node:module';
 import {basename, resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {parse} from 'oxc-parser';
 import {type InlineConfig, build as viteBuild} from 'vite';
 import {assert} from '../../shared/src/asserts.ts';
 import {makeDefine} from '../../shared/src/build.ts';
-import {getExternalFromPackageJSON} from '../../shared/src/tool/get-external-from-package-json.ts';
 import * as workerUrls from '../../zero-cache/src/server/worker-urls.ts';
 
 const forBundleSizeDashboard = process.argv.includes('--bundle-sizes');
 const watchMode = process.argv.includes('--watch');
 
-async function getExternal(): Promise<string[]> {
-  return [
-    ...(await getExternalFromPackageJSON(import.meta.url, true)),
-    'node:*',
-    'expo*',
-    '@op-engineering/*',
-    ...builtinModules,
-  ].sort();
+// Everything imported by a bare specifier is external; only these modules get
+// bundled into the output. All other runtime deps are declared in
+// dependencies and loaded from node_modules.
+const inlinedModules = new Set([
+  // Transform helpers (e.g. helpers/usingCtx for `using` declarations) that
+  // rolldown injects as imports. Not a real dependency of ours — must ship
+  // inside the bundle.
+  '@oxc-project/runtime',
+]);
+
+// Integration packages imported by adapter entries (./react, ./solid,
+// ./server/adapters/*, ./expo-sqlite, ./op-sqlite). They are intentionally
+// undeclared: consumers that use an adapter entry already depend on the
+// integration themselves, and they must NOT be peerDependencies — pnpm keys a
+// package's installed instance by its resolved peers, so a peer that resolves
+// in some workspace packages and not others (react in a web app, pg in a
+// server package, expo-sqlite in a React Native app) splits @rocicorp/zero
+// into multiple copies. TypeScript then sees distinct module identities and
+// shared schema/query-registry types stop unifying across the workspace (e.g.
+// defineQueries results collapse to `never`), and `declare module
+// '@rocicorp/zero'` augmentations only apply to one copy.
+//
+// This list is not used for bundling (all bare imports are external); it is
+// the allowlist for the post-build check that every bare import in the output
+// is either a declared dependency or a known integration.
+const allowedUndeclaredImports = new Set([
+  '@op-engineering/op-sqlite',
+  'drizzle-orm',
+  'expo-sqlite',
+  'kysely',
+  'pg',
+  'react',
+  'solid-js',
+]);
+
+// '@scope/pkg/subpath' -> '@scope/pkg', 'pkg/subpath' -> 'pkg'.
+function packageName(id: string): string {
+  const parts = id.split('/');
+  return id.startsWith('@') ? parts.slice(0, 2).join('/') : parts[0];
 }
 
-const external = await getExternal();
+function external(id: string): boolean {
+  // Relative/absolute ids and bundler-virtual ids (\0-prefixed) get bundled.
+  if (id.startsWith('.') || id.startsWith('/') || id.startsWith('\0')) {
+    return false;
+  }
+  return !inlinedModules.has(packageName(id));
+}
 
 const define = {
   ...makeDefine('unknown'),
@@ -190,8 +227,83 @@ function assertNoNodeModulesInOut() {
   const nodeModulesPath = resolve('out', 'node_modules');
   if (existsSync(nodeModulesPath)) {
     throw new Error(
-      `Build produced out/node_modules — a third-party package was bundled instead of externalized. ` +
-        `Add it to dependencies or peerDependencies of package.json. Path: ${nodeModulesPath}`,
+      `Build produced out/node_modules — a third-party package was bundled instead of externalized. Path: ${nodeModulesPath}`,
+    );
+  }
+}
+
+async function collectImportSpecifiers(path: string): Promise<string[]> {
+  const source = await readFile(path, 'utf-8');
+  const {module} = await parse(path, source, {sourceType: 'module'});
+
+  const specifiers: string[] = [];
+  for (const imp of module.staticImports) {
+    specifiers.push(imp.moduleRequest.value);
+  }
+  for (const exp of module.staticExports) {
+    for (const entry of exp.entries) {
+      if (entry.moduleRequest) {
+        specifiers.push(entry.moduleRequest.value);
+      }
+    }
+  }
+  for (const imp of module.dynamicImports) {
+    // moduleRequest is a span of the argument expression; only string
+    // literals can be checked statically.
+    const text = source.slice(imp.moduleRequest.start, imp.moduleRequest.end);
+    const quote = text[0];
+    if ((quote === "'" || quote === '"') && text.endsWith(quote)) {
+      specifiers.push(text.slice(1, -1));
+    }
+  }
+  return specifiers;
+}
+
+// Every bare import left in the output must be resolvable by consumers:
+// a declared dependency, a node builtin, or a known integration package
+// (allowedUndeclaredImports). Anything else is a typo or an undeclared
+// dependency and would fail at the consumer's runtime.
+async function assertBareImportsAreDeclared() {
+  const packageJSON = await getPackageJSON();
+  const allowed = new Set([
+    ...Object.keys(packageJSON.dependencies ?? {}),
+    ...allowedUndeclaredImports,
+    ...builtinModules,
+  ]);
+
+  const outDir = resolve('out');
+  const files = (await readdir(outDir, {recursive: true, withFileTypes: true}))
+    .filter(entry => entry.isFile() && entry.name.endsWith('.js'))
+    .map(entry => resolve(entry.parentPath, entry.name));
+
+  const violations = new Map<string, string[]>();
+  await Promise.all(
+    files.map(async path => {
+      for (const id of await collectImportSpecifiers(path)) {
+        if (id.startsWith('.') || id.startsWith('/') || id.startsWith('\0')) {
+          continue;
+        }
+        const name = id.startsWith('node:')
+          ? id.slice('node:'.length).split('/')[0]
+          : packageName(id);
+        if (!allowed.has(name)) {
+          violations.set(id, [
+            ...(violations.get(id) ?? []),
+            path.slice(outDir.length + 1),
+          ]);
+        }
+      }
+    }),
+  );
+
+  if (violations.size > 0) {
+    const details = [...violations]
+      .map(([id, files]) => `  '${id}' in ${files.join(', ')}`)
+      .join('\n');
+    throw new Error(
+      `Build output imports undeclared modules:\n${details}\n` +
+        `Add them to dependencies in package.json, or to allowedUndeclaredImports ` +
+        `in build.ts if consumers provide them.`,
     );
   }
 }
@@ -270,6 +382,7 @@ async function build() {
     await makeBinFilesExecutable();
     await copyStaticFiles();
     assertNoNodeModulesInOut();
+    await assertBareImportsAreDeclared();
   }
 
   const totalDuration = ((performance.now() - startTime) / 1000).toFixed(2);
