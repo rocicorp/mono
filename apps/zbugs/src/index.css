@@ -622,17 +622,6 @@ textarea.autoResize {
   padding-left: 2.5rem;
 }
 
-.virtual-list {
-  position: relative;
-}
-
-.comments-container > .virtual-list > div {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-}
-
 .row.unread::after {
   content: '';
   height: 0.4rem;
