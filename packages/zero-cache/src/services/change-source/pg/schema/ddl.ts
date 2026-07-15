@@ -174,6 +174,12 @@ export function createEventFunctionStatements(shard: ShardConfig) {
   return /*sql*/ `
 CREATE SCHEMA IF NOT EXISTS ${schema};
 
+-- The SECURITY DEFINER entrypoints below call helper functions in this schema.
+-- PUBLIC must not be able to add an overload that could be selected while the
+-- entrypoints are running with their owner's privileges. Explicit grants to
+-- trusted administration roles are left unchanged.
+REVOKE CREATE ON SCHEMA ${schema} FROM PUBLIC;
+
 CREATE OR REPLACE FUNCTION ${schema}.get_trigger_context()
 RETURNS record AS $$
 DECLARE
@@ -269,6 +275,12 @@ END
 $$ LANGUAGE plpgsql;
 
 
+-- These are the only privileged entrypoints in the DDL trigger stack. Event
+-- triggers are database-wide, so a role can invoke them indirectly without
+-- having access to this schema. Everything reached from these functions runs
+-- with the existing function owner's privileges: keep internal calls schema
+-- qualified, keep pg_catalog before pg_temp, and never introduce
+-- caller-controlled dynamic SQL anywhere in this call chain.
 CREATE OR REPLACE FUNCTION ${schema}.emit_ddl_start()
 RETURNS event_trigger
 LANGUAGE plpgsql
@@ -375,6 +387,15 @@ BEGIN
 
 END
 $$;
+
+
+-- Event triggers retain their function references by OID and do not require
+-- the role issuing DDL to call these entrypoints directly. PostgreSQL grants
+-- EXECUTE to PUBLIC on new functions. That did not cross a privilege boundary
+-- while these functions were SECURITY INVOKER, but is unnecessary once they
+-- run as their owner.
+REVOKE ALL ON FUNCTION ${schema}.emit_ddl_start() FROM PUBLIC;
+REVOKE ALL ON FUNCTION ${schema}.emit_ddl_end() FROM PUBLIC;
 `;
 }
 

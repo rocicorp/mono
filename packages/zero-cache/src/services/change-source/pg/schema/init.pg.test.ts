@@ -246,7 +246,7 @@ describe('change-streamer/pg/schema/init', () => {
     });
   }
 
-  test('upgrades existing DDL hooks to security definers with a locked search path', async () => {
+  test('upgrades and locks down existing DDL hook security definers', async () => {
     const shard: ShardConfig = {
       appID: APP_ID,
       shardNum: SHARD_NUM,
@@ -260,6 +260,9 @@ describe('change-streamer/pg/schema/init', () => {
       ALTER FUNCTION ${id(schema)}.${id(DDL_START_FUNCTION)}() RESET ALL;
       ALTER FUNCTION ${id(schema)}.${id(DDL_END_FUNCTION)}() SECURITY INVOKER;
       ALTER FUNCTION ${id(schema)}.${id(DDL_END_FUNCTION)}() RESET ALL;
+      GRANT EXECUTE ON FUNCTION ${id(schema)}.${id(DDL_START_FUNCTION)}() TO PUBLIC;
+      GRANT EXECUTE ON FUNCTION ${id(schema)}.${id(DDL_END_FUNCTION)}() TO PUBLIC;
+      GRANT CREATE ON SCHEMA ${id(schema)} TO PUBLIC;
     `);
     await upstream`
       UPDATE ${upstream(schema)}."versionHistory"
@@ -271,14 +274,38 @@ describe('change-streamer/pg/schema/init', () => {
       upstream<
         {
           functionName: string;
+          owner: string;
           securityDefiner: boolean;
           config: string | null;
+          publicExecute: boolean;
+          publicSchemaCreate: boolean;
         }[]
       >`
         SELECT
           p.proname AS "functionName",
+          pg_catalog.pg_get_userbyid(p.proowner) AS owner,
           p.prosecdef AS "securityDefiner",
-          array_to_string(p.proconfig, ',') AS config
+          array_to_string(p.proconfig, ',') AS config,
+          EXISTS (
+            SELECT FROM pg_catalog.aclexplode(
+              COALESCE(
+                p.proacl,
+                pg_catalog.acldefault('f', p.proowner)
+              )
+            ) AS acl
+            WHERE acl.grantee = 0
+              AND acl.privilege_type = 'EXECUTE'
+          ) AS "publicExecute",
+          EXISTS (
+            SELECT FROM pg_catalog.aclexplode(
+              COALESCE(
+                n.nspacl,
+                pg_catalog.acldefault('n', n.nspowner)
+              )
+            ) AS acl
+            WHERE acl.grantee = 0
+              AND acl.privilege_type = 'CREATE'
+          ) AS "publicSchemaCreate"
         FROM pg_catalog.pg_proc p
         JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
         WHERE n.nspname = ${schema}
@@ -287,23 +314,36 @@ describe('change-streamer/pg/schema/init', () => {
       `;
 
     const expectedEventTriggerFunctions = (
+      owner: string,
       securityDefiner: boolean,
       config: string | null,
+      publicExecute: boolean,
+      publicSchemaCreate: boolean,
     ) =>
       DDL_EVENT_TRIGGER_FUNCTIONS.map(functionName => ({
         functionName,
+        owner,
         securityDefiner,
         config,
+        publicExecute,
+        publicSchemaCreate,
       }));
 
+    const [{owner}] = await getEventTriggerFunctions();
     expect(await getEventTriggerFunctions()).toEqual(
-      expectedEventTriggerFunctions(false, null),
+      expectedEventTriggerFunctions(owner, false, null, true, true),
     );
 
     await updateShardSchema(lc, upstream, shard, TEST_REPLICA_VERSION);
 
     expect(await getEventTriggerFunctions()).toEqual(
-      expectedEventTriggerFunctions(true, LOCKED_SEARCH_PATH_CONFIG),
+      expectedEventTriggerFunctions(
+        owner,
+        true,
+        LOCKED_SEARCH_PATH_CONFIG,
+        false,
+        false,
+      ),
     );
     await expectTablesToMatch(upstream, {
       [`${schema}.versionHistory`]: [CURRENT_SCHEMA_VERSIONS],

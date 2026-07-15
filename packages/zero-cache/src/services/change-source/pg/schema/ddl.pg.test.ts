@@ -54,11 +54,12 @@ describe('change-source/tables/ddl', () => {
   ];
   const EXPECTED_NO_SHARD_PRIVILEGES = [
     {
+      ddlEntrypointExecute: false,
       schemaUsage: false,
       schemaCreate: false,
       publishedSchemaSelect: false,
       publishedSchemaUpdate: false,
-      memberOfShardOwner: false,
+      memberOfFunctionOwner: false,
     },
   ];
 
@@ -134,9 +135,9 @@ describe('change-source/tables/ddl', () => {
     CREATE PUBLICATION nonzeropub FOR TABLE pub.foo, pub.boo;
     `;
 
-  test('event trigger functions use the shard owner and locked search path', async () => {
-    const [{shardOwner}] = await upstream<{shardOwner: string}[]>`
-      SELECT current_user AS "shardOwner"
+  test('event trigger functions lock down their privileged execution context', async () => {
+    const [{functionOwner}] = await upstream<{functionOwner: string}[]>`
+      SELECT current_user AS "functionOwner"
     `;
 
     const eventTriggers = await upstream<
@@ -148,6 +149,8 @@ describe('change-source/tables/ddl', () => {
         owner: string;
         securityDefiner: boolean;
         config: string | null;
+        publicExecute: boolean;
+        publicSchemaCreate: boolean;
       }[]
     >`
       SELECT
@@ -157,7 +160,27 @@ describe('change-source/tables/ddl', () => {
         p.proname AS "functionName",
         pg_catalog.pg_get_userbyid(p.proowner) AS owner,
         p.prosecdef AS "securityDefiner",
-        array_to_string(p.proconfig, ',') AS config
+        array_to_string(p.proconfig, ',') AS config,
+        EXISTS (
+          SELECT FROM pg_catalog.aclexplode(
+            COALESCE(
+              p.proacl,
+              pg_catalog.acldefault('f', p.proowner)
+            )
+          ) AS acl
+          WHERE acl.grantee = 0
+            AND acl.privilege_type = 'EXECUTE'
+        ) AS "publicExecute",
+        EXISTS (
+          SELECT FROM pg_catalog.aclexplode(
+            COALESCE(
+              n.nspacl,
+              pg_catalog.acldefault('n', n.nspowner)
+            )
+          ) AS acl
+          WHERE acl.grantee = 0
+            AND acl.privilege_type = 'CREATE'
+        ) AS "publicSchemaCreate"
       FROM pg_catalog.pg_event_trigger e
       JOIN pg_catalog.pg_proc p ON p.oid = e.evtfoid
       JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
@@ -172,18 +195,22 @@ describe('change-source/tables/ddl', () => {
         event: 'ddl_command_end',
         enabled: 'O',
         functionName: DDL_END_FUNCTION,
-        owner: shardOwner,
+        owner: functionOwner,
         securityDefiner: true,
         config: LOCKED_SEARCH_PATH_CONFIG,
+        publicExecute: false,
+        publicSchemaCreate: false,
       },
       {
         triggerName: `${APP_ID}_ddl_start_${SHARD_NUM}`,
         event: 'ddl_command_start',
         enabled: 'O',
         functionName: DDL_START_FUNCTION,
-        owner: shardOwner,
+        owner: functionOwner,
         securityDefiner: true,
         config: LOCKED_SEARCH_PATH_CONFIG,
+        publicExecute: false,
+        publicSchemaCreate: false,
       },
     ]);
   });
@@ -194,8 +221,8 @@ describe('change-source/tables/ddl', () => {
     await testDBs.sql
       .unsafe(`DROP ROLE IF EXISTS ${id(RESTRICTED_ROLE)}`)
       .simple();
-    const [{shardOwner}] = await upstream<{shardOwner: string}[]>`
-      SELECT current_user AS "shardOwner"
+    const [{functionOwner}] = await upstream<{functionOwner: string}[]>`
+      SELECT current_user AS "functionOwner"
     `;
     await upstream.unsafe(/*sql*/ `
       CREATE ROLE ${id(RESTRICTED_ROLE)} NOINHERIT;
@@ -207,9 +234,10 @@ describe('change-source/tables/ddl', () => {
         {
           schemaUsage: boolean;
           schemaCreate: boolean;
+          ddlEntrypointExecute: boolean;
           publishedSchemaSelect: boolean;
           publishedSchemaUpdate: boolean;
-          memberOfShardOwner: boolean;
+          memberOfFunctionOwner: boolean;
         }[]
       >`
         SELECT
@@ -219,6 +247,15 @@ describe('change-source/tables/ddl', () => {
           pg_catalog.has_schema_privilege(
             ${RESTRICTED_ROLE}, ${SHARD_SCHEMA}, 'CREATE'
           ) AS "schemaCreate",
+          EXISTS (
+            SELECT FROM pg_catalog.pg_proc p
+            JOIN pg_catalog.pg_namespace pn ON pn.oid = p.pronamespace
+            WHERE pn.nspname = ${SHARD_SCHEMA}
+              AND p.proname IN (${DDL_END_FUNCTION}, ${DDL_START_FUNCTION})
+              AND pg_catalog.has_function_privilege(
+                ${RESTRICTED_ROLE}, p.oid, 'EXECUTE'
+              )
+          ) AS "ddlEntrypointExecute",
           pg_catalog.has_table_privilege(
             ${RESTRICTED_ROLE}, c.oid, 'SELECT'
           ) AS "publishedSchemaSelect",
@@ -226,8 +263,8 @@ describe('change-source/tables/ddl', () => {
             ${RESTRICTED_ROLE}, c.oid, 'UPDATE'
           ) AS "publishedSchemaUpdate",
           pg_catalog.pg_has_role(
-            ${RESTRICTED_ROLE}, ${shardOwner}, 'MEMBER'
-          ) AS "memberOfShardOwner"
+            ${RESTRICTED_ROLE}, ${functionOwner}, 'MEMBER'
+          ) AS "memberOfFunctionOwner"
         FROM pg_catalog.pg_class c
         JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
         WHERE n.nspname = ${SHARD_SCHEMA}
