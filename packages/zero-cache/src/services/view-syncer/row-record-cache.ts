@@ -452,11 +452,7 @@ export class RowRecordCache {
       }
     }
     if (deleteKeys.length) {
-      // Batched set-based delete rather than one DELETE per removed row, so the
-      // flush issues a single statement regardless of how many rows are
-      // tombstoned. Rows are matched on their JSONB primary key; `rowKey`
-      // equality is canonical JSONB equality — the same comparison the previous
-      // per-row `WHERE "rowKey" = ${id.rowKey}` relied on.
+      // Batched set-based delete rather than one DELETE per removed row.
       pending.push(
         tx`
         DELETE FROM ${this.#cvr('rows')} AS r
