@@ -208,6 +208,13 @@ export const TTL_CLOCK_INTERVAL = 60_000;
  */
 export const TTL_TIMER_HYSTERESIS = 50; // ms
 
+/**
+ * Number of replica catchup passes to complete after discarding pipelines
+ * before paying to hydrate them again. This avoids reset/rehydrate thrashing
+ * while preserving eventual recovery for continuously-written replicas.
+ */
+export const POST_RESET_CATCHUP_PASSES = 3;
+
 type CustomQueryTransformMode = 'all' | 'missing';
 
 export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
@@ -271,6 +278,19 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
   #cvr: CVRSnapshot | undefined;
   #pipelinesSynced = false;
+  /**
+   * Number of replica catchup passes completed after an incremental-advance
+   * reset. A reset intentionally drops pipelines so catchup can cheaply move
+   * the replica snapshot forward without doing IVM work. Rehydrating on that
+   * first caught-up snapshot recreates the pipelines while a write burst is
+   * still in flight, which can immediately trigger another reset.
+   *
+   * Rehydration is therefore admitted only after several replica catchup
+   * passes. This is the low-water mark of the reset/rehydrate state machine:
+   * incoming replica progress is discarded cheaply for a bounded period before
+   * paying the more expensive hydration cost again.
+   */
+  #postResetCatchupPasses: number | undefined;
   #servedVersion: string | null = null;
 
   #expiredQueriesTimer: ReturnType<SetTimeout> | 0 = 0;
@@ -544,6 +564,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             this.#pipelineResets.add(1, {reason: result.reason});
             this.#pipelines.reset(clientSchema);
             this.#pipelinesSynced = false;
+            this.#postResetCatchupPasses = 0;
             this.connContextManager.setSharedRetransformReady(false);
           }
 
@@ -554,6 +575,19 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           if (version < cvr.version.stateVersion) {
             lc.debug?.(`replica@${version} is behind cvr@${cvrVer}`);
             return; // Wait for the next advancement.
+          }
+
+          if (this.#postResetCatchupPasses !== undefined) {
+            this.#postResetCatchupPasses++;
+            if (this.#postResetCatchupPasses < POST_RESET_CATCHUP_PASSES) {
+              lc.debug?.(
+                `catching up after pipeline reset: pass ` +
+                  `${this.#postResetCatchupPasses}/${POST_RESET_CATCHUP_PASSES} ` +
+                  `at replica@${version}`,
+              );
+              return;
+            }
+            this.#postResetCatchupPasses = undefined;
           }
 
           // stateVersion is at or beyond CVR version for the first time.
