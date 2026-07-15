@@ -7,7 +7,10 @@ import {
   decodeTimeTZ,
   decodeTimestamp,
   decodeUUID,
+  isDirectTextBufferColumn,
+  makeBinaryColumnDecoder,
   makeBinaryDecoder,
+  textCastDecoder,
 } from './pg-copy-binary.ts';
 
 // Helper to build a valid PGCOPY binary header.
@@ -604,4 +607,173 @@ describe('makeBinaryDecoder', () => {
     const result = decode(buf);
     expect(result).toBe('["a",null,"b"]');
   });
+});
+
+describe('makeBinaryColumnDecoder', () => {
+  type Spec = Parameters<typeof makeBinaryColumnDecoder>[0];
+
+  const eligible: {name: string; spec: Spec}[] = [
+    {name: 'text', spec: {typeOID: 25, dataType: 'text'}},
+    {name: 'varchar', spec: {typeOID: 1043, dataType: 'varchar'}},
+    {name: 'bpchar', spec: {typeOID: 1042, dataType: 'bpchar'}},
+    {name: 'json', spec: {typeOID: 114, dataType: 'json'}},
+    {
+      name: 'enum',
+      spec: {typeOID: 99_999, dataType: 'status', pgTypeClass: 'e'},
+    },
+  ];
+
+  test.each(eligible)('$name returns the original UTF-8 Buffer', ({spec}) => {
+    const decode = makeBinaryColumnDecoder(spec);
+    for (const value of ['snowman ☃ and 雪', '']) {
+      const buf = Buffer.from(value);
+      expect(isDirectTextBufferColumn(spec)).toBe(true);
+      expect(decode(buf)).toBe(buf);
+    }
+  });
+
+  test.each(['"雪"', ''])(
+    'jsonb returns a view after exactly one version byte: %j',
+    value => {
+      const spec = {typeOID: 3802, dataType: 'jsonb'};
+      const buf = Buffer.concat([Buffer.from([1]), Buffer.from(value)]);
+      const decoded = makeBinaryColumnDecoder(spec)(buf);
+
+      expect(isDirectTextBufferColumn(spec)).toBe(true);
+      expect(Buffer.isBuffer(decoded)).toBe(true);
+      expect((decoded as Buffer).toString()).toBe(value);
+      expect((decoded as Buffer).buffer).toBe(buf.buffer);
+      expect((decoded as Buffer).byteOffset).toBe(buf.byteOffset + 1);
+      expect((decoded as Buffer).byteLength).toBe(buf.byteLength - 1);
+    },
+  );
+
+  test.each([
+    {
+      name: 'internal char',
+      spec: {typeOID: 18, dataType: 'char'},
+      buf: Buffer.from('A'),
+      expected: 'A',
+    },
+    {
+      name: 'unknown text-cast type',
+      spec: {typeOID: 829, dataType: 'macaddr'},
+      buf: Buffer.from('08:00:2b:01:02:03'),
+      expected: '08:00:2b:01:02:03',
+    },
+    {
+      name: 'text array',
+      spec: {typeOID: 1009, dataType: 'text[]', elemPgTypeClass: 'b'},
+      buf: (() => {
+        const buf = Buffer.alloc(12);
+        buf.writeInt32BE(25, 8);
+        return buf;
+      })(),
+      expected: '[]',
+    },
+    {
+      name: 'bytea',
+      spec: {typeOID: 17, dataType: 'bytea'},
+      buf: Buffer.from([0xde, 0xad]),
+      expected: Buffer.from([0xde, 0xad]),
+    },
+    {
+      name: 'numeric',
+      spec: {typeOID: 1700, dataType: 'numeric'},
+      buf: Buffer.alloc(8),
+      expected: 0,
+    },
+    {
+      name: 'boolean',
+      spec: {typeOID: 16, dataType: 'bool'},
+      buf: Buffer.from([1]),
+      expected: 1,
+    },
+    {
+      name: 'number',
+      spec: {typeOID: 23, dataType: 'int4'},
+      buf: Buffer.from([0, 0, 0, 42]),
+      expected: 42,
+    },
+    {
+      name: 'timestamp',
+      spec: {typeOID: 1114, dataType: 'timestamp'},
+      buf: Buffer.alloc(8),
+      expected: 946_684_800_000,
+    },
+    {
+      name: 'timestamptz',
+      spec: {typeOID: 1184, dataType: 'timestamptz'},
+      buf: Buffer.alloc(8),
+      expected: 946_684_800_000,
+    },
+    {
+      name: 'date',
+      spec: {typeOID: 1082, dataType: 'date'},
+      buf: Buffer.alloc(4),
+      expected: 946_684_800_000,
+    },
+    {
+      name: 'time',
+      spec: {typeOID: 1083, dataType: 'time'},
+      buf: Buffer.alloc(8),
+      expected: 0,
+    },
+    {
+      name: 'uuid',
+      spec: {typeOID: 2950, dataType: 'uuid'},
+      buf: Buffer.from('550e8400e29b41d4a716446655440000', 'hex'),
+      expected: '550e8400-e29b-41d4-a716-446655440000',
+    },
+  ] satisfies {name: string; spec: Spec; buf: Buffer; expected: unknown}[])(
+    '$name retains its established decoder',
+    ({spec, buf, expected}) => {
+      expect(isDirectTextBufferColumn(spec)).toBe(false);
+      const decoded = makeBinaryColumnDecoder(spec)(buf);
+      expect(decoded).toEqual(expected);
+      if (spec.typeOID === 17) {
+        expect(decoded).not.toBe(buf);
+      }
+    },
+  );
+
+  test.each([
+    {
+      name: 'text',
+      spec: {typeOID: 25, dataType: 'text'},
+      buf: Buffer.from('snowman ☃ and 雪'),
+    },
+    {
+      name: 'varchar',
+      spec: {typeOID: 1043, dataType: 'varchar'},
+      buf: Buffer.from(''),
+    },
+    {
+      name: 'bpchar',
+      spec: {typeOID: 1042, dataType: 'bpchar'},
+      buf: Buffer.from('padded  '),
+    },
+    {
+      name: 'json',
+      spec: {typeOID: 114, dataType: 'json'},
+      buf: Buffer.from('{"message":"雪"}'),
+    },
+    {
+      name: 'jsonb',
+      spec: {typeOID: 3802, dataType: 'jsonb'},
+      buf: Buffer.concat([Buffer.from([1]), Buffer.from('{"message":"雪"}')]),
+    },
+    {
+      name: 'enum',
+      spec: {typeOID: 99_999, dataType: 'status', pgTypeClass: 'e'},
+      buf: Buffer.from('unicøde'),
+    },
+  ] satisfies {name: string; spec: Spec; buf: Buffer}[])(
+    '$name Buffer is UTF-8-equivalent to the old string decoder',
+    ({spec, buf}) => {
+      const direct = makeBinaryColumnDecoder(spec)(buf) as Buffer;
+      const previous = makeBinaryDecoder(spec)(buf);
+      expect(textCastDecoder(direct)).toBe(previous);
+    },
+  );
 });

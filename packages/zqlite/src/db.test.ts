@@ -188,3 +188,159 @@ test('compaction', () => {
   db.compact(10 * 4096); // Threshold met.
   expect(pageCount()).toBe(startingPageCount);
 });
+
+test('CAST Buffer parameters preserve SQLite text semantics', () => {
+  const db = new Database(createSilentLogContext(), ':memory:');
+  db.exec(`
+    CREATE TABLE direct_text (
+      id INTEGER PRIMARY KEY,
+      binary_value TEXT COLLATE BINARY,
+      nocase_value TEXT COLLATE NOCASE,
+      payload JSON
+    );
+    CREATE INDEX direct_text_binary_idx ON direct_text(binary_value);
+    CREATE INDEX direct_text_nocase_idx ON direct_text(nocase_value);
+  `);
+
+  const rowSql = '(?, CAST(? AS TEXT), CAST(? AS TEXT), CAST(? AS TEXT))';
+  db.prepare(
+    `INSERT INTO direct_text VALUES ${[rowSql, rowSql, rowSql, rowSql, rowSql].join(',')}`,
+  ).run([
+    1,
+    Buffer.from('éclair'),
+    Buffer.from('Zulu'),
+    Buffer.from('{"message":"雪"}'),
+    2,
+    Buffer.from(''),
+    Buffer.from(''),
+    Buffer.from('{"empty":""}'),
+    3,
+    null,
+    null,
+    null,
+    4,
+    Buffer.from('apple'),
+    Buffer.from('apple'),
+    Buffer.from('[1,2]'),
+    5,
+    Buffer.from('Banana'),
+    Buffer.from('Banana'),
+    Buffer.from('42'),
+  ]);
+
+  expect(
+    db
+      .prepare(
+        `SELECT id, typeof(binary_value) AS binary_type,
+                typeof(nocase_value) AS nocase_type,
+                typeof(payload) AS payload_type
+           FROM direct_text ORDER BY id`,
+      )
+      .all(),
+  ).toEqual([
+    {id: 1, binary_type: 'text', nocase_type: 'text', payload_type: 'text'},
+    {id: 2, binary_type: 'text', nocase_type: 'text', payload_type: 'text'},
+    {id: 3, binary_type: 'null', nocase_type: 'null', payload_type: 'null'},
+    {id: 4, binary_type: 'text', nocase_type: 'text', payload_type: 'text'},
+    {
+      id: 5,
+      binary_type: 'text',
+      nocase_type: 'text',
+      payload_type: 'integer',
+    },
+  ]);
+  expect(
+    db
+      .prepare(
+        `SELECT id, json_valid(payload) AS valid FROM direct_text
+          WHERE payload IS NOT NULL ORDER BY id`,
+      )
+      .all(),
+  ).toEqual([
+    {id: 1, valid: 1},
+    {id: 2, valid: 1},
+    {id: 4, valid: 1},
+    {id: 5, valid: 1},
+  ]);
+  expect(
+    db
+      .prepare(
+        `SELECT json_extract(payload, '$.message') AS message FROM direct_text WHERE id = 1`,
+      )
+      .get(),
+  ).toEqual({message: '雪'});
+
+  expect(
+    db
+      .prepare(
+        `SELECT id FROM direct_text INDEXED BY direct_text_binary_idx
+          WHERE binary_value = ?`,
+      )
+      .all('apple'),
+  ).toEqual([{id: 4}]);
+  expect(
+    db
+      .prepare(
+        `SELECT id FROM direct_text INDEXED BY direct_text_nocase_idx
+          WHERE nocase_value = ?`,
+      )
+      .all('APPLE'),
+  ).toEqual([{id: 4}]);
+  expect(
+    db
+      .prepare(`SELECT id FROM direct_text WHERE binary_value = ?`)
+      .all('APPLE'),
+  ).toEqual([]);
+
+  const binaryPlan = db
+    .prepare(
+      `EXPLAIN QUERY PLAN SELECT id FROM direct_text
+        INDEXED BY direct_text_binary_idx WHERE binary_value = ?`,
+    )
+    .all<{detail: string}>('apple')
+    .map(row => row.detail)
+    .join('\n');
+  expect(binaryPlan).toMatch(
+    /SEARCH direct_text USING COVERING INDEX direct_text_binary_idx/,
+  );
+
+  expect(
+    db
+      .prepare(
+        `SELECT binary_value FROM direct_text
+          WHERE binary_value IS NOT NULL ORDER BY binary_value`,
+      )
+      .all(),
+  ).toEqual([
+    {binary_value: ''},
+    {binary_value: 'Banana'},
+    {binary_value: 'apple'},
+    {binary_value: 'éclair'},
+  ]);
+  expect(
+    db
+      .prepare(
+        `SELECT nocase_value FROM direct_text
+          WHERE nocase_value IS NOT NULL ORDER BY nocase_value`,
+      )
+      .all(),
+  ).toEqual([
+    {nocase_value: ''},
+    {nocase_value: 'apple'},
+    {nocase_value: 'Banana'},
+    {nocase_value: 'Zulu'},
+  ]);
+});
+
+test('synchronous CAST binding does not retain the source Buffer', () => {
+  const db = new Database(createSilentLogContext(), ':memory:');
+  db.exec('CREATE TABLE direct_text (value TEXT)');
+  const source = Buffer.from('stable text');
+
+  db.prepare('INSERT INTO direct_text VALUES (CAST(? AS TEXT))').run(source);
+  source.fill('x');
+
+  expect(db.prepare('SELECT value FROM direct_text').get()).toEqual({
+    value: 'stable text',
+  });
+});

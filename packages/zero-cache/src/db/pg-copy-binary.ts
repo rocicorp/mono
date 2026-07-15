@@ -216,6 +216,24 @@ const KNOWN_BINARY_OIDS = new Set([
   NUMERIC,
 ]);
 
+const DIRECT_TEXT_BUFFER_OIDS = new Set([
+  TEXT,
+  VARCHAR,
+  BPCHAR,
+  JSON_OID,
+  JSONB,
+]);
+
+export function isDirectTextBufferColumn(spec: BinaryColumnSpec): boolean {
+  if (spec.elemPgTypeClass !== null && spec.elemPgTypeClass !== undefined) {
+    return false;
+  }
+  return (
+    spec.pgTypeClass === PostgresTypeClass.Enum ||
+    DIRECT_TEXT_BUFFER_OIDS.has(spec.typeOID)
+  );
+}
+
 /**
  * Returns true if the column's binary format is known and can be decoded
  * natively. For columns where this returns false, the COPY SELECT should
@@ -234,6 +252,14 @@ export function hasBinaryDecoder(spec: BinaryColumnSpec): boolean {
 
 /** Decoder for columns cast to `::text` in the COPY SELECT. */
 export const textCastDecoder: BinaryDecoder = buf => buf.toString('utf8');
+
+/** Decoder used by binary COPY during initial sync. */
+export function makeBinaryColumnDecoder(spec: BinaryColumnSpec): BinaryDecoder {
+  if (isDirectTextBufferColumn(spec)) {
+    return spec.typeOID === JSONB ? buf => buf.subarray(1) : buf => buf;
+  }
+  return hasBinaryDecoder(spec) ? makeBinaryDecoder(spec) : textCastDecoder;
+}
 
 /**
  * Creates a specialized binary decoder for the given column spec.

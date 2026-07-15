@@ -2738,6 +2738,275 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
     });
   }
 
+  test('binary COPY binds known UTF-8 fields directly as SQLite text', async () => {
+    await upstream
+      .unsafe(/*sql*/ `
+        CREATE TYPE direct_copy_mood AS ENUM ('plain', 'unicøde');
+        CREATE TABLE direct_copy_types (
+          id INT PRIMARY KEY,
+          text_value TEXT,
+          varchar_value VARCHAR(20),
+          bpchar_value BPCHAR(6),
+          json_value JSON,
+          jsonb_value JSONB,
+          enum_value direct_copy_mood,
+          internal_char "char",
+          mac_value MACADDR,
+          array_value TEXT[],
+          bytes_value BYTEA,
+          numeric_value NUMERIC,
+          timestamp_value TIMESTAMP,
+          timestamptz_value TIMESTAMPTZ,
+          uuid_value UUID,
+          bool_value BOOLEAN
+        );
+        CREATE INDEX direct_copy_types_text_idx
+          ON direct_copy_types (text_value);
+
+        INSERT INTO direct_copy_types
+        SELECT
+          g,
+          CASE g
+            WHEN 1 THEN 'snowman ☃ and 雪'
+            WHEN 2 THEN ''
+            WHEN 3 THEN NULL
+            WHEN 4 THEN 'apple'
+            WHEN 5 THEN 'Banana'
+            ELSE 'value-' || lpad(g::text, 3, '0')
+          END,
+          CASE g WHEN 1 THEN '雪' WHEN 2 THEN '' WHEN 3 THEN NULL
+            ELSE 'varchar-' || g END,
+          CASE g WHEN 1 THEN '猫' WHEN 2 THEN '' WHEN 3 THEN NULL
+            ELSE 'b' || lpad(g::text, 3, '0') END,
+          CASE g WHEN 1 THEN '{"message":"雪"}'::json
+            WHEN 2 THEN '{"empty":""}'::json WHEN 3 THEN NULL
+            WHEN 4 THEN '42'::json ELSE ('{"id":' || g || '}')::json END,
+          CASE g WHEN 1 THEN '{"message":"雪"}'::jsonb
+            WHEN 2 THEN '{"empty":""}'::jsonb WHEN 3 THEN NULL
+            WHEN 4 THEN '42'::jsonb ELSE ('{"id":' || g || '}')::jsonb END,
+          CASE g WHEN 1 THEN 'unicøde'::direct_copy_mood WHEN 3 THEN NULL
+            ELSE 'plain'::direct_copy_mood END,
+          CASE g WHEN 3 THEN NULL WHEN 1 THEN 'A'::"char" ELSE 'B'::"char" END,
+          CASE g WHEN 3 THEN NULL ELSE '08:00:2b:01:02:03'::macaddr END,
+          CASE g WHEN 1 THEN ARRAY['雪', ''] WHEN 2 THEN ARRAY[]::text[]
+            WHEN 3 THEN NULL ELSE ARRAY['a', 'b'] END,
+          CASE g WHEN 1 THEN convert_to('雪', 'UTF8') WHEN 2 THEN ''::bytea
+            WHEN 3 THEN NULL ELSE decode('00ff', 'hex') END,
+          CASE g WHEN 1 THEN 123.45 WHEN 2 THEN 0 WHEN 3 THEN NULL
+            ELSE g::numeric / 10 END,
+          CASE g WHEN 1 THEN TIMESTAMP '2024-01-01 00:00:00.123456'
+            WHEN 2 THEN TIMESTAMP '1970-01-01' WHEN 3 THEN NULL
+            ELSE TIMESTAMP '2024-01-01' + g * INTERVAL '1 second' END,
+          CASE g WHEN 1 THEN TIMESTAMPTZ '2024-01-01 00:00:00.123456+00'
+            WHEN 2 THEN TIMESTAMPTZ '1970-01-01 00:00:00+00' WHEN 3 THEN NULL
+            ELSE TIMESTAMPTZ '2024-01-01 00:00:00+00' + g * INTERVAL '1 second' END,
+          ('00000000-0000-0000-0000-' || lpad(g::text, 12, '0'))::uuid,
+          CASE g WHEN 3 THEN NULL ELSE g % 2 = 0 END
+        FROM generate_series(1, ${INSERT_BATCH_SIZE + 1}) AS g;
+      `)
+      .simple();
+
+    const lc = createSilentLogContext();
+    const shard = {appID: APP_ID, shardNum: SHARD_NUM, publications: []};
+
+    async function sync(textCopy: boolean) {
+      const replica = new Database(lc, ':memory:');
+      await initialSync(
+        lc,
+        shard,
+        replica,
+        getConnectionURI(upstream),
+        {tableCopyWorkers: 1, textCopy},
+        TEST_CONTEXT,
+      );
+      return replica;
+    }
+
+    const binary = await sync(false);
+    const text = await sync(true);
+    const userColumns = `
+      id, text_value, varchar_value, bpchar_value, json_value, jsonb_value,
+      enum_value, internal_char, mac_value, array_value, bytes_value,
+      numeric_value, timestamp_value, timestamptz_value, uuid_value, bool_value`;
+    const binaryRows = binary
+      .prepare(`SELECT ${userColumns} FROM direct_copy_types ORDER BY id`)
+      .all();
+    const textRows = text
+      .prepare(`SELECT ${userColumns} FROM direct_copy_types ORDER BY id`)
+      .all();
+
+    expect(binaryRows).toHaveLength(INSERT_BATCH_SIZE + 1);
+    expect(binaryRows).toEqual(textRows);
+
+    function expectSQLiteSemantics(replica: Database) {
+      expect(
+        replica
+          .prepare(/*sql*/ `
+            SELECT typeof(text_value) AS text_type,
+                   typeof(varchar_value) AS varchar_type,
+                   typeof(bpchar_value) AS bpchar_type,
+                   typeof(json_value) AS json_type,
+                   typeof(jsonb_value) AS jsonb_type,
+                   typeof(enum_value) AS enum_type
+              FROM direct_copy_types WHERE id = 1`)
+          .get(),
+      ).toEqual({
+        text_type: 'text',
+        varchar_type: 'text',
+        bpchar_type: 'text',
+        json_type: 'text',
+        jsonb_type: 'text',
+        enum_type: 'text',
+      });
+      expect(
+        replica
+          .prepare(/*sql*/ `
+            SELECT text_value, varchar_value, bpchar_value
+              FROM direct_copy_types WHERE id IN (2, 3) ORDER BY id`)
+          .all(),
+      ).toEqual([
+        {text_value: '', varchar_value: '', bpchar_value: '      '},
+        {text_value: null, varchar_value: null, bpchar_value: null},
+      ]);
+      expect(
+        replica
+          .prepare(/*sql*/ `
+            SELECT text_value, varchar_value, bpchar_value, enum_value,
+                   json_extract(json_value, '$.message') AS json_message,
+                   json_extract(jsonb_value, '$.message') AS jsonb_message
+              FROM direct_copy_types WHERE id = 1`)
+          .get(),
+      ).toEqual({
+        text_value: 'snowman ☃ and 雪',
+        varchar_value: '雪',
+        bpchar_value: '猫     ',
+        enum_value: 'unicøde',
+        json_message: '雪',
+        jsonb_message: '雪',
+      });
+      expect(
+        replica
+          .prepare(/*sql*/ `
+            SELECT typeof(json_value) AS json_type, json_value,
+                   typeof(jsonb_value) AS jsonb_type, jsonb_value
+              FROM direct_copy_types WHERE id = 4`)
+          .get(),
+      ).toEqual({
+        json_type: 'integer',
+        json_value: 42,
+        jsonb_type: 'integer',
+        jsonb_value: 42,
+      });
+      expect(
+        replica
+          .prepare(/*sql*/ `
+            SELECT count(*) AS valid_count FROM direct_copy_types
+              WHERE json_valid(json_value) AND json_valid(jsonb_value)`)
+          .get(),
+      ).toEqual({valid_count: 50});
+      expect(
+        replica
+          .prepare(/*sql*/ `
+            SELECT internal_char, mac_value, array_value, bytes_value,
+                   numeric_value, uuid_value, bool_value,
+                   typeof(internal_char) AS internal_char_type,
+                   typeof(mac_value) AS mac_type,
+                   typeof(array_value) AS array_type,
+                   typeof(bytes_value) AS bytes_type,
+                   typeof(numeric_value) AS numeric_type,
+                   typeof(timestamp_value) AS timestamp_type,
+                   typeof(timestamptz_value) AS timestamptz_type,
+                   typeof(uuid_value) AS uuid_type,
+                   typeof(bool_value) AS bool_type
+              FROM direct_copy_types WHERE id = 1`)
+          .get(),
+      ).toEqual({
+        internal_char: 'A',
+        mac_value: '08:00:2b:01:02:03',
+        array_value: '["雪",""]',
+        bytes_value: Buffer.from('雪'),
+        numeric_value: 123.45,
+        uuid_value: '00000000-0000-0000-0000-000000000001',
+        bool_value: 0,
+        internal_char_type: 'text',
+        mac_type: 'text',
+        array_type: 'text',
+        bytes_type: 'blob',
+        numeric_type: 'real',
+        timestamp_type: 'real',
+        timestamptz_type: 'real',
+        uuid_type: 'text',
+        bool_type: 'integer',
+      });
+
+      expect(
+        replica
+          .prepare(/*sql*/ `
+            SELECT id FROM direct_copy_types
+              INDEXED BY direct_copy_types_text_idx WHERE text_value = ?`)
+          .all('snowman ☃ and 雪'),
+      ).toEqual([{id: 1}]);
+      const binaryPlan = replica
+        .prepare(/*sql*/ `
+          EXPLAIN QUERY PLAN SELECT id FROM direct_copy_types
+            INDEXED BY direct_copy_types_text_idx WHERE text_value = ?`)
+        .all<{detail: string}>('snowman ☃ and 雪')
+        .map(row => row.detail)
+        .join('\n');
+      expect(binaryPlan).toMatch(
+        /SEARCH direct_copy_types USING (COVERING )?INDEX direct_copy_types_text_idx/,
+      );
+      expect(
+        replica
+          .prepare(/*sql*/ `
+            SELECT text_value FROM direct_copy_types WHERE id IN (2, 4, 5)
+              ORDER BY text_value COLLATE BINARY`)
+          .all(),
+      ).toEqual([
+        {text_value: ''},
+        {text_value: 'Banana'},
+        {text_value: 'apple'},
+      ]);
+
+      replica.exec(/*sql*/ `
+        CREATE INDEX direct_copy_types_text_nocase_idx
+          ON direct_copy_types(text_value COLLATE NOCASE)`);
+      expect(
+        replica
+          .prepare(/*sql*/ `
+            SELECT id FROM direct_copy_types
+              INDEXED BY direct_copy_types_text_nocase_idx
+             WHERE text_value COLLATE NOCASE = ?`)
+          .all('APPLE'),
+      ).toEqual([{id: 4}]);
+      const nocasePlan = replica
+        .prepare(/*sql*/ `
+          EXPLAIN QUERY PLAN SELECT id FROM direct_copy_types
+            INDEXED BY direct_copy_types_text_nocase_idx
+           WHERE text_value COLLATE NOCASE = ?`)
+        .all<{detail: string}>('APPLE')
+        .map(row => row.detail)
+        .join('\n');
+      expect(nocasePlan).toMatch(
+        /SEARCH direct_copy_types USING (COVERING )?INDEX direct_copy_types_text_nocase_idx/,
+      );
+      expect(
+        replica
+          .prepare(/*sql*/ `
+            SELECT text_value FROM direct_copy_types WHERE id IN (2, 4, 5)
+              ORDER BY text_value COLLATE NOCASE`)
+          .all(),
+      ).toEqual([
+        {text_value: ''},
+        {text_value: 'apple'},
+        {text_value: 'Banana'},
+      ]);
+    }
+
+    expectSQLiteSemantics(binary);
+    expectSQLiteSemantics(text);
+  });
+
   test('resume initial sync with invalid table', async () => {
     const lc = createSilentLogContext();
     const replica = new Database(lc, ':memory:');

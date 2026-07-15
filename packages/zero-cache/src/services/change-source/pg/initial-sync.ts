@@ -20,8 +20,8 @@ import * as Mode from '../../../db/mode-enum.ts';
 import {
   BinaryCopyParser,
   hasBinaryDecoder,
-  makeBinaryDecoder,
-  textCastDecoder,
+  isDirectTextBufferColumn,
+  makeBinaryColumnDecoder,
 } from '../../../db/pg-copy-binary.ts';
 import {TsvParser} from '../../../db/pg-copy.ts';
 import {
@@ -1192,7 +1192,13 @@ async function copyBinary(
   const insertColumnList = columnNames.map(c => id(c)).join(',');
 
   const valuesSql =
-    columnNames.length > 0 ? `(${'?,'.repeat(columnNames.length - 1)}?)` : '()';
+    columnNames.length > 0
+      ? `(${columnSpecs
+          .map(spec =>
+            isDirectTextBufferColumn(spec) ? 'CAST(? AS TEXT)' : '?',
+          )
+          .join(',')})`
+      : '()';
   const insertSql = /*sql*/ `
     INSERT INTO "${tableName}" (${insertColumnList}) VALUES ${valuesSql}`;
   const insertStmt = to.prepare(insertSql);
@@ -1210,7 +1216,7 @@ async function copyBinary(
   ).select;
 
   const decoders = orderedColumns.map(([, spec]) =>
-    hasBinaryDecoder(spec) ? makeBinaryDecoder(spec) : textCastDecoder,
+    makeBinaryColumnDecoder(spec),
   );
 
   const valuesPerRow = columnSpecs.length;
