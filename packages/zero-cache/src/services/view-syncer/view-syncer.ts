@@ -222,6 +222,12 @@ export const POST_RESET_LOW_WATER_PASSES = 2;
  */
 export const POST_RESET_LOW_WATER_MAX_CHANGES = 8;
 
+/**
+ * Low water is preferred, but cannot be required forever: a continuously busy
+ * replica still needs occasional hydration attempts to make client progress.
+ */
+export const POST_RESET_MAX_CATCHUP_MS = 5_000;
+
 type CustomQueryTransformMode = 'all' | 'missing';
 
 export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
@@ -297,6 +303,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
    * This is the low-water mark of the reset/rehydrate state machine.
    */
   #postResetLowWaterPasses: number | undefined;
+  #postResetCatchupStartedAtMs: number | undefined;
+  #postResetRehydrateTimer: ReturnType<SetTimeout> | 0 = 0;
   #servedVersion: string | null = null;
 
   #expiredQueriesTimer: ReturnType<SetTimeout> | 0 = 0;
@@ -571,6 +579,8 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             this.#pipelines.reset(clientSchema);
             this.#pipelinesSynced = false;
             this.#postResetLowWaterPasses = -1;
+            this.#postResetCatchupStartedAtMs = Date.now();
+            this.#schedulePostResetRehydrate();
             this.connContextManager.setSharedRetransformReady(false);
           }
 
@@ -584,7 +594,21 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           }
 
           if (this.#postResetLowWaterPasses !== undefined) {
-            if (this.#postResetLowWaterPasses === -1) {
+            const forceHydration =
+              Date.now() -
+                must(
+                  this.#postResetCatchupStartedAtMs,
+                  'post-reset catchup start time missing',
+                ) >=
+              POST_RESET_MAX_CATCHUP_MS;
+            if (forceHydration) {
+              lc.info?.(
+                `post-reset catchup timed out after ` +
+                  `${POST_RESET_MAX_CATCHUP_MS}ms; rehydrating at ` +
+                  `replica@${version} with ${numChanges} changes`,
+              );
+              this.#clearPostResetCatchup();
+            } else if (this.#postResetLowWaterPasses === -1) {
               // Always discard the first post-reset diff. It is often the
               // remainder of the burst that made incremental advancement lose.
               this.#postResetLowWaterPasses = 0;
@@ -593,8 +617,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
                   `of ${numChanges} changes at replica@${version}`,
               );
               return;
-            }
-            if (numChanges > POST_RESET_LOW_WATER_MAX_CHANGES) {
+            } else if (numChanges > POST_RESET_LOW_WATER_MAX_CHANGES) {
               this.#postResetLowWaterPasses = -1;
               lc.debug?.(
                 `catching up after pipeline reset: ${numChanges} changes ` +
@@ -602,20 +625,21 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
                   `${POST_RESET_LOW_WATER_MAX_CHANGES}`,
               );
               return;
+            } else {
+              this.#postResetLowWaterPasses++;
+              if (
+                this.#postResetLowWaterPasses <
+                POST_RESET_LOW_WATER_PASSES
+              ) {
+                lc.debug?.(
+                  `catching up after pipeline reset: low-water pass ` +
+                    `${this.#postResetLowWaterPasses}/${POST_RESET_LOW_WATER_PASSES} ` +
+                    `with ${numChanges} changes at replica@${version}`,
+                );
+                return;
+              }
+              this.#clearPostResetCatchup();
             }
-            this.#postResetLowWaterPasses++;
-            if (
-              this.#postResetLowWaterPasses <
-              POST_RESET_LOW_WATER_PASSES
-            ) {
-              lc.debug?.(
-                `catching up after pipeline reset: low-water pass ` +
-                  `${this.#postResetLowWaterPasses}/${POST_RESET_LOW_WATER_PASSES} ` +
-                  `with ${numChanges} changes at replica@${version}`,
-              );
-              return;
-            }
-            this.#postResetLowWaterPasses = undefined;
           }
 
           // stateVersion is at or beyond CVR version for the first time.
@@ -804,6 +828,20 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     }
     clearTimeout(this.#authMaintenanceTimer);
     this.#authMaintenanceTimer = 0;
+  }
+
+  #schedulePostResetRehydrate() {
+    this.#postResetRehydrateTimer = this.#setTimeout(() => {
+      this.#postResetRehydrateTimer = 0;
+      this.#stateChanges.push({state: 'version-ready'});
+    }, POST_RESET_MAX_CATCHUP_MS);
+  }
+
+  #clearPostResetCatchup() {
+    this.#postResetLowWaterPasses = undefined;
+    this.#postResetCatchupStartedAtMs = undefined;
+    clearTimeout(this.#postResetRehydrateTimer);
+    this.#postResetRehydrateTimer = 0;
   }
 
   /**
@@ -2834,6 +2872,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     this.#stopTTLClockInterval();
     this.#stopExpireTimer();
     this.#stopAuthMaintenanceTimer();
+    this.#clearPostResetCatchup();
     // The InspectorDelegate shares this transformer and may still use it
     // after cleanup; a destroyed transformer is safe to use (it just stops
     // caching and never restarts its cleanup interval).
