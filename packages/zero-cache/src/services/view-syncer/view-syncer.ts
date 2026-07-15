@@ -209,11 +209,18 @@ export const TTL_CLOCK_INTERVAL = 60_000;
 export const TTL_TIMER_HYSTERESIS = 50; // ms
 
 /**
- * Number of replica catchup passes to complete after discarding pipelines
- * before paying to hydrate them again. This avoids reset/rehydrate thrashing
- * while preserving eventual recovery for continuously-written replicas.
+ * A reset is followed by an unconditional catchup pass, then this many
+ * consecutive low-water passes before pipelines may be hydrated again.
  */
-export const POST_RESET_CATCHUP_PASSES = 3;
+export const POST_RESET_LOW_WATER_PASSES = 2;
+
+/**
+ * A post-reset replica diff at or below this size is considered caught up
+ * enough to start accumulating low-water passes. This is deliberately below
+ * the driver projection's minimum 16-change sample, so a burst cannot cause
+ * an immediate rehydration on the next replica notification.
+ */
+export const POST_RESET_LOW_WATER_MAX_CHANGES = 8;
 
 type CustomQueryTransformMode = 'all' | 'missing';
 
@@ -279,18 +286,17 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   #cvr: CVRSnapshot | undefined;
   #pipelinesSynced = false;
   /**
-   * Number of replica catchup passes completed after an incremental-advance
-   * reset. A reset intentionally drops pipelines so catchup can cheaply move
-   * the replica snapshot forward without doing IVM work. Rehydrating on that
-   * first caught-up snapshot recreates the pipelines while a write burst is
-   * still in flight, which can immediately trigger another reset.
+   * Number of consecutive low-water replica diffs completed after an
+   * incremental-advance reset. A reset intentionally drops pipelines so the
+   * snapshot can catch up without IVM work. Rehydrating on that first caught-up
+   * snapshot recreates the pipelines while a write burst is still in flight,
+   * which can immediately trigger another reset.
    *
-   * Rehydration is therefore admitted only after several replica catchup
-   * passes. This is the low-water mark of the reset/rehydrate state machine:
-   * incoming replica progress is discarded cheaply for a bounded period before
-   * paying the more expensive hydration cost again.
+   * Rehydration is therefore admitted only after an initial discarded pass and
+   * consecutive diffs no larger than {@link POST_RESET_LOW_WATER_MAX_CHANGES}.
+   * This is the low-water mark of the reset/rehydrate state machine.
    */
-  #postResetCatchupPasses: number | undefined;
+  #postResetLowWaterPasses: number | undefined;
   #servedVersion: string | null = null;
 
   #expiredQueriesTimer: ReturnType<SetTimeout> | 0 = 0;
@@ -564,12 +570,12 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             this.#pipelineResets.add(1, {reason: result.reason});
             this.#pipelines.reset(clientSchema);
             this.#pipelinesSynced = false;
-            this.#postResetCatchupPasses = 0;
+            this.#postResetLowWaterPasses = -1;
             this.connContextManager.setSharedRetransformReady(false);
           }
 
           // Advance the snapshot to the current version.
-          const version = this.#pipelines.advanceWithoutDiff();
+          const {version, numChanges} = this.#pipelines.advanceWithoutDiff();
           const cvrVer = versionString(cvr.version);
 
           if (version < cvr.version.stateVersion) {
@@ -577,17 +583,39 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             return; // Wait for the next advancement.
           }
 
-          if (this.#postResetCatchupPasses !== undefined) {
-            this.#postResetCatchupPasses++;
-            if (this.#postResetCatchupPasses < POST_RESET_CATCHUP_PASSES) {
+          if (this.#postResetLowWaterPasses !== undefined) {
+            if (this.#postResetLowWaterPasses === -1) {
+              // Always discard the first post-reset diff. It is often the
+              // remainder of the burst that made incremental advancement lose.
+              this.#postResetLowWaterPasses = 0;
               lc.debug?.(
-                `catching up after pipeline reset: pass ` +
-                  `${this.#postResetCatchupPasses}/${POST_RESET_CATCHUP_PASSES} ` +
-                  `at replica@${version}`,
+                `catching up after pipeline reset: discarding initial diff ` +
+                  `of ${numChanges} changes at replica@${version}`,
               );
               return;
             }
-            this.#postResetCatchupPasses = undefined;
+            if (numChanges > POST_RESET_LOW_WATER_MAX_CHANGES) {
+              this.#postResetLowWaterPasses = -1;
+              lc.debug?.(
+                `catching up after pipeline reset: ${numChanges} changes ` +
+                  `exceeds low-water mark of ` +
+                  `${POST_RESET_LOW_WATER_MAX_CHANGES}`,
+              );
+              return;
+            }
+            this.#postResetLowWaterPasses++;
+            if (
+              this.#postResetLowWaterPasses <
+              POST_RESET_LOW_WATER_PASSES
+            ) {
+              lc.debug?.(
+                `catching up after pipeline reset: low-water pass ` +
+                  `${this.#postResetLowWaterPasses}/${POST_RESET_LOW_WATER_PASSES} ` +
+                  `with ${numChanges} changes at replica@${version}`,
+              );
+              return;
+            }
+            this.#postResetLowWaterPasses = undefined;
           }
 
           // stateVersion is at or beyond CVR version for the first time.
