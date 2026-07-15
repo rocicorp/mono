@@ -30,7 +30,11 @@ import {
 } from '../../../db/pg-to-lite.ts';
 import {getTypeParsers} from '../../../db/pg-type-parser.ts';
 import {runTx} from '../../../db/run-transaction.ts';
-import type {IndexSpec, PublishedTableSpec} from '../../../db/specs.ts';
+import type {
+  IndexSpec,
+  PublishedIndexSpec,
+  PublishedTableSpec,
+} from '../../../db/specs.ts';
 import {importSnapshot, TransactionPool} from '../../../db/transaction-pool.ts';
 import {
   getOrCreateCounter,
@@ -73,6 +77,7 @@ export type InitialSyncOptions = {
   profileCopy?: boolean | undefined;
   textCopy?: boolean | undefined;
   replicationSlotFailover?: boolean | undefined;
+  secondaryIndexMinAverageRowBytes?: number | undefined;
   /**
    * When set, run initial sync in "shadow" mode for verification: skip all
    * upstream mutations (no replication slot, no addReplica, no dropShard, no
@@ -114,6 +119,7 @@ export async function initialSync(
     profileCopy,
     textCopy = false,
     replicationSlotFailover = false,
+    secondaryIndexMinAverageRowBytes = 0,
     shadow,
   } = syncOptions;
   const syncMode: InitialSyncMode = shadow ? 'shadow' : 'initial';
@@ -242,12 +248,32 @@ export async function initialSync(
           ),
         ),
       );
+      const downloadStatuses = downloads.map(({status}) => status);
+      const indexPlan = planInitialSyncIndexes(
+        indexes,
+        downloadStatuses,
+        secondaryIndexMinAverageRowBytes,
+        shadow === undefined,
+      );
+      if (indexPlan.enabled) {
+        lc.info?.('Selected initial-sync secondary index strategies', {
+          minAverageRowBytes: secondaryIndexMinAverageRowBytes,
+          tables: indexPlan.tableStrategies,
+          preCopySecondaryIndexes: indexPlan.preCopyIndexes.length,
+          postCopySecondaryIndexes: indexPlan.postCopySecondaryIndexes,
+          postCopyPrimaryIndexes: indexPlan.postCopyPrimaryIndexes,
+        });
+      }
+      let indexMs = 0;
+      if (indexPlan.preCopyIndexes.length > 0) {
+        indexMs += createLiteIndices(lc, tx, indexPlan.preCopyIndexes);
+      }
       statusPublisher.publish(
         lc,
         'Initializing',
         `Copying ${numTables} upstream tables at version ${initialVersion}`,
         5000,
-        () => ({downloadStatus: downloads.map(({status}) => status)}),
+        () => ({downloadStatus: downloadStatuses}),
       );
 
       void copyProfiler?.start();
@@ -275,16 +301,16 @@ export async function initialSync(
 
       const copySummary = initialSyncCopySummary(copyResults, copyElapsed);
 
-      statusPublisher.publish(
-        lc,
-        'Indexing',
-        `Creating ${indexes.length} indexes`,
-        5000,
-      );
-      const indexStart = performance.now();
-      createLiteIndices(lc, tx, indexes);
-      const index = performance.now() - indexStart;
-      lc.info?.(`Created indexes (${index.toFixed(3)} ms)`);
+      if (indexPlan.postCopyIndexes.length > 0) {
+        statusPublisher.publish(
+          lc,
+          'Indexing',
+          `Creating ${indexPlan.postCopyIndexes.length} indexes`,
+          5000,
+        );
+        indexMs += createLiteIndices(lc, tx, indexPlan.postCopyIndexes);
+      }
+      lc.info?.(`Created indexes (${indexMs.toFixed(3)} ms)`);
 
       if (slotName && replicaID) {
         await initReplica(sql, shard, replicaID, published, context);
@@ -298,7 +324,7 @@ export async function initialSync(
       }
 
       const elapsed = performance.now() - start;
-      const copyOtherMs = Math.max(0, elapsed - copySummary.flushMs - index);
+      const copyOtherMs = Math.max(0, elapsed - copySummary.flushMs - indexMs);
       recordInitialSyncRunMetrics(
         {
           durationMs: elapsed,
@@ -307,7 +333,7 @@ export async function initialSync(
           copyMs: copySummary.copyMs,
           copyOtherMs,
           flushMs: copySummary.flushMs,
-          indexMs: index,
+          indexMs,
         },
         {
           result: 'success',
@@ -317,7 +343,7 @@ export async function initialSync(
       );
       lc.info?.(
         `Synced ${copySummary.rows.toLocaleString()} rows of ${numTables} tables in ${publications} up to ${lsn} ` +
-          `(flush: ${copySummary.flushMs.toFixed(3)}, index: ${index.toFixed(3)}, total: ${elapsed.toFixed(3)} ms)`,
+          `(flush: ${copySummary.flushMs.toFixed(3)}, index: ${indexMs.toFixed(3)}, total: ${elapsed.toFixed(3)} ms)`,
         {
           syncMode,
           copyFormat,
@@ -325,7 +351,7 @@ export async function initialSync(
           lsn,
           ...copySummary,
           indexes: indexes.length,
-          indexMs: index,
+          indexMs,
           copyOtherMs,
           totalMs: elapsed,
         },
@@ -610,7 +636,12 @@ function createLiteTables(
   }
 }
 
-function createLiteIndices(lc: LogContext, tx: Database, indices: IndexSpec[]) {
+function createLiteIndices(
+  lc: LogContext,
+  tx: Database,
+  indices: IndexSpec[],
+): number {
+  const totalStart = performance.now();
   for (const [i, index] of indices.entries()) {
     const stmt = createLiteIndexStatement(mapPostgresToLiteIndex(index));
     lc.info?.(`Creating index ${i + 1}/${indices.length}: ${stmt}`);
@@ -621,6 +652,7 @@ function createLiteIndices(lc: LogContext, tx: Database, indices: IndexSpec[]) {
         `(${(performance.now() - start).toFixed(3)} ms): ${stmt}`,
     );
   }
+  return performance.now() - totalStart;
 }
 
 /**
@@ -849,6 +881,121 @@ type CopyResult = {
   processingMs: number;
   copyBytes: number;
 };
+
+type SecondaryIndexTableStrategy = {
+  table: string;
+  estimateSource: 'pg_class' | 'unavailable';
+  totalRows: number | null;
+  totalBytes: number | null;
+  estimatedAverageRowBytes: number | null;
+  strategy: 'eager' | 'deferred';
+};
+
+type InitialSyncIndexPlan = {
+  enabled: boolean;
+  preCopyIndexes: PublishedIndexSpec[];
+  postCopyIndexes: PublishedIndexSpec[];
+  tableStrategies: SecondaryIndexTableStrategy[];
+  postCopySecondaryIndexes: number;
+  postCopyPrimaryIndexes: number;
+};
+
+// Exported for testing.
+export function planInitialSyncIndexes(
+  indexes: readonly PublishedIndexSpec[],
+  downloadStatuses: readonly DownloadStatus[],
+  minAverageRowBytes: number,
+  hasTableEstimates: boolean,
+): InitialSyncIndexPlan {
+  const enabled = minAverageRowBytes > 0;
+  const secondaryIndexTables = new Set<string>();
+  if (enabled) {
+    for (const index of indexes) {
+      if (!index.isPrimaryKey) {
+        secondaryIndexTables.add(
+          liteTableName({schema: index.schema, name: index.tableName}),
+        );
+      }
+    }
+  }
+
+  const tableStrategies = downloadStatuses
+    .filter(status => secondaryIndexTables.has(status.table))
+    .map(status => {
+      const totalBytes = status.totalBytes ?? 0;
+      const createBeforeCopy =
+        hasTableEstimates &&
+        shouldCreateSecondaryIndexesBeforeCopy(
+          status.totalRows,
+          status.totalBytes,
+          minAverageRowBytes,
+        );
+      return {
+        table: status.table,
+        estimateSource: hasTableEstimates ? 'pg_class' : 'unavailable',
+        totalRows: hasTableEstimates ? status.totalRows : null,
+        totalBytes: hasTableEstimates ? totalBytes : null,
+        estimatedAverageRowBytes:
+          hasTableEstimates && status.totalRows > 0
+            ? totalBytes / status.totalRows
+            : null,
+        strategy: createBeforeCopy ? 'eager' : 'deferred',
+      } as const;
+    });
+  const preCopyTables = new Set(
+    tableStrategies
+      .filter(({strategy}) => strategy === 'eager')
+      .map(({table}) => table),
+  );
+
+  const preCopyIndexes: PublishedIndexSpec[] = [];
+  const postCopyIndexes: PublishedIndexSpec[] = [];
+  let postCopySecondaryIndexes = 0;
+  let postCopyPrimaryIndexes = 0;
+  for (const index of indexes) {
+    const table = liteTableName({
+      schema: index.schema,
+      name: index.tableName,
+    });
+    if (!index.isPrimaryKey && preCopyTables.has(table)) {
+      preCopyIndexes.push(index);
+      continue;
+    }
+    postCopyIndexes.push(index);
+    if (index.isPrimaryKey) {
+      postCopyPrimaryIndexes++;
+    } else {
+      postCopySecondaryIndexes++;
+    }
+  }
+
+  return {
+    enabled,
+    preCopyIndexes,
+    postCopyIndexes,
+    tableStrategies,
+    postCopySecondaryIndexes,
+    postCopyPrimaryIndexes,
+  };
+}
+
+function shouldCreateSecondaryIndexesBeforeCopy(
+  totalRows: number,
+  totalBytes: number | undefined,
+  minAverageRowBytes: number,
+): boolean {
+  // totalBytes comes from pg_table_size, which includes TOAST and table
+  // overhead but excludes indexes. The estimate therefore measures physical
+  // PostgreSQL width, not binary COPY bytes: compression can lower it, while
+  // dead tuples and bloat can raise it. reltuples can also be stale. Keep the
+  // cutoff configurable for canary tuning, and defer zero or unknown estimates.
+  // A zero cutoff disables eager secondary-index creation.
+  return (
+    minAverageRowBytes > 0 &&
+    totalRows > 0 &&
+    (totalBytes ?? 0) / totalRows >= minAverageRowBytes
+  );
+}
 
 const INITIAL_SYNC_DURATION_HISTOGRAM_BOUNDARIES_S = [
   1, 2, 5, 10, 30, 60, 120, 300, 600, 1200, 2400, 3600, 7200,
@@ -1099,8 +1246,8 @@ export async function getInitialDownloadState(
     };
   }
   // Use pg_class estimates instead of expensive COUNT(*) and
-  // SUM(pg_column_size(...)) full table scans. The exact values are only
-  // used for progress reporting, so estimates are sufficient.
+  // SUM(pg_column_size(...)) full table scans. The estimates drive progress
+  // reporting and secondary-index scheduling.
   const qualifiedName = `${id(spec.schema)}.${id(spec.name)}`;
   const estimateResult = await sql<
     {totalRows: number; totalBytes: number}[]

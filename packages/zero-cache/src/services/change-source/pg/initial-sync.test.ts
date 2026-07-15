@@ -1,11 +1,16 @@
 import type postgres from 'postgres';
 import {describe, expect, test, vi} from 'vitest';
 import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.ts';
-import type {PublishedTableSpec} from '../../../db/specs.ts';
+import type {DownloadStatus} from '../../../../../zero-events/src/status.ts';
+import type {
+  PublishedIndexSpec,
+  PublishedTableSpec,
+} from '../../../db/specs.ts';
 import type {PostgresDB} from '../../../types/pg.ts';
 import {
   getInitialDownloadState,
   makeDownloadStatements,
+  planInitialSyncIndexes,
 } from './initial-sync.ts';
 import {createReplicationSlot} from './replication-slots.ts';
 
@@ -152,6 +157,165 @@ describe('getInitialDownloadState', () => {
     );
     expect(state.status.totalRows).toBe(42);
     expect(state.status.totalBytes).toBe(8192);
+  });
+});
+
+describe('planInitialSyncIndexes', () => {
+  function indexSpec(
+    schema: string,
+    tableName: string,
+    name: string,
+    isPrimaryKey = false,
+  ): PublishedIndexSpec {
+    return {
+      schema,
+      tableName,
+      name,
+      unique: isPrimaryKey,
+      columns: {id: 'ASC'},
+      isPrimaryKey,
+    };
+  }
+
+  function downloadStatus(
+    table: string,
+    totalRows: number,
+    totalBytes: number | undefined,
+  ): DownloadStatus {
+    return {table, columns: ['id'], rows: 0, totalRows, totalBytes};
+  }
+
+  test('leaves all indexes after the copy when disabled', () => {
+    const secondary = indexSpec('public', 'items', 'items_key_idx');
+    const primary = indexSpec('public', 'items', 'items_pkey', true);
+    const indexes = [secondary, primary];
+
+    const plan = planInitialSyncIndexes(
+      indexes,
+      [downloadStatus('items', 1, 4096)],
+      0,
+      true,
+    );
+
+    expect(plan.enabled).toBe(false);
+    expect(plan.preCopyIndexes).toEqual([]);
+    expect(plan.postCopyIndexes).toEqual(indexes);
+    expect(plan.tableStrategies).toEqual([]);
+    expect(plan.postCopySecondaryIndexes).toBe(1);
+    expect(plan.postCopyPrimaryIndexes).toBe(1);
+  });
+
+  test.each([
+    {name: 'empty table', rows: 0, bytes: 8192, expected: false},
+    {name: 'missing bytes', rows: 1, bytes: undefined, expected: false},
+    {name: 'zero bytes', rows: 1, bytes: 0, expected: false},
+    {name: 'below threshold', rows: 1, bytes: 2047, expected: false},
+    {name: 'at threshold', rows: 1, bytes: 2048, expected: true},
+    {name: 'above threshold', rows: 1, bytes: 2049, expected: true},
+    {
+      name: 'large finite estimate',
+      rows: 1_000_000,
+      bytes: 2_048_000_000,
+      expected: true,
+    },
+    {name: 'stale high row estimate', rows: 10, bytes: 2049, expected: false},
+    {name: 'stale low row estimate', rows: 1, bytes: 20_480, expected: true},
+  ])('$name', ({rows, bytes, expected}) => {
+    const secondary = indexSpec('public', 'items', 'items_key_idx');
+    const plan = planInitialSyncIndexes(
+      [secondary],
+      [downloadStatus('items', rows, bytes)],
+      2048,
+      true,
+    );
+
+    expect(plan.preCopyIndexes).toEqual(expected ? [secondary] : []);
+    expect(plan.postCopyIndexes).toEqual(expected ? [] : [secondary]);
+    expect(plan.tableStrategies[0]?.strategy).toBe(
+      expected ? 'eager' : 'deferred',
+    );
+  });
+
+  test('partitions indexes by table while preserving order', () => {
+    const wideSecondaryA = indexSpec('wide', 'items', 'items_key_idx');
+    const narrowSecondary = indexSpec('narrow', 'items', 'items_key_idx');
+    const widePrimary = indexSpec('wide', 'items', 'items_pkey', true);
+    const emptySecondary = indexSpec('empty', 'items', 'items_key_idx');
+    const wideSecondaryB = indexSpec('wide', 'items', 'items_replica_idx');
+    const plan = planInitialSyncIndexes(
+      [
+        wideSecondaryA,
+        narrowSecondary,
+        widePrimary,
+        emptySecondary,
+        wideSecondaryB,
+      ],
+      [
+        downloadStatus('wide.items', 2, 4096),
+        downloadStatus('narrow.items', 2, 4095),
+        downloadStatus('empty.items', 0, 8192),
+      ],
+      2048,
+      true,
+    );
+
+    expect(plan.preCopyIndexes).toEqual([wideSecondaryA, wideSecondaryB]);
+    expect(plan.postCopyIndexes).toEqual([
+      narrowSecondary,
+      widePrimary,
+      emptySecondary,
+    ]);
+    expect(plan.tableStrategies).toEqual([
+      {
+        table: 'wide.items',
+        estimateSource: 'pg_class',
+        totalRows: 2,
+        totalBytes: 4096,
+        estimatedAverageRowBytes: 2048,
+        strategy: 'eager',
+      },
+      {
+        table: 'narrow.items',
+        estimateSource: 'pg_class',
+        totalRows: 2,
+        totalBytes: 4095,
+        estimatedAverageRowBytes: 2047.5,
+        strategy: 'deferred',
+      },
+      {
+        table: 'empty.items',
+        estimateSource: 'pg_class',
+        totalRows: 0,
+        totalBytes: 8192,
+        estimatedAverageRowBytes: null,
+        strategy: 'deferred',
+      },
+    ]);
+    expect(plan.postCopySecondaryIndexes).toBe(2);
+    expect(plan.postCopyPrimaryIndexes).toBe(1);
+  });
+
+  test('defers indexes when table estimates are unavailable', () => {
+    const secondary = indexSpec('public', 'items', 'items_key_idx');
+    const plan = planInitialSyncIndexes(
+      [secondary],
+      [downloadStatus('items', 1, 4096)],
+      2048,
+      false,
+    );
+
+    expect(plan.preCopyIndexes).toEqual([]);
+    expect(plan.postCopyIndexes).toEqual([secondary]);
+    expect(plan.tableStrategies).toEqual([
+      {
+        table: 'items',
+        estimateSource: 'unavailable',
+        totalRows: null,
+        totalBytes: null,
+        estimatedAverageRowBytes: null,
+        strategy: 'deferred',
+      },
+    ]);
   });
 });
 

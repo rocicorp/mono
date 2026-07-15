@@ -1037,6 +1037,26 @@ export const zeroOptions = {
       ],
     },
 
+    secondaryIndexMinAverageRowBytes: {
+      type: v
+        .number()
+        .assert(
+          n => Number.isSafeInteger(n) && n >= 0,
+          `initialSync.secondaryIndexMinAverageRowBytes must be a nonnegative safe integer`,
+        )
+        .default(0),
+      hidden: true,
+      desc: [
+        `The minimum estimated physical bytes per row at which secondary indexes`,
+        `are created before copying table data. The estimate uses pg_table_size`,
+        `divided by pg_class.reltuples: it includes TOAST and table overhead,`,
+        `excludes indexes, and can be affected by compression, bloat, or stale`,
+        `statistics. Primary indexes and tables with zero or unknown estimates`,
+        `are always indexed after the copy. Set to 0 to disable eager index`,
+        `creation, which is the default.`,
+      ],
+    },
+
     profileCopy: {
       type: v.boolean().optional(),
       hidden: true,

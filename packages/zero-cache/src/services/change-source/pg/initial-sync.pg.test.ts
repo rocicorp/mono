@@ -2594,6 +2594,178 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
     return () => testDBs.drop(upstream);
   });
 
+  test('adaptively schedules secondary indexes from table estimates', async () => {
+    await initDB(
+      upstream,
+      /*sql*/ `
+        CREATE SCHEMA wide;
+        CREATE SCHEMA narrow;
+        CREATE SCHEMA empty;
+
+        CREATE TABLE wide.items(
+          id int4 PRIMARY KEY,
+          key text NOT NULL,
+          payload text NOT NULL
+        );
+        ALTER TABLE wide.items ALTER COLUMN payload SET STORAGE PLAIN;
+        INSERT INTO wide.items
+          SELECT g, 'key-' || g, repeat(md5(g::text), 100)
+          FROM generate_series(1, 8) g;
+        CREATE INDEX wide_items_key_idx ON wide.items(key);
+        CREATE UNIQUE INDEX wide_items_replica_idx ON wide.items(key);
+        ALTER TABLE wide.items REPLICA IDENTITY USING INDEX wide_items_replica_idx;
+
+        CREATE TABLE narrow.items(
+          id int4 PRIMARY KEY,
+          key text NOT NULL
+        );
+        INSERT INTO narrow.items
+          SELECT g, 'key-' || g FROM generate_series(1, 200) g;
+        CREATE INDEX narrow_items_key_idx ON narrow.items(key);
+
+        CREATE TABLE empty.items(
+          id int4 PRIMARY KEY,
+          key text NOT NULL
+        );
+        CREATE INDEX empty_items_key_idx ON empty.items(key);
+
+        CREATE PUBLICATION adaptive_test FOR TABLE
+          wide.items, narrow.items, empty.items;
+        ANALYZE wide.items;
+        ANALYZE narrow.items;
+        ANALYZE empty.items;
+      `,
+    );
+
+    const sink = new TestLogSink();
+    const lc = new LogContext('info', undefined, sink);
+    const replica = new Database(lc, ':memory:');
+    initLiteDB(replica);
+    try {
+      await initialSync(
+        lc,
+        {
+          appID: APP_ID,
+          shardNum: SHARD_NUM,
+          publications: ['adaptive_test'],
+        },
+        replica,
+        getConnectionURI(upstream),
+        {
+          tableCopyWorkers: 3,
+          secondaryIndexMinAverageRowBytes: 2048,
+        },
+        TEST_CONTEXT,
+      );
+
+      const messages = sink.messages.map(([, , args]) =>
+        args.filter(arg => typeof arg === 'string').join(' '),
+      );
+      const position = (includes: string) =>
+        messages.findIndex(message => message.includes(includes));
+      const createdIndexPosition = (name: string) => {
+        const indexPosition = messages.findIndex(
+          message =>
+            message.includes('Created index') && message.includes(name),
+        );
+        expect(indexPosition, messages.join('\n')).toBeGreaterThanOrEqual(0);
+        return indexPosition;
+      };
+
+      const wideCopy = position('Starting binary copy stream of wide.items');
+      const narrowCopy = position(
+        'Starting binary copy stream of narrow.items',
+      );
+      const emptyCopy = position('Starting binary copy stream of empty.items');
+      expect(wideCopy).toBeGreaterThanOrEqual(0);
+      expect(narrowCopy).toBeGreaterThanOrEqual(0);
+      expect(emptyCopy).toBeGreaterThanOrEqual(0);
+
+      expect(createdIndexPosition('wide_items_key_idx')).toBeLessThan(wideCopy);
+      expect(createdIndexPosition('wide_items_replica_idx')).toBeLessThan(
+        wideCopy,
+      );
+      expect(createdIndexPosition('wide.items_pkey')).toBeGreaterThan(wideCopy);
+      expect(createdIndexPosition('narrow_items_key_idx')).toBeGreaterThan(
+        narrowCopy,
+      );
+      expect(createdIndexPosition('narrow.items_pkey')).toBeGreaterThan(
+        narrowCopy,
+      );
+      expect(createdIndexPosition('empty_items_key_idx')).toBeGreaterThan(
+        emptyCopy,
+      );
+      expect(createdIndexPosition('empty.items_pkey')).toBeGreaterThan(
+        emptyCopy,
+      );
+
+      const strategyLogs = sink.messages.filter(([, , args]) =>
+        args.includes('Selected initial-sync secondary index strategies'),
+      );
+      expect(strategyLogs).toHaveLength(1);
+      const [strategyLog] = strategyLogs;
+      const strategyDetails = strategyLog?.[2].find(
+        arg => typeof arg === 'object' && arg !== null && 'tables' in arg,
+      ) as
+        | {
+            minAverageRowBytes: number;
+            tables: {table: string; strategy: string}[];
+            preCopySecondaryIndexes: number;
+            postCopySecondaryIndexes: number;
+            postCopyPrimaryIndexes: number;
+          }
+        | undefined;
+      expect(strategyDetails).toMatchObject({
+        minAverageRowBytes: 2048,
+        tables: expect.arrayContaining([
+          expect.objectContaining({table: 'wide.items', strategy: 'eager'}),
+          expect.objectContaining({
+            table: 'narrow.items',
+            strategy: 'deferred',
+          }),
+          expect.objectContaining({
+            table: 'empty.items',
+            strategy: 'deferred',
+          }),
+        ]),
+        preCopySecondaryIndexes: 2,
+      });
+      expect(strategyDetails?.postCopySecondaryIndexes).toBeGreaterThanOrEqual(
+        2,
+      );
+      expect(strategyDetails?.postCopyPrimaryIndexes).toBeGreaterThanOrEqual(3);
+
+      const {indexes} = await getPublicationInfo(upstream, ['adaptive_test']);
+      const tableNames = new Set(['wide.items', 'narrow.items', 'empty.items']);
+      const byName = <T extends {name: string}>(a: T, b: T) =>
+        a.name.localeCompare(b.name);
+      const expectedIndexes = indexes.map(index => {
+        const {tableName, name, columns, unique} =
+          mapPostgresToLiteIndex(index);
+        return {tableName, name, columns, unique};
+      });
+      expect(
+        listIndexes(replica)
+          .filter(index => tableNames.has(index.tableName))
+          .sort(byName),
+      ).toEqual(expectedIndexes.sort(byName));
+      expect(
+        replica
+          .prepare(
+            `SELECT id FROM "wide.items"
+               INDEXED BY "wide.wide_items_key_idx"
+             WHERE key = ?`,
+          )
+          .get('key-3'),
+      ).toEqual({id: 3});
+      expect(replica.pragma('integrity_check')).toEqual([
+        {integrity_check: 'ok'},
+      ]);
+    } finally {
+      replica.close();
+    }
+  });
+
   for (const c of cases) {
     test(c.name, async ({skip}) => {
       if (pgVersion < (c.minPgVersion ?? 0)) {
