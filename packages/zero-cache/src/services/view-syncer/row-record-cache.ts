@@ -3,6 +3,7 @@ import {type Resolver, resolver} from '@rocicorp/resolver';
 import type {PendingQuery, Row} from 'postgres';
 import {startAsyncSpan} from '../../../../otel/src/span.ts';
 import {CustomKeyMap} from '../../../../shared/src/custom-key-map.ts';
+import type {JSONObject} from '../../../../shared/src/json.ts';
 import {must} from '../../../../shared/src/must.ts';
 import {promiseVoid} from '../../../../shared/src/resolved-promises.ts';
 import * as Mode from '../../db/mode-enum.ts';
@@ -438,20 +439,38 @@ export class RowRecordCache {
     ];
 
     const rowRecordRows: RowsRow[] = [];
+    const deleteKeys: Pick<RowsRow, 'schema' | 'table' | 'rowKey'>[] = [];
     for (const [id, row] of rowUpdates.entries()) {
       if (row === null) {
-        pending.push(
-          tx`
-          DELETE FROM ${this.#cvr('rows')}
-            WHERE "clientGroupID" = ${this.#cvrID}
-              AND "schema" = ${id.schema}
-              AND "table" = ${id.table}
-              AND "rowKey" = ${id.rowKey}
-       `,
-        );
+        deleteKeys.push({
+          schema: id.schema,
+          table: id.table,
+          rowKey: id.rowKey as JSONObject,
+        });
       } else {
         rowRecordRows.push(rowRecordToRowsRow(this.#cvrID, row));
       }
+    }
+    if (deleteKeys.length) {
+      // Batched set-based delete rather than one DELETE per removed row, so the
+      // flush issues a single statement regardless of how many rows are
+      // tombstoned. Rows are matched on their JSONB primary key; `rowKey`
+      // equality is canonical JSONB equality — the same comparison the previous
+      // per-row `WHERE "rowKey" = ${id.rowKey}` relied on.
+      pending.push(
+        tx`
+        DELETE FROM ${this.#cvr('rows')} AS r
+          USING json_to_recordset(${deleteKeys}) AS x(
+            "schema" TEXT,
+            "table" TEXT,
+            "rowKey" JSONB
+          )
+          WHERE r."clientGroupID" = ${this.#cvrID}
+            AND r."schema" = x."schema"
+            AND r."table" = x."table"
+            AND r."rowKey" = x."rowKey"
+      `,
+      );
     }
     if (rowRecordRows.length) {
       pending.push(
