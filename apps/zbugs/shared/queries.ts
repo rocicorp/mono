@@ -9,7 +9,6 @@ import {
 } from '@rocicorp/zero';
 import * as z from 'zod/mini';
 import type {AuthData, Role} from './auth.ts';
-import {INITIAL_COMMENT_LIMIT} from './consts.ts';
 import {QueryError, QueryErrorCode} from './error.ts';
 import {builder, ZERO_PROJECT_NAME} from './schema.ts';
 
@@ -177,6 +176,41 @@ export const queries = defineQueries({
     },
   ),
 
+  // Paged comment window for the zero-virtual comments list. Ordered
+  // (created, id); a backward page flips the order. `start` is the cursor row.
+  commentsPage: defineQuery(
+    z.object({
+      issueID: z.string(),
+      limit: z.number(),
+      start: z.nullable(z.object({id: z.string(), created: z.number()})),
+      dir: z.union([z.literal('forward'), z.literal('backward')]),
+      inclusive: z.boolean(),
+    }),
+    ({args: {issueID, limit, start, dir, inclusive}}) => {
+      const orderDir = dir === 'forward' ? 'asc' : 'desc';
+      let q = builder.comment
+        .related('creator')
+        .related('emoji', emoji => emoji.related('creator'))
+        .where('issueID', issueID)
+        .orderBy('created', orderDir)
+        .orderBy('id', orderDir);
+      if (start) {
+        q = q.start(start, {inclusive});
+      }
+      return q.limit(limit);
+    },
+  ),
+
+  // Single-comment lookup for comment permalinks (the comments virtualizer
+  // pages in the window around it).
+  comment: defineQuery(idValidator, ({args: id}) =>
+    builder.comment
+      .related('creator')
+      .related('emoji', emoji => emoji.related('creator'))
+      .where('id', id)
+      .one(),
+  ),
+
   issueDetail: defineQuery(
     z.object({
       idField: z.union([z.literal('shortID'), z.literal('id')]),
@@ -200,12 +234,14 @@ export const queries = defineQueries({
               : alwaysFalse(viewState)
             ).one(),
           )
+          // Preload the most recent comments so the comments list resolves
+          // locally on navigation (it renders and pages via `commentsPage`;
+          // for issues with up to 50 comments this covers the whole thread).
           .related('comments', comments =>
             comments
               .related('creator')
               .related('emoji', emoji => emoji.related('creator'))
-              // One more than we display so we can detect if there are more to load.
-              .limit(INITIAL_COMMENT_LIMIT + 1)
+              .limit(50)
               .orderBy('created', 'desc')
               .orderBy('id', 'desc'),
           )

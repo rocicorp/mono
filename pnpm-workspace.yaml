@@ -26,7 +26,7 @@ minimumReleaseAgeExclude:
   - postcss@8.5.10
   - '@rocicorp/zero-sqlite3'
   - '@rocicorp/logger@6.1.0'
-  - '@rocicorp/zero-virtual@0.6.0'
+  - '@rocicorp/zero-virtual@0.6.3'
 
 overrides:
   '@hono/node-server@<1.19.13': ^1.19.13
