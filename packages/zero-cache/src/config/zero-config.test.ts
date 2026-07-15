@@ -213,6 +213,13 @@ test('zero-cache --help', () => {
                                                                         Note that this number must allow for at least one connection per                                                           
                                                                         sync worker, or zero-cache will fail to start. See num-sync-workers                                                        
                                                                                                                                                                                                    
+     --cvr-deferred-row-flush-threshold number                          default: 100                                                                                                               
+       ZERO_CVR_DEFERRED_ROW_FLUSH_THRESHOLD env                                                                                                                                                   
+                                                                        The number of CVR row updates above which a flush writes the row records                                                   
+                                                                        back to the CVR database asynchronously (off the advance / poke path)                                                      
+                                                                        instead of synchronously. Lower values move more row-write work off the                                                    
+                                                                        critical path at the cost of more frequent background flushes.                                                             
+                                                                                                                                                                                                   
      --cvr-garbage-collection-inactivity-threshold-hours number         default: 48                                                                                                                
        ZERO_CVR_GARBAGE_COLLECTION_INACTIVITY_THRESHOLD_HOURS env                                                                                                                                  
                                                                         The duration after which an inactive CVR is eligible for garbage collection.                                               
