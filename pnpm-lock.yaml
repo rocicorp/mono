@@ -134,14 +134,11 @@ importers:
         specifier: workspace:*
         version: link:../../packages/zero
       '@rocicorp/zero-virtual':
-        specifier: 0.6.0
-        version: 0.6.0(@rocicorp/zero@packages+zero)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(solid-js@1.9.13)
+        specifier: 0.6.3
+        version: 0.6.3(@rocicorp/zero@packages+zero)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(solid-js@1.9.13)
       '@schickling/fps-meter':
         specifier: ^0.1.2
         version: 0.1.2(react@19.2.6)
-      '@tanstack/react-virtual':
-        specifier: ^3.13.19
-        version: 3.13.24(react-dom@19.2.6(react@19.2.6))(react@19.2.6)
       classnames:
         specifier: ^2.5.1
         version: 2.5.1
@@ -3574,11 +3571,11 @@ packages:
 
   '@esbuild-kit/core-utils@3.3.2':
     resolution: {integrity: sha512-sPRAnw9CdSsRmEtnsl2WXWdyquogVpB3yZ3dgwJfe8zrOzTsV7cJvmwrKVa+0ma5BoiGJ+BoqkMvawbayKUsqQ==}
-    deprecated: 'Merged into tsx: https://tsx.is'
+    deprecated: 'Merged into tsx: https://tsx.hirok.io'
 
   '@esbuild-kit/esm-loader@2.6.5':
     resolution: {integrity: sha512-FxEMIkJKnodyA1OaCUoEvbYRkoZlLZ4d/eXFu9Fh8CbBBgP5EmZxrfTRyN0qpXZ4vOvqnE5YdRdcrmUUXuU+dA==}
-    deprecated: 'Merged into tsx: https://tsx.is'
+    deprecated: 'Merged into tsx: https://tsx.hirok.io'
 
   '@esbuild/aix-ppc64@0.27.7':
     resolution: {integrity: sha512-EKX3Qwmhz1eMdEJokhALr0YiD0lhQNwDqkPYyPhiSwKrh7/4KRjQc04sZ8db+5DVVnZ1LmbNDI1uAMPEUBnQPg==}
@@ -5573,14 +5570,16 @@ packages:
     engines: {bun: '>=1.1.0', node: 22.x || 24.x}
     hasBin: true
 
-  '@rocicorp/zero-virtual@0.6.0':
-    resolution: {integrity: sha512-47xDpyqm0PWXWUnfRUFF7RHLzv3midhmRQlCeoN2Xs81swPCcKhFLiHu5yhrI9fzNrCiYVTmYHJ9DfYGrK6/OA==}
+  '@rocicorp/zero-virtual@0.6.3':
+    resolution: {integrity: sha512-QtX5NoUzlPpYFcCLGuwaY1WQPdXAhUD0hUN7yeLk4oUNDr46c2xU8jTnn0sxGh6FqQknWfM0/sUgRts8ELvOoQ==}
     peerDependencies:
       '@rocicorp/zero': ^1.7.0
       react: ^19.2.4
       react-dom: ^19.2.4
       solid-js: ^1.9.4
     peerDependenciesMeta:
+      '@rocicorp/zero':
+        optional: true
       react:
         optional: true
       react-dom:
@@ -18423,10 +18422,9 @@ snapshots:
       bindings: 1.5.0
       prebuild-install: 7.1.3
 
-  '@rocicorp/zero-virtual@0.6.0(@rocicorp/zero@packages+zero)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(solid-js@1.9.13)':
-    dependencies:
-      '@rocicorp/zero': link:packages/zero
+  '@rocicorp/zero-virtual@0.6.3(@rocicorp/zero@packages+zero)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(solid-js@1.9.13)':
     optionalDependencies:
+      '@rocicorp/zero': link:packages/zero
       react: 19.2.6
       react-dom: 19.2.6(react@19.2.6)
       solid-js: 1.9.13
