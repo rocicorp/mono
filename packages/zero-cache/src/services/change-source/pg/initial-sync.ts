@@ -845,6 +845,8 @@ type CopyResult = {
   estimatedBytes: number | undefined;
   flushMs: number;
   elapsedMs: number;
+  sourceWaitMs: number;
+  processingMs: number;
   copyBytes: number;
 };
 
@@ -1180,6 +1182,7 @@ async function copyBinary(
   const copyMetrics = initialSyncCopyMetrics({syncMode, copyFormat});
   let flushMs = 0;
   let copyBytes = 0;
+  let processingMs = 0;
 
   const tableName = liteTableName(table);
   const orderedColumns = Object.entries(table.columns);
@@ -1262,6 +1265,7 @@ async function copyBinary(
 
   lc.info?.(`Starting binary copy stream of ${tableName}:`, select);
 
+  const copyStreamStart = performance.now();
   await pipeline(
     await from
       .unsafe(`COPY (${select}) TO STDOUT WITH (FORMAT binary)`)
@@ -1274,6 +1278,7 @@ async function copyBinary(
         _encoding: string,
         callback: (error?: Error) => void,
       ) {
+        const processingStart = performance.now();
         try {
           copyBytes += chunk.length;
           copyMetrics.add(chunk.length);
@@ -1293,18 +1298,23 @@ async function copyBinary(
               }
             }
           }
+          processingMs += performance.now() - processingStart;
           callback();
         } catch (e) {
+          processingMs += performance.now() - processingStart;
           callback(e instanceof Error ? e : new Error(String(e)));
         }
       },
 
       final: (callback: (error?: Error) => void) => {
+        const processingStart = performance.now();
         try {
           copyMetrics.flush();
           flush();
+          processingMs += performance.now() - processingStart;
           callback();
         } catch (e) {
+          processingMs += performance.now() - processingStart;
           callback(e instanceof Error ? e : new Error(String(e)));
         }
       },
@@ -1316,6 +1326,10 @@ async function copyBinary(
     }),
   );
 
+  const sourceWaitMs = Math.max(
+    0,
+    performance.now() - copyStreamStart - processingMs,
+  );
   const elapsed = performance.now() - start;
   const result = {
     schema: table.schema,
@@ -1329,6 +1343,8 @@ async function copyBinary(
     estimatedBytes: status.totalBytes,
     flushMs,
     elapsedMs: elapsed,
+    sourceWaitMs,
+    processingMs,
     copyBytes,
   } satisfies CopyResult;
 
@@ -1356,6 +1372,7 @@ async function copyText(
   const copyMetrics = initialSyncCopyMetrics({syncMode, copyFormat});
   let flushMs = 0;
   let copyBytes = 0;
+  let processingMs = 0;
 
   const tableName = liteTableName(table);
   const orderedColumns = Object.entries(table.columns);
@@ -1441,6 +1458,7 @@ async function copyText(
   const tsvParser = new TsvParser();
   let col = 0;
 
+  const copyStreamStart = performance.now();
   await pipeline(
     await from.unsafe(`COPY (${select}) TO STDOUT`).readable(),
     new Writable({
@@ -1451,6 +1469,7 @@ async function copyText(
         _encoding: string,
         callback: (error?: Error) => void,
       ) {
+        const processingStart = performance.now();
         try {
           copyBytes += chunk.length;
           copyMetrics.add(chunk.length);
@@ -1470,18 +1489,23 @@ async function copyText(
               }
             }
           }
+          processingMs += performance.now() - processingStart;
           callback();
         } catch (e) {
+          processingMs += performance.now() - processingStart;
           callback(e instanceof Error ? e : new Error(String(e)));
         }
       },
 
       final: (callback: (error?: Error) => void) => {
+        const processingStart = performance.now();
         try {
           copyMetrics.flush();
           flush();
+          processingMs += performance.now() - processingStart;
           callback();
         } catch (e) {
+          processingMs += performance.now() - processingStart;
           callback(e instanceof Error ? e : new Error(String(e)));
         }
       },
@@ -1493,6 +1517,10 @@ async function copyText(
     }),
   );
 
+  const sourceWaitMs = Math.max(
+    0,
+    performance.now() - copyStreamStart - processingMs,
+  );
   const elapsed = performance.now() - start;
   const result = {
     schema: table.schema,
@@ -1506,6 +1534,8 @@ async function copyText(
     estimatedBytes: status.totalBytes,
     flushMs,
     elapsedMs: elapsed,
+    sourceWaitMs,
+    processingMs,
     copyBytes,
   } satisfies CopyResult;
   lc.info?.(
