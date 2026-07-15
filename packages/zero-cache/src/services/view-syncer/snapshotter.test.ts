@@ -701,8 +701,8 @@ describe('view-syncer/snapshotter', () => {
       'SELECT "id","handle","_0_version" FROM "users" WHERE "id"=?',
     );
 
-    // Keep this lookup index-driven. The legacy `id = ? OR handle = ?` shape
-    // becomes a table scan when the handle parameter is NULL.
+    // Keep this lookup index-driven. A nullable alternate key must not enter
+    // the batched OR lookup.
     const plan = diff.prev.db.db
       .prepare(`EXPLAIN QUERY PLAN ${query}`)
       .all<{detail: string}>(30)
@@ -710,15 +710,6 @@ describe('view-syncer/snapshotter', () => {
       .join('\n');
     expect(plan).toMatch(/SEARCH users USING/);
     expect(plan).not.toMatch(/\bSCAN users\b/);
-
-    const legacyPlan = diff.prev.db.db
-      .prepare(
-        'EXPLAIN QUERY PLAN SELECT "id","handle","_0_version" FROM "users" WHERE "id"=? OR "handle"=?',
-      )
-      .all<{detail: string}>(30, null)
-      .map(row => row.detail)
-      .join('\n');
-    expect(legacyPlan).toMatch(/\bSCAN users\b/);
 
     getSpy.mockRestore();
   });
