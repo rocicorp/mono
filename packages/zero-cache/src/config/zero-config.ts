@@ -437,6 +437,16 @@ export const zeroOptions = {
       hidden: true, // Passed from main thread to sync workers
     },
 
+    deferredRowFlushThreshold: {
+      type: v.number().default(100),
+      desc: [
+        `The number of CVR row updates above which a flush writes the row records`,
+        `back to the CVR database asynchronously (off the advance / poke path)`,
+        `instead of synchronously. Lower values move more row-write work off the`,
+        `critical path at the cost of more frequent background flushes.`,
+      ],
+    },
+
     garbageCollectionInactivityThresholdHours: {
       type: v.number().default(48),
       desc: [
