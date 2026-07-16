@@ -209,22 +209,16 @@ export const TTL_CLOCK_INTERVAL = 60_000;
 export const TTL_TIMER_HYSTERESIS = 50; // ms
 
 /**
- * Amount of replica progress to observe after a reset before judging whether
- * ingress has fallen enough for hydration to stick.
+ * Time without new replica changes after a reset before rehydrating pipelines.
+ * This is long enough to coalesce a burst of version-ready notifications, but
+ * short enough to begin recovery promptly once the burst ends.
  */
-export const POST_RESET_LOW_WATER_WINDOW_MS = 1_000;
+export const POST_RESET_QUIET_MS = 50;
 
 /**
- * Maximum observed change-log ingress rate at which a reset pipeline may be
- * rehydrated. This is deliberately below the known saturated relational-hot
- * workload (roughly 150 changes/s), while allowing the known healthy workload
- * (roughly 24 changes/s) to recover without waiting for the liveness timeout.
- */
-export const POST_RESET_LOW_WATER_MAX_CHANGES_PER_SEC = 32;
-
-/**
- * Low water is preferred, but cannot be required forever: a continuously busy
- * replica still needs occasional hydration attempts to make client progress.
+ * A quiet interval is preferred, but cannot be required forever: a
+ * continuously busy replica still needs occasional hydration attempts to make
+ * client progress.
  */
 export const POST_RESET_MAX_CATCHUP_MS = 5_000;
 
@@ -292,21 +286,15 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   #cvr: CVRSnapshot | undefined;
   #pipelinesSynced = false;
   /**
-   * Change-log entries observed while catching up after an incremental-advance
-   * reset. A reset intentionally drops pipelines so the snapshot can catch up
-   * without IVM work. Rehydrating while ingress is still high recreates the
-   * pipelines during the same write burst and can immediately trigger another
-   * reset.
-   *
-   * Rehydration is therefore admitted only after ingress measured over
-   * {@link POST_RESET_LOW_WATER_WINDOW_MS} is below
-   * {@link POST_RESET_LOW_WATER_MAX_CHANGES_PER_SEC}. This is the low-water
-   * mark of the reset/rehydrate state machine.
+   * A reset intentionally drops pipelines so the snapshot can catch up without
+   * IVM work. Rehydrating during the same burst can immediately trigger another
+   * reset, so each observed change postpones hydration until the replica has
+   * been quiet for {@link POST_RESET_QUIET_MS}.
    */
-  #postResetCatchupChanges: number | undefined;
   #postResetCatchupStartedAtMs: number | undefined;
-  #postResetRateWindowStartedAtMs: number | undefined;
-  #postResetLowWaterTimer: ReturnType<SetTimeout> | 0 = 0;
+  #postResetQuietElapsed = false;
+  #postResetForceRehydrate = false;
+  #postResetQuietTimer: ReturnType<SetTimeout> | 0 = 0;
   #postResetRehydrateTimer: ReturnType<SetTimeout> | 0 = 0;
   #servedVersion: string | null = null;
 
@@ -581,10 +569,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             this.#pipelineResets.add(1, {reason: result.reason});
             this.#pipelines.reset(clientSchema);
             this.#pipelinesSynced = false;
-            this.#postResetCatchupChanges = 0;
             this.#postResetCatchupStartedAtMs = Date.now();
-            this.#postResetRateWindowStartedAtMs =
-              this.#postResetCatchupStartedAtMs;
             this.#schedulePostResetRehydrate();
             this.connContextManager.setSharedRetransformReady(false);
           }
@@ -598,55 +583,30 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             return; // Wait for the next advancement.
           }
 
-          if (this.#postResetCatchupChanges !== undefined) {
-            this.#postResetCatchupChanges += numChanges;
+          if (this.#postResetCatchupStartedAtMs !== undefined) {
             const catchupElapsedMs =
-              Date.now() -
-              must(
-                this.#postResetCatchupStartedAtMs,
-                'post-reset catchup start time missing',
-              );
-            const rateWindowElapsedMs =
-              Date.now() -
-              must(
-                this.#postResetRateWindowStartedAtMs,
-                'post-reset rate window start time missing',
-              );
-            if (catchupElapsedMs >= POST_RESET_MAX_CATCHUP_MS) {
+              Date.now() - this.#postResetCatchupStartedAtMs;
+            if (this.#postResetForceRehydrate) {
               lc.info?.(
                 `post-reset catchup timed out after ` +
                   `${POST_RESET_MAX_CATCHUP_MS}ms; rehydrating at ` +
                   `replica@${version} with ${numChanges} changes`,
               );
               this.#clearPostResetCatchup();
-            } else if (
-              rateWindowElapsedMs < POST_RESET_LOW_WATER_WINDOW_MS
-            ) {
+            } else if (this.#postResetQuietElapsed && numChanges === 0) {
               lc.debug?.(
-                `catching up after pipeline reset: observed ` +
-                  `${this.#postResetCatchupChanges} changes in ` +
-                  `${catchupElapsedMs}ms`,
-              );
-              return;
-            } else {
-              const changeRate =
-                (this.#postResetCatchupChanges * 1_000) / rateWindowElapsedMs;
-              if (changeRate > POST_RESET_LOW_WATER_MAX_CHANGES_PER_SEC) {
-                lc.debug?.(
-                  `catching up after pipeline reset: ${changeRate.toFixed(1)} ` +
-                    `changes/s exceeds low-water rate of ` +
-                    `${POST_RESET_LOW_WATER_MAX_CHANGES_PER_SEC} changes/s`,
-                );
-                this.#postResetCatchupChanges = 0;
-                this.#postResetRateWindowStartedAtMs = Date.now();
-                this.#schedulePostResetLowWaterProbe();
-                return;
-              }
-              lc.debug?.(
-                `post-reset catchup admitted at ${changeRate.toFixed(1)} ` +
-                  `changes/s`,
+                `post-reset catchup admitted after ${POST_RESET_QUIET_MS}ms ` +
+                  `quiet at replica@${version}`,
               );
               this.#clearPostResetCatchup();
+            } else {
+              this.#postResetQuietElapsed = false;
+              this.#schedulePostResetQuietProbe();
+              lc.debug?.(
+                `catching up after pipeline reset: observed ${numChanges} ` +
+                  `changes in ${catchupElapsedMs}ms`,
+              );
+              return;
             }
           }
 
@@ -839,27 +799,31 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   }
 
   #schedulePostResetRehydrate() {
-    this.#schedulePostResetLowWaterProbe();
+    this.#postResetQuietElapsed = false;
+    this.#postResetForceRehydrate = false;
+    this.#schedulePostResetQuietProbe();
     this.#postResetRehydrateTimer = this.#setTimeout(() => {
       this.#postResetRehydrateTimer = 0;
+      this.#postResetForceRehydrate = true;
       this.#stateChanges.push({state: 'version-ready'});
     }, POST_RESET_MAX_CATCHUP_MS);
   }
 
-  #schedulePostResetLowWaterProbe() {
-    clearTimeout(this.#postResetLowWaterTimer);
-    this.#postResetLowWaterTimer = this.#setTimeout(() => {
-      this.#postResetLowWaterTimer = 0;
+  #schedulePostResetQuietProbe() {
+    clearTimeout(this.#postResetQuietTimer);
+    this.#postResetQuietTimer = this.#setTimeout(() => {
+      this.#postResetQuietTimer = 0;
+      this.#postResetQuietElapsed = true;
       this.#stateChanges.push({state: 'version-ready'});
-    }, POST_RESET_LOW_WATER_WINDOW_MS);
+    }, POST_RESET_QUIET_MS);
   }
 
   #clearPostResetCatchup() {
-    this.#postResetCatchupChanges = undefined;
     this.#postResetCatchupStartedAtMs = undefined;
-    this.#postResetRateWindowStartedAtMs = undefined;
-    clearTimeout(this.#postResetLowWaterTimer);
-    this.#postResetLowWaterTimer = 0;
+    this.#postResetQuietElapsed = false;
+    this.#postResetForceRehydrate = false;
+    clearTimeout(this.#postResetQuietTimer);
+    this.#postResetQuietTimer = 0;
     clearTimeout(this.#postResetRehydrateTimer);
     this.#postResetRehydrateTimer = 0;
   }

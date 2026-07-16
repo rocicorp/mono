@@ -419,7 +419,10 @@ export class PipelineDriver {
     return this.#permissions;
   }
 
-  advanceWithoutDiff(): {readonly version: string; readonly numChanges: number} {
+  advanceWithoutDiff(): {
+    readonly version: string;
+    readonly numChanges: number;
+  } {
     const {prev, curr} = this.#snapshotter.advanceWithoutDiff();
     const {db, version} = curr;
     for (const table of this.#tables.values()) {
