@@ -182,7 +182,7 @@
     "syncpack": "^14.3.0",
     "typedoc": "^0.28.17",
     "typedoc-plugin-markdown": "^4.10.0",
-    "typescript": "~6.0.2",
+    "typescript": "~7.0.2",
     "vite": "^8.0.13",
     "vitest": "^4.1.6",
     "zero-cache": "workspace:*",

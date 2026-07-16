@@ -2,7 +2,12 @@
   "extends": "../../tsconfig.json",
   "compilerOptions": {
     "rootDir": "..",
-    "outDir": "dist"
+    "outDir": "dist",
+    // This package only type-checks (noEmit) and never emits .d.ts, so it opts
+    // out of TypeScript 7's declaration-emit portability check (TS2883), which
+    // flags cross-package relative source imports in pnpm's symlinked layout.
+    "declaration": false,
+    "declarationMap": false
   },
   "include": ["src/**/*.ts"]
 }

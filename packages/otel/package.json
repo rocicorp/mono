@@ -22,7 +22,7 @@
   "devDependencies": {
     "oxfmt": "^0.45.0",
     "shared": "workspace:*",
-    "typescript": "~6.0.2"
+    "typescript": "~7.0.2"
   },
   "packageManager": "pnpm@11.5.3"
 }

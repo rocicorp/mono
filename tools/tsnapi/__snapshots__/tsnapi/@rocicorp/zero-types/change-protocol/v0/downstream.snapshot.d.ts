@@ -23,54 +23,54 @@ export declare const changeStreamDataSchema: v.UnionType<[v.TupleType<[v.Type<"b
 }, undefined>]>, v.TupleType<[v.Type<"data">, v.UnionType<[v.UnionType<[v.ObjectType<{
     tag: v.Type<"insert">;
     relation: v.Type<{
-        rowKey: {
-            type?: "default" | "nothing" | "full" | "index" | undefined;
-            columns: string[];
-        };
-        keyColumns?: string[] | undefined;
-        replicaIdentity?: "default" | "nothing" | "full" | "index" | undefined;
         schema: string;
         name: string;
+        keyColumns?: string[] | undefined;
+        replicaIdentity?: "default" | "full" | "index" | "nothing" | undefined;
+        rowKey: {
+            columns: string[];
+            type?: "default" | "full" | "index" | "nothing" | undefined;
+        };
     }>;
     new: v.Type<Record<string, import("../../../../../../shared/src/bigint-json.ts").JSONValue>>;
 }, undefined>, v.ObjectType<{
     tag: v.Type<"update">;
     relation: v.Type<{
-        rowKey: {
-            type?: "default" | "nothing" | "full" | "index" | undefined;
-            columns: string[];
-        };
-        keyColumns?: string[] | undefined;
-        replicaIdentity?: "default" | "nothing" | "full" | "index" | undefined;
         schema: string;
         name: string;
+        keyColumns?: string[] | undefined;
+        replicaIdentity?: "default" | "full" | "index" | "nothing" | undefined;
+        rowKey: {
+            columns: string[];
+            type?: "default" | "full" | "index" | "nothing" | undefined;
+        };
     }>;
     key: v.Type<Record<string, import("../../../../../../shared/src/bigint-json.ts").JSONValue> | null>;
     new: v.Type<Record<string, import("../../../../../../shared/src/bigint-json.ts").JSONValue>>;
 }, undefined>, v.ObjectType<{
     tag: v.Type<"delete">;
     relation: v.Type<{
-        rowKey: {
-            type?: "default" | "nothing" | "full" | "index" | undefined;
-            columns: string[];
-        };
-        keyColumns?: string[] | undefined;
-        replicaIdentity?: "default" | "nothing" | "full" | "index" | undefined;
         schema: string;
         name: string;
+        keyColumns?: string[] | undefined;
+        replicaIdentity?: "default" | "full" | "index" | "nothing" | undefined;
+        rowKey: {
+            columns: string[];
+            type?: "default" | "full" | "index" | "nothing" | undefined;
+        };
     }>;
     key: v.Type<Record<string, import("../../../../../../shared/src/bigint-json.ts").JSONValue>>;
 }, undefined>, v.ObjectType<{
     tag: v.Type<"truncate">;
     relations: v.ArrayType<v.Type<{
-        rowKey: {
-            type?: "default" | "nothing" | "full" | "index" | undefined;
-            columns: string[];
-        };
-        keyColumns?: string[] | undefined;
-        replicaIdentity?: "default" | "nothing" | "full" | "index" | undefined;
         schema: string;
         name: string;
+        keyColumns?: string[] | undefined;
+        replicaIdentity?: "default" | "full" | "index" | "nothing" | undefined;
+        rowKey: {
+            columns: string[];
+            type?: "default" | "full" | "index" | "nothing" | undefined;
+        };
     }>>;
 }, undefined>, v.ObjectType<{
     tag: v.Type<"backfill">;
@@ -79,29 +79,29 @@ export declare const changeStreamDataSchema: v.UnionType<[v.TupleType<[v.Type<"b
         name: v.Type<string>;
         rowKey: v.ObjectType<{
             columns: v.ArrayType<v.Type<string>>;
-            type: v.Optional<"default" | "nothing" | "full" | "index">;
+            type: v.Optional<"default" | "full" | "index" | "nothing">;
         }, undefined>;
     }, undefined>;
     columns: v.ArrayType<v.Type<string>>;
     watermark: v.Type<string>;
     rowValues: v.ArrayType<v.ArrayType<v.Type<import("../../../../../../shared/src/bigint-json.ts").JSONValue>>>;
     status: v.Optional<{
-        totalBytes?: number | undefined;
         rows: number;
         totalRows: number;
+        totalBytes?: number | undefined;
     }>;
 }, undefined>]>, v.UnionType<[v.ObjectType<{
     tag: v.Type<"create-table">;
     spec: v.ObjectType<Omit<{
         name: v.Type<string>;
         columns: v.Type<Record<string, {
-            pgTypeClass?: "e" | "d" | "b" | "c" | "p" | "r" | "m" | undefined;
-            elemPgTypeClass?: "e" | "d" | "b" | "c" | "p" | "r" | "m" | null | undefined;
+            pos: number;
+            dataType: string;
+            pgTypeClass?: "b" | "c" | "d" | "e" | "m" | "p" | "r" | undefined;
+            elemPgTypeClass?: "b" | "c" | "d" | "e" | "m" | "p" | "r" | null | undefined;
             characterMaximumLength?: number | null | undefined;
             notNull?: boolean | null | undefined;
             dflt?: string | null | undefined;
-            pos: number;
-            dataType: string;
         }>>;
         primaryKey: v.Optional<string[]>;
     }, "schema"> & {
@@ -145,8 +145,8 @@ export declare const changeStreamDataSchema: v.UnionType<[v.TupleType<[v.Type<"b
         spec: v.ObjectType<{
             pos: v.Type<number>;
             dataType: v.Type<string>;
-            pgTypeClass: v.Optional<"e" | "d" | "b" | "c" | "p" | "r" | "m">;
-            elemPgTypeClass: v.Optional<"e" | "d" | "b" | "c" | "p" | "r" | "m" | null>;
+            pgTypeClass: v.Optional<"b" | "c" | "d" | "e" | "m" | "p" | "r">;
+            elemPgTypeClass: v.Optional<"b" | "c" | "d" | "e" | "m" | "p" | "r" | null>;
             characterMaximumLength: v.Optional<number | null>;
             notNull: v.Optional<boolean | null>;
             dflt: v.Optional<string | null>;
@@ -168,8 +168,8 @@ export declare const changeStreamDataSchema: v.UnionType<[v.TupleType<[v.Type<"b
         spec: v.ObjectType<{
             pos: v.Type<number>;
             dataType: v.Type<string>;
-            pgTypeClass: v.Optional<"e" | "d" | "b" | "c" | "p" | "r" | "m">;
-            elemPgTypeClass: v.Optional<"e" | "d" | "b" | "c" | "p" | "r" | "m" | null>;
+            pgTypeClass: v.Optional<"b" | "c" | "d" | "e" | "m" | "p" | "r">;
+            elemPgTypeClass: v.Optional<"b" | "c" | "d" | "e" | "m" | "p" | "r" | null>;
             characterMaximumLength: v.Optional<number | null>;
             notNull: v.Optional<boolean | null>;
             dflt: v.Optional<string | null>;
@@ -180,8 +180,8 @@ export declare const changeStreamDataSchema: v.UnionType<[v.TupleType<[v.Type<"b
         spec: v.ObjectType<{
             pos: v.Type<number>;
             dataType: v.Type<string>;
-            pgTypeClass: v.Optional<"e" | "d" | "b" | "c" | "p" | "r" | "m">;
-            elemPgTypeClass: v.Optional<"e" | "d" | "b" | "c" | "p" | "r" | "m" | null>;
+            pgTypeClass: v.Optional<"b" | "c" | "d" | "e" | "m" | "p" | "r">;
+            elemPgTypeClass: v.Optional<"b" | "c" | "d" | "e" | "m" | "p" | "r" | null>;
             characterMaximumLength: v.Optional<number | null>;
             notNull: v.Optional<boolean | null>;
             dflt: v.Optional<string | null>;
@@ -223,15 +223,15 @@ export declare const changeStreamDataSchema: v.UnionType<[v.TupleType<[v.Type<"b
         name: v.Type<string>;
         rowKey: v.ObjectType<{
             columns: v.ArrayType<v.Type<string>>;
-            type: v.Optional<"default" | "nothing" | "full" | "index">;
+            type: v.Optional<"default" | "full" | "index" | "nothing">;
         }, undefined>;
     }, undefined>;
     columns: v.ArrayType<v.Type<string>>;
     watermark: v.Type<string>;
     status: v.Optional<{
-        totalBytes?: number | undefined;
         rows: number;
         totalRows: number;
+        totalBytes?: number | undefined;
     }>;
 }, undefined>]>]>]>, v.TupleType<[v.Type<"commit">, v.ObjectType<{
     tag: v.Type<"commit">;
@@ -249,54 +249,54 @@ export declare const changeStreamMessageSchema: v.UnionType<[v.UnionType<[v.Tupl
 }, undefined>]>, v.TupleType<[v.Type<"data">, v.UnionType<[v.UnionType<[v.ObjectType<{
     tag: v.Type<"insert">;
     relation: v.Type<{
-        rowKey: {
-            type?: "default" | "nothing" | "full" | "index" | undefined;
-            columns: string[];
-        };
-        keyColumns?: string[] | undefined;
-        replicaIdentity?: "default" | "nothing" | "full" | "index" | undefined;
         schema: string;
         name: string;
+        keyColumns?: string[] | undefined;
+        replicaIdentity?: "default" | "full" | "index" | "nothing" | undefined;
+        rowKey: {
+            columns: string[];
+            type?: "default" | "full" | "index" | "nothing" | undefined;
+        };
     }>;
     new: v.Type<Record<string, import("../../../../../../shared/src/bigint-json.ts").JSONValue>>;
 }, undefined>, v.ObjectType<{
     tag: v.Type<"update">;
     relation: v.Type<{
-        rowKey: {
-            type?: "default" | "nothing" | "full" | "index" | undefined;
-            columns: string[];
-        };
-        keyColumns?: string[] | undefined;
-        replicaIdentity?: "default" | "nothing" | "full" | "index" | undefined;
         schema: string;
         name: string;
+        keyColumns?: string[] | undefined;
+        replicaIdentity?: "default" | "full" | "index" | "nothing" | undefined;
+        rowKey: {
+            columns: string[];
+            type?: "default" | "full" | "index" | "nothing" | undefined;
+        };
     }>;
     key: v.Type<Record<string, import("../../../../../../shared/src/bigint-json.ts").JSONValue> | null>;
     new: v.Type<Record<string, import("../../../../../../shared/src/bigint-json.ts").JSONValue>>;
 }, undefined>, v.ObjectType<{
     tag: v.Type<"delete">;
     relation: v.Type<{
-        rowKey: {
-            type?: "default" | "nothing" | "full" | "index" | undefined;
-            columns: string[];
-        };
-        keyColumns?: string[] | undefined;
-        replicaIdentity?: "default" | "nothing" | "full" | "index" | undefined;
         schema: string;
         name: string;
+        keyColumns?: string[] | undefined;
+        replicaIdentity?: "default" | "full" | "index" | "nothing" | undefined;
+        rowKey: {
+            columns: string[];
+            type?: "default" | "full" | "index" | "nothing" | undefined;
+        };
     }>;
     key: v.Type<Record<string, import("../../../../../../shared/src/bigint-json.ts").JSONValue>>;
 }, undefined>, v.ObjectType<{
     tag: v.Type<"truncate">;
     relations: v.ArrayType<v.Type<{
-        rowKey: {
-            type?: "default" | "nothing" | "full" | "index" | undefined;
-            columns: string[];
-        };
-        keyColumns?: string[] | undefined;
-        replicaIdentity?: "default" | "nothing" | "full" | "index" | undefined;
         schema: string;
         name: string;
+        keyColumns?: string[] | undefined;
+        replicaIdentity?: "default" | "full" | "index" | "nothing" | undefined;
+        rowKey: {
+            columns: string[];
+            type?: "default" | "full" | "index" | "nothing" | undefined;
+        };
     }>>;
 }, undefined>, v.ObjectType<{
     tag: v.Type<"backfill">;
@@ -305,29 +305,29 @@ export declare const changeStreamMessageSchema: v.UnionType<[v.UnionType<[v.Tupl
         name: v.Type<string>;
         rowKey: v.ObjectType<{
             columns: v.ArrayType<v.Type<string>>;
-            type: v.Optional<"default" | "nothing" | "full" | "index">;
+            type: v.Optional<"default" | "full" | "index" | "nothing">;
         }, undefined>;
     }, undefined>;
     columns: v.ArrayType<v.Type<string>>;
     watermark: v.Type<string>;
     rowValues: v.ArrayType<v.ArrayType<v.Type<import("../../../../../../shared/src/bigint-json.ts").JSONValue>>>;
     status: v.Optional<{
-        totalBytes?: number | undefined;
         rows: number;
         totalRows: number;
+        totalBytes?: number | undefined;
     }>;
 }, undefined>]>, v.UnionType<[v.ObjectType<{
     tag: v.Type<"create-table">;
     spec: v.ObjectType<Omit<{
         name: v.Type<string>;
         columns: v.Type<Record<string, {
-            pgTypeClass?: "e" | "d" | "b" | "c" | "p" | "r" | "m" | undefined;
-            elemPgTypeClass?: "e" | "d" | "b" | "c" | "p" | "r" | "m" | null | undefined;
+            pos: number;
+            dataType: string;
+            pgTypeClass?: "b" | "c" | "d" | "e" | "m" | "p" | "r" | undefined;
+            elemPgTypeClass?: "b" | "c" | "d" | "e" | "m" | "p" | "r" | null | undefined;
             characterMaximumLength?: number | null | undefined;
             notNull?: boolean | null | undefined;
             dflt?: string | null | undefined;
-            pos: number;
-            dataType: string;
         }>>;
         primaryKey: v.Optional<string[]>;
     }, "schema"> & {
@@ -371,8 +371,8 @@ export declare const changeStreamMessageSchema: v.UnionType<[v.UnionType<[v.Tupl
         spec: v.ObjectType<{
             pos: v.Type<number>;
             dataType: v.Type<string>;
-            pgTypeClass: v.Optional<"e" | "d" | "b" | "c" | "p" | "r" | "m">;
-            elemPgTypeClass: v.Optional<"e" | "d" | "b" | "c" | "p" | "r" | "m" | null>;
+            pgTypeClass: v.Optional<"b" | "c" | "d" | "e" | "m" | "p" | "r">;
+            elemPgTypeClass: v.Optional<"b" | "c" | "d" | "e" | "m" | "p" | "r" | null>;
             characterMaximumLength: v.Optional<number | null>;
             notNull: v.Optional<boolean | null>;
             dflt: v.Optional<string | null>;
@@ -394,8 +394,8 @@ export declare const changeStreamMessageSchema: v.UnionType<[v.UnionType<[v.Tupl
         spec: v.ObjectType<{
             pos: v.Type<number>;
             dataType: v.Type<string>;
-            pgTypeClass: v.Optional<"e" | "d" | "b" | "c" | "p" | "r" | "m">;
-            elemPgTypeClass: v.Optional<"e" | "d" | "b" | "c" | "p" | "r" | "m" | null>;
+            pgTypeClass: v.Optional<"b" | "c" | "d" | "e" | "m" | "p" | "r">;
+            elemPgTypeClass: v.Optional<"b" | "c" | "d" | "e" | "m" | "p" | "r" | null>;
             characterMaximumLength: v.Optional<number | null>;
             notNull: v.Optional<boolean | null>;
             dflt: v.Optional<string | null>;
@@ -406,8 +406,8 @@ export declare const changeStreamMessageSchema: v.UnionType<[v.UnionType<[v.Tupl
         spec: v.ObjectType<{
             pos: v.Type<number>;
             dataType: v.Type<string>;
-            pgTypeClass: v.Optional<"e" | "d" | "b" | "c" | "p" | "r" | "m">;
-            elemPgTypeClass: v.Optional<"e" | "d" | "b" | "c" | "p" | "r" | "m" | null>;
+            pgTypeClass: v.Optional<"b" | "c" | "d" | "e" | "m" | "p" | "r">;
+            elemPgTypeClass: v.Optional<"b" | "c" | "d" | "e" | "m" | "p" | "r" | null>;
             characterMaximumLength: v.Optional<number | null>;
             notNull: v.Optional<boolean | null>;
             dflt: v.Optional<string | null>;
@@ -449,15 +449,15 @@ export declare const changeStreamMessageSchema: v.UnionType<[v.UnionType<[v.Tupl
         name: v.Type<string>;
         rowKey: v.ObjectType<{
             columns: v.ArrayType<v.Type<string>>;
-            type: v.Optional<"default" | "nothing" | "full" | "index">;
+            type: v.Optional<"default" | "full" | "index" | "nothing">;
         }, undefined>;
     }, undefined>;
     columns: v.ArrayType<v.Type<string>>;
     watermark: v.Type<string>;
     status: v.Optional<{
-        totalBytes?: number | undefined;
         rows: number;
         totalRows: number;
+        totalBytes?: number | undefined;
     }>;
 }, undefined>]>]>]>, v.TupleType<[v.Type<"commit">, v.ObjectType<{
     tag: v.Type<"commit">;

@@ -19,7 +19,7 @@
     "@types/node": "^22.10.5",
     "@vitest/coverage-v8": "^4.1.6",
     "oxfmt": "^0.45.0",
-    "typescript": "~6.0.2",
+    "typescript": "~7.0.2",
     "vitest": "^4.1.6"
   },
   "packageManager": "pnpm@11.5.3"

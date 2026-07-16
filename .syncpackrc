@@ -1,4 +1,12 @@
 {
+  "versionGroups": [
+    {
+      "label": "replicache-doc pins TypeScript 6.x: its typedoc/docusaurus toolchain does not support the TypeScript 7 native compiler",
+      "packages": ["replicache-doc"],
+      "dependencies": ["typescript"],
+      "isIgnored": true
+    }
+  ],
   "semverGroups": [
     {
       "range": "~",
