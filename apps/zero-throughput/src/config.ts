@@ -12,6 +12,7 @@ const DEFAULT_PG_URL = 'postgresql://user:password@127.0.0.1:6436/postgres';
 const APP_ID_PATTERN = /^[a-z0-9_]+$/;
 
 const options = {
+  benchmark: v.literalUnion('throughput', 'recovery').default('throughput'),
   profile: v
     .literalUnion('feed-append', 'email', 'forum', 'relational')
     .default('feed-append'),
@@ -34,6 +35,14 @@ const options = {
   processLogMode: v.literalUnion('file', 'inherit', 'ignore').default('file'),
   reset: v.boolean().default(true),
   cacheURL: v.string().optional(),
+
+  recovery: {
+    timeoutMs: v.number().default(60_000),
+    stableMs: v.number().default(2_000),
+    pollMs: v.number().default(100),
+    minSeqLag: v.number().default(1),
+    minPipelineResets: v.number().default(1),
+  },
 
   pg: {
     url: v.string().default(DEFAULT_PG_URL),
@@ -58,9 +67,11 @@ const options = {
 
 export type BenchmarkProfile = 'feed-append' | 'email' | 'forum' | 'relational';
 export type BenchmarkModel = 'hot' | 'realistic';
+export type BenchmarkKind = 'throughput' | 'recovery';
 
 export type BenchmarkConfig = {
   readonly runID: string;
+  readonly benchmark: BenchmarkKind;
   readonly profile: BenchmarkProfile;
   readonly model: BenchmarkModel;
   readonly users: number;
@@ -80,6 +91,13 @@ export type BenchmarkConfig = {
   readonly processLogMode: 'file' | 'inherit' | 'ignore';
   readonly reset: boolean;
   readonly cacheURL: string;
+  readonly recovery: {
+    readonly timeoutMs: number;
+    readonly stableMs: number;
+    readonly pollMs: number;
+    readonly minSeqLag: number;
+    readonly minPipelineResets: number;
+  };
   readonly pg: {
     readonly url: string;
     readonly start: boolean;
@@ -118,10 +136,24 @@ export function loadConfig(): BenchmarkConfig {
   assertPositiveInteger('sampleIntervalMs', parsed.sampleIntervalMs);
   assertNonNegativeInteger('progressIntervalMs', parsed.progressIntervalMs);
   assertPositiveInteger('sloP99LagMs', parsed.sloP99LagMs);
+  assertPositiveInteger('recovery.timeoutMs', parsed.recovery.timeoutMs);
+  assertNonNegativeInteger('recovery.stableMs', parsed.recovery.stableMs);
+  assertPositiveInteger('recovery.pollMs', parsed.recovery.pollMs);
+  assertNonNegativeInteger('recovery.minSeqLag', parsed.recovery.minSeqLag);
+  assertNonNegativeInteger(
+    'recovery.minPipelineResets',
+    parsed.recovery.minPipelineResets,
+  );
   assertValidAppID(parsed.zero.appID);
+  if (parsed.benchmark === 'recovery' && parsed.model !== 'hot') {
+    throw new Error(
+      'recovery benchmark currently requires --model hot so global seq lag represents every client group',
+    );
+  }
 
   return {
     runID: new Date().toISOString().replace(/[:.]/g, '-'),
+    benchmark: parsed.benchmark,
     profile: parsed.profile,
     model: parsed.model,
     users: parsed.users,
@@ -141,6 +173,7 @@ export function loadConfig(): BenchmarkConfig {
     processLogMode: parsed.processLogMode,
     reset: parsed.reset,
     cacheURL: parsed.cacheURL ?? `http://127.0.0.1:${parsed.zero.port}`,
+    recovery: parsed.recovery,
     pg: parsed.pg,
     zero: parsed.zero,
   };

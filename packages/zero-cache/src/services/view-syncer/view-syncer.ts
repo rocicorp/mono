@@ -209,18 +209,18 @@ export const TTL_CLOCK_INTERVAL = 60_000;
 export const TTL_TIMER_HYSTERESIS = 50; // ms
 
 /**
- * A reset is followed by an unconditional catchup pass, then this many
- * consecutive low-water passes before pipelines may be hydrated again.
+ * Amount of replica progress to observe after a reset before judging whether
+ * ingress has fallen enough for hydration to stick.
  */
-export const POST_RESET_LOW_WATER_PASSES = 2;
+export const POST_RESET_LOW_WATER_WINDOW_MS = 1_000;
 
 /**
- * A post-reset replica diff at or below this size is considered caught up
- * enough to start accumulating low-water passes. This is deliberately below
- * the driver projection's minimum 16-change sample, so a burst cannot cause
- * an immediate rehydration on the next replica notification.
+ * Maximum observed change-log ingress rate at which a reset pipeline may be
+ * rehydrated. This is deliberately below the known saturated relational-hot
+ * workload (roughly 150 changes/s), while allowing the known healthy workload
+ * (roughly 24 changes/s) to recover without waiting for the liveness timeout.
  */
-export const POST_RESET_LOW_WATER_MAX_CHANGES = 8;
+export const POST_RESET_LOW_WATER_MAX_CHANGES_PER_SEC = 32;
 
 /**
  * Low water is preferred, but cannot be required forever: a continuously busy
@@ -292,18 +292,21 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   #cvr: CVRSnapshot | undefined;
   #pipelinesSynced = false;
   /**
-   * Number of consecutive low-water replica diffs completed after an
-   * incremental-advance reset. A reset intentionally drops pipelines so the
-   * snapshot can catch up without IVM work. Rehydrating on that first caught-up
-   * snapshot recreates the pipelines while a write burst is still in flight,
-   * which can immediately trigger another reset.
+   * Change-log entries observed while catching up after an incremental-advance
+   * reset. A reset intentionally drops pipelines so the snapshot can catch up
+   * without IVM work. Rehydrating while ingress is still high recreates the
+   * pipelines during the same write burst and can immediately trigger another
+   * reset.
    *
-   * Rehydration is therefore admitted only after an initial discarded pass and
-   * consecutive diffs no larger than {@link POST_RESET_LOW_WATER_MAX_CHANGES}.
-   * This is the low-water mark of the reset/rehydrate state machine.
+   * Rehydration is therefore admitted only after ingress measured over
+   * {@link POST_RESET_LOW_WATER_WINDOW_MS} is below
+   * {@link POST_RESET_LOW_WATER_MAX_CHANGES_PER_SEC}. This is the low-water
+   * mark of the reset/rehydrate state machine.
    */
-  #postResetLowWaterPasses: number | undefined;
+  #postResetCatchupChanges: number | undefined;
   #postResetCatchupStartedAtMs: number | undefined;
+  #postResetRateWindowStartedAtMs: number | undefined;
+  #postResetLowWaterTimer: ReturnType<SetTimeout> | 0 = 0;
   #postResetRehydrateTimer: ReturnType<SetTimeout> | 0 = 0;
   #servedVersion: string | null = null;
 
@@ -578,8 +581,10 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             this.#pipelineResets.add(1, {reason: result.reason});
             this.#pipelines.reset(clientSchema);
             this.#pipelinesSynced = false;
-            this.#postResetLowWaterPasses = -1;
+            this.#postResetCatchupChanges = 0;
             this.#postResetCatchupStartedAtMs = Date.now();
+            this.#postResetRateWindowStartedAtMs =
+              this.#postResetCatchupStartedAtMs;
             this.#schedulePostResetRehydrate();
             this.connContextManager.setSharedRetransformReady(false);
           }
@@ -593,51 +598,54 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             return; // Wait for the next advancement.
           }
 
-          if (this.#postResetLowWaterPasses !== undefined) {
-            const forceHydration =
+          if (this.#postResetCatchupChanges !== undefined) {
+            this.#postResetCatchupChanges += numChanges;
+            const catchupElapsedMs =
               Date.now() -
-                must(
-                  this.#postResetCatchupStartedAtMs,
-                  'post-reset catchup start time missing',
-                ) >=
-              POST_RESET_MAX_CATCHUP_MS;
-            if (forceHydration) {
+              must(
+                this.#postResetCatchupStartedAtMs,
+                'post-reset catchup start time missing',
+              );
+            const rateWindowElapsedMs =
+              Date.now() -
+              must(
+                this.#postResetRateWindowStartedAtMs,
+                'post-reset rate window start time missing',
+              );
+            if (catchupElapsedMs >= POST_RESET_MAX_CATCHUP_MS) {
               lc.info?.(
                 `post-reset catchup timed out after ` +
                   `${POST_RESET_MAX_CATCHUP_MS}ms; rehydrating at ` +
                   `replica@${version} with ${numChanges} changes`,
               );
               this.#clearPostResetCatchup();
-            } else if (this.#postResetLowWaterPasses === -1) {
-              // Always discard the first post-reset diff. It is often the
-              // remainder of the burst that made incremental advancement lose.
-              this.#postResetLowWaterPasses = 0;
+            } else if (
+              rateWindowElapsedMs < POST_RESET_LOW_WATER_WINDOW_MS
+            ) {
               lc.debug?.(
-                `catching up after pipeline reset: discarding initial diff ` +
-                  `of ${numChanges} changes at replica@${version}`,
-              );
-              return;
-            } else if (numChanges > POST_RESET_LOW_WATER_MAX_CHANGES) {
-              this.#postResetLowWaterPasses = -1;
-              lc.debug?.(
-                `catching up after pipeline reset: ${numChanges} changes ` +
-                  `exceeds low-water mark of ` +
-                  `${POST_RESET_LOW_WATER_MAX_CHANGES}`,
+                `catching up after pipeline reset: observed ` +
+                  `${this.#postResetCatchupChanges} changes in ` +
+                  `${catchupElapsedMs}ms`,
               );
               return;
             } else {
-              this.#postResetLowWaterPasses++;
-              if (
-                this.#postResetLowWaterPasses <
-                POST_RESET_LOW_WATER_PASSES
-              ) {
+              const changeRate =
+                (this.#postResetCatchupChanges * 1_000) / rateWindowElapsedMs;
+              if (changeRate > POST_RESET_LOW_WATER_MAX_CHANGES_PER_SEC) {
                 lc.debug?.(
-                  `catching up after pipeline reset: low-water pass ` +
-                    `${this.#postResetLowWaterPasses}/${POST_RESET_LOW_WATER_PASSES} ` +
-                    `with ${numChanges} changes at replica@${version}`,
+                  `catching up after pipeline reset: ${changeRate.toFixed(1)} ` +
+                    `changes/s exceeds low-water rate of ` +
+                    `${POST_RESET_LOW_WATER_MAX_CHANGES_PER_SEC} changes/s`,
                 );
+                this.#postResetCatchupChanges = 0;
+                this.#postResetRateWindowStartedAtMs = Date.now();
+                this.#schedulePostResetLowWaterProbe();
                 return;
               }
+              lc.debug?.(
+                `post-reset catchup admitted at ${changeRate.toFixed(1)} ` +
+                  `changes/s`,
+              );
               this.#clearPostResetCatchup();
             }
           }
@@ -831,15 +839,27 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   }
 
   #schedulePostResetRehydrate() {
+    this.#schedulePostResetLowWaterProbe();
     this.#postResetRehydrateTimer = this.#setTimeout(() => {
       this.#postResetRehydrateTimer = 0;
       this.#stateChanges.push({state: 'version-ready'});
     }, POST_RESET_MAX_CATCHUP_MS);
   }
 
+  #schedulePostResetLowWaterProbe() {
+    clearTimeout(this.#postResetLowWaterTimer);
+    this.#postResetLowWaterTimer = this.#setTimeout(() => {
+      this.#postResetLowWaterTimer = 0;
+      this.#stateChanges.push({state: 'version-ready'});
+    }, POST_RESET_LOW_WATER_WINDOW_MS);
+  }
+
   #clearPostResetCatchup() {
-    this.#postResetLowWaterPasses = undefined;
+    this.#postResetCatchupChanges = undefined;
     this.#postResetCatchupStartedAtMs = undefined;
+    this.#postResetRateWindowStartedAtMs = undefined;
+    clearTimeout(this.#postResetLowWaterTimer);
+    this.#postResetLowWaterTimer = 0;
     clearTimeout(this.#postResetRehydrateTimer);
     this.#postResetRehydrateTimer = 0;
   }

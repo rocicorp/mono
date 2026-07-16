@@ -1,4 +1,5 @@
 import {inspect} from 'node:util';
+import {readFile} from 'node:fs/promises';
 import {startSyntheticClients, type SyntheticClient} from './client.ts';
 import {loadConfig} from './config.ts';
 import {
@@ -25,6 +26,7 @@ import {
   writeResult,
   type BenchmarkResult,
   type MetricSample,
+  type RecoveryMeasurement,
 } from './results.ts';
 import {formatDuration, log, warn, sleep} from './util.ts';
 import {FixedRateWriter, type WriterStats} from './writer.ts';
@@ -47,7 +49,7 @@ async function main(): Promise<void> {
 
   try {
     log(
-      `zero-throughput ${config.profile}:${config.model} run ${config.runID}`,
+      `zero-throughput ${config.benchmark} ${config.profile}:${config.model} run ${config.runID}`,
     );
     log(`Results will be written to ${resultOutputPath(config)}`);
 
@@ -101,8 +103,9 @@ async function main(): Promise<void> {
       await Promise.all(clients.map(client => client.close()));
     });
 
+    const phase = config.benchmark === 'recovery' ? 'overload' : 'measurement';
     log(
-      `Initial sync complete. Writing for ${formatDuration(config.durationMs)} at ${config.writeRate} logical writes/s...`,
+      `Initial sync complete. Starting ${phase} writes for ${formatDuration(config.durationMs)} at ${config.writeRate} logical writes/s...`,
     );
     const writer = new FixedRateWriter(sql, config);
     const samples: MetricSample[] = [];
@@ -123,14 +126,30 @@ async function main(): Promise<void> {
     const sampler = setInterval(recordSample, config.sampleIntervalMs);
 
     let writerStats: WriterStats;
+    let recovery: RecoveryMeasurement | undefined;
     try {
       writerStats = await writer.run(config.durationMs);
       recordSample();
+      if (config.benchmark === 'recovery') {
+        log(
+          `Overload complete at seq ${writer.highestCommittedSeq}. Stopping writes and waiting up to ${formatDuration(config.recovery.timeoutMs)} for stable recovery...`,
+        );
+        const recoveryTiming = await waitForRecovery({
+          clients,
+          config,
+          targetSeq: writer.highestCommittedSeq,
+          sampleStartedAtMs,
+          recordSample,
+        });
+        const recoveryEvents = await readRecoveryEvents(zeroCache?.logPath);
+        recovery = {...recoveryTiming, ...recoveryEvents};
+        recordSample();
+      }
     } finally {
       clearInterval(sampler);
     }
 
-    if (config.settleMs > 0) {
+    if (config.benchmark === 'throughput' && config.settleMs > 0) {
       log(`Waiting ${config.settleMs}ms for final client observations...`);
       await sleep(config.settleMs);
       samples.push(
@@ -144,6 +163,7 @@ async function main(): Promise<void> {
       writerStats,
       samples,
       clients,
+      recovery,
     });
     outputPath = await writeResult(config, result);
   } catch (caught) {
@@ -198,6 +218,22 @@ function printSummary(
   log(
     `Achieved write rate: ${summary.achievedWriteRate.toFixed(2)} logical writes/s`,
   );
+  if (summary.recovery !== undefined) {
+    log(
+      `Recovery: ${summary.recovery.recovered ? 'stable' : 'timed out'} after ${formatDuration(summary.recovery.timeToStableRecoveryMs)}`,
+    );
+    log(
+      `Time to first catch-up: ${summary.recovery.timeToFirstCaughtUpMs === undefined ? 'not reached' : formatDuration(summary.recovery.timeToFirstCaughtUpMs)}`,
+    );
+    log(`Overload peak seq lag: ${summary.recovery.overloadPeakSeqLag}`);
+    log(`Final seq lag: ${summary.recovery.finalSeqLag}`);
+    log(
+      `Pipeline resets: ${summary.recovery.pipelineResets?.toString() ?? 'unavailable'}`,
+    );
+    log(
+      `Forced rehydrations: ${summary.recovery.forcedRehydrations?.toString() ?? 'unavailable'}`,
+    );
+  }
   log(
     `Active-query impact rate: ${(summary.writeImpact.affectedActiveClientGroupWriteRatio * 100).toFixed(2)}%`,
   );
@@ -209,6 +245,101 @@ function printSummary(
     log(`failure reasons: ${summary.failureReasons.join('; ')}`);
   }
   log(`details: ${outputPath}`);
+}
+
+async function waitForRecovery(args: {
+  readonly clients: readonly SyntheticClient[];
+  readonly config: ReturnType<typeof loadConfig>;
+  readonly targetSeq: number;
+  readonly sampleStartedAtMs: number;
+  readonly recordSample: () => void;
+}): Promise<RecoveryMeasurement> {
+  const startedAtMs = Date.now();
+  const startedAtElapsedMs = startedAtMs - args.sampleStartedAtMs;
+  const deadlineMs = startedAtMs + args.config.recovery.timeoutMs;
+  let firstCaughtUpAtMs: number | undefined;
+  let stableSinceMs: number | undefined;
+
+  for (;;) {
+    const now = Date.now();
+    const caughtUp = args.clients.every(client => {
+      const stats = client.stats();
+      return stats.connected && client.minObservedSeq() >= args.targetSeq;
+    });
+    if (caughtUp) {
+      firstCaughtUpAtMs ??= now;
+      stableSinceMs ??= now;
+      if (now - stableSinceMs >= args.config.recovery.stableMs) {
+        args.recordSample();
+        return {
+          targetSeq: args.targetSeq,
+          startedAtElapsedMs,
+          firstCaughtUpAtElapsedMs:
+            firstCaughtUpAtMs - args.sampleStartedAtMs,
+          finishedAtElapsedMs: now - args.sampleStartedAtMs,
+          stableMs: args.config.recovery.stableMs,
+          timedOut: false,
+          pipelineResets: undefined,
+          forcedRehydrations: undefined,
+        };
+      }
+    } else {
+      stableSinceMs = undefined;
+    }
+
+    if (now >= deadlineMs) {
+      args.recordSample();
+      return {
+        targetSeq: args.targetSeq,
+        startedAtElapsedMs,
+        firstCaughtUpAtElapsedMs:
+          firstCaughtUpAtMs === undefined
+            ? undefined
+            : firstCaughtUpAtMs - args.sampleStartedAtMs,
+        finishedAtElapsedMs: now - args.sampleStartedAtMs,
+        stableMs: args.config.recovery.stableMs,
+        timedOut: true,
+        pipelineResets: undefined,
+        forcedRehydrations: undefined,
+      };
+    }
+    await sleep(
+      Math.min(args.config.recovery.pollMs, Math.max(1, deadlineMs - now)),
+    );
+  }
+}
+
+async function readRecoveryEvents(
+  logPath: string | undefined,
+): Promise<{
+  readonly pipelineResets: number | undefined;
+  readonly forcedRehydrations: number | undefined;
+}> {
+  if (logPath === undefined) {
+    return {pipelineResets: undefined, forcedRehydrations: undefined};
+  }
+  try {
+    const contents = await readFile(logPath, 'utf8');
+    return {
+      pipelineResets: countOccurrences(contents, 'resetting pipelines:'),
+      forcedRehydrations: countOccurrences(
+        contents,
+        'post-reset catchup timed out',
+      ),
+    };
+  } catch {
+    return {pipelineResets: undefined, forcedRehydrations: undefined};
+  }
+}
+
+function countOccurrences(contents: string, needle: string): number {
+  let count = 0;
+  let offset = 0;
+  while ((offset = contents.indexOf(needle, offset)) !== -1) {
+    count++;
+    offset += needle.length;
+  }
+  return count;
 }
 
 function printProgress(

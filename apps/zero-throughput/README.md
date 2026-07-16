@@ -138,6 +138,45 @@ observe. The result JSON still records the existing global seq-lag fields, but
 realistic pass/fail uses client-visible lag and connection/initial-sync checks;
 write-impact counters report the active-query impact rate.
 
+## Recovery benchmark
+
+Use the recovery benchmark to measure how quickly overloaded ViewSyncers return
+to a stable, caught-up state after ingress stops. Recovery currently requires
+the `hot` model so every logical write is visible to every client group and the
+global sequence lag is meaningful.
+
+```bash
+pnpm --filter zero-throughput start -- \
+  --benchmark recovery \
+  --profile relational \
+  --model hot \
+  --users 50 \
+  --queries-per-user 3 \
+  --rows-per-query 50 \
+  --write-rate 50 \
+  --duration-ms 20000 \
+  --recovery-timeout-ms 60000 \
+  --recovery-stable-ms 2000 \
+  --recovery-min-pipeline-resets 1 \
+  --output results/relational-recovery.json
+```
+
+The benchmark has two phases:
+
+1. **Overload:** write at `writeRate` for `durationMs`, building client-visible
+   backlog and exercising pipeline shedding.
+2. **Recovery:** stop writes and wait until every connected client has observed
+   the overload target sequence continuously for `recoveryStableMs`.
+
+Recovery pass/fail intentionally ignores the steady-state p99 lag SLO. It
+instead requires a configurable overload backlog (`recoveryMinSeqLag`, default
+1), at least `recoveryMinPipelineResets` observed resets (default 1), and stable
+recovery within `recoveryTimeoutMs`. Results include overload and recovery peak
+sequence lag, time to first catch-up, time to stable recovery, final sequence
+lag, pipeline resets, and timeout-forced rehydrations. Set
+`--recovery-min-pipeline-resets 0` when using an externally managed zero-cache
+whose log is unavailable to the harness.
+
 To stream zero-cache logs directly in the terminal:
 
 ```bash
