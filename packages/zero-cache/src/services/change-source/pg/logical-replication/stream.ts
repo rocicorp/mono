@@ -74,10 +74,18 @@ export async function subscribe(
   >`SELECT EXTRACT(EPOCH FROM (setting || unit)::interval) * 1000 
         AS "walSenderTimeoutMs" FROM pg_settings
         WHERE name = 'wal_sender_timeout'`.simple();
-  const manualKeepaliveTimeout = Math.floor(walSenderTimeoutMs * 0.75);
+  const {
+    enabled: livenessEnabled,
+    manualKeepaliveTimeout,
+    inboundTimeoutMs,
+    timerIntervalMs,
+  } = computeLivenessTimings(walSenderTimeoutMs);
   lc.info?.(
-    `wal_sender_timeout: ${walSenderTimeoutMs}ms. ` +
-      `Ensuring manual keepalives at least every ${manualKeepaliveTimeout}ms`,
+    livenessEnabled
+      ? `wal_sender_timeout: ${walSenderTimeoutMs}ms. ` +
+          `Ensuring manual keepalives at least every ${manualKeepaliveTimeout}ms`
+      : `wal_sender_timeout is disabled (0); skipping manual keepalives and ` +
+          `inbound liveness detection.`,
   );
 
   const [readable, writable] = await startReplicationStream(
@@ -95,38 +103,36 @@ export async function subscribe(
     lastAckTime = Date.now();
   }
 
-  // Postgres promises to send a keepalive at roughly wal_sender_timeout / 2.
-  // If we go long enough without receiving anything (data or keepalive), the
-  // inbound half of the connection is silently dead — our outbound acks keep
-  // flowing into the void, neither side errors, and the change-source sits
-  // there forever. Tear down the readable to force a reconnect.
-  //
-  // The threshold is 2x wal_sender_timeout — i.e. two consecutive keepalives
-  // missed — to avoid spurious reconnects from a single delayed keepalive
-  // (PG scheduling jitter under load, our own event-loop stalls, etc.).
-  const inboundTimeoutMs = walSenderTimeoutMs * 2;
+  // Tear down the readable to force a reconnect if the inbound half of the
+  // connection goes silent (our outbound acks keep flowing into the void,
+  // neither side errors, and the change-source would otherwise sit there
+  // forever). See computeLivenessTimings for the derivation of these
+  // thresholds — and why the whole timer is disabled when wal_sender_timeout
+  // is 0.
   let lastReceivedTime = Date.now();
 
-  const livenessTimer = setInterval(() => {
-    const now = Date.now();
-    if (now - lastAckTime > manualKeepaliveTimeout) {
-      sendAck(0n);
-      lc.debug?.(`sent manual keepalive`);
-    }
-    const sinceLastReceived = now - lastReceivedTime;
-    if (sinceLastReceived > inboundTimeoutMs && !readable.destroyed) {
-      lc.warn?.(
-        `no message received from ${db.options.host} in ${sinceLastReceived}ms ` +
-          `(> 2x wal_sender_timeout ${walSenderTimeoutMs}ms). Destroying ` +
-          `replication stream to force reconnect.`,
-      );
-      readable.destroy(
-        new Error(
-          `replication stream inbound timeout after ${sinceLastReceived}ms`,
-        ),
-      );
-    }
-  }, manualKeepaliveTimeout / 5);
+  const livenessTimer = livenessEnabled
+    ? setInterval(() => {
+        const now = Date.now();
+        if (now - lastAckTime > manualKeepaliveTimeout) {
+          sendAck(0n);
+          lc.debug?.(`sent manual keepalive`);
+        }
+        const sinceLastReceived = now - lastReceivedTime;
+        if (sinceLastReceived > inboundTimeoutMs && !readable.destroyed) {
+          lc.warn?.(
+            `no message received from ${db.options.host} in ${sinceLastReceived}ms ` +
+              `(> 2x wal_sender_timeout ${walSenderTimeoutMs}ms). Destroying ` +
+              `replication stream to force reconnect.`,
+          );
+          readable.destroy(
+            new Error(
+              `replication stream inbound timeout after ${sinceLastReceived}ms`,
+            ),
+          );
+        }
+      }, timerIntervalMs)
+    : undefined;
 
   let destroyed = false;
   const typeParsers = await getTypeParsers(db, {returnJsonAsString: true});
@@ -171,6 +177,53 @@ export async function subscribe(
   return {
     messages,
     acks: {push: sendAck},
+  };
+}
+
+/**
+ * Derives the timings for the replication liveness timer from the server's
+ * `wal_sender_timeout` (in milliseconds).
+ *
+ * Postgres treats `wal_sender_timeout = 0` as "disabled": it will neither
+ * terminate an idle wal sender nor emit the periodic keepalives it otherwise
+ * sends at roughly `wal_sender_timeout / 2`. Every timing below is derived from
+ * that interval, so a disabled timeout disables the liveness machinery entirely
+ * (`enabled: false`). Otherwise the derived thresholds would all collapse to 0,
+ * inverting the intended meaning: the inbound watchdog would fire on the very
+ * first tick and destroy the stream, while the timer itself would busy-spin at
+ * a 0ms interval — together producing a continuous reconnect storm.
+ *
+ * https://www.postgresql.org/docs/current/runtime-config-replication.html#GUC-WAL-SENDER-TIMEOUT
+ */
+export function computeLivenessTimings(walSenderTimeoutMs: number): {
+  enabled: boolean;
+  manualKeepaliveTimeout: number;
+  inboundTimeoutMs: number;
+  timerIntervalMs: number;
+} {
+  // Guard with `!(x > 0)` so that 0, negative, and NaN values all disable the
+  // timer rather than producing degenerate (zero / NaN) thresholds.
+  if (!(walSenderTimeoutMs > 0)) {
+    return {
+      enabled: false,
+      manualKeepaliveTimeout: 0,
+      inboundTimeoutMs: 0,
+      timerIntervalMs: 0,
+    };
+  }
+  // Send a manual keepalive if nothing has been sent in the last 75% of the
+  // wal_sender_timeout, so Postgres never times us out under back-pressure.
+  const manualKeepaliveTimeout = Math.floor(walSenderTimeoutMs * 0.75);
+  return {
+    enabled: true,
+    manualKeepaliveTimeout,
+    // Force a reconnect after 2x wal_sender_timeout — i.e. two consecutive
+    // missed keepalives — without any inbound message, to avoid spurious
+    // reconnects from a single delayed keepalive (PG scheduling jitter under
+    // load, our own event-loop stalls, etc.).
+    inboundTimeoutMs: walSenderTimeoutMs * 2,
+    // Poll at 1/5th of the manual keepalive interval.
+    timerIntervalMs: manualKeepaliveTimeout / 5,
   };
 }
 
