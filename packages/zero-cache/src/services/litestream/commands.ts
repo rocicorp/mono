@@ -94,7 +94,19 @@ export async function restoreReplica(
   try {
     for (;;) {
       try {
-        const attempt = await tryRestore(lc, config, replicaConstraints, role);
+        // `consecutiveErrors` is 0 on a fresh attempt and 1 on the retry, so
+        // `consecutiveErrors >= 1` identifies the final attempt of a streak.
+        // tryRestore surfaces litestream's failure output with a different
+        // message on the final attempt (which the log classifier routes to a
+        // paging alert) than on a retriable earlier attempt (routed to a
+        // non-paging warning). See INC-961.
+        const attempt = await tryRestore(
+          lc,
+          config,
+          replicaConstraints,
+          role,
+          consecutiveErrors >= 1,
+        );
         backupURL = attempt.backupURL;
         if (attempt.restored) {
           result = attempt.result;
@@ -215,6 +227,7 @@ async function tryRestore(
   config: ZeroConfig,
   replicaConstraints: ReplicaConstraints | null,
   role: LitestreamRole,
+  isFinalAttempt: boolean,
 ): Promise<RestoreAttempt> {
   let snapshotStatus: SnapshotStatus | undefined;
   if (!replicaConstraints) {
@@ -251,6 +264,13 @@ async function tryRestore(
       multipartConcurrency,
       multipartSize,
     });
+    // Pipe (rather than inherit) litestream's stdout/stderr so that its own
+    // `"level":"ERROR"` output on a failed restore does not go straight to the
+    // pod's stdout — where a log-scraper alert would page on it — before our
+    // code has decided whether the failure is retriable. The captured output is
+    // re-surfaced through `lc` below with a distinct message per attempt, so a
+    // retriable failure is routed to a non-paging warning and only a post-retry
+    // failure pages. See INC-961.
     const proc = spawn(
       litestream,
       [
@@ -261,8 +281,14 @@ async function tryRestore(
         String(parallelism),
         config.replica.file,
       ],
-      {env, stdio: 'inherit', windowsHide: true},
+      {env, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true},
     );
+    let stdout = '';
+    let stderr = '';
+    proc.stdout.setEncoding('utf-8');
+    proc.stderr.setEncoding('utf-8');
+    proc.stdout.on('data', chunk => (stdout += chunk));
+    proc.stderr.on('data', chunk => (stderr += chunk));
     const {promise, resolve, reject} = resolver();
     proc.on('error', reject);
     proc.on('close', (code, signal) => {
@@ -281,11 +307,36 @@ async function tryRestore(
         performance.now() - processStart,
         {...attrs, result: 'success'},
       );
+      // A successful restore does not emit ERROR-level output; forward
+      // litestream's own (minimal, debug-level) restore logging to the pod's
+      // stdout/stderr, matching the previous `stdio: 'inherit'` behavior.
+      if (stdout) {
+        process.stdout.write(stdout);
+      }
+      if (stderr) {
+        process.stderr.write(stderr);
+      }
     } catch (e) {
       litestreamRestoreProcessDuration().recordMs(
         performance.now() - processStart,
         {...attrs, result: 'error'},
       );
+      // litestream logs its restore failure at ERROR. Re-surface that captured
+      // output through our logger with a distinct message per attempt, so the
+      // cloudzero log classifier can route them differently: the retriable
+      // earlier attempt to a non-paging warning, and the post-retry failure to
+      // a paging critical. Both are emitted at ERROR because the log scraper
+      // only ingests error-level lines, and both carry our `worker` context,
+      // distinguishing them from litestream's untagged raw output. See INC-961.
+      const output = (stdout + stderr).trim();
+      if (isFinalAttempt) {
+        lc.error?.(`litestream restore failed after retry`, output || e);
+      } else {
+        lc.error?.(
+          `litestream restore attempt failed, will retry`,
+          output || e,
+        );
+      }
       throw e;
     }
     if (!existsSync(config.replica.file)) {
