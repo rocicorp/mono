@@ -209,7 +209,7 @@ function failureReasonsFor(args: {
   ) {
     reasons.push('at least one query did not complete initial sync');
   }
-  if (args.config.benchmark === 'recovery') {
+  if (args.config.benchmark !== 'throughput') {
     if (args.recovery === undefined) {
       reasons.push('recovery measurements were not recorded');
       return reasons;

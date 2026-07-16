@@ -177,6 +177,57 @@ lag, pipeline resets, and timeout-forced rehydrations. Set
 `--recovery-min-pipeline-resets 0` when using an externally managed zero-cache
 whose log is unavailable to the harness.
 
+## Migration recovery benchmark
+
+The migration benchmark writes an exact number of `feed-append` rows using one
+set-based `INSERT` per transaction, then applies the same stable-recovery check.
+`migrationTotalRows` controls the total migration size, `batchSize` controls
+rows per transaction, and `writeRate` schedules transaction starts in rows per
+second. Transactions remain serialized, so database commit time naturally
+limits the achieved rate.
+
+Compare one atomic 30,000-row transaction:
+
+```bash
+pnpm --filter zero-throughput start -- \
+  --benchmark migration \
+  --profile feed-append \
+  --model hot \
+  --users 50 \
+  --queries-per-user 1 \
+  --rows-per-query 50 \
+  --migration-total-rows 30000 \
+  --batch-size 30000 \
+  --write-rate 30000 \
+  --sample-interval-ms 100 \
+  --recovery-timeout-ms 120000 \
+  --output results/migration-atomic-30k.json
+```
+
+Against a sustained stream of 30 transactions containing 1,000 rows each. At
+30,000 rows/s, transaction starts are scheduled about 33ms apart, inside the
+default post-reset quiet interval:
+
+```bash
+pnpm --filter zero-throughput start -- \
+  --benchmark migration \
+  --profile feed-append \
+  --model hot \
+  --users 50 \
+  --queries-per-user 1 \
+  --rows-per-query 50 \
+  --migration-total-rows 30000 \
+  --batch-size 1000 \
+  --write-rate 30000 \
+  --sample-interval-ms 100 \
+  --recovery-timeout-ms 120000 \
+  --output results/migration-stream-30x1k.json
+```
+
+The benchmark sequence is an application-level row marker, so sequence lag
+represents migrated rows that the slowest client query has not yet observed;
+it is not the number of Zero replica versions behind.
+
 To stream zero-cache logs directly in the terminal:
 
 ```bash

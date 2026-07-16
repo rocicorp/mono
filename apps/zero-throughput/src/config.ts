@@ -12,7 +12,9 @@ const DEFAULT_PG_URL = 'postgresql://user:password@127.0.0.1:6436/postgres';
 const APP_ID_PATTERN = /^[a-z0-9_]+$/;
 
 const options = {
-  benchmark: v.literalUnion('throughput', 'recovery').default('throughput'),
+  benchmark: v
+    .literalUnion('throughput', 'recovery', 'migration')
+    .default('throughput'),
   profile: v
     .literalUnion('feed-append', 'email', 'forum', 'relational')
     .default('feed-append'),
@@ -44,6 +46,10 @@ const options = {
     minPipelineResets: v.number().default(1),
   },
 
+  migration: {
+    totalRows: v.number().default(30_000),
+  },
+
   pg: {
     url: v.string().default(DEFAULT_PG_URL),
     start: v.boolean().default(true),
@@ -67,7 +73,7 @@ const options = {
 
 export type BenchmarkProfile = 'feed-append' | 'email' | 'forum' | 'relational';
 export type BenchmarkModel = 'hot' | 'realistic';
-export type BenchmarkKind = 'throughput' | 'recovery';
+export type BenchmarkKind = 'throughput' | 'recovery' | 'migration';
 
 export type BenchmarkConfig = {
   readonly runID: string;
@@ -97,6 +103,9 @@ export type BenchmarkConfig = {
     readonly pollMs: number;
     readonly minSeqLag: number;
     readonly minPipelineResets: number;
+  };
+  readonly migration: {
+    readonly totalRows: number;
   };
   readonly pg: {
     readonly url: string;
@@ -144,10 +153,16 @@ export function loadConfig(): BenchmarkConfig {
     'recovery.minPipelineResets',
     parsed.recovery.minPipelineResets,
   );
+  assertPositiveInteger('migration.totalRows', parsed.migration.totalRows);
   assertValidAppID(parsed.zero.appID);
-  if (parsed.benchmark === 'recovery' && parsed.model !== 'hot') {
+  if (parsed.benchmark !== 'throughput' && parsed.model !== 'hot') {
     throw new Error(
-      'recovery benchmark currently requires --model hot so global seq lag represents every client group',
+      `${parsed.benchmark} benchmark currently requires --model hot so global seq lag represents every client group`,
+    );
+  }
+  if (parsed.benchmark === 'migration' && parsed.profile !== 'feed-append') {
+    throw new Error(
+      'migration benchmark currently requires --profile feed-append so each logical write produces exactly one migrated row',
     );
   }
 
@@ -174,6 +189,7 @@ export function loadConfig(): BenchmarkConfig {
     reset: parsed.reset,
     cacheURL: parsed.cacheURL ?? `http://127.0.0.1:${parsed.zero.port}`,
     recovery: parsed.recovery,
+    migration: parsed.migration,
     pg: parsed.pg,
     zero: parsed.zero,
   };
