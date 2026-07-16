@@ -382,6 +382,71 @@ describe('replicator/incremental-sync', () => {
     `);
   });
 
+  test('coalesces queued logical transactions into one worker batch', async () => {
+    const issues = new ReplicationMessages({issues: 'issueID'});
+
+    initReplicationState(mainDb, ['zero_data'], '02', {}, false);
+    initDB(
+      mainDb,
+      /*sql*/ `
+      CREATE TABLE issues(
+        issueID INTEGER PRIMARY KEY,
+        _0_version TEXT
+      );
+      `,
+    );
+
+    const processMessagesImpl = worker.processMessages.bind(worker);
+    const workerMayProceed = resolver<void>();
+    const processMessages = vi
+      .spyOn(worker, 'processMessages')
+      .mockImplementation(async messages => {
+        await workerMayProceed.promise;
+        return processMessagesImpl(messages);
+      });
+    const processMessage = vi.spyOn(worker, 'processMessage');
+    syncing = syncer.run();
+    const notifications = syncer.subscribe();
+    const versionReady = notifications[Symbol.asyncIterator]();
+    await versionReady.next();
+    await vi.waitFor(() => expect(subscribeFn).toHaveBeenCalled());
+
+    const caughtUp = versionReady.next();
+    const messages = [
+      ['begin', issues.begin(), {commitWatermark: '06'}],
+      ['data', issues.insert('issues', {issueID: 123})],
+      ['commit', issues.commit(), {watermark: '06'}],
+      ['begin', issues.begin(), {commitWatermark: '07'}],
+      ['data', issues.insert('issues', {issueID: 456})],
+      ['commit', issues.commit(), {watermark: '07'}],
+    ] satisfies Downstream[];
+    const consumed = messages.map(message => downstream.push(message).result);
+
+    // Transport consumption must not wait for the physical commit. Otherwise,
+    // the sender can stop for flow control in the middle of a logical
+    // transaction while the receiver waits for its commit message.
+    await expect(Promise.all(consumed)).resolves.toEqual(
+      messages.map(() => 'consumed'),
+    );
+    expect(mainDb.prepare('SELECT * FROM issues').all()).toEqual([]);
+    workerMayProceed.resolve();
+
+    await expect(caughtUp).resolves.toMatchObject({
+      value: {state: 'version-ready', watermark: '07'},
+    });
+    expect(processMessages).toHaveBeenCalledTimes(1);
+    expect(processMessages).toHaveBeenCalledWith(messages);
+    expect(processMessage).not.toHaveBeenCalled();
+    expect(
+      mainDb
+        .prepare('SELECT issueID, _0_version FROM issues ORDER BY issueID')
+        .all(),
+    ).toEqual([
+      {issueID: 123, _0_version: '06'},
+      {issueID: 456, _0_version: '07'},
+    ]);
+  });
+
   test('replicates schema changes', async () => {
     const issues = new ReplicationMessages({issues: ['issueID', 'bool']});
 

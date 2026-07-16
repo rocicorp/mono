@@ -101,6 +101,69 @@ describe('write-worker', () => {
     expect(state.watermark).toBe('06');
   });
 
+  test('processMessages coalesces logical transactions', async () => {
+    const issues = new ReplicationMessages({issues: ['issueID', 'bool']});
+    const messages: ChangeStreamData[] = [
+      ['begin', issues.begin(), {commitWatermark: '06'}],
+      ['data', issues.insert('issues', {issueID: 123, bool: true})],
+      ['commit', issues.commit(), {watermark: '06'}],
+      ['begin', issues.begin(), {commitWatermark: '07'}],
+      ['data', issues.insert('issues', {issueID: 456, bool: false})],
+      ['commit', issues.commit(), {watermark: '07'}],
+    ];
+
+    expect(await worker.processMessages(messages)).toEqual([
+      {
+        watermark: '06',
+        completedBackfill: undefined,
+        schemaUpdated: false,
+        changeLogUpdated: true,
+      },
+      {
+        watermark: '07',
+        completedBackfill: undefined,
+        schemaUpdated: false,
+        changeLogUpdated: true,
+      },
+    ]);
+
+    expect(
+      mainDb
+        .prepare(
+          'SELECT issueID, bool, _0_version FROM issues ORDER BY issueID',
+        )
+        .all(),
+    ).toEqual([
+      {issueID: 123, bool: 1, _0_version: '06'},
+      {issueID: 456, bool: 0, _0_version: '07'},
+    ]);
+    expect((await worker.getSubscriptionState()).watermark).toBe('07');
+  });
+
+  test('processMessages rolls back the entire physical transaction', async () => {
+    const issues = new ReplicationMessages({issues: ['issueID', 'bool']});
+    const invalid = new ReplicationMessages({missing: 'id'});
+    const messages: ChangeStreamData[] = [
+      ['begin', issues.begin(), {commitWatermark: '06'}],
+      ['data', issues.insert('issues', {issueID: 123, bool: true})],
+      ['commit', issues.commit(), {watermark: '06'}],
+      ['begin', invalid.begin(), {commitWatermark: '07'}],
+      ['data', invalid.insert('missing', {id: 456})],
+      ['commit', invalid.commit(), {watermark: '07'}],
+    ];
+
+    await expect(worker.processMessages(messages)).rejects.toThrow();
+
+    expect(mainDb.prepare('SELECT * FROM issues').all()).toEqual([]);
+    expect(
+      mainDb
+        .prepare(
+          'SELECT stateVersion FROM "_zero.replicationState" WHERE lock = 1',
+        )
+        .get(),
+    ).toEqual({stateVersion: '02'});
+  });
+
   test('abort rolls back pending transaction', async () => {
     const issues = new ReplicationMessages({issues: ['issueID', 'bool']});
 

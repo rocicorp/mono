@@ -1,9 +1,13 @@
 import type {LogContext} from '@rocicorp/logger';
 import {AbortError} from '../../../../shared/src/abort-error.ts';
+import {assert} from '../../../../shared/src/asserts.ts';
 import type {Enum} from '../../../../shared/src/enum.ts';
 import {getOrCreateCounter} from '../../observability/metrics.ts';
 import type {Source} from '../../types/streams.ts';
-import type {DownloadStatus} from '../change-source/protocol/current.ts';
+import type {
+  Change,
+  DownloadStatus,
+} from '../change-source/protocol/current.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
 import {
   errorTypeToReadableName,
@@ -22,6 +26,50 @@ import type {ReplicationReport} from './reporter/report-schema.ts';
 import type {WriteWorkerClient} from './write-worker-client.ts';
 
 type ErrorType = Enum<typeof ErrorType>;
+
+const MAX_COALESCED_TRANSACTIONS = 256;
+const MAX_COALESCED_MESSAGES = 4096;
+
+type PipelinedDownstream = {
+  value: Downstream;
+  consumed: () => void;
+};
+
+type BackfillState = {current: DownloadStatus | undefined};
+
+function queuedMessages(source: Source<Downstream>): number {
+  return (
+    (
+      source as Source<Downstream> & {
+        readonly queued?: number | undefined;
+      }
+    ).queued ?? 0
+  );
+}
+
+function isCoalescibleTag(tag: Change['tag']): boolean {
+  switch (tag) {
+    case 'begin':
+    case 'insert':
+    case 'update':
+    case 'delete':
+    case 'truncate':
+    case 'commit':
+      return true;
+    default:
+      return false;
+  }
+}
+
+function assertTransactionBoundary(
+  transaction: readonly PipelinedDownstream[],
+  boundary: string,
+) {
+  assert(
+    transaction.length === 0,
+    `encountered ${boundary} in the middle of a transaction`,
+  );
+}
 
 /**
  * The {@link IncrementalSyncer} manages a logical replication stream from upstream,
@@ -110,83 +158,10 @@ export class IncrementalSyncer {
           `Replicating from ${watermark}`,
         );
 
-        let backfillStatus: DownloadStatus | undefined;
-
-        for await (const message of downstream) {
-          this.#replicationEvents.add(1);
-          switch (message[0]) {
-            case 'status': {
-              const {lagReport} = message[1];
-              if (lagReport) {
-                const report: ReplicationReport = {
-                  nextSendTimeMs: lagReport.nextSendTimeMs,
-                };
-                if (lagReport.lastTimings) {
-                  report.lastTimings = {
-                    ...lagReport.lastTimings,
-                    replicateTimeMs: Date.now(),
-                  };
-                }
-                this.#reporter.record(report);
-              }
-              break;
-            }
-            case 'error': {
-              // Signal from the replication-manager that the view-syncer must
-              // shut down and restore a new backup from litestream.
-              const {type, message: msg} = message[1];
-              this.stop(
-                lc,
-                // Note: The AbortError indicates a clean / intentional shutdown.
-                new AbortError(
-                  `${errorTypeToReadableName(type as ErrorType)}: ${msg}`,
-                ),
-              );
-              break;
-            }
-            default: {
-              const msg = message[1];
-              if (msg.tag === 'backfill' && msg.status) {
-                const {status} = msg;
-                if (!backfillStatus) {
-                  // Start publishing the status every 3 seconds.
-                  backfillStatus = status;
-                  this.#statusPublisher?.publish(
-                    lc,
-                    'Replicating',
-                    `Backfilling ${msg.relation.name} table`,
-                    3000,
-                    () =>
-                      backfillStatus
-                        ? {
-                            downloadStatus: [
-                              {
-                                ...backfillStatus,
-                                table: msg.relation.name,
-                                columns: [
-                                  ...msg.relation.rowKey.columns,
-                                  ...msg.columns,
-                                ],
-                              },
-                            ],
-                          }
-                        : {},
-                  );
-                }
-                backfillStatus = status; // Update the current status
-              }
-
-              const result = await this.#worker.processMessage(
-                message as ChangeStreamData,
-              );
-
-              this.#handleResult(lc, result);
-              if (result?.completedBackfill) {
-                backfillStatus = undefined;
-              }
-              break;
-            }
-          }
+        if (downstream.pipeline) {
+          await this.#processPipelined(lc, downstream, downstream.pipeline);
+        } else {
+          await this.#processSynchronous(lc, downstream);
         }
         this.#worker.abort();
       } catch (e) {
@@ -200,6 +175,212 @@ export class IncrementalSyncer {
       await this.#state.backoff(lc, err);
     }
     lc.info?.('IncrementalSyncer stopped');
+  }
+
+  async #processSynchronous(lc: LogContext, downstream: Source<Downstream>) {
+    const backfill: BackfillState = {current: undefined};
+    for await (const message of downstream) {
+      this.#replicationEvents.add(1);
+      if (this.#handleControlMessage(lc, message)) {
+        continue;
+      }
+      this.#trackBackfill(lc, message as ChangeStreamData, backfill);
+      const result = await this.#worker.processMessage(
+        message as ChangeStreamData,
+      );
+      this.#handleResult(lc, result);
+      if (result?.completedBackfill) {
+        backfill.current = undefined;
+      }
+    }
+  }
+
+  async #processPipelined(
+    lc: LogContext,
+    downstream: Source<Downstream>,
+    pipeline: AsyncIterable<PipelinedDownstream>,
+  ) {
+    const backfill: BackfillState = {current: undefined};
+    let currentTransaction: PipelinedDownstream[] = [];
+    let currentTransactionCoalescible = true;
+    let batch: PipelinedDownstream[] = [];
+    let batchTransactions = 0;
+
+    const handleResults = (results: readonly CommitResult[]) => {
+      for (const result of results) {
+        this.#handleResult(lc, result);
+        if (result.completedBackfill) {
+          backfill.current = undefined;
+        }
+      }
+    };
+
+    const handleCoalescedResults = (results: readonly CommitResult[]) => {
+      const last = results.at(-1);
+      if (!last) {
+        return;
+      }
+      this.#handleResult(lc, {
+        ...last,
+        schemaUpdated: results.some(result => result.schemaUpdated),
+        changeLogUpdated: results.some(result => result.changeLogUpdated),
+      });
+    };
+
+    const flushBatch = async () => {
+      if (batch.length === 0) {
+        return;
+      }
+      const entries = batch;
+      batch = [];
+      batchTransactions = 0;
+      const results = await this.#worker.processMessages(
+        entries.map(({value}) => value as ChangeStreamData),
+      );
+      handleCoalescedResults(results);
+    };
+
+    const processTransaction = async (entries: PipelinedDownstream[]) => {
+      const results = await this.#worker.processMessages(
+        entries.map(({value}) => value as ChangeStreamData),
+      );
+      handleResults(results);
+    };
+
+    for await (const entry of pipeline) {
+      const {value: message} = entry;
+      this.#replicationEvents.add(1);
+
+      // This acknowledgement is transport flow control: the message has been
+      // copied into this process and can be replayed after a crash from the
+      // durable SQLite watermark. Waiting for the coalesced physical commit can
+      // deadlock when the transport's flow-control window ends mid-transaction.
+      entry.consumed();
+
+      if (message[0] === 'status' || message[0] === 'error') {
+        assertTransactionBoundary(currentTransaction, message[0]);
+        await flushBatch();
+        this.#handleControlMessage(lc, message);
+        continue;
+      }
+
+      this.#trackBackfill(lc, message as ChangeStreamData, backfill);
+      currentTransaction.push(entry);
+      const tag = message[1].tag;
+      if (!isCoalescibleTag(tag)) {
+        currentTransactionCoalescible = false;
+      }
+
+      if (tag === 'rollback') {
+        await flushBatch();
+        // Rollbacks cannot share an outer transaction because rolling one back
+        // would also discard earlier logical commits in the group.
+        for (const txEntry of currentTransaction) {
+          const result = await this.#worker.processMessage(
+            txEntry.value as ChangeStreamData,
+          );
+          this.#handleResult(lc, result);
+        }
+        currentTransaction = [];
+        currentTransactionCoalescible = true;
+        continue;
+      }
+
+      if (tag !== 'commit') {
+        continue;
+      }
+
+      if (!currentTransactionCoalescible) {
+        await flushBatch();
+        await processTransaction(currentTransaction);
+      } else {
+        batch.push(...currentTransaction);
+        batchTransactions++;
+      }
+      currentTransaction = [];
+      currentTransactionCoalescible = true;
+
+      if (
+        batchTransactions >= MAX_COALESCED_TRANSACTIONS ||
+        batch.length >= MAX_COALESCED_MESSAGES ||
+        queuedMessages(downstream) === 0
+      ) {
+        await flushBatch();
+      }
+    }
+
+    assertTransactionBoundary(currentTransaction, 'end of stream');
+    await flushBatch();
+  }
+
+  #handleControlMessage(lc: LogContext, message: Downstream): boolean {
+    switch (message[0]) {
+      case 'status': {
+        const {lagReport} = message[1];
+        if (lagReport) {
+          const report: ReplicationReport = {
+            nextSendTimeMs: lagReport.nextSendTimeMs,
+          };
+          if (lagReport.lastTimings) {
+            report.lastTimings = {
+              ...lagReport.lastTimings,
+              replicateTimeMs: Date.now(),
+            };
+          }
+          this.#reporter.record(report);
+        }
+        return true;
+      }
+      case 'error': {
+        // Signal from the replication-manager that the view-syncer must shut
+        // down and restore a new backup from litestream.
+        const {type, message: msg} = message[1];
+        this.stop(
+          lc,
+          // AbortError indicates a clean / intentional shutdown.
+          new AbortError(
+            `${errorTypeToReadableName(type as ErrorType)}: ${msg}`,
+          ),
+        );
+        return true;
+      }
+      default:
+        return false;
+    }
+  }
+
+  #trackBackfill(
+    lc: LogContext,
+    message: ChangeStreamData,
+    state: BackfillState,
+  ): void {
+    const msg = message[1];
+    if (msg.tag !== 'backfill' || !msg.status) {
+      return;
+    }
+    const {status} = msg;
+    if (!state.current) {
+      // Start publishing the status every 3 seconds.
+      this.#statusPublisher?.publish(
+        lc,
+        'Replicating',
+        `Backfilling ${msg.relation.name} table`,
+        3000,
+        () =>
+          state.current
+            ? {
+                downloadStatus: [
+                  {
+                    ...state.current,
+                    table: msg.relation.name,
+                    columns: [...msg.relation.rowKey.columns, ...msg.columns],
+                  },
+                ],
+              }
+            : {},
+      );
+    }
+    state.current = status;
   }
 
   #handleResult(lc: LogContext, result: CommitResult | null) {

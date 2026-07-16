@@ -99,6 +99,13 @@ export class ChangeProcessor {
 
   #currentTx: TransactionProcessor | null = null;
 
+  // A positive value indicates that processMessages() is grouping multiple
+  // logical upstream transactions into one physical SQLite transaction. Each
+  // logical commit still updates its row versions and change-log entries, but
+  // only the final commit closes the SQLite transaction.
+  #coalescedCommitsRemaining = 0;
+  #physicalTransactionOpen = false;
+
   #failure: Error | undefined;
 
   constructor(
@@ -117,7 +124,14 @@ export class ChangeProcessor {
     if (!this.#failure) {
       let failureError = err;
       try {
-        this.#currentTx?.abort(lc); // roll back any pending transaction.
+        if (this.#currentTx) {
+          this.#currentTx.abort(lc); // roll back any pending transaction.
+        } else if (this.#physicalTransactionOpen) {
+          // A coalesced batch can fail between logical transactions, after the
+          // previous TransactionProcessor has finished but before the next one
+          // has been installed.
+          this.#db.rollback();
+        }
       } catch (rollbackError) {
         const combinedError = new Error(
           `Message processing failed and rollback also failed: operation error = ${String(err)}; rollback error = ${String(rollbackError)}`,
@@ -125,6 +139,8 @@ export class ChangeProcessor {
         combinedError.cause = err;
         failureError = combinedError;
       }
+      this.#currentTx = null;
+      this.#physicalTransactionOpen = false;
 
       this.#failure = ensureError(failureError);
 
@@ -164,6 +180,54 @@ export class ChangeProcessor {
     return null;
   }
 
+  /**
+   * Applies one or more complete, committed upstream transactions in a single
+   * physical SQLite transaction. CommitResults are returned for every logical
+   * transaction, but none are observable outside the worker until the final
+   * physical commit succeeds.
+   */
+  processMessages(
+    lc: LogContext,
+    downstream: readonly ChangeStreamData[],
+  ): CommitResult[] {
+    assert(
+      this.#currentTx === null && !this.#physicalTransactionOpen,
+      'cannot coalesce while a transaction is in progress',
+    );
+    const commits = downstream.reduce(
+      (count, [, message]) => count + (message.tag === 'commit' ? 1 : 0),
+      0,
+    );
+    assert(commits > 0, 'coalesced batch must contain a committed transaction');
+
+    this.#coalescedCommitsRemaining = commits;
+    const results: CommitResult[] = [];
+    try {
+      for (const message of downstream) {
+        const result = this.processMessage(lc, message);
+        if (result) {
+          results.push(result);
+        }
+        if (this.#failure) {
+          // #failService has already propagated the original processing error
+          // to the worker client and rolled back the physical transaction.
+          return results;
+        }
+      }
+      assert(
+        this.#currentTx === null && !this.#physicalTransactionOpen,
+        'coalesced batch ended with an incomplete transaction',
+      );
+      assert(
+        this.#coalescedCommitsRemaining === 0,
+        'coalesced batch did not process every commit',
+      );
+      return results;
+    } finally {
+      this.#coalescedCommitsRemaining = 0;
+    }
+  }
+
   #beginTransaction(
     lc: LogContext,
     commitVersion: string,
@@ -180,7 +244,8 @@ export class ChangeProcessor {
     // an unknown deadlock situation, manual intervention will be necessary.
     for (let i = 0; ; i++) {
       try {
-        return new TransactionProcessor(
+        const beginPhysicalTransaction = !this.#physicalTransactionOpen;
+        const tx = new TransactionProcessor(
           lc,
           this.#db,
           this.#mode,
@@ -189,7 +254,12 @@ export class ChangeProcessor {
           this.#tableSpecs,
           commitVersion,
           jsonFormat,
+          beginPhysicalTransaction,
         );
+        if (this.#mode !== 'initial-sync') {
+          this.#physicalTransactionOpen = true;
+        }
+        return tx;
       } catch (e) {
         if (e instanceof SqliteError && e.code === 'SQLITE_BUSY') {
           lc.warn?.(
@@ -236,12 +306,25 @@ export class ChangeProcessor {
       this.#currentTx = null;
 
       assert(watermark, 'watermark is required for commit messages');
-      return tx.processCommit(msg, watermark);
+      const commitPhysicalTransaction = this.#coalescedCommitsRemaining <= 1;
+      const result = tx.processCommit(
+        msg,
+        watermark,
+        commitPhysicalTransaction,
+      );
+      if (this.#coalescedCommitsRemaining > 0) {
+        this.#coalescedCommitsRemaining--;
+      }
+      if (commitPhysicalTransaction && this.#mode !== 'initial-sync') {
+        this.#physicalTransactionOpen = false;
+      }
+      return result;
     }
 
     if (msg.tag === 'rollback') {
       this.#currentTx?.abort(lc);
       this.#currentTx = null;
+      this.#physicalTransactionOpen = false;
       return null;
     }
 
@@ -345,6 +428,7 @@ class TransactionProcessor {
     tableSpecs: Map<string, LiteTableSpecWithReplicationStatus>,
     commitVersion: LexiVersion,
     jsonFormat: JSONFormat,
+    beginPhysicalTransaction: boolean,
   ) {
     this.#startMs = Date.now();
     this.#mode = mode;
@@ -359,14 +443,18 @@ class TransactionProcessor {
         //
         // This TransactionProcessor is the only logic that will actually
         // `COMMIT` any transactions to the replica.
-        db.beginConcurrent();
+        if (beginPhysicalTransaction) {
+          db.beginConcurrent();
+        }
         break;
       case 'backup':
         // For the backup-replicator (i.e. replication-manager), there are no View Syncers
         // and thus BEGIN CONCURRENT is not necessary. In fact, BEGIN CONCURRENT can cause
         // deadlocks with forced wal-checkpoints (which `litestream replicate` performs),
         // so it is important to use vanilla transactions in this configuration.
-        db.beginImmediate();
+        if (beginPhysicalTransaction) {
+          db.beginImmediate();
+        }
         break;
       case 'initial-sync':
         // When the ChangeProcessor is used for initial-sync, the calling code
@@ -912,7 +1000,11 @@ class TransactionProcessor {
     // no backfills are in progress).
   }
 
-  processCommit(commit: MessageCommit, watermark: string): CommitResult {
+  processCommit(
+    commit: MessageCommit,
+    watermark: string,
+    commitPhysicalTransaction = true,
+  ): CommitResult {
     if (watermark !== this.#version) {
       throw new Error(
         `'commit' version ${watermark} does not match 'begin' version ${
@@ -930,7 +1022,7 @@ class TransactionProcessor {
       );
     }
 
-    if (this.#mode !== 'initial-sync') {
+    if (this.#mode !== 'initial-sync' && commitPhysicalTransaction) {
       this.#db.commit();
     }
 
