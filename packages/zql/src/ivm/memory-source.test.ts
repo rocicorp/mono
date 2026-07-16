@@ -31,6 +31,7 @@ import {
   makeSourceChangeAdd,
   makeSourceChangeEdit,
   makeSourceChangeRemove,
+  type SourceInput,
 } from './source.ts';
 const lc = createSilentLogContext();
 
@@ -241,6 +242,438 @@ test('fetch during push edit change', () => {
       },
     ]
   `);
+});
+
+describe('fetch with req.filter', () => {
+  test('non-PK filter returns only matching rows', () => {
+    const ms = createSource(
+      lc,
+      testLogConfig,
+      'table',
+      {a: {type: 'string'}, b: {type: 'string'}},
+      ['a'],
+    );
+    consume(ms.push(makeSourceChangeAdd({a: 'a1', b: 'x'})));
+    consume(ms.push(makeSourceChangeAdd({a: 'a2', b: 'y'})));
+    consume(ms.push(makeSourceChangeAdd({a: 'a3', b: 'x'})));
+
+    const conn = ms.connect([['a', 'asc']]);
+    const rows = [
+      ...conn.fetch({
+        filter: {
+          type: 'simple',
+          op: '=',
+          left: {type: 'column', name: 'b'},
+          right: {type: 'literal', value: 'x'},
+        },
+      }),
+    ].filter(n => n !== 'yield');
+
+    expect(rows.map(n => n.row)).toEqual([
+      {a: 'a1', b: 'x'},
+      {a: 'a3', b: 'x'},
+    ]);
+    conn.destroy();
+  });
+
+  test('PK-equality filter drives indexed PK lookup', () => {
+    const ms = createSource(
+      lc,
+      testLogConfig,
+      'table',
+      {a: {type: 'string'}, b: {type: 'string'}},
+      ['a'],
+    );
+    for (let i = 0; i < 100; i++) {
+      consume(ms.push(makeSourceChangeAdd({a: `id-${i}`, b: `val-${i}`})));
+    }
+
+    const conn = ms.connect([['a', 'asc']]);
+    const rows = [
+      ...conn.fetch({
+        filter: {
+          type: 'simple',
+          op: '=',
+          left: {type: 'column', name: 'a'},
+          right: {type: 'literal', value: 'id-42'},
+        },
+      }),
+    ].filter(n => n !== 'yield');
+
+    expect(rows.map(n => n.row)).toEqual([{a: 'id-42', b: 'val-42'}]);
+    conn.destroy();
+  });
+
+  test('req.filter is ANDed with connection-time filter', () => {
+    const ms = createSource(
+      lc,
+      testLogConfig,
+      'table',
+      {
+        a: {type: 'string'},
+        b: {type: 'string'},
+        c: {type: 'string'},
+      },
+      ['a'],
+    );
+    consume(ms.push(makeSourceChangeAdd({a: '1', b: 'x', c: 'p'})));
+    consume(ms.push(makeSourceChangeAdd({a: '2', b: 'x', c: 'q'})));
+    consume(ms.push(makeSourceChangeAdd({a: '3', b: 'y', c: 'p'})));
+
+    const conn = ms.connect([['a', 'asc']], {
+      type: 'simple',
+      op: '=',
+      left: {type: 'column', name: 'b'},
+      right: {type: 'literal', value: 'x'},
+    });
+
+    const rows = [
+      ...conn.fetch({
+        filter: {
+          type: 'simple',
+          op: '=',
+          left: {type: 'column', name: 'c'},
+          right: {type: 'literal', value: 'p'},
+        },
+      }),
+    ].filter(n => n !== 'yield');
+
+    expect(rows.map(n => n.row)).toEqual([{a: '1', b: 'x', c: 'p'}]);
+    conn.destroy();
+  });
+
+  test('req.filter applies when fetching in reverse', () => {
+    const ms = createSource(
+      lc,
+      testLogConfig,
+      'table',
+      {a: {type: 'string'}, b: {type: 'string'}},
+      ['a'],
+    );
+    consume(ms.push(makeSourceChangeAdd({a: 'a1', b: 'x'})));
+    consume(ms.push(makeSourceChangeAdd({a: 'a2', b: 'y'})));
+    consume(ms.push(makeSourceChangeAdd({a: 'a3', b: 'x'})));
+    consume(ms.push(makeSourceChangeAdd({a: 'a4', b: 'y'})));
+    consume(ms.push(makeSourceChangeAdd({a: 'a5', b: 'x'})));
+
+    const conn = ms.connect([['a', 'asc']]);
+    const rows = [
+      ...conn.fetch({
+        reverse: true,
+        filter: {
+          type: 'simple',
+          op: '=',
+          left: {type: 'column', name: 'b'},
+          right: {type: 'literal', value: 'x'},
+        },
+      }),
+    ].filter(n => n !== 'yield');
+
+    expect(rows.map(n => n.row)).toEqual([
+      {a: 'a5', b: 'x'},
+      {a: 'a3', b: 'x'},
+      {a: 'a1', b: 'x'},
+    ]);
+    conn.destroy();
+  });
+
+  test('req.filter applies when fetching with start', () => {
+    const ms = createSource(
+      lc,
+      testLogConfig,
+      'table',
+      {a: {type: 'string'}, b: {type: 'string'}},
+      ['a'],
+    );
+    consume(ms.push(makeSourceChangeAdd({a: 'a1', b: 'x'})));
+    consume(ms.push(makeSourceChangeAdd({a: 'a2', b: 'y'})));
+    consume(ms.push(makeSourceChangeAdd({a: 'a3', b: 'x'})));
+    consume(ms.push(makeSourceChangeAdd({a: 'a4', b: 'y'})));
+    consume(ms.push(makeSourceChangeAdd({a: 'a5', b: 'x'})));
+
+    const conn = ms.connect([['a', 'asc']]);
+    const rows = [
+      ...conn.fetch({
+        start: {row: {a: 'a2', b: 'y'}, basis: 'after'},
+        filter: {
+          type: 'simple',
+          op: '=',
+          left: {type: 'column', name: 'b'},
+          right: {type: 'literal', value: 'x'},
+        },
+      }),
+    ].filter(n => n !== 'yield');
+
+    expect(rows.map(n => n.row)).toEqual([
+      {a: 'a3', b: 'x'},
+      {a: 'a5', b: 'x'},
+    ]);
+    conn.destroy();
+  });
+
+  test('req.filter applies along with multiConstraints', () => {
+    // FlippedJoin drives parent fetches with multiConstraints. The filter
+    // pushed from a FilterStart upstream must AND with the IN-list and
+    // narrow the result further. Regression: if `#fetchMulti` ever stops
+    // spreading `req` into its recursive `#fetch` call, `filter` would
+    // silently be dropped on this path.
+    const ms = createSource(
+      lc,
+      testLogConfig,
+      'table',
+      {a: {type: 'string'}, b: {type: 'string'}},
+      ['a'],
+    );
+    consume(ms.push(makeSourceChangeAdd({a: 'a1', b: 'x'})));
+    consume(ms.push(makeSourceChangeAdd({a: 'a2', b: 'y'})));
+    consume(ms.push(makeSourceChangeAdd({a: 'a3', b: 'x'})));
+    consume(ms.push(makeSourceChangeAdd({a: 'a4', b: 'x'})));
+
+    const conn = ms.connect([['a', 'asc']]);
+    const rows = [
+      ...conn.fetch({
+        multiConstraints: [[{a: 'a1'}, {a: 'a2'}, {a: 'a3'}]],
+        filter: {
+          type: 'simple',
+          op: '=',
+          left: {type: 'column', name: 'b'},
+          right: {type: 'literal', value: 'x'},
+        },
+      }),
+    ].filter(n => n !== 'yield');
+
+    // a1 (IN-list ✓, b=x ✓), a2 (IN-list ✓, b=y ✗), a3 (IN-list ✓, b=x ✓),
+    // a4 (IN-list ✗) → expect [a1, a3].
+    expect(rows.map(n => n.row)).toEqual([
+      {a: 'a1', b: 'x'},
+      {a: 'a3', b: 'x'},
+    ]);
+    conn.destroy();
+  });
+});
+
+describe('fetch with req.filter during push (overlay)', () => {
+  // Filter on `b` so each test can vary `b` to flip the matching status of
+  // overlay rows independently of the primary key `a`.
+  const bEqX = {
+    type: 'simple',
+    op: '=',
+    left: {type: 'column', name: 'b'},
+    right: {type: 'literal', value: 'x'},
+  } as const;
+
+  // Wires a Catch-like output that, on each push, fetches the connection
+  // with `bEqX` as req.filter. The fetch runs *while the overlay is set*,
+  // exercising the overlay × req.filter interaction.
+  //
+  // This runs against both MemorySource and TableSource — the zqlite-zql-test
+  // package re-runs this file with a TableSource-backed `createSource`.
+  function captureFetchDuringPush(conn: SourceInput, drive: () => void): Row[] {
+    let captured: (Node | 'yield')[] = [];
+    conn.setOutput({
+      push(_change: Change) {
+        captured = [...conn.fetch({filter: bEqX})];
+        return emptyArray;
+      },
+    });
+    drive();
+    return captured.filter((n): n is Node => n !== 'yield').map(n => n.row);
+  }
+
+  function makeSource() {
+    return createSource(
+      lc,
+      testLogConfig,
+      'table',
+      {a: {type: 'string'}, b: {type: 'string'}, c: {type: 'string'}},
+      ['a'],
+    );
+  }
+
+  test('ADD overlay matching req.filter is visible to in-flight fetch', () => {
+    const ms = makeSource();
+    // Seed with a non-matching row so the overlay row is the only match.
+    consume(ms.push(makeSourceChangeAdd({a: 'a1', b: 'y', c: 'seed'})));
+    const conn = ms.connect([['a', 'asc']]);
+
+    const rows = captureFetchDuringPush(conn, () =>
+      consume(ms.push(makeSourceChangeAdd({a: 'a2', b: 'x', c: 'overlay'}))),
+    );
+
+    expect(rows).toEqual([{a: 'a2', b: 'x', c: 'overlay'}]);
+    conn.destroy();
+  });
+
+  test('ADD overlay NOT matching req.filter is invisible to in-flight fetch', () => {
+    // Regression: without filtering the overlay's add via req.filter, the
+    // non-matching add would leak into the result when conn has no filter.
+    const ms = makeSource();
+    consume(ms.push(makeSourceChangeAdd({a: 'a1', b: 'x', c: 'seed'})));
+    const conn = ms.connect([['a', 'asc']]);
+
+    const rows = captureFetchDuringPush(conn, () =>
+      consume(ms.push(makeSourceChangeAdd({a: 'a2', b: 'y', c: 'overlay'}))),
+    );
+
+    expect(rows).toEqual([{a: 'a1', b: 'x', c: 'seed'}]);
+    conn.destroy();
+  });
+
+  test('REMOVE overlay matching req.filter suppresses the row', () => {
+    const ms = makeSource();
+    consume(ms.push(makeSourceChangeAdd({a: 'a1', b: 'x', c: 'keep'})));
+    consume(ms.push(makeSourceChangeAdd({a: 'a2', b: 'x', c: 'drop'})));
+    const conn = ms.connect([['a', 'asc']]);
+
+    const rows = captureFetchDuringPush(conn, () =>
+      consume(ms.push(makeSourceChangeRemove({a: 'a2', b: 'x', c: 'drop'}))),
+    );
+
+    expect(rows).toEqual([{a: 'a1', b: 'x', c: 'keep'}]);
+    conn.destroy();
+  });
+
+  test('REMOVE overlay NOT matching req.filter is a no-op for filtered view', () => {
+    const ms = makeSource();
+    consume(ms.push(makeSourceChangeAdd({a: 'a1', b: 'x', c: 'keep'})));
+    consume(ms.push(makeSourceChangeAdd({a: 'a2', b: 'y', c: 'drop'})));
+    const conn = ms.connect([['a', 'asc']]);
+
+    const rows = captureFetchDuringPush(conn, () =>
+      consume(ms.push(makeSourceChangeRemove({a: 'a2', b: 'y', c: 'drop'}))),
+    );
+
+    expect(rows).toEqual([{a: 'a1', b: 'x', c: 'keep'}]);
+    conn.destroy();
+  });
+
+  test('EDIT overlay where both old and new match: shows the new row', () => {
+    const ms = makeSource();
+    consume(ms.push(makeSourceChangeAdd({a: 'a1', b: 'x', c: 'old'})));
+    const conn = ms.connect([['a', 'asc']]);
+
+    const rows = captureFetchDuringPush(conn, () =>
+      consume(
+        ms.push(
+          makeSourceChangeEdit(
+            {a: 'a1', b: 'x', c: 'new'},
+            {a: 'a1', b: 'x', c: 'old'},
+          ),
+        ),
+      ),
+    );
+
+    expect(rows).toEqual([{a: 'a1', b: 'x', c: 'new'}]);
+    conn.destroy();
+  });
+
+  test('EDIT overlay where old matches but new does not: row disappears', () => {
+    // Regression: in the in-flight view the BTreeSet still holds the old
+    // row. The overlay's remove suppresses it, and the add (now
+    // non-matching) must be dropped — otherwise the filtered view would
+    // briefly contain a row that does not satisfy req.filter.
+    const ms = makeSource();
+    consume(ms.push(makeSourceChangeAdd({a: 'a1', b: 'x', c: 'old'})));
+    const conn = ms.connect([['a', 'asc']]);
+
+    const rows = captureFetchDuringPush(conn, () =>
+      consume(
+        ms.push(
+          makeSourceChangeEdit(
+            {a: 'a1', b: 'y', c: 'new'},
+            {a: 'a1', b: 'x', c: 'old'},
+          ),
+        ),
+      ),
+    );
+
+    expect(rows).toEqual([]);
+    conn.destroy();
+  });
+
+  test('EDIT overlay where new matches but old did not: row appears', () => {
+    const ms = makeSource();
+    consume(ms.push(makeSourceChangeAdd({a: 'a1', b: 'y', c: 'old'})));
+    const conn = ms.connect([['a', 'asc']]);
+
+    const rows = captureFetchDuringPush(conn, () =>
+      consume(
+        ms.push(
+          makeSourceChangeEdit(
+            {a: 'a1', b: 'x', c: 'new'},
+            {a: 'a1', b: 'y', c: 'old'},
+          ),
+        ),
+      ),
+    );
+
+    expect(rows).toEqual([{a: 'a1', b: 'x', c: 'new'}]);
+    conn.destroy();
+  });
+
+  test('EDIT overlay where neither old nor new match: no-op for filtered view', () => {
+    // Regression: BTreeSet contains a separate matching row plus the row
+    // being edited (non-matching → non-matching). Without filtering the
+    // remove overlay via req.filter, the unrelated remove suppression
+    // mechanics still need to produce a correct filtered view.
+    const ms = makeSource();
+    consume(ms.push(makeSourceChangeAdd({a: 'a1', b: 'x', c: 'keep'})));
+    consume(ms.push(makeSourceChangeAdd({a: 'a2', b: 'y', c: 'old'})));
+    const conn = ms.connect([['a', 'asc']]);
+
+    const rows = captureFetchDuringPush(conn, () =>
+      consume(
+        ms.push(
+          makeSourceChangeEdit(
+            {a: 'a2', b: 'z', c: 'new'},
+            {a: 'a2', b: 'y', c: 'old'},
+          ),
+        ),
+      ),
+    );
+
+    expect(rows).toEqual([{a: 'a1', b: 'x', c: 'keep'}]);
+    conn.destroy();
+  });
+
+  // Unordered (`connect(undefined, …)`) — used in production by non-flipped
+  // EXISTS children via the `useCap` path in builder.ts. MemorySource still
+  // sorts internally by PK, but TableSource takes a separate code path
+  // (`generateWithOverlayUnordered`) that's only exercised when sort is
+  // omitted. These run via the zqlite-zql-test setup, locking in the
+  // overlay × req.filter contract on that path too.
+  test('unordered: ADD overlay NOT matching req.filter is invisible', () => {
+    const ms = makeSource();
+    consume(ms.push(makeSourceChangeAdd({a: 'a1', b: 'x', c: 'seed'})));
+    const conn = ms.connect(undefined);
+
+    const rows = captureFetchDuringPush(conn, () =>
+      consume(ms.push(makeSourceChangeAdd({a: 'a2', b: 'y', c: 'overlay'}))),
+    );
+
+    expect(rows).toEqual([{a: 'a1', b: 'x', c: 'seed'}]);
+    conn.destroy();
+  });
+
+  test('unordered: EDIT overlay where old matches but new does not: row disappears', () => {
+    const ms = makeSource();
+    consume(ms.push(makeSourceChangeAdd({a: 'a1', b: 'x', c: 'old'})));
+    const conn = ms.connect(undefined);
+
+    const rows = captureFetchDuringPush(conn, () =>
+      consume(
+        ms.push(
+          makeSourceChangeEdit(
+            {a: 'a1', b: 'y', c: 'new'},
+            {a: 'a1', b: 'x', c: 'old'},
+          ),
+        ),
+      ),
+    );
+
+    expect(rows).toEqual([]);
+    conn.destroy();
+  });
 });
 
 describe('generateWithOverlayInner', () => {
