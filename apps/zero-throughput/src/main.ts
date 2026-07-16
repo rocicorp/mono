@@ -68,7 +68,16 @@ async function main(): Promise<void> {
 
     log('Waiting for PostgreSQL...');
     await waitForPostgres(config.pg.url, config.pg.readyTimeoutMs);
-    const sql = connectBenchmarkDB(config.pg.url);
+    const sql = connectBenchmarkDB(config.pg.url, {
+      maxConnections:
+        config.benchmark === 'migration'
+          ? config.migration.concurrency
+          : undefined,
+      synchronousCommit:
+        config.benchmark === 'migration'
+          ? config.migration.synchronousCommit
+          : undefined,
+    });
     cleanup.push(() => sql.end());
 
     if (config.reset) {
@@ -111,7 +120,7 @@ async function main(): Promise<void> {
     const recoveryBenchmark = config.benchmark !== 'throughput';
     if (config.benchmark === 'migration') {
       log(
-        `Initial sync complete. Migrating ${config.migration.totalRows} rows in transactions of up to ${config.batchSize} rows at ${config.writeRate} rows/s...`,
+        `Initial sync complete. Migrating ${config.migration.totalRows} rows in transactions of up to ${config.batchSize} rows at ${config.writeRate} rows/s with ${config.migration.concurrency} writer(s) and synchronous_commit=${config.migration.synchronousCommit ? 'on' : 'off'}...`,
       );
     } else {
       const phase = recoveryBenchmark ? 'overload' : 'measurement';

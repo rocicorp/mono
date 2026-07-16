@@ -48,6 +48,8 @@ const options = {
 
   migration: {
     totalRows: v.number().default(30_000),
+    concurrency: v.number().default(1),
+    synchronousCommit: v.boolean().default(true),
   },
 
   pg: {
@@ -106,6 +108,8 @@ export type BenchmarkConfig = {
   };
   readonly migration: {
     readonly totalRows: number;
+    readonly concurrency: number;
+    readonly synchronousCommit: boolean;
   };
   readonly pg: {
     readonly url: string;
@@ -154,6 +158,7 @@ export function loadConfig(): BenchmarkConfig {
     parsed.recovery.minPipelineResets,
   );
   assertPositiveInteger('migration.totalRows', parsed.migration.totalRows);
+  assertPositiveInteger('migration.concurrency', parsed.migration.concurrency);
   assertValidAppID(parsed.zero.appID);
   if (parsed.benchmark !== 'throughput' && parsed.model !== 'hot') {
     throw new Error(

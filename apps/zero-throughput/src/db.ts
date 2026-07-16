@@ -37,12 +37,28 @@ import {
 
 export type BenchmarkDB = postgres.Sql;
 
-export function connectBenchmarkDB(url: string): BenchmarkDB {
+export function connectBenchmarkDB(
+  url: string,
+  options: {
+    readonly maxConnections?: number | undefined;
+    readonly synchronousCommit?: boolean | undefined;
+  } = {},
+): BenchmarkDB {
   return postgres(url, {
     idle_timeout: 0,
     connect_timeout: 30,
     max_lifetime: null,
     onnotice: () => undefined,
+    ...(options.maxConnections === undefined
+      ? {}
+      : {max: options.maxConnections}),
+    ...(options.synchronousCommit === undefined
+      ? {}
+      : {
+          connection: {
+            synchronous_commit: options.synchronousCommit ? 'on' : 'off',
+          },
+        }),
   });
 }
 

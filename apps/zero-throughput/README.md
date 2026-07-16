@@ -183,8 +183,9 @@ The migration benchmark writes an exact number of `feed-append` rows using one
 set-based `INSERT` per transaction, then applies the same stable-recovery check.
 `migrationTotalRows` controls the total migration size, `batchSize` controls
 rows per transaction, and `writeRate` schedules transaction starts in rows per
-second. Transactions remain serialized, so database commit time naturally
-limits the achieved rate.
+second. `migrationConcurrency` controls the number of in-flight transactions
+and the benchmark PostgreSQL connection-pool size. `migrationSynchronousCommit`
+defaults to `true`; set it to `false` only to measure a non-durable upper bound.
 
 Compare one atomic 30,000-row transaction:
 
@@ -197,6 +198,7 @@ pnpm --filter zero-throughput start -- \
   --queries-per-user 1 \
   --rows-per-query 50 \
   --migration-total-rows 30000 \
+  --migration-concurrency 1 \
   --batch-size 30000 \
   --write-rate 30000 \
   --sample-interval-ms 100 \
@@ -217,6 +219,7 @@ pnpm --filter zero-throughput start -- \
   --queries-per-user 1 \
   --rows-per-query 50 \
   --migration-total-rows 30000 \
+  --migration-concurrency 1 \
   --batch-size 1000 \
   --write-rate 30000 \
   --sample-interval-ms 100 \
@@ -227,6 +230,13 @@ pnpm --filter zero-throughput start -- \
 The benchmark sequence is an application-level row marker, so sequence lag
 represents migrated rows that the slowest client query has not yet observed;
 it is not the number of Zero replica versions behind.
+
+For a concurrent, non-durable ceiling run, add for example:
+
+```bash
+  --migration-concurrency 10 \
+  --migration-synchronous-commit=false
+```
 
 To stream zero-cache logs directly in the terminal:
 
