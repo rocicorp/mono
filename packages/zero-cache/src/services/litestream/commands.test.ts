@@ -1,3 +1,4 @@
+import * as childProcess from 'node:child_process';
 import {existsSync, mkdtempSync, statSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
@@ -17,6 +18,14 @@ import {
   restoreReplica,
 } from './commands.ts';
 import * as litestreamMetrics from './metrics.ts';
+
+// Wrap (don't replace) node:child_process.spawn so tests can assert the args it
+// was called with while it still spawns the fake litestream executable. Node's
+// built-in module exports are non-configurable, so vi.spyOn cannot be used here.
+vi.mock('node:child_process', async importOriginal => {
+  const actual = await importOriginal<typeof childProcess>();
+  return {...actual, spawn: vi.fn(actual.spawn)};
+});
 
 // Writes a fake `litestream` executable that emits `sh` (a POSIX shell
 // snippet that can branch on `$1`, the litestream subcommand) and returns the
@@ -396,5 +405,40 @@ describe('litestream/commands restoreReplica', () => {
         args.some(a => String(a).includes('write WAL segment 169/0')),
       ),
     ).toBe(true);
+  });
+
+  // INC-961: the mechanism that actually prevents the paging is spawning
+  // `litestream restore` with piped (captured) stdio rather than inheriting the
+  // pod's streams — with `stdio: 'inherit'` litestream's own ERROR would reach
+  // the pod's stdout directly, before our retry logic could downgrade it.
+  // Assert the spawn options so a regression back to inheriting is caught.
+  test('spawns `litestream restore` with piped stdio (not inherited)', async () => {
+    const spawnMock = vi.mocked(childProcess.spawn);
+    spawnMock.mockClear();
+    const dir = mkdtempSync(join(tmpdir(), 'litestream-restore-test-'));
+    const source = join(dir, 'source.db');
+    const replica = join(dir, 'replica.db');
+    createRestorableReplica(source, '01');
+    const config = configWithFakeLitestream(
+      `if [ "$1" = "restore" ]; then\n` +
+        `  cp "${source}" "$6"\n` +
+        `  exit 0\n` +
+        `fi\n` +
+        `exit 1`,
+      replica,
+    );
+
+    await restoreReplica(lc, config, {
+      replicaVersion: '01',
+      minWatermark: '01',
+    });
+
+    const restoreCall = spawnMock.mock.calls.find(
+      call => Array.isArray(call[1]) && call[1][0] === 'restore',
+    );
+    expect(restoreCall).toBeDefined();
+    // stdio is [stdin, stdout, stderr]; stdout/stderr must be piped so
+    // litestream's output is captured rather than sent to the pod's stdout.
+    expect(restoreCall?.[2]?.stdio).toEqual(['ignore', 'pipe', 'pipe']);
   });
 });
