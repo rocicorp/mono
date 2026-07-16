@@ -1,3 +1,4 @@
+import * as childProcess from 'node:child_process';
 import {existsSync, mkdtempSync, statSync, writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
@@ -17,6 +18,14 @@ import {
   restoreReplica,
 } from './commands.ts';
 import * as litestreamMetrics from './metrics.ts';
+
+// Wrap (don't replace) node:child_process.spawn so tests can assert the args it
+// was called with while it still spawns the fake litestream executable. Node's
+// built-in module exports are non-configurable, so vi.spyOn cannot be used here.
+vi.mock('node:child_process', async importOriginal => {
+  const actual = await importOriginal<typeof childProcess>();
+  return {...actual, spawn: vi.fn(actual.spawn)};
+});
 
 // Writes a fake `litestream` executable that emits `sh` (a POSIX shell
 // snippet that can branch on `$1`, the litestream subcommand) and returns the
@@ -307,5 +316,129 @@ describe('litestream/commands restoreReplica', () => {
       1,
       expect.objectContaining({result: 'invalid_replica'}),
     );
+  });
+
+  // INC-961: litestream's own `"level":"ERROR"` restore output must not reach
+  // the pod's stdout on the first (retriable) attempt. Instead, a fake
+  // litestream that fails once and succeeds on the retry should surface the
+  // failure through our logger with the distinct "will retry" message — which
+  // the cloudzero classifier demotes to a non-paging warning — and never the
+  // paging "after retry" message.
+  test('marks a retriable restore failure with a distinct "will retry" message', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'litestream-restore-test-'));
+    const source = join(dir, 'source.db');
+    const replica = join(dir, 'replica.db');
+    createRestorableReplica(source, '01');
+    const sink = new TestLogSink();
+    const lc = new LogContext('debug', undefined, sink);
+    const config = configWithFakeLitestream(
+      `if [ "$1" = "restore" ]; then\n` +
+        `  d=$(dirname "$6")\n` +
+        `  n=$(cat "$d/attempts" 2>/dev/null || echo 0)\n` +
+        `  n=$((n+1))\n` +
+        `  echo "$n" > "$d/attempts"\n` +
+        `  if [ "$n" -eq 1 ]; then\n` +
+        `    echo '{"level":"ERROR","msg":"failed to run","error":"apply WAL segments: write WAL segment 169/0: file does not exist"}'\n` +
+        `    exit 1\n` +
+        `  fi\n` +
+        `  cp "${source}" "$6"\n` +
+        `  exit 0\n` +
+        `fi\n` +
+        `exit 1`,
+      replica,
+    );
+
+    await restoreReplica(lc, config, {
+      replicaVersion: '01',
+      minWatermark: '01',
+    });
+
+    expect(existsSync(replica)).toBe(true);
+    const errorMessages = sink.messages
+      .filter(([level]) => level === 'error')
+      .map(([, , args]) => String(args[0]));
+    // The retriable attempt uses the "will retry" message (demoted to a
+    // non-paging warning by the classifier)...
+    expect(
+      errorMessages.some(m => m.includes('attempt failed, will retry')),
+    ).toBe(true);
+    // ...and never the paging "after retry" message, since the retry succeeded.
+    expect(errorMessages.some(m => m.includes('after retry'))).toBe(false);
+  });
+
+  // If the retry also fails, the failure is real and must surface with the
+  // "after retry" message (carrying litestream's own captured output) that the
+  // classifier routes to a paging critical.
+  test('surfaces an "after retry" ERROR when the retry also fails', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'litestream-restore-test-'));
+    const replica = join(dir, 'replica.db');
+    const sink = new TestLogSink();
+    const lc = new LogContext('debug', undefined, sink);
+    const config = configWithFakeLitestream(
+      `if [ "$1" = "restore" ]; then\n` +
+        `  echo '{"level":"ERROR","msg":"failed to run","error":"apply WAL segments: write WAL segment 169/0: file does not exist"}'\n` +
+        `  exit 1\n` +
+        `fi\n` +
+        `exit 1`,
+      replica,
+    );
+
+    const err = await restoreReplica(lc, config, {
+      replicaVersion: '01',
+      minWatermark: '01',
+    }).then(
+      () => undefined,
+      (e: unknown) => e,
+    );
+    expect(String(err)).toContain('litestream exited with code 1');
+
+    // Exactly one "after retry" ERROR is surfaced (the retriable first attempt
+    // uses the separate "will retry" message), and it carries litestream's own
+    // captured failure output.
+    const afterRetry = sink.messages.filter(
+      ([level, , args]) =>
+        level === 'error' && String(args[0]).includes('after retry'),
+    );
+    expect(afterRetry.length).toBe(1);
+    expect(
+      afterRetry.some(([, , args]) =>
+        args.some(a => String(a).includes('write WAL segment 169/0')),
+      ),
+    ).toBe(true);
+  });
+
+  // INC-961: the mechanism that actually prevents the paging is spawning
+  // `litestream restore` with piped (captured) stdio rather than inheriting the
+  // pod's streams — with `stdio: 'inherit'` litestream's own ERROR would reach
+  // the pod's stdout directly, before our retry logic could downgrade it.
+  // Assert the spawn options so a regression back to inheriting is caught.
+  test('spawns `litestream restore` with piped stdio (not inherited)', async () => {
+    const spawnMock = vi.mocked(childProcess.spawn);
+    spawnMock.mockClear();
+    const dir = mkdtempSync(join(tmpdir(), 'litestream-restore-test-'));
+    const source = join(dir, 'source.db');
+    const replica = join(dir, 'replica.db');
+    createRestorableReplica(source, '01');
+    const config = configWithFakeLitestream(
+      `if [ "$1" = "restore" ]; then\n` +
+        `  cp "${source}" "$6"\n` +
+        `  exit 0\n` +
+        `fi\n` +
+        `exit 1`,
+      replica,
+    );
+
+    await restoreReplica(lc, config, {
+      replicaVersion: '01',
+      minWatermark: '01',
+    });
+
+    const restoreCall = spawnMock.mock.calls.find(
+      call => Array.isArray(call[1]) && call[1][0] === 'restore',
+    );
+    expect(restoreCall).toBeDefined();
+    // stdio is [stdin, stdout, stderr]; stdout/stderr must be piped so
+    // litestream's output is captured rather than sent to the pod's stdout.
+    expect(restoreCall?.[2]?.stdio).toEqual(['ignore', 'pipe', 'pipe']);
   });
 });
