@@ -1,8 +1,12 @@
-import type {LogContext} from '@rocicorp/logger';
+import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import postgres from 'postgres';
 import {beforeEach, describe, expect} from 'vitest';
-import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import {AbortError} from '../../../shared/src/abort-error.ts';
+import {
+  createSilentLogContext,
+  TestLogSink,
+} from '../../../shared/src/logging-test-utils.ts';
 import {type PgTest, test} from '../test/db.ts';
 import {postgresTypeConfig, type PostgresDB} from '../types/pg.ts';
 import {
@@ -249,6 +253,61 @@ describe('db/migration', () => {
       );
     });
   }
+
+  test('AbortError is logged at warn, not error', async () => {
+    // AbortErrors (e.g. AutoResetSignal signaling that the schema is not
+    // initialized) are an expected, self-healing control-flow signal and must
+    // not be logged at `error`, which would trip error-based alerting.
+    const sink = new TestLogSink();
+    const lc = new LogContext('debug', undefined, sink);
+
+    const abort = new AbortError('shard is not initialized');
+    let caught: unknown;
+    try {
+      await runSchemaMigrations(
+        lc,
+        debugName,
+        schemaName,
+        db,
+        {migrateSchema: () => Promise.reject(abort)},
+        {1: {}},
+      );
+    } catch (e) {
+      caught = e;
+    }
+
+    // The signal still propagates so the caller can resync.
+    expect(caught).toBe(abort);
+
+    const errors = sink.messages.filter(([level]) => level === 'error');
+    const warns = sink.messages.filter(([level]) => level === 'warn');
+    expect(errors).toEqual([]);
+    expect(warns.some(([, , args]) => args.includes(abort))).toBe(true);
+  });
+
+  test('non-AbortError is logged at error', async () => {
+    const sink = new TestLogSink();
+    const lc = new LogContext('debug', undefined, sink);
+
+    const err = new Error('genuine migration failure');
+    let caught: unknown;
+    try {
+      await runSchemaMigrations(
+        lc,
+        debugName,
+        schemaName,
+        db,
+        {migrateSchema: () => Promise.reject(err)},
+        {1: {}},
+      );
+    } catch (e) {
+      caught = e;
+    }
+
+    expect(caught).toBe(err);
+    const errors = sink.messages.filter(([level]) => level === 'error');
+    expect(errors.some(([, , args]) => args.includes(err))).toBe(true);
+  });
 
   test<PgTest>('concurrent migrations are serialized by advisory lock', async ({
     testDBs,
