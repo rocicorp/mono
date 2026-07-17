@@ -6,6 +6,21 @@ import type {Subscriber} from './subscriber.ts';
 export type BroadcastReleaseMode = 'all-subscribers' | 'consensus-timeout';
 
 /**
+ * Enables event-driven early release of a {@link Broadcast}. When provided, the
+ * broadcast resolves exactly `consensusTimeoutMs` after the most recent
+ * subscriber completion once a majority has acked, instead of relying on the
+ * Forwarder's periodic progress tick to call {@link Broadcast.checkProgress()}.
+ */
+export type EarlyReleaseOptions = {
+  /** Milliseconds to wait after the majority acks before releasing. */
+  consensusTimeoutMs: number;
+  /** Injectable timer, for deterministic testing. */
+  setTimeoutFn?: typeof setTimeout;
+  /** Injectable timer cancellation, for deterministic testing. */
+  clearTimeoutFn?: typeof clearTimeout;
+};
+
+/**
  * Initiates and tracks the progress of a change broadcasted to
  * a set of subscribers.
  *
@@ -42,15 +57,30 @@ export class Broadcast {
   readonly #start = performance.now();
   #latestCompleted = Number.MAX_VALUE;
 
+  // When set, the broadcast schedules its own consensus-timeout release instead
+  // of waiting for the Forwarder's periodic progress tick.
+  readonly #earlyReleaseTimeoutMs: number | undefined;
+  readonly #setTimeout: typeof setTimeout;
+  readonly #clearTimeout: typeof clearTimeout;
+  #earlyReleaseGeneration = 0;
+  #earlyReleaseTimer: ReturnType<typeof setTimeout> | undefined;
+
   /**
    * Broadcasts the `change` to the `subscribers` and tracks their
    * completion.
    */
-  constructor(subscribers: Iterable<Subscriber>, change: WatermarkedChange) {
+  constructor(
+    subscribers: Iterable<Subscriber>,
+    change: WatermarkedChange,
+    earlyRelease?: EarlyReleaseOptions,
+  ) {
     this.#pending = new Set(subscribers);
     this.#completed = [];
     this.#watermark = change[0];
     this.#majority = Math.floor(this.#pending.size / 2) + 1;
+    this.#earlyReleaseTimeoutMs = earlyRelease?.consensusTimeoutMs;
+    this.#setTimeout = earlyRelease?.setTimeoutFn ?? setTimeout;
+    this.#clearTimeout = earlyRelease?.clearTimeoutFn ?? clearTimeout;
 
     for (const sub of this.#pending) {
       const changes = sub.numPending + 1; // add one for this `change`
@@ -72,7 +102,36 @@ export class Broadcast {
     this.#pending.delete(sub);
     if (this.#pending.size === 0) {
       this.#setDone('all-subscribers');
+      return;
     }
+    // Event-driven consensus-timeout: once a majority has acked, resolve exactly
+    // #earlyReleaseTimeoutMs after this (the most recent) completion instead of
+    // waiting up to a full progress-tick interval for checkProgress() to run.
+    // Each later completion re-arms the timer; checkProgress() remains as a
+    // fallback and for logging.
+    if (
+      this.#earlyReleaseTimeoutMs !== undefined &&
+      this.#completed.length >= this.#majority
+    ) {
+      this.#scheduleEarlyRelease();
+    }
+  }
+
+  #scheduleEarlyRelease() {
+    const generation = ++this.#earlyReleaseGeneration;
+    // Cancel the timer armed by an earlier completion so stale timers don't
+    // accumulate (each retaining this Broadcast in memory and adding callback
+    // load) when many subscribers complete after the majority is reached.
+    this.#clearTimeout(this.#earlyReleaseTimer);
+    this.#earlyReleaseTimer = this.#setTimeout(() => {
+      // Skip if a later completion superseded this timer or the broadcast has
+      // already resolved (e.g. all subscribers acked). The generation check
+      // still guards the race where a timer fires just before it is cleared.
+      if (this.#isDone || generation !== this.#earlyReleaseGeneration) {
+        return;
+      }
+      this.#setDone('consensus-timeout');
+    }, this.#earlyReleaseTimeoutMs);
   }
 
   #setDone(releaseMode: BroadcastReleaseMode) {
@@ -81,6 +140,8 @@ export class Broadcast {
     }
     this.#isDone = true;
     this.#releaseMode = releaseMode;
+    this.#clearTimeout(this.#earlyReleaseTimer);
+    this.#earlyReleaseTimer = undefined;
     this.#done.resolve();
   }
 

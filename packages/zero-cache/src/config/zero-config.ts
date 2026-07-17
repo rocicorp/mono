@@ -717,6 +717,19 @@ export const zeroOptions = {
         `available as an emergency measure.)`,
       ],
     },
+
+    flowControlEventDrivenRelease: {
+      type: v.boolean().default(false),
+      desc: [
+        `When enabled, flow control releases replication as soon as the`,
+        `consensus-timeout condition is met (a majority of subscribers have`,
+        `acked and the flowControlConsensusPaddingSeconds interval has elapsed),`,
+        `rather than waiting for the next periodic (1 second) progress check.`,
+        ``,
+        `This reduces replication latency when a slow subscriber would otherwise`,
+        `hold the stream at each flow-control checkpoint until the next tick.`,
+      ],
+    },
   },
 
   taskID: {
