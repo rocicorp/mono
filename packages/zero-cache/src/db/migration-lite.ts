@@ -1,4 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
+import {AbortError} from '../../../shared/src/abort-error.ts';
 import {assert} from '../../../shared/src/asserts.ts';
 import {randInt} from '../../../shared/src/rand.ts';
 import * as v from '../../../shared/src/valita.ts';
@@ -171,7 +172,16 @@ export async function runSchemaMigrations(
       } ms)`,
     );
   } catch (e) {
-    log.error?.('Error in ensureSchemaMigrated', e);
+    if (e instanceof AbortError) {
+      // AbortErrors (e.g. AutoResetSignal) are not failures. They are the
+      // expected mechanism for signaling that the replica needs a reset (e.g.
+      // corruption or an incompatible schema version) so that the caller can
+      // resync anew. Logging them at `error` would trip error-based alerting
+      // for a normal, self-healing path.
+      log.warn?.('Replica requires reset; resync will follow', e);
+    } else {
+      log.error?.('Error in ensureSchemaMigrated', e);
+    }
     throw e;
   } finally {
     db.close();
@@ -333,7 +343,14 @@ async function runTransaction<T>(
     db.prepare('COMMIT').run();
     return result;
   } catch (e) {
-    log.error?.('Aborted transaction due to error', e);
+    if (e instanceof AbortError) {
+      // AbortErrors (e.g. AutoResetSignal) are an expected, self-healing
+      // control-flow signal, not a failure. Log at `warn` so the rollback is
+      // still visible without tripping error-based alerting.
+      log.warn?.('Aborted transaction for reset signal', e);
+    } else {
+      log.error?.('Aborted transaction due to error', e);
+    }
     try {
       db.prepare('ROLLBACK').run();
     } catch (rollbackError) {
