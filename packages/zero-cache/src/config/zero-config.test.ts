@@ -450,6 +450,16 @@ test('zero-cache --help', () => {
                                                                         Set this to a negative number to disable early flow control releases. (Not recommended, but                                
                                                                         available as an emergency measure.)                                                                                        
                                                                                                                                                                                                    
+     --change-streamer-flow-control-event-driven-release boolean        default: false                                                                                                             
+       ZERO_CHANGE_STREAMER_FLOW_CONTROL_EVENT_DRIVEN_RELEASE env                                                                                                                                  
+                                                                        When enabled, flow control releases replication as soon as the                                                             
+                                                                        consensus-timeout condition is met (a majority of subscribers have                                                         
+                                                                        acked and the flowControlConsensusPaddingSeconds interval has elapsed),                                                    
+                                                                        rather than waiting for the next periodic (1 second) progress check.                                                       
+                                                                                                                                                                                                   
+                                                                        This reduces replication latency when a slow subscriber would otherwise                                                    
+                                                                        hold the stream at each flow-control checkpoint until the next tick.                                                       
+                                                                                                                                                                                                   
      --task-id string                                                   optional                                                                                                                   
        ZERO_TASK_ID env                                                                                                                                                                            
                                                                         Globally unique identifier for the zero-cache instance.                                                                    
