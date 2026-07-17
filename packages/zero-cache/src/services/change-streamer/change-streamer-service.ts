@@ -56,6 +56,7 @@ import {Subscriber} from './subscriber.ts';
 
 export type TuningOptions = StorerOptions & {
   flowControlConsensusPaddingSeconds: number;
+  flowControlEventDrivenRelease?: boolean | undefined;
 };
 
 /**
@@ -343,6 +344,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     this.#forwarder = new Forwarder(lc, {
       flowControlConsensusPaddingSeconds:
         opts.flowControlConsensusPaddingSeconds,
+      eventDrivenRelease: opts.flowControlEventDrivenRelease,
     });
     this.#replicationStatusPublisher = replicationStatusPublisher;
     this.#purgeLock = initialPurgeLock;

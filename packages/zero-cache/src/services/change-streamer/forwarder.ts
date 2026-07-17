@@ -5,18 +5,27 @@ import {
   getOrCreateGauge,
   getOrCreateLatencyHistogram,
 } from '../../observability/metrics.ts';
-import {Broadcast} from './broadcast.ts';
+import {Broadcast, type EarlyReleaseOptions} from './broadcast.ts';
 import type {ChangeTag, WatermarkedChange} from './change-streamer-service.ts';
 import type {Status} from './change-streamer.ts';
 import type {Subscriber} from './subscriber.ts';
 
 export type ProgressMonitorOptions = {
   flowControlConsensusPaddingSeconds: number;
+  // When true, broadcasts schedule their own consensus-timeout release as soon
+  // as the majority-plus-padding condition is met, instead of waiting for the
+  // 1s progress tick to call checkProgress().
+  eventDrivenRelease?: boolean | undefined;
+  // Injectable timers, for deterministic testing.
+  setTimeoutFn?: typeof setTimeout | undefined;
+  clearTimeoutFn?: typeof clearTimeout | undefined;
 };
 
 export class Forwarder {
   readonly #lc: LogContext;
   readonly #progressMonitorOptions: ProgressMonitorOptions;
+  readonly #setTimeout: typeof setTimeout;
+  readonly #clearTimeout: typeof clearTimeout;
   readonly #active = new Set<Subscriber>();
   readonly #queued = new Set<Subscriber>();
   readonly #flowControlWaits = getOrCreateCounter(
@@ -40,6 +49,8 @@ export class Forwarder {
   ) {
     this.#lc = lc.withContext('component', 'progress-monitor');
     this.#progressMonitorOptions = opts;
+    this.#setTimeout = opts.setTimeoutFn ?? setTimeout;
+    this.#clearTimeout = opts.clearTimeoutFn ?? clearTimeout;
 
     getOrCreateGauge(
       'replication',
@@ -151,13 +162,32 @@ export class Forwarder {
     }
   }
 
+  #earlyReleaseOptions(): EarlyReleaseOptions | undefined {
+    const {flowControlConsensusPaddingSeconds, eventDrivenRelease} =
+      this.#progressMonitorOptions;
+    // A negative padding disables early release entirely (mirrors the
+    // checkProgress() path, which is skipped when padding < 0).
+    if (!eventDrivenRelease || flowControlConsensusPaddingSeconds < 0) {
+      return undefined;
+    }
+    return {
+      consensusTimeoutMs: flowControlConsensusPaddingSeconds * 1000,
+      setTimeoutFn: this.#setTimeout,
+      clearTimeoutFn: this.#clearTimeout,
+    };
+  }
+
   /**
    * The flow-control-aware equivalent of {@link forward()}, returning a
    * Promise that resolves when replication should continue.
    */
   async forwardWithFlowControl(entry: WatermarkedChange) {
     const start = performance.now();
-    const broadcast = new Broadcast(this.#active.values(), entry);
+    const broadcast = new Broadcast(
+      this.#active.values(),
+      entry,
+      this.#earlyReleaseOptions(),
+    );
     this.#updateActiveSubscribers(entry[1]);
 
     // set for progress tracking
