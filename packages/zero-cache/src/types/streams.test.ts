@@ -17,8 +17,10 @@ import * as v from '../../../shared/src/valita.ts';
 import {
   stream,
   streamIn,
+  streamInBatched,
   streamOut,
   streamOutStringified,
+  streamOutStringifiedBatched,
   type Sink,
   type Source,
 } from './streams.ts';
@@ -28,6 +30,140 @@ const messageSchema = v.object({
   from: v.number(),
   to: v.number(),
   str: v.string(),
+});
+
+describe('batched streams with internal acks', () => {
+  let lc: LogContext;
+  let server: FastifyInstance;
+  let producer: Subscription<string>;
+  let consumed: Queue<string>;
+  let cleanedUp: Promise<string[]>;
+  let url: string;
+
+  beforeEach(async () => {
+    lc = createSilentLogContext();
+    consumed = new Queue();
+    const cleanup = resolver<string[]>();
+    cleanedUp = cleanup.promise;
+    producer = Subscription.create({
+      consumed: value => consumed.enqueue(value),
+      cleanup: cleanup.resolve,
+    });
+
+    server = Fastify();
+    await server.register(websocket);
+    server.get('/', {websocket: true}, ws => {
+      void streamOutStringifiedBatched(lc, producer, ws, {
+        maxMessages: 1024,
+        maxBytes: 100_000,
+        flushIntervalMs: 1,
+      });
+    });
+    server.get('/legacy', {websocket: true}, ws => {
+      void streamOutStringified(lc, producer, ws);
+    });
+    url = await server.listen({port: 0});
+  });
+
+  afterEach(async () => {
+    await server.close();
+  });
+
+  async function startReceiver(path = '') {
+    const ws = new WebSocket(url + path);
+    let frames = 0;
+    ws.on('message', () => frames++);
+    const consumer = await streamInBatched(lc, ws, messageSchema);
+    return {consumer, frames: () => frames};
+  }
+
+  test('batches frames and ACKs only after the complete batch is consumed', async () => {
+    const values = [
+      {from: 0, to: 1, str: 'foo'},
+      {from: 1, to: 2, str: 'bar'},
+      {from: 2, to: 3, str: 'baz'},
+    ];
+    const results = values.map(
+      value => producer.push(JSON.stringify(value)).result,
+    );
+    const {consumer, frames} = await startReceiver();
+    const iterator = consumer[Symbol.asyncIterator]();
+
+    expect((await iterator.next()).value).toEqual(values[0]);
+    expect((await iterator.next()).value).toEqual(values[1]);
+    expect((await iterator.next()).value).toEqual(values[2]);
+    expect(frames()).toBe(1);
+    expect(consumed.size()).toBe(0);
+
+    await iterator.return?.();
+    expect(await Promise.all(results)).toEqual([
+      'consumed',
+      'consumed',
+      'consumed',
+    ]);
+    expect(consumed.size()).toBe(3);
+  });
+
+  test('does not ACK a partially consumed batch', async () => {
+    const values = [
+      {from: 0, to: 1, str: 'foo'},
+      {from: 1, to: 2, str: 'bar'},
+      {from: 2, to: 3, str: 'baz'},
+    ];
+    const results = values.map(
+      value => producer.push(JSON.stringify(value)).result,
+    );
+    const {consumer} = await startReceiver();
+    const iterator = consumer[Symbol.asyncIterator]();
+
+    expect((await iterator.next()).value).toEqual(values[0]);
+    await iterator.return?.();
+
+    expect(await cleanedUp).toEqual(values.map(value => JSON.stringify(value)));
+    expect(await Promise.all(results)).toEqual([
+      'unconsumed',
+      'unconsumed',
+      'unconsumed',
+    ]);
+    expect(consumed.size()).toBe(0);
+  });
+
+  test('accepts legacy single-message frames', async () => {
+    const value = {from: 0, to: 1, str: 'foo'};
+    const result = producer.push(JSON.stringify(value)).result;
+    const {consumer, frames} = await startReceiver('/legacy');
+    const iterator = consumer[Symbol.asyncIterator]();
+
+    expect((await iterator.next()).value).toEqual(value);
+    expect(frames()).toBe(1);
+    await iterator.return?.();
+    expect(await result).toBe('consumed');
+  });
+
+  test('sends a 1,000-message transaction-sized burst in one frame', async () => {
+    const values = Array.from({length: 1000}, (_, from) => ({
+      from,
+      to: from + 1,
+      str: 'row',
+    }));
+    const results = values.map(
+      value => producer.push(JSON.stringify(value)).result,
+    );
+    const {consumer, frames} = await startReceiver();
+
+    let received = 0;
+    for await (const value of consumer) {
+      expect(value).toEqual(values[received]);
+      if (++received === values.length) {
+        break;
+      }
+    }
+
+    expect(frames()).toBe(1);
+    expect(await Promise.all(results)).toEqual(
+      Array<string>(1000).fill('consumed'),
+    );
+  });
 });
 
 type Message = v.Infer<typeof messageSchema>;

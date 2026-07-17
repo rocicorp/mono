@@ -243,11 +243,39 @@ export function streamOutStringified(
   return streamOutInternal(lc, source, sink, json => json);
 }
 
+export type BatchOptions<T> = {
+  /** Maximum number of logical messages in one WebSocket frame. */
+  maxMessages: number;
+  /** Approximate maximum serialized payload size of one WebSocket frame. */
+  maxBytes: number;
+  /** Maximum time to wait for more messages after receiving the first one. */
+  flushIntervalMs: number;
+  /** Flushes the current batch immediately after matching messages. */
+  flushAfter?: ((value: T) => boolean) | undefined;
+};
+
+type BatchEnvelope<T> = {batch: T[]};
+
+/**
+ * Streams already-stringified JSON messages in bounded batches. Each batch is
+ * transported and ACKed as one WebSocket message. The individual source
+ * entries are marked consumed only after that batch ACK is received.
+ */
+export function streamOutStringifiedBatched(
+  lc: LogContext,
+  source: Source<string>,
+  sink: WebSocket,
+  options: BatchOptions<string>,
+): Promise<void> {
+  return streamOutInternal(lc, source, sink, json => json, options);
+}
+
 async function streamOutInternal<T extends JSONValue>(
   lc: LogContext,
   source: Source<T>,
   sink: WebSocket,
   stringify: (payload: T) => string,
+  batchOptions?: BatchOptions<T>,
 ): Promise<void> {
   sendPingsForLiveness(lc, sink, PING_INTERVAL_MS);
 
@@ -271,9 +299,12 @@ async function streamOutInternal<T extends JSONValue>(
     const {pipeline} = source;
     if (pipeline) {
       lc.debug?.(`started pipelined outbound stream`);
-      for await (const {value: msg, consumed} of pipeline) {
+      const outbound = batchOptions
+        ? batchPipeline(pipeline, stringify, batchOptions)
+        : stringifyPipeline(pipeline, stringify);
+      for await (const {json, consumed} of outbound) {
         const id = ++nextID;
-        const data = `{"id":${id},"msg":${stringify(msg)}}`;
+        const data = `{"id":${id},"msg":${json}}`;
         // Enable for debugging. Otherwise too verbose.
         // lc.debug?.(`pipelining`, data);
         sink.send(data);
@@ -285,7 +316,7 @@ async function streamOutInternal<T extends JSONValue>(
             throw new Error(`Unexpected ack for ${id}: ${ack}`);
           }
           consumed();
-        })();
+        })().catch(e => closer.close(e));
       }
     } else {
       lc.debug?.(`started synchronous outbound stream`);
@@ -305,6 +336,91 @@ async function streamOutInternal<T extends JSONValue>(
     closer.close();
   } catch (e) {
     closer.close(e);
+  }
+}
+
+type PipelineEntry<T> = {value: T; consumed: () => void};
+type SerializedPipelineEntry = {json: string; consumed: () => void};
+
+async function* stringifyPipeline<T>(
+  pipeline: AsyncIterable<PipelineEntry<T>>,
+  stringify: (payload: T) => string,
+): AsyncGenerator<SerializedPipelineEntry> {
+  for await (const {value, consumed} of pipeline) {
+    yield {json: stringify(value), consumed};
+  }
+}
+
+async function* batchPipeline<T>(
+  pipeline: AsyncIterable<PipelineEntry<T>>,
+  stringify: (payload: T) => string,
+  options: BatchOptions<T>,
+): AsyncGenerator<SerializedPipelineEntry> {
+  const {maxMessages, maxBytes, flushIntervalMs, flushAfter} = options;
+  assert(maxMessages > 0, 'maxMessages must be positive');
+  assert(maxBytes > 0, 'maxBytes must be positive');
+  assert(flushIntervalMs >= 0, 'flushIntervalMs must be non-negative');
+
+  const iterator = pipeline[Symbol.asyncIterator]();
+  let pendingNext: Promise<IteratorResult<PipelineEntry<T>>> | undefined;
+  let sourceDone = false;
+
+  try {
+    while (!sourceDone) {
+      const first = await (pendingNext ?? iterator.next());
+      pendingNext = undefined;
+      if (first.done) {
+        break;
+      }
+
+      const entries = [first.value];
+      const json = [stringify(first.value.value)];
+      let bytes = json[0].length;
+
+      if (!flushAfter?.(first.value.value)) {
+        let flushTimer: ReturnType<typeof setTimeout> | undefined;
+        const flush = new Promise<'flush'>(resolve => {
+          flushTimer = setTimeout(resolve, flushIntervalMs, 'flush');
+        });
+
+        try {
+          while (entries.length < maxMessages && bytes < maxBytes) {
+            pendingNext ??= iterator.next();
+            const result = await Promise.race([
+              pendingNext.then(value => ({kind: 'next' as const, value})),
+              flush.then(kind => ({kind})),
+            ]);
+            if (result.kind === 'flush') {
+              break;
+            }
+
+            pendingNext = undefined;
+            if (result.value.done) {
+              sourceDone = true;
+              break;
+            }
+
+            const entry = result.value.value;
+            const serialized = stringify(entry.value);
+            entries.push(entry);
+            json.push(serialized);
+            bytes += serialized.length + 1; // comma separator
+            if (flushAfter?.(entry.value)) {
+              break;
+            }
+          }
+        } finally {
+          clearTimeout(flushTimer);
+        }
+      }
+
+      yield {
+        json: `{"batch":[${json.join(',')}]}`,
+        consumed: () => entries.forEach(entry => entry.consumed()),
+      };
+    }
+  } finally {
+    await iterator.return?.();
   }
 }
 
@@ -349,6 +465,81 @@ export async function streamIn<T extends JSONValue>(
 
   await closer.connected;
   return sink;
+}
+
+/**
+ * Receives either legacy single-message frames or capability-gated batch
+ * envelopes and exposes both as the original logical message stream.
+ */
+export async function streamInBatched<T extends JSONValue>(
+  lc: LogContext,
+  source: WebSocket,
+  schema: v.Type<T>,
+): Promise<Source<T>> {
+  const envelopeSchema = v.object({batch: v.array(schema)});
+  const wireSource = await streamIn(
+    lc,
+    source,
+    v.union(schema, envelopeSchema),
+  );
+  return flattenBatchEnvelopes(wireSource);
+}
+
+function flattenBatchEnvelopes<T extends JSONValue>(
+  source: Source<T | BatchEnvelope<T>>,
+): Source<T> {
+  return {
+    cancel: err => source.cancel(err),
+    [Symbol.asyncIterator]() {
+      const delegate = source[Symbol.asyncIterator]();
+      let batch: T[] | undefined;
+      let index = 0;
+
+      return {
+        async next(): Promise<IteratorResult<T>> {
+          if (batch && index < batch.length) {
+            return {value: batch[index++], done: false};
+          }
+
+          const next = await delegate.next();
+          if (next.done) {
+            return {value: next.value as T, done: true};
+          }
+          batch = isBatchEnvelope(next.value) ? next.value.batch : [next.value];
+          index = 0;
+          assert(batch.length > 0, 'batch envelope must not be empty');
+          return {value: batch[index++], done: false};
+        },
+
+        return(value?: unknown): Promise<IteratorResult<T>> {
+          if (batch && index < batch.length) {
+            // Do not ACK a partially processed batch. Closing the stream makes
+            // the producer treat every entry in the frame as unconsumed.
+            source.cancel();
+            return Promise.resolve({value: value as T, done: true});
+          }
+          if (delegate.return) {
+            return delegate
+              .return(value as T)
+              .then(result => ({value: result.value as T, done: true}));
+          }
+          source.cancel();
+          return Promise.resolve({value: value as T, done: true});
+        },
+      };
+    },
+  };
+}
+
+function isBatchEnvelope<T>(
+  value: T | BatchEnvelope<T>,
+): value is BatchEnvelope<T> {
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value) &&
+    'batch' in value
+  );
 }
 
 class WebSocketCloser {

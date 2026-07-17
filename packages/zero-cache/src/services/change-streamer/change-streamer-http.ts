@@ -10,8 +10,10 @@ import {type Worker} from '../../types/processes.ts';
 import {type ShardID} from '../../types/shards.ts';
 import {
   streamIn,
+  streamInBatched,
   streamOut,
   streamOutStringified,
+  streamOutStringifiedBatched,
   type Source,
 } from '../../types/streams.ts';
 import {URLParams} from '../../types/url-params.ts';
@@ -38,6 +40,17 @@ const PATH_REGEX = /\/replication\/v(?<version>\d+)\/(changes|snapshot)$/;
 
 const SNAPSHOT_PATH = `/replication/v${PROTOCOL_VERSION}/snapshot`;
 const CHANGES_PATH = `/replication/v${PROTOCOL_VERSION}/changes`;
+
+const BATCH_QUERY_PARAM = 'batch';
+const CHANGE_BATCH_OPTIONS = {
+  maxMessages: 1024,
+  maxBytes: 1024 * 1024,
+  flushIntervalMs: 1,
+  // Keep ACK watermarks aligned with transaction boundaries whenever the
+  // transaction fits within the size limits.
+  flushAfter: (json: string) =>
+    json.startsWith('["commit",') || json.startsWith('["rollback",'),
+};
 
 type Options = {
   port: number;
@@ -143,7 +156,16 @@ export class ChangeStreamerHttpServer extends HttpService {
         // end the reservation to safely resume scheduling cleanup.
         this.#backupMonitor.endReservation(ctx.taskID);
       }
-      void streamOutStringified(this._lc, downstream, ws);
+      if (supportsBatchedFrames(req)) {
+        void streamOutStringifiedBatched(
+          this._lc,
+          downstream,
+          ws,
+          CHANGE_BATCH_OPTIONS,
+        );
+      } else {
+        void streamOutStringified(this._lc, downstream, ws);
+      }
     } catch (err) {
       closeWithError(this._lc, ws, err, PROTOCOL_ERROR);
     }
@@ -238,7 +260,7 @@ export class ChangeStreamerHttpClient implements ChangeStreamer {
     const params = getParams(ctx);
     const ws = new WebSocket(uri + `?${params.toString()}`);
 
-    return streamIn(this.#lc, ws, downstreamSchema);
+    return streamInBatched(this.#lc, ws, downstreamSchema);
   }
 }
 
@@ -291,5 +313,14 @@ function getParams(ctx: SubscriberContext): URLSearchParams {
     ...stringParams,
     taskID: ctx.taskID ? ctx.taskID : '',
     initial: ctx.initial ? 'true' : 'false',
+    // This is deliberately a capability flag rather than a protocol version
+    // bump. Old servers ignore it and send legacy single-message frames; new
+    // clients accept either representation, making both rollout orders safe.
+    [BATCH_QUERY_PARAM]: 'true',
   });
+}
+
+function supportsBatchedFrames(req: RequestHeaders): boolean {
+  const url = new URL(req.url ?? '', req.headers.origin ?? 'http://localhost');
+  return url.searchParams.get(BATCH_QUERY_PARAM) === 'true';
 }

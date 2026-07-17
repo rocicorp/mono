@@ -368,4 +368,59 @@ describe('change-streamer/http', () => {
       ]
     `);
   });
+
+  test('keeps legacy single-message framing without the batch capability', async () => {
+    const params = new URLSearchParams({
+      taskID: 'foo-task',
+      id: 'legacy-view-syncer',
+      mode: 'serving',
+      replicaVersion: 'abc',
+      watermark: '123',
+      initial: 'true',
+    });
+    const ws = new WebSocket(
+      new URL(
+        `/replication/v${PROTOCOL_VERSION}/changes?${params.toString()}`,
+        `http://${serverAddress}`,
+      ),
+    );
+    await new Promise<void>((resolve, reject) => {
+      ws.once('open', resolve);
+      ws.once('error', reject);
+    });
+
+    const frames: unknown[] = [];
+    const received = new Promise<void>((resolve, reject) => {
+      ws.on('message', data => {
+        try {
+          const frame = JSON.parse(data.toString()) as {
+            id: number;
+            msg: unknown;
+          };
+          frames.push(frame.msg);
+          ws.send(JSON.stringify({ack: frame.id}));
+          if (frames.length === 2) {
+            resolve();
+          }
+        } catch (e) {
+          reject(e);
+        }
+      });
+    });
+
+    downstream.push(
+      JSON.stringify(['begin', {tag: 'begin'}, {commitWatermark: '456'}]),
+    );
+    downstream.push(
+      JSON.stringify(['commit', {tag: 'commit'}, {watermark: '456'}]),
+    );
+    await received;
+
+    expect(frames).toEqual([
+      ['begin', {tag: 'begin'}, {commitWatermark: '456'}],
+      ['commit', {tag: 'commit'}, {watermark: '456'}],
+    ]);
+    ws.close();
+    await new Promise<void>(resolve => ws.once('close', () => resolve()));
+  });
 });
