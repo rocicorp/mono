@@ -276,6 +276,24 @@ function getIncrementalMigrations(
         lc.info?.(`Upgraded DDL event triggers`);
       },
     },
+
+    // v24: Run the database wide DDL event trigger entrypoints as their
+    // existing function owner instead of the role issuing the DDL. This lets
+    // restricted roles change unrelated objects without requiring access to
+    // the shard's private schema.
+    //
+    // This is also the point where the entrypoint owner and ACL become a
+    // security boundary. setupTriggers() preserves the established function
+    // owner, locks search_path, removes PUBLIC's direct EXECUTE privilege, and
+    // prevents PUBLIC from adding overloads to the private helper schema.
+    24: {
+      migrateSchema: async (lc, sql) => {
+        const [{publications}] = await sql<{publications: string[]}[]>`
+          SELECT publications FROM ${sql(shardConfigTable)}`;
+        await setupTriggers(lc, sql, {...shard, publications});
+        lc.info?.(`Upgraded DDL event trigger execution identity`);
+      },
+    },
   };
 }
 
