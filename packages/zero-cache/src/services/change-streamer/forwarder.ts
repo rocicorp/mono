@@ -16,14 +16,16 @@ export type ProgressMonitorOptions = {
   // as the majority-plus-padding condition is met, instead of waiting for the
   // 1s progress tick to call checkProgress().
   eventDrivenRelease?: boolean | undefined;
-  // Injectable timer, for deterministic testing.
+  // Injectable timers, for deterministic testing.
   setTimeoutFn?: typeof setTimeout | undefined;
+  clearTimeoutFn?: typeof clearTimeout | undefined;
 };
 
 export class Forwarder {
   readonly #lc: LogContext;
   readonly #progressMonitorOptions: ProgressMonitorOptions;
   readonly #setTimeout: typeof setTimeout;
+  readonly #clearTimeout: typeof clearTimeout;
   readonly #active = new Set<Subscriber>();
   readonly #queued = new Set<Subscriber>();
   readonly #flowControlWaits = getOrCreateCounter(
@@ -48,6 +50,7 @@ export class Forwarder {
     this.#lc = lc.withContext('component', 'progress-monitor');
     this.#progressMonitorOptions = opts;
     this.#setTimeout = opts.setTimeoutFn ?? setTimeout;
+    this.#clearTimeout = opts.clearTimeoutFn ?? clearTimeout;
 
     getOrCreateGauge(
       'replication',
@@ -170,6 +173,7 @@ export class Forwarder {
     return {
       consensusTimeoutMs: flowControlConsensusPaddingSeconds * 1000,
       setTimeoutFn: this.#setTimeout,
+      clearTimeoutFn: this.#clearTimeout,
     };
   }
 

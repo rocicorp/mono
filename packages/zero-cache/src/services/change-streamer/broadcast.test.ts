@@ -126,12 +126,24 @@ describe('change-streamer/broadcast', () => {
   ];
 
   function captureTimers() {
-    const scheduled: {cb: () => void; ms: number | undefined}[] = [];
+    const scheduled: {
+      cb: () => void;
+      ms: number | undefined;
+      handle: number;
+    }[] = [];
+    const cleared: number[] = [];
+    let nextHandle = 1;
     const setTimeoutFn = ((cb: () => void, ms?: number) => {
-      scheduled.push({cb, ms});
-      return 0;
+      const handle = nextHandle++;
+      scheduled.push({cb, ms, handle});
+      return handle;
     }) as unknown as typeof setTimeout;
-    return {scheduled, setTimeoutFn};
+    const clearTimeoutFn = ((handle?: number) => {
+      if (handle !== undefined) {
+        cleared.push(handle);
+      }
+    }) as unknown as typeof clearTimeout;
+    return {scheduled, cleared, setTimeoutFn, clearTimeoutFn};
   }
 
   test('event-driven early release once a majority acks', async () => {
@@ -139,11 +151,12 @@ describe('change-streamer/broadcast', () => {
     const [sub2] = createSubscriber('00', true);
     const [sub3] = createSubscriber('00', true);
     const [sub4] = createSubscriber('00', true);
-    const {scheduled, setTimeoutFn} = captureTimers();
+    const {scheduled, setTimeoutFn, clearTimeoutFn} = captureTimers();
 
     const broadcast = new Broadcast([sub1, sub2, sub3, sub4], begin, {
       consensusTimeoutMs: 2000,
       setTimeoutFn,
+      clearTimeoutFn,
     });
 
     // Two acks: below the majority of 3, so no early-release timer is armed.
@@ -173,11 +186,12 @@ describe('change-streamer/broadcast', () => {
     const [sub3] = createSubscriber('00', true);
     const [sub4] = createSubscriber('00', true);
     const [sub5] = createSubscriber('00', true);
-    const {scheduled, setTimeoutFn} = captureTimers();
+    const {scheduled, cleared, setTimeoutFn, clearTimeoutFn} = captureTimers();
 
     const broadcast = new Broadcast([sub1, sub2, sub3, sub4, sub5], begin, {
       consensusTimeoutMs: 2000,
       setTimeoutFn,
+      clearTimeoutFn,
     });
 
     // Majority of 5 is 3: arms the timer.
@@ -187,10 +201,12 @@ describe('change-streamer/broadcast', () => {
     await sleep(1);
     expect(scheduled).toHaveLength(1);
 
-    // A later completion re-arms (new generation) instead of releasing now.
+    // A later completion re-arms (new generation) instead of releasing now, and
+    // cancels the previously-armed timer so stale timers don't accumulate.
     sub4.close();
     await sleep(1);
     expect(scheduled).toHaveLength(2);
+    expect(cleared).toContain(scheduled[0].handle);
     expect(broadcast.isDone).toBe(false);
 
     // The stale (first-generation) timer must not release the broadcast.
@@ -207,11 +223,12 @@ describe('change-streamer/broadcast', () => {
     const [sub1] = createSubscriber('00', true);
     const [sub2] = createSubscriber('00', true);
     const [sub3] = createSubscriber('00', true);
-    const {scheduled, setTimeoutFn} = captureTimers();
+    const {scheduled, cleared, setTimeoutFn, clearTimeoutFn} = captureTimers();
 
     const broadcast = new Broadcast([sub1, sub2, sub3], begin, {
       consensusTimeoutMs: 2000,
       setTimeoutFn,
+      clearTimeoutFn,
     });
 
     // Majority of 3 is 2: arms the timer.
@@ -224,6 +241,8 @@ describe('change-streamer/broadcast', () => {
     sub3.close();
     await broadcast.done;
     expect(broadcast.releaseMode).toBe('all-subscribers');
+    // Resolving cancels the pending early-release timer.
+    expect(cleared).toContain(scheduled[0].handle);
 
     // A late timer callback is a no-op: the broadcast is already done.
     scheduled[0].cb();

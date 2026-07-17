@@ -16,6 +16,8 @@ export type EarlyReleaseOptions = {
   consensusTimeoutMs: number;
   /** Injectable timer, for deterministic testing. */
   setTimeoutFn?: typeof setTimeout;
+  /** Injectable timer cancellation, for deterministic testing. */
+  clearTimeoutFn?: typeof clearTimeout;
 };
 
 /**
@@ -59,7 +61,9 @@ export class Broadcast {
   // of waiting for the Forwarder's periodic progress tick.
   readonly #earlyReleaseTimeoutMs: number | undefined;
   readonly #setTimeout: typeof setTimeout;
+  readonly #clearTimeout: typeof clearTimeout;
   #earlyReleaseGeneration = 0;
+  #earlyReleaseTimer: ReturnType<typeof setTimeout> | undefined;
 
   /**
    * Broadcasts the `change` to the `subscribers` and tracks their
@@ -76,6 +80,7 @@ export class Broadcast {
     this.#majority = Math.floor(this.#pending.size / 2) + 1;
     this.#earlyReleaseTimeoutMs = earlyRelease?.consensusTimeoutMs;
     this.#setTimeout = earlyRelease?.setTimeoutFn ?? setTimeout;
+    this.#clearTimeout = earlyRelease?.clearTimeoutFn ?? clearTimeout;
 
     for (const sub of this.#pending) {
       const changes = sub.numPending + 1; // add one for this `change`
@@ -114,9 +119,14 @@ export class Broadcast {
 
   #scheduleEarlyRelease() {
     const generation = ++this.#earlyReleaseGeneration;
-    this.#setTimeout(() => {
+    // Cancel the timer armed by an earlier completion so stale timers don't
+    // accumulate (each retaining this Broadcast in memory and adding callback
+    // load) when many subscribers complete after the majority is reached.
+    this.#clearTimeout(this.#earlyReleaseTimer);
+    this.#earlyReleaseTimer = this.#setTimeout(() => {
       // Skip if a later completion superseded this timer or the broadcast has
-      // already resolved (e.g. all subscribers acked).
+      // already resolved (e.g. all subscribers acked). The generation check
+      // still guards the race where a timer fires just before it is cleared.
       if (this.#isDone || generation !== this.#earlyReleaseGeneration) {
         return;
       }
@@ -130,6 +140,8 @@ export class Broadcast {
     }
     this.#isDone = true;
     this.#releaseMode = releaseMode;
+    this.#clearTimeout(this.#earlyReleaseTimer);
+    this.#earlyReleaseTimer = undefined;
     this.#done.resolve();
   }
 
