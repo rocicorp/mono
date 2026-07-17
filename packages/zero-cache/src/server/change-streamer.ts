@@ -57,6 +57,7 @@ export default async function runWorker(
       startupDelayMs,
       backPressureLimitHeapProportion,
       flowControlConsensusPaddingSeconds,
+      flowControlEventDrivenRelease,
     },
     upstream,
     change,
@@ -166,6 +167,7 @@ export default async function runWorker(
         {
           backPressureLimitHeapProportion,
           flowControlConsensusPaddingSeconds,
+          flowControlEventDrivenRelease,
           statementTimeoutMs: change.statementTimeoutMs,
           changeLogBatchSize: change.logBatchSize,
         },
