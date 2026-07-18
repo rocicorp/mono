@@ -11,7 +11,11 @@ import {
 import {StatementRunner} from '../../db/statements.ts';
 import {createLogContext} from '../../server/logging.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
-import {ChangeProcessor, type ChangeProcessorMode} from './change-processor.ts';
+import {
+  ChangeProcessor,
+  type ChangeProcessorMode,
+  type CommitResult,
+} from './change-processor.ts';
 import {getSubscriptionState} from './schema/replication-state.ts';
 import {
   applyPragmas,
@@ -19,6 +23,7 @@ import {
   type ArgsMap,
   type Method,
   type PragmaConfig,
+  type ProcessMessagesResult,
   type Request,
   type Response,
   type ResultMap,
@@ -102,6 +107,10 @@ function createAPI(): API {
       }
     },
 
+    processMessages(downstreams: readonly ChangeStreamData[]) {
+      return processMessageBatch(must(processor), must(lc), downstreams);
+    },
+
     abort() {
       must(processor).abort(must(lc));
       createProcessor();
@@ -117,6 +126,24 @@ function createAPI(): API {
       unregisterCorruptionDiagnosticTarget = undefined;
     },
   };
+}
+
+function processMessageBatch(
+  processor: ChangeProcessor,
+  lc: LogContext,
+  downstreams: readonly ChangeStreamData[],
+): ProcessMessagesResult {
+  const results: CommitResult[] = [];
+  for (const downstream of downstreams) {
+    const result = processor.processMessage(lc, downstream);
+    if (result) {
+      results.push(result);
+    }
+  }
+  if (results.length === 0) {
+    return null;
+  }
+  return results.length === 1 ? results[0] : results;
 }
 
 const api = createAPI();
