@@ -19,6 +19,7 @@ import {
 import * as v from '../../../../../shared/src/valita.ts';
 import {Database} from '../../../../../zqlite/src/db.ts';
 import {
+  defaultValueMatches,
   mapPostgresToLiteColumn,
   UnsupportedColumnDefaultError,
 } from '../../../db/pg-to-lite.ts';
@@ -1286,6 +1287,8 @@ class ChangeMaker {
             must(prevTbl.get(id)),
             must(nextTbl.get(id)),
             tag,
+            event.newColumns ?? null,
+            event.missingValues ?? null,
           ),
         );
       }
@@ -1330,6 +1333,8 @@ class ChangeMaker {
     oldTable: PublishedTableWithReplicaIdentity,
     newTable: PublishedTableWithReplicaIdentity,
     ddlTag: string,
+    newColumns: Record<string, number[]> | null,
+    missingValues: Record<string, Record<string, unknown>> | null,
   ): SchemaChange[] {
     const changes: SchemaChange[] = [];
     if (
@@ -1353,21 +1358,24 @@ class ChangeMaker {
       });
     }
     const table = {schema: newTable.schema, name: newTable.name};
-    const oldColumns = columnsByID(oldTable.columns);
-    const newColumns = columnsByID(newTable.columns);
+    const oldTableColumns = columnsByID(oldTable.columns);
+    const newTableColumns = columnsByID(newTable.columns);
 
     // DROP
-    const [dropped, added] = symmetricDifferences(oldColumns, newColumns);
+    const [dropped, added] = symmetricDifferences(
+      oldTableColumns,
+      newTableColumns,
+    );
     for (const id of dropped) {
-      const {name: column} = must(oldColumns.get(id));
+      const {name: column} = must(oldTableColumns.get(id));
       changes.push({tag: 'drop-column', table, column});
     }
 
     // ALTER
-    const both = intersection(oldColumns, newColumns);
+    const both = intersection(oldTableColumns, newTableColumns);
     for (const id of both) {
-      const {name: oldName, ...oldSpec} = must(oldColumns.get(id));
-      const {name: newName, ...newSpec} = must(newColumns.get(id));
+      const {name: oldName, ...oldSpec} = must(oldTableColumns.get(id));
+      const {name: newName, ...newSpec} = must(newTableColumns.get(id));
       // The three things that we care about are:
       // 1. name
       // 2. type
@@ -1386,19 +1394,31 @@ class ChangeMaker {
       }
     }
 
-    // Only columns introduced by `ALTER TABLE` statements can potentially
-    // skip backfill if they have non-constant defaults. All other scenarios
-    // in which columns are introduced, e.g.
+    // Only columns known to hold a specific value in all pre-existing rows
+    // can potentially skip backfill, namely:
+    // * columns introduced by an `ALTER TABLE` statement, which diff as a
+    //   single command and thus hold the default reported in the schema.
+    // * columns reported by the event's `newColumns` field to have been
+    //   created in the same (upstream) transaction — which covers the
+    //   manual update_schemas() hook when invoked in the transaction that
+    //   performed the schema change — *provided that* the current default
+    //   matches the column's "missing value" (i.e. the value stamped into
+    //   pre-existing rows at creation, reported in `missingValues`). The
+    //   two can differ, e.g. if the default was changed after the column
+    //   was added but before the update_schemas() call, in which case the
+    //   column must be backfilled.
+    // All other scenarios in which columns are introduced, e.g.
     // * ALTER PUBLICATION
     // * COMMENT
-    // * MANUAL
-    // * UNKNOWN
-    // must be backfilled.
-    const alwaysBackfill = ddlTag !== 'ALTER TABLE';
+    // * MANUAL / UNKNOWN commands predating the `newColumns` field
+    // must be backfilled, as a newly *published* column may contain
+    // arbitrary values in existing rows.
+    const newColAttNums = new Set(newColumns?.[String(newTable.oid)] ?? []);
+    const tableMissingValues = missingValues?.[String(newTable.oid)];
 
     // ADD
     for (const id of added) {
-      const {name, ...spec} = must(newColumns.get(id));
+      const {name, ...spec} = must(newTableColumns.get(id));
       const column = {name, spec};
       const addColumn: ColumnAdd = {
         tag: 'add-column',
@@ -1406,6 +1426,12 @@ class ChangeMaker {
         column,
         tableMetadata: getMetadata(newTable),
       };
+      const alwaysBackfill =
+        ddlTag !== 'ALTER TABLE' &&
+        !(
+          newColAttNums.has(spec.pos) &&
+          defaultValueMatches(spec.dflt, tableMissingValues?.[spec.pos])
+        );
       if (alwaysBackfill) {
         addColumn.column.spec.dflt = null;
         addColumn.backfill = {attNum: spec.pos} satisfies ColumnMetadata;
