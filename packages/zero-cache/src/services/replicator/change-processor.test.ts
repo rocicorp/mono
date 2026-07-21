@@ -3682,6 +3682,159 @@ describe('replicator/change-processor', () => {
       }
     });
   }
+
+  test('DML plan cache binds repeated shapes by column name', () => {
+    initDB(
+      servingReplica,
+      `
+      CREATE TABLE foo(
+        id INTEGER,
+        shard INTEGER,
+        alpha INTEGER,
+        beta INTEGER,
+        _0_version TEXT,
+        PRIMARY KEY(id, shard)
+      );
+      `,
+    );
+
+    const foo = new ReplicationMessages({foo: ['id', 'shard']});
+    for (const change of [
+      ['begin', foo.begin(), {commitWatermark: '07'}],
+      ['data', foo.insert('foo', {id: 1, shard: 10, alpha: 100, beta: 200})],
+      ['data', foo.insert('foo', {beta: 400, shard: 20, id: 2, alpha: 300})],
+      ['data', foo.update('foo', {id: 1, shard: 10, alpha: 101, beta: 201})],
+      ['data', foo.update('foo', {beta: 401, shard: 20, id: 2, alpha: 301})],
+      ['data', foo.delete('foo', {shard: 20, id: 2})],
+      ['commit', foo.commit(), {watermark: '07'}],
+    ] satisfies ChangeStreamData[]) {
+      servingProcessor.processMessage(lc, change);
+    }
+
+    expectTables(
+      servingReplica,
+      {
+        foo: [
+          {
+            id: 1n,
+            shard: 10n,
+            alpha: 101n,
+            beta: 201n,
+            ['_0_version']: '07',
+          },
+        ],
+      },
+      'bigint',
+    );
+  });
+
+  test('serving keyed insert batches respect change-log bind limit', () => {
+    initDB(
+      servingReplica,
+      `
+      CREATE TABLE foo(
+        id INTEGER PRIMARY KEY,
+        _0_version TEXT
+      );
+      `,
+    );
+
+    const maxBindings = 900;
+    let maxChangeLogBindings = 0;
+    const prepare = servingReplica.prepare.bind(servingReplica);
+    servingReplica.prepare = sql => {
+      const stmt = prepare(sql);
+      if (
+        !sql.includes('INSERT OR REPLACE INTO "_zero.changeLog2"') ||
+        !sql.includes(`'${SET_OP}'`)
+      ) {
+        return stmt;
+      }
+
+      const run = stmt.run.bind(stmt);
+      stmt.run = (...params) => {
+        const values = params[0];
+        if (Array.isArray(values)) {
+          maxChangeLogBindings = Math.max(maxChangeLogBindings, values.length);
+          expect(values.length).toBeLessThanOrEqual(maxBindings);
+        }
+        return run(...params);
+      };
+      return stmt;
+    };
+
+    const rowCount = 226;
+    const foo = new ReplicationMessages({foo: 'id'});
+    servingProcessor.processMessages(lc, [
+      ['begin', foo.begin(), {commitWatermark: '07'}],
+      ...Array.from(
+        {length: rowCount},
+        (_, id) => ['data', foo.insert('foo', {id})] satisfies ChangeStreamData,
+      ),
+      ['commit', foo.commit(), {watermark: '07'}],
+    ]);
+
+    expect(maxChangeLogBindings).toBe(maxBindings);
+    expect(
+      servingReplica
+        .prepare('SELECT COUNT(*) AS count FROM foo')
+        .get<{count: number}>(),
+    ).toEqual({count: rowCount});
+    expect(
+      servingReplica
+        .prepare(
+          'SELECT COUNT(*) AS count FROM "_zero.changeLog2" WHERE "table" = ? AND op = ?',
+        )
+        .get<{count: number}>('foo', SET_OP),
+    ).toEqual({count: rowCount});
+  });
+
+  test('processMessages applies a stream batch and returns each commit', () => {
+    initDB(
+      servingReplica,
+      `
+      CREATE TABLE foo(
+        id INTEGER PRIMARY KEY,
+        _0_version TEXT
+      );
+      `,
+    );
+
+    const foo = new ReplicationMessages({foo: 'id'});
+    const result = servingProcessor.processMessages(lc, [
+      ['begin', foo.begin(), {commitWatermark: '07'}],
+      ['data', foo.insert('foo', {id: 1})],
+      ['commit', foo.commit(), {watermark: '07'}],
+      ['begin', foo.begin(), {commitWatermark: '0a'}],
+      ['data', foo.insert('foo', {id: 2})],
+      ['commit', foo.commit(), {watermark: '0a'}],
+    ]);
+
+    expect(result).toEqual([
+      {
+        watermark: '07',
+        completedBackfill: undefined,
+        schemaUpdated: false,
+        changeLogUpdated: true,
+      },
+      {
+        watermark: '0a',
+        completedBackfill: undefined,
+        schemaUpdated: false,
+        changeLogUpdated: true,
+      },
+    ]);
+    expectTables(
+      servingReplica,
+      {
+        foo: [
+          {id: 1n, ['_0_version']: '07'},
+          {id: 2n, ['_0_version']: '0a'},
+        ],
+      },
+      'bigint',
+    );
+  });
 });
 
 describe('replicator/change-processor-errors', () => {
@@ -3832,6 +3985,11 @@ describe('replicator/change-processor-errors', () => {
     processor.processMessage(lc, [
       'data',
       messages.insert('auto_rollback', {id: 123}),
+    ]);
+    processor.processMessage(lc, [
+      'commit',
+      messages.commit(),
+      {watermark: '0e'},
     ]);
 
     expect(failures).toHaveLength(1);
