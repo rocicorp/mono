@@ -628,4 +628,79 @@ describe('types/subscription', () => {
     });
     expect(subWithCoalesceAndPipeline.pipeline).not.toBeUndefined();
   });
+
+  test('pipeline cancel cleanup ignores already dequeued head entries', async () => {
+    const consumed: number[] = [];
+    const cleanup = vi.fn();
+    const results: Promise<Result>[] = [];
+
+    const subscription = Subscription.create<number>({
+      cleanup,
+      consumed: m => consumed.push(m),
+    });
+    for (let i = 0; i < 1500; i++) {
+      results.push(subscription.push(i).result);
+    }
+
+    assert(
+      subscription.pipeline,
+      'Expected subscription pipeline to be defined',
+    );
+    const iterator = subscription.pipeline[Symbol.asyncIterator]();
+
+    for (let i = 0; i < 1200; i++) {
+      const next = await iterator.next();
+      assert(!next.done, 'Expected next subscription entry');
+      expect(next.value.value).toBe(i);
+      next.value.consumed();
+      expect(await results[i]).toBe('consumed');
+    }
+
+    const current = await iterator.next();
+    assert(!current.done, 'Expected current subscription entry');
+    expect(current.value.value).toBe(1200);
+    expect(subscription.queued).toBe(299);
+
+    subscription.cancel();
+    expect(await iterator.next()).toEqual({value: undefined, done: true});
+
+    for (let i = 1200; i < 1500; i++) {
+      expect(await results[i]).toBe('unconsumed');
+    }
+    expect(consumed).toEqual(Array.from({length: 1200}, (_, i) => i));
+    expect(cleanup).toBeCalledTimes(1);
+    expect(cleanup.mock.calls[0][0]).toEqual(
+      Array.from({length: 300}, (_, i) => i + 1200),
+    );
+  });
+
+  test('end drains queued messages after head advances', async () => {
+    const consumed: number[] = [];
+    const cleanup = vi.fn();
+    const results: Promise<Result>[] = [];
+
+    const subscription = Subscription.create<number>({
+      cleanup,
+      consumed: m => consumed.push(m),
+    });
+    for (let i = 0; i < 1500; i++) {
+      results.push(subscription.push(i).result);
+    }
+
+    const received: number[] = [];
+    for await (const m of subscription) {
+      received.push(m);
+      if (m === 1199) {
+        subscription.end();
+      }
+    }
+
+    expect(received).toEqual(Array.from({length: 1500}, (_, i) => i));
+    expect(consumed).toEqual(received);
+    expect(cleanup).toBeCalledTimes(1);
+    expect(cleanup.mock.calls[0][0]).toEqual([]);
+    for (const result of results) {
+      expect(await result).toBe('consumed');
+    }
+  });
 });
