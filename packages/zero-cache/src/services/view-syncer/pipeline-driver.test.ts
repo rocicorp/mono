@@ -1620,6 +1620,277 @@ describe('view-syncer/pipeline-driver', () => {
     `);
   });
 
+  test('planned OR whereExists keeps helper rows in rowSetSignature', () => {
+    const storage = new Database(lc, ':memory:');
+    storage.prepare(CREATE_STORAGE_TABLE).run();
+    const plannerPipelines = new PipelineDriver(
+      lc,
+      testLogConfig,
+      new Snapshotter(lc, dbFile.path, {appID: shardID.appID}),
+      shardID,
+      new DatabaseStorage(storage).createClientGroupStorage(
+        'planner-client-group',
+      ),
+      'pipeline-driver.test.ts/planner',
+      new InspectorDelegate(undefined),
+      () => 200,
+      true,
+    );
+    const query: AST = {
+      table: 'issues',
+      orderBy: [['id', 'asc']],
+      where: {
+        type: 'or',
+        conditions: [
+          {
+            type: 'simple',
+            left: {type: 'column', name: 'closed'},
+            op: '=',
+            right: {type: 'literal', value: true},
+          },
+          {
+            type: 'correlatedSubquery',
+            op: 'EXISTS',
+            flip: true,
+            related: {
+              system: 'client',
+              correlation: {
+                parentField: ['id'],
+                childField: ['issueID'],
+              },
+              subquery: {
+                table: 'issueLabels',
+                alias: 'issueLabels',
+                orderBy: [
+                  ['issueID', 'asc'],
+                  ['labelID', 'asc'],
+                ],
+                where: {
+                  type: 'simple',
+                  left: {type: 'column', name: 'labelID'},
+                  op: '=',
+                  right: {type: 'literal', value: '1'},
+                },
+              },
+            },
+          },
+        ],
+      },
+    };
+
+    db.exec('ANALYZE');
+    plannerPipelines.init(clientSchema);
+    expect([
+      ...plannerPipelines.addQuery(
+        'hash-planner-or-exists',
+        'queryID',
+        query,
+        startTimer(),
+      ),
+    ]).toMatchInlineSnapshot(`
+      [
+        {
+          "queryID": "queryID",
+          "row": {
+            "_0_version": "123",
+            "closed": false,
+            "id": "1",
+          },
+          "rowKey": {
+            "id": "1",
+          },
+          "table": "issues",
+          "type": 0,
+        },
+        {
+          "queryID": "queryID",
+          "row": {
+            "_0_version": "123",
+            "issueID": "1",
+            "labelID": "1",
+            "legacyID": "1-1",
+          },
+          "rowKey": {
+            "issueID": "1",
+            "labelID": "1",
+          },
+          "table": "issueLabels",
+          "type": 0,
+        },
+        {
+          "queryID": "queryID",
+          "row": {
+            "_0_version": "123",
+            "closed": true,
+            "id": "2",
+          },
+          "rowKey": {
+            "id": "2",
+          },
+          "table": "issues",
+          "type": 0,
+        },
+      ]
+    `);
+
+    expect(plannerPipelines.rowSetSignature('queryID')).toEqual(
+      rowIDSignatureUnit({
+        schema: '',
+        table: 'issues',
+        rowKey: {id: '1'},
+      }) ^
+        rowIDSignatureUnit({
+          schema: '',
+          table: 'issueLabels',
+          rowKey: {issueID: '1', labelID: '1'},
+        }) ^
+        rowIDSignatureUnit({
+          schema: '',
+          table: 'issues',
+          rowKey: {id: '2'},
+        }),
+    );
+  });
+
+  test('planned OR absorption keeps client helper rows in rowSetSignature', () => {
+    const storage = new Database(lc, ':memory:');
+    storage.prepare(CREATE_STORAGE_TABLE).run();
+    const plannerPipelines = new PipelineDriver(
+      lc,
+      testLogConfig,
+      new Snapshotter(lc, dbFile.path, {appID: shardID.appID}),
+      shardID,
+      new DatabaseStorage(storage).createClientGroupStorage(
+        'planner-absorption-client-group',
+      ),
+      'pipeline-driver.test.ts/planner-absorption',
+      new InspectorDelegate(undefined),
+      () => 200,
+      true,
+    );
+    const closedFalse = {
+      type: 'simple',
+      left: {type: 'column', name: 'closed'},
+      op: '=',
+      right: {type: 'literal', value: false},
+    } as const;
+    const query: AST = {
+      table: 'issues',
+      orderBy: [['id', 'asc']],
+      where: {
+        type: 'or',
+        conditions: [
+          closedFalse,
+          {
+            type: 'and',
+            conditions: [
+              closedFalse,
+              {
+                type: 'correlatedSubquery',
+                op: 'EXISTS',
+                flip: true,
+                related: {
+                  system: 'client',
+                  correlation: {
+                    parentField: ['id'],
+                    childField: ['issueID'],
+                  },
+                  subquery: {
+                    table: 'issueLabels',
+                    alias: 'issueLabels',
+                    orderBy: [
+                      ['issueID', 'asc'],
+                      ['labelID', 'asc'],
+                    ],
+                    where: {
+                      type: 'simple',
+                      left: {type: 'column', name: 'labelID'},
+                      op: '=',
+                      right: {type: 'literal', value: '1'},
+                    },
+                  },
+                },
+              },
+            ],
+          },
+        ],
+      },
+    };
+
+    db.exec('ANALYZE');
+    plannerPipelines.init(clientSchema);
+    expect([
+      ...plannerPipelines.addQuery(
+        'hash-planner-or-absorption',
+        'queryID',
+        query,
+        startTimer(),
+      ),
+    ]).toMatchInlineSnapshot(`
+      [
+        {
+          "queryID": "queryID",
+          "row": {
+            "_0_version": "123",
+            "closed": false,
+            "id": "1",
+          },
+          "rowKey": {
+            "id": "1",
+          },
+          "table": "issues",
+          "type": 0,
+        },
+        {
+          "queryID": "queryID",
+          "row": {
+            "_0_version": "123",
+            "issueID": "1",
+            "labelID": "1",
+            "legacyID": "1-1",
+          },
+          "rowKey": {
+            "issueID": "1",
+            "labelID": "1",
+          },
+          "table": "issueLabels",
+          "type": 0,
+        },
+        {
+          "queryID": "queryID",
+          "row": {
+            "_0_version": "123",
+            "closed": false,
+            "id": "3",
+          },
+          "rowKey": {
+            "id": "3",
+          },
+          "table": "issues",
+          "type": 0,
+        },
+      ]
+    `);
+
+    expect(plannerPipelines.rowSetSignature('queryID')).toEqual(
+      rowIDSignatureUnit({
+        schema: '',
+        table: 'issues',
+        rowKey: {id: '1'},
+      }) ^
+        rowIDSignatureUnit({
+          schema: '',
+          table: 'issueLabels',
+          rowKey: {issueID: '1', labelID: '1'},
+        }) ^
+        rowIDSignatureUnit({
+          schema: '',
+          table: 'issues',
+          rowKey: {id: '3'},
+        }),
+    );
+  });
+
   test('subset client schema can hydrate whereExists helper tables', () => {
     pipelines.init(subsetClientSchema);
 
