@@ -164,6 +164,26 @@ export class ChangeProcessor {
     return null;
   }
 
+  processMessages(
+    lc: LogContext,
+    downstreams: readonly ChangeStreamData[],
+  ): CommitResult | readonly CommitResult[] | null {
+    const results: CommitResult[] = [];
+    for (const downstream of downstreams) {
+      const result = this.processMessage(lc, downstream);
+      if (result) {
+        results.push(result);
+      }
+      if (this.#failure) {
+        break;
+      }
+    }
+    if (results.length === 0) {
+      return null;
+    }
+    return results.length === 1 ? results[0] : results;
+  }
+
   #beginTransaction(
     lc: LogContext,
     commitVersion: string,
