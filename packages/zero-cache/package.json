@@ -31,6 +31,7 @@
     "start": "node ./src/server/runner/main.ts",
     "benchdb": "node ./bench/bench.ts",
     "double": "node ./bench/double.ts",
+    "perf:vs-digestion": "node ./bench/view-syncer-digestion/index.ts",
     "wal_bench": "node ./bench/wal-bench.ts",
     "wal2_bench": "node ./bench/wal2-bench.ts",
     "fmt": "oxfmt .",
