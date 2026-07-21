@@ -39,7 +39,10 @@ export function configForNoPg(url: string) {
   return mergeConfig(config, {
     test: {
       name: `${name}/no-pg`,
-      include: ['src/**/*.test.?(c|m)[jt]s?(x)'],
+      include: [
+        'src/**/*.test.?(c|m)[jt]s?(x)',
+        'bench/**/*.test.?(c|m)[jt]s?(x)',
+      ],
       exclude: ['src/**/*.pg.test.?(c|m)[jt]s?(x)'],
       browser: {enabled: false},
       silent: 'passed-only',
