@@ -32,7 +32,7 @@ RUN apk add --no-cache readline readline-dev
 # packageManager field. pnpm's build-script allowlist (v10+) blocks lifecycle
 # scripts from transitive deps unless explicitly opted in, shrinking the
 # postinstall supply-chain surface to packages we name below.
-RUN corepack enable && corepack prepare pnpm@11.5.3 --activate
+RUN corepack enable && corepack prepare pnpm@11.11.0 --activate
 
 RUN mkdir -p /opt/app
 WORKDIR /opt/app
