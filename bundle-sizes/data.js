@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1782851467221,
+  "lastUpdate": 1784718068499,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -56929,6 +56929,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/rocicorp/mono/commit/261c7e64357642e1910d059cba6c7ce5946bec0a"
         },
         "date": 1782851454214,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 317540,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 57097,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 117426,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 33511,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "arv@roci.dev",
+            "name": "Erik Arvidsson",
+            "username": "arv"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "461ce78cd12c7c50c35ef8df733c39bdabae1418",
+          "message": "chore: update action versions and pnpm in workflows and package.json (#6246)\n\nCo-authored-by: copilot-swe-agent[bot] <198982749+Copilot@users.noreply.github.com>",
+          "timestamp": "2026-07-22T10:44:47Z",
+          "tree_id": "8040b189fb5946f92782f79c4eb74fa2380f4101",
+          "url": "https://github.com/rocicorp/mono/commit/461ce78cd12c7c50c35ef8df733c39bdabae1418"
+        },
+        "date": 1784718053742,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
