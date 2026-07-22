@@ -4,7 +4,7 @@ import {assert} from '../../../../shared/src/asserts.ts';
 import type {LogConfig} from '../../../../shared/src/logging.ts';
 import type {Database} from '../../../../zqlite/src/db.ts';
 import {WRITE_WORKER_URL} from '../../server/worker-urls.ts';
-import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
+import type {SerializedChangeStreamData} from '../change-source/protocol/current/downstream.ts';
 import type {ChangeProcessorMode, CommitResult} from './change-processor.ts';
 import type {SubscriptionState} from './schema/replication-state.ts';
 
@@ -21,7 +21,9 @@ type ErrorHandler = (err: Error) => void;
  */
 export interface WriteWorkerClient {
   getSubscriptionState(): Promise<SubscriptionState>;
-  processMessage(downstream: ChangeStreamData): Promise<CommitResult | null>;
+  processMessage(
+    downstream: SerializedChangeStreamData,
+  ): Promise<CommitResult | null>;
   abort(): void;
   stop(): Promise<void>;
   onError(handler: ErrorHandler): void;
@@ -89,7 +91,7 @@ export function deserializeError(serialized: SerializedError): Error {
 export type ArgsMap = {
   init: [string, ChangeProcessorMode, PragmaConfig, LogConfig];
   getSubscriptionState: [];
-  processMessage: [ChangeStreamData];
+  processMessage: [SerializedChangeStreamData];
   abort: [];
   stop: [];
 };
@@ -194,7 +196,9 @@ export class ThreadWriteWorkerClient implements WriteWorkerClient {
     return this.#call('getSubscriptionState', []);
   }
 
-  processMessage(downstream: ChangeStreamData): Promise<CommitResult | null> {
+  processMessage(
+    downstream: SerializedChangeStreamData,
+  ): Promise<CommitResult | null> {
     return this.#call('processMessage', [downstream]);
   }
 

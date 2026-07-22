@@ -18,6 +18,7 @@ import {initEventSinkForTesting} from '../../observability/events.ts';
 import {DbFile, expectTables, initDB} from '../../test/lite.ts';
 import {Subscription} from '../../types/subscription.ts';
 import {orTimeoutWith} from '../../types/timeout.ts';
+import * as changeLogCodec from '../change-streamer/change-log-codec.ts';
 import {
   PROTOCOL_VERSION,
   type Downstream,
@@ -32,6 +33,14 @@ import {
 } from './schema/replication-state.ts';
 import {ReplicationMessages} from './test-utils.ts';
 import {ThreadWriteWorkerClient} from './write-worker-client.ts';
+
+vi.mock('../change-streamer/change-log-codec.ts', async importOriginal => {
+  const actual = await importOriginal<typeof changeLogCodec>();
+  return {
+    ...actual,
+    serializeChangeStreamData: vi.fn(actual.serializeChangeStreamData),
+  };
+});
 
 type ErrorType = Enum<typeof ErrorType>;
 
@@ -52,6 +61,7 @@ describe('replicator/incremental-sync', () => {
   >;
 
   beforeEach(async () => {
+    vi.mocked(changeLogCodec.serializeChangeStreamData).mockClear();
     lc = createSilentLogContext();
     dbFile = new DbFile('incremental-sync-test');
     mainDb = dbFile.connect(lc);
@@ -143,6 +153,9 @@ describe('replicator/incremental-sync', () => {
       ['data', issues.insert('issues', {issueID: 123, bool: true})],
       ['data', issues.insert('issues', {issueID: 456, bool: false})],
       ['commit', issues.commit(), {watermark: '06'}],
+
+      ['begin', issues.begin(), {commitWatermark: '08'}],
+      ['rollback', issues.rollback()],
 
       ['begin', issues.begin(), {commitWatermark: '0b'}],
       [
@@ -380,6 +393,7 @@ describe('replicator/incremental-sync', () => {
         },
       ]
     `);
+    expect(changeLogCodec.serializeChangeStreamData).toHaveBeenCalledTimes(11);
   });
 
   test('replicates schema changes', async () => {
@@ -786,5 +800,6 @@ describe('replicator/incremental-sync', () => {
 
     // Should stop / resolve
     await syncing;
+    expect(changeLogCodec.serializeChangeStreamData).not.toHaveBeenCalled();
   });
 });
