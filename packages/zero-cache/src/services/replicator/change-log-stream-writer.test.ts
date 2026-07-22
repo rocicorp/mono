@@ -5,7 +5,10 @@ import {StatementRunner} from '../../db/statements.ts';
 import {expectTableExact} from '../../test/lite.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
 import {serializeChangeStreamData} from '../change-streamer/change-log-codec.ts';
-import {ChangeLogStreamWriter} from './change-log-stream-writer.ts';
+import {
+  ChangeLogStreamWriter,
+  estimateChangeLogStreamRowBytes,
+} from './change-log-stream-writer.ts';
 import {CHANGE_LOG_STREAM_TABLE} from './schema/change-log-stream.ts';
 import {
   initReplicationState,
@@ -27,41 +30,46 @@ describe('replicator/change-log-stream-writer', () => {
     const writeTimeMs = 1_234_567;
 
     runner.beginImmediate();
-    writer.begin(
-      '06',
-      json(['begin', {tag: 'begin'}, {commitWatermark: '06'}]),
-    );
-    writer.append(
-      json([
-        'data',
-        {
-          tag: 'insert',
-          relation: {
-            schema: 'public',
-            name: 'issues',
-            rowKey: {columns: ['id'], type: 'default'},
-          },
-          new: {id: 9007199254740993n, text: 'before\0after'},
+    const begin = json(['begin', {tag: 'begin'}, {commitWatermark: '06'}]);
+    const insert = json([
+      'data',
+      {
+        tag: 'insert',
+        relation: {
+          schema: 'public',
+          name: 'issues',
+          rowKey: {columns: ['id'], type: 'default'},
         },
-      ]),
-      'insert',
-    );
-    writer.append(
-      json([
-        'data',
-        {
-          tag: 'rename-table',
-          old: {schema: 'public', name: 'issues'},
-          new: {schema: 'public', name: 'renamed'},
-        },
-      ]),
-      'rename-table',
-    );
-    writer.commit(
-      '06',
-      json(['commit', {tag: 'commit'}, {watermark: '06'}]),
-      writeTimeMs,
-    );
+        new: {id: 9007199254740993n, text: 'before\0after'},
+      },
+    ]);
+    const rename = json([
+      'data',
+      {
+        tag: 'rename-table',
+        old: {schema: 'public', name: 'issues'},
+        new: {schema: 'public', name: 'renamed'},
+      },
+    ]);
+    const commit = json(['commit', {tag: 'commit'}, {watermark: '06'}]);
+    writer.begin('06', begin);
+    writer.append(insert, 'insert');
+    writer.append(rename, 'rename-table');
+    const stats = writer.commit('06', commit, writeTimeMs);
+    expect(stats).toEqual({
+      rows: 4,
+      estimatedBytes:
+        estimateChangeLogStreamRowBytes('06', '{"tag":"begin"}') +
+        estimateChangeLogStreamRowBytes(
+          '06',
+          '{"tag":"insert","relation":{"schema":"public","name":"issues","rowKey":{"columns":["id"],"type":"default"}},"new":{"id":9007199254740993,"text":"before\\u0000after"}}',
+        ) +
+        estimateChangeLogStreamRowBytes(
+          '06',
+          '{"tag":"rename-table","old":{"schema":"public","name":"issues"},"new":{"schema":"public","name":"renamed"}}',
+        ) +
+        estimateChangeLogStreamRowBytes('06', '{"tag":"commit"}', '06', true),
+    });
     updateReplicationWatermark(runner, '06', writeTimeMs);
     runner.commit();
 

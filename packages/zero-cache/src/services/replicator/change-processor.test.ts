@@ -3894,7 +3894,10 @@ describe('replicator/change-processor change-stream logging', () => {
     const result = process(['commit', issues.commit(), {watermark: '06'}]);
 
     expect(failures).toEqual([]);
-    expect(result).toMatchObject({watermark: '06'});
+    expect(result).toMatchObject({
+      watermark: '06',
+      changeLogStream: {rows: 3, estimatedBytes: expect.any(Number)},
+    });
     expectTableExact(
       replica,
       'issues',

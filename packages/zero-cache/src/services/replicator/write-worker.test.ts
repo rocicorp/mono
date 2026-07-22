@@ -140,9 +140,15 @@ describe('write-worker', () => {
       ['data', issues.insert('issues', {issueID: 456, bool: false})],
       ['commit', issues.commit(), {watermark: '06'}],
     ];
+    let commitResult = null;
     for (const message of messages) {
-      await worker.processMessage(serialized(message));
+      commitResult =
+        (await worker.processMessage(serialized(message))) ?? commitResult;
     }
+    expect(commitResult).toMatchObject({
+      watermark: '06',
+      changeLogStream: {rows: 4, estimatedBytes: expect.any(Number)},
+    });
 
     await worker.stop();
     worker = new ThreadWriteWorkerClient();
