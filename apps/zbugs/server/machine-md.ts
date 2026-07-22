@@ -10,18 +10,21 @@
  * logins.
  */
 
-export const BASE_URL = 'https://bugs.rocicorp.dev';
+import {compareUTF8} from 'compare-utf8';
+import {groupBy} from '../../../packages/shared/src/arrays.ts';
 
-export type MdUser = {readonly login: string};
+const BASE_URL = 'https://bugs.rocicorp.dev';
 
-export type MdEmoji = {
+type MdUser = {readonly login: string};
+
+type MdEmoji = {
   readonly value: string;
   readonly creator?: MdUser | undefined;
 };
 
-export type MdLabel = {readonly name: string};
+type MdLabel = {readonly name: string};
 
-export type MdProject = {
+type MdProject = {
   readonly name: string;
   readonly lowerCaseName: string;
 };
@@ -50,12 +53,12 @@ export type MdIssue = {
 };
 
 /** Formats an epoch-milliseconds timestamp as e.g. `2026-07-01T12:34:56Z`. */
-export function formatDate(epochMillis: number): string {
+function formatDate(epochMillis: number): string {
   return new Date(epochMillis).toISOString().replace(/\.\d+Z$/, 'Z');
 }
 
 /** Collapses all whitespace runs (including newlines) to single spaces. */
-export function oneLine(s: string): string {
+function oneLine(s: string): string {
   return s.replace(/\s+/g, ' ').trim();
 }
 
@@ -66,15 +69,11 @@ export function issueMdPath(
   return `/p/${projectLowerCaseName}/issue/${ref}.md`;
 }
 
-export function issueHumanURL(
+function issueHumanURL(
   projectLowerCaseName: string,
   ref: number | string,
 ): string {
   return `${BASE_URL}/p/${projectLowerCaseName}/issue/${ref}`;
-}
-
-function compare(a: string, b: string): number {
-  return a < b ? -1 : a > b ? 1 : 0;
 }
 
 function formatReactions(
@@ -83,24 +82,15 @@ function formatReactions(
   if (!emoji || emoji.length === 0) {
     return undefined;
   }
-  const groups = new Map<string, {count: number; logins: string[]}>();
-  for (const e of emoji) {
-    let group = groups.get(e.value);
-    if (!group) {
-      group = {count: 0, logins: []};
-      groups.set(e.value, group);
-    }
-    group.count++;
-    if (e.creator) {
-      group.logins.push(e.creator.login);
-    }
-  }
-  return [...groups.entries()]
-    .sort(([a], [b]) => compare(a, b))
-    .map(([value, {count, logins}]) => {
-      const who =
-        logins.length > 0 ? ` (${logins.sort(compare).join(', ')})` : '';
-      return `${value} ×${count}${who}`;
+  return [...groupBy(emoji, e => e.value)]
+    .sort(([a], [b]) => compareUTF8(a, b))
+    .map(([value, group]) => {
+      const logins = group
+        .map(e => e.creator?.login)
+        .filter(login => login !== undefined)
+        .sort(compareUTF8);
+      const who = logins.length > 0 ? ` (${logins.join(', ')})` : '';
+      return `${value} ×${group.length}${who}`;
     })
     .join(' · ');
 }
@@ -126,7 +116,7 @@ export function renderIssueMd(
   if (issue.assignee) {
     lines.push(`- Assignee: @${issue.assignee.login}`);
   }
-  const labels = (issue.labels ?? []).map(l => l.name).sort(compare);
+  const labels = (issue.labels ?? []).map(l => l.name).sort(compareUTF8);
   if (labels.length > 0) {
     lines.push(`- Labels: ${labels.join(', ')}`);
   }

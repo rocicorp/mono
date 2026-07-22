@@ -1,6 +1,7 @@
 import type {IncomingHttpHeaders} from 'http';
 import type {FastifyInstance, FastifyReply} from 'fastify';
 import type {JWTData} from '../shared/auth.ts';
+import {getIDFromString} from '../shared/issue-id.ts';
 import {queries} from '../shared/queries.ts';
 import {builder} from '../shared/schema.ts';
 import {dbProvider} from './db.ts';
@@ -14,20 +15,16 @@ const MAX_COMMENTS = 1000;
 
 type AuthFn = (headers: IncomingHttpHeaders) => Promise<JWTData | undefined>;
 
-// Mirrors getIDFromString in src/pages/issue/get-id.tsx, which is not imported
-// here because it is part of the client bundle. Returns undefined for ids that
-// cannot possibly match (empty, or digits beyond the integer range).
+// Returns undefined for ids that cannot possibly match (empty, or digit
+// strings beyond the safe-integer range).
 function parseIssueID(idStr: string) {
   if (idStr === '') {
     return undefined;
   }
-  if (/[^\d]/.test(idStr)) {
-    return {idField: 'id', idValue: idStr} as const;
-  }
-  const shortID = parseInt(idStr);
-  return Number.isSafeInteger(shortID)
-    ? ({idField: 'shortID', idValue: shortID} as const)
-    : undefined;
+  const parsed = getIDFromString(idStr);
+  return parsed.idField === 'shortID' && !Number.isSafeInteger(parsed.idValue)
+    ? undefined
+    : parsed;
 }
 
 async function fetchIssueForMd(

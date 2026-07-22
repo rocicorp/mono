@@ -1,7 +1,5 @@
 import {expect, test} from 'vitest';
 import {
-  formatDate,
-  oneLine,
   renderErrorMd,
   renderIssueMd,
   type MdComment,
@@ -130,16 +128,6 @@ test('reactions without creators still count', () => {
     {commentsCapped: false},
   );
   expect(md).toContain('- Reactions: 👀 ×2\n');
-});
-
-test('formatDate', () => {
-  expect(formatDate(Date.UTC(2026, 6, 1, 12, 34, 56, 789))).toBe(
-    '2026-07-01T12:34:56Z',
-  );
-});
-
-test('oneLine', () => {
-  expect(oneLine('  a\r\n b\t\tc  ')).toBe('a b c');
 });
 
 test('renderErrorMd', () => {
