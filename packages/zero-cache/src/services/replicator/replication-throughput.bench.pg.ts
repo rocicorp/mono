@@ -184,6 +184,7 @@ async function startReplicationPipeline(testDBs: PgTest['testDBs']) {
     parseStringifiedChangeStreamer(changeStreamer),
     worker,
     null,
+    undefined,
   );
   const replicatorDone = replicator.run();
   cleanup.push(async () => {

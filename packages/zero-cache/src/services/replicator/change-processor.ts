@@ -56,7 +56,10 @@ import type {
   TableUpdateMetadata,
 } from '../change-source/protocol/current/data.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
-import {ChangeLogStreamWriter} from './change-log-stream-writer.ts';
+import {
+  ChangeLogStreamWriter,
+  type ChangeLogStreamTransactionStats,
+} from './change-log-stream-writer.ts';
 import type {ReplicatorMode} from './replicator.ts';
 import {ChangeLog, DEL_OP, SET_OP} from './schema/change-log.ts';
 import {ColumnMetadataStore} from './schema/column-metadata.ts';
@@ -77,6 +80,7 @@ export type CommitResult = {
   completedBackfill: DownloadStatus | undefined;
   schemaUpdated: boolean;
   changeLogUpdated: boolean;
+  changeLogStream?: ChangeLogStreamTransactionStats | undefined;
 };
 
 /**
@@ -954,9 +958,14 @@ class TransactionProcessor {
         }: ${stringify(commit)}`,
       );
     }
+    let changeLogStream: ChangeLogStreamTransactionStats | undefined;
     if (changeLogStreamWriter) {
       const writeTimeMs = Date.now();
-      changeLogStreamWriter.commit(watermark, must(canonicalJSON), writeTimeMs);
+      changeLogStream = changeLogStreamWriter.commit(
+        watermark,
+        must(canonicalJSON),
+        writeTimeMs,
+      );
       updateReplicationWatermark(this.#db, watermark, writeTimeMs);
     } else {
       updateReplicationWatermark(this.#db, watermark);
@@ -982,6 +991,7 @@ class TransactionProcessor {
       completedBackfill: this.#completedBackfill,
       schemaUpdated: this.#schemaChanged,
       changeLogUpdated: this.#numChangeLogEntries > 0,
+      ...(changeLogStream === undefined ? {} : {changeLogStream}),
     };
   }
 

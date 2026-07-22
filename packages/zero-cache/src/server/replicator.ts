@@ -5,6 +5,7 @@ import {consoleLogSink, LogContext} from '@rocicorp/logger';
 import {assert} from '../../../shared/src/asserts.ts';
 import {must} from '../../../shared/src/must.ts';
 import * as v from '../../../shared/src/valita.ts';
+import {Database} from '../../../zqlite/src/db.ts';
 import {getNormalizedZeroConfig} from '../config/zero-config.ts';
 import {registerSQLiteCorruptionDiagnosticTarget} from '../db/sqlite-corruption.ts';
 import {initEventSink} from '../observability/events.ts';
@@ -16,6 +17,11 @@ import {
   ReplicatorService,
   type ReplicatorMode,
 } from '../services/replicator/replicator.ts';
+import {
+  getSQLiteChangeLogInfo,
+  logSQLiteChangeLogStartup,
+  SQLiteChangeLogObserver,
+} from '../services/replicator/sqlite-change-log-observability.ts';
 import {ThreadWriteWorkerClient} from '../services/replicator/write-worker-client.ts';
 import {
   parentWorker,
@@ -80,6 +86,12 @@ export default async function runWorker(
     dbPath,
   });
 
+  const changeLogInfo = readSQLiteChangeLogInfo(lc, dbPath);
+  logSQLiteChangeLogStartup(lc, fileMode, logsChangeStream, changeLogInfo);
+  const sqliteChangeLogObserver = logsChangeStream
+    ? new SQLiteChangeLogObserver(lc, changeLogInfo)
+    : undefined;
+
   setupMetrics(lc, dbPath, walMode);
 
   // Create the write worker for async SQLite writes.
@@ -116,6 +128,7 @@ export default async function runWorker(
       ? // publish ReplicationStatusEvents from backup-replicator only
         ReplicationStatusPublisher.forReplicaFile(dbPath)
       : null,
+    sqliteChangeLogObserver,
   );
 
   setUpMessageHandlers(lc, replicator, parent);
@@ -129,6 +142,15 @@ export default async function runWorker(
   }
 
   return running;
+}
+
+function readSQLiteChangeLogInfo(lc: LogContext, file: string) {
+  const db = new Database(lc, file, {readonly: true});
+  try {
+    return getSQLiteChangeLogInfo(db);
+  } finally {
+    db.close();
+  }
 }
 
 function setupMetrics(lc: LogContext, file: string, walMode: WalMode) {
