@@ -20,6 +20,7 @@ import type {ReplicationStatusPublisher} from './replication-status.ts';
 import type {ReplicaState, ReplicatorMode} from './replicator.ts';
 import {ReplicationReportRecorder} from './reporter/recorder.ts';
 import type {ReplicationReport} from './reporter/report-schema.ts';
+import type {SQLiteChangeLogObserver} from './sqlite-change-log-observability.ts';
 import type {WriteWorkerClient} from './write-worker-client.ts';
 
 type ErrorType = Enum<typeof ErrorType>;
@@ -41,6 +42,7 @@ export class IncrementalSyncer {
   readonly #statusPublisher: ReplicationStatusPublisher | null;
   readonly #notifier: Notifier;
   readonly #reporter: ReplicationReportRecorder;
+  readonly #sqliteChangeLogObserver: SQLiteChangeLogObserver | undefined;
 
   readonly #state = new RunningState('IncrementalSyncer');
 
@@ -58,6 +60,7 @@ export class IncrementalSyncer {
     worker: WriteWorkerClient,
     mode: ReplicatorMode,
     statusPublisher: ReplicationStatusPublisher | null,
+    sqliteChangeLogObserver: SQLiteChangeLogObserver | undefined,
   ) {
     this.#lc = lc;
     this.#taskID = taskID;
@@ -68,6 +71,7 @@ export class IncrementalSyncer {
     this.#statusPublisher = statusPublisher;
     this.#notifier = new Notifier();
     this.#reporter = new ReplicationReportRecorder(lc);
+    this.#sqliteChangeLogObserver = sqliteChangeLogObserver;
   }
 
   async run() {
@@ -178,10 +182,27 @@ export class IncrementalSyncer {
               }
 
               const data = message as ChangeStreamData;
-              const result = await this.#worker.processMessage({
+              const start = performance.now();
+              this.#sqliteChangeLogObserver?.messageReceived(data);
+              let result: CommitResult | null;
+              try {
+                result = await this.#worker.processMessage({
+                  data,
+                  json: serializeChangeStreamData(data),
+                });
+              } catch (e) {
+                this.#sqliteChangeLogObserver?.messageFailed(
+                  data,
+                  e,
+                  performance.now() - start,
+                );
+                throw e;
+              }
+              this.#sqliteChangeLogObserver?.messageProcessed(
                 data,
-                json: serializeChangeStreamData(data),
-              });
+                result,
+                performance.now() - start,
+              );
 
               this.#handleResult(lc, result);
               if (result?.completedBackfill) {
@@ -191,9 +212,11 @@ export class IncrementalSyncer {
             }
           }
         }
+        this.#sqliteChangeLogObserver?.abort();
         this.#worker.abort();
       } catch (e) {
         err = e;
+        this.#sqliteChangeLogObserver?.abort();
         this.#worker.abort();
       } finally {
         downstream?.cancel();

@@ -246,6 +246,7 @@ export default async function runWorker(
     new IPCChangeStreamer(parent),
     worker,
     null,
+    undefined,
   );
 
   const running = runUntilKilled(lc, parent, replicator);

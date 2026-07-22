@@ -12,6 +12,7 @@ import {sleep} from '../../../../shared/src/sleep.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {StatementRunner} from '../../db/statements.ts';
 import {expectTables, test, type PgTest} from '../../test/db.ts';
+import {DbFile, initDB} from '../../test/lite.ts';
 import type {PostgresDB} from '../../types/pg.ts';
 import type {Source} from '../../types/streams.ts';
 import {Subscription, type Result} from '../../types/subscription.ts';
@@ -19,13 +20,19 @@ import type {ChangeSource} from '../change-source/change-source.ts';
 import {type ChangeStreamMessage} from '../change-source/protocol/current/downstream.ts';
 import type {UpstreamStatusMessage} from '../change-source/protocol/current/status.ts';
 import {exitAfter} from '../life-cycle.ts';
+import {IncrementalSyncer} from '../replicator/incremental-sync.ts';
 import {ReplicationStatusPublisher} from '../replicator/replication-status.ts';
 import {
   getSubscriptionState,
   initReplicationState,
   type SubscriptionState,
 } from '../replicator/schema/replication-state.ts';
+import {
+  getSQLiteChangeLogInfo,
+  SQLiteChangeLogObserver,
+} from '../replicator/sqlite-change-log-observability.ts';
 import {ReplicationMessages} from '../replicator/test-utils.ts';
+import {ThreadWriteWorkerClient} from '../replicator/write-worker-client.ts';
 import {
   initializeStreamer,
   type TuningOptions,
@@ -162,6 +169,152 @@ describe('change-streamer/service', () => {
   }
 
   const messages = new ReplicationMessages({foo: 'id'});
+
+  test('PG stream shadow-writes SQLite without changing PG serving or ACKs', async () => {
+    const dbFile = new DbFile('sqlite-change-log-shadow-integration');
+    const replica = dbFile.connect(lc);
+    replica.pragma('journal_mode = wal');
+    replica.exec(/*sql*/ `
+      CREATE TABLE "_zero.versionHistory" (
+        "dataVersion" INTEGER NOT NULL,
+        "schemaVersion" INTEGER NOT NULL,
+        "minSafeVersion" INTEGER NOT NULL,
+        "lock" INTEGER PRIMARY KEY DEFAULT 1 CHECK ("lock" = 1)
+      );
+      INSERT INTO "_zero.versionHistory"
+        ("dataVersion", "schemaVersion", "minSafeVersion")
+        VALUES (14, 14, 0);
+    `);
+    initReplicationState(replica, ['zero_data'], REPLICA_VERSION);
+    initDB(
+      replica,
+      `
+      CREATE TABLE foo(
+        id TEXT PRIMARY KEY,
+        _0_version TEXT
+      );
+      `,
+    );
+
+    const worker = new ThreadWriteWorkerClient();
+    await worker.init(
+      dbFile.path,
+      'serving',
+      true,
+      {busyTimeout: 30_000, analysisLimit: 1000},
+      {level: 'error', format: 'text'},
+    );
+    const observer = new SQLiteChangeLogObserver(
+      lc,
+      getSQLiteChangeLogInfo(replica),
+    );
+    const syncer = new IncrementalSyncer(
+      lc,
+      'shadow-write-task',
+      'canonical-replicator',
+      {
+        async subscribe(ctx) {
+          const encoded = await streamer.subscribe(ctx);
+          return {
+            cancel: err => encoded.cancel(err),
+            async *[Symbol.asyncIterator]() {
+              for await (const json of encoded) {
+                yield BigIntJSON.parse(json) as Downstream;
+              }
+            },
+          };
+        },
+      },
+      worker,
+      'serving',
+      null,
+      observer,
+    );
+    const syncing = syncer.run();
+
+    const liveSub = await streamer.subscribe({
+      protocolVersion: PROTOCOL_VERSION,
+      taskID: 'live-observer-task',
+      id: 'live-observer',
+      mode: 'serving',
+      watermark: REPLICA_VERSION,
+      replicaVersion: REPLICA_VERSION,
+      initial: true,
+    });
+    const live = drainToQueue(liveSub);
+    expect(await nextChange(live)).toMatchObject({tag: 'status'});
+
+    try {
+      changes.push(['begin', messages.begin(), {commitWatermark: '06'}]);
+      changes.push(['data', messages.insert('foo', {id: 'hello'})]);
+      changes.push(['commit', messages.commit(), {watermark: '06'}]);
+
+      expect(await nextChange(live)).toMatchObject({tag: 'begin'});
+      expect(await nextChange(live)).toMatchObject({
+        tag: 'insert',
+        new: {id: 'hello'},
+      });
+      expect(await nextChange(live)).toMatchObject({tag: 'commit'});
+
+      await expectAcks('06');
+      await vi.waitFor(() => {
+        expect(
+          replica
+            .prepare(`SELECT "stateVersion" FROM "_zero.replicationState"`)
+            .get(),
+        ).toEqual({stateVersion: '06'});
+      });
+      expect(
+        replica
+          .prepare(
+            `SELECT max("watermark") AS "watermark" FROM "_zero.changeLogStream"`,
+          )
+          .get(),
+      ).toEqual({watermark: '06'});
+      expect(observer.state()).toMatchObject({
+        receivedHead: '06',
+        sqliteHead: '06',
+        headLag: 0,
+        invariantFailures: 0,
+      });
+
+      const catchupSub = await streamer.subscribe({
+        protocolVersion: PROTOCOL_VERSION,
+        taskID: 'catchup-observer-task',
+        id: 'catchup-observer',
+        mode: 'serving',
+        watermark: REPLICA_VERSION,
+        replicaVersion: REPLICA_VERSION,
+        initial: true,
+      });
+      const catchup = drainToQueue(catchupSub);
+      expect(await nextChange(catchup)).toMatchObject({tag: 'status'});
+      expect(await nextChange(catchup)).toMatchObject({tag: 'begin'});
+      expect(await nextChange(catchup)).toMatchObject({
+        tag: 'insert',
+        new: {id: 'hello'},
+      });
+      expect(await nextChange(catchup)).toMatchObject({tag: 'commit'});
+
+      streamer.scheduleCleanup('06');
+      const purge = setTimeoutFn.mock.calls.at(-1)?.[0];
+      assert(purge, 'PG change-log purge was not scheduled');
+      await (purge() as unknown as Promise<void>);
+      expect(
+        await sql`SELECT watermark FROM "zoro_3/cdc"."changeLog"
+                    ORDER BY watermark, pos`.values(),
+      ).toEqual([['06'], ['06'], ['06']]);
+
+      catchupSub.cancel();
+    } finally {
+      liveSub.cancel();
+      syncer.stop(lc);
+      await syncing;
+      await worker.stop();
+      replica.close();
+      dbFile.delete();
+    }
+  });
 
   test('get empty changelog state', async () => {
     expect(await streamer.getChangeLogState()).toEqual({
