@@ -101,11 +101,18 @@ export function computePipelineDedupStats(
   >();
   const internalHashes = new Set<string>();
   const schemaKeys = new Set<string>();
+  let vsIndex = 0;
   for (const vs of viewSyncers) {
     const schemaKey = vs.clientSchemaKey;
     if (schemaKey !== undefined) {
       schemaKeys.add(schemaKey);
     }
+    // Without a client schema the pipeline's dedup identity is unknown, so key
+    // it uniquely per view-syncer; otherwise schema-less pipelines from
+    // unrelated client groups would collapse under a shared `undefined/<hash>`
+    // key and overstate deduplication.
+    const dedupSchemaKey = schemaKey ?? `#vs${vsIndex}`;
+    vsIndex++;
     for (const {
       transformationHash,
       internal,
@@ -113,7 +120,7 @@ export function computePipelineDedupStats(
     } of vs.pipelineHashes()) {
       // Pipelines only share when both the client schema (which determines
       // row keys) and the transformed AST are identical.
-      const key = `${schemaKey}/${transformationHash}`;
+      const key = `${dedupSchemaKey}/${transformationHash}`;
       if (internal) {
         internalTotal++;
         internalHashes.add(key);
@@ -524,9 +531,9 @@ export class Syncer implements SingletonService {
 
     getOrCreateGauge(
       'sync',
-      'pipelines-total',
+      'pipelines_total',
       'Query pipelines across all client groups on this worker, by query ' +
-        'type. The ratio to sync.pipelines-unique is the dedup factor ' +
+        'type. The ratio to sync.pipelines_unique is the dedup factor ' +
         'available to shared pipeline advancement.',
     ).addCallback(result => {
       const stats = this.#computePipelineDedupStats();
@@ -536,7 +543,7 @@ export class Syncer implements SingletonService {
 
     getOrCreateGauge(
       'sync',
-      'pipelines-unique',
+      'pipelines_unique',
       'Distinct (clientSchema, transformationHash) pipelines across all ' +
         'client groups on this worker, by query type',
     ).addCallback(result => {
@@ -547,7 +554,7 @@ export class Syncer implements SingletonService {
 
     getOrCreateGauge(
       'sync',
-      'client-schemas',
+      'client_schemas',
       'Distinct client schemas across all client groups on this worker',
     ).addCallback(result => {
       result.observe(this.#computePipelineDedupStats().clientSchemas);

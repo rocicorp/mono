@@ -448,6 +448,31 @@ describe('computePipelineDedupStats', () => {
     expect(stats.internalUnique).toBe(1);
     expect(stats.clientSchemas).toBe(2);
   });
+
+  test('schema-less pipelines are not deduplicated across view-syncers', () => {
+    // A view-syncer with no client schema yet (clientSchemaKey undefined) has
+    // an unknown dedup identity. Two such view-syncers running the same
+    // transformationHash must not collapse into one unique pipeline, which
+    // would overstate the available deduplication.
+    const stats = computePipelineDedupStats([
+      {
+        clientSchemaKey: undefined,
+        pipelineHashes: () => [
+          {transformationHash: 'aaa', internal: false, queryName: 'issues'},
+        ],
+      },
+      {
+        clientSchemaKey: undefined,
+        pipelineHashes: () => [
+          {transformationHash: 'aaa', internal: false, queryName: 'issues'},
+        ],
+      },
+    ]);
+
+    expect(stats.clientTotal).toBe(2);
+    expect(stats.clientHashes.size).toBe(2);
+    expect(stats.clientSchemas).toBe(0);
+  });
 });
 
 function makeParams(clientID: number, params: any = {}) {

@@ -655,13 +655,19 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       return [];
     }
     const cvrQueries = this.#cvr?.queries;
+    if (cvrQueries === undefined) {
+      // Without CVR query metadata we can't distinguish internal queries from
+      // client queries; report nothing rather than misclassify every query as
+      // client (which would inflate the client dedup factor).
+      return [];
+    }
     const hashes: PipelineHashInfo[] = [];
     for (const [queryID, {transformationHash, queryName}] of this.#pipelines
       .queries()
       .entries()) {
       hashes.push({
         transformationHash,
-        internal: cvrQueries?.[queryID]?.type === 'internal',
+        internal: cvrQueries[queryID]?.type === 'internal',
         queryName,
       });
     }
