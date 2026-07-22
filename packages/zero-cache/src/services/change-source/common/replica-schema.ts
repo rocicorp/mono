@@ -11,6 +11,10 @@ import {
   logSQLiteCorruptionDiagnostics,
 } from '../../../db/sqlite-corruption.ts';
 import {AutoResetSignal} from '../../change-streamer/schema/tables.ts';
+import {
+  CREATE_CHANGE_LOG_STREAM_SCHEMA,
+  seedChangeLogStream,
+} from '../../replicator/schema/change-log-stream.ts';
 import {populateFromExistingTables} from '../../replicator/schema/column-metadata.ts';
 import {
   CREATE_RUNTIME_EVENTS_TABLE,
@@ -240,6 +244,16 @@ export const schemaVersionMigrationMap: IncrementalMigrationMap = {
       db.exec(/*sql*/ `
         UPDATE "_zero.replicationState" 
           SET writeTimeMs = COALESCE(writeTimeMs, unixepoch('subsec') * 1000)`);
+    },
+  },
+
+  14: {
+    migrateSchema: (_, db) => {
+      db.exec(CREATE_CHANGE_LOG_STREAM_SCHEMA);
+    },
+
+    migrateData: (_, db) => {
+      seedChangeLogStream(db);
     },
   },
 };
