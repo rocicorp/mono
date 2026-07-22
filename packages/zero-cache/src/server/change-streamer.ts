@@ -92,11 +92,16 @@ export default async function runWorker(
   const {autoReset, replicationLag} = config;
   const shard = getShardConfig(config);
 
-  // Ensure the change DB schema is initialized/up-to-date, then acquire
-  // a lock to prevent change-lock purges. This ensures that (this)
-  // change-streamer will be able to resume from the backup.
+  // Ensure the change DB schema is initialized/up-to-date.
   await initChangeStreamerSchema(lc, changeDB, shard);
-  let purgeLock = await new PurgeLocker(lc, shard, changeDB).acquire();
+
+  // When restoring from litestream, acquire a lock to prevent change-log
+  // purges. This ensures that (this) change-streamer will be able to resume
+  // from the backup.
+  let purgeLock =
+    config.litestream.backupURL && config.litestream.executable
+      ? await new PurgeLocker(lc, shard, changeDB).acquire()
+      : null;
 
   // Restore from litestream if the change-log has entries.
   if (purgeLock) {
