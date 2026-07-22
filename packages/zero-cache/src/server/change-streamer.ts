@@ -100,7 +100,14 @@ export default async function runWorker(
   let purgeLock = await new PurgeLocker(lc, shard, changeDB).acquire();
 
   // Restore from litestream if the change-log has entries.
-  if (purgeLock) {
+  if (purgeLock && !config.litestream.backupURL) {
+    // litestream backups are not configured (e.g. local development), so
+    // there is no backup to restore. Release the purgeLock so that it does
+    // not prevent the change-db update after the (re)sync completes.
+    lc.debug?.('no litestream backup configured. skipping restore');
+    await purgeLock.release();
+    purgeLock = null;
+  } else if (purgeLock) {
     try {
       await restoreReplica(lc, config, purgeLock);
     } catch (e) {
