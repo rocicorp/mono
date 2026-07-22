@@ -841,9 +841,11 @@ export const zeroOptions = {
     },
 
     restoreUsingV5: {
-      type: v.boolean().default(false),
+      type: v.boolean().default(true),
       desc: [
         `Restores the backup using the {bold ZERO_LITESTREAM_EXECUTABLE_V5} if specified.`,
+        `This provides a recovery path if rolling back from {bold ZERO_LITESTREAM_BACKUP_USING_V5}`,
+        `as v5 restores from both v3 and v5 backups (whichever is more recent).`,
       ],
     },
 
