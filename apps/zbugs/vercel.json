@@ -18,6 +18,10 @@
       "destination": "/api"
     },
     {
+      "source": "/p/:projectName/issue/:id.md",
+      "destination": "/api"
+    },
+    {
       "source": "/p/roci/:path*",
       "destination": "/roci.html"
     },
