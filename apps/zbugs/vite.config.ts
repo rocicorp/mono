@@ -12,10 +12,18 @@ const zeroPath = fileURLToPath(
   new URL('../../packages/zero/src/zero.ts', import.meta.url),
 );
 
+function isFastifyPath(url: string): boolean {
+  const pathname = url.split('?')[0];
+  return (
+    pathname.startsWith('/api') ||
+    (pathname.startsWith('/p/') && pathname.endsWith('.md'))
+  );
+}
+
 async function configureServer(server: ViteDevServer) {
   await fastify.ready();
   server.middlewares.use((req, res, next) => {
-    if (!req.url?.startsWith('/api')) {
+    if (!req.url || !isFastifyPath(req.url)) {
       return next();
     }
     fastify.server.emit('request', req, res);

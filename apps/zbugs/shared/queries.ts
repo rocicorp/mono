@@ -12,13 +12,11 @@ import type {AuthData, Role} from './auth.ts';
 import {QueryError, QueryErrorCode} from './error.ts';
 import {builder, ZERO_PROJECT_NAME} from './schema.ts';
 
-function applyIssuePermissions<TQuery extends IssueQuery>(
+export function applyIssuePermissions<TQuery extends IssueQuery>(
   q: TQuery,
   role: Role | undefined,
 ): TQuery {
-  return q.where(({or, cmp, cmpLit}) =>
-    or(cmp('visibility', '=', 'public'), cmpLit(role, '=', 'crew')),
-  ) as TQuery;
+  return role === 'crew' ? q : (q.where('visibility', 'public') as TQuery);
 }
 
 const idValidator = z.string();

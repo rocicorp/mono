@@ -51,6 +51,7 @@
     "@rocicorp/zero-virtual": "0.6.3",
     "@schickling/fps-meter": "^0.1.2",
     "classnames": "^2.5.1",
+    "compare-utf8": "^0.2.0",
     "emoji-picker-element": "^1.22.8",
     "emoji-picker-element-data": "^1.6.1",
     "fastify": "^5.0.0",
