@@ -361,6 +361,7 @@ async function startZeroCacheReplica(testDBs: PgTest['testDBs']) {
     await worker.init(
       replicaDbFile.path,
       'serving',
+      false,
       getPragmaConfig('serving'),
       {level: 'error', format: 'text'},
     );

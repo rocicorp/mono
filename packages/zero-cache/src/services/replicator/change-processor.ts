@@ -56,6 +56,7 @@ import type {
   TableUpdateMetadata,
 } from '../change-source/protocol/current/data.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
+import {ChangeLogStreamWriter} from './change-log-stream-writer.ts';
 import type {ReplicatorMode} from './replicator.ts';
 import {ChangeLog, DEL_OP, SET_OP} from './schema/change-log.ts';
 import {ColumnMetadataStore} from './schema/column-metadata.ts';
@@ -66,6 +67,10 @@ import {
 import {TableMetadataTracker} from './schema/table-metadata.ts';
 
 export type ChangeProcessorMode = ReplicatorMode | 'initial-sync';
+
+export type ChangeProcessorOptions = {
+  logsChangeStream: boolean;
+};
 
 export type CommitResult = {
   watermark: string;
@@ -88,6 +93,7 @@ export type CommitResult = {
 export class ChangeProcessor {
   readonly #db: StatementRunner;
   readonly #changeLog: ChangeLog;
+  readonly #changeLogStreamWriter: ChangeLogStreamWriter | undefined;
   readonly #tableMetadata: TableMetadataTracker;
   readonly #mode: ChangeProcessorMode;
   readonly #failService: (lc: LogContext, err: unknown) => void;
@@ -104,10 +110,14 @@ export class ChangeProcessor {
   constructor(
     db: StatementRunner,
     mode: ChangeProcessorMode,
+    options: ChangeProcessorOptions,
     failService: (lc: LogContext, err: unknown) => void,
   ) {
     this.#db = db;
     this.#changeLog = new ChangeLog(db.db);
+    this.#changeLogStreamWriter = options.logsChangeStream
+      ? new ChangeLogStreamWriter(db.db)
+      : undefined;
     this.#tableMetadata = new TableMetadataTracker(db.db);
     this.#mode = mode;
     this.#failService = failService;
@@ -118,6 +128,7 @@ export class ChangeProcessor {
       let failureError = err;
       try {
         this.#currentTx?.abort(lc); // roll back any pending transaction.
+        this.#changeLogStreamWriter?.rollback();
       } catch (rollbackError) {
         const combinedError = new Error(
           `Message processing failed and rollback also failed: operation error = ${String(err)}; rollback error = ${String(rollbackError)}`,
@@ -144,6 +155,7 @@ export class ChangeProcessor {
   processMessage(
     lc: LogContext,
     downstream: ChangeStreamData,
+    canonicalJSON?: string | undefined,
   ): CommitResult | null {
     const [type, message] = downstream;
     if (this.#failure) {
@@ -157,7 +169,13 @@ export class ChangeProcessor {
           : type === 'commit'
             ? downstream[2].watermark
             : undefined;
-      return this.#processMessage(lc, message, watermark);
+      if (this.#changeLogStreamWriter) {
+        must(
+          canonicalJSON,
+          'canonical JSON is required when change-stream logging is enabled',
+        );
+      }
+      return this.#processMessage(lc, message, watermark, canonicalJSON);
     } catch (e) {
       this.#fail(lc, e);
     }
@@ -210,6 +228,7 @@ export class ChangeProcessor {
     lc: LogContext,
     msg: Change,
     watermark: string | undefined,
+    canonicalJSON: string | undefined,
   ): CommitResult | null {
     if (msg.tag === 'begin') {
       if (this.#currentTx) {
@@ -220,6 +239,7 @@ export class ChangeProcessor {
         must(watermark),
         msg.json ?? JSON_PARSED,
       );
+      this.#changeLogStreamWriter?.begin(must(watermark), must(canonicalJSON));
       return null;
     }
 
@@ -232,18 +252,27 @@ export class ChangeProcessor {
     }
 
     if (msg.tag === 'commit') {
-      // Undef this.#currentTx to allow the assembly of the next transaction.
-      this.#currentTx = null;
-
       assert(watermark, 'watermark is required for commit messages');
-      return tx.processCommit(msg, watermark);
+      const result = tx.processCommit(
+        msg,
+        watermark,
+        this.#changeLogStreamWriter,
+        canonicalJSON,
+      );
+      // Clear only after a successful commit so #fail can roll back a commit
+      // path that throws before SQLite has committed.
+      this.#currentTx = null;
+      return result;
     }
 
     if (msg.tag === 'rollback') {
-      this.#currentTx?.abort(lc);
+      tx.abort(lc);
+      this.#changeLogStreamWriter?.rollback();
       this.#currentTx = null;
       return null;
     }
+
+    this.#changeLogStreamWriter?.append(must(canonicalJSON), msg.tag);
 
     switch (msg.tag) {
       case 'insert':
@@ -912,7 +941,12 @@ class TransactionProcessor {
     // no backfills are in progress).
   }
 
-  processCommit(commit: MessageCommit, watermark: string): CommitResult {
+  processCommit(
+    commit: MessageCommit,
+    watermark: string,
+    changeLogStreamWriter: ChangeLogStreamWriter | undefined,
+    canonicalJSON: string | undefined,
+  ): CommitResult {
     if (watermark !== this.#version) {
       throw new Error(
         `'commit' version ${watermark} does not match 'begin' version ${
@@ -920,7 +954,13 @@ class TransactionProcessor {
         }: ${stringify(commit)}`,
       );
     }
-    updateReplicationWatermark(this.#db, watermark);
+    if (changeLogStreamWriter) {
+      const writeTimeMs = Date.now();
+      changeLogStreamWriter.commit(watermark, must(canonicalJSON), writeTimeMs);
+      updateReplicationWatermark(this.#db, watermark, writeTimeMs);
+    } else {
+      updateReplicationWatermark(this.#db, watermark);
+    }
 
     if (this.#schemaChanged) {
       const start = Date.now();

@@ -40,6 +40,7 @@ import {
 import {getShardConfig} from '../types/shards.ts';
 import {
   getPragmaConfig,
+  replicaLogsChangeStream,
   replicaFileModeSchema,
   setUpMessageHandlers,
   setupReplica,
@@ -61,6 +62,18 @@ export default async function runWorker(
 
   const config = getNormalizedZeroConfig({env, argv: args.slice(1)});
   const mode: ReplicatorMode = fileMode === 'backup' ? 'backup' : 'serving';
+  const runningLocalChangeStreamer =
+    config.changeStreamer.mode === 'dedicated' && !config.changeStreamer.uri;
+  const logsChangeStream = replicaLogsChangeStream(
+    fileMode,
+    config.changeStreamer.sqliteChangeLogMode !== 'off',
+    runningLocalChangeStreamer,
+    config.litestream.backupURL,
+  );
+  assert(
+    fileMode !== 'serving-copy' || !logsChangeStream,
+    'serving-copy replicas cannot write the SQLite change log',
+  );
   const workerName = `${mode}-replicator`;
   startOtelAuto(createLogContext(config, workerName, 0, false), workerName, 0);
   lc = createLogContext(config, workerName);
@@ -91,10 +104,8 @@ export default async function runWorker(
   // Create the write worker for async SQLite writes.
   const pragmas = getPragmaConfig(fileMode);
   const workerClient = new ThreadWriteWorkerClient();
-  await workerClient.init(dbPath, mode, pragmas, config.log);
+  await workerClient.init(dbPath, mode, logsChangeStream, pragmas, config.log);
 
-  const runningLocalChangeStreamer =
-    config.changeStreamer.mode === 'dedicated' && !config.changeStreamer.uri;
   const shard = getShardConfig(config);
   const {
     taskID,

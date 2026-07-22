@@ -7,7 +7,16 @@ function configWith(litestream: Partial<ZeroConfig['litestream']>): ZeroConfig {
     taskID: 'task-id',
     numSyncWorkers: 1,
     adminPassword: 'admin',
-    changeStreamer: {port: 4849, address: 'localhost'},
+    changeStreamer: {
+      port: 4849,
+      address: 'localhost',
+      sqliteChangeLogMode: 'off',
+      sqliteChangeLogReadPercent: 0,
+      sqliteChangeLogRetentionMs: 60_000,
+      sqliteChangeLogReadBatchRows: 1000,
+      sqliteChangeLogPurgeBatchRows: 1000,
+      sqliteChangeLogBarrierTimeoutMs: 30_000,
+    },
     change: {db: 'postgres:///change'},
     cvr: {db: 'postgres:///cvr'},
     litestream: {
@@ -95,5 +104,37 @@ describe('config/normalize litestream v5 gating', () => {
         }),
       ),
     ).not.toThrow();
+  });
+});
+
+describe('config/normalize SQLite change log', () => {
+  test('read percentage is only allowed in serve mode', () => {
+    const config = configWith({});
+    config.changeStreamer.sqliteChangeLogMode = 'compare';
+    config.changeStreamer.sqliteChangeLogReadPercent = 1;
+
+    expect(() => assertNormalized(config)).toThrow(
+      'must be 0 unless --change-streamer-sqlite-change-log-mode=serve',
+    );
+  });
+
+  test('read percentage must be an integer from 0 through 100', () => {
+    for (const percent of [-1, 1.5, 101]) {
+      const config = configWith({});
+      config.changeStreamer.sqliteChangeLogMode = 'serve';
+      config.changeStreamer.sqliteChangeLogReadPercent = percent;
+
+      expect(() => assertNormalized(config)).toThrow(
+        'must be an integer between 0 and 100',
+      );
+    }
+  });
+
+  test('accepts positive integer tuning values', () => {
+    const config = configWith({});
+    config.changeStreamer.sqliteChangeLogMode = 'serve';
+    config.changeStreamer.sqliteChangeLogReadPercent = 100;
+
+    expect(() => assertNormalized(config)).not.toThrow();
   });
 });

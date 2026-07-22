@@ -38,6 +38,7 @@ function createAPI(): API {
   let runner: StatementRunner | undefined;
   let processor: ChangeProcessor | undefined;
   let mode: ChangeProcessorMode | undefined;
+  let logsChangeStream: boolean | undefined;
   let lc: LogContext | undefined;
   let replicaDbPath: string | undefined;
   let unregisterCorruptionDiagnosticTarget: (() => void) | undefined;
@@ -49,18 +50,24 @@ function createAPI(): API {
   }
 
   function createProcessor() {
-    processor = new ChangeProcessor(must(runner), must(mode), (_lc, err) => {
-      logCorruptionDiagnostics(err);
-      port.postMessage({
-        writeError: serializeError(err),
-      } satisfies WriteError);
-    });
+    processor = new ChangeProcessor(
+      must(runner),
+      must(mode),
+      {logsChangeStream: must(logsChangeStream)},
+      (_lc, err) => {
+        logCorruptionDiagnostics(err);
+        port.postMessage({
+          writeError: serializeError(err),
+        } satisfies WriteError);
+      },
+    );
   }
 
   return {
     init(
       dbPath: string,
       cpMode: ChangeProcessorMode,
+      shouldLogChangeStream: boolean,
       pragmas: PragmaConfig,
       logConfig: LogConfig,
     ) {
@@ -77,6 +84,7 @@ function createAPI(): API {
         applyPragmas(db, pragmas);
         runner = new StatementRunner(db);
         mode = cpMode;
+        logsChangeStream = shouldLogChangeStream;
         createProcessor();
       } catch (e) {
         logCorruptionDiagnostics(e);
@@ -93,11 +101,9 @@ function createAPI(): API {
       }
     },
 
-    processMessage({data}: SerializedChangeStreamData) {
+    processMessage({data, json}: SerializedChangeStreamData) {
       try {
-        // The canonical JSON is intentionally unused until the SQLite stream
-        // writer is added. ChangeProcessor continues to consume parsed data.
-        return must(processor).processMessage(must(lc), data);
+        return must(processor).processMessage(must(lc), data, json);
       } catch (e) {
         logCorruptionDiagnostics(e);
         throw e;
