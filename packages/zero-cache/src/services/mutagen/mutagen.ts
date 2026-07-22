@@ -388,7 +388,10 @@ export function getInsertSQL(
   tx: postgres.TransactionSql,
   create: InsertOp,
 ): postgres.PendingQuery<postgres.Row[]> {
-  return tx`INSERT INTO ${tx(create.tableName)} ${tx(create.value)}`;
+  return tx`
+    INSERT INTO ${tx(create.tableName)} ${tx(create.value)}
+    ON CONFLICT (${tx(create.primaryKey)}) DO NOTHING
+  `;
 }
 
 export function getUpsertSQL(

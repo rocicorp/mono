@@ -353,6 +353,11 @@ function makeServerTableCRUD(schema: TableSchema): TableCRUD<TableSchema> {
       const serverTableSchema = this[serverSchemaSymbol][serverName(schema)];
 
       const targetedColumns = origAndServerNamesFor(Object.keys(value), schema);
+      const primaryKeyColumns = origAndServerNamesFor(
+        schema.primaryKey,
+        schema,
+      );
+
       const stmt = formatPgInternalConvert(
         sql`INSERT INTO ${sql.ident(serverName(schema))} (${sql.join(
           targetedColumns.map(([, serverName]) => sql.ident(serverName)),
@@ -362,7 +367,10 @@ function makeServerTableCRUD(schema: TableSchema): TableCRUD<TableSchema> {
             sqlInsertValue(v, serverTableSchema[serverNameFor(col, schema)]),
           ),
           ', ',
-        )})`,
+        )}) ON CONFLICT (${sql.join(
+          primaryKeyColumns.map(([, serverName]) => sql.ident(serverName)),
+          ', ',
+        )}) DO NOTHING`,
       );
       const tx = this[dbTxSymbol];
       await tx.query(stmt.text, stmt.values);
