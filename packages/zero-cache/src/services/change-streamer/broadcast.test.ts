@@ -4,7 +4,7 @@ import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.
 import {sleep} from '../../../../shared/src/sleep.ts';
 import {ReplicationMessages} from '../replicator/test-utils.ts';
 import {Broadcast} from './broadcast.ts';
-import type {WatermarkedChange} from './change-streamer-service.ts';
+import type {WatermarkedChange} from './change-streamer.ts';
 import {createSubscriber} from './test-utils.ts';
 
 const json = BigIntJSON.stringify;

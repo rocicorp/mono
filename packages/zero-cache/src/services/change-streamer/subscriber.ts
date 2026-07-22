@@ -7,8 +7,12 @@ import {promiseVoid} from '../../../../shared/src/resolved-promises.ts';
 import {RingBuffer} from '../../../../shared/src/ring-buffer.ts';
 import {max} from '../../types/lexi-version.ts';
 import type {Subscription} from '../../types/subscription.ts';
-import type {ChangeTag, WatermarkedChange} from './change-streamer-service.ts';
-import {type Downstream, type Status} from './change-streamer.ts';
+import type {
+  ChangeTag,
+  Downstream,
+  Status,
+  WatermarkedChange,
+} from './change-streamer.ts';
 import * as ErrorType from './error-type-enum.ts';
 
 type ErrorType = Enum<typeof ErrorType>;
