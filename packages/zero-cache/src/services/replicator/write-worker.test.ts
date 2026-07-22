@@ -50,6 +50,7 @@ describe('write-worker', () => {
     await worker.init(
       dbFile.path,
       'serving',
+      false,
       {
         busyTimeout: 30000,
         analysisLimit: 1000,
@@ -112,6 +113,112 @@ describe('write-worker', () => {
     expect(state.watermark).toBe('06');
   });
 
+  test('enabled writer is atomic across abort and worker restart', async () => {
+    await worker.stop();
+    worker = new ThreadWriteWorkerClient();
+    await worker.init(
+      dbFile.path,
+      'serving',
+      true,
+      {
+        busyTimeout: 30000,
+        analysisLimit: 1000,
+      },
+      {level: 'error', format: 'text'},
+    );
+
+    const issues = new ReplicationMessages({issues: ['issueID', 'bool']});
+    await worker.processMessage(
+      serialized(['begin', issues.begin(), {commitWatermark: '05'}]),
+    );
+    await worker.processMessage(
+      serialized(['data', issues.insert('issues', {issueID: 1, bool: true})]),
+    );
+    worker.abort();
+
+    const messages: ChangeStreamData[] = [
+      ['begin', issues.begin(), {commitWatermark: '06'}],
+      ['data', issues.insert('issues', {issueID: 123, bool: true})],
+      ['data', issues.insert('issues', {issueID: 456, bool: false})],
+      ['commit', issues.commit(), {watermark: '06'}],
+    ];
+    for (const message of messages) {
+      await worker.processMessage(serialized(message));
+    }
+
+    await worker.stop();
+    worker = new ThreadWriteWorkerClient();
+    await worker.init(
+      dbFile.path,
+      'serving',
+      true,
+      {
+        busyTimeout: 30000,
+        analysisLimit: 1000,
+      },
+      {level: 'error', format: 'text'},
+    );
+
+    expect(await worker.getSubscriptionState()).toMatchObject({
+      watermark: '06',
+    });
+    expect(
+      mainDb
+        .prepare(/*sql*/ `
+          SELECT "watermark", "pos", json_extract("change", '$.tag') AS "tag",
+                 "precommit", "writeTimeMs"
+            FROM "_zero.changeLogStream"
+            WHERE "watermark" IN ('05', '06')
+            ORDER BY "watermark", "pos"
+        `)
+        .all(),
+    ).toEqual([
+      {
+        watermark: '06',
+        pos: 0,
+        tag: 'begin',
+        precommit: null,
+        writeTimeMs: null,
+      },
+      {
+        watermark: '06',
+        pos: 1,
+        tag: 'insert',
+        precommit: null,
+        writeTimeMs: null,
+      },
+      {
+        watermark: '06',
+        pos: 2,
+        tag: 'insert',
+        precommit: null,
+        writeTimeMs: null,
+      },
+      {
+        watermark: '06',
+        pos: 3,
+        tag: 'commit',
+        precommit: '06',
+        writeTimeMs: expect.any(Number),
+      },
+    ]);
+    const state = mainDb
+      .prepare(
+        `SELECT "stateVersion", "writeTimeMs" FROM "_zero.replicationState"`,
+      )
+      .get<{stateVersion: string; writeTimeMs: number}>();
+    const commit = mainDb
+      .prepare(/*sql*/ `
+        SELECT "writeTimeMs" FROM "_zero.changeLogStream"
+          WHERE "watermark" = '06' AND "precommit" IS NOT NULL
+      `)
+      .get<{writeTimeMs: number}>();
+    expect(state).toEqual({
+      stateVersion: '06',
+      writeTimeMs: commit.writeTimeMs,
+    });
+  });
+
   test('abort rolls back pending transaction', async () => {
     const issues = new ReplicationMessages({issues: ['issueID', 'bool']});
 
@@ -152,6 +259,7 @@ describe('write-worker', () => {
     await worker.init(
       dbFile.path,
       'serving',
+      false,
       {
         busyTimeout: 30000,
         analysisLimit: 1000,

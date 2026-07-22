@@ -89,7 +89,7 @@ export function deserializeError(serialized: SerializedError): Error {
 
 // Wire protocol types.
 export type ArgsMap = {
-  init: [string, ChangeProcessorMode, PragmaConfig, LogConfig];
+  init: [string, ChangeProcessorMode, boolean, PragmaConfig, LogConfig];
   getSubscriptionState: [];
   processMessage: [SerializedChangeStreamData];
   abort: [];
@@ -186,10 +186,17 @@ export class ThreadWriteWorkerClient implements WriteWorkerClient {
   init(
     dbPath: string,
     mode: ChangeProcessorMode,
+    logsChangeStream: boolean,
     pragmas: PragmaConfig,
     logConfig: LogConfig,
   ): Promise<void> {
-    return this.#call('init', [dbPath, mode, pragmas, logConfig]);
+    return this.#call('init', [
+      dbPath,
+      mode,
+      logsChangeStream,
+      pragmas,
+      logConfig,
+    ]);
   }
 
   getSubscriptionState(): Promise<SubscriptionState> {

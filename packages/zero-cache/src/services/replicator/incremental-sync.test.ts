@@ -79,6 +79,7 @@ describe('replicator/incremental-sync', () => {
     await worker.init(
       dbFile.path,
       'serving',
+      false,
       {
         busyTimeout: 30000,
         analysisLimit: 1000,
@@ -786,6 +787,69 @@ describe('replicator/incremental-sync', () => {
 
     syncer.stop(lc);
     void localSyncing.catch(() => {});
+  });
+
+  test('source disconnect rolls back an enabled stream writer transaction', async () => {
+    await worker.stop();
+    worker = new ThreadWriteWorkerClient();
+    await worker.init(
+      dbFile.path,
+      'serving',
+      true,
+      {
+        busyTimeout: 30000,
+        analysisLimit: 1000,
+      },
+      {level: 'error', format: 'text'},
+    );
+    initReplicationState(mainDb, ['zero_data'], '02', {}, false);
+    initDB(
+      mainDb,
+      `
+      CREATE TABLE issues(
+        id INTEGER PRIMARY KEY,
+        _0_version TEXT
+      );
+      `,
+    );
+
+    const {promise: hasRetried, resolve: retried} = resolver<true>();
+    subscribeFn.mockResolvedValueOnce(downstream).mockImplementation(() => {
+      retried(true);
+      return resolver<Subscription<Downstream>>().promise;
+    });
+    syncer = new IncrementalSyncer(
+      lc,
+      TASK_ID,
+      REPLICA_ID,
+      {subscribe: subscribeFn},
+      worker,
+      'serving',
+      ReplicationStatusPublisher.forReplicaFile(dbFile.path),
+    );
+    syncing = syncer.run();
+    await vi.waitFor(() => expect(subscribeFn).toHaveBeenCalledTimes(1));
+
+    const issues = new ReplicationMessages({issues: 'id'});
+    downstream.push(['begin', issues.begin(), {commitWatermark: '06'}]);
+    downstream.push(['data', issues.insert('issues', {id: 1})]);
+    await vi.waitFor(() =>
+      expect(changeLogCodec.serializeChangeStreamData).toHaveBeenCalledTimes(2),
+    );
+    downstream.fail(new Error('source disconnected'));
+
+    expect(await hasRetried).toBe(true);
+    expect(mainDb.prepare(`SELECT * FROM issues`).all()).toEqual([]);
+    expect(
+      mainDb
+        .prepare(
+          `SELECT * FROM "_zero.changeLogStream" WHERE "watermark" = '06'`,
+        )
+        .all(),
+    ).toEqual([]);
+    syncer.stop(lc);
+    void syncing.catch(() => {});
+    syncing = undefined;
   });
 
   test('shut down on change-streamer error message', async () => {

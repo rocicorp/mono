@@ -165,10 +165,11 @@ class FailpointWriteWorkerClient implements WriteWorkerClient {
   init(
     dbPath: string,
     mode: Parameters<ThreadWriteWorkerClient['init']>[1],
+    logsChangeStream: boolean,
     pragmas: PragmaConfig,
     logConfig: LogConfig,
   ) {
-    return this.#inner.init(dbPath, mode, pragmas, logConfig);
+    return this.#inner.init(dbPath, mode, logsChangeStream, pragmas, logConfig);
   }
 
   getSubscriptionState() {
@@ -232,7 +233,7 @@ export default async function runWorker(
     parent,
     failpoint,
   );
-  await worker.init(dbPath, 'serving', getPragmaConfig('serving'), {
+  await worker.init(dbPath, 'serving', false, getPragmaConfig('serving'), {
     level: 'error',
     format: 'text',
   });

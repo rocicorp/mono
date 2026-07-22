@@ -162,10 +162,16 @@ async function startReplicationPipeline(testDBs: PgTest['testDBs']) {
   });
 
   const worker = new ThreadWriteWorkerClient();
-  await worker.init(replicaDbFile.path, 'serving', getPragmaConfig('serving'), {
-    level: 'error',
-    format: 'text',
-  });
+  await worker.init(
+    replicaDbFile.path,
+    'serving',
+    false,
+    getPragmaConfig('serving'),
+    {
+      level: 'error',
+      format: 'text',
+    },
+  );
 
   const replicator = new ReplicatorService(
     lc,
