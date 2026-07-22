@@ -5,6 +5,8 @@ import {inProcChannel} from '../types/processes.ts';
 import {Subscription} from '../types/subscription.ts';
 import {
   createNotifierFrom,
+  createsCanonicalReplicator,
+  replicaLogsChangeStream,
   setUpMessageHandlers,
   subscribeTo,
 } from './replicator.ts';
@@ -12,6 +14,29 @@ import {
 const lc = createSilentLogContext();
 
 describe('workers/replicator', () => {
+  test('selects exactly one canonical SQLite change-log writer', () => {
+    expect(createsCanonicalReplicator(true, 's3://backup', 0)).toBe(true);
+    expect(createsCanonicalReplicator(true, undefined, 1)).toBe(true);
+    expect(createsCanonicalReplicator(true, undefined, 0)).toBe(false);
+    expect(createsCanonicalReplicator(false, undefined, 1)).toBe(false);
+
+    expect(replicaLogsChangeStream('backup', true, true, 's3://backup')).toBe(
+      true,
+    );
+    expect(
+      replicaLogsChangeStream('serving-copy', true, true, 's3://backup'),
+    ).toBe(false);
+    expect(replicaLogsChangeStream('serving', true, true, undefined)).toBe(
+      true,
+    );
+    expect(replicaLogsChangeStream('serving', true, false, undefined)).toBe(
+      false,
+    );
+    expect(replicaLogsChangeStream('serving', false, true, undefined)).toBe(
+      false,
+    );
+  });
+
   test('replicator subscription', async () => {
     const originalSub = Subscription.create<ReplicaState>();
 

@@ -29,6 +29,28 @@ export const replicaFileModeSchema = v.literalUnion(
 
 export type ReplicaFileMode = v.Infer<typeof replicaFileModeSchema>;
 
+export function createsCanonicalReplicator(
+  runsLocalChangeStreamer: boolean,
+  backupURL: string | undefined,
+  numSyncWorkers: number,
+): boolean {
+  return runsLocalChangeStreamer && (Boolean(backupURL) || numSyncWorkers > 0);
+}
+
+export function replicaLogsChangeStream(
+  fileMode: ReplicaFileMode,
+  sqliteChangeLogEnabled: boolean,
+  runsLocalChangeStreamer: boolean,
+  backupURL: string | undefined,
+): boolean {
+  if (!sqliteChangeLogEnabled || !runsLocalChangeStreamer) {
+    return false;
+  }
+  return (
+    fileMode === 'backup' || (fileMode === 'serving' && !Boolean(backupURL))
+  );
+}
+
 export type WalMode = 'wal' | 'wal2';
 
 export function replicaFileName(replicaFile: string, mode: ReplicaFileMode) {

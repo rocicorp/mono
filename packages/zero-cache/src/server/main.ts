@@ -1,6 +1,7 @@
 import path from 'node:path';
 import {consoleLogSink, LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
+import {assert} from '../../../shared/src/asserts.ts';
 import {must} from '../../../shared/src/must.ts';
 import {getNormalizedZeroConfig} from '../config/zero-config.ts';
 import {registerSQLiteCorruptionDiagnosticTarget} from '../db/sqlite-corruption.ts';
@@ -24,6 +25,7 @@ import {
 } from '../types/processes.ts';
 import {
   createNotifierFrom,
+  createsCanonicalReplicator,
   handleSubscriptionsFrom,
   type ReplicaFileMode,
   subscribeTo,
@@ -108,6 +110,17 @@ export default async function runWorker(
   } = config;
   const runChangeStreamer =
     changeStreamerMode === 'dedicated' && changeStreamerURI === undefined;
+  const sqliteChangeLogEnabled =
+    config.changeStreamer.sqliteChangeLogMode !== 'off';
+  const hasCanonicalReplicator = createsCanonicalReplicator(
+    runChangeStreamer,
+    litestream.backupURL,
+    numSyncers,
+  );
+  assert(
+    !sqliteChangeLogEnabled || hasCanonicalReplicator,
+    'SQLite change-log writing requires this process tree to create a canonical replicator',
+  );
 
   let changeStreamer: Worker | undefined;
 

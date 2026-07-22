@@ -11,8 +11,9 @@ import {
 } from '../../db/lite-tables.ts';
 import type {LiteIndexSpec} from '../../db/specs.ts';
 import {StatementRunner} from '../../db/statements.ts';
-import {expectTables, initDB} from '../../test/lite.ts';
+import {expectTableExact, expectTables, initDB} from '../../test/lite.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
+import {serializeChangeStreamData} from '../change-streamer/change-log-codec.ts';
 import {ChangeProcessor} from './change-processor.ts';
 import {DEL_OP, SET_OP} from './schema/change-log.ts';
 import {ColumnMetadataStore} from './schema/column-metadata.ts';
@@ -36,6 +37,7 @@ describe('replicator/change-processor', () => {
     servingProcessor = new ChangeProcessor(
       new StatementRunner(servingReplica),
       'serving',
+      {logsChangeStream: false},
       (_, err) => {
         throw err;
       },
@@ -45,6 +47,7 @@ describe('replicator/change-processor', () => {
     backupProcessor = new ChangeProcessor(
       new StatementRunner(backupReplica),
       'backup',
+      {logsChangeStream: false},
       (_, err) => {
         throw err;
       },
@@ -3844,6 +3847,176 @@ describe('replicator/change-processor-errors', () => {
       'auto rollback change processor',
     );
     expect(replica.inTransaction).toBe(false);
+  });
+});
+
+describe('replicator/change-processor change-stream logging', () => {
+  let lc: LogContext;
+  let replica: Database;
+  let processor: ChangeProcessor;
+  let failures: unknown[];
+
+  const issues = new ReplicationMessages({issues: 'id'});
+
+  beforeEach(() => {
+    lc = createSilentLogContext();
+    replica = new Database(lc, ':memory:');
+    initReplicationState(replica, ['zero_data'], '02');
+    initDB(
+      replica,
+      `
+      CREATE TABLE issues(
+        id INTEGER PRIMARY KEY,
+        text TEXT,
+        _0_version TEXT
+      );
+      `,
+    );
+    failures = [];
+    processor = createChangeProcessor(replica, (_, err) => failures.push(err), {
+      logsChangeStream: true,
+    });
+  });
+
+  function process(data: ChangeStreamData) {
+    return processor.processMessage(lc, data, serializeChangeStreamData(data));
+  }
+
+  test('atomically applies data, appends the stream, and advances state', () => {
+    process(['begin', issues.begin(), {commitWatermark: '06'}]);
+    process([
+      'data',
+      issues.insert('issues', {
+        id: 9007199254740993n,
+        text: 'before\0after',
+      }),
+    ]);
+    const result = process(['commit', issues.commit(), {watermark: '06'}]);
+
+    expect(failures).toEqual([]);
+    expect(result).toMatchObject({watermark: '06'});
+    expectTableExact(
+      replica,
+      'issues',
+      [
+        {
+          id: 9007199254740993n,
+          text: 'before\0after',
+          _0_version: '06',
+        },
+      ],
+      'bigint',
+      'id',
+    );
+
+    const rows = replica
+      .prepare(/*sql*/ `
+        SELECT "watermark", "pos", "change", "precommit", "writeTimeMs"
+          FROM "_zero.changeLogStream"
+          WHERE "watermark" = '06'
+          ORDER BY "pos"
+      `)
+      .all<{
+        watermark: string;
+        pos: number;
+        change: string;
+        precommit: string | null;
+        writeTimeMs: number | null;
+      }>();
+    expect(rows).toEqual([
+      {
+        watermark: '06',
+        pos: 0,
+        change: '{"tag":"begin"}',
+        precommit: null,
+        writeTimeMs: null,
+      },
+      {
+        watermark: '06',
+        pos: 1,
+        change:
+          '{"tag":"insert","relation":{"tag":"relation","schema":"public","name":"issues","rowKey":{"type":"default","columns":["id"]}},"new":{"id":9007199254740993,"text":"before\\u0000after"}}',
+        precommit: null,
+        writeTimeMs: null,
+      },
+      {
+        watermark: '06',
+        pos: 2,
+        change: '{"tag":"commit"}',
+        precommit: '06',
+        writeTimeMs: expect.any(Number),
+      },
+    ]);
+
+    const state = replica
+      .prepare(/*sql*/ `
+        SELECT "stateVersion", "writeTimeMs"
+          FROM "_zero.replicationState"
+      `)
+      .get<{stateVersion: string; writeTimeMs: number}>();
+    expect(state.stateVersion).toBe('06');
+    expect(state.writeTimeMs).toBe(rows[2].writeTimeMs);
+    expect(
+      replica
+        .prepare(/*sql*/ `
+          SELECT max("watermark") AS "watermark"
+            FROM "_zero.changeLogStream"
+        `)
+        .get(),
+    ).toEqual({watermark: state.stateVersion});
+  });
+
+  test('explicit rollback and abort leave no stream or replica rows', () => {
+    process(['begin', issues.begin(), {commitWatermark: '06'}]);
+    process(['data', issues.insert('issues', {id: 1, text: 'rollback'})]);
+    process(['rollback', {tag: 'rollback'}]);
+
+    process(['begin', issues.begin(), {commitWatermark: '07'}]);
+    process(['data', issues.insert('issues', {id: 2, text: 'abort'})]);
+    processor.abort(lc);
+
+    expect(replica.prepare(`SELECT * FROM issues`).all()).toEqual([]);
+    expect(
+      replica
+        .prepare(/*sql*/ `
+          SELECT "watermark" FROM "_zero.changeLogStream"
+            WHERE "watermark" IN ('06', '07')
+        `)
+        .all(),
+    ).toEqual([]);
+    expect(
+      replica
+        .prepare(`SELECT "stateVersion" FROM "_zero.replicationState"`)
+        .get(),
+    ).toEqual({stateVersion: '02'});
+  });
+
+  test('processing failure rolls back stream rows with replica changes', () => {
+    process(['begin', issues.begin(), {commitWatermark: '06'}]);
+    process(['data', issues.insert('issues', {id: 1, text: 'valid'})]);
+    process([
+      'data',
+      {
+        tag: 'insert',
+        relation: {
+          schema: 'public',
+          name: 'missing',
+          rowKey: {columns: ['id'], type: 'default'},
+        },
+        new: {id: 2},
+      },
+    ]);
+
+    expect(failures).toHaveLength(1);
+    expect(replica.inTransaction).toBe(false);
+    expect(replica.prepare(`SELECT * FROM issues`).all()).toEqual([]);
+    expect(
+      replica
+        .prepare(
+          `SELECT * FROM "_zero.changeLogStream" WHERE "watermark" = '06'`,
+        )
+        .all(),
+    ).toEqual([]);
   });
 });
 
