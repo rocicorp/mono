@@ -52,14 +52,18 @@ export type MdIssue = {
   readonly emoji?: readonly MdEmoji[] | undefined;
 };
 
+const millisRegex = /\.\d+Z$/;
+
 /** Formats an epoch-milliseconds timestamp as e.g. `2026-07-01T12:34:56Z`. */
 function formatDate(epochMillis: number): string {
-  return new Date(epochMillis).toISOString().replace(/\.\d+Z$/, 'Z');
+  return new Date(epochMillis).toISOString().replace(millisRegex, 'Z');
 }
+
+const whitespaceRegex = /\s+/g;
 
 /** Collapses all whitespace runs (including newlines) to single spaces. */
 function oneLine(s: string): string {
-  return s.replace(/\s+/g, ' ').trim();
+  return s.replace(whitespaceRegex, ' ').trim();
 }
 
 export function issueMdPath(
@@ -83,7 +87,7 @@ function formatReactions(
     return undefined;
   }
   return [...groupBy(emoji, e => e.value)]
-    .sort(([a], [b]) => compareUTF8(a, b))
+    .toSorted(([a], [b]) => compareUTF8(a, b))
     .map(([value, group]) => {
       const logins = group
         .map(e => e.creator?.login)

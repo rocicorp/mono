@@ -27,7 +27,7 @@ function parseIssueID(idStr: string) {
     : parsed;
 }
 
-async function fetchIssueForMd(
+function fetchIssueForMd(
   authData: JWTData | undefined,
   idField: 'shortID' | 'id',
   idValue: string | number,
@@ -54,7 +54,7 @@ async function fetchIssueForMd(
     );
     return {
       issue,
-      comments: commentsDesc.slice().reverse(),
+      comments: commentsDesc.toReversed(),
       commentsCapped: commentsDesc.length === MAX_COMMENTS,
     };
   });
