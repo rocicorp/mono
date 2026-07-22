@@ -10,11 +10,63 @@
       ],
       "destination": "https://bugs.rocicorp.dev/p/roci",
       "permanent": true
+    },
+    {
+      "source": "/p/:projectName/issue/:id([^./]+)",
+      "has": [
+        {
+          "type": "header",
+          "key": "accept",
+          "value": ".*text/markdown.*"
+        }
+      ],
+      "destination": "/p/:projectName/issue/:id.md",
+      "permanent": false
+    },
+    {
+      "source": "/p/:projectName/issue/:id([^./]+)",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*(GPTBot|OAI-SearchBot|ChatGPT-User|ClaudeBot|Claude-User|Claude-SearchBot|anthropic-ai|PerplexityBot|Perplexity-User|Google-Extended|CCBot|cohere-ai|Bytespider|meta-external|Applebot-Extended|Amazonbot|Diffbot|DuckAssistBot|MistralAI|curl|Wget|python-requests|python-httpx|aiohttp|Go-http-client|okhttp|Googlebot|[Bb]ingbot|DuckDuckBot|Baiduspider|YandexBot|Slurp).*"
+        }
+      ],
+      "destination": "/p/:projectName/issue/:id.md",
+      "permanent": false
+    },
+    {
+      "source": "/issue/:id([^./]+)",
+      "has": [
+        {
+          "type": "header",
+          "key": "accept",
+          "value": ".*text/markdown.*"
+        }
+      ],
+      "destination": "/p/zero/issue/:id.md",
+      "permanent": false
+    },
+    {
+      "source": "/issue/:id([^./]+)",
+      "has": [
+        {
+          "type": "header",
+          "key": "user-agent",
+          "value": ".*(GPTBot|OAI-SearchBot|ChatGPT-User|ClaudeBot|Claude-User|Claude-SearchBot|anthropic-ai|PerplexityBot|Perplexity-User|Google-Extended|CCBot|cohere-ai|Bytespider|meta-external|Applebot-Extended|Amazonbot|Diffbot|DuckAssistBot|MistralAI|curl|Wget|python-requests|python-httpx|aiohttp|Go-http-client|okhttp|Googlebot|[Bb]ingbot|DuckDuckBot|Baiduspider|YandexBot|Slurp).*"
+        }
+      ],
+      "destination": "/p/zero/issue/:id.md",
+      "permanent": false
     }
   ],
   "rewrites": [
     {
       "source": "/api/(.*)",
+      "destination": "/api"
+    },
+    {
+      "source": "/p/:projectName/issue/:id.md",
       "destination": "/api"
     },
     {
