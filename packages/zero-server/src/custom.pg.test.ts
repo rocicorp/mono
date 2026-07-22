@@ -120,6 +120,30 @@ describe('makeSchemaCRUD', () => {
     });
   });
 
+  test('insert on an existing primary key is a no-op', async () => {
+    await pg.begin(async tx => {
+      const transaction = new Transaction(tx);
+      const crud = crudProvider(
+        transaction,
+        await getServerSchema(transaction, schema),
+      );
+
+      await crud.basic.insert({id: '1', a: 2, b: 'foo', c: true});
+      await checkDb(tx, 'basic', [{id: '1', a: 2, b: 'foo', c: true}]);
+
+      // Re-inserting the same primary key with different values must not throw
+      // and must leave the existing row unchanged (skip-if-exists), matching the
+      // optimistic client behavior.
+      await crud.basic.insert({id: '1', a: 999, b: 'bar', c: false});
+      await checkDb(tx, 'basic', [{id: '1', a: 2, b: 'foo', c: true}]);
+
+      // Same for a compound primary key.
+      await crud.compoundPk.insert({a: 'a', b: 1, c: 'c'});
+      await crud.compoundPk.insert({a: 'a', b: 1, c: 'different'});
+      await checkDb(tx, 'compoundPk', [{a: 'a', b: 1, c: 'c'}]);
+    });
+  });
+
   test('insert/update/upsert with missing columns', async () => {
     await pg.begin(async tx => {
       const transaction = new Transaction(tx);

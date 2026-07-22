@@ -59,6 +59,12 @@ async function createTables(db: PostgresDB) {
         time1 TIMESTAMPTZ,
         time2 TIMESTAMPTZ
       );
+      CREATE TABLE compoundpk (
+        a text,
+        b text,
+        c text,
+        PRIMARY KEY(a, b)
+      );
       CREATE TABLE fk_ref (
         id text,
         ref text,
@@ -230,6 +236,155 @@ describe('processMutation', {timeout: 15000}, () => {
     });
   });
 
+  test('insert on an existing primary key is a no-op', async () => {
+    const error1 = await processMutation(
+      lc,
+      undefined,
+      db,
+      SHARD,
+      'abc',
+      {
+        type: MutationType.CRUD,
+        id: 1,
+        clientID: '123',
+        name: '_zero_crud',
+        args: [
+          {
+            ops: [
+              {
+                op: 'insert',
+                tableName: 'types',
+                primaryKey: ['id'],
+                value: {id: '1', num: 5},
+              },
+            ],
+          },
+        ],
+        timestamp: Date.now(),
+      },
+      mockWriteAuthorizer,
+    );
+    expect(error1).undefined;
+
+    // Re-insert the same primary key with a different value. This must be a
+    // no-op (skip-if-exists), leave the original row unchanged, and must not
+    // error, matching the optimistic client behavior.
+    const error2 = await processMutation(
+      lc,
+      undefined,
+      db,
+      SHARD,
+      'abc',
+      {
+        type: MutationType.CRUD,
+        id: 2,
+        clientID: '123',
+        name: '_zero_crud',
+        args: [
+          {
+            ops: [
+              {
+                op: 'insert',
+                tableName: 'types',
+                primaryKey: ['id'],
+                value: {id: '1', num: 99},
+              },
+            ],
+          },
+        ],
+        timestamp: Date.now(),
+      },
+      mockWriteAuthorizer,
+    );
+    expect(error2).undefined;
+
+    await expectTables(db, {
+      types: [{id: '1', num: 5, time1: null, time2: null}],
+      [`${APP_ID}_${SHARD_NUM}.clients`]: [
+        {
+          clientGroupID: 'abc',
+          clientID: '123',
+          lastMutationID: 2n,
+          userID: null,
+        },
+      ],
+    });
+  });
+
+  test('insert on an existing compound primary key is a no-op', async () => {
+    const error1 = await processMutation(
+      lc,
+      undefined,
+      db,
+      SHARD,
+      'abc',
+      {
+        type: MutationType.CRUD,
+        id: 1,
+        clientID: '123',
+        name: '_zero_crud',
+        args: [
+          {
+            ops: [
+              {
+                op: 'insert',
+                tableName: 'compoundpk',
+                primaryKey: ['a', 'b'],
+                value: {a: 'a', b: 'b', c: 'first'},
+              },
+            ],
+          },
+        ],
+        timestamp: Date.now(),
+      },
+      mockWriteAuthorizer,
+    );
+    expect(error1).undefined;
+
+    // Same compound primary key, different non-key value: must be a no-op and
+    // leave the existing row unchanged (exercises `ON CONFLICT (a, b)`).
+    const error2 = await processMutation(
+      lc,
+      undefined,
+      db,
+      SHARD,
+      'abc',
+      {
+        type: MutationType.CRUD,
+        id: 2,
+        clientID: '123',
+        name: '_zero_crud',
+        args: [
+          {
+            ops: [
+              {
+                op: 'insert',
+                tableName: 'compoundpk',
+                primaryKey: ['a', 'b'],
+                value: {a: 'a', b: 'b', c: 'second'},
+              },
+            ],
+          },
+        ],
+        timestamp: Date.now(),
+      },
+      mockWriteAuthorizer,
+    );
+    expect(error2).undefined;
+
+    await expectTables(db, {
+      compoundpk: [{a: 'a', b: 'b', c: 'first'}],
+      [`${APP_ID}_${SHARD_NUM}.clients`]: [
+        {
+          clientGroupID: 'abc',
+          clientID: '123',
+          lastMutationID: 2n,
+          userID: null,
+        },
+      ],
+    });
+  });
+
   test('old mutations that would have errored are skipped', async () => {
     await db`
       INSERT INTO ${db(
@@ -256,7 +411,7 @@ describe('processMutation', {timeout: 15000}, () => {
                 op: 'insert',
                 tableName: 'idonly',
                 primaryKey: ['id'],
-                value: {id: '1'}, // This would result in a duplicate key value if applied.
+                value: {id: '1'}, // Duplicate primary key: a no-op if applied, so this asserts the mutation is skipped via the lastMutationID check, not that it errors.
               },
             ],
           },
