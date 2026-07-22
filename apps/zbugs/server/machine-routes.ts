@@ -143,7 +143,7 @@ export function registerMachineRoutes(
       if (issue.project) {
         const ref = String(issue.shortID ?? issue.id);
         if (
-          request.params.projectName.toLocaleLowerCase() !==
+          request.params.projectName.toLowerCase() !==
             issue.project.lowerCaseName ||
           request.params.id !== ref
         ) {
