@@ -1,8 +1,8 @@
 import type {IncomingHttpHeaders} from 'http';
 import type {FastifyInstance, FastifyReply} from 'fastify';
-import type {JWTData} from '../shared/auth.ts';
+import type {JWTData, Role} from '../shared/auth.ts';
 import {getIDFromString} from '../shared/issue-id.ts';
-import {queries} from '../shared/queries.ts';
+import {applyIssuePermissions} from '../shared/queries.ts';
 import {builder} from '../shared/schema.ts';
 import {dbProvider} from './db.ts';
 import {issueMdPath, renderErrorMd, renderIssueMd} from './machine-md.ts';
@@ -27,6 +27,27 @@ function parseIssueID(idStr: string) {
     : parsed;
 }
 
+// The issue tree the markdown view renders. This is issueDetail minus the
+// per-user relationships (viewState, notificationState) and the comment
+// preload: the markdown view has no per-user state, and comments are fetched
+// separately below. Uses the same applyIssuePermissions gate as issueDetail.
+export function issueForMdQuery(
+  idField: 'shortID' | 'id',
+  idValue: string | number,
+  role: Role | undefined,
+) {
+  return applyIssuePermissions(
+    builder.issue
+      .where(idField, idValue)
+      .related('project')
+      .related('creator')
+      .related('assignee')
+      .related('labels')
+      .related('emoji', e => e.related('creator')),
+    role,
+  ).one();
+}
+
 function fetchIssueForMd(
   authData: JWTData | undefined,
   idField: 'shortID' | 'id',
@@ -34,7 +55,7 @@ function fetchIssueForMd(
 ) {
   return dbProvider.transaction(async tx => {
     const issue = await tx.run(
-      queries.issueDetail.fn({args: {idField, id: idValue}, ctx: authData}),
+      issueForMdQuery(idField, idValue, authData?.role),
     );
     if (!issue) {
       return undefined;
