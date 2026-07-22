@@ -545,9 +545,11 @@ test('zero-cache --help', () => {
                                                                         affording forwards compatibility with a future zero-cache                                                                  
                                                                         version that will use litestream v0.5.x to backup the replica.                                                             
                                                                                                                                                                                                    
-     --litestream-restore-using-v5 boolean                              default: false                                                                                                             
+     --litestream-restore-using-v5 boolean                              default: true                                                                                                              
        ZERO_LITESTREAM_RESTORE_USING_V5 env                                                                                                                                                        
                                                                         Restores the backup using the ZERO_LITESTREAM_EXECUTABLE_V5 if specified.                                                  
+                                                                        This provides a recovery path if rolling back from ZERO_LITESTREAM_BACKUP_USING_V5                                         
+                                                                        as v5 restores from both v3 and v5 backups (whichever is more recent).                                                     
                                                                                                                                                                                                    
      --litestream-backup-using-v5 boolean                               default: false                                                                                                             
        ZERO_LITESTREAM_BACKUP_USING_V5 env                                                                                                                                                         
