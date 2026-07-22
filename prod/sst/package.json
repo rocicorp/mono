@@ -18,5 +18,5 @@
     "@types/aws-lambda": "8.10.147",
     "oxfmt": "^0.45.0"
   },
-  "packageManager": "pnpm@11.5.3"
+  "packageManager": "pnpm@11.11.0"
 }
