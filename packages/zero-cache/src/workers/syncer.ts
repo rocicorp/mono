@@ -72,8 +72,74 @@ type ServingLagDistribution = ServingLagStats & {
   readonly lagsMs: readonly number[];
 };
 
+export type PipelineDedupViewSyncer = Pick<
+  ViewSyncer,
+  'pipelineHashes' | 'clientSchemaKey'
+>;
+
+export type PipelineDedupStats = {
+  readonly clientTotal: number;
+  readonly internalTotal: number;
+  // (clientSchemaKey, transformationHash) -> occurrence count across client
+  // groups, for client/custom queries.
+  readonly clientHashes: ReadonlyMap<
+    string,
+    {count: number; queryName: string | undefined}
+  >;
+  readonly internalUnique: number;
+  readonly clientSchemas: number;
+};
+
+export function computePipelineDedupStats(
+  viewSyncers: Iterable<PipelineDedupViewSyncer>,
+): PipelineDedupStats {
+  let clientTotal = 0;
+  let internalTotal = 0;
+  const clientHashes = new Map<
+    string,
+    {count: number; queryName: string | undefined}
+  >();
+  const internalHashes = new Set<string>();
+  const schemaKeys = new Set<string>();
+  for (const vs of viewSyncers) {
+    const schemaKey = vs.clientSchemaKey;
+    if (schemaKey !== undefined) {
+      schemaKeys.add(schemaKey);
+    }
+    for (const {
+      transformationHash,
+      internal,
+      queryName,
+    } of vs.pipelineHashes()) {
+      // Pipelines only share when both the client schema (which determines
+      // row keys) and the transformed AST are identical.
+      const key = `${schemaKey}/${transformationHash}`;
+      if (internal) {
+        internalTotal++;
+        internalHashes.add(key);
+      } else {
+        clientTotal++;
+        const entry = clientHashes.get(key);
+        if (entry) {
+          entry.count++;
+        } else {
+          clientHashes.set(key, {count: 1, queryName});
+        }
+      }
+    }
+  }
+  return {
+    clientTotal,
+    internalTotal,
+    clientHashes,
+    internalUnique: internalHashes.size,
+    clientSchemas: schemaKeys.size,
+  };
+}
+
 export const MAX_REPLICA_READY_STATES = 10_000;
 const VIEW_SYNCER_LAG_SAMPLE_INTERVAL_MS = 60_000;
+const SHARED_ADVANCE_ELIGIBILITY_LOG_INTERVAL_MS = 5 * 60_000;
 
 const PROTOCOL_VERSION_ATTRIBUTE = 'protocol.version';
 const FAILURE_REASON_ATTRIBUTE = 'reason';
@@ -332,6 +398,7 @@ export class Syncer implements SingletonService {
   #servingLagDistributionCache: ServingLagDistribution | undefined;
   #servingLagDistributionCacheClearQueued = false;
   #viewSyncerLagSampleInterval: ReturnType<typeof setInterval> | undefined;
+  #eligibilityLogInterval: ReturnType<typeof setInterval> | undefined;
 
   constructor(
     lc: LogContext,
@@ -455,11 +522,48 @@ export class Syncer implements SingletonService {
       result.observe(this.#computeServingLagDistribution().laggingClientGroups);
     });
 
+    getOrCreateGauge(
+      'sync',
+      'pipelines-total',
+      'Query pipelines across all client groups on this worker, by query ' +
+        'type. The ratio to sync.pipelines-unique is the dedup factor ' +
+        'available to shared pipeline advancement.',
+    ).addCallback(result => {
+      const stats = this.#computePipelineDedupStats();
+      result.observe(stats.clientTotal, {type: 'client'});
+      result.observe(stats.internalTotal, {type: 'internal'});
+    });
+
+    getOrCreateGauge(
+      'sync',
+      'pipelines-unique',
+      'Distinct (clientSchema, transformationHash) pipelines across all ' +
+        'client groups on this worker, by query type',
+    ).addCallback(result => {
+      const stats = this.#computePipelineDedupStats();
+      result.observe(stats.clientHashes.size, {type: 'client'});
+      result.observe(stats.internalUnique, {type: 'internal'});
+    });
+
+    getOrCreateGauge(
+      'sync',
+      'client-schemas',
+      'Distinct client schemas across all client groups on this worker',
+    ).addCallback(result => {
+      result.observe(this.#computePipelineDedupStats().clientSchemas);
+    });
+
     this.#viewSyncerLagSampleInterval = setInterval(
       () => this.#recordViewSyncerLagSamples(),
       VIEW_SYNCER_LAG_SAMPLE_INTERVAL_MS,
     );
     this.#viewSyncerLagSampleInterval.unref?.();
+
+    this.#eligibilityLogInterval = setInterval(
+      () => this.#logSharedAdvanceEligibility(),
+      SHARED_ADVANCE_ELIGIBILITY_LOG_INTERVAL_MS,
+    );
+    this.#eligibilityLogInterval.unref?.();
   }
 
   #computeServingLagDistribution(): ServingLagDistribution {
@@ -488,6 +592,31 @@ export class Syncer implements SingletonService {
     for (const lagMs of lagsMs) {
       this.#viewSyncerLag.recordMs(lagMs);
     }
+  }
+
+  #computePipelineDedupStats(): PipelineDedupStats {
+    return computePipelineDedupStats(this.#viewSyncers.getServices());
+  }
+
+  #logSharedAdvanceEligibility(): void {
+    const stats = this.#computePipelineDedupStats();
+    if (stats.clientTotal === 0) {
+      return;
+    }
+    const unique = stats.clientHashes.size;
+    const topDuplicated = [...stats.clientHashes.entries()]
+      .filter(([, {count}]) => count > 1)
+      .sort((a, b) => b[1].count - a[1].count)
+      .slice(0, 10)
+      .map(([key, {count, queryName}]) => ({key, count, queryName}));
+    this.#lc.info?.('shared-advance-eligibility', {
+      clientPipelines: stats.clientTotal,
+      uniqueClientPipelines: unique,
+      dedupFactor: Number((stats.clientTotal / Math.max(unique, 1)).toFixed(2)),
+      internalPipelines: stats.internalTotal,
+      clientSchemas: stats.clientSchemas,
+      topDuplicated,
+    });
   }
 
   #recordReplicaReadyState(state: ReplicaState): void {
@@ -748,6 +877,7 @@ export class Syncer implements SingletonService {
 
   stop() {
     clearInterval(this.#viewSyncerLagSampleInterval);
+    clearInterval(this.#eligibilityLogInterval);
     this.#wss.close();
     this.#stopped.resolve();
     return promiseVoid;
