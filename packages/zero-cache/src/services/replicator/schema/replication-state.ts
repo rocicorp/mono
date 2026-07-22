@@ -202,13 +202,24 @@ export function getSubscriptionStateAndContext(
 export function updateReplicationWatermark(
   db: StatementRunner,
   watermark: string,
+  writeTimeMs?: number | undefined,
 ) {
-  db.run(
-    /*sql*/ `
-    UPDATE "_zero.replicationState" 
-      SET stateVersion=?, writeTimeMs=unixepoch('subsec') * 1000`,
-    watermark,
-  );
+  if (writeTimeMs === undefined) {
+    db.run(
+      /*sql*/ `
+      UPDATE "_zero.replicationState"
+        SET stateVersion=?, writeTimeMs=unixepoch('subsec') * 1000`,
+      watermark,
+    );
+  } else {
+    db.run(
+      /*sql*/ `
+      UPDATE "_zero.replicationState"
+        SET stateVersion=?, writeTimeMs=?`,
+      watermark,
+      writeTimeMs,
+    );
+  }
 }
 
 export function getReplicationState(db: StatementRunner): ReplicationState {
