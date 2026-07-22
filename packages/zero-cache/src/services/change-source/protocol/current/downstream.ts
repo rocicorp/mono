@@ -33,6 +33,11 @@ export type Rollback = v.Infer<typeof rollback>;
 export const changeStreamDataSchema = v.union(begin, data, commit, rollback);
 export type ChangeStreamData = v.Infer<typeof changeStreamDataSchema>;
 
+export type SerializedChangeStreamData = {
+  data: ChangeStreamData;
+  json: string;
+};
+
 export const changeStreamControlSchema = v.tuple([
   v.literal('control'),
   resetRequiredSchema, // TODO: Add statusRequestedSchema

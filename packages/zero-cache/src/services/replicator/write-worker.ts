@@ -10,7 +10,7 @@ import {
 } from '../../db/sqlite-corruption.ts';
 import {StatementRunner} from '../../db/statements.ts';
 import {createLogContext} from '../../server/logging.ts';
-import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
+import type {SerializedChangeStreamData} from '../change-source/protocol/current/downstream.ts';
 import {ChangeProcessor, type ChangeProcessorMode} from './change-processor.ts';
 import {getSubscriptionState} from './schema/replication-state.ts';
 import {
@@ -93,9 +93,11 @@ function createAPI(): API {
       }
     },
 
-    processMessage(downstream: ChangeStreamData) {
+    processMessage({data}: SerializedChangeStreamData) {
       try {
-        return must(processor).processMessage(must(lc), downstream);
+        // The canonical JSON is intentionally unused until the SQLite stream
+        // writer is added. ChangeProcessor continues to consume parsed data.
+        return must(processor).processMessage(must(lc), data);
       } catch (e) {
         logCorruptionDiagnostics(e);
         throw e;

@@ -1,15 +1,26 @@
+import {once} from 'node:events';
+import {Worker} from 'node:worker_threads';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import type {Database} from '../../../../zqlite/src/db.ts';
 import {DbFile, initDB} from '../../test/lite.ts';
-import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
+import type {
+  ChangeStreamData,
+  SerializedChangeStreamData,
+} from '../change-source/protocol/current/downstream.ts';
+import {serializeChangeStreamData} from '../change-streamer/change-log-codec.ts';
 import {initReplicationState} from './schema/replication-state.ts';
 import {ReplicationMessages} from './test-utils.ts';
 import {
   deserializeError,
   serializeError,
   ThreadWriteWorkerClient,
+  type Request,
 } from './write-worker-client.ts';
+
+function serialized(data: ChangeStreamData): SerializedChangeStreamData {
+  return {data, json: serializeChangeStreamData(data)};
+}
 
 describe('write-worker', () => {
   let dbFile: DbFile;
@@ -74,7 +85,7 @@ describe('write-worker', () => {
 
     let commitResult = null;
     for (let i = 0; i < messages.length; i++) {
-      const result = await worker.processMessage(messages[i]);
+      const result = await worker.processMessage(serialized(messages[i]));
       if (result) {
         commitResult = result;
       }
@@ -105,15 +116,12 @@ describe('write-worker', () => {
     const issues = new ReplicationMessages({issues: ['issueID', 'bool']});
 
     // Start a transaction but don't commit
-    await worker.processMessage([
-      'begin',
-      issues.begin(),
-      {commitWatermark: '06'},
-    ]);
-    await worker.processMessage([
-      'data',
-      issues.insert('issues', {issueID: 123, bool: true}),
-    ]);
+    await worker.processMessage(
+      serialized(['begin', issues.begin(), {commitWatermark: '06'}]),
+    );
+    await worker.processMessage(
+      serialized(['data', issues.insert('issues', {issueID: 123, bool: true})]),
+    );
 
     // Abort should roll back
     worker.abort();
@@ -130,7 +138,7 @@ describe('write-worker', () => {
     ];
 
     for (let i = 0; i < messages.length; i++) {
-      await worker.processMessage(messages[i]);
+      await worker.processMessage(serialized(messages[i]));
     }
 
     const rowsAfter = mainDb.prepare('SELECT issueID FROM issues').all();
@@ -164,21 +172,68 @@ describe('write-worker', () => {
 
     // Send a processMessage without a begin - should cause a failure
     await expect(
-      worker.processMessage([
-        'data',
-        {
-          tag: 'insert',
-          relation: {
-            schema: 'public',
-            name: 'nonexistent',
-            rowKey: {columns: ['id'], type: 'default'},
+      worker.processMessage(
+        serialized([
+          'data',
+          {
+            tag: 'insert',
+            relation: {
+              schema: 'public',
+              name: 'nonexistent',
+              rowKey: {columns: ['id'], type: 'default'},
+            },
+            new: {id: [1, 'int4']},
           },
-          new: {id: [1, 'int4']},
-        },
-      ]),
+        ]),
+      ),
     ).rejects.toThrow();
 
     expect(errorReceived).toBeDefined();
+  });
+
+  test('worker structured clone preserves the serialized envelope', async () => {
+    const data: ChangeStreamData = [
+      'data',
+      {
+        tag: 'insert',
+        relation: {
+          schema: 'public',
+          name: 'issues',
+          rowKey: {columns: ['issueID'], type: 'default'},
+        },
+        new: {
+          issueID: 9007199254740993n,
+          text: 'before\0after',
+        },
+      },
+    ];
+    const request = {
+      method: 'processMessage',
+      args: [serialized(data)],
+    } satisfies Request<'processMessage'>;
+    const echoWorker = new Worker(
+      /*js*/ `
+        const {parentPort} = require('node:worker_threads');
+        parentPort.once('message', message => parentPort.postMessage(message));
+      `,
+      {eval: true},
+    );
+
+    try {
+      const response = once(echoWorker, 'message');
+      echoWorker.postMessage(request);
+      const [roundTripped] = (await response) as [typeof request];
+
+      expect(roundTripped).toEqual(request);
+      expect(roundTripped.args[0].data[1]).toMatchObject({
+        new: {issueID: 9007199254740993n, text: 'before\0after'},
+      });
+      expect(roundTripped.args[0].json).toContain(
+        '"text":"before\\u0000after"',
+      );
+    } finally {
+      await echoWorker.terminate();
+    }
   });
 
   test('error serialization preserves useful fields', () => {
