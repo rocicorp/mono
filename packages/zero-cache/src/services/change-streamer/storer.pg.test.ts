@@ -14,15 +14,11 @@ import {
 } from '../change-source/protocol/current/downstream.ts';
 import type {UpstreamStatusMessage} from '../change-source/protocol/current/status.ts';
 import {ReplicationMessages} from '../replicator/test-utils.ts';
+import {extractChangeSubstring} from './change-log-codec.ts';
 import {type Downstream} from './change-streamer.ts';
 import * as ErrorType from './error-type-enum.ts';
 import {ensureReplicationConfig, setupCDCTables} from './schema/tables.ts';
-import {
-  extractChangeSubstring,
-  PurgeLocker,
-  Storer,
-  type TuningOptions,
-} from './storer.ts';
+import {PurgeLocker, Storer, type TuningOptions} from './storer.ts';
 import {createSubscriber} from './test-utils.ts';
 
 const opts: TuningOptions = {
