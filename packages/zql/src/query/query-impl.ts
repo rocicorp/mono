@@ -300,7 +300,7 @@ export class QueryImpl<
             },
             this.customQueryID,
             relationship,
-          ),
+          ) as AnyQuery,
         ),
       );
 
@@ -487,7 +487,7 @@ export class QueryImpl<
             defaultFormat,
             this.customQueryID,
             undefined,
-          ),
+          ) as AnyQuery,
         ),
       );
       return {
@@ -566,8 +566,12 @@ export class QueryImpl<
     return this.#ast;
   }
 
-  expressionBuilder() {
-    return new ExpressionBuilder(this.#exists);
+  expressionBuilder(): ExpressionBuilder<TTable, TSchema> {
+    return new ExpressionBuilder<TTable, TSchema>(
+      this.#exists as ConstructorParameters<
+        typeof ExpressionBuilder<TTable, TSchema>
+      >[0],
+    );
   }
 }
 

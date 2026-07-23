@@ -12,6 +12,7 @@ import type {
   ChangeStreamer,
   ChangeStreamerService,
   Downstream,
+  SerializedDownstream,
 } from '../../../zero-cache/src/services/change-streamer/change-streamer.ts';
 import {initChangeStreamerSchema} from '../../../zero-cache/src/services/change-streamer/schema/init.ts';
 import {ReplicationStatusPublisher} from '../../../zero-cache/src/services/replicator/replication-status.ts';
@@ -247,12 +248,14 @@ function selectWriteFuzzSkeletons(
   return out;
 }
 
-function parseStringifiedSource(source: Source<string>): Source<Downstream> {
+function parseStringifiedSource(
+  source: Source<string>,
+): Source<SerializedDownstream> {
   return {
     cancel: err => source.cancel(err),
     async *[Symbol.asyncIterator]() {
-      for await (const msg of source) {
-        yield BigIntJSON.parse(msg) as Downstream;
+      for await (const json of source) {
+        yield {data: BigIntJSON.parse(json) as Downstream, json};
       }
     },
   };

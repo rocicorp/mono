@@ -5,12 +5,11 @@ import {getOrCreateCounter} from '../../observability/metrics.ts';
 import type {Source} from '../../types/streams.ts';
 import type {DownloadStatus} from '../change-source/protocol/current.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
-import {serializeChangeStreamData} from '../change-streamer/change-log-codec.ts';
 import {
   errorTypeToReadableName,
   PROTOCOL_VERSION,
   type ChangeStreamer,
-  type Downstream,
+  type SerializedDownstream,
 } from '../change-streamer/change-streamer.ts';
 import type * as ErrorType from '../change-streamer/error-type-enum.ts';
 import {RunningState} from '../running-state.ts';
@@ -89,7 +88,7 @@ export class IncrementalSyncer {
       const {replicaVersion, watermark} =
         await this.#worker.getSubscriptionState();
 
-      let downstream: Source<Downstream> | undefined;
+      let downstream: Source<SerializedDownstream> | undefined;
       let unregister = () => {};
       let err: unknown | undefined;
 
@@ -113,7 +112,7 @@ export class IncrementalSyncer {
 
         let backfillStatus: DownloadStatus | undefined;
 
-        for await (const message of downstream) {
+        for await (const {data: message, json} of downstream) {
           this.#replicationEvents.add(1);
           switch (message[0]) {
             case 'status': {
@@ -180,7 +179,7 @@ export class IncrementalSyncer {
               const data = message as ChangeStreamData;
               const result = await this.#worker.processMessage({
                 data,
-                json: serializeChangeStreamData(data),
+                json,
               });
 
               this.#handleResult(lc, result);

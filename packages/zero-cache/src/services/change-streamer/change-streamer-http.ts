@@ -10,6 +10,7 @@ import {type Worker} from '../../types/processes.ts';
 import {type ShardID} from '../../types/shards.ts';
 import {
   streamIn,
+  streamInStringified,
   streamOut,
   streamOutStringified,
   type Source,
@@ -24,7 +25,7 @@ import {
   PROTOCOL_VERSION,
   type ChangeStreamer,
   type ChangeStreamerService,
-  type Downstream,
+  type SerializedDownstream,
   type SubscriberContext,
 } from './change-streamer.ts';
 import {discoverChangeStreamerAddress} from './schema/tables.ts';
@@ -232,13 +233,15 @@ export class ChangeStreamerHttpClient implements ChangeStreamer {
     return streamIn(this.#lc, ws, snapshotMessageSchema);
   }
 
-  async subscribe(ctx: SubscriberContext): Promise<Source<Downstream>> {
+  async subscribe(
+    ctx: SubscriberContext,
+  ): Promise<Source<SerializedDownstream>> {
     const uri = await this.#resolveChangeStreamer(CHANGES_PATH);
 
     const params = getParams(ctx);
     const ws = new WebSocket(uri + `?${params.toString()}`);
 
-    return streamIn(this.#lc, ws, downstreamSchema);
+    return streamInStringified(this.#lc, ws, downstreamSchema);
   }
 }
 
