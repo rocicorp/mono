@@ -41,7 +41,6 @@ import {
 } from './change-streamer.ts';
 import * as ErrorType from './error-type-enum.ts';
 import {Forwarder} from './forwarder.ts';
-import {initChangeStreamerSchema} from './schema/init.ts';
 import {
   AutoResetSignal,
   ensureReplicationConfig,
@@ -77,14 +76,13 @@ export async function initializeStreamer(
   opts: TuningOptions,
   setTimeoutFn = setTimeout,
 ): Promise<ChangeStreamerService> {
-  // Make sure the ChangeLog DB is set up.
-  await initChangeStreamerSchema(lc, changeDB, shard);
   await ensureReplicationConfig(
     lc,
     changeDB,
     subscriptionState,
     shard,
     autoReset,
+    purgeLock ?? undefined,
     setTimeoutFn,
   );
 

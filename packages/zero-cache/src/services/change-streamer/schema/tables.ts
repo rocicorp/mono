@@ -143,6 +143,10 @@ function createTables(shard: ShardID) {
   );
 }
 
+interface PurgeLock {
+  release(): Promise<void>;
+}
+
 export async function setupCDCTables(
   lc: LogContext,
   db: postgres.TransactionSql,
@@ -168,6 +172,7 @@ export async function ensureReplicationConfig(
   >,
   shard: ShardID,
   autoReset: boolean,
+  purgeLock?: PurgeLock,
   setTimeoutFn: typeof setTimeout = setTimeout,
 ) {
   const {publications, replicaVersion, watermark} = subscriptionState;
@@ -209,6 +214,10 @@ export async function ensureReplicationConfig(
           `Data in cdc tables @${replicaVersion} is incompatible ` +
             `with replica @${replicaConfig.replicaVersion}. Clearing tables.`,
         );
+        // Release any purge lock held by the caller; the changeLog is
+        // incompatible with the replica and needs to be truncated.
+        void purgeLock?.release();
+
         // Note: The order of TRUNCATE matters. The replicationState table is
         //       truncated before the changeLog table, in order to acquire
         //       (exclusive) locks on the tables in the same order that the
