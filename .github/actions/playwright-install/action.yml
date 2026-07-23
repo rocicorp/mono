@@ -14,11 +14,13 @@ runs:
       with:
         path: ~/.cache/ms-playwright
         key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ steps.playwright-version.outputs.version }}
+    # Composite action steps do not support timeout-minutes, so use the
+    # timeout command to abort the job if an install hangs.
     - name: Install Playwright browsers and system deps
       if: steps.playwright-cache.outputs.cache-hit != 'true'
-      run: pnpm exec playwright install --with-deps
+      run: timeout -k 30s 20m pnpm exec playwright install --with-deps
       shell: bash
     - name: Install Playwright system deps only
       if: steps.playwright-cache.outputs.cache-hit == 'true'
-      run: pnpm exec playwright install-deps
+      run: timeout -k 30s 20m pnpm exec playwright install-deps
       shell: bash
