@@ -181,7 +181,10 @@ describe('change-streamer/storer', () => {
   });
 
   describe('protocol: ws', () => {
+    let storedWatermarks: string[];
+
     beforeEach(async () => {
+      storedWatermarks = [];
       storer = new Storer(
         lc,
         shard,
@@ -193,6 +196,7 @@ describe('change-streamer/storer', () => {
         msg => consumed.enqueue(msg),
         err => fatalErrors.enqueue(err),
         opts,
+        watermark => storedWatermarks.push(watermark),
       );
       await storer.assumeOwnership();
       done = storer.run();
@@ -202,6 +206,20 @@ describe('change-streamer/storer', () => {
       expect(
         await db`SELECT "ownerAddress" FROM "xero_5/cdc"."replicationState" WHERE owner = 'task-id'`,
       ).toEqual([{ownerAddress: 'change-streamer:12345'}]);
+    });
+
+    test('reports every durable commit even when its source ACK is skipped', async () => {
+      storer.store('08', [
+        'begin',
+        {tag: 'begin', skipAck: true},
+        {commitWatermark: '08'},
+      ]);
+      storer.store('08', ['commit', {tag: 'commit'}, {watermark: '08'}]);
+
+      await storer.allProcessed();
+
+      expect(storedWatermarks).toEqual(['08']);
+      expect(consumed.size()).toBe(0);
     });
 
     test('purge', async () => {

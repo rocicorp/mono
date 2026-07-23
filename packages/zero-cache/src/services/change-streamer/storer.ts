@@ -144,6 +144,7 @@ export class Storer implements Service {
   readonly #replicaVersion: string;
   readonly #onConsumed: (c: Commit | UpstreamStatusMessage) => void;
   readonly #onFatal: (err: Error) => void;
+  readonly #onCommitStored: ((watermark: string) => void) | undefined;
   readonly #queue = new Queue<QueueEntry>();
   readonly #backPressureThresholdBytes: number;
   readonly #statementTimeoutMs: number;
@@ -167,6 +168,7 @@ export class Storer implements Service {
       statementTimeoutMs,
       changeLogBatchSize,
     }: TuningOptions,
+    onCommitStored?: ((watermark: string) => void) | undefined,
   ) {
     this.#lc = lc.withContext('component', 'change-log');
     this.#shard = shard;
@@ -177,6 +179,7 @@ export class Storer implements Service {
     this.#replicaVersion = replicaVersion;
     this.#onConsumed = onConsumed;
     this.#onFatal = onFatal;
+    this.#onCommitStored = onCommitStored;
     this.#statementTimeoutMs = statementTimeoutMs;
     this.#changeLogBatchSize = Math.max(1, changeLogBatchSize);
 
@@ -617,6 +620,10 @@ export class Storer implements Service {
           }
 
           await tx.pool.done();
+
+          // This fires for every durable change-log transaction, including
+          // backfill transactions whose source ACK is intentionally skipped.
+          this.#onCommitStored?.(watermark);
 
           // ACK the LSN to the upstream Postgres.
           if (tx.ack) {

@@ -57,6 +57,11 @@ import {
   SQLiteChangeLogCleanupCoordinator,
   type SQLiteChangeLogCleanupOptions,
 } from './sqlite-change-log-cleanup.ts';
+import {
+  createSQLiteChangeLogComparator,
+  type SQLiteChangeLogComparator,
+  type SQLiteChangeLogComparatorOptions,
+} from './sqlite-change-log-comparator.ts';
 import {SQLiteChangeLogReader} from './sqlite-change-log-reader.ts';
 import {
   Storer,
@@ -79,6 +84,22 @@ export type TuningOptions = StorerOptions & {
   flowControlConsensusPaddingSeconds: number;
   flowControlEventDrivenRelease?: boolean | undefined;
   sqliteCatchup?: SQLiteCatchupOptions | undefined;
+  sqliteCompare?:
+    | (Pick<
+        SQLiteChangeLogComparatorOptions,
+        | 'retentionMs'
+        | 'samplePercent'
+        | 'retryDelayMs'
+        | 'now'
+        | 'setTimeoutFn'
+        | 'clearTimeoutFn'
+        | 'onResult'
+      > & {
+        replicaFile: string;
+        readBatchRows: number;
+        warmupStartedAtMs?: number | undefined;
+      })
+    | undefined;
   sqliteCleanup?:
     | Pick<
         SQLiteChangeLogCleanupOptions,
@@ -292,6 +313,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
   readonly #forwarder: Forwarder;
   readonly #replicationStatusPublisher: ReplicationStatusPublisher;
   readonly #sqliteCatchupOptions: SQLiteCatchupOptions | undefined;
+  readonly #sqliteComparator: SQLiteChangeLogComparator | undefined;
   readonly #sqliteCleanup: SQLiteChangeLogCleanupCoordinator | undefined;
 
   readonly #autoReset: boolean;
@@ -349,6 +371,26 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     this.#changeDB = changeDB;
     this.#replicaVersion = replicaVersion;
     this.#source = source;
+    this.#sqliteComparator = opts.sqliteCompare
+      ? createSQLiteChangeLogComparator(
+          this.#lc,
+          changeDB,
+          opts.sqliteCompare.replicaFile,
+          {
+            replicaVersion,
+            shard,
+            retentionMs: opts.sqliteCompare.retentionMs,
+            batchSize: opts.sqliteCompare.readBatchRows,
+            samplePercent: opts.sqliteCompare.samplePercent,
+            warmupStartedAtMs: opts.sqliteCompare.warmupStartedAtMs,
+            retryDelayMs: opts.sqliteCompare.retryDelayMs,
+            now: opts.sqliteCompare.now,
+            setTimeoutFn: opts.sqliteCompare.setTimeoutFn,
+            clearTimeoutFn: opts.sqliteCompare.clearTimeoutFn,
+            onResult: opts.sqliteCompare.onResult,
+          },
+        )
+      : undefined;
     this.#storer = new Storer(
       lc,
       shard,
@@ -360,6 +402,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       consumed => this.#stream?.acks.push(['status', consumed[1], consumed[2]]),
       err => this.stop(err),
       opts,
+      watermark => this.#sqliteComparator?.schedule(watermark),
     );
     this.#forwarder = new Forwarder(lc, {
       flowControlConsensusPaddingSeconds:
@@ -698,7 +741,10 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     this.#state.stop(this.#lc, err);
     this.#stream?.changes.cancel();
     this.#sqliteCatchup?.close();
-    await this.#sqliteCleanup?.close();
+    await Promise.all([
+      this.#sqliteComparator?.close(),
+      this.#sqliteCleanup?.close(),
+    ]);
     await this.#storer.stop();
     await this.#source.stop();
   }

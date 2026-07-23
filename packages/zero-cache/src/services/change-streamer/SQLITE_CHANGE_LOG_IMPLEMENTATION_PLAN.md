@@ -341,6 +341,7 @@ Add hidden options under `changeStreamer` with safe defaults. Suggested names:
 | --------------------------------- | -----------------: | --------------------------------------------- |
 | `sqliteChangeLogMode`             |              `off` | `off`, `write`, `compare`, or `serve`         |
 | `sqliteChangeLogReadPercent`      |                `0` | Stable canary percentage when mode is `serve` |
+| `sqliteChangeLogComparePercent`   |                `1` | Stable sampled-range comparison percentage    |
 | `sqliteChangeLogRetentionMs`      |            `60000` | Time-based minimum retention                  |
 | `sqliteChangeLogReadBatchRows`    |   benchmark result | Rows per short read snapshot                  |
 | `sqliteChangeLogPurgeBatchRows`   |   benchmark result | Target rows per write batch                   |
