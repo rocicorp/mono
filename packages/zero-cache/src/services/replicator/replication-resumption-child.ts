@@ -194,6 +194,26 @@ class FailpointWriteWorkerClient implements WriteWorkerClient {
     return result;
   }
 
+  async processMessages(
+    downstream: readonly ChangeStreamData[],
+  ): Promise<CommitResult[]> {
+    const results = await this.#inner.processMessages(downstream);
+    const result = results.at(-1);
+    if (
+      result?.watermark &&
+      this.#failpoint === 'after-sqlite-commit-before-ack' &&
+      !this.#triggered
+    ) {
+      this.#triggered = true;
+      send(this.#parent, [
+        'replication-resumption:failpoint',
+        {name: this.#failpoint, watermark: result.watermark},
+      ]);
+      await resolver<never>().promise;
+    }
+    return results;
+  }
+
   abort() {
     this.#inner.abort();
   }

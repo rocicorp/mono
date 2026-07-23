@@ -229,6 +229,20 @@ export const TTL_CLOCK_INTERVAL = 60_000;
  */
 export const TTL_TIMER_HYSTERESIS = 50; // ms
 
+/**
+ * Time without new replica changes after a reset before rehydrating pipelines.
+ * This is long enough to coalesce a burst of version-ready notifications, but
+ * short enough to begin recovery promptly once the burst ends.
+ */
+export const POST_RESET_QUIET_MS = 50;
+
+/**
+ * A quiet interval is preferred, but cannot be required forever: a
+ * continuously busy replica still needs occasional hydration attempts to make
+ * client progress.
+ */
+export const POST_RESET_MAX_CATCHUP_MS = 5_000;
+
 type CustomQueryTransformMode = 'all' | 'missing';
 
 export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
@@ -292,6 +306,17 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
   #cvr: CVRSnapshot | undefined;
   #pipelinesSynced = false;
+  /**
+   * A reset intentionally drops pipelines so the snapshot can catch up without
+   * IVM work. Rehydrating during the same burst can immediately trigger another
+   * reset, so each observed change postpones hydration until the replica has
+   * been quiet for {@link POST_RESET_QUIET_MS}.
+   */
+  #postResetCatchupStartedAtMs: number | undefined;
+  #postResetQuietElapsed = false;
+  #postResetForceRehydrate = false;
+  #postResetQuietTimer: ReturnType<SetTimeout> | 0 = 0;
+  #postResetRehydrateTimer: ReturnType<SetTimeout> | 0 = 0;
   #servedVersion: string | null = null;
 
   #expiredQueriesTimer: ReturnType<SetTimeout> | 0 = 0;
@@ -565,16 +590,45 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             this.#pipelineResets.add(1, {reason: result.reason});
             this.#pipelines.reset(clientSchema);
             this.#pipelinesSynced = false;
+            this.#postResetCatchupStartedAtMs = Date.now();
+            this.#schedulePostResetRehydrate();
             this.connContextManager.setSharedRetransformReady(false);
           }
 
           // Advance the snapshot to the current version.
-          const version = this.#pipelines.advanceWithoutDiff();
+          const {version, numChanges} = this.#pipelines.advanceWithoutDiff();
           const cvrVer = versionString(cvr.version);
 
           if (version < cvr.version.stateVersion) {
             lc.debug?.(`replica@${version} is behind cvr@${cvrVer}`);
             return; // Wait for the next advancement.
+          }
+
+          if (this.#postResetCatchupStartedAtMs !== undefined) {
+            const catchupElapsedMs =
+              Date.now() - this.#postResetCatchupStartedAtMs;
+            if (this.#postResetForceRehydrate) {
+              lc.info?.(
+                `post-reset catchup timed out after ` +
+                  `${POST_RESET_MAX_CATCHUP_MS}ms; rehydrating at ` +
+                  `replica@${version} with ${numChanges} changes`,
+              );
+              this.#clearPostResetCatchup();
+            } else if (this.#postResetQuietElapsed && numChanges === 0) {
+              lc.debug?.(
+                `post-reset catchup admitted after ${POST_RESET_QUIET_MS}ms ` +
+                  `quiet at replica@${version}`,
+              );
+              this.#clearPostResetCatchup();
+            } else {
+              this.#postResetQuietElapsed = false;
+              this.#schedulePostResetQuietProbe();
+              lc.debug?.(
+                `catching up after pipeline reset: observed ${numChanges} ` +
+                  `changes in ${catchupElapsedMs}ms`,
+              );
+              return;
+            }
           }
 
           // stateVersion is at or beyond CVR version for the first time.
@@ -807,6 +861,36 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     }
     clearTimeout(this.#authMaintenanceTimer);
     this.#authMaintenanceTimer = 0;
+  }
+
+  #schedulePostResetRehydrate() {
+    this.#postResetQuietElapsed = false;
+    this.#postResetForceRehydrate = false;
+    this.#schedulePostResetQuietProbe();
+    this.#postResetRehydrateTimer = this.#setTimeout(() => {
+      this.#postResetRehydrateTimer = 0;
+      this.#postResetForceRehydrate = true;
+      this.#stateChanges.push({state: 'version-ready'});
+    }, POST_RESET_MAX_CATCHUP_MS);
+  }
+
+  #schedulePostResetQuietProbe() {
+    clearTimeout(this.#postResetQuietTimer);
+    this.#postResetQuietTimer = this.#setTimeout(() => {
+      this.#postResetQuietTimer = 0;
+      this.#postResetQuietElapsed = true;
+      this.#stateChanges.push({state: 'version-ready'});
+    }, POST_RESET_QUIET_MS);
+  }
+
+  #clearPostResetCatchup() {
+    this.#postResetCatchupStartedAtMs = undefined;
+    this.#postResetQuietElapsed = false;
+    this.#postResetForceRehydrate = false;
+    clearTimeout(this.#postResetQuietTimer);
+    this.#postResetQuietTimer = 0;
+    clearTimeout(this.#postResetRehydrateTimer);
+    this.#postResetRehydrateTimer = 0;
   }
 
   /**
@@ -2837,6 +2921,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     this.#stopTTLClockInterval();
     this.#stopExpireTimer();
     this.#stopAuthMaintenanceTimer();
+    this.#clearPostResetCatchup();
     // The InspectorDelegate shares this transformer and may still use it
     // after cleanup; a destroyed transformer is safe to use (it just stops
     // caching and never restarts its cleanup interval).

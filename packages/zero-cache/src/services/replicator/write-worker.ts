@@ -102,6 +102,15 @@ function createAPI(): API {
       }
     },
 
+    processMessages(downstream: readonly ChangeStreamData[]) {
+      try {
+        return must(processor).processMessages(must(lc), downstream);
+      } catch (e) {
+        logCorruptionDiagnostics(e);
+        throw e;
+      }
+    },
+
     abort() {
       must(processor).abort(must(lc));
       createProcessor();

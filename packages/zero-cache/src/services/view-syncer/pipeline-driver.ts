@@ -419,12 +419,16 @@ export class PipelineDriver {
     return this.#permissions;
   }
 
-  advanceWithoutDiff(): string {
-    const {db, version} = this.#snapshotter.advanceWithoutDiff().curr;
+  advanceWithoutDiff(): {
+    readonly version: string;
+    readonly numChanges: number;
+  } {
+    const {prev, curr} = this.#snapshotter.advanceWithoutDiff();
+    const {db, version} = curr;
     for (const table of this.#tables.values()) {
       table.setDB(db.db);
     }
-    return version;
+    return {version, numChanges: curr.numChangesSince(prev.version)};
   }
 
   #ensureCostModelExistsIfEnabled(db: Database) {

@@ -138,6 +138,106 @@ observe. The result JSON still records the existing global seq-lag fields, but
 realistic pass/fail uses client-visible lag and connection/initial-sync checks;
 write-impact counters report the active-query impact rate.
 
+## Recovery benchmark
+
+Use the recovery benchmark to measure how quickly overloaded ViewSyncers return
+to a stable, caught-up state after ingress stops. Recovery currently requires
+the `hot` model so every logical write is visible to every client group and the
+global sequence lag is meaningful.
+
+```bash
+pnpm --filter zero-throughput start -- \
+  --benchmark recovery \
+  --profile relational \
+  --model hot \
+  --users 50 \
+  --queries-per-user 3 \
+  --rows-per-query 50 \
+  --write-rate 50 \
+  --duration-ms 20000 \
+  --recovery-timeout-ms 60000 \
+  --recovery-stable-ms 2000 \
+  --recovery-min-pipeline-resets 1 \
+  --output results/relational-recovery.json
+```
+
+The benchmark has two phases:
+
+1. **Overload:** write at `writeRate` for `durationMs`, building client-visible
+   backlog and exercising pipeline shedding.
+2. **Recovery:** stop writes and wait until every connected client has observed
+   the overload target sequence continuously for `recoveryStableMs`.
+
+Recovery pass/fail intentionally ignores the steady-state p99 lag SLO. It
+instead requires a configurable overload backlog (`recoveryMinSeqLag`, default
+1), at least `recoveryMinPipelineResets` observed resets (default 1), and stable
+recovery within `recoveryTimeoutMs`. Results include overload and recovery peak
+sequence lag, time to first catch-up, time to stable recovery, final sequence
+lag, pipeline resets, and timeout-forced rehydrations. Set
+`--recovery-min-pipeline-resets 0` when using an externally managed zero-cache
+whose log is unavailable to the harness.
+
+## Migration recovery benchmark
+
+The migration benchmark writes an exact number of `feed-append` rows using one
+set-based `INSERT` per transaction, then applies the same stable-recovery check.
+`migrationTotalRows` controls the total migration size, `batchSize` controls
+rows per transaction, and `writeRate` schedules transaction starts in rows per
+second. `migrationConcurrency` controls the number of in-flight transactions
+and the benchmark PostgreSQL connection-pool size. `migrationSynchronousCommit`
+defaults to `true`; set it to `false` only to measure a non-durable upper bound.
+
+Compare one atomic 30,000-row transaction:
+
+```bash
+pnpm --filter zero-throughput start -- \
+  --benchmark migration \
+  --profile feed-append \
+  --model hot \
+  --users 50 \
+  --queries-per-user 1 \
+  --rows-per-query 50 \
+  --migration-total-rows 30000 \
+  --migration-concurrency 1 \
+  --batch-size 30000 \
+  --write-rate 30000 \
+  --sample-interval-ms 100 \
+  --recovery-timeout-ms 120000 \
+  --output results/migration-atomic-30k.json
+```
+
+Against a sustained stream of 30 transactions containing 1,000 rows each. At
+30,000 rows/s, transaction starts are scheduled about 33ms apart, inside the
+default post-reset quiet interval:
+
+```bash
+pnpm --filter zero-throughput start -- \
+  --benchmark migration \
+  --profile feed-append \
+  --model hot \
+  --users 50 \
+  --queries-per-user 1 \
+  --rows-per-query 50 \
+  --migration-total-rows 30000 \
+  --migration-concurrency 1 \
+  --batch-size 1000 \
+  --write-rate 30000 \
+  --sample-interval-ms 100 \
+  --recovery-timeout-ms 120000 \
+  --output results/migration-stream-30x1k.json
+```
+
+The benchmark sequence is an application-level row marker, so sequence lag
+represents migrated rows that the slowest client query has not yet observed;
+it is not the number of Zero replica versions behind.
+
+For a concurrent, non-durable ceiling run, add for example:
+
+```bash
+  --migration-concurrency 10 \
+  --migration-synchronous-commit=false
+```
+
 To stream zero-cache logs directly in the terminal:
 
 ```bash
