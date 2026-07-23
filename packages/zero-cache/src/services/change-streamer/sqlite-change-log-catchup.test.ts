@@ -58,6 +58,15 @@ describe('SQLiteChangeLogCatchup', () => {
     expect(fixture.reader.reads).toEqual([
       {from: '01', through: '06', batchSize: 2},
     ]);
+    await vi.waitFor(() => expect(fixture.onResult).toHaveBeenCalledOnce());
+    expect(fixture.onResult).toHaveBeenCalledWith(
+      expect.objectContaining({
+        source: 'sqlite',
+        outcome: 'success',
+        rows: 6,
+        backlogRows: 3,
+      }),
+    );
   });
 
   test('waits for a mid-transaction commit before choosing the required head', async () => {
@@ -229,6 +238,9 @@ describe('SQLiteChangeLogCatchup', () => {
     await fixture.coordinator.catchup(subscriber, 'serving', () => '06');
 
     await done;
+    expect(fixture.onFailure).toHaveBeenCalledWith(
+      expect.any(SQLiteChangeLogBarrierTimeoutError),
+    );
     expect(fixture.logSink.messages).toContainEqual([
       'error',
       expect.anything(),
@@ -240,6 +252,9 @@ describe('SQLiteChangeLogCatchup', () => {
       ],
     ]);
     expect(fixture.onFatal).not.toHaveBeenCalled();
+    expect(fixture.onResult).toHaveBeenCalledWith(
+      expect.objectContaining({outcome: 'barrier-timeout'}),
+    );
   });
 
   test('fails closed on reader errors after registration', async () => {
@@ -251,6 +266,7 @@ describe('SQLiteChangeLogCatchup', () => {
     await fixture.coordinator.catchup(subscriber, 'serving', () => '06');
 
     await done;
+    expect(fixture.onFailure).toHaveBeenCalledWith(fixture.reader.readError);
     expect(fixture.logSink.messages).toContainEqual([
       'error',
       expect.anything(),
@@ -314,15 +330,27 @@ function createFixture(
   const onFatal = vi.fn<(error: AutoResetSignal) => Promise<void>>(() =>
     Promise.resolve(),
   );
+  const onFailure = vi.fn<(error: unknown) => void>();
+  const onResult = vi.fn();
   const coordinator = new SQLiteChangeLogCatchup(lc, forwarder, reader, {
     batchSize: 2,
     barrierTimeoutMs: opts.barrierTimeoutMs ?? 1_000,
     barrierPollIntervalMs: 1,
     cleanupGuard: opts.cleanupGuard,
     onFatal,
+    onFailure,
+    onResult,
   });
   coordinators.push(coordinator);
-  return {coordinator, forwarder, logSink, onFatal, reader};
+  return {
+    coordinator,
+    forwarder,
+    logSink,
+    onFailure,
+    onFatal,
+    onResult,
+    reader,
+  };
 }
 
 class TestReader implements SQLiteChangeLogCatchupReader {

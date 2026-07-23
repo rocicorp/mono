@@ -62,6 +62,11 @@ import {
   type SQLiteChangeLogComparator,
   type SQLiteChangeLogComparatorOptions,
 } from './sqlite-change-log-comparator.ts';
+import {
+  SQLiteChangeLogReadSourceRouter,
+  type SQLiteChangeLogReadDecision,
+  type SQLiteChangeLogReadSource,
+} from './sqlite-change-log-read-source.ts';
 import {SQLiteChangeLogReader} from './sqlite-change-log-reader.ts';
 import {
   Storer,
@@ -74,8 +79,17 @@ export type SQLiteCatchupOptions = {
   replicaFile: string;
   readBatchRows: number;
   barrierTimeoutMs: number;
-  /** Slice 11 supplies the production canary selector. */
-  shouldUse?: ((ctx: SubscriberContext) => boolean) | undefined;
+  readPercent: number;
+  retentionMs: number;
+  warmupStartedAtMs?: number | undefined;
+  healthProbeIntervalMs?: number | undefined;
+  now?: (() => number) | undefined;
+  setTimeoutFn?: typeof setTimeout | undefined;
+  clearTimeoutFn?: typeof clearTimeout | undefined;
+  createReadSource?: (() => SQLiteChangeLogReadSource) | undefined;
+  onReadDecision?:
+    | ((decision: SQLiteChangeLogReadDecision) => void)
+    | undefined;
   /** Slice 9 supplies the writer-serialized purge guard. */
   cleanupGuard?: SQLiteChangeLogCleanupGuard | undefined;
 };
@@ -313,6 +327,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
   readonly #forwarder: Forwarder;
   readonly #replicationStatusPublisher: ReplicationStatusPublisher;
   readonly #sqliteCatchupOptions: SQLiteCatchupOptions | undefined;
+  readonly #sqliteReadSourceRouter: SQLiteChangeLogReadSourceRouter | undefined;
   readonly #sqliteComparator: SQLiteChangeLogComparator | undefined;
   readonly #sqliteCleanup: SQLiteChangeLogCleanupCoordinator | undefined;
 
@@ -345,6 +360,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
   #purgeLock: PurgeLock | null;
   #stream: ChangeStream | undefined;
   #sqliteCatchup: SQLiteChangeLogCatchup | undefined;
+  readonly #forwardedHeadInitialized = resolver<string>();
   #lastForwardedCommitWatermark: string | undefined;
   #currentTransactionCompletion:
     | Resolver<ForwardedTransactionCompletion>
@@ -411,6 +427,20 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     });
     this.#replicationStatusPublisher = replicationStatusPublisher;
     this.#sqliteCatchupOptions = opts.sqliteCatchup;
+    this.#sqliteReadSourceRouter = opts.sqliteCatchup
+      ? new SQLiteChangeLogReadSourceRouter(lc, shard, replicaVersion, {
+          replicaFile: opts.sqliteCatchup.replicaFile,
+          readPercent: opts.sqliteCatchup.readPercent,
+          retentionMs: opts.sqliteCatchup.retentionMs,
+          warmupStartedAtMs: opts.sqliteCatchup.warmupStartedAtMs,
+          healthProbeIntervalMs: opts.sqliteCatchup.healthProbeIntervalMs,
+          now: opts.sqliteCatchup.now,
+          setTimeoutFn: opts.sqliteCatchup.setTimeoutFn,
+          clearTimeoutFn: opts.sqliteCatchup.clearTimeoutFn,
+          createSource: opts.sqliteCatchup.createReadSource,
+          onDecision: opts.sqliteCatchup.onReadDecision,
+        })
+      : undefined;
     this.#sqliteCleanup = opts.sqliteCleanup
       ? new SQLiteChangeLogCleanupCoordinator(this.#lc, {
           ...opts.sqliteCleanup,
@@ -454,6 +484,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
         // from the durable PG head. Commits observed only since process startup
         // are insufficient after a change-streamer restart.
         this.#lastForwardedCommitWatermark = lastWatermark;
+        this.#forwardedHeadInitialized.resolve(lastWatermark);
         const stream = await this.#source.startStream(
           lastWatermark,
           backfillRequests,
@@ -637,12 +668,26 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     } else {
       this.#lc.debug?.(`adding subscriber ${subscriber.id}`);
 
-      const sqliteCatchup = this.#selectSQLiteCatchup(ctx);
-      if (sqliteCatchup) {
-        cleanupSubscriber = () => sqliteCatchup.remove(subscriber);
-        await sqliteCatchup.catchup(subscriber, mode, () =>
-          this.#captureRequiredHead(),
-        );
+      const readDecision =
+        this.#sqliteReadSourceRouter?.selectForSubscriber(ctx);
+      if (readDecision?.source === 'sqlite') {
+        try {
+          const sqliteCatchup = this.#getSQLiteCatchup();
+          cleanupSubscriber = () => sqliteCatchup.remove(subscriber);
+          await sqliteCatchup.catchup(subscriber, mode, () =>
+            this.#captureRequiredHead(),
+          );
+        } catch (error) {
+          this.#sqliteReadSourceRouter?.reportFailure(error);
+          if (readDecision.pinned) {
+            // A snapshot-advertised SQLite range cannot switch stores without
+            // violating its minimum-watermark contract.
+            subscriber.fail(error);
+          } else {
+            this.#forwarder.add(subscriber);
+            this.#storer.catchup(subscriber, mode);
+          }
+        }
       } else {
         // Keep the existing PG registration/catchup lockstep unchanged when
         // SQLite was not selected before Forwarder.add().
@@ -667,10 +712,23 @@ class ChangeStreamerImpl implements ChangeStreamerService {
   }
 
   endCleanupReservation(taskID: string): void {
+    this.#sqliteReadSourceRouter?.releaseReservation(taskID);
     this.#sqliteCleanup?.resumeAfterSnapshot(taskID);
   }
 
-  async getChangeLogState(): Promise<{
+  getChangeLogState(taskID?: string | undefined): Promise<{
+    replicaVersion: string;
+    minWatermark: string;
+  }> {
+    if (taskID && this.#sqliteReadSourceRouter) {
+      return this.#sqliteReadSourceRouter.reserveSnapshot(taskID, () =>
+        this.#getPGChangeLogState(),
+      );
+    }
+    return this.#getPGChangeLogState();
+  }
+
+  async #getPGChangeLogState(): Promise<{
     replicaVersion: string;
     minWatermark: string;
   }> {
@@ -741,6 +799,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     this.#state.stop(this.#lc, err);
     this.#stream?.changes.cancel();
     this.#sqliteCatchup?.close();
+    this.#sqliteReadSourceRouter?.close();
     await Promise.all([
       this.#sqliteComparator?.close(),
       this.#sqliteCleanup?.close(),
@@ -784,7 +843,11 @@ class ChangeStreamerImpl implements ChangeStreamerService {
 
   #captureRequiredHead(): string | Promise<string> {
     const committed = this.#lastForwardedCommitWatermark;
-    assert(committed, 'last forwarded commit watermark is not initialized');
+    if (committed === undefined) {
+      return this.#forwardedHeadInitialized.promise.then(() =>
+        this.#captureRequiredHead(),
+      );
+    }
     return (
       this.#currentTransactionCompletion?.promise.then(
         completion => completion.watermark,
@@ -792,19 +855,9 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     );
   }
 
-  #selectSQLiteCatchup(
-    ctx: SubscriberContext,
-  ): SQLiteChangeLogCatchup | undefined {
+  #getSQLiteCatchup(): SQLiteChangeLogCatchup {
     const opts = this.#sqliteCatchupOptions;
-    // Slice 11 supplies a non-default selector. Until then, this keeps all
-    // production subscriptions on PG even though the complete SQLite handoff
-    // path is wired and testable.
-    if (
-      this.#lastForwardedCommitWatermark === undefined ||
-      !opts?.shouldUse?.(ctx)
-    ) {
-      return undefined;
-    }
+    assert(opts, 'SQLite catchup selected without SQLite catchup options');
     if (!this.#sqliteCatchup) {
       this.#sqliteCatchup = new SQLiteChangeLogCatchup(
         this.#lc,
@@ -817,6 +870,9 @@ class ChangeStreamerImpl implements ChangeStreamerService {
           onFatal: async error => {
             await markResetRequired(this.#changeDB, this.#shard);
             void this.stop(error);
+          },
+          onFailure: error => {
+            this.#sqliteReadSourceRouter?.reportFailure(error);
           },
         },
       );

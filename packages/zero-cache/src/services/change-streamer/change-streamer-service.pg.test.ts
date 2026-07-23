@@ -41,9 +41,11 @@ import {
   PROTOCOL_VERSION,
   type ChangeStreamerService,
   type Downstream,
+  type SubscriberContext,
 } from './change-streamer.ts';
 import * as ErrorType from './error-type-enum.ts';
 import {AutoResetSignal, ensureReplicationConfig} from './schema/tables.ts';
+import {isSQLiteChangeLogReadSelected} from './sqlite-change-log-read-source.ts';
 import {PurgeLocker} from './storer.ts';
 
 const opts: TuningOptions = {
@@ -166,6 +168,42 @@ describe('change-streamer/service', () => {
     for (const watermark of watermarks) {
       expect((await acks.dequeue())[2].watermark).toBe(watermark);
     }
+  }
+
+  function subscriberContext(taskID: string): SubscriberContext {
+    return {
+      protocolVersion: PROTOCOL_VERSION,
+      taskID,
+      id: taskID,
+      mode: 'serving',
+      watermark: REPLICA_VERSION,
+      replicaVersion: REPLICA_VERSION,
+      initial: false,
+    };
+  }
+
+  function canaryIdentities(readPercent: number): {
+    sqlite: string;
+    pg: string;
+  } {
+    let sqlite: string | undefined;
+    let pg: string | undefined;
+    for (let i = 0; sqlite === undefined || pg === undefined; i++) {
+      const identity = `canary-subscriber-${i}`;
+      if (
+        isSQLiteChangeLogReadSelected(
+          shard,
+          REPLICA_VERSION,
+          identity,
+          readPercent,
+        )
+      ) {
+        sqlite ??= identity;
+      } else {
+        pg ??= identity;
+      }
+    }
+    return {sqlite, pg};
   }
 
   const messages = new ReplicationMessages({foo: 'id'});
@@ -326,6 +364,101 @@ describe('change-streamer/service', () => {
       minWatermark: '01',
       replicaVersion: '01',
     });
+  });
+
+  test('mixed PG and SQLite canary subscribers receive the same committed sequence', async () => {
+    await streamer.stop();
+    await streamerDone;
+
+    const dbFile = new DbFile('sqlite-change-log-canary-integration');
+    const replica = dbFile.connect(lc);
+    replica.exec(/*sql*/ `
+      CREATE TABLE "_zero.versionHistory" (
+        "dataVersion" INTEGER NOT NULL,
+        "schemaVersion" INTEGER NOT NULL,
+        "minSafeVersion" INTEGER NOT NULL,
+        "lock" INTEGER PRIMARY KEY DEFAULT 1 CHECK ("lock" = 1)
+      );
+      INSERT INTO "_zero.versionHistory"
+        ("dataVersion", "schemaVersion", "minSafeVersion")
+        VALUES (14, 14, 0);
+    `);
+    initReplicationState(replica, ['zero_data'], REPLICA_VERSION);
+    replica.close();
+
+    const canaryChanges = Subscription.create<ChangeStreamMessage>();
+    const decisions: {source: string}[] = [];
+    const canaryStreamer = await initializeStreamer(
+      lc,
+      shard,
+      'canary-task-id',
+      'change.streamer:12345',
+      'ws',
+      sql,
+      {
+        startStream: () =>
+          Promise.resolve({
+            initialWatermark: '02',
+            changes: canaryChanges,
+            acks: {push: () => {}},
+          }),
+        startLagReporter: () => Promise.resolve(null),
+        stop: () => Promise.resolve(),
+      },
+      ReplicationStatusPublisher.forTesting(),
+      replicaConfig,
+      null,
+      true,
+      {
+        ...opts,
+        sqliteCatchup: {
+          replicaFile: dbFile.path,
+          readBatchRows: 2,
+          barrierTimeoutMs: 1000,
+          readPercent: 50,
+          retentionMs: 1,
+          warmupStartedAtMs: 0,
+          now: () => 1000,
+          onReadDecision: decision => decisions.push(decision),
+        },
+      },
+    );
+    const canaryDone = canaryStreamer.run();
+    const identities = canaryIdentities(50);
+    const sqliteSub = await canaryStreamer.subscribe(
+      subscriberContext(identities.sqlite),
+    );
+    const pgSub = await canaryStreamer.subscribe(
+      subscriberContext(identities.pg),
+    );
+    const sqliteOutput = drainToQueue(sqliteSub);
+    const pgOutput = drainToQueue(pgSub);
+
+    try {
+      expect(await nextChange(sqliteOutput)).toMatchObject({tag: 'status'});
+      expect(await nextChange(pgOutput)).toMatchObject({tag: 'status'});
+      expect(decisions.map(({source}) => source)).toEqual(['sqlite', 'pg']);
+
+      canaryChanges.push(['begin', messages.begin(), {commitWatermark: '06'}]);
+      canaryChanges.push(['data', messages.insert('foo', {id: 'same-change'})]);
+      canaryChanges.push(['commit', messages.commit(), {watermark: '06'}]);
+
+      const expected = ['begin', 'insert', 'commit'];
+      const sqliteSequence = [];
+      const pgSequence = [];
+      for (let i = 0; i < expected.length; i++) {
+        sqliteSequence.push((await nextChange(sqliteOutput)).tag);
+        pgSequence.push((await nextChange(pgOutput)).tag);
+      }
+      expect(sqliteSequence).toEqual(expected);
+      expect(pgSequence).toEqual(expected);
+    } finally {
+      sqliteSub.cancel();
+      pgSub.cancel();
+      await canaryStreamer.stop();
+      await canaryDone;
+      dbFile.delete();
+    }
   });
 
   test('immediate forwarding, transaction storage', async () => {

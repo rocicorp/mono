@@ -63,6 +63,7 @@ export default async function runWorker(
       flowControlConsensusPaddingSeconds,
       flowControlEventDrivenRelease,
       sqliteChangeLogMode,
+      sqliteChangeLogReadPercent,
       sqliteChangeLogComparePercent,
       sqliteChangeLogRetentionMs,
       sqliteChangeLogReadBatchRows,
@@ -185,11 +186,16 @@ export default async function runWorker(
           flowControlEventDrivenRelease,
           statementTimeoutMs: change.statementTimeoutMs,
           changeLogBatchSize: change.logBatchSize,
-          sqliteCatchup: {
-            replicaFile: replica.file,
-            readBatchRows: sqliteChangeLogReadBatchRows,
-            barrierTimeoutMs: sqliteChangeLogBarrierTimeoutMs,
-          },
+          sqliteCatchup:
+            sqliteChangeLogMode === 'serve'
+              ? {
+                  replicaFile: replica.file,
+                  readBatchRows: sqliteChangeLogReadBatchRows,
+                  barrierTimeoutMs: sqliteChangeLogBarrierTimeoutMs,
+                  readPercent: sqliteChangeLogReadPercent,
+                  retentionMs: sqliteChangeLogRetentionMs,
+                }
+              : undefined,
           sqliteCompare:
             sqliteChangeLogMode === 'compare' || sqliteChangeLogMode === 'serve'
               ? {

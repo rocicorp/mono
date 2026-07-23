@@ -269,7 +269,8 @@ export class Litestream3BackupMonitor implements BackupMonitor {
         );
         await sleep(RESTORABLE_BACKUP_POLL_INTERVAL_MS, this.#state.signal);
       }
-      const changeLogState = await this.#changeStreamer.getChangeLogState();
+      const changeLogState =
+        await this.#changeStreamer.getChangeLogState(taskID);
       if (sub.active) {
         sub.push([
           'status',

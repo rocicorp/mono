@@ -389,6 +389,7 @@ litestream_replica_validation_total{db="/tmp/zbugs-sync-replica.db",name="file",
         'status',
         {tag: 'status', minWatermark: '1ab'},
       ]);
+      expect(getChangeLogState).toHaveBeenCalledWith('view-syncer-1');
 
       monitor.endReservation('view-syncer-1');
       expect(endCleanupReservation).toHaveBeenCalledWith('view-syncer-1');

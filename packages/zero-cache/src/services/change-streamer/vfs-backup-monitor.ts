@@ -98,7 +98,7 @@ export class VfsBackupMonitor implements BackupMonitor {
     this.#reservations.set(taskID, {start: new Date(), sub});
 
     void cleanupPaused
-      .then(() => this.#changeStreamer.getChangeLogState())
+      .then(() => this.#changeStreamer.getChangeLogState(taskID))
       .then(changeLogState => {
         sub.push([
           'status',
