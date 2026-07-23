@@ -241,7 +241,7 @@ export interface ChangeStreamerService
   /** Releases the task-scoped SQLite purge block. */
   endCleanupReservation(taskID: string): void;
 
-  getChangeLogState(): Promise<{
+  getChangeLogState(taskID?: string | undefined): Promise<{
     replicaVersion: string;
     minWatermark: string;
   }>;

@@ -3,6 +3,11 @@ import {AbortError} from '../../../../shared/src/abort-error.ts';
 import {sleep} from '../../../../shared/src/sleep.ts';
 import {getOrCreateCounter} from '../../observability/metrics.ts';
 import type {ReplicatorMode} from '../replicator/replicator.ts';
+import {
+  recordChangeLogCatchup,
+  type ChangeLogCatchupOutcome,
+  type ChangeLogCatchupResult,
+} from './change-log-catchup-observer.ts';
 import type {WatermarkedChange} from './change-streamer.ts';
 import * as ErrorType from './error-type-enum.ts';
 import type {Forwarder} from './forwarder.ts';
@@ -32,6 +37,8 @@ export type SQLiteChangeLogCatchupOptions = {
   barrierPollIntervalMs?: number | undefined;
   cleanupGuard?: SQLiteChangeLogCleanupGuard | undefined;
   onFatal: (error: AutoResetSignal) => Promise<void>;
+  onFailure?: ((error: unknown) => void) | undefined;
+  onResult?: ((result: ChangeLogCatchupResult) => void) | undefined;
   sleep?: typeof sleep | undefined;
   now?: (() => number) | undefined;
 };
@@ -58,6 +65,8 @@ export class SQLiteChangeLogCatchup implements Disposable {
   readonly #barrierPollIntervalMs: number;
   readonly #cleanupGuard: SQLiteChangeLogCleanupGuard;
   readonly #onFatal: (error: AutoResetSignal) => Promise<void>;
+  readonly #onFailure: ((error: unknown) => void) | undefined;
+  readonly #onResult: ((result: ChangeLogCatchupResult) => void) | undefined;
   readonly #sleep: typeof sleep;
   readonly #now: () => number;
   readonly #barrierTimeouts = getOrCreateCounter(
@@ -82,6 +91,8 @@ export class SQLiteChangeLogCatchup implements Disposable {
     this.#barrierPollIntervalMs = opts.barrierPollIntervalMs ?? 10;
     this.#cleanupGuard = opts.cleanupGuard ?? NOOP_CLEANUP_GUARD;
     this.#onFatal = opts.onFatal;
+    this.#onFailure = opts.onFailure;
+    this.#onResult = opts.onResult;
     this.#sleep = opts.sleep ?? sleep;
     this.#now = opts.now ?? Date.now;
   }
@@ -160,7 +171,15 @@ export class SQLiteChangeLogCatchup implements Disposable {
     abort: AbortController,
   ): Promise<void> {
     const {signal} = abort;
+    const startedAt = this.#now();
     const deadline = this.#now() + this.#barrierTimeoutMs;
+    let barrierWaitMs = 0;
+    let count = 0;
+    let bytes = 0;
+    let backlogRows = 0;
+    let backlogBytes = 0;
+    let outcome: ChangeLogCatchupOutcome = 'reader-error';
+    let shouldRecord = true;
     try {
       const required = await this.#awaitRequiredHead(
         requiredHead,
@@ -173,6 +192,7 @@ export class SQLiteChangeLogCatchup implements Disposable {
         deadline,
         signal,
       );
+      barrierWaitMs = this.#now() - startedAt;
       this.#throwIfAborted(signal);
 
       if (plan.kind === 'too-old') {
@@ -190,11 +210,11 @@ export class SQLiteChangeLogCatchup implements Disposable {
             `(earliest watermark: ${plan.minWatermark})`,
         );
         subscriber.close(ErrorType.WatermarkTooOld, message);
+        outcome = 'too-old';
         return;
       }
 
-      let count = 0;
-      const start = this.#now();
+      const readStart = this.#now();
       if (plan.kind === 'range') {
         let lastBatchConsumed: Promise<unknown> | undefined;
         for await (const changes of this.#reader.read(
@@ -216,10 +236,13 @@ export class SQLiteChangeLogCatchup implements Disposable {
           for (const change of changes) {
             lastBatchConsumed = subscriber.catchup(change);
             count++;
+            bytes += change[2].length;
           }
         }
         await lastBatchConsumed;
+        outcome = 'success';
       } else {
+        outcome = 'ahead';
         this.#lc.warn?.(
           `subscriber ${subscriber.id} at watermark ${subscriber.watermark} ` +
             `is ahead of the SQLite change-log head ${plan.headWatermark}; ` +
@@ -230,27 +253,57 @@ export class SQLiteChangeLogCatchup implements Disposable {
       this.#throwIfAborted(signal);
       this.#lc.info?.(
         `caught up ${subscriber.id} from SQLite with ${count} changes ` +
-          `(${this.#now() - start} ms)`,
+          `(${this.#now() - readStart} ms)`,
       );
+      ({backlog: backlogRows, backlogBytes} = subscriber.getStats());
       // Keep buffering live sends until the asynchronous backlog drain has
       // established its ordering boundary.
       void subscriber.setCaughtUp();
     } catch (error) {
       if (signal.aborted) {
+        shouldRecord = false;
         return;
       }
       this.#lc.error?.(
         `error while catching up subscriber ${subscriber.id} from SQLite`,
         error,
       );
+      ({backlog: backlogRows, backlogBytes} = subscriber.getStats());
       if (error instanceof SQLiteChangeLogBarrierTimeoutError) {
+        barrierWaitMs = this.#now() - startedAt;
         this.#barrierTimeouts.add(1);
+        outcome = 'barrier-timeout';
+        this.#notifyFailure(error);
       }
       if (error instanceof AutoResetSignal) {
+        outcome = 'reset';
         await this.#onFatal(error);
+      } else if (!(error instanceof SQLiteChangeLogBarrierTimeoutError)) {
+        outcome = 'reader-error';
+        this.#notifyFailure(error);
       }
       subscriber.fail(error);
     } finally {
+      if (shouldRecord) {
+        const result: ChangeLogCatchupResult = {
+          source: 'sqlite',
+          outcome,
+          rows: count,
+          bytes,
+          durationMs: this.#now() - startedAt,
+          barrierWaitMs,
+          backlogRows,
+          backlogBytes,
+        };
+        recordChangeLogCatchup(result);
+        try {
+          this.#onResult?.(result);
+        } catch (error) {
+          this.#lc.warn?.('SQLite catchup observer failed', {
+            errorName: error instanceof Error ? error.name : typeof error,
+          });
+        }
+      }
       if (this.#catchups.get(subscriber) === abort) {
         this.#catchups.delete(subscriber);
       }
@@ -315,6 +368,19 @@ export class SQLiteChangeLogCatchup implements Disposable {
   #throwIfAborted(signal: AbortSignal): void {
     if (this.#closed || signal.aborted) {
       throw new AbortError('SQLite change-log catchup aborted');
+    }
+  }
+
+  #notifyFailure(error: unknown): void {
+    try {
+      this.#onFailure?.(error);
+    } catch (observerError) {
+      this.#lc.warn?.('SQLite catchup failure observer failed', {
+        errorName:
+          observerError instanceof Error
+            ? observerError.name
+            : typeof observerError,
+      });
     }
   }
 }

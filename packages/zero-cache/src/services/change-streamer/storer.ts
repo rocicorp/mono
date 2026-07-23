@@ -35,6 +35,10 @@ import type {
 import type {ReplicatorMode} from '../replicator/replicator.ts';
 import type {Service} from '../service.ts';
 import {
+  recordChangeLogCatchup,
+  type ChangeLogCatchupOutcome,
+} from './change-log-catchup-observer.ts';
+import {
   extractChangeSubstring,
   reconstructWatermarkedChange,
   serializeChangeStreamData,
@@ -689,14 +693,31 @@ export class Storer implements Service {
     lastWatermark: string,
     reader: TransactionPool,
   ) {
+    const startedAt = performance.now();
+    let count = 0;
+    let bytes = 0;
+    let recorded = false;
+    const record = (outcome: ChangeLogCatchupOutcome) => {
+      if (recorded) {
+        return;
+      }
+      recorded = true;
+      const stats = sub.getStats();
+      recordChangeLogCatchup({
+        source: 'pg',
+        outcome,
+        rows: count,
+        bytes,
+        durationMs: performance.now() - startedAt,
+        backlogRows: stats.backlog,
+        backlogBytes: stats.backlogBytes,
+      });
+    };
     try {
       await reader.processReadTask(async tx => {
-        const start = Date.now();
-
         // When starting from initial-sync, there won't be a change with a watermark
         // equal to the replica version. This is the empty changeLog scenario.
         let watermarkFound = sub.watermark === this.#replicaVersion;
-        let count = 0;
         let lastBatchConsumed: Promise<unknown> | undefined;
 
         for await (const entries of tx<ChangeLogEntry[]> /*sql*/ `
@@ -725,10 +746,10 @@ export class Storer implements Service {
               // Catchup starts from *after* the watermark.
               watermarkFound = true;
             } else if (watermarkFound) {
-              lastBatchConsumed = sub.catchup(
-                reconstructWatermarkedChange(entry),
-              );
+              const change = reconstructWatermarkedChange(entry);
+              lastBatchConsumed = sub.catchup(change);
               count++;
+              bytes += change[2].length;
             } else if (mode === 'backup') {
               throw new AutoResetSignal(
                 `backup replica at watermark ${sub.watermark} is behind change db: ${entry.watermark})`,
@@ -741,6 +762,7 @@ export class Storer implements Service {
                 ErrorType.WatermarkTooOld,
                 `earliest supported watermark is ${entry.watermark} (requested ${sub.watermark})`,
               );
+              record('too-old');
               return;
             }
           }
@@ -749,9 +771,10 @@ export class Storer implements Service {
           await lastBatchConsumed;
           this.#lc.info?.(
             `caught up ${sub.id} with ${count} changes (${
-              Date.now() - start
+              performance.now() - startedAt
             } ms)`,
           );
+          record('success');
         } else {
           // The subscriber is ahead of the latest durable changeLog entry
           // (lastWatermark). This can legitimately happen: changes are
@@ -768,6 +791,7 @@ export class Storer implements Service {
               `the latest durable watermark ${lastWatermark}; waiting for the ` +
               `change DB to catch up`,
           );
+          record('ahead');
         }
         // Start draining messages buffered during catchup. The returned promise
         // is intentionally not awaited here: while the drain is in progress,
@@ -776,6 +800,7 @@ export class Storer implements Service {
         void sub.setCaughtUp();
       });
     } catch (err) {
+      record(err instanceof AutoResetSignal ? 'reset' : 'reader-error');
       this.#lc.error?.(`error while catching up subscriber ${sub.id}`, err);
       if (err instanceof AutoResetSignal) {
         await markResetRequired(this.#db, this.#shard);

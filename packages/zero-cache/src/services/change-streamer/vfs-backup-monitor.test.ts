@@ -181,7 +181,7 @@ describe('change-streamer/vfs-backup-monitor', () => {
       'status',
       {tag: 'status', minWatermark: '1ab'},
     ]);
-    expect(getChangeLogState).toHaveBeenCalledTimes(1);
+    expect(getChangeLogState).toHaveBeenCalledWith('view-syncer-1');
 
     monitor.endReservation('view-syncer-1');
     expect(endCleanupReservation).toHaveBeenCalledWith('view-syncer-1');
