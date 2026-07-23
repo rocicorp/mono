@@ -32,6 +32,7 @@ import {
 } from '../workers/replicator.ts';
 import {createLogContext} from './logging.ts';
 import {startOtelAuto} from './otel-start.ts';
+import {SQLiteChangeLogMaintenanceRouter} from './sqlite-change-log-maintenance-router.ts';
 import {WorkerDispatcher} from './worker-dispatcher.ts';
 import {
   CHANGE_STREAMER_URL,
@@ -123,6 +124,7 @@ export default async function runWorker(
   );
 
   let changeStreamer: Worker | undefined;
+  let canonicalReplicator: Worker | undefined;
 
   if (!runChangeStreamer) {
     changeStreamer = undefined;
@@ -147,7 +149,13 @@ export default async function runWorker(
       // Start a backup replicator and corresponding litestream backup process.
       const {promise: backupReady, resolve} = resolver();
       const mode: ReplicaFileMode = 'backup';
-      loadWorker(REPLICATOR_URL, 'supporting', mode, mode).once(
+      canonicalReplicator = loadWorker(
+        REPLICATOR_URL,
+        'supporting',
+        mode,
+        mode,
+      );
+      canonicalReplicator.once(
         // Wait for the Replicator's first message (i.e. "ready") before starting
         // litestream backup in order to avoid contending on the lock when the
         // replicator first prepares the db file.
@@ -196,6 +204,13 @@ export default async function runWorker(
       subscribeTo(lc, replicator);
       resolve();
     });
+    if (mode === 'serving' && runChangeStreamer) {
+      assert(
+        canonicalReplicator === undefined,
+        'dispatcher selected more than one canonical replicator',
+      );
+      canonicalReplicator = replicator;
+    }
     await replicaReady;
 
     const notifier = createNotifierFrom(lc, replicator);
@@ -208,6 +223,14 @@ export default async function runWorker(
   if (clientConnectionBifurcated) {
     mutator = loadWorker(MUTATOR_URL, 'supporting', 'mutator');
   }
+
+  const sqliteChangeLogMaintenanceRouter = changeStreamer
+    ? new SQLiteChangeLogMaintenanceRouter(
+        lc,
+        changeStreamer,
+        canonicalReplicator,
+      )
+    : undefined;
 
   lc.info?.('waiting for workers to be ready ...');
   const logWaiting = setInterval(
@@ -238,6 +261,8 @@ export default async function runWorker(
   } catch (err) {
     processes.logErrorAndExit(err, 'dispatcher');
   }
+
+  sqliteChangeLogMaintenanceRouter?.close();
 
   await processes.done();
 }

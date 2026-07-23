@@ -224,6 +224,7 @@ export class Litestream3BackupMonitor implements BackupMonitor {
     this.#lc.info?.(`pausing change-log cleanup while ${taskID} snapshots`);
     // In the case of retries, only track the last reservation.
     this.#reservations.get(taskID)?.sub.cancel();
+    const cleanupPaused = this.#changeStreamer.startCleanupReservation(taskID);
 
     const sub = Subscription.create<SnapshotMessage>({
       // If the reservation still exists when the connection closes
@@ -236,7 +237,7 @@ export class Litestream3BackupMonitor implements BackupMonitor {
     //       websocket can begin sending liveness pings. The `status` signal
     //       (which tells the view-syncer to restore) is withheld until a
     //       restorable backup actually exists; see #pushStatusWhenRestorable.
-    void this.#pushStatusWhenRestorable(taskID, sub);
+    void this.#pushStatusWhenRestorable(taskID, sub, cleanupPaused);
     return sub;
   }
 
@@ -251,8 +252,10 @@ export class Litestream3BackupMonitor implements BackupMonitor {
   async #pushStatusWhenRestorable(
     taskID: string,
     sub: Subscription<SnapshotMessage>,
+    cleanupPaused: Promise<void>,
   ): Promise<void> {
     try {
+      await cleanupPaused;
       while (this.#lastVerifiedUploadTime === null) {
         if (!sub.active) {
           return; // subscriber disconnected, or a newer reservation took over
@@ -306,6 +309,7 @@ export class Litestream3BackupMonitor implements BackupMonitor {
       return;
     }
     this.#reservations.delete(taskID);
+    this.#changeStreamer.endCleanupReservation(taskID);
     const {start, sub} = res;
     sub.cancel(); // closes the connection if still open
     const duration = Date.now() - start.getTime();

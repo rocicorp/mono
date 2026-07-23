@@ -232,6 +232,15 @@ export interface ChangeStreamerService
    */
   scheduleCleanup(watermark: string): void;
 
+  /**
+   * Blocks new SQLite purge dispatch and waits for an already-dispatched batch
+   * before snapshot bounds are read.
+   */
+  startCleanupReservation(taskID: string): Promise<void>;
+
+  /** Releases the task-scoped SQLite purge block. */
+  endCleanupReservation(taskID: string): void;
+
   getChangeLogState(): Promise<{
     replicaVersion: string;
     minWatermark: string;

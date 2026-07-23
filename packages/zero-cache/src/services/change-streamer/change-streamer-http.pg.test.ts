@@ -105,6 +105,8 @@ describe('change-streamer/http', () => {
           return service.promise;
         }),
         scheduleCleanup: vi.fn(),
+        startCleanupReservation: vi.fn(() => Promise.resolve()),
+        endCleanupReservation: vi.fn(),
         getChangeLogState: vi.fn(),
       },
       {
@@ -168,6 +170,8 @@ describe('change-streamer/http', () => {
           return service.promise;
         }),
         scheduleCleanup: vi.fn(),
+        startCleanupReservation: vi.fn(() => Promise.resolve()),
+        endCleanupReservation: vi.fn(),
         getChangeLogState: vi.fn(),
       },
       null,

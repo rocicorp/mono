@@ -13,6 +13,7 @@ import {createLogContext} from '../../server/logging.ts';
 import type {SerializedChangeStreamData} from '../change-source/protocol/current/downstream.ts';
 import {ChangeProcessor, type ChangeProcessorMode} from './change-processor.ts';
 import {getSubscriptionState} from './schema/replication-state.ts';
+import {SQLiteChangeLogPurger} from './sqlite-change-log-purger.ts';
 import {
   applyPragmas,
   serializeError,
@@ -37,6 +38,7 @@ function createAPI(): API {
   let db: Database | undefined;
   let runner: StatementRunner | undefined;
   let processor: ChangeProcessor | undefined;
+  let changeLogPurger: SQLiteChangeLogPurger | undefined;
   let mode: ChangeProcessorMode | undefined;
   let logsChangeStream: boolean | undefined;
   let lc: LogContext | undefined;
@@ -86,6 +88,9 @@ function createAPI(): API {
         mode = cpMode;
         logsChangeStream = shouldLogChangeStream;
         createProcessor();
+        changeLogPurger = shouldLogChangeStream
+          ? new SQLiteChangeLogPurger(db)
+          : undefined;
       } catch (e) {
         logCorruptionDiagnostics(e);
         throw e;
@@ -110,6 +115,18 @@ function createAPI(): API {
       }
     },
 
+    purgeChangeLog(options) {
+      try {
+        return must(
+          changeLogPurger,
+          'SQLite change-log maintenance is disabled for this write worker',
+        ).purgeBatch(options);
+      } catch (e) {
+        logCorruptionDiagnostics(e);
+        throw e;
+      }
+    },
+
     abort() {
       must(processor).abort(must(lc));
       createProcessor();
@@ -120,6 +137,7 @@ function createAPI(): API {
       db = undefined;
       runner = undefined;
       processor = undefined;
+      changeLogPurger = undefined;
       replicaDbPath = undefined;
       unregisterCorruptionDiagnosticTarget?.();
       unregisterCorruptionDiagnosticTarget = undefined;

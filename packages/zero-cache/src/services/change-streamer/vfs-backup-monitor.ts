@@ -90,14 +90,15 @@ export class VfsBackupMonitor implements BackupMonitor {
   startSnapshotReservation(taskID: string): Subscription<SnapshotMessage> {
     this.#lc.info?.(`pausing change-log cleanup while ${taskID} snapshots`);
     this.#reservations.get(taskID)?.sub.cancel();
+    const cleanupPaused = this.#changeStreamer.startCleanupReservation(taskID);
 
     const sub = Subscription.create<SnapshotMessage>({
       cleanup: () => this.endReservation(taskID, false),
     });
     this.#reservations.set(taskID, {start: new Date(), sub});
 
-    void this.#changeStreamer
-      .getChangeLogState()
+    void cleanupPaused
+      .then(() => this.#changeStreamer.getChangeLogState())
       .then(changeLogState => {
         sub.push([
           'status',
@@ -117,6 +118,7 @@ export class VfsBackupMonitor implements BackupMonitor {
       return;
     }
     this.#reservations.delete(taskID);
+    this.#changeStreamer.endCleanupReservation(taskID);
     const {start, sub} = res;
     sub.cancel();
     const duration = Date.now() - start.getTime();

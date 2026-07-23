@@ -6,6 +6,7 @@ import {promiseVoid} from '../../../../shared/src/resolved-promises.ts';
 import {publishCriticalEvent} from '../../observability/events.ts';
 import {getOrCreateCounter} from '../../observability/metrics.ts';
 import {
+  max,
   min,
   type AtLeastOne,
   type LexiVersion,
@@ -52,6 +53,10 @@ import {
   SQLiteChangeLogCatchup,
   type SQLiteChangeLogCleanupGuard,
 } from './sqlite-change-log-catchup.ts';
+import {
+  SQLiteChangeLogCleanupCoordinator,
+  type SQLiteChangeLogCleanupOptions,
+} from './sqlite-change-log-cleanup.ts';
 import {SQLiteChangeLogReader} from './sqlite-change-log-reader.ts';
 import {
   Storer,
@@ -74,6 +79,19 @@ export type TuningOptions = StorerOptions & {
   flowControlConsensusPaddingSeconds: number;
   flowControlEventDrivenRelease?: boolean | undefined;
   sqliteCatchup?: SQLiteCatchupOptions | undefined;
+  sqliteCleanup?:
+    | Pick<
+        SQLiteChangeLogCleanupOptions,
+        | 'retentionMs'
+        | 'maxRows'
+        | 'request'
+        | 'retryDelayMs'
+        | 'idleDrainIntervalMs'
+        | 'now'
+        | 'setTimeoutFn'
+        | 'clearTimeoutFn'
+      >
+    | undefined;
 };
 
 /**
@@ -274,6 +292,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
   readonly #forwarder: Forwarder;
   readonly #replicationStatusPublisher: ReplicationStatusPublisher;
   readonly #sqliteCatchupOptions: SQLiteCatchupOptions | undefined;
+  readonly #sqliteCleanup: SQLiteChangeLogCleanupCoordinator | undefined;
 
   readonly #autoReset: boolean;
   readonly #state: RunningState;
@@ -349,6 +368,13 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     });
     this.#replicationStatusPublisher = replicationStatusPublisher;
     this.#sqliteCatchupOptions = opts.sqliteCatchup;
+    this.#sqliteCleanup = opts.sqliteCleanup
+      ? new SQLiteChangeLogCleanupCoordinator(this.#lc, {
+          ...opts.sqliteCleanup,
+          getAcks: () => this.#forwarder.getAcks(),
+          getHead: () => this.#lastForwardedCommitWatermark,
+        })
+      : undefined;
     this.#purgeLock = initialPurgeLock;
     this.#autoReset = autoReset;
     this.#state = new RunningState(this.id, undefined, setTimeoutFn);
@@ -593,6 +619,14 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     }
   }
 
+  startCleanupReservation(taskID: string): Promise<void> {
+    return this.#sqliteCleanup?.pauseForSnapshot(taskID) ?? Promise.resolve();
+  }
+
+  endCleanupReservation(taskID: string): void {
+    this.#sqliteCleanup?.resumeAfterSnapshot(taskID);
+  }
+
   async getChangeLogState(): Promise<{
     replicaVersion: string;
     minWatermark: string;
@@ -620,6 +654,13 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       this.#lc.warn?.('No initial watermarks to check for cleanup'); // Not expected.
       return;
     }
+    const earliestInitial = min(...(initial as AtLeastOne<LexiVersion>));
+    const latestInitial = max(...(initial as AtLeastOne<LexiVersion>));
+    // SQLite purge is independent of PG purge. The coordinator retains the
+    // newest verified backup target and re-reads subscriber ACKs immediately
+    // before each canonical-writer dispatch.
+    this.#sqliteCleanup?.scheduleCleanup(latestInitial);
+
     const current = [...this.#forwarder.getAcks()];
     if (current.length === 0) {
       // Also not expected, but possible (e.g. subscriber connects, then disconnects).
@@ -628,7 +669,6 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       return;
     }
     try {
-      const earliestInitial = min(...(initial as AtLeastOne<LexiVersion>));
       const earliestCurrent = min(...(current as AtLeastOne<LexiVersion>));
       if (earliestCurrent < earliestInitial) {
         this.#lc.info?.(
@@ -658,6 +698,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     this.#state.stop(this.#lc, err);
     this.#stream?.changes.cancel();
     this.#sqliteCatchup?.close();
+    await this.#sqliteCleanup?.close();
     await this.#storer.stop();
     await this.#source.stop();
   }
@@ -726,7 +767,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
         {
           batchSize: opts.readBatchRows,
           barrierTimeoutMs: opts.barrierTimeoutMs,
-          cleanupGuard: opts.cleanupGuard,
+          cleanupGuard: opts.cleanupGuard ?? this.#sqliteCleanup,
           onFatal: async error => {
             await markResetRequired(this.#changeDB, this.#shard);
             void this.stop(error);

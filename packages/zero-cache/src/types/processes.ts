@@ -25,6 +25,8 @@ export const MESSAGE_TYPES = {
   ready: 'ready',
   backupWatermarkRequest: 'backupWatermarkRequest',
   backupWatermarkResponse: 'backupWatermarkResponse',
+  sqliteChangeLogMaintenanceRequest: 'sqliteChangeLogMaintenanceRequest',
+  sqliteChangeLogMaintenanceResponse: 'sqliteChangeLogMaintenanceResponse',
 } as const;
 
 export type Message<Payload> = [keyof typeof MESSAGE_TYPES, Payload];

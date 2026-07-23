@@ -225,6 +225,62 @@ describe('write-worker', () => {
     });
   });
 
+  test('purges the SQLite change log in the enabled write worker', async () => {
+    await worker.stop();
+    worker = new ThreadWriteWorkerClient();
+    await worker.init(
+      dbFile.path,
+      'serving',
+      true,
+      {
+        busyTimeout: 30000,
+        analysisLimit: 1000,
+      },
+      {level: 'error', format: 'text'},
+    );
+
+    const issues = new ReplicationMessages({issues: ['issueID', 'bool']});
+    for (const message of [
+      ['begin', issues.begin(), {commitWatermark: '06'}],
+      ['data', issues.insert('issues', {issueID: 123, bool: true})],
+      ['commit', issues.commit(), {watermark: '06'}],
+    ] satisfies ChangeStreamData[]) {
+      await worker.processMessage(serialized(message));
+    }
+
+    await expect(
+      worker.purgeChangeLog({
+        externalFloor: '06',
+        retentionCutoffMs: Number.MAX_SAFE_INTEGER,
+        maxRows: 100,
+      }),
+    ).resolves.toMatchObject({
+      headWatermark: '06',
+      effectiveFloor: '06',
+      deletedRows: 2,
+      moreEligible: false,
+    });
+    expect(
+      mainDb
+        .prepare(
+          `SELECT DISTINCT "watermark" FROM "_zero.changeLogStream" ORDER BY "watermark"`,
+        )
+        .all(),
+    ).toEqual([{watermark: '06'}]);
+  });
+
+  test('rejects purge when SQLite change-log writing is disabled', async () => {
+    await expect(
+      worker.purgeChangeLog({
+        externalFloor: '02',
+        retentionCutoffMs: 0,
+        maxRows: 1,
+      }),
+    ).rejects.toThrow(
+      'SQLite change-log maintenance is disabled for this write worker',
+    );
+  });
+
   test('abort rolls back pending transaction', async () => {
     const issues = new ReplicationMessages({issues: ['issueID', 'bool']});
 

@@ -18,6 +18,8 @@ describe('change-streamer/litestream3-backup-monitor', () => {
   const scheduled: string[] = [];
   const changeStreamer = {
     scheduleCleanup: (watermark: string) => scheduled.push(watermark),
+    startCleanupReservation: () => Promise.resolve(),
+    endCleanupReservation: () => {},
     getChangeLogState: () =>
       Promise.resolve({
         replicaVersion: '123',
@@ -361,6 +363,40 @@ litestream_replica_validation_total{db="/tmp/zbugs-sync-replica.db",name="file",
         minWatermark: '1ab',
       },
     ]);
+  });
+
+  test('waits for the writer-side purge barrier before advertising snapshot bounds', async () => {
+    const cleanupPaused = resolver<void>();
+    const startCleanupReservation = vi
+      .spyOn(changeStreamer, 'startCleanupReservation')
+      .mockReturnValue(cleanupPaused.promise);
+    const getChangeLogState = vi.spyOn(changeStreamer, 'getChangeLogState');
+    const endCleanupReservation = vi.spyOn(
+      changeStreamer,
+      'endCleanupReservation',
+    );
+
+    try {
+      const sub = monitor.startSnapshotReservation('view-syncer-1');
+      const firstMessage = getFirstMessage(sub);
+      await Promise.resolve();
+      expect(startCleanupReservation).toHaveBeenCalledWith('view-syncer-1');
+      expect(getChangeLogState).not.toHaveBeenCalled();
+      expect(verifyBackupState).not.toHaveBeenCalled();
+
+      cleanupPaused.resolve();
+      await expect(firstMessage).resolves.toMatchObject([
+        'status',
+        {tag: 'status', minWatermark: '1ab'},
+      ]);
+
+      monitor.endReservation('view-syncer-1');
+      expect(endCleanupReservation).toHaveBeenCalledWith('view-syncer-1');
+    } finally {
+      startCleanupReservation.mockRestore();
+      getChangeLogState.mockRestore();
+      endCleanupReservation.mockRestore();
+    }
   });
 
   test('pauses cleanup during reservation', async () => {
