@@ -12,6 +12,7 @@ function configWith(litestream: Partial<ZeroConfig['litestream']>): ZeroConfig {
       address: 'localhost',
       sqliteChangeLogMode: 'off',
       sqliteChangeLogReadPercent: 0,
+      sqliteChangeLogComparePercent: 1,
       sqliteChangeLogRetentionMs: 60_000,
       sqliteChangeLogReadBatchRows: 1000,
       sqliteChangeLogPurgeBatchRows: 1000,
@@ -126,6 +127,17 @@ describe('config/normalize SQLite change log', () => {
 
       expect(() => assertNormalized(config)).toThrow(
         'must be an integer between 0 and 100',
+      );
+    }
+  });
+
+  test('compare percentage must be an integer from 0 through 100', () => {
+    for (const percent of [-1, 1.5, 101]) {
+      const config = configWith({});
+      config.changeStreamer.sqliteChangeLogComparePercent = percent;
+
+      expect(() => assertNormalized(config)).toThrow(
+        'compare-percent must be an integer between 0 and 100',
       );
     }
   });

@@ -693,6 +693,15 @@ export const zeroOptions = {
       hidden: true,
     },
 
+    sqliteChangeLogComparePercent: {
+      type: v.number().default(1),
+      desc: [
+        `The stable percentage of committed ranges compared between PostgreSQL and SQLite`,
+        `when SQLite change-log compare mode is enabled.`,
+      ],
+      hidden: true,
+    },
+
     sqliteChangeLogRetentionMs: {
       type: v.number().default(60_000),
       desc: [`The minimum time window retained in the SQLite change log.`],
