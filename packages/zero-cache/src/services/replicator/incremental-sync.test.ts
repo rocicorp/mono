@@ -9,19 +9,23 @@ import {
   vi,
   type MockedFunction,
 } from 'vitest';
-import type {JSONObject} from '../../../../shared/src/bigint-json.ts';
+import {
+  BigIntJSON,
+  type JSONObject,
+} from '../../../../shared/src/bigint-json.ts';
 import type {Enum} from '../../../../shared/src/enum.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import type {ZeroEvent} from '../../../../zero-events/src/index.ts';
 import type {Database} from '../../../../zqlite/src/db.ts';
 import {initEventSinkForTesting} from '../../observability/events.ts';
 import {DbFile, expectTables, initDB} from '../../test/lite.ts';
+import type {Source} from '../../types/streams.ts';
 import {Subscription} from '../../types/subscription.ts';
 import {orTimeoutWith} from '../../types/timeout.ts';
-import * as changeLogCodec from '../change-streamer/change-log-codec.ts';
 import {
   PROTOCOL_VERSION,
   type Downstream,
+  type SerializedDownstream,
   type SubscriberContext,
 } from '../change-streamer/change-streamer.ts';
 import * as ErrorType from '../change-streamer/error-type-enum.ts';
@@ -33,14 +37,6 @@ import {
 } from './schema/replication-state.ts';
 import {ReplicationMessages} from './test-utils.ts';
 import {ThreadWriteWorkerClient} from './write-worker-client.ts';
-
-vi.mock('../change-streamer/change-log-codec.ts', async importOriginal => {
-  const actual = await importOriginal<typeof changeLogCodec>();
-  return {
-    ...actual,
-    serializeChangeStreamData: vi.fn(actual.serializeChangeStreamData),
-  };
-});
 
 type ErrorType = Enum<typeof ErrorType>;
 
@@ -54,21 +50,23 @@ describe('replicator/incremental-sync', () => {
   let worker: ThreadWriteWorkerClient;
   let syncer: IncrementalSyncer;
   let syncing: Promise<void> | undefined;
-  let downstream: Subscription<Downstream>;
+  let downstream: Subscription<SerializedDownstream, Downstream>;
   let eventSink: ZeroEvent[];
   let subscribeFn: MockedFunction<
-    (ctx: SubscriberContext) => Promise<Subscription<Downstream>>
+    (ctx: SubscriberContext) => Promise<Source<SerializedDownstream>>
   >;
 
   beforeEach(async () => {
-    vi.mocked(changeLogCodec.serializeChangeStreamData).mockClear();
     lc = createSilentLogContext();
     dbFile = new DbFile('incremental-sync-test');
     mainDb = dbFile.connect(lc);
     mainDb.pragma('journal_mode = wal');
     createReplicationStateTables(mainDb);
 
-    downstream = Subscription.create();
+    downstream = new Subscription({}, data => ({
+      data,
+      json: BigIntJSON.stringify(data),
+    }));
     eventSink = [];
     initEventSinkForTesting(
       eventSink,
@@ -109,6 +107,7 @@ describe('replicator/incremental-sync', () => {
 
   test('replicates transactions', async () => {
     const issues = new ReplicationMessages({issues: ['issueID', 'bool']});
+    const processMessage = vi.spyOn(worker, 'processMessage');
 
     initReplicationState(mainDb, ['zero_data'], '02', {}, false);
 
@@ -147,9 +146,15 @@ describe('replicator/incremental-sync', () => {
       initial: true,
     });
 
+    const firstBegin = [
+      'begin',
+      issues.begin(),
+      {commitWatermark: '06'},
+    ] satisfies Downstream;
+
     for (const change of [
       ['status', {tag: 'status'}],
-      ['begin', issues.begin(), {commitWatermark: '06'}],
+      firstBegin,
       ['data', issues.insert('issues', {issueID: 123, bool: true})],
       ['data', issues.insert('issues', {issueID: 456, bool: false})],
       ['commit', issues.commit(), {watermark: '06'}],
@@ -393,7 +398,11 @@ describe('replicator/incremental-sync', () => {
         },
       ]
     `);
-    expect(changeLogCodec.serializeChangeStreamData).toHaveBeenCalledTimes(11);
+    expect(processMessage).toHaveBeenCalledTimes(11);
+    expect(processMessage).toHaveBeenNthCalledWith(1, {
+      data: firstBegin,
+      json: BigIntJSON.stringify(firstBegin),
+    });
   });
 
   test('replicates schema changes', async () => {
@@ -790,6 +799,7 @@ describe('replicator/incremental-sync', () => {
 
   test('shut down on change-streamer error message', async () => {
     initReplicationState(mainDb, ['zero_data'], '02', {}, false);
+    const processMessage = vi.spyOn(worker, 'processMessage');
 
     const syncing = syncer.run();
 
@@ -800,6 +810,6 @@ describe('replicator/incremental-sync', () => {
 
     // Should stop / resolve
     await syncing;
-    expect(changeLogCodec.serializeChangeStreamData).not.toHaveBeenCalled();
+    expect(processMessage).not.toHaveBeenCalled();
   });
 });
