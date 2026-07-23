@@ -1,7 +1,7 @@
 import type {LogContext} from '@rocicorp/logger';
 import {AbortError} from '../../../../shared/src/abort-error.ts';
 import {assert} from '../../../../shared/src/asserts.ts';
-import {Database} from '../../../../zqlite/src/db.ts';
+import {Database, type Statement} from '../../../../zqlite/src/db.ts';
 import {CHANGE_LOG_STREAM_TABLE} from '../replicator/schema/change-log-stream.ts';
 import {
   reconstructWatermarkedChange,
@@ -61,18 +61,27 @@ const CHANGE_TAGS: ReadonlySet<string> = new Set<ChangeTag>([
   'rollback',
 ]);
 
+/**
+ * Seeks to the final position so validating a boundary does not scan every row
+ * of a large transaction. Exported so the focused query-plan test covers the
+ * production subquery.
+ */
+export const SQLITE_CHANGE_LOG_BOUNDARY_SQL = /*sql*/ `
+  SELECT
+    "precommit" = @fromWatermark AND
+      json_extract("change", '$.tag') = 'commit' AS "boundaryExists"
+  FROM "${CHANGE_LOG_STREAM_TABLE}"
+  WHERE "watermark" = @fromWatermark
+  ORDER BY "pos" DESC
+  LIMIT 1
+`;
+
 const PLAN_SQL = /*sql*/ `
   SELECT
     state."stateVersion" AS "headWatermark",
     bounds."minWatermark" AS "minWatermark",
     @fromWatermark > state."stateVersion" AS "subscriberAhead",
-    EXISTS (
-      SELECT 1
-        FROM "${CHANGE_LOG_STREAM_TABLE}"
-        WHERE "watermark" = @fromWatermark
-          AND "precommit" IS NOT NULL
-          AND json_extract("change", '$.tag') = 'commit'
-    ) AS "boundaryExists"
+    coalesce((${SQLITE_CHANGE_LOG_BOUNDARY_SQL}), 0) AS "boundaryExists"
   FROM "_zero.replicationState" AS state
   CROSS JOIN (
     SELECT min("watermark") AS "minWatermark"
@@ -104,6 +113,8 @@ export const SQLITE_CHANGE_LOG_READ_BATCH_SQL = /*sql*/ `
  */
 export class SQLiteChangeLogReader implements Disposable {
   readonly #db: Database;
+  readonly #plan: Statement;
+  readonly #readBatch: Statement;
   #closed = false;
 
   constructor(lc: LogContext, replicaFile: string) {
@@ -112,13 +123,13 @@ export class SQLiteChangeLogReader implements Disposable {
       replicaFile,
       {readonly: true},
     );
+    this.#plan = this.#db.prepare(PLAN_SQL);
+    this.#readBatch = this.#db.prepare(SQLITE_CHANGE_LOG_READ_BATCH_SQL);
   }
 
   plan(fromWatermark: string): CatchupPlan {
     this.#assertOpen();
-    const row = this.#db
-      .prepare(PLAN_SQL)
-      .get<PlanRow | undefined>({fromWatermark});
+    const row = this.#plan.get<PlanRow | undefined>({fromWatermark});
     assert(row !== undefined, 'replication state must be initialized');
     assert(
       row.minWatermark !== null,
@@ -161,15 +172,11 @@ export class SQLiteChangeLogReader implements Disposable {
 
     while (true) {
       this.#throwIfAborted(signal);
-      const rows = this.#db.transaction(() =>
-        this.#db
-          .prepare(SQLITE_CHANGE_LOG_READ_BATCH_SQL)
-          .all<ChangeLogRow>(
-            lastWatermark,
-            lastPos,
-            throughWatermark,
-            batchSize,
-          ),
+      const rows = this.#readBatch.all<ChangeLogRow>(
+        lastWatermark,
+        lastPos,
+        throughWatermark,
+        batchSize,
       );
       this.#throwIfAborted(signal);
 
@@ -187,8 +194,9 @@ export class SQLiteChangeLogReader implements Disposable {
       lastWatermark = last.watermark;
       lastPos = last.pos;
 
-      // The read transaction above is already committed. In particular, this
-      // yield cannot pin the WAL while subscriber flow control is pending.
+      // all() has exhausted the SELECT and closed its implicit read
+      // transaction. This yield therefore cannot pin the WAL while subscriber
+      // flow control is pending.
       yield changes;
     }
 

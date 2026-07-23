@@ -1,7 +1,8 @@
+import SQLite3Database from '@rocicorp/zero-sqlite3';
 import {afterEach, describe, expect, test} from 'vitest';
 import {AbortError} from '../../../../shared/src/abort-error.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
-import type {Database} from '../../../../zqlite/src/db.ts';
+import type {Database, Statement} from '../../../../zqlite/src/db.ts';
 import {StatementRunner} from '../../db/statements.ts';
 import {DbFile} from '../../test/lite.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
@@ -13,6 +14,7 @@ import {
 import {serializeChangeStreamData} from './change-log-codec.ts';
 import type {WatermarkedChange} from './change-streamer.ts';
 import {
+  SQLITE_CHANGE_LOG_BOUNDARY_SQL,
   SQLITE_CHANGE_LOG_READ_BATCH_SQL,
   SQLiteChangeLogReader,
 } from './sqlite-change-log-reader.ts';
@@ -95,6 +97,21 @@ function flatten(
   batches: readonly (readonly WatermarkedChange[])[],
 ): readonly WatermarkedChange[] {
   return batches.flatMap(batch => batch);
+}
+
+function countVisitedRows(statement: Statement): number {
+  let visited = 0;
+  for (let i = 0; ; i++) {
+    const nvisit = statement.scanStatus(
+      i,
+      SQLite3Database.SQLITE_SCANSTAT_NVISIT,
+      1,
+    );
+    if (nvisit === undefined) {
+      return visited;
+    }
+    visited += Number(nvisit);
+  }
 }
 
 describe('sqlite change log reader', () => {
@@ -315,5 +332,26 @@ describe('sqlite change log reader', () => {
     const details = plans.map(({detail}) => detail).join('\n');
     expect(details).toMatch(/\bSEARCH\b/);
     expect(details).not.toMatch(/\bSCAN\b/);
+  });
+
+  test('boundary query seeks directly to the final row of a large transaction', () => {
+    const {db} = createReplica();
+    using writer = db;
+    appendTransaction(
+      writer,
+      '04',
+      Array.from({length: 1_000}, () => truncate()),
+    );
+
+    const plans = writer
+      .prepare(`EXPLAIN QUERY PLAN ${SQLITE_CHANGE_LOG_BOUNDARY_SQL}`)
+      .all<{detail: string}>({fromWatermark: '04'});
+    const details = plans.map(({detail}) => detail).join('\n');
+    expect(details).toMatch(/\bSEARCH\b.*\(watermark=\?\)/);
+    expect(details).not.toMatch(/\bSCAN\b|USE TEMP B-TREE/);
+
+    const statement = writer.prepare(SQLITE_CHANGE_LOG_BOUNDARY_SQL);
+    expect(statement.get({fromWatermark: '04'})).toEqual({boundaryExists: 1});
+    expect(countVisitedRows(statement)).toBe(1);
   });
 });
