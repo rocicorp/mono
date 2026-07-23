@@ -21,11 +21,7 @@ export interface SQLiteChangeLogCatchupReader {
   close(): void;
 }
 
-/**
- * Slice 9 replaces this no-op implementation with a guard that waits for an
- * in-flight purge and blocks new purge dispatch while the subscriber's ACK is
- * made visible to the Forwarder.
- */
+/** Guards subscriber registration against canonical-writer purge dispatch. */
 export interface SQLiteChangeLogCleanupGuard {
   runWhilePurgeBlocked<T>(register: () => T): Promise<T>;
 }

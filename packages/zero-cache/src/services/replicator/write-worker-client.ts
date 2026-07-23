@@ -7,6 +7,10 @@ import {WRITE_WORKER_URL} from '../../server/worker-urls.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
 import type {ChangeProcessorMode, CommitResult} from './change-processor.ts';
 import type {SubscriptionState} from './schema/replication-state.ts';
+import type {
+  SQLiteChangeLogPurgeOptions,
+  SQLiteChangeLogPurgeResult,
+} from './sqlite-change-log-purger.ts';
 
 export type SerializedChangeStreamData = {
   data: ChangeStreamData;
@@ -29,6 +33,9 @@ export interface WriteWorkerClient {
   processMessage(
     downstream: SerializedChangeStreamData,
   ): Promise<CommitResult | null>;
+  purgeChangeLog(
+    options: SQLiteChangeLogPurgeOptions,
+  ): Promise<SQLiteChangeLogPurgeResult>;
   abort(): void;
   stop(): Promise<void>;
   onError(handler: ErrorHandler): void;
@@ -97,6 +104,7 @@ export type ArgsMap = {
   init: [string, ChangeProcessorMode, boolean, PragmaConfig, LogConfig];
   getSubscriptionState: [];
   processMessage: [SerializedChangeStreamData];
+  purgeChangeLog: [SQLiteChangeLogPurgeOptions];
   abort: [];
   stop: [];
 };
@@ -109,6 +117,7 @@ export type ResultMap = {
   init: void;
   getSubscriptionState: SubscriptionState;
   processMessage: CommitResult | null;
+  purgeChangeLog: SQLiteChangeLogPurgeResult;
   abort: void;
   stop: void;
 };
@@ -212,6 +221,12 @@ export class ThreadWriteWorkerClient implements WriteWorkerClient {
     downstream: SerializedChangeStreamData,
   ): Promise<CommitResult | null> {
     return this.#call('processMessage', [downstream]);
+  }
+
+  purgeChangeLog(
+    options: SQLiteChangeLogPurgeOptions,
+  ): Promise<SQLiteChangeLogPurgeResult> {
+    return this.#call('purgeChangeLog', [options]);
   }
 
   abort(): void {

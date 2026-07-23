@@ -25,6 +25,10 @@ import {
   replicationStatusError,
   ReplicationStatusPublisher,
 } from '../services/replicator/replication-status.ts';
+import {
+  requestSQLiteChangeLogMaintenance,
+  SQLITE_CHANGE_LOG_MAINTENANCE_TIMEOUT_MS,
+} from '../services/replicator/sqlite-change-log-maintenance.ts';
 import {connectPgClient} from '../types/pg.ts';
 import {
   parentWorker,
@@ -55,7 +59,10 @@ export default async function runWorker(
       backPressureLimitHeapProportion,
       flowControlConsensusPaddingSeconds,
       flowControlEventDrivenRelease,
+      sqliteChangeLogMode,
+      sqliteChangeLogRetentionMs,
       sqliteChangeLogReadBatchRows,
+      sqliteChangeLogPurgeBatchRows,
       sqliteChangeLogBarrierTimeoutMs,
     },
     autoReset,
@@ -172,6 +179,19 @@ export default async function runWorker(
             readBatchRows: sqliteChangeLogReadBatchRows,
             barrierTimeoutMs: sqliteChangeLogBarrierTimeoutMs,
           },
+          sqliteCleanup:
+            sqliteChangeLogMode === 'off'
+              ? undefined
+              : {
+                  retentionMs: sqliteChangeLogRetentionMs,
+                  maxRows: sqliteChangeLogPurgeBatchRows,
+                  request: maintenance =>
+                    requestSQLiteChangeLogMaintenance(
+                      parent,
+                      maintenance,
+                      SQLITE_CHANGE_LOG_MAINTENANCE_TIMEOUT_MS,
+                    ),
+                },
         },
         setTimeout,
       );

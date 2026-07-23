@@ -1,6 +1,11 @@
+import {resolver} from '@rocicorp/resolver';
 import {describe, expect, test, vi} from 'vitest';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
 import type {ReplicaState} from '../services/replicator/replicator.ts';
+import type {
+  SQLiteChangeLogMaintenanceRequest,
+  SQLiteChangeLogMaintenanceResponse,
+} from '../services/replicator/sqlite-change-log-maintenance.ts';
 import {inProcChannel} from '../types/processes.ts';
 import {Subscription} from '../types/subscription.ts';
 import {
@@ -72,5 +77,73 @@ describe('workers/replicator', () => {
       {state: 'version-ready', testSeqNum: 2},
       {state: 'version-ready', testSeqNum: 3},
     ]);
+  });
+
+  test('dispatches SQLite change-log maintenance results and errors when enabled', async () => {
+    const originalSub = Subscription.create<ReplicaState>();
+    const purgeChangeLog = vi.fn().mockResolvedValue({
+      headWatermark: '08',
+      timeFloor: '08',
+      effectiveFloor: '06',
+      deletedRows: 4,
+      deletedBeforeWatermark: '06',
+      moreEligible: false,
+    });
+    const replicator = {
+      status: vi.fn(),
+      subscribe: () => originalSub,
+      purgeChangeLog,
+    };
+    const [parent, child] = inProcChannel();
+    setUpMessageHandlers(lc, replicator, parent, true);
+    const response = resolver<SQLiteChangeLogMaintenanceResponse[1]>();
+    child.onceMessageType<SQLiteChangeLogMaintenanceResponse>(
+      'sqliteChangeLogMaintenanceResponse',
+      response.resolve,
+    );
+
+    child.send<SQLiteChangeLogMaintenanceRequest>([
+      'sqliteChangeLogMaintenanceRequest',
+      {
+        requestID: 'request-1',
+        safeFloor: '06',
+        requestTimeMs: 10_000,
+        retentionMs: 1000,
+        maxRows: 100,
+      },
+    ]);
+
+    await expect(response.promise).resolves.toMatchObject({
+      requestID: 'request-1',
+      result: {deletedRows: 4},
+    });
+    expect(purgeChangeLog).toHaveBeenCalledWith({
+      safeFloor: '06',
+      requestTimeMs: 10_000,
+      retentionMs: 1000,
+      maxRows: 100,
+    });
+
+    purgeChangeLog.mockRejectedValueOnce(new Error('purge failed'));
+    const errorResponse = resolver<SQLiteChangeLogMaintenanceResponse[1]>();
+    child.onceMessageType<SQLiteChangeLogMaintenanceResponse>(
+      'sqliteChangeLogMaintenanceResponse',
+      errorResponse.resolve,
+    );
+    child.send<SQLiteChangeLogMaintenanceRequest>([
+      'sqliteChangeLogMaintenanceRequest',
+      {
+        requestID: 'request-2',
+        safeFloor: '06',
+        requestTimeMs: 10_000,
+        retentionMs: 1000,
+        maxRows: 100,
+      },
+    ]);
+
+    await expect(errorResponse.promise).resolves.toMatchObject({
+      requestID: 'request-2',
+      error: {name: 'Error', message: 'purge failed'},
+    });
   });
 });

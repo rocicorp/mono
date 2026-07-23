@@ -150,7 +150,7 @@ export default async function runWorker(
     sqliteChangeLogObserver,
   );
 
-  setUpMessageHandlers(lc, replicator, parent);
+  setUpMessageHandlers(lc, replicator, parent, logsChangeStream);
 
   const running = runUntilKilled(lc, parent, replicator);
 

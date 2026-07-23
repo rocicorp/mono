@@ -5,7 +5,9 @@ import type {ChangeStreamer} from '../change-streamer/change-streamer.ts';
 import type {Service} from '../service.ts';
 import {IncrementalSyncer} from './incremental-sync.ts';
 import type {ReplicationStatusPublisher} from './replication-status.ts';
+import type {SQLiteChangeLogMaintenance} from './sqlite-change-log-maintenance.ts';
 import type {SQLiteChangeLogObserver} from './sqlite-change-log-observability.ts';
+import type {SQLiteChangeLogPurgeResult} from './sqlite-change-log-purger.ts';
 import type {WriteWorkerClient} from './write-worker-client.ts';
 
 /** See {@link ReplicaStateNotifier.subscribe()}. */
@@ -111,12 +113,18 @@ export class ReplicatorService implements Replicator, Service {
     return this.#incrementalSyncer.subscribe();
   }
 
+  purgeChangeLog(
+    maintenance: SQLiteChangeLogMaintenance,
+  ): Promise<SQLiteChangeLogPurgeResult> {
+    return this.#incrementalSyncer.purgeChangeLog(maintenance);
+  }
+
   async stop() {
-    this.#incrementalSyncer.stop(this.#lc);
+    const maintenanceStopped = this.#incrementalSyncer.stop(this.#lc);
     // Wait for the syncer's run loop to finish so that any in-flight
-    // worker.processMessage() call completes and clears #pending
-    // before we send the 'stop' message to the worker.
-    await this.#runPromise;
+    // worker call completes and clears #pending before we send the 'stop'
+    // message to the worker.
+    await Promise.all([this.#runPromise, maintenanceStopped]);
     await this.#worker.stop();
   }
 }
