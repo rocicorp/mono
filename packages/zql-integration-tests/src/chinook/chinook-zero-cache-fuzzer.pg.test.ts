@@ -13,6 +13,7 @@ import type {
   ChangeStreamerService,
   Downstream,
 } from '../../../zero-cache/src/services/change-streamer/change-streamer.ts';
+import {initChangeStreamerSchema} from '../../../zero-cache/src/services/change-streamer/schema/init.ts';
 import {ReplicationStatusPublisher} from '../../../zero-cache/src/services/replicator/replication-status.ts';
 import type {ReplicaState} from '../../../zero-cache/src/services/replicator/replicator.ts';
 import {ReplicatorService} from '../../../zero-cache/src/services/replicator/replicator.ts';
@@ -330,6 +331,7 @@ async function startZeroCacheReplica(testDBs: PgTest['testDBs']) {
 
     await setupReplica(lc, 'serving', {file: replicaDbFile.path});
 
+    await initChangeStreamerSchema(lc, changeDB, shard);
     const changeStreamer = await initializeStreamer(
       lc,
       shard,
