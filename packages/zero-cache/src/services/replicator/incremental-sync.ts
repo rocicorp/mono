@@ -5,6 +5,7 @@ import {getOrCreateCounter} from '../../observability/metrics.ts';
 import type {Source} from '../../types/streams.ts';
 import type {DownloadStatus} from '../change-source/protocol/current.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
+import {serializeChangeStreamData} from '../change-streamer/change-log-codec.ts';
 import {
   errorTypeToReadableName,
   PROTOCOL_VERSION,
@@ -176,9 +177,11 @@ export class IncrementalSyncer {
                 backfillStatus = status; // Update the current status
               }
 
-              const result = await this.#worker.processMessage(
-                message as ChangeStreamData,
-              );
+              const data = message as ChangeStreamData;
+              const result = await this.#worker.processMessage({
+                data,
+                json: serializeChangeStreamData(data),
+              });
 
               this.#handleResult(lc, result);
               if (result?.completedBackfill) {

@@ -8,6 +8,11 @@ import type {ChangeStreamData} from '../change-source/protocol/current/downstrea
 import type {ChangeProcessorMode, CommitResult} from './change-processor.ts';
 import type {SubscriptionState} from './schema/replication-state.ts';
 
+export type SerializedChangeStreamData = {
+  data: ChangeStreamData;
+  json: string;
+};
+
 export type PragmaConfig = {
   busyTimeout: number;
   analysisLimit: number;
@@ -21,7 +26,9 @@ type ErrorHandler = (err: Error) => void;
  */
 export interface WriteWorkerClient {
   getSubscriptionState(): Promise<SubscriptionState>;
-  processMessage(downstream: ChangeStreamData): Promise<CommitResult | null>;
+  processMessage(
+    downstream: SerializedChangeStreamData,
+  ): Promise<CommitResult | null>;
   abort(): void;
   stop(): Promise<void>;
   onError(handler: ErrorHandler): void;
@@ -89,7 +96,7 @@ export function deserializeError(serialized: SerializedError): Error {
 export type ArgsMap = {
   init: [string, ChangeProcessorMode, PragmaConfig, LogConfig];
   getSubscriptionState: [];
-  processMessage: [ChangeStreamData];
+  processMessage: [SerializedChangeStreamData];
   abort: [];
   stop: [];
 };
@@ -194,7 +201,9 @@ export class ThreadWriteWorkerClient implements WriteWorkerClient {
     return this.#call('getSubscriptionState', []);
   }
 
-  processMessage(downstream: ChangeStreamData): Promise<CommitResult | null> {
+  processMessage(
+    downstream: SerializedChangeStreamData,
+  ): Promise<CommitResult | null> {
     return this.#call('processMessage', [downstream]);
   }
 
