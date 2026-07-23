@@ -1,6 +1,6 @@
 import {resolver} from '@rocicorp/resolver';
 import postgres from 'postgres';
-import {beforeEach, describe, expect} from 'vitest';
+import {beforeEach, describe, expect, vi} from 'vitest';
 import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.ts';
 import {Database} from '../../../../../zqlite/src/db.ts';
 import {expectTables, type PgTest, test} from '../../../test/db.ts';
@@ -32,6 +32,7 @@ describe('change-streamer/schema/tables', () => {
   test('ensureReplicationConfig', async () => {
     const replica1 = new Database(lc, ':memory:');
     initReplicationState(replica1, ['zero_data', 'zero_metadata'], '123');
+    const purgeLock = {release: vi.fn()};
 
     await ensureReplicationConfig(
       lc,
@@ -43,6 +44,7 @@ describe('change-streamer/schema/tables', () => {
       },
       shard,
       true,
+      purgeLock,
     );
 
     await expectTables(sql, {
@@ -90,6 +92,7 @@ describe('change-streamer/schema/tables', () => {
       },
       shard,
       true,
+      purgeLock,
     );
 
     await expectTables(sql, {
@@ -182,6 +185,7 @@ describe('change-streamer/schema/tables', () => {
       },
       shard,
       false,
+      purgeLock,
     );
 
     // autoReset with the same version should throw.
@@ -196,8 +200,11 @@ describe('change-streamer/schema/tables', () => {
         },
         shard,
         true,
+        purgeLock,
       ),
     ).rejects.toThrow(AutoResetSignal);
+
+    expect(purgeLock.release).not.toHaveBeenCalled();
 
     // Different replica version should wipe the tables.
     await ensureReplicationConfig(
@@ -210,7 +217,11 @@ describe('change-streamer/schema/tables', () => {
       },
       shard,
       true,
+      purgeLock,
     );
+
+    expect(purgeLock.release).toHaveBeenCalled();
+    purgeLock.release.mockReset();
 
     await expectTables(sql, {
       ['rezo_8/cdc.replicationConfig']: [
@@ -250,8 +261,11 @@ describe('change-streamer/schema/tables', () => {
         },
         shard,
         true,
+        purgeLock,
       ),
     ).rejects.toThrow(AutoResetSignal);
+
+    expect(purgeLock.release).not.toHaveBeenCalled();
   });
 
   test('no deadlocks when table is reset', async () => {
@@ -451,6 +465,7 @@ describe('change-streamer/schema/tables', () => {
         },
         shard,
         true,
+        undefined,
         shortSetTimeout,
       );
 

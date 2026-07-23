@@ -30,6 +30,7 @@ import {
   type ChangeStreamerService,
   type Downstream,
 } from '../change-streamer/change-streamer.ts';
+import {initChangeStreamerSchema} from '../change-streamer/schema/init.ts';
 import {ReplicationStatusPublisher} from './replication-status.ts';
 import {getSubscriptionState} from './schema/replication-state.ts';
 
@@ -472,6 +473,7 @@ async function startHarness(testDBs: PgTest['testDBs']) {
       );
 
     const faultyChangeSource = new FaultyChangeSource(changeSource);
+    await initChangeStreamerSchema(lc, changeDB, shard);
     const changeStreamer = await initializeStreamer(
       lc,
       shard,

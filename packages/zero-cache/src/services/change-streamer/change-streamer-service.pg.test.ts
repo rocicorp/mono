@@ -36,6 +36,7 @@ import {
   type Downstream,
 } from './change-streamer.ts';
 import * as ErrorType from './error-type-enum.ts';
+import {initChangeStreamerSchema} from './schema/init.ts';
 import {AutoResetSignal, ensureReplicationConfig} from './schema/tables.ts';
 import {PurgeLocker} from './storer.ts';
 
@@ -79,6 +80,7 @@ describe('change-streamer/service', () => {
     acks = new Queue();
     setTimeoutFn = vi.fn();
 
+    await initChangeStreamerSchema(lc, sql, shard);
     streamer = await initializeStreamer(
       lc,
       shard,

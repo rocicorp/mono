@@ -116,12 +116,6 @@ export default async function runWorker(
         `error restoring backup. resyncing the replica: ${String(e)}`,
         e,
       );
-
-      // The purgeLock must be released if the backup could not be restored,
-      // or it will otherwise prevent the change-db update after the resync
-      // completes.
-      await purgeLock.release();
-      purgeLock = null;
     }
   }
 
