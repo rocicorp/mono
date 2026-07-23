@@ -6,6 +6,7 @@ import {
   expectMatchingObjectsInTables,
   initDB as initLiteDB,
 } from '../../../test/lite.ts';
+import {CREATE_CHANGE_LOG_STREAM_SCHEMA} from '../../replicator/schema/change-log-stream.ts';
 import {initReplicationState} from '../../replicator/schema/replication-state.ts';
 import {CREATE_TABLE_METADATA_TABLE} from '../../replicator/schema/table-metadata.ts';
 import {
@@ -448,6 +449,76 @@ describe('replica-schema-migrations', () => {
             lock: 1,
           },
         ],
+        ['_zero.changeLogStream']: [
+          {
+            watermark: '123',
+            pos: 0,
+            change: '{"tag":"begin"}',
+            precommit: null,
+            writeTimeMs: null,
+          },
+          {
+            watermark: '123',
+            pos: 1,
+            change: '{"tag":"commit"}',
+            precommit: '123',
+            writeTimeMs: 12345,
+          },
+        ],
+      },
+    },
+    {
+      fromSchemaVersion: 14,
+      fromDataVersion: 13,
+      desc: 'does not duplicate the seed after rollback and rollforward',
+      replicaSetup:
+        /*sql*/ `CREATE TABLE "_zero.replicationState" (
+          stateVersion TEXT NOT NULL,
+          writeTimeMs INTEGER,
+          lock INTEGER PRIMARY KEY DEFAULT 1 CHECK (lock=1)
+        );` + CREATE_CHANGE_LOG_STREAM_SCHEMA,
+      replicaPreState: {
+        ['_zero.replicationState']: [
+          {
+            stateVersion: '123',
+            writeTimeMs: 12345,
+            lock: 1,
+          },
+        ],
+        ['_zero.changeLogStream']: [
+          {
+            watermark: '123',
+            pos: 0,
+            change: '{"tag":"begin"}',
+            precommit: null,
+            writeTimeMs: null,
+          },
+          {
+            watermark: '123',
+            pos: 1,
+            change: '{"tag":"commit"}',
+            precommit: '123',
+            writeTimeMs: 12345,
+          },
+        ],
+      },
+      replicaPostState: {
+        ['_zero.changeLogStream']: [
+          {
+            watermark: '123',
+            pos: 0,
+            change: '{"tag":"begin"}',
+            precommit: null,
+            writeTimeMs: null,
+          },
+          {
+            watermark: '123',
+            pos: 1,
+            change: '{"tag":"commit"}',
+            precommit: '123',
+            writeTimeMs: 12345,
+          },
+        ],
       },
     },
   ];
@@ -472,6 +543,16 @@ describe('replica-schema-migrations', () => {
             minSafeVersion: 1,
           },
         ],
+        ...(c.fromSchemaVersion === 0 ||
+        c.replicaPreState?.['_zero.replicationState']
+          ? {}
+          : {
+              ['_zero.replicationState']: [
+                {
+                  stateVersion: '123',
+                },
+              ],
+            }),
         ...c.replicaPreState,
       });
 

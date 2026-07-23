@@ -310,7 +310,7 @@ describe('replicator/incremental-sync', () => {
                 "unique": true,
               },
             ],
-            "replicaSize": 57344,
+            "replicaSize": 69632,
             "tables": [
               {
                 "columns": [
@@ -453,7 +453,7 @@ describe('replicator/incremental-sync', () => {
                 "unique": true,
               },
             ],
-            "replicaSize": 57344,
+            "replicaSize": 69632,
             "tables": [
               {
                 "columns": [
@@ -507,7 +507,7 @@ describe('replicator/incremental-sync', () => {
                 "unique": true,
               },
             ],
-            "replicaSize": 65536,
+            "replicaSize": 77824,
             "tables": [
               {
                 "columns": [
