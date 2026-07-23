@@ -7,7 +7,7 @@ import {
   reconstructWatermarkedChange,
   type ChangeLogEntry,
 } from './change-log-codec.ts';
-import type {ChangeTag, WatermarkedChange} from './change-streamer.ts';
+import type {WatermarkedChange} from './change-streamer.ts';
 
 export type CatchupPlan =
   | {
@@ -31,35 +31,7 @@ type PlanRow = {
 
 type ChangeLogRow = ChangeLogEntry & {
   readonly pos: number;
-  readonly tag: string | null;
 };
-
-type TransactionCursor = {
-  watermark: string;
-  nextPos: number;
-  complete: boolean;
-};
-
-const CHANGE_TAGS: ReadonlySet<string> = new Set<ChangeTag>([
-  'begin',
-  'insert',
-  'update',
-  'delete',
-  'truncate',
-  'backfill',
-  'create-table',
-  'rename-table',
-  'update-table-metadata',
-  'add-column',
-  'update-column',
-  'drop-column',
-  'drop-table',
-  'create-index',
-  'drop-index',
-  'backfill-completed',
-  'commit',
-  'rollback',
-]);
 
 /**
  * Seeks to the final position so validating a boundary does not scan every row
@@ -168,7 +140,7 @@ export class SQLiteChangeLogReader implements Disposable {
     // The first query must be strictly after the requested transaction. Every
     // real stream position is far below this sentinel.
     let lastPos = Number.MAX_SAFE_INTEGER;
-    let transaction: TransactionCursor | undefined;
+    let lastTag: string | undefined;
 
     while (true) {
       this.#throwIfAborted(signal);
@@ -184,15 +156,12 @@ export class SQLiteChangeLogReader implements Disposable {
         break;
       }
 
-      const changes: WatermarkedChange[] = [];
-      for (const row of rows) {
-        transaction = validateRow(row, transaction);
-        changes.push(reconstructWatermarkedChange(validatedEntry(row)));
-      }
+      const changes = rows.map(reconstructWatermarkedChange);
       const last = rows.at(-1);
       assert(last !== undefined, 'non-empty batch must have a final row');
       lastWatermark = last.watermark;
       lastPos = last.pos;
+      lastTag = last.tag;
 
       // all() has exhausted the SELECT and closed its implicit read
       // transaction. This yield therefore cannot pin the WAL while subscriber
@@ -202,8 +171,7 @@ export class SQLiteChangeLogReader implements Disposable {
 
     if (fromWatermark !== throughWatermark) {
       assert(
-        transaction?.complete === true &&
-          transaction.watermark === throughWatermark,
+        lastWatermark === throughWatermark && lastTag === 'commit',
         () =>
           `SQLite change log did not end at pinned head ${throughWatermark}`,
       );
@@ -234,60 +202,4 @@ export class SQLiteChangeLogReader implements Disposable {
       throw new AbortError('SQLite change log read aborted');
     }
   }
-}
-
-function validatedEntry(row: ChangeLogRow): ChangeLogEntry {
-  assert(
-    row.tag !== null && CHANGE_TAGS.has(row.tag),
-    () => `invalid SQLite change log tag ${String(row.tag)}`,
-  );
-  return {watermark: row.watermark, tag: row.tag, change: row.change};
-}
-
-function validateRow(
-  row: ChangeLogRow,
-  transaction: TransactionCursor | undefined,
-): TransactionCursor {
-  assert(
-    Number.isSafeInteger(row.pos) && row.pos >= 0,
-    () => `invalid SQLite change log position ${row.pos}`,
-  );
-
-  if (transaction === undefined || row.watermark !== transaction.watermark) {
-    assert(
-      transaction === undefined || transaction.complete,
-      () =>
-        `incomplete SQLite change log transaction ${transaction?.watermark}`,
-    );
-    assert(
-      row.pos === 0 && row.tag === 'begin',
-      () =>
-        `SQLite change log transaction ${row.watermark} does not start with begin at position 0`,
-    );
-    return {watermark: row.watermark, nextPos: 1, complete: false};
-  }
-
-  assert(
-    !transaction.complete,
-    () =>
-      `SQLite change log transaction ${row.watermark} has rows after commit`,
-  );
-  assert(
-    row.pos === transaction.nextPos,
-    () =>
-      `non-contiguous SQLite change log transaction ${row.watermark}: expected position ${transaction.nextPos}, got ${row.pos}`,
-  );
-  assert(
-    row.tag !== 'begin',
-    () => `SQLite change log transaction ${row.watermark} has multiple begins`,
-  );
-  assert(
-    row.tag !== 'rollback',
-    () => `SQLite change log transaction ${row.watermark} contains a rollback`,
-  );
-  return {
-    watermark: transaction.watermark,
-    nextPos: transaction.nextPos + 1,
-    complete: row.tag === 'commit',
-  };
 }
