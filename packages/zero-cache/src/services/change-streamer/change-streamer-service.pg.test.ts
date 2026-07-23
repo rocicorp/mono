@@ -340,6 +340,11 @@ describe('change-streamer/service', () => {
       // the purge eligibility check below.
       catchupSub.cancel();
 
+      // drainToQueue() enqueues before requesting the next source item, which
+      // is the action that ACKs the commit back to Subscriber. Let that turn
+      // complete before manually bypassing the production cleanup delay.
+      await sleep(0);
+
       streamer.scheduleCleanup('06');
       const purge = setTimeoutFn.mock.calls.at(-1)?.[0];
       assert(purge, 'PG change-log purge was not scheduled');
@@ -350,7 +355,7 @@ describe('change-streamer/service', () => {
       ).toEqual([['06'], ['06'], ['06']]);
     } finally {
       liveSub.cancel();
-      syncer.stop(lc);
+      await syncer.stop(lc);
       await syncing;
       await worker.stop();
       replica.close();

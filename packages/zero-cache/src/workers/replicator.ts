@@ -1,4 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
+import {assert} from '../../../shared/src/asserts.ts';
 import {sleep} from '../../../shared/src/sleep.ts';
 import * as v from '../../../shared/src/valita.ts';
 import {Database} from '../../../zqlite/src/db.ts';
@@ -16,7 +17,15 @@ import {
   recordEvent,
 } from '../services/replicator/schema/replication-state.ts';
 import {
+  validateSQLiteChangeLogMaintenanceRequest,
+  type SQLiteChangeLogMaintenance,
+  type SQLiteChangeLogMaintenanceRequest,
+  type SQLiteChangeLogMaintenanceResponse,
+} from '../services/replicator/sqlite-change-log-maintenance.ts';
+import type {SQLiteChangeLogPurgeResult} from '../services/replicator/sqlite-change-log-purger.ts';
+import {
   applyPragmas,
+  serializeError,
   type PragmaConfig,
 } from '../services/replicator/write-worker-client.ts';
 import type {Worker} from '../types/processes.ts';
@@ -198,10 +207,67 @@ export function setupReplica(
 
 export function setUpMessageHandlers(
   lc: LogContext,
-  replicator: Replicator,
+  replicator: Replicator & Partial<SQLiteChangeLogMaintainer>,
   parent: Worker,
+  sqliteChangeLogMaintenanceEnabled = false,
 ) {
   handleSubscriptionsFrom(lc, parent, replicator);
+  parent.onMessageType<SQLiteChangeLogMaintenanceRequest>(
+    'sqliteChangeLogMaintenanceRequest',
+    msg => {
+      void handleSQLiteChangeLogMaintenanceRequest(
+        lc,
+        replicator,
+        parent,
+        msg,
+        sqliteChangeLogMaintenanceEnabled,
+      );
+    },
+  );
+}
+
+export interface SQLiteChangeLogMaintainer {
+  purgeChangeLog(
+    maintenance: SQLiteChangeLogMaintenance,
+  ): Promise<SQLiteChangeLogPurgeResult>;
+}
+
+async function handleSQLiteChangeLogMaintenanceRequest(
+  lc: LogContext,
+  replicator: Replicator & Partial<SQLiteChangeLogMaintainer>,
+  parent: Worker,
+  value: unknown,
+  enabled: boolean,
+): Promise<void> {
+  let requestID =
+    value &&
+    typeof value === 'object' &&
+    'requestID' in value &&
+    typeof value.requestID === 'string' &&
+    value.requestID.length > 0
+      ? value.requestID
+      : 'invalid-request';
+  try {
+    const request = validateSQLiteChangeLogMaintenanceRequest(value);
+    requestID = request.requestID;
+    const purgeChangeLog = replicator.purgeChangeLog;
+    assert(
+      enabled && purgeChangeLog !== undefined,
+      'SQLite change-log maintenance is disabled for this replicator',
+    );
+    const {requestID: _, ...maintenance} = request;
+    const result = await purgeChangeLog.call(replicator, maintenance);
+    parent.send<SQLiteChangeLogMaintenanceResponse>([
+      'sqliteChangeLogMaintenanceResponse',
+      {requestID, result},
+    ]);
+  } catch (error) {
+    lc.warn?.('SQLite change-log maintenance request failed', error);
+    parent.send<SQLiteChangeLogMaintenanceResponse>([
+      'sqliteChangeLogMaintenanceResponse',
+      {requestID, error: serializeError(error)},
+    ]);
+  }
 }
 
 type Notification = ['notify', ReplicaState];

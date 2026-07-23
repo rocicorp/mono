@@ -13,6 +13,8 @@ const changeStreamer = {
   stop: () => Promise.resolve(),
   subscribe: () => Promise.resolve(Subscription.create<string>()),
   scheduleCleanup: vi.fn(),
+  startCleanupReservation: () => Promise.resolve(),
+  endCleanupReservation: vi.fn(),
   getChangeLogState: () =>
     Promise.resolve({
       replicaVersion: 'replica-version',

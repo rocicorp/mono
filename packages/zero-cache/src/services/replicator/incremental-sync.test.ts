@@ -99,7 +99,7 @@ describe('replicator/incremental-sync', () => {
 
   afterEach(async () => {
     downstream?.cancel();
-    syncer?.stop(lc);
+    await syncer?.stop(lc);
     // Wait for the run loop to finish so any in-flight worker call
     // completes before we send 'stop' to the worker.
     await syncing?.catch(() => {});
@@ -765,7 +765,7 @@ describe('replicator/incremental-sync', () => {
 
     expect(await hasRetried).toBe(true);
 
-    syncer.stop(lc);
+    await syncer.stop(lc);
     void localSyncing.catch(() => {});
   });
 
@@ -798,7 +798,7 @@ describe('replicator/incremental-sync', () => {
 
     expect(await hasRetried).toBe(true);
 
-    syncer.stop(lc);
+    await syncer.stop(lc);
     void localSyncing.catch(() => {});
   });
 
@@ -860,9 +860,113 @@ describe('replicator/incremental-sync', () => {
         )
         .all(),
     ).toEqual([]);
-    syncer.stop(lc);
+    await syncer.stop(lc);
     void syncing.catch(() => {});
     syncing = undefined;
+  });
+
+  test('serializes and coalesces purge requests around source transactions and idle time', async () => {
+    await worker.stop();
+    worker = new ThreadWriteWorkerClient();
+    await worker.init(
+      dbFile.path,
+      'serving',
+      true,
+      {
+        busyTimeout: 30000,
+        analysisLimit: 1000,
+      },
+      {level: 'error', format: 'text'},
+    );
+    initReplicationState(mainDb, ['zero_data'], '02', {}, false);
+    initDB(
+      mainDb,
+      `
+      CREATE TABLE issues(
+        id INTEGER PRIMARY KEY,
+        _0_version TEXT
+      );
+      `,
+    );
+    syncer = new IncrementalSyncer(
+      lc,
+      TASK_ID,
+      REPLICA_ID,
+      {subscribe: subscribeFn.mockResolvedValue(downstream)},
+      worker,
+      'serving',
+      ReplicationStatusPublisher.forReplicaFile(dbFile.path),
+      undefined,
+    );
+    syncing = syncer.run();
+    await vi.waitFor(() => expect(subscribeFn).toHaveBeenCalledTimes(1));
+
+    const processMessage = vi.spyOn(worker, 'processMessage');
+    const purgeChangeLog = vi.spyOn(worker, 'purgeChangeLog');
+    const issues = new ReplicationMessages({issues: 'id'});
+    downstream.push(['begin', issues.begin(), {commitWatermark: '06'}]);
+    downstream.push(['data', issues.insert('issues', {id: 1})]);
+    await vi.waitFor(() => expect(processMessage).toHaveBeenCalledTimes(2));
+
+    let firstSettled = false;
+    const first = syncer
+      .purgeChangeLog({
+        safeFloor: '06',
+        requestTimeMs: 10_000,
+        retentionMs: 1000,
+        maxRows: 100,
+      })
+      .finally(() => {
+        firstSettled = true;
+      });
+    const lowered = syncer.purgeChangeLog({
+      safeFloor: '02',
+      requestTimeMs: 20_000,
+      retentionMs: 2000,
+      maxRows: 5,
+    });
+    await new Promise(resolve => setTimeout(resolve, 10));
+    expect(firstSettled).toBe(false);
+    expect(purgeChangeLog).not.toHaveBeenCalled();
+
+    downstream.push(['commit', issues.commit(), {watermark: '06'}]);
+    const [firstResult, loweredResult] = await Promise.all([first, lowered]);
+    expect(firstResult).toEqual(loweredResult);
+    expect(purgeChangeLog).toHaveBeenCalledTimes(1);
+    expect(purgeChangeLog).toHaveBeenCalledWith({
+      externalFloor: '02',
+      retentionCutoffMs: 18_000,
+      maxRows: 5,
+    });
+
+    await expect(
+      syncer.purgeChangeLog({
+        safeFloor: '06',
+        requestTimeMs: Number.MAX_SAFE_INTEGER,
+        retentionMs: 1,
+        maxRows: 100,
+      }),
+    ).resolves.toMatchObject({
+      headWatermark: '06',
+      deletedRows: 2,
+      moreEligible: false,
+    });
+    expect(purgeChangeLog).toHaveBeenCalledTimes(2);
+
+    downstream.push(['begin', issues.begin(), {commitWatermark: '08'}]);
+    await vi.waitFor(() => expect(processMessage).toHaveBeenCalledTimes(4));
+    const rejectedDuringShutdown = syncer.purgeChangeLog({
+      safeFloor: '06',
+      requestTimeMs: 30_000,
+      retentionMs: 1000,
+      maxRows: 100,
+    });
+    const shutdownError = rejectedDuringShutdown.catch(error => error);
+    await syncer.stop(lc);
+    await expect(shutdownError).resolves.toMatchObject({
+      message: 'IncrementalSyncer stopped before maintenance ran',
+    });
+    expect(purgeChangeLog).toHaveBeenCalledTimes(2);
   });
 
   test('an enabled SQLite stream-writer error stops the replicator', async () => {

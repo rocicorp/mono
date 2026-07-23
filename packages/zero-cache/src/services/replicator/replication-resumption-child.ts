@@ -198,6 +198,12 @@ class FailpointWriteWorkerClient implements WriteWorkerClient {
     return result;
   }
 
+  purgeChangeLog(
+    options: Parameters<ThreadWriteWorkerClient['purgeChangeLog']>[0],
+  ) {
+    return this.#inner.purgeChangeLog(options);
+  }
+
   abort() {
     this.#inner.abort();
   }
