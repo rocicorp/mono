@@ -294,16 +294,28 @@ describe('change-streamer/http', () => {
 
       expect(endReservationFn).toHaveBeenCalledWith('foo-task');
 
-      downstream.push(
-        JSON.stringify(['begin', {tag: 'begin'}, {commitWatermark: '456'}]),
-      );
-      downstream.push(
-        JSON.stringify(['commit', {tag: 'commit'}, {watermark: '456'}]),
-      );
+      const begin = JSON.stringify([
+        'begin',
+        {tag: 'begin'},
+        {commitWatermark: '456'},
+      ]);
+      const commit = JSON.stringify([
+        'commit',
+        {tag: 'commit'},
+        {watermark: '456'},
+      ]);
+      downstream.push(begin);
+      downstream.push(commit);
 
       expect(await drain(2, sub)).toEqual([
-        ['begin', {tag: 'begin'}, {commitWatermark: '456'}],
-        ['commit', {tag: 'commit'}, {watermark: '456'}],
+        {
+          data: ['begin', {tag: 'begin'}, {commitWatermark: '456'}],
+          json: begin,
+        },
+        {
+          data: ['commit', {tag: 'commit'}, {watermark: '456'}],
+          json: commit,
+        },
       ]);
 
       // Draining the client-side subscription should cancel it, closing the
@@ -339,33 +351,8 @@ describe('change-streamer/http', () => {
       big3: BigInt(Number.MAX_SAFE_INTEGER) + 3n,
     });
 
-    downstream.push(BigIntJSON.stringify(['data', insert]));
-    expect(await drain(1, sub)).toMatchInlineSnapshot(`
-      [
-        [
-          "data",
-          {
-            "new": {
-              "big1": 9007199254740992n,
-              "big2": 9007199254740993n,
-              "big3": 9007199254740994n,
-              "id": "foo",
-            },
-            "relation": {
-              "name": "issues",
-              "rowKey": {
-                "columns": [
-                  "id",
-                ],
-                "type": "default",
-              },
-              "schema": "public",
-              "tag": "relation",
-            },
-            "tag": "insert",
-          },
-        ],
-      ]
-    `);
+    const json = BigIntJSON.stringify(['data', insert]);
+    downstream.push(json);
+    expect(await drain(1, sub)).toEqual([{data: ['data', insert], json}]);
   });
 });

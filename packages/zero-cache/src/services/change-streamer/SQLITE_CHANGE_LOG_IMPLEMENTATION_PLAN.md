@@ -230,10 +230,13 @@ export type SerializedChangeStreamData = {
 };
 ```
 
-`json` is produced with `BigIntJSON.stringify(data)`. It is the representation
-used for forwarding and for extracting the `change` text stored by PG and
-SQLite. The parsed `data` remains available to `ChangeProcessor`; the worker
-does not parse JSON a second time.
+`json` is produced once by the change-streamer with
+`BigIntJSON.stringify(data)`. It is the representation used for forwarding and
+for extracting the `change` text stored by PG and SQLite. The change-streamer
+client preserves the exact application-level JSON while parsing and validating
+`data`, so `IncrementalSyncer` does not stringify the message again. The parsed
+`data` remains available to `ChangeProcessor`; the worker does not parse JSON a
+second time.
 
 Move `extractChangeSubstring()` and the inverse reconstruction helper out of
 `storer.ts`. The codec tests become the compatibility contract for both stores.
@@ -525,33 +528,41 @@ preserving existing processing behavior.
 
 - Add `SerializedChangeStreamData` in the lowest non-cyclic protocol module
   that can be directly imported by both the replicator and write worker.
+- Add a `streamInStringified()` counterpart to `streamOutStringified()` that
+  preserves the exact application-level JSON alongside its parsed, validated
+  value without changing the WebSocket protocol.
+- Change the client-side `ChangeStreamer` interface and alternate
+  implementations to return parsed downstream data with its preserved JSON.
 - Change `WriteWorkerClient.processMessage()`, `ArgsMap`, `Request`, and worker
   dispatch to accept the envelope.
-- At the replication-manager ingress in `IncrementalSyncer`, serialize each
-  parsed data-plane message exactly once and send parsed data plus JSON to the
-  worker.
+- At the replication-manager ingress in `IncrementalSyncer`, send each parsed
+  data-plane message plus its preserved JSON to the worker without
+  reserialization.
 - In this slice, `ChangeProcessor` consumes `data` and intentionally ignores
   `json`.
-- Keep status/error/control messages outside the envelope because they are not
-  part of the persisted stream log.
+- Keep status/error/control messages outside the write-worker envelope because
+  they are not part of the persisted stream log.
 
 **Tests**
 
 - Update `write-worker.test.ts` and `incremental-sync.test.ts` fixtures.
 - Add a worker-thread round-trip test proving bigint and escaped-NUL JSON cross
   structured-clone without alteration.
-- Assert exactly one call to the serializer per data-plane message.
+- Assert the HTTP client preserves the exact application-level JSON for bigint
+  and escaped-NUL messages and that the worker receives that string unchanged.
 - Confirm all existing commit results, notification timing, abort, and worker
   error propagation are unchanged.
 
 **Exit criteria**
 
-- Production behavior is unchanged with the extra ignored string.
+- Production behavior is unchanged with the extra ignored string and no second
+  canonical serialization in the replicator.
 - The worker receives the same canonical JSON covered in Slice 1.
 
-**Production effect:** small IPC payload increase. **Rollback:** restore the
-old worker argument after draining/restarting workers; there is no persisted
-format dependency yet.
+**Production effect:** small IPC payload increase and one fewer canonical
+serialization per data-plane message in each replicator. **Rollback:** restore
+the old change-streamer client result and worker argument after
+draining/restarting workers; there is no persisted-format dependency yet.
 
 ### Slice 4 — Add the atomic SQLite writer behind a disabled flag
 

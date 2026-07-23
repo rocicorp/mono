@@ -9,8 +9,8 @@ import {getPragmaConfig, setupReplica} from '../../workers/replicator.ts';
 import type {SerializedChangeStreamData} from '../change-source/protocol/current/downstream.ts';
 import type {
   ChangeStreamer,
+  SerializedDownstream,
   SubscriberContext,
-  Downstream,
 } from '../change-streamer/change-streamer.ts';
 import {exitAfter, runUntilKilled} from '../life-cycle.ts';
 import type {CommitResult} from './change-processor.ts';
@@ -24,7 +24,10 @@ import {
 type ChildFailpoint = 'none' | 'after-sqlite-commit-before-ack';
 
 type ParentMessage =
-  | ['replication-resumption:downstream', {seq: number; msg: Downstream}]
+  | [
+      'replication-resumption:downstream',
+      {seq: number; msg: SerializedDownstream},
+    ]
   | ['replication-resumption:source-error', {message: string}]
   | ['replication-resumption:source-end', Record<string, never>];
 
@@ -64,17 +67,17 @@ class IPCChangeStreamer implements ChangeStreamer {
     this.#parent = parent;
   }
 
-  subscribe(ctx: SubscriberContext): Promise<Source<Downstream>> {
+  subscribe(ctx: SubscriberContext): Promise<Source<SerializedDownstream>> {
     send(this.#parent, ['replication-resumption:subscribe', ctx]);
     return Promise.resolve(new IPCDownstreamSource(this.#parent));
   }
 }
 
 type QueueEntry =
-  | {type: 'message'; seq: number; msg: Downstream}
+  | {type: 'message'; seq: number; msg: SerializedDownstream}
   | {type: 'end'};
 
-class IPCDownstreamSource implements Source<Downstream> {
+class IPCDownstreamSource implements Source<SerializedDownstream> {
   readonly #parent: Worker;
   readonly #queue = new Queue<QueueEntry>();
   #canceled = false;
@@ -112,7 +115,7 @@ class IPCDownstreamSource implements Source<Downstream> {
     this.#queue.enqueue({type: 'end'});
   }
 
-  [Symbol.asyncIterator](): AsyncIterator<Downstream> {
+  [Symbol.asyncIterator](): AsyncIterator<SerializedDownstream> {
     let previousSeq: number | undefined;
     return {
       next: async () => {
