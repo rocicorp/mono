@@ -4,7 +4,6 @@ import {resolver, type Resolver} from '@rocicorp/resolver';
 import {type PendingQuery, type Row} from 'postgres';
 import {AbortError} from '../../../../shared/src/abort-error.ts';
 import {assert} from '../../../../shared/src/asserts.ts';
-import {BigIntJSON} from '../../../../shared/src/bigint-json.ts';
 import {Queue} from '../../../../shared/src/queue.ts';
 import {promiseVoid} from '../../../../shared/src/resolved-promises.ts';
 import * as v from '../../../../shared/src/valita.ts';
@@ -35,7 +34,12 @@ import type {
 } from '../change-source/protocol/current/status.ts';
 import type {ReplicatorMode} from '../replicator/replicator.ts';
 import type {Service} from '../service.ts';
-import type {ChangeTag, WatermarkedChange} from './change-streamer-service.ts';
+import {
+  extractChangeSubstring,
+  reconstructWatermarkedChange,
+  serializeChangeStreamData,
+  type ChangeLogEntry,
+} from './change-log-codec.ts';
 import * as ErrorType from './error-type-enum.ts';
 import {
   AutoResetSignal,
@@ -313,7 +317,7 @@ export class Storer implements Service {
     // Eagerly stringify the JSON payload to:
     // - avoid redundant stringification when fanning out to subscribers
     // - efficiently estimate the amount of memory the payload consumes
-    const json = BigIntJSON.stringify(data);
+    const json = serializeChangeStreamData(data);
     this.#approximateQueuedBytes += json.length;
 
     const change = data[1];
@@ -714,7 +718,9 @@ export class Storer implements Service {
               // Catchup starts from *after* the watermark.
               watermarkFound = true;
             } else if (watermarkFound) {
-              lastBatchConsumed = sub.catchup(toDownstream(entry));
+              lastBatchConsumed = sub.catchup(
+                reconstructWatermarkedChange(entry),
+              );
               count++;
             } else if (mode === 'backup') {
               throw new AutoResetSignal(
@@ -926,65 +932,6 @@ export class Storer implements Service {
       this.#queue.enqueue('stop');
     }
     return this.#stopped;
-  }
-}
-
-/**
- * Extracts the stringified change message from the stringified
- * stream message (e.g. the second tuple element). This optimization
- * facilitates stringifying (and sharing the result of) the stream
- * message exactly once, but storing only the change message substring
- * in the changeLog for backwards compatibility.
- */
-export function extractChangeSubstring(
-  streamMessageJSON: string,
-  tag: Change['tag'] | undefined,
-) {
-  switch (tag) {
-    case 'begin':
-    case 'commit':
-      // e.g.
-      // ["begin",<message-json>,{"commitWatermark":"92fj2d0s"}]
-      // ["commit",<message-json>,{"watermark":"92fj2d0s"}]
-      return streamMessageJSON.substring(
-        streamMessageJSON.indexOf(',') + 1,
-        streamMessageJSON.lastIndexOf(','),
-      );
-    default:
-      // ["data",<message-json>]
-      return streamMessageJSON.substring(
-        streamMessageJSON.indexOf(',') + 1,
-        streamMessageJSON.lastIndexOf(']'),
-      );
-  }
-}
-
-type ChangeLogEntry = {
-  watermark: string;
-  tag: string;
-  change: string;
-};
-
-function toDownstream(entry: ChangeLogEntry): WatermarkedChange {
-  const {watermark, change} = entry;
-  const tag = entry.tag as ChangeTag;
-  switch (tag) {
-    case 'begin':
-      return [
-        watermark,
-        tag,
-        `["begin",${change},{"commitWatermark":"${watermark}"}]`,
-      ];
-    case 'commit':
-      return [
-        watermark,
-        tag,
-        `["commit",${change},{"watermark":"${watermark}"}]`,
-      ];
-    case 'rollback':
-      return [watermark, tag, `["rollback",${change}]`];
-    default:
-      return [watermark, tag, `["data",${change}]`];
   }
 }
 

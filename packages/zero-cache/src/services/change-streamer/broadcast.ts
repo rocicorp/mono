@@ -1,6 +1,6 @@
 import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
-import type {WatermarkedChange} from './change-streamer-service.ts';
+import type {WatermarkedChange} from './change-streamer.ts';
 import type {Subscriber} from './subscriber.ts';
 
 export type BroadcastReleaseMode = 'all-subscribers' | 'consensus-timeout';

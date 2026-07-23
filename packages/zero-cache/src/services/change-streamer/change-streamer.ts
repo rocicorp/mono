@@ -1,13 +1,32 @@
 import type {Enum} from '../../../../shared/src/enum.ts';
 import * as v from '../../../../shared/src/valita.ts';
 import type {Source} from '../../types/streams.ts';
-import {changeStreamDataSchema} from '../change-source/protocol/current/downstream.ts';
+import {
+  changeStreamDataSchema,
+  type ChangeStreamData,
+} from '../change-source/protocol/current/downstream.ts';
 import type {ReplicatorMode} from '../replicator/replicator.ts';
 import {changeSourceTimingsSchema} from '../replicator/reporter/report-schema.ts';
 import type {Service} from '../service.ts';
 import * as ErrorType from './error-type-enum.ts';
 
 type ErrorType = Enum<typeof ErrorType>;
+
+export type ChangeTag = ChangeStreamData[1]['tag'];
+
+/**
+ * Internally all downstream messages (not just commits) are given a watermark.
+ * These are used for internal ordering while replaying stored changes and
+ * filtering changes already seen by a subscriber.
+ *
+ * Only commit watermarks are exposed to subscribers. The JSON string is the
+ * canonical serialization shared by storage and live forwarding.
+ */
+export type WatermarkedChange = [
+  watermark: string,
+  tag: ChangeTag,
+  json: string,
+];
 
 /**
  * The ChangeStreamer is the component between replicators ("subscribers")

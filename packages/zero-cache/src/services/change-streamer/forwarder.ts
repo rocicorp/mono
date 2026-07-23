@@ -6,8 +6,7 @@ import {
   getOrCreateLatencyHistogram,
 } from '../../observability/metrics.ts';
 import {Broadcast, type EarlyReleaseOptions} from './broadcast.ts';
-import type {ChangeTag, WatermarkedChange} from './change-streamer-service.ts';
-import type {Status} from './change-streamer.ts';
+import type {ChangeTag, Status, WatermarkedChange} from './change-streamer.ts';
 import type {Subscriber} from './subscriber.ts';
 
 export type ProgressMonitorOptions = {

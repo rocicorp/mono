@@ -20,7 +20,6 @@ import type {
 } from '../change-source/change-source.ts';
 import {
   type ChangeStreamControl,
-  type ChangeStreamData,
   type Rollback,
 } from '../change-source/protocol/current/downstream.ts';
 import {
@@ -35,6 +34,7 @@ import {
   UnrecoverableError,
 } from '../running-state.ts';
 import {
+  type WatermarkedChange,
   type ChangeStreamerService,
   type Status,
   type SubscriberContext,
@@ -107,28 +107,6 @@ export async function initializeStreamer(
 }
 
 const REPLICATION_STATUS_ERROR_DELAY_THRESHOLD_MS = 5000;
-
-export type ChangeTag = ChangeStreamData[1]['tag'];
-
-/**
- * Internally all Downstream messages (not just commits) are given a watermark.
- * These are used for internal ordering for:
- * 1. Replaying new changes in the Storer
- * 2. Filtering old changes in the Subscriber
- *
- * However, only the watermark for `Commit` messages are exposed to
- * subscribers, as that is the only semantically correct watermark to
- * use for tracking a position in a replication stream.
- *
- * Additionally, the ChangeStreamData is eagerly stringified once, after which
- * the string is passed to the changeLog and all subscribers, eliminating
- * redundant stringification and reducing GC churn.
- */
-export type WatermarkedChange = [
-  watermark: string,
-  tag: ChangeTag,
-  json: string,
-];
 
 /**
  * Upstream-agnostic dispatch of messages in a {@link ChangeStreamMessage} to a
