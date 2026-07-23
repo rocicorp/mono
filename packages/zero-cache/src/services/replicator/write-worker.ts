@@ -10,7 +10,6 @@ import {
 } from '../../db/sqlite-corruption.ts';
 import {StatementRunner} from '../../db/statements.ts';
 import {createLogContext} from '../../server/logging.ts';
-import type {SerializedChangeStreamData} from '../change-source/protocol/current/downstream.ts';
 import {ChangeProcessor, type ChangeProcessorMode} from './change-processor.ts';
 import {getSubscriptionState} from './schema/replication-state.ts';
 import {
@@ -22,6 +21,7 @@ import {
   type Request,
   type Response,
   type ResultMap,
+  type SerializedChangeStreamData,
   type WriteError,
 } from './write-worker-client.ts';
 

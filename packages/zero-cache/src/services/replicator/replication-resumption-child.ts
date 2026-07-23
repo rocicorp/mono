@@ -6,7 +6,6 @@ import {Queue} from '../../../../shared/src/queue.ts';
 import {parentWorker, type Worker} from '../../types/processes.ts';
 import type {Source} from '../../types/streams.ts';
 import {getPragmaConfig, setupReplica} from '../../workers/replicator.ts';
-import type {SerializedChangeStreamData} from '../change-source/protocol/current/downstream.ts';
 import type {
   ChangeStreamer,
   SubscriberContext,
@@ -18,6 +17,7 @@ import {ReplicatorService} from './replicator.ts';
 import {
   ThreadWriteWorkerClient,
   type PragmaConfig,
+  type SerializedChangeStreamData,
   type WriteWorkerClient,
 } from './write-worker-client.ts';
 

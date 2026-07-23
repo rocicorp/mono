@@ -4,10 +4,7 @@ import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import type {Database} from '../../../../zqlite/src/db.ts';
 import {DbFile, initDB} from '../../test/lite.ts';
-import type {
-  ChangeStreamData,
-  SerializedChangeStreamData,
-} from '../change-source/protocol/current/downstream.ts';
+import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
 import {serializeChangeStreamData} from '../change-streamer/change-log-codec.ts';
 import {initReplicationState} from './schema/replication-state.ts';
 import {ReplicationMessages} from './test-utils.ts';
@@ -16,6 +13,7 @@ import {
   serializeError,
   ThreadWriteWorkerClient,
   type Request,
+  type SerializedChangeStreamData,
 } from './write-worker-client.ts';
 
 function serialized(data: ChangeStreamData): SerializedChangeStreamData {

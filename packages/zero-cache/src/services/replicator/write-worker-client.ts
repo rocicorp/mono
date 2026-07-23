@@ -4,9 +4,14 @@ import {assert} from '../../../../shared/src/asserts.ts';
 import type {LogConfig} from '../../../../shared/src/logging.ts';
 import type {Database} from '../../../../zqlite/src/db.ts';
 import {WRITE_WORKER_URL} from '../../server/worker-urls.ts';
-import type {SerializedChangeStreamData} from '../change-source/protocol/current/downstream.ts';
+import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
 import type {ChangeProcessorMode, CommitResult} from './change-processor.ts';
 import type {SubscriptionState} from './schema/replication-state.ts';
+
+export type SerializedChangeStreamData = {
+  data: ChangeStreamData;
+  json: string;
+};
 
 export type PragmaConfig = {
   busyTimeout: number;
