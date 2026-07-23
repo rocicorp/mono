@@ -10,7 +10,6 @@ import type {Write as DagWrite} from '../dag/store.ts';
 import * as FormatVersion from '../format-version-enum.ts';
 import type {FrozenJSONValue} from '../frozen-json.ts';
 import {type Hash, emptyHash} from '../hash.ts';
-import {lazy} from '../lazy.ts';
 import type {DiffComputationConfig} from '../sync/diff.ts';
 import {DiffsMap} from '../sync/diff.ts';
 import type {ClientID} from '../sync/ids.ts';
@@ -84,9 +83,7 @@ export class Write extends Read {
     key: string,
     value: FrozenJSONValue,
   ): Promise<void> {
-    const oldVal = lazy(() => this.map.get(key));
-    await updateIndexes(lc, this.indexes, key, oldVal, value);
-
+    await updateIndexes(lc, this.map, this.indexes, key, value);
     await this.map.put(key, value);
   }
 
@@ -109,8 +106,7 @@ export class Write extends Read {
     if (this.indexes.size > 0) {
       // TODO(arv): Indexes can use the optimizePatch pattern too.
       for (const [key, value] of entries) {
-        const oldVal = lazy(() => this.map.get(key));
-        await updateIndexes(lc, this.indexes, key, oldVal, value);
+        await updateIndexes(lc, this.map, this.indexes, key, value);
       }
     }
 
@@ -123,10 +119,8 @@ export class Write extends Read {
   }
 
   async del(lc: LogContext, key: string): Promise<boolean> {
-    // TODO(arv): This does the binary search twice. We can do better.
-    const oldVal = lazy(() => this.map.get(key));
-    if (oldVal !== undefined) {
-      await updateIndexes(lc, this.indexes, key, oldVal, undefined);
+    if (this.indexes.size > 0) {
+      await updateIndexes(lc, this.map, this.indexes, key, undefined);
     }
     return this.map.del(key);
   }
@@ -350,16 +344,18 @@ export async function newWriteSnapshotDD31(
 
 export async function updateIndexes(
   lc: LogContext,
+  map: BTreeRead,
   indexes: Map<string, IndexWrite>,
   key: string,
-  oldValGetter: () => Promise<FrozenJSONValue | undefined>,
   newVal: FrozenJSONValue | undefined,
 ): Promise<void> {
+  let oldValPromise: Promise<FrozenJSONValue | undefined> | undefined;
+
   const ps: Promise<void>[] = [];
   for (const idx of indexes.values()) {
     const {keyPrefix} = idx.meta.definition;
     if (!keyPrefix || key.startsWith(keyPrefix)) {
-      const oldVal = await oldValGetter();
+      const oldVal = await (oldValPromise ??= map.get(key));
       if (oldVal !== undefined) {
         ps.push(
           indexValue(
