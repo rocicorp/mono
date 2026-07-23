@@ -27,6 +27,7 @@ import {
   type ChangeStreamerService,
   type Downstream,
 } from '../change-streamer/change-streamer.ts';
+import {initChangeStreamerSchema} from '../change-streamer/schema/init.ts';
 import {ReplicationStatusPublisher} from './replication-status.ts';
 import {ReplicatorService} from './replicator.ts';
 import {ThreadWriteWorkerClient} from './write-worker-client.ts';
@@ -138,7 +139,7 @@ async function startReplicationPipeline(testDBs: PgTest['testDBs']) {
     );
 
   await setupReplica(lc, 'serving', {file: replicaDbFile.path});
-
+  await initChangeStreamerSchema(lc, changeDB, shard);
   const changeStreamer = await initializeStreamer(
     lc,
     shard,
