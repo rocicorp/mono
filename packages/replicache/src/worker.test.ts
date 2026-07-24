@@ -1,11 +1,5 @@
-import {afterEach, expect, test} from 'vitest';
+import {expect, test} from 'vitest';
 import {sleep} from '../../shared/src/sleep.ts';
-import {closeAllReps, dbsToDrop, deleteAllDatabases} from './test-util.ts';
-
-afterEach(async () => {
-  await closeAllReps();
-  await deleteAllDatabases();
-});
 
 test('worker test', async () => {
   // Need to have the 'new URL' call inside `new Worker` for vite to
@@ -14,13 +8,25 @@ test('worker test', async () => {
     type: 'module',
   });
   const name = 'worker-test';
-  dbsToDrop.add(name);
 
-  const data = await send(w, {name});
-  if (data !== undefined) {
-    throw data;
+  // The worker itself closes its Replicache instance and drops its database
+  // (including the replicache-dbs-v0 registry record). Cleanup must happen in
+  // the worker: workers use the real origin-wide IndexedDB, bypassing vitest
+  // browser mode's per-file storage isolation, so anything left behind leaks
+  // into every other browser test file.
+  try {
+    const data = await send(w, {name});
+    if (data !== undefined) {
+      throw data;
+    }
+    expect(data).toBeUndefined();
+  } finally {
+    // The worker posts its message only after cleanup has finished, so it is
+    // safe to terminate here. This closes any IndexedDB connections still
+    // open in the worker which could otherwise block other test files from
+    // deleting databases.
+    w.terminate();
   }
-  expect(data).toBeUndefined();
 });
 
 function send(w: Worker, data: {name: string}): Promise<unknown> {
