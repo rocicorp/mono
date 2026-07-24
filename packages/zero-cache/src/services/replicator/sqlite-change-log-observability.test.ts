@@ -11,6 +11,7 @@ import {ChangeLogTransactionHasher} from '../change-streamer/change-log-transact
 import {initReplicationState} from './schema/replication-state.ts';
 import {
   getSQLiteChangeLogInfo,
+  getSQLiteChangeLogStartupInfo,
   logSQLiteChangeLogStartup,
   SQLiteChangeLogObserver,
 } from './sqlite-change-log-observability.ts';
@@ -98,6 +99,44 @@ describe('SQLite change-log observability', () => {
           sqliteChangeLog: {
             fileMode: 'backup',
             writerEnabled: true,
+            schemaVersion: 14,
+            seedWatermark: '02',
+            headWatermark: '02',
+            stateWatermark: '02',
+          },
+        },
+      ],
+    ]);
+  });
+
+  test('startup info skips the row/byte aggregate for disabled writers', () => {
+    using fixture = setupReplica();
+    const startupInfo = getSQLiteChangeLogStartupInfo(fixture.db);
+
+    // Same schema/state/head as the full read, but no table-scanning totals.
+    expect(startupInfo).toEqual({
+      schemaVersion: 14,
+      stateWatermark: '02',
+      seedWatermark: '02',
+      headWatermark: '02',
+    });
+    const {
+      rows: _rows,
+      estimatedBytes: _bytes,
+      ...head
+    } = getSQLiteChangeLogInfo(fixture.db);
+    expect(startupInfo).toEqual(head);
+
+    logSQLiteChangeLogStartup(fixture.lc, 'serving', false, startupInfo);
+    expect(fixture.sink.messages.at(-1)).toEqual([
+      'info',
+      undefined,
+      [
+        'SQLite change-log startup',
+        {
+          sqliteChangeLog: {
+            fileMode: 'serving',
+            writerEnabled: false,
             schemaVersion: 14,
             seedWatermark: '02',
             headWatermark: '02',

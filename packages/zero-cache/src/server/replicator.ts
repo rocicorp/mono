@@ -34,6 +34,7 @@ import {
 } from '../services/replicator/replicator.ts';
 import {
   getSQLiteChangeLogInfo,
+  getSQLiteChangeLogStartupInfo,
   logSQLiteChangeLogStartup,
   SQLiteChangeLogObserver,
 } from '../services/replicator/sqlite-change-log-observability.ts';
@@ -50,6 +51,7 @@ import {
   replicaFileModeSchema,
   setUpMessageHandlers,
   setupReplica,
+  type ReplicaFileMode,
   type WalMode,
 } from '../workers/replicator.ts';
 import {createLogContext} from './logging.ts';
@@ -105,11 +107,12 @@ export default async function runWorker(
     dbPath,
   });
 
-  const changeLogInfo = readSQLiteChangeLogInfo(lc, dbPath);
-  logSQLiteChangeLogStartup(lc, fileMode, logsChangeStream, changeLogInfo);
-  const sqliteChangeLogObserver = logsChangeStream
-    ? new SQLiteChangeLogObserver(lc, changeLogInfo)
-    : undefined;
+  const sqliteChangeLogObserver = readSQLiteChangeLog(
+    lc,
+    dbPath,
+    fileMode,
+    logsChangeStream,
+  );
 
   setupMetrics(lc, dbPath, walMode);
 
@@ -163,10 +166,34 @@ export default async function runWorker(
   return running;
 }
 
-function readSQLiteChangeLogInfo(lc: LogContext, file: string) {
+/**
+ * Emits the read-only SQLite change-log startup inspection and, when the writer
+ * is enabled, returns an observer seeded with the retained row/byte totals.
+ *
+ * The totals require a full change-log table scan, so that scan is skipped when
+ * the writer is disabled: an off-mode replica still logs its startup state but
+ * only pays for the indexed schema/state/head lookups.
+ */
+function readSQLiteChangeLog(
+  lc: LogContext,
+  file: string,
+  fileMode: ReplicaFileMode,
+  logsChangeStream: boolean,
+): SQLiteChangeLogObserver | undefined {
   const db = new Database(lc, file, {readonly: true});
   try {
-    return getSQLiteChangeLogInfo(db);
+    if (!logsChangeStream) {
+      logSQLiteChangeLogStartup(
+        lc,
+        fileMode,
+        false,
+        getSQLiteChangeLogStartupInfo(db),
+      );
+      return undefined;
+    }
+    const info = getSQLiteChangeLogInfo(db);
+    logSQLiteChangeLogStartup(lc, fileMode, true, info);
+    return new SQLiteChangeLogObserver(lc, info);
   } finally {
     db.close();
   }
