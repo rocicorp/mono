@@ -15,8 +15,8 @@
 declare global {
   namespace NodeJS {
     interface ProcessEnv {
-      ['DISABLE_MUTATION_RECOVERY']?: boolean | undefined;
-      ['DISABLE_REPLICACHE_INDEXES']?: boolean | undefined;
+      ['DISABLE_MUTATION_RECOVERY']?: string | undefined;
+      ['DISABLE_REPLICACHE_INDEXES']?: string | undefined;
     }
     interface Process {
       env: ProcessEnv;
