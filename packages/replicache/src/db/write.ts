@@ -119,9 +119,7 @@ export class Write extends Read {
   }
 
   async del(lc: LogContext, key: string): Promise<boolean> {
-    if (this.indexes.size > 0) {
-      await updateIndexes(lc, this.map, this.indexes, key, undefined);
-    }
+    await updateIndexes(lc, this.map, this.indexes, key, undefined);
     return this.map.del(key);
   }
 
