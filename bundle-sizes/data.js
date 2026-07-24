@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784718068499,
+  "lastUpdate": 1784888095251,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -56973,6 +56973,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/rocicorp/mono/commit/461ce78cd12c7c50c35ef8df733c39bdabae1418"
         },
         "date": 1784718053742,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 317540,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 57097,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 117426,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 33511,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "arv@roci.dev",
+            "name": "Erik Arvidsson",
+            "username": "arv"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": false,
+          "id": "88b391c1d9ca43745e67e290869ed438b3cc40a0",
+          "message": "chore(replicache): fix IndexedDB registry leak from worker test (#6270)\n\n## What\n\nFixes an IndexedDB leak from `worker.test.ts`: the Web Worker it spawns\nconstructed a `Replicache` instance with the default `'idb'` kvStore and\nnever cleaned it up, leaving a `rep:worker-test:7` record in the\norigin-wide `replicache-dbs-v0` registry.\n\n- The worker (`worker-test.ts`) now closes its Replicache instance and\ncalls `dropDatabase(rep.idbName)` in a `finally`, removing both the KV\ndatabase and its registry record. It then re-opens the registry and\nasserts the record is actually gone, so a regression fails this test\ndirectly instead of flaking other files. Cleanup/verification errors\npropagate to the existing `catch` and are posted back to the main\nthread, failing the test.\n- `worker.test.ts` drops its broken main-thread cleanup\n(`dbsToDrop.add('worker-test')` used the instance name instead of the\nidbName, and `deleteAllDatabases` never touched the registry record —\nand it operated on the wrong, isolated storage anyway) and now\nterminates the worker once it reports back, closing the IndexedDB\nconnection that `dropDatabase`'s internal registry store leaves open.\n\n## Why\n\nWeb Workers bypass vitest browser mode's per-file storage isolation, so\nanything a worker leaves in IndexedDB leaks into every other browser\ntest file for the rest of the run. This caused flaky failures in\n`persist/collect-idb-databases.test.ts` before that test was made\nleak-tolerant. Cleanup has to happen inside the worker because only the\nworker sees the real origin-wide storage.\n\n## Notes for reviewers\n\n- The worker posts its result message only after the `finally` cleanup\ncompletes, so `w.terminate()` on the main thread cannot interrupt\ncleanup.\n- The zero-client worker test does not have this issue: `zeroForTest`\ndefaults to `kvStore: 'mem'`, so nothing there touches real IndexedDB.\n- Verified: full `pnpm --filter replicache run test` passes (73 files /\n798 tests), plus lint, format, and check-types.",
+          "timestamp": "2026-07-24T10:06:12Z",
+          "tree_id": "d00a9df3bb119c1dd140fb57f2437eb9f65a7cb9",
+          "url": "https://github.com/rocicorp/mono/commit/88b391c1d9ca43745e67e290869ed438b3cc40a0"
+        },
+        "date": 1784888082139,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
