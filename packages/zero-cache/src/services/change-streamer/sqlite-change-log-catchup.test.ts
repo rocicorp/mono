@@ -14,6 +14,7 @@ import {AutoResetSignal} from './schema/tables.ts';
 import {
   SQLiteChangeLogCatchup,
   SQLiteChangeLogBarrierTimeoutError,
+  type SQLiteChangeLogCatchupOptions,
   type SQLiteChangeLogCatchupReader,
   type SQLiteChangeLogCleanupGuard,
 } from './sqlite-change-log-catchup.ts';
@@ -242,6 +243,30 @@ describe('SQLiteChangeLogCatchup', () => {
     expect(fixture.onFatal).not.toHaveBeenCalled();
   });
 
+  test('waits on a forwarded transaction with one completion handler', async () => {
+    let now = 0;
+    const fixture = createFixture({
+      barrierTimeoutMs: 5,
+      now: () => now,
+      sleep: ms => {
+        now += ms;
+        return Promise.resolve();
+      },
+    });
+    const completion = resolver<string>();
+    const then = vi.spyOn(completion.promise, 'then');
+    const {subscriber, done} = createSubscriber('01');
+
+    await fixture.coordinator.catchup(
+      subscriber,
+      'serving',
+      () => completion.promise,
+    );
+    await done;
+
+    expect(then).toHaveBeenCalledOnce();
+  });
+
   test('fails closed on reader errors after registration', async () => {
     const fixture = createFixture();
     fixture.reader.head = '06';
@@ -257,6 +282,33 @@ describe('SQLiteChangeLogCatchup', () => {
       [
         expect.stringContaining('error while catching up subscriber'),
         expect.objectContaining({message: 'broken SQLite read'}),
+      ],
+    ]);
+  });
+
+  test('fails the subscriber when fatal handling rejects', async () => {
+    const fatalError = new Error('failed to mark reset required');
+    const onFatal = vi.fn(() => Promise.reject(fatalError));
+    const fixture = createFixture({onFatal});
+    fixture.reader.min = '04';
+    fixture.reader.head = '06';
+    fixture.reader.boundaries.add('04');
+    const {subscriber, done} = createSubscriber('01');
+    const fail = vi.spyOn(subscriber, 'fail');
+
+    await fixture.coordinator.catchup(subscriber, 'backup', () => '06');
+    await vi.waitFor(() => expect(fail).toHaveBeenCalledOnce(), {
+      timeout: 100,
+    });
+    await done;
+    expect(onFatal).toHaveBeenCalledOnce();
+    expect(fail).toHaveBeenCalledWith(expect.any(AutoResetSignal));
+    expect(fixture.logSink.messages).toContainEqual([
+      'error',
+      expect.anything(),
+      [
+        expect.stringContaining('error while handling fatal SQLite catchup'),
+        fatalError,
       ],
     ]);
   });
@@ -305,21 +357,27 @@ function createFixture(
   opts: {
     barrierTimeoutMs?: number | undefined;
     cleanupGuard?: SQLiteChangeLogCleanupGuard | undefined;
+    now?: SQLiteChangeLogCatchupOptions['now'];
+    onFatal?: SQLiteChangeLogCatchupOptions['onFatal'];
+    sleep?: SQLiteChangeLogCatchupOptions['sleep'];
   } = {},
 ) {
   const logSink = new TestLogSink();
   const lc = new LogContext('debug', undefined, logSink);
   const reader = new TestReader();
   const forwarder = new Forwarder(lc);
-  const onFatal = vi.fn<(error: AutoResetSignal) => Promise<void>>(() =>
-    Promise.resolve(),
+  const onFatal = vi.fn(
+    opts.onFatal ??
+      ((_error: AutoResetSignal): Promise<void> => Promise.resolve()),
   );
   const coordinator = new SQLiteChangeLogCatchup(lc, forwarder, reader, {
     batchSize: 2,
     barrierTimeoutMs: opts.barrierTimeoutMs ?? 1_000,
     barrierPollIntervalMs: 1,
     cleanupGuard: opts.cleanupGuard,
+    now: opts.now,
     onFatal,
+    sleep: opts.sleep,
   });
   coordinators.push(coordinator);
   return {coordinator, forwarder, logSink, onFatal, reader};

@@ -726,8 +726,11 @@ class ChangeStreamerImpl implements ChangeStreamerService {
           barrierTimeoutMs: opts.barrierTimeoutMs,
           cleanupGuard: opts.cleanupGuard,
           onFatal: async error => {
-            await markResetRequired(this.#changeDB, this.#shard);
-            void this.stop(error);
+            try {
+              await markResetRequired(this.#changeDB, this.#shard);
+            } finally {
+              void this.stop(error);
+            }
           },
         },
       );
