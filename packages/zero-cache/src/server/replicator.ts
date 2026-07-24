@@ -4,13 +4,28 @@ import type {ObservableCallback} from '@opentelemetry/api';
 import {consoleLogSink, LogContext} from '@rocicorp/logger';
 import {assert} from '../../../shared/src/asserts.ts';
 import {must} from '../../../shared/src/must.ts';
+import {sleep} from '../../../shared/src/sleep.ts';
 import * as v from '../../../shared/src/valita.ts';
+import type {
+  LitestreamConfig,
+  NormalizedZeroConfig,
+} from '../config/normalize.ts';
 import {getNormalizedZeroConfig} from '../config/zero-config.ts';
 import {registerSQLiteCorruptionDiagnosticTarget} from '../db/sqlite-corruption.ts';
 import {initEventSink} from '../observability/events.ts';
 import {getOrCreateGauge} from '../observability/metrics.ts';
 import {ChangeStreamerHttpClient} from '../services/change-streamer/change-streamer-http.ts';
+import {reserveAndGetSnapshotStatus} from '../services/change-streamer/snapshot.ts';
 import {exitAfter, runUntilKilled} from '../services/life-cycle.ts';
+import {
+  tryRestore,
+  type RestoreResult,
+} from '../services/litestream/commands.ts';
+import {
+  litestreamRestoreDuration,
+  litestreamRestoreMetricAttrs,
+  litestreamRestoreRuns,
+} from '../services/litestream/metrics.ts';
 import {ReplicationStatusPublisher} from '../services/replicator/replication-status.ts';
 import {
   ReplicatorService,
@@ -55,6 +70,10 @@ export default async function runWorker(
       dbPath: config.replica.file,
     });
   initEventSink(lc, config);
+
+  if (fileMode === 'serving' && config.litestream.backupURL) {
+    await restoreReplica(lc, config);
+  }
 
   const {file: dbPath, walMode} = await setupReplica(
     lc,
@@ -150,6 +169,53 @@ function observeFileSize(lc: LogContext, file: string): ObservableCallback {
       lc.warn?.(`unable to stat ${file} for size metrics`, e);
     }
   };
+}
+
+const RETRY_INTERVAL_MS = 3000;
+
+// View-syncers (no replicaConstraints) wait indefinitely for the
+// replication-manager to publish a restorable backup. On a fresh stack the
+// first backup is not durable until the initial sync completes and litestream
+// uploads the initial snapshot, which can take many minutes for a large
+// replica. The platform's startup probe budget (which scales with replica
+// size) is the backstop, so restoreReplica must not impose its own shorter
+// cap and self-terminate while the backup is still being produced.
+async function restoreReplica(lc: LogContext, config: NormalizedZeroConfig) {
+  const start = performance.now();
+  let backupURL: string | undefined;
+  let result: RestoreResult | undefined;
+  try {
+    for (;;) {
+      const snapshotStatus = await reserveAndGetSnapshotStatus(lc, config);
+      // The backupURL comes from the replication-manager's snapshot response.
+      ({backupURL} = snapshotStatus);
+      const litestream: LitestreamConfig = {...config.litestream, backupURL};
+      const attempt = await tryRestore(
+        lc,
+        litestream,
+        config.replica.file,
+        snapshotStatus,
+        'view_syncer',
+      );
+      if (attempt.restored) {
+        result = attempt.result;
+        return;
+      }
+      lc.info?.(
+        `replica not found. retrying in ${RETRY_INTERVAL_MS / 1000} seconds`,
+      );
+      await sleep(RETRY_INTERVAL_MS);
+    }
+  } finally {
+    const attrs = litestreamRestoreMetricAttrs(
+      config.litestream,
+      'view_syncer',
+      backupURL,
+    );
+    const labels = {...attrs, result: result ?? 'error'};
+    litestreamRestoreRuns().add(1, labels);
+    litestreamRestoreDuration().recordMs(performance.now() - start, labels);
+  }
 }
 
 // fork()
