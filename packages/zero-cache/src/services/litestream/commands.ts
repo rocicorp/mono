@@ -148,10 +148,6 @@ function getLitestream(
     multipartSize,
   } = config.litestream;
 
-  // Set the snapshot interval to something smaller than x hours so that
-  // the hourly check triggers on the hour, rather than the hour after.
-  const snapshotBackupIntervalMinutes = snapshotBackupIntervalHours * 60 - 5;
-
   const litestream =
     // The v0.5.8+ litestream executable can restore from either the new LTX
     // format or the legacy WAL format, allowing forwards-compatibility /
@@ -174,8 +170,11 @@ function getLitestream(
         incrementalBackupIntervalMinutes,
       ),
       ['ZERO_LITESTREAM_LOG_LEVEL']: logLevelOverride ?? logLevel,
-      ['ZERO_LITESTREAM_SNAPSHOT_BACKUP_INTERVAL_MINUTES']: String(
-        snapshotBackupIntervalMinutes,
+      ['ZERO_LITESTREAM_SNAPSHOT_BACKUP_INTERVAL_HOURS']: String(
+        snapshotBackupIntervalHours,
+      ),
+      ['ZERO_LITESTREAM_SNAPSHOT_RETENTION_INTERVAL_HOURS']: String(
+        snapshotBackupIntervalHours + 6, // delete old snapshots after 6 hours
       ),
       ['ZERO_LITESTREAM_MULTIPART_CONCURRENCY']: String(multipartConcurrency),
       ['ZERO_LITESTREAM_MULTIPART_SIZE']: String(multipartSize),
