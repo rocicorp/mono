@@ -36,7 +36,8 @@ export function createBackupCleanupMonitor({
   vfsBackupWatermarkSource,
   env,
 }: BackupCleanupMonitorFactoryOptions): BackupMonitor | null {
-  const {backupURL, port: metricsPort} = config.litestream;
+  const {litestream, replica} = config;
+  const {backupURL, port: metricsPort} = litestream;
   if (!backupURL) {
     return null;
   }
@@ -65,6 +66,7 @@ export function createBackupCleanupMonitor({
     `http://localhost:${metricsPort}/metrics`,
     changeStreamer,
     initialCleanupDelayMs,
-    verifyBackupState ?? (() => getLastBackupTime(lc, config)),
+    verifyBackupState ??
+      (() => getLastBackupTime(lc, litestream, replica.file)),
   );
 }

@@ -4,23 +4,14 @@ import {existsSync, statSync} from 'node:fs';
 import type {LogContext, LogLevel} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {must} from '../../../../shared/src/must.ts';
-import {sleep} from '../../../../shared/src/sleep.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
-import {assertNormalized} from '../../config/normalize.ts';
-import type {ZeroConfig} from '../../config/zero-config.ts';
+import {type LitestreamConfig} from '../../config/normalize.ts';
 import {deleteLiteDB} from '../../db/delete-lite-db.ts';
 import {
   isSQLiteCorruption,
   logSQLiteCorruptionDiagnostics,
 } from '../../db/sqlite-corruption.ts';
 import {StatementRunner} from '../../db/statements.ts';
-import {getShardConfig} from '../../types/shards.ts';
-import type {Source} from '../../types/streams.ts';
-import {ChangeStreamerHttpClient} from '../change-streamer/change-streamer-http.ts';
-import type {
-  SnapshotMessage,
-  SnapshotStatus,
-} from '../change-streamer/snapshot.ts';
 import {getSubscriptionState} from '../replicator/schema/replication-state.ts';
 import {
   litestreamBackupListDuration,
@@ -30,23 +21,22 @@ import {
   litestreamBackupProcessRuns,
   litestreamRestoreAttempts,
   litestreamRestoredDbBytes,
-  litestreamRestoreDuration,
   litestreamRestoreMetricAttrs,
   litestreamRestoreProcessDuration,
-  litestreamRestoreRuns,
   litestreamRestoreValidationDuration,
-  litestreamRestoreWaitDuration,
   type LitestreamRole,
 } from './metrics.ts';
 
-const RETRY_INTERVAL_MS = 3000;
-
-type ReplicaConstraints = {
+export type ReplicaConstraints = {
   replicaVersion: string;
   minWatermark: string;
 };
 
-type RestoreResult = 'success' | 'no_backup' | 'invalid_replica' | 'error';
+export type RestoreResult =
+  | 'success'
+  | 'no_backup'
+  | 'invalid_replica'
+  | 'error';
 
 type RestoreAttempt = {
   restored: boolean;
@@ -62,69 +52,11 @@ export class BackupNotFoundException extends Error {
   }
 }
 
-/**
- * @param replicaConstraints The constraints of the restored backup when
- *        restoring for the change-streamer (replication-manager). For the
- *        view-syncer, this should be unspecified so that the constraints are
- *        retrieved from the replication-manager via the snapshot protocol.
- */
-export async function restoreReplica(
-  lc: LogContext,
-  config: ZeroConfig,
-  replicaConstraints: ReplicaConstraints | null,
-) {
-  const start = performance.now();
-  const role: LitestreamRole = replicaConstraints
-    ? 'replication_manager'
-    : 'view_syncer';
-  let backupURL = config.litestream.backupURL;
-  let result: RestoreResult | undefined;
-  // View-syncers (no replicaConstraints) wait indefinitely for the
-  // replication-manager to publish a restorable backup. On a fresh stack the
-  // first backup is not durable until the initial sync completes and litestream
-  // uploads the initial snapshot, which can take many minutes for a large
-  // replica. The platform's startup probe budget (which scales with replica
-  // size) is the backstop, so restoreReplica must not impose its own shorter
-  // cap and self-terminate while the backup is still being produced.
-  try {
-    for (;;) {
-      const attempt = await tryRestore(lc, config, replicaConstraints, role);
-      backupURL = attempt.backupURL;
-      if (attempt.restored) {
-        result = attempt.result;
-        return;
-      }
-      if (replicaConstraints) {
-        // The replication-manager restores against explicit constraints, so a
-        // missing backup is fatal (e.g. the litestream URL was purposefully
-        // changed to force a resync). Only the view-syncer (no constraints)
-        // waits for a backup to appear.
-        result = attempt.result;
-        throw new BackupNotFoundException(config.litestream.backupURL);
-      }
-      lc.info?.(
-        `replica not found. retrying in ${RETRY_INTERVAL_MS / 1000} seconds`,
-      );
-      await sleep(RETRY_INTERVAL_MS);
-    }
-  } catch (e) {
-    if (e instanceof BackupNotFoundException && result === undefined) {
-      result = 'no_backup';
-    }
-    throw e;
-  } finally {
-    const attrs = litestreamRestoreMetricAttrs(config, role, backupURL);
-    const labels = {...attrs, result: result ?? 'error'};
-    litestreamRestoreRuns().add(1, labels);
-    litestreamRestoreDuration().recordMs(performance.now() - start, labels);
-  }
-}
-
 function getLitestream(
   mode: 'restore' | 'replicate',
-  config: ZeroConfig,
+  config: LitestreamConfig,
+  replicaFile: string,
   logLevelOverride?: LogLevel,
-  backupURLOverride?: string,
 ): {
   litestream: string;
   env: NodeJS.ProcessEnv;
@@ -138,7 +70,7 @@ function getLitestream(
     configPath,
     endpoint,
     region,
-    port = config.port + 2,
+    port,
     checkpointThresholdMB,
     minCheckpointPageCount = checkpointThresholdMB * 250, // SQLite page size is 4KB
     maxCheckpointPageCount = minCheckpointPageCount * 10,
@@ -146,7 +78,7 @@ function getLitestream(
     snapshotBackupIntervalHours,
     multipartConcurrency,
     multipartSize,
-  } = config.litestream;
+  } = config;
 
   const litestream =
     // The v0.5.8+ litestream executable can restore from either the new LTX
@@ -158,8 +90,8 @@ function getLitestream(
     litestream,
     env: {
       ...process.env,
-      ['ZERO_REPLICA_FILE']: config.replica.file,
-      ['ZERO_LITESTREAM_BACKUP_URL']: must(backupURLOverride ?? backupURL),
+      ['ZERO_REPLICA_FILE']: replicaFile,
+      ['ZERO_LITESTREAM_BACKUP_URL']: must(backupURL),
       ['ZERO_LITESTREAM_MIN_CHECKPOINT_PAGE_COUNT']: String(
         minCheckpointPageCount,
       ),
@@ -178,7 +110,7 @@ function getLitestream(
       ),
       ['ZERO_LITESTREAM_MULTIPART_CONCURRENCY']: String(multipartConcurrency),
       ['ZERO_LITESTREAM_MULTIPART_SIZE']: String(multipartSize),
-      ['ZERO_LOG_FORMAT']: config.log.format,
+      ['ZERO_LOG_FORMAT']: 'json',
       ['LITESTREAM_CONFIG']: configPath,
       ['LITESTREAM_PORT']: String(port),
       ...(endpoint ? {['ZERO_LITESTREAM_ENDPOINT']: endpoint} : {}),
@@ -187,42 +119,29 @@ function getLitestream(
   };
 }
 
-async function tryRestore(
+export async function tryRestore(
   lc: LogContext,
-  config: ZeroConfig,
-  replicaConstraints: ReplicaConstraints | null,
+  config: LitestreamConfig,
+  replicaFile: string,
+  replicaConstraints: ReplicaConstraints,
   role: LitestreamRole,
 ): Promise<RestoreAttempt> {
-  let snapshotStatus: SnapshotStatus | undefined;
-  if (!replicaConstraints) {
-    // view-syncers fetch replica constraints from the replication-manager
-    // via the snapshot protocol.
-    const waitStart = performance.now();
-    snapshotStatus = await reserveAndGetSnapshotStatus(lc, config);
-    litestreamRestoreWaitDuration().recordMs(
-      performance.now() - waitStart,
-      litestreamRestoreMetricAttrs(config, role, snapshotStatus.backupURL),
-    );
-    lc.info?.(`restoring backup from ${snapshotStatus.backupURL}`);
-    replicaConstraints = snapshotStatus;
-  }
-
-  const backupURL = snapshotStatus?.backupURL ?? config.litestream.backupURL;
+  const {backupURL} = config;
   const attrs = litestreamRestoreMetricAttrs(config, role, backupURL);
   let result: RestoreResult = 'error';
   try {
-    const replicaExistedBeforeRestore = existsSync(config.replica.file);
+    const replicaExistedBeforeRestore = existsSync(replicaFile);
     const {litestream, env} = getLitestream(
       'restore',
       config,
+      replicaFile,
       'debug', // Include all output from `litestream restore`, as it's minimal.
-      snapshotStatus?.backupURL,
     );
     const {
       restoreParallelism: parallelism,
       multipartConcurrency,
       multipartSize,
-    } = config.litestream;
+    } = config;
     lc.info?.(`starting litestream restore`, {
       restoreParallelism: parallelism,
       multipartConcurrency,
@@ -243,7 +162,7 @@ async function tryRestore(
         '-if-replica-exists',
         '-parallelism',
         String(parallelism),
-        config.replica.file,
+        replicaFile,
       ],
       {env, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true},
     );
@@ -287,12 +206,12 @@ async function tryRestore(
       );
       throw e;
     }
-    if (!existsSync(config.replica.file)) {
+    if (!existsSync(replicaFile)) {
       result = 'no_backup';
       return {restored: false, backupURL, result};
     }
     const validationStart = performance.now();
-    const valid = replicaIsValid(lc, config.replica.file, replicaConstraints);
+    const valid = replicaIsValid(lc, replicaFile, replicaConstraints);
     litestreamRestoreValidationDuration().recordMs(
       performance.now() - validationStart,
       {...attrs, result: valid ? 'success' : 'invalid_replica'},
@@ -300,22 +219,19 @@ async function tryRestore(
     if (!valid) {
       result = 'invalid_replica';
       lc.info?.(`Deleting local replica and retrying restore`);
-      deleteLiteDB(config.replica.file);
+      deleteLiteDB(replicaFile);
       return {restored: false, backupURL, result};
     }
     result = 'success';
     if (!replicaExistedBeforeRestore) {
-      litestreamRestoredDbBytes().add(statSync(config.replica.file).size, {
+      litestreamRestoredDbBytes().add(statSync(replicaFile).size, {
         ...attrs,
         result: 'success',
       });
     }
     return {restored: true, backupURL, result};
   } finally {
-    litestreamRestoreAttempts().add(1, {
-      ...attrs,
-      result,
-    });
+    litestreamRestoreAttempts().add(1, {...attrs, result});
   }
 }
 
@@ -361,11 +277,12 @@ function replicaIsValid(
 
 export function startReplicaBackupProcess(
   lc: LogContext,
-  config: ZeroConfig,
+  config: LitestreamConfig,
+  replicaFile: string,
 ): ChildProcess {
-  const {litestream, env} = getLitestream('replicate', config);
+  const {litestream, env} = getLitestream('replicate', config, replicaFile);
   const attrs = litestreamBackupProcessMetricAttrs(config);
-  lc.info?.(`starting litestream backup to ${config.litestream.backupURL}`);
+  lc.info?.(`starting litestream backup to ${config.backupURL}`);
   const start = performance.now();
   const proc = spawn(litestream, ['replicate'], {
     env,
@@ -425,11 +342,12 @@ const wsRe = /\s+/;
  */
 export async function getLastBackupTime(
   lc: LogContext,
-  config: ZeroConfig,
+  config: LitestreamConfig,
+  replicaFile: string,
 ): Promise<Date> {
   const [snapshots, wal] = await Promise.all([
-    listBackupCreatedTimes(lc, config, 'snapshots'),
-    listBackupCreatedTimes(lc, config, 'wal'),
+    listBackupCreatedTimes(lc, config, replicaFile, 'snapshots'),
+    listBackupCreatedTimes(lc, config, replicaFile, 'wal'),
   ]);
   const times = [...snapshots, ...wal];
   if (times.length === 0) {
@@ -438,7 +356,7 @@ export async function getLastBackupTime(
     // distinguished from a failed one. Since a valid backup always contains
     // at least one snapshot, an empty listing is treated as a failure.
     throw new Error(
-      `no snapshots or WAL segments listed at ${config.litestream.backupURL}`,
+      `no snapshots or WAL segments listed at ${config.backupURL}`,
     );
   }
   return new Date(Math.max(...times.map(time => time.getTime())));
@@ -457,13 +375,14 @@ export async function getLastBackupTime(
  */
 async function listBackupCreatedTimes(
   lc: LogContext,
-  config: ZeroConfig,
+  config: LitestreamConfig,
+  replicaFile: string,
   command: 'snapshots' | 'wal',
 ): Promise<Date[]> {
   const start = performance.now();
   let result: 'success' | 'empty' | 'timeout' | 'error' = 'error';
-  const {litestream, env} = getLitestream('replicate', config);
-  const proc = spawn(litestream, [command, config.replica.file], {
+  const {litestream, env} = getLitestream('replicate', config, replicaFile);
+  const proc = spawn(litestream, [command, replicaFile], {
     env,
     stdio: ['ignore', 'pipe', 'inherit'],
     windowsHide: true,
@@ -534,76 +453,4 @@ export function parseBackupCreatedTimes(
     times.push(time);
   }
   return times;
-}
-
-function reserveAndGetSnapshotStatus(
-  lc: LogContext,
-  config: ZeroConfig,
-): Promise<SnapshotStatus> {
-  const {promise: status, resolve, reject} = resolver<SnapshotStatus>();
-
-  void (async function () {
-    const abort = new AbortController();
-    process.on('SIGINT', () => abort.abort());
-    process.on('SIGTERM', () => abort.abort());
-
-    for (let i = 0; ; i++) {
-      let err: unknown;
-      try {
-        let resolved = false;
-        const stream = await reserveSnapshot(lc, config);
-        for await (const msg of stream) {
-          // Capture the value of the status message that the change-streamer
-          // backup monitor returns, and hold the connection open to
-          // "reserve" the snapshot and prevent change log cleanup.
-          resolve(msg[1]);
-          resolved = true;
-        }
-        // The change-streamer itself closes the connection when the
-        // subscription is started (or the reservation retried).
-        if (resolved) {
-          break;
-        }
-      } catch (e) {
-        err = e;
-      }
-      // Retry in the view-syncer since it cannot proceed until it connects
-      // to a (compatible) replication-manager. In particular, a
-      // replication-manager that does not support the view-syncer's
-      // change-streamer protocol will close the stream with an error; this
-      // retry logic essentially delays the startup of a view-syncer until
-      // a compatible replication-manager has been rolled out, allowing
-      // replication-manager and view-syncer services to be updated in
-      // parallel.
-      lc.warn?.(
-        `Unable to reserve snapshot (attempt ${i + 1}). Retrying in 5 seconds.`,
-        String(err),
-      );
-      try {
-        await sleep(5000, abort.signal);
-      } catch (e) {
-        return reject(e);
-      }
-    }
-  })();
-
-  return status;
-}
-
-function reserveSnapshot(
-  lc: LogContext,
-  config: ZeroConfig,
-): Promise<Source<SnapshotMessage>> {
-  assertNormalized(config);
-  const {taskID, change, changeStreamer} = config;
-  const shardID = getShardConfig(config);
-
-  const changeStreamerClient = new ChangeStreamerHttpClient(
-    lc,
-    shardID,
-    change.db,
-    changeStreamer.uri,
-  );
-
-  return changeStreamerClient.reserveSnapshot(taskID);
 }
