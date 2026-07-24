@@ -86,55 +86,21 @@ export async function restoreReplica(
   // replica. The platform's startup probe budget (which scales with replica
   // size) is the backstop, so restoreReplica must not impose its own shorter
   // cap and self-terminate while the backup is still being produced.
-  //
-  // `consecutiveErrors` distinguishes a transient restore *error* (e.g. the
-  // `replicate` process compacting a snapshot mid-restore) — which is retried
-  // once — from a "backup not found" result, which is expected while waiting.
-  let consecutiveErrors = 0;
   try {
     for (;;) {
-      try {
-        // `consecutiveErrors` is 0 on a fresh attempt and 1 on the retry, so
-        // `consecutiveErrors >= 1` identifies the final attempt of a streak.
-        // tryRestore surfaces litestream's failure output with a different
-        // message on the final attempt (which the log classifier routes to a
-        // paging alert) than on a retriable earlier attempt (routed to a
-        // non-paging warning). See INC-961.
-        const attempt = await tryRestore(
-          lc,
-          config,
-          replicaConstraints,
-          role,
-          consecutiveErrors >= 1,
-        );
-        backupURL = attempt.backupURL;
-        if (attempt.restored) {
-          result = attempt.result;
-          return;
-        }
-        consecutiveErrors = 0;
-        if (replicaConstraints) {
-          // The replication-manager restores against explicit constraints, so a
-          // missing backup is fatal (e.g. the litestream URL was purposefully
-          // changed to force a resync). Only the view-syncer (no constraints)
-          // waits for a backup to appear.
-          result = attempt.result;
-          throw new BackupNotFoundException(config.litestream.backupURL);
-        }
-      } catch (e) {
-        if (e instanceof BackupNotFoundException) {
-          throw e;
-        }
-        if (++consecutiveErrors <= 1) {
-          // A restore will fail if the `replicate` process creates a new
-          // snapshot (and compacts old files) at the same time. Snapshots are
-          // infrequent (e.g. once every 12 hours), and the scenario is
-          // recoverable with a retry.
-          lc.warn?.(`restore attempt failed. retrying once`, e);
-          continue;
-        }
-        // If it fails again on the retry, though, bail.
-        throw e;
+      const attempt = await tryRestore(lc, config, replicaConstraints, role);
+      backupURL = attempt.backupURL;
+      if (attempt.restored) {
+        result = attempt.result;
+        return;
+      }
+      if (replicaConstraints) {
+        // The replication-manager restores against explicit constraints, so a
+        // missing backup is fatal (e.g. the litestream URL was purposefully
+        // changed to force a resync). Only the view-syncer (no constraints)
+        // waits for a backup to appear.
+        result = attempt.result;
+        throw new BackupNotFoundException(config.litestream.backupURL);
       }
       lc.info?.(
         `replica not found. retrying in ${RETRY_INTERVAL_MS / 1000} seconds`,
@@ -227,7 +193,6 @@ async function tryRestore(
   config: ZeroConfig,
   replicaConstraints: ReplicaConstraints | null,
   role: LitestreamRole,
-  isFinalAttempt: boolean,
 ): Promise<RestoreAttempt> {
   let snapshotStatus: SnapshotStatus | undefined;
   if (!replicaConstraints) {
@@ -321,22 +286,6 @@ async function tryRestore(
         performance.now() - processStart,
         {...attrs, result: 'error'},
       );
-      // litestream logs its restore failure at ERROR. Re-surface that captured
-      // output through our logger with a distinct message per attempt, so the
-      // cloudzero log classifier can route them differently: the retriable
-      // earlier attempt to a non-paging warning, and the post-retry failure to
-      // a paging critical. Both are emitted at ERROR because the log scraper
-      // only ingests error-level lines, and both carry our `worker` context,
-      // distinguishing them from litestream's untagged raw output. See INC-961.
-      const output = (stdout + stderr).trim();
-      if (isFinalAttempt) {
-        lc.error?.(`litestream restore failed after retry`, output || e);
-      } else {
-        lc.error?.(
-          `litestream restore attempt failed, will retry`,
-          output || e,
-        );
-      }
       throw e;
     }
     if (!existsSync(config.replica.file)) {

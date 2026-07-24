@@ -8,7 +8,8 @@ dbs:
       - url: ${ZERO_LITESTREAM_BACKUP_URL}
         endpoint: ${ZERO_LITESTREAM_ENDPOINT}
         region: ${ZERO_LITESTREAM_REGION}
-        retention: ${ZERO_LITESTREAM_SNAPSHOT_BACKUP_INTERVAL_MINUTES}m
+        snapshot-interval: ${ZERO_LITESTREAM_SNAPSHOT_BACKUP_INTERVAL_MINUTES}m
+        retention: 4h
         retention-check-interval: 1h
         sync-interval: ${ZERO_LITESTREAM_INCREMENTAL_BACKUP_INTERVAL_MINUTES}m
         multipart-concurrency: ${ZERO_LITESTREAM_MULTIPART_CONCURRENCY}
