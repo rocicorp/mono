@@ -35,6 +35,7 @@ import {
   createReplicationStateTables,
   initReplicationState,
 } from './schema/replication-state.ts';
+import {SQLiteChangeLogObserver} from './sqlite-change-log-observability.ts';
 import {ReplicationMessages} from './test-utils.ts';
 import {ThreadWriteWorkerClient} from './write-worker-client.ts';
 
@@ -92,6 +93,7 @@ describe('replicator/incremental-sync', () => {
       worker,
       'serving',
       ReplicationStatusPublisher.forReplicaFile(dbFile.path),
+      undefined,
     );
   });
 
@@ -756,6 +758,7 @@ describe('replicator/incremental-sync', () => {
       worker,
       'serving',
       ReplicationStatusPublisher.forReplicaFile(dbFile.path),
+      undefined,
     );
 
     const localSyncing = syncer.run();
@@ -786,6 +789,7 @@ describe('replicator/incremental-sync', () => {
       worker,
       'serving',
       ReplicationStatusPublisher.forReplicaFile(dbFile.path),
+      undefined,
     );
 
     const localSyncing = syncer.run();
@@ -825,7 +829,7 @@ describe('replicator/incremental-sync', () => {
     const {promise: hasRetried, resolve: retried} = resolver<true>();
     subscribeFn.mockResolvedValueOnce(downstream).mockImplementation(() => {
       retried(true);
-      return resolver<Subscription<Downstream>>().promise;
+      return resolver<Source<SerializedDownstream>>().promise;
     });
     syncer = new IncrementalSyncer(
       lc,
@@ -835,16 +839,16 @@ describe('replicator/incremental-sync', () => {
       worker,
       'serving',
       ReplicationStatusPublisher.forReplicaFile(dbFile.path),
+      undefined,
     );
     syncing = syncer.run();
     await vi.waitFor(() => expect(subscribeFn).toHaveBeenCalledTimes(1));
+    const processMessage = vi.spyOn(worker, 'processMessage');
 
     const issues = new ReplicationMessages({issues: 'id'});
     downstream.push(['begin', issues.begin(), {commitWatermark: '06'}]);
     downstream.push(['data', issues.insert('issues', {id: 1})]);
-    await vi.waitFor(() =>
-      expect(changeLogCodec.serializeChangeStreamData).toHaveBeenCalledTimes(2),
-    );
+    await vi.waitFor(() => expect(processMessage).toHaveBeenCalledTimes(2));
     downstream.fail(new Error('source disconnected'));
 
     expect(await hasRetried).toBe(true);
@@ -859,6 +863,60 @@ describe('replicator/incremental-sync', () => {
     syncer.stop(lc);
     void syncing.catch(() => {});
     syncing = undefined;
+  });
+
+  test('an enabled SQLite stream-writer error stops the replicator', async () => {
+    await worker.stop();
+    worker = new ThreadWriteWorkerClient();
+    await worker.init(
+      dbFile.path,
+      'serving',
+      true,
+      {
+        busyTimeout: 30000,
+        analysisLimit: 1000,
+      },
+      {level: 'error', format: 'text'},
+    );
+    initReplicationState(mainDb, ['zero_data'], '02', {}, false);
+    const observer = new SQLiteChangeLogObserver(lc, {
+      schemaVersion: 14,
+      stateWatermark: '02',
+      seedWatermark: '02',
+      headWatermark: '02',
+      rows: 2,
+      estimatedBytes: 50,
+    });
+    syncer = new IncrementalSyncer(
+      lc,
+      TASK_ID,
+      REPLICA_ID,
+      {subscribe: subscribeFn.mockResolvedValue(downstream)},
+      worker,
+      'serving',
+      ReplicationStatusPublisher.forReplicaFile(dbFile.path),
+      observer,
+    );
+    syncing = syncer.run();
+    await vi.waitFor(() => expect(subscribeFn).toHaveBeenCalledTimes(1));
+
+    // Reusing the seed watermark makes the stream insert fail even though the
+    // otherwise-empty replica transaction itself would be valid.
+    downstream.push(['begin', {tag: 'begin'}, {commitWatermark: '02'}]);
+    await syncing;
+    syncing = undefined;
+
+    expect(subscribeFn).toHaveBeenCalledTimes(1);
+    expect(observer.state()).toMatchObject({
+      sqliteHead: '02',
+      rows: 2,
+      rollbacks: 1,
+    });
+    expect(
+      mainDb
+        .prepare(`SELECT "stateVersion" FROM "_zero.replicationState"`)
+        .get(),
+    ).toEqual({stateVersion: '02'});
   });
 
   test('shut down on change-streamer error message', async () => {

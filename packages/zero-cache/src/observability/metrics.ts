@@ -119,6 +119,27 @@ const LATENCY_HISTOGRAM_BOUNDARIES_S = [
 
 const histograms = cache<Histogram>();
 
+/**
+ * Creates a histogram for dimensionless values without applying the
+ * millisecond-to-second conversion used by the latency helpers below.
+ */
+export function getOrCreateValueHistogram(
+  category: Category,
+  name: string,
+  opts: HistogramOptions,
+): Histogram {
+  const {bucketBoundaries, ...metricOptions} = opts;
+  return histograms(name, name =>
+    getMeter().createHistogram(`zero.${category}.${name}`, {
+      ...metricOptions,
+      advice: {
+        ...metricOptions.advice,
+        explicitBucketBoundaries: bucketBoundaries,
+      },
+    }),
+  );
+}
+
 export function getOrCreateHistogram(
   category: Category,
   name: string,
