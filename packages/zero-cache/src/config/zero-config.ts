@@ -676,6 +676,47 @@ export const zeroOptions = {
       ],
     },
 
+    sqliteChangeLogMode: {
+      type: v.literalUnion('off', 'write', 'compare', 'serve').default('off'),
+      desc: [
+        `Controls the staged SQLite change-log rollout. Modes are cumulative:`,
+        `{bold off}, {bold write}, {bold compare}, and {bold serve}.`,
+      ],
+      hidden: true,
+    },
+
+    sqliteChangeLogReadPercent: {
+      type: v.number().default(0),
+      desc: [
+        `The stable percentage of eligible catchup subscriptions served from SQLite.`,
+      ],
+      hidden: true,
+    },
+
+    sqliteChangeLogRetentionMs: {
+      type: v.number().default(60_000),
+      desc: [`The minimum time window retained in the SQLite change log.`],
+      hidden: true,
+    },
+
+    sqliteChangeLogReadBatchRows: {
+      type: v.number().default(1000),
+      desc: [`The target number of rows in each SQLite catchup read batch.`],
+      hidden: true,
+    },
+
+    sqliteChangeLogPurgeBatchRows: {
+      type: v.number().default(1000),
+      desc: [`The target number of rows in each SQLite purge batch.`],
+      hidden: true,
+    },
+
+    sqliteChangeLogBarrierTimeoutMs: {
+      type: v.number().default(30_000),
+      desc: [`The maximum wait for the SQLite required-head barrier.`],
+      hidden: true,
+    },
+
     backPressureLimitHeapProportion: {
       type: v.number().default(0.04),
       desc: [

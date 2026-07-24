@@ -180,6 +180,7 @@ export async function initialSync(
   const processor = new ChangeProcessor(
     new StatementRunner(tx),
     'initial-sync',
+    {logsChangeStream: false},
     (_, err) => {
       throw err;
     },
