@@ -26,6 +26,7 @@ import {
   type ChangeStreamer,
   type ChangeStreamerService,
   type Downstream,
+  type SerializedDownstream,
 } from '../change-streamer/change-streamer.ts';
 import {initChangeStreamerSchema} from '../change-streamer/schema/init.ts';
 import {ReplicationStatusPublisher} from './replication-status.ts';
@@ -71,12 +72,14 @@ afterEach(async () => {
   await runCleanup();
 });
 
-function parseStringifiedSource(source: Source<string>): Source<Downstream> {
+function parseStringifiedSource(
+  source: Source<string>,
+): Source<SerializedDownstream> {
   return {
     cancel: err => source.cancel(err),
     async *[Symbol.asyncIterator]() {
-      for await (const msg of source) {
-        yield BigIntJSON.parse(msg) as Downstream;
+      for await (const json of source) {
+        yield {data: BigIntJSON.parse(json) as Downstream, json};
       }
     },
   };

@@ -17,6 +17,7 @@ import * as v from '../../../shared/src/valita.ts';
 import {
   stream,
   streamIn,
+  streamInStringified,
   streamOut,
   streamOutStringified,
   type Sink,
@@ -268,6 +269,14 @@ describe('streams with internal acks', () => {
     };
   }
 
+  async function startStringifiedReceiver() {
+    ws = new WebSocket(`http://localhost:${port}/`);
+    return {
+      ws,
+      consumer: await streamInStringified(lc, ws, messageSchema),
+    };
+  }
+
   test('one at a time', async () => {
     let num = 0;
 
@@ -447,11 +456,8 @@ describe('streams with internal acks', () => {
     ]);
   });
 
-  async function drain(
-    num: number,
-    consumer: Source<Message>,
-  ): Promise<Message[]> {
-    const drained: Message[] = [];
+  async function drain<T>(num: number, consumer: Source<T>): Promise<T[]> {
+    const drained: T[] = [];
     let i = 0;
     for await (const msg of consumer) {
       drained.push(msg);
@@ -472,11 +478,21 @@ describe('streams with internal acks', () => {
   });
 
   test('stringified source', async () => {
-    stringifiedProducer.push('{"from":1,"to":2,"str":"foo","extra":"bar"}');
+    const json =
+      '{"from":1,"to":2,"str":"before\\u0000after","big":9007199254740993}';
+    stringifiedProducer.push(json);
 
-    const {consumer} = await startReceiver();
+    const {consumer} = await startStringifiedReceiver();
     expect(await drain(1, consumer)).toEqual([
-      {from: 1, to: 2, str: 'foo', extra: 'bar'},
+      {
+        data: {
+          from: 1,
+          to: 2,
+          str: 'before\0after',
+          big: 9007199254740993n,
+        },
+        json,
+      },
     ]);
   });
 
