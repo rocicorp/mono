@@ -147,6 +147,18 @@ describe('SQLite change-log observability', () => {
     ]);
   });
 
+  test('startup info throws on an unseeded change log', () => {
+    using fixture = setupReplica();
+    // Simulate a replica whose change log has not been seeded (e.g. one that
+    // predates the change-log migration). The off-mode startup path catches
+    // this and warns instead of crashing the replicator.
+    fixture.db.prepare(`DELETE FROM "_zero.changeLogStream"`).run();
+
+    expect(() => getSQLiteChangeLogStartupInfo(fixture.db)).toThrow(
+      'SQLite change log must contain its seed transaction',
+    );
+  });
+
   test('reports temporary head skew without an invariant failure', () => {
     using fixture = setupReplica();
     fixture.db

@@ -173,6 +173,11 @@ export default async function runWorker(
  * The totals require a full change-log table scan, so that scan is skipped when
  * the writer is disabled: an off-mode replica still logs its startup state but
  * only pays for the indexed schema/state/head lookups.
+ *
+ * Only the writer requires a seeded change log, so when it is disabled the
+ * inspection is best-effort: a missing or unseeded log (e.g. a replica that
+ * predates the change-log migration) is warned about rather than crashing the
+ * replicator, keeping `sqliteChangeLogMode=off` a safe rollback.
  */
 function readSQLiteChangeLog(
   lc: LogContext,
@@ -183,12 +188,20 @@ function readSQLiteChangeLog(
   const db = new Database(lc, file, {readonly: true});
   try {
     if (!logsChangeStream) {
-      logSQLiteChangeLogStartup(
-        lc,
-        fileMode,
-        false,
-        getSQLiteChangeLogStartupInfo(db),
-      );
+      try {
+        logSQLiteChangeLogStartup(
+          lc,
+          fileMode,
+          false,
+          getSQLiteChangeLogStartupInfo(db),
+        );
+      } catch (e) {
+        lc.warn?.(
+          'SQLite change-log startup inspection skipped: the change log is ' +
+            'unavailable and the writer is disabled',
+          e,
+        );
+      }
       return undefined;
     }
     const info = getSQLiteChangeLogInfo(db);
