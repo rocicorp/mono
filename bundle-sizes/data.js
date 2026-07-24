@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784890143514,
+  "lastUpdate": 1784895712563,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -57081,6 +57081,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "Size of replicache.min.mjs.br (Brotli compressed)",
             "value": 33458,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "arv@roci.dev",
+            "name": "Erik Arvidsson",
+            "username": "arv"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "b7aa4eee7bff90c8afba92527376d7fc228b55fa",
+          "message": "chore: add process.env flags to control replicache indexes (#6271)\n\nThis reduces the binary size by 8.4KB and should make the core a tiny\nteeny bit faster.",
+          "timestamp": "2026-07-24T12:12:55Z",
+          "tree_id": "47118040ab78f7c1e2d8dac79d8d517f0dfdc245",
+          "url": "https://github.com/rocicorp/mono/commit/b7aa4eee7bff90c8afba92527376d7fc228b55fa"
+        },
+        "date": 1784895701305,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 317629,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 57073,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 117348,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 33538,
             "unit": "bytes"
           }
         ]
