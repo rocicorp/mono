@@ -66,6 +66,7 @@ function external(id: string): boolean {
 const define = {
   ...makeDefine('unknown'),
   'process.env.DISABLE_MUTATION_RECOVERY': 'true',
+  'process.env.DISABLE_REPLICACHE_INDEXES': 'true',
 };
 
 // Vite config helper functions
