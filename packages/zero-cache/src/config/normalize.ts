@@ -41,6 +41,35 @@ export function assertNormalized(
   assert(config.taskID, 'missing --task-id');
   assert(config.changeStreamer.port, 'missing --change-streamer-port');
   assert(config.changeStreamer.address, 'missing --change-streamer-address');
+  const {
+    sqliteChangeLogMode,
+    sqliteChangeLogReadPercent,
+    sqliteChangeLogRetentionMs,
+    sqliteChangeLogReadBatchRows,
+    sqliteChangeLogPurgeBatchRows,
+    sqliteChangeLogBarrierTimeoutMs,
+  } = config.changeStreamer;
+  assert(
+    Number.isSafeInteger(sqliteChangeLogReadPercent) &&
+      sqliteChangeLogReadPercent >= 0 &&
+      sqliteChangeLogReadPercent <= 100,
+    '--change-streamer-sqlite-change-log-read-percent must be an integer between 0 and 100',
+  );
+  assert(
+    sqliteChangeLogMode === 'serve' || sqliteChangeLogReadPercent === 0,
+    '--change-streamer-sqlite-change-log-read-percent must be 0 unless --change-streamer-sqlite-change-log-mode=serve',
+  );
+  for (const [flag, value] of [
+    ['retention-ms', sqliteChangeLogRetentionMs],
+    ['read-batch-rows', sqliteChangeLogReadBatchRows],
+    ['purge-batch-rows', sqliteChangeLogPurgeBatchRows],
+    ['barrier-timeout-ms', sqliteChangeLogBarrierTimeoutMs],
+  ] as const) {
+    assert(
+      Number.isSafeInteger(value) && value > 0,
+      `--change-streamer-sqlite-change-log-${flag} must be a positive integer`,
+    );
+  }
   assert(config.litestream.port, 'missing --litestream-port');
   assert(
     !config.litestream.backupUsingV5 || config.litestream.restoreUsingV5,
