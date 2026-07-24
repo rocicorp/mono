@@ -293,7 +293,7 @@ function createMutator<
     const validatedArgs = validator
       ? validateInput(name, options.args, validator, 'mutator')
       : (options.args as unknown as ArgsOutput);
-    await definition.fn({
+    return await definition.fn({
       args: validatedArgs,
       ctx: options.ctx as C,
       tx: options.tx,
