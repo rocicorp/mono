@@ -251,7 +251,14 @@ export class SQLiteChangeLogCatchup implements Disposable {
         this.#barrierTimeouts.add(1);
       }
       if (error instanceof AutoResetSignal) {
-        await this.#onFatal(error);
+        try {
+          await this.#onFatal(error);
+        } catch (fatalError) {
+          this.#lc.error?.(
+            `error while handling fatal SQLite catchup failure for ${subscriber.id}`,
+            fatalError,
+          );
+        }
       }
       subscriber.fail(error);
     } finally {
@@ -269,25 +276,23 @@ export class SQLiteChangeLogCatchup implements Disposable {
     if (typeof requiredHead === 'string') {
       return requiredHead;
     }
-    while (true) {
-      this.#throwIfAborted(signal);
-      const remaining = deadline - this.#now();
-      if (remaining <= 0) {
-        throw new SQLiteChangeLogBarrierTimeoutError(
-          'timed out waiting for the forwarded transaction to finish',
-        );
-      }
-      const result = await Promise.race([
-        requiredHead.then(value => ({kind: 'required', value}) as const),
-        this.#sleep(
-          Math.min(this.#barrierPollIntervalMs, remaining),
-          signal,
-        ).then(() => ({kind: 'pending'}) as const),
-      ]);
-      if (result.kind === 'required') {
-        return result.value;
-      }
+    this.#throwIfAborted(signal);
+    const remaining = deadline - this.#now();
+    if (remaining <= 0) {
+      throw new SQLiteChangeLogBarrierTimeoutError(
+        'timed out waiting for the forwarded transaction to finish',
+      );
     }
+    const result = await Promise.race([
+      requiredHead.then(value => ({kind: 'required', value}) as const),
+      this.#sleep(remaining, signal).then(() => ({kind: 'timeout'}) as const),
+    ]);
+    if (result.kind === 'timeout') {
+      throw new SQLiteChangeLogBarrierTimeoutError(
+        'timed out waiting for the forwarded transaction to finish',
+      );
+    }
+    return result.value;
   }
 
   async #waitForPlan(
