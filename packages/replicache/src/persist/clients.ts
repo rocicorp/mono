@@ -1,3 +1,4 @@
+import '../process-env.ts';
 import type {LogContext} from '@rocicorp/logger';
 import {assert, assertObject} from '../../../shared/src/asserts.ts';
 import type {Enum} from '../../../shared/src/enum.ts';
@@ -343,38 +344,40 @@ export function initClientV6(
 
     // Create indexes
     const indexRecords: IndexRecord[] = [];
-    const {valueHash, indexes: oldIndexes} = snapshot;
-    const map = new BTreeRead(dagWrite, formatVersion, valueHash);
+    if (!process.env.DISABLE_REPLICACHE_INDEXES) {
+      const {valueHash, indexes: oldIndexes} = snapshot;
+      const map = new BTreeRead(dagWrite, formatVersion, valueHash);
 
-    for (const [name, indexDefinition] of Object.entries(indexes)) {
-      const {prefix = '', jsonPointer, allowEmpty = false} = indexDefinition;
-      const chunkIndexDefinition: ChunkIndexDefinition = {
-        name,
-        keyPrefix: prefix,
-        jsonPointer,
-        allowEmpty,
-      };
-
-      const oldIndex = findMatchingOldIndex(oldIndexes, chunkIndexDefinition);
-      if (oldIndex) {
-        indexRecords.push({
-          definition: chunkIndexDefinition,
-          valueHash: oldIndex.valueHash,
-        });
-      } else {
-        const indexBTree = await createIndexBTree(
-          lc,
-          dagWrite,
-          map,
-          prefix,
+      for (const [name, indexDefinition] of Object.entries(indexes)) {
+        const {prefix = '', jsonPointer, allowEmpty = false} = indexDefinition;
+        const chunkIndexDefinition: ChunkIndexDefinition = {
+          name,
+          keyPrefix: prefix,
           jsonPointer,
           allowEmpty,
-          formatVersion,
-        );
-        indexRecords.push({
-          definition: chunkIndexDefinition,
-          valueHash: await indexBTree.flush(),
-        });
+        };
+
+        const oldIndex = findMatchingOldIndex(oldIndexes, chunkIndexDefinition);
+        if (oldIndex) {
+          indexRecords.push({
+            definition: chunkIndexDefinition,
+            valueHash: oldIndex.valueHash,
+          });
+        } else {
+          const indexBTree = await createIndexBTree(
+            lc,
+            dagWrite,
+            map,
+            prefix,
+            jsonPointer,
+            allowEmpty,
+            formatVersion,
+          );
+          indexRecords.push({
+            definition: chunkIndexDefinition,
+            valueHash: await indexBTree.flush(),
+          });
+        }
       }
     }
 

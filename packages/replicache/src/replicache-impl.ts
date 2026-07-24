@@ -129,12 +129,6 @@ import {
   withWriteNoImplicitCommit,
 } from './with-transactions.ts';
 
-declare const process: {
-  env: {
-    ['DISABLE_MUTATION_RECOVERY']?: string | undefined;
-  };
-};
-
 /**
  * The maximum number of time to call out to getAuth before giving up
  * and throwing an error.

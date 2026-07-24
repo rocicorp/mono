@@ -1,3 +1,4 @@
+import './process-env.ts';
 import type {LogContext} from '@rocicorp/logger';
 import {compareUTF8, greaterThan, lessThan, lessThanEq} from 'compare-utf8';
 import {assert} from '../../shared/src/asserts.ts';
@@ -272,7 +273,7 @@ export class WatchSubscription implements Subscription<Diff | undefined> {
         : undefined;
     };
 
-    if (this.#indexName) {
+    if (!process.env.DISABLE_REPLICACHE_INDEXES && this.#indexName) {
       return invoke<IndexKey>(
         this.#indexName,
         this.#prefix,
@@ -597,6 +598,11 @@ export function scanInfoMatchesKey(
     return true;
   }
 
+  if (process.env.DISABLE_REPLICACHE_INDEXES) {
+    // Indexes are compiled out of this build so index scan infos never exist.
+    return false;
+  }
+
   const [changedKeySecondary, changedKeyPrimary] = decodeIndexKey(changedKey);
 
   if (prefix) {
@@ -656,9 +662,10 @@ function watcherMatchesDiff(
     return true;
   }
 
-  const compareKey = indexName
-    ? (diffOp: InternalDiffOperation) => decodeIndexKey(diffOp.key)[0]
-    : (diffOp: InternalDiffOperation) => diffOp.key;
+  const compareKey =
+    !process.env.DISABLE_REPLICACHE_INDEXES && indexName
+      ? (diffOp: InternalDiffOperation) => decodeIndexKey(diffOp.key)[0]
+      : (diffOp: InternalDiffOperation) => diffOp.key;
   const i = diffBinarySearch(diff, prefix, compareKey);
   return i < diff.length && compareKey(diff[i]).startsWith(prefix);
 }

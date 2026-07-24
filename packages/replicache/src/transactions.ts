@@ -1,3 +1,4 @@
+import './process-env.ts';
 import type {LogContext} from '@rocicorp/logger';
 import {greaterThan} from 'compare-utf8';
 import type {JSONValue, ReadonlyJSONValue} from '../../shared/src/json.ts';
@@ -402,6 +403,12 @@ async function* getScanIteratorForIndexMap(
   dbRead: Read,
   options: ScanIndexOptions,
 ): AsyncIterable<IndexKeyEntry<ReadonlyJSONValue>> {
+  if (process.env.DISABLE_REPLICACHE_INDEXES) {
+    // Indexes are compiled out of this build so no index name ever exists.
+    // Thrown here (inside the generator) so that the error surfaces on first
+    // iteration, matching getMapForIndex — tx.scan() itself never throws.
+    throw new Error(`Unknown index name: ${options.indexName}`);
+  }
   const map = dbRead.getMapForIndex(options.indexName);
   for await (const entry of map.scan(fromKeyForIndexScanInternal(options))) {
     yield [decodeIndexKey(entry[0]), entry[1]];

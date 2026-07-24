@@ -1,3 +1,4 @@
+import '../process-env.ts';
 import type {LogContext} from '@rocicorp/logger';
 import {assert} from '../../../shared/src/asserts.ts';
 import type {Enum} from '../../../shared/src/enum.ts';
@@ -83,7 +84,9 @@ export class Write extends Read {
     key: string,
     value: FrozenJSONValue,
   ): Promise<void> {
-    await updateIndexes(lc, this.map, this.indexes, key, value);
+    if (!process.env.DISABLE_REPLICACHE_INDEXES && this.indexes.size > 0) {
+      await updateIndexes(lc, this.map, this.indexes, key, value);
+    }
     await this.map.put(key, value);
   }
 
@@ -103,7 +106,7 @@ export class Write extends Read {
     }
 
     // Update indexes for all entries
-    if (this.indexes.size > 0) {
+    if (!process.env.DISABLE_REPLICACHE_INDEXES && this.indexes.size > 0) {
       // TODO(arv): Indexes can use the optimizePatch pattern too.
       for (const [key, value] of entries) {
         await updateIndexes(lc, this.map, this.indexes, key, value);
@@ -119,7 +122,9 @@ export class Write extends Read {
   }
 
   async del(lc: LogContext, key: string): Promise<boolean> {
-    await updateIndexes(lc, this.map, this.indexes, key, undefined);
+    if (!process.env.DISABLE_REPLICACHE_INDEXES && this.indexes.size > 0) {
+      await updateIndexes(lc, this.map, this.indexes, key, undefined);
+    }
     return this.map.del(key);
   }
 
@@ -235,6 +240,9 @@ export class Write extends Read {
       valueDiff = await diff(basisMap, this.map);
     }
     diffsMap.set('', valueDiff);
+    if (process.env.DISABLE_REPLICACHE_INDEXES) {
+      return diffsMap;
+    }
     let basisIndexes: Map<string, IndexRead>;
     if (this.#basis) {
       basisIndexes = readIndexesForRead(
@@ -390,7 +398,10 @@ export function readIndexesForWrite(
   dagWrite: DagWrite,
   formatVersion: FormatVersion,
 ): Map<string, IndexWrite> {
-  const m = new Map();
+  const m: Map<string, IndexWrite> = new Map();
+  if (process.env.DISABLE_REPLICACHE_INDEXES) {
+    return m;
+  }
   for (const index of commit.indexes) {
     m.set(
       index.definition.name,
