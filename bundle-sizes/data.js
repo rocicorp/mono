@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784888095251,
+  "lastUpdate": 1784890143514,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -57037,6 +57037,50 @@ window.BENCHMARK_DATA = {
           {
             "name": "Size of replicache.min.mjs.br (Brotli compressed)",
             "value": 33511,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "arv@roci.dev",
+            "name": "Erik Arvidsson",
+            "username": "arv"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "9d27505cb431ed67f7e084d4b48065c7dc603633",
+          "message": "chore(replicache): Fix issue with replicache del called updateIndexes (#6261)\n\nWe were always calling `updateIndex` even when there were no indexes.\nNot a big deal but worth simplifying.",
+          "timestamp": "2026-07-24T10:41:07Z",
+          "tree_id": "b9edd890c967c0a618e0814f41edb533e058a171",
+          "url": "https://github.com/rocicorp/mono/commit/9d27505cb431ed67f7e084d4b48065c7dc603633"
+        },
+        "date": 1784890130937,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 317230,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 57026,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 117301,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 33458,
             "unit": "bytes"
           }
         ]
