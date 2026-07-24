@@ -1,5 +1,5 @@
 /**
- * Definitions for the `snapshot` API, which serves the purpose of:
+ * The `snapshot` API serves the purpose of:
  * - informing subscribers (i.e. view-syncers) of the (litestream)
  *   backup location from which to restore a replica snapshot
  * - checking whether a restored backup or existing replica is
@@ -12,7 +12,14 @@
  *   backed up changes.
  */
 
+import type {LogContext} from '@rocicorp/logger';
+import {resolver} from '@rocicorp/resolver';
+import {sleep} from '../../../../shared/src/sleep.ts';
 import * as v from '../../../../shared/src/valita.ts';
+import {type NormalizedZeroConfig} from '../../config/normalize.ts';
+import {getShardConfig} from '../../types/shards.ts';
+import type {Source} from '../../types/streams.ts';
+import {ChangeStreamerHttpClient} from './change-streamer-http.ts';
 
 const statusSchema = v.object({
   tag: v.literal('status'),
@@ -46,3 +53,74 @@ const statusMessageSchema = v.tuple([v.literal('status'), statusSchema]);
 export const snapshotMessageSchema = v.union(statusMessageSchema);
 
 export type SnapshotMessage = v.Infer<typeof statusMessageSchema>;
+
+export function reserveAndGetSnapshotStatus(
+  lc: LogContext,
+  config: NormalizedZeroConfig,
+): Promise<SnapshotStatus> {
+  const {promise: status, resolve, reject} = resolver<SnapshotStatus>();
+
+  void (async function () {
+    const abort = new AbortController();
+    process.on('SIGINT', () => abort.abort());
+    process.on('SIGTERM', () => abort.abort());
+
+    for (let i = 0; ; i++) {
+      let err: unknown;
+      try {
+        let resolved = false;
+        const stream = await reserveSnapshot(lc, config);
+        for await (const msg of stream) {
+          // Capture the value of the status message that the change-streamer
+          // backup monitor returns, and hold the connection open to
+          // "reserve" the snapshot and prevent change log cleanup.
+          resolve(msg[1]);
+          resolved = true;
+        }
+        // The change-streamer itself closes the connection when the
+        // subscription is started (or the reservation retried).
+        if (resolved) {
+          break;
+        }
+      } catch (e) {
+        err = e;
+      }
+      // Retry in the view-syncer since it cannot proceed until it connects
+      // to a (compatible) replication-manager. In particular, a
+      // replication-manager that does not support the view-syncer's
+      // change-streamer protocol will close the stream with an error; this
+      // retry logic essentially delays the startup of a view-syncer until
+      // a compatible replication-manager has been rolled out, allowing
+      // replication-manager and view-syncer services to be updated in
+      // parallel.
+      lc.warn?.(
+        `Unable to reserve snapshot (attempt ${i + 1}). Retrying in 5 seconds.`,
+        String(err),
+      );
+      try {
+        await sleep(5000, abort.signal);
+      } catch (e) {
+        return reject(e);
+      }
+    }
+  })();
+
+  return status;
+}
+
+function reserveSnapshot(
+  lc: LogContext,
+  config: NormalizedZeroConfig,
+): Promise<Source<SnapshotMessage>> {
+  const {taskID, change, changeStreamer} = config;
+  const shardID = getShardConfig(config);
+
+  const changeStreamerClient = new ChangeStreamerHttpClient(
+    lc,
+    shardID,
+    change.db,
+    changeStreamer.uri,
+  );
+
+  return changeStreamerClient.reserveSnapshot(taskID);
+}

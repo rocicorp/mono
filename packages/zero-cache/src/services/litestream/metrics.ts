@@ -1,4 +1,4 @@
-import type {ZeroConfig} from '../../config/zero-config.ts';
+import type {LitestreamConfig} from '../../config/normalize.ts';
 import {
   getOrCreateCounter,
   getOrCreateHistogram,
@@ -20,11 +20,11 @@ type LitestreamMultipartMetricAttrs = {
 };
 
 export function litestreamRestoreMetricAttrs(
-  config: ZeroConfig,
+  config: LitestreamConfig,
   role: LitestreamRole,
-  backupURL = config.litestream.backupURL,
+  backupURL = config.backupURL,
 ): LitestreamMetricAttrs & LitestreamMultipartMetricAttrs {
-  const {executable, executableV5, restoreUsingV5} = config.litestream;
+  const {executable, executableV5, restoreUsingV5} = config;
   const selectedExecutable =
     (restoreUsingV5 ? executableV5 : executable) ?? executable;
   return {
@@ -39,21 +39,21 @@ export function litestreamRestoreMetricAttrs(
 }
 
 export function litestreamBackupMetricAttrs(
-  config: ZeroConfig,
+  config: LitestreamConfig,
 ): LitestreamMetricAttrs {
   return {
     role: 'replication_manager',
-    backup_scheme: litestreamBackupScheme(config.litestream.backupURL),
+    backup_scheme: litestreamBackupScheme(config.backupURL),
     litestream:
-      config.litestream.executableV5 !== undefined &&
-      config.litestream.executable === config.litestream.executableV5
+      config.executableV5 !== undefined &&
+      config.executable === config.executableV5
         ? 'v5'
         : 'legacy',
   };
 }
 
 export function litestreamBackupProcessMetricAttrs(
-  config: ZeroConfig,
+  config: LitestreamConfig,
 ): LitestreamMetricAttrs & LitestreamMultipartMetricAttrs {
   return {
     ...litestreamBackupMetricAttrs(config),
@@ -86,13 +86,11 @@ function litestreamBackupScheme(backupURL: string | undefined): string {
 }
 
 function litestreamMultipartMetricAttrs(
-  config: ZeroConfig,
+  config: LitestreamConfig,
 ): LitestreamMultipartMetricAttrs {
   return {
-    multipart_concurrency: config.litestream.multipartConcurrency,
-    multipart_size_mib: Math.round(
-      config.litestream.multipartSize / 1024 / 1024,
-    ),
+    multipart_concurrency: config.multipartConcurrency,
+    multipart_size_mib: Math.round(config.multipartSize / 1024 / 1024),
   };
 }
 

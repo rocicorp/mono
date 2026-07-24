@@ -9,13 +9,12 @@ import {
   TestLogSink,
 } from '../../../../shared/src/logging-test-utils.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
-import type {ZeroConfig} from '../../config/zero-config.ts';
+import {type NormalizedZeroConfig} from '../../config/normalize.ts';
 import {initReplicationState} from '../replicator/schema/replication-state.ts';
 import {
-  BackupNotFoundException,
   getLastBackupTime,
   parseBackupCreatedTimes,
-  restoreReplica,
+  tryRestore,
 } from './commands.ts';
 import * as litestreamMetrics from './metrics.ts';
 
@@ -33,7 +32,7 @@ vi.mock('node:child_process', async importOriginal => {
 function configWithFakeLitestream(
   sh: string,
   replicaFile?: string,
-): ZeroConfig {
+): NormalizedZeroConfig {
   const dir = mkdtempSync(join(tmpdir(), 'litestream-test-'));
   const executable = join(dir, 'fake-litestream');
   writeFileSync(executable, `#!/bin/sh\n${sh}\n`, {mode: 0o755});
@@ -42,6 +41,7 @@ function configWithFakeLitestream(
     log: {format: 'text'},
     replica: {file: replicaFile ?? join(dir, 'replica.db')},
     litestream: {
+      port: 4850,
       executable,
       backupURL: 's3://fake-bucket/backup',
       configPath: './src/services/litestream/config.yml',
@@ -54,7 +54,7 @@ function configWithFakeLitestream(
       multipartSize: 16 * 1024 * 1024,
       restoreParallelism: 48,
     },
-  } as unknown as ZeroConfig;
+  } as unknown as NormalizedZeroConfig;
 }
 
 function createRestorableReplica(file: string, watermark: string) {
@@ -140,7 +140,7 @@ describe('litestream/commands getLastBackupTime', () => {
   const lc = createSilentLogContext();
 
   test('returns the most recent created time across snapshots and wal', async () => {
-    const config = configWithFakeLitestream(
+    const {litestream, replica} = configWithFakeLitestream(
       `if [ "$1" = "snapshots" ]; then\n` +
         `  echo "replica generation index size created"\n` +
         `  echo "s3 gen 0 100 2025-04-24T00:00:00Z"\n` +
@@ -150,29 +150,29 @@ describe('litestream/commands getLastBackupTime', () => {
         `  echo "s3 gen 2 0 100 2025-04-24T00:10:00Z"\n` +
         `fi`,
     );
-    expect(await getLastBackupTime(lc, config)).toEqual(
+    expect(await getLastBackupTime(lc, litestream, replica.file)).toEqual(
       new Date('2025-04-24T00:10:00Z'),
     );
   });
 
   test('rejects when nothing is listed at the destination', async () => {
-    const config = configWithFakeLitestream(`exit 0`);
-    await expect(getLastBackupTime(lc, config)).rejects.toThrow(
-      /no snapshots or WAL segments listed/,
-    );
+    const {litestream, replica} = configWithFakeLitestream(`exit 0`);
+    await expect(
+      getLastBackupTime(lc, litestream, replica.file),
+    ).rejects.toThrow(/no snapshots or WAL segments listed/);
   });
 
   test('rejects when the litestream process exits non-zero', async () => {
-    const config = configWithFakeLitestream(`exit 1`);
-    await expect(getLastBackupTime(lc, config)).rejects.toThrow(
-      /litestream (snapshots|wal) exited with code 1/,
-    );
+    const {litestream, replica} = configWithFakeLitestream(`exit 1`);
+    await expect(
+      getLastBackupTime(lc, litestream, replica.file),
+    ).rejects.toThrow(/litestream (snapshots|wal) exited with code 1/);
   });
 
   test('rejects (and kills the process) when listing times out', async () => {
     vi.useFakeTimers();
-    const config = configWithFakeLitestream(`sleep 30`);
-    const result = getLastBackupTime(lc, config);
+    const {litestream, replica} = configWithFakeLitestream(`sleep 30`);
+    const result = getLastBackupTime(lc, litestream, replica.file);
     // Surface the rejection synchronously so the unhandled-rejection guard
     // does not fire before we await it below.
     const settled = result.then(
@@ -206,7 +206,7 @@ describe('litestream/commands restoreReplica', () => {
     } as unknown as ReturnType<
       typeof litestreamMetrics.litestreamRestoredDbBytes
     >);
-    const config = configWithFakeLitestream(
+    const {litestream} = configWithFakeLitestream(
       `if [ "$1" = "restore" ]; then\n` +
         `  cp "${source}" "$6"\n` +
         `  exit 0\n` +
@@ -215,10 +215,16 @@ describe('litestream/commands restoreReplica', () => {
       replica,
     );
 
-    await restoreReplica(lc, config, {
-      replicaVersion: '01',
-      minWatermark: '01',
-    });
+    await tryRestore(
+      lc,
+      litestream,
+      replica,
+      {
+        replicaVersion: '01',
+        minWatermark: '01',
+      },
+      'replication_manager',
+    );
 
     expect(existsSync(replica)).toBe(true);
     expect(restoredDbBytesAdd).toHaveBeenCalledWith(
@@ -237,40 +243,23 @@ describe('litestream/commands restoreReplica', () => {
     } as unknown as ReturnType<
       typeof litestreamMetrics.litestreamRestoredDbBytes
     >);
-    const config = configWithFakeLitestream(
+    const {litestream} = configWithFakeLitestream(
       `if [ "$1" = "restore" ]; then\n` + `  exit 0\n` + `fi\n` + `exit 1`,
       replica,
     );
 
-    await restoreReplica(lc, config, {
-      replicaVersion: '01',
-      minWatermark: '01',
-    });
-
-    expect(restoredDbBytesAdd).not.toHaveBeenCalled();
-  });
-
-  test('reports a missing backup when restore exits without a replica', async () => {
-    const restoreAttemptsAdd = vi.fn();
-    vi.spyOn(litestreamMetrics, 'litestreamRestoreAttempts').mockReturnValue({
-      add: restoreAttemptsAdd,
-    } as unknown as ReturnType<
-      typeof litestreamMetrics.litestreamRestoreAttempts
-    >);
-    const config = configWithFakeLitestream(
-      `if [ "$1" = "restore" ]; then\n` + `  exit 0\n` + `fi\n` + `exit 1`,
-    );
-
-    await expect(
-      restoreReplica(lc, config, {
+    await tryRestore(
+      lc,
+      litestream,
+      replica,
+      {
         replicaVersion: '01',
         minWatermark: '01',
-      }),
-    ).rejects.toThrow(BackupNotFoundException);
-    expect(restoreAttemptsAdd).toHaveBeenCalledWith(
-      1,
-      expect.objectContaining({result: 'no_backup'}),
+      },
+      'replication_manager',
     );
+
+    expect(restoredDbBytesAdd).not.toHaveBeenCalled();
   });
 
   test('deletes an incompatible restored replica', async () => {
@@ -278,11 +267,7 @@ describe('litestream/commands restoreReplica', () => {
     const source = join(dir, 'source.db');
     const replica = join(dir, 'replica.db');
     createRestorableReplica(source, '01');
-    const restoreRunsAdd = vi.fn();
     const restoreValidationRecordMs = vi.fn();
-    vi.spyOn(litestreamMetrics, 'litestreamRestoreRuns').mockReturnValue({
-      add: restoreRunsAdd,
-    } as unknown as ReturnType<typeof litestreamMetrics.litestreamRestoreRuns>);
     vi.spyOn(
       litestreamMetrics,
       'litestreamRestoreValidationDuration',
@@ -291,7 +276,7 @@ describe('litestream/commands restoreReplica', () => {
     } as unknown as ReturnType<
       typeof litestreamMetrics.litestreamRestoreValidationDuration
     >);
-    const config = configWithFakeLitestream(
+    const {litestream} = configWithFakeLitestream(
       `if [ "$1" = "restore" ]; then\n` +
         `  cp "${source}" "$6"\n` +
         `  exit 0\n` +
@@ -300,20 +285,25 @@ describe('litestream/commands restoreReplica', () => {
       replica,
     );
 
-    await expect(
-      restoreReplica(lc, config, {
-        replicaVersion: '02',
-        minWatermark: '02',
-      }),
-    ).rejects.toThrow(BackupNotFoundException);
+    expect(
+      await tryRestore(
+        lc,
+        litestream,
+        replica,
+        {
+          replicaVersion: '02',
+          minWatermark: '02',
+        },
+        'replication_manager',
+      ),
+    ).toMatchObject({
+      restored: false,
+      result: 'invalid_replica',
+    });
 
     expect(existsSync(replica)).toBe(false);
     expect(restoreValidationRecordMs).toHaveBeenCalledWith(
       expect.any(Number),
-      expect.objectContaining({result: 'invalid_replica'}),
-    );
-    expect(restoreRunsAdd).toHaveBeenCalledWith(
-      1,
       expect.objectContaining({result: 'invalid_replica'}),
     );
   });
@@ -330,7 +320,7 @@ describe('litestream/commands restoreReplica', () => {
     const source = join(dir, 'source.db');
     const replica = join(dir, 'replica.db');
     createRestorableReplica(source, '01');
-    const config = configWithFakeLitestream(
+    const {litestream} = configWithFakeLitestream(
       `if [ "$1" = "restore" ]; then\n` +
         `  cp "${source}" "$6"\n` +
         `  exit 0\n` +
@@ -339,10 +329,16 @@ describe('litestream/commands restoreReplica', () => {
       replica,
     );
 
-    await restoreReplica(lc, config, {
-      replicaVersion: '01',
-      minWatermark: '01',
-    });
+    await tryRestore(
+      lc,
+      litestream,
+      replica,
+      {
+        replicaVersion: '01',
+        minWatermark: '01',
+      },
+      'replication_manager',
+    );
 
     const restoreCall = spawnMock.mock.calls.find(
       call => Array.isArray(call[1]) && call[1][0] === 'restore',

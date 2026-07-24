@@ -12,10 +12,7 @@ import {
   runUntilKilled,
   type WorkerType,
 } from '../services/life-cycle.ts';
-import {
-  restoreReplica,
-  startReplicaBackupProcess,
-} from '../services/litestream/commands.ts';
+import {startReplicaBackupProcess} from '../services/litestream/commands.ts';
 import {
   childWorker,
   parentWorker,
@@ -104,6 +101,7 @@ export default async function runWorker(
   const {
     taskID,
     changeStreamer: {mode: changeStreamerMode, uri: changeStreamerURI},
+    replica,
     litestream,
   } = config;
   const runChangeStreamer =
@@ -111,14 +109,7 @@ export default async function runWorker(
 
   let changeStreamer: Worker | undefined;
 
-  if (!runChangeStreamer) {
-    changeStreamer = undefined;
-    if (litestream.executable) {
-      // For view-syncers, the backup is restored here. For the replication-manager,
-      // the backup is restored in the change-streamer worker.
-      await restoreReplica(lc, config, null);
-    }
-  } else {
+  if (runChangeStreamer) {
     const {promise: changeStreamerReady, resolve: changeStreamerStarted} =
       resolver();
     changeStreamer = loadWorker(CHANGE_STREAMER_URL, 'supporting').once(
@@ -141,7 +132,7 @@ export default async function runWorker(
         'message',
         () => {
           processes.addSubprocess(
-            startReplicaBackupProcess(lc, config),
+            startReplicaBackupProcess(lc, litestream, replica.file),
             'supporting',
             'litestream',
           );

@@ -8,6 +8,7 @@ import {deleteLiteDB} from '../db/delete-lite-db.ts';
 import {registerSQLiteCorruptionDiagnosticTarget} from '../db/sqlite-corruption.ts';
 import {warmupConnections} from '../db/warmup.ts';
 import {initEventSink, publishCriticalEvent} from '../observability/events.ts';
+import {restoreReplica} from '../services/change-source/common/replica-restore.ts';
 import {upgradeReplica} from '../services/change-source/common/replica-schema.ts';
 import {initializeCustomChangeSource} from '../services/change-source/custom/change-source.ts';
 import {initializePostgresChangeSource} from '../services/change-source/pg/change-source.ts';
@@ -20,10 +21,6 @@ import {initChangeStreamerSchema} from '../services/change-streamer/schema/init.
 import {AutoResetSignal} from '../services/change-streamer/schema/tables.ts';
 import {PurgeLocker} from '../services/change-streamer/storer.ts';
 import {exitAfter, runUntilKilled} from '../services/life-cycle.ts';
-import {
-  BackupNotFoundException,
-  restoreReplica,
-} from '../services/litestream/commands.ts';
 import {
   replicationStatusError,
   ReplicationStatusPublisher,
@@ -59,6 +56,9 @@ export default async function runWorker(
       flowControlConsensusPaddingSeconds,
       flowControlEventDrivenRelease,
     },
+    autoReset,
+    replicationLag,
+    litestream,
     upstream,
     change,
     replica,
@@ -83,14 +83,11 @@ export default async function runWorker(
     lc,
     change.db,
     'change-streamer',
-    {
-      max: change.maxConns,
-    },
+    {max: change.maxConns},
     {sendStringAsJson: true},
   );
   void warmupConnections(lc, changeDB, 'change').catch(() => {});
 
-  const {autoReset, replicationLag} = config;
   const shard = getShardConfig(config);
 
   // Ensure the change DB schema is initialized/up-to-date.
@@ -100,19 +97,18 @@ export default async function runWorker(
   // purges. This ensures that (this) change-streamer will be able to resume
   // from the backup.
   let purgeLock =
-    config.litestream.backupURL && config.litestream.executable
+    litestream.backupURL && litestream.executable
       ? await new PurgeLocker(lc, shard, changeDB).acquire()
       : null;
 
   // Restore from litestream if the change-log has entries.
   if (purgeLock) {
     try {
-      await restoreReplica(lc, config, purgeLock);
+      if (!(await restoreReplica(lc, litestream, replica.file, purgeLock))) {
+        lc.info?.(`no backup found. syncing the replica`);
+      }
     } catch (e) {
-      // If the restore failed, e.g. due to a corrupt or missing backup, the
-      // replication-manager recovers by re-syncing.
-      const log = e instanceof BackupNotFoundException ? 'warn' : 'error';
-      lc[log]?.(
+      lc.error?.(
         `error restoring backup. resyncing the replica: ${String(e)}`,
         e,
       );
