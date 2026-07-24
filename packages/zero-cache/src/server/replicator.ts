@@ -92,7 +92,10 @@ export default async function runWorker(
     });
   initEventSink(lc, config);
 
-  if (fileMode === 'serving' && config.litestream.backupURL) {
+  if (
+    fileMode === 'serving' &&
+    (config.litestream.executable || config.litestream.executableV5)
+  ) {
     await restoreReplica(lc, config);
   }
 
