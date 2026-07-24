@@ -6,6 +6,7 @@ import {assert} from '../../../shared/src/asserts.ts';
 import {must} from '../../../shared/src/must.ts';
 import {sleep} from '../../../shared/src/sleep.ts';
 import * as v from '../../../shared/src/valita.ts';
+import {Database} from '../../../zqlite/src/db.ts';
 import type {
   LitestreamConfig,
   NormalizedZeroConfig,
@@ -31,6 +32,12 @@ import {
   ReplicatorService,
   type ReplicatorMode,
 } from '../services/replicator/replicator.ts';
+import {
+  getSQLiteChangeLogInfo,
+  getSQLiteChangeLogStartupInfo,
+  logSQLiteChangeLogStartup,
+  SQLiteChangeLogObserver,
+} from '../services/replicator/sqlite-change-log-observability.ts';
 import {ThreadWriteWorkerClient} from '../services/replicator/write-worker-client.ts';
 import {
   parentWorker,
@@ -44,6 +51,7 @@ import {
   replicaFileModeSchema,
   setUpMessageHandlers,
   setupReplica,
+  type ReplicaFileMode,
   type WalMode,
 } from '../workers/replicator.ts';
 import {createLogContext} from './logging.ts';
@@ -99,6 +107,13 @@ export default async function runWorker(
     dbPath,
   });
 
+  const sqliteChangeLogObserver = readSQLiteChangeLog(
+    lc,
+    dbPath,
+    fileMode,
+    logsChangeStream,
+  );
+
   setupMetrics(lc, dbPath, walMode);
 
   // Create the write worker for async SQLite writes.
@@ -135,6 +150,7 @@ export default async function runWorker(
       ? // publish ReplicationStatusEvents from backup-replicator only
         ReplicationStatusPublisher.forReplicaFile(dbPath)
       : null,
+    sqliteChangeLogObserver,
   );
 
   setUpMessageHandlers(lc, replicator, parent);
@@ -148,6 +164,52 @@ export default async function runWorker(
   }
 
   return running;
+}
+
+/**
+ * Emits the read-only SQLite change-log startup inspection and, when the writer
+ * is enabled, returns an observer seeded with the retained row/byte totals.
+ *
+ * The totals require a full change-log table scan, so that scan is skipped when
+ * the writer is disabled: an off-mode replica still logs its startup state but
+ * only pays for the indexed schema/state/head lookups.
+ *
+ * Only the writer requires a seeded change log, so when it is disabled the
+ * inspection is best-effort: a missing or unseeded log (e.g. a replica that
+ * predates the change-log migration) is warned about rather than crashing the
+ * replicator, keeping `sqliteChangeLogMode=off` a safe rollback.
+ */
+function readSQLiteChangeLog(
+  lc: LogContext,
+  file: string,
+  fileMode: ReplicaFileMode,
+  logsChangeStream: boolean,
+): SQLiteChangeLogObserver | undefined {
+  const db = new Database(lc, file, {readonly: true});
+  try {
+    if (!logsChangeStream) {
+      try {
+        logSQLiteChangeLogStartup(
+          lc,
+          fileMode,
+          false,
+          getSQLiteChangeLogStartupInfo(db),
+        );
+      } catch (e) {
+        lc.warn?.(
+          'SQLite change-log startup inspection skipped: the change log is ' +
+            'unavailable and the writer is disabled',
+          e,
+        );
+      }
+      return undefined;
+    }
+    const info = getSQLiteChangeLogInfo(db);
+    logSQLiteChangeLogStartup(lc, fileMode, true, info);
+    return new SQLiteChangeLogObserver(lc, info);
+  } finally {
+    db.close();
+  }
 }
 
 function setupMetrics(lc: LogContext, file: string, walMode: WalMode) {
