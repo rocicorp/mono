@@ -599,7 +599,10 @@ export function scanInfoMatchesKey(
   }
 
   if (process.env.DISABLE_REPLICACHE_INDEXES) {
-    // Indexes are compiled out of this build so index scan infos never exist.
+    // Unreachable in practice: when indexes are disabled no scan subscription
+    // has an indexName and no diff is keyed by one, so changeIndexName and
+    // indexName are both '' and we return above. This early return exists so
+    // that the decodeIndexKey call below can be dead-code eliminated.
     return false;
   }
 
