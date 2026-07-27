@@ -375,48 +375,72 @@ export class SQLiteChangeLogCatchup implements Disposable {
     deadline: number,
     signal: AbortSignal,
   ): Promise<CatchupPlan> {
-    // Registered once for the whole barrier rather than per wait, both to
-    // bound the waiters a long barrier accumulates and because the crossing
-    // is one-way: the backlog cannot shrink while catchup is buffering it.
+    // Race backlog growth once around the whole polling loop. Attaching the
+    // same unresolved promise to every per-poll race would retain one reaction
+    // per iteration until the subscriber's backlog eventually filled.
     const backlogFull = subscriber.whenBacklogFull();
-    while (true) {
-      this.#throwIfAborted(signal);
-      const plan = this.#reader.plan(subscriber.watermark);
-      if (plan.headWatermark >= requiredHead) {
-        return plan;
-      }
-      const remaining = deadline - this.#now();
-      if (remaining <= 0) {
-        throw new SQLiteChangeLogBarrierTimeoutError(
-          `timed out waiting for SQLite head ${plan.headWatermark} to reach ` +
-            `required head ${requiredHead}`,
-        );
-      }
-      await this.#awaitChangeLogProgress(
-        requiredHead,
-        remaining,
-        backlogFull,
-        signal,
-      );
-      // Bytes, not time, are what the barrier actually costs: past the high
-      // water mark this subscriber's send() no longer resolves, so it holds up
-      // every flush and, with no other subscriber to form a majority, stalls
-      // replication -- which stalls the very replica the barrier waits on.
-      if (subscriber.backlogFull) {
+    const barrier = new AbortController();
+    const abortBarrier = () => barrier.abort();
+    signal.addEventListener('abort', abortBarrier, {once: true});
+    if (signal.aborted) {
+      barrier.abort();
+    }
+
+    let observedHead = subscriber.watermark;
+    try {
+      const planReady = (async () => {
+        while (true) {
+          this.#throwIfAborted(barrier.signal);
+          const plan = this.#reader.plan(subscriber.watermark);
+          observedHead = plan.headWatermark;
+          if (plan.headWatermark >= requiredHead) {
+            return plan;
+          }
+          const remaining = deadline - this.#now();
+          if (remaining <= 0) {
+            throw new SQLiteChangeLogBarrierTimeoutError(
+              `timed out waiting for SQLite head ${plan.headWatermark} to ` +
+                `reach required head ${requiredHead}`,
+            );
+          }
+          await this.#awaitChangeLogProgress(
+            requiredHead,
+            remaining,
+            barrier.signal,
+          );
+        }
+      })();
+
+      const backlogOverflow = backlogFull.promise.then(() => {
+        this.#throwIfAborted(signal);
+        // close() also resolves backlog waiters so none are stranded. The
+        // backlog is cleared first, which distinguishes close from overflow.
+        if (!subscriber.backlogFull) {
+          return new Promise<never>(() => {});
+        }
+        this.#barrierWakeups.add(1, {'wakeup.source': 'backlog'});
+        // Bytes, not time, are what the barrier actually costs: past the high
+        // water mark this subscriber's send() no longer resolves, so it holds
+        // up every flush and can stall the replica this barrier waits on.
         this.#barrierBacklogOverflows.add(1);
         throw new SQLiteChangeLogBarrierBacklogError(
           `backlog for subscriber ${subscriber.id} reached its high water ` +
-            `mark while waiting for SQLite head ${plan.headWatermark} to ` +
+            `mark while waiting for SQLite head ${observedHead} to ` +
             `reach required head ${requiredHead}`,
         );
-      }
+      });
+
+      return await Promise.race([planReady, backlogOverflow]);
+    } finally {
+      signal.removeEventListener('abort', abortBarrier);
+      barrier.abort();
+      backlogFull.cancel();
     }
   }
 
   /**
-   * Waits for a reason to stop waiting: the change-log writer's ACK of
-   * `requiredHead`, the subscriber's backlog filling up, or the poll interval
-   * as a backstop.
+   * Waits for the change-log writer's ACK of `requiredHead`, or the poll
+   * interval as a backstop.
    *
    * No ACK can be missed by registering after `plan()` was read, because the
    * ACK lags the write it acknowledges: if the writer had already acked
@@ -425,7 +449,6 @@ export class SQLiteChangeLogCatchup implements Disposable {
   async #awaitChangeLogProgress(
     requiredHead: string,
     remainingMs: number,
-    backlogFull: Promise<void>,
     signal: AbortSignal,
   ): Promise<void> {
     const acked = resolver<void>();
@@ -439,7 +462,6 @@ export class SQLiteChangeLogCatchup implements Disposable {
     try {
       const wokenBy = await Promise.race([
         acked.promise.then(() => 'ack' as const),
-        backlogFull.then(() => 'backlog' as const),
         this.#sleep(
           Math.min(this.#barrierPollIntervalMs, remainingMs),
           poll.signal,

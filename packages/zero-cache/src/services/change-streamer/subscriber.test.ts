@@ -1,5 +1,6 @@
 import {describe, expect, test} from 'vitest';
 import {ReplicationMessages} from '../replicator/test-utils.ts';
+import * as ErrorType from './error-type-enum.ts';
 import {createSubscriber} from './test-utils.ts';
 
 const json = JSON.stringify;
@@ -264,7 +265,8 @@ describe('change-streamer/subscriber', () => {
     });
 
     let full = false;
-    void sub.whenBacklogFull().then(() => {
+    const backlogFull = sub.whenBacklogFull();
+    void backlogFull.promise.then(() => {
       full = true;
     });
     expect(sub.backlogFull).toBe(false);
@@ -294,7 +296,8 @@ describe('change-streamer/subscriber', () => {
     });
 
     let full = false;
-    const waiting = sub.whenBacklogFull().then(() => {
+    const backlogFull = sub.whenBacklogFull();
+    const waiting = backlogFull.promise.then(() => {
       full = true;
     });
 
@@ -304,6 +307,48 @@ describe('change-streamer/subscriber', () => {
     // caller that re-checks does not mistake this for an overflow.
     expect(full).toBe(true);
     expect(sub.backlogFull).toBe(false);
+  });
+
+  test('whenBacklogFull waiters can be cancelled', async () => {
+    const [sub] = createSubscriber('00', false, {
+      backlogHighWaterBytes: 1,
+    });
+
+    let full = false;
+    const backlogFull = sub.whenBacklogFull();
+    void backlogFull.promise.then(() => {
+      full = true;
+    });
+    backlogFull.cancel();
+
+    const blocked = sub.send([
+      '11',
+      'begin',
+      json(['begin', messages.begin(), {commitWatermark: '12'}]),
+    ]);
+    await Promise.resolve();
+    expect(sub.backlogFull).toBe(true);
+    expect(full).toBe(false);
+
+    sub.close();
+    await blocked;
+    await Promise.resolve();
+    expect(full).toBe(false);
+  });
+
+  test('fail sends the Unknown error code', async () => {
+    const [sub, , receiver] = createSubscriber();
+    const iterator = receiver[Symbol.asyncIterator]();
+
+    sub.fail(new Error('boom'));
+
+    const error = await iterator.next();
+    expect(error.done).toBeFalsy();
+    expect(JSON.parse(error.value as string)).toEqual([
+      'error',
+      {type: ErrorType.Unknown, message: 'Error: boom'},
+    ]);
+    expect((await iterator.next()).done).toBe(true);
   });
 
   test('close releases backlog backpressure', async () => {

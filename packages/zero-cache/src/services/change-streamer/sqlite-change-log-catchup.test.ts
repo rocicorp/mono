@@ -257,6 +257,10 @@ describe('SQLiteChangeLogCatchup', () => {
 
     const plan = vi.spyOn(fixture.reader, 'plan');
     const {subscriber, output} = createSubscriber('01');
+    const backlogFull = subscriber.whenBacklogFull();
+    const backlogThen = vi.spyOn(backlogFull.promise, 'then');
+    const cancelBacklogWait = vi.spyOn(backlogFull, 'cancel');
+    vi.spyOn(subscriber, 'whenBacklogFull').mockReturnValue(backlogFull);
     await fixture.coordinator.catchup(subscriber, 'serving', () => '06');
     await vi.waitFor(() => expect(plan).toHaveBeenCalledOnce());
 
@@ -275,6 +279,8 @@ describe('SQLiteChangeLogCatchup', () => {
       'status',
       ...transactionMarkers('06'),
     ]);
+    expect(backlogThen).toHaveBeenCalledOnce();
+    expect(cancelBacklogWait).toHaveBeenCalledOnce();
   });
 
   test('maps too-old plans to serving and backup policies', async () => {
@@ -437,9 +443,13 @@ describe('SQLiteChangeLogCatchup', () => {
     fixture.reader.head = '06';
     fixture.reader.boundaries.add('01');
     fixture.reader.readError = new Error('broken SQLite read');
-    const {subscriber, done} = createSubscriber('01');
+    const {subscriber, done, output} = createSubscriber('01');
     await fixture.coordinator.catchup(subscriber, 'serving', () => '06');
 
+    expect(await output.dequeue()).toEqual([
+      'error',
+      {type: ErrorType.Unknown, message: 'Error: broken SQLite read'},
+    ]);
     await done;
     expect(fixture.logSink.messages).toContainEqual([
       'error',

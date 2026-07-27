@@ -32,6 +32,11 @@ export type SubscriberOptions = {
   onAck?: ((watermark: string) => void) | undefined;
 };
 
+export type BacklogFullWait = {
+  readonly promise: Promise<void>;
+  cancel(): void;
+};
+
 /**
  * Encapsulates a subscriber to changes. All subscribers start in a
  * "catchup" phase in which changes are buffered in a backlog while the
@@ -54,7 +59,7 @@ export class Subscriber {
   #backlogInFlightBytes = 0;
   #backlogDrain: Promise<void> | null = null;
   readonly #backlogBackpressure: ByteBackpressureGate;
-  readonly #backlogFullWaiters: Resolver<void>[] = [];
+  readonly #backlogFullWaiters = new Set<Resolver<void>>();
   readonly #onAck: ((watermark: string) => void) | undefined;
 
   constructor(
@@ -102,15 +107,21 @@ export class Subscriber {
   /**
    * Resolves the first time {@link backlogFull} becomes true, so that a caller
    * holding the subscriber in catchup can give up at the moment the subscriber
-   * starts costing replication rather than on a timer.
+   * starts costing replication rather than on a timer. Call cancel() when the
+   * wait is no longer needed so the subscriber does not retain it.
    */
-  whenBacklogFull(): Promise<void> {
+  whenBacklogFull(): BacklogFullWait {
     if (this.backlogFull) {
-      return promiseVoid;
+      return {promise: promiseVoid, cancel() {}};
     }
     const r = resolver<void>();
-    this.#backlogFullWaiters.push(r);
-    return r.promise;
+    this.#backlogFullWaiters.add(r);
+    return {
+      promise: r.promise,
+      cancel: () => {
+        this.#backlogFullWaiters.delete(r);
+      },
+    };
   }
 
   send(change: WatermarkedChange): Promise<void> {
@@ -302,11 +313,9 @@ export class Subscriber {
     this.#backlogBackpressure.releaseAll();
     // The backlog can no longer grow, so nothing would ever resolve these.
     // Waiters re-check backlogFull, which is now false, and see the close.
-    for (const waiter of this.#backlogFullWaiters.splice(0)) {
-      waiter.resolve();
-    }
+    this.#resolveBacklogFullWaiters();
 
-    if (error) {
+    if (error !== undefined) {
       // Wait for the ACK of the error message before closing the connection.
       void this.#sendDownstream(['error', {type: error, message}]).finally(() =>
         this.#downstream.cancel(),
@@ -332,9 +341,15 @@ export class Subscriber {
     this.#backlog.push(change);
     this.#backlogBytes += change[2].length;
     if (this.backlogFull) {
-      for (const waiter of this.#backlogFullWaiters.splice(0)) {
-        waiter.resolve();
-      }
+      this.#resolveBacklogFullWaiters();
+    }
+  }
+
+  #resolveBacklogFullWaiters() {
+    const waiters = [...this.#backlogFullWaiters];
+    this.#backlogFullWaiters.clear();
+    for (const waiter of waiters) {
+      waiter.resolve();
     }
   }
 
