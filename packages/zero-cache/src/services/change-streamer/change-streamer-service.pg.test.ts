@@ -672,6 +672,111 @@ describe('change-streamer/service', () => {
     }
   });
 
+  test('a change-log writer is never served from the change log it writes', async () => {
+    await streamer.stop();
+    await streamerDone;
+
+    const catchupReplicaFile = new DbFile('sqlite-catchup-writer-integration');
+    const catchupReplica = catchupReplicaFile.connect(lc);
+    catchupReplica.pragma('journal_mode = wal');
+    initReplicationState(catchupReplica, ['zero_data'], REPLICA_VERSION);
+
+    changes = Subscription.create();
+    acks = new Queue();
+    streamer = await initializeStreamer(
+      lc,
+      shard,
+      'task-id',
+      'change.streamer:12345',
+      'ws',
+      sql,
+      {
+        startStream: () =>
+          Promise.resolve({
+            initialWatermark: '02',
+            changes,
+            acks: {push: status => acks.enqueue(status)},
+          }),
+        startLagReporter: () => Promise.resolve({nextSendTimeMs: 123}),
+        stop: () => Promise.resolve(),
+      },
+      ReplicationStatusPublisher.forTesting(),
+      replicaConfig,
+      null,
+      true,
+      {
+        ...opts,
+        sqliteCatchup: {
+          replicaFile: catchupReplicaFile.path,
+          readBatchRows: 2,
+          barrierTimeoutMs: 60_000,
+          barrierPollIntervalMs: 60_000,
+          // The selector mistake this guards against: a canary that picks the
+          // one subscriber that cannot be served from SQLite. Nothing here
+          // advances the replica, so a barrier would hold until the deadline.
+          shouldUse: ctx => ctx.logsChangeStream,
+        },
+      },
+      setTimeoutFn as unknown as typeof setTimeout,
+    );
+    streamerDone = streamer.run();
+
+    try {
+      const observerSub = await streamer.subscribe({
+        protocolVersion: PROTOCOL_VERSION,
+        taskID: 'observer-task',
+        id: 'observer',
+        mode: 'serving',
+        watermark: REPLICA_VERSION,
+        replicaVersion: REPLICA_VERSION,
+        initial: true,
+        logsChangeStream: false,
+      });
+      const observed = drainToQueue(observerSub);
+      expect(await nextChange(observed)).toMatchObject({tag: 'status'});
+
+      changes.push(['begin', messages.begin(), {commitWatermark: '04'}]);
+      changes.push(['data', messages.insert('foo', {id: 'forwarded'})]);
+      changes.push(['commit', messages.commit(), {watermark: '04'}]);
+      // Establishes a forwarded head, which is what the writer would then be
+      // made to wait for.
+      expect(await nextChange(observed)).toMatchObject({tag: 'begin'});
+
+      const writerSub = await streamer.subscribe({
+        protocolVersion: PROTOCOL_VERSION,
+        taskID: 'task-id',
+        id: 'change-log-writer',
+        mode: 'backup',
+        watermark: REPLICA_VERSION,
+        replicaVersion: REPLICA_VERSION,
+        initial: true,
+        logsChangeStream: true,
+      });
+      const written = drainToQueue(writerSub);
+
+      // Served from PG instead of waiting on itself.
+      expect(await nextChange(written)).toMatchObject({tag: 'status'});
+      expect(await nextChange(written)).toMatchObject({tag: 'begin'});
+      expect(await nextChange(written)).toMatchObject({
+        tag: 'insert',
+        new: {id: 'forwarded'},
+      });
+      expect(await nextChange(written)).toMatchObject({tag: 'commit'});
+      expect(logSink.messages).toContainEqual([
+        'warn',
+        expect.anything(),
+        [expect.stringContaining('it would wait on its own ACK')],
+      ]);
+
+      observerSub.cancel();
+      writerSub.cancel();
+    } finally {
+      await streamer.stop();
+      catchupReplica.close();
+      catchupReplicaFile.delete();
+    }
+  });
+
   test('get empty changelog state', async () => {
     expect(await streamer.getChangeLogState()).toEqual({
       minWatermark: '01',

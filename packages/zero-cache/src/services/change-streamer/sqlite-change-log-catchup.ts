@@ -77,6 +77,12 @@ export class SQLiteChangeLogCatchup implements Disposable {
     'sqlite_change_log.barrier_timeouts',
     'SQLite change-log catchups that timed out waiting for the required head.',
   );
+  readonly #barrierBacklogOverflows = getOrCreateCounter(
+    'replication',
+    'sqlite_change_log.barrier_backlog_overflows',
+    'SQLite change-log catchups abandoned because the subscriber backlog ' +
+      'reached its high water mark while waiting for the required head.',
+  );
   readonly #barrierWakeups = getOrCreateCounter(
     'replication',
     'sqlite_change_log.barrier_wakeups',
@@ -217,7 +223,7 @@ export class SQLiteChangeLogCatchup implements Disposable {
       // the replica is.
       const deadline = this.#now() + this.#barrierTimeoutMs;
       const plan = await this.#waitForPlan(
-        subscriber.watermark,
+        subscriber,
         required,
         deadline,
         signal,
@@ -288,16 +294,18 @@ export class SQLiteChangeLogCatchup implements Disposable {
       if (signal.aborted) {
         return;
       }
-      if (error instanceof SQLiteChangeLogBarrierTimeoutError) {
-        this.#barrierTimeouts.add(1);
-        // A barrier timeout means the replica has not caught up *yet*, not
-        // that it cannot serve this subscriber. End the subscription cleanly
-        // so the client reconnects and retries: IncrementalSyncer treats any
-        // ['error', ...] message as terminal and restores a fresh replica from
-        // litestream, whereas a clean end backs off and re-subscribes. If
-        // retries keep failing until the change log is purged past the
-        // subscriber's watermark, plan() returns 'too-old', which is terminal
-        // by design.
+      if (error instanceof SQLiteChangeLogBarrierError) {
+        if (error instanceof SQLiteChangeLogBarrierTimeoutError) {
+          this.#barrierTimeouts.add(1);
+        }
+        // Giving up on the barrier means the replica has not caught up *yet*,
+        // not that it cannot serve this subscriber. End the subscription
+        // cleanly so the client reconnects and retries: IncrementalSyncer
+        // treats any ['error', ...] message as terminal and restores a fresh
+        // replica from litestream, whereas a clean end backs off and
+        // re-subscribes. If retries keep failing until the change log is purged
+        // past the subscriber's watermark, plan() returns 'too-old', which is
+        // terminal by design.
         this.#lc.warn?.(
           `ending subscription for ${subscriber.id} to retry SQLite catchup`,
           error,
@@ -362,14 +370,18 @@ export class SQLiteChangeLogCatchup implements Disposable {
   }
 
   async #waitForPlan(
-    fromWatermark: string,
+    subscriber: Subscriber,
     requiredHead: string,
     deadline: number,
     signal: AbortSignal,
   ): Promise<CatchupPlan> {
+    // Registered once for the whole barrier rather than per wait, both to
+    // bound the waiters a long barrier accumulates and because the crossing
+    // is one-way: the backlog cannot shrink while catchup is buffering it.
+    const backlogFull = subscriber.whenBacklogFull();
     while (true) {
       this.#throwIfAborted(signal);
-      const plan = this.#reader.plan(fromWatermark);
+      const plan = this.#reader.plan(subscriber.watermark);
       if (plan.headWatermark >= requiredHead) {
         return plan;
       }
@@ -380,13 +392,31 @@ export class SQLiteChangeLogCatchup implements Disposable {
             `required head ${requiredHead}`,
         );
       }
-      await this.#awaitChangeLogProgress(requiredHead, remaining, signal);
+      await this.#awaitChangeLogProgress(
+        requiredHead,
+        remaining,
+        backlogFull,
+        signal,
+      );
+      // Bytes, not time, are what the barrier actually costs: past the high
+      // water mark this subscriber's send() no longer resolves, so it holds up
+      // every flush and, with no other subscriber to form a majority, stalls
+      // replication -- which stalls the very replica the barrier waits on.
+      if (subscriber.backlogFull) {
+        this.#barrierBacklogOverflows.add(1);
+        throw new SQLiteChangeLogBarrierBacklogError(
+          `backlog for subscriber ${subscriber.id} reached its high water ` +
+            `mark while waiting for SQLite head ${plan.headWatermark} to ` +
+            `reach required head ${requiredHead}`,
+        );
+      }
     }
   }
 
   /**
-   * Waits for a reason to re-read the replica: the change-log writer's ACK of
-   * `requiredHead`, or the poll interval as a backstop.
+   * Waits for a reason to stop waiting: the change-log writer's ACK of
+   * `requiredHead`, the subscriber's backlog filling up, or the poll interval
+   * as a backstop.
    *
    * No ACK can be missed by registering after `plan()` was read, because the
    * ACK lags the write it acknowledges: if the writer had already acked
@@ -395,6 +425,7 @@ export class SQLiteChangeLogCatchup implements Disposable {
   async #awaitChangeLogProgress(
     requiredHead: string,
     remainingMs: number,
+    backlogFull: Promise<void>,
     signal: AbortSignal,
   ): Promise<void> {
     const acked = resolver<void>();
@@ -408,6 +439,7 @@ export class SQLiteChangeLogCatchup implements Disposable {
     try {
       const wokenBy = await Promise.race([
         acked.promise.then(() => 'ack' as const),
+        backlogFull.then(() => 'backlog' as const),
         this.#sleep(
           Math.min(this.#barrierPollIntervalMs, remainingMs),
           poll.signal,
@@ -430,6 +462,19 @@ export class SQLiteChangeLogCatchup implements Disposable {
 
 type AckWaiter = {watermark: string; resolve: () => void};
 
-export class SQLiteChangeLogBarrierTimeoutError extends Error {
+/**
+ * A barrier that gave up on the replica reaching the required head. Both
+ * reasons mean "not yet", not "never", so both end the subscription cleanly
+ * for a retry rather than failing it.
+ */
+export class SQLiteChangeLogBarrierError extends Error {}
+
+/** The replica did not reach the required head before the deadline. */
+export class SQLiteChangeLogBarrierTimeoutError extends SQLiteChangeLogBarrierError {
   readonly name = 'SQLiteChangeLogBarrierTimeoutError';
+}
+
+/** Waiting any longer would have cost more than reconnecting. */
+export class SQLiteChangeLogBarrierBacklogError extends SQLiteChangeLogBarrierError {
+  readonly name = 'SQLiteChangeLogBarrierBacklogError';
 }

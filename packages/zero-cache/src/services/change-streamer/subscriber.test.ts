@@ -258,6 +258,54 @@ describe('change-streamer/subscriber', () => {
     expect(released).toBe(true);
   });
 
+  test('whenBacklogFull resolves at the same point send() blocks', async () => {
+    const [sub] = createSubscriber('00', false, {
+      backlogHighWaterBytes: 1_000,
+    });
+
+    let full = false;
+    void sub.whenBacklogFull().then(() => {
+      full = true;
+    });
+    expect(sub.backlogFull).toBe(false);
+
+    const small = json(['begin', messages.begin(), {commitWatermark: '12'}]);
+    expect(small.length).toBeLessThan(1_000);
+    let released = false;
+    void sub.send(['11', 'begin', small]).then(() => {
+      released = true;
+    });
+
+    await Promise.resolve();
+    expect(full).toBe(false);
+    expect(released).toBe(true);
+
+    // Enough to cross the mark, which is exactly where send() stops resolving.
+    void sub.send(['12', 'commit', 'x'.repeat(1_000)]);
+
+    await Promise.resolve();
+    expect(sub.backlogFull).toBe(true);
+    expect(full).toBe(true);
+  });
+
+  test('close releases whenBacklogFull waiters', async () => {
+    const [sub] = createSubscriber('00', false, {
+      backlogHighWaterBytes: 1,
+    });
+
+    let full = false;
+    const waiting = sub.whenBacklogFull().then(() => {
+      full = true;
+    });
+
+    sub.close();
+    await waiting;
+    // Resolved so the waiter is not stranded, but the backlog is gone, so a
+    // caller that re-checks does not mistake this for an overflow.
+    expect(full).toBe(true);
+    expect(sub.backlogFull).toBe(false);
+  });
+
   test('close releases backlog backpressure', async () => {
     const [sub] = createSubscriber('00', false, {
       backlogHighWaterBytes: 1,

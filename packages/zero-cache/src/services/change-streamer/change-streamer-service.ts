@@ -68,7 +68,13 @@ export type SQLiteCatchupOptions = {
    * the barrier. Defaults to the catchup coordinator's interval.
    */
   barrierPollIntervalMs?: number | undefined;
-  /** Slice 11 supplies the production canary selector. */
+  /**
+   * Slice 11 supplies the production canary selector.
+   *
+   * It does not need to exclude the change-log writer: subscribers with
+   * `logsChangeStream` are rejected regardless of what this returns, since
+   * serving one from SQLite would make it wait on its own ACK.
+   */
   shouldUse?: ((ctx: SubscriberContext) => boolean) | undefined;
   /** Slice 9 supplies the writer-serialized purge guard. */
   cleanupGuard?: SQLiteChangeLogCleanupGuard | undefined;
@@ -727,6 +733,19 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       this.#lastForwardedCommitWatermark === undefined ||
       !opts?.shouldUse?.(ctx)
     ) {
+      return undefined;
+    }
+    if (ctx.logsChangeStream) {
+      // A change-log writer cannot be served from the change log it writes.
+      // The barrier waits for a head that only this subscriber can advance,
+      // and it advances it by consuming the very subscription the barrier is
+      // holding: it would wait on its own ACK until the deadline, on every
+      // reconnect. Enforced here rather than left to the selector so that no
+      // selector can express it.
+      this.#lc.warn?.(
+        `not serving change-log writer ${ctx.id} from SQLite catchup: ` +
+          `it would wait on its own ACK`,
+      );
       return undefined;
     }
     if (!this.#sqliteCatchup) {

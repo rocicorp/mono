@@ -15,7 +15,7 @@ function configWith(litestream: Partial<ZeroConfig['litestream']>): ZeroConfig {
       sqliteChangeLogRetentionMs: 60_000,
       sqliteChangeLogReadBatchRows: 1000,
       sqliteChangeLogPurgeBatchRows: 1000,
-      sqliteChangeLogBarrierTimeoutMs: 30_000,
+      sqliteChangeLogBarrierTimeoutMs: 300_000,
     },
     change: {db: 'postgres:///change'},
     cvr: {db: 'postgres:///cvr'},

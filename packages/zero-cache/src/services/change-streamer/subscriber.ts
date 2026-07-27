@@ -54,6 +54,7 @@ export class Subscriber {
   #backlogInFlightBytes = 0;
   #backlogDrain: Promise<void> | null = null;
   readonly #backlogBackpressure: ByteBackpressureGate;
+  readonly #backlogFullWaiters: Resolver<void>[] = [];
   readonly #onAck: ((watermark: string) => void) | undefined;
 
   constructor(
@@ -84,6 +85,32 @@ export class Subscriber {
 
   get acked() {
     return this.#acked;
+  }
+
+  /**
+   * Whether the backlog of live changes buffered during catchup has reached the
+   * point at which {@link send()} stops resolving. Past it the subscriber is no
+   * longer free: it holds up every subsequent flush, and with no other
+   * subscriber to form a majority it stalls replication outright.
+   */
+  get backlogFull() {
+    return (
+      this.#bufferedBacklogBytes >= this.#backlogBackpressure.highWaterBytes
+    );
+  }
+
+  /**
+   * Resolves the first time {@link backlogFull} becomes true, so that a caller
+   * holding the subscriber in catchup can give up at the moment the subscriber
+   * starts costing replication rather than on a timer.
+   */
+  whenBacklogFull(): Promise<void> {
+    if (this.backlogFull) {
+      return promiseVoid;
+    }
+    const r = resolver<void>();
+    this.#backlogFullWaiters.push(r);
+    return r.promise;
   }
 
   send(change: WatermarkedChange): Promise<void> {
@@ -273,6 +300,11 @@ export class Subscriber {
     this.#backlog = null;
     this.#backlogBytes = 0;
     this.#backlogBackpressure.releaseAll();
+    // The backlog can no longer grow, so nothing would ever resolve these.
+    // Waiters re-check backlogFull, which is now false, and see the close.
+    for (const waiter of this.#backlogFullWaiters.splice(0)) {
+      waiter.resolve();
+    }
 
     if (error) {
       // Wait for the ACK of the error message before closing the connection.
@@ -299,6 +331,11 @@ export class Subscriber {
     assert(this.#backlog, 'cannot push to backlog after catchup completed');
     this.#backlog.push(change);
     this.#backlogBytes += change[2].length;
+    if (this.backlogFull) {
+      for (const waiter of this.#backlogFullWaiters.splice(0)) {
+        waiter.resolve();
+      }
+    }
   }
 
   #maybeWaitForBacklogSpace(): Promise<void> {

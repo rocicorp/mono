@@ -14,13 +14,14 @@ import {Forwarder} from './forwarder.ts';
 import {AutoResetSignal} from './schema/tables.ts';
 import {
   SQLiteChangeLogCatchup,
+  SQLiteChangeLogBarrierBacklogError,
   SQLiteChangeLogBarrierTimeoutError,
   type SQLiteChangeLogCatchupOptions,
   type SQLiteChangeLogCatchupReader,
   type SQLiteChangeLogCleanupGuard,
 } from './sqlite-change-log-catchup.ts';
 import type {CatchupPlan} from './sqlite-change-log-reader.ts';
-import {Subscriber} from './subscriber.ts';
+import {Subscriber, type SubscriberOptions} from './subscriber.ts';
 
 const coordinators: SQLiteChangeLogCatchup[] = [];
 
@@ -311,6 +312,43 @@ describe('SQLiteChangeLogCatchup', () => {
     expect(backup.onFatal.mock.calls[0][0]).toBeInstanceOf(AutoResetSignal);
   });
 
+  test('gives up the barrier once the subscriber backlog fills', async () => {
+    // Long enough that only the backlog can end this wait. Bytes, not time,
+    // are the real bound; the deadline is only a backstop for an idle shard.
+    const fixture = createFixture({
+      barrierTimeoutMs: 60_000,
+      barrierPollIntervalMs: 60_000,
+    });
+    fixture.reader.head = '01';
+
+    const {subscriber, done, output} = createSubscriber('01', {
+      backlogHighWaterBytes: 1,
+    });
+    const fail = vi.spyOn(subscriber, 'fail');
+    await fixture.coordinator.catchup(subscriber, 'serving', () => '06');
+
+    // Past the high water mark this subscriber's send() no longer resolves,
+    // so it holds up the flushes that would advance the replica it waits on.
+    forward(fixture.forwarder, transaction('06'));
+
+    await done;
+    // A clean end, same as a barrier timeout: reconnecting is cheaper than
+    // holding replication while the backlog grows.
+    expect(fail).not.toHaveBeenCalled();
+    expect(output.size()).toBe(0);
+    expect(fixture.logSink.messages).toContainEqual([
+      'warn',
+      expect.anything(),
+      [
+        expect.stringContaining('to retry SQLite catchup'),
+        expect.objectContaining({
+          name: SQLiteChangeLogBarrierBacklogError.name,
+        }),
+      ],
+    ]);
+    expect(fixture.onFatal).not.toHaveBeenCalled();
+  });
+
   test('ends only the selected subscription, cleanly, on barrier timeout', async () => {
     const fixture = createFixture({barrierTimeoutMs: 5});
     fixture.reader.head = '01';
@@ -574,7 +612,7 @@ class TestReader implements SQLiteChangeLogCatchupReader {
   }
 }
 
-function createSubscriber(watermark: string) {
+function createSubscriber(watermark: string, options: SubscriberOptions = {}) {
   const downstream = Subscription.create<string>();
   const subscriber = new Subscriber(
     5,
@@ -582,6 +620,7 @@ function createSubscriber(watermark: string) {
     watermark,
     downstream,
     () => ({tag: 'status'}),
+    options,
   );
   const {done, output} = drainToQueue(downstream);
   return {done, subscriber, output};
