@@ -260,6 +260,10 @@ export function getSubscriberContext(req: RequestHeaders): SubscriberContext {
     replicaVersion: params.get('replicaVersion', true),
     watermark: params.get('watermark', true),
     initial: params.getBoolean('initial'),
+    // Absent for subscribers that predate the parameter, which is the safe
+    // default: the barrier falls back to polling rather than waiting on an
+    // ACK that would never be attributed to a writer.
+    logsChangeStream: params.getBoolean('logsChangeStream'),
   };
 }
 
@@ -294,5 +298,6 @@ function getParams(ctx: SubscriberContext): URLSearchParams {
     ...stringParams,
     taskID: ctx.taskID ? ctx.taskID : '',
     initial: ctx.initial ? 'true' : 'false',
+    logsChangeStream: ctx.logsChangeStream ? 'true' : 'false',
   });
 }

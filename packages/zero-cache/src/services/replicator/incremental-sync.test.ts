@@ -92,6 +92,7 @@ describe('replicator/incremental-sync', () => {
       {subscribe: subscribeFn.mockResolvedValue(downstream)},
       worker,
       'serving',
+      false,
       ReplicationStatusPublisher.forReplicaFile(dbFile.path),
       undefined,
     );
@@ -147,6 +148,7 @@ describe('replicator/incremental-sync', () => {
       replicaVersion: '02',
       watermark: '02',
       initial: true,
+      logsChangeStream: false,
     });
 
     const firstBegin = [
@@ -439,6 +441,7 @@ describe('replicator/incremental-sync', () => {
       replicaVersion: '09',
       watermark: '09',
       initial: true,
+      logsChangeStream: false,
     });
 
     for (const change of [
@@ -616,6 +619,7 @@ describe('replicator/incremental-sync', () => {
       replicaVersion: '09',
       watermark: '09',
       initial: true,
+      logsChangeStream: false,
     });
 
     const next = versionReady.next();
@@ -757,6 +761,7 @@ describe('replicator/incremental-sync', () => {
       },
       worker,
       'serving',
+      false,
       ReplicationStatusPublisher.forReplicaFile(dbFile.path),
       undefined,
     );
@@ -788,6 +793,7 @@ describe('replicator/incremental-sync', () => {
       },
       worker,
       'serving',
+      false,
       ReplicationStatusPublisher.forReplicaFile(dbFile.path),
       undefined,
     );
@@ -838,6 +844,7 @@ describe('replicator/incremental-sync', () => {
       {subscribe: subscribeFn},
       worker,
       'serving',
+      true,
       ReplicationStatusPublisher.forReplicaFile(dbFile.path),
       undefined,
     );
@@ -894,6 +901,7 @@ describe('replicator/incremental-sync', () => {
       {subscribe: subscribeFn.mockResolvedValue(downstream)},
       worker,
       'serving',
+      true,
       ReplicationStatusPublisher.forReplicaFile(dbFile.path),
       observer,
     );

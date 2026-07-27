@@ -1,4 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
+import {resolver} from '@rocicorp/resolver';
 import {AbortError} from '../../../../shared/src/abort-error.ts';
 import {sleep} from '../../../../shared/src/sleep.ts';
 import {getOrCreateCounter} from '../../observability/metrics.ts';
@@ -29,6 +30,13 @@ export interface SQLiteChangeLogCatchupReader {
 export interface SQLiteChangeLogCleanupGuard {
   runWhilePurgeBlocked<T>(register: () => T): Promise<T>;
 }
+
+// How long the barrier waits for the change-log writer's ACK before falling
+// back to reading the replica. The ACK normally arrives first, so this is a
+// backstop for the windows in which no ACK is coming: no writer is subscribed
+// (in which case the change log cannot be advancing either), the writer is
+// mid-reconnect, or it predates the `logsChangeStream` subscription parameter.
+const DEFAULT_BARRIER_POLL_INTERVAL_MS = 1000;
 
 export type SQLiteChangeLogCatchupOptions = {
   batchSize: number;
@@ -69,7 +77,15 @@ export class SQLiteChangeLogCatchup implements Disposable {
     'sqlite_change_log.barrier_timeouts',
     'SQLite change-log catchups that timed out waiting for the required head.',
   );
+  readonly #barrierWakeups = getOrCreateCounter(
+    'replication',
+    'sqlite_change_log.barrier_wakeups',
+    'SQLite catchup barrier waits, labeled by what ended the wait. A ' +
+      'population dominated by "poll" means the change-log writer ACK is not ' +
+      'reaching the barrier.',
+  );
   readonly #catchups = new Map<Subscriber, AbortController>();
+  readonly #ackWaiters = new Set<AckWaiter>();
   #closed = false;
 
   constructor(
@@ -83,7 +99,8 @@ export class SQLiteChangeLogCatchup implements Disposable {
     this.#reader = reader;
     this.#batchSize = opts.batchSize;
     this.#barrierTimeoutMs = opts.barrierTimeoutMs;
-    this.#barrierPollIntervalMs = opts.barrierPollIntervalMs ?? 10;
+    this.#barrierPollIntervalMs =
+      opts.barrierPollIntervalMs ?? DEFAULT_BARRIER_POLL_INTERVAL_MS;
     this.#cleanupGuard = opts.cleanupGuard ?? NOOP_CLEANUP_GUARD;
     this.#onFatal = opts.onFatal;
     this.#sleep = opts.sleep ?? sleep;
@@ -132,6 +149,25 @@ export class SQLiteChangeLogCatchup implements Disposable {
       requiredHead as string | Promise<string>,
       abort,
     );
+  }
+
+  /**
+   * Notes that the subscriber writing the SQLite change log has acked
+   * `watermark`, i.e. has durably applied it to the replica this coordinator
+   * reads. That is the only event that advances the change log, so it is what
+   * the barrier waits on instead of polling the replica for it.
+   *
+   * The ACK is a wakeup, not an authority: `plan()` still decides what can be
+   * read. An ACK that never arrives costs the barrier a poll interval, and one
+   * that arrives early costs an extra `plan()` call.
+   */
+  onChangeLogWriterAck(watermark: string): void {
+    for (const waiter of this.#ackWaiters) {
+      if (watermark >= waiter.watermark) {
+        this.#ackWaiters.delete(waiter);
+        waiter.resolve();
+      }
+    }
   }
 
   remove(subscriber: Subscriber): void {
@@ -344,10 +380,44 @@ export class SQLiteChangeLogCatchup implements Disposable {
             `required head ${requiredHead}`,
         );
       }
-      await this.#sleep(
-        Math.min(this.#barrierPollIntervalMs, remaining),
-        signal,
-      );
+      await this.#awaitChangeLogProgress(requiredHead, remaining, signal);
+    }
+  }
+
+  /**
+   * Waits for a reason to re-read the replica: the change-log writer's ACK of
+   * `requiredHead`, or the poll interval as a backstop.
+   *
+   * No ACK can be missed by registering after `plan()` was read, because the
+   * ACK lags the write it acknowledges: if the writer had already acked
+   * `requiredHead`, `plan()` would have seen it.
+   */
+  async #awaitChangeLogProgress(
+    requiredHead: string,
+    remainingMs: number,
+    signal: AbortSignal,
+  ): Promise<void> {
+    const acked = resolver<void>();
+    const waiter = {watermark: requiredHead, resolve: acked.resolve};
+    this.#ackWaiters.add(waiter);
+    // Scopes the backstop timer to this wait so that an ACK cancels it rather
+    // than leaving it to fire against a barrier that has already moved on.
+    const poll = new AbortController();
+    const abortPoll = () => poll.abort();
+    signal.addEventListener('abort', abortPoll, {once: true});
+    try {
+      const wokenBy = await Promise.race([
+        acked.promise.then(() => 'ack' as const),
+        this.#sleep(
+          Math.min(this.#barrierPollIntervalMs, remainingMs),
+          poll.signal,
+        ).then(() => 'poll' as const),
+      ]);
+      this.#barrierWakeups.add(1, {'wakeup.source': wokenBy});
+    } finally {
+      this.#ackWaiters.delete(waiter);
+      signal.removeEventListener('abort', abortPoll);
+      poll.abort();
     }
   }
 
@@ -357,6 +427,8 @@ export class SQLiteChangeLogCatchup implements Disposable {
     }
   }
 }
+
+type AckWaiter = {watermark: string; resolve: () => void};
 
 export class SQLiteChangeLogBarrierTimeoutError extends Error {
   readonly name = 'SQLiteChangeLogBarrierTimeoutError';

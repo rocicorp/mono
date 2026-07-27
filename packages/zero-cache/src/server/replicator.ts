@@ -149,6 +149,7 @@ export default async function runWorker(
     mode,
     changeStreamer,
     workerClient,
+    logsChangeStream,
     runningLocalChangeStreamer
       ? // publish ReplicationStatusEvents from backup-replicator only
         ReplicationStatusPublisher.forReplicaFile(dbPath)

@@ -184,6 +184,7 @@ async function startReplicationPipeline(testDBs: PgTest['testDBs']) {
     'serving',
     parseStringifiedChangeStreamer(changeStreamer),
     worker,
+    false,
     null,
     undefined,
   );

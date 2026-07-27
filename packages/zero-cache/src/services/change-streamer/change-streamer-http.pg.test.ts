@@ -280,6 +280,8 @@ describe('change-streamer/http', () => {
         replicaVersion: 'abc',
         watermark: '123',
         initial: true,
+        // Non-default so that the roundtrip below pins the parameter.
+        logsChangeStream: true,
       } as const;
       await setChangeStreamerAddress(addr());
       const client = autoDiscover
@@ -341,6 +343,7 @@ describe('change-streamer/http', () => {
       replicaVersion: 'abc',
       watermark: '123',
       initial: true,
+      logsChangeStream: false,
     });
 
     const messages = new ReplicationMessages({issues: 'id'});

@@ -189,6 +189,93 @@ describe('SQLiteChangeLogCatchup', () => {
     ]);
   });
 
+  test('releases the barrier on the change-log writer ACK', async () => {
+    // A poll interval well beyond the test timeout: only the ACK can release
+    // this barrier, so passing proves it is not polling for the head.
+    const fixture = createFixture({
+      barrierTimeoutMs: 60_000,
+      barrierPollIntervalMs: 60_000,
+    });
+    fixture.reader.entries.push(...transaction('04'));
+    fixture.reader.boundaries.add('04');
+    fixture.reader.head = '04';
+
+    const plan = vi.spyOn(fixture.reader, 'plan');
+    const {subscriber, output} = createSubscriber('01');
+    await fixture.coordinator.catchup(subscriber, 'serving', () => '06');
+    await vi.waitFor(() => expect(plan).toHaveBeenCalledOnce());
+
+    fixture.reader.entries.push(...transaction('06'));
+    fixture.reader.boundaries.add('06');
+    fixture.reader.head = '06';
+    fixture.coordinator.onChangeLogWriterAck('06');
+
+    expect(await takeMarkers(output, 7)).toEqual([
+      'status',
+      ...transactionMarkers('04'),
+      ...transactionMarkers('06'),
+    ]);
+  });
+
+  test('ignores change-log ACKs below the required head', async () => {
+    const fixture = createFixture({
+      barrierTimeoutMs: 60_000,
+      barrierPollIntervalMs: 60_000,
+    });
+    fixture.reader.head = '04';
+
+    const plan = vi.spyOn(fixture.reader, 'plan');
+    const {subscriber, output} = createSubscriber('01');
+    await fixture.coordinator.catchup(subscriber, 'serving', () => '06');
+    await vi.waitFor(() => expect(plan).toHaveBeenCalledOnce());
+
+    // The writer is still behind the required head. Waking on every ACK would
+    // re-read the replica at the writer's commit rate for no reason.
+    fixture.coordinator.onChangeLogWriterAck('04');
+    await sleep(20);
+    expect(plan).toHaveBeenCalledOnce();
+    expect(output.size()).toBe(0);
+
+    fixture.reader.entries.push(...transaction('06'));
+    fixture.reader.boundaries.add('06');
+    fixture.reader.head = '06';
+    fixture.coordinator.onChangeLogWriterAck('06');
+
+    expect(await takeMarkers(output, 4)).toEqual([
+      'status',
+      ...transactionMarkers('06'),
+    ]);
+  });
+
+  test('re-reads the replica rather than trusting the ACK', async () => {
+    const fixture = createFixture({
+      barrierTimeoutMs: 60_000,
+      barrierPollIntervalMs: 60_000,
+    });
+    fixture.reader.head = '04';
+
+    const plan = vi.spyOn(fixture.reader, 'plan');
+    const {subscriber, output} = createSubscriber('01');
+    await fixture.coordinator.catchup(subscriber, 'serving', () => '06');
+    await vi.waitFor(() => expect(plan).toHaveBeenCalledOnce());
+
+    // An ACK that the reader cannot yet corroborate wakes the barrier but does
+    // not release it: plan() decides what is readable.
+    fixture.coordinator.onChangeLogWriterAck('06');
+    await vi.waitFor(() => expect(plan).toHaveBeenCalledTimes(2));
+    expect(output.size()).toBe(0);
+
+    fixture.reader.entries.push(...transaction('06'));
+    fixture.reader.boundaries.add('06');
+    fixture.reader.head = '06';
+    fixture.coordinator.onChangeLogWriterAck('06');
+
+    expect(await takeMarkers(output, 4)).toEqual([
+      'status',
+      ...transactionMarkers('06'),
+    ]);
+  });
+
   test('maps too-old plans to serving and backup policies', async () => {
     const serving = createFixture();
     serving.reader.min = '04';
@@ -396,6 +483,7 @@ describe('SQLiteChangeLogCatchup', () => {
 function createFixture(
   opts: {
     barrierTimeoutMs?: number | undefined;
+    barrierPollIntervalMs?: number | undefined;
     cleanupGuard?: SQLiteChangeLogCleanupGuard | undefined;
     now?: SQLiteChangeLogCatchupOptions['now'];
     onFatal?: SQLiteChangeLogCatchupOptions['onFatal'];
@@ -413,7 +501,7 @@ function createFixture(
   const coordinator = new SQLiteChangeLogCatchup(lc, forwarder, reader, {
     batchSize: 2,
     barrierTimeoutMs: opts.barrierTimeoutMs ?? 1_000,
-    barrierPollIntervalMs: 1,
+    barrierPollIntervalMs: opts.barrierPollIntervalMs ?? 1,
     cleanupGuard: opts.cleanupGuard,
     now: opts.now,
     onFatal,

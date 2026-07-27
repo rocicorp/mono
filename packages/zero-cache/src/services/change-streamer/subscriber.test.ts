@@ -439,4 +439,50 @@ describe('change-streamer/subscriber', () => {
       sub.sampleProcessRate(performance.now()).getStats().processRate,
     ).toBeGreaterThan(0);
   });
+
+  test('onAck reports each advance of the acked watermark', async () => {
+    const acks: string[] = [];
+    const [sub, _, receiver] = createSubscriber('00', true, {
+      onAck: watermark => acks.push(watermark),
+    });
+
+    void sub.send([
+      '11',
+      'begin',
+      json(['begin', messages.begin(), {commitWatermark: '12'}]),
+    ]);
+    void sub.send([
+      '12',
+      'commit',
+      json(['commit', messages.commit(), {watermark: '12'}]),
+    ]);
+    void sub.send([
+      '21',
+      'begin',
+      json(['begin', messages.begin(), {commitWatermark: '22'}]),
+    ]);
+    void sub.send([
+      '22',
+      'commit',
+      json(['commit', messages.commit(), {watermark: '22'}]),
+    ]);
+    // Trailing message: a commit is only acked once the consumer moves past it.
+    void sub.send([
+      '31',
+      'begin',
+      json(['begin', messages.begin(), {commitWatermark: '32'}]),
+    ]);
+
+    let count = 0;
+    for await (const _json of receiver) {
+      // The status message from setCaughtUp() plus the five sends.
+      if (++count === 6) {
+        sub.close();
+      }
+    }
+
+    // Only commits are acked, and only when the subscriber confirms them.
+    expect(acks).toEqual(['12', '22']);
+    expect(sub.acked).toBe('22');
+  });
 });

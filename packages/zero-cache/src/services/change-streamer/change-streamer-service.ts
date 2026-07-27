@@ -63,6 +63,11 @@ export type SQLiteCatchupOptions = {
   replicaFile: string;
   readBatchRows: number;
   barrierTimeoutMs: number;
+  /**
+   * Backstop for the change-log writer's ACK, which is what normally releases
+   * the barrier. Defaults to the catchup coordinator's interval.
+   */
+  barrierPollIntervalMs?: number | undefined;
   /** Slice 11 supplies the production canary selector. */
   shouldUse?: ((ctx: SubscriberContext) => boolean) | undefined;
   /** Slice 9 supplies the writer-serialized purge guard. */
@@ -551,6 +556,14 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       watermark,
       downstream,
       () => this.#latestStatus,
+      ctx.logsChangeStream
+        ? {
+            // This subscriber writes the SQLite change log that catchup reads,
+            // so its ACKs are what advance that log's head. Routing them to the
+            // barrier saves it from polling the replica for the same fact.
+            onAck: acked => this.#sqliteCatchup?.onChangeLogWriterAck(acked),
+          }
+        : {},
     );
     cleanupSubscriber = () => this.#forwarder.remove(subscriber);
     if (replicaVersion !== this.#replicaVersion) {
@@ -724,6 +737,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
         {
           batchSize: opts.readBatchRows,
           barrierTimeoutMs: opts.barrierTimeoutMs,
+          barrierPollIntervalMs: opts.barrierPollIntervalMs,
           cleanupGuard: opts.cleanupGuard,
           onFatal: async error => {
             try {

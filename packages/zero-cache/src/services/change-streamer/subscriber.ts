@@ -23,6 +23,13 @@ const DEFAULT_BACKLOG_LOW_WATER_RATIO = 0.8;
 export type SubscriberOptions = {
   backlogHighWaterBytes?: number | undefined;
   backlogLowWaterRatio?: number | undefined;
+
+  /**
+   * Called whenever the subscriber's acked watermark advances, i.e. when it
+   * has confirmed that a commit was durably applied to its replica. The ACK
+   * therefore lags the subscriber's replica rather than leading it.
+   */
+  onAck?: ((watermark: string) => void) | undefined;
 };
 
 /**
@@ -47,6 +54,7 @@ export class Subscriber {
   #backlogInFlightBytes = 0;
   #backlogDrain: Promise<void> | null = null;
   readonly #backlogBackpressure: ByteBackpressureGate;
+  readonly #onAck: ((watermark: string) => void) | undefined;
 
   constructor(
     protocolVersion: number,
@@ -67,6 +75,7 @@ export class Subscriber {
       options.backlogHighWaterBytes ?? DEFAULT_BACKLOG_HIGH_WATER_BYTES,
       options.backlogLowWaterRatio ?? DEFAULT_BACKLOG_LOW_WATER_RATIO,
     );
+    this.#onAck = options.onAck;
   }
 
   get watermark() {
@@ -150,7 +159,14 @@ export class Subscriber {
     }
     const result = await this.#sendStringifiedDownstream(json);
     if (tag === 'commit' && result === 'consumed') {
-      this.#acked = max(this.#acked, watermark);
+      // Sends can complete out of order (e.g. the bounded window in
+      // #drainBacklog), so the ack only advances monotonically, and listeners
+      // are only notified when it does.
+      const acked = max(this.#acked, watermark);
+      if (acked !== this.#acked) {
+        this.#acked = acked;
+        this.#onAck?.(acked);
+      }
     }
   }
 
