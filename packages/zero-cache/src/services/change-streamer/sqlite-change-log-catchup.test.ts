@@ -224,18 +224,25 @@ describe('SQLiteChangeLogCatchup', () => {
     expect(backup.onFatal.mock.calls[0][0]).toBeInstanceOf(AutoResetSignal);
   });
 
-  test('fails only the selected subscription on barrier timeout', async () => {
+  test('ends only the selected subscription, cleanly, on barrier timeout', async () => {
     const fixture = createFixture({barrierTimeoutMs: 5});
     fixture.reader.head = '01';
-    const {subscriber, done} = createSubscriber('01');
+    const {subscriber, done, output} = createSubscriber('01');
+    const fail = vi.spyOn(subscriber, 'fail');
     await fixture.coordinator.catchup(subscriber, 'serving', () => '06');
 
     await done;
+    // A clean cancel rather than an ['error', ...] message. IncrementalSyncer
+    // treats any error message as terminal and restores from litestream; a
+    // clean end backs off and re-subscribes, which is what "the replica is not
+    // caught up yet" warrants.
+    expect(fail).not.toHaveBeenCalled();
+    expect(output.size()).toBe(0);
     expect(fixture.logSink.messages).toContainEqual([
-      'error',
+      'warn',
       expect.anything(),
       [
-        expect.stringContaining('error while catching up subscriber'),
+        expect.stringContaining('to retry SQLite catchup'),
         expect.objectContaining({
           name: SQLiteChangeLogBarrierTimeoutError.name,
         }),

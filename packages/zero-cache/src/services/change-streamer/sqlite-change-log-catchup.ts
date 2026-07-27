@@ -252,13 +252,27 @@ export class SQLiteChangeLogCatchup implements Disposable {
       if (signal.aborted) {
         return;
       }
+      if (error instanceof SQLiteChangeLogBarrierTimeoutError) {
+        this.#barrierTimeouts.add(1);
+        // A barrier timeout means the replica has not caught up *yet*, not
+        // that it cannot serve this subscriber. End the subscription cleanly
+        // so the client reconnects and retries: IncrementalSyncer treats any
+        // ['error', ...] message as terminal and restores a fresh replica from
+        // litestream, whereas a clean end backs off and re-subscribes. If
+        // retries keep failing until the change log is purged past the
+        // subscriber's watermark, plan() returns 'too-old', which is terminal
+        // by design.
+        this.#lc.warn?.(
+          `ending subscription for ${subscriber.id} to retry SQLite catchup`,
+          error,
+        );
+        subscriber.close();
+        return;
+      }
       this.#lc.error?.(
         `error while catching up subscriber ${subscriber.id} from SQLite`,
         error,
       );
-      if (error instanceof SQLiteChangeLogBarrierTimeoutError) {
-        this.#barrierTimeouts.add(1);
-      }
       if (error instanceof AutoResetSignal) {
         try {
           await this.#onFatal(error);
