@@ -190,7 +190,7 @@ export function initialSyncBenchmarkPayloadMB(
 // 20% bench_composite: (account_id, seq) primary key, payload 128-1024 B,
 // ~576 B average, amount 0-99_999 indexed.
 // 10% bench_lookup: id primary key, label 8-11 B, active boolean indexed.
-function makeBenchmarkFixtureRow(id: number): BenchmarkFixtureRow {
+export function makeBenchmarkFixtureRow(id: number): BenchmarkFixtureRow {
   const kind = id % 10;
 
   if (kind < 5) {
