@@ -984,7 +984,23 @@ describe('change-streamer/storer', () => {
       // Prevent the beforeEach cleanup from re-throwing the rejected done.
       done = Promise.resolve();
 
-      // subscribers that were waiting to be caught up should be canceled
+      // Subscribers that were waiting to be caught up receive the terminal
+      // error and are canceled after consuming it.
+      for (const stream of [stream1, stream2]) {
+        const iterator = stream[Symbol.asyncIterator]();
+        const error = await iterator.next();
+        expect(error.done).toBe(false);
+        expect(JSON.parse(error.value as string)).toEqual([
+          'error',
+          {
+            type: ErrorType.Unknown,
+            message: expect.stringContaining(
+              'changeLog ownership has been assumed by other-task',
+            ),
+          },
+        ]);
+        expect((await iterator.next()).done).toBe(true);
+      }
       expect(stream1.active).toBe(false);
       expect(stream2.active).toBe(false);
     });

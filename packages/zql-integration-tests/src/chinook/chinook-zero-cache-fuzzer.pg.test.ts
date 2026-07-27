@@ -373,6 +373,7 @@ async function startZeroCacheReplica(testDBs: PgTest['testDBs']) {
       'serving',
       parseStringifiedChangeStreamer(changeStreamer),
       worker,
+      false,
       null,
       undefined,
     );
