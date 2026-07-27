@@ -5,6 +5,7 @@ import {AbortError} from '../../../../shared/src/abort-error.ts';
 import {BigIntJSON} from '../../../../shared/src/bigint-json.ts';
 import {TestLogSink} from '../../../../shared/src/logging-test-utils.ts';
 import {Queue} from '../../../../shared/src/queue.ts';
+import {sleep} from '../../../../shared/src/sleep.ts';
 import type {Source} from '../../types/streams.ts';
 import {Subscription} from '../../types/subscription.ts';
 import type {Downstream, WatermarkedChange} from './change-streamer.ts';
@@ -243,28 +244,60 @@ describe('SQLiteChangeLogCatchup', () => {
     expect(fixture.onFatal).not.toHaveBeenCalled();
   });
 
-  test('waits on a forwarded transaction with one completion handler', async () => {
-    let now = 0;
-    const fixture = createFixture({
-      barrierTimeoutMs: 5,
-      now: () => now,
-      sleep: ms => {
-        now += ms;
-        return Promise.resolve();
-      },
-    });
+  test('waits out a transaction longer than the barrier timeout', async () => {
+    const fixture = createFixture({barrierTimeoutMs: 5});
+    fixture.reader.entries.push(...transaction('04'));
+    fixture.reader.boundaries.add('04');
+    fixture.reader.head = '04';
+
     const completion = resolver<string>();
     const then = vi.spyOn(completion.promise, 'then');
-    const {subscriber, done} = createSubscriber('01');
+    const {subscriber, output} = createSubscriber('01');
+    const fail = vi.spyOn(subscriber, 'fail');
 
     await fixture.coordinator.catchup(
       subscriber,
       'serving',
       () => completion.promise,
     );
-    await done;
 
+    // Well past barrierTimeoutMs with the transaction still in flight. The
+    // barrier bounds replica lag, so this wait must not consume its budget.
+    await sleep(50);
+    expect(fail).not.toHaveBeenCalled();
+
+    fixture.reader.entries.push(...transaction('06'));
+    fixture.reader.boundaries.add('06');
+    fixture.reader.head = '06';
+    completion.resolve('06');
+
+    // The barrier still has its full budget once the required head is known.
+    expect(await takeMarkers(output, 7)).toEqual([
+      'status',
+      ...transactionMarkers('04'),
+      ...transactionMarkers('06'),
+    ]);
     expect(then).toHaveBeenCalledOnce();
+  });
+
+  test('aborting during the required-head wait releases the subscriber', async () => {
+    const fixture = createFixture();
+    const completion = resolver<string>();
+    const {subscriber, done} = createSubscriber('01');
+    const fail = vi.spyOn(subscriber, 'fail');
+
+    await fixture.coordinator.catchup(
+      subscriber,
+      'serving',
+      () => completion.promise,
+    );
+    fixture.coordinator.remove(subscriber);
+
+    await done;
+    expect(fail).not.toHaveBeenCalled();
+    expect(
+      fixture.logSink.messages.filter(([level]) => level === 'error'),
+    ).toEqual([]);
   });
 
   test('fails closed on reader errors after registration', async () => {

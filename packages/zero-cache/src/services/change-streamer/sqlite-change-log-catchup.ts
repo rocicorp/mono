@@ -164,13 +164,22 @@ export class SQLiteChangeLogCatchup implements Disposable {
     abort: AbortController,
   ): Promise<void> {
     const {signal} = abort;
-    const deadline = this.#now() + this.#barrierTimeoutMs;
     try {
-      const required = await this.#awaitRequiredHead(
-        requiredHead,
-        deadline,
-        signal,
-      );
+      const requiredHeadStart = this.#now();
+      const required = await this.#awaitRequiredHead(requiredHead, signal);
+      const requiredHeadWaitMs = this.#now() - requiredHeadStart;
+      if (requiredHeadWaitMs > this.#barrierTimeoutMs) {
+        this.#lc.info?.(
+          `waited ${requiredHeadWaitMs} ms for the forwarded transaction to ` +
+            `commit before starting the SQLite barrier for ${subscriber.id}`,
+        );
+      }
+      // The barrier bounds replica lag, not upstream transaction duration, so
+      // its deadline starts once the required head is known. Sharing one
+      // deadline with the wait above would fail subscribers that registered
+      // during a transaction longer than barrierTimeoutMs, however current
+      // the replica is.
+      const deadline = this.#now() + this.#barrierTimeoutMs;
       const plan = await this.#waitForPlan(
         subscriber.watermark,
         required,
@@ -268,31 +277,38 @@ export class SQLiteChangeLogCatchup implements Disposable {
     }
   }
 
+  /**
+   * Waits for the transaction that was in flight at registration to finish.
+   *
+   * This wait is bounded by the upstream transaction rather than by
+   * `barrierTimeoutMs`: the completion settles on both commit and rollback,
+   * and an interrupted change stream forwards a synthetic rollback, so it
+   * always settles. Aborting -- the subscriber disconnecting or the service
+   * shutting down -- is what releases it early.
+   */
   async #awaitRequiredHead(
     requiredHead: string | Promise<string>,
-    deadline: number,
     signal: AbortSignal,
   ): Promise<string> {
     if (typeof requiredHead === 'string') {
       return requiredHead;
     }
     this.#throwIfAborted(signal);
-    const remaining = deadline - this.#now();
-    if (remaining <= 0) {
-      throw new SQLiteChangeLogBarrierTimeoutError(
-        'timed out waiting for the forwarded transaction to finish',
-      );
+    let onAbort: (() => void) | undefined;
+    try {
+      return await Promise.race([
+        requiredHead,
+        new Promise<never>((_, reject) => {
+          onAbort = () =>
+            reject(new AbortError('SQLite change-log catchup aborted'));
+          signal.addEventListener('abort', onAbort, {once: true});
+        }),
+      ]);
+    } finally {
+      if (onAbort) {
+        signal.removeEventListener('abort', onAbort);
+      }
     }
-    const result = await Promise.race([
-      requiredHead.then(value => ({kind: 'required', value}) as const),
-      this.#sleep(remaining, signal).then(() => ({kind: 'timeout'}) as const),
-    ]);
-    if (result.kind === 'timeout') {
-      throw new SQLiteChangeLogBarrierTimeoutError(
-        'timed out waiting for the forwarded transaction to finish',
-      );
-    }
-    return result.value;
   }
 
   async #waitForPlan(

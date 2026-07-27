@@ -487,6 +487,12 @@ describe('change-streamer/service', () => {
         new: {id: 'after-rollback'},
       });
       expect(await nextChange(rolledBack)).toMatchObject({tag: 'commit'});
+      expect(await nextChange(live)).toMatchObject({tag: 'begin'});
+      expect(await nextChange(live)).toMatchObject({
+        tag: 'insert',
+        new: {id: 'after-rollback'},
+      });
+      expect(await nextChange(live)).toMatchObject({tag: 'commit'});
       appendSQLiteTransaction(catchupReplica, '08', [insert08]);
 
       changes.push(['begin', messages.begin(), {commitWatermark: '0a'}]);
