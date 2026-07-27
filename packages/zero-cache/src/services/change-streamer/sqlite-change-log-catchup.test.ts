@@ -1,5 +1,6 @@
 import {LogContext} from '@rocicorp/logger';
-import {resolver} from '@rocicorp/resolver';
+import {resolver, type Resolver} from '@rocicorp/resolver';
+import fc from 'fast-check';
 import {afterEach, describe, expect, test, vi} from 'vitest';
 import {AbortError} from '../../../../shared/src/abort-error.ts';
 import {BigIntJSON} from '../../../../shared/src/bigint-json.ts';
@@ -24,6 +25,41 @@ import type {CatchupPlan} from './sqlite-change-log-reader.ts';
 import {Subscriber, type SubscriberOptions} from './subscriber.ts';
 
 const coordinators: SQLiteChangeLogCatchup[] = [];
+
+const FUZZ_SEED_WATERMARK = '0001';
+type CatchupFuzzScenario = {
+  readonly priorWidths: number[];
+  readonly requestedPosition: number;
+  readonly sqlitePosition: number;
+  readonly registrationPhase: 'between' | 'after-begin' | 'after-data';
+  readonly inFlightCommits: boolean;
+  readonly inFlightWidth: number;
+  readonly futureWidths: number[];
+  readonly sentinelWidth: number;
+  readonly batchSize: number;
+  readonly wakeup: 'ack' | 'early-ack' | 'poll';
+};
+
+const catchupFuzzScenario: fc.Arbitrary<CatchupFuzzScenario> = fc.record({
+  priorWidths: fc.array(fc.integer({min: 0, max: 5}), {maxLength: 5}),
+  requestedPosition: fc.nat({max: 100}),
+  sqlitePosition: fc.nat({max: 100}),
+  registrationPhase: fc.constantFrom(
+    'between' as const,
+    'after-begin' as const,
+    'after-data' as const,
+  ),
+  inFlightCommits: fc.boolean(),
+  inFlightWidth: fc.integer({min: 0, max: 5}),
+  futureWidths: fc.array(fc.integer({min: 0, max: 5}), {maxLength: 5}),
+  sentinelWidth: fc.integer({min: 0, max: 5}),
+  batchSize: fc.integer({min: 1, max: 5}),
+  wakeup: fc.constantFrom(
+    'ack' as const,
+    'early-ack' as const,
+    'poll' as const,
+  ),
+});
 
 describe('SQLiteChangeLogCatchup', () => {
   afterEach(() => {
@@ -188,6 +224,29 @@ describe('SQLiteChangeLogCatchup', () => {
       'status',
       ...transactionMarkers('08'),
     ]);
+  });
+
+  test('fuzzes gap-free catchup-to-live interleavings', async () => {
+    // Reuse one fixture per batch size. Constructing a Forwarder per fast-check
+    // run would register hundreds of process-lifetime metric callbacks.
+    const fixtures = new Map(
+      [1, 2, 3, 4, 5].map(
+        batchSize => [batchSize, createFixture({batchSize})] as const,
+      ),
+    );
+
+    try {
+      await fc.assert(
+        fc.asyncProperty(catchupFuzzScenario, scenario =>
+          runCatchupFuzzScenario(fixtures.get(scenario.batchSize), scenario),
+        ),
+        {numRuns: 500},
+      );
+    } finally {
+      for (const {coordinator} of fixtures.values()) {
+        coordinator.close();
+      }
+    }
   });
 
   test('releases the barrier on the change-log writer ACK', async () => {
@@ -530,6 +589,7 @@ describe('SQLiteChangeLogCatchup', () => {
 
 function createFixture(
   opts: {
+    batchSize?: number | undefined;
     barrierTimeoutMs?: number | undefined;
     barrierPollIntervalMs?: number | undefined;
     cleanupGuard?: SQLiteChangeLogCleanupGuard | undefined;
@@ -547,7 +607,7 @@ function createFixture(
       ((_error: AutoResetSignal): Promise<void> => Promise.resolve()),
   );
   const coordinator = new SQLiteChangeLogCatchup(lc, forwarder, reader, {
-    batchSize: 2,
+    batchSize: opts.batchSize ?? 2,
     barrierTimeoutMs: opts.barrierTimeoutMs ?? 1_000,
     barrierPollIntervalMs: opts.barrierPollIntervalMs ?? 1,
     cleanupGuard: opts.cleanupGuard,
@@ -673,16 +733,208 @@ function transactionMarkers(watermark: string) {
   return [`${watermark}:begin`, `${watermark}:insert`, `${watermark}:commit`];
 }
 
+type FuzzTransaction = {
+  readonly changes: WatermarkedChange[];
+  readonly markers: string[];
+  readonly watermark: string;
+};
+
+function fuzzTransaction(index: number, width: number): FuzzTransaction {
+  const watermark = String((index + 1) * 2).padStart(4, '0');
+  const inserts = Array.from({length: width}, (_, i) => {
+    const marker = `${watermark}:insert-${i}`;
+    return {
+      change: [
+        watermark,
+        'insert',
+        JSON.stringify(['data', {tag: 'insert', marker}]),
+      ] satisfies WatermarkedChange,
+      marker,
+    };
+  });
+  return {
+    watermark,
+    changes: [
+      entry(watermark, 'begin'),
+      ...inserts.map(({change}) => change),
+      entry(watermark, 'commit'),
+    ],
+    markers: [
+      `${watermark}:begin`,
+      ...inserts.map(({marker}) => marker),
+      `${watermark}:commit`,
+    ],
+  };
+}
+
+async function runCatchupFuzzScenario(
+  fixture: ReturnType<typeof createFixture> | undefined,
+  scenario: CatchupFuzzScenario,
+): Promise<void> {
+  if (!fixture) {
+    throw new Error(`missing fixture for batch size ${scenario.batchSize}`);
+  }
+  const {coordinator, forwarder, onFatal, reader} = fixture;
+  expect(forwarder.getAcks()).toEqual(new Set());
+  resetFuzzReader(reader);
+  onFatal.mockClear();
+
+  let nextIndex = 0;
+  const prior = scenario.priorWidths.map(width =>
+    fuzzTransaction(nextIndex++, width),
+  );
+  for (const tx of prior) {
+    forward(forwarder, tx.changes);
+  }
+
+  const sqlitePosition =
+    scenario.sqlitePosition % (scenario.priorWidths.length + 1);
+  applyFuzzTransactions(reader, prior.slice(0, sqlitePosition));
+
+  const requestedPosition =
+    scenario.requestedPosition % (scenario.priorWidths.length + 1);
+  const requestedWatermark =
+    requestedPosition === 0
+      ? FUZZ_SEED_WATERMARK
+      : (prior.at(requestedPosition - 1)?.watermark ?? FUZZ_SEED_WATERMARK);
+
+  let requiredHead: string | Promise<string> =
+    prior.at(-1)?.watermark ?? FUZZ_SEED_WATERMARK;
+  let inFlight:
+    | {
+        readonly completion: Resolver<string>;
+        readonly forwardedEntries: number;
+        readonly tx: FuzzTransaction;
+      }
+    | undefined;
+  if (scenario.registrationPhase !== 'between') {
+    const tx = fuzzTransaction(nextIndex++, scenario.inFlightWidth);
+    const forwardedEntries =
+      scenario.registrationPhase === 'after-begin' ? 1 : tx.changes.length - 1;
+    forward(forwarder, tx.changes.slice(0, forwardedEntries));
+    const completion = resolver<string>();
+    requiredHead = completion.promise;
+    inFlight = {completion, forwardedEntries, tx};
+  }
+
+  const {done, output, subscriber} = createSubscriber(requestedWatermark);
+  try {
+    await coordinator.catchup(subscriber, 'serving', () => requiredHead);
+
+    if (inFlight) {
+      const {completion, forwardedEntries, tx} = inFlight;
+      if (scenario.inFlightCommits) {
+        forward(forwarder, tx.changes.slice(forwardedEntries));
+        completion.resolve(tx.watermark);
+      } else {
+        forward(
+          forwarder,
+          tx.changes.slice(forwardedEntries, tx.changes.length - 1),
+        );
+        forwarder.forward(entry(tx.watermark, 'rollback'));
+        completion.resolve(prior.at(-1)?.watermark ?? FUZZ_SEED_WATERMARK);
+      }
+    }
+
+    const future = scenario.futureWidths.map(width =>
+      fuzzTransaction(nextIndex++, width),
+    );
+    for (const tx of future) {
+      forward(forwarder, tx.changes);
+    }
+
+    const committed = [
+      ...prior,
+      ...(inFlight && scenario.inFlightCommits ? [inFlight.tx] : []),
+      ...future,
+    ];
+    const appliedHead = committed.at(-1)?.watermark ?? FUZZ_SEED_WATERMARK;
+    if (scenario.wakeup === 'early-ack') {
+      coordinator.onChangeLogWriterAck(appliedHead);
+      // Let an early ACK race a plan() that still observes the old head. The
+      // poll backstop must preserve correctness if the notification is spent.
+      await Promise.resolve();
+    }
+    applyFuzzTransactions(
+      reader,
+      committed.filter(tx => !reader.boundaries.has(tx.watermark)),
+    );
+    if (scenario.wakeup === 'ack') {
+      coordinator.onChangeLogWriterAck(appliedHead);
+    }
+
+    // This commit is deliberately live-only. Receiving it proves catchup made
+    // the transition and provides an ordering sentinel after every overlap.
+    const sentinel = fuzzTransaction(nextIndex, scenario.sentinelWidth);
+    forward(forwarder, sentinel.changes);
+
+    const expected = [
+      'status',
+      ...committed
+        .filter(tx => tx.watermark > requestedWatermark)
+        .flatMap(tx => tx.markers),
+      ...sentinel.markers,
+    ];
+    expect(await takeMarkers(output, expected.length, 250)).toEqual(expected);
+    await vi.waitFor(() => expect(subscriber.numPending).toBe(0), {
+      timeout: 250,
+    });
+    expect(subscriber.acked).toBe(sentinel.watermark);
+    expect(output.size()).toBe(0);
+    expect(onFatal).not.toHaveBeenCalled();
+  } finally {
+    coordinator.remove(subscriber);
+    await done;
+    expect(forwarder.getAcks()).toEqual(new Set());
+  }
+}
+
+function resetFuzzReader(reader: TestReader): void {
+  reader.boundaries.clear();
+  reader.boundaries.add(FUZZ_SEED_WATERMARK);
+  reader.entries.splice(0);
+  reader.reads.splice(0);
+  reader.min = FUZZ_SEED_WATERMARK;
+  reader.head = FUZZ_SEED_WATERMARK;
+  reader.beforeRead = undefined;
+  reader.readError = undefined;
+}
+
+function applyFuzzTransactions(
+  reader: TestReader,
+  transactions: readonly FuzzTransaction[],
+): void {
+  for (const tx of transactions) {
+    reader.entries.push(...tx.changes);
+    reader.boundaries.add(tx.watermark);
+    reader.head = tx.watermark;
+  }
+}
+
 function forward(forwarder: Forwarder, changes: WatermarkedChange[]) {
   for (const change of changes) {
     forwarder.forward(change);
   }
 }
 
-async function takeMarkers(output: Queue<Downstream>, count: number) {
+async function takeMarkers(
+  output: Queue<Downstream>,
+  count: number,
+  timeoutMs?: number,
+) {
   const markers: string[] = [];
   for (let i = 0; i < count; i++) {
-    const downstream = await output.dequeue();
+    const timeout = [
+      'error',
+      {type: ErrorType.Unknown, message: 'timed out waiting for fuzz output'},
+    ] satisfies Downstream;
+    const downstream =
+      timeoutMs === undefined
+        ? await output.dequeue()
+        : await output.dequeue(timeout, timeoutMs);
+    if (downstream === timeout) {
+      throw new Error(timeout[1].message);
+    }
     if (downstream[0] === 'error') {
       throw new Error(`unexpected downstream error: ${downstream[1].message}`);
     }
