@@ -312,7 +312,7 @@ class PostgresChangeSource implements ChangeSource {
     await this.#db.end();
   }
 
-  async startLagReporter(): Promise<{nextSendTimeMs: number} | null> {
+  async startLagReporter() {
     if (this.#lagReporter) {
       try {
         return await this.#lagReporter.initiateLagReport(true);
@@ -781,7 +781,7 @@ export class LagReporter {
         commitTimeMs,
       });
     }
-    return {nextSendTimeMs: now};
+    return {firstCommitTimeMs: commitTimeMs, nextSendTimeMs: now};
   }
 
   /**
