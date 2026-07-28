@@ -108,7 +108,8 @@ describe('change-streamer/service', () => {
             changes,
             acks: {push: status => acks.enqueue(status)},
           }),
-        startLagReporter: () => Promise.resolve({nextSendTimeMs: 123}),
+        startLagReporter: () =>
+          Promise.resolve({firstCommitTimeMs: 100, nextSendTimeMs: 123}),
         stop: () => Promise.resolve(),
       },
       ReplicationStatusPublisher.forTesting(),
@@ -386,7 +387,8 @@ describe('change-streamer/service', () => {
             changes,
             acks: {push: status => acks.enqueue(status)},
           }),
-        startLagReporter: () => Promise.resolve({nextSendTimeMs: 123}),
+        startLagReporter: () =>
+          Promise.resolve({firstCommitTimeMs: 100, nextSendTimeMs: 123}),
         stop: () => Promise.resolve(),
       },
       ReplicationStatusPublisher.forTesting(),
@@ -565,7 +567,8 @@ describe('change-streamer/service', () => {
             changes,
             acks: {push: status => acks.enqueue(status)},
           }),
-        startLagReporter: () => Promise.resolve({nextSendTimeMs: 123}),
+        startLagReporter: () =>
+          Promise.resolve({firstCommitTimeMs: 100, nextSendTimeMs: 123}),
         stop: () => Promise.resolve(),
       },
       ReplicationStatusPublisher.forTesting(),
@@ -698,7 +701,8 @@ describe('change-streamer/service', () => {
             changes,
             acks: {push: status => acks.enqueue(status)},
           }),
-        startLagReporter: () => Promise.resolve({nextSendTimeMs: 123}),
+        startLagReporter: () =>
+          Promise.resolve({firstCommitTimeMs: 100, nextSendTimeMs: 123}),
         stop: () => Promise.resolve(),
       },
       ReplicationStatusPublisher.forTesting(),
@@ -825,6 +829,23 @@ describe('change-streamer/service', () => {
     });
     const downstream = drainToQueue(sub);
 
+    // Ignore lag reports from before this change stream was initialized.
+    changes.push([
+      'status',
+      {
+        ack: false,
+        lagReport: {
+          lastTimings: {
+            sendTimeMs: 10,
+            commitTimeMs: 10,
+            receiveTimeMs: 15,
+          },
+          nextSendTimeMs: 50,
+        },
+      },
+      {watermark: '08'},
+    ]);
+
     changes.push(['begin', messages.begin(), {commitWatermark: '09'}]);
     changes.push(['data', messages.insert('foo', {id: 'hello'})]);
     changes.push(['data', messages.insert('foo', {id: 'world'})]);
@@ -832,6 +853,23 @@ describe('change-streamer/service', () => {
       'commit',
       messages.commit({extra: 'fields'}),
       {watermark: '09'},
+    ]);
+
+    // Ignore lag reports from before this change stream was initialized.
+    changes.push([
+      'status',
+      {
+        ack: false,
+        lagReport: {
+          lastTimings: {
+            sendTimeMs: 50,
+            commitTimeMs: 50,
+            receiveTimeMs: 55,
+          },
+          nextSendTimeMs: 100,
+        },
+      },
+      {watermark: '0a'},
     ]);
 
     expect(await nextChange(downstream)).toMatchObject({
@@ -852,7 +890,7 @@ describe('change-streamer/service', () => {
       extra: 'fields',
     });
 
-    changes.push(['status', {ack: false}, {watermark: '0a'}]);
+    changes.push(['status', {ack: false}, {watermark: '0b'}]);
 
     changes.push([
       'status',
@@ -867,10 +905,10 @@ describe('change-streamer/service', () => {
           nextSendTimeMs: 234,
         },
       },
-      {watermark: '0b'},
+      {watermark: '0c'},
     ]);
 
-    changes.push(['status', {ack: true}, {watermark: '0c'}]);
+    changes.push(['status', {ack: true}, {watermark: '0d'}]);
 
     expect(await nextChange(downstream)).toMatchObject({
       tag: 'status',
@@ -885,7 +923,7 @@ describe('change-streamer/service', () => {
     });
 
     // Await the ACK for the single commit, then the status message with an ack.
-    await expectAcks('09', '0c');
+    await expectAcks('09', '0d');
 
     expect(
       await sql`SELECT watermark, change->'tag' FROM "zoro_3/cdc"."changeLog"`.values(),

@@ -310,6 +310,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
   );
 
   #latestStatus: Status;
+  #latestLagReportCommitTimeMs = 0;
   #purgeLock: PurgeLock | null;
   #stream: ChangeStream | undefined;
   #sqliteCatchup: SQLiteChangeLogCatchup | undefined;
@@ -369,9 +370,16 @@ class ChangeStreamerImpl implements ChangeStreamerService {
 
     this.#forwarder.startProgressMonitor();
 
-    const lagReport = await this.#source.startLagReporter();
-    if (lagReport) {
-      this.#latestStatus.lagReport = lagReport;
+    const lagReportInit = await this.#source.startLagReporter();
+    if (lagReportInit) {
+      this.#latestStatus.lagReport = {
+        nextSendTimeMs: lagReportInit.nextSendTimeMs,
+      };
+      // Record the commit time of the initiated lag report (i.e. "head")
+      // for the purpose of skipping over any lag reports that are re-streamed
+      // by the change-source in the case of a change-streamer starting from
+      // an older watermark.
+      this.#latestLagReportCommitTimeMs = lagReportInit.firstCommitTimeMs;
     }
 
     // Once this change-streamer acquires "ownership" of the change DB,
@@ -422,12 +430,18 @@ class ChangeStreamerImpl implements ChangeStreamerService {
               if (msg.ack) {
                 this.#storer.status(change); // storer acks once it gets through its queue
               }
-              if (msg.lagReport) {
+              if (
+                msg.lagReport &&
+                msg.lagReport.lastTimings.commitTimeMs >=
+                  this.#latestLagReportCommitTimeMs
+              ) {
                 // Lag reports are not stored in the cdc change log, but rather
                 // only forwarded on "live" connections. When a new subscriber
                 // is catching up, it is initialized with the #latestStatus
                 // from which it can measure lag while catching up.
                 this.#latestStatus.lagReport = msg.lagReport;
+                this.#latestLagReportCommitTimeMs =
+                  msg.lagReport.lastTimings.commitTimeMs;
                 this.#forwarder.sendStatus(this.#latestStatus);
               }
               continue;
