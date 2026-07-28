@@ -107,3 +107,4 @@ packages/zql-integration-tests/Chinook_Sqlite.sqlite
 
 *.ignore.*
 package-lock-commit-deps-report.html
+packages/zql-integration-tests/Pagila_PostgreSql-5ba5a57aeb15.sql

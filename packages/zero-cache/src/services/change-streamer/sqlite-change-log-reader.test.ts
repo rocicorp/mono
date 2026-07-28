@@ -1,3 +1,4 @@
+import {existsSync} from 'node:fs';
 import SQLite3Database from '@rocicorp/zero-sqlite3';
 import {afterEach, describe, expect, test} from 'vitest';
 import {AbortError} from '../../../../shared/src/abort-error.ts';
@@ -6,15 +7,20 @@ import type {Database, Statement} from '../../../../zqlite/src/db.ts';
 import {StatementRunner} from '../../db/statements.ts';
 import {DbFile} from '../../test/lite.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
-import {ChangeLogStreamWriter} from '../replicator/change-log-stream-writer.ts';
 import {
-  initReplicationState,
-  updateReplicationWatermark,
-} from '../replicator/schema/replication-state.ts';
+  changeLogFileName,
+  deleteChangeLogDB,
+  openChangeLogDB,
+  reconcileChangeLog,
+  type ReplicaAnchor,
+} from '../replicator/change-log-db.ts';
+import {ChangeLogStreamWriter} from '../replicator/change-log-stream-writer.ts';
+import {CHANGE_LOG_STREAM_TABLE} from '../replicator/schema/change-log-stream.ts';
 import {serializeChangeStreamData} from './change-log-codec.ts';
 import type {WatermarkedChange} from './change-streamer.ts';
 import {
   SQLITE_CHANGE_LOG_BOUNDARY_SQL,
+  SQLITE_CHANGE_LOG_PLAN_SQL,
   SQLITE_CHANGE_LOG_READ_BATCH_SQL,
   SQLiteChangeLogReader,
 } from './sqlite-change-log-reader.ts';
@@ -24,17 +30,35 @@ const files: DbFile[] = [];
 
 afterEach(() => {
   for (const file of files.splice(0)) {
+    deleteChangeLogDB(file.path);
     file.delete();
   }
 });
 
-function createReplica(): {db: Database; file: DbFile} {
+/**
+ * The replica the change log is anchored to. No fixture in this file creates
+ * that replica: the reader is served entirely by the change-log database.
+ */
+const ANCHOR: ReplicaAnchor = {
+  replicaVersion: '01',
+  stateVersion: '02',
+  writeTimeMs: 1234567890,
+};
+
+/** The replica path whose `-change-log` sibling the fixtures build. */
+function newReplicaPath(): DbFile {
   const file = new DbFile('sqlite-change-log-reader');
   files.push(file);
-  const db = file.connect(lc);
+  return file;
+}
+
+/** A change-log database seeded at {@link ANCHOR}, with no replica beside it. */
+function createChangeLog(): {db: Database; file: DbFile; path: string} {
+  const file = newReplicaPath();
+  const db = openChangeLogDB(lc, file.path, {readonly: false});
   db.pragma('journal_mode = wal');
-  initReplicationState(db, ['zero_data'], '02');
-  return {db, file};
+  reconcileChangeLog(lc, db, ANCHOR);
+  return {db, file, path: changeLogFileName(file.path)};
 }
 
 function truncate(): ChangeStreamData {
@@ -55,6 +79,8 @@ function appendTransaction(
   ];
   const commit: ChangeStreamData = ['commit', {tag: 'commit'}, {watermark}];
 
+  // Slice 7D moves this transaction into the writer itself; until then the
+  // caller owns it, as ChangeProcessor does.
   runner.beginImmediate();
   try {
     writer.begin(watermark, serializeChangeStreamData(begin));
@@ -62,7 +88,6 @@ function appendTransaction(
       writer.append(serializeChangeStreamData(message), message[1].tag);
     }
     writer.commit(watermark, serializeChangeStreamData(commit), Date.now());
-    updateReplicationWatermark(runner, watermark);
     runner.commit();
   } catch (e) {
     runner.rollback();
@@ -110,18 +135,27 @@ function countVisitedRows(statement: Statement): number {
     if (nvisit === undefined) {
       return visited;
     }
-    visited += Number(nvisit);
+    // Steps that are not loops (a subquery boundary, a constant row) report -1
+    // rather than a row count.
+    visited += Math.max(Number(nvisit), 0);
   }
+}
+
+function queryPlan(db: Database, sql: string, ...params: unknown[]): string[] {
+  return db
+    .prepare(`EXPLAIN QUERY PLAN ${sql}`)
+    .all<{detail: string}>(...params)
+    .map(({detail}) => detail);
 }
 
 describe('sqlite change log reader', () => {
   test('plans seed, minimum, middle, head, too-old, missing, and ahead watermarks', () => {
-    const {db, file} = createReplica();
+    const {db, path} = createChangeLog();
     using writer = db;
     appendTransaction(writer, '04', [truncate()]);
     appendTransaction(writer, '06', [truncate()]);
     appendTransaction(writer, '08', [truncate()]);
-    using reader = new SQLiteChangeLogReader(lc, file.path);
+    using reader = new SQLiteChangeLogReader(lc, path);
 
     const bounds = {minWatermark: '02', headWatermark: '08'};
     expect(reader.plan('02')).toEqual({kind: 'range', ...bounds});
@@ -136,7 +170,9 @@ describe('sqlite change log reader', () => {
     });
 
     writer
-      .prepare(`DELETE FROM "_zero.changeLogStream" WHERE "watermark" = '02'`)
+      .prepare(
+        `DELETE FROM "${CHANGE_LOG_STREAM_TABLE}" WHERE "watermark" = '02'`,
+      )
       .run();
     expect(reader.plan('04')).toEqual({
       kind: 'range',
@@ -150,8 +186,65 @@ describe('sqlite change log reader', () => {
     });
   });
 
+  test('the head follows the log, with no replica in the picture', () => {
+    const {db, file, path} = createChangeLog();
+    using writer = db;
+    using reader = new SQLiteChangeLogReader(lc, path);
+
+    // A seeded log is serviceable only for a subscriber at the seed.
+    expect(reader.plan('02')).toEqual({
+      kind: 'range',
+      minWatermark: '02',
+      headWatermark: '02',
+    });
+
+    // Each committed transaction moves the head, and nothing else does.
+    appendTransaction(writer, '04', [truncate()]);
+    expect(reader.plan('02')).toMatchObject({headWatermark: '04'});
+    appendTransaction(writer, '06', [truncate()]);
+    expect(reader.plan('02')).toMatchObject({headWatermark: '06'});
+
+    // The reader never touched the replica path, which does not even exist.
+    for (const suffix of ['', '-wal', '-wal2', '-shm']) {
+      expect(existsSync(file.path + suffix)).toBe(false);
+    }
+  });
+
+  test('not-ready before the log has a stream table, and ready once it does', async () => {
+    const file = newReplicaPath();
+    using log = openChangeLogDB(lc, file.path, {readonly: false});
+    log.pragma('journal_mode = wal');
+    // The change-streamer can start before the replicator has reconciled the
+    // log. Statements are prepared on demand, so this does not throw.
+    using reader = new SQLiteChangeLogReader(lc, changeLogFileName(file.path));
+
+    expect(reader.plan('02')).toEqual({kind: 'not-ready'});
+    await expect(collect(reader, '02', '04', 2)).rejects.toThrow(
+      'SQLite change log must be ready before it is read',
+    );
+
+    reconcileChangeLog(lc, log, ANCHOR);
+    appendTransaction(log, '04', [truncate()]);
+
+    // The same reader, without reconstruction, now serves the log.
+    expect(reader.plan('02')).toEqual({
+      kind: 'range',
+      minWatermark: '02',
+      headWatermark: '04',
+    });
+  });
+
+  test('not-ready for an empty log', () => {
+    const {db, path} = createChangeLog();
+    using writer = db;
+    writer.prepare(`DELETE FROM "${CHANGE_LOG_STREAM_TABLE}"`).run();
+    using reader = new SQLiteChangeLogReader(lc, path);
+
+    expect(reader.plan('02')).toEqual({kind: 'not-ready'});
+  });
+
   test('reads a transaction across batches and multiple transactions in one batch', async () => {
-    const {db, file} = createReplica();
+    const {db, path} = createChangeLog();
     using writer = db;
     const tx04 = appendTransaction(writer, '04', [
       truncate(),
@@ -161,7 +254,7 @@ describe('sqlite change log reader', () => {
       truncate(),
     ]);
     const tx06 = appendTransaction(writer, '06', [truncate()]);
-    using reader = new SQLiteChangeLogReader(lc, file.path);
+    using reader = new SQLiteChangeLogReader(lc, path);
 
     const smallBatches = await collect(reader, '02', '06', 2);
     expect(smallBatches.map(batch => batch.length)).toEqual([2, 2, 2, 2, 2]);
@@ -175,7 +268,7 @@ describe('sqlite change log reader', () => {
   });
 
   test('pins the head while another connection appends and purges', async () => {
-    const {db, file} = createReplica();
+    const {db, path} = createChangeLog();
     using writer = db;
     const tx04 = appendTransaction(writer, '04', [
       truncate(),
@@ -185,7 +278,7 @@ describe('sqlite change log reader', () => {
     ]);
     const tx06 = appendTransaction(writer, '06', [truncate()]);
     const tx08 = appendTransaction(writer, '08', [truncate()]);
-    using reader = new SQLiteChangeLogReader(lc, file.path);
+    using reader = new SQLiteChangeLogReader(lc, path);
 
     const plan = reader.plan('02');
     expect(plan.kind).toBe('range');
@@ -200,7 +293,9 @@ describe('sqlite change log reader', () => {
 
     appendTransaction(writer, '0a', [truncate()]);
     writer
-      .prepare(`DELETE FROM "_zero.changeLogStream" WHERE "watermark" = '02'`)
+      .prepare(
+        `DELETE FROM "${CHANGE_LOG_STREAM_TABLE}" WHERE "watermark" = '02'`,
+      )
       .run();
 
     const batches = first.value === undefined ? [] : [first.value];
@@ -215,8 +310,23 @@ describe('sqlite change log reader', () => {
     expect(flatten(batches).at(-1)?.[0]).toBe('08');
   });
 
+  test('rejects a pinned head the log does not reach', async () => {
+    // A head pinned by plan() comes from max("watermark") of the same table, so
+    // this can no longer happen from skew between the log and the replica's
+    // _zero.replicationState. The assertion remains as a guard against a caller
+    // pinning a head from somewhere else.
+    const {db, path} = createChangeLog();
+    using writer = db;
+    appendTransaction(writer, '04', [truncate()]);
+    using reader = new SQLiteChangeLogReader(lc, path);
+
+    await expect(collect(reader, '02', '06', 10)).rejects.toThrow(
+      'SQLite change log did not end at pinned head 06',
+    );
+  });
+
   test('cancellation and abort between batches release the read snapshot', async () => {
-    const {db, file} = createReplica();
+    const {db, path} = createChangeLog();
     using writer = db;
     appendTransaction(writer, '04', [
       truncate(),
@@ -224,7 +334,7 @@ describe('sqlite change log reader', () => {
       truncate(),
       truncate(),
     ]);
-    using reader = new SQLiteChangeLogReader(lc, file.path);
+    using reader = new SQLiteChangeLogReader(lc, path);
 
     const canceled = reader.read('02', '04', 2)[Symbol.asyncIterator]();
     await expect(canceled.next()).resolves.toMatchObject({done: false});
@@ -246,10 +356,10 @@ describe('sqlite change log reader', () => {
   });
 
   test('close aborts reads and releases the dedicated connection', async () => {
-    const {db, file} = createReplica();
+    const {db, path} = createChangeLog();
     using writer = db;
     appendTransaction(writer, '04', [truncate(), truncate()]);
-    const reader = new SQLiteChangeLogReader(lc, file.path);
+    const reader = new SQLiteChangeLogReader(lc, path);
     const iterator = reader.read('02', '04', 1)[Symbol.asyncIterator]();
     await expect(iterator.next()).resolves.toMatchObject({done: false});
 
@@ -260,7 +370,7 @@ describe('sqlite change log reader', () => {
   });
 
   test('reconstructs canonical bigint, NUL, schema, backfill, and truncate messages byte-for-byte', async () => {
-    const {db, file} = createReplica();
+    const {db, path} = createChangeLog();
     using writer = db;
     const messages: ChangeStreamData[] = [
       [
@@ -312,7 +422,7 @@ describe('sqlite change log reader', () => {
       ],
     ];
     const expected = appendTransaction(writer, '04', messages);
-    using reader = new SQLiteChangeLogReader(lc, file.path);
+    using reader = new SQLiteChangeLogReader(lc, path);
 
     const actual = flatten(await collect(reader, '02', '04', 2));
     expect(actual).toEqual(expected);
@@ -322,20 +432,59 @@ describe('sqlite change log reader', () => {
   });
 
   test('continuation and ceiling query uses the primary-key index', () => {
-    const {db} = createReplica();
+    const {db} = createChangeLog();
     using writer = db;
     appendTransaction(writer, '04', [truncate()]);
 
-    const plans = writer
-      .prepare(`EXPLAIN QUERY PLAN ${SQLITE_CHANGE_LOG_READ_BATCH_SQL}`)
-      .all<{detail: string}>('02', Number.MAX_SAFE_INTEGER, '04', 100);
-    const details = plans.map(({detail}) => detail).join('\n');
+    const details = queryPlan(
+      writer,
+      SQLITE_CHANGE_LOG_READ_BATCH_SQL,
+      '02',
+      Number.MAX_SAFE_INTEGER,
+      '04',
+      100,
+    ).join('\n');
     expect(details).toMatch(/\bSEARCH\b/);
     expect(details).not.toMatch(/\bSCAN\b/);
   });
 
+  test('plan query seeks for both bounds instead of scanning the log', () => {
+    const {db} = createChangeLog();
+    using writer = db;
+    for (const watermark of ['04', '06', '08', '0a']) {
+      appendTransaction(
+        writer,
+        watermark,
+        Array.from({length: 250}, () => truncate()),
+      );
+    }
+
+    // Both bounds are separate scalar subqueries so that each gets SQLite's
+    // single-aggregate index optimization. Folding them into one aggregate
+    // (`SELECT min(x), max(x) FROM t`) turns both into a full scan of the log,
+    // which is what this test exists to catch.
+    const details = queryPlan(writer, SQLITE_CHANGE_LOG_PLAN_SQL, {
+      fromWatermark: '08',
+    });
+    const logSteps = details.filter(detail =>
+      detail.includes(CHANGE_LOG_STREAM_TABLE),
+    );
+    // max, min, and the boundary check.
+    expect(logSteps).toHaveLength(3);
+    expect(logSteps.filter(detail => !detail.startsWith('SEARCH'))).toEqual([]);
+
+    // Three seeks: one row visited each, regardless of the size of the log.
+    const statement = writer.prepare(SQLITE_CHANGE_LOG_PLAN_SQL);
+    expect(statement.get({fromWatermark: '08'})).toEqual({
+      headWatermark: '0a',
+      minWatermark: '02',
+      boundaryExists: 1,
+    });
+    expect(countVisitedRows(statement)).toBe(3);
+  });
+
   test('boundary query seeks directly to the final row of a large transaction', () => {
-    const {db} = createReplica();
+    const {db} = createChangeLog();
     using writer = db;
     appendTransaction(
       writer,
@@ -343,10 +492,9 @@ describe('sqlite change log reader', () => {
       Array.from({length: 1_000}, () => truncate()),
     );
 
-    const plans = writer
-      .prepare(`EXPLAIN QUERY PLAN ${SQLITE_CHANGE_LOG_BOUNDARY_SQL}`)
-      .all<{detail: string}>({fromWatermark: '04'});
-    const details = plans.map(({detail}) => detail).join('\n');
+    const details = queryPlan(writer, SQLITE_CHANGE_LOG_BOUNDARY_SQL, {
+      fromWatermark: '04',
+    }).join('\n');
     expect(details).toMatch(/\bSEARCH\b.*\(watermark=\?\)/);
     expect(details).not.toMatch(/\bSCAN\b|USE TEMP B-TREE/);
 
