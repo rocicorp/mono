@@ -2,8 +2,16 @@
 
 // Benchmarks the SQLite write ceiling for the replication-manager shape:
 // applying rows to the backup replica and appending the raw change stream to a
-// SQLite-local change log. Every logical upstream transaction is committed as
-// exactly one SQLite transaction.
+// SQLite-local change log.
+//
+// Two layouts are measured:
+//
+//   'combined'       one file, one transaction: the change log lives inside the
+//                    replica, so every logical upstream transaction is exactly
+//                    one SQLite transaction.
+//   'separate-files' two files, two ordered transactions: the change log lives
+//                    in `${replica}-change-log` and commits *before* the replica
+//                    (design 4.4). This is the layout plan slice 7D implements.
 //
 // Deterministic correctness run:
 //   SQLITE_CHANGE_LOG_CORRECTNESS=1 pnpm --filter zero-cache run bench sqlite-change-log-ceiling
@@ -12,6 +20,13 @@
 // SQLITE_CHANGE_LOG_MIN_CHANGES_PER_SECOND,
 // SQLITE_CHANGE_LOG_MAX_COMMIT_P95_MS, and
 // SQLITE_CHANGE_LOG_MAX_STALL_REGRESSION_PERCENT.
+//
+// Slice 7A knobs:
+//   SQLITE_CHANGE_LOG_MODES                 apply,log,combined,separate-files
+//   SQLITE_CHANGE_LOG_LOG_JOURNAL_MODE      wal,wal2   (change-log DB only)
+//   SQLITE_CHANGE_LOG_LOG_SYNCHRONOUS       NORMAL,FULL (change-log DB only)
+//   SQLITE_CHANGE_LOG_RETENTION_MINUTES     simulated retention window
+//   SQLITE_CHANGE_LOG_RETENTION_WINDOWS     retention windows per bench run
 
 import {spawn, spawnSync, type ChildProcess} from 'node:child_process';
 import {existsSync, mkdtempSync, rmSync, statSync} from 'node:fs';
@@ -22,6 +37,7 @@ import {createManualBenchmarkRecorder} from '../../../../shared/src/bench.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import type {Statement} from '../../../../zqlite/src/db.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
+import {deleteLiteDB} from '../../db/delete-lite-db.ts';
 import {StatementRunner} from '../../db/statements.ts';
 import {DbFile} from '../../test/lite.ts';
 import {versionToLexi} from '../../types/lexi-version.ts';
@@ -29,8 +45,16 @@ import {getPragmaConfig} from '../../workers/replicator.ts';
 import {ZERO_VERSION_COLUMN_NAME} from './schema/constants.ts';
 import {applyPragmas} from './write-worker-client.ts';
 
-type WriteMode = 'apply' | 'log' | 'combined';
+type WriteMode = 'apply' | 'log' | 'combined' | 'separate-files';
 type Workload = 'small-high-frequency' | 'mixed-row-schema' | 'oversized';
+type JournalMode = 'wal' | 'wal2';
+type Synchronous = 'NORMAL' | 'FULL';
+
+/** Durability settings for the change-log DB only (design 4.6). */
+type LogDurability = {
+  readonly journalMode: JournalMode;
+  readonly synchronous: Synchronous;
+};
 
 type MessageSize = {
   readonly bytes: number;
@@ -40,6 +64,8 @@ type MessageSize = {
 type BenchCase = {
   readonly workload: Workload;
   readonly mode: WriteMode;
+  /** Defined only for 'separate-files'; the coupled layout has no second file. */
+  readonly logDurability: LogDurability | undefined;
   readonly logicalTxRows: number;
   readonly sqliteTxRows: number;
   readonly totalTransactions: number;
@@ -53,6 +79,29 @@ type FileMetrics = {
   readonly freelistBytes: number;
 };
 
+type CaseFileMetrics = {
+  readonly replica: FileMetrics;
+  /** Undefined in the coupled layout, where there is no second file. */
+  readonly changeLog: FileMetrics | undefined;
+};
+
+/**
+ * How the change log is trimmed while the workload runs.
+ *
+ * 'drain' purges everything below the latest durable transaction, which is what
+ * the original bench measured. 'retention' applies the policy that actually
+ * governs a catchup log (design 3.2): purge only what has aged out of the
+ * retention window, which is gated on the confirmed backup watermark and runs
+ * tens of minutes, not the 60s `sqliteChangeLogRetentionMs` floor.
+ */
+type PurgePolicy =
+  | {readonly kind: 'drain'; readonly maxRows: number}
+  | {
+      readonly kind: 'retention';
+      readonly maxRows: number;
+      readonly retentionMs: number;
+    };
+
 type PurgeResult = {
   readonly elapsedMs: number;
   readonly deletedRows: number;
@@ -65,11 +114,20 @@ type WriteResult = {
   readonly changes: number;
   readonly transactions: number;
   readonly payloadBytes: number;
+  /** Time spent in COMMIT; both commits in the separated layout. */
   readonly commitLatencyMs: readonly number[];
+  /** Empty unless separated. The gap to the replica commit is the phantom window. */
+  readonly logCommitLatencyMs: readonly number[];
+  readonly replicaCommitLatencyMs: readonly number[];
   readonly transactionLatencyMs: readonly number[];
   readonly upstreamLoopStallMs: readonly number[];
   readonly purgeResults: readonly PurgeResult[];
   readonly purgedRows: number;
+};
+
+type RetainedLog = {
+  readonly rows: number;
+  readonly windowMs: number;
 };
 
 type CatchupResult = {
@@ -115,6 +173,19 @@ const LITESTREAM_VERSION_RE = /\bv?0\.5\./;
 const LITESTREAM_READY_RE = /replicating|initialized db/i;
 const BYTES_PER_MB = 1_000_000;
 const TEST_TIMEOUT_MS = 3_600_000;
+
+// The replica's settings are the production 'backup' ones and are held fixed so
+// that separated runs stay comparable to previously published combined runs.
+const REPLICA_JOURNAL_MODE: JournalMode = 'wal';
+const REPLICA_SYNCHRONOUS: Synchronous = 'NORMAL';
+
+// Design 4.6 proposes these for the change-log DB. The sweep below measures the
+// alternatives rather than asserting the choice.
+const DEFAULT_LOG_JOURNAL_MODES: readonly JournalMode[] = ['wal2'];
+const DEFAULT_LOG_SYNCHRONOUS: readonly Synchronous[] = ['NORMAL'];
+const SWEEP_LOG_JOURNAL_MODES: readonly JournalMode[] = ['wal', 'wal2'];
+const SWEEP_LOG_SYNCHRONOUS: readonly Synchronous[] = ['NORMAL', 'FULL'];
+
 const CORRECTNESS_MODE = booleanFromEnv('SQLITE_CHANGE_LOG_CORRECTNESS', false);
 const GO_NO_GO = booleanFromEnv('SQLITE_CHANGE_LOG_GO_NO_GO', false);
 const WARMUP_REPS = nonNegativeIntegerFromEnv(
@@ -155,6 +226,23 @@ const SCHEMA_EVERY_TRANSACTIONS = integerFromEnv(
   CORRECTNESS_MODE ? 2 : 10,
 );
 
+// Design 3.2: realistic steady-state retention is ~15-30 minutes of change
+// stream, gated on the confirmed S3 backup watermark. 20 is the midpoint.
+const RETENTION_MINUTES = integerFromEnv(
+  'SQLITE_CHANGE_LOG_RETENTION_MINUTES',
+  20,
+);
+// How many retention windows one bench run stands for. Anything above 1 reaches
+// steady state: the log ends holding one window of live rows, and the file
+// carries the insert-and-purge churn of the windows before it.
+const RETENTION_WINDOWS = integerFromEnv(
+  'SQLITE_CHANGE_LOG_RETENTION_WINDOWS',
+  3,
+);
+const RETENTION_MS = RETENTION_MINUTES * 60_000;
+const SIMULATED_RUN_MS = RETENTION_MS * RETENTION_WINDOWS;
+const SIMULATED_EPOCH_MS = 1_700_000_000_000;
+
 const lc = createSilentLogContext();
 const benchmarkRecorder = createManualBenchmarkRecorder();
 const publishedResults: PublishedResult[] = [];
@@ -180,6 +268,11 @@ afterAll(() => {
           readBatchRows: READ_BATCH_ROWS,
           purgeBatchRows: PURGE_BATCH_ROWS,
           betweenCommitPurgeRows: BETWEEN_COMMIT_PURGE_ROWS,
+          retention: {
+            minutes: RETENTION_MINUTES,
+            windows: RETENTION_WINDOWS,
+            simulatedRunMs: SIMULATED_RUN_MS,
+          },
           thresholds: goNoGoThresholds,
         },
         results: publishedResults,
@@ -248,6 +341,34 @@ function positiveNumberFromEnv(name: string) {
   return value;
 }
 
+function enumListFromEnv<T extends string>(
+  name: string,
+  allowed: readonly T[],
+  fallback: readonly T[],
+): T[] {
+  const raw = process.env[name];
+  if (!raw) {
+    return [...fallback];
+  }
+  const values = raw
+    .split(',')
+    .map(part => part.trim())
+    .filter(part => part.length > 0)
+    .map(part => {
+      const value = allowed.find(candidate => candidate === part);
+      if (value === undefined) {
+        throw new Error(
+          `${name} must contain only ${allowed.join(', ')}; got ${raw}`,
+        );
+      }
+      return value;
+    });
+  if (values.length === 0) {
+    throw new Error(`${name} must contain at least one value`);
+  }
+  return [...new Set(values)];
+}
+
 function readGoNoGoThresholds(): GoNoGoThresholds | undefined {
   if (!GO_NO_GO) {
     return undefined;
@@ -266,38 +387,38 @@ function readGoNoGoThresholds(): GoNoGoThresholds | undefined {
 }
 
 function writeModesFromEnv(): WriteMode[] {
-  const raw = process.env.SQLITE_CHANGE_LOG_MODES;
-  if (!raw) {
-    return GO_NO_GO ? ['apply', 'combined'] : ['combined'];
-  }
-
-  const modes = raw
-    .split(',')
-    .map(part => part.trim())
-    .filter(part => part.length > 0)
-    .map(mode => {
-      switch (mode) {
-        case 'apply':
-        case 'log':
-        case 'combined':
-          return mode;
-        default:
-          throw new Error(
-            `SQLITE_CHANGE_LOG_MODES must contain apply, log, or combined: ${raw}`,
-          );
-      }
-    });
-
-  if (modes.length === 0) {
-    throw new Error('SQLITE_CHANGE_LOG_MODES must contain at least one mode');
-  }
-  const unique = [...new Set(modes)];
-  if (GO_NO_GO && (!unique.includes('apply') || !unique.includes('combined'))) {
+  const modes = enumListFromEnv(
+    'SQLITE_CHANGE_LOG_MODES',
+    ['apply', 'log', 'combined', 'separate-files'] as const,
+    GO_NO_GO
+      ? ['apply', 'combined', 'separate-files']
+      : ['combined', 'separate-files'],
+  );
+  if (GO_NO_GO && (!modes.includes('apply') || !modes.includes('combined'))) {
     throw new Error(
       'Go/no-go runs require both apply and combined write modes to measure regression',
     );
   }
-  return unique;
+  return modes;
+}
+
+function logDurabilitiesFromEnv(
+  journalModeFallback: readonly JournalMode[],
+  synchronousFallback: readonly Synchronous[],
+): LogDurability[] {
+  const journalModes = enumListFromEnv(
+    'SQLITE_CHANGE_LOG_LOG_JOURNAL_MODE',
+    ['wal', 'wal2'] as const,
+    journalModeFallback,
+  );
+  const synchronousModes = enumListFromEnv(
+    'SQLITE_CHANGE_LOG_LOG_SYNCHRONOUS',
+    ['NORMAL', 'FULL'] as const,
+    synchronousFallback,
+  );
+  return journalModes.flatMap(journalMode =>
+    synchronousModes.map(synchronous => ({journalMode, synchronous})),
+  );
 }
 
 function averageMessageBytes(distribution: readonly MessageSize[]) {
@@ -319,7 +440,12 @@ function transactionCount(
   return Math.max(2, Math.ceil(bounded / logicalTxRows));
 }
 
-function makeCases(): BenchCase[] {
+function makeCases(
+  logDurabilities: readonly LogDurability[] = logDurabilitiesFromEnv(
+    DEFAULT_LOG_JOURNAL_MODES,
+    DEFAULT_LOG_SYNCHRONOUS,
+  ),
+): BenchCase[] {
   const workloads = [
     {
       workload: 'small-high-frequency',
@@ -342,24 +468,30 @@ function makeCases(): BenchCase[] {
   ] as const;
 
   return writeModesFromEnv().flatMap(mode =>
-    workloads.map(
-      ({
-        workload,
-        logicalTxRows,
-        messageSizes,
-        schemaEveryTransactions,
-      }): BenchCase => ({
-        workload,
-        mode,
-        logicalTxRows,
-        // This equality is an intentional go/no-go invariant: batching
-        // multiple logical transactions into one SQLite commit understates
-        // the production commit cost.
-        sqliteTxRows: logicalTxRows,
-        totalTransactions: transactionCount(logicalTxRows, messageSizes),
-        messageSizes,
-        schemaEveryTransactions,
-      }),
+    // Only the separated layout has a change-log file whose durability can be
+    // configured; the coupled layout inherits the replica's.
+    (mode === 'separate-files' ? logDurabilities : [undefined]).flatMap(
+      logDurability =>
+        workloads.map(
+          ({
+            workload,
+            logicalTxRows,
+            messageSizes,
+            schemaEveryTransactions,
+          }): BenchCase => ({
+            workload,
+            mode,
+            logDurability,
+            logicalTxRows,
+            // This equality is an intentional go/no-go invariant: batching
+            // multiple logical transactions into one SQLite commit understates
+            // the production commit cost.
+            sqliteTxRows: logicalTxRows,
+            totalTransactions: transactionCount(logicalTxRows, messageSizes),
+            messageSizes,
+            schemaEveryTransactions,
+          }),
+        ),
     ),
   );
 }
@@ -429,50 +561,137 @@ function changeJSON(kind: 'row' | 'schema', targetBytes: number) {
   return json;
 }
 
-function setupDB(dbFile: DbFile) {
-  const db = new Database(lc, dbFile.path);
-  db.pragma('journal_mode = wal');
-  db.pragma('synchronous = NORMAL');
-  applyPragmas(db, getPragmaConfig('backup'));
+/**
+ * The bench writes a whole run in seconds; production spreads the same stream
+ * over the tens of minutes described in design 3.2. Mapping the transaction
+ * index onto a simulated clock makes a real retention window a real fraction of
+ * the stream, so a retention-gated purge leaves exactly one window behind
+ * instead of draining the log to a 60s floor.
+ */
+function simulatedWriteTimeMs(txIndex: number, totalTransactions: number) {
+  return (
+    SIMULATED_EPOCH_MS +
+    Math.round((SIMULATED_RUN_MS * (txIndex + 1)) / totalTransactions)
+  );
+}
 
-  db.exec(/*sql*/ `
-    CREATE TABLE "bench_rows" (
-      "id" INTEGER PRIMARY KEY,
-      "indexed" INTEGER NOT NULL,
-      "payload" TEXT NOT NULL,
-      "${ZERO_VERSION_COLUMN_NAME}" TEXT NOT NULL
-    );
-    CREATE INDEX "bench_rows_indexed_idx" ON "bench_rows"("indexed");
+/** Mirrors design 4.1. Slice 7B moves this derivation into production code. */
+function changeLogFileName(replicaFile: string) {
+  return `${replicaFile}-change-log`;
+}
 
-    CREATE TABLE "_zero.changeLogStream" (
-      "watermark"   TEXT NOT NULL,
-      "pos"         INTEGER NOT NULL,
-      "change"      TEXT NOT NULL,
-      "precommit"   TEXT,
-      "writeTimeMs" INTEGER,
-      PRIMARY KEY ("watermark", "pos")
-    );
+const REPLICA_SCHEMA_SQL = /*sql*/ `
+  CREATE TABLE "bench_rows" (
+    "id" INTEGER PRIMARY KEY,
+    "indexed" INTEGER NOT NULL,
+    "payload" TEXT NOT NULL,
+    "${ZERO_VERSION_COLUMN_NAME}" TEXT NOT NULL
+  );
+  CREATE INDEX "bench_rows_indexed_idx" ON "bench_rows"("indexed");
 
-    CREATE INDEX "_zero.changeLogStream_writeTimeMs"
-      ON "_zero.changeLogStream" ("writeTimeMs", "watermark")
-      WHERE "writeTimeMs" IS NOT NULL;
+  CREATE TABLE "_zero.replicationState" (
+    "stateVersion" TEXT NOT NULL,
+    "writeTimeMs" INTEGER,
+    "lock" INTEGER PRIMARY KEY DEFAULT 1 CHECK ("lock" = 1)
+  );
 
-    CREATE TABLE "_zero.replicationState" (
-      "stateVersion" TEXT NOT NULL,
-      "writeTimeMs" INTEGER,
-      "lock" INTEGER PRIMARY KEY DEFAULT 1 CHECK ("lock" = 1)
-    );
+  INSERT INTO "_zero.replicationState" ("stateVersion", "writeTimeMs")
+    VALUES ('00', ${SIMULATED_EPOCH_MS});
+`;
 
-    INSERT INTO "_zero.replicationState" ("stateVersion", "writeTimeMs")
-      VALUES ('00', unixepoch('subsec') * 1000);
-    INSERT INTO "_zero.changeLogStream"
-      ("watermark", "pos", "change", "precommit", "writeTimeMs")
-      VALUES
-        ('00', 0, '{"tag":"begin"}', NULL, NULL),
-        ('00', 1, '{"tag":"commit"}', '00', unixepoch('subsec') * 1000);
-  `);
+const CHANGE_LOG_SCHEMA_SQL = /*sql*/ `
+  CREATE TABLE "_zero.changeLogStream" (
+    "watermark"   TEXT NOT NULL,
+    "pos"         INTEGER NOT NULL,
+    "change"      TEXT NOT NULL,
+    "precommit"   TEXT,
+    "writeTimeMs" INTEGER,
+    PRIMARY KEY ("watermark", "pos")
+  );
 
-  return db;
+  CREATE INDEX "_zero.changeLogStream_writeTimeMs"
+    ON "_zero.changeLogStream" ("writeTimeMs", "watermark")
+    WHERE "writeTimeMs" IS NOT NULL;
+
+  INSERT INTO "_zero.changeLogStream"
+    ("watermark", "pos", "change", "precommit", "writeTimeMs")
+    VALUES
+      ('00', 0, '{"tag":"begin"}', NULL, NULL),
+      ('00', 1, '{"tag":"commit"}', '00', ${SIMULATED_EPOCH_MS});
+`;
+
+// Design 4.2. Present only in the separated layout, where the log has to
+// describe which replica it belongs to.
+const CHANGE_LOG_META_SQL = /*sql*/ `
+  CREATE TABLE "_zero.changeLogMeta" (
+    "replicaVersion" TEXT NOT NULL,
+    "schemaVersion"  INTEGER NOT NULL,
+    "lock"           INTEGER PRIMARY KEY DEFAULT 1 CHECK ("lock" = 1)
+  );
+
+  INSERT INTO "_zero.changeLogMeta" ("replicaVersion", "schemaVersion")
+    VALUES ('00', 1);
+`;
+
+type BenchDBs = {
+  readonly replica: Database;
+  readonly replicaPath: string;
+  /** The change-log handle. Identical to `replica` unless `separated`. */
+  readonly log: Database;
+  readonly logPath: string;
+  readonly separated: boolean;
+  readonly close: () => void;
+};
+
+function setupDBs(c: BenchCase, testName: string): BenchDBs {
+  const dbFile = new DbFile(testName);
+  cleanup.push(() => dbFile.delete());
+
+  const replica = new Database(lc, dbFile.path);
+  replica.pragma(`journal_mode = ${REPLICA_JOURNAL_MODE}`);
+  replica.pragma(`synchronous = ${REPLICA_SYNCHRONOUS}`);
+  applyPragmas(replica, getPragmaConfig('backup'));
+  replica.exec(REPLICA_SCHEMA_SQL);
+
+  if (c.mode !== 'separate-files') {
+    replica.exec(CHANGE_LOG_SCHEMA_SQL);
+    return {
+      replica,
+      replicaPath: dbFile.path,
+      log: replica,
+      logPath: dbFile.path,
+      separated: false,
+      close: () => replica.close(),
+    };
+  }
+
+  const durability = c.logDurability;
+  if (durability === undefined) {
+    throw new Error('separate-files cases require a logDurability');
+  }
+  const logPath = changeLogFileName(dbFile.path);
+  cleanup.push(() => deleteLiteDB(logPath));
+
+  const log = new Database(lc, logPath);
+  log.pragma(`journal_mode = ${durability.journalMode}`);
+  log.pragma(`synchronous = ${durability.synchronous}`);
+  // Design 4.6: nothing else owns this file, so wal_autocheckpoint keeps its
+  // default rather than the replica's litestream-owned 0.
+  applyPragmas(log, {busyTimeout: 30_000, analysisLimit: 1000});
+  log.exec(CHANGE_LOG_SCHEMA_SQL);
+  log.exec(CHANGE_LOG_META_SQL);
+
+  return {
+    replica,
+    replicaPath: dbFile.path,
+    log,
+    logPath,
+    separated: true,
+    close: () => {
+      log.close();
+      replica.close();
+    },
+  };
 }
 
 function fileSize(path: string) {
@@ -486,35 +705,44 @@ function fileMetrics(db: Database, path: string): FileMetrics {
   }>('freelist_count');
   return {
     dbBytes: fileSize(path),
-    walBytes: fileSize(`${path}-wal`),
+    // wal2 mode alternates between two WAL files; both are on-disk cost.
+    walBytes: fileSize(`${path}-wal`) + fileSize(`${path}-wal2`),
     freelistBytes: pageSize * freelistPages,
   };
 }
 
-function prepareStatements(db: Database) {
+function caseFileMetrics(dbs: BenchDBs): CaseFileMetrics {
   return {
-    runner: new StatementRunner(db),
-    upsertRow: db.prepare(/*sql*/ `
+    replica: fileMetrics(dbs.replica, dbs.replicaPath),
+    changeLog: dbs.separated ? fileMetrics(dbs.log, dbs.logPath) : undefined,
+  };
+}
+
+function prepareStatements(dbs: BenchDBs) {
+  return {
+    replicaRunner: new StatementRunner(dbs.replica),
+    logRunner: new StatementRunner(dbs.log),
+    upsertRow: dbs.replica.prepare(/*sql*/ `
       INSERT OR REPLACE INTO "bench_rows"
         ("id", "indexed", "payload", "${ZERO_VERSION_COLUMN_NAME}")
         VALUES (?, ?, ?, ?)
     `),
-    insertLog: db.prepare(/*sql*/ `
+    insertLog: dbs.log.prepare(/*sql*/ `
       INSERT INTO "_zero.changeLogStream"
         ("watermark", "pos", "change", "precommit", "writeTimeMs")
         VALUES (?, ?, ?, ?, ?)
     `),
-    updateWatermark: db.prepare(/*sql*/ `
+    updateWatermark: dbs.replica.prepare(/*sql*/ `
       UPDATE "_zero.replicationState"
-        SET "stateVersion" = ?, "writeTimeMs" = unixepoch('subsec') * 1000
+        SET "stateVersion" = ?, "writeTimeMs" = ?
     `),
   };
 }
 
 function runCase(
-  db: Database,
+  dbs: BenchDBs,
   c: BenchCase,
-  betweenCommitPurgeRows?: number,
+  purge?: PurgePolicy,
 ): WriteResult {
   if (c.sqliteTxRows !== c.logicalTxRows) {
     throw new Error(
@@ -524,10 +752,14 @@ function runCase(
 
   const beginJSON = '{"tag":"begin"}';
   const commitJSON = '{"tag":"commit"}';
-  const {runner, upsertRow, insertLog, updateWatermark} = prepareStatements(db);
-  const writesRows = c.mode === 'apply' || c.mode === 'combined';
-  const writesLog = c.mode === 'log' || c.mode === 'combined';
+  const {replicaRunner, logRunner, upsertRow, insertLog, updateWatermark} =
+    prepareStatements(dbs);
+  const {separated} = dbs;
+  const writesRows = c.mode !== 'log';
+  const writesLog = c.mode !== 'apply';
   const commitLatencyMs: number[] = [];
+  const logCommitLatencyMs: number[] = [];
+  const replicaCommitLatencyMs: number[] = [];
   const transactionLatencyMs: number[] = [];
   const upstreamLoopStallMs: number[] = [];
   const purgeResults: PurgeResult[] = [];
@@ -538,12 +770,19 @@ function runCase(
   for (let txIndex = 0; txIndex < c.totalTransactions; txIndex++) {
     const loopStart = performance.now();
     const watermark = versionToLexi(txIndex + 1);
+    const writeTimeMs = simulatedWriteTimeMs(txIndex, c.totalTransactions);
     const isSchemaTransaction =
       c.schemaEveryTransactions !== undefined &&
       txIndex % c.schemaEveryTransactions === 0;
     const transactionStart = performance.now();
     try {
-      runner.beginImmediate();
+      // Matches ChangeProcessor's 'begin' handling: the replica transaction
+      // opens first because it carries the indefinite SQLITE_BUSY retry for
+      // litestream checkpoints. Only the commit order is load-bearing.
+      replicaRunner.beginImmediate();
+      if (separated) {
+        logRunner.beginImmediate();
+      }
       if (writesLog) {
         insertLogRow(insertLog, watermark, 0, beginJSON, null, null);
       }
@@ -558,7 +797,7 @@ function runCase(
           if (kind === 'schema') {
             // Exercise a real SQLite schema mutation. The generated identifier
             // is derived only from the numeric loop index.
-            db.exec(/*sql*/ `
+            dbs.replica.exec(/*sql*/ `
               CREATE TABLE "bench_schema_event_${txIndex}" (
                 "id" INTEGER PRIMARY KEY,
                 "${ZERO_VERSION_COLUMN_NAME}" TEXT NOT NULL
@@ -586,27 +825,54 @@ function runCase(
           c.logicalTxRows + 1,
           commitJSON,
           watermark,
-          Date.now(),
+          writeTimeMs,
         );
       }
-      updateWatermark.run(watermark);
-      const commitStart = performance.now();
-      runner.commit();
-      commitLatencyMs.push(performance.now() - commitStart);
+
+      if (separated) {
+        // Design 4.4 / plan slice 7D: the log commits first, then the replica's
+        // state version, then the replica. A crash in between leaves a phantom,
+        // never a hole.
+        const logCommitStart = performance.now();
+        logRunner.commit();
+        const logCommitMs = performance.now() - logCommitStart;
+        updateWatermark.run(watermark, writeTimeMs);
+        const replicaCommitStart = performance.now();
+        replicaRunner.commit();
+        const replicaCommitMs = performance.now() - replicaCommitStart;
+        logCommitLatencyMs.push(logCommitMs);
+        replicaCommitLatencyMs.push(replicaCommitMs);
+        // Time in COMMIT only, so this stays comparable with the single-commit
+        // layouts; the interleaved state-version UPDATE is in the transaction
+        // latency below.
+        commitLatencyMs.push(logCommitMs + replicaCommitMs);
+      } else {
+        updateWatermark.run(watermark, writeTimeMs);
+        const commitStart = performance.now();
+        replicaRunner.commit();
+        commitLatencyMs.push(performance.now() - commitStart);
+      }
     } catch (e) {
-      if (db.inTransaction) {
-        runner.rollback();
+      if (separated && dbs.log.inTransaction) {
+        logRunner.rollback();
+      }
+      if (dbs.replica.inTransaction) {
+        replicaRunner.rollback();
       }
       throw e;
     }
     transactionLatencyMs.push(performance.now() - transactionStart);
 
-    if (betweenCommitPurgeRows !== undefined && writesLog) {
+    if (purge !== undefined && writesLog) {
       purgeResults.push(
-        purgeBatch(db, {
+        purgeBatch(dbs.log, {
           externalFloor: watermark,
-          retentionCutoffMs: Number.MAX_SAFE_INTEGER,
-          maxRows: betweenCommitPurgeRows,
+          stateVersionFloor: watermark,
+          retentionCutoffMs:
+            purge.kind === 'retention'
+              ? writeTimeMs - purge.retentionMs
+              : Number.MAX_SAFE_INTEGER,
+          maxRows: purge.maxRows,
         }),
       );
     }
@@ -619,6 +885,8 @@ function runCase(
     transactions: c.totalTransactions,
     payloadBytes,
     commitLatencyMs,
+    logCommitLatencyMs,
+    replicaCommitLatencyMs,
     transactionLatencyMs,
     upstreamLoopStallMs,
     purgeResults,
@@ -640,9 +908,9 @@ function insertLogRow(
   stmt.run(watermark, pos, change, precommit, writeTimeMs);
 }
 
-function verifyCase(db: Database, c: BenchCase, result: WriteResult) {
-  const writesRows = c.mode === 'apply' || c.mode === 'combined';
-  const writesLog = c.mode === 'log' || c.mode === 'combined';
+function verifyCase(dbs: BenchDBs, c: BenchCase, result: WriteResult) {
+  const writesRows = c.mode !== 'log';
+  const writesLog = c.mode !== 'apply';
   const schemaTransactions =
     c.schemaEveryTransactions === undefined
       ? 0
@@ -653,20 +921,18 @@ function verifyCase(db: Database, c: BenchCase, result: WriteResult) {
     : 2;
 
   expect(
-    db.prepare(`SELECT count(*) AS n FROM "bench_rows"`).get<{n: number}>().n,
-  ).toBe(expectedRows);
-  expect(
-    db
-      .prepare(`SELECT count(*) AS n FROM "_zero.changeLogStream"`)
+    dbs.replica
+      .prepare(`SELECT count(*) AS n FROM "bench_rows"`)
       .get<{n: number}>().n,
-  ).toBe(expectedLogRows);
+  ).toBe(expectedRows);
+  expect(countLogRows(dbs.log)).toBe(expectedLogRows);
   expect(
-    db
+    dbs.replica
       .prepare(`SELECT "stateVersion" AS version FROM "_zero.replicationState"`)
       .get<{version: string}>().version,
   ).toBe(versionToLexi(c.totalTransactions));
   expect(
-    db
+    dbs.replica
       .prepare(/*sql*/ `
         SELECT count(*) AS n
         FROM sqlite_schema
@@ -675,11 +941,29 @@ function verifyCase(db: Database, c: BenchCase, result: WriteResult) {
       .get<{n: number}>().n,
   ).toBe(writesRows ? schemaTransactions : 0);
   expect(
-    db
+    dbs.log
       .prepare(`SELECT max("watermark") AS head FROM "_zero.changeLogStream"`)
       .get<{head: string}>().head,
   ).toBe(writesLog ? versionToLexi(c.totalTransactions) : '00');
-  assertCompleteTransactions(db);
+  assertCompleteTransactions(dbs.log);
+}
+
+function countLogRows(db: Database) {
+  return db
+    .prepare(`SELECT count(*) AS n FROM "_zero.changeLogStream"`)
+    .get<{n: number}>().n;
+}
+
+/** The simulated-time span still held by the log, in ms. */
+function retainedWindowMs(db: Database) {
+  const {oldest, newest} = db
+    .prepare(/*sql*/ `
+      SELECT min("writeTimeMs") AS "oldest", max("writeTimeMs") AS "newest"
+      FROM "_zero.changeLogStream"
+      WHERE "writeTimeMs" IS NOT NULL
+    `)
+    .get<{oldest: number | null; newest: number | null}>();
+  return oldest === null || newest === null ? 0 : newest - oldest;
 }
 
 function assertCompleteTransactions(db: Database) {
@@ -701,7 +985,14 @@ function assertCompleteTransactions(db: Database) {
 function purgeBatch(
   db: Database,
   opts: {
+    /** The confirmed backup watermark (design 3.2). */
     externalFloor: string;
+    /**
+     * The latest durable transaction, always preserved as a catchup boundary
+     * (storer.ts:286-300). Passed in rather than read from
+     * `_zero.replicationState`, which lives in the other file once separated.
+     */
+    stateVersionFloor: string;
     retentionCutoffMs: number;
     maxRows: number;
   },
@@ -713,9 +1004,7 @@ function purgeBatch(
     WHERE "writeTimeMs" IS NOT NULL
       AND "writeTimeMs" < ?
       AND "watermark" <= ?
-      AND "watermark" < (
-        SELECT "stateVersion" FROM "_zero.replicationState"
-      )
+      AND "watermark" < ?
     ORDER BY "writeTimeMs", "watermark"
   `);
   const countTransaction = db.prepare(/*sql*/ `
@@ -736,6 +1025,7 @@ function purgeBatch(
     const candidates = eligibleCommits.all<{watermark: string}>(
       opts.retentionCutoffMs,
       opts.externalFloor,
+      opts.stateVersionFloor,
     );
     for (const {watermark} of candidates) {
       const rows = countTransaction.get<{rows: number}>(watermark).rows;
@@ -864,15 +1154,37 @@ function latencyPercentiles(values: readonly number[]) {
 }
 
 function caseName(c: BenchCase) {
+  const durability =
+    c.logDurability === undefined
+      ? ''
+      : ` logJournalMode=${c.logDurability.journalMode}` +
+        ` logSynchronous=${c.logDurability.synchronous}`;
   return (
     `workload=${c.workload} mode=${c.mode} ` +
-    `logicalTxRows=${c.logicalTxRows} sqliteTxRows=${c.sqliteTxRows}`
+    `logicalTxRows=${c.logicalTxRows} sqliteTxRows=${c.sqliteTxRows}` +
+    durability
   );
+}
+
+function fileMeasurements(
+  samples: readonly {files: CaseFileMetrics}[],
+  which: 'replica' | 'changeLog',
+) {
+  const metrics = samples.map(({files}) => files[which]);
+  if (metrics.some(m => m === undefined)) {
+    return undefined;
+  }
+  const present = metrics as readonly FileMetrics[];
+  return {
+    dbBytes: present.map(m => m.dbBytes),
+    walBytes: present.map(m => m.walBytes),
+    freelistBytes: present.map(m => m.freelistBytes),
+  };
 }
 
 function recordWriteSamples(
   name: string,
-  samples: readonly {write: WriteResult; files: FileMetrics}[],
+  samples: readonly {write: WriteResult; files: CaseFileMetrics}[],
 ) {
   benchmarkRecorder.recordThroughputSamples(
     `${name} transactions`,
@@ -897,6 +1209,10 @@ function recordWriteSamples(
   );
 
   const allCommits = samples.flatMap(({write}) => write.commitLatencyMs);
+  const allLogCommits = samples.flatMap(({write}) => write.logCommitLatencyMs);
+  const allReplicaCommits = samples.flatMap(
+    ({write}) => write.replicaCommitLatencyMs,
+  );
   const allTransactions = samples.flatMap(
     ({write}) => write.transactionLatencyMs,
   );
@@ -906,7 +1222,12 @@ function recordWriteSamples(
   recordLatency(`${name} commit latency`, allCommits);
   recordLatency(`${name} SQLite transaction latency`, allTransactions);
   recordLatency(`${name} upstream-loop SQLite stall`, allUpstreamStalls);
+  if (allLogCommits.length > 0) {
+    recordLatency(`${name} log commit latency`, allLogCommits);
+    recordLatency(`${name} replica commit latency`, allReplicaCommits);
+  }
 
+  const replicaFiles = fileMeasurements(samples, 'replica');
   publishedResults.push({
     name,
     measurements: {
@@ -917,11 +1238,23 @@ function recordWriteSamples(
         ({write}) => (write.changes * 1000) / write.elapsedMs,
       ),
       commitLatencyMs: latencyPercentiles(allCommits),
+      logCommitLatencyMs:
+        allLogCommits.length > 0
+          ? latencyPercentiles(allLogCommits)
+          : undefined,
+      replicaCommitLatencyMs:
+        allReplicaCommits.length > 0
+          ? latencyPercentiles(allReplicaCommits)
+          : undefined,
       sqliteTransactionLatencyMs: latencyPercentiles(allTransactions),
       upstreamLoopSQLiteStallMs: latencyPercentiles(allUpstreamStalls),
-      dbBytes: samples.map(({files}) => files.dbBytes),
-      walBytes: samples.map(({files}) => files.walBytes),
-      freelistBytes: samples.map(({files}) => files.freelistBytes),
+      replicaFileBytes: replicaFiles,
+      changeLogFileBytes: fileMeasurements(samples, 'changeLog'),
+      // The headline win: what litestream ships and a restoring view-syncer
+      // downloads is the replica file plus its WAL, and nothing else.
+      litestreamBytes: samples.map(
+        ({files}) => files.replica.dbBytes + files.replica.walBytes,
+      ),
     },
   });
 }
@@ -942,17 +1275,50 @@ function recordLatency(name: string, values: readonly number[]) {
 
 function writeSample(
   c: BenchCase,
-  betweenCommitPurgeRows?: number,
-): {write: WriteResult; files: FileMetrics} {
-  const dbFile = new DbFile('sqlite-change-log-ceiling-bench');
-  cleanup.push(() => dbFile.delete());
-  const db = setupDB(dbFile);
+  purge?: PurgePolicy,
+  testName = 'sqlite-change-log-ceiling-bench',
+): {write: WriteResult; files: CaseFileMetrics} {
+  const dbs = setupDBs(c, testName);
   try {
-    const write = runCase(db, c, betweenCommitPurgeRows);
-    verifyCase(db, c, write);
-    return {write, files: fileMetrics(db, dbFile.path)};
+    const write = runCase(dbs, c, purge);
+    verifyCase(dbs, c, write);
+    return {write, files: caseFileMetrics(dbs)};
   } finally {
-    db.close();
+    dbs.close();
+    runCleanup();
+  }
+}
+
+function retentionSample(c: BenchCase): {
+  write: WriteResult;
+  files: CaseFileMetrics;
+  retained: RetainedLog;
+} {
+  const dbs = setupDBs(c, 'sqlite-change-log-retention-bench');
+  try {
+    const write = runCase(dbs, c, {
+      kind: 'retention',
+      maxRows: PURGE_BATCH_ROWS,
+      retentionMs: RETENTION_MS,
+    });
+    verifyCase(dbs, c, write);
+    const retained = {
+      rows: countLogRows(dbs.log),
+      windowMs: retainedWindowMs(dbs.log),
+    };
+    // The run spans several windows, so aged-out stream must have been purged.
+    expect(write.purgedRows).toBeGreaterThan(0);
+    // And the purge must never have reached into the retention window: every
+    // transaction at or after the final cutoff survives. The oldest survivor
+    // lands within one simulated inter-transaction step of that cutoff, so the
+    // retained span is (RETENTION_MS - step, RETENTION_MS] when the purge keeps
+    // up, and larger when it falls behind. Only the lower bound is a guarantee;
+    // the published `retainedWindowMs` shows whether it kept up.
+    const stepMs = Math.ceil(SIMULATED_RUN_MS / c.totalTransactions);
+    expect(retained.windowMs).toBeGreaterThan(RETENTION_MS - stepMs);
+    return {write, files: caseFileMetrics(dbs), retained};
+  } finally {
+    dbs.close();
     runCleanup();
   }
 }
@@ -968,9 +1334,15 @@ function measuredSamples<T>(run: () => T): T[] {
   return samples;
 }
 
+function goNoGoKey(c: BenchCase) {
+  return c.logDurability === undefined
+    ? `${c.workload}:${c.mode}`
+    : `${c.workload}:${c.mode}:${c.logDurability.journalMode}:` +
+        c.logDurability.synchronous;
+}
+
 function recordGoNoGoResult(c: BenchCase, samples: readonly WriteResult[]) {
-  const key = `${c.workload}:${c.mode}`;
-  goNoGoResults.set(key, [...samples]);
+  goNoGoResults.set(goNoGoKey(c), [...samples]);
 }
 
 function assertGoNoGoGates() {
@@ -1050,9 +1422,26 @@ function benchmarkEnvironment() {
     os: `${platform()} ${release()} ${arch()}`,
     node: process.version,
     sqlite: sqliteVersion,
-    journalMode: 'wal',
-    synchronous: 'NORMAL',
-    walAutocheckpoint: 0,
+    replica: {
+      journalMode: REPLICA_JOURNAL_MODE,
+      synchronous: REPLICA_SYNCHRONOUS,
+      walAutocheckpoint: 0,
+    },
+    // Applies to the main sweep. The durability test overrides these, and every
+    // result name carries the settings its case actually ran with.
+    changeLog: {
+      defaultJournalModes: enumListFromEnv(
+        'SQLITE_CHANGE_LOG_LOG_JOURNAL_MODE',
+        ['wal', 'wal2'] as const,
+        DEFAULT_LOG_JOURNAL_MODES,
+      ),
+      defaultSynchronous: enumListFromEnv(
+        'SQLITE_CHANGE_LOG_LOG_SYNCHRONOUS',
+        ['NORMAL', 'FULL'] as const,
+        DEFAULT_LOG_SYNCHRONOUS,
+      ),
+      walAutocheckpoint: 'default',
+    },
     litestreamExecutable,
   };
 }
@@ -1133,6 +1522,15 @@ async function stopLitestream(proc: ChildProcess) {
   });
 }
 
+/** The two layouts the separate-file design compares. */
+function layoutCases(workload: Workload, cases = makeCases()) {
+  return cases.filter(
+    c =>
+      c.workload === workload &&
+      (c.mode === 'combined' || c.mode === 'separate-files'),
+  );
+}
+
 describe('replicator/sqlite change-log ceiling', () => {
   test('write workload sweep', {timeout: TEST_TIMEOUT_MS}, () => {
     for (const c of makeCases()) {
@@ -1147,71 +1545,122 @@ describe('replicator/sqlite change-log ceiling', () => {
     assertGoNoGoGates();
   });
 
+  // Design 4.6 asserts wal2 + synchronous=NORMAL for the change-log DB. This
+  // measures the alternatives so the default is a recorded decision with a
+  // measured cost, per the slice 7A exit criteria.
+  test('log durability trade', {timeout: TEST_TIMEOUT_MS}, () => {
+    const cases = makeCases(
+      logDurabilitiesFromEnv(SWEEP_LOG_JOURNAL_MODES, SWEEP_LOG_SYNCHRONOUS),
+    ).filter(
+      c => c.mode === 'separate-files' && c.workload === 'small-high-frequency',
+    );
+    for (const c of cases) {
+      const samples = measuredSamples(() => writeSample(c));
+      recordWriteSamples(
+        `replicator/sqlite change-log durability ${caseName(c)}`,
+        samples,
+      );
+    }
+  });
+
+  // The win: replica bytes under each layout once the log holds a full
+  // retention window (design 3.2/3.3), which is what litestream ships and a
+  // restoring view-syncer downloads.
+  test('retention-window steady state', {timeout: TEST_TIMEOUT_MS}, () => {
+    const cases = makeCases().filter(
+      c =>
+        // 'oversized' exists to exercise the batch-limit edge case, which the
+        // idle-purge test covers directly.
+        c.workload !== 'oversized' &&
+        (c.mode === 'combined' || c.mode === 'separate-files'),
+    );
+    for (const c of cases) {
+      const samples = measuredSamples(() => retentionSample(c));
+      const name =
+        'replicator/sqlite change-log retention window ' +
+        `retentionMinutes=${RETENTION_MINUTES} ` +
+        `windows=${RETENTION_WINDOWS} ${caseName(c)}`;
+      recordWriteSamples(name, samples);
+
+      const productivePurges = samples.flatMap(({write}) =>
+        write.purgeResults.filter(({deletedRows}) => deletedRows > 0),
+      );
+      recordLatency(
+        `${name} purge transaction latency`,
+        productivePurges.map(({elapsedMs}) => elapsedMs),
+      );
+      publishedResults.push({
+        name: `${name} retention`,
+        measurements: {
+          retainedRows: samples.map(({retained}) => retained.rows),
+          retainedWindowMs: samples.map(({retained}) => retained.windowMs),
+          purgedRows: samples.map(({write}) => write.purgedRows),
+          purgeTransactions: productivePurges.length,
+          purgeTransactionLatencyMs: latencyPercentiles(
+            productivePurges.map(({elapsedMs}) => elapsedMs),
+          ),
+        },
+      });
+    }
+  });
+
   test(
     'large catchup scan on a second connection',
     {timeout: TEST_TIMEOUT_MS},
     () => {
-      const c = makeCases().find(
-        c => c.workload === 'mixed-row-schema' && c.mode === 'combined',
-      );
-      if (c === undefined) {
-        return;
+      for (const c of layoutCases('mixed-row-schema')) {
+        const samples = measuredSamples(() => {
+          const dbs = setupDBs(c, 'sqlite-change-log-catchup-bench');
+          try {
+            const write = runCase(dbs, c);
+            verifyCase(dbs, c, write);
+            const catchup = runCatchup(
+              dbs.logPath,
+              '00',
+              versionToLexi(c.totalTransactions),
+              READ_BATCH_ROWS,
+            );
+            expect(catchup.rows).toBe(write.changes + write.transactions * 2);
+            return {catchup, files: caseFileMetrics(dbs)};
+          } finally {
+            dbs.close();
+            runCleanup();
+          }
+        });
+
+        const name =
+          'replicator/sqlite change-log large catchup ' +
+          `batchRows=${READ_BATCH_ROWS} ${caseName(c)}`;
+        benchmarkRecorder.recordThroughputSamples(
+          `${name} rows`,
+          samples.map(({catchup}) => ({
+            elapsedMs: catchup.elapsedMs,
+            operations: catchup.rows,
+          })),
+        );
+        const batchLatencies = samples.flatMap(
+          ({catchup}) => catchup.batchLatencyMs,
+        );
+        recordLatency(`${name} batch latency`, batchLatencies);
+        recordLatency(
+          `${name} end-to-end latency`,
+          samples.map(({catchup}) => catchup.elapsedMs),
+        );
+        publishedResults.push({
+          name,
+          measurements: {
+            rowsPerSecond: samples.map(
+              ({catchup}) => (catchup.rows * 1000) / catchup.elapsedMs,
+            ),
+            batchLatencyMs: latencyPercentiles(batchLatencies),
+            endToEndLatencyMs: latencyPercentiles(
+              samples.map(({catchup}) => catchup.elapsedMs),
+            ),
+            replicaFileBytes: fileMeasurements(samples, 'replica'),
+            changeLogFileBytes: fileMeasurements(samples, 'changeLog'),
+          },
+        });
       }
-
-      const samples = measuredSamples(() => {
-        const dbFile = new DbFile('sqlite-change-log-catchup-bench');
-        cleanup.push(() => dbFile.delete());
-        const db = setupDB(dbFile);
-        try {
-          const write = runCase(db, c);
-          verifyCase(db, c, write);
-          const catchup = runCatchup(
-            dbFile.path,
-            '00',
-            versionToLexi(c.totalTransactions),
-            READ_BATCH_ROWS,
-          );
-          expect(catchup.rows).toBe(write.changes + write.transactions * 2);
-          return {catchup, files: fileMetrics(db, dbFile.path)};
-        } finally {
-          db.close();
-          runCleanup();
-        }
-      });
-
-      const name =
-        'replicator/sqlite change-log large catchup ' +
-        `batchRows=${READ_BATCH_ROWS}`;
-      benchmarkRecorder.recordThroughputSamples(
-        `${name} rows`,
-        samples.map(({catchup}) => ({
-          elapsedMs: catchup.elapsedMs,
-          operations: catchup.rows,
-        })),
-      );
-      const batchLatencies = samples.flatMap(
-        ({catchup}) => catchup.batchLatencyMs,
-      );
-      recordLatency(`${name} batch latency`, batchLatencies);
-      recordLatency(
-        `${name} end-to-end latency`,
-        samples.map(({catchup}) => catchup.elapsedMs),
-      );
-      publishedResults.push({
-        name,
-        measurements: {
-          rowsPerSecond: samples.map(
-            ({catchup}) => (catchup.rows * 1000) / catchup.elapsedMs,
-          ),
-          batchLatencyMs: latencyPercentiles(batchLatencies),
-          endToEndLatencyMs: latencyPercentiles(
-            samples.map(({catchup}) => catchup.elapsedMs),
-          ),
-          dbBytes: samples.map(({files}) => files.dbBytes),
-          walBytes: samples.map(({files}) => files.walBytes),
-          freelistBytes: samples.map(({files}) => files.freelistBytes),
-        },
-      });
     },
   );
 
@@ -1219,48 +1668,44 @@ describe('replicator/sqlite change-log ceiling', () => {
     'small purge batches between commits',
     {timeout: TEST_TIMEOUT_MS},
     () => {
-      const c = makeCases().find(
-        c => c.workload === 'small-high-frequency' && c.mode === 'combined',
-      );
-      if (c === undefined) {
-        return;
+      for (const c of layoutCases('small-high-frequency')) {
+        const samples = measuredSamples(() =>
+          writeSample(c, {kind: 'drain', maxRows: BETWEEN_COMMIT_PURGE_ROWS}),
+        );
+        const name =
+          'replicator/sqlite change-log between-commit purge ' +
+          `batchRows=${BETWEEN_COMMIT_PURGE_ROWS} ${caseName(c)}`;
+        recordWriteSamples(name, samples);
+        const purges = samples.flatMap(({write}) => write.purgeResults);
+        const productivePurges = purges.filter(
+          ({deletedRows}) => deletedRows > 0,
+        );
+        expect(productivePurges.length).toBeGreaterThan(0);
+        recordLatency(
+          `${name} transaction latency`,
+          productivePurges.map(({elapsedMs}) => elapsedMs),
+        );
+        benchmarkRecorder.recordThroughputSamples(
+          `${name} rows`,
+          productivePurges.map(({elapsedMs, deletedRows}) => ({
+            elapsedMs,
+            operations: deletedRows,
+          })),
+        );
+        publishedResults.push({
+          name: `${name} purge`,
+          measurements: {
+            transactionLatencyMs: latencyPercentiles(
+              productivePurges.map(({elapsedMs}) => elapsedMs),
+            ),
+            purgeTransactions: productivePurges.length,
+            rowsDeleted: productivePurges.reduce(
+              (sum, {deletedRows}) => sum + deletedRows,
+              0,
+            ),
+          },
+        });
       }
-      const samples = measuredSamples(() =>
-        writeSample(c, BETWEEN_COMMIT_PURGE_ROWS),
-      );
-      const name =
-        'replicator/sqlite change-log between-commit purge ' +
-        `batchRows=${BETWEEN_COMMIT_PURGE_ROWS}`;
-      recordWriteSamples(name, samples);
-      const purges = samples.flatMap(({write}) => write.purgeResults);
-      const productivePurges = purges.filter(
-        ({deletedRows}) => deletedRows > 0,
-      );
-      expect(productivePurges.length).toBeGreaterThan(0);
-      recordLatency(
-        `${name} transaction latency`,
-        productivePurges.map(({elapsedMs}) => elapsedMs),
-      );
-      benchmarkRecorder.recordThroughputSamples(
-        `${name} rows`,
-        productivePurges.map(({elapsedMs, deletedRows}) => ({
-          elapsedMs,
-          operations: deletedRows,
-        })),
-      );
-      publishedResults.push({
-        name: `${name} purge`,
-        measurements: {
-          transactionLatencyMs: latencyPercentiles(
-            productivePurges.map(({elapsedMs}) => elapsedMs),
-          ),
-          purgeTransactions: productivePurges.length,
-          rowsDeleted: productivePurges.reduce(
-            (sum, {deletedRows}) => sum + deletedRows,
-            0,
-          ),
-        },
-      });
     },
   );
 
@@ -1268,82 +1713,72 @@ describe('replicator/sqlite change-log ceiling', () => {
     'idle purge drains oversized transactions',
     {timeout: TEST_TIMEOUT_MS},
     () => {
-      const c = makeCases().find(
-        c => c.workload === 'oversized' && c.mode === 'combined',
-      );
-      if (c === undefined) {
-        return;
-      }
-      const samples = measuredSamples(() => {
-        const dbFile = new DbFile('sqlite-change-log-purge-bench');
-        cleanup.push(() => dbFile.delete());
-        const db = setupDB(dbFile);
-        try {
-          const write = runCase(db, c);
-          verifyCase(db, c, write);
-          const purges: PurgeResult[] = [];
-          for (;;) {
-            const result = purgeBatch(db, {
-              externalFloor: versionToLexi(c.totalTransactions),
-              retentionCutoffMs: Number.MAX_SAFE_INTEGER,
-              maxRows: PURGE_BATCH_ROWS,
-            });
-            purges.push(result);
-            if (!result.moreEligible) {
-              break;
+      for (const c of layoutCases('oversized')) {
+        const samples = measuredSamples(() => {
+          const dbs = setupDBs(c, 'sqlite-change-log-purge-bench');
+          try {
+            const write = runCase(dbs, c);
+            verifyCase(dbs, c, write);
+            const purges: PurgeResult[] = [];
+            for (;;) {
+              const result = purgeBatch(dbs.log, {
+                externalFloor: versionToLexi(c.totalTransactions),
+                stateVersionFloor: versionToLexi(c.totalTransactions),
+                retentionCutoffMs: Number.MAX_SAFE_INTEGER,
+                maxRows: PURGE_BATCH_ROWS,
+              });
+              purges.push(result);
+              if (!result.moreEligible) {
+                break;
+              }
+              expect(result.deletedRows).toBeGreaterThan(0);
             }
-            expect(result.deletedRows).toBeGreaterThan(0);
+            expect(
+              purges.some(({deletedRows}) => deletedRows > PURGE_BATCH_ROWS),
+            ).toBe(true);
+            expect(purges.at(-1)?.moreEligible).toBe(false);
+            expect(countLogRows(dbs.log)).toBe(c.logicalTxRows + 2);
+            assertCompleteTransactions(dbs.log);
+            return {purges, files: caseFileMetrics(dbs)};
+          } finally {
+            dbs.close();
+            runCleanup();
           }
-          expect(
-            purges.some(({deletedRows}) => deletedRows > PURGE_BATCH_ROWS),
-          ).toBe(true);
-          expect(purges.at(-1)?.moreEligible).toBe(false);
-          expect(
-            db
-              .prepare(`SELECT count(*) AS n FROM "_zero.changeLogStream"`)
-              .get<{n: number}>().n,
-          ).toBe(c.logicalTxRows + 2);
-          assertCompleteTransactions(db);
-          return {purges, files: fileMetrics(db, dbFile.path)};
-        } finally {
-          db.close();
-          runCleanup();
-        }
-      });
+        });
 
-      const name =
-        'replicator/sqlite change-log idle purge ' +
-        `batchRows=${PURGE_BATCH_ROWS}`;
-      const productivePurges = samples.flatMap(({purges}) =>
-        purges.filter(({deletedRows}) => deletedRows > 0),
-      );
-      recordLatency(
-        `${name} transaction latency`,
-        productivePurges.map(({elapsedMs}) => elapsedMs),
-      );
-      benchmarkRecorder.recordThroughputSamples(
-        `${name} rows`,
-        productivePurges.map(({elapsedMs, deletedRows}) => ({
-          elapsedMs,
-          operations: deletedRows,
-        })),
-      );
-      publishedResults.push({
-        name,
-        measurements: {
-          transactionLatencyMs: latencyPercentiles(
-            productivePurges.map(({elapsedMs}) => elapsedMs),
-          ),
-          purgeTransactions: productivePurges.length,
-          rowsDeleted: productivePurges.reduce(
-            (sum, {deletedRows}) => sum + deletedRows,
-            0,
-          ),
-          dbBytes: samples.map(({files}) => files.dbBytes),
-          walBytes: samples.map(({files}) => files.walBytes),
-          freelistBytes: samples.map(({files}) => files.freelistBytes),
-        },
-      });
+        const name =
+          'replicator/sqlite change-log idle purge ' +
+          `batchRows=${PURGE_BATCH_ROWS} ${caseName(c)}`;
+        const productivePurges = samples.flatMap(({purges}) =>
+          purges.filter(({deletedRows}) => deletedRows > 0),
+        );
+        recordLatency(
+          `${name} transaction latency`,
+          productivePurges.map(({elapsedMs}) => elapsedMs),
+        );
+        benchmarkRecorder.recordThroughputSamples(
+          `${name} rows`,
+          productivePurges.map(({elapsedMs, deletedRows}) => ({
+            elapsedMs,
+            operations: deletedRows,
+          })),
+        );
+        publishedResults.push({
+          name,
+          measurements: {
+            transactionLatencyMs: latencyPercentiles(
+              productivePurges.map(({elapsedMs}) => elapsedMs),
+            ),
+            purgeTransactions: productivePurges.length,
+            rowsDeleted: productivePurges.reduce(
+              (sum, {deletedRows}) => sum + deletedRows,
+              0,
+            ),
+            replicaFileBytes: fileMeasurements(samples, 'replica'),
+            changeLogFileBytes: fileMeasurements(samples, 'changeLog'),
+          },
+        });
+      }
     },
   );
 
@@ -1351,43 +1786,47 @@ describe('replicator/sqlite change-log ceiling', () => {
     'litestream v5/checkpoint pressure',
     {timeout: TEST_TIMEOUT_MS},
     async () => {
-      const c = makeCases().find(
-        c => c.workload === 'small-high-frequency' && c.mode === 'combined',
-      );
-      if (c === undefined || litestreamExecutable === undefined) {
+      if (litestreamExecutable === undefined) {
         return;
       }
-
-      const samples: {write: WriteResult; files: FileMetrics}[] = [];
-      for (let rep = 0; rep < WARMUP_REPS + REPS; rep++) {
-        const dbFile = new DbFile('sqlite-change-log-litestream-bench');
-        const backupDir = mkdtempSync(
-          join(tmpdir(), 'sqlite-change-log-litestream-'),
-        );
-        const db = setupDB(dbFile);
-        const proc = spawn(
-          litestreamExecutable,
-          ['replicate', dbFile.path, `file://${join(backupDir, 'replica')}`],
-          {stdio: ['ignore', 'pipe', 'pipe']},
-        );
-        try {
-          await waitForLitestream(proc);
-          const write = runCase(db, c);
-          verifyCase(db, c, write);
-          if (rep >= WARMUP_REPS) {
-            samples.push({write, files: fileMetrics(db, dbFile.path)});
+      for (const c of layoutCases('small-high-frequency')) {
+        const samples: {write: WriteResult; files: CaseFileMetrics}[] = [];
+        for (let rep = 0; rep < WARMUP_REPS + REPS; rep++) {
+          const dbs = setupDBs(c, 'sqlite-change-log-litestream-bench');
+          const backupDir = mkdtempSync(
+            join(tmpdir(), 'sqlite-change-log-litestream-'),
+          );
+          // Litestream replicates the replica only; the change-log file is
+          // local by construction (design 4.1).
+          const proc = spawn(
+            litestreamExecutable,
+            [
+              'replicate',
+              dbs.replicaPath,
+              `file://${join(backupDir, 'replica')}`,
+            ],
+            {stdio: ['ignore', 'pipe', 'pipe']},
+          );
+          try {
+            await waitForLitestream(proc);
+            const write = runCase(dbs, c);
+            verifyCase(dbs, c, write);
+            if (rep >= WARMUP_REPS) {
+              samples.push({write, files: caseFileMetrics(dbs)});
+            }
+          } finally {
+            await stopLitestream(proc);
+            dbs.close();
+            runCleanup();
+            rmSync(backupDir, {recursive: true, force: true});
           }
-        } finally {
-          await stopLitestream(proc);
-          db.close();
-          dbFile.delete();
-          rmSync(backupDir, {recursive: true, force: true});
         }
+        recordWriteSamples(
+          'replicator/sqlite change-log litestream-v5 checkpoint pressure ' +
+            caseName(c),
+          samples,
+        );
       }
-      recordWriteSamples(
-        'replicator/sqlite change-log litestream-v5 checkpoint pressure',
-        samples,
-      );
     },
   );
 });
