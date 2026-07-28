@@ -984,21 +984,12 @@ describe('change-streamer/storer', () => {
       // Prevent the beforeEach cleanup from re-throwing the rejected done.
       done = Promise.resolve();
 
-      // Subscribers that were waiting to be caught up receive the terminal
-      // error and are canceled after consuming it.
+      // Subscribers that were waiting to be caught up are canceled without a
+      // downstream error, so they reconnect rather than restoring a replica.
+      // An ownership handoff is a routine event; it must not fan out into a
+      // fleet-wide litestream restore.
       for (const stream of [stream1, stream2]) {
         const iterator = stream[Symbol.asyncIterator]();
-        const error = await iterator.next();
-        expect(error.done).toBeFalsy();
-        expect(JSON.parse(error.value as string)).toEqual([
-          'error',
-          {
-            type: ErrorType.Unknown,
-            message: expect.stringContaining(
-              'changeLog ownership has been assumed by other-task',
-            ),
-          },
-        ]);
         expect((await iterator.next()).done).toBe(true);
       }
       expect(stream1.active).toBe(false);

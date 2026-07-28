@@ -13,7 +13,7 @@ import type {
   Status,
   WatermarkedChange,
 } from './change-streamer.ts';
-import * as ErrorType from './error-type-enum.ts';
+import type * as ErrorType from './error-type-enum.ts';
 
 type ErrorType = Enum<typeof ErrorType>;
 
@@ -301,8 +301,20 @@ export class Subscriber {
     return true;
   }
 
-  fail(err?: unknown) {
-    this.close(ErrorType.Unknown, String(err));
+  /**
+   * Ends the subscription without sending a downstream `['error', ...]`.
+   *
+   * This is deliberate, and not the same as reporting the failure to the
+   * subscriber: `IncrementalSyncer` treats any `['error', ...]` as terminal and
+   * shuts down to restore a fresh replica from litestream, whereas a clean end
+   * backs off and re-subscribes. The failures routed here -- storer catchup
+   * errors, backlog drain errors, backup-monitor errors -- are transient, so a
+   * reconnect is the proportionate response and a fleet-wide restore is not.
+   *
+   * Callers are responsible for logging `err`; it is not carried downstream.
+   */
+  fail(_err?: unknown) {
+    this.close();
   }
 
   close(error?: ErrorType, message?: string) {

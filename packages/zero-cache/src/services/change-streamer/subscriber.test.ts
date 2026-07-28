@@ -336,17 +336,29 @@ describe('change-streamer/subscriber', () => {
     expect(full).toBe(false);
   });
 
-  test('fail sends the Unknown error code', async () => {
+  test('fail ends the subscription without sending an error', async () => {
     const [sub, , receiver] = createSubscriber();
     const iterator = receiver[Symbol.asyncIterator]();
 
     sub.fail(new Error('boom'));
 
+    // No ['error', ...] downstream: IncrementalSyncer would treat it as
+    // terminal and restore a fresh replica, where these failures only warrant
+    // a reconnect.
+    expect((await iterator.next()).done).toBe(true);
+  });
+
+  test('close with an error type sends it downstream', async () => {
+    const [sub, , receiver] = createSubscriber();
+    const iterator = receiver[Symbol.asyncIterator]();
+
+    sub.close(ErrorType.WatermarkTooOld, 'too old');
+
     const error = await iterator.next();
     expect(error.done).toBeFalsy();
     expect(JSON.parse(error.value as string)).toEqual([
       'error',
-      {type: ErrorType.Unknown, message: 'Error: boom'},
+      {type: ErrorType.WatermarkTooOld, message: 'too old'},
     ]);
     expect((await iterator.next()).done).toBe(true);
   });

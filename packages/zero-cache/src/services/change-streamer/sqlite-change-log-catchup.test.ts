@@ -467,11 +467,11 @@ describe('SQLiteChangeLogCatchup', () => {
     const {subscriber, done, output} = createSubscriber('01');
     await fixture.coordinator.catchup(subscriber, () => '06');
 
-    expect(await output.dequeue()).toEqual([
-      'error',
-      {type: ErrorType.Unknown, message: 'Error: broken SQLite read'},
-    ]);
+    // fail() ends the subscription without a downstream ['error', ...], so the
+    // subscriber reconnects instead of restoring a replica. The error reaches
+    // operators through the log below, not through the subscriber.
     await done;
+    expect(output.size()).toBe(0);
     expect(fixture.logSink.messages).toContainEqual([
       'error',
       expect.anything(),
