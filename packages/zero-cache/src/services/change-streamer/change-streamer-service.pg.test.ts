@@ -23,6 +23,13 @@ import type {
 } from '../change-source/protocol/current/downstream.ts';
 import type {UpstreamStatusMessage} from '../change-source/protocol/current/status.ts';
 import {exitAfter} from '../life-cycle.ts';
+import {
+  changeLogFileName,
+  deleteChangeLogDB,
+  openChangeLogDB,
+  readReplicaAnchor,
+  reconcileChangeLog,
+} from '../replicator/change-log-db.ts';
 import {ChangeLogStreamWriter} from '../replicator/change-log-stream-writer.ts';
 import {IncrementalSyncer} from '../replicator/incremental-sync.ts';
 import {ReplicationStatusPublisher} from '../replicator/replication-status.ts';
@@ -179,13 +186,22 @@ describe('change-streamer/service', () => {
 
   const messages = new ReplicationMessages({foo: 'id'});
 
+  /** The change-log database the replicator writes beside `replicaFile`. */
+  function createChangeLogDB(replicaFile: DbFile, replica: Database): Database {
+    const changeLog = openChangeLogDB(lc, replicaFile.path, {readonly: false});
+    reconcileChangeLog(lc, changeLog, readReplicaAnchor(replica));
+    return changeLog;
+  }
+
+  /** Applies a transaction the way the write worker does: log first, then replica. */
   function appendSQLiteTransaction(
     replica: Database,
+    changeLog: Database,
     watermark: string,
     data: readonly ChangeStreamData[],
   ): void {
     const runner = new StatementRunner(replica);
-    const writer = new ChangeLogStreamWriter(replica);
+    const writer = new ChangeLogStreamWriter(new StatementRunner(changeLog));
     const begin: ChangeStreamData = [
       'begin',
       messages.begin(),
@@ -204,6 +220,7 @@ describe('change-streamer/service', () => {
       runner.commit();
     } catch (e) {
       runner.rollback();
+      writer.rollback();
       throw e;
     }
   }
@@ -304,13 +321,23 @@ describe('change-streamer/service', () => {
             .get(),
         ).toEqual({stateVersion: '06'});
       });
+      // The stream is logged to the change-log database beside the replica,
+      // never to the replica itself.
+      using changeLog = openChangeLogDB(lc, dbFile.path, {readonly: true});
+      expect(
+        changeLog
+          .prepare(
+            `SELECT max("watermark") AS "watermark" FROM "_zero.changeLogStream"`,
+          )
+          .get(),
+      ).toEqual({watermark: '06'});
       expect(
         replica
           .prepare(
             `SELECT max("watermark") AS "watermark" FROM "_zero.changeLogStream"`,
           )
           .get(),
-      ).toEqual({watermark: '06'});
+      ).toEqual({watermark: REPLICA_VERSION});
       expect(observer.state()).toMatchObject({
         receivedHead: '06',
         sqliteHead: '06',
@@ -358,6 +385,7 @@ describe('change-streamer/service', () => {
       await syncing;
       await worker.stop();
       replica.close();
+      deleteChangeLogDB(dbFile.path);
       dbFile.delete();
     }
   });
@@ -370,6 +398,10 @@ describe('change-streamer/service', () => {
     const catchupReplica = catchupReplicaFile.connect(lc);
     catchupReplica.pragma('journal_mode = wal');
     initReplicationState(catchupReplica, ['zero_data'], REPLICA_VERSION);
+    const catchupChangeLog = createChangeLogDB(
+      catchupReplicaFile,
+      catchupReplica,
+    );
 
     changes = Subscription.create();
     acks = new Queue();
@@ -398,7 +430,7 @@ describe('change-streamer/service', () => {
       {
         ...opts,
         sqliteCatchup: {
-          replicaFile: catchupReplicaFile.path,
+          changeLogFile: changeLogFileName(catchupReplicaFile.path),
           readBatchRows: 2,
           barrierTimeoutMs: 1_000,
           // Nothing here acks the change log, so the barrier relies on its
@@ -451,7 +483,9 @@ describe('change-streamer/service', () => {
 
       changes.push(['commit', messages.commit(), {watermark: '04'}]);
       expect(await nextChange(live)).toMatchObject({tag: 'commit'});
-      appendSQLiteTransaction(catchupReplica, '04', [insert04]);
+      appendSQLiteTransaction(catchupReplica, catchupChangeLog, '04', [
+        insert04,
+      ]);
 
       expect(await nextChange(committed)).toMatchObject({tag: 'status'});
       expect(await nextChange(committed)).toMatchObject({tag: 'begin'});
@@ -504,7 +538,9 @@ describe('change-streamer/service', () => {
         new: {id: 'after-rollback'},
       });
       expect(await nextChange(live)).toMatchObject({tag: 'commit'});
-      appendSQLiteTransaction(catchupReplica, '08', [insert08]);
+      appendSQLiteTransaction(catchupReplica, catchupChangeLog, '08', [
+        insert08,
+      ]);
 
       changes.push(['begin', messages.begin(), {commitWatermark: '0a'}]);
       changes.push(['data', messages.insert('foo', {id: 'interrupted'})]);
@@ -537,7 +573,9 @@ describe('change-streamer/service', () => {
       interruptedSub.cancel();
     } finally {
       await streamer.stop();
+      catchupChangeLog.close();
       catchupReplica.close();
+      deleteChangeLogDB(catchupReplicaFile.path);
       catchupReplicaFile.delete();
     }
   });
@@ -550,6 +588,10 @@ describe('change-streamer/service', () => {
     const catchupReplica = catchupReplicaFile.connect(lc);
     catchupReplica.pragma('journal_mode = wal');
     initReplicationState(catchupReplica, ['zero_data'], REPLICA_VERSION);
+    const catchupChangeLog = createChangeLogDB(
+      catchupReplicaFile,
+      catchupReplica,
+    );
 
     changes = Subscription.create();
     acks = new Queue();
@@ -578,7 +620,7 @@ describe('change-streamer/service', () => {
       {
         ...opts,
         sqliteCatchup: {
-          replicaFile: catchupReplicaFile.path,
+          changeLogFile: changeLogFileName(catchupReplicaFile.path),
           readBatchRows: 2,
           barrierTimeoutMs: 60_000,
           // Far beyond the test timeout, so only the writer's ACK can release
@@ -620,6 +662,7 @@ describe('change-streamer/service', () => {
             await applyTransactions.promise;
             appendSQLiteTransaction(
               catchupReplica,
+              catchupChangeLog,
               watermark,
               buffered.splice(0),
             );
@@ -670,7 +713,9 @@ describe('change-streamer/service', () => {
       await writing;
     } finally {
       await streamer.stop();
+      catchupChangeLog.close();
       catchupReplica.close();
+      deleteChangeLogDB(catchupReplicaFile.path);
       catchupReplicaFile.delete();
     }
   });
@@ -683,6 +728,10 @@ describe('change-streamer/service', () => {
     const catchupReplica = catchupReplicaFile.connect(lc);
     catchupReplica.pragma('journal_mode = wal');
     initReplicationState(catchupReplica, ['zero_data'], REPLICA_VERSION);
+    const catchupChangeLog = createChangeLogDB(
+      catchupReplicaFile,
+      catchupReplica,
+    );
 
     changes = Subscription.create();
     acks = new Queue();
@@ -712,7 +761,7 @@ describe('change-streamer/service', () => {
       {
         ...opts,
         sqliteCatchup: {
-          replicaFile: catchupReplicaFile.path,
+          changeLogFile: changeLogFileName(catchupReplicaFile.path),
           readBatchRows: 2,
           barrierTimeoutMs: 60_000,
           barrierPollIntervalMs: 60_000,
@@ -804,7 +853,9 @@ describe('change-streamer/service', () => {
       writerSub.cancel();
     } finally {
       await streamer.stop();
+      catchupChangeLog.close();
       catchupReplica.close();
+      deleteChangeLogDB(catchupReplicaFile.path);
       catchupReplicaFile.delete();
     }
   });

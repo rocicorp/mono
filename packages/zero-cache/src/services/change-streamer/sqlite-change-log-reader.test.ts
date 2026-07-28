@@ -70,8 +70,7 @@ function appendTransaction(
   watermark: string,
   data: readonly ChangeStreamData[],
 ): readonly WatermarkedChange[] {
-  const runner = new StatementRunner(db);
-  const writer = new ChangeLogStreamWriter(db);
+  const writer = new ChangeLogStreamWriter(new StatementRunner(db));
   const begin: ChangeStreamData = [
     'begin',
     {tag: 'begin'},
@@ -79,18 +78,14 @@ function appendTransaction(
   ];
   const commit: ChangeStreamData = ['commit', {tag: 'commit'}, {watermark}];
 
-  // Slice 7D moves this transaction into the writer itself; until then the
-  // caller owns it, as ChangeProcessor does.
-  runner.beginImmediate();
   try {
     writer.begin(watermark, serializeChangeStreamData(begin));
     for (const message of data) {
       writer.append(serializeChangeStreamData(message), message[1].tag);
     }
     writer.commit(watermark, serializeChangeStreamData(commit), Date.now());
-    runner.commit();
   } catch (e) {
-    runner.rollback();
+    writer.rollback();
     throw e;
   }
 

@@ -4,6 +4,7 @@ import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.
 import {Database} from '../../../../zqlite/src/db.ts';
 import {DbFile, expectTableExact} from '../../test/lite.ts';
 import {
+  applyChangeLogPragmas,
   CHANGE_LOG_DB_SCHEMA_VERSION,
   CHANGE_LOG_META_TABLE,
   changeLogFileName,
@@ -202,6 +203,26 @@ describe('replicator/change-log-db', () => {
     test('readonly open of an absent log throws', () => {
       const file = newDbFile();
       expect(() => openChangeLogDB(lc, file.path, {readonly: true})).toThrow();
+    });
+  });
+
+  describe('applyChangeLogPragmas', () => {
+    test('configures the durability the benchmark settled on', () => {
+      const file = newDbFile();
+      using db = openChangeLogDB(lc, file.path, {readonly: false});
+
+      applyChangeLogPragmas(db);
+
+      expect(db.pragma('journal_mode')).toEqual([{journal_mode: 'wal2'}]);
+      // 1 == NORMAL: the log's commit precedes the replica's on the hot path,
+      // so it does not pay for a second fsync.
+      expect(db.pragma('synchronous')).toEqual([{synchronous: 1}]);
+      expect(db.pragma('busy_timeout')).toEqual([{timeout: 30000}]);
+      // Nothing else owns this file, so checkpointing stays automatic rather
+      // than being handed to litestream as it is for the backup replica.
+      expect(db.pragma('wal_autocheckpoint')).toEqual([
+        {wal_autocheckpoint: 1000},
+      ]);
     });
   });
 

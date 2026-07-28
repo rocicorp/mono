@@ -1,4 +1,5 @@
 import {once} from 'node:events';
+import {existsSync} from 'node:fs';
 import {Worker} from 'node:worker_threads';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
@@ -6,6 +7,14 @@ import type {Database} from '../../../../zqlite/src/db.ts';
 import {DbFile, initDB} from '../../test/lite.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
 import {serializeChangeStreamData} from '../change-streamer/change-log-codec.ts';
+import {
+  CHANGE_LOG_DB_SCHEMA_VERSION,
+  CHANGE_LOG_META_TABLE,
+  changeLogFileName,
+  deleteChangeLogDB,
+  openChangeLogDB,
+} from './change-log-db.ts';
+import {CHANGE_LOG_STREAM_TABLE} from './schema/change-log-stream.ts';
 import {initReplicationState} from './schema/replication-state.ts';
 import {ReplicationMessages} from './test-utils.ts';
 import {
@@ -20,10 +29,21 @@ function serialized(data: ChangeStreamData): SerializedChangeStreamData {
   return {data, json: serializeChangeStreamData(data)};
 }
 
+const PRAGMAS = {busyTimeout: 30000, analysisLimit: 1000};
+const LOG_CONFIG = {level: 'error', format: 'text'} as const;
+
 describe('write-worker', () => {
   let dbFile: DbFile;
   let mainDb: Database;
   let worker: ThreadWriteWorkerClient;
+
+  /** Reads the change log the worker writes beside the replica. */
+  function readChangeLog<T>(read: (db: Database) => T): T {
+    using db = openChangeLogDB(createSilentLogContext(), dbFile.path, {
+      readonly: true,
+    });
+    return read(db);
+  }
 
   beforeEach(async () => {
     const lc = createSilentLogContext();
@@ -60,6 +80,7 @@ describe('write-worker', () => {
   afterEach(async () => {
     await worker.stop();
     mainDb.close();
+    deleteChangeLogDB(dbFile.path);
     dbFile.delete();
   });
 
@@ -111,19 +132,88 @@ describe('write-worker', () => {
     expect(state.watermark).toBe('06');
   });
 
+  test('init creates, seeds, and then leaves the change log alone', async () => {
+    await worker.stop();
+    expect(existsSync(changeLogFileName(dbFile.path))).toBe(false);
+
+    worker = new ThreadWriteWorkerClient();
+    expect(
+      await worker.init(dbFile.path, 'serving', true, PRAGMAS, LOG_CONFIG),
+    ).toEqual({action: 'reseeded', head: '02', reason: 'created'});
+    expect(existsSync(changeLogFileName(dbFile.path))).toBe(true);
+    expect(
+      readChangeLog(db => ({
+        meta: db.prepare(`SELECT * FROM "${CHANGE_LOG_META_TABLE}"`).get(),
+        journalMode: db.pragma('journal_mode'),
+        head: db
+          .prepare(
+            `SELECT max("watermark") AS "head" FROM "${CHANGE_LOG_STREAM_TABLE}"`,
+          )
+          .get(),
+      })),
+    ).toEqual({
+      meta: {
+        replicaVersion: '02',
+        schemaVersion: CHANGE_LOG_DB_SCHEMA_VERSION,
+        lock: 1,
+      },
+      journalMode: [{journal_mode: 'wal2'}],
+      head: {head: '02'},
+    });
+
+    // A restart against a consistent log neither truncates nor reseeds.
+    await worker.stop();
+    worker = new ThreadWriteWorkerClient();
+    expect(
+      await worker.init(dbFile.path, 'serving', true, PRAGMAS, LOG_CONFIG),
+    ).toEqual({action: 'none', head: '02'});
+  });
+
+  test('init truncates a phantom transaction left by a crash', async () => {
+    await worker.stop();
+    worker = new ThreadWriteWorkerClient();
+    await worker.init(dbFile.path, 'serving', true, PRAGMAS, LOG_CONFIG);
+    await worker.stop();
+
+    // A transaction that reached the log but whose replica commit was lost.
+    {
+      using log = openChangeLogDB(createSilentLogContext(), dbFile.path, {
+        readonly: false,
+      });
+      log
+        .prepare(/*sql*/ `
+        INSERT INTO "${CHANGE_LOG_STREAM_TABLE}"
+          ("watermark", "pos", "change", "precommit", "writeTimeMs")
+          VALUES ('06', 0, '{"tag":"begin"}', NULL, NULL),
+                 ('06', 1, '{"tag":"commit"}', '02', 123)
+      `)
+        .run();
+    }
+
+    worker = new ThreadWriteWorkerClient();
+    expect(
+      await worker.init(dbFile.path, 'serving', true, PRAGMAS, LOG_CONFIG),
+    ).toEqual({action: 'truncated', head: '02', rows: 2});
+  });
+
+  test('init rejects the change-log writer in initial-sync mode', async () => {
+    await worker.stop();
+    worker = new ThreadWriteWorkerClient();
+    await expect(
+      worker.init(dbFile.path, 'initial-sync', true, PRAGMAS, LOG_CONFIG),
+    ).rejects.toThrow('initial-sync owns its transaction boundaries');
+    expect(existsSync(changeLogFileName(dbFile.path))).toBe(false);
+
+    // Leave a usable worker for the afterEach teardown.
+    await worker.stop();
+    worker = new ThreadWriteWorkerClient();
+    await worker.init(dbFile.path, 'serving', false, PRAGMAS, LOG_CONFIG);
+  });
+
   test('enabled writer is atomic across abort and worker restart', async () => {
     await worker.stop();
     worker = new ThreadWriteWorkerClient();
-    await worker.init(
-      dbFile.path,
-      'serving',
-      true,
-      {
-        busyTimeout: 30000,
-        analysisLimit: 1000,
-      },
-      {level: 'error', format: 'text'},
-    );
+    await worker.init(dbFile.path, 'serving', true, PRAGMAS, LOG_CONFIG);
 
     const issues = new ReplicationMessages({issues: ['issueID', 'bool']});
     await worker.processMessage(
@@ -152,30 +242,27 @@ describe('write-worker', () => {
 
     await worker.stop();
     worker = new ThreadWriteWorkerClient();
-    await worker.init(
-      dbFile.path,
-      'serving',
-      true,
-      {
-        busyTimeout: 30000,
-        analysisLimit: 1000,
-      },
-      {level: 'error', format: 'text'},
-    );
+    // The aborted transaction left nothing behind, so there is no phantom to
+    // truncate and no gap to reseed.
+    expect(
+      await worker.init(dbFile.path, 'serving', true, PRAGMAS, LOG_CONFIG),
+    ).toEqual({action: 'none', head: '06'});
 
     expect(await worker.getSubscriptionState()).toMatchObject({
       watermark: '06',
     });
     expect(
-      mainDb
-        .prepare(/*sql*/ `
-          SELECT "watermark", "pos", json_extract("change", '$.tag') AS "tag",
-                 "precommit", "writeTimeMs"
-            FROM "_zero.changeLogStream"
-            WHERE "watermark" IN ('05', '06')
-            ORDER BY "watermark", "pos"
-        `)
-        .all(),
+      readChangeLog(db =>
+        db
+          .prepare(/*sql*/ `
+            SELECT "watermark", "pos", json_extract("change", '$.tag') AS "tag",
+                   "precommit", "writeTimeMs"
+              FROM "${CHANGE_LOG_STREAM_TABLE}"
+              WHERE "watermark" IN ('05', '06')
+              ORDER BY "watermark", "pos"
+          `)
+          .all(),
+      ),
     ).toEqual([
       {
         watermark: '06',
@@ -211,16 +298,26 @@ describe('write-worker', () => {
         `SELECT "stateVersion", "writeTimeMs" FROM "_zero.replicationState"`,
       )
       .get<{stateVersion: string; writeTimeMs: number}>();
-    const commit = mainDb
-      .prepare(/*sql*/ `
-        SELECT "writeTimeMs" FROM "_zero.changeLogStream"
-          WHERE "watermark" = '06' AND "precommit" IS NOT NULL
-      `)
-      .get<{writeTimeMs: number}>();
+    const commit = readChangeLog(db =>
+      db
+        .prepare(/*sql*/ `
+          SELECT "writeTimeMs" FROM "${CHANGE_LOG_STREAM_TABLE}"
+            WHERE "watermark" = '06' AND "precommit" IS NOT NULL
+        `)
+        .get<{writeTimeMs: number}>(),
+    );
     expect(state).toEqual({
       stateVersion: '06',
       writeTimeMs: commit.writeTimeMs,
     });
+    // The replica's own copy of the table is no longer written.
+    expect(
+      mainDb
+        .prepare(/*sql*/ `
+          SELECT max("watermark") AS "head" FROM "${CHANGE_LOG_STREAM_TABLE}"
+        `)
+        .get(),
+    ).toEqual({head: '02'});
   });
 
   test('abort rolls back pending transaction', async () => {

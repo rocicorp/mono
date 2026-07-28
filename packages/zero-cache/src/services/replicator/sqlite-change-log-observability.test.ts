@@ -8,11 +8,13 @@ import {
   serializeChangeStreamData,
 } from '../change-streamer/change-log-codec.ts';
 import {ChangeLogTransactionHasher} from '../change-streamer/change-log-transaction-hash.ts';
+import type {ReconcileResult} from './change-log-db.ts';
 import {initReplicationState} from './schema/replication-state.ts';
 import {
   getSQLiteChangeLogInfo,
   getSQLiteChangeLogStartupInfo,
   logSQLiteChangeLogStartup,
+  recordSQLiteChangeLogReconcile,
   SQLiteChangeLogObserver,
 } from './sqlite-change-log-observability.ts';
 
@@ -351,6 +353,38 @@ describe('SQLite change-log observability', () => {
           },
         },
       ],
+    ]);
+  });
+});
+
+describe('replicator/sqlite-change-log reconcile reporting', () => {
+  // Every ReconcileResult, including each wipe reason: `gap` in steady state
+  // means log-first ordering is not holding, and is the one on the alert list.
+  const cases: [name: string, result: ReconcileResult][] = [
+    ['consistent', {action: 'none', head: '05'}],
+    ['phantom truncation', {action: 'truncated', head: '05', rows: 27}],
+    ['wipe: created', {action: 'reseeded', head: '05', reason: 'created'}],
+    [
+      'wipe: schema-mismatch',
+      {action: 'reseeded', head: '05', reason: 'schema-mismatch'},
+    ],
+    [
+      'wipe: replica-version-mismatch',
+      {action: 'reseeded', head: '05', reason: 'replica-version-mismatch'},
+    ],
+    ['wipe: gap', {action: 'reseeded', head: '05', reason: 'gap'}],
+  ];
+
+  test.each(cases)('%s', (_name, result) => {
+    const sink = new TestLogSink();
+    const lc = new LogContext('debug', undefined, sink);
+
+    recordSQLiteChangeLogReconcile(lc, result);
+
+    expect(sink.messages.at(-1)).toEqual([
+      'debug',
+      undefined,
+      ['SQLite change-log reconciliation', {sqliteChangeLogReconcile: result}],
     ]);
   });
 });

@@ -84,7 +84,7 @@ test('streamed schema changes match a replica rebuilt from the final schema', ()
         const processor = new ChangeProcessor(
           new StatementRunner(streamed),
           'serving',
-          {logsChangeStream: false},
+          {changeLog: undefined},
           (_, error) => {
             throw error;
           },

@@ -62,7 +62,7 @@ export function createChangeProcessor(
   failures: (lc: LogContext, err: unknown) => void = (_, err) => {
     throw err;
   },
-  options: ChangeProcessorOptions = {logsChangeStream: false},
+  options: ChangeProcessorOptions = {changeLog: undefined},
 ): ChangeProcessor {
   return new ChangeProcessor(
     new StatementRunner(db),

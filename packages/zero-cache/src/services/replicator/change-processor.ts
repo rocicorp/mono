@@ -72,7 +72,12 @@ import {TableMetadataTracker} from './schema/table-metadata.ts';
 export type ChangeProcessorMode = ReplicatorMode | 'initial-sync';
 
 export type ChangeProcessorOptions = {
-  logsChangeStream: boolean;
+  /**
+   * The change-log database, when the canonical change stream is being logged.
+   * It is a separate file from the replica, with its own transaction, which
+   * {@link ChangeLogStreamWriter} owns and commits before the replica's.
+   */
+  changeLog: StatementRunner | undefined;
 };
 
 export type CommitResult = {
@@ -117,10 +122,15 @@ export class ChangeProcessor {
     options: ChangeProcessorOptions,
     failService: (lc: LogContext, err: unknown) => void,
   ) {
+    assert(
+      options.changeLog === undefined || mode !== 'initial-sync',
+      'initial-sync owns its transaction boundaries and cannot write the ' +
+        'change log, which opens a second one',
+    );
     this.#db = db;
     this.#changeLog = new ChangeLog(db.db);
-    this.#changeLogStreamWriter = options.logsChangeStream
-      ? new ChangeLogStreamWriter(db.db)
+    this.#changeLogStreamWriter = options.changeLog
+      ? new ChangeLogStreamWriter(options.changeLog)
       : undefined;
     this.#tableMetadata = new TableMetadataTracker(db.db);
     this.#mode = mode;
@@ -130,12 +140,17 @@ export class ChangeProcessor {
   #fail(lc: LogContext, err: unknown) {
     if (!this.#failure) {
       let failureError = err;
-      try {
-        this.#currentTx?.abort(lc); // roll back any pending transaction.
-        this.#changeLogStreamWriter?.rollback();
-      } catch (rollbackError) {
+      // The two transactions are independent, so each is rolled back even if
+      // the other throws. Leaving one open would wedge the next attempt behind
+      // its own write lock.
+      const rollbackErrors = [
+        attempt(() => this.#currentTx?.abort(lc)),
+        attempt(() => this.#changeLogStreamWriter?.rollback()),
+      ].filter(e => e !== undefined);
+
+      if (rollbackErrors.length) {
         const combinedError = new Error(
-          `Message processing failed and rollback also failed: operation error = ${String(err)}; rollback error = ${String(rollbackError)}`,
+          `Message processing failed and rollback also failed: operation error = ${String(err)}; rollback error = ${rollbackErrors.map(String).join('; ')}`,
         );
         combinedError.cause = err;
         failureError = combinedError;
@@ -238,6 +253,10 @@ export class ChangeProcessor {
       if (this.#currentTx) {
         throw new Error(`Already in a transaction ${stringify(msg)}`);
       }
+      // Only the commit order matters. The replica's transaction is opened
+      // first because that is the one that carries the indefinite SQLITE_BUSY
+      // retry for litestream checkpoints; opening the log first would leave it
+      // holding a write lock for the duration of that wait.
       this.#currentTx = this.#beginTransaction(
         lc,
         must(watermark),
@@ -958,6 +977,11 @@ class TransactionProcessor {
         }: ${stringify(commit)}`,
       );
     }
+    // Commit order is load-bearing: the change log commits first, then the
+    // replica (design 4.4). It is what makes `logHead >= stateVersion` hold at
+    // all times, so a crash in between leaves a phantom transaction in the log
+    // — locally detectable and truncated at startup — rather than a hole in it,
+    // which would be silently served to a subscriber as a gap.
     let changeLogStream: ChangeLogStreamTransactionStats | undefined;
     if (changeLogStreamWriter) {
       const writeTimeMs = Date.now();
@@ -966,6 +990,8 @@ class TransactionProcessor {
         must(canonicalJSON),
         writeTimeMs,
       );
+      // The same writeTimeMs is stored in both databases, so reconciliation
+      // can seed the log from the replica's state alone.
       updateReplicationWatermark(this.#db, watermark, writeTimeMs);
     } else {
       updateReplicationWatermark(this.#db, watermark);
@@ -1009,6 +1035,16 @@ function getBackfilledColumns(
     return undefined; // common case
   }
   return backfilling.filter(col => col in row);
+}
+
+/** Runs `fn`, returning its error rather than throwing it. */
+function attempt(fn: () => void): unknown {
+  try {
+    fn();
+    return undefined;
+  } catch (e) {
+    return e ?? new Error('rollback failed');
+  }
 }
 
 function ensureError(err: unknown): Error {

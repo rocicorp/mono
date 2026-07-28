@@ -30,6 +30,7 @@ import {
   type SubscriberContext,
 } from '../change-streamer/change-streamer.ts';
 import * as ErrorType from '../change-streamer/error-type-enum.ts';
+import {deleteChangeLogDB, openChangeLogDB} from './change-log-db.ts';
 import {IncrementalSyncer} from './incremental-sync.ts';
 import {ReplicationStatusPublisher} from './replication-status.ts';
 import {
@@ -108,6 +109,7 @@ describe('replicator/incremental-sync', () => {
     await syncing?.catch(() => {});
     await worker?.stop();
     mainDb?.close();
+    deleteChangeLogDB(dbFile.path);
     dbFile?.delete();
   });
 
@@ -879,6 +881,9 @@ describe('replicator/incremental-sync', () => {
 
   test('source disconnect rolls back an enabled stream writer transaction', async () => {
     await worker.stop();
+    // The change log is anchored to the replica's state, so the state has to
+    // exist before the worker opens and reconciles it.
+    initReplicationState(mainDb, ['zero_data'], '02', {}, false);
     worker = new ThreadWriteWorkerClient();
     await worker.init(
       dbFile.path,
@@ -890,7 +895,6 @@ describe('replicator/incremental-sync', () => {
       },
       {level: 'error', format: 'text'},
     );
-    initReplicationState(mainDb, ['zero_data'], '02', {}, false);
     initDB(
       mainDb,
       `
@@ -929,13 +933,16 @@ describe('replicator/incremental-sync', () => {
 
     expect(await hasRetried).toBe(true);
     expect(mainDb.prepare(`SELECT * FROM issues`).all()).toEqual([]);
-    expect(
-      mainDb
-        .prepare(
-          `SELECT * FROM "_zero.changeLogStream" WHERE "watermark" = '06'`,
-        )
-        .all(),
-    ).toEqual([]);
+    {
+      using changeLog = openChangeLogDB(lc, dbFile.path, {readonly: true});
+      expect(
+        changeLog
+          .prepare(
+            `SELECT * FROM "_zero.changeLogStream" WHERE "watermark" = '06'`,
+          )
+          .all(),
+      ).toEqual([]);
+    }
     syncer.stop(lc);
     void syncing.catch(() => {});
     syncing = undefined;
@@ -943,6 +950,7 @@ describe('replicator/incremental-sync', () => {
 
   test('an enabled SQLite stream-writer error stops the replicator', async () => {
     await worker.stop();
+    initReplicationState(mainDb, ['zero_data'], '02', {}, false);
     worker = new ThreadWriteWorkerClient();
     await worker.init(
       dbFile.path,
@@ -954,7 +962,6 @@ describe('replicator/incremental-sync', () => {
       },
       {level: 'error', format: 'text'},
     );
-    initReplicationState(mainDb, ['zero_data'], '02', {}, false);
     const observer = new SQLiteChangeLogObserver(lc, {
       schemaVersion: 14,
       stateWatermark: '02',

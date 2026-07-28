@@ -115,6 +115,38 @@ export function openChangeLogDB(
   );
 }
 
+/**
+ * Configures the change-log database, which the write worker owns exclusively.
+ * These are the settings the `separate-files` mode of
+ * `sqlite-change-log-ceiling.bench.ts` measured.
+ *
+ * They deliberately do not go through `getPragmaConfig` in `workers/replicator`
+ * beside the replica's, because the write worker applies them in its own
+ * thread and that module reaches the Postgres client through the replica
+ * migrations.
+ *
+ * `wal2` because the log is a continuous append that catchup reads
+ * continuously, which is the case wal2 exists for: it avoids checkpoint
+ * starvation without needing an autocheckpoint. `wal_autocheckpoint` therefore
+ * keeps its default, unlike the backup replica's 0, which hands checkpointing
+ * to litestream — nothing else owns this file.
+ *
+ * `synchronous = NORMAL` because the log commits *before* the replica on the
+ * replication hot path, and NORMAL keeps that from costing a second fsync. It
+ * is not a durability compromise here: in WAL mode NORMAL still writes every
+ * commit through to the OS, so it survives a process crash, an OOM kill, or a
+ * SIGKILL. It is lost only to kernel panic or power loss, and those destroy the
+ * node — the task restarts elsewhere, restores the replica from S3, and has no
+ * change-log file at all. Whatever a power loss does take is detected as a gap
+ * by {@link reconcileChangeLog} and reseeded.
+ */
+export function applyChangeLogPragmas(db: Database): void {
+  db.pragma('busy_timeout = 30000');
+  db.pragma('analysis_limit = 1000');
+  db.pragma('journal_mode = wal2');
+  db.pragma('synchronous = NORMAL');
+}
+
 export type ReseedReason =
   | 'created' // file or table absent
   | 'schema-mismatch'
