@@ -94,6 +94,7 @@ packages/zero-client/docs
 
 Chinook_PostgreSql.sql
 Pagila_PostgreSql.sql
+Pagila_PostgreSql-*.sql
 WARP.md
 *.db-shm
 *.db-wal
