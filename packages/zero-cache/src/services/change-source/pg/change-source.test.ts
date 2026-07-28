@@ -80,6 +80,7 @@ test('lag reporter retries missing reports', async () => {
 
   try {
     await expect(reporter.initiateLagReport()).resolves.toEqual({
+      firstCommitTimeMs: 1_000,
       nextSendTimeMs: 1_000,
     });
     expect(dbMock).toHaveBeenCalledTimes(2);
