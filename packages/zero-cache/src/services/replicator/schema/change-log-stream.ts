@@ -25,6 +25,22 @@ export const CREATE_CHANGE_LOG_STREAM_INDEX = /*sql*/ `
 export const CREATE_CHANGE_LOG_STREAM_SCHEMA =
   CREATE_CHANGE_LOG_STREAM_TABLE + CREATE_CHANGE_LOG_STREAM_INDEX;
 
+/**
+ * Inserts the synthetic begin/commit pair for a `@stateVersion` watermark.
+ *
+ * The insert is idempotent because migrateData can run again after a rollback
+ * followed by a roll-forward. Both rows are inserted by one statement so a
+ * caller outside a larger transaction cannot leave a partial seed.
+ */
+export const SEED_CHANGE_LOG_STREAM_SQL = /*sql*/ `
+  INSERT INTO "${CHANGE_LOG_STREAM_TABLE}"
+    ("watermark", "pos", "change", "precommit", "writeTimeMs")
+  VALUES
+    (@stateVersion, 0, '{"tag":"begin"}', NULL, NULL),
+    (@stateVersion, 1, '{"tag":"commit"}', @stateVersion, @writeTimeMs)
+  ON CONFLICT ("watermark", "pos") DO NOTHING
+`;
+
 type ReplicationState = {
   stateVersion: string;
   writeTimeMs: number | null;
@@ -33,9 +49,10 @@ type ReplicationState = {
 /**
  * Seeds a valid synthetic transaction at the replica's current watermark.
  *
- * The insert is idempotent because migrateData can run again after a rollback
- * followed by a roll-forward. Both rows are inserted by one statement so a
- * caller outside a larger transaction cannot leave a partial seed.
+ * This is the in-replica variant, used by initial sync and by replica-schema
+ * migration 14. The change-log database uses the anchor-parameterized
+ * `seedChangeLogStream` in `change-log-db.ts` instead, since the state it seeds
+ * from lives in a different file.
  */
 export function seedChangeLogStream(db: Database): void {
   const state = db
@@ -50,12 +67,5 @@ export function seedChangeLogStream(db: Database): void {
     'replication state writeTimeMs must be initialized',
   );
 
-  db.prepare(/*sql*/ `
-    INSERT INTO "${CHANGE_LOG_STREAM_TABLE}"
-      ("watermark", "pos", "change", "precommit", "writeTimeMs")
-    VALUES
-      (@stateVersion, 0, '{"tag":"begin"}', NULL, NULL),
-      (@stateVersion, 1, '{"tag":"commit"}', @stateVersion, @writeTimeMs)
-    ON CONFLICT ("watermark", "pos") DO NOTHING
-  `).run(state);
+  db.prepare(SEED_CHANGE_LOG_STREAM_SQL).run(state);
 }
