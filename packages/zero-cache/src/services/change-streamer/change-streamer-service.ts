@@ -585,14 +585,13 @@ class ChangeStreamerImpl implements ChangeStreamerService {
           }
         : {},
     );
+    const lc = this.#lc.withContext('subscriber', subscriber.id);
     cleanupSubscriber = () => {
-      this.#lc.info?.(`removing subscriber ${subscriber.id}`);
+      lc.info?.(`removing subscriber ${subscriber.id}`);
       this.#forwarder.remove(subscriber);
     };
     if (replicaVersion !== this.#replicaVersion) {
-      this.#lc.warn?.(
-        `rejecting subscriber at replica version ${replicaVersion}`,
-      );
+      lc.warn?.(`rejecting subscriber at replica version ${replicaVersion}`);
       subscriber.close(
         ErrorType.WrongReplicaVersion,
         `current replica version is ${
@@ -600,7 +599,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
         } (requested ${replicaVersion})`,
       );
     } else {
-      this.#lc.info?.(`adding subscriber ${subscriber.id}`);
+      lc.info?.(`adding subscriber ${subscriber.id}`);
 
       const sqliteCatchup = this.#selectSQLiteCatchup(ctx);
       if (sqliteCatchup) {
