@@ -77,6 +77,7 @@ export class ReplicatorService implements Replicator, Service {
     mode: ReplicatorMode,
     changeStreamer: ChangeStreamer,
     worker: WriteWorkerClient,
+    logsChangeStream: boolean,
     statusPublisher: ReplicationStatusPublisher | null,
     sqliteChangeLogObserver: SQLiteChangeLogObserver | undefined,
   ) {
@@ -93,6 +94,7 @@ export class ReplicatorService implements Replicator, Service {
       changeStreamer,
       worker,
       mode,
+      logsChangeStream,
       statusPublisher,
       sqliteChangeLogObserver,
     );

@@ -248,6 +248,7 @@ export default async function runWorker(
     'serving',
     new IPCChangeStreamer(parent),
     worker,
+    false,
     null,
     undefined,
   );

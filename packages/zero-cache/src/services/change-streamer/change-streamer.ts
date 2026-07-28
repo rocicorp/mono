@@ -142,6 +142,16 @@ export type SubscriberContext = {
    * are safe to purge from the Storer.
    */
   initial: boolean;
+
+  /**
+   * Whether the subscriber's replica writes the SQLite change log that the
+   * `change-streamer` reads for catchup (see `replicaLogsChangeStream()`).
+   * Such a subscriber is always co-located with the `change-streamer`, and
+   * is the only thing that advances that change log: its ACKs are what the
+   * SQLite catchup barrier waits on, and it cannot itself be served from
+   * SQLite catchup without waiting on its own ACK.
+   */
+  logsChangeStream: boolean;
 };
 
 /**

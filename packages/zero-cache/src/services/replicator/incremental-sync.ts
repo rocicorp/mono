@@ -38,6 +38,7 @@ export class IncrementalSyncer {
   readonly #changeStreamer: ChangeStreamer;
   readonly #worker: WriteWorkerClient;
   readonly #mode: ReplicatorMode;
+  readonly #logsChangeStream: boolean;
   readonly #statusPublisher: ReplicationStatusPublisher | null;
   readonly #notifier: Notifier;
   readonly #reporter: ReplicationReportRecorder;
@@ -58,6 +59,7 @@ export class IncrementalSyncer {
     changeStreamer: ChangeStreamer,
     worker: WriteWorkerClient,
     mode: ReplicatorMode,
+    logsChangeStream: boolean,
     statusPublisher: ReplicationStatusPublisher | null,
     sqliteChangeLogObserver: SQLiteChangeLogObserver | undefined,
   ) {
@@ -67,6 +69,7 @@ export class IncrementalSyncer {
     this.#changeStreamer = changeStreamer;
     this.#worker = worker;
     this.#mode = mode;
+    this.#logsChangeStream = logsChangeStream;
     this.#statusPublisher = statusPublisher;
     this.#notifier = new Notifier();
     this.#reporter = new ReplicationReportRecorder(lc);
@@ -105,6 +108,7 @@ export class IncrementalSyncer {
           watermark,
           replicaVersion,
           initial: watermark === initialWatermark,
+          logsChangeStream: this.#logsChangeStream,
         });
         this.#state.resetBackoff();
         unregister = this.#state.cancelOnStop(downstream);

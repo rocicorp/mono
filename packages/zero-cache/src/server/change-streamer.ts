@@ -55,6 +55,8 @@ export default async function runWorker(
       backPressureLimitHeapProportion,
       flowControlConsensusPaddingSeconds,
       flowControlEventDrivenRelease,
+      sqliteChangeLogReadBatchRows,
+      sqliteChangeLogBarrierTimeoutMs,
     },
     autoReset,
     replicationLag,
@@ -165,6 +167,11 @@ export default async function runWorker(
           flowControlEventDrivenRelease,
           statementTimeoutMs: change.statementTimeoutMs,
           changeLogBatchSize: change.logBatchSize,
+          sqliteCatchup: {
+            replicaFile: replica.file,
+            readBatchRows: sqliteChangeLogReadBatchRows,
+            barrierTimeoutMs: sqliteChangeLogBarrierTimeoutMs,
+          },
         },
         setTimeout,
       );

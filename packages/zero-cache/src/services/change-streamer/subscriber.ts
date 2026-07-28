@@ -13,7 +13,7 @@ import type {
   Status,
   WatermarkedChange,
 } from './change-streamer.ts';
-import * as ErrorType from './error-type-enum.ts';
+import type * as ErrorType from './error-type-enum.ts';
 
 type ErrorType = Enum<typeof ErrorType>;
 
@@ -23,6 +23,18 @@ const DEFAULT_BACKLOG_LOW_WATER_RATIO = 0.8;
 export type SubscriberOptions = {
   backlogHighWaterBytes?: number | undefined;
   backlogLowWaterRatio?: number | undefined;
+
+  /**
+   * Called whenever the subscriber's acked watermark advances, i.e. when it
+   * has confirmed that a commit was durably applied to its replica. The ACK
+   * therefore lags the subscriber's replica rather than leading it.
+   */
+  onAck?: ((watermark: string) => void) | undefined;
+};
+
+export type BacklogFullWait = {
+  readonly promise: Promise<void>;
+  cancel(): void;
 };
 
 /**
@@ -47,6 +59,8 @@ export class Subscriber {
   #backlogInFlightBytes = 0;
   #backlogDrain: Promise<void> | null = null;
   readonly #backlogBackpressure: ByteBackpressureGate;
+  readonly #backlogFullWaiters = new Set<Resolver<void>>();
+  readonly #onAck: ((watermark: string) => void) | undefined;
 
   constructor(
     protocolVersion: number,
@@ -67,6 +81,7 @@ export class Subscriber {
       options.backlogHighWaterBytes ?? DEFAULT_BACKLOG_HIGH_WATER_BYTES,
       options.backlogLowWaterRatio ?? DEFAULT_BACKLOG_LOW_WATER_RATIO,
     );
+    this.#onAck = options.onAck;
   }
 
   get watermark() {
@@ -75,6 +90,38 @@ export class Subscriber {
 
   get acked() {
     return this.#acked;
+  }
+
+  /**
+   * Whether the backlog of live changes buffered during catchup has reached the
+   * point at which {@link send()} stops resolving. Past it the subscriber is no
+   * longer free: it holds up every subsequent flush, and with no other
+   * subscriber to form a majority it stalls replication outright.
+   */
+  get backlogFull() {
+    return (
+      this.#bufferedBacklogBytes >= this.#backlogBackpressure.highWaterBytes
+    );
+  }
+
+  /**
+   * Resolves the first time {@link backlogFull} becomes true, so that a caller
+   * holding the subscriber in catchup can give up at the moment the subscriber
+   * starts costing replication rather than on a timer. Call cancel() when the
+   * wait is no longer needed so the subscriber does not retain it.
+   */
+  whenBacklogFull(): BacklogFullWait {
+    if (this.backlogFull) {
+      return {promise: promiseVoid, cancel() {}};
+    }
+    const r = resolver<void>();
+    this.#backlogFullWaiters.add(r);
+    return {
+      promise: r.promise,
+      cancel: () => {
+        this.#backlogFullWaiters.delete(r);
+      },
+    };
   }
 
   send(change: WatermarkedChange): Promise<void> {
@@ -150,7 +197,14 @@ export class Subscriber {
     }
     const result = await this.#sendStringifiedDownstream(json);
     if (tag === 'commit' && result === 'consumed') {
-      this.#acked = max(this.#acked, watermark);
+      // Sends can complete out of order (e.g. the bounded window in
+      // #drainBacklog), so the ack only advances monotonically, and listeners
+      // are only notified when it does.
+      const acked = max(this.#acked, watermark);
+      if (acked !== this.#acked) {
+        this.#acked = acked;
+        this.#onAck?.(acked);
+      }
     }
   }
 
@@ -247,8 +301,20 @@ export class Subscriber {
     return true;
   }
 
-  fail(err?: unknown) {
-    this.close(ErrorType.Unknown, String(err));
+  /**
+   * Ends the subscription without sending a downstream `['error', ...]`.
+   *
+   * This is deliberate, and not the same as reporting the failure to the
+   * subscriber: `IncrementalSyncer` treats any `['error', ...]` as terminal and
+   * shuts down to restore a fresh replica from litestream, whereas a clean end
+   * backs off and re-subscribes. The failures routed here -- storer catchup
+   * errors, backlog drain errors, backup-monitor errors -- are transient, so a
+   * reconnect is the proportionate response and a fleet-wide restore is not.
+   *
+   * Callers are responsible for logging `err`; it is not carried downstream.
+   */
+  fail(_err?: unknown) {
+    this.close();
   }
 
   close(error?: ErrorType, message?: string) {
@@ -257,8 +323,11 @@ export class Subscriber {
     this.#backlog = null;
     this.#backlogBytes = 0;
     this.#backlogBackpressure.releaseAll();
+    // The backlog can no longer grow, so nothing would ever resolve these.
+    // Waiters re-check backlogFull, which is now false, and see the close.
+    this.#resolveBacklogFullWaiters();
 
-    if (error) {
+    if (error !== undefined) {
       // Wait for the ACK of the error message before closing the connection.
       void this.#sendDownstream(['error', {type: error, message}]).finally(() =>
         this.#downstream.cancel(),
@@ -283,6 +352,17 @@ export class Subscriber {
     assert(this.#backlog, 'cannot push to backlog after catchup completed');
     this.#backlog.push(change);
     this.#backlogBytes += change[2].length;
+    if (this.backlogFull) {
+      this.#resolveBacklogFullWaiters();
+    }
+  }
+
+  #resolveBacklogFullWaiters() {
+    const waiters = [...this.#backlogFullWaiters];
+    this.#backlogFullWaiters.clear();
+    for (const waiter of waiters) {
+      waiter.resolve();
+    }
   }
 
   #maybeWaitForBacklogSpace(): Promise<void> {

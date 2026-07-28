@@ -712,8 +712,15 @@ export const zeroOptions = {
     },
 
     sqliteChangeLogBarrierTimeoutMs: {
-      type: v.number().default(30_000),
-      desc: [`The maximum wait for the SQLite required-head barrier.`],
+      type: v.number().default(300_000),
+      desc: [
+        `The maximum wait for the SQLite required-head barrier. This is a`,
+        `backstop for a wedged replica on an idle shard, where waiting costs`,
+        `nothing and would otherwise go unnoticed. A shard with traffic is`,
+        `bounded well before this by the subscriber's backlog reaching its`,
+        `high water mark, which is the point at which waiting starts holding`,
+        `up replication.`,
+      ],
       hidden: true,
     },
 
