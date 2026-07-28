@@ -12,7 +12,6 @@ import {Subscription} from '../../types/subscription.ts';
 import type {Downstream, WatermarkedChange} from './change-streamer.ts';
 import * as ErrorType from './error-type-enum.ts';
 import {Forwarder} from './forwarder.ts';
-import {AutoResetSignal} from './schema/tables.ts';
 import {
   SQLiteChangeLogCatchup,
   SQLiteChangeLogBarrierBacklogError,
@@ -75,7 +74,7 @@ describe('SQLiteChangeLogCatchup', () => {
     fixture.reader.boundaries.add('04');
 
     const {subscriber, output} = createSubscriber('01');
-    await fixture.coordinator.catchup(subscriber, 'serving', () => '06');
+    await fixture.coordinator.catchup(subscriber, () => '06');
 
     // This replay reaches the Forwarder after registration but before SQLite
     // reaches the required head. It is both in the backlog and, once applied,
@@ -108,11 +107,7 @@ describe('SQLiteChangeLogCatchup', () => {
     fixture.forwarder.forward(entry('06', 'begin'));
     const completion = resolver<string>();
     const {subscriber, output} = createSubscriber('04');
-    await fixture.coordinator.catchup(
-      subscriber,
-      'serving',
-      () => completion.promise,
-    );
+    await fixture.coordinator.catchup(subscriber, () => completion.promise);
 
     fixture.forwarder.forward(entry('06', 'insert'));
     fixture.forwarder.forward(entry('06', 'commit'));
@@ -142,11 +137,7 @@ describe('SQLiteChangeLogCatchup', () => {
     fixture.forwarder.forward(entry('06', 'begin'));
     const completion = resolver<string>();
     const {subscriber, output} = createSubscriber('01');
-    await fixture.coordinator.catchup(
-      subscriber,
-      'serving',
-      () => completion.promise,
-    );
+    await fixture.coordinator.catchup(subscriber, () => completion.promise);
     fixture.forwarder.forward(entry('06', 'rollback'));
     completion.resolve('04');
 
@@ -172,7 +163,7 @@ describe('SQLiteChangeLogCatchup', () => {
     fixture.reader.beforeRead = releaseRead.promise;
 
     const {subscriber, output} = createSubscriber('01');
-    await fixture.coordinator.catchup(subscriber, 'serving', () => '06');
+    await fixture.coordinator.catchup(subscriber, () => '06');
     forward(fixture.forwarder, transaction('08'));
     forward(fixture.forwarder, transaction('0a'));
     releaseRead.resolve();
@@ -193,7 +184,7 @@ describe('SQLiteChangeLogCatchup', () => {
     fixture.reader.head = '04';
 
     const {subscriber, output} = createSubscriber('06');
-    await fixture.coordinator.catchup(subscriber, 'serving', () => '04');
+    await fixture.coordinator.catchup(subscriber, () => '04');
     forward(fixture.forwarder, transaction('06'));
     forward(fixture.forwarder, transaction('08'));
 
@@ -213,7 +204,7 @@ describe('SQLiteChangeLogCatchup', () => {
     // canonical replica is only at 04. A subscriber reconnecting at 06 must
     // wait for SQLite to replay 04..06 without receiving 06 twice.
     const {subscriber, output} = createSubscriber('06');
-    await fixture.coordinator.catchup(subscriber, 'serving', () => '06');
+    await fixture.coordinator.catchup(subscriber, () => '06');
     forward(fixture.forwarder, transaction('06'));
     fixture.reader.entries.push(...transaction('06'));
     fixture.reader.boundaries.add('06');
@@ -262,7 +253,7 @@ describe('SQLiteChangeLogCatchup', () => {
 
     const plan = vi.spyOn(fixture.reader, 'plan');
     const {subscriber, output} = createSubscriber('01');
-    await fixture.coordinator.catchup(subscriber, 'serving', () => '06');
+    await fixture.coordinator.catchup(subscriber, () => '06');
     await vi.waitFor(() => expect(plan).toHaveBeenCalledOnce());
 
     fixture.reader.entries.push(...transaction('06'));
@@ -286,7 +277,7 @@ describe('SQLiteChangeLogCatchup', () => {
 
     const plan = vi.spyOn(fixture.reader, 'plan');
     const {subscriber, output} = createSubscriber('01');
-    await fixture.coordinator.catchup(subscriber, 'serving', () => '06');
+    await fixture.coordinator.catchup(subscriber, () => '06');
     await vi.waitFor(() => expect(plan).toHaveBeenCalledOnce());
 
     // The writer is still behind the required head. Waking on every ACK would
@@ -320,7 +311,7 @@ describe('SQLiteChangeLogCatchup', () => {
     const backlogThen = vi.spyOn(backlogFull.promise, 'then');
     const cancelBacklogWait = vi.spyOn(backlogFull, 'cancel');
     vi.spyOn(subscriber, 'whenBacklogFull').mockReturnValue(backlogFull);
-    await fixture.coordinator.catchup(subscriber, 'serving', () => '06');
+    await fixture.coordinator.catchup(subscriber, () => '06');
     await vi.waitFor(() => expect(plan).toHaveBeenCalledOnce());
 
     // An ACK that the reader cannot yet corroborate wakes the barrier but does
@@ -342,39 +333,20 @@ describe('SQLiteChangeLogCatchup', () => {
     expect(cancelBacklogWait).toHaveBeenCalledOnce();
   });
 
-  test('maps too-old plans to serving and backup policies', async () => {
-    const serving = createFixture();
-    serving.reader.min = '04';
-    serving.reader.head = '06';
-    serving.reader.boundaries.add('04');
-    const servingSub = createSubscriber('01');
-    await serving.coordinator.catchup(
-      servingSub.subscriber,
-      'serving',
-      () => '06',
-    );
-    expect(await servingSub.output.dequeue()).toEqual([
+  test('maps too-old plans to WatermarkTooOld', async () => {
+    const fixture = createFixture();
+    fixture.reader.min = '04';
+    fixture.reader.head = '06';
+    fixture.reader.boundaries.add('04');
+    const {output, subscriber} = createSubscriber('01');
+    await fixture.coordinator.catchup(subscriber, () => '06');
+    expect(await output.dequeue()).toEqual([
       'error',
       {
         type: ErrorType.WatermarkTooOld,
         message: 'earliest supported watermark is 04 (requested 01)',
       },
     ]);
-    expect(serving.onFatal).not.toHaveBeenCalled();
-
-    const backup = createFixture();
-    backup.reader.min = '04';
-    backup.reader.head = '06';
-    backup.reader.boundaries.add('04');
-    const backupSub = createSubscriber('01');
-    await backup.coordinator.catchup(
-      backupSub.subscriber,
-      'backup',
-      () => '06',
-    );
-    await backupSub.done;
-    await vi.waitFor(() => expect(backup.onFatal).toHaveBeenCalledOnce());
-    expect(backup.onFatal.mock.calls[0][0]).toBeInstanceOf(AutoResetSignal);
   });
 
   test('gives up the barrier once the subscriber backlog fills', async () => {
@@ -390,7 +362,7 @@ describe('SQLiteChangeLogCatchup', () => {
       backlogHighWaterBytes: 1,
     });
     const fail = vi.spyOn(subscriber, 'fail');
-    await fixture.coordinator.catchup(subscriber, 'serving', () => '06');
+    await fixture.coordinator.catchup(subscriber, () => '06');
 
     // Past the high water mark this subscriber's send() no longer resolves,
     // so it holds up the flushes that would advance the replica it waits on.
@@ -411,7 +383,6 @@ describe('SQLiteChangeLogCatchup', () => {
         }),
       ],
     ]);
-    expect(fixture.onFatal).not.toHaveBeenCalled();
   });
 
   test('ends only the selected subscription, cleanly, on barrier timeout', async () => {
@@ -419,7 +390,7 @@ describe('SQLiteChangeLogCatchup', () => {
     fixture.reader.head = '01';
     const {subscriber, done, output} = createSubscriber('01');
     const fail = vi.spyOn(subscriber, 'fail');
-    await fixture.coordinator.catchup(subscriber, 'serving', () => '06');
+    await fixture.coordinator.catchup(subscriber, () => '06');
 
     await done;
     // A clean cancel rather than an ['error', ...] message. IncrementalSyncer
@@ -438,7 +409,6 @@ describe('SQLiteChangeLogCatchup', () => {
         }),
       ],
     ]);
-    expect(fixture.onFatal).not.toHaveBeenCalled();
   });
 
   test('waits out a transaction longer than the barrier timeout', async () => {
@@ -452,11 +422,7 @@ describe('SQLiteChangeLogCatchup', () => {
     const {subscriber, output} = createSubscriber('01');
     const fail = vi.spyOn(subscriber, 'fail');
 
-    await fixture.coordinator.catchup(
-      subscriber,
-      'serving',
-      () => completion.promise,
-    );
+    await fixture.coordinator.catchup(subscriber, () => completion.promise);
 
     // Well past barrierTimeoutMs with the transaction still in flight. The
     // barrier bounds replica lag, so this wait must not consume its budget.
@@ -483,11 +449,7 @@ describe('SQLiteChangeLogCatchup', () => {
     const {subscriber, done} = createSubscriber('01');
     const fail = vi.spyOn(subscriber, 'fail');
 
-    await fixture.coordinator.catchup(
-      subscriber,
-      'serving',
-      () => completion.promise,
-    );
+    await fixture.coordinator.catchup(subscriber, () => completion.promise);
     fixture.coordinator.remove(subscriber);
 
     await done;
@@ -503,7 +465,7 @@ describe('SQLiteChangeLogCatchup', () => {
     fixture.reader.boundaries.add('01');
     fixture.reader.readError = new Error('broken SQLite read');
     const {subscriber, done, output} = createSubscriber('01');
-    await fixture.coordinator.catchup(subscriber, 'serving', () => '06');
+    await fixture.coordinator.catchup(subscriber, () => '06');
 
     expect(await output.dequeue()).toEqual([
       'error',
@@ -520,42 +482,15 @@ describe('SQLiteChangeLogCatchup', () => {
     ]);
   });
 
-  test('fails the subscriber when fatal handling rejects', async () => {
-    const fatalError = new Error('failed to mark reset required');
-    const onFatal = vi.fn(() => Promise.reject(fatalError));
-    const fixture = createFixture({onFatal});
-    fixture.reader.min = '04';
-    fixture.reader.head = '06';
-    fixture.reader.boundaries.add('04');
-    const {subscriber, done} = createSubscriber('01');
-    const fail = vi.spyOn(subscriber, 'fail');
-
-    await fixture.coordinator.catchup(subscriber, 'backup', () => '06');
-    await vi.waitFor(() => expect(fail).toHaveBeenCalledOnce(), {
-      timeout: 100,
-    });
-    await done;
-    expect(onFatal).toHaveBeenCalledOnce();
-    expect(fail).toHaveBeenCalledWith(expect.any(AutoResetSignal));
-    expect(fixture.logSink.messages).toContainEqual([
-      'error',
-      expect.anything(),
-      [
-        expect.stringContaining('error while handling fatal SQLite catchup'),
-        fatalError,
-      ],
-    ]);
-  });
-
   test('cancellation and shutdown release catchup resources', async () => {
     const fixture = createFixture();
     fixture.reader.head = '01';
     const first = createSubscriber('01');
-    await fixture.coordinator.catchup(first.subscriber, 'serving', () => '06');
+    await fixture.coordinator.catchup(first.subscriber, () => '06');
     fixture.coordinator.remove(first.subscriber);
 
     const second = createSubscriber('01');
-    await fixture.coordinator.catchup(second.subscriber, 'serving', () => '06');
+    await fixture.coordinator.catchup(second.subscriber, () => '06');
     fixture.coordinator.close();
 
     expect(fixture.reader.closed).toBe(true);
@@ -574,11 +509,7 @@ describe('SQLiteChangeLogCatchup', () => {
     fixture.reader.head = '01';
     fixture.reader.boundaries.add('01');
     const {subscriber} = createSubscriber('01');
-    const registering = fixture.coordinator.catchup(
-      subscriber,
-      'serving',
-      () => '01',
-    );
+    const registering = fixture.coordinator.catchup(subscriber, () => '01');
 
     expect(fixture.forwarder.getAcks()).toEqual(new Set());
     guardGate.resolve();
@@ -594,7 +525,6 @@ function createFixture(
     barrierPollIntervalMs?: number | undefined;
     cleanupGuard?: SQLiteChangeLogCleanupGuard | undefined;
     now?: SQLiteChangeLogCatchupOptions['now'];
-    onFatal?: SQLiteChangeLogCatchupOptions['onFatal'];
     sleep?: SQLiteChangeLogCatchupOptions['sleep'];
   } = {},
 ) {
@@ -602,21 +532,16 @@ function createFixture(
   const lc = new LogContext('debug', undefined, logSink);
   const reader = new TestReader();
   const forwarder = new Forwarder(lc);
-  const onFatal = vi.fn(
-    opts.onFatal ??
-      ((_error: AutoResetSignal): Promise<void> => Promise.resolve()),
-  );
   const coordinator = new SQLiteChangeLogCatchup(lc, forwarder, reader, {
     batchSize: opts.batchSize ?? 2,
     barrierTimeoutMs: opts.barrierTimeoutMs ?? 1_000,
     barrierPollIntervalMs: opts.barrierPollIntervalMs ?? 1,
     cleanupGuard: opts.cleanupGuard,
     now: opts.now,
-    onFatal,
     sleep: opts.sleep,
   });
   coordinators.push(coordinator);
-  return {coordinator, forwarder, logSink, onFatal, reader};
+  return {coordinator, forwarder, logSink, reader};
 }
 
 class TestReader implements SQLiteChangeLogCatchupReader {
@@ -774,10 +699,9 @@ async function runCatchupFuzzScenario(
   if (!fixture) {
     throw new Error(`missing fixture for batch size ${scenario.batchSize}`);
   }
-  const {coordinator, forwarder, onFatal, reader} = fixture;
+  const {coordinator, forwarder, reader} = fixture;
   expect(forwarder.getAcks()).toEqual(new Set());
   resetFuzzReader(reader);
-  onFatal.mockClear();
 
   let nextIndex = 0;
   const prior = scenario.priorWidths.map(width =>
@@ -819,7 +743,7 @@ async function runCatchupFuzzScenario(
 
   const {done, output, subscriber} = createSubscriber(requestedWatermark);
   try {
-    await coordinator.catchup(subscriber, 'serving', () => requiredHead);
+    await coordinator.catchup(subscriber, () => requiredHead);
 
     if (inFlight) {
       const {completion, forwardedEntries, tx} = inFlight;
@@ -881,7 +805,6 @@ async function runCatchupFuzzScenario(
     });
     expect(subscriber.acked).toBe(sentinel.watermark);
     expect(output.size()).toBe(0);
-    expect(onFatal).not.toHaveBeenCalled();
   } finally {
     coordinator.remove(subscriber);
     await done;

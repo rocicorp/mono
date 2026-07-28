@@ -71,9 +71,9 @@ export type SQLiteCatchupOptions = {
   /**
    * Slice 11 supplies the production canary selector.
    *
-   * It does not need to exclude the change-log writer: subscribers with
-   * `logsChangeStream` are rejected regardless of what this returns, since
-   * serving one from SQLite would make it wait on its own ACK.
+   * It does not need to exclude backup subscribers or the change-log writer:
+   * eligibility checks reject both before invoking this selector. Serving a
+   * writer from SQLite would make it wait on its own ACK.
    */
   shouldUse?: ((ctx: SubscriberContext) => boolean) | undefined;
   /** Slice 9 supplies the writer-serialized purge guard. */
@@ -588,7 +588,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       const sqliteCatchup = this.#selectSQLiteCatchup(ctx);
       if (sqliteCatchup) {
         cleanupSubscriber = () => sqliteCatchup.remove(subscriber);
-        await sqliteCatchup.catchup(subscriber, mode, () =>
+        await sqliteCatchup.catchup(subscriber, () =>
           this.#captureRequiredHead(),
         );
       } else {
@@ -729,10 +729,17 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     // Slice 11 supplies a non-default selector. Until then, this keeps all
     // production subscriptions on PG even though the complete SQLite handoff
     // path is wired and testable.
-    if (
-      this.#lastForwardedCommitWatermark === undefined ||
-      !opts?.shouldUse?.(ctx)
-    ) {
+    if (this.#lastForwardedCommitWatermark === undefined || !opts) {
+      return undefined;
+    }
+    // SQLite catchup is only for disposable serving replicas. Backup
+    // subscribers retain the existing PG recovery policy until RMv2 can
+    // resume the canonical replica directly from replica/backup/slot state.
+    // Enforce this before the selector so no canary policy can override it.
+    if (ctx.mode !== 'serving') {
+      this.#lc.debug?.(
+        `not serving backup subscriber ${ctx.id} from SQLite catchup`,
+      );
       return undefined;
     }
     if (ctx.logsChangeStream) {
@@ -748,6 +755,9 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       );
       return undefined;
     }
+    if (!opts.shouldUse?.(ctx)) {
+      return undefined;
+    }
     if (!this.#sqliteCatchup) {
       this.#sqliteCatchup = new SQLiteChangeLogCatchup(
         this.#lc,
@@ -758,13 +768,6 @@ class ChangeStreamerImpl implements ChangeStreamerService {
           barrierTimeoutMs: opts.barrierTimeoutMs,
           barrierPollIntervalMs: opts.barrierPollIntervalMs,
           cleanupGuard: opts.cleanupGuard,
-          onFatal: async error => {
-            try {
-              await markResetRequired(this.#changeDB, this.#shard);
-            } finally {
-              void this.stop(error);
-            }
-          },
         },
       );
     }

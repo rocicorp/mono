@@ -672,7 +672,7 @@ describe('change-streamer/service', () => {
     }
   });
 
-  test('a change-log writer is never served from the change log it writes', async () => {
+  test('backup subscribers and change-log writers cannot select SQLite catchup', async () => {
     await streamer.stop();
     await streamerDone;
 
@@ -683,6 +683,7 @@ describe('change-streamer/service', () => {
 
     changes = Subscription.create();
     acks = new Queue();
+    const shouldUse = vi.fn(() => true);
     streamer = await initializeStreamer(
       lc,
       shard,
@@ -711,10 +712,9 @@ describe('change-streamer/service', () => {
           readBatchRows: 2,
           barrierTimeoutMs: 60_000,
           barrierPollIntervalMs: 60_000,
-          // The selector mistake this guards against: a canary that picks the
-          // one subscriber that cannot be served from SQLite. Nothing here
-          // advances the replica, so a barrier would hold until the deadline.
-          shouldUse: ctx => ctx.logsChangeStream,
+          // Deliberately attempts to select every subscriber. Eligibility
+          // checks must run first and cannot be overridden by this selector.
+          shouldUse,
         },
       },
       setTimeoutFn as unknown as typeof setTimeout,
@@ -742,16 +742,43 @@ describe('change-streamer/service', () => {
       // made to wait for.
       expect(await nextChange(observed)).toMatchObject({tag: 'begin'});
 
+      shouldUse.mockClear();
+      const backupSub = await streamer.subscribe({
+        protocolVersion: PROTOCOL_VERSION,
+        taskID: 'backup-task',
+        id: 'backup-reader',
+        mode: 'backup',
+        watermark: REPLICA_VERSION,
+        replicaVersion: REPLICA_VERSION,
+        initial: true,
+        logsChangeStream: false,
+      });
+      expect(shouldUse).not.toHaveBeenCalled();
+      const backed = drainToQueue(backupSub);
+
+      // Backup subscribers retain the PG catchup/recovery policy.
+      expect(await nextChange(backed)).toMatchObject({tag: 'status'});
+      expect(await nextChange(backed)).toMatchObject({tag: 'begin'});
+      expect(await nextChange(backed)).toMatchObject({
+        tag: 'insert',
+        new: {id: 'forwarded'},
+      });
+      expect(await nextChange(backed)).toMatchObject({tag: 'commit'});
+
+      shouldUse.mockClear();
       const writerSub = await streamer.subscribe({
         protocolVersion: PROTOCOL_VERSION,
         taskID: 'task-id',
         id: 'change-log-writer',
-        mode: 'backup',
+        // A single-node canonical writer has serving mode, so the independent
+        // logsChangeStream guard remains necessary.
+        mode: 'serving',
         watermark: REPLICA_VERSION,
         replicaVersion: REPLICA_VERSION,
         initial: true,
         logsChangeStream: true,
       });
+      expect(shouldUse).not.toHaveBeenCalled();
       const written = drainToQueue(writerSub);
 
       // Served from PG instead of waiting on itself.
@@ -769,6 +796,7 @@ describe('change-streamer/service', () => {
       ]);
 
       observerSub.cancel();
+      backupSub.cancel();
       writerSub.cancel();
     } finally {
       await streamer.stop();

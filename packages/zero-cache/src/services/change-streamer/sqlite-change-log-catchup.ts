@@ -3,11 +3,9 @@ import {resolver} from '@rocicorp/resolver';
 import {AbortError} from '../../../../shared/src/abort-error.ts';
 import {sleep} from '../../../../shared/src/sleep.ts';
 import {getOrCreateCounter} from '../../observability/metrics.ts';
-import type {ReplicatorMode} from '../replicator/replicator.ts';
 import type {WatermarkedChange} from './change-streamer.ts';
 import * as ErrorType from './error-type-enum.ts';
 import type {Forwarder} from './forwarder.ts';
-import {AutoResetSignal} from './schema/tables.ts';
 import type {CatchupPlan} from './sqlite-change-log-reader.ts';
 import type {Subscriber} from './subscriber.ts';
 
@@ -43,7 +41,6 @@ export type SQLiteChangeLogCatchupOptions = {
   barrierTimeoutMs: number;
   barrierPollIntervalMs?: number | undefined;
   cleanupGuard?: SQLiteChangeLogCleanupGuard | undefined;
-  onFatal: (error: AutoResetSignal) => Promise<void>;
   sleep?: typeof sleep | undefined;
   now?: (() => number) | undefined;
 };
@@ -53,8 +50,8 @@ const NOOP_CLEANUP_GUARD: SQLiteChangeLogCleanupGuard = {
 };
 
 /**
- * Coordinates the gap-free transition from replica-local SQLite catchup to
- * the Forwarder's live stream.
+ * Coordinates a serving subscriber's gap-free transition from replica-local
+ * SQLite catchup to the Forwarder's live stream.
  *
  * Registration and required-head capture happen in one synchronous callback.
  * The subscriber therefore either sees a transaction in SQLite catchup or in
@@ -69,7 +66,6 @@ export class SQLiteChangeLogCatchup implements Disposable {
   readonly #barrierTimeoutMs: number;
   readonly #barrierPollIntervalMs: number;
   readonly #cleanupGuard: SQLiteChangeLogCleanupGuard;
-  readonly #onFatal: (error: AutoResetSignal) => Promise<void>;
   readonly #sleep: typeof sleep;
   readonly #now: () => number;
   readonly #barrierTimeouts = getOrCreateCounter(
@@ -108,7 +104,6 @@ export class SQLiteChangeLogCatchup implements Disposable {
     this.#barrierPollIntervalMs =
       opts.barrierPollIntervalMs ?? DEFAULT_BARRIER_POLL_INTERVAL_MS;
     this.#cleanupGuard = opts.cleanupGuard ?? NOOP_CLEANUP_GUARD;
-    this.#onFatal = opts.onFatal;
     this.#sleep = opts.sleep ?? sleep;
     this.#now = opts.now ?? Date.now;
   }
@@ -120,7 +115,6 @@ export class SQLiteChangeLogCatchup implements Disposable {
    */
   async catchup(
     subscriber: Subscriber,
-    mode: ReplicatorMode,
     captureRequiredHead: () => string | Promise<string>,
   ): Promise<void> {
     if (this.#closed) {
@@ -149,12 +143,7 @@ export class SQLiteChangeLogCatchup implements Disposable {
       return;
     }
 
-    void this.#run(
-      subscriber,
-      mode,
-      requiredHead as string | Promise<string>,
-      abort,
-    );
+    void this.#run(subscriber, requiredHead as string | Promise<string>, abort);
   }
 
   /**
@@ -201,7 +190,6 @@ export class SQLiteChangeLogCatchup implements Disposable {
 
   async #run(
     subscriber: Subscriber,
-    mode: ReplicatorMode,
     requiredHead: string | Promise<string>,
     abort: AbortController,
   ): Promise<void> {
@@ -234,12 +222,6 @@ export class SQLiteChangeLogCatchup implements Disposable {
         const message =
           `earliest supported watermark is ${plan.minWatermark} ` +
           `(requested ${subscriber.watermark})`;
-        if (mode === 'backup') {
-          throw new AutoResetSignal(
-            `backup replica at watermark ${subscriber.watermark} is behind ` +
-              `SQLite change log: ${plan.minWatermark}`,
-          );
-        }
         this.#lc.warn?.(
           `rejecting subscriber at watermark ${subscriber.watermark} ` +
             `(earliest watermark: ${plan.minWatermark})`,
@@ -317,16 +299,6 @@ export class SQLiteChangeLogCatchup implements Disposable {
         `error while catching up subscriber ${subscriber.id} from SQLite`,
         error,
       );
-      if (error instanceof AutoResetSignal) {
-        try {
-          await this.#onFatal(error);
-        } catch (fatalError) {
-          this.#lc.error?.(
-            `error while handling fatal SQLite catchup failure for ${subscriber.id}`,
-            fatalError,
-          );
-        }
-      }
       subscriber.fail(error);
     } finally {
       if (this.#catchups.get(subscriber) === abort) {
