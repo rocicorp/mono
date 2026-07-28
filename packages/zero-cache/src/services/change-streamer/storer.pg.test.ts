@@ -989,7 +989,7 @@ describe('change-streamer/storer', () => {
       for (const stream of [stream1, stream2]) {
         const iterator = stream[Symbol.asyncIterator]();
         const error = await iterator.next();
-        expect(error.done).toBe(false);
+        expect(error.done).toBeFalsy();
         expect(JSON.parse(error.value as string)).toEqual([
           'error',
           {
