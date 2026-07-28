@@ -1,3 +1,4 @@
+import {writeFileSync} from 'node:fs';
 import {PG_LOCK_NOT_AVAILABLE} from '@drdgvhbh/postgres-error-codes';
 import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
@@ -48,6 +49,7 @@ import {ThreadWriteWorkerClient} from '../replicator/write-worker-client.ts';
 import {serializeChangeStreamData} from './change-log-codec.ts';
 import {
   initializeStreamer,
+  type SQLiteCatchupOptions,
   type TuningOptions,
 } from './change-streamer-service.ts';
 import {
@@ -58,6 +60,7 @@ import {
 import * as ErrorType from './error-type-enum.ts';
 import {initChangeStreamerSchema} from './schema/init.ts';
 import {AutoResetSignal, ensureReplicationConfig} from './schema/tables.ts';
+import {SQLiteChangeLogReader} from './sqlite-change-log-reader.ts';
 import {PurgeLocker} from './storer.ts';
 
 const opts: TuningOptions = {
@@ -191,6 +194,69 @@ describe('change-streamer/service', () => {
     const changeLog = openChangeLogDB(lc, replicaFile.path, {readonly: false});
     reconcileChangeLog(lc, changeLog, readReplicaAnchor(replica));
     return changeLog;
+  }
+
+  /** A replica whose `-change-log` sibling the SQLite catchup tests build. */
+  function createCatchupReplica(name: string): {
+    file: DbFile;
+    replica: Database;
+  } {
+    const file = new DbFile(name);
+    const replica = file.connect(lc);
+    replica.pragma('journal_mode = wal');
+    initReplicationState(replica, ['zero_data'], REPLICA_VERSION);
+    return {file, replica};
+  }
+
+  /** Restarts the streamer with SQLite catchup wired to `sqliteCatchup`. */
+  async function restartWithSQLiteCatchup(
+    sqliteCatchup: SQLiteCatchupOptions,
+  ): Promise<void> {
+    await streamer.stop();
+    await streamerDone;
+
+    changes = Subscription.create();
+    acks = new Queue();
+    streamer = await initializeStreamer(
+      lc,
+      shard,
+      'task-id',
+      'change.streamer:12345',
+      'ws',
+      sql,
+      {
+        startStream: () =>
+          Promise.resolve({
+            initialWatermark: '02',
+            changes,
+            acks: {push: status => acks.enqueue(status)},
+          }),
+        startLagReporter: () =>
+          Promise.resolve({firstCommitTimeMs: 100, nextSendTimeMs: 123}),
+        stop: () => Promise.resolve(),
+      },
+      ReplicationStatusPublisher.forTesting(),
+      replicaConfig,
+      null,
+      true,
+      {...opts, sqliteCatchup},
+      setTimeoutFn as unknown as typeof setTimeout,
+    );
+    streamerDone = streamer.run();
+  }
+
+  /** A serving subscriber, i.e. one eligible for SQLite catchup. */
+  function subscribeServing(id: string): Promise<Source<string>> {
+    return streamer.subscribe({
+      protocolVersion: PROTOCOL_VERSION,
+      taskID: `${id}-task`,
+      id,
+      mode: 'serving',
+      watermark: REPLICA_VERSION,
+      replicaVersion: REPLICA_VERSION,
+      initial: true,
+      logsChangeStream: false,
+    });
   }
 
   /** Applies a transaction the way the write worker does: log first, then replica. */
@@ -854,6 +920,243 @@ describe('change-streamer/service', () => {
     } finally {
       await streamer.stop();
       catchupChangeLog.close();
+      catchupReplica.close();
+      deleteChangeLogDB(catchupReplicaFile.path);
+      catchupReplicaFile.delete();
+    }
+  });
+
+  test('a change-streamer that starts before the change log serves from PG, then from SQLite', async () => {
+    // The replicator has not created the log yet, which is the normal ordering
+    // when both processes start at once.
+    const {file: catchupReplicaFile, replica: catchupReplica} =
+      createCatchupReplica('sqlite-catchup-startup-race');
+    await restartWithSQLiteCatchup({
+      changeLogFile: changeLogFileName(catchupReplicaFile.path),
+      readBatchRows: 2,
+      barrierTimeoutMs: 1_000,
+      barrierPollIntervalMs: 10,
+      shouldUse: () => true,
+    });
+
+    let catchupChangeLog: Database | undefined;
+    try {
+      changes.push(['begin', messages.begin(), {commitWatermark: '04'}]);
+      changes.push(['data', messages.insert('foo', {id: 'from-pg'})]);
+      changes.push(['commit', messages.commit(), {watermark: '04'}]);
+      // SQLite catchup is not eligible until the stream has started and the
+      // forwarded head is known, which the ACK of this commit establishes.
+      await expectAcks('04');
+
+      const pgSub = await subscribeServing('before-change-log');
+      const fromPG = drainToQueue(pgSub);
+      expect(await nextChange(fromPG)).toMatchObject({tag: 'status'});
+      expect(await nextChange(fromPG)).toMatchObject({tag: 'begin'});
+      expect(await nextChange(fromPG)).toMatchObject({
+        tag: 'insert',
+        new: {id: 'from-pg'},
+      });
+      expect(await nextChange(fromPG)).toMatchObject({tag: 'commit'});
+
+      expect(logSink.messages).toContainEqual([
+        'debug',
+        expect.anything(),
+        [
+          expect.stringContaining(
+            'serving before-change-log from PG catchup: cannot read',
+          ),
+          // A readonly handle cannot create the file, so an absent log arrives
+          // as an open error rather than as an empty database.
+          expect.objectContaining({message: expect.stringContaining('unable')}),
+        ],
+      ]);
+      // Startup ordering is not an incident: nothing is warned about until the
+      // log has been unavailable for longer than the threshold.
+      expect(
+        logSink.messages.filter(
+          ([level, , args]) =>
+            level === 'warn' && String(args[0]).includes('PG catchup'),
+        ),
+      ).toEqual([]);
+
+      // The replicator creates and seeds the log, then applies the transaction
+      // to it. Its payload differs from the forwarded one only so that the next
+      // subscriber's changes say which log served it.
+      catchupChangeLog = createChangeLogDB(catchupReplicaFile, catchupReplica);
+      appendSQLiteTransaction(catchupReplica, catchupChangeLog, '04', [
+        ['data', messages.insert('foo', {id: 'from-sqlite'})],
+      ]);
+
+      const sqliteSub = await subscribeServing('after-change-log');
+      const fromSQLite = drainToQueue(sqliteSub);
+      expect(await nextChange(fromSQLite)).toMatchObject({tag: 'status'});
+      expect(await nextChange(fromSQLite)).toMatchObject({tag: 'begin'});
+      expect(await nextChange(fromSQLite)).toMatchObject({
+        tag: 'insert',
+        new: {id: 'from-sqlite'},
+      });
+      expect(await nextChange(fromSQLite)).toMatchObject({tag: 'commit'});
+
+      pgSub.cancel();
+      sqliteSub.cancel();
+    } finally {
+      await streamer.stop();
+      catchupChangeLog?.close();
+      catchupReplica.close();
+      deleteChangeLogDB(catchupReplicaFile.path);
+      catchupReplicaFile.delete();
+    }
+  });
+
+  test('a change log with no changes declines, without caching the failure', async () => {
+    const {file: catchupReplicaFile, replica: catchupReplica} =
+      createCatchupReplica('sqlite-catchup-empty-log');
+    // The file exists but the writer has not reconciled it into a stream table.
+    const catchupChangeLog = openChangeLogDB(lc, catchupReplicaFile.path, {
+      readonly: false,
+    });
+    catchupChangeLog.pragma('journal_mode = wal');
+
+    // Each declined attempt must close the handle it opened, since the next
+    // subscription opens another one.
+    const readerClose = vi.spyOn(SQLiteChangeLogReader.prototype, 'close');
+    await restartWithSQLiteCatchup({
+      changeLogFile: changeLogFileName(catchupReplicaFile.path),
+      readBatchRows: 2,
+      barrierTimeoutMs: 1_000,
+      barrierPollIntervalMs: 10,
+      shouldUse: () => true,
+    });
+
+    try {
+      changes.push(['begin', messages.begin(), {commitWatermark: '04'}]);
+      changes.push(['data', messages.insert('foo', {id: 'from-pg'})]);
+      changes.push(['commit', messages.commit(), {watermark: '04'}]);
+      // SQLite catchup is not eligible until the stream has started and the
+      // forwarded head is known, which the ACK of this commit establishes.
+      await expectAcks('04');
+
+      const noTableSub = await subscribeServing('no-stream-table');
+      const noTable = drainToQueue(noTableSub);
+      expect(await nextChange(noTable)).toMatchObject({tag: 'status'});
+      expect(await nextChange(noTable)).toMatchObject({tag: 'begin'});
+      expect(await nextChange(noTable)).toMatchObject({
+        tag: 'insert',
+        new: {id: 'from-pg'},
+      });
+      expect(await nextChange(noTable)).toMatchObject({tag: 'commit'});
+      expect(readerClose).toHaveBeenCalledTimes(1);
+
+      // A stream table with no rows is equally unserviceable.
+      reconcileChangeLog(
+        lc,
+        catchupChangeLog,
+        readReplicaAnchor(catchupReplica),
+      );
+      catchupChangeLog.prepare(`DELETE FROM "_zero.changeLogStream"`).run();
+
+      const noRowsSub = await subscribeServing('no-rows');
+      const noRows = drainToQueue(noRowsSub);
+      expect(await nextChange(noRows)).toMatchObject({tag: 'status'});
+      expect(await nextChange(noRows)).toMatchObject({tag: 'begin'});
+      expect(await nextChange(noRows)).toMatchObject({
+        tag: 'insert',
+        new: {id: 'from-pg'},
+      });
+      expect(await nextChange(noRows)).toMatchObject({tag: 'commit'});
+      // Constructed again rather than remembered as unusable, and closed again.
+      expect(readerClose).toHaveBeenCalledTimes(2);
+
+      // Reconciling an emptied log reseeds it at the replica head, after which
+      // the writer's transactions make it servable.
+      reconcileChangeLog(
+        lc,
+        catchupChangeLog,
+        readReplicaAnchor(catchupReplica),
+      );
+      appendSQLiteTransaction(catchupReplica, catchupChangeLog, '04', [
+        ['data', messages.insert('foo', {id: 'from-sqlite'})],
+      ]);
+
+      const servedSub = await subscribeServing('served-from-sqlite');
+      const served = drainToQueue(servedSub);
+      expect(await nextChange(served)).toMatchObject({tag: 'status'});
+      expect(await nextChange(served)).toMatchObject({tag: 'begin'});
+      expect(await nextChange(served)).toMatchObject({
+        tag: 'insert',
+        new: {id: 'from-sqlite'},
+      });
+      expect(await nextChange(served)).toMatchObject({tag: 'commit'});
+      // The reader that can serve is retained by the catchup coordinator.
+      expect(readerClose).toHaveBeenCalledTimes(2);
+
+      noTableSub.cancel();
+      noRowsSub.cancel();
+      servedSub.cancel();
+    } finally {
+      await streamer.stop();
+      readerClose.mockRestore();
+      catchupChangeLog.close();
+      catchupReplica.close();
+      deleteChangeLogDB(catchupReplicaFile.path);
+      catchupReplicaFile.delete();
+    }
+  });
+
+  test('an unreadable change log declines rather than failing the subscription', async () => {
+    const {file: catchupReplicaFile, replica: catchupReplica} =
+      createCatchupReplica('sqlite-catchup-corrupt-log');
+    writeFileSync(
+      changeLogFileName(catchupReplicaFile.path),
+      'not a SQLite database',
+    );
+
+    await restartWithSQLiteCatchup({
+      changeLogFile: changeLogFileName(catchupReplicaFile.path),
+      readBatchRows: 2,
+      barrierTimeoutMs: 1_000,
+      barrierPollIntervalMs: 10,
+      shouldUse: () => true,
+      // A zero threshold makes the first decline the "still unavailable" case,
+      // which is the one that warrants a warning.
+      notReadyWarnThresholdMs: 0,
+    });
+
+    try {
+      changes.push(['begin', messages.begin(), {commitWatermark: '04'}]);
+      changes.push(['data', messages.insert('foo', {id: 'from-pg'})]);
+      changes.push(['commit', messages.commit(), {watermark: '04'}]);
+      // SQLite catchup is not eligible until the stream has started and the
+      // forwarded head is known, which the ACK of this commit establishes.
+      await expectAcks('04');
+
+      const sub = await subscribeServing('corrupt-change-log');
+      const served = drainToQueue(sub);
+      expect(await nextChange(served)).toMatchObject({tag: 'status'});
+      expect(await nextChange(served)).toMatchObject({tag: 'begin'});
+      expect(await nextChange(served)).toMatchObject({
+        tag: 'insert',
+        new: {id: 'from-pg'},
+      });
+      expect(await nextChange(served)).toMatchObject({tag: 'commit'});
+
+      expect(logSink.messages).toContainEqual([
+        'warn',
+        expect.anything(),
+        [
+          expect.stringContaining(
+            'serving corrupt-change-log from PG catchup: cannot read',
+          ),
+          expect.anything(),
+        ],
+      ]);
+      expect(logSink.messages.filter(([level]) => level === 'error')).toEqual(
+        [],
+      );
+
+      sub.cancel();
+    } finally {
+      await streamer.stop();
       catchupReplica.close();
       deleteChangeLogDB(catchupReplicaFile.path);
       catchupReplicaFile.delete();

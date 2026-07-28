@@ -22,8 +22,9 @@ export type CatchupPlan =
       readonly headWatermark: string;
     }
   // The log exists as a file but has no content to serve: the replicator has
-  // not created or reconciled it yet. Slice 7E declines and falls back to PG
-  // catchup; there is no production caller before then.
+  // not created or reconciled it yet. Subscriber selection treats this as
+  // "decline and fall back to PG catchup", which is why it is a plan rather
+  // than an error.
   | {readonly kind: 'not-ready'};
 
 type PlanRow = {
