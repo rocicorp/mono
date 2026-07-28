@@ -585,7 +585,10 @@ class ChangeStreamerImpl implements ChangeStreamerService {
           }
         : {},
     );
-    cleanupSubscriber = () => this.#forwarder.remove(subscriber);
+    cleanupSubscriber = () => {
+      this.#lc.info?.(`removing subscriber ${subscriber.id}`);
+      this.#forwarder.remove(subscriber);
+    };
     if (replicaVersion !== this.#replicaVersion) {
       this.#lc.warn?.(
         `rejecting subscriber at replica version ${replicaVersion}`,
@@ -597,7 +600,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
         } (requested ${replicaVersion})`,
       );
     } else {
-      this.#lc.debug?.(`adding subscriber ${subscriber.id}`);
+      this.#lc.info?.(`adding subscriber ${subscriber.id}`);
 
       const sqliteCatchup = this.#selectSQLiteCatchup(ctx);
       if (sqliteCatchup) {
@@ -751,7 +754,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     // resume the canonical replica directly from replica/backup/slot state.
     // Enforce this before the selector so no canary policy can override it.
     if (ctx.mode !== 'serving') {
-      this.#lc.debug?.(
+      this.#lc.info?.(
         `not serving backup subscriber ${ctx.id} from SQLite catchup`,
       );
       return undefined;

@@ -648,10 +648,11 @@ export class Storer implements Service {
       return;
     }
 
-    const reader = new TransactionPool(
-      this.#lc.withContext('pool', 'catchup'),
-      {mode: Mode.READONLY},
-    );
+    const lc = this.#lc.withContext('pool', 'catchup');
+    // TODO: Consider setting initialWorkers to accomodate parallel
+    //       catchups of multiple subscribers. The tricky part is
+    //       staying within the db's max connections.
+    const reader = new TransactionPool(lc, {mode: Mode.READONLY});
     reader.run(this.#db);
 
     let lastWatermark: string | undefined;
@@ -673,17 +674,27 @@ export class Storer implements Service {
     // Run the actual catchup queries in the background. Errors are handled in
     // #catchup() by disconnecting the associated subscriber.
     void Promise.all(
-      subs.map(sub => this.#catchup(sub, lastWatermark, reader)),
+      subs.map(sub =>
+        this.#catchup(
+          lc.withContext('subscriber', sub.subscriber.id),
+          sub,
+          lastWatermark,
+          reader,
+        ),
+      ),
     ).finally(() => reader.setDone());
   }
 
   async #catchup(
+    lc: LogContext,
     {subscriber: sub, mode}: SubscriberAndMode,
     lastWatermark: string,
     reader: TransactionPool,
   ) {
     try {
+      lc.info?.(`starting catchup`);
       await reader.processReadTask(async tx => {
+        lc.info?.(`catching up`);
         const start = Date.now();
 
         // When starting from initial-sync, there won't be a change with a watermark
@@ -707,7 +718,7 @@ export class Storer implements Service {
           await lastBatchConsumed;
           const elapsed = performance.now() - start;
           if (lastBatchConsumed) {
-            this.#lc[elapsed > 100 ? 'info' : 'debug']?.(
+            lc[elapsed > 100 ? 'info' : 'debug']?.(
               `waited ${elapsed.toFixed(3)} ms for ${sub.id} to consume last batch of catchup entries`,
             );
           }
@@ -727,7 +738,7 @@ export class Storer implements Service {
                 `backup replica at watermark ${sub.watermark} is behind change db: ${entry.watermark})`,
               );
             } else {
-              this.#lc.warn?.(
+              lc.warn?.(
                 `rejecting subscriber at watermark ${sub.watermark} (earliest watermark: ${entry.watermark})`,
               );
               sub.close(
@@ -740,7 +751,7 @@ export class Storer implements Service {
         }
         if (watermarkFound) {
           await lastBatchConsumed;
-          this.#lc.info?.(
+          lc.info?.(
             `caught up ${sub.id} with ${count} changes (${
               Date.now() - start
             } ms)`,
@@ -756,7 +767,7 @@ export class Storer implements Service {
           // the subscriber dedups any watermarks it already has. Unlike the
           // AutoResetSignal / WatermarkTooOld cases above, this is not a gap in
           // replication history, so the subscriber is simply marked caught up.
-          this.#lc.warn?.(
+          lc.warn?.(
             `subscriber ${sub.id} at watermark ${sub.watermark} is ahead of ` +
               `the latest durable watermark ${lastWatermark}; waiting for the ` +
               `change DB to catch up`,
@@ -769,7 +780,7 @@ export class Storer implements Service {
         void sub.setCaughtUp();
       });
     } catch (err) {
-      this.#lc.error?.(`error while catching up subscriber ${sub.id}`, err);
+      lc.error?.(`error while catching up subscriber ${sub.id}`, err);
       if (err instanceof AutoResetSignal) {
         await markResetRequired(this.#db, this.#shard);
         this.#onFatal(err);
