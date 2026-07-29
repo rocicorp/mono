@@ -124,7 +124,7 @@ export async function tryRestore(
   lc: LogContext,
   config: LitestreamConfig,
   replicaFile: string,
-  replicaConstraints: ReplicaConstraints,
+  replicaConstraints: ReplicaConstraints | undefined,
   role: LitestreamRole,
 ): Promise<RestoreAttempt> {
   const {backupURL} = config;
@@ -252,31 +252,35 @@ export async function tryRestore(
 function replicaIsValid(
   lc: LogContext,
   replica: string,
-  constraints: ReplicaConstraints,
+  constraints: ReplicaConstraints | undefined,
 ) {
   let db: Database | undefined;
   try {
+    // Note: Open the database and read the subscription state as a
+    // sanity / corruption check, even if there are no constraints.
     db = new Database(lc, replica);
     const {replicaVersion, watermark} = getSubscriptionState(
       new StatementRunner(db),
     );
-    if (replicaVersion !== constraints.replicaVersion) {
-      lc.warn?.(
-        `Local replica version ${replicaVersion} does not match expected replicaVersion ${constraints.replicaVersion}`,
+    if (constraints) {
+      if (replicaVersion !== constraints.replicaVersion) {
+        lc.warn?.(
+          `Local replica version ${replicaVersion} does not match expected replicaVersion ${constraints.replicaVersion}`,
+          constraints,
+        );
+        return false;
+      }
+      if (watermark < constraints.minWatermark) {
+        lc.warn?.(
+          `Local replica watermark ${watermark} is earlier than minWatermark ${constraints.minWatermark}`,
+        );
+        return false;
+      }
+      lc.info?.(
+        `Local replica at version ${replicaVersion} and watermark ${watermark} is compatible`,
         constraints,
       );
-      return false;
     }
-    if (watermark < constraints.minWatermark) {
-      lc.warn?.(
-        `Local replica watermark ${watermark} is earlier than minWatermark ${constraints.minWatermark}`,
-      );
-      return false;
-    }
-    lc.info?.(
-      `Local replica at version ${replicaVersion} and watermark ${watermark} is compatible`,
-      constraints,
-    );
     return true;
   } catch (e) {
     if (isSQLiteCorruption(e)) {

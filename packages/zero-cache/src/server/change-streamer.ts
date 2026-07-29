@@ -1,4 +1,5 @@
 import {consoleLogSink, LogContext} from '@rocicorp/logger';
+import {resolver} from '@rocicorp/resolver';
 import {assert} from '../../../shared/src/asserts.ts';
 import {must} from '../../../shared/src/must.ts';
 import {DatabaseInitError} from '../../../zqlite/src/db.ts';
@@ -8,8 +9,6 @@ import {deleteLiteDB} from '../db/delete-lite-db.ts';
 import {registerSQLiteCorruptionDiagnosticTarget} from '../db/sqlite-corruption.ts';
 import {warmupConnections} from '../db/warmup.ts';
 import {initEventSink, publishCriticalEvent} from '../observability/events.ts';
-import {restoreReplica} from '../services/change-source/common/replica-restore.ts';
-import {upgradeReplica} from '../services/change-source/common/replica-schema.ts';
 import {initializeCustomChangeSource} from '../services/change-source/custom/change-source.ts';
 import {initializePostgresChangeSource} from '../services/change-source/pg/change-source.ts';
 import {createBackupCleanupMonitor} from '../services/change-streamer/backup-cleanup-monitor-factory.ts';
@@ -20,7 +19,12 @@ import {ReplicaMonitor} from '../services/change-streamer/replica-monitor.ts';
 import {initChangeStreamerSchema} from '../services/change-streamer/schema/init.ts';
 import {AutoResetSignal} from '../services/change-streamer/schema/tables.ts';
 import {PurgeLocker} from '../services/change-streamer/storer.ts';
-import {exitAfter, runUntilKilled} from '../services/life-cycle.ts';
+import {
+  exitAfter,
+  ProcessManager,
+  runUntilKilled,
+} from '../services/life-cycle.ts';
+import {startReplicaBackupProcess} from '../services/litestream/commands.ts';
 import {
   changeLogFileName,
   deleteChangeLogDB,
@@ -31,13 +35,16 @@ import {
 } from '../services/replicator/replication-status.ts';
 import {connectPgClient} from '../types/pg.ts';
 import {
+  childWorker,
   parentWorker,
   singleProcessMode,
   type Worker,
 } from '../types/processes.ts';
 import {getShardConfig} from '../types/shards.ts';
+import type {ReplicaFileMode} from '../workers/replicator.ts';
 import {createLogContext} from './logging.ts';
 import {startOtelAuto} from './otel-start.ts';
+import {REPLICATOR_URL} from './worker-urls.ts';
 
 // Default LogContext, overridden in runWorker
 let lc = new LogContext('info', {}, consoleLogSink);
@@ -106,29 +113,17 @@ export default async function runWorker(
     litestream.backupURL && litestream.executable
       ? await new PurgeLocker(lc, shard, changeDB).acquire()
       : null;
-
-  // Restore from litestream if the change-log has entries.
-  if (purgeLock) {
-    try {
-      if (!(await restoreReplica(lc, litestream, replica.file, purgeLock))) {
-        lc.info?.(`no backup found. syncing the replica`);
-      }
-    } catch (e) {
-      lc.error?.(
-        `error restoring backup. resyncing the replica: ${String(e)}`,
-        e,
-      );
-    }
-  }
+  const restoreOptions = {litestream, constraints: purgeLock ?? undefined};
 
   let changeStreamer: ChangeStreamerService | undefined;
+  let backupURL: string | undefined;
 
   const context = getServerContext(config);
 
   for (const first of [true, false]) {
     try {
       // Note: This performs initial sync of the replica if necessary.
-      const {changeSource, subscriptionState} =
+      const {changeSource, subscriptionState, destinationBackupURL} =
         upstream.type === 'pg'
           ? await initializePostgresChangeSource(
               lc,
@@ -141,6 +136,7 @@ export default async function runWorker(
               },
               context,
               replicationLag.reportIntervalMs,
+              restoreOptions,
               purgeLock,
             )
           : await initializeCustomChangeSource(
@@ -149,6 +145,7 @@ export default async function runWorker(
               shard,
               replica.file,
               context,
+              restoreOptions,
             );
 
       const replicationStatusPublisher =
@@ -180,6 +177,7 @@ export default async function runWorker(
         },
         setTimeout,
       );
+      backupURL = destinationBackupURL;
       break;
     } catch (e) {
       if (first && e instanceof AutoResetSignal) {
@@ -220,12 +218,32 @@ export default async function runWorker(
   // impossible: upstream must have advanced in order for replication to be stuck.
   assert(changeStreamer, `resetting replica did not advance replicaVersion`);
 
-  // Perform any upgrades to the replica in case it was restored from an
-  // earlier version. Note that this upgrade is done by the replicator worker
-  // as well (in both the replication-manager and the view-syncer), but the
-  // change-streamer independently reads the replica, and it is fine run the
-  // upgrade logic redundantly since it is idempotent.
-  await upgradeReplica(lc, 'change-streamer-init', replica.file);
+  const processes = new ProcessManager(lc, parent);
+  if (backupURL) {
+    lc.info?.('setting up backup to', backupURL);
+    litestream.backupURL = backupURL;
+    const {promise: backupStarted, resolve} = resolver();
+
+    // Start a backup replicator and corresponding litestream backup process.
+    processes
+      .addWorker(
+        childWorker(REPLICATOR_URL, env, 'backup' satisfies ReplicaFileMode),
+        'supporting',
+        'backup-replicator',
+      )
+      // Wait for the replicator's first message (i.e. "ready") before starting
+      // litestream backup in order to avoid contending on the sqlite lock
+      // when the replicator first prepares the db file.
+      .once('message', () => {
+        processes.addSubprocess(
+          startReplicaBackupProcess(lc, litestream, replica.file),
+          'supporting',
+          'litestream',
+        );
+        resolve();
+      });
+    await backupStarted;
+  }
 
   const backupMonitor = createBackupCleanupMonitor({
     lc,
@@ -257,7 +275,13 @@ export default async function runWorker(
 
   // Note: The changeStreamer itself is not started here; it is started by the
   //       changeStreamerWebServer.
-  return runUntilKilled(lc, parent, changeStreamerWebServer, monitor);
+  try {
+    await runUntilKilled(lc, parent, changeStreamerWebServer, monitor);
+  } catch (err) {
+    processes.logErrorAndExit(err, 'change-streamer');
+  } finally {
+    await processes.shutdown();
+  }
 }
 
 // fork()

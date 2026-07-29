@@ -64,8 +64,10 @@ import {getPublicationInfo} from './schema/published.ts';
 import {
   dropShard,
   getInternalShardConfig,
+  getReplicaState,
   initReplica,
   validatePublications,
+  type ReplicaState,
 } from './schema/shard.ts';
 
 export type InitialSyncOptions = {
@@ -96,6 +98,10 @@ export type InitialSyncOptions = {
 /** Server context to store with the initial sync metadata for debugging. */
 export type ServerContext = JSONObject;
 
+/**
+ * @returns The {@link ReplicaState} of the initialized replica, or `undefined`
+ *          for a shadow sync.
+ */
 export async function initialSync(
   lc: LogContext,
   shard: ShardConfig,
@@ -103,7 +109,7 @@ export async function initialSync(
   upstreamURI: string,
   syncOptions: InitialSyncOptions,
   context: ServerContext,
-) {
+): Promise<ReplicaState | undefined> {
   if (!ALLOWED_APP_ID_CHARACTERS.test(shard.appID)) {
     throw new Error(
       'The App ID may only consist of lower-case letters, numbers, and the underscore character',
@@ -330,6 +336,13 @@ export async function initialSync(
           totalMs: elapsed,
         },
       );
+
+      return slotName && replicaID
+        ? must(
+            await getReplicaState(sql, shard, replicaID),
+            `Missing replica with id ${replicaID}`,
+          )
+        : undefined; // shadow sync only
     } finally {
       // All meaningful errors are handled at the processReadTask() call site.
       void copyPool.end().catch(e => lc.warn?.(`Error closing copyPool`, e));
@@ -353,7 +366,7 @@ export async function initialSync(
           WHERE slot_name = ${slotName};
       `.catch(e => lc.warn?.(`Unable to drop replication slot ${slotName}`, e));
     }
-    await statusPublisher.publishAndThrowError(lc, 'Initializing', e);
+    throw await statusPublisher.publishAndThrowError(lc, 'Initializing', e);
   } finally {
     statusPublisher.stop();
     if (releaseShadowSnapshot) {
@@ -460,6 +473,11 @@ async function ensurePublishedTables(
   const {database, host} = sql.options;
   lc.info?.(`Ensuring upstream PUBLICATION on ${database}@${host}`);
 
+  // Technically, ensureShardSchema() is already called by
+  // initializePostgresChangeSource, so the call here is redundant
+  // but harmless. On the contrary, it makes initial sync more
+  // self-contained (for test setup), and also plays a role in
+  // recovering from corruption (below) after the shard is dropped.
   await ensureShardSchema(lc, sql, shard);
   const {publications} = await getInternalShardConfig(sql, shard);
 
