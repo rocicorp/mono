@@ -10,11 +10,11 @@ import {serializeChangeStreamData} from '../change-streamer/change-log-codec.ts'
 import {
   CHANGE_LOG_DB_SCHEMA_VERSION,
   CHANGE_LOG_META_TABLE,
+  CHANGE_LOG_STREAM_TABLE,
   changeLogFileName,
   deleteChangeLogDB,
   openChangeLogDB,
 } from './change-log-db.ts';
-import {CHANGE_LOG_STREAM_TABLE} from './schema/change-log-stream.ts';
 import {initReplicationState} from './schema/replication-state.ts';
 import {ReplicationMessages} from './test-utils.ts';
 import {
@@ -357,14 +357,14 @@ describe('write-worker', () => {
       stateVersion: '06',
       writeTimeMs: commit.writeTimeMs,
     });
-    // The replica's own copy of the table is no longer written.
+    // The replica does not carry the table at all as of schema v15.
     expect(
       mainDb
-        .prepare(/*sql*/ `
-          SELECT max("watermark") AS "head" FROM "${CHANGE_LOG_STREAM_TABLE}"
-        `)
-        .get(),
-    ).toEqual({head: '02'});
+        .prepare(
+          /*sql*/ `SELECT "name" FROM "sqlite_master" WHERE "tbl_name" = ?`,
+        )
+        .all(CHANGE_LOG_STREAM_TABLE),
+    ).toEqual([]);
   });
 
   test('abort rolls back pending transaction', async () => {

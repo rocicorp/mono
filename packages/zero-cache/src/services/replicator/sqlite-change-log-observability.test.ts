@@ -8,9 +8,15 @@ import {
   serializeChangeStreamData,
 } from '../change-streamer/change-log-codec.ts';
 import {ChangeLogTransactionHasher} from '../change-streamer/change-log-transaction-hash.ts';
-import type {ReconcileResult} from './change-log-db.ts';
+import {
+  CHANGE_LOG_STREAM_TABLE,
+  readReplicaAnchor,
+  reconcileChangeLog,
+  type ReconcileResult,
+} from './change-log-db.ts';
 import {initReplicationState} from './schema/replication-state.ts';
 import {
+  getReplicaChangeLogInfo,
   getSQLiteChangeLogInfo,
   getSQLiteChangeLogStartupInfo,
   logSQLiteChangeLogStartup,
@@ -31,14 +37,20 @@ function setupReplica() {
     );
     INSERT INTO "_zero.versionHistory"
       ("dataVersion", "schemaVersion", "minSafeVersion")
-      VALUES (14, 14, 0);
+      VALUES (15, 15, 0);
   `);
   initReplicationState(db, ['zero_data'], '02');
+  // The change log is a separate database as of replica schema v15. Seed it at
+  // the replica head the way the writer's startup reconciliation does.
+  const changeLog = new Database(lc, ':memory:');
+  reconcileChangeLog(lc, changeLog, readReplicaAnchor(db));
   return {
     db,
+    changeLog,
     lc,
     sink,
     [Symbol.dispose]() {
+      changeLog.close();
       db.close();
     },
   };
@@ -79,10 +91,10 @@ function twoRowTransactionHash(watermark: string): string {
 describe('SQLite change-log observability', () => {
   test('reads and logs startup state', () => {
     using fixture = setupReplica();
-    const info = getSQLiteChangeLogInfo(fixture.db);
+    const info = getSQLiteChangeLogInfo(fixture.db, fixture.changeLog);
 
     expect(info).toMatchObject({
-      schemaVersion: 14,
+      schemaVersion: 15,
       stateWatermark: '02',
       seedWatermark: '02',
       headWatermark: '02',
@@ -101,7 +113,7 @@ describe('SQLite change-log observability', () => {
           sqliteChangeLog: {
             fileMode: 'backup',
             writerEnabled: true,
-            schemaVersion: 14,
+            schemaVersion: 15,
             seedWatermark: '02',
             headWatermark: '02',
             stateWatermark: '02',
@@ -111,13 +123,16 @@ describe('SQLite change-log observability', () => {
     ]);
   });
 
-  test('startup info skips the row/byte aggregate for disabled writers', () => {
+  test('startup info skips the row/byte aggregate', () => {
     using fixture = setupReplica();
-    const startupInfo = getSQLiteChangeLogStartupInfo(fixture.db);
+    const startupInfo = getSQLiteChangeLogStartupInfo(
+      fixture.db,
+      fixture.changeLog,
+    );
 
     // Same schema/state/head as the full read, but no table-scanning totals.
     expect(startupInfo).toEqual({
-      schemaVersion: 14,
+      schemaVersion: 15,
       stateWatermark: '02',
       seedWatermark: '02',
       headWatermark: '02',
@@ -126,10 +141,24 @@ describe('SQLite change-log observability', () => {
       rows: _rows,
       estimatedBytes: _bytes,
       ...head
-    } = getSQLiteChangeLogInfo(fixture.db);
+    } = getSQLiteChangeLogInfo(fixture.db, fixture.changeLog);
     expect(startupInfo).toEqual(head);
+  });
 
-    logSQLiteChangeLogStartup(fixture.lc, 'serving', false, startupInfo);
+  // A disabled writer opens no change-log database, so it reports the replica's
+  // own state and no head. The replica has not carried a copy of the log since
+  // schema v15, so there is nothing else it could report.
+  test('a disabled writer reports replica state without a head', () => {
+    using fixture = setupReplica();
+    const info = getReplicaChangeLogInfo(fixture.db);
+
+    expect(info).toEqual({
+      schemaVersion: 15,
+      stateWatermark: '02',
+      seedWatermark: '02',
+    });
+
+    logSQLiteChangeLogStartup(fixture.lc, 'serving', false, info);
     expect(fixture.sink.messages.at(-1)).toEqual([
       'info',
       undefined,
@@ -139,9 +168,9 @@ describe('SQLite change-log observability', () => {
           sqliteChangeLog: {
             fileMode: 'serving',
             writerEnabled: false,
-            schemaVersion: 14,
+            schemaVersion: 15,
             seedWatermark: '02',
-            headWatermark: '02',
+            headWatermark: undefined,
             stateWatermark: '02',
           },
         },
@@ -151,14 +180,14 @@ describe('SQLite change-log observability', () => {
 
   test('startup info throws on an unseeded change log', () => {
     using fixture = setupReplica();
-    // Simulate a replica whose change log has not been seeded (e.g. one that
-    // predates the change-log migration). The off-mode startup path catches
-    // this and warns instead of crashing the replicator.
-    fixture.db.prepare(`DELETE FROM "_zero.changeLogStream"`).run();
+    // The writer path runs after reconciliation, which cannot leave the log
+    // empty, so this is the assertion that catches a caller reading the log
+    // before it has been reconciled.
+    fixture.changeLog.prepare(`DELETE FROM "${CHANGE_LOG_STREAM_TABLE}"`).run();
 
-    expect(() => getSQLiteChangeLogStartupInfo(fixture.db)).toThrow(
-      'SQLite change log must contain its seed transaction',
-    );
+    expect(() =>
+      getSQLiteChangeLogStartupInfo(fixture.db, fixture.changeLog),
+    ).toThrow('SQLite change log must contain its seed transaction');
   });
 
   test('reports temporary head skew without an invariant failure', () => {
@@ -168,7 +197,7 @@ describe('SQLite change-log observability', () => {
       .run();
     const observer = new SQLiteChangeLogObserver(
       fixture.lc,
-      getSQLiteChangeLogInfo(fixture.db),
+      getSQLiteChangeLogInfo(fixture.db, fixture.changeLog),
     );
 
     expect(observer.state()).toMatchObject({
@@ -220,7 +249,9 @@ describe('SQLite change-log observability', () => {
       sqliteHead: '07',
       headLag: 0,
       rows: 4,
-      estimatedBytes: getSQLiteChangeLogInfo(fixture.db).estimatedBytes + 100,
+      estimatedBytes:
+        getSQLiteChangeLogInfo(fixture.db, fixture.changeLog).estimatedBytes +
+        100,
       invariantFailures: 0,
       hashMatches: 1,
       hashMismatches: 0,
@@ -232,7 +263,7 @@ describe('SQLite change-log observability', () => {
     using fixture = setupReplica();
     const observer = new SQLiteChangeLogObserver(
       fixture.lc,
-      getSQLiteChangeLogInfo(fixture.db),
+      getSQLiteChangeLogInfo(fixture.db, fixture.changeLog),
     );
 
     observer.messageProcessed(
@@ -263,7 +294,7 @@ describe('SQLite change-log observability', () => {
     using fixture = setupReplica();
     const observer = new SQLiteChangeLogObserver(
       fixture.lc,
-      getSQLiteChangeLogInfo(fixture.db),
+      getSQLiteChangeLogInfo(fixture.db, fixture.changeLog),
     );
     const invariantError = new Error('stream position mismatch');
     invariantError.name = 'ChangeLogStreamInvariantError';
@@ -304,7 +335,7 @@ describe('SQLite change-log observability', () => {
     using fixture = setupReplica();
     const observer = new SQLiteChangeLogObserver(
       fixture.lc,
-      getSQLiteChangeLogInfo(fixture.db),
+      getSQLiteChangeLogInfo(fixture.db, fixture.changeLog),
     );
     const begin: ChangeStreamData = [
       'begin',

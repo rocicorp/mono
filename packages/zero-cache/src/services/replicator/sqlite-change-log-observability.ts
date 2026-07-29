@@ -11,9 +11,11 @@ import {versionFromLexi} from '../../types/lexi-version.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
 import {extractChangeSubstring} from '../change-streamer/change-log-codec.ts';
 import {ChangeLogTransactionHasher} from '../change-streamer/change-log-transaction-hash.ts';
-import type {ReconcileResult} from './change-log-db.ts';
+import {
+  CHANGE_LOG_STREAM_TABLE,
+  type ReconcileResult,
+} from './change-log-db.ts';
 import type {CommitResult} from './change-processor.ts';
-import {CHANGE_LOG_STREAM_TABLE} from './schema/change-log-stream.ts';
 
 /**
  * Reports the startup reconciliation of the change-log database against the
@@ -59,10 +61,18 @@ export function recordSQLiteChangeLogReconcile(
   });
 }
 
-export type SQLiteChangeLogStartupInfo = {
+/**
+ * The replica-side half of the startup state. The change log no longer lives in
+ * the replica, so these are the only change-log-relevant facts a replicator can
+ * report without opening the change-log database.
+ */
+export type ReplicaChangeLogInfo = {
   readonly schemaVersion: number;
   readonly stateWatermark: string;
   readonly seedWatermark: string;
+};
+
+export type SQLiteChangeLogStartupInfo = ReplicaChangeLogInfo & {
   readonly headWatermark: string;
 };
 
@@ -72,44 +82,60 @@ export type SQLiteChangeLogInfo = SQLiteChangeLogStartupInfo & {
 };
 
 /**
- * Reads the schema version, replication state, and change-log head. These are
- * single-row lookups plus an index-optimized `max()`, so unlike
- * {@link getSQLiteChangeLogInfo} this does not scan the change-log table and is
- * cheap to call on every startup, including when the writer is disabled.
+ * Reads the replica's schema version and replication state. Two single-row
+ * lookups, and no change-log database required, so this is what a replicator
+ * with the writer disabled reports.
  */
-export function getSQLiteChangeLogStartupInfo(
-  db: Database,
-): SQLiteChangeLogStartupInfo {
-  const version = db
+export function getReplicaChangeLogInfo(
+  replica: Database,
+): ReplicaChangeLogInfo {
+  const version = replica
     .prepare(/*sql*/ `
       SELECT "schemaVersion"
         FROM "_zero.versionHistory"
     `)
     .get<{schemaVersion: number} | undefined>();
-  const state = db
+  const state = replica
     .prepare(/*sql*/ `
       SELECT state."stateVersion", config."replicaVersion"
         FROM "_zero.replicationState" AS state,
              "_zero.replicationConfig" AS config
     `)
     .get<{stateVersion: string; replicaVersion: string} | undefined>();
-  const head = db
+
+  assert(version !== undefined, 'replica schema version must be initialized');
+  assert(state !== undefined, 'replication state must be initialized');
+  return {
+    schemaVersion: version.schemaVersion,
+    stateWatermark: state.stateVersion,
+    seedWatermark: state.replicaVersion,
+  };
+}
+
+/**
+ * Adds the change-log head, read from the change-log database. An
+ * index-optimized `max()`, so unlike {@link getSQLiteChangeLogInfo} this does
+ * not scan the log.
+ *
+ * Call this after the writer has reconciled the log against the replica, which
+ * is the only point at which `headWatermark === stateWatermark` is guaranteed.
+ */
+export function getSQLiteChangeLogStartupInfo(
+  replica: Database,
+  changeLog: Database,
+): SQLiteChangeLogStartupInfo {
+  const head = changeLog
     .prepare(/*sql*/ `
       SELECT max("watermark") AS "headWatermark"
         FROM "${CHANGE_LOG_STREAM_TABLE}"
     `)
     .get<{headWatermark: string | null}>();
-
-  assert(version !== undefined, 'replica schema version must be initialized');
-  assert(state !== undefined, 'replication state must be initialized');
   assert(
     head.headWatermark !== null,
     'SQLite change log must contain its seed transaction',
   );
   return {
-    schemaVersion: version.schemaVersion,
-    stateWatermark: state.stateVersion,
-    seedWatermark: state.replicaVersion,
+    ...getReplicaChangeLogInfo(replica),
     headWatermark: head.headWatermark,
   };
 }
@@ -120,9 +146,12 @@ export function getSQLiteChangeLogStartupInfo(
  * only call this when the totals are consumed, i.e. when the writer (and thus
  * the observer) is enabled.
  */
-export function getSQLiteChangeLogInfo(db: Database): SQLiteChangeLogInfo {
-  const startup = getSQLiteChangeLogStartupInfo(db);
-  const aggregate = db
+export function getSQLiteChangeLogInfo(
+  replica: Database,
+  changeLog: Database,
+): SQLiteChangeLogInfo {
+  const startup = getSQLiteChangeLogStartupInfo(replica, changeLog);
+  const aggregate = changeLog
     .prepare(/*sql*/ `
       SELECT count(*) AS "rows",
              coalesce(sum(
@@ -147,7 +176,7 @@ export function logSQLiteChangeLogStartup(
   lc: LogContext,
   fileMode: 'serving' | 'serving-copy' | 'backup',
   writerEnabled: boolean,
-  info: SQLiteChangeLogStartupInfo,
+  info: ReplicaChangeLogInfo & {readonly headWatermark?: string | undefined},
 ): void {
   lc.info?.('SQLite change-log startup', {
     sqliteChangeLog: {
@@ -155,6 +184,8 @@ export function logSQLiteChangeLogStartup(
       writerEnabled,
       schemaVersion: info.schemaVersion,
       seedWatermark: info.seedWatermark,
+      // Absent when the writer is disabled: there is no change-log database to
+      // read a head from, and the replica no longer carries a copy.
       headWatermark: info.headWatermark,
       stateWatermark: info.stateWatermark,
     },

@@ -6,6 +6,7 @@ import {DbFile, expectTableExact} from '../../test/lite.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
 import {serializeChangeStreamData} from '../change-streamer/change-log-codec.ts';
 import {
+  CHANGE_LOG_STREAM_TABLE,
   deleteChangeLogDB,
   openChangeLogDB,
   reconcileChangeLog,
@@ -15,7 +16,6 @@ import {
   ChangeLogStreamWriter,
   estimateChangeLogStreamRowBytes,
 } from './change-log-stream-writer.ts';
-import {CHANGE_LOG_STREAM_TABLE} from './schema/change-log-stream.ts';
 
 const lc = createSilentLogContext();
 

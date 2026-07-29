@@ -20,13 +20,13 @@ import {
 import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
 import {serializeChangeStreamData} from '../change-streamer/change-log-codec.ts';
 import {
+  CHANGE_LOG_STREAM_TABLE,
   deleteChangeLogDB,
   openChangeLogDB,
   readReplicaAnchor,
   reconcileChangeLog,
 } from './change-log-db.ts';
 import {ChangeProcessor} from './change-processor.ts';
-import {CHANGE_LOG_STREAM_TABLE} from './schema/change-log-stream.ts';
 import {DEL_OP, SET_OP} from './schema/change-log.ts';
 import {ColumnMetadataStore} from './schema/column-metadata.ts';
 import {
@@ -4022,9 +4022,14 @@ describe('replicator/change-processor change-stream logging', () => {
       },
     ]);
 
-    // The replica's own copy of the table is still present but no longer
-    // written; slice 7G drops it.
-    expect(streamRows(replica, '06')).toEqual([]);
+    // The replica does not carry the table at all as of schema v15.
+    expect(
+      replica
+        .prepare(
+          /*sql*/ `SELECT "name" FROM "sqlite_master" WHERE "tbl_name" = ?`,
+        )
+        .all(CHANGE_LOG_STREAM_TABLE),
+    ).toEqual([]);
 
     const state = replica
       .prepare(/*sql*/ `

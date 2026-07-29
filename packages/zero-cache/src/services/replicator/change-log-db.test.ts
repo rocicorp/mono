@@ -3,11 +3,15 @@ import {afterEach, describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {DbFile, expectTableExact} from '../../test/lite.ts';
+import {CREATE_V14_CHANGE_LOG_STREAM} from '../change-source/common/replica-schema.ts';
 import {
   applyChangeLogPragmas,
   CHANGE_LOG_DB_SCHEMA_VERSION,
   CHANGE_LOG_META_TABLE,
+  CHANGE_LOG_STREAM_TABLE,
+  CHANGE_LOG_STREAM_WRITE_TIME_INDEX,
   changeLogFileName,
+  CREATE_CHANGE_LOG_STREAM_SCHEMA,
   deleteChangeLogDB,
   openChangeLogDB,
   openChangeLogDBForWriting,
@@ -15,10 +19,6 @@ import {
   reconcileChangeLog,
   type ReplicaAnchor,
 } from './change-log-db.ts';
-import {
-  CHANGE_LOG_STREAM_TABLE,
-  CREATE_CHANGE_LOG_STREAM_SCHEMA,
-} from './schema/change-log-stream.ts';
 
 const lc = createSilentLogContext();
 
@@ -144,6 +144,98 @@ function createReconciledLog(anchor = ANCHOR): Database {
 }
 
 describe('replicator/change-log-db', () => {
+  describe('schema', () => {
+    test('creates the stream table and partial retention index', () => {
+      using db = new Database(lc, ':memory:');
+      db.exec(CREATE_CHANGE_LOG_STREAM_SCHEMA);
+
+      expect(
+        db.prepare(`PRAGMA table_info("${CHANGE_LOG_STREAM_TABLE}")`).all(),
+      ).toEqual([
+        {
+          cid: 0,
+          name: 'watermark',
+          type: 'TEXT',
+          notnull: 1,
+          dflt_value: null,
+          pk: 1,
+        },
+        {
+          cid: 1,
+          name: 'pos',
+          type: 'INTEGER',
+          notnull: 1,
+          dflt_value: null,
+          pk: 2,
+        },
+        {
+          cid: 2,
+          name: 'change',
+          type: 'TEXT',
+          notnull: 1,
+          dflt_value: null,
+          pk: 0,
+        },
+        {
+          cid: 3,
+          name: 'precommit',
+          type: 'TEXT',
+          notnull: 0,
+          dflt_value: null,
+          pk: 0,
+        },
+        {
+          cid: 4,
+          name: 'writeTimeMs',
+          type: 'INTEGER',
+          notnull: 0,
+          dflt_value: null,
+          pk: 0,
+        },
+      ]);
+
+      expect(
+        db.prepare(`PRAGMA index_list("${CHANGE_LOG_STREAM_TABLE}")`).all(),
+      ).toEqual(
+        expect.arrayContaining([
+          {
+            seq: expect.any(Number),
+            name: CHANGE_LOG_STREAM_WRITE_TIME_INDEX,
+            unique: 0,
+            origin: 'c',
+            partial: 1,
+          },
+        ]),
+      );
+      expect(
+        db
+          .prepare(`PRAGMA index_info("${CHANGE_LOG_STREAM_WRITE_TIME_INDEX}")`)
+          .all(),
+      ).toEqual([
+        {seqno: 0, cid: 4, name: 'writeTimeMs'},
+        {seqno: 1, cid: 0, name: 'watermark'},
+      ]);
+    });
+
+    // The replica carried this same table at schema v14. The two definitions
+    // describe different databases now and are deliberately not shared, so
+    // this is the check that the writer's table is still the one a v14 replica
+    // would have held — i.e. that the split did not silently change the shape.
+    test('matches the shape frozen in replica migration 14', () => {
+      using changeLog = new Database(lc, ':memory:');
+      changeLog.exec(CREATE_CHANGE_LOG_STREAM_SCHEMA);
+      using replica = new Database(lc, ':memory:');
+      replica.exec(CREATE_V14_CHANGE_LOG_STREAM);
+
+      const schema = (db: Database) =>
+        db
+          .prepare(/*sql*/ `SELECT "type", "name", "tbl_name", "sql" FROM "sqlite_master"
+                       ORDER BY "type", "name"`)
+          .all();
+      expect(schema(changeLog)).toEqual(schema(replica));
+    });
+  });
+
   describe('file naming', () => {
     test('the log and its sidecars never collide with the replica', () => {
       const replica = '/data/sync-replica.db';
