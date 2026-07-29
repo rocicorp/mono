@@ -20,17 +20,25 @@ export type CatchupPlan =
       readonly kind: 'too-old';
       readonly minWatermark: string;
       readonly headWatermark: string;
-    };
+    }
+  // The log exists as a file but has no content to serve: the replicator has
+  // not created or reconciled it yet. Slice 7E declines and falls back to PG
+  // catchup; there is no production caller before then.
+  | {readonly kind: 'not-ready'};
 
 type PlanRow = {
-  readonly headWatermark: string;
+  readonly headWatermark: string | null;
   readonly minWatermark: string | null;
-  readonly subscriberAhead: number;
   readonly boundaryExists: number;
 };
 
 type ChangeLogRow = ChangeLogEntry & {
   readonly pos: number;
+};
+
+type PreparedStatements = {
+  readonly plan: Statement;
+  readonly readBatch: Statement;
 };
 
 /**
@@ -48,17 +56,26 @@ export const SQLITE_CHANGE_LOG_BOUNDARY_SQL = /*sql*/ `
   LIMIT 1
 `;
 
-const PLAN_SQL = /*sql*/ `
+/**
+ * The log describes its own bounds; nothing here reads the replica.
+ * `max("watermark")` is the head because a transaction's rows commit atomically,
+ * so the log never ends mid-transaction.
+ *
+ * `min` and `max` are deliberately kept as *separate* scalar subqueries: SQLite
+ * applies its single-aggregate index optimization only when the aggregate is
+ * alone in its query, so `SELECT min(x), max(x) FROM t` degrades to a full scan
+ * while two scalar subqueries are two index seeks. The query-plan test pins
+ * this.
+ *
+ * Exported so that test can cover the production query.
+ */
+export const SQLITE_CHANGE_LOG_PLAN_SQL = /*sql*/ `
   SELECT
-    state."stateVersion" AS "headWatermark",
-    bounds."minWatermark" AS "minWatermark",
-    @fromWatermark > state."stateVersion" AS "subscriberAhead",
+    (SELECT max("watermark") FROM "${CHANGE_LOG_STREAM_TABLE}")
+      AS "headWatermark",
+    (SELECT min("watermark") FROM "${CHANGE_LOG_STREAM_TABLE}")
+      AS "minWatermark",
     coalesce((${SQLITE_CHANGE_LOG_BOUNDARY_SQL}), 0) AS "boundaryExists"
-  FROM "_zero.replicationState" AS state
-  CROSS JOIN (
-    SELECT min("watermark") AS "minWatermark"
-      FROM "${CHANGE_LOG_STREAM_TABLE}"
-  ) AS bounds
 `;
 
 /** Exported so the focused query-plan test covers the production query. */
@@ -75,54 +92,57 @@ export const SQLITE_CHANGE_LOG_READ_BATCH_SQL = /*sql*/ `
   LIMIT ?
 `;
 
+const TABLE_EXISTS_SQL = /*sql*/ `
+  SELECT 1 FROM "sqlite_master" WHERE "type" = 'table' AND "name" = ?
+`;
+
 /**
- * Reads the replica-local change log without retaining a SQLite snapshot while
- * a consumer processes a batch.
+ * Reads the change log without retaining a SQLite snapshot while a consumer
+ * processes a batch.
  *
- * The connection is read-only and therefore keeps the journal mode configured
- * by the replica writer (WAL or WAL2). Callers pin a head with {@link plan}
+ * The log lives in its own database beside the replica
+ * (`changeLogFileName(replicaFile)`), which this reader opens read-only; it
+ * never opens the replica. The connection therefore keeps the journal mode
+ * configured by the change-log writer. Callers pin a head with {@link plan}
  * before passing it to {@link read}.
+ *
+ * A change-streamer can start before the replicator has created the log, so the
+ * stream table may not exist yet. Statements are prepared on first use rather
+ * than in the constructor, and {@link plan} reports `not-ready` until they can
+ * be; a reader constructed too early becomes usable once the writer catches up.
  */
 export class SQLiteChangeLogReader implements Disposable {
   readonly #db: Database;
-  readonly #plan: Statement;
-  readonly #readBatch: Statement;
+  #statements: PreparedStatements | undefined;
   #closed = false;
 
-  constructor(lc: LogContext, replicaFile: string) {
+  constructor(lc: LogContext, changeLogFile: string) {
     this.#db = new Database(
       lc.withContext('component', 'sqlite-change-log-reader'),
-      replicaFile,
+      changeLogFile,
       {readonly: true},
     );
-    this.#plan = this.#db.prepare(PLAN_SQL);
-    this.#readBatch = this.#db.prepare(SQLITE_CHANGE_LOG_READ_BATCH_SQL);
   }
 
   plan(fromWatermark: string): CatchupPlan {
     this.#assertOpen();
-    const row = this.#plan.get<PlanRow | undefined>({fromWatermark});
-    assert(row !== undefined, 'replication state must be initialized');
-    assert(
-      row.minWatermark !== null,
-      'SQLite change log must contain a catchup boundary',
-    );
+    const statements = this.#prepare();
+    if (statements === undefined) {
+      return {kind: 'not-ready'};
+    }
+    const row = statements.plan.get<PlanRow>({fromWatermark});
+    if (row.headWatermark === null || row.minWatermark === null) {
+      return {kind: 'not-ready'};
+    }
+    const {headWatermark, minWatermark} = row;
 
-    if (row.subscriberAhead !== 0) {
-      return {kind: 'ahead', headWatermark: row.headWatermark};
+    if (fromWatermark > headWatermark) {
+      return {kind: 'ahead', headWatermark};
     }
-    if (fromWatermark < row.minWatermark || row.boundaryExists === 0) {
-      return {
-        kind: 'too-old',
-        minWatermark: row.minWatermark,
-        headWatermark: row.headWatermark,
-      };
+    if (fromWatermark < minWatermark || row.boundaryExists === 0) {
+      return {kind: 'too-old', minWatermark, headWatermark};
     }
-    return {
-      kind: 'range',
-      minWatermark: row.minWatermark,
-      headWatermark: row.headWatermark,
-    };
+    return {kind: 'range', minWatermark, headWatermark};
   }
 
   async *read(
@@ -135,6 +155,12 @@ export class SQLiteChangeLogReader implements Disposable {
       Number.isSafeInteger(batchSize) && batchSize > 0,
       'SQLite change log batch size must be a positive safe integer',
     );
+    this.#assertOpen();
+    const statements = this.#prepare();
+    assert(
+      statements !== undefined,
+      'SQLite change log must be ready before it is read',
+    );
 
     let lastWatermark = fromWatermark;
     // The first query must be strictly after the requested transaction. Every
@@ -144,7 +170,7 @@ export class SQLiteChangeLogReader implements Disposable {
 
     while (true) {
       this.#throwIfAborted(signal);
-      const rows = this.#readBatch.all<ChangeLogRow>(
+      const rows = statements.readBatch.all<ChangeLogRow>(
         lastWatermark,
         lastPos,
         throughWatermark,
@@ -169,6 +195,11 @@ export class SQLiteChangeLogReader implements Disposable {
       yield changes;
     }
 
+    // `throughWatermark` was pinned from `max("watermark")` of this same table,
+    // so reaching it no longer depends on the log agreeing with the replica's
+    // `_zero.replicationState`, which is what this assertion used to guard.
+    // What remains is a concurrent purge of the head transaction, which the
+    // purge policy (never past the latest durable transaction) does not do.
     if (fromWatermark !== throughWatermark) {
       assert(
         lastWatermark === throughWatermark && lastTag === 'commit',
@@ -188,6 +219,29 @@ export class SQLiteChangeLogReader implements Disposable {
 
   [Symbol.dispose](): void {
     this.close();
+  }
+
+  /**
+   * Prepares the statements once the stream table exists, memoizing them.
+   * Returns `undefined` while the log has not been created, which is a normal
+   * startup state rather than an error.
+   */
+  #prepare(): PreparedStatements | undefined {
+    if (this.#statements === undefined && this.#streamTableExists()) {
+      this.#statements = {
+        plan: this.#db.prepare(SQLITE_CHANGE_LOG_PLAN_SQL),
+        readBatch: this.#db.prepare(SQLITE_CHANGE_LOG_READ_BATCH_SQL),
+      };
+    }
+    return this.#statements;
+  }
+
+  #streamTableExists(): boolean {
+    return (
+      this.#db
+        .prepare(TABLE_EXISTS_SQL)
+        .get<{1: number} | undefined>(CHANGE_LOG_STREAM_TABLE) !== undefined
+    );
   }
 
   #assertOpen(): void {

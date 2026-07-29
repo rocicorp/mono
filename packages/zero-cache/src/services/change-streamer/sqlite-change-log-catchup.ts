@@ -346,7 +346,7 @@ export class SQLiteChangeLogCatchup implements Disposable {
     requiredHead: string,
     deadline: number,
     signal: AbortSignal,
-  ): Promise<CatchupPlan> {
+  ): Promise<Exclude<CatchupPlan, {kind: 'not-ready'}>> {
     // Race backlog growth once around the whole polling loop. Attaching the
     // same unresolved promise to every per-poll race would retain one reaction
     // per iteration until the subscriber's backlog eventually filled.
@@ -364,14 +364,20 @@ export class SQLiteChangeLogCatchup implements Disposable {
         while (true) {
           this.#throwIfAborted(barrier.signal);
           const plan = this.#reader.plan(subscriber.watermark);
-          observedHead = plan.headWatermark;
-          if (plan.headWatermark >= requiredHead) {
-            return plan;
+          // A not-ready log has no head to compare, so it can never satisfy
+          // the required head: keep waiting for the writer to create and
+          // reconcile it, and let the barrier deadline end the subscription
+          // cleanly for a retry. Slice 7E declines these before this point.
+          if (plan.kind !== 'not-ready') {
+            observedHead = plan.headWatermark;
+            if (plan.headWatermark >= requiredHead) {
+              return plan;
+            }
           }
           const remaining = deadline - this.#now();
           if (remaining <= 0) {
             throw new SQLiteChangeLogBarrierTimeoutError(
-              `timed out waiting for SQLite head ${plan.headWatermark} to ` +
+              `timed out waiting for SQLite head ${observedHead} to ` +
                 `reach required head ${requiredHead}`,
             );
           }
