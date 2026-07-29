@@ -137,6 +137,7 @@ export default async function runWorker(
               },
               context,
               replicationLag.reportIntervalMs,
+              purgeLock,
             )
           : await initializeCustomChangeSource(
               lc,
