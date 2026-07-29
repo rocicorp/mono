@@ -12,6 +12,7 @@ import {
   logSQLiteCorruptionDiagnostics,
 } from '../../db/sqlite-corruption.ts';
 import {StatementRunner} from '../../db/statements.ts';
+import {deleteChangeLogDB} from '../replicator/change-log-db.ts';
 import {getSubscriptionState} from '../replicator/schema/replication-state.ts';
 import {
   litestreamBackupListDuration,
@@ -220,10 +221,23 @@ export async function tryRestore(
       result = 'invalid_replica';
       lc.info?.(`Deleting local replica and retrying restore`);
       deleteLiteDB(replicaFile);
+      deleteChangeLogDB(replicaFile);
       return {restored: false, backupURL, result};
     }
     result = 'success';
     if (!replicaExistedBeforeRestore) {
+      // This restore materialized the replica file, so any change log beside it
+      // was written against a replica that is no longer there. Reconciliation
+      // is the safety net — a restored replica keeps its replicaVersion, so the
+      // rule falls through to truncate-or-reseed on head mismatch — but the log
+      // is a cache and deleting it here is the explicit statement that nothing
+      // in it survives the restore.
+      //
+      // A restore that reuses an existing replica (`-if-db-not-exists` made it
+      // a no-op) deliberately keeps the log: that is the process-restart path,
+      // where the log is still the one written beside this exact replica and
+      // discarding it would cost every reconnecting subscriber a `too-old`.
+      deleteChangeLogDB(replicaFile);
       litestreamRestoredDbBytes().add(statSync(replicaFile).size, {
         ...attrs,
         result: 'success',

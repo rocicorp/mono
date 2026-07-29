@@ -7,16 +7,29 @@
  *
  * Because it is disposable, it has no migration framework. Any inconsistency
  * with the replica — a schema change, a leftover file from a different replica,
- * a gap left by a crash or by running with the writer disabled — is resolved by
- * {@link reconcileChangeLog}, which either truncates the offending rows or wipes
- * and reseeds the log at the replica's current head. The worst outcome is a
+ * a gap left by a crash or by running with the writer disabled, a corrupt file
+ * — is resolved by {@link reconcileChangeLog} and
+ * {@link openChangeLogDBForWriting}, which truncate the offending rows or wipe
+ * and reseed the log at the replica's current head. The worst outcome is a
  * `too-old` for a lagging subscriber; a silently delivered gap is not reachable.
+ *
+ * Disk sizing: a task that writes the log needs room for the replica *plus* one
+ * retention window of the change stream — the log's main file, its wal2
+ * sidecars, and pages a purge has freed but not yet reused. Nothing purges the
+ * log yet (that is parent slice 8), so with the writer enabled it currently
+ * grows with the entire change stream since its last reseed, which is one more
+ * reason `sqliteChangeLogMode` defaults to `off`. The log is excluded from the
+ * litestream backup, so this is local disk only and never S3.
  */
 
 import type {LogContext} from '@rocicorp/logger';
 import {assert} from '../../../../shared/src/asserts.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {deleteLiteDB} from '../../db/delete-lite-db.ts';
+import {
+  isSQLiteCorruption,
+  logSQLiteCorruptionDiagnostics,
+} from '../../db/sqlite-corruption.ts';
 import {
   CHANGE_LOG_STREAM_TABLE,
   CREATE_CHANGE_LOG_STREAM_SCHEMA,
@@ -145,6 +158,66 @@ export function applyChangeLogPragmas(db: Database): void {
   db.pragma('analysis_limit = 1000');
   db.pragma('journal_mode = wal2');
   db.pragma('synchronous = NORMAL');
+}
+
+/**
+ * Opens the change-log database for the writer, applies its pragmas, and
+ * reconciles it against `anchor`, returning the handle and what reconciliation
+ * had to do.
+ *
+ * Corruption is answered with a rebuild rather than an escalation, which is a
+ * deliberate divergence from how the replica's own corruption is handled. A
+ * corrupt replica is a lost source of truth, so it ends in a restore or an
+ * auto-reset; the change log holds nothing that is not either already in the
+ * replica's litestream backup or re-derivable from the upstream slot, so the
+ * entire response is to delete the file and seed a new one at the replica head.
+ * The cost is one retention window of catchup — reconnecting subscribers below
+ * the head get `too-old` — which is what every other {@link ReseedReason}
+ * costs. Failing startup instead would take the replica down with the cache.
+ *
+ * Only corruption is rebuilt through. Anything else (a bad path, a permissions
+ * error, a full disk) is a problem with the environment rather than with the
+ * file's contents, and deleting a database in response would destroy state
+ * without fixing it.
+ */
+export function openChangeLogDBForWriting(
+  lc: LogContext,
+  replicaFile: string,
+  anchor: ReplicaAnchor,
+): {db: Database; result: ReconcileResult} {
+  try {
+    return openAndReconcile(lc, replicaFile, anchor);
+  } catch (e) {
+    if (!isSQLiteCorruption(e)) {
+      throw e;
+    }
+    const file = changeLogFileName(replicaFile);
+    logSQLiteCorruptionDiagnostics(lc, 'change-log', file, e);
+    lc.error?.('rebuilding the corrupt SQLite change log', {
+      sqliteChangeLog: {file},
+    });
+    deleteChangeLogDB(replicaFile);
+    // Reconciles a database that does not exist, i.e. reseeds with reason
+    // 'created'. A second failure is the environment's, not the file's.
+    return openAndReconcile(lc, replicaFile, anchor);
+  }
+}
+
+function openAndReconcile(
+  lc: LogContext,
+  replicaFile: string,
+  anchor: ReplicaAnchor,
+): {db: Database; result: ReconcileResult} {
+  const db = openChangeLogDB(lc, replicaFile, {readonly: false});
+  try {
+    applyChangeLogPragmas(db);
+    return {db, result: reconcileChangeLog(lc, db, anchor)};
+  } catch (e) {
+    // The caller never sees this handle, so it closes here or leaks — and it
+    // must be closed before the corruption path deletes the file.
+    db.close();
+    throw e;
+  }
 }
 
 export type ReseedReason =
