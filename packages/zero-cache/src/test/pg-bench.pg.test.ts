@@ -58,15 +58,16 @@ for (const {fixture, table, indexes, id} of [
           lc,
           `${fixture.fixture}-bench-fixture`,
           replicaFile.path,
-          (log, tx) =>
-            initialSync(
+          async (log, tx) => {
+            await initialSync(
               log,
               shard,
               tx,
               getConnectionURI(upstream),
               {tableCopyWorkers: 2},
               {test: 'pg-bench-fixture-validation'},
-            ),
+            );
+          },
         );
 
         expect(

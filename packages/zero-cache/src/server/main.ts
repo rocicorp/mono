@@ -13,7 +13,6 @@ import {
   runUntilKilled,
   type WorkerType,
 } from '../services/life-cycle.ts';
-import {startReplicaBackupProcess} from '../services/litestream/commands.ts';
 import {
   childWorker,
   parentWorker,
@@ -103,7 +102,6 @@ export default async function runWorker(
   const {
     taskID,
     changeStreamer: {mode: changeStreamerMode, uri: changeStreamerURI},
-    replica,
     litestream,
   } = config;
   const runChangeStreamer =
@@ -129,31 +127,9 @@ export default async function runWorker(
       'message',
       changeStreamerStarted,
     );
-
     // Wait for the change-streamer to be ready to guarantee that a replica
     // file is present.
     await changeStreamerReady;
-
-    if (litestream.backupURL) {
-      // Start a backup replicator and corresponding litestream backup process.
-      const {promise: backupReady, resolve} = resolver();
-      const mode: ReplicaFileMode = 'backup';
-      loadWorker(REPLICATOR_URL, 'supporting', mode, mode).once(
-        // Wait for the Replicator's first message (i.e. "ready") before starting
-        // litestream backup in order to avoid contending on the lock when the
-        // replicator first prepares the db file.
-        'message',
-        () => {
-          processes.addSubprocess(
-            startReplicaBackupProcess(lc, litestream, replica.file),
-            'supporting',
-            'litestream',
-          );
-          resolve();
-        },
-      );
-      await backupReady;
-    }
   }
 
   if (numSyncers > 0) {
@@ -228,9 +204,9 @@ export default async function runWorker(
     );
   } catch (err) {
     processes.logErrorAndExit(err, 'dispatcher');
+  } finally {
+    await processes.shutdown();
   }
-
-  await processes.done();
 }
 
 if (!singleProcessMode()) {

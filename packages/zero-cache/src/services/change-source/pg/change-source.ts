@@ -50,7 +50,6 @@ import type {Sink} from '../../../types/streams.ts';
 import {AutoResetSignal} from '../../change-streamer/schema/tables.ts';
 import {
   getSubscriptionStateAndContext,
-  type SubscriptionState,
   type SubscriptionStateAndContext,
 } from '../../replicator/schema/replication-state.ts';
 import type {ChangeSource, ChangeStream} from '../change-source.ts';
@@ -59,6 +58,11 @@ import {
   ChangeStreamMultiplexer,
   type Listener,
 } from '../common/change-stream-multiplexer.ts';
+import {
+  restoreReplica,
+  type InitializeResult,
+  type RestoreOptions,
+} from '../common/replica-restore.ts';
 import {initReplica} from '../common/replica-schema.ts';
 import type {
   BackfillRequest,
@@ -94,7 +98,7 @@ import {fromBigInt, toBigInt, toStateVersionString, type LSN} from './lsn.ts';
 import {registerReplicationSlotHealthMetrics} from './replication-slot-health.ts';
 import {dropOldReplicasAndSlots} from './replication-slots.ts';
 import {replicationEventSchema, type ReplicationEvent} from './schema/ddl.ts';
-import {updateShardSchema} from './schema/init.ts';
+import {ensureShardSchema} from './schema/init.ts';
 import {
   getPublicationInfo,
   type PublishedSchema,
@@ -102,6 +106,7 @@ import {
 } from './schema/published.ts';
 import {
   dropShard,
+  getActiveReplicas,
   getInternalShardConfig,
   getReplicaAtVersion,
   internalPublicationPrefix,
@@ -109,6 +114,7 @@ import {
   replicationSlotPrefix,
   type InternalShardConfig,
   type Replica,
+  type ReplicaState,
 } from './schema/shard.ts';
 import {validate} from './schema/validation.ts';
 
@@ -131,32 +137,50 @@ export async function initializePostgresChangeSource(
   syncOptions: InitialSyncOptions,
   context: ServerContext,
   lagReportIntervalMs = 0,
+  restoreOptions: RestoreOptions = {},
   purgeLock?: PurgeLock | null,
-): Promise<{subscriptionState: SubscriptionState; changeSource: ChangeSource}> {
-  await initReplica(
-    lc,
-    `replica-${shard.appID}-${shard.shardNum}`,
-    replicaDbFile,
-    async (log, tx) => {
-      // In RMv1, the purge lock on the change-db must be released before performing
-      // initial sync; if the change-db and upstream are the same db, a lock-holding
-      // transaction will prevent a replication slot from being created. This awkward
-      // dependency can go away with RMv2.
-      void purgeLock?.release();
-      await initialSync(log, shard, tx, upstreamURI, syncOptions, context);
-    },
-  );
-
-  const replica = new Database(lc, replicaDbFile);
-  const subscriptionState = getSubscriptionStateAndContext(
-    new StatementRunner(replica),
-  );
-  replica.close();
-
-  // Check that upstream is properly setup, and throw an AutoReset to re-run
-  // initial sync if not.
+): Promise<InitializeResult> {
   const db = await connectPgClient(lc, upstreamURI, 'change-source-init');
   try {
+    await ensureShardSchema(lc, db, shard);
+
+    let replicaState = await selectAndRestoreReplica(
+      lc,
+      db,
+      shard,
+      replicaDbFile,
+      restoreOptions,
+    );
+
+    await initReplica(
+      lc,
+      `replica-${shard.appID}-${shard.shardNum}`,
+      replicaDbFile,
+      async (log, tx) => {
+        // In RMv1, the purge lock on the change-db must be released before performing
+        // initial sync; if the change-db and upstream are the same db, a lock-holding
+        // transaction will prevent a replication slot from being created. This awkward
+        // dependency can go away with RMv2.
+        void purgeLock?.release();
+        replicaState = await initialSync(
+          log,
+          shard,
+          tx,
+          upstreamURI,
+          syncOptions,
+          context,
+        );
+      },
+    );
+
+    const replica = new Database(lc, replicaDbFile);
+    const subscriptionState = getSubscriptionStateAndContext(
+      new StatementRunner(replica),
+    );
+    replica.close();
+
+    // Check that upstream is properly setup, and throw an AutoReset to re-run
+    // initial sync if not.
     const upstreamReplica = await checkAndUpdateUpstream(
       lc,
       db,
@@ -174,10 +198,56 @@ export async function initializePostgresChangeSource(
       syncOptions.textCopy,
     );
 
-    return {subscriptionState, changeSource};
+    const destinationBackupURL =
+      replicaState?.backupPath && restoreOptions.litestream?.backupURL
+        ? new URL(
+            replicaState.backupPath,
+            restoreOptions.litestream.backupURL,
+          ).toString()
+        : // For legacy RMv1 replicas (on litestream-v3), backup to the same location
+          restoreOptions.litestream?.backupURL;
+
+    return {subscriptionState, changeSource, destinationBackupURL};
   } finally {
     await db.end();
   }
+}
+
+async function selectAndRestoreReplica(
+  lc: LogContext,
+  sql: PostgresDB,
+  shard: ShardID,
+  replicaFile: string,
+  {litestream, constraints}: RestoreOptions,
+): Promise<ReplicaState | undefined> {
+  if (litestream?.backupURL) {
+    const {backupURL: backupBaseURL} = litestream;
+    const replicas = (await getActiveReplicas(lc, sql, shard)).filter(
+      // filter to the generation specified by the constraints, if present
+      ({generation}) =>
+        generation === (constraints?.replicaVersion ?? generation),
+    );
+    if (replicas.length === 0) {
+      lc.info?.(`no suitable replicas to restore from`, {replicas});
+      return undefined;
+    }
+
+    const [replica] = replicas;
+    const {slot, backupPath, confirmedFlushLsn} = replica;
+    const backupURL = new URL(backupPath ?? '', backupBaseURL).toString();
+    lc.info?.(
+      `restoring replica from ${backupURL} (${slot}@${confirmedFlushLsn})`,
+      {replicas},
+    );
+    await restoreReplica(
+      lc,
+      {...litestream, backupURL}, // includes the replica's backup sub-path
+      replicaFile,
+      constraints,
+    );
+    return replica;
+  }
+  return undefined;
 }
 
 async function checkAndUpdateUpstream(
@@ -190,9 +260,6 @@ async function checkAndUpdateUpstream(
     initialSyncContext,
   }: SubscriptionStateAndContext,
 ) {
-  // Perform any shard schema updates
-  await updateShardSchema(lc, sql, shard, replicaVersion);
-
   const upstreamReplica = await getReplicaAtVersion(
     lc,
     sql,
@@ -502,7 +569,7 @@ class PostgresChangeSource implements ChangeSource {
 
     this.#lc.info?.(
       `started replication stream@${slot} from ${clientWatermark} (replicaVersion: ${
-        this.#replica.version
+        this.#replica.generation
       })`,
     );
 
@@ -518,11 +585,11 @@ class PostgresChangeSource implements ChangeSource {
         this.#lc,
         this.#db,
         this.#shard,
-        this.#replica.version,
+        this.#replica.generation,
       );
       if (replica) {
         this.#lc.info?.(
-          `Shutdown signal from replica@${this.#replica.version}: ${stringify(replica.subscriberContext)}`,
+          `Shutdown signal from replica@${this.#replica.generation}: ${stringify(replica.subscriberContext)}`,
         );
       }
     } catch (e) {
@@ -547,7 +614,7 @@ class PostgresChangeSource implements ChangeSource {
     if (result.length === 0) {
       const slotExpression = replicationSlotPrefix(this.#shard);
       const replicas = await sql`
-        SELECT id, rank, slot, version, "initialSyncContext", "subscriberContext" 
+        SELECT id, rank, slot, generation, "initialSyncContext", "subscriberContext" 
           FROM ${sql(replicasTable)} ORDER BY rank DESC`;
       const slots = await sql`
         SELECT slot_name as slot, active, active_pid as pid

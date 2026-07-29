@@ -122,8 +122,8 @@ describe('change-streamer/pg/sync-schema', () => {
           createSilentLogContext(),
           'test',
           replicaFile.path,
-          (log, tx) =>
-            initialSync(
+          async (log, tx) => {
+            await initialSync(
               log,
               shard,
               tx,
@@ -132,7 +132,8 @@ describe('change-streamer/pg/sync-schema', () => {
                 tableCopyWorkers: 5,
               },
               TEST_CONTEXT,
-            ),
+            );
+          },
         );
 
         await expectTables(upstream, c.upstreamPostState);

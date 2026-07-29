@@ -201,6 +201,8 @@ export function shardSetup(
     "rank"               BIGSERIAL,
     "slot"               TEXT NOT NULL,
     "version"            TEXT NOT NULL,
+    "generation"         TEXT,  -- to replace version, NULL-able in the interim
+    "backupPath"         TEXT,  -- subpath within the litestream backup URL
     "initialSchema"      JSON,  -- set after initial sync
     "initialSyncContext" JSON,
     "subscriberContext"  JSON
@@ -229,17 +231,43 @@ const internalShardConfigSchema = v.object({
 
 export type InternalShardConfig = v.Infer<typeof internalShardConfigSchema>;
 
-const replicaSchema = internalShardConfigSchema.extend({
+const replicaInfoSchema = v.object({
   id: v.string(),
   rank: v.bigint(),
   slot: v.string(),
   version: v.string(),
+  generation: v.string().nullable(),
+  backupPath: v.string().nullable(),
+});
+
+const fullReplicaRowSchema = replicaInfoSchema.extend({
   initialSchema: publishedSchema,
   initialSyncContext: jsonObjectSchema.nullable(),
   subscriberContext: jsonObjectSchema.nullable(),
 });
 
+const replicaSchema = internalShardConfigSchema
+  .extend(fullReplicaRowSchema.shape)
+  .map(replica => {
+    const {version, generation, ...r} = replica;
+    return {...r, generation: generation ?? version};
+  });
+
 export type Replica = v.Infer<typeof replicaSchema>;
+
+const replicationSlotStateSchema = v.object({
+  active: v.boolean(),
+  confirmedFlushLsn: v.string().nullable(),
+});
+
+const replicaStateSchema = replicaInfoSchema
+  .extend(replicationSlotStateSchema.shape)
+  .map(replica => {
+    const {version, generation, ...r} = replica;
+    return {...r, generation: generation ?? version};
+  });
+
+export type ReplicaState = v.Infer<typeof replicaStateSchema>;
 
 // triggerSetup is run separately in a sub-transaction (i.e. SAVEPOINT) so
 // that a failure (e.g. due to lack of superuser permissions) can be handled
@@ -269,7 +297,13 @@ export async function createReplica(
   replicaVersion: string,
 ) {
   const schema = upstreamSchema(shard);
-  const values = {id, slot, version: replicaVersion};
+  const values: Partial<v.Infer<typeof fullReplicaRowSchema>> = {
+    id,
+    slot,
+    version: replicaVersion,
+    generation: replicaVersion,
+    backupPath: id,
+  };
   await sql`INSERT INTO ${sql(schema)}.replicas ${sql(values)}`;
 }
 
@@ -288,7 +322,7 @@ export async function initReplica(
 }
 
 /**
- * Gets the latest initialized replica at the specified version.
+ * Gets the latest (by rank) initialized replica at the specified version.
  */
 export async function getReplicaAtVersion(
   lc: LogContext,
@@ -304,6 +338,8 @@ export async function getReplicaAtVersion(
       replicas."rank",
       replicas."slot",
       replicas."version",
+      replicas."generation",
+      replicas."backupPath",
       replicas."initialSchema",
       replicas."initialSyncContext",
       replicas."subscriberContext",
@@ -326,6 +362,55 @@ export async function getReplicaAtVersion(
     return null;
   }
   return v.parse(result[0], replicaSchema, 'passthrough');
+}
+
+export async function getActiveReplicas(
+  lc: LogContext,
+  sql: PostgresDB,
+  shard: ShardID,
+): Promise<ReplicaState[]> {
+  const schema = sql(upstreamSchema(shard));
+  const results = await sql`
+    SELECT
+      replicas."id",
+      replicas."rank",
+      replicas."slot",
+      replicas."version",
+      replicas."generation",
+      replicas."backupPath",
+      slots."active",
+      slots."confirmed_flush_lsn" as "confirmedFlushLsn"
+    FROM ${schema}.replicas JOIN pg_replication_slots slots ON slot = slot_name
+      WHERE "initialSyncContext" IS NOT NULL
+      ORDER BY generation DESC, confirmed_flush_lsn DESC;
+  `;
+  const replicas = v.parse(results, v.array(replicaStateSchema), 'passthrough');
+  lc.info?.(`current replicas`, {replicas});
+  return replicas;
+}
+
+export async function getReplicaState(
+  sql: PostgresDB,
+  shard: ShardID,
+  id: string,
+): Promise<ReplicaState | null> {
+  const schema = sql(upstreamSchema(shard));
+  const results = await sql`
+    SELECT
+      replicas."id",
+      replicas."rank",
+      replicas."slot",
+      replicas."version",
+      replicas."generation",
+      replicas."backupPath",
+      slots."active",
+      slots."confirmed_flush_lsn" as "confirmedFlushLsn"
+    FROM ${schema}.replicas JOIN pg_replication_slots slots ON slot = slot_name
+      WHERE "id" = ${id};
+  `;
+  return results.length
+    ? v.parse(results[0], replicaStateSchema, 'passthrough')
+    : null;
 }
 
 export async function getInternalShardConfig(

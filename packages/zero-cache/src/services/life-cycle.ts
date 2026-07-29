@@ -159,8 +159,11 @@ export class ProcessManager {
     };
   }
 
-  done() {
-    return this.#runningState.stopped();
+  async shutdown() {
+    if (this.#drainStart === 0) {
+      this.#startDrain(GRACEFUL_SHUTDOWN[0]);
+    }
+    await this.#runningState.stopped();
   }
 
   #exit(code: number) {

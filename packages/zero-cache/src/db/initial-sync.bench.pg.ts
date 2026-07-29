@@ -137,15 +137,16 @@ describe('zero-cache/initial-sync throughput', () => {
           lc,
           'initial-sync-bench',
           replicaDbFile.path,
-          (log, tx) =>
-            initialSync(
+          async (log, tx) => {
+            await initialSync(
               log,
               shard,
               tx,
               getConnectionURI(upstream),
               {tableCopyWorkers: profile.tableCopyWorkers},
               {bench: 'initial-sync-throughput', profile: profileName},
-            ),
+            );
+          },
         );
         const elapsed = performance.now() - start;
 

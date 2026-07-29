@@ -10,14 +10,26 @@ import {
   litestreamRestoreMetricAttrs,
   litestreamRestoreRuns,
 } from '../../litestream/metrics.ts';
+import type {SubscriptionState} from '../../replicator/schema/replication-state.ts';
+import type {ChangeSource} from '../change-source.ts';
 
-/** @returns `true` if the replica was restored, `false` if not found */
+export type RestoreOptions = {
+  litestream?: LitestreamConfig;
+  constraints?: ReplicaConstraints | undefined;
+};
+
+export type InitializeResult = {
+  subscriptionState: SubscriptionState;
+  changeSource: ChangeSource;
+  destinationBackupURL: string | undefined;
+};
+
 export async function restoreReplica(
   lc: LogContext,
   config: LitestreamConfig,
   replicaFile: string,
-  replicaConstraints: ReplicaConstraints,
-): Promise<boolean> {
+  replicaConstraints: ReplicaConstraints | undefined,
+): Promise<void> {
   const start = performance.now();
   let result: RestoreResult | undefined;
   try {
@@ -29,7 +41,11 @@ export async function restoreReplica(
       'replication_manager',
     );
     result = attempt.result;
-    return attempt.restored;
+  } catch (e) {
+    lc.error?.(
+      `error restoring backup. resyncing the replica: ${String(e)}`,
+      e,
+    );
   } finally {
     const attrs = litestreamRestoreMetricAttrs(config, 'replication_manager');
     const labels = {...attrs, result: result ?? 'error'};

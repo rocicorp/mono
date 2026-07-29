@@ -22,9 +22,13 @@ import {
   createReplicationStateTables,
   getSubscriptionState,
   initReplicationState,
-  type SubscriptionState,
 } from '../../replicator/schema/replication-state.ts';
 import type {ChangeSource, ChangeStream} from '../change-source.ts';
+import {
+  restoreReplica,
+  type InitializeResult,
+  type RestoreOptions,
+} from '../common/replica-restore.ts';
 import {initReplica} from '../common/replica-schema.ts';
 import {changeStreamMessageSchema} from '../protocol/current/downstream.ts';
 import {
@@ -45,7 +49,20 @@ export async function initializeCustomChangeSource(
   shard: ShardConfig,
   replicaDbFile: string,
   context: ServerContext,
-): Promise<{subscriptionState: SubscriptionState; changeSource: ChangeSource}> {
+  {litestream, constraints}: RestoreOptions = {},
+): Promise<InitializeResult> {
+  // At the moment, the custom change-source implementation does not support
+  // per-RM backups (and thus does not support litestream v5 or RMv2). The
+  // current proposal to support this without requiring additional upstream
+  // state tracking is to:
+  // - use litestream to (ltx) query a fixed pool of subfolders within the
+  //   backupURL (e.g. /a/, /b/, /c/, /d/, /e/)
+  // - restore from the subfolder with the latest ltx file
+  // - backup to the subfolder with the oldest (or non-existent) ltx file
+  if (litestream?.backupURL) {
+    await restoreReplica(lc, litestream, replicaDbFile, constraints);
+  }
+
   await initReplica(
     lc,
     `replica-${shard.appID}-${shard.shardNum}`,
@@ -75,7 +92,11 @@ export async function initializeCustomChangeSource(
     subscriptionState,
   );
 
-  return {subscriptionState, changeSource};
+  return {
+    subscriptionState,
+    changeSource,
+    destinationBackupURL: litestream?.backupURL,
+  };
 }
 
 class CustomChangeSource implements ChangeSource {
