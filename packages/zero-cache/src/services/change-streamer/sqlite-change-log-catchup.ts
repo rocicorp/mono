@@ -367,7 +367,9 @@ export class SQLiteChangeLogCatchup implements Disposable {
           // A not-ready log has no head to compare, so it can never satisfy
           // the required head: keep waiting for the writer to create and
           // reconcile it, and let the barrier deadline end the subscription
-          // cleanly for a retry. Slice 7E declines these before this point.
+          // cleanly for a retry. Selection declines a not-ready log before a
+          // subscriber gets here, and neither purging nor reconciliation can
+          // empty a log that had content, so this is a belt-and-braces path.
           if (plan.kind !== 'not-ready') {
             observedHead = plan.headWatermark;
             if (plan.headWatermark >= requiredHead) {

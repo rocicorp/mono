@@ -79,6 +79,12 @@ export type SQLiteCatchupOptions = {
   shouldUse?: ((ctx: SubscriberContext) => boolean) | undefined;
   /** Slice 9 supplies the writer-serialized purge guard. */
   cleanupGuard?: SQLiteChangeLogCleanupGuard | undefined;
+  /**
+   * How long the change log may be unavailable before declining to serve from
+   * it is reported as a warning rather than a debug line. Defaults to
+   * {@link DEFAULT_CHANGE_LOG_UNAVAILABLE_WARN_THRESHOLD_MS}.
+   */
+  notReadyWarnThresholdMs?: number | undefined;
 };
 
 export type TuningOptions = StorerOptions & {
@@ -134,6 +140,14 @@ export async function initializeStreamer(
 }
 
 const REPLICATION_STATUS_ERROR_DELAY_THRESHOLD_MS = 5000;
+
+// How long the change log may be unavailable before declining to serve from it
+// stops looking like normal startup ordering. A change-streamer routinely
+// starts before the replicator has created and reconciled the log, so early
+// declines are expected. Still declining a minute later means the log is not
+// being written at all -- `sqliteChangeLogMode=off`, a replicator crash loop,
+// or a path mismatch -- which is worth surfacing.
+const DEFAULT_CHANGE_LOG_UNAVAILABLE_WARN_THRESHOLD_MS = 60_000;
 
 /**
  * Upstream-agnostic dispatch of messages in a {@link ChangeStreamMessage} to a
@@ -315,6 +329,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
   #purgeLock: PurgeLock | null;
   #stream: ChangeStream | undefined;
   #sqliteCatchup: SQLiteChangeLogCatchup | undefined;
+  #changeLogUnavailableSince: number | undefined;
   #lastForwardedCommitWatermark: string | undefined;
   #currentTransactionCompletion:
     | Resolver<ForwardedTransactionCompletion>
@@ -775,20 +790,95 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     if (!opts.shouldUse?.(ctx)) {
       return undefined;
     }
-    if (!this.#sqliteCatchup) {
-      this.#sqliteCatchup = new SQLiteChangeLogCatchup(
-        this.#lc,
-        this.#forwarder,
-        new SQLiteChangeLogReader(this.#lc, opts.changeLogFile),
-        {
-          batchSize: opts.readBatchRows,
-          barrierTimeoutMs: opts.barrierTimeoutMs,
-          barrierPollIntervalMs: opts.barrierPollIntervalMs,
-          cleanupGuard: opts.cleanupGuard,
-        },
+    return this.#sqliteCatchup ?? this.#openSQLiteCatchup(opts, ctx);
+  }
+
+  /**
+   * Opens the change log and, if it can serve, wraps it in the coordinator that
+   * subsequent subscriptions reuse.
+   *
+   * The change-streamer and the replicator that writes the log start
+   * independently, so the log may not exist yet, may exist without content, or
+   * may be unreadable. None of those can be allowed to fail a subscription:
+   * this is the last point at which PG catchup is still available -- past
+   * `Forwarder.add()` the subscriber is committed to SQLite -- so each declines
+   * here instead. Neither the failure nor the reader is retained, so a later
+   * subscription retries from scratch.
+   */
+  #openSQLiteCatchup(
+    opts: SQLiteCatchupOptions,
+    ctx: SubscriberContext,
+  ): SQLiteChangeLogCatchup | undefined {
+    let reader: SQLiteChangeLogReader | undefined;
+    try {
+      reader = new SQLiteChangeLogReader(this.#lc, opts.changeLogFile);
+      // `plan()` doubles as the readiness check: it reports `not-ready` when
+      // the writer has not created or seeded the stream table. The barrier
+      // cannot wait its way out of that, since a log with no head can never
+      // reach the required one.
+      if (reader.plan(ctx.watermark).kind === 'not-ready') {
+        reader.close();
+        this.#declineSQLiteCatchup(
+          ctx,
+          opts,
+          `${opts.changeLogFile} has no changes to serve yet`,
+        );
+        return undefined;
+      }
+    } catch (e) {
+      // An absent file is the common case, since a readonly handle cannot
+      // create one. A corrupt or truncated file lands here too, and is equally
+      // not a reason to fail the subscription.
+      reader?.close();
+      this.#declineSQLiteCatchup(
+        ctx,
+        opts,
+        `cannot read ${opts.changeLogFile}`,
+        e,
       );
+      return undefined;
     }
+    this.#changeLogUnavailableSince = undefined;
+    // Readiness is checked once, on the way to the cached coordinator: a log
+    // with content keeps it. Purging preserves the latest transaction as a
+    // catchup boundary, and `reconcileChangeLog` reseeds inside a single
+    // transaction, so a reader never observes an emptied log.
+    this.#sqliteCatchup = new SQLiteChangeLogCatchup(
+      this.#lc,
+      this.#forwarder,
+      reader,
+      {
+        batchSize: opts.readBatchRows,
+        barrierTimeoutMs: opts.barrierTimeoutMs,
+        barrierPollIntervalMs: opts.barrierPollIntervalMs,
+        cleanupGuard: opts.cleanupGuard,
+      },
+    );
     return this.#sqliteCatchup;
+  }
+
+  /**
+   * Reports falling back to PG catchup, tracking how long the log has been
+   * unavailable so that a change-streamer that merely started before its
+   * replicator does not look like an incident.
+   */
+  #declineSQLiteCatchup(
+    ctx: SubscriberContext,
+    opts: SQLiteCatchupOptions,
+    reason: string,
+    error?: unknown,
+  ): void {
+    const now = Date.now();
+    this.#changeLogUnavailableSince ??= now;
+    const unavailableMs = now - this.#changeLogUnavailableSince;
+    const threshold =
+      opts.notReadyWarnThresholdMs ??
+      DEFAULT_CHANGE_LOG_UNAVAILABLE_WARN_THRESHOLD_MS;
+    this.#lc[unavailableMs >= threshold ? 'warn' : 'debug']?.(
+      `serving ${ctx.id} from PG catchup: ${reason} ` +
+        `(unavailable for ${unavailableMs} ms)`,
+      ...(error === undefined ? [] : [error]),
+    );
   }
 }
 
