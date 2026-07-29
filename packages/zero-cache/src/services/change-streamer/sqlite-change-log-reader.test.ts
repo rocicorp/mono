@@ -8,6 +8,7 @@ import {StatementRunner} from '../../db/statements.ts';
 import {DbFile} from '../../test/lite.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
 import {
+  CHANGE_LOG_STREAM_TABLE,
   changeLogFileName,
   deleteChangeLogDB,
   openChangeLogDB,
@@ -15,7 +16,6 @@ import {
   type ReplicaAnchor,
 } from '../replicator/change-log-db.ts';
 import {ChangeLogStreamWriter} from '../replicator/change-log-stream-writer.ts';
-import {CHANGE_LOG_STREAM_TABLE} from '../replicator/schema/change-log-stream.ts';
 import {serializeChangeStreamData} from './change-log-codec.ts';
 import type {WatermarkedChange} from './change-streamer.ts';
 import {

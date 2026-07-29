@@ -6,15 +6,16 @@ import {
   expectMatchingObjectsInTables,
   initDB as initLiteDB,
 } from '../../../test/lite.ts';
-import {CREATE_CHANGE_LOG_STREAM_SCHEMA} from '../../replicator/schema/change-log-stream.ts';
 import {initReplicationState} from '../../replicator/schema/replication-state.ts';
 import {CREATE_TABLE_METADATA_TABLE} from '../../replicator/schema/table-metadata.ts';
 import {
   CREATE_V6_COLUMN_METADATA_TABLE,
   CREATE_V7_CHANGE_LOG,
   CREATE_V9_TABLE_METADATA_TABLE,
+  CREATE_V14_CHANGE_LOG_STREAM,
   CURRENT_SCHEMA_VERSION,
   initReplica,
+  V14_CHANGE_LOG_STREAM_TABLE,
 } from './replica-schema.ts';
 
 export const CURRENT_SCHEMA_VERSIONS = {
@@ -420,6 +421,8 @@ describe('replica-schema-migrations', () => {
       },
     },
     {
+      // v14 creates and seeds the change-log stream table; v16 drops it. Both
+      // run here, in that order.
       fromSchemaVersion: 13,
       fromDataVersion: 11,
       desc: 'preserves writeTimeMs after rollback and rollforward',
@@ -449,34 +452,20 @@ describe('replica-schema-migrations', () => {
             lock: 1,
           },
         ],
-        ['_zero.changeLogStream']: [
-          {
-            watermark: '123',
-            pos: 0,
-            change: '{"tag":"begin"}',
-            precommit: null,
-            writeTimeMs: null,
-          },
-          {
-            watermark: '123',
-            pos: 1,
-            change: '{"tag":"commit"}',
-            precommit: '123',
-            writeTimeMs: 12345,
-          },
-        ],
       },
     },
     {
+      // A replica that a v14 zero-cache created, seed included. v16 drops the
+      // table out from under it.
       fromSchemaVersion: 14,
-      fromDataVersion: 13,
-      desc: 'does not duplicate the seed after rollback and rollforward',
+      fromDataVersion: 14,
+      desc: 'drops the change-log stream table a v14 zero-cache created',
       replicaSetup:
         /*sql*/ `CREATE TABLE "_zero.replicationState" (
           stateVersion TEXT NOT NULL,
           writeTimeMs INTEGER,
           lock INTEGER PRIMARY KEY DEFAULT 1 CHECK (lock=1)
-        );` + CREATE_CHANGE_LOG_STREAM_SCHEMA,
+        );` + CREATE_V14_CHANGE_LOG_STREAM,
       replicaPreState: {
         ['_zero.replicationState']: [
           {
@@ -503,20 +492,43 @@ describe('replica-schema-migrations', () => {
         ],
       },
       replicaPostState: {
-        ['_zero.changeLogStream']: [
+        ['_zero.replicationState']: [
           {
-            watermark: '123',
-            pos: 0,
-            change: '{"tag":"begin"}',
-            precommit: null,
-            writeTimeMs: null,
-          },
-          {
-            watermark: '123',
-            pos: 1,
-            change: '{"tag":"commit"}',
-            precommit: '123',
+            stateVersion: '123',
             writeTimeMs: 12345,
+            lock: 1,
+          },
+        ],
+      },
+    },
+    {
+      // Rolled back to v14 code, which reset dataVersion to 14 while leaving
+      // schemaVersion at 16, then rolled forward. Migration 16 re-runs with
+      // its schema step skipped, so it must not resurrect the table.
+      fromSchemaVersion: 16,
+      fromDataVersion: 14,
+      desc: 'stays dropped after rollback and rollforward',
+      // writeTimeMs is NOT NULL because a v16 schema has been through v15.
+      replicaSetup: /*sql*/ `CREATE TABLE "_zero.replicationState" (
+          stateVersion TEXT NOT NULL,
+          writeTimeMs INTEGER NOT NULL,
+          lock INTEGER PRIMARY KEY DEFAULT 1 CHECK (lock=1)
+        );`,
+      replicaPreState: {
+        ['_zero.replicationState']: [
+          {
+            stateVersion: '123',
+            writeTimeMs: 12345,
+            lock: 1,
+          },
+        ],
+      },
+      replicaPostState: {
+        ['_zero.replicationState']: [
+          {
+            stateVersion: '123',
+            writeTimeMs: 12345,
+            lock: 1,
           },
         ],
       },
@@ -565,6 +577,16 @@ describe('replica-schema-migrations', () => {
         ['_zero.versionHistory']: [CURRENT_SCHEMA_VERSIONS],
         ...c.replicaPostState,
       });
+
+      // No replica at CURRENT_SCHEMA_VERSION carries the change-log stream
+      // table, by any route into it: a fresh sync never creates it, and every
+      // incremental path runs migration 16.
+      expect(
+        replica
+          .prepare(/*sql*/ `SELECT "name" FROM "sqlite_master"
+                       WHERE "tbl_name" = ?`)
+          .all(V14_CHANGE_LOG_STREAM_TABLE),
+      ).toEqual([]);
     });
   }
 });

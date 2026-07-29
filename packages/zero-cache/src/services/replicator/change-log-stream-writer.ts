@@ -3,7 +3,7 @@ import type {StatementRunner} from '../../db/statements.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
 import {extractChangeSubstring} from '../change-streamer/change-log-codec.ts';
 import {ChangeLogTransactionHasher} from '../change-streamer/change-log-transaction-hash.ts';
-import {CHANGE_LOG_STREAM_TABLE} from './schema/change-log-stream.ts';
+import {CHANGE_LOG_STREAM_TABLE} from './change-log-db.ts';
 
 type ChangeTag = ChangeStreamData[1]['tag'];
 

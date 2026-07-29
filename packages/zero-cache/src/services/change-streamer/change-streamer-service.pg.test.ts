@@ -325,9 +325,11 @@ describe('change-streamer/service', () => {
       {busyTimeout: 30_000, analysisLimit: 1000},
       {level: 'error', format: 'text'},
     );
+    // `init` created and reconciled the change log, so its head is readable.
+    using changeLog = openChangeLogDB(lc, dbFile.path, {readonly: true});
     const observer = new SQLiteChangeLogObserver(
       lc,
-      getSQLiteChangeLogInfo(replica),
+      getSQLiteChangeLogInfo(replica, changeLog),
     );
     const syncer = new IncrementalSyncer(
       lc,
@@ -399,11 +401,10 @@ describe('change-streamer/service', () => {
       ).toEqual({watermark: '06'});
       expect(
         replica
-          .prepare(
-            `SELECT max("watermark") AS "watermark" FROM "_zero.changeLogStream"`,
-          )
-          .get(),
-      ).toEqual({watermark: REPLICA_VERSION});
+          .prepare(/*sql*/ `SELECT "name" FROM "sqlite_master"
+                       WHERE "tbl_name" = '_zero.changeLogStream'`)
+          .all(),
+      ).toEqual([]);
       expect(observer.state()).toMatchObject({
         receivedHead: '06',
         sqliteHead: '06',

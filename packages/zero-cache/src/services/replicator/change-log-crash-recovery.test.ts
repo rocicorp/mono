@@ -27,6 +27,7 @@ import type {ChangeStreamData} from '../change-source/protocol/current/downstrea
 import {serializeChangeStreamData} from '../change-streamer/change-log-codec.ts';
 import {
   CHANGE_LOG_META_TABLE,
+  CHANGE_LOG_STREAM_TABLE,
   deleteChangeLogDB,
   openChangeLogDB,
   readReplicaAnchor,
@@ -34,7 +35,6 @@ import {
   type ReconcileResult,
 } from './change-log-db.ts';
 import {ChangeProcessor} from './change-processor.ts';
-import {CHANGE_LOG_STREAM_TABLE} from './schema/change-log-stream.ts';
 import {initReplicationState} from './schema/replication-state.ts';
 import {ReplicationMessages} from './test-utils.ts';
 
