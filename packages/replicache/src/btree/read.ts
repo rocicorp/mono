@@ -307,6 +307,13 @@ async function* scanForHash(
     i = binarySearch(fromKey, entries);
   }
   if (data[NODE_LEVEL] > 0) {
+    await Promise.all(
+      entries
+        .slice(i)
+        .map(entry =>
+          readNode((entry as Entry<Hash>)[1]).catch(() => undefined),
+        ),
+    );
     for (; i < entries.length; i++) {
       yield* scanForHash(
         expectedRootHash,
