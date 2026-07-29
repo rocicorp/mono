@@ -405,14 +405,19 @@ describe('change-streamer/service', () => {
                        WHERE "tbl_name" = '_zero.changeLogStream'`)
           .all(),
       ).toEqual([]);
-      expect(observer.state()).toMatchObject({
-        receivedHead: '06',
-        sqliteHead: '06',
-        headLag: 0,
-        invariantFailures: 0,
-        hashMatches: 1,
-        hashMismatches: 0,
-        hashUnpaired: 0,
+      // Waited for, not asserted directly: the replica's commit is visible to
+      // this connection as soon as the write worker commits it, while the
+      // observer advances only once that worker's reply reaches the syncer.
+      await vi.waitFor(() => {
+        expect(observer.state()).toMatchObject({
+          receivedHead: '06',
+          sqliteHead: '06',
+          headLag: 0,
+          invariantFailures: 0,
+          hashMatches: 1,
+          hashMismatches: 0,
+          hashUnpaired: 0,
+        });
       });
 
       const catchupSub = await streamer.subscribe({

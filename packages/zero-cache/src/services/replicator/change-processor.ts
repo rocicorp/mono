@@ -80,12 +80,32 @@ export type ChangeProcessorOptions = {
   changeLog: StatementRunner | undefined;
 };
 
+/**
+ * The two halves of the ordered commit, measured in the write worker so that
+ * the IPC round trip is not folded in.
+ */
+export type CommitTiming = {
+  /**
+   * Appending the commit row to the change log and committing its transaction.
+   */
+  readonly logCommitMs: number;
+  /**
+   * From the change log's `COMMIT` returning to the replica's — the phantom
+   * window. A crash anywhere in it leaves the log durable at `watermark` and
+   * the replica behind it, which startup reconciliation truncates. Watching it
+   * is watching how much of the change stream a crash can cost.
+   */
+  readonly replicaCommitMs: number;
+};
+
 export type CommitResult = {
   watermark: string;
   completedBackfill: DownloadStatus | undefined;
   schemaUpdated: boolean;
   changeLogUpdated: boolean;
   changeLogStream?: ChangeLogStreamTransactionStats | undefined;
+  /** Set with {@link changeLogStream}, i.e. only when the log is written. */
+  commitTiming?: CommitTiming | undefined;
 };
 
 /**
@@ -983,13 +1003,19 @@ class TransactionProcessor {
     // — locally detectable and truncated at startup — rather than a hole in it,
     // which would be silently served to a subscriber as a gap.
     let changeLogStream: ChangeLogStreamTransactionStats | undefined;
+    // Brackets the log's commit so that the two spans it separates — the log's
+    // own commit cost, and the phantom window that follows it — are measured
+    // rather than inferred from the total. Undefined when nothing is logged.
+    let logCommit: {startedAt: number; endedAt: number} | undefined;
     if (changeLogStreamWriter) {
       const writeTimeMs = Date.now();
+      const startedAt = performance.now();
       changeLogStream = changeLogStreamWriter.commit(
         watermark,
         must(canonicalJSON),
         writeTimeMs,
       );
+      logCommit = {startedAt, endedAt: performance.now()};
       // The same writeTimeMs is stored in both databases, so reconciliation
       // can seed the log from the replica's state alone.
       updateReplicationWatermark(this.#db, watermark, writeTimeMs);
@@ -1008,6 +1034,12 @@ class TransactionProcessor {
     if (this.#mode !== 'initial-sync') {
       this.#db.commit();
     }
+    // The replica commit above is unconditional whenever the log was written:
+    // a change processor that logs is never in 'initial-sync' mode.
+    const commitTiming: CommitTiming | undefined = logCommit && {
+      logCommitMs: logCommit.endedAt - logCommit.startedAt,
+      replicaCommitMs: performance.now() - logCommit.endedAt,
+    };
 
     const elapsedMs = Date.now() - this.#startMs;
     this.#lc.debug?.(`Committed tx@${this.#version} (${elapsedMs} ms)`);
@@ -1018,6 +1050,7 @@ class TransactionProcessor {
       schemaUpdated: this.#schemaChanged,
       changeLogUpdated: this.#numChangeLogEntries > 0,
       ...(changeLogStream === undefined ? {} : {changeLogStream}),
+      ...(commitTiming === undefined ? {} : {commitTiming}),
     };
   }
 

@@ -42,6 +42,7 @@ import {
   getSQLiteChangeLogInfo,
   logSQLiteChangeLogStartup,
   recordSQLiteChangeLogReconcile,
+  sqliteFileBytes,
   SQLiteChangeLogObserver,
 } from '../services/replicator/sqlite-change-log-observability.ts';
 import {ThreadWriteWorkerClient} from '../services/replicator/write-worker-client.ts';
@@ -139,7 +140,7 @@ export default async function runWorker(
     deleteChangeLogDB(dbPath);
   }
 
-  setupMetrics(lc, dbPath, walMode);
+  setupMetrics(lc, dbPath, walMode, logsChangeStream);
 
   // Create the write worker for async SQLite writes. When the change-log
   // writer is enabled, init also opens the change-log database beside the
@@ -254,7 +255,12 @@ function readSQLiteChangeLog(
   return new SQLiteChangeLogObserver(lc, info);
 }
 
-function setupMetrics(lc: LogContext, file: string, walMode: WalMode) {
+function setupMetrics(
+  lc: LogContext,
+  file: string,
+  walMode: WalMode,
+  logsChangeStream: boolean,
+) {
   getOrCreateGauge('replica', 'db_size', {
     description:
       `The size of the replica's main db file, ` +
@@ -273,6 +279,28 @@ function setupMetrics(lc: LogContext, file: string, walMode: WalMode) {
       unit: 'bytes',
     }).addCallback(observeFileSize(lc, `${file}-wal2`));
   }
+
+  // The pair that accounts for the change log's bytes. They are whole-database
+  // totals rather than per-file, because a table that leaves the replica leaves
+  // through its wal: the replica's footprint is what shrank, and the change
+  // log's is where it went. Neither is derivable from the other, and the log's
+  // was invisible while it lived inside the replica.
+  getOrCreateGauge('replica', 'file_bytes', {
+    description:
+      `The replica's total on-disk footprint: its main db file plus its ` +
+      `wal sidecars.`,
+    unit: 'By',
+  }).addCallback(observeSQLiteFileBytes(lc, file));
+
+  if (logsChangeStream) {
+    getOrCreateGauge('replica', 'sqlite_change_log.file_bytes', {
+      description:
+        `The SQLite change log's total on-disk footprint: its main db file ` +
+        `plus its wal sidecars. Local disk only — the log is excluded from ` +
+        `the litestream backup.`,
+      unit: 'By',
+    }).addCallback(observeSQLiteFileBytes(lc, changeLogFileName(file)));
+  }
 }
 
 function observeFileSize(lc: LogContext, file: string): ObservableCallback {
@@ -284,6 +312,13 @@ function observeFileSize(lc: LogContext, file: string): ObservableCallback {
       lc.warn?.(`unable to stat ${file} for size metrics`, e);
     }
   };
+}
+
+function observeSQLiteFileBytes(
+  lc: LogContext,
+  file: string,
+): ObservableCallback {
+  return async o => o.observe(await sqliteFileBytes(lc, file));
 }
 
 const RETRY_INTERVAL_MS = 3000;

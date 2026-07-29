@@ -3981,6 +3981,10 @@ describe('replicator/change-processor change-stream logging', () => {
     expect(result).toMatchObject({
       watermark: '06',
       changeLogStream: {rows: 3, estimatedBytes: expect.any(Number)},
+      commitTiming: {
+        logCommitMs: expect.any(Number),
+        replicaCommitMs: expect.any(Number),
+      },
     });
     expectTableExact(
       replica,
@@ -4075,6 +4079,29 @@ describe('replicator/change-processor change-stream logging', () => {
       // Both committed.
       {logHead: '06', stateVersion: '06'},
     ]);
+  });
+
+  // The two commits are reported separately because they are no longer one
+  // atomic commit, and the second span is the phantom window. Delaying the
+  // replica's commit must therefore land entirely in `replicaCommitMs`.
+  test('commit timing attributes the phantom window to the replica half', () => {
+    const DELAY_MS = 50;
+    replicaRunner.onCommit = () => {
+      const until = performance.now() + DELAY_MS;
+      while (performance.now() < until) {
+        // Busy-wait: the replica's commit is synchronous, so this has to be
+        // too in order to land inside the measured span.
+      }
+    };
+
+    process(['begin', issues.begin(), {commitWatermark: '06'}]);
+    process(['data', issues.insert('issues', {id: 1, text: 'timing'})]);
+    const result = process(['commit', issues.commit(), {watermark: '06'}]);
+
+    expect(failures).toEqual([]);
+    const timing = must(result).commitTiming;
+    expect(timing?.replicaCommitMs).toBeGreaterThanOrEqual(DELAY_MS);
+    expect(timing?.logCommitMs).toBeLessThan(must(timing).replicaCommitMs);
   });
 
   test('no interleaving leaves the replica ahead of the log', () => {
