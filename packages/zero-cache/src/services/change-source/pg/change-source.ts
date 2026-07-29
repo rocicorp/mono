@@ -114,6 +114,10 @@ import {validate} from './schema/validation.ts';
 
 const REPLICA_SLOT_CLEANUP_INTERVAL_MS = 30_000;
 
+interface PurgeLock {
+  release(): Promise<void>;
+}
+
 /**
  * Initializes a Postgres change source, including the initial sync of the
  * replica, before streaming changes from the corresponding logical replication
@@ -127,12 +131,20 @@ export async function initializePostgresChangeSource(
   syncOptions: InitialSyncOptions,
   context: ServerContext,
   lagReportIntervalMs = 0,
+  purgeLock?: PurgeLock | null,
 ): Promise<{subscriptionState: SubscriptionState; changeSource: ChangeSource}> {
   await initReplica(
     lc,
     `replica-${shard.appID}-${shard.shardNum}`,
     replicaDbFile,
-    (log, tx) => initialSync(log, shard, tx, upstreamURI, syncOptions, context),
+    async (log, tx) => {
+      // In RMv1, the purge lock on the change-db must be released before performing
+      // initial sync; if the change-db and upstream are the same db, a lock-holding
+      // transaction will prevent a replication slot from being created. This awkward
+      // dependency can go away with RMv2.
+      void purgeLock?.release();
+      await initialSync(log, shard, tx, upstreamURI, syncOptions, context);
+    },
   );
 
   const replica = new Database(lc, replicaDbFile);
