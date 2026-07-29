@@ -15,10 +15,10 @@
  *
  * Disk sizing: a task that writes the log needs room for the replica *plus* one
  * retention window of the change stream — the log's main file, its wal2
- * sidecars, and pages a purge has freed but not yet reused. Nothing purges the
- * log yet (that is parent slice 8), so with the writer enabled it currently
- * grows with the entire change stream since its last reseed, which is one more
- * reason `sqliteChangeLogMode` defaults to `off`. The log is excluded from the
+ * sidecars, and pages a purge has freed but not yet reused. Nothing calls the
+ * purger yet (that is slice 9), so with the writer enabled it currently grows
+ * with the entire change stream since its last reseed, which is one more reason
+ * `sqliteChangeLogMode` defaults to `off`. The log is excluded from the
  * litestream backup, so this is local disk only and never S3.
  */
 
@@ -34,8 +34,16 @@ import {
 /**
  * Bumped whenever the change-log database's schema changes. Since the file is a
  * cache, a mismatch costs one reseed rather than a migration.
+ *
+ * v2 adds `seededAtMs` to the meta table and `auto_vacuum = INCREMENTAL` to the
+ * file. The latter is not a schema change SQLite can be talked into after the
+ * fact, which is why {@link openChangeLogDBForWriting} rebuilds rather than
+ * relying on the reseed a version mismatch triggers.
  */
-export const CHANGE_LOG_DB_SCHEMA_VERSION = 1;
+export const CHANGE_LOG_DB_SCHEMA_VERSION = 2;
+
+/** https://www.sqlite.org/pragma.html#pragma_auto_vacuum */
+const AUTO_VACUUM_INCREMENTAL = 2;
 
 export const CHANGE_LOG_STREAM_TABLE = '_zero.changeLogStream';
 export const CHANGE_LOG_STREAM_WRITE_TIME_INDEX =
@@ -82,11 +90,17 @@ export const CHANGE_LOG_META_TABLE = '_zero.changeLogMeta';
 
 // "replicaVersion" identifies the replica this log was built against, which
 // detects a file left behind by a replica that was since reset and re-synced.
+// "seededAtMs" is when the log last started over, which is how a canary decides
+// whether it is warm enough to serve: a freshly seeded log returns `too-old` to
+// every reconnecting subscriber. `min("writeTimeMs")` cannot answer that — the
+// seed row carries the replica's last *upstream* commit time, which on an idle
+// shard is arbitrarily old and reads as warm.
 // "lock" enforces single-row semantics, as in "_zero.replicationConfig".
 const CREATE_CHANGE_LOG_META_SCHEMA = /*sql*/ `
   CREATE TABLE "${CHANGE_LOG_META_TABLE}" (
     "replicaVersion" TEXT NOT NULL,
     "schemaVersion"  INTEGER NOT NULL,
+    "seededAtMs"     INTEGER NOT NULL,
     "lock"           INTEGER PRIMARY KEY DEFAULT 1 CHECK ("lock" = 1)
   );
 `;
@@ -114,6 +128,15 @@ export type ReplicaAnchor = {
   readonly replicaVersion: string;
   readonly stateVersion: string;
   readonly writeTimeMs: number;
+  /**
+   * Wall-clock time at reconciliation, persisted as `seededAtMs` by a reseed.
+   *
+   * Not a replica fact, but carried here rather than as a parameter: the anchor
+   * is read by {@link readReplicaAnchor} in production and built by hand in
+   * tests, so this is the one place a test can control the clock without a
+   * signature change reaching every caller.
+   */
+  readonly nowMs: number;
 };
 
 type ReplicaAnchorRow = {
@@ -122,7 +145,10 @@ type ReplicaAnchorRow = {
   readonly writeTimeMs: number | null;
 };
 
-export function readReplicaAnchor(replica: Database): ReplicaAnchor {
+export function readReplicaAnchor(
+  replica: Database,
+  nowMs = Date.now(),
+): ReplicaAnchor {
   const row = replica
     .prepare(/*sql*/ `
       SELECT config."replicaVersion",
@@ -141,6 +167,7 @@ export function readReplicaAnchor(replica: Database): ReplicaAnchor {
     replicaVersion: row.replicaVersion,
     stateVersion: row.stateVersion,
     writeTimeMs: row.writeTimeMs,
+    nowMs,
   };
 }
 
@@ -188,12 +215,26 @@ export function openChangeLogDB(
  * node — the task restarts elsewhere, restores the replica from S3, and has no
  * change-log file at all. Whatever a power loss does take is detected as a gap
  * by {@link reconcileChangeLog} and reseeded.
+ *
+ * `auto_vacuum = INCREMENTAL` so that purge can return freed pages to the OS
+ * rather than leaving the file at its high-water mark. **It must be the first
+ * statement here.** SQLite honours a `none` -> `incremental` transition only
+ * while the file is still empty, and `journal_mode = wal2` materializes page 1;
+ * appending the pragma instead of prepending it silently leaves the file at
+ * mode 0 forever, since neither `DROP TABLE` nor a reseed makes a file empty
+ * again. {@link openChangeLogDBForWriting} verifies the result.
  */
 export function applyChangeLogPragmas(db: Database): void {
+  db.pragma('auto_vacuum = INCREMENTAL');
   db.pragma('busy_timeout = 30000');
   db.pragma('analysis_limit = 1000');
   db.pragma('journal_mode = wal2');
   db.pragma('synchronous = NORMAL');
+}
+
+function readAutoVacuum(db: Database): number {
+  const [{auto_vacuum: mode}] = db.pragma<{auto_vacuum: number}>('auto_vacuum');
+  return mode;
 }
 
 /**
@@ -215,12 +256,32 @@ export function applyChangeLogPragmas(db: Database): void {
  * error, a full disk) is a problem with the environment rather than with the
  * file's contents, and deleting a database in response would destroy state
  * without fixing it.
+ *
+ * A file that predates `auto_vacuum = INCREMENTAL` takes the same rebuild, for
+ * the same reason and at the same cost: the pragma only takes on an empty file,
+ * so a reseed cannot enable it. Unlike corruption, a *second* failure there is
+ * tolerated rather than thrown — see {@link ensureIncrementalAutoVacuum}.
  */
 export function openChangeLogDBForWriting(
   lc: LogContext,
   replicaFile: string,
   anchor: ReplicaAnchor,
 ): {db: Database; result: ReconcileResult} {
+  const opened = openOrRebuildCorrupt(lc, replicaFile, anchor);
+  const {db, result} = ensureIncrementalAutoVacuum(
+    lc,
+    replicaFile,
+    anchor,
+    opened,
+  );
+  return {db, result};
+}
+
+function openOrRebuildCorrupt(
+  lc: LogContext,
+  replicaFile: string,
+  anchor: ReplicaAnchor,
+): OpenedChangeLog {
   try {
     return openAndReconcile(lc, replicaFile, anchor);
   } catch (e) {
@@ -232,22 +293,82 @@ export function openChangeLogDBForWriting(
     lc.error?.('rebuilding the corrupt SQLite change log', {
       sqliteChangeLog: {file},
     });
-    deleteChangeLogDB(replicaFile);
-    // Reconciles a database that does not exist, i.e. reseeds with reason
-    // 'created'. A second failure is the environment's, not the file's.
-    return openAndReconcile(lc, replicaFile, anchor);
+    return rebuildChangeLog(lc, replicaFile, anchor);
   }
 }
+
+/**
+ * Rebuilds a log whose `auto_vacuum` mode is not `INCREMENTAL`, which is every
+ * log created before schema v2. Deleting the file is the only way to enable the
+ * pragma: `DROP TABLE` leaves the header's mode intact, and the in-place
+ * alternative — a full `VACUUM` — is an unbounded blocking statement on a file
+ * the writer needs.
+ *
+ * A mode that is still wrong after the rebuild is logged and tolerated, which
+ * is the one place this diverges from the corruption path. The two failures are
+ * not alike: a file that stays corrupt after a rebuild is an environment
+ * problem, but a pragma that stays wrong on a brand-new file can only mean
+ * {@link applyChangeLogPragmas}' statement order is wrong — a code bug, present
+ * on every task, on every start. Throwing there turns a lost optimization into
+ * a crash loop, and rebuilding again turns it into a reseed per start, which is
+ * worse than the freelist growth it was trying to avoid. `Database.compact()`
+ * already warns and no-ops when the mode is not `INCREMENTAL`, so degrading is
+ * the accepted fallback.
+ */
+function ensureIncrementalAutoVacuum(
+  lc: LogContext,
+  replicaFile: string,
+  anchor: ReplicaAnchor,
+  opened: OpenedChangeLog,
+): OpenedChangeLog {
+  if (opened.autoVacuum === AUTO_VACUUM_INCREMENTAL) {
+    return opened;
+  }
+  const file = changeLogFileName(replicaFile);
+  lc.info?.('rebuilding the SQLite change log to enable incremental vacuum', {
+    sqliteChangeLog: {file, autoVacuum: opened.autoVacuum},
+  });
+  opened.db.close();
+  const rebuilt = rebuildChangeLog(lc, replicaFile, anchor);
+  if (rebuilt.autoVacuum !== AUTO_VACUUM_INCREMENTAL) {
+    lc.error?.(
+      'SQLite change log does not support incremental vacuum; ' +
+        'it will plateau at its high-water mark',
+      {sqliteChangeLog: {file, autoVacuum: rebuilt.autoVacuum}},
+    );
+  }
+  return rebuilt;
+}
+
+/** The shared "delete the file and open a new one" body. */
+function rebuildChangeLog(
+  lc: LogContext,
+  replicaFile: string,
+  anchor: ReplicaAnchor,
+): OpenedChangeLog {
+  deleteChangeLogDB(replicaFile);
+  // Reconciles a database that does not exist, i.e. reseeds with reason
+  // 'created'. A second failure is the environment's, not the file's.
+  return openAndReconcile(lc, replicaFile, anchor);
+}
+
+type OpenedChangeLog = {
+  db: Database;
+  result: ReconcileResult;
+  /** Read before reconciling, so a rebuild does not pay for two reseeds. */
+  autoVacuum: number;
+};
 
 function openAndReconcile(
   lc: LogContext,
   replicaFile: string,
   anchor: ReplicaAnchor,
-): {db: Database; result: ReconcileResult} {
+): OpenedChangeLog {
   const db = openChangeLogDB(lc, replicaFile, {readonly: false});
   try {
     applyChangeLogPragmas(db);
-    return {db, result: reconcileChangeLog(lc, db, anchor)};
+    const autoVacuum = readAutoVacuum(db);
+    return {db, result: reconcileChangeLog(lc, db, anchor), autoVacuum};
   } catch (e) {
     // The caller never sees this handle, so it closes here or leaks — and it
     // must be closed before the corruption path deletes the file.
@@ -378,9 +499,10 @@ function reseed(
     ${CREATE_CHANGE_LOG_META_SCHEMA}
   `);
   db.prepare(/*sql*/ `
-    INSERT INTO "${CHANGE_LOG_META_TABLE}" ("replicaVersion", "schemaVersion")
-      VALUES (?, ?)
-  `).run(anchor.replicaVersion, CHANGE_LOG_DB_SCHEMA_VERSION);
+    INSERT INTO "${CHANGE_LOG_META_TABLE}"
+      ("replicaVersion", "schemaVersion", "seededAtMs")
+      VALUES (?, ?, ?)
+  `).run(anchor.replicaVersion, CHANGE_LOG_DB_SCHEMA_VERSION, anchor.nowMs);
   seedChangeLogStream(db, anchor);
 
   lc.info?.('reseeded the SQLite change log', {
@@ -389,6 +511,7 @@ function reseed(
       head: anchor.stateVersion,
       replicaVersion: anchor.replicaVersion,
       schemaVersion: CHANGE_LOG_DB_SCHEMA_VERSION,
+      seededAtMs: anchor.nowMs,
     },
   });
   return {action: 'reseeded', head: anchor.stateVersion, reason};

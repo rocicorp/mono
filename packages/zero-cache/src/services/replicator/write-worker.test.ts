@@ -155,6 +155,8 @@ describe('write-worker', () => {
       meta: {
         replicaVersion: '02',
         schemaVersion: CHANGE_LOG_DB_SCHEMA_VERSION,
+        // The worker's own clock: `readReplicaAnchor` fills it in.
+        seededAtMs: expect.any(Number),
         lock: 1,
       },
       journalMode: [{journal_mode: 'wal2'}],

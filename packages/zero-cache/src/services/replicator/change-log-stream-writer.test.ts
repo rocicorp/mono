@@ -23,6 +23,7 @@ const ANCHOR: ReplicaAnchor = {
   replicaVersion: '01',
   stateVersion: '02',
   writeTimeMs: 1_000,
+  nowMs: 1_000,
 };
 
 const files: DbFile[] = [];

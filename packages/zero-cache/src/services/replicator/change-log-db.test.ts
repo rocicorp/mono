@@ -1,6 +1,10 @@
 import {existsSync, mkdirSync, rmSync, statSync, writeFileSync} from 'node:fs';
-import {afterEach, describe, expect, test} from 'vitest';
-import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
+import {LogContext} from '@rocicorp/logger';
+import {afterEach, describe, expect, test, vi} from 'vitest';
+import {
+  createSilentLogContext,
+  TestLogSink,
+} from '../../../../shared/src/logging-test-utils.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {DbFile, expectTableExact} from '../../test/lite.ts';
 import {CREATE_V14_CHANGE_LOG_STREAM} from '../change-source/common/replica-schema.ts';
@@ -26,6 +30,7 @@ const ANCHOR: ReplicaAnchor = {
   replicaVersion: '01',
   stateVersion: '05',
   writeTimeMs: 12345,
+  nowMs: 1_700_000_000_000,
 };
 
 /** The main file and the sidecars `deleteLiteDB` removes. */
@@ -134,6 +139,46 @@ function head(db: Database): string | null {
 
 function meta(db: Database) {
   return db.prepare(/*sql*/ `SELECT * FROM "${CHANGE_LOG_META_TABLE}"`).get();
+}
+
+/** The meta row a reseed at `anchor` writes. */
+function seedMeta(anchor: ReplicaAnchor = ANCHOR) {
+  return {
+    replicaVersion: anchor.replicaVersion,
+    schemaVersion: CHANGE_LOG_DB_SCHEMA_VERSION,
+    seededAtMs: anchor.nowMs,
+    lock: 1,
+  };
+}
+
+const readPragma = Database.prototype.pragma;
+
+function autoVacuum(db: Database): number {
+  const [{auto_vacuum: mode}] = readPragma.call(db, 'auto_vacuum') as [
+    {auto_vacuum: number},
+  ];
+  return mode;
+}
+
+/**
+ * A schema v1 log: the shape 7D shipped, before `seededAtMs` and before
+ * `auto_vacuum`. This is what a staging file looks like on the first start
+ * after slice 8.
+ */
+function createV1Log(replicaFile: string): void {
+  using db = openChangeLogDB(lc, replicaFile, {readonly: false});
+  db.pragma('journal_mode = wal2');
+  db.exec(/*sql*/ `
+    ${CREATE_CHANGE_LOG_STREAM_SCHEMA}
+    CREATE TABLE "${CHANGE_LOG_META_TABLE}" (
+      "replicaVersion" TEXT NOT NULL,
+      "schemaVersion"  INTEGER NOT NULL,
+      "lock"           INTEGER PRIMARY KEY DEFAULT 1 CHECK ("lock" = 1)
+    );
+    INSERT INTO "${CHANGE_LOG_META_TABLE}" ("replicaVersion", "schemaVersion")
+      VALUES ('${ANCHOR.replicaVersion}', 1);
+  `);
+  appendTransaction(db, ANCHOR.stateVersion, '04', 1, 100);
 }
 
 /** A change-log db that is valid and consistent with {@link ANCHOR}. */
@@ -316,6 +361,44 @@ describe('replicator/change-log-db', () => {
       expect(db.pragma('wal_autocheckpoint')).toEqual([
         {wal_autocheckpoint: 1000},
       ]);
+      // 2 == INCREMENTAL, so purge can hand freed pages back to the OS.
+      expect(autoVacuum(db)).toBe(2);
+    });
+
+    // This is the test that pins the pragma *ordering*. SQLite honours a
+    // none -> incremental transition only while the file is empty, and
+    // `journal_mode = wal2` materializes page 1, so appending the pragma
+    // instead of prepending it produces a log that silently never reclaims.
+    test('auto_vacuum survives on the reopened file, not just the connection', () => {
+      const file = newDbFile();
+      {
+        using db = openChangeLogDB(lc, file.path, {readonly: false});
+        applyChangeLogPragmas(db);
+        db.exec(CREATE_CHANGE_LOG_STREAM_SCHEMA);
+      }
+
+      using reopened = openChangeLogDB(lc, file.path, {readonly: true});
+      expect(autoVacuum(reopened)).toBe(2);
+    });
+
+    test('appending the pragma after journal_mode would not take', () => {
+      const file = newDbFile();
+      {
+        using db = openChangeLogDB(lc, file.path, {readonly: false});
+        db.pragma('journal_mode = wal2');
+        db.pragma('auto_vacuum = INCREMENTAL');
+        db.exec(CREATE_CHANGE_LOG_STREAM_SCHEMA);
+        // Nor does dropping and recreating the tables: the mode is a header
+        // property that survives `DROP TABLE`, which is why a wrong mode is
+        // answered with a new file rather than with a reseed.
+        db.pragma('auto_vacuum = INCREMENTAL');
+        db.exec(/*sql*/ `DROP TABLE "${CHANGE_LOG_STREAM_TABLE}"`);
+        db.exec(CREATE_CHANGE_LOG_STREAM_SCHEMA);
+        expect(autoVacuum(db)).toBe(0);
+      }
+
+      using reopened = openChangeLogDB(lc, file.path, {readonly: true});
+      expect(autoVacuum(reopened)).toBe(0);
     });
   });
 
@@ -357,11 +440,7 @@ describe('replicator/change-log-db', () => {
         head: ANCHOR.stateVersion,
         reason: 'created',
       });
-      expect(meta(rebuilt)).toEqual({
-        replicaVersion: ANCHOR.replicaVersion,
-        schemaVersion: CHANGE_LOG_DB_SCHEMA_VERSION,
-        lock: 1,
-      });
+      expect(meta(rebuilt)).toEqual(seedMeta());
       expectTableExact(
         rebuilt,
         CHANGE_LOG_STREAM_TABLE,
@@ -371,6 +450,98 @@ describe('replicator/change-log-db', () => {
         'pos',
       );
       expect(rebuilt.pragma('journal_mode')).toEqual([{journal_mode: 'wal2'}]);
+    });
+
+    test('rebuilds a v1 log and enables incremental vacuum', () => {
+      const file = newDbFile();
+      createV1Log(file.path);
+
+      const {db, result} = openChangeLogDBForWriting(lc, file.path, ANCHOR);
+      using rebuilt = db;
+
+      // 'created' rather than 'schema-mismatch': a reseed cannot enable the
+      // pragma, so the whole file is replaced and the reconcile that follows
+      // runs against a database that does not exist yet.
+      expect(result).toEqual({
+        action: 'reseeded',
+        head: ANCHOR.stateVersion,
+        reason: 'created',
+      });
+      expect(meta(rebuilt)).toEqual(seedMeta());
+      expect(autoVacuum(rebuilt)).toBe(2);
+    });
+
+    // The guard is on the pragma, not only on the version: a file written by a
+    // build whose pragma order was wrong carries the current schema version and
+    // would otherwise reconcile clean and never reclaim.
+    test('rebuilds a current-version log whose pragma never took', () => {
+      const file = newDbFile();
+      {
+        using db = openChangeLogDB(lc, file.path, {readonly: false});
+        db.pragma('journal_mode = wal2');
+        db.pragma('auto_vacuum = INCREMENTAL'); // too late; stays at 0
+        reconcileChangeLog(lc, db, ANCHOR);
+        appendTransaction(db, '07', '05', 2, 100);
+        expect(autoVacuum(db)).toBe(0);
+      }
+
+      const {db, result} = openChangeLogDBForWriting(lc, file.path, ANCHOR);
+      using rebuilt = db;
+
+      expect(result).toEqual({
+        action: 'reseeded',
+        head: ANCHOR.stateVersion,
+        reason: 'created',
+      });
+      expect(autoVacuum(rebuilt)).toBe(2);
+    });
+
+    // A pragma that is still wrong on a brand-new file can only mean the pragma
+    // sequence itself is wrong, which is a code bug present on every start.
+    // Throwing would be a crash loop and rebuilding again would be a reseed per
+    // start, so the log opens and `Database.compact()`'s own mode guard becomes
+    // the fallback.
+    test('opens a log whose pragma is still wrong after one rebuild', () => {
+      const file = newDbFile();
+      const sink = new TestLogSink();
+      const logger = new LogContext('error', undefined, sink);
+      const reads = vi
+        .spyOn(Database.prototype, 'pragma')
+        .mockImplementation(function (this: Database, sql: string) {
+          return sql === 'auto_vacuum'
+            ? [{auto_vacuum: 0}]
+            : // oxlint-disable-next-line no-explicit-any
+              (readPragma.call(this, sql) as any);
+        });
+
+      try {
+        const {db, result} = openChangeLogDBForWriting(
+          logger,
+          file.path,
+          ANCHOR,
+        );
+        using opened = db;
+
+        expect(result).toEqual({
+          action: 'reseeded',
+          head: ANCHOR.stateVersion,
+          reason: 'created',
+        });
+        expect(head(opened)).toBe(ANCHOR.stateVersion);
+        // One read for the initial open and one for the rebuild: no third.
+        expect(
+          reads.mock.calls.filter(([sql]) => sql === 'auto_vacuum'),
+        ).toHaveLength(2);
+      } finally {
+        reads.mockRestore();
+      }
+
+      expect(sink.messages.filter(([level]) => level === 'error')).toHaveLength(
+        1,
+      );
+      expect(sink.messages.at(-1)?.[2][0]).toMatch(
+        /does not support incremental vacuum/,
+      );
     });
 
     // A path that cannot be opened is a problem with the environment rather
@@ -393,7 +564,17 @@ describe('replicator/change-log-db', () => {
   describe('readReplicaAnchor', () => {
     test('reads the replica facts the log is anchored to', () => {
       using replica = createReplica();
-      expect(readReplicaAnchor(replica)).toEqual(ANCHOR);
+      expect(readReplicaAnchor(replica, ANCHOR.nowMs)).toEqual(ANCHOR);
+    });
+
+    // `nowMs` is not a replica fact; it rides along so that `reseed` never
+    // reaches for `Date.now()` itself.
+    test('defaults nowMs to the current time', () => {
+      using replica = createReplica();
+      const before = Date.now();
+      const {nowMs} = readReplicaAnchor(replica);
+      expect(nowMs).toBeGreaterThanOrEqual(before);
+      expect(nowMs).toBeLessThanOrEqual(Date.now());
     });
 
     test('requires initialized replication state', () => {
@@ -421,11 +602,7 @@ describe('replicator/change-log-db', () => {
         reason: 'created',
       });
       expect(head(db)).toBe(ANCHOR.stateVersion);
-      expect(meta(db)).toEqual({
-        replicaVersion: ANCHOR.replicaVersion,
-        schemaVersion: CHANGE_LOG_DB_SCHEMA_VERSION,
-        lock: 1,
-      });
+      expect(meta(db)).toEqual(seedMeta());
       expectTableExact(
         db,
         CHANGE_LOG_STREAM_TABLE,
@@ -466,11 +643,7 @@ describe('replicator/change-log-db', () => {
         head: ANCHOR.stateVersion,
         reason: 'created',
       });
-      expect(meta(db)).toEqual({
-        replicaVersion: ANCHOR.replicaVersion,
-        schemaVersion: CHANGE_LOG_DB_SCHEMA_VERSION,
-        lock: 1,
-      });
+      expect(meta(db)).toEqual(seedMeta());
     });
 
     test('created: meta table without the stream table', () => {
@@ -498,11 +671,7 @@ describe('replicator/change-log-db', () => {
         head: ANCHOR.stateVersion,
         reason: 'schema-mismatch',
       });
-      expect(meta(db)).toEqual({
-        replicaVersion: ANCHOR.replicaVersion,
-        schemaVersion: CHANGE_LOG_DB_SCHEMA_VERSION,
-        lock: 1,
-      });
+      expect(meta(db)).toEqual(seedMeta());
       expectTableExact(
         db,
         CHANGE_LOG_STREAM_TABLE,
@@ -523,11 +692,7 @@ describe('replicator/change-log-db', () => {
         head: ANCHOR.stateVersion,
         reason: 'replica-version-mismatch',
       });
-      expect(meta(db)).toEqual({
-        replicaVersion: ANCHOR.replicaVersion,
-        schemaVersion: CHANGE_LOG_DB_SCHEMA_VERSION,
-        lock: 1,
-      });
+      expect(meta(db)).toEqual(seedMeta());
       expectTableExact(
         db,
         CHANGE_LOG_STREAM_TABLE,
@@ -697,6 +862,30 @@ describe('replicator/change-log-db', () => {
         'watermark',
         'pos',
       );
+    });
+
+    // `seededAtMs` is how a canary decides a log is warm enough to serve, so it
+    // must move on every reseed and stay put through everything else.
+    test('seededAtMs moves on a reseed and survives a truncation', () => {
+      using db = createReconciledLog();
+      expect(meta(db)).toEqual(seedMeta());
+
+      const later = {...ANCHOR, nowMs: ANCHOR.nowMs + 60_000};
+      appendTransaction(db, '09', '05', 2, 100);
+      expect(reconcileChangeLog(lc, db, later)).toEqual({
+        action: 'truncated',
+        head: ANCHOR.stateVersion,
+        rows: 4,
+      });
+      expect(meta(db)).toEqual(seedMeta());
+
+      const reseeded = {...later, stateVersion: '07'};
+      expect(reconcileChangeLog(lc, db, reseeded)).toEqual({
+        action: 'reseeded',
+        head: '07',
+        reason: 'gap',
+      });
+      expect(meta(db)).toEqual(seedMeta(reseeded));
     });
 
     test('a log at the replica head is not written to', () => {
