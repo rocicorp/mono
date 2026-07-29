@@ -1,5 +1,6 @@
 import {parentPort} from 'node:worker_threads';
 import type {LogContext} from '@rocicorp/logger';
+import {assert} from '../../../../shared/src/asserts.ts';
 import type {LogConfig} from '../../../../shared/src/logging.ts';
 import {must} from '../../../../shared/src/must.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
@@ -10,6 +11,13 @@ import {
 } from '../../db/sqlite-corruption.ts';
 import {StatementRunner} from '../../db/statements.ts';
 import {createLogContext} from '../../server/logging.ts';
+import {
+  applyChangeLogPragmas,
+  openChangeLogDB,
+  readReplicaAnchor,
+  reconcileChangeLog,
+  type ReconcileResult,
+} from './change-log-db.ts';
 import {ChangeProcessor, type ChangeProcessorMode} from './change-processor.ts';
 import {getSubscriptionState} from './schema/replication-state.ts';
 import {
@@ -36,9 +44,10 @@ type API = {[M in Method]: (...args: ArgsMap[M]) => ResultMap[M]};
 function createAPI(): API {
   let db: Database | undefined;
   let runner: StatementRunner | undefined;
+  let changeLogDb: Database | undefined;
+  let changeLogRunner: StatementRunner | undefined;
   let processor: ChangeProcessor | undefined;
   let mode: ChangeProcessorMode | undefined;
-  let logsChangeStream: boolean | undefined;
   let lc: LogContext | undefined;
   let replicaDbPath: string | undefined;
   let unregisterCorruptionDiagnosticTarget: (() => void) | undefined;
@@ -53,7 +62,7 @@ function createAPI(): API {
     processor = new ChangeProcessor(
       must(runner),
       must(mode),
-      {logsChangeStream: must(logsChangeStream)},
+      {changeLog: changeLogRunner},
       (_lc, err) => {
         logCorruptionDiagnostics(err);
         port.postMessage({
@@ -70,7 +79,12 @@ function createAPI(): API {
       shouldLogChangeStream: boolean,
       pragmas: PragmaConfig,
       logConfig: LogConfig,
-    ) {
+    ): ReconcileResult | undefined {
+      assert(
+        !shouldLogChangeStream || cpMode !== 'initial-sync',
+        'initial-sync owns its transaction boundaries and cannot write the ' +
+          'change log, which opens a second one',
+      );
       replicaDbPath = dbPath;
       lc = createLogContext({log: logConfig}, 'write-worker');
       unregisterCorruptionDiagnosticTarget?.();
@@ -84,8 +98,27 @@ function createAPI(): API {
         applyPragmas(db, pragmas);
         runner = new StatementRunner(db);
         mode = cpMode;
-        logsChangeStream = shouldLogChangeStream;
+
+        // The change log lives beside the replica rather than inside it, and
+        // the path is derived here so that the derivation stays the single
+        // source of truth rather than becoming a second IPC argument that
+        // could disagree with it.
+        changeLogDb?.close();
+        changeLogDb = undefined;
+        changeLogRunner = undefined;
+        let reconciled: ReconcileResult | undefined;
+        if (shouldLogChangeStream) {
+          changeLogDb = openChangeLogDB(must(lc), dbPath, {readonly: false});
+          applyChangeLogPragmas(changeLogDb);
+          reconciled = reconcileChangeLog(
+            must(lc),
+            changeLogDb,
+            readReplicaAnchor(db),
+          );
+          changeLogRunner = new StatementRunner(changeLogDb);
+        }
         createProcessor();
+        return reconciled;
       } catch (e) {
         logCorruptionDiagnostics(e);
         throw e;
@@ -119,6 +152,9 @@ function createAPI(): API {
       db?.close();
       db = undefined;
       runner = undefined;
+      changeLogDb?.close();
+      changeLogDb = undefined;
+      changeLogRunner = undefined;
       processor = undefined;
       replicaDbPath = undefined;
       unregisterCorruptionDiagnosticTarget?.();

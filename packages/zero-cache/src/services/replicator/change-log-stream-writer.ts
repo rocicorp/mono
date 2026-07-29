@@ -1,4 +1,5 @@
-import type {Database, Statement} from '../../../../zqlite/src/db.ts';
+import type {Statement} from '../../../../zqlite/src/db.ts';
+import type {StatementRunner} from '../../db/statements.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
 import {extractChangeSubstring} from '../change-streamer/change-log-codec.ts';
 import {ChangeLogTransactionHasher} from '../change-streamer/change-log-transaction-hash.ts';
@@ -48,14 +49,16 @@ function assertInvariant(
 }
 
 /**
- * Appends the canonical downstream stream to the replica-local change log.
+ * Appends the canonical downstream stream to the change-log database, which is
+ * a separate file from the replica.
  *
- * Transaction ownership deliberately remains with {@link ChangeProcessor}.
- * This class only tracks the current stream watermark and position, and every
- * statement it executes participates in the transaction already opened by the
- * processor.
+ * This class owns the change log's transaction, and its transaction alone. The
+ * replica's remains with {@link ChangeProcessor}, which commits the two in a
+ * fixed order — log first, then replica (design 4.4) — so that a crash can
+ * leave a phantom transaction in the log but never a hole.
  */
 export class ChangeLogStreamWriter {
+  readonly #db: StatementRunner;
   readonly #insertChange: Statement;
   readonly #insertCommit: Statement;
 
@@ -64,13 +67,14 @@ export class ChangeLogStreamWriter {
   #estimatedBytes = 0;
   #hasher: ChangeLogTransactionHasher | undefined;
 
-  constructor(db: Database) {
-    this.#insertChange = db.prepare(/*sql*/ `
+  constructor(db: StatementRunner) {
+    this.#db = db;
+    this.#insertChange = db.db.prepare(/*sql*/ `
       INSERT INTO "${CHANGE_LOG_STREAM_TABLE}"
         ("watermark", "pos", "change")
         VALUES (?, ?, ?)
     `);
-    this.#insertCommit = db.prepare(/*sql*/ `
+    this.#insertCommit = db.db.prepare(/*sql*/ `
       INSERT INTO "${CHANGE_LOG_STREAM_TABLE}"
         ("watermark", "pos", "change", "precommit", "writeTimeMs")
         VALUES (?, ?, ?, ?, ?)
@@ -82,6 +86,10 @@ export class ChangeLogStreamWriter {
       this.#watermark === undefined,
       `change-log stream transaction already open at ${this.#watermark}`,
     );
+    // This process is the sole writer of the change-log database, so the write
+    // lock is taken up front rather than risking a failed upgrade from a
+    // deferred transaction partway through the append.
+    this.#db.beginImmediate();
     this.#watermark = watermark;
     this.#pos = 0;
     const change = extractChangeSubstring(json, 'begin');
@@ -144,14 +152,28 @@ export class ChangeLogStreamWriter {
         estimateChangeLogStreamRowBytes(watermark, change, precommit, true),
       hash: hasher.digest(),
     };
-    this.#watermark = undefined;
-    this.#pos = 0;
-    this.#estimatedBytes = 0;
-    this.#hasher = undefined;
+    // The log is durable at `watermark` from here on, while the replica is
+    // still at the previous version. A crash in that window leaves a phantom,
+    // which startup reconciliation truncates.
+    this.#db.commit();
+    this.#reset();
     return stats;
   }
 
+  /**
+   * Discards the open transaction, if any. Safe to call when none is open —
+   * the caller's rollback path also runs after a commit that succeeded and a
+   * subsequent replica write that did not.
+   */
   rollback(): void {
+    const {inTransaction} = this.#db.db;
+    this.#reset();
+    if (inTransaction) {
+      this.#db.rollback();
+    }
+  }
+
+  #reset(): void {
     this.#watermark = undefined;
     this.#pos = 0;
     this.#estimatedBytes = 0;

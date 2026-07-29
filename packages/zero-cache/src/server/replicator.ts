@@ -36,6 +36,7 @@ import {
   getSQLiteChangeLogInfo,
   getSQLiteChangeLogStartupInfo,
   logSQLiteChangeLogStartup,
+  recordSQLiteChangeLogReconcile,
   SQLiteChangeLogObserver,
 } from '../services/replicator/sqlite-change-log-observability.ts';
 import {ThreadWriteWorkerClient} from '../services/replicator/write-worker-client.ts';
@@ -119,10 +120,21 @@ export default async function runWorker(
 
   setupMetrics(lc, dbPath, walMode);
 
-  // Create the write worker for async SQLite writes.
+  // Create the write worker for async SQLite writes. When the change-log
+  // writer is enabled, init also opens the change-log database beside the
+  // replica and reconciles it against the replica's head.
   const pragmas = getPragmaConfig(fileMode);
   const workerClient = new ThreadWriteWorkerClient();
-  await workerClient.init(dbPath, mode, logsChangeStream, pragmas, config.log);
+  const reconciled = await workerClient.init(
+    dbPath,
+    mode,
+    logsChangeStream,
+    pragmas,
+    config.log,
+  );
+  if (reconciled) {
+    recordSQLiteChangeLogReconcile(lc, reconciled);
+  }
 
   const shard = getShardConfig(config);
   const {

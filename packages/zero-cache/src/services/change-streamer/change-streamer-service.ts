@@ -60,7 +60,8 @@ import {
 import {Subscriber} from './subscriber.ts';
 
 export type SQLiteCatchupOptions = {
-  replicaFile: string;
+  /** The change-log database, i.e. `changeLogFileName(replicaFile)`. */
+  changeLogFile: string;
   readBatchRows: number;
   barrierTimeoutMs: number;
   /**
@@ -778,7 +779,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       this.#sqliteCatchup = new SQLiteChangeLogCatchup(
         this.#lc,
         this.#forwarder,
-        new SQLiteChangeLogReader(this.#lc, opts.replicaFile),
+        new SQLiteChangeLogReader(this.#lc, opts.changeLogFile),
         {
           batchSize: opts.readBatchRows,
           barrierTimeoutMs: opts.barrierTimeoutMs,

@@ -1,5 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
-import {assert} from '../../../../shared/src/asserts.ts';
+import {assert, unreachable} from '../../../../shared/src/asserts.ts';
 import type {Database} from '../../../../zqlite/src/db.ts';
 import {
   getOrCreateCounter,
@@ -11,8 +11,53 @@ import {versionFromLexi} from '../../types/lexi-version.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
 import {extractChangeSubstring} from '../change-streamer/change-log-codec.ts';
 import {ChangeLogTransactionHasher} from '../change-streamer/change-log-transaction-hash.ts';
+import type {ReconcileResult} from './change-log-db.ts';
 import type {CommitResult} from './change-processor.ts';
 import {CHANGE_LOG_STREAM_TABLE} from './schema/change-log-stream.ts';
+
+/**
+ * Reports the startup reconciliation of the change-log database against the
+ * replica.
+ *
+ * A wipe is not an error — it is how every abnormal change-log state is
+ * collapsed into a correct one — but each wipe costs the retention window, so
+ * every reconnecting subscriber below the replica head gets `too-old`. The
+ * `gap` reason in particular means log-first commit ordering did not hold, so a
+ * nonzero rate in steady state is an alert, not a statistic.
+ *
+ * Called from the replicator process rather than the write worker, which does
+ * not start OTel.
+ */
+export function recordSQLiteChangeLogReconcile(
+  lc: LogContext,
+  result: ReconcileResult,
+): void {
+  switch (result.action) {
+    case 'truncated':
+      getOrCreateCounter(
+        'replica',
+        'sqlite_change_log.reconcile_truncated_rows',
+        'Phantom change-log rows removed at startup, i.e. logged transactions ' +
+          'whose replica commit was lost to a crash.',
+      ).add(result.rows);
+      break;
+    case 'reseeded':
+      getOrCreateCounter(
+        'replica',
+        'sqlite_change_log.reconcile_wipes',
+        'Change-log wipes at startup, by reason. Each one resets the retention ' +
+          'window, so subscribers below the replica head get `too-old`.',
+      ).add(1, {reason: result.reason});
+      break;
+    case 'none':
+      break;
+    default:
+      unreachable(result);
+  }
+  lc.debug?.('SQLite change-log reconciliation', {
+    sqliteChangeLogReconcile: result,
+  });
+}
 
 export type SQLiteChangeLogStartupInfo = {
   readonly schemaVersion: number;

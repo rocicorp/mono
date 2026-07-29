@@ -21,6 +21,7 @@ import {initChangeStreamerSchema} from '../services/change-streamer/schema/init.
 import {AutoResetSignal} from '../services/change-streamer/schema/tables.ts';
 import {PurgeLocker} from '../services/change-streamer/storer.ts';
 import {exitAfter, runUntilKilled} from '../services/life-cycle.ts';
+import {changeLogFileName} from '../services/replicator/change-log-db.ts';
 import {
   replicationStatusError,
   ReplicationStatusPublisher,
@@ -169,7 +170,7 @@ export default async function runWorker(
           statementTimeoutMs: change.statementTimeoutMs,
           changeLogBatchSize: change.logBatchSize,
           sqliteCatchup: {
-            replicaFile: replica.file,
+            changeLogFile: changeLogFileName(replica.file),
             readBatchRows: sqliteChangeLogReadBatchRows,
             barrierTimeoutMs: sqliteChangeLogBarrierTimeoutMs,
           },

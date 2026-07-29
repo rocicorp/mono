@@ -5,6 +5,7 @@ import type {LogConfig} from '../../../../shared/src/logging.ts';
 import type {Database} from '../../../../zqlite/src/db.ts';
 import {WRITE_WORKER_URL} from '../../server/worker-urls.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
+import type {ReconcileResult} from './change-log-db.ts';
 import type {ChangeProcessorMode, CommitResult} from './change-processor.ts';
 import type {SubscriptionState} from './schema/replication-state.ts';
 
@@ -106,7 +107,10 @@ export type Method = keyof ArgsMap;
 export type Request<M extends Method = Method> = {method: M; args: ArgsMap[M]};
 
 export type ResultMap = {
-  init: void;
+  // The change-log reconciliation, when the writer is enabled. Returned rather
+  // than reported from the worker because OTel is only started in the
+  // replicator process, so metrics recorded in this thread would be dropped.
+  init: ReconcileResult | undefined;
   getSubscriptionState: SubscriptionState;
   processMessage: CommitResult | null;
   abort: void;
@@ -194,7 +198,7 @@ export class ThreadWriteWorkerClient implements WriteWorkerClient {
     logsChangeStream: boolean,
     pragmas: PragmaConfig,
     logConfig: LogConfig,
-  ): Promise<void> {
+  ): Promise<ReconcileResult | undefined> {
     return this.#call('init', [
       dbPath,
       mode,
