@@ -1,4 +1,4 @@
-import {existsSync, writeFileSync} from 'node:fs';
+import {existsSync, mkdirSync, rmSync, statSync, writeFileSync} from 'node:fs';
 import {afterEach, describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
@@ -10,6 +10,7 @@ import {
   changeLogFileName,
   deleteChangeLogDB,
   openChangeLogDB,
+  openChangeLogDBForWriting,
   readReplicaAnchor,
   reconcileChangeLog,
   type ReplicaAnchor,
@@ -223,6 +224,77 @@ describe('replicator/change-log-db', () => {
       expect(db.pragma('wal_autocheckpoint')).toEqual([
         {wal_autocheckpoint: 1000},
       ]);
+    });
+  });
+
+  describe('openChangeLogDBForWriting', () => {
+    test('creates and seeds the log, then leaves it alone', () => {
+      const file = newDbFile();
+      {
+        const {db, result} = openChangeLogDBForWriting(lc, file.path, ANCHOR);
+        using open = db;
+        expect(result).toEqual({
+          action: 'reseeded',
+          head: ANCHOR.stateVersion,
+          reason: 'created',
+        });
+        expect(open.pragma('journal_mode')).toEqual([{journal_mode: 'wal2'}]);
+        expect(head(open)).toBe(ANCHOR.stateVersion);
+      }
+
+      const reopened = openChangeLogDBForWriting(lc, file.path, ANCHOR);
+      using db = reopened.db;
+      expect(reopened.result).toEqual({
+        action: 'none',
+        head: ANCHOR.stateVersion,
+      });
+      expect(head(db)).toBe(ANCHOR.stateVersion);
+    });
+
+    // The divergence from replica corruption: the log is a cache, so a corrupt
+    // file costs a retention window rather than a restore or an auto-reset.
+    test('rebuilds a corrupt log rather than failing startup', () => {
+      const file = newDbFile();
+      writeFileSync(changeLogFileName(file.path), 'this is not a database');
+
+      const {db, result} = openChangeLogDBForWriting(lc, file.path, ANCHOR);
+      using rebuilt = db;
+
+      expect(result).toEqual({
+        action: 'reseeded',
+        head: ANCHOR.stateVersion,
+        reason: 'created',
+      });
+      expect(meta(rebuilt)).toEqual({
+        replicaVersion: ANCHOR.replicaVersion,
+        schemaVersion: CHANGE_LOG_DB_SCHEMA_VERSION,
+        lock: 1,
+      });
+      expectTableExact(
+        rebuilt,
+        CHANGE_LOG_STREAM_TABLE,
+        seedRows(ANCHOR),
+        'number',
+        'watermark',
+        'pos',
+      );
+      expect(rebuilt.pragma('journal_mode')).toEqual([{journal_mode: 'wal2'}]);
+    });
+
+    // A path that cannot be opened is a problem with the environment rather
+    // than with the file's contents, so it propagates with the file intact.
+    test('does not rebuild for a failure that is not corruption', () => {
+      const file = newDbFile();
+      const dir = changeLogFileName(file.path);
+      mkdirSync(dir);
+      try {
+        expect(() => openChangeLogDBForWriting(lc, file.path, ANCHOR)).toThrow(
+          /unable to open database file/,
+        );
+        expect(statSync(dir).isDirectory()).toBe(true);
+      } finally {
+        rmSync(dir, {recursive: true, force: true});
+      }
     });
   });
 

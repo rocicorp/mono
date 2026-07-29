@@ -27,6 +27,10 @@ import {
   litestreamRestoreMetricAttrs,
   litestreamRestoreRuns,
 } from '../services/litestream/metrics.ts';
+import {
+  changeLogFileName,
+  deleteChangeLogDB,
+} from '../services/replicator/change-log-db.ts';
 import {ReplicationStatusPublisher} from '../services/replicator/replication-status.ts';
 import {
   ReplicatorService,
@@ -73,9 +77,11 @@ export default async function runWorker(
   const mode: ReplicatorMode = fileMode === 'backup' ? 'backup' : 'serving';
   const runningLocalChangeStreamer =
     config.changeStreamer.mode === 'dedicated' && !config.changeStreamer.uri;
+  const sqliteChangeLogEnabled =
+    config.changeStreamer.sqliteChangeLogMode !== 'off';
   const logsChangeStream = replicaLogsChangeStream(
     fileMode,
-    config.changeStreamer.sqliteChangeLogMode !== 'off',
+    sqliteChangeLogEnabled,
     runningLocalChangeStreamer,
     config.litestream.backupURL,
   );
@@ -110,6 +116,27 @@ export default async function runWorker(
     debugName: `${workerName} replica`,
     dbPath,
   });
+
+  if (sqliteChangeLogEnabled) {
+    registerSQLiteCorruptionDiagnosticTarget({
+      debugName: `${workerName} change-log`,
+      dbPath: changeLogFileName(dbPath),
+    });
+  } else {
+    // Nothing in this task writes the log, so a file left behind by a run with
+    // the writer enabled would hold local disk indefinitely: it is excluded
+    // from the litestream backup and only the writer purges it. Deleting it is
+    // safe because the log is a cache — re-enabling the writer reseeds at the
+    // replica head — which is also why it is deleted rather than kept around
+    // for a rollback: a stale log is never served, only reseeded.
+    //
+    // The guard is the config rather than the derived `logsChangeStream`.
+    // `logsChangeStream` is false for replicas that coexist with an enabled
+    // writer in the same task (today the serving-copy, whose file is a
+    // different path), so keying deletion on it would delete a live log the
+    // moment a file mode shares the canonical replica's path.
+    deleteChangeLogDB(dbPath);
+  }
 
   const sqliteChangeLogObserver = readSQLiteChangeLog(
     lc,

@@ -12,10 +12,9 @@ import {
 import {StatementRunner} from '../../db/statements.ts';
 import {createLogContext} from '../../server/logging.ts';
 import {
-  applyChangeLogPragmas,
-  openChangeLogDB,
+  changeLogFileName,
+  openChangeLogDBForWriting,
   readReplicaAnchor,
-  reconcileChangeLog,
   type ReconcileResult,
 } from './change-log-db.ts';
 import {ChangeProcessor, type ChangeProcessorMode} from './change-processor.ts';
@@ -50,11 +49,30 @@ function createAPI(): API {
   let mode: ChangeProcessorMode | undefined;
   let lc: LogContext | undefined;
   let replicaDbPath: string | undefined;
-  let unregisterCorruptionDiagnosticTarget: (() => void) | undefined;
+  let changeLogDbPath: string | undefined;
+  let unregisterCorruptionDiagnosticTargets: (() => void)[] = [];
 
+  function unregisterCorruptionDiagnostics() {
+    unregisterCorruptionDiagnosticTargets.forEach(unregister => unregister());
+    unregisterCorruptionDiagnosticTargets = [];
+  }
+
+  // The write path spans two databases and a SqliteError does not say which
+  // one it came from, so both are dumped.
   function logCorruptionDiagnostics(err: unknown) {
-    if (lc && replicaDbPath && isSQLiteCorruption(err)) {
+    if (!lc || !isSQLiteCorruption(err)) {
+      return;
+    }
+    if (replicaDbPath) {
       logSQLiteCorruptionDiagnostics(lc, 'write-worker', replicaDbPath, err);
+    }
+    if (changeLogDbPath) {
+      logSQLiteCorruptionDiagnostics(
+        lc,
+        'write-worker change-log',
+        changeLogDbPath,
+        err,
+      );
     }
   }
 
@@ -86,13 +104,25 @@ function createAPI(): API {
           'change log, which opens a second one',
       );
       replicaDbPath = dbPath;
+      changeLogDbPath = shouldLogChangeStream
+        ? changeLogFileName(dbPath)
+        : undefined;
       lc = createLogContext({log: logConfig}, 'write-worker');
-      unregisterCorruptionDiagnosticTarget?.();
-      unregisterCorruptionDiagnosticTarget =
+      unregisterCorruptionDiagnostics();
+      unregisterCorruptionDiagnosticTargets.push(
         registerSQLiteCorruptionDiagnosticTarget({
           debugName: 'write-worker',
           dbPath,
-        });
+        }),
+      );
+      if (changeLogDbPath) {
+        unregisterCorruptionDiagnosticTargets.push(
+          registerSQLiteCorruptionDiagnosticTarget({
+            debugName: 'write-worker change-log',
+            dbPath: changeLogDbPath,
+          }),
+        );
+      }
       try {
         db = new Database(lc, dbPath);
         applyPragmas(db, pragmas);
@@ -108,13 +138,13 @@ function createAPI(): API {
         changeLogRunner = undefined;
         let reconciled: ReconcileResult | undefined;
         if (shouldLogChangeStream) {
-          changeLogDb = openChangeLogDB(must(lc), dbPath, {readonly: false});
-          applyChangeLogPragmas(changeLogDb);
-          reconciled = reconcileChangeLog(
+          const opened = openChangeLogDBForWriting(
             must(lc),
-            changeLogDb,
+            dbPath,
             readReplicaAnchor(db),
           );
+          changeLogDb = opened.db;
+          reconciled = opened.result;
           changeLogRunner = new StatementRunner(changeLogDb);
         }
         createProcessor();
@@ -157,8 +187,8 @@ function createAPI(): API {
       changeLogRunner = undefined;
       processor = undefined;
       replicaDbPath = undefined;
-      unregisterCorruptionDiagnosticTarget?.();
-      unregisterCorruptionDiagnosticTarget = undefined;
+      changeLogDbPath = undefined;
+      unregisterCorruptionDiagnostics();
     },
   };
 }

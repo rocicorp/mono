@@ -1,5 +1,5 @@
 import {once} from 'node:events';
-import {existsSync} from 'node:fs';
+import {existsSync, writeFileSync} from 'node:fs';
 import {Worker} from 'node:worker_threads';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
@@ -194,6 +194,53 @@ describe('write-worker', () => {
     expect(
       await worker.init(dbFile.path, 'serving', true, PRAGMAS, LOG_CONFIG),
     ).toEqual({action: 'truncated', head: '02', rows: 2});
+  });
+
+  test('init rebuilds a corrupt change log instead of failing', async () => {
+    await worker.stop();
+    writeFileSync(changeLogFileName(dbFile.path), 'this is not a database');
+
+    // The replica is intact, so the log is rebuilt in place of the file that
+    // cannot be read, rather than taking the replicator down with the cache.
+    worker = new ThreadWriteWorkerClient();
+    expect(
+      await worker.init(dbFile.path, 'serving', true, PRAGMAS, LOG_CONFIG),
+    ).toEqual({action: 'reseeded', head: '02', reason: 'created'});
+
+    const issues = new ReplicationMessages({issues: ['issueID', 'bool']});
+    for (const message of [
+      ['begin', issues.begin(), {commitWatermark: '06'}],
+      ['data', issues.insert('issues', {issueID: 1, bool: true})],
+      ['commit', issues.commit(), {watermark: '06'}],
+    ] satisfies ChangeStreamData[]) {
+      await worker.processMessage(serialized(message));
+    }
+    expect(
+      readChangeLog(db =>
+        db
+          .prepare(
+            `SELECT max("watermark") AS "head" FROM "${CHANGE_LOG_STREAM_TABLE}"`,
+          )
+          .get(),
+      ),
+    ).toEqual({head: '06'});
+  });
+
+  test('the disabled writer does not create a change log', async () => {
+    // `beforeEach` inits with the writer disabled, which is the
+    // `sqliteChangeLogMode=off` shape: a transaction goes through without the
+    // file ever appearing, so deleting a stale one at startup cannot race a
+    // writer.
+    const issues = new ReplicationMessages({issues: ['issueID', 'bool']});
+    for (const message of [
+      ['begin', issues.begin(), {commitWatermark: '06'}],
+      ['data', issues.insert('issues', {issueID: 1, bool: true})],
+      ['commit', issues.commit(), {watermark: '06'}],
+    ] satisfies ChangeStreamData[]) {
+      await worker.processMessage(serialized(message));
+    }
+
+    expect(existsSync(changeLogFileName(dbFile.path))).toBe(false);
   });
 
   test('init rejects the change-log writer in initial-sync mode', async () => {

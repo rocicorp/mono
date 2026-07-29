@@ -1,5 +1,11 @@
 import * as childProcess from 'node:child_process';
-import {existsSync, mkdtempSync, statSync, writeFileSync} from 'node:fs';
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {LogContext} from '@rocicorp/logger';
@@ -8,8 +14,10 @@ import {
   createSilentLogContext,
   TestLogSink,
 } from '../../../../shared/src/logging-test-utils.ts';
+import {must} from '../../../../shared/src/must.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {type NormalizedZeroConfig} from '../../config/normalize.ts';
+import {changeLogFileName} from '../replicator/change-log-db.ts';
 import {initReplicationState} from '../replicator/schema/replication-state.ts';
 import {
   getLastBackupTime,
@@ -233,6 +241,66 @@ describe('litestream/commands restoreReplica', () => {
     );
   });
 
+  test('deletes a change log left beside a restored replica', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'litestream-restore-test-'));
+    const source = join(dir, 'source.db');
+    const replica = join(dir, 'replica.db');
+    createRestorableReplica(source, '01');
+    // A change log whose replica is gone: the file it was anchored to is not
+    // the one this restore materializes.
+    const staleLog = changeLogFileName(replica);
+    writeFileSync(staleLog, '');
+    writeFileSync(`${staleLog}-wal2`, '');
+    const {litestream} = configWithFakeLitestream(
+      `if [ "$1" = "restore" ]; then\n` +
+        `  cp "${source}" "$6"\n` +
+        `  exit 0\n` +
+        `fi\n` +
+        `exit 1`,
+      replica,
+    );
+
+    expect(
+      await tryRestore(
+        lc,
+        litestream,
+        replica,
+        {replicaVersion: '01', minWatermark: '01'},
+        'replication_manager',
+      ),
+    ).toMatchObject({restored: true, result: 'success'});
+
+    expect(existsSync(replica)).toBe(true);
+    expect(existsSync(staleLog)).toBe(false);
+    expect(existsSync(`${staleLog}-wal2`)).toBe(false);
+  });
+
+  // The process-restart path: `-if-db-not-exists` makes the restore a no-op,
+  // and the change log beside the reused replica is still the one written
+  // against it. Deleting it would cost every reconnecting subscriber a
+  // `too-old` on every deploy.
+  test('keeps the change log when the restore reuses an existing replica', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'litestream-restore-test-'));
+    const replica = join(dir, 'replica.db');
+    createRestorableReplica(replica, '01');
+    const log = changeLogFileName(replica);
+    writeFileSync(log, '');
+    const {litestream} = configWithFakeLitestream(
+      `if [ "$1" = "restore" ]; then\n` + `  exit 0\n` + `fi\n` + `exit 1`,
+      replica,
+    );
+
+    await tryRestore(
+      lc,
+      litestream,
+      replica,
+      {replicaVersion: '01', minWatermark: '01'},
+      'replication_manager',
+    );
+
+    expect(existsSync(log)).toBe(true);
+  });
+
   test('does not record restored bytes when reusing an existing replica', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'litestream-restore-test-'));
     const replica = join(dir, 'replica.db');
@@ -284,6 +352,7 @@ describe('litestream/commands restoreReplica', () => {
         `exit 1`,
       replica,
     );
+    writeFileSync(changeLogFileName(replica), '');
 
     expect(
       await tryRestore(
@@ -302,6 +371,9 @@ describe('litestream/commands restoreReplica', () => {
     });
 
     expect(existsSync(replica)).toBe(false);
+    // The change log went with it; the next attempt reseeds against whatever
+    // replica it restores.
+    expect(existsSync(changeLogFileName(replica))).toBe(false);
     expect(restoreValidationRecordMs).toHaveBeenCalledWith(
       expect.any(Number),
       expect.objectContaining({result: 'invalid_replica'}),
@@ -347,5 +419,35 @@ describe('litestream/commands restoreReplica', () => {
     // stdio is [stdin, stdout, stderr]; stdout/stderr must be piped so
     // litestream's output is captured rather than sent to the pod's stdout.
     expect(restoreCall?.[2]?.stdio).toEqual(['ignore', 'pipe', 'pipe']);
+  });
+
+  // The change log is a local cache that is deliberately not backed up: it
+  // holds nothing that is not already in the replica's backup or re-derivable
+  // from the upstream slot, and shipping it would give back the S3 and
+  // follower-download savings the separate file exists to win.
+  test('the rendered litestream config never backs up the change-log database', () => {
+    const replica = join(
+      mkdtempSync(join(tmpdir(), 'litestream-config-test-')),
+      'replica.db',
+    );
+    const {litestream} = configWithFakeLitestream('exit 0', replica);
+    // The variables `getLitestream` substitutes into the config it hands
+    // litestream; `ZERO_REPLICA_FILE` is always the replica, never a path
+    // derived from it.
+    const env: Record<string, string> = {
+      ZERO_REPLICA_FILE: replica,
+      ZERO_LITESTREAM_BACKUP_URL: must(litestream.backupURL),
+    };
+    const yaml = readFileSync(
+      new URL('./config.yml', import.meta.url),
+      'utf-8',
+    ).replace(/\$\{(\w+)\}/g, (_, name: string) => env[name] ?? '');
+
+    const paths = Array.from(
+      yaml.matchAll(/^\s*-?\s*path:\s*(\S+)\s*$/gm),
+      ([, path]) => path,
+    );
+    expect(paths).toEqual([replica]);
+    expect(paths).not.toContain(changeLogFileName(replica));
   });
 });
