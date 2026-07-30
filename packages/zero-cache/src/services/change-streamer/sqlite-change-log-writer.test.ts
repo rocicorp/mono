@@ -151,6 +151,9 @@ describe('change-streamer/sqlite-change-log-writer', () => {
     expect(fixture.errors().join('\n')).toContain(
       'error writing to the SQLite change log',
     );
+    // The generic policy, not the carve-out: a dropped table is not a missed
+    // truncate-above, so it must not be reported as an invariant failure.
+    expect(fixture.errors().join('\n')).not.toContain('violated a constraint');
 
     // Replication continues: further writes are no-ops rather than throws, and
     // nothing recreates the file.
@@ -188,6 +191,44 @@ describe('change-streamer/sqlite-change-log-writer', () => {
     // Reported before failing soft, so the invariant failure is not absorbed.
     expect(fixture.writer.enabled).toBe(false);
     expect(existsSync(changeLogFileName(fixture.file.path))).toBe(false);
+  });
+
+  test('abort discards an interrupted transaction', () => {
+    using fixture = setup('change-log-writer-abort');
+
+    const begin: ChangeStreamData = [
+      'begin',
+      messages.begin(),
+      {commitWatermark: '04'},
+    ];
+    fixture.writer.write(begin, serializeChangeStreamData(begin));
+    fixture.writer.abort();
+
+    expect(fixture.head()).toBe('02');
+    expect(fixture.commits).toEqual([]);
+    expect(fixture.writer.enabled).toBe(true);
+
+    // The reconnected stream reconciles and re-delivers as if the interrupted
+    // transaction had never arrived.
+    fixture.writer.reconcile('02');
+    transaction(fixture.writer, '04');
+    expect(fixture.head()).toBe('04');
+    expect(fixture.commits).toEqual(['04']);
+  });
+
+  // The stream loop aborts whenever it believes a transaction is open, which
+  // includes the window between the commit-row write and its own bookkeeping --
+  // so an abort can arrive after the log already committed, and must be a
+  // no-op rather than a fail-soft.
+  test('abort with no open transaction is a no-op', () => {
+    using fixture = setup('change-log-writer-abort-idle');
+
+    transaction(fixture.writer, '04');
+    fixture.writer.abort();
+
+    expect(fixture.writer.enabled).toBe(true);
+    expect(fixture.head()).toBe('04');
+    expect(fixture.errors()).toEqual([]);
   });
 
   test('a failure to open the log disables the writer without throwing', () => {

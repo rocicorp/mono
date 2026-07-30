@@ -1,4 +1,4 @@
-import {writeFileSync} from 'node:fs';
+import {existsSync, writeFileSync} from 'node:fs';
 import {PG_LOCK_NOT_AVAILABLE} from '@drdgvhbh/postgres-error-codes';
 import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
@@ -53,10 +53,13 @@ import {
   type Downstream,
 } from './change-streamer.ts';
 import * as ErrorType from './error-type-enum.ts';
+import {Forwarder} from './forwarder.ts';
 import {initChangeStreamerSchema} from './schema/init.ts';
 import {AutoResetSignal, ensureReplicationConfig} from './schema/tables.ts';
+import {SQLiteChangeLogCatchup} from './sqlite-change-log-catchup.ts';
 import {SQLiteChangeLogReader} from './sqlite-change-log-reader.ts';
-import {PurgeLocker} from './storer.ts';
+import {SQLiteChangeLogWriter} from './sqlite-change-log-writer.ts';
+import {PurgeLocker, Storer} from './storer.ts';
 
 const opts: TuningOptions = {
   backPressureLimitHeapProportion: 0.04,
@@ -453,7 +456,10 @@ describe('change-streamer/service', () => {
         seedWatermark: REPLICA_VERSION,
       });
 
-      // And a subscriber selected for SQLite is served from it.
+      // And a subscriber selected for SQLite is served from it -- from the
+      // SQLite reader itself, not a silent PG fallback delivering the same
+      // messages.
+      const readerRead = vi.spyOn(SQLiteChangeLogReader.prototype, 'read');
       const sqliteSub = await subscribeServing('from-sqlite');
       const fromSQLite = drainToQueue(sqliteSub);
       expect(await nextChange(fromSQLite)).toMatchObject({tag: 'status'});
@@ -463,9 +469,90 @@ describe('change-streamer/service', () => {
         new: {id: 'hello'},
       });
       expect(await nextChange(fromSQLite)).toMatchObject({tag: 'commit'});
+      expect(readerRead).toHaveBeenCalled();
+      readerRead.mockRestore();
       sqliteSub.cancel();
     } finally {
       liveSub.cancel();
+      await streamer.stop();
+      await streamerDone;
+      deleteChangeLogDB(logFile.path);
+      logFile.delete();
+    }
+  });
+
+  /**
+   * Invariant 1 in its assertable form, against the real stream loop rather
+   * than a model of it: no `await` separates `#storer.store()` from the log's
+   * commit, and the commit precedes the forward of that transaction's `commit`
+   * message. The microtask queued at `store()` is the await-detector — if the
+   * loop yields between the two calls, the microtask runs and the label flips.
+   */
+  test('the log commits in the tick that stores the commit, before the forward', async () => {
+    const events: string[] = [];
+    let microtaskRanSinceStore = false;
+
+    const realStore = Storer.prototype.store;
+    const storeSpy = vi
+      .spyOn(Storer.prototype, 'store')
+      .mockImplementation(function (this: Storer, watermark, data) {
+        if (data[0] === 'commit') {
+          events.push(`store:${watermark}`);
+          microtaskRanSinceStore = false;
+          queueMicrotask(() => {
+            microtaskRanSinceStore = true;
+          });
+        }
+        return realStore.call(this, watermark, data);
+      });
+    const realWrite = SQLiteChangeLogWriter.prototype.write;
+    const writeSpy = vi
+      .spyOn(SQLiteChangeLogWriter.prototype, 'write')
+      .mockImplementation(function (this: SQLiteChangeLogWriter, change, json) {
+        realWrite.call(this, change, json);
+        if (change[0] === 'commit') {
+          events.push(
+            `log-commit:${change[2].watermark}:` +
+              (microtaskRanSinceStore ? 'after-an-await' : 'same-tick'),
+          );
+        }
+      });
+    const realForward = Forwarder.prototype.forward;
+    const forwardSpy = vi
+      .spyOn(Forwarder.prototype, 'forward')
+      .mockImplementation(function (this: Forwarder, entry) {
+        if (entry[1] === 'commit') {
+          events.push(`forward:${entry[0]}`);
+        }
+        return realForward.call(this, entry);
+      });
+
+    const logFile = new DbFile('sqlite-change-log-ordering');
+    await restartWithInlineChangeLogWriter(logFile);
+
+    try {
+      changes.push(['begin', messages.begin(), {commitWatermark: '06'}]);
+      changes.push(['data', messages.insert('foo', {id: 'first'})]);
+      changes.push(['commit', messages.commit(), {watermark: '06'}]);
+      changes.push(['begin', messages.begin(), {commitWatermark: '08'}]);
+      changes.push(['data', messages.insert('foo', {id: 'second'})]);
+      changes.push(['commit', messages.commit(), {watermark: '08'}]);
+      // The upstream ACK follows the storer's Postgres commit, which is behind
+      // everything the events record.
+      await expectAcks('06', '08');
+
+      expect(events).toEqual([
+        'store:06',
+        'log-commit:06:same-tick',
+        'forward:06',
+        'store:08',
+        'log-commit:08:same-tick',
+        'forward:08',
+      ]);
+    } finally {
+      storeSpy.mockRestore();
+      writeSpy.mockRestore();
+      forwardSpy.mockRestore();
       await streamer.stop();
       await streamerDone;
       deleteChangeLogDB(logFile.path);
@@ -790,6 +877,20 @@ describe('change-streamer/service', () => {
    * this log any more.
    */
   test("the writer's commit releases the SQLite barrier", async () => {
+    // The wiring this test exists for: the writer's onCommit callback notifies
+    // the barrier, now that no subscriber's ACK advances this log. Asserted via
+    // spy because the mid-transaction wait below can also be satisfied on its
+    // first plan() read — the required head resolves at forward time, after the
+    // log's commit — which would leave a broken notification path undetected.
+    const onChangeLogCommit = vi.spyOn(
+      SQLiteChangeLogCatchup.prototype,
+      'onChangeLogCommit',
+    );
+    // Pins the source: the catchup below must be served by the SQLite reader.
+    // A silent PG fallback delivers the same messages with the same timing,
+    // since PG catchup also withholds them until the storer commits.
+    const readerRead = vi.spyOn(SQLiteChangeLogReader.prototype, 'read');
+
     const logFile = new DbFile('sqlite-change-log-barrier');
     await restartWithInlineChangeLogWriter(logFile, {
       barrierTimeoutMs: 60_000,
@@ -829,8 +930,115 @@ describe('change-streamer/service', () => {
         new: {id: 'mid-transaction'},
       });
       expect(await nextChange(fromSQLite)).toMatchObject({tag: 'commit'});
+      // The commit's notification reached the barrier, and the messages above
+      // came out of the SQLite reader.
+      expect(onChangeLogCommit).toHaveBeenCalledWith('06');
+      expect(readerRead).toHaveBeenCalled();
       sqliteSub.cancel();
     } finally {
+      onChangeLogCommit.mockRestore();
+      readerRead.mockRestore();
+      liveSub.cancel();
+      await streamer.stop();
+      await streamerDone;
+      deleteChangeLogDB(logFile.path);
+      logFile.delete();
+    }
+  });
+
+  /**
+   * §3.7 at the service level: a write failure costs catchup reach, never the
+   * shard's replication. The writer disables itself, deletes the file, and --
+   * because the reader is cached on the service -- closes it, so no in-process
+   * reader is left serving an unlinked inode while every new open sees nothing.
+   */
+  test('a mid-stream writer failure fails soft without stopping replication', async () => {
+    const readerClose = vi.spyOn(SQLiteChangeLogReader.prototype, 'close');
+    const logFile = new DbFile('sqlite-change-log-fail-soft');
+    await restartWithInlineChangeLogWriter(logFile, {
+      barrierPollIntervalMs: 10,
+      shouldUse: ctx => ctx.id.startsWith('from-sqlite'),
+    });
+
+    const liveSub = await subscribeServing('live-observer');
+    const live = drainToQueue(liveSub);
+    expect(await nextChange(live)).toMatchObject({tag: 'status'});
+
+    try {
+      changes.push(['begin', messages.begin(), {commitWatermark: '06'}]);
+      changes.push(['data', messages.insert('foo', {id: 'logged'})]);
+      changes.push(['commit', messages.commit(), {watermark: '06'}]);
+      expect(await nextChange(live)).toMatchObject({tag: 'begin'});
+      expect(await nextChange(live)).toMatchObject({tag: 'insert'});
+      expect(await nextChange(live)).toMatchObject({tag: 'commit'});
+
+      // A subscriber served from SQLite, so that the service holds the cached
+      // reader the fail-soft below must close.
+      const sqliteSub = await subscribeServing('from-sqlite');
+      const fromSQLite = drainToQueue(sqliteSub);
+      expect(await nextChange(fromSQLite)).toMatchObject({tag: 'status'});
+      expect(await nextChange(fromSQLite)).toMatchObject({tag: 'begin'});
+      expect(await nextChange(fromSQLite)).toMatchObject({
+        tag: 'insert',
+        new: {id: 'logged'},
+      });
+      expect(await nextChange(fromSQLite)).toMatchObject({tag: 'commit'});
+      expect(readerClose).not.toHaveBeenCalled();
+
+      // Breaks the log under the writer: its next insert fails with an error
+      // the file's contents cannot explain, i.e. the generic fail-soft class.
+      {
+        using saboteur = openChangeLogDB(lc, logFile.path, {readonly: false});
+        saboteur.exec(`DROP TABLE "_zero.changeLogStream"`);
+      }
+
+      changes.push(['begin', messages.begin(), {commitWatermark: '08'}]);
+      changes.push(['data', messages.insert('foo', {id: 'after-failure'})]);
+      changes.push(['commit', messages.commit(), {watermark: '08'}]);
+
+      // Replication continues, for the live subscriber and for the one that
+      // was served from SQLite alike.
+      for (const sub of [live, fromSQLite]) {
+        expect(await nextChange(sub)).toMatchObject({tag: 'begin'});
+        expect(await nextChange(sub)).toMatchObject({
+          tag: 'insert',
+          new: {id: 'after-failure'},
+        });
+        expect(await nextChange(sub)).toMatchObject({tag: 'commit'});
+      }
+
+      // The writer disabled itself, deleted the file, and closed the reader.
+      expect(existsSync(changeLogFileName(logFile.path))).toBe(false);
+      expect(readerClose).toHaveBeenCalled();
+      expect(
+        logSink.messages
+          .filter(([level]) => level === 'error')
+          .map(([, , args]) => String(args[0]))
+          .join('\n'),
+      ).toContain('error writing to the SQLite change log');
+
+      // A subscriber arriving after the failure declines to SQLite -- the file
+      // is gone -- and is served everything from PG.
+      const afterSub = await subscribeServing('from-sqlite-after');
+      const after = drainToQueue(afterSub);
+      expect(await nextChange(after)).toMatchObject({tag: 'status'});
+      expect(await nextChange(after)).toMatchObject({tag: 'begin'});
+      expect(await nextChange(after)).toMatchObject({
+        tag: 'insert',
+        new: {id: 'logged'},
+      });
+      expect(await nextChange(after)).toMatchObject({tag: 'commit'});
+      expect(await nextChange(after)).toMatchObject({tag: 'begin'});
+      expect(await nextChange(after)).toMatchObject({
+        tag: 'insert',
+        new: {id: 'after-failure'},
+      });
+      expect(await nextChange(after)).toMatchObject({tag: 'commit'});
+
+      afterSub.cancel();
+      sqliteSub.cancel();
+    } finally {
+      readerClose.mockRestore();
       liveSub.cancel();
       await streamer.stop();
       await streamerDone;

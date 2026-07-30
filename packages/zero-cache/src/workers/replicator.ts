@@ -5,6 +5,7 @@ import {Database} from '../../../zqlite/src/db.ts';
 import type {ReplicaOptions} from '../config/zero-config.ts';
 import {deleteLiteDB} from '../db/delete-lite-db.ts';
 import {upgradeReplica} from '../services/change-source/common/replica-schema.ts';
+import {deleteChangeLogDB} from '../services/replicator/change-log-db.ts';
 import {Notifier} from '../services/replicator/notifier.ts';
 import type {
   ReplicaState,
@@ -55,6 +56,24 @@ export function replicatorDeletesStaleChangeLog(
   sqliteChangeLogMode: string,
 ): boolean {
   return sqliteChangeLogMode === 'off';
+}
+
+/**
+ * The `mode=off` cleanup itself: deletes the change-log file beside `dbPath`
+ * when {@link replicatorDeletesStaleChangeLog} says nothing writes it, and
+ * reports whether it did. The decision and the delete live in one function so
+ * that the guard test covers the call the replicator actually makes, not just
+ * the predicate.
+ */
+export function deleteStaleChangeLog(
+  sqliteChangeLogMode: string,
+  dbPath: string,
+): boolean {
+  if (!replicatorDeletesStaleChangeLog(sqliteChangeLogMode)) {
+    return false;
+  }
+  deleteChangeLogDB(dbPath);
+  return true;
 }
 
 const MILLIS_PER_HOUR = 1000 * 60 * 60;

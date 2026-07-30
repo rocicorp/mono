@@ -156,11 +156,11 @@ export async function initializeStreamer(
 const REPLICATION_STATUS_ERROR_DELAY_THRESHOLD_MS = 5000;
 
 // How long the change log may be unavailable before declining to serve from it
-// stops looking like normal startup ordering. A change-streamer routinely
-// starts before the replicator has created and reconciled the log, so early
+// stops looking like normal startup ordering. Subscriptions can arrive before
+// the stream loop's first reconcile has created and seeded the log, so early
 // declines are expected. Still declining a minute later means the log is not
-// being written at all -- `sqliteChangeLogMode=off`, a replicator crash loop,
-// or a path mismatch -- which is worth surfacing.
+// being written at all -- `sqliteChangeLogMode=off`, a writer that has failed
+// soft, or a path mismatch -- which is worth surfacing.
 const DEFAULT_CHANGE_LOG_UNAVAILABLE_WARN_THRESHOLD_MS = 60_000;
 
 /**
@@ -873,9 +873,10 @@ class ChangeStreamerImpl implements ChangeStreamerService {
    * Opens the change log and, if it can serve, wraps it in the coordinator that
    * subsequent subscriptions reuse.
    *
-   * The change-streamer and the replicator that writes the log start
-   * independently, so the log may not exist yet, may exist without content, or
-   * may be unreadable. None of those can be allowed to fail a subscription:
+   * The log may not exist yet -- the writer creates it at the stream loop's
+   * first reconcile, and deletes it when it fails soft -- or may exist without
+   * content, or may be unreadable. None of those can be allowed to fail a
+   * subscription:
    * this is the last point at which PG catchup is still available -- past
    * `Forwarder.add()` the subscriber is committed to SQLite -- so each declines
    * here instead. Neither the failure nor the reader is retained, so a later
@@ -935,8 +936,8 @@ class ChangeStreamerImpl implements ChangeStreamerService {
 
   /**
    * Reports falling back to PG catchup, tracking how long the log has been
-   * unavailable so that a change-streamer that merely started before its
-   * replicator does not look like an incident.
+   * unavailable so that a subscription that merely arrived before the writer's
+   * first reconcile does not look like an incident.
    */
   #declineSQLiteCatchup(
     ctx: SubscriberContext,

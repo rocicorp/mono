@@ -26,7 +26,6 @@ import {
   litestreamRestoreMetricAttrs,
   litestreamRestoreRuns,
 } from '../services/litestream/metrics.ts';
-import {deleteChangeLogDB} from '../services/replicator/change-log-db.ts';
 import {ReplicationStatusPublisher} from '../services/replicator/replication-status.ts';
 import {
   ReplicatorService,
@@ -43,7 +42,7 @@ import {getShardConfig} from '../types/shards.ts';
 import {
   getPragmaConfig,
   replicaFileModeSchema,
-  replicatorDeletesStaleChangeLog,
+  deleteStaleChangeLog,
   setUpMessageHandlers,
   setupReplica,
   type WalMode,
@@ -66,9 +65,6 @@ export default async function runWorker(
   const mode: ReplicatorMode = fileMode === 'backup' ? 'backup' : 'serving';
   const runningLocalChangeStreamer =
     config.changeStreamer.mode === 'dedicated' && !config.changeStreamer.uri;
-  const deletesStaleChangeLog = replicatorDeletesStaleChangeLog(
-    config.changeStreamer.sqliteChangeLogMode,
-  );
   const workerName = `${mode}-replicator`;
   startOtelAuto(createLogContext(config, workerName, 0, false), workerName, 0);
   lc = createLogContext(config, workerName);
@@ -97,12 +93,10 @@ export default async function runWorker(
     dbPath,
   });
 
-  if (deletesStaleChangeLog) {
-    // A file left behind by a run with the writer enabled would otherwise hold
-    // local disk indefinitely. See `replicatorDeletesStaleChangeLog` for why
-    // this is keyed on the config flag and nothing else.
-    deleteChangeLogDB(dbPath);
-  }
+  // A file left behind by a run with the writer enabled would otherwise hold
+  // local disk indefinitely. See `replicatorDeletesStaleChangeLog` for why
+  // this is keyed on the config flag and nothing else.
+  deleteStaleChangeLog(config.changeStreamer.sqliteChangeLogMode, dbPath);
 
   setupMetrics(lc, dbPath, walMode);
 

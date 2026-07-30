@@ -224,11 +224,11 @@ export default async function runWorker(
         // TODO: Make deleteLiteDB work with litestream. It will probably have to be
         //       a semantic wipe instead of a file delete.
         deleteLiteDB(replica.file);
-        // The change log is anchored to the replica it was written beside, and
-        // the retry performs a fresh initial sync with a new replicaVersion.
-        // Reconciliation would catch that on its own (as
-        // 'replica-version-mismatch') but only after the writer opened a file
-        // that is known here to be garbage.
+        // The change log carries the identity of the replica it was written
+        // beside, and the retry performs a fresh initial sync with a new
+        // replicaVersion. Reconciliation would catch that on its own (as
+        // 'identity-mismatch') but only after the writer opened a file that is
+        // known here to be garbage.
         deleteChangeLogDB(replica.file);
         // Release the purge lock before retrying. This is safe because the
         // purge lock exists to preserve change-log entries so the new
