@@ -439,6 +439,47 @@ describe('change-streamer/sqlite-change-log-purge-scheduler', () => {
     expect(minWatermark(db)).toBe(v(8));
   });
 
+  test('pause resolves only once the in-flight batch has completed', async () => {
+    const {db, scheduler} = setup({batchRows: 4});
+    appendSeries(db, 1, 30);
+
+    // Hold the purge mutex, as a catchup registration does, so that the
+    // cycle's first batch queues behind it: a batch "in flight" — dispatched
+    // but not yet run — at the moment the reservation arrives.
+    let releaseGuard!: () => void;
+    const registration = scheduler.cleanupGuard.runWhilePurgeBlocked(
+      () => new Promise<void>(resolve => (releaseGuard = resolve)),
+    );
+    await microtasks();
+
+    const cycle = scheduler.purge(v(25));
+    await microtasks(); // the batch's lock acquisition is now queued
+
+    let minAtResume: string | null | undefined;
+    const paused = scheduler.pause('restorer').then(() => {
+      minAtResume = minWatermark(db);
+    });
+
+    // The barrier: the pause was issued after the batch was dispatched, so
+    // its promise must not resolve while that batch is still pending.
+    await microtasks();
+    expect(minAtResume).toBeUndefined();
+
+    releaseGuard();
+    await registration;
+    await paused;
+
+    // The queued batch ran to completion *before* the pause resolved — the
+    // bounds a backup monitor reads after awaiting the pause cannot be
+    // invalidated by a batch that was already on its way in...
+    expect(minAtResume).toBe(v(1));
+    // ...and no batch runs after it: the drain is interrupted, not finished.
+    const result = await cycle;
+    expect(result.stopped).toBe('paused');
+    expect(result.batches).toBe(1);
+    expect(minWatermark(db)).toBe(v(1));
+  });
+
   test('a pause lands between batches and interrupts the drain', async () => {
     const fixture = setup({
       batchRows: 4,
