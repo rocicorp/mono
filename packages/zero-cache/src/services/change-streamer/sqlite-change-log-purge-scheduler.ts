@@ -16,7 +16,8 @@ import type {SQLiteChangeLogCleanupGuard} from './sqlite-change-log-catchup.ts';
 import {SQLITE_CHANGE_LOG_PLAN_SQL} from './sqlite-change-log-reader.ts';
 
 /**
- * The hard bound on any one purge statement. Purge runs on the writer's own
+ * The duration target for any one purge statement, enforced by the purger's
+ * measured-budget feedback. Purge runs on the writer's own
  * connection, in the stream loop's process, so a statement's duration stalls
  * the appending path — and the fan-out behind it — directly. The bench's
  * 100 ms bound was derived for the replicator's write worker; this budget is
