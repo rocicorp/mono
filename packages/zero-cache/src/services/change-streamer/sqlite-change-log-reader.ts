@@ -2,7 +2,7 @@ import type {LogContext} from '@rocicorp/logger';
 import {AbortError} from '../../../../shared/src/abort-error.ts';
 import {assert} from '../../../../shared/src/asserts.ts';
 import {Database, type Statement} from '../../../../zqlite/src/db.ts';
-import {CHANGE_LOG_STREAM_TABLE} from '../replicator/schema/change-log-stream.ts';
+import {CHANGE_LOG_STREAM_TABLE} from '../replicator/change-log-db.ts';
 import {
   reconstructWatermarkedChange,
   type ChangeLogEntry,

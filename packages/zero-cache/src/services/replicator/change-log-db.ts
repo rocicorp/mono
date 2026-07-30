@@ -30,17 +30,53 @@ import {
   isSQLiteCorruption,
   logSQLiteCorruptionDiagnostics,
 } from '../../db/sqlite-corruption.ts';
-import {
-  CHANGE_LOG_STREAM_TABLE,
-  CREATE_CHANGE_LOG_STREAM_SCHEMA,
-  SEED_CHANGE_LOG_STREAM_SQL,
-} from './schema/change-log-stream.ts';
 
 /**
  * Bumped whenever the change-log database's schema changes. Since the file is a
  * cache, a mismatch costs one reseed rather than a migration.
  */
 export const CHANGE_LOG_DB_SCHEMA_VERSION = 1;
+
+export const CHANGE_LOG_STREAM_TABLE = '_zero.changeLogStream';
+export const CHANGE_LOG_STREAM_WRITE_TIME_INDEX =
+  '_zero.changeLogStream_writeTimeMs';
+
+// The index is partial because only commit rows carry a "writeTimeMs", so it
+// holds one entry per transaction rather than one per change. It is what the
+// purger scans to find transactions older than the retention window.
+//
+// The replica carried this same table through schema versions 14 and 15; see
+// `CREATE_V14_CHANGE_LOG_STREAM` in `change-source/common/replica-schema.ts`,
+// which is frozen at the v14 shape and must not be kept in sync with this one.
+export const CREATE_CHANGE_LOG_STREAM_SCHEMA = /*sql*/ `
+  CREATE TABLE "${CHANGE_LOG_STREAM_TABLE}" (
+    "watermark"   TEXT NOT NULL,
+    "pos"         INTEGER NOT NULL,
+    "change"      TEXT NOT NULL,
+    "precommit"   TEXT,
+    "writeTimeMs" INTEGER,
+    PRIMARY KEY ("watermark", "pos")
+  );
+
+  CREATE INDEX "${CHANGE_LOG_STREAM_WRITE_TIME_INDEX}"
+    ON "${CHANGE_LOG_STREAM_TABLE}" ("writeTimeMs", "watermark")
+    WHERE "writeTimeMs" IS NOT NULL;
+`;
+
+/**
+ * Inserts the synthetic begin/commit pair for a `@stateVersion` watermark.
+ *
+ * Both rows are inserted by one statement so a caller outside a larger
+ * transaction cannot leave a partial seed.
+ */
+const SEED_CHANGE_LOG_STREAM_SQL = /*sql*/ `
+  INSERT INTO "${CHANGE_LOG_STREAM_TABLE}"
+    ("watermark", "pos", "change", "precommit", "writeTimeMs")
+  VALUES
+    (@stateVersion, 0, '{"tag":"begin"}', NULL, NULL),
+    (@stateVersion, 1, '{"tag":"commit"}', @stateVersion, @writeTimeMs)
+  ON CONFLICT ("watermark", "pos") DO NOTHING
+`;
 
 export const CHANGE_LOG_META_TABLE = '_zero.changeLogMeta';
 

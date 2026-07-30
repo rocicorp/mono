@@ -30,6 +30,7 @@ import {
 import {
   changeLogFileName,
   deleteChangeLogDB,
+  openChangeLogDB,
 } from '../services/replicator/change-log-db.ts';
 import {ReplicationStatusPublisher} from '../services/replicator/replication-status.ts';
 import {
@@ -37,8 +38,8 @@ import {
   type ReplicatorMode,
 } from '../services/replicator/replicator.ts';
 import {
+  getReplicaChangeLogInfo,
   getSQLiteChangeLogInfo,
-  getSQLiteChangeLogStartupInfo,
   logSQLiteChangeLogStartup,
   recordSQLiteChangeLogReconcile,
   SQLiteChangeLogObserver,
@@ -138,13 +139,6 @@ export default async function runWorker(
     deleteChangeLogDB(dbPath);
   }
 
-  const sqliteChangeLogObserver = readSQLiteChangeLog(
-    lc,
-    dbPath,
-    fileMode,
-    logsChangeStream,
-  );
-
   setupMetrics(lc, dbPath, walMode);
 
   // Create the write worker for async SQLite writes. When the change-log
@@ -162,6 +156,16 @@ export default async function runWorker(
   if (reconciled) {
     recordSQLiteChangeLogReconcile(lc, reconciled);
   }
+
+  // Read after `init`, which creates the change-log database if it is absent
+  // and reconciles it if it is not. Before that call there may be no file to
+  // read, and any head it held would be the pre-reconciliation one.
+  const sqliteChangeLogObserver = readSQLiteChangeLog(
+    lc,
+    dbPath,
+    fileMode,
+    logsChangeStream,
+  );
 
   const shard = getShardConfig(config);
   const {
@@ -211,16 +215,14 @@ export default async function runWorker(
 
 /**
  * Emits the read-only SQLite change-log startup inspection and, when the writer
- * is enabled, returns an observer seeded with the retained row/byte totals.
+ * is enabled, returns an observer seeded with the change log's head and its
+ * retained row/byte totals.
  *
- * The totals require a full change-log table scan, so that scan is skipped when
- * the writer is disabled: an off-mode replica still logs its startup state but
- * only pays for the indexed schema/state/head lookups.
- *
- * Only the writer requires a seeded change log, so when it is disabled the
- * inspection is best-effort: a missing or unseeded log (e.g. a replica that
- * predates the change-log migration) is warned about rather than crashing the
- * replicator, keeping `sqliteChangeLogMode=off` a safe rollback.
+ * The totals require a full scan of the change log, so a disabled writer opens
+ * no change-log database at all and reports only the replica's own schema and
+ * replication state. That path stays best-effort — it warns rather than
+ * crashing the replicator — so that `sqliteChangeLogMode=off` remains a safe
+ * rollback.
  */
 function readSQLiteChangeLog(
   lc: LogContext,
@@ -228,31 +230,28 @@ function readSQLiteChangeLog(
   fileMode: ReplicaFileMode,
   logsChangeStream: boolean,
 ): SQLiteChangeLogObserver | undefined {
-  const db = new Database(lc, file, {readonly: true});
-  try {
-    if (!logsChangeStream) {
-      try {
-        logSQLiteChangeLogStartup(
-          lc,
-          fileMode,
-          false,
-          getSQLiteChangeLogStartupInfo(db),
-        );
-      } catch (e) {
-        lc.warn?.(
-          'SQLite change-log startup inspection skipped: the change log is ' +
-            'unavailable and the writer is disabled',
-          e,
-        );
-      }
-      return undefined;
+  using replica = new Database(lc, file, {readonly: true});
+  if (!logsChangeStream) {
+    try {
+      logSQLiteChangeLogStartup(
+        lc,
+        fileMode,
+        false,
+        getReplicaChangeLogInfo(replica),
+      );
+    } catch (e) {
+      lc.warn?.(
+        'SQLite change-log startup inspection skipped: the replica state is ' +
+          'unavailable and the writer is disabled',
+        e,
+      );
     }
-    const info = getSQLiteChangeLogInfo(db);
-    logSQLiteChangeLogStartup(lc, fileMode, true, info);
-    return new SQLiteChangeLogObserver(lc, info);
-  } finally {
-    db.close();
+    return undefined;
   }
+  using changeLog = openChangeLogDB(lc, file, {readonly: true});
+  const info = getSQLiteChangeLogInfo(replica, changeLog);
+  logSQLiteChangeLogStartup(lc, fileMode, true, info);
+  return new SQLiteChangeLogObserver(lc, info);
 }
 
 function setupMetrics(lc: LogContext, file: string, walMode: WalMode) {

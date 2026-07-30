@@ -1,4 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
+import {assert} from '../../../../../shared/src/asserts.ts';
 import type {Database} from '../../../../../zqlite/src/db.ts';
 import {listTables} from '../../../db/lite-tables.ts';
 import {
@@ -11,10 +12,6 @@ import {
   logSQLiteCorruptionDiagnostics,
 } from '../../../db/sqlite-corruption.ts';
 import {AutoResetSignal} from '../../change-streamer/schema/tables.ts';
-import {
-  CREATE_CHANGE_LOG_STREAM_SCHEMA,
-  seedChangeLogStream,
-} from '../../replicator/schema/change-log-stream.ts';
 import {populateFromExistingTables} from '../../replicator/schema/column-metadata.ts';
 import {
   CREATE_RUNTIME_EVENTS_TABLE,
@@ -119,6 +116,58 @@ export const CREATE_V9_TABLE_METADATA_TABLE = /*sql*/ `
     PRIMARY KEY ("schema", "table")
   );
 `;
+
+// Deliberately shadows the same names in `replicator/change-log-db.ts`: these
+// are the v14 replica's, that module's are the change-log database's, and the
+// two are frozen apart.
+export const V14_CHANGE_LOG_STREAM_TABLE = '_zero.changeLogStream';
+const V14_CHANGE_LOG_STREAM_WRITE_TIME_INDEX =
+  '_zero.changeLogStream_writeTimeMs';
+
+// The change-log stream table, as migration 14 created it and migration 16
+// drops it. Frozen at its v14 shape: a migration is history, so this must not
+// be kept in sync with the live definition in `replicator/change-log-db.ts`,
+// which now describes a table in a different database.
+export const CREATE_V14_CHANGE_LOG_STREAM = /*sql*/ `
+  CREATE TABLE "${V14_CHANGE_LOG_STREAM_TABLE}" (
+    "watermark"   TEXT NOT NULL,
+    "pos"         INTEGER NOT NULL,
+    "change"      TEXT NOT NULL,
+    "precommit"   TEXT,
+    "writeTimeMs" INTEGER,
+    PRIMARY KEY ("watermark", "pos")
+  );
+
+  CREATE INDEX "${V14_CHANGE_LOG_STREAM_WRITE_TIME_INDEX}"
+    ON "${V14_CHANGE_LOG_STREAM_TABLE}" ("writeTimeMs", "watermark")
+    WHERE "writeTimeMs" IS NOT NULL;
+`;
+
+// Idempotent because migrateData may run again after a rollback followed by a
+// roll-forward, and both rows go in with one statement so a partial seed is
+// not reachable.
+const SEED_V14_CHANGE_LOG_STREAM = /*sql*/ `
+  INSERT INTO "${V14_CHANGE_LOG_STREAM_TABLE}"
+    ("watermark", "pos", "change", "precommit", "writeTimeMs")
+  VALUES
+    (@stateVersion, 0, '{"tag":"begin"}', NULL, NULL),
+    (@stateVersion, 1, '{"tag":"commit"}', @stateVersion, @writeTimeMs)
+  ON CONFLICT ("watermark", "pos") DO NOTHING
+`;
+
+function seedV14ChangeLogStream(db: Database): void {
+  const state = db
+    .prepare(/*sql*/ `
+      SELECT "stateVersion", "writeTimeMs" FROM "_zero.replicationState"
+    `)
+    .get<{stateVersion: string; writeTimeMs: number | null} | undefined>();
+  assert(state !== undefined, 'replication state must be initialized');
+  assert(
+    state.writeTimeMs !== null,
+    'replication state writeTimeMs must be initialized',
+  );
+  db.prepare(SEED_V14_CHANGE_LOG_STREAM).run(state);
+}
 
 export const schemaVersionMigrationMap: IncrementalMigrationMap = {
   // There's no incremental migration from v1. Just reset the replica.
@@ -247,13 +296,16 @@ export const schemaVersionMigrationMap: IncrementalMigrationMap = {
     },
   },
 
+  // Deliberately left as it shipped, even though v16 immediately undoes it.
+  // Rewriting it to a no-op would strand replicas already at v14: they roll
+  // back to v14 code, which expects the table this created.
   14: {
     migrateSchema: (_, db) => {
-      db.exec(CREATE_CHANGE_LOG_STREAM_SCHEMA);
+      db.exec(CREATE_V14_CHANGE_LOG_STREAM);
     },
 
     migrateData: (_, db) => {
-      seedChangeLogStream(db);
+      seedV14ChangeLogStream(db);
     },
   },
 
@@ -275,6 +327,32 @@ export const schemaVersionMigrationMap: IncrementalMigrationMap = {
         DROP TABLE "_zero.replicationState";
 
         ALTER TABLE "_zero.replicationState2" RENAME TO "_zero.replicationState";
+      `);
+    },
+  },
+
+  // The change log moved out of the replica and into its own database
+  // (`${replicaFile}-change-log`), so the replica's copy is dead weight in
+  // every file the backup ships and every follower downloads. Nothing reads it
+  // as of this version.
+  //
+  // `IF EXISTS` because a fresh replica never runs the incremental migrations
+  // at all — its setup migration creates the current schema directly, which no
+  // longer includes this table — and because a rollback to v14 followed by a
+  // roll-forward re-runs `migrateData` while skipping `migrateSchema`.
+  //
+  // The freed pages are reclaimed by the existing `vacuumIntervalHours`
+  // trigger in `workers/replicator.ts`; no special handling here.
+  //
+  // No `minSafeVersion`: an older zero-cache still runs against a v16 replica,
+  // and with `sqliteChangeLogMode=off` (the default) it never looks for this
+  // table. Bumping the rollback limit would turn every rollback into a hard
+  // startup failure to protect a configuration that is not enabled anywhere.
+  16: {
+    migrateSchema: (_, db) => {
+      db.exec(/*sql*/ `
+        DROP INDEX IF EXISTS "${V14_CHANGE_LOG_STREAM_WRITE_TIME_INDEX}";
+        DROP TABLE IF EXISTS "${V14_CHANGE_LOG_STREAM_TABLE}";
       `);
     },
   },
