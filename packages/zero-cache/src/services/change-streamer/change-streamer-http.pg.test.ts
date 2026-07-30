@@ -196,22 +196,26 @@ describe('change-streamer/http', () => {
         `/replication/v${PROTOCOL_VERSION}/changes`,
       ],
       [
+        'invalid querystring - missing taskID',
+        `/replication/v${PROTOCOL_VERSION}/changes?id=foo`,
+      ],
+      [
         'Missing taskID in snapshot request',
         `/replication/v${PROTOCOL_VERSION}/snapshot`,
       ],
       [
         'invalid querystring - missing watermark',
-        `/replication/v${PROTOCOL_VERSION}/changes?id=foo&replicaVersion=bar&initial=true`,
+        `/replication/v${PROTOCOL_VERSION}/changes?id=foo&replicaVersion=bar&initial=true&taskID=foo`,
       ],
       [
         // Change the error message as necessary
-        `Cannot service client at protocol v7. Supported protocols: [v1 ... v6]`,
+        `Cannot service client at protocol v7. Supported protocols: [v4 ... v6]`,
         `/replication/v${PROTOCOL_VERSION + 1}/changes` +
-          `?id=foo&replicaVersion=bar&watermark=123&initial=true`,
+          `?id=foo&replicaVersion=bar&watermark=123&initial=true&id=foo`,
       ],
       [
         // Change the error message as necessary
-        `Cannot service client at protocol v7. Supported protocols: [v1 ... v6]`,
+        `Cannot service client at protocol v7. Supported protocols: [v4 ... v6]`,
         `/replication/v${PROTOCOL_VERSION + 1}/snapshot` +
           `?id=foo&replicaVersion=bar&watermark=123&initial=true`,
       ],
