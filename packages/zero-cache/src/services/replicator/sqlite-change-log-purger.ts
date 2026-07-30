@@ -55,10 +55,26 @@ export const SQLITE_CHANGE_LOG_ELIGIBLE_COMMITS_SQL = /*sql*/ `
   LIMIT @limit
 `;
 
-const COUNT_TRANSACTION_SQL = /*sql*/ `
-  SELECT count(*) AS "rows"
-  FROM "${CHANGE_LOG_STREAM_TABLE}"
-  WHERE "watermark" = ?
+/**
+ * Counts the rows at `@watermark`, capped at `@limit`. The cap is what keeps
+ * batch sizing O(budget): this runs per candidate inside the
+ * `BEGIN IMMEDIATE`, and the transaction being sized can be arbitrarily
+ * large — an uncapped count of a multi-million-row backfill would rescan
+ * every remaining row on every tear batch, holding the write lock (and the
+ * appending path behind it) for the duration, quadratically over the drain.
+ * The caller only needs to know whether the transaction fits its remaining
+ * budget, so it passes `remaining + 1` and reads a count above `remaining`
+ * as "does not fit".
+ *
+ * Exported so the focused tests cover the production query.
+ */
+export const SQLITE_CHANGE_LOG_COUNT_TRANSACTION_SQL = /*sql*/ `
+  SELECT count(*) AS "rows" FROM (
+    SELECT 1
+    FROM "${CHANGE_LOG_STREAM_TABLE}"
+    WHERE "watermark" = @watermark
+    LIMIT @limit
+  )
 `;
 
 /**
@@ -129,12 +145,16 @@ export type PurgeBatchOptions = {
   /** Starting chunk size. Not the bound — `maxDurationMs` is. */
   readonly maxRows: number;
   /**
-   * The hard bound. No single statement in the batch may run longer than this:
-   * purge shares the writer's connection, so there is no lock to arbitrate and
-   * no `busy_timeout` to bound the wait — a long statement blocks the appending
-   * path, and the forward behind it, directly and for its full duration. That
-   * is why this is a precondition of purging from the stream loop rather than a
-   * tuning knob.
+   * The statement duration target, enforced by feedback rather than by
+   * interruption: SQLite cannot yield mid-statement, so the purger measures
+   * each delete and shrinks the next batch's row budget when one overruns
+   * (see {@link SQLiteChangeLogPurger.budgetRows}) — which means the first
+   * delete after a restart, sized by `maxRows` alone, can still overrun it.
+   * The target is this consequential because purge shares the writer's
+   * connection: there is no lock to arbitrate and no `busy_timeout` to bound
+   * the wait — a long statement blocks the appending path, and the forward
+   * behind it, directly and for its full duration. That is why this is a
+   * precondition of purging from the stream loop rather than a tuning knob.
    */
   readonly maxDurationMs: number;
 };
@@ -176,7 +196,7 @@ export class SQLiteChangeLogPurger {
     this.#now = now;
     this.#stmts = {
       eligibleCommits: db.prepare(SQLITE_CHANGE_LOG_ELIGIBLE_COMMITS_SQL),
-      countTransaction: db.prepare(COUNT_TRANSACTION_SQL),
+      countTransaction: db.prepare(SQLITE_CHANGE_LOG_COUNT_TRANSACTION_SQL),
       deleteThrough: db.prepare(DELETE_THROUGH_SQL),
       minWatermark: db.prepare(MIN_WATERMARK_SQL),
       tearBoundary: db.prepare(TEAR_BOUNDARY_SQL),
@@ -244,10 +264,15 @@ export class SQLiteChangeLogPurger {
     let rows = 0;
     let deletedThrough: string | undefined;
     for (const {watermark} of candidates) {
-      const {rows: n} = this.#stmts.countTransaction.get<{rows: number}>(
+      // The count is capped at one past the remaining budget: `n > remaining`
+      // is exactly `rows + n > budget` for a fitting transaction, and a
+      // too-large one stops scanning as soon as it is known not to fit.
+      const remaining = budget - rows;
+      const {rows: n} = this.#stmts.countTransaction.get<{rows: number}>({
         watermark,
-      );
-      if (rows + n > budget) {
+        limit: remaining + 1,
+      });
+      if (n > remaining) {
         break;
       }
       rows += n;

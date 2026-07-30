@@ -19,6 +19,7 @@ import {
 } from './change-log-db.ts';
 import {ChangeLogStreamWriter} from './change-log-stream-writer.ts';
 import {
+  SQLITE_CHANGE_LOG_COUNT_TRANSACTION_SQL,
   SQLITE_CHANGE_LOG_ELIGIBLE_COMMITS_SQL,
   SQLiteChangeLogPurger,
   type PurgeBatchOptions,
@@ -1003,6 +1004,48 @@ describe('replicator/sqlite-change-log-purger', () => {
 
       expect(() => purge(new SQLiteChangeLogPurger(db))).toThrow(cause);
       expect(executed).toEqual(['BEGIN IMMEDIATE']);
+    });
+  });
+
+  describe('transaction sizing', () => {
+    // Sizing a candidate must not scan more rows than the batch may delete:
+    // the count runs per candidate inside the BEGIN IMMEDIATE, and an
+    // uncapped count of a huge transaction would rescan every remaining row
+    // on every tear batch, holding the write lock for the duration.
+    test('the transaction count is capped at its limit', () => {
+      const {db, close} = createLog();
+      try {
+        append(db, v(1), 10, SEED_WRITE_TIME_MS + 1); // 12 rows with begin+commit
+        const count = (limit: number) =>
+          db
+            .prepare(SQLITE_CHANGE_LOG_COUNT_TRANSACTION_SQL)
+            .get<{rows: number}>({watermark: v(1), limit}).rows;
+
+        expect(count(20)).toBe(12); // exact when the transaction fits
+        expect(count(5)).toBe(5); // capped when it cannot
+        expect(count(12)).toBe(12); // an exact fit is not mistaken for overflow
+      } finally {
+        close();
+      }
+    });
+
+    test('the capped transaction count seeks the primary key', () => {
+      const {db, close} = createLog();
+      try {
+        appendSeries(db, 1, 5, 5);
+        const details = queryPlan(db, SQLITE_CHANGE_LOG_COUNT_TRANSACTION_SQL, {
+          watermark: v(1),
+          limit: 10,
+        });
+        const steps = details.filter(detail =>
+          detail.includes(CHANGE_LOG_STREAM_TABLE),
+        );
+        expect(steps).toHaveLength(1);
+        expect(steps[0]).toMatch(/^SEARCH/);
+        expect(steps[0]).toMatch(/COVERING INDEX/);
+      } finally {
+        close();
+      }
     });
   });
 
