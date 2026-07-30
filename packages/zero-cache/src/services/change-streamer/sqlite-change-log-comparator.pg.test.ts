@@ -446,6 +446,50 @@ describe('change-streamer/sqlite-change-log-comparator', () => {
     expect(result.matched).toBe(2);
   });
 
+  test('rows outside any committed transaction classify as orphan-output', async () => {
+    await feedBoth(
+      tx('03', messages.insert('foo', {id: 'a'})),
+      tx('04', messages.insert('foo', {id: 'b'})),
+      tx('05', messages.insert('foo', {id: 'c'})),
+    );
+    // A torn/corrupt remnant only SQLite serves: begin + data with no commit
+    // row, invisible to the commit enumeration but served to any subscriber
+    // catching up across it. '03b' is the same remnant in *both* stores,
+    // identically — parity in what catchup serves, so not a finding.
+    withSQLiteLog(db =>
+      db.exec(/*sql*/ `
+        INSERT INTO "${CHANGE_LOG_STREAM_TABLE}"
+          ("watermark", "pos", "change", "precommit", "writeTimeMs")
+        VALUES
+          ('03a', 0, '{"tag":"begin"}', NULL, NULL),
+          ('03a', 1, '{"tag":"insert"}', NULL, NULL),
+          ('03b', 0, '{"tag":"begin"}', NULL, NULL),
+          ('03b', 1, '{"tag":"insert"}', NULL, NULL)
+      `),
+    );
+    await sql`
+      INSERT INTO ${cdc('changeLog')} ("watermark", "pos", "change", "precommit")
+      VALUES ('03b', 0, '{"tag":"begin"}'::json, NULL),
+             ('03b', 1, '{"tag":"insert"}'::json, NULL),
+             ('04a', 0, '{"tag":"begin"}'::json, NULL),
+             ('04a', 1, '{"tag":"insert"}'::json, NULL)`;
+
+    const result = await newComparator().compareOnce();
+    assert(result.kind === 'compared', 'expected a compared cycle');
+    // The asymmetric orphans are reported at their own watermarks; the
+    // transactions themselves all still match.
+    expect(result.divergent).toMatchObject([
+      {watermark: '03a', outcome: 'orphan-output', sqliteRows: 2},
+      {watermark: '04a', outcome: 'orphan-output', pgRows: 2},
+    ]);
+    expect(result.matched).toBe(3);
+    const [sqliteOrphan, pgOrphan] = result.divergent;
+    expect(sqliteOrphan.sqliteDigest).toHaveLength(16);
+    expect(sqliteOrphan.pgDigest).toBeUndefined();
+    expect(pgOrphan.pgDigest).toHaveLength(16);
+    expect(pgOrphan.sqliteDigest).toBeUndefined();
+  });
+
   test('a missing catchup boundary classifies as bounds-mismatch', async () => {
     await feedBoth(
       tx('03', messages.insert('foo', {id: 'boundary'})),

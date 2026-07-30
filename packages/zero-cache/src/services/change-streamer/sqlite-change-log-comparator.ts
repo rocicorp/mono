@@ -50,6 +50,13 @@ const DIGEST_PREFIX_LENGTH = 16;
  * The outcome of comparing one committed transaction's catchup output between
  * the two stores, or of a cycle-level bounds check.
  *
+ * `orphan-output` means a sampled read served rows at a watermark that is not
+ * a committed transaction in either store — a torn or corrupt remnant the
+ * commit enumeration cannot see, but that a real catchup subscriber would
+ * receive. It is reported at the orphan's own watermark, for whichever store
+ * serves it, unless both stores serve it identically (which is parity in what
+ * catchup *serves*, the thing this comparison measures).
+ *
  * `inconclusive` means the common lower bound (or a head) moved after the
  * cycle pinned it — a purge, truncation, or reseed raced the comparison — so
  * the observation says nothing about divergence and is deliberately not
@@ -60,6 +67,7 @@ export type CompareOutcome =
   | 'digest-mismatch'
   | 'missing-pg'
   | 'missing-sqlite'
+  | 'orphan-output'
   | 'bounds-mismatch'
   | 'reader-error'
   | 'inconclusive';
@@ -137,6 +145,9 @@ export type SQLiteChangeLogCompareOptions = {
    * transactions whose catchup output is digest-compared. Presence (a
    * transaction one store serves and the other does not) is checked for every
    * transaction in the range regardless, since it needs no payload reads.
+   * Orphan output — rows belonging to no committed transaction — has no
+   * commit row for the presence pass to see, so it is detectable only within
+   * sampled reads.
    */
   readonly comparePercent: number;
   /**
@@ -553,19 +564,26 @@ export class SQLiteChangeLogComparator {
           isSampledForCompare(this.#shard, watermark, this.#opts.comparePercent)
         ) {
           sampled++;
-          const result = await this.#compareTransaction(
+          const {tx, orphans} = await this.#compareTransaction(
             db,
             reader,
             meta,
             previousBoundary,
             watermark,
           );
-          if (result === undefined) {
+          // Orphans precede the transaction: their watermarks lie strictly
+          // inside `(previousBoundary, watermark)`, keeping `divergent` in
+          // watermark order.
+          for (const orphan of orphans) {
+            divergent.push(orphan);
+            this.#compareResults.add(1, {outcome: orphan.outcome});
+          }
+          if (tx === undefined) {
             matched++;
             this.#compareResults.add(1, {outcome: 'match'});
           } else {
-            divergent.push(result);
-            this.#compareResults.add(1, {outcome: result.outcome});
+            divergent.push(tx);
+            this.#compareResults.add(1, {outcome: tx.outcome});
           }
           // Let fan-out, catchup, and the stream loop make progress between
           // sampled reads.
@@ -712,8 +730,14 @@ export class SQLiteChangeLogComparator {
   /**
    * Runs both catchup paths over `(previousBoundary, watermark]` — exactly one
    * transaction, since `previousBoundary` is the immediately preceding commit
-   * in either store — and compares the digests of what each serves. Returns
+   * in either store — and compares the digests of what each serves. `tx` is
    * `undefined` on a match.
+   *
+   * Everything else either read returned is orphan output: rows at a
+   * watermark that is not a committed transaction in either store, which a
+   * real catchup subscriber would nevertheless receive. Reporting it here is
+   * what keeps "extra served rows" from passing as parity; see
+   * {@link #compareOrphans}.
    */
   async #compareTransaction(
     db: Database,
@@ -721,23 +745,22 @@ export class SQLiteChangeLogComparator {
     meta: ChangeLogMeta,
     previousBoundary: string,
     watermark: string,
-  ): Promise<TransactionCompareResult | undefined> {
-    let sqliteTx: CatchupTransactionDigest | undefined;
-    let pgTx: CatchupTransactionDigest | undefined;
+  ): Promise<{
+    tx: TransactionCompareResult | undefined;
+    orphans: TransactionCompareResult[];
+  }> {
+    let sqliteServed: Map<string, CatchupTransactionDigest>;
+    let pgServed: Map<string, CatchupTransactionDigest>;
     try {
       const readBatchRows = this.#opts.readBatchRows ?? DEFAULT_READ_BATCH_ROWS;
-      sqliteTx = (
-        await digestCatchupTransactions(
-          reader.read(previousBoundary, watermark, readBatchRows),
-        )
-      ).get(watermark);
-      pgTx = (
-        await digestCatchupTransactions(
-          reconstructBatches(
-            this.#pg.readCatchupRange(previousBoundary, watermark),
-          ),
-        )
-      ).get(watermark);
+      sqliteServed = await digestCatchupTransactions(
+        reader.read(previousBoundary, watermark, readBatchRows),
+      );
+      pgServed = await digestCatchupTransactions(
+        reconstructBatches(
+          this.#pg.readCatchupRange(previousBoundary, watermark),
+        ),
+      );
     } catch (e) {
       this.#lc.warn?.(
         `error reading transaction ${watermark} for comparison`,
@@ -749,8 +772,17 @@ export class SQLiteChangeLogComparator {
         watermark,
         'reader-error',
       );
-      return {watermark, outcome};
+      return {tx: {watermark, outcome}, orphans: []};
     }
+    const orphans = await this.#compareOrphans(
+      db,
+      meta,
+      watermark,
+      sqliteServed,
+      pgServed,
+    );
+    const sqliteTx = sqliteServed.get(watermark);
+    const pgTx = pgServed.get(watermark);
     if (
       sqliteTx !== undefined &&
       pgTx !== undefined &&
@@ -758,7 +790,7 @@ export class SQLiteChangeLogComparator {
       pgTx.complete &&
       sqliteTx.digest === pgTx.digest
     ) {
-      return undefined;
+      return {tx: undefined, orphans};
     }
     const suspect: Exclude<CompareOutcome, 'match'> =
       sqliteTx === undefined
@@ -768,13 +800,63 @@ export class SQLiteChangeLogComparator {
           : 'digest-mismatch';
     const outcome = await this.#reconfirm(db, meta, watermark, suspect);
     return {
-      watermark,
-      outcome,
-      sqliteDigest: sqliteTx?.digest.slice(0, DIGEST_PREFIX_LENGTH),
-      pgDigest: pgTx?.digest.slice(0, DIGEST_PREFIX_LENGTH),
-      sqliteRows: sqliteTx?.rows,
-      pgRows: pgTx?.rows,
+      tx: {
+        watermark,
+        outcome,
+        sqliteDigest: sqliteTx?.digest.slice(0, DIGEST_PREFIX_LENGTH),
+        pgDigest: pgTx?.digest.slice(0, DIGEST_PREFIX_LENGTH),
+        sqliteRows: sqliteTx?.rows,
+        pgRows: pgTx?.rows,
+      },
+      orphans,
     };
+  }
+
+  /**
+   * Classifies every digest a range read produced at a watermark other than
+   * the compared transaction's. The commit enumeration cannot see these —
+   * they have no commit row — so a sampled read is the only place they are
+   * observable, and discarding them would report a store that serves extra
+   * rows as parity. Output both stores serve identically is parity — the
+   * comparison measures what catchup *serves*, and 7H owns content — so only
+   * asymmetric orphans are reported, at their own watermark, subject to the
+   * same purge-race reconfirmation as every other suspect.
+   */
+  async #compareOrphans(
+    db: Database,
+    meta: ChangeLogMeta,
+    txWatermark: string,
+    sqliteServed: Map<string, CatchupTransactionDigest>,
+    pgServed: Map<string, CatchupTransactionDigest>,
+  ): Promise<TransactionCompareResult[]> {
+    const watermarks = [
+      ...new Set([...sqliteServed.keys(), ...pgServed.keys()]),
+    ]
+      .filter(w => w !== txWatermark)
+      .sort();
+    const orphans: TransactionCompareResult[] = [];
+    for (const w of watermarks) {
+      const sqlite = sqliteServed.get(w);
+      const pg = pgServed.get(w);
+      if (
+        sqlite !== undefined &&
+        pg !== undefined &&
+        sqlite.complete === pg.complete &&
+        sqlite.digest === pg.digest
+      ) {
+        continue;
+      }
+      const outcome = await this.#reconfirm(db, meta, w, 'orphan-output');
+      orphans.push({
+        watermark: w,
+        outcome,
+        sqliteDigest: sqlite?.digest.slice(0, DIGEST_PREFIX_LENGTH),
+        pgDigest: pg?.digest.slice(0, DIGEST_PREFIX_LENGTH),
+        sqliteRows: sqlite?.rows,
+        pgRows: pg?.rows,
+      });
+    }
+    return orphans;
   }
 
   /**
