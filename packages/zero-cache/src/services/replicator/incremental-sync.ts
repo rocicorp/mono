@@ -19,7 +19,6 @@ import type {ReplicationStatusPublisher} from './replication-status.ts';
 import type {ReplicaState, ReplicatorMode} from './replicator.ts';
 import {ReplicationReportRecorder} from './reporter/recorder.ts';
 import type {ReplicationReport} from './reporter/report-schema.ts';
-import type {SQLiteChangeLogObserver} from './sqlite-change-log-observability.ts';
 import type {WriteWorkerClient} from './write-worker-client.ts';
 
 type ErrorType = Enum<typeof ErrorType>;
@@ -38,11 +37,9 @@ export class IncrementalSyncer {
   readonly #changeStreamer: ChangeStreamer;
   readonly #worker: WriteWorkerClient;
   readonly #mode: ReplicatorMode;
-  readonly #logsChangeStream: boolean;
   readonly #statusPublisher: ReplicationStatusPublisher | null;
   readonly #notifier: Notifier;
   readonly #reporter: ReplicationReportRecorder;
-  readonly #sqliteChangeLogObserver: SQLiteChangeLogObserver | undefined;
 
   readonly #state = new RunningState('IncrementalSyncer');
 
@@ -59,9 +56,7 @@ export class IncrementalSyncer {
     changeStreamer: ChangeStreamer,
     worker: WriteWorkerClient,
     mode: ReplicatorMode,
-    logsChangeStream: boolean,
     statusPublisher: ReplicationStatusPublisher | null,
-    sqliteChangeLogObserver: SQLiteChangeLogObserver | undefined,
   ) {
     this.#lc = lc;
     this.#taskID = taskID;
@@ -69,11 +64,9 @@ export class IncrementalSyncer {
     this.#changeStreamer = changeStreamer;
     this.#worker = worker;
     this.#mode = mode;
-    this.#logsChangeStream = logsChangeStream;
     this.#statusPublisher = statusPublisher;
     this.#notifier = new Notifier();
     this.#reporter = new ReplicationReportRecorder(lc);
-    this.#sqliteChangeLogObserver = sqliteChangeLogObserver;
   }
 
   async run() {
@@ -108,7 +101,11 @@ export class IncrementalSyncer {
           watermark,
           replicaVersion,
           initial: watermark === initialWatermark,
-          logsChangeStream: this.#logsChangeStream,
+          // The SQLite change log is written by the change-streamer itself, so
+          // no replicator logs the change stream any more. The parameter stays
+          // on the wire for change-streamers that still exclude a writer from
+          // SQLite catchup.
+          logsChangeStream: false,
         });
         this.#state.resetBackoff();
         unregister = this.#state.cancelOnStop(downstream);
@@ -120,7 +117,7 @@ export class IncrementalSyncer {
 
         let backfillStatus: DownloadStatus | undefined;
 
-        for await (const {data: message, json} of downstream) {
+        for await (const {data: message} of downstream) {
           this.#replicationEvents.add(1);
           switch (message[0]) {
             case 'status': {
@@ -185,27 +182,7 @@ export class IncrementalSyncer {
               }
 
               const data = message as ChangeStreamData;
-              const start = performance.now();
-              this.#sqliteChangeLogObserver?.messageReceived(data, json);
-              let result: CommitResult | null;
-              try {
-                result = await this.#worker.processMessage({
-                  data,
-                  json,
-                });
-              } catch (e) {
-                this.#sqliteChangeLogObserver?.messageFailed(
-                  data,
-                  e,
-                  performance.now() - start,
-                );
-                throw e;
-              }
-              this.#sqliteChangeLogObserver?.messageProcessed(
-                data,
-                result,
-                performance.now() - start,
-              );
+              const result = await this.#worker.processMessage(data);
 
               this.#handleResult(lc, result);
               if (result?.completedBackfill) {
@@ -215,11 +192,9 @@ export class IncrementalSyncer {
             }
           }
         }
-        this.#sqliteChangeLogObserver?.abort();
         this.#worker.abort();
       } catch (e) {
         err = e;
-        this.#sqliteChangeLogObserver?.abort();
         this.#worker.abort();
       } finally {
         downstream?.cancel();

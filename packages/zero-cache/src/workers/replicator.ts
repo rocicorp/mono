@@ -5,6 +5,7 @@ import {Database} from '../../../zqlite/src/db.ts';
 import type {ReplicaOptions} from '../config/zero-config.ts';
 import {deleteLiteDB} from '../db/delete-lite-db.ts';
 import {upgradeReplica} from '../services/change-source/common/replica-schema.ts';
+import {deleteChangeLogDB} from '../services/replicator/change-log-db.ts';
 import {Notifier} from '../services/replicator/notifier.ts';
 import type {
   ReplicaState,
@@ -29,32 +30,50 @@ export const replicaFileModeSchema = v.literalUnion(
 
 export type ReplicaFileMode = v.Infer<typeof replicaFileModeSchema>;
 
-export function createsCanonicalReplicator(
-  runsLocalChangeStreamer: boolean,
-  backupURL: string | undefined,
-  numSyncWorkers: number,
-): boolean {
-  return runsLocalChangeStreamer && (Boolean(backupURL) || numSyncWorkers > 0);
-}
-
-export function replicaLogsChangeStream(
-  fileMode: ReplicaFileMode,
-  sqliteChangeLogEnabled: boolean,
-  runsLocalChangeStreamer: boolean,
-  backupURL: string | undefined,
-): boolean {
-  if (!sqliteChangeLogEnabled || !runsLocalChangeStreamer) {
-    return false;
-  }
-  return (
-    fileMode === 'backup' || (fileMode === 'serving' && !Boolean(backupURL))
-  );
-}
-
 export type WalMode = 'wal' | 'wal2';
 
 export function replicaFileName(replicaFile: string, mode: ReplicaFileMode) {
   return mode === 'serving-copy' ? `${replicaFile}-serving-copy` : replicaFile;
+}
+
+/**
+ * Whether a replicator worker deletes the change-log file beside its replica at
+ * startup.
+ *
+ * The change log belongs to the change-streamer, so this only ever cleans up a
+ * file that nothing is writing. The predicate is deliberately the config flag
+ * and nothing else: keying it on anything derived per replica -- a file mode, or
+ * the retired `logsChangeStream` -- would make every replicator start unlink the
+ * change-streamer's live log, because no replicator writes it any more. Paths
+ * coincide whenever `fileMode !== 'serving-copy'`, so that hazard is real in the
+ * shipped no-`backupURL` configuration.
+ *
+ * Deleting is safe when nothing writes the log: it is excluded from the
+ * litestream backup, only the writer purges it, and re-enabling the writer
+ * reseeds at the resume watermark.
+ */
+export function replicatorDeletesStaleChangeLog(
+  sqliteChangeLogMode: string,
+): boolean {
+  return sqliteChangeLogMode === 'off';
+}
+
+/**
+ * The `mode=off` cleanup itself: deletes the change-log file beside `dbPath`
+ * when {@link replicatorDeletesStaleChangeLog} says nothing writes it, and
+ * reports whether it did. The decision and the delete live in one function so
+ * that the guard test covers the call the replicator actually makes, not just
+ * the predicate.
+ */
+export function deleteStaleChangeLog(
+  sqliteChangeLogMode: string,
+  dbPath: string,
+): boolean {
+  if (!replicatorDeletesStaleChangeLog(sqliteChangeLogMode)) {
+    return false;
+  }
+  deleteChangeLogDB(dbPath);
+  return true;
 }
 
 const MILLIS_PER_HOUR = 1000 * 60 * 60;

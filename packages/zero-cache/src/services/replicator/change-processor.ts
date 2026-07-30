@@ -56,10 +56,6 @@ import type {
   TableUpdateMetadata,
 } from '../change-source/protocol/current/data.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
-import {
-  ChangeLogStreamWriter,
-  type ChangeLogStreamTransactionStats,
-} from './change-log-stream-writer.ts';
 import type {ReplicatorMode} from './replicator.ts';
 import {ChangeLog, DEL_OP, SET_OP} from './schema/change-log.ts';
 import {ColumnMetadataStore} from './schema/column-metadata.ts';
@@ -71,41 +67,11 @@ import {TableMetadataTracker} from './schema/table-metadata.ts';
 
 export type ChangeProcessorMode = ReplicatorMode | 'initial-sync';
 
-export type ChangeProcessorOptions = {
-  /**
-   * The change-log database, when the canonical change stream is being logged.
-   * It is a separate file from the replica, with its own transaction, which
-   * {@link ChangeLogStreamWriter} owns and commits before the replica's.
-   */
-  changeLog: StatementRunner | undefined;
-};
-
-/**
- * The two halves of the ordered commit, measured in the write worker so that
- * the IPC round trip is not folded in.
- */
-export type CommitTiming = {
-  /**
-   * Appending the commit row to the change log and committing its transaction.
-   */
-  readonly logCommitMs: number;
-  /**
-   * From the change log's `COMMIT` returning to the replica's — the phantom
-   * window. A crash anywhere in it leaves the log durable at `watermark` and
-   * the replica behind it, which startup reconciliation truncates. Watching it
-   * is watching how much of the change stream a crash can cost.
-   */
-  readonly replicaCommitMs: number;
-};
-
 export type CommitResult = {
   watermark: string;
   completedBackfill: DownloadStatus | undefined;
   schemaUpdated: boolean;
   changeLogUpdated: boolean;
-  changeLogStream?: ChangeLogStreamTransactionStats | undefined;
-  /** Set with {@link changeLogStream}, i.e. only when the log is written. */
-  commitTiming?: CommitTiming | undefined;
 };
 
 /**
@@ -122,7 +88,6 @@ export type CommitResult = {
 export class ChangeProcessor {
   readonly #db: StatementRunner;
   readonly #changeLog: ChangeLog;
-  readonly #changeLogStreamWriter: ChangeLogStreamWriter | undefined;
   readonly #tableMetadata: TableMetadataTracker;
   readonly #mode: ChangeProcessorMode;
   readonly #failService: (lc: LogContext, err: unknown) => void;
@@ -139,19 +104,10 @@ export class ChangeProcessor {
   constructor(
     db: StatementRunner,
     mode: ChangeProcessorMode,
-    options: ChangeProcessorOptions,
     failService: (lc: LogContext, err: unknown) => void,
   ) {
-    assert(
-      options.changeLog === undefined || mode !== 'initial-sync',
-      'initial-sync owns its transaction boundaries and cannot write the ' +
-        'change log, which opens a second one',
-    );
     this.#db = db;
     this.#changeLog = new ChangeLog(db.db);
-    this.#changeLogStreamWriter = options.changeLog
-      ? new ChangeLogStreamWriter(options.changeLog)
-      : undefined;
     this.#tableMetadata = new TableMetadataTracker(db.db);
     this.#mode = mode;
     this.#failService = failService;
@@ -160,13 +116,9 @@ export class ChangeProcessor {
   #fail(lc: LogContext, err: unknown) {
     if (!this.#failure) {
       let failureError = err;
-      // The two transactions are independent, so each is rolled back even if
-      // the other throws. Leaving one open would wedge the next attempt behind
-      // its own write lock.
-      const rollbackErrors = [
-        attempt(() => this.#currentTx?.abort(lc)),
-        attempt(() => this.#changeLogStreamWriter?.rollback()),
-      ].filter(e => e !== undefined);
+      const rollbackErrors = [attempt(() => this.#currentTx?.abort(lc))].filter(
+        e => e !== undefined,
+      );
 
       if (rollbackErrors.length) {
         const combinedError = new Error(
@@ -194,7 +146,6 @@ export class ChangeProcessor {
   processMessage(
     lc: LogContext,
     downstream: ChangeStreamData,
-    canonicalJSON?: string | undefined,
   ): CommitResult | null {
     const [type, message] = downstream;
     if (this.#failure) {
@@ -208,13 +159,7 @@ export class ChangeProcessor {
           : type === 'commit'
             ? downstream[2].watermark
             : undefined;
-      if (this.#changeLogStreamWriter) {
-        must(
-          canonicalJSON,
-          'canonical JSON is required when change-stream logging is enabled',
-        );
-      }
-      return this.#processMessage(lc, message, watermark, canonicalJSON);
+      return this.#processMessage(lc, message, watermark);
     } catch (e) {
       this.#fail(lc, e);
     }
@@ -267,22 +212,16 @@ export class ChangeProcessor {
     lc: LogContext,
     msg: Change,
     watermark: string | undefined,
-    canonicalJSON: string | undefined,
   ): CommitResult | null {
     if (msg.tag === 'begin') {
       if (this.#currentTx) {
         throw new Error(`Already in a transaction ${stringify(msg)}`);
       }
-      // Only the commit order matters. The replica's transaction is opened
-      // first because that is the one that carries the indefinite SQLITE_BUSY
-      // retry for litestream checkpoints; opening the log first would leave it
-      // holding a write lock for the duration of that wait.
       this.#currentTx = this.#beginTransaction(
         lc,
         must(watermark),
         msg.json ?? JSON_PARSED,
       );
-      this.#changeLogStreamWriter?.begin(must(watermark), must(canonicalJSON));
       return null;
     }
 
@@ -296,12 +235,7 @@ export class ChangeProcessor {
 
     if (msg.tag === 'commit') {
       assert(watermark, 'watermark is required for commit messages');
-      const result = tx.processCommit(
-        msg,
-        watermark,
-        this.#changeLogStreamWriter,
-        canonicalJSON,
-      );
+      const result = tx.processCommit(msg, watermark);
       // Clear only after a successful commit so #fail can roll back a commit
       // path that throws before SQLite has committed.
       this.#currentTx = null;
@@ -310,12 +244,9 @@ export class ChangeProcessor {
 
     if (msg.tag === 'rollback') {
       tx.abort(lc);
-      this.#changeLogStreamWriter?.rollback();
       this.#currentTx = null;
       return null;
     }
-
-    this.#changeLogStreamWriter?.append(must(canonicalJSON), msg.tag);
 
     switch (msg.tag) {
       case 'insert':
@@ -984,12 +915,7 @@ class TransactionProcessor {
     // no backfills are in progress).
   }
 
-  processCommit(
-    commit: MessageCommit,
-    watermark: string,
-    changeLogStreamWriter: ChangeLogStreamWriter | undefined,
-    canonicalJSON: string | undefined,
-  ): CommitResult {
+  processCommit(commit: MessageCommit, watermark: string): CommitResult {
     if (watermark !== this.#version) {
       throw new Error(
         `'commit' version ${watermark} does not match 'begin' version ${
@@ -997,31 +923,7 @@ class TransactionProcessor {
         }: ${stringify(commit)}`,
       );
     }
-    // Commit order is load-bearing: the change log commits first, then the
-    // replica (design 4.4). It is what makes `logHead >= stateVersion` hold at
-    // all times, so a crash in between leaves a phantom transaction in the log
-    // — locally detectable and truncated at startup — rather than a hole in it,
-    // which would be silently served to a subscriber as a gap.
-    let changeLogStream: ChangeLogStreamTransactionStats | undefined;
-    // Brackets the log's commit so that the two spans it separates — the log's
-    // own commit cost, and the phantom window that follows it — are measured
-    // rather than inferred from the total. Undefined when nothing is logged.
-    let logCommit: {startedAt: number; endedAt: number} | undefined;
-    if (changeLogStreamWriter) {
-      const writeTimeMs = Date.now();
-      const startedAt = performance.now();
-      changeLogStream = changeLogStreamWriter.commit(
-        watermark,
-        must(canonicalJSON),
-        writeTimeMs,
-      );
-      logCommit = {startedAt, endedAt: performance.now()};
-      // The same writeTimeMs is stored in both databases, so reconciliation
-      // can seed the log from the replica's state alone.
-      updateReplicationWatermark(this.#db, watermark, writeTimeMs);
-    } else {
-      updateReplicationWatermark(this.#db, watermark);
-    }
+    updateReplicationWatermark(this.#db, watermark);
 
     if (this.#schemaChanged) {
       const start = Date.now();
@@ -1034,12 +936,6 @@ class TransactionProcessor {
     if (this.#mode !== 'initial-sync') {
       this.#db.commit();
     }
-    // The replica commit above is unconditional whenever the log was written:
-    // a change processor that logs is never in 'initial-sync' mode.
-    const commitTiming: CommitTiming | undefined = logCommit && {
-      logCommitMs: logCommit.endedAt - logCommit.startedAt,
-      replicaCommitMs: performance.now() - logCommit.endedAt,
-    };
 
     const elapsedMs = Date.now() - this.#startMs;
     this.#lc.debug?.(`Committed tx@${this.#version} (${elapsedMs} ms)`);
@@ -1049,8 +945,6 @@ class TransactionProcessor {
       completedBackfill: this.#completedBackfill,
       schemaUpdated: this.#schemaChanged,
       changeLogUpdated: this.#numChangeLogEntries > 0,
-      ...(changeLogStream === undefined ? {} : {changeLogStream}),
-      ...(commitTiming === undefined ? {} : {commitTiming}),
     };
   }
 

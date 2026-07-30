@@ -24,10 +24,7 @@ import type {
   TableDrop,
   TableRename,
 } from '../change-source/protocol/current/data.ts';
-import {
-  ChangeProcessor,
-  type ChangeProcessorOptions,
-} from './change-processor.ts';
+import {ChangeProcessor} from './change-processor.ts';
 
 export interface FakeReplicator {
   processTransaction(
@@ -62,14 +59,8 @@ export function createChangeProcessor(
   failures: (lc: LogContext, err: unknown) => void = (_, err) => {
     throw err;
   },
-  options: ChangeProcessorOptions = {changeLog: undefined},
 ): ChangeProcessor {
-  return new ChangeProcessor(
-    new StatementRunner(db),
-    'serving',
-    options,
-    failures,
-  );
+  return new ChangeProcessor(new StatementRunner(db), 'serving', failures);
 }
 
 export class ReplicationMessages<

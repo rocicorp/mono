@@ -9,6 +9,7 @@ import {deleteLiteDB} from '../db/delete-lite-db.ts';
 import {registerSQLiteCorruptionDiagnosticTarget} from '../db/sqlite-corruption.ts';
 import {warmupConnections} from '../db/warmup.ts';
 import {initEventSink, publishCriticalEvent} from '../observability/events.ts';
+import {getOrCreateGauge} from '../observability/metrics.ts';
 import {initializeCustomChangeSource} from '../services/change-source/custom/change-source.ts';
 import {initializePostgresChangeSource} from '../services/change-source/pg/change-source.ts';
 import {createBackupCleanupMonitor} from '../services/change-streamer/backup-cleanup-monitor-factory.ts';
@@ -33,6 +34,7 @@ import {
   replicationStatusError,
   ReplicationStatusPublisher,
 } from '../services/replicator/replication-status.ts';
+import {sqliteFileBytes} from '../services/replicator/sqlite-change-log-observability.ts';
 import {connectPgClient} from '../types/pg.ts';
 import {
   childWorker,
@@ -66,6 +68,7 @@ export default async function runWorker(
       backPressureLimitHeapProportion,
       flowControlConsensusPaddingSeconds,
       flowControlEventDrivenRelease,
+      sqliteChangeLogMode,
       sqliteChangeLogReadBatchRows,
       sqliteChangeLogBarrierTimeoutMs,
     },
@@ -119,11 +122,32 @@ export default async function runWorker(
   let backupURL: string | undefined;
 
   const context = getServerContext(config);
+  const sqliteChangeLogEnabled = sqliteChangeLogMode !== 'off';
+  if (sqliteChangeLogEnabled) {
+    const changeLogFile = changeLogFileName(replica.file);
+    registerSQLiteCorruptionDiagnosticTarget({
+      debugName: 'change-streamer change-log',
+      dbPath: changeLogFile,
+    });
+    // The log's bytes are accounted for in the process that writes them. This
+    // is local disk only — the log is excluded from the litestream backup — and
+    // it is a whole-database total, because a table that left the replica left
+    // through its wal: the replica's footprint is what shrank and this is where
+    // it went.
+    getOrCreateGauge('replica', 'sqlite_change_log.file_bytes', {
+      description:
+        `The SQLite change log's total on-disk footprint: its main db file ` +
+        `plus its wal sidecars.`,
+      unit: 'By',
+    }).addCallback(async o =>
+      o.observe(await sqliteFileBytes(lc, changeLogFile)),
+    );
+  }
 
   for (const first of [true, false]) {
     try {
       // Note: This performs initial sync of the replica if necessary.
-      const {changeSource, subscriptionState, destinationBackupURL} =
+      const {changeSource, subscriptionState, destinationBackupURL, replicaID} =
         upstream.type === 'pg'
           ? await initializePostgresChangeSource(
               lc,
@@ -174,6 +198,21 @@ export default async function runWorker(
             readBatchRows: sqliteChangeLogReadBatchRows,
             barrierTimeoutMs: sqliteChangeLogBarrierTimeoutMs,
           },
+          // The presence of these options is the writer's gate. This process
+          // performs the restore and the initial sync, so the replica's
+          // identity is in hand at the moment the log is opened.
+          sqliteChangeLogWriter: sqliteChangeLogEnabled
+            ? {
+                replicaFile: replica.file,
+                identity: {
+                  // RMv2 supplies the epoch; until then the generation and the
+                  // replica ID are the whole of the identity.
+                  epoch: null,
+                  generation: subscriptionState.replicaVersion,
+                  replicaID,
+                },
+              }
+            : undefined,
         },
         setTimeout,
       );
@@ -185,11 +224,11 @@ export default async function runWorker(
         // TODO: Make deleteLiteDB work with litestream. It will probably have to be
         //       a semantic wipe instead of a file delete.
         deleteLiteDB(replica.file);
-        // The change log is anchored to the replica it was written beside, and
-        // the retry performs a fresh initial sync with a new replicaVersion.
-        // Reconciliation would catch that on its own (as
-        // 'replica-version-mismatch') but only after the writer opened a file
-        // that is known here to be garbage.
+        // The change log carries the identity of the replica it was written
+        // beside, and the retry performs a fresh initial sync with a new
+        // replicaVersion. Reconciliation would catch that on its own (as
+        // 'identity-mismatch') but only after the writer opened a file that is
+        // known here to be garbage.
         deleteChangeLogDB(replica.file);
         // Release the purge lock before retrying. This is safe because the
         // purge lock exists to preserve change-log entries so the new

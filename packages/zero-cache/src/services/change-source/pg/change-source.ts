@@ -207,7 +207,16 @@ export async function initializePostgresChangeSource(
         : // For legacy RMv1 replicas (on litestream-v3), backup to the same location
           restoreOptions.litestream?.backupURL;
 
-    return {subscriptionState, changeSource, destinationBackupURL};
+    return {
+      subscriptionState,
+      changeSource,
+      destinationBackupURL,
+      // The replica this change stream belongs to. It is part of the identity
+      // the SQLite change log records, because a generation (i.e.
+      // `replicaVersion`) is shared by every sibling of a forked replica and so
+      // cannot distinguish two siblings' logs.
+      replicaID: upstreamReplica.id,
+    };
   } finally {
     await db.end();
   }

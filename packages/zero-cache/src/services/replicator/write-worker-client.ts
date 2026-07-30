@@ -5,14 +5,8 @@ import type {LogConfig} from '../../../../shared/src/logging.ts';
 import type {Database} from '../../../../zqlite/src/db.ts';
 import {WRITE_WORKER_URL} from '../../server/worker-urls.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
-import type {ReconcileResult} from './change-log-db.ts';
 import type {ChangeProcessorMode, CommitResult} from './change-processor.ts';
 import type {SubscriptionState} from './schema/replication-state.ts';
-
-export type SerializedChangeStreamData = {
-  data: ChangeStreamData;
-  json: string;
-};
 
 export type PragmaConfig = {
   busyTimeout: number;
@@ -27,9 +21,7 @@ type ErrorHandler = (err: Error) => void;
  */
 export interface WriteWorkerClient {
   getSubscriptionState(): Promise<SubscriptionState>;
-  processMessage(
-    downstream: SerializedChangeStreamData,
-  ): Promise<CommitResult | null>;
+  processMessage(downstream: ChangeStreamData): Promise<CommitResult | null>;
   abort(): void;
   stop(): Promise<void>;
   onError(handler: ErrorHandler): void;
@@ -95,9 +87,9 @@ export function deserializeError(serialized: SerializedError): Error {
 
 // Wire protocol types.
 export type ArgsMap = {
-  init: [string, ChangeProcessorMode, boolean, PragmaConfig, LogConfig];
+  init: [string, ChangeProcessorMode, PragmaConfig, LogConfig];
   getSubscriptionState: [];
-  processMessage: [SerializedChangeStreamData];
+  processMessage: [ChangeStreamData];
   abort: [];
   stop: [];
 };
@@ -107,10 +99,7 @@ export type Method = keyof ArgsMap;
 export type Request<M extends Method = Method> = {method: M; args: ArgsMap[M]};
 
 export type ResultMap = {
-  // The change-log reconciliation, when the writer is enabled. Returned rather
-  // than reported from the worker because OTel is only started in the
-  // replicator process, so metrics recorded in this thread would be dropped.
-  init: ReconcileResult | undefined;
+  init: void;
   getSubscriptionState: SubscriptionState;
   processMessage: CommitResult | null;
   abort: void;
@@ -195,26 +184,17 @@ export class ThreadWriteWorkerClient implements WriteWorkerClient {
   init(
     dbPath: string,
     mode: ChangeProcessorMode,
-    logsChangeStream: boolean,
     pragmas: PragmaConfig,
     logConfig: LogConfig,
-  ): Promise<ReconcileResult | undefined> {
-    return this.#call('init', [
-      dbPath,
-      mode,
-      logsChangeStream,
-      pragmas,
-      logConfig,
-    ]);
+  ): Promise<void> {
+    return this.#call('init', [dbPath, mode, pragmas, logConfig]);
   }
 
   getSubscriptionState(): Promise<SubscriptionState> {
     return this.#call('getSubscriptionState', []);
   }
 
-  processMessage(
-    downstream: SerializedChangeStreamData,
-  ): Promise<CommitResult | null> {
+  processMessage(downstream: ChangeStreamData): Promise<CommitResult | null> {
     return this.#call('processMessage', [downstream]);
   }
 

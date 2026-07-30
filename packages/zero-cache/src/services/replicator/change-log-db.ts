@@ -5,25 +5,31 @@
  * the upstream replication slot, so it is deliberately excluded from the backup
  * and is never a source of truth.
  *
- * Because it is disposable, it has no migration framework. Any inconsistency
- * with the replica — a schema change, a leftover file from a different replica,
- * a gap left by a crash or by running with the writer disabled, a corrupt file
- * — is resolved by {@link reconcileChangeLog} and
- * {@link openChangeLogDBForWriting}, which truncate the offending rows or wipe
- * and reseed the log at the replica's current head. The worst outcome is a
- * `too-old` for a lagging subscriber; a silently delivered gap is not reachable.
+ * The change-streamer writes it, from the stream loop that fans changes out to
+ * subscribers, and commits it before forwarding each transaction's `commit`
+ * message. Its head is therefore always at or above the watermark the stream
+ * would resume from, which is what {@link reconcileChangeLog} anchors on.
  *
- * Disk sizing: a task that writes the log needs room for the replica *plus* one
- * retention window of the change stream — the log's main file, its wal2
- * sidecars, and pages a purge has freed but not yet reused. Nothing purges the
- * log yet (that is parent slice 8), so with the writer enabled it currently
- * grows with the entire change stream since its last reseed, which is one more
- * reason `sqliteChangeLogMode` defaults to `off`. The log is excluded from the
- * litestream backup, so this is local disk only and never S3.
+ * Because it is disposable, it has no migration framework. Any inconsistency —
+ * a schema change, a leftover file from a different replica, a gap left by a
+ * crash or by running with the writer disabled, a corrupt file — is resolved by
+ * {@link reconcileChangeLog} and {@link openChangeLogDBForWriting}, which
+ * truncate the offending rows or wipe and reseed the log at the resume
+ * watermark. The worst outcome is a `too-old` for a lagging subscriber; a
+ * silently delivered gap is not reachable.
+ *
+ * Disk sizing: a task that writes the log needs room for the replica *plus* the
+ * retained change stream — the log's main file, its wal2 sidecars, and pages a
+ * purge has freed but not yet reused. Nothing purges the log yet (that is slice
+ * 8), so with the writer enabled it currently grows with the entire change
+ * stream since its last reseed, which is one more reason
+ * `sqliteChangeLogMode` defaults to `off`. Once purge lands, retention is
+ * bounded by the confirmed backup watermark rather than by a constant, so it is
+ * a function of the backup interval. The log is excluded from the litestream
+ * backup, so this is local disk only and never S3.
  */
 
 import type {LogContext} from '@rocicorp/logger';
-import {assert} from '../../../../shared/src/asserts.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {deleteLiteDB} from '../../db/delete-lite-db.ts';
 import {
@@ -34,8 +40,13 @@ import {
 /**
  * Bumped whenever the change-log database's schema changes. Since the file is a
  * cache, a mismatch costs one reseed rather than a migration.
+ *
+ * v2 re-homed the writer to the change-streamer: the log anchors on the
+ * watermark its stream connection resumes from rather than on the replica's
+ * state version, and its meta row carries the replica's identity triple plus
+ * the seed point.
  */
-export const CHANGE_LOG_DB_SCHEMA_VERSION = 1;
+export const CHANGE_LOG_DB_SCHEMA_VERSION = 2;
 
 export const CHANGE_LOG_STREAM_TABLE = '_zero.changeLogStream';
 export const CHANGE_LOG_STREAM_WRITE_TIME_INDEX =
@@ -64,7 +75,7 @@ export const CREATE_CHANGE_LOG_STREAM_SCHEMA = /*sql*/ `
 `;
 
 /**
- * Inserts the synthetic begin/commit pair for a `@stateVersion` watermark.
+ * Inserts the synthetic begin/commit pair for the seed watermark.
  *
  * Both rows are inserted by one statement so a caller outside a larger
  * transaction cannot leave a partial seed.
@@ -73,26 +84,45 @@ const SEED_CHANGE_LOG_STREAM_SQL = /*sql*/ `
   INSERT INTO "${CHANGE_LOG_STREAM_TABLE}"
     ("watermark", "pos", "change", "precommit", "writeTimeMs")
   VALUES
-    (@stateVersion, 0, '{"tag":"begin"}', NULL, NULL),
-    (@stateVersion, 1, '{"tag":"commit"}', @stateVersion, @writeTimeMs)
+    (@watermark, 0, '{"tag":"begin"}', NULL, NULL),
+    (@watermark, 1, '{"tag":"commit"}', @watermark, @writeTimeMs)
   ON CONFLICT ("watermark", "pos") DO NOTHING
 `;
 
 export const CHANGE_LOG_META_TABLE = '_zero.changeLogMeta';
 
-// "replicaVersion" identifies the replica this log was built against, which
-// detects a file left behind by a replica that was since reset and re-synced.
-// "lock" enforces single-row semantics, as in "_zero.replicationConfig".
+// The identity triple (see ChangeLogIdentity) detects a file left behind by a
+// different replica -- most concretely, a leftover log on a reused volume.
+//
+// "seededAtMs"    : when the log was seeded, i.e. how far its retention window
+//                   can possibly reach back. Slice 11 uses it as the warm-up
+//                   signal for canary reads.
+// "seedWatermark" : where the log was seeded. `min("watermark")` cannot answer
+//                   this once purge has advanced the minimum, and the
+//                   difference is what distinguishes a log that purged past the
+//                   retention floor (an invariant violation) from one that
+//                   never held that history at all (routine at every fork).
+// "lock"          : enforces single-row semantics, as in
+//                   "_zero.replicationConfig".
 const CREATE_CHANGE_LOG_META_SCHEMA = /*sql*/ `
   CREATE TABLE "${CHANGE_LOG_META_TABLE}" (
-    "replicaVersion" TEXT NOT NULL,
-    "schemaVersion"  INTEGER NOT NULL,
-    "lock"           INTEGER PRIMARY KEY DEFAULT 1 CHECK ("lock" = 1)
+    "epoch"         TEXT,
+    "generation"    TEXT NOT NULL,
+    "replicaID"     TEXT,
+    "schemaVersion" INTEGER NOT NULL,
+    "seededAtMs"    INTEGER NOT NULL,
+    "seedWatermark" TEXT NOT NULL,
+    "lock"          INTEGER PRIMARY KEY DEFAULT 1 CHECK ("lock" = 1)
   );
 `;
 
 /**
  * `${replicaFile}-change-log`, matching the `-serving-copy` convention.
+ *
+ * The name outlives the writer's move into the change-streamer: the
+ * change-streamer derives the path from the replica file it owns, so renaming
+ * would save no plumbing and would orphan the old file on every existing
+ * volume, where nothing would delete it.
  *
  * Its `-wal` / `-wal2` / `-shm` sidecars are suffixes of *this* name, so they
  * never collide with the replica's own sidecars.
@@ -109,48 +139,61 @@ export function deleteChangeLogDB(replicaFile: string): void {
   deleteLiteDB(changeLogFileName(replicaFile));
 }
 
-/** The replica facts the change log is anchored to. */
-export type ReplicaAnchor = {
-  readonly replicaVersion: string;
-  readonly stateVersion: string;
-  readonly writeTimeMs: number;
+/**
+ * Which replica the log's contents belong to.
+ *
+ * `generation` is RMv1's `replicaVersion`: the version at which initial sync
+ * copied every row. It is shared by every sibling of a forked replica, which is
+ * why it cannot be the whole of the identity under RMv2 — `epoch` and
+ * `replicaID` are what distinguish two siblings' logs. Both are `null` until
+ * RMv2 supplies them, and a `null` matches only another `null`, so a log
+ * written before they exist is still recognized as this replica's.
+ */
+export type ChangeLogIdentity = {
+  readonly epoch: string | null;
+  readonly generation: string;
+  readonly replicaID: string | null;
 };
 
-type ReplicaAnchorRow = {
-  readonly replicaVersion: string;
-  readonly stateVersion: string;
-  readonly writeTimeMs: number | null;
+/**
+ * What the log is reconciled against. Reconciliation runs once per stream
+ * connection, since every reconnect can re-read a different resume watermark.
+ */
+export type ChangeLogAnchor = {
+  readonly identity: ChangeLogIdentity;
+  /**
+   * The watermark this stream connection resumes from. The log's own head is
+   * measured against it, and a reseed seeds a synthetic transaction at it.
+   *
+   * Deliberately *not* "the replica's state version": after the writer moved to
+   * the change-streamer, the canonical replicator is a subscriber downstream of
+   * the write loop, so its state version is a consequence of this log rather
+   * than a constraint on it.
+   */
+  readonly resumeWatermark: string;
+  /**
+   * The change-streamer's clock, at reconciliation time. Supplied rather than
+   * read inline so that tests control it. Used for `seededAtMs` and for the
+   * seed transaction's `writeTimeMs`, which is what the purger's time floor
+   * measures.
+   */
+  readonly nowMs: number;
 };
 
-export function readReplicaAnchor(replica: Database): ReplicaAnchor {
-  const row = replica
-    .prepare(/*sql*/ `
-      SELECT config."replicaVersion",
-             state."stateVersion",
-             state."writeTimeMs"
-        FROM "_zero.replicationConfig" AS config,
-             "_zero.replicationState" AS state
-    `)
-    .get<ReplicaAnchorRow | undefined>();
-  assert(row !== undefined, 'replication state must be initialized');
-  assert(
-    row.writeTimeMs !== null,
-    'replication state writeTimeMs must be initialized',
-  );
-  return {
-    replicaVersion: row.replicaVersion,
-    stateVersion: row.stateVersion,
-    writeTimeMs: row.writeTimeMs,
-  };
-}
+/** The meta row, i.e. everything the log records about itself. */
+export type ChangeLogMeta = ChangeLogIdentity & {
+  readonly schemaVersion: number;
+  readonly seededAtMs: number;
+  readonly seedWatermark: string;
+};
 
 /**
  * Opens the change-log database beside `replicaFile`.
  *
  * A writable handle creates the file if it is absent; a `readonly` handle
- * throws, which is the normal state for a change-streamer that starts before
- * the replicator has created the log. Pragmas are the caller's responsibility,
- * since only the writer sets the persistent ones.
+ * throws, which is the normal state for a change-streamer whose writer is
+ * disabled. Pragmas are the caller's responsibility, since only the writer sets
+ * the persistent ones.
  */
 export function openChangeLogDB(
   lc: LogContext,
@@ -165,14 +208,9 @@ export function openChangeLogDB(
 }
 
 /**
- * Configures the change-log database, which the write worker owns exclusively.
- * These are the settings the `separate-files` mode of
+ * Configures the change-log database, which the change-streamer's writer owns
+ * exclusively. These are the settings the `separate-files` mode of
  * `sqlite-change-log-ceiling.bench.ts` measured.
- *
- * They deliberately do not go through `getPragmaConfig` in `workers/replicator`
- * beside the replica's, because the write worker applies them in its own
- * thread and that module reaches the Postgres client through the replica
- * migrations.
  *
  * `wal2` because the log is a continuous append that catchup reads
  * continuously, which is the case wal2 exists for: it avoids checkpoint
@@ -180,14 +218,14 @@ export function openChangeLogDB(
  * keeps its default, unlike the backup replica's 0, which hands checkpointing
  * to litestream — nothing else owns this file.
  *
- * `synchronous = NORMAL` because the log commits *before* the replica on the
- * replication hot path, and NORMAL keeps that from costing a second fsync. It
- * is not a durability compromise here: in WAL mode NORMAL still writes every
- * commit through to the OS, so it survives a process crash, an OOM kill, or a
- * SIGKILL. It is lost only to kernel panic or power loss, and those destroy the
- * node — the task restarts elsewhere, restores the replica from S3, and has no
- * change-log file at all. Whatever a power loss does take is detected as a gap
- * by {@link reconcileChangeLog} and reseeded.
+ * `synchronous = NORMAL` because the commit sits on the forward path, once per
+ * upstream transaction, and NORMAL keeps that from costing an fsync. It is not
+ * a durability compromise here: in WAL mode NORMAL still writes every commit
+ * through to the OS, so it survives a process crash, an OOM kill, or a SIGKILL.
+ * It is lost only to kernel panic or power loss, and those destroy the node —
+ * the task restarts elsewhere, restores the replica from S3, and has no
+ * change-log file at all. Whatever a power loss does take is detected by
+ * {@link reconcileChangeLog} and reseeded.
  */
 export function applyChangeLogPragmas(db: Database): void {
   db.pragma('busy_timeout = 30000');
@@ -206,20 +244,21 @@ export function applyChangeLogPragmas(db: Database): void {
  * corrupt replica is a lost source of truth, so it ends in a restore or an
  * auto-reset; the change log holds nothing that is not either already in the
  * replica's litestream backup or re-derivable from the upstream slot, so the
- * entire response is to delete the file and seed a new one at the replica head.
- * The cost is one retention window of catchup — reconnecting subscribers below
- * the head get `too-old` — which is what every other {@link ReseedReason}
- * costs. Failing startup instead would take the replica down with the cache.
+ * entire response is to delete the file and seed a new one at the resume
+ * watermark. The cost is one retention window of catchup — reconnecting
+ * subscribers below the head get `too-old` — which is what every other
+ * {@link ReseedReason} costs.
  *
  * Only corruption is rebuilt through. Anything else (a bad path, a permissions
  * error, a full disk) is a problem with the environment rather than with the
  * file's contents, and deleting a database in response would destroy state
- * without fixing it.
+ * without fixing it. Those propagate to the caller, which disables the writer
+ * and keeps replicating.
  */
 export function openChangeLogDBForWriting(
   lc: LogContext,
   replicaFile: string,
-  anchor: ReplicaAnchor,
+  anchor: ChangeLogAnchor,
 ): {db: Database; result: ReconcileResult} {
   try {
     return openAndReconcile(lc, replicaFile, anchor);
@@ -242,7 +281,7 @@ export function openChangeLogDBForWriting(
 function openAndReconcile(
   lc: LogContext,
   replicaFile: string,
-  anchor: ReplicaAnchor,
+  anchor: ChangeLogAnchor,
 ): {db: Database; result: ReconcileResult} {
   const db = openChangeLogDB(lc, replicaFile, {readonly: false});
   try {
@@ -259,8 +298,8 @@ function openAndReconcile(
 export type ReseedReason =
   | 'created' // file or table absent
   | 'schema-mismatch'
-  | 'replica-version-mismatch'
-  | 'gap'; // head < stateVersion after truncation
+  | 'identity-mismatch'
+  | 'gap'; // head does not land on the resume watermark after truncation
 
 export type ReconcileResult =
   | {action: 'none'; head: string}
@@ -268,25 +307,38 @@ export type ReconcileResult =
   | {action: 'reseeded'; head: string; reason: ReseedReason};
 
 /**
- * Brings the change log into agreement with the replica, in one transaction on
- * the change-log database.
+ * Brings the change log into agreement with the watermark its stream connection
+ * resumes from, in one transaction on the change-log database:
  *
- * Writes are ordered log-first, so a crash can leave a *phantom* — a
- * transaction in the log whose replica commit was lost — but never a *hole*.
- * A phantom's rows all carry the aborted transaction's commit watermark, which
- * is strictly greater than the replica's `stateVersion`, so deleting on that
- * predicate removes phantoms whole and retains every committed transaction.
+ * ```
+ * head === resumeWatermark  → keep appending
+ * head  >  resumeWatermark  → truncate above resumeWatermark
+ * otherwise                 → wipe, seed at resumeWatermark, record the reason
+ * ```
  *
- * Anything the ordering guarantee does not cover — the file was deleted, the
- * replica ran with the writer disabled, the replica was restored, power was
- * lost with `synchronous=NORMAL` — surfaces as a head that does not land on
- * `stateVersion` after truncation, and is resolved by wiping and reseeding at
- * the replica head.
+ * The log commits before anything that can advance the resume watermark, so a
+ * *phantom* — a transaction the log holds whose watermark the resumed stream
+ * re-delivers — is the normal state, and truncate-above is the whole of
+ * reconciliation rather than a special case. A phantom's rows all carry the
+ * transaction's commit watermark, which is strictly greater than the resume
+ * watermark, so deleting on that predicate removes phantoms whole and retains
+ * every transaction at or below the resume point.
+ *
+ * It must run per stream connection, not once per process: the stream loop
+ * re-reads its resume watermark on every reconnect, and the writer inserts with
+ * a plain `INSERT` against `PRIMARY KEY ("watermark","pos")`, so an
+ * un-truncated overlap is a constraint violation on the first re-delivered
+ * transaction.
+ *
+ * Anything truncation cannot resolve — the file was deleted, the writer was
+ * disabled for a while, the replica was restored, power was lost with
+ * `synchronous=NORMAL` — surfaces as a head that does not land on the resume
+ * watermark, and is resolved by wiping and reseeding there.
  */
 export function reconcileChangeLog(
   lc: LogContext,
   db: Database,
-  anchor: ReplicaAnchor,
+  anchor: ChangeLogAnchor,
 ): ReconcileResult {
   db.exec('BEGIN IMMEDIATE');
   try {
@@ -304,25 +356,26 @@ export function reconcileChangeLog(
 function reconcile(
   lc: LogContext,
   db: Database,
-  anchor: ReplicaAnchor,
+  anchor: ChangeLogAnchor,
 ): ReconcileResult {
   const wipe = wipeReason(db, anchor);
   if (wipe !== undefined) {
     return reseed(lc, db, anchor, wipe);
   }
 
-  let head = readHead(db);
+  const {resumeWatermark} = anchor;
+  let head = readChangeLogHead(db);
   let rows = 0;
-  if (head !== null && head > anchor.stateVersion) {
+  if (head !== null && head > resumeWatermark) {
     rows = db
       .prepare(/*sql*/ `
         DELETE FROM "${CHANGE_LOG_STREAM_TABLE}" WHERE "watermark" > ?
       `)
-      .run(anchor.stateVersion).changes;
-    head = readHead(db);
+      .run(resumeWatermark).changes;
+    head = readChangeLogHead(db);
   }
 
-  if (head !== anchor.stateVersion) {
+  if (head !== resumeWatermark) {
     return reseed(lc, db, anchor, 'gap');
   }
   if (rows > 0) {
@@ -331,7 +384,7 @@ function reconcile(
     });
     return {action: 'truncated', head, rows};
   }
-  lc.debug?.('SQLite change log is consistent with the replica', {
+  lc.debug?.('SQLite change log is at the resume watermark', {
     sqliteChangeLogReconcile: {head},
   });
   return {action: 'none', head};
@@ -339,7 +392,7 @@ function reconcile(
 
 function wipeReason(
   db: Database,
-  anchor: ReplicaAnchor,
+  anchor: ChangeLogAnchor,
 ): ReseedReason | undefined {
   if (
     !tableExists(db, CHANGE_LOG_STREAM_TABLE) ||
@@ -347,19 +400,28 @@ function wipeReason(
   ) {
     return 'created';
   }
-  const meta = db
+  // The schema version is read on its own because it is the one column every
+  // version of this table has had. Reading the rest of a v1 row would fail on
+  // its missing columns instead of reporting the mismatch that explains it.
+  const version = db
     .prepare(/*sql*/ `
-      SELECT "replicaVersion", "schemaVersion" FROM "${CHANGE_LOG_META_TABLE}"
+      SELECT "schemaVersion" FROM "${CHANGE_LOG_META_TABLE}"
     `)
-    .get<{replicaVersion: string; schemaVersion: number} | undefined>();
-  if (meta === undefined) {
+    .get<{schemaVersion: number} | undefined>();
+  if (version === undefined) {
     return 'created';
   }
-  if (meta.schemaVersion !== CHANGE_LOG_DB_SCHEMA_VERSION) {
+  if (version.schemaVersion !== CHANGE_LOG_DB_SCHEMA_VERSION) {
     return 'schema-mismatch';
   }
-  if (meta.replicaVersion !== anchor.replicaVersion) {
-    return 'replica-version-mismatch';
+  const {epoch, generation, replicaID} = readChangeLogMeta(db);
+  const identity = anchor.identity;
+  if (
+    epoch !== identity.epoch ||
+    generation !== identity.generation ||
+    replicaID !== identity.replicaID
+  ) {
+    return 'identity-mismatch';
   }
   return undefined;
 }
@@ -367,9 +429,10 @@ function wipeReason(
 function reseed(
   lc: LogContext,
   db: Database,
-  anchor: ReplicaAnchor,
+  anchor: ChangeLogAnchor,
   reason: ReseedReason,
 ): ReconcileResult {
+  const {identity, resumeWatermark, nowMs} = anchor;
   // Dropping the table drops its partial index with it.
   db.exec(/*sql*/ `
     DROP TABLE IF EXISTS "${CHANGE_LOG_STREAM_TABLE}";
@@ -378,39 +441,68 @@ function reseed(
     ${CREATE_CHANGE_LOG_META_SCHEMA}
   `);
   db.prepare(/*sql*/ `
-    INSERT INTO "${CHANGE_LOG_META_TABLE}" ("replicaVersion", "schemaVersion")
-      VALUES (?, ?)
-  `).run(anchor.replicaVersion, CHANGE_LOG_DB_SCHEMA_VERSION);
+    INSERT INTO "${CHANGE_LOG_META_TABLE}"
+      ("epoch", "generation", "replicaID", "schemaVersion", "seededAtMs",
+       "seedWatermark")
+      VALUES (@epoch, @generation, @replicaID, @schemaVersion, @seededAtMs,
+              @seedWatermark)
+  `).run({
+    epoch: identity.epoch,
+    generation: identity.generation,
+    replicaID: identity.replicaID,
+    schemaVersion: CHANGE_LOG_DB_SCHEMA_VERSION,
+    seededAtMs: nowMs,
+    seedWatermark: resumeWatermark,
+  });
   seedChangeLogStream(db, anchor);
 
   lc.info?.('reseeded the SQLite change log', {
     sqliteChangeLogReconcile: {
       reason,
-      head: anchor.stateVersion,
-      replicaVersion: anchor.replicaVersion,
+      head: resumeWatermark,
+      ...identity,
       schemaVersion: CHANGE_LOG_DB_SCHEMA_VERSION,
+      seededAtMs: nowMs,
     },
   });
-  return {action: 'reseeded', head: anchor.stateVersion, reason};
+  return {action: 'reseeded', head: resumeWatermark, reason};
 }
 
 /**
- * Seeds a valid synthetic transaction at the replica's current watermark,
- * making an otherwise empty log serviceable as a catchup boundary for a
- * subscriber that is exactly at the replica head.
+ * Seeds a valid synthetic transaction at the anchor's resume watermark, making
+ * an otherwise empty log serviceable as a catchup boundary for a subscriber
+ * that is exactly at that watermark.
  */
-export function seedChangeLogStream(db: Database, anchor: ReplicaAnchor): void {
+export function seedChangeLogStream(
+  db: Database,
+  anchor: ChangeLogAnchor,
+): void {
   db.prepare(SEED_CHANGE_LOG_STREAM_SQL).run({
-    stateVersion: anchor.stateVersion,
-    writeTimeMs: anchor.writeTimeMs,
+    watermark: anchor.resumeWatermark,
+    writeTimeMs: anchor.nowMs,
   });
+}
+
+/** Reads the whole meta row. Throws if the log has not been reconciled. */
+export function readChangeLogMeta(db: Database): ChangeLogMeta {
+  const meta = db
+    .prepare(/*sql*/ `
+      SELECT "epoch", "generation", "replicaID", "schemaVersion",
+             "seededAtMs", "seedWatermark"
+        FROM "${CHANGE_LOG_META_TABLE}"
+    `)
+    .get<ChangeLogMeta | undefined>();
+  if (meta === undefined) {
+    throw new Error('the SQLite change log has no meta row');
+  }
+  return meta;
 }
 
 /**
  * `max()` on the primary key's leading column, i.e. an index seek. Null when
  * the log is empty.
  */
-function readHead(db: Database): string | null {
+export function readChangeLogHead(db: Database): string | null {
   const {head} = db
     .prepare(/*sql*/ `
       SELECT max("watermark") AS "head" FROM "${CHANGE_LOG_STREAM_TABLE}"

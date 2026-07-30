@@ -1,6 +1,18 @@
+/**
+ * Observability for the SQLite change log.
+ *
+ * Everything here now runs in the **change-streamer** process, which is where
+ * the writer lives. The module stays beside the rest of the change-log code
+ * under `services/replicator/` for the same reason `change-log-db.ts` and
+ * `change-log-stream-writer.ts` do: moving files would obscure the topology
+ * diff, and the writer's home is a property of who calls it rather than of
+ * where it sits. Metric names are unchanged from 7H — only their emitting
+ * process, and therefore their resource attributes, moved.
+ */
+
 import {stat} from 'node:fs/promises';
 import type {LogContext} from '@rocicorp/logger';
-import {assert, unreachable} from '../../../../shared/src/asserts.ts';
+import {unreachable} from '../../../../shared/src/asserts.ts';
 import type {Database} from '../../../../zqlite/src/db.ts';
 import {
   getOrCreateCounter,
@@ -13,24 +25,25 @@ import type {ChangeStreamData} from '../change-source/protocol/current/downstrea
 import {extractChangeSubstring} from '../change-streamer/change-log-codec.ts';
 import {ChangeLogTransactionHasher} from '../change-streamer/change-log-transaction-hash.ts';
 import {
-  CHANGE_LOG_META_TABLE,
   CHANGE_LOG_STREAM_TABLE,
+  readChangeLogHead,
+  readChangeLogMeta,
+  type ChangeLogMeta,
   type ReconcileResult,
 } from './change-log-db.ts';
-import type {CommitResult} from './change-processor.ts';
+import type {ChangeLogStreamTransactionStats} from './change-log-stream-writer.ts';
 
 /**
- * Reports the startup reconciliation of the change-log database against the
- * replica.
+ * Reports the reconciliation of the change-log database against the watermark
+ * the stream connection resumes from. This runs once per stream connection, so
+ * a reconnect storm is visible here as well as a restart.
  *
  * A wipe is not an error — it is how every abnormal change-log state is
  * collapsed into a correct one — but each wipe costs the retention window, so
- * every reconnecting subscriber below the replica head gets `too-old`. The
- * `gap` reason in particular means log-first commit ordering did not hold, so a
- * nonzero rate in steady state is an alert, not a statistic.
- *
- * Called from the replicator process rather than the write worker, which does
- * not start OTel.
+ * every reconnecting subscriber below the head gets `too-old`. The `gap` reason
+ * in particular means the log neither held the resume watermark nor could be
+ * truncated to it, so a nonzero rate in steady state is an alert, not a
+ * statistic.
  */
 export function recordSQLiteChangeLogReconcile(
   lc: LogContext,
@@ -41,16 +54,16 @@ export function recordSQLiteChangeLogReconcile(
       getOrCreateCounter(
         'replica',
         'sqlite_change_log.reconcile_truncated_rows',
-        'Phantom change-log rows removed at startup, i.e. logged transactions ' +
-          'whose replica commit was lost to a crash.',
+        'Phantom change-log rows removed at reconciliation, i.e. rows above ' +
+          'the watermark the change stream resumed from.',
       ).add(result.rows);
       break;
     case 'reseeded':
       getOrCreateCounter(
         'replica',
         'sqlite_change_log.reconcile_wipes',
-        'Change-log wipes at startup, by reason. Each one resets the retention ' +
-          'window, so subscribers below the replica head get `too-old`.',
+        'Change-log wipes at reconciliation, by reason. Each one resets the ' +
+          'retention window, so subscribers below the head get `too-old`.',
       ).add(1, {reason: result.reason});
       break;
     case 'none':
@@ -64,22 +77,11 @@ export function recordSQLiteChangeLogReconcile(
 }
 
 /**
- * The replica-side half of the startup state. The change log no longer lives in
- * the replica, so these are the only change-log-relevant facts a replicator can
- * report without opening the change-log database.
+ * What the log says about itself. Nothing here reads the replica: after the
+ * writer moved to the change-streamer, the replica's state version is a
+ * consequence of this log rather than a fact about it.
  */
-export type ReplicaChangeLogInfo = {
-  readonly stateWatermark: string;
-  readonly seedWatermark: string;
-};
-
-export type SQLiteChangeLogStartupInfo = ReplicaChangeLogInfo & {
-  /**
-   * The change-log database's own schema version, not the replica's. The two
-   * are versioned independently: the log is a cache with no migrations, so a
-   * mismatch costs it a reseed.
-   */
-  readonly schemaVersion: number;
+export type SQLiteChangeLogStartupInfo = ChangeLogMeta & {
   readonly headWatermark: string;
 };
 
@@ -89,87 +91,33 @@ export type SQLiteChangeLogInfo = SQLiteChangeLogStartupInfo & {
 };
 
 /**
- * Reads the replica's replication state. One single-row lookup, and no
- * change-log database required, so this is what a replicator with the writer
- * disabled reports.
- */
-export function getReplicaChangeLogInfo(
-  replica: Database,
-): ReplicaChangeLogInfo {
-  const state = replica
-    .prepare(/*sql*/ `
-      SELECT state."stateVersion", config."replicaVersion"
-        FROM "_zero.replicationState" AS state,
-             "_zero.replicationConfig" AS config
-    `)
-    .get<{stateVersion: string; replicaVersion: string} | undefined>();
-
-  assert(state !== undefined, 'replication state must be initialized');
-  return {
-    stateWatermark: state.stateVersion,
-    seedWatermark: state.replicaVersion,
-  };
-}
-
-/**
- * Adds the change log's own schema version and head, read from the change-log
- * database. The head is an index-optimized `max()`, so unlike
- * {@link getSQLiteChangeLogInfo} this does not scan the log.
+ * Reads the meta row and the head. The head is an index-optimized `max()`, so
+ * unlike {@link getSQLiteChangeLogInfo} this does not scan the log.
  *
- * Both handles are passed in rather than deriving one from the other: state
- * comes from the replica and everything else from the log, and holding them
- * apart is what lets this cross-check the two.
- *
- * Call this after the writer has reconciled the log against the replica, which
- * is the only point at which `headWatermark === stateWatermark` is guaranteed.
+ * Call this after reconciliation, which is the only point at which the head is
+ * known to be the resume watermark.
  */
 export function getSQLiteChangeLogStartupInfo(
-  replica: Database,
   changeLog: Database,
 ): SQLiteChangeLogStartupInfo {
-  const replicaInfo = getReplicaChangeLogInfo(replica);
-  const meta = changeLog
-    .prepare(/*sql*/ `
-      SELECT "schemaVersion", "replicaVersion" FROM "${CHANGE_LOG_META_TABLE}"
-    `)
-    .get<{schemaVersion: number; replicaVersion: string} | undefined>();
-  assert(meta !== undefined, 'SQLite change log must have a meta row');
-  // Reconciliation wipes the log on any disagreement, so a log that survives it
-  // is anchored to this replica. Checking it here is the cheapest place to
-  // notice a log that was served without being reconciled.
-  assert(
-    meta.replicaVersion === replicaInfo.seedWatermark,
-    `SQLite change log is anchored to replica version ${meta.replicaVersion}, ` +
-      `not ${replicaInfo.seedWatermark}`,
-  );
-  const head = changeLog
-    .prepare(/*sql*/ `
-      SELECT max("watermark") AS "headWatermark"
-        FROM "${CHANGE_LOG_STREAM_TABLE}"
-    `)
-    .get<{headWatermark: string | null}>();
-  assert(
-    head.headWatermark !== null,
-    'SQLite change log must contain its seed transaction',
-  );
-  return {
-    ...replicaInfo,
-    schemaVersion: meta.schemaVersion,
-    headWatermark: head.headWatermark,
-  };
+  const meta = readChangeLogMeta(changeLog);
+  const head = readChangeLogHead(changeLog);
+  if (head === null) {
+    throw new Error('the SQLite change log must contain its seed transaction');
+  }
+  return {...meta, headWatermark: head};
 }
 
 /**
  * Extends {@link getSQLiteChangeLogStartupInfo} with the retained row and
  * estimated byte totals. Computing these scans the entire change-log table, so
- * only call this when the totals are consumed, i.e. when the writer (and thus
- * the observer) is enabled.
+ * only call it when the totals are consumed, i.e. when the writer (and thus the
+ * observer) is enabled.
  */
 export function getSQLiteChangeLogInfo(
-  replica: Database,
   changeLog: Database,
 ): SQLiteChangeLogInfo {
-  const startup = getSQLiteChangeLogStartupInfo(replica, changeLog);
+  const startup = getSQLiteChangeLogStartupInfo(changeLog);
   const aggregate = changeLog
     .prepare(/*sql*/ `
       SELECT count(*) AS "rows",
@@ -193,24 +141,19 @@ export function getSQLiteChangeLogInfo(
 
 export function logSQLiteChangeLogStartup(
   lc: LogContext,
-  fileMode: 'serving' | 'serving-copy' | 'backup',
-  writerEnabled: boolean,
-  info: ReplicaChangeLogInfo & {
-    readonly schemaVersion?: number | undefined;
-    readonly headWatermark?: string | undefined;
-  },
+  file: string,
+  info: SQLiteChangeLogStartupInfo,
 ): void {
   lc.info?.('SQLite change-log startup', {
     sqliteChangeLog: {
-      fileMode,
-      writerEnabled,
-      // Both absent when the writer is disabled: there is no change-log
-      // database to read a schema version or a head from, and the replica no
-      // longer carries a copy.
+      file,
+      epoch: info.epoch,
+      generation: info.generation,
+      replicaID: info.replicaID,
       schemaVersion: info.schemaVersion,
       seedWatermark: info.seedWatermark,
+      seededAtMs: info.seededAtMs,
       headWatermark: info.headWatermark,
-      stateWatermark: info.stateWatermark,
     },
   });
 }
@@ -243,6 +186,17 @@ export async function sqliteFileBytes(
   return sizes.reduce((total, size) => total + size, 0);
 }
 
+/** What the writer reports back for a committed transaction. */
+export type ChangeLogCommit = {
+  readonly watermark: string;
+  readonly stats: ChangeLogStreamTransactionStats;
+  /**
+   * Appending the commit row and committing the log's transaction. This is the
+   * cost that sits on the forward path, once per upstream transaction.
+   */
+  readonly logCommitMs: number;
+};
+
 export type SQLiteChangeLogObservabilityState = {
   readonly receivedHead: string;
   readonly sqliteHead: string;
@@ -259,37 +213,29 @@ export type SQLiteChangeLogObservabilityState = {
 const TRANSACTION_ROW_BUCKETS = [2, 3, 5, 10, 25, 50, 100, 250, 1000, 5000];
 
 /**
- * Records shadow-writer metrics in the replicator process, where OTel is
- * initialized. State changes only after the corresponding worker operation
- * succeeds, except receivedHead, which intentionally advances before a commit
- * is sent to the worker so transient shadow lag is observable.
+ * Records writer metrics in the change-streamer process. State changes only
+ * after the corresponding write succeeds, except receivedHead, which advances
+ * when a commit message arrives so that transient lag behind the log is
+ * observable.
  */
 export class SQLiteChangeLogObserver {
   readonly #lc: LogContext;
   readonly #messageProcessing = getOrCreateLatencyHistogram(
     'replica',
     'sqlite_change_log.message_processing_duration',
-    'Time to process a replication message while SQLite change logging is enabled.',
+    'Time to write a replication message to the SQLite change log.',
   );
-  // There is no longer one commit to time. The log and the replica are
-  // separate databases committed in a fixed order, so these are the two halves
-  // of what `sqlite_change_log.commit_duration` used to fuse, and the second is
-  // the phantom window. Both are recorded from the write worker's own
-  // measurements, so neither includes the IPC round trip that
-  // `message_processing_duration` covers; that metric, keyed `tag="commit"`,
-  // is also where a failed commit is still timed.
+  // The commit that sits on the forward path. There is no second commit to
+  // order against any more: the replica's belongs to a subscriber downstream of
+  // this loop, so `sqlite_change_log.replica_commit_duration` and the phantom
+  // window it measured are gone. A failed commit is still timed, by
+  // `message_processing_duration` keyed `tag="commit"`.
   readonly #logCommitDuration = getOrCreateLatencyHistogram(
     'replica',
     'sqlite_change_log.log_commit_duration',
     'Time to append the commit row to the SQLite change log and commit its ' +
-      'transaction.',
-  );
-  readonly #replicaCommitDuration = getOrCreateLatencyHistogram(
-    'replica',
-    'sqlite_change_log.replica_commit_duration',
-    'Time from the SQLite change-log commit returning to the replica commit ' +
-      'returning. This is the phantom window: a crash within it leaves the ' +
-      'log ahead of the replica, to be truncated at startup.',
+      'transaction. This is on the forward path: it precedes the forward of ' +
+      "that transaction's commit message.",
   );
   readonly #transactionRows = getOrCreateValueHistogram(
     'replica',
@@ -337,7 +283,9 @@ export class SQLiteChangeLogObserver {
 
   constructor(lc: LogContext, info: SQLiteChangeLogInfo) {
     this.#lc = lc.withContext('component', 'sqlite-change-log-observer');
-    this.#receivedHead = info.stateWatermark;
+    // Reconciliation has just put the head at the resume watermark, which is
+    // also the point the stream is about to be received from.
+    this.#receivedHead = info.headWatermark;
     this.#sqliteHead = info.headWatermark;
     this.#rows = info.rows;
     this.#estimatedBytes = info.estimatedBytes;
@@ -365,25 +313,22 @@ export class SQLiteChangeLogObserver {
     getOrCreateGauge(
       'replica',
       'sqlite_change_log.head_lag',
-      'Distance from the latest received PG commit to the SQLite change-log head.',
+      'Distance from the latest received commit to the SQLite change-log ' +
+        'head. The log commits before the forward, so this is zero except ' +
+        'within a transaction.',
     ).addCallback(result => {
       const lag = watermarkDistance(this.#receivedHead, this.#sqliteHead);
       if (lag !== undefined) {
         result.observe(lag);
       }
     });
-
-    if (info.headWatermark > info.stateWatermark) {
-      this.#invariantFailure(
-        'SQLite change-log head is ahead of replica state',
-        {
-          sqliteHead: info.headWatermark,
-          stateWatermark: info.stateWatermark,
-        },
-      );
-    }
   }
 
+  /**
+   * Called as each message arrives, before it is written. Hashes the *received*
+   * stream, which is compared against the hash the writer computes over what it
+   * *stored*.
+   */
   messageReceived(data: ChangeStreamData, json: string): void {
     const tag = data[1].tag;
     if (data[0] === 'begin') {
@@ -440,9 +385,10 @@ export class SQLiteChangeLogObserver {
     }
   }
 
+  /** Called after the message has been written to the log. */
   messageProcessed(
     data: ChangeStreamData,
-    result: CommitResult | null,
+    commit: ChangeLogCommit | null,
     durationMs: number,
   ): void {
     const tag = data[1].tag;
@@ -470,39 +416,33 @@ export class SQLiteChangeLogObserver {
       return;
     }
 
-    const timing = result?.commitTiming;
-    if (timing !== undefined) {
-      this.#logCommitDuration.recordMs(timing.logCommitMs);
-      this.#replicaCommitDuration.recordMs(timing.replicaCommitMs);
-    }
     const watermark = data[2].watermark;
+    if (commit !== null) {
+      this.#logCommitDuration.recordMs(commit.logCommitMs);
+    }
     if (this.#transactionWatermark !== watermark) {
       this.#invariantFailure(
         'SQLite change-log commit does not match the observed begin',
         {openWatermark: this.#transactionWatermark, commitWatermark: watermark},
       );
     }
-    if (result?.watermark !== watermark) {
-      this.#invariantFailure(
-        'SQLite change-log commit result has an unexpected watermark',
-        {commitWatermark: watermark, resultWatermark: result?.watermark},
-      );
-    }
-    if (result?.changeLogStream === undefined) {
+    if (commit === null) {
       this.#invariantFailure(
         'SQLite change-log commit result is missing writer statistics',
         {commitWatermark: watermark},
       );
       this.#recordUnpaired(watermark, 'missing-sqlite-hash');
     } else {
-      this.#rows += result.changeLogStream.rows;
-      this.#estimatedBytes += result.changeLogStream.estimatedBytes;
-      this.#transactionRows.record(result.changeLogStream.rows);
-      this.#compareHashes(
-        watermark,
-        this.#sourceCommitHash,
-        result.changeLogStream.hash,
-      );
+      if (commit.watermark !== watermark) {
+        this.#invariantFailure(
+          'SQLite change-log commit result has an unexpected watermark',
+          {commitWatermark: watermark, resultWatermark: commit.watermark},
+        );
+      }
+      this.#rows += commit.stats.rows;
+      this.#estimatedBytes += commit.stats.estimatedBytes;
+      this.#transactionRows.record(commit.stats.rows);
+      this.#compareHashes(watermark, this.#sourceCommitHash, commit.stats.hash);
     }
     if (watermark < this.#sqliteHead) {
       this.#invariantFailure('SQLite change-log head regressed', {
@@ -523,9 +463,9 @@ export class SQLiteChangeLogObserver {
     const tag = data[1].tag;
     this.#messageProcessing.recordMs(durationMs, {tag, outcome: 'error'});
     if (data[0] === 'commit') {
-      // No commit-half durations here: a failure gives no CommitResult, so
-      // there is nothing to attribute to either database. The attempt is timed
-      // by `message_processing_duration{tag="commit",outcome="error"}` above.
+      // No commit duration here: a failed commit produces no statistics, so
+      // there is nothing to attribute. The attempt is timed by
+      // `message_processing_duration{tag="commit",outcome="error"}` above.
       this.#recordUnpaired(data[2].watermark, 'sqlite-commit-failed');
     }
     if (
@@ -541,11 +481,32 @@ export class SQLiteChangeLogObserver {
     this.#resetSourceHash();
   }
 
+  /**
+   * A missed truncate-above surfaces as a constraint violation on the writer's
+   * plain `INSERT`, which the fail-soft policy would otherwise absorb quietly.
+   * Classifying it as an invariant failure is what keeps a reconciliation bug
+   * from looking like a lost cache.
+   */
+  invariantFailure(message: string, details?: Record<string, unknown>): void {
+    this.#invariantFailure(message, details);
+  }
+
+  /** The source interrupted the stream mid-transaction. */
   abort(): void {
     if (this.#transactionWatermark !== undefined) {
       this.#recordRollback('source-interruption');
       this.#transactionWatermark = undefined;
     }
+    this.#resetSourceHash();
+  }
+
+  /** Reconciliation moved the head, so the observer's totals are restated. */
+  reconciled(info: SQLiteChangeLogInfo): void {
+    this.#receivedHead = info.headWatermark;
+    this.#sqliteHead = info.headWatermark;
+    this.#rows = info.rows;
+    this.#estimatedBytes = info.estimatedBytes;
+    this.#transactionWatermark = undefined;
     this.#resetSourceHash();
   }
 

@@ -22,6 +22,14 @@ export type InitializeResult = {
   subscriptionState: SubscriptionState;
   changeSource: ChangeSource;
   destinationBackupURL: string | undefined;
+  /**
+   * The replica this change stream belongs to, from the upstream `replicas`
+   * table. It is part of the identity the SQLite change log records, because a
+   * generation (i.e. `replicaVersion`) is shared by every sibling of a forked
+   * replica and so cannot distinguish two siblings' logs. `null` when the
+   * change source has no upstream table to identify itself from.
+   */
+  replicaID: string | null;
 };
 
 export async function restoreReplica(

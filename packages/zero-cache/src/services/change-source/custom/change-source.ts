@@ -96,6 +96,10 @@ export async function initializeCustomChangeSource(
     subscriptionState,
     changeSource,
     destinationBackupURL: litestream?.backupURL,
+    // A custom change source has no upstream `replicas` table to identify
+    // itself from, so the generation is the whole of the SQLite change log's
+    // identity here.
+    replicaID: null,
   };
 }
 
@@ -201,7 +205,6 @@ export async function initialSync(
   const processor = new ChangeProcessor(
     new StatementRunner(tx),
     'initial-sync',
-    {changeLog: undefined},
     (_, err) => {
       throw err;
     },

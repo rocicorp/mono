@@ -6,6 +6,7 @@ import {Queue} from '../../../../shared/src/queue.ts';
 import {parentWorker, type Worker} from '../../types/processes.ts';
 import type {Source} from '../../types/streams.ts';
 import {getPragmaConfig, setupReplica} from '../../workers/replicator.ts';
+import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
 import type {
   ChangeStreamer,
   SerializedDownstream,
@@ -17,7 +18,6 @@ import {ReplicatorService} from './replicator.ts';
 import {
   ThreadWriteWorkerClient,
   type PragmaConfig,
-  type SerializedChangeStreamData,
   type WriteWorkerClient,
 } from './write-worker-client.ts';
 
@@ -168,11 +168,10 @@ class FailpointWriteWorkerClient implements WriteWorkerClient {
   init(
     dbPath: string,
     mode: Parameters<ThreadWriteWorkerClient['init']>[1],
-    logsChangeStream: boolean,
     pragmas: PragmaConfig,
     logConfig: LogConfig,
   ) {
-    return this.#inner.init(dbPath, mode, logsChangeStream, pragmas, logConfig);
+    return this.#inner.init(dbPath, mode, pragmas, logConfig);
   }
 
   getSubscriptionState() {
@@ -180,7 +179,7 @@ class FailpointWriteWorkerClient implements WriteWorkerClient {
   }
 
   async processMessage(
-    downstream: SerializedChangeStreamData,
+    downstream: ChangeStreamData,
   ): Promise<CommitResult | null> {
     const result = await this.#inner.processMessage(downstream);
     if (
@@ -236,7 +235,7 @@ export default async function runWorker(
     parent,
     failpoint,
   );
-  await worker.init(dbPath, 'serving', false, getPragmaConfig('serving'), {
+  await worker.init(dbPath, 'serving', getPragmaConfig('serving'), {
     level: 'error',
     format: 'text',
   });
@@ -248,9 +247,7 @@ export default async function runWorker(
     'serving',
     new IPCChangeStreamer(parent),
     worker,
-    false,
     null,
-    undefined,
   );
 
   const running = runUntilKilled(lc, parent, replicator);

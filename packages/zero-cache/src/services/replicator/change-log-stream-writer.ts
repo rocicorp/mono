@@ -52,10 +52,11 @@ function assertInvariant(
  * Appends the canonical downstream stream to the change-log database, which is
  * a separate file from the replica.
  *
- * This class owns the change log's transaction, and its transaction alone. The
- * replica's remains with {@link ChangeProcessor}, which commits the two in a
- * fixed order — log first, then replica (design 4.4) — so that a crash can
- * leave a phantom transaction in the log but never a hole.
+ * This class owns the change log's transaction, and its transaction alone. It is
+ * driven from the change-streamer's stream loop, which commits it before
+ * forwarding a transaction's `commit` message; see `SQLiteChangeLogWriter` in
+ * `change-streamer/sqlite-change-log-writer.ts` for the ordering that makes a
+ * hole unreachable, and for the fail-soft policy that wraps every call here.
  */
 export class ChangeLogStreamWriter {
   readonly #db: StatementRunner;
@@ -152,18 +153,19 @@ export class ChangeLogStreamWriter {
         estimateChangeLogStreamRowBytes(watermark, change, precommit, true),
       hash: hasher.digest(),
     };
-    // The log is durable at `watermark` from here on, while the replica is
-    // still at the previous version. A crash in that window leaves a phantom,
-    // which startup reconciliation truncates.
+    // The log is durable at `watermark` from here on, and nothing that can
+    // advance the watermark the stream would resume from has run yet. A crash in
+    // that window leaves a transaction the resumed stream re-delivers, which
+    // reconciliation truncates.
     this.#db.commit();
     this.#reset();
     return stats;
   }
 
   /**
-   * Discards the open transaction, if any. Safe to call when none is open —
-   * the caller's rollback path also runs after a commit that succeeded and a
-   * subsequent replica write that did not.
+   * Discards the open transaction, if any. Safe to call when none is open — the
+   * caller rolls back on an interrupted change stream, which can arrive between
+   * transactions as well as inside one.
    */
   rollback(): void {
     const {inTransaction} = this.#db.db;

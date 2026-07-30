@@ -6,7 +6,6 @@ import {assert} from '../../../shared/src/asserts.ts';
 import {must} from '../../../shared/src/must.ts';
 import {sleep} from '../../../shared/src/sleep.ts';
 import * as v from '../../../shared/src/valita.ts';
-import {Database} from '../../../zqlite/src/db.ts';
 import type {
   LitestreamConfig,
   NormalizedZeroConfig,
@@ -27,24 +26,12 @@ import {
   litestreamRestoreMetricAttrs,
   litestreamRestoreRuns,
 } from '../services/litestream/metrics.ts';
-import {
-  changeLogFileName,
-  deleteChangeLogDB,
-  openChangeLogDB,
-} from '../services/replicator/change-log-db.ts';
 import {ReplicationStatusPublisher} from '../services/replicator/replication-status.ts';
 import {
   ReplicatorService,
   type ReplicatorMode,
 } from '../services/replicator/replicator.ts';
-import {
-  getReplicaChangeLogInfo,
-  getSQLiteChangeLogInfo,
-  logSQLiteChangeLogStartup,
-  recordSQLiteChangeLogReconcile,
-  sqliteFileBytes,
-  SQLiteChangeLogObserver,
-} from '../services/replicator/sqlite-change-log-observability.ts';
+import {sqliteFileBytes} from '../services/replicator/sqlite-change-log-observability.ts';
 import {ThreadWriteWorkerClient} from '../services/replicator/write-worker-client.ts';
 import {
   parentWorker,
@@ -54,11 +41,10 @@ import {
 import {getShardConfig} from '../types/shards.ts';
 import {
   getPragmaConfig,
-  replicaLogsChangeStream,
   replicaFileModeSchema,
+  deleteStaleChangeLog,
   setUpMessageHandlers,
   setupReplica,
-  type ReplicaFileMode,
   type WalMode,
 } from '../workers/replicator.ts';
 import {createLogContext} from './logging.ts';
@@ -79,18 +65,6 @@ export default async function runWorker(
   const mode: ReplicatorMode = fileMode === 'backup' ? 'backup' : 'serving';
   const runningLocalChangeStreamer =
     config.changeStreamer.mode === 'dedicated' && !config.changeStreamer.uri;
-  const sqliteChangeLogEnabled =
-    config.changeStreamer.sqliteChangeLogMode !== 'off';
-  const logsChangeStream = replicaLogsChangeStream(
-    fileMode,
-    sqliteChangeLogEnabled,
-    runningLocalChangeStreamer,
-    config.litestream.backupURL,
-  );
-  assert(
-    fileMode !== 'serving-copy' || !logsChangeStream,
-    'serving-copy replicas cannot write the SQLite change log',
-  );
   const workerName = `${mode}-replicator`;
   startOtelAuto(createLogContext(config, workerName, 0, false), workerName, 0);
   lc = createLogContext(config, workerName);
@@ -119,54 +93,17 @@ export default async function runWorker(
     dbPath,
   });
 
-  if (sqliteChangeLogEnabled) {
-    registerSQLiteCorruptionDiagnosticTarget({
-      debugName: `${workerName} change-log`,
-      dbPath: changeLogFileName(dbPath),
-    });
-  } else {
-    // Nothing in this task writes the log, so a file left behind by a run with
-    // the writer enabled would hold local disk indefinitely: it is excluded
-    // from the litestream backup and only the writer purges it. Deleting it is
-    // safe because the log is a cache — re-enabling the writer reseeds at the
-    // replica head — which is also why it is deleted rather than kept around
-    // for a rollback: a stale log is never served, only reseeded.
-    //
-    // The guard is the config rather than the derived `logsChangeStream`.
-    // `logsChangeStream` is false for replicas that coexist with an enabled
-    // writer in the same task (today the serving-copy, whose file is a
-    // different path), so keying deletion on it would delete a live log the
-    // moment a file mode shares the canonical replica's path.
-    deleteChangeLogDB(dbPath);
-  }
+  // A file left behind by a run with the writer enabled would otherwise hold
+  // local disk indefinitely. See `replicatorDeletesStaleChangeLog` for why
+  // this is keyed on the config flag and nothing else.
+  deleteStaleChangeLog(config.changeStreamer.sqliteChangeLogMode, dbPath);
 
-  setupMetrics(lc, dbPath, walMode, logsChangeStream);
+  setupMetrics(lc, dbPath, walMode);
 
-  // Create the write worker for async SQLite writes. When the change-log
-  // writer is enabled, init also opens the change-log database beside the
-  // replica and reconciles it against the replica's head.
+  // Create the write worker for async SQLite writes.
   const pragmas = getPragmaConfig(fileMode);
   const workerClient = new ThreadWriteWorkerClient();
-  const reconciled = await workerClient.init(
-    dbPath,
-    mode,
-    logsChangeStream,
-    pragmas,
-    config.log,
-  );
-  if (reconciled) {
-    recordSQLiteChangeLogReconcile(lc, reconciled);
-  }
-
-  // Read after `init`, which creates the change-log database if it is absent
-  // and reconciles it if it is not. Before that call there may be no file to
-  // read, and any head it held would be the pre-reconciliation one.
-  const sqliteChangeLogObserver = readSQLiteChangeLog(
-    lc,
-    dbPath,
-    fileMode,
-    logsChangeStream,
-  );
+  await workerClient.init(dbPath, mode, pragmas, config.log);
 
   const shard = getShardConfig(config);
   const {
@@ -193,12 +130,10 @@ export default async function runWorker(
     mode,
     changeStreamer,
     workerClient,
-    logsChangeStream,
     runningLocalChangeStreamer
       ? // publish ReplicationStatusEvents from backup-replicator only
         ReplicationStatusPublisher.forReplicaFile(dbPath)
       : null,
-    sqliteChangeLogObserver,
   );
 
   setUpMessageHandlers(lc, replicator, parent);
@@ -214,53 +149,7 @@ export default async function runWorker(
   return running;
 }
 
-/**
- * Emits the read-only SQLite change-log startup inspection and, when the writer
- * is enabled, returns an observer seeded with the change log's head and its
- * retained row/byte totals.
- *
- * The totals require a full scan of the change log, so a disabled writer opens
- * no change-log database at all and reports only the replica's own schema and
- * replication state. That path stays best-effort — it warns rather than
- * crashing the replicator — so that `sqliteChangeLogMode=off` remains a safe
- * rollback.
- */
-function readSQLiteChangeLog(
-  lc: LogContext,
-  file: string,
-  fileMode: ReplicaFileMode,
-  logsChangeStream: boolean,
-): SQLiteChangeLogObserver | undefined {
-  using replica = new Database(lc, file, {readonly: true});
-  if (!logsChangeStream) {
-    try {
-      logSQLiteChangeLogStartup(
-        lc,
-        fileMode,
-        false,
-        getReplicaChangeLogInfo(replica),
-      );
-    } catch (e) {
-      lc.warn?.(
-        'SQLite change-log startup inspection skipped: the replica state is ' +
-          'unavailable and the writer is disabled',
-        e,
-      );
-    }
-    return undefined;
-  }
-  using changeLog = openChangeLogDB(lc, file, {readonly: true});
-  const info = getSQLiteChangeLogInfo(replica, changeLog);
-  logSQLiteChangeLogStartup(lc, fileMode, true, info);
-  return new SQLiteChangeLogObserver(lc, info);
-}
-
-function setupMetrics(
-  lc: LogContext,
-  file: string,
-  walMode: WalMode,
-  logsChangeStream: boolean,
-) {
+function setupMetrics(lc: LogContext, file: string, walMode: WalMode) {
   getOrCreateGauge('replica', 'db_size', {
     description:
       `The size of the replica's main db file, ` +
@@ -280,27 +169,15 @@ function setupMetrics(
     }).addCallback(observeFileSize(lc, `${file}-wal2`));
   }
 
-  // The pair that accounts for the change log's bytes. They are whole-database
-  // totals rather than per-file, because a table that leaves the replica leaves
-  // through its wal: the replica's footprint is what shrank, and the change
-  // log's is where it went. Neither is derivable from the other, and the log's
-  // was invisible while it lived inside the replica.
+  // A whole-database total rather than a per-file one. Its counterpart,
+  // `sqlite_change_log.file_bytes`, is emitted by the change-streamer, which is
+  // the process that writes the log.
   getOrCreateGauge('replica', 'file_bytes', {
     description:
       `The replica's total on-disk footprint: its main db file plus its ` +
       `wal sidecars.`,
     unit: 'By',
   }).addCallback(observeSQLiteFileBytes(lc, file));
-
-  if (logsChangeStream) {
-    getOrCreateGauge('replica', 'sqlite_change_log.file_bytes', {
-      description:
-        `The SQLite change log's total on-disk footprint: its main db file ` +
-        `plus its wal sidecars. Local disk only — the log is excluded from ` +
-        `the litestream backup.`,
-      unit: 'By',
-    }).addCallback(observeSQLiteFileBytes(lc, changeLogFileName(file)));
-  }
 }
 
 function observeFileSize(lc: LogContext, file: string): ObservableCallback {

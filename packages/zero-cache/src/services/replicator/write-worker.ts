@@ -1,6 +1,5 @@
 import {parentPort} from 'node:worker_threads';
 import type {LogContext} from '@rocicorp/logger';
-import {assert} from '../../../../shared/src/asserts.ts';
 import type {LogConfig} from '../../../../shared/src/logging.ts';
 import {must} from '../../../../shared/src/must.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
@@ -11,12 +10,7 @@ import {
 } from '../../db/sqlite-corruption.ts';
 import {StatementRunner} from '../../db/statements.ts';
 import {createLogContext} from '../../server/logging.ts';
-import {
-  changeLogFileName,
-  openChangeLogDBForWriting,
-  readReplicaAnchor,
-  type ReconcileResult,
-} from './change-log-db.ts';
+import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
 import {ChangeProcessor, type ChangeProcessorMode} from './change-processor.ts';
 import {getSubscriptionState} from './schema/replication-state.ts';
 import {
@@ -28,7 +22,6 @@ import {
   type Request,
   type Response,
   type ResultMap,
-  type SerializedChangeStreamData,
   type WriteError,
 } from './write-worker-client.ts';
 
@@ -43,13 +36,10 @@ type API = {[M in Method]: (...args: ArgsMap[M]) => ResultMap[M]};
 function createAPI(): API {
   let db: Database | undefined;
   let runner: StatementRunner | undefined;
-  let changeLogDb: Database | undefined;
-  let changeLogRunner: StatementRunner | undefined;
   let processor: ChangeProcessor | undefined;
   let mode: ChangeProcessorMode | undefined;
   let lc: LogContext | undefined;
   let replicaDbPath: string | undefined;
-  let changeLogDbPath: string | undefined;
   let unregisterCorruptionDiagnosticTargets: (() => void)[] = [];
 
   function unregisterCorruptionDiagnostics() {
@@ -57,56 +47,30 @@ function createAPI(): API {
     unregisterCorruptionDiagnosticTargets = [];
   }
 
-  // The write path spans two databases and a SqliteError does not say which
-  // one it came from, so both are dumped.
   function logCorruptionDiagnostics(err: unknown) {
-    if (!lc || !isSQLiteCorruption(err)) {
+    if (!lc || !replicaDbPath || !isSQLiteCorruption(err)) {
       return;
     }
-    if (replicaDbPath) {
-      logSQLiteCorruptionDiagnostics(lc, 'write-worker', replicaDbPath, err);
-    }
-    if (changeLogDbPath) {
-      logSQLiteCorruptionDiagnostics(
-        lc,
-        'write-worker change-log',
-        changeLogDbPath,
-        err,
-      );
-    }
+    logSQLiteCorruptionDiagnostics(lc, 'write-worker', replicaDbPath, err);
   }
 
   function createProcessor() {
-    processor = new ChangeProcessor(
-      must(runner),
-      must(mode),
-      {changeLog: changeLogRunner},
-      (_lc, err) => {
-        logCorruptionDiagnostics(err);
-        port.postMessage({
-          writeError: serializeError(err),
-        } satisfies WriteError);
-      },
-    );
+    processor = new ChangeProcessor(must(runner), must(mode), (_lc, err) => {
+      logCorruptionDiagnostics(err);
+      port.postMessage({
+        writeError: serializeError(err),
+      } satisfies WriteError);
+    });
   }
 
   return {
     init(
       dbPath: string,
       cpMode: ChangeProcessorMode,
-      shouldLogChangeStream: boolean,
       pragmas: PragmaConfig,
       logConfig: LogConfig,
-    ): ReconcileResult | undefined {
-      assert(
-        !shouldLogChangeStream || cpMode !== 'initial-sync',
-        'initial-sync owns its transaction boundaries and cannot write the ' +
-          'change log, which opens a second one',
-      );
+    ): void {
       replicaDbPath = dbPath;
-      changeLogDbPath = shouldLogChangeStream
-        ? changeLogFileName(dbPath)
-        : undefined;
       lc = createLogContext({log: logConfig}, 'write-worker');
       unregisterCorruptionDiagnostics();
       unregisterCorruptionDiagnosticTargets.push(
@@ -115,40 +79,12 @@ function createAPI(): API {
           dbPath,
         }),
       );
-      if (changeLogDbPath) {
-        unregisterCorruptionDiagnosticTargets.push(
-          registerSQLiteCorruptionDiagnosticTarget({
-            debugName: 'write-worker change-log',
-            dbPath: changeLogDbPath,
-          }),
-        );
-      }
       try {
         db = new Database(lc, dbPath);
         applyPragmas(db, pragmas);
         runner = new StatementRunner(db);
         mode = cpMode;
-
-        // The change log lives beside the replica rather than inside it, and
-        // the path is derived here so that the derivation stays the single
-        // source of truth rather than becoming a second IPC argument that
-        // could disagree with it.
-        changeLogDb?.close();
-        changeLogDb = undefined;
-        changeLogRunner = undefined;
-        let reconciled: ReconcileResult | undefined;
-        if (shouldLogChangeStream) {
-          const opened = openChangeLogDBForWriting(
-            must(lc),
-            dbPath,
-            readReplicaAnchor(db),
-          );
-          changeLogDb = opened.db;
-          reconciled = opened.result;
-          changeLogRunner = new StatementRunner(changeLogDb);
-        }
         createProcessor();
-        return reconciled;
       } catch (e) {
         logCorruptionDiagnostics(e);
         throw e;
@@ -164,9 +100,9 @@ function createAPI(): API {
       }
     },
 
-    processMessage({data, json}: SerializedChangeStreamData) {
+    processMessage(downstream: ChangeStreamData) {
       try {
-        return must(processor).processMessage(must(lc), data, json);
+        return must(processor).processMessage(must(lc), downstream);
       } catch (e) {
         logCorruptionDiagnostics(e);
         throw e;
@@ -182,12 +118,8 @@ function createAPI(): API {
       db?.close();
       db = undefined;
       runner = undefined;
-      changeLogDb?.close();
-      changeLogDb = undefined;
-      changeLogRunner = undefined;
       processor = undefined;
       replicaDbPath = undefined;
-      changeLogDbPath = undefined;
       unregisterCorruptionDiagnostics();
     },
   };
