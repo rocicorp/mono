@@ -256,6 +256,28 @@ export const schemaVersionMigrationMap: IncrementalMigrationMap = {
       seedChangeLogStream(db);
     },
   },
+
+  15: {
+    migrateSchema: (_, db) => {
+      // Make writeTimeMs NOT NULL. In SQLite the only way to do this is to
+      // create a new table, copy the data over, delete the old table, and
+      // rename. This is cheap because it's a single row table.
+      db.exec(/*sql*/ `
+        CREATE TABLE "_zero.replicationState2" (
+          stateVersion TEXT NOT NULL,
+          writeTimeMs INTEGER NOT NULL,
+          lock INTEGER PRIMARY KEY DEFAULT 1 CHECK (lock=1)
+        );
+
+        INSERT INTO "_zero.replicationState2" (stateVersion, writeTimeMs, lock)
+          SELECT stateVersion, writeTimeMs, lock FROM "_zero.replicationState";
+
+        DROP TABLE "_zero.replicationState";
+
+        ALTER TABLE "_zero.replicationState2" RENAME TO "_zero.replicationState";
+      `);
+    },
+  },
 };
 
 // Referenced in tests.
