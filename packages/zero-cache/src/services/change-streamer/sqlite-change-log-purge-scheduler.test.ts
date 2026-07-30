@@ -280,6 +280,33 @@ describe('change-streamer/sqlite-change-log-purge-scheduler', () => {
     expect(minWatermark(db)).toBe(v(8));
   });
 
+  test('a decline arms the recheck timer, which alone lifts it', async () => {
+    const {db, scheduler, timers, setAcks} = setup();
+    appendSeries(db, 1, 10);
+
+    setAcks([v(3)]);
+    const declined = await scheduler.purge(v(8));
+    expect(declined.stopped).toBe('subscriber-behind');
+    // Nothing notifies when the lagging subscriber ACKs past the floor, so
+    // the recheck timer is the only thing that ever lifts a decline.
+    expect(timers.delays()).toEqual([30_000]);
+
+    // The subscriber catches up; the timer alone — no new purge() dispatch —
+    // resumes the drain.
+    setAcks([v(20)]);
+    timers.fire();
+    await microtasks();
+    expect(minWatermark(db)).toBe(v(8));
+    // Drained to the floor with nothing below it: no timer left armed.
+    expect(timers.delays()).toEqual([]);
+
+    // The no-subscribers decline re-arms the same way.
+    setAcks([]);
+    const noSubs = await scheduler.purge(v(9));
+    expect(noSubs.stopped).toBe('no-subscribers');
+    expect(timers.delays()).toEqual([30_000]);
+  });
+
   test('a registration mid-drain is honored by the very next batch', async () => {
     const fixture = setup({
       batchRows: 6,
@@ -362,6 +389,35 @@ describe('change-streamer/sqlite-change-log-purge-scheduler', () => {
 
     expect(result.stopped).toBeUndefined();
     expect(watermarks(db)).toEqual([v(40)]);
+  });
+
+  test('the poll backstop finds the purge window a silent rollback opens', async () => {
+    const {db, scheduler, timers} = setup();
+    appendSeries(db, 1, 10);
+
+    const writer = new ChangeLogStreamWriter(new StatementRunner(db));
+    writer.begin(
+      v(40),
+      serializeChangeStreamData([
+        'begin',
+        {tag: 'begin'},
+        {commitWatermark: v(40)},
+      ]),
+    );
+
+    const cycle = scheduler.purge(v(8));
+    await microtasks();
+    expect(timers.delays()).toEqual([1_000]); // parked on the poll
+
+    // An interrupted stream rolls back with no commit notification —
+    // deliberately no onWriterIdle() here. Only the poll can find the window
+    // the rollback opened.
+    writer.rollback();
+    timers.fire();
+    const result = await cycle;
+
+    expect(result.stopped).toBeUndefined();
+    expect(minWatermark(db)).toBe(v(8));
   });
 
   test('an appending writer interleaves with a drain that tears an oversized transaction', async () => {
@@ -478,6 +534,87 @@ describe('change-streamer/sqlite-change-log-purge-scheduler', () => {
     expect(result.stopped).toBe('paused');
     expect(result.batches).toBe(1);
     expect(minWatermark(db)).toBe(v(1));
+  });
+
+  test('a batch queued behind a registration re-checks the writer under the lock', async () => {
+    const {db, scheduler, timers} = setup();
+    appendSeries(db, 1, 10);
+
+    let releaseGuard!: () => void;
+    const registration = scheduler.cleanupGuard.runWhilePurgeBlocked(
+      () => new Promise<void>(resolve => (releaseGuard = resolve)),
+    );
+    await microtasks();
+
+    const cycle = scheduler.purge(v(8));
+    await microtasks(); // the batch's lock acquisition is now queued
+
+    // The writer begins a transaction while the batch waits on the mutex —
+    // everything the loop's unlocked checks established is now stale.
+    const writer = new ChangeLogStreamWriter(new StatementRunner(db));
+    writer.begin(
+      v(40),
+      serializeChangeStreamData([
+        'begin',
+        {tag: 'begin'},
+        {commitWatermark: v(40)},
+      ]),
+    );
+
+    releaseGuard();
+    await registration;
+    const winner = await Promise.race([
+      cycle.then(() => 'done'),
+      microtasks().then(() => 'waiting'),
+    ]);
+    // The batch retried instead of running BEGIN IMMEDIATE inside the
+    // writer's open transaction: nothing was purged, and the cycle is parked
+    // on the commit notification with the poll as a backstop.
+    expect(winner).toBe('waiting');
+    expect(watermarks(db)).toContain(SEED_WATERMARK);
+    expect(timers.delays()).toEqual([1_000]);
+
+    writer.commit(
+      v(40),
+      serializeChangeStreamData([
+        'commit',
+        {tag: 'commit'},
+        {watermark: v(40)},
+      ]),
+      LONG_AGO - 1,
+    );
+    scheduler.onWriterIdle();
+    const result = await cycle;
+    expect(result.stopped).toBeUndefined();
+    expect(minWatermark(db)).toBe(v(8));
+  });
+
+  test('a batch queued behind a registration skips a writer that failed soft', async () => {
+    const {db, scheduler, timers, setConnection} = setup();
+    appendSeries(db, 1, 10);
+
+    let releaseGuard!: () => void;
+    const registration = scheduler.cleanupGuard.runWhilePurgeBlocked(
+      () => new Promise<void>(resolve => (releaseGuard = resolve)),
+    );
+    await microtasks();
+
+    const cycle = scheduler.purge(v(8));
+    await microtasks(); // the batch's lock acquisition is now queued
+
+    // The writer fails soft while the batch waits on the mutex.
+    setConnection(undefined);
+
+    releaseGuard();
+    await registration;
+    const result = await cycle;
+
+    // The batch's locked re-check saw the connection change and retried; the
+    // loop then skipped rather than purging on the stale handle.
+    expect(result.stopped).toBe('writer-unavailable');
+    expect(result.deletedRows).toBe(0);
+    expect(watermarks(db)).toContain(SEED_WATERMARK);
+    expect(timers.delays()).toEqual([30_000]);
   });
 
   test('a pause lands between batches and interrupts the drain', async () => {
