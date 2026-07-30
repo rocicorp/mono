@@ -102,7 +102,7 @@ export declare const backfillSchema: v.ObjectType<{
 }, undefined>;
 export declare const beginSchema: v.ObjectType<{
     tag: v.Type<"begin">;
-    json: v.Optional<"p" | "s">;
+    json: v.Optional<"s" | "p">;
     skipAck: v.Optional<boolean>;
 }, undefined>;
 export declare const commitSchema: v.ObjectType<{
