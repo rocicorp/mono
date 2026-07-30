@@ -30,7 +30,7 @@ import {
   type SubscriberContext,
 } from '../change-streamer/change-streamer.ts';
 import * as ErrorType from '../change-streamer/error-type-enum.ts';
-import {deleteChangeLogDB, openChangeLogDB} from './change-log-db.ts';
+import {deleteChangeLogDB} from './change-log-db.ts';
 import {IncrementalSyncer} from './incremental-sync.ts';
 import {ReplicationStatusPublisher} from './replication-status.ts';
 import {
@@ -38,7 +38,6 @@ import {
   getReplicationState,
   initReplicationState,
 } from './schema/replication-state.ts';
-import {SQLiteChangeLogObserver} from './sqlite-change-log-observability.ts';
 import {ReplicationMessages} from './test-utils.ts';
 import {ThreadWriteWorkerClient} from './write-worker-client.ts';
 
@@ -81,7 +80,6 @@ describe('replicator/incremental-sync', () => {
     await worker.init(
       dbFile.path,
       'serving',
-      false,
       {
         busyTimeout: 30000,
         analysisLimit: 1000,
@@ -95,9 +93,7 @@ describe('replicator/incremental-sync', () => {
       {subscribe: subscribeFn.mockResolvedValue(downstream)},
       worker,
       'serving',
-      false,
       ReplicationStatusPublisher.forReplicaFile(dbFile.path),
-      undefined,
     );
   });
 
@@ -475,10 +471,9 @@ describe('replicator/incremental-sync', () => {
       ]
     `);
     expect(processMessage).toHaveBeenCalledTimes(11);
-    expect(processMessage).toHaveBeenNthCalledWith(1, {
-      data: firstBegin,
-      json: BigIntJSON.stringify(firstBegin),
-    });
+    // The parsed change, and nothing else: the canonical JSON went to the write
+    // worker only for the change log, which the change-streamer now writes.
+    expect(processMessage).toHaveBeenNthCalledWith(1, firstBegin);
   });
 
   test('replicates schema changes', async () => {
@@ -832,9 +827,7 @@ describe('replicator/incremental-sync', () => {
       },
       worker,
       'serving',
-      false,
       ReplicationStatusPublisher.forReplicaFile(dbFile.path),
-      undefined,
     );
 
     const localSyncing = syncer.run();
@@ -864,9 +857,7 @@ describe('replicator/incremental-sync', () => {
       },
       worker,
       'serving',
-      false,
       ReplicationStatusPublisher.forReplicaFile(dbFile.path),
-      undefined,
     );
 
     const localSyncing = syncer.run();
@@ -877,130 +868,6 @@ describe('replicator/incremental-sync', () => {
 
     syncer.stop(lc);
     void localSyncing.catch(() => {});
-  });
-
-  test('source disconnect rolls back an enabled stream writer transaction', async () => {
-    await worker.stop();
-    // The change log is anchored to the replica's state, so the state has to
-    // exist before the worker opens and reconciles it.
-    initReplicationState(mainDb, ['zero_data'], '02', {}, false);
-    worker = new ThreadWriteWorkerClient();
-    await worker.init(
-      dbFile.path,
-      'serving',
-      true,
-      {
-        busyTimeout: 30000,
-        analysisLimit: 1000,
-      },
-      {level: 'error', format: 'text'},
-    );
-    initDB(
-      mainDb,
-      `
-      CREATE TABLE issues(
-        id INTEGER PRIMARY KEY,
-        _0_version TEXT
-      );
-      `,
-    );
-
-    const {promise: hasRetried, resolve: retried} = resolver<true>();
-    subscribeFn.mockResolvedValueOnce(downstream).mockImplementation(() => {
-      retried(true);
-      return resolver<Source<SerializedDownstream>>().promise;
-    });
-    syncer = new IncrementalSyncer(
-      lc,
-      TASK_ID,
-      REPLICA_ID,
-      {subscribe: subscribeFn},
-      worker,
-      'serving',
-      true,
-      ReplicationStatusPublisher.forReplicaFile(dbFile.path),
-      undefined,
-    );
-    syncing = syncer.run();
-    await vi.waitFor(() => expect(subscribeFn).toHaveBeenCalledTimes(1));
-    const processMessage = vi.spyOn(worker, 'processMessage');
-
-    const issues = new ReplicationMessages({issues: 'id'});
-    downstream.push(['begin', issues.begin(), {commitWatermark: '06'}]);
-    downstream.push(['data', issues.insert('issues', {id: 1})]);
-    await vi.waitFor(() => expect(processMessage).toHaveBeenCalledTimes(2));
-    downstream.fail(new Error('source disconnected'));
-
-    expect(await hasRetried).toBe(true);
-    expect(mainDb.prepare(`SELECT * FROM issues`).all()).toEqual([]);
-    {
-      using changeLog = openChangeLogDB(lc, dbFile.path, {readonly: true});
-      expect(
-        changeLog
-          .prepare(
-            `SELECT * FROM "_zero.changeLogStream" WHERE "watermark" = '06'`,
-          )
-          .all(),
-      ).toEqual([]);
-    }
-    syncer.stop(lc);
-    void syncing.catch(() => {});
-    syncing = undefined;
-  });
-
-  test('an enabled SQLite stream-writer error stops the replicator', async () => {
-    await worker.stop();
-    initReplicationState(mainDb, ['zero_data'], '02', {}, false);
-    worker = new ThreadWriteWorkerClient();
-    await worker.init(
-      dbFile.path,
-      'serving',
-      true,
-      {
-        busyTimeout: 30000,
-        analysisLimit: 1000,
-      },
-      {level: 'error', format: 'text'},
-    );
-    const observer = new SQLiteChangeLogObserver(lc, {
-      schemaVersion: 14,
-      stateWatermark: '02',
-      seedWatermark: '02',
-      headWatermark: '02',
-      rows: 2,
-      estimatedBytes: 50,
-    });
-    syncer = new IncrementalSyncer(
-      lc,
-      TASK_ID,
-      REPLICA_ID,
-      {subscribe: subscribeFn.mockResolvedValue(downstream)},
-      worker,
-      'serving',
-      true,
-      ReplicationStatusPublisher.forReplicaFile(dbFile.path),
-      observer,
-    );
-    syncing = syncer.run();
-    await vi.waitFor(() => expect(subscribeFn).toHaveBeenCalledTimes(1));
-
-    // Reusing the seed watermark makes the stream insert fail even though the
-    // otherwise-empty replica transaction itself would be valid.
-    downstream.push(['begin', {tag: 'begin'}, {commitWatermark: '02'}]);
-    await syncing;
-    syncing = undefined;
-
-    expect(subscribeFn).toHaveBeenCalledTimes(1);
-    expect(observer.state()).toMatchObject({
-      sqliteHead: '02',
-      rows: 2,
-      rollbacks: 1,
-    });
-    expect(
-      mainDb
-        .prepare(`SELECT "stateVersion" FROM "_zero.replicationState"`)
-        .get(),
-    ).toEqual({stateVersion: '02'});
   });
 
   test('shut down on change-streamer error message', async () => {

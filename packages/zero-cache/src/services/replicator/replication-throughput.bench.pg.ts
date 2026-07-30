@@ -1,14 +1,11 @@
 // Benchmarks end-to-end logical replication throughput from upstream Postgres
 // writes through the change-streamer and into the SQLite replica.
 //
-// Set SQLITE_CHANGE_LOG_WRITER=1 to also write the canonical change stream to
-// the change-log database beside the replica, which is what the replicator
-// does with `sqliteChangeLogMode` enabled. Running the bench both ways is the
-// slice 7D measurement: the cost of the second, log-first commit on the real
-// write path rather than on the synthetic ceiling harness.
+// The change log is written by the change-streamer rather than by this write
+// path, so there is no writer axis here any more: this measures the replicator's
+// baseline, which is what slice 7I returned it to.
 //
 //   pnpm --filter zero-cache run bench:pg replication-throughput
-//   SQLITE_CHANGE_LOG_WRITER=1 pnpm --filter zero-cache run bench:pg replication-throughput
 
 import {afterEach, describe, expect} from 'vitest';
 import {createManualBenchmarkRecorder} from '../../../../shared/src/bench.ts';
@@ -38,7 +35,6 @@ import {
   type SerializedDownstream,
 } from '../change-streamer/change-streamer.ts';
 import {initChangeStreamerSchema} from '../change-streamer/schema/init.ts';
-import {deleteChangeLogDB} from './change-log-db.ts';
 import {ReplicationStatusPublisher} from './replication-status.ts';
 import {ReplicatorService} from './replicator.ts';
 import {ThreadWriteWorkerClient} from './write-worker-client.ts';
@@ -54,8 +50,6 @@ const APP_ID = 'logical_replication_bench_app';
 const SHARD_NUM = 0;
 const TASK_ID = 'logical-replication-throughput-bench';
 const TEST_TIMEOUT_MS = 900_000;
-
-const LOGS_CHANGE_STREAM = process.env['SQLITE_CHANGE_LOG_WRITER'] === '1';
 
 const lc = createSilentLogContext();
 const shard = {
@@ -178,19 +172,9 @@ async function startReplicationPipeline(testDBs: PgTest['testDBs']) {
   });
 
   const worker = new ThreadWriteWorkerClient();
-  await worker.init(
-    replicaDbFile.path,
-    'serving',
-    LOGS_CHANGE_STREAM,
-    getPragmaConfig('serving'),
-    {
-      level: 'error',
-      format: 'text',
-    },
-  );
-  cleanup.push(() => {
-    deleteChangeLogDB(replicaDbFile.path);
-    return Promise.resolve();
+  await worker.init(replicaDbFile.path, 'serving', getPragmaConfig('serving'), {
+    level: 'error',
+    format: 'text',
   });
 
   const replicator = new ReplicatorService(
@@ -200,9 +184,7 @@ async function startReplicationPipeline(testDBs: PgTest['testDBs']) {
     'serving',
     parseStringifiedChangeStreamer(changeStreamer),
     worker,
-    LOGS_CHANGE_STREAM,
     null,
-    undefined,
   );
   const replicatorDone = replicator.run();
   cleanup.push(async () => {
@@ -264,9 +246,10 @@ describe('replicator/logical replication throughput', () => {
         });
       }
 
+      // The change-log writer is no longer on this path: it lives in the
+      // change-streamer, so this is the write path's baseline again.
       benchmarkRecorder.recordThroughputSamples(
-        'replicator/logical replication end-to-end payload MB ' +
-          `changeLogWriter=${LOGS_CHANGE_STREAM ? 'on' : 'off'}`,
+        'replicator/logical replication end-to-end payload MB',
         samples,
       );
     },

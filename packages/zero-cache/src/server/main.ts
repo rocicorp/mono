@@ -21,7 +21,6 @@ import {
 } from '../types/processes.ts';
 import {
   createNotifierFrom,
-  createsCanonicalReplicator,
   handleSubscriptionsFrom,
   type ReplicaFileMode,
   subscribeTo,
@@ -108,14 +107,9 @@ export default async function runWorker(
     changeStreamerMode === 'dedicated' && changeStreamerURI === undefined;
   const sqliteChangeLogEnabled =
     config.changeStreamer.sqliteChangeLogMode !== 'off';
-  const hasCanonicalReplicator = createsCanonicalReplicator(
-    runChangeStreamer,
-    litestream.backupURL,
-    numSyncers,
-  );
   assert(
-    !sqliteChangeLogEnabled || hasCanonicalReplicator,
-    'SQLite change-log writing requires this process tree to create a canonical replicator',
+    !sqliteChangeLogEnabled || runChangeStreamer,
+    'SQLite change-log writing requires this process tree to run the change-streamer, which is where the writer lives',
   );
 
   let changeStreamer: Worker | undefined;

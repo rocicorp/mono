@@ -361,9 +361,11 @@ async function startZeroCacheReplica(testDBs: PgTest['testDBs']) {
     await worker.init(
       replicaDbFile.path,
       'serving',
-      false,
       getPragmaConfig('serving'),
-      {level: 'error', format: 'text'},
+      {
+        level: 'error',
+        format: 'text',
+      },
     );
 
     const replicator = new ReplicatorService(
@@ -373,9 +375,7 @@ async function startZeroCacheReplica(testDBs: PgTest['testDBs']) {
       'serving',
       parseStringifiedChangeStreamer(changeStreamer),
       worker,
-      false,
       null,
-      undefined,
     );
     const replicatorDone = replicator.run();
     cleanup.push(async () => {

@@ -18,7 +18,10 @@ import {afterEach, expect, test, vi} from 'vitest';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
 import type {ReseedReason} from './change-log-db.ts';
-import type {CommitResult} from './change-processor.ts';
+import type {
+  ChangeLogCommit,
+  SQLiteChangeLogInfo,
+} from './sqlite-change-log-observability.ts';
 
 afterEach(() => {
   metrics.disable();
@@ -90,7 +93,7 @@ test('each reseed reason increments reconcile_wipes with its own label', async (
   const reasons: ReseedReason[] = [
     'created',
     'schema-mismatch',
-    'replica-version-mismatch',
+    'identity-mismatch',
     'gap',
   ];
 
@@ -102,7 +105,8 @@ test('each reseed reason increments reconcile_wipes with its own label', async (
     });
   }
   // Twice, to show the `gap` series counts rather than latches. A nonzero rate
-  // in steady state is the alert that log-first ordering is not holding.
+  // in steady state is the alert that the log is not leading the resume
+  // watermark.
   recordSQLiteChangeLogReconcile(lc, {
     action: 'reseeded',
     head: '05',
@@ -119,7 +123,7 @@ test('each reseed reason increments reconcile_wipes with its own label', async (
   expect(counts(otel.exporter, `${METRIC}.reconcile_wipes`)).toEqual({
     'created': 1,
     'schema-mismatch': 1,
-    'replica-version-mismatch': 1,
+    'identity-mismatch': 1,
     'gap': 2,
   });
   expect(counts(otel.exporter, `${METRIC}.reconcile_truncated_rows`)).toEqual({
@@ -153,31 +157,33 @@ const BEGIN: ChangeStreamData = [
 ];
 const COMMIT: ChangeStreamData = ['commit', {tag: 'commit'}, {watermark: '06'}];
 
-const COMMIT_RESULT: CommitResult = {
+const COMMIT_RESULT: ChangeLogCommit = {
   watermark: '06',
-  completedBackfill: undefined,
-  schemaUpdated: false,
-  changeLogUpdated: true,
-  changeLogStream: {rows: 2, estimatedBytes: 100, hash: '0'.repeat(64)},
-  commitTiming: {logCommitMs: 4, replicaCommitMs: 11},
+  stats: {rows: 2, estimatedBytes: 100, hash: '0'.repeat(64)},
+  logCommitMs: 4,
 };
 
-test('records the two halves of the ordered commit separately', async () => {
+const INFO: SQLiteChangeLogInfo = {
+  epoch: null,
+  generation: '01',
+  replicaID: null,
+  schemaVersion: 2,
+  seededAtMs: 1_700_000_000_000,
+  seedWatermark: '02',
+  headWatermark: '02',
+  rows: 2,
+  estimatedBytes: 100,
+};
+
+test('records the commit that sits on the forward path', async () => {
   await using otel = withProvider();
   const {SQLiteChangeLogObserver} =
     await import('./sqlite-change-log-observability.ts');
-  const observer = new SQLiteChangeLogObserver(createSilentLogContext(), {
-    schemaVersion: 1,
-    stateWatermark: '02',
-    seedWatermark: '02',
-    headWatermark: '02',
-    rows: 2,
-    estimatedBytes: 100,
-  });
+  const observer = new SQLiteChangeLogObserver(createSilentLogContext(), INFO);
 
   observer.messageProcessed(BEGIN, null, 1);
-  // The 20 ms round trip is the message-processing time; the two commits
-  // inside it are what the write worker measured.
+  // The 20 ms is the whole write of the commit message; the commit inside it is
+  // the part that precedes the forward.
   observer.messageProcessed(COMMIT, COMMIT_RESULT, 20);
   await otel.provider.forceFlush();
 
@@ -185,39 +191,30 @@ test('records the two halves of the ordered commit separately', async () => {
   expect(
     histogram(otel.exporter, `${METRIC}.log_commit_duration`),
   ).toMatchObject({count: 1, sum: 0.004});
+  // There is no second commit to order against any more: the replica's belongs
+  // to a subscriber downstream of this loop.
   expect(
-    histogram(otel.exporter, `${METRIC}.replica_commit_duration`),
-  ).toMatchObject({count: 1, sum: 0.011});
-  // The metric they replaced claimed the two were one atomic commit.
+    dataPoints(otel.exporter, `${METRIC}.replica_commit_duration`),
+  ).toBeUndefined();
   expect(
     dataPoints(otel.exporter, `${METRIC}.commit_duration`),
   ).toBeUndefined();
 });
 
-test('a failed commit times the attempt but neither database', async () => {
+test('a failed commit times the attempt but not the commit', async () => {
   await using otel = withProvider();
   const {SQLiteChangeLogObserver} =
     await import('./sqlite-change-log-observability.ts');
-  const observer = new SQLiteChangeLogObserver(createSilentLogContext(), {
-    schemaVersion: 1,
-    stateWatermark: '02',
-    seedWatermark: '02',
-    headWatermark: '02',
-    rows: 2,
-    estimatedBytes: 100,
-  });
+  const observer = new SQLiteChangeLogObserver(createSilentLogContext(), INFO);
 
   observer.messageProcessed(BEGIN, null, 1);
   observer.messageFailed(COMMIT, new Error('commit failed'), 20);
   await otel.provider.forceFlush();
 
-  // There is no CommitResult to attribute a duration to either half, so the
-  // attempt is timed only by the message-processing histogram.
+  // A failed commit produces no statistics, so there is nothing to attribute a
+  // duration to: the attempt is timed only by the message-processing histogram.
   expect(
     dataPoints(otel.exporter, `${METRIC}.log_commit_duration`),
-  ).toBeUndefined();
-  expect(
-    dataPoints(otel.exporter, `${METRIC}.replica_commit_duration`),
   ).toBeUndefined();
   expect(
     histogram(otel.exporter, `${METRIC}.message_processing_duration`, {

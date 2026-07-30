@@ -29,11 +29,10 @@ export interface SQLiteChangeLogCleanupGuard {
   runWhilePurgeBlocked<T>(register: () => T): Promise<T>;
 }
 
-// How long the barrier waits for the change-log writer's ACK before falling
-// back to reading the replica. The ACK normally arrives first, so this is a
-// backstop for the windows in which no ACK is coming: no writer is subscribed
-// (in which case the change log cannot be advancing either), the writer is
-// mid-reconnect, or it predates the `logsChangeStream` subscription parameter.
+// How long the barrier waits for the change-log writer's commit notification
+// before re-reading the log itself. The notification normally arrives first, so
+// this is a backstop for the windows in which none is coming: the writer is
+// disabled, or it is between stream connections.
 const DEFAULT_BARRIER_POLL_INTERVAL_MS = 1000;
 
 export type SQLiteChangeLogCatchupOptions = {
@@ -83,11 +82,11 @@ export class SQLiteChangeLogCatchup implements Disposable {
     'replication',
     'sqlite_change_log.barrier_wakeups',
     'SQLite catchup barrier waits, labeled by what ended the wait. A ' +
-      'population dominated by "poll" means the change-log writer ACK is not ' +
-      'reaching the barrier.',
+      'population dominated by "poll" means the change-log writer\'s commit ' +
+      'notification is not reaching the barrier.',
   );
   readonly #catchups = new Map<Subscriber, AbortController>();
-  readonly #ackWaiters = new Set<AckWaiter>();
+  readonly #commitWaiters = new Set<CommitWaiter>();
   #closed = false;
 
   constructor(
@@ -147,19 +146,18 @@ export class SQLiteChangeLogCatchup implements Disposable {
   }
 
   /**
-   * Notes that the subscriber writing the SQLite change log has acked
-   * `watermark`, i.e. has durably applied it to the replica this coordinator
-   * reads. That is the only event that advances the change log, so it is what
-   * the barrier waits on instead of polling the replica for it.
+   * Notes that the change-log writer has committed `watermark`, i.e. that the
+   * log's head has advanced to it. The writer runs in this process, so this is
+   * the event itself rather than a subscriber's ACK of it.
    *
-   * The ACK is a wakeup, not an authority: `plan()` still decides what can be
-   * read. An ACK that never arrives costs the barrier a poll interval, and one
+   * It is a wakeup, not an authority: `plan()` still decides what can be read.
+   * A notification that never arrives costs the barrier a poll interval, and one
    * that arrives early costs an extra `plan()` call.
    */
-  onChangeLogWriterAck(watermark: string): void {
-    for (const waiter of this.#ackWaiters) {
+  onChangeLogCommit(watermark: string): void {
+    for (const waiter of this.#commitWaiters) {
       if (watermark >= waiter.watermark) {
-        this.#ackWaiters.delete(waiter);
+        this.#commitWaiters.delete(waiter);
         waiter.resolve();
       }
     }
@@ -419,29 +417,29 @@ export class SQLiteChangeLogCatchup implements Disposable {
   }
 
   /**
-   * Waits for the change-log writer's ACK of `requiredHead`, or the poll
+   * Waits for the change-log writer to commit `requiredHead`, or the poll
    * interval as a backstop.
    *
-   * No ACK can be missed by registering after `plan()` was read, because the
-   * ACK lags the write it acknowledges: if the writer had already acked
-   * `requiredHead`, `plan()` would have seen it.
+   * No notification can be missed by registering after `plan()` was read: the
+   * notification follows the commit it reports, so if the writer had already
+   * committed `requiredHead`, `plan()` would have seen it.
    */
   async #awaitChangeLogProgress(
     requiredHead: string,
     remainingMs: number,
     signal: AbortSignal,
   ): Promise<void> {
-    const acked = resolver<void>();
-    const waiter = {watermark: requiredHead, resolve: acked.resolve};
-    this.#ackWaiters.add(waiter);
-    // Scopes the backstop timer to this wait so that an ACK cancels it rather
+    const committed = resolver<void>();
+    const waiter = {watermark: requiredHead, resolve: committed.resolve};
+    this.#commitWaiters.add(waiter);
+    // Scopes the backstop timer to this wait so that a commit cancels it rather
     // than leaving it to fire against a barrier that has already moved on.
     const poll = new AbortController();
     const abortPoll = () => poll.abort();
     signal.addEventListener('abort', abortPoll, {once: true});
     try {
       const wokenBy = await Promise.race([
-        acked.promise.then(() => 'ack' as const),
+        committed.promise.then(() => 'commit' as const),
         this.#sleep(
           Math.min(this.#barrierPollIntervalMs, remainingMs),
           poll.signal,
@@ -449,7 +447,7 @@ export class SQLiteChangeLogCatchup implements Disposable {
       ]);
       this.#barrierWakeups.add(1, {'wakeup.source': wokenBy});
     } finally {
-      this.#ackWaiters.delete(waiter);
+      this.#commitWaiters.delete(waiter);
       signal.removeEventListener('abort', abortPoll);
       poll.abort();
     }
@@ -462,7 +460,7 @@ export class SQLiteChangeLogCatchup implements Disposable {
   }
 }
 
-type AckWaiter = {watermark: string; resolve: () => void};
+type CommitWaiter = {watermark: string; resolve: () => void};
 
 /**
  * A barrier that gave up on the replica reaching the required head. Both

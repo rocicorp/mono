@@ -1,58 +1,70 @@
 /**
- * Property-based crash injection across the log-first commit ordering.
+ * Property-based crash injection across the change log's commit ordering.
  *
- * The writer commits the change log before the replica, so the window between
- * the two commits is the one place where the two databases legitimately
- * disagree. A crash there must leave a *phantom* — a transaction in the log
- * whose replica commit was lost — and never a *hole*, because a phantom is
- * detectable and repairable at startup while a hole would be served to a
- * subscriber as a silent gap.
+ * The change-streamer commits the log before forwarding a transaction's
+ * `commit` message, and everything that can advance the watermark the stream
+ * would resume from — the storer's Postgres commit, `lastWatermark`, the
+ * upstream ACK — runs strictly after that. So the log's head is always at or
+ * above the resume point: a crash can leave a *phantom* (a transaction the
+ * resumed stream will re-deliver) but never a *hole*, because a phantom is
+ * detectable and truncatable while a hole would be served to a subscriber as a
+ * silent gap.
  *
- * Each generated case runs a change stream through {@link ChangeProcessor},
- * kills the process at a chosen point, then reopens both databases exactly as
- * `write-worker`'s `init` does and asserts design 5.1 invariants 1-4 plus
- * transaction-level contiguity. This is the writer-side companion to the
- * catchup handoff property test in
- * `change-streamer/sqlite-change-log-catchup.test.ts`.
+ * Each generated case drives a change stream through
+ * {@link SQLiteChangeLogWriter}, kills the process at a chosen point relative to
+ * the forward and the Postgres commit, then reopens the log exactly as the next
+ * stream connection does and asserts the ordering invariant plus
+ * transaction-level contiguity.
+ *
+ * The Postgres side is modeled rather than run: what the log is reconciled
+ * against is a single watermark, and the only thing that matters about its
+ * source is *when* it advances relative to the log's commit. The end-to-end
+ * version of this, driven by a real storer failure, is in
+ * `change-streamer/change-streamer-service.pg.test.ts`.
  */
 
 import fc from 'fast-check';
 import {afterEach, describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import {must} from '../../../../shared/src/must.ts';
-import {Database} from '../../../../zqlite/src/db.ts';
-import {StatementRunner} from '../../db/statements.ts';
-import {DbFile, initDB} from '../../test/lite.ts';
+import type {Database} from '../../../../zqlite/src/db.ts';
+import {DbFile} from '../../test/lite.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
 import {serializeChangeStreamData} from '../change-streamer/change-log-codec.ts';
+import {SQLiteChangeLogWriter} from '../change-streamer/sqlite-change-log-writer.ts';
 import {
-  CHANGE_LOG_META_TABLE,
   CHANGE_LOG_STREAM_TABLE,
   deleteChangeLogDB,
   openChangeLogDB,
-  readReplicaAnchor,
-  reconcileChangeLog,
-  type ReconcileResult,
+  readChangeLogHead,
+  readChangeLogMeta,
+  type ChangeLogIdentity,
 } from './change-log-db.ts';
-import {ChangeProcessor} from './change-processor.ts';
-import {initReplicationState} from './schema/replication-state.ts';
 import {ReplicationMessages} from './test-utils.ts';
 
 const lc = createSilentLogContext();
 const issues = new ReplicationMessages({issues: 'id'});
 
-const REPLICA_VERSION = '02';
+const IDENTITY: ChangeLogIdentity = {
+  epoch: null,
+  generation: '02',
+  replicaID: '1777575698286',
+};
 
-/** Where the process is killed, relative to the two commits. */
+/** Where the process is killed, relative to the forward and the PG commit. */
 type CrashPoint =
-  // The log's COMMIT never runs: both databases end at the previous version.
-  | 'log-commit'
-  // The log is committed; the replica's state update never runs.
-  | 'state-update'
-  // The log is committed and the state updated; the replica's COMMIT never runs.
-  | 'replica-commit'
-  // Not a crash: the source drops mid-transaction and the processor aborts.
-  | 'source-disconnect';
+  // The log's COMMIT never runs: nothing for that transaction is durable.
+  | 'before-log-commit'
+  // The log is committed; the `commit` message is not yet forwarded.
+  | 'after-log-commit'
+  // The `commit` is forwarded; the resume watermark has not advanced.
+  | 'after-forward'
+  // Not a crash: the source drops mid-transaction and the writer rolls back.
+  | 'source-disconnect'
+  // Not a crash either: the whole transaction is logged and forwarded, and the
+  // Postgres commit never lands. This is what a failed storer commit leaves,
+  // and it is the in-process form of 'after-forward'.
+  | 'no-pg-commit';
 
 type Scenario = {
   readonly before: number;
@@ -66,9 +78,9 @@ const scenario: fc.Arbitrary<Scenario> = fc.record({
   changes: fc.integer({min: 0, max: 3}),
   after: fc.integer({min: 0, max: 3}),
   crashPoint: fc.constantFrom<CrashPoint>(
-    'log-commit',
-    'state-update',
-    'replica-commit',
+    'before-log-commit',
+    'after-log-commit',
+    'after-forward',
     'source-disconnect',
   ),
 });
@@ -78,131 +90,63 @@ function watermark(i: number): string {
   return `0${'3456789abcdefghijk'[i]}`;
 }
 
+/**
+ * One change-streamer process: the writer, the watermarks it has forwarded, and
+ * the resume watermark that only a Postgres commit advances.
+ */
+class Session {
+  readonly forwarded: string[] = [];
+  readonly writer: SQLiteChangeLogWriter;
+  #resumeWatermark: string;
+  #dead = false;
+
+  constructor(file: DbFile, resumeWatermark: string) {
+    this.#resumeWatermark = resumeWatermark;
+    this.writer = new SQLiteChangeLogWriter(lc, {
+      replicaFile: file.path,
+      identity: IDENTITY,
+      now: () => 1_700_000_000_000,
+    });
+  }
+
+  get resumeWatermark(): string {
+    return this.#resumeWatermark;
+  }
+
+  reconcile() {
+    this.writer.reconcile(this.#resumeWatermark);
+  }
+
+  write(change: ChangeStreamData) {
+    this.writer.write(change, serializeChangeStreamData(change));
+  }
+
+  forward(change: ChangeStreamData) {
+    if (change[0] === 'commit') {
+      this.forwarded.push(change[2].watermark);
+    }
+  }
+
+  /** The storer's Postgres commit, i.e. the only thing that moves the anchor. */
+  pgCommit(watermark: string) {
+    this.#resumeWatermark = watermark;
+  }
+
+  /**
+   * Kills the process. Closing the handle is what makes this a crash rather
+   * than a shutdown: SQLite discards whatever the open transaction had not
+   * committed, and nothing gets a chance to roll anything back.
+   */
+  kill() {
+    if (!this.#dead) {
+      this.#dead = true;
+      this.writer.close();
+    }
+  }
+}
+
 class Crash extends Error {
   override readonly name = 'InjectedCrash';
-}
-
-/**
- * A replica runner that kills the process at a chosen statement, by closing
- * both connections before throwing. Closing rather than rolling back is what
- * makes this a crash: SQLite discards whatever was not committed, and the
- * processor's own rollback then fails against a closed handle, which is the
- * partial-rollback path `#fail` has to tolerate.
- */
-class CrashingStatementRunner extends StatementRunner {
-  kill: (() => void) | undefined;
-  crashOnStateUpdate = false;
-  crashOnCommit = false;
-
-  override run(sql: string, ...args: unknown[]) {
-    if (this.crashOnStateUpdate && sql.includes('"_zero.replicationState"')) {
-      this.crashOnStateUpdate = false;
-      this.#crash();
-    }
-    return super.run(sql, ...args);
-  }
-
-  override commit() {
-    if (this.crashOnCommit) {
-      this.crashOnCommit = false;
-      this.#crash();
-    }
-    return super.commit();
-  }
-
-  #crash(): never {
-    this.kill?.();
-    throw new Crash('injected crash');
-  }
-}
-
-/** A change-log runner that kills the process instead of committing. */
-class CrashingChangeLogRunner extends StatementRunner {
-  kill: (() => void) | undefined;
-  crashOnCommit = false;
-
-  override commit() {
-    if (this.crashOnCommit) {
-      this.crashOnCommit = false;
-      this.kill?.();
-      throw new Crash('injected crash');
-    }
-    return super.commit();
-  }
-}
-
-type Session = {
-  readonly replica: Database;
-  readonly changeLog: Database;
-  readonly replicaRunner: CrashingStatementRunner;
-  readonly changeLogRunner: CrashingChangeLogRunner;
-  readonly processor: ChangeProcessor;
-  readonly failures: unknown[];
-  readonly reconciled: ReconcileResult;
-  readonly close: () => void;
-};
-
-/** Opens both databases and reconciles, exactly as `write-worker.init` does. */
-function startSession(file: DbFile): Session {
-  const replica = file.connect(lc);
-  const changeLog = openChangeLogDB(lc, file.path, {readonly: false});
-  changeLog.pragma('journal_mode = wal2');
-  const reconciled = reconcileChangeLog(
-    lc,
-    changeLog,
-    readReplicaAnchor(replica),
-  );
-
-  const replicaRunner = new CrashingStatementRunner(replica);
-  const changeLogRunner = new CrashingChangeLogRunner(changeLog);
-  const failures: unknown[] = [];
-  let closed = false;
-  const kill = () => {
-    closed = true;
-    changeLog.close();
-    replica.close();
-  };
-  replicaRunner.kill = kill;
-  changeLogRunner.kill = kill;
-
-  return {
-    replica,
-    changeLog,
-    replicaRunner,
-    changeLogRunner,
-    processor: new ChangeProcessor(
-      replicaRunner,
-      'serving',
-      {changeLog: changeLogRunner},
-      (_, err) => failures.push(err),
-    ),
-    failures,
-    reconciled,
-    close: () => {
-      if (!closed) {
-        closed = true;
-        changeLog.close();
-        replica.close();
-      }
-    },
-  };
-}
-
-function process(session: Session, data: ChangeStreamData) {
-  return session.processor.processMessage(
-    lc,
-    data,
-    serializeChangeStreamData(data),
-  );
-}
-
-/** A whole transaction: begin, `changes` inserts, commit. */
-function transaction(session: Session, wm: string, changes: number): void {
-  process(session, ['begin', issues.begin(), {commitWatermark: wm}]);
-  for (let i = 0; i < changes; i++) {
-    process(session, ['data', issues.insert('issues', {id: i, text: wm})]);
-  }
-  process(session, ['commit', issues.commit(), {watermark: wm}]);
 }
 
 type LogTransaction = {
@@ -246,24 +190,10 @@ function readLog(db: Database): LogTransaction[] {
   return transactions;
 }
 
-function head(db: Database): string | null {
-  return db
-    .prepare(
-      /*sql*/ `SELECT max("watermark") AS "head" FROM "${CHANGE_LOG_STREAM_TABLE}"`,
-    )
-    .get<{head: string | null}>().head;
-}
-
-function stateVersion(db: Database): string {
-  return db
-    .prepare(/*sql*/ `SELECT "stateVersion" FROM "_zero.replicationState"`)
-    .get<{stateVersion: string}>().stateVersion;
-}
-
 /**
- * Design 5.1 invariant 3: every logged transaction is whole — contiguous
- * positions from a `begin` to a `commit` that chains to the previous
- * transaction — and the sequence covers the committed watermarks with no gap.
+ * Every logged transaction is whole — contiguous positions from a `begin` to a
+ * `commit` that chains to the previous transaction — and the sequence covers the
+ * committed watermarks with no gap.
  */
 function expectContiguous(log: LogTransaction[], committed: string[]) {
   expect(log.map(({watermark}) => watermark)).toEqual(committed);
@@ -290,149 +220,155 @@ afterEach(() => {
   }
 });
 
-function newReplica(): DbFile {
+function newReplicaFile(): DbFile {
   const file = new DbFile('change-log-crash-recovery');
   files.push(file);
-  const replica = file.connect(lc);
-  replica.pragma('journal_mode = wal');
-  initReplicationState(replica, ['zero_data'], REPLICA_VERSION);
-  initDB(
-    replica,
-    `
-    CREATE TABLE issues(
-      id INTEGER PRIMARY KEY,
-      text TEXT,
-      _0_version TEXT
-    );
-    `,
-  );
-  replica.close();
   return file;
+}
+
+/** Drives one whole transaction through the loop's order of operations. */
+function transaction(
+  session: Session,
+  wm: string,
+  changes: number,
+  crashPoint?: CrashPoint,
+): void {
+  const messages: ChangeStreamData[] = [
+    ['begin', issues.begin(), {commitWatermark: wm}],
+    ...Array.from(
+      {length: changes},
+      (_, i) =>
+        [
+          'data',
+          issues.insert('issues', {id: i, text: wm}),
+        ] as ChangeStreamData,
+    ),
+  ];
+  for (const message of messages) {
+    session.write(message);
+    session.forward(message);
+  }
+
+  if (crashPoint === 'source-disconnect') {
+    session.writer.abort();
+    return;
+  }
+  if (crashPoint === 'before-log-commit') {
+    session.kill();
+    throw new Crash('killed before the log commit');
+  }
+
+  const commit: ChangeStreamData = ['commit', issues.commit(), {watermark: wm}];
+  session.write(commit);
+  if (crashPoint === 'after-log-commit') {
+    session.kill();
+    throw new Crash('killed after the log commit, before the forward');
+  }
+  session.forward(commit);
+  if (crashPoint === 'after-forward') {
+    session.kill();
+    throw new Crash('killed after the forward, before the PG commit');
+  }
+  if (crashPoint === 'no-pg-commit') {
+    return;
+  }
+  session.pgCommit(wm);
 }
 
 /** What the crash left behind, before and after recovery. */
 type Outcome = {
-  /** The log head and replica state as the recovering process found them. */
-  readonly afterCrash: {logHead: string; stateVersion: string};
-  readonly reconciled: ReconcileResult;
+  readonly afterCrash: {logHead: string; resumeWatermark: string};
   readonly recoveredHead: string;
   readonly resumedHead: string;
 };
 
 function runScenario({before, changes, after, crashPoint}: Scenario): Outcome {
-  const file = newReplica();
+  const file = newReplicaFile();
+  const REPLICA_VERSION = '02';
   const committed = [REPLICA_VERSION];
   const phantomExpected =
-    crashPoint === 'state-update' || crashPoint === 'replica-commit';
+    crashPoint === 'after-log-commit' || crashPoint === 'after-forward';
   let next = 0;
 
   // The process that crashes.
-  const crashed = startSession(file);
+  const crashed = new Session(file, REPLICA_VERSION);
   try {
-    expect(crashed.reconciled).toEqual({
-      action: 'reseeded',
-      head: REPLICA_VERSION,
-      reason: 'created',
-    });
+    crashed.reconcile();
+    expect(crashed.writer.enabled).toBe(true);
     for (let i = 0; i < before; i++) {
       const wm = watermark(next++);
       transaction(crashed, wm, changes);
       committed.push(wm);
     }
-    expect(crashed.failures).toEqual([]);
 
     const crashWatermark = watermark(next++);
-    crashed.replicaRunner.crashOnStateUpdate = crashPoint === 'state-update';
-    crashed.replicaRunner.crashOnCommit = crashPoint === 'replica-commit';
-    crashed.changeLogRunner.crashOnCommit = crashPoint === 'log-commit';
-    if (crashPoint === 'source-disconnect') {
-      process(crashed, [
-        'begin',
-        issues.begin(),
-        {commitWatermark: crashWatermark},
-      ]);
-      for (let i = 0; i < changes; i++) {
-        process(crashed, ['data', issues.insert('issues', {id: i, text: 'x'})]);
-      }
-      crashed.processor.abort(lc);
-    } else {
-      transaction(crashed, crashWatermark, changes);
+    try {
+      transaction(crashed, crashWatermark, changes, crashPoint);
+      expect(crashPoint).toBe('source-disconnect');
+    } catch (e) {
+      expect(e).toBeInstanceOf(Crash);
     }
-    // An abort is expected, so it is not reported to the service; an injected
-    // crash is.
-    expect(crashed.failures).toHaveLength(
-      crashPoint === 'source-disconnect' ? 0 : 1,
-    );
+    // A write failure would have disabled the writer and deleted the file.
+    // Nothing here is a write failure.
+    expect(crashed.writer.state()?.invariantFailures ?? 0).toBe(0);
   } finally {
-    crashed.close();
+    crashed.kill();
   }
 
-  // Invariant 1, observed before any repair: the log never trails the replica,
-  // whatever the crash point.
-  const afterCrash = (() => {
-    using replica = new Database(lc, file.path, {readonly: true});
+  const resumeWatermark = crashed.resumeWatermark;
+  expect(resumeWatermark).toBe(committed.at(-1));
+
+  // Invariant 1, observed before any repair: the log never trails the resume
+  // watermark, whatever the crash point.
+  const logHead = (() => {
     using changeLog = openChangeLogDB(lc, file.path, {readonly: true});
-    return {
-      logHead: must(head(changeLog), 'the log is never empty'),
-      stateVersion: stateVersion(replica),
-    };
+    return must(readChangeLogHead(changeLog), 'the log is never empty');
   })();
-  expect(afterCrash.logHead >= afterCrash.stateVersion).toBe(true);
-  expect(afterCrash.stateVersion).toBe(committed.at(-1));
-  // A crash after the log's commit leaves the phantom behind.
-  expect(afterCrash.logHead).toBe(
-    phantomExpected ? watermark(next - 1) : afterCrash.stateVersion,
-  );
+  expect(logHead >= resumeWatermark).toBe(true);
+  expect(logHead).toBe(phantomExpected ? watermark(next - 1) : resumeWatermark);
 
-  // The process that recovers.
-  const recovered = startSession(file);
+  // The process that recovers. It reconciles against the watermark the stream
+  // resumes from, which is where the crash left Postgres.
+  const recovered = new Session(file, resumeWatermark);
   try {
-    expect(recovered.reconciled).toEqual(
-      phantomExpected
-        ? {
-            action: 'truncated',
-            head: committed.at(-1),
-            rows: changes + 2, // begin + changes + commit
-          }
-        : {action: 'none', head: committed.at(-1)},
-    );
+    recovered.reconcile();
+    expect(recovered.writer.enabled).toBe(true);
 
-    // Invariants 2 and 4.
-    const recoveredHead = must(head(recovered.changeLog));
-    expect(recoveredHead).toBe(stateVersion(recovered.replica));
-    expect(
-      recovered.changeLog
-        .prepare(
-          /*sql*/ `SELECT "replicaVersion" FROM "${CHANGE_LOG_META_TABLE}"`,
-        )
-        .get(),
-    ).toEqual({replicaVersion: REPLICA_VERSION});
-    expectContiguous(readLog(recovered.changeLog), committed);
+    using observer = openChangeLogDB(lc, file.path, {readonly: true});
+    const recoveredHead = must(readChangeLogHead(observer));
+    expect(recoveredHead).toBe(resumeWatermark);
+    expect(readChangeLogMeta(observer)).toMatchObject({
+      ...IDENTITY,
+      // Never a reseed: the crash is always answered by truncate-above.
+      seedWatermark: REPLICA_VERSION,
+    });
+    expectContiguous(readLog(observer), committed);
 
-    // Replication resumes from the recovered head.
+    // Replication resumes from the recovered head, re-delivering nothing and
+    // colliding with nothing.
     for (let i = 0; i < after; i++) {
       const wm = watermark(next++);
       transaction(recovered, wm, changes);
       committed.push(wm);
     }
-    expect(recovered.failures).toEqual([]);
-    const resumedHead = must(head(recovered.changeLog));
-    expect(resumedHead).toBe(stateVersion(recovered.replica));
-    expectContiguous(readLog(recovered.changeLog), committed);
+    expect(recovered.writer.state()?.invariantFailures ?? 0).toBe(0);
+    expect(recovered.writer.enabled).toBe(true);
+    const resumedHead = must(readChangeLogHead(observer));
+    expect(resumedHead).toBe(recovered.resumeWatermark);
+    expectContiguous(readLog(observer), committed);
 
     return {
-      afterCrash,
-      reconciled: recovered.reconciled,
+      afterCrash: {logHead, resumeWatermark},
       recoveredHead,
       resumedHead,
     };
   } finally {
-    recovered.close();
+    recovered.kill();
   }
 }
 
 describe('replicator/change-log crash recovery', () => {
-  test('a crash at any commit point leaves a phantom, never a hole', () => {
+  test('a crash at any point leaves a phantom, never a hole', () => {
     fc.assert(
       fc.property(scenario, s => {
         runScenario(s);
@@ -441,35 +377,42 @@ describe('replicator/change-log crash recovery', () => {
     );
   });
 
-  test('a crash between the two commits leaves the log ahead by one', () => {
+  test('a crash between the log commit and the forward leaves the log ahead by one', () => {
     const outcome = runScenario({
       before: 2,
       changes: 2,
       after: 2,
-      crashPoint: 'state-update',
+      crashPoint: 'after-log-commit',
     });
 
     // '03' and '04' committed, the crash at '05'.
-    expect(outcome.afterCrash).toEqual({logHead: '05', stateVersion: '04'});
-    expect(outcome.reconciled).toEqual({
-      action: 'truncated',
-      head: '04',
-      rows: 4,
-    });
+    expect(outcome.afterCrash).toEqual({logHead: '05', resumeWatermark: '04'});
     expect(outcome.recoveredHead).toBe('04');
     expect(outcome.resumedHead).toBe('07');
   });
 
-  test('an interrupted log commit leaves both databases at the same head', () => {
+  test('a crash between the forward and the PG commit leaves the log ahead by one', () => {
     const outcome = runScenario({
       before: 1,
       changes: 1,
       after: 1,
-      crashPoint: 'log-commit',
+      crashPoint: 'after-forward',
     });
 
-    expect(outcome.afterCrash).toEqual({logHead: '03', stateVersion: '03'});
-    expect(outcome.reconciled).toEqual({action: 'none', head: '03'});
+    expect(outcome.afterCrash).toEqual({logHead: '04', resumeWatermark: '03'});
+    expect(outcome.recoveredHead).toBe('03');
+    expect(outcome.resumedHead).toBe('05');
+  });
+
+  test('an interrupted log commit leaves the log at the resume watermark', () => {
+    const outcome = runScenario({
+      before: 1,
+      changes: 1,
+      after: 1,
+      crashPoint: 'before-log-commit',
+    });
+
+    expect(outcome.afterCrash).toEqual({logHead: '03', resumeWatermark: '03'});
     expect(outcome.resumedHead).toBe('05');
   });
 
@@ -481,41 +424,40 @@ describe('replicator/change-log crash recovery', () => {
       crashPoint: 'source-disconnect',
     });
 
-    expect(outcome.afterCrash).toEqual({logHead: '03', stateVersion: '03'});
-    expect(outcome.reconciled).toEqual({action: 'none', head: '03'});
+    expect(outcome.afterCrash).toEqual({logHead: '03', resumeWatermark: '03'});
     expect(outcome.resumedHead).toBe('05');
   });
 
-  test('a log left behind by a different replica is reseeded, never served', () => {
-    const file = newReplica();
-    const session = startSession(file);
+  // The in-process form of the same repair: no restart, just a stream
+  // connection that resumes below the log's head. The writer inserts with a
+  // plain INSERT, so an un-truncated overlap is a constraint violation on the
+  // first re-delivered transaction.
+  test('an in-process reconnect below the head truncates and re-accepts', () => {
+    const file = newReplicaFile();
+    const session = new Session(file, '02');
     try {
-      transaction(session, watermark(0), 2);
-      expect(session.failures).toEqual([]);
-    } finally {
-      session.close();
-    }
+      session.reconcile();
+      using observer = openChangeLogDB(lc, file.path, {readonly: true});
 
-    // Simulate an auto-reset whose change-log deletion was missed: the replica
-    // is re-synced at a new replicaVersion beside the old log.
-    {
-      using replica = new Database(lc, file.path);
-      replica.exec(/*sql*/ `
-        UPDATE "_zero.replicationConfig" SET "replicaVersion" = '04';
-        UPDATE "_zero.replicationState" SET "stateVersion" = '04';
-      `);
-    }
+      // Two transactions reach the log; only the first reaches Postgres, which
+      // is what a failed storer commit leaves behind.
+      transaction(session, '03', 2);
+      transaction(session, '05', 2, 'no-pg-commit');
+      expect(readChangeLogHead(observer)).toBe('05');
 
-    const reset = startSession(file);
-    try {
-      expect(reset.reconciled).toEqual({
-        action: 'reseeded',
-        head: '04',
-        reason: 'replica-version-mismatch',
-      });
-      expectContiguous(readLog(reset.changeLog), ['04']);
+      // The stream is re-established without a restart. Its resume watermark is
+      // re-read, is behind the log's head, and reconciliation truncates '05'.
+      session.writer.reconcile('03');
+      expect(readChangeLogHead(observer)).toBe('03');
+
+      // The resumed stream re-delivers '05' at the same watermark.
+      transaction(session, '05', 2);
+      expect(session.writer.enabled).toBe(true);
+      expect(session.writer.state()?.invariantFailures).toBe(0);
+      expect(readChangeLogHead(observer)).toBe('05');
+      expectContiguous(readLog(observer), ['02', '03', '05']);
     } finally {
-      reset.close();
+      session.kill();
     }
   });
 });

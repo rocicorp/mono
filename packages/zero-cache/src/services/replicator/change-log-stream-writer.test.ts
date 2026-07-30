@@ -10,7 +10,7 @@ import {
   deleteChangeLogDB,
   openChangeLogDB,
   reconcileChangeLog,
-  type ReplicaAnchor,
+  type ChangeLogAnchor,
 } from './change-log-db.ts';
 import {
   ChangeLogStreamWriter,
@@ -19,10 +19,10 @@ import {
 
 const lc = createSilentLogContext();
 
-const ANCHOR: ReplicaAnchor = {
-  replicaVersion: '01',
-  stateVersion: '02',
-  writeTimeMs: 1_000,
+const ANCHOR: ChangeLogAnchor = {
+  identity: {epoch: null, generation: '01', replicaID: null},
+  resumeWatermark: '02',
+  nowMs: 1_000,
 };
 
 const files: DbFile[] = [];
@@ -35,21 +35,21 @@ afterEach(() => {
   }
 });
 
-/** The seed transaction {@link reconcileChangeLog} writes at the replica head. */
+/** The seed transaction {@link reconcileChangeLog} writes at the resume point. */
 const SEED_ROWS = [
   {
-    watermark: ANCHOR.stateVersion,
+    watermark: ANCHOR.resumeWatermark,
     pos: 0,
     change: '{"tag":"begin"}',
     precommit: null,
     writeTimeMs: null,
   },
   {
-    watermark: ANCHOR.stateVersion,
+    watermark: ANCHOR.resumeWatermark,
     pos: 1,
     change: '{"tag":"commit"}',
-    precommit: ANCHOR.stateVersion,
-    writeTimeMs: ANCHOR.writeTimeMs,
+    precommit: ANCHOR.resumeWatermark,
+    writeTimeMs: ANCHOR.nowMs,
   },
 ];
 
@@ -192,7 +192,7 @@ describe('replicator/change-log-stream-writer', () => {
     expect(db.inTransaction).toBe(true);
     writer.append(TRUNCATE, 'truncate');
     // Nothing is visible to another connection until the writer commits.
-    expect(head(observer)).toBe(ANCHOR.stateVersion);
+    expect(head(observer)).toBe(ANCHOR.resumeWatermark);
 
     writer.commit('06', COMMIT, 789);
     expect(db.inTransaction).toBe(false);
@@ -231,7 +231,7 @@ describe('replicator/change-log-stream-writer', () => {
     writer.append(TRUNCATE, 'truncate');
     writer.rollback();
 
-    expect(head(observer)).toBe(ANCHOR.stateVersion);
+    expect(head(observer)).toBe(ANCHOR.resumeWatermark);
     expect(rowCount(observer)).toBe(SEED_ROWS.length);
   });
 

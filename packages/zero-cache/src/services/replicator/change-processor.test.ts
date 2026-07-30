@@ -1,5 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
-import {afterEach, beforeEach, describe, expect, test} from 'vitest';
+import {beforeEach, describe, expect, test} from 'vitest';
 import type {JSONObject} from '../../../../shared/src/bigint-json.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import {must} from '../../../../shared/src/must.ts';
@@ -11,21 +11,8 @@ import {
 } from '../../db/lite-tables.ts';
 import type {LiteIndexSpec} from '../../db/specs.ts';
 import {StatementRunner} from '../../db/statements.ts';
-import {
-  DbFile,
-  expectTableExact,
-  expectTables,
-  initDB,
-} from '../../test/lite.ts';
+import {expectTables, initDB} from '../../test/lite.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
-import {serializeChangeStreamData} from '../change-streamer/change-log-codec.ts';
-import {
-  CHANGE_LOG_STREAM_TABLE,
-  deleteChangeLogDB,
-  openChangeLogDB,
-  readReplicaAnchor,
-  reconcileChangeLog,
-} from './change-log-db.ts';
 import {ChangeProcessor} from './change-processor.ts';
 import {DEL_OP, SET_OP} from './schema/change-log.ts';
 import {ColumnMetadataStore} from './schema/column-metadata.ts';
@@ -34,39 +21,6 @@ import {
   initReplicationState,
 } from './schema/replication-state.ts';
 import {createChangeProcessor, ReplicationMessages} from './test-utils.ts';
-
-/**
- * Exposes the two points inside `processCommit` where the replica is written,
- * so a test can sample the two databases from other connections in between.
- */
-class ObservingStatementRunner extends StatementRunner {
-  onCommit: (() => void) | undefined;
-  onRun: (() => void) | undefined;
-
-  override commit() {
-    this.onCommit?.();
-    return super.commit();
-  }
-
-  override run(sql: string, ...args: unknown[]) {
-    this.onRun?.();
-    return super.run(sql, ...args);
-  }
-}
-
-function head(db: Database): string | null {
-  return db
-    .prepare(
-      /*sql*/ `SELECT max("watermark") AS "head" FROM "${CHANGE_LOG_STREAM_TABLE}"`,
-    )
-    .get<{head: string | null}>().head;
-}
-
-function stateVersion(db: Database): string {
-  return db
-    .prepare(/*sql*/ `SELECT "stateVersion" FROM "_zero.replicationState"`)
-    .get<{stateVersion: string}>().stateVersion;
-}
 
 describe('replicator/change-processor', () => {
   let lc: LogContext;
@@ -82,8 +36,7 @@ describe('replicator/change-processor', () => {
     servingProcessor = new ChangeProcessor(
       new StatementRunner(servingReplica),
       'serving',
-      {changeLog: undefined},
-      (_, err) => {
+      (_, err: unknown) => {
         throw err;
       },
     );
@@ -92,8 +45,7 @@ describe('replicator/change-processor', () => {
     backupProcessor = new ChangeProcessor(
       new StatementRunner(backupReplica),
       'backup',
-      {changeLog: undefined},
-      (_, err) => {
+      (_, err: unknown) => {
         throw err;
       },
     );
@@ -3892,321 +3844,6 @@ describe('replicator/change-processor-errors', () => {
       'auto rollback change processor',
     );
     expect(replica.inTransaction).toBe(false);
-  });
-});
-
-describe('replicator/change-processor change-stream logging', () => {
-  let lc: LogContext;
-  let replicaFile: DbFile;
-  let replica: Database;
-  let replicaRunner: ObservingStatementRunner;
-  let changeLog: Database;
-  let processor: ChangeProcessor;
-  let failures: unknown[];
-
-  const issues = new ReplicationMessages({issues: 'id'});
-
-  beforeEach(() => {
-    lc = createSilentLogContext();
-    // File-backed, so a second connection can observe what is committed while
-    // a transaction is still open.
-    replicaFile = new DbFile('change-processor-change-log');
-    replica = replicaFile.connect(lc);
-    replica.pragma('journal_mode = wal');
-    initReplicationState(replica, ['zero_data'], '02');
-    initDB(
-      replica,
-      `
-      CREATE TABLE issues(
-        id INTEGER PRIMARY KEY,
-        text TEXT,
-        _0_version TEXT
-      );
-      `,
-    );
-    changeLog = openChangeLogDB(lc, replicaFile.path, {readonly: false});
-    changeLog.pragma('journal_mode = wal');
-    reconcileChangeLog(lc, changeLog, readReplicaAnchor(replica));
-
-    failures = [];
-    replicaRunner = new ObservingStatementRunner(replica);
-    processor = new ChangeProcessor(
-      replicaRunner,
-      'serving',
-      {changeLog: new StatementRunner(changeLog)},
-      (_, err) => failures.push(err),
-    );
-  });
-
-  afterEach(() => {
-    changeLog.close();
-    replica.close();
-    deleteChangeLogDB(replicaFile.path);
-    replicaFile.delete();
-  });
-
-  function process(data: ChangeStreamData) {
-    return processor.processMessage(lc, data, serializeChangeStreamData(data));
-  }
-
-  function streamRows(db: Database, watermark: string) {
-    return db
-      .prepare(/*sql*/ `
-        SELECT "watermark", "pos", "change", "precommit", "writeTimeMs"
-          FROM "${CHANGE_LOG_STREAM_TABLE}"
-          WHERE "watermark" = ?
-          ORDER BY "pos"
-      `)
-      .all<{
-        watermark: string;
-        pos: number;
-        change: string;
-        precommit: string | null;
-        writeTimeMs: number | null;
-      }>(watermark);
-  }
-
-  test('applies data, logs the stream to its own database, and advances state', () => {
-    process(['begin', issues.begin(), {commitWatermark: '06'}]);
-    process([
-      'data',
-      issues.insert('issues', {
-        id: 9007199254740993n,
-        text: 'before\0after',
-      }),
-    ]);
-    const result = process(['commit', issues.commit(), {watermark: '06'}]);
-
-    expect(failures).toEqual([]);
-    expect(result).toMatchObject({
-      watermark: '06',
-      changeLogStream: {rows: 3, estimatedBytes: expect.any(Number)},
-      commitTiming: {
-        logCommitMs: expect.any(Number),
-        replicaCommitMs: expect.any(Number),
-      },
-    });
-    expectTableExact(
-      replica,
-      'issues',
-      [
-        {
-          id: 9007199254740993n,
-          text: 'before\0after',
-          _0_version: '06',
-        },
-      ],
-      'bigint',
-      'id',
-    );
-
-    const rows = streamRows(changeLog, '06');
-    expect(rows).toEqual([
-      {
-        watermark: '06',
-        pos: 0,
-        change: '{"tag":"begin"}',
-        precommit: null,
-        writeTimeMs: null,
-      },
-      {
-        watermark: '06',
-        pos: 1,
-        change:
-          '{"tag":"insert","relation":{"tag":"relation","schema":"public","name":"issues","rowKey":{"type":"default","columns":["id"]}},"new":{"id":9007199254740993,"text":"before\\u0000after"}}',
-        precommit: null,
-        writeTimeMs: null,
-      },
-      {
-        watermark: '06',
-        pos: 2,
-        change: '{"tag":"commit"}',
-        precommit: '06',
-        writeTimeMs: expect.any(Number),
-      },
-    ]);
-
-    // The replica does not carry the table at all as of schema v15.
-    expect(
-      replica
-        .prepare(
-          /*sql*/ `SELECT "name" FROM "sqlite_master" WHERE "tbl_name" = ?`,
-        )
-        .all(CHANGE_LOG_STREAM_TABLE),
-    ).toEqual([]);
-
-    const state = replica
-      .prepare(/*sql*/ `
-        SELECT "stateVersion", "writeTimeMs"
-          FROM "_zero.replicationState"
-      `)
-      .get<{stateVersion: string; writeTimeMs: number}>();
-    expect(state.stateVersion).toBe('06');
-    // The same writeTimeMs in both databases, so reconciliation can seed the
-    // log from the replica alone.
-    expect(state.writeTimeMs).toBe(rows[2].writeTimeMs);
-    expect(head(changeLog)).toBe(state.stateVersion);
-  });
-
-  test('the log is durable at the new head while the replica is still behind', () => {
-    using replicaObserver = new Database(lc, replicaFile.path, {
-      readonly: true,
-    });
-    using logObserver = openChangeLogDB(lc, replicaFile.path, {readonly: true});
-    const observed: {logHead: string | null; stateVersion: string}[] = [];
-    const observe = () =>
-      observed.push({
-        logHead: head(logObserver),
-        stateVersion: stateVersion(replicaObserver),
-      });
-
-    // Sampled from another connection at the one point where the two
-    // databases legitimately disagree: after the log's COMMIT and before the
-    // replica's.
-    replicaRunner.onCommit = observe;
-
-    process(['begin', issues.begin(), {commitWatermark: '06'}]);
-    process(['data', issues.insert('issues', {id: 1, text: 'ordering'})]);
-    observe();
-    process(['commit', issues.commit(), {watermark: '06'}]);
-    observe();
-
-    expect(observed).toEqual([
-      // Mid-transaction: neither has the new watermark.
-      {logHead: '02', stateVersion: '02'},
-      // Between the two commits: the log leads the replica.
-      {logHead: '06', stateVersion: '02'},
-      // Both committed.
-      {logHead: '06', stateVersion: '06'},
-    ]);
-  });
-
-  // The two commits are reported separately because they are no longer one
-  // atomic commit, and the second span is the phantom window. Delaying the
-  // replica's commit must therefore land entirely in `replicaCommitMs`.
-  test('commit timing attributes the phantom window to the replica half', () => {
-    const DELAY_MS = 50;
-    replicaRunner.onCommit = () => {
-      const until = performance.now() + DELAY_MS;
-      while (performance.now() < until) {
-        // Busy-wait: the replica's commit is synchronous, so this has to be
-        // too in order to land inside the measured span.
-      }
-    };
-
-    process(['begin', issues.begin(), {commitWatermark: '06'}]);
-    process(['data', issues.insert('issues', {id: 1, text: 'timing'})]);
-    const result = process(['commit', issues.commit(), {watermark: '06'}]);
-
-    expect(failures).toEqual([]);
-    const timing = must(result).commitTiming;
-    expect(timing?.replicaCommitMs).toBeGreaterThanOrEqual(DELAY_MS);
-    expect(timing?.logCommitMs).toBeLessThan(must(timing).replicaCommitMs);
-  });
-
-  test('no interleaving leaves the replica ahead of the log', () => {
-    using replicaObserver = new Database(lc, replicaFile.path, {
-      readonly: true,
-    });
-    using logObserver = openChangeLogDB(lc, replicaFile.path, {readonly: true});
-    const holes: unknown[] = [];
-    const check = () => {
-      const logHead = head(logObserver);
-      const state = stateVersion(replicaObserver);
-      if (logHead === null || logHead < state) {
-        holes.push({logHead, stateVersion: state});
-      }
-    };
-
-    replicaRunner.onCommit = check;
-    replicaRunner.onRun = check;
-    for (const watermark of ['06', '08', '0a']) {
-      process(['begin', issues.begin(), {commitWatermark: watermark}]);
-      check();
-      process(['data', issues.insert('issues', {id: 1, text: watermark})]);
-      check();
-      process(['commit', issues.commit(), {watermark}]);
-      check();
-    }
-
-    expect(failures).toEqual([]);
-    expect(holes).toEqual([]);
-    expect(head(changeLog)).toBe('0a');
-  });
-
-  test('explicit rollback and abort leave no stream or replica rows', () => {
-    process(['begin', issues.begin(), {commitWatermark: '06'}]);
-    process(['data', issues.insert('issues', {id: 1, text: 'rollback'})]);
-    process(['rollback', {tag: 'rollback'}]);
-    expect(changeLog.inTransaction).toBe(false);
-
-    process(['begin', issues.begin(), {commitWatermark: '07'}]);
-    process(['data', issues.insert('issues', {id: 2, text: 'abort'})]);
-    processor.abort(lc);
-    expect(changeLog.inTransaction).toBe(false);
-
-    expect(replica.prepare(`SELECT * FROM issues`).all()).toEqual([]);
-    expect(streamRows(changeLog, '06')).toEqual([]);
-    expect(streamRows(changeLog, '07')).toEqual([]);
-    expect(head(changeLog)).toBe('02');
-    expect(stateVersion(replica)).toBe('02');
-  });
-
-  test('processing failure rolls back both transactions', () => {
-    process(['begin', issues.begin(), {commitWatermark: '06'}]);
-    process(['data', issues.insert('issues', {id: 1, text: 'valid'})]);
-    process([
-      'data',
-      {
-        tag: 'insert',
-        relation: {
-          schema: 'public',
-          name: 'missing',
-          rowKey: {columns: ['id'], type: 'default'},
-        },
-        new: {id: 2},
-      },
-    ]);
-
-    expect(failures).toHaveLength(1);
-    expect(replica.inTransaction).toBe(false);
-    expect(changeLog.inTransaction).toBe(false);
-    expect(replica.prepare(`SELECT * FROM issues`).all()).toEqual([]);
-    expect(streamRows(changeLog, '06')).toEqual([]);
-  });
-
-  test('a replica rollback failure still rolls back the change log', () => {
-    process(['begin', issues.begin(), {commitWatermark: '06'}]);
-    process(['data', issues.insert('issues', {id: 1, text: 'valid'})]);
-    // SQLite rolls back this statement's transaction itself, so the
-    // processor's own ROLLBACK then fails: the change log must not be left
-    // holding its write lock because of it.
-    replica.exec(/*sql*/ `
-      CREATE TRIGGER "AutoRollback" BEFORE INSERT ON issues
-      BEGIN SELECT RAISE(ROLLBACK, 'auto rollback'); END;
-    `);
-    process(['data', issues.insert('issues', {id: 2, text: 'boom'})]);
-
-    expect(failures).toHaveLength(1);
-    expect(String(failures[0])).toContain('auto rollback');
-    expect(String(failures[0])).toContain(
-      'cannot rollback - no transaction is active',
-    );
-    expect(replica.inTransaction).toBe(false);
-    expect(changeLog.inTransaction).toBe(false);
-    expect(streamRows(changeLog, '06')).toEqual([]);
-  });
-
-  test('initial-sync cannot open a second transaction for the log', () => {
-    expect(
-      () =>
-        new ChangeProcessor(
-          new StatementRunner(replica),
-          'initial-sync',
-          {changeLog: new StatementRunner(changeLog)},
-          () => {},
-        ),
-    ).toThrow('initial-sync owns its transaction boundaries');
   });
 });
 

@@ -13,7 +13,7 @@ import {
   deleteChangeLogDB,
   openChangeLogDB,
   reconcileChangeLog,
-  type ReplicaAnchor,
+  type ChangeLogAnchor,
 } from '../replicator/change-log-db.ts';
 import {ChangeLogStreamWriter} from '../replicator/change-log-stream-writer.ts';
 import {serializeChangeStreamData} from './change-log-codec.ts';
@@ -36,13 +36,13 @@ afterEach(() => {
 });
 
 /**
- * The replica the change log is anchored to. No fixture in this file creates
- * that replica: the reader is served entirely by the change-log database.
+ * The watermark the log is seeded at. No fixture in this file creates a
+ * replica: the reader is served entirely by the change-log database.
  */
-const ANCHOR: ReplicaAnchor = {
-  replicaVersion: '01',
-  stateVersion: '02',
-  writeTimeMs: 1234567890,
+const ANCHOR: ChangeLogAnchor = {
+  identity: {epoch: null, generation: '01', replicaID: null},
+  resumeWatermark: '02',
+  nowMs: 1234567890,
 };
 
 /** The replica path whose `-change-log` sibling the fixtures build. */

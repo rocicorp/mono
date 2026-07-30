@@ -1,40 +1,56 @@
 import {describe, expect, test, vi} from 'vitest';
 import {createSilentLogContext} from '../../../shared/src/logging-test-utils.ts';
+import {changeLogFileName} from '../services/replicator/change-log-db.ts';
 import type {ReplicaState} from '../services/replicator/replicator.ts';
 import {inProcChannel} from '../types/processes.ts';
 import {Subscription} from '../types/subscription.ts';
 import {
   createNotifierFrom,
-  createsCanonicalReplicator,
-  replicaLogsChangeStream,
+  replicaFileName,
+  replicatorDeletesStaleChangeLog,
   setUpMessageHandlers,
   subscribeTo,
+  type ReplicaFileMode,
 } from './replicator.ts';
 
 const lc = createSilentLogContext();
 
 describe('workers/replicator', () => {
-  test('selects exactly one canonical SQLite change-log writer', () => {
-    expect(createsCanonicalReplicator(true, 's3://backup', 0)).toBe(true);
-    expect(createsCanonicalReplicator(true, undefined, 1)).toBe(true);
-    expect(createsCanonicalReplicator(true, undefined, 0)).toBe(false);
-    expect(createsCanonicalReplicator(false, undefined, 1)).toBe(false);
+  // The change log belongs to the change-streamer, and on POSIX a replicator
+  // that unlinked it would fail quietly: the writer would keep appending to its
+  // own inode while every reader opening by path saw nothing. So the guard has
+  // to hold in both topologies, and its key has to stay the config flag rather
+  // than anything derived per replica.
+  test('no replicator deletes the live change log when the writer is enabled', () => {
+    const REPLICA = '/data/replica.db';
+    const liveLog = changeLogFileName(REPLICA);
 
-    expect(replicaLogsChangeStream('backup', true, true, 's3://backup')).toBe(
-      true,
-    );
-    expect(
-      replicaLogsChangeStream('serving-copy', true, true, 's3://backup'),
-    ).toBe(false);
-    expect(replicaLogsChangeStream('serving', true, true, undefined)).toBe(
-      true,
-    );
-    expect(replicaLogsChangeStream('serving', true, false, undefined)).toBe(
-      false,
-    );
-    expect(replicaLogsChangeStream('serving', false, true, undefined)).toBe(
-      false,
-    );
+    // The `backupURL` topology runs 'backup' + 'serving-copy'; the
+    // no-`backupURL` one runs 'serving'.
+    const topologies: {
+      backupURL: string | undefined;
+      modes: ReplicaFileMode[];
+    }[] = [
+      {backupURL: 's3://backup', modes: ['backup', 'serving-copy']},
+      {backupURL: undefined, modes: ['serving']},
+    ];
+
+    for (const {modes} of topologies) {
+      for (const mode of modes) {
+        const replicatorLog = changeLogFileName(replicaFileName(REPLICA, mode));
+        // Paths coincide for every mode but 'serving-copy', so a delete keyed on
+        // anything but the config flag would take the live log with it.
+        expect(replicatorLog === liveLog).toBe(mode !== 'serving-copy');
+
+        for (const sqliteChangeLogMode of ['write', 'compare', 'serve']) {
+          expect(replicatorDeletesStaleChangeLog(sqliteChangeLogMode)).toBe(
+            false,
+          );
+        }
+        // Only `off` -- i.e. nothing in the task writes the log -- deletes it.
+        expect(replicatorDeletesStaleChangeLog('off')).toBe(true);
+      }
+    }
   });
 
   test('replicator subscription', async () => {
