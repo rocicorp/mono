@@ -1,3 +1,4 @@
+import fc from 'fast-check';
 import {afterEach, describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import type {Database} from '../../../../zqlite/src/db.ts';
@@ -1004,6 +1005,128 @@ describe('replicator/sqlite-change-log-purger', () => {
 
       expect(() => purge(new SQLiteChangeLogPurger(db))).toThrow(cause);
       expect(executed).toEqual(['BEGIN IMMEDIATE']);
+    });
+  });
+
+  describe('property: invariants hold under arbitrary schedules', () => {
+    /**
+     * Rows per transaction, by watermark. The unit of the safety argument:
+     * a purge may remove whole transactions below the floor and tear the
+     * minimum, but must never thin a transaction it retains.
+     */
+    function txRowCounts(db: Database): Map<string, number> {
+      return new Map(
+        db
+          .prepare(/*sql*/ `
+            SELECT "watermark", count(*) AS "n"
+            FROM "${CHANGE_LOG_STREAM_TABLE}"
+            GROUP BY "watermark"
+          `)
+          .all<{watermark: string; n: number}>()
+          .map(({watermark, n}) => [watermark, n]),
+      );
+    }
+
+    const purgeFuzzScenario = fc.record({
+      // The initial series. `skew` makes `writeTimeMs` non-monotone, the
+      // clock-went-backwards case the accounting comments reason about.
+      txs: fc.array(
+        fc.record({
+          width: fc.integer({min: 0, max: 6}),
+          skew: fc.integer({min: -5, max: 5}),
+        }),
+        {minLength: 1, maxLength: 10},
+      ),
+      // Purge batches with arbitrary bounds, interleaved with live appends.
+      ops: fc.array(
+        fc.oneof(
+          fc.record({
+            kind: fc.constant('append' as const),
+            width: fc.integer({min: 0, max: 4}),
+            skew: fc.integer({min: -5, max: 5}),
+          }),
+          fc.record({
+            kind: fc.constant('purge' as const),
+            // Floors below, among, at, and beyond every written watermark.
+            floorNum: fc.integer({min: 0, max: 25}),
+            // Cutoffs that make none, some, or all of the history eligible.
+            cutoffOffset: fc.integer({min: -5, max: 30}),
+            maxRows: fc.integer({min: 1, max: 12}),
+          }),
+        ),
+        {minLength: 1, maxLength: 12},
+      ),
+    });
+
+    test('any batch schedule preserves the floor, the head, and the boundary', () => {
+      fc.assert(
+        fc.property(purgeFuzzScenario, ({txs, ops}) => {
+          const {db, close} = createLog();
+          try {
+            let nextWm = 1;
+            const appendTx = (width: number, skew: number) => {
+              append(db, v(nextWm), width, SEED_WRITE_TIME_MS + nextWm + skew);
+              nextWm++;
+            };
+            txs.forEach(({width, skew}) => appendTx(width, skew));
+
+            const purger = new SQLiteChangeLogPurger(db);
+            for (const op of ops) {
+              if (op.kind === 'append') {
+                appendTx(op.width, op.skew);
+                continue;
+              }
+              const opts = {
+                externalFloor: v(op.floorNum),
+                retentionCutoffMs: SEED_WRITE_TIME_MS + op.cutoffOffset,
+                maxRows: op.maxRows,
+              };
+              const before = txRowCounts(db);
+              const headBefore = bounds(db).head;
+              const result = purge(purger, opts);
+              const after = txRowCounts(db);
+
+              // Structure: everything above the minimum is whole, and the
+              // minimum — whole or torn — still ends at its commit row.
+              expectInvariants(db);
+
+              // The head cap: the latest transaction is never a candidate.
+              expect(bounds(db).head).toBe(headBefore);
+
+              // The floor is the safety property: every transaction at or
+              // above it survives, whole. Only the retention *courtesy* may
+              // be crossed by a clock that went backwards — never these.
+              let deleted = 0;
+              for (const [w, n] of before) {
+                const remaining = after.get(w) ?? 0;
+                expect(remaining).toBeLessThanOrEqual(n);
+                deleted += n - remaining;
+                if (remaining < n) {
+                  expect(w < opts.externalFloor).toBe(true);
+                  expect(w < headBefore!).toBe(true);
+                }
+              }
+              expect(result.deletedRows).toBe(deleted);
+
+              // Progress and honesty: a batch that reports more work did
+              // some, and one that reports none has none left.
+              if (result.moreEligible) {
+                expect(result.deletedRows).toBeGreaterThan(0);
+              } else {
+                expect(purge(purger, opts).deletedRows).toBe(0);
+              }
+            }
+
+            // Whatever the schedule left behind drains to quiescence in
+            // bounded batches; drain() throws if purge stops terminating.
+            drain(purger, {maxRows: 5});
+            expectInvariants(db);
+          } finally {
+            close();
+          }
+        }),
+        {numRuns: 50},
+      );
     });
   });
 
