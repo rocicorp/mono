@@ -66,7 +66,7 @@ const CREATE_REPLICATION_STATE_SCHEMA =
   /*sql*/ `
   CREATE TABLE "_zero.replicationState" (
     stateVersion TEXT NOT NULL,
-    writeTimeMs INTEGER,
+    writeTimeMs INTEGER NOT NULL,
     lock INTEGER PRIMARY KEY DEFAULT 1 CHECK (lock=1)
   );
   ` +
