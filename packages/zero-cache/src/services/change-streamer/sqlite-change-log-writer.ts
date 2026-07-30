@@ -98,6 +98,18 @@ export class SQLiteChangeLogWriter {
     return !this.#disabled;
   }
 
+  /**
+   * The writer's own connection, which is the one purge runs on (§3.3): one
+   * process appends *and* deletes, on one handle, with no second writable
+   * connection and no cross-process barrier. `undefined` until the stream
+   * loop's first reconcile creates the log, and again once the writer has
+   * failed soft and deleted the file — both of which a purge cycle treats as
+   * "skip", not as an error.
+   */
+  get connection(): Database | undefined {
+    return this.#db;
+  }
+
   /** Exposed for tests and for the integration assertions on the metrics. */
   state(): SQLiteChangeLogObservabilityState | undefined {
     return this.#observer?.state();

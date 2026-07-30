@@ -57,6 +57,10 @@ import {
   SQLiteChangeLogCatchup,
   type SQLiteChangeLogCleanupGuard,
 } from './sqlite-change-log-catchup.ts';
+import {
+  SQLiteChangeLogPurgeScheduler,
+  type SQLiteChangeLogPurgeSchedulerOptions,
+} from './sqlite-change-log-purge-scheduler.ts';
 import {SQLiteChangeLogReader} from './sqlite-change-log-reader.ts';
 import {
   SQLiteChangeLogWriter,
@@ -92,7 +96,11 @@ export type SQLiteCatchupOptions = {
    * writer from SQLite would make it wait on its own ACK.
    */
   shouldUse?: ((ctx: SubscriberContext) => boolean) | undefined;
-  /** Slice 9 supplies the writer-serialized purge guard. */
+  /**
+   * Overrides the purge scheduler's guard, for tests. When absent, the
+   * service supplies the scheduler's real writer-serialized guard, or the
+   * catchup's no-op default when purging is not configured.
+   */
   cleanupGuard?: SQLiteChangeLogCleanupGuard | undefined;
   /**
    * How long the change log may be unavailable before declining to serve from
@@ -113,6 +121,15 @@ export type TuningOptions = StorerOptions & {
   sqliteChangeLogWriter?:
     | Omit<SQLiteChangeLogWriterOptions, 'onCommit' | 'onDisabled'>
     | undefined;
+  /**
+   * Also supplied when `sqliteChangeLogMode != off`, and deliberately not
+   * gated on the read path: in `write` mode no reader ever opens, and this is
+   * the configuration the purge scheduler actually ships in. The scheduler
+   * runs on the writer's own connection, so with the writer absent (mode
+   * `off`) it is never constructed, and a leftover file on disk is left to
+   * the replicator's cleanup.
+   */
+  sqliteChangeLogPurge?: SQLiteChangeLogPurgeSchedulerOptions | undefined;
 };
 
 /**
@@ -324,6 +341,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
   readonly #replicationStatusPublisher: ReplicationStatusPublisher;
   readonly #sqliteCatchupOptions: SQLiteCatchupOptions | undefined;
   readonly #changeLogWriter: SQLiteChangeLogWriter | undefined;
+  readonly #purgeScheduler: SQLiteChangeLogPurgeScheduler | undefined;
 
   readonly #autoReset: boolean;
   readonly #state: RunningState;
@@ -413,20 +431,49 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       eventDrivenRelease: opts.flowControlEventDrivenRelease,
     });
     this.#reservations = backupConfig
-      ? new SnapshotReservations(lc, backupConfig)
+      ? new SnapshotReservations(lc, backupConfig, taskID =>
+          this.#purgeScheduler?.resume(taskID),
+        )
       : undefined;
     this.#replicationStatusPublisher = replicationStatusPublisher;
-    this.#sqliteCatchupOptions = opts.sqliteCatchup;
     this.#changeLogWriter = opts.sqliteChangeLogWriter
       ? new SQLiteChangeLogWriter(lc, {
           ...opts.sqliteChangeLogWriter,
-          onCommit: watermark =>
-            this.#sqliteCatchup?.onChangeLogCommit(watermark),
+          onCommit: watermark => {
+            this.#sqliteCatchup?.onChangeLogCommit(watermark);
+            // The commit closed the log's transaction, i.e. opened a purge
+            // window (§3.3).
+            this.#purgeScheduler?.onWriterIdle();
+          },
           // Fail-soft deletes the file, and the reader is cached here, so it
           // has to go with it: otherwise it serves an unlinked inode while
           // every new open sees nothing.
           onDisabled: () => this.#closeSQLiteCatchup(),
         })
+      : undefined;
+    // The purge scheduler runs on the writer's own connection, which is also
+    // its gate: no writer (mode `off`) means no scheduler, and a writer that
+    // has not created the file yet -- or failed soft and deleted it -- makes
+    // cycles skip rather than fail, so a late-appearing file is picked up
+    // without a restart.
+    this.#purgeScheduler =
+      opts.sqliteChangeLogPurge && this.#changeLogWriter
+        ? new SQLiteChangeLogPurgeScheduler(
+            lc,
+            () => this.#changeLogWriter?.connection,
+            () => this.#forwarder.getAcks(),
+            opts.sqliteChangeLogPurge,
+          )
+        : undefined;
+    this.#sqliteCatchupOptions = opts.sqliteCatchup
+      ? {
+          ...opts.sqliteCatchup,
+          // The real cleanup guard, in place of the catchup's no-op default:
+          // registration and purge batches now serialize on one mutex.
+          cleanupGuard:
+            opts.sqliteCatchup.cleanupGuard ??
+            this.#purgeScheduler?.cleanupGuard,
+        }
       : undefined;
     this.#purgeLock = initialPurgeLock;
     this.#autoReset = autoReset;
@@ -607,6 +654,9 @@ class ChangeStreamerImpl implements ChangeStreamerService {
         // so the next connection's reconciliation sees a head at or below its
         // resume watermark rather than a partial transaction.
         this.#changeLogWriter?.abort();
+        // A rollback ends the log's open transaction without a commit
+        // notification; wake any purge batch waiting for that window.
+        this.#purgeScheduler?.onWriterIdle();
         this.#forwarder.forward([watermark, 'rollback', ROLLBACK_JSON]);
         this.#recordForwardedTransactionBoundary('rollback', watermark);
       }
@@ -714,9 +764,17 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     }
     const downstream = this.#reservations.open(taskID);
 
-    // If a backup has been confirmed, immediately confirm the reservation.
-    await this.#confirmReservations();
-    return downstream;
+    try {
+      // Wait for an in-flight SQLite purge batch before reading and
+      // advertising the reservation's bounds.
+      await (this.#purgeScheduler?.pause(taskID) ?? promiseVoid);
+      // If a backup has been confirmed, immediately confirm the reservation.
+      await this.#confirmReservations();
+      return downstream;
+    } catch (e) {
+      this.#reservations.close(taskID);
+      throw e;
+    }
   }
 
   trackBackupWatermark(watermark: string) {
@@ -823,6 +881,15 @@ class ChangeStreamerImpl implements ChangeStreamerService {
           `Purged ${deleted} changes before ${purgeWatermark} (${elapsed} ms)`,
         );
         this.#purgedWatermark = purgeWatermark;
+        // The SQLite arm: the same floor, in the same cycle, behind the same
+        // decline gate as the PG purge above. Ordered after it, in its own
+        // try/catch, so a SQLite failure can neither suppress the PG purge
+        // nor roll back the PG watermark accounting above.
+        try {
+          await this.#purgeScheduler?.purge(purgeWatermark);
+        } catch (e) {
+          this.#lc.warn?.(`error purging the SQLite change log`, e);
+        }
       }
     } catch (e) {
       this.#lc.warn?.(`error purging change log`, e);
@@ -834,6 +901,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
   async stop(err?: unknown) {
     this.#state.stop(this.#lc, err);
     this.#stream?.changes.cancel();
+    this.#purgeScheduler?.stop();
     this.#sqliteCatchup?.close();
     this.#changeLogWriter?.close();
     await this.#storer.stop();
