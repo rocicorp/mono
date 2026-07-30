@@ -153,7 +153,7 @@ export class Subscriber {
   }
 
   sendStatus(status: Status) {
-    if (this.#protocolVersion >= 2 && this.#initialized) {
+    if (this.#initialized) {
       void this.#sendDownstream(['status', status]);
     }
   }

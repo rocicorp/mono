@@ -108,7 +108,7 @@ export type SubscriberContext = {
    * Task ID. This is used to link the request with a preceding snapshot
    * reservation.
    */
-  taskID: string | null; // TODO: Make required when v3 is min.
+  taskID: string;
 
   /**
    * Subscriber id. This is only used for debugging.

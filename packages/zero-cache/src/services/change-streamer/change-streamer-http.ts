@@ -31,7 +31,7 @@ import {
 import {discoverChangeStreamerAddress} from './schema/tables.ts';
 import {snapshotMessageSchema, type SnapshotMessage} from './snapshot.ts';
 
-const MIN_SUPPORTED_PROTOCOL_VERSION = 1;
+const MIN_SUPPORTED_PROTOCOL_VERSION = 4;
 
 const SNAPSHOT_PATH_PATTERN = '/replication/:version/snapshot';
 const CHANGES_PATH_PATTERN = '/replication/:version/changes';
@@ -255,7 +255,7 @@ export function getSubscriberContext(req: RequestHeaders): SubscriberContext {
   return {
     protocolVersion,
     id: params.get('id', true),
-    taskID: params.get('taskID', false),
+    taskID: params.get('taskID', true),
     mode: params.get('mode', false) === 'backup' ? 'backup' : 'serving',
     replicaVersion: params.get('replicaVersion', true),
     watermark: params.get('watermark', true),
@@ -296,7 +296,6 @@ function getParams(ctx: SubscriberContext): URLSearchParams {
   );
   return new URLSearchParams({
     ...stringParams,
-    taskID: ctx.taskID ? ctx.taskID : '',
     initial: ctx.initial ? 'true' : 'false',
     logsChangeStream: ctx.logsChangeStream ? 'true' : 'false',
   });
