@@ -489,6 +489,7 @@ export class SQLiteChangeLogComparator {
         return this.#skipped('nothing-to-compare');
       }
 
+      const divergent: TransactionCompareResult[] = [];
       reader = new SQLiteChangeLogReader(this.#lc, this.#changeLogFile);
       const plan = reader.plan(from);
       if (plan.kind === 'not-ready') {
@@ -508,9 +509,19 @@ export class SQLiteChangeLogComparator {
           'bounds-mismatch',
         );
         this.#compareResults.add(1, {outcome});
-        return this.#compared(from, from, 0, 0, 0, [
-          {watermark: from, outcome},
-        ]);
+        divergent.push({watermark: from, outcome});
+        if (outcome === 'inconclusive') {
+          // The pinned bounds moved; nothing this cycle established about the
+          // range still holds. The cursor stays put and the next cycle re-pins.
+          return this.#compared(from, from, 0, 0, 0, divergent);
+        }
+        // A *confirmed* mismatch is a finding about the boundary itself —
+        // typically a commit this store never held, already reported as
+        // missing by the cycle that enumerated it. The reads below are
+        // positional and never dereference the boundary row, so the cycle
+        // still compares the range and advances the cursor past it. Returning
+        // here instead would re-report the same boundary — and compare
+        // nothing else — every cycle, forever.
       }
 
       const limit = Math.max(
@@ -522,7 +533,6 @@ export class SQLiteChangeLogComparator {
       const {union} = enumerated;
       const effectiveThrough = enumerated.through;
 
-      const divergent: TransactionCompareResult[] = [];
       let sampled = 0;
       let matched = 0;
       let previousBoundary = from;

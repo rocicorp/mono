@@ -473,6 +473,58 @@ describe('change-streamer/sqlite-change-log-comparator', () => {
     expect(second.divergent).toMatchObject([
       {watermark: '04', outcome: 'bounds-mismatch'},
     ]);
+    // The finding is about the boundary, not the range above it: the same
+    // cycle still compares ('04', '05'] and moves the cursor past the damage.
+    expect(second).toMatchObject({throughWatermark: '05', matched: 1});
+
+    // The next cycle starts above the bad boundary rather than re-reporting
+    // the identical bounds-mismatch forever.
+    const third = await comparator.compareOnce();
+    expect(third).toEqual({kind: 'skipped', reason: 'nothing-to-compare'});
+  });
+
+  test('a divergent cursor boundary does not wedge the comparator', async () => {
+    // SQLite loses a whole transaction PG holds, while the log runs ahead of
+    // PG (its normal state), so the cycle's common upper bound — and with it
+    // the cursor — lands exactly on the commit the log cannot serve as a
+    // catchup boundary.
+    await feedBoth(
+      tx('03', messages.insert('foo', {id: 'boundary'})),
+      tx('04', messages.insert('foo', {id: 'sqlite-lost'})),
+    );
+    feedSQLiteOnly(tx('05', messages.insert('foo', {id: 'log-leads'})));
+    withSQLiteLog(db =>
+      db
+        .prepare(
+          /*sql*/ `DELETE FROM "${CHANGE_LOG_STREAM_TABLE}" WHERE "watermark" = '04'`,
+        )
+        .run(),
+    );
+
+    const comparator = newComparator();
+    const first = await comparator.compareOnce();
+    assert(first.kind === 'compared', 'expected a compared cycle');
+    expect(first).toMatchObject({throughWatermark: '04', matched: 1});
+    expect(first.divergent).toMatchObject([
+      {watermark: '04', outcome: 'missing-sqlite'},
+    ]);
+
+    // The stream continues, so the next cycle has a non-empty range whose
+    // `from` is the divergent boundary: plan() is `too-old` and the bounds
+    // have not moved.
+    await feedBoth(tx('06', messages.insert('foo', {id: 'next'})));
+
+    const second = await comparator.compareOnce();
+    assert(second.kind === 'compared', 'expected a compared cycle');
+    expect(second.divergent).toMatchObject([
+      {watermark: '04', outcome: 'bounds-mismatch'},
+      {watermark: '05', outcome: 'missing-pg'},
+    ]);
+    expect(second).toMatchObject({throughWatermark: '06', matched: 1});
+
+    // Progress, not a wedge.
+    const third = await comparator.compareOnce();
+    expect(third).toEqual({kind: 'skipped', reason: 'nothing-to-compare'});
   });
 
   test('a failing reader classifies as reader-error', async () => {
