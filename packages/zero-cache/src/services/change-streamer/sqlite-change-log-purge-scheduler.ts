@@ -412,81 +412,89 @@ export class SQLiteChangeLogPurgeScheduler {
     let stopped: PurgeStopReason | undefined;
     let db: Database | undefined;
 
-    for (;;) {
-      // The floor is re-read each batch: a coalesced dispatch may have raised
-      // it, and the gate below is evaluated against what is actually used.
-      floor = this.#pendingFloor ?? floor;
-      if (this.#stopped) {
-        stopped = 'stopped';
-        break;
-      }
-      if (this.#pausedBy.size > 0) {
-        stopped = 'paused';
-        break;
-      }
-      const connection = this.#connection();
-      if (connection === undefined) {
-        db = undefined;
-        this.#lc.debug?.(
-          'skipping SQLite change-log purge: the writer has not opened the log',
-        );
-        stopped = 'writer-unavailable';
-        break;
-      }
-      db = connection;
-      if (
-        batches >=
-        Math.max(
-          1,
-          this.#opts.maxBatchesPerCycle ?? DEFAULT_MAX_BATCHES_PER_CYCLE,
-        )
-      ) {
-        stopped = 'batch-limit';
-        break;
-      }
-      if (connection.inTransaction) {
-        // Purge windows exist only between the writer's commits (§3.3).
-        await this.#awaitWriterIdle();
-        continue;
-      }
+    try {
+      for (;;) {
+        // The floor is re-read each batch: a coalesced dispatch may have raised
+        // it, and the gate below is evaluated against what is actually used.
+        floor = this.#pendingFloor ?? floor;
+        if (this.#stopped) {
+          stopped = 'stopped';
+          break;
+        }
+        if (this.#pausedBy.size > 0) {
+          stopped = 'paused';
+          break;
+        }
+        const connection = this.#connection();
+        if (connection === undefined) {
+          db = undefined;
+          this.#lc.debug?.(
+            'skipping SQLite change-log purge: the writer has not opened the log',
+          );
+          stopped = 'writer-unavailable';
+          break;
+        }
+        db = connection;
+        if (
+          batches >=
+          Math.max(
+            1,
+            this.#opts.maxBatchesPerCycle ?? DEFAULT_MAX_BATCHES_PER_CYCLE,
+          )
+        ) {
+          stopped = 'batch-limit';
+          break;
+        }
+        if (connection.inTransaction) {
+          // Purge windows exist only between the writer's commits (§3.3).
+          await this.#awaitWriterIdle();
+          continue;
+        }
 
-      const batchFloor = floor;
-      const outcome = await this.#lock.withLock(() => {
-        // Everything the wait above established is re-checked under the lock:
-        // the writer may have begun another transaction or failed soft while
-        // this batch's acquisition was queued behind a registration.
-        if (this.#connection() !== connection || connection.inTransaction) {
-          return {kind: 'retry'} as const;
-        }
-        const declined = this.#gate(batchFloor);
-        if (declined !== undefined) {
-          return {kind: 'declined', reason: declined} as const;
-        }
-        const result = this.#cacheFor(connection).purger.purgeBatch({
-          externalFloor: batchFloor,
-          retentionCutoffMs: this.#now() - this.#opts.retentionMs,
-          maxRows: this.#opts.batchRows,
-          maxDurationMs:
-            this.#opts.statementTargetMs ?? DEFAULT_STATEMENT_TARGET_MS,
+        const batchFloor = floor;
+        const outcome = await this.#lock.withLock(() => {
+          // Everything the wait above established is re-checked under the lock:
+          // the writer may have begun another transaction or failed soft while
+          // this batch's acquisition was queued behind a registration.
+          if (this.#connection() !== connection || connection.inTransaction) {
+            return {kind: 'retry'} as const;
+          }
+          const declined = this.#gate(batchFloor);
+          if (declined !== undefined) {
+            return {kind: 'declined', reason: declined} as const;
+          }
+          const result = this.#cacheFor(connection).purger.purgeBatch({
+            externalFloor: batchFloor,
+            retentionCutoffMs: this.#now() - this.#opts.retentionMs,
+            maxRows: this.#opts.batchRows,
+            maxDurationMs:
+              this.#opts.statementTargetMs ?? DEFAULT_STATEMENT_TARGET_MS,
+          });
+          return {kind: 'purged', result} as const;
         });
-        return {kind: 'purged', result} as const;
-      });
 
-      if (outcome.kind === 'retry') {
-        continue;
+        if (outcome.kind === 'retry') {
+          continue;
+        }
+        if (outcome.kind === 'declined') {
+          stopped = outcome.reason;
+          break;
+        }
+        batches++;
+        deletedRows += outcome.result.deletedRows;
+        if (!outcome.result.moreEligible) {
+          break;
+        }
+        // Release the loop — and the guard, released above — so fan-out,
+        // catchup, and registrations make progress between batches.
+        await this.#yield();
       }
-      if (outcome.kind === 'declined') {
-        stopped = outcome.reason;
-        break;
-      }
-      batches++;
-      deletedRows += outcome.result.deletedRows;
-      if (!outcome.result.moreEligible) {
-        break;
-      }
-      // Release the loop — and the guard, released above — so fan-out,
-      // catchup, and registrations make progress between batches.
-      await this.#yield();
+    } catch (e) {
+      // Earlier batches committed independently and must remain visible in the
+      // result and metrics. Finalize the partial cycle, including its floor
+      // probe, rather than replacing it with an empty skipped result.
+      this.#lc.warn?.('error purging the SQLite change log', e);
+      stopped = 'error';
     }
 
     const probe = db === undefined ? undefined : this.#probeFloor(db, floor);

@@ -735,6 +735,36 @@ describe('change-streamer/sqlite-change-log-purge-scheduler', () => {
     }
   });
 
+  test('a later batch failure preserves completed work and probes the floor', async () => {
+    let failDeletes = false;
+    const fixture = setup({
+      batchRows: 4,
+      yieldFn: () => {
+        if (!failDeletes) {
+          failDeletes = true;
+          fixture.db.exec(/*sql*/ `
+            CREATE TRIGGER "fail-purge-delete"
+            BEFORE DELETE ON "${CHANGE_LOG_STREAM_TABLE}"
+            BEGIN
+              SELECT RAISE(ABORT, 'injected purge failure');
+            END
+          `);
+        }
+        return Promise.resolve();
+      },
+    });
+    const {db, scheduler, timers} = fixture;
+    appendSeries(db, 1, 30);
+
+    const result = await scheduler.purge(v(25));
+
+    expect(result.stopped).toBe('error');
+    expect(result.batches).toBe(1);
+    expect(result.deletedRows).toBeGreaterThan(0);
+    expect(result.probe).toBe('retained');
+    expect(timers.delays()).toEqual([30_000]);
+  });
+
   test('a failed cycle reports an error and re-arms instead of throwing', async () => {
     const {db, scheduler, timers} = setup();
     appendSeries(db, 1, 10);
