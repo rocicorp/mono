@@ -1,6 +1,10 @@
 import {existsSync, mkdirSync, rmSync, statSync, writeFileSync} from 'node:fs';
-import {afterEach, describe, expect, test} from 'vitest';
-import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
+import {LogContext} from '@rocicorp/logger';
+import {afterEach, describe, expect, test, vi} from 'vitest';
+import {
+  createSilentLogContext,
+  TestLogSink,
+} from '../../../../shared/src/logging-test-utils.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {DbFile, expectTableExact} from '../../test/lite.ts';
 import {CREATE_V14_CHANGE_LOG_STREAM} from '../change-source/common/replica-schema.ts';
@@ -121,6 +125,38 @@ function expectSeededAt(db: Database, anchor: ChangeLogAnchor) {
     'watermark',
     'pos',
   );
+}
+
+const readPragma = Database.prototype.pragma;
+
+/** Reads the mode through the unmocked pragma, so the degrade-path test can
+ * stub `Database.prototype.pragma` without blinding its own assertions. */
+function autoVacuum(db: Database): number {
+  const [{auto_vacuum: mode}] = readPragma.call(db, 'auto_vacuum') as [
+    {auto_vacuum: number},
+  ];
+  return mode;
+}
+
+/**
+ * A schema v1 log: the shape 7D shipped, before the v2 meta row and before
+ * `auto_vacuum`. This is what a staging file looks like on the first start
+ * after slice 8.
+ */
+function createV1Log(replicaFile: string): void {
+  using db = openChangeLogDB(lc, replicaFile, {readonly: false});
+  db.pragma('journal_mode = wal2');
+  db.exec(/*sql*/ `
+    ${CREATE_CHANGE_LOG_STREAM_SCHEMA}
+    CREATE TABLE "${CHANGE_LOG_META_TABLE}" (
+      "replicaVersion" TEXT NOT NULL,
+      "schemaVersion"  INTEGER NOT NULL,
+      "lock"           INTEGER PRIMARY KEY DEFAULT 1 CHECK ("lock" = 1)
+    );
+    INSERT INTO "${CHANGE_LOG_META_TABLE}" ("replicaVersion", "schemaVersion")
+      VALUES ('01', 1);
+  `);
+  appendTransaction(db, ANCHOR.resumeWatermark, '04', 1, 100);
 }
 
 /** A change-log db that is valid and consistent with {@link ANCHOR}. */
@@ -318,6 +354,44 @@ describe('replicator/change-log-db', () => {
       expect(db.pragma('wal_autocheckpoint')).toEqual([
         {wal_autocheckpoint: 1000},
       ]);
+      // 2 == INCREMENTAL, so purge can hand freed pages back to the OS.
+      expect(autoVacuum(db)).toBe(2);
+    });
+
+    // This is the test that pins the pragma *ordering*. SQLite honours a
+    // none -> incremental transition only while the file is empty, and
+    // `journal_mode = wal2` materializes page 1, so appending the pragma
+    // instead of prepending it produces a log that silently never reclaims.
+    test('auto_vacuum survives on the reopened file, not just the connection', () => {
+      const file = newDbFile();
+      {
+        using db = openChangeLogDB(lc, file.path, {readonly: false});
+        applyChangeLogPragmas(db);
+        db.exec(CREATE_CHANGE_LOG_STREAM_SCHEMA);
+      }
+
+      using reopened = openChangeLogDB(lc, file.path, {readonly: true});
+      expect(autoVacuum(reopened)).toBe(2);
+    });
+
+    test('appending the pragma after journal_mode would not take', () => {
+      const file = newDbFile();
+      {
+        using db = openChangeLogDB(lc, file.path, {readonly: false});
+        db.pragma('journal_mode = wal2');
+        db.pragma('auto_vacuum = INCREMENTAL');
+        db.exec(CREATE_CHANGE_LOG_STREAM_SCHEMA);
+        // Nor does dropping and recreating the tables: the mode is a header
+        // property that survives `DROP TABLE`, which is why a wrong mode is
+        // answered with a new file rather than with a reseed.
+        db.pragma('auto_vacuum = INCREMENTAL');
+        db.exec(/*sql*/ `DROP TABLE "${CHANGE_LOG_STREAM_TABLE}"`);
+        db.exec(CREATE_CHANGE_LOG_STREAM_SCHEMA);
+        expect(autoVacuum(db)).toBe(0);
+      }
+
+      using reopened = openChangeLogDB(lc, file.path, {readonly: true});
+      expect(autoVacuum(reopened)).toBe(0);
     });
   });
 
@@ -361,6 +435,99 @@ describe('replicator/change-log-db', () => {
       });
       expectSeededAt(rebuilt, ANCHOR);
       expect(rebuilt.pragma('journal_mode')).toEqual([{journal_mode: 'wal2'}]);
+    });
+
+    test('rebuilds a v1 log and enables incremental vacuum', () => {
+      const file = newDbFile();
+      createV1Log(file.path);
+
+      const {db, result} = openChangeLogDBForWriting(lc, file.path, ANCHOR);
+      using rebuilt = db;
+
+      // 'created' rather than 'schema-mismatch': a reseed cannot enable the
+      // pragma, so the whole file is replaced and the reconcile that follows
+      // runs against a database that does not exist yet.
+      expect(result).toEqual({
+        action: 'reseeded',
+        head: ANCHOR.resumeWatermark,
+        reason: 'created',
+      });
+      expectSeededAt(rebuilt, ANCHOR);
+      expect(autoVacuum(rebuilt)).toBe(2);
+    });
+
+    // The guard is on the pragma, not only on the version: every log the
+    // writer created before slice 8 carries the current schema version with
+    // `auto_vacuum = 0`, so this is the upgrade path rather than an edge case.
+    // Without it such a file would reconcile clean and never reclaim.
+    test('rebuilds a current-version log whose pragma never took', () => {
+      const file = newDbFile();
+      {
+        using db = openChangeLogDB(lc, file.path, {readonly: false});
+        db.pragma('journal_mode = wal2');
+        db.pragma('auto_vacuum = INCREMENTAL'); // too late; stays at 0
+        reconcileChangeLog(lc, db, ANCHOR);
+        appendTransaction(db, '07', '05', 2, 100);
+        expect(autoVacuum(db)).toBe(0);
+      }
+
+      const {db, result} = openChangeLogDBForWriting(lc, file.path, ANCHOR);
+      using rebuilt = db;
+
+      expect(result).toEqual({
+        action: 'reseeded',
+        head: ANCHOR.resumeWatermark,
+        reason: 'created',
+      });
+      expect(autoVacuum(rebuilt)).toBe(2);
+    });
+
+    // A pragma that is still wrong on a brand-new file can only mean the pragma
+    // sequence itself is wrong, which is a code bug present on every start.
+    // Throwing would be a crash loop and rebuilding again would be a reseed per
+    // start, so the log opens and `Database.compact()`'s own mode guard becomes
+    // the fallback.
+    test('opens a log whose pragma is still wrong after one rebuild', () => {
+      const file = newDbFile();
+      const sink = new TestLogSink();
+      const logger = new LogContext('error', undefined, sink);
+      const reads = vi
+        .spyOn(Database.prototype, 'pragma')
+        .mockImplementation(function (this: Database, sql: string) {
+          return sql === 'auto_vacuum'
+            ? [{auto_vacuum: 0}]
+            : // oxlint-disable-next-line no-explicit-any
+              (readPragma.call(this, sql) as any);
+        });
+
+      try {
+        const {db, result} = openChangeLogDBForWriting(
+          logger,
+          file.path,
+          ANCHOR,
+        );
+        using opened = db;
+
+        expect(result).toEqual({
+          action: 'reseeded',
+          head: ANCHOR.resumeWatermark,
+          reason: 'created',
+        });
+        expect(readChangeLogHead(opened)).toBe(ANCHOR.resumeWatermark);
+        // One read for the initial open and one for the rebuild: no third.
+        expect(
+          reads.mock.calls.filter(([sql]) => sql === 'auto_vacuum'),
+        ).toHaveLength(2);
+      } finally {
+        reads.mockRestore();
+      }
+
+      expect(sink.messages.filter(([level]) => level === 'error')).toHaveLength(
+        1,
+      );
+      expect(sink.messages.at(-1)?.[2][0]).toMatch(
+        /does not support incremental vacuum/,
+      );
     });
 
     // A path that cannot be opened is a problem with the environment rather
@@ -649,6 +816,37 @@ describe('replicator/change-log-db', () => {
       expect(reconcileChangeLog(lc, db, ANCHOR)).toEqual({
         action: 'none',
         head: ANCHOR.resumeWatermark,
+      });
+    });
+
+    // `seededAtMs` is how a canary decides a log is warm enough to serve, so it
+    // must move on every reseed and stay put through everything else.
+    test('seededAtMs moves on a reseed and survives a truncation', () => {
+      using db = createReconciledLog();
+      expect(readChangeLogMeta(db)).toMatchObject({
+        seededAtMs: NOW_MS,
+        seedWatermark: '05',
+      });
+
+      const later = anchorAt('05', {nowMs: NOW_MS + 60_000});
+      appendTransaction(db, '09', '05', 2, 100);
+      expect(reconcileChangeLog(lc, db, later)).toEqual({
+        action: 'truncated',
+        head: '05',
+        rows: 4,
+      });
+      // The log did not start over, so its warm-up clock does not restart.
+      expect(readChangeLogMeta(db)).toMatchObject({seededAtMs: NOW_MS});
+
+      const reseeded = anchorAt('07', {nowMs: NOW_MS + 60_000});
+      expect(reconcileChangeLog(lc, db, reseeded)).toEqual({
+        action: 'reseeded',
+        head: '07',
+        reason: 'gap',
+      });
+      expect(readChangeLogMeta(db)).toMatchObject({
+        seededAtMs: NOW_MS + 60_000,
+        seedWatermark: '07',
       });
     });
 

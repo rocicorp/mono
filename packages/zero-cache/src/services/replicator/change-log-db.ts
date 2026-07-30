@@ -20,12 +20,12 @@
  *
  * Disk sizing: a task that writes the log needs room for the replica *plus* the
  * retained change stream — the log's main file, its wal2 sidecars, and pages a
- * purge has freed but not yet reused. Nothing purges the log yet (that is slice
- * 8), so with the writer enabled it currently grows with the entire change
- * stream since its last reseed, which is one more reason
- * `sqliteChangeLogMode` defaults to `off`. Once purge lands, retention is
- * bounded by the confirmed backup watermark rather than by a constant, so it is
- * a function of the backup interval. The log is excluded from the litestream
+ * purge has freed but not yet reused. Nothing calls the purger yet (that is
+ * slice 9), so with the writer enabled it currently grows with the entire
+ * change stream since its last reseed, which is one more reason
+ * `sqliteChangeLogMode` defaults to `off`. Once purge is scheduled, retention
+ * is bounded by the confirmed backup watermark rather than by a constant, so it
+ * is a function of the backup interval. The log is excluded from the litestream
  * backup, so this is local disk only and never S3.
  */
 
@@ -45,8 +45,17 @@ import {
  * watermark its stream connection resumes from rather than on the replica's
  * state version, and its meta row carries the replica's identity triple plus
  * the seed point.
+ *
+ * `auto_vacuum = INCREMENTAL` arrived within v2, deliberately without a bump:
+ * it is a file-header property rather than a schema change, and the reseed a
+ * version mismatch triggers cannot enable it (see
+ * {@link applyChangeLogPragmas}), so {@link openChangeLogDBForWriting} guards
+ * on the pragma itself instead of on this number.
  */
 export const CHANGE_LOG_DB_SCHEMA_VERSION = 2;
+
+/** https://www.sqlite.org/pragma.html#pragma_auto_vacuum */
+const AUTO_VACUUM_INCREMENTAL = 2;
 
 export const CHANGE_LOG_STREAM_TABLE = '_zero.changeLogStream';
 export const CHANGE_LOG_STREAM_WRITE_TIME_INDEX =
@@ -226,12 +235,26 @@ export function openChangeLogDB(
  * the task restarts elsewhere, restores the replica from S3, and has no
  * change-log file at all. Whatever a power loss does take is detected by
  * {@link reconcileChangeLog} and reseeded.
+ *
+ * `auto_vacuum = INCREMENTAL` so that purge can return freed pages to the OS
+ * rather than leaving the file at its high-water mark. **It must be the first
+ * statement here.** SQLite honours a `none` -> `incremental` transition only
+ * while the file is still empty, and `journal_mode = wal2` materializes page 1;
+ * appending the pragma instead of prepending it silently leaves the file at
+ * mode 0 forever, since neither `DROP TABLE` nor a reseed makes a file empty
+ * again. {@link openChangeLogDBForWriting} verifies the result.
  */
 export function applyChangeLogPragmas(db: Database): void {
+  db.pragma('auto_vacuum = INCREMENTAL');
   db.pragma('busy_timeout = 30000');
   db.pragma('analysis_limit = 1000');
   db.pragma('journal_mode = wal2');
   db.pragma('synchronous = NORMAL');
+}
+
+function readAutoVacuum(db: Database): number {
+  const [{auto_vacuum: mode}] = db.pragma<{auto_vacuum: number}>('auto_vacuum');
+  return mode;
 }
 
 /**
@@ -254,12 +277,32 @@ export function applyChangeLogPragmas(db: Database): void {
  * file's contents, and deleting a database in response would destroy state
  * without fixing it. Those propagate to the caller, which disables the writer
  * and keeps replicating.
+ *
+ * A file that predates `auto_vacuum = INCREMENTAL` takes the same rebuild, for
+ * the same reason and at the same cost: the pragma only takes on an empty file,
+ * so a reseed cannot enable it. Unlike corruption, a *second* failure there is
+ * tolerated rather than thrown — see {@link ensureIncrementalAutoVacuum}.
  */
 export function openChangeLogDBForWriting(
   lc: LogContext,
   replicaFile: string,
   anchor: ChangeLogAnchor,
 ): {db: Database; result: ReconcileResult} {
+  const opened = openOrRebuildCorrupt(lc, replicaFile, anchor);
+  const {db, result} = ensureIncrementalAutoVacuum(
+    lc,
+    replicaFile,
+    anchor,
+    opened,
+  );
+  return {db, result};
+}
+
+function openOrRebuildCorrupt(
+  lc: LogContext,
+  replicaFile: string,
+  anchor: ChangeLogAnchor,
+): OpenedChangeLog {
   try {
     return openAndReconcile(lc, replicaFile, anchor);
   } catch (e) {
@@ -271,22 +314,84 @@ export function openChangeLogDBForWriting(
     lc.error?.('rebuilding the corrupt SQLite change log', {
       sqliteChangeLog: {file},
     });
-    deleteChangeLogDB(replicaFile);
-    // Reconciles a database that does not exist, i.e. reseeds with reason
-    // 'created'. A second failure is the environment's, not the file's.
-    return openAndReconcile(lc, replicaFile, anchor);
+    return rebuildChangeLog(lc, replicaFile, anchor);
   }
 }
+
+/**
+ * Rebuilds a log whose `auto_vacuum` mode is not `INCREMENTAL`, which is every
+ * log created before the pragma shipped — including every v2 file the writer
+ * wrote in the meantime, which is why the guard is on the pragma rather than
+ * on the schema version. Deleting the file is the only way to enable it:
+ * `DROP TABLE` leaves the header's mode intact, and the in-place alternative —
+ * a full `VACUUM` — is an unbounded blocking statement on a file the writer
+ * needs.
+ *
+ * A mode that is still wrong after the rebuild is logged and tolerated, which
+ * is the one place this diverges from the corruption path. The two failures are
+ * not alike: a file that stays corrupt after a rebuild is an environment
+ * problem, but a pragma that stays wrong on a brand-new file can only mean
+ * {@link applyChangeLogPragmas}' statement order is wrong — a code bug, present
+ * on every task, on every start. Throwing there turns a lost optimization into
+ * a crash loop, and rebuilding again turns it into a reseed per start, which is
+ * worse than the freelist growth it was trying to avoid. `Database.compact()`
+ * already warns and no-ops when the mode is not `INCREMENTAL`, so degrading is
+ * the accepted fallback.
+ */
+function ensureIncrementalAutoVacuum(
+  lc: LogContext,
+  replicaFile: string,
+  anchor: ChangeLogAnchor,
+  opened: OpenedChangeLog,
+): OpenedChangeLog {
+  if (opened.autoVacuum === AUTO_VACUUM_INCREMENTAL) {
+    return opened;
+  }
+  const file = changeLogFileName(replicaFile);
+  lc.info?.('rebuilding the SQLite change log to enable incremental vacuum', {
+    sqliteChangeLog: {file, autoVacuum: opened.autoVacuum},
+  });
+  opened.db.close();
+  const rebuilt = rebuildChangeLog(lc, replicaFile, anchor);
+  if (rebuilt.autoVacuum !== AUTO_VACUUM_INCREMENTAL) {
+    lc.error?.(
+      'SQLite change log does not support incremental vacuum; ' +
+        'it will plateau at its high-water mark',
+      {sqliteChangeLog: {file, autoVacuum: rebuilt.autoVacuum}},
+    );
+  }
+  return rebuilt;
+}
+
+/** The shared "delete the file and open a new one" body. */
+function rebuildChangeLog(
+  lc: LogContext,
+  replicaFile: string,
+  anchor: ChangeLogAnchor,
+): OpenedChangeLog {
+  deleteChangeLogDB(replicaFile);
+  // Reconciles a database that does not exist, i.e. reseeds with reason
+  // 'created'. A second failure is the environment's, not the file's.
+  return openAndReconcile(lc, replicaFile, anchor);
+}
+
+type OpenedChangeLog = {
+  db: Database;
+  result: ReconcileResult;
+  /** The file's persistent `auto_vacuum` mode, read back after the pragmas. */
+  autoVacuum: number;
+};
 
 function openAndReconcile(
   lc: LogContext,
   replicaFile: string,
   anchor: ChangeLogAnchor,
-): {db: Database; result: ReconcileResult} {
+): OpenedChangeLog {
   const db = openChangeLogDB(lc, replicaFile, {readonly: false});
   try {
     applyChangeLogPragmas(db);
-    return {db, result: reconcileChangeLog(lc, db, anchor)};
+    const autoVacuum = readAutoVacuum(db);
+    return {db, result: reconcileChangeLog(lc, db, anchor), autoVacuum};
   } catch (e) {
     // The caller never sees this handle, so it closes here or leaks — and it
     // must be closed before the corruption path deletes the file.
