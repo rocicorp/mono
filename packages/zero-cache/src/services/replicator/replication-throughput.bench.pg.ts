@@ -162,6 +162,7 @@ async function startReplicationPipeline(testDBs: PgTest['testDBs']) {
     ),
     subscriptionState,
     null,
+    null,
     true,
     streamerOptions,
   );

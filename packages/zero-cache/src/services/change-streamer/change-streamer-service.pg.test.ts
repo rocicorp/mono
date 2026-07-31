@@ -37,8 +37,8 @@ import {ReplicationStatusPublisher} from '../replicator/replication-status.ts';
 import {
   getSubscriptionState,
   initReplicationState,
-  type SubscriptionState,
   updateReplicationWatermark,
+  type SubscriptionState,
 } from '../replicator/schema/replication-state.ts';
 import {ReplicationMessages} from '../replicator/test-utils.ts';
 import {serializeChangeStreamData} from './change-log-codec.ts';
@@ -56,6 +56,7 @@ import * as ErrorType from './error-type-enum.ts';
 import {Forwarder} from './forwarder.ts';
 import {initChangeStreamerSchema} from './schema/init.ts';
 import {AutoResetSignal, ensureReplicationConfig} from './schema/tables.ts';
+import type {SnapshotMessage} from './snapshot.ts';
 import {SQLiteChangeLogCatchup} from './sqlite-change-log-catchup.ts';
 import {SQLiteChangeLogReader} from './sqlite-change-log-reader.ts';
 import {SQLiteChangeLogWriter} from './sqlite-change-log-writer.ts';
@@ -123,6 +124,7 @@ describe('change-streamer/service', () => {
       ReplicationStatusPublisher.forTesting(),
       replicaConfig,
       null,
+      null,
       true,
       opts,
       setTimeoutFn as unknown as typeof setTimeout,
@@ -143,6 +145,56 @@ describe('change-streamer/service', () => {
       }
     })();
     return queue;
+  }
+
+  function drainSnapshotMessages(
+    sub: Source<SnapshotMessage>,
+  ): Queue<SnapshotMessage> {
+    const queue = new Queue<SnapshotMessage>();
+    void (async () => {
+      for await (const msg of sub) {
+        queue.enqueue(msg);
+      }
+    })();
+    return queue;
+  }
+
+  // Creates and runs a second ChangeStreamerImpl configured with a
+  // `backupURL`, i.e. with snapshot reservations enabled. Callers that use
+  // this must first `await streamer.stop()` to release the default
+  // (backup-less) streamer's ownership of the change DB.
+  async function newBackupStreamer(
+    backupURL: string,
+    source: Partial<ChangeSource> = {},
+  ): Promise<ChangeStreamerService> {
+    const backupStreamer = await initializeStreamer(
+      lc,
+      shard,
+      'task-id',
+      'change.streamer:12345',
+      'ws',
+      sql,
+      {
+        startStream: () =>
+          Promise.resolve({
+            initialWatermark: '02',
+            changes: Subscription.create(),
+            acks: {push: () => {}},
+          }),
+        startLagReporter: () => Promise.resolve(null),
+        stop: () => Promise.resolve(),
+        ...source,
+      } satisfies ChangeSource,
+      ReplicationStatusPublisher.forTesting(),
+      replicaConfig,
+      {backupURL, litestreamVersion: 'legacy'},
+      null,
+      true,
+      opts,
+      setTimeoutFn as unknown as typeof setTimeout,
+    );
+    void backupStreamer.run();
+    return backupStreamer;
   }
 
   async function nextChange(sub: Queue<Downstream>) {
@@ -258,6 +310,7 @@ describe('change-streamer/service', () => {
       ReplicationStatusPublisher.forTesting(),
       replicaConfig,
       null,
+      null,
       true,
       {...opts, sqliteCatchup},
       setTimeoutFn as unknown as typeof setTimeout,
@@ -298,6 +351,7 @@ describe('change-streamer/service', () => {
       },
       ReplicationStatusPublisher.forTesting(),
       replicaConfig,
+      null,
       null,
       true,
       {
@@ -606,6 +660,7 @@ describe('change-streamer/service', () => {
       ReplicationStatusPublisher.forTesting(),
       replicaConfig,
       null,
+      null,
       true,
       {
         ...opts,
@@ -714,6 +769,7 @@ describe('change-streamer/service', () => {
       },
       ReplicationStatusPublisher.forTesting(),
       replicaConfig,
+      null,
       null,
       true,
       {
@@ -1087,6 +1143,7 @@ describe('change-streamer/service', () => {
       ReplicationStatusPublisher.forTesting(),
       replicaConfig,
       null,
+      null,
       true,
       {
         ...opts,
@@ -1421,13 +1478,6 @@ describe('change-streamer/service', () => {
       deleteChangeLogDB(catchupReplicaFile.path);
       catchupReplicaFile.delete();
     }
-  });
-
-  test('get empty changelog state', async () => {
-    expect(await streamer.getChangeLogState()).toEqual({
-      minWatermark: '01',
-      replicaVersion: '01',
-    });
   });
 
   test('immediate forwarding, transaction storage', async () => {
@@ -2140,11 +2190,6 @@ describe('change-streamer/service', () => {
       UPDATE "zoro_3/cdc"."replicationState" SET "lastWatermark" = '08';
     `.simple();
 
-    expect(await streamer.getChangeLogState()).toEqual({
-      replicaVersion: '01',
-      minWatermark: '01',
-    });
-
     // Start two subscribers: one at 06 and one at 04
     const sub1 = await streamer.subscribe({
       protocolVersion: PROTOCOL_VERSION,
@@ -2172,9 +2217,9 @@ describe('change-streamer/service', () => {
       await sql`SELECT watermark FROM "zoro_3/cdc"."changeLog"`.values(),
     ).toEqual([['01'], ['01'], ['03'], ['04'], ['05'], ['06'], ['07'], ['08']]);
 
-    // schedule a cleanups at 04 and 06
-    streamer.scheduleCleanup('06');
-    streamer.scheduleCleanup('04');
+    // Report the backup watermark as '06'. The purge floor is
+    // min(backupWatermark, current subscriber acks), which is '04' (sub2).
+    streamer.trackBackupWatermark('06');
 
     expect(setTimeoutFn).toHaveBeenCalledTimes(1);
     expect(setTimeoutFn.mock.calls[0][1]).toBe(30000);
@@ -2221,13 +2266,8 @@ describe('change-streamer/service', () => {
       ],
     });
 
-    expect(await streamer.getChangeLogState()).toEqual({
-      replicaVersion: '01',
-      minWatermark: '06',
-    });
-
-    // No more timeouts should have been scheduled because both initialWatermarks
-    // were cleaned up.
+    // No more timeouts should have been scheduled because the purged
+    // watermark has caught up to the backup watermark.
     expect(setTimeoutFn).toHaveBeenCalledTimes(3);
 
     // New connections earlier than 06 should now be rejected.
@@ -2250,6 +2290,164 @@ describe('change-streamer/service', () => {
         message: 'earliest supported watermark is 06 (requested 04)',
       },
     ]);
+  });
+
+  test('startSnapshotReservation throws when backups are not configured', async () => {
+    // The default `streamer` fixture is initialized with a `null` backupURL.
+    await expect(
+      streamer.startSnapshotReservation('view-syncer-1'),
+    ).rejects.toThrow('backups are not configured');
+  });
+
+  test('startSnapshotReservation withholds status until a backup watermark is tracked', async () => {
+    await streamer.stop();
+    const backupStreamer = await newBackupStreamer('s3://foo/bar');
+
+    const reservation =
+      await backupStreamer.startSnapshotReservation('view-syncer-1');
+    const messages = drainSnapshotMessages(reservation);
+
+    // No backup watermark has been tracked yet, so the reservation stays
+    // open with no status pushed.
+    const NO_MESSAGE = Symbol('no-message');
+    expect(
+      await messages.dequeue(NO_MESSAGE as unknown as SnapshotMessage, 50),
+    ).toBe(NO_MESSAGE);
+
+    backupStreamer.trackBackupWatermark('05');
+
+    expect(await messages.dequeue()).toEqual([
+      'status',
+      {
+        tag: 'status',
+        backupURL: 's3://foo/bar',
+        replicaVersion: REPLICA_VERSION,
+        minWatermark: REPLICA_VERSION,
+      },
+    ]);
+
+    await backupStreamer.stop();
+  });
+
+  test('startSnapshotReservation immediately confirms once a backup watermark is known', async () => {
+    await streamer.stop();
+    const backupStreamer = await newBackupStreamer('s3://foo/bar');
+
+    backupStreamer.trackBackupWatermark('05');
+
+    const reservation =
+      await backupStreamer.startSnapshotReservation('view-syncer-1');
+    expect(await drainSnapshotMessages(reservation).dequeue()).toEqual([
+      'status',
+      {
+        tag: 'status',
+        backupURL: 's3://foo/bar',
+        replicaVersion: REPLICA_VERSION,
+        minWatermark: REPLICA_VERSION,
+      },
+    ]);
+
+    await backupStreamer.stop();
+  });
+
+  test('subscribe() closes a pending snapshot reservation for the same taskID', async () => {
+    await streamer.stop();
+    const backupStreamer = await newBackupStreamer('s3://foo/bar');
+
+    const reservation =
+      await backupStreamer.startSnapshotReservation('view-syncer-1');
+
+    await backupStreamer.subscribe({
+      protocolVersion: PROTOCOL_VERSION,
+      taskID: 'view-syncer-1',
+      id: 'myid1',
+      mode: 'serving',
+      watermark: '05',
+      replicaVersion: REPLICA_VERSION,
+      initial: true,
+      logsChangeStream: false,
+    });
+
+    // The reservation's connection is torn down once its taskID subscribes
+    // to the change stream: its iteration completes rather than hanging
+    // open.
+    const {done} = await reservation[Symbol.asyncIterator]().next();
+    expect(done).toBe(true);
+
+    await backupStreamer.stop();
+  });
+
+  test('a snapshot reservation limits the purge floor', async () => {
+    // Free up ownership of the change DB for the backup-enabled streamer
+    // that this test needs (the default `streamer` fixture has no backup).
+    await streamer.stop();
+
+    await sql`
+      INSERT INTO "zoro_3/cdc"."changeLog" (watermark, pos, change) VALUES ('03', 0, '{"tag":"begin"}'::json);
+      INSERT INTO "zoro_3/cdc"."changeLog" (watermark, pos, change) VALUES ('04', 0, '{"tag":"commit"}'::json);
+      INSERT INTO "zoro_3/cdc"."changeLog" (watermark, pos, change) VALUES ('05', 0, '{"tag":"begin"}'::json);
+      INSERT INTO "zoro_3/cdc"."changeLog" (watermark, pos, change) VALUES ('06', 0, '{"tag":"commit"}'::json);
+      UPDATE "zoro_3/cdc"."replicationState" SET "lastWatermark" = '06';
+    `.simple();
+
+    const backupStreamer = await newBackupStreamer('s3://foo/bar');
+
+    // A view-syncer reserves a snapshot while it downloads the backup.
+    const reservation =
+      await backupStreamer.startSnapshotReservation('view-syncer-1');
+    const reservationMessages = drainSnapshotMessages(reservation);
+
+    // A different subscriber is already fully caught up at '06'.
+    const sub1 = await backupStreamer.subscribe({
+      protocolVersion: PROTOCOL_VERSION,
+      taskID: 'other-task',
+      id: 'myid1',
+      mode: 'serving',
+      watermark: '06',
+      replicaVersion: REPLICA_VERSION,
+      initial: true,
+      logsChangeStream: false,
+    });
+    drainToQueue(sub1);
+
+    // Tracking the backup watermark confirms the reservation at the
+    // change-log's current minimum ('01', since nothing has been purged
+    // yet), even though the backup and the other subscriber are both at
+    // '06'.
+    backupStreamer.trackBackupWatermark('06');
+    expect(await reservationMessages.dequeue()).toEqual([
+      'status',
+      {
+        tag: 'status',
+        backupURL: 's3://foo/bar',
+        replicaVersion: REPLICA_VERSION,
+        minWatermark: '01',
+      },
+    ]);
+    expect(setTimeoutFn).toHaveBeenCalledTimes(1);
+
+    // The open reservation pins the purge floor at '01': nothing new is
+    // deleted even though the backup and the other subscriber are at '06'.
+    await (setTimeoutFn.mock.calls[0][0]() as unknown as Promise<void>);
+    expect(
+      await sql`SELECT watermark FROM "zoro_3/cdc"."changeLog"`.values(),
+    ).toEqual([['01'], ['01'], ['03'], ['04'], ['05'], ['06']]);
+    // Purging hasn't yet caught up to the backup watermark, so cleanup is
+    // rescheduled.
+    expect(setTimeoutFn).toHaveBeenCalledTimes(2);
+
+    // Releasing the reservation (e.g. the snapshot connection is dropped)
+    // lets the next purge proceed all the way to the backup watermark.
+    reservation.cancel();
+    await (setTimeoutFn.mock.calls[1][0]() as unknown as Promise<void>);
+    expect(
+      await sql`SELECT watermark FROM "zoro_3/cdc"."changeLog"`.values(),
+    ).toEqual([['06']]);
+    // The purged watermark now equals the backup watermark, so no further
+    // cleanup is scheduled.
+    expect(setTimeoutFn).toHaveBeenCalledTimes(2);
+
+    await backupStreamer.stop();
   });
 
   test('wrong replica version', async () => {
@@ -2298,6 +2496,7 @@ describe('change-streamer/service', () => {
       ReplicationStatusPublisher.forTesting(),
       replicaConfig,
       null,
+      null,
       true,
       opts,
     );
@@ -2339,6 +2538,7 @@ describe('change-streamer/service', () => {
       ReplicationStatusPublisher.forTesting(),
       replicaConfig,
       null,
+      null,
       true,
       opts,
     );
@@ -2362,6 +2562,7 @@ describe('change-streamer/service', () => {
       source,
       ReplicationStatusPublisher.forTesting(),
       replicaConfig,
+      null,
       null,
       true,
       opts,
@@ -2400,6 +2601,7 @@ describe('change-streamer/service', () => {
       },
       ReplicationStatusPublisher.forTesting(),
       replicaConfig,
+      null,
       lock,
       true,
       opts,
@@ -2444,6 +2646,7 @@ describe('change-streamer/service', () => {
       ReplicationStatusPublisher.forTesting(),
       replicaConfig,
       null,
+      null,
       true,
       opts,
     );
@@ -2485,6 +2688,7 @@ describe('change-streamer/service', () => {
       source,
       ReplicationStatusPublisher.forTesting(),
       replicaConfig,
+      null,
       null,
       true,
       opts,
@@ -2544,6 +2748,7 @@ describe('change-streamer/service', () => {
       source,
       ReplicationStatusPublisher.forTesting(),
       replicaConfig,
+      null,
       null,
       true,
       opts,
@@ -2620,6 +2825,7 @@ describe('change-streamer/service', () => {
       source,
       ReplicationStatusPublisher.forTesting(),
       replicaConfig,
+      null,
       null,
       true,
       opts,

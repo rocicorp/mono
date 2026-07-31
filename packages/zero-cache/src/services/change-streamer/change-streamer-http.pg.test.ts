@@ -13,7 +13,6 @@ import type {Source} from '../../types/streams.ts';
 import {Subscription} from '../../types/subscription.ts';
 import {installWebSocketHandoff} from '../../types/websocket-handoff.ts';
 import {ReplicationMessages} from '../replicator/test-utils.ts';
-import type {BackupMonitor} from './backup-monitor.ts';
 import {
   ChangeStreamerHttpClient,
   ChangeStreamerHttpServer,
@@ -36,8 +35,9 @@ describe('change-streamer/http', () => {
   let subscribeFn: MockedFunction<
     (ctx: SubscriberContext) => Promise<Subscription<string>>
   >;
-  let snapshotFn: MockedFunction<(id: string) => Subscription<SnapshotMessage>>;
-  let endReservationFn: MockedFunction<(id: string) => void>;
+  let snapshotFn: MockedFunction<
+    (id: string) => Promise<Subscription<SnapshotMessage>>
+  >;
   let runFn: MockedFunction<() => Promise<void>>;
   let stopFn: MockedFunction<() => Promise<void>>;
 
@@ -71,7 +71,6 @@ describe('change-streamer/http', () => {
     snapshotStream = Subscription.create();
     subscribeFn = vi.fn();
     snapshotFn = vi.fn();
-    endReservationFn = vi.fn();
     runFn = vi.fn();
     stopFn = vi.fn();
 
@@ -99,21 +98,14 @@ describe('change-streamer/http', () => {
       {
         id: 'change-streamer',
         subscribe: subscribeFn.mockResolvedValue(downstream),
+        startSnapshotReservation: snapshotFn.mockResolvedValue(snapshotStream),
+        trackBackupWatermark: vi.fn(),
         run: runFn.mockImplementation(() => service.promise),
         stop: stopFn.mockImplementation(() => {
           service.resolve();
           return service.promise;
         }),
-        scheduleCleanup: vi.fn(),
-        getChangeLogState: vi.fn(),
       },
-      {
-        id: 'backup-monitor',
-        run: vi.fn(() => Promise.resolve()),
-        stop: vi.fn(() => Promise.resolve()),
-        startSnapshotReservation: snapshotFn.mockReturnValue(snapshotStream),
-        endReservation: endReservationFn,
-      } satisfies BackupMonitor,
     );
 
     const [dispatcherURL, serverURL] = await Promise.all([
@@ -162,15 +154,14 @@ describe('change-streamer/http', () => {
       {
         id: 'change-streamer',
         subscribe: subscribeFn.mockResolvedValue(downstream),
+        startSnapshotReservation: vi.fn(),
+        trackBackupWatermark: vi.fn(),
         run: runFn.mockImplementation(() => service.promise),
         stop: stopFn.mockImplementation(() => {
           service.resolve();
           return service.promise;
         }),
-        scheduleCleanup: vi.fn(),
-        getChangeLogState: vi.fn(),
       },
-      null,
     );
     const baseURL = await server.start();
 
@@ -297,8 +288,6 @@ describe('change-streamer/http', () => {
             `http://${addr()}`,
           );
       const sub = await client.subscribe(ctx);
-
-      expect(endReservationFn).toHaveBeenCalledWith('foo-task');
 
       const begin = JSON.stringify([
         'begin',

@@ -3,26 +3,18 @@ import nock from 'nock';
 import {beforeAll, beforeEach, describe, expect, test, vi} from 'vitest';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import {DbFile} from '../../test/lite.ts';
-import type {Subscription} from '../../types/subscription.ts';
 import {initReplicationState} from '../replicator/schema/replication-state.ts';
 import type {ChangeStreamerService} from './change-streamer.ts';
 import {
   INITIAL_BACKUP_GRACE_MS_PER_UNIT,
   Litestream3BackupMonitor,
-  RESTORABLE_BACKUP_POLL_INTERVAL_MS,
   WEDGED_SHUTDOWN_GRACE_MS,
 } from './litestream3-backup-monitor.ts';
-import type {SnapshotMessage} from './snapshot.ts';
 
 describe('change-streamer/litestream3-backup-monitor', () => {
   const scheduled: string[] = [];
   const changeStreamer = {
-    scheduleCleanup: (watermark: string) => scheduled.push(watermark),
-    getChangeLogState: () =>
-      Promise.resolve({
-        replicaVersion: '123',
-        minWatermark: '1ab',
-      }),
+    trackBackupWatermark: (watermark: string) => scheduled.push(watermark),
   };
   let metricsResponse = 'unconfigured';
   let monitor: Litestream3BackupMonitor;
@@ -75,7 +67,6 @@ litestream_replica_validation_total{db="/tmp/zbugs-sync-replica.db",name="file",
       's3://foo/bar',
       'http://localhost:4850/metrics',
       changeStreamer as unknown as ChangeStreamerService,
-      100_000, // 100 seconds
       verifyBackupState,
     );
 
@@ -91,62 +82,22 @@ litestream_replica_validation_total{db="/tmp/zbugs-sync-replica.db",name="file",
     };
   });
 
-  function getFirstMessage(
-    sub: Subscription<SnapshotMessage>,
-  ): Promise<SnapshotMessage> {
-    const {promise, resolve} = resolver<SnapshotMessage>();
-    void (async function () {
-      for await (const msg of sub) {
-        resolve(msg);
-        // To simulate an open connection, do not exit the loop.
-      }
-    })();
-    return promise;
-  }
-
-  test('schedules overdue cleanup', async () => {
-    setMetricsResponse('618ocqq8', '1.74545644476593e+09');
-
-    await monitor.checkWatermarksAndScheduleCleanup();
-
-    expect(scheduled).toEqual(['618ocqq8']);
-  });
-
-  test('schedules new cleanup at the right time', async () => {
-    const time = Date.UTC(2025, 3, 24);
-    vi.setSystemTime(time);
-    const nowSeconds = (Date.now() / 1000).toPrecision(9);
-    setMetricsResponse('618p0bw8', nowSeconds);
-
-    await monitor.checkWatermarksAndScheduleCleanup();
-
-    vi.setSystemTime(time + 99_999);
-    await monitor.checkWatermarksAndScheduleCleanup();
-    expect(scheduled).toEqual([]);
-
-    vi.setSystemTime(time + 100_000);
-    await monitor.checkWatermarksAndScheduleCleanup();
-    expect(scheduled).toEqual(['618p0bw8']);
-  });
-
-  test('drops obsolete watermarks', async () => {
+  test('schedules cleanup', async () => {
     const time = Date.UTC(2025, 3, 24);
     vi.setSystemTime(time);
 
     const t1 = (Date.now() / 1000).toPrecision(9);
     setMetricsResponse('618ocqq8', t1);
+
     await monitor.checkWatermarksAndScheduleCleanup();
-    expect(scheduled).toEqual([]);
+    expect(scheduled).toEqual(['618ocqq8']);
 
     vi.setSystemTime(time + 10_000);
     const t2 = (Date.now() / 1000).toPrecision(9);
     setMetricsResponse('618p0bw8', t2);
-    await monitor.checkWatermarksAndScheduleCleanup();
-    expect(scheduled).toEqual([]);
 
-    vi.setSystemTime(time + 110_000);
     await monitor.checkWatermarksAndScheduleCleanup();
-    expect(scheduled).toEqual(['618p0bw8']);
+    expect(scheduled).toEqual(['618ocqq8', '618p0bw8']);
   });
 
   test('blocks purge when actual backup is older than claimed', async () => {
@@ -159,13 +110,6 @@ litestream_replica_validation_total{db="/tmp/zbugs-sync-replica.db",name="file",
     // object actually uploaded to the backup destination is 10 minutes old.
     lastActualBackupTime = () => Promise.resolve(new Date(time - 10 * 60_000));
 
-    await monitor.checkWatermarksAndScheduleCleanup();
-    expect(scheduled).toEqual([]);
-    expect(verifyBackupState).toHaveBeenCalledTimes(0);
-
-    // The cleanup delay has passed, but the purge must be blocked because
-    // the claimed backup time is not corroborated by an actual upload.
-    vi.setSystemTime(time + 100_000);
     await monitor.checkWatermarksAndScheduleCleanup();
     expect(scheduled).toEqual([]);
     expect(verifyBackupState).toHaveBeenCalledTimes(1);
@@ -193,20 +137,12 @@ litestream_replica_validation_total{db="/tmp/zbugs-sync-replica.db",name="file",
     const t1 = (Date.now() / 1000).toPrecision(9);
     setMetricsResponse('618ocqq8', t1);
     await monitor.checkWatermarksAndScheduleCleanup();
-    expect(scheduled).toEqual([]);
+    expect(scheduled).toEqual(['618ocqq8']);
 
-    // The first watermark (claimed at `time`) becomes eligible and is
-    // confirmed by the actual backup state.
+    // The second watermark is after the confirmed lastActualBackupTime.
     vi.setSystemTime(time + 10 * 60_000);
     const t2 = (Date.now() / 1000).toPrecision(9);
     setMetricsResponse('618p0bw8', t2);
-    await monitor.checkWatermarksAndScheduleCleanup();
-    expect(scheduled).toEqual(['618ocqq8']);
-
-    // Both watermarks have passed the cleanup delay, but the second one
-    // (claimed at time + 10 min) is not corroborated by the actual backup
-    // state (last actual upload at `time`), so it must not be purged.
-    vi.setSystemTime(time + 20 * 60_000);
     await monitor.checkWatermarksAndScheduleCleanup();
     expect(scheduled).toEqual(['618ocqq8']);
 
@@ -227,12 +163,13 @@ litestream_replica_validation_total{db="/tmp/zbugs-sync-replica.db",name="file",
 
     await monitor.checkWatermarksAndScheduleCleanup();
     expect(scheduled).toEqual([]);
+    expect(verifyBackupState).toHaveBeenCalledTimes(1);
 
     // Verification fails, so the purge is conservatively skipped.
     vi.setSystemTime(time + 100_000);
     await monitor.checkWatermarksAndScheduleCleanup();
     expect(scheduled).toEqual([]);
-    expect(verifyBackupState).toHaveBeenCalledTimes(1);
+    expect(verifyBackupState).toHaveBeenCalledTimes(2);
 
     // When verification recovers (and confirms the claim), the purge
     // proceeds.
@@ -245,20 +182,12 @@ litestream_replica_validation_total{db="/tmp/zbugs-sync-replica.db",name="file",
     const time = Date.UTC(2025, 3, 24);
     vi.setSystemTime(time);
 
-    const t1 = (Date.now() / 1000).toPrecision(9);
-    setMetricsResponse('618ocqq8', t1);
-    await monitor.checkWatermarksAndScheduleCleanup();
-
-    vi.setSystemTime(time + 10_000);
-    const t2 = (Date.now() / 1000).toPrecision(9);
-    setMetricsResponse('618p0bw8', t2);
-    await monitor.checkWatermarksAndScheduleCleanup();
-
     // The first purge verifies against the backup destination, which
     // reports a last actual upload time that also covers the second
     // watermark (within the clock-skew slack).
     lastActualBackupTime = () => Promise.resolve(new Date(time + 10_000));
-    vi.setSystemTime(time + 100_000);
+    const t1 = (Date.now() / 1000).toPrecision(9);
+    setMetricsResponse('618ocqq8', t1);
     await monitor.checkWatermarksAndScheduleCleanup();
     expect(scheduled).toEqual(['618ocqq8']);
     expect(verifyBackupState).toHaveBeenCalledTimes(1);
@@ -266,203 +195,12 @@ litestream_replica_validation_total{db="/tmp/zbugs-sync-replica.db",name="file",
     // The second watermark's claimed backup time is already confirmed by
     // the cached verification result, so the backup destination is not
     // consulted again.
-    vi.setSystemTime(time + 110_000);
+    vi.setSystemTime(time + 10_000);
+    const t2 = (Date.now() / 1000).toPrecision(9);
+    setMetricsResponse('618p0bw8', t2);
     await monitor.checkWatermarksAndScheduleCleanup();
     expect(scheduled).toEqual(['618ocqq8', '618p0bw8']);
     expect(verifyBackupState).toHaveBeenCalledTimes(1);
-  });
-
-  test('only keeps one reservation per id', async () => {
-    const sub1 = monitor.startSnapshotReservation('foo-bar');
-    expect(await getFirstMessage(sub1)).toEqual([
-      'status',
-      {
-        tag: 'status',
-        backupURL: 's3://foo/bar',
-        replicaVersion: '123',
-        minWatermark: '1ab',
-      },
-    ]);
-    expect(sub1.active).toBe(true);
-
-    const sub2 = monitor.startSnapshotReservation('bar-foo');
-    expect(await getFirstMessage(sub2)).toEqual([
-      'status',
-      {
-        tag: 'status',
-        backupURL: 's3://foo/bar',
-        replicaVersion: '123',
-        minWatermark: '1ab',
-      },
-    ]);
-    expect(sub1.active).toBe(true);
-    expect(sub2.active).toBe(true);
-
-    const sub3 = monitor.startSnapshotReservation('bar-foo');
-    expect(await getFirstMessage(sub3)).toEqual([
-      'status',
-      {
-        tag: 'status',
-        backupURL: 's3://foo/bar',
-        replicaVersion: '123',
-        minWatermark: '1ab',
-      },
-    ]);
-    expect(sub1.active).toBe(true);
-    expect(sub2.active).toBe(false);
-    expect(sub3.active).toBe(true);
-  });
-
-  test('withholds the snapshot status until a restorable backup exists', async () => {
-    // Cold start: no restorable backup yet, so verification rejects (as the
-    // litestream listing would while the initial snapshot is still uploading).
-    lastActualBackupTime = () =>
-      Promise.reject(new Error('no snapshots or WAL segments listed'));
-
-    const sub = monitor.startSnapshotReservation('view-syncer-1');
-    let status: SnapshotMessage | undefined;
-    void getFirstMessage(sub).then(m => (status = m));
-
-    // While no backup exists, the reservation is held open (still active) and
-    // no status is pushed, so the view-syncer stays unready instead of being
-    // told to restore a backup that does not yet exist.
-    await vi.advanceTimersByTimeAsync(RESTORABLE_BACKUP_POLL_INTERVAL_MS * 3);
-    expect(status).toBeUndefined();
-    expect(sub.active).toBe(true);
-    expect(verifyBackupState.mock.calls.length).toBeGreaterThan(1);
-
-    // The first backup lands; the next poll confirms it and the status is
-    // finally pushed.
-    lastActualBackupTime = () => Promise.resolve(new Date());
-    await vi.advanceTimersByTimeAsync(RESTORABLE_BACKUP_POLL_INTERVAL_MS);
-
-    expect(status).toEqual([
-      'status',
-      {
-        tag: 'status',
-        backupURL: 's3://foo/bar',
-        replicaVersion: '123',
-        minWatermark: '1ab',
-      },
-    ]);
-    expect(sub.active).toBe(true);
-  });
-
-  test('pushes the snapshot status immediately on a warm start', async () => {
-    // A restorable backup already exists (verification succeeds), so the
-    // status is pushed without waiting on any poll interval.
-    const sub = monitor.startSnapshotReservation('view-syncer-1');
-    expect(await getFirstMessage(sub)).toEqual([
-      'status',
-      {
-        tag: 'status',
-        backupURL: 's3://foo/bar',
-        replicaVersion: '123',
-        minWatermark: '1ab',
-      },
-    ]);
-  });
-
-  test('pauses cleanup during reservation', async () => {
-    const time = Date.UTC(2025, 3, 24);
-    vi.setSystemTime(time);
-    const nowSeconds = (Date.now() / 1000).toPrecision(9);
-    setMetricsResponse('618p0bw8', nowSeconds);
-
-    await monitor.checkWatermarksAndScheduleCleanup();
-
-    const sub = monitor.startSnapshotReservation('foo-bar');
-    expect(await getFirstMessage(sub)).toEqual([
-      'status',
-      {
-        tag: 'status',
-        backupURL: 's3://foo/bar',
-        replicaVersion: '123',
-        minWatermark: '1ab',
-      },
-    ]);
-
-    vi.setSystemTime(time + 100_000);
-    await monitor.checkWatermarksAndScheduleCleanup();
-    expect(scheduled).toEqual([]);
-
-    monitor.endReservation('foo-bar');
-    await monitor.checkWatermarksAndScheduleCleanup();
-    expect(scheduled).toEqual(['618p0bw8']);
-  });
-
-  test('extends cleanup delay due to reservation', async () => {
-    const time = Date.UTC(2025, 3, 24);
-    vi.setSystemTime(time);
-    const sub = monitor.startSnapshotReservation('boo-far');
-    expect(await getFirstMessage(sub)).toEqual([
-      'status',
-      {
-        tag: 'status',
-        backupURL: 's3://foo/bar',
-        replicaVersion: '123',
-        minWatermark: '1ab',
-      },
-    ]);
-
-    vi.setSystemTime(time + 50_000);
-    const nowSeconds = (Date.now() / 1000).toPrecision(9);
-    setMetricsResponse('618p0bw8', nowSeconds);
-
-    await monitor.checkWatermarksAndScheduleCleanup();
-    expect(scheduled).toEqual([]);
-
-    vi.setSystemTime(time + 125_000); // Reservation was held of 125 secs.
-    monitor.endReservation('boo-far');
-    await monitor.checkWatermarksAndScheduleCleanup();
-    expect(scheduled).toEqual([]);
-
-    // No cleanup should be scheduled, even though 100 seconds passed,
-    // as the delay should have been increased to 125 seconds.
-    vi.setSystemTime(time + 174_999);
-    await monitor.checkWatermarksAndScheduleCleanup();
-    expect(scheduled).toEqual([]);
-
-    vi.setSystemTime(time + 175_000);
-    await monitor.checkWatermarksAndScheduleCleanup();
-    expect(scheduled).toEqual(['618p0bw8']);
-  });
-
-  test('does not extend cleanup delay on prematurely terminated reservation', async () => {
-    const time = Date.UTC(2025, 3, 24);
-    vi.setSystemTime(time);
-    const sub = monitor.startSnapshotReservation('boo-far');
-    expect(await getFirstMessage(sub)).toEqual([
-      'status',
-      {
-        tag: 'status',
-        backupURL: 's3://foo/bar',
-        replicaVersion: '123',
-        minWatermark: '1ab',
-      },
-    ]);
-
-    vi.setSystemTime(time + 50_000);
-    const nowSeconds = (Date.now() / 1000).toPrecision(9);
-    setMetricsResponse('618p0bw8', nowSeconds);
-
-    await monitor.checkWatermarksAndScheduleCleanup();
-    expect(scheduled).toEqual([]);
-
-    // Hold the reservation for 125 secs but terminate unexpectedly.
-    // This should *not* result in increasing the cleanup delay.
-    vi.setSystemTime(time + 125_000);
-    sub.cancel();
-    await monitor.checkWatermarksAndScheduleCleanup();
-    expect(scheduled).toEqual([]);
-
-    vi.setSystemTime(time + 149_999);
-    await monitor.checkWatermarksAndScheduleCleanup();
-    expect(scheduled).toEqual([]);
-
-    vi.setSystemTime(time + 150_000); // delay should still be 100 secs
-    await monitor.checkWatermarksAndScheduleCleanup();
-    expect(scheduled).toEqual(['618p0bw8']);
   });
 
   test('aborts in-flight fetch on stop', async () => {
@@ -628,18 +366,8 @@ litestream_db_size{db="/tmp/zbugs-sync-replica.db"} 1e+06`;
     await Promise.resolve();
     expect(rejection).toBeUndefined();
 
-    // The first backup lands and a view-syncer reservation confirms it.
+    // The first backup lands.
     lastActualBackupTime = () => Promise.resolve(new Date());
-    const sub = monitor.startSnapshotReservation('view-syncer-1');
-    expect(await getFirstMessage(sub)).toEqual([
-      'status',
-      {
-        tag: 'status',
-        backupURL: 's3://foo/bar',
-        replicaVersion: '123',
-        minWatermark: '1ab',
-      },
-    ]);
 
     // Past the deadline, but since a restorable backup has been confirmed the
     // process keeps running.

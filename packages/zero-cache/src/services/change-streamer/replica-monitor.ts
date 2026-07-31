@@ -7,7 +7,7 @@ import {RunningState} from '../running-state.ts';
 import type {Service} from '../service.ts';
 import type {ChangeStreamerService} from './change-streamer.ts';
 
-const CHECK_INTERVAL_MS = 30 * 1000;
+const CHECK_INTERVAL_MS = 10 * 1000;
 
 /**
  * The single-node equivalent of a backup monitor polls the replica file every
@@ -44,7 +44,7 @@ export class ReplicaMonitor implements Service {
         if (stateVersion !== this.#lastWatermark) {
           this.#lastWatermark = stateVersion;
           this.#lc.debug?.(`replicated up to watermark ${stateVersion}`);
-          this.#changeStreamer.scheduleCleanup(stateVersion);
+          this.#changeStreamer.trackBackupWatermark(stateVersion);
         }
       } catch (e) {
         this.#lc.error?.(`Unable to read watermark from replica`, e);

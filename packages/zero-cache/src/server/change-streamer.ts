@@ -56,7 +56,6 @@ export default async function runWorker(
   env: NodeJS.ProcessEnv,
   ...argv: string[]
 ): Promise<void> {
-  const workerStartTime = Date.now();
   const config = getNormalizedZeroConfig({env, argv});
   const {
     taskID,
@@ -185,6 +184,9 @@ export default async function runWorker(
         changeSource,
         replicationStatusPublisher,
         subscriptionState,
+        destinationBackupURL
+          ? {backupURL: destinationBackupURL, litestreamVersion: 'legacy'}
+          : null,
         purgeLock,
         autoReset ?? false,
         {
@@ -289,14 +291,6 @@ export default async function runWorker(
     config,
     replicaFile: replica.file,
     changeStreamer,
-    // The time between when the zero-cache was started to when the
-    // change-streamer is ready to start serves as the initial delay for
-    // watermark cleanup (as it either includes a similar replica
-    // restoration/preparation step, or an initial-sync, which
-    // generally takes longer).
-    //
-    // Consider: Also account for permanent volumes?
-    initialCleanupDelayMs: Date.now() - workerStartTime,
     env,
   });
   const monitor =
@@ -307,7 +301,6 @@ export default async function runWorker(
     {port, keepaliveTimeoutMs, startupDelayMs},
     parent,
     changeStreamer,
-    backupMonitor,
   );
 
   parent.send(['ready', {ready: true}]);

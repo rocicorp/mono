@@ -12,12 +12,8 @@ const changeStreamer = {
   run: () => Promise.resolve(),
   stop: () => Promise.resolve(),
   subscribe: () => Promise.resolve(Subscription.create<string>()),
-  scheduleCleanup: vi.fn(),
-  getChangeLogState: () =>
-    Promise.resolve({
-      replicaVersion: 'replica-version',
-      minWatermark: 'min-watermark',
-    }),
+  startSnapshotReservation: vi.fn(),
+  trackBackupWatermark: vi.fn(),
 } satisfies ChangeStreamerService;
 
 function configWithLitestream(
@@ -43,7 +39,6 @@ describe('createBackupCleanupMonitor', () => {
       config: configWithLitestream({backupURL: undefined}),
       replicaFile: '/tmp/replica.db',
       changeStreamer,
-      initialCleanupDelayMs: 0,
     });
 
     expect(monitor).toBeNull();
@@ -55,7 +50,6 @@ describe('createBackupCleanupMonitor', () => {
       config: configWithLitestream({backupURL: 's3://bucket/prefix'}),
       replicaFile: '/tmp/replica.db',
       changeStreamer,
-      initialCleanupDelayMs: 0,
       verifyBackupState: vi.fn().mockResolvedValue(new Date()),
     });
 
@@ -74,7 +68,6 @@ describe('createBackupCleanupMonitor', () => {
       }),
       replicaFile: '/tmp/replica.db',
       changeStreamer,
-      initialCleanupDelayMs: 0,
       vfsBackupWatermarkSource: {
         readWatermark: vi.fn(),
       },
