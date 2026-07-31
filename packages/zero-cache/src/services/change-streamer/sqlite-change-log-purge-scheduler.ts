@@ -146,17 +146,30 @@ type PlanRow = {
 };
 
 /**
- * Whether any row below both the floor and the head remains. Deliberately not
- * the purger's eligibility query: rows younger than the retention cutoff are
- * not eligible *yet*, but they will be, and their presence asks the cleanup
- * coordinator for a deferred pass even on a quiet source.
+ * Whether the cleanup coordinator still owes this floor a pass. Deliberately
+ * not the purger's eligibility query, in two ways:
+ *
+ * - `remains`: rows younger than the retention cutoff are not eligible *yet*,
+ *   but they will be, and their presence asks the cleanup coordinator for a
+ *   deferred pass even on a quiet source.
+ * - `headBehindFloor`: a head behind the floor means the writer is expected
+ *   to replay commits below it (e.g. after reconnecting while the backup
+ *   outran this log). Those rows do not exist to count yet, writer commits
+ *   only wake an in-flight waiter, and backup monitors never resend an
+ *   unchanged floor — so reporting quiescence here would disarm cleanup for
+ *   good. An empty log (no head) defers for the same reason.
  */
 const BELOW_FLOOR_REMAINS_SQL = /*sql*/ `
-  SELECT EXISTS (
-    SELECT 1 FROM "${CHANGE_LOG_STREAM_TABLE}"
-    WHERE "watermark" < @floor
-      AND "watermark" < (SELECT max("watermark") FROM "${CHANGE_LOG_STREAM_TABLE}")
-  ) AS "remains"
+  SELECT
+    EXISTS (
+      SELECT 1 FROM "${CHANGE_LOG_STREAM_TABLE}"
+      WHERE "watermark" < @floor
+        AND "watermark" < (SELECT max("watermark") FROM "${CHANGE_LOG_STREAM_TABLE}")
+    ) AS "remains",
+    coalesce(
+      (SELECT max("watermark") FROM "${CHANGE_LOG_STREAM_TABLE}") < @floor,
+      1
+    ) AS "headBehindFloor"
 `;
 
 /**
@@ -480,7 +493,9 @@ export class SQLiteChangeLogPurgeScheduler {
   /**
    * Reports whether the level-triggered cleanup coordinator should run again.
    * Rows below the floor but inside the retention window require a deferred
-   * pass even when no new backup watermark arrives.
+   * pass even when no new backup watermark arrives, and so does a head behind
+   * the floor: the rows the writer replays into that gap arrive after this
+   * check, with no other event armed to reap them.
    */
   #continuation(
     floor: string,
@@ -503,10 +518,13 @@ export class SQLiteChangeLogPurgeScheduler {
         if (db === undefined) {
           return 'deferred';
         }
-        const {remains} = this.#cacheFor(db).belowFloorRemains.get<{
+        const {remains, headBehindFloor} = this.#cacheFor(
+          db,
+        ).belowFloorRemains.get<{
           remains: number;
+          headBehindFloor: number;
         }>({floor});
-        return remains === 0 ? undefined : 'deferred';
+        return remains === 0 && headBehindFloor === 0 ? undefined : 'deferred';
       }
     }
   }

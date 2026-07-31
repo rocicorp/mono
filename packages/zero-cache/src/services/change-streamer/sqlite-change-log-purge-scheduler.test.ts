@@ -236,6 +236,38 @@ describe('change-streamer/sqlite-change-log-purge-scheduler', () => {
     expect(result.probe).toBe('ahead');
   });
 
+  test('a floor ahead of the head stays armed for replayed commits', async () => {
+    const {db, scheduler} = setup();
+    appendSeries(db, 1, 5);
+
+    // The backup outran this log: the pass drains to the head cap but must
+    // stay deferred. The writer will replay commits below the unchanged
+    // floor, and neither those commits nor the backup monitor (which never
+    // resends an unchanged floor) re-arms cleanup — quiescence here would
+    // disarm it for good.
+    const ahead = await scheduler.purge(v(10));
+    expect(ahead.stopped).toBeUndefined();
+    expect(ahead.probe).toBe('ahead');
+    expect(watermarks(db)).toEqual([v(5)]);
+    expect(ahead.continuation).toBe('deferred');
+
+    // Mid-replay: the head is still behind the floor, so cleanup stays armed
+    // even though everything below the head has drained.
+    appendSeries(db, 6, 3);
+    const partial = await scheduler.purge(v(10));
+    expect(partial.stopped).toBeUndefined();
+    expect(watermarks(db)).toEqual([v(8)]);
+    expect(partial.continuation).toBe('deferred');
+
+    // Replay reaches the floor: the drain completes and cleanup disarms.
+    appendSeries(db, 9, 2);
+    const caughtUp = await scheduler.purge(v(10));
+    expect(caughtUp.stopped).toBeUndefined();
+    expect(watermarks(db)).toEqual([v(10)]);
+    expect(caughtUp.probe).toBe('retained');
+    expect(caughtUp.continuation).toBeUndefined();
+  });
+
   test('bounded batches per pass request an immediate continuation', async () => {
     const {db, scheduler} = setup({
       batchRows: 4,
@@ -1165,6 +1197,14 @@ describe('change-streamer/sqlite-change-log-purge-scheduler', () => {
 
               floorNum = snapFloor(finalFloorNum);
               const finalFloor = v(floorNum);
+              // Two terminal states: an undefined continuation, or — under a
+              // frozen floor the head can never reach — a stable no-progress
+              // 'deferred' that keeps cleanup armed for replayed rows.
+              const terminal = (r: PurgePassResult) =>
+                r.continuation === undefined ||
+                (r.stopped === undefined &&
+                  r.deletedRows === 0 &&
+                  r.continuation === 'deferred');
               let last: PurgePassResult;
               for (let passes = 0; ; passes++) {
                 // Termination: the drain reaches quiescence in bounded passes.
@@ -1172,17 +1212,25 @@ describe('change-streamer/sqlite-change-log-purge-scheduler', () => {
                 last = await scheduler.purge(finalFloor);
                 results.push(last);
                 checkResult(last);
-                if (last.continuation === undefined) {
+                if (terminal(last)) {
                   break;
                 }
               }
               expect(last.stopped).toBeUndefined();
 
+              // No lost floor: however the loop exited, nothing below both
+              // the final floor and the head survives.
+              const finalWms = [...rowCounts(db).keys()];
+              const finalHead = finalWms.reduce((a, b) => (a > b ? a : b));
+              for (const w of finalWms) {
+                expect(w >= finalFloor || w === finalHead).toBe(true);
+              }
+
               // Quiescence is stable, and no timer or yield is left parked.
               const extra = await scheduler.purge(finalFloor);
               results.push(extra);
               expect(extra.deletedRows).toBe(0);
-              expect(extra.continuation).toBeUndefined();
+              expect(extra.continuation).toBe(last.continuation);
               expect(timers.delays()).toEqual([]);
               expect(parkedYields).toEqual([]);
 
