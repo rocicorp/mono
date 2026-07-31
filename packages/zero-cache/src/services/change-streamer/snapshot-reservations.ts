@@ -14,7 +14,7 @@ export class SnapshotReservations {
   readonly #reservations = new Map<string, Reservation>();
 
   constructor(lc: LogContext, backupConfig: BackupConfig) {
-    this.#lc = lc;
+    this.#lc = lc.withContext('component', 'snapshot-reserver');
     this.#backupConfig = backupConfig;
   }
 
