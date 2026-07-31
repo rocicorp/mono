@@ -348,6 +348,36 @@ describe('change-streamer/sqlite-change-log-purge-scheduler', () => {
     expect(minWatermark(db)).toBe(v(20));
   });
 
+  test('a floor raised as the captured floor drains keeps the cycle running', async () => {
+    let scheduler!: SQLiteChangeLogPurgeScheduler;
+    let second: Promise<unknown> | undefined;
+    let raiseFloor = true;
+    const fixture = setup({
+      batchRows: 1_000,
+      now: () => {
+        if (raiseFloor) {
+          raiseFloor = false;
+          // Run after purgeBatch() has reported that floor 10 is drained but
+          // before #runCycle() resumes from awaiting the lock.
+          queueMicrotask(() => {
+            second = scheduler.purge(v(20));
+          });
+        }
+        return LONG_AGO;
+      },
+    });
+    ({scheduler} = fixture);
+    appendSeries(fixture.db, 1, 30);
+
+    const first = scheduler.purge(v(10));
+    const result = await first;
+
+    expect(second).toBe(first);
+    expect(result.floor).toBe(v(20));
+    expect(minWatermark(fixture.db)).toBe(v(20));
+    expect(fixture.timers.delays()).toEqual([]);
+  });
+
   test("purges only between the writer's commits", async () => {
     const {db, scheduler, timers} = setup();
     appendSeries(db, 1, 10);

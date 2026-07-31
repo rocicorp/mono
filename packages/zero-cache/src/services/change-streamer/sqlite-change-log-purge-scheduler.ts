@@ -482,11 +482,17 @@ export class SQLiteChangeLogPurgeScheduler {
         }
         batches++;
         deletedRows += outcome.result.deletedRows;
-        if (!outcome.result.moreEligible) {
+        // A purge() call can raise the pending floor while this batch is
+        // suspended on withLock(). `moreEligible` only describes the captured
+        // batch floor, so do not mistake a drain to that floor for a drain to
+        // the newer one.
+        const floorRaised =
+          this.#pendingFloor !== undefined && this.#pendingFloor > batchFloor;
+        if (!outcome.result.moreEligible && !floorRaised) {
           break;
         }
         // Release the loop — and the guard, released above — so fan-out,
-        // catchup, and registrations make progress between batches.
+        // catchup, and registrations make progress between batches or floors.
         await this.#yield();
       }
     } catch (e) {
@@ -544,6 +550,17 @@ export class SQLiteChangeLogPurgeScheduler {
         );
         break;
       case undefined: {
+        // Backstop the last-batch check above: a dispatch can land after
+        // #runCycle() returns but before this finalization runs. The coalesced
+        // floor must leave the scheduler armed even though the completed floor
+        // itself is fully drained.
+        if (
+          this.#pendingFloor !== undefined &&
+          this.#pendingFloor > result.floor
+        ) {
+          this.#scheduleRecheck(0);
+          break;
+        }
         // A read is safe even inside the writer's open transaction; it just
         // observes the uncommitted head, which is never below the floor.
         const db = this.#connection();
