@@ -2316,13 +2316,16 @@ describe('change-streamer/service', () => {
 
     backupStreamer.trackBackupWatermark('05');
 
+    // The confirmed minWatermark is the backup watermark itself ('05'),
+    // since it is later than the change-log's actual minimum (the initial
+    // watermark, REPLICA_VERSION) -- the normal, expected case.
     expect(await messages.dequeue()).toEqual([
       'status',
       {
         tag: 'status',
         backupURL: 's3://foo/bar',
         replicaVersion: REPLICA_VERSION,
-        minWatermark: REPLICA_VERSION,
+        minWatermark: '05',
       },
     ]);
 
@@ -2343,7 +2346,7 @@ describe('change-streamer/service', () => {
         tag: 'status',
         backupURL: 's3://foo/bar',
         replicaVersion: REPLICA_VERSION,
-        minWatermark: REPLICA_VERSION,
+        minWatermark: '05',
       },
     ]);
 
@@ -2377,7 +2380,7 @@ describe('change-streamer/service', () => {
     await backupStreamer.stop();
   });
 
-  test('a snapshot reservation limits the purge floor', async () => {
+  test('a confirmed snapshot reservation does not hold back purging below the backup watermark', async () => {
     // Free up ownership of the change DB for the backup-enabled streamer
     // that this test needs (the default `streamer` fixture has no backup).
     await streamer.stop();
@@ -2393,59 +2396,79 @@ describe('change-streamer/service', () => {
     const backupStreamer = await newBackupStreamer('s3://foo/bar');
 
     // A view-syncer reserves a snapshot while it downloads the backup.
+    // There are no other subscribers yet.
     const reservation =
       await backupStreamer.startSnapshotReservation('view-syncer-1');
-    const reservationMessages = drainSnapshotMessages(reservation);
+    const messages = drainSnapshotMessages(reservation);
 
-    // A different subscriber is already fully caught up at '06'.
-    const sub1 = await backupStreamer.subscribe({
-      protocolVersion: PROTOCOL_VERSION,
-      taskID: 'other-task',
-      id: 'myid1',
-      mode: 'serving',
-      watermark: '06',
-      replicaVersion: REPLICA_VERSION,
-      initial: true,
-      logsChangeStream: false,
-    });
-    drainToQueue(sub1);
-
-    // Tracking the backup watermark confirms the reservation at the
-    // change-log's current minimum ('01', since nothing has been purged
-    // yet), even though the backup and the other subscriber are both at
-    // '06'.
     backupStreamer.trackBackupWatermark('06');
-    expect(await reservationMessages.dequeue()).toEqual([
+
+    // Confirmed at the backup watermark ('06'), not the change-log's much
+    // older actual minimum ('01').
+    expect(await messages.dequeue()).toEqual([
       'status',
       {
         tag: 'status',
         backupURL: 's3://foo/bar',
         replicaVersion: REPLICA_VERSION,
-        minWatermark: '01',
+        minWatermark: '06',
       },
     ]);
     expect(setTimeoutFn).toHaveBeenCalledTimes(1);
 
-    // The open reservation pins the purge floor at '01': nothing new is
-    // deleted even though the backup and the other subscriber are at '06'.
+    // Even with no other subscribers, the confirmed reservation (rather
+    // than making `current` empty and bailing out) lets the purge proceed
+    // all the way to the backup watermark: it no longer pins the floor at
+    // a stale minWatermark.
     await (setTimeoutFn.mock.calls[0][0]() as unknown as Promise<void>);
     expect(
       await sql`SELECT watermark FROM "zoro_3/cdc"."changeLog"`.values(),
-    ).toEqual([['01'], ['01'], ['03'], ['04'], ['05'], ['06']]);
-    // Purging hasn't yet caught up to the backup watermark, so cleanup is
-    // rescheduled.
-    expect(setTimeoutFn).toHaveBeenCalledTimes(2);
-
-    // Releasing the reservation (e.g. the snapshot connection is dropped)
-    // lets the next purge proceed all the way to the backup watermark.
-    reservation.cancel();
-    await (setTimeoutFn.mock.calls[1][0]() as unknown as Promise<void>);
-    expect(
-      await sql`SELECT watermark FROM "zoro_3/cdc"."changeLog"`.values(),
     ).toEqual([['06']]);
-    // The purged watermark now equals the backup watermark, so no further
+
+    // Purging caught all the way up to the backup watermark, so no further
     // cleanup is scheduled.
-    expect(setTimeoutFn).toHaveBeenCalledTimes(2);
+    expect(setTimeoutFn).toHaveBeenCalledTimes(1);
+
+    await backupStreamer.stop();
+  });
+
+  test('does not confirm reservation if the change-log minWatermark has unexpectedly advanced past the backup watermark', async () => {
+    await streamer.stop();
+
+    // Simulate the change-log having been purged past what the (stale)
+    // reported backup watermark claims -- not expected if cleanup logic is
+    // correct, but handled defensively rather than confirming a watermark
+    // that is no longer available for catchup.
+    await sql`
+      DELETE FROM "zoro_3/cdc"."changeLog";
+      INSERT INTO "zoro_3/cdc"."changeLog" (watermark, pos, change) VALUES ('05', 0, '{"tag":"begin"}'::json);
+      INSERT INTO "zoro_3/cdc"."changeLog" (watermark, pos, change) VALUES ('06', 0, '{"tag":"commit"}'::json);
+    `.simple();
+
+    const backupStreamer = await newBackupStreamer('s3://foo/bar');
+
+    const reservation =
+      await backupStreamer.startSnapshotReservation('view-syncer-1');
+    const messages = drainSnapshotMessages(reservation);
+
+    // The reported backup watermark ('03') is older than the change-log's
+    // actual minimum ('05').
+    backupStreamer.trackBackupWatermark('03');
+
+    const NO_MESSAGE = Symbol('no-message');
+    expect(
+      await messages.dequeue(NO_MESSAGE as unknown as SnapshotMessage, 50),
+    ).toBe(NO_MESSAGE);
+
+    expect(
+      logSink.messages.some(
+        ([level, , args]) =>
+          level === 'error' &&
+          args.some(
+            arg => typeof arg === 'string' && arg.includes('is later than'),
+          ),
+      ),
+    ).toBe(true);
 
     await backupStreamer.stop();
   });

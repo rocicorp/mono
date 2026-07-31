@@ -739,7 +739,18 @@ class ChangeStreamerImpl implements ChangeStreamerService {
   async #confirmReservations() {
     if (this.#backupWatermark && this.#reservations?.confirmationsRequired()) {
       const {replicaVersion, minWatermark} = await this.#getChangeLogState();
-      this.#reservations?.confirm(replicaVersion, minWatermark);
+      if (minWatermark <= this.#backupWatermark) {
+        this.#reservations?.confirm(replicaVersion, this.#backupWatermark);
+      } else {
+        // Something is wrong here ... the change-log should not have been
+        // purged past the backup watermark. If we confirm the reservation,
+        // we may not be able to catch up from the backup that the requester
+        // restores.
+        this.#lc.error?.(
+          `change-log minWatermark ${minWatermark} is later than backupWatermark ${this.#backupWatermark}. ` +
+            `Delaying confirmation of snapshot reservation until next backup.`,
+        );
+      }
     }
   }
 
