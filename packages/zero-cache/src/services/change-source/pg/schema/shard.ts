@@ -302,7 +302,9 @@ export async function createReplica(
     slot,
     version: replicaVersion,
     generation: replicaVersion,
-    backupPath: id,
+    // TODO: Start setting replica-specific backupPaths after the code that
+    //       supports reading from them has been in one release.
+    // backupPath: id,
   };
   await sql`INSERT INTO ${sql(schema)}.replicas ${sql(values)}`;
 }
