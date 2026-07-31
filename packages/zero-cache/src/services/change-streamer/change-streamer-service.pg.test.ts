@@ -2292,6 +2292,31 @@ describe('change-streamer/service', () => {
     ]);
   });
 
+  test('change log cleanup reaches the backup watermark with no subscribers', async () => {
+    await sql`
+      INSERT INTO "zoro_3/cdc"."changeLog" (watermark, pos, change) VALUES ('03', 0, '{"tag":"begin"}'::json);
+      INSERT INTO "zoro_3/cdc"."changeLog" (watermark, pos, change) VALUES ('04', 0, '{"tag":"commit"}'::json);
+      INSERT INTO "zoro_3/cdc"."changeLog" (watermark, pos, change) VALUES ('05', 0, '{"tag":"begin"}'::json);
+      INSERT INTO "zoro_3/cdc"."changeLog" (watermark, pos, change) VALUES ('06', 0, '{"tag":"commit"}'::json);
+      INSERT INTO "zoro_3/cdc"."changeLog" (watermark, pos, change) VALUES ('07', 0, '{"tag":"begin"}'::json);
+      INSERT INTO "zoro_3/cdc"."changeLog" (watermark, pos, change) VALUES ('08', 0, '{"tag":"commit"}'::json);
+      UPDATE "zoro_3/cdc"."replicationState" SET "lastWatermark" = '08';
+    `.simple();
+
+    streamer.trackBackupWatermark('06');
+
+    expect(setTimeoutFn).toHaveBeenCalledTimes(1);
+    expect(setTimeoutFn.mock.calls[0][1]).toBe(30_000);
+
+    await (setTimeoutFn.mock.calls[0][0]() as unknown as Promise<void>);
+    expect(
+      await sql`SELECT watermark FROM "zoro_3/cdc"."changeLog"`.values(),
+    ).toEqual([['06'], ['07'], ['08']]);
+
+    // Cleanup reached the confirmed backup watermark, so it is not re-armed.
+    expect(setTimeoutFn).toHaveBeenCalledTimes(1);
+  });
+
   test('startSnapshotReservation throws when backups are not configured', async () => {
     // The default `streamer` fixture is initialized with a `null` backupURL.
     await expect(

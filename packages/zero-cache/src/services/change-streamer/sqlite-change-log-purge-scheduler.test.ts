@@ -258,7 +258,7 @@ describe('change-streamer/sqlite-change-log-purge-scheduler', () => {
     expect(minWatermark(db)).toBe(v(15));
   });
 
-  test('declines when a subscriber ACK is behind the floor, and with no subscribers', async () => {
+  test('declines only when a connected subscriber ACK is behind the floor', async () => {
     const {db, scheduler, setAcks} = setup();
     appendSeries(db, 1, 10);
 
@@ -268,13 +268,6 @@ describe('change-streamer/sqlite-change-log-purge-scheduler', () => {
     expect(result.deletedRows).toBe(0);
 
     setAcks([]);
-    result = await scheduler.purge(v(8));
-    expect(result.stopped).toBe('no-subscribers');
-    expect(result.deletedRows).toBe(0);
-
-    // The gate is evaluated at dispatch, not at schedule: once the lagging
-    // subscriber has ACKed past the floor, the same floor purges.
-    setAcks([v(8), v(20)]);
     result = await scheduler.purge(v(8));
     expect(result.stopped).toBeUndefined();
     expect(minWatermark(db)).toBe(v(8));
@@ -299,12 +292,6 @@ describe('change-streamer/sqlite-change-log-purge-scheduler', () => {
     expect(minWatermark(db)).toBe(v(8));
     // Drained to the floor with nothing below it: no timer left armed.
     expect(timers.delays()).toEqual([]);
-
-    // The no-subscribers decline re-arms the same way.
-    setAcks([]);
-    const noSubs = await scheduler.purge(v(9));
-    expect(noSubs.stopped).toBe('no-subscribers');
-    expect(timers.delays()).toEqual([30_000]);
   });
 
   test('a registration mid-drain is honored by the very next batch', async () => {

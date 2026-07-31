@@ -58,9 +58,6 @@ export type PurgeStopReason =
   // The writer has not opened the change log (the file does not exist yet),
   // or has failed soft and deleted it.
   | 'writer-unavailable'
-  // No subscriber is connected to confirm the floor. Matches the PG arm's
-  // "No subscribers to confirm cleanup" bail.
-  | 'no-subscribers'
   // A connected subscriber's ACK is behind the floor. Matches the PG arm's
   // "behind backup" decline, re-checked before every batch so a registration
   // that lands mid-drain is honored by the very next batch.
@@ -541,7 +538,6 @@ export class SQLiteChangeLogPurgeScheduler {
       case 'stopped':
       case 'paused':
         break;
-      case 'no-subscribers':
       case 'subscriber-behind':
       case 'writer-unavailable':
       case 'error':
@@ -581,19 +577,18 @@ export class SQLiteChangeLogPurgeScheduler {
   }
 
   /**
-   * The decline gate, identical to the PG arm's: no purge unless at least one
-   * subscriber is connected and none is behind the floor. It is a gate, not a
-   * lower floor — more conservative than a `min()` over the ACKs.
+   * The decline gate, identical to the PG arm's: no purge while a connected
+   * subscriber is behind the floor. With no subscribers, the cleanup delay
+   * has already provided the reconnect grace period and the confirmed backup
+   * floor is safe to use.
    */
-  #gate(floor: string): 'no-subscribers' | 'subscriber-behind' | undefined {
-    let subscribers = 0;
+  #gate(floor: string): 'subscriber-behind' | undefined {
     for (const ack of this.#subscriberAcks()) {
-      subscribers++;
       if (ack < floor) {
         return 'subscriber-behind';
       }
     }
-    return subscribers === 0 ? 'no-subscribers' : undefined;
+    return undefined;
   }
 
   /**

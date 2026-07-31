@@ -8,11 +8,7 @@ import {
   getOrCreateCounter,
   getOrCreateLatencyHistogram,
 } from '../../observability/metrics.ts';
-import {
-  min,
-  type AtLeastOne,
-  type LexiVersion,
-} from '../../types/lexi-version.ts';
+import {min} from '../../types/lexi-version.ts';
 import type {PostgresDB} from '../../types/pg.ts';
 import type {ShardID} from '../../types/shards.ts';
 import type {Source} from '../../types/streams.ts';
@@ -856,16 +852,11 @@ class ChangeStreamerImpl implements ChangeStreamerService {
         ...this.#forwarder.getAcks(),
         ...(this.#reservations?.getReservedWatermarks() ?? []),
       ];
-      if (current.length === 0) {
-        // Also not expected, but possible (e.g. subscriber connects, then disconnects).
-        // Bail to be safe.
-        this.#lc.warn?.('No subscribers to confirm cleanup');
-        return;
-      }
-      const purgeWatermark = min(
-        this.#backupWatermark,
-        ...(current as AtLeastOne<LexiVersion>),
-      );
+      // The cleanup delay above is the grace period for disconnected
+      // subscribers to reconnect and expose their ACKs. Once it expires, an
+      // empty set places no additional constraint on the confirmed backup
+      // watermark and must not pin the change log indefinitely.
+      const purgeWatermark = min(this.#backupWatermark, ...current);
       if (purgeWatermark > this.#purgedWatermark) {
         if (purgeWatermark < this.#backupWatermark) {
           this.#lc.info?.(
