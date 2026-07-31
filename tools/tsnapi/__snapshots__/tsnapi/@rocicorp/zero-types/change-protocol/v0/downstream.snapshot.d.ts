@@ -16,7 +16,7 @@ export declare const changeStreamControlSchema: v.TupleType<[v.Type<"control">, 
 }, undefined>]>;
 export declare const changeStreamDataSchema: v.UnionType<[v.TupleType<[v.Type<"begin">, v.ObjectType<{
     tag: v.Type<"begin">;
-    json: v.Optional<"p" | "s">;
+    json: v.Optional<"s" | "p">;
     skipAck: v.Optional<boolean>;
 }, undefined>, v.ObjectType<{
     commitWatermark: v.Type<string>;
@@ -242,7 +242,7 @@ export declare const changeStreamDataSchema: v.UnionType<[v.TupleType<[v.Type<"b
 }, undefined>]>]>;
 export declare const changeStreamMessageSchema: v.UnionType<[v.UnionType<[v.TupleType<[v.Type<"begin">, v.ObjectType<{
     tag: v.Type<"begin">;
-    json: v.Optional<"p" | "s">;
+    json: v.Optional<"s" | "p">;
     skipAck: v.Optional<boolean>;
 }, undefined>, v.ObjectType<{
     commitWatermark: v.Type<string>;

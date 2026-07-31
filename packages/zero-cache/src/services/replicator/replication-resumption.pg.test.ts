@@ -492,6 +492,7 @@ async function startHarness(testDBs: PgTest['testDBs']) {
       ReplicationStatusPublisher.forTesting(),
       subscriptionState,
       null,
+      null,
       true,
       streamerOptions,
     );

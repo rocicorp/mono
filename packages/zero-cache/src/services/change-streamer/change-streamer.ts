@@ -9,6 +9,7 @@ import type {ReplicatorMode} from '../replicator/replicator.ts';
 import {changeSourceTimingsSchema} from '../replicator/reporter/report-schema.ts';
 import type {Service} from '../service.ts';
 import * as ErrorType from './error-type-enum.ts';
+import type {SnapshotMessage} from './snapshot.ts';
 
 type ErrorType = Enum<typeof ErrorType>;
 
@@ -108,7 +109,7 @@ export type SubscriberContext = {
    * Task ID. This is used to link the request with a preceding snapshot
    * reservation.
    */
-  taskID: string | null; // TODO: Make required when v3 is min.
+  taskID: string;
 
   /**
    * Subscriber id. This is only used for debugging.
@@ -145,11 +146,14 @@ export type SubscriberContext = {
 
   /**
    * Whether the subscriber's replica writes the SQLite change log that the
-   * `change-streamer` reads for catchup (see `replicaLogsChangeStream()`).
-   * Such a subscriber is always co-located with the `change-streamer`, and
-   * is the only thing that advances that change log: its ACKs are what the
-   * SQLite catchup barrier waits on, and it cannot itself be served from
-   * SQLite catchup without waiting on its own ACK.
+   * `change-streamer` reads for catchup.
+   *
+   * Always `false` from this version on: the change-streamer writes that log
+   * itself, from the stream loop, so no subscriber advances it and no
+   * subscriber's ACK releases the catchup barrier. The parameter stays on the
+   * wire because a subscriber that predates the writer's move still sets it,
+   * and such a subscriber is excluded from SQLite catchup until slice 11 lifts
+   * the exclusion deliberately.
    */
   logsChangeStream: boolean;
 };
@@ -236,14 +240,25 @@ export interface ChangeStreamerService
   subscribe(ctx: SubscriberContext): Promise<Source<string>>;
 
   /**
-   * Notifies the change streamer of a watermark that has been backed up,
-   * indicating that changes before the watermark can be purged if active
-   * subscribers have progressed beyond the watermark.
+   * Starts a snapshot reservation to preserve change-log entries while
+   * a soon-to-be-subscriber downloads the current replica backup. Once
+   * the change-streamer knows that a backup is available
+   * (via {@link trackBackupWatermark}), it sends a confirmation
+   * SnapshotMessage and reserves the corresponding entries in the change-log
+   * until the client with that `taskID` subscribes, or if the snapshot
+   * connection terminates.
    */
-  scheduleCleanup(watermark: string): void;
+  startSnapshotReservation(taskID: string): Promise<Source<SnapshotMessage>>;
 
-  getChangeLogState(): Promise<{
-    replicaVersion: string;
-    minWatermark: string;
-  }>;
+  /**
+   * Informs the change-streamer of the watermark up to which the replica has
+   * been backed up. This serves two purposes:
+   * - It serves as the maximum watermark up to which the change-log can be
+   *   purged. Note that the change-streamer also takes into account the
+   *   positions of its subscribers and snapshot reservations when purging
+   *   changes in the change-log.
+   * - In RMv2, this ACK's the upstream change-source to allow its buffer of
+   *   changes (e.g. the replication_slot) to advance.
+   */
+  trackBackupWatermark(watermark: string): void;
 }

@@ -90,7 +90,7 @@ describe('change-source/pg', () => {
           slot: 'zro_0_1234',
           version: '0wdfj02',
           generation: '0wdfj02',
-          backupPath: /\d{10,}/,
+          backupPath: null,
           initialSchema: {tables: [], indexes: []},
           initialSyncContext: {foo: 'bar'},
           subscriberContext: null,

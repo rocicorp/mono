@@ -25,6 +25,7 @@
 //   SQLITE_CHANGE_LOG_MODES                 apply,log,combined,separate-files
 //   SQLITE_CHANGE_LOG_LOG_JOURNAL_MODE      wal,wal2   (change-log DB only)
 //   SQLITE_CHANGE_LOG_LOG_SYNCHRONOUS       NORMAL,FULL (change-log DB only)
+//   SQLITE_CHANGE_LOG_LOG_AUTO_VACUUM       NONE,INCREMENTAL (change-log DB only)
 //   SQLITE_CHANGE_LOG_RETENTION_MINUTES     simulated retention window
 //   SQLITE_CHANGE_LOG_RETENTION_WINDOWS     retention windows per bench run
 
@@ -43,17 +44,27 @@ import {DbFile} from '../../test/lite.ts';
 import {versionToLexi} from '../../types/lexi-version.ts';
 import {getPragmaConfig} from '../../workers/replicator.ts';
 import {ZERO_VERSION_COLUMN_NAME} from './schema/constants.ts';
+import {SQLiteChangeLogPurger} from './sqlite-change-log-purger.ts';
 import {applyPragmas} from './write-worker-client.ts';
 
 type WriteMode = 'apply' | 'log' | 'combined' | 'separate-files';
 type Workload = 'small-high-frequency' | 'mixed-row-schema' | 'oversized';
 type JournalMode = 'wal' | 'wal2';
 type Synchronous = 'NORMAL' | 'FULL';
+type AutoVacuum = 'NONE' | 'INCREMENTAL';
 
 /** Durability settings for the change-log DB only (design 4.6). */
 type LogDurability = {
   readonly journalMode: JournalMode;
   readonly synchronous: Synchronous;
+  /**
+   * `INCREMENTAL` buys the ability to return purged pages to the OS, at the
+   * cost of pointer-map pages (roughly one per 200 data pages) that have to be
+   * updated whenever a page moves. That write-path cost is what this axis
+   * exists to measure; the log's pragmas set it first, before `journal_mode`,
+   * because SQLite only honours the transition while the file is empty.
+   */
+  readonly autoVacuum: AutoVacuum;
 };
 
 type MessageSize = {
@@ -183,8 +194,10 @@ const REPLICA_SYNCHRONOUS: Synchronous = 'NORMAL';
 // alternatives rather than asserting the choice.
 const DEFAULT_LOG_JOURNAL_MODES: readonly JournalMode[] = ['wal2'];
 const DEFAULT_LOG_SYNCHRONOUS: readonly Synchronous[] = ['NORMAL'];
+const DEFAULT_LOG_AUTO_VACUUM: readonly AutoVacuum[] = ['INCREMENTAL'];
 const SWEEP_LOG_JOURNAL_MODES: readonly JournalMode[] = ['wal', 'wal2'];
 const SWEEP_LOG_SYNCHRONOUS: readonly Synchronous[] = ['NORMAL', 'FULL'];
+const SWEEP_LOG_AUTO_VACUUM: readonly AutoVacuum[] = ['NONE', 'INCREMENTAL'];
 
 const CORRECTNESS_MODE = booleanFromEnv('SQLITE_CHANGE_LOG_CORRECTNESS', false);
 const GO_NO_GO = booleanFromEnv('SQLITE_CHANGE_LOG_GO_NO_GO', false);
@@ -216,6 +229,14 @@ const READ_BATCH_ROWS = integerFromEnv(
 const PURGE_BATCH_ROWS = integerFromEnv(
   'SQLITE_CHANGE_LOG_PURGE_BATCH_ROWS',
   CORRECTNESS_MODE ? 10 : 1000,
+);
+// The purger's hard bound on any one statement. Purge shares the writer's
+// connection, so a statement's duration stalls the appending path directly. It
+// governs how far the adaptive chunk size can grow, so it is part of what
+// these numbers measure.
+const PURGE_MAX_DURATION_MS = integerFromEnv(
+  'SQLITE_CHANGE_LOG_PURGE_MAX_DURATION_MS',
+  100,
 );
 const BETWEEN_COMMIT_PURGE_ROWS = integerFromEnv(
   'SQLITE_CHANGE_LOG_BETWEEN_COMMIT_PURGE_ROWS',
@@ -405,6 +426,7 @@ function writeModesFromEnv(): WriteMode[] {
 function logDurabilitiesFromEnv(
   journalModeFallback: readonly JournalMode[],
   synchronousFallback: readonly Synchronous[],
+  autoVacuumFallback: readonly AutoVacuum[] = DEFAULT_LOG_AUTO_VACUUM,
 ): LogDurability[] {
   const journalModes = enumListFromEnv(
     'SQLITE_CHANGE_LOG_LOG_JOURNAL_MODE',
@@ -416,8 +438,19 @@ function logDurabilitiesFromEnv(
     ['NORMAL', 'FULL'] as const,
     synchronousFallback,
   );
+  const autoVacuumModes = enumListFromEnv(
+    'SQLITE_CHANGE_LOG_LOG_AUTO_VACUUM',
+    ['NONE', 'INCREMENTAL'] as const,
+    autoVacuumFallback,
+  );
   return journalModes.flatMap(journalMode =>
-    synchronousModes.map(synchronous => ({journalMode, synchronous})),
+    synchronousModes.flatMap(synchronous =>
+      autoVacuumModes.map(autoVacuum => ({
+        journalMode,
+        synchronous,
+        autoVacuum,
+      })),
+    ),
   );
 }
 
@@ -640,6 +673,11 @@ type BenchDBs = {
   readonly log: Database;
   readonly logPath: string;
   readonly separated: boolean;
+  /**
+   * One instance per file, because the purger's chunk size adapts across
+   * batches — a fresh purger per batch would measure only its starting size.
+   */
+  readonly purger: SQLiteChangeLogPurger;
   readonly close: () => void;
 };
 
@@ -661,6 +699,7 @@ function setupDBs(c: BenchCase, testName: string): BenchDBs {
       log: replica,
       logPath: dbFile.path,
       separated: false,
+      purger: new SQLiteChangeLogPurger(replica),
       close: () => replica.close(),
     };
   }
@@ -673,6 +712,10 @@ function setupDBs(c: BenchCase, testName: string): BenchDBs {
   cleanup.push(() => deleteLiteDB(logPath));
 
   const log = new Database(lc, logPath);
+  // First, and before `journal_mode`: SQLite honours a none -> incremental
+  // transition only while the file is still empty, and setting the journal mode
+  // materializes page 1.
+  log.pragma(`auto_vacuum = ${durability.autoVacuum}`);
   log.pragma(`journal_mode = ${durability.journalMode}`);
   log.pragma(`synchronous = ${durability.synchronous}`);
   // Design 4.6: nothing else owns this file, so wal_autocheckpoint keeps its
@@ -687,6 +730,7 @@ function setupDBs(c: BenchCase, testName: string): BenchDBs {
     log,
     logPath,
     separated: true,
+    purger: new SQLiteChangeLogPurger(log),
     close: () => {
       log.close();
       replica.close();
@@ -865,9 +909,10 @@ function runCase(
 
     if (purge !== undefined && writesLog) {
       purgeResults.push(
-        purgeBatch(dbs.log, {
+        purgeBatch(dbs.purger, {
+          // The head cap comes from the log itself now, so the just-committed
+          // watermark only has to be supplied once.
           externalFloor: watermark,
-          stateVersionFloor: watermark,
           retentionCutoffMs:
             purge.kind === 'retention'
               ? writeTimeMs - purge.retentionMs
@@ -982,81 +1027,28 @@ function assertCompleteTransactions(db: Database) {
   expect(incomplete).toEqual([]);
 }
 
+/**
+ * The production purger, timed. The bench used to carry its own copy of this
+ * SQL; slice 8 promoted it to `sqlite-change-log-purger.ts`, so what is
+ * measured here is now what ships — including the strict `<` on the external
+ * floor and the tear that keeps an oversized transaction from becoming one
+ * unbounded DELETE.
+ */
 function purgeBatch(
-  db: Database,
+  purger: SQLiteChangeLogPurger,
   opts: {
     /** The confirmed backup watermark (design 3.2). */
     externalFloor: string;
-    /**
-     * The latest durable transaction, always preserved as a catchup boundary
-     * (storer.ts:286-300). Passed in rather than read from
-     * `_zero.replicationState`, which lives in the other file once separated.
-     */
-    stateVersionFloor: string;
     retentionCutoffMs: number;
     maxRows: number;
   },
 ): PurgeResult {
-  const runner = new StatementRunner(db);
-  const eligibleCommits = db.prepare(/*sql*/ `
-    SELECT "watermark"
-    FROM "_zero.changeLogStream"
-    WHERE "writeTimeMs" IS NOT NULL
-      AND "writeTimeMs" < ?
-      AND "watermark" <= ?
-      AND "watermark" < ?
-    ORDER BY "writeTimeMs", "watermark"
-  `);
-  const countTransaction = db.prepare(/*sql*/ `
-    SELECT count(*) AS "rows"
-    FROM "_zero.changeLogStream"
-    WHERE "watermark" = ?
-  `);
-  const deleteThrough = db.prepare(/*sql*/ `
-    DELETE FROM "_zero.changeLogStream" WHERE "watermark" <= ?
-  `);
-
   const start = performance.now();
-  let deletedRows = 0;
-  let deletedThrough: string | undefined;
-  let moreEligible = false;
-  try {
-    runner.beginImmediate();
-    const candidates = eligibleCommits.all<{watermark: string}>(
-      opts.retentionCutoffMs,
-      opts.externalFloor,
-      opts.stateVersionFloor,
-    );
-    for (const {watermark} of candidates) {
-      const rows = countTransaction.get<{rows: number}>(watermark).rows;
-      if (deletedRows > 0 && deletedRows + rows > opts.maxRows) {
-        moreEligible = true;
-        break;
-      }
-      // Treat maxRows as a soft limit. In particular, the oldest transaction
-      // must be removed even when it is larger than the target batch.
-      deletedRows += rows;
-      deletedThrough = watermark;
-    }
-    if (deletedThrough !== undefined) {
-      deleteThrough.run(deletedThrough);
-    }
-    if (!moreEligible && candidates.length > 0) {
-      moreEligible = deletedThrough !== candidates.at(-1)?.watermark;
-    }
-    runner.commit();
-  } catch (e) {
-    if (db.inTransaction) {
-      runner.rollback();
-    }
-    throw e;
-  }
-  return {
-    elapsedMs: performance.now() - start,
-    deletedRows,
-    deletedThrough,
-    moreEligible,
-  };
+  const result = purger.purgeBatch({
+    ...opts,
+    maxDurationMs: PURGE_MAX_DURATION_MS,
+  });
+  return {elapsedMs: performance.now() - start, ...result};
 }
 
 function runCatchup(
@@ -1158,7 +1150,8 @@ function caseName(c: BenchCase) {
     c.logDurability === undefined
       ? ''
       : ` logJournalMode=${c.logDurability.journalMode}` +
-        ` logSynchronous=${c.logDurability.synchronous}`;
+        ` logSynchronous=${c.logDurability.synchronous}` +
+        ` logAutoVacuum=${c.logDurability.autoVacuum}`;
   return (
     `workload=${c.workload} mode=${c.mode} ` +
     `logicalTxRows=${c.logicalTxRows} sqliteTxRows=${c.sqliteTxRows}` +
@@ -1338,7 +1331,7 @@ function goNoGoKey(c: BenchCase) {
   return c.logDurability === undefined
     ? `${c.workload}:${c.mode}`
     : `${c.workload}:${c.mode}:${c.logDurability.journalMode}:` +
-        c.logDurability.synchronous;
+        `${c.logDurability.synchronous}:${c.logDurability.autoVacuum}`;
 }
 
 function recordGoNoGoResult(c: BenchCase, samples: readonly WriteResult[]) {
@@ -1439,6 +1432,11 @@ function benchmarkEnvironment() {
         'SQLITE_CHANGE_LOG_LOG_SYNCHRONOUS',
         ['NORMAL', 'FULL'] as const,
         DEFAULT_LOG_SYNCHRONOUS,
+      ),
+      defaultAutoVacuum: enumListFromEnv(
+        'SQLITE_CHANGE_LOG_LOG_AUTO_VACUUM',
+        ['NONE', 'INCREMENTAL'] as const,
+        DEFAULT_LOG_AUTO_VACUUM,
       ),
       walAutocheckpoint: 'default',
     },
@@ -1545,12 +1543,17 @@ describe('replicator/sqlite change-log ceiling', () => {
     assertGoNoGoGates();
   });
 
-  // Design 4.6 asserts wal2 + synchronous=NORMAL for the change-log DB. This
-  // measures the alternatives so the default is a recorded decision with a
-  // measured cost, per the slice 7A exit criteria.
+  // Design 4.6 asserts wal2 + synchronous=NORMAL for the change-log DB, and
+  // slice 8 adds auto_vacuum=INCREMENTAL so purge can return pages to the OS.
+  // This measures the alternatives so each default is a recorded decision with
+  // a measured cost, per the slice 7A exit criteria.
   test('log durability trade', {timeout: TEST_TIMEOUT_MS}, () => {
     const cases = makeCases(
-      logDurabilitiesFromEnv(SWEEP_LOG_JOURNAL_MODES, SWEEP_LOG_SYNCHRONOUS),
+      logDurabilitiesFromEnv(
+        SWEEP_LOG_JOURNAL_MODES,
+        SWEEP_LOG_SYNCHRONOUS,
+        SWEEP_LOG_AUTO_VACUUM,
+      ),
     ).filter(
       c => c.mode === 'separate-files' && c.workload === 'small-high-frequency',
     );
@@ -1721,9 +1724,8 @@ describe('replicator/sqlite change-log ceiling', () => {
             verifyCase(dbs, c, write);
             const purges: PurgeResult[] = [];
             for (;;) {
-              const result = purgeBatch(dbs.log, {
+              const result = purgeBatch(dbs.purger, {
                 externalFloor: versionToLexi(c.totalTransactions),
-                stateVersionFloor: versionToLexi(c.totalTransactions),
                 retentionCutoffMs: Number.MAX_SAFE_INTEGER,
                 maxRows: PURGE_BATCH_ROWS,
               });
@@ -1733,8 +1735,15 @@ describe('replicator/sqlite change-log ceiling', () => {
               }
               expect(result.deletedRows).toBeGreaterThan(0);
             }
+            // Slice 8's exit criterion, and the reason this case exists: a
+            // transaction larger than the batch is removed across chunks rather
+            // than in one unbounded DELETE. Before slice 8, `maxRows` was a soft
+            // target and this asserted the opposite.
             expect(
-              purges.some(({deletedRows}) => deletedRows > PURGE_BATCH_ROWS),
+              purges.filter(({deletedRows}) => deletedRows > PURGE_BATCH_ROWS),
+            ).toEqual([]);
+            expect(
+              purges.some(({deletedThrough}) => deletedThrough === undefined),
             ).toBe(true);
             expect(purges.at(-1)?.moreEligible).toBe(false);
             expect(countLogRows(dbs.log)).toBe(c.logicalTxRows + 2);

@@ -1,4 +1,4 @@
-import {writeFileSync} from 'node:fs';
+import {existsSync, writeFileSync} from 'node:fs';
 import {PG_LOCK_NOT_AVAILABLE} from '@drdgvhbh/postgres-error-codes';
 import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
@@ -13,7 +13,7 @@ import {sleep} from '../../../../shared/src/sleep.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {StatementRunner} from '../../db/statements.ts';
 import {expectTables, test, type PgTest} from '../../test/db.ts';
-import {DbFile, initDB} from '../../test/lite.ts';
+import {DbFile} from '../../test/lite.ts';
 import type {PostgresDB} from '../../types/pg.ts';
 import type {Source} from '../../types/streams.ts';
 import {Subscription, type Result} from '../../types/subscription.ts';
@@ -28,24 +28,19 @@ import {
   changeLogFileName,
   deleteChangeLogDB,
   openChangeLogDB,
-  readReplicaAnchor,
+  readChangeLogHead,
   reconcileChangeLog,
+  type ChangeLogAnchor,
 } from '../replicator/change-log-db.ts';
 import {ChangeLogStreamWriter} from '../replicator/change-log-stream-writer.ts';
-import {IncrementalSyncer} from '../replicator/incremental-sync.ts';
 import {ReplicationStatusPublisher} from '../replicator/replication-status.ts';
 import {
   getSubscriptionState,
   initReplicationState,
-  type SubscriptionState,
   updateReplicationWatermark,
+  type SubscriptionState,
 } from '../replicator/schema/replication-state.ts';
-import {
-  getSQLiteChangeLogInfo,
-  SQLiteChangeLogObserver,
-} from '../replicator/sqlite-change-log-observability.ts';
 import {ReplicationMessages} from '../replicator/test-utils.ts';
-import {ThreadWriteWorkerClient} from '../replicator/write-worker-client.ts';
 import {serializeChangeStreamData} from './change-log-codec.ts';
 import {
   initializeStreamer,
@@ -58,10 +53,14 @@ import {
   type Downstream,
 } from './change-streamer.ts';
 import * as ErrorType from './error-type-enum.ts';
+import {Forwarder} from './forwarder.ts';
 import {initChangeStreamerSchema} from './schema/init.ts';
 import {AutoResetSignal, ensureReplicationConfig} from './schema/tables.ts';
+import type {SnapshotMessage} from './snapshot.ts';
+import {SQLiteChangeLogCatchup} from './sqlite-change-log-catchup.ts';
 import {SQLiteChangeLogReader} from './sqlite-change-log-reader.ts';
-import {PurgeLocker} from './storer.ts';
+import {SQLiteChangeLogWriter} from './sqlite-change-log-writer.ts';
+import {PurgeLocker, Storer} from './storer.ts';
 
 const opts: TuningOptions = {
   backPressureLimitHeapProportion: 0.04,
@@ -125,6 +124,7 @@ describe('change-streamer/service', () => {
       ReplicationStatusPublisher.forTesting(),
       replicaConfig,
       null,
+      null,
       true,
       opts,
       setTimeoutFn as unknown as typeof setTimeout,
@@ -145,6 +145,56 @@ describe('change-streamer/service', () => {
       }
     })();
     return queue;
+  }
+
+  function drainSnapshotMessages(
+    sub: Source<SnapshotMessage>,
+  ): Queue<SnapshotMessage> {
+    const queue = new Queue<SnapshotMessage>();
+    void (async () => {
+      for await (const msg of sub) {
+        queue.enqueue(msg);
+      }
+    })();
+    return queue;
+  }
+
+  // Creates and runs a second ChangeStreamerImpl configured with a
+  // `backupURL`, i.e. with snapshot reservations enabled. Callers that use
+  // this must first `await streamer.stop()` to release the default
+  // (backup-less) streamer's ownership of the change DB.
+  async function newBackupStreamer(
+    backupURL: string,
+    source: Partial<ChangeSource> = {},
+  ): Promise<ChangeStreamerService> {
+    const backupStreamer = await initializeStreamer(
+      lc,
+      shard,
+      'task-id',
+      'change.streamer:12345',
+      'ws',
+      sql,
+      {
+        startStream: () =>
+          Promise.resolve({
+            initialWatermark: '02',
+            changes: Subscription.create(),
+            acks: {push: () => {}},
+          }),
+        startLagReporter: () => Promise.resolve(null),
+        stop: () => Promise.resolve(),
+        ...source,
+      } satisfies ChangeSource,
+      ReplicationStatusPublisher.forTesting(),
+      replicaConfig,
+      {backupURL, litestreamVersion: 'legacy'},
+      null,
+      true,
+      opts,
+      setTimeoutFn as unknown as typeof setTimeout,
+    );
+    void backupStreamer.run();
+    return backupStreamer;
   }
 
   async function nextChange(sub: Queue<Downstream>) {
@@ -189,10 +239,32 @@ describe('change-streamer/service', () => {
 
   const messages = new ReplicationMessages({foo: 'id'});
 
-  /** The change-log database the replicator writes beside `replicaFile`. */
+  /**
+   * The anchor a writer beside `replica` reconciles against. The catchup tests
+   * drive the log from outside the change-streamer so that its content is
+   * controlled independently of the stream, which is what lets them exercise a
+   * head the streamer has not reached; `replica`'s replication state stands in
+   * for the watermark such a stream would resume from.
+   */
+  function anchorFor(replica: Database): ChangeLogAnchor {
+    const {stateVersion, replicaVersion} = replica
+      .prepare(/*sql*/ `
+        SELECT state."stateVersion", config."replicaVersion"
+          FROM "_zero.replicationState" AS state,
+               "_zero.replicationConfig" AS config
+      `)
+      .get<{stateVersion: string; replicaVersion: string}>();
+    return {
+      identity: {epoch: null, generation: replicaVersion, replicaID: null},
+      resumeWatermark: stateVersion,
+      nowMs: Date.now(),
+    };
+  }
+
+  /** The change-log database beside `replicaFile`, seeded and reconciled. */
   function createChangeLogDB(replicaFile: DbFile, replica: Database): Database {
     const changeLog = openChangeLogDB(lc, replicaFile.path, {readonly: false});
-    reconcileChangeLog(lc, changeLog, readReplicaAnchor(replica));
+    reconcileChangeLog(lc, changeLog, anchorFor(replica));
     return changeLog;
   }
 
@@ -238,8 +310,73 @@ describe('change-streamer/service', () => {
       ReplicationStatusPublisher.forTesting(),
       replicaConfig,
       null,
+      null,
       true,
       {...opts, sqliteCatchup},
+      setTimeoutFn as unknown as typeof setTimeout,
+    );
+    streamerDone = streamer.run();
+  }
+
+  /**
+   * Restarts the streamer with the change-log writer enabled, i.e. with the
+   * production topology: this process writes the log from its own stream loop,
+   * and can serve catchup from what it wrote.
+   */
+  async function restartWithInlineChangeLogWriter(
+    logFile: DbFile,
+    sqliteCatchup?: Partial<SQLiteCatchupOptions>,
+  ): Promise<void> {
+    await streamer.stop();
+    await streamerDone;
+
+    changes = Subscription.create();
+    acks = new Queue();
+    streamer = await initializeStreamer(
+      lc,
+      shard,
+      'task-id',
+      'change.streamer:12345',
+      'ws',
+      sql,
+      {
+        startStream: () =>
+          Promise.resolve({
+            initialWatermark: REPLICA_VERSION,
+            changes,
+            acks: {push: status => acks.enqueue(status)},
+          }),
+        startLagReporter: () => null,
+        stop: () => Promise.resolve(),
+      },
+      ReplicationStatusPublisher.forTesting(),
+      replicaConfig,
+      null,
+      null,
+      true,
+      {
+        ...opts,
+        // No replica beside it: the writer's anchor is the watermark its stream
+        // connection resumes from, which is Postgres's `lastWatermark`.
+        sqliteChangeLogWriter: {
+          replicaFile: logFile.path,
+          identity: {
+            epoch: null,
+            generation: REPLICA_VERSION,
+            replicaID: 'replica-id',
+          },
+        },
+        ...(sqliteCatchup === undefined
+          ? {}
+          : {
+              sqliteCatchup: {
+                changeLogFile: changeLogFileName(logFile.path),
+                readBatchRows: 2,
+                barrierTimeoutMs: 1_000,
+                ...sqliteCatchup,
+              },
+            }),
+      },
       setTimeoutFn as unknown as typeof setTimeout,
     );
     streamerDone = streamer.run();
@@ -259,7 +396,11 @@ describe('change-streamer/service', () => {
     });
   }
 
-  /** Applies a transaction the way the write worker does: log first, then replica. */
+  /**
+   * Appends a transaction to the log the way the writer does, and advances the
+   * replica's watermark with it so that {@link anchorFor} keeps agreeing with
+   * the log's head.
+   */
   function appendSQLiteTransaction(
     replica: Database,
     changeLog: Database,
@@ -291,79 +432,21 @@ describe('change-streamer/service', () => {
     }
   }
 
-  test('PG stream shadow-writes SQLite without changing PG serving or ACKs', async () => {
-    const dbFile = new DbFile('sqlite-change-log-shadow-integration');
-    const replica = dbFile.connect(lc);
-    replica.pragma('journal_mode = wal');
-    replica.exec(/*sql*/ `
-      CREATE TABLE "_zero.versionHistory" (
-        "dataVersion" INTEGER NOT NULL,
-        "schemaVersion" INTEGER NOT NULL,
-        "minSafeVersion" INTEGER NOT NULL,
-        "lock" INTEGER PRIMARY KEY DEFAULT 1 CHECK ("lock" = 1)
-      );
-      INSERT INTO "_zero.versionHistory"
-        ("dataVersion", "schemaVersion", "minSafeVersion")
-        VALUES (14, 14, 0);
-    `);
-    initReplicationState(replica, ['zero_data'], REPLICA_VERSION);
-    initDB(
-      replica,
-      `
-      CREATE TABLE foo(
-        id TEXT PRIMARY KEY,
-        _0_version TEXT
-      );
-      `,
-    );
-
-    const worker = new ThreadWriteWorkerClient();
-    await worker.init(
-      dbFile.path,
-      'serving',
-      true,
-      {busyTimeout: 30_000, analysisLimit: 1000},
-      {level: 'error', format: 'text'},
-    );
-    const observer = new SQLiteChangeLogObserver(
-      lc,
-      getSQLiteChangeLogInfo(replica),
-    );
-    const syncer = new IncrementalSyncer(
-      lc,
-      'shadow-write-task',
-      'canonical-replicator',
-      {
-        async subscribe(ctx) {
-          const encoded = await streamer.subscribe(ctx);
-          return {
-            cancel: err => encoded.cancel(err),
-            async *[Symbol.asyncIterator]() {
-              for await (const json of encoded) {
-                yield {data: BigIntJSON.parse(json) as Downstream, json};
-              }
-            },
-          };
-        },
-      },
-      worker,
-      'serving',
-      true,
-      null,
-      observer,
-    );
-    const syncing = syncer.run();
-
-    const liveSub = await streamer.subscribe({
-      protocolVersion: PROTOCOL_VERSION,
-      taskID: 'live-observer-task',
-      id: 'live-observer',
-      mode: 'serving',
-      watermark: REPLICA_VERSION,
-      replicaVersion: REPLICA_VERSION,
-      initial: true,
-      logsChangeStream: false,
+  /**
+   * The whole of slice 7I, end to end: the change-streamer writes the SQLite
+   * change log from its own stream loop, commits it before forwarding each
+   * transaction's `commit`, and can then serve a subscriber's catchup from it —
+   * with the barrier released by the writer's commit rather than by any
+   * subscriber's ACK.
+   */
+  test('the change-streamer writes the log inline and serves catchup from it', async () => {
+    const logFile = new DbFile('sqlite-change-log-inline-writer');
+    await restartWithInlineChangeLogWriter(logFile, {
+      barrierPollIntervalMs: 10,
+      shouldUse: ctx => ctx.id === 'from-sqlite',
     });
+
+    const liveSub = await subscribeServing('live-observer');
     const live = drainToQueue(liveSub);
     expect(await nextChange(live)).toMatchObject({tag: 'status'});
 
@@ -378,81 +461,276 @@ describe('change-streamer/service', () => {
         new: {id: 'hello'},
       });
       expect(await nextChange(live)).toMatchObject({tag: 'commit'});
+      // Invariant 2, at the earliest moment it can be observed: a subscriber
+      // that has the `commit` implies the log already committed it, because the
+      // log's commit precedes the forward.
+      {
+        using log = openChangeLogDB(lc, logFile.path, {readonly: true});
+        expect(readChangeLogHead(log)).toBe('06');
+      }
 
+      // PG serving and the upstream ACK are unchanged.
       await expectAcks('06');
-      await vi.waitFor(() => {
-        expect(
-          replica
-            .prepare(`SELECT "stateVersion" FROM "_zero.replicationState"`)
-            .get(),
-        ).toEqual({stateVersion: '06'});
-      });
-      // The stream is logged to the change-log database beside the replica,
-      // never to the replica itself.
-      using changeLog = openChangeLogDB(lc, dbFile.path, {readonly: true});
+      expect(
+        await sql`SELECT watermark FROM "zoro_3/cdc"."changeLog"
+                    WHERE watermark = '06' ORDER BY pos`.values(),
+      ).toEqual([['06'], ['06'], ['06']]);
+
+      // The log holds the seed transaction at the watermark the stream resumed
+      // from, then the transaction that was just forwarded.
+      using changeLog = openChangeLogDB(lc, logFile.path, {readonly: true});
       expect(
         changeLog
-          .prepare(
-            `SELECT max("watermark") AS "watermark" FROM "_zero.changeLogStream"`,
-          )
-          .get(),
-      ).toEqual({watermark: '06'});
+          .prepare(/*sql*/ `
+            SELECT "watermark", "pos", json_extract("change", '$.tag') AS "tag",
+                   "precommit"
+              FROM "_zero.changeLogStream" ORDER BY "watermark", "pos"
+          `)
+          .all(),
+      ).toEqual([
+        {watermark: '01', pos: 0, tag: 'begin', precommit: null},
+        {watermark: '01', pos: 1, tag: 'commit', precommit: '01'},
+        {watermark: '06', pos: 0, tag: 'begin', precommit: null},
+        {watermark: '06', pos: 1, tag: 'insert', precommit: null},
+        {watermark: '06', pos: 2, tag: 'commit', precommit: '06'},
+      ]);
       expect(
-        replica
-          .prepare(
-            `SELECT max("watermark") AS "watermark" FROM "_zero.changeLogStream"`,
-          )
+        changeLog
+          .prepare(/*sql*/ `
+            SELECT "epoch", "generation", "replicaID", "schemaVersion",
+                   "seedWatermark"
+              FROM "_zero.changeLogMeta"
+          `)
           .get(),
-      ).toEqual({watermark: REPLICA_VERSION});
-      expect(observer.state()).toMatchObject({
-        receivedHead: '06',
-        sqliteHead: '06',
-        headLag: 0,
-        invariantFailures: 0,
-        hashMatches: 1,
-        hashMismatches: 0,
-        hashUnpaired: 0,
+      ).toEqual({
+        epoch: null,
+        generation: REPLICA_VERSION,
+        replicaID: 'replica-id',
+        schemaVersion: 2,
+        seedWatermark: REPLICA_VERSION,
       });
 
-      const catchupSub = await streamer.subscribe({
-        protocolVersion: PROTOCOL_VERSION,
-        taskID: 'catchup-observer-task',
-        id: 'catchup-observer',
-        mode: 'serving',
-        watermark: REPLICA_VERSION,
-        replicaVersion: REPLICA_VERSION,
-        initial: true,
-        logsChangeStream: false,
-      });
-      const catchup = drainToQueue(catchupSub);
-      expect(await nextChange(catchup)).toMatchObject({tag: 'status'});
-      expect(await nextChange(catchup)).toMatchObject({tag: 'begin'});
-      expect(await nextChange(catchup)).toMatchObject({
+      // And a subscriber selected for SQLite is served from it -- from the
+      // SQLite reader itself, not a silent PG fallback delivering the same
+      // messages.
+      const readerRead = vi.spyOn(SQLiteChangeLogReader.prototype, 'read');
+      const sqliteSub = await subscribeServing('from-sqlite');
+      const fromSQLite = drainToQueue(sqliteSub);
+      expect(await nextChange(fromSQLite)).toMatchObject({tag: 'status'});
+      expect(await nextChange(fromSQLite)).toMatchObject({tag: 'begin'});
+      expect(await nextChange(fromSQLite)).toMatchObject({
         tag: 'insert',
         new: {id: 'hello'},
       });
-      expect(await nextChange(catchup)).toMatchObject({tag: 'commit'});
-      // This test has finished exercising catchup. Remove the subscriber
-      // before testing cleanup so its asynchronous consumed ACK cannot race
-      // the purge eligibility check below.
-      catchupSub.cancel();
-
-      streamer.scheduleCleanup('06');
-      const purge = setTimeoutFn.mock.calls.at(-1)?.[0];
-      assert(purge, 'PG change-log purge was not scheduled');
-      await (purge() as unknown as Promise<void>);
-      expect(
-        await sql`SELECT watermark FROM "zoro_3/cdc"."changeLog"
-                    ORDER BY watermark, pos`.values(),
-      ).toEqual([['06'], ['06'], ['06']]);
+      expect(await nextChange(fromSQLite)).toMatchObject({tag: 'commit'});
+      expect(readerRead).toHaveBeenCalled();
+      readerRead.mockRestore();
+      sqliteSub.cancel();
     } finally {
       liveSub.cancel();
-      syncer.stop(lc);
-      await syncing;
-      await worker.stop();
-      replica.close();
-      deleteChangeLogDB(dbFile.path);
-      dbFile.delete();
+      await streamer.stop();
+      await streamerDone;
+      deleteChangeLogDB(logFile.path);
+      logFile.delete();
+    }
+  });
+
+  /**
+   * Invariant 1 in its assertable form, against the real stream loop rather
+   * than a model of it: no `await` separates `#storer.store()` from the log's
+   * commit, and the commit precedes the forward of that transaction's `commit`
+   * message. The microtask queued at `store()` is the await-detector — if the
+   * loop yields between the two calls, the microtask runs and the label flips.
+   */
+  test('the log commits in the tick that stores the commit, before the forward', async () => {
+    const events: string[] = [];
+    let microtaskRanSinceStore = false;
+
+    const realStore = Storer.prototype.store;
+    const storeSpy = vi
+      .spyOn(Storer.prototype, 'store')
+      .mockImplementation(function (this: Storer, watermark, data) {
+        if (data[0] === 'commit') {
+          events.push(`store:${watermark}`);
+          microtaskRanSinceStore = false;
+          queueMicrotask(() => {
+            microtaskRanSinceStore = true;
+          });
+        }
+        return realStore.call(this, watermark, data);
+      });
+    const realWrite = SQLiteChangeLogWriter.prototype.write;
+    const writeSpy = vi
+      .spyOn(SQLiteChangeLogWriter.prototype, 'write')
+      .mockImplementation(function (this: SQLiteChangeLogWriter, change, json) {
+        realWrite.call(this, change, json);
+        if (change[0] === 'commit') {
+          events.push(
+            `log-commit:${change[2].watermark}:` +
+              (microtaskRanSinceStore ? 'after-an-await' : 'same-tick'),
+          );
+        }
+      });
+    const realForward = Forwarder.prototype.forward;
+    const forwardSpy = vi
+      .spyOn(Forwarder.prototype, 'forward')
+      .mockImplementation(function (this: Forwarder, entry) {
+        if (entry[1] === 'commit') {
+          events.push(`forward:${entry[0]}`);
+        }
+        return realForward.call(this, entry);
+      });
+
+    const logFile = new DbFile('sqlite-change-log-ordering');
+    await restartWithInlineChangeLogWriter(logFile);
+
+    try {
+      changes.push(['begin', messages.begin(), {commitWatermark: '06'}]);
+      changes.push(['data', messages.insert('foo', {id: 'first'})]);
+      changes.push(['commit', messages.commit(), {watermark: '06'}]);
+      changes.push(['begin', messages.begin(), {commitWatermark: '08'}]);
+      changes.push(['data', messages.insert('foo', {id: 'second'})]);
+      changes.push(['commit', messages.commit(), {watermark: '08'}]);
+      // The upstream ACK follows the storer's Postgres commit, which is behind
+      // everything the events record.
+      await expectAcks('06', '08');
+
+      expect(events).toEqual([
+        'store:06',
+        'log-commit:06:same-tick',
+        'forward:06',
+        'store:08',
+        'log-commit:08:same-tick',
+        'forward:08',
+      ]);
+    } finally {
+      storeSpy.mockRestore();
+      writeSpy.mockRestore();
+      forwardSpy.mockRestore();
+      await streamer.stop();
+      await streamerDone;
+      deleteChangeLogDB(logFile.path);
+      logFile.delete();
+    }
+  });
+
+  /**
+   * The in-process form of truncate-above, driven by production machinery: a
+   * storer commit fails, the stream is re-established, and its resume watermark
+   * is behind the log's head. The writer inserts with a plain `INSERT`, so an
+   * un-truncated overlap is a constraint violation on the re-delivery.
+   */
+  test('an in-process reconnect below the log head truncates rather than colliding', async () => {
+    await streamer.stop();
+    await streamerDone;
+
+    const logFile = new DbFile('sqlite-change-log-reconnect');
+    const first = Subscription.create<ChangeStreamMessage>();
+    const second = Subscription.create<ChangeStreamMessage>();
+    const {promise: reconnected, resolve: didReconnect} = resolver<true>();
+    streamer = await initializeStreamer(
+      lc,
+      shard,
+      'task-id',
+      'change.streamer:12345',
+      'ws',
+      sql,
+      {
+        startStream: vi
+          .fn()
+          .mockImplementationOnce(() =>
+            Promise.resolve({
+              initialWatermark: REPLICA_VERSION,
+              changes: first,
+              acks: {push: () => {}},
+            }),
+          )
+          .mockImplementationOnce(() => {
+            didReconnect(true);
+            return Promise.resolve({
+              initialWatermark: REPLICA_VERSION,
+              changes: second,
+              acks: {push: () => {}},
+            });
+          })
+          .mockImplementation(() => resolver().promise),
+        startLagReporter: () => null,
+        stop: () => Promise.resolve(),
+      },
+      ReplicationStatusPublisher.forTesting(),
+      replicaConfig,
+      null,
+      null,
+      true,
+      {
+        ...opts,
+        sqliteChangeLogWriter: {
+          replicaFile: logFile.path,
+          identity: {
+            epoch: null,
+            generation: REPLICA_VERSION,
+            replicaID: 'replica-id',
+          },
+        },
+      },
+      // The real timer, because this test depends on the reconnect backoff
+      // actually firing.
+    );
+    streamerDone = streamer.run();
+
+    const head = () => {
+      using changeLog = openChangeLogDB(lc, logFile.path, {readonly: true});
+      return changeLog
+        .prepare(
+          `SELECT max("watermark") AS "head" FROM "_zero.changeLogStream"`,
+        )
+        .get<{head: string | null}>().head;
+    };
+
+    try {
+      // Makes the storer's commit of '05' fail, so Postgres never records it
+      // while the log already has. `pos` 3 is where the commit row of the
+      // four-message transaction below lands.
+      await sql`INSERT INTO "zoro_3/cdc"."changeLog" (watermark, pos, change)
+        VALUES ('05', 3, ${{conflicting: 'entry'}})`;
+
+      first.push(['begin', messages.begin(), {commitWatermark: '05'}]);
+      first.push(['data', messages.insert('foo', {id: 'logged-not-stored'})]);
+      first.push(['data', messages.insert('foo', {id: 'also-not-stored'})]);
+      first.push(['commit', messages.commit(), {watermark: '05'}]);
+
+      // The reconnect re-reads its resume watermark, finds it behind the log's
+      // head, and truncates '05' away before the new stream starts.
+      expect(await reconnected).toBe(true);
+      expect(head()).toBe(REPLICA_VERSION);
+
+      // The resumed stream re-delivers '05'. Without the truncation this would
+      // violate PRIMARY KEY ("watermark","pos").
+      await sql`DELETE FROM "zoro_3/cdc"."changeLog"
+                  WHERE watermark = '05' AND pos = 3`;
+      second.push(['begin', messages.begin(), {commitWatermark: '05'}]);
+      second.push(['data', messages.insert('foo', {id: 'redelivered'})]);
+      second.push(['data', messages.insert('foo', {id: 'redelivered-too'})]);
+      second.push(['commit', messages.commit(), {watermark: '05'}]);
+
+      await vi.waitFor(() => expect(head()).toBe('05'));
+      // Fail-soft would have deleted the file on a constraint violation, so the
+      // head above already proves there was none. Assert it directly too, since
+      // the whole point of the carve-out is that it is reported rather than
+      // absorbed.
+      expect(
+        logSink.messages
+          .filter(([level]) => level === 'error')
+          .map(([, , args]) => String(args[0]))
+          .filter(m => m.includes('constraint')),
+      ).toEqual([]);
+    } finally {
+      first.cancel();
+      second.cancel();
+      await streamer.stop();
+      await streamerDone;
+      deleteChangeLogDB(logFile.path);
+      logFile.delete();
     }
   });
 
@@ -491,6 +769,7 @@ describe('change-streamer/service', () => {
       },
       ReplicationStatusPublisher.forTesting(),
       replicaConfig,
+      null,
       null,
       true,
       {
@@ -646,147 +925,188 @@ describe('change-streamer/service', () => {
     }
   });
 
-  test('the change-log writer ACK releases the SQLite barrier', async () => {
-    await streamer.stop();
-    await streamerDone;
-
-    const catchupReplicaFile = new DbFile('sqlite-catchup-ack-integration');
-    const catchupReplica = catchupReplicaFile.connect(lc);
-    catchupReplica.pragma('journal_mode = wal');
-    initReplicationState(catchupReplica, ['zero_data'], REPLICA_VERSION);
-    const catchupChangeLog = createChangeLogDB(
-      catchupReplicaFile,
-      catchupReplica,
+  /**
+   * The barrier, with the writer in-process. A subscriber that registers
+   * mid-transaction must wait for that transaction rather than be served a
+   * truncated view of it, and the wait must end on the writer's own commit: the
+   * poll interval here is far beyond the test timeout, and no subscriber acks
+   * this log any more.
+   */
+  test("the writer's commit releases the SQLite barrier", async () => {
+    // The wiring this test exists for: the writer's onCommit callback notifies
+    // the barrier, now that no subscriber's ACK advances this log. Asserted via
+    // spy because the mid-transaction wait below can also be satisfied on its
+    // first plan() read — the required head resolves at forward time, after the
+    // log's commit — which would leave a broken notification path undetected.
+    const onChangeLogCommit = vi.spyOn(
+      SQLiteChangeLogCatchup.prototype,
+      'onChangeLogCommit',
     );
+    // Pins the source: the catchup below must be served by the SQLite reader.
+    // A silent PG fallback delivers the same messages with the same timing,
+    // since PG catchup also withholds them until the storer commits.
+    const readerRead = vi.spyOn(SQLiteChangeLogReader.prototype, 'read');
 
-    changes = Subscription.create();
-    acks = new Queue();
-    streamer = await initializeStreamer(
-      lc,
-      shard,
-      'task-id',
-      'change.streamer:12345',
-      'ws',
-      sql,
-      {
-        startStream: () =>
-          Promise.resolve({
-            initialWatermark: '02',
-            changes,
-            acks: {push: status => acks.enqueue(status)},
-          }),
-        startLagReporter: () =>
-          Promise.resolve({firstCommitTimeMs: 100, nextSendTimeMs: 123}),
-        stop: () => Promise.resolve(),
-      },
-      ReplicationStatusPublisher.forTesting(),
-      replicaConfig,
-      null,
-      true,
-      {
-        ...opts,
-        sqliteCatchup: {
-          changeLogFile: changeLogFileName(catchupReplicaFile.path),
-          readBatchRows: 2,
-          barrierTimeoutMs: 60_000,
-          // Far beyond the test timeout, so only the writer's ACK can release
-          // the barrier. The change log itself is never polled for the head.
-          barrierPollIntervalMs: 60_000,
-          shouldUse: ctx => !ctx.logsChangeStream,
-        },
-      },
-      setTimeoutFn as unknown as typeof setTimeout,
-    );
-    streamerDone = streamer.run();
+    const logFile = new DbFile('sqlite-change-log-barrier');
+    await restartWithInlineChangeLogWriter(logFile, {
+      barrierTimeoutMs: 60_000,
+      barrierPollIntervalMs: 60_000,
+      shouldUse: ctx => ctx.id === 'from-sqlite',
+    });
+
+    const liveSub = await subscribeServing('live-observer');
+    const live = drainToQueue(liveSub);
+    expect(await nextChange(live)).toMatchObject({tag: 'status'});
 
     try {
-      // Stands in for the replicator that writes the SQLite change log. Like
-      // the real one, it applies a transaction to the replica before its
-      // consumption is acked, which is what makes the ACK mean "durable".
-      const writerSub = await streamer.subscribe({
-        protocolVersion: PROTOCOL_VERSION,
-        taskID: 'task-id',
-        id: 'change-log-writer',
-        mode: 'backup',
-        watermark: REPLICA_VERSION,
-        replicaVersion: REPLICA_VERSION,
-        initial: true,
-        logsChangeStream: true,
+      changes.push(['begin', messages.begin(), {commitWatermark: '06'}]);
+      changes.push(['data', messages.insert('foo', {id: 'mid-transaction'})]);
+      expect(await nextChange(live)).toMatchObject({tag: 'begin'});
+      expect(await nextChange(live)).toMatchObject({
+        tag: 'insert',
+        new: {id: 'mid-transaction'},
       });
-      const applyTransactions = resolver<void>();
-      const received = new Queue<string>();
-      const applied = new Queue<string>();
-      const writing = (async () => {
-        const buffered: ChangeStreamData[] = [];
-        for await (const msg of writerSub) {
-          const down = BigIntJSON.parse(msg) as Downstream;
-          if (down[0] === 'data') {
-            buffered.push(down as ChangeStreamData);
-          } else if (down[0] === 'commit') {
-            const {watermark} = down[2];
-            received.enqueue(watermark);
-            await applyTransactions.promise;
-            appendSQLiteTransaction(
-              catchupReplica,
-              catchupChangeLog,
-              watermark,
-              buffered.splice(0),
-            );
-            applied.enqueue(watermark);
-          }
-        }
-      })();
 
-      changes.push(['begin', messages.begin(), {commitWatermark: '04'}]);
-      changes.push(['data', messages.insert('foo', {id: 'acked'})]);
-      changes.push(['commit', messages.commit(), {watermark: '04'}]);
-      // The commit reached the writer, so it is also the forwarded head that
-      // the next subscriber will have to wait for.
-      expect(await received.dequeue()).toBe('04');
-
-      // The writer has the transaction but has not applied it, so the replica
-      // is behind the head this subscriber requires.
-      const catchupSub = await streamer.subscribe({
-        protocolVersion: PROTOCOL_VERSION,
-        taskID: 'catchup-task',
-        id: 'sqlite-catchup',
-        mode: 'serving',
-        watermark: REPLICA_VERSION,
-        replicaVersion: REPLICA_VERSION,
-        initial: true,
-        logsChangeStream: false,
-      });
-      const caught = drainToQueue(catchupSub);
+      // Registered while '06' is in flight, so its required head is '06'.
+      const sqliteSub = await subscribeServing('from-sqlite');
+      const fromSQLite = drainToQueue(sqliteSub);
       // The barrier holds the subscription: not even the status message is
       // delivered until the required head is readable.
       await sleep(50);
-      expect(caught.size()).toBe(0);
+      expect(fromSQLite.size()).toBe(0);
 
-      applyTransactions.resolve();
-      expect(await applied.dequeue()).toBe('04');
+      changes.push(['commit', messages.commit(), {watermark: '06'}]);
+      expect(await nextChange(live)).toMatchObject({tag: 'commit'});
 
-      // Released by the writer's ACK rather than by a poll.
-      expect(await nextChange(caught)).toMatchObject({tag: 'status'});
-      expect(await nextChange(caught)).toMatchObject({tag: 'begin'});
-      expect(await nextChange(caught)).toMatchObject({
+      // Released by the writer's commit rather than by a poll.
+      expect(await nextChange(fromSQLite)).toMatchObject({tag: 'status'});
+      expect(await nextChange(fromSQLite)).toMatchObject({tag: 'begin'});
+      expect(await nextChange(fromSQLite)).toMatchObject({
         tag: 'insert',
-        new: {id: 'acked'},
+        new: {id: 'mid-transaction'},
       });
-      expect(await nextChange(caught)).toMatchObject({tag: 'commit'});
-
-      catchupSub.cancel();
-      writerSub.cancel();
-      await writing;
+      expect(await nextChange(fromSQLite)).toMatchObject({tag: 'commit'});
+      // The commit's notification reached the barrier, and the messages above
+      // came out of the SQLite reader.
+      expect(onChangeLogCommit).toHaveBeenCalledWith('06');
+      expect(readerRead).toHaveBeenCalled();
+      sqliteSub.cancel();
     } finally {
+      onChangeLogCommit.mockRestore();
+      readerRead.mockRestore();
+      liveSub.cancel();
       await streamer.stop();
-      catchupChangeLog.close();
-      catchupReplica.close();
-      deleteChangeLogDB(catchupReplicaFile.path);
-      catchupReplicaFile.delete();
+      await streamerDone;
+      deleteChangeLogDB(logFile.path);
+      logFile.delete();
     }
   });
 
-  test('backup subscribers and change-log writers cannot select SQLite catchup', async () => {
+  /**
+   * §3.7 at the service level: a write failure costs catchup reach, never the
+   * shard's replication. The writer disables itself, deletes the file, and --
+   * because the reader is cached on the service -- closes it, so no in-process
+   * reader is left serving an unlinked inode while every new open sees nothing.
+   */
+  test('a mid-stream writer failure fails soft without stopping replication', async () => {
+    const readerClose = vi.spyOn(SQLiteChangeLogReader.prototype, 'close');
+    const logFile = new DbFile('sqlite-change-log-fail-soft');
+    await restartWithInlineChangeLogWriter(logFile, {
+      barrierPollIntervalMs: 10,
+      shouldUse: ctx => ctx.id.startsWith('from-sqlite'),
+    });
+
+    const liveSub = await subscribeServing('live-observer');
+    const live = drainToQueue(liveSub);
+    expect(await nextChange(live)).toMatchObject({tag: 'status'});
+
+    try {
+      changes.push(['begin', messages.begin(), {commitWatermark: '06'}]);
+      changes.push(['data', messages.insert('foo', {id: 'logged'})]);
+      changes.push(['commit', messages.commit(), {watermark: '06'}]);
+      expect(await nextChange(live)).toMatchObject({tag: 'begin'});
+      expect(await nextChange(live)).toMatchObject({tag: 'insert'});
+      expect(await nextChange(live)).toMatchObject({tag: 'commit'});
+
+      // A subscriber served from SQLite, so that the service holds the cached
+      // reader the fail-soft below must close.
+      const sqliteSub = await subscribeServing('from-sqlite');
+      const fromSQLite = drainToQueue(sqliteSub);
+      expect(await nextChange(fromSQLite)).toMatchObject({tag: 'status'});
+      expect(await nextChange(fromSQLite)).toMatchObject({tag: 'begin'});
+      expect(await nextChange(fromSQLite)).toMatchObject({
+        tag: 'insert',
+        new: {id: 'logged'},
+      });
+      expect(await nextChange(fromSQLite)).toMatchObject({tag: 'commit'});
+      expect(readerClose).not.toHaveBeenCalled();
+
+      // Breaks the log under the writer: its next insert fails with an error
+      // the file's contents cannot explain, i.e. the generic fail-soft class.
+      {
+        using saboteur = openChangeLogDB(lc, logFile.path, {readonly: false});
+        saboteur.exec(`DROP TABLE "_zero.changeLogStream"`);
+      }
+
+      changes.push(['begin', messages.begin(), {commitWatermark: '08'}]);
+      changes.push(['data', messages.insert('foo', {id: 'after-failure'})]);
+      changes.push(['commit', messages.commit(), {watermark: '08'}]);
+
+      // Replication continues, for the live subscriber and for the one that
+      // was served from SQLite alike.
+      for (const sub of [live, fromSQLite]) {
+        expect(await nextChange(sub)).toMatchObject({tag: 'begin'});
+        expect(await nextChange(sub)).toMatchObject({
+          tag: 'insert',
+          new: {id: 'after-failure'},
+        });
+        expect(await nextChange(sub)).toMatchObject({tag: 'commit'});
+      }
+
+      // The writer disabled itself, deleted the file, and closed the reader.
+      expect(existsSync(changeLogFileName(logFile.path))).toBe(false);
+      expect(readerClose).toHaveBeenCalled();
+      expect(
+        logSink.messages
+          .filter(([level]) => level === 'error')
+          .map(([, , args]) => String(args[0]))
+          .join('\n'),
+      ).toContain('error writing to the SQLite change log');
+
+      // A subscriber arriving after the failure declines to SQLite -- the file
+      // is gone -- and is served everything from PG.
+      const afterSub = await subscribeServing('from-sqlite-after');
+      const after = drainToQueue(afterSub);
+      expect(await nextChange(after)).toMatchObject({tag: 'status'});
+      expect(await nextChange(after)).toMatchObject({tag: 'begin'});
+      expect(await nextChange(after)).toMatchObject({
+        tag: 'insert',
+        new: {id: 'logged'},
+      });
+      expect(await nextChange(after)).toMatchObject({tag: 'commit'});
+      expect(await nextChange(after)).toMatchObject({tag: 'begin'});
+      expect(await nextChange(after)).toMatchObject({
+        tag: 'insert',
+        new: {id: 'after-failure'},
+      });
+      expect(await nextChange(after)).toMatchObject({tag: 'commit'});
+
+      afterSub.cancel();
+      sqliteSub.cancel();
+    } finally {
+      readerClose.mockRestore();
+      liveSub.cancel();
+      await streamer.stop();
+      await streamerDone;
+      deleteChangeLogDB(logFile.path);
+      logFile.delete();
+    }
+  });
+
+  // The exclusion outlives its original reason -- the writer is no longer a
+  // subscriber, so nothing can wait on its own ACK -- because a replicator that
+  // predates the writer's move still sets the parameter. Slice 11 lifts it.
+  test('backup subscribers and legacy change-log writers cannot select SQLite catchup', async () => {
     await streamer.stop();
     await streamerDone;
 
@@ -822,6 +1142,7 @@ describe('change-streamer/service', () => {
       },
       ReplicationStatusPublisher.forTesting(),
       replicaConfig,
+      null,
       null,
       true,
       {
@@ -911,7 +1232,11 @@ describe('change-streamer/service', () => {
       expect(logSink.messages).toContainEqual([
         'warn',
         expect.anything(),
-        [expect.stringContaining('it would wait on its own ACK')],
+        [
+          expect.stringContaining(
+            'not serving legacy change-log writer change-log-writer',
+          ),
+        ],
       ]);
 
       observerSub.cancel();
@@ -1048,11 +1373,7 @@ describe('change-streamer/service', () => {
       expect(readerClose).toHaveBeenCalledTimes(1);
 
       // A stream table with no rows is equally unserviceable.
-      reconcileChangeLog(
-        lc,
-        catchupChangeLog,
-        readReplicaAnchor(catchupReplica),
-      );
+      reconcileChangeLog(lc, catchupChangeLog, anchorFor(catchupReplica));
       catchupChangeLog.prepare(`DELETE FROM "_zero.changeLogStream"`).run();
 
       const noRowsSub = await subscribeServing('no-rows');
@@ -1069,11 +1390,7 @@ describe('change-streamer/service', () => {
 
       // Reconciling an emptied log reseeds it at the replica head, after which
       // the writer's transactions make it servable.
-      reconcileChangeLog(
-        lc,
-        catchupChangeLog,
-        readReplicaAnchor(catchupReplica),
-      );
+      reconcileChangeLog(lc, catchupChangeLog, anchorFor(catchupReplica));
       appendSQLiteTransaction(catchupReplica, catchupChangeLog, '04', [
         ['data', messages.insert('foo', {id: 'from-sqlite'})],
       ]);
@@ -1161,13 +1478,6 @@ describe('change-streamer/service', () => {
       deleteChangeLogDB(catchupReplicaFile.path);
       catchupReplicaFile.delete();
     }
-  });
-
-  test('get empty changelog state', async () => {
-    expect(await streamer.getChangeLogState()).toEqual({
-      minWatermark: '01',
-      replicaVersion: '01',
-    });
   });
 
   test('immediate forwarding, transaction storage', async () => {
@@ -1880,11 +2190,6 @@ describe('change-streamer/service', () => {
       UPDATE "zoro_3/cdc"."replicationState" SET "lastWatermark" = '08';
     `.simple();
 
-    expect(await streamer.getChangeLogState()).toEqual({
-      replicaVersion: '01',
-      minWatermark: '01',
-    });
-
     // Start two subscribers: one at 06 and one at 04
     const sub1 = await streamer.subscribe({
       protocolVersion: PROTOCOL_VERSION,
@@ -1912,9 +2217,9 @@ describe('change-streamer/service', () => {
       await sql`SELECT watermark FROM "zoro_3/cdc"."changeLog"`.values(),
     ).toEqual([['01'], ['01'], ['03'], ['04'], ['05'], ['06'], ['07'], ['08']]);
 
-    // schedule a cleanups at 04 and 06
-    streamer.scheduleCleanup('06');
-    streamer.scheduleCleanup('04');
+    // Report the backup watermark as '06'. The purge floor is
+    // min(backupWatermark, current subscriber acks), which is '04' (sub2).
+    streamer.trackBackupWatermark('06');
 
     expect(setTimeoutFn).toHaveBeenCalledTimes(1);
     expect(setTimeoutFn.mock.calls[0][1]).toBe(30000);
@@ -1961,13 +2266,8 @@ describe('change-streamer/service', () => {
       ],
     });
 
-    expect(await streamer.getChangeLogState()).toEqual({
-      replicaVersion: '01',
-      minWatermark: '06',
-    });
-
-    // No more timeouts should have been scheduled because both initialWatermarks
-    // were cleaned up.
+    // No more timeouts should have been scheduled because the purged
+    // watermark has caught up to the backup watermark.
     expect(setTimeoutFn).toHaveBeenCalledTimes(3);
 
     // New connections earlier than 06 should now be rejected.
@@ -1990,6 +2290,187 @@ describe('change-streamer/service', () => {
         message: 'earliest supported watermark is 06 (requested 04)',
       },
     ]);
+  });
+
+  test('startSnapshotReservation throws when backups are not configured', async () => {
+    // The default `streamer` fixture is initialized with a `null` backupURL.
+    await expect(
+      streamer.startSnapshotReservation('view-syncer-1'),
+    ).rejects.toThrow('backups are not configured');
+  });
+
+  test('startSnapshotReservation withholds status until a backup watermark is tracked', async () => {
+    await streamer.stop();
+    const backupStreamer = await newBackupStreamer('s3://foo/bar');
+
+    const reservation =
+      await backupStreamer.startSnapshotReservation('view-syncer-1');
+    const messages = drainSnapshotMessages(reservation);
+
+    // No backup watermark has been tracked yet, so the reservation stays
+    // open with no status pushed.
+    const NO_MESSAGE = Symbol('no-message');
+    expect(
+      await messages.dequeue(NO_MESSAGE as unknown as SnapshotMessage, 50),
+    ).toBe(NO_MESSAGE);
+
+    backupStreamer.trackBackupWatermark('05');
+
+    // The confirmed minWatermark is the backup watermark itself ('05'),
+    // since it is later than the change-log's actual minimum (the initial
+    // watermark, REPLICA_VERSION) -- the normal, expected case.
+    expect(await messages.dequeue()).toEqual([
+      'status',
+      {
+        tag: 'status',
+        backupURL: 's3://foo/bar',
+        replicaVersion: REPLICA_VERSION,
+        minWatermark: '05',
+      },
+    ]);
+
+    await backupStreamer.stop();
+  });
+
+  test('startSnapshotReservation immediately confirms once a backup watermark is known', async () => {
+    await streamer.stop();
+    const backupStreamer = await newBackupStreamer('s3://foo/bar');
+
+    backupStreamer.trackBackupWatermark('05');
+
+    const reservation =
+      await backupStreamer.startSnapshotReservation('view-syncer-1');
+    expect(await drainSnapshotMessages(reservation).dequeue()).toEqual([
+      'status',
+      {
+        tag: 'status',
+        backupURL: 's3://foo/bar',
+        replicaVersion: REPLICA_VERSION,
+        minWatermark: '05',
+      },
+    ]);
+
+    await backupStreamer.stop();
+  });
+
+  test('subscribe() closes a pending snapshot reservation for the same taskID', async () => {
+    await streamer.stop();
+    const backupStreamer = await newBackupStreamer('s3://foo/bar');
+
+    const reservation =
+      await backupStreamer.startSnapshotReservation('view-syncer-1');
+
+    await backupStreamer.subscribe({
+      protocolVersion: PROTOCOL_VERSION,
+      taskID: 'view-syncer-1',
+      id: 'myid1',
+      mode: 'serving',
+      watermark: '05',
+      replicaVersion: REPLICA_VERSION,
+      initial: true,
+      logsChangeStream: false,
+    });
+
+    // The reservation's connection is torn down once its taskID subscribes
+    // to the change stream: its iteration completes rather than hanging
+    // open.
+    const {done} = await reservation[Symbol.asyncIterator]().next();
+    expect(done).toBe(true);
+
+    await backupStreamer.stop();
+  });
+
+  test('a confirmed snapshot reservation does not hold back purging below the backup watermark', async () => {
+    // Free up ownership of the change DB for the backup-enabled streamer
+    // that this test needs (the default `streamer` fixture has no backup).
+    await streamer.stop();
+
+    await sql`
+      INSERT INTO "zoro_3/cdc"."changeLog" (watermark, pos, change) VALUES ('03', 0, '{"tag":"begin"}'::json);
+      INSERT INTO "zoro_3/cdc"."changeLog" (watermark, pos, change) VALUES ('04', 0, '{"tag":"commit"}'::json);
+      INSERT INTO "zoro_3/cdc"."changeLog" (watermark, pos, change) VALUES ('05', 0, '{"tag":"begin"}'::json);
+      INSERT INTO "zoro_3/cdc"."changeLog" (watermark, pos, change) VALUES ('06', 0, '{"tag":"commit"}'::json);
+      UPDATE "zoro_3/cdc"."replicationState" SET "lastWatermark" = '06';
+    `.simple();
+
+    const backupStreamer = await newBackupStreamer('s3://foo/bar');
+
+    // A view-syncer reserves a snapshot while it downloads the backup.
+    // There are no other subscribers yet.
+    const reservation =
+      await backupStreamer.startSnapshotReservation('view-syncer-1');
+    const messages = drainSnapshotMessages(reservation);
+
+    backupStreamer.trackBackupWatermark('06');
+
+    // Confirmed at the backup watermark ('06'), not the change-log's much
+    // older actual minimum ('01').
+    expect(await messages.dequeue()).toEqual([
+      'status',
+      {
+        tag: 'status',
+        backupURL: 's3://foo/bar',
+        replicaVersion: REPLICA_VERSION,
+        minWatermark: '06',
+      },
+    ]);
+    expect(setTimeoutFn).toHaveBeenCalledTimes(1);
+
+    // Even with no other subscribers, the confirmed reservation (rather
+    // than making `current` empty and bailing out) lets the purge proceed
+    // all the way to the backup watermark: it no longer pins the floor at
+    // a stale minWatermark.
+    await (setTimeoutFn.mock.calls[0][0]() as unknown as Promise<void>);
+    expect(
+      await sql`SELECT watermark FROM "zoro_3/cdc"."changeLog"`.values(),
+    ).toEqual([['06']]);
+
+    // Purging caught all the way up to the backup watermark, so no further
+    // cleanup is scheduled.
+    expect(setTimeoutFn).toHaveBeenCalledTimes(1);
+
+    await backupStreamer.stop();
+  });
+
+  test('does not confirm reservation if the change-log minWatermark has unexpectedly advanced past the backup watermark', async () => {
+    await streamer.stop();
+
+    // Simulate the change-log having been purged past what the (stale)
+    // reported backup watermark claims -- not expected if cleanup logic is
+    // correct, but handled defensively rather than confirming a watermark
+    // that is no longer available for catchup.
+    await sql`
+      DELETE FROM "zoro_3/cdc"."changeLog";
+      INSERT INTO "zoro_3/cdc"."changeLog" (watermark, pos, change) VALUES ('05', 0, '{"tag":"begin"}'::json);
+      INSERT INTO "zoro_3/cdc"."changeLog" (watermark, pos, change) VALUES ('06', 0, '{"tag":"commit"}'::json);
+    `.simple();
+
+    const backupStreamer = await newBackupStreamer('s3://foo/bar');
+
+    const reservation =
+      await backupStreamer.startSnapshotReservation('view-syncer-1');
+    const messages = drainSnapshotMessages(reservation);
+
+    // The reported backup watermark ('03') is older than the change-log's
+    // actual minimum ('05').
+    backupStreamer.trackBackupWatermark('03');
+
+    const NO_MESSAGE = Symbol('no-message');
+    expect(
+      await messages.dequeue(NO_MESSAGE as unknown as SnapshotMessage, 50),
+    ).toBe(NO_MESSAGE);
+
+    expect(
+      logSink.messages.some(
+        ([level, , args]) =>
+          level === 'error' &&
+          args.some(
+            arg => typeof arg === 'string' && arg.includes('is later than'),
+          ),
+      ),
+    ).toBe(true);
+
+    await backupStreamer.stop();
   });
 
   test('wrong replica version', async () => {
@@ -2038,6 +2519,7 @@ describe('change-streamer/service', () => {
       ReplicationStatusPublisher.forTesting(),
       replicaConfig,
       null,
+      null,
       true,
       opts,
     );
@@ -2079,6 +2561,7 @@ describe('change-streamer/service', () => {
       ReplicationStatusPublisher.forTesting(),
       replicaConfig,
       null,
+      null,
       true,
       opts,
     );
@@ -2102,6 +2585,7 @@ describe('change-streamer/service', () => {
       source,
       ReplicationStatusPublisher.forTesting(),
       replicaConfig,
+      null,
       null,
       true,
       opts,
@@ -2140,6 +2624,7 @@ describe('change-streamer/service', () => {
       },
       ReplicationStatusPublisher.forTesting(),
       replicaConfig,
+      null,
       lock,
       true,
       opts,
@@ -2184,6 +2669,7 @@ describe('change-streamer/service', () => {
       ReplicationStatusPublisher.forTesting(),
       replicaConfig,
       null,
+      null,
       true,
       opts,
     );
@@ -2225,6 +2711,7 @@ describe('change-streamer/service', () => {
       source,
       ReplicationStatusPublisher.forTesting(),
       replicaConfig,
+      null,
       null,
       true,
       opts,
@@ -2284,6 +2771,7 @@ describe('change-streamer/service', () => {
       source,
       ReplicationStatusPublisher.forTesting(),
       replicaConfig,
+      null,
       null,
       true,
       opts,
@@ -2360,6 +2848,7 @@ describe('change-streamer/service', () => {
       source,
       ReplicationStatusPublisher.forTesting(),
       replicaConfig,
+      null,
       null,
       true,
       opts,

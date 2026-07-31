@@ -1,31 +1,44 @@
 import {existsSync, mkdirSync, rmSync, statSync, writeFileSync} from 'node:fs';
-import {afterEach, describe, expect, test} from 'vitest';
-import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
+import {LogContext} from '@rocicorp/logger';
+import {afterEach, describe, expect, test, vi} from 'vitest';
+import {
+  createSilentLogContext,
+  TestLogSink,
+} from '../../../../shared/src/logging-test-utils.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {DbFile, expectTableExact} from '../../test/lite.ts';
+import {CREATE_V14_CHANGE_LOG_STREAM} from '../change-source/common/replica-schema.ts';
 import {
   applyChangeLogPragmas,
   CHANGE_LOG_DB_SCHEMA_VERSION,
   CHANGE_LOG_META_TABLE,
+  CHANGE_LOG_STREAM_TABLE,
+  CHANGE_LOG_STREAM_WRITE_TIME_INDEX,
   changeLogFileName,
+  CREATE_CHANGE_LOG_STREAM_SCHEMA,
   deleteChangeLogDB,
   openChangeLogDB,
   openChangeLogDBForWriting,
-  readReplicaAnchor,
+  readChangeLogHead,
+  readChangeLogMeta,
   reconcileChangeLog,
-  type ReplicaAnchor,
+  type ChangeLogAnchor,
 } from './change-log-db.ts';
-import {
-  CHANGE_LOG_STREAM_TABLE,
-  CREATE_CHANGE_LOG_STREAM_SCHEMA,
-} from './schema/change-log-stream.ts';
 
 const lc = createSilentLogContext();
 
-const ANCHOR: ReplicaAnchor = {
-  replicaVersion: '01',
-  stateVersion: '05',
-  writeTimeMs: 12345,
+const NOW_MS = 12345;
+
+/**
+ * The log anchors on the watermark its stream connection resumes from, plus the
+ * replica's identity. Nothing here reads a replica: after the writer moved to
+ * the change-streamer, the replica's state version is a consequence of the log
+ * rather than a constraint on it.
+ */
+const ANCHOR: ChangeLogAnchor = {
+  identity: {epoch: null, generation: '01', replicaID: '1777575698286'},
+  resumeWatermark: '05',
+  nowMs: NOW_MS,
 };
 
 /** The main file and the sidecars `deleteLiteDB` removes. */
@@ -47,38 +60,11 @@ function newDbFile(): DbFile {
   return file;
 }
 
-type PartialAnchor = Omit<Partial<ReplicaAnchor>, 'writeTimeMs'> & {
-  writeTimeMs?: number | null | undefined;
-};
-
-function createReplica(anchor: PartialAnchor = ANCHOR): Database {
-  const db = new Database(lc, ':memory:');
-  db.exec(/*sql*/ `
-    CREATE TABLE "_zero.replicationConfig" (
-      replicaVersion TEXT NOT NULL,
-      publications TEXT NOT NULL,
-      initialSyncContext TEXT DEFAULT '{}',
-      lock INTEGER PRIMARY KEY DEFAULT 1 CHECK (lock=1)
-    );
-    CREATE TABLE "_zero.replicationState" (
-      stateVersion TEXT NOT NULL,
-      writeTimeMs INTEGER,
-      lock INTEGER PRIMARY KEY DEFAULT 1 CHECK (lock=1)
-    );
-  `);
-  if (anchor.replicaVersion !== undefined) {
-    db.prepare(/*sql*/ `
-      INSERT INTO "_zero.replicationConfig" (replicaVersion, publications)
-        VALUES (?, '[]')
-    `).run(anchor.replicaVersion);
-  }
-  if (anchor.stateVersion !== undefined) {
-    db.prepare(/*sql*/ `
-      INSERT INTO "_zero.replicationState" (stateVersion, writeTimeMs)
-        VALUES (?, ?)
-    `).run(anchor.stateVersion, anchor.writeTimeMs ?? null);
-  }
-  return db;
+function anchorAt(
+  resumeWatermark: string,
+  overrides: Partial<ChangeLogAnchor> = {},
+): ChangeLogAnchor {
+  return {...ANCHOR, resumeWatermark, ...overrides};
 }
 
 /**
@@ -105,35 +91,72 @@ function appendTransaction(
   stmt.run(watermark, changes + 1, '{"tag":"commit"}', precommit, writeTimeMs);
 }
 
-function seedRows(anchor: ReplicaAnchor) {
+function seedRows(anchor: ChangeLogAnchor) {
   return [
     {
-      watermark: anchor.stateVersion,
+      watermark: anchor.resumeWatermark,
       pos: 0,
       change: '{"tag":"begin"}',
       precommit: null,
       writeTimeMs: null,
     },
     {
-      watermark: anchor.stateVersion,
+      watermark: anchor.resumeWatermark,
       pos: 1,
       change: '{"tag":"commit"}',
-      precommit: anchor.stateVersion,
-      writeTimeMs: anchor.writeTimeMs,
+      precommit: anchor.resumeWatermark,
+      writeTimeMs: anchor.nowMs,
     },
   ];
 }
 
-function head(db: Database): string | null {
-  return db
-    .prepare(
-      /*sql*/ `SELECT max("watermark") AS "head" FROM "${CHANGE_LOG_STREAM_TABLE}"`,
-    )
-    .get<{head: string | null}>().head;
+function expectSeededAt(db: Database, anchor: ChangeLogAnchor) {
+  expect(readChangeLogMeta(db)).toEqual({
+    ...anchor.identity,
+    schemaVersion: CHANGE_LOG_DB_SCHEMA_VERSION,
+    seededAtMs: anchor.nowMs,
+    seedWatermark: anchor.resumeWatermark,
+  });
+  expectTableExact(
+    db,
+    CHANGE_LOG_STREAM_TABLE,
+    seedRows(anchor),
+    'number',
+    'watermark',
+    'pos',
+  );
 }
 
-function meta(db: Database) {
-  return db.prepare(/*sql*/ `SELECT * FROM "${CHANGE_LOG_META_TABLE}"`).get();
+const readPragma = Database.prototype.pragma;
+
+/** Reads the mode through the unmocked pragma, so the degrade-path test can
+ * stub `Database.prototype.pragma` without blinding its own assertions. */
+function autoVacuum(db: Database): number {
+  const [{auto_vacuum: mode}] = readPragma.call(db, 'auto_vacuum') as [
+    {auto_vacuum: number},
+  ];
+  return mode;
+}
+
+/**
+ * A schema v1 log: the shape 7D shipped, before the v2 meta row and before
+ * `auto_vacuum`. This is what a staging file looks like on the first start
+ * after slice 8.
+ */
+function createV1Log(replicaFile: string): void {
+  using db = openChangeLogDB(lc, replicaFile, {readonly: false});
+  db.pragma('journal_mode = wal2');
+  db.exec(/*sql*/ `
+    ${CREATE_CHANGE_LOG_STREAM_SCHEMA}
+    CREATE TABLE "${CHANGE_LOG_META_TABLE}" (
+      "replicaVersion" TEXT NOT NULL,
+      "schemaVersion"  INTEGER NOT NULL,
+      "lock"           INTEGER PRIMARY KEY DEFAULT 1 CHECK ("lock" = 1)
+    );
+    INSERT INTO "${CHANGE_LOG_META_TABLE}" ("replicaVersion", "schemaVersion")
+      VALUES ('01', 1);
+  `);
+  appendTransaction(db, ANCHOR.resumeWatermark, '04', 1, 100);
 }
 
 /** A change-log db that is valid and consistent with {@link ANCHOR}. */
@@ -144,6 +167,113 @@ function createReconciledLog(anchor = ANCHOR): Database {
 }
 
 describe('replicator/change-log-db', () => {
+  describe('schema', () => {
+    test('creates the stream table and partial retention index', () => {
+      using db = new Database(lc, ':memory:');
+      db.exec(CREATE_CHANGE_LOG_STREAM_SCHEMA);
+
+      expect(
+        db.prepare(`PRAGMA table_info("${CHANGE_LOG_STREAM_TABLE}")`).all(),
+      ).toEqual([
+        {
+          cid: 0,
+          name: 'watermark',
+          type: 'TEXT',
+          notnull: 1,
+          dflt_value: null,
+          pk: 1,
+        },
+        {
+          cid: 1,
+          name: 'pos',
+          type: 'INTEGER',
+          notnull: 1,
+          dflt_value: null,
+          pk: 2,
+        },
+        {
+          cid: 2,
+          name: 'change',
+          type: 'TEXT',
+          notnull: 1,
+          dflt_value: null,
+          pk: 0,
+        },
+        {
+          cid: 3,
+          name: 'precommit',
+          type: 'TEXT',
+          notnull: 0,
+          dflt_value: null,
+          pk: 0,
+        },
+        {
+          cid: 4,
+          name: 'writeTimeMs',
+          type: 'INTEGER',
+          notnull: 0,
+          dflt_value: null,
+          pk: 0,
+        },
+      ]);
+
+      expect(
+        db.prepare(`PRAGMA index_list("${CHANGE_LOG_STREAM_TABLE}")`).all(),
+      ).toEqual(
+        expect.arrayContaining([
+          {
+            seq: expect.any(Number),
+            name: CHANGE_LOG_STREAM_WRITE_TIME_INDEX,
+            unique: 0,
+            origin: 'c',
+            partial: 1,
+          },
+        ]),
+      );
+      expect(
+        db
+          .prepare(`PRAGMA index_info("${CHANGE_LOG_STREAM_WRITE_TIME_INDEX}")`)
+          .all(),
+      ).toEqual([
+        {seqno: 0, cid: 4, name: 'writeTimeMs'},
+        {seqno: 1, cid: 0, name: 'watermark'},
+      ]);
+    });
+
+    // The replica carried this same table at schema v14. The two definitions
+    // describe different databases now and are deliberately not shared, so
+    // this is the check that the writer's table is still the one a v14 replica
+    // would have held — i.e. that the split did not silently change the shape.
+    test('matches the shape frozen in replica migration 14', () => {
+      using changeLog = new Database(lc, ':memory:');
+      changeLog.exec(CREATE_CHANGE_LOG_STREAM_SCHEMA);
+      using replica = new Database(lc, ':memory:');
+      replica.exec(CREATE_V14_CHANGE_LOG_STREAM);
+
+      const schema = (db: Database) =>
+        db
+          .prepare(/*sql*/ `SELECT "type", "name", "tbl_name", "sql" FROM "sqlite_master"
+                       ORDER BY "type", "name"`)
+          .all();
+      expect(schema(changeLog)).toEqual(schema(replica));
+    });
+
+    // The whole v2 shape lands in one bump, so that slice 8 can add the
+    // `auto_vacuum` pragma without forcing a second reseed on every task.
+    test('the meta row carries the identity triple and the seed point', () => {
+      using db = createReconciledLog();
+
+      expect(readChangeLogMeta(db)).toEqual({
+        epoch: null,
+        generation: '01',
+        replicaID: '1777575698286',
+        schemaVersion: 2,
+        seededAtMs: NOW_MS,
+        seedWatermark: '05',
+      });
+    });
+  });
+
   describe('file naming', () => {
     test('the log and its sidecars never collide with the replica', () => {
       const replica = '/data/sync-replica.db';
@@ -196,7 +326,7 @@ describe('replicator/change-log-db', () => {
       }
 
       using db = openChangeLogDB(lc, file.path, {readonly: true});
-      expect(head(db)).toBe(ANCHOR.stateVersion);
+      expect(readChangeLogHead(db)).toBe(ANCHOR.resumeWatermark);
     });
 
     // Slice 7E turns this into a decline-and-fall-back-to-PG, rather than a
@@ -215,8 +345,8 @@ describe('replicator/change-log-db', () => {
       applyChangeLogPragmas(db);
 
       expect(db.pragma('journal_mode')).toEqual([{journal_mode: 'wal2'}]);
-      // 1 == NORMAL: the log's commit precedes the replica's on the hot path,
-      // so it does not pay for a second fsync.
+      // 1 == NORMAL: the commit sits on the forward path, so it does not pay
+      // for an fsync.
       expect(db.pragma('synchronous')).toEqual([{synchronous: 1}]);
       expect(db.pragma('busy_timeout')).toEqual([{timeout: 30000}]);
       // Nothing else owns this file, so checkpointing stays automatic rather
@@ -224,6 +354,44 @@ describe('replicator/change-log-db', () => {
       expect(db.pragma('wal_autocheckpoint')).toEqual([
         {wal_autocheckpoint: 1000},
       ]);
+      // 2 == INCREMENTAL, so purge can hand freed pages back to the OS.
+      expect(autoVacuum(db)).toBe(2);
+    });
+
+    // This is the test that pins the pragma *ordering*. SQLite honours a
+    // none -> incremental transition only while the file is empty, and
+    // `journal_mode = wal2` materializes page 1, so appending the pragma
+    // instead of prepending it produces a log that silently never reclaims.
+    test('auto_vacuum survives on the reopened file, not just the connection', () => {
+      const file = newDbFile();
+      {
+        using db = openChangeLogDB(lc, file.path, {readonly: false});
+        applyChangeLogPragmas(db);
+        db.exec(CREATE_CHANGE_LOG_STREAM_SCHEMA);
+      }
+
+      using reopened = openChangeLogDB(lc, file.path, {readonly: true});
+      expect(autoVacuum(reopened)).toBe(2);
+    });
+
+    test('appending the pragma after journal_mode would not take', () => {
+      const file = newDbFile();
+      {
+        using db = openChangeLogDB(lc, file.path, {readonly: false});
+        db.pragma('journal_mode = wal2');
+        db.pragma('auto_vacuum = INCREMENTAL');
+        db.exec(CREATE_CHANGE_LOG_STREAM_SCHEMA);
+        // Nor does dropping and recreating the tables: the mode is a header
+        // property that survives `DROP TABLE`, which is why a wrong mode is
+        // answered with a new file rather than with a reseed.
+        db.pragma('auto_vacuum = INCREMENTAL');
+        db.exec(/*sql*/ `DROP TABLE "${CHANGE_LOG_STREAM_TABLE}"`);
+        db.exec(CREATE_CHANGE_LOG_STREAM_SCHEMA);
+        expect(autoVacuum(db)).toBe(0);
+      }
+
+      using reopened = openChangeLogDB(lc, file.path, {readonly: true});
+      expect(autoVacuum(reopened)).toBe(0);
     });
   });
 
@@ -235,20 +403,20 @@ describe('replicator/change-log-db', () => {
         using open = db;
         expect(result).toEqual({
           action: 'reseeded',
-          head: ANCHOR.stateVersion,
+          head: ANCHOR.resumeWatermark,
           reason: 'created',
         });
         expect(open.pragma('journal_mode')).toEqual([{journal_mode: 'wal2'}]);
-        expect(head(open)).toBe(ANCHOR.stateVersion);
+        expect(readChangeLogHead(open)).toBe(ANCHOR.resumeWatermark);
       }
 
       const reopened = openChangeLogDBForWriting(lc, file.path, ANCHOR);
       using db = reopened.db;
       expect(reopened.result).toEqual({
         action: 'none',
-        head: ANCHOR.stateVersion,
+        head: ANCHOR.resumeWatermark,
       });
-      expect(head(db)).toBe(ANCHOR.stateVersion);
+      expect(readChangeLogHead(db)).toBe(ANCHOR.resumeWatermark);
     });
 
     // The divergence from replica corruption: the log is a cache, so a corrupt
@@ -262,27 +430,110 @@ describe('replicator/change-log-db', () => {
 
       expect(result).toEqual({
         action: 'reseeded',
-        head: ANCHOR.stateVersion,
+        head: ANCHOR.resumeWatermark,
         reason: 'created',
       });
-      expect(meta(rebuilt)).toEqual({
-        replicaVersion: ANCHOR.replicaVersion,
-        schemaVersion: CHANGE_LOG_DB_SCHEMA_VERSION,
-        lock: 1,
-      });
-      expectTableExact(
-        rebuilt,
-        CHANGE_LOG_STREAM_TABLE,
-        seedRows(ANCHOR),
-        'number',
-        'watermark',
-        'pos',
-      );
+      expectSeededAt(rebuilt, ANCHOR);
       expect(rebuilt.pragma('journal_mode')).toEqual([{journal_mode: 'wal2'}]);
+    });
+
+    test('rebuilds a v1 log and enables incremental vacuum', () => {
+      const file = newDbFile();
+      createV1Log(file.path);
+
+      const {db, result} = openChangeLogDBForWriting(lc, file.path, ANCHOR);
+      using rebuilt = db;
+
+      // 'created' rather than 'schema-mismatch': a reseed cannot enable the
+      // pragma, so the whole file is replaced and the reconcile that follows
+      // runs against a database that does not exist yet.
+      expect(result).toEqual({
+        action: 'reseeded',
+        head: ANCHOR.resumeWatermark,
+        reason: 'created',
+      });
+      expectSeededAt(rebuilt, ANCHOR);
+      expect(autoVacuum(rebuilt)).toBe(2);
+    });
+
+    // The guard is on the pragma, not only on the version: every log the
+    // writer created before slice 8 carries the current schema version with
+    // `auto_vacuum = 0`, so this is the upgrade path rather than an edge case.
+    // Without it such a file would reconcile clean and never reclaim.
+    test('rebuilds a current-version log whose pragma never took', () => {
+      const file = newDbFile();
+      {
+        using db = openChangeLogDB(lc, file.path, {readonly: false});
+        db.pragma('journal_mode = wal2');
+        db.pragma('auto_vacuum = INCREMENTAL'); // too late; stays at 0
+        reconcileChangeLog(lc, db, ANCHOR);
+        appendTransaction(db, '07', '05', 2, 100);
+        expect(autoVacuum(db)).toBe(0);
+      }
+
+      const {db, result} = openChangeLogDBForWriting(lc, file.path, ANCHOR);
+      using rebuilt = db;
+
+      expect(result).toEqual({
+        action: 'reseeded',
+        head: ANCHOR.resumeWatermark,
+        reason: 'created',
+      });
+      expect(autoVacuum(rebuilt)).toBe(2);
+    });
+
+    // A pragma that is still wrong on a brand-new file can only mean the pragma
+    // sequence itself is wrong, which is a code bug present on every start.
+    // Throwing would be a crash loop and rebuilding again would be a reseed per
+    // start, so the log opens and `Database.compact()`'s own mode guard becomes
+    // the fallback.
+    test('opens a log whose pragma is still wrong after one rebuild', () => {
+      const file = newDbFile();
+      const sink = new TestLogSink();
+      const logger = new LogContext('error', undefined, sink);
+      const reads = vi
+        .spyOn(Database.prototype, 'pragma')
+        .mockImplementation(function (this: Database, sql: string) {
+          return sql === 'auto_vacuum'
+            ? [{auto_vacuum: 0}]
+            : // oxlint-disable-next-line no-explicit-any
+              (readPragma.call(this, sql) as any);
+        });
+
+      try {
+        const {db, result} = openChangeLogDBForWriting(
+          logger,
+          file.path,
+          ANCHOR,
+        );
+        using opened = db;
+
+        expect(result).toEqual({
+          action: 'reseeded',
+          head: ANCHOR.resumeWatermark,
+          reason: 'created',
+        });
+        expect(readChangeLogHead(opened)).toBe(ANCHOR.resumeWatermark);
+        // One read for the initial open and one for the rebuild: no third.
+        expect(
+          reads.mock.calls.filter(([sql]) => sql === 'auto_vacuum'),
+        ).toHaveLength(2);
+      } finally {
+        reads.mockRestore();
+      }
+
+      expect(sink.messages.filter(([level]) => level === 'error')).toHaveLength(
+        1,
+      );
+      expect(sink.messages.at(-1)?.[2][0]).toMatch(
+        /does not support incremental vacuum/,
+      );
     });
 
     // A path that cannot be opened is a problem with the environment rather
     // than with the file's contents, so it propagates with the file intact.
+    // The caller answers it by disabling the writer and continuing to
+    // replicate, not by deleting a database that is not the problem.
     test('does not rebuild for a failure that is not corruption', () => {
       const file = newDbFile();
       const dir = changeLogFileName(file.path);
@@ -298,50 +549,16 @@ describe('replicator/change-log-db', () => {
     });
   });
 
-  describe('readReplicaAnchor', () => {
-    test('reads the replica facts the log is anchored to', () => {
-      using replica = createReplica();
-      expect(readReplicaAnchor(replica)).toEqual(ANCHOR);
-    });
-
-    test('requires initialized replication state', () => {
-      using replica = createReplica({replicaVersion: '01'});
-      expect(() => readReplicaAnchor(replica)).toThrow(
-        'replication state must be initialized',
-      );
-    });
-
-    test('requires an initialized writeTimeMs', () => {
-      using replica = createReplica({...ANCHOR, writeTimeMs: null});
-      expect(() => readReplicaAnchor(replica)).toThrow(
-        'replication state writeTimeMs must be initialized',
-      );
-    });
-  });
-
   describe('reconcileChangeLog: reseed reasons', () => {
     test('created: empty database', () => {
       using db = new Database(lc, ':memory:');
 
       expect(reconcileChangeLog(lc, db, ANCHOR)).toEqual({
         action: 'reseeded',
-        head: ANCHOR.stateVersion,
+        head: ANCHOR.resumeWatermark,
         reason: 'created',
       });
-      expect(head(db)).toBe(ANCHOR.stateVersion);
-      expect(meta(db)).toEqual({
-        replicaVersion: ANCHOR.replicaVersion,
-        schemaVersion: CHANGE_LOG_DB_SCHEMA_VERSION,
-        lock: 1,
-      });
-      expectTableExact(
-        db,
-        CHANGE_LOG_STREAM_TABLE,
-        seedRows(ANCHOR),
-        'number',
-        'watermark',
-        'pos',
-      );
+      expectSeededAt(db, ANCHOR);
     });
 
     test('created: stream table without the meta table', () => {
@@ -351,18 +568,11 @@ describe('replicator/change-log-db', () => {
 
       expect(reconcileChangeLog(lc, db, ANCHOR)).toEqual({
         action: 'reseeded',
-        head: ANCHOR.stateVersion,
+        head: ANCHOR.resumeWatermark,
         reason: 'created',
       });
       // The pre-existing rows are wiped, not retained.
-      expectTableExact(
-        db,
-        CHANGE_LOG_STREAM_TABLE,
-        seedRows(ANCHOR),
-        'number',
-        'watermark',
-        'pos',
-      );
+      expectSeededAt(db, ANCHOR);
     });
 
     test('created: meta table without its row', () => {
@@ -371,14 +581,10 @@ describe('replicator/change-log-db', () => {
 
       expect(reconcileChangeLog(lc, db, ANCHOR)).toEqual({
         action: 'reseeded',
-        head: ANCHOR.stateVersion,
+        head: ANCHOR.resumeWatermark,
         reason: 'created',
       });
-      expect(meta(db)).toEqual({
-        replicaVersion: ANCHOR.replicaVersion,
-        schemaVersion: CHANGE_LOG_DB_SCHEMA_VERSION,
-        lock: 1,
-      });
+      expectSeededAt(db, ANCHOR);
     });
 
     test('created: meta table without the stream table', () => {
@@ -387,10 +593,10 @@ describe('replicator/change-log-db', () => {
 
       expect(reconcileChangeLog(lc, db, ANCHOR)).toEqual({
         action: 'reseeded',
-        head: ANCHOR.stateVersion,
+        head: ANCHOR.resumeWatermark,
         reason: 'created',
       });
-      expect(head(db)).toBe(ANCHOR.stateVersion);
+      expect(readChangeLogHead(db)).toBe(ANCHOR.resumeWatermark);
     });
 
     test('schema-mismatch', () => {
@@ -403,47 +609,77 @@ describe('replicator/change-log-db', () => {
 
       expect(reconcileChangeLog(lc, db, ANCHOR)).toEqual({
         action: 'reseeded',
-        head: ANCHOR.stateVersion,
+        head: ANCHOR.resumeWatermark,
         reason: 'schema-mismatch',
       });
-      expect(meta(db)).toEqual({
-        replicaVersion: ANCHOR.replicaVersion,
-        schemaVersion: CHANGE_LOG_DB_SCHEMA_VERSION,
-        lock: 1,
-      });
-      expectTableExact(
-        db,
-        CHANGE_LOG_STREAM_TABLE,
-        seedRows(ANCHOR),
-        'number',
-        'watermark',
-        'pos',
-      );
+      expectSeededAt(db, ANCHOR);
     });
 
-    test('replica-version-mismatch', () => {
-      // A log left behind by a replica that was reset and re-synced.
-      using db = createReconciledLog({...ANCHOR, replicaVersion: '00'});
-      appendTransaction(db, '07', '05', 3, 100);
+    // A v1 log carries a "replicaVersion" where v2 carries the identity triple,
+    // so the version is read on its own: reading the rest of the row would fail
+    // on the missing columns instead of reporting the mismatch that explains it.
+    // This is the upgrade path every existing log takes.
+    test('schema-mismatch: a v1 log is rebuilt rather than read', () => {
+      using db = new Database(lc, ':memory:');
+      db.exec(/*sql*/ `
+        ${CREATE_CHANGE_LOG_STREAM_SCHEMA}
+        CREATE TABLE "${CHANGE_LOG_META_TABLE}" (
+          "replicaVersion" TEXT NOT NULL,
+          "schemaVersion"  INTEGER NOT NULL,
+          "lock"           INTEGER PRIMARY KEY DEFAULT 1 CHECK ("lock" = 1)
+        );
+        INSERT INTO "${CHANGE_LOG_META_TABLE}" ("replicaVersion", "schemaVersion")
+          VALUES ('01', 1);
+      `);
+      appendTransaction(db, '05', '04', 1, 100);
 
       expect(reconcileChangeLog(lc, db, ANCHOR)).toEqual({
         action: 'reseeded',
-        head: ANCHOR.stateVersion,
-        reason: 'replica-version-mismatch',
+        head: ANCHOR.resumeWatermark,
+        reason: 'schema-mismatch',
       });
-      expect(meta(db)).toEqual({
-        replicaVersion: ANCHOR.replicaVersion,
-        schemaVersion: CHANGE_LOG_DB_SCHEMA_VERSION,
-        lock: 1,
+      expectSeededAt(db, ANCHOR);
+    });
+
+    test.each([
+      [
+        'a different generation',
+        {epoch: null, generation: '00', replicaID: 'a'},
+      ],
+      ['a sibling replica ID', {epoch: null, generation: '01', replicaID: 'b'}],
+      ['a different epoch', {epoch: '1', generation: '01', replicaID: 'a'}],
+    ])('identity-mismatch: %s', (_, identity) => {
+      // A leftover log on a reused volume. Under RMv2 the generation alone
+      // cannot catch this: siblings of a forked replica share it.
+      using db = createReconciledLog(anchorAt('05', {identity}));
+      appendTransaction(db, '07', '05', 3, 100);
+
+      const anchor = anchorAt('05', {
+        identity: {epoch: null, generation: '01', replicaID: 'a'},
       });
-      expectTableExact(
-        db,
-        CHANGE_LOG_STREAM_TABLE,
-        seedRows(ANCHOR),
-        'number',
-        'watermark',
-        'pos',
-      );
+      expect(reconcileChangeLog(lc, db, anchor)).toEqual({
+        action: 'reseeded',
+        head: '05',
+        reason: 'identity-mismatch',
+      });
+      expectSeededAt(db, anchor);
+    });
+
+    test('identity: a null epoch and replica ID match only another null', () => {
+      const identity = {epoch: null, generation: '01', replicaID: null};
+      using db = createReconciledLog(anchorAt('05', {identity}));
+
+      expect(reconcileChangeLog(lc, db, anchorAt('05', {identity}))).toEqual({
+        action: 'none',
+        head: '05',
+      });
+      expect(
+        reconcileChangeLog(
+          lc,
+          db,
+          anchorAt('05', {identity: {...identity, replicaID: 'a'}}),
+        ),
+      ).toMatchObject({action: 'reseeded', reason: 'identity-mismatch'});
     });
 
     test('gap: valid meta with an empty log', () => {
@@ -452,49 +688,43 @@ describe('replicator/change-log-db', () => {
 
       expect(reconcileChangeLog(lc, db, ANCHOR)).toEqual({
         action: 'reseeded',
-        head: ANCHOR.stateVersion,
+        head: ANCHOR.resumeWatermark,
         reason: 'gap',
       });
-      expect(head(db)).toBe(ANCHOR.stateVersion);
+      expect(readChangeLogHead(db)).toBe(ANCHOR.resumeWatermark);
     });
 
-    test('gap: head behind the replica', () => {
-      // e.g. the replica advanced while sqliteChangeLogMode was off, or power
-      // was lost with synchronous=NORMAL on the log.
-      using db = createReconciledLog({...ANCHOR, stateVersion: '03'});
+    // The log leads the resume watermark by construction, so this is the state
+    // that says the ordering guarantee did not hold: the writer was disabled for
+    // a while, the file was deleted, or power was lost with synchronous=NORMAL.
+    test('gap: head behind the resume watermark', () => {
+      using db = createReconciledLog(anchorAt('03'));
       appendTransaction(db, '04', '03', 2, 100);
 
       expect(reconcileChangeLog(lc, db, ANCHOR)).toEqual({
         action: 'reseeded',
-        head: ANCHOR.stateVersion,
+        head: ANCHOR.resumeWatermark,
         reason: 'gap',
       });
-      expectTableExact(
-        db,
-        CHANGE_LOG_STREAM_TABLE,
-        seedRows(ANCHOR),
-        'number',
-        'watermark',
-        'pos',
-      );
+      expectSeededAt(db, ANCHOR);
     });
 
-    test('gap: truncation leaves the head behind the replica', () => {
-      using db = createReconciledLog({...ANCHOR, stateVersion: '03'});
+    test('gap: truncation leaves the head behind the resume watermark', () => {
+      using db = createReconciledLog(anchorAt('03'));
       appendTransaction(db, '07', '03', 2, 100);
 
       expect(reconcileChangeLog(lc, db, ANCHOR)).toEqual({
         action: 'reseeded',
-        head: ANCHOR.stateVersion,
+        head: ANCHOR.resumeWatermark,
         reason: 'gap',
       });
-      expect(head(db)).toBe(ANCHOR.stateVersion);
+      expect(readChangeLogHead(db)).toBe(ANCHOR.resumeWatermark);
     });
   });
 
   describe('reconcileChangeLog: truncation', () => {
-    test('removes rows above the replica head and retains the rest', () => {
-      using db = createReconciledLog({...ANCHOR, stateVersion: '02'});
+    test('removes rows above the resume watermark and retains the rest', () => {
+      using db = createReconciledLog(anchorAt('02'));
       appendTransaction(db, '03', '02', 1, 100);
       appendTransaction(db, '05', '03', 1, 200);
       appendTransaction(db, '06', '05', 1, 300);
@@ -503,17 +733,18 @@ describe('replicator/change-log-db', () => {
       // 3 rows in '06' + 4 rows in '07'
       expect(reconcileChangeLog(lc, db, ANCHOR)).toEqual({
         action: 'truncated',
-        head: ANCHOR.stateVersion,
+        head: ANCHOR.resumeWatermark,
         rows: 7,
       });
-      expect(head(db)).toBe(ANCHOR.stateVersion);
+      expect(readChangeLogHead(db)).toBe(ANCHOR.resumeWatermark);
       expect(
         db
           .prepare(/*sql*/ `SELECT DISTINCT "watermark" FROM "${CHANGE_LOG_STREAM_TABLE}"
                        ORDER BY "watermark"`)
           .all(),
       ).toEqual([{watermark: '02'}, {watermark: '03'}, {watermark: '05'}]);
-      // The log's new head transaction is untouched by the truncation.
+      // The log's new head transaction is untouched by the truncation, so it is
+      // still a valid catchup boundary for a subscriber sitting exactly there.
       expect(
         db
           .prepare(/*sql*/ `SELECT * FROM "${CHANGE_LOG_STREAM_TABLE}"
@@ -544,22 +775,22 @@ describe('replicator/change-log-db', () => {
       ]);
     });
 
-    test('removes a phantom transaction whole', () => {
-      // Every row of a transaction carries its commit watermark, so a phantom
+    test('removes a re-delivered transaction whole', () => {
+      // Every row of a transaction carries its commit watermark, so truncation
       // cannot leave an orphaned begin or a mid-transaction row behind.
       using db = createReconciledLog();
       appendTransaction(db, '09', '05', 25, 100);
 
       expect(reconcileChangeLog(lc, db, ANCHOR)).toEqual({
         action: 'truncated',
-        head: ANCHOR.stateVersion,
+        head: ANCHOR.resumeWatermark,
         rows: 27,
       });
       expect(
         db
           .prepare(/*sql*/ `SELECT count(*) AS "rows" FROM "${CHANGE_LOG_STREAM_TABLE}"
-                       WHERE "watermark" > @stateVersion`)
-          .get<{rows: number}>({stateVersion: ANCHOR.stateVersion}).rows,
+                       WHERE "watermark" > @resumeWatermark`)
+          .get<{rows: number}>({resumeWatermark: ANCHOR.resumeWatermark}).rows,
       ).toBe(0);
       expectTableExact(
         db,
@@ -580,46 +811,86 @@ describe('replicator/change-log-db', () => {
       });
       expect(reconcileChangeLog(lc, db, ANCHOR)).toEqual({
         action: 'none',
-        head: ANCHOR.stateVersion,
+        head: ANCHOR.resumeWatermark,
       });
       expect(reconcileChangeLog(lc, db, ANCHOR)).toEqual({
         action: 'none',
-        head: ANCHOR.stateVersion,
+        head: ANCHOR.resumeWatermark,
       });
+    });
+
+    // `seededAtMs` is how a canary decides a log is warm enough to serve, so it
+    // must move on every reseed and stay put through everything else.
+    test('seededAtMs moves on a reseed and survives a truncation', () => {
+      using db = createReconciledLog();
+      expect(readChangeLogMeta(db)).toMatchObject({
+        seededAtMs: NOW_MS,
+        seedWatermark: '05',
+      });
+
+      const later = anchorAt('05', {nowMs: NOW_MS + 60_000});
+      appendTransaction(db, '09', '05', 2, 100);
+      expect(reconcileChangeLog(lc, db, later)).toEqual({
+        action: 'truncated',
+        head: '05',
+        rows: 4,
+      });
+      // The log did not start over, so its warm-up clock does not restart.
+      expect(readChangeLogMeta(db)).toMatchObject({seededAtMs: NOW_MS});
+
+      const reseeded = anchorAt('07', {nowMs: NOW_MS + 60_000});
+      expect(reconcileChangeLog(lc, db, reseeded)).toEqual({
+        action: 'reseeded',
+        head: '07',
+        reason: 'gap',
+      });
+      expect(readChangeLogMeta(db)).toMatchObject({
+        seededAtMs: NOW_MS + 60_000,
+        seedWatermark: '07',
+      });
+    });
+
+    // The reconnect case, which is what makes this per-connection rather than
+    // per-process: the log holds transactions the resumed stream will
+    // re-deliver, and the writer's plain INSERT would collide with them.
+    test('a resume below the head truncates rather than colliding', () => {
+      using db = createReconciledLog(anchorAt('02'));
+      appendTransaction(db, '03', '02', 1, 100);
+      appendTransaction(db, '05', '03', 1, 200);
+
+      expect(reconcileChangeLog(lc, db, anchorAt('03'))).toEqual({
+        action: 'truncated',
+        head: '03',
+        rows: 3,
+      });
+      // Re-appending what was truncated no longer violates the primary key.
+      expect(() => appendTransaction(db, '05', '03', 1, 300)).not.toThrow();
     });
   });
 
   describe('reconcileChangeLog: consistent log', () => {
-    test('an empty-but-valid log at the replica head is a no-op', () => {
+    test('a freshly seeded log at the resume watermark is a no-op', () => {
       using db = createReconciledLog();
 
       expect(reconcileChangeLog(lc, db, ANCHOR)).toEqual({
         action: 'none',
-        head: ANCHOR.stateVersion,
+        head: ANCHOR.resumeWatermark,
       });
-      expectTableExact(
-        db,
-        CHANGE_LOG_STREAM_TABLE,
-        seedRows(ANCHOR),
-        'number',
-        'watermark',
-        'pos',
-      );
+      expectSeededAt(db, ANCHOR);
     });
 
-    test('a log at the replica head is not written to', () => {
+    test('a log at the resume watermark is not written to', () => {
       const file = newDbFile();
       using db = openChangeLogDB(lc, file.path, {readonly: false});
       reconcileChangeLog(lc, db, ANCHOR);
       appendTransaction(db, '07', '05', 2, 100);
-      const state = {...ANCHOR, stateVersion: '07'};
 
       // data_version only advances for writes made by *another* connection.
       using observer = openChangeLogDB(lc, file.path, {readonly: true});
       const dataVersion = () => observer.pragma('data_version');
       const before = dataVersion();
 
-      expect(reconcileChangeLog(lc, db, state)).toEqual({
+      expect(reconcileChangeLog(lc, db, anchorAt('07'))).toEqual({
         action: 'none',
         head: '07',
       });
@@ -642,15 +913,21 @@ describe('replicator/change-log-db', () => {
 
       expect(() => reconcileChangeLog(lc, db, ANCHOR)).toThrow('boom');
       expect(db.inTransaction).toBe(false);
-      // The phantom is still there: nothing was half-applied.
-      expect(head(db)).toBe('09');
+      // The re-delivered transaction is still there: nothing was half-applied.
+      expect(readChangeLogHead(db)).toBe('09');
     });
 
     test('leaves no transaction open when a reseed fails', () => {
       const file = newDbFile();
       {
         using db = openChangeLogDB(lc, file.path, {readonly: false});
-        reconcileChangeLog(lc, db, {...ANCHOR, replicaVersion: '00'});
+        reconcileChangeLog(
+          lc,
+          db,
+          anchorAt('05', {
+            identity: {epoch: null, generation: '00', replicaID: null},
+          }),
+        );
       }
 
       using db = openChangeLogDB(lc, file.path, {readonly: true});

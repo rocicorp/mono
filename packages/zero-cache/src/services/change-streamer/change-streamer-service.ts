@@ -4,7 +4,10 @@ import {resolver, type Resolver} from '@rocicorp/resolver';
 import {assert, unreachable} from '../../../../shared/src/asserts.ts';
 import {promiseVoid} from '../../../../shared/src/resolved-promises.ts';
 import {publishCriticalEvent} from '../../observability/events.ts';
-import {getOrCreateCounter} from '../../observability/metrics.ts';
+import {
+  getOrCreateCounter,
+  getOrCreateLatencyHistogram,
+} from '../../observability/metrics.ts';
 import {
   min,
   type AtLeastOne,
@@ -19,10 +22,11 @@ import type {
   ChangeStream,
 } from '../change-source/change-source.ts';
 import {
-  type ChangeStreamData,
   type ChangeStreamControl,
+  type ChangeStreamData,
   type Rollback,
 } from '../change-source/protocol/current/downstream.ts';
+import type {LitestreamVersion} from '../litestream/metrics.ts';
 import {
   publishReplicationError,
   replicationStatusError,
@@ -35,10 +39,10 @@ import {
   UnrecoverableError,
 } from '../running-state.ts';
 import {
-  type WatermarkedChange,
   type ChangeStreamerService,
   type Status,
   type SubscriberContext,
+  type WatermarkedChange,
 } from './change-streamer.ts';
 import * as ErrorType from './error-type-enum.ts';
 import {Forwarder} from './forwarder.ts';
@@ -47,17 +51,28 @@ import {
   ensureReplicationConfig,
   markResetRequired,
 } from './schema/tables.ts';
+import {SnapshotReservations} from './snapshot-reservations.ts';
+import type {SnapshotMessage} from './snapshot.ts';
 import {
   SQLiteChangeLogCatchup,
   type SQLiteChangeLogCleanupGuard,
 } from './sqlite-change-log-catchup.ts';
 import {SQLiteChangeLogReader} from './sqlite-change-log-reader.ts';
 import {
+  SQLiteChangeLogWriter,
+  type SQLiteChangeLogWriterOptions,
+} from './sqlite-change-log-writer.ts';
+import {
   Storer,
   type PurgeLock,
   type TuningOptions as StorerOptions,
 } from './storer.ts';
 import {Subscriber} from './subscriber.ts';
+
+export type BackupConfig = {
+  backupURL: string;
+  litestreamVersion: LitestreamVersion;
+};
 
 export type SQLiteCatchupOptions = {
   /** The change-log database, i.e. `changeLogFileName(replicaFile)`. */
@@ -91,6 +106,13 @@ export type TuningOptions = StorerOptions & {
   flowControlConsensusPaddingSeconds: number;
   flowControlEventDrivenRelease?: boolean | undefined;
   sqliteCatchup?: SQLiteCatchupOptions | undefined;
+  /**
+   * Supplied when `sqliteChangeLogMode != off`, i.e. this is the gate on the
+   * change-log writer. Absent, nothing writes the log.
+   */
+  sqliteChangeLogWriter?:
+    | Omit<SQLiteChangeLogWriterOptions, 'onCommit' | 'onDisabled'>
+    | undefined;
 };
 
 /**
@@ -106,6 +128,7 @@ export async function initializeStreamer(
   changeSource: ChangeSource,
   replicationStatusPublisher: ReplicationStatusPublisher,
   subscriptionState: SubscriptionState,
+  backupConfig: BackupConfig | null,
   purgeLock: PurgeLock | null,
   autoReset: boolean,
   opts: TuningOptions,
@@ -132,6 +155,7 @@ export async function initializeStreamer(
     replicaVersion,
     changeSource,
     replicationStatusPublisher,
+    backupConfig,
     purgeLock,
     autoReset,
     opts,
@@ -142,11 +166,11 @@ export async function initializeStreamer(
 const REPLICATION_STATUS_ERROR_DELAY_THRESHOLD_MS = 5000;
 
 // How long the change log may be unavailable before declining to serve from it
-// stops looking like normal startup ordering. A change-streamer routinely
-// starts before the replicator has created and reconciled the log, so early
+// stops looking like normal startup ordering. Subscriptions can arrive before
+// the stream loop's first reconcile has created and seeded the log, so early
 // declines are expected. Still declining a minute later means the log is not
-// being written at all -- `sqliteChangeLogMode=off`, a replicator crash loop,
-// or a path mismatch -- which is worth surfacing.
+// being written at all -- `sqliteChangeLogMode=off`, a writer that has failed
+// soft, or a path mismatch -- which is worth surfacing.
 const DEFAULT_CHANGE_LOG_UNAVAILABLE_WARN_THRESHOLD_MS = 60_000;
 
 /**
@@ -296,12 +320,13 @@ class ChangeStreamerImpl implements ChangeStreamerService {
   readonly #source: ChangeSource;
   readonly #storer: Storer;
   readonly #forwarder: Forwarder;
+  readonly #reservations: SnapshotReservations | undefined;
   readonly #replicationStatusPublisher: ReplicationStatusPublisher;
   readonly #sqliteCatchupOptions: SQLiteCatchupOptions | undefined;
+  readonly #changeLogWriter: SQLiteChangeLogWriter | undefined;
 
   readonly #autoReset: boolean;
   readonly #state: RunningState;
-  readonly #initialWatermarks = new Set<string>();
 
   // Starting the (Postgres) ChangeStream results in killing the previous
   // Postgres subscriber, potentially creating a gap in which the old
@@ -323,14 +348,27 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     'changes',
     'Count of replicated changes (DML or DDL statements)',
   );
+  // The number the SQLite change-log commit lands in. It is labeled by whether
+  // the log is being written so that the cost of putting a commit on the
+  // forward path is attributable rather than inferred.
+  readonly #transactionForwardDuration = getOrCreateLatencyHistogram(
+    'replication',
+    'transaction_forward_duration',
+    "Time from receiving a transaction's `begin` to forwarding its `commit`, " +
+      'i.e. the change-streamer half of forward-to-subscriber latency.',
+  );
 
   #latestStatus: Status;
   #latestLagReportCommitTimeMs = 0;
+  #backupWatermark: string | undefined;
+  #purgedWatermark: string = '';
   #purgeLock: PurgeLock | null;
+  #purgeTimer: NodeJS.Timeout | undefined;
   #stream: ChangeStream | undefined;
   #sqliteCatchup: SQLiteChangeLogCatchup | undefined;
   #changeLogUnavailableSince: number | undefined;
   #lastForwardedCommitWatermark: string | undefined;
+  #transactionForwardStartedAt: number | undefined;
   #currentTransactionCompletion:
     | Resolver<ForwardedTransactionCompletion>
     | undefined;
@@ -345,6 +383,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     replicaVersion: string,
     source: ChangeSource,
     replicationStatusPublisher: ReplicationStatusPublisher,
+    backupConfig: BackupConfig | null,
     initialPurgeLock: PurgeLock | null,
     autoReset: boolean,
     opts: TuningOptions,
@@ -373,8 +412,22 @@ class ChangeStreamerImpl implements ChangeStreamerService {
         opts.flowControlConsensusPaddingSeconds,
       eventDrivenRelease: opts.flowControlEventDrivenRelease,
     });
+    this.#reservations = backupConfig
+      ? new SnapshotReservations(lc, backupConfig)
+      : undefined;
     this.#replicationStatusPublisher = replicationStatusPublisher;
     this.#sqliteCatchupOptions = opts.sqliteCatchup;
+    this.#changeLogWriter = opts.sqliteChangeLogWriter
+      ? new SQLiteChangeLogWriter(lc, {
+          ...opts.sqliteChangeLogWriter,
+          onCommit: watermark =>
+            this.#sqliteCatchup?.onChangeLogCommit(watermark),
+          // Fail-soft deletes the file, and the reader is cached here, so it
+          // has to go with it: otherwise it serves an unlinked inode while
+          // every new open sees nothing.
+          onDisabled: () => this.#closeSQLiteCatchup(),
+        })
+      : undefined;
     this.#purgeLock = initialPurgeLock;
     this.#autoReset = autoReset;
     this.#state = new RunningState(this.id, undefined, setTimeoutFn);
@@ -418,6 +471,12 @@ class ChangeStreamerImpl implements ChangeStreamerService {
         // from the durable PG head. Commits observed only since process startup
         // are insufficient after a change-streamer restart.
         this.#lastForwardedCommitWatermark = lastWatermark;
+        // Per stream connection, not once per process: the resume watermark is
+        // re-read on every reconnect, so the log can be holding transactions
+        // above it -- a restarted backfill's abandoned ones, in bulk -- and the
+        // writer's plain INSERT would collide with the first re-delivery.
+        // Ordered before startStream so no change can arrive mid-reconcile.
+        this.#changeLogWriter?.reconcile(lastWatermark);
         const stream = await this.#source.startStream(
           lastWatermark,
           backfillRequests,
@@ -488,6 +547,17 @@ class ChangeStreamerImpl implements ChangeStreamerService {
           }
 
           const json = this.#storer.store(watermark, change);
+          // The SQLite change log commits at transaction boundaries, and its
+          // commit for this transaction lands here -- before the forward of the
+          // `commit` message, and before #recordForwardedTransactionBoundary
+          // advances what #captureRequiredHead reads. No `await` separates it
+          // from #storer.store() above, which is the assertable form of
+          // invariant 1: the storer only enqueues, and its Postgres commit
+          // cannot complete without yielding, so a synchronous SQLite commit in
+          // the same loop iteration always precedes anything that can advance
+          // the watermark this stream would resume from. Never throws; a write
+          // failure disables the writer rather than stopping replication.
+          this.#changeLogWriter?.write(change, json);
           const entry: WatermarkedChange = [watermark, change[1].tag, json];
           unflushedBytes += json.length;
           if (unflushedBytes < flushBytesThreshold) {
@@ -533,6 +603,10 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       if (watermark) {
         this.#lc.warn?.(`aborting interrupted transaction ${watermark}`);
         this.#storer.abort();
+        // Rolling back the log leaves no rows for the interrupted transaction,
+        // so the next connection's reconciliation sees a head at or below its
+        // resume watermark rather than a partial transaction.
+        this.#changeLogWriter?.abort();
         this.#forwarder.forward([watermark, 'rollback', ROLLBACK_JSON]);
         this.#recordForwardedTransactionBoundary('rollback', watermark);
       }
@@ -586,20 +660,16 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     const downstream = Subscription.create<string>({
       cleanup: () => cleanupSubscriber(),
     });
+    // No subscriber's ACK advances the SQLite change log's head any more: the
+    // writer runs in this process, so the barrier is notified from the commit
+    // itself (see #changeLogWriter's onCommit).
     const subscriber = new Subscriber(
       protocolVersion,
       id,
       watermark,
       downstream,
       () => this.#latestStatus,
-      ctx.logsChangeStream
-        ? {
-            // This subscriber writes the SQLite change log that catchup reads,
-            // so its ACKs are what advance that log's head. Routing them to the
-            // barrier saves it from polling the replica for the same fact.
-            onAck: acked => this.#sqliteCatchup?.onChangeLogWriterAck(acked),
-          }
-        : {},
+      {},
     );
     const lc = this.#lc.withContext('subscriber', subscriber.id);
     cleanupSubscriber = () => {
@@ -630,19 +700,74 @@ class ChangeStreamerImpl implements ChangeStreamerService {
         this.#storer.catchup(subscriber, mode);
       }
     }
+    // Any snapshot reservation held by this task can be closed now that
+    // it is subscribed to the change stream.
+    this.#reservations?.close(ctx.taskID);
     return downstream;
   }
 
-  scheduleCleanup(watermark: string) {
-    const origSize = this.#initialWatermarks.size;
-    this.#initialWatermarks.add(watermark);
+  async startSnapshotReservation(
+    taskID: string,
+  ): Promise<Source<SnapshotMessage>> {
+    if (!this.#reservations) {
+      throw new Error('backups are not configured');
+    }
+    const downstream = this.#reservations.open(taskID);
 
-    if (origSize === 0) {
-      this.#state.setTimeout(() => this.#purgeOldChanges(), CLEANUP_DELAY_MS);
+    // If a backup has been confirmed, immediately confirm the reservation.
+    await this.#confirmReservations();
+    return downstream;
+  }
+
+  trackBackupWatermark(watermark: string) {
+    this.#backupWatermark = watermark;
+    // TODO: in RMv2, the backup watermark immediately acks upstream
+    //       so that (in PG) the confirmed_flush_lsn can advance. The
+    //       cleanup of the change-log can trail that based on where
+    //       current subscribers are, and our policy for how much buffer
+    //       is kept around for reconnecting view-syncers.
+    this.#maybeScheduleCleanup();
+
+    // Confirm any waiting reservations now that a backup has been confirmed.
+    // Note that this is asynchronous and best effort; if it fails, the watermark
+    // is still "tracked" and the confirmation will be retried on the next backup.
+    void this.#confirmReservations().catch(e =>
+      this.#lc.warn?.(`error confirming snapshot reservation`, e),
+    );
+  }
+
+  async #confirmReservations() {
+    if (this.#backupWatermark && this.#reservations?.confirmationsRequired()) {
+      const {replicaVersion, minWatermark} = await this.#getChangeLogState();
+      if (minWatermark <= this.#backupWatermark) {
+        this.#reservations?.confirm(replicaVersion, this.#backupWatermark);
+      } else {
+        // Something is wrong here ... the change-log should not have been
+        // purged past the backup watermark. If we confirm the reservation,
+        // we may not be able to catch up from the backup that the requester
+        // restores.
+        this.#lc.error?.(
+          `change-log minWatermark ${minWatermark} is later than backupWatermark ${this.#backupWatermark}. ` +
+            `Delaying confirmation of snapshot reservation until next backup.`,
+        );
+      }
     }
   }
 
-  async getChangeLogState(): Promise<{
+  #maybeScheduleCleanup() {
+    if (
+      this.#purgeTimer === undefined &&
+      this.#backupWatermark !== undefined &&
+      this.#purgedWatermark < this.#backupWatermark
+    ) {
+      this.#purgeTimer = this.#state.setTimeout(() => {
+        this.#purgeTimer = undefined;
+        return this.#purgeOldChanges();
+      }, CLEANUP_DELAY_MS);
+    }
+  }
+
+  async #getChangeLogState(): Promise<{
     replicaVersion: string;
     minWatermark: string;
   }> {
@@ -664,42 +789,45 @@ class ChangeStreamerImpl implements ChangeStreamerService {
    * to run in a timeout.
    */
   async #purgeOldChanges(): Promise<void> {
-    const initial = [...this.#initialWatermarks];
-    if (initial.length === 0) {
-      this.#lc.warn?.('No initial watermarks to check for cleanup'); // Not expected.
-      return;
-    }
-    const current = [...this.#forwarder.getAcks()];
-    if (current.length === 0) {
-      // Also not expected, but possible (e.g. subscriber connects, then disconnects).
-      // Bail to be safe.
-      this.#lc.warn?.('No subscribers to confirm cleanup');
+    if (!this.#backupWatermark) {
+      this.#lc.warn?.('No backup watermark tracked for cleanup'); // Not expected.
       return;
     }
     try {
-      const earliestInitial = min(...(initial as AtLeastOne<LexiVersion>));
-      const earliestCurrent = min(...(current as AtLeastOne<LexiVersion>));
-      if (earliestCurrent < earliestInitial) {
-        this.#lc.info?.(
-          `At least one client is behind backup (${earliestCurrent} < ${earliestInitial})`,
-        );
-      } else {
-        this.#lc.info?.(`Purging changes before ${earliestInitial} ...`);
+      const current = [
+        ...this.#forwarder.getAcks(),
+        ...(this.#reservations?.getReservedWatermarks() ?? []),
+      ];
+      if (current.length === 0) {
+        // Also not expected, but possible (e.g. subscriber connects, then disconnects).
+        // Bail to be safe.
+        this.#lc.warn?.('No subscribers to confirm cleanup');
+        return;
+      }
+      const purgeWatermark = min(
+        this.#backupWatermark,
+        ...(current as AtLeastOne<LexiVersion>),
+      );
+      if (purgeWatermark > this.#purgedWatermark) {
+        if (purgeWatermark < this.#backupWatermark) {
+          this.#lc.info?.(
+            `At least one client is behind backup ${this.#backupWatermark}`,
+            {watermarks: current},
+          );
+        }
+        this.#lc.info?.(`Purging changes before ${purgeWatermark} ...`);
         const start = performance.now();
-        const deleted = await this.#storer.purgeRecordsBefore(earliestInitial);
+        const deleted = await this.#storer.purgeRecordsBefore(purgeWatermark);
         const elapsed = (performance.now() - start).toFixed(2);
         this.#lc.info?.(
-          `Purged ${deleted} changes before ${earliestInitial} (${elapsed} ms)`,
+          `Purged ${deleted} changes before ${purgeWatermark} (${elapsed} ms)`,
         );
-        this.#initialWatermarks.delete(earliestInitial);
+        this.#purgedWatermark = purgeWatermark;
       }
     } catch (e) {
       this.#lc.warn?.(`error purging change log`, e);
     } finally {
-      if (this.#initialWatermarks.size) {
-        // If there are unpurged watermarks to check, schedule the next purge.
-        this.#state.setTimeout(() => this.#purgeOldChanges(), CLEANUP_DELAY_MS);
-      }
+      this.#maybeScheduleCleanup();
     }
   }
 
@@ -707,6 +835,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     this.#state.stop(this.#lc, err);
     this.#stream?.changes.cancel();
     this.#sqliteCatchup?.close();
+    this.#changeLogWriter?.close();
     await this.#storer.stop();
     await this.#source.stop();
   }
@@ -723,10 +852,12 @@ class ChangeStreamerImpl implements ChangeStreamerService {
         );
         this.#currentTransactionCompletion =
           resolver<ForwardedTransactionCompletion>();
+        this.#transactionForwardStartedAt = performance.now();
         break;
       case 'commit': {
         const completion = this.#currentTransactionCompletion;
         assert(completion, 'forwarded commit without a pending transaction');
+        this.#recordTransactionForwardDuration();
         this.#lastForwardedCommitWatermark = watermark;
         this.#currentTransactionCompletion = undefined;
         completion.resolve({kind: 'committed', watermark});
@@ -737,11 +868,32 @@ class ChangeStreamerImpl implements ChangeStreamerService {
         assert(completion, 'forwarded rollback without a pending transaction');
         const committed = this.#lastForwardedCommitWatermark;
         assert(committed, 'last forwarded commit watermark is not initialized');
+        this.#transactionForwardStartedAt = undefined;
         this.#currentTransactionCompletion = undefined;
         completion.resolve({kind: 'rolled-back', watermark: committed});
         break;
       }
     }
+  }
+
+  #recordTransactionForwardDuration() {
+    const startedAt = this.#transactionForwardStartedAt;
+    this.#transactionForwardStartedAt = undefined;
+    if (startedAt !== undefined) {
+      this.#transactionForwardDuration.recordMs(performance.now() - startedAt, {
+        sqlite_change_log: this.#changeLogWriter?.enabled ? 'on' : 'off',
+      });
+    }
+  }
+
+  /**
+   * Closes and forgets the cached catchup coordinator, so that a later
+   * subscription re-opens the log from scratch rather than reading a handle
+   * whose file is gone.
+   */
+  #closeSQLiteCatchup() {
+    this.#sqliteCatchup?.close();
+    this.#sqliteCatchup = undefined;
   }
 
   #captureRequiredHead(): string | Promise<string> {
@@ -775,15 +927,14 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       return undefined;
     }
     if (ctx.logsChangeStream) {
-      // A change-log writer cannot be served from the change log it writes.
-      // The barrier waits for a head that only this subscriber can advance,
-      // and it advances it by consuming the very subscription the barrier is
-      // holding: it would wait on its own ACK until the deadline, on every
-      // reconnect. Enforced here rather than left to the selector so that no
-      // selector can express it.
+      // The reason for this exclusion is gone: the writer is no longer a
+      // subscriber, so nothing can wait on its own ACK, and no replicator this
+      // version ships sets the parameter. It stays until slice 11 lifts it
+      // deliberately, because a subscriber that predates the writer's move does
+      // set it, and serving one from SQLite is a change in behavior rather than
+      // a cleanup.
       this.#lc.warn?.(
-        `not serving change-log writer ${ctx.id} from SQLite catchup: ` +
-          `it would wait on its own ACK`,
+        `not serving legacy change-log writer ${ctx.id} from SQLite catchup`,
       );
       return undefined;
     }
@@ -797,9 +948,10 @@ class ChangeStreamerImpl implements ChangeStreamerService {
    * Opens the change log and, if it can serve, wraps it in the coordinator that
    * subsequent subscriptions reuse.
    *
-   * The change-streamer and the replicator that writes the log start
-   * independently, so the log may not exist yet, may exist without content, or
-   * may be unreadable. None of those can be allowed to fail a subscription:
+   * The log may not exist yet -- the writer creates it at the stream loop's
+   * first reconcile, and deletes it when it fails soft -- or may exist without
+   * content, or may be unreadable. None of those can be allowed to fail a
+   * subscription:
    * this is the last point at which PG catchup is still available -- past
    * `Forwarder.add()` the subscriber is committed to SQLite -- so each declines
    * here instead. Neither the failure nor the reader is retained, so a later
@@ -859,8 +1011,8 @@ class ChangeStreamerImpl implements ChangeStreamerService {
 
   /**
    * Reports falling back to PG catchup, tracking how long the log has been
-   * unavailable so that a change-streamer that merely started before its
-   * replicator does not look like an incident.
+   * unavailable so that a subscription that merely arrived before the writer's
+   * first reconcile does not look like an incident.
    */
   #declineSQLiteCatchup(
     ctx: SubscriberContext,

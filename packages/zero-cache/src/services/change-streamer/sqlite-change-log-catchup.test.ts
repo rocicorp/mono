@@ -36,7 +36,7 @@ type CatchupFuzzScenario = {
   readonly futureWidths: number[];
   readonly sentinelWidth: number;
   readonly batchSize: number;
-  readonly wakeup: 'ack' | 'early-ack' | 'poll';
+  readonly wakeup: 'commit' | 'early-commit' | 'poll';
 };
 
 const catchupFuzzScenario: fc.Arbitrary<CatchupFuzzScenario> = fc.record({
@@ -54,8 +54,8 @@ const catchupFuzzScenario: fc.Arbitrary<CatchupFuzzScenario> = fc.record({
   sentinelWidth: fc.integer({min: 0, max: 5}),
   batchSize: fc.integer({min: 1, max: 5}),
   wakeup: fc.constantFrom(
-    'ack' as const,
-    'early-ack' as const,
+    'commit' as const,
+    'early-commit' as const,
     'poll' as const,
   ),
 });
@@ -240,9 +240,10 @@ describe('SQLiteChangeLogCatchup', () => {
     }
   });
 
-  test('releases the barrier on the change-log writer ACK', async () => {
-    // A poll interval well beyond the test timeout: only the ACK can release
-    // this barrier, so passing proves it is not polling for the head.
+  test("releases the barrier on the change-log writer's commit", async () => {
+    // A poll interval well beyond the test timeout: only the commit
+    // notification can release this barrier, so passing proves it is not
+    // polling for the head.
     const fixture = createFixture({
       barrierTimeoutMs: 60_000,
       barrierPollIntervalMs: 60_000,
@@ -259,7 +260,7 @@ describe('SQLiteChangeLogCatchup', () => {
     fixture.reader.entries.push(...transaction('06'));
     fixture.reader.boundaries.add('06');
     fixture.reader.head = '06';
-    fixture.coordinator.onChangeLogWriterAck('06');
+    fixture.coordinator.onChangeLogCommit('06');
 
     expect(await takeMarkers(output, 7)).toEqual([
       'status',
@@ -268,7 +269,7 @@ describe('SQLiteChangeLogCatchup', () => {
     ]);
   });
 
-  test('ignores change-log ACKs below the required head', async () => {
+  test('ignores change-log commits below the required head', async () => {
     const fixture = createFixture({
       barrierTimeoutMs: 60_000,
       barrierPollIntervalMs: 60_000,
@@ -280,9 +281,9 @@ describe('SQLiteChangeLogCatchup', () => {
     await fixture.coordinator.catchup(subscriber, () => '06');
     await vi.waitFor(() => expect(plan).toHaveBeenCalledOnce());
 
-    // The writer is still behind the required head. Waking on every ACK would
-    // re-read the replica at the writer's commit rate for no reason.
-    fixture.coordinator.onChangeLogWriterAck('04');
+    // The writer is still behind the required head. Waking on every commit
+    // would re-read the log at the writer's commit rate for no reason.
+    fixture.coordinator.onChangeLogCommit('04');
     await sleep(20);
     expect(plan).toHaveBeenCalledOnce();
     expect(output.size()).toBe(0);
@@ -290,7 +291,7 @@ describe('SQLiteChangeLogCatchup', () => {
     fixture.reader.entries.push(...transaction('06'));
     fixture.reader.boundaries.add('06');
     fixture.reader.head = '06';
-    fixture.coordinator.onChangeLogWriterAck('06');
+    fixture.coordinator.onChangeLogCommit('06');
 
     expect(await takeMarkers(output, 4)).toEqual([
       'status',
@@ -316,14 +317,14 @@ describe('SQLiteChangeLogCatchup', () => {
 
     // An ACK that the reader cannot yet corroborate wakes the barrier but does
     // not release it: plan() decides what is readable.
-    fixture.coordinator.onChangeLogWriterAck('06');
+    fixture.coordinator.onChangeLogCommit('06');
     await vi.waitFor(() => expect(plan).toHaveBeenCalledTimes(2));
     expect(output.size()).toBe(0);
 
     fixture.reader.entries.push(...transaction('06'));
     fixture.reader.boundaries.add('06');
     fixture.reader.head = '06';
-    fixture.coordinator.onChangeLogWriterAck('06');
+    fixture.coordinator.onChangeLogCommit('06');
 
     expect(await takeMarkers(output, 4)).toEqual([
       'status',
@@ -773,18 +774,18 @@ async function runCatchupFuzzScenario(
       ...future,
     ];
     const appliedHead = committed.at(-1)?.watermark ?? FUZZ_SEED_WATERMARK;
-    if (scenario.wakeup === 'early-ack') {
-      coordinator.onChangeLogWriterAck(appliedHead);
-      // Let an early ACK race a plan() that still observes the old head. The
-      // poll backstop must preserve correctness if the notification is spent.
+    if (scenario.wakeup === 'early-commit') {
+      coordinator.onChangeLogCommit(appliedHead);
+      // Let an early notification race a plan() that still observes the old
+      // head. The poll backstop must preserve correctness if it is spent.
       await Promise.resolve();
     }
     applyFuzzTransactions(
       reader,
       committed.filter(tx => !reader.boundaries.has(tx.watermark)),
     );
-    if (scenario.wakeup === 'ack') {
-      coordinator.onChangeLogWriterAck(appliedHead);
+    if (scenario.wakeup === 'commit') {
+      coordinator.onChangeLogCommit(appliedHead);
     }
 
     // This commit is deliberately live-only. Receiving it proves catchup made

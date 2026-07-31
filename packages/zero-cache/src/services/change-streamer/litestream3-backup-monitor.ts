@@ -4,25 +4,20 @@ import {resolver} from '@rocicorp/resolver';
 import parsePrometheusTextFormat from 'parse-prometheus-text-format';
 import {must} from '../../../../shared/src/must.ts';
 import {promiseVoid} from '../../../../shared/src/resolved-promises.ts';
-import {sleep} from '../../../../shared/src/sleep.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {
   getOrCreateCounter,
   getOrCreateGauge,
 } from '../../observability/metrics.ts';
-import {Subscription} from '../../types/subscription.ts';
 import {
   litestreamBackupVerificationDuration,
   litestreamMonitorMetricAttrs,
-  litestreamSnapshotReservationDuration,
 } from '../litestream/metrics.ts';
 import {RunningState, UnrecoverableError} from '../running-state.ts';
 import type {BackupMonitor} from './backup-monitor.ts';
 import type {ChangeStreamerService} from './change-streamer.ts';
-import type {SnapshotMessage} from './snapshot.ts';
 
-export const CHECK_INTERVAL_MS = 60_000;
-const MIN_CLEANUP_DELAY_MS = 30_000;
+export const CHECK_INTERVAL_MS = 10_000;
 
 /**
  * Allowance for clock skew between the machine reporting litestream metrics
@@ -89,11 +84,6 @@ export const RESTORABLE_BACKUP_POLL_INTERVAL_MS = 10_000;
  */
 export type BackupStateVerifier = () => Promise<Date>;
 
-type Reservation = {
-  start: Date;
-  sub: Subscription<SnapshotMessage>;
-};
-
 /**
  * The Litestream3BackupMonitor polls the litestream "/metrics" endpoint to
  * track the watermark (label) value of the `litestream_replica_progress` gauge
@@ -143,7 +133,6 @@ export class Litestream3BackupMonitor implements BackupMonitor {
   readonly #changeStreamer: ChangeStreamerService;
   readonly #state = new RunningState(this.id);
 
-  readonly #reservations = new Map<string, Reservation>();
   readonly #watermarks = new Map<string, Date>();
 
   readonly #verifyBackupState: BackupStateVerifier;
@@ -177,7 +166,6 @@ export class Litestream3BackupMonitor implements BackupMonitor {
   // Epoch ms at which run() started, used to bound how long to wait for the
   // first restorable backup to appear. `null` until run() is called.
   #runStartTime: number | null = null;
-  #cleanupDelayMs: number;
   #checkMetricsTimer: NodeJS.Timeout | undefined;
 
   constructor(
@@ -186,7 +174,6 @@ export class Litestream3BackupMonitor implements BackupMonitor {
     backupURL: string,
     metricsEndpoint: string,
     changeStreamer: ChangeStreamerService,
-    initialCleanupDelayMs: number,
     verifyBackupState: BackupStateVerifier,
   ) {
     this.#lc = lc.withContext('component', this.id);
@@ -195,22 +182,11 @@ export class Litestream3BackupMonitor implements BackupMonitor {
     this.#metricsEndpoint = metricsEndpoint;
     this.#changeStreamer = changeStreamer;
     this.#verifyBackupState = verifyBackupState;
-    this.#cleanupDelayMs = Math.max(
-      initialCleanupDelayMs,
-      MIN_CLEANUP_DELAY_MS, // purely for peace of mind
-    );
-
-    this.#lc.info?.(
-      `backup monitor started ${initialCleanupDelayMs} ms after snapshot restore`,
-    );
   }
 
   run(): Promise<void> {
     this.#runStartTime = Date.now();
-    this.#lc.info?.(
-      `monitoring backups at ${this.#metricsEndpoint} with ` +
-        `${this.#cleanupDelayMs} ms cleanup delay`,
-    );
+    this.#lc.info?.(`monitoring backups at ${this.#metricsEndpoint}`);
     this.#checkMetricsTimer = setInterval(
       this.checkWatermarksAndScheduleCleanup,
       CHECK_INTERVAL_MS,
@@ -218,68 +194,6 @@ export class Litestream3BackupMonitor implements BackupMonitor {
     this.#initBackupLagMetric();
     // Resolves on a normal stop; rejects if the backup is found to be wedged.
     return Promise.race([this.#state.stopped(), this.#fatal.promise]);
-  }
-
-  startSnapshotReservation(taskID: string): Subscription<SnapshotMessage> {
-    this.#lc.info?.(`pausing change-log cleanup while ${taskID} snapshots`);
-    // In the case of retries, only track the last reservation.
-    this.#reservations.get(taskID)?.sub.cancel();
-
-    const sub = Subscription.create<SnapshotMessage>({
-      // If the reservation still exists when the connection closes
-      // (e.g. subscriber crashed), clean it up without updating the
-      // cleanup delay.
-      cleanup: () => this.endReservation(taskID, false),
-    });
-    this.#reservations.set(taskID, {start: new Date(), sub});
-    // Note: the Subscription must be returned immediately so that the
-    //       websocket can begin sending liveness pings. The `status` signal
-    //       (which tells the view-syncer to restore) is withheld until a
-    //       restorable backup actually exists; see #pushStatusWhenRestorable.
-    void this.#pushStatusWhenRestorable(taskID, sub);
-    return sub;
-  }
-
-  /**
-   * Pushes the `status` snapshot signal once a restorable backup is confirmed
-   * to exist in the backup destination. On a warm start this is immediate; on a
-   * cold start (a fresh stack whose first backup is still being produced) the
-   * reservation is held open — kept alive by websocket liveness pings — and the
-   * view-syncer stays unready until the first backup lands, rather than being
-   * told to restore a backup that does not yet exist.
-   */
-  async #pushStatusWhenRestorable(
-    taskID: string,
-    sub: Subscription<SnapshotMessage>,
-  ): Promise<void> {
-    try {
-      while (this.#lastVerifiedUploadTime === null) {
-        if (!sub.active) {
-          return; // subscriber disconnected, or a newer reservation took over
-        }
-        if (await this.#confirmRestorableBackup()) {
-          break;
-        }
-        this.#lc.info?.(
-          `no restorable backup at ${this.#backupURL} yet; ` +
-            `holding ${taskID}'s reservation open until it lands`,
-        );
-        await sleep(RESTORABLE_BACKUP_POLL_INTERVAL_MS, this.#state.signal);
-      }
-      const changeLogState = await this.#changeStreamer.getChangeLogState();
-      if (sub.active) {
-        sub.push([
-          'status',
-          {tag: 'status', backupURL: this.#backupURL, ...changeLogState},
-        ]);
-      }
-    } catch (e) {
-      if (this.#state.signal.aborted) {
-        return; // shutting down; not an error
-      }
-      this.#lc.warn?.(`failing snapshot reservation`, e);
-      sub.fail(e instanceof Error ? e : new Error(String(e)));
-    }
   }
 
   /**
@@ -297,29 +211,6 @@ export class Litestream3BackupMonitor implements BackupMonitor {
     } catch (e) {
       this.#lc.info?.(`backup not yet restorable at ${this.#backupURL}`, e);
       return false;
-    }
-  }
-
-  endReservation(taskID: string, updateCleanupDelay = true) {
-    const res = this.#reservations.get(taskID);
-    if (res === undefined) {
-      return;
-    }
-    this.#reservations.delete(taskID);
-    const {start, sub} = res;
-    sub.cancel(); // closes the connection if still open
-    const duration = Date.now() - start.getTime();
-    litestreamSnapshotReservationDuration().recordMs(duration, {
-      ...litestreamMonitorMetricAttrs(this.#backupURL, 'legacy', 'view_syncer'),
-      result: updateCleanupDelay ? 'success' : 'cancelled',
-    });
-
-    if (updateCleanupDelay) {
-      this.#lc.info?.(`snapshot initialized by ${taskID} in ${duration} ms`);
-      if (duration > this.#cleanupDelayMs) {
-        this.#cleanupDelayMs = duration;
-        this.#lc.info?.(`increased cleanup delay to ${duration} ms`);
-      }
     }
   }
 
@@ -403,14 +294,7 @@ export class Litestream3BackupMonitor implements BackupMonitor {
   }
 
   async #scheduleCleanup() {
-    if (this.#reservations.size > 0) {
-      this.#lc.info?.(
-        `watermark cleanup paused for snapshot(s): ${[...this.#reservations.keys()]}`,
-      );
-      return;
-    }
-    const latestCleanupTime = Date.now() - this.#cleanupDelayMs;
-    const maxWatermark = this.#maxWatermarkUpTo(latestCleanupTime);
+    const maxWatermark = this.#maxWatermarkUpTo(Date.now());
     if (maxWatermark.length === 0) {
       return;
     }
@@ -443,10 +327,7 @@ export class Litestream3BackupMonitor implements BackupMonitor {
     // map and are re-evaluated at the next check.
     const lastUpload = must(this.#lastVerifiedUploadTime);
     const verifiedWatermark = this.#maxWatermarkUpTo(
-      Math.min(
-        latestCleanupTime,
-        lastUpload.getTime() + BACKUP_VERIFICATION_SLACK_MS,
-      ),
+      lastUpload.getTime() + BACKUP_VERIFICATION_SLACK_MS,
     );
     if (verifiedWatermark.length === 0) {
       this.#purgesBlocked.add(1, {reason: 'backup-stale'});
@@ -471,7 +352,7 @@ export class Litestream3BackupMonitor implements BackupMonitor {
     // The cleanup watermark advanced past a real upload, so the backup is
     // keeping up: clear the staleness clock.
     this.#backupStaleSince = null;
-    this.#changeStreamer.scheduleCleanup(verifiedWatermark);
+    this.#changeStreamer.trackBackupWatermark(verifiedWatermark);
     for (const watermark of this.#watermarks.keys()) {
       if (watermark <= verifiedWatermark) {
         this.#watermarks.delete(watermark);
@@ -627,13 +508,6 @@ export class Litestream3BackupMonitor implements BackupMonitor {
 
   stop(): Promise<void> {
     clearInterval(this.#checkMetricsTimer);
-    for (const {sub} of this.#reservations.values()) {
-      // Close any pending reservations. This commonly happens when a new
-      // replication-manager makes a `/snapshot` reservation on the existing
-      // replication-manager, and then shuts it down when it takes over the
-      // replication slot.
-      sub.cancel();
-    }
     this.#state.stop(this.#lc);
     return promiseVoid;
   }

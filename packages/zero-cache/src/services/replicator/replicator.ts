@@ -5,7 +5,6 @@ import type {ChangeStreamer} from '../change-streamer/change-streamer.ts';
 import type {Service} from '../service.ts';
 import {IncrementalSyncer} from './incremental-sync.ts';
 import type {ReplicationStatusPublisher} from './replication-status.ts';
-import type {SQLiteChangeLogObserver} from './sqlite-change-log-observability.ts';
 import type {WriteWorkerClient} from './write-worker-client.ts';
 
 /** See {@link ReplicaStateNotifier.subscribe()}. */
@@ -77,9 +76,7 @@ export class ReplicatorService implements Replicator, Service {
     mode: ReplicatorMode,
     changeStreamer: ChangeStreamer,
     worker: WriteWorkerClient,
-    logsChangeStream: boolean,
     statusPublisher: ReplicationStatusPublisher | null,
-    sqliteChangeLogObserver: SQLiteChangeLogObserver | undefined,
   ) {
     this.id = id;
     this.#lc = lc
@@ -94,9 +91,7 @@ export class ReplicatorService implements Replicator, Service {
       changeStreamer,
       worker,
       mode,
-      logsChangeStream,
       statusPublisher,
-      sqliteChangeLogObserver,
     );
   }
 

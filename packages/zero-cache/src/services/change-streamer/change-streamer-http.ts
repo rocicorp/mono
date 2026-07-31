@@ -3,7 +3,6 @@ import websocket from '@fastify/websocket';
 import type {LogContext} from '@rocicorp/logger';
 import WebSocket from 'ws';
 import {assert} from '../../../../shared/src/asserts.ts';
-import {must} from '../../../../shared/src/must.ts';
 import type {IncomingMessageSubset} from '../../types/http.ts';
 import {pgClient, type PostgresDB} from '../../types/pg.ts';
 import {type Worker} from '../../types/processes.ts';
@@ -19,7 +18,6 @@ import {URLParams} from '../../types/url-params.ts';
 import {installWebSocketReceiver} from '../../types/websocket-handoff.ts';
 import {closeWithError, PROTOCOL_ERROR} from '../../types/ws.ts';
 import {HttpService} from '../http-service.ts';
-import type {BackupMonitor} from './backup-monitor.ts';
 import {
   downstreamSchema,
   PROTOCOL_VERSION,
@@ -31,7 +29,7 @@ import {
 import {discoverChangeStreamerAddress} from './schema/tables.ts';
 import {snapshotMessageSchema, type SnapshotMessage} from './snapshot.ts';
 
-const MIN_SUPPORTED_PROTOCOL_VERSION = 1;
+const MIN_SUPPORTED_PROTOCOL_VERSION = 4;
 
 const SNAPSHOT_PATH_PATTERN = '/replication/:version/snapshot';
 const CHANGES_PATH_PATTERN = '/replication/:version/changes';
@@ -51,14 +49,12 @@ export class ChangeStreamerHttpServer extends HttpService {
   readonly #lc: LogContext;
   readonly #opts: Options;
   readonly #changeStreamer: ChangeStreamerService;
-  readonly #backupMonitor: BackupMonitor | null;
 
   constructor(
     lc: LogContext,
     opts: Options,
     parent: Worker,
     changeStreamer: ChangeStreamerService,
-    backupMonitor: BackupMonitor | null,
   ) {
     super('change-streamer-http-server', lc, opts, async fastify => {
       await fastify.register(websocket);
@@ -81,14 +77,6 @@ export class ChangeStreamerHttpServer extends HttpService {
     this.#lc = lc;
     this.#opts = opts;
     this.#changeStreamer = changeStreamer;
-    this.#backupMonitor = backupMonitor;
-  }
-
-  #getBackupMonitor() {
-    return must(
-      this.#backupMonitor,
-      'replication-manager is not configured with a ZERO_LITESTREAM_BACKUP_URL',
-    );
   }
 
   // Called when receiving a web socket via the main dispatcher handoff.
@@ -112,7 +100,8 @@ export class ChangeStreamerHttpServer extends HttpService {
     }
   };
 
-  readonly #reserveSnapshot = (ws: WebSocket, req: RequestHeaders) => {
+  readonly #reserveSnapshot = async (ws: WebSocket, req: RequestHeaders) => {
+    this.#ensureChangeStreamerStarted('incoming snapshot reservation');
     try {
       const url = new URL(
         req.url ?? '',
@@ -124,7 +113,7 @@ export class ChangeStreamerHttpServer extends HttpService {
         throw new Error('Missing taskID in snapshot request');
       }
       const downstream =
-        this.#getBackupMonitor().startSnapshotReservation(taskID);
+        await this.#changeStreamer.startSnapshotReservation(taskID);
       void streamOut(this._lc, downstream, ws);
     } catch (err) {
       closeWithError(this._lc, ws, err, PROTOCOL_ERROR);
@@ -139,11 +128,6 @@ export class ChangeStreamerHttpServer extends HttpService {
       }
 
       const downstream = await this.#changeStreamer.subscribe(ctx);
-      if (ctx.initial && ctx.taskID && this.#backupMonitor) {
-        // Now that the change-streamer knows about the subscriber and watermark,
-        // end the reservation to safely resume scheduling cleanup.
-        this.#backupMonitor.endReservation(ctx.taskID);
-      }
       void streamOutStringified(this._lc, downstream, ws);
     } catch (err) {
       closeWithError(this._lc, ws, err, PROTOCOL_ERROR);
@@ -255,7 +239,7 @@ export function getSubscriberContext(req: RequestHeaders): SubscriberContext {
   return {
     protocolVersion,
     id: params.get('id', true),
-    taskID: params.get('taskID', false),
+    taskID: params.get('taskID', true),
     mode: params.get('mode', false) === 'backup' ? 'backup' : 'serving',
     replicaVersion: params.get('replicaVersion', true),
     watermark: params.get('watermark', true),
@@ -296,7 +280,6 @@ function getParams(ctx: SubscriberContext): URLSearchParams {
   );
   return new URLSearchParams({
     ...stringParams,
-    taskID: ctx.taskID ? ctx.taskID : '',
     initial: ctx.initial ? 'true' : 'false',
     logsChangeStream: ctx.logsChangeStream ? 'true' : 'false',
   });

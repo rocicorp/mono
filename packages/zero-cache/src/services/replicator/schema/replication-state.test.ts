@@ -25,10 +25,6 @@ describe('replicator/schema/replication-state', () => {
   });
 
   test('initial replication state', () => {
-    const {writeTimeMs} = db.db
-      .prepare(`SELECT writeTimeMs FROM "_zero.replicationState"`)
-      .get<{writeTimeMs: number}>();
-
     expectMatchingObjectsInTables(db.db, {
       ['_zero.replicationConfig']: [
         {
@@ -51,23 +47,16 @@ describe('replicator/schema/replication-state', () => {
           timestamp: expect.any(String),
         },
       ],
-      ['_zero.changeLogStream']: [
-        {
-          watermark: '0a',
-          pos: 0,
-          change: '{"tag":"begin"}',
-          precommit: null,
-          writeTimeMs: null,
-        },
-        {
-          watermark: '0a',
-          pos: 1,
-          change: '{"tag":"commit"}',
-          precommit: '0a',
-          writeTimeMs,
-        },
-      ],
     });
+
+    // The change log lives in its own database as of replica schema v16, so
+    // initial sync neither creates nor seeds a copy here.
+    expect(
+      db.db
+        .prepare(/*sql*/ `SELECT "name" FROM "sqlite_master"
+                     WHERE "tbl_name" = '_zero.changeLogStream'`)
+        .all(),
+    ).toEqual([]);
   });
 
   test('runtime events', () => {
