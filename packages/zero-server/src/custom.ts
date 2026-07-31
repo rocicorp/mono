@@ -453,8 +453,9 @@ function nonPrimaryKeyEntries(
   value: Record<string, unknown>,
   schema: TableSchema,
 ) {
-  const primaryKey = new Set(schema.primaryKey);
-  return Object.entries(value).filter(([name]) => !primaryKey.has(name));
+  return Object.entries(value).filter(
+    ([name]) => !schema.primaryKey.includes(name),
+  );
 }
 
 function serverName(x: {name: string; serverName?: string | undefined}) {
