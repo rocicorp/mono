@@ -383,6 +383,19 @@ function makeServerTableCRUD(schema: TableSchema): TableCRUD<TableSchema> {
         schema.primaryKey,
         schema,
       );
+      const updatedEntries = nonPrimaryKeyEntries(value, schema);
+      const conflictAction =
+        updatedEntries.length === 0
+          ? sql`DO NOTHING`
+          : sql`DO UPDATE SET ${sql.join(
+              updatedEntries.map(
+                ([col, val]) =>
+                  sql`${sql.ident(
+                    schema.columns[col].serverName ?? col,
+                  )} = ${sqlInsertValue(val, serverTableSchema[serverNameFor(col, schema)])}`,
+              ),
+              ', ',
+            )}`;
       const stmt = formatPgInternalConvert(
         sql`INSERT INTO ${sql.ident(serverName(schema))} (${sql.join(
           targetedColumns.map(([, serverName]) => sql.ident(serverName)),
@@ -395,15 +408,7 @@ function makeServerTableCRUD(schema: TableSchema): TableCRUD<TableSchema> {
         )}) ON CONFLICT (${sql.join(
           primaryKeyColumns.map(([, serverName]) => sql.ident(serverName)),
           ', ',
-        )}) DO UPDATE SET ${sql.join(
-          Object.entries(value).map(
-            ([col, val]) =>
-              sql`${sql.ident(
-                schema.columns[col].serverName ?? col,
-              )} = ${sqlInsertValue(val, serverTableSchema[serverNameFor(col, schema)])}`,
-          ),
-          ', ',
-        )}`,
+        )}) ${conflictAction}`,
       );
       const tx = this[dbTxSymbol];
       await tx.query(stmt.text, stmt.values);
@@ -411,7 +416,13 @@ function makeServerTableCRUD(schema: TableSchema): TableCRUD<TableSchema> {
     async update(this: WithHiddenTxAndSchema, value) {
       value = removeUndefined(value);
       const serverTableSchema = this[serverSchemaSymbol][serverName(schema)];
-      const targetedColumns = origAndServerNamesFor(Object.keys(value), schema);
+      const targetedColumns = origAndServerNamesFor(
+        nonPrimaryKeyEntries(value, schema).map(([name]) => name),
+        schema,
+      );
+      if (targetedColumns.length === 0) {
+        return;
+      }
       const stmt = formatPgInternalConvert(
         sql`UPDATE ${sql.ident(serverName(schema))} SET ${sql.join(
           targetedColumns.map(
@@ -436,6 +447,15 @@ function makeServerTableCRUD(schema: TableSchema): TableCRUD<TableSchema> {
       await tx.query(stmt.text, stmt.values);
     },
   };
+}
+
+function nonPrimaryKeyEntries(
+  value: Record<string, unknown>,
+  schema: TableSchema,
+) {
+  return Object.entries(value).filter(
+    ([name]) => !schema.primaryKey.includes(name),
+  );
 }
 
 function serverName(x: {name: string; serverName?: string | undefined}) {
