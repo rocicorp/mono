@@ -22,10 +22,11 @@ import type {
   ChangeStream,
 } from '../change-source/change-source.ts';
 import {
-  type ChangeStreamData,
   type ChangeStreamControl,
+  type ChangeStreamData,
   type Rollback,
 } from '../change-source/protocol/current/downstream.ts';
+import type {LitestreamVersion} from '../litestream/metrics.ts';
 import {
   publishReplicationError,
   replicationStatusError,
@@ -38,10 +39,10 @@ import {
   UnrecoverableError,
 } from '../running-state.ts';
 import {
-  type WatermarkedChange,
   type ChangeStreamerService,
   type Status,
   type SubscriberContext,
+  type WatermarkedChange,
 } from './change-streamer.ts';
 import * as ErrorType from './error-type-enum.ts';
 import {Forwarder} from './forwarder.ts';
@@ -50,6 +51,8 @@ import {
   ensureReplicationConfig,
   markResetRequired,
 } from './schema/tables.ts';
+import {SnapshotReservations} from './snapshot-reservations.ts';
+import type {SnapshotMessage} from './snapshot.ts';
 import {
   SQLiteChangeLogCatchup,
   type SQLiteChangeLogCleanupGuard,
@@ -65,6 +68,11 @@ import {
   type TuningOptions as StorerOptions,
 } from './storer.ts';
 import {Subscriber} from './subscriber.ts';
+
+export type BackupConfig = {
+  backupURL: string;
+  litestreamVersion: LitestreamVersion;
+};
 
 export type SQLiteCatchupOptions = {
   /** The change-log database, i.e. `changeLogFileName(replicaFile)`. */
@@ -120,6 +128,7 @@ export async function initializeStreamer(
   changeSource: ChangeSource,
   replicationStatusPublisher: ReplicationStatusPublisher,
   subscriptionState: SubscriptionState,
+  backupConfig: BackupConfig | null,
   purgeLock: PurgeLock | null,
   autoReset: boolean,
   opts: TuningOptions,
@@ -146,6 +155,7 @@ export async function initializeStreamer(
     replicaVersion,
     changeSource,
     replicationStatusPublisher,
+    backupConfig,
     purgeLock,
     autoReset,
     opts,
@@ -310,13 +320,13 @@ class ChangeStreamerImpl implements ChangeStreamerService {
   readonly #source: ChangeSource;
   readonly #storer: Storer;
   readonly #forwarder: Forwarder;
+  readonly #reservations: SnapshotReservations | undefined;
   readonly #replicationStatusPublisher: ReplicationStatusPublisher;
   readonly #sqliteCatchupOptions: SQLiteCatchupOptions | undefined;
   readonly #changeLogWriter: SQLiteChangeLogWriter | undefined;
 
   readonly #autoReset: boolean;
   readonly #state: RunningState;
-  readonly #initialWatermarks = new Set<string>();
 
   // Starting the (Postgres) ChangeStream results in killing the previous
   // Postgres subscriber, potentially creating a gap in which the old
@@ -350,7 +360,10 @@ class ChangeStreamerImpl implements ChangeStreamerService {
 
   #latestStatus: Status;
   #latestLagReportCommitTimeMs = 0;
+  #backupWatermark: string | undefined;
+  #purgedWatermark: string = '';
   #purgeLock: PurgeLock | null;
+  #purgeTimer: NodeJS.Timeout | undefined;
   #stream: ChangeStream | undefined;
   #sqliteCatchup: SQLiteChangeLogCatchup | undefined;
   #changeLogUnavailableSince: number | undefined;
@@ -370,6 +383,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     replicaVersion: string,
     source: ChangeSource,
     replicationStatusPublisher: ReplicationStatusPublisher,
+    backupConfig: BackupConfig | null,
     initialPurgeLock: PurgeLock | null,
     autoReset: boolean,
     opts: TuningOptions,
@@ -398,6 +412,9 @@ class ChangeStreamerImpl implements ChangeStreamerService {
         opts.flowControlConsensusPaddingSeconds,
       eventDrivenRelease: opts.flowControlEventDrivenRelease,
     });
+    this.#reservations = backupConfig
+      ? new SnapshotReservations(lc, backupConfig)
+      : undefined;
     this.#replicationStatusPublisher = replicationStatusPublisher;
     this.#sqliteCatchupOptions = opts.sqliteCatchup;
     this.#changeLogWriter = opts.sqliteChangeLogWriter
@@ -683,19 +700,74 @@ class ChangeStreamerImpl implements ChangeStreamerService {
         this.#storer.catchup(subscriber, mode);
       }
     }
+    // Any snapshot reservation held by this task can be closed now that
+    // it is subscribed to the change stream.
+    this.#reservations?.close(ctx.taskID);
     return downstream;
   }
 
-  scheduleCleanup(watermark: string) {
-    const origSize = this.#initialWatermarks.size;
-    this.#initialWatermarks.add(watermark);
+  async startSnapshotReservation(
+    taskID: string,
+  ): Promise<Source<SnapshotMessage>> {
+    if (!this.#reservations) {
+      throw new Error('backups are not configured');
+    }
+    const downstream = this.#reservations.open(taskID);
 
-    if (origSize === 0) {
-      this.#state.setTimeout(() => this.#purgeOldChanges(), CLEANUP_DELAY_MS);
+    // If a backup has been confirmed, immediately confirm the reservation.
+    await this.#confirmReservations();
+    return downstream;
+  }
+
+  trackBackupWatermark(watermark: string) {
+    this.#backupWatermark = watermark;
+    // TODO: in RMv2, the backup watermark immediately acks upstream
+    //       so that (in PG) the confirmed_flush_lsn can advance. The
+    //       cleanup of the change-log can trail that based on where
+    //       current subscribers are, and our policy for how much buffer
+    //       is kept around for reconnecting view-syncers.
+    this.#maybeScheduleCleanup();
+
+    // Confirm any waiting reservations now that a backup has been confirmed.
+    // Note that this is asynchronous and best effort; if it fails, the watermark
+    // is still "tracked" and the confirmation will be retried on the next backup.
+    void this.#confirmReservations().catch(e =>
+      this.#lc.warn?.(`error confirming snapshot reservation`, e),
+    );
+  }
+
+  async #confirmReservations() {
+    if (this.#backupWatermark && this.#reservations?.confirmationsRequired()) {
+      const {replicaVersion, minWatermark} = await this.#getChangeLogState();
+      if (minWatermark <= this.#backupWatermark) {
+        this.#reservations?.confirm(replicaVersion, this.#backupWatermark);
+      } else {
+        // Something is wrong here ... the change-log should not have been
+        // purged past the backup watermark. If we confirm the reservation,
+        // we may not be able to catch up from the backup that the requester
+        // restores.
+        this.#lc.error?.(
+          `change-log minWatermark ${minWatermark} is later than backupWatermark ${this.#backupWatermark}. ` +
+            `Delaying confirmation of snapshot reservation until next backup.`,
+        );
+      }
     }
   }
 
-  async getChangeLogState(): Promise<{
+  #maybeScheduleCleanup() {
+    if (
+      this.#purgeTimer === undefined &&
+      this.#backupWatermark !== undefined &&
+      this.#purgedWatermark < this.#backupWatermark
+    ) {
+      this.#purgeTimer = this.#state.setTimeout(() => {
+        this.#purgeTimer = undefined;
+        return this.#purgeOldChanges();
+      }, CLEANUP_DELAY_MS);
+    }
+  }
+
+  async #getChangeLogState(): Promise<{
     replicaVersion: string;
     minWatermark: string;
   }> {
@@ -717,42 +789,45 @@ class ChangeStreamerImpl implements ChangeStreamerService {
    * to run in a timeout.
    */
   async #purgeOldChanges(): Promise<void> {
-    const initial = [...this.#initialWatermarks];
-    if (initial.length === 0) {
-      this.#lc.warn?.('No initial watermarks to check for cleanup'); // Not expected.
-      return;
-    }
-    const current = [...this.#forwarder.getAcks()];
-    if (current.length === 0) {
-      // Also not expected, but possible (e.g. subscriber connects, then disconnects).
-      // Bail to be safe.
-      this.#lc.warn?.('No subscribers to confirm cleanup');
+    if (!this.#backupWatermark) {
+      this.#lc.warn?.('No backup watermark tracked for cleanup'); // Not expected.
       return;
     }
     try {
-      const earliestInitial = min(...(initial as AtLeastOne<LexiVersion>));
-      const earliestCurrent = min(...(current as AtLeastOne<LexiVersion>));
-      if (earliestCurrent < earliestInitial) {
-        this.#lc.info?.(
-          `At least one client is behind backup (${earliestCurrent} < ${earliestInitial})`,
-        );
-      } else {
-        this.#lc.info?.(`Purging changes before ${earliestInitial} ...`);
+      const current = [
+        ...this.#forwarder.getAcks(),
+        ...(this.#reservations?.getReservedWatermarks() ?? []),
+      ];
+      if (current.length === 0) {
+        // Also not expected, but possible (e.g. subscriber connects, then disconnects).
+        // Bail to be safe.
+        this.#lc.warn?.('No subscribers to confirm cleanup');
+        return;
+      }
+      const purgeWatermark = min(
+        this.#backupWatermark,
+        ...(current as AtLeastOne<LexiVersion>),
+      );
+      if (purgeWatermark > this.#purgedWatermark) {
+        if (purgeWatermark < this.#backupWatermark) {
+          this.#lc.info?.(
+            `At least one client is behind backup ${this.#backupWatermark}`,
+            {watermarks: current},
+          );
+        }
+        this.#lc.info?.(`Purging changes before ${purgeWatermark} ...`);
         const start = performance.now();
-        const deleted = await this.#storer.purgeRecordsBefore(earliestInitial);
+        const deleted = await this.#storer.purgeRecordsBefore(purgeWatermark);
         const elapsed = (performance.now() - start).toFixed(2);
         this.#lc.info?.(
-          `Purged ${deleted} changes before ${earliestInitial} (${elapsed} ms)`,
+          `Purged ${deleted} changes before ${purgeWatermark} (${elapsed} ms)`,
         );
-        this.#initialWatermarks.delete(earliestInitial);
+        this.#purgedWatermark = purgeWatermark;
       }
     } catch (e) {
       this.#lc.warn?.(`error purging change log`, e);
     } finally {
-      if (this.#initialWatermarks.size) {
-        // If there are unpurged watermarks to check, schedule the next purge.
-        this.#state.setTimeout(() => this.#purgeOldChanges(), CLEANUP_DELAY_MS);
-      }
+      this.#maybeScheduleCleanup();
     }
   }
 

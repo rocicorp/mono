@@ -20,7 +20,6 @@ export type BackupCleanupMonitorFactoryOptions = {
   config: NormalizedZeroConfig;
   replicaFile: string;
   changeStreamer: ChangeStreamerService;
-  initialCleanupDelayMs: number;
   verifyBackupState?: BackupStateVerifier | undefined;
   vfsBackupWatermarkSource?: VfsBackupWatermarkSource | undefined;
   env?: NodeJS.ProcessEnv | undefined;
@@ -31,7 +30,6 @@ export function createBackupCleanupMonitor({
   config,
   replicaFile,
   changeStreamer,
-  initialCleanupDelayMs,
   verifyBackupState,
   vfsBackupWatermarkSource,
   env,
@@ -47,7 +45,6 @@ export function createBackupCleanupMonitor({
       lc,
       backupURL,
       changeStreamer,
-      initialCleanupDelayMs,
       config.litestream.vfsProbeIntervalMs,
       vfsBackupWatermarkSource ??
         new VfsBackupWatermarkWorkerSource(
@@ -65,7 +62,6 @@ export function createBackupCleanupMonitor({
     backupURL,
     `http://localhost:${metricsPort}/metrics`,
     changeStreamer,
-    initialCleanupDelayMs,
     verifyBackupState ??
       (() => getLastBackupTime(lc, litestream, replica.file)),
   );

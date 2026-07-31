@@ -9,6 +9,7 @@ import type {ReplicatorMode} from '../replicator/replicator.ts';
 import {changeSourceTimingsSchema} from '../replicator/reporter/report-schema.ts';
 import type {Service} from '../service.ts';
 import * as ErrorType from './error-type-enum.ts';
+import type {SnapshotMessage} from './snapshot.ts';
 
 type ErrorType = Enum<typeof ErrorType>;
 
@@ -239,14 +240,25 @@ export interface ChangeStreamerService
   subscribe(ctx: SubscriberContext): Promise<Source<string>>;
 
   /**
-   * Notifies the change streamer of a watermark that has been backed up,
-   * indicating that changes before the watermark can be purged if active
-   * subscribers have progressed beyond the watermark.
+   * Starts a snapshot reservation to preserve change-log entries while
+   * a soon-to-be-subscriber downloads the current replica backup. Once
+   * the change-streamer knows that a backup is available
+   * (via {@link trackBackupWatermark}), it sends a confirmation
+   * SnapshotMessage and reserves the corresponding entries in the change-log
+   * until the client with that `taskID` subscribes, or if the snapshot
+   * connection terminates.
    */
-  scheduleCleanup(watermark: string): void;
+  startSnapshotReservation(taskID: string): Promise<Source<SnapshotMessage>>;
 
-  getChangeLogState(): Promise<{
-    replicaVersion: string;
-    minWatermark: string;
-  }>;
+  /**
+   * Informs the change-streamer of the watermark up to which the replica has
+   * been backed up. This serves two purposes:
+   * - It serves as the maximum watermark up to which the change-log can be
+   *   purged. Note that the change-streamer also takes into account the
+   *   positions of its subscribers and snapshot reservations when purging
+   *   changes in the change-log.
+   * - In RMv2, this ACK's the upstream change-source to allow its buffer of
+   *   changes (e.g. the replication_slot) to advance.
+   */
+  trackBackupWatermark(watermark: string): void;
 }

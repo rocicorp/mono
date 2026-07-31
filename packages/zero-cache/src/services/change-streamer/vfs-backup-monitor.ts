@@ -4,24 +4,14 @@ import {
   getOrCreateCounter,
   getOrCreateGauge,
 } from '../../observability/metrics.ts';
-import {Subscription} from '../../types/subscription.ts';
 import {
   litestreamBackupVerificationDuration,
   litestreamMonitorMetricAttrs,
-  litestreamSnapshotReservationDuration,
 } from '../litestream/metrics.ts';
 import type {VfsBackupWatermark} from '../litestream/vfs-watermark-reader.ts';
 import {RunningState} from '../running-state.ts';
 import type {BackupMonitor} from './backup-monitor.ts';
 import type {ChangeStreamerService} from './change-streamer.ts';
-import type {SnapshotMessage} from './snapshot.ts';
-
-const MIN_CLEANUP_DELAY_MS = 30_000;
-
-type Reservation = {
-  start: Date;
-  sub: Subscription<SnapshotMessage>;
-};
 
 export interface VfsBackupWatermarkSource {
   readWatermark(): Promise<VfsBackupWatermark>;
@@ -41,7 +31,6 @@ export class VfsBackupMonitor implements BackupMonitor {
   readonly #probeIntervalMs: number;
   readonly #state = new RunningState(this.id);
 
-  readonly #reservations = new Map<string, Reservation>();
   readonly #watermarks = new Map<string, VfsBackupWatermark>();
 
   readonly #purgesBlocked = getOrCreateCounter('replica', 'purge_blocked', {
@@ -52,14 +41,12 @@ export class VfsBackupMonitor implements BackupMonitor {
 
   #lastWatermark: string = '';
   #latestBackupWatermark: VfsBackupWatermark | undefined;
-  #cleanupDelayMs: number;
   #checkWatermarkTimer: NodeJS.Timeout | undefined;
 
   constructor(
     lc: LogContext,
     backupURL: string,
     changeStreamer: ChangeStreamerService,
-    initialCleanupDelayMs: number,
     probeIntervalMs: number,
     source: VfsBackupWatermarkSource,
   ) {
@@ -68,70 +55,16 @@ export class VfsBackupMonitor implements BackupMonitor {
     this.#changeStreamer = changeStreamer;
     this.#source = source;
     this.#probeIntervalMs = probeIntervalMs;
-    this.#cleanupDelayMs = Math.max(
-      initialCleanupDelayMs,
-      MIN_CLEANUP_DELAY_MS,
-    );
   }
 
   run(): Promise<void> {
-    this.#lc.info?.(
-      `monitoring v5 backups at ${this.#backupURL} with ` +
-        `${this.#cleanupDelayMs} ms cleanup delay`,
-    );
+    this.#lc.info?.(`monitoring v5 backups at ${this.#backupURL} `);
     this.#checkWatermarkTimer = setInterval(
       this.checkWatermarkAndScheduleCleanup,
       this.#probeIntervalMs,
     );
     this.#initBackupLagMetric();
     return this.#state.stopped();
-  }
-
-  startSnapshotReservation(taskID: string): Subscription<SnapshotMessage> {
-    this.#lc.info?.(`pausing change-log cleanup while ${taskID} snapshots`);
-    this.#reservations.get(taskID)?.sub.cancel();
-
-    const sub = Subscription.create<SnapshotMessage>({
-      cleanup: () => this.endReservation(taskID, false),
-    });
-    this.#reservations.set(taskID, {start: new Date(), sub});
-
-    void this.#changeStreamer
-      .getChangeLogState()
-      .then(changeLogState => {
-        sub.push([
-          'status',
-          {tag: 'status', backupURL: this.#backupURL, ...changeLogState},
-        ]);
-      })
-      .catch(e => {
-        this.#lc.warn?.(`failing snapshot reservation`, e);
-        sub.fail(e);
-      });
-    return sub;
-  }
-
-  endReservation(taskID: string, updateCleanupDelay = true): void {
-    const res = this.#reservations.get(taskID);
-    if (res === undefined) {
-      return;
-    }
-    this.#reservations.delete(taskID);
-    const {start, sub} = res;
-    sub.cancel();
-    const duration = Date.now() - start.getTime();
-    litestreamSnapshotReservationDuration().recordMs(duration, {
-      ...litestreamMonitorMetricAttrs(this.#backupURL, 'v5', 'view_syncer'),
-      result: updateCleanupDelay ? 'success' : 'cancelled',
-    });
-
-    if (updateCleanupDelay) {
-      this.#lc.info?.(`snapshot initialized by ${taskID} in ${duration} ms`);
-      if (duration > this.#cleanupDelayMs) {
-        this.#cleanupDelayMs = duration;
-        this.#lc.info?.(`increased cleanup delay to ${duration} ms`);
-      }
-    }
   }
 
   // Exported for testing
@@ -194,27 +127,20 @@ export class VfsBackupMonitor implements BackupMonitor {
   }
 
   #scheduleCleanup(): void {
-    if (this.#reservations.size > 0) {
-      this.#lc.info?.(
-        `watermark cleanup paused for snapshot(s): ${[...this.#reservations.keys()]}`,
-      );
-      return;
-    }
-
     const latestConfirmedWatermark = this.#latestBackupWatermark?.watermark;
     if (latestConfirmedWatermark === undefined) {
       return;
     }
 
     const maxWatermark = this.#maxWatermarkUpTo(
-      Date.now() - this.#cleanupDelayMs,
+      Date.now(),
       latestConfirmedWatermark,
     );
     if (maxWatermark.length === 0) {
       return;
     }
 
-    this.#changeStreamer.scheduleCleanup(maxWatermark);
+    this.#changeStreamer.trackBackupWatermark(maxWatermark);
     for (const watermark of this.#watermarks.keys()) {
       if (watermark <= maxWatermark) {
         this.#watermarks.delete(watermark);
@@ -239,9 +165,6 @@ export class VfsBackupMonitor implements BackupMonitor {
 
   stop(): Promise<void> {
     clearInterval(this.#checkWatermarkTimer);
-    for (const {sub} of this.#reservations.values()) {
-      sub.cancel();
-    }
     this.#source.close?.();
     this.#state.stop(this.#lc);
     return promiseVoid;
