@@ -1,3 +1,4 @@
+import fc from 'fast-check';
 import {afterEach, describe, expect, test} from 'vitest';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import type {Database} from '../../../../zqlite/src/db.ts';
@@ -16,6 +17,7 @@ import {ChangeLogStreamWriter} from '../replicator/change-log-stream-writer.ts';
 import {serializeChangeStreamData} from './change-log-codec.ts';
 import {
   SQLiteChangeLogPurgeScheduler,
+  type PurgePassResult,
   type SQLiteChangeLogPurgeSchedulerOptions,
 } from './sqlite-change-log-purge-scheduler.ts';
 import {SQLiteChangeLogReader} from './sqlite-change-log-reader.ts';
@@ -764,5 +766,445 @@ describe('change-streamer/sqlite-change-log-purge-scheduler', () => {
     writer.rollback();
 
     expect((await scheduler.purge(NO_FLOOR)).stopped).toBe('stopped');
+  });
+
+  describe('property: invariants hold under arbitrary interleavings', () => {
+    /** Rows per watermark: the granularity of the deletion-legality checks. */
+    function rowCounts(db: Database): Map<string, number> {
+      return new Map(
+        db
+          .prepare(/*sql*/ `
+            SELECT "watermark", count(*) AS "n"
+            FROM "${CHANGE_LOG_STREAM_TABLE}"
+            GROUP BY "watermark"
+          `)
+          .all<{watermark: string; n: number}>()
+          .map(({watermark, n}) => [watermark, n]),
+      );
+    }
+
+    function totalRows(db: Database): number {
+      return db
+        .prepare(
+          /*sql*/ `SELECT count(*) AS "n" FROM "${CHANGE_LOG_STREAM_TABLE}"`,
+        )
+        .get<{n: number}>().n;
+    }
+
+    /**
+     * The floor used when a dispatch lands above every committed watermark: a
+     * value no fuzzed append can reach, so the pass stays in the stale-log
+     * regime (probe `ahead`) rather than being crossed by later appends,
+     * which would place the floor between real watermarks and manufacture a
+     * spurious `violation`. Production floors are backup watermarks, i.e.
+     * monotone and always either a committed watermark or from before the log.
+     */
+    const FROZEN_FLOOR = 1_000_000;
+
+    // Dispatch and pump are weighted up: they are what makes a pass start and
+    // make progress, so their density decides how many deletion events land
+    // inside interesting windows (open reservations, low ACKs, open
+    // transactions) rather than in the drained finale.
+    const command = fc.oneof(
+      {
+        // The cleanup coordinator supplies a new durable floor.
+        arbitrary: fc.record({
+          kind: fc.constant('dispatch' as const),
+          floorNum: fc.integer({min: 0, max: 60}),
+        }),
+        weight: 3,
+      },
+      {
+        // Releases one parked between-batch yield.
+        arbitrary: fc.record({kind: fc.constant('pump' as const)}),
+        weight: 3,
+      },
+      {
+        // A whole committed transaction between the writer's commits.
+        arbitrary: fc.record({
+          kind: fc.constant('append' as const),
+          width: fc.integer({min: 0, max: 3}),
+          ageMs: fc.integer({min: -2_000, max: 5_000}),
+        }),
+        weight: 2,
+      },
+      // The writer's open-transaction window, and both ways out of it:
+      // commit notifies; rollback is silent, leaving only the poll.
+      fc.record({
+        kind: fc.constant('begin' as const),
+        width: fc.integer({min: 0, max: 3}),
+      }),
+      fc.record({
+        kind: fc.constant('commit' as const),
+        ageMs: fc.integer({min: -2_000, max: 5_000}),
+      }),
+      fc.record({kind: fc.constant('rollback' as const)}),
+      // Snapshot reservations, including unbalanced and surplus schedules.
+      fc.record({
+        kind: fc.constant('pause' as const),
+        task: fc.constantFrom('task-a', 'task-b'),
+      }),
+      fc.record({
+        kind: fc.constant('resume' as const),
+        task: fc.constantFrom('task-a', 'task-b'),
+      }),
+      // A catchup registration swapping the live ACK set under the guard.
+      fc.record({
+        kind: fc.constant('register' as const),
+        ackNums: fc.array(fc.integer({min: 0, max: 70}), {maxLength: 2}),
+      }),
+      fc.record({
+        kind: fc.constant('advanceClock' as const),
+        ms: fc.integer({min: 0, max: 5_000}),
+      }),
+      fc.record({kind: fc.constant('fireTimers' as const)}),
+    );
+
+    const schedulerFuzzScenario = fc.record({
+      batchRows: fc.integer({min: 1, max: 8}),
+      maxBatchesPerPass: fc.integer({min: 1, max: 4}),
+      seedTxs: fc.integer({min: 0, max: 8}),
+      cmds: fc.array(command, {minLength: 1, maxLength: 40}),
+      finalFloorNum: fc.integer({min: 0, max: 60}),
+    });
+
+    test('any interleaving preserves the gates and drains to quiescence', async () => {
+      await fc.assert(
+        fc.asyncProperty(
+          schedulerFuzzScenario,
+          async ({
+            batchRows,
+            maxBatchesPerPass,
+            seedTxs,
+            cmds,
+            finalFloorNum,
+          }) => {
+            // The yield gate: purge parks between batches until a pump (or
+            // the finale) releases it, so batch boundaries land exactly at
+            // chosen command points rather than wherever the microtask queue
+            // happens to put them.
+            let gated = true;
+            const parkedYields: Array<() => void> = [];
+            const fixture = setup({
+              batchRows,
+              maxBatchesPerPass,
+              yieldFn: () =>
+                gated
+                  ? new Promise<void>(resolve => parkedYields.push(resolve))
+                  : Promise.resolve(),
+            });
+            const {db, file, scheduler, timers, setAcks, setNow} = fixture;
+            try {
+              appendSeries(db, 1, seedTxs);
+              const committed = Array.from({length: seedTxs + 1}, (_, i) => i);
+              let nextWm = seedTxs + 1;
+              let openTx:
+                | {
+                    writer: ChangeLogStreamWriter;
+                    watermark: string;
+                    wmNum: number;
+                  }
+                | undefined;
+              let nowMs = LONG_AGO;
+              let acks: string[] = [];
+              setAcks(acks);
+              const pauses = new Map<string, number>();
+              const pauseTotal = () =>
+                [...pauses.values()].reduce((a, b) => a + b, 0);
+              let floorNum: number | undefined;
+              let insertedTotal = totalRows(db);
+              const results: PurgePassResult[] = [];
+              let inflight: Promise<void> | undefined;
+              let settled: PurgePassResult | undefined;
+
+              const snapFloor = (n: number) => {
+                const snapped =
+                  n > committed.at(-1)!
+                    ? FROZEN_FLOOR
+                    : committed.reduce((best, w) => (w <= n ? w : best), 0);
+                return Math.max(snapped, floorNum ?? 0);
+              };
+
+              // Rows enter and leave via the writer only synchronously, so
+              // measuring around each writer operation attributes every other
+              // row-count change to purge batches.
+              const measureInsert = (fn: () => void) => {
+                const before = totalRows(db);
+                fn();
+                insertedTotal += totalRows(db) - before;
+              };
+
+              const checkResult = (r: PurgePassResult) => {
+                // Health: the writer's windows were respected (no nested
+                // BEGIN error), the connection never went away, and history
+                // at or above the floor was never purged.
+                expect([
+                  undefined,
+                  'paused',
+                  'subscriber-behind',
+                  'batch-limit',
+                ]).toContain(r.stopped);
+                expect(r.probe).not.toBe('violation');
+                expect(r.batches).toBeLessThanOrEqual(maxBatchesPerPass);
+                if (r.stopped === 'batch-limit') {
+                  expect(r.batches).toBe(maxBatchesPerPass);
+                  expect(r.continuation).toBe('immediate');
+                } else if (r.stopped !== undefined) {
+                  expect(r.continuation).toBe('deferred');
+                }
+                if (r.stopped === undefined && r.continuation === undefined) {
+                  // No floor is lost: a pass reporting quiescence left
+                  // nothing below both the floor and the head.
+                  const wms = [...rowCounts(db).keys()];
+                  const head = wms.reduce((a, b) => (a > b ? a : b));
+                  for (const w of wms) {
+                    expect(w >= r.floor || w === head).toBe(true);
+                  }
+                }
+              };
+
+              const apply = async (cmd: (typeof cmds)[number]) => {
+                switch (cmd.kind) {
+                  case 'dispatch':
+                    // The coordinator runs one pass at a time.
+                    if (inflight === undefined) {
+                      floorNum = snapFloor(cmd.floorNum);
+                      inflight = scheduler.purge(v(floorNum)).then(r => {
+                        settled = r;
+                      });
+                    }
+                    break;
+                  case 'append':
+                    if (openTx === undefined) {
+                      const wm = nextWm++;
+                      measureInsert(() =>
+                        append(db, v(wm), cmd.width, nowMs - cmd.ageMs),
+                      );
+                      committed.push(wm);
+                    }
+                    break;
+                  case 'begin':
+                    if (openTx === undefined) {
+                      const wmNum = nextWm++;
+                      const watermark = v(wmNum);
+                      const writer = new ChangeLogStreamWriter(
+                        new StatementRunner(db),
+                      );
+                      measureInsert(() => {
+                        writer.begin(
+                          watermark,
+                          serializeChangeStreamData([
+                            'begin',
+                            {tag: 'begin'},
+                            {commitWatermark: watermark},
+                          ]),
+                        );
+                        for (let i = 0; i < cmd.width; i++) {
+                          writer.append(
+                            serializeChangeStreamData([
+                              'data',
+                              {tag: 'truncate', relations: []},
+                            ]),
+                            'truncate',
+                          );
+                        }
+                      });
+                      openTx = {writer, watermark, wmNum};
+                    }
+                    break;
+                  case 'commit':
+                    if (openTx !== undefined) {
+                      const {writer, watermark, wmNum} = openTx;
+                      measureInsert(() =>
+                        writer.commit(
+                          watermark,
+                          serializeChangeStreamData([
+                            'commit',
+                            {tag: 'commit'},
+                            {watermark},
+                          ]),
+                          nowMs - cmd.ageMs,
+                        ),
+                      );
+                      committed.push(wmNum);
+                      openTx = undefined;
+                      scheduler.onWriterIdle();
+                    }
+                    break;
+                  case 'rollback':
+                    if (openTx !== undefined) {
+                      // Deliberately no onWriterIdle(): an interrupted
+                      // stream's rollback is silent, and only the poll finds
+                      // the window it opens.
+                      const {writer} = openTx;
+                      measureInsert(() => writer.rollback());
+                      openTx = undefined;
+                    }
+                    break;
+                  case 'pause':
+                    pauses.set(cmd.task, (pauses.get(cmd.task) ?? 0) + 1);
+                    await scheduler.pause(cmd.task);
+                    break;
+                  case 'resume': {
+                    const count = pauses.get(cmd.task);
+                    if (count !== undefined) {
+                      if (count > 1) {
+                        pauses.set(cmd.task, count - 1);
+                      } else {
+                        pauses.delete(cmd.task);
+                      }
+                    }
+                    scheduler.resume(cmd.task);
+                    break;
+                  }
+                  case 'register':
+                    await scheduler.cleanupGuard.runWhilePurgeBlocked(() => {
+                      acks = cmd.ackNums.map(v);
+                      setAcks(acks);
+                    });
+                    break;
+                  case 'advanceClock':
+                    nowMs += cmd.ms;
+                    setNow(nowMs);
+                    break;
+                  case 'fireTimers':
+                    timers.fire();
+                    break;
+                  case 'pump':
+                    parkedYields.shift()?.();
+                    break;
+                }
+              };
+
+              for (const cmd of cmds) {
+                const before = rowCounts(db);
+                const acksBefore = acks;
+                const pausedBefore = pauseTotal() > 0;
+                const rolledBack =
+                  cmd.kind === 'rollback' ? openTx?.watermark : undefined;
+                await apply(cmd);
+                await microtasks();
+                const after = rowCounts(db);
+
+                const deleted = [...before.keys()].filter(
+                  w => w !== rolledBack && (after.get(w) ?? 0) < before.get(w)!,
+                );
+                if (deleted.length > 0) {
+                  // Only a purge batch deletes rows, and only legally: below
+                  // the dispatched floor, below the head, and below every
+                  // live subscriber ACK.
+                  expect(floorNum).toBeDefined();
+                  const head = [...after.keys()].reduce((a, b) =>
+                    a > b ? a : b,
+                  );
+                  for (const w of deleted) {
+                    expect(w < v(floorNum!)).toBe(true);
+                    expect(w < head).toBe(true);
+                  }
+                  if (cmd.kind !== 'register' && acksBefore.length > 0) {
+                    const minAck = acksBefore.reduce((a, b) => (a < b ? a : b));
+                    for (const w of deleted) {
+                      expect(w < minAck).toBe(true);
+                    }
+                  }
+                  // Exclusion: never while a reservation was effective
+                  // throughout the step.
+                  expect(pausedBefore && pauseTotal() > 0).toBe(false);
+                }
+
+                if (settled !== undefined) {
+                  results.push(settled);
+                  checkResult(settled);
+                  settled = undefined;
+                  inflight = undefined;
+                }
+              }
+
+              // The finale: close the writer's window, end every reservation,
+              // move every ACK out of the way, age all history out, open the
+              // yield gate, and drain as the level-triggered coordinator
+              // would. A raised floor must always be drained to.
+              if (openTx !== undefined) {
+                const {writer, watermark, wmNum} = openTx;
+                measureInsert(() =>
+                  writer.commit(
+                    watermark,
+                    serializeChangeStreamData([
+                      'commit',
+                      {tag: 'commit'},
+                      {watermark},
+                    ]),
+                    nowMs,
+                  ),
+                );
+                committed.push(wmNum);
+                openTx = undefined;
+                scheduler.onWriterIdle();
+              }
+              for (const [task, count] of pauses) {
+                for (let i = 0; i < count; i++) {
+                  scheduler.resume(task);
+                }
+              }
+              pauses.clear();
+              acks = [];
+              setAcks(acks);
+              nowMs += 100_000_000;
+              setNow(nowMs);
+              gated = false;
+              parkedYields.splice(0).forEach(release => release());
+              timers.fire();
+              if (inflight !== undefined) {
+                await inflight;
+                expect(settled).toBeDefined();
+                results.push(settled!);
+                checkResult(settled!);
+                settled = undefined;
+                inflight = undefined;
+              }
+
+              floorNum = snapFloor(finalFloorNum);
+              const finalFloor = v(floorNum);
+              let last: PurgePassResult;
+              for (let passes = 0; ; passes++) {
+                // Termination: the drain reaches quiescence in bounded passes.
+                expect(passes).toBeLessThan(200);
+                last = await scheduler.purge(finalFloor);
+                results.push(last);
+                checkResult(last);
+                if (last.continuation === undefined) {
+                  break;
+                }
+              }
+              expect(last.stopped).toBeUndefined();
+
+              // Quiescence is stable, and no timer or yield is left parked.
+              const extra = await scheduler.purge(finalFloor);
+              results.push(extra);
+              expect(extra.deletedRows).toBe(0);
+              expect(extra.continuation).toBeUndefined();
+              expect(timers.delays()).toEqual([]);
+              expect(parkedYields).toEqual([]);
+
+              // Accounting: every row ever inserted was either deleted by
+              // exactly the batches that reported it, or is still in the log.
+              expect(
+                results.reduce((sum, {deletedRows}) => sum + deletedRows, 0),
+              ).toBe(insertedTotal - totalRows(db));
+            } finally {
+              scheduler.stop();
+              parkedYields.splice(0).forEach(release => release());
+              const index = files.indexOf(file);
+              if (index >= 0) {
+                files.splice(index, 1);
+              }
+              deleteChangeLogDB(file.path);
+              file.delete();
+            }
+          },
+        ),
+        {numRuns: 1000},
+      );
+    });
   });
 });
