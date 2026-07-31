@@ -980,3 +980,202 @@ describe('string arg packing', () => {
     });
   });
 });
+
+describe('schema-qualified user-defined types', () => {
+  test('enum in a non-public schema is schema-qualified', () => {
+    expect(
+      formatPgInternalConvert(
+        sql`INSERT INTO "app"."doc_review_item" ("kind") VALUES (${sqlConvertColumnArg(
+          {
+            isArray: false,
+            isEnum: true,
+            type: 'doc_review_item_kind',
+            typeSchema: 'app',
+          },
+          'edge_case',
+          false,
+          false,
+        )})`,
+      ),
+    ).toMatchInlineSnapshot(`
+      {
+        "text": "INSERT INTO "app"."doc_review_item" ("kind") VALUES ($1::text::"app"."doc_review_item_kind")",
+        "values": [
+          "edge_case",
+        ],
+      }
+    `);
+  });
+
+  test('enum[] in a non-public schema is schema-qualified', () => {
+    expect(
+      formatPgInternalConvert(
+        sql`INSERT INTO "app"."doc_review_item" ("kinds") VALUES (${sqlConvertColumnArg(
+          {
+            isArray: true,
+            isEnum: true,
+            type: 'doc_review_item_kind',
+            typeSchema: 'app',
+          },
+          ['edge_case', 'normal'],
+          false,
+          false,
+        )})`,
+      ),
+    ).toMatchInlineSnapshot(`
+      {
+        "text": "INSERT INTO "app"."doc_review_item" ("kinds") VALUES (ARRAY(
+                SELECT value::text::"app"."doc_review_item_kind" FROM jsonb_array_elements_text($1::text::jsonb)
+              ))",
+        "values": [
+          "["edge_case","normal"]",
+        ],
+      }
+    `);
+  });
+
+  test('enum in public schema stays unqualified (back-compat)', () => {
+    expect(
+      formatPgInternalConvert(
+        sql`INSERT INTO "foo" VALUES (${sqlConvertColumnArg(
+          {
+            isArray: false,
+            isEnum: true,
+            type: 'some_enum',
+            typeSchema: 'public',
+          },
+          'ENUM_KEY',
+          false,
+          false,
+        )})`,
+      ),
+    ).toMatchInlineSnapshot(`
+      {
+        "text": "INSERT INTO "foo" VALUES ($1::text::"some_enum")",
+        "values": [
+          "ENUM_KEY",
+        ],
+      }
+    `);
+  });
+
+  test('builtin types in pg_catalog stay unqualified', () => {
+    expect(
+      formatPgInternalConvert(
+        sql`INSERT INTO "foo" VALUES (${sqlConvertColumnArg(
+          {
+            isArray: false,
+            isEnum: false,
+            type: 'numeric',
+            typeSchema: 'pg_catalog',
+          },
+          1,
+          false,
+          false,
+        )})`,
+      ),
+    ).toMatchInlineSnapshot(`
+      {
+        "text": "INSERT INTO "foo" VALUES ($1::text::numeric)",
+        "values": [
+          "1",
+        ],
+      }
+    `);
+  });
+
+  test('text-represented type in a non-public schema is schema-qualified', () => {
+    // e.g. the `isn` extension installed into a non-public schema.
+    expect(
+      formatPgInternalConvert(
+        sql`INSERT INTO "foo" VALUES (${sqlConvertColumnArg(
+          {
+            isArray: false,
+            isEnum: false,
+            type: 'isbn13',
+            typeSchema: 'app',
+          },
+          '9780306406157',
+          false,
+          false,
+        )})`,
+      ),
+    ).toMatchInlineSnapshot(`
+      {
+        "text": "INSERT INTO "foo" VALUES ($1::text::"app"."isbn13")",
+        "values": [
+          "9780306406157",
+        ],
+      }
+    `);
+  });
+
+  test('enum whose name matches a builtin type is schema-qualified', () => {
+    expect(
+      formatPgInternalConvert(
+        sql`INSERT INTO "foo" VALUES (${sqlConvertColumnArg(
+          {
+            isArray: false,
+            isEnum: true,
+            type: 'uuid',
+            typeSchema: 'app',
+          },
+          'internal',
+          false,
+          false,
+        )})`,
+      ),
+    ).toMatchInlineSnapshot(`
+      {
+        "text": "INSERT INTO "foo" VALUES ($1::text::"app"."uuid")",
+        "values": [
+          "internal",
+        ],
+      }
+    `);
+  });
+
+  test('non-enum type whose name matches a builtin type is schema-qualified', () => {
+    expect(
+      formatPgInternalConvert(
+        sql`INSERT INTO "foo" VALUES (${sqlConvertColumnArg(
+          {
+            isArray: false,
+            isEnum: false,
+            type: 'numeric',
+            typeSchema: 'app',
+          },
+          1,
+          false,
+          false,
+        )})`,
+      ),
+    ).toMatchInlineSnapshot(`
+      {
+        "text": "INSERT INTO "foo" VALUES ($1::text::"app"."numeric")",
+        "values": [
+          "1",
+        ],
+      }
+    `);
+  });
+
+  test('identifiers are safely escaped, not string-concatenated', () => {
+    // A schema/type name containing a double quote must be escaped (the quote
+    // doubled), never blindly wrapped in quotes which would break the cast.
+    const {text} = formatPgInternalConvert(
+      sql`SELECT ${sqlConvertColumnArg(
+        {
+          isArray: false,
+          isEnum: true,
+          type: 'we"ird',
+          typeSchema: 'sch"ema',
+        },
+        'x',
+        false,
+        false,
+      )}`,
+    );
+    expect(text).toBe(`SELECT $1::text::"sch""ema"."we""ird"`);
+  });
+});

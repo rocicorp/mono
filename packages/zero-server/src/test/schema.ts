@@ -8,6 +8,9 @@ import {
   table,
 } from '../../../zero-schema/src/builder/table-builder.ts';
 
+type DocReviewKind = 'edge_case' | 'normal';
+type DocReviewState = 'active' | 'archived';
+
 const jsonCols = {
   str: json<string>(),
   num: json<number>(),
@@ -98,6 +101,20 @@ export const schema = createSchema({
         ip: string(),
         mac: string(),
         title: string(),
+      })
+      .primaryKey('id'),
+    // A table in a non-public Postgres schema whose enum columns (and enum
+    // array column) use enum types that also live in that non-public schema.
+    // The `priority` column is backed by a domain in the non-public schema to
+    // exercise domain-backed columns. See `docReviewSchemaSql`.
+    table('docReviewItem')
+      .from('app.doc_review_item')
+      .columns({
+        id: string(),
+        kind: enumeration<DocReviewKind>(),
+        state: enumeration<DocReviewState>(),
+        kinds: json<DocReviewKind[]>().optional(),
+        priority: number().optional(),
       })
       .primaryKey('id'),
   ],
@@ -196,6 +213,28 @@ CREATE TABLE "textRepresentedScalars" (
   "ip" INET NOT NULL,
   "mac" MACADDR NOT NULL,
   "title" TEXT NOT NULL
+);
+
+-- A table living in a non-public schema, whose enum (and enum array) columns
+-- reference enum types declared in that same non-public schema, plus a column
+-- backed by a domain declared in that schema. Generated CRUD SQL must
+-- schema-qualify the enum casts (e.g. "app"."doc_review_item_kind") so that
+-- they resolve under the default search_path ("$user", public).
+CREATE SCHEMA app;
+
+CREATE TYPE app.doc_review_item_kind AS ENUM ('edge_case', 'normal');
+CREATE TYPE app.doc_review_item_state AS ENUM ('active', 'archived');
+-- A domain in the non-public schema. Postgres' information_schema reports
+-- domain columns as their underlying base type, so Zero treats them as the
+-- base type and never needs to reference the domain name in a cast.
+CREATE DOMAIN app.priority AS INTEGER CHECK (VALUE >= 0);
+
+CREATE TABLE app.doc_review_item (
+  id TEXT PRIMARY KEY,
+  kind app.doc_review_item_kind NOT NULL,
+  state app.doc_review_item_state NOT NULL,
+  kinds app.doc_review_item_kind[],
+  priority app.priority
 );
 `;
 

@@ -20,8 +20,10 @@ type ServerSchemaRow = {
   scale: string | null;
   typtype: PostgresTypeClass;
   typename: string;
+  typenamespace: string;
   elemTyptype: PostgresTypeClass | null;
   elemTypname: string | null;
+  elemTypenamespace: string | null;
 };
 
 export async function getServerSchema<S extends Schema>(
@@ -67,16 +69,24 @@ export async function getServerSchema<S extends Schema>(
           c.numeric_scale AS scale,
           t.typtype::text AS typtype,
           t.typname::text AS typename,
+          n.nspname::text AS "typenamespace",
           CASE WHEN t.typelem <> 0 THEN et.typtype::text ELSE NULL END AS "elemTyptype",
-          CASE WHEN t.typelem <> 0 THEN et.typname::text ELSE NULL END AS "elemTypname"
+          CASE WHEN t.typelem <> 0 THEN et.typname::text ELSE NULL END AS "elemTypname",
+          CASE WHEN t.typelem <> 0 THEN en.nspname::text ELSE NULL END AS "elemTypenamespace"
       FROM
           information_schema.columns c
+      -- Join the column's type using BOTH the type name and the namespace it
+      -- lives in. Matching on name alone (the previous behavior) is ambiguous
+      -- when the same type name exists in more than one schema and could pick
+      -- the wrong type (and thus the wrong namespace) entirely.
       JOIN
-          pg_catalog.pg_type t ON c.udt_name = t.typname
+          pg_catalog.pg_namespace n ON n.nspname = c.udt_schema
+      JOIN
+          pg_catalog.pg_type t ON t.typname = c.udt_name AND t.typnamespace = n.oid
       LEFT JOIN
           pg_catalog.pg_type et ON t.typelem = et.oid
-      JOIN
-          pg_catalog.pg_namespace n ON t.typnamespace = n.oid
+      LEFT JOIN
+          pg_catalog.pg_namespace en ON et.typnamespace = en.oid
       WHERE
           (c.table_schema, c.table_name) IN (${inClause})
     `;
@@ -128,10 +138,17 @@ export async function getServerSchema<S extends Schema>(
     ) {
       type = `${type}(${row.precision}, ${row.scale})`;
     }
+    // The namespace that backs `type`. For arrays `type` holds the element
+    // type name, so we record the element type's namespace; otherwise the
+    // column type's own namespace. This lets the SQL generator schema-qualify
+    // casts to user-defined types (enums, ...) that live outside `public`.
+    const typeSchema =
+      (isArray ? row.elemTypenamespace : row.typenamespace) ?? undefined;
     tableSchema[row.column] = {
       type,
       isEnum,
       isArray,
+      typeSchema,
     };
   }
 
