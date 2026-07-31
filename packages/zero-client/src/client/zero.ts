@@ -147,6 +147,7 @@ import {
   isAuthError,
   isClientError,
   isServerError,
+  isZeroError,
 } from './error.ts';
 import {
   type HTTPString,
@@ -211,6 +212,22 @@ interface TestZero {
     consoleLogLevel: LogLevel;
     server: string | null;
   }) => LogOptions;
+}
+
+type ConnectAttemptControl = {
+  readonly controller: AbortController;
+  readonly connected: Resolver<void>;
+  readonly events: [date: Date, event: string][];
+};
+
+function connectionReadyResolver(): Resolver<void> {
+  const ready = resolver<void>();
+  // A connection attempt can fail without any push, pull, or inspector
+  // currently waiting on it. The run loop handles the corresponding attempt
+  // failure; this handler prevents the optional readiness listener from
+  // becoming an unhandled rejection.
+  void ready.promise.catch(() => {});
+  return ready;
 }
 
 function asTestZero<
@@ -415,12 +432,14 @@ export class Zero<
 
   #socket: WebSocket | undefined = undefined;
   #socketResolver = resolver<WebSocket>();
-  /**
-   * Utility promise that resolves when the socket transitions to connected.
-   * It rejects if we hit an error or timeout before the connected message.
-   * Used by push/pull helpers to queue work until the connection is usable.
-   */
-  #connectResolver = resolver<void>();
+
+  // Resolves when the run loop establishes a usable connection. The run loop
+  // replaces it if the attempt fails or the established connection disconnects.
+  #connectionReadyResolver = connectionReadyResolver();
+
+  // Installed and removed by the run loop so socket events and disconnects can
+  // deliver inputs to the active attempt without settling its returned promise.
+  #currentConnectAttempt: ConnectAttemptControl | undefined;
 
   #closeAbortController = new AbortController();
 
@@ -1433,7 +1452,6 @@ export class Zero<
             'large files to object storage and storing only the URL in Zero.' +
             recentMessagesInfo,
         });
-        this.#connectResolver.reject(messageTooLargeError);
         this.#disconnect(lc, messageTooLargeError);
 
         await this.#rep.disableClientGroup();
@@ -1453,7 +1471,6 @@ export class Zero<
                 message: 'WebSocket connection closed abruptly',
               },
         );
-        this.#connectResolver.reject(closeError);
         this.#disconnect(lc, closeError);
       }
     } catch (e) {
@@ -1465,7 +1482,6 @@ export class Zero<
         },
         {cause: e},
       );
-      this.#connectResolver.reject(internalError);
       this.#disconnect(lc, internalError);
     }
   };
@@ -1490,8 +1506,6 @@ export class Zero<
     const error = new ProtocolError(downMessage[1]);
     lc.error?.(`${error.kind}:\n\n${error.errorBody.message}`, error);
 
-    lc.debug?.('Rejecting connect resolver due to error', error);
-    this.#connectResolver.reject(error);
     this.#disconnect(lc, error);
 
     if (kind === ErrorKind.VersionNotSupported) {
@@ -1524,9 +1538,14 @@ export class Zero<
     lc: LogContext,
     connectedMessage: ConnectedMessage,
   ): Promise<void> {
+    const attempt = must(
+      this.#currentConnectAttempt,
+      'Connected message received without an active connection attempt',
+    );
     const now = Date.now();
     const [, connectBody] = connectedMessage;
     lc = addWebSocketIDToLogContext(connectBody.wsid, lc);
+    this.#addConnectEvent(lc, attempt, 'processing the server acknowledgement');
 
     if (this.#connectedCount === 0) {
       this.#checkConnectivity('firstConnect');
@@ -1626,42 +1645,40 @@ export class Zero<
     maybeSendDeletedClients();
 
     this.#connectionManager.connected();
-    this.#connectResolver.resolve();
+    attempt.connected.resolve();
   }
 
   /**
    * Starts a new connection. This will create the WebSocket that does the HTTP
    * request to the server.
    *
-   * {@link #connect} will throw an assertion error if the
+   * {@link #connectAttempt} will throw an assertion error if the
    * {@link #connectionManager} status is not {@link ConnectionManagerState.Disconnected}
    * or {@link ConnectionManagerState.Connecting}.
    * Callers MUST check the connection status before calling this method and log
    * an error as needed.
    *
-   * The function will resolve once the socket is connected. If you need to know
-   * when a connection has been established, as in we have received the
-   * {@link ConnectedMessage}, you should await the {@link #connectResolver}
-   * promise. The {@link #connectResolver} promise rejects if an error message
-   * is received before the connected message is received or if the connection
-   * attempt times out.
+   * The returned promise resolves after receiving the {@link ConnectedMessage}
+   * and rejects if setup, the socket, or the connection handshake fails.
    */
-  async #connect(
+  async #connectAttempt(
     lc: LogContext,
     additionalConnectParams: Record<string, string> | undefined,
+    attempt: ConnectAttemptControl,
   ): Promise<void> {
     if (this.closed) {
       return;
     }
 
     assert(this.#server, 'No server provided');
+    const socketOrigin = toWSString(this.#server);
 
     // can be called from both disconnected and connecting states.
     // connecting() handles incrementing attempt counter if already connecting.
     assert(
       this.#connectionManager.is(ConnectionStatus.Disconnected) ||
         this.#connectionManager.is(ConnectionStatus.Connecting),
-      'connect() called from invalid state: ' +
+      'connectAttempt() called from invalid state: ' +
         this.#connectionManager.state.name,
     );
 
@@ -1671,7 +1688,7 @@ export class Zero<
 
     this.#connectionManager.connecting();
 
-    // connect() called but connect start time is defined. This should not
+    // connectAttempt() called but connect start time is defined. This should not
     // happen.
     assert(this.#connectStart === undefined, 'connect start time is defined');
 
@@ -1681,42 +1698,32 @@ export class Zero<
       this.#totalToConnectStart = now;
     }
 
-    if (this.closed) {
-      return;
-    }
-    this.#connectCookie = valita.parse(
+    const {signal} = attempt.controller;
+    this.#addConnectEvent(lc, attempt, 'reading the cookie');
+    const connectCookie = valita.parse(
       await this.#rep.cookie,
       nullableVersionSchema,
       'passthrough',
     );
-    if (this.closed) {
-      return;
-    }
+    this.#addConnectEvent(lc, attempt, 'reading the client group ID');
+    const clientGroupID = await this.clientGroupID;
+    this.#addConnectEvent(lc, attempt, 'initializing active clients');
+    const activeClientsManager = await this.#activeClientsManager;
 
-    // Reject connect after a timeout.
-    const timeoutID = setTimeout(() => {
-      lc.debug?.('Rejecting connect resolver due to timeout');
-      const timeoutError = new ClientError({
-        kind: ClientErrorKind.ConnectTimeout,
-        message: `Connection attempt timed out after ${CONNECT_TIMEOUT_MS / 1000} seconds`,
-      });
-      this.#connectResolver.reject(timeoutError);
-      this.#disconnect(lc, timeoutError);
-    }, CONNECT_TIMEOUT_MS);
-    const abortHandler = () => {
-      clearTimeout(timeoutID);
-    };
-    // signal.aborted cannot be true here because we checked for `this.closed` above.
-    this.#closeAbortController.signal.addEventListener('abort', abortHandler);
+    // The run loop has already stopped waiting for this attempt if it was
+    // canceled. Do not let setup that completed late create a socket.
+    if (signal.aborted) {
+      throw signal.reason;
+    }
 
     const [ws, initConnectionQueries, deletedClients] = await createSocket(
       this.#rep,
       this.#queryManager,
       this.#deleteClientsManager,
-      toWSString(this.#server),
-      this.#connectCookie,
+      socketOrigin,
+      connectCookie,
       this.clientID,
-      await this.clientGroupID,
+      clientGroupID,
       this.#clientSchema,
       this.userID,
       fromReplicacheAuthToken(this.#rep.auth),
@@ -1729,14 +1736,25 @@ export class Zero<
       this.#options.queryURL ?? this.#options.getQueriesURL,
       this.#options.queryHeaders,
       additionalConnectParams,
-      await this.#activeClientsManager,
+      activeClientsManager,
       this.#options.maxHeaderLength,
+      event => this.#addConnectEvent(lc, attempt, event),
     );
 
+    // createSocket performs asynchronous preparation before constructing the
+    // WebSocket. If the attempt was canceled during that work, the late socket
+    // still belongs to this attempt and must be closed.
+    if (signal.aborted) {
+      ws.close();
+      throw signal.reason;
+    }
+
     if (this.closed) {
+      ws.close();
       return;
     }
 
+    this.#connectCookie = connectCookie;
     this.#initConnectionQueries = initConnectionQueries;
     this.#deletedClients = deletedClients;
     ws.addEventListener('message', this.#onMessage);
@@ -1745,22 +1763,33 @@ export class Zero<
     this.#socket = ws;
     this.#socketResolver.resolve(ws);
 
-    try {
-      lc.debug?.('Waiting for connection to be acknowledged');
-      await this.#connectResolver.promise;
-      this.#mutationTracker.onConnected(this.#lastMutationIDReceived);
-      // push any outstanding mutations on reconnect.
-      this.#rep.push().catch(() => {});
-    } finally {
-      clearTimeout(timeoutID);
-      this.#closeAbortController.signal.removeEventListener(
-        'abort',
-        abortHandler,
-      );
+    this.#addConnectEvent(
+      lc,
+      attempt,
+      'waiting for the server acknowledgement',
+    );
+    lc.debug?.('Waiting for connection to be acknowledged');
+    await attempt.connected.promise;
+    if (signal.aborted) {
+      throw signal.reason;
     }
+    this.#mutationTracker.onConnected(this.#lastMutationIDReceived);
+    // push any outstanding mutations on reconnect.
+    this.#rep.push().catch(() => {});
+  }
+
+  #addConnectEvent(
+    lc: LogContext,
+    attempt: ConnectAttemptControl,
+    event: string,
+  ): void {
+    attempt.events.push([new Date(), event]);
+    lc.debug?.('Connect event', event);
   }
 
   #disconnect(lc: LogContext, reason: ZeroError, closeCode?: CloseCode): void {
+    this.#currentConnectAttempt?.controller.abort(reason);
+
     if (shouldReportConnectError(reason)) {
       this.#connectErrorCount++;
       this.#metrics.lastConnectError.set(getLastConnectErrorValue(reason));
@@ -1814,8 +1843,6 @@ export class Zero<
     }
 
     this.#socketResolver = resolver();
-    lc.debug?.('Creating new connect resolver');
-    this.#connectResolver = resolver();
     this.#messageCount = 0;
     this.#connectStart = undefined; // don't reset this._totalToConnectStart
     this.#connectedAt = 0;
@@ -1922,7 +1949,7 @@ export class Zero<
     // The deprecation of pushVersion 0 predates zero-client
     assert(req.pushVersion === 1, 'Expected pushVersion 1');
     // If we are connecting we wait until we are connected.
-    await this.#connectResolver.promise;
+    await this.#connectionReadyResolver.promise;
     const lc = this.#lc.withContext('requestID', requestID);
     lc.debug?.(`pushing ${req.mutations.length} mutations`);
     assert(this.#socket, 'Expected socket to be connected for push');
@@ -2055,8 +2082,73 @@ export class Zero<
               break;
             }
 
-            await this.#connect(lc, additionalConnectParams);
-            additionalConnectParams = undefined;
+            const ready = this.#connectionReadyResolver;
+            assert(
+              this.#currentConnectAttempt === undefined,
+              'Connection attempt already active',
+            );
+            const attempt: ConnectAttemptControl = {
+              controller: new AbortController(),
+              connected: resolver(),
+              events: [],
+            };
+            this.#currentConnectAttempt = attempt;
+            this.#addConnectEvent(lc, attempt, 'starting the connection');
+            const canceled = resolver<never>();
+            const abortHandler = () =>
+              canceled.reject(attempt.controller.signal.reason);
+            attempt.controller.signal.addEventListener('abort', abortHandler, {
+              once: true,
+            });
+            const timeoutID = setTimeout(() => {
+              lc.debug?.('Connection attempt timed out');
+              this.#disconnect(
+                lc,
+                new ClientError({
+                  kind: ClientErrorKind.ConnectTimeout,
+                  message:
+                    `Connection attempt timed out after ${CONNECT_TIMEOUT_MS / 1000} seconds. ` +
+                    `Connect events: ${JSON.stringify(attempt.events)}`,
+                }),
+              );
+            }, CONNECT_TIMEOUT_MS);
+            try {
+              try {
+                await Promise.race([
+                  this.#connectAttempt(lc, additionalConnectParams, attempt),
+                  canceled.promise,
+                ]);
+              } catch (ex) {
+                const error = isZeroError(ex)
+                  ? ex
+                  : new ClientError(
+                      {
+                        kind: ClientErrorKind.Internal,
+                        message: getErrorMessage(ex),
+                      },
+                      {cause: ex},
+                    );
+                if (!attempt.controller.signal.aborted) {
+                  this.#disconnect(lc, error);
+                }
+                ready.reject(error);
+                if (this.#connectionReadyResolver === ready) {
+                  this.#connectionReadyResolver = connectionReadyResolver();
+                }
+                throw error;
+              }
+              ready.resolve();
+              additionalConnectParams = undefined;
+            } finally {
+              clearTimeout(timeoutID);
+              attempt.controller.signal.removeEventListener(
+                'abort',
+                abortHandler,
+              );
+              if (this.#currentConnectAttempt === attempt) {
+                this.#currentConnectAttempt = undefined;
+              }
+            }
 
             throwIfConnectionError(this.#connectionManager.state);
 
@@ -2069,6 +2161,7 @@ export class Zero<
           }
 
           case ConnectionStatus.Connected: {
+            const ready = this.#connectionReadyResolver;
             // When connected we wait for whatever happens first out of:
             // - After pingTimeoutMs we send a ping
             // - We get a message
@@ -2082,38 +2175,47 @@ export class Zero<
               controller.signal,
             );
 
-            const raceResult = await promiseRace({
-              waitForPing: pingTimeoutPromise,
-              waitForPingAborted: pingTimeoutAborted,
-              tabHidden: this.#visibilityWatcher.waitForHidden(),
-              stateChange: this.#connectionManager.waitForStateChange(),
-            });
+            try {
+              const raceResult = await promiseRace({
+                waitForPing: pingTimeoutPromise,
+                waitForPingAborted: pingTimeoutAborted,
+                tabHidden: this.#visibilityWatcher.waitForHidden(),
+                stateChange: this.#connectionManager.waitForStateChange(),
+              });
 
-            switch (raceResult.key) {
-              case 'waitForPing': {
-                await this.#ping(lc);
-                break;
+              switch (raceResult.key) {
+                case 'waitForPing': {
+                  await this.#ping(lc);
+                  break;
+                }
+
+                case 'waitForPingAborted':
+                  break;
+
+                case 'tabHidden': {
+                  const hiddenError = new ClientError({
+                    kind: ClientErrorKind.Hidden,
+                    message: 'Connection closed because tab was hidden',
+                  });
+                  this.#disconnect(lc, hiddenError);
+                  break;
+                }
+
+                case 'stateChange': {
+                  throwIfConnectionError(raceResult.result);
+                  break;
+                }
+
+                default:
+                  unreachable(raceResult);
               }
-
-              case 'waitForPingAborted':
-                break;
-
-              case 'tabHidden': {
-                const hiddenError = new ClientError({
-                  kind: ClientErrorKind.Hidden,
-                  message: 'Connection closed because tab was hidden',
-                });
-                this.#disconnect(lc, hiddenError);
-                break;
+            } finally {
+              if (
+                !this.#connectionManager.is(ConnectionStatus.Connected) &&
+                this.#connectionReadyResolver === ready
+              ) {
+                this.#connectionReadyResolver = connectionReadyResolver();
               }
-
-              case 'stateChange': {
-                throwIfConnectionError(raceResult.result);
-                break;
-              }
-
-              default:
-                unreachable(raceResult);
             }
 
             break;
@@ -2281,7 +2383,7 @@ export class Zero<
     }
 
     // If we are connecting we wait until we are connected.
-    await this.#connectResolver.promise;
+    await this.#connectionReadyResolver.promise;
     assert(
       this.#socket,
       'Expected socket to be connected for mutation recovery pull',
@@ -2499,7 +2601,7 @@ export class Zero<
         this.#queryManager,
         this.#zeroContext,
         async () => {
-          await this.#connectResolver.promise;
+          await this.#connectionReadyResolver.promise;
           return must(this.#socket);
         },
       ));
@@ -2604,6 +2706,7 @@ export async function createSocket(
   additionalConnectParams: Record<string, string> | undefined,
   activeClientsManager: Pick<ActiveClientsManager, 'activeClients'>,
   maxHeaderLength = 1024 * 8,
+  onEvent?: (event: string) => void,
 ): Promise<
   [
     WebSocket,
@@ -2611,6 +2714,7 @@ export async function createSocket(
     DeleteClientsBody | undefined,
   ]
 > {
+  onEvent?.('reading the profile ID');
   const url = await createConnectionURL(
     socketOrigin,
     clientID,
@@ -2632,9 +2736,11 @@ export async function createSocket(
   // for a `protocol`.
   const WS = mustGetBrowserGlobal('WebSocket');
   const queriesPatchP = rep.query(tx => queryManager.getQueriesPatch(tx));
+  onEvent?.('reading deleted clients');
   const deletedClientsArray = await deleteClientsManager.getDeletedClients();
   let deletedClients: DeleteClientsBody | undefined =
     convertDeletedClientsToBody(deletedClientsArray, clientGroupID);
+  onEvent?.('reading desired queries');
   let queriesPatch: Map<string, UpQueriesPatchOp> | undefined =
     await queriesPatchP;
   const {activeClients} = activeClientsManager;
@@ -2670,6 +2776,7 @@ export async function createSocket(
   } else {
     deletedClients = undefined;
   }
+  onEvent?.('creating the WebSocket');
   return [
     new WS(
       // toString() required for RN URL polyfill.
