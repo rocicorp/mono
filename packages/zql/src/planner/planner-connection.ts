@@ -1,5 +1,6 @@
 import {assert} from '../../../shared/src/asserts.ts';
 import type {Condition, Ordering} from '../../../zero-protocol/src/ast.ts';
+import type {NoSubqueryCondition} from '../builder/filter.ts';
 import {
   mergeConstraints,
   type PlannerConstraint,
@@ -90,6 +91,17 @@ export class PlannerConnection {
    * a single join in the UFO is flipped - other branches report undefined.
    */
   readonly #constraints: Map<string, PlannerConstraint | undefined>;
+
+  /**
+   * Per-branch filters registered by `PlannerFilter` nodes (simple OR
+   * branches) when the enclosing FanIn is in UFI mode. Key is the same
+   * `branchPattern.join(',')` used by `#constraints`.
+   *
+   * These are AND-merged with `#filters` when calling the cost model so
+   * the model sees the true filter that the runtime would push to the
+   * source for this specific branch.
+   */
+  readonly #perBranchFilters: Map<string, NoSubqueryCondition> = new Map();
 
   readonly #isRoot: boolean;
 
@@ -184,6 +196,18 @@ export class PlannerConnection {
     });
   }
 
+  /**
+   * Register a per-branch filter for the given branch pattern. Called by
+   * `PlannerFilter` (a simple OR branch) when the enclosing FanIn is in
+   * UFI mode. The filter is AND-merged with `this.#filters` when the cost
+   * model is invoked for this branch.
+   */
+  setPerBranchFilter(path: number[], filter: NoSubqueryCondition): void {
+    this.#perBranchFilters.set(path.join(','), filter);
+    // The cost depends on the filter, so invalidate caches.
+    this.#cachedConstraintCosts.clear();
+  }
+
   estimateCost(
     downstreamChildSelectivity: number,
     branchPattern: number[],
@@ -205,10 +229,21 @@ export class PlannerConnection {
       this.#baseConstraints,
       constraint,
     );
+    // AND the per-branch filter (registered by a PlannerFilter for a
+    // simple OR branch in UFI mode) with the connection-time filter so
+    // the cost model sees the same effective filter the runtime applies.
+    const perBranchFilter = this.#perBranchFilters.get(key);
+    const effectiveFilters: Condition | undefined =
+      this.#filters && perBranchFilter
+        ? {
+            type: 'and',
+            conditions: [this.#filters, perBranchFilter],
+          }
+        : (this.#filters ?? perBranchFilter);
     const {startupCost, fanout, rows} = this.#model(
       this.table,
       this.#sort,
-      this.#filters,
+      effectiveFilters,
       mergedConstraint,
     );
     cost = {
@@ -269,6 +304,7 @@ export class PlannerConnection {
 
   reset() {
     this.#constraints.clear();
+    this.#perBranchFilters.clear();
     this.limit = this.#baseLimit;
     // Clear all cost caches
     this.#cachedConstraintCosts.clear();
@@ -285,11 +321,17 @@ export class PlannerConnection {
   /**
    * Restore constraint state from a snapshot.
    * Used by PlannerGraph to restore planning state.
+   *
+   * Per-branch filters are not snapshotted — they are re-derived by the
+   * subsequent `propagateConstraints` pass. Clearing them here ensures
+   * that any entries left over from the previous iteration don't linger
+   * in case the restored plan registers a different set.
    */
   restoreConstraints(
     constraints: Map<string, PlannerConstraint | undefined>,
   ): void {
     this.#constraints.clear();
+    this.#perBranchFilters.clear();
     for (const [key, value] of constraints) {
       this.#constraints.set(key, value);
     }

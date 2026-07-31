@@ -1769,6 +1769,32 @@ test("flipped exists, or'ed", () => {
   expect(view.data[0]?.id).toBe('0001');
 });
 
+// End-to-end runtime correctness for `or(simple, flipped-exists)`.
+// More comprehensive coverage (incl. add/remove/edit + PG comparison) is in
+// `chinook-join-flip.pg.test.ts` → "Flipped exists - or with other conditions".
+// This in-memory variant exists as a fast non-PG smoke test for the shape
+// where one OR branch is a simple cmp and another is a flipped EXISTS —
+// the path that exercises `applyFilterWithFlips` for OR with a bundled
+// simple-branches `buildFilterPipeline` alongside a FlippedJoin branch.
+test('or(simple, flipped-exists): hydration returns rows matched by either branch', async () => {
+  const queryDelegate = new QueryDelegateImpl();
+  addData(queryDelegate);
+
+  // From `addData`:
+  //   issue 0001 has label 0001 (via issueLabel) → matches the flipped exists
+  //   issue 0002 has title 'issue 2'             → matches the simple cmp
+  //   issue 0003 has neither                     → matches nothing
+  const q = newQuery(schema, 'issue').where(({or, cmp, exists}) =>
+    or(
+      cmp('title', '=', 'issue 2'),
+      exists('labels', l => l.where('id', '=', '0001'), {flip: true}),
+    ),
+  );
+
+  const rows = (await queryDelegate.run(q)) as {id: string}[];
+  expect(rows.map(r => r.id).sort()).toEqual(['0001', '0002']);
+});
+
 test('broken flipped exists', async () => {
   const queryDelegate = new QueryDelegateImpl();
   const commentSource = must(queryDelegate.getSource('comment'));
