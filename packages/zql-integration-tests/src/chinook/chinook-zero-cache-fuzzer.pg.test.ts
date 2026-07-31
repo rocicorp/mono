@@ -29,8 +29,8 @@ import {
 } from '../../../zero-cache/src/services/view-syncer/schema/types.ts';
 import {Snapshotter} from '../../../zero-cache/src/services/view-syncer/snapshotter.ts';
 import {
-  type SyncContext,
   ViewSyncerService,
+  type SyncContext,
 } from '../../../zero-cache/src/services/view-syncer/view-syncer.ts';
 import {
   getConnectionURI,
@@ -64,8 +64,8 @@ import {
 import {getServerSchema} from '../../../zero-server/src/schema.ts';
 import {Transaction} from '../../../zero-server/src/test/util.ts';
 import type {
-  Schema as ZeroSchema,
   TableSchema,
+  Schema as ZeroSchema,
 } from '../../../zero-types/src/schema.ts';
 import {MemorySource} from '../../../zql/src/ivm/memory-source.ts';
 import {makeSourceChangeAdd} from '../../../zql/src/ivm/source.ts';
@@ -99,7 +99,7 @@ import {
 import {Data} from './fuzz/literals.ts';
 import {miniData, miniPgContent} from './fuzz/mini.ts';
 import {pushForSkeleton, type Mutation} from './fuzz/push.ts';
-import {label as skeletonLabel, lower, type Skeleton} from './fuzz/skeleton.ts';
+import {lower, label as skeletonLabel, type Skeleton} from './fuzz/skeleton.ts';
 import {builder, schema} from './schema.ts';
 
 const lc = createSilentLogContext();
@@ -347,6 +347,7 @@ async function startZeroCacheReplica(testDBs: PgTest['testDBs']) {
         Promise.resolve(),
       ),
       subscriptionState,
+      null,
       null,
       true,
       streamerOptions,
