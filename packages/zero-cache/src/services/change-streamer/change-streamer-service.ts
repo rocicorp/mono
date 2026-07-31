@@ -377,6 +377,13 @@ class ChangeStreamerImpl implements ChangeStreamerService {
   #latestLagReportCommitTimeMs = 0;
   #backupWatermark: string | undefined;
   #pgPurgedWatermark: string = '';
+  /**
+   * The floor last logged as held back by a laggard. The level-triggered
+   * retry re-evaluates every {@link CLEANUP_DELAY_MS}; logging only when the
+   * blocking floor moves keeps a stuck subscriber from emitting the same
+   * line indefinitely.
+   */
+  #loggedBehindWatermark: string | undefined;
   #sqlitePurgeContinuation: PurgeContinuation | undefined;
   #purgeLock: PurgeLock | null;
   // PG and SQLite intentionally own separate level-triggered loops. Neither
@@ -915,10 +922,15 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       const {backupWatermark, purgeWatermark, current} =
         this.#getCleanupFloor();
       if (purgeWatermark < backupWatermark) {
-        this.#lc.info?.(
-          `At least one client is behind backup ${backupWatermark}`,
-          {watermarks: current},
-        );
+        if (this.#loggedBehindWatermark !== purgeWatermark) {
+          this.#loggedBehindWatermark = purgeWatermark;
+          this.#lc.info?.(
+            `At least one client is behind backup ${backupWatermark}`,
+            {watermarks: current},
+          );
+        }
+      } else {
+        this.#loggedBehindWatermark = undefined;
       }
       if (purgeWatermark <= this.#pgPurgedWatermark) {
         return;
