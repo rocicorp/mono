@@ -2624,6 +2624,16 @@ function connectTimeoutErrors(z: TestZero<Schema>): ClientError[] {
     );
 }
 
+function connectEvents(
+  error: ClientError | undefined,
+): [date: string, event: string][] {
+  assert(error);
+  const marker = 'Connect events: ';
+  const markerIndex = error.message.indexOf(marker);
+  assert(markerIndex >= 0, 'Expected timeout error to contain connect events');
+  return JSON.parse(error.message.slice(markerIndex + marker.length));
+}
+
 test('Connect timeout', async () => {
   const z = zeroForTest({logLevel: 'debug'});
 
@@ -2654,8 +2664,20 @@ test('Connect timeout', async () => {
     await vi.advanceTimersByTimeAsync(1);
     expect(z.connectionStatus).toBe(ConnectionStatus.Connecting);
     expectLogMessages(z).contain(connectTimeoutMessage);
-    expect(connectTimeoutErrors(z).at(-1)?.message).toContain(
-      'while waiting for the server acknowledgement',
+    const events = connectEvents(connectTimeoutErrors(z).at(-1));
+    expect(events.map(([_date, event]) => event)).toEqual([
+      'starting the connection',
+      'reading the cookie',
+      'reading the client group ID',
+      'initializing active clients',
+      'reading the profile ID',
+      'reading deleted clients',
+      'reading desired queries',
+      'creating the WebSocket',
+      'waiting for the server acknowledgement',
+    ]);
+    expect(events.every(([date]) => !Number.isNaN(Date.parse(date)))).toBe(
+      true,
     );
     const nextSocketPromise = z.socket;
 
@@ -2734,9 +2756,16 @@ test('connect timeout during setup retries without an unhandled rejection', asyn
           event.reason.kind === ClientErrorKind.ConnectTimeout,
       ),
     ).toEqual([]);
-    expect(connectTimeoutErrors(z).at(-1)?.message).toContain(
-      'while initializing active clients',
-    );
+    expect(
+      connectEvents(connectTimeoutErrors(z).at(-1)).map(
+        ([_date, event]) => event,
+      ),
+    ).toEqual([
+      'starting the connection',
+      'reading the cookie',
+      'reading the client group ID',
+      'initializing active clients',
+    ]);
 
     await tickAFewTimes(vi, RUN_LOOP_INTERVAL_MS);
     expect(connectAttempts()).toBe(2);

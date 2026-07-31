@@ -214,32 +214,11 @@ interface TestZero {
   }) => LogOptions;
 }
 
-type ConnectPhase =
-  | 'starting the connection'
-  | 'reading the cookie'
-  | 'reading the client group ID'
-  | 'initializing active clients'
-  | 'reading the profile ID'
-  | 'reading deleted clients'
-  | 'reading desired queries'
-  | 'creating the WebSocket'
-  | 'waiting for the server acknowledgement'
-  | 'processing the server acknowledgement';
-
 type ConnectAttemptControl = {
   readonly controller: AbortController;
   readonly connected: Resolver<void>;
-  phase: ConnectPhase;
-  phaseStartedAt: number;
+  readonly events: [date: Date, event: string][];
 };
-
-function setConnectPhase(
-  attempt: ConnectAttemptControl,
-  phase: ConnectPhase,
-): void {
-  attempt.phase = phase;
-  attempt.phaseStartedAt = Date.now();
-}
 
 function connectionReadyResolver(): Resolver<void> {
   const ready = resolver<void>();
@@ -1563,11 +1542,10 @@ export class Zero<
       this.#currentConnectAttempt,
       'Connected message received without an active connection attempt',
     );
-    setConnectPhase(attempt, 'processing the server acknowledgement');
-
     const now = Date.now();
     const [, connectBody] = connectedMessage;
     lc = addWebSocketIDToLogContext(connectBody.wsid, lc);
+    this.#addConnectEvent(lc, attempt, 'processing the server acknowledgement');
 
     if (this.#connectedCount === 0) {
       this.#checkConnectivity('firstConnect');
@@ -1721,15 +1699,15 @@ export class Zero<
     }
 
     const {signal} = attempt.controller;
-    setConnectPhase(attempt, 'reading the cookie');
+    this.#addConnectEvent(lc, attempt, 'reading the cookie');
     const connectCookie = valita.parse(
       await this.#rep.cookie,
       nullableVersionSchema,
       'passthrough',
     );
-    setConnectPhase(attempt, 'reading the client group ID');
+    this.#addConnectEvent(lc, attempt, 'reading the client group ID');
     const clientGroupID = await this.clientGroupID;
-    setConnectPhase(attempt, 'initializing active clients');
+    this.#addConnectEvent(lc, attempt, 'initializing active clients');
     const activeClientsManager = await this.#activeClientsManager;
 
     // The run loop has already stopped waiting for this attempt if it was
@@ -1760,7 +1738,7 @@ export class Zero<
       additionalConnectParams,
       activeClientsManager,
       this.#options.maxHeaderLength,
-      phase => setConnectPhase(attempt, phase),
+      event => this.#addConnectEvent(lc, attempt, event),
     );
 
     // createSocket performs asynchronous preparation before constructing the
@@ -1785,7 +1763,11 @@ export class Zero<
     this.#socket = ws;
     this.#socketResolver.resolve(ws);
 
-    setConnectPhase(attempt, 'waiting for the server acknowledgement');
+    this.#addConnectEvent(
+      lc,
+      attempt,
+      'waiting for the server acknowledgement',
+    );
     lc.debug?.('Waiting for connection to be acknowledged');
     await attempt.connected.promise;
     if (signal.aborted) {
@@ -1794,6 +1776,15 @@ export class Zero<
     this.#mutationTracker.onConnected(this.#lastMutationIDReceived);
     // push any outstanding mutations on reconnect.
     this.#rep.push().catch(() => {});
+  }
+
+  #addConnectEvent(
+    lc: LogContext,
+    attempt: ConnectAttemptControl,
+    event: string,
+  ): void {
+    attempt.events.push([new Date(), event]);
+    lc.debug?.('Connect event', event);
   }
 
   #disconnect(lc: LogContext, reason: ZeroError, closeCode?: CloseCode): void {
@@ -2099,10 +2090,10 @@ export class Zero<
             const attempt: ConnectAttemptControl = {
               controller: new AbortController(),
               connected: resolver(),
-              phase: 'starting the connection',
-              phaseStartedAt: Date.now(),
+              events: [],
             };
             this.#currentConnectAttempt = attempt;
+            this.#addConnectEvent(lc, attempt, 'starting the connection');
             const canceled = resolver<never>();
             const abortHandler = () =>
               canceled.reject(attempt.controller.signal.reason);
@@ -2111,16 +2102,13 @@ export class Zero<
             });
             const timeoutID = setTimeout(() => {
               lc.debug?.('Connection attempt timed out');
-              const phaseDurationSeconds =
-                Math.round((Date.now() - attempt.phaseStartedAt) / 100) / 10;
               this.#disconnect(
                 lc,
                 new ClientError({
                   kind: ClientErrorKind.ConnectTimeout,
                   message:
-                    `Connection attempt timed out after ${CONNECT_TIMEOUT_MS / 1000} seconds ` +
-                    `while ${attempt.phase} ` +
-                    `(${phaseDurationSeconds} seconds in this phase)`,
+                    `Connection attempt timed out after ${CONNECT_TIMEOUT_MS / 1000} seconds. ` +
+                    `Connect events: ${JSON.stringify(attempt.events)}`,
                 }),
               );
             }, CONNECT_TIMEOUT_MS);
@@ -2718,7 +2706,7 @@ export async function createSocket(
   additionalConnectParams: Record<string, string> | undefined,
   activeClientsManager: Pick<ActiveClientsManager, 'activeClients'>,
   maxHeaderLength = 1024 * 8,
-  onPhase?: (phase: ConnectPhase) => void,
+  onEvent?: (event: string) => void,
 ): Promise<
   [
     WebSocket,
@@ -2726,7 +2714,7 @@ export async function createSocket(
     DeleteClientsBody | undefined,
   ]
 > {
-  onPhase?.('reading the profile ID');
+  onEvent?.('reading the profile ID');
   const url = await createConnectionURL(
     socketOrigin,
     clientID,
@@ -2748,11 +2736,11 @@ export async function createSocket(
   // for a `protocol`.
   const WS = mustGetBrowserGlobal('WebSocket');
   const queriesPatchP = rep.query(tx => queryManager.getQueriesPatch(tx));
-  onPhase?.('reading deleted clients');
+  onEvent?.('reading deleted clients');
   const deletedClientsArray = await deleteClientsManager.getDeletedClients();
   let deletedClients: DeleteClientsBody | undefined =
     convertDeletedClientsToBody(deletedClientsArray, clientGroupID);
-  onPhase?.('reading desired queries');
+  onEvent?.('reading desired queries');
   let queriesPatch: Map<string, UpQueriesPatchOp> | undefined =
     await queriesPatchP;
   const {activeClients} = activeClientsManager;
@@ -2788,7 +2776,7 @@ export async function createSocket(
   } else {
     deletedClients = undefined;
   }
-  onPhase?.('creating the WebSocket');
+  onEvent?.('creating the WebSocket');
   return [
     new WS(
       // toString() required for RN URL polyfill.
