@@ -775,7 +775,13 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       await this.#confirmReservations();
       return downstream;
     } catch (e) {
-      this.#reservations.close(taskID);
+      // Cancel the reservation this call opened, not whatever currently
+      // holds the task's slot: an overlapping retry for the same taskID may
+      // have already replaced it, and a by-taskID close would tear down the
+      // replacement and release its purge pause while it is advertising
+      // snapshot bounds. cancel() routes through the subscription's cleanup,
+      // which closes the reservation only if this instance still owns it.
+      downstream.cancel();
       throw e;
     }
   }
