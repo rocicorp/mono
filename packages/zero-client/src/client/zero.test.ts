@@ -73,6 +73,7 @@ import {
 import {createBuilder} from '../../../zql/src/query/create-builder.ts';
 import type {Row} from '../../../zql/src/query/query.ts';
 import {nanoid} from '../util/nanoid.ts';
+import {ActiveClientsManager} from './active-clients-manager.ts';
 import {ClientErrorKind} from './client-error-kind.ts';
 import {ConnectionStatus} from './connection-status.ts';
 import type {ConnectionState} from './connection.ts';
@@ -2603,7 +2604,7 @@ test('Runtime pingTimeoutMs configuration', async () => {
   expect(z.connectionStatus).toBe(ConnectionStatus.Connecting);
 });
 
-const connectTimeoutMessage = 'Rejecting connect resolver due to timeout';
+const connectTimeoutMessage = 'Connection attempt timed out';
 
 function expectLogMessages(z: TestZero<Schema>) {
   return expect(
@@ -2611,6 +2612,26 @@ function expectLogMessages(z: TestZero<Schema>) {
       level === 'debug' ? msg : [],
     ),
   );
+}
+
+function connectTimeoutErrors(z: TestZero<Schema>): ClientError[] {
+  return z.testLogSink.messages
+    .flatMap(([_level, _context, messages]) => messages)
+    .filter(
+      (message): message is ClientError =>
+        message instanceof ClientError &&
+        message.kind === ClientErrorKind.ConnectTimeout,
+    );
+}
+
+function connectEvents(
+  error: ClientError | undefined,
+): [date: string, event: string][] {
+  assert(error);
+  const marker = 'Connect events: ';
+  const markerIndex = error.message.indexOf(marker);
+  assert(markerIndex >= 0, 'Expected timeout error to contain connect events');
+  return JSON.parse(error.message.slice(markerIndex + marker.length));
 }
 
 test('Connect timeout', async () => {
@@ -2643,6 +2664,21 @@ test('Connect timeout', async () => {
     await vi.advanceTimersByTimeAsync(1);
     expect(z.connectionStatus).toBe(ConnectionStatus.Connecting);
     expectLogMessages(z).contain(connectTimeoutMessage);
+    const events = connectEvents(connectTimeoutErrors(z).at(-1));
+    expect(events.map(([_date, event]) => event)).toEqual([
+      'starting the connection',
+      'reading the cookie',
+      'reading the client group ID',
+      'initializing active clients',
+      'reading the profile ID',
+      'reading deleted clients',
+      'reading desired queries',
+      'creating the WebSocket',
+      'waiting for the server acknowledgement',
+    ]);
+    expect(events.every(([date]) => !Number.isNaN(Date.parse(date)))).toBe(
+      true,
+    );
     const nextSocketPromise = z.socket;
 
     // We stay in connecting state and sleep for RUN_LOOP_INTERVAL_MS before trying again
@@ -2684,6 +2720,58 @@ test('Connect timeout', async () => {
   ]);
 
   connectionStatusCleanup();
+});
+
+test('connect timeout during setup retries without an unhandled rejection', async () => {
+  const unhandledRejections: PromiseRejectionEvent[] = [];
+  const onUnhandled = (event: PromiseRejectionEvent) => {
+    unhandledRejections.push(event);
+    event.preventDefault();
+  };
+  window.addEventListener('unhandledrejection', onUnhandled);
+
+  vi.spyOn(ActiveClientsManager, 'create').mockReturnValue(
+    new Promise(() => {}),
+  );
+
+  try {
+    const z = zeroForTest({logLevel: 'debug'});
+    const connectAttempts = () =>
+      z.testLogSink.messages.filter(
+        ([level, _context, messages]) =>
+          level === 'info' && messages.includes('Connecting...'),
+      ).length;
+
+    await z.waitForConnectionStatus(ConnectionStatus.Connecting);
+    await tickAFewTimes(vi, 0);
+    expect(connectAttempts()).toBe(1);
+
+    await vi.advanceTimersByTimeAsync(CONNECT_TIMEOUT_MS + 1);
+    await tickAFewTimes(vi);
+
+    expect(
+      unhandledRejections.filter(
+        event =>
+          event.reason instanceof ClientError &&
+          event.reason.kind === ClientErrorKind.ConnectTimeout,
+      ),
+    ).toEqual([]);
+    expect(
+      connectEvents(connectTimeoutErrors(z).at(-1)).map(
+        ([_date, event]) => event,
+      ),
+    ).toEqual([
+      'starting the connection',
+      'reading the cookie',
+      'reading the client group ID',
+      'initializing active clients',
+    ]);
+
+    await tickAFewTimes(vi, RUN_LOOP_INTERVAL_MS);
+    expect(connectAttempts()).toBe(2);
+  } finally {
+    window.removeEventListener('unhandledrejection', onUnhandled);
+  }
 });
 
 test('socketOrigin', async () => {
