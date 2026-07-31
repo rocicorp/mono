@@ -27,20 +27,10 @@ import {SQLITE_CHANGE_LOG_PLAN_SQL} from './sqlite-change-log-reader.ts';
 const DEFAULT_STATEMENT_TARGET_MS = 20;
 
 /**
- * Batches per cycle. This bounds one cycle's bookkeeping, not the drain:
- * a cycle that hits the limit with history still eligible schedules its own
- * continuation immediately.
+ * Batches per pass. This bounds one pass's bookkeeping, not the drain: a pass
+ * that hits the limit asks its caller for an immediate continuation.
  */
-const DEFAULT_MAX_BATCHES_PER_CYCLE = 100;
-
-/**
- * How long to wait before re-checking a log that is drained down to history
- * that is not old enough to purge yet, or whose writer has not opened the
- * file. This is what lets a quiet source still drain eligible history: the
- * retention cutoff advances with the clock even when no new cleanup watermark
- * arrives to dispatch a cycle.
- */
-const DEFAULT_RECHECK_INTERVAL_MS = 30_000;
+const DEFAULT_MAX_BATCHES_PER_PASS = 100;
 
 /**
  * The backstop poll while waiting for the writer's open transaction to
@@ -49,7 +39,7 @@ const DEFAULT_RECHECK_INTERVAL_MS = 30_000;
  */
 const DEFAULT_IN_TRANSACTION_POLL_MS = 1_000;
 
-/** Why a cycle stopped before draining the eligible set. */
+/** Why a pass stopped before draining the eligible set. */
 export type PurgeStopReason =
   // The scheduler was stopped.
   | 'stopped'
@@ -58,17 +48,17 @@ export type PurgeStopReason =
   // The writer has not opened the change log (the file does not exist yet),
   // or has failed soft and deleted it.
   | 'writer-unavailable'
-  // A connected subscriber's ACK is behind the floor. Matches the PG arm's
-  // "behind backup" decline, re-checked before every batch so a registration
-  // that lands mid-drain is honored by the very next batch.
+  // A connected subscriber's ACK is behind the floor. Re-checked before every
+  // batch so a registration that lands mid-drain is honored by the very next
+  // batch.
   | 'subscriber-behind'
-  // The per-cycle batch limit was reached with history still eligible.
+  // The per-pass batch limit was reached with history still eligible.
   | 'batch-limit'
-  // The cycle failed; the error was logged and counted.
+  // The pass failed; the error was logged and counted.
   | 'error';
 
 /**
- * The invariant-14 probe's classification of `plan(floor)` after a cycle.
+ * The invariant-14 probe's classification of `plan(floor)` after a pass.
  *
  * `too-old` at the floor is not by itself a violation: a log that never held
  * that history — routine at every fork, restore, and rolling restart — returns
@@ -95,15 +85,25 @@ export type FloorProbeOutcome =
   // could catch up from was purged.
   | 'violation';
 
-export type PurgeCycleResult = {
-  /** The external floor the cycle last used. */
+/** When the cleanup coordinator should run another pass. */
+export type PurgeContinuation =
+  // The pass hit its batch limit while eligible history remained.
+  | 'immediate'
+  // Progress depends on time or external state: retention, a subscriber ACK,
+  // a reservation, the writer becoming available, or a transient error.
+  | 'deferred';
+
+export type PurgePassResult = {
+  /** The external floor the pass used. */
   readonly floor: string;
   readonly batches: number;
   readonly deletedRows: number;
-  /** Why the cycle ended before draining, if it did. */
+  /** Why the pass ended before draining, if it did. */
   readonly stopped: PurgeStopReason | undefined;
   /** The invariant-14 probe's outcome, when the log was available to probe. */
   readonly probe: FloorProbeOutcome | undefined;
+  /** Whether, and how soon, the cleanup coordinator should run another pass. */
+  readonly continuation: PurgeContinuation | undefined;
 };
 
 export type SQLiteChangeLogPurgeSchedulerOptions = {
@@ -119,8 +119,7 @@ export type SQLiteChangeLogPurgeSchedulerOptions = {
    */
   readonly batchRows: number;
   readonly statementTargetMs?: number | undefined;
-  readonly maxBatchesPerCycle?: number | undefined;
-  readonly recheckIntervalMs?: number | undefined;
+  readonly maxBatchesPerPass?: number | undefined;
   readonly inTransactionPollMs?: number | undefined;
   /** The clock the retention cutoff is measured against. Defaults to `Date.now`. */
   readonly now?: (() => number) | undefined;
@@ -149,8 +148,8 @@ type PlanRow = {
 /**
  * Whether any row below both the floor and the head remains. Deliberately not
  * the purger's eligibility query: rows younger than the retention cutoff are
- * not eligible *yet*, but they will be, and their presence is what keeps the
- * recheck timer armed on a quiet source.
+ * not eligible *yet*, but they will be, and their presence asks the cleanup
+ * coordinator for a deferred pass even on a quiet source.
  */
 const BELOW_FLOOR_REMAINS_SQL = /*sql*/ `
   SELECT EXISTS (
@@ -161,25 +160,23 @@ const BELOW_FLOOR_REMAINS_SQL = /*sql*/ `
 `;
 
 /**
- * Schedules SQLite change-log purges from the change-streamer's own process,
- * on the writer's own connection.
+ * Runs bounded SQLite change-log purge passes on the writer's own connection.
  *
- * The change-streamer dispatches a cycle from the same `#purgeOldChanges`
- * pass that purges the PG change log, with the same floor, after the same
- * decline gate — so the two logs cannot diverge in what they retain. Within a
- * cycle the scheduler drains bounded batches, re-checking the gate before
- * each one and releasing the cleanup guard between them, so a catchup
- * registration or a snapshot reservation never waits longer than one batch.
+ * The caller supplies the current durable cleanup floor independently of any
+ * other change-log implementation and owns the timing of subsequent passes.
+ * Within a pass this class drains bounded batches, re-checking live subscriber
+ * ACKs before each one and releasing the cleanup guard between them, so a
+ * catchup registration or snapshot reservation never waits longer than one
+ * batch.
  *
  * Purge windows exist only between the writer's commits: purge shares the
  * writer's connection, so it cannot run inside the writer's open transaction,
  * and a batch that finds one waits for the commit notification instead.
  *
- * The scheduler also re-arms itself: a cycle that hits its batch limit
- * continues immediately, and a drained log that still holds history younger
- * than the retention cutoff is re-checked on a timer — which is what lets a
- * quiet source, whose backup watermark stops advancing, still drain eligible
- * history.
+ * The result tells the cleanup coordinator whether the next pass should be
+ * immediate or deferred. This class deliberately owns no cleanup timer: the
+ * same level-triggered coordinator continues a large drain, advances the
+ * retention clock on a quiet source, and retries changing external state.
  */
 export class SQLiteChangeLogPurgeScheduler {
   readonly #lc: LogContext;
@@ -215,17 +212,17 @@ export class SQLiteChangeLogPurgeScheduler {
     'sqlite_change_log.purged_rows',
     'Rows removed from the SQLite change log by the purge scheduler.',
   );
-  readonly #cycleDuration = getOrCreateLatencyHistogram(
+  readonly #passDuration = getOrCreateLatencyHistogram(
     'replica',
     'sqlite_change_log.purge_cycle_duration',
-    'Duration of one SQLite change-log purge cycle, including the yields ' +
+    'Duration of one SQLite change-log purge pass, including the yields ' +
       'between its batches.',
   );
-  readonly #cycleBatches = getOrCreateValueHistogram(
+  readonly #passBatches = getOrCreateValueHistogram(
     'replica',
     'sqlite_change_log.purge_cycle_batches',
     {
-      description: 'Purge batches run per SQLite change-log purge cycle.',
+      description: 'Purge batches run per SQLite change-log purge pass.',
       unit: '{batch}',
       bucketBoundaries: [1, 2, 5, 10, 25, 50, 100, 250],
     },
@@ -233,21 +230,17 @@ export class SQLiteChangeLogPurgeScheduler {
   readonly #declines = getOrCreateCounter(
     'replica',
     'sqlite_change_log.purge_declined',
-    'SQLite change-log purge cycles that ended before draining, by reason.',
+    'SQLite change-log purge passes that ended before draining, by reason.',
   );
   readonly #floorProbes = getOrCreateCounter(
     'replica',
     'sqlite_change_log.purge_floor_probe',
     'Invariant-14 probe outcomes: whether the transaction at the purge ' +
-      'floor is still servable after each cycle. "violation" means history ' +
+      'floor is still servable after each pass. "violation" means history ' +
       'at or above the floor was purged and alerts; "cold-log" means the ' +
       'log never held it, which is routine at every fork and resumption.',
   );
 
-  /** The highest floor any cycle has been dispatched with. Floors only rise. */
-  #pendingFloor: string | undefined;
-  #running: Promise<PurgeCycleResult> | undefined;
-  #recheckTimer: ReturnType<typeof setTimeout> | undefined;
   #cache: ConnectionCache | undefined;
   #stopped = false;
 
@@ -264,11 +257,11 @@ export class SQLiteChangeLogPurgeScheduler {
   /**
    * @param connection the writer's own connection (§3.3). `undefined` until
    *     the writer's first reconcile creates the file, and again after the
-   *     writer fails soft and deletes it — both of which skip the cycle
-   *     rather than fail it, so the scheduler picks a late-appearing file up
-   *     without a restart.
-   * @param subscriberAcks the ACKs `#purgeOldChanges` gates the PG purge on,
-   *     re-read before every batch.
+   *     writer fails soft and deletes it — both of which defer the pass rather
+   *     than fail it, so a later coordinator pass picks up a late-appearing
+   *     file without a restart.
+   * @param subscriberAcks live subscriber ACKs, re-read before every batch so
+   *     the supplied floor remains safe throughout an asynchronous drain.
    */
   constructor(
     lc: LogContext,
@@ -297,23 +290,20 @@ export class SQLiteChangeLogPurgeScheduler {
   }
 
   /**
-   * Dispatches a purge cycle for `floor` — the same floor, in the same cycle,
-   * behind the same decline gate as the PG purge. A cycle already running
-   * coalesces: the floor is raised for its next batch and its completion is
-   * returned.
-   *
-   * Never rejects; a failed cycle is logged and reported as `stopped: 'error'`.
+   * Runs one purge pass for the current durable cleanup `floor`.
+   * Never rejects; a failed pass is logged and reported as `stopped: 'error'`.
    */
-  purge(floor: string): Promise<PurgeCycleResult> {
-    this.#pendingFloor =
-      this.#pendingFloor === undefined || floor > this.#pendingFloor
-        ? floor
-        : this.#pendingFloor;
+  async purge(floor: string): Promise<PurgePassResult> {
     if (this.#stopped) {
-      return Promise.resolve(this.#skipped(floor, 'stopped'));
+      return this.#skipped(floor, 'stopped');
     }
-    this.#clearRecheckTimer();
-    return this.#running ?? this.#dispatch();
+    try {
+      return await this.#runPass(floor);
+    } catch (e) {
+      this.#lc.warn?.('error purging the SQLite change log', e);
+      this.#declines.add(1, {reason: 'error'});
+      return this.#skipped(floor, 'error', 'deferred');
+    }
   }
 
   /**
@@ -324,14 +314,12 @@ export class SQLiteChangeLogPurgeScheduler {
    */
   pause(taskID: string): Promise<void> {
     this.#pausedBy.set(taskID, (this.#pausedBy.get(taskID) ?? 0) + 1);
-    this.#clearRecheckTimer();
     return this.#lock.withLock(() => {});
   }
 
   /**
-   * Ends one of `taskID`'s pauses. Purging resumes only when every
-   * reservation has ended, picking up any drain the pauses interrupted.
-   * Unknown `taskID`s are ignored.
+   * Ends one of `taskID`'s pauses. A later coordinator pass can purge once
+   * every reservation has ended. Unknown `taskID`s are ignored.
    */
   resume(taskID: string): void {
     const count = this.#pausedBy.get(taskID);
@@ -343,13 +331,6 @@ export class SQLiteChangeLogPurgeScheduler {
       return;
     }
     this.#pausedBy.delete(taskID);
-    if (
-      this.#pausedBy.size === 0 &&
-      !this.#stopped &&
-      this.#pendingFloor !== undefined
-    ) {
-      this.#scheduleRecheck(0);
-    }
   }
 
   /**
@@ -366,44 +347,11 @@ export class SQLiteChangeLogPurgeScheduler {
 
   stop(): void {
     this.#stopped = true;
-    this.#clearRecheckTimer();
     this.onWriterIdle();
   }
 
-  #dispatch(): Promise<PurgeCycleResult> {
-    // One promise per cycle, stored and returned, so a dispatch that lands
-    // while a cycle is running coalesces into the identical completion.
-    const running = (async () => {
-      let result: PurgeCycleResult;
-      try {
-        result = await this.#runCycle();
-      } catch (e) {
-        const floor = this.#pendingFloor;
-        assert(floor !== undefined, 'a cycle cannot run without a floor');
-        this.#lc.warn?.('error purging the SQLite change log', e);
-        this.#declines.add(1, {reason: 'error'});
-        result = this.#skipped(floor, 'error');
-      }
-      try {
-        this.#finishCycle(result);
-      } catch (e) {
-        this.#lc.warn?.('error re-arming the SQLite change-log purge', e);
-      }
-      return result;
-    })().finally(() => {
-      this.#running = undefined;
-    });
-    this.#running = running;
-    return running;
-  }
-
-  async #runCycle(): Promise<PurgeCycleResult> {
+  async #runPass(floor: string): Promise<PurgePassResult> {
     const startedAt = performance.now();
-    assert(
-      this.#pendingFloor !== undefined,
-      'a cycle cannot run without a floor',
-    );
-    let floor: string = this.#pendingFloor;
     let batches = 0;
     let deletedRows = 0;
     let stopped: PurgeStopReason | undefined;
@@ -411,9 +359,6 @@ export class SQLiteChangeLogPurgeScheduler {
 
     try {
       for (;;) {
-        // The floor is re-read each batch: a coalesced dispatch may have raised
-        // it, and the gate below is evaluated against what is actually used.
-        floor = this.#pendingFloor ?? floor;
         if (this.#stopped) {
           stopped = 'stopped';
           break;
@@ -436,7 +381,7 @@ export class SQLiteChangeLogPurgeScheduler {
           batches >=
           Math.max(
             1,
-            this.#opts.maxBatchesPerCycle ?? DEFAULT_MAX_BATCHES_PER_CYCLE,
+            this.#opts.maxBatchesPerPass ?? DEFAULT_MAX_BATCHES_PER_PASS,
           )
         ) {
           stopped = 'batch-limit';
@@ -448,7 +393,6 @@ export class SQLiteChangeLogPurgeScheduler {
           continue;
         }
 
-        const batchFloor = floor;
         const outcome = await this.#lock.withLock(() => {
           // Everything the wait above established is re-checked under the lock:
           // the writer may have begun another transaction or failed soft while
@@ -456,12 +400,12 @@ export class SQLiteChangeLogPurgeScheduler {
           if (this.#connection() !== connection || connection.inTransaction) {
             return {kind: 'retry'} as const;
           }
-          const declined = this.#gate(batchFloor);
+          const declined = this.#gate(floor);
           if (declined !== undefined) {
             return {kind: 'declined', reason: declined} as const;
           }
           const result = this.#cacheFor(connection).purger.purgeBatch({
-            externalFloor: batchFloor,
+            externalFloor: floor,
             retentionCutoffMs: this.#now() - this.#opts.retentionMs,
             maxRows: this.#opts.batchRows,
             maxDurationMs:
@@ -479,108 +423,98 @@ export class SQLiteChangeLogPurgeScheduler {
         }
         batches++;
         deletedRows += outcome.result.deletedRows;
-        // A purge() call can raise the pending floor while this batch is
-        // suspended on withLock(). `moreEligible` only describes the captured
-        // batch floor, so do not mistake a drain to that floor for a drain to
-        // the newer one.
-        const floorRaised =
-          this.#pendingFloor !== undefined && this.#pendingFloor > batchFloor;
-        if (!outcome.result.moreEligible && !floorRaised) {
+        if (!outcome.result.moreEligible) {
           break;
         }
         // Release the loop — and the guard, released above — so fan-out,
-        // catchup, and registrations make progress between batches or floors.
+        // catchup, and registrations make progress between batches.
         await this.#yield();
       }
     } catch (e) {
       // Earlier batches committed independently and must remain visible in the
-      // result and metrics. Finalize the partial cycle, including its floor
+      // result and metrics. Finalize the partial pass, including its floor
       // probe, rather than replacing it with an empty skipped result.
       this.#lc.warn?.('error purging the SQLite change log', e);
       stopped = 'error';
     }
 
     const probe = db === undefined ? undefined : this.#probeFloor(db, floor);
+    let continuation: PurgeContinuation | undefined;
+    try {
+      continuation = this.#continuation(floor, stopped);
+    } catch (e) {
+      // A connection can fail soft between the pass and this level check. Keep
+      // completed batches visible and ask the coordinator to retry later.
+      this.#lc.warn?.(
+        'unable to determine whether SQLite change-log purge should continue',
+        e,
+      );
+      continuation = 'deferred';
+      stopped ??= 'error';
+    }
     if (deletedRows > 0) {
       this.#purgedRows.add(deletedRows);
     }
     if (batches > 0) {
-      this.#cycleBatches.record(batches);
-      this.#cycleDuration.recordMs(performance.now() - startedAt);
+      this.#passBatches.record(batches);
+      this.#passDuration.recordMs(performance.now() - startedAt);
     }
     if (stopped !== undefined) {
       this.#declines.add(1, {reason: stopped});
     }
     if (batches > 0 || stopped !== 'writer-unavailable') {
-      this.#lc.debug?.('SQLite change-log purge cycle', {
-        sqliteChangeLogPurge: {floor, batches, deletedRows, stopped, probe},
+      this.#lc.debug?.('SQLite change-log purge pass', {
+        sqliteChangeLogPurge: {
+          floor,
+          batches,
+          deletedRows,
+          stopped,
+          probe,
+          continuation,
+        },
       });
     }
-    return {floor, batches, deletedRows, stopped, probe};
+    return {floor, batches, deletedRows, stopped, probe, continuation};
   }
 
   /**
-   * Re-arms the scheduler after a cycle. A cycle interrupted by its batch
-   * limit continues immediately; a decline or an unopened log is re-checked
-   * later (a decline lifts when the lagging subscriber ACKs past the floor,
-   * which nothing notifies); and a fully drained log is re-checked as long as
-   * it retains history below the floor, which the advancing retention cutoff
-   * will eventually release.
+   * Reports whether the level-triggered cleanup coordinator should run again.
+   * Rows below the floor but inside the retention window require a deferred
+   * pass even when no new backup watermark arrives.
    */
-  #finishCycle(result: PurgeCycleResult): void {
-    if (this.#stopped || this.#pausedBy.size > 0) {
-      return; // resume() re-arms.
-    }
-    switch (result.stopped) {
+  #continuation(
+    floor: string,
+    stopped: PurgeStopReason | undefined,
+  ): PurgeContinuation | undefined {
+    switch (stopped) {
       case 'batch-limit':
-        this.#scheduleRecheck(0);
-        break;
+        return 'immediate';
       case 'stopped':
+        return undefined;
       case 'paused':
-        break;
       case 'subscriber-behind':
       case 'writer-unavailable':
       case 'error':
-        this.#scheduleRecheck(
-          this.#opts.recheckIntervalMs ?? DEFAULT_RECHECK_INTERVAL_MS,
-        );
-        break;
+        return 'deferred';
       case undefined: {
-        // Backstop the last-batch check above: a dispatch can land after
-        // #runCycle() returns but before this finalization runs. The coalesced
-        // floor must leave the scheduler armed even though the completed floor
-        // itself is fully drained.
-        if (
-          this.#pendingFloor !== undefined &&
-          this.#pendingFloor > result.floor
-        ) {
-          this.#scheduleRecheck(0);
-          break;
-        }
         // A read is safe even inside the writer's open transaction; it just
         // observes the uncommitted head, which is never below the floor.
         const db = this.#connection();
-        if (db !== undefined) {
-          const {remains} = this.#cacheFor(db).belowFloorRemains.get<{
-            remains: number;
-          }>({floor: result.floor});
-          if (remains === 0) {
-            break;
-          }
+        if (db === undefined) {
+          return 'deferred';
         }
-        this.#scheduleRecheck(
-          this.#opts.recheckIntervalMs ?? DEFAULT_RECHECK_INTERVAL_MS,
-        );
-        break;
+        const {remains} = this.#cacheFor(db).belowFloorRemains.get<{
+          remains: number;
+        }>({floor});
+        return remains === 0 ? undefined : 'deferred';
       }
     }
   }
 
   /**
-   * The decline gate, identical to the PG arm's: no purge while a connected
-   * subscriber is behind the floor. With no subscribers, the cleanup delay
-   * has already provided the reconnect grace period and the confirmed backup
-   * floor is safe to use.
+   * No purge while a connected subscriber is behind the supplied floor. The
+   * cleanup coordinator has already provided the reconnect grace period; an
+   * empty live set places no additional constraint on the durable floor.
    */
   #gate(floor: string): 'subscriber-behind' | undefined {
     for (const ack of this.#subscriberAcks()) {
@@ -648,31 +582,6 @@ export class SQLiteChangeLogPurgeScheduler {
     });
   }
 
-  #scheduleRecheck(delayMs: number): void {
-    if (this.#stopped || this.#recheckTimer !== undefined) {
-      return;
-    }
-    this.#recheckTimer = this.#setTimeoutFn(() => {
-      this.#recheckTimer = undefined;
-      if (
-        this.#stopped ||
-        this.#running !== undefined ||
-        this.#pendingFloor === undefined ||
-        this.#pausedBy.size > 0
-      ) {
-        return;
-      }
-      void this.#dispatch();
-    }, delayMs);
-  }
-
-  #clearRecheckTimer(): void {
-    if (this.#recheckTimer !== undefined) {
-      this.#clearTimeoutFn(this.#recheckTimer);
-      this.#recheckTimer = undefined;
-    }
-  }
-
   /**
    * The per-connection statements, rebuilt if the writer's connection ever
    * changes. The purger's prepared statements survive a reseed — SQLite
@@ -690,13 +599,18 @@ export class SQLiteChangeLogPurgeScheduler {
     return this.#cache;
   }
 
-  #skipped(floor: string, reason: PurgeStopReason): PurgeCycleResult {
+  #skipped(
+    floor: string,
+    reason: PurgeStopReason,
+    continuation?: PurgeContinuation | undefined,
+  ): PurgePassResult {
     return {
       floor,
       batches: 0,
       deletedRows: 0,
       stopped: reason,
       probe: undefined,
+      continuation,
     };
   }
 }

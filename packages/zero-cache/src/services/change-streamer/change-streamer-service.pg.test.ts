@@ -326,6 +326,7 @@ describe('change-streamer/service', () => {
   async function restartWithInlineChangeLogWriter(
     logFile: DbFile,
     sqliteCatchup?: Partial<SQLiteCatchupOptions>,
+    sqliteChangeLogPurge?: TuningOptions['sqliteChangeLogPurge'],
   ): Promise<void> {
     await streamer.stop();
     await streamerDone;
@@ -366,6 +367,7 @@ describe('change-streamer/service', () => {
             replicaID: 'replica-id',
           },
         },
+        ...(sqliteChangeLogPurge === undefined ? {} : {sqliteChangeLogPurge}),
         ...(sqliteCatchup === undefined
           ? {}
           : {
@@ -528,6 +530,77 @@ describe('change-streamer/service', () => {
       sqliteSub.cancel();
     } finally {
       liveSub.cancel();
+      await streamer.stop();
+      await streamerDone;
+      deleteChangeLogDB(logFile.path);
+      logFile.delete();
+    }
+  });
+
+  test('SQLite cleanup continues independently after PG reaches the floor', async () => {
+    const logFile = new DbFile('sqlite-change-log-independent-purge');
+    await restartWithInlineChangeLogWriter(logFile, undefined, {
+      retentionMs: 1,
+      batchRows: 2,
+      maxBatchesPerPass: 1,
+      now: () => Date.now() + 60_000,
+      yieldFn: () => Promise.resolve(),
+    });
+
+    const watermarks = ['03', '04', '05', '06', '07', '08', '09'];
+    try {
+      for (const watermark of watermarks) {
+        changes.push(['begin', messages.begin(), {commitWatermark: watermark}]);
+        changes.push(['commit', messages.commit(), {watermark}]);
+      }
+      await expectAcks(...watermarks);
+
+      const sqliteMinWatermark = () => {
+        using log = openChangeLogDB(lc, logFile.path, {readonly: true});
+        return log
+          .prepare(/*sql*/ `
+            SELECT min("watermark") AS "watermark"
+              FROM "_zero.changeLogStream"
+          `)
+          .get<{watermark: string}>().watermark;
+      };
+      expect(sqliteMinWatermark()).toBe(REPLICA_VERSION);
+
+      setTimeoutFn.mockClear();
+      const pgPurge = vi.spyOn(Storer.prototype, 'purgeRecordsBefore');
+      try {
+        streamer.trackBackupWatermark('08');
+        const initial = setTimeoutFn.mock.calls.slice(0, 2);
+        expect(initial.map(call => call[1])).toEqual([30_000, 30_000]);
+        await Promise.all(
+          initial.map(call => call[0]() as unknown as Promise<void>),
+        );
+
+        let timerIndex = initial.length;
+        let sqlitePasses = 1;
+        while (sqliteMinWatermark() !== '08') {
+          const call = setTimeoutFn.mock.calls[timerIndex];
+          assert(call, `cleanup timer ${timerIndex} was not scheduled`);
+          expect(call[1]).toBe(0);
+          timerIndex++;
+          sqlitePasses++;
+          await (call[0]() as unknown as Promise<void>);
+
+          // PG reaches the floor in the first pass. Later level-triggered
+          // passes belong solely to SQLite's bounded drain.
+          expect(pgPurge).toHaveBeenCalledTimes(1);
+          expect(sqlitePasses).toBeLessThan(10);
+        }
+
+        expect(sqlitePasses).toBeGreaterThan(1);
+        expect(
+          await sql`SELECT min(watermark) FROM "zoro_3/cdc"."changeLog"`.values(),
+        ).toEqual([['08']]);
+        expect(setTimeoutFn).toHaveBeenCalledTimes(timerIndex);
+      } finally {
+        pgPurge.mockRestore();
+      }
+    } finally {
       await streamer.stop();
       await streamerDone;
       deleteChangeLogDB(logFile.path);

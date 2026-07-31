@@ -162,8 +162,7 @@ function setup(
       retentionMs: 1_000,
       batchRows: 10,
       statementTargetMs: 1_000,
-      maxBatchesPerCycle: 100,
-      recheckIntervalMs: 30_000,
+      maxBatchesPerPass: 100,
       inTransactionPollMs: 1_000,
       now: () => nowMs,
       setTimeoutFn,
@@ -235,27 +234,29 @@ describe('change-streamer/sqlite-change-log-purge-scheduler', () => {
     expect(result.probe).toBe('ahead');
   });
 
-  test('bounded batches per cycle, with an immediate continuation', async () => {
-    const {db, scheduler, timers} = setup({
+  test('bounded batches per pass request an immediate continuation', async () => {
+    const {db, scheduler} = setup({
       batchRows: 4,
-      maxBatchesPerCycle: 2,
+      maxBatchesPerPass: 2,
     });
     appendSeries(db, 1, 20);
 
     const first = await scheduler.purge(v(15));
     expect(first.stopped).toBe('batch-limit');
     expect(first.batches).toBe(2);
+    expect(first.continuation).toBe('immediate');
     expect(minWatermark(db)).not.toBe(v(15));
-    // The continuation is scheduled immediately -- the limit bounds one
-    // cycle's bookkeeping, not the drain.
-    expect(timers.delays()).toEqual([0]);
 
-    // Repeated dispatches drain to the floor.
+    // The cleanup coordinator follows the result until the pass drains.
+    let result = first;
     for (let i = 0; i < 10; i++) {
-      timers.fire();
-      await scheduler.purge(v(15));
+      if (result.continuation === undefined) {
+        break;
+      }
+      result = await scheduler.purge(v(15));
     }
     expect(minWatermark(db)).toBe(v(15));
+    expect(result.continuation).toBeUndefined();
   });
 
   test('declines only when a connected subscriber ACK is behind the floor', async () => {
@@ -266,6 +267,7 @@ describe('change-streamer/sqlite-change-log-purge-scheduler', () => {
     let result = await scheduler.purge(v(8));
     expect(result.stopped).toBe('subscriber-behind');
     expect(result.deletedRows).toBe(0);
+    expect(result.continuation).toBe('deferred');
 
     setAcks([]);
     result = await scheduler.purge(v(8));
@@ -273,25 +275,21 @@ describe('change-streamer/sqlite-change-log-purge-scheduler', () => {
     expect(minWatermark(db)).toBe(v(8));
   });
 
-  test('a decline arms the recheck timer, which alone lifts it', async () => {
-    const {db, scheduler, timers, setAcks} = setup();
+  test('a deferred pass observes a subscriber that has caught up', async () => {
+    const {db, scheduler, setAcks} = setup();
     appendSeries(db, 1, 10);
 
     setAcks([v(3)]);
     const declined = await scheduler.purge(v(8));
     expect(declined.stopped).toBe('subscriber-behind');
-    // Nothing notifies when the lagging subscriber ACKs past the floor, so
-    // the recheck timer is the only thing that ever lifts a decline.
-    expect(timers.delays()).toEqual([30_000]);
+    expect(declined.continuation).toBe('deferred');
 
-    // The subscriber catches up; the timer alone — no new purge() dispatch —
-    // resumes the drain.
+    // Subscriber ACKs are level-triggered rather than notifications. The
+    // cleanup coordinator follows the deferred result with another pass.
     setAcks([v(20)]);
-    timers.fire();
-    await microtasks();
+    const result = await scheduler.purge(v(8));
     expect(minWatermark(db)).toBe(v(8));
-    // Drained to the floor with nothing below it: no timer left armed.
-    expect(timers.delays()).toEqual([]);
+    expect(result.continuation).toBeUndefined();
   });
 
   test('a registration mid-drain is honored by the very next batch', async () => {
@@ -299,7 +297,7 @@ describe('change-streamer/sqlite-change-log-purge-scheduler', () => {
       batchRows: 6,
       yieldFn: async () => {
         // Runs between batches, where the guard must be free: a guard held
-        // for the cycle would deadlock this registration.
+        // for the pass would deadlock this registration.
         if (!registered) {
           registered = true;
           await fixture.scheduler.cleanupGuard.runWhilePurgeBlocked(() => {
@@ -320,49 +318,6 @@ describe('change-streamer/sqlite-change-log-purge-scheduler', () => {
     expect(result.stopped).toBe('subscriber-behind');
     using reader = new SQLiteChangeLogReader(lc, changeLogFileName(file.path));
     expect(reader.plan(v(15)).kind).toBe('range');
-  });
-
-  test('a floor raised by a coalesced dispatch applies to the running drain', async () => {
-    const {db, scheduler} = setup({batchRows: 4});
-    appendSeries(db, 1, 30);
-
-    const first = scheduler.purge(v(10));
-    const second = scheduler.purge(v(20));
-    // The second dispatch coalesced into the running cycle...
-    expect(second).toBe(first);
-    await first;
-    // ...and raised its floor.
-    expect(minWatermark(db)).toBe(v(20));
-  });
-
-  test('a floor raised as the captured floor drains keeps the cycle running', async () => {
-    let scheduler!: SQLiteChangeLogPurgeScheduler;
-    let second: Promise<unknown> | undefined;
-    let raiseFloor = true;
-    const fixture = setup({
-      batchRows: 1_000,
-      now: () => {
-        if (raiseFloor) {
-          raiseFloor = false;
-          // Run after purgeBatch() has reported that floor 10 is drained but
-          // before #runCycle() resumes from awaiting the lock.
-          queueMicrotask(() => {
-            second = scheduler.purge(v(20));
-          });
-        }
-        return LONG_AGO;
-      },
-    });
-    ({scheduler} = fixture);
-    appendSeries(fixture.db, 1, 30);
-
-    const first = scheduler.purge(v(10));
-    const result = await first;
-
-    expect(second).toBe(first);
-    expect(result.floor).toBe(v(20));
-    expect(minWatermark(fixture.db)).toBe(v(20));
-    expect(fixture.timers.delays()).toEqual([]);
   });
 
   test("purges only between the writer's commits", async () => {
@@ -470,7 +425,7 @@ describe('change-streamer/sqlite-change-log-purge-scheduler', () => {
   });
 
   test('reservations pause purging and resume only when every one has ended', async () => {
-    const {db, scheduler, timers, setNow} = setup();
+    const {db, scheduler} = setup();
     appendSeries(db, 1, 10);
 
     await scheduler.pause('task-a');
@@ -479,17 +434,14 @@ describe('change-streamer/sqlite-change-log-purge-scheduler', () => {
     const paused = await scheduler.purge(v(8));
     expect(paused.stopped).toBe('paused');
     expect(paused.deletedRows).toBe(0);
+    expect(paused.continuation).toBe('deferred');
     expect(watermarks(db)).toContain(SEED_WATERMARK);
 
     scheduler.resume('task-a');
-    expect(timers.delays()).toEqual([]); // task-b still holds a reservation
     const stillPaused = await scheduler.purge(v(8));
     expect(stillPaused.stopped).toBe('paused');
 
     scheduler.resume('task-b');
-    expect(timers.delays()).toEqual([0]);
-    setNow(LONG_AGO + 1);
-    timers.fire();
     await scheduler.purge(v(8));
     expect(minWatermark(db)).toBe(v(8));
   });
@@ -517,7 +469,7 @@ describe('change-streamer/sqlite-change-log-purge-scheduler', () => {
     appendSeries(db, 1, 30);
 
     // Hold the purge mutex, as a catchup registration does, so that the
-    // cycle's first batch queues behind it: a batch "in flight" — dispatched
+    // pass's first batch queues behind it: a batch "in flight" — dispatched
     // but not yet run — at the moment the reservation arrives.
     let releaseGuard!: () => void;
     const registration = scheduler.cleanupGuard.runWhilePurgeBlocked(
@@ -607,7 +559,7 @@ describe('change-streamer/sqlite-change-log-purge-scheduler', () => {
   });
 
   test('a batch queued behind a registration skips a writer that failed soft', async () => {
-    const {db, scheduler, timers, setConnection} = setup();
+    const {db, scheduler, setConnection} = setup();
     appendSeries(db, 1, 10);
 
     let releaseGuard!: () => void;
@@ -630,8 +582,8 @@ describe('change-streamer/sqlite-change-log-purge-scheduler', () => {
     // loop then skipped rather than purging on the stale handle.
     expect(result.stopped).toBe('writer-unavailable');
     expect(result.deletedRows).toBe(0);
+    expect(result.continuation).toBe('deferred');
     expect(watermarks(db)).toContain(SEED_WATERMARK);
-    expect(timers.delays()).toEqual([30_000]);
   });
 
   test('a pause lands between batches and interrupts the drain', async () => {
@@ -645,7 +597,7 @@ describe('change-streamer/sqlite-change-log-purge-scheduler', () => {
       },
     });
     let paused = false;
-    const {db, scheduler, timers} = fixture;
+    const {db, scheduler} = fixture;
     appendSeries(db, 1, 30);
 
     const result = await scheduler.purge(v(25));
@@ -654,50 +606,50 @@ describe('change-streamer/sqlite-change-log-purge-scheduler', () => {
     const atPause = watermarks(db);
     expect(atPause.length).toBeGreaterThan(1); // the drain did not finish
 
-    // Ending the reservation resumes the interrupted drain.
+    // Ending the reservation lets the coordinator's next pass resume the
+    // interrupted drain.
     scheduler.resume('restorer');
-    timers.fire();
     await scheduler.purge(v(25));
     expect(minWatermark(db)).toBe(v(25));
   });
 
   test('skips at debug until the writer opens the log, then picks it up', async () => {
-    const {db, scheduler, timers, setConnection} = setup({connected: false});
+    const {db, scheduler, setConnection} = setup({connected: false});
     appendSeries(db, 1, 10);
 
     const skipped = await scheduler.purge(v(8));
     expect(skipped.stopped).toBe('writer-unavailable');
     expect(skipped.probe).toBeUndefined();
+    expect(skipped.continuation).toBe('deferred');
     expect(watermarks(db)).toContain(SEED_WATERMARK);
-    expect(timers.delays()).toEqual([30_000]);
 
     // The change-log file appears (the writer's first reconcile): the next
-    // cycle picks it up without a restart.
+    // pass picks it up without a restart.
     setConnection(db);
-    timers.fire();
     await scheduler.purge(v(8));
     expect(minWatermark(db)).toBe(v(8));
   });
 
   test('a quiet source still drains once young history ages out', async () => {
-    const {db, scheduler, timers, setNow} = setup();
+    const {db, scheduler, setNow} = setup();
     appendSeries(db, 1, 30);
     // Only transactions written before the cutoff are eligible on the first
-    // cycle; the rest are within the minimum retention window.
+    // pass; the rest are within the minimum retention window.
     setNow(SEED_WRITE_TIME_MS + 20 + 1_000);
 
     const first = await scheduler.purge(v(25));
     expect(first.stopped).toBeUndefined();
     expect(minWatermark(db)).toBe(v(20));
-    // History below the floor remains, so the recheck timer is armed.
-    expect(timers.delays()).toEqual([30_000]);
+    // History below the floor remains, so the coordinator gets a deferred
+    // continuation even though the source is quiet.
+    expect(first.continuation).toBe('deferred');
 
-    // No new cleanup watermark ever arrives; the clock alone releases the
-    // rest.
+    // No new cleanup watermark arrives; a later level-triggered pass observes
+    // the advanced clock and releases the rest.
     setNow(LONG_AGO);
-    timers.fire();
-    await scheduler.purge(v(25));
+    const second = await scheduler.purge(v(25));
     expect(minWatermark(db)).toBe(v(25));
+    expect(second.continuation).toBeUndefined();
   });
 
   test('a stale floor stalls purge; the boundary stays servable end to end', async () => {
@@ -770,7 +722,7 @@ describe('change-streamer/sqlite-change-log-purge-scheduler', () => {
         return Promise.resolve();
       },
     });
-    const {db, scheduler, timers} = fixture;
+    const {db, scheduler} = fixture;
     appendSeries(db, 1, 30);
 
     const result = await scheduler.purge(v(25));
@@ -779,20 +731,20 @@ describe('change-streamer/sqlite-change-log-purge-scheduler', () => {
     expect(result.batches).toBe(1);
     expect(result.deletedRows).toBeGreaterThan(0);
     expect(result.probe).toBe('retained');
-    expect(timers.delays()).toEqual([30_000]);
+    expect(result.continuation).toBe('deferred');
   });
 
-  test('a failed cycle reports an error and re-arms instead of throwing', async () => {
-    const {db, scheduler, timers} = setup();
+  test('a failed pass reports an error and requests a retry', async () => {
+    const {db, scheduler} = setup();
     appendSeries(db, 1, 10);
     db.exec(/*sql*/ `DROP TABLE "${CHANGE_LOG_STREAM_TABLE}"`);
 
     const result = await scheduler.purge(v(8));
     expect(result.stopped).toBe('error');
-    expect(timers.delays()).toEqual([30_000]);
+    expect(result.continuation).toBe('deferred');
   });
 
-  test('stop ends cycles and unparks a waiting batch', async () => {
+  test('stop ends passes and unparks a waiting batch', async () => {
     const {db, scheduler} = setup();
     appendSeries(db, 1, 10);
     const writer = new ChangeLogStreamWriter(new StatementRunner(db));
