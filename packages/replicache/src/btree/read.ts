@@ -307,6 +307,19 @@ async function* scanForHash(
     i = binarySearch(fromKey, entries);
   }
   if (data[NODE_LEVEL] > 0) {
+    // Preload children in parallel so the backing store can coalesce their
+    // reads. This can waste work when a caller stops before visiting every
+    // child. Zero currently accepts that tradeoff: startup scans the entire
+    // cached entity range into IVM memory before becoming ready (see
+    // `ZeroRep.init` in packages/zero-client/src/client/zero-rep.ts), and client
+    // views are intended to remain small. If views commonly outgrow the 100 MB
+    // `LAZY_STORE_SOURCE_CHUNK_CACHE_SIZE_LIMIT`, reconsider the preload
+    // window, although batching may still be a useful general optimization.
+    // Longer term, the Replicache/IVM boundary should also be revisited because
+    // materializing entities into `MemorySource` duplicates B-tree storage.
+    //
+    // The serial scan below preserves traversal order and remains the
+    // authoritative read, so speculative failures are ignored here.
     await Promise.all(
       entries
         .slice(i)
