@@ -192,6 +192,44 @@ describe('makeSchemaCRUD', () => {
     });
   });
 
+  test('update and upsert allow concurrent foreign key inserts', async () => {
+    await pg`
+      CREATE TABLE basic_refs (
+        id TEXT PRIMARY KEY,
+        basic_id TEXT NOT NULL REFERENCES basic(id)
+      )
+    `;
+    await pg`INSERT INTO basic (id, a, b) VALUES ('1', 1, 'one')`;
+
+    const assertAllowsForeignKeyInsert = async (
+      id: string,
+      operation: (crud: SchemaCRUD<typeof schema>) => Promise<void>,
+    ) => {
+      await pg.begin(async tx => {
+        const transaction = new Transaction(tx);
+        const crud = crudProvider(
+          transaction,
+          await getServerSchema(transaction, schema),
+        );
+        await operation(crud);
+
+        await pg.begin(async concurrent => {
+          await concurrent.unsafe(`SET LOCAL lock_timeout = '100ms'`);
+          await concurrent`
+            INSERT INTO basic_refs (id, basic_id) VALUES (${id}, '1')
+          `;
+        });
+      });
+    };
+
+    await assertAllowsForeignKeyInsert('update', crud =>
+      crud.basic.update({id: '1', b: 'updated'}),
+    );
+    await assertAllowsForeignKeyInsert('upsert', crud =>
+      crud.basic.upsert({id: '1', a: 2, b: 'upserted'}),
+    );
+  });
+
   test('insert/update/upsert with nullable array columns preserves null', async () => {
     await pg.begin(async tx => {
       const transaction = new Transaction(tx);

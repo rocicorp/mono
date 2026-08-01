@@ -994,9 +994,8 @@ export class Zero<
   /**
    * Executes a query once and returns the results.
    *
-   * By default, waits for any pending data to sync before running the query.
-   * This ensures fresh results from the server. Use `{type: 'unknown'}` to
-   * run immediately with whatever data is available locally.
+   * By default, runs immediately with whatever data is available locally.
+   * Use `{type: 'complete'}` to wait for fresh results from the server.
    *
    * @param query - The query to execute
    * @param runOptions - Options controlling query execution
@@ -1004,11 +1003,11 @@ export class Zero<
    *
    * @example
    * ```ts
-   * // Wait for server sync
+   * // Run with local data only
    * const users = await zero.run(userQuery);
    *
-   * // Run with local data only
-   * const cachedUsers = await zero.run(userQuery, {type: 'unknown'});
+   * // Wait for server sync
+   * const freshUsers = await zero.run(userQuery, {type: 'complete'});
    * ```
    */
   run<
