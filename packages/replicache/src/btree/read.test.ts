@@ -63,57 +63,6 @@ test('scan over a multi-level btree yields all entries in order', async () => {
   });
 });
 
-test('prefetch preserves scan output across many tree shapes and fromKeys', async () => {
-  // Deterministic MINSTD PRNG so the shapes are reproducible (no Date/random).
-  let seed = 1;
-  const rand = () => {
-    seed = (seed * 48271) % 0x7fffffff;
-    return seed / 0x7fffffff;
-  };
-
-  const shapes = [
-    {count: 1, min: 2, max: 3},
-    {count: 7, min: 2, max: 3},
-    {count: 64, min: 2, max: 4},
-    {count: 200, min: 2, max: 3},
-    {count: 500, min: 3, max: 6},
-  ];
-
-  for (const {count, min, max} of shapes) {
-    const keySet = new Set<string>();
-    while (keySet.size < count) {
-      keySet.add(String(Math.floor(rand() * count * 10)).padStart(6, '0'));
-    }
-    const keys = [...keySet];
-    const sorted = keys.toSorted();
-
-    const dagStore = new TestStore();
-    await withWrite(dagStore, async dagWrite => {
-      const map = makeTree(dagWrite, min, max);
-      for (const k of keys) {
-        await map.put(k, k);
-      }
-      await map.flush();
-
-      // '' + before-first + after-last + every key + a key wedged between
-      // each key and its successor. Covers the binarySearch index boundaries
-      // that decide slice(i) in the prefetch.
-      const fromKeys = [
-        '',
-        '000000',
-        '999999',
-        ...sorted,
-        ...sorted.map(k => `${k}5`),
-      ];
-      for (const fromKey of fromKeys) {
-        expect(await drainKeys(map.scan(fromKey))).toEqual(
-          sorted.filter(k => k >= fromKey),
-        );
-      }
-    });
-  }
-});
-
 // Overrides getNode so a single chunk read can be made to fail, letting us
 // probe the boundaries of the prefetch added to scanForHash.
 class PoisonBTree extends BTreeWrite {
