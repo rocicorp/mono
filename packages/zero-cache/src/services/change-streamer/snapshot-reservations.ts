@@ -11,11 +11,17 @@ import type {SnapshotMessage} from './snapshot.ts';
 export class SnapshotReservations {
   readonly #lc: LogContext;
   readonly #backupConfig: BackupConfig;
+  readonly #onClose: ((taskID: string) => void) | undefined;
   readonly #reservations = new Map<string, Reservation>();
 
-  constructor(lc: LogContext, backupConfig: BackupConfig) {
+  constructor(
+    lc: LogContext,
+    backupConfig: BackupConfig,
+    onClose?: ((taskID: string) => void) | undefined,
+  ) {
     this.#lc = lc.withContext('component', 'snapshot-reserver');
     this.#backupConfig = backupConfig;
+    this.#onClose = onClose;
   }
 
   open(taskID: string): Source<SnapshotMessage> {
@@ -42,6 +48,7 @@ export class SnapshotReservations {
     ) {
       // Note: delete first, so that the reservation is gone when close() is called.
       this.#reservations.delete(taskID);
+      this.#onClose?.(taskID);
       res.close();
 
       const duration = Date.now() - res.startTime.getTime();

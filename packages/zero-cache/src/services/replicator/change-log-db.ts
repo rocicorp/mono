@@ -20,13 +20,15 @@
  *
  * Disk sizing: a task that writes the log needs room for the replica *plus* the
  * retained change stream — the log's main file, its wal2 sidecars, and pages a
- * purge has freed but not yet reused. Nothing calls the purger yet (that is
- * slice 9), so with the writer enabled it currently grows with the entire
- * change stream since its last reseed, which is one more reason
- * `sqliteChangeLogMode` defaults to `off`. Once purge is scheduled, retention
- * is bounded by the confirmed backup watermark rather than by a constant, so it
- * is a function of the backup interval. The log is excluded from the litestream
- * backup, so this is local disk only and never S3.
+ * purge has freed but not yet returned to the OS. The change-streamer schedules
+ * purges against the same floor as the PG change log, so retention is bounded
+ * by the confirmed backup watermark ANDed with the minimum retention window —
+ * a function of the backup interval, not a constant: 15–30+ minutes behind an
+ * RMv1 sync interval, ~60 seconds once litestream v5 backs up every 15–30 s.
+ * A held snapshot reservation pins retention unboundedly for its duration, so
+ * peak retained bytes is set by the slowest concurrent restore rather than by
+ * the retention setting — size disk and alerts on that. The log is excluded
+ * from the litestream backup, so this is local disk only and never S3.
  */
 
 import type {LogContext} from '@rocicorp/logger';
