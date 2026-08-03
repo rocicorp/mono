@@ -326,6 +326,8 @@ describe('change-streamer/service', () => {
   async function restartWithInlineChangeLogWriter(
     logFile: DbFile,
     sqliteCatchup?: Partial<SQLiteCatchupOptions>,
+    sqliteChangeLogPurge?: TuningOptions['sqliteChangeLogPurge'],
+    backupURL?: string,
   ): Promise<void> {
     await streamer.stop();
     await streamerDone;
@@ -351,7 +353,7 @@ describe('change-streamer/service', () => {
       },
       ReplicationStatusPublisher.forTesting(),
       replicaConfig,
-      null,
+      backupURL === undefined ? null : {backupURL, litestreamVersion: 'legacy'},
       null,
       true,
       {
@@ -366,6 +368,7 @@ describe('change-streamer/service', () => {
             replicaID: 'replica-id',
           },
         },
+        ...(sqliteChangeLogPurge === undefined ? {} : {sqliteChangeLogPurge}),
         ...(sqliteCatchup === undefined
           ? {}
           : {
@@ -380,6 +383,17 @@ describe('change-streamer/service', () => {
       setTimeoutFn as unknown as typeof setTimeout,
     );
     streamerDone = streamer.run();
+  }
+
+  /** The oldest watermark retained in the SQLite change log beside `logFile`. */
+  function sqliteMinWatermark(logFile: DbFile): string {
+    using log = openChangeLogDB(lc, logFile.path, {readonly: true});
+    return log
+      .prepare(/*sql*/ `
+        SELECT min("watermark") AS "watermark"
+          FROM "_zero.changeLogStream"
+      `)
+      .get<{watermark: string}>().watermark;
   }
 
   /** A serving subscriber, i.e. one eligible for SQLite catchup. */
@@ -528,6 +542,244 @@ describe('change-streamer/service', () => {
       sqliteSub.cancel();
     } finally {
       liveSub.cancel();
+      await streamer.stop();
+      await streamerDone;
+      deleteChangeLogDB(logFile.path);
+      logFile.delete();
+    }
+  });
+
+  test('SQLite cleanup continues independently after PG reaches the floor', async () => {
+    const logFile = new DbFile('sqlite-change-log-independent-purge');
+    await restartWithInlineChangeLogWriter(logFile, undefined, {
+      retentionMs: 1,
+      batchRows: 2,
+      maxBatchesPerPass: 1,
+      now: () => Date.now() + 60_000,
+      yieldFn: () => Promise.resolve(),
+    });
+
+    const watermarks = ['03', '04', '05', '06', '07', '08', '09'];
+    try {
+      for (const watermark of watermarks) {
+        changes.push(['begin', messages.begin(), {commitWatermark: watermark}]);
+        changes.push(['commit', messages.commit(), {watermark}]);
+      }
+      await expectAcks(...watermarks);
+
+      expect(sqliteMinWatermark(logFile)).toBe(REPLICA_VERSION);
+
+      setTimeoutFn.mockClear();
+      const pgPurge = vi.spyOn(Storer.prototype, 'purgeRecordsBefore');
+      try {
+        streamer.trackBackupWatermark('08');
+        const initial = setTimeoutFn.mock.calls.slice(0, 2);
+        expect(initial.map(call => call[1])).toEqual([30_000, 30_000]);
+        await Promise.all(
+          initial.map(call => call[0]() as unknown as Promise<void>),
+        );
+
+        let timerIndex = initial.length;
+        let sqlitePasses = 1;
+        while (sqliteMinWatermark(logFile) !== '08') {
+          const call = setTimeoutFn.mock.calls[timerIndex];
+          assert(call, `cleanup timer ${timerIndex} was not scheduled`);
+          expect(call[1]).toBe(0);
+          timerIndex++;
+          sqlitePasses++;
+          await (call[0]() as unknown as Promise<void>);
+
+          // PG reaches the floor in the first pass. Later level-triggered
+          // passes belong solely to SQLite's bounded drain.
+          expect(pgPurge).toHaveBeenCalledTimes(1);
+          expect(sqlitePasses).toBeLessThan(10);
+        }
+
+        expect(sqlitePasses).toBeGreaterThan(1);
+        expect(
+          await sql`SELECT min(watermark) FROM "zoro_3/cdc"."changeLog"`.values(),
+        ).toEqual([['08']]);
+        expect(setTimeoutFn).toHaveBeenCalledTimes(timerIndex);
+      } finally {
+        pgPurge.mockRestore();
+      }
+    } finally {
+      await streamer.stop();
+      await streamerDone;
+      deleteChangeLogDB(logFile.path);
+      logFile.delete();
+    }
+  });
+
+  /**
+   * The SQLite floor's live constraint is level-triggered, not edge-triggered:
+   * backup monitors never resend an unchanged floor, so once a laggard's ACK
+   * holds a purge below the backup watermark, only the coordinator's own
+   * deferred retries can finish the job when the laggard catches up.
+   */
+  test('a laggard ACK holds the SQLite floor until its subscriber catches up', async () => {
+    const logFile = new DbFile('sqlite-change-log-laggard-purge');
+    await restartWithInlineChangeLogWriter(logFile, undefined, {
+      retentionMs: 1,
+      batchRows: 100,
+      now: () => Date.now() + 60_000,
+      yieldFn: () => Promise.resolve(),
+    });
+
+    const watermarks = ['03', '04', '05', '06', '07', '08'];
+    try {
+      for (const watermark of watermarks) {
+        changes.push(['begin', messages.begin(), {commitWatermark: watermark}]);
+        changes.push(['commit', messages.commit(), {watermark}]);
+      }
+      await expectAcks(...watermarks);
+      expect(sqliteMinWatermark(logFile)).toBe(REPLICA_VERSION);
+
+      // A serving subscriber whose ACK ('04') trails the backup watermark.
+      const laggard = await streamer.subscribe({
+        protocolVersion: PROTOCOL_VERSION,
+        taskID: 'laggard-task',
+        id: 'laggard',
+        mode: 'serving',
+        watermark: '04',
+        replicaVersion: REPLICA_VERSION,
+        initial: true,
+        logsChangeStream: false,
+      });
+
+      let fired = 0;
+      const fireNextTimer = async () => {
+        const call = setTimeoutFn.mock.calls[fired];
+        assert(call, `cleanup timer ${fired} was not scheduled`);
+        expect(call[1]).toBe(30_000);
+        fired++;
+        await (call[0]() as unknown as Promise<void>);
+      };
+
+      setTimeoutFn.mockClear();
+      streamer.trackBackupWatermark('08');
+
+      // One PG and one SQLite cleanup pass: both purge up to the laggard's
+      // ACK and stop there.
+      await fireNextTimer();
+      await fireNextTimer();
+      expect(sqliteMinWatermark(logFile)).toBe('04');
+
+      // Both loops re-armed themselves even though the SQLite pass found
+      // nothing left below its floor: the floor has not reached the backup
+      // watermark, so cleanup must keep re-evaluating.
+      await fireNextTimer();
+      await fireNextTimer();
+      expect(sqliteMinWatermark(logFile)).toBe('04');
+
+      // The laggard consumes through '08', advancing its ACK ...
+      const msgs = drainToQueue(laggard);
+      for (;;) {
+        const msg = await msgs.dequeue();
+        if (msg[0] === 'commit' && msg[2].watermark === '08') {
+          break;
+        }
+      }
+      // ... and the still-armed retries drain both change logs to the backup
+      // watermark without another trackBackupWatermark() call.
+      let passes = 0;
+      while (sqliteMinWatermark(logFile) !== '08') {
+        await fireNextTimer();
+        expect(++passes).toBeLessThan(10);
+      }
+      while (fired < setTimeoutFn.mock.calls.length) {
+        await fireNextTimer();
+      }
+      expect(
+        await sql`SELECT min(watermark) FROM "zoro_3/cdc"."changeLog"`.values(),
+      ).toEqual([['08']]);
+      // Both floors reached the backup watermark: the loops disarmed.
+      expect(setTimeoutFn).toHaveBeenCalledTimes(fired);
+    } finally {
+      await streamer.stop();
+      await streamerDone;
+      deleteChangeLogDB(logFile.path);
+      logFile.delete();
+    }
+  });
+
+  /**
+   * The reservation/purge wiring end to end: `startSnapshotReservation`
+   * pauses the SQLite purge scheduler, and the reservation's close routes
+   * through `SnapshotReservations`' onClose to the scheduler's resume — so a
+   * restoring follower's advertised bounds stay servable, and the log is not
+   * pinned once the restore is over.
+   */
+  test('a snapshot reservation pauses the SQLite purge until it closes', async () => {
+    const logFile = new DbFile('sqlite-change-log-reservation-pause');
+    await restartWithInlineChangeLogWriter(
+      logFile,
+      undefined,
+      {
+        retentionMs: 1,
+        batchRows: 100,
+        now: () => Date.now() + 60_000,
+        yieldFn: () => Promise.resolve(),
+      },
+      's3://foo/bar',
+    );
+
+    const watermarks = ['03', '04', '05', '06', '07', '08'];
+    try {
+      for (const watermark of watermarks) {
+        changes.push(['begin', messages.begin(), {commitWatermark: watermark}]);
+        changes.push(['commit', messages.commit(), {watermark}]);
+      }
+      await expectAcks(...watermarks);
+      expect(sqliteMinWatermark(logFile)).toBe(REPLICA_VERSION);
+
+      // A view-syncer reserves a snapshot while it restores from backup.
+      const reservation =
+        await streamer.startSnapshotReservation('view-syncer-1');
+      const snapshots = drainSnapshotMessages(reservation);
+
+      setTimeoutFn.mockClear();
+      streamer.trackBackupWatermark('08');
+      expect(await snapshots.dequeue()).toEqual([
+        'status',
+        {
+          tag: 'status',
+          backupURL: 's3://foo/bar',
+          replicaVersion: REPLICA_VERSION,
+          minWatermark: '08',
+        },
+      ]);
+
+      let fired = 0;
+      const fireNextTimer = async () => {
+        const call = setTimeoutFn.mock.calls[fired];
+        assert(call, `cleanup timer ${fired} was not scheduled`);
+        expect(call[1]).toBe(30_000);
+        fired++;
+        await (call[0]() as unknown as Promise<void>);
+      };
+
+      // The confirmed reservation does not hold the PG purge below the
+      // backup watermark ...
+      await fireNextTimer();
+      expect(
+        await sql`SELECT min(watermark) FROM "zoro_3/cdc"."changeLog"`.values(),
+      ).toEqual([['08']]);
+      // ... but it pauses the SQLite purge outright: each pass declines and
+      // re-arms rather than invalidating the advertised snapshot bounds.
+      await fireNextTimer();
+      expect(sqliteMinWatermark(logFile)).toBe(REPLICA_VERSION);
+      await fireNextTimer();
+      expect(sqliteMinWatermark(logFile)).toBe(REPLICA_VERSION);
+
+      // Closing the reservation resumes purging: the next armed pass drains
+      // the SQLite log to the floor.
+      reservation.cancel();
+      await fireNextTimer();
+      expect(sqliteMinWatermark(logFile)).toBe('08');
+      // Cleanup reached the backup watermark: nothing further is armed.
+      expect(setTimeoutFn).toHaveBeenCalledTimes(fired);
+    } finally {
       await streamer.stop();
       await streamerDone;
       deleteChangeLogDB(logFile.path);
@@ -2290,6 +2542,132 @@ describe('change-streamer/service', () => {
         message: 'earliest supported watermark is 06 (requested 04)',
       },
     ]);
+  });
+
+  test('change log cleanup reaches the backup watermark with no subscribers', async () => {
+    await sql`
+      INSERT INTO "zoro_3/cdc"."changeLog" (watermark, pos, change) VALUES ('03', 0, '{"tag":"begin"}'::json);
+      INSERT INTO "zoro_3/cdc"."changeLog" (watermark, pos, change) VALUES ('04', 0, '{"tag":"commit"}'::json);
+      INSERT INTO "zoro_3/cdc"."changeLog" (watermark, pos, change) VALUES ('05', 0, '{"tag":"begin"}'::json);
+      INSERT INTO "zoro_3/cdc"."changeLog" (watermark, pos, change) VALUES ('06', 0, '{"tag":"commit"}'::json);
+      INSERT INTO "zoro_3/cdc"."changeLog" (watermark, pos, change) VALUES ('07', 0, '{"tag":"begin"}'::json);
+      INSERT INTO "zoro_3/cdc"."changeLog" (watermark, pos, change) VALUES ('08', 0, '{"tag":"commit"}'::json);
+      UPDATE "zoro_3/cdc"."replicationState" SET "lastWatermark" = '08';
+    `.simple();
+
+    streamer.trackBackupWatermark('06');
+
+    expect(setTimeoutFn).toHaveBeenCalledTimes(1);
+    expect(setTimeoutFn.mock.calls[0][1]).toBe(30_000);
+
+    await (setTimeoutFn.mock.calls[0][0]() as unknown as Promise<void>);
+    expect(
+      await sql`SELECT watermark FROM "zoro_3/cdc"."changeLog"`.values(),
+    ).toEqual([['06'], ['07'], ['08']]);
+
+    // Cleanup reached the confirmed backup watermark, so it is not re-armed.
+    expect(setTimeoutFn).toHaveBeenCalledTimes(1);
+  });
+
+  test('an unchanged behind-backup floor is logged only once', async () => {
+    await sql`
+      INSERT INTO "zoro_3/cdc"."changeLog" (watermark, pos, change) VALUES ('03', 0, '{"tag":"begin"}'::json);
+      INSERT INTO "zoro_3/cdc"."changeLog" (watermark, pos, change) VALUES ('04', 0, '{"tag":"commit"}'::json);
+      INSERT INTO "zoro_3/cdc"."changeLog" (watermark, pos, change) VALUES ('05', 0, '{"tag":"begin"}'::json);
+      INSERT INTO "zoro_3/cdc"."changeLog" (watermark, pos, change) VALUES ('06', 0, '{"tag":"commit"}'::json);
+      INSERT INTO "zoro_3/cdc"."changeLog" (watermark, pos, change) VALUES ('07', 0, '{"tag":"begin"}'::json);
+      INSERT INTO "zoro_3/cdc"."changeLog" (watermark, pos, change) VALUES ('08', 0, '{"tag":"commit"}'::json);
+      UPDATE "zoro_3/cdc"."replicationState" SET "lastWatermark" = '08';
+    `.simple();
+
+    // Two idle subscribers pin the cleanup floor below the backup. The
+    // level-triggered retry re-evaluates the floor every pass, and must not
+    // repeat the laggard warning while the blocking floor stands still.
+    const sub1 = await streamer.subscribe({
+      protocolVersion: PROTOCOL_VERSION,
+      taskID: 'task-id',
+      id: 'myid1',
+      mode: 'serving',
+      watermark: '04',
+      replicaVersion: REPLICA_VERSION,
+      initial: true,
+      logsChangeStream: false,
+    });
+    const sub2 = await streamer.subscribe({
+      protocolVersion: PROTOCOL_VERSION,
+      taskID: 'task-id',
+      id: 'myid2',
+      mode: 'serving',
+      watermark: '06',
+      replicaVersion: REPLICA_VERSION,
+      initial: true,
+      logsChangeStream: false,
+    });
+
+    const behindLogs = () =>
+      logSink.messages.filter(
+        ([, , args]) =>
+          typeof args[0] === 'string' &&
+          args[0].startsWith('At least one client is behind backup'),
+      );
+    let fired = 0;
+    const fireNextTimer = async () => {
+      const call = setTimeoutFn.mock.calls[fired];
+      assert(call, `cleanup timer ${fired} was not scheduled`);
+      expect(call[1]).toBe(30_000);
+      fired++;
+      await (call[0]() as unknown as Promise<void>);
+    };
+
+    setTimeoutFn.mockClear();
+    streamer.trackBackupWatermark('08');
+
+    // The first pass logs the blocking floor ('04') and purges up to it.
+    await fireNextTimer();
+    expect(behindLogs()).toHaveLength(1);
+    expect(
+      await sql`SELECT watermark FROM "zoro_3/cdc"."changeLog"`.values(),
+    ).toEqual([['04'], ['05'], ['06'], ['07'], ['08']]);
+
+    // The retry re-evaluates the same floor: no repeated line.
+    await fireNextTimer();
+    expect(behindLogs()).toHaveLength(1);
+
+    // The blocking floor moves ('04' -> '06'), still behind the backup:
+    // logged anew, again only once.
+    sub1.cancel();
+    await fireNextTimer();
+    expect(behindLogs()).toHaveLength(2);
+    await fireNextTimer();
+    expect(behindLogs()).toHaveLength(2);
+
+    // With no laggard left, the floor reaches the backup watermark: purge
+    // completes silently and the cleanup loop disarms.
+    sub2.cancel();
+    await fireNextTimer();
+    expect(behindLogs()).toHaveLength(2);
+    expect(
+      await sql`SELECT watermark FROM "zoro_3/cdc"."changeLog"`.values(),
+    ).toEqual([['08']]);
+    expect(setTimeoutFn).toHaveBeenCalledTimes(5);
+
+    // A new backup outrunning a client is a new condition: logged again.
+    const sub3 = await streamer.subscribe({
+      protocolVersion: PROTOCOL_VERSION,
+      taskID: 'task-id',
+      id: 'myid3',
+      mode: 'serving',
+      watermark: '08',
+      replicaVersion: REPLICA_VERSION,
+      initial: true,
+      logsChangeStream: false,
+    });
+    streamer.trackBackupWatermark('0a');
+    await fireNextTimer();
+    expect(behindLogs()).toHaveLength(3);
+    await fireNextTimer();
+    expect(behindLogs()).toHaveLength(3);
+    sub3.cancel();
   });
 
   test('startSnapshotReservation throws when backups are not configured', async () => {

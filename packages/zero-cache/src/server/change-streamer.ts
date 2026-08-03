@@ -68,7 +68,9 @@ export default async function runWorker(
       flowControlConsensusPaddingSeconds,
       flowControlEventDrivenRelease,
       sqliteChangeLogMode,
+      sqliteChangeLogRetentionMs,
       sqliteChangeLogReadBatchRows,
+      sqliteChangeLogPurgeBatchRows,
       sqliteChangeLogBarrierTimeoutMs,
     },
     autoReset,
@@ -213,6 +215,15 @@ export default async function runWorker(
                   generation: subscriptionState.replicaVersion,
                   replicaID,
                 },
+              }
+            : undefined,
+          // The purge scheduler shares the writer's gate -- mode, not the
+          // read path -- because `write` mode, with no read selector at all,
+          // is the configuration it ships in.
+          sqliteChangeLogPurge: sqliteChangeLogEnabled
+            ? {
+                retentionMs: sqliteChangeLogRetentionMs,
+                batchRows: sqliteChangeLogPurgeBatchRows,
               }
             : undefined,
         },

@@ -129,6 +129,36 @@ describe('change-streamer/snapshot-reservations', () => {
     expect(reservations.getReservedWatermarks()).toEqual(['watermark-1']);
   });
 
+  test('cancelling a superseded reservation leaves the replacement intact', async () => {
+    // The onClose callback stands in for the purge-pause release the
+    // change-streamer wires up: it must fire once per closed reservation,
+    // never for a superseded instance's late cancel.
+    const closed: string[] = [];
+    const reservations = new SnapshotReservations(
+      createSilentLogContext(),
+      {backupURL: 's3://foo/bar', litestreamVersion: 'v5'},
+      taskID => closed.push(taskID),
+    );
+    const sub1 = reservations.open('task-1');
+    const sub2 = reservations.open('task-1');
+    expect(closed).toEqual(['task-1']);
+
+    // The superseded caller's failure path cancels the downstream it owns.
+    // The instance guard makes it a no-op: the replacement stays open, and
+    // its purge pause is not released a second time.
+    sub1.cancel();
+    expect(closed).toEqual(['task-1']);
+    expect(reservations.confirmationsRequired()).toBe(true);
+
+    const message = getFirstMessage(sub2);
+    reservations.confirm('replica-v1', 'watermark-1');
+    await message;
+    expect(reservations.getReservedWatermarks()).toEqual(['watermark-1']);
+
+    reservations.close('task-1');
+    expect(closed).toEqual(['task-1', 'task-1']);
+  });
+
   test('close() cancels and removes the reservation', async () => {
     const reservations = newReservations();
     const sub = reservations.open('task-1');
