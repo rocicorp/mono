@@ -136,7 +136,9 @@ export function serverSchemaQuery(
   // the single level domain unwrap that data_type and udt_name perform (`ut`),
   // and the view's own relkind, attnum and privilege filters. pg_type is joined
   // by OID rather than by udt_name, which additionally avoids duplicate rows
-  // when two schemas declare a type with the same name.
+  // when two schemas declare a type with the same name. The types those
+  // functions special case are named through regtype, which the parser resolves
+  // while planning.
   const query = sql`
       SELECT
           n.nspname::text AS schema,
@@ -149,20 +151,20 @@ export function serverSchemaQuery(
           END::text AS "dataType",
           CASE
               WHEN tm.typmod = -1 THEN NULL
-              WHEN ut.oid IN (1042, 1043) THEN tm.typmod - 4
-              WHEN ut.oid IN (1560, 1562) THEN tm.typmod
+              WHEN ut.oid IN ('pg_catalog.bpchar'::regtype, 'pg_catalog.varchar'::regtype) THEN tm.typmod - 4
+              WHEN ut.oid IN ('pg_catalog.bit'::regtype, 'pg_catalog.varbit'::regtype) THEN tm.typmod
           END AS length,
           CASE ut.oid
-              WHEN 21 THEN 16
-              WHEN 23 THEN 32
-              WHEN 20 THEN 64
-              WHEN 700 THEN 24
-              WHEN 701 THEN 53
-              WHEN 1700 THEN CASE WHEN tm.typmod = -1 THEN NULL ELSE ((tm.typmod - 4) >> 16) & 65535 END
+              WHEN 'pg_catalog.int2'::regtype THEN 16
+              WHEN 'pg_catalog.int4'::regtype THEN 32
+              WHEN 'pg_catalog.int8'::regtype THEN 64
+              WHEN 'pg_catalog.float4'::regtype THEN 24
+              WHEN 'pg_catalog.float8'::regtype THEN 53
+              WHEN 'pg_catalog.numeric'::regtype THEN CASE WHEN tm.typmod = -1 THEN NULL ELSE ((tm.typmod - 4) >> 16) & 65535 END
           END AS precision,
           CASE
-              WHEN ut.oid IN (21, 23, 20) THEN 0
-              WHEN ut.oid = 1700 AND tm.typmod <> -1 THEN (tm.typmod - 4) & 65535
+              WHEN ut.oid IN ('pg_catalog.int2'::regtype, 'pg_catalog.int4'::regtype, 'pg_catalog.int8'::regtype) THEN 0
+              WHEN ut.oid = 'pg_catalog.numeric'::regtype AND tm.typmod <> -1 THEN (tm.typmod - 4) & 65535
           END AS scale,
           ut.typtype::text AS typtype,
           ut.typname::text AS typename,
