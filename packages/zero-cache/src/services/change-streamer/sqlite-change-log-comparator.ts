@@ -24,18 +24,20 @@ import type {WatermarkedChange} from './change-streamer.ts';
 import {SQLiteChangeLogReader} from './sqlite-change-log-reader.ts';
 
 /**
- * How often a comparison cycle runs. Each cycle is bounded by
- * {@link SQLiteChangeLogCompareOptions.maxTransactionsPerCycle}, so a busy
- * stream is compared in bounded increments rather than all at once.
+ * How often a comparison cycle runs. Each cycle is bounded by commit
+ * enumeration and catchup row budgets, so a busy stream is compared in
+ * bounded increments rather than all at once.
  */
 const DEFAULT_COMPARE_INTERVAL_MS = 30_000;
 
 /**
- * The per-cycle bound on enumerated transactions. Bounds one cycle's work and
- * memory (two watermark lists plus one transaction's digest state); it does not
- * bound coverage, since the next cycle resumes from where this one stopped.
+ * The per-cycle bound on enumerated transactions. This bounds the two commit
+ * watermark lists; catchup payload work has a separate per-source row budget.
  */
 const DEFAULT_MAX_TRANSACTIONS_PER_CYCLE = 256;
+
+/** Catchup rows read from each store per comparison cycle. */
+const DEFAULT_MAX_ROWS_PER_SOURCE_PER_CYCLE = 1000;
 
 /** Rows per SQLite catchup read batch, matching the read path's default. */
 const DEFAULT_READ_BATCH_ROWS = 1000;
@@ -107,16 +109,19 @@ export type CompareCycleResult =
       readonly kind: 'compared';
       /** Exclusive lower bound of the compared range. */
       readonly fromWatermark: string;
-      /**
-       * Inclusive upper bound attempted. The next cycle normally resumes from
-       * here, but retries from `fromWatermark` after an inconclusive result.
-       */
+      /** Inclusive upper bound handled; the next cycle resumes from here. */
       readonly throughWatermark: string;
-      /** Committed transactions present in either store over the range. */
+      /** Committed transactions handled through `throughWatermark`. */
       readonly transactions: number;
       /** How many were sampled for digest comparison. */
       readonly sampled: number;
       readonly matched: number;
+      readonly sqliteRowsRead: number;
+      readonly pgRowsRead: number;
+      /** Sampled transactions deferred until a fresh cycle row budget. */
+      readonly deferred: number;
+      /** Sampled transactions skipped because they exceed a fresh row budget. */
+      readonly oversized: number;
       /** Every non-match observation, in watermark order. */
       readonly divergent: readonly TransactionCompareResult[];
     };
@@ -140,6 +145,7 @@ export interface PGChangeLogRangeReader {
   readCatchupRange(
     afterWatermark: string,
     throughWatermark: string,
+    batchRows?: number | undefined,
   ): AsyncIterable<ChangeLogEntry[]>;
 }
 
@@ -162,6 +168,8 @@ export type SQLiteChangeLogCompareOptions = {
   readonly retentionMs: number;
   readonly intervalMs?: number | undefined;
   readonly maxTransactionsPerCycle?: number | undefined;
+  /** Catchup payload rows read from each source in one cycle. */
+  readonly maxRowsPerSourcePerCycle?: number | undefined;
   readonly readBatchRows?: number | undefined;
   readonly maxLoggedDivergences?: number | undefined;
   /** The clock the warm-up window is measured against. Defaults to `Date.now`. */
@@ -306,6 +314,47 @@ export async function digestCatchupTransactions(
   return digests;
 }
 
+type CappedCatchupDigest = {
+  readonly digests: Map<string, CatchupTransactionDigest>;
+  readonly rowsRead: number;
+  /** The cap was reached before the target transaction committed. */
+  readonly limitReached: boolean;
+};
+
+async function digestCappedCatchupTransactions(
+  batches: AsyncIterable<readonly WatermarkedChange[]>,
+  targetWatermark: string,
+  maxRows: number,
+  onRowsRead: (rows: number) => void,
+): Promise<CappedCatchupDigest> {
+  let rowsRead = 0;
+
+  async function* cappedBatches() {
+    for await (const batch of batches) {
+      const remaining = maxRows - rowsRead;
+      if (remaining === 0) {
+        return;
+      }
+      const capped =
+        batch.length <= remaining ? batch : batch.slice(0, remaining);
+      rowsRead += capped.length;
+      onRowsRead(capped.length);
+      yield capped;
+      if (rowsRead === maxRows) {
+        return;
+      }
+    }
+  }
+
+  const digests = await digestCatchupTransactions(cappedBatches());
+  return {
+    digests,
+    rowsRead,
+    limitReached:
+      rowsRead === maxRows && !digests.get(targetWatermark)?.complete,
+  };
+}
+
 /**
  * `min` and `max` as separate scalar subqueries for the single-aggregate index
  * optimization, matching the reader's plan query.
@@ -343,6 +392,25 @@ type PinnedBounds = {
   readonly pgMinWatermark: string;
   readonly pgLastWatermark: string;
 };
+
+type TransactionComparison =
+  | {
+      readonly kind: 'compared';
+      readonly tx: TransactionCompareResult | undefined;
+      readonly orphans: TransactionCompareResult[];
+      readonly sqliteRowsRead: number;
+      readonly pgRowsRead: number;
+    }
+  | {
+      readonly kind: 'deferred';
+      readonly sqliteRowsRead: number;
+      readonly pgRowsRead: number;
+    }
+  | {
+      readonly kind: 'oversized';
+      readonly sqliteRowsRead: number;
+      readonly pgRowsRead: number;
+    };
 
 /**
  * Compares what SQLite catchup *serves* against what PG catchup serves, over
@@ -388,6 +456,16 @@ export class SQLiteChangeLogComparator {
     'replica',
     'sqlite_change_log.compare_cycles',
     'SQLite change-log comparison cycles, by result.',
+  );
+  readonly #compareRows = getOrCreateCounter(
+    'replica',
+    'sqlite_change_log.compare_rows',
+    'Catchup rows read by the SQLite change-log comparator, by source.',
+  );
+  readonly #compareSkippedTransactions = getOrCreateCounter(
+    'replica',
+    'sqlite_change_log.compare_skipped_transactions',
+    'Sampled SQLite change-log transactions not compared, by reason.',
   );
   readonly #cycleDuration = getOrCreateLatencyHistogram(
     'replica',
@@ -580,15 +658,26 @@ export class SQLiteChangeLogComparator {
       );
       const enumerated = await this.#enumerateCommits(db, from, through, limit);
       const {union} = enumerated;
-      const effectiveThrough = enumerated.through;
+      const maxRowsPerSource = Math.max(
+        1,
+        this.#opts.maxRowsPerSourcePerCycle ??
+          DEFAULT_MAX_ROWS_PER_SOURCE_PER_CYCLE,
+      );
 
       let sampled = 0;
       let matched = 0;
+      let sqliteRowsRead = 0;
+      let pgRowsRead = 0;
+      let deferred = 0;
+      let oversized = 0;
+      let transactions = 0;
       let previousBoundary = from;
+      let handledThrough = from;
       for (const {watermark, inSqlite, inPg} of union) {
         if (this.#stopped) {
           break;
         }
+        let stopAfterTransaction = false;
         if (!inSqlite || !inPg) {
           const outcome = await this.#reconfirm(
             db,
@@ -601,49 +690,79 @@ export class SQLiteChangeLogComparator {
         } else if (
           isSampledForCompare(this.#shard, watermark, this.#opts.comparePercent)
         ) {
+          const sqliteRowsRemaining = maxRowsPerSource - sqliteRowsRead;
+          const pgRowsRemaining = maxRowsPerSource - pgRowsRead;
+          if (sqliteRowsRemaining === 0 || pgRowsRemaining === 0) {
+            deferred++;
+            this.#compareSkippedTransactions.add(1, {reason: 'deferred'});
+            break;
+          }
           sampled++;
-          const {tx, orphans} = await this.#compareTransaction(
+          const comparison = await this.#compareTransaction(
             db,
             reader,
             pinned,
             previousBoundary,
             watermark,
+            sqliteRowsRemaining,
+            pgRowsRemaining,
+            maxRowsPerSource,
           );
-          // Orphans precede the transaction: their watermarks lie strictly
-          // inside `(previousBoundary, watermark)`, keeping `divergent` in
-          // watermark order.
-          for (const orphan of orphans) {
-            divergent.push(orphan);
-            this.#compareResults.add(1, {outcome: orphan.outcome});
+          sqliteRowsRead += comparison.sqliteRowsRead;
+          pgRowsRead += comparison.pgRowsRead;
+          if (comparison.kind === 'deferred') {
+            deferred++;
+            this.#compareSkippedTransactions.add(1, {reason: 'deferred'});
+            break;
           }
-          if (tx === undefined) {
-            matched++;
-            this.#compareResults.add(1, {outcome: 'match'});
+          if (comparison.kind === 'oversized') {
+            oversized++;
+            this.#compareSkippedTransactions.add(1, {reason: 'oversized'});
+            stopAfterTransaction = true;
           } else {
-            divergent.push(tx);
-            this.#compareResults.add(1, {outcome: tx.outcome});
+            const {tx, orphans} = comparison;
+            // Orphans precede the transaction: their watermarks lie strictly
+            // inside `(previousBoundary, watermark)`, keeping `divergent` in
+            // watermark order.
+            for (const orphan of orphans) {
+              divergent.push(orphan);
+              this.#compareResults.add(1, {outcome: orphan.outcome});
+            }
+            if (tx === undefined) {
+              matched++;
+              this.#compareResults.add(1, {outcome: 'match'});
+            } else {
+              divergent.push(tx);
+              this.#compareResults.add(1, {outcome: tx.outcome});
+            }
           }
           // Let fan-out, catchup, and the stream loop make progress between
           // sampled reads.
           await this.#yield();
         }
         previousBoundary = watermark;
+        handledThrough = watermark;
+        transactions++;
+        if (stopAfterTransaction) {
+          break;
+        }
       }
 
       const inconclusive = divergent.some(
         ({outcome}) => outcome === 'inconclusive',
       );
       if (!this.#stopped && !inconclusive) {
-        this.#cursor = effectiveThrough;
-        this.#continueWithoutDelay = effectiveThrough < through;
+        this.#cursor = handledThrough;
+        this.#continueWithoutDelay = handledThrough < through;
       }
       return this.#compared(
         from,
-        effectiveThrough,
-        union.length,
+        handledThrough,
+        transactions,
         sampled,
         matched,
         divergent,
+        {sqliteRowsRead, pgRowsRead, deferred, oversized},
       );
     } catch (e) {
       this.#lc.warn?.('error comparing the SQLite change log', e);
@@ -787,21 +906,39 @@ export class SQLiteChangeLogComparator {
     pinned: PinnedBounds,
     previousBoundary: string,
     watermark: string,
-  ): Promise<{
-    tx: TransactionCompareResult | undefined;
-    orphans: TransactionCompareResult[];
-  }> {
-    let sqliteServed: Map<string, CatchupTransactionDigest>;
-    let pgServed: Map<string, CatchupTransactionDigest>;
+    sqliteMaxRows: number,
+    pgMaxRows: number,
+    maxRowsPerSource: number,
+  ): Promise<TransactionComparison> {
+    let sqliteRowsRead = 0;
+    let pgRowsRead = 0;
+    let sqlite: CappedCatchupDigest;
+    let pg: CappedCatchupDigest;
     try {
       const readBatchRows = this.#opts.readBatchRows ?? DEFAULT_READ_BATCH_ROWS;
-      sqliteServed = await digestCatchupTransactions(
-        reader.read(previousBoundary, watermark, readBatchRows),
-      );
-      pgServed = await digestCatchupTransactions(
-        reconstructBatches(
-          this.#pg.readCatchupRange(previousBoundary, watermark),
+      sqlite = await digestCappedCatchupTransactions(
+        reader.read(
+          previousBoundary,
+          watermark,
+          Math.min(readBatchRows, sqliteMaxRows),
+          undefined,
+          sqliteMaxRows,
         ),
+        watermark,
+        sqliteMaxRows,
+        rows => {
+          sqliteRowsRead += rows;
+        },
+      );
+      pg = await digestCappedCatchupTransactions(
+        reconstructBatches(
+          this.#pg.readCatchupRange(previousBoundary, watermark, pgMaxRows),
+        ),
+        watermark,
+        pgMaxRows,
+        rows => {
+          pgRowsRead += rows;
+        },
       );
     } catch (e) {
       this.#lc.warn?.(
@@ -814,17 +951,31 @@ export class SQLiteChangeLogComparator {
         watermark,
         'reader-error',
       );
-      return {tx: {watermark, outcome}, orphans: []};
+      return {
+        kind: 'compared',
+        tx: {watermark, outcome},
+        orphans: [],
+        sqliteRowsRead,
+        pgRowsRead,
+      };
+    }
+    if (sqlite.limitReached || pg.limitReached) {
+      const kind =
+        (sqlite.limitReached && sqliteMaxRows === maxRowsPerSource) ||
+        (pg.limitReached && pgMaxRows === maxRowsPerSource)
+          ? 'oversized'
+          : 'deferred';
+      return {kind, sqliteRowsRead, pgRowsRead};
     }
     const orphans = await this.#compareOrphans(
       db,
       pinned,
       watermark,
-      sqliteServed,
-      pgServed,
+      sqlite.digests,
+      pg.digests,
     );
-    const sqliteTx = sqliteServed.get(watermark);
-    const pgTx = pgServed.get(watermark);
+    const sqliteTx = sqlite.digests.get(watermark);
+    const pgTx = pg.digests.get(watermark);
     if (
       sqliteTx !== undefined &&
       pgTx !== undefined &&
@@ -832,7 +983,13 @@ export class SQLiteChangeLogComparator {
       pgTx.complete &&
       sqliteTx.digest === pgTx.digest
     ) {
-      return {tx: undefined, orphans};
+      return {
+        kind: 'compared',
+        tx: undefined,
+        orphans,
+        sqliteRowsRead,
+        pgRowsRead,
+      };
     }
     const suspect: Exclude<CompareOutcome, 'match'> =
       sqliteTx === undefined
@@ -842,6 +999,7 @@ export class SQLiteChangeLogComparator {
           : 'digest-mismatch';
     const outcome = await this.#reconfirm(db, pinned, watermark, suspect);
     return {
+      kind: 'compared',
       tx: {
         watermark,
         outcome,
@@ -851,6 +1009,8 @@ export class SQLiteChangeLogComparator {
         pgRows: pgTx?.rows,
       },
       orphans,
+      sqliteRowsRead,
+      pgRowsRead,
     };
   }
 
@@ -960,8 +1120,25 @@ export class SQLiteChangeLogComparator {
     sampled: number,
     matched: number,
     divergent: TransactionCompareResult[],
+    stats: {
+      readonly sqliteRowsRead: number;
+      readonly pgRowsRead: number;
+      readonly deferred: number;
+      readonly oversized: number;
+    } = {
+      sqliteRowsRead: 0,
+      pgRowsRead: 0,
+      deferred: 0,
+      oversized: 0,
+    },
   ): CompareCycleResult {
     this.#compareCycles.add(1, {result: 'compared'});
+    if (stats.sqliteRowsRead > 0) {
+      this.#compareRows.add(stats.sqliteRowsRead, {source: 'sqlite'});
+    }
+    if (stats.pgRowsRead > 0) {
+      this.#compareRows.add(stats.pgRowsRead, {source: 'pg'});
+    }
     const reportable = divergent.filter(d => d.outcome !== 'inconclusive');
     if (reportable.length > 0) {
       const maxLogged =
@@ -988,6 +1165,7 @@ export class SQLiteChangeLogComparator {
         transactions,
         sampled,
         matched,
+        ...stats,
         divergent: divergent.length,
       },
     });
@@ -998,6 +1176,7 @@ export class SQLiteChangeLogComparator {
       transactions,
       sampled,
       matched,
+      ...stats,
       divergent,
     };
   }

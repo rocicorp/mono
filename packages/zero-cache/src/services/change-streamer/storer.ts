@@ -337,12 +337,19 @@ export class Storer implements Service {
   readCatchupRange(
     afterWatermark: string,
     throughWatermark: string,
+    batchRows = 2000,
   ): AsyncIterable<ChangeLogEntry[]> {
+    assert(
+      Number.isSafeInteger(batchRows) && batchRows > 0,
+      'Postgres change log batch size must be a positive safe integer',
+    );
     return this.#db<ChangeLogEntry[]> /*sql*/ `
       SELECT watermark, change->'tag' as tag, change::text FROM ${this.#cdc('changeLog')}
        WHERE watermark > ${afterWatermark}
          AND watermark <= ${throughWatermark}
-       ORDER BY watermark, pos`.cursor(2000) as AsyncIterable<ChangeLogEntry[]>;
+       ORDER BY watermark, pos`.cursor(batchRows) as AsyncIterable<
+      ChangeLogEntry[]
+    >;
   }
 
   purgeRecordsBefore(watermark: string): Promise<number> {

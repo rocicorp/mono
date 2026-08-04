@@ -337,6 +337,105 @@ describe('change-streamer/sqlite-change-log-comparator', () => {
     });
   });
 
+  test('caps total catchup rows per source and defers an unfinished transaction', async () => {
+    await feedBoth(
+      tx('03', messages.insert('foo', {id: 'first'})),
+      tx(
+        '04',
+        messages.insert('foo', {id: 'second-a'}),
+        messages.insert('foo', {id: 'second-b'}),
+      ),
+    );
+    const comparator = newComparator({
+      maxRowsPerSourcePerCycle: 5,
+      readBatchRows: 2,
+    });
+
+    const first = await comparator.compareOnce();
+    assert(first.kind === 'compared', 'expected a compared cycle');
+    expect(first).toMatchObject({
+      throughWatermark: '03',
+      transactions: 1,
+      sampled: 2,
+      matched: 1,
+      sqliteRowsRead: 5,
+      pgRowsRead: 5,
+      deferred: 1,
+      oversized: 0,
+      divergent: [],
+    });
+
+    const second = await comparator.compareOnce();
+    assert(second.kind === 'compared', 'expected a compared cycle');
+    expect(second).toMatchObject({
+      fromWatermark: '03',
+      throughWatermark: '04',
+      transactions: 1,
+      sampled: 1,
+      matched: 1,
+      sqliteRowsRead: 4,
+      pgRowsRead: 4,
+      deferred: 0,
+      oversized: 0,
+      divergent: [],
+    });
+  });
+
+  test('skips a transaction that exceeds a fresh cycle row budget', async () => {
+    await feedBoth(
+      tx(
+        '03',
+        messages.insert('foo', {id: 'large-a'}),
+        messages.insert('foo', {id: 'large-b'}),
+        messages.insert('foo', {id: 'large-c'}),
+      ),
+      tx('04', messages.insert('foo', {id: 'after-large'})),
+    );
+    const comparator = newComparator({maxRowsPerSourcePerCycle: 4});
+
+    const first = await comparator.compareOnce();
+    assert(first.kind === 'compared', 'expected a compared cycle');
+    expect(first).toMatchObject({
+      throughWatermark: '03',
+      transactions: 1,
+      sampled: 1,
+      matched: 0,
+      sqliteRowsRead: 4,
+      pgRowsRead: 4,
+      deferred: 0,
+      oversized: 1,
+      divergent: [],
+    });
+
+    const second = await comparator.compareOnce();
+    assert(second.kind === 'compared', 'expected a compared cycle');
+    expect(second).toMatchObject({
+      fromWatermark: '03',
+      throughWatermark: '04',
+      matched: 1,
+      sqliteRowsRead: 3,
+      pgRowsRead: 3,
+      oversized: 0,
+    });
+  });
+
+  test('compares a transaction that exactly fills the cycle row budget', async () => {
+    await feedBoth(tx('03', messages.insert('foo', {id: 'exact'})));
+
+    const result = await newComparator({
+      maxRowsPerSourcePerCycle: 3,
+    }).compareOnce();
+    assert(result.kind === 'compared', 'expected a compared cycle');
+    expect(result).toMatchObject({
+      throughWatermark: '03',
+      matched: 1,
+      sqliteRowsRead: 3,
+      pgRowsRead: 3,
+      deferred: 0,
+      oversized: 0,
+    });
+  });
+
   test('a capped cycle schedules its continuation without the poll delay', async () => {
     await feedBoth(
       tx('03', messages.insert('foo', {id: 'a'})),
@@ -717,8 +816,8 @@ describe('change-streamer/sqlite-change-log-comparator', () => {
         });
         return list;
       },
-      readCatchupRange: (after, through) =>
-        storer.readCatchupRange(after, through),
+      readCatchupRange: (after, through, batchRows) =>
+        storer.readCatchupRange(after, through, batchRows),
     };
     const result = await newComparator({pg: racing}).compareOnce();
     assert(result.kind === 'compared', 'expected a compared cycle');
@@ -761,8 +860,8 @@ describe('change-streamer/sqlite-change-log-comparator', () => {
       hasCatchupWatermark: w => storer.hasCatchupWatermark(w),
       listCommitWatermarks: (after, through, limit) =>
         storer.listCommitWatermarks(after, through, limit),
-      readCatchupRange: (after, through) =>
-        storer.readCatchupRange(after, through),
+      readCatchupRange: (after, through, batchRows) =>
+        storer.readCatchupRange(after, through, batchRows),
     };
     const comparator = newComparator({pg: failing});
     const result = await comparator.compareOnce();
@@ -791,11 +890,11 @@ describe('change-streamer/sqlite-change-log-comparator', () => {
       hasCatchupWatermark: w => storer.hasCatchupWatermark(w),
       listCommitWatermarks: (after, through, limit) =>
         storer.listCommitWatermarks(after, through, limit),
-      readCatchupRange: (after, through) => {
+      readCatchupRange: (after, through, batchRows) => {
         if (through === '04') {
           throw new Error('injected read failure');
         }
-        return storer.readCatchupRange(after, through);
+        return storer.readCatchupRange(after, through, batchRows);
       },
     };
     const result = await newComparator({pg: failing}).compareOnce();
@@ -820,13 +919,13 @@ describe('change-streamer/sqlite-change-log-comparator', () => {
       hasCatchupWatermark: w => storer.hasCatchupWatermark(w),
       listCommitWatermarks: (after, through, limit) =>
         storer.listCommitWatermarks(after, through, limit),
-      readCatchupRange: (after, through) =>
+      readCatchupRange: (after, through, batchRows) =>
         (async function* (this: void) {
           if (!purged) {
             purged = true;
             await storer.purgeRecordsBefore('05');
           }
-          yield* storer.readCatchupRange(after, through);
+          yield* storer.readCatchupRange(after, through, batchRows);
         })(),
     };
     const result = await newComparator({pg: racing}).compareOnce();
@@ -867,8 +966,8 @@ describe('change-streamer/sqlite-change-log-comparator', () => {
         );
         return list;
       },
-      readCatchupRange: (after, through) =>
-        storer.readCatchupRange(after, through),
+      readCatchupRange: (after, through, batchRows) =>
+        storer.readCatchupRange(after, through, batchRows),
     };
     const result = await newComparator({pg: racing}).compareOnce();
     assert(result.kind === 'compared', 'expected a compared cycle');
