@@ -1449,7 +1449,12 @@ test('related w/o junction edge', () => {
   `);
 });
 
-test('scalar subquery with EXISTS generates = operator', () => {
+// `scalar` is an IVM planner hint; z2s ignores it and emits a plain
+// correlated EXISTS, which Postgres decorrelates on its own. Honoring it as
+// `parentField = (SELECT childField … LIMIT 1)` was only sound when the
+// subquery matched at most one row globally (here `name = 'Alice'` does not),
+// and silently dropped rows otherwise.
+test('scalar subquery with EXISTS is compiled as a plain EXISTS', () => {
   expect(
     formatPgInternalConvert(
       compile(serverSchema, schema, {
@@ -1484,7 +1489,12 @@ test('scalar subquery with EXISTS generates = operator', () => {
         COALESCE(json_agg(row_to_json("zql_root")), '[]'::json)::text AS "zql_result"
         FROM (SELECT "issue_0"."id" as "id","issue_0"."title" as "title","issue_0"."description" as "description","issue_0"."closed" as "closed","issue_0"."ownerId" as "ownerId",EXTRACT(EPOCH FROM "issue_0"."created") * 1000 as "created"
         FROM "issue" AS "issue_0"
-        WHERE "issue_0"."ownerId" = (SELECT "user_1"."id" FROM "user" AS "user_1" WHERE "user_1"."name" = $1::text ORDER BY "user_1"."id" ASC NULLS FIRST LIMIT 1)
+        WHERE EXISTS (SELECT "user_1"."id" as "id","user_1"."name" as "name","user_1"."nameArray" as "nameArray","user_1"."age" as "age","user_1"."ageArray" as "ageArray"
+        FROM "user" AS "user_1"
+        WHERE "user_1"."name" = $1::text
+        AND "issue_0"."ownerId" = "user_1"."id"
+        ORDER BY "user_1"."id" ASC NULLS FIRST
+        )
          
         ORDER BY "issue_0"."id" ASC NULLS FIRST
         ) "zql_root"",
@@ -1495,7 +1505,10 @@ test('scalar subquery with EXISTS generates = operator', () => {
   `);
 });
 
-test('scalar subquery with NOT EXISTS generates IS NOT operator', () => {
+// The NOT EXISTS form additionally used to emit `x IS NOT (SELECT …)`, which
+// Postgres cannot parse at all — this snapshot asserted invalid SQL because it
+// was never executed against a database.
+test('scalar subquery with NOT EXISTS is compiled as a plain NOT EXISTS', () => {
   expect(
     formatPgInternalConvert(
       compile(serverSchema, schema, {
@@ -1530,7 +1543,12 @@ test('scalar subquery with NOT EXISTS generates IS NOT operator', () => {
         COALESCE(json_agg(row_to_json("zql_root")), '[]'::json)::text AS "zql_result"
         FROM (SELECT "issue_0"."id" as "id","issue_0"."title" as "title","issue_0"."description" as "description","issue_0"."closed" as "closed","issue_0"."ownerId" as "ownerId",EXTRACT(EPOCH FROM "issue_0"."created") * 1000 as "created"
         FROM "issue" AS "issue_0"
-        WHERE "issue_0"."ownerId" IS NOT (SELECT "user_1"."id" FROM "user" AS "user_1" WHERE "user_1"."name" = $1::text ORDER BY "user_1"."id" ASC NULLS FIRST LIMIT 1)
+        WHERE NOT EXISTS (SELECT "user_1"."id" as "id","user_1"."name" as "name","user_1"."nameArray" as "nameArray","user_1"."age" as "age","user_1"."ageArray" as "ageArray"
+        FROM "user" AS "user_1"
+        WHERE "user_1"."name" = $1::text
+        AND "issue_0"."ownerId" = "user_1"."id"
+        ORDER BY "user_1"."id" ASC NULLS FIRST
+        )
          
         ORDER BY "issue_0"."id" ASC NULLS FIRST
         ) "zql_root"",

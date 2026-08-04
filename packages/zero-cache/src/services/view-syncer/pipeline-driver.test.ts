@@ -2,7 +2,10 @@ import {LogContext} from '@rocicorp/logger';
 import {afterEach, beforeEach, describe, expect, test} from 'vitest';
 import {testLogConfig} from '../../../../otel/src/test-log-config.ts';
 import {TestLogSink} from '../../../../shared/src/logging-test-utils.ts';
-import type {AST} from '../../../../zero-protocol/src/ast.ts';
+import type {
+  AST,
+  CorrelatedSubqueryCondition,
+} from '../../../../zero-protocol/src/ast.ts';
 import {createSchema} from '../../../../zero-schema/src/builder/schema-builder.ts';
 import {
   boolean,
@@ -2367,6 +2370,42 @@ describe('view-syncer/pipeline-driver', () => {
       op: '=',
       left: {type: 'literal', value: 1},
       right: {type: 'literal', value: 0},
+    });
+  });
+
+  test('scalar NOT EXISTS subquery with no matching rows', () => {
+    pipelines.init(clientSchema);
+
+    // No comment has id='nonexistent', so nothing can satisfy the correlated
+    // EXISTS — its negation holds for every issue.
+    const results = [
+      ...pipelines.addQuery(
+        'hash-scalar-not-none',
+        'queryScalarNotNone',
+        {
+          ...ISSUES_WITH_NONEXISTENT_SCALAR_SUBQUERY,
+          where: {
+            ...(ISSUES_WITH_NONEXISTENT_SCALAR_SUBQUERY.where as CorrelatedSubqueryCondition),
+            op: 'NOT EXISTS',
+          },
+        },
+        startTimer(),
+      ),
+    ];
+
+    expect(results.filter(r => r !== 'yield').map(r => r.rowKey)).toEqual([
+      {id: '1'},
+      {id: '2'},
+      {id: '3'},
+    ]);
+
+    expect(
+      pipelines.queries().get('queryScalarNotNone')?.transformedAst.where,
+    ).toEqual({
+      type: 'simple',
+      op: '=',
+      left: {type: 'literal', value: 1},
+      right: {type: 'literal', value: 1},
     });
   });
 
