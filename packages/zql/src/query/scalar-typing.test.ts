@@ -1,0 +1,165 @@
+import {expect, test} from 'vitest';
+import {relationships} from '../../../zero-schema/src/builder/relationship-builder.ts';
+import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
+import {string, table} from '../../../zero-schema/src/builder/table-builder.ts';
+import {newQuery} from './query-impl.ts';
+import {asQueryInternals} from './query-internals.ts';
+
+/**
+ * `{scalar: true}` is only honored by the server when the subquery is provably
+ * limited to one row — every column of the primary key, or of a declared
+ * {@linkcode TableBuilderWithColumns.unique} key, constrained to a literal by
+ * `=`. Anything else silently degrades to a plain `EXISTS`, so the type
+ * rejects it. These cases pin down where that line falls.
+ */
+
+const project = table('project')
+  .columns({
+    id: string(),
+    name: string(),
+    lowerCaseName: string(),
+  })
+  .primaryKey('id')
+  // Mirrors `CREATE UNIQUE INDEX ... ON project (lowerCaseName)` upstream.
+  .unique('lowerCaseName');
+
+const label = table('label')
+  .columns({
+    id: string(),
+    projectID: string(),
+    name: string(),
+  })
+  .primaryKey('id')
+  .unique('projectID', 'name');
+
+const issue = table('issue')
+  .columns({
+    id: string(),
+    projectID: string(),
+    title: string(),
+  })
+  .primaryKey('id');
+
+const issueRelationships = relationships(issue, ({one}) => ({
+  project: one({
+    sourceField: ['projectID'],
+    destField: ['id'],
+    destSchema: project,
+  }),
+}));
+
+const labelRelationships = relationships(label, ({one}) => ({
+  project: one({
+    sourceField: ['projectID'],
+    destField: ['id'],
+    destSchema: project,
+  }),
+}));
+
+const schema = createSchema({
+  tables: [issue, label, project],
+  relationships: [issueRelationships, labelRelationships],
+});
+
+test('primary key pinned by = is accepted', () => {
+  const q = newQuery(schema, 'issue').whereExists(
+    'project',
+    p => p.where('id', '=', 'p1'),
+    {scalar: true},
+  );
+  expect(asQueryInternals(q).ast.where).toMatchObject({scalar: true});
+});
+
+test('the implicit-= form pins too', () => {
+  const q = newQuery(schema, 'issue').whereExists(
+    'project',
+    p => p.where('id', 'p1'),
+    {scalar: true},
+  );
+  expect(asQueryInternals(q).ast.where).toMatchObject({scalar: true});
+});
+
+test('a declared unique key is accepted', () => {
+  // `lowerCaseName` is not the primary key; only the `.unique()` declaration
+  // makes this provable on the client. This is the zbugs shape.
+  const q = newQuery(schema, 'issue').whereExists(
+    'project',
+    p => p.where('lowerCaseName', '=', 'zero'),
+    {scalar: true},
+  );
+  expect(asQueryInternals(q).ast.where).toMatchObject({scalar: true});
+});
+
+test('a compound unique key needs every column', () => {
+  const q = newQuery(schema, 'label').whereExists(
+    'project',
+    p => p.where('id', '=', 'p1'),
+    {scalar: true},
+  );
+  expect(asQueryInternals(q).ast.where).toMatchObject({scalar: true});
+});
+
+test('pinning survives chaining in any order', () => {
+  const q = newQuery(schema, 'issue').whereExists(
+    'project',
+    p => p.where('name', 'LIKE', 'z%').where('id', '=', 'p1').limit(5),
+    {scalar: true},
+  );
+  expect(asQueryInternals(q).ast.where).toMatchObject({scalar: true});
+});
+
+test('scalar: false is always allowed', () => {
+  const q = newQuery(schema, 'issue').whereExists('project', p => p, {
+    scalar: false,
+  });
+  expect(asQueryInternals(q).ast.where).toMatchObject({scalar: false});
+});
+
+test('flip is unaffected by pinning', () => {
+  const q = newQuery(schema, 'issue').whereExists('project', p => p, {
+    flip: true,
+  });
+  expect(asQueryInternals(q).ast.where).toMatchObject({flip: true});
+});
+
+test('rejected shapes are type errors but still build at runtime', () => {
+  // The directive sits on the statement because the overload mismatch is
+  // reported at the call expression, not at the argument that caused it.
+  // Runtime behavior is unchanged — the server simply ignores the hint.
+
+  // @ts-expect-error the subquery pins nothing
+  const unpinned = newQuery(schema, 'issue').whereExists('project', p => p, {
+    scalar: true,
+  });
+  expect(asQueryInternals(unpinned).ast.where).toMatchObject({scalar: true});
+
+  // @ts-expect-error `name` is not unique on `project`
+  const nonUnique = newQuery(schema, 'issue').whereExists(
+    'project',
+    p => p.where('name', '=', 'Zero'),
+    {scalar: true},
+  );
+  expect(asQueryInternals(nonUnique).ast.where).toMatchObject({scalar: true});
+
+  // @ts-expect-error LIKE does not pin `id` to a literal
+  const nonEquality = newQuery(schema, 'issue').whereExists(
+    'project',
+    p => p.where('id', 'LIKE', 'p%'),
+    {scalar: true},
+  );
+  expect(asQueryInternals(nonEquality).ast.where).toMatchObject({scalar: true});
+
+  // @ts-expect-error `name` covers no unique key of `project`
+  const partial = newQuery(schema, 'label').whereExists(
+    'project',
+    p => p.where('name', '=', 'zero'),
+    {scalar: true},
+  );
+  expect(asQueryInternals(partial).ast.where).toMatchObject({scalar: true});
+
+  const noCallback = newQuery(schema, 'issue').whereExists('project', {
+    // @ts-expect-error with no callback nothing can be pinned
+    scalar: true,
+  });
+  expect(asQueryInternals(noCallback).ast.where).toMatchObject({scalar: true});
+});

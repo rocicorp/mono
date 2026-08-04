@@ -19,7 +19,9 @@ const user = table('user')
     avatar: string(),
     role: enumeration<Role>(),
   })
-  .primaryKey('id');
+  .primaryKey('id')
+  // CREATE UNIQUE INDEX "user_login_idx" ON "user" ("login")
+  .unique('login');
 
 const project = table('project')
   .columns({
@@ -31,7 +33,11 @@ const project = table('project')
     markURL: string().optional(),
     logoURL: string().optional(),
   })
-  .primaryKey('id');
+  .primaryKey('id')
+  // CREATE UNIQUE INDEX "project_name_idx" ON "project" ("name")
+  .unique('name')
+  // CREATE UNIQUE INDEX "project_lower_case_name_idx" ON "project" ("lowerCaseName")
+  .unique('lowerCaseName');
 
 const issue = table('issue')
   .columns({
@@ -73,7 +79,9 @@ const label = table('label')
     name: string(),
     projectID: string(),
   })
-  .primaryKey('id');
+  .primaryKey('id')
+  // CREATE UNIQUE INDEX "label_name_project_idx" ON "label" ("projectID","name")
+  .unique('projectID', 'name');
 
 const issueLabel = table('issueLabel')
   .columns({

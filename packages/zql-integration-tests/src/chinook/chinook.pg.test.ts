@@ -146,7 +146,11 @@ describe(
           },
           {
             name: 'Scalar subquery: tracks for album by title',
+            // `title` is not unique on `album`, so the server ignores the hint
+            // and runs a plain EXISTS. The type says so; the case stays to
+            // prove the results are correct either way.
             createQuery: q =>
+              // @ts-expect-error deliberately unpinned
               q.track.whereExists('album', a => a.where('title', 'Riot Act'), {
                 scalar: true,
               }),
@@ -157,6 +161,7 @@ describe(
             name: 'Scalar subquery: with and combinator',
             createQuery: q =>
               q.track
+                // @ts-expect-error deliberately unpinned, as above
                 .whereExists('album', a => a.where('title', 'Riot Act'), {
                   scalar: true,
                 })

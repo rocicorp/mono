@@ -73,6 +73,11 @@ function buildNormalizedQuery(
                       t.whereExists(
                         'school',
                         s =>
+                          // Known limitation: the expression-builder form of
+                          // `where` pins `userId` at runtime — the server does
+                          // honor this hint — but the type cannot see through
+                          // `ExpressionFactory`, so it reads as unpinned.
+                          // @ts-expect-error see above
                           s.whereExists(
                             'teachers',
                             st =>
@@ -105,6 +110,8 @@ function buildNormalizedQuery(
                               g.whereExists(
                                 'schools',
                                 ds =>
+                                  // @ts-expect-error expression-builder form is
+                                  // not tracked; see above
                                   ds.whereExists(
                                     'teachers',
                                     dt =>

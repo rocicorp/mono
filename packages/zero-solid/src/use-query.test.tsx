@@ -297,7 +297,9 @@ test('useQuery query deps change', async () => {
 test('useQuery query deps change, reconcile minimizes reactive updates', async () => {
   const {tableQuery, queryDelegate} = setupTestEnvironment();
 
-  const [querySignal, setQuery] = createSignal(tableQuery.where('a', 1));
+  const [querySignal, setQuery] = createSignal<typeof tableQuery>(
+    tableQuery.where('a', 1),
+  );
 
   const zero = newMockZero('useQuery-deps-change-id-min', queryDelegate);
   const renderHookResult = useQueryWithZeroProvider(zero, querySignal);
@@ -415,9 +417,9 @@ test('useQuery query deps change, reconcile minimizes reactive updates, tree', a
   });
   const issueQuery = newQuery(schema, 'issue');
 
-  const [querySignal, setQuery] = createSignal(
-    issueQuery.where('id', 'i1').related('comments'),
-  );
+  const [querySignal, setQuery] = createSignal<
+    ReturnType<typeof issueQuery.related<'comments'>>
+  >(issueQuery.where('id', 'i1').related('comments'));
 
   const zero = newMockZero('useQuery-deps-change-id-min-tree', queryDelegate);
   const renderHookResult = useQueryWithZeroProvider(zero, querySignal);

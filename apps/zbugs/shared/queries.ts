@@ -450,18 +450,17 @@ export function buildListQuery(args: ListQueryArgs) {
         : undefined,
       ...(labels ?? []).map(label =>
         exists('issueLabels', q =>
-          q.whereExists(
-            'label',
-            q =>
-              q
-                .where('name', label)
-                .whereExists(
-                  'project',
-                  q =>
-                    q.where('lowerCaseName', projectName.toLocaleLowerCase()),
-                  {scalar: true},
-                ),
-            {scalar: true},
+          // No `{scalar: true}` on this gate: `label`'s unique keys are `(id)`
+          // and `(projectID, name)`, and pinning `name` alone covers neither,
+          // so the server would ignore the hint and run a plain EXISTS anyway.
+          q.whereExists('label', q =>
+            q
+              .where('name', label)
+              .whereExists(
+                'project',
+                q => q.where('lowerCaseName', projectName.toLocaleLowerCase()),
+                {scalar: true},
+              ),
           ),
         ),
       ),

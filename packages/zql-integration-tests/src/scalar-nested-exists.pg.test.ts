@@ -153,9 +153,13 @@ test.each(
         // The user's query, verbatim in shape. z2s returns [], IVM returns
         // event2.
         name: 'scalar exists nesting a many-relation exists',
+        // The reported bug, verbatim — and the static check now rejects it at
+        // authoring time, since the callback pins no unique key of `post`.
+        // Kept as a runtime case to prove the compiled SQL is correct.
         createQuery: q =>
           q.event
             .where('rootPostId', '=', 'post2')
+            // @ts-expect-error deliberately unpinned
             .whereExists(
               'rootPost',
               p =>
@@ -246,6 +250,7 @@ test.each(
         createQuery: q =>
           q.event
             .where('rootPostId', '=', 'post2')
+            // @ts-expect-error deliberately unpinned — `title` pins no unique key
             .whereExists('rootPost', p => p.where('title', 'LIKE', 'Post%'), {
               scalar: true,
             })
