@@ -217,3 +217,31 @@ test('rejected shapes are type errors but still build at runtime', () => {
   });
   expect(asQueryInternals(noCallback).ast.where).toMatchObject({scalar: true});
 });
+
+test('the rejections above are attributable to `scalar`, not to the query', () => {
+  // Controls for each rejected shape: the identical call *without* the option
+  // must compile. `@ts-expect-error` swallows whatever error lands on its line,
+  // so without these a case could go on "passing" after it started failing for
+  // an unrelated reason — a renamed column, a dropped relationship.
+  const q = newQuery(schema, 'issue');
+  expect(q.whereExists('project', p => p)).toBeDefined();
+  expect(
+    q.whereExists('project', p => p.where('name', '=', 'Zero')),
+  ).toBeDefined();
+  expect(
+    q.whereExists('project', p => p.where('id', 'LIKE', 'p%')),
+  ).toBeDefined();
+  expect(
+    newQuery(schema, 'label').whereExists('project', p =>
+      p.where('name', '=', 'zero'),
+    ),
+  ).toBeDefined();
+  expect(q.whereExists('project')).toBeDefined();
+  expect(
+    newQuery(schema, 'issueLabel').whereExists('label', l =>
+      l
+        .where('name', '=', 'bug')
+        .whereExists('project', p => p.where('lowerCaseName', '=', 'zero')),
+    ),
+  ).toBeDefined();
+});
