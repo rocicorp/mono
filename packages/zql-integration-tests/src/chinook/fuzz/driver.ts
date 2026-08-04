@@ -53,12 +53,7 @@ import {mutate} from './mutate.ts';
 import {type Mutation, pushForSkeleton} from './push.ts';
 import type {Regression} from './regressions.ts';
 import {rng} from './rng.ts';
-import {
-  buildScalar,
-  hasScalarSubquery,
-  resolveScalarForIvm,
-  scalarCandidates,
-} from './scalar.ts';
+import {scalarizableExistsCount, setScalars} from './scalar.ts';
 import {constructCount, shrinkAst} from './shrink.ts';
 import {enumerate, label, lower, type Skeleton} from './skeleton.ts';
 import {Mask, swarmGen} from './swarm.ts';
@@ -275,6 +270,29 @@ export function flipQueryCases(
       cases.push({
         label: `flip|${label(s)}|${bits.map(b => (b ? 1 : 0)).join('')}`,
         query: wrapAst(setFlips(base, bits)),
+      });
+    }
+  }
+  return cases;
+}
+
+/** Scalar-invariance variants as target-independent query cases. */
+export function scalarQueryCases(
+  skels: readonly Skeleton[],
+  maxScalars = 4,
+): readonly QueryCase[] {
+  const cases: QueryCase[] = [];
+  for (const s of skels) {
+    const base = asQueryInternals(lower(s)).ast;
+    const k = scalarizableExistsCount(base);
+    if (k === 0 || k > maxScalars) {
+      continue;
+    }
+    // The same `{false, true}^k` enumeration flip-invariance uses.
+    for (const bits of flipAssignments(k)) {
+      cases.push({
+        label: `scalar|${label(s)}|${bits.map(b => (b ? 1 : 0)).join('')}`,
+        query: wrapAst(setScalars(base, bits)),
       });
     }
   }
@@ -737,57 +755,21 @@ export async function checkYieldTail(
 }
 
 /**
- * **Scalar-subquery sweep:** for every one-hop relationship, build a PK-constrained (hence
- * *simple*) scalar subquery and check that the production split agrees with the oracle — the
- * original `scalar: true` AST through z2s (`parentField = (SELECT childField … LIMIT 1)`)
- * vs the IVM over the **pre-resolved** AST (`parentField = <literal>`, the transform
- * zero-cache's pipeline-driver applies via {@link resolveSimpleScalarSubqueries}).
- *
- * `rawRows` (client-named) backs the synchronous scalar executor; it must match the data
- * loaded into the oracle so both sides pick the same row. A candidate whose subquery fails
- * to resolve (would leave the base IVM treating `scalar` as a plain EXISTS — a generation
- * regression, not an engine bug) is reported, not silently passed.
+ * **Scalar-invariance sweep:** `scalar` is a plan hint every engine in the differential is
+ * free to ignore, so all `2^k` scalar assignments of an EXISTS-bearing skeleton must agree
+ * with the oracle — hence with each other. Unlike the old lane, gates are *not* pinned to a
+ * unique key first: an undecorated skeleton gate is unpinned, which is exactly the space
+ * where z2s used to decorrelate unsoundly.
  */
-export async function checkScalar(
+export async function checkScalarInvariance(
   delegates: Delegates,
-  rawRows: Record<string, readonly Row[]>,
-  data: Data,
+  skels: readonly Skeleton[],
+  maxScalars = 4,
 ): Promise<Report> {
-  const failures: Array<[string, string]> = [];
-  let total = 0;
-  for (const cand of scalarCandidates()) {
-    const q = buildScalar(cand, data);
-    if (!q) {
-      continue; // empty child table — no present PK to constrain
-    }
-    total += 1;
-    const lbl = `scalar|${cand.table}.${cand.rel}`;
-    const msg = await capture(async () => {
-      const ast = asQueryInternals(q).ast;
-      const resolved = resolveScalarForIvm(ast, rawRows);
-      if (hasScalarSubquery(resolved)) {
-        throw new Error(
-          `scalar subquery did not resolve (would diverge spuriously) for ${lbl}`,
-        );
-      }
-      const resolvedQuery = wrapAst(resolved);
-      // Oracle runs the ORIGINAL scalar AST (z2s); the IVM runs the RESOLVED one.
-      const pgResult = await delegates.pg.run(q);
-      const sqliteResult = mapResultToClientNames(
-        await delegates.sqlite.run(resolvedQuery),
-        schema,
-        // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-        ast.table as any,
-      );
-      const memoryResult = await delegates.memory.run(resolvedQuery);
-      expect(memoryResult).toEqualPg(pgResult);
-      expect(sqliteResult).toEqualPg(pgResult);
-    });
-    if (msg) {
-      failures.push([lbl, msg]);
-    }
-  }
-  return {total, failures};
+  return await checkHydrateCases(
+    delegates,
+    scalarQueryCases(skels, maxScalars),
+  );
 }
 
 /**

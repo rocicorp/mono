@@ -16,6 +16,7 @@ import {consume} from '../../../../zql/src/ivm/stream.ts';
 import {RandomYieldSource} from '../../../../zql/src/ivm/test/random-yield-source.ts';
 import {asQueryInternals} from '../../../../zql/src/query/query-internals.ts';
 import type {AnyQuery} from '../../../../zql/src/query/query.ts';
+import {newStaticQuery} from '../../../../zql/src/query/static-query.ts';
 import {QueryDelegateImpl as TestMemoryQueryDelegate} from '../../../../zql/src/query/test/query-delegate.ts';
 import {schema} from '../schema.ts';
 import {AXES, hasText, pkOf, relsOf, tables} from './axes.ts';
@@ -42,11 +43,9 @@ import {
 } from './regressions.ts';
 import {rng} from './rng.ts';
 import {
-  buildScalar,
   hasScalarSubquery,
-  makeScalarExecutor,
-  resolveScalarForIvm,
-  scalarCandidates,
+  scalarizableExistsCount,
+  setScalars,
 } from './scalar.ts';
 import {constructCount, shrinkAst} from './shrink.ts';
 import {
@@ -714,64 +713,87 @@ describe('regressions', () => {
   });
 });
 
-// ── scalar subqueries (production resolve mirror) ─────────────────────────────────────
+// ── scalar subqueries (scalar-invariance axis) ────────────────────────────────────────
 
 describe('scalar subqueries', () => {
-  test('candidates are one-hop (no junctions) with a single-col-PK child', () => {
-    const cands = scalarCandidates();
-    expect(cands.length).toBeGreaterThan(0);
-    for (const c of cands) {
-      expect(relsOf(c.table).find(r => r.name === c.rel)?.junction).toBe(false);
-      expect(pkOf(c.child)).toEqual([c.childPk]);
-    }
-  });
-
-  test('a built gate carries scalar:true and the resolver rewrites it to a literal =', async () => {
-    const delegate = memoryDelegate();
-    let checked = 0;
-    for (const c of scalarCandidates()) {
-      const q = buildScalar(c, data);
-      if (!q) {
+  test('the count matches the gates setScalars actually marks', () => {
+    let covered = 0;
+    for (const s of enumerate({depth: 2, related: 1, exists: 2})) {
+      const ast = asQueryInternals(lower(s)).ast;
+      const k = scalarizableExistsCount(ast);
+      if (k === 0) {
+        expect(hasScalarSubquery(setScalars(ast, []))).toBe(false);
         continue;
       }
-      const ast = asQueryInternals(q).ast;
-      // The raw gate is a scalar correlated subquery …
-      expect(hasScalarSubquery(ast), `${c.table}.${c.rel} not scalar`).toBe(
-        true,
-      );
-      // … which the production resolver rewrites away to a plain comparison …
-      const resolved = resolveScalarForIvm(ast, miniData);
+      covered += 1;
+      // All-on marks every gate; all-off leaves none set.
       expect(
-        hasScalarSubquery(resolved),
-        `unresolved scalar for ${c.table}.${c.rel}`,
-      ).toBe(false);
-      expect(resolved.where?.type).toBe('simple');
-      // … and the resolved query hydrates through the IVM.
-      await hydrates(delegate, wrapAst(resolved));
-      checked += 1;
+        hasScalarSubquery(setScalars(ast, Array(k).fill(true))),
+        `${label(s)} not marked`,
+      ).toBe(true);
+      expect(hasScalarSubquery(setScalars(ast, Array(k).fill(false)))).toBe(
+        false,
+      );
     }
-    expect(checked).toBeGreaterThan(0);
+    expect(covered).toBeGreaterThan(0);
   });
 
-  test('the executor returns the childField of the constrained row', () => {
-    // album.tracks: SELECT track.albumId WHERE track.id = <mid> ⇒ that track's albumId
-    // (childField ≠ the constrained PK — the non-trivial direction).
-    const c = must(
-      scalarCandidates().find(x => x.table === 'album' && x.rel === 'tracks'),
-      'album.tracks candidate missing',
+  test('junction wrappers are not marked — the builder puts scalar on the inner hop', () => {
+    // `playlist.tracks` is a two-hop junction. `{scalar: true}` through the builder lands
+    // on the second hop, so the wrapper must not be counted as a markable gate.
+    const junctionRel = must(
+      relsOf('playlist').find(r => r.junction),
+      'playlist has no junction relationship',
     );
-    const mid = data.pkMid('track');
-    const wantRow = must(miniData.track.find(r => r.id === mid));
-    const gate = must(asQueryInternals(must(buildScalar(c, data))).ast.where);
+    const viaBuilder = asQueryInternals(
+      // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+      (newStaticQuery(schema, 'playlist') as any).whereExists(
+        junctionRel.name,
+        // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+        (q: any) => q,
+        {scalar: true},
+      ),
+    ).ast;
+    const gate = must(viaBuilder.where);
     expect(gate.type).toBe('correlatedSubquery');
     if (gate.type !== 'correlatedSubquery') {
       return;
     }
-    const childField = gate.related.correlation.childField[0];
-    expect(childField).toBe('albumId');
-    expect(
-      makeScalarExecutor(miniData)(gate.related.subquery, childField),
-    ).toBe(wantRow.albumId);
+    // The wrapper itself is unmarked by the builder …
+    expect(gate.scalar).toBeUndefined();
+    // … and setScalars agrees: one markable gate (the inner hop), not two.
+    const bare = asQueryInternals(
+      lower({
+        table: 'playlist',
+        children: [
+          {
+            rel: junctionRel.name,
+            kind: 'exists',
+            sub: {table: junctionRel.child, children: []},
+          },
+        ],
+      }),
+    ).ast;
+    expect(scalarizableExistsCount(bare)).toBe(1);
+  });
+
+  test('marking a gate scalar leaves hydration unchanged', async () => {
+    const delegate = memoryDelegate();
+    let checked = 0;
+    for (const s of enumerate({depth: 1, related: 0, exists: 1})) {
+      const ast = asQueryInternals(lower(s)).ast;
+      const k = scalarizableExistsCount(ast);
+      if (k === 0) {
+        continue;
+      }
+      const marked = setScalars(ast, Array(k).fill(true));
+      expect(hasScalarSubquery(marked)).toBe(true);
+      const before = await delegate.run(wrapAst(ast));
+      const after = await delegate.run(wrapAst(marked));
+      expect(after, `${label(s)} changed under scalar`).toEqual(before);
+      checked += 1;
+    }
+    expect(checked).toBeGreaterThan(0);
   });
 });
 

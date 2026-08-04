@@ -1,162 +1,116 @@
 /**
- * **Scalar subqueries** (the one phase-7 axis deferred at first): a `whereExists(rel, …,
- * {scalar: true})` gate that z2s compiles to `parentField = (SELECT childField … LIMIT 1)`
- * but the base IVM does **not** natively resolve — only zero-cache's pipeline-driver does,
- * by pre-resolving "simple" (unique-key-constrained, ≤1-row) scalar subqueries to a literal
- * `parentField = <value>` condition via {@link resolveSimpleScalarSubqueries}.
+ * **Scalar-invariance** (design §6, shaped like {@link flippableExistsCount flip.ts}).
  *
- * So a faithful differential mirrors production: run the **original** scalar AST through the
- * Postgres oracle (z2s), and run the IVM (memory + sqlite) over the **pre-resolved** AST —
- * the exact transform the pipeline-driver applies. To keep the subquery simple (so it
- * actually resolves), we constrain the child's single-column **primary key** to one present
- * value; the resolver then rewrites the gate to the literal it would in production.
+ * `{scalar: true}` on an EXISTS gate is a **plan hint, not a semantic one**: it asserts the
+ * subquery matches at most one row, so an engine *may* decorrelate the gate into a literal
+ * comparison. z2s ignores it (Postgres decorrelates EXISTS on its own) and the base IVM
+ * ignores it; only zero-cache's pipeline-driver acts on it, pre-resolving a *simple*
+ * (unique-key-pinned) subquery through `resolveSimpleScalarSubqueries` — a transform whose
+ * own soundness is unit-tested in `zqlite/src/resolve-scalar-subqueries.test.ts`.
  *
- * This module is PG-free (the generator + the IVM-side resolve). The differential itself —
- * original-through-PG vs resolved-through-IVM — lives in `driver.ts`'s `checkScalar`.
+ * So the property is: **marking gates scalar must not change results.** Every
+ * `{false, true}^k` scalar assignment of an EXISTS-bearing query MUST hydrate to the same
+ * rows — and the differential pins each one to the same Postgres oracle, so if any
+ * assignment diverges it surfaces here.
+ *
+ * This lane used to generate only PK-pinned (hence provably decorrelatable) gates, and ran
+ * the *resolved* AST through the IVM against the *original* through z2s. That mirrored
+ * production, but it assumed the rewrite valid on both sides and so could not observe a
+ * wrong one: it missed a z2s bug that dropped rows for every scalar gate not pinned to a
+ * unique key (repro: `src/scalar-nested-exists.pg.test.ts`). Generating the unpinned space
+ * is the whole point — an undecorated skeleton gate is already unpinned.
+ *
+ * Both `EXISTS` and `NOT EXISTS` gates are marked (`not()` carries the flag through), at
+ * any nesting depth, so the shapes the old one-hop candidate list could not express — a
+ * scalar gate whose body nests a further EXISTS — are now in range.
+ *
+ * Junction (two-hop) wrappers are skipped: the builder lands `{scalar: true}` on the
+ * *inner* hop of a junction, so marking the wrapper would generate an AST no builder call
+ * can produce.
  */
 
-import type {AST, LiteralValue} from '../../../../zero-protocol/src/ast.ts';
-import type {Row, Value} from '../../../../zero-protocol/src/data.ts';
-import type {PrimaryKey} from '../../../../zero-protocol/src/primary-key.ts';
-import type {AnyQuery} from '../../../../zql/src/query/query.ts';
 import {
-  extractLiteralEqualityConstraints,
-  resolveSimpleScalarSubqueries,
-  type ScalarExecutor,
-} from '../../../../zqlite/src/resolve-scalar-subqueries.ts';
-import {pkOf, relsOf, tables} from './axes.ts';
-import type {Data} from './literals.ts';
-import {lower} from './skeleton.ts';
-
-/** A scalar-subquery candidate: a one-hop relationship a simple scalar gate can sit on. */
-export type ScalarCandidate = {
-  readonly table: string;
-  readonly rel: string;
-  readonly child: string;
-  readonly childPk: string;
-};
+  SUBQ_PREFIX,
+  type AST,
+  type Condition,
+  type CorrelatedSubqueryCondition,
+} from '../../../../zero-protocol/src/ast.ts';
 
 /**
- * Every `(table, one-hop relationship)` pair a *simple* scalar subquery can be built on:
- * non-junction (the builder throws on two-hop junctions) and a single-column-PK child (so
- * the subquery is made simple by constraining that PK to one present value). Deterministic
- * in schema-declaration order.
+ * Whether `c` is the outer wrapper the builder emits for a junction (two-hop)
+ * relationship — recognized, as in `ast-to-zql`, by the hidden alias on the second hop.
  */
-export function scalarCandidates(): ScalarCandidate[] {
-  const out: ScalarCandidate[] = [];
-  for (const table of tables()) {
-    for (const rel of relsOf(table)) {
-      if (rel.junction) {
-        continue; // scalar is unsupported on two-hop junctions (the builder throws)
-      }
-      const pk = pkOf(rel.child);
-      if (pk.length !== 1) {
-        continue; // need a single-column PK to constrain the subquery to one row
-      }
-      out.push({table, rel: rel.name, child: rel.child, childPk: pk[0]});
-    }
-  }
-  return out;
-}
-
-/**
- * Build the scalar-subquery query for `cand`:
- * `table.whereExists(rel, child ⇒ child.where(childPk = <present value>), {scalar: true})`.
- *
- * PK-constrained ⇒ the subquery returns ≤1 row, so it is *simple* and the production
- * resolver rewrites the gate to `parentField = <selected childField>`. `null` if the child
- * has no present PK value in `data` (an empty table).
- */
-export function buildScalar(
-  cand: ScalarCandidate,
-  data: Data,
-): AnyQuery | null {
-  const pkVal = data.pkMid(cand.child);
-  if (pkVal === undefined) {
-    return null;
-  }
-  const base = lower({table: cand.table, children: []});
+function isJunctionWrapper(c: CorrelatedSubqueryCondition): boolean {
+  const secondHop = c.related.subquery.where;
   return (
-    base as unknown as {
-      whereExists(
-        rel: string,
-        cb: (q: AnyQuery) => AnyQuery,
-        opts: {scalar: boolean},
-      ): AnyQuery;
-    }
-  ).whereExists(
-    cand.rel,
-    // oxlint-disable-next-line @typescript-eslint/no-explicit-any
-    (q: any) => q.where(cand.childPk, '=', pkVal),
-    {scalar: true},
+    secondHop?.type === 'correlatedSubquery' &&
+    (secondHop.related.subquery.alias?.includes(SUBQ_PREFIX + 'zhidden_') ??
+      false)
   );
 }
 
-/**
- * The `tableSpecs` map {@link resolveSimpleScalarSubqueries} needs, derived from the client
- * {@link schema}: each table's primary key is treated as a unique key — the subset of unique
- * keys the client schema records, and enough to make a PK-constrained subquery simple. Keyed
- * by **client** table name (matching the client-named subquery ASTs the builder produces).
- */
-export function scalarTableSpecs(): Map<
-  string,
-  {tableSpec: {uniqueKeys: PrimaryKey[]}}
-> {
-  const m = new Map<string, {tableSpec: {uniqueKeys: PrimaryKey[]}}>();
-  for (const t of tables()) {
-    m.set(t, {tableSpec: {uniqueKeys: [pkOf(t) as unknown as PrimaryKey]}});
-  }
-  return m;
-}
-
-/**
- * A synchronous {@link ScalarExecutor} backed by the raw fixture rows. For a *simple*
- * subquery the equality constraints pin a unique-key row, so a direct lookup returns the
- * same `childField` value the IVM pipeline (or Postgres `… LIMIT 1`) would. Returns
- * `undefined` when no row matches (→ the resolver yields an always-false gate, matching
- * Postgres's empty `(SELECT …)`).
- */
-export function makeScalarExecutor(
-  rawRows: Record<string, readonly Row[]>,
-): ScalarExecutor {
-  return (subqueryAST: AST, childField: string) => {
-    if (!subqueryAST.where) {
-      return undefined;
+/** The number of gates in `ast` that {@link setScalars} will mark. */
+export function scalarizableExistsCount(ast: AST): number {
+  let n = 0;
+  const countCond = (c: Condition): void => {
+    switch (c.type) {
+      case 'simple':
+        return;
+      case 'and':
+      case 'or':
+        c.conditions.forEach(countCond);
+        return;
+      case 'correlatedSubquery':
+        if (!isJunctionWrapper(c)) {
+          n += 1;
+        }
+        countAst(c.related.subquery);
     }
-    const constraints = extractLiteralEqualityConstraints(subqueryAST.where);
-    const rows = rawRows[subqueryAST.table] ?? [];
-    const match = rows.find(r =>
-      [...constraints].every(([col, val]) => eq(r[col], val)),
-    );
-    if (!match) {
-      return undefined;
-    }
-    return (match[childField] ?? null) as LiteralValue | null;
   };
-}
-
-function eq(a: Value | undefined, b: LiteralValue): boolean {
-  return a === b;
+  const countAst = (a: AST): void => {
+    if (a.where) {
+      countCond(a.where);
+    }
+    for (const r of a.related ?? []) {
+      countAst(r.subquery);
+    }
+  };
+  countAst(ast);
+  return n;
 }
 
 /**
- * Pre-resolve every simple scalar subquery in `ast` to a literal condition — the exact
- * transform zero-cache's pipeline-driver applies before running the IVM. The returned AST
- * has the scalar gate replaced by a plain `parentField = <value>` (or an always-false
- * condition), so the base IVM runs it as an ordinary filter.
+ * Set the `scalar` flag of each markable gate from `bits` (one boolean per gate, in a fixed
+ * pre-order). `bits.length` must equal {@link scalarizableExistsCount}. Pure.
  */
-export function resolveScalarForIvm(
-  ast: AST,
-  rawRows: Record<string, readonly Row[]>,
-): AST {
-  return resolveSimpleScalarSubqueries(
-    ast,
-    scalarTableSpecs(),
-    makeScalarExecutor(rawRows),
-  ).ast;
+export function setScalars(ast: AST, bits: readonly boolean[]): AST {
+  let i = 0;
+  const visitCond = (c: Condition): Condition => {
+    switch (c.type) {
+      case 'simple':
+        return c;
+      case 'and':
+      case 'or':
+        return {...c, conditions: c.conditions.map(visitCond)};
+      case 'correlatedSubquery': {
+        const mark = !isJunctionWrapper(c);
+        // Consume this gate's bit before descending, so the pre-order matches the count.
+        const scalar = mark ? bits[i++] : undefined;
+        const subquery = visitAst(c.related.subquery);
+        const withSub: Condition = {...c, related: {...c.related, subquery}};
+        return scalar === undefined ? withSub : {...withSub, scalar};
+      }
+    }
+  };
+  const visitAst = (a: AST): AST => ({
+    ...a,
+    where: a.where ? visitCond(a.where) : undefined,
+    related: a.related?.map(r => ({...r, subquery: visitAst(r.subquery)})),
+  });
+  return visitAst(ast);
 }
 
-/** Whether `ast` still contains a `scalar: true` correlated subquery (unresolved). */
+/** Whether `ast` carries any `scalar: true` correlated subquery. */
 export function hasScalarSubquery(ast: AST): boolean {
   const inCond = (c: AST['where']): boolean => {
     if (!c) {
