@@ -169,8 +169,12 @@ function resolveScalarSubquery(
   });
 
   if (value === undefined || value === null) {
-    // No rows or NULL value — both x = NULL and x != NULL are false in SQL
-    return ALWAYS_FALSE;
+    // No row matched, or the matched row's `childField` is NULL (which can
+    // never satisfy the correlation, since `parentField = NULL` is never
+    // true). Either way the correlated EXISTS is false for *every* parent
+    // row, so the gate collapses to a constant: false for EXISTS, and its
+    // negation — true — for NOT EXISTS.
+    return condition.op === 'EXISTS' ? ALWAYS_FALSE : ALWAYS_TRUE;
   }
 
   const op = condition.op === 'EXISTS' ? '=' : 'IS NOT';
@@ -187,6 +191,13 @@ const ALWAYS_FALSE: SimpleCondition = {
   op: '=',
   left: {type: 'literal', value: 1},
   right: {type: 'literal', value: 0},
+};
+
+const ALWAYS_TRUE: SimpleCondition = {
+  type: 'simple',
+  op: '=',
+  left: {type: 'literal', value: 1},
+  right: {type: 'literal', value: 1},
 };
 
 /**
