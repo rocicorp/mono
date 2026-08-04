@@ -450,17 +450,22 @@ export function buildListQuery(args: ListQueryArgs) {
         : undefined,
       ...(labels ?? []).map(label =>
         exists('issueLabels', q =>
-          // No `{scalar: true}` on this gate: `label`'s unique keys are `(id)`
-          // and `(projectID, name)`, and pinning `name` alone covers neither,
-          // so the server would ignore the hint and run a plain EXISTS anyway.
-          q.whereExists('label', q =>
-            q
-              .where('name', label)
-              .whereExists(
-                'project',
-                q => q.where('lowerCaseName', projectName.toLocaleLowerCase()),
-                {scalar: true},
-              ),
+          // `label`'s unique key is `(projectID, name)` and only `name` is
+          // pinned here — but the inner `project` gate is itself scalar, so it
+          // rewrites to `label.projectID = <literal>` before this gate is
+          // tested, completing the key. Both gates are honored.
+          q.whereExists(
+            'label',
+            q =>
+              q
+                .where('name', label)
+                .whereExists(
+                  'project',
+                  q =>
+                    q.where('lowerCaseName', projectName.toLocaleLowerCase()),
+                  {scalar: true},
+                ),
+            {scalar: true},
           ),
         ),
       ),

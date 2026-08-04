@@ -32,6 +32,13 @@ const label = table('label')
   .primaryKey('id')
   .unique('projectID', 'name');
 
+const issueLabel = table('issueLabel')
+  .columns({
+    issueID: string(),
+    labelID: string(),
+  })
+  .primaryKey('issueID', 'labelID');
+
 const issue = table('issue')
   .columns({
     id: string(),
@@ -48,6 +55,14 @@ const issueRelationships = relationships(issue, ({one}) => ({
   }),
 }));
 
+const issueLabelRelationships = relationships(issueLabel, ({one}) => ({
+  label: one({
+    sourceField: ['labelID'],
+    destField: ['id'],
+    destSchema: label,
+  }),
+}));
+
 const labelRelationships = relationships(label, ({one}) => ({
   project: one({
     sourceField: ['projectID'],
@@ -57,8 +72,12 @@ const labelRelationships = relationships(label, ({one}) => ({
 }));
 
 const schema = createSchema({
-  tables: [issue, label, project],
-  relationships: [issueRelationships, labelRelationships],
+  tables: [issue, issueLabel, label, project],
+  relationships: [
+    issueRelationships,
+    issueLabelRelationships,
+    labelRelationships,
+  ],
 });
 
 test('primary key pinned by = is accepted', () => {
@@ -103,6 +122,41 @@ test('pinning survives chaining in any order', () => {
   const q = newQuery(schema, 'issue').whereExists(
     'project',
     p => p.where('name', 'LIKE', 'z%').where('id', '=', 'p1').limit(5),
+    {scalar: true},
+  );
+  expect(asQueryInternals(q).ast.where).toMatchObject({scalar: true});
+});
+
+test('an inner scalar gate completes an outer compound key', () => {
+  // `label`'s unique key is (projectID, name) and only `name` is pinned here.
+  // The inner `project` gate is itself scalar, so the server rewrites it to
+  // `label.projectID = <literal>` before testing this gate — completing the
+  // key. The type follows the same rule.
+  // (Regression-tested end to end in
+  // zqlite/src/resolve-nested-scalar.test.ts.)
+  const q = newQuery(schema, 'issueLabel').whereExists(
+    'label',
+    l =>
+      l
+        .where('name', '=', 'bug')
+        .whereExists('project', p => p.where('lowerCaseName', '=', 'zero'), {
+          scalar: true,
+        }),
+    {scalar: true},
+  );
+  expect(asQueryInternals(q).ast.where).toMatchObject({scalar: true});
+});
+
+test('a non-scalar inner gate does not complete the key', () => {
+  // Same shape without the inner hint: nothing supplies `projectID`, so the
+  // outer gate is genuinely unpinned.
+  // @ts-expect-error `name` alone does not cover (projectID, name)
+  const q = newQuery(schema, 'issueLabel').whereExists(
+    'label',
+    l =>
+      l
+        .where('name', '=', 'bug')
+        .whereExists('project', p => p.where('lowerCaseName', '=', 'zero')),
     {scalar: true},
   );
   expect(asQueryInternals(q).ast.where).toMatchObject({scalar: true});

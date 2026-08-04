@@ -126,6 +126,33 @@ type ScalarRequirement<
 
 declare const scalarNeedsUniqueKey: unique symbol;
 
+/**
+ * The columns an honored `{scalar: true}` gate pins on the *parent* query.
+ *
+ * The server rewrites such a gate to `parentField = <literal>`, and it does so
+ * bottom-up: an inner gate's rewrite is already in place when the outer gate is
+ * tested for single-row-ness. So an inner scalar can supply the very column an
+ * outer key was missing — which is how a `label` subquery pinning only `name`
+ * ends up covering `(projectID, name)`.
+ *
+ * Only one-hop relationships qualify. On a junction the flag lands on the inner
+ * hop, and the outer wrapper stays a plain EXISTS over the junction table, so
+ * nothing is pinned on the parent.
+ */
+type ScalarPins<
+  TTable extends string,
+  TSchema extends ZeroSchema,
+  TRelationship extends string,
+> = TSchema['relationships'][TTable][TRelationship] extends readonly [
+  infer TOnly,
+]
+  ? TOnly extends {
+      readonly sourceField: infer TSource extends readonly string[];
+    }
+    ? TSource[number]
+    : never
+  : never;
+
 export type GetFilterType<
   TSchema extends TableSchema,
   TColumn extends keyof TSchema['columns'],
@@ -405,7 +432,12 @@ export interface Query<
         TSubPinned
       >,
     options: ExistsOptions<boolean> & {scalar: true},
-  ): Query<TTable, TSchema, TReturn, TPinned>;
+  ): Query<
+    TTable,
+    TSchema,
+    TReturn,
+    TPinned | ScalarPins<TTable, TSchema, TRelationship>
+  >;
   whereExists<TRelationship extends AvailableRelationships<TTable, TSchema>>(
     relationship: TRelationship,
     cb: (
