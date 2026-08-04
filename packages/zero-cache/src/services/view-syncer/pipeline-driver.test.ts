@@ -2409,6 +2409,98 @@ describe('view-syncer/pipeline-driver', () => {
     });
   });
 
+  describe('unhonored scalar hints are reported', () => {
+    // The driver is built at 'error' by default, which swallows warnings.
+    function warningsFrom(query: AST): string[] {
+      logSink.messages.length = 0;
+      const warnLc = new LogContext('warn', undefined, logSink);
+      const storage = new Database(warnLc, ':memory:');
+      storage.prepare(CREATE_STORAGE_TABLE).run();
+      pipelines = new PipelineDriver(
+        warnLc,
+        testLogConfig,
+        new Snapshotter(warnLc, dbFile.path, {appID: shardID.appID}),
+        shardID,
+        new DatabaseStorage(storage).createClientGroupStorage(
+          'foo-client-group',
+        ),
+        'pipeline-driver.test.ts',
+        new InspectorDelegate(undefined),
+        () => 200 /** yield threshold */,
+      );
+      pipelines.init(clientSchema);
+      [...pipelines.addQuery('hash-warn', 'queryWarn', query, startTimer())];
+      return logSink.messages
+        .filter(([level]) => level === 'warn')
+        .map(([, , args]) => String(args[0]));
+    }
+
+    test('an unpinned subquery warns, naming the table and its unique keys', () => {
+      const warnings = warningsFrom({
+        ...ISSUES_WITH_SCALAR_SUBQUERY,
+        where: {
+          ...(ISSUES_WITH_SCALAR_SUBQUERY.where as CorrelatedSubqueryCondition),
+          related: {
+            correlation: {parentField: ['id'], childField: ['issueID']},
+            subquery: {
+              table: 'comments',
+              // The gate survives as a real EXISTS, which needs an alias —
+              // the builder always emits one.
+              alias: 'zsubq_comments',
+              orderBy: [['id', 'asc']],
+              // `upvotes` is not unique, so this pins nothing.
+              where: {
+                type: 'simple',
+                op: '=',
+                left: {type: 'column', name: 'upvotes'},
+                right: {type: 'literal', value: 0},
+              },
+            },
+          },
+        },
+      });
+
+      expect(warnings).toHaveLength(1);
+      expect(warnings[0]).toMatchInlineSnapshot(
+        `"Ignoring {scalar: true} on the "comments" subquery of query queryWarn: it does not constrain every column of any unique key [(id)] to a literal with "=", so it is not provably limited to one row. The gate runs as a plain EXISTS."`,
+      );
+    });
+
+    test('a subquery pinned on the primary key is silent', () => {
+      expect(warningsFrom(ISSUES_WITH_SCALAR_SUBQUERY)).toEqual([]);
+    });
+
+    test('a subquery pinned on a non-primary unique index is silent', () => {
+      // `uniques` has unique indexes on both `id` and `name`. Pinning `name`
+      // is honored, which the client schema — primary keys only — could not
+      // have known. This is why the check lives here and not in the builder.
+      expect(
+        warningsFrom({
+          table: 'issues',
+          orderBy: [['id', 'asc']],
+          where: {
+            type: 'correlatedSubquery',
+            op: 'EXISTS',
+            scalar: true,
+            related: {
+              correlation: {parentField: ['id'], childField: ['id']},
+              subquery: {
+                table: 'uniques',
+                orderBy: [['id', 'asc']],
+                where: {
+                  type: 'simple',
+                  op: '=',
+                  left: {type: 'column', name: 'name'},
+                  right: {type: 'literal', value: 'bar'},
+                },
+              },
+            },
+          },
+        }),
+      ).toEqual([]);
+    });
+  });
+
   test('scalar subquery in AND with other conditions', () => {
     pipelines.init(clientSchema);
 

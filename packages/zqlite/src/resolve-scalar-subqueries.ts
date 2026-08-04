@@ -23,9 +23,31 @@ export type CompanionSubquery = {
   resolvedValue: LiteralValue | null | undefined;
 };
 
+/**
+ * A `scalar` hint that could not be honored: the subquery was not provably
+ * limited to one row, so the gate was left as a plain EXISTS.
+ */
+export type IgnoredScalarHint = {
+  /** The subquery's table. */
+  table: string;
+  /** The unique keys that were available to pin it. */
+  uniqueKeys: readonly PrimaryKey[];
+};
+
 export type ResolveResult = {
   ast: AST;
   companions: CompanionSubquery[];
+  /**
+   * Hints the caller may want to surface: each one is a `{scalar: true}` the
+   * author asked for and did not get. See {@link IgnoredScalarHint}.
+   */
+  ignoredScalarHints: IgnoredScalarHint[];
+};
+
+/** Accumulators threaded through the recursion. */
+type Out = {
+  companions: CompanionSubquery[];
+  ignoredScalarHints: IgnoredScalarHint[];
 };
 
 /**
@@ -56,24 +78,24 @@ export function resolveSimpleScalarSubqueries(
   tableSpecs: Map<string, TableSpecWithUniqueKeys>,
   execute: ScalarExecutor,
 ): ResolveResult {
-  const companions: CompanionSubquery[] = [];
-  const resolved = resolveASTRecursive(ast, tableSpecs, execute, companions);
-  return {ast: resolved, companions};
+  const out: Out = {companions: [], ignoredScalarHints: []};
+  const resolved = resolveASTRecursive(ast, tableSpecs, execute, out);
+  return {ast: resolved, ...out};
 }
 
 function resolveASTRecursive(
   ast: AST,
   tableSpecs: Map<string, TableSpecWithUniqueKeys>,
   execute: ScalarExecutor,
-  companions: CompanionSubquery[],
+  out: Out,
 ): AST {
   const where = ast.where
-    ? resolveCondition(ast.where, tableSpecs, execute, companions)
+    ? resolveCondition(ast.where, tableSpecs, execute, out)
     : undefined;
 
   const related = ast.related?.map(r => ({
     ...r,
-    subquery: resolveASTRecursive(r.subquery, tableSpecs, execute, companions),
+    subquery: resolveASTRecursive(r.subquery, tableSpecs, execute, out),
   }));
 
   if (where !== ast.where || related !== ast.related) {
@@ -86,17 +108,12 @@ function resolveCondition(
   condition: Condition,
   tableSpecs: Map<string, TableSpecWithUniqueKeys>,
   execute: ScalarExecutor,
-  companions: CompanionSubquery[],
+  out: Out,
 ): Condition {
   switch (condition.type) {
     case 'correlatedSubquery':
       if (condition.scalar) {
-        return resolveScalarSubquery(
-          condition,
-          tableSpecs,
-          execute,
-          companions,
-        );
+        return resolveScalarSubquery(condition, tableSpecs, execute, out);
       }
       // Non-scalar correlated subquery: recurse into its subquery
       {
@@ -104,7 +121,7 @@ function resolveCondition(
           condition.related.subquery,
           tableSpecs,
           execute,
-          companions,
+          out,
         );
         if (resolvedSubquery !== condition.related.subquery) {
           return {
@@ -117,7 +134,7 @@ function resolveCondition(
     case 'and':
     case 'or': {
       const resolved = condition.conditions.map(c =>
-        resolveCondition(c, tableSpecs, execute, companions),
+        resolveCondition(c, tableSpecs, execute, out),
       );
       if (resolved.every((c, i) => c === condition.conditions[i])) {
         return condition;
@@ -133,7 +150,7 @@ function resolveScalarSubquery(
   condition: CorrelatedSubqueryCondition,
   tableSpecs: Map<string, TableSpecWithUniqueKeys>,
   execute: ScalarExecutor,
-  companions: CompanionSubquery[],
+  out: Out,
 ): Condition {
   const parentField = condition.related.correlation.parentField[0];
   const childField = condition.related.correlation.childField[0];
@@ -144,10 +161,17 @@ function resolveScalarSubquery(
     condition.related.subquery,
     tableSpecs,
     execute,
-    companions,
+    out,
   );
 
   if (!isSimpleSubquery(subquery, tableSpecs)) {
+    // The author asked for a scalar rewrite and is not getting one. Record it
+    // so the caller can say so — silently falling back is the whole reason the
+    // hint is easy to get wrong.
+    out.ignoredScalarHints.push({
+      table: subquery.table,
+      uniqueKeys: tableSpecs.get(subquery.table)?.tableSpec.uniqueKeys ?? [],
+    });
     // Return with the (possibly partially-resolved) subquery.
     if (subquery !== condition.related.subquery) {
       return {
@@ -162,7 +186,7 @@ function resolveScalarSubquery(
 
   // Record the companion subquery AST so its rows are synced to the client.
   // The client rewrites scalar subqueries to EXISTS and needs those rows.
-  companions.push({
+  out.companions.push({
     ast: subquery,
     childField,
     resolvedValue: value,
