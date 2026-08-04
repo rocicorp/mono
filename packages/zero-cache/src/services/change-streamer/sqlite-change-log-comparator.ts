@@ -107,7 +107,10 @@ export type CompareCycleResult =
       readonly kind: 'compared';
       /** Exclusive lower bound of the compared range. */
       readonly fromWatermark: string;
-      /** Inclusive upper bound; the next cycle resumes from here. */
+      /**
+       * Inclusive upper bound attempted. The next cycle normally resumes from
+       * here, but retries from `fromWatermark` after an inconclusive result.
+       */
       readonly throughWatermark: string;
       /** Committed transactions present in either store over the range. */
       readonly transactions: number;
@@ -128,6 +131,7 @@ export interface PGChangeLogRangeReader {
     minWatermark: string | null;
     lastWatermark: string;
   }>;
+  hasCatchupWatermark(watermark: string): Promise<boolean>;
   listCommitWatermarks(
     afterWatermark: string,
     throughWatermark: string,
@@ -400,6 +404,7 @@ export class SQLiteChangeLogComparator {
   #running: Promise<CompareCycleResult> | undefined;
   #timer: ReturnType<typeof setTimeout> | undefined;
   #stopped = false;
+  #continueWithoutDelay = false;
 
   constructor(
     lc: LogContext,
@@ -434,9 +439,16 @@ export class SQLiteChangeLogComparator {
       return Promise.resolve({kind: 'skipped', reason: 'stopped'});
     }
     if (this.#running === undefined) {
-      this.#running = this.#runCycle().finally(() => {
-        this.#running = undefined;
-      });
+      this.#running = this.#runCycle()
+        .then(result => {
+          if (this.#continueWithoutDelay) {
+            this.#rescheduleNext(0);
+          }
+          return result;
+        })
+        .finally(() => {
+          this.#running = undefined;
+        });
     }
     return this.#running;
   }
@@ -449,18 +461,29 @@ export class SQLiteChangeLogComparator {
     }
   }
 
-  #scheduleNext(): void {
+  #scheduleNext(
+    delayMs = this.#opts.intervalMs ?? DEFAULT_COMPARE_INTERVAL_MS,
+  ): void {
     if (this.#stopped || this.#timer !== undefined) {
       return;
     }
     this.#timer = this.#setTimeoutFn(() => {
       this.#timer = undefined;
       void this.compareOnce().finally(() => this.#scheduleNext());
-    }, this.#opts.intervalMs ?? DEFAULT_COMPARE_INTERVAL_MS);
+    }, delayMs);
+  }
+
+  #rescheduleNext(delayMs: number): void {
+    if (this.#timer !== undefined) {
+      this.#clearTimeoutFn(this.#timer);
+      this.#timer = undefined;
+    }
+    this.#scheduleNext(delayMs);
   }
 
   async #runCycle(): Promise<CompareCycleResult> {
     const startedAt = performance.now();
+    this.#continueWithoutDelay = false;
     let db: Database | undefined;
     let reader: SQLiteChangeLogReader | undefined;
     try {
@@ -501,6 +524,21 @@ export class SQLiteChangeLogComparator {
       }
 
       const divergent: TransactionCompareResult[] = [];
+      if (!(await this.#pg.hasCatchupWatermark(from))) {
+        // PG catchup includes the requested boundary and rejects the range if
+        // it cannot find it. A strict-greater-than comparison would otherwise
+        // hide a hole at exactly `from` and accept output PG cannot serve.
+        const outcome = await this.#reconfirm(
+          db,
+          pinned,
+          from,
+          'bounds-mismatch',
+        );
+        this.#compareResults.add(1, {outcome});
+        divergent.push({watermark: from, outcome});
+        return this.#compared(from, from, 0, 0, 0, divergent);
+      }
+
       reader = new SQLiteChangeLogReader(this.#lc, this.#changeLogFile);
       const plan = reader.plan(from);
       if (plan.kind === 'not-ready') {
@@ -515,7 +553,7 @@ export class SQLiteChangeLogComparator {
         // after they were pinned, which is a purge race, not a finding.
         const outcome = await this.#reconfirm(
           db,
-          meta,
+          pinned,
           from,
           'bounds-mismatch',
         );
@@ -554,7 +592,7 @@ export class SQLiteChangeLogComparator {
         if (!inSqlite || !inPg) {
           const outcome = await this.#reconfirm(
             db,
-            meta,
+            pinned,
             watermark,
             inSqlite ? 'missing-pg' : 'missing-sqlite',
           );
@@ -567,7 +605,7 @@ export class SQLiteChangeLogComparator {
           const {tx, orphans} = await this.#compareTransaction(
             db,
             reader,
-            meta,
+            pinned,
             previousBoundary,
             watermark,
           );
@@ -592,8 +630,12 @@ export class SQLiteChangeLogComparator {
         previousBoundary = watermark;
       }
 
-      if (!this.#stopped) {
+      const inconclusive = divergent.some(
+        ({outcome}) => outcome === 'inconclusive',
+      );
+      if (!this.#stopped && !inconclusive) {
         this.#cursor = effectiveThrough;
+        this.#continueWithoutDelay = effectiveThrough < through;
       }
       return this.#compared(
         from,
@@ -742,7 +784,7 @@ export class SQLiteChangeLogComparator {
   async #compareTransaction(
     db: Database,
     reader: SQLiteChangeLogReader,
-    meta: ChangeLogMeta,
+    pinned: PinnedBounds,
     previousBoundary: string,
     watermark: string,
   ): Promise<{
@@ -768,7 +810,7 @@ export class SQLiteChangeLogComparator {
       );
       const outcome = await this.#reconfirm(
         db,
-        meta,
+        pinned,
         watermark,
         'reader-error',
       );
@@ -776,7 +818,7 @@ export class SQLiteChangeLogComparator {
     }
     const orphans = await this.#compareOrphans(
       db,
-      meta,
+      pinned,
       watermark,
       sqliteServed,
       pgServed,
@@ -798,7 +840,7 @@ export class SQLiteChangeLogComparator {
         : pgTx === undefined
           ? 'missing-pg'
           : 'digest-mismatch';
-    const outcome = await this.#reconfirm(db, meta, watermark, suspect);
+    const outcome = await this.#reconfirm(db, pinned, watermark, suspect);
     return {
       tx: {
         watermark,
@@ -824,7 +866,7 @@ export class SQLiteChangeLogComparator {
    */
   async #compareOrphans(
     db: Database,
-    meta: ChangeLogMeta,
+    pinned: PinnedBounds,
     txWatermark: string,
     sqliteServed: Map<string, CatchupTransactionDigest>,
     pgServed: Map<string, CatchupTransactionDigest>,
@@ -846,7 +888,7 @@ export class SQLiteChangeLogComparator {
       ) {
         continue;
       }
-      const outcome = await this.#reconfirm(db, meta, w, 'orphan-output');
+      const outcome = await this.#reconfirm(db, pinned, w, 'orphan-output');
       orphans.push({
         watermark: w,
         outcome,
@@ -869,15 +911,15 @@ export class SQLiteChangeLogComparator {
    */
   async #reconfirm(
     db: Database,
-    pinnedMeta: ChangeLogMeta,
+    pinned: PinnedBounds,
     watermark: string,
     suspect: Exclude<CompareOutcome, 'match'>,
   ): Promise<Exclude<CompareOutcome, 'match'>> {
     try {
       const meta = readChangeLogMeta(db);
       if (
-        meta.seedWatermark !== pinnedMeta.seedWatermark ||
-        meta.seededAtMs !== pinnedMeta.seededAtMs
+        meta.seedWatermark !== pinned.meta.seedWatermark ||
+        meta.seededAtMs !== pinned.meta.seededAtMs
       ) {
         return 'inconclusive';
       }
@@ -887,8 +929,9 @@ export class SQLiteChangeLogComparator {
         return 'inconclusive';
       }
       if (
-        watermark <= sqlite.minWatermark ||
-        watermark <= minWatermark ||
+        (sqlite.minWatermark > pinned.sqlite.minWatermark &&
+          watermark <= sqlite.minWatermark) ||
+        (minWatermark > pinned.pgMinWatermark && watermark <= minWatermark) ||
         watermark > sqlite.headWatermark ||
         watermark > lastWatermark
       ) {

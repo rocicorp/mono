@@ -290,6 +290,16 @@ export class Storer implements Service {
     return bounds;
   }
 
+  /** Whether PG catchup can find the requested exclusive lower boundary. */
+  async hasCatchupWatermark(watermark: string): Promise<boolean> {
+    const [{exists}] = await this.#db<{exists: boolean}[]> /*sql*/ `
+      SELECT EXISTS (
+        SELECT 1 FROM ${this.#cdc('changeLog')}
+         WHERE watermark = ${watermark}
+      ) AS exists`;
+    return exists;
+  }
+
   /**
    * The commit watermarks of the transactions in `(afterWatermark,
    * throughWatermark]`, ascending, at most `limit` of them. Every row of a

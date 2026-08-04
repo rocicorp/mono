@@ -337,6 +337,45 @@ describe('change-streamer/sqlite-change-log-comparator', () => {
     });
   });
 
+  test('a capped cycle schedules its continuation without the poll delay', async () => {
+    await feedBoth(
+      tx('03', messages.insert('foo', {id: 'a'})),
+      tx('04', messages.insert('foo', {id: 'b'})),
+      tx('05', messages.insert('foo', {id: 'c'})),
+    );
+
+    type Scheduled = {callback: () => void; delayMs: number};
+    const scheduled = new Map<ReturnType<typeof setTimeout>, Scheduled>();
+    let nextTimer = 0;
+    const setTimeoutFn = vi.fn((callback: () => void, delayMs?: number) => {
+      const handle = ++nextTimer as unknown as ReturnType<typeof setTimeout>;
+      scheduled.set(handle, {callback, delayMs: delayMs ?? 0});
+      return handle;
+    }) as unknown as typeof setTimeout;
+    const clearTimeoutFn = vi.fn((handle: ReturnType<typeof setTimeout>) => {
+      scheduled.delete(handle);
+    }) as unknown as typeof clearTimeout;
+    const comparator = newComparator({
+      intervalMs: 30_000,
+      maxTransactionsPerCycle: 2,
+      setTimeoutFn,
+      clearTimeoutFn,
+    });
+
+    expect(Array.from(scheduled.values(), ({delayMs}) => delayMs)).toEqual([
+      30_000,
+    ]);
+    const first = await comparator.compareOnce();
+    assert(first.kind === 'compared', 'expected a compared cycle');
+    expect(first).toMatchObject({
+      throughWatermark: '04',
+      transactions: 2,
+    });
+    expect(Array.from(scheduled.values(), ({delayMs}) => delayMs)).toEqual([0]);
+
+    comparator.stop();
+  });
+
   test('head lag in either direction is not divergence', async () => {
     await feedBoth(
       tx('03', messages.insert('foo', {id: 'boundary'})),
@@ -530,6 +569,46 @@ describe('change-streamer/sqlite-change-log-comparator', () => {
     expect(third).toEqual({kind: 'skipped', reason: 'nothing-to-compare'});
   });
 
+  test('a missing PG catchup boundary prevents accepting the later range', async () => {
+    await feedBoth(
+      tx('03', messages.insert('foo', {id: 'older'})),
+      tx('04', messages.insert('foo', {id: 'boundary'})),
+      tx('05', messages.insert('foo', {id: 'later'})),
+    );
+    // SQLite has purged to '04', while PG still has older and later rows but
+    // has a hole at that exact catchup boundary.
+    withSQLiteLog(db =>
+      db
+        .prepare(
+          /*sql*/ `DELETE FROM "${CHANGE_LOG_STREAM_TABLE}" WHERE "watermark" < '04'`,
+        )
+        .run(),
+    );
+    await sql`DELETE FROM ${cdc('changeLog')} WHERE watermark = '04'`;
+
+    const comparator = newComparator();
+    const first = await comparator.compareOnce();
+    assert(first.kind === 'compared', 'expected a compared cycle');
+    expect(first).toMatchObject({
+      fromWatermark: '04',
+      throughWatermark: '04',
+      transactions: 0,
+      sampled: 0,
+      matched: 0,
+      divergent: [{watermark: '04', outcome: 'bounds-mismatch'}],
+    });
+
+    // The later transaction is not accepted and the invalid boundary remains
+    // the start of the next attempt.
+    const second = await comparator.compareOnce();
+    assert(second.kind === 'compared', 'expected a compared cycle');
+    expect(second).toMatchObject({
+      fromWatermark: '04',
+      throughWatermark: '04',
+      matched: 0,
+    });
+  });
+
   test('a divergent cursor boundary does not wedge the comparator', async () => {
     // SQLite loses a whole transaction PG holds, while the log runs ahead of
     // PG (its normal state), so the cycle's common upper bound — and with it
@@ -626,6 +705,7 @@ describe('change-streamer/sqlite-change-log-comparator', () => {
     // cannot see this — only the meta comparison can.
     const racing: PGChangeLogRangeReader = {
       getCatchupBounds: () => storer.getCatchupBounds(),
+      hasCatchupWatermark: w => storer.hasCatchupWatermark(w),
       listCommitWatermarks: async (after, through, limit) => {
         const list = await storer.listCommitWatermarks(after, through, limit);
         withSQLiteLog(db => {
@@ -668,27 +748,37 @@ describe('change-streamer/sqlite-change-log-comparator', () => {
         )
         .run(),
     );
-    // The bounds re-read that would confirm the finding fails; the
+    // The first bounds re-read that would confirm the finding fails; the
     // observation cannot be distinguished from a race and must not report.
     let boundsReads = 0;
     const failing: PGChangeLogRangeReader = {
       getCatchupBounds: () => {
-        if (++boundsReads > 1) {
+        if (++boundsReads === 2) {
           throw new Error('injected bounds re-read failure');
         }
         return storer.getCatchupBounds();
       },
+      hasCatchupWatermark: w => storer.hasCatchupWatermark(w),
       listCommitWatermarks: (after, through, limit) =>
         storer.listCommitWatermarks(after, through, limit),
       readCatchupRange: (after, through) =>
         storer.readCatchupRange(after, through),
     };
-    const result = await newComparator({pg: failing}).compareOnce();
+    const comparator = newComparator({pg: failing});
+    const result = await comparator.compareOnce();
     assert(result.kind === 'compared', 'expected a compared cycle');
     expect(result.divergent).toMatchObject([
       {watermark: '04', outcome: 'inconclusive'},
     ]);
     expect(result.matched).toBe(2);
+
+    // The cursor did not move, so a later cycle retries and confirms the
+    // persistent divergence once the transient bounds failure clears.
+    const retry = await comparator.compareOnce();
+    assert(retry.kind === 'compared', 'expected a compared cycle');
+    expect(retry.divergent).toMatchObject([
+      {watermark: '04', outcome: 'missing-sqlite'},
+    ]);
   });
 
   test('a failing reader classifies as reader-error', async () => {
@@ -698,6 +788,7 @@ describe('change-streamer/sqlite-change-log-comparator', () => {
     );
     const failing: PGChangeLogRangeReader = {
       getCatchupBounds: () => storer.getCatchupBounds(),
+      hasCatchupWatermark: w => storer.hasCatchupWatermark(w),
       listCommitWatermarks: (after, through, limit) =>
         storer.listCommitWatermarks(after, through, limit),
       readCatchupRange: (after, through) => {
@@ -726,6 +817,7 @@ describe('change-streamer/sqlite-change-log-comparator', () => {
     let purged = false;
     const racing: PGChangeLogRangeReader = {
       getCatchupBounds: () => storer.getCatchupBounds(),
+      hasCatchupWatermark: w => storer.hasCatchupWatermark(w),
       listCommitWatermarks: (after, through, limit) =>
         storer.listCommitWatermarks(after, through, limit),
       readCatchupRange: (after, through) =>
@@ -763,6 +855,7 @@ describe('change-streamer/sqlite-change-log-comparator', () => {
     // purger (which deletes whole transactions below the floor) would.
     const racing: PGChangeLogRangeReader = {
       getCatchupBounds: () => storer.getCatchupBounds(),
+      hasCatchupWatermark: w => storer.hasCatchupWatermark(w),
       listCommitWatermarks: async (after, through, limit) => {
         const list = await storer.listCommitWatermarks(after, through, limit);
         withSQLiteLog(db =>
@@ -989,6 +1082,16 @@ describe('change-streamer/sqlite-change-log-comparator', () => {
               runWriter.write(change, storer.store(t.watermark, change));
             }
           };
+          // Production seeds at PG's durable head, which must be a valid
+          // catchup boundary. Give each generated run the same invariant;
+          // SQLite's synthetic seed remains excluded from the compared range.
+          const boundary = tx(
+            wm(base),
+            messages.insert('foo', {id: `boundary-${base}`}),
+          );
+          for (const change of boundary.changes) {
+            storer.store(boundary.watermark, change);
+          }
           for (const spec of specs) {
             feedRun(
               tx(
@@ -1066,14 +1169,12 @@ describe('change-streamer/sqlite-change-log-comparator', () => {
             }
           }
 
-          // Drive to quiescence. The tiny per-cycle limit forces cycle
-          // boundaries onto arbitrary — possibly corrupted — transactions,
-          // fuzzing the truncation-to-common-range arithmetic, and makes the
-          // guard a real anti-wedge property: a divergent boundary must
-          // never stall the cursor.
+          // Drive to quiescence in one complete range, whose clean sentinel is
+          // a valid boundary in both stores. Capped-range behavior is covered
+          // separately: allowing a cap to land on a PG hole would correctly
+          // keep rejecting that boundary, just as authoritative catchup does.
           const comparator = newComparator({
             file: changeLogFileName(runFile.path),
-            maxTransactionsPerCycle: 2,
           });
           const divergent: {watermark: string; outcome: string}[] = [];
           let matched = 0;
@@ -1093,22 +1194,6 @@ describe('change-streamer/sqlite-change-log-comparator', () => {
             );
           }
 
-          // A cursor landing on a transaction SQLite does not hold is
-          // re-reported once as a bounds-mismatch when the next cycle's
-          // plan() cannot serve the boundary — a classified duplicate of the
-          // missing-sqlite finding, never of anything else, and never twice.
-          const echoes = divergent.filter(d => d.outcome === 'bounds-mismatch');
-          for (const echo of echoes) {
-            expect(
-              specs.some(
-                s => s.watermark === echo.watermark && s.kind === 'drop-sqlite',
-              ),
-            ).toBe(true);
-          }
-          expect(new Set(echoes.map(e => e.watermark)).size).toBe(
-            echoes.length,
-          );
-
           const order = (
             a: {watermark: string; outcome: string},
             b: {watermark: string; outcome: string},
@@ -1118,10 +1203,7 @@ describe('change-streamer/sqlite-change-log-comparator', () => {
               : a.watermark > b.watermark
                 ? 1
                 : a.outcome.localeCompare(b.outcome);
-          const primary = divergent.filter(
-            d => d.outcome !== 'bounds-mismatch',
-          );
-          expect(primary.toSorted(order)).toEqual(expected.toSorted(order));
+          expect(divergent.toSorted(order)).toEqual(expected.toSorted(order));
           expect(matched).toBe(expectedMatched);
         } finally {
           runWriter.close();
