@@ -352,9 +352,15 @@ function where(
         ' OR ',
       )})`;
     case 'correlatedSubquery':
-      if (condition.scalar) {
-        return scalarSubquery(spec, condition, table);
-      }
+      // `scalar` is deliberately ignored here. It is a planner hint for the
+      // IVM engines, which have no cost-based planner and benefit from
+      // pre-resolving an at-most-one-row subquery to a literal comparison
+      // (see zqlite's `resolveSimpleScalarSubqueries`). Postgres decorrelates
+      // EXISTS into a semi-join on its own, so the hint buys nothing here —
+      // and honoring it as `parentField = (SELECT childField … LIMIT 1)` is
+      // only sound when the subquery matches at most one row *globally*.
+      // Applying it unconditionally silently dropped rows whenever the
+      // subquery was not pinned to a unique key.
       return exists(spec, condition, table);
     case 'simple':
       return simple(spec, condition, table);
@@ -396,47 +402,6 @@ function exists(
         ),
       )})`;
   }
-}
-
-function scalarSubquery(
-  spec: Spec,
-  condition: CorrelatedSubqueryCondition,
-  parentTable: Table,
-): SQLQuery {
-  const parentField = condition.related.correlation.parentField[0];
-  const childField = condition.related.correlation.childField[0];
-  const subqueryAST = condition.related.subquery;
-
-  const parentCol = colIdent(spec.server, {
-    table: parentTable,
-    zql: parentField,
-  });
-
-  const subqueryTable = makeTable(spec, subqueryAST.table);
-  const childCol = colIdent(spec.server, {
-    table: subqueryTable,
-    zql: childField,
-  });
-
-  const op = sql.__dangerous__rawValue(
-    condition.op === 'EXISTS' ? '=' : 'IS NOT',
-  );
-
-  const subqueryConditions = subqueryAST.where
-    ? [where(spec, subqueryAST.where, subqueryTable)]
-    : [];
-  if (subqueryAST.start) {
-    subqueryConditions.push(
-      start(spec, subqueryAST.start, subqueryAST.orderBy, subqueryTable),
-    );
-  }
-  const subqueryOrderBy = orderBy(spec, subqueryAST.orderBy, subqueryTable);
-
-  return sql`${parentCol} ${op} (SELECT ${childCol} FROM ${fromIdent(spec.server, subqueryTable)} ${
-    subqueryConditions.length > 0
-      ? sql`WHERE ${sql.join(subqueryConditions, ' AND ')}`
-      : sql``
-  } ${subqueryOrderBy} LIMIT 1)`;
 }
 
 export function makeCorrelator(
