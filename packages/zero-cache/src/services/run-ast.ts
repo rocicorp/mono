@@ -109,11 +109,20 @@ export async function runAst(
     return node ? ((node.row[childField] as LiteralValue) ?? null) : undefined;
   };
 
-  const {ast: resolvedAst} = resolveSimpleScalarSubqueries(
+  const {ast: resolvedAst, ignoredScalarHints} = resolveSimpleScalarSubqueries(
     ast,
     options.tableSpecs,
     executor,
   );
+  for (const {table, uniqueKeys} of ignoredScalarHints) {
+    lc.warn?.(
+      `Ignoring {scalar: true} on the "${table}" subquery: it does not ` +
+        `constrain every column of any unique key ` +
+        `[${uniqueKeys.map(k => `(${k.join(', ')})`).join(', ')}] to a ` +
+        `literal with "=", so it is not provably limited to one row. ` +
+        `The gate runs as a plain EXISTS.`,
+    );
+  }
 
   const pipeline = buildPipeline(
     resolvedAst,

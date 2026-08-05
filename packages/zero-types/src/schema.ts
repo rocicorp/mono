@@ -11,6 +11,17 @@ export type TableSchema = {
   readonly serverName?: string | undefined;
   readonly columns: Record<string, SchemaValue>;
   readonly primaryKey: PrimaryKey;
+  /**
+   * Additional unique keys on the table, beyond the primary key — one entry
+   * per unique index, each listing every column the index covers.
+   *
+   * This is metadata for the type checker, not a constraint Zero creates or
+   * enforces: it mirrors unique indexes that already exist upstream. The
+   * server reads the real indexes off the replica, so declaring these only
+   * affects what the client-side types can prove — notably whether a
+   * `{scalar: true}` subquery is provably limited to one row.
+   */
+  readonly uniqueKeys?: readonly PrimaryKey[] | undefined;
 };
 
 export type RelationshipsSchema = {

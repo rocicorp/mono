@@ -109,6 +109,43 @@ export class TableBuilderWithColumns<TShape extends TableSchema> {
     });
   }
 
+  /**
+   * Declares that `columnNames` together are unique — mirroring a unique index
+   * that already exists upstream. Call once per index.
+   *
+   * Zero neither creates nor enforces the constraint; declaring it tells the
+   * type checker what the server already knows from the replica, which is what
+   * lets a `{scalar: true}` subquery pinned on these columns typecheck.
+   *
+   * The return type is spelled out so the column names stay literal — spreading
+   * the accumulated keys widens them to `PrimaryKey`, which loses exactly the
+   * information the check needs.
+   */
+  unique<
+    const TUniqueColNames extends [
+      keyof TShape['columns'] & string,
+      ...(keyof TShape['columns'] & string)[],
+    ],
+  >(
+    ...columnNames: TUniqueColNames
+  ): TableBuilderWithColumns<
+    Omit<TShape, 'uniqueKeys'> & {
+      uniqueKeys: [
+        ...(TShape extends {
+          uniqueKeys: infer TExisting extends readonly PrimaryKey[];
+        }
+          ? TExisting
+          : []),
+        TUniqueColNames,
+      ];
+    }
+  > {
+    return new TableBuilderWithColumns({
+      ...this.#schema,
+      uniqueKeys: [...(this.#schema.uniqueKeys ?? []), columnNames],
+    }) as any;
+  }
+
   get schema() {
     return this.#schema;
   }

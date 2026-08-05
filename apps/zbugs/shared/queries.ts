@@ -450,6 +450,10 @@ export function buildListQuery(args: ListQueryArgs) {
         : undefined,
       ...(labels ?? []).map(label =>
         exists('issueLabels', q =>
+          // `label`'s unique key is `(projectID, name)` and only `name` is
+          // pinned here — but the inner `project` gate is itself scalar, so it
+          // rewrites to `label.projectID = <literal>` before this gate is
+          // tested, completing the key. Both gates are honored.
           q.whereExists(
             'label',
             q =>

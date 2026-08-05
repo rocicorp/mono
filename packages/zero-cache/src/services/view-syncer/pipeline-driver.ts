@@ -40,6 +40,7 @@ import type {Database} from '../../../../zqlite/src/db.ts';
 import {
   resolveSimpleScalarSubqueries,
   type CompanionSubquery,
+  type IgnoredScalarHint,
 } from '../../../../zqlite/src/resolve-scalar-subqueries.ts';
 import {createSQLiteCostModel} from '../../../../zqlite/src/sqlite-cost-model.ts';
 import {TableSource} from '../../../../zqlite/src/table-source.ts';
@@ -505,11 +506,32 @@ export class PipelineDriver {
     lc.info?.('query pipeline lifecycle');
   }
 
+  /**
+   * A `{scalar: true}` that cannot be honored degrades silently to a plain
+   * EXISTS, so the author gets none of the plan they asked for and no signal
+   * that they didn't. Say so, with the unique keys that were actually
+   * available — the client schema knows only primary keys, so this is the only
+   * place the advice can be correct.
+   */
+  #warnIgnoredScalarHints(queryID: string, hints: IgnoredScalarHint[]): void {
+    for (const {table, uniqueKeys} of hints) {
+      const keys = uniqueKeys.map(k => `(${k.join(', ')})`).join(', ');
+      this.#lc.warn?.(
+        `Ignoring {scalar: true} on the "${table}" subquery of query ` +
+          `${queryID}: it does not constrain every column of any unique key ` +
+          `${keys.length > 0 ? `[${keys}]` : '(none on this table)'} to a ` +
+          `literal with "=", so it is not provably limited to one row. ` +
+          `The gate runs as a plain EXISTS.`,
+      );
+    }
+  }
+
   #resolveScalarSubqueries(ast: AST): {
     ast: AST;
     companionRows: {table: string; row: Row}[];
     companions: CompanionSubquery[];
     companionInputs: Input[];
+    ignoredScalarHints: IgnoredScalarHint[];
   } {
     const companionRows: {table: string; row: Row}[] = [];
     const companionInputs: Input[] = [];
@@ -548,12 +570,18 @@ export class PipelineDriver {
       return (node.row[childField] as LiteralValue) ?? null;
     };
 
-    const {ast: resolved, companions} = resolveSimpleScalarSubqueries(
-      ast,
-      this.#tableSpecs,
-      executor,
-    );
-    return {ast: resolved, companionRows, companions, companionInputs};
+    const {
+      ast: resolved,
+      companions,
+      ignoredScalarHints,
+    } = resolveSimpleScalarSubqueries(ast, this.#tableSpecs, executor);
+    return {
+      ast: resolved,
+      companionRows,
+      companions,
+      companionInputs,
+      ignoredScalarHints,
+    };
   }
 
   /**
@@ -637,7 +665,10 @@ export class PipelineDriver {
         companionRows,
         companions: companionMeta,
         companionInputs,
+        ignoredScalarHints,
       } = this.#resolveScalarSubqueries(query);
+
+      this.#warnIgnoredScalarHints(queryID, ignoredScalarHints);
 
       const input = buildPipeline(
         resolvedQuery,
