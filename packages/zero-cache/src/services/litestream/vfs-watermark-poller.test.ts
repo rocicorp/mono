@@ -1,7 +1,7 @@
-import Sqlite3Database from '@rocicorp/zero-sqlite3';
 import {mkdtempSync, rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
+import Sqlite3Database from '@rocicorp/zero-sqlite3';
 import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
@@ -91,8 +91,11 @@ function openReadonly(
   };
 }
 
-const update = (watermark: string, writeTimeMs: number, backupTimeMs: number) =>
-  ['backupWatermarkUpdate', {watermark, writeTimeMs, backupTimeMs}];
+const update = (
+  watermark: string,
+  writeTimeMs: number,
+  backupTimeMs: number,
+) => ['backupWatermarkUpdate', {watermark, writeTimeMs, backupTimeMs}];
 
 /**
  * Wires a poller to two file-backed dbs, handing it genuine read-only sqlite
