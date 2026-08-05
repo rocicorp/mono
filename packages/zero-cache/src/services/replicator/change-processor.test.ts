@@ -1,5 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
-import {beforeEach, describe, expect, test} from 'vitest';
+import {beforeEach, describe, expect, test, vi} from 'vitest';
 import type {JSONObject} from '../../../../shared/src/bigint-json.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import {must} from '../../../../shared/src/must.ts';
@@ -25,6 +25,7 @@ import {createChangeProcessor, ReplicationMessages} from './test-utils.ts';
 describe('replicator/change-processor', () => {
   let lc: LogContext;
   let servingReplica: Database;
+  let servingRunner: StatementRunner;
   let servingProcessor: ChangeProcessor;
   let backupReplica: Database;
   let backupProcessor: ChangeProcessor;
@@ -33,8 +34,9 @@ describe('replicator/change-processor', () => {
     lc = createSilentLogContext();
     servingReplica = new Database(lc, ':memory:');
     initReplicationState(servingReplica, ['zero_data'], '02');
+    servingRunner = new StatementRunner(servingReplica);
     servingProcessor = new ChangeProcessor(
-      new StatementRunner(servingReplica),
+      servingRunner,
       'serving',
       (_, err: unknown) => {
         throw err;
@@ -73,6 +75,25 @@ describe('replicator/change-processor', () => {
   const fooBarBaz = new ReplicationMessages({foo: 'id', bar: 'id', baz: 'id'});
   const tables = new ReplicationMessages({transaction: 'column'});
   const bff = new ReplicationMessages({bff: ['b', 'a', 'c']});
+
+  test('starts serving transactions with BEGIN IMMEDIATE', () => {
+    const beginImmediate = vi.spyOn(servingRunner, 'beginImmediate');
+    const beginConcurrent = vi.spyOn(servingRunner, 'beginConcurrent');
+
+    servingProcessor.processMessage(lc, [
+      'begin',
+      issues.begin(),
+      {commitWatermark: '03'},
+    ]);
+    servingProcessor.processMessage(lc, [
+      'commit',
+      issues.commit(),
+      {watermark: '03'},
+    ]);
+
+    expect(beginImmediate).toHaveBeenCalledOnce();
+    expect(beginConcurrent).not.toHaveBeenCalled();
+  });
 
   const cases: Case[] = [
     {

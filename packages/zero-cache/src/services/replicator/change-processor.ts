@@ -355,14 +355,11 @@ class TransactionProcessor {
 
     switch (mode) {
       case 'serving':
-        // Although the Replicator / Incremental Syncer is the only writer of the replica,
-        // a `BEGIN CONCURRENT` transaction is used to allow View Syncers to simulate
-        // (i.e. and `ROLLBACK`) changes on historic snapshots of the database for the
-        // purpose of IVM).
-        //
-        // This TransactionProcessor is the only logic that will actually
-        // `COMMIT` any transactions to the replica.
-        db.beginConcurrent();
+        // This is the only transaction that commits to the serving replica.
+        // Snapshotters use BEGIN CONCURRENT for private changes that are
+        // always rolled back, while BEGIN IMMEDIATE lets this writer spill
+        // dirty pages during large transactions.
+        db.beginImmediate();
         break;
       case 'backup':
         // For the backup-replicator (i.e. replication-manager), there are no View Syncers
