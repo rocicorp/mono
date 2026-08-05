@@ -287,9 +287,10 @@ class Snapshot {
     const [{journal_mode: mode}] = conn.pragma('journal_mode') as [
       {journal_mode: string},
     ];
-    // The Snapshotter operates on the replica file with BEGIN CONCURRENT,
-    // which must be used in concert with the replicator using BEGIN CONCURRENT
-    // on a db in the wal2 journal_mode.
+    // BEGIN CONCURRENT lets the Snapshotter simulate changes on a historic
+    // snapshot without taking the WAL writer lock. These private changes are
+    // always rolled back; the replicator is the only committer and can use
+    // BEGIN IMMEDIATE on the same WAL2 database.
     assert(
       mode === 'wal2',
       `replica db must be in wal2 mode (current: ${mode})`,
