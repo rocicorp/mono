@@ -769,7 +769,7 @@ describe('fetchFromAPIServer', () => {
 
   test('wraps non-OK responses in ProtocolError with http type', async () => {
     mockFetch.mockResolvedValueOnce(
-      new Response('failure-body', {status: 503}),
+      new Response('failure-body', {status: 400}),
     );
 
     let caught: unknown;
@@ -792,9 +792,9 @@ describe('fetchFromAPIServer', () => {
       caught.errorBody.reason === ErrorReason.HTTP,
       'Expected zeroCache HTTP error',
     );
-    expect(caught.errorBody.status).toBe(503);
+    expect(caught.errorBody.status).toBe(400);
     expect(caught.errorBody.bodyPreview).toBe('failure-body');
-    expect(caught.errorBody.message).toMatch(/non-OK status 503/);
+    expect(caught.errorBody.message).toMatch(/non-OK status 400/);
   });
 
   test('wraps JSON parse failures in ProtocolError with parse type', async () => {
@@ -975,45 +975,26 @@ describe('fetchFromAPIServer', () => {
       vi.useFakeTimers();
     });
 
-    test('retries on 502 and succeeds', async () => {
-      mockFetch
-        .mockResolvedValueOnce(new Response('bad gateway', {status: 502}))
-        .mockResolvedValueOnce(new Response('bad gateway', {status: 502}))
-        .mockResolvedValueOnce(
-          new Response(JSON.stringify({success: true}), {status: 200}),
-        );
+    test.each([500, 502, 503, 504, 599])(
+      'retries on %i and succeeds',
+      async status => {
+        mockFetch
+          .mockResolvedValueOnce(new Response('server error', {status}))
+          .mockResolvedValueOnce(
+            new Response(JSON.stringify({success: true}), {status: 200}),
+          );
 
-      const promise = fetchWithContext(validator, 'push', {
-        operation: 'mutate',
-      });
+        const promise = fetchWithContext(validator, 'push', {
+          operation: 'mutate',
+        });
 
-      // 1st retry
-      await vi.advanceTimersByTimeAsync(1200);
-      // 2nd retry
-      await vi.advanceTimersByTimeAsync(1200);
+        await vi.advanceTimersByTimeAsync(1200);
 
-      const result = await promise;
-      expect(result).toEqual({success: true});
-      expect(mockFetch).toHaveBeenCalledTimes(3);
-    });
-
-    test('retries on 504 and succeeds', async () => {
-      mockFetch
-        .mockResolvedValueOnce(new Response('gateway timeout', {status: 504}))
-        .mockResolvedValueOnce(
-          new Response(JSON.stringify({success: true}), {status: 200}),
-        );
-
-      const promise = fetchWithContext(validator, 'push', {
-        operation: 'mutate',
-      });
-
-      await vi.advanceTimersByTimeAsync(1200);
-
-      const result = await promise;
-      expect(result).toEqual({success: true});
-      expect(mockFetch).toHaveBeenCalledTimes(2);
-    });
+        const result = await promise;
+        expect(result).toEqual({success: true});
+        expect(mockFetch).toHaveBeenCalledTimes(2);
+      },
+    );
 
     test('retries on fetch failed and succeeds', async () => {
       mockFetch
