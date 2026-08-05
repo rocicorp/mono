@@ -69,6 +69,7 @@ import {
   type TuningOptions as StorerOptions,
 } from './storer.ts';
 import {Subscriber} from './subscriber.ts';
+import {UpstreamAcker} from './upstream-acker.ts';
 
 export type BackupConfig = {
   backupURL: string;
@@ -339,6 +340,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
   readonly #sqliteCatchupOptions: SQLiteCatchupOptions | undefined;
   readonly #changeLogWriter: SQLiteChangeLogWriter | undefined;
   readonly #purgeScheduler: SQLiteChangeLogPurgeScheduler | undefined;
+  readonly #acker: UpstreamAcker;
 
   readonly #autoReset: boolean;
   readonly #state: RunningState;
@@ -431,7 +433,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       discoveryProtocol,
       changeDB,
       replicaVersion,
-      consumed => this.#stream?.acks.push(['status', consumed[1], consumed[2]]),
+      consumed => this.#acker.trackPgChangeLog(consumed[2].watermark),
       err => this.stop(err),
       opts,
     );
@@ -475,6 +477,10 @@ class ChangeStreamerImpl implements ChangeStreamerService {
             opts.sqliteChangeLogPurge,
           )
         : undefined;
+    this.#acker = new UpstreamAcker({
+      trackPgChangeLog: true, // TODO: set false when retiring PG
+      trackBackup: backupConfig?.litestreamVersion === 'v5',
+    });
     this.#sqliteCatchupOptions = opts.sqliteCatchup
       ? {
           ...opts.sqliteCatchup,
@@ -555,13 +561,13 @@ class ChangeStreamerImpl implements ChangeStreamerService {
         }
         watermark = null;
 
+        this.#acker.reset(stream.acks);
         for await (const change of stream.changes) {
+          this.#acker.trackDownstream(change);
+
           const [type, msg] = change;
           switch (type) {
             case 'status':
-              if (msg.ack) {
-                this.#storer.status(change); // storer acks once it gets through its queue
-              }
               if (
                 msg.lagReport &&
                 msg.lagReport.lastTimings.commitTimeMs >=
@@ -795,11 +801,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
 
   trackBackupWatermark(watermark: string) {
     this.#backupWatermark = watermark;
-    // TODO: in RMv2, the backup watermark immediately acks upstream
-    //       so that (in PG) the confirmed_flush_lsn can advance. The
-    //       cleanup of the change-log can trail that based on where
-    //       current subscribers are, and our policy for how much buffer
-    //       is kept around for reconnecting view-syncers.
+    this.#acker.trackBackup(watermark);
     // The durable backup floor is an independent input to each change-log
     // implementation. SQLite receives it even when the PG log has already
     // reached this watermark.
