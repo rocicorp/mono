@@ -352,6 +352,7 @@ export function materializeImpl<
     : queryHash;
   const queryCompleteResolver = resolver<true>();
   let queryComplete: boolean | ErroredQuery = delegate.defaultQueryComplete;
+  let endToEndMetricRecorded = false;
   const updateTTL = customQueryID
     ? (newTTL: TTL) => delegate.updateCustomQuery(customQueryID, newTTL)
     : (newTTL: TTL) => delegate.updateServerQuery(ast, newTTL);
@@ -364,12 +365,15 @@ export function materializeImpl<
     }
 
     if (got) {
-      delegate.addMetric(
-        'query-materialization-end-to-end',
-        performance.now() - t0,
-        queryID,
-        ast,
-      );
+      if (!endToEndMetricRecorded) {
+        delegate.addMetric(
+          'query-materialization-end-to-end',
+          performance.now() - t0,
+          queryID,
+          ast,
+        );
+        endToEndMetricRecorded = true;
+      }
       queryComplete = true;
       queryCompleteResolver.resolve(true);
     }

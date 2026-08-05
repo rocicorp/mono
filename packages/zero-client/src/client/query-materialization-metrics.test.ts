@@ -425,6 +425,35 @@ describe('query materialization metrics', () => {
       view2.destroy();
     });
 
+    test('records the metric only once when got is re-confirmed', () => {
+      mockPerformanceNow([
+        100,
+        125, // Initial client materialization
+        200, // Initial got: 100ms end-to-end
+        309_801, // Reconnect got would incorrectly report 309,701ms
+      ]);
+
+      const query = createTestQuery();
+      const view = queryDelegate.materialize(query) as unknown as MockView;
+
+      gotCallback!(true);
+      gotCallback!(true);
+
+      const endToEndCalls = addMetricSpy.mock.calls.filter(
+        call => call[0] === 'query-materialization-end-to-end',
+      );
+      expect(endToEndCalls).toEqual([
+        [
+          'query-materialization-end-to-end',
+          100,
+          expect.any(String),
+          expect.objectContaining({table: 'users'}),
+        ],
+      ]);
+
+      view.destroy();
+    });
+
     test('handles server responding with false (query not available)', () => {
       // Mock performance.now() for server failure scenario
       mockClientTiming(150, 200);
