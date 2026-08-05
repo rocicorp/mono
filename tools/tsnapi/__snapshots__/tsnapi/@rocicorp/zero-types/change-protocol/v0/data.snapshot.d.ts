@@ -107,6 +107,7 @@ export declare const beginSchema: v.ObjectType<{
 }, undefined>;
 export declare const commitSchema: v.ObjectType<{
     tag: v.Type<"commit">;
+    commitTimeMs: v.Optional<number>;
 }, undefined>;
 export declare const createIndexSchema: v.ObjectType<{
     tag: v.Type<"create-index">;

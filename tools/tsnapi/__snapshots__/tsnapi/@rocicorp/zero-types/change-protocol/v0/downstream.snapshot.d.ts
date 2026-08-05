@@ -235,6 +235,7 @@ export declare const changeStreamDataSchema: v.UnionType<[v.TupleType<[v.Type<"b
     }>;
 }, undefined>]>]>]>, v.TupleType<[v.Type<"commit">, v.ObjectType<{
     tag: v.Type<"commit">;
+    commitTimeMs: v.Optional<number>;
 }, undefined>, v.ObjectType<{
     watermark: v.Type<string>;
 }, undefined>]>, v.TupleType<[v.Type<"rollback">, v.ObjectType<{
@@ -461,6 +462,7 @@ export declare const changeStreamMessageSchema: v.UnionType<[v.UnionType<[v.Tupl
     }>;
 }, undefined>]>]>]>, v.TupleType<[v.Type<"commit">, v.ObjectType<{
     tag: v.Type<"commit">;
+    commitTimeMs: v.Optional<number>;
 }, undefined>, v.ObjectType<{
     watermark: v.Type<string>;
 }, undefined>]>, v.TupleType<[v.Type<"rollback">, v.ObjectType<{

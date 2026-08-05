@@ -28,6 +28,7 @@ export declare const changeSourceUpstreamSchema: v.TupleType<[v.Type<"status">, 
     }>;
 }, undefined>, v.ObjectType<{
     tag: v.Type<"commit">;
+    commitTimeMs: v.Optional<number>;
 }, undefined>]>, v.ObjectType<{
     watermark: v.Type<string>;
 }, undefined>]>;
