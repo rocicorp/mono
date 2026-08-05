@@ -24,6 +24,7 @@ import type {
 } from '../change-source/protocol/current/downstream.ts';
 import type {UpstreamStatusMessage} from '../change-source/protocol/current/status.ts';
 import {exitAfter} from '../life-cycle.ts';
+import type {LitestreamVersion} from '../litestream/metrics.ts';
 import {
   changeLogFileName,
   deleteChangeLogDB,
@@ -166,6 +167,7 @@ describe('change-streamer/service', () => {
   async function newBackupStreamer(
     backupURL: string,
     source: Partial<ChangeSource> = {},
+    litestreamVersion: LitestreamVersion = 'legacy',
   ): Promise<ChangeStreamerService> {
     const backupStreamer = await initializeStreamer(
       lc,
@@ -187,7 +189,7 @@ describe('change-streamer/service', () => {
       } satisfies ChangeSource,
       ReplicationStatusPublisher.forTesting(),
       replicaConfig,
-      {backupURL, litestreamVersion: 'legacy'},
+      {backupURL, litestreamVersion},
       null,
       true,
       opts,
@@ -1945,8 +1947,11 @@ describe('change-streamer/service', () => {
       more: 'stuff',
     });
 
-    // Two commits with intervening status messages
-    await expectAcks('09', '0a', '0b', '0d');
+    // Two commits with intervening status messages. Note that the '0a'
+    // status is superseded by '0d' (the latest known status watermark) before
+    // the pg change-log persists up through '0b', so it is coalesced into
+    // the '0d' ack rather than being acked on its own.
+    await expectAcks('09', '0b', '0d');
 
     expect(
       await sql`SELECT watermark, change->'tag' FROM "zoro_3/cdc"."changeLog"`.values(),
@@ -2849,6 +2854,111 @@ describe('change-streamer/service', () => {
     ).toBe(true);
 
     await backupStreamer.stop();
+  });
+
+  describe('upstream acks with a v5 backup', () => {
+    // With `litestreamVersion: 'v5'`, the UpstreamAcker tracks both the pg
+    // change-log (via the Storer, which persists to the real `sql` db) and
+    // the backup watermark (reported via `trackBackupWatermark()`). An
+    // upstream ack should only be sent once *both* have reached a watermark.
+    async function newV5BackupStreamer() {
+      await streamer.stop();
+      const v5Changes = Subscription.create<ChangeStreamMessage>();
+      const v5Acks = new Queue<UpstreamStatusMessage>();
+      const backupStreamer = await newBackupStreamer(
+        's3://foo/bar',
+        {
+          startStream: () =>
+            Promise.resolve({
+              initialWatermark: '02',
+              changes: v5Changes,
+              acks: {push: status => v5Acks.enqueue(status)},
+            }),
+        },
+        'v5',
+      );
+      return {backupStreamer, v5Changes, v5Acks};
+    }
+
+    // Polls the real change db (rather than a mock) since the pg change-log
+    // side of the ack gating is driven by the actual Storer flushing to it.
+    async function waitForChangeLog(watermark: string) {
+      for (let i = 0; i < 100; i++) {
+        const rows = await sql`
+          SELECT 1 FROM "zoro_3/cdc"."changeLog" WHERE watermark = ${watermark}`;
+        if (rows.length) {
+          return;
+        }
+        await sleep(10);
+      }
+      throw new Error(`changeLog never reached watermark ${watermark}`);
+    }
+
+    const NO_ACK = Symbol('no-ack');
+    async function expectNoAck(v5Acks: Queue<UpstreamStatusMessage>) {
+      expect(
+        await v5Acks.dequeue(NO_ACK as unknown as UpstreamStatusMessage, 50),
+      ).toBe(NO_ACK);
+    }
+
+    test('withholds the ack until the backup catches up to an already-persisted commit', async () => {
+      const {backupStreamer, v5Changes, v5Acks} = await newV5BackupStreamer();
+
+      v5Changes.push(['begin', messages.begin(), {commitWatermark: '09'}]);
+      v5Changes.push(['data', messages.insert('foo', {id: 'hello'})]);
+      v5Changes.push(['commit', messages.commit(), {watermark: '09'}]);
+
+      // The pg change-log persists the commit on its own, but the backup
+      // hasn't reported reaching '09' yet, so nothing should be acked.
+      await waitForChangeLog('09');
+      await expectNoAck(v5Acks);
+
+      backupStreamer.trackBackupWatermark('09');
+      expect((await v5Acks.dequeue())[2].watermark).toBe('09');
+
+      await backupStreamer.stop();
+    });
+
+    test('withholds the ack until the pg change-log catches up to an already-reported backup watermark', async () => {
+      const {backupStreamer, v5Changes, v5Acks} = await newV5BackupStreamer();
+
+      // The backup races ahead of the pg change-log.
+      backupStreamer.trackBackupWatermark('09');
+      await expectNoAck(v5Acks);
+
+      v5Changes.push(['begin', messages.begin(), {commitWatermark: '09'}]);
+      v5Changes.push(['data', messages.insert('foo', {id: 'hello'})]);
+      v5Changes.push(['commit', messages.commit(), {watermark: '09'}]);
+
+      // Even though the backup already reported '09', the ack should wait
+      // for the pg change-log to persist the commit itself.
+      await waitForChangeLog('09');
+      expect((await v5Acks.dequeue())[2].watermark).toBe('09');
+
+      await backupStreamer.stop();
+    });
+
+    test('acks the min of the two watermarks across multiple commits', async () => {
+      const {backupStreamer, v5Changes, v5Acks} = await newV5BackupStreamer();
+
+      v5Changes.push(['begin', messages.begin(), {commitWatermark: '09'}]);
+      v5Changes.push(['commit', messages.commit(), {watermark: '09'}]);
+      v5Changes.push(['begin', messages.begin(), {commitWatermark: '0a'}]);
+      v5Changes.push(['commit', messages.commit(), {watermark: '0a'}]);
+
+      // The pg change-log races ahead to '0a', but the backup only reports
+      // up through '09': the ack should stop there.
+      await waitForChangeLog('0a');
+      backupStreamer.trackBackupWatermark('09');
+      expect((await v5Acks.dequeue())[2].watermark).toBe('09');
+      await expectNoAck(v5Acks);
+
+      // Once the backup catches up to '0a', the second commit is acked too.
+      backupStreamer.trackBackupWatermark('0a');
+      expect((await v5Acks.dequeue())[2].watermark).toBe('0a');
+
+      await backupStreamer.stop();
+    });
   });
 
   test('wrong replica version', async () => {

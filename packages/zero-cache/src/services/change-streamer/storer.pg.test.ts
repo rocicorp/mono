@@ -1279,9 +1279,6 @@ describe('change-streamer/storer', () => {
         {watermark: '08'},
       ]);
 
-      storer.status(['status', {ack: true}, {watermark: '0e'}]);
-      storer.status(['status', {ack: true}, {watermark: '0f'}]);
-
       // Catchup should wait for the transaction to complete before querying
       // the database, and start after watermark '03'.
       expect(await drain(stream1, '0a')).toMatchInlineSnapshot(`
@@ -1502,7 +1499,7 @@ describe('change-streamer/storer', () => {
         ]
       `);
 
-      await expectConsumed('08', '0e', '0f');
+      await expectConsumed('08');
     });
 
     // Similar to "queued if transaction is in progress" but tests rollback.
@@ -1539,9 +1536,6 @@ describe('change-streamer/storer', () => {
       storer.catchup(sub2, 'serving');
       // Rollback the transaction.
       storer.store('08', ['rollback', messages.rollback()]);
-
-      storer.status(['status', {ack: true}, {watermark: '0a'}]);
-      storer.status(['status', {ack: true}, {watermark: '0c'}]);
 
       // Catchup should wait for the transaction to complete before querying
       // the database, and start after watermark '03'.
@@ -1708,7 +1702,8 @@ describe('change-streamer/storer', () => {
         ]
       `);
 
-      await expectConsumed('0a', '0c');
+      // The transaction was rolled back, so nothing should be acked.
+      expect(consumed.size()).toBe(0);
     });
 
     test('catchup does not include subsequent transactions', async () => {
@@ -1742,9 +1737,6 @@ describe('change-streamer/storer', () => {
       // catchup doesn't include the next transaction.
       storer.store('09', ['begin', messages.begin(), {commitWatermark: '0a'}]);
       storer.store('0a', ['commit', messages.commit(), {watermark: '0a'}]);
-
-      storer.status(['status', {ack: true}, {watermark: '0d'}]);
-      storer.status(['status', {ack: true}, {watermark: '0e'}]);
 
       // Wait for the storer to commit that transaction.
       for (let i = 0; i < 10; i++) {
@@ -1834,7 +1826,7 @@ describe('change-streamer/storer', () => {
         ],
       ]
     `);
-      await expectConsumed('08', '0a', '0d', '0e');
+      await expectConsumed('08', '0a');
     });
   });
 

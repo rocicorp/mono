@@ -28,10 +28,7 @@ import {
   type ChangeStreamData,
   type Commit,
 } from '../change-source/protocol/current/downstream.ts';
-import type {
-  DownstreamStatusMessage,
-  UpstreamStatusMessage,
-} from '../change-source/protocol/current/status.ts';
+import type {UpstreamStatusMessage} from '../change-source/protocol/current/status.ts';
 import type {ReplicatorMode} from '../replicator/replicator.ts';
 import type {Service} from '../service.ts';
 import {
@@ -63,7 +60,6 @@ type QueueEntry =
     ]
   | ['ready', callback: () => void]
   | ['subscriber', SubscriberAndMode]
-  | DownstreamStatusMessage
   | ['abort']
   | 'stop';
 
@@ -142,7 +138,7 @@ export class Storer implements Service {
   readonly #discoveryProtocol: string;
   readonly #db: PostgresDB;
   readonly #replicaVersion: string;
-  readonly #onConsumed: (c: Commit | UpstreamStatusMessage) => void;
+  readonly #onCommitted: (c: Commit) => void;
   readonly #onFatal: (err: Error) => void;
   readonly #queue = new Queue<QueueEntry>();
   readonly #backPressureThresholdBytes: number;
@@ -160,7 +156,7 @@ export class Storer implements Service {
     discoveryProtocol: string,
     db: PostgresDB,
     replicaVersion: string,
-    onConsumed: (c: Commit | UpstreamStatusMessage) => void,
+    onCommitted: (c: Commit | UpstreamStatusMessage) => void,
     onFatal: (err: Error) => void,
     {
       backPressureLimitHeapProportion,
@@ -175,7 +171,7 @@ export class Storer implements Service {
     this.#discoveryProtocol = discoveryProtocol;
     this.#db = db;
     this.#replicaVersion = replicaVersion;
-    this.#onConsumed = onConsumed;
+    this.#onCommitted = onCommitted;
     this.#onFatal = onFatal;
     this.#statementTimeoutMs = statementTimeoutMs;
     this.#changeLogBatchSize = Math.max(1, changeLogBatchSize);
@@ -333,10 +329,6 @@ export class Storer implements Service {
 
   abort() {
     this.#queue.enqueue(['abort']);
-  }
-
-  status(s: DownstreamStatusMessage) {
-    this.#queue.enqueue(s);
   }
 
   catchup(subscriber: Subscriber, mode: ReplicatorMode) {
@@ -501,9 +493,6 @@ export class Storer implements Service {
             }
             continue;
           }
-          case 'status':
-            this.#onConsumed(msg);
-            continue;
           case 'abort': {
             if (tx) {
               tx.pool.abort();
@@ -620,7 +609,7 @@ export class Storer implements Service {
 
           // ACK the LSN to the upstream Postgres.
           if (tx.ack) {
-            this.#onConsumed(['commit', change, {watermark}]);
+            this.#onCommitted(['commit', change, {watermark}]);
           }
           tx = null;
 
