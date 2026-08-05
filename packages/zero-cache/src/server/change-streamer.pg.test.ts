@@ -18,6 +18,7 @@ import {
 } from '../services/replicator/change-log-db.ts';
 import {replicationStatusError} from '../services/replicator/replication-status.ts';
 import {getSubscriptionState} from '../services/replicator/schema/replication-state.ts';
+import type {SingletonService} from '../services/service.ts';
 import {getConnectionURI, test, type PgTest} from '../test/db.ts';
 import {DbFile} from '../test/lite.ts';
 import {ConfigurationError} from '../types/configuration-error.ts';
@@ -38,7 +39,13 @@ vi.mock('../services/life-cycle.ts', async importOriginal => {
   return {
     ...actual,
     exitAfter: vi.fn(),
-    runUntilKilled: vi.fn().mockResolvedValue(undefined),
+    // Some services (e.g. the BackupMonitor) may need to be started
+    // in order to signal readiness.
+    runUntilKilled: (
+      _lc: object,
+      _parent: object,
+      ...services: SingletonService[]
+    ) => services.map(svc => svc.run()),
   };
 });
 

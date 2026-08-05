@@ -63,11 +63,15 @@ export async function initializeCustomChangeSource(
     await restoreReplica(lc, litestream, replicaDbFile, constraints);
   }
 
+  let initialSynced = false;
   await initReplica(
     lc,
     `replica-${shard.appID}-${shard.shardNum}`,
     replicaDbFile,
-    (log, tx) => initialSync(log, shard, tx, upstreamURI, context),
+    (log, tx) => {
+      initialSynced = true;
+      return initialSync(log, shard, tx, upstreamURI, context);
+    },
   );
 
   const replica = new Database(lc, replicaDbFile);
@@ -100,6 +104,7 @@ export async function initializeCustomChangeSource(
     // itself from, so the generation is the whole of the SQLite change log's
     // identity here.
     replicaID: null,
+    waitForBackupBeforeServing: initialSynced,
   };
 }
 
