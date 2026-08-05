@@ -14,7 +14,10 @@ describe('view-syncer/e2e-serving-lag', () => {
     const tracker = new E2EServingLagTracker();
 
     tracker.onVersionReady(ready('02', 1_000));
-    expect(tracker.onVersionServed('02', 1_350)).toBe(350);
+    expect(tracker.onVersionServed('02', 1_350)).toEqual({
+      lagMs: 350,
+      clamped: false,
+    });
     // The pending commit is consumed, so serving again records nothing.
     expect(tracker.onVersionServed('02', 1_400)).toBeNull();
   });
@@ -23,7 +26,10 @@ describe('view-syncer/e2e-serving-lag', () => {
     const tracker = new E2EServingLagTracker();
 
     tracker.onVersionReady(ready('02', 1_000));
-    expect(tracker.onVersionServed('05', 1_500)).toBe(500);
+    expect(tracker.onVersionServed('05', 1_500)).toEqual({
+      lagMs: 500,
+      clamped: false,
+    });
   });
 
   test('serving an earlier version does not record', () => {
@@ -33,7 +39,10 @@ describe('view-syncer/e2e-serving-lag', () => {
     expect(tracker.onVersionServed('02', 1_500)).toBeNull();
     // Still outstanding: it is recorded once the version is actually served.
     expect(tracker.pending).toEqual({watermark: '05', commitTimeMs: 1_000});
-    expect(tracker.onVersionServed('05', 1_800)).toBe(800);
+    expect(tracker.onVersionServed('05', 1_800)).toEqual({
+      lagMs: 800,
+      clamped: false,
+    });
   });
 
   test('coalesced notifications measure the oldest subsumed commit', () => {
@@ -46,7 +55,10 @@ describe('view-syncer/e2e-serving-lag', () => {
 
     // The reported lag is that of the oldest, which is the worst latency any
     // client actually experienced.
-    expect(tracker.onVersionServed('04', 2_000)).toBe(1_000);
+    expect(tracker.onVersionServed('04', 2_000)).toEqual({
+      lagMs: 1_000,
+      clamped: false,
+    });
   });
 
   test('notifications without a commit time are ignored', () => {
@@ -60,7 +72,10 @@ describe('view-syncer/e2e-serving-lag', () => {
     // previous notification did carry.
     tracker.onVersionReady(ready('03', 1_000));
     tracker.onVersionReady(ready('04', undefined));
-    expect(tracker.onVersionServed('04', 1_600)).toBe(600);
+    expect(tracker.onVersionServed('04', 1_600)).toEqual({
+      lagMs: 600,
+      clamped: false,
+    });
   });
 
   test('the initial version-ready notification is ignored', () => {
@@ -72,12 +87,27 @@ describe('view-syncer/e2e-serving-lag', () => {
     expect(tracker.pending).toBeNull();
   });
 
-  test('clock skew is clamped instead of recording a negative duration', () => {
+  test('clock skew is clamped and reported rather than silently swallowed', () => {
     const tracker = new E2EServingLagTracker();
 
     // The upstream commit time comes from the upstream database's clock, which
-    // may run ahead of the ViewSyncer's.
+    // may run ahead of the ViewSyncer's. A negative duration would corrupt the
+    // histogram's sum, but it must not vanish either: skew in this direction
+    // biases the metric low, which reads as healthy serving.
     tracker.onVersionReady(ready('02', 5_000));
-    expect(tracker.onVersionServed('02', 4_000)).toBe(0);
+    expect(tracker.onVersionServed('02', 4_000)).toEqual({
+      lagMs: 0,
+      clamped: true,
+    });
+  });
+
+  test('a genuinely zero lag is not reported as a clamp', () => {
+    const tracker = new E2EServingLagTracker();
+
+    tracker.onVersionReady(ready('02', 1_000));
+    expect(tracker.onVersionServed('02', 1_000)).toEqual({
+      lagMs: 0,
+      clamped: false,
+    });
   });
 });

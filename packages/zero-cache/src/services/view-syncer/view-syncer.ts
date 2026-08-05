@@ -346,6 +346,19 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       unit: 's',
     },
   );
+  readonly #e2eServingLagClamps = getOrCreateCounter(
+    'sync',
+    'e2e_serving_lag_clamps',
+    {
+      description:
+        'Observations of sync.e2e_serving_lag that came out negative and were ' +
+        'clamped to zero. Non-zero means the upstream database clock is ' +
+        'running ahead of this pod by more than the entire pipeline latency, ' +
+        'so sync.e2e_serving_lag is biased low and reads healthier than ' +
+        'reality. See replication.upstream_clock_skew for the magnitude.',
+      unit: '{observation}',
+    },
+  );
   readonly #transactionAdvanceTime = getOrCreateLatencyHistogram(
     'sync',
     'advance-time',
@@ -728,12 +741,15 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
   #markVersionServed(version: CVRVersion) {
     this.#servedVersion = version.stateVersion;
-    const lagMs = this.#e2eServingLagTracker.onVersionServed(
+    const observation = this.#e2eServingLagTracker.onVersionServed(
       version.stateVersion,
       Date.now(),
     );
-    if (lagMs !== null) {
-      this.#e2eServingLag.recordMs(lagMs);
+    if (observation !== null) {
+      this.#e2eServingLag.recordMs(observation.lagMs);
+      if (observation.clamped) {
+        this.#e2eServingLagClamps.add(1);
+      }
     }
   }
 

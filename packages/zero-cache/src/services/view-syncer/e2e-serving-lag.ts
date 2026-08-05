@@ -49,18 +49,34 @@ export class E2EServingLagTracker {
   /**
    * Called once a version has been poked to clients.
    *
-   * @return the end-to-end lag in milliseconds to record, or `null` if the
-   *     served version does not yet cover an outstanding upstream commit.
+   * @return the observation to record, or `null` if the served version does
+   *     not yet cover an outstanding upstream commit.
    */
-  onVersionServed(servedVersion: string, nowMs: number): number | null {
+  onVersionServed(servedVersion: string, nowMs: number): Observation | null {
     const pending = this.#pending;
     if (pending === null || servedVersion < pending.watermark) {
       return null;
     }
     this.#pending = null;
-    // The commit time comes from the upstream database's clock while `nowMs`
-    // is local, so clamp rather than let skew put a negative duration into the
-    // histogram's sum.
-    return Math.max(0, nowMs - pending.commitTimeMs);
+
+    const lagMs = nowMs - pending.commitTimeMs;
+    if (lagMs >= 0) {
+      return {lagMs, clamped: false};
+    }
+    // The commit time is on the upstream database's clock while `nowMs` is
+    // local, so a negative duration means upstream's clock is running ahead of
+    // ours by more than the entire pipeline latency. Clamp, because a negative
+    // value would corrupt the histogram's sum -- but report the clamp, since
+    // it is proof of gross clock skew, and skew in this direction biases the
+    // metric *low*, which reads as healthy serving rather than as a broken
+    // measurement. See replication.upstream_clock_skew for the magnitude.
+    return {lagMs: 0, clamped: true};
   }
 }
+
+export type Observation = {
+  /** End-to-end lag in milliseconds, clamped to be non-negative. */
+  readonly lagMs: number;
+  /** Whether the clamp was applied, i.e. the raw measurement was negative. */
+  readonly clamped: boolean;
+};
