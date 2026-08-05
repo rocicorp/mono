@@ -170,6 +170,7 @@ const INFO: SQLiteChangeLogInfo = {
   schemaVersion: 2,
   seededAtMs: 1_700_000_000_000,
   seedWatermark: '02',
+  minWatermark: '02',
   headWatermark: '02',
   rows: 2,
   estimatedBytes: 100,

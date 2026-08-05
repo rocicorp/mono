@@ -351,11 +351,13 @@ describe('SQLiteChangeLogCatchup', () => {
   });
 
   test('gives up the barrier once the subscriber backlog fills', async () => {
+    const onFailure = vi.fn();
     // Long enough that only the backlog can end this wait. Bytes, not time,
     // are the real bound; the deadline is only a backstop for an idle shard.
     const fixture = createFixture({
       barrierTimeoutMs: 60_000,
       barrierPollIntervalMs: 60_000,
+      onFailure,
     });
     fixture.reader.head = '01';
 
@@ -374,6 +376,7 @@ describe('SQLiteChangeLogCatchup', () => {
     // holding replication while the backlog grows.
     expect(fail).not.toHaveBeenCalled();
     expect(output.size()).toBe(0);
+    expect(onFailure).toHaveBeenCalledExactlyOnceWith('barrier-backlog');
     expect(fixture.logSink.messages).toContainEqual([
       'warn',
       expect.anything(),
@@ -387,7 +390,8 @@ describe('SQLiteChangeLogCatchup', () => {
   });
 
   test('ends only the selected subscription, cleanly, on barrier timeout', async () => {
-    const fixture = createFixture({barrierTimeoutMs: 5});
+    const onFailure = vi.fn();
+    const fixture = createFixture({barrierTimeoutMs: 5, onFailure});
     fixture.reader.head = '01';
     const {subscriber, done, output} = createSubscriber('01');
     const fail = vi.spyOn(subscriber, 'fail');
@@ -400,6 +404,7 @@ describe('SQLiteChangeLogCatchup', () => {
     // caught up yet" warrants.
     expect(fail).not.toHaveBeenCalled();
     expect(output.size()).toBe(0);
+    expect(onFailure).toHaveBeenCalledExactlyOnceWith('barrier-timeout');
     expect(fixture.logSink.messages).toContainEqual([
       'warn',
       expect.anything(),
@@ -461,7 +466,8 @@ describe('SQLiteChangeLogCatchup', () => {
   });
 
   test('fails closed on reader errors after registration', async () => {
-    const fixture = createFixture();
+    const onFailure = vi.fn();
+    const fixture = createFixture({onFailure});
     fixture.reader.head = '06';
     fixture.reader.boundaries.add('01');
     fixture.reader.readError = new Error('broken SQLite read');
@@ -473,6 +479,7 @@ describe('SQLiteChangeLogCatchup', () => {
     // operators through the log below, not through the subscriber.
     await done;
     expect(output.size()).toBe(0);
+    expect(onFailure).toHaveBeenCalledExactlyOnceWith('reader-error');
     expect(fixture.logSink.messages).toContainEqual([
       'error',
       expect.anything(),
@@ -526,6 +533,7 @@ function createFixture(
     barrierPollIntervalMs?: number | undefined;
     cleanupGuard?: SQLiteChangeLogCleanupGuard | undefined;
     now?: SQLiteChangeLogCatchupOptions['now'];
+    onFailure?: SQLiteChangeLogCatchupOptions['onFailure'];
     sleep?: SQLiteChangeLogCatchupOptions['sleep'];
   } = {},
 ) {
@@ -539,6 +547,7 @@ function createFixture(
     barrierPollIntervalMs: opts.barrierPollIntervalMs ?? 1,
     cleanupGuard: opts.cleanupGuard,
     now: opts.now,
+    onFailure: opts.onFailure,
     sleep: opts.sleep,
   });
   coordinators.push(coordinator);
