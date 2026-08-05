@@ -154,8 +154,14 @@ describe('out of order mutation', () => {
     });
 
     await checkClientsTable(pg, 1);
-    // only error responses are written
-    await checkMutationsTable(pg, []);
+    await checkMutationsTable(pg, [
+      {
+        clientGroupID: 'cgid',
+        clientID: 'cid',
+        mutationID: 1n,
+        result: {},
+      },
+    ]);
   });
 });
 
@@ -181,8 +187,14 @@ test('first mutation', async () => {
   );
 
   await checkClientsTable(pg, 1);
-  // only error responses are written
-  await checkMutationsTable(pg, []);
+  await checkMutationsTable(pg, [
+    {
+      clientGroupID: 'cgid',
+      clientID: 'cid',
+      mutationID: 1n,
+      result: {},
+    },
+  ]);
 });
 
 test('previously seen mutation', async () => {
@@ -215,7 +227,26 @@ test('previously seen mutation', async () => {
   );
 
   await checkClientsTable(pg, 3);
-  await checkMutationsTable(pg, []);
+  await checkMutationsTable(pg, [
+    {
+      clientGroupID: 'cgid',
+      clientID: 'cid',
+      mutationID: 1n,
+      result: {},
+    },
+    {
+      clientGroupID: 'cgid',
+      clientID: 'cid',
+      mutationID: 2n,
+      result: {},
+    },
+    {
+      clientGroupID: 'cgid',
+      clientID: 'cid',
+      mutationID: 3n,
+      result: {},
+    },
+  ]);
 });
 
 test('lmid still moves forward if the mutator implementation throws', async () => {
@@ -250,6 +281,18 @@ test('lmid still moves forward if the mutator implementation throws', async () =
   );
   await checkClientsTable(pg, 3);
   await checkMutationsTable(pg, [
+    {
+      clientGroupID: 'cgid',
+      clientID: 'cid',
+      mutationID: 1n,
+      result: {},
+    },
+    {
+      clientGroupID: 'cgid',
+      clientID: 'cid',
+      mutationID: 2n,
+      result: {},
+    },
     {
       clientGroupID: 'cgid',
       clientID: 'cid',
@@ -375,6 +418,30 @@ test('processes all mutations, even if all mutations have been seen before', asy
     await pg`select "clientGroupID", "clientID", "mutationID", "result" from "zero_0"."mutations" order by "mutationID"`,
   ).toMatchInlineSnapshot(`
     Result [
+      {
+        "clientGroupID": "cgid",
+        "clientID": "cid",
+        "mutationID": 1n,
+        "result": {},
+      },
+      {
+        "clientGroupID": "cgid",
+        "clientID": "cid",
+        "mutationID": 2n,
+        "result": {},
+      },
+      {
+        "clientGroupID": "cgid",
+        "clientID": "cid",
+        "mutationID": 3n,
+        "result": {},
+      },
+      {
+        "clientGroupID": "cgid",
+        "clientID": "cid",
+        "mutationID": 4n,
+        "result": {},
+      },
       {
         "clientGroupID": "cgid",
         "clientID": "cid",
@@ -599,7 +666,20 @@ test('stops processing mutations as soon as it hits an out of order mutation', a
     ],
   });
   await checkClientsTable(pg, 2);
-  await checkMutationsTable(pg, []);
+  await checkMutationsTable(pg, [
+    {
+      clientGroupID: 'cgid',
+      clientID: 'cid',
+      mutationID: 1n,
+      result: {},
+    },
+    {
+      clientGroupID: 'cgid',
+      clientID: 'cid',
+      mutationID: 2n,
+      result: {},
+    },
+  ]);
 });
 
 test('a mutation throws an app error then an ooo mutation error', async () => {
@@ -795,6 +875,18 @@ test('mutators with and without namespaces', async () => {
     {
       clientGroupID: 'cgid',
       clientID: 'cid',
+      mutationID: 1n,
+      result: {},
+    },
+    {
+      clientGroupID: 'cgid',
+      clientID: 'cid',
+      mutationID: 2n,
+      result: {},
+    },
+    {
+      clientGroupID: 'cgid',
+      clientID: 'cid',
       mutationID: 3n,
       result: {
         error: 'app',
@@ -918,11 +1010,23 @@ test('mutators with arbitrary depth nesting', async () => {
     {
       clientGroupID: 'cgid',
       clientID: 'cid',
+      mutationID: 1n,
+      result: {},
+    },
+    {
+      clientGroupID: 'cgid',
+      clientID: 'cid',
       mutationID: 2n,
       result: {
         error: 'app',
         message: 'deep application error',
       },
+    },
+    {
+      clientGroupID: 'cgid',
+      clientID: 'cid',
+      mutationID: 3n,
+      result: {},
     },
   ]);
 });

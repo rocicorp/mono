@@ -52,7 +52,7 @@ describe('MutationTracker', () => {
 
     tracker.processPushResponse(response);
     const result = await serverPromise;
-    expect(result.type).toBe('success');
+    expect(result).toBeUndefined();
     expect(onFatalError).not.toHaveBeenCalled();
   });
 
@@ -262,8 +262,8 @@ describe('MutationTracker', () => {
       mutation1.serverPromise,
       mutation2.serverPromise,
     ]);
-    expect(result1.type).toBe('success');
-    expect(result2.type).toBe('success');
+    expect(result1).toBeUndefined();
+    expect(result2).toBeUndefined();
     expect(onFatalError).not.toHaveBeenCalled();
   });
 
@@ -612,7 +612,7 @@ describe('MutationTracker', () => {
     });
 
     const result = await serverPromise;
-    expect(result.type).toBe('success');
+    expect(result).toBeUndefined();
     expect(tracker.size).toBe(0);
     expect(onFatalError).not.toHaveBeenCalled();
   });
