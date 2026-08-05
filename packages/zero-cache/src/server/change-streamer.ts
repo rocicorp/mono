@@ -68,6 +68,7 @@ export default async function runWorker(
       flowControlConsensusPaddingSeconds,
       flowControlEventDrivenRelease,
       sqliteChangeLogMode,
+      sqliteChangeLogComparePercent,
       sqliteChangeLogRetentionMs,
       sqliteChangeLogReadBatchRows,
       sqliteChangeLogPurgeBatchRows,
@@ -226,6 +227,17 @@ export default async function runWorker(
                 batchRows: sqliteChangeLogPurgeBatchRows,
               }
             : undefined,
+          // Modes are cumulative: `compare` and `serve` sample dark reads of
+          // both stores' catchup output. PG remains authoritative; nothing a
+          // subscriber is served changes.
+          sqliteChangeLogCompare:
+            sqliteChangeLogMode === 'compare' || sqliteChangeLogMode === 'serve'
+              ? {
+                  comparePercent: sqliteChangeLogComparePercent,
+                  retentionMs: sqliteChangeLogRetentionMs,
+                  readBatchRows: sqliteChangeLogReadBatchRows,
+                }
+              : undefined,
         },
         setTimeout,
       );
