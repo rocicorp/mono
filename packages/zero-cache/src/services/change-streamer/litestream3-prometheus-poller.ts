@@ -1,21 +1,17 @@
 import {statSync} from 'node:fs';
 import type {LogContext} from '@rocicorp/logger';
-import {resolver} from '@rocicorp/resolver';
 import parsePrometheusTextFormat from 'parse-prometheus-text-format';
+import {assert} from '../../../../shared/src/asserts.ts';
 import {must} from '../../../../shared/src/must.ts';
-import {promiseVoid} from '../../../../shared/src/resolved-promises.ts';
-import {Database} from '../../../../zqlite/src/db.ts';
-import {
-  getOrCreateCounter,
-  getOrCreateGauge,
-} from '../../observability/metrics.ts';
+import {getOrCreateCounter} from '../../observability/metrics.ts';
+import type {Source} from '../../types/streams.ts';
+import {Subscription} from '../../types/subscription.ts';
 import {
   litestreamBackupVerificationDuration,
   litestreamMonitorMetricAttrs,
 } from '../litestream/metrics.ts';
 import {RunningState, UnrecoverableError} from '../running-state.ts';
-import type {BackupMonitor} from './backup-monitor.ts';
-import type {ChangeStreamerService} from './change-streamer.ts';
+import type {BackedUpWatermark} from './backup-monitor.ts';
 
 export const CHECK_INTERVAL_MS = 10_000;
 
@@ -85,54 +81,29 @@ export const RESTORABLE_BACKUP_POLL_INTERVAL_MS = 10_000;
 export type BackupStateVerifier = () => Promise<Date>;
 
 /**
- * The Litestream3BackupMonitor polls the litestream "/metrics" endpoint to
+ * The Litestream3PrometheusPoller polls the litestream "/metrics" endpoint to
  * track the watermark (label) value of the `litestream_replica_progress` gauge
- * and schedules cleanup of change log entries that can be purged as a result.
+ * and emits verified watermarks to a stream of {@link BackedUpWatermark}s.
  *
  * See: https://github.com/rocicorp/litestream/pull/3
  *
- * Note that change log entries cannot simply be purged as soon as they
- * have been applied and backed up by litestream. Consider the case in which
- * litestream backs up new wal segments every minute, but it takes 5 minutes
- * to restore a replica: if a zero-cache starts restoring a replica at
- * minute 0, and new watermarks are replicated at minutes 1, 2, 3, 4, and 5,
- * purging changelog records as soon as those watermarks are replicated would
- * result in the zero-cache not being able to catch up from minute 0 once it
- * has finished restoring the replica.
- *
- * The `/snapshot` reservation protocol is used to prevent premature change
- * log cleanup:
- * - Clients restoring a snapshot initiate a `/snapshot` request and hold that
- *   request open while it restores its snapshot, prepares it, and
- *   starts its subscription to the change stream. During this time, no
- *   cleanups are scheduled.
- * - When the subscription is started, the interval since the beginning of
- *   of the reservation is tracked to increase the background cleanup delay
- *   interval if needed. The reservation is ended (and request closed), and
- *   cleanup scheduling is resumed with the current delay interval.
- *
- * Note that the reservation request is the primary mechanism by which
- * premature change log cleanup is prevented. The cleanup delay interval is
- * a secondary safeguard.
- *
- * Additionally, because the watermarks reported by litestream metrics
- * reflect what litestream *believes* has been backed up (which has been
- * observed to diverge from reality when uploads silently fail), the cleanup
- * watermark is only advanced after verifying it against the actual backup
- * state in the replica destination via a {@link BackupStateVerifier}. If the
+ * Because the watermarks reported by litestream metrics reflect what
+ * litestream *believes* has been backed up (which has been observed to
+ * diverge from reality when uploads silently fail), the cleanup watermark is
+ * only published after verifying it against the actual backup state in the
+ * replica destination via a {@link BackupStateVerifier}. If the
  * actual backup state stays behind the claimed progress for longer than
  * {@link WEDGED_SHUTDOWN_GRACE_MS}, the backup is treated as wedged and the
  * process is shut down rather than risk corrupting the backup.
  */
-export class Litestream3BackupMonitor implements BackupMonitor {
-  readonly id = 'backup-monitor';
+export class Litestream3PrometheusPoller {
   readonly #lc: LogContext;
   readonly #replicaFile: string;
   readonly #backupURL: string;
   readonly #metricsEndpoint: string;
-  readonly #changeStreamer: ChangeStreamerService;
-  readonly #state = new RunningState(this.id);
+  readonly #state = new RunningState('litestream3-prometheus-poller');
 
+  readonly #stream: Subscription<BackedUpWatermark>;
   readonly #watermarks = new Map<string, Date>();
 
   readonly #verifyBackupState: BackupStateVerifier;
@@ -145,10 +116,6 @@ export class Litestream3BackupMonitor implements BackupMonitor {
       'The "backup-wedged" reason is emitted once just before the process ' +
       'shuts itself down due to a persistently stale backup.',
   });
-
-  // Rejected when the backup is determined to be genuinely wedged, which
-  // surfaces as a rejection of the `run()` promise and shuts the process down.
-  readonly #fatal = resolver<void>();
 
   #lastWatermark: string = '';
   #latestBackupTime: Date | null = null;
@@ -173,27 +140,34 @@ export class Litestream3BackupMonitor implements BackupMonitor {
     replicaFile: string,
     backupURL: string,
     metricsEndpoint: string,
-    changeStreamer: ChangeStreamerService,
     verifyBackupState: BackupStateVerifier,
   ) {
-    this.#lc = lc.withContext('component', this.id);
+    this.#lc = lc.withContext('component', 'litestream3-prometheus-poller');
     this.#replicaFile = replicaFile;
     this.#backupURL = backupURL;
     this.#metricsEndpoint = metricsEndpoint;
-    this.#changeStreamer = changeStreamer;
     this.#verifyBackupState = verifyBackupState;
+    this.#stream = Subscription.create<BackedUpWatermark>({
+      cleanup: () => {
+        clearInterval(this.#checkMetricsTimer);
+        this.#state.stop(this.#lc);
+      },
+    });
   }
 
-  run(): Promise<void> {
+  /**
+   * Starts polling for watermarks and pushes new ones to returned stream.
+   * Must only be called once.
+   */
+  start(): Source<BackedUpWatermark> {
+    assert(this.#runStartTime === null, `Already called start()`);
     this.#runStartTime = Date.now();
     this.#lc.info?.(`monitoring backups at ${this.#metricsEndpoint}`);
     this.#checkMetricsTimer = setInterval(
-      this.checkWatermarksAndScheduleCleanup,
+      this.checkVerifyAndPublishWatermarks,
       CHECK_INTERVAL_MS,
     );
-    this.#initBackupLagMetric();
-    // Resolves on a normal stop; rejects if the backup is found to be wedged.
-    return Promise.race([this.#state.stopped(), this.#fatal.promise]);
+    return this.#stream;
   }
 
   /**
@@ -215,14 +189,14 @@ export class Litestream3BackupMonitor implements BackupMonitor {
   }
 
   // Exported for testing
-  readonly checkWatermarksAndScheduleCleanup = async () => {
+  readonly checkVerifyAndPublishWatermarks = async () => {
     try {
       await this.#checkWatermarks();
     } catch (e) {
       this.#lc.warn?.(`unable to fetch metrics at ${this.#metricsEndpoint}`, e);
     }
     try {
-      await this.#scheduleCleanup();
+      await this.#publishVerifiedWatermarks();
     } catch (e) {
       this.#lc.warn?.(`error scheduling cleanup`, e);
     }
@@ -293,11 +267,12 @@ export class Litestream3BackupMonitor implements BackupMonitor {
     return this.#latestBackupTime;
   }
 
-  async #scheduleCleanup() {
-    const maxWatermark = this.#maxWatermarkUpTo(Date.now());
-    if (maxWatermark.length === 0) {
+  async #publishVerifiedWatermarks() {
+    const maxBackup = this.#maxBackupBefore(Date.now());
+    if (!maxBackup) {
       return;
     }
+    const {watermark: maxWatermark, backupTime: claimedTime} = maxBackup;
     // Purge guard: the watermarks (and their backup times) come from
     // litestream metrics, which are exported when litestream *believes*
     // an upload succeeded, and have been observed to advance even when
@@ -307,7 +282,6 @@ export class Litestream3BackupMonitor implements BackupMonitor {
     // watermark, verify it against the actual backup state: a claimed
     // backup time is only trusted if an object was actually uploaded to
     // the replica destination at (or after) that time, modulo clock skew.
-    const claimedTime = must(this.#watermarks.get(maxWatermark));
     if (!this.#confirmedDurable(claimedTime)) {
       try {
         this.#lastVerifiedUploadTime = await this.#verifyBackupStateTimed();
@@ -326,10 +300,10 @@ export class Litestream3BackupMonitor implements BackupMonitor {
     // Watermarks whose backup time isn't yet confirmed durable remain in the
     // map and are re-evaluated at the next check.
     const lastUpload = must(this.#lastVerifiedUploadTime);
-    const verifiedWatermark = this.#maxWatermarkUpTo(
+    const verifiedBackup = this.#maxBackupBefore(
       lastUpload.getTime() + BACKUP_VERIFICATION_SLACK_MS,
     );
-    if (verifiedWatermark.length === 0) {
+    if (!verifiedBackup) {
       this.#purgesBlocked.add(1, {reason: 'backup-stale'});
       const now = Date.now();
       if (this.#backupStaleSince === null) {
@@ -352,12 +326,16 @@ export class Litestream3BackupMonitor implements BackupMonitor {
     // The cleanup watermark advanced past a real upload, so the backup is
     // keeping up: clear the staleness clock.
     this.#backupStaleSince = null;
-    this.#changeStreamer.trackBackupWatermark(verifiedWatermark);
+    const {watermark: verifiedWatermark, backupTime} = verifiedBackup;
     for (const watermark of this.#watermarks.keys()) {
       if (watermark <= verifiedWatermark) {
         this.#watermarks.delete(watermark);
       }
     }
+    this.#stream.push({
+      watermark: verifiedWatermark,
+      backupTimeMs: backupTime.getTime(),
+    });
     this.#lastWatermark = verifiedWatermark;
   }
 
@@ -406,8 +384,7 @@ export class Litestream3BackupMonitor implements BackupMonitor {
         `the backup; investigate the backup destination.`,
     );
     this.#lc.error?.(err.message);
-    clearInterval(this.#checkMetricsTimer);
-    this.#fatal.reject(err);
+    this.#stream.fail(err);
   }
 
   /**
@@ -472,22 +449,28 @@ export class Litestream3BackupMonitor implements BackupMonitor {
         `Investigate litestream replication to ${this.#backupURL}.`,
     );
     this.#lc.error?.(err.message);
-    clearInterval(this.#checkMetricsTimer);
-    this.#fatal.reject(err);
+    this.#stream.fail(err);
   }
 
   /**
    * Returns the newest watermark whose backup time is at or before `cutoff`
    * (epoch ms), or `''` if there is none.
    */
-  #maxWatermarkUpTo(cutoff: number): string {
+  #maxBackupBefore(
+    cutoff: number,
+  ): {watermark: string; backupTime: Date} | null {
     let max = '';
+    let maxBackupTime: Date | undefined;
     for (const [watermark, backupTime] of this.#watermarks) {
       if (backupTime.getTime() <= cutoff && watermark > max) {
         max = watermark;
+        maxBackupTime = backupTime;
       }
     }
-    return max;
+    if (!maxBackupTime) {
+      return null;
+    }
+    return {watermark: max, backupTime: maxBackupTime};
   }
 
   /**
@@ -504,49 +487,5 @@ export class Litestream3BackupMonitor implements BackupMonitor {
       claimedTime.getTime() <=
         lastUpload.getTime() + BACKUP_VERIFICATION_SLACK_MS
     );
-  }
-
-  stop(): Promise<void> {
-    clearInterval(this.#checkMetricsTimer);
-    this.#state.stop(this.#lc);
-    return promiseVoid;
-  }
-
-  #initBackupLagMetric() {
-    getOrCreateGauge('replica', 'backup_lag', {
-      description:
-        'Latency from when a change is written to the replica ' +
-        'to when it is backed up to litestream. It is expected to create a saw ' +
-        'pattern from 0 to the configured ZERO_LITESTREAM_INCREMENTAL_BACKUP_INTERVAL_MINUTES.',
-      unit: 'millisecond',
-    }).addCallback(async o => {
-      // For legacy litestream, we use the watermark metric (and its associated
-      // backup time) exported by litestream metrics to determine the time of
-      // of the backed up watermark. This is technically imprecise--it would be
-      // more correct to use the committed writeTimeMs--but it is good enough
-      // in that it serves the purpose of detecting a non-functioning backup.
-      // With litestream v5, this can be made more precise by querying the
-      // _zero.replicationState row from the backup directly using an LTX-based
-      // database reader.
-      const latestBackup = await this.#checkWatermarks();
-      if (!latestBackup) {
-        this.#lc.warn?.(
-          `no backed up watermarks. unable to report replica.backup_lag`,
-        );
-        return;
-      }
-      const db = new Database(this.#lc, this.#replicaFile, {readonly: true});
-      try {
-        const {writeTimeMs} = db
-          .prepare(/*sql*/ `SELECT writeTimeMs FROM "_zero.replicationState"`)
-          .get<{writeTimeMs: number}>();
-        const backupLag = Math.max(0, writeTimeMs - latestBackup.getTime());
-        o.observe(backupLag);
-      } catch (e) {
-        this.#lc.warn?.(`error measuring replica.backup_lag metric`, e);
-      } finally {
-        db.close();
-      }
-    });
   }
 }

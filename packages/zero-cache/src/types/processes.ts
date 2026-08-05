@@ -23,8 +23,7 @@ export const MESSAGE_TYPES = {
   subscribe: 'subscribe',
   notify: 'notify',
   ready: 'ready',
-  backupWatermarkRequest: 'backupWatermarkRequest',
-  backupWatermarkResponse: 'backupWatermarkResponse',
+  backupWatermarkUpdate: 'backupWatermakUpdate',
 } as const;
 
 export type Message<Payload> = [keyof typeof MESSAGE_TYPES, Payload];

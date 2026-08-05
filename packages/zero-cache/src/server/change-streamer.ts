@@ -16,7 +16,6 @@ import {createBackupCleanupMonitor} from '../services/change-streamer/backup-cle
 import {ChangeStreamerHttpServer} from '../services/change-streamer/change-streamer-http.ts';
 import {initializeStreamer} from '../services/change-streamer/change-streamer-service.ts';
 import type {ChangeStreamerService} from '../services/change-streamer/change-streamer.ts';
-import {ReplicaMonitor} from '../services/change-streamer/replica-monitor.ts';
 import {initChangeStreamerSchema} from '../services/change-streamer/schema/init.ts';
 import {AutoResetSignal} from '../services/change-streamer/schema/tables.ts';
 import {PurgeLocker} from '../services/change-streamer/storer.ts';
@@ -145,10 +144,17 @@ export default async function runWorker(
     );
   }
 
+  let waitForFirstBackupBeforeServing = false;
   for (const first of [true, false]) {
     try {
       // Note: This performs initial sync of the replica if necessary.
-      const {changeSource, subscriptionState, destinationBackupURL, replicaID} =
+      const {
+        changeSource,
+        subscriptionState,
+        destinationBackupURL,
+        replicaID,
+        waitForBackupBeforeServing,
+      } =
         upstream.type === 'pg'
           ? await initializePostgresChangeSource(
               lc,
@@ -230,6 +236,7 @@ export default async function runWorker(
         setTimeout,
       );
       backupURL = destinationBackupURL;
+      waitForFirstBackupBeforeServing = waitForBackupBeforeServing;
       break;
     } catch (e) {
       if (first && e instanceof AutoResetSignal) {
@@ -299,13 +306,12 @@ export default async function runWorker(
 
   const backupMonitor = createBackupCleanupMonitor({
     lc,
+    processes,
     config,
     replicaFile: replica.file,
     changeStreamer,
     env,
   });
-  const monitor =
-    backupMonitor ?? new ReplicaMonitor(lc, replica.file, changeStreamer);
 
   const changeStreamerWebServer = new ChangeStreamerHttpServer(
     lc,
@@ -314,12 +320,24 @@ export default async function runWorker(
     changeStreamer,
   );
 
-  parent.send(['ready', {ready: true}]);
+  if (waitForFirstBackupBeforeServing) {
+    lc.info?.(`awaiting initial backup ...`);
+    void backupMonitor
+      .firstBackupReceived()
+      .then(() => parent.send(['ready', {ready: true}]));
+  } else {
+    parent.send(['ready', {ready: true}]);
+  }
 
   // Note: The changeStreamer itself is not started here; it is started by the
-  //       changeStreamerWebServer.
+  //       changeStreamerWebServer after a delay to ensure that routing
+  //       routing elements have registered the server before the
+  //       change-streamer takes over the replication slot.
+  // TODO: Remove this delay and start the changeStreamer normally here once
+  //       transitioned to RMv2, since changeStreamer startup will no longer
+  //       disrupt an existing task.
   try {
-    await runUntilKilled(lc, parent, changeStreamerWebServer, monitor);
+    await runUntilKilled(lc, parent, changeStreamerWebServer, backupMonitor);
   } catch (err) {
     processes.logErrorAndExit(err, 'change-streamer');
   } finally {

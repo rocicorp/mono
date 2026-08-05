@@ -30,6 +30,18 @@ export type InitializeResult = {
    * change source has no upstream table to identify itself from.
    */
   replicaID: string | null;
+
+  /**
+   * Whether server readiness should be gated on the first litestream backup,
+   * in order to ensure that a newly connecting subscriber can restore from
+   * this change-streamer's backup.
+   *
+   * This should be true when the backup destination differs from where the
+   * backup was restored from, which is the case for (1) initial-sync and
+   * (2) most initialization cases in RMv2, with the exception being when
+   * an abandoned replica is resumed.
+   */
+  waitForBackupBeforeServing: boolean;
 };
 
 export async function restoreReplica(

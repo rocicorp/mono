@@ -144,7 +144,7 @@ export async function initializePostgresChangeSource(
   try {
     await ensureShardSchema(lc, db, shard);
 
-    let replicaState = await selectAndRestoreReplica(
+    const restoredReplica = await selectAndRestoreReplica(
       lc,
       db,
       shard,
@@ -152,6 +152,7 @@ export async function initializePostgresChangeSource(
       restoreOptions,
     );
 
+    let initialSyncedReplica: ReplicaState | undefined;
     await initReplica(
       lc,
       `replica-${shard.appID}-${shard.shardNum}`,
@@ -162,7 +163,7 @@ export async function initializePostgresChangeSource(
         // transaction will prevent a replication slot from being created. This awkward
         // dependency can go away with RMv2.
         void purgeLock?.release();
-        replicaState = await initialSync(
+        initialSyncedReplica = await initialSync(
           log,
           shard,
           tx,
@@ -198,12 +199,10 @@ export async function initializePostgresChangeSource(
       syncOptions.textCopy,
     );
 
+    const backupPath = must(initialSyncedReplica ?? restoredReplica).backupPath;
     const destinationBackupURL =
-      replicaState?.backupPath && restoreOptions.litestream?.backupURL
-        ? new URL(
-            replicaState.backupPath,
-            restoreOptions.litestream.backupURL,
-          ).toString()
+      backupPath && restoreOptions.litestream?.backupURL
+        ? new URL(backupPath, restoreOptions.litestream.backupURL).toString()
         : // For legacy RMv1 replicas (on litestream-v3), backup to the same location
           restoreOptions.litestream?.backupURL;
 
@@ -216,6 +215,11 @@ export async function initializePostgresChangeSource(
       // `replicaVersion`) is shared by every sibling of a forked replica and so
       // cannot distinguish two siblings' logs.
       replicaID: upstreamReplica.id,
+      // For RMv1, wait for the backup if an initial-sync was performed. When
+      // replica-specific backups are enabled (e.g. for > RMv1), the condition
+      // can be generalized to:
+      //   restoredReplica?.backupPath !== initializedReplica?.backupPath,
+      waitForBackupBeforeServing: initialSyncedReplica !== undefined,
     };
   } finally {
     await db.end();

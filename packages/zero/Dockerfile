@@ -82,10 +82,13 @@ ENV PATH="/opt/app/node_modules/.bin:${PATH}"
 # Copy litestream executable and config.yml
 COPY --from=litestream /usr/local/bin/litestream /usr/local/bin/litestream
 COPY --from=litestream-v5 /usr/local/bin/litestream /usr/local/bin/litestream-v5
+COPY --from=litestream-v5 /usr/local/lib/litestream-vfs.so /usr/local/lib/litestream-vfs.so
 RUN cp /opt/app/node_modules/@rocicorp/zero/out/zero-cache/src/services/litestream/config.yml /etc/litestream.yml
 
 ENV ZERO_LITESTREAM_EXECUTABLE=/usr/local/bin/litestream
 ENV ZERO_LITESTREAM_EXECUTABLE_V5=/usr/local/bin/litestream-v5
+# This is the default value, but set explicitly as documentation.
+ENV ZERO_LITESTREAM_VFS_EXTENSION_PATH=/usr/local/lib/litestream-vfs.so
 ENV ZERO_LITESTREAM_CONFIG_PATH=/etc/litestream.yml
 ENV ZERO_LOG_FORMAT=json
 ENV ZERO_SERVER_VERSION=${ZERO_VERSION}
