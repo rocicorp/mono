@@ -385,7 +385,7 @@ describe('CRUDMutatorFactory', () => {
     const factory = new CRUDMutatorFactory(simpleSchema);
     const {mockTx} = createMockTx();
 
-    // Mock the information_schema query that getServerSchema uses
+    // Mock the introspection query that getServerSchema uses
     const mockSchemaRows = [
       {
         schema: 'public',
@@ -431,7 +431,7 @@ describe('CRUDMutatorFactory', () => {
     const originalQuery = mockTx.query;
     mockTx.query = vi.fn((...args: unknown[]) => {
       const sql = args[0] as string;
-      if (sql.includes('information_schema')) {
+      if (sql.includes('pg_attribute')) {
         return Promise.resolve(mockSchemaRows);
       }
       return originalQuery.apply(
@@ -450,7 +450,7 @@ describe('CRUDMutatorFactory', () => {
     // Verify mutate works
     void tx.mutate.basic.insert({id: '1', a: 1, b: 'test'});
 
-    // The information_schema query + the insert
+    // The introspection query + the insert
     expect(mockTx.query).toHaveBeenCalled();
   });
 
@@ -520,7 +520,7 @@ describe('CRUDMutatorFactory', () => {
         wrappedTransaction: null,
         query: (...args: unknown[]) => {
           const sql = args[0] as string;
-          if (sql.includes('information_schema')) {
+          if (sql.includes('pg_attribute')) {
             serverSchemaFetchCount++;
             return Promise.resolve(mockSchemaRows);
           }
@@ -614,7 +614,7 @@ describe('CRUDMutatorFactory', () => {
         wrappedTransaction: null,
         query: (...args: unknown[]) => {
           const sql = args[0] as string;
-          if (sql.includes('information_schema')) {
+          if (sql.includes('pg_attribute')) {
             serverSchemaFetchCount++;
             return Promise.resolve(mockSchemaRows);
           }
