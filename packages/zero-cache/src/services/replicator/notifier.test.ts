@@ -81,4 +81,54 @@ describe('replicator/notifier', () => {
       replicaReadyTimeMs: 300,
     });
   });
+
+  test('coalesced notifications keep earliest upstream commit time', async () => {
+    const notifier = new Notifier();
+    const sub = notifier.subscribe();
+
+    void notifier.notifySubscribers({
+      state: 'version-ready',
+      watermark: '02',
+      replicaReadyTimeMs: 200,
+      upstreamCommitTimeMs: 100,
+    });
+    void notifier.notifySubscribers({
+      state: 'version-ready',
+      watermark: '03',
+      replicaReadyTimeMs: 300,
+      upstreamCommitTimeMs: 250,
+    });
+
+    // The oldest commit time survives, paired with the newest watermark: the
+    // subsumed commit is only delivered once '03' has been served.
+    await expectSingleMessage(sub, {
+      state: 'version-ready',
+      watermark: '03',
+      replicaReadyTimeMs: 200,
+      upstreamCommitTimeMs: 100,
+    });
+  });
+
+  test('coalescing tolerates a missing upstream commit time', async () => {
+    const notifier = new Notifier();
+    const sub = notifier.subscribe();
+
+    // A ChangeSource that reports no commit time must not erase one that a
+    // previous notification did carry, and vice versa.
+    void notifier.notifySubscribers({
+      state: 'version-ready',
+      watermark: '02',
+      upstreamCommitTimeMs: 100,
+    });
+    void notifier.notifySubscribers({
+      state: 'version-ready',
+      watermark: '03',
+    });
+
+    await expectSingleMessage(sub, {
+      state: 'version-ready',
+      watermark: '03',
+      upstreamCommitTimeMs: 100,
+    });
+  });
 });
