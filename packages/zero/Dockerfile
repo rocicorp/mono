@@ -56,8 +56,11 @@ allowBuilds:
   '@rocicorp/zero-sqlite3': true
   esbuild: true
   protobufjs: true
+patchedDependencies:
+  postgres@3.4.7: patches/postgres@3.4.7.patch
 EOF
 
+COPY patches/ patches/
 COPY pkgs/ /tmp/pkgs/
 
 # Install zero package based on install source format (tarball or pnpm)
