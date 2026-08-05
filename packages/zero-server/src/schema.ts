@@ -48,39 +48,7 @@ export async function getServerSchema<S extends Schema>(
     return {}; // No pairs to query for
   }
 
-  // Cast all inputs to text and all outputs to text to avoid
-  // any conversions customer's DBTransaction impl has on other types.
-  const inClause = sql.join(
-    schemaTablePairs.map(
-      ([schema, table]) => sql`(${schema}::text, ${table}::text)`,
-    ),
-    ',',
-  );
-  const query = sql`
-      SELECT
-          c.table_schema::text AS schema,
-          c.table_name::text AS table,
-          c.column_name::text AS column,
-          c.data_type::text AS "dataType",
-          c.character_maximum_length AS length,
-          c.numeric_precision AS precision,
-          c.numeric_scale AS scale,
-          t.typtype::text AS typtype,
-          t.typname::text AS typename,
-          CASE WHEN t.typelem <> 0 THEN et.typtype::text ELSE NULL END AS "elemTyptype",
-          CASE WHEN t.typelem <> 0 THEN et.typname::text ELSE NULL END AS "elemTypname"
-      FROM
-          information_schema.columns c
-      JOIN
-          pg_catalog.pg_type t ON c.udt_name = t.typname
-      LEFT JOIN
-          pg_catalog.pg_type et ON t.typelem = et.oid
-      JOIN
-          pg_catalog.pg_namespace n ON t.typnamespace = n.oid
-      WHERE
-          (c.table_schema, c.table_name) IN (${inClause})
-    `;
-  const {text, values} = formatPg(query);
+  const {text, values} = serverSchemaQuery(schemaTablePairs);
   const results: Iterable<ServerSchemaRow> = (await dbTransaction.query(
     text,
     values,
@@ -139,6 +107,95 @@ export async function getServerSchema<S extends Schema>(
   assert(errors.length === 0, () => makeSchemaIncompatibleErrorMessage(errors));
 
   return serverSchema;
+}
+
+/**
+ * The query behind {@linkcode getServerSchema}, exported so that it can be
+ * diffed against the `information_schema` query it replaced.
+ */
+export function serverSchemaQuery(
+  schemaTablePairs: readonly (readonly [string, string])[],
+): {text: string; values: unknown[]} {
+  // Cast all inputs to text and all outputs to text to avoid
+  // any conversions customer's DBTransaction impl has on other types.
+  const inClause = sql.join(
+    schemaTablePairs.map(
+      ([schema, table]) => sql`(${schema}::text, ${table}::text)`,
+    ),
+    ',',
+  );
+  // Read pg_catalog directly instead of information_schema.columns. The view
+  // derives every column it returns through the information_schema._pg_*
+  // functions and a per column privilege check, which is several times slower
+  // than the query below. Server processes run this on the first transaction
+  // they serve, so serverless deployments pay for it on every cold start.
+  //
+  // The expressions below reproduce the parts of the view's definition that we
+  // select, down to the int4 wire types of length, precision and scale: the
+  // _pg_char_max_length / _pg_numeric_precision / _pg_numeric_scale arithmetic,
+  // the single level domain unwrap that data_type and udt_name perform (`ut`),
+  // and the view's own relkind, attnum and privilege filters. pg_type is joined
+  // by OID rather than by udt_name, which additionally avoids duplicate rows
+  // when two schemas declare a type with the same name. The types those
+  // functions special case are named through regtype, which the parser resolves
+  // while planning.
+  const query = sql`
+      SELECT
+          n.nspname::text AS schema,
+          cl.relname::text AS table,
+          a.attname::text AS column,
+          CASE
+              WHEN ut.typelem <> 0 AND ut.typlen = -1 THEN 'ARRAY'
+              WHEN nut.nspname = 'pg_catalog' THEN pg_catalog.format_type(ut.oid, NULL)
+              ELSE 'USER-DEFINED'
+          END::text AS "dataType",
+          CASE
+              WHEN tm.typmod = -1 THEN NULL
+              WHEN ut.oid IN ('pg_catalog.bpchar'::regtype, 'pg_catalog.varchar'::regtype) THEN tm.typmod - 4
+              WHEN ut.oid IN ('pg_catalog.bit'::regtype, 'pg_catalog.varbit'::regtype) THEN tm.typmod
+          END AS length,
+          CASE ut.oid
+              WHEN 'pg_catalog.int2'::regtype THEN 16
+              WHEN 'pg_catalog.int4'::regtype THEN 32
+              WHEN 'pg_catalog.int8'::regtype THEN 64
+              WHEN 'pg_catalog.float4'::regtype THEN 24
+              WHEN 'pg_catalog.float8'::regtype THEN 53
+              WHEN 'pg_catalog.numeric'::regtype THEN CASE WHEN tm.typmod = -1 THEN NULL ELSE ((tm.typmod - 4) >> 16) & 65535 END
+          END AS precision,
+          CASE
+              WHEN ut.oid IN ('pg_catalog.int2'::regtype, 'pg_catalog.int4'::regtype, 'pg_catalog.int8'::regtype) THEN 0
+              WHEN ut.oid = 'pg_catalog.numeric'::regtype AND tm.typmod <> -1 THEN (tm.typmod - 4) & 65535
+          END AS scale,
+          ut.typtype::text AS typtype,
+          ut.typname::text AS typename,
+          CASE WHEN ut.typelem <> 0 THEN et.typtype::text ELSE NULL END AS "elemTyptype",
+          CASE WHEN ut.typelem <> 0 THEN et.typname::text ELSE NULL END AS "elemTypname"
+      FROM
+          pg_catalog.pg_attribute a
+      JOIN
+          pg_catalog.pg_class cl ON cl.oid = a.attrelid
+      JOIN
+          pg_catalog.pg_namespace n ON n.oid = cl.relnamespace
+      JOIN
+          pg_catalog.pg_type t ON t.oid = a.atttypid
+      JOIN
+          pg_catalog.pg_type ut ON ut.oid = CASE WHEN t.typtype = 'd' THEN t.typbasetype ELSE t.oid END
+      JOIN
+          pg_catalog.pg_namespace nut ON nut.oid = ut.typnamespace
+      LEFT JOIN
+          pg_catalog.pg_type et ON et.oid = ut.typelem
+      CROSS JOIN LATERAL
+          (SELECT CASE WHEN t.typtype = 'd' THEN t.typtypmod ELSE a.atttypmod END AS typmod) tm
+      WHERE
+          a.attnum > 0
+          AND NOT a.attisdropped
+          AND cl.relkind IN ('r', 'v', 'f', 'p')
+          AND NOT pg_catalog.pg_is_other_temp_schema(n.oid)
+          AND (pg_catalog.pg_has_role(cl.relowner, 'USAGE')
+               OR pg_catalog.has_column_privilege(cl.oid, a.attnum, 'SELECT, INSERT, UPDATE, REFERENCES'))
+          AND (n.nspname, cl.relname) IN (${inClause})
+    `;
+  return formatPg(query);
 }
 
 function makeSchemaIncompatibleErrorMessage(
