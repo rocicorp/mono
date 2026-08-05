@@ -13,9 +13,10 @@ type Opts = {
 
 /**
  * Tracks the progress (watermark) of multiple streams:
- * - downstream transactinos and status messages (status messages
- *   indicate wal LSNs that are not relevant to the publication)
- * - PG change-log
+ * - downstream transactions and status messages (the latter
+ *   indicating LSNs that are not relevant to the publication
+ *   but nevertheless need to be ACKed)
+ * - PG change-log commits
  * - backup watermarks
  *
  * and sends upstream ACKs accordingly. When both the PG change-log
@@ -25,7 +26,7 @@ type Opts = {
  *
  * The UpstreamAcker also takes into account that an upstream
  * connection can be disconnected and {@link reset()}. In this case,
- * the progress of the persistent stores are retained and the acks
+ * the progress of the persistent stores is retained and the acks
  * are resent on the new upstream connection as necessary.
  */
 export class UpstreamAcker {
