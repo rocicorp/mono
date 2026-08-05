@@ -43,4 +43,4 @@ overrides:
   webpackbar: ^7.0.0
 
 patchedDependencies:
-  postgres@3.4.7: patches/postgres@3.4.7.patch
+  postgres@3.4.7: packages/zero/patches/postgres@3.4.7.patch
