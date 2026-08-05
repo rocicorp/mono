@@ -224,10 +224,10 @@ export async function fetchFromAPIServer<TValidator extends Type>(
             status: response.status,
             bodyPreview,
           });
-          // Bad Gateway or Gateway Timeout indicate the server was not reached
-          // We retry these if we have retries remaining.
+          // Server errors can be transient, so retry if attempts remain.
           const willRetry =
-            (response.status === 502 || response.status === 504) &&
+            response.status >= 500 &&
+            response.status < 600 &&
             attempt < MAX_ATTEMPTS;
           recordApiAttempt(performance.now() - attemptStart, metricAttrs, {
             attempt,
