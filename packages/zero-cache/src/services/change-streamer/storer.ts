@@ -290,16 +290,6 @@ export class Storer implements Service {
     return bounds;
   }
 
-  /** Whether PG catchup can find the requested exclusive lower boundary. */
-  async hasCatchupWatermark(watermark: string): Promise<boolean> {
-    const [{exists}] = await this.#db<{exists: boolean}[]> /*sql*/ `
-      SELECT EXISTS (
-        SELECT 1 FROM ${this.#cdc('changeLog')}
-         WHERE watermark = ${watermark}
-      ) AS exists`;
-    return exists;
-  }
-
   /**
    * The commit watermarks of the transactions in `(afterWatermark,
    * throughWatermark]`, ascending, at most `limit` of them. Every row of a
@@ -331,8 +321,8 @@ export class Storer implements Service {
    * every string value in the document while scanning for the field, and
    * Postgres cannot represent `\u0000` as text, so a change whose payload
    * contains an escaped NUL fails the read. Subscriber catchup fails on
-   * exactly the same row, so the comparator reports it (as `reader-error`)
-   * rather than papering over it with a different statement.
+   * exactly the same row, so the comparator reports it as a mismatch rather
+   * than papering over it with a different statement.
    */
   readCatchupRange(
     afterWatermark: string,

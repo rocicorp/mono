@@ -9,7 +9,7 @@ import {describe, expect, test} from 'vitest';
 import type {ShardID} from '../../types/shards.ts';
 import type {ChangeTag, WatermarkedChange} from './change-streamer.ts';
 import {
-  digestCatchupTransactions,
+  digestCatchupRange,
   isSampledForCompare,
   normalizeChangeJSON,
 } from './sqlite-change-log-comparator.ts';
@@ -23,7 +23,7 @@ describe('change-streamer/sqlite-change-log-comparator/properties', () => {
         width: fc.integer({min: 0, max: 5}),
         kind: fc.constantFrom<TxKind>('complete', 'orphan', 'rollback'),
       }),
-      {maxLength: 8},
+      {minLength: 1, maxLength: 8},
     ),
     // Rows dropped from the front of the stream, so it can begin
     // mid-transaction — possibly beheading more than one transaction.
@@ -83,47 +83,132 @@ describe('change-streamer/sqlite-change-log-comparator/properties', () => {
     }
   }
 
-  test('digests are a pure function of the rows, not of their batching', async () => {
+  const digest = (rows: WatermarkedChange[], sizes: number[] = [3]) =>
+    digestCatchupRange(
+      chunked(rows, sizes),
+      rows.at(-1)?.[0] ?? '',
+      rows.length + 1,
+    );
+
+  test('the digest is a pure function of the served rows, not their batching', async () => {
     await fc.assert(
       fc.asyncProperty(
         streamScenario,
         async ({txs, truncateHead, chunkSizesA, chunkSizesB}) => {
           const rows = buildRows(txs).slice(truncateHead);
 
-          const a = await digestCatchupTransactions(chunked(rows, chunkSizesA));
-          const b = await digestCatchupTransactions(chunked(rows, chunkSizesB));
           // Batch boundaries carry no meaning: any two chunkings of the same
-          // served rows digest identically.
-          expect(a).toEqual(b);
-
-          // The entries are exactly the groupwise rules the comparator
-          // depends on: committed groups digest as complete iff their begin
-          // survived; rolled-back groups vanish; everything else is orphan
-          // output, always incomplete. Row counts are what was served.
-          const groups = new Map<string, WatermarkedChange[]>();
-          for (const row of rows) {
-            const group = groups.get(row[0]) ?? [];
-            group.push(row);
-            groups.set(row[0], group);
-          }
-          for (const [w, group] of groups) {
-            const tags = new Set(group.map(([, tag]) => tag));
-            const entry = a.get(w);
-            if (tags.has('rollback')) {
-              expect(entry).toBeUndefined();
-            } else {
-              expect(entry).toMatchObject({
-                watermark: w,
-                rows: group.length,
-                complete: tags.has('commit') && tags.has('begin'),
-              });
-            }
-          }
-          expect(a.size).toBe(
-            [...groups.values()].filter(
-              group => !group.some(([, tag]) => tag === 'rollback'),
-            ).length,
+          // served rows digest identically, and count the same rows.
+          expect(await digest(rows, chunkSizesA)).toEqual(
+            await digest(rows, chunkSizesB),
           );
+          expect((await digest(rows, chunkSizesA)).rows).toBe(rows.length);
+        },
+      ),
+      {numRuns: 100},
+    );
+  });
+
+  test('the digest changes under any single-row corruption', async () => {
+    type Corruption = 'drop' | 'mutate' | 'duplicate' | 'move-to-end';
+
+    await fc.assert(
+      fc.asyncProperty(
+        fc.record({
+          txs: streamScenario.map(({txs}) => txs),
+          index: fc.nat(),
+          kind: fc.constantFrom<Corruption>(
+            'drop',
+            'mutate',
+            'duplicate',
+            'move-to-end',
+          ),
+        }),
+        async ({txs, index, kind}) => {
+          const rows = buildRows(txs);
+          const i = index % rows.length;
+          // Reordering the only row, or the last one, is not a reordering.
+          fc.pre(kind !== 'move-to-end' || i < rows.length - 1);
+
+          const corrupted = [...rows];
+          switch (kind) {
+            case 'drop':
+              corrupted.splice(i, 1);
+              break;
+            case 'mutate': {
+              const [w, tag, json] = rows[i];
+              corrupted[i] = [w, tag, `${json.slice(0, -1)},"extra":1]`];
+              break;
+            }
+            case 'duplicate':
+              corrupted.splice(i, 0, rows[i]);
+              break;
+            case 'move-to-end':
+              corrupted.push(...corrupted.splice(i, 1));
+              break;
+          }
+
+          // This is the whole comparison: a missing row, an extra row at any
+          // watermark, a mutated payload, and a reordering are all one
+          // inequality. There is no per-watermark bookkeeping to fool.
+          expect((await digest(corrupted)).digest).not.toBe(
+            (await digest(rows)).digest,
+          );
+        },
+      ),
+      {numRuns: 200},
+    );
+  });
+
+  test('the digest ignores JSON formatting, as the two stores differ in it', async () => {
+    await fc.assert(
+      fc.asyncProperty(
+        fc.record({txs: streamScenario.map(({txs}) => txs)}),
+        async ({txs}) => {
+          const rows = buildRows(txs);
+          // SQLite serves the exact substring it stored; PG serves the same
+          // document re-rendered from its `json` column. Only normalization
+          // keeps that round trip from reading as divergence.
+          const reformatted = rows.map(
+            ([w, tag, json]): WatermarkedChange => [
+              w,
+              tag,
+              json.replaceAll(':', ': ').replaceAll(',', ', '),
+            ],
+          );
+          expect((await digest(reformatted)).digest).toBe(
+            (await digest(rows)).digest,
+          );
+        },
+      ),
+      {numRuns: 50},
+    );
+  });
+
+  test('the row cap reports whether the range closed', async () => {
+    await fc.assert(
+      fc.asyncProperty(
+        fc.record({
+          txs: streamScenario.map(({txs}) => txs),
+          maxRows: fc.integer({min: 1, max: 60}),
+        }),
+        async ({txs, maxRows}) => {
+          const rows = buildRows(txs);
+          const through = rows.at(-1)?.[0] ?? '';
+          const result = await digestCatchupRange(
+            chunked(rows, [4]),
+            through,
+            maxRows,
+          );
+
+          const served = Math.min(maxRows, rows.length);
+          expect(result.rows).toBe(served);
+          // The cap is only a finding when it cut the range short of the
+          // commit that closes it; a range that fits exactly is compared.
+          const closed = rows
+            .slice(0, served)
+            .some(([w, tag]) => tag === 'commit' && w === through);
+          expect(result.limitReached).toBe(served === maxRows && !closed);
         },
       ),
       {numRuns: 100},
@@ -160,7 +245,17 @@ describe('change-streamer/sqlite-change-log-comparator/properties', () => {
     );
   });
 
-  test('normalization is idempotent', () => {
+  test('normalization collapses formatting and preserves content', () => {
+    expect(normalizeChangeJSON('{ "tag" : "insert",\n  "v": 1 }')).toBe(
+      normalizeChangeJSON('{"tag":"insert","v":1}'),
+    );
+    // Precision above Number.MAX_SAFE_INTEGER survives the round trip.
+    expect(normalizeChangeJSON('{"v":9007199254740993}')).toBe(
+      '{"v":9007199254740993}',
+    );
+    // A value that does not parse is hashed as-is.
+    expect(normalizeChangeJSON('not-json')).toBe('not-json');
+
     fc.assert(
       fc.property(fc.oneof(fc.json(), fc.string()), value => {
         const once = normalizeChangeJSON(value);
