@@ -134,7 +134,8 @@ export class VfsBackupWatermarkPoller implements Service {
     options: VfsBackupWatermarkPollerOptions,
     deps: VfsBackupWatermarkPollerDeps = {},
   ) {
-    this.#lc = lc.withContext('component', 'vfs-backup-watermark-poller');
+    lc = lc.withContext('component', 'vfs-watermark-poller');
+    this.#lc = lc;
     this.#parent = parent;
 
     const {databaseFactory} = deps;
@@ -145,7 +146,7 @@ export class VfsBackupWatermarkPoller implements Service {
     ) => {
       try {
         const db = databaseFactory
-          ? databaseFactory(this.#lc, url)
+          ? databaseFactory(lc, url)
           : new Database(lc, url, {readonly: true});
         const stmt = db.prepare(
           type === 'local'
@@ -252,7 +253,7 @@ export class VfsBackupWatermarkPoller implements Service {
         this.checkWatermarks();
         interval = MIN_CHECK_INTERVAL_MS;
       } catch (e) {
-        this.#lc.error?.(`error checking local and remote watermarks`, e);
+        this.#lc.warn?.(`error checking local and remote watermarks`, e);
         interval = Math.min(MAX_CHECK_INTERVAL_MS, interval * 2);
       }
       await this.#runningState.sleep(interval);
