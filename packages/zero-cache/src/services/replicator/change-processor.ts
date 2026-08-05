@@ -651,23 +651,31 @@ class TransactionProcessor {
     const oldSpec = mapPostgresToLiteColumn(table, msg.old, 'ignore-default');
     const newSpec = mapPostgresToLiteColumn(table, msg.new, 'ignore-default');
 
+    // NOT_NULL is encoded in the SQLite type string for upstream metadata, but
+    // is not enforced by SQLite and does not change how values are stored.
+    const oldStorageType = oldSpec.dataType.replace('|NOT_NULL', '');
+    const newStorageType = newSpec.dataType.replace('|NOT_NULL', '');
+
     // If neither the column name nor the SQLite data type changes, only the
     // upstream metadata needs to be updated. This includes changes such as a
-    // varchar character limit, which SQLite does not enforce but a freshly
-    // built replica still records.
-    if (oldName === newName && oldSpec.dataType === newSpec.dataType) {
+    // varchar character limit and nullability, which SQLite does not enforce
+    // but a freshly built replica still records.
+    if (oldName === newName && oldStorageType === newStorageType) {
       this.#columnMetadata.update(
         table,
         msg.old.name,
         msg.new.name,
         msg.new.spec,
       );
+      if (oldSpec.dataType !== newSpec.dataType) {
+        this.#bumpVersions(msg.table);
+      }
       this.#lc.info?.(msg.tag, 'updated metadata only', oldSpec, newSpec);
       return;
     }
     // If the data type changes, we have to make a new column with the new data type
     // and copy the values over.
-    if (oldSpec.dataType !== newSpec.dataType) {
+    if (oldStorageType !== newStorageType) {
       const tableSpec = must(
         listTables(this.#db.db, false, false).find(
           tableSpec => tableSpec.name === table,

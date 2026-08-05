@@ -121,11 +121,27 @@ function expectReplicaStatesToMatch(
   rebuilt: CanonicalReplicaState,
 ) {
   expect(streamed.integrityCheck).toEqual([{integrity_check: 'ok'}]);
-  expect(streamed.physicalTables).toEqual(rebuilt.physicalTables);
+  // Nullability is logical metadata and does not affect SQLite storage. A
+  // streamed replica retains its existing declared type while a fresh replica
+  // includes the current NOT_NULL marker. SQLite type names are also
+  // case-insensitive and may be normalized by subsequent ALTER TABLE commands.
+  expect(storageTables(streamed.physicalTables)).toEqual(
+    storageTables(rebuilt.physicalTables),
+  );
   expect(streamed.logicalTables).toEqual(rebuilt.logicalTables);
   expect(streamed.indexes).toEqual(rebuilt.indexes);
   expect(streamed.columnMetadata).toEqual(rebuilt.columnMetadata);
   expect(streamed.rows).toEqual(rebuilt.rows);
+}
+
+function storageTables(tables: CanonicalReplicaState['physicalTables']) {
+  return tables.map(table => ({
+    ...table,
+    columns: table.columns.map(column => ({
+      ...column,
+      dataType: column.dataType.replace('|NOT_NULL', '').toLowerCase(),
+    })),
+  }));
 }
 
 function initialModel(): SchemaModel {
