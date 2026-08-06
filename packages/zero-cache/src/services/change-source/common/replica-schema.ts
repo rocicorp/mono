@@ -12,6 +12,10 @@ import {
   logSQLiteCorruptionDiagnostics,
 } from '../../../db/sqlite-corruption.ts';
 import {AutoResetSignal} from '../../change-streamer/schema/tables.ts';
+import {
+  CREATE_BACKFILLING_TABLE,
+  populateBackfillingFromColumnMetadata,
+} from '../../replicator/schema/backfilling.ts';
 import {populateFromExistingTables} from '../../replicator/schema/column-metadata.ts';
 import {
   CREATE_RUNTIME_EVENTS_TABLE,
@@ -354,6 +358,26 @@ export const schemaVersionMigrationMap: IncrementalMigrationMap = {
         DROP INDEX IF EXISTS "${V14_CHANGE_LOG_STREAM_WRITE_TIME_INDEX}";
         DROP TABLE IF EXISTS "${V14_CHANGE_LOG_STREAM_TABLE}";
       `);
+    },
+  },
+
+  // `_zero.column_metadata.backfill` records which columns are backfilling but
+  // is keyed by lite table name, which has no inverse: it cannot be turned back
+  // into the `BackfillRequest`s that a change log initialized from this replica
+  // would have to send. This table carries the upstream identity alongside the
+  // same state. See `replicator/schema/backfilling.ts`.
+  //
+  // No `minSafeVersion`: an older zero-cache runs fine against a v17 replica,
+  // since nothing at v16 reads the new table. Its writes to
+  // `column_metadata.backfill` are what `migrateData` rebuilds from when rolling
+  // forward again, so a rollback costs nothing but the re-seed.
+  17: {
+    migrateSchema: (_, db) => {
+      db.exec(CREATE_BACKFILLING_TABLE);
+    },
+
+    migrateData: (lc, db) => {
+      populateBackfillingFromColumnMetadata(lc, db);
     },
   },
 };
