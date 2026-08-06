@@ -37,9 +37,13 @@ test('protocol versions', () => {
   // Then update the version number of the `CHANGE_SOURCE_PATH`
   // in current and export it appropriately as the new version
   // in `mod.ts`.
-  t(current, 'eodyqg15jkoa', '/changes/v0/stream');
+  // The hash last changed for the optional `commit.commitTimeMs` field, which
+  // is additive: the stream is parsed in 'passthrough' mode, so an older peer
+  // ignores the field and a newer peer treats its absence as "no commit time
+  // reported". No new version directory was needed.
+  t(current, '37sbudqm1hcbg', '/changes/v0/stream');
   // During initial development, we use v0 as a non-stable
   // version (i.e. breaking change are allowed). Once the
   // protocol graduates to v1, versions must be stable.
-  t(v0, 'eodyqg15jkoa', '/changes/v0/stream');
+  t(v0, '37sbudqm1hcbg', '/changes/v0/stream');
 });

@@ -25,6 +25,7 @@ type HistogramOptions = Options & {bucketBoundaries: number[]};
 export const NATIVE_HISTOGRAM_INSTRUMENT_NAMES = [
   'zero.sync.view_syncer_lag',
   'zero.sync.view_syncer_hydration',
+  'zero.sync.e2e_serving_lag',
 ] as const;
 
 export const LONG_DURATION_HISTOGRAM_BOUNDARIES_S = [
