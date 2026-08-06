@@ -168,15 +168,17 @@ export function shardSetup(
     () => `Publications must include ${metadataPublication}`,
   );
 
+  // Note: the "replicas" table is included in the metadata publication
+  // to guarantee that the change-log and replica backups eventually
+  // advance past the consistent_point_lsn of new replication slots
+  // (when a new replica is added). It is not actually read from the
+  // replica itself, but the amount of data is small so including the
+  // table is a simple and reliable way to achieve this.
   return /*sql*/ `
   CREATE SCHEMA IF NOT EXISTS ${shard};
 
   ${getClientsTableDefinition(shard)}
   ${getMutationsTableDefinition(shard)}
-
-  DROP PUBLICATION IF EXISTS ${id(metadataPublication)};
-  CREATE PUBLICATION ${id(metadataPublication)}
-    FOR TABLE ${app}."permissions", TABLE ${shard}."clients", ${shard}."mutations";
 
   CREATE TABLE ${shard}."${SHARD_CONFIG_TABLE}" (
     "publications"  TEXT[] NOT NULL,
@@ -207,6 +209,11 @@ export function shardSetup(
     "initialSyncContext" JSON,
     "subscriberContext"  JSON
   );
+
+  DROP PUBLICATION IF EXISTS ${id(metadataPublication)};
+  CREATE PUBLICATION ${id(metadataPublication)}
+    FOR TABLE ${app}."permissions", 
+        TABLE ${shard}."clients", ${shard}."mutations", ${shard}."replicas";
   `;
 }
 
