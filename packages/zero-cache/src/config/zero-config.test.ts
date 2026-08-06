@@ -645,14 +645,14 @@ test('zero-cache --help', () => {
                                                                         blocks writers until complete. Defaults to minCheckpointPageCount * 10.                                                    
                                                                         Set to 0 to disable RESTART checkpoints entirely.                                                                          
                                                                                                                                                                                                    
-     --litestream-incremental-backup-interval-minutes number            default: 15                                                                                                                
+     --litestream-incremental-backup-interval-minutes number            default: 5                                                                                                                 
        ZERO_LITESTREAM_INCREMENTAL_BACKUP_INTERVAL_MINUTES env                                                                                                                                     
                                                                         The interval between incremental backups of the replica. Shorter intervals                                                 
                                                                         reduce the amount of change history that needs to be replayed when catching                                                
                                                                         up a new view-syncer, at the expense of increasing the number of files needed                                              
                                                                         to download for the initial litestream restore.                                                                            
                                                                                                                                                                                                    
-     --litestream-snapshot-backup-interval-hours number                 default: 12                                                                                                                
+     --litestream-snapshot-backup-interval-hours number                 default: 4                                                                                                                 
        ZERO_LITESTREAM_SNAPSHOT_BACKUP_INTERVAL_HOURS env                                                                                                                                          
                                                                         The interval between snapshot backups of the replica. Snapshot backups                                                     
                                                                         make a full copy of the database to a new litestream generation. This                                                      
