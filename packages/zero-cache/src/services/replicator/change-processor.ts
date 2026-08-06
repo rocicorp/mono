@@ -1,3 +1,4 @@
+import {constants as bufferConstants} from 'node:buffer';
 import type {LogContext} from '@rocicorp/logger';
 import {SqliteError} from '@rocicorp/zero-sqlite3';
 import {AbortError} from '../../../../shared/src/abort-error.ts';
@@ -66,6 +67,15 @@ import {
 import {TableMetadataTracker} from './schema/table-metadata.ts';
 
 export type ChangeProcessorMode = ReplicatorMode | 'initial-sync';
+
+const BIND_VALUE_TOO_BIG_ERROR =
+  'The bound string, buffer, or bigint is too big';
+const MAX_SQLITE_BIND_BYTES = Math.min(
+  bufferConstants.MAX_LENGTH,
+  bufferConstants.MAX_STRING_LENGTH,
+);
+const MIN_SQLITE_BIGINT = -(1n << 63n);
+const MAX_SQLITE_BIGINT = (1n << 63n) - 1n;
 
 export type CommitResult = {
   watermark: string;
@@ -509,19 +519,23 @@ class TransactionProcessor {
     const conds = Object.keys(currKey).map(col => `${id(col)}=?`);
     const setExprs = Object.keys(row).map(col => `${id(col)}=?`);
 
-    const {changes} = this.#db.run(
-      `
-      UPDATE ${id(table)}
-        SET ${setExprs.join(',')}
-        WHERE ${conds.join(' AND ')}
-      `,
-      [...Object.values(row), ...Object.values(currKey)],
-    );
+    try {
+      const {changes} = this.#db.run(
+        `
+        UPDATE ${id(table)}
+          SET ${setExprs.join(',')}
+          WHERE ${conds.join(' AND ')}
+        `,
+        [...Object.values(row), ...Object.values(currKey)],
+      );
 
-    // If the UPDATE did not affect any rows, perform an UPSERT of the
-    // new row for resumptive replication.
-    if (changes === 0) {
-      this.#upsert(table, row);
+      // If the UPDATE did not affect any rows, perform an UPSERT of the
+      // new row for resumptive replication.
+      if (changes === 0) {
+        this.#upsert(table, row);
+      }
+    } catch (e) {
+      throw wrapBindError(e, this.#version, update.relation, row, currKey);
     }
   }
 
@@ -959,6 +973,74 @@ function getBackfilledColumns(
     return undefined; // common case
   }
   return backfilling.filter(col => col in row);
+}
+
+class OversizedUpdateBindingError extends Error {
+  constructor(message: string, cause: RangeError) {
+    super(message, {cause});
+    this.name = 'OversizedUpdateBindingError';
+  }
+}
+
+function wrapBindError(
+  error: unknown,
+  tx: LexiVersion,
+  relation: MessageRelation,
+  row: LiteRow,
+  currKey: LiteRowKey,
+) {
+  if (
+    !(error instanceof RangeError) ||
+    error.message !== BIND_VALUE_TOO_BIG_ERROR
+  ) {
+    return error;
+  }
+
+  const binding = [...Object.entries(row), ...Object.entries(currKey)].find(
+    ([, value]) => oversizedValueDescription(value),
+  );
+  const relationOid = getRelationOid(relation);
+  const context = [
+    `tx=${tx}`,
+    relationOid === undefined ? undefined : `relationOid=${relationOid}`,
+    `table=${relation.schema}.${relation.name}`,
+    `column=${binding?.[0] ?? 'unknown'}`,
+    binding && oversizedValueDescription(binding[1]),
+  ]
+    .filter(Boolean)
+    .join(' ');
+
+  return new OversizedUpdateBindingError(
+    `Oversized SQLite update binding: ${context}`,
+    error,
+  );
+}
+
+function getRelationOid(relation: MessageRelation): number | undefined {
+  return 'relationOid' in relation && typeof relation.relationOid === 'number'
+    ? relation.relationOid
+    : undefined;
+}
+
+function oversizedValueDescription(value: LiteValueType): string | undefined {
+  if (typeof value === 'bigint') {
+    return value < MIN_SQLITE_BIGINT || value > MAX_SQLITE_BIGINT
+      ? 'valueType=bigint fitsInt64=false'
+      : undefined;
+  }
+
+  if (typeof value === 'string') {
+    const sizeBytes = Buffer.byteLength(value);
+    return sizeBytes > MAX_SQLITE_BIND_BYTES
+      ? `valueType=string sizeBytes=${sizeBytes} limitBytes=${MAX_SQLITE_BIND_BYTES}`
+      : undefined;
+  }
+
+  if (value instanceof Uint8Array && value.byteLength > MAX_SQLITE_BIND_BYTES) {
+    return `valueType=buffer sizeBytes=${value.byteLength} limitBytes=${MAX_SQLITE_BIND_BYTES}`;
+  }
+
+  return undefined;
 }
 
 /** Runs `fn`, returning its error rather than throwing it. */
