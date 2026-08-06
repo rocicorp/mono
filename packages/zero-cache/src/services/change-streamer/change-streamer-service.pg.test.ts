@@ -21,11 +21,13 @@ import type {ChangeSource} from '../change-source/change-source.ts';
 import type {
   ChangeStreamData,
   ChangeStreamMessage,
+  Data,
 } from '../change-source/protocol/current/downstream.ts';
 import type {UpstreamStatusMessage} from '../change-source/protocol/current/status.ts';
 import {exitAfter} from '../life-cycle.ts';
 import type {LitestreamVersion} from '../litestream/metrics.ts';
 import {
+  CHANGE_LOG_DB_SCHEMA_VERSION,
   changeLogFileName,
   deleteChangeLogDB,
   openChangeLogDB,
@@ -421,7 +423,7 @@ describe('change-streamer/service', () => {
     replica: Database,
     changeLog: Database,
     watermark: string,
-    data: readonly ChangeStreamData[],
+    data: readonly Data[],
   ): void {
     const runner = new StatementRunner(replica);
     const writer = new ChangeLogStreamWriter(new StatementRunner(changeLog));
@@ -436,7 +438,7 @@ describe('change-streamer/service', () => {
     try {
       writer.begin(watermark, serializeChangeStreamData(begin));
       for (const message of data) {
-        writer.append(serializeChangeStreamData(message), message[1].tag);
+        writer.append(serializeChangeStreamData(message), message[1]);
       }
       writer.commit(watermark, serializeChangeStreamData(commit), Date.now());
       updateReplicationWatermark(runner, watermark);
@@ -522,7 +524,7 @@ describe('change-streamer/service', () => {
         epoch: null,
         generation: REPLICA_VERSION,
         replicaID: 'replica-id',
-        schemaVersion: 2,
+        schemaVersion: CHANGE_LOG_DB_SCHEMA_VERSION,
         seedWatermark: REPLICA_VERSION,
       });
 

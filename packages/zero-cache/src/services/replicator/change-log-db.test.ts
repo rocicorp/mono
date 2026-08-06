@@ -9,6 +9,12 @@ import {Database} from '../../../../zqlite/src/db.ts';
 import {DbFile, expectTableExact} from '../../test/lite.ts';
 import {CREATE_V14_CHANGE_LOG_STREAM} from '../change-source/common/replica-schema.ts';
 import {
+  CHANGE_LOG_BACKFILLING_TABLE,
+  ChangeLogCookieWriter,
+  DROP_CHANGE_LOG_COOKIE_TABLES,
+  readCookies,
+} from './change-log-cookies.ts';
+import {
   applyChangeLogPragmas,
   CHANGE_LOG_DB_SCHEMA_VERSION,
   CHANGE_LOG_META_TABLE,
@@ -267,7 +273,7 @@ describe('replicator/change-log-db', () => {
         epoch: null,
         generation: '01',
         replicaID: '1777575698286',
-        schemaVersion: 2,
+        schemaVersion: CHANGE_LOG_DB_SCHEMA_VERSION,
         seededAtMs: NOW_MS,
         seedWatermark: '05',
       });
@@ -405,6 +411,7 @@ describe('replicator/change-log-db', () => {
           action: 'reseeded',
           head: ANCHOR.resumeWatermark,
           reason: 'created',
+          cookiesStale: true,
         });
         expect(open.pragma('journal_mode')).toEqual([{journal_mode: 'wal2'}]);
         expect(readChangeLogHead(open)).toBe(ANCHOR.resumeWatermark);
@@ -415,6 +422,7 @@ describe('replicator/change-log-db', () => {
       expect(reopened.result).toEqual({
         action: 'none',
         head: ANCHOR.resumeWatermark,
+        cookiesStale: false,
       });
       expect(readChangeLogHead(db)).toBe(ANCHOR.resumeWatermark);
     });
@@ -432,6 +440,7 @@ describe('replicator/change-log-db', () => {
         action: 'reseeded',
         head: ANCHOR.resumeWatermark,
         reason: 'created',
+        cookiesStale: true,
       });
       expectSeededAt(rebuilt, ANCHOR);
       expect(rebuilt.pragma('journal_mode')).toEqual([{journal_mode: 'wal2'}]);
@@ -451,6 +460,7 @@ describe('replicator/change-log-db', () => {
         action: 'reseeded',
         head: ANCHOR.resumeWatermark,
         reason: 'created',
+        cookiesStale: true,
       });
       expectSeededAt(rebuilt, ANCHOR);
       expect(autoVacuum(rebuilt)).toBe(2);
@@ -478,6 +488,7 @@ describe('replicator/change-log-db', () => {
         action: 'reseeded',
         head: ANCHOR.resumeWatermark,
         reason: 'created',
+        cookiesStale: true,
       });
       expect(autoVacuum(rebuilt)).toBe(2);
     });
@@ -512,6 +523,7 @@ describe('replicator/change-log-db', () => {
           action: 'reseeded',
           head: ANCHOR.resumeWatermark,
           reason: 'created',
+          cookiesStale: true,
         });
         expect(readChangeLogHead(opened)).toBe(ANCHOR.resumeWatermark);
         // One read for the initial open and one for the rebuild: no third.
@@ -557,6 +569,7 @@ describe('replicator/change-log-db', () => {
         action: 'reseeded',
         head: ANCHOR.resumeWatermark,
         reason: 'created',
+        cookiesStale: true,
       });
       expectSeededAt(db, ANCHOR);
     });
@@ -570,6 +583,7 @@ describe('replicator/change-log-db', () => {
         action: 'reseeded',
         head: ANCHOR.resumeWatermark,
         reason: 'created',
+        cookiesStale: true,
       });
       // The pre-existing rows are wiped, not retained.
       expectSeededAt(db, ANCHOR);
@@ -583,6 +597,7 @@ describe('replicator/change-log-db', () => {
         action: 'reseeded',
         head: ANCHOR.resumeWatermark,
         reason: 'created',
+        cookiesStale: true,
       });
       expectSeededAt(db, ANCHOR);
     });
@@ -595,6 +610,7 @@ describe('replicator/change-log-db', () => {
         action: 'reseeded',
         head: ANCHOR.resumeWatermark,
         reason: 'created',
+        cookiesStale: true,
       });
       expect(readChangeLogHead(db)).toBe(ANCHOR.resumeWatermark);
     });
@@ -611,6 +627,7 @@ describe('replicator/change-log-db', () => {
         action: 'reseeded',
         head: ANCHOR.resumeWatermark,
         reason: 'schema-mismatch',
+        cookiesStale: true,
       });
       expectSeededAt(db, ANCHOR);
     });
@@ -637,6 +654,7 @@ describe('replicator/change-log-db', () => {
         action: 'reseeded',
         head: ANCHOR.resumeWatermark,
         reason: 'schema-mismatch',
+        cookiesStale: true,
       });
       expectSeededAt(db, ANCHOR);
     });
@@ -661,6 +679,7 @@ describe('replicator/change-log-db', () => {
         action: 'reseeded',
         head: '05',
         reason: 'identity-mismatch',
+        cookiesStale: true,
       });
       expectSeededAt(db, anchor);
     });
@@ -672,6 +691,7 @@ describe('replicator/change-log-db', () => {
       expect(reconcileChangeLog(lc, db, anchorAt('05', {identity}))).toEqual({
         action: 'none',
         head: '05',
+        cookiesStale: false,
       });
       expect(
         reconcileChangeLog(
@@ -690,6 +710,7 @@ describe('replicator/change-log-db', () => {
         action: 'reseeded',
         head: ANCHOR.resumeWatermark,
         reason: 'gap',
+        cookiesStale: true,
       });
       expect(readChangeLogHead(db)).toBe(ANCHOR.resumeWatermark);
     });
@@ -705,6 +726,7 @@ describe('replicator/change-log-db', () => {
         action: 'reseeded',
         head: ANCHOR.resumeWatermark,
         reason: 'gap',
+        cookiesStale: true,
       });
       expectSeededAt(db, ANCHOR);
     });
@@ -717,6 +739,7 @@ describe('replicator/change-log-db', () => {
         action: 'reseeded',
         head: ANCHOR.resumeWatermark,
         reason: 'gap',
+        cookiesStale: true,
       });
       expect(readChangeLogHead(db)).toBe(ANCHOR.resumeWatermark);
     });
@@ -735,6 +758,7 @@ describe('replicator/change-log-db', () => {
         action: 'truncated',
         head: ANCHOR.resumeWatermark,
         rows: 7,
+        cookiesStale: true,
       });
       expect(readChangeLogHead(db)).toBe(ANCHOR.resumeWatermark);
       expect(
@@ -785,6 +809,7 @@ describe('replicator/change-log-db', () => {
         action: 'truncated',
         head: ANCHOR.resumeWatermark,
         rows: 27,
+        cookiesStale: true,
       });
       expect(
         db
@@ -812,10 +837,12 @@ describe('replicator/change-log-db', () => {
       expect(reconcileChangeLog(lc, db, ANCHOR)).toEqual({
         action: 'none',
         head: ANCHOR.resumeWatermark,
+        cookiesStale: false,
       });
       expect(reconcileChangeLog(lc, db, ANCHOR)).toEqual({
         action: 'none',
         head: ANCHOR.resumeWatermark,
+        cookiesStale: false,
       });
     });
 
@@ -834,6 +861,7 @@ describe('replicator/change-log-db', () => {
         action: 'truncated',
         head: '05',
         rows: 4,
+        cookiesStale: true,
       });
       // The log did not start over, so its warm-up clock does not restart.
       expect(readChangeLogMeta(db)).toMatchObject({seededAtMs: NOW_MS});
@@ -843,6 +871,7 @@ describe('replicator/change-log-db', () => {
         action: 'reseeded',
         head: '07',
         reason: 'gap',
+        cookiesStale: true,
       });
       expect(readChangeLogMeta(db)).toMatchObject({
         seededAtMs: NOW_MS + 60_000,
@@ -862,6 +891,7 @@ describe('replicator/change-log-db', () => {
         action: 'truncated',
         head: '03',
         rows: 3,
+        cookiesStale: true,
       });
       // Re-appending what was truncated no longer violates the primary key.
       expect(() => appendTransaction(db, '05', '03', 1, 300)).not.toThrow();
@@ -875,6 +905,7 @@ describe('replicator/change-log-db', () => {
       expect(reconcileChangeLog(lc, db, ANCHOR)).toEqual({
         action: 'none',
         head: ANCHOR.resumeWatermark,
+        cookiesStale: false,
       });
       expectSeededAt(db, ANCHOR);
     });
@@ -893,6 +924,7 @@ describe('replicator/change-log-db', () => {
       expect(reconcileChangeLog(lc, db, anchorAt('07'))).toEqual({
         action: 'none',
         head: '07',
+        cookiesStale: false,
       });
       expect(dataVersion()).toEqual(before);
 
@@ -952,6 +984,106 @@ describe('replicator/change-log-db', () => {
 
       expect(() => reconcileChangeLog(lc, db, ANCHOR)).toThrow(cause);
       expect(executed).toEqual(['BEGIN IMMEDIATE']);
+    });
+  });
+
+  // The cookies are unversioned point-in-time state: they are only meaningful
+  // paired with the watermark they were folded to. So they are created with the
+  // buffer, dropped with it, and invalidated by anything that moves the head.
+  describe('the cookie jar', () => {
+    /** Puts a cookie in the jar without going through the writer. */
+    function seedCookie(db: Database) {
+      new ChangeLogCookieWriter(db).apply({
+        tag: 'create-table',
+        spec: {schema: 'my', name: 'foo', columns: {}},
+        metadata: {rowKey: {columns: ['id']}},
+        backfill: {a: {fooID: 1}},
+      });
+    }
+
+    test('a reseed creates the cookie tables, empty', () => {
+      using db = createReconciledLog();
+
+      expect(readCookies(db)).toEqual({tableMetadata: [], backfilling: []});
+    });
+
+    test('a wipe drops the cookies with the buffer', () => {
+      using db = createReconciledLog();
+      seedCookie(db);
+      appendTransaction(db, '09', '05', 1, 100);
+
+      // An identity mismatch: this file belongs to a different replica, so its
+      // cookie set describes a different stream.
+      const anchor = anchorAt('05', {
+        identity: {epoch: null, generation: '02', replicaID: 'other'},
+      });
+      expect(reconcileChangeLog(lc, db, anchor)).toMatchObject({
+        action: 'reseeded',
+        reason: 'identity-mismatch',
+        cookiesStale: true,
+      });
+      expect(readCookies(db)).toEqual({tableMetadata: [], backfilling: []});
+    });
+
+    test('a truncation clears the cookies it can no longer vouch for', () => {
+      using db = createReconciledLog();
+      seedCookie(db);
+      // The truncated transaction could itself have carried a `create-table`,
+      // an `add-column`, or a `backfill-completed`, none of which truncating
+      // the rows rolls back.
+      appendTransaction(db, '09', '05', 2, 100);
+
+      expect(reconcileChangeLog(lc, db, ANCHOR)).toMatchObject({
+        action: 'truncated',
+        cookiesStale: true,
+      });
+      expect(readCookies(db)).toEqual({tableMetadata: [], backfilling: []});
+    });
+
+    test('a reconcile that changes nothing leaves the cookies alone', () => {
+      using db = createReconciledLog();
+      seedCookie(db);
+      const before = readCookies(db);
+
+      expect(reconcileChangeLog(lc, db, ANCHOR)).toEqual({
+        action: 'none',
+        head: ANCHOR.resumeWatermark,
+        cookiesStale: false,
+      });
+      expect(readCookies(db)).toEqual(before);
+      expect(before.backfilling).toHaveLength(1);
+    });
+
+    // Every file in the fleet at the v3 upgrade is a v2 file, and the reason it
+    // is wiped should be the version it is at rather than the tables it lacks.
+    test('a v2 file reseeds as schema-mismatch, not as created', () => {
+      using db = createReconciledLog();
+      db.exec(/*sql*/ `
+        ${DROP_CHANGE_LOG_COOKIE_TABLES}
+        UPDATE "${CHANGE_LOG_META_TABLE}" SET "schemaVersion" = 2
+      `);
+
+      expect(reconcileChangeLog(lc, db, ANCHOR)).toEqual({
+        action: 'reseeded',
+        head: ANCHOR.resumeWatermark,
+        reason: 'schema-mismatch',
+        cookiesStale: true,
+      });
+      expectSeededAt(db, ANCHOR);
+      expect(readCookies(db)).toEqual({tableMetadata: [], backfilling: []});
+    });
+
+    test('a current-version file missing a cookie table is rebuilt', () => {
+      using db = createReconciledLog();
+      db.exec(/*sql*/ `DROP TABLE "${CHANGE_LOG_BACKFILLING_TABLE}"`);
+
+      expect(reconcileChangeLog(lc, db, ANCHOR)).toEqual({
+        action: 'reseeded',
+        head: ANCHOR.resumeWatermark,
+        reason: 'created',
+        cookiesStale: true,
+      });
+      expect(readCookies(db)).toEqual({tableMetadata: [], backfilling: []});
     });
   });
 });

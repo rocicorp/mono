@@ -17,7 +17,10 @@ import {
 import {afterEach, expect, test, vi} from 'vitest';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
-import type {ReseedReason} from './change-log-db.ts';
+import {
+  CHANGE_LOG_DB_SCHEMA_VERSION,
+  type ReseedReason,
+} from './change-log-db.ts';
 import type {
   ChangeLogCommit,
   SQLiteChangeLogInfo,
@@ -59,14 +62,22 @@ function dataPoints(exporter: InMemoryMetricExporter, name: string) {
   return metric?.dataPoints;
 }
 
-function counts(exporter: InMemoryMetricExporter, name: string) {
+function counts(
+  exporter: InMemoryMetricExporter,
+  name: string,
+  label: string = 'reason',
+) {
   return Object.fromEntries(
     (dataPoints(exporter, name) ?? []).map(point => [
-      // Every counter here is either unlabeled or labeled by `reason`.
-      point.attributes.reason ?? '',
+      point.attributes[label] ?? '',
       point.value,
     ]),
   );
+}
+
+/** Observable gauges report per label set, like the counters above. */
+function gauges(exporter: InMemoryMetricExporter, name: string, label: string) {
+  return counts(exporter, name, label);
 }
 
 function histogram(
@@ -102,6 +113,7 @@ test('each reseed reason increments reconcile_wipes with its own label', async (
       action: 'reseeded',
       head: '05',
       reason,
+      cookiesStale: true,
     });
   }
   // Twice, to show the `gap` series counts rather than latches. A nonzero rate
@@ -111,13 +123,19 @@ test('each reseed reason increments reconcile_wipes with its own label', async (
     action: 'reseeded',
     head: '05',
     reason: 'gap',
+    cookiesStale: true,
   });
   recordSQLiteChangeLogReconcile(lc, {
     action: 'truncated',
     head: '05',
     rows: 27,
+    cookiesStale: true,
   });
-  recordSQLiteChangeLogReconcile(lc, {action: 'none', head: '05'});
+  recordSQLiteChangeLogReconcile(lc, {
+    action: 'none',
+    head: '05',
+    cookiesStale: false,
+  });
   await otel.provider.forceFlush();
 
   expect(counts(otel.exporter, `${METRIC}.reconcile_wipes`)).toEqual({
@@ -139,6 +157,7 @@ test('a consistent log emits no wipe or truncation series at all', async () => {
   recordSQLiteChangeLogReconcile(createSilentLogContext(), {
     action: 'none',
     head: '05',
+    cookiesStale: false,
   });
   await otel.provider.forceFlush();
 
@@ -159,7 +178,12 @@ const COMMIT: ChangeStreamData = ['commit', {tag: 'commit'}, {watermark: '06'}];
 
 const COMMIT_RESULT: ChangeLogCommit = {
   watermark: '06',
-  stats: {rows: 2, estimatedBytes: 100, hash: '0'.repeat(64)},
+  stats: {
+    rows: 2,
+    estimatedBytes: 100,
+    hash: '0'.repeat(64),
+    cookieMutations: [],
+  },
   logCommitMs: 4,
 };
 
@@ -167,12 +191,13 @@ const INFO: SQLiteChangeLogInfo = {
   epoch: null,
   generation: '01',
   replicaID: null,
-  schemaVersion: 2,
+  schemaVersion: CHANGE_LOG_DB_SCHEMA_VERSION,
   seededAtMs: 1_700_000_000_000,
   seedWatermark: '02',
   headWatermark: '02',
   rows: 2,
   estimatedBytes: 100,
+  cookieRows: {tableMetadata: 0, backfilling: 0},
 };
 
 test('records the commit that sits on the forward path', async () => {
@@ -222,4 +247,70 @@ test('a failed commit times the attempt but not the commit', async () => {
       outcome: 'error',
     }),
   ).toMatchObject({count: 1, sum: 0.02});
+});
+
+test('every reconcile that moves the head counts a cookie reseed', async () => {
+  await using otel = withProvider();
+  const {recordSQLiteChangeLogReconcile} =
+    await import('./sqlite-change-log-observability.ts');
+  const lc = createSilentLogContext();
+
+  recordSQLiteChangeLogReconcile(lc, {
+    action: 'truncated',
+    head: '05',
+    rows: 27,
+    cookiesStale: true,
+  });
+  recordSQLiteChangeLogReconcile(lc, {
+    action: 'reseeded',
+    head: '05',
+    reason: 'gap',
+    cookiesStale: true,
+  });
+  // A reconcile that changed nothing did not invalidate the cookie set, so it
+  // must not appear in the series at all.
+  recordSQLiteChangeLogReconcile(lc, {
+    action: 'none',
+    head: '05',
+    cookiesStale: false,
+  });
+  await otel.provider.forceFlush();
+
+  expect(counts(otel.exporter, `${METRIC}.cookie_reseed`, 'action')).toEqual({
+    truncated: 1,
+    reseeded: 1,
+  });
+});
+
+test('cookie mutations are counted by op, and the rows they leave gauged', async () => {
+  await using otel = withProvider();
+  const {SQLiteChangeLogObserver} =
+    await import('./sqlite-change-log-observability.ts');
+  const observer = new SQLiteChangeLogObserver(createSilentLogContext(), INFO);
+
+  observer.cookiesMutated(['upsert-metadata', 'upsert-backfill'], {
+    tableMetadata: 1,
+    backfilling: 1,
+  });
+  observer.cookiesMutated(['upsert-backfill'], {
+    tableMetadata: 1,
+    backfilling: 2,
+  });
+  observer.cookiesMutated(['complete-backfill'], {
+    tableMetadata: 1,
+    backfilling: 0,
+  });
+  await otel.provider.forceFlush();
+
+  expect(counts(otel.exporter, `${METRIC}.cookie_mutations`, 'op')).toEqual({
+    'upsert-metadata': 1,
+    'upsert-backfill': 2,
+    'complete-backfill': 1,
+  });
+  // A retained cookie row with no backfill in flight is a backfill that will be
+  // re-requested forever, so the gauge is per table rather than a total.
+  expect(gauges(otel.exporter, `${METRIC}.cookie_rows`, 'table')).toEqual({
+    tableMetadata: 1,
+    backfilling: 0,
+  });
 });

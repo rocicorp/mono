@@ -3,8 +3,13 @@ import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.
 import {Database} from '../../../../zqlite/src/db.ts';
 import {StatementRunner} from '../../db/statements.ts';
 import {DbFile, expectTableExact} from '../../test/lite.ts';
+import type {
+  DataChange,
+  SchemaChange,
+} from '../change-source/protocol/current/data.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
 import {serializeChangeStreamData} from '../change-streamer/change-log-codec.ts';
+import {EMPTY_COOKIE_SET, readCookies} from './change-log-cookies.ts';
 import {
   CHANGE_LOG_STREAM_TABLE,
   deleteChangeLogDB,
@@ -91,7 +96,8 @@ function rowCount(db: Database): number {
 
 const BEGIN = json(['begin', {tag: 'begin'}, {commitWatermark: '06'}]);
 const COMMIT = json(['commit', {tag: 'commit'}, {watermark: '06'}]);
-const TRUNCATE = json(['data', {tag: 'truncate', relations: []}]);
+const TRUNCATE_CHANGE: DataChange = {tag: 'truncate', relations: []};
+const TRUNCATE = json(['data', TRUNCATE_CHANGE]);
 
 describe('replicator/change-log-stream-writer', () => {
   test('writes contiguous positions and commit-only metadata', () => {
@@ -99,33 +105,32 @@ describe('replicator/change-log-stream-writer', () => {
     const writer = new ChangeLogStreamWriter(new StatementRunner(db));
     const writeTimeMs = 1_234_567;
 
-    const insert = json([
-      'data',
-      {
-        tag: 'insert',
-        relation: {
-          schema: 'public',
-          name: 'issues',
-          rowKey: {columns: ['id'], type: 'default'},
-        },
-        new: {id: 9007199254740993n, text: 'before\0after'},
+    const insertChange: DataChange = {
+      tag: 'insert',
+      relation: {
+        schema: 'public',
+        name: 'issues',
+        rowKey: {columns: ['id'], type: 'default'},
       },
-    ]);
-    const rename = json([
-      'data',
-      {
-        tag: 'rename-table',
-        old: {schema: 'public', name: 'issues'},
-        new: {schema: 'public', name: 'renamed'},
-      },
-    ]);
+      new: {id: 9007199254740993n, text: 'before\0after'},
+    };
+    const renameChange: SchemaChange = {
+      tag: 'rename-table',
+      old: {schema: 'public', name: 'issues'},
+      new: {schema: 'public', name: 'renamed'},
+    };
+    const insert = json(['data', insertChange]);
+    const rename = json(['data', renameChange]);
     writer.begin('06', BEGIN);
-    writer.append(insert, 'insert');
-    writer.append(rename, 'rename-table');
+    writer.append(insert, insertChange);
+    writer.append(rename, renameChange);
     const stats = writer.commit('06', COMMIT, writeTimeMs);
     expect(stats).toEqual({
       rows: 4,
       hash: expect.stringMatching(/^[0-9a-f]{64}$/),
+      // A rename of a table with no cookies still folds: the mutation runs and
+      // matches nothing.
+      cookieMutations: ['rename-table'],
       estimatedBytes:
         estimateChangeLogStreamRowBytes('06', '{"tag":"begin"}') +
         estimateChangeLogStreamRowBytes(
@@ -190,7 +195,7 @@ describe('replicator/change-log-stream-writer', () => {
     expect(db.inTransaction).toBe(false);
     writer.begin('06', BEGIN);
     expect(db.inTransaction).toBe(true);
-    writer.append(TRUNCATE, 'truncate');
+    writer.append(TRUNCATE, TRUNCATE_CHANGE);
     // Nothing is visible to another connection until the writer commits.
     expect(head(observer)).toBe(ANCHOR.resumeWatermark);
 
@@ -204,7 +209,7 @@ describe('replicator/change-log-stream-writer', () => {
     const writer = new ChangeLogStreamWriter(new StatementRunner(db));
 
     writer.begin('06', BEGIN);
-    writer.append(TRUNCATE, 'truncate');
+    writer.append(TRUNCATE, TRUNCATE_CHANGE);
     writer.rollback();
 
     expect(db.inTransaction).toBe(false);
@@ -228,7 +233,7 @@ describe('replicator/change-log-stream-writer', () => {
     const writer = new ChangeLogStreamWriter(new StatementRunner(db));
 
     writer.begin('06', BEGIN);
-    writer.append(TRUNCATE, 'truncate');
+    writer.append(TRUNCATE, TRUNCATE_CHANGE);
     writer.rollback();
 
     expect(head(observer)).toBe(ANCHOR.resumeWatermark);
@@ -242,7 +247,7 @@ describe('replicator/change-log-stream-writer', () => {
     const rows = 2500;
     writer.begin('06', BEGIN);
     for (let i = 0; i < rows; i++) {
-      writer.append(TRUNCATE, 'truncate');
+      writer.append(TRUNCATE, TRUNCATE_CHANGE);
     }
     writer.commit('06', COMMIT, 789);
 
@@ -268,5 +273,72 @@ describe('replicator/change-log-stream-writer', () => {
     // The open transaction is the first one, not a nested second.
     writer.rollback();
     expect(db.inTransaction).toBe(false);
+  });
+
+  // The cookies are written in the stream's own transaction, which is what
+  // makes them atomic with the head and what makes an interrupted stream need
+  // no cookie handling of its own.
+  describe('the cookie jar', () => {
+    const CREATE_TABLE: SchemaChange = {
+      tag: 'create-table',
+      spec: {schema: 'my', name: 'foo', columns: {}},
+      metadata: {rowKey: {columns: ['id']}},
+      backfill: {a: {fooID: 1}},
+    };
+    const createTable = json(['data', CREATE_TABLE]);
+
+    test('cookies are durable with the transaction that carried them', () => {
+      const {db, observer} = createChangeLogFile();
+      using _db = db;
+      using _observer = observer;
+      const writer = new ChangeLogStreamWriter(new StatementRunner(db));
+
+      writer.begin('06', BEGIN);
+      writer.append(createTable, CREATE_TABLE);
+      // Written, but not yet visible to another connection — the cookie set and
+      // the rows it was folded from become durable together.
+      expect(readCookies(db).backfilling).toHaveLength(1);
+      expect(readCookies(observer)).toEqual(EMPTY_COOKIE_SET);
+
+      const stats = writer.commit('06', COMMIT, 789);
+      expect(stats.cookieMutations).toEqual([
+        'upsert-metadata',
+        'upsert-backfill',
+      ]);
+      expect(readCookies(observer)).toEqual({
+        tableMetadata: [
+          {schema: 'my', table: 'foo', metadata: {rowKey: {columns: ['id']}}},
+        ],
+        backfilling: [
+          {schema: 'my', table: 'foo', column: 'a', backfill: {fooID: 1}},
+        ],
+      });
+    });
+
+    test('a rollback discards the cookies with the rows', () => {
+      using db = createChangeLog();
+      const writer = new ChangeLogStreamWriter(new StatementRunner(db));
+
+      writer.begin('06', BEGIN);
+      writer.append(createTable, CREATE_TABLE);
+      writer.rollback();
+
+      expect(readCookies(db)).toEqual(EMPTY_COOKIE_SET);
+      expect(rowCount(db)).toBe(SEED_ROWS.length);
+
+      // ...and the discarded mutations are not reported by the next commit.
+      writer.begin('06', BEGIN);
+      expect(writer.commit('06', COMMIT, 789).cookieMutations).toEqual([]);
+    });
+
+    test('a transaction with no schema change reports no mutations', () => {
+      using db = createChangeLog();
+      const writer = new ChangeLogStreamWriter(new StatementRunner(db));
+
+      writer.begin('06', BEGIN);
+      writer.append(TRUNCATE, TRUNCATE_CHANGE);
+      expect(writer.commit('06', COMMIT, 789).cookieMutations).toEqual([]);
+      expect(readCookies(db)).toEqual(EMPTY_COOKIE_SET);
+    });
   });
 });

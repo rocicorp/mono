@@ -25,6 +25,11 @@ import type {ChangeStreamData} from '../change-source/protocol/current/downstrea
 import {extractChangeSubstring} from '../change-streamer/change-log-codec.ts';
 import {ChangeLogTransactionHasher} from '../change-streamer/change-log-transaction-hash.ts';
 import {
+  readCookieRowCounts,
+  type CookieOpTag,
+  type CookieRowCounts,
+} from './change-log-cookies.ts';
+import {
   CHANGE_LOG_STREAM_TABLE,
   readChangeLogHead,
   readChangeLogMeta,
@@ -71,6 +76,18 @@ export function recordSQLiteChangeLogReconcile(
     default:
       unreachable(result);
   }
+  if (result.cookiesStale) {
+    // The invariant-17 counter: after any reconcile that moved the head, the
+    // log's cookie set has to be replaced with the one that belongs to the
+    // resume watermark. A nonzero `truncated` series in steady state means
+    // phantom truncation is happening on a shard where it should not.
+    getOrCreateCounter(
+      'replica',
+      'sqlite_change_log.cookie_reseed',
+      'Change-log cookie sets invalidated at reconciliation, by the ' +
+        'reconcile action that invalidated them.',
+    ).add(1, {action: result.action});
+  }
   lc.debug?.('SQLite change-log reconciliation', {
     sqliteChangeLogReconcile: result,
   });
@@ -88,6 +105,7 @@ export type SQLiteChangeLogStartupInfo = ChangeLogMeta & {
 export type SQLiteChangeLogInfo = SQLiteChangeLogStartupInfo & {
   readonly rows: number;
   readonly estimatedBytes: number;
+  readonly cookieRows: CookieRowCounts;
 };
 
 /**
@@ -136,6 +154,7 @@ export function getSQLiteChangeLogInfo(
     ...startup,
     rows: aggregate.rows,
     estimatedBytes: aggregate.estimatedBytes,
+    cookieRows: readCookieRowCounts(changeLog),
   };
 }
 
@@ -203,6 +222,8 @@ export type SQLiteChangeLogObservabilityState = {
   readonly headLag: number | undefined;
   readonly rows: number;
   readonly estimatedBytes: number;
+  readonly cookieRows: CookieRowCounts;
+  readonly cookieMutations: number;
   readonly rollbacks: number;
   readonly invariantFailures: number;
   readonly hashMatches: number;
@@ -266,11 +287,19 @@ export class SQLiteChangeLogObserver {
     'sqlite_change_log.hash_unpaired',
     'Committed change-log transactions without both ephemeral hashes available for comparison.',
   );
+  // Near zero at steady state: cookie state only moves on schema changes.
+  readonly #cookieMutationCounter = getOrCreateCounter(
+    'replica',
+    'sqlite_change_log.cookie_mutations',
+    'Change-log cookie mutations folded from schema changes, by operation.',
+  );
 
   #receivedHead: string;
   #sqliteHead: string;
   #rows: number;
   #estimatedBytes: number;
+  #cookieRows: CookieRowCounts;
+  #cookieMutations = 0;
   #transactionWatermark: string | undefined;
   #sourceHasher: ChangeLogTransactionHasher | undefined;
   #sourcePos = 0;
@@ -289,12 +318,23 @@ export class SQLiteChangeLogObserver {
     this.#sqliteHead = info.headWatermark;
     this.#rows = info.rows;
     this.#estimatedBytes = info.estimatedBytes;
+    this.#cookieRows = info.cookieRows;
 
     getOrCreateGauge(
       'replica',
       'sqlite_change_log.rows',
       'Rows retained in the SQLite change log.',
     ).addCallback(result => result.observe(this.#rows));
+    // Nonzero with no backfill in flight is a leaked cookie, i.e. a backfill
+    // that will be re-requested forever.
+    getOrCreateGauge(
+      'replica',
+      'sqlite_change_log.cookie_rows',
+      'Cookie rows retained in the SQLite change log, by cookie table.',
+    ).addCallback(result => {
+      result.observe(this.#cookieRows.tableMetadata, {table: 'tableMetadata'});
+      result.observe(this.#cookieRows.backfilling, {table: 'backfilling'});
+    });
     getOrCreateGauge('replica', 'sqlite_change_log.retained_bytes', {
       description:
         'Estimated UTF-8 payload bytes retained in the SQLite change log.',
@@ -482,6 +522,19 @@ export class SQLiteChangeLogObserver {
   }
 
   /**
+   * A committed transaction folded schema changes into the cookie jar. Reported
+   * separately from {@link messageProcessed} because it costs a read of the
+   * cookie tables, which is only worth taking when they actually moved.
+   */
+  cookiesMutated(ops: readonly CookieOpTag[], rows: CookieRowCounts): void {
+    for (const op of ops) {
+      this.#cookieMutations++;
+      this.#cookieMutationCounter.add(1, {op});
+    }
+    this.#cookieRows = rows;
+  }
+
+  /**
    * A missed truncate-above surfaces as a constraint violation on the writer's
    * plain `INSERT`, which the fail-soft policy would otherwise absorb quietly.
    * Classifying it as an invariant failure is what keeps a reconciliation bug
@@ -506,6 +559,7 @@ export class SQLiteChangeLogObserver {
     this.#sqliteHead = info.headWatermark;
     this.#rows = info.rows;
     this.#estimatedBytes = info.estimatedBytes;
+    this.#cookieRows = info.cookieRows;
     this.#transactionWatermark = undefined;
     this.#resetSourceHash();
   }
@@ -517,6 +571,8 @@ export class SQLiteChangeLogObserver {
       headLag: watermarkDistance(this.#receivedHead, this.#sqliteHead),
       rows: this.#rows,
       estimatedBytes: this.#estimatedBytes,
+      cookieRows: this.#cookieRows,
+      cookieMutations: this.#cookieMutations,
       rollbacks: this.#rollbacks,
       invariantFailures: this.#invariantFailures,
       hashMatches: this.#hashMatches,

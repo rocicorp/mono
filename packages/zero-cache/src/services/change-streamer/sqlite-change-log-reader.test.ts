@@ -6,7 +6,10 @@ import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.
 import type {Database, Statement} from '../../../../zqlite/src/db.ts';
 import {StatementRunner} from '../../db/statements.ts';
 import {DbFile} from '../../test/lite.ts';
-import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
+import type {
+  ChangeStreamData,
+  Data,
+} from '../change-source/protocol/current/downstream.ts';
 import {
   CHANGE_LOG_STREAM_TABLE,
   changeLogFileName,
@@ -61,14 +64,14 @@ function createChangeLog(): {db: Database; file: DbFile; path: string} {
   return {db, file, path: changeLogFileName(file.path)};
 }
 
-function truncate(): ChangeStreamData {
+function truncate(): Data {
   return ['data', {tag: 'truncate', relations: []}];
 }
 
 function appendTransaction(
   db: Database,
   watermark: string,
-  data: readonly ChangeStreamData[],
+  data: readonly Data[],
 ): readonly WatermarkedChange[] {
   const writer = new ChangeLogStreamWriter(new StatementRunner(db));
   const begin: ChangeStreamData = [
@@ -81,7 +84,7 @@ function appendTransaction(
   try {
     writer.begin(watermark, serializeChangeStreamData(begin));
     for (const message of data) {
-      writer.append(serializeChangeStreamData(message), message[1].tag);
+      writer.append(serializeChangeStreamData(message), message[1]);
     }
     writer.commit(watermark, serializeChangeStreamData(commit), Date.now());
   } catch (e) {
@@ -367,7 +370,7 @@ describe('sqlite change log reader', () => {
   test('reconstructs canonical bigint, NUL, schema, backfill, and truncate messages byte-for-byte', async () => {
     const {db, path} = createChangeLog();
     using writer = db;
-    const messages: ChangeStreamData[] = [
+    const messages: Data[] = [
       [
         'data',
         {

@@ -71,7 +71,7 @@ function commitResult(
 ): ChangeLogCommit {
   return {
     watermark,
-    stats: {rows: 2, estimatedBytes, hash},
+    stats: {rows: 2, estimatedBytes, hash, cookieMutations: []},
     logCommitMs: 0.009,
   };
 }
@@ -116,6 +116,7 @@ describe('SQLite change-log observability', () => {
       headWatermark: '02',
       rows: 2,
       estimatedBytes: expect.any(Number),
+      cookieRows: {tableMetadata: 0, backfilling: 0},
     });
     expect(info.estimatedBytes).toBeGreaterThan(0);
 
@@ -158,6 +159,7 @@ describe('SQLite change-log observability', () => {
     const {
       rows: _rows,
       estimatedBytes: _bytes,
+      cookieRows: _cookieRows,
       ...head
     } = getSQLiteChangeLogInfo(fixture.changeLog);
     expect(startupInfo).toEqual(head);
@@ -513,18 +515,37 @@ describe('replicator/sqlite-change-log reconcile reporting', () => {
   // means the log did not lead the resume watermark, and is the one on the
   // alert list.
   const cases: [name: string, result: ReconcileResult][] = [
-    ['consistent', {action: 'none', head: '05'}],
-    ['phantom truncation', {action: 'truncated', head: '05', rows: 27}],
-    ['wipe: created', {action: 'reseeded', head: '05', reason: 'created'}],
+    ['consistent', {action: 'none', head: '05', cookiesStale: false}],
+    [
+      'phantom truncation',
+      {action: 'truncated', head: '05', rows: 27, cookiesStale: true},
+    ],
+    [
+      'wipe: created',
+      {action: 'reseeded', head: '05', reason: 'created', cookiesStale: true},
+    ],
     [
       'wipe: schema-mismatch',
-      {action: 'reseeded', head: '05', reason: 'schema-mismatch'},
+      {
+        action: 'reseeded',
+        head: '05',
+        reason: 'schema-mismatch',
+        cookiesStale: true,
+      },
     ],
     [
       'wipe: identity-mismatch',
-      {action: 'reseeded', head: '05', reason: 'identity-mismatch'},
+      {
+        action: 'reseeded',
+        head: '05',
+        reason: 'identity-mismatch',
+        cookiesStale: true,
+      },
     ],
-    ['wipe: gap', {action: 'reseeded', head: '05', reason: 'gap'}],
+    [
+      'wipe: gap',
+      {action: 'reseeded', head: '05', reason: 'gap', cookiesStale: true},
+    ],
   ];
 
   test.each(cases)('%s', (_name, result) => {

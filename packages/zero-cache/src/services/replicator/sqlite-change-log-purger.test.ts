@@ -5,7 +5,10 @@ import type {Database} from '../../../../zqlite/src/db.ts';
 import {StatementRunner} from '../../db/statements.ts';
 import {DbFile} from '../../test/lite.ts';
 import {versionToLexi} from '../../types/lexi-version.ts';
-import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
+import type {
+  ChangeStreamData,
+  Data,
+} from '../change-source/protocol/current/downstream.ts';
 import {serializeChangeStreamData} from '../change-streamer/change-log-codec.ts';
 import type {WatermarkedChange} from '../change-streamer/change-streamer.ts';
 import {SQLiteChangeLogReader} from '../change-streamer/sqlite-change-log-reader.ts';
@@ -86,12 +89,12 @@ function append(
     {tag: 'begin'},
     {commitWatermark: watermark},
   ];
-  const truncate: ChangeStreamData = ['data', {tag: 'truncate', relations: []}];
+  const truncate: Data = ['data', {tag: 'truncate', relations: []}];
   const commit: ChangeStreamData = ['commit', {tag: 'commit'}, {watermark}];
   try {
     writer.begin(watermark, serializeChangeStreamData(begin));
     for (let i = 0; i < changes; i++) {
-      writer.append(serializeChangeStreamData(truncate), 'truncate');
+      writer.append(serializeChangeStreamData(truncate), truncate[1]);
     }
     writer.commit(watermark, serializeChangeStreamData(commit), writeTimeMs);
   } catch (e) {
@@ -789,7 +792,11 @@ describe('replicator/sqlite-change-log-purger', () => {
           {...ANCHOR, resumeWatermark: v(4)},
         );
         try {
-          expect(result).toEqual({action: 'none', head: v(4)});
+          expect(result).toEqual({
+            action: 'none',
+            head: v(4),
+            cookiesStale: false,
+          });
           expect(rowCount(reopened, v(1))).toBe(remaining);
 
           drain(new SQLiteChangeLogPurger(reopened), {maxRows: MAX_ROWS});

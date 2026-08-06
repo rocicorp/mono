@@ -4,6 +4,7 @@ import {afterEach, describe, expect, test} from 'vitest';
 import {TestLogSink} from '../../../../shared/src/logging-test-utils.ts';
 import {DbFile} from '../../test/lite.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
+import {readCookies, type CookieSet} from '../replicator/change-log-cookies.ts';
 import {
   CHANGE_LOG_STREAM_TABLE,
   changeLogFileName,
@@ -59,6 +60,11 @@ function setup(name: string, resumeWatermark = '02') {
     head: () => {
       using db = openChangeLogDB(lc, file.path, {readonly: true});
       return readChangeLogHead(db);
+    },
+    /** Read through a second connection, i.e. what is durable. */
+    cookies: (): CookieSet => {
+      using db = openChangeLogDB(lc, file.path, {readonly: true});
+      return readCookies(db);
     },
     errors: () =>
       sink.messages
@@ -275,5 +281,86 @@ describe('change-streamer/sqlite-change-log-writer', () => {
     expect(fixture.head()).toBe('06');
     expect(fixture.writer.enabled).toBe(true);
     expect(fixture.writer.state()?.invariantFailures).toBe(0);
+  });
+
+  describe('the cookie jar', () => {
+    const createTable: ChangeStreamData = [
+      'data',
+      {
+        tag: 'create-table',
+        spec: {schema: 'my', name: 'foo', columns: {}},
+        metadata: {rowKey: {columns: ['id']}},
+        backfill: {a: {fooID: 1}},
+      },
+    ];
+
+    test('a schema change moves the cookies and is counted', () => {
+      using fixture = setup('change-log-writer-cookies');
+
+      expect(fixture.writer.state()).toMatchObject({
+        cookieMutations: 0,
+        cookieRows: {tableMetadata: 0, backfilling: 0},
+      });
+
+      transaction(fixture.writer, '04', createTable);
+
+      expect(fixture.cookies()).toEqual({
+        tableMetadata: [
+          {schema: 'my', table: 'foo', metadata: {rowKey: {columns: ['id']}}},
+        ],
+        backfilling: [
+          {schema: 'my', table: 'foo', column: 'a', backfill: {fooID: 1}},
+        ],
+      });
+      expect(fixture.writer.state()).toMatchObject({
+        cookieMutations: 2,
+        cookieRows: {tableMetadata: 1, backfilling: 1},
+      });
+
+      // A transaction with no schema change neither moves nor re-counts them.
+      transaction(fixture.writer, '06', [
+        'data',
+        messages.insert('foo', {id: 'one'}),
+      ]);
+      expect(fixture.writer.state()).toMatchObject({cookieMutations: 2});
+    });
+
+    test('an interrupted transaction discards its cookies with its rows', () => {
+      using fixture = setup('change-log-writer-cookies-abort');
+
+      const begin: ChangeStreamData = [
+        'begin',
+        messages.begin(),
+        {commitWatermark: '04'},
+      ];
+      fixture.writer.write(begin, serializeChangeStreamData(begin));
+      fixture.writer.write(createTable, serializeChangeStreamData(createTable));
+      fixture.writer.abort();
+
+      expect(fixture.head()).toBe('02');
+      expect(fixture.cookies()).toEqual({tableMetadata: [], backfilling: []});
+      expect(fixture.writer.state()).toMatchObject({cookieMutations: 0});
+      expect(fixture.writer.enabled).toBe(true);
+    });
+
+    // Invariant 17: the cookie set is only meaningful paired with the watermark
+    // it was folded to, and a truncation moves that watermark.
+    test('a reconcile that truncates leaves no stale cookies behind', () => {
+      using fixture = setup('change-log-writer-cookies-reconcile');
+
+      transaction(fixture.writer, '04', createTable);
+      expect(fixture.writer.state()).toMatchObject({
+        cookieRows: {tableMetadata: 1, backfilling: 1},
+      });
+
+      // The stream reconnects below the head, so the transaction that carried
+      // the cookies is truncated away.
+      fixture.writer.reconcile('02');
+
+      expect(fixture.cookies()).toEqual({tableMetadata: [], backfilling: []});
+      expect(fixture.writer.state()).toMatchObject({
+        cookieRows: {tableMetadata: 0, backfilling: 0},
+      });
+    });
   });
 });
