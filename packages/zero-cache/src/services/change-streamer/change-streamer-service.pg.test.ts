@@ -27,6 +27,10 @@ import type {UpstreamStatusMessage} from '../change-source/protocol/current/stat
 import {exitAfter} from '../life-cycle.ts';
 import type {LitestreamVersion} from '../litestream/metrics.ts';
 import {
+  EMPTY_COOKIE_SET,
+  readCookies,
+} from '../replicator/change-log-cookies.ts';
+import {
   CHANGE_LOG_DB_SCHEMA_VERSION,
   changeLogFileName,
   deleteChangeLogDB,
@@ -262,6 +266,9 @@ describe('change-streamer/service', () => {
       identity: {epoch: null, generation: replicaVersion, replicaID: null},
       resumeWatermark: stateVersion,
       nowMs: Date.now(),
+      // No backfill is in flight in any of these tests, which is the steady
+      // state: the cookie jar is empty and stays empty.
+      cookies: EMPTY_COOKIE_SET,
     };
   }
 
@@ -871,16 +878,15 @@ describe('change-streamer/service', () => {
   });
 
   /**
-   * The in-process form of truncate-above, driven by production machinery: a
-   * storer commit fails, the stream is re-established, and its resume watermark
-   * is behind the log's head. The writer inserts with a plain `INSERT`, so an
-   * un-truncated overlap is a constraint violation on the re-delivery.
+   * A streamer whose change source hands out two streams in turn, with the
+   * reconnect between them observable. This is the shape every in-process
+   * reconnect takes: the resume point is re-read from Postgres and the log is
+   * reconciled against it before the second stream starts.
    */
-  test('an in-process reconnect below the log head truncates rather than colliding', async () => {
+  async function startWithReconnect(logFile: DbFile) {
     await streamer.stop();
     await streamerDone;
 
-    const logFile = new DbFile('sqlite-change-log-reconnect');
     const first = Subscription.create<ChangeStreamMessage>();
     const second = Subscription.create<ChangeStreamMessage>();
     const {promise: reconnected, resolve: didReconnect} = resolver<true>();
@@ -929,19 +935,44 @@ describe('change-streamer/service', () => {
           },
         },
       },
-      // The real timer, because this test depends on the reconnect backoff
+      // The real timer, because these tests depend on the reconnect backoff
       // actually firing.
     );
     streamerDone = streamer.run();
 
-    const head = () => {
-      using changeLog = openChangeLogDB(lc, logFile.path, {readonly: true});
-      return changeLog
-        .prepare(
-          `SELECT max("watermark") AS "head" FROM "_zero.changeLogStream"`,
-        )
-        .get<{head: string | null}>().head;
+    return {
+      first,
+      second,
+      reconnected,
+      head: () => {
+        using changeLog = openChangeLogDB(lc, logFile.path, {readonly: true});
+        return readChangeLogHead(changeLog);
+      },
+      cookies: () => {
+        using changeLog = openChangeLogDB(lc, logFile.path, {readonly: true});
+        return readCookies(changeLog);
+      },
+      cleanup: async () => {
+        first.cancel();
+        second.cancel();
+        await streamer.stop();
+        await streamerDone;
+        deleteChangeLogDB(logFile.path);
+        logFile.delete();
+      },
     };
+  }
+
+  /**
+   * The in-process form of truncate-above, driven by production machinery: a
+   * storer commit fails, the stream is re-established, and its resume watermark
+   * is behind the log's head. The writer inserts with a plain `INSERT`, so an
+   * un-truncated overlap is a constraint violation on the re-delivery.
+   */
+  test('an in-process reconnect below the log head truncates rather than colliding', async () => {
+    const logFile = new DbFile('sqlite-change-log-reconnect');
+    const {first, second, reconnected, head, cleanup} =
+      await startWithReconnect(logFile);
 
     try {
       // Makes the storer's commit of '05' fail, so Postgres never records it
@@ -981,12 +1012,110 @@ describe('change-streamer/service', () => {
           .filter(m => m.includes('constraint')),
       ).toEqual([]);
     } finally {
-      first.cancel();
-      second.cancel();
-      await streamer.stop();
-      await streamerDone;
-      deleteChangeLogDB(logFile.path);
-      logFile.delete();
+      await cleanup();
+    }
+  });
+
+  /**
+   * The cookie half of the same reconnect (slice C2). The log folds the cookies
+   * of every schema change it appends, so a transaction it holds and Postgres
+   * does not leaves it holding a backfill Postgres never recorded — and
+   * deleting those rows does not undo the fold. The set that belongs to the
+   * resume watermark therefore replaces the log's wholesale, read from Postgres
+   * in the same snapshot as the watermark itself (invariants 15 and 17).
+   */
+  test('a reconnect replaces the log’s cookies with the resume point’s', async () => {
+    const logFile = new DbFile('sqlite-change-log-reconnect-cookies');
+    const {first, second, reconnected, head, cookies, cleanup} =
+      await startWithReconnect(logFile);
+
+    const foo = {
+      tag: 'create-table',
+      spec: {schema: 'my', name: 'foo', columns: {}},
+      metadata: {rowKey: {type: 'default', columns: ['id']}},
+      backfill: {a: {fooID: 1}},
+    } as const;
+    const bar = {
+      tag: 'create-table',
+      spec: {schema: 'my', name: 'bar', columns: {}},
+      backfill: {b: {barID: 2}},
+    } as const;
+
+    try {
+      // '03' commits in both stores: a table whose backfill is still in flight
+      // at the watermark the reconnect will resume from.
+      first.push(['begin', messages.begin(), {commitWatermark: '03'}]);
+      first.push(['data', foo]);
+      first.push(['commit', messages.commit(), {watermark: '03'}]);
+      await vi.waitFor(() => expect(head()).toBe('03'));
+      await vi.waitFor(async () =>
+        expect(
+          await sql`SELECT "lastWatermark" FROM "zoro_3/cdc"."replicationState"`.values(),
+        ).toEqual([['03']]),
+      );
+
+      // '05' reaches the log only: its commit row collides at `pos` 2, so the
+      // storer rolls the whole transaction back -- the schema-change row and
+      // the cookie DML it carried with it. The log's own write is synchronous
+      // and already done, cookies and all.
+      await sql`INSERT INTO "zoro_3/cdc"."changeLog" (watermark, pos, change)
+        VALUES ('05', 2, ${{conflicting: 'entry'}})`;
+      first.push(['begin', messages.begin(), {commitWatermark: '05'}]);
+      first.push(['data', bar]);
+      first.push(['commit', messages.commit(), {watermark: '05'}]);
+
+      expect(await reconnected).toBe(true);
+      // The truncation is what says the log had gone above '03', i.e. that it
+      // had folded `bar` into a jar Postgres knows nothing about.
+      expect(
+        logSink.messages
+          .map(([, , args]) => String(args[0]))
+          .filter(m => m.includes('truncated phantom transactions')),
+      ).toHaveLength(1);
+      expect(head()).toBe('03');
+
+      // Invariant 17: the set that belongs to '03', which is Postgres' -- not
+      // the one the log folded, and not an empty jar.
+      const atResumePoint = {
+        tableMetadata: [
+          {
+            schema: 'my',
+            table: 'foo',
+            metadata: {rowKey: {type: 'default', columns: ['id']}},
+          },
+        ],
+        backfilling: [
+          {schema: 'my', table: 'foo', column: 'a', backfill: {fooID: 1}},
+        ],
+      };
+      expect(cookies()).toEqual(atResumePoint);
+
+      // And the log folds onward from it: the resumed stream re-delivers '05',
+      // and both stores end up holding the same two tables.
+      await sql`DELETE FROM "zoro_3/cdc"."changeLog"
+                  WHERE watermark = '05' AND pos = 2`;
+      second.push(['begin', messages.begin(), {commitWatermark: '05'}]);
+      second.push(['data', bar]);
+      second.push(['commit', messages.commit(), {watermark: '05'}]);
+      await vi.waitFor(() => expect(head()).toBe('05'));
+
+      expect(cookies()).toEqual({
+        ...atResumePoint,
+        backfilling: [
+          {schema: 'my', table: 'bar', column: 'b', backfill: {barID: 2}},
+          ...atResumePoint.backfilling,
+        ],
+      });
+      expect(
+        await sql`SELECT "schema", "table", "column", "backfill"
+                    FROM "zoro_3/cdc"."backfilling"
+                    ORDER BY "schema", "table", "column"`.values(),
+      ).toEqual([
+        ['my', 'bar', 'b', {barID: 2}],
+        ['my', 'foo', 'a', {fooID: 1}],
+      ]);
+    } finally {
+      await cleanup();
     }
   });
 

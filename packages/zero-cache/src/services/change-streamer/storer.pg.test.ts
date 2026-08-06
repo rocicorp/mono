@@ -301,11 +301,29 @@ describe('change-streamer/storer', () => {
       await storer.allProcessed();
       expect(await storer.getStartStreamInitializationParameters())
         .toMatchInlineSnapshot(`
-        {
-          "backfillRequests": Result [],
-          "lastWatermark": "09",
-        }
-      `);
+          {
+            "backfillRequests": Result [],
+            "cookies": {
+              "backfilling": [],
+              "tableMetadata": [
+                {
+                  "metadata": {
+                    "rowKey": {
+                      "columns": [
+                        "a",
+                        "b",
+                      ],
+                      "type": "index",
+                    },
+                  },
+                  "schema": "my",
+                  "table": "foo",
+                },
+              ],
+            },
+            "lastWatermark": "09",
+          }
+        `);
 
       // Add a different table with backfill metadata only.
       storer.store('0a', ['begin', messages.begin(), {commitWatermark: '0a'}]);
@@ -356,6 +374,52 @@ describe('change-streamer/storer', () => {
                 },
               },
             ],
+            "cookies": {
+              "backfilling": [
+                {
+                  "backfill": {
+                    "barID": "zoo",
+                    "fooID": 987,
+                  },
+                  "column": "a",
+                  "schema": "your",
+                  "table": "bar",
+                },
+                {
+                  "backfill": {
+                    "barID": "ozz",
+                    "fooID": 843,
+                  },
+                  "column": "b",
+                  "schema": "your",
+                  "table": "bar",
+                },
+                {
+                  "backfill": {
+                    "barID": "zoz",
+                    "fooID": 777,
+                  },
+                  "column": "d",
+                  "schema": "your",
+                  "table": "bar",
+                },
+              ],
+              "tableMetadata": [
+                {
+                  "metadata": {
+                    "rowKey": {
+                      "columns": [
+                        "a",
+                        "b",
+                      ],
+                      "type": "index",
+                    },
+                  },
+                  "schema": "my",
+                  "table": "foo",
+                },
+              ],
+            },
             "lastWatermark": "0a",
           }
         `);
@@ -426,6 +490,61 @@ describe('change-streamer/storer', () => {
                 },
               },
             ],
+            "cookies": {
+              "backfilling": [
+                {
+                  "backfill": {
+                    "barID": "baz",
+                    "fooID": 123,
+                  },
+                  "column": "c",
+                  "schema": "my",
+                  "table": "foo",
+                },
+                {
+                  "backfill": {
+                    "barID": "zoo",
+                    "fooID": 987,
+                  },
+                  "column": "a",
+                  "schema": "your",
+                  "table": "bar",
+                },
+                {
+                  "backfill": {
+                    "barID": "ozz",
+                    "fooID": 843,
+                  },
+                  "column": "b",
+                  "schema": "your",
+                  "table": "bar",
+                },
+                {
+                  "backfill": {
+                    "barID": "zoz",
+                    "fooID": 777,
+                  },
+                  "column": "d",
+                  "schema": "your",
+                  "table": "bar",
+                },
+              ],
+              "tableMetadata": [
+                {
+                  "metadata": {
+                    "rowKey": {
+                      "columns": [
+                        "a",
+                        "b",
+                      ],
+                      "type": "index",
+                    },
+                  },
+                  "schema": "my",
+                  "table": "foo",
+                },
+              ],
+            },
             "lastWatermark": "0b",
           }
         `);
@@ -500,6 +619,69 @@ describe('change-streamer/storer', () => {
                 },
               },
             ],
+            "cookies": {
+              "backfilling": [
+                {
+                  "backfill": {
+                    "barID": "baz",
+                    "fooID": 123,
+                  },
+                  "column": "c",
+                  "schema": "my",
+                  "table": "foo",
+                },
+                {
+                  "backfill": {
+                    "barID": "boo",
+                    "fooID": 456,
+                  },
+                  "column": "d",
+                  "schema": "my",
+                  "table": "foo",
+                },
+                {
+                  "backfill": {
+                    "barID": "zoo",
+                    "fooID": 987,
+                  },
+                  "column": "a",
+                  "schema": "your",
+                  "table": "bar",
+                },
+                {
+                  "backfill": {
+                    "barID": "ozz",
+                    "fooID": 843,
+                  },
+                  "column": "b",
+                  "schema": "your",
+                  "table": "bar",
+                },
+                {
+                  "backfill": {
+                    "barID": "zoz",
+                    "fooID": 777,
+                  },
+                  "column": "d",
+                  "schema": "your",
+                  "table": "bar",
+                },
+              ],
+              "tableMetadata": [
+                {
+                  "metadata": {
+                    "rowKey": {
+                      "columns": [
+                        "b",
+                      ],
+                      "type": "default",
+                    },
+                  },
+                  "schema": "my",
+                  "table": "foo",
+                },
+              ],
+            },
             "lastWatermark": "0c",
           }
         `);
@@ -582,6 +764,81 @@ describe('change-streamer/storer', () => {
                 },
               },
             ],
+            "cookies": {
+              "backfilling": [
+                {
+                  "backfill": {
+                    "barID": "baz",
+                    "fooID": 123,
+                  },
+                  "column": "c",
+                  "schema": "my",
+                  "table": "foo",
+                },
+                {
+                  "backfill": {
+                    "barID": "boo",
+                    "fooID": 456,
+                  },
+                  "column": "d",
+                  "schema": "my",
+                  "table": "foo",
+                },
+                {
+                  "backfill": {
+                    "barID": "zoo",
+                    "fooID": 987,
+                  },
+                  "column": "a",
+                  "schema": "your",
+                  "table": "bar",
+                },
+                {
+                  "backfill": {
+                    "barID": "ozz",
+                    "fooID": 843,
+                  },
+                  "column": "b",
+                  "schema": "your",
+                  "table": "bar",
+                },
+                {
+                  "backfill": {
+                    "barID": "zoz",
+                    "fooID": 777,
+                  },
+                  "column": "d",
+                  "schema": "your",
+                  "table": "bar",
+                },
+              ],
+              "tableMetadata": [
+                {
+                  "metadata": {
+                    "rowKey": {
+                      "columns": [
+                        "b",
+                      ],
+                      "type": "default",
+                    },
+                  },
+                  "schema": "my",
+                  "table": "foo",
+                },
+                {
+                  "metadata": {
+                    "rowKey": {
+                      "columns": [
+                        "a",
+                      ],
+                      "type": "default",
+                    },
+                  },
+                  "schema": "your",
+                  "table": "bar",
+                },
+              ],
+            },
             "lastWatermark": "0d",
           }
         `);
@@ -666,6 +923,81 @@ describe('change-streamer/storer', () => {
                 },
               },
             ],
+            "cookies": {
+              "backfilling": [
+                {
+                  "backfill": {
+                    "barID": "baz",
+                    "fooID": 123,
+                  },
+                  "column": "c",
+                  "schema": "my",
+                  "table": "foo",
+                },
+                {
+                  "backfill": {
+                    "barID": "boo",
+                    "fooID": 456,
+                  },
+                  "column": "d",
+                  "schema": "my",
+                  "table": "foo",
+                },
+                {
+                  "backfill": {
+                    "barID": "zoo",
+                    "fooID": 987,
+                  },
+                  "column": "a",
+                  "schema": "your",
+                  "table": "bar",
+                },
+                {
+                  "backfill": {
+                    "barID": "zoz",
+                    "fooID": 777,
+                  },
+                  "column": "d",
+                  "schema": "your",
+                  "table": "bar",
+                },
+                {
+                  "backfill": {
+                    "barID": "ozz",
+                    "fooID": 843,
+                  },
+                  "column": "newName",
+                  "schema": "your",
+                  "table": "bar",
+                },
+              ],
+              "tableMetadata": [
+                {
+                  "metadata": {
+                    "rowKey": {
+                      "columns": [
+                        "b",
+                      ],
+                      "type": "default",
+                    },
+                  },
+                  "schema": "my",
+                  "table": "foo",
+                },
+                {
+                  "metadata": {
+                    "rowKey": {
+                      "columns": [
+                        "a",
+                      ],
+                      "type": "default",
+                    },
+                  },
+                  "schema": "your",
+                  "table": "bar",
+                },
+              ],
+            },
             "lastWatermark": "0e",
           }
         `);
@@ -739,6 +1071,72 @@ describe('change-streamer/storer', () => {
                 },
               },
             ],
+            "cookies": {
+              "backfilling": [
+                {
+                  "backfill": {
+                    "barID": "baz",
+                    "fooID": 123,
+                  },
+                  "column": "c",
+                  "schema": "my",
+                  "table": "foo",
+                },
+                {
+                  "backfill": {
+                    "barID": "boo",
+                    "fooID": 456,
+                  },
+                  "column": "d",
+                  "schema": "my",
+                  "table": "foo",
+                },
+                {
+                  "backfill": {
+                    "barID": "zoo",
+                    "fooID": 987,
+                  },
+                  "column": "a",
+                  "schema": "your",
+                  "table": "bar",
+                },
+                {
+                  "backfill": {
+                    "barID": "zoz",
+                    "fooID": 777,
+                  },
+                  "column": "d",
+                  "schema": "your",
+                  "table": "bar",
+                },
+              ],
+              "tableMetadata": [
+                {
+                  "metadata": {
+                    "rowKey": {
+                      "columns": [
+                        "b",
+                      ],
+                      "type": "default",
+                    },
+                  },
+                  "schema": "my",
+                  "table": "foo",
+                },
+                {
+                  "metadata": {
+                    "rowKey": {
+                      "columns": [
+                        "a",
+                      ],
+                      "type": "default",
+                    },
+                  },
+                  "schema": "your",
+                  "table": "bar",
+                },
+              ],
+            },
             "lastWatermark": "0f",
           }
         `);
@@ -794,6 +1192,54 @@ describe('change-streamer/storer', () => {
                 },
               },
             ],
+            "cookies": {
+              "backfilling": [
+                {
+                  "backfill": {
+                    "barID": "baz",
+                    "fooID": 123,
+                  },
+                  "column": "c",
+                  "schema": "my",
+                  "table": "foo",
+                },
+                {
+                  "backfill": {
+                    "barID": "boo",
+                    "fooID": 456,
+                  },
+                  "column": "d",
+                  "schema": "my",
+                  "table": "foo",
+                },
+              ],
+              "tableMetadata": [
+                {
+                  "metadata": {
+                    "rowKey": {
+                      "columns": [
+                        "b",
+                      ],
+                      "type": "default",
+                    },
+                  },
+                  "schema": "my",
+                  "table": "foo",
+                },
+                {
+                  "metadata": {
+                    "rowKey": {
+                      "columns": [
+                        "a",
+                      ],
+                      "type": "default",
+                    },
+                  },
+                  "schema": "your",
+                  "table": "bar",
+                },
+              ],
+            },
             "lastWatermark": "110",
           }
         `);
@@ -862,6 +1308,54 @@ describe('change-streamer/storer', () => {
                 },
               },
             ],
+            "cookies": {
+              "backfilling": [
+                {
+                  "backfill": {
+                    "barID": "baz",
+                    "fooID": 123,
+                  },
+                  "column": "c",
+                  "schema": "your",
+                  "table": "bloo",
+                },
+                {
+                  "backfill": {
+                    "barID": "boo",
+                    "fooID": 456,
+                  },
+                  "column": "deez",
+                  "schema": "your",
+                  "table": "bloo",
+                },
+              ],
+              "tableMetadata": [
+                {
+                  "metadata": {
+                    "rowKey": {
+                      "columns": [
+                        "a",
+                      ],
+                      "type": "default",
+                    },
+                  },
+                  "schema": "your",
+                  "table": "bar",
+                },
+                {
+                  "metadata": {
+                    "rowKey": {
+                      "columns": [
+                        "b",
+                      ],
+                      "type": "default",
+                    },
+                  },
+                  "schema": "your",
+                  "table": "bloo",
+                },
+              ],
+            },
             "lastWatermark": "111",
           }
         `);
@@ -886,6 +1380,23 @@ describe('change-streamer/storer', () => {
         .toMatchInlineSnapshot(`
           {
             "backfillRequests": Result [],
+            "cookies": {
+              "backfilling": [],
+              "tableMetadata": [
+                {
+                  "metadata": {
+                    "rowKey": {
+                      "columns": [
+                        "a",
+                      ],
+                      "type": "default",
+                    },
+                  },
+                  "schema": "your",
+                  "table": "bar",
+                },
+              ],
+            },
             "lastWatermark": "112",
           }
         `);

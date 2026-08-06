@@ -12,7 +12,9 @@ import {
   CHANGE_LOG_BACKFILLING_TABLE,
   ChangeLogCookieWriter,
   DROP_CHANGE_LOG_COOKIE_TABLES,
+  EMPTY_COOKIE_SET,
   readCookies,
+  type CookieSet,
 } from './change-log-cookies.ts';
 import {
   applyChangeLogPragmas,
@@ -45,6 +47,7 @@ const ANCHOR: ChangeLogAnchor = {
   identity: {epoch: null, generation: '01', replicaID: '1777575698286'},
   resumeWatermark: '05',
   nowMs: NOW_MS,
+  cookies: EMPTY_COOKIE_SET,
 };
 
 /** The main file and the sidecars `deleteLiteDB` removes. */
@@ -989,7 +992,8 @@ describe('replicator/change-log-db', () => {
 
   // The cookies are unversioned point-in-time state: they are only meaningful
   // paired with the watermark they were folded to. So they are created with the
-  // buffer, dropped with it, and invalidated by anything that moves the head.
+  // buffer, dropped with it, and — whenever reconciliation moves the head —
+  // replaced with the set the anchor carries for the resume watermark.
   describe('the cookie jar', () => {
     /** Puts a cookie in the jar without going through the writer. */
     function seedCookie(db: Database) {
@@ -1001,43 +1005,80 @@ describe('replicator/change-log-db', () => {
       });
     }
 
+    /**
+     * The cookie set Postgres holds at the resume watermark, in the shape
+     * `Storer.getStartStreamInitializationParameters()` returns it. It is
+     * deliberately disjoint from what {@link seedCookie} folds, so that
+     * "installed the anchor's" and "kept the log's own" cannot both pass.
+     */
+    const ANCHOR_COOKIES: CookieSet = {
+      tableMetadata: [
+        {schema: 'my', table: 'bar', metadata: {rowKey: {columns: ['barID']}}},
+      ],
+      backfilling: [
+        {schema: 'my', table: 'bar', column: 'z', backfill: {barID: 9}},
+      ],
+    };
+
     test('a reseed creates the cookie tables, empty', () => {
       using db = createReconciledLog();
 
-      expect(readCookies(db)).toEqual({tableMetadata: [], backfilling: []});
+      expect(readCookies(db)).toEqual(EMPTY_COOKIE_SET);
     });
 
-    test('a wipe drops the cookies with the buffer', () => {
+    test('a reseed installs the cookie set the anchor carries', () => {
+      using db = createReconciledLog(anchorAt('05', {cookies: ANCHOR_COOKIES}));
+
+      expect(readCookies(db)).toEqual(ANCHOR_COOKIES);
+    });
+
+    test('a wipe drops the log’s cookies and installs the anchor’s', () => {
       using db = createReconciledLog();
       seedCookie(db);
       appendTransaction(db, '09', '05', 1, 100);
 
       // An identity mismatch: this file belongs to a different replica, so its
-      // cookie set describes a different stream.
+      // cookie set describes a different stream and none of it survives.
       const anchor = anchorAt('05', {
         identity: {epoch: null, generation: '02', replicaID: 'other'},
+        cookies: ANCHOR_COOKIES,
       });
       expect(reconcileChangeLog(lc, db, anchor)).toMatchObject({
         action: 'reseeded',
         reason: 'identity-mismatch',
         cookiesStale: true,
       });
-      expect(readCookies(db)).toEqual({tableMetadata: [], backfilling: []});
+      expect(readCookies(db)).toEqual(ANCHOR_COOKIES);
     });
 
-    test('a truncation clears the cookies it can no longer vouch for', () => {
+    // Invariant 17. The truncated transactions could have carried a
+    // `create-table`, an `add-column`, or a `backfill-completed`, none of which
+    // deleting their rows rolls back — so the set is replaced rather than
+    // rewound, and the replacement is the one that belongs to the resume point.
+    test('a truncation replaces the cookies it can no longer vouch for', () => {
       using db = createReconciledLog();
       seedCookie(db);
-      // The truncated transaction could itself have carried a `create-table`,
-      // an `add-column`, or a `backfill-completed`, none of which truncating
-      // the rows rolls back.
       appendTransaction(db, '09', '05', 2, 100);
 
+      expect(
+        reconcileChangeLog(lc, db, anchorAt('05', {cookies: ANCHOR_COOKIES})),
+      ).toMatchObject({action: 'truncated', cookiesStale: true});
+      expect(readCookies(db)).toEqual(ANCHOR_COOKIES);
+    });
+
+    test('a truncation with an empty anchor set clears the jar', () => {
+      using db = createReconciledLog();
+      seedCookie(db);
+      appendTransaction(db, '09', '05', 2, 100);
+
+      // The normal case: no backfill is in flight at the resume watermark, so
+      // the set that belongs there is empty. It is still installed rather than
+      // assumed — an emptied jar and an untouched one are not the same thing.
       expect(reconcileChangeLog(lc, db, ANCHOR)).toMatchObject({
         action: 'truncated',
         cookiesStale: true,
       });
-      expect(readCookies(db)).toEqual({tableMetadata: [], backfilling: []});
+      expect(readCookies(db)).toEqual(EMPTY_COOKIE_SET);
     });
 
     test('a reconcile that changes nothing leaves the cookies alone', () => {
@@ -1045,7 +1086,11 @@ describe('replicator/change-log-db', () => {
       seedCookie(db);
       const before = readCookies(db);
 
-      expect(reconcileChangeLog(lc, db, ANCHOR)).toEqual({
+      // The head is already the resume watermark, so the log's own set is the
+      // one that belongs to it and the anchor's is not written over it.
+      expect(
+        reconcileChangeLog(lc, db, anchorAt('05', {cookies: ANCHOR_COOKIES})),
+      ).toEqual({
         action: 'none',
         head: ANCHOR.resumeWatermark,
         cookiesStale: false,
@@ -1063,27 +1108,51 @@ describe('replicator/change-log-db', () => {
         UPDATE "${CHANGE_LOG_META_TABLE}" SET "schemaVersion" = 2
       `);
 
-      expect(reconcileChangeLog(lc, db, ANCHOR)).toEqual({
+      const anchor = anchorAt('05', {cookies: ANCHOR_COOKIES});
+      expect(reconcileChangeLog(lc, db, anchor)).toEqual({
         action: 'reseeded',
         head: ANCHOR.resumeWatermark,
         reason: 'schema-mismatch',
         cookiesStale: true,
       });
-      expectSeededAt(db, ANCHOR);
-      expect(readCookies(db)).toEqual({tableMetadata: [], backfilling: []});
+      expectSeededAt(db, anchor);
+      // The tables the upgrade creates are not merely present: they hold the
+      // set the resumed stream is about to fold onto.
+      expect(readCookies(db)).toEqual(ANCHOR_COOKIES);
     });
 
     test('a current-version file missing a cookie table is rebuilt', () => {
       using db = createReconciledLog();
       db.exec(/*sql*/ `DROP TABLE "${CHANGE_LOG_BACKFILLING_TABLE}"`);
 
-      expect(reconcileChangeLog(lc, db, ANCHOR)).toEqual({
+      expect(
+        reconcileChangeLog(lc, db, anchorAt('05', {cookies: ANCHOR_COOKIES})),
+      ).toEqual({
         action: 'reseeded',
         head: ANCHOR.resumeWatermark,
         reason: 'created',
         cookiesStale: true,
       });
-      expect(readCookies(db)).toEqual({tableMetadata: [], backfilling: []});
+      expect(readCookies(db)).toEqual(ANCHOR_COOKIES);
+    });
+
+    // The whole reconciliation is one transaction, so a failure cannot leave
+    // the log's head at one position and its cookie set at another.
+    test('a failed reconcile rolls the cookie replacement back with it', () => {
+      using db = createReconciledLog();
+      seedCookie(db);
+      const before = readCookies(db);
+      appendTransaction(db, '09', '05', 2, 100);
+      db.exec(/*sql*/ `
+        CREATE TRIGGER "no_deletes" BEFORE DELETE ON "${CHANGE_LOG_STREAM_TABLE}"
+        BEGIN SELECT RAISE(ABORT, 'boom'); END;
+      `);
+
+      expect(() =>
+        reconcileChangeLog(lc, db, anchorAt('05', {cookies: ANCHOR_COOKIES})),
+      ).toThrow('boom');
+      expect(readChangeLogHead(db)).toBe('09');
+      expect(readCookies(db)).toEqual(before);
     });
   });
 });

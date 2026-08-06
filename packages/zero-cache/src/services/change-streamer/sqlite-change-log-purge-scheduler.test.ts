@@ -9,6 +9,7 @@ import type {
   ChangeStreamData,
   Data,
 } from '../change-source/protocol/current/downstream.ts';
+import {EMPTY_COOKIE_SET} from '../replicator/change-log-cookies.ts';
 import {
   CHANGE_LOG_STREAM_TABLE,
   changeLogFileName,
@@ -140,6 +141,7 @@ function setup(
     identity: {epoch: null, generation: '01', replicaID: null},
     resumeWatermark: opts.resumeWatermark ?? SEED_WATERMARK,
     nowMs: SEED_WRITE_TIME_MS,
+    cookies: EMPTY_COOKIE_SET,
   };
   const {db} = openChangeLogDBForWriting(lc, file.path, anchor);
 

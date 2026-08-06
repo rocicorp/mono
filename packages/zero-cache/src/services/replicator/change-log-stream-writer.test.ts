@@ -28,6 +28,7 @@ const ANCHOR: ChangeLogAnchor = {
   identity: {epoch: null, generation: '01', replicaID: null},
   resumeWatermark: '02',
   nowMs: 1_000,
+  cookies: EMPTY_COOKIE_SET,
 };
 
 const files: DbFile[] = [];

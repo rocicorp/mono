@@ -12,6 +12,7 @@ import type {
 import {serializeChangeStreamData} from '../change-streamer/change-log-codec.ts';
 import type {WatermarkedChange} from '../change-streamer/change-streamer.ts';
 import {SQLiteChangeLogReader} from '../change-streamer/sqlite-change-log-reader.ts';
+import {EMPTY_COOKIE_SET} from './change-log-cookies.ts';
 import {
   CHANGE_LOG_STREAM_TABLE,
   CHANGE_LOG_STREAM_WRITE_TIME_INDEX,
@@ -44,6 +45,7 @@ const ANCHOR: ChangeLogAnchor = {
   identity: {epoch: null, generation: '01', replicaID: null},
   resumeWatermark: SEED_WATERMARK,
   nowMs: SEED_WRITE_TIME_MS,
+  cookies: EMPTY_COOKIE_SET,
 };
 
 /** A floor above every watermark any fixture writes. */
