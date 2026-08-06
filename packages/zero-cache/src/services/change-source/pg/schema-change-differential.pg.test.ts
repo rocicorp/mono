@@ -8,6 +8,7 @@ import {canonicalReplicaState} from '../../../test/replica-state.ts';
 import type {PostgresDB} from '../../../types/pg.ts';
 import type {Source} from '../../../types/streams.ts';
 import {createChangeProcessor} from '../../replicator/test-utils.ts';
+import {isSchemaChange} from '../protocol/current/data.ts';
 import type {ChangeStreamMessage} from '../protocol/current/downstream.ts';
 import {initializePostgresChangeSource} from './change-source.ts';
 import {initialSync} from './initial-sync.ts';
@@ -93,16 +94,16 @@ async function applyNextTransaction(
   processor: ReturnType<typeof createChangeProcessor>,
   changes: Source<ChangeStreamMessage>,
 ) {
-  let sawData = false;
+  let sawSchemaChange = false;
   for await (const change of changes) {
     const [type] = change;
     if (type === 'control' || type === 'status') {
       continue;
     }
     processor.processMessage(lc, change);
-    if (type === 'data') {
-      sawData = true;
-    } else if (type === 'commit' && sawData) {
+    if (type === 'data' && isSchemaChange(change[1])) {
+      sawSchemaChange = true;
+    } else if (type === 'commit' && sawSchemaChange) {
       return;
     }
   }

@@ -229,6 +229,24 @@ function getIncrementalMigrations(shard: ShardConfig): IncrementalMigrationMap {
         `;
       },
     },
+
+    // v25 (1.10.0):
+    // - adds the "replicas" table to the metadata publication to guarantee
+    //   that the change-log and backups advance past the consistent point of
+    //   new replication slots.
+    25: {
+      migrateSchema: async (_, sql) => {
+        const {appID, shardNum} = shard;
+        const metadataPublication = metadataPublicationName(appID, shardNum);
+        await sql`
+          ALTER PUBLICATION ${sql(metadataPublication)}
+            ADD TABLE ${sql(upstreamSchema(shard))}.replicas;`;
+
+        // Workaround Supabase's lack of ALTER PUBLICATION event triggers
+        await sql`
+          SELECT ${sql(upstreamSchema(shard))}.update_schemas();`;
+      },
+    },
   };
 }
 
