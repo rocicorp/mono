@@ -27,7 +27,11 @@ import {
   type CookieSet,
   type TableMetadataCookie,
 } from '../replicator/change-log-cookies.ts';
-import {CREATE_CHANGE_LOG_STREAM_SCHEMA} from '../replicator/change-log-db.ts';
+import {
+  CREATE_CHANGE_LOG_STREAM_SCHEMA,
+  reconcileChangeLog,
+  type ChangeLogAnchor,
+} from '../replicator/change-log-db.ts';
 import {ChangeLogStreamWriter} from '../replicator/change-log-stream-writer.ts';
 import {serializeChangeStreamData} from './change-log-codec.ts';
 import {ensureReplicationConfig, setupCDCTables} from './schema/tables.ts';
@@ -418,6 +422,125 @@ describe('change-streamer/change-log cookie parity', () => {
       backfilling: [
         {schema: 'my', table: 'foo', column: 'a', backfill: {fooID: 1}},
       ],
+    });
+  });
+
+  /**
+   * Slice C2. Everything above proves the two stores fold alike; this proves
+   * that the log can be *handed* the Postgres set at a resume point and carry
+   * on folding from it — which is what invariant 17 requires of every
+   * reconciliation that moves the head, and what the C5 flip inverts.
+   */
+  describe('reseeding the log at the resume point', () => {
+    function anchorFrom({
+      lastWatermark,
+      cookies,
+    }: {
+      lastWatermark: string;
+      cookies: CookieSet;
+    }): ChangeLogAnchor {
+      return {
+        identity: {epoch: null, generation: REPLICA_VERSION, replicaID: null},
+        resumeWatermark: lastWatermark,
+        nowMs: 1_700_000_000_000,
+        cookies,
+      };
+    }
+
+    /** The anchor a stream connection would reconcile the log against. */
+    async function anchor(): Promise<ChangeLogAnchor> {
+      return anchorFrom(await storer.getStartStreamInitializationParameters());
+    }
+
+    test('a reseed lands the cookie set Postgres holds', async () => {
+      await transaction({
+        tag: 'create-table',
+        spec: {schema: 'my', name: 'foo', columns: {}},
+        metadata: {rowKey: {type: 'index', columns: ['a', 'b']}},
+        backfill: {a: {fooID: 987}, b: {fooID: 843}},
+      });
+      // A table whose metadata `backfillRequests` drops, since it has no
+      // in-flight backfill (§3.7). The raw cookie set is what carries it, and
+      // is why the reseed reads the tables rather than the request list.
+      await transaction({
+        tag: 'create-table',
+        spec: {schema: 'your', name: 'bar', columns: {}},
+        metadata: {rowKey: {type: 'default', columns: ['id']}},
+      });
+
+      // A log with no meta row of its own: what a task that has just restored a
+      // replica, or upgraded past a schema version, brings to its first stream
+      // connection. It is wiped and reseeded at the resume watermark.
+      const params = await storer.getStartStreamInitializationParameters();
+      expect(
+        reconcileChangeLog(lc, changeLog, anchorFrom(params)),
+      ).toMatchObject({
+        action: 'reseeded',
+        reason: 'created',
+        cookiesStale: true,
+      });
+
+      expect(readCookies(changeLog)).toEqual(await pgCookies());
+      // Not the same thing as the request list, and strictly more than it.
+      expect(params.backfillRequests).toHaveLength(1);
+      expect(readCookies(changeLog).tableMetadata).toHaveLength(2);
+    });
+
+    test('a truncation replaces the set rather than keeping its own', async () => {
+      await transaction({
+        tag: 'create-table',
+        spec: {schema: 'my', name: 'foo', columns: {}},
+        backfill: {a: {fooID: 1}},
+      });
+      // The resume point of the connection that is about to reconnect, captured
+      // before the log runs ahead of it.
+      const resumePoint = await anchor();
+      reconcileChangeLog(lc, changeLog, resumePoint);
+
+      // The log commits before anything that advances the resume watermark, so
+      // it can hold a transaction Postgres' watermark has not reached -- and
+      // that transaction's cookies with it.
+      await transaction({
+        tag: 'add-column',
+        table: {schema: 'my', name: 'foo'},
+        column: {name: 'b', spec: {pos: 2, dataType: 'text'}},
+        backfill: {fooID: 2},
+      });
+      expect(readCookies(changeLog).backfilling).toHaveLength(2);
+
+      // The reconnect truncates it away. Rolling the cookies back is not
+      // possible -- an `add-column`'s backfill is not undone by deleting the
+      // row that carried it -- so the set that belongs to the resume watermark
+      // replaces it wholesale.
+      expect(reconcileChangeLog(lc, changeLog, resumePoint)).toMatchObject({
+        action: 'truncated',
+        cookiesStale: true,
+      });
+      expect(readCookies(changeLog)).toEqual(resumePoint.cookies);
+      expect(readCookies(changeLog).backfilling).toEqual([
+        {schema: 'my', table: 'foo', column: 'a', backfill: {fooID: 1}},
+      ]);
+    });
+
+    test('the log folds onward from the set it was reseeded with', async () => {
+      await transaction({
+        tag: 'create-table',
+        spec: {schema: 'my', name: 'foo', columns: {}},
+        backfill: {a: {fooID: 1}, b: {fooID: 2}},
+      });
+      reconcileChangeLog(lc, changeLog, await anchor());
+
+      // The completion arrives on the resumed stream, against cookies this log
+      // never folded for itself. Both stores land in the same place, which is
+      // the property the whole reseed exists to preserve.
+      await transaction({
+        tag: 'backfill-completed',
+        relation: {schema: 'my', name: 'foo', rowKey: {columns: ['a']}},
+        columns: ['b'],
+        watermark: '09',
+      });
+
+      await expectCookies({tableMetadata: [], backfilling: []});
     });
   });
 

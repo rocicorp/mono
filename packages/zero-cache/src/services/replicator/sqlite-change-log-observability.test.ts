@@ -10,6 +10,7 @@ import {
   serializeChangeStreamData,
 } from '../change-streamer/change-log-codec.ts';
 import {ChangeLogTransactionHasher} from '../change-streamer/change-log-transaction-hash.ts';
+import {EMPTY_COOKIE_SET} from './change-log-cookies.ts';
 import {
   CHANGE_LOG_DB_SCHEMA_VERSION,
   CHANGE_LOG_META_TABLE,
@@ -36,6 +37,7 @@ const ANCHOR: ChangeLogAnchor = {
   identity: {epoch: null, generation: '01', replicaID: '1777575698286'},
   resumeWatermark: '02',
   nowMs: 1_700_000_000_000,
+  cookies: EMPTY_COOKIE_SET,
 };
 
 /**

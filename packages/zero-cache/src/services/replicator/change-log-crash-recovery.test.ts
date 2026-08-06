@@ -32,6 +32,7 @@ import {DbFile} from '../../test/lite.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
 import {serializeChangeStreamData} from '../change-streamer/change-log-codec.ts';
 import {SQLiteChangeLogWriter} from '../change-streamer/sqlite-change-log-writer.ts';
+import {EMPTY_COOKIE_SET} from './change-log-cookies.ts';
 import {
   CHANGE_LOG_STREAM_TABLE,
   deleteChangeLogDB,
@@ -114,7 +115,12 @@ class Session {
   }
 
   reconcile() {
-    this.writer.reconcile(this.#resumeWatermark);
+    // No backfill is in flight in any of these cases: what is under test is the
+    // buffer's commit ordering, and the cookie set rides the same transaction.
+    this.writer.reconcile({
+      resumeWatermark: this.#resumeWatermark,
+      cookies: EMPTY_COOKIE_SET,
+    });
   }
 
   write(change: ChangeStreamData) {
@@ -447,7 +453,10 @@ describe('replicator/change-log crash recovery', () => {
 
       // The stream is re-established without a restart. Its resume watermark is
       // re-read, is behind the log's head, and reconciliation truncates '05'.
-      session.writer.reconcile('03');
+      session.writer.reconcile({
+        resumeWatermark: '03',
+        cookies: EMPTY_COOKIE_SET,
+      });
       expect(readChangeLogHead(observer)).toBe('03');
 
       // The resumed stream re-delivers '05' at the same watermark.

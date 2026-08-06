@@ -10,6 +10,7 @@ import type {
   ChangeStreamData,
   Data,
 } from '../change-source/protocol/current/downstream.ts';
+import {EMPTY_COOKIE_SET} from '../replicator/change-log-cookies.ts';
 import {
   CHANGE_LOG_STREAM_TABLE,
   changeLogFileName,
@@ -46,6 +47,7 @@ const ANCHOR: ChangeLogAnchor = {
   identity: {epoch: null, generation: '01', replicaID: null},
   resumeWatermark: '02',
   nowMs: 1234567890,
+  cookies: EMPTY_COOKIE_SET,
 };
 
 /** The replica path whose `-change-log` sibling the fixtures build. */

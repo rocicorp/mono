@@ -4,7 +4,11 @@ import {afterEach, describe, expect, test} from 'vitest';
 import {TestLogSink} from '../../../../shared/src/logging-test-utils.ts';
 import {DbFile} from '../../test/lite.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
-import {readCookies, type CookieSet} from '../replicator/change-log-cookies.ts';
+import {
+  EMPTY_COOKIE_SET,
+  readCookies,
+  type CookieSet,
+} from '../replicator/change-log-cookies.ts';
 import {
   CHANGE_LOG_STREAM_TABLE,
   changeLogFileName,
@@ -35,6 +39,17 @@ afterEach(() => {
   }
 });
 
+/**
+ * What the stream loop hands the writer: the watermark it resumes from and the
+ * cookie set that belongs to it, both read from Postgres in one snapshot.
+ */
+function resumeAt(
+  resumeWatermark: string,
+  cookies: CookieSet = EMPTY_COOKIE_SET,
+) {
+  return {resumeWatermark, cookies};
+}
+
 function setup(name: string, resumeWatermark = '02') {
   const sink = new TestLogSink();
   const lc = new LogContext('debug', undefined, sink);
@@ -49,7 +64,7 @@ function setup(name: string, resumeWatermark = '02') {
     onDisabled: () => disabled++,
     now: () => 1_700_000_000_000,
   });
-  writer.reconcile(resumeWatermark);
+  writer.reconcile(resumeAt(resumeWatermark));
   return {
     lc,
     sink,
@@ -164,7 +179,7 @@ describe('change-streamer/sqlite-change-log-writer', () => {
     // Replication continues: further writes are no-ops rather than throws, and
     // nothing recreates the file.
     expect(() => transaction(fixture.writer, '06')).not.toThrow();
-    fixture.writer.reconcile('06');
+    fixture.writer.reconcile(resumeAt('06'));
     expect(existsSync(changeLogFileName(fixture.file.path))).toBe(false);
     expect(fixture.writer.enabled).toBe(false);
   });
@@ -216,7 +231,7 @@ describe('change-streamer/sqlite-change-log-writer', () => {
 
     // The reconnected stream reconciles and re-delivers as if the interrupted
     // transaction had never arrived.
-    fixture.writer.reconcile('02');
+    fixture.writer.reconcile(resumeAt('02'));
     transaction(fixture.writer, '04');
     expect(fixture.head()).toBe('04');
     expect(fixture.commits).toEqual(['04']);
@@ -247,7 +262,7 @@ describe('change-streamer/sqlite-change-log-writer', () => {
       identity: IDENTITY,
     });
 
-    expect(() => writer.reconcile('02')).not.toThrow();
+    expect(() => writer.reconcile(resumeAt('02'))).not.toThrow();
     expect(writer.enabled).toBe(false);
     expect(
       sink.messages
@@ -271,7 +286,7 @@ describe('change-streamer/sqlite-change-log-writer', () => {
     expect(fixture.head()).toBe('06');
 
     // The stream reconnects and resumes below the head.
-    fixture.writer.reconcile('04');
+    fixture.writer.reconcile(resumeAt('04'));
     expect(fixture.head()).toBe('04');
 
     transaction(fixture.writer, '06', [
@@ -343,9 +358,30 @@ describe('change-streamer/sqlite-change-log-writer', () => {
       expect(fixture.writer.enabled).toBe(true);
     });
 
+    /**
+     * What Postgres holds at the watermark a reconnect resumes from: a backfill
+     * that is still in flight there, on a table the log's own head has never
+     * heard of. Deliberately disjoint from what {@link createTable} folds, so
+     * that "installed the anchor's set" and "kept its own" cannot both pass.
+     */
+    const pgCookies: CookieSet = {
+      tableMetadata: [
+        {
+          schema: 'my',
+          table: 'bar',
+          metadata: {rowKey: {columns: ['barID']}},
+        },
+      ],
+      backfilling: [
+        {schema: 'my', table: 'bar', column: 'z', backfill: {barID: 9}},
+      ],
+    };
+
     // Invariant 17: the cookie set is only meaningful paired with the watermark
-    // it was folded to, and a truncation moves that watermark.
-    test('a reconcile that truncates leaves no stale cookies behind', () => {
+    // it was folded to, and a truncation moves that watermark. What the log
+    // folded above the resume point is not rolled back by deleting those rows,
+    // so it is replaced wholesale rather than rewound.
+    test('a reconcile that truncates installs the resume point’s cookies', () => {
       using fixture = setup('change-log-writer-cookies-reconcile');
 
       transaction(fixture.writer, '04', createTable);
@@ -354,13 +390,59 @@ describe('change-streamer/sqlite-change-log-writer', () => {
       });
 
       // The stream reconnects below the head, so the transaction that carried
-      // the cookies is truncated away.
-      fixture.writer.reconcile('02');
+      // the cookies is truncated away and Postgres' set takes its place.
+      fixture.writer.reconcile(resumeAt('02', pgCookies));
 
-      expect(fixture.cookies()).toEqual({tableMetadata: [], backfilling: []});
+      expect(fixture.cookies()).toEqual(pgCookies);
       expect(fixture.writer.state()).toMatchObject({
-        cookieRows: {tableMetadata: 0, backfilling: 0},
+        cookieRows: {tableMetadata: 1, backfilling: 1},
       });
+
+      // And the log keeps folding onto it rather than from scratch: 'my.foo'
+      // is re-delivered by the resumed stream, 'my.bar' is still backfilling.
+      transaction(fixture.writer, '04', createTable);
+      expect(fixture.cookies()).toEqual({
+        tableMetadata: [
+          ...pgCookies.tableMetadata,
+          {schema: 'my', table: 'foo', metadata: {rowKey: {columns: ['id']}}},
+        ],
+        backfilling: [
+          ...pgCookies.backfilling,
+          {schema: 'my', table: 'foo', column: 'a', backfill: {fooID: 1}},
+        ],
+      });
+    });
+
+    // The other half of invariant 17: a wipe discards the cookie tables with
+    // the buffer, so the anchor's set is all that is left to seed them with.
+    test('a reconcile that reseeds installs the resume point’s cookies', () => {
+      using fixture = setup('change-log-writer-cookies-reseed');
+
+      transaction(fixture.writer, '04', createTable);
+
+      // A resume watermark the log neither holds nor can be truncated to, i.e.
+      // what a restored replica leaves behind. The log is wiped and reseeded.
+      fixture.writer.reconcile(resumeAt('08', pgCookies));
+
+      expect(fixture.head()).toBe('08');
+      expect(fixture.cookies()).toEqual(pgCookies);
+      expect(fixture.writer.state()).toMatchObject({
+        cookieRows: {tableMetadata: 1, backfilling: 1},
+      });
+    });
+
+    test('a reconcile that changes nothing leaves the cookies alone', () => {
+      using fixture = setup('change-log-writer-cookies-noop');
+
+      transaction(fixture.writer, '04', createTable);
+      const folded = fixture.cookies();
+
+      // The anchor's set is Postgres' as of '04', which the log has already
+      // folded for itself. Nothing moved, so nothing is replaced -- and the
+      // disjoint `pgCookies` proves it is not written on this path.
+      fixture.writer.reconcile(resumeAt('04', pgCookies));
+
+      expect(fixture.cookies()).toEqual(folded);
     });
   });
 });

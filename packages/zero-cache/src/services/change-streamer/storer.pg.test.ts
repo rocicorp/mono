@@ -29,6 +29,42 @@ const opts: TuningOptions = {
 
 const json = BigIntJSON.stringify;
 
+/**
+ * The initialization parameters as one line per row.
+ *
+ * Lossless -- every field of every row is here -- but flat, because the cookie
+ * set is cumulative and what each step below is actually asserting is its delta
+ * from the one before. Printed as objects, every step re-prints everything its
+ * predecessors established, which is most of the snapshot and none of the
+ * signal. The `metadata: null` step keeps its object snapshot, so the exact
+ * shape this flattens is still pinned somewhere.
+ */
+function summarize({
+  lastWatermark,
+  backfillRequests,
+  cookies,
+}: Awaited<
+  ReturnType<Storer['getStartStreamInitializationParameters']>
+>): string {
+  return [
+    `lastWatermark ${lastWatermark}`,
+    'tableMetadata',
+    ...cookies.tableMetadata.map(
+      m => `  ${m.schema}.${m.table} ${json(m.metadata)}`,
+    ),
+    'backfilling',
+    ...cookies.backfilling.map(
+      b => `  ${b.schema}.${b.table}.${b.column} ${json(b.backfill)}`,
+    ),
+    'backfillRequests',
+    ...backfillRequests.map(
+      r =>
+        `  ${r.table.schema}.${r.table.name} metadata=${json(r.table.metadata)} ` +
+        `columns=${json(r.columns)}`,
+    ),
+  ].join('\n');
+}
+
 describe('change-streamer/storer', () => {
   const lc = createSilentLogContext();
   let db: PostgresDB;
@@ -299,12 +335,13 @@ describe('change-streamer/storer', () => {
 
       // No backfillRequests should be present.
       await storer.allProcessed();
-      expect(await storer.getStartStreamInitializationParameters())
+      expect(summarize(await storer.getStartStreamInitializationParameters()))
         .toMatchInlineSnapshot(`
-        {
-          "backfillRequests": Result [],
-          "lastWatermark": "09",
-        }
+        "lastWatermark 09
+        tableMetadata
+          my.foo {"rowKey":{"type":"index","columns":["a","b"]}}
+        backfilling
+        backfillRequests"
       `);
 
       // Add a different table with backfill metadata only.
@@ -356,6 +393,52 @@ describe('change-streamer/storer', () => {
                 },
               },
             ],
+            "cookies": {
+              "backfilling": [
+                {
+                  "backfill": {
+                    "barID": "zoo",
+                    "fooID": 987,
+                  },
+                  "column": "a",
+                  "schema": "your",
+                  "table": "bar",
+                },
+                {
+                  "backfill": {
+                    "barID": "ozz",
+                    "fooID": 843,
+                  },
+                  "column": "b",
+                  "schema": "your",
+                  "table": "bar",
+                },
+                {
+                  "backfill": {
+                    "barID": "zoz",
+                    "fooID": 777,
+                  },
+                  "column": "d",
+                  "schema": "your",
+                  "table": "bar",
+                },
+              ],
+              "tableMetadata": [
+                {
+                  "metadata": {
+                    "rowKey": {
+                      "columns": [
+                        "a",
+                        "b",
+                      ],
+                      "type": "index",
+                    },
+                  },
+                  "schema": "my",
+                  "table": "foo",
+                },
+              ],
+            },
             "lastWatermark": "0a",
           }
         `);
@@ -379,56 +462,20 @@ describe('change-streamer/storer', () => {
       // Now the original table shows up in the backfillRequests, with its
       // table metadata.
       await storer.allProcessed();
-      expect(await storer.getStartStreamInitializationParameters())
+      expect(summarize(await storer.getStartStreamInitializationParameters()))
         .toMatchInlineSnapshot(`
-          {
-            "backfillRequests": Result [
-              {
-                "columns": {
-                  "a": {
-                    "barID": "zoo",
-                    "fooID": 987,
-                  },
-                  "b": {
-                    "barID": "ozz",
-                    "fooID": 843,
-                  },
-                  "d": {
-                    "barID": "zoz",
-                    "fooID": 777,
-                  },
-                },
-                "table": {
-                  "metadata": null,
-                  "name": "bar",
-                  "schema": "your",
-                },
-              },
-              {
-                "columns": {
-                  "c": {
-                    "barID": "baz",
-                    "fooID": 123,
-                  },
-                },
-                "table": {
-                  "metadata": {
-                    "rowKey": {
-                      "columns": [
-                        "a",
-                        "b",
-                      ],
-                      "type": "index",
-                    },
-                  },
-                  "name": "foo",
-                  "schema": "my",
-                },
-              },
-            ],
-            "lastWatermark": "0b",
-          }
-        `);
+        "lastWatermark 0b
+        tableMetadata
+          my.foo {"rowKey":{"type":"index","columns":["a","b"]}}
+        backfilling
+          my.foo.c {"barID":"baz","fooID":123}
+          your.bar.a {"barID":"zoo","fooID":987}
+          your.bar.b {"barID":"ozz","fooID":843}
+          your.bar.d {"barID":"zoz","fooID":777}
+        backfillRequests
+          your.bar metadata=null columns={"a":{"barID":"zoo","fooID":987},"b":{"barID":"ozz","fooID":843},"d":{"barID":"zoz","fooID":777}}
+          my.foo metadata={"rowKey":{"type":"index","columns":["a","b"]}} columns={"c":{"barID":"baz","fooID":123}}"
+      `);
 
       // Add another column to the same table with new table metadata.
       storer.store('0c', ['begin', messages.begin(), {commitWatermark: '0b'}]);
@@ -450,59 +497,21 @@ describe('change-streamer/storer', () => {
       storer.store('0c', ['commit', messages.commit(), {watermark: '0c'}]);
 
       await storer.allProcessed();
-      expect(await storer.getStartStreamInitializationParameters())
+      expect(summarize(await storer.getStartStreamInitializationParameters()))
         .toMatchInlineSnapshot(`
-          {
-            "backfillRequests": Result [
-              {
-                "columns": {
-                  "c": {
-                    "barID": "baz",
-                    "fooID": 123,
-                  },
-                  "d": {
-                    "barID": "boo",
-                    "fooID": 456,
-                  },
-                },
-                "table": {
-                  "metadata": {
-                    "rowKey": {
-                      "columns": [
-                        "b",
-                      ],
-                      "type": "default",
-                    },
-                  },
-                  "name": "foo",
-                  "schema": "my",
-                },
-              },
-              {
-                "columns": {
-                  "a": {
-                    "barID": "zoo",
-                    "fooID": 987,
-                  },
-                  "b": {
-                    "barID": "ozz",
-                    "fooID": 843,
-                  },
-                  "d": {
-                    "barID": "zoz",
-                    "fooID": 777,
-                  },
-                },
-                "table": {
-                  "metadata": null,
-                  "name": "bar",
-                  "schema": "your",
-                },
-              },
-            ],
-            "lastWatermark": "0c",
-          }
-        `);
+        "lastWatermark 0c
+        tableMetadata
+          my.foo {"rowKey":{"type":"default","columns":["b"]}}
+        backfilling
+          my.foo.c {"barID":"baz","fooID":123}
+          my.foo.d {"barID":"boo","fooID":456}
+          your.bar.a {"barID":"zoo","fooID":987}
+          your.bar.b {"barID":"ozz","fooID":843}
+          your.bar.d {"barID":"zoz","fooID":777}
+        backfillRequests
+          my.foo metadata={"rowKey":{"type":"default","columns":["b"]}} columns={"c":{"barID":"baz","fooID":123},"d":{"barID":"boo","fooID":456}}
+          your.bar metadata=null columns={"a":{"barID":"zoo","fooID":987},"b":{"barID":"ozz","fooID":843},"d":{"barID":"zoz","fooID":777}}"
+      `);
 
       // Update the table metadata of the new table.
       storer.store('0d', ['begin', messages.begin(), {commitWatermark: '0c'}]);
@@ -525,66 +534,22 @@ describe('change-streamer/storer', () => {
       storer.store('0d', ['commit', messages.commit(), {watermark: '0d'}]);
 
       await storer.allProcessed();
-      expect(await storer.getStartStreamInitializationParameters())
+      expect(summarize(await storer.getStartStreamInitializationParameters()))
         .toMatchInlineSnapshot(`
-          {
-            "backfillRequests": Result [
-              {
-                "columns": {
-                  "c": {
-                    "barID": "baz",
-                    "fooID": 123,
-                  },
-                  "d": {
-                    "barID": "boo",
-                    "fooID": 456,
-                  },
-                },
-                "table": {
-                  "metadata": {
-                    "rowKey": {
-                      "columns": [
-                        "b",
-                      ],
-                      "type": "default",
-                    },
-                  },
-                  "name": "foo",
-                  "schema": "my",
-                },
-              },
-              {
-                "columns": {
-                  "a": {
-                    "barID": "zoo",
-                    "fooID": 987,
-                  },
-                  "b": {
-                    "barID": "ozz",
-                    "fooID": 843,
-                  },
-                  "d": {
-                    "barID": "zoz",
-                    "fooID": 777,
-                  },
-                },
-                "table": {
-                  "metadata": {
-                    "rowKey": {
-                      "columns": [
-                        "a",
-                      ],
-                      "type": "default",
-                    },
-                  },
-                  "name": "bar",
-                  "schema": "your",
-                },
-              },
-            ],
-            "lastWatermark": "0d",
-          }
-        `);
+        "lastWatermark 0d
+        tableMetadata
+          my.foo {"rowKey":{"type":"default","columns":["b"]}}
+          your.bar {"rowKey":{"type":"default","columns":["a"]}}
+        backfilling
+          my.foo.c {"barID":"baz","fooID":123}
+          my.foo.d {"barID":"boo","fooID":456}
+          your.bar.a {"barID":"zoo","fooID":987}
+          your.bar.b {"barID":"ozz","fooID":843}
+          your.bar.d {"barID":"zoz","fooID":777}
+        backfillRequests
+          my.foo metadata={"rowKey":{"type":"default","columns":["b"]}} columns={"c":{"barID":"baz","fooID":123},"d":{"barID":"boo","fooID":456}}
+          your.bar metadata={"rowKey":{"type":"default","columns":["a"]}} columns={"a":{"barID":"zoo","fooID":987},"b":{"barID":"ozz","fooID":843},"d":{"barID":"zoz","fooID":777}}"
+      `);
 
       // Rename one of the backfilling columns
       storer.store('0e', ['begin', messages.begin(), {commitWatermark: '0e'}]);
@@ -609,66 +574,22 @@ describe('change-streamer/storer', () => {
       storer.store('0e', ['commit', messages.commit(), {watermark: '0e'}]);
 
       await storer.allProcessed();
-      expect(await storer.getStartStreamInitializationParameters())
+      expect(summarize(await storer.getStartStreamInitializationParameters()))
         .toMatchInlineSnapshot(`
-          {
-            "backfillRequests": Result [
-              {
-                "columns": {
-                  "c": {
-                    "barID": "baz",
-                    "fooID": 123,
-                  },
-                  "d": {
-                    "barID": "boo",
-                    "fooID": 456,
-                  },
-                },
-                "table": {
-                  "metadata": {
-                    "rowKey": {
-                      "columns": [
-                        "b",
-                      ],
-                      "type": "default",
-                    },
-                  },
-                  "name": "foo",
-                  "schema": "my",
-                },
-              },
-              {
-                "columns": {
-                  "a": {
-                    "barID": "zoo",
-                    "fooID": 987,
-                  },
-                  "d": {
-                    "barID": "zoz",
-                    "fooID": 777,
-                  },
-                  "newName": {
-                    "barID": "ozz",
-                    "fooID": 843,
-                  },
-                },
-                "table": {
-                  "metadata": {
-                    "rowKey": {
-                      "columns": [
-                        "a",
-                      ],
-                      "type": "default",
-                    },
-                  },
-                  "name": "bar",
-                  "schema": "your",
-                },
-              },
-            ],
-            "lastWatermark": "0e",
-          }
-        `);
+        "lastWatermark 0e
+        tableMetadata
+          my.foo {"rowKey":{"type":"default","columns":["b"]}}
+          your.bar {"rowKey":{"type":"default","columns":["a"]}}
+        backfilling
+          my.foo.c {"barID":"baz","fooID":123}
+          my.foo.d {"barID":"boo","fooID":456}
+          your.bar.a {"barID":"zoo","fooID":987}
+          your.bar.d {"barID":"zoz","fooID":777}
+          your.bar.newName {"barID":"ozz","fooID":843}
+        backfillRequests
+          my.foo metadata={"rowKey":{"type":"default","columns":["b"]}} columns={"c":{"barID":"baz","fooID":123},"d":{"barID":"boo","fooID":456}}
+          your.bar metadata={"rowKey":{"type":"default","columns":["a"]}} columns={"a":{"barID":"zoo","fooID":987},"d":{"barID":"zoz","fooID":777},"newName":{"barID":"ozz","fooID":843}}"
+      `);
 
       // Drop a backfilling column.
       storer.store('0f', ['begin', messages.begin(), {commitWatermark: '0f'}]);
@@ -686,62 +607,21 @@ describe('change-streamer/storer', () => {
       storer.store('0f', ['commit', messages.commit(), {watermark: '0f'}]);
 
       await storer.allProcessed();
-      expect(await storer.getStartStreamInitializationParameters())
+      expect(summarize(await storer.getStartStreamInitializationParameters()))
         .toMatchInlineSnapshot(`
-          {
-            "backfillRequests": Result [
-              {
-                "columns": {
-                  "c": {
-                    "barID": "baz",
-                    "fooID": 123,
-                  },
-                  "d": {
-                    "barID": "boo",
-                    "fooID": 456,
-                  },
-                },
-                "table": {
-                  "metadata": {
-                    "rowKey": {
-                      "columns": [
-                        "b",
-                      ],
-                      "type": "default",
-                    },
-                  },
-                  "name": "foo",
-                  "schema": "my",
-                },
-              },
-              {
-                "columns": {
-                  "a": {
-                    "barID": "zoo",
-                    "fooID": 987,
-                  },
-                  "d": {
-                    "barID": "zoz",
-                    "fooID": 777,
-                  },
-                },
-                "table": {
-                  "metadata": {
-                    "rowKey": {
-                      "columns": [
-                        "a",
-                      ],
-                      "type": "default",
-                    },
-                  },
-                  "name": "bar",
-                  "schema": "your",
-                },
-              },
-            ],
-            "lastWatermark": "0f",
-          }
-        `);
+        "lastWatermark 0f
+        tableMetadata
+          my.foo {"rowKey":{"type":"default","columns":["b"]}}
+          your.bar {"rowKey":{"type":"default","columns":["a"]}}
+        backfilling
+          my.foo.c {"barID":"baz","fooID":123}
+          my.foo.d {"barID":"boo","fooID":456}
+          your.bar.a {"barID":"zoo","fooID":987}
+          your.bar.d {"barID":"zoz","fooID":777}
+        backfillRequests
+          my.foo metadata={"rowKey":{"type":"default","columns":["b"]}} columns={"c":{"barID":"baz","fooID":123},"d":{"barID":"boo","fooID":456}}
+          your.bar metadata={"rowKey":{"type":"default","columns":["a"]}} columns={"a":{"barID":"zoo","fooID":987},"d":{"barID":"zoz","fooID":777}}"
+      `);
 
       // Set the other backfilling columns to completed
       storer.store('110', [
@@ -765,38 +645,18 @@ describe('change-streamer/storer', () => {
       storer.store('110', ['commit', messages.commit(), {watermark: '110'}]);
 
       await storer.allProcessed();
-      expect(await storer.getStartStreamInitializationParameters())
+      expect(summarize(await storer.getStartStreamInitializationParameters()))
         .toMatchInlineSnapshot(`
-          {
-            "backfillRequests": Result [
-              {
-                "columns": {
-                  "c": {
-                    "barID": "baz",
-                    "fooID": 123,
-                  },
-                  "d": {
-                    "barID": "boo",
-                    "fooID": 456,
-                  },
-                },
-                "table": {
-                  "metadata": {
-                    "rowKey": {
-                      "columns": [
-                        "b",
-                      ],
-                      "type": "default",
-                    },
-                  },
-                  "name": "foo",
-                  "schema": "my",
-                },
-              },
-            ],
-            "lastWatermark": "110",
-          }
-        `);
+        "lastWatermark 110
+        tableMetadata
+          my.foo {"rowKey":{"type":"default","columns":["b"]}}
+          your.bar {"rowKey":{"type":"default","columns":["a"]}}
+        backfilling
+          my.foo.c {"barID":"baz","fooID":123}
+          my.foo.d {"barID":"boo","fooID":456}
+        backfillRequests
+          my.foo metadata={"rowKey":{"type":"default","columns":["b"]}} columns={"c":{"barID":"baz","fooID":123},"d":{"barID":"boo","fooID":456}}"
+      `);
 
       // Rename the backfilling table, and a contained column in the same tx.
       storer.store('111', [
@@ -833,38 +693,18 @@ describe('change-streamer/storer', () => {
       storer.store('111', ['commit', messages.commit(), {watermark: '111'}]);
 
       await storer.allProcessed();
-      expect(await storer.getStartStreamInitializationParameters())
+      expect(summarize(await storer.getStartStreamInitializationParameters()))
         .toMatchInlineSnapshot(`
-          {
-            "backfillRequests": Result [
-              {
-                "columns": {
-                  "c": {
-                    "barID": "baz",
-                    "fooID": 123,
-                  },
-                  "deez": {
-                    "barID": "boo",
-                    "fooID": 456,
-                  },
-                },
-                "table": {
-                  "metadata": {
-                    "rowKey": {
-                      "columns": [
-                        "b",
-                      ],
-                      "type": "default",
-                    },
-                  },
-                  "name": "bloo",
-                  "schema": "your",
-                },
-              },
-            ],
-            "lastWatermark": "111",
-          }
-        `);
+        "lastWatermark 111
+        tableMetadata
+          your.bar {"rowKey":{"type":"default","columns":["a"]}}
+          your.bloo {"rowKey":{"type":"default","columns":["b"]}}
+        backfilling
+          your.bloo.c {"barID":"baz","fooID":123}
+          your.bloo.deez {"barID":"boo","fooID":456}
+        backfillRequests
+          your.bloo metadata={"rowKey":{"type":"default","columns":["b"]}} columns={"c":{"barID":"baz","fooID":123},"deez":{"barID":"boo","fooID":456}}"
+      `);
 
       // Drop the backfilling table
       storer.store('112', [
@@ -882,13 +722,14 @@ describe('change-streamer/storer', () => {
       storer.store('112', ['commit', messages.commit(), {watermark: '112'}]);
 
       await storer.allProcessed();
-      expect(await storer.getStartStreamInitializationParameters())
+      expect(summarize(await storer.getStartStreamInitializationParameters()))
         .toMatchInlineSnapshot(`
-          {
-            "backfillRequests": Result [],
-            "lastWatermark": "112",
-          }
-        `);
+        "lastWatermark 112
+        tableMetadata
+          your.bar {"rowKey":{"type":"default","columns":["a"]}}
+        backfilling
+        backfillRequests"
+      `);
     });
 
     test('non-owner purge prevented', async () => {
