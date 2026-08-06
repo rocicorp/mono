@@ -1,16 +1,23 @@
 import type {Statement} from '../../../../zqlite/src/db.ts';
 import type {StatementRunner} from '../../db/statements.ts';
-import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
+import {
+  isSchemaChange,
+  type DataOrSchemaChange,
+} from '../change-source/protocol/current/data.ts';
 import {extractChangeSubstring} from '../change-streamer/change-log-codec.ts';
 import {ChangeLogTransactionHasher} from '../change-streamer/change-log-transaction-hash.ts';
+import {ChangeLogCookieWriter, type CookieOpTag} from './change-log-cookies.ts';
 import {CHANGE_LOG_STREAM_TABLE} from './change-log-db.ts';
-
-type ChangeTag = ChangeStreamData[1]['tag'];
 
 export type ChangeLogStreamTransactionStats = {
   readonly rows: number;
   readonly estimatedBytes: number;
   readonly hash: string;
+  /**
+   * The cookie mutations this transaction's schema changes folded in, in stream
+   * order. Empty for the overwhelming majority of transactions.
+   */
+  readonly cookieMutations: readonly CookieOpTag[];
 };
 
 const INTEGER_BYTES = 8;
@@ -50,23 +57,30 @@ function assertInvariant(
 
 /**
  * Appends the canonical downstream stream to the change-log database, which is
- * a separate file from the replica.
+ * a separate file from the replica, and folds its schema changes into the log's
+ * cookie jar (`change-log-cookies.ts`) as it goes.
  *
  * This class owns the change log's transaction, and its transaction alone. It is
  * driven from the change-streamer's stream loop, which commits it before
  * forwarding a transaction's `commit` message; see `SQLiteChangeLogWriter` in
  * `change-streamer/sqlite-change-log-writer.ts` for the ordering that makes a
  * hole unreachable, and for the fail-soft policy that wraps every call here.
+ *
+ * Because the cookies are written in that same transaction, they are atomic with
+ * the head and {@link rollback} discards them with the rows they were folded
+ * from. Neither needs any handling of its own.
  */
 export class ChangeLogStreamWriter {
   readonly #db: StatementRunner;
   readonly #insertChange: Statement;
   readonly #insertCommit: Statement;
+  readonly #cookies: ChangeLogCookieWriter;
 
   #watermark: string | undefined;
   #pos = 0;
   #estimatedBytes = 0;
   #hasher: ChangeLogTransactionHasher | undefined;
+  #cookieMutations: CookieOpTag[] = [];
 
   constructor(db: StatementRunner) {
     this.#db = db;
@@ -80,6 +94,7 @@ export class ChangeLogStreamWriter {
         ("watermark", "pos", "change", "precommit", "writeTimeMs")
         VALUES (?, ?, ?, ?, ?)
     `);
+    this.#cookies = new ChangeLogCookieWriter(db.db);
   }
 
   begin(watermark: string, json: string): void {
@@ -106,18 +121,35 @@ export class ChangeLogStreamWriter {
     this.#estimatedBytes = estimateChangeLogStreamRowBytes(watermark, change);
   }
 
-  append(json: string, tag: ChangeTag): void {
+  /**
+   * Appends one data or schema change. The parsed message is taken rather than
+   * just its tag because a schema change also mutates the cookie jar, and the
+   * caller already holds it — so the fold costs no re-parse.
+   *
+   * The cookie statements run here, i.e. inside this transaction and in stream
+   * order relative to the rows they were folded from. The Postgres change log
+   * has to flush its buffered batch to get the same ordering
+   * (`Storer.#processQueue()`); SQLite gets it from statement order.
+   */
+  append(json: string, change: DataOrSchemaChange): void {
     const watermark = this.#requireWatermark();
-    const change = extractChangeSubstring(json, tag);
-    this.#insertChange.run(watermark, ++this.#pos, change);
+    const {tag} = change;
+    const stored = extractChangeSubstring(json, tag);
+    this.#insertChange.run(watermark, ++this.#pos, stored);
     this.#requireHasher().add({
       watermark,
       pos: this.#pos,
       tag,
-      change,
+      change: stored,
       precommit: null,
     });
-    this.#estimatedBytes += estimateChangeLogStreamRowBytes(watermark, change);
+    this.#estimatedBytes += estimateChangeLogStreamRowBytes(watermark, stored);
+
+    if (isSchemaChange(change)) {
+      for (const op of this.#cookies.apply(change)) {
+        this.#cookieMutations.push(op.op);
+      }
+    }
   }
 
   commit(
@@ -152,6 +184,7 @@ export class ChangeLogStreamWriter {
         this.#estimatedBytes +
         estimateChangeLogStreamRowBytes(watermark, change, precommit, true),
       hash: hasher.digest(),
+      cookieMutations: this.#cookieMutations,
     };
     // The log is durable at `watermark` from here on, and nothing that can
     // advance the watermark the stream would resume from has run yet. A crash in
@@ -180,6 +213,9 @@ export class ChangeLogStreamWriter {
     this.#pos = 0;
     this.#estimatedBytes = 0;
     this.#hasher = undefined;
+    // A fresh array rather than a truncation: the committed stats hold a
+    // reference to the previous one.
+    this.#cookieMutations = [];
   }
 
   #requireWatermark(): string {

@@ -10,6 +10,12 @@
  * message. Its head is therefore always at or above the watermark the stream
  * would resume from, which is what {@link reconcileChangeLog} anchors on.
  *
+ * Beside the buffer it holds the log's *cookie jar* — the backfill progress
+ * state folded up to the same head. That is `change-log-cookies.ts`; this file
+ * owns its tables' lifecycle, because a cookie set is only meaningful paired
+ * with the watermark it was folded to, and so must be created, dropped, and
+ * invalidated with the buffer rather than beside it.
+ *
  * Because it is disposable, it has no migration framework. Any inconsistency —
  * a schema change, a leftover file from a different replica, a gap left by a
  * crash or by running with the writer disabled, a corrupt file — is resolved by
@@ -38,6 +44,14 @@ import {
   isSQLiteCorruption,
   logSQLiteCorruptionDiagnostics,
 } from '../../db/sqlite-corruption.ts';
+import {
+  CHANGE_LOG_BACKFILLING_TABLE,
+  CHANGE_LOG_TABLE_METADATA_TABLE,
+  CREATE_CHANGE_LOG_COOKIE_SCHEMA,
+  DROP_CHANGE_LOG_COOKIE_TABLES,
+  EMPTY_COOKIE_SET,
+  replaceCookies,
+} from './change-log-cookies.ts';
 
 /**
  * Bumped whenever the change-log database's schema changes. Since the file is a
@@ -48,13 +62,17 @@ import {
  * state version, and its meta row carries the replica's identity triple plus
  * the seed point.
  *
+ * v3 added the cookie tables (see `change-log-cookies.ts`), i.e. the log's
+ * second job. The reseed it costs on upgrade buys one retention window of
+ * catchup reach on a log nothing reads yet.
+ *
  * `auto_vacuum = INCREMENTAL` arrived within v2, deliberately without a bump:
  * it is a file-header property rather than a schema change, and the reseed a
  * version mismatch triggers cannot enable it (see
  * {@link applyChangeLogPragmas}), so {@link openChangeLogDBForWriting} guards
  * on the pragma itself instead of on this number.
  */
-export const CHANGE_LOG_DB_SCHEMA_VERSION = 2;
+export const CHANGE_LOG_DB_SCHEMA_VERSION = 3;
 
 /** https://www.sqlite.org/pragma.html#pragma_auto_vacuum */
 const AUTO_VACUUM_INCREMENTAL = 2;
@@ -408,10 +426,24 @@ export type ReseedReason =
   | 'identity-mismatch'
   | 'gap'; // head does not land on the resume watermark after truncation
 
+/**
+ * `cookiesStale` records that the cookie set the log held did not survive
+ * reconciliation. The cookies are unversioned point-in-time state, so any
+ * reconciliation that moves the head invalidates them, and the same transaction
+ * clears them (see `change-log-cookies.ts`). It is `action !== 'none'` today;
+ * it is a field rather than a derivation because the reseed that replaces the
+ * clear reads as intent at the call site, and because it is what the
+ * `cookie_reseed` counter is keyed on.
+ */
 export type ReconcileResult =
-  | {action: 'none'; head: string}
-  | {action: 'truncated'; head: string; rows: number}
-  | {action: 'reseeded'; head: string; reason: ReseedReason};
+  | {action: 'none'; head: string; cookiesStale: false}
+  | {action: 'truncated'; head: string; rows: number; cookiesStale: true}
+  | {
+      action: 'reseeded';
+      head: string;
+      reason: ReseedReason;
+      cookiesStale: true;
+    };
 
 /**
  * Brings the change log into agreement with the watermark its stream connection
@@ -486,15 +518,22 @@ function reconcile(
     return reseed(lc, db, anchor, 'gap');
   }
   if (rows > 0) {
+    // The truncated transactions can have carried `create-table`,
+    // `add-column`, and `backfill-completed`, none of which the truncate rolls
+    // back, so the cookie set no longer belongs to the head. Clearing it is
+    // correct but lossy; the anchor supplies the set that belongs to the resume
+    // watermark once there is one to supply. Nothing reads the cookies in the
+    // meantime.
+    replaceCookies(db, EMPTY_COOKIE_SET);
     lc.info?.('truncated phantom transactions from the SQLite change log', {
       sqliteChangeLogReconcile: {head, rows},
     });
-    return {action: 'truncated', head, rows};
+    return {action: 'truncated', head, rows, cookiesStale: true};
   }
   lc.debug?.('SQLite change log is at the resume watermark', {
     sqliteChangeLogReconcile: {head},
   });
-  return {action: 'none', head};
+  return {action: 'none', head, cookiesStale: false};
 }
 
 function wipeReason(
@@ -521,6 +560,16 @@ function wipeReason(
   if (version.schemaVersion !== CHANGE_LOG_DB_SCHEMA_VERSION) {
     return 'schema-mismatch';
   }
+  // Checked *after* the version, so that every pre-v3 file — which is every
+  // file in the fleet at the upgrade — reports the `schema-mismatch` that
+  // explains it rather than the `created` its absent cookie tables would
+  // otherwise look like.
+  if (
+    !tableExists(db, CHANGE_LOG_TABLE_METADATA_TABLE) ||
+    !tableExists(db, CHANGE_LOG_BACKFILLING_TABLE)
+  ) {
+    return 'created';
+  }
   const {epoch, generation, replicaID} = readChangeLogMeta(db);
   const identity = anchor.identity;
   if (
@@ -540,12 +589,16 @@ function reseed(
   reason: ReseedReason,
 ): ReconcileResult {
   const {identity, resumeWatermark, nowMs} = anchor;
-  // Dropping the table drops its partial index with it.
+  // Dropping the table drops its partial index with it. The cookie tables go
+  // with the buffer: a cookie set without the transactions it was folded from
+  // is not a smaller cookie set, it is a wrong one.
   db.exec(/*sql*/ `
     DROP TABLE IF EXISTS "${CHANGE_LOG_STREAM_TABLE}";
     DROP TABLE IF EXISTS "${CHANGE_LOG_META_TABLE}";
+    ${DROP_CHANGE_LOG_COOKIE_TABLES}
     ${CREATE_CHANGE_LOG_STREAM_SCHEMA}
     ${CREATE_CHANGE_LOG_META_SCHEMA}
+    ${CREATE_CHANGE_LOG_COOKIE_SCHEMA}
   `);
   db.prepare(/*sql*/ `
     INSERT INTO "${CHANGE_LOG_META_TABLE}"
@@ -572,7 +625,12 @@ function reseed(
       seededAtMs: nowMs,
     },
   });
-  return {action: 'reseeded', head: resumeWatermark, reason};
+  return {
+    action: 'reseeded',
+    head: resumeWatermark,
+    reason,
+    cookiesStale: true,
+  };
 }
 
 /**

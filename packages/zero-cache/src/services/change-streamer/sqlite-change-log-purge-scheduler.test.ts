@@ -5,7 +5,10 @@ import type {Database} from '../../../../zqlite/src/db.ts';
 import {StatementRunner} from '../../db/statements.ts';
 import {DbFile} from '../../test/lite.ts';
 import {versionToLexi} from '../../types/lexi-version.ts';
-import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
+import type {
+  ChangeStreamData,
+  Data,
+} from '../change-source/protocol/current/downstream.ts';
 import {
   CHANGE_LOG_STREAM_TABLE,
   changeLogFileName,
@@ -60,12 +63,12 @@ function append(
     {tag: 'begin'},
     {commitWatermark: watermark},
   ];
-  const truncate: ChangeStreamData = ['data', {tag: 'truncate', relations: []}];
+  const truncate: Data = ['data', {tag: 'truncate', relations: []}];
   const commit: ChangeStreamData = ['commit', {tag: 'commit'}, {watermark}];
   try {
     writer.begin(watermark, serializeChangeStreamData(begin));
     for (let i = 0; i < changes; i++) {
-      writer.append(serializeChangeStreamData(truncate), 'truncate');
+      writer.append(serializeChangeStreamData(truncate), truncate[1]);
     }
     writer.commit(watermark, serializeChangeStreamData(commit), writeTimeMs);
   } catch (e) {
@@ -1037,7 +1040,7 @@ describe('change-streamer/sqlite-change-log-purge-scheduler', () => {
                               'data',
                               {tag: 'truncate', relations: []},
                             ]),
-                            'truncate',
+                            {tag: 'truncate', relations: []},
                           );
                         }
                       });
