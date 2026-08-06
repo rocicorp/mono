@@ -21,6 +21,22 @@ export type ReplicaState = {
    */
   readonly replicaReadyTimeMs?: number | undefined;
 
+  /**
+   * Millisecond epoch at which the transaction behind `watermark` committed
+   * *upstream*, as reported by the ChangeSource. Unlike `replicaReadyTimeMs`,
+   * which is stamped locally when the change lands in the replica, this is the
+   * origin of the whole pipeline, so `now - upstreamCommitTimeMs` at the point
+   * the change is poked to clients is the end-to-end serving lag.
+   *
+   * Note that this crosses a clock domain: it comes from the upstream
+   * database, whereas it is subtracted from the local clock in the ViewSyncer.
+   * The existing `zero.replication.total_lag` metric spans the same boundary.
+   *
+   * Undefined when the ChangeSource does not report a commit time, and for the
+   * initial "current state is ready" notification.
+   */
+  readonly upstreamCommitTimeMs?: number | undefined;
+
   // Used in tests to verify behavior when additional information
   // is ferried in the future. Not set in production.
   readonly testSeqNum?: number | undefined;
