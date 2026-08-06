@@ -3824,6 +3824,44 @@ describe('replicator/change-processor-errors', () => {
     expect(replica.inTransaction).toBe(false);
   });
 
+  test('wraps oversized update binding errors with context', () => {
+    const failures: unknown[] = [];
+    const processor = new ChangeProcessor(
+      new StatementRunner(replica),
+      'backup',
+      (_, error) => failures.push(error),
+    );
+    const update = messages.update('foo', {id: 1, big: 1n << 63n});
+    const relation = {
+      ...update.relation,
+      relationOid: 42,
+    } as typeof update.relation & {relationOid: number};
+
+    processor.processMessage(lc, [
+      'begin',
+      messages.begin(),
+      {commitWatermark: '0e'},
+    ]);
+    processor.processMessage(lc, [
+      'data',
+      {
+        ...update,
+        relation,
+      },
+    ]);
+
+    expect(failures).toHaveLength(1);
+    expect(failures[0]).toMatchObject({
+      name: 'OversizedUpdateBindingError',
+      message:
+        'Oversized SQLite update binding: tx=0e relationOid=42 table=public.foo column=big valueType=bigint fitsInt64=false',
+      cause: {
+        name: 'RangeError',
+        message: 'The bound string, buffer, or bigint is too big',
+      },
+    });
+  });
+
   test('preserves original sqlite auto-rollback error', () => {
     const failures: unknown[] = [];
     const processor = createChangeProcessor(replica, (_, err) =>
