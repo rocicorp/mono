@@ -361,6 +361,143 @@ export class ChangeLogCookieWriter {
   }
 }
 
+const tableKey = (schema: string, table: string) =>
+  JSON.stringify([schema, table]);
+
+const columnKey = (schema: string, table: string, column: string) =>
+  JSON.stringify([schema, table, column]);
+
+const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+
+/**
+ * The in-memory interpreter of {@link cookieOps}: the third one, and the only
+ * one that is not a store.
+ *
+ * A replica-derived cookie set is a snapshot at the replica's state version,
+ * which trails the change log's head, so it cannot be compared with a
+ * Postgres-derived set directly. This carries it forward over the schema changes
+ * the log holds in between, which turns "the two stores disagree, but they are
+ * also at different positions" into an exact equality — and makes a
+ * disagreement between any two of the three interpreters visible as an
+ * inequality that neither store would have noticed on its own.
+ *
+ * `changes` must be the log's schema changes over `(from, to]` in stream order.
+ * Anything else produces a set that belongs to no watermark.
+ */
+export function foldCookies(
+  cookies: CookieSet,
+  changes: Iterable<SchemaChange>,
+): CookieSet {
+  const metadata = new Map<string, TableMetadataCookie>(
+    cookies.tableMetadata.map(c => [tableKey(c.schema, c.table), c]),
+  );
+  const backfilling = new Map<string, BackfillCookie>(
+    cookies.backfilling.map(c => [columnKey(c.schema, c.table, c.column), c]),
+  );
+  const dropColumn = ({schema, name}: Identifier, column: string) =>
+    backfilling.delete(columnKey(schema, name, column));
+
+  for (const change of changes) {
+    for (const op of cookieOps(change)) {
+      switch (op.op) {
+        case 'upsert-metadata':
+          metadata.set(tableKey(op.table.schema, op.table.name), {
+            schema: op.table.schema,
+            table: op.table.name,
+            metadata: op.metadata,
+          });
+          break;
+
+        case 'upsert-backfill':
+          backfilling.set(
+            columnKey(op.table.schema, op.table.name, op.column),
+            {
+              schema: op.table.schema,
+              table: op.table.name,
+              column: op.column,
+              backfill: op.backfill,
+            },
+          );
+          break;
+
+        case 'rename-table': {
+          const {old, new: renamed} = op;
+          const moved = metadata.get(tableKey(old.schema, old.name));
+          if (moved) {
+            metadata.delete(tableKey(old.schema, old.name));
+            metadata.set(tableKey(renamed.schema, renamed.name), {
+              ...moved,
+              schema: renamed.schema,
+              table: renamed.name,
+            });
+          }
+          // Snapshotted before mutating, since the rename both deletes and
+          // inserts into the map being scanned.
+          for (const [key, cookie] of [...backfilling]) {
+            if (cookie.schema === old.schema && cookie.table === old.name) {
+              backfilling.delete(key);
+              backfilling.set(
+                columnKey(renamed.schema, renamed.name, cookie.column),
+                {...cookie, schema: renamed.schema, table: renamed.name},
+              );
+            }
+          }
+          break;
+        }
+
+        case 'drop-table': {
+          const {schema, name} = op.table;
+          metadata.delete(tableKey(schema, name));
+          for (const [key, cookie] of [...backfilling]) {
+            if (cookie.schema === schema && cookie.table === name) {
+              backfilling.delete(key);
+            }
+          }
+          break;
+        }
+
+        case 'rename-column': {
+          const {schema, name} = op.table;
+          const moved = backfilling.get(columnKey(schema, name, op.old));
+          if (moved) {
+            backfilling.delete(columnKey(schema, name, op.old));
+            backfilling.set(columnKey(schema, name, op.new), {
+              ...moved,
+              column: op.new,
+            });
+          }
+          break;
+        }
+
+        case 'drop-column':
+          dropColumn(op.table, op.column);
+          break;
+
+        case 'complete-backfill':
+          for (const column of op.columns) {
+            dropColumn(op.table, column);
+          }
+          break;
+
+        default:
+          unreachable(op);
+      }
+    }
+  }
+
+  return {
+    tableMetadata: [...metadata.values()].toSorted(
+      (a, b) => cmp(a.schema, b.schema) || cmp(a.table, b.table),
+    ),
+    backfilling: [...backfilling.values()].toSorted(
+      (a, b) =>
+        cmp(a.schema, b.schema) ||
+        cmp(a.table, b.table) ||
+        cmp(a.column, b.column),
+    ),
+  };
+}
+
 /**
  * Reads the whole cookie set, ordered by primary key. This is what a
  * change-streamer would hand `startStream`, and what the Postgres-derived and

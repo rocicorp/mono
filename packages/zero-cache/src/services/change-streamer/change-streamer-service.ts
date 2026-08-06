@@ -2,6 +2,7 @@ import {getDefaultHighWaterMark} from 'node:stream';
 import type {LogContext} from '@rocicorp/logger';
 import {resolver, type Resolver} from '@rocicorp/resolver';
 import {assert, unreachable} from '../../../../shared/src/asserts.ts';
+import {must} from '../../../../shared/src/must.ts';
 import {promiseVoid} from '../../../../shared/src/resolved-promises.ts';
 import {publishCriticalEvent} from '../../observability/events.ts';
 import {
@@ -34,6 +35,10 @@ import {
   RunningState,
   UnrecoverableError,
 } from '../running-state.ts';
+import {
+  ChangeLogInitializer,
+  replicaInitializationSource,
+} from './change-log-initializer.ts';
 import {
   type ChangeStreamerService,
   type Status,
@@ -128,6 +133,15 @@ export type TuningOptions = StorerOptions & {
    * the replicator's cleanup.
    */
   sqliteChangeLogPurge?: SQLiteChangeLogPurgeSchedulerOptions | undefined;
+  /**
+   * Supplied at `sqliteChangeLogMode >= compare`, and the gate on deriving the
+   * stream's initialization parameters from the replica as well as from
+   * Postgres. Postgres stays authoritative; the two are compared and the
+   * result is reported. Not a new configuration option -- the mode ladder
+   * carries it, because a state in which the log's buffer and its cookies were
+   * at different rollout stages is what invariant 15 exists to forbid.
+   */
+  sqliteChangeLogCompare?: {replicaFile: string} | undefined;
 };
 
 /**
@@ -341,6 +355,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
   readonly #changeLogWriter: SQLiteChangeLogWriter | undefined;
   readonly #purgeScheduler: SQLiteChangeLogPurgeScheduler | undefined;
   readonly #acker: UpstreamAcker;
+  readonly #initializer: ChangeLogInitializer;
 
   readonly #autoReset: boolean;
   readonly #state: RunningState;
@@ -481,6 +496,24 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       trackPgChangeLog: true, // TODO: set false when retiring PG
       trackBackup: backupConfig?.litestreamVersion === 'v5',
     });
+    const replicaSource = opts.sqliteChangeLogCompare
+      ? replicaInitializationSource(lc, opts.sqliteChangeLogCompare.replicaFile)
+      : undefined;
+    this.#initializer = new ChangeLogInitializer(
+      lc,
+      {
+        initFromPgChangeLog: true, // TODO: set false when retiring PG
+        initFromReplica: replicaSource !== undefined,
+      },
+      {
+        pgChangeLog: () =>
+          this.#storer.getStartStreamInitializationParameters(),
+        // Only reached when `initFromReplica` is set, i.e. when the option
+        // that supplies the file is present.
+        replica: () => must(replicaSource)(),
+        changeLog: () => this.#changeLogWriter?.connection,
+      },
+    );
     this.#sqliteCatchupOptions = opts.sqliteCatchup
       ? {
           ...opts.sqliteCatchup,
@@ -529,7 +562,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       let unflushedBytes = 0;
       try {
         const {lastWatermark, backfillRequests, cookies} =
-          await this.#storer.getStartStreamInitializationParameters();
+          await this.#initializer.initialize();
         // SQLite catchup must not be eligible until this has been initialized
         // from the durable PG head. Commits observed only since process startup
         // are insufficient after a change-streamer restart.
@@ -548,6 +581,13 @@ class ChangeStreamerImpl implements ChangeStreamerService {
           resumeWatermark: lastWatermark,
           cookies,
         });
+        // After the reconcile, not before: the fold reads the log's schema
+        // changes over the interval the replica trails by, and only a
+        // reconciled log holds exactly the transactions at or below the resume
+        // watermark. An un-reconciled one can hold phantoms, another replica's
+        // history, or nothing -- none of which is a disagreement between the
+        // two stores, and all of which would be reported as one.
+        this.#initializer.compare();
         const stream = await this.#source.startStream(
           lastWatermark,
           backfillRequests,
