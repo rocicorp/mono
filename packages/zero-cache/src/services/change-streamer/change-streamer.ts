@@ -96,6 +96,12 @@ export interface ChangeStreamer {
 //   - Adds support for `backfill` messages
 // v6: v1.0.1  (backwards compatible, no version change)
 //   - Adds lag reporting to status messages
+// v6: (backwards compatible, no version change)
+//   - Adds the optional `commitTimeMs` field to `commit` messages, carrying
+//     the upstream commit timestamp for end-to-end serving lag measurement.
+//     The stream is parsed in 'passthrough' mode, so an older peer ignores the
+//     field, and a newer peer treats its absence (including in changes
+//     replayed from the Change DB) as "no commit time reported".
 
 export const PROTOCOL_VERSION = 6;
 

@@ -82,6 +82,12 @@ export type CommitResult = {
   completedBackfill: DownloadStatus | undefined;
   schemaUpdated: boolean;
   changeLogUpdated: boolean;
+  /**
+   * Millisecond epoch at which the transaction committed upstream, if the
+   * ChangeSource reported one. Propagated to ViewSyncers as the origin
+   * timestamp of the end-to-end serving lag measurement.
+   */
+  upstreamCommitTimeMs?: number | undefined;
 };
 
 /**
@@ -956,6 +962,7 @@ class TransactionProcessor {
       completedBackfill: this.#completedBackfill,
       schemaUpdated: this.#schemaChanged,
       changeLogUpdated: this.#numChangeLogEntries > 0,
+      upstreamCommitTimeMs: commit.commitTimeMs,
     };
   }
 

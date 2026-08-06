@@ -93,6 +93,7 @@ import {
   type RowUpdate,
 } from './cvr.ts';
 import type {DrainCoordinator} from './drain-coordinator.ts';
+import {E2EServingLagTracker} from './e2e-serving-lag.ts';
 import {handleInspect} from './inspect-handler.ts';
 import type {PipelineDriver} from './pipeline-driver.ts';
 import {type RowChange} from './pipeline-driver.ts';
@@ -293,6 +294,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   #cvr: CVRSnapshot | undefined;
   #pipelinesSynced = false;
   #servedVersion: string | null = null;
+  readonly #e2eServingLagTracker = new E2EServingLagTracker();
 
   #expiredQueriesTimer: ReturnType<SetTimeout> | 0 = 0;
   #authMaintenanceTimer: ReturnType<SetTimeout> | 0 = 0;
@@ -329,6 +331,32 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         'client group. Includes query transformation, query materialization, ' +
         'CVR flush, catchup, and pokeEnd.',
       unit: 's',
+    },
+  );
+  readonly #e2eServingLag = getOrCreateNativeHistogram(
+    'sync',
+    'e2e_serving_lag',
+    {
+      description:
+        'End-to-end lag from upstream commit to ViewSyncer output. Spans the ' +
+        'whole pipeline: the upstream transaction commit, replication to the ' +
+        'replica, IVM advancement, CVR flush, and pokeEnd. Recorded once per ' +
+        'served version, not sampled, so each observation is the completion ' +
+        'latency of real replicated work.',
+      unit: 's',
+    },
+  );
+  readonly #e2eServingLagClamps = getOrCreateCounter(
+    'sync',
+    'e2e_serving_lag_clamps',
+    {
+      description:
+        'Observations of sync.e2e_serving_lag that came out negative and were ' +
+        'clamped to zero. Non-zero means the upstream database clock is ' +
+        'running ahead of this pod by more than the entire pipeline latency, ' +
+        'so sync.e2e_serving_lag is biased low and reads healthier than ' +
+        'reality. See replication.upstream_clock_skew for the magnitude.',
+      unit: '{observation}',
     },
   );
   readonly #transactionAdvanceTime = getOrCreateLatencyHistogram(
@@ -528,12 +556,14 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         this.#lc.debug?.(`draining view-syncer ${this.id} before running`);
         void this.stop();
       }
-      for await (const {state} of this.#stateChanges) {
+      for await (const replicaState of this.#stateChanges) {
+        const {state} = replicaState;
         if (this.#drainCoordinator.shouldDrain()) {
           this.#lc.debug?.(`draining view-syncer ${this.id} (elective)`);
           break;
         }
         assert(state === 'version-ready', 'state should be version-ready'); // This is the only state change used.
+        this.#e2eServingLagTracker.onVersionReady(replicaState);
 
         await this.#runInLockWithCVR(async (lc, cvr) => {
           const clientSchema = must(
@@ -711,6 +741,16 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
   #markVersionServed(version: CVRVersion) {
     this.#servedVersion = version.stateVersion;
+    const observation = this.#e2eServingLagTracker.onVersionServed(
+      version.stateVersion,
+      Date.now(),
+    );
+    if (observation !== null) {
+      this.#e2eServingLag.recordMs(observation.lagMs);
+      if (observation.clamped) {
+        this.#e2eServingLagClamps.add(1);
+      }
+    }
   }
 
   #keepAliveUntil: number = 0;

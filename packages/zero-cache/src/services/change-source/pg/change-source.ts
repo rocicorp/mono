@@ -1166,7 +1166,10 @@ class ChangeMaker {
         return [
           [
             'commit',
-            msg,
+            // `commitTime` is microseconds since the unix epoch. Carrying it
+            // as milliseconds gives the ViewSyncer the origin timestamp for
+            // the end-to-end serving lag histogram.
+            {...msg, commitTimeMs: Number(msg.commitTime / 1000n)},
             {watermark: toStateVersionString(must(msg.commitLsn))},
           ],
         ];
