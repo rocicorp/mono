@@ -23,6 +23,9 @@ import {beforeEach, describe, expect} from 'vitest';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import type {Database} from '../../../../zqlite/src/db.ts';
 import {type PgTest, test} from '../../test/db.ts';
+import type {BackfillRequest} from '../change-source/protocol/current/upstream.ts';
+import {readCookies} from '../replicator/change-log-cookies.ts';
+import {readChangeLogHead} from '../replicator/change-log-db.ts';
 import type {ChangeProcessor} from '../replicator/change-processor.ts';
 import {
   ChangeLogInitializer,
@@ -56,16 +59,7 @@ describe('change-streamer/change-log-initializer against a shard', () => {
     changeLog = createChangeLog(lc);
     ({replica, processor} = createReplica(lc));
 
-    initializer = new ChangeLogInitializer(
-      lc,
-      {initFromPgChangeLog: true, initFromReplica: true},
-      {
-        pgChangeLog: () =>
-          shard.storer.getStartStreamInitializationParameters(),
-        replica: () => readReplicaInitializationParameters(replica),
-        changeLog: () => changeLog,
-      },
-    );
+    initializer = makeInitializer(true);
     // The stream loop's three stores, driven together.
     driver = new ChangeStreamDriver(lc, {
       upstream: shard.storer,
@@ -80,9 +74,66 @@ describe('change-streamer/change-log-initializer against a shard', () => {
     };
   });
 
+  /**
+   * `initFromPgChangeLog` is the flip, and the only difference between the two
+   * configurations under test.
+   */
+  function makeInitializer(initFromPgChangeLog: boolean) {
+    return new ChangeLogInitializer(
+      lc,
+      {initFromPgChangeLog, initFromReplica: true},
+      {
+        pgChangeLog: () =>
+          shard.storer.getStartStreamInitializationParameters(),
+        replica: () => readReplicaInitializationParameters(replica),
+        // Stands in for the writer. The log here is driven directly, so it is
+        // always already in agreement: Postgres's point passes through, and
+        // without one the log's own head is the resume point.
+        reconcileChangeLog: (resumeFrom, seed) => {
+          if (resumeFrom) {
+            return resumeFrom;
+          }
+          const head = readChangeLogHead(changeLog);
+          return head === null
+            ? seed()
+            : {resumeWatermark: head, cookies: readCookies(changeLog)};
+        },
+        changeLog: () => changeLog,
+      },
+    );
+  }
+
   async function compare() {
     await initializer.initialize();
-    return initializer.compare();
+    return initializer.lastComparison();
+  }
+
+  /**
+   * The cutover, asserted directly: the two configurations produce the same
+   * parameters from the same stream. Everything else here says the SQLite side
+   * *agrees* with Postgres; this says the flip is a no-op, which is the claim
+   * it actually makes.
+   *
+   * Ordered against Postgres's list rather than compared position-for-position,
+   * because the two are ordered in two engines under two collations.
+   */
+  async function expectFlipIsANoOp() {
+    const withPg = await makeInitializer(true).initialize();
+    const withoutPg = await makeInitializer(false).initialize();
+
+    expect(withoutPg.lastWatermark).toBe(withPg.lastWatermark);
+    expect(sorted(withoutPg.backfillRequests)).toEqual(
+      sorted(withPg.backfillRequests),
+    );
+    expect(withoutPg.cookies).toEqual(withPg.cookies);
+  }
+
+  function sorted(requests: BackfillRequest[]): BackfillRequest[] {
+    return requests.toSorted((a, b) =>
+      `${a.table.schema}.${a.table.name}`.localeCompare(
+        `${b.table.schema}.${b.table.name}`,
+      ),
+    );
   }
 
   test('the two stores agree when the replica is caught up', async () => {
@@ -105,6 +156,7 @@ describe('change-streamer/change-log-initializer against a shard', () => {
     ]);
 
     expect(await compare()).toBe('equal');
+    await expectFlipIsANoOp();
   });
 
   test('and when it trails, over an interval that moves both cookies', async () => {
@@ -190,5 +242,6 @@ describe('change-streamer/change-log-initializer against a shard', () => {
     ]);
 
     expect(await compare()).toBe('equal-after-fold');
+    await expectFlipIsANoOp();
   });
 });

@@ -8,12 +8,17 @@ import {
 } from '../../db/sqlite-corruption.ts';
 import {StatementRunner} from '../../db/statements.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
-import {readCookieRowCounts} from '../replicator/change-log-cookies.ts';
+import {
+  readCookieRowCounts,
+  readCookies,
+} from '../replicator/change-log-cookies.ts';
 import {
   ChangeLogRebuildRequired,
   changeLogFileName,
+  changeLogWipeReason,
   deleteChangeLogDB,
   openChangeLogDBForWriting,
+  readChangeLogHead,
   rebuildChangeLogDBForWriting,
   reconcileChangeLog,
   type ChangeLogAnchor,
@@ -124,30 +129,63 @@ export class SQLiteChangeLogWriter {
   }
 
   /**
-   * Opens the log if necessary and reconciles it against the point this stream
-   * connection resumes from.
+   * Opens the log if necessary, brings it into agreement with the point
+   * Postgres says this stream connection resumes from, and returns the point
+   * the log ends up at. `undefined` when the writer is disabled, i.e. when
+   * there is no log to resume from and the caller has to fall back.
    *
    * This runs per connection rather than once per process: the stream loop
-   * re-reads its resume point on every reconnect, so a routine reconnect — not
-   * just a restart — can leave the log holding watermarks above the new resume
-   * watermark, and the writer's plain `INSERT` would collide with the first
-   * re-delivered transaction.
+   * re-derives its resume point on every reconnect, so a routine reconnect —
+   * not just a restart — can leave the log holding watermarks above the new
+   * resume watermark, and the writer's plain `INSERT` would collide with the
+   * first re-delivered transaction.
    *
-   * The resume point is taken whole rather than as a bare watermark because its
-   * cookie set is not separable from it: a reconciliation that moves the head
-   * invalidates the cookies the log was holding, and only the set read at the
-   * same position (invariant 15) can replace them.
+   * `resumeFrom` is taken whole rather than as a bare watermark because a
+   * cookie set is not separable from the watermark it was folded to: a
+   * reconciliation that moves the head invalidates the cookies the log was
+   * holding, and only the set read at the same position (invariant 15) can
+   * replace them.
+   *
+   * This is the transitional half of a pair — {@link reconcileFromLog} is the
+   * other — and `P§:6.9` deletes this method along with truncate-above and the
+   * reseed it feeds.
    */
-  reconcile(resumeFrom: ChangeLogResumePoint): void {
+  reconcile(
+    resumeFrom: ChangeLogResumePoint,
+  ): ChangeLogResumePoint | undefined {
+    return this.#reconcile(() => resumeFrom);
+  }
+
+  /**
+   * The same, with the log itself supplying the resume point.
+   *
+   * A log this task may keep appending to is anchored on its own head, so
+   * there is nothing above it, nothing to truncate, and nothing to reseed —
+   * reconciliation degenerates to the rollback the stream loop already did on
+   * the interrupted transaction. `seed` is where a log that *cannot* be kept
+   * starts instead: the replica's state version and its cookies, read in one
+   * snapshot, which is the only other pairing of both halves at one position
+   * (invariant 15).
+   */
+  reconcileFromLog(
+    seed: () => ChangeLogResumePoint,
+  ): ChangeLogResumePoint | undefined {
+    return this.#reconcile(db => this.#resumeFromLog(db, seed));
+  }
+
+  #reconcile(
+    resolve: (db: Database) => ChangeLogResumePoint,
+  ): ChangeLogResumePoint | undefined {
     if (this.#disabled) {
-      return;
+      return undefined;
     }
     const {replicaFile, identity} = this.#opts;
-    const anchor: ChangeLogAnchor = {
-      ...resumeFrom,
+    const nowMs = this.#now();
+    const anchor = (db: Database): ChangeLogAnchor => ({
+      ...resolve(db),
       identity,
-      nowMs: this.#now(),
-    };
+      nowMs,
+    });
     try {
       const db = this.#db;
       if (db === undefined) {
@@ -165,9 +203,10 @@ export class SQLiteChangeLogWriter {
         );
         this.#observer = new SQLiteChangeLogObserver(this.#lc, info);
       } else {
+        const resolved = anchor(db);
         let result: ReconcileResult;
         try {
-          result = reconcileChangeLog(this.#lc, db, anchor, {
+          result = reconcileChangeLog(this.#lc, db, resolved, {
             rebuildInsteadOfUnboundedWork: true,
           });
         } catch (e) {
@@ -183,7 +222,7 @@ export class SQLiteChangeLogWriter {
           const rebuilt = rebuildChangeLogDBForWriting(
             this.#lc,
             replicaFile,
-            anchor,
+            resolved,
             e,
           );
           this.#db = rebuilt.db;
@@ -200,14 +239,48 @@ export class SQLiteChangeLogWriter {
       }
       // A reseed drops and recreates the stream table, so the append statements
       // are prepared fresh against whatever the reconciliation left behind.
-      this.#writer = new ChangeLogStreamWriter(
-        new StatementRunner(
-          must(this.#db, 'the SQLite change log is not open'),
+      const db2 = must(this.#db, 'the SQLite change log is not open');
+      this.#writer = new ChangeLogStreamWriter(new StatementRunner(db2));
+      // Read back rather than returned by reconciliation, and the same in every
+      // branch, because invariant 17 is exactly the statement that makes it
+      // valid: whichever of truncate or reseed moved the head also replaced the
+      // cookie set with the one that belongs there, in the same transaction.
+      return {
+        resumeWatermark: must(
+          readChangeLogHead(db2),
+          'the SQLite change log has no head after reconciliation',
         ),
-      );
+        cookies: readCookies(db2),
+      };
     } catch (e) {
       this.#failSoft('reconciling the SQLite change log', e);
+      return undefined;
     }
+  }
+
+  /**
+   * The resume point a log supplies for itself, once nothing else supplies one.
+   *
+   * A log this task may keep appending to resumes from its own head — which is
+   * the whole of it: the head *is* the anchor, so phantoms cannot exist and
+   * reconciliation degenerates to the rollback the stream loop already did. A
+   * log that has to be wiped has no head worth having, and takes the replica's
+   * state version and cookies, which is the only other pairing of the two
+   * halves at one position (invariant 15).
+   */
+  #resumeFromLog(
+    db: Database,
+    seed: () => ChangeLogResumePoint,
+  ): ChangeLogResumePoint {
+    if (changeLogWipeReason(db, this.#opts.identity) !== undefined) {
+      return seed();
+    }
+    const head = readChangeLogHead(db);
+    // An empty but otherwise valid log is `gap`'s case: there is no head to
+    // resume from, so it is seeded like any other wipe.
+    return head === null
+      ? seed()
+      : {resumeWatermark: head, cookies: readCookies(db)};
   }
 
   /**

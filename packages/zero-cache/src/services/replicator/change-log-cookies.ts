@@ -34,6 +34,7 @@
 
 import {unreachable} from '../../../../shared/src/asserts.ts';
 import {BigIntJSON} from '../../../../shared/src/bigint-json.ts';
+import * as v from '../../../../shared/src/valita.ts';
 import type {Database, Statement} from '../../../../zqlite/src/db.ts';
 import type {
   BackfillID,
@@ -41,6 +42,10 @@ import type {
   SchemaChange,
   TableMetadata,
 } from '../change-source/protocol/current/data.ts';
+import {
+  backfillRequestSchema,
+  type BackfillRequest,
+} from '../change-source/protocol/current/upstream.ts';
 
 export const CHANGE_LOG_TABLE_METADATA_TABLE = '_zero.changeLogTableMetadata';
 export const CHANGE_LOG_BACKFILLING_TABLE = '_zero.changeLogBackfilling';
@@ -496,6 +501,48 @@ export function foldCookies(
         cmp(a.column, b.column),
     ),
   };
+}
+
+const backfillRequestsSchema = v.array(backfillRequestSchema);
+
+/**
+ * Projects a cookie set into the {@link BackfillRequest}s a stream connection
+ * hands the change source.
+ *
+ * The projection is lossy in one direction and that is deliberate (§3.7): it is
+ * driven off the *backfilling* half, so a table with no in-flight backfill
+ * contributes no request even when its metadata is held. Which is why the two
+ * are not interchangeable, and why a change log has to hold the whole cookie
+ * set rather than the requests it last sent.
+ *
+ * One implementation, shared by every store, for the same reason
+ * {@link cookieOps} is: `Storer.getStartStreamInitializationParameters()` does
+ * this join in SQL, and a second hand-written grouping is a second thing that
+ * can be wrong about `metadata: null`.
+ */
+export function backfillRequestsFrom(cookies: CookieSet): BackfillRequest[] {
+  const metadata = new Map(
+    cookies.tableMetadata.map(c => [tableKey(c.schema, c.table), c.metadata]),
+  );
+  const requests: BackfillRequest[] = [];
+  let curr: BackfillRequest | undefined;
+  for (const {schema, table, column, backfill} of cookies.backfilling) {
+    if (curr?.table.schema !== schema || curr.table.name !== table) {
+      curr = {
+        table: {
+          schema,
+          name: table,
+          // `null`, not absent: a table can be backfilling with no metadata of
+          // its own, which is the LEFT half of the join Postgres does in SQL.
+          metadata: metadata.get(tableKey(schema, table)) ?? null,
+        },
+        columns: {},
+      };
+      requests.push(curr);
+    }
+    curr.columns[column] = backfill;
+  }
+  return v.parse(requests, backfillRequestsSchema);
 }
 
 /**

@@ -77,13 +77,14 @@ async function compare(replica: () => InitializationParameters) {
     {
       pgChangeLog: () => Promise.resolve(AT('02')),
       replica,
+      reconcileChangeLog: resumeFrom => resumeFrom,
       // The fold is never reached: the two cases below are decided at the
       // watermark, and the third never gets as far as a comparison.
       changeLog: () => undefined,
     },
   );
   await init.initialize();
-  return init.compare();
+  return init.lastComparison();
 }
 
 test('an agreement is counted as equal', async () => {

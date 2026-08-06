@@ -74,7 +74,7 @@ type Log = {
 function createLog(): Log {
   const file = new DbFile('sqlite-change-log-purger');
   files.push(file);
-  const {db} = openChangeLogDBForWriting(lc, file.path, ANCHOR);
+  const {db} = openChangeLogDBForWriting(lc, file.path, () => ANCHOR);
   return {db, path: changeLogFileName(file.path), close: () => db.close()};
 }
 
@@ -723,10 +723,10 @@ describe('replicator/sqlite-change-log-purger', () => {
       // The seed's writeTimeMs is the change-streamer's own clock at
       // reconciliation, which can sit ahead of the upstream commit times the
       // transactions that follow carry.
-      const {db} = openChangeLogDBForWriting(lc, file.path, {
+      const {db} = openChangeLogDBForWriting(lc, file.path, () => ({
         ...ANCHOR,
         nowMs: 5_000,
-      });
+      }));
       try {
         append(db, v(1), 400, 2_000);
         appendSeries(db, 2, 1);
@@ -791,7 +791,7 @@ describe('replicator/sqlite-change-log-purger', () => {
         const {db: reopened, result} = openChangeLogDBForWriting(
           lc,
           replicaFile,
-          {...ANCHOR, resumeWatermark: v(4)},
+          () => ({...ANCHOR, resumeWatermark: v(4)}),
         );
         try {
           expect(result).toEqual({

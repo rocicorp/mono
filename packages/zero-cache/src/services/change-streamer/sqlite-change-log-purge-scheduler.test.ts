@@ -143,7 +143,7 @@ function setup(
     nowMs: SEED_WRITE_TIME_MS,
     cookies: EMPTY_COOKIE_SET,
   };
-  const {db} = openChangeLogDBForWriting(lc, file.path, anchor);
+  const {db} = openChangeLogDBForWriting(lc, file.path, () => anchor);
 
   let connection: Database | undefined =
     (opts.connected ?? true) ? db : undefined;

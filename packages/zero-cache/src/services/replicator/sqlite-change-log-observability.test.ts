@@ -425,7 +425,11 @@ describe('SQLite change-log observability on disk', () => {
     const sink = new TestLogSink();
     const lc = new LogContext('debug', undefined, sink);
     dbFile = new DbFile('sqlite-change-log-observability');
-    const {db: changeLog} = openChangeLogDBForWriting(lc, dbFile.path, ANCHOR);
+    const {db: changeLog} = openChangeLogDBForWriting(
+      lc,
+      dbFile.path,
+      () => ANCHOR,
+    );
     return {
       lc,
       sink,
