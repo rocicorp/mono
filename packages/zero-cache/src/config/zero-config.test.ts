@@ -582,7 +582,7 @@ test('zero-cache --help', () => {
                                                                         Path to the Litestream v0.5.x SQLite VFS loadable extension used by                                                        
                                                                         the backup watermark reader to query the backup directly.                                                                  
                                                                                                                                                                                                    
-     --litestream-vfs-probe-interval-ms number                          default: 30000                                                                                                             
+     --litestream-vfs-probe-interval-ms number                          default: 15000                                                                                                             
        ZERO_LITESTREAM_VFS_PROBE_INTERVAL_MS env                                                                                                                                                   
                                                                         Interval in milliseconds at which the standalone backup watermark reader                                                   
                                                                         logs the watermark when it is run without a parent worker. The integrated                                                  

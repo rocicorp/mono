@@ -941,7 +941,7 @@ export const zeroOptions = {
     },
 
     vfsProbeIntervalMs: {
-      type: v.number().default(30 * 1000),
+      type: v.number().default(15 * 1000),
       desc: [
         `Interval in milliseconds at which the standalone backup watermark reader`,
         `logs the watermark when it is run without a parent worker. The integrated`,
