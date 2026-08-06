@@ -224,6 +224,7 @@ export class IncrementalSyncer {
         state: 'version-ready',
         watermark: result.watermark,
         replicaReadyTimeMs: Date.now(),
+        upstreamCommitTimeMs: result.upstreamCommitTimeMs,
       });
     }
   }
