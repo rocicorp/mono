@@ -13,14 +13,12 @@ import {EMPTY_COOKIE_SET, readCookies} from './change-log-cookies.ts';
 import {
   CHANGE_LOG_STREAM_TABLE,
   deleteChangeLogDB,
+  estimateChangeLogStreamRowBytes,
   openChangeLogDB,
   reconcileChangeLog,
   type ChangeLogAnchor,
 } from './change-log-db.ts';
-import {
-  ChangeLogStreamWriter,
-  estimateChangeLogStreamRowBytes,
-} from './change-log-stream-writer.ts';
+import {ChangeLogStreamWriter} from './change-log-stream-writer.ts';
 
 const lc = createSilentLogContext();
 
@@ -46,6 +44,12 @@ const SEED_ROWS = [
   {
     watermark: ANCHOR.resumeWatermark,
     pos: 0,
+    tag: 'begin',
+    estimatedBytes: estimateChangeLogStreamRowBytes(
+      ANCHOR.resumeWatermark,
+      'begin',
+      '{"tag":"begin"}',
+    ),
     change: '{"tag":"begin"}',
     precommit: null,
     writeTimeMs: null,
@@ -53,6 +57,14 @@ const SEED_ROWS = [
   {
     watermark: ANCHOR.resumeWatermark,
     pos: 1,
+    tag: 'commit',
+    estimatedBytes: estimateChangeLogStreamRowBytes(
+      ANCHOR.resumeWatermark,
+      'commit',
+      '{"tag":"commit"}',
+      ANCHOR.resumeWatermark,
+      true,
+    ),
     change: '{"tag":"commit"}',
     precommit: ANCHOR.resumeWatermark,
     writeTimeMs: ANCHOR.nowMs,
@@ -133,16 +145,24 @@ describe('replicator/change-log-stream-writer', () => {
       // matches nothing.
       cookieMutations: ['rename-table'],
       estimatedBytes:
-        estimateChangeLogStreamRowBytes('06', '{"tag":"begin"}') +
+        estimateChangeLogStreamRowBytes('06', 'begin', '{"tag":"begin"}') +
         estimateChangeLogStreamRowBytes(
           '06',
+          'insert',
           '{"tag":"insert","relation":{"schema":"public","name":"issues","rowKey":{"columns":["id"],"type":"default"}},"new":{"id":9007199254740993,"text":"before\\u0000after"}}',
         ) +
         estimateChangeLogStreamRowBytes(
           '06',
+          'rename-table',
           '{"tag":"rename-table","old":{"schema":"public","name":"issues"},"new":{"schema":"public","name":"renamed"}}',
         ) +
-        estimateChangeLogStreamRowBytes('06', '{"tag":"commit"}', '06', true),
+        estimateChangeLogStreamRowBytes(
+          '06',
+          'commit',
+          '{"tag":"commit"}',
+          '06',
+          true,
+        ),
     });
 
     expectTableExact(
@@ -153,6 +173,12 @@ describe('replicator/change-log-stream-writer', () => {
         {
           watermark: '06',
           pos: 0,
+          tag: 'begin',
+          estimatedBytes: estimateChangeLogStreamRowBytes(
+            '06',
+            'begin',
+            '{"tag":"begin"}',
+          ),
           change: '{"tag":"begin"}',
           precommit: null,
           writeTimeMs: null,
@@ -160,6 +186,12 @@ describe('replicator/change-log-stream-writer', () => {
         {
           watermark: '06',
           pos: 1,
+          tag: 'insert',
+          estimatedBytes: estimateChangeLogStreamRowBytes(
+            '06',
+            'insert',
+            '{"tag":"insert","relation":{"schema":"public","name":"issues","rowKey":{"columns":["id"],"type":"default"}},"new":{"id":9007199254740993,"text":"before\\u0000after"}}',
+          ),
           change:
             '{"tag":"insert","relation":{"schema":"public","name":"issues","rowKey":{"columns":["id"],"type":"default"}},"new":{"id":9007199254740993,"text":"before\\u0000after"}}',
           precommit: null,
@@ -168,6 +200,12 @@ describe('replicator/change-log-stream-writer', () => {
         {
           watermark: '06',
           pos: 2,
+          tag: 'rename-table',
+          estimatedBytes: estimateChangeLogStreamRowBytes(
+            '06',
+            'rename-table',
+            '{"tag":"rename-table","old":{"schema":"public","name":"issues"},"new":{"schema":"public","name":"renamed"}}',
+          ),
           change:
             '{"tag":"rename-table","old":{"schema":"public","name":"issues"},"new":{"schema":"public","name":"renamed"}}',
           precommit: null,
@@ -176,6 +214,14 @@ describe('replicator/change-log-stream-writer', () => {
         {
           watermark: '06',
           pos: 3,
+          tag: 'commit',
+          estimatedBytes: estimateChangeLogStreamRowBytes(
+            '06',
+            'commit',
+            '{"tag":"commit"}',
+            '06',
+            true,
+          ),
           change: '{"tag":"commit"}',
           precommit: '06',
           writeTimeMs,

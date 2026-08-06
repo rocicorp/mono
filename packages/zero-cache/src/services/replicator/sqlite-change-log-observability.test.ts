@@ -465,7 +465,8 @@ describe('SQLite change-log observability on disk', () => {
     files.changeLog
       .prepare(/*sql*/ `
         INSERT INTO "${CHANGE_LOG_STREAM_TABLE}"
-          ("watermark", "pos", "change") VALUES ('03', 0, ?)
+          ("watermark", "pos", "tag", "estimatedBytes", "change")
+          VALUES ('03', 0, 'insert', 100000, ?)
       `)
       .run('x'.repeat(100_000));
 

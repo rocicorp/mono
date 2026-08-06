@@ -21,7 +21,7 @@
  * a schema change, a leftover file from a different replica, a gap left by a
  * crash or by running with the writer disabled, a corrupt file — is resolved by
  * {@link reconcileChangeLog} and {@link openChangeLogDBForWriting}, which
- * truncate the offending rows or wipe and reseed the log at the resume
+ * truncate a bounded suffix or replace and reseed the log at the resume
  * watermark. The worst outcome is a `too-old` for a lagging subscriber; a
  * silently delivered gap is not reachable.
  *
@@ -38,6 +38,7 @@
  * from the litestream backup, so this is local disk only and never S3.
  */
 
+import {existsSync} from 'node:fs';
 import type {LogContext} from '@rocicorp/logger';
 import {Database} from '../../../../zqlite/src/db.ts';
 import {deleteLiteDB} from '../../db/delete-lite-db.ts';
@@ -67,13 +68,17 @@ import {
  * second job. The reseed it costs on upgrade buys one retention window of
  * catchup reach on a log nothing reads yet.
  *
+ * v4 stores each row's tag and estimated retained bytes alongside its JSON.
+ * Readers can now filter without parsing arbitrary row payloads, and
+ * reconciliation can bound truncation by bytes as well as rows.
+ *
  * `auto_vacuum = INCREMENTAL` arrived within v2, deliberately without a bump:
  * it is a file-header property rather than a schema change, and the reseed a
  * version mismatch triggers cannot enable it (see
  * {@link applyChangeLogPragmas}), so {@link openChangeLogDBForWriting} guards
  * on the pragma itself instead of on this number.
  */
-export const CHANGE_LOG_DB_SCHEMA_VERSION = 3;
+export const CHANGE_LOG_DB_SCHEMA_VERSION = 4;
 
 /** https://www.sqlite.org/pragma.html#pragma_auto_vacuum */
 const AUTO_VACUUM_INCREMENTAL = 2;
@@ -82,20 +87,47 @@ export const CHANGE_LOG_STREAM_TABLE = '_zero.changeLogStream';
 export const CHANGE_LOG_STREAM_WRITE_TIME_INDEX =
   '_zero.changeLogStream_writeTimeMs';
 
+const INTEGER_BYTES = 8;
+
+/**
+ * Estimates the retained payload size of a stream row. This deliberately does
+ * not claim to measure SQLite b-tree/page overhead; it is stable across the
+ * write path, reconciliation, and the startup scan used by observability.
+ */
+export function estimateChangeLogStreamRowBytes(
+  watermark: string,
+  tag: string,
+  change: string,
+  precommit?: string,
+  hasWriteTime = false,
+): number {
+  return (
+    Buffer.byteLength(watermark) +
+    INTEGER_BYTES +
+    Buffer.byteLength(tag) +
+    Buffer.byteLength(change) +
+    (precommit === undefined ? 0 : Buffer.byteLength(precommit)) +
+    (hasWriteTime ? INTEGER_BYTES : 0)
+  );
+}
+
 // The index is partial because only commit rows carry a "writeTimeMs", so it
 // holds one entry per transaction rather than one per change. It is what the
 // purger scans to find transactions older than the retention window.
 //
-// The replica carried this same table through schema versions 14 and 15; see
-// `CREATE_V14_CHANGE_LOG_STREAM` in `change-source/common/replica-schema.ts`,
-// which is frozen at the v14 shape and must not be kept in sync with this one.
+// The replica carried this table's original shape through versions 14 and 15;
+// see `CREATE_V14_CHANGE_LOG_STREAM` in
+// `change-source/common/replica-schema.ts`, which is frozen at the v14 shape
+// and must not be kept in sync with this one.
 export const CREATE_CHANGE_LOG_STREAM_SCHEMA = /*sql*/ `
   CREATE TABLE "${CHANGE_LOG_STREAM_TABLE}" (
-    "watermark"   TEXT NOT NULL,
-    "pos"         INTEGER NOT NULL,
-    "change"      TEXT NOT NULL,
-    "precommit"   TEXT,
-    "writeTimeMs" INTEGER,
+    "watermark"      TEXT NOT NULL,
+    "pos"            INTEGER NOT NULL,
+    "tag"            TEXT NOT NULL,
+    "estimatedBytes"  INTEGER NOT NULL,
+    "change"          TEXT NOT NULL,
+    "precommit"       TEXT,
+    "writeTimeMs"     INTEGER,
     PRIMARY KEY ("watermark", "pos")
   );
 
@@ -112,10 +144,12 @@ export const CREATE_CHANGE_LOG_STREAM_SCHEMA = /*sql*/ `
  */
 const SEED_CHANGE_LOG_STREAM_SQL = /*sql*/ `
   INSERT INTO "${CHANGE_LOG_STREAM_TABLE}"
-    ("watermark", "pos", "change", "precommit", "writeTimeMs")
+    ("watermark", "pos", "tag", "estimatedBytes", "change", "precommit",
+     "writeTimeMs")
   VALUES
-    (@watermark, 0, '{"tag":"begin"}', NULL, NULL),
-    (@watermark, 1, '{"tag":"commit"}', @watermark, @writeTimeMs)
+    (@watermark, 0, 'begin', @beginBytes, @beginChange, NULL, NULL),
+    (@watermark, 1, 'commit', @commitBytes, @commitChange, @watermark,
+     @writeTimeMs)
   ON CONFLICT ("watermark", "pos") DO NOTHING
 `;
 
@@ -336,25 +370,30 @@ export function openChangeLogDBForWriting(
   lc: LogContext,
   replicaFile: string,
   anchor: ChangeLogAnchor,
-): {db: Database; result: ReconcileResult} {
-  const opened = openOrRebuildCorrupt(lc, replicaFile, anchor);
-  const {db, result} = ensureIncrementalAutoVacuum(
+): {db: Database; result: ReconcileResult; replacedFile: boolean} {
+  const existed = existsSync(changeLogFileName(replicaFile));
+  const opened = openOrRebuildCorrupt(lc, replicaFile, anchor, existed);
+  const {db, result, replacedFile} = ensureIncrementalAutoVacuum(
     lc,
     replicaFile,
     anchor,
     opened,
   );
-  return {db, result};
+  return {db, result, replacedFile};
 }
 
 function openOrRebuildCorrupt(
   lc: LogContext,
   replicaFile: string,
   anchor: ChangeLogAnchor,
+  boundReconciliation: boolean,
 ): OpenedChangeLog {
   try {
-    return openAndReconcile(lc, replicaFile, anchor);
+    return openAndReconcile(lc, replicaFile, anchor, boundReconciliation);
   } catch (e) {
+    if (e instanceof ChangeLogRebuildRequired) {
+      return rebuildChangeLog(lc, replicaFile, anchor, e);
+    }
     if (!isSQLiteCorruption(e)) {
       throw e;
     }
@@ -417,16 +456,52 @@ function rebuildChangeLog(
   lc: LogContext,
   replicaFile: string,
   anchor: ChangeLogAnchor,
+  required?: ChangeLogRebuildRequired | undefined,
 ): OpenedChangeLog {
+  if (required) {
+    lc.warn?.(
+      'rebuilding the SQLite change log instead of running an unbounded reconciliation',
+      {
+        sqliteChangeLogRebuild: {
+          reason: required.reason,
+          rows: required.rows,
+          estimatedBytes: required.estimatedBytes,
+        },
+      },
+    );
+  }
   deleteChangeLogDB(replicaFile);
-  // Reconciles a database that does not exist, i.e. reseeds with reason
-  // 'created'. A second failure is the environment's, not the file's.
-  return openAndReconcile(lc, replicaFile, anchor);
+  // The file is absent, so the reseed only drops empty/nonexistent tables. A
+  // second failure is the environment's, not the old file's.
+  const opened = openAndReconcile(
+    lc,
+    replicaFile,
+    anchor,
+    false,
+    required?.reason,
+  );
+  return {...opened, replacedFile: true};
+}
+
+/**
+ * Replaces an already-closed change-log file after bounded reconciliation
+ * declined its work. The caller closes cached readers before calling this so
+ * none can continue serving the unlinked inode.
+ */
+export function rebuildChangeLogDBForWriting(
+  lc: LogContext,
+  replicaFile: string,
+  anchor: ChangeLogAnchor,
+  required: ChangeLogRebuildRequired,
+): {db: Database; result: ReconcileResult; replacedFile: true} {
+  const {db, result} = rebuildChangeLog(lc, replicaFile, anchor, required);
+  return {db, result, replacedFile: true};
 }
 
 type OpenedChangeLog = {
   db: Database;
   result: ReconcileResult;
+  replacedFile: boolean;
   /** The file's persistent `auto_vacuum` mode, read back after the pragmas. */
   autoVacuum: number;
 };
@@ -435,12 +510,22 @@ function openAndReconcile(
   lc: LogContext,
   replicaFile: string,
   anchor: ChangeLogAnchor,
+  boundReconciliation: boolean,
+  reseedReason?: ReseedReason | undefined,
 ): OpenedChangeLog {
   const db = openChangeLogDB(lc, replicaFile, {readonly: false});
   try {
     applyChangeLogPragmas(db);
     const autoVacuum = readAutoVacuum(db);
-    return {db, result: reconcileChangeLog(lc, db, anchor), autoVacuum};
+    return {
+      db,
+      result: reconcileChangeLog(lc, db, anchor, {
+        rebuildInsteadOfUnboundedWork: boundReconciliation,
+        reseedReason,
+      }),
+      replacedFile: false,
+      autoVacuum,
+    };
   } catch (e) {
     // The caller never sees this handle, so it closes here or leaks — and it
     // must be closed before the corruption path deletes the file.
@@ -453,7 +538,42 @@ export type ReseedReason =
   | 'created' // file or table absent
   | 'schema-mismatch'
   | 'identity-mismatch'
-  | 'gap'; // head does not land on the resume watermark after truncation
+  | 'gap' // head does not land on the resume watermark after truncation
+  | 'oversized-truncate'; // preserving the prefix would require too much work
+
+/**
+ * Reconciliation runs synchronously on the change-streamer's event loop. A
+ * normal phantom is one transaction, so work above either limit is answered by
+ * unlinking and reseeding this disposable cache rather than deleting an
+ * arbitrarily large suffix in place.
+ */
+export const MAX_RECONCILE_TRUNCATE_ROWS = 10_000;
+export const MAX_RECONCILE_TRUNCATE_BYTES = 16 * 1024 * 1024;
+
+export class ChangeLogRebuildRequired extends Error {
+  override readonly name = 'ChangeLogRebuildRequired';
+  readonly reason: ReseedReason;
+  readonly rows?: number | undefined;
+  readonly estimatedBytes?: number | undefined;
+
+  constructor(
+    reason: ReseedReason,
+    rows?: number | undefined,
+    estimatedBytes?: number | undefined,
+  ) {
+    super(`SQLite change log requires a ${reason} rebuild`);
+    this.reason = reason;
+    this.rows = rows;
+    this.estimatedBytes = estimatedBytes;
+  }
+}
+
+type ReconcileOptions = {
+  /** Throw before an unbounded delete/drop so the file owner can unlink it. */
+  readonly rebuildInsteadOfUnboundedWork?: boolean | undefined;
+  /** Preserve the reason that caused an old file to be unlinked. */
+  readonly reseedReason?: ReseedReason | undefined;
+};
 
 /**
  * `cookiesStale` records that the cookie set the log held did not survive
@@ -512,10 +632,19 @@ export function reconcileChangeLog(
   lc: LogContext,
   db: Database,
   anchor: ChangeLogAnchor,
+  opts: ReconcileOptions = {},
 ): ReconcileResult {
   db.exec('BEGIN IMMEDIATE');
   try {
-    const result = reconcile(lc, db, anchor);
+    if (opts.rebuildInsteadOfUnboundedWork) {
+      const required = rebuildRequired(db, anchor);
+      if (required) {
+        throw required;
+      }
+    }
+    const result = opts.reseedReason
+      ? reseed(lc, db, anchor, opts.reseedReason)
+      : reconcile(lc, db, anchor);
     db.exec('COMMIT');
     return result;
   } catch (e) {
@@ -524,6 +653,57 @@ export function reconcileChangeLog(
     }
     throw e;
   }
+}
+
+/**
+ * Decides whether reconciliation can be performed within its synchronous work
+ * budget. Every query is either an index seek or a scan capped at one row past
+ * the delete limit. No state changes before the decision is complete.
+ */
+function rebuildRequired(
+  db: Database,
+  anchor: ChangeLogAnchor,
+): ChangeLogRebuildRequired | undefined {
+  const wipe = wipeReason(db, anchor);
+  if (wipe !== undefined) {
+    return new ChangeLogRebuildRequired(wipe);
+  }
+
+  const head = readChangeLogHead(db);
+  const {resumeWatermark} = anchor;
+  if (head === null || head < resumeWatermark) {
+    return new ChangeLogRebuildRequired('gap');
+  }
+  if (head === resumeWatermark) {
+    return undefined;
+  }
+
+  const boundary = db
+    .prepare(/*sql*/ `
+      SELECT 1 FROM "${CHANGE_LOG_STREAM_TABLE}"
+        WHERE "watermark" = ?
+        LIMIT 1
+    `)
+    .get<{1: number} | undefined>(resumeWatermark);
+  if (boundary === undefined) {
+    return new ChangeLogRebuildRequired('gap');
+  }
+
+  const {rows, estimatedBytes} = db
+    .prepare(/*sql*/ `
+      SELECT count(*) AS "rows",
+             coalesce(sum("estimatedBytes"), 0) AS "estimatedBytes"
+        FROM (
+          SELECT "estimatedBytes" FROM "${CHANGE_LOG_STREAM_TABLE}"
+            WHERE "watermark" > ?
+            LIMIT ${MAX_RECONCILE_TRUNCATE_ROWS + 1}
+        )
+    `)
+    .get<{rows: number; estimatedBytes: number}>(resumeWatermark);
+  return rows > MAX_RECONCILE_TRUNCATE_ROWS ||
+    estimatedBytes > MAX_RECONCILE_TRUNCATE_BYTES
+    ? new ChangeLogRebuildRequired('oversized-truncate', rows, estimatedBytes)
+    : undefined;
 }
 
 function reconcile(
@@ -593,7 +773,7 @@ function wipeReason(
   if (version.schemaVersion !== CHANGE_LOG_DB_SCHEMA_VERSION) {
     return 'schema-mismatch';
   }
-  // Checked *after* the version, so that every pre-v3 file — which is every
+  // Checked *after* the version, so that every pre-v4 file — which is every
   // file in the fleet at the upgrade — reports the `schema-mismatch` that
   // explains it rather than the `created` its absent cookie tables would
   // otherwise look like.
@@ -681,8 +861,24 @@ export function seedChangeLogStream(
   db: Database,
   anchor: ChangeLogAnchor,
 ): void {
+  const beginChange = '{"tag":"begin"}';
+  const commitChange = '{"tag":"commit"}';
   db.prepare(SEED_CHANGE_LOG_STREAM_SQL).run({
     watermark: anchor.resumeWatermark,
+    beginBytes: estimateChangeLogStreamRowBytes(
+      anchor.resumeWatermark,
+      'begin',
+      beginChange,
+    ),
+    beginChange,
+    commitBytes: estimateChangeLogStreamRowBytes(
+      anchor.resumeWatermark,
+      'commit',
+      commitChange,
+      anchor.resumeWatermark,
+      true,
+    ),
+    commitChange,
     writeTimeMs: anchor.nowMs,
   });
 }

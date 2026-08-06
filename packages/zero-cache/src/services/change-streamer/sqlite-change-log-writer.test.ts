@@ -11,6 +11,8 @@ import {
 } from '../replicator/change-log-cookies.ts';
 import {
   CHANGE_LOG_STREAM_TABLE,
+  MAX_RECONCILE_TRUNCATE_BYTES,
+  MAX_RECONCILE_TRUNCATE_ROWS,
   changeLogFileName,
   deleteChangeLogDB,
   openChangeLogDB,
@@ -57,11 +59,13 @@ function setup(name: string, resumeWatermark = '02') {
   files.push(file);
   const commits: string[] = [];
   let disabled = 0;
+  let rebuilt = 0;
   const writer = new SQLiteChangeLogWriter(lc, {
     replicaFile: file.path,
     identity: IDENTITY,
     onCommit: watermark => commits.push(watermark),
     onDisabled: () => disabled++,
+    onRebuilt: () => rebuilt++,
     now: () => 1_700_000_000_000,
   });
   writer.reconcile(resumeAt(resumeWatermark));
@@ -72,6 +76,7 @@ function setup(name: string, resumeWatermark = '02') {
     writer,
     commits,
     disabledCount: () => disabled,
+    rebuiltCount: () => rebuilt,
     head: () => {
       using db = openChangeLogDB(lc, file.path, {readonly: true});
       return readChangeLogHead(db);
@@ -198,7 +203,8 @@ describe('change-streamer/sqlite-change-log-writer', () => {
       other
         .prepare(/*sql*/ `
           INSERT INTO "${CHANGE_LOG_STREAM_TABLE}"
-            ("watermark", "pos", "change") VALUES ('04', 0, '{"tag":"begin"}')
+            ("watermark", "pos", "tag", "estimatedBytes", "change")
+            VALUES ('04', 0, 'begin', 0, '{"tag":"begin"}')
         `)
         .run();
     }
@@ -296,6 +302,43 @@ describe('change-streamer/sqlite-change-log-writer', () => {
     expect(fixture.head()).toBe('06');
     expect(fixture.writer.enabled).toBe(true);
     expect(fixture.writer.state()?.invariantFailures).toBe(0);
+  });
+
+  test('oversized reconciliation replaces the log instead of deleting synchronously', () => {
+    using fixture = setup('change-log-writer-bounded-reconcile');
+
+    const insertSuffix = (rows: number, estimatedBytes: number) => {
+      using other = openChangeLogDB(fixture.lc, fixture.file.path, {
+        readonly: false,
+      });
+      const insert = other.prepare(/*sql*/ `
+        INSERT INTO "${CHANGE_LOG_STREAM_TABLE}"
+          ("watermark", "pos", "tag", "estimatedBytes", "change")
+          VALUES ('04', ?, 'insert', ?, '{"tag":"insert"}')
+      `);
+      other.transaction(() => {
+        for (let pos = 0; pos < rows; pos++) {
+          insert.run(pos, estimatedBytes);
+        }
+      });
+    };
+
+    // Too many small rows: the decision scans at most one row past the cap.
+    insertSuffix(MAX_RECONCILE_TRUNCATE_ROWS + 1, 1);
+    fixture.writer.reconcile(resumeAt('02'));
+    expect(fixture.head()).toBe('02');
+    expect(fixture.rebuiltCount()).toBe(1);
+
+    // One enormous row is bounded independently of the row count.
+    insertSuffix(1, MAX_RECONCILE_TRUNCATE_BYTES + 1);
+    fixture.writer.reconcile(resumeAt('02'));
+    expect(fixture.head()).toBe('02');
+    expect(fixture.rebuiltCount()).toBe(2);
+
+    // Rebuilding the disposable cache does not disable the stream writer.
+    transaction(fixture.writer, '04');
+    expect(fixture.writer.enabled).toBe(true);
+    expect(fixture.head()).toBe('04');
   });
 
   describe('the cookie jar', () => {

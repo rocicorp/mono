@@ -139,13 +139,7 @@ export function getSQLiteChangeLogInfo(
   const aggregate = changeLog
     .prepare(/*sql*/ `
       SELECT count(*) AS "rows",
-             coalesce(sum(
-               length(CAST("watermark" AS BLOB)) +
-               8 +
-               length(CAST("change" AS BLOB)) +
-               coalesce(length(CAST("precommit" AS BLOB)), 0) +
-               CASE WHEN "writeTimeMs" IS NULL THEN 0 ELSE 8 END
-             ), 0) AS "estimatedBytes"
+             coalesce(sum("estimatedBytes"), 0) AS "estimatedBytes"
         FROM "${CHANGE_LOG_STREAM_TABLE}"
     `)
     .get<{rows: number; estimatedBytes: number}>();

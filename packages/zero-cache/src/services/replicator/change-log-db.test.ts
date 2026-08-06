@@ -25,6 +25,7 @@ import {
   changeLogFileName,
   CREATE_CHANGE_LOG_STREAM_SCHEMA,
   deleteChangeLogDB,
+  estimateChangeLogStreamRowBytes,
   openChangeLogDB,
   openChangeLogDBForWriting,
   readChangeLogHead,
@@ -90,14 +91,37 @@ function appendTransaction(
 ) {
   const stmt = db.prepare(/*sql*/ `
     INSERT INTO "${CHANGE_LOG_STREAM_TABLE}"
-      ("watermark", "pos", "change", "precommit", "writeTimeMs")
-      VALUES (?, ?, ?, ?, ?)
+      ("watermark", "pos", "tag", "estimatedBytes", "change", "precommit",
+       "writeTimeMs")
+      VALUES (?, ?, ?, ?, ?, ?, ?)
   `);
-  stmt.run(watermark, 0, '{"tag":"begin"}', null, null);
+  const insert = (
+    pos: number,
+    tag: string,
+    change: string,
+    rowPrecommit: string | null,
+    rowWriteTimeMs: number | null,
+  ) =>
+    stmt.run(
+      watermark,
+      pos,
+      tag,
+      estimateChangeLogStreamRowBytes(
+        watermark,
+        tag,
+        change,
+        rowPrecommit ?? undefined,
+        rowWriteTimeMs !== null,
+      ),
+      change,
+      rowPrecommit,
+      rowWriteTimeMs,
+    );
+  insert(0, 'begin', '{"tag":"begin"}', null, null);
   for (let i = 1; i <= changes; i++) {
-    stmt.run(watermark, i, `{"tag":"insert","pos":${i}}`, null, null);
+    insert(i, 'insert', `{"tag":"insert","pos":${i}}`, null, null);
   }
-  stmt.run(watermark, changes + 1, '{"tag":"commit"}', precommit, writeTimeMs);
+  insert(changes + 1, 'commit', '{"tag":"commit"}', precommit, writeTimeMs);
 }
 
 function seedRows(anchor: ChangeLogAnchor) {
@@ -105,6 +129,12 @@ function seedRows(anchor: ChangeLogAnchor) {
     {
       watermark: anchor.resumeWatermark,
       pos: 0,
+      tag: 'begin',
+      estimatedBytes: estimateChangeLogStreamRowBytes(
+        anchor.resumeWatermark,
+        'begin',
+        '{"tag":"begin"}',
+      ),
       change: '{"tag":"begin"}',
       precommit: null,
       writeTimeMs: null,
@@ -112,6 +142,14 @@ function seedRows(anchor: ChangeLogAnchor) {
     {
       watermark: anchor.resumeWatermark,
       pos: 1,
+      tag: 'commit',
+      estimatedBytes: estimateChangeLogStreamRowBytes(
+        anchor.resumeWatermark,
+        'commit',
+        '{"tag":"commit"}',
+        anchor.resumeWatermark,
+        true,
+      ),
       change: '{"tag":"commit"}',
       precommit: anchor.resumeWatermark,
       writeTimeMs: anchor.nowMs,
@@ -202,7 +240,7 @@ describe('replicator/change-log-db', () => {
         },
         {
           cid: 2,
-          name: 'change',
+          name: 'tag',
           type: 'TEXT',
           notnull: 1,
           dflt_value: null,
@@ -210,6 +248,22 @@ describe('replicator/change-log-db', () => {
         },
         {
           cid: 3,
+          name: 'estimatedBytes',
+          type: 'INTEGER',
+          notnull: 1,
+          dflt_value: null,
+          pk: 0,
+        },
+        {
+          cid: 4,
+          name: 'change',
+          type: 'TEXT',
+          notnull: 1,
+          dflt_value: null,
+          pk: 0,
+        },
+        {
+          cid: 5,
           name: 'precommit',
           type: 'TEXT',
           notnull: 0,
@@ -217,7 +271,7 @@ describe('replicator/change-log-db', () => {
           pk: 0,
         },
         {
-          cid: 4,
+          cid: 6,
           name: 'writeTimeMs',
           type: 'INTEGER',
           notnull: 0,
@@ -244,27 +298,40 @@ describe('replicator/change-log-db', () => {
           .prepare(`PRAGMA index_info("${CHANGE_LOG_STREAM_WRITE_TIME_INDEX}")`)
           .all(),
       ).toEqual([
-        {seqno: 0, cid: 4, name: 'writeTimeMs'},
+        {seqno: 0, cid: 6, name: 'writeTimeMs'},
         {seqno: 1, cid: 0, name: 'watermark'},
       ]);
     });
 
-    // The replica carried this same table at schema v14. The two definitions
-    // describe different databases now and are deliberately not shared, so
-    // this is the check that the writer's table is still the one a v14 replica
-    // would have held — i.e. that the split did not silently change the shape.
-    test('matches the shape frozen in replica migration 14', () => {
+    // The replica's migration is history and must not acquire columns added to
+    // the separate, disposable change-log database after the split.
+    test('keeps the replica migration 14 shape frozen apart', () => {
       using changeLog = new Database(lc, ':memory:');
       changeLog.exec(CREATE_CHANGE_LOG_STREAM_SCHEMA);
       using replica = new Database(lc, ':memory:');
       replica.exec(CREATE_V14_CHANGE_LOG_STREAM);
 
-      const schema = (db: Database) =>
+      const columns = (db: Database) =>
         db
-          .prepare(/*sql*/ `SELECT "type", "name", "tbl_name", "sql" FROM "sqlite_master"
-                       ORDER BY "type", "name"`)
-          .all();
-      expect(schema(changeLog)).toEqual(schema(replica));
+          .prepare(`PRAGMA table_info("${CHANGE_LOG_STREAM_TABLE}")`)
+          .all<{name: string}>()
+          .map(({name}) => name);
+      expect(columns(replica)).toEqual([
+        'watermark',
+        'pos',
+        'change',
+        'precommit',
+        'writeTimeMs',
+      ]);
+      expect(columns(changeLog)).toEqual([
+        'watermark',
+        'pos',
+        'tag',
+        'estimatedBytes',
+        'change',
+        'precommit',
+        'writeTimeMs',
+      ]);
     });
 
     // The whole v2 shape lands in one bump, so that slice 8 can add the
@@ -456,13 +523,12 @@ describe('replicator/change-log-db', () => {
       const {db, result} = openChangeLogDBForWriting(lc, file.path, ANCHOR);
       using rebuilt = db;
 
-      // 'created' rather than 'schema-mismatch': a reseed cannot enable the
-      // pragma, so the whole file is replaced and the reconcile that follows
-      // runs against a database that does not exist yet.
+      // The file is replaced rather than dropped in place, but the original
+      // reason is retained for observability.
       expect(result).toEqual({
         action: 'reseeded',
         head: ANCHOR.resumeWatermark,
-        reason: 'created',
+        reason: 'schema-mismatch',
         cookiesStale: true,
       });
       expectSeededAt(rebuilt, ANCHOR);
@@ -781,6 +847,12 @@ describe('replicator/change-log-db', () => {
         {
           watermark: '05',
           pos: 0,
+          tag: 'begin',
+          estimatedBytes: estimateChangeLogStreamRowBytes(
+            '05',
+            'begin',
+            '{"tag":"begin"}',
+          ),
           change: '{"tag":"begin"}',
           precommit: null,
           writeTimeMs: null,
@@ -788,6 +860,12 @@ describe('replicator/change-log-db', () => {
         {
           watermark: '05',
           pos: 1,
+          tag: 'insert',
+          estimatedBytes: estimateChangeLogStreamRowBytes(
+            '05',
+            'insert',
+            '{"tag":"insert","pos":1}',
+          ),
           change: '{"tag":"insert","pos":1}',
           precommit: null,
           writeTimeMs: null,
@@ -795,6 +873,14 @@ describe('replicator/change-log-db', () => {
         {
           watermark: '05',
           pos: 2,
+          tag: 'commit',
+          estimatedBytes: estimateChangeLogStreamRowBytes(
+            '05',
+            'commit',
+            '{"tag":"commit"}',
+            '03',
+            true,
+          ),
           change: '{"tag":"commit"}',
           precommit: '03',
           writeTimeMs: 200,

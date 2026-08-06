@@ -193,7 +193,7 @@ function expectMinimumIsAValidBoundary(db: Database) {
   }
   const last = db
     .prepare(/*sql*/ `
-      SELECT "precommit", json_extract("change", '$.tag') AS "tag"
+      SELECT "precommit", "tag"
       FROM "${CHANGE_LOG_STREAM_TABLE}"
       WHERE "watermark" = ?
       ORDER BY "pos" DESC

@@ -7,7 +7,10 @@ import {
 import {extractChangeSubstring} from '../change-streamer/change-log-codec.ts';
 import {ChangeLogTransactionHasher} from '../change-streamer/change-log-transaction-hash.ts';
 import {ChangeLogCookieWriter, type CookieOpTag} from './change-log-cookies.ts';
-import {CHANGE_LOG_STREAM_TABLE} from './change-log-db.ts';
+import {
+  CHANGE_LOG_STREAM_TABLE,
+  estimateChangeLogStreamRowBytes,
+} from './change-log-db.ts';
 
 export type ChangeLogStreamTransactionStats = {
   readonly rows: number;
@@ -19,28 +22,6 @@ export type ChangeLogStreamTransactionStats = {
    */
   readonly cookieMutations: readonly CookieOpTag[];
 };
-
-const INTEGER_BYTES = 8;
-
-/**
- * Estimates the retained payload size of a stream row. This deliberately does
- * not claim to measure SQLite b-tree/page overhead; it is stable across the
- * write path and the startup scan used by observability.
- */
-export function estimateChangeLogStreamRowBytes(
-  watermark: string,
-  change: string,
-  precommit?: string,
-  hasWriteTime = false,
-): number {
-  return (
-    Buffer.byteLength(watermark) +
-    INTEGER_BYTES +
-    Buffer.byteLength(change) +
-    (precommit === undefined ? 0 : Buffer.byteLength(precommit)) +
-    (hasWriteTime ? INTEGER_BYTES : 0)
-  );
-}
 
 export class ChangeLogStreamInvariantError extends Error {
   override readonly name = 'ChangeLogStreamInvariantError';
@@ -86,13 +67,14 @@ export class ChangeLogStreamWriter {
     this.#db = db;
     this.#insertChange = db.db.prepare(/*sql*/ `
       INSERT INTO "${CHANGE_LOG_STREAM_TABLE}"
-        ("watermark", "pos", "change")
-        VALUES (?, ?, ?)
+        ("watermark", "pos", "tag", "estimatedBytes", "change")
+        VALUES (?, ?, ?, ?, ?)
     `);
     this.#insertCommit = db.db.prepare(/*sql*/ `
       INSERT INTO "${CHANGE_LOG_STREAM_TABLE}"
-        ("watermark", "pos", "change", "precommit", "writeTimeMs")
-        VALUES (?, ?, ?, ?, ?)
+        ("watermark", "pos", "tag", "estimatedBytes", "change", "precommit",
+         "writeTimeMs")
+        VALUES (?, ?, 'commit', ?, ?, ?, ?)
     `);
     this.#cookies = new ChangeLogCookieWriter(db.db);
   }
@@ -109,7 +91,18 @@ export class ChangeLogStreamWriter {
     this.#watermark = watermark;
     this.#pos = 0;
     const change = extractChangeSubstring(json, 'begin');
-    this.#insertChange.run(watermark, this.#pos, change);
+    const estimatedBytes = estimateChangeLogStreamRowBytes(
+      watermark,
+      'begin',
+      change,
+    );
+    this.#insertChange.run(
+      watermark,
+      this.#pos,
+      'begin',
+      estimatedBytes,
+      change,
+    );
     this.#hasher = new ChangeLogTransactionHasher();
     this.#hasher.add({
       watermark,
@@ -118,7 +111,7 @@ export class ChangeLogStreamWriter {
       change,
       precommit: null,
     });
-    this.#estimatedBytes = estimateChangeLogStreamRowBytes(watermark, change);
+    this.#estimatedBytes = estimatedBytes;
   }
 
   /**
@@ -135,7 +128,12 @@ export class ChangeLogStreamWriter {
     const watermark = this.#requireWatermark();
     const {tag} = change;
     const stored = extractChangeSubstring(json, tag);
-    this.#insertChange.run(watermark, ++this.#pos, stored);
+    const estimatedBytes = estimateChangeLogStreamRowBytes(
+      watermark,
+      tag,
+      stored,
+    );
+    this.#insertChange.run(watermark, ++this.#pos, tag, estimatedBytes, stored);
     this.#requireHasher().add({
       watermark,
       pos: this.#pos,
@@ -143,7 +141,7 @@ export class ChangeLogStreamWriter {
       change: stored,
       precommit: null,
     });
-    this.#estimatedBytes += estimateChangeLogStreamRowBytes(watermark, stored);
+    this.#estimatedBytes += estimatedBytes;
 
     if (isSchemaChange(change)) {
       for (const op of this.#cookies.apply(change)) {
@@ -163,9 +161,17 @@ export class ChangeLogStreamWriter {
       `change-log stream commit ${watermark} does not match begin ${precommit}`,
     );
     const change = extractChangeSubstring(json, 'commit');
+    const estimatedBytes = estimateChangeLogStreamRowBytes(
+      watermark,
+      'commit',
+      change,
+      precommit,
+      true,
+    );
     this.#insertCommit.run(
       watermark,
       ++this.#pos,
+      estimatedBytes,
       change,
       precommit,
       writeTimeMs,
@@ -180,9 +186,7 @@ export class ChangeLogStreamWriter {
     });
     const stats = {
       rows: this.#pos + 1,
-      estimatedBytes:
-        this.#estimatedBytes +
-        estimateChangeLogStreamRowBytes(watermark, change, precommit, true),
+      estimatedBytes: this.#estimatedBytes + estimatedBytes,
       hash: hasher.digest(),
       cookieMutations: this.#cookieMutations,
     };

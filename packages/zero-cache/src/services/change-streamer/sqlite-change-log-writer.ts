@@ -10,13 +10,16 @@ import {StatementRunner} from '../../db/statements.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
 import {readCookieRowCounts} from '../replicator/change-log-cookies.ts';
 import {
+  ChangeLogRebuildRequired,
   changeLogFileName,
   deleteChangeLogDB,
   openChangeLogDBForWriting,
+  rebuildChangeLogDBForWriting,
   reconcileChangeLog,
   type ChangeLogAnchor,
   type ChangeLogIdentity,
   type ChangeLogResumePoint,
+  type ReconcileResult,
 } from '../replicator/change-log-db.ts';
 import {ChangeLogStreamWriter} from '../replicator/change-log-stream-writer.ts';
 import {
@@ -46,6 +49,8 @@ export type SQLiteChangeLogWriterOptions = {
    * nothing.
    */
   onDisabled?: (() => void) | undefined;
+  /** Called when reconciliation replaces the file, to close cached readers. */
+  onRebuilt?: (() => void) | undefined;
   /** Overridable for tests. */
   now?: (() => number) | undefined;
 };
@@ -148,6 +153,9 @@ export class SQLiteChangeLogWriter {
       if (db === undefined) {
         const opened = openChangeLogDBForWriting(this.#lc, replicaFile, anchor);
         this.#db = opened.db;
+        if (opened.replacedFile) {
+          this.#opts.onRebuilt?.();
+        }
         recordSQLiteChangeLogReconcile(this.#lc, opened.result);
         const info = getSQLiteChangeLogInfo(opened.db);
         logSQLiteChangeLogStartup(
@@ -157,10 +165,37 @@ export class SQLiteChangeLogWriter {
         );
         this.#observer = new SQLiteChangeLogObserver(this.#lc, info);
       } else {
-        const result = reconcileChangeLog(this.#lc, db, anchor);
+        let result: ReconcileResult;
+        try {
+          result = reconcileChangeLog(this.#lc, db, anchor, {
+            rebuildInsteadOfUnboundedWork: true,
+          });
+        } catch (e) {
+          if (!(e instanceof ChangeLogRebuildRequired)) {
+            throw e;
+          }
+          // Close every handle to the old inode before unlinking it. The writer
+          // is reconstructed below against the replacement connection.
+          this.#writer = undefined;
+          this.#db = undefined;
+          db.close();
+          this.#opts.onRebuilt?.();
+          const rebuilt = rebuildChangeLogDBForWriting(
+            this.#lc,
+            replicaFile,
+            anchor,
+            e,
+          );
+          this.#db = rebuilt.db;
+          result = rebuilt.result;
+        }
         recordSQLiteChangeLogReconcile(this.#lc, result);
         if (result.action !== 'none') {
-          this.#observer?.reconciled(getSQLiteChangeLogInfo(db));
+          this.#observer?.reconciled(
+            getSQLiteChangeLogInfo(
+              must(this.#db, 'the SQLite change log is not open'),
+            ),
+          );
         }
       }
       // A reseed drops and recreates the stream table, so the append statements

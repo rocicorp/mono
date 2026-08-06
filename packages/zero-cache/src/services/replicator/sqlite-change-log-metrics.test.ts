@@ -106,6 +106,7 @@ test('each reseed reason increments reconcile_wipes with its own label', async (
     'schema-mismatch',
     'identity-mismatch',
     'gap',
+    'oversized-truncate',
   ];
 
   for (const reason of reasons) {
@@ -143,6 +144,7 @@ test('each reseed reason increments reconcile_wipes with its own label', async (
     'schema-mismatch': 1,
     'identity-mismatch': 1,
     'gap': 2,
+    'oversized-truncate': 1,
   });
   expect(counts(otel.exporter, `${METRIC}.reconcile_truncated_rows`)).toEqual({
     '': 27,

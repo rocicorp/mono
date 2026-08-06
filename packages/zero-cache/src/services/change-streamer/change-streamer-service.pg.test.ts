@@ -507,8 +507,7 @@ describe('change-streamer/service', () => {
       expect(
         changeLog
           .prepare(/*sql*/ `
-            SELECT "watermark", "pos", json_extract("change", '$.tag') AS "tag",
-                   "precommit"
+            SELECT "watermark", "pos", "tag", "precommit"
               FROM "_zero.changeLogStream" ORDER BY "watermark", "pos"
           `)
           .all(),

@@ -165,8 +165,7 @@ type LogTransaction = {
 function readLog(db: Database): LogTransaction[] {
   const rows = db
     .prepare(/*sql*/ `
-      SELECT "watermark", "pos", json_extract("change", '$.tag') AS "tag",
-             "precommit"
+      SELECT "watermark", "pos", "tag", "precommit"
         FROM "${CHANGE_LOG_STREAM_TABLE}"
         ORDER BY "watermark", "pos"
     `)
