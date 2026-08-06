@@ -17,7 +17,11 @@ import {StatementRunner} from '../../db/statements.ts';
 import {DbFile} from '../../test/lite.ts';
 import type {SchemaChange} from '../change-source/protocol/current/data.ts';
 import {readCookies} from '../replicator/change-log-cookies.ts';
-import {CHANGE_LOG_STREAM_TABLE} from '../replicator/change-log-db.ts';
+import {
+  CHANGE_LOG_STREAM_TABLE,
+  readChangeLogHead,
+  type ChangeLogResumePoint,
+} from '../replicator/change-log-db.ts';
 import {BACKFILLING_TABLE} from '../replicator/schema/backfilling.ts';
 import {
   initReplicationState,
@@ -27,6 +31,7 @@ import {
   ChangeLogInitializer,
   readReplicaInitializationParameters,
   replicaInitializationSource,
+  type ChangeLogInitializerSources,
   type InitializationParameters,
 } from './change-log-initializer.ts';
 import {
@@ -80,12 +85,33 @@ describe('change-streamer/change-log-initializer', () => {
     };
   }
 
+  /**
+   * Stands in for `SQLiteChangeLogWriter.reconcile` / `.reconcileFromLog`. The
+   * log here is driven directly, so it is always already in agreement and there
+   * is nothing to truncate: Postgres's point passes through, and without one
+   * the log's own head is the resume point -- which is what the writer's
+   * resolution reduces to for a log it may keep.
+   */
+  function reconcileChangeLog(
+    resumeFrom: ChangeLogResumePoint | undefined,
+    seed: () => ChangeLogResumePoint,
+  ): ChangeLogResumePoint | undefined {
+    if (resumeFrom) {
+      return resumeFrom;
+    }
+    const head = readChangeLogHead(changeLog);
+    return head === null
+      ? seed()
+      : {resumeWatermark: head, cookies: readCookies(changeLog)};
+  }
+
   function initializer(
     opts: {
       initFromPgChangeLog?: boolean;
       initFromReplica?: boolean;
       pg?: () => Promise<InitializationParameters>;
       replica?: () => InitializationParameters;
+      reconcileChangeLog?: ChangeLogInitializerSources['reconcileChangeLog'];
       changeLog?: () => Database | undefined;
     } = {},
   ) {
@@ -99,15 +125,15 @@ describe('change-streamer/change-log-initializer', () => {
         pgChangeLog: opts.pg ?? (() => Promise.resolve(pgParameters())),
         replica:
           opts.replica ?? (() => readReplicaInitializationParameters(replica)),
+        reconcileChangeLog: opts.reconcileChangeLog ?? reconcileChangeLog,
         changeLog: opts.changeLog ?? (() => changeLog),
       },
     );
   }
 
-  /** The stream loop's order: initialize, reconcile, then compare. */
   async function compare(init = initializer()) {
     await init.initialize();
-    return init.compare();
+    return init.lastComparison();
   }
 
   const CREATE_FOO: SchemaChange = {
@@ -437,7 +463,7 @@ describe('change-streamer/change-log-initializer', () => {
     // Postgres is authoritative, so the parameters still come back...
     expect((await init.initialize()).lastWatermark).toBe(wm);
     // ...and there is nothing to compare them against.
-    expect(init.compare()).toBeUndefined();
+    expect(init.lastComparison()).toBeUndefined();
   });
 
   test('a replica that cannot be read *is* fatal once it is the only source', async () => {
@@ -457,7 +483,99 @@ describe('change-streamer/change-log-initializer', () => {
     const init = initializer({initFromReplica: false});
 
     expect((await init.initialize()).lastWatermark).toBe(wm);
-    expect(init.compare()).toBeUndefined();
+    expect(init.lastComparison()).toBeUndefined();
+  });
+
+  /**
+   * Postgres is not a source, so the resume point is the log's own head with
+   * its own cookies, and the requests are projected from those rather than
+   * queried from anywhere.
+   */
+  describe('with Postgres retired', () => {
+    const withoutPg = (
+      opts: Parameters<typeof initializer>[0] = {},
+    ): ReturnType<typeof initializer> =>
+      initializer({
+        ...opts,
+        initFromPgChangeLog: false,
+        pg: () => Promise.reject(new Error('Postgres must not be read')),
+      });
+
+    test('the log supplies the resume point, and it is the one Postgres would have', async () => {
+      await transaction([CREATE_FOO]);
+      // The replica is held back, which after the flip is routine rather than
+      // interesting: nothing pairs its watermark with anything.
+      const head = await transaction(
+        [
+          {
+            tag: 'add-column',
+            table: {schema: 'my', name: 'foo'},
+            column: {name: 'd', spec: {pos: 3, dataType: 'text'}},
+            backfill: {fooID: 123},
+          },
+        ],
+        {toReplica: false},
+      );
+
+      const pg = pgParameters();
+      const params = await withoutPg().initialize();
+
+      expect(params.lastWatermark).toBe(head);
+      expect(params.cookies).toEqual(pg.cookies);
+      expect(params.backfillRequests).toEqual([
+        {
+          table: {
+            schema: 'my',
+            name: 'foo',
+            metadata: {rowKey: {type: 'default', columns: ['id']}},
+          },
+          columns: {a: {fooID: 987}, b: {fooID: 843}, d: {fooID: 123}},
+        },
+      ]);
+    });
+
+    test('a log that cannot be kept falls back to the replica', async () => {
+      await transaction([CREATE_FOO]);
+      const replicated = readReplicaInitializationParameters(replica);
+
+      // What the writer returns for a wiped log: the seed it was handed.
+      const params = await withoutPg({
+        reconcileChangeLog: (_, seed) => seed(),
+      }).initialize();
+
+      expect(params.lastWatermark).toBe(replicated.lastWatermark);
+      expect(params.cookies).toEqual(replicated.cookies);
+      expect(params.backfillRequests).toEqual(replicated.backfillRequests);
+    });
+
+    test('a writer that has failed soft falls back to the replica', async () => {
+      await transaction([CREATE_FOO]);
+      await transaction([], {toReplica: false});
+      const replicated = readReplicaInitializationParameters(replica);
+
+      // No log at all -- `sqliteChangeLogMode=off`, or a writer that deleted
+      // its file. The replica is the floor: there is always a resume point.
+      const params = await withoutPg({
+        reconcileChangeLog: () => undefined,
+      }).initialize();
+
+      expect(params.lastWatermark).toBe(replicated.lastWatermark);
+      expect(params.backfillRequests).toEqual(replicated.backfillRequests);
+    });
+
+    test('nothing is compared, because there is nothing to compare against', async () => {
+      await transaction([CREATE_FOO]);
+      const init = withoutPg();
+
+      await init.initialize();
+      expect(init.lastComparison()).toBeUndefined();
+    });
+
+    test('the replica is required, since it is the floor', () => {
+      expect(() => withoutPg({initFromReplica: false})).toThrow(
+        'At least one of initFromPgChangeLog or initFromReplica',
+      );
+    });
   });
 
   test('with the replica alone its parameters are the ones returned', async () => {
@@ -483,16 +601,21 @@ describe('change-streamer/change-log-initializer', () => {
         columns: {a: {fooID: 987}, b: {fooID: 843}},
       },
     ]);
-    expect(init.compare()).toBeUndefined();
+    expect(init.lastComparison()).toBeUndefined();
   });
 
-  test('a comparison is consumed, so a missed initialize cannot compare stale state', async () => {
+  test('a classification does not outlive the initialize that produced it', async () => {
     await transaction([CREATE_FOO]);
     const init = initializer();
 
     await init.initialize();
-    expect(init.compare()).toBe('equal');
-    expect(init.compare()).toBeUndefined();
+    expect(init.lastComparison()).toBe('equal');
+
+    // The next connection re-derives both sides, so a stale classification must
+    // not be reported for it -- this one has nothing to compare.
+    const withoutReplica = initializer({initFromReplica: false});
+    await withoutReplica.initialize();
+    expect(withoutReplica.lastComparison()).toBeUndefined();
   });
 
   test('a fold that throws is reported rather than raised', async () => {
@@ -507,7 +630,7 @@ describe('change-streamer/change-log-initializer', () => {
     await init.initialize();
     // Nothing acts on the comparison, so nothing about it may reach the stream
     // loop -- but it must not be silent either.
-    expect(init.compare()).toBe('error');
+    expect(init.lastComparison()).toBe('error');
   });
 
   test('at least one source is required', () => {

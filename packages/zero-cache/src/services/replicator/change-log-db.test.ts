@@ -408,7 +408,11 @@ describe('replicator/change-log-db', () => {
     test('creates and seeds the log, then leaves it alone', () => {
       const file = newDbFile();
       {
-        const {db, result} = openChangeLogDBForWriting(lc, file.path, ANCHOR);
+        const {db, result} = openChangeLogDBForWriting(
+          lc,
+          file.path,
+          () => ANCHOR,
+        );
         using open = db;
         expect(result).toEqual({
           action: 'reseeded',
@@ -420,7 +424,7 @@ describe('replicator/change-log-db', () => {
         expect(readChangeLogHead(open)).toBe(ANCHOR.resumeWatermark);
       }
 
-      const reopened = openChangeLogDBForWriting(lc, file.path, ANCHOR);
+      const reopened = openChangeLogDBForWriting(lc, file.path, () => ANCHOR);
       using db = reopened.db;
       expect(reopened.result).toEqual({
         action: 'none',
@@ -436,7 +440,11 @@ describe('replicator/change-log-db', () => {
       const file = newDbFile();
       writeFileSync(changeLogFileName(file.path), 'this is not a database');
 
-      const {db, result} = openChangeLogDBForWriting(lc, file.path, ANCHOR);
+      const {db, result} = openChangeLogDBForWriting(
+        lc,
+        file.path,
+        () => ANCHOR,
+      );
       using rebuilt = db;
 
       expect(result).toEqual({
@@ -453,7 +461,11 @@ describe('replicator/change-log-db', () => {
       const file = newDbFile();
       createV1Log(file.path);
 
-      const {db, result} = openChangeLogDBForWriting(lc, file.path, ANCHOR);
+      const {db, result} = openChangeLogDBForWriting(
+        lc,
+        file.path,
+        () => ANCHOR,
+      );
       using rebuilt = db;
 
       // 'created' rather than 'schema-mismatch': a reseed cannot enable the
@@ -484,7 +496,11 @@ describe('replicator/change-log-db', () => {
         expect(autoVacuum(db)).toBe(0);
       }
 
-      const {db, result} = openChangeLogDBForWriting(lc, file.path, ANCHOR);
+      const {db, result} = openChangeLogDBForWriting(
+        lc,
+        file.path,
+        () => ANCHOR,
+      );
       using rebuilt = db;
 
       expect(result).toEqual({
@@ -518,7 +534,7 @@ describe('replicator/change-log-db', () => {
         const {db, result} = openChangeLogDBForWriting(
           logger,
           file.path,
-          ANCHOR,
+          () => ANCHOR,
         );
         using opened = db;
 
@@ -554,9 +570,9 @@ describe('replicator/change-log-db', () => {
       const dir = changeLogFileName(file.path);
       mkdirSync(dir);
       try {
-        expect(() => openChangeLogDBForWriting(lc, file.path, ANCHOR)).toThrow(
-          /unable to open database file/,
-        );
+        expect(() =>
+          openChangeLogDBForWriting(lc, file.path, () => ANCHOR),
+        ).toThrow(/unable to open database file/);
         expect(statSync(dir).isDirectory()).toBe(true);
       } finally {
         rmSync(dir, {recursive: true, force: true});

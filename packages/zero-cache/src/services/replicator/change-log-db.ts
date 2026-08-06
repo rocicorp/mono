@@ -332,10 +332,22 @@ function readAutoVacuum(db: Database): number {
  * so a reseed cannot enable it. Unlike corruption, a *second* failure there is
  * tolerated rather than thrown — see {@link ensureIncrementalAutoVacuum}.
  */
+/**
+ * Produces the anchor for a database that is now open.
+ *
+ * A function rather than a value because the anchor can depend on what the file
+ * turns out to contain: once the log owns the resume point, a log this
+ * task may keep appending to is anchored on its *own* head, and only one that
+ * has to be wiped falls back to the replica's state version. It is called
+ * again after a rebuild, against the fresh empty file, which is the answer
+ * those paths need rather than a complication for them.
+ */
+export type AnchorResolver = (db: Database) => ChangeLogAnchor;
+
 export function openChangeLogDBForWriting(
   lc: LogContext,
   replicaFile: string,
-  anchor: ChangeLogAnchor,
+  anchor: AnchorResolver,
 ): {db: Database; result: ReconcileResult} {
   const opened = openOrRebuildCorrupt(lc, replicaFile, anchor);
   const {db, result} = ensureIncrementalAutoVacuum(
@@ -350,7 +362,7 @@ export function openChangeLogDBForWriting(
 function openOrRebuildCorrupt(
   lc: LogContext,
   replicaFile: string,
-  anchor: ChangeLogAnchor,
+  anchor: AnchorResolver,
 ): OpenedChangeLog {
   try {
     return openAndReconcile(lc, replicaFile, anchor);
@@ -390,7 +402,7 @@ function openOrRebuildCorrupt(
 function ensureIncrementalAutoVacuum(
   lc: LogContext,
   replicaFile: string,
-  anchor: ChangeLogAnchor,
+  anchor: AnchorResolver,
   opened: OpenedChangeLog,
 ): OpenedChangeLog {
   if (opened.autoVacuum === AUTO_VACUUM_INCREMENTAL) {
@@ -416,7 +428,7 @@ function ensureIncrementalAutoVacuum(
 function rebuildChangeLog(
   lc: LogContext,
   replicaFile: string,
-  anchor: ChangeLogAnchor,
+  anchor: AnchorResolver,
 ): OpenedChangeLog {
   deleteChangeLogDB(replicaFile);
   // Reconciles a database that does not exist, i.e. reseeds with reason
@@ -434,13 +446,13 @@ type OpenedChangeLog = {
 function openAndReconcile(
   lc: LogContext,
   replicaFile: string,
-  anchor: ChangeLogAnchor,
+  anchor: AnchorResolver,
 ): OpenedChangeLog {
   const db = openChangeLogDB(lc, replicaFile, {readonly: false});
   try {
     applyChangeLogPragmas(db);
     const autoVacuum = readAutoVacuum(db);
-    return {db, result: reconcileChangeLog(lc, db, anchor), autoVacuum};
+    return {db, result: reconcileChangeLog(lc, db, anchor(db)), autoVacuum};
   } catch (e) {
     // The caller never sees this handle, so it closes here or leaks — and it
     // must be closed before the corruption path deletes the file.
@@ -531,7 +543,7 @@ function reconcile(
   db: Database,
   anchor: ChangeLogAnchor,
 ): ReconcileResult {
-  const wipe = wipeReason(db, anchor);
+  const wipe = changeLogWipeReason(db, anchor.identity);
   if (wipe !== undefined) {
     return reseed(lc, db, anchor, wipe);
   }
@@ -569,9 +581,19 @@ function reconcile(
   return {action: 'none', head, cookiesStale: false};
 }
 
-function wipeReason(
+/**
+ * Whether the log's contents can be kept, and if not, why.
+ *
+ * Exported because it is also the question "can this log supply a resume point
+ * of its own": once the log owns the resume point, its head is only usable
+ * if the file is one this task may keep appending to, and that is exactly this
+ * predicate. Taking the identity rather than a whole anchor is what makes that
+ * call possible — at that moment there is no anchor yet, because the anchor is
+ * what the answer produces.
+ */
+export function changeLogWipeReason(
   db: Database,
-  anchor: ChangeLogAnchor,
+  identity: ChangeLogIdentity,
 ): ReseedReason | undefined {
   if (
     !tableExists(db, CHANGE_LOG_STREAM_TABLE) ||
@@ -604,7 +626,6 @@ function wipeReason(
     return 'created';
   }
   const {epoch, generation, replicaID} = readChangeLogMeta(db);
-  const identity = anchor.identity;
   if (
     epoch !== identity.epoch ||
     generation !== identity.generation ||

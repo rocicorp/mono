@@ -16,6 +16,7 @@ import {
   openChangeLogDB,
   readChangeLogHead,
   type ChangeLogIdentity,
+  type ChangeLogResumePoint,
 } from '../replicator/change-log-db.ts';
 import {ReplicationMessages} from '../replicator/test-utils.ts';
 import {serializeChangeStreamData} from './change-log-codec.ts';
@@ -443,6 +444,96 @@ describe('change-streamer/sqlite-change-log-writer', () => {
       fixture.writer.reconcile(resumeAt('04', pgCookies));
 
       expect(fixture.cookies()).toEqual(folded);
+    });
+
+    /**
+     * Nothing supplies a resume point, so the log's own head is one -- and a
+     * log that cannot be kept falls back to the replica's, never to Postgres's.
+     *
+     * `seed` throws wherever it must not be called, which is the load-bearing
+     * half of these assertions: a warm log that consulted its seed would be
+     * resuming from a position it had already passed.
+     */
+    describe('resuming from the log itself', () => {
+      const replicaSeed = resumeAt('03', pgCookies);
+      const noSeed = (): ChangeLogResumePoint => {
+        throw new Error('the seed must not be consulted');
+      };
+
+      test('a log it may keep resumes from its own head and cookies', () => {
+        using fixture = setup('change-log-writer-from-log-warm');
+
+        transaction(fixture.writer, '04', createTable);
+        const folded = fixture.cookies();
+
+        expect(fixture.writer.reconcileFromLog(noSeed)).toEqual({
+          resumeWatermark: '04',
+          cookies: folded,
+        });
+        // Nothing was truncated and nothing was reseeded: the head *is* the
+        // anchor, so there is nothing above it to remove.
+        expect(fixture.head()).toBe('04');
+        expect(fixture.cookies()).toEqual(folded);
+      });
+
+      test('a log left by another replica is seeded from the replica', () => {
+        using fixture = setup('change-log-writer-from-log-identity');
+        transaction(fixture.writer, '04', createTable);
+        fixture.writer.close();
+
+        // Same file, different replica: what a reused volume leaves behind.
+        const other = new SQLiteChangeLogWriter(fixture.lc, {
+          replicaFile: fixture.file.path,
+          identity: {...IDENTITY, replicaID: 'a-different-replica'},
+          now: () => 1_700_000_000_000,
+        });
+        try {
+          expect(other.reconcileFromLog(() => replicaSeed)).toEqual(
+            replicaSeed,
+          );
+          // Postgres' set is here because the fixture reuses it as the
+          // replica's; what matters is that it came from the seed.
+          expect(fixture.cookies()).toEqual(pgCookies);
+          expect(fixture.head()).toBe('03');
+        } finally {
+          other.close();
+        }
+      });
+
+      test('a log created here and now is seeded from the replica', () => {
+        const sink = new TestLogSink();
+        const lc = new LogContext('debug', undefined, sink);
+        const file = new DbFile('change-log-writer-from-log-cold');
+        files.push(file);
+        const writer = new SQLiteChangeLogWriter(lc, {
+          replicaFile: file.path,
+          identity: IDENTITY,
+          now: () => 1_700_000_000_000,
+        });
+        try {
+          // The first reconcile of a process whose file does not exist yet,
+          // which is every restore.
+          expect(writer.reconcileFromLog(() => replicaSeed)).toEqual(
+            replicaSeed,
+          );
+        } finally {
+          writer.close();
+        }
+      });
+
+      test('a disabled writer supplies no resume point at all', () => {
+        using fixture = setup('change-log-writer-from-log-disabled');
+
+        // Fail soft, which deletes the file and disables the writer. The
+        // caller falls back to the replica rather than resuming from nothing.
+        fixture.writer.write(
+          ['data', {tag: 'insert'} as never],
+          'not a transaction',
+        );
+        expect(fixture.disabledCount()).toBe(1);
+
+        expect(fixture.writer.reconcileFromLog(noSeed)).toBeUndefined();
+      });
     });
   });
 });
