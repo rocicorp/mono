@@ -941,7 +941,7 @@ export const zeroOptions = {
     },
 
     vfsProbeIntervalMs: {
-      type: v.number().default(30 * 1000),
+      type: v.number().default(15 * 1000),
       desc: [
         `Interval in milliseconds at which the standalone backup watermark reader`,
         `logs the watermark when it is run without a parent worker. The integrated`,
@@ -1035,7 +1035,7 @@ export const zeroOptions = {
     },
 
     incrementalBackupIntervalMinutes: {
-      type: v.number().default(15),
+      type: v.number().default(5),
       desc: [
         `The interval between incremental backups of the replica. Shorter intervals`,
         `reduce the amount of change history that needs to be replayed when catching`,
@@ -1045,7 +1045,7 @@ export const zeroOptions = {
     },
 
     snapshotBackupIntervalHours: {
-      type: v.number().default(12),
+      type: v.number().default(4),
       desc: [
         `The interval between snapshot backups of the replica. Snapshot backups`,
         `make a full copy of the database to a new litestream generation. This`,
