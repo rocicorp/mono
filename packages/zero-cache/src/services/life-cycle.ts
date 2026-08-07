@@ -308,7 +308,7 @@ export class ProcessManager {
             } ms)`
           : `all user-facing workers exited`,
       );
-      return this.#exit(0);
+      return this.#exit(this.#drainStart ? 0 : code || -1);
     }
 
     if (this.#drainStart === 0) {
