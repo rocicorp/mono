@@ -515,6 +515,16 @@ class ViewWrapper<
   readonly #singular: boolean;
   #destroyTimer: ReturnType<typeof setTimeout> | undefined;
 
+  // Inputs of the previous #onData call. When a view flush delivers
+  // reference-identical data with the same resultType and error, the previous
+  // snapshot tuple is kept and React is not notified — building a fresh tuple
+  // would defeat useSyncExternalStore's Object.is bailout and re-render every
+  // subscriber with identical data. #lastResultType doubles as the "has fired
+  // before" sentinel (data and error may both legitimately be undefined).
+  #lastData: Immutable<HumanReadable<TReturn>> | undefined;
+  #lastResultType: ResultType | undefined;
+  #lastError: ErroredQuery | undefined;
+
   constructor(
     query: Query<TTable, TSchema, TReturn>,
     zero: Pick<Zero<TSchema, undefined, TContext>, 'materialize'>,
@@ -538,16 +548,31 @@ class ViewWrapper<
     resultType: ResultType,
     error?: ErroredQuery,
   ) => {
-    // applyChange now returns immutable data structures, so no deep clone needed.
-    // Unchanged rows preserve their object identity for React.memo optimization.
-    const data = snap as HumanReadable<TReturn>;
-    this.#snapshot = getSnapshot(
-      this.#singular,
-      data,
-      resultType,
-      this.#retry,
-      error,
-    );
+    const unchanged =
+      this.#lastResultType !== undefined &&
+      this.#lastData === snap &&
+      this.#lastResultType === resultType &&
+      this.#lastError === error;
+    this.#lastData = snap;
+    this.#lastResultType = resultType;
+    this.#lastError = error;
+
+    if (!unchanged) {
+      // applyChange now returns immutable data structures, so no deep clone needed.
+      // Unchanged rows preserve their object identity for React.memo optimization.
+      const data = snap as HumanReadable<TReturn>;
+      this.#snapshot = getSnapshot(
+        this.#singular,
+        data,
+        resultType,
+        this.#retry,
+        error,
+      );
+    }
+
+    // The resolver bookkeeping runs even when unchanged: after a
+    // destroy/re-materialize cycle the resolvers are fresh but the new view
+    // may deliver the same data/resultType as before the destroy.
     if (resultType === 'complete' || resultType === 'error') {
       this.#complete = true;
       this.#completeResolver.resolve();
@@ -562,6 +587,10 @@ class ViewWrapper<
     ) {
       this.#nonEmpty = true;
       this.#nonEmptyResolver.resolve();
+    }
+
+    if (unchanged) {
+      return;
     }
 
     for (const internals of this.#reactInternals) {
