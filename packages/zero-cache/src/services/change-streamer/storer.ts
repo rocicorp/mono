@@ -3,7 +3,7 @@ import type {LogContext} from '@rocicorp/logger';
 import {resolver, type Resolver} from '@rocicorp/resolver';
 import {type PendingQuery, type Row} from 'postgres';
 import {AbortError} from '../../../../shared/src/abort-error.ts';
-import {assert} from '../../../../shared/src/asserts.ts';
+import {assert, unreachable} from '../../../../shared/src/asserts.ts';
 import {Queue} from '../../../../shared/src/queue.ts';
 import {promiseVoid} from '../../../../shared/src/resolved-promises.ts';
 import * as v from '../../../../shared/src/valita.ts';
@@ -29,6 +29,7 @@ import {
   type Commit,
 } from '../change-source/protocol/current/downstream.ts';
 import type {UpstreamStatusMessage} from '../change-source/protocol/current/status.ts';
+import {cookieOps, type CookieOp} from '../replicator/change-log-cookies.ts';
 import type {ReplicatorMode} from '../replicator/replicator.ts';
 import type {Service} from '../service.ts';
 import {
@@ -781,110 +782,76 @@ export class Storer implements Service {
   /**
    * Returns the db statements necessary to track backfill and table metadata
    * presented in the `change`, if any.
+   *
+   * This is the Postgres interpreter of {@link cookieOps}, which is also
+   * interpreted against the SQLite change log by `ChangeLogCookieWriter`. The
+   * two stores have to agree on every transition forever, and the failure mode
+   * if they drift is a backfill that is silently never re-requested — so the
+   * decision of what a schema change *means* lives in one place and only its
+   * transport lives here.
    */
   #trackBackfillMetadata(sql: PostgresTransaction, change: SchemaChange) {
-    const stmts: PendingQuery<Row[]>[] = [];
+    return cookieOps(change).flatMap(op => this.#cookieStmts(sql, op));
+  }
 
-    switch (change.tag) {
-      case 'update-table-metadata': {
-        const {table, new: metadata} = change;
-        stmts.push(this.#upsertTableMetadataStmt(sql, table, metadata));
-        break;
-      }
+  #cookieStmts(sql: PostgresTransaction, op: CookieOp): PendingQuery<Row[]>[] {
+    switch (op.op) {
+      case 'upsert-metadata':
+        return [this.#upsertTableMetadataStmt(sql, op.table, op.metadata)];
 
-      case 'create-table': {
-        const {spec, metadata, backfill} = change;
-        if (metadata) {
-          stmts.push(this.#upsertTableMetadataStmt(sql, spec, metadata));
-        }
-        if (backfill) {
-          Object.entries(backfill).forEach(([col, backfill]) => {
-            stmts.push(
-              this.#upsertColumnBackfillStmt(sql, spec, col, backfill),
-            );
-          });
-        }
-        break;
-      }
+      case 'upsert-backfill':
+        return [
+          this.#upsertColumnBackfillStmt(sql, op.table, op.column, op.backfill),
+        ];
 
       case 'rename-table': {
-        const {old} = change;
-        const row = {schema: change.new.schema, table: change.new.name};
-        stmts.push(
+        const {old} = op;
+        const row = {schema: op.new.schema, table: op.new.name};
+        return [
           sql`UPDATE ${this.#cdc('tableMetadata')} SET ${sql(row)}
                 WHERE "schema" = ${old.schema} AND "table" = ${old.name}`,
           sql`UPDATE ${this.#cdc('backfilling')} SET ${sql(row)}
                 WHERE "schema" = ${old.schema} AND "table" = ${old.name}`,
-        );
-        break;
+        ];
       }
 
       case 'drop-table': {
-        const {
-          id: {schema, name},
-        } = change;
-        stmts.push(
+        const {schema, name} = op.table;
+        return [
           sql`DELETE FROM ${this.#cdc('tableMetadata')}
                 WHERE "schema" = ${schema} AND "table" = ${name}`,
           sql`DELETE FROM ${this.#cdc('backfilling')}
                 WHERE "schema" = ${schema} AND "table" = ${name}`,
-        );
-        break;
+        ];
       }
 
-      case 'add-column': {
-        const {table, tableMetadata, column, backfill} = change;
-        if (tableMetadata) {
-          stmts.push(this.#upsertTableMetadataStmt(sql, table, tableMetadata));
-        }
-        if (backfill) {
-          stmts.push(
-            this.#upsertColumnBackfillStmt(sql, table, column.name, backfill),
-          );
-        }
-        break;
-      }
-
-      case 'update-column': {
-        const {
-          table: {schema, name: table},
-          old: {name: oldName},
-          new: {name: newName},
-        } = change;
-        if (oldName !== newName) {
-          stmts.push(
-            sql`UPDATE ${this.#cdc('backfilling')} SET "column" = ${newName}
-                WHERE "schema" = ${schema} AND "table" = ${table} AND "column" = ${oldName}`,
-          );
-        }
-        break;
+      case 'rename-column': {
+        const {schema, name: table} = op.table;
+        return [
+          sql`UPDATE ${this.#cdc('backfilling')} SET "column" = ${op.new}
+                WHERE "schema" = ${schema} AND "table" = ${table} AND "column" = ${op.old}`,
+        ];
       }
 
       case 'drop-column': {
-        const {
-          table: {schema, name},
-          column,
-        } = change;
-        stmts.push(
+        const {schema, name} = op.table;
+        return [
           sql`DELETE FROM ${this.#cdc('backfilling')}
-                WHERE "schema" = ${schema} AND "table" = ${name} AND "column" = ${column}`,
-        );
-        break;
+                WHERE "schema" = ${schema} AND "table" = ${name} AND "column" = ${op.column}`,
+        ];
       }
 
-      case 'backfill-completed': {
-        const {
-          relation: {schema, name: table, rowKey},
-          columns,
-        } = change;
-        const cols = [...rowKey.columns, ...columns];
-        stmts.push(
+      case 'complete-backfill': {
+        const {schema, name: table} = op.table;
+        return [
           sql`DELETE FROM ${this.#cdc('backfilling')}
-                WHERE "schema" = ${schema} AND "table" = ${table} AND "column" IN ${sql(cols)}`,
-        );
+                WHERE "schema" = ${schema} AND "table" = ${table} AND "column" IN ${sql([...op.columns])}`,
+        ];
       }
+
+      default:
+        unreachable(op);
     }
-    return stmts;
   }
 
   #upsertTableMetadataStmt(
@@ -895,7 +862,7 @@ export class Storer implements Service {
     const row: TableMetadataRow = {schema, table, metadata};
     return sql`
         INSERT INTO ${this.#cdc('tableMetadata')} ${sql(row)}
-          ON CONFLICT ("schema", "table") 
+          ON CONFLICT ("schema", "table")
           DO UPDATE SET ${sql(row)};
     `;
   }
@@ -909,7 +876,7 @@ export class Storer implements Service {
     const row: BackfillingColumn = {schema, table, column, backfill};
     return sql`
         INSERT INTO ${this.#cdc('backfilling')} ${sql(row)}
-          ON CONFLICT ("schema", "table", "column") 
+          ON CONFLICT ("schema", "table", "column")
           DO UPDATE SET ${sql(row)};
     `;
   }
