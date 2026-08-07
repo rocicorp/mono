@@ -58,6 +58,7 @@ import type {
 } from '../change-source/protocol/current/data.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
 import type {ReplicatorMode} from './replicator.ts';
+import {BackfillingTracker} from './schema/backfilling.ts';
 import {ChangeLog, DEL_OP, SET_OP} from './schema/change-log.ts';
 import {ColumnMetadataStore} from './schema/column-metadata.ts';
 import {
@@ -103,6 +104,7 @@ export class ChangeProcessor {
   readonly #db: StatementRunner;
   readonly #changeLog: ChangeLog;
   readonly #tableMetadata: TableMetadataTracker;
+  readonly #backfilling: BackfillingTracker;
   readonly #mode: ChangeProcessorMode;
   readonly #failService: (lc: LogContext, err: unknown) => void;
 
@@ -123,6 +125,7 @@ export class ChangeProcessor {
     this.#db = db;
     this.#changeLog = new ChangeLog(db.db);
     this.#tableMetadata = new TableMetadataTracker(db.db);
+    this.#backfilling = new BackfillingTracker(db.db);
     this.#mode = mode;
     this.#failService = failService;
   }
@@ -202,6 +205,7 @@ export class ChangeProcessor {
           this.#mode,
           this.#changeLog,
           this.#tableMetadata,
+          this.#backfilling,
           this.#tableSpecs,
           commitVersion,
           jsonFormat,
@@ -345,6 +349,7 @@ class TransactionProcessor {
   readonly #version: LexiVersion;
   readonly #changeLog: ChangeLog;
   readonly #tableMetadata: TableMetadataTracker;
+  readonly #backfilling: BackfillingTracker;
   readonly #tableSpecs: Map<string, LiteTableSpecWithReplicationStatus>;
   readonly #jsonFormat: JSONFormat;
   readonly #columnMetadata: ColumnMetadataStore;
@@ -359,6 +364,7 @@ class TransactionProcessor {
     mode: ChangeProcessorMode,
     changeLog: ChangeLog,
     tableMetadata: TableMetadataTracker,
+    backfilling: BackfillingTracker,
     tableSpecs: Map<string, LiteTableSpecWithReplicationStatus>,
     commitVersion: LexiVersion,
     jsonFormat: JSONFormat,
@@ -394,6 +400,7 @@ class TransactionProcessor {
     this.#lc = lc.withContext('version', commitVersion);
     this.#changeLog = changeLog;
     this.#tableMetadata = tableMetadata;
+    this.#backfilling = backfilling;
     this.#tableSpecs = tableSpecs;
     // The column_metadata table is guaranteed to exist since the
     // replica-schema.ts migration to v8.
@@ -601,6 +608,7 @@ class TransactionProcessor {
     if (create.metadata) {
       this.#tableMetadata.setUpstreamMetadata(create.spec, create.metadata);
     }
+    this.#backfilling.apply(create);
     const table = mapPostgresToLite(create.spec);
     this.#db.db.exec(createLiteTableStatement(table));
 
@@ -630,10 +638,18 @@ class TransactionProcessor {
 
   processTableMetadata(msg: TableUpdateMetadata) {
     this.#tableMetadata.setUpstreamMetadata(msg.table, msg.new);
+    // Inert today: the fold's only op for this tag is `upsert-metadata`, which
+    // the line above is the replica's interpreter of. Called anyway so that
+    // every site that hands a schema change to one cookie tracker hands it to
+    // both -- an exception here would be a schema change the shared fold has an
+    // opinion about and this store never sees, which is the drift the fold
+    // exists to make impossible.
+    this.#backfilling.apply(msg);
   }
 
   processRenameTable(rename: TableRename) {
     this.#tableMetadata.rename(rename.old, rename.new);
+    this.#backfilling.apply(rename);
 
     const oldName = liteTableName(rename.old);
     const newName = liteTableName(rename.new);
@@ -651,6 +667,7 @@ class TransactionProcessor {
     if (msg.tableMetadata) {
       this.#tableMetadata.setUpstreamMetadata(msg.table, msg.tableMetadata);
     }
+    this.#backfilling.apply(msg);
     const table = liteTableName(msg.table);
     const {name} = msg.column;
     const spec = mapPostgresToLiteColumn(table, msg.column);
@@ -672,6 +689,10 @@ class TransactionProcessor {
   }
 
   processUpdateColumn(msg: ColumnUpdate) {
+    // A no-op unless this is a rename, which is the only part of a column
+    // update that moves the backfill cookie.
+    this.#backfilling.apply(msg);
+
     const table = liteTableName(msg.table);
     let oldName = msg.old.name;
     const newName = msg.new.name;
@@ -769,6 +790,7 @@ class TransactionProcessor {
 
     // Delete from metadata table
     this.#columnMetadata.deleteColumn(table, column);
+    this.#backfilling.apply(msg);
 
     this.#bumpVersions(msg.table);
     this.#lc.info?.(msg.tag, table, column);
@@ -776,6 +798,7 @@ class TransactionProcessor {
 
   processDropTable(drop: TableDrop) {
     this.#tableMetadata.drop(drop.id);
+    this.#backfilling.apply(drop);
 
     const name = liteTableName(drop.id);
     this.#db.db.exec(`DROP TABLE IF EXISTS ${id(name)}`);
@@ -925,7 +948,8 @@ class TransactionProcessor {
 
   #completedBackfill: DownloadStatus | undefined;
 
-  processBackfillCompleted({relation, columns, status}: BackfillCompleted) {
+  processBackfillCompleted(msg: BackfillCompleted) {
+    const {relation, columns, status} = msg;
     const tableName = liteTableName(relation);
     const rowKeyCols = relation.rowKey.columns;
     const cols = [...rowKeyCols, ...columns];
@@ -934,6 +958,7 @@ class TransactionProcessor {
     for (const col of cols) {
       columnMetadata.clearBackfilling(tableName, col);
     }
+    this.#backfilling.apply(msg);
     // Given that new columns are being exposed for every row in the table, bump the
     // row version for all rows.
     this.#bumpVersions(relation);
