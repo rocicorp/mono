@@ -1,6 +1,6 @@
 import {jsonSchema} from '../../shared/src/json-schema.ts';
 import * as v from '../../shared/src/valita.ts';
-import {astSchema} from './ast.ts';
+import {depthBoundedAstSchema} from './ast.ts';
 
 export const putOpSchema = v.object({
   op: v.literal('put'),
@@ -12,7 +12,12 @@ export const upPutOpSchema = putOpSchema.extend({
   // All fields are optional in this transitional period.
   // - ast is filled in for client queries
   // - name and args are filled in for custom queries
-  ast: astSchema.optional(),
+  //
+  // `depthBoundedAstSchema` (not `astSchema`) is used here so that
+  // pathologically nested client-supplied ASTs are rejected at the wire
+  // boundary before the structurally-recursive `astSchema` parser is
+  // invoked. See `assertAstDepth` in `./ast.ts` for the cap.
+  ast: depthBoundedAstSchema.optional(),
   name: v.string().optional(),
   args: v.readonly(v.array(jsonSchema)).optional(),
 });
