@@ -385,7 +385,12 @@ const schemaChanges = [
 ] as const;
 
 // Note: keep in sync or the tag tests will fail
-const schemaChangeTags = [
+/**
+ * Exported so that a store which filters schema changes in SQL rather than in
+ * TypeScript — `change-log-initializer.ts` reads them back out of the change
+ * log — filters on a list that cannot drift from {@link isSchemaChange}.
+ */
+export const schemaChangeTags = [
   'create-table',
   'rename-table',
   'update-table-metadata',

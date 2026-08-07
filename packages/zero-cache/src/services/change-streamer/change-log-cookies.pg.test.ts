@@ -10,96 +10,50 @@
 
 import {beforeEach, describe, expect} from 'vitest';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
-import {Database} from '../../../../zqlite/src/db.ts';
+import type {Database} from '../../../../zqlite/src/db.ts';
 import {StatementRunner} from '../../db/statements.ts';
 import {type PgTest, test} from '../../test/db.ts';
-import type {PostgresDB} from '../../types/pg.ts';
 import type {SchemaChange} from '../change-source/protocol/current/data.ts';
-import type {
-  ChangeStreamData,
-  Commit,
-} from '../change-source/protocol/current/downstream.ts';
-import type {UpstreamStatusMessage} from '../change-source/protocol/current/status.ts';
+import {readCookies, type CookieSet} from '../replicator/change-log-cookies.ts';
 import {
-  CREATE_CHANGE_LOG_COOKIE_SCHEMA,
-  readCookies,
-  type BackfillCookie,
-  type CookieSet,
-  type TableMetadataCookie,
-} from '../replicator/change-log-cookies.ts';
-import {
-  CREATE_CHANGE_LOG_STREAM_SCHEMA,
   reconcileChangeLog,
   type ChangeLogAnchor,
 } from '../replicator/change-log-db.ts';
 import {ChangeLogStreamWriter} from '../replicator/change-log-stream-writer.ts';
 import {serializeChangeStreamData} from './change-log-codec.ts';
-import {ensureReplicationConfig, setupCDCTables} from './schema/tables.ts';
-import {Storer, type TuningOptions} from './storer.ts';
+import {
+  ChangeStreamDriver,
+  createChangeLog,
+  createShardStorer,
+  readPgCookies,
+  REPLICA_VERSION,
+  transactionMessages,
+  type ShardStorer,
+} from './change-log-test-utils.ts';
 
 const lc = createSilentLogContext();
 
-const APP_ID = 'cookies';
-const SHARD_NUM = 1;
-const CDC_SCHEMA = `${APP_ID}_${SHARD_NUM}/cdc`;
-const REPLICA_VERSION = '00';
-
-const opts: TuningOptions = {
-  backPressureLimitHeapProportion: 0.04,
-  statementTimeoutMs: 20_000,
-  changeLogBatchSize: 2000,
-};
-
 describe('change-streamer/change-log cookie parity', () => {
-  let db: PostgresDB;
-  let storer: Storer;
-  let done: Promise<void>;
+  let shard: ShardStorer;
   let changeLog: Database;
-  let watermark: number;
+  let driver: ChangeStreamDriver;
 
   beforeEach<PgTest>(async ({testDBs}) => {
-    db = await testDBs.create('change_log_cookie_parity', {
-      typeOpts: {sendStringAsJson: true},
+    shard = await createShardStorer(
+      lc,
+      testDBs,
+      'change_log_cookie_parity',
+      'cookies',
+    );
+    changeLog = createChangeLog(lc);
+    driver = new ChangeStreamDriver(lc, {
+      upstream: shard.storer,
+      changeLog,
     });
-    const shard = {appID: APP_ID, shardNum: SHARD_NUM};
-    await db.begin(tx => setupCDCTables(lc, tx, shard));
-    await ensureReplicationConfig(
-      lc,
-      db,
-      {
-        replicaVersion: REPLICA_VERSION,
-        publications: [],
-        watermark: REPLICA_VERSION,
-      },
-      shard,
-      true,
-    );
-
-    storer = new Storer(
-      lc,
-      shard,
-      'task-id',
-      'change-streamer:12345',
-      'ws',
-      db,
-      REPLICA_VERSION,
-      (_: Commit | UpstreamStatusMessage) => {},
-      () => {},
-      opts,
-    );
-    await storer.assumeOwnership();
-    done = storer.run();
-
-    changeLog = new Database(lc, ':memory:');
-    changeLog.exec(CREATE_CHANGE_LOG_STREAM_SCHEMA);
-    changeLog.exec(CREATE_CHANGE_LOG_COOKIE_SCHEMA);
-    watermark = 1;
 
     return async () => {
       changeLog.close();
-      await testDBs.drop(db);
-      void storer?.stop();
-      await done;
+      await shard.close();
     };
   });
 
@@ -107,41 +61,12 @@ describe('change-streamer/change-log cookie parity', () => {
    * Drives one transaction carrying `changes` through both writers, the way
    * their respective stream loops do.
    */
-  async function transaction(...changes: SchemaChange[]): Promise<void> {
-    const wm = String(++watermark).padStart(2, '0');
-    const messages: ChangeStreamData[] = [
-      ['begin', {tag: 'begin'}, {commitWatermark: wm}],
-      ...changes.map((change): ChangeStreamData => ['data', change]),
-      ['commit', {tag: 'commit'}, {watermark: wm}],
-    ];
-
-    messages.forEach(message => storer.store(wm, message));
-
-    const writer = new ChangeLogStreamWriter(new StatementRunner(changeLog));
-    writer.begin(wm, serializeChangeStreamData(messages[0]));
-    changes.forEach((change, i) =>
-      writer.append(serializeChangeStreamData(messages[i + 1]), change),
-    );
-    writer.commit(wm, serializeChangeStreamData(messages.at(-1)!), 1_000);
-
-    await storer.allProcessed();
-  }
+  const transaction = (...changes: SchemaChange[]) =>
+    driver.transaction(changes);
 
   /** The cookie set the Postgres change log holds, in the SQLite log's shape. */
-  async function pgCookies(): Promise<CookieSet> {
-    const [tableMetadata, backfilling] = await Promise.all([
-      db<TableMetadataCookie[]>`
-        SELECT "schema", "table", "metadata" FROM ${db(CDC_SCHEMA)}."tableMetadata"
-          ORDER BY "schema", "table"`,
-      db<BackfillCookie[]>`
-        SELECT "schema", "table", "column", "backfill" FROM ${db(CDC_SCHEMA)}."backfilling"
-          ORDER BY "schema", "table", "column"`,
-    ]);
-    return {
-      tableMetadata: [...tableMetadata],
-      backfilling: [...backfilling],
-    };
-  }
+  const pgCookies = (): Promise<CookieSet> =>
+    readPgCookies(shard.db, shard.cdcSchema);
 
   /**
    * Both stores agree, and the agreed-on set is what was expected. The second
@@ -392,30 +317,26 @@ describe('change-streamer/change-log cookie parity', () => {
 
     // The stream is interrupted after the schema change and before the commit:
     // Postgres aborts its transaction pool, SQLite rolls its transaction back.
-    const wm = String(++watermark).padStart(2, '0');
+    // Driven by hand rather than by the driver, which only commits.
     const change: SchemaChange = {
       tag: 'add-column',
       table: {schema: 'my', name: 'foo'},
       column: {name: 'b', spec: {pos: 2, dataType: 'text'}},
       backfill: {fooID: 2},
     };
-    storer.store(wm, ['begin', {tag: 'begin'}, {commitWatermark: wm}]);
-    storer.store(wm, ['data', change]);
+    const wm = driver.claimWatermark();
+    const [begin, data] = transactionMessages(wm, [change]);
+
+    shard.storer.store(wm, begin);
+    shard.storer.store(wm, data);
 
     const writer = new ChangeLogStreamWriter(new StatementRunner(changeLog));
-    writer.begin(
-      wm,
-      serializeChangeStreamData([
-        'begin',
-        {tag: 'begin'},
-        {commitWatermark: wm},
-      ]),
-    );
-    writer.append(serializeChangeStreamData(['data', change]), change);
+    writer.begin(wm, serializeChangeStreamData(begin));
+    writer.append(serializeChangeStreamData(data), change);
     writer.rollback();
 
-    storer.abort();
-    await storer.allProcessed();
+    shard.storer.abort();
+    await shard.storer.allProcessed();
 
     await expectCookies({
       tableMetadata: [],
@@ -449,7 +370,9 @@ describe('change-streamer/change-log cookie parity', () => {
 
     /** The anchor a stream connection would reconcile the log against. */
     async function anchor(): Promise<ChangeLogAnchor> {
-      return anchorFrom(await storer.getStartStreamInitializationParameters());
+      return anchorFrom(
+        await shard.storer.getStartStreamInitializationParameters(),
+      );
     }
 
     test('a reseed lands the cookie set Postgres holds', async () => {
@@ -471,7 +394,8 @@ describe('change-streamer/change-log cookie parity', () => {
       // A log with no meta row of its own: what a task that has just restored a
       // replica, or upgraded past a schema version, brings to its first stream
       // connection. It is wiped and reseeded at the resume watermark.
-      const params = await storer.getStartStreamInitializationParameters();
+      const params =
+        await shard.storer.getStartStreamInitializationParameters();
       expect(
         reconcileChangeLog(lc, changeLog, anchorFrom(params)),
       ).toMatchObject({
