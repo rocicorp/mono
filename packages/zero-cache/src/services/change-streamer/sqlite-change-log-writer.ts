@@ -8,6 +8,7 @@ import {
 } from '../../db/sqlite-corruption.ts';
 import {StatementRunner} from '../../db/statements.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
+import {readCookieRowCounts} from '../replicator/change-log-cookies.ts';
 import {
   changeLogFileName,
   deleteChangeLogDB,
@@ -169,7 +170,8 @@ export class SQLiteChangeLogWriter {
    */
   write(change: ChangeStreamData, json: string): void {
     const writer = this.#writer;
-    if (this.#disabled || writer === undefined) {
+    const db = this.#db;
+    if (this.#disabled || writer === undefined || db === undefined) {
       return;
     }
     const observer = this.#observer;
@@ -197,10 +199,20 @@ export class SQLiteChangeLogWriter {
           writer.rollback();
           break;
         default:
-          writer.append(json, msg.tag);
+          writer.append(json, msg);
           break;
       }
       observer?.messageProcessed(change, commit, performance.now() - startedAt);
+      if (commit !== null && commit.stats.cookieMutations.length > 0) {
+        // Only re-counted when a schema change actually moved the cookie jar,
+        // which keeps the count off the forward path of every other
+        // transaction. The counts are read after the commit, so they are what
+        // a reader of the file would see.
+        observer?.cookiesMutated(
+          commit.stats.cookieMutations,
+          readCookieRowCounts(db),
+        );
+      }
       if (commit !== null) {
         // The head advanced, and it is durable. Releasing the barrier here is
         // what makes its poll interval a backstop rather than the mechanism.
