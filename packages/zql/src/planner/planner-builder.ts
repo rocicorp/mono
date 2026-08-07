@@ -9,6 +9,7 @@ import type {
   Disjunction,
 } from '../../../zero-protocol/src/ast.ts';
 import {planIdSymbol} from '../../../zero-protocol/src/ast.ts';
+import {normalizePlannerAST} from './condition-normalizer.ts';
 import type {ConnectionCostModel} from './planner-connection.ts';
 import type {PlannerConstraint} from './planner-constraint.ts';
 import type {PlanDebugger} from './planner-debug.ts';
@@ -314,9 +315,10 @@ export function planQuery(
   planDebugger?: PlanDebugger,
   lc?: LogContext,
 ): AST {
-  const plans = buildPlanGraph(ast, model, true);
+  const normalizedAST = normalizePlannerAST(ast);
+  const plans = buildPlanGraph(normalizedAST, model, true);
   planRecursively(plans, planDebugger, lc);
-  return applyPlansToAST(ast, plans);
+  return applyPlansToAST(normalizedAST, plans);
 }
 
 function applyToCondition(
@@ -332,10 +334,17 @@ function applyToCondition(
       planIdSymbol
     ];
     const shouldFlip = planId !== undefined && flippedIds.has(planId);
+    // Preserve explicit flip: false while avoiding a noisy flip: false on every
+    // ordinary planner-controlled EXISTS. The absence of flip means "planner may
+    // choose"; an explicit false means "do not flip this relationship".
+    const flip =
+      shouldFlip || condition.flip !== undefined
+        ? {flip: shouldFlip}
+        : undefined;
 
     return {
       ...condition,
-      flip: shouldFlip,
+      ...flip,
       related: {
         ...condition.related,
         subquery: {

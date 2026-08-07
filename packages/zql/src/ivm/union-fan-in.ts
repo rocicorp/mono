@@ -15,6 +15,7 @@ import {
 } from './operator.ts';
 import {
   makeAddEmptyRelationships,
+  mergeEmpty,
   mergeRelationships,
   pushAccumulatedChanges,
 } from './push-accumulated.ts';
@@ -102,11 +103,20 @@ export class UnionFanIn implements Operator {
 
   fetch(req: FetchRequest): Stream<Node | 'yield'> {
     const iterables = this.#inputs.map(input => input.fetch(req));
-    const compareRows = this.#schema.compareRows;
-    const compare = req.reverse
-      ? (l: Node, r: Node) => compareRows(r.row, l.row)
-      : (l: Node, r: Node) => compareRows(l.row, r.row);
-    return mergeFetches(iterables, compare);
+    const compareRows = req.reverse
+      ? (left: Node, right: Node) =>
+          this.#schema.compareRows(right.row, left.row)
+      : (left: Node, right: Node) =>
+          this.#schema.compareRows(left.row, right.row);
+    const relationshipNames = Object.keys(this.#schema.relationships);
+    return addEmptyRelationshipsToFetch(
+      mergeFetches(
+        iterables,
+        compareRows,
+        mergeNodeRelationships(relationshipNames),
+      ),
+      relationshipNames,
+    );
   }
 
   getSchema(): SourceSchema {
@@ -221,24 +231,58 @@ export class UnionFanIn implements Operator {
   }
 }
 
+function mergeNodeRelationships(relationshipNames: string[]) {
+  return (left: Node, right: Node): Node => {
+    const relationships = {
+      ...right.relationships,
+      ...left.relationships,
+    };
+    mergeEmpty(relationships, relationshipNames);
+    return {
+      row: left.row,
+      relationships,
+    };
+  };
+}
+
+function* addEmptyRelationshipsToFetch(
+  fetch: Iterable<Node | 'yield'>,
+  relationshipNames: string[],
+): Stream<Node | 'yield'> {
+  for (const node of fetch) {
+    if (node === 'yield') {
+      yield node;
+      continue;
+    }
+    const relationships = {...node.relationships};
+    mergeEmpty(relationships, relationshipNames);
+    yield {
+      row: node.row,
+      relationships,
+    };
+  }
+}
+
 export function* mergeFetches(
   fetches: Iterable<Node | 'yield'>[],
   comparator: (l: Node, r: Node) => number,
+  mergeEqual?: ((left: Node, right: Node) => Node) | undefined,
 ): IterableIterator<Node | 'yield'> {
   const iterators = fetches.map(i => i[Symbol.iterator]());
   let threw = false;
   try {
     const current: (Node | null)[] = [];
-    let lastNodeYielded: Node | undefined;
-    for (let i = 0; i < iterators.length; i++) {
+    const advance = function* (i: number) {
       const iter = iterators[i];
       let result = iter.next();
-      // yield yields when initializing
       while (!result.done && result.value === 'yield') {
         yield result.value;
         result = iter.next();
       }
       current[i] = result.done ? null : (result.value as Node);
+    };
+    for (let i = 0; i < iterators.length; i++) {
+      yield* advance(i);
     }
     while (current.some(c => c !== null)) {
       const min = current.reduce(
@@ -255,22 +299,35 @@ export function* mergeFetches(
       );
 
       assert(min !== undefined, 'min is undefined');
-      const [minNode, minIndex] = min;
-      const iter = iterators[minIndex];
-      let result = iter.next();
-      while (!result.done && result.value === 'yield') {
-        yield result.value;
-        result = iter.next();
+      let [nodeToYield, currentIndex] = min;
+      yield* advance(currentIndex);
+
+      while (true) {
+        const equal = current.reduce(
+          (
+            acc: [Node, number] | undefined,
+            c,
+            i,
+          ): [Node, number] | undefined => {
+            if (c === null || comparator(c, nodeToYield) !== 0) {
+              return acc;
+            }
+            return acc ?? [c, i];
+          },
+          undefined,
+        );
+        if (!equal) {
+          break;
+        }
+        const [equalNode, equalIndex] = equal;
+        nodeToYield = mergeEqual
+          ? mergeEqual(nodeToYield, equalNode)
+          : nodeToYield;
+        currentIndex = equalIndex;
+        yield* advance(currentIndex);
       }
-      current[minIndex] = result.done ? null : (result.value as Node);
-      if (
-        lastNodeYielded !== undefined &&
-        comparator(lastNodeYielded, minNode) === 0
-      ) {
-        continue;
-      }
-      lastNodeYielded = minNode;
-      yield minNode;
+
+      yield nodeToYield;
     }
   } catch (e) {
     threw = true;
