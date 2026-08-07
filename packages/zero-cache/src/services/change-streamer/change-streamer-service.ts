@@ -528,7 +528,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       let watermark: string | null = null;
       let unflushedBytes = 0;
       try {
-        const {lastWatermark, backfillRequests} =
+        const {lastWatermark, backfillRequests, cookies} =
           await this.#storer.getStartStreamInitializationParameters();
         // SQLite catchup must not be eligible until this has been initialized
         // from the durable PG head. Commits observed only since process startup
@@ -539,7 +539,15 @@ class ChangeStreamerImpl implements ChangeStreamerService {
         // above it -- a restarted backfill's abandoned ones, in bulk -- and the
         // writer's plain INSERT would collide with the first re-delivery.
         // Ordered before startStream so no change can arrive mid-reconcile.
-        this.#changeLogWriter?.reconcile(lastWatermark);
+        //
+        // The cookies come from the same read as the watermark, and go to the
+        // log with it: a reconcile that moves the head discards the set the log
+        // had folded, and only the set that belongs to this watermark can
+        // replace it (invariant 15).
+        this.#changeLogWriter?.reconcile({
+          resumeWatermark: lastWatermark,
+          cookies,
+        });
         const stream = await this.#source.startStream(
           lastWatermark,
           backfillRequests,

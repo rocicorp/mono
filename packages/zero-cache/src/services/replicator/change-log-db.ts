@@ -13,8 +13,9 @@
  * Beside the buffer it holds the log's *cookie jar* — the backfill progress
  * state folded up to the same head. That is `change-log-cookies.ts`; this file
  * owns its tables' lifecycle, because a cookie set is only meaningful paired
- * with the watermark it was folded to, and so must be created, dropped, and
- * invalidated with the buffer rather than beside it.
+ * with the watermark it was folded to, and so must be created, dropped, and —
+ * whenever reconciliation moves the head — replaced with the anchor's, all with
+ * the buffer rather than beside it.
  *
  * Because it is disposable, it has no migration framework. Any inconsistency —
  * a schema change, a leftover file from a different replica, a gap left by a
@@ -49,8 +50,8 @@ import {
   CHANGE_LOG_TABLE_METADATA_TABLE,
   CREATE_CHANGE_LOG_COOKIE_SCHEMA,
   DROP_CHANGE_LOG_COOKIE_TABLES,
-  EMPTY_COOKIE_SET,
   replaceCookies,
+  type CookieSet,
 } from './change-log-cookies.ts';
 
 /**
@@ -185,11 +186,19 @@ export type ChangeLogIdentity = {
 };
 
 /**
- * What the log is reconciled against. Reconciliation runs once per stream
- * connection, since every reconnect can re-read a different resume watermark.
+ * Where the stream connection resumes, and everything the log's state at that
+ * position consists of.
+ *
+ * The two fields travel together because a cookie set is only meaningful paired
+ * with the watermark it was folded up to (invariant 15). They are read from one
+ * store, in one snapshot: `Storer.getStartStreamInitializationParameters()`
+ * reads both from Postgres in a single REPEATABLE READ transaction. Pairing one
+ * store's cookies with another's watermark would silently drop every backfill
+ * that completed in the interval, and those rows are unrecoverable — backfill
+ * transactions are synthesized by the change source rather than replayed from
+ * the slot.
  */
-export type ChangeLogAnchor = {
-  readonly identity: ChangeLogIdentity;
+export type ChangeLogResumePoint = {
   /**
    * The watermark this stream connection resumes from. The log's own head is
    * measured against it, and a reseed seeds a synthetic transaction at it.
@@ -200,6 +209,26 @@ export type ChangeLogAnchor = {
    * than a constraint on it.
    */
   readonly resumeWatermark: string;
+  /**
+   * The cookie set that belongs to {@link resumeWatermark}. Any reconciliation
+   * that moves the head invalidates the set the log was holding — the cookies
+   * are unversioned point-in-time state, and truncating the stream above `W`
+   * does not roll them back to `W` — so the same transaction installs this one
+   * in its place (invariant 17).
+   *
+   * Postgres supplies it while it remains the store the stream resumes from. At
+   * the C5 flip the log's own head *is* the resume point, phantoms cannot
+   * exist, and both this field and the truncate-above path become dead code.
+   */
+  readonly cookies: CookieSet;
+};
+
+/**
+ * What the log is reconciled against. Reconciliation runs once per stream
+ * connection, since every reconnect can re-read a different resume point.
+ */
+export type ChangeLogAnchor = ChangeLogResumePoint & {
+  readonly identity: ChangeLogIdentity;
   /**
    * The change-streamer's clock, at reconciliation time. Supplied rather than
    * read inline so that tests control it. Used for `seededAtMs` and for the
@@ -430,10 +459,11 @@ export type ReseedReason =
  * `cookiesStale` records that the cookie set the log held did not survive
  * reconciliation. The cookies are unversioned point-in-time state, so any
  * reconciliation that moves the head invalidates them, and the same transaction
- * clears them (see `change-log-cookies.ts`). It is `action !== 'none'` today;
- * it is a field rather than a derivation because the reseed that replaces the
- * clear reads as intent at the call site, and because it is what the
- * `cookie_reseed` counter is keyed on.
+ * replaces them with the anchor's — the set that belongs to the resume
+ * watermark (see `change-log-cookies.ts`). It is `action !== 'none'` today; it
+ * is a field rather than a derivation because the replacement reads as intent
+ * at the call site, and because it is what the `cookie_reseed` counter is keyed
+ * on.
  */
 export type ReconcileResult =
   | {action: 'none'; head: string; cookiesStale: false}
@@ -473,6 +503,10 @@ export type ReconcileResult =
  * disabled for a while, the replica was restored, power was lost with
  * `synchronous=NORMAL` — surfaces as a head that does not land on the resume
  * watermark, and is resolved by wiping and reseeding there.
+ *
+ * Whichever of the two moves the head also replaces the cookie set with the one
+ * the anchor carries, in the same transaction: the head and the cookies are one
+ * position, and nothing may observe them at two.
  */
 export function reconcileChangeLog(
   lc: LogContext,
@@ -520,13 +554,12 @@ function reconcile(
   if (rows > 0) {
     // The truncated transactions can have carried `create-table`,
     // `add-column`, and `backfill-completed`, none of which the truncate rolls
-    // back, so the cookie set no longer belongs to the head. Clearing it is
-    // correct but lossy; the anchor supplies the set that belongs to the resume
-    // watermark once there is one to supply. Nothing reads the cookies in the
-    // meantime.
-    replaceCookies(db, EMPTY_COOKIE_SET);
+    // back, so the cookie set no longer belongs to the head. The anchor's set
+    // does, and it lands in this same transaction: invariant 17 holds at every
+    // point another connection could observe the log.
+    replaceCookies(db, anchor.cookies);
     lc.info?.('truncated phantom transactions from the SQLite change log', {
-      sqliteChangeLogReconcile: {head, rows},
+      sqliteChangeLogReconcile: {head, rows, cookies: cookieCounts(anchor)},
     });
     return {action: 'truncated', head, rows, cookiesStale: true};
   }
@@ -615,6 +648,11 @@ function reseed(
     seedWatermark: resumeWatermark,
   });
   seedChangeLogStream(db, anchor);
+  // Into tables this statement just created, so the wholesale replacement is
+  // all insert. It is still the same call the truncate path makes: a reseed is
+  // the case where the log's cookie set was not merely moved but discarded, and
+  // the anchor's is equally what belongs at the head either way.
+  replaceCookies(db, anchor.cookies);
 
   lc.info?.('reseeded the SQLite change log', {
     sqliteChangeLogReconcile: {
@@ -623,6 +661,7 @@ function reseed(
       ...identity,
       schemaVersion: CHANGE_LOG_DB_SCHEMA_VERSION,
       seededAtMs: nowMs,
+      cookies: cookieCounts(anchor),
     },
   });
   return {
@@ -674,6 +713,17 @@ export function readChangeLogHead(db: Database): string | null {
     `)
     .get<{head: string | null}>();
   return head;
+}
+
+/**
+ * What was installed, for the reconcile log line. Normally `{0, 0}`: a nonzero
+ * `backfilling` means the resumed stream is being handed backfills to re-request.
+ */
+function cookieCounts({cookies}: ChangeLogAnchor) {
+  return {
+    tableMetadata: cookies.tableMetadata.length,
+    backfilling: cookies.backfilling.length,
+  };
 }
 
 function tableExists(db: Database, table: string): boolean {

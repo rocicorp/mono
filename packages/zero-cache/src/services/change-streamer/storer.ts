@@ -29,7 +29,13 @@ import {
   type Commit,
 } from '../change-source/protocol/current/downstream.ts';
 import type {UpstreamStatusMessage} from '../change-source/protocol/current/status.ts';
-import {cookieOps, type CookieOp} from '../replicator/change-log-cookies.ts';
+import {
+  cookieOps,
+  type BackfillCookie,
+  type CookieOp,
+  type CookieSet,
+  type TableMetadataCookie,
+} from '../replicator/change-log-cookies.ts';
 import type {ReplicatorMode} from '../replicator/replicator.ts';
 import type {Service} from '../service.ts';
 import {
@@ -222,11 +228,29 @@ export class Storer implements Service {
     }
   }
 
+  /**
+   * The whole of what a stream connection starts from: where to resume, what to
+   * ask the change source to backfill, and the raw cookie set those requests
+   * were derived from.
+   *
+   * All four statements run in one REPEATABLE READ transaction, so they see one
+   * snapshot. That is invariant 15 — the resume watermark and the cookies must
+   * come from the same store, read at the same position — and it is why the
+   * cookies are read here rather than by a second call: a cookie set paired
+   * with a watermark it was not folded to loses every backfill that completed
+   * in the interval, and those rows are not replayable from the slot.
+   *
+   * `cookies` is not `backfillRequests` in another shape. The request list is
+   * driven off `backfilling`, so it drops the metadata of every table with no
+   * in-flight backfill — correct for starting a stream, lossy as the cookie
+   * snapshot that the SQLite change log continues folding onto.
+   */
   async getStartStreamInitializationParameters(): Promise<{
     lastWatermark: string;
     backfillRequests: BackfillRequest[];
+    cookies: CookieSet;
   }> {
-    const [[{lastWatermark}], result] = await runTx(
+    const [[{lastWatermark}], result, tableMetadata, backfilling] = await runTx(
       this.#db,
       sql => [
         sql<{lastWatermark: string}[]>`
@@ -236,19 +260,33 @@ export class Storer implements Service {
         // `columns` object. It is LEFT JOIN'ed with the `tableMetadata` table
         // to make it optional and possibly `null`.
         sql`
-        SELECT 
+        SELECT
             json_build_object(
               'schema', b."schema",
               'name', b."table",
               'metadata', t."metadata"
             ) as "table",
-            json_object_agg(b."column", b."backfill") 
+            json_object_agg(b."column", b."backfill")
               as "columns"
           FROM ${this.#cdc('backfilling')} as b
           LEFT JOIN ${this.#cdc('tableMetadata')} as t
           ON (b."schema" = t."schema" AND b."table" = t."table")
           GROUP BY b."schema", b."table", t."metadata"
         `,
+
+        // Ordered by primary key, so that this set and the SQLite change log's
+        // can be compared row for row. `COLLATE "C"` because that comparison is
+        // against a store whose TEXT columns sort by byte: a linguistic
+        // collation orders `foo-bar` and `foobar` differently than SQLite's
+        // BINARY does, which would read as a divergence rather than as the
+        // identical set it is.
+        sql<TableMetadataCookie[]>`
+        SELECT "schema", "table", "metadata" FROM ${this.#cdc('tableMetadata')}
+          ORDER BY "schema" COLLATE "C", "table" COLLATE "C"`,
+
+        sql<BackfillCookie[]>`
+        SELECT "schema", "table", "column", "backfill" FROM ${this.#cdc('backfilling')}
+          ORDER BY "schema" COLLATE "C", "table" COLLATE "C", "column" COLLATE "C"`,
       ],
       {mode: Mode.READONLY},
     );
@@ -256,6 +294,10 @@ export class Storer implements Service {
     return {
       lastWatermark,
       backfillRequests: v.parse(result, backfillRequestsSchema),
+      cookies: {
+        tableMetadata: [...tableMetadata],
+        backfilling: [...backfilling],
+      },
     };
   }
 

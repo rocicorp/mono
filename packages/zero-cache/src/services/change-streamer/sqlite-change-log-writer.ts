@@ -14,7 +14,9 @@ import {
   deleteChangeLogDB,
   openChangeLogDBForWriting,
   reconcileChangeLog,
+  type ChangeLogAnchor,
   type ChangeLogIdentity,
+  type ChangeLogResumePoint,
 } from '../replicator/change-log-db.ts';
 import {ChangeLogStreamWriter} from '../replicator/change-log-stream-writer.ts';
 import {
@@ -117,21 +119,30 @@ export class SQLiteChangeLogWriter {
   }
 
   /**
-   * Opens the log if necessary and reconciles it against the watermark this
-   * stream connection resumes from.
+   * Opens the log if necessary and reconciles it against the point this stream
+   * connection resumes from.
    *
    * This runs per connection rather than once per process: the stream loop
-   * re-reads its resume watermark on every reconnect, so a routine reconnect —
-   * not just a restart — can leave the log holding watermarks above the new
-   * resume point, and the writer's plain `INSERT` would collide with the first
+   * re-reads its resume point on every reconnect, so a routine reconnect — not
+   * just a restart — can leave the log holding watermarks above the new resume
+   * watermark, and the writer's plain `INSERT` would collide with the first
    * re-delivered transaction.
+   *
+   * The resume point is taken whole rather than as a bare watermark because its
+   * cookie set is not separable from it: a reconciliation that moves the head
+   * invalidates the cookies the log was holding, and only the set read at the
+   * same position (invariant 15) can replace them.
    */
-  reconcile(resumeWatermark: string): void {
+  reconcile(resumeFrom: ChangeLogResumePoint): void {
     if (this.#disabled) {
       return;
     }
     const {replicaFile, identity} = this.#opts;
-    const anchor = {identity, resumeWatermark, nowMs: this.#now()};
+    const anchor: ChangeLogAnchor = {
+      ...resumeFrom,
+      identity,
+      nowMs: this.#now(),
+    };
     try {
       const db = this.#db;
       if (db === undefined) {
