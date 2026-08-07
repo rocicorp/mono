@@ -3,12 +3,196 @@ import {createSilentLogContext} from '../../shared/src/logging-test-utils.ts';
 import {computeZqlSpecs} from '../../zero-cache/src/db/lite-tables.ts';
 import type {LiteAndZqlSpec} from '../../zero-cache/src/db/specs.ts';
 import {CREATE_TABLE_METADATA_TABLE} from '../../zero-cache/src/services/replicator/schema/table-metadata.ts';
+import type {Condition, LiteralValue} from '../../zero-protocol/src/ast.ts';
 import {Database} from './db.ts';
-import {btreeCost, createSQLiteCostModel} from './sqlite-cost-model.ts';
+import {
+  btreeCost,
+  createSQLiteCostModel,
+  getFilterApproximations,
+  removeCorrelatedSubqueries,
+} from './sqlite-cost-model.ts';
+
+function equalsCondition(columnName: string, value: LiteralValue): Condition {
+  return {
+    type: 'simple',
+    left: {type: 'column', name: columnName},
+    op: '=',
+    right: {type: 'literal', value},
+  };
+}
+
+function correlatedExistsCondition(parentField: string): Condition {
+  return {
+    type: 'correlatedSubquery',
+    op: 'EXISTS',
+    related: {
+      system: 'client',
+      correlation: {
+        parentField: [parentField],
+        childField: ['fooId'],
+      },
+      subquery: {
+        table: 'bar',
+        orderBy: [['id', 'asc']],
+      },
+    },
+  };
+}
+
+function andCondition(...conditions: Condition[]): Condition {
+  return {type: 'and', conditions};
+}
+
+function orCondition(...conditions: Condition[]): Condition {
+  return {type: 'or', conditions};
+}
+
+describe('removeCorrelatedSubqueries', () => {
+  test('keeps surviving OR predicates when another branch is always false', () => {
+    // a = 1
+    // OR FALSE
+    //
+    // FALSE is a real filter branch, not uncertainty from a removed correlated
+    // subquery. Dropping the whole OR here would overestimate an exact `a = 1`
+    // filter as a full scan.
+    expect(
+      removeCorrelatedSubqueries(
+        orCondition(equalsCondition('a', 1), orCondition()),
+      ),
+    ).toEqual(equalsCondition('a', 1));
+  });
+
+  test('drops an OR when a whole branch is a correlated subquery', () => {
+    // a = 1
+    // OR EXISTS(bar)
+    //
+    // Keeping only `a = 1` would make the root scan look narrower than the
+    // real query. Dropping the OR entirely is the conservative approximation.
+    expect(
+      removeCorrelatedSubqueries(
+        orCondition(equalsCondition('a', 1), correlatedExistsCondition('a')),
+      ),
+    ).toBeUndefined();
+  });
+
+  test('keeps conservative OR approximations when every branch still has simple filters', () => {
+    // (a = 1 AND EXISTS(bar))
+    // OR b = 2
+    //
+    // Every OR branch still leaves behind a simple root-table predicate, so the
+    // conservative approximation can keep `a = 1 OR b = 2`.
+    expect(
+      removeCorrelatedSubqueries(
+        orCondition(
+          andCondition(equalsCondition('a', 1), correlatedExistsCondition('a')),
+          equalsCondition('b', 2),
+        ),
+      ),
+    ).toEqual(orCondition(equalsCondition('a', 1), equalsCondition('b', 2)));
+  });
+});
+
+describe('getFilterApproximations', () => {
+  test('does not treat always-false OR branches as pessimistic uncertainty', () => {
+    expect(
+      getFilterApproximations(
+        orCondition(equalsCondition('a', 1), orCondition()),
+      ),
+    ).toEqual({
+      optimistic: equalsCondition('a', 1),
+      pessimistic: equalsCondition('a', 1),
+    });
+  });
+
+  test('preserves always-false filters when all OR branches are false', () => {
+    expect(getFilterApproximations(orCondition(orCondition()))).toEqual({
+      optimistic: orCondition(),
+      pessimistic: orCondition(),
+    });
+  });
+
+  test('preserves always-false filters through AND approximations', () => {
+    expect(
+      getFilterApproximations(
+        andCondition(equalsCondition('a', 1), orCondition()),
+      ),
+    ).toEqual({
+      optimistic: orCondition(),
+      pessimistic: orCondition(),
+    });
+  });
+
+  test('tracks optimistic and pessimistic forms for mixed OR branches', () => {
+    // optimistic:  a = 1
+    // pessimistic: <no root-table filter>
+    //
+    // The optimistic view keeps the visible signal. The pessimistic view says
+    // "pretend the correlated branch might widen this all the way out".
+    expect(
+      getFilterApproximations(
+        orCondition(equalsCondition('a', 1), correlatedExistsCondition('a')),
+      ),
+    ).toEqual({
+      optimistic: equalsCondition('a', 1),
+      pessimistic: undefined,
+    });
+  });
+
+  test('retains surrounding AND filters when only one nested OR branch is uncertain', () => {
+    // b = 2
+    // AND (a = 4 OR EXISTS(bar))
+    //
+    // optimistic:  b = 2 AND a = 4
+    // pessimistic: b = 2
+    //
+    // The important part here is that uncertainty inside the OR should not erase
+    // the sibling `b = 2` filter from the surrounding AND.
+    expect(
+      getFilterApproximations(
+        andCondition(
+          equalsCondition('b', 2),
+          orCondition(equalsCondition('a', 4), correlatedExistsCondition('a')),
+        ),
+      ),
+    ).toEqual({
+      optimistic: andCondition(
+        equalsCondition('b', 2),
+        equalsCondition('a', 4),
+      ),
+      pessimistic: equalsCondition('b', 2),
+    });
+  });
+
+  test('treats pure correlated OR branches as having no root-table selectivity signal', () => {
+    // EXISTS(bar_1)
+    // OR EXISTS(bar_2)
+    //
+    // There is no visible root-table predicate left after subquery removal, so
+    // both approximations should be empty.
+    expect(
+      getFilterApproximations(
+        orCondition(
+          correlatedExistsCondition('a'),
+          correlatedExistsCondition('a'),
+        ),
+      ),
+    ).toEqual({
+      optimistic: undefined,
+      pessimistic: undefined,
+    });
+  });
+});
 
 describe('SQLite cost model', () => {
   let db: Database;
   let costModel: ReturnType<typeof createSQLiteCostModel>;
+
+  function estimateCost(
+    filters: Condition | undefined,
+    sort: [['a' | 'b' | 'id', 'asc']] = [['a', 'asc']],
+  ) {
+    return costModel('foo', sort, filters, undefined);
+  }
 
   beforeEach(() => {
     const lc = createSilentLogContext();
@@ -38,6 +222,94 @@ describe('SQLite cost model', () => {
 
     // Create the cost model
     costModel = createSQLiteCostModel(db, tableSpecs);
+  });
+
+  test('mixed OR with correlated branch stays between optimistic and pessimistic row bounds', () => {
+    const mixedOrFilter = orCondition(
+      equalsCondition('a', 4),
+      correlatedExistsCondition('a'),
+    );
+    const {optimistic, pessimistic} = getFilterApproximations(mixedOrFilter);
+
+    // a = 4 OR EXISTS(bar)
+    //
+    // Intuitively this should land somewhere between:
+    //   optimistic:  a = 4
+    //   pessimistic: <no root-table filter>
+    //
+    // If the blended estimate equals the optimistic bound, we are pretending the
+    // correlated branch does not exist. If it equals the pessimistic bound, we
+    // are throwing away all useful signal from `a = 4`.
+    const optimisticRows = estimateCost(optimistic).rows;
+    const pessimisticRows = estimateCost(pessimistic).rows;
+    const blendedRows = estimateCost(mixedOrFilter).rows;
+
+    expect(optimisticRows).toBe(1);
+    expect(pessimisticRows).toBe(1920);
+    expect(blendedRows).toBeGreaterThan(optimisticRows);
+    expect(blendedRows).toBeLessThan(pessimisticRows);
+  });
+
+  test('mixed OR inside AND preserves the surrounding simple filter signal', () => {
+    const mixedNestedFilter = andCondition(
+      equalsCondition('b', 2),
+      orCondition(equalsCondition('a', 4), correlatedExistsCondition('a')),
+    );
+    const {optimistic, pessimistic} =
+      getFilterApproximations(mixedNestedFilter);
+
+    // b = 2 AND (a = 4 OR EXISTS(bar))
+    //
+    // This should stay between:
+    //   optimistic:  b = 2 AND a = 4
+    //   pessimistic: b = 2
+    //
+    // That means the final estimate still reflects that `b = 2` is definitely
+    // true, while `a = 4` is only one possible narrowing inside the OR.
+    const optimisticRows = estimateCost(optimistic).rows;
+    const pessimisticRows = estimateCost(pessimistic).rows;
+    const blendedRows = estimateCost(mixedNestedFilter).rows;
+
+    expect(optimisticRows).toBe(1);
+    expect(pessimisticRows).toBe(480);
+    expect(blendedRows).toBeGreaterThan(optimisticRows);
+    expect(blendedRows).toBeLessThan(pessimisticRows);
+  });
+
+  test('pure correlated OR falls back to the baseline root scan estimate', () => {
+    const onlyCorrelatedOrFilter = orCondition(
+      correlatedExistsCondition('a'),
+      correlatedExistsCondition('a'),
+    );
+
+    // EXISTS(bar_1) OR EXISTS(bar_2)
+    //
+    // With no visible root-table predicate, the root should cost the same as the
+    // baseline unconstrained scan.
+    expect(estimateCost(onlyCorrelatedOrFilter).rows).toBe(
+      estimateCost(undefined).rows,
+    );
+  });
+
+  test('mixed OR uses the more conservative startup cost bound', () => {
+    const mixedOrFilter = orCondition(
+      equalsCondition('a', 4),
+      correlatedExistsCondition('a'),
+    );
+    const {optimistic, pessimistic} = getFilterApproximations(mixedOrFilter);
+
+    // sort by b
+    // startup = max(optimistic, pessimistic)
+    //
+    // Row counts are blended, but one-time work should stay conservative. If the
+    // broader approximation needs a more expensive sort, the final startup cost
+    // should keep that larger bound.
+    expect(estimateCost(mixedOrFilter, [['b', 'asc']]).startupCost).toBe(
+      Math.max(
+        estimateCost(optimistic, [['b', 'asc']]).startupCost,
+        estimateCost(pessimistic, [['b', 'asc']]).startupCost,
+      ),
+    );
   });
 
   test('table scan ordered by primary key requires no sort', () => {
