@@ -18,6 +18,7 @@ import {
 } from '../../../../zero-protocol/src/error.ts';
 import type {InspectDownBody} from '../../../../zero-protocol/src/inspect-down.ts';
 import {mutationResultSchema} from '../../../../zero-protocol/src/mutation.ts';
+import type {MutationPatch} from '../../../../zero-protocol/src/mutations-patch.ts';
 import type {
   PokePartBody,
   PokeStartBody,
@@ -104,9 +105,14 @@ export function startPoke(
   };
 }
 
-// Semi-arbitrary threshold at which poke body parts are flushed.
-// When row size is being computed, that should be used as a threshold instead.
-const PART_COUNT_FLUSH_THRESHOLD = 100;
+// Keep poke parts small enough that clients observe progress while syncing.
+// A single patch can exceed this limit because rows are atomic at the protocol
+// level, but it will be sent in a part by itself.
+export const POKE_PART_FLUSH_THRESHOLD_BYTES = 1024 * 1024;
+
+function jsonByteLength(value: unknown): number {
+  return Buffer.byteLength(JSON.stringify(value));
+}
 
 /**
  * Handles a single `ViewSyncer` connection.
@@ -207,7 +213,8 @@ export class ClientHandler {
 
     let pokeStarted = false;
     let body: PokePartBody | undefined;
-    let partCount = 0;
+    const emptyPartBytes = jsonByteLength(['pokePart', {pokeID}]);
+    let partBytes = emptyPartBytes;
     const ensureBody = async () => {
       if (!pokeStarted) {
         await this.#push(['pokeStart', pokeStart]);
@@ -219,7 +226,21 @@ export class ClientHandler {
       if (body) {
         await this.#push(['pokePart', body]);
         body = undefined;
-        partCount = 0;
+        partBytes = emptyPartBytes;
+      }
+    };
+
+    const addToBody = async (
+      patchBytes: number,
+      add: (body: PokePartBody) => void,
+    ) => {
+      if (body && partBytes + patchBytes > POKE_PART_FLUSH_THRESHOLD_BYTES) {
+        await flushBody();
+      }
+      add(await ensureBody());
+      partBytes += patchBytes;
+      if (partBytes >= POKE_PART_FLUSH_THRESHOLD_BYTES) {
+        await flushBody();
       }
     };
 
@@ -228,33 +249,44 @@ export class ClientHandler {
       if (cmpVersions(toVersion, this.#baseVersion) <= 0) {
         return;
       }
-      const body = await ensureBody();
-
       const {type, op} = patch;
       switch (type) {
         case 'query': {
-          const patches = patch.clientID
-            ? ((body.desiredQueriesPatches ??= {})[patch.clientID] ??= [])
-            : (body.gotQueriesPatch ??= []);
-          if (op === 'put') {
-            patches.push({op, hash: patch.id});
-          } else {
-            patches.push({op, hash: patch.id});
-          }
+          const queryPatch = {op, hash: patch.id};
+          const contribution = patch.clientID
+            ? {desiredQueriesPatches: {[patch.clientID]: [queryPatch]}}
+            : {gotQueriesPatch: [queryPatch]};
+          await addToBody(jsonByteLength(contribution), body => {
+            const patches = patch.clientID
+              ? ((body.desiredQueriesPatches ??= {})[patch.clientID] ??= [])
+              : (body.gotQueriesPatch ??= []);
+            patches.push(queryPatch);
+          });
           break;
         }
         case 'row':
           if (patch.id.table === this.#zeroClientsTable) {
-            this.#updateLMIDs((body.lastMutationIDChanges ??= {}), patch);
+            const lmidChanges: Record<string, number> = {};
+            this.#updateLMIDs(lmidChanges, patch);
+            if (Object.keys(lmidChanges).length > 0) {
+              await addToBody(
+                jsonByteLength({lastMutationIDChanges: lmidChanges}),
+                body =>
+                  Object.assign(
+                    (body.lastMutationIDChanges ??= {}),
+                    lmidChanges,
+                  ),
+              );
+            }
           } else if (patch.id.table === this.#zeroMutationsTable) {
-            const patches = (body.mutationsPatch ??= []);
+            let mutationPatch: MutationPatch;
             if (op === 'put') {
               const row = v.parse(
                 ensureSafeJSON(patch.contents),
                 mutationRowSchema,
                 'passthrough',
               );
-              patches.push({
+              mutationPatch = {
                 op: 'put',
                 mutation: {
                   id: {
@@ -263,7 +295,7 @@ export class ClientHandler {
                   },
                   result: row.result,
                 },
-              });
+              };
             } else {
               const {clientID, mutationID} = patch.id.rowKey;
               assert(
@@ -275,24 +307,27 @@ export class ClientHandler {
                 !Number.isNaN(id) && Number.isFinite(id) && id >= 0,
                 'mutation id must be a finite number',
               );
-              patches.push({
+              mutationPatch = {
                 op: 'del',
                 id: {
                   clientID,
                   id,
                 },
-              });
+              };
             }
+            await addToBody(
+              jsonByteLength({mutationsPatch: [mutationPatch]}),
+              body => (body.mutationsPatch ??= []).push(mutationPatch),
+            );
           } else {
-            (body.rowsPatch ??= []).push(makeRowPatch(patch));
+            const rowPatch = makeRowPatch(patch);
+            await addToBody(jsonByteLength({rowsPatch: [rowPatch]}), body =>
+              (body.rowsPatch ??= []).push(rowPatch),
+            );
           }
           break;
         default:
           unreachable(patch);
-      }
-
-      if (++partCount >= PART_COUNT_FLUSH_THRESHOLD) {
-        await flushBody();
       }
     };
 
