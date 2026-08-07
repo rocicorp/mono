@@ -63,6 +63,7 @@ export interface MessageHandler {
 // replication stream (which can similarly be back-pressured):
 // https://github.com/rocicorp/mono/blob/f98cb369a2dbb15650328859c732db358f187ef0/packages/zero-cache/src/services/change-source/pg/logical-replication/stream.ts#L21
 const DOWNSTREAM_MSG_INTERVAL_MS = 6_000;
+export const WEBSOCKET_SEND_TIMEOUT_MS = 10_000;
 const PROTOCOL_VERSION_ATTRIBUTE = 'protocol.version';
 const EVENT_TYPE_ATTRIBUTE = 'event.type';
 
@@ -361,10 +362,37 @@ export function send(
   callback: ((err?: Error | null) => void) | 'ignore-backpressure',
 ) {
   if (ws.readyState === WebSocket.OPEN) {
-    ws.send(
-      JSON.stringify(data),
-      callback === 'ignore-backpressure' ? undefined : callback,
-    );
+    const serialized = JSON.stringify(data);
+    if (callback === 'ignore-backpressure') {
+      ws.send(serialized);
+      return;
+    }
+
+    let completed = false;
+    const timer = setTimeout(() => {
+      complete(
+        new ProtocolErrorWithLevel(
+          {
+            kind: ErrorKind.Internal,
+            message: `WebSocket send timed out after ${WEBSOCKET_SEND_TIMEOUT_MS} ms`,
+            origin: ErrorOrigin.ZeroCache,
+          },
+          'info',
+        ),
+      );
+    }, WEBSOCKET_SEND_TIMEOUT_MS);
+    timer.unref();
+
+    const complete = (error?: Error | null) => {
+      if (completed) {
+        return;
+      }
+      completed = true;
+      clearTimeout(timer);
+      callback(error);
+    };
+
+    ws.send(serialized, complete);
   } else {
     lc.debug?.(`Dropping outbound message on ws (state: ${ws.readyState})`, {
       dropped: data,
