@@ -10,6 +10,7 @@ import {
   test,
   vi,
 } from 'vitest';
+import {TestLogSink} from '../../../shared/src/logging-test-utils.ts';
 import type {MutationPatch} from '../../../zero-protocol/src/mutations-patch.ts';
 import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {string, table} from '../../../zero-schema/src/builder/table-builder.ts';
@@ -164,6 +165,45 @@ describe('poke handler', () => {
     await timeoutCallback1();
     expect(replicachePokeStub).toHaveBeenCalledTimes(1);
     expect(setTimeoutStub).toHaveBeenCalledTimes(2);
+  });
+
+  test('warns once when synced rows include columns absent from the client schema', () => {
+    const sink = new TestLogSink();
+    const logContext = new LogContext('warn', undefined, sink);
+    const pokeHandler = new PokeHandler(
+      vi.fn(),
+      vi.fn(),
+      'c1',
+      schema,
+      logContext,
+      new MutationTracker(logContext, ackMutationResponses, onFatalError),
+    );
+    pokeHandler.handlePokeStart({pokeID: 'poke1', baseCookie: '1'});
+
+    for (const id of ['issue1', 'issue2']) {
+      pokeHandler.handlePokePart({
+        pokeID: 'poke1',
+        rowsPatch: [
+          {
+            op: 'put',
+            tableName: 'issues',
+            value: {issue_id: id, title: 'title', raw: {large: 'payload'}},
+          },
+        ],
+      });
+    }
+
+    expect(sink.messages).toEqual([
+      [
+        'warn',
+        {PokeHandler: undefined},
+        [
+          'Received columns that are absent from the Zero client schema. ' +
+            'This may indicate that the Postgres publication is replicating and syncing unused columns.',
+          {tableName: 'issues', columns: ['raw']},
+        ],
+      ],
+    ]);
   });
 
   test('canceled poke is not applied', async () => {

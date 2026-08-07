@@ -57,6 +57,8 @@ export class PokeHandler {
   readonly #pokeLock = new Lock();
   readonly #schema: Schema;
   readonly #serverToClient: NameMapper;
+  readonly #serverColumnsByTable = new Map<string, ReadonlySet<string>>();
+  readonly #warnedUnknownColumns = new Set<string>();
   readonly #mutationTracker: MutationTracker;
 
   constructor(
@@ -72,6 +74,17 @@ export class PokeHandler {
     this.#clientID = clientID;
     this.#schema = schema;
     this.#serverToClient = serverToClient(schema.tables);
+    for (const [tableName, tableSchema] of Object.entries(schema.tables)) {
+      this.#serverColumnsByTable.set(
+        tableSchema.serverName ?? tableName,
+        new Set(
+          Object.entries(tableSchema.columns).map(
+            ([columnName, columnSchema]) =>
+              columnSchema.serverName ?? columnName,
+          ),
+        ),
+      );
+    }
     this.#lc = lc.withContext('PokeHandler');
     this.#mutationTracker = mutationTracker;
   }
@@ -102,6 +115,9 @@ export class PokeHandler {
       );
       return;
     }
+    for (const rowPatch of pokePart.rowsPatch ?? []) {
+      this.#warnAboutUnknownColumns(rowPatch);
+    }
     this.#receivingPoke.parts.push(pokePart);
     return pokePart.lastMutationIDChanges?.[this.#clientID];
   }
@@ -129,6 +145,42 @@ export class PokeHandler {
   handleDisconnect(): void {
     this.#lc.debug?.('clearing due to disconnect');
     this.#clear();
+  }
+
+  #warnAboutUnknownColumns(rowPatch: RowPatchOp): void {
+    if (rowPatch.op === 'clear') {
+      return;
+    }
+    const knownColumns = this.#serverColumnsByTable.get(rowPatch.tableName);
+    if (!knownColumns || rowPatch.op === 'del') {
+      return;
+    }
+
+    const receivedColumns =
+      rowPatch.op === 'put'
+        ? Object.keys(rowPatch.value)
+        : [...Object.keys(rowPatch.merge ?? {}), ...(rowPatch.constrain ?? [])];
+    const unknownColumns = receivedColumns.filter(column => {
+      if (knownColumns.has(column)) {
+        return false;
+      }
+      const key = `${rowPatch.tableName}\0${column}`;
+      if (this.#warnedUnknownColumns.has(key)) {
+        return false;
+      }
+      this.#warnedUnknownColumns.add(key);
+      return true;
+    });
+    if (unknownColumns.length === 0) {
+      return;
+    }
+
+    this.#lc.warn?.(
+      'Received columns that are absent from the Zero client schema. ' +
+        'This may indicate that the Postgres publication is replicating and ' +
+        'syncing unused columns.',
+      {tableName: rowPatch.tableName, columns: unknownColumns.sort()},
+    );
   }
 
   #startPlaybackLoop() {
