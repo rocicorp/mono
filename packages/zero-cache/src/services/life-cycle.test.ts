@@ -287,6 +287,19 @@ describe('shutdown', () => {
     expect(events.sort()).toEqual(expectedEvents.sort());
   });
 
+  test('exits nonzero when the final worker stops before drain', async () => {
+    const testProc = new EventEmitter();
+    const {promise: exitCode, resolve} = resolver<number>();
+    testProc.on('exit', resolve);
+    const manager = new ProcessManager(lc, testProc);
+    const [worker] = inProcChannel();
+    manager.addWorker(worker, 'user-facing', 'zero-cache');
+
+    worker.emit('close', 0, null);
+
+    expect(await exitCode).toBe(-1);
+  });
+
   test('records worker startup duration when a worker is ready', () => {
     const [parentPort, childPort] = inProcChannel();
     processes.addWorker(parentPort, 'supporting', 'replicator.ts (backup)');
