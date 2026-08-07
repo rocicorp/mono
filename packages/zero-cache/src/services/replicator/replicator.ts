@@ -4,7 +4,10 @@ import type {Source} from '../../types/streams.ts';
 import type {ChangeStreamer} from '../change-streamer/change-streamer.ts';
 import type {Service} from '../service.ts';
 import {IncrementalSyncer} from './incremental-sync.ts';
-import type {ReplicationStatusPublisher} from './replication-status.ts';
+import {
+  publishReplicationError,
+  type ReplicationStatusPublisher,
+} from './replication-status.ts';
 import type {WriteWorkerClient} from './write-worker-client.ts';
 
 /** See {@link ReplicaStateNotifier.subscribe()}. */
@@ -82,6 +85,7 @@ export class ReplicatorService implements Replicator, Service {
   readonly id: string;
   readonly #lc: LogContext;
   readonly #incrementalSyncer: IncrementalSyncer;
+  readonly #shouldPublishErrors: boolean;
   readonly #worker: WriteWorkerClient;
   #runPromise: Promise<void> | undefined;
 
@@ -99,6 +103,7 @@ export class ReplicatorService implements Replicator, Service {
       .withContext('component', 'replicator')
       .withContext('serviceID', this.id);
     this.#worker = worker;
+    this.#shouldPublishErrors = statusPublisher !== null;
 
     this.#incrementalSyncer = new IncrementalSyncer(
       this.#lc,
@@ -116,7 +121,16 @@ export class ReplicatorService implements Replicator, Service {
   }
 
   run() {
-    this.#runPromise = this.#incrementalSyncer.run();
+    this.#runPromise = this.#incrementalSyncer.run().catch(async error => {
+      if (this.#shouldPublishErrors) {
+        await publishReplicationError(
+          this.#lc,
+          'Replicating',
+          'Replication stopped because the replica writer failed',
+        );
+      }
+      throw error;
+    });
     return this.#runPromise;
   }
 
