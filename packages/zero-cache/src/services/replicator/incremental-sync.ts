@@ -71,7 +71,11 @@ export class IncrementalSyncer {
 
   async run() {
     const lc = this.#lc;
-    this.#worker.onError(err => this.#state.stop(lc, err));
+    let workerError: Error | undefined;
+    this.#worker.onError(err => {
+      workerError ??= err;
+      this.#state.stop(lc, err);
+    });
     lc.info?.(`Starting IncrementalSyncer`);
     const {watermark: initialWatermark} =
       await this.#worker.getSubscriptionState();
@@ -204,6 +208,9 @@ export class IncrementalSyncer {
       await this.#state.backoff(lc, err);
     }
     lc.info?.('IncrementalSyncer stopped');
+    if (workerError) {
+      throw workerError;
+    }
   }
 
   #handleResult(lc: LogContext, result: CommitResult | null) {
