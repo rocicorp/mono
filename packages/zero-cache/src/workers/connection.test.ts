@@ -9,7 +9,12 @@ import type {Downstream} from '../../../zero-protocol/src/down.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
 import {ProtocolErrorWithLevel} from '../types/error-with-level.ts';
-import {send, sendError, type WebSocketLike} from './connection.ts';
+import {
+  send,
+  sendError,
+  WEBSOCKET_SEND_TIMEOUT_MS,
+  type WebSocketLike,
+} from './connection.ts';
 
 class MockSocket implements WebSocketLike {
   readyState: WebSocket['readyState'] = WebSocket.OPEN;
@@ -46,7 +51,51 @@ describe('send', () => {
     const callback = () => {};
     ws.readyState = WebSocket.OPEN;
     send(lc, ws, data, callback);
-    expect(sendSpy).toHaveBeenCalledWith(JSON.stringify(data), callback);
+    expect(sendSpy).toHaveBeenCalledWith(
+      JSON.stringify(data),
+      expect.any(Function),
+    );
+  });
+
+  test('fails a stalled websocket send after the timeout', async () => {
+    vi.useFakeTimers();
+    try {
+      const callback = vi.fn();
+      send(lc, ws, data, callback);
+
+      await vi.advanceTimersByTimeAsync(WEBSOCKET_SEND_TIMEOUT_MS);
+
+      expect(callback).toHaveBeenCalledTimes(1);
+      const error = callback.mock.calls[0]![0] as ProtocolErrorWithLevel;
+      expect(error).toBeInstanceOf(ProtocolErrorWithLevel);
+      expect(error.errorBody).toEqual({
+        kind: ErrorKind.Internal,
+        message: `WebSocket send timed out after ${WEBSOCKET_SEND_TIMEOUT_MS} ms`,
+        origin: ErrorOrigin.ZeroCache,
+      });
+      expect(error.logLevel).toBe('info');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  test('invokes the callback only once when a timed-out send later completes', async () => {
+    vi.useFakeTimers();
+    try {
+      let sendCallback: ((err?: Error) => void) | undefined;
+      ws.send = (_data, callback) => {
+        sendCallback = callback;
+      };
+      const callback = vi.fn();
+      send(lc, ws, data, callback);
+
+      await vi.advanceTimersByTimeAsync(WEBSOCKET_SEND_TIMEOUT_MS);
+      sendCallback?.();
+
+      expect(callback).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
