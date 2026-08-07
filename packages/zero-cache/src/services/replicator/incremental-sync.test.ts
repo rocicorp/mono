@@ -26,6 +26,7 @@ import {
 import * as ErrorType from '../change-streamer/error-type-enum.ts';
 import {IncrementalSyncer} from './incremental-sync.ts';
 import {ReplicationStatusPublisher} from './replication-status.ts';
+import {ReplicatorService} from './replicator.ts';
 import {
   createReplicationStateTables,
   initReplicationState,
@@ -547,6 +548,37 @@ describe('replicator/incremental-sync', () => {
         },
       ]
     `);
+  });
+
+  test('publishes and rejects fatal replication errors', async () => {
+    const issues = new ReplicationMessages({issues: ['issueID']});
+
+    initReplicationState(mainDb, ['zero_data'], '02', {}, false);
+    const replicator = new ReplicatorService(
+      lc,
+      TASK_ID,
+      REPLICA_ID,
+      'backup',
+      {subscribe: subscribeFn.mockResolvedValue(downstream)},
+      worker,
+      ReplicationStatusPublisher.forReplicaFile(dbFile.path),
+    );
+    syncing = replicator.run();
+    await vi.waitFor(() => expect(subscribeFn).toHaveBeenCalled());
+
+    downstream.push([
+      'data',
+      issues.insert('issues', {issueID: 123, big: 456}),
+    ]);
+
+    await expect(syncing).rejects.toThrow(
+      'Received message outside of transaction',
+    );
+    expect(eventSink.at(-1)).toMatchObject({
+      status: 'ERROR',
+      stage: 'Replicating',
+      description: 'Replication stopped because the replica writer failed',
+    });
   });
 
   async function noNotification(
