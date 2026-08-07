@@ -1,5 +1,5 @@
 import {defineConfig, mergeConfig} from 'vitest/config';
-import config, {CI} from '../shared/src/tool/vitest-config.ts';
+import config, {benchConfig, CI} from '../shared/src/tool/vitest-config.ts';
 
 const coverageInclude = ['src/**/*.{js,jsx,ts,tsx,mjs,mts,cjs,cts}'];
 
@@ -50,6 +50,22 @@ export function configForNoPg(url: string) {
       },
     },
   });
+}
+
+export function configForPgBench(url: string) {
+  const name = nameFromURL(url);
+  const merged = mergeConfig(benchConfig, {
+    test: {
+      name: `${name}/bench-pg`,
+      globalSetup: ['../zero-cache/test/pg-17.ts'],
+      browser: {enabled: false},
+      testTimeout: 300_000,
+      hookTimeout: 300_000,
+    },
+  });
+  // Override include to only pg benchmarks (mergeConfig merges arrays).
+  merged.test.include = ['src/**/*.bench.pg.?(c|m)[jt]s?(x)'];
+  return merged;
 }
 
 // To run tests against a custom Postgres instance (e.g. Aurora), specify

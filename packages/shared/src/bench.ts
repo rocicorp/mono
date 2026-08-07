@@ -193,6 +193,14 @@ export function createManualBenchmarkRecorder() {
   });
 
   return {
+    recordLatency(name: string, elapsedMsSamples: readonly number[]) {
+      results.push({
+        name,
+        stats: statsFromSamples(
+          elapsedMsSamples.map(elapsedMs => elapsedMs * 1e6),
+        ),
+      });
+    },
     recordThroughput(
       name: string,
       elapsedMsSamples: readonly number[],

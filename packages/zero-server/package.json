@@ -11,6 +11,7 @@
     "check-types:watch": "tsc --watch",
     "lint": "oxlint --quiet --config ../../oxlint.config.ts src/",
     "postinstall": "prisma generate --schema ./src/adapters/schema.test.prisma",
+    "bench:pg": "vitest run --config vitest.config.bench.pg.ts",
     "test": "vitest run",
     "test:watch": "vitest watch",
     "test:pg17": "vitest run --project='*17*'",
