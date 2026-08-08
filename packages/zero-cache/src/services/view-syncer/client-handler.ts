@@ -18,7 +18,6 @@ import {
 } from '../../../../zero-protocol/src/error.ts';
 import type {InspectDownBody} from '../../../../zero-protocol/src/inspect-down.ts';
 import {mutationResultSchema} from '../../../../zero-protocol/src/mutation.ts';
-import type {MutationPatch} from '../../../../zero-protocol/src/mutations-patch.ts';
 import type {
   PokePartBody,
   PokeStartBody,
@@ -110,193 +109,7 @@ export function startPoke(
 // A single patch can exceed this limit because rows are atomic at the protocol
 // level, but it will be sent in a part by itself.
 export const POKE_PART_FLUSH_THRESHOLD_CHARS = 1024 * 1024;
-
-type QueryPatchOp = NonNullable<PokePartBody['gotQueriesPatch']>[number];
-
-type SerializedRecordValue = {
-  readonly key: string;
-  value: string;
-};
-
-type SerializedDesiredQueries = {
-  readonly key: string;
-  readonly patches: string[];
-};
-
-class PokePartBuilder {
-  readonly #body: PokePartBody;
-  readonly #pokeID: string;
-  readonly #lastMutationIDChanges = new Map<string, SerializedRecordValue>();
-  readonly #desiredQueriesPatches = new Map<string, SerializedDesiredQueries>();
-  readonly #gotQueriesPatch: string[] = [];
-  readonly #rowsPatch: string[] = [];
-  readonly #mutationsPatch: string[] = [];
-  #length: number;
-  #patchCount = 0;
-
-  constructor(pokeID: string) {
-    this.#body = {pokeID};
-    this.#pokeID = JSON.stringify(pokeID);
-    this.#length = `["pokePart",{"pokeID":${this.#pokeID}}]`.length;
-  }
-
-  get length(): number {
-    return this.#length;
-  }
-
-  trySetLastMutationID(
-    clientID: string,
-    lastMutationID: number,
-    maxChars: number,
-  ): boolean {
-    const value = JSON.stringify(lastMutationID);
-    const existing = this.#lastMutationIDChanges.get(clientID);
-    const key = existing?.key ?? JSON.stringify(clientID);
-    const additionalChars = existing
-      ? value.length - existing.value.length
-      : this.#lastMutationIDChanges.size === 0
-        ? `,"lastMutationIDChanges":{${key}:${value}}`.length
-        : `,${key}:${value}`.length;
-    return this.#tryAdd(additionalChars, maxChars, () => {
-      this.#lastMutationIDChanges.set(clientID, {key, value});
-      (this.#body.lastMutationIDChanges ??= {})[clientID] = lastMutationID;
-    });
-  }
-
-  tryAddDesiredQueryPatch(
-    clientID: string,
-    patch: QueryPatchOp,
-    serialized: string,
-    maxChars: number,
-  ): boolean {
-    const existing = this.#desiredQueriesPatches.get(clientID);
-    const key = existing?.key ?? JSON.stringify(clientID);
-    const additionalChars = existing
-      ? `,${serialized}`.length
-      : this.#desiredQueriesPatches.size === 0
-        ? `,"desiredQueriesPatches":{${key}:[${serialized}]}`.length
-        : `,${key}:[${serialized}]`.length;
-    return this.#tryAdd(additionalChars, maxChars, () => {
-      if (existing) {
-        existing.patches.push(serialized);
-      } else {
-        this.#desiredQueriesPatches.set(clientID, {
-          key,
-          patches: [serialized],
-        });
-      }
-      ((this.#body.desiredQueriesPatches ??= {})[clientID] ??= []).push(patch);
-    });
-  }
-
-  tryAddGotQueryPatch(
-    patch: QueryPatchOp,
-    serialized: string,
-    maxChars: number,
-  ): boolean {
-    return this.#tryAddArrayItem(
-      'gotQueriesPatch',
-      this.#gotQueriesPatch,
-      serialized,
-      maxChars,
-      () => (this.#body.gotQueriesPatch ??= []).push(patch),
-    );
-  }
-
-  tryAddRowPatch(
-    patch: RowPatchOp,
-    serialized: string,
-    maxChars: number,
-  ): boolean {
-    return this.#tryAddArrayItem(
-      'rowsPatch',
-      this.#rowsPatch,
-      serialized,
-      maxChars,
-      () => (this.#body.rowsPatch ??= []).push(patch),
-    );
-  }
-
-  tryAddMutationPatch(
-    patch: MutationPatch,
-    serialized: string,
-    maxChars: number,
-  ): boolean {
-    return this.#tryAddArrayItem(
-      'mutationsPatch',
-      this.#mutationsPatch,
-      serialized,
-      maxChars,
-      () => (this.#body.mutationsPatch ??= []).push(patch),
-    );
-  }
-
-  message(): Downstream {
-    const serialized = this.#serialize();
-    assert(
-      serialized.length === this.#length,
-      'serialized poke part length did not match the measured length',
-    );
-    return setSerializedDownstream(['pokePart', this.#body], serialized);
-  }
-
-  #tryAddArrayItem(
-    field: string,
-    items: string[],
-    serialized: string,
-    maxChars: number,
-    addToBody: () => void,
-  ): boolean {
-    const additionalChars =
-      items.length === 0
-        ? `,${JSON.stringify(field)}:[${serialized}]`.length
-        : `,${serialized}`.length;
-    return this.#tryAdd(additionalChars, maxChars, () => {
-      items.push(serialized);
-      addToBody();
-    });
-  }
-
-  #tryAdd(additionalChars: number, maxChars: number, add: () => void): boolean {
-    if (this.#patchCount > 0 && this.#length + additionalChars > maxChars) {
-      return false;
-    }
-    add();
-    this.#length += additionalChars;
-    this.#patchCount++;
-    return true;
-  }
-
-  #serialize(): string {
-    const fields = [`"pokeID":${this.#pokeID}`];
-    if (this.#lastMutationIDChanges.size > 0) {
-      fields.push(
-        `"lastMutationIDChanges":{${Array.from(
-          this.#lastMutationIDChanges.values(),
-          ({key, value}) => `${key}:${value}`,
-        ).join(',')}}`,
-      );
-    }
-    if (this.#desiredQueriesPatches.size > 0) {
-      fields.push(
-        `"desiredQueriesPatches":{${Array.from(
-          this.#desiredQueriesPatches.values(),
-          ({key, patches}) => `${key}:[${patches.join(',')}]`,
-        ).join(',')}}`,
-      );
-    }
-    this.#pushArrayField(fields, 'gotQueriesPatch', this.#gotQueriesPatch);
-    this.#pushArrayField(fields, 'rowsPatch', this.#rowsPatch);
-    this.#pushArrayField(fields, 'mutationsPatch', this.#mutationsPatch);
-    return `["pokePart",{${fields.join(',')}}]`;
-  }
-
-  #pushArrayField(fields: string[], field: string, items: string[]): void {
-    if (items.length > 0) {
-      fields.push(`${JSON.stringify(field)}:[${items.join(',')}]`);
-    }
-  }
-}
+const PART_COUNT_FLUSH_THRESHOLD = 100;
 
 /**
  * Handles a single `ViewSyncer` connection.
@@ -396,31 +209,49 @@ export class ClientHandler {
     const pokeStart: PokeStartBody = {pokeID, baseCookie};
 
     let pokeStarted = false;
-    let part: PokePartBuilder | undefined;
-    const ensurePart = async () => {
+    let body: PokePartBody | undefined;
+    let partCount = 0;
+    const emptySerializedBody = JSON.stringify(['pokePart', {pokeID}]);
+    let serializedBody = emptySerializedBody;
+    const serializedRows: string[] = [];
+    let serializedRowsLength = 0;
+
+    const ensureBody = async () => {
       if (!pokeStarted) {
         await this.#push(['pokeStart', pokeStart]);
         pokeStarted = true;
       }
-      return (part ??= new PokePartBuilder(pokeID));
+      return (body ??= {pokeID});
     };
-    const flushPart = async () => {
-      if (part) {
-        await this.#push(part.message());
-        part = undefined;
+
+    const serializedLength = (rowsLength = serializedRowsLength) =>
+      rowsLength
+        ? serializedBody.length - 2 + ',"rowsPatch":[]}]'.length + rowsLength
+        : serializedBody.length;
+
+    const flushBody = async () => {
+      if (body) {
+        const serialized = serializedRows.length
+          ? `${serializedBody.slice(0, -2)},"rowsPatch":[${serializedRows.join(',')}]}]`
+          : serializedBody;
+        assert(
+          serialized.length === serializedLength(),
+          'serialized poke part length did not match the measured length',
+        );
+        await this.#push(
+          setSerializedDownstream(['pokePart', body], serialized),
+        );
+        body = undefined;
+        partCount = 0;
+        serializedBody = emptySerializedBody;
+        serializedRows.length = 0;
+        serializedRowsLength = 0;
       }
     };
 
-    const addToPart = async (add: (part: PokePartBuilder) => boolean) => {
-      let target = await ensurePart();
-      if (!add(target)) {
-        await flushPart();
-        target = await ensurePart();
-        assert(add(target), 'failed to add patch to an empty poke part');
-      }
-      if (target.length >= POKE_PART_FLUSH_THRESHOLD_CHARS) {
-        await flushPart();
-      }
+    const updateSerializedBody = (body: PokePartBody) => {
+      const {rowsPatch: _, ...rest} = body;
+      serializedBody = JSON.stringify(['pokePart', rest]);
     };
 
     const addPatch = async (patchToVersion: PatchToVersion) => {
@@ -428,51 +259,30 @@ export class ClientHandler {
       if (cmpVersions(toVersion, this.#baseVersion) <= 0) {
         return;
       }
+      let target = await ensureBody();
+      let addedSerializedRow = false;
+
       const {type, op} = patch;
       switch (type) {
         case 'query': {
-          const queryPatch = {op, hash: patch.id};
-          const serialized = JSON.stringify(queryPatch);
-          await addToPart(part =>
-            patch.clientID
-              ? part.tryAddDesiredQueryPatch(
-                  patch.clientID,
-                  queryPatch,
-                  serialized,
-                  POKE_PART_FLUSH_THRESHOLD_CHARS,
-                )
-              : part.tryAddGotQueryPatch(
-                  queryPatch,
-                  serialized,
-                  POKE_PART_FLUSH_THRESHOLD_CHARS,
-                ),
-          );
+          const patches = patch.clientID
+            ? ((target.desiredQueriesPatches ??= {})[patch.clientID] ??= [])
+            : (target.gotQueriesPatch ??= []);
+          patches.push({op, hash: patch.id});
           break;
         }
         case 'row':
           if (patch.id.table === this.#zeroClientsTable) {
-            const lmidChanges: Record<string, number> = {};
-            this.#updateLMIDs(lmidChanges, patch);
-            for (const [clientID, lastMutationID] of Object.entries(
-              lmidChanges,
-            )) {
-              await addToPart(part =>
-                part.trySetLastMutationID(
-                  clientID,
-                  lastMutationID,
-                  POKE_PART_FLUSH_THRESHOLD_CHARS,
-                ),
-              );
-            }
+            this.#updateLMIDs((target.lastMutationIDChanges ??= {}), patch);
           } else if (patch.id.table === this.#zeroMutationsTable) {
-            let mutationPatch: MutationPatch;
+            const patches = (target.mutationsPatch ??= []);
             if (op === 'put') {
               const row = v.parse(
                 ensureSafeJSON(patch.contents),
                 mutationRowSchema,
                 'passthrough',
               );
-              mutationPatch = {
+              patches.push({
                 op: 'put',
                 mutation: {
                   id: {
@@ -481,7 +291,7 @@ export class ClientHandler {
                   },
                   result: row.result,
                 },
-              };
+              });
             } else {
               const {clientID, mutationID} = patch.id.rowKey;
               assert(
@@ -493,36 +303,48 @@ export class ClientHandler {
                 !Number.isNaN(id) && Number.isFinite(id) && id >= 0,
                 'mutation id must be a finite number',
               );
-              mutationPatch = {
+              patches.push({
                 op: 'del',
                 id: {
                   clientID,
                   id,
                 },
-              };
+              });
             }
-            const serialized = JSON.stringify(mutationPatch);
-            await addToPart(part =>
-              part.tryAddMutationPatch(
-                mutationPatch,
-                serialized,
-                POKE_PART_FLUSH_THRESHOLD_CHARS,
-              ),
-            );
           } else {
             const rowPatch = makeRowPatch(patch);
             const serialized = JSON.stringify(rowPatch);
-            await addToPart(part =>
-              part.tryAddRowPatch(
-                rowPatch,
-                serialized,
-                POKE_PART_FLUSH_THRESHOLD_CHARS,
-              ),
-            );
+            const nextRowsLength =
+              serializedRowsLength +
+              (serializedRows.length ? 1 : 0) +
+              serialized.length;
+            if (
+              partCount > 0 &&
+              serializedLength(nextRowsLength) > POKE_PART_FLUSH_THRESHOLD_CHARS
+            ) {
+              await flushBody();
+              target = await ensureBody();
+            }
+            (target.rowsPatch ??= []).push(rowPatch);
+            serializedRowsLength +=
+              (serializedRows.length ? 1 : 0) + serialized.length;
+            serializedRows.push(serialized);
+            addedSerializedRow = true;
           }
           break;
         default:
           unreachable(patch);
+      }
+
+      if (!addedSerializedRow) {
+        updateSerializedBody(target);
+      }
+      partCount++;
+      if (
+        serializedLength() >= POKE_PART_FLUSH_THRESHOLD_CHARS ||
+        (!addedSerializedRow && partCount >= PART_COUNT_FLUSH_THRESHOLD)
+      ) {
+        await flushBody();
       }
     };
 
@@ -562,7 +384,7 @@ export class ClientHandler {
               `not greater than baseVersion ${this.#baseVersion}`,
           );
         }
-        await flushPart();
+        await flushBody();
         await this.#push(['pokeEnd', {pokeID, cookie}]);
         this.#baseVersion = finalVersion;
         this.#everPoked = true;
