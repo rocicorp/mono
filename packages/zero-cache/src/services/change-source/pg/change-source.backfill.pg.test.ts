@@ -178,7 +178,84 @@ describe.each([
     }
   }
 
+  test.each([
+    [
+      'CREATE TABLE AS',
+      `CREATE TABLE published.scratch AS SELECT 1::INT AS id`,
+    ],
+    ['SELECT INTO', `SELECT 1::INT AS id INTO published.scratch`],
+  ])(
+    '%s scratch table created and dropped in one transaction',
+    async (_, ddl) => {
+      await upstream.unsafe(/*sql*/ `
+      ${ddl};
+      INSERT INTO published.scratch VALUES (2);
+      DROP TABLE published.scratch;
+    `);
+
+      expect((await nextTransaction()).map(({tag}) => tag)).toEqual([
+        'create-table',
+        'insert',
+        'drop-table',
+      ]);
+    },
+  );
+
   test.for([
+    [
+      'table created with CREATE TABLE AS',
+      PG_15_UP,
+      /*sql*/ `
+      CREATE TABLE published.ctas_table AS
+        SELECT * FROM (VALUES (1, 'one'::TEXT), (2, 'two'::TEXT)) AS rows(id, value);
+      ALTER TABLE published.ctas_table ADD PRIMARY KEY (id);
+      INSERT INTO published.ctas_table VALUES (3, 'three');
+      `,
+      null,
+      {
+        ['published.ctas_table']: [
+          {id: 3n, value: 'three'},
+          {id: 1n, value: 'one'},
+          {id: 2n, value: 'two'},
+        ],
+      },
+      [
+        {
+          name: 'published.ctas_table',
+          columns: {
+            id: {dataType: 'int4|NOT_NULL', pos: 1},
+            value: {dataType: 'text', pos: 2},
+          },
+        },
+      ],
+    ],
+    [
+      'table created with SELECT INTO',
+      PG_15_UP,
+      /*sql*/ `
+      SELECT * INTO published.select_into_table
+        FROM (VALUES (1, 'one'::TEXT), (2, 'two'::TEXT)) AS rows(id, value);
+      ALTER TABLE published.select_into_table ADD PRIMARY KEY (id);
+      INSERT INTO published.select_into_table VALUES (3, 'three');
+      `,
+      null,
+      {
+        ['published.select_into_table']: [
+          {id: 3n, value: 'three'},
+          {id: 1n, value: 'one'},
+          {id: 2n, value: 'two'},
+        ],
+      },
+      [
+        {
+          name: 'published.select_into_table',
+          columns: {
+            id: {dataType: 'int4|NOT_NULL', pos: 1},
+            value: {dataType: 'text', pos: 2},
+          },
+        },
+      ],
+    ],
     [
       'table added to published schema',
       PG_15_UP,

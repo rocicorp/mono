@@ -29,7 +29,7 @@ export async function ensureShardSchema(
 ): Promise<void> {
   const initialSetup: Migration = {
     migrateSchema: (lc, tx) => setupTablesAndReplication(lc, tx, shard),
-    minSafeVersion: 1,
+    minSafeVersion: 25,
   };
   await runSchemaMigrations(
     lc,
@@ -228,6 +228,18 @@ function getIncrementalMigrations(shard: ShardConfig): IncrementalMigrationMap {
           UPDATE ${sql(upstreamSchema(shard))}.replicas SET "generation" = "version";
         `;
       },
+    },
+
+    // v25: Upgrade DDL triggers to detect CREATE TABLE AS and SELECT INTO.
+    25: {
+      migrateSchema: async (lc, sql) => {
+        const [{publications}] = await sql<{publications: string[]}[]>`
+          SELECT publications FROM ${sql(shardConfigTable)}`;
+        await setupTriggers(lc, sql, {...shard, publications});
+        lc.info?.(`Upgraded DDL event triggers`);
+      },
+      // Older change sources process CTAS rows before the table schema.
+      minSafeVersion: 25,
     },
   };
 }

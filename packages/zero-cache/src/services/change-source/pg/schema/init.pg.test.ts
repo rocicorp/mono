@@ -23,7 +23,7 @@ const SHARD_NUM = 23;
 const CURRENT_SCHEMA_VERSIONS = {
   dataVersion: CURRENT_SCHEMA_VERSION,
   schemaVersion: CURRENT_SCHEMA_VERSION,
-  minSafeVersion: 1,
+  minSafeVersion: 25,
   lock: 'v',
 } as const;
 
@@ -228,4 +228,51 @@ describe('change-streamer/pg/schema/init', () => {
       await expectTablesToMatch(upstream, c.upstreamPostState);
     });
   }
+
+  test('upgrades DDL event triggers from v24', async () => {
+    const shard = {
+      appID: APP_ID,
+      shardNum: SHARD_NUM,
+      publications: [],
+    };
+    await ensureShardSchema(lc, upstream, shard);
+
+    await upstream.unsafe(/*sql*/ `
+      DROP EVENT TRIGGER ${APP_ID}_ddl_start_${SHARD_NUM};
+      DROP EVENT TRIGGER ${APP_ID}_ddl_end_${SHARD_NUM};
+
+      CREATE EVENT TRIGGER ${APP_ID}_ddl_start_${SHARD_NUM}
+        ON ddl_command_start
+        WHEN TAG IN ('CREATE TABLE')
+        EXECUTE PROCEDURE ${APP_ID}_${SHARD_NUM}.emit_ddl_start();
+
+      CREATE EVENT TRIGGER ${APP_ID}_ddl_end_${SHARD_NUM}
+        ON ddl_command_end
+        WHEN TAG IN ('CREATE TABLE')
+        EXECUTE PROCEDURE ${APP_ID}_${SHARD_NUM}.emit_ddl_end();
+    `);
+
+    const schema = `${APP_ID}_${SHARD_NUM}`;
+    await upstream`
+      UPDATE ${upstream(schema)}."versionHistory"
+      SET "dataVersion" = ${CURRENT_SCHEMA_VERSION - 1},
+          "schemaVersion" = ${CURRENT_SCHEMA_VERSION - 1}
+    `;
+
+    await ensureShardSchema(lc, upstream, shard);
+
+    const triggers = await upstream<{tags: string[]}[]>`
+      SELECT evttags AS tags
+      FROM pg_event_trigger
+      WHERE evtname IN (
+        ${`${APP_ID}_ddl_start_${SHARD_NUM}`},
+        ${`${APP_ID}_ddl_end_${SHARD_NUM}`}
+      )
+    `;
+    expect(triggers).toHaveLength(2);
+    for (const {tags} of triggers) {
+      expect(tags).toContain('CREATE TABLE AS');
+      expect(tags).toContain('SELECT INTO');
+    }
+  });
 });
