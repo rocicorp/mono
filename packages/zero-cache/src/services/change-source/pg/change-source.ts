@@ -1011,6 +1011,7 @@ type ReplicationError = {
 };
 
 const SET_REPLICA_IDENTITY_DELAY_MS = 50;
+const PRE_SCHEMA_DATA_TAGS = new Set(['CREATE TABLE AS', 'SELECT INTO']);
 
 class ChangeMaker {
   readonly #shardPrefix: string;
@@ -1020,6 +1021,8 @@ class ChangeMaker {
 
   #replicaIdentityTimer: NodeJS.Timeout | undefined;
   #error: ReplicationError | undefined;
+  readonly #knownRelationOIDs: Set<number>;
+  #preSchemaData: {tag: string; relationOID?: number} | undefined;
 
   constructor(
     {appID, shardNum}: ShardID,
@@ -1032,6 +1035,7 @@ class ChangeMaker {
     this.#shardConfig = shardConfig;
     this.#initialSchema = initialSchema;
     this.#db = db;
+    this.#knownRelationOIDs = new Set(initialSchema.tables.map(({oid}) => oid));
   }
 
   async makeChanges(
@@ -1111,6 +1115,9 @@ class ChangeMaker {
         ];
 
       case 'delete': {
+        if (this.#isPreSchemaData(msg.relation)) {
+          return [];
+        }
         if (!(msg.key ?? msg.old)) {
           throw new Error(
             `Invalid DELETE msg (missing key): ${stringify(msg)}`,
@@ -1130,6 +1137,9 @@ class ChangeMaker {
       }
 
       case 'update': {
+        if (this.#isPreSchemaData(msg.relation)) {
+          return [];
+        }
         return [
           [
             'data',
@@ -1144,9 +1154,18 @@ class ChangeMaker {
       }
 
       case 'insert':
+        if (this.#isPreSchemaData(msg.relation)) {
+          return [];
+        }
         return [['data', {...msg, relation: makeRelation(msg.relation)}]];
-      case 'truncate':
-        return [['data', {...msg, relations: msg.relations.map(makeRelation)}]];
+      case 'truncate': {
+        const relations = msg.relations.filter(
+          relation => !this.#isPreSchemaData(relation),
+        );
+        return relations.length
+          ? [['data', {...msg, relations: relations.map(makeRelation)}]]
+          : [];
+      }
 
       case 'message':
         if (!msg.prefix.startsWith(this.#shardPrefix)) {
@@ -1163,6 +1182,7 @@ class ChangeMaker {
         }
 
       case 'commit':
+        this.#preSchemaData = undefined;
         return [
           [
             'commit',
@@ -1218,6 +1238,15 @@ class ChangeMaker {
         return [];
     }
 
+    if (type === 'ddlStart' && PRE_SCHEMA_DATA_TAGS.has(event.event.tag)) {
+      this.#preSchemaData = {tag: event.event.tag};
+    } else if (
+      type === 'ddlUpdate' &&
+      this.#preSchemaData?.tag === event.event.tag
+    ) {
+      this.#preSchemaData = undefined;
+    }
+
     const prevEvent = this.#lastReplicationEvent;
     // Store the new event to understand the context of the next event.
     this.#lastReplicationEvent = event;
@@ -1231,6 +1260,11 @@ class ChangeMaker {
         event: summarizeReplicationEventForLog(event),
       });
       return [];
+    }
+
+    this.#knownRelationOIDs.clear();
+    for (const {oid} of schema.tables) {
+      this.#knownRelationOIDs.add(oid);
     }
 
     const prevSchema =
@@ -1392,7 +1426,9 @@ class ChangeMaker {
           spec,
           metadata: getMetadata(spec),
         };
-        // Only tables introduced by a `CREATE` statement can skip backfill.
+        // Only tables introduced by a plain `CREATE TABLE` statement can skip
+        // backfill. CREATE TABLE AS and SELECT INTO emit their row changes
+        // before the schema change, so those rows are suppressed and backfilled.
         // All other scenarios in which tables are introduced into the
         // schema, e.g.
         // * ALTER PUBLICATION statements
@@ -1400,7 +1436,7 @@ class ChangeMaker {
         // * MANUAL snapshots
         // * UNKNOWN command tags
         // must be backfilled.
-        if (!tag.startsWith('CREATE')) {
+        if (tag !== 'CREATE TABLE') {
           createTable.backfill = mapValues(spec.columns, ({pos: attNum}) => ({
             attNum,
           })) satisfies Record<string, ColumnMetadata>;
@@ -1549,6 +1585,13 @@ class ChangeMaker {
    * However, they serve the purpose determining if schemas have changed.
    */
   async #handleRelation(rel: PostgresRelation): Promise<ChangeStreamData[]> {
+    if (
+      this.#preSchemaData &&
+      this.#preSchemaData.relationOID === undefined &&
+      !this.#knownRelationOIDs.has(rel.relationOid)
+    ) {
+      this.#preSchemaData.relationOID = rel.relationOid;
+    }
     const {publications, ddlDetection} = this.#shardConfig;
     if (ddlDetection) {
       return [];
@@ -1577,6 +1620,10 @@ class ChangeMaker {
       );
     }
     return [];
+  }
+
+  #isPreSchemaData(relation: PostgresRelation): boolean {
+    return this.#preSchemaData?.relationOID === relation.relationOid;
   }
 }
 
