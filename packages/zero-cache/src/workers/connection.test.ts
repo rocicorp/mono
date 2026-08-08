@@ -8,6 +8,7 @@ import {
 import type {Downstream} from '../../../zero-protocol/src/down.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
+import {setSerializedDownstream} from '../types/downstream.ts';
 import {ProtocolErrorWithLevel} from '../types/error-with-level.ts';
 import {
   send,
@@ -96,6 +97,16 @@ describe('send', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  test('reuses an already serialized downstream message', () => {
+    using sendSpy = vi.spyOn(ws, 'send');
+    const callback = () => {};
+    const serialized = '["pong", {"cached": true}]';
+
+    send(lc, ws, setSerializedDownstream(data, serialized), callback);
+
+    expect(sendSpy).toHaveBeenCalledWith(serialized, callback);
   });
 });
 
