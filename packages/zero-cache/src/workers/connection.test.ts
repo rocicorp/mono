@@ -8,6 +8,7 @@ import {
 import type {Downstream} from '../../../zero-protocol/src/down.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
+import {setSerializedDownstream} from '../types/downstream.ts';
 import {ProtocolErrorWithLevel} from '../types/error-with-level.ts';
 import {send, sendError, type WebSocketLike} from './connection.ts';
 
@@ -47,6 +48,16 @@ describe('send', () => {
     ws.readyState = WebSocket.OPEN;
     send(lc, ws, data, callback);
     expect(sendSpy).toHaveBeenCalledWith(JSON.stringify(data), callback);
+  });
+
+  test('reuses an already serialized downstream message', () => {
+    using sendSpy = vi.spyOn(ws, 'send');
+    const callback = () => {};
+    const serialized = '["pong", {"cached": true}]';
+
+    send(lc, ws, setSerializedDownstream(data, serialized), callback);
+
+    expect(sendSpy).toHaveBeenCalledWith(serialized, callback);
   });
 });
 
