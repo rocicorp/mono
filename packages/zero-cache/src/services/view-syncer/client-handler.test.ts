@@ -8,11 +8,12 @@ import type {
   PokePartMessage,
   PokeStartMessage,
 } from '../../../../zero-protocol/src/poke.ts';
+import {stringifyDownstream} from '../../types/downstream.ts';
 import {Subscription} from '../../types/subscription.ts';
 import {
   ClientHandler,
   ensureSafeJSON,
-  POKE_PART_FLUSH_THRESHOLD_BYTES,
+  POKE_PART_FLUSH_THRESHOLD_CHARS,
   startPoke,
   type Patch,
   type PokeHandler,
@@ -471,8 +472,10 @@ describe('view-syncer/client-handler', () => {
     const pokeParts = received.filter(message => message[0] === 'pokePart');
     expect(pokeParts).toHaveLength(3);
     for (const pokePart of pokeParts) {
-      expect(Buffer.byteLength(JSON.stringify(pokePart))).toBeLessThanOrEqual(
-        POKE_PART_FLUSH_THRESHOLD_BYTES,
+      const serialized = stringifyDownstream(pokePart);
+      expect(serialized).toBe(JSON.stringify(pokePart));
+      expect(serialized.length).toBeLessThanOrEqual(
+        POKE_PART_FLUSH_THRESHOLD_CHARS,
       );
     }
   });

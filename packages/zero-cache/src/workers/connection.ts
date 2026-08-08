@@ -19,6 +19,7 @@ import {
 } from '../../../zero-protocol/src/protocol-version.ts';
 import {upstreamSchema, type Upstream} from '../../../zero-protocol/src/up.ts';
 import {getOrCreateCounter} from '../observability/metrics.ts';
+import {stringifyDownstream} from '../types/downstream.ts';
 import {
   ProtocolErrorWithLevel,
   getLogLevel,
@@ -362,7 +363,7 @@ export function send(
 ) {
   if (ws.readyState === WebSocket.OPEN) {
     ws.send(
-      JSON.stringify(data),
+      stringifyDownstream(data),
       callback === 'ignore-backpressure' ? undefined : callback,
     );
   } else {
