@@ -29,6 +29,10 @@ export type CreateSlotSpec = {
   // Note: must be false if pgVersion < PG_17. Caller must verify.
   failover?: boolean;
 
+  // Create a temporary slot (i.e. not persisted, and automatically
+  // cleaned up when the replication session ends).
+  temporary?: boolean;
+
   // For overriding in tests.
   lockTimeout?: number;
 };
@@ -54,7 +58,12 @@ const SERVER_LOCK_TIMEOUT_MS = CREATE_REPLICATION_SLOT_TIMEOUT_MS - 1_000;
 export async function createReplicationSlot(
   lc: LogContext,
   session: postgres.Sql,
-  {slotName, failover, lockTimeout = SERVER_LOCK_TIMEOUT_MS}: CreateSlotSpec,
+  {
+    slotName,
+    failover,
+    temporary,
+    lockTimeout = SERVER_LOCK_TIMEOUT_MS,
+  }: CreateSlotSpec,
 ): Promise<ReplicationSlot> {
   // CREATE_REPLICATION_SLOT can hang indefinitely waiting for long-running
   // transactions to finish: internally it calls SnapBuildWaitSnapshot →
@@ -73,13 +82,11 @@ export async function createReplicationSlot(
   // fires (~2h default) or the blocking transaction finishes.
   await session.unsafe(`SET lock_timeout = ${lockTimeout}`);
 
-  const createSlot = failover
-    ? session.unsafe<ReplicationSlot[]>(
-        /*sql*/ `CREATE_REPLICATION_SLOT "${slotName}" LOGICAL pgoutput (FAILOVER)`,
-      )
-    : session.unsafe<ReplicationSlot[]>(
-        /*sql*/ `CREATE_REPLICATION_SLOT "${slotName}" LOGICAL pgoutput`,
-      );
+  const maybeTemporary = temporary ? 'TEMPORARY' : '';
+  const options = failover ? '(FAILOVER)' : '';
+  const createSlot = session.unsafe<ReplicationSlot[]>(/*sql*/ `
+    CREATE_REPLICATION_SLOT "${slotName}" ${maybeTemporary} LOGICAL pgoutput ${options}`);
+
   const raced = await orTimeout(createSlot, CREATE_REPLICATION_SLOT_TIMEOUT_MS);
   if (raced === 'timed-out') {
     // Create slot can block indefinitely waiting for old transactions. End
