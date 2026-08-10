@@ -24,7 +24,7 @@ import {
 } from '../../../zero-protocol/src/protocol-version.ts';
 import {upstreamSchema, type Upstream} from '../../../zero-protocol/src/up.ts';
 import {getOrCreateCounter} from '../observability/metrics.ts';
-import {stringifyDownstream} from '../types/downstream.ts';
+import type {ViewSyncerDownstream} from '../types/downstream.ts';
 import {
   ProtocolErrorWithLevel,
   getLogLevel,
@@ -51,11 +51,17 @@ export type HandlerResult =
     }
   | StreamResult;
 
-export type StreamResult = {
-  type: 'stream';
-  source: 'viewSyncer' | 'pusher';
-  stream: Source<Downstream>;
-};
+export type StreamResult =
+  | {
+      type: 'stream';
+      source: 'viewSyncer';
+      stream: Source<ViewSyncerDownstream>;
+    }
+  | {
+      type: 'stream';
+      source: 'pusher';
+      stream: Source<Downstream>;
+    };
 
 export interface MessageHandler {
   handleMessage(msg: Upstream): Promise<HandlerResult[]>;
@@ -99,7 +105,7 @@ export class Connection {
     'Client WebSocket error events.',
   );
 
-  #viewSyncerOutboundStream: Source<Downstream> | undefined;
+  #viewSyncerOutboundStream: Source<ViewSyncerDownstream> | undefined;
   #pusherOutboundStream: Source<Downstream> | undefined;
   #pokeChunkEncoder: PokeChunkEncoder | undefined;
   #closed = false;
@@ -258,7 +264,15 @@ export class Connection {
             this.#pusherOutboundStream = result.stream;
             break;
         }
-        this.#proxyOutbound(result.stream);
+        if (result.source === 'viewSyncer') {
+          this.#proxyOutbound(result.stream, (downstream, callback) =>
+            this.send(downstream.message, callback, downstream.serialized),
+          );
+        } else {
+          this.#proxyOutbound(result.stream, (downstream, callback) =>
+            this.send(downstream, callback),
+          );
+        }
         break;
       }
       case 'transient': {
@@ -304,7 +318,13 @@ export class Connection {
     );
   }
 
-  #proxyOutbound(outboundStream: Source<Downstream>) {
+  #proxyOutbound<T>(
+    outboundStream: Source<T>,
+    sendMessage: (
+      downstream: T,
+      callback: (err?: Error | null) => void,
+    ) => void,
+  ) {
     // Note: createWebSocketStream() is avoided here in order to control
     //       exception handling with #closeWithThrown(). If the Writable
     //       from createWebSocketStream() were instead used, exceptions
@@ -314,8 +334,8 @@ export class Connection {
       Readable.from(outboundStream),
       new Writable({
         objectMode: true,
-        write: (downstream: Downstream, _encoding, callback) =>
-          this.send(downstream, callback),
+        write: (downstream: T, _encoding, callback) =>
+          sendMessage(downstream, callback),
       }),
       e =>
         e
@@ -351,6 +371,7 @@ export class Connection {
   send(
     data: Downstream,
     callback: ((err?: Error | null) => void) | 'ignore-backpressure',
+    serialized?: string | undefined,
   ) {
     this.#lastDownstreamMsgTime = Date.now();
     if (this.#protocolVersion >= POKE_CHUNK_PROTOCOL_VERSION) {
@@ -363,25 +384,26 @@ export class Connection {
           this.#pokeChunkEncoder = new PokeChunkEncoder();
           break;
         case 'pokePart':
-          this.#sendPokePart(data, callback);
+          this.#sendPokePart(data, callback, serialized);
           return;
         case 'pokeEnd':
           this.#sendPokeEnd(data, callback);
           return;
       }
     }
-    return send(this.#lc, this.#ws, data, callback);
+    return send(this.#lc, this.#ws, data, callback, serialized);
   }
 
   #sendPokePart(
     pokePart: PokePartMessage,
     callback: ((err?: Error | null) => void) | 'ignore-backpressure',
+    serialized?: string | undefined,
   ): void {
     const encoder = this.#pokeChunkEncoder;
     assert(encoder, 'pokePart received without a pokeStart');
 
     void encoder
-      .addPatch(serializedPokePatch(pokePart), chunk =>
+      .addPatch(serializedPokePatch(pokePart, serialized), chunk =>
         sendBinary(this.#lc, this.#ws, chunk),
       )
       .then(
@@ -428,9 +450,10 @@ export function send(
   ws: WebSocketLike,
   data: Downstream,
   callback: ((err?: Error | null) => void) | 'ignore-backpressure',
+  serialized?: string | undefined,
 ) {
   if (ws.readyState === WebSocket.OPEN) {
-    const serialized = stringifyDownstream(data);
+    serialized ??= JSON.stringify(data);
     if (callback === 'ignore-backpressure') {
       ws.send(serialized);
       return;
@@ -483,8 +506,10 @@ export function send(
 const POKE_PART_PREFIX = '["pokePart",';
 
 // Exported for testing the no-reserialization fast path.
-export function serializedPokePatch(pokePart: PokePartMessage): string {
-  const serialized = stringifyDownstream(pokePart);
+export function serializedPokePatch(
+  pokePart: PokePartMessage,
+  serialized = JSON.stringify(pokePart),
+): string {
   const bodyPrefix = `${POKE_PART_PREFIX}{"pokeID":${JSON.stringify(
     pokePart[1].pokeID,
   )}`;

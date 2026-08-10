@@ -8,7 +8,7 @@ import type {
   PokePartMessage,
   PokeStartMessage,
 } from '../../../../zero-protocol/src/poke.ts';
-import {stringifyDownstream} from '../../types/downstream.ts';
+import type {ViewSyncerDownstream} from '../../types/downstream.ts';
 import {Subscription} from '../../types/subscription.ts';
 import {
   ClientHandler,
@@ -29,15 +29,19 @@ describe('view-syncer/client-handler', () => {
   function createSubscription() {
     const received: Downstream[] = [];
     const unconsumed: Downstream[] = [];
-    const subscription = Subscription.create<Downstream>({
-      cleanup: msgs => unconsumed.push(...msgs),
+    const serialized = new Map<Downstream, string>();
+    const subscription = Subscription.create<ViewSyncerDownstream>({
+      cleanup: msgs => unconsumed.push(...msgs.map(msg => msg.message)),
     });
     let err: Error | undefined;
     const {promise: loopDone, resolve: onDone} = resolver();
     void (async function () {
       try {
-        for await (const msg of subscription) {
-          received.push(msg);
+        for await (const {message, serialized: encoded} of subscription) {
+          received.push(message);
+          if (encoded !== undefined) {
+            serialized.set(message, encoded);
+          }
         }
       } catch (e) {
         err = e instanceof Error ? e : new Error(String(e));
@@ -51,7 +55,7 @@ describe('view-syncer/client-handler', () => {
       close: async () => {
         subscription.cancel();
         await loopDone;
-        return {received: [...received, ...unconsumed], err};
+        return {received: [...received, ...unconsumed], serialized, err};
       },
     };
   }
@@ -468,13 +472,13 @@ describe('view-syncer/client-handler', () => {
     }
     await poker.end({stateVersion: '123'});
 
-    const {received} = await close();
+    const {received, serialized} = await close();
     const pokeParts = received.filter(message => message[0] === 'pokePart');
     expect(pokeParts).toHaveLength(3);
     for (const pokePart of pokeParts) {
-      const serialized = stringifyDownstream(pokePart);
-      expect(serialized).toBe(JSON.stringify(pokePart));
-      expect(serialized.length).toBeLessThanOrEqual(
+      const encoded = serialized.get(pokePart);
+      expect(encoded).toBe(JSON.stringify(pokePart));
+      expect(encoded?.length).toBeLessThanOrEqual(
         POKE_PART_FLUSH_THRESHOLD_CHARS,
       );
     }

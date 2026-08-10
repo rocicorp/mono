@@ -9,7 +9,6 @@ import type {Downstream} from '../../../zero-protocol/src/down.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
 import type {PokePartMessage} from '../../../zero-protocol/src/poke.ts';
-import {setSerializedDownstream} from '../types/downstream.ts';
 import {ProtocolErrorWithLevel} from '../types/error-with-level.ts';
 import {
   send,
@@ -106,7 +105,7 @@ describe('send', () => {
     const callback = () => {};
     const serialized = '["pong", {"cached": true}]';
 
-    send(lc, ws, setSerializedDownstream(data, serialized), callback);
+    send(lc, ws, data, callback, serialized);
 
     expect(sendSpy).toHaveBeenCalledWith(serialized, callback);
   });
@@ -120,9 +119,9 @@ describe('serializedPokePatch', () => {
     ];
     const serialized = JSON.stringify(message);
 
-    expect(
-      serializedPokePatch(setSerializedDownstream(message, serialized)),
-    ).toBe('{"rowsPatch":[{"op":"clear"}]}');
+    expect(serializedPokePatch(message, serialized)).toBe(
+      '{"rowsPatch":[{"op":"clear"}]}',
+    );
   });
 
   test('handles nonstandard property insertion order off the hot path', () => {

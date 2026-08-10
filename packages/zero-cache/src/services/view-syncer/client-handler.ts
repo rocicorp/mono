@@ -28,7 +28,7 @@ import {
   getOrCreateCounter,
   getOrCreateLatencyHistogram,
 } from '../../observability/metrics.ts';
-import {setSerializedDownstream} from '../../types/downstream.ts';
+import type {ViewSyncerDownstream} from '../../types/downstream.ts';
 import {
   getLogLevel,
   wrapWithProtocolError,
@@ -121,7 +121,7 @@ export class ClientHandler {
   readonly #zeroClientsTable: string;
   readonly #zeroMutationsTable: string;
   readonly #lc: LogContext;
-  readonly #downstream: Subscription<Downstream>;
+  readonly #downstream: Subscription<ViewSyncerDownstream>;
   #baseVersion: NullableCVRVersion;
   // We will send a poke on connect even if the client is already caught up, so that it can learn its
   // got-queries state has been reconciled with the server. After that, we will only send a poke if
@@ -153,7 +153,7 @@ export class ClientHandler {
     wsID: string,
     shard: ShardID,
     baseCookie: string | null,
-    downstream: Subscription<Downstream>,
+    downstream: Subscription<ViewSyncerDownstream>,
   ) {
     lc.debug?.('new client handler');
     this.#clientGroupID = clientGroupID;
@@ -170,8 +170,8 @@ export class ClientHandler {
     return this.#baseVersion;
   }
 
-  async #push(msg: Downstream): Promise<void> {
-    const {result} = this.#downstream.push(msg);
+  async #push(msg: Downstream, serialized?: string | undefined): Promise<void> {
+    const {result} = this.#downstream.push({message: msg, serialized});
     await result;
   }
 
@@ -238,9 +238,7 @@ export class ClientHandler {
           serialized.length === serializedLength(),
           'serialized poke part length did not match the measured length',
         );
-        await this.#push(
-          setSerializedDownstream(['pokePart', body], serialized),
-        );
+        await this.#push(['pokePart', body], serialized);
         body = undefined;
         partCount = 0;
         serializedBody = emptySerializedBody;
@@ -422,7 +420,10 @@ export class ClientHandler {
 
   sendInspectResponse(lc: LogContext, response: InspectDownBody): void {
     lc.debug?.('sending inspect response', response);
-    this.#downstream.push(['inspect', response]);
+    this.#downstream.push({
+      message: ['inspect', response],
+      serialized: undefined,
+    });
   }
 
   #updateLMIDs(lmids: Record<string, number>, patch: RowPatch) {

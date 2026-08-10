@@ -34,6 +34,7 @@ import type {
 import {StatementRunner} from '../../db/statements.ts';
 import {type PgTest, test} from '../../test/db.ts';
 import type {DbFile} from '../../test/lite.ts';
+import type {ViewSyncerDownstream} from '../../types/downstream.ts';
 import type {PostgresDB} from '../../types/pg.ts';
 import {cvrSchema} from '../../types/shards.ts';
 import type {Source} from '../../types/streams.ts';
@@ -126,7 +127,7 @@ describe('view-syncer/service', () => {
     activeClients?: string[],
   ) => {
     queue: Queue<Downstream>;
-    source: Source<Downstream>;
+    source: Source<ViewSyncerDownstream>;
   };
   let setTimeoutFn: Mock<typeof setTimeout>;
   let customQueryTransformer: CustomQueryTransformer | undefined;

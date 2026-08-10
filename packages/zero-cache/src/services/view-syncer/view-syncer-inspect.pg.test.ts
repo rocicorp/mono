@@ -17,6 +17,7 @@ import type {
 import type {InspectorDelegate} from '../../server/inspector-delegate.ts';
 import {type PgTest, test} from '../../test/db.ts';
 import type {DbFile} from '../../test/lite.ts';
+import type {ViewSyncerDownstream} from '../../types/downstream.ts';
 import type {PostgresDB} from '../../types/pg.ts';
 import type {Source} from '../../types/streams.ts';
 import type {Subscription} from '../../types/subscription.ts';
@@ -69,7 +70,7 @@ describe('view-syncer/service', () => {
     activeClients?: string[],
   ) => {
     queue: Queue<Downstream>;
-    source: Source<Downstream>;
+    source: Source<ViewSyncerDownstream>;
   };
 
   const SYNC_CONTEXT: SyncContext = {
@@ -689,7 +690,7 @@ describe('view-syncer/service', () => {
       activeClients?: string[],
     ) => {
       queue: Queue<Downstream>;
-      source: Source<Downstream>;
+      source: Source<ViewSyncerDownstream>;
     };
     let restrictiveDelegate: InspectorDelegate;
     let restrictiveClearMocks: () => void;
