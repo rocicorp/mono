@@ -696,8 +696,8 @@ class ProtocolFuzzerClient {
 
     void (async () => {
       try {
-        for await (const msg of source) {
-          queue.enqueue(msg);
+        for await (const {message} of source) {
+          queue.enqueue(message);
         }
       } catch (e) {
         queue.enqueueRejection(e);
