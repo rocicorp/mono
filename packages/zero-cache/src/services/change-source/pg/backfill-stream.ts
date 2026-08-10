@@ -302,25 +302,18 @@ async function createSnapshotTransaction(
   const slotName = `${slotNamePrefix}_bf_${Date.now()}`;
   try {
     const {snapshot_name: snapshot, consistent_point: lsn} =
-      await createReplicationSlot(lc, replicationSession, {slotName});
+      await createReplicationSlot(lc, replicationSession, {
+        slotName,
+        temporary: true, // deletes the slot when the replicationSession ends
+      });
 
     const {init, imported} = importSnapshot(snapshot);
     const tx = new TransactionPool(lc, {mode: READONLY, init}).run(db);
     await imported;
-    await replicationSession.unsafe(`DROP_REPLICATION_SLOT "${slotName}"`);
 
     const watermark = toStateVersionString(lsn);
     lc.info?.(`Opened snapshot transaction at LSN ${lsn} (${watermark})`);
     return {tx, watermark};
-  } catch (e) {
-    // In the event of a failure, clean up the replication slot if created.
-    await replicationSession.unsafe(
-      /*sql*/
-      `SELECT pg_drop_replication_slot(slot_name) FROM pg_replication_slots
-         WHERE slot_name = '${slotName}'`,
-    );
-    lc.warn?.(`Failed to create backfill snapshot`, e);
-    throw e;
   } finally {
     await replicationSession.end();
   }

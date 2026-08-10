@@ -8,6 +8,8 @@ import type {BackfillRequest} from '../protocol/current.ts';
 import {streamBackfill} from './backfill-stream.ts';
 import {getPublicationInfo} from './schema/published.ts';
 
+const SLOT_NAME = 'backfill_test_slot';
+
 describe('backfill-stream', () => {
   let lc: LogContext;
   let upstream: PostgresDB;
@@ -96,7 +98,14 @@ describe('backfill-stream', () => {
       },
     };
 
-    return () => testDBs.drop(upstream);
+    return async () => {
+      expect(
+        await upstream /*sql*/ `
+          SELECT slot_name FROM pg_replication_slots WHERE slot_name LIKE 'backfill_test_slot_%'`,
+      ).toEqual([]);
+
+      await testDBs.drop(upstream);
+    };
   });
 
   test.each([
@@ -106,7 +115,7 @@ describe('backfill-stream', () => {
     const stream = streamBackfill(
       lc,
       upstreamURI,
-      {slot: 'slot_name', publications: ['the_pub']},
+      {slot: SLOT_NAME, publications: ['the_pub']},
       columnBackfillRequest,
       {textCopy},
     );
@@ -163,7 +172,7 @@ describe('backfill-stream', () => {
     const stream = streamBackfill(
       lc,
       upstreamURI,
-      {slot: 'slot_name', publications: ['the_pub']},
+      {slot: SLOT_NAME, publications: ['the_pub']},
       tableBackfillRequest,
       {textCopy},
     );
@@ -226,7 +235,7 @@ describe('backfill-stream', () => {
     const stream = streamBackfill(
       lc,
       upstreamURI,
-      {slot: 'slot_name', publications: ['the_pub']},
+      {slot: SLOT_NAME, publications: ['the_pub']},
       columnBackfillRequest,
     );
     for await (const _ of stream) {
@@ -305,7 +314,7 @@ describe('backfill-stream', () => {
     const stream = streamBackfill(
       lc,
       upstreamURI,
-      {slot: 'slot_name', publications: ['the_pub']},
+      {slot: SLOT_NAME, publications: ['the_pub']},
       columnBackfillRequest,
     );
 

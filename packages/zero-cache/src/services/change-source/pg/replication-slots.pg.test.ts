@@ -3,6 +3,7 @@ import postgres from 'postgres';
 import {beforeEach, describe, expect, vi} from 'vitest';
 import {createSilentLogContext} from '../../../../../shared/src/logging-test-utils.ts';
 import {getConnectionURI, type PgTest, test} from '../../../test/db.ts';
+import {PG_17} from '../../../types/pg-versions.ts';
 import {pgClient, type PostgresDB} from '../../../types/pg.ts';
 import type {ShardID} from '../../../types/shards.ts';
 import {
@@ -33,14 +34,67 @@ describe('createReplicationSlot', () => {
   const shard: ShardID = {appID: APP_ID, shardNum: SHARD_NUM};
 
   let upstream: PostgresDB;
+  let pgVersion: number;
 
   beforeEach<PgTest>(async ({testDBs}) => {
     upstream = await testDBs.create('replication_slots');
+    [{pgVersion}] =
+      await upstream`SELECT current_setting('server_version_num')::int as "pgVersion"`;
     await ensureGlobalTables(upstream, shard);
     await upstream.unsafe(
       shardSetup({...shard, publications: ['foo_pub', 'meta_pub']}, 'meta_pub'),
     );
     return () => testDBs.drop(upstream);
+  });
+
+  test('createReplicationSlot options', async () => {
+    const lc = createSilentLogContext();
+    const upstreamURI = getConnectionURI(upstream);
+    const session = pgClient(lc, upstreamURI, 'slot-pool', {
+      max: 1,
+      ['fetch_types']: false,
+      connection: {replication: 'database'},
+    });
+
+    await createReplicationSlot(lc, session, {slotName: 'zero_18_a'});
+    await createReplicationSlot(lc, session, {
+      slotName: 'zero_18_b',
+      temporary: true,
+    });
+    expect(
+      await upstream /*sql*/ `
+      SELECT slot_name, temporary FROM pg_replication_slots 
+        WHERE slot_name LIKE 'zero_18_%' ORDER BY slot_name`,
+    ).toMatchObject([
+      {
+        slot_name: 'zero_18_a',
+        temporary: false,
+      },
+      {
+        slot_name: 'zero_18_b',
+        temporary: true,
+      },
+    ]);
+
+    if (pgVersion >= PG_17) {
+      await createReplicationSlot(lc, session, {
+        slotName: 'zero_18_c',
+        failover: true,
+      });
+      // oxlint-disable-next-line jest/no-conditional-expect
+      expect(
+        await upstream`SELECT slot_name, temporary, failover FROM pg_replication_slots WHERE slot_name = 'zero_18_c'`,
+      ).toMatchObject([
+        {
+          slot_name: 'zero_18_c',
+          temporary: false,
+          failover: true,
+        },
+      ]);
+    }
+
+    // Cleanup
+    await dropOldReplicasAndSlots(lc, upstream, shard, 100n);
   });
 
   test('createReplicationSlot times out behind an older idle transaction', async () => {
