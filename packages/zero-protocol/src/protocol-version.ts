@@ -57,7 +57,8 @@ import {assert} from '../../shared/src/asserts.ts';
 // -- version 49 adds `scalar` to CorrelatedSubqueryCondition, removes scalarSubquery
 // -- version 50 adds OTEL headers to push and query messages
 // -- version 51 changes inspector metrics fields
-export const PROTOCOL_VERSION = 51;
+// -- version 52 replaces JSON pokePart messages with binary poke chunks
+export const PROTOCOL_VERSION = 52;
 
 /**
  * The minimum server-supported sync protocol version (i.e. the version

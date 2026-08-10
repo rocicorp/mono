@@ -7,11 +7,15 @@ import type {
 import type {PatchOperation} from '../../../replicache/src/patch-operation.ts';
 import type {ClientID} from '../../../replicache/src/sync/ids.ts';
 import {unreachable} from '../../../shared/src/asserts.ts';
+import * as v from '../../../shared/src/valita.ts';
 import type {MutationPatch} from '../../../zero-protocol/src/mutations-patch.ts';
-import type {
-  PokeEndBody,
-  PokePartBody,
-  PokeStartBody,
+import {
+  pokePatchesSchema,
+  type PokeChunk,
+  type PokeEndBody,
+  type PokePartBody,
+  type PokePatches,
+  type PokeStartBody,
 } from '../../../zero-protocol/src/poke.ts';
 import type {QueriesPatchOp} from '../../../zero-protocol/src/queries-patch.ts';
 import type {RowPatchOp} from '../../../zero-protocol/src/row-patch.ts';
@@ -34,6 +38,17 @@ type PokeAccumulator = {
   readonly pokeEnd: PokeEndBody;
 };
 
+type ReceivingPoke = {
+  readonly pokeStart: PokeStartBody;
+  readonly parts: PokePartBody[];
+  readonly chunks: PokeChunk[];
+};
+
+export type PokeEndResult = {
+  readonly lastMutationIDChangeForSelf: number | undefined;
+  readonly hasRows: boolean;
+};
+
 /**
  * Handles the multi-part format of zero pokes.
  * As an optimization it also debounces pokes, only poking Replicache with a
@@ -48,7 +63,7 @@ export class PokeHandler {
   readonly #onPokeError: (error: unknown) => void;
   readonly #clientID: ClientID;
   readonly #lc: LogContext;
-  #receivingPoke: Omit<PokeAccumulator, 'pokeEnd'> | undefined = undefined;
+  #receivingPoke: ReceivingPoke | undefined = undefined;
   readonly #pokeBuffer: PokeAccumulator[] = [];
   #pokePlaybackLoopRunning = false;
   #lastScheduledTimestamp = 0;
@@ -90,6 +105,7 @@ export class PokeHandler {
     this.#receivingPoke = {
       pokeStart,
       parts: [],
+      chunks: [],
     };
   }
 
@@ -102,11 +118,27 @@ export class PokeHandler {
       );
       return;
     }
+    if (this.#receivingPoke.chunks.length > 0) {
+      this.#handlePokeError('received both pokePart and binary poke chunks');
+      return;
+    }
     this.#receivingPoke.parts.push(pokePart);
     return pokePart.lastMutationIDChanges?.[this.#clientID];
   }
 
-  handlePokeEnd(pokeEnd: PokeEndBody): void {
+  handlePokeChunk(chunk: PokeChunk): void {
+    if (!this.#receivingPoke) {
+      this.#handlePokeError('received a binary poke chunk without pokeStart');
+      return;
+    }
+    if (this.#receivingPoke.parts.length > 0) {
+      this.#handlePokeError('received both pokePart and binary poke chunks');
+      return;
+    }
+    this.#receivingPoke.chunks.push(chunk);
+  }
+
+  handlePokeEnd(pokeEnd: PokeEndBody): PokeEndResult | undefined {
     if (pokeEnd.pokeID !== this.#receivingPoke?.pokeStart.pokeID) {
       this.#handlePokeError(
         `pokeEnd for ${pokeEnd.pokeID}, when receiving ${
@@ -119,11 +151,40 @@ export class PokeHandler {
       this.#receivingPoke = undefined;
       return;
     }
-    this.#pokeBuffer.push({...this.#receivingPoke, pokeEnd});
+    const receivingPoke = this.#receivingPoke;
+    if (receivingPoke.chunks.length > 0) {
+      try {
+        receivingPoke.parts.push(
+          ...decodePokeChunks(receivingPoke.chunks).map(patch => ({
+            ...patch,
+            pokeID: pokeEnd.pokeID,
+          })),
+        );
+      } catch (e) {
+        this.#handlePokeError(e);
+        return;
+      }
+    }
+    for (const part of receivingPoke.parts) {
+      if (part.pokeID !== pokeEnd.pokeID) {
+        this.#handlePokeError(
+          `poke patch for ${part.pokeID}, when receiving ${pokeEnd.pokeID}`,
+        );
+        return;
+      }
+    }
+
+    const result = summarizePoke(receivingPoke.parts, this.#clientID);
+    this.#pokeBuffer.push({
+      pokeStart: receivingPoke.pokeStart,
+      parts: receivingPoke.parts,
+      pokeEnd,
+    });
     this.#receivingPoke = undefined;
     if (!this.#pokePlaybackLoopRunning) {
       this.#startPlaybackLoop();
     }
+    return result;
   }
 
   handleDisconnect(): void {
@@ -209,6 +270,37 @@ export class PokeHandler {
     this.#receivingPoke = undefined;
     this.#pokeBuffer.length = 0;
   }
+}
+
+function decodePokeChunks(chunks: PokeChunk[]): PokePatches {
+  const decoder = new TextDecoder('utf-8', {fatal: true});
+  const decoded = new Array<string>(chunks.length + 1);
+  for (let i = 0; i < chunks.length; i++) {
+    decoded[i] = decoder.decode(chunks[i], {stream: true});
+  }
+  decoded[chunks.length] = decoder.decode();
+  chunks.length = 0;
+  return v.parse(
+    JSON.parse(decoded.join('')),
+    pokePatchesSchema,
+    'passthrough',
+  );
+}
+
+function summarizePoke(
+  parts: PokePartBody[],
+  clientID: ClientID,
+): PokeEndResult {
+  let lastMutationIDChangeForSelf: number | undefined;
+  let hasRows = false;
+  for (const part of parts) {
+    const lmid = part.lastMutationIDChanges?.[clientID];
+    if (lmid !== undefined) {
+      lastMutationIDChangeForSelf = lmid;
+    }
+    hasRows ||= Boolean(part.rowsPatch?.length);
+  }
+  return {lastMutationIDChangeForSelf, hasRows};
 }
 
 export function mergePokes(

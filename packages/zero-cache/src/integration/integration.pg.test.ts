@@ -605,7 +605,8 @@ describe('integration', {timeout: 30000}, () => {
 
     const downstream = new Queue<unknown>();
     const ws = new WebSocket(
-      `ws://localhost:${port}/zero/sync/v${PROTOCOL_VERSION}/connect` +
+      // This test asserts the legacy JSON pokePart representation.
+      `ws://localhost:${port}/zero/sync/v${PROTOCOL_VERSION - 1}/connect` +
         `?clientGroupID=abc&clientID=def&wsid=123&schemaVersion=1&baseCookie=&ts=123456789&lmid=1`,
       encodeURIComponent(btoa('{}')),
     );
@@ -806,7 +807,8 @@ describe('integration', {timeout: 30000}, () => {
 
       const downstream = new Queue<unknown>();
       const ws = new WebSocket(
-        `ws://localhost:${port}/zero/sync/v${PROTOCOL_VERSION}/connect` +
+        // This test asserts the legacy JSON pokePart representation.
+        `ws://localhost:${port}/zero/sync/v${PROTOCOL_VERSION - 1}/connect` +
           `?clientGroupID=abc&clientID=def&wsid=123&schemaVersion=1&baseCookie=&ts=123456789&lmid=1`,
         encodeURIComponent(btoa('{}')), // auth token
       );

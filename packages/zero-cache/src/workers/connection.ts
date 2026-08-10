@@ -13,6 +13,11 @@ import {
   isProtocolError,
   type ProtocolError,
 } from '../../../zero-protocol/src/error.ts';
+import type {
+  PokeChunk,
+  PokeEndMessage,
+  PokePartMessage,
+} from '../../../zero-protocol/src/poke.ts';
 import {
   MIN_SERVER_SUPPORTED_SYNC_PROTOCOL,
   PROTOCOL_VERSION,
@@ -25,6 +30,10 @@ import {
   getLogLevel,
   wrapWithProtocolError,
 } from '../types/error-with-level.ts';
+import {
+  POKE_CHUNK_PROTOCOL_VERSION,
+  PokeChunkEncoder,
+} from '../types/poke-chunk.ts';
 import type {Source} from '../types/streams.ts';
 import type {ConnectParams} from './connect-params.ts';
 
@@ -92,6 +101,7 @@ export class Connection {
 
   #viewSyncerOutboundStream: Source<Downstream> | undefined;
   #pusherOutboundStream: Source<Downstream> | undefined;
+  #pokeChunkEncoder: PokeChunkEncoder | undefined;
   #closed = false;
 
   constructor(
@@ -343,7 +353,64 @@ export class Connection {
     callback: ((err?: Error | null) => void) | 'ignore-backpressure',
   ) {
     this.#lastDownstreamMsgTime = Date.now();
+    if (this.#protocolVersion >= POKE_CHUNK_PROTOCOL_VERSION) {
+      switch (data[0]) {
+        case 'pokeStart':
+          assert(
+            this.#pokeChunkEncoder === undefined,
+            'cannot start a poke while another poke is in progress',
+          );
+          this.#pokeChunkEncoder = new PokeChunkEncoder();
+          break;
+        case 'pokePart':
+          this.#sendPokePart(data, callback);
+          return;
+        case 'pokeEnd':
+          this.#sendPokeEnd(data, callback);
+          return;
+      }
+    }
     return send(this.#lc, this.#ws, data, callback);
+  }
+
+  #sendPokePart(
+    pokePart: PokePartMessage,
+    callback: ((err?: Error | null) => void) | 'ignore-backpressure',
+  ): void {
+    const encoder = this.#pokeChunkEncoder;
+    assert(encoder, 'pokePart received without a pokeStart');
+
+    void encoder
+      .addPatch(serializedPokePatch(pokePart), chunk =>
+        sendBinary(this.#lc, this.#ws, chunk),
+      )
+      .then(
+        () => invokeCallback(callback),
+        error => invokeCallback(callback, toError(error)),
+      );
+  }
+
+  #sendPokeEnd(
+    pokeEnd: PokeEndMessage,
+    callback: ((err?: Error | null) => void) | 'ignore-backpressure',
+  ): void {
+    const encoder = this.#pokeChunkEncoder;
+    assert(encoder, 'pokeEnd received without a pokeStart');
+    this.#pokeChunkEncoder = undefined;
+
+    if (pokeEnd[1].cancel) {
+      encoder.cancel();
+      send(this.#lc, this.#ws, pokeEnd, callback);
+      return;
+    }
+
+    void encoder
+      .finish(chunk => sendBinary(this.#lc, this.#ws, chunk))
+      .then(() => sendAsync(this.#lc, this.#ws, pokeEnd))
+      .then(
+        () => invokeCallback(callback),
+        error => invokeCallback(callback, toError(error)),
+      );
   }
 
   sendError(errorBody: ErrorBody, thrown?: unknown) {
@@ -352,7 +419,7 @@ export class Connection {
 }
 
 export type WebSocketLike = Pick<WebSocket, 'readyState'> & {
-  send(data: string, cb?: (err?: Error) => void): void;
+  send(data: string | PokeChunk, cb?: (err?: Error) => void): void;
 };
 
 // Exported for testing purposes.
@@ -411,6 +478,81 @@ export function send(
       );
     }
   }
+}
+
+const POKE_PART_PREFIX = '["pokePart",';
+
+// Exported for testing the no-reserialization fast path.
+export function serializedPokePatch(pokePart: PokePartMessage): string {
+  const serialized = stringifyDownstream(pokePart);
+  const bodyPrefix = `${POKE_PART_PREFIX}{"pokeID":${JSON.stringify(
+    pokePart[1].pokeID,
+  )}`;
+  assert(
+    serialized.startsWith(POKE_PART_PREFIX) && serialized.endsWith('}]'),
+    'invalid serialized pokePart',
+  );
+  if (serialized.startsWith(bodyPrefix)) {
+    const fields = serialized.slice(bodyPrefix.length, -2);
+    return fields ? `{${fields.slice(1)}}` : '{}';
+  }
+
+  // Non-production callers may construct a body whose pokeID was inserted
+  // after other fields. Preserve correctness without penalizing the hot path.
+  const {pokeID: _, ...patch} = pokePart[1];
+  return JSON.stringify(patch);
+}
+
+function sendAsync(
+  lc: LogContext,
+  ws: WebSocketLike,
+  data: Downstream,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    send(lc, ws, data, error => (error ? reject(error) : resolve()));
+  });
+}
+
+function sendBinary(
+  lc: LogContext,
+  ws: WebSocketLike,
+  chunk: PokeChunk,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    if (ws.readyState !== WebSocket.OPEN) {
+      const error = webSocketClosedError();
+      lc.debug?.(
+        `Dropping outbound binary message on ws (state: ${ws.readyState})`,
+      );
+      reject(error);
+      return;
+    }
+    ws.send(chunk, error => (error ? reject(error) : resolve()));
+  });
+}
+
+function invokeCallback(
+  callback: ((err?: Error | null) => void) | 'ignore-backpressure',
+  error?: Error,
+): void {
+  if (callback !== 'ignore-backpressure') {
+    callback(error);
+  }
+}
+
+function toError(error: unknown): Error {
+  return error instanceof Error ? error : new Error(String(error));
+}
+
+function webSocketClosedError(): ProtocolErrorWithLevel {
+  return new ProtocolErrorWithLevel(
+    {
+      kind: ErrorKind.Internal,
+      message: 'WebSocket closed',
+      origin: ErrorOrigin.ZeroCache,
+    },
+    'info',
+  );
 }
 
 export function sendError(

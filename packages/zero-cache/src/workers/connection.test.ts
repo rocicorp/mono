@@ -8,11 +8,13 @@ import {
 import type {Downstream} from '../../../zero-protocol/src/down.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
+import type {PokePartMessage} from '../../../zero-protocol/src/poke.ts';
 import {setSerializedDownstream} from '../types/downstream.ts';
 import {ProtocolErrorWithLevel} from '../types/error-with-level.ts';
 import {
   send,
   sendError,
+  serializedPokePatch,
   WEBSOCKET_SEND_TIMEOUT_MS,
   type WebSocketLike,
 } from './connection.ts';
@@ -107,6 +109,29 @@ describe('send', () => {
     send(lc, ws, setSerializedDownstream(data, serialized), callback);
 
     expect(sendSpy).toHaveBeenCalledWith(serialized, callback);
+  });
+});
+
+describe('serializedPokePatch', () => {
+  test('removes the legacy envelope and repeated pokeID', () => {
+    const message: PokePartMessage = [
+      'pokePart',
+      {pokeID: '01', rowsPatch: [{op: 'clear'}]},
+    ];
+    const serialized = JSON.stringify(message);
+
+    expect(
+      serializedPokePatch(setSerializedDownstream(message, serialized)),
+    ).toBe('{"rowsPatch":[{"op":"clear"}]}');
+  });
+
+  test('handles nonstandard property insertion order off the hot path', () => {
+    const message = [
+      'pokePart',
+      {rowsPatch: [{op: 'clear'}], pokeID: '01'},
+    ] as PokePartMessage;
+
+    expect(serializedPokePatch(message)).toBe('{"rowsPatch":[{"op":"clear"}]}');
   });
 });
 

@@ -16,12 +16,13 @@ import {nullableVersionSchema, versionSchema} from './version.ts';
  * A poke begins with a `poke-start` message which contains the `baseCookie`
  * the poke is updating from and the `cookie` the poke is updating to.
  *
- * The poke continues with zero to many `poke-part` messages, each of which
- * can contain patch parts.  These patch parts should be merged in the order
- * received.
+ * Through protocol version 51, the poke continues with zero to many
+ * `poke-part` JSON messages. Starting in version 52, it continues with zero to
+ * many binary `pokeChunk` messages. Concatenating and decoding the pokeChunks
+ * produces a PokePatch array. pokeChunk boundaries have no semantic meaning.
  *
- * Finally, the poke ends with a `poke-end` message.  The merged `poke-parts`
- * can now be applied as a whole to update from `baseCookie` to `cookie`.
+ * Finally, the poke ends with a `poke-end` message. The decoded patches can
+ * now be applied as a whole to update from `baseCookie` to `cookie`.
  *
  * Poke messages can be intermingled with other `down` messages, but cannot be
  * intermingled with poke messages for a different `pokeID`. If this is
@@ -48,8 +49,7 @@ export const pokeStartBodySchema = v.object({
   timestamp: v.number().optional(),
 });
 
-export const pokePartBodySchema = v.object({
-  pokeID: v.string(),
+export const pokePatchSchema = v.object({
   // Changes to last mutation id by client id.
   lastMutationIDChanges: v.record(v.number()).optional(),
   // Patches to the desired query sets by client id.
@@ -62,6 +62,20 @@ export const pokePartBodySchema = v.object({
   // Mutation results patch
   mutationsPatch: mutationsPatchSchema.optional(),
 });
+
+export const pokePartBodySchema = pokePatchSchema.extend({
+  pokeID: v.string(),
+});
+
+/**
+ * The logical payload carried by binary poke chunks. Chunk boundaries are
+ * arbitrary; concatenating and decoding all chunks for a poke produces this
+ * array.
+ *
+ * PokePatch retains the grouped fields from PokePartBody, but omits pokeID:
+ * pokeStart and pokeEnd already delimit a single poke on the ordered stream.
+ */
+export const pokePatchesSchema = v.array(pokePatchSchema);
 
 export const pokeEndBodySchema = v.object({
   pokeID: v.string(),
@@ -86,8 +100,13 @@ export const pokeEndMessageSchema = v.tuple([
 ]);
 
 export type PokeStartBody = v.Infer<typeof pokeStartBodySchema>;
+export type PokePatch = v.Infer<typeof pokePatchSchema>;
 export type PokePartBody = v.Infer<typeof pokePartBodySchema>;
+export type PokePatches = v.Infer<typeof pokePatchesSchema>;
 export type PokeEndBody = v.Infer<typeof pokeEndBodySchema>;
+
+/** A raw binary WebSocket message. It has no JSON envelope. */
+export type PokeChunk = Uint8Array;
 
 export type PokeStartMessage = v.Infer<typeof pokeStartMessageSchema>;
 export type PokePartMessage = v.Infer<typeof pokePartMessageSchema>;
