@@ -435,7 +435,7 @@ describe('change-streamer/change-log-initializer', () => {
     // Above MAX_FOLD_SCAN_ROWS. A replicator that has been stalled can leave
     // the interval arbitrarily large, and this runs between reconciliation and
     // `startStream`, so the comparison declines rather than pays.
-    padTransaction(head, 100_002);
+    padTransaction(head, 10_002);
 
     expect(await compare()).toBe('inconclusive');
   });
@@ -447,7 +447,7 @@ describe('change-streamer/change-log-initializer', () => {
     // rather than declined. Pinned because the guard counts to one row *past*
     // the cap in SQL so that an unbounded interval is not walked in full, and
     // an off-by-one there would silently stop folding a legal interval.
-    padTransaction(head, 99_999);
+    padTransaction(head, 9_999);
 
     expect(await compare()).toBe('equal-after-fold');
   });

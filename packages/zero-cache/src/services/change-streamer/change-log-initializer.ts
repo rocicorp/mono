@@ -149,7 +149,7 @@ type Opts = {
  * cap the comparison declines rather than pays: a chronically lagging replicator
  * shows up as `inconclusive`, which is charted, and not as a stall.
  */
-const MAX_FOLD_SCAN_ROWS = 100_000;
+const MAX_FOLD_SCAN_ROWS = 10_000;
 
 export class ChangeLogInitializer {
   readonly #lc: LogContext;
