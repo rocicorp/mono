@@ -151,15 +151,9 @@ export type SubscriberContext = {
   initial: boolean;
 
   /**
-   * Whether the subscriber's replica writes the SQLite change log that the
-   * `change-streamer` reads for catchup.
-   *
-   * Always `false` from this version on: the change-streamer writes that log
-   * itself, from the stream loop, so no subscriber advances it and no
-   * subscriber's ACK releases the catchup barrier. The parameter stays on the
-   * wire because a subscriber that predates the writer's move still sets it,
-   * and such a subscriber is excluded from SQLite catchup until slice 11 lifts
-   * the exclusion deliberately.
+   * Legacy topology hint retained on the wire. It no longer affects local
+   * routing: the change-streamer writes the SQLite log itself, so no
+   * subscriber's ACK advances its head or releases its catchup barrier.
    */
   logsChangeStream: boolean;
 };

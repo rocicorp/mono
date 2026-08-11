@@ -96,6 +96,25 @@ describe('change-streamer/snapshot-reservations', () => {
     ]);
   });
 
+  test('confirmFor() applies the pinned source bounds to one task only', async () => {
+    const reservations = newReservations();
+    const first = getFirstMessage(reservations.open('task-1'));
+    reservations.open('task-2');
+
+    expect(reservations.unconfirmedTaskIDs().sort()).toEqual([
+      'task-1',
+      'task-2',
+    ]);
+    reservations.confirmFor('task-1', 'replica-v1', 'sqlite-min');
+
+    expect(await first).toMatchObject([
+      'status',
+      {replicaVersion: 'replica-v1', minWatermark: 'sqlite-min'},
+    ]);
+    expect(reservations.unconfirmedTaskIDs()).toEqual(['task-2']);
+    expect(reservations.getReservedWatermarks()).toEqual(['sqlite-min']);
+  });
+
   test('confirm() only resolves reservations opened before it was called', () => {
     const reservations = newReservations();
     reservations.open('task-1');
@@ -120,6 +139,8 @@ describe('change-streamer/snapshot-reservations', () => {
     const sub2 = reservations.open('task-1');
 
     expect(await isCancelled(sub1)).toBe(true);
+    expect(reservations.isCurrent('task-1', sub1)).toBe(false);
+    expect(reservations.isCurrent('task-1', sub2)).toBe(true);
 
     // Only one reservation is tracked for the taskID, and it's the new one:
     // it still receives the confirm() push.

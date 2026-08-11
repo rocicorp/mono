@@ -40,6 +40,10 @@ export class SnapshotReservations {
     this.#close(taskID, undefined);
   }
 
+  isCurrent(taskID: string, source: Source<SnapshotMessage>): boolean {
+    return this.#reservations.get(taskID)?.owns(source) ?? false;
+  }
+
   #close(taskID: string, cancelledInstanceID: InstanceID | undefined) {
     const res = this.#reservations.get(taskID);
     if (
@@ -76,14 +80,30 @@ export class SnapshotReservations {
     return false;
   }
 
+  unconfirmedTaskIDs(): string[] {
+    return [...this.#reservations.entries()]
+      .filter(([, reservation]) => !reservation.confirmed())
+      .map(([taskID]) => taskID);
+  }
+
   confirm(replicaVersion: string, minWatermark: string) {
-    for (const [taskID, res] of this.#reservations.entries()) {
-      if (!res.confirmed()) {
-        this.#lc.info?.(
-          `reserving change-log entries since ${minWatermark} for ${taskID}`,
-        );
-        res.confirm(this.#backupConfig.backupURL, replicaVersion, minWatermark);
-      }
+    for (const taskID of this.unconfirmedTaskIDs()) {
+      this.confirmFor(taskID, replicaVersion, minWatermark);
+    }
+  }
+
+  /** Confirms one reservation with the bounds of its pinned read source. */
+  confirmFor(
+    taskID: string,
+    replicaVersion: string,
+    minWatermark: string,
+  ): void {
+    const res = this.#reservations.get(taskID);
+    if (res && !res.confirmed()) {
+      this.#lc.info?.(
+        `reserving change-log entries since ${minWatermark} for ${taskID}`,
+      );
+      res.confirm(this.#backupConfig.backupURL, replicaVersion, minWatermark);
     }
   }
 
@@ -117,6 +137,10 @@ class Reservation {
 
   confirmed() {
     return this.#watermark !== null;
+  }
+
+  owns(source: Source<SnapshotMessage>): boolean {
+    return this.#downstream === source;
   }
 
   confirm(backupURL: string, replicaVersion: string, minWatermark: string) {

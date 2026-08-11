@@ -31,7 +31,6 @@ import {
 } from './change-log-cookies.ts';
 import {
   CHANGE_LOG_STREAM_TABLE,
-  readChangeLogHead,
   readChangeLogMeta,
   type ChangeLogMeta,
   type ReconcileResult,
@@ -99,6 +98,7 @@ export function recordSQLiteChangeLogReconcile(
  * consequence of this log rather than a fact about it.
  */
 export type SQLiteChangeLogStartupInfo = ChangeLogMeta & {
+  readonly minWatermark: string;
   readonly headWatermark: string;
 };
 
@@ -109,8 +109,9 @@ export type SQLiteChangeLogInfo = SQLiteChangeLogStartupInfo & {
 };
 
 /**
- * Reads the meta row and the head. The head is an index-optimized `max()`, so
- * unlike {@link getSQLiteChangeLogInfo} this does not scan the log.
+ * Reads the meta row and covered range. The scalar `min()` and `max()`
+ * subqueries each use the watermark index, so unlike
+ * {@link getSQLiteChangeLogInfo} this does not scan the log.
  *
  * Call this after reconciliation, which is the only point at which the head is
  * known to be the resume watermark.
@@ -119,11 +120,19 @@ export function getSQLiteChangeLogStartupInfo(
   changeLog: Database,
 ): SQLiteChangeLogStartupInfo {
   const meta = readChangeLogMeta(changeLog);
-  const head = readChangeLogHead(changeLog);
-  if (head === null) {
+  const {minWatermark, headWatermark} = changeLog
+    .prepare(/*sql*/ `
+      SELECT
+        (SELECT min("watermark") FROM "${CHANGE_LOG_STREAM_TABLE}")
+          AS "minWatermark",
+        (SELECT max("watermark") FROM "${CHANGE_LOG_STREAM_TABLE}")
+          AS "headWatermark"
+    `)
+    .get<{minWatermark: string | null; headWatermark: string | null}>();
+  if (minWatermark === null || headWatermark === null) {
     throw new Error('the SQLite change log must contain its seed transaction');
   }
-  return {...meta, headWatermark: head};
+  return {...meta, minWatermark, headWatermark};
 }
 
 /**
@@ -166,6 +175,7 @@ export function logSQLiteChangeLogStartup(
       schemaVersion: info.schemaVersion,
       seedWatermark: info.seedWatermark,
       seededAtMs: info.seededAtMs,
+      minWatermark: info.minWatermark,
       headWatermark: info.headWatermark,
     },
   });
