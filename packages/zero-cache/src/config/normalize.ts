@@ -58,8 +58,7 @@ export function assertNormalized(
       sqliteChangeLogReadPercent <= 100,
     '--change-streamer-sqlite-change-log-read-percent must be an integer between 0 and 100',
   );
-  // Deliberately no mode restriction: the default is nonzero, and the sampled
-  // comparison only runs in `compare` mode and above.
+  // This setting has no mode restriction. Comparison starts in `compare` mode.
   assert(
     Number.isSafeInteger(sqliteChangeLogComparePercent) &&
       sqliteChangeLogComparePercent >= 0 &&

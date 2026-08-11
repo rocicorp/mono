@@ -1,4 +1,5 @@
 import {LogContext} from '@rocicorp/logger';
+import {resolver} from '@rocicorp/resolver';
 import fc from 'fast-check';
 import {beforeEach, describe, expect, vi} from 'vitest';
 import {assert} from '../../../../shared/src/asserts.ts';
@@ -54,6 +55,7 @@ describe('change-streamer/sqlite-change-log-comparator', () => {
   let writer: SQLiteChangeLogWriter;
   let logFile: DbFile;
   let seededAtMs: number;
+  let onWriterRebuilt: () => void;
 
   beforeEach<PgTest>(async ({testDBs}) => {
     logSink = new TestLogSink();
@@ -92,14 +94,15 @@ describe('change-streamer/sqlite-change-log-comparator', () => {
     storerDone = storer.run();
 
     seededAtMs = 1_000_000;
+    onWriterRebuilt = () => {};
     logFile = new DbFile('sqlite-change-log-comparator');
     writer = new SQLiteChangeLogWriter(lc, {
       replicaFile: logFile.path,
       identity,
       now: () => seededAtMs,
+      onRebuilt: () => onWriterRebuilt(),
     });
-    // The stream would resume from PG's lastWatermark, which
-    // ensureReplicationConfig initialized to the replica version.
+    // Resume from the Postgres watermark at the replica version.
     writer.reconcile({
       resumeWatermark: REPLICA_VERSION,
       cookies: EMPTY_COOKIE_SET,
@@ -179,7 +182,7 @@ describe('change-streamer/sqlite-change-log-comparator', () => {
       {
         comparePercent: 100,
         retentionMs: RETENTION_MS,
-        // Warm by default: exactly one retention window past the seed.
+        // Make the log exactly one retention period old.
         now: () => seededAtMs + RETENTION_MS,
         setTimeoutFn: vi.fn() as unknown as typeof setTimeout,
         yieldFn: () => Promise.resolve(),
@@ -188,7 +191,7 @@ describe('change-streamer/sqlite-change-log-comparator', () => {
     );
   }
 
-  /** The production reader, with one call site swapped for a fault or a race. */
+  /** Returns the production reader with optional overrides. */
   function pgReader(
     overrides: Partial<PGChangeLogRangeReader> = {},
   ): PGChangeLogRangeReader {
@@ -202,7 +205,7 @@ describe('change-streamer/sqlite-change-log-comparator', () => {
     };
   }
 
-  /** Direct writes to the SQLite log, as the purger or an injected fault. */
+  /** Opens the SQLite log for direct fault injection. */
   function withSQLiteLog<T>(fn: (db: Database) => T): T {
     const db = new Database(lc, changeLogFileName(logFile.path));
     try {
@@ -216,12 +219,7 @@ describe('change-streamer/sqlite-change-log-comparator', () => {
     return sql(`${cdcSchema(shard)}.${table}`);
   }
 
-  /**
-   * The watermarks reported diverged, read back off the log line — the
-   * comparison's actual production surface. The cycle result carries counts
-   * only, deliberately: one collapsed `mismatch` outcome replaced the old
-   * per-watermark taxonomy.
-   */
+  /** Reads diverged watermarks from production error logs. */
   function divergedWatermarks(since = 0): string[] {
     return logSink.messages
       .slice(since)
@@ -262,7 +260,7 @@ describe('change-streamer/sqlite-change-log-comparator', () => {
     );
   }
 
-  /** Rows belonging to no committed transaction, as a torn write would leave. */
+  /** Inserts rows that do not belong to a committed transaction. */
   function insertSQLiteRows(watermark: string) {
     withSQLiteLog(db => {
       const insert = db.prepare(/*sql*/ `
@@ -292,23 +290,7 @@ describe('change-streamer/sqlite-change-log-comparator', () => {
              (${watermark}, 1, '{"tag":"insert"}'::json, NULL)`;
   }
 
-  // 1. Equivalent output matches.
-  //
-  // The normalization pin comes first (§6.5): a transaction round-tripped
-  // through both stores — SQLite's exact stored substring versus PG's json
-  // column read back as text — must digest identically before any injected
-  // mutation can mean anything.
-  //
-  // Both stores carry a synthetic seed transaction at the replica version
-  // '01' (PG's from ensureReplicationConfig, SQLite's from reconcile), so the
-  // comparable range starts there and every fed transaction is compared.
-  //
-  // The payload deliberately contains an *escaped* backslash-u sequence, not
-  // an actual NUL character: `change->'tag'` in the production PG catchup
-  // statement de-escapes every string value while scanning for the field, and
-  // Postgres cannot convert an escaped NUL to text, so a row containing one
-  // fails PG catchup itself — the comparator faithfully reports it as a
-  // mismatch rather than as parity.
+  // Use a literal backslash-u sequence. An escaped NUL makes Postgres catchup fail.
   test('equivalent catchup output matches, across message families and batches', async () => {
     await feedBoth(
       tx(
@@ -342,8 +324,7 @@ describe('change-streamer/sqlite-change-log-comparator', () => {
       tx('06', messages.addColumn('foo', 'extra', {dataType: 'text', pos: 9})),
       tx('07', messages.dropColumn('foo', 'extra'), messages.dropTable('baz')),
     );
-    // readBatchRows 2 forces multiple SQLite read batches per transaction;
-    // maxTransactionsPerCycle 2 forces the comparison across cycles.
+    // Use small limits to require multiple batches and cycles.
     const comparator = newComparator({
       readBatchRows: 2,
       maxTransactionsPerCycle: 2,
@@ -383,12 +364,6 @@ describe('change-streamer/sqlite-change-log-comparator', () => {
     expect(divergedWatermarks()).toEqual([]);
   });
 
-  // 2. Mutated, missing, or extra output mismatches.
-  //
-  // One rolling digest per served range replaced the per-transaction digest
-  // map, so extra rows at any watermark — which no commit enumeration can see
-  // — are caught by the same equality check as a mutated payload, and are
-  // reported at the watermark of the range that served them.
   describe('divergent catchup output mismatches', () => {
     const cases: {
       name: string;
@@ -434,8 +409,7 @@ describe('change-streamer/sqlite-change-log-comparator', () => {
         diverged: ['05'],
       },
       {
-        // Identical output is parity in what catchup *serves* — the thing this
-        // comparison measures — even where no committed transaction claims it.
+        // Equal output matches even when no commit owns these rows.
         name: 'identical extra rows in both stores',
         corrupt: async () => {
           insertSQLiteRows('04z');
@@ -463,7 +437,6 @@ describe('change-streamer/sqlite-change-log-comparator', () => {
     }
   });
 
-  // 3. Head skew compares only the common range.
   test('head lag in either direction is not divergence', async () => {
     await feedBoth(
       tx('03', messages.insert('foo', {id: 'boundary'})),
@@ -472,8 +445,7 @@ describe('change-streamer/sqlite-change-log-comparator', () => {
     const t5 = tx('05', messages.insert('foo', {id: 'trailing-pg'}));
     const t6 = tx('06', messages.insert('foo', {id: 'trailing-sqlite'}));
 
-    // The SQLite log leads, as it does in production: compare only through
-    // the PG head.
+    // SQLite leads, so compare only through the Postgres head.
     feedSQLiteOnly(t5);
     const comparator = newComparator();
     expect(await comparator.compareOnce()).toMatchObject({
@@ -483,7 +455,7 @@ describe('change-streamer/sqlite-change-log-comparator', () => {
       mismatched: 0,
     });
 
-    // PG catches up and then leads: compare only through the SQLite head.
+    // Postgres then leads, so compare only through the SQLite head.
     await feedPGOnly(t5, t6);
     expect(await comparator.compareOnce()).toMatchObject({
       fromWatermark: '04',
@@ -492,7 +464,7 @@ describe('change-streamer/sqlite-change-log-comparator', () => {
       mismatched: 0,
     });
 
-    // SQLite catches up: the previously skewed transaction compares clean.
+    // SQLite catches up, and the earlier skew matches.
     feedSQLiteOnly(t6);
     expect(await comparator.compareOnce()).toMatchObject({
       fromWatermark: '05',
@@ -513,10 +485,7 @@ describe('change-streamer/sqlite-change-log-comparator', () => {
     deleteFromSQLiteLog(`"watermark" = '04'`);
 
     const comparator = newComparator({maxTransactionsPerCycle: 2});
-    // The stores hit the limit at different watermarks — SQLite's two commits
-    // reach '05', PG's reach '04' — so the cycle covers only the range both
-    // enumerations completely cover. '05', cut from PG's list by the limit
-    // alone, must not be reported missing.
+    // The lower complete enumeration ends at 04, so 05 is not missing.
     expect(await comparator.compareOnce()).toMatchObject({
       throughWatermark: '04',
       transactions: 2,
@@ -525,17 +494,16 @@ describe('change-streamer/sqlite-change-log-comparator', () => {
     });
     expect(divergedWatermarks()).toEqual(['04']);
 
-    // The next cycle resumes above the covered range and completes it.
+    // The next cycle completes the remaining range.
     const before = logSink.messages.length;
     expect(await comparator.compareOnce()).toMatchObject({
       throughWatermark: '06',
       matched: 2,
     });
-    // '04' is re-reported once, as the boundary the log cannot serve.
+    // Report 04 again because the log cannot serve that boundary.
     expect(divergedWatermarks(before)).toEqual(['04']);
   });
 
-  // 4. Purge/reseed races are inconclusive.
   describe('a race with the pinned bounds is inconclusive', () => {
     const cases: {
       name: string;
@@ -544,8 +512,7 @@ describe('change-streamer/sqlite-change-log-comparator', () => {
       inconclusive: number;
     }[] = [
       {
-        // The purge lands after the cycle pinned its bounds and enumerated the
-        // range, exactly as a concurrently scheduled cleanup would.
+        // Purge Postgres after the cycle reads its initial bounds.
         name: 'a PG purge',
         pg: () => {
           let purged = false;
@@ -560,12 +527,11 @@ describe('change-streamer/sqlite-change-log-comparator', () => {
               })(),
           });
         },
-        matched: 1, // '05' survives the purge and matches
+        matched: 1, // Transaction 05 survives the purge and matches.
         inconclusive: 2,
       },
       {
-        // The purger deletes whole transactions below the floor, after the
-        // cycle enumerated them.
+        // Purge SQLite after the cycle enumerates its transactions.
         name: 'a SQLite purge',
         pg: () =>
           pgReader({
@@ -583,10 +549,7 @@ describe('change-streamer/sqlite-change-log-comparator', () => {
         inconclusive: 2,
       },
       {
-        // The writer reseeds the log after the cycle pinned its bounds: '04'
-        // vanishes and the meta row's seed point moves, as reconcileChangeLog's
-        // reseed would. The re-read bounds alone cannot see this — only the
-        // meta comparison can.
+        // Change the seed after the cycle reads its initial bounds.
         name: 'a reseed',
         pg: () =>
           pgReader({
@@ -621,10 +584,52 @@ describe('change-streamer/sqlite-change-log-comparator', () => {
 
         const result = await newComparator({pg: pg()}).compareOnce();
         expect(result).toMatchObject({matched, inconclusive, mismatched: 0});
-        // A race is not a finding: nothing reports as diverged.
+        // Bounds races do not report divergence.
         expect(divergedWatermarks()).toEqual([]);
       });
     }
+  });
+
+  test('a file rebuild invalidates a cycle before it opens another reader', async () => {
+    await feedBoth(
+      tx('03', messages.insert('foo', {id: 'removed-before-rebuild'})),
+      tx('04', messages.insert('foo', {id: 'old-head'})),
+    );
+
+    const boundsPinned = resolver();
+    const continueBounds = resolver();
+    let firstBoundsRead = true;
+    const comparator = newComparator({
+      pg: pgReader({
+        getCatchupBounds: async () => {
+          if (firstBoundsRead) {
+            firstBoundsRead = false;
+            boundsPinned.resolve();
+            await continueBounds.promise;
+          }
+          return storer.getCatchupBounds();
+        },
+      }),
+    });
+    onWriterRebuilt = () => comparator.invalidate();
+
+    const comparing = comparator.compareOnce();
+    await boundsPinned.promise;
+
+    // Rebuild while the comparator waits for Postgres bounds.
+    // The old database handle then points to the removed file.
+    deleteFromSQLiteLog(`"watermark" = '03'`);
+    writer.reconcile({
+      resumeWatermark: '03',
+      cookies: EMPTY_COOKIE_SET,
+    });
+    continueBounds.resolve();
+
+    expect(await comparing).toEqual({
+      kind: 'skipped',
+      reason: 'log-rebuilt',
+    });
+    expect(divergedWatermarks()).toEqual([]);
   });
 
   test('a suspect that cannot be reconfirmed is inconclusive, then retried', async () => {
@@ -635,8 +640,7 @@ describe('change-streamer/sqlite-change-log-comparator', () => {
     );
     deleteFromSQLiteLog(`"watermark" = '04'`);
 
-    // The bounds re-read that would confirm the finding fails once; the
-    // observation cannot be distinguished from a race and must not report.
+    // Fail the bounds recheck once, so the first result is inconclusive.
     let boundsReads = 0;
     const comparator = newComparator({
       pg: pgReader({
@@ -655,8 +659,7 @@ describe('change-streamer/sqlite-change-log-comparator', () => {
     });
     expect(divergedWatermarks()).toEqual([]);
 
-    // The cursor did not move, so a later cycle retries and confirms the
-    // persistent divergence once the transient bounds failure clears.
+    // The next cycle retries and reports the persistent mismatch.
     expect(await comparator.compareOnce()).toMatchObject({mismatched: 1});
     expect(divergedWatermarks()).toEqual(['04']);
   });
@@ -680,7 +683,6 @@ describe('change-streamer/sqlite-change-log-comparator', () => {
     expect(divergedWatermarks()).toEqual(['04']);
   });
 
-  // 5. Sampling is deterministic.
   test('a retried comparison samples the same transactions', async () => {
     const txs = Array.from({length: 12}, (_, i) =>
       tx((i + 3).toString(36).padStart(2, '0'), {
@@ -694,8 +696,7 @@ describe('change-streamer/sqlite-change-log-comparator', () => {
       isSampledForCompare(shard, watermark, percent),
     ).length;
 
-    // Two independent comparators — as across a restart — pin the same range
-    // and select exactly the same sample.
+    // Independent comparators select the same sample.
     const first = await newComparator({comparePercent: percent}).compareOnce();
     const second = await newComparator({comparePercent: percent}).compareOnce();
     assert(
@@ -710,7 +711,6 @@ describe('change-streamer/sqlite-change-log-comparator', () => {
     expect(second.matched).toBe(second.sampled);
   });
 
-  // 6. Remaining-budget exhaustion defers.
   test('caps total catchup rows per source and defers an unfinished transaction', async () => {
     await feedBoth(
       tx('03', messages.insert('foo', {id: 'first'})),
@@ -735,7 +735,7 @@ describe('change-streamer/sqlite-change-log-comparator', () => {
       mismatched: 0,
     });
 
-    // The next cycle's fresh budget fits it.
+    // The fresh budget in the next cycle fits the transaction.
     expect(await comparator.compareOnce()).toMatchObject({
       fromWatermark: '03',
       throughWatermark: '04',
@@ -745,7 +745,6 @@ describe('change-streamer/sqlite-change-log-comparator', () => {
     });
   });
 
-  // 7. A fresh-budget overflow skips.
   test('skips a transaction that exceeds a fresh cycle row budget', async () => {
     await feedBoth(
       tx(
@@ -766,7 +765,7 @@ describe('change-streamer/sqlite-change-log-comparator', () => {
       mismatched: 0,
     });
 
-    // Skipped, not wedged: the cursor moved past what can never fit.
+    // The cursor advances past the oversized transaction.
     expect(await comparator.compareOnce()).toMatchObject({
       fromWatermark: '03',
       throughWatermark: '04',
@@ -775,7 +774,6 @@ describe('change-streamer/sqlite-change-log-comparator', () => {
     });
   });
 
-  // 8. A transaction that exactly fills the budget compares.
   test('compares a transaction that exactly fills the cycle row budget', async () => {
     await feedBoth(tx('03', messages.insert('foo', {id: 'exact'})));
 
@@ -789,12 +787,8 @@ describe('change-streamer/sqlite-change-log-comparator', () => {
     });
   });
 
-  // 9. A confirmed mismatch at the cursor boundary still advances.
   test('a divergent cursor boundary does not wedge the comparator', async () => {
-    // SQLite loses a whole transaction PG holds, while the log runs ahead of
-    // PG (its normal state), so the cycle's common upper bound — and with it
-    // the cursor — lands exactly on the commit the log cannot serve as a
-    // catchup boundary.
+    // Remove the transaction at the common upper bound.
     await feedBoth(
       tx('03', messages.insert('foo', {id: 'boundary'})),
       tx('04', messages.insert('foo', {id: 'sqlite-lost'})),
@@ -810,9 +804,7 @@ describe('change-streamer/sqlite-change-log-comparator', () => {
     });
     expect(divergedWatermarks()).toEqual(['04']);
 
-    // The stream continues, so the next cycle has a non-empty range whose
-    // `from` is the divergent boundary: plan() is `too-old` and the bounds
-    // have not moved. The cycle must still compare the range above it.
+    // The next cycle starts at the missing boundary and compares later rows.
     await feedBoth(tx('06', messages.insert('foo', {id: 'next'})));
 
     const before = logSink.messages.length;
@@ -823,7 +815,7 @@ describe('change-streamer/sqlite-change-log-comparator', () => {
     });
     expect(divergedWatermarks(before)).toEqual(['04', '05']);
 
-    // Progress, not a wedge.
+    // The cursor advanced.
     expect(await comparator.compareOnce()).toEqual({
       kind: 'skipped',
       reason: 'nothing-to-compare',
@@ -881,8 +873,7 @@ describe('change-streamer/sqlite-change-log-comparator', () => {
     const result = await newComparator().compareOnce();
     expect(result).toMatchObject({mismatched: 1});
 
-    // Neither the cycle result nor anything logged for it contains the
-    // payload, or any digest of it.
+    // Results and logs contain neither payloads nor digests.
     expect(JSON.stringify(result)).not.toContain(sentinel);
     expect(JSON.stringify(logSink.messages.slice(before))).not.toContain(
       sentinel,
@@ -919,9 +910,7 @@ describe('change-streamer/sqlite-change-log-comparator', () => {
   });
 
   test('a freshly seeded log with no traffic has nothing to compare', async () => {
-    // Both stores hold only their synthetic seed transactions at '01'. Seeds
-    // are catchup boundaries, never compared output — and SQLite's seed is
-    // never reported as missing from PG.
+    // Synthetic seed transactions are boundaries, not compared output.
     expect(await newComparator().compareOnce()).toEqual({
       kind: 'skipped',
       reason: 'nothing-to-compare',
@@ -959,9 +948,7 @@ describe('change-streamer/sqlite-change-log-comparator', () => {
       ),
     });
 
-    // Runs share the fixture's PG database; each run scopes itself with a
-    // fresh SQLite log seeded above every prior run's watermarks, so prior
-    // corruptions sit below its `from` and are invisible to it.
+    // Each run starts above the watermarks from earlier runs.
     let nextNum = 1;
     const wm = (n: number) => `w${String(n).padStart(8, '0')}`;
 
@@ -986,9 +973,7 @@ describe('change-streamer/sqlite-change-log-comparator', () => {
             ...spec,
             watermark: wm(base + (i + 1) * 10),
           }));
-          // A clean sentinel pins the common head, so every generated
-          // transaction lies strictly inside the compared range — head skew
-          // is deliberately never reported, and is not what this pins.
+          // A clean sentinel keeps generated transactions below the common head.
           const sentinel = wm(base + (txs.length + 1) * 10);
 
           const feedRun = (t: Tx) => {
@@ -1018,11 +1003,9 @@ describe('change-streamer/sqlite-change-log-comparator', () => {
             }
           };
 
-          // Corrupt, and build the expected report while doing so. Every
-          // corruption is reported at its own watermark: presence for a
-          // dropped transaction, a digest inequality for a mutated one.
+          // Apply each fault and record its expected watermark.
           const expected: string[] = [];
-          let expectedMatched = 1; // the sentinel
+          let expectedMatched = 1; // The sentinel matches.
           for (const spec of specs) {
             switch (spec.kind) {
               case 'clean':

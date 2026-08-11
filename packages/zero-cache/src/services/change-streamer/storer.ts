@@ -314,12 +314,9 @@ export class Storer implements Service {
   }
 
   /**
-   * The bounds of the range the PG change log can serve catchup over:
-   * `minWatermark` is the earliest retained transaction (`null` only for a
-   * completely new replica) and `lastWatermark` is the durable head, which
-   * commits in the same transaction as its change-log rows.
-   *
-   * Used by the SQLite change-log comparator to pin the range it compares.
+   * Returns the retained Postgres catchup bounds.
+   * `minWatermark` is the oldest transaction, or `null` for a new replica.
+   * `lastWatermark` is the durable head.
    */
   async getCatchupBounds(): Promise<{
     minWatermark: string | null;
@@ -335,10 +332,8 @@ export class Storer implements Service {
   }
 
   /**
-   * The commit watermarks of the transactions in `(afterWatermark,
-   * throughWatermark]`, ascending, at most `limit` of them. Every row of a
-   * transaction is stored at its commit watermark, so this is a complete
-   * enumeration of the committed transactions in the range.
+   * Lists at most `limit` committed transaction watermarks in
+   * `(afterWatermark, throughWatermark]`, in ascending order.
    */
   async listCommitWatermarks(
     afterWatermark: string,
@@ -356,17 +351,11 @@ export class Storer implements Service {
   }
 
   /**
-   * Reads the change-log entries in `(afterWatermark, throughWatermark]` in
-   * stream order, in bounded batches. This is the same statement shape as the
-   * subscriber catchup query in {@link #catchup} — the comparator exists to
-   * compare catchup *output*, so the two must not diverge in what they select.
+   * Reads `(afterWatermark, throughWatermark]` in stream order and bounded batches.
+   * This query matches the subscriber catchup query.
    *
-   * That fidelity includes a shared limitation: `change->'tag'` de-escapes
-   * every string value in the document while scanning for the field, and
-   * Postgres cannot represent `\u0000` as text, so a change whose payload
-   * contains an escaped NUL fails the read. Subscriber catchup fails on
-   * exactly the same row, so the comparator reports it as a mismatch rather
-   * than papering over it with a different statement.
+   * Both queries fail when an escaped NUL reaches `change->'tag'`.
+   * Postgres cannot convert that value to text.
    */
   readCatchupRange(
     afterWatermark: string,

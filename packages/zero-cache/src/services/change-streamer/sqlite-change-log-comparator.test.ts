@@ -1,8 +1,4 @@
-/**
- * Property tests for the comparator's pure functions. The store-facing
- * behavior — real Postgres against a real SQLite log — lives in
- * `sqlite-change-log-comparator.pg.test.ts`; nothing here needs a database.
- */
+/** Tests pure comparator functions. Integration tests cover both stores. */
 
 import fc from 'fast-check';
 import {describe, expect, test} from 'vitest';
@@ -25,10 +21,9 @@ describe('change-streamer/sqlite-change-log-comparator/properties', () => {
       }),
       {minLength: 1, maxLength: 8},
     ),
-    // Rows dropped from the front of the stream, so it can begin
-    // mid-transaction — possibly beheading more than one transaction.
+    // Remove leading rows to start inside a transaction.
     truncateHead: fc.nat({max: 3}),
-    // Two chunkings of the same rows, cycled over the stream.
+    // Use two batch layouts for the same rows.
     chunkSizesA: fc.array(fc.integer({min: 1, max: 7}), {
       minLength: 1,
       maxLength: 4,
@@ -65,7 +60,7 @@ describe('change-streamer/sqlite-change-log-comparator/properties', () => {
         ]);
       } else if (kind === 'rollback') {
         rows.push([w, 'rollback', `["rollback",{"tag":"rollback"}]`]);
-      } // orphan: no terminal row — a torn or corrupt remnant.
+      } // Orphan transactions have no terminal row.
     });
     return rows;
   }
@@ -97,8 +92,7 @@ describe('change-streamer/sqlite-change-log-comparator/properties', () => {
         async ({txs, truncateHead, chunkSizesA, chunkSizesB}) => {
           const rows = buildRows(txs).slice(truncateHead);
 
-          // Batch boundaries carry no meaning: any two chunkings of the same
-          // served rows digest identically, and count the same rows.
+          // Batch boundaries do not change the digest or row count.
           expect(await digest(rows, chunkSizesA)).toEqual(
             await digest(rows, chunkSizesB),
           );
@@ -127,7 +121,7 @@ describe('change-streamer/sqlite-change-log-comparator/properties', () => {
         async ({txs, index, kind}) => {
           const rows = buildRows(txs);
           const i = index % rows.length;
-          // Reordering the only row, or the last one, is not a reordering.
+          // Moving the only or last row does not change its order.
           fc.pre(kind !== 'move-to-end' || i < rows.length - 1);
 
           const corrupted = [...rows];
@@ -148,9 +142,7 @@ describe('change-streamer/sqlite-change-log-comparator/properties', () => {
               break;
           }
 
-          // This is the whole comparison: a missing row, an extra row at any
-          // watermark, a mutated payload, and a reordering are all one
-          // inequality. There is no per-watermark bookkeeping to fool.
+          // Each corruption changes the ordered range digest.
           expect((await digest(corrupted)).digest).not.toBe(
             (await digest(rows)).digest,
           );
@@ -166,9 +158,7 @@ describe('change-streamer/sqlite-change-log-comparator/properties', () => {
         fc.record({txs: streamScenario.map(({txs}) => txs)}),
         async ({txs}) => {
           const rows = buildRows(txs);
-          // SQLite serves the exact substring it stored; PG serves the same
-          // document re-rendered from its `json` column. Only normalization
-          // keeps that round trip from reading as divergence.
+          // Both stores can return the same JSON with different formatting.
           const reformatted = rows.map(
             ([w, tag, json]): WatermarkedChange => [
               w,
@@ -203,8 +193,7 @@ describe('change-streamer/sqlite-change-log-comparator/properties', () => {
 
           const served = Math.min(maxRows, rows.length);
           expect(result.rows).toBe(served);
-          // The cap is only a finding when it cut the range short of the
-          // commit that closes it; a range that fits exactly is compared.
+          // The limit applies only when it omits the closing commit.
           const closed = rows
             .slice(0, served)
             .some(([w, tag]) => tag === 'commit' && w === through);
@@ -229,12 +218,11 @@ describe('change-streamer/sqlite-change-log-comparator/properties', () => {
           const shard: ShardID = {appID, shardNum};
           const lo = Math.min(p1, p2);
           const hi = Math.max(p1, p2);
-          // Stable: a retried comparison selects the same transactions.
+          // A retry selects the same transactions.
           expect(isSampledForCompare(shard, watermark, hi)).toBe(
             isSampledForCompare(shard, watermark, hi),
           );
-          // Monotone: raising the percentage only ever adds transactions,
-          // so a canary ramp-up keeps everything it was already comparing.
+          // A larger percentage keeps the transactions in a smaller sample.
           if (isSampledForCompare(shard, watermark, lo)) {
             expect(isSampledForCompare(shard, watermark, hi)).toBe(true);
           }
@@ -249,11 +237,11 @@ describe('change-streamer/sqlite-change-log-comparator/properties', () => {
     expect(normalizeChangeJSON('{ "tag" : "insert",\n  "v": 1 }')).toBe(
       normalizeChangeJSON('{"tag":"insert","v":1}'),
     );
-    // Precision above Number.MAX_SAFE_INTEGER survives the round trip.
+    // Values above Number.MAX_SAFE_INTEGER retain their precision.
     expect(normalizeChangeJSON('{"v":9007199254740993}')).toBe(
       '{"v":9007199254740993}',
     );
-    // A value that does not parse is hashed as-is.
+    // Invalid JSON remains unchanged.
     expect(normalizeChangeJSON('not-json')).toBe('not-json');
 
     fc.assert(

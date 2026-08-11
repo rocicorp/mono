@@ -340,6 +340,7 @@ describe('change-streamer/service', () => {
     sqliteCatchup?: Partial<SQLiteCatchupOptions>,
     sqliteChangeLogPurge?: TuningOptions['sqliteChangeLogPurge'],
     backupURL?: string,
+    sqliteChangeLogCompare?: TuningOptions['sqliteChangeLogCompare'],
   ): Promise<void> {
     await streamer.stop();
     await streamerDone;
@@ -381,6 +382,9 @@ describe('change-streamer/service', () => {
           },
         },
         ...(sqliteChangeLogPurge === undefined ? {} : {sqliteChangeLogPurge}),
+        ...(sqliteChangeLogCompare === undefined
+          ? {}
+          : {sqliteChangeLogCompare}),
         ...(sqliteCatchup === undefined
           ? {}
           : {
@@ -870,6 +874,125 @@ describe('change-streamer/service', () => {
       storeSpy.mockRestore();
       writeSpy.mockRestore();
       forwardSpy.mockRestore();
+      await streamer.stop();
+      await streamerDone;
+      deleteChangeLogDB(logFile.path);
+      logFile.delete();
+    }
+  });
+
+  /**
+   * Compare mode runs initialization and catchup checks independently.
+   * Failures do not stop replication.
+   * A warm log reports injected Postgres divergence.
+   */
+  test('compare mode: both checks run and fail independently', async () => {
+    const COLD_INTERVAL_MS = 777_001;
+    const WARM_INTERVAL_MS = 777_002;
+    const logFile = new DbFile('sqlite-change-log-compare-coexist');
+    const noSuchReplica = `${logFile.path}-no-such-replica`;
+
+    const fireCompareCycle = (intervalMs: number, fromIndex: number) => {
+      const call = setTimeoutFn.mock.calls
+        .slice(fromIndex)
+        .find(([, delay]) => delay === intervalMs);
+      assert(call, `no comparison cycle scheduled at ${intervalMs}ms`);
+      (call[0] as () => void)();
+    };
+    const logged = (level: string, message: string) =>
+      logSink.messages.some(
+        ([lvl, , parts]) => lvl === level && parts[0] === message,
+      );
+    // Read diverged watermarks from production error logs.
+    const divergedWatermarks = () =>
+      logSink.messages
+        .filter(([level, , parts]) => level === 'error' && parts.length === 2)
+        .flatMap(([, , parts]) => {
+          const detail = (
+            parts[1] as {
+              sqliteChangeLogCompare?: {watermark: string} | undefined;
+            }
+          ).sqliteChangeLogCompare;
+          return detail === undefined ? [] : [detail.watermark];
+        });
+
+    try {
+      // Start with a new log and a missing replica file.
+      await restartWithInlineChangeLogWriter(
+        logFile,
+        {},
+        undefined,
+        undefined,
+        {
+          replicaFile: noSuchReplica,
+          comparePercent: 100,
+          retentionMs: 60_000,
+          intervalMs: COLD_INTERVAL_MS,
+        },
+      );
+
+      // Both advisory checks leave replication active.
+      changes.push(['begin', messages.begin(), {commitWatermark: '06'}]);
+      changes.push(['data', messages.insert('foo', {id: 'compared'})]);
+      changes.push(['commit', messages.commit(), {watermark: '06'}]);
+      await expectAcks('06');
+
+      // The missing replica causes a warning, but startup continues.
+      await vi.waitFor(() =>
+        expect(
+          logged(
+            'warn',
+            'failed to derive change-log initialization from the replica',
+          ),
+        ).toBe(true),
+      );
+
+      // The comparator skips the new log without reporting divergence.
+      fireCompareCycle(COLD_INTERVAL_MS, 0);
+      await vi.waitFor(() =>
+        expect(
+          logged('debug', 'skipping SQLite change-log comparison: cold-log'),
+        ).toBe(true),
+      );
+      expect(divergedWatermarks()).toEqual([]);
+
+      // Restart with a clock that makes the log warm.
+      const warmStart = setTimeoutFn.mock.calls.length;
+      await restartWithInlineChangeLogWriter(
+        logFile,
+        {},
+        undefined,
+        undefined,
+        {
+          replicaFile: noSuchReplica,
+          comparePercent: 100,
+          retentionMs: 60_000,
+          intervalMs: WARM_INTERVAL_MS,
+          now: () => Date.now() + 3_600_000,
+        },
+      );
+
+      changes.push(['begin', messages.begin(), {commitWatermark: '08'}]);
+      changes.push(['data', messages.insert('foo', {id: 'diverged'})]);
+      changes.push(['commit', messages.commit(), {watermark: '08'}]);
+      await expectAcks('08');
+
+      // Change the stored Postgres row after commit.
+      const [{change}] = await sql<{change: string}[]>`
+        SELECT change::text FROM "zoro_3/cdc"."changeLog"
+         WHERE watermark = '08' AND pos = 1`;
+      const mutated = JSON.stringify({
+        ...(JSON.parse(change) as Record<string, unknown>),
+        divergence: true,
+      });
+      await sql`
+        UPDATE "zoro_3/cdc"."changeLog" SET change = ${mutated}::json
+         WHERE watermark = '08' AND pos = 1`;
+
+      // Transaction 06 matches. Transaction 08 diverges.
+      fireCompareCycle(WARM_INTERVAL_MS, warmStart);
+      await vi.waitFor(() => expect(divergedWatermarks()).toEqual(['08']));
+    } finally {
       await streamer.stop();
       await streamerDone;
       deleteChangeLogDB(logFile.path);

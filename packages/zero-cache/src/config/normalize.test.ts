@@ -140,8 +140,7 @@ describe('config/normalize SQLite change log', () => {
         '--change-streamer-sqlite-change-log-compare-percent must be an integer between 0 and 100',
       );
     }
-    // Unlike the read percentage, a nonzero value is valid in every mode:
-    // the default is nonzero, and sampling only runs in `compare` and above.
+    // A nonzero value is valid in every mode. Sampling starts in `compare` mode.
     const config = configWith({});
     config.changeStreamer.sqliteChangeLogComparePercent = 100;
     expect(() => assertNormalized(config)).not.toThrow();
