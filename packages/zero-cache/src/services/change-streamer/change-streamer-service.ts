@@ -67,6 +67,12 @@ import {
   type PurgeContinuation,
   type SQLiteChangeLogPurgeSchedulerOptions,
 } from './sqlite-change-log-purge-scheduler.ts';
+import {
+  inspectSQLiteChangeLog,
+  SQLiteChangeLogReadRouter,
+  type ChangeLogReadRoute,
+  type SQLiteChangeLogCoverage,
+} from './sqlite-change-log-read-router.ts';
 import {SQLiteChangeLogReader} from './sqlite-change-log-reader.ts';
 import {
   SQLiteChangeLogWriter,
@@ -96,11 +102,9 @@ export type SQLiteCatchupOptions = {
    */
   barrierPollIntervalMs?: number | undefined;
   /**
-   * Slice 11 supplies the production canary selector.
-   *
-   * It does not need to exclude backup subscribers or the change-log writer:
-   * eligibility checks reject both before invoking this selector. Serving a
-   * writer from SQLite would make it wait on its own ACK.
+   * Optional policy hook used by focused tests. Production canary selection is
+   * supplied by `sqliteChangeLogServe` and is stable by shard plus task ID.
+   * Backup subscribers are rejected before either selector is invoked.
    */
   shouldUse?: ((ctx: SubscriberContext) => boolean) | undefined;
   /**
@@ -115,6 +119,19 @@ export type SQLiteCatchupOptions = {
    * {@link DEFAULT_CHANGE_LOG_UNAVAILABLE_WARN_THRESHOLD_MS}.
    */
   notReadyWarnThresholdMs?: number | undefined;
+};
+
+export type SQLiteChangeLogServeOptions = {
+  /** Stable percentage of eligible serving tasks routed to SQLite. */
+  readPercent: number;
+  /** A reseeded log must age through this whole window before it can serve. */
+  retentionMs: number;
+  /** Injectable for deterministic breaker tests. */
+  failureCooldownMs?: number | undefined;
+  /** Injectable for deterministic warm-up and breaker tests. */
+  now?: (() => number) | undefined;
+  /** Injectable readiness inspection for service-level tests. */
+  inspect?: (() => SQLiteChangeLogCoverage | undefined) | undefined;
 };
 
 export type TuningOptions = StorerOptions & {
@@ -150,6 +167,8 @@ export type TuningOptions = StorerOptions & {
   sqliteChangeLogCompare?:
     | (SQLiteChangeLogCompareOptions & {replicaFile: string})
     | undefined;
+  /** Supplied only in `serve` mode. A zero percentage keeps every read on PG. */
+  sqliteChangeLogServe?: SQLiteChangeLogServeOptions | undefined;
 };
 
 /**
@@ -365,6 +384,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
   readonly #comparator: SQLiteChangeLogComparator | undefined;
   readonly #acker: UpstreamAcker;
   readonly #initializer: ChangeLogInitializer;
+  readonly #readRouter: SQLiteChangeLogReadRouter | undefined;
 
   readonly #autoReset: boolean;
   readonly #state: RunningState;
@@ -397,6 +417,11 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     'transaction_forward_duration',
     "Time from receiving a transaction's `begin` to forwarding its `commit`, " +
       'i.e. the change-streamer half of forward-to-subscriber latency.',
+  );
+  readonly #catchupRoutes = getOrCreateCounter(
+    'replication',
+    'sqlite_change_log.catchup_routes',
+    'Catchup subscriptions by selected source and low-cardinality reason.',
   );
 
   #latestStatus: Status;
@@ -467,10 +492,32 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       flowControlSlowSubscriberGracePeriodMs:
         opts.flowControlSlowSubscriberGracePeriodMs,
     });
+    const serveOptions = opts.sqliteChangeLogServe;
+    const writerOptions = opts.sqliteChangeLogWriter;
+    const catchupOptions = opts.sqliteCatchup;
+    this.#readRouter =
+      serveOptions && writerOptions && catchupOptions
+        ? new SQLiteChangeLogReadRouter({
+            shard,
+            readPercent: serveOptions.readPercent,
+            retentionMs: serveOptions.retentionMs,
+            failureCooldownMs: serveOptions.failureCooldownMs,
+            now: serveOptions.now,
+            inspect:
+              serveOptions.inspect ??
+              (() =>
+                inspectSQLiteChangeLog(
+                  lc,
+                  catchupOptions.changeLogFile,
+                  writerOptions.identity,
+                )),
+          })
+        : undefined;
     this.#reservations = backupConfig
-      ? new SnapshotReservations(lc, backupConfig, taskID =>
-          this.#purgeScheduler?.resume(taskID),
-        )
+      ? new SnapshotReservations(lc, backupConfig, taskID => {
+          this.#readRouter?.release(taskID);
+          this.#purgeScheduler?.resume(taskID);
+        })
       : undefined;
     this.#replicationStatusPublisher = replicationStatusPublisher;
     this.#changeLogWriter = opts.sqliteChangeLogWriter
@@ -486,6 +533,10 @@ class ChangeStreamerImpl implements ChangeStreamerService {
           // has to go with it: otherwise it serves an unlinked inode while
           // every new open sees nothing.
           onDisabled: () => {
+            // The writer stays disabled and the file stays absent for the life
+            // of this process, so unlike a transient read/barrier failure this
+            // breaker never expires.
+            this.#readRouter?.trip(true);
             this.#closeSQLiteCatchup();
             this.#comparator?.stop();
           },
@@ -806,10 +857,11 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       {},
     );
     const lc = this.#lc.withContext('subscriber', subscriber.id);
-    cleanupSubscriber = () => {
+    const removeFromForwarder = () => {
       lc.info?.(`removing subscriber ${subscriber.id}`);
       this.#forwarder.remove(subscriber);
     };
+    cleanupSubscriber = removeFromForwarder;
     if (replicaVersion !== this.#replicaVersion) {
       lc.warn?.(`rejecting subscriber at replica version ${replicaVersion}`);
       subscriber.close(
@@ -821,17 +873,65 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     } else {
       lc.info?.(`adding subscriber ${subscriber.id}`);
 
-      const sqliteCatchup = this.#selectSQLiteCatchup(ctx);
-      if (sqliteCatchup) {
-        cleanupSubscriber = () => sqliteCatchup.remove(subscriber);
-        await sqliteCatchup.catchup(subscriber, () =>
-          this.#captureRequiredHead(),
-        );
-      } else {
+      const catchupFromPG = () => {
         // Keep the existing PG registration/catchup lockstep unchanged when
         // SQLite was not selected before Forwarder.add().
+        cleanupSubscriber = removeFromForwarder;
         this.#forwarder.add(subscriber);
         this.#storer.catchup(subscriber, mode);
+      };
+      const sqliteSelection = this.#selectSQLiteCatchup(lc, ctx);
+      if (!sqliteSelection) {
+        catchupFromPG();
+      } else {
+        const {catchup, reason, coverage, logWarm} = sqliteSelection;
+        cleanupSubscriber = () => catchup.remove(subscriber);
+        const registration = await catchup.catchup(
+          subscriber,
+          () => this.#captureRequiredHead(),
+          {logWarm},
+        );
+        switch (registration.kind) {
+          case 'registered':
+            lc.debug?.(
+              `serving ${ctx.id} from SQLite catchup`,
+              ...(coverage ? [{sqliteChangeLogCoverage: coverage}] : []),
+            );
+            this.#recordCatchupRoute('sqlite', reason);
+            break;
+          case 'uncovered':
+            lc.info?.(
+              `serving ${ctx.id} from PG catchup: subscriber watermark ` +
+                `${ctx.watermark} is below the SQLite change-log minimum ` +
+                registration.minWatermark,
+            );
+            this.#recordCatchupRoute('pg', 'watermark-uncovered');
+            catchupFromPG();
+            break;
+          case 'declined':
+            // Registration failed before the subscriber was committed to
+            // SQLite, so PG is still available. The coordinator has already
+            // tripped the breaker, which keeps the retry off SQLite for the
+            // cooldown; it is deliberately not closed here, since closing it
+            // would abort the catchups of every other subscriber it is
+            // serving.
+            lc.error?.(
+              `serving ${ctx.id} from PG catchup: SQLite catchup ` +
+                `registration failed`,
+              registration.error,
+            );
+            this.#recordCatchupRoute('pg', 'registration-failed');
+            catchupFromPG();
+            break;
+          case 'handled':
+            // The coordinator closed or failed the subscriber itself, so
+            // there is nothing left to route. Still counted, so that the
+            // route counter sums to the number of subscriptions.
+            this.#recordCatchupRoute('sqlite', 'registration-handled');
+            break;
+          default:
+            unreachable(registration);
+        }
       }
     }
     // Any snapshot reservation held by this task can be closed now that
@@ -852,6 +952,16 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       // Wait for an in-flight SQLite purge batch before reading and
       // advertising the reservation's bounds.
       await (this.#purgeScheduler?.pause(taskID) ?? promiseVoid);
+      // A concurrent retry for this task may have superseded and cancelled
+      // this reservation while its purge pause was settling. Only the current
+      // owner may replace the task's source pin.
+      if (!this.#reservations.isCurrent(taskID, downstream)) {
+        return downstream;
+      }
+      // Pin after the purge pause has settled, so the SQLite minimum captured
+      // by the router cannot move before it is advertised. #confirmReservations
+      // skips an unpinned task while this await is in flight.
+      this.#readRouter?.pin(taskID);
       // If a backup has been confirmed, immediately confirm the reservation.
       await this.#confirmReservations();
       return downstream;
@@ -886,18 +996,54 @@ class ChangeStreamerImpl implements ChangeStreamerService {
   }
 
   async #confirmReservations() {
-    if (this.#backupWatermark && this.#reservations?.confirmationsRequired()) {
-      const {replicaVersion, minWatermark} = await this.#getChangeLogState();
-      if (minWatermark <= this.#backupWatermark) {
-        this.#reservations?.confirm(replicaVersion, this.#backupWatermark);
+    const backupWatermark = this.#backupWatermark;
+    const reservations = this.#reservations;
+    if (
+      backupWatermark === undefined ||
+      !reservations?.confirmationsRequired()
+    ) {
+      return;
+    }
+
+    // Resolve PG bounds before touching any pin. Everything below runs to
+    // completion without awaiting, which is what keeps a reservation's
+    // advertised bounds and its pin in agreement: a concurrent /snapshot
+    // retry for the same task replaces the reservation and re-pins it, and
+    // confirming that replacement with the previous pin's bounds is exactly
+    // the mismatch pinning exists to prevent. The cost is one PG round trip
+    // per call even when every reservation is pinned to SQLite.
+    const pgState = await this.#getChangeLogState();
+    for (const taskID of reservations.unconfirmedTaskIDs()) {
+      const route = this.#readRouter?.peek(taskID);
+      // startSnapshotReservation pins only after an in-flight purge has
+      // completed. A task with no pin yet is confirmed by that path instead.
+      if (this.#readRouter && route === undefined) {
+        continue;
+      }
+
+      let minWatermark: string;
+      if (route?.source === 'sqlite') {
+        const coverage = route.coverage;
+        assert(coverage, 'a pinned SQLite route must carry its covered range');
+        minWatermark = coverage.minWatermark;
       } else {
-        // Something is wrong here ... the change-log should not have been
-        // purged past the backup watermark. If we confirm the reservation,
-        // we may not be able to catch up from the backup that the requester
-        // restores.
+        ({minWatermark} = pgState);
+      }
+
+      if (minWatermark <= backupWatermark) {
+        reservations.confirmFor(
+          taskID,
+          pgState.replicaVersion,
+          backupWatermark,
+        );
+      } else {
+        // The selected source cannot catch a restored replica up from this
+        // backup yet. Keep the reservation pending until a later backup moves
+        // the durable watermark into its covered range.
         this.#lc.error?.(
-          `change-log minWatermark ${minWatermark} is later than backupWatermark ${this.#backupWatermark}. ` +
-            `Delaying confirmation of snapshot reservation until next backup.`,
+          `${route?.source ?? 'pg'} change-log minWatermark ${minWatermark} ` +
+            `is later than backupWatermark ${backupWatermark}. Delaying ` +
+            `confirmation of snapshot reservation until next backup.`,
         );
       }
     }
@@ -1134,13 +1280,12 @@ class ChangeStreamerImpl implements ChangeStreamerService {
   }
 
   #selectSQLiteCatchup(
+    lc: LogContext,
     ctx: SubscriberContext,
-  ): SQLiteChangeLogCatchup | undefined {
+  ): SQLiteCatchupSelection | undefined {
     const opts = this.#sqliteCatchupOptions;
-    // Slice 11 supplies a non-default selector. Until then, this keeps all
-    // production subscriptions on PG even though the complete SQLite handoff
-    // path is wired and testable.
     if (this.#lastForwardedCommitWatermark === undefined || !opts) {
+      this.#recordCatchupRoute('pg', 'not-ready');
       return undefined;
     }
     // SQLite catchup is only for disposable serving replicas. Backup
@@ -1148,27 +1293,82 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     // resume the canonical replica directly from replica/backup/slot state.
     // Enforce this before the selector so no canary policy can override it.
     if (ctx.mode !== 'serving') {
-      this.#lc.info?.(
-        `not serving backup subscriber ${ctx.id} from SQLite catchup`,
-      );
+      lc.info?.(`not serving backup subscriber ${ctx.id} from SQLite catchup`);
+      this.#recordCatchupRoute('pg', 'ineligible-mode');
       return undefined;
     }
-    if (ctx.logsChangeStream) {
-      // The reason for this exclusion is gone: the writer is no longer a
-      // subscriber, so nothing can wait on its own ACK, and no replicator this
-      // version ships sets the parameter. It stays until slice 11 lifts it
-      // deliberately, because a subscriber that predates the writer's move does
-      // set it, and serving one from SQLite is a change in behavior rather than
-      // a cleanup.
-      this.#lc.warn?.(
-        `not serving legacy change-log writer ${ctx.id} from SQLite catchup`,
-      );
+
+    let route: ChangeLogReadRoute | undefined;
+    if (this.#readRouter) {
+      route = this.#readRouter.consume(ctx.taskID);
+      if (route.source === 'pg') {
+        if (route.reason === 'cold-log') {
+          lc.info?.(
+            `serving ${ctx.id} from PG catchup: SQLite change log is still warming`,
+            {sqliteChangeLogCoverage: route.coverage},
+          );
+        } else if (route.reason === 'log-unavailable') {
+          this.#declineSQLiteCatchup(
+            lc,
+            ctx,
+            opts,
+            `${opts.changeLogFile} is unavailable or incompatible`,
+          );
+        } else {
+          lc.debug?.(
+            `serving ${ctx.id} from PG catchup: SQLite route ${route.reason}`,
+            ...(route.coverage
+              ? [{sqliteChangeLogCoverage: route.coverage}]
+              : []),
+          );
+        }
+        this.#recordCatchupRoute('pg', route.reason);
+        return undefined;
+      }
+      const coverage = route.coverage;
+      assert(coverage, 'a SQLite route must carry its covered range');
+      if (ctx.watermark < coverage.minWatermark) {
+        lc.info?.(
+          `serving ${ctx.id} from PG catchup: subscriber watermark ` +
+            `${ctx.watermark} is below the SQLite change-log minimum ` +
+            coverage.minWatermark,
+          {sqliteChangeLogCoverage: coverage},
+        );
+        this.#recordCatchupRoute('pg', 'watermark-uncovered');
+        return undefined;
+      }
+    }
+
+    // `shouldUse` remains as a test hook and an optional extra policy gate.
+    // Production selection comes from #readRouter.
+    if (!this.#readRouter && !opts.shouldUse?.(ctx)) {
+      this.#recordCatchupRoute('pg', 'selector');
       return undefined;
     }
-    if (!opts.shouldUse?.(ctx)) {
+    if (this.#readRouter && opts.shouldUse && !opts.shouldUse(ctx)) {
+      this.#recordCatchupRoute('pg', 'selector');
       return undefined;
     }
-    return this.#sqliteCatchup ?? this.#openSQLiteCatchup(opts, ctx);
+
+    const catchup =
+      this.#sqliteCatchup ?? this.#openSQLiteCatchup(lc, opts, ctx);
+    if (catchup) {
+      return {
+        catchup,
+        reason: route?.reason ?? 'selector',
+        coverage: route?.coverage,
+        // Every route the router selects has passed the warm-up gate.
+        // Legacy focused-test selection has no warm classification.
+        logWarm: route === undefined ? undefined : true,
+      };
+    } else {
+      this.#recordCatchupRoute('pg', 'log-unavailable');
+    }
+    return undefined;
+  }
+
+  #recordCatchupRoute(source: 'pg' | 'sqlite', reason: string): void {
+    this.#catchupRoutes.add(1, {source, reason});
   }
 
   /**
@@ -1185,6 +1385,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
    * subscription retries from scratch.
    */
   #openSQLiteCatchup(
+    lc: LogContext,
     opts: SQLiteCatchupOptions,
     ctx: SubscriberContext,
   ): SQLiteChangeLogCatchup | undefined {
@@ -1198,6 +1399,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       if (reader.plan(ctx.watermark).kind === 'not-ready') {
         reader.close();
         this.#declineSQLiteCatchup(
+          lc,
           ctx,
           opts,
           `${opts.changeLogFile} has no changes to serve yet`,
@@ -1210,6 +1412,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       // not a reason to fail the subscription.
       reader?.close();
       this.#declineSQLiteCatchup(
+        lc,
         ctx,
         opts,
         `cannot read ${opts.changeLogFile}`,
@@ -1231,6 +1434,12 @@ class ChangeStreamerImpl implements ChangeStreamerService {
         barrierTimeoutMs: opts.barrierTimeoutMs,
         barrierPollIntervalMs: opts.barrierPollIntervalMs,
         cleanupGuard: opts.cleanupGuard,
+        onFailure: failure => {
+          this.#lc.warn?.(
+            `temporarily disabling SQLite catchup after ${failure}`,
+          );
+          this.#readRouter?.trip();
+        },
       },
     );
     return this.#sqliteCatchup;
@@ -1242,6 +1451,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
    * first reconcile does not look like an incident.
    */
   #declineSQLiteCatchup(
+    lc: LogContext,
     ctx: SubscriberContext,
     opts: SQLiteCatchupOptions,
     reason: string,
@@ -1253,7 +1463,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     const threshold =
       opts.notReadyWarnThresholdMs ??
       DEFAULT_CHANGE_LOG_UNAVAILABLE_WARN_THRESHOLD_MS;
-    this.#lc[unavailableMs >= threshold ? 'warn' : 'debug']?.(
+    lc[unavailableMs >= threshold ? 'warn' : 'debug']?.(
       `serving ${ctx.id} from PG catchup: ${reason} ` +
         `(unavailable for ${unavailableMs} ms)`,
       ...(error === undefined ? [] : [error]),
@@ -1264,6 +1474,17 @@ class ChangeStreamerImpl implements ChangeStreamerService {
 type ForwardedTransactionCompletion =
   | {kind: 'committed'; watermark: string}
   | {kind: 'rolled-back'; watermark: string};
+
+type SQLiteCatchupSelection = {
+  readonly catchup: SQLiteChangeLogCatchup;
+  readonly reason: string;
+  readonly coverage: SQLiteChangeLogCoverage | undefined;
+  /**
+   * Whether the router classified the log as warm for this subscriber, or
+   * undefined when selection did not run through the router (focused tests).
+   */
+  readonly logWarm: boolean | undefined;
+};
 
 // The delay between receiving an initial, backup-based watermark
 // and performing a check of whether to purge records before it.

@@ -255,7 +255,7 @@ describe('SQLiteChangeLogCatchup', () => {
     const plan = vi.spyOn(fixture.reader, 'plan');
     const {subscriber, output} = createSubscriber('01');
     await fixture.coordinator.catchup(subscriber, () => '06');
-    await vi.waitFor(() => expect(plan).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(plan).toHaveBeenCalledTimes(2));
 
     fixture.reader.entries.push(...transaction('06'));
     fixture.reader.boundaries.add('06');
@@ -279,13 +279,13 @@ describe('SQLiteChangeLogCatchup', () => {
     const plan = vi.spyOn(fixture.reader, 'plan');
     const {subscriber, output} = createSubscriber('01');
     await fixture.coordinator.catchup(subscriber, () => '06');
-    await vi.waitFor(() => expect(plan).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(plan).toHaveBeenCalledTimes(2));
 
     // The writer is still behind the required head. Waking on every commit
     // would re-read the log at the writer's commit rate for no reason.
     fixture.coordinator.onChangeLogCommit('04');
     await sleep(20);
-    expect(plan).toHaveBeenCalledOnce();
+    expect(plan).toHaveBeenCalledTimes(2);
     expect(output.size()).toBe(0);
 
     fixture.reader.entries.push(...transaction('06'));
@@ -313,12 +313,12 @@ describe('SQLiteChangeLogCatchup', () => {
     const cancelBacklogWait = vi.spyOn(backlogFull, 'cancel');
     vi.spyOn(subscriber, 'whenBacklogFull').mockReturnValue(backlogFull);
     await fixture.coordinator.catchup(subscriber, () => '06');
-    await vi.waitFor(() => expect(plan).toHaveBeenCalledOnce());
+    await vi.waitFor(() => expect(plan).toHaveBeenCalledTimes(2));
 
     // An ACK that the reader cannot yet corroborate wakes the barrier but does
     // not release it: plan() decides what is readable.
     fixture.coordinator.onChangeLogCommit('06');
-    await vi.waitFor(() => expect(plan).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(plan).toHaveBeenCalledTimes(3));
     expect(output.size()).toBe(0);
 
     fixture.reader.entries.push(...transaction('06'));
@@ -340,6 +340,17 @@ describe('SQLiteChangeLogCatchup', () => {
     fixture.reader.head = '06';
     fixture.reader.boundaries.add('04');
     const {output, subscriber} = createSubscriber('01');
+    vi.spyOn(fixture.reader, 'plan')
+      .mockReturnValueOnce({
+        kind: 'range',
+        minWatermark: '01',
+        headWatermark: '06',
+      })
+      .mockReturnValueOnce({
+        kind: 'too-old',
+        minWatermark: '04',
+        headWatermark: '06',
+      });
     await fixture.coordinator.catchup(subscriber, () => '06');
     expect(await output.dequeue()).toEqual([
       'error',
@@ -350,12 +361,29 @@ describe('SQLiteChangeLogCatchup', () => {
     ]);
   });
 
+  test('declines an uncovered watermark before registering', async () => {
+    const fixture = createFixture();
+    fixture.reader.min = '04';
+    fixture.reader.head = '06';
+    fixture.reader.boundaries.add('04');
+    const {output, subscriber} = createSubscriber('01');
+
+    expect(await fixture.coordinator.catchup(subscriber, () => '06')).toEqual({
+      kind: 'uncovered',
+      minWatermark: '04',
+    });
+    expect(fixture.forwarder.getAcks()).toEqual(new Set());
+    expect(output.size()).toBe(0);
+  });
+
   test('gives up the barrier once the subscriber backlog fills', async () => {
+    const onFailure = vi.fn();
     // Long enough that only the backlog can end this wait. Bytes, not time,
     // are the real bound; the deadline is only a backstop for an idle shard.
     const fixture = createFixture({
       barrierTimeoutMs: 60_000,
       barrierPollIntervalMs: 60_000,
+      onFailure,
     });
     fixture.reader.head = '01';
 
@@ -374,6 +402,10 @@ describe('SQLiteChangeLogCatchup', () => {
     // holding replication while the backlog grows.
     expect(fail).not.toHaveBeenCalled();
     expect(output.size()).toBe(0);
+    // The breaker stays closed: a backlog high water mark is a property of
+    // this one subscriber's consumption, not of the log, and tripping it
+    // would take every task in the shard off SQLite.
+    expect(onFailure).not.toHaveBeenCalled();
     expect(fixture.logSink.messages).toContainEqual([
       'warn',
       expect.anything(),
@@ -387,7 +419,8 @@ describe('SQLiteChangeLogCatchup', () => {
   });
 
   test('ends only the selected subscription, cleanly, on barrier timeout', async () => {
-    const fixture = createFixture({barrierTimeoutMs: 5});
+    const onFailure = vi.fn();
+    const fixture = createFixture({barrierTimeoutMs: 5, onFailure});
     fixture.reader.head = '01';
     const {subscriber, done, output} = createSubscriber('01');
     const fail = vi.spyOn(subscriber, 'fail');
@@ -400,6 +433,7 @@ describe('SQLiteChangeLogCatchup', () => {
     // caught up yet" warrants.
     expect(fail).not.toHaveBeenCalled();
     expect(output.size()).toBe(0);
+    expect(onFailure).toHaveBeenCalledExactlyOnceWith('barrier-timeout');
     expect(fixture.logSink.messages).toContainEqual([
       'warn',
       expect.anything(),
@@ -461,7 +495,8 @@ describe('SQLiteChangeLogCatchup', () => {
   });
 
   test('fails closed on reader errors after registration', async () => {
-    const fixture = createFixture();
+    const onFailure = vi.fn();
+    const fixture = createFixture({onFailure});
     fixture.reader.head = '06';
     fixture.reader.boundaries.add('01');
     fixture.reader.readError = new Error('broken SQLite read');
@@ -473,6 +508,7 @@ describe('SQLiteChangeLogCatchup', () => {
     // operators through the log below, not through the subscriber.
     await done;
     expect(output.size()).toBe(0);
+    expect(onFailure).toHaveBeenCalledExactlyOnceWith('reader-error');
     expect(fixture.logSink.messages).toContainEqual([
       'error',
       expect.anything(),
@@ -481,6 +517,36 @@ describe('SQLiteChangeLogCatchup', () => {
         expect.objectContaining({message: 'broken SQLite read'}),
       ],
     ]);
+  });
+
+  test('declines to PG when registration fails before the Forwarder add', async () => {
+    const onFailure = vi.fn();
+    const fixture = createFixture({onFailure});
+    fixture.reader.head = '06';
+    fixture.reader.boundaries.add('01');
+    // A corrupt or truncated log: plan() is the first thing registration
+    // reads, and it throws before anything is committed to SQLite.
+    fixture.reader.planError = new Error('SQLITE_CORRUPT');
+    const {subscriber, output} = createSubscriber('01');
+    const fail = vi.spyOn(subscriber, 'fail');
+
+    const registration = await fixture.coordinator.catchup(
+      subscriber,
+      () => '06',
+    );
+
+    // Declined, not failed: the subscriber never reached the Forwarder, so PG
+    // catchup is still available and the caller falls back to it. Failing it
+    // would send a terminal ['error', ...] and cost a full replica restore.
+    expect(registration).toEqual({
+      kind: 'declined',
+      error: fixture.reader.planError,
+    });
+    expect(fail).not.toHaveBeenCalled();
+    expect(fixture.forwarder.getAcks()).toEqual(new Set());
+    expect(output.size()).toBe(0);
+    // The breaker opens, so the retry does not pick SQLite again.
+    expect(onFailure).toHaveBeenCalledExactlyOnceWith('reader-error');
   });
 
   test('cancellation and shutdown release catchup resources', async () => {
@@ -526,6 +592,7 @@ function createFixture(
     barrierPollIntervalMs?: number | undefined;
     cleanupGuard?: SQLiteChangeLogCleanupGuard | undefined;
     now?: SQLiteChangeLogCatchupOptions['now'];
+    onFailure?: SQLiteChangeLogCatchupOptions['onFailure'];
     sleep?: SQLiteChangeLogCatchupOptions['sleep'];
   } = {},
 ) {
@@ -539,6 +606,7 @@ function createFixture(
     barrierPollIntervalMs: opts.barrierPollIntervalMs ?? 1,
     cleanupGuard: opts.cleanupGuard,
     now: opts.now,
+    onFailure: opts.onFailure,
     sleep: opts.sleep,
   });
   coordinators.push(coordinator);
@@ -552,10 +620,14 @@ class TestReader implements SQLiteChangeLogCatchupReader {
   min = '01';
   head = '01';
   beforeRead: Promise<void> | undefined;
+  planError: Error | undefined;
   readError: Error | undefined;
   closed = false;
 
   plan(fromWatermark: string): CatchupPlan {
+    if (this.planError) {
+      throw this.planError;
+    }
     if (fromWatermark > this.head) {
       return {kind: 'ahead', headWatermark: this.head};
     }

@@ -49,12 +49,12 @@ describe('change-streamer/snapshot-reservations', () => {
     expect(reservations.getReservedWatermarks()).toEqual([]);
   });
 
-  test('confirm() pushes a status message and confirms the reservation', async () => {
+  test('confirmFor() pushes a status message and confirms the reservation', async () => {
     const reservations = newReservations();
     const sub = reservations.open('task-1');
     const message = getFirstMessage(sub);
 
-    reservations.confirm('replica-v1', 'watermark-1');
+    reservations.confirmFor('task-1', 'replica-v1', 'watermark-1');
 
     expect(await message).toEqual([
       'status',
@@ -69,26 +69,28 @@ describe('change-streamer/snapshot-reservations', () => {
     expect(reservations.getReservedWatermarks()).toEqual(['watermark-1']);
   });
 
-  test('confirm() is a no-op for an already-confirmed reservation', () => {
+  test('confirmFor() is a no-op for an already-confirmed reservation', () => {
     const reservations = newReservations();
     reservations.open('task-1');
 
-    reservations.confirm('replica-v1', 'watermark-1');
-    reservations.confirm('replica-v1', 'watermark-2');
+    reservations.confirmFor('task-1', 'replica-v1', 'watermark-1');
+    reservations.confirmFor('task-1', 'replica-v1', 'watermark-2');
 
     // The reservation stays pinned to the watermark from its first
-    // confirmation; the second confirm() call is a no-op for it.
+    // confirmation; the second confirmFor() call is a no-op for it.
     expect(reservations.getReservedWatermarks()).toEqual(['watermark-1']);
   });
 
-  test('a single confirm() call resolves all pending reservations at once', () => {
+  test('the confirmation requirement clears once every task is confirmed', () => {
     const reservations = newReservations();
     reservations.open('task-1');
     reservations.open('task-2');
     expect(reservations.confirmationsRequired()).toBe(true);
 
-    reservations.confirm('replica-v1', 'watermark-1');
+    reservations.confirmFor('task-1', 'replica-v1', 'watermark-1');
+    expect(reservations.confirmationsRequired()).toBe(true);
 
+    reservations.confirmFor('task-2', 'replica-v1', 'watermark-1');
     expect(reservations.confirmationsRequired()).toBe(false);
     expect(reservations.getReservedWatermarks().sort()).toEqual([
       'watermark-1',
@@ -96,17 +98,35 @@ describe('change-streamer/snapshot-reservations', () => {
     ]);
   });
 
-  test('confirm() only resolves reservations opened before it was called', () => {
+  test('confirmFor() applies the pinned source bounds to one task only', async () => {
+    const reservations = newReservations();
+    const first = getFirstMessage(reservations.open('task-1'));
+    reservations.open('task-2');
+
+    expect(reservations.unconfirmedTaskIDs().sort()).toEqual([
+      'task-1',
+      'task-2',
+    ]);
+    reservations.confirmFor('task-1', 'replica-v1', 'sqlite-min');
+
+    expect(await first).toMatchObject([
+      'status',
+      {replicaVersion: 'replica-v1', minWatermark: 'sqlite-min'},
+    ]);
+    expect(reservations.unconfirmedTaskIDs()).toEqual(['task-2']);
+    expect(reservations.getReservedWatermarks()).toEqual(['sqlite-min']);
+  });
+
+  test('a reservation opened after a confirmation is still unconfirmed', () => {
     const reservations = newReservations();
     reservations.open('task-1');
-    reservations.confirm('replica-v1', 'watermark-1');
+    reservations.confirmFor('task-1', 'replica-v1', 'watermark-1');
 
-    // Opened after the first confirm(); still unconfirmed.
     reservations.open('task-2');
     expect(reservations.confirmationsRequired()).toBe(true);
     expect(reservations.getReservedWatermarks()).toEqual(['watermark-1']);
 
-    reservations.confirm('replica-v1', 'watermark-2');
+    reservations.confirmFor('task-2', 'replica-v1', 'watermark-2');
     expect(reservations.confirmationsRequired()).toBe(false);
     expect(reservations.getReservedWatermarks().sort()).toEqual([
       'watermark-1',
@@ -120,11 +140,13 @@ describe('change-streamer/snapshot-reservations', () => {
     const sub2 = reservations.open('task-1');
 
     expect(await isCancelled(sub1)).toBe(true);
+    expect(reservations.isCurrent('task-1', sub1)).toBe(false);
+    expect(reservations.isCurrent('task-1', sub2)).toBe(true);
 
     // Only one reservation is tracked for the taskID, and it's the new one:
-    // it still receives the confirm() push.
+    // it still receives the confirmation push.
     const message = getFirstMessage(sub2);
-    reservations.confirm('replica-v1', 'watermark-1');
+    reservations.confirmFor('task-1', 'replica-v1', 'watermark-1');
     await message;
     expect(reservations.getReservedWatermarks()).toEqual(['watermark-1']);
   });
@@ -151,7 +173,7 @@ describe('change-streamer/snapshot-reservations', () => {
     expect(reservations.confirmationsRequired()).toBe(true);
 
     const message = getFirstMessage(sub2);
-    reservations.confirm('replica-v1', 'watermark-1');
+    reservations.confirmFor('task-1', 'replica-v1', 'watermark-1');
     await message;
     expect(reservations.getReservedWatermarks()).toEqual(['watermark-1']);
 
@@ -187,10 +209,10 @@ describe('change-streamer/snapshot-reservations', () => {
     expect(reservations.getReservedWatermarks()).toEqual([]);
   });
 
-  test('confirm() with no reservations is a no-op', () => {
+  test('confirmFor() an unknown taskID is a no-op', () => {
     const reservations = newReservations();
     expect(() =>
-      reservations.confirm('replica-v1', 'watermark-1'),
+      reservations.confirmFor('task-1', 'replica-v1', 'watermark-1'),
     ).not.toThrow();
   });
 });

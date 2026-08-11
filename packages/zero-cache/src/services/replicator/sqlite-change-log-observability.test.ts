@@ -115,6 +115,7 @@ describe('SQLite change-log observability', () => {
       schemaVersion: CHANGE_LOG_DB_SCHEMA_VERSION,
       seededAtMs: ANCHOR.nowMs,
       seedWatermark: '02',
+      minWatermark: '02',
       headWatermark: '02',
       rows: 2,
       estimatedBytes: expect.any(Number),
@@ -137,6 +138,7 @@ describe('SQLite change-log observability', () => {
             schemaVersion: CHANGE_LOG_DB_SCHEMA_VERSION,
             seedWatermark: '02',
             seededAtMs: ANCHOR.nowMs,
+            minWatermark: '02',
             headWatermark: '02',
           },
         },
@@ -156,6 +158,7 @@ describe('SQLite change-log observability', () => {
       schemaVersion: CHANGE_LOG_DB_SCHEMA_VERSION,
       seededAtMs: ANCHOR.nowMs,
       seedWatermark: '02',
+      minWatermark: '02',
       headWatermark: '02',
     });
     const {

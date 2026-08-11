@@ -2,11 +2,7 @@
 
 import fc from 'fast-check';
 import {describe, expect, test} from 'vitest';
-import type {ShardID} from '../../types/shards.ts';
-import {
-  digestCatchupRange,
-  isSampledForCompare,
-} from './change-log-compare-digest.ts';
+import {digestCatchupRange} from './change-log-compare-digest.ts';
 import type {ChangeTag, WatermarkedChange} from './change-streamer.ts';
 
 describe('change-streamer/change-log-compare-digest', () => {
@@ -259,35 +255,6 @@ describe('change-streamer/change-log-compare-digest', () => {
     // encoding costs more of it.
     expect(b.rows).toBe(a.rows);
     expect(b.bytes).toBeGreaterThan(a.bytes);
-  });
-
-  test('sampling is stable, bounded, and monotone in the percentage', () => {
-    fc.assert(
-      fc.property(
-        fc.record({
-          appID: fc.string({minLength: 1, maxLength: 8}),
-          shardNum: fc.nat({max: 1000}),
-          watermark: fc.hexaString({minLength: 2, maxLength: 10}),
-          p1: fc.integer({min: 0, max: 100}),
-          p2: fc.integer({min: 0, max: 100}),
-        }),
-        ({appID, shardNum, watermark, p1, p2}) => {
-          const shard: ShardID = {appID, shardNum};
-          const lo = Math.min(p1, p2);
-          const hi = Math.max(p1, p2);
-          // A retry selects the same transactions.
-          expect(isSampledForCompare(shard, watermark, hi)).toBe(
-            isSampledForCompare(shard, watermark, hi),
-          );
-          // A larger percentage keeps the transactions in a smaller sample.
-          if (isSampledForCompare(shard, watermark, lo)) {
-            expect(isSampledForCompare(shard, watermark, hi)).toBe(true);
-          }
-          expect(isSampledForCompare(shard, watermark, 0)).toBe(false);
-          expect(isSampledForCompare(shard, watermark, 100)).toBe(true);
-        },
-      ),
-    );
   });
 
   test('a change is hashed exactly as stored, including large integers', async () => {

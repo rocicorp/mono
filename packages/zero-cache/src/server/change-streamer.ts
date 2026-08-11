@@ -67,6 +67,7 @@ export default async function runWorker(
       flowControlConsensusTimeoutProportion,
       flowControlSlowSubscriberGracePeriodSeconds,
       sqliteChangeLogMode,
+      sqliteChangeLogReadPercent,
       sqliteChangeLogComparePercent,
       sqliteChangeLogRetentionMs,
       sqliteChangeLogReadBatchRows,
@@ -260,6 +261,16 @@ export default async function runWorker(
                 readBatchRows: sqliteChangeLogReadBatchRows,
               }
             : undefined,
+          // Slice 11 lands dark by default: serve mode constructs the stable
+          // router, while readPercent=0 keeps every catchup on PG and emits
+          // eligibility metrics before any canary traffic is enabled.
+          sqliteChangeLogServe:
+            sqliteChangeLogMode === 'serve'
+              ? {
+                  readPercent: sqliteChangeLogReadPercent,
+                  retentionMs: sqliteChangeLogRetentionMs,
+                }
+              : undefined,
         },
         setTimeout,
       );

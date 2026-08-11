@@ -26,9 +26,9 @@ import {
 } from '../replicator/schema/replication-state.ts';
 import {ReplicationMessages} from '../replicator/test-utils.ts';
 import {serializeChangeStreamData} from './change-log-codec.ts';
-import {isSampledForCompare} from './change-log-compare-digest.ts';
 import {initChangeStreamerSchema} from './schema/init.ts';
 import {ensureReplicationConfig} from './schema/tables.ts';
+import {isSampledForShard} from './shard-sampling.ts';
 import {
   SQLiteChangeLogComparator,
   type PGChangeLogRangeReader,
@@ -729,7 +729,7 @@ describe('change-streamer/sqlite-change-log-comparator', () => {
 
     const percent = 40;
     const expected = txs.filter(({watermark}) =>
-      isSampledForCompare(shard, watermark, percent),
+      isSampledForShard(shard, watermark, percent),
     ).length;
 
     // Independent comparators select the same sample.
