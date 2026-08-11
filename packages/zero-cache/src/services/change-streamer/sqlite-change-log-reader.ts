@@ -50,7 +50,7 @@ type PreparedStatements = {
 export const SQLITE_CHANGE_LOG_BOUNDARY_SQL = /*sql*/ `
   SELECT
     "precommit" = @fromWatermark AND
-      json_extract("change", '$.tag') = 'commit' AS "boundaryExists"
+      "tag" = 'commit' AS "boundaryExists"
   FROM "${CHANGE_LOG_STREAM_TABLE}"
   WHERE "watermark" = @fromWatermark
   ORDER BY "pos" DESC
@@ -84,7 +84,7 @@ export const SQLITE_CHANGE_LOG_READ_BATCH_SQL = /*sql*/ `
   SELECT
     "watermark",
     "pos",
-    json_extract("change", '$.tag') AS "tag",
+    "tag",
     "change"
   FROM "${CHANGE_LOG_STREAM_TABLE}"
   WHERE ("watermark", "pos") > (?, ?)

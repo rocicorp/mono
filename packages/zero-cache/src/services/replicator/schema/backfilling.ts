@@ -52,7 +52,11 @@ import {
   backfillRequestSchema,
   type BackfillRequest,
 } from '../../change-source/protocol/current/upstream.ts';
-import {cookieOps, type CookieOp} from '../change-log-cookies.ts';
+import {
+  cookieOps,
+  type CookieOp,
+  type CookieSet,
+} from '../change-log-cookies.ts';
 
 export const BACKFILLING_TABLE = '_zero.backfilling';
 
@@ -239,6 +243,53 @@ export function readBackfillRequests(db: Database): BackfillRequest[] {
     curr.columns[column] = BigIntJSON.parse(backfill) as BackfillID;
   }
   return v.parse(requests, backfillRequestsSchema);
+}
+
+/**
+ * The replica's whole cookie set, in the shape the change log holds it — the
+ * seed a change log would be initialized from, and the replica-derived half of
+ * the initialization comparison.
+ *
+ * The metadata half is filtered on `upstreamMetadata IS NOT NULL` because
+ * `_zero.tableMetadata` carries `minRowVersion` as well, so a row exists for
+ * every table whose rows were ever force-re-downloaded, whether or not upstream
+ * ever sent metadata for it. Neither cookie store can represent that row:
+ * `cdc.tableMetadata."metadata"` and `_zero.changeLogTableMetadata."metadata"`
+ * are both `NOT NULL`.
+ *
+ * Only meaningful paired with `_zero.replicationState.stateVersion`, read in
+ * the same snapshot (invariant 15).
+ */
+export function readReplicaCookies(db: Database): CookieSet {
+  const tableMetadata = db
+    .prepare(/*sql*/ `
+      SELECT "schema", "table", "upstreamMetadata" AS "metadata"
+        FROM "_zero.tableMetadata"
+        WHERE "upstreamMetadata" IS NOT NULL
+        ORDER BY "schema", "table"
+    `)
+    .all<{schema: string; table: string; metadata: string}>()
+    .map(({schema, table, metadata}) => ({
+      schema,
+      table,
+      metadata: BigIntJSON.parse(metadata) as TableMetadata,
+    }));
+
+  const backfilling = db
+    .prepare(/*sql*/ `
+      SELECT "schema", "table", "column", "backfill"
+        FROM "${BACKFILLING_TABLE}"
+        ORDER BY "schema", "table", "column"
+    `)
+    .all<{schema: string; table: string; column: string; backfill: string}>()
+    .map(({schema, table, column, backfill}) => ({
+      schema,
+      table,
+      column,
+      backfill: BigIntJSON.parse(backfill) as BackfillID,
+    }));
+
+  return {tableMetadata, backfilling};
 }
 
 /**

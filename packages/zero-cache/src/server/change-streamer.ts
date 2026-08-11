@@ -123,6 +123,9 @@ export default async function runWorker(
 
   const context = getServerContext(config);
   const sqliteChangeLogEnabled = sqliteChangeLogMode !== 'off';
+  // The modes are cumulative, so `serve` implies `compare`.
+  const sqliteChangeLogComparing =
+    sqliteChangeLogMode === 'compare' || sqliteChangeLogMode === 'serve';
   if (sqliteChangeLogEnabled) {
     const changeLogFile = changeLogFileName(replica.file);
     registerSQLiteCorruptionDiagnosticTarget({
@@ -231,6 +234,12 @@ export default async function runWorker(
                 retentionMs: sqliteChangeLogRetentionMs,
                 batchRows: sqliteChangeLogPurgeBatchRows,
               }
+            : undefined,
+          // `compare` and above. The replica-derived initialization path runs
+          // at full rate and is checked against Postgres, which stays
+          // authoritative. Flipping authority to the replica comes later.
+          sqliteChangeLogCompare: sqliteChangeLogComparing
+            ? {replicaFile: replica.file}
             : undefined,
         },
         setTimeout,

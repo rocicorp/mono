@@ -13,6 +13,7 @@ import * as v from '../../../../../../shared/src/valita.ts';
 import {columnSpec, indexSpec, tableSpec} from '../../../../db/specs.ts';
 import type {Satisfies} from '../../../../types/satisfies.ts';
 import {jsonObjectSchema} from './json.ts';
+import {schemaChangeTags} from './schema-change-tags.ts';
 
 export const beginSchema = v.object({
   tag: v.literal('begin'),
@@ -382,20 +383,6 @@ const schemaChanges = [
   createIndexSchema,
   dropIndexSchema,
   backfillCompletedSchema,
-] as const;
-
-// Note: keep in sync or the tag tests will fail
-const schemaChangeTags = [
-  'create-table',
-  'rename-table',
-  'update-table-metadata',
-  'add-column',
-  'update-column',
-  'drop-column',
-  'drop-table',
-  'create-index',
-  'drop-index',
-  'backfill-completed',
 ] as const;
 
 export const schemaChangeSchema = v.union(...schemaChanges);
