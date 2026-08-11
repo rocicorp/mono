@@ -313,6 +313,79 @@ export class Storer implements Service {
     return minWatermark;
   }
 
+  /**
+   * The bounds of the range the PG change log can serve catchup over:
+   * `minWatermark` is the earliest retained transaction (`null` only for a
+   * completely new replica) and `lastWatermark` is the durable head, which
+   * commits in the same transaction as its change-log rows.
+   *
+   * Used by the SQLite change-log comparator to pin the range it compares.
+   */
+  async getCatchupBounds(): Promise<{
+    minWatermark: string | null;
+    lastWatermark: string;
+  }> {
+    const [bounds] = await this.#db<
+      {minWatermark: string | null; lastWatermark: string}[]
+    > /*sql*/ `
+      SELECT
+        (SELECT min(watermark) FROM ${this.#cdc('changeLog')}) as "minWatermark",
+        (SELECT "lastWatermark" FROM ${this.#cdc('replicationState')}) as "lastWatermark"`;
+    return bounds;
+  }
+
+  /**
+   * The commit watermarks of the transactions in `(afterWatermark,
+   * throughWatermark]`, ascending, at most `limit` of them. Every row of a
+   * transaction is stored at its commit watermark, so this is a complete
+   * enumeration of the committed transactions in the range.
+   */
+  async listCommitWatermarks(
+    afterWatermark: string,
+    throughWatermark: string,
+    limit: number,
+  ): Promise<string[]> {
+    const rows = await this.#db<{watermark: string}[]> /*sql*/ `
+      SELECT watermark FROM ${this.#cdc('changeLog')}
+       WHERE precommit IS NOT NULL
+         AND watermark > ${afterWatermark}
+         AND watermark <= ${throughWatermark}
+       ORDER BY watermark
+       LIMIT ${limit}`;
+    return rows.map(({watermark}) => watermark);
+  }
+
+  /**
+   * Reads the change-log entries in `(afterWatermark, throughWatermark]` in
+   * stream order, in bounded batches. This is the same statement shape as the
+   * subscriber catchup query in {@link #catchup} — the comparator exists to
+   * compare catchup *output*, so the two must not diverge in what they select.
+   *
+   * That fidelity includes a shared limitation: `change->'tag'` de-escapes
+   * every string value in the document while scanning for the field, and
+   * Postgres cannot represent `\u0000` as text, so a change whose payload
+   * contains an escaped NUL fails the read. Subscriber catchup fails on
+   * exactly the same row, so the comparator reports it as a mismatch rather
+   * than papering over it with a different statement.
+   */
+  readCatchupRange(
+    afterWatermark: string,
+    throughWatermark: string,
+    batchRows = 2000,
+  ): AsyncIterable<ChangeLogEntry[]> {
+    assert(
+      Number.isSafeInteger(batchRows) && batchRows > 0,
+      'Postgres change log batch size must be a positive safe integer',
+    );
+    return this.#db<ChangeLogEntry[]> /*sql*/ `
+      SELECT watermark, change->'tag' as tag, change::text FROM ${this.#cdc('changeLog')}
+       WHERE watermark > ${afterWatermark}
+         AND watermark <= ${throughWatermark}
+       ORDER BY watermark, pos`.cursor(batchRows) as AsyncIterable<
+      ChangeLogEntry[]
+    >;
+  }
+
   purgeRecordsBefore(watermark: string): Promise<number> {
     return runTx(this.#db, async sql => {
       // This NOWAIT pre-check is an optimization to abort the transaction
