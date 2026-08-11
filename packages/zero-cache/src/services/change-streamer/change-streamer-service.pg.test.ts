@@ -17,6 +17,7 @@ import {DbFile} from '../../test/lite.ts';
 import type {PostgresDB} from '../../types/pg.ts';
 import type {Source} from '../../types/streams.ts';
 import {Subscription, type Result} from '../../types/subscription.ts';
+import {orTimeout} from '../../types/timeout.ts';
 import type {ChangeSource} from '../change-source/change-source.ts';
 import type {
   ChangeStreamData,
@@ -3296,6 +3297,95 @@ describe('change-streamer/service', () => {
     changes.fail(new Error('doh'));
 
     expect(await hasRetried).toBe(true);
+  });
+
+  test('exit when source terminates behind storer backpressure', async () => {
+    await streamer.stop();
+    await streamerDone;
+
+    const firstStreamStarted = resolver<void>();
+    const sourceTerminated = resolver<Error>();
+    const firstChanges = Subscription.create<ChangeStreamMessage>();
+    const source = {
+      startStream: vi.fn().mockImplementation(() => {
+        firstStreamStarted.resolve();
+        return Promise.resolve({
+          initialWatermark: '01',
+          changes: firstChanges,
+          acks: {push: () => {}},
+          sourceTerminated: sourceTerminated.promise,
+        });
+      }),
+      startLagReporter: () => null,
+      stop: () => {
+        firstChanges.cancel();
+        return Promise.resolve();
+      },
+    } satisfies ChangeSource;
+
+    const incidentStreamer = await initializeStreamer(
+      lc,
+      shard,
+      'task-id',
+      'change.streamer:12345',
+      'ws',
+      sql,
+      source,
+      ReplicationStatusPublisher.forTesting(),
+      replicaConfig,
+      null,
+      null,
+      true,
+      {
+        ...opts,
+        backPressureLimitHeapProportion: 0.00001,
+        statementTimeoutMs: 20_000,
+      },
+    );
+    const incidentDone = incidentStreamer.run();
+    await firstStreamStarted.promise;
+
+    const lockAcquired = resolver<void>();
+    const releaseLock = resolver<void>();
+    const lockDone = sql.begin(async tx => {
+      await tx`SELECT owner FROM "zoro_3/cdc"."replicationState" FOR UPDATE`;
+      lockAcquired.resolve();
+      await releaseLock.promise;
+    });
+    void lockDone.catch(lockAcquired.reject);
+    await lockAcquired.promise;
+
+    firstChanges.push(['begin', messages.begin(), {commitWatermark: '05'}]);
+    firstChanges.push(['commit', messages.commit(), {watermark: '05'}]);
+    const nextBegin = firstChanges.push([
+      'begin',
+      messages.begin(),
+      {commitWatermark: '06'},
+    ]);
+
+    const nextBeginResult = await orTimeout(nextBegin.result, 300);
+    const blockedChange = firstChanges.push([
+      'data',
+      messages.insert('foo', {id: 'blocked', value: 'a'.repeat(1024 ** 2)}),
+    ]);
+    const backpressureResult = await orTimeout(blockedChange.result, 50);
+
+    const sourceError = new Error('source terminated');
+    sourceTerminated.resolve(sourceError);
+    const exitResult = await orTimeout(
+      incidentDone.catch(error => error),
+      300,
+    );
+    const stopResult = await orTimeout(incidentStreamer.stop(), 200);
+
+    releaseLock.resolve();
+    await lockDone;
+    await incidentDone.catch(() => {});
+
+    expect(nextBeginResult).toBe('consumed');
+    expect(backpressureResult).toBe('timed-out');
+    expect(exitResult).toBe(sourceError);
+    expect(stopResult).toBeUndefined();
   });
 
   test('retry on unexpected storage error', async () => {
