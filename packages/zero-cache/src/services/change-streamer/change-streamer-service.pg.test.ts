@@ -791,6 +791,197 @@ describe('change-streamer/service', () => {
     }
   });
 
+  /**
+   * §6.6's rollback drill. At readPercent=100, with a subscriber served from
+   * SQLite and a snapshot reservation confirmed while SQLite was the pinned
+   * source, a restart back to un-flipped routing keeps every promise on PG:
+   * everything SQLite can promise, PG can serve.
+   */
+  test('rollback drill: a restart out of serve mode keeps every subscriber on PG range', async () => {
+    const readerRead = vi.spyOn(SQLiteChangeLogReader.prototype, 'read');
+    const logFile = new DbFile('sqlite-change-log-rollback-drill');
+    await restartWithInlineChangeLogWriter(
+      logFile,
+      {barrierPollIntervalMs: 10},
+      undefined,
+      's3://foo/bar',
+      undefined,
+      {readPercent: 100, retentionMs: 0},
+    );
+
+    try {
+      changes.push(['begin', messages.begin(), {commitWatermark: '06'}]);
+      changes.push(['data', messages.insert('foo', {id: 'pre-rollback'})]);
+      changes.push(['commit', messages.commit(), {watermark: '06'}]);
+      await expectAcks('06');
+
+      // Flipped: a serving subscriber reads from SQLite.
+      const flipped = await subscribeServing('flipped');
+      const flippedOut = drainToQueue(flipped);
+      expect(await nextChange(flippedOut)).toMatchObject({tag: 'status'});
+      expect(await nextChange(flippedOut)).toMatchObject({tag: 'begin'});
+      expect(await nextChange(flippedOut)).toMatchObject({
+        tag: 'insert',
+        new: {id: 'pre-rollback'},
+      });
+      expect(await nextChange(flippedOut)).toMatchObject({tag: 'commit'});
+      expect(readerRead).toHaveBeenCalled();
+      flipped.cancel();
+
+      // A follower's reservation, confirmed while SQLite is the pinned
+      // source. The advertised bounds are the promise the rollback must keep.
+      streamer.trackBackupWatermark('06');
+      const reservation = await streamer.startSnapshotReservation('follower');
+      const [, status] = await drainSnapshotMessages(reservation).dequeue();
+      const promisedMin = (status as {minWatermark: string}).minWatermark;
+      expect(promisedMin).toBe('06');
+
+      // The rollback deploy: same log and stores, no serve option, so no
+      // router is constructed and routing reverts to PG.
+      readerRead.mockClear();
+      await restartWithInlineChangeLogWriter(
+        logFile,
+        {barrierPollIntervalMs: 10},
+        undefined,
+        's3://foo/bar',
+      );
+
+      changes.push(['begin', messages.begin(), {commitWatermark: '08'}]);
+      changes.push(['data', messages.insert('foo', {id: 'post-rollback'})]);
+      changes.push(['commit', messages.commit(), {watermark: '08'}]);
+      await expectAcks('08');
+
+      // The pre-rollback subscriber reconnects where it left off and gets
+      // range from PG -- not too-old, not a reset.
+      const reconnected = await streamer.subscribe({
+        protocolVersion: PROTOCOL_VERSION,
+        taskID: 'flipped-task',
+        id: 'flipped',
+        mode: 'serving',
+        watermark: '06',
+        replicaVersion: REPLICA_VERSION,
+        initial: true,
+        logsChangeStream: false,
+      });
+      const reconnectedOut = drainToQueue(reconnected);
+      expect(await nextChange(reconnectedOut)).toMatchObject({tag: 'status'});
+      expect(await nextChange(reconnectedOut)).toMatchObject({tag: 'begin'});
+      expect(await nextChange(reconnectedOut)).toMatchObject({
+        tag: 'insert',
+        new: {id: 'post-rollback'},
+      });
+      expect(await nextChange(reconnectedOut)).toMatchObject({tag: 'commit'});
+      reconnected.cancel();
+
+      // The follower restores at the bounds advertised under SQLite pinning
+      // and catches up from PG.
+      const follower = await streamer.subscribe({
+        protocolVersion: PROTOCOL_VERSION,
+        taskID: 'follower',
+        id: 'follower',
+        mode: 'serving',
+        watermark: promisedMin,
+        replicaVersion: REPLICA_VERSION,
+        initial: true,
+        logsChangeStream: false,
+      });
+      const followerOut = drainToQueue(follower);
+      expect(await nextChange(followerOut)).toMatchObject({tag: 'status'});
+      expect(await nextChange(followerOut)).toMatchObject({tag: 'begin'});
+      expect(await nextChange(followerOut)).toMatchObject({
+        tag: 'insert',
+        new: {id: 'post-rollback'},
+      });
+      expect(readerRead).not.toHaveBeenCalled();
+      follower.cancel();
+    } finally {
+      readerRead.mockRestore();
+      await streamer.stop();
+      await streamerDone;
+      deleteChangeLogDB(logFile.path);
+      logFile.delete();
+    }
+  });
+
+  /**
+   * §6.6's flip-forward drill. A restart from un-flipped routing into serve
+   * mode at 100 percent, against a log that survived the restart, moves
+   * catchup to SQLite with no reset and the same committed sequence.
+   */
+  test('flip-forward drill: a restart into serve mode moves catchup to SQLite', async () => {
+    const readerRead = vi.spyOn(SQLiteChangeLogReader.prototype, 'read');
+    const logFile = new DbFile('sqlite-change-log-flip-drill');
+    // Un-flipped: the writer runs, catchup is served from PG.
+    await restartWithInlineChangeLogWriter(logFile, {
+      barrierPollIntervalMs: 10,
+    });
+
+    try {
+      changes.push(['begin', messages.begin(), {commitWatermark: '06'}]);
+      changes.push(['data', messages.insert('foo', {id: 'pre-flip'})]);
+      changes.push(['commit', messages.commit(), {watermark: '06'}]);
+      await expectAcks('06');
+
+      const before = await subscribeServing('pre-flip');
+      const beforeOut = drainToQueue(before);
+      expect(await nextChange(beforeOut)).toMatchObject({tag: 'status'});
+      expect(await nextChange(beforeOut)).toMatchObject({tag: 'begin'});
+      expect(await nextChange(beforeOut)).toMatchObject({
+        tag: 'insert',
+        new: {id: 'pre-flip'},
+      });
+      expect(await nextChange(beforeOut)).toMatchObject({tag: 'commit'});
+      expect(readerRead).not.toHaveBeenCalled();
+      before.cancel();
+
+      // The flip deploy. The log's head equals the resume watermark, so
+      // reconciliation keeps it -- the flip serves from the same log the
+      // un-flipped process wrote, with no reseed and no warm-up hole.
+      await restartWithInlineChangeLogWriter(
+        logFile,
+        {barrierPollIntervalMs: 10},
+        undefined,
+        undefined,
+        undefined,
+        {readPercent: 100, retentionMs: 0},
+      );
+
+      changes.push(['begin', messages.begin(), {commitWatermark: '08'}]);
+      changes.push(['data', messages.insert('foo', {id: 'post-flip'})]);
+      changes.push(['commit', messages.commit(), {watermark: '08'}]);
+      await expectAcks('08');
+
+      // A subscriber reconnecting across the flip is served the same
+      // committed sequence, now from SQLite.
+      const after = await streamer.subscribe({
+        protocolVersion: PROTOCOL_VERSION,
+        taskID: 'pre-flip-task',
+        id: 'pre-flip',
+        mode: 'serving',
+        watermark: '06',
+        replicaVersion: REPLICA_VERSION,
+        initial: true,
+        logsChangeStream: false,
+      });
+      const afterOut = drainToQueue(after);
+      expect(await nextChange(afterOut)).toMatchObject({tag: 'status'});
+      expect(await nextChange(afterOut)).toMatchObject({tag: 'begin'});
+      expect(await nextChange(afterOut)).toMatchObject({
+        tag: 'insert',
+        new: {id: 'post-flip'},
+      });
+      expect(await nextChange(afterOut)).toMatchObject({tag: 'commit'});
+      expect(readerRead).toHaveBeenCalled();
+      after.cancel();
+    } finally {
+      readerRead.mockRestore();
+      await streamer.stop();
+      await streamerDone;
+      deleteChangeLogDB(logFile.path);
+      logFile.delete();
+    }
+  });
+
   test('SQLite cleanup continues independently after PG reaches the floor', async () => {
     const logFile = new DbFile('sqlite-change-log-independent-purge');
     await restartWithInlineChangeLogWriter(logFile, undefined, {
