@@ -3,7 +3,10 @@ import type {LogContext} from '@rocicorp/logger';
 import {SqliteError} from '@rocicorp/zero-sqlite3';
 import {Database} from '../../../zqlite/src/db.ts';
 
-const SQLITE_CORRUPTION_CODES = new Set(['SQLITE_CORRUPT', 'SQLITE_NOTADB']);
+// Matches primary corruption codes and extended variants (e.g.
+// SQLITE_CORRUPT_INDEX, SQLITE_CORRUPT_VTAB, SQLITE_CORRUPT_SEQUENCE), which
+// the driver reports because it enables sqlite3_extended_result_codes().
+const SQLITE_CORRUPTION_CODE = /^SQLITE_(CORRUPT(_|$)|NOTADB$)/;
 const SQLITE_CORRUPTION_MESSAGE =
   /database disk image is malformed|file is not a database|database is malformed|malformed database/i;
 const SQLITE_FILE_SUFFIXES = ['', '-wal', '-wal2', '-shm', '-journal'] as const;
@@ -127,7 +130,7 @@ function getSQLiteCorruptionCode(e: unknown): string | undefined {
     seen.add(current);
 
     const code = getErrorCode(current);
-    if (code !== undefined && SQLITE_CORRUPTION_CODES.has(code)) {
+    if (code !== undefined && SQLITE_CORRUPTION_CODE.test(code)) {
       return code;
     }
 
