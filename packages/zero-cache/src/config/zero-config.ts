@@ -476,6 +476,15 @@ export const zeroOptions = {
     ],
   },
 
+  sqliteCorruptionChecks: {
+    type: v.boolean().default(false),
+    desc: [
+      `Run SQLite quick_check and integrity_check when corruption is detected.`,
+      `These checks scan the replica and can take a long time on large databases.`,
+    ],
+    hidden: true,
+  },
+
   enableQueryPlanner: {
     type: v.boolean().default(true),
     desc: [
