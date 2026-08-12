@@ -14,6 +14,7 @@ import type {PostgresDB} from '../../types/pg.ts';
 import type {ShardID} from '../../types/shards.ts';
 import type {Source} from '../../types/streams.ts';
 import {Subscription} from '../../types/subscription.ts';
+import {orTimeout} from '../../types/timeout.ts';
 import type {
   ChangeSource,
   ChangeStream,
@@ -412,6 +413,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
   #pgPurgeRunning = false;
   #sqlitePurgeScheduled = false;
   #sqlitePurgeRunning = false;
+  #fatalSourceError: Error | undefined;
   #stream: ChangeStream | undefined;
   #sqliteCatchup: SQLiteChangeLogCatchup | undefined;
   #changeLogUnavailableSince: number | undefined;
@@ -596,6 +598,20 @@ class ChangeStreamerImpl implements ChangeStreamerService {
           lastWatermark,
           backfillRequests,
         );
+        const waitForFlowControl = async (wait: Promise<void>) => {
+          if (!stream.sourceTerminated) {
+            await wait;
+            return;
+          }
+          const sourceError = await Promise.race([
+            wait.then(() => undefined),
+            stream.sourceTerminated,
+          ]);
+          if (sourceError) {
+            this.#fatalSourceError = sourceError;
+            throw sourceError;
+          }
+        };
         this.#storer.run().catch(e => stream.changes.cancel(e));
 
         this.#stream = stream;
@@ -693,7 +709,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
             // control promise. Record the boundary before awaiting that promise
             // so registrations during the wait observe the forwarded state.
             this.#recordForwardedTransactionBoundary(type, entry[0]);
-            await forwarded;
+            await waitForFlowControl(forwarded);
             unflushedBytes = 0;
           }
 
@@ -704,7 +720,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
           // Allow the storer to exert back pressure.
           const readyForMore = this.#storer.readyForMore();
           if (readyForMore) {
-            await readyForMore;
+            await waitForFlowControl(readyForMore);
           }
         }
       } catch (e) {
@@ -712,6 +728,12 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       } finally {
         this.#stream?.changes.cancel();
         this.#stream = undefined;
+      }
+
+      if (this.#fatalSourceError && err === this.#fatalSourceError) {
+        // A blocked flow-control wait may not drain; restart from durable state.
+        this.#forwarder.stopProgressMonitor();
+        throw err;
       }
 
       // When the change stream is interrupted, abort any pending transaction.
@@ -1047,6 +1069,15 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     this.#purgeScheduler?.stop();
     this.#sqliteCatchup?.close();
     this.#changeLogWriter?.close();
+    if (this.#fatalSourceError) {
+      // Cleanup is best-effort before intentional process replacement. A
+      // wedged Storer may be unable to stop without the process exiting.
+      await orTimeout(
+        Promise.allSettled([this.#storer.stop(), this.#source.stop()]),
+        100,
+      );
+      return;
+    }
     await this.#storer.stop();
     await this.#source.stop();
   }
