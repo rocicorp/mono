@@ -69,10 +69,13 @@ export default async function runWorker(
   startOtelAuto(createLogContext(config, workerName, 0, false), workerName, 0);
   lc = createLogContext(config, workerName);
   const unregisterInitialCorruptionDiagnosticTarget =
-    registerSQLiteCorruptionDiagnosticTarget({
-      debugName: `${workerName} replica`,
-      dbPath: config.replica.file,
-    });
+    registerSQLiteCorruptionDiagnosticTarget(
+      {
+        debugName: `${workerName} replica`,
+        dbPath: config.replica.file,
+      },
+      config.sqliteCorruptionChecks,
+    );
   initEventSink(lc, config);
 
   if (
@@ -88,10 +91,13 @@ export default async function runWorker(
     config.replica,
   );
   unregisterInitialCorruptionDiagnosticTarget();
-  registerSQLiteCorruptionDiagnosticTarget({
-    debugName: `${workerName} replica`,
-    dbPath,
-  });
+  registerSQLiteCorruptionDiagnosticTarget(
+    {
+      debugName: `${workerName} replica`,
+      dbPath,
+    },
+    config.sqliteCorruptionChecks,
+  );
 
   // A file left behind by a run with the writer enabled would otherwise hold
   // local disk indefinitely. See `replicatorDeletesStaleChangeLog` for why
