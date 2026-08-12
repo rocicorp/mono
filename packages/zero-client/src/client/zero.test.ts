@@ -1803,6 +1803,64 @@ test('pusher does not skip mutations when the pending list is reordered', async 
   ).toEqual(['c2:3']);
 });
 
+test('pusher sends the pending mutations of a closed client', async () => {
+  // Mutation recovery skips our own client group, so when another tab in the
+  // group goes away its pending mutations are only ever sent by a surviving
+  // tab, as part of that tab's ordinary push of the client group's chain. Those
+  // mutations sit *before* our own unpersisted ones in the chain, so they must
+  // not be filtered out by what we have already sent for ourselves.
+  const z = zeroForTest();
+  await z.triggerConnected();
+
+  const clientGroupID = await z.clientGroupID;
+
+  const mut = (clientID: string, id: number): Mutation => ({
+    type: MutationType.Custom,
+    clientID,
+    id,
+    name: 'mut1',
+    args: [{}],
+    timestamp: id,
+  });
+
+  const push = async (mutations: Mutation[]) => {
+    const mockSocket = await z.socket;
+    mockSocket.messages.length = 0;
+    await z.pusher(
+      {
+        profileID: 'p1',
+        clientGroupID,
+        pushVersion: 1,
+        schemaVersion: '1',
+        mutations,
+      },
+      'test-request-id',
+    );
+    return mockSocket.messages.map(raw => {
+      const [, {mutations}] = valita.parse(JSON.parse(raw), pushMessageSchema);
+      return `${mutations[0].clientID}:${mutations[0].id}`;
+    });
+  };
+
+  expect(await push([mut('a', 1), mut('b', 1)])).toEqual(['a:1', 'b:1']);
+
+  // Tab a closed with a:2 and a:3 persisted but unsent. We are the only client
+  // left that can push them.
+  expect(
+    await push([mut('a', 1), mut('a', 2), mut('a', 3), mut('b', 1)]),
+  ).toEqual(['a:2', 'a:3']);
+
+  // After a reconnect the server has forgotten what it saw on the old socket,
+  // so everything still pending is sent again.
+  await z.triggerClose();
+  await z.waitForConnectionStatus(ConnectionStatus.Connecting);
+  await vi.advanceTimersByTimeAsync(RUN_LOOP_INTERVAL_MS);
+  await z.triggerConnected();
+  expect(
+    await push([mut('a', 1), mut('a', 2), mut('a', 3), mut('b', 1)]),
+  ).toEqual(['a:1', 'a:2', 'a:3', 'b:1']);
+});
+
 test('pusher maps CRUD mutation names', async () => {
   const t = async (
     pushes: {
