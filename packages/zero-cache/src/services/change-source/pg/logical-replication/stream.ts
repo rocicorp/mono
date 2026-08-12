@@ -112,6 +112,7 @@ export async function subscribe(
   // thresholds — and why the whole timer is disabled when wal_sender_timeout
   // is 0.
   let lastReceivedTime = Date.now();
+  let locallyBackpressured = false;
 
   const livenessTimer = livenessEnabled
     ? setInterval(() => {
@@ -121,7 +122,14 @@ export async function subscribe(
           lc.debug?.(`sent manual keepalive`);
         }
         const sinceLastReceived = now - lastReceivedTime;
-        if (sinceLastReceived > inboundTimeoutMs && !readable.destroyed) {
+        if (
+          shouldDestroyForInboundTimeout(
+            sinceLastReceived,
+            inboundTimeoutMs,
+            locallyBackpressured,
+          ) &&
+          !readable.destroyed
+        ) {
           lc.warn?.(
             `no message received from ${db.options.host} in ${sinceLastReceived}ms ` +
               `(> 2x wal_sender_timeout ${walSenderTimeoutMs}ms). Destroying ` +
@@ -179,6 +187,12 @@ export async function subscribe(
     // that the change-source loop can check the queue to determine if more
     // messages are immediately available.
     bufferMessages: 5,
+    onBackpressureChange: backpressured => {
+      locallyBackpressured = backpressured;
+      if (!backpressured) {
+        lastReceivedTime = Date.now();
+      }
+    },
   });
 
   return {
@@ -186,6 +200,14 @@ export async function subscribe(
     acks: {push: sendAck},
     sourceTerminated: sourceTerminated.promise,
   };
+}
+
+export function shouldDestroyForInboundTimeout(
+  sinceLastReceived: number,
+  inboundTimeoutMs: number,
+  locallyBackpressured: boolean,
+) {
+  return !locallyBackpressured && sinceLastReceived > inboundTimeoutMs;
 }
 
 /**

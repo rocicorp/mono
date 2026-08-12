@@ -150,9 +150,16 @@ type PipeOptions<T> = {
   sink: Subscription<T>;
   parse: (buffer: Buffer) => T | null;
   bufferMessages?: number;
+  onBackpressureChange?: ((backpressured: boolean) => void) | undefined;
 };
 
-export function pipe<T>({source, sink, parse, bufferMessages}: PipeOptions<T>) {
+export function pipe<T>({
+  source,
+  sink,
+  parse,
+  bufferMessages,
+  onBackpressureChange,
+}: PipeOptions<T>) {
   bufferMessages ??= 0;
   assert(bufferMessages >= 0, 'bufferMessages must be non-negative');
   const pending: Promise<unknown>[] = [];
@@ -186,9 +193,16 @@ export function pipe<T>({source, sink, parse, bufferMessages}: PipeOptions<T>) {
           callback();
         } else {
           // wait for the oldest result in the pending queue
+          onBackpressureChange?.(true);
           pending[0].then(
-            () => callback(),
-            err => callback(ensureError(err)),
+            () => {
+              onBackpressureChange?.(false);
+              callback();
+            },
+            err => {
+              onBackpressureChange?.(false);
+              callback(ensureError(err));
+            },
           );
         }
       },

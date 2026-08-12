@@ -1,4 +1,4 @@
-import {getDefaultHighWaterMark} from 'stream';
+import {getDefaultHighWaterMark, Readable} from 'stream';
 import websocket from '@fastify/websocket';
 import {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
@@ -20,6 +20,7 @@ import {
   streamInStringified,
   streamOut,
   streamOutStringified,
+  pipe,
   type Sink,
   type Source,
 } from './streams.ts';
@@ -32,6 +33,25 @@ const messageSchema = v.object({
 });
 
 type Message = v.Infer<typeof messageSchema>;
+
+test('pipe reports backpressure while waiting for consumption', async () => {
+  const sink = Subscription.create<string>();
+  const changes: boolean[] = [];
+  pipe({
+    source: Readable.from([Buffer.from('one'), Buffer.from('two')]),
+    sink,
+    parse: chunk => chunk.toString(),
+    onBackpressureChange: backpressured => changes.push(backpressured),
+  });
+
+  await vi.waitFor(() => expect(changes).toEqual([true]));
+
+  const iterator = sink[Symbol.asyncIterator]();
+  expect(await iterator.next()).toEqual({value: 'one'});
+  expect(await iterator.next()).toEqual({value: 'two'});
+  expect(await iterator.next()).toEqual({done: true});
+  expect(changes).toEqual([true, false, true, false]);
+});
 
 describe('streams with flow control', () => {
   let logSink: TestLogSink;

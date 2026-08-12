@@ -1,5 +1,13 @@
 import {describe, expect, test} from 'vitest';
-import {computeLivenessTimings} from './stream.ts';
+import {
+  computeLivenessTimings,
+  shouldDestroyForInboundTimeout,
+} from './stream.ts';
+
+test('inbound timeout is suppressed during local backpressure', () => {
+  expect(shouldDestroyForInboundTimeout(120_001, 120_000, false)).toBe(true);
+  expect(shouldDestroyForInboundTimeout(120_001, 120_000, true)).toBe(false);
+});
 
 describe('computeLivenessTimings', () => {
   // Regression test for https://github.com/rocicorp/mono/pull/6047, which
