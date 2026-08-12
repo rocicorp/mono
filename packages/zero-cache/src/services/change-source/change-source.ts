@@ -8,9 +8,6 @@ import type {
 export type ChangeStream = {
   changes: Source<ChangeStreamMessage>;
 
-  /** Resolves if the upstream source fails independently of change consumption. */
-  sourceTerminated?: Promise<Error>;
-
   /**
    * A Sink to push the {@link StatusMessage}s that reflect Commits
    * that have been successfully stored by the {@link Storer}, or

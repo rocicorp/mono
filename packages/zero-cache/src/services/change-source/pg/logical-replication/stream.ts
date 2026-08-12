@@ -4,7 +4,6 @@ import {
   PG_OBJECT_NOT_IN_PREREQUISITE_STATE,
 } from '@drdgvhbh/postgres-error-codes';
 import type {LogContext} from '@rocicorp/logger';
-import {resolver} from '@rocicorp/resolver';
 import {defu} from 'defu';
 import postgres, {type Options, type PostgresType} from 'postgres';
 import {sleep} from '../../../../../../shared/src/sleep.ts';
@@ -43,7 +42,6 @@ export async function subscribe(
 ): Promise<{
   messages: SourceWithPendingQueue<StreamMessage>;
   acks: Sink<bigint>;
-  sourceTerminated: Promise<Error>;
 }> {
   const session = postgres(
     defu(
@@ -137,7 +135,6 @@ export async function subscribe(
     : undefined;
 
   let destroyed = false;
-  const sourceTerminated = resolver<Error>();
   const typeParsers = await getTypeParsers(db, {returnJsonAsString: true});
   const parser = new PgoutputParser(typeParsers);
   const messages = Subscription.create<StreamMessage>({
@@ -149,24 +146,20 @@ export async function subscribe(
     },
   });
 
-  readable.once('close', () => {
-    if (!destroyed) {
-      const error = new Error(
-        `replication stream closed by ${db.options.host}`,
-      );
-      sourceTerminated.resolve(error);
-      lc.warn?.(error.message);
-    }
-  });
-  readable.once('error', e => {
-    if (!destroyed) {
-      sourceTerminated.resolve(e);
-    }
-    // Don't log the shutdown signal. This is the expected way for upstream
-    // to close the connection (and will be logged downstream).
-    (e instanceof postgres.PostgresError && e.code === PG_ADMIN_SHUTDOWN) ||
-      lc.warn?.(`error from ${db.options.host}`, e);
-  });
+  readable.once(
+    'close',
+    () =>
+      // Only log a warning if the stream was not manually closed.
+      destroyed || lc.warn?.(`replication stream closed by ${db.options.host}`),
+  );
+  readable.once(
+    'error',
+    e =>
+      // Don't log the shutdown signal. This is the expected way for upstream
+      // to close the connection (and will be logged downstream).
+      (e instanceof postgres.PostgresError && e.code === PG_ADMIN_SHUTDOWN) ||
+      lc.warn?.(`error from ${db.options.host}`, e),
+  );
 
   pipe({
     source: readable,
@@ -184,7 +177,6 @@ export async function subscribe(
   return {
     messages,
     acks: {push: sendAck},
-    sourceTerminated: sourceTerminated.promise,
   };
 }
 
