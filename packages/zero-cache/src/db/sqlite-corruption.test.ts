@@ -35,6 +35,30 @@ describe('sqlite-corruption', () => {
     expect(isSQLiteCorruption(new Error('SQLITE_BUSY'))).toBe(false);
   });
 
+  test('detects extended corruption codes regardless of message', () => {
+    for (const code of [
+      'SQLITE_CORRUPT_INDEX',
+      'SQLITE_CORRUPT_VTAB',
+      'SQLITE_CORRUPT_SEQUENCE',
+    ]) {
+      expect(
+        isSQLiteCorruption(
+          Object.assign(new Error('vtab-specific message'), {code}),
+        ),
+      ).toBe(true);
+    }
+    expect(
+      isSQLiteCorruption(
+        Object.assign(new Error('unrelated'), {code: 'SQLITE_CORRUPTED_NOT'}),
+      ),
+    ).toBe(false);
+    expect(
+      isSQLiteCorruption(
+        Object.assign(new Error('unrelated'), {code: 'SQLITE_NOTADB_X'}),
+      ),
+    ).toBe(false);
+  });
+
   test('logs in-place diagnostics without row data', () => {
     const dir = mkdtempSync(join(tmpdir(), 'sqlite-corruption-test-'));
     const dbPath = join(dir, 'replica.db');
