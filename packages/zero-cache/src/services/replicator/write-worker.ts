@@ -53,8 +53,12 @@ function createAPI(): API {
       return;
     }
     logSQLiteCorruptionDiagnostics(lc, 'write-worker', replicaDbPath, err);
-    lc.warn?.(`deleting corrupted db at ${replicaDbPath}`);
-    deleteLiteDB(replicaDbPath);
+    try {
+      lc.warn?.(`deleting corrupted db at ${replicaDbPath}`);
+      deleteLiteDB(replicaDbPath);
+    } catch (e) {
+      lc.warn?.(`error deleting corrupted db at ${replicaDbPath}`, e);
+    }
   }
 
   function createProcessor() {
