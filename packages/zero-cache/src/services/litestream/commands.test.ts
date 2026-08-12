@@ -273,6 +273,30 @@ describe('litestream/commands restoreReplica', () => {
     );
   });
 
+  test('includes captured output when restore fails', async () => {
+    const config = configWithFakeLitestream(
+      `if [ "$1" = "restore" ]; then\n` +
+        `  echo "restore stdout"\n` +
+        `  echo "restore stderr" >&2\n` +
+        `  exit 1\n` +
+        `fi\n` +
+        `exit 1`,
+    );
+
+    const error = await restoreReplica(lc, config, {
+      replicaVersion: '01',
+      minWatermark: '01',
+    }).then(
+      () => undefined,
+      (e: unknown) => e,
+    );
+
+    expect(error).toBeInstanceOf(Error);
+    expect(String(error)).toContain('litestream exited with code 1');
+    expect(String(error)).toContain('restore stdout');
+    expect(String(error)).toContain('restore stderr');
+  });
+
   test('deletes an incompatible restored replica', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'litestream-restore-test-'));
     const source = join(dir, 'source.db');
