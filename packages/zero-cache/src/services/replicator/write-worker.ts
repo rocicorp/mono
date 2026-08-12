@@ -3,6 +3,7 @@ import type {LogContext} from '@rocicorp/logger';
 import type {LogConfig} from '../../../../shared/src/logging.ts';
 import {must} from '../../../../shared/src/must.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
+import {deleteLiteDB} from '../../db/delete-lite-db.ts';
 import {
   isSQLiteCorruption,
   logSQLiteCorruptionDiagnostics,
@@ -47,16 +48,22 @@ function createAPI(): API {
     unregisterCorruptionDiagnosticTargets = [];
   }
 
-  function logCorruptionDiagnostics(err: unknown) {
+  function handleCorruptedDb(err: unknown) {
     if (!lc || !replicaDbPath || !isSQLiteCorruption(err)) {
       return;
     }
     logSQLiteCorruptionDiagnostics(lc, 'write-worker', replicaDbPath, err);
+    try {
+      lc.warn?.(`deleting corrupted db at ${replicaDbPath}`);
+      deleteLiteDB(replicaDbPath);
+    } catch (e) {
+      lc.warn?.(`error deleting corrupted db at ${replicaDbPath}`, e);
+    }
   }
 
   function createProcessor() {
     processor = new ChangeProcessor(must(runner), must(mode), (_lc, err) => {
-      logCorruptionDiagnostics(err);
+      handleCorruptedDb(err);
       port.postMessage({
         writeError: serializeError(err),
       } satisfies WriteError);
@@ -86,7 +93,7 @@ function createAPI(): API {
         mode = cpMode;
         createProcessor();
       } catch (e) {
-        logCorruptionDiagnostics(e);
+        handleCorruptedDb(e);
         throw e;
       }
     },
@@ -95,7 +102,7 @@ function createAPI(): API {
       try {
         return getSubscriptionState(must(runner));
       } catch (e) {
-        logCorruptionDiagnostics(e);
+        handleCorruptedDb(e);
         throw e;
       }
     },
@@ -104,7 +111,7 @@ function createAPI(): API {
       try {
         return must(processor).processMessage(must(lc), downstream);
       } catch (e) {
-        logCorruptionDiagnostics(e);
+        handleCorruptedDb(e);
         throw e;
       }
     },
