@@ -63,6 +63,7 @@ export default async function runWorker(
     replica,
     initialSync,
     keepaliveTimeoutMs,
+    sqliteCorruptionChecks,
   } = config;
 
   startOtelAuto(
@@ -71,10 +72,13 @@ export default async function runWorker(
     0,
   );
   lc = createLogContext(config, 'change-streamer');
-  registerSQLiteCorruptionDiagnosticTarget({
-    debugName: 'change-streamer replica',
-    dbPath: replica.file,
-  });
+  registerSQLiteCorruptionDiagnosticTarget(
+    {
+      debugName: 'change-streamer replica',
+      dbPath: replica.file,
+    },
+    sqliteCorruptionChecks,
+  );
   initEventSink(lc, config);
 
   // Kick off DB connection warmup in the background.

@@ -94,6 +94,7 @@ describe('sqlite-corruption', () => {
       Object.assign(new Error('database disk image is malformed'), {
         code: 'SQLITE_CORRUPT',
       }),
+      true,
     );
 
     const serializedLogs = JSON.stringify(sink.messages);
@@ -103,6 +104,24 @@ describe('sqlite-corruption', () => {
     expect(serializedLogs).toContain('"status":"ok"');
     expect(serializedLogs).toContain('"watermark":"01"');
     expect(serializedLogs).not.toContain('do-not-log');
+  });
+
+  test('skips full checks by default', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'sqlite-corruption-test-'));
+    const dbPath = join(dir, 'replica.db');
+    new Database(createSilentLogContext(), dbPath).close();
+    const sink = new TestLogSink();
+
+    logSQLiteCorruptionDiagnostics(
+      new LogContext('debug', undefined, sink),
+      'test-replica',
+      dbPath,
+      new Error('database disk image is malformed'),
+    );
+
+    const serializedLogs = JSON.stringify(sink.messages);
+    expect(serializedLogs).not.toContain('quick-check');
+    expect(serializedLogs).not.toContain('integrity-check');
   });
 
   test('logs file stats when readonly open fails', () => {
