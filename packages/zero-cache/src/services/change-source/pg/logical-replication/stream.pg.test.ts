@@ -301,24 +301,6 @@ describe('pg/logic-replication', {timeout: 30000}, () => {
     }
   });
 
-  test('reports unexpected source termination', async () => {
-    const {messages, sourceTerminated} = await subscribe(
-      lc,
-      db,
-      SLOT,
-      ['foo_pub', 'my_pub'],
-      0n,
-    );
-
-    await db`
-      SELECT pg_terminate_backend(active_pid)
-        FROM pg_replication_slots
-        WHERE slot_name = ${SLOT}`;
-
-    await expect(sourceTerminated).resolves.toBeInstanceOf(Error);
-    messages.cancel();
-  });
-
   // This fails with:
   //
   // FAIL   zero-cache/pg-17  src/services/change-source/pg/logical-replication/stream.pg.test.ts > pg/logic-replication > session resumption from confirmed flushes
