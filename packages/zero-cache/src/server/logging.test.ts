@@ -20,10 +20,13 @@ describe('server/logging', () => {
     const dbPath = createSQLiteDB();
     const sink = new TestLogSink();
     const lc = new LogContext('debug', undefined, sink);
-    const unregister = registerSQLiteCorruptionDiagnosticTarget({
-      debugName: 'test-replica',
-      dbPath,
-    });
+    const unregister = registerSQLiteCorruptionDiagnosticTarget(
+      {
+        debugName: 'test-replica',
+        dbPath,
+      },
+      true,
+    );
 
     try {
       await logUncaughtException(
