@@ -1183,7 +1183,6 @@ describe('change-streamer/service', () => {
       ReplicationStatusPublisher.forTesting(),
       replicaConfig,
       null,
-      null,
       true,
       {
         ...opts,
