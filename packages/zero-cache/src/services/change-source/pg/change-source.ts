@@ -356,7 +356,7 @@ class PostgresChangeSource implements ChangeSource {
     backfillRequests: BackfillRequest[],
   ): Promise<ChangeStream> {
     const clientStart = majorVersionFromString(clientWatermark) + 1n;
-    const {messages, acks} = await subscribe(
+    const {messages, acks, sourceTerminated} = await subscribe(
       this.#lc,
       this.#db,
       slot,
@@ -496,6 +496,7 @@ class PostgresChangeSource implements ChangeSource {
     return {
       changes: changes.asSource(),
       acks: {push: status => acker.ack(status[2].watermark)},
+      sourceTerminated: sourceTerminated.then(translateError),
     };
   }
 
