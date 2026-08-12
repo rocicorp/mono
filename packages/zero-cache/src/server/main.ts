@@ -55,10 +55,13 @@ export default async function runWorker(
     0,
   );
   lc = createLogContext(config, 'dispatcher');
-  registerSQLiteCorruptionDiagnosticTarget({
-    debugName: 'dispatcher replica',
-    dbPath: config.replica.file,
-  });
+  registerSQLiteCorruptionDiagnosticTarget(
+    {
+      debugName: 'dispatcher replica',
+      dbPath: config.replica.file,
+    },
+    config.sqliteCorruptionChecks,
+  );
   initEventSink(lc, config);
 
   const processes = new ProcessManager(lc, parent);

@@ -80,6 +80,7 @@ export default async function runWorker(
     replica,
     initialSync,
     keepaliveTimeoutMs,
+    sqliteCorruptionChecks,
   } = config;
 
   startOtelAuto(
@@ -88,10 +89,13 @@ export default async function runWorker(
     0,
   );
   lc = createLogContext(config, 'change-streamer');
-  registerSQLiteCorruptionDiagnosticTarget({
-    debugName: 'change-streamer replica',
-    dbPath: replica.file,
-  });
+  registerSQLiteCorruptionDiagnosticTarget(
+    {
+      debugName: 'change-streamer replica',
+      dbPath: replica.file,
+    },
+    sqliteCorruptionChecks,
+  );
   initEventSink(lc, config);
 
   // Kick off DB connection warmup in the background.
@@ -128,10 +132,13 @@ export default async function runWorker(
     sqliteChangeLogMode === 'compare' || sqliteChangeLogMode === 'serve';
   if (sqliteChangeLogEnabled) {
     const changeLogFile = changeLogFileName(replica.file);
-    registerSQLiteCorruptionDiagnosticTarget({
-      debugName: 'change-streamer change-log',
-      dbPath: changeLogFile,
-    });
+    registerSQLiteCorruptionDiagnosticTarget(
+      {
+        debugName: 'change-streamer change-log',
+        dbPath: changeLogFile,
+      },
+      sqliteCorruptionChecks,
+    );
     // The log's bytes are accounted for in the process that writes them. This
     // is local disk only — the log is excluded from the litestream backup — and
     // it is a whole-database total, because a table that left the replica left
