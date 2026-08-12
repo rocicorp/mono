@@ -269,8 +269,6 @@ export const CONNECT_TIMEOUT_MS = 10_000;
 
 const CHECK_CONNECTIVITY_ON_ERROR_FREQUENCY = 6;
 
-const NULL_LAST_MUTATION_ID_SENT = {clientID: '', id: -1} as const;
-
 const DEFAULT_QUERY_CHANGE_THROTTLE_MS = 10;
 
 export const LOGGED_OUT_STORAGE_USER_ID = '__anonymous__';
@@ -383,8 +381,25 @@ export class Zero<
    */
   #deletedClients: DeleteClientsBody | undefined;
 
-  #lastMutationIDSent: {clientID: string; id: number} =
-    NULL_LAST_MUTATION_ID_SENT;
+  /**
+   * The highest mutation ID we have sent over the current connection, per
+   * client.
+   *
+   * The pending mutations we push come from the client group's local commit
+   * chain, so they interleave mutations from every client (tab) in the group,
+   * and the *cross-client* order of that chain is not stable between pushes:
+   * `persist` rebases this client's unpersisted mutations onto the current
+   * perdag head, and `refresh` then rebuilds memdag as
+   * `perdagChain ++ ownUnpersistedMutations`. So another client's mutation can
+   * move ahead of a mutation we have already sent. Tracking what was sent per
+   * client (rather than a single position in the chain) keeps the decision
+   * independent of that ordering, so we never skip a mutation and never send a
+   * gap in a client's mutation ID sequence.
+   *
+   * Cleared whenever the connection is (re)established or torn down, since the
+   * server forgets what it has seen on a socket.
+   */
+  readonly #lastMutationIDsSent: Map<ClientID, number> = new Map();
 
   #onPong: () => void = () => undefined;
 
@@ -1496,7 +1511,7 @@ export class Zero<
     // We really don't want to disconnect and reconnect a rate limited user as
     // it'll use more resources on the server
     if (kind === ErrorKind.MutationRateLimited) {
-      this.#lastMutationIDSent = NULL_LAST_MUTATION_ID_SENT;
+      this.#lastMutationIDsSent.clear();
       lc.error?.(kind, 'Mutation rate limited', {message});
       return;
     }
@@ -1590,7 +1605,7 @@ export class Zero<
       connectedCount: this.#connectedCount,
       proceedingConnectErrorCount,
     });
-    this.#lastMutationIDSent = NULL_LAST_MUTATION_ID_SENT;
+    this.#lastMutationIDsSent.clear();
 
     lc.debug?.('Resolving connect resolver');
     must(this.#socket);
@@ -1850,7 +1865,7 @@ export class Zero<
     this.#socket?.removeEventListener('close', this.#onClose);
     this.#socket?.close(closeCode);
     this.#socket = undefined;
-    this.#lastMutationIDSent = NULL_LAST_MUTATION_ID_SENT;
+    this.#lastMutationIDsSent.clear();
     this.#pokeHandler.handleDisconnect();
     this.#queryManager.clearGotQueriesAuthoritative();
 
@@ -1955,23 +1970,22 @@ export class Zero<
 
     const isMutationRecoveryPush =
       req.clientGroupID !== (await this.clientGroupID);
-    const start = isMutationRecoveryPush
-      ? 0
-      : req.mutations.findIndex(
-          m =>
-            m.clientID === this.#lastMutationIDSent.clientID &&
-            m.id === this.#lastMutationIDSent.id,
-        ) + 1;
+    // A recovery push is for a different client group, so nothing has been sent
+    // for it on this connection.
+    const toSend = isMutationRecoveryPush
+      ? req.mutations
+      : req.mutations.filter(
+          m => m.id > (this.#lastMutationIDsSent.get(m.clientID) ?? 0),
+        );
     lc.debug?.(
       isMutationRecoveryPush ? 'pushing for recovery' : 'pushing',
-      req.mutations.length - start,
+      toSend.length,
       'mutations of',
       req.mutations.length,
       'mutations.',
     );
     const now = Date.now();
-    for (let i = start; i < req.mutations.length; i++) {
-      const m = req.mutations[i];
+    for (const m of toSend) {
       const timestamp = now - Math.round(performance.now() - m.timestamp);
       const zeroM =
         m.name === CRUD_MUTATION_NAME
@@ -2004,7 +2018,7 @@ export class Zero<
       ];
       this.#send(msg);
       if (!isMutationRecoveryPush) {
-        this.#lastMutationIDSent = {clientID: m.clientID, id: m.id};
+        this.#lastMutationIDsSent.set(m.clientID, m.id);
       }
     }
     return {

@@ -1749,6 +1749,60 @@ test('pusher sends one mutation per push message', async () => {
   ]);
 });
 
+test('pusher does not skip mutations when the pending list is reordered', async () => {
+  // The pending list is the client group's local commit chain, so it
+  // interleaves mutations from every client (tab) in the group. `persist`
+  // rebases this client's unpersisted mutations onto the current perdag head
+  // and `refresh` then rebuilds memdag as `perdagChain ++ ownUnpersisted`, so
+  // another client's mutation can move *ahead* of a mutation we already sent.
+  // We must still send it, and we must never send a gap in a client's mutation
+  // ID sequence (the server rejects that with an out of order mutation error).
+  const z = zeroForTest();
+  await z.triggerConnected();
+
+  const mockSocket = await z.socket;
+  const clientGroupID = await z.clientGroupID;
+
+  const mut = (clientID: string, id: number): Mutation => ({
+    type: MutationType.Custom,
+    clientID,
+    id,
+    name: 'mut1',
+    args: [{}],
+    timestamp: id,
+  });
+
+  const push = async (mutations: Mutation[]) => {
+    mockSocket.messages.length = 0;
+    await z.pusher(
+      {
+        profileID: 'p1',
+        clientGroupID,
+        pushVersion: 1,
+        schemaVersion: '1',
+        mutations,
+      },
+      'test-request-id',
+    );
+    return mockSocket.messages.map(raw => {
+      const [, {mutations}] = valita.parse(JSON.parse(raw), pushMessageSchema);
+      return `${mutations[0].clientID}:${mutations[0].id}`;
+    });
+  };
+
+  expect(await push([mut('c2', 1), mut('c1', 1)])).toEqual(['c2:1', 'c1:1']);
+
+  // c2:2 lands *before* c1:1, the last mutation we sent.
+  expect(await push([mut('c2', 1), mut('c2', 2), mut('c1', 1)])).toEqual([
+    'c2:2',
+  ]);
+
+  // c2:3 must not be sent without c2:2 having been sent first.
+  expect(
+    await push([mut('c2', 1), mut('c2', 2), mut('c1', 1), mut('c2', 3)]),
+  ).toEqual(['c2:3']);
+});
+
 test('pusher maps CRUD mutation names', async () => {
   const t = async (
     pushes: {
