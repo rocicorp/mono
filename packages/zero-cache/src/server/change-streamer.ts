@@ -115,10 +115,7 @@ export default async function runWorker(
       // If the restore failed, e.g. due to a corrupt or missing backup, the
       // replication-manager recovers by re-syncing.
       const log = e instanceof BackupNotFoundException ? 'warn' : 'error';
-      lc[log]?.(
-        `error restoring backup. resyncing the replica: ${String(e)}`,
-        e,
-      );
+      lc[log]?.(`error restoring backup. resyncing the replica`, e);
 
       // The purgeLock must be released if the backup could not be restored,
       // or it will otherwise prevent the change-db update after the resync
