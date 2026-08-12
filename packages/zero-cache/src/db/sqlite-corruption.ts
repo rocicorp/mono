@@ -37,8 +37,14 @@ type DiagnosticTarget = {
   readonly dbPath: string;
 };
 
-const diagnosticTargets = new Map<number, DiagnosticTarget>();
+type RegisteredDiagnosticTarget = DiagnosticTarget & {
+  readonly corruptionChecks: SQLiteCorruptionChecks;
+};
+
+const diagnosticTargets = new Map<number, RegisteredDiagnosticTarget>();
 let nextDiagnosticTargetID = 0;
+
+export type SQLiteCorruptionChecks = boolean;
 
 export function isSQLiteCorruption(e: unknown): boolean {
   return getSQLiteCorruptionCode(e) !== undefined;
@@ -46,9 +52,10 @@ export function isSQLiteCorruption(e: unknown): boolean {
 
 export function registerSQLiteCorruptionDiagnosticTarget(
   target: DiagnosticTarget,
+  corruptionChecks: SQLiteCorruptionChecks = false,
 ): () => void {
   const id = nextDiagnosticTargetID++;
-  diagnosticTargets.set(id, target);
+  diagnosticTargets.set(id, {...target, corruptionChecks});
   return () => diagnosticTargets.delete(id);
 }
 
@@ -59,8 +66,18 @@ export function logLastChanceSQLiteCorruptionDiagnostics(
   if (!isSQLiteCorruption(cause) || diagnosticTargets.size === 0) {
     return false;
   }
-  for (const {debugName, dbPath} of diagnosticTargets.values()) {
-    logSQLiteCorruptionDiagnostics(lc, debugName, dbPath, cause);
+  for (const {
+    debugName,
+    dbPath,
+    corruptionChecks,
+  } of diagnosticTargets.values()) {
+    logSQLiteCorruptionDiagnostics(
+      lc,
+      debugName,
+      dbPath,
+      cause,
+      corruptionChecks,
+    );
   }
   return true;
 }
@@ -70,6 +87,7 @@ export function logSQLiteCorruptionDiagnostics(
   debugName: string,
   dbPath: string,
   cause: unknown,
+  corruptionChecks: SQLiteCorruptionChecks = false,
 ): void {
   const start = Date.now();
   lc.error?.('SQLite replica corruption detected', {
@@ -103,12 +121,14 @@ export function logSQLiteCorruptionDiagnostics(
     logDiagnostic(lc, debugName, 'replica-metadata', () => ({
       metadata: getReplicaMetadata(db),
     }));
-    logDiagnostic(lc, debugName, 'quick-check', () => ({
-      check: runCheck(db, 'quick_check'),
-    }));
-    logDiagnostic(lc, debugName, 'integrity-check', () => ({
-      check: runCheck(db, 'integrity_check'),
-    }));
+    if (corruptionChecks) {
+      logDiagnostic(lc, debugName, 'quick-check', () => ({
+        check: runCheck(db, 'quick_check'),
+      }));
+      logDiagnostic(lc, debugName, 'integrity-check', () => ({
+        check: runCheck(db, 'integrity_check'),
+      }));
+    }
     lc.error?.('SQLite corruption diagnostics completed', {
       debugName,
       dbPath,

@@ -92,10 +92,13 @@ export default async function runWorker(
   const {cvr, upstream, enableCrudMutations} = config;
 
   const replicaFile = replicaFileName(config.replica.file, fileMode);
-  registerSQLiteCorruptionDiagnosticTarget({
-    debugName: 'syncer replica',
-    dbPath: replicaFile,
-  });
+  registerSQLiteCorruptionDiagnosticTarget(
+    {
+      debugName: 'syncer replica',
+      dbPath: replicaFile,
+    },
+    config.sqliteCorruptionChecks,
+  );
   lc.debug?.(`running view-syncer on ${replicaFile}`);
 
   const cvrDB = await connectPgClient(lc, cvr.db, `sync-worker-${pid}-cvr`, {
