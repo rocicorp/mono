@@ -151,10 +151,9 @@ export async function tryRestore(
     // Pipe (rather than inherit) litestream's stdout/stderr so that its own
     // `"level":"ERROR"` output on a failed restore does not go straight to the
     // pod's stdout — where a log-scraper alert would page on it — before our
-    // code has decided whether the failure is retriable. The captured output is
-    // re-surfaced through `lc` below with a distinct message per attempt, so a
-    // retriable failure is routed to a non-paging warning and only a post-retry
-    // failure pages. See INC-961.
+    // code has decided how to handle the failure. The captured output is
+    // included in the thrown error so the caller can log the final outcome.
+    // See INC-961.
     const proc = spawn(
       litestream,
       [
@@ -205,7 +204,13 @@ export async function tryRestore(
         performance.now() - processStart,
         {...attrs, result: 'error'},
       );
-      throw e;
+      const output = [stdout, stderr]
+        .map(value => value.trim())
+        .filter(Boolean)
+        .join('\n');
+      throw new Error(output ? `${String(e)}\n${output}` : String(e), {
+        cause: e,
+      });
     }
     if (!existsSync(replicaFile)) {
       result = 'no_backup';

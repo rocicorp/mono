@@ -62,10 +62,7 @@ export async function restoreReplica(
     );
     result = attempt.result;
   } catch (e) {
-    lc.error?.(
-      `error restoring backup. resyncing the replica: ${String(e)}`,
-      e,
-    );
+    lc.error?.(`error restoring backup. resyncing the replica`, e);
   } finally {
     const attrs = litestreamRestoreMetricAttrs(config, 'replication_manager');
     const labels = {...attrs, result: result ?? 'error'};
