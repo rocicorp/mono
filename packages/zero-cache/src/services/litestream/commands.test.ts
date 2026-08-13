@@ -1,5 +1,11 @@
 import * as childProcess from 'node:child_process';
-import {existsSync, mkdtempSync, statSync, writeFileSync} from 'node:fs';
+import {
+  existsSync,
+  mkdtempSync,
+  readFileSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {LogContext} from '@rocicorp/logger';
@@ -295,7 +301,36 @@ describe('litestream/commands restoreReplica', () => {
     expect(String(error)).toContain('litestream exited with code 1');
     expect(String(error)).toContain('restore stdout');
     expect(String(error)).toContain('restore stderr');
-  });
+  }, 15_000);
+
+  test('retries a transient replication-manager restore failure', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'litestream-restore-test-'));
+    const source = join(dir, 'source.db');
+    const replica = join(dir, 'replica.db');
+    const attempts = join(dir, 'attempts');
+    createRestorableReplica(source, '01');
+    const config = configWithFakeLitestream(
+      `if [ "$1" = "restore" ]; then\n` +
+        `  attempts="${attempts}"\n` +
+        `  count=$(cat "$attempts" 2>/dev/null || echo 0)\n` +
+        `  count=$((count + 1))\n` +
+        `  echo "$count" > "$attempts"\n` +
+        `  if [ "$count" -eq 1 ]; then exit 1; fi\n` +
+        `  cp "${source}" "$6"\n` +
+        `  exit 0\n` +
+        `fi\n` +
+        `exit 1`,
+      replica,
+    );
+
+    await restoreReplica(lc, config, {
+      replicaVersion: '01',
+      minWatermark: '01',
+    });
+
+    expect(readFileSync(attempts, 'utf-8').trim()).toBe('2');
+    expect(existsSync(replica)).toBe(true);
+  }, 10_000);
 
   test('deletes an incompatible restored replica', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'litestream-restore-test-'));
