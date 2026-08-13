@@ -506,14 +506,8 @@ export function foldCookies(
 const backfillRequestsSchema = v.array(backfillRequestSchema);
 
 /**
- * Builds the {@link BackfillRequest}s for a stream connection from a cookie
- * set.
- *
- * Only tables with an active backfill produce requests. A table with metadata
- * but no active backfill does not produce a request. Therefore, the change log
- * stores the complete cookie set instead of only the generated requests.
- *
- * All stores use this function so they handle `metadata: null` in the same way.
+ * Returns one {@link BackfillRequest} for each table with an active backfill.
+ * Each request contains the stored table metadata, if available.
  */
 export function backfillRequestsFrom(cookies: CookieSet): BackfillRequest[] {
   const metadata = new Map(

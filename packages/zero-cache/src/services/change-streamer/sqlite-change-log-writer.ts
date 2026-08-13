@@ -226,16 +226,18 @@ export class SQLiteChangeLogWriter {
       }
       // A reseed drops and recreates the stream table, so the append statements
       // are prepared fresh against whatever the reconciliation left behind.
-      const db2 = must(this.#db, 'the SQLite change log is not open');
-      this.#writer = new ChangeLogStreamWriter(new StatementRunner(db2));
+      const reconciledDB = must(this.#db, 'the SQLite change log is not open');
+      this.#writer = new ChangeLogStreamWriter(
+        new StatementRunner(reconciledDB),
+      );
       // Read both values after reconciliation. A truncate or reseed updates the
       // head and cookies in the same transaction.
       return {
         resumeWatermark: must(
-          readChangeLogHead(db2),
+          readChangeLogHead(reconciledDB),
           'the SQLite change log has no head after reconciliation',
         ),
-        cookies: readCookies(db2),
+        cookies: readCookies(reconciledDB),
       };
     } catch (e) {
       this.#failSoft('reconciling the SQLite change log', e);

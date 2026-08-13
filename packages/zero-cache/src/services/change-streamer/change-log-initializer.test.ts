@@ -86,8 +86,8 @@ describe('change-streamer/change-log-initializer', () => {
   }
 
   /**
-   * Replaces writer reconciliation in these tests. The tests write directly to
-   * the log, so the log is already consistent.
+   * Simulates change-log reconciliation without creating a writer. These tests
+   * write directly to the log, so the log is already consistent.
    *
    * Uses the Postgres point when present. Otherwise, it uses the current log
    * head or the supplied seed.
