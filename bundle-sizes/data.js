@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784895712563,
+  "lastUpdate": 1786608059515,
   "repoUrl": "https://github.com/rocicorp/mono",
   "entries": {
     "Bundle Sizes": [
@@ -57105,6 +57105,50 @@ window.BENCHMARK_DATA = {
           "url": "https://github.com/rocicorp/mono/commit/b7aa4eee7bff90c8afba92527376d7fc228b55fa"
         },
         "date": 1784895701305,
+        "tool": "customSmallerIsBetter",
+        "benches": [
+          {
+            "name": "Size of replicache.mjs",
+            "value": 317629,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.mjs.br (Brotli compressed)",
+            "value": 57073,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs",
+            "value": 117348,
+            "unit": "bytes"
+          },
+          {
+            "name": "Size of replicache.min.mjs.br (Brotli compressed)",
+            "value": 33538,
+            "unit": "bytes"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "aaron@aaronboodman.com",
+            "name": "Aaron Boodman",
+            "username": "aboodman"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "cad1d2f3958a87f8ca9c5ee96c5068746cab7a4c",
+          "message": "fix(zero): Upgrade zero-sqlite3 to 1.1.4. (#6349)\n\nThis includes a new sqlite3 that we hope will fix some corruption issues\nwe are seeing.",
+          "timestamp": "2026-08-12T21:59:42-10:00",
+          "tree_id": "f53c4b0a833ca2b9ee9ea809fc86619e4e513c0c",
+          "url": "https://github.com/rocicorp/mono/commit/cad1d2f3958a87f8ca9c5ee96c5068746cab7a4c"
+        },
+        "date": 1786608047204,
         "tool": "customSmallerIsBetter",
         "benches": [
           {
