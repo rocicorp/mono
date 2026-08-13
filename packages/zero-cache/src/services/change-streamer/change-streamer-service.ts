@@ -455,7 +455,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
             //     arrive, instead getting them in a large batch after being
             //     idle while they were queued (causing further delays).
             const forwarded = this.#forwarder.forwardWithFlowControl(entry);
-            await forwarded;
+            await stream.changes.doneOr(forwarded);
             unflushedBytes = 0;
           }
 
@@ -466,7 +466,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
           // Allow the storer to exert back pressure.
           const readyForMore = this.#storer.readyForMore();
           if (readyForMore) {
-            await readyForMore;
+            await stream.changes.doneOr(readyForMore);
           }
         }
       } catch (e) {
@@ -630,8 +630,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
   async stop(err?: unknown) {
     this.#state.stop(this.#lc, err);
     this.#stream?.changes.cancel();
-    await this.#storer.stop();
-    await this.#source.stop();
+    await Promise.allSettled([this.#storer.stop(), this.#source.stop()]);
   }
 }
 
