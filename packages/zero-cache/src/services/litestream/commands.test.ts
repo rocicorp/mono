@@ -347,13 +347,16 @@ describe('litestream/commands restoreReplica', () => {
     const source = join(dir, 'source.db');
     const replica = join(dir, 'replica.db');
     const temporaryReplica = `${replica}.tmp`;
+    const stagedWAL = `${temporaryReplica}-deadbeef-wal`;
     createRestorableReplica(source, '01');
     writeSQLiteFamily(temporaryReplica);
+    writeFileSync(stagedWAL, 'stale WAL data');
     const {litestream} = configWithFakeLitestream(
       `if [ "$1" = "restore" ]; then\n` +
         `  for suffix in "" "-wal" "-wal2" "-shm" "-journal"; do\n` +
         `    if [ -e "$6.tmp$suffix" ]; then exit 9; fi\n` +
         `  done\n` +
+        `  if [ -e "$6.tmp-deadbeef-wal" ]; then exit 9; fi\n` +
         `  cp "${source}" "$6"\n` +
         `  exit 0\n` +
         `fi\n` +
@@ -372,17 +375,20 @@ describe('litestream/commands restoreReplica', () => {
     ).resolves.toMatchObject({restored: true, result: 'success'});
 
     expect(sqliteFamilyFiles(temporaryReplica).some(existsSync)).toBe(false);
+    expect(existsSync(stagedWAL)).toBe(false);
   });
 
   test('deletes a temporary SQLite family left by a failed restore', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'litestream-restore-test-'));
     const replica = join(dir, 'replica.db');
     const temporaryReplica = `${replica}.tmp`;
+    const stagedWAL = `${temporaryReplica}-deadbeef-wal`;
     const {litestream} = configWithFakeLitestream(
       `if [ "$1" = "restore" ]; then\n` +
         `  for suffix in "" "-wal" "-wal2" "-shm" "-journal"; do\n` +
         `    printf "temporary" > "$6.tmp$suffix"\n` +
         `  done\n` +
+        `  printf "temporary WAL" > "${stagedWAL}"\n` +
         `  exit 1\n` +
         `fi\n` +
         `exit 1`,
@@ -400,6 +406,7 @@ describe('litestream/commands restoreReplica', () => {
     ).rejects.toThrow('litestream exited with code 1');
 
     expect(sqliteFamilyFiles(temporaryReplica).some(existsSync)).toBe(false);
+    expect(existsSync(stagedWAL)).toBe(false);
   });
 
   test('temporary restore cleanup preserves the real replica family', async () => {
@@ -500,6 +507,7 @@ describe('litestream/commands restoreReplica', () => {
   test('includes captured output when restore fails', async () => {
     const {litestream, replica} = configWithFakeLitestream(
       `if [ "$1" = "restore" ]; then\n` +
+        `  mkdir "$6.tmp"\n` +
         `  echo "restore stdout"\n` +
         `  echo "restore stderr" >&2\n` +
         `  exit 1\n` +
