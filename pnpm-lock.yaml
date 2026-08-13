@@ -525,8 +525,8 @@ importers:
         specifier: '>=15'
         version: 15.2.14(react-native@0.85.3(@babel/core@7.29.0)(@types/react@19.2.15)(react@19.2.6))(react@19.2.6)
       '@rocicorp/zero-sqlite3':
-        specifier: ^1.1.2
-        version: 1.1.2
+        specifier: ^1.1.4
+        version: 1.1.4
       '@types/command-line-args':
         specifier: ^5.2.3
         version: 5.2.3
@@ -895,8 +895,8 @@ importers:
         specifier: ^1.0.2
         version: 1.0.2
       '@rocicorp/zero-sqlite3':
-        specifier: ^1.1.2
-        version: 1.1.2
+        specifier: ^1.1.4
+        version: 1.1.4
       '@standard-schema/spec':
         specifier: ^1.0.0
         version: 1.1.0
@@ -1106,8 +1106,8 @@ importers:
         specifier: ^1.0.2
         version: 1.0.2
       '@rocicorp/zero-sqlite3':
-        specifier: ^1.1.2
-        version: 1.1.2
+        specifier: ^1.1.4
+        version: 1.1.4
       '@types/basic-auth':
         specifier: ^1.1.8
         version: 1.1.8
@@ -1739,8 +1739,8 @@ importers:
         specifier: ^6.1.0
         version: 6.1.0
       '@rocicorp/zero-sqlite3':
-        specifier: ^1.1.2
-        version: 1.1.2
+        specifier: ^1.1.4
+        version: 1.1.4
       zql:
         specifier: workspace:*
         version: link:../zql
@@ -5568,8 +5568,8 @@ packages:
     engines: {node: ^12.20.0 || ^14.13.1 || >=16.0.0}
     deprecated: Use Promise.withResolvers instead
 
-  '@rocicorp/zero-sqlite3@1.1.2':
-    resolution: {integrity: sha512-bpxeS/JXENp8Wgo68wHsiMJjy41zePI0tCX0va/T4wAlUGfQ+gy4/Fr0TTfWWwHgDkVkAiQn5nb2EdN9xdOQWQ==}
+  '@rocicorp/zero-sqlite3@1.1.4':
+    resolution: {integrity: sha512-hD2O9HzGTV05uioaztu5dq2mzcv7/t2hQqBiFWKPW0vBsVynyw6PT7QN2eHHSTg/awkM/E8e5lv8N0oXU5bVSQ==}
     engines: {bun: '>=1.1.0', node: 22.x || 24.x}
     hasBin: true
 
@@ -6366,10 +6366,12 @@ packages:
   '@xmldom/xmldom@0.8.13':
     resolution: {integrity: sha512-KRYzxepc14G/CEpEGc3Yn+JKaAeT63smlDr+vjB8jRfgTBBI9wRj/nkQEO+ucV8p8I9bfKLWp37uHgFrbntPvw==}
     engines: {node: '>=10.0.0'}
+    deprecated: this version has critical issues, please update to the latest version
 
   '@xmldom/xmldom@0.9.10':
     resolution: {integrity: sha512-A9gOqLdi6cV4ibazAjcQufGj0B1y/vDqYrcuP6d/6x8P27gRS8643Dj9o1dEKtB6O7fwxb2FgBmJS2mX7gpvdw==}
     engines: {node: '>=14.6'}
+    deprecated: this version has critical issues, please update to the latest version
 
   '@xtuc/ieee754@1.2.0':
     resolution: {integrity: sha512-DX8nKgqcGwsc0eJSqYt5lwP4DH5FlHnmuWWBRy7X0NcaGR0ZtuyeESgMwTYVEtxmsNGY+qit4QYT/MIYTOTPeA==}
@@ -6833,9 +6835,6 @@ packages:
   binary-extensions@2.3.0:
     resolution: {integrity: sha512-Ceh+7ox5qe7LJuLHoY0feh3pHuUDHAcRUeyL2VYghZwfpkNIy/+8Ocg0a3UuSoYzavmylwuLWQOf3hl0jjMMIw==}
     engines: {node: '>=8'}
-
-  bindings@1.5.0:
-    resolution: {integrity: sha512-p2q/t/mhvuOj/UeLlV6566GD/guowlr0hHxClI0W9m7MWYkL1F0hLo+0Aexs9HSPCtR1SXQ0TD3MMKrXZajbiQ==}
 
   bl@4.1.0:
     resolution: {integrity: sha512-1W07cM9gS6DcLperZfFSj+bWLtaPGSOHWhPiGzXmvVJbRLdG82sH/Kn8EtW1VqWVA54AKf2h5k5BbnIbwF3h6w==}
@@ -8087,10 +8086,6 @@ packages:
     resolution: {integrity: sha512-8uSpZZocAZRBAPIEINJj3Lo9HyGitllczc27Eh5YYojjMFMn8yHMDMaUHE2Jqfq05D/wucwI4JGURyXt1vchyg==}
     engines: {node: '>=10'}
 
-  expand-template@2.0.3:
-    resolution: {integrity: sha512-XYfuKMvj4O35f/pOXLObndIRvyQ+/+6AhODh+OKWj9S9498pHHn/IMszH+gt0fBCRWMNfk1ZSp5x3AifmnI2vg==}
-    engines: {node: '>=6'}
-
   expect-type@1.3.0:
     resolution: {integrity: sha512-knvyeauYhqjOYvQ66MznSMs83wmHrCycNEN6Ao+2AeYEfxUIkuiVxdEa1qlGEPK+We3n0THiDciYSsCcgW/DoA==}
     engines: {node: '>=12.0.0'}
@@ -8286,9 +8281,6 @@ packages:
     resolution: {integrity: sha512-QgXo+mXTe8ljeqUFaX3QVHc5osSItJ/Km+xpocx0aSqWGMSCf6qYs/VnzZgS864Pjn5iceMRFigeAV7AfTlaig==}
     engines: {node: '>= 12'}
 
-  file-uri-to-path@1.0.0:
-    resolution: {integrity: sha512-0Zt+s3L7Vf1biwWZ29aARiVYLx7iMGnEUl9x33fbB/j3jR81u/O2LbqK+Bm1CDSNDKVtJ/YjwY7TUd5SkeLQLw==}
-
   fill-range@7.1.1:
     resolution: {integrity: sha512-YsGpe3WHLK8ZYi4tWDg2Jy3ebRz2rXowDxnld4bkQB00cc/1Zw9AWnC0i9ztDJitivtQvaI9KaLyKrc+hBW0yg==}
     engines: {node: '>=8'}
@@ -8473,9 +8465,6 @@ packages:
   giget@3.2.0:
     resolution: {integrity: sha512-GvHTWcykIR/fP8cj8dMpuMMkvaeJfPvYnhq0oW+chSeIr+ldX21ifU2Ms6KBoyKZQZmVaUAAhQ2EZ68KJF8a7A==}
     hasBin: true
-
-  github-from-package@0.0.0:
-    resolution: {integrity: sha512-SyHy3T1v2NUXn29OsWdxmK6RwHD+vkj3v8en8AOBZ1wBQ/hCAQ5bAQTD02kW4W9tUp/3Qh6J8r9EvntiyCmOOw==}
 
   github-slugger@1.5.0:
     resolution: {integrity: sha512-wIh+gKBI9Nshz2o46B0B3f5k/W+WI9ZAv6y5Dn5WJ5SK1t0TnDimB4WE5rmTD05ZAIn8HALCZVmCsvj0w0v0lw==}
@@ -9927,9 +9916,6 @@ packages:
     engines: {node: ^18 || >=20}
     hasBin: true
 
-  napi-build-utils@2.0.0:
-    resolution: {integrity: sha512-GEbrYkbfF7MoNaoh2iGG84Mnf/WZfB0GdGEsM8wz7Expx/LlWf5U8t9nvJKXSp3qr5IsEbK04cBGhol/KwOsWA==}
-
   native-duplexpair@1.0.0:
     resolution: {integrity: sha512-E7QQoM+3jvNtlmyfqRZ0/U75VFgCls+fSkbml2MpgWkWyz3ox8Y58gNhfuziuQYGNNQAbFZJQck55LHCnCK6CA==}
 
@@ -9959,10 +9945,6 @@ packages:
     resolution: {integrity: sha512-S0a47C9pLvcYx/Ugf0H30BVBEcUgMMBDk9VJIDlJ8XGrfH2QDUD4Tgdp45qDIiHttokBG+IbsOtsvIjGR/j3bg==}
     engines: {node: '>=18.20.0 <20 || >=20.12.1'}
 
-  node-abi@3.92.0:
-    resolution: {integrity: sha512-KdHvFWZjEKDf0cakgFjebl371GPsISX2oZHcuyKqM7DtogIsHrqKeLTo8wBHxaXRAQlY2PsPlZmfo+9ZCxEREQ==}
-    engines: {node: '>=10'}
-
   node-domexception@1.0.0:
     resolution: {integrity: sha512-/jKZoMpw0F8GRwl4/eLROPA3cfcXtLApP0QzLmUT/HuPCZWyB7IY9ZrMeKw2O/nFIqPQB3PVM9aYm0F312AXDQ==}
     engines: {node: '>=10.5.0'}
@@ -9979,6 +9961,10 @@ packages:
   node-forge@1.4.0:
     resolution: {integrity: sha512-LarFH0+6VfriEhqMMcLX2F7SwSXeWwnEAJEsYm5QKWchiVYVvJyV9v7UDvUv+w5HO23ZpQTXDv/GxdDdMyOuoQ==}
     engines: {node: '>= 6.13.0'}
+
+  node-gyp-build@4.8.4:
+    resolution: {integrity: sha512-LA4ZjwlnUblHVgq0oBF3Jl/6h/Nvs5fzBLwdEF4nuxnFdsfajde4WfxtJr3CaiH+F6ewcIB/q4jQ4UzPyid+CQ==}
+    hasBin: true
 
   node-int64@0.4.0:
     resolution: {integrity: sha512-O5lz91xSOeoXP6DulyHfllpq+Eg00MWitZIbtPfoSEvqIHdl5gfcY6hYzDWnj0qD5tz52PI08u9qUvSVeUBeHw==}
@@ -11009,12 +10995,6 @@ packages:
     resolution: {integrity: sha512-Jtc2612XINuBjIl/QTWsV5UvE8UHuNblcO3vVADSrKsrc6RqGX6lOW1cEo3CM2v0XG4Nat8nI+YM7/f26VxXLw==}
     engines: {node: '>=12'}
 
-  prebuild-install@7.1.3:
-    resolution: {integrity: sha512-8Mf2cbV7x1cXPUILADGI3wuhfqWvtiLA1iclTDbFRZkgRQS0NqsPZphna9V+HyTEadheuPmjaJMsbzKQFOzLug==}
-    engines: {node: '>=10'}
-    deprecated: No longer maintained. Please contact the author of the relevant native addon; alternatives are available.
-    hasBin: true
-
   pretty-error@4.0.0:
     resolution: {integrity: sha512-AoJ5YMAcXKYxKhuJGdcvse+Voc6v1RgnsR3nWcYU7q4t6z0Q6T86sv5Zq8VIRbOWWFpvdGE83LtdSMNd+6Y0xw==}
 
@@ -11700,12 +11680,6 @@ packages:
     resolution: {integrity: sha512-bzyZ1e88w9O1iNJbKnOlvYTrWPDl46O1bG0D3XInv+9tkPrxrN8jUUTiFlDkkmKWgn1M6CfIA13SuGqOa9Korw==}
     engines: {node: '>=14'}
 
-  simple-concat@1.0.1:
-    resolution: {integrity: sha512-cSFtAPtRhljv69IK0hTVZQ+OfE9nePi/rtJmw5UjHeVyVroEqJXP1sFztKUy1qU+xvz3u/sfYJLa947b7nAN2Q==}
-
-  simple-get@4.0.1:
-    resolution: {integrity: sha512-brv7p5WgH0jmQJr1ZDDfKDOSeWWg+OVypG99A/5vYGPqJ6pxiaHLy8nxtFjBA7oMa01ebA9gfh1uMCFqOuXxvA==}
-
   simple-oauth2@5.1.0:
     resolution: {integrity: sha512-gWDa38Ccm4MwlG5U7AlcJxPv3lvr80dU7ARJWrGdgvOKyzSj1gr3GBPN1rABTedAYvC/LsGYoFuFxwDBPtGEbw==}
 
@@ -12259,9 +12233,6 @@ packages:
   tsyringe@4.10.0:
     resolution: {integrity: sha512-axr3IdNuVIxnaK5XGEUFTu3YmAQ6lllgrvqfEoR16g/HGnYY/6We4oWENtAnzK6/LpJ2ur9PAb80RBt7/U4ugw==}
     engines: {node: '>= 6.0.0'}
-
-  tunnel-agent@0.6.0:
-    resolution: {integrity: sha512-McnNiV1l8RYeY8tBgEpuodCC1mLUdbSN+CYBL7kJsJNInOP8UjDDEwdk6Mw60vdLLrr5NHKZhMAOSrR2NZuQ+w==}
 
   turbo@2.9.14:
     resolution: {integrity: sha512-BQqXRr4UoWI3UPFrtznCLykYHxwxWh53iCB57x092jPMjIlW1wnm3N895g5irpiXmnxUhREBB0n6+y8BHhs4nw==}
@@ -18420,10 +18391,9 @@ snapshots:
 
   '@rocicorp/resolver@1.0.2': {}
 
-  '@rocicorp/zero-sqlite3@1.1.2':
+  '@rocicorp/zero-sqlite3@1.1.4':
     dependencies:
-      bindings: 1.5.0
-      prebuild-install: 7.1.3
+      node-gyp-build: 4.8.4
 
   '@rocicorp/zero-virtual@0.6.3(@rocicorp/zero@packages+zero)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(solid-js@1.9.13)':
     optionalDependencies:
@@ -19847,10 +19817,6 @@ snapshots:
 
   binary-extensions@2.3.0: {}
 
-  bindings@1.5.0:
-    dependencies:
-      file-uri-to-path: 1.0.0
-
   bl@4.1.0:
     dependencies:
       buffer: 5.7.1
@@ -21089,8 +21055,6 @@ snapshots:
       signal-exit: 3.0.7
       strip-final-newline: 2.0.0
 
-  expand-template@2.0.3: {}
-
   expect-type@1.3.0: {}
 
   expo-asset@55.0.17(expo@55.0.24)(react-native@0.85.3(@babel/core@7.29.0)(@types/react@19.2.15)(react@19.2.6))(react@19.2.6)(typescript@6.0.3):
@@ -21388,8 +21352,6 @@ snapshots:
     dependencies:
       tslib: 2.8.1
 
-  file-uri-to-path@1.0.0: {}
-
   fill-range@7.1.1:
     dependencies:
       to-regex-range: 5.0.1
@@ -21575,8 +21537,6 @@ snapshots:
   getenv@2.0.0: {}
 
   giget@3.2.0: {}
-
-  github-from-package@0.0.0: {}
 
   github-slugger@1.5.0: {}
 
@@ -23578,8 +23538,6 @@ snapshots:
 
   nanoid@5.1.11: {}
 
-  napi-build-utils@2.0.0: {}
-
   native-duplexpair@1.0.0: {}
 
   negotiator@0.6.3: {}
@@ -23603,10 +23561,6 @@ snapshots:
       json-stringify-safe: 5.0.1
       propagate: 2.0.1
 
-  node-abi@3.92.0:
-    dependencies:
-      semver: 7.8.0
-
   node-domexception@1.0.0: {}
 
   node-emoji@2.2.0:
@@ -23623,6 +23577,8 @@ snapshots:
       formdata-polyfill: 4.0.10
 
   node-forge@1.4.0: {}
+
+  node-gyp-build@4.8.4: {}
 
   node-int64@0.4.0: {}
 
@@ -24782,21 +24738,6 @@ snapshots:
 
   postgres@3.4.7(patch_hash=2bd119d361250d5ee010b23af4c98504e9c6861b692d2e2ae23b9a9e5de4dbce): {}
 
-  prebuild-install@7.1.3:
-    dependencies:
-      detect-libc: 2.1.2
-      expand-template: 2.0.3
-      github-from-package: 0.0.0
-      minimist: 1.2.8
-      mkdirp-classic: 0.5.3
-      napi-build-utils: 2.0.0
-      node-abi: 3.92.0
-      pump: 3.0.4
-      rc: 1.2.8
-      simple-get: 4.0.1
-      tar-fs: 2.1.4
-      tunnel-agent: 0.6.0
-
   pretty-error@4.0.0:
     dependencies:
       lodash: 4.18.1
@@ -25685,14 +25626,6 @@ snapshots:
 
   signal-exit@4.1.0: {}
 
-  simple-concat@1.0.1: {}
-
-  simple-get@4.0.1:
-    dependencies:
-      decompress-response: 6.0.0
-      once: 1.4.0
-      simple-concat: 1.0.1
-
   simple-oauth2@5.1.0:
     dependencies:
       '@hapi/hoek': 11.0.7
@@ -26279,10 +26212,6 @@ snapshots:
   tsyringe@4.10.0:
     dependencies:
       tslib: 1.14.1
-
-  tunnel-agent@0.6.0:
-    dependencies:
-      safe-buffer: 5.2.1
 
   turbo@2.9.14:
     optionalDependencies:
