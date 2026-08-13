@@ -1,12 +1,12 @@
 import {PG_LOCK_NOT_AVAILABLE} from '@drdgvhbh/postgres-error-codes';
 import postgres from 'postgres';
-import {beforeEach, describe, expect} from 'vitest';
+import {afterEach, beforeEach, describe, expect} from 'vitest';
 import {BigIntJSON} from '../../../../shared/src/bigint-json.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import {Queue} from '../../../../shared/src/queue.ts';
 import {sleep} from '../../../../shared/src/sleep.ts';
 import {type PgTest, test} from '../../test/db.ts';
-import type {PostgresDB} from '../../types/pg.ts';
+import {postgresTypeConfig, type PostgresDB} from '../../types/pg.ts';
 import type {Subscription} from '../../types/subscription.ts';
 import {
   type ChangeStreamData,
@@ -1693,6 +1693,123 @@ describe('change-streamer/storer', () => {
       expect(
         await db`SELECT "ownerAddress" FROM "xero_5/cdc"."replicationState" WHERE owner = 'task-id'`,
       ).toEqual([{ownerAddress: 'wss://change-streamer:12345'}]);
+    });
+  });
+
+  describe('back pressure timeout', () => {
+    // Small enough that any nonzero backlog counts as "applying back
+    // pressure", and short enough to keep the test fast.
+    const TINY_BACKPRESSURE_PROPORTION = 1e-9;
+    const TIMEOUT_MS = 100;
+
+    let singleConnDb: PostgresDB;
+
+    beforeEach(async () => {
+      const {host, port, database, user: username, pass} = db.options;
+      // A dedicated, single-connection pool to the same test database, so
+      // that reserving its one connection deterministically blocks the
+      // storer from ever acquiring a connection for its next transaction --
+      // simulating a wedge that happens *before* any statement is sent to
+      // PG. This is the gap that TransactionPool's own
+      // statementResponseTimeout cannot see, since it only tracks
+      // statements that have already been dispatched.
+      singleConnDb = postgres({
+        host: host[0],
+        port: port[0],
+        username,
+        password: pass ?? undefined,
+        database,
+        max: 1,
+        ...postgresTypeConfig({sendStringAsJson: true}),
+      });
+
+      storer = new Storer(
+        lc,
+        shard,
+        'task-id',
+        'change-streamer:12345',
+        'ws',
+        singleConnDb,
+        REPLICA_VERSION,
+        msg => consumed.enqueue(msg),
+        err => fatalErrors.enqueue(err),
+        {
+          ...opts,
+          statementTimeoutMs: TIMEOUT_MS,
+          backPressureLimitHeapProportion: TINY_BACKPRESSURE_PROPORTION,
+          // Flush every change immediately, so that the *second* flush of
+          // the backlog blocks awaiting the still-pending first flush (which
+          // itself can never complete: the sole connection is reserved, so
+          // TransactionPool can't even start its `BEGIN`). This is what
+          // stalls #processQueue's loop mid-message, before it reaches the
+          // per-message #maybeReleaseBackPressure() call for that message,
+          // leaving the still-unprocessed backlog behind it counted against
+          // approximateQueuedBytes -- which is what keeps back pressure
+          // (and the watchdog timer) engaged instead of self-releasing.
+          changeLogBatchSize: 1,
+        },
+      );
+      await storer.assumeOwnership();
+      done = storer.run();
+    });
+
+    afterEach(async () => {
+      await storer.stop();
+      await singleConnDb.end();
+    });
+
+    // Queues a 'begin' plus enough data changes that #processQueue gets
+    // stuck (per the note above) with some of the backlog still undrained,
+    // and returns the resulting readyForMore() promise.
+    function storeUntilWedged() {
+      storer.store('20', ['begin', messages.begin(), {commitWatermark: '20'}]);
+      for (let i = 0; i < 4; i++) {
+        storer.store('20', ['data', messages.insert('issues', {id: `${i}`})]);
+      }
+      // Called synchronously with the store()s above (no intervening
+      // `await`) so that the async queue-processing loop has not yet had a
+      // chance to run and decrement approximateQueuedBytes.
+      return storer.readyForMore();
+    }
+
+    test('rejects with AbortError when the connection cannot be acquired within the timeout', async () => {
+      const reserved = await singleConnDb.reserve();
+      try {
+        const readyForMore = storeUntilWedged();
+        expect(readyForMore).toBeDefined();
+
+        const start = Date.now();
+        await expect(readyForMore).rejects.toThrow(
+          /Considering the change-log to be wedged/,
+        );
+        expect(Date.now() - start).toBeLessThan(TIMEOUT_MS * 5);
+      } finally {
+        // The wedged transaction is still open (no commit/rollback was
+        // ever sent) and its TransactionPool worker is still waiting on
+        // the connection this releases. Explicitly abort it -- mirroring
+        // what change-streamer-service.ts does on the interrupted
+        // transaction after readyForMore() rejects -- so the pending
+        // transaction doesn't hang the db connection open through
+        // teardown.
+        reserved.release();
+        storer.abort();
+        await storer.allProcessed();
+      }
+    });
+
+    test('recovers after a timeout once the backlog can drain again', async () => {
+      const reserved = await singleConnDb.reserve();
+      const firstReadyForMore = storeUntilWedged();
+      await expect(firstReadyForMore).rejects.toThrow(/wedged/);
+
+      // Release the connection so the storer can make progress again.
+      reserved.release();
+      storer.store('20', ['commit', messages.commit(), {watermark: '20'}]);
+      await expectConsumed('20');
+
+      // A stale, already-rejected resolver must not be reused: with nothing
+      // queued, back pressure should no longer be in effect.
+      expect(storer.readyForMore()).toBeUndefined();
     });
   });
 

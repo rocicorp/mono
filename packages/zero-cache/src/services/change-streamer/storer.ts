@@ -384,6 +384,7 @@ export class Storer implements Service {
   }
 
   #readyForMore: Resolver<void> | null = null;
+  #backpressureTimeout: NodeJS.Timeout | undefined;
 
   readyForMore(): Promise<void> | undefined {
     if (!this.#running) {
@@ -407,21 +408,41 @@ export class Storer implements Service {
           `  LIMIT 20;`,
       );
       this.#readyForMore = resolver();
+      this.#resetBackpressureTimeout(true);
     }
     return this.#readyForMore?.promise;
   }
 
+  #resetBackpressureTimeout(reschedule: boolean) {
+    clearTimeout(this.#backpressureTimeout);
+    this.#backpressureTimeout = reschedule
+      ? setTimeout(() => {
+          this.#readyForMore?.reject(
+            new AbortError(
+              `No statement processed within the last ${this.#statementTimeoutMs}ms. Considering the change-log to be wedged.`,
+            ),
+          );
+          this.#readyForMore = null;
+        }, this.#statementTimeoutMs)
+      : undefined;
+  }
+
   #maybeReleaseBackPressure() {
-    if (
-      this.#readyForMore !== null &&
+    if (this.#readyForMore !== null) {
       // Wait for at least 20% of the threshold to free up.
-      this.#approximateQueuedBytes < this.#backPressureThresholdBytes * 0.8
-    ) {
-      this.#lc.info?.(
-        `releasing back pressure with ${this.#queue.size()} queued changes (~${(this.#approximateQueuedBytes / 1024 ** 2).toFixed(2)} MB)`,
-      );
-      this.#readyForMore.resolve();
-      this.#readyForMore = null;
+      if (
+        this.#approximateQueuedBytes <
+        this.#backPressureThresholdBytes * 0.8
+      ) {
+        this.#lc.info?.(
+          `releasing back pressure with ${this.#queue.size()} queued changes (~${(this.#approximateQueuedBytes / 1024 ** 2).toFixed(2)} MB)`,
+        );
+        this.#readyForMore.resolve();
+        this.#readyForMore = null;
+        this.#resetBackpressureTimeout(false);
+      } else {
+        this.#resetBackpressureTimeout(true);
+      }
     }
   }
 
@@ -482,6 +503,7 @@ export class Storer implements Service {
         this.#readyForMore.resolve();
         this.#readyForMore = null;
       }
+      this.#resetBackpressureTimeout(false);
       this.#cancelQueueEntries(
         this.#queue.drain().filter(entry => entry !== undefined),
         err,
