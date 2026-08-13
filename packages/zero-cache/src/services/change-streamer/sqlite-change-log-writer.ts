@@ -8,12 +8,17 @@ import {
 } from '../../db/sqlite-corruption.ts';
 import {StatementRunner} from '../../db/statements.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
-import {readCookieRowCounts} from '../replicator/change-log-cookies.ts';
+import {
+  readCookieRowCounts,
+  readCookies,
+} from '../replicator/change-log-cookies.ts';
 import {
   ChangeLogRebuildRequired,
   changeLogFileName,
+  changeLogWipeReason,
   deleteChangeLogDB,
   openChangeLogDBForWriting,
+  readChangeLogHead,
   rebuildChangeLogDBForWriting,
   reconcileChangeLog,
   type ChangeLogAnchor,
@@ -124,30 +129,50 @@ export class SQLiteChangeLogWriter {
   }
 
   /**
-   * Opens the log if necessary and reconciles it against the point this stream
-   * connection resumes from.
+   * Opens the log if necessary and reconciles it with the Postgres resume
+   * point. Returns the resume point stored in the log.
    *
-   * This runs per connection rather than once per process: the stream loop
-   * re-reads its resume point on every reconnect, so a routine reconnect — not
-   * just a restart — can leave the log holding watermarks above the new resume
-   * watermark, and the writer's plain `INSERT` would collide with the first
-   * re-delivered transaction.
+   * Returns `undefined` when the writer is disabled. The caller must then use
+   * another source.
    *
-   * The resume point is taken whole rather than as a bare watermark because its
-   * cookie set is not separable from it: a reconciliation that moves the head
-   * invalidates the cookies the log was holding, and only the set read at the
-   * same position (invariant 15) can replace them.
+   * This runs for every connection because Postgres supplies a new resume point
+   * after each reconnect. The log can contain transactions above that point.
+   * Reconciliation removes them before Postgres sends them again.
+   *
+   * `resumeFrom` includes cookies because the cookies must match the resume
+   * watermark.
    */
-  reconcile(resumeFrom: ChangeLogResumePoint): void {
+  reconcile(
+    resumeFrom: ChangeLogResumePoint,
+  ): ChangeLogResumePoint | undefined {
+    return this.#reconcile(() => resumeFrom);
+  }
+
+  /**
+   * Reconciles the log without a Postgres resume point.
+   *
+   * A valid log uses its own head and cookies. A new or invalid log uses the
+   * replica values returned by `seed`.
+   */
+  reconcileFromLog(
+    seed: () => ChangeLogResumePoint,
+  ): ChangeLogResumePoint | undefined {
+    return this.#reconcile(db => this.#resumeFromLog(db, seed));
+  }
+
+  #reconcile(
+    resolve: (db: Database) => ChangeLogResumePoint,
+  ): ChangeLogResumePoint | undefined {
     if (this.#disabled) {
-      return;
+      return undefined;
     }
     const {replicaFile, identity} = this.#opts;
-    const anchor: ChangeLogAnchor = {
-      ...resumeFrom,
+    const nowMs = this.#now();
+    const anchor = (db: Database): ChangeLogAnchor => ({
+      ...resolve(db),
       identity,
-      nowMs: this.#now(),
-    };
+      nowMs,
+    });
     try {
       const db = this.#db;
       if (db === undefined) {
@@ -165,9 +190,10 @@ export class SQLiteChangeLogWriter {
         );
         this.#observer = new SQLiteChangeLogObserver(this.#lc, info);
       } else {
+        const resolved = anchor(db);
         let result: ReconcileResult;
         try {
-          result = reconcileChangeLog(this.#lc, db, anchor, {
+          result = reconcileChangeLog(this.#lc, db, resolved, {
             rebuildInsteadOfUnboundedWork: true,
           });
         } catch (e) {
@@ -183,7 +209,7 @@ export class SQLiteChangeLogWriter {
           const rebuilt = rebuildChangeLogDBForWriting(
             this.#lc,
             replicaFile,
-            anchor,
+            resolved,
             e,
           );
           this.#db = rebuilt.db;
@@ -200,14 +226,43 @@ export class SQLiteChangeLogWriter {
       }
       // A reseed drops and recreates the stream table, so the append statements
       // are prepared fresh against whatever the reconciliation left behind.
+      const reconciledDB = must(this.#db, 'the SQLite change log is not open');
       this.#writer = new ChangeLogStreamWriter(
-        new StatementRunner(
-          must(this.#db, 'the SQLite change log is not open'),
-        ),
+        new StatementRunner(reconciledDB),
       );
+      // Read both values after reconciliation. A truncate or reseed updates the
+      // head and cookies in the same transaction.
+      return {
+        resumeWatermark: must(
+          readChangeLogHead(reconciledDB),
+          'the SQLite change log has no head after reconciliation',
+        ),
+        cookies: readCookies(reconciledDB),
+      };
     } catch (e) {
       this.#failSoft('reconciling the SQLite change log', e);
+      return undefined;
     }
+  }
+
+  /**
+   * Returns the resume point supplied by the log.
+   *
+   * A valid log uses its own head and cookies. A log that must be recreated uses
+   * the replica values returned by `seed`.
+   */
+  #resumeFromLog(
+    db: Database,
+    seed: () => ChangeLogResumePoint,
+  ): ChangeLogResumePoint {
+    if (changeLogWipeReason(db, this.#opts.identity) !== undefined) {
+      return seed();
+    }
+    const head = readChangeLogHead(db);
+    // An empty log has no resume point, so use the replica seed.
+    return head === null
+      ? seed()
+      : {resumeWatermark: head, cookies: readCookies(db)};
   }
 
   /**

@@ -366,10 +366,19 @@ function readAutoVacuum(db: Database): number {
  * so a reseed cannot enable it. Unlike corruption, a *second* failure there is
  * tolerated rather than thrown — see {@link ensureIncrementalAutoVacuum}.
  */
+/**
+ * Returns an anchor after the database opens.
+ *
+ * The resolver can inspect the existing file before it selects the anchor. A
+ * valid log can use its own head. A new or invalid log uses the replica seed.
+ * The rebuild path calls the resolver again for the new file.
+ */
+export type AnchorResolver = (db: Database) => ChangeLogAnchor;
+
 export function openChangeLogDBForWriting(
   lc: LogContext,
   replicaFile: string,
-  anchor: ChangeLogAnchor,
+  anchor: AnchorResolver,
 ): {db: Database; result: ReconcileResult; replacedFile: boolean} {
   const existed = existsSync(changeLogFileName(replicaFile));
   const opened = openOrRebuildCorrupt(lc, replicaFile, anchor, existed);
@@ -385,7 +394,7 @@ export function openChangeLogDBForWriting(
 function openOrRebuildCorrupt(
   lc: LogContext,
   replicaFile: string,
-  anchor: ChangeLogAnchor,
+  anchor: AnchorResolver,
   boundReconciliation: boolean,
 ): OpenedChangeLog {
   try {
@@ -429,7 +438,7 @@ function openOrRebuildCorrupt(
 function ensureIncrementalAutoVacuum(
   lc: LogContext,
   replicaFile: string,
-  anchor: ChangeLogAnchor,
+  anchor: AnchorResolver,
   opened: OpenedChangeLog,
 ): OpenedChangeLog {
   if (opened.autoVacuum === AUTO_VACUUM_INCREMENTAL) {
@@ -455,7 +464,7 @@ function ensureIncrementalAutoVacuum(
 function rebuildChangeLog(
   lc: LogContext,
   replicaFile: string,
-  anchor: ChangeLogAnchor,
+  anchor: AnchorResolver,
   required?: ChangeLogRebuildRequired | undefined,
 ): OpenedChangeLog {
   if (required) {
@@ -494,7 +503,12 @@ export function rebuildChangeLogDBForWriting(
   anchor: ChangeLogAnchor,
   required: ChangeLogRebuildRequired,
 ): {db: Database; result: ReconcileResult; replacedFile: true} {
-  const {db, result} = rebuildChangeLog(lc, replicaFile, anchor, required);
+  const {db, result} = rebuildChangeLog(
+    lc,
+    replicaFile,
+    () => anchor,
+    required,
+  );
   return {db, result, replacedFile: true};
 }
 
@@ -509,7 +523,7 @@ type OpenedChangeLog = {
 function openAndReconcile(
   lc: LogContext,
   replicaFile: string,
-  anchor: ChangeLogAnchor,
+  anchor: AnchorResolver,
   boundReconciliation: boolean,
   reseedReason?: ReseedReason | undefined,
 ): OpenedChangeLog {
@@ -519,7 +533,7 @@ function openAndReconcile(
     const autoVacuum = readAutoVacuum(db);
     return {
       db,
-      result: reconcileChangeLog(lc, db, anchor, {
+      result: reconcileChangeLog(lc, db, anchor(db), {
         rebuildInsteadOfUnboundedWork: boundReconciliation,
         reseedReason,
       }),
@@ -664,7 +678,7 @@ function rebuildRequired(
   db: Database,
   anchor: ChangeLogAnchor,
 ): ChangeLogRebuildRequired | undefined {
-  const wipe = wipeReason(db, anchor);
+  const wipe = changeLogWipeReason(db, anchor.identity);
   if (wipe !== undefined) {
     return new ChangeLogRebuildRequired(wipe);
   }
@@ -711,7 +725,7 @@ function reconcile(
   db: Database,
   anchor: ChangeLogAnchor,
 ): ReconcileResult {
-  const wipe = wipeReason(db, anchor);
+  const wipe = changeLogWipeReason(db, anchor.identity);
   if (wipe !== undefined) {
     return reseed(lc, db, anchor, wipe);
   }
@@ -749,9 +763,16 @@ function reconcile(
   return {action: 'none', head, cookiesStale: false};
 }
 
-function wipeReason(
+/**
+ * Returns the reason that the log must be recreated. Returns `undefined` when
+ * the writer can continue to use the log.
+ *
+ * This function takes only the expected identity because callers use the result
+ * to select the anchor.
+ */
+export function changeLogWipeReason(
   db: Database,
-  anchor: ChangeLogAnchor,
+  identity: ChangeLogIdentity,
 ): ReseedReason | undefined {
   if (
     !tableExists(db, CHANGE_LOG_STREAM_TABLE) ||
@@ -784,7 +805,6 @@ function wipeReason(
     return 'created';
   }
   const {epoch, generation, replicaID} = readChangeLogMeta(db);
-  const identity = anchor.identity;
   if (
     epoch !== identity.epoch ||
     generation !== identity.generation ||

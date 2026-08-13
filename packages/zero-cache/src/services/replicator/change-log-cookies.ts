@@ -34,6 +34,7 @@
 
 import {unreachable} from '../../../../shared/src/asserts.ts';
 import {BigIntJSON} from '../../../../shared/src/bigint-json.ts';
+import * as v from '../../../../shared/src/valita.ts';
 import type {Database, Statement} from '../../../../zqlite/src/db.ts';
 import type {
   BackfillID,
@@ -41,6 +42,10 @@ import type {
   SchemaChange,
   TableMetadata,
 } from '../change-source/protocol/current/data.ts';
+import {
+  backfillRequestSchema,
+  type BackfillRequest,
+} from '../change-source/protocol/current/upstream.ts';
 
 export const CHANGE_LOG_TABLE_METADATA_TABLE = '_zero.changeLogTableMetadata';
 export const CHANGE_LOG_BACKFILLING_TABLE = '_zero.changeLogBackfilling';
@@ -496,6 +501,37 @@ export function foldCookies(
         cmp(a.column, b.column),
     ),
   };
+}
+
+const backfillRequestsSchema = v.array(backfillRequestSchema);
+
+/**
+ * Returns one {@link BackfillRequest} for each table with an active backfill.
+ * Each request contains the stored table metadata, if available.
+ */
+export function backfillRequestsFrom(cookies: CookieSet): BackfillRequest[] {
+  const metadata = new Map(
+    cookies.tableMetadata.map(c => [tableKey(c.schema, c.table), c.metadata]),
+  );
+  const requests: BackfillRequest[] = [];
+  let curr: BackfillRequest | undefined;
+  for (const {schema, table, column, backfill} of cookies.backfilling) {
+    if (curr?.table.schema !== schema || curr.table.name !== table) {
+      curr = {
+        table: {
+          schema,
+          name: table,
+          // Use `null` when a backfilling table has no metadata. This matches
+          // the result of the Postgres left join.
+          metadata: metadata.get(tableKey(schema, table)) ?? null,
+        },
+        columns: {},
+      };
+      requests.push(curr);
+    }
+    curr.columns[column] = backfill;
+  }
+  return v.parse(requests, backfillRequestsSchema);
 }
 
 /**

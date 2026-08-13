@@ -515,6 +515,12 @@ class ChangeStreamerImpl implements ChangeStreamerService {
         // Only reached when `initFromReplica` is set, i.e. when the option
         // that supplies the file is present.
         replica: () => must(replicaSource)(),
+        // Use the Postgres resume point when it is present. Otherwise, let the
+        // SQLite change log supply its own resume point.
+        reconcileChangeLog: (resumeFrom, seed) =>
+          resumeFrom
+            ? this.#changeLogWriter?.reconcile(resumeFrom)
+            : this.#changeLogWriter?.reconcileFromLog(seed),
         changeLog: () => this.#changeLogWriter?.connection,
       },
     );
@@ -565,33 +571,15 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       let watermark: string | null = null;
       let unflushedBytes = 0;
       try {
-        const {lastWatermark, backfillRequests, cookies} =
+        // Initialization reconciles the change log for every stream
+        // connection. It completes before `startStream`, so no change can
+        // arrive during reconciliation.
+        const {lastWatermark, backfillRequests} =
           await this.#initializer.initialize();
         // SQLite catchup must not be eligible until this has been initialized
         // from the durable PG head. Commits observed only since process startup
         // are insufficient after a change-streamer restart.
         this.#lastForwardedCommitWatermark = lastWatermark;
-        // Per stream connection, not once per process: the resume watermark is
-        // re-read on every reconnect, so the log can be holding transactions
-        // above it -- a restarted backfill's abandoned ones, in bulk -- and the
-        // writer's plain INSERT would collide with the first re-delivery.
-        // Ordered before startStream so no change can arrive mid-reconcile.
-        //
-        // The cookies come from the same read as the watermark, and go to the
-        // log with it: a reconcile that moves the head discards the set the log
-        // had folded, and only the set that belongs to this watermark can
-        // replace it (invariant 15).
-        this.#changeLogWriter?.reconcile({
-          resumeWatermark: lastWatermark,
-          cookies,
-        });
-        // After the reconcile, not before: the fold reads the log's schema
-        // changes over the interval the replica trails by, and only a
-        // reconciled log holds exactly the transactions at or below the resume
-        // watermark. An un-reconciled one can hold phantoms, another replica's
-        // history, or nothing -- none of which is a disagreement between the
-        // two stores, and all of which would be reported as one.
-        this.#initializer.compare();
         const stream = await this.#source.startStream(
           lastWatermark,
           backfillRequests,

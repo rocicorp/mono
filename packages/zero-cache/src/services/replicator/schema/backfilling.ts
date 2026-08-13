@@ -38,7 +38,6 @@
 import type {LogContext} from '@rocicorp/logger';
 import {unreachable} from '../../../../../shared/src/asserts.ts';
 import {BigIntJSON} from '../../../../../shared/src/bigint-json.ts';
-import * as v from '../../../../../shared/src/valita.ts';
 import type {Database, Statement} from '../../../../../zqlite/src/db.ts';
 import {getOrCreateCounter} from '../../../observability/metrics.ts';
 import {liteTableName} from '../../../types/names.ts';
@@ -48,11 +47,9 @@ import type {
   SchemaChange,
   TableMetadata,
 } from '../../change-source/protocol/current/data.ts';
+import type {BackfillRequest} from '../../change-source/protocol/current/upstream.ts';
 import {
-  backfillRequestSchema,
-  type BackfillRequest,
-} from '../../change-source/protocol/current/upstream.ts';
-import {
+  backfillRequestsFrom,
   cookieOps,
   type CookieOp,
   type CookieSet,
@@ -186,63 +183,16 @@ export class BackfillingTracker {
   }
 }
 
-const backfillRequestsSchema = v.array(backfillRequestSchema);
-
-type BackfillRequestRow = {
-  schema: string;
-  table: string;
-  metadata: string | null;
-  column: string;
-  backfill: string;
-};
-
 /**
- * Assembles the {@link BackfillRequest}s that the replica's state implies, in
- * the shape `Storer.getStartStreamInitializationParameters()` produces them
- * from `cdc.backfilling` LEFT JOIN `cdc.tableMetadata`.
+ * Returns the {@link BackfillRequest}s from the current replica cookies. The
+ * result has the same shape as the Postgres initialization result.
  *
- * The join is `LEFT` for the same reason it is there: a table can be
- * backfilling with no metadata of its own, in which case the request carries
- * `metadata: null`. Rows are ordered by primary key so that this list and the
- * Postgres-derived one can be compared position for position.
- *
- * This is a snapshot of the replica at its `_zero.replicationState.stateVersion`
- * and is only meaningful paired with it. It trails the change log's head, which
- * is why C4 folds the log's own schema changes onto it before comparing rather
- * than expecting raw equality.
+ * The caller must pair this snapshot with the replica state version. When the
+ * replica trails the change log, the comparison applies the missing schema
+ * changes before it compares the results.
  */
 export function readBackfillRequests(db: Database): BackfillRequest[] {
-  const rows = db
-    .prepare(/*sql*/ `
-      SELECT b."schema", b."table", b."column", b."backfill",
-             t."upstreamMetadata" AS "metadata"
-        FROM "${BACKFILLING_TABLE}" AS b
-        LEFT JOIN "_zero.tableMetadata" AS t
-          ON b."schema" = t."schema" AND b."table" = t."table"
-        ORDER BY b."schema", b."table", b."column"
-    `)
-    .all<BackfillRequestRow>();
-
-  const requests: BackfillRequest[] = [];
-  let curr: BackfillRequest | undefined;
-  for (const {schema, table, metadata, column, backfill} of rows) {
-    if (curr?.table.schema !== schema || curr.table.name !== table) {
-      curr = {
-        table: {
-          schema,
-          name: table,
-          metadata:
-            metadata === null
-              ? null
-              : (BigIntJSON.parse(metadata) as TableMetadata),
-        },
-        columns: {},
-      };
-      requests.push(curr);
-    }
-    curr.columns[column] = BigIntJSON.parse(backfill) as BackfillID;
-  }
-  return v.parse(requests, backfillRequestsSchema);
+  return backfillRequestsFrom(readReplicaCookies(db));
 }
 
 /**
