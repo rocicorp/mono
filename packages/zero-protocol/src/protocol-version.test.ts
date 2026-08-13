@@ -1,7 +1,10 @@
 import {expect, test} from 'vitest';
 import {h64} from '../../shared/src/hash.ts';
 import {downstreamSchema} from './down.ts';
-import {PROTOCOL_VERSION} from './protocol-version.ts';
+import {
+  MIN_SERVER_SUPPORTED_SYNC_PROTOCOL,
+  PROTOCOL_VERSION,
+} from './protocol-version.ts';
 import {upstreamSchema} from './up.ts';
 
 test('protocol version', () => {
@@ -13,4 +16,9 @@ test('protocol version', () => {
   // PROTOCOL_VERSION and update the expected values.
   expect(hash).toEqual('24niurwt66lah');
   expect(PROTOCOL_VERSION).toBe(52);
+});
+
+test('server support retains the CloudZero protocol floor', () => {
+  // CloudZero may continue serving clients at this version indefinitely.
+  expect(MIN_SERVER_SUPPORTED_SYNC_PROTOCOL).toBe(30);
 });

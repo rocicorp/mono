@@ -8,9 +8,17 @@ import {
 import type {Downstream} from '../../../zero-protocol/src/down.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
-import type {PokePartMessage} from '../../../zero-protocol/src/poke.ts';
+import type {
+  PokeChunk,
+  PokeEndMessage,
+  PokePartMessage,
+  PokeStartMessage,
+} from '../../../zero-protocol/src/poke.ts';
+import {MIN_SERVER_SUPPORTED_SYNC_PROTOCOL} from '../../../zero-protocol/src/protocol-version.ts';
 import {ProtocolErrorWithLevel} from '../types/error-with-level.ts';
+import {POKE_CHUNK_PROTOCOL_VERSION} from '../types/poke-chunk.ts';
 import {
+  DownstreamSender,
   send,
   sendError,
   serializedPokePatch,
@@ -20,7 +28,19 @@ import {
 
 class MockSocket implements WebSocketLike {
   readyState: WebSocket['readyState'] = WebSocket.OPEN;
-  send(_data: string, _cb?: (err?: Error) => void) {}
+  readonly sent: (string | PokeChunk)[] = [];
+  readonly autoComplete: boolean;
+
+  constructor(autoComplete = false) {
+    this.autoComplete = autoComplete;
+  }
+
+  send(data: string | PokeChunk, cb?: (err?: Error) => void) {
+    this.sent.push(typeof data === 'string' ? data : data.slice());
+    if (this.autoComplete) {
+      cb?.();
+    }
+  }
 }
 
 describe('send', () => {
@@ -107,9 +127,72 @@ describe('send', () => {
 
     send(lc, ws, data, callback, serialized);
 
-    expect(sendSpy).toHaveBeenCalledWith(serialized, callback);
+    expect(sendSpy).toHaveBeenCalledWith(serialized, expect.any(Function));
   });
 });
+
+describe('DownstreamSender poke compatibility', () => {
+  const lc = createSilentLogContext();
+  const pokeStart = [
+    'pokeStart',
+    {pokeID: '01', baseCookie: null},
+  ] satisfies PokeStartMessage;
+  const pokePart = [
+    'pokePart',
+    {pokeID: '01', rowsPatch: [{op: 'clear'}]},
+  ] satisfies PokePartMessage;
+  const pokeEnd = [
+    'pokeEnd',
+    {pokeID: '01', cookie: '01'},
+  ] satisfies PokeEndMessage;
+
+  test.each([
+    MIN_SERVER_SUPPORTED_SYNC_PROTOCOL,
+    POKE_CHUNK_PROTOCOL_VERSION - 1,
+  ])(
+    'keeps sending JSON pokePart messages to protocol version %i',
+    async protocolVersion => {
+      const ws = new MockSocket(true);
+      const sender = new DownstreamSender(lc, ws, protocolVersion);
+
+      await sendWithBackpressure(sender, pokeStart);
+      await sendWithBackpressure(sender, pokePart);
+      await sendWithBackpressure(sender, pokeEnd);
+
+      expect(ws.sent).toEqual([
+        JSON.stringify(pokeStart),
+        JSON.stringify(pokePart),
+        JSON.stringify(pokeEnd),
+      ]);
+    },
+  );
+
+  test('sends binary poke chunks only to clients at the cutoff', async () => {
+    const ws = new MockSocket(true);
+    const sender = new DownstreamSender(lc, ws, POKE_CHUNK_PROTOCOL_VERSION);
+
+    await sendWithBackpressure(sender, pokeStart);
+    await sendWithBackpressure(sender, pokePart);
+    await sendWithBackpressure(sender, pokeEnd);
+
+    expect(ws.sent).toHaveLength(3);
+    expect(ws.sent[0]).toBe(JSON.stringify(pokeStart));
+    expect(ws.sent[1]).toBeInstanceOf(Uint8Array);
+    expect(new TextDecoder().decode(ws.sent[1] as PokeChunk)).toBe(
+      '[{"rowsPatch":[{"op":"clear"}]}]',
+    );
+    expect(ws.sent[2]).toBe(JSON.stringify(pokeEnd));
+  });
+});
+
+function sendWithBackpressure(
+  sender: DownstreamSender,
+  downstream: Downstream,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    sender.send(downstream, error => (error ? reject(error) : resolve()));
+  });
+}
 
 describe('serializedPokePatch', () => {
   test('removes the legacy envelope and repeated pokeID', () => {

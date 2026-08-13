@@ -98,6 +98,7 @@ export class Connection {
   readonly #lc: LogContext;
   readonly #onClose: () => void;
   readonly #messageHandler: MessageHandler;
+  readonly #downstreamSender: DownstreamSender;
   readonly #downstreamMsgTimer: NodeJS.Timeout | undefined;
   readonly #webSocketErrors = getOrCreateCounter(
     'sync',
@@ -107,7 +108,6 @@ export class Connection {
 
   #viewSyncerOutboundStream: Source<ViewSyncerDownstream> | undefined;
   #pusherOutboundStream: Source<Downstream> | undefined;
-  #pokeChunkEncoder: PokeChunkEncoder | undefined;
   #closed = false;
 
   constructor(
@@ -129,6 +129,11 @@ export class Connection {
       .withContext('clientID', clientID)
       .withContext('clientGroupID', clientGroupID)
       .withContext('wsID', wsID);
+    this.#downstreamSender = new DownstreamSender(
+      this.#lc,
+      ws,
+      protocolVersion,
+    );
     this.#lc.debug?.('new connection');
     this.#onClose = onClose;
 
@@ -374,65 +379,7 @@ export class Connection {
     serialized?: string | undefined,
   ) {
     this.#lastDownstreamMsgTime = Date.now();
-    if (this.#protocolVersion >= POKE_CHUNK_PROTOCOL_VERSION) {
-      switch (data[0]) {
-        case 'pokeStart':
-          assert(
-            this.#pokeChunkEncoder === undefined,
-            'cannot start a poke while another poke is in progress',
-          );
-          this.#pokeChunkEncoder = new PokeChunkEncoder();
-          break;
-        case 'pokePart':
-          this.#sendPokePart(data, callback, serialized);
-          return;
-        case 'pokeEnd':
-          this.#sendPokeEnd(data, callback);
-          return;
-      }
-    }
-    return send(this.#lc, this.#ws, data, callback, serialized);
-  }
-
-  #sendPokePart(
-    pokePart: PokePartMessage,
-    callback: ((err?: Error | null) => void) | 'ignore-backpressure',
-    serialized?: string | undefined,
-  ): void {
-    const encoder = this.#pokeChunkEncoder;
-    assert(encoder, 'pokePart received without a pokeStart');
-
-    void encoder
-      .addPatch(serializedPokePatch(pokePart, serialized), chunk =>
-        sendBinary(this.#lc, this.#ws, chunk),
-      )
-      .then(
-        () => invokeCallback(callback),
-        error => invokeCallback(callback, toError(error)),
-      );
-  }
-
-  #sendPokeEnd(
-    pokeEnd: PokeEndMessage,
-    callback: ((err?: Error | null) => void) | 'ignore-backpressure',
-  ): void {
-    const encoder = this.#pokeChunkEncoder;
-    assert(encoder, 'pokeEnd received without a pokeStart');
-    this.#pokeChunkEncoder = undefined;
-
-    if (pokeEnd[1].cancel) {
-      encoder.cancel();
-      send(this.#lc, this.#ws, pokeEnd, callback);
-      return;
-    }
-
-    void encoder
-      .finish(chunk => sendBinary(this.#lc, this.#ws, chunk))
-      .then(() => sendAsync(this.#lc, this.#ws, pokeEnd))
-      .then(
-        () => invokeCallback(callback),
-        error => invokeCallback(callback, toError(error)),
-      );
+    this.#downstreamSender.send(data, callback, serialized);
   }
 
   sendError(errorBody: ErrorBody, thrown?: unknown) {
@@ -500,6 +447,92 @@ export function send(
         ),
       );
     }
+  }
+}
+
+/**
+ * Sends downstream messages in the format supported by a connection's sync
+ * protocol version. Keep version forks contained here so the view-syncer can
+ * continue producing one canonical poke representation.
+ *
+ * Exported for compatibility testing.
+ */
+export class DownstreamSender {
+  readonly #lc: LogContext;
+  readonly #ws: WebSocketLike;
+  readonly #protocolVersion: number;
+  #pokeChunkEncoder: PokeChunkEncoder | undefined;
+
+  constructor(lc: LogContext, ws: WebSocketLike, protocolVersion: number) {
+    this.#lc = lc;
+    this.#ws = ws;
+    this.#protocolVersion = protocolVersion;
+  }
+
+  send(
+    data: Downstream,
+    callback: ((err?: Error | null) => void) | 'ignore-backpressure',
+    serialized?: string | undefined,
+  ): void {
+    if (this.#protocolVersion >= POKE_CHUNK_PROTOCOL_VERSION) {
+      switch (data[0]) {
+        case 'pokeStart':
+          assert(
+            this.#pokeChunkEncoder === undefined,
+            'cannot start a poke while another poke is in progress',
+          );
+          this.#pokeChunkEncoder = new PokeChunkEncoder();
+          break;
+        case 'pokePart':
+          this.#sendPokePart(data, callback, serialized);
+          return;
+        case 'pokeEnd':
+          this.#sendPokeEnd(data, callback);
+          return;
+      }
+    }
+    send(this.#lc, this.#ws, data, callback, serialized);
+  }
+
+  #sendPokePart(
+    pokePart: PokePartMessage,
+    callback: ((err?: Error | null) => void) | 'ignore-backpressure',
+    serialized?: string | undefined,
+  ): void {
+    const encoder = this.#pokeChunkEncoder;
+    assert(encoder, 'pokePart received without a pokeStart');
+
+    void encoder
+      .addPatch(serializedPokePatch(pokePart, serialized), chunk =>
+        sendBinary(this.#lc, this.#ws, chunk),
+      )
+      .then(
+        () => invokeCallback(callback),
+        error => invokeCallback(callback, toError(error)),
+      );
+  }
+
+  #sendPokeEnd(
+    pokeEnd: PokeEndMessage,
+    callback: ((err?: Error | null) => void) | 'ignore-backpressure',
+  ): void {
+    const encoder = this.#pokeChunkEncoder;
+    assert(encoder, 'pokeEnd received without a pokeStart');
+    this.#pokeChunkEncoder = undefined;
+
+    if (pokeEnd[1].cancel) {
+      encoder.cancel();
+      send(this.#lc, this.#ws, pokeEnd, callback);
+      return;
+    }
+
+    void encoder
+      .finish(chunk => sendBinary(this.#lc, this.#ws, chunk))
+      .then(() => sendAsync(this.#lc, this.#ws, pokeEnd))
+      .then(
+        () => invokeCallback(callback),
+        error => invokeCallback(callback, toError(error)),
+      );
   }
 }
 
