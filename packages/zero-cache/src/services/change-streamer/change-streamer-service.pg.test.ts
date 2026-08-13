@@ -17,6 +17,7 @@ import {DbFile} from '../../test/lite.ts';
 import type {PostgresDB} from '../../types/pg.ts';
 import type {Source} from '../../types/streams.ts';
 import {Subscription, type Result} from '../../types/subscription.ts';
+import {orTimeout} from '../../types/timeout.ts';
 import type {ChangeSource} from '../change-source/change-source.ts';
 import type {
   ChangeStreamData,
@@ -3296,6 +3297,186 @@ describe('change-streamer/service', () => {
     changes.fail(new Error('doh'));
 
     expect(await hasRetried).toBe(true);
+  });
+
+  /**
+   * Drives a streamer into the incident state: the change stream terminates
+   * while the change-streamer is blocked in a flow-control await, behind a
+   * storer that is wedged on the `replicationState` row lock (as when PG or the
+   * connection to it stalls). Returns once the interrupted transaction's
+   * `rollback` has been observed by a subscriber -- i.e. once `doneOr()` has
+   * aborted the flow-control await -- with the streamer now in its backoff,
+   * calling `storer.stop()` to drain.
+   *
+   * The storer stays wedged until `releaseLock()` is called, which lets the
+   * caller choose whether the storer drains within `drainTimeoutMs` or not.
+   */
+  async function wedgeStreamerBehindStorerBackpressure(drainTimeoutMs: number) {
+    await streamer.stop();
+    await streamerDone;
+
+    const firstChanges = Subscription.create<ChangeStreamMessage>();
+    const reconnected = resolver<void>();
+    const startStream = vi
+      .fn()
+      .mockImplementationOnce(() =>
+        Promise.resolve({
+          initialWatermark: '01',
+          changes: firstChanges,
+          acks: {push: () => {}},
+        }),
+      )
+      // On in-process recovery the streamer reconnects; signal it and park so
+      // run() stays alive until the test tears it down.
+      .mockImplementation(() => {
+        reconnected.resolve();
+        return resolver().promise;
+      });
+    const source = {
+      startStream,
+      startLagReporter: () => null,
+      stop: () => {
+        firstChanges.cancel();
+        return Promise.resolve();
+      },
+    } satisfies ChangeSource;
+
+    const incidentStreamer = await initializeStreamer(
+      lc,
+      shard,
+      'task-id',
+      'change.streamer:12345',
+      'ws',
+      sql,
+      source,
+      ReplicationStatusPublisher.forTesting(),
+      replicaConfig,
+      null,
+      null,
+      true,
+      {
+        ...opts,
+        backPressureLimitHeapProportion: 0.00001,
+        statementTimeoutMs: 20_000,
+        drainTimeoutMs,
+      },
+    );
+    const incidentDone = incidentStreamer.run();
+
+    const sub = await incidentStreamer.subscribe({
+      protocolVersion: PROTOCOL_VERSION,
+      taskID: 'task-id',
+      id: 'myid1',
+      mode: 'serving',
+      watermark: '01',
+      replicaVersion: REPLICA_VERSION,
+      initial: true,
+      logsChangeStream: false,
+    });
+    const msgs = drainToQueue(sub);
+    expect(await nextChange(msgs)).toMatchObject({tag: 'status'});
+
+    // Wedge the storer: hold the replicationState row lock it acquires at the
+    // start of every transaction, so it cannot drain and backpressure never
+    // clears.
+    const lockAcquired = resolver<void>();
+    const releaseLock = resolver<void>();
+    const lockDone = sql.begin(async tx => {
+      await tx`SELECT owner FROM "zoro_3/cdc"."replicationState" FOR UPDATE`;
+      lockAcquired.resolve();
+      await releaseLock.promise;
+    });
+    void lockDone.catch(lockAcquired.reject);
+    await lockAcquired.promise;
+
+    // Commit one transaction so the storer parks at its commit (blocked on the
+    // held lock) and stops dequeuing. Then open a new transaction and push a
+    // large change: it stays queued behind the parked storer, keeping
+    // `approximateQueuedBytes` over the tiny backpressure threshold so
+    // `readyForMore()` never resolves. The change-streamer is now blocked in the
+    // flow-control await, mid-transaction (watermark '06').
+    firstChanges.push(['begin', messages.begin(), {commitWatermark: '05'}]);
+    firstChanges.push(['commit', messages.commit(), {watermark: '05'}]);
+    const nextBegin = firstChanges.push([
+      'begin',
+      messages.begin(),
+      {commitWatermark: '06'},
+    ]);
+    const blockedChange = firstChanges.push([
+      'data',
+      messages.insert('foo', {id: 'blocked', value: 'a'.repeat(1024 ** 2)}),
+    ]);
+
+    expect(await nextChange(msgs)).toMatchObject({tag: 'begin'});
+    expect(await nextChange(msgs)).toMatchObject({tag: 'commit'});
+    expect(await nextChange(msgs)).toMatchObject({tag: 'begin'});
+    expect(await nextChange(msgs)).toMatchObject({tag: 'insert'});
+
+    // The '06' begin was consumed, but the large change is not: the streamer is
+    // parked awaiting flow control before it can request the next message.
+    expect(await orTimeout(nextBegin.result, 300)).toBe('consumed');
+    expect(await orTimeout(blockedChange.result, 50)).toBe('timed-out');
+
+    // The source terminates independently of change consumption. doneOr() must
+    // abort the blocked flow-control await so the interrupted '06' transaction
+    // is rolled back immediately -- WITHOUT waiting for the wedged storer to
+    // drain (which cannot happen until the lock is released, ~12h in the
+    // incident).
+    firstChanges.fail(new Error('source terminated'));
+
+    const rollback = await msgs.dequeue(
+      ['error', {type: 0, message: 'timed-out'}],
+      1000,
+    );
+    expect(rollback).toMatchObject([expect.anything(), {tag: 'rollback'}]);
+
+    return {
+      incidentStreamer,
+      incidentDone,
+      startStream,
+      reconnected: reconnected.promise,
+      releaseLock: () => releaseLock.resolve(),
+      lockDone,
+    };
+  }
+
+  test('recover when source terminates behind storer backpressure that drains', async () => {
+    const {
+      incidentStreamer,
+      incidentDone,
+      startStream,
+      reconnected,
+      releaseLock,
+      lockDone,
+    } = await wedgeStreamerBehindStorerBackpressure(5_000);
+
+    // The storer drains before the timeout, so the streamer recovers in-process
+    // and reconnects rather than exiting.
+    releaseLock();
+    await lockDone.catch(() => {});
+
+    expect(await orTimeout(reconnected, 2_000)).toBeUndefined();
+    expect(startStream).toHaveBeenCalledTimes(2);
+
+    await orTimeout(incidentStreamer.stop(), 2_000);
+    void incidentDone.catch(() => {});
+  });
+
+  test('exit when source terminates behind storer backpressure that does not drain', async () => {
+    const {incidentDone, startStream, releaseLock, lockDone} =
+      await wedgeStreamerBehindStorerBackpressure(200);
+
+    // The storer never drains (the lock is still held), so `storer.stop()`
+    // times out and run() exits with the drain-timeout error instead of
+    // reconnecting -- allowing the worker to be replaced.
+    await expect(orTimeout(incidentDone, 3_000)).rejects.toThrow(
+      'changeLog did not drain within 200ms',
+    );
+    expect(startStream).toHaveBeenCalledTimes(1);
+
+    // Release the lock so the wedged storer transaction unwinds during teardown.
+    releaseLock();
+    await lockDone.catch(() => {});
   });
 
   test('retry on unexpected storage error', async () => {

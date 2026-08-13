@@ -693,7 +693,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
             // control promise. Record the boundary before awaiting that promise
             // so registrations during the wait observe the forwarded state.
             this.#recordForwardedTransactionBoundary(type, entry[0]);
-            await forwarded;
+            await stream.changes.doneOr(forwarded);
             unflushedBytes = 0;
           }
 
@@ -704,7 +704,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
           // Allow the storer to exert back pressure.
           const readyForMore = this.#storer.readyForMore();
           if (readyForMore) {
-            await readyForMore;
+            await stream.changes.doneOr(readyForMore);
           }
         }
       } catch (e) {
@@ -1047,8 +1047,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     this.#purgeScheduler?.stop();
     this.#sqliteCatchup?.close();
     this.#changeLogWriter?.close();
-    await this.#storer.stop();
-    await this.#source.stop();
+    await Promise.allSettled([this.#storer.stop(), this.#source.stop()]);
   }
 
   #recordForwardedTransactionBoundary(

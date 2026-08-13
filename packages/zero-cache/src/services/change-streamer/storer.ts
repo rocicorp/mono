@@ -12,6 +12,7 @@ import {runTx} from '../../db/run-transaction.ts';
 import {TransactionPool} from '../../db/transaction-pool.ts';
 import {type PostgresDB, type PostgresTransaction} from '../../types/pg.ts';
 import {cdcSchema, type ShardID} from '../../types/shards.ts';
+import {orTimeout} from '../../types/timeout.ts';
 import {
   backfillRequestSchema,
   isDataChange,
@@ -93,6 +94,7 @@ export type TuningOptions = {
   backPressureLimitHeapProportion: number;
   statementTimeoutMs: number;
   changeLogBatchSize: number;
+  drainTimeoutMs?: number | undefined;
 };
 
 /**
@@ -151,6 +153,7 @@ export class Storer implements Service {
   readonly #backPressureThresholdBytes: number;
   readonly #statementTimeoutMs: number;
   readonly #changeLogBatchSize: number;
+  readonly #drainTimeoutMs: number;
 
   #approximateQueuedBytes = 0;
   #running = false;
@@ -169,6 +172,7 @@ export class Storer implements Service {
       backPressureLimitHeapProportion,
       statementTimeoutMs,
       changeLogBatchSize,
+      drainTimeoutMs = 30_000,
     }: TuningOptions,
   ) {
     this.#lc = lc.withContext('component', 'change-log');
@@ -182,6 +186,7 @@ export class Storer implements Service {
     this.#onFatal = onFatal;
     this.#statementTimeoutMs = statementTimeoutMs;
     this.#changeLogBatchSize = Math.max(1, changeLogBatchSize);
+    this.#drainTimeoutMs = drainTimeoutMs;
 
     const heapStats = getHeapStatistics();
     this.#backPressureThresholdBytes =
@@ -935,12 +940,23 @@ export class Storer implements Service {
     }
   }
 
-  stop() {
+  /**
+   * Stops the storer and waits up to a drain timeout for entries to drain,
+   * throwing an exception if it doesn't drain in time, in order to abort
+   * the server when PG (or the connection to it) appears to be wedged.
+   */
+  async stop() {
     if (this.#running) {
       this.#lc.info?.(`draining ${this.#queue.size()} changeLog entries`);
       this.#queue.enqueue('stop');
     }
-    return this.#stopped;
+    if (
+      (await orTimeout(this.#stopped, this.#drainTimeoutMs)) === 'timed-out'
+    ) {
+      throw new AbortError(
+        `changeLog did not drain within ${this.#drainTimeoutMs}ms`,
+      );
+    }
   }
 }
 
