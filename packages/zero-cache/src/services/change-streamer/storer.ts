@@ -970,6 +970,7 @@ export class Storer implements Service {
   async stop() {
     if (this.#running) {
       this.#lc.info?.(`draining ${this.#queue.size()} changeLog entries`);
+      this.abort(); // for cleanliness, abort any open transactions
       this.#queue.enqueue('stop');
     }
     if (
