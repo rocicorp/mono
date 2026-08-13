@@ -382,22 +382,27 @@ export class Zero<
   #deletedClients: DeleteClientsBody | undefined;
 
   /**
-   * The highest mutation ID we have sent over the current connection, per
-   * client.
+   * The highest mutation ID we have sent on the current connection, for each
+   * client in our client group.
    *
-   * The pending mutations we push come from the client group's local commit
-   * chain, so they interleave mutations from every client (tab) in the group,
-   * and the *cross-client* order of that chain is not stable between pushes:
-   * `persist` rebases this client's unpersisted mutations onto the current
-   * perdag head, and `refresh` then rebuilds memdag as
-   * `perdagChain ++ ownUnpersistedMutations`. So another client's mutation can
-   * move ahead of a mutation we have already sent. Tracking what was sent per
-   * client (rather than a single position in the chain) keeps the decision
-   * independent of that ordering, so we never skip a mutation and never send a
-   * gap in a client's mutation ID sequence.
+   * The mutations we push are the client group's local commit chain, so they
+   * include mutations made by every tab in the group, not just this one. The
+   * order of that chain changes from one push to the next: when we persist our
+   * own mutations they move to the end of the chain, behind whatever the other
+   * tabs persisted in the meantime. So a mutation from another tab can end up
+   * in front of one we already sent, which means we cannot decide what to send
+   * next by remembering a single position in the chain. Remembering the last ID
+   * we sent for each client works no matter how the chain is ordered: we never
+   * skip a mutation, and we never leave a hole in a client's run of mutation
+   * IDs (the server rejects a hole as an invalid push).
    *
-   * Cleared whenever the connection is (re)established or torn down, since the
-   * server forgets what it has seen on a socket.
+   * Cleared whenever the connection is established or torn down. The server
+   * does remember what it has processed, in a last mutation ID per client, and
+   * it ignores anything it has already applied. But we don't know which of our
+   * sends actually made it across before the socket died, so we start over and
+   * let the server drop the duplicates. The only mutations we don't resend are
+   * the ones the server has acknowledged in a poke, because those have already
+   * been rebased out of the commit chain.
    */
   readonly #lastMutationIDsSent: Map<ClientID, number> = new Map();
 

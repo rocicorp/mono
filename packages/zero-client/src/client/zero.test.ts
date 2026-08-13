@@ -1749,116 +1749,125 @@ test('pusher sends one mutation per push message', async () => {
   ]);
 });
 
-test('pusher does not skip mutations when the pending list is reordered', async () => {
-  // The pending list is the client group's local commit chain, so it
-  // interleaves mutations from every client (tab) in the group. `persist`
-  // rebases this client's unpersisted mutations onto the current perdag head
-  // and `refresh` then rebuilds memdag as `perdagChain ++ ownUnpersisted`, so
-  // another client's mutation can move *ahead* of a mutation we already sent.
-  // We must still send it, and we must never send a gap in a client's mutation
-  // ID sequence (the server rejects that with an out of order mutation error).
-  const z = zeroForTest();
-  await z.triggerConnected();
-
-  const mockSocket = await z.socket;
-  const clientGroupID = await z.clientGroupID;
-
-  const mut = (clientID: string, id: number): Mutation => ({
-    type: MutationType.Custom,
-    clientID,
-    id,
-    name: 'mut1',
-    args: [{}],
-    timestamp: id,
-  });
-
-  const push = async (mutations: Mutation[]) => {
-    mockSocket.messages.length = 0;
-    await z.pusher(
-      {
-        profileID: 'p1',
-        clientGroupID,
-        pushVersion: 1,
-        schemaVersion: '1',
-        mutations,
-      },
-      'test-request-id',
-    );
-    return mockSocket.messages.map(raw => {
-      const [, {mutations}] = valita.parse(JSON.parse(raw), pushMessageSchema);
-      return `${mutations[0].clientID}:${mutations[0].id}`;
-    });
-  };
-
-  expect(await push([mut('c2', 1), mut('c1', 1)])).toEqual(['c2:1', 'c1:1']);
-
-  // c2:2 lands *before* c1:1, the last mutation we sent.
-  expect(await push([mut('c2', 1), mut('c2', 2), mut('c1', 1)])).toEqual([
-    'c2:2',
-  ]);
-
-  // c2:3 must not be sent without c2:2 having been sent first.
-  expect(
-    await push([mut('c2', 1), mut('c2', 2), mut('c1', 1), mut('c2', 3)]),
-  ).toEqual(['c2:3']);
+const pushMutation = (clientID: string, id: number): Mutation => ({
+  type: MutationType.Custom,
+  clientID,
+  id,
+  name: 'mut1',
+  args: [{}],
+  timestamp: id,
 });
 
-test('pusher sends the pending mutations of a closed client', async () => {
-  // Mutation recovery skips our own client group, so when another tab in the
-  // group goes away its pending mutations are only ever sent by a surviving
-  // tab, as part of that tab's ordinary push of the client group's chain. Those
-  // mutations sit *before* our own unpersisted ones in the chain, so they must
-  // not be filtered out by what we have already sent for ourselves.
+// Pushes the given mutations as if they were the client group's pending
+// mutations and returns what actually went out on the socket, as
+// "clientID:mutationID" strings.
+const pushAndReadSocket = async (
+  z: TestZero<Schema>,
+  mutations: Mutation[],
+) => {
+  const mockSocket = await z.socket;
+  mockSocket.messages.length = 0;
+  await z.pusher(
+    {
+      profileID: 'p1',
+      clientGroupID: await z.clientGroupID,
+      pushVersion: 1,
+      schemaVersion: '1',
+      mutations,
+    },
+    'test-request-id',
+  );
+  return mockSocket.messages.map(raw => {
+    const [, {mutations}] = valita.parse(JSON.parse(raw), pushMessageSchema);
+    return `${mutations[0].clientID}:${mutations[0].id}`;
+  });
+};
+
+test('pusher does not skip mutations when the pending list is reordered', async () => {
+  // A client pushes the whole client group's commit chain, so the mutations it
+  // sends include ones made by the other tabs in the group. The order of that
+  // chain changes from one push to the next: when this tab persists its own
+  // mutations they move to the end of the chain, behind whatever the other tabs
+  // persisted in the meantime. So a mutation from another tab can show up in
+  // front of one we already sent. We still have to send it, and we must never
+  // leave a hole in a client's run of mutation IDs, because the server rejects
+  // a hole as an invalid push.
   const z = zeroForTest();
   await z.triggerConnected();
 
-  const clientGroupID = await z.clientGroupID;
+  // Our own mutations are the ones that get moved to the end of the chain, so
+  // use this client's real ID for them.
+  const self = z.clientID;
+  const other = 'other-tab';
+  const push = (mutations: Mutation[]) => pushAndReadSocket(z, mutations);
 
-  const mut = (clientID: string, id: number): Mutation => ({
-    type: MutationType.Custom,
-    clientID,
-    id,
-    name: 'mut1',
-    args: [{}],
-    timestamp: id,
-  });
+  expect(await push([pushMutation(other, 1), pushMutation(self, 1)])).toEqual([
+    `${other}:1`,
+    `${self}:1`,
+  ]);
 
-  const push = async (mutations: Mutation[]) => {
-    const mockSocket = await z.socket;
-    mockSocket.messages.length = 0;
-    await z.pusher(
-      {
-        profileID: 'p1',
-        clientGroupID,
-        pushVersion: 1,
-        schemaVersion: '1',
-        mutations,
-      },
-      'test-request-id',
-    );
-    return mockSocket.messages.map(raw => {
-      const [, {mutations}] = valita.parse(JSON.parse(raw), pushMessageSchema);
-      return `${mutations[0].clientID}:${mutations[0].id}`;
-    });
-  };
-
-  expect(await push([mut('a', 1), mut('b', 1)])).toEqual(['a:1', 'b:1']);
-
-  // Tab a closed with a:2 and a:3 persisted but unsent. We are the only client
-  // left that can push them.
+  // The other tab's second mutation now sits in front of our own, which was the
+  // last mutation we sent.
   expect(
-    await push([mut('a', 1), mut('a', 2), mut('a', 3), mut('b', 1)]),
-  ).toEqual(['a:2', 'a:3']);
+    await push([
+      pushMutation(other, 1),
+      pushMutation(other, 2),
+      pushMutation(self, 1),
+    ]),
+  ).toEqual([`${other}:2`]);
 
-  // After a reconnect the server has forgotten what it saw on the old socket,
-  // so everything still pending is sent again.
+  // The other tab's third mutation must not go out unless its second one
+  // already did.
+  expect(
+    await push([
+      pushMutation(other, 1),
+      pushMutation(other, 2),
+      pushMutation(self, 1),
+      pushMutation(other, 3),
+    ]),
+  ).toEqual([`${other}:3`]);
+});
+
+test('pusher resends every pending mutation after a reconnect', async () => {
+  // We track what we have sent per connection. On a new connection we don't
+  // know how much of what we sent on the old socket actually got there, so we
+  // send everything still pending again and let the server ignore the ones it
+  // has already applied.
+  const z = zeroForTest();
+  await z.triggerConnected();
+
+  const self = z.clientID;
+  const other = 'other-tab';
+  const push = (mutations: Mutation[]) => pushAndReadSocket(z, mutations);
+
+  expect(await push([pushMutation(other, 1), pushMutation(self, 1)])).toEqual([
+    `${other}:1`,
+    `${self}:1`,
+  ]);
+
+  // Still on the same connection, so only the mutations we haven't sent go out.
+  expect(
+    await push([
+      pushMutation(other, 1),
+      pushMutation(other, 2),
+      pushMutation(other, 3),
+      pushMutation(self, 1),
+    ]),
+  ).toEqual([`${other}:2`, `${other}:3`]);
+
   await z.triggerClose();
   await z.waitForConnectionStatus(ConnectionStatus.Connecting);
   await vi.advanceTimersByTimeAsync(RUN_LOOP_INTERVAL_MS);
   await z.triggerConnected();
+
   expect(
-    await push([mut('a', 1), mut('a', 2), mut('a', 3), mut('b', 1)]),
-  ).toEqual(['a:1', 'a:2', 'a:3', 'b:1']);
+    await push([
+      pushMutation(other, 1),
+      pushMutation(other, 2),
+      pushMutation(other, 3),
+      pushMutation(self, 1),
+    ]),
+  ).toEqual([`${other}:1`, `${other}:2`, `${other}:3`, `${self}:1`]);
 });
 
 test('pusher maps CRUD mutation names', async () => {
