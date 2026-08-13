@@ -52,7 +52,7 @@ const ANCHOR: ChangeLogAnchor = {
 };
 
 /** The main file and the sidecars `deleteLiteDB` removes. */
-const SIDECARS = ['', '-wal', '-wal2', '-shm'];
+const SIDECARS = ['', '-wal', '-wal2', '-shm', '-journal'];
 
 const dbFiles: DbFile[] = [];
 
