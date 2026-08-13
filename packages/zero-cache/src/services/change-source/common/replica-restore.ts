@@ -1,4 +1,5 @@
 import type {LogContext} from '@rocicorp/logger';
+import {sleep} from '../../../../../shared/src/sleep.ts';
 import type {LitestreamConfig} from '../../../config/normalize.ts';
 import {
   tryRestore,
@@ -44,6 +45,11 @@ export type InitializeResult = {
   waitForBackupBeforeServing: boolean;
 };
 
+// A short retry is much cheaper than an initial Postgres sync, while keeping a
+// persistent failure from delaying startup appreciably.
+const MAX_RESTORE_ATTEMPTS = 3;
+const RESTORE_RETRY_DELAY_MS = 5_000;
+
 export async function restoreReplica(
   lc: LogContext,
   config: LitestreamConfig,
@@ -53,16 +59,37 @@ export async function restoreReplica(
   const start = performance.now();
   let result: RestoreResult | undefined;
   try {
-    const attempt = await tryRestore(
-      lc,
-      config,
-      replicaFile,
-      replicaConstraints,
-      'replication_manager',
-    );
-    result = attempt.result;
-  } catch (e) {
-    lc.error?.(`error restoring backup. resyncing the replica`, e);
+    // `tryRestore` returns ordinary restore outcomes (no backup or an invalid
+    // replica) rather than throwing; preserve their existing immediate
+    // initial-sync fallback. Retry every thrown restore error twice before
+    // falling back to the initial Postgres sync.
+    for (let attemptNum = 1; attemptNum <= MAX_RESTORE_ATTEMPTS; attemptNum++) {
+      try {
+        const attempt = await tryRestore(
+          lc,
+          config,
+          replicaFile,
+          replicaConstraints,
+          'replication_manager',
+        );
+        result = attempt.result;
+        return;
+      } catch (e) {
+        if (attemptNum === MAX_RESTORE_ATTEMPTS) {
+          lc.error?.(
+            `litestream restore failed after ${attemptNum} attempts; resyncing the replica`,
+            e,
+          );
+          return;
+        }
+
+        lc.warn?.(
+          `litestream restore attempt ${attemptNum} failed; retrying in ${RESTORE_RETRY_DELAY_MS}ms (attempt ${attemptNum + 1} of ${MAX_RESTORE_ATTEMPTS})`,
+          e,
+        );
+        await sleep(RESTORE_RETRY_DELAY_MS);
+      }
+    }
   } finally {
     const attrs = litestreamRestoreMetricAttrs(config, 'replication_manager');
     const labels = {...attrs, result: result ?? 'error'};
