@@ -119,7 +119,20 @@ export async function subscribe(
           lc.debug?.(`sent manual keepalive`);
         }
         const sinceLastReceived = now - lastReceivedTime;
-        if (sinceLastReceived > inboundTimeoutMs && !readable.destroyed) {
+        const {resetWindow, timedOut} = evaluateInboundLiveness({
+          sinceLastReceived,
+          inboundTimeoutMs,
+          queued: messages.queued,
+        });
+        if (resetWindow) {
+          // Downstream back-pressure is preventing us from consuming (and thus
+          // receiving) upstream messages. Keep the inbound window fresh so that
+          // when the backlog finally drains we grant a full inboundTimeoutMs
+          // before concluding the connection is dead — otherwise a long stall
+          // would leave lastReceivedTime stale and fire this watchdog on the
+          // first post-drain tick, tearing down a healthy connection.
+          lastReceivedTime = now;
+        } else if (timedOut && !readable.destroyed) {
           lc.warn?.(
             `no message received from ${db.options.host} in ${sinceLastReceived}ms ` +
               `(> 2x wal_sender_timeout ${walSenderTimeoutMs}ms). Destroying ` +
@@ -225,6 +238,39 @@ export function computeLivenessTimings(walSenderTimeoutMs: number): {
     // Poll at 1/5th of the manual keepalive interval.
     timerIntervalMs: manualKeepaliveTimeout / 5,
   };
+}
+
+/**
+ * Pure decision for the inbound-liveness watchdog, given the time since the
+ * last inbound message, the timeout threshold, and the number of messages
+ * currently queued downstream (see {@link SourceWithPendingQueue.queued}).
+ *
+ * A non-empty downstream queue means we have received data we haven't yet
+ * consumed: the reason we aren't receiving *more* is our own back-pressure, not
+ * upstream silence. In that case we `resetWindow` (treat the backlog as
+ * liveness evidence) rather than counting the stall against the connection.
+ * This both suppresses false timeouts during back-pressure and — crucially —
+ * keeps `lastReceivedTime` fresh so the drain transition (queue emptying after
+ * a long stall) doesn't fire the watchdog against a stale timestamp on the very
+ * next tick.
+ *
+ * Only when the queue is empty (consumption has caught up, so reading — and
+ * thus keepalives — should be flowing again) does an over-threshold gap
+ * indicate a genuinely dead inbound half.
+ */
+export function evaluateInboundLiveness({
+  sinceLastReceived,
+  inboundTimeoutMs,
+  queued,
+}: {
+  sinceLastReceived: number;
+  inboundTimeoutMs: number;
+  queued: number;
+}): {resetWindow: boolean; timedOut: boolean} {
+  if (queued > 0) {
+    return {resetWindow: true, timedOut: false};
+  }
+  return {resetWindow: false, timedOut: sinceLastReceived > inboundTimeoutMs};
 }
 
 /**
