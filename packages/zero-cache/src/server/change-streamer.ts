@@ -179,6 +179,7 @@ export default async function runWorker(
               replicationLag.reportIntervalMs,
               restoreOptions,
               purgeLock,
+              upstream.pgStreamInboundTimeoutMs,
             )
           : await initializeCustomChangeSource(
               lc,
