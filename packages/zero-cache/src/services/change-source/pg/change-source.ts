@@ -139,6 +139,7 @@ export async function initializePostgresChangeSource(
   lagReportIntervalMs = 0,
   restoreOptions: RestoreOptions = {},
   purgeLock?: PurgeLock | null,
+  streamInboundTimeoutMs?: number | undefined,
 ): Promise<InitializeResult> {
   const db = await connectPgClient(lc, upstreamURI, 'change-source-init');
   try {
@@ -197,6 +198,7 @@ export async function initializePostgresChangeSource(
       context,
       lagReportIntervalMs,
       syncOptions.textCopy,
+      streamInboundTimeoutMs,
     );
 
     const backupPath = must(initialSyncedReplica ?? restoredReplica).backupPath;
@@ -358,6 +360,7 @@ class PostgresChangeSource implements ChangeSource {
   readonly #context: ServerContext;
   readonly #lagReporter: LagReporter | null;
   readonly #textCopy: boolean;
+  readonly #streamInboundTimeoutMs: number | undefined;
   #stopped = false;
 
   constructor(
@@ -368,6 +371,7 @@ class PostgresChangeSource implements ChangeSource {
     context: ServerContext,
     lagReportIntervalMs: number,
     textCopy?: boolean | undefined,
+    streamInboundTimeoutMs?: number | undefined,
   ) {
     this.#lc = lc.withContext('component', 'change-source');
     this.#db = pgClient(lc, upstreamUri, 'replication-monitor', {
@@ -380,6 +384,7 @@ class PostgresChangeSource implements ChangeSource {
     this.#replica = replica;
     this.#context = context;
     this.#textCopy = textCopy ?? false;
+    this.#streamInboundTimeoutMs = streamInboundTimeoutMs;
     this.#lagReporter =
       lagReportIntervalMs > 0
         ? new LagReporter(
@@ -455,6 +460,9 @@ class PostgresChangeSource implements ChangeSource {
       slot,
       [...shardConfig.publications],
       clientStart,
+      undefined,
+      undefined,
+      this.#streamInboundTimeoutMs,
     );
     const acker = new Acker(acks);
 
