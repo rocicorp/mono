@@ -269,8 +269,6 @@ export const CONNECT_TIMEOUT_MS = 10_000;
 
 const CHECK_CONNECTIVITY_ON_ERROR_FREQUENCY = 6;
 
-const NULL_LAST_MUTATION_ID_SENT = {clientID: '', id: -1} as const;
-
 const DEFAULT_QUERY_CHANGE_THROTTLE_MS = 10;
 
 export const LOGGED_OUT_STORAGE_USER_ID = '__anonymous__';
@@ -383,8 +381,30 @@ export class Zero<
    */
   #deletedClients: DeleteClientsBody | undefined;
 
-  #lastMutationIDSent: {clientID: string; id: number} =
-    NULL_LAST_MUTATION_ID_SENT;
+  /**
+   * The highest mutation ID we have sent on the current connection, for each
+   * client in our client group.
+   *
+   * The mutations we push are the client group's local commit chain, so they
+   * include mutations made by every tab in the group, not just this one. The
+   * order of that chain changes from one push to the next: when we persist our
+   * own mutations they move to the end of the chain, behind whatever the other
+   * tabs persisted in the meantime. So a mutation from another tab can end up
+   * in front of one we already sent, which means we cannot decide what to send
+   * next by remembering a single position in the chain. Remembering the last ID
+   * we sent for each client works no matter how the chain is ordered: we never
+   * skip a mutation, and we never leave a hole in a client's run of mutation
+   * IDs (the server rejects a hole as an invalid push).
+   *
+   * Cleared whenever the connection is established or torn down. The server
+   * does remember what it has processed, in a last mutation ID per client, and
+   * it ignores anything it has already applied. But we don't know which of our
+   * sends actually made it across before the socket died, so we start over and
+   * let the server drop the duplicates. The only mutations we don't resend are
+   * the ones the server has acknowledged in a poke, because those have already
+   * been rebased out of the commit chain.
+   */
+  readonly #lastMutationIDsSent: Map<ClientID, number> = new Map();
 
   #onPong: () => void = () => undefined;
 
@@ -1496,7 +1516,7 @@ export class Zero<
     // We really don't want to disconnect and reconnect a rate limited user as
     // it'll use more resources on the server
     if (kind === ErrorKind.MutationRateLimited) {
-      this.#lastMutationIDSent = NULL_LAST_MUTATION_ID_SENT;
+      this.#lastMutationIDsSent.clear();
       lc.error?.(kind, 'Mutation rate limited', {message});
       return;
     }
@@ -1590,7 +1610,7 @@ export class Zero<
       connectedCount: this.#connectedCount,
       proceedingConnectErrorCount,
     });
-    this.#lastMutationIDSent = NULL_LAST_MUTATION_ID_SENT;
+    this.#lastMutationIDsSent.clear();
 
     lc.debug?.('Resolving connect resolver');
     must(this.#socket);
@@ -1850,7 +1870,7 @@ export class Zero<
     this.#socket?.removeEventListener('close', this.#onClose);
     this.#socket?.close(closeCode);
     this.#socket = undefined;
-    this.#lastMutationIDSent = NULL_LAST_MUTATION_ID_SENT;
+    this.#lastMutationIDsSent.clear();
     this.#pokeHandler.handleDisconnect();
     this.#queryManager.clearGotQueriesAuthoritative();
 
@@ -1955,23 +1975,22 @@ export class Zero<
 
     const isMutationRecoveryPush =
       req.clientGroupID !== (await this.clientGroupID);
-    const start = isMutationRecoveryPush
-      ? 0
-      : req.mutations.findIndex(
-          m =>
-            m.clientID === this.#lastMutationIDSent.clientID &&
-            m.id === this.#lastMutationIDSent.id,
-        ) + 1;
+    // A recovery push is for a different client group, so nothing has been sent
+    // for it on this connection.
+    const toSend = isMutationRecoveryPush
+      ? req.mutations
+      : req.mutations.filter(
+          m => m.id > (this.#lastMutationIDsSent.get(m.clientID) ?? 0),
+        );
     lc.debug?.(
       isMutationRecoveryPush ? 'pushing for recovery' : 'pushing',
-      req.mutations.length - start,
+      toSend.length,
       'mutations of',
       req.mutations.length,
       'mutations.',
     );
     const now = Date.now();
-    for (let i = start; i < req.mutations.length; i++) {
-      const m = req.mutations[i];
+    for (const m of toSend) {
       const timestamp = now - Math.round(performance.now() - m.timestamp);
       const zeroM =
         m.name === CRUD_MUTATION_NAME
@@ -2004,7 +2023,7 @@ export class Zero<
       ];
       this.#send(msg);
       if (!isMutationRecoveryPush) {
-        this.#lastMutationIDSent = {clientID: m.clientID, id: m.id};
+        this.#lastMutationIDsSent.set(m.clientID, m.id);
       }
     }
     return {
