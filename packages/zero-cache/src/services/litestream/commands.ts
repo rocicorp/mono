@@ -40,6 +40,10 @@ import {
 } from './metrics.ts';
 
 const RETRY_INTERVAL_MS = 3000;
+// A short retry is much cheaper than an initial Postgres sync, while keeping a
+// persistent failure from delaying startup appreciably.
+const MAX_RESTORE_ATTEMPTS = 3;
+const RESTORE_RETRY_DELAY_MS = 5_000;
 
 type ReplicaConstraints = {
   replicaVersion: string;
@@ -87,8 +91,24 @@ export async function restoreReplica(
   // size) is the backstop, so restoreReplica must not impose its own shorter
   // cap and self-terminate while the backup is still being produced.
   try {
-    for (;;) {
-      const attempt = await tryRestore(lc, config, replicaConstraints, role);
+    for (let attemptNum = 1; ; attemptNum++) {
+      let attempt: RestoreAttempt;
+      try {
+        attempt = await tryRestore(lc, config, replicaConstraints, role);
+      } catch (e) {
+        // View-syncers retain their existing startup behavior. For replication
+        // managers, retry a transient restore failure twice before falling back
+        // to the existing initial-sync recovery path.
+        if (!replicaConstraints || attemptNum === MAX_RESTORE_ATTEMPTS) {
+          throw e;
+        }
+        lc.warn?.(
+          `litestream restore attempt ${attemptNum} failed; retrying in ${RESTORE_RETRY_DELAY_MS}ms (attempt ${attemptNum + 1} of ${MAX_RESTORE_ATTEMPTS})`,
+          e,
+        );
+        await sleep(RESTORE_RETRY_DELAY_MS);
+        continue;
+      }
       backupURL = attempt.backupURL;
       if (attempt.restored) {
         result = attempt.result;
