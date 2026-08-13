@@ -1,12 +1,13 @@
 import {EventEmitter} from 'node:events';
 import {describe, expect, test, vi} from 'vitest';
+import type * as processes from '../../types/processes.ts';
 import type {Worker} from '../../types/processes.ts';
 
 // The module self-starts its worker loop on import when `parentWorker` is set
 // (i.e. `process.send` exists, which is true under vitest's forked pool). Mock
 // it to null so importing the module for unit tests has no side effects.
 vi.mock('../../types/processes.ts', async importOriginal => ({
-  ...(await importOriginal<typeof import('../../types/processes.ts')>()),
+  ...(await importOriginal<typeof processes>()),
   parentWorker: null,
 }));
 
