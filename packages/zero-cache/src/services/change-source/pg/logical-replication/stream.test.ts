@@ -1,5 +1,5 @@
 import {describe, expect, test} from 'vitest';
-import {computeLivenessTimings} from './stream.ts';
+import {computeLivenessTimings, evaluateInboundLiveness} from './stream.ts';
 
 describe('computeLivenessTimings', () => {
   // Regression test for https://github.com/rocicorp/mono/pull/6047, which
@@ -43,5 +43,88 @@ describe('computeLivenessTimings', () => {
       expect(t.inboundTimeoutMs).toBeGreaterThan(0);
       expect(t.manualKeepaliveTimeout).toBeGreaterThan(0);
     }
+  });
+});
+
+describe('evaluateInboundLiveness', () => {
+  const inboundTimeoutMs = 120_000; // 2x a default 60s wal_sender_timeout
+
+  // The whole point of the watchdog: when consumption has caught up (queue
+  // empty) and we still haven't heard from upstream past the threshold, the
+  // inbound half is dead and we must force a reconnect.
+  test('times out when the queue is empty and the gap exceeds the threshold', () => {
+    expect(
+      evaluateInboundLiveness({
+        sinceLastReceived: inboundTimeoutMs + 1,
+        inboundTimeoutMs,
+        queued: 0,
+      }),
+    ).toEqual({resetWindow: false, timedOut: true});
+  });
+
+  test('does not time out at or below the threshold with an empty queue', () => {
+    expect(
+      evaluateInboundLiveness({
+        sinceLastReceived: inboundTimeoutMs, // exactly at threshold: not yet
+        inboundTimeoutMs,
+        queued: 0,
+      }),
+    ).toEqual({resetWindow: false, timedOut: false});
+    expect(
+      evaluateInboundLiveness({
+        sinceLastReceived: inboundTimeoutMs - 1,
+        inboundTimeoutMs,
+        queued: 0,
+      }),
+    ).toEqual({resetWindow: false, timedOut: false});
+  });
+
+  // Steady-state back-pressure: a non-empty downstream queue means the silence
+  // is our own flow control, not upstream death. Never time out; instead signal
+  // the caller to refresh the inbound window.
+  test('suppresses the timeout while messages are queued, even far past the threshold', () => {
+    for (const queued of [1, 5, 100]) {
+      expect(
+        evaluateInboundLiveness({
+          sinceLastReceived: inboundTimeoutMs * 10,
+          inboundTimeoutMs,
+          queued,
+        }),
+      ).toEqual({resetWindow: true, timedOut: false});
+    }
+  });
+
+  // Regression test for the drain-transition race. During a long back-pressure
+  // stall the queue stays non-empty, so every tick resets the window (below).
+  // The tick that observes the queue finally drained to 0 must NOT immediately
+  // fire against the pre-stall timestamp — the window was kept fresh, so
+  // `sinceLastReceived` is small and the connection is granted a full
+  // inboundTimeoutMs to deliver the next message.
+  test('a non-empty queue resets the window so the post-drain tick has a fresh gap', () => {
+    // While stalled, every tick sees queued > 0 and resets the window.
+    const duringStall = evaluateInboundLiveness({
+      sinceLastReceived: inboundTimeoutMs * 5,
+      inboundTimeoutMs,
+      queued: 6,
+    });
+    expect(duringStall.resetWindow).toBe(true);
+    expect(duringStall.timedOut).toBe(false);
+
+    // The first tick after the queue drains sees only the small gap accumulated
+    // since the last (reset) tick — well under the threshold — so it holds.
+    const justAfterDrain = evaluateInboundLiveness({
+      sinceLastReceived: 200, // ~one polling interval since the window was reset
+      inboundTimeoutMs,
+      queued: 0,
+    });
+    expect(justAfterDrain).toEqual({resetWindow: false, timedOut: false});
+
+    // Only if upstream then stays silent past the full threshold do we act.
+    const stillSilent = evaluateInboundLiveness({
+      sinceLastReceived: inboundTimeoutMs + 1,
+      inboundTimeoutMs,
+      queued: 0,
+    });
+    expect(stillSilent).toEqual({resetWindow: false, timedOut: true});
   });
 });
