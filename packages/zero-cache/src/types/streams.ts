@@ -40,6 +40,18 @@ export type Source<T> = AsyncIterable<T> & {
   cancel: (err?: Error) => void;
 
   /**
+   * Resolves the result of the specified `other` Promise, or a
+   * resolved/rejected Promise when the Source is terminated or
+   * rejects.
+   *
+   * This is similar to using `Promise.race([other, sourceDone])`, but
+   * in a memory safe way, as repeatedly calling `Promise.race([ ... ])` with
+   * a long-lived Promise results in leaking memory via a growing list of
+   * `then()` callbacks (https://github.com/nodejs/node/issues/17469).
+   */
+  doneOr<R>(other: Promise<R>): Promise<void | R>;
+
+  /**
    * The presence of a `pipeline` iterable allows the usual "consumed-on-iterate" semantics
    * to be overridden.
    *

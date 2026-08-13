@@ -74,6 +74,7 @@ export class Subscription<T, M = T> implements Source<T>, Sink<M> {
     return new Subscription(options, publish);
   }
 
+  readonly #abortController = new AbortController();
   // Consumers waiting to consume messages (i.e. an async iteration awaiting the next message).
   readonly #consumers: Resolver<Entry<M> | null>[] = [];
   // Messages waiting to be dequeued.
@@ -227,6 +228,41 @@ export class Subscription<T, M = T> implements Source<T>, Sink<M> {
     this.#terminate(err);
   }
 
+  /**
+   * Resolves the result of the specified `other` Promise, or a
+   * resolved/rejected Promise when the Subscription {@link end}s,
+   * is {@link cancel}ed, or {@link fail}s.
+   *
+   * This is similar to using `Promise.race([other, subscriptionDone])`, but
+   * in a memory safe way, as repeatedly calling `Promise.race([ ... ])` with
+   * a long-lived Promise results in leaking memory via a growing list of
+   * `then()` callbacks (https://github.com/nodejs/node/issues/17469).
+   */
+  async doneOr<R>(other: Promise<R>): Promise<void | R> {
+    const result = resolver();
+    const handler = () => {
+      if (this.#sentinel instanceof Error) {
+        result.reject(this.#sentinel);
+      } else {
+        result.resolve();
+      }
+    };
+    const {signal} = this.#abortController;
+    if (signal.aborted) {
+      // The subscription is already terminated. `addEventListener('abort')`
+      // would never fire on an already-aborted signal, so settle eagerly.
+      handler();
+    } else {
+      signal.addEventListener('abort', handler);
+    }
+
+    try {
+      return await Promise.race([other, result.promise]);
+    } finally {
+      signal.removeEventListener('abort', handler);
+    }
+  }
+
   #terminate(sentinel: 'canceled' | Error) {
     if (!this.#sentinel) {
       this.#sentinel = sentinel;
@@ -245,6 +281,7 @@ export class Subscription<T, M = T> implements Source<T>, Sink<M> {
           ? consumer.resolve(null)
           : consumer.reject(sentinel);
       }
+      this.#abortController.abort(sentinel);
     }
   }
 

@@ -1,3 +1,4 @@
+import {resolver} from '@rocicorp/resolver';
 import {describe, expect, test, vi} from 'vitest';
 import {assert} from '../../../shared/src/asserts.ts';
 import {sleep} from '../../../shared/src/sleep.ts';
@@ -627,5 +628,95 @@ describe('types/subscription', () => {
       pipeline: true,
     });
     expect(subWithCoalesceAndPipeline.pipeline).not.toBeUndefined();
+  });
+
+  describe('doneOr', () => {
+    test('other resolves first, subscription remains active', async () => {
+      const sub = Subscription.create<number>();
+      const other = resolver<string>();
+
+      const raced = sub.doneOr(other.promise);
+      other.resolve('foo');
+
+      expect(await raced).toBe('foo');
+      expect(sub.active).toBe(true);
+    });
+
+    test('other rejects first', async () => {
+      const sub = Subscription.create<number>();
+      const other = resolver<string>();
+
+      const raced = sub.doneOr(other.promise);
+      other.reject(new Error('other-boom'));
+
+      await expect(raced).rejects.toThrow('other-boom');
+      expect(sub.active).toBe(true);
+    });
+
+    test('cancel wins over a never-settling other', async () => {
+      const sub = Subscription.create<number>();
+      const never = new Promise<string>(() => {});
+
+      const raced = sub.doneOr(never);
+      sub.cancel();
+
+      expect(await raced).toBeUndefined();
+    });
+
+    test('fail wins over a never-settling other, rejecting with the error', async () => {
+      const sub = Subscription.create<number>();
+      const never = new Promise<string>(() => {});
+
+      const raced = sub.doneOr(never);
+      sub.fail(new Error('sub-boom'));
+
+      await expect(raced).rejects.toThrow('sub-boom');
+    });
+
+    test('end (with no queued messages) resolves doneOr', async () => {
+      const sub = Subscription.create<number>();
+      const never = new Promise<string>(() => {});
+
+      const raced = sub.doneOr(never);
+      sub.end(); // no queued messages => immediate cancel
+
+      expect(await raced).toBeUndefined();
+    });
+
+    test('already-canceled subscription resolves immediately', async () => {
+      const sub = Subscription.create<number>();
+      sub.cancel();
+
+      const never = new Promise<string>(() => {});
+      expect(await sub.doneOr(never)).toBeUndefined();
+    });
+
+    test('already-failed subscription rejects immediately', async () => {
+      const sub = Subscription.create<number>();
+      sub.fail(new Error('already-boom'));
+
+      const never = new Promise<string>(() => {});
+      await expect(sub.doneOr(never)).rejects.toThrow('already-boom');
+    });
+
+    test('repeated races do not accumulate abort listeners', async () => {
+      const sub = Subscription.create<number>();
+
+      // Each race resolves via `other`; the abort listener must be removed in
+      // the `finally` so listeners don't accumulate on the shared signal
+      // (the whole point of doneOr over Promise.race with a long-lived done
+      // promise, see https://github.com/nodejs/node/issues/17469).
+      for (let i = 0; i < 100; i++) {
+        const other = resolver<number>();
+        const raced = sub.doneOr(other.promise);
+        other.resolve(i);
+        expect(await raced).toBe(i);
+      }
+
+      // The subscription still terminates cleanly afterwards.
+      const raced = sub.doneOr(new Promise<number>(() => {}));
+      sub.cancel();
+      expect(await raced).toBeUndefined();
+    });
   });
 });
