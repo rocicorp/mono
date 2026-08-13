@@ -5,7 +5,7 @@ import {BigIntJSON} from '../../../../shared/src/bigint-json.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import {Queue} from '../../../../shared/src/queue.ts';
 import {sleep} from '../../../../shared/src/sleep.ts';
-import {type PgTest, test} from '../../test/db.ts';
+import {test, type PgTest} from '../../test/db.ts';
 import {postgresTypeConfig, type PostgresDB} from '../../types/pg.ts';
 import type {Subscription} from '../../types/subscription.ts';
 import {
@@ -1784,16 +1784,7 @@ describe('change-streamer/storer', () => {
         );
         expect(Date.now() - start).toBeLessThan(TIMEOUT_MS * 5);
       } finally {
-        // The wedged transaction is still open (no commit/rollback was
-        // ever sent) and its TransactionPool worker is still waiting on
-        // the connection this releases. Explicitly abort it -- mirroring
-        // what change-streamer-service.ts does on the interrupted
-        // transaction after readyForMore() rejects -- so the pending
-        // transaction doesn't hang the db connection open through
-        // teardown.
         reserved.release();
-        storer.abort();
-        await storer.allProcessed();
       }
     });
 
