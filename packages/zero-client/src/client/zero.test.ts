@@ -1749,6 +1749,127 @@ test('pusher sends one mutation per push message', async () => {
   ]);
 });
 
+const pushMutation = (clientID: string, id: number): Mutation => ({
+  type: MutationType.Custom,
+  clientID,
+  id,
+  name: 'mut1',
+  args: [{}],
+  timestamp: id,
+});
+
+// Pushes the given mutations as if they were the client group's pending
+// mutations and returns what actually went out on the socket, as
+// "clientID:mutationID" strings.
+const pushAndReadSocket = async (
+  z: TestZero<Schema>,
+  mutations: Mutation[],
+) => {
+  const mockSocket = await z.socket;
+  mockSocket.messages.length = 0;
+  await z.pusher(
+    {
+      profileID: 'p1',
+      clientGroupID: await z.clientGroupID,
+      pushVersion: 1,
+      schemaVersion: '1',
+      mutations,
+    },
+    'test-request-id',
+  );
+  return mockSocket.messages.map(raw => {
+    const [, {mutations}] = valita.parse(JSON.parse(raw), pushMessageSchema);
+    return `${mutations[0].clientID}:${mutations[0].id}`;
+  });
+};
+
+test('pusher does not skip mutations when the pending list is reordered', async () => {
+  // A client pushes the whole client group's commit chain, so the mutations it
+  // sends include ones made by the other tabs in the group. The order of that
+  // chain changes from one push to the next: when this tab persists its own
+  // mutations they move to the end of the chain, behind whatever the other tabs
+  // persisted in the meantime. So a mutation from another tab can show up in
+  // front of one we already sent. We still have to send it, and we must never
+  // leave a hole in a client's run of mutation IDs, because the server rejects
+  // a hole as an invalid push.
+  const z = zeroForTest();
+  await z.triggerConnected();
+
+  // Our own mutations are the ones that get moved to the end of the chain, so
+  // use this client's real ID for them.
+  const self = z.clientID;
+  const other = 'other-tab';
+  const push = (mutations: Mutation[]) => pushAndReadSocket(z, mutations);
+
+  expect(await push([pushMutation(other, 1), pushMutation(self, 1)])).toEqual([
+    `${other}:1`,
+    `${self}:1`,
+  ]);
+
+  // The other tab's second mutation now sits in front of our own, which was the
+  // last mutation we sent.
+  expect(
+    await push([
+      pushMutation(other, 1),
+      pushMutation(other, 2),
+      pushMutation(self, 1),
+    ]),
+  ).toEqual([`${other}:2`]);
+
+  // The other tab's third mutation must not go out unless its second one
+  // already did.
+  expect(
+    await push([
+      pushMutation(other, 1),
+      pushMutation(other, 2),
+      pushMutation(self, 1),
+      pushMutation(other, 3),
+    ]),
+  ).toEqual([`${other}:3`]);
+});
+
+test('pusher resends every pending mutation after a reconnect', async () => {
+  // We track what we have sent per connection. On a new connection we don't
+  // know how much of what we sent on the old socket actually got there, so we
+  // send everything still pending again and let the server ignore the ones it
+  // has already applied.
+  const z = zeroForTest();
+  await z.triggerConnected();
+
+  const self = z.clientID;
+  const other = 'other-tab';
+  const push = (mutations: Mutation[]) => pushAndReadSocket(z, mutations);
+
+  expect(await push([pushMutation(other, 1), pushMutation(self, 1)])).toEqual([
+    `${other}:1`,
+    `${self}:1`,
+  ]);
+
+  // Still on the same connection, so only the mutations we haven't sent go out.
+  expect(
+    await push([
+      pushMutation(other, 1),
+      pushMutation(other, 2),
+      pushMutation(other, 3),
+      pushMutation(self, 1),
+    ]),
+  ).toEqual([`${other}:2`, `${other}:3`]);
+
+  await z.triggerClose();
+  await z.waitForConnectionStatus(ConnectionStatus.Connecting);
+  await vi.advanceTimersByTimeAsync(RUN_LOOP_INTERVAL_MS);
+  await z.triggerConnected();
+
+  expect(
+    await push([
+      pushMutation(other, 1),
+      pushMutation(other, 2),
+      pushMutation(other, 3),
+      pushMutation(self, 1),
+    ]),
+  ).toEqual([`${other}:1`, `${other}:2`, `${other}:3`, `${self}:1`]);
+});
+
 test('pusher maps CRUD mutation names', async () => {
   const t = async (
     pushes: {
