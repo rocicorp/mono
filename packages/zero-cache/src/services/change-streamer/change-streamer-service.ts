@@ -515,7 +515,8 @@ class ChangeStreamerImpl implements ChangeStreamerService {
         // Only reached when `initFromReplica` is set, i.e. when the option
         // that supplies the file is present.
         replica: () => must(replicaSource)(),
-        // The first arm goes with Postgres in `P§:6.9`, leaving the second.
+        // Use the Postgres resume point when it is present. Otherwise, let the
+        // SQLite change log supply its own resume point.
         reconcileChangeLog: (resumeFrom, seed) =>
           resumeFrom
             ? this.#changeLogWriter?.reconcile(resumeFrom)
@@ -570,11 +571,9 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       let watermark: string | null = null;
       let unflushedBytes = 0;
       try {
-        // Reconciling the change log is part of this, and happens inside: it is
-        // what brings the log into agreement with the resume point while
-        // Postgres owns it, and it is where the resume point *comes from* once
-        // the log does. It runs per stream connection rather than once per
-        // process, and before startStream so no change can arrive mid-reconcile.
+        // Initialization reconciles the change log for every stream
+        // connection. It completes before `startStream`, so no change can
+        // arrive during reconciliation.
         const {lastWatermark, backfillRequests} =
           await this.#initializer.initialize();
         // SQLite catchup must not be eligible until this has been initialized

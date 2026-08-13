@@ -94,13 +94,12 @@ export type ChangeLogInitializerSources = {
   /** Typically {@link replicaInitializationSource}. */
   readonly replica: () => InitializationParameters;
   /**
-   * `SQLiteChangeLogWriter.reconcile()`: brings the log into agreement with
-   * `resumeFrom` — Postgres's, while Postgres supplies one — and returns the
-   * point the log is actually at. With no `resumeFrom` the log's own head is
-   * that point, and `seed` is where a log that cannot be kept starts instead.
+   * Reconciles the SQLite change log and returns its current resume point.
    *
-   * `undefined` when there is no log at all (`sqliteChangeLogMode=off`) or the
-   * writer has failed soft.
+   * When `resumeFrom` is present, it supplies the resume point. Otherwise, a
+   * valid log uses its own head. A new or invalid log uses `seed`.
+   *
+   * Returns `undefined` when the writer is disabled or unavailable.
    */
   readonly reconcileChangeLog: (
     resumeFrom: ChangeLogResumePoint | undefined,
@@ -117,24 +116,20 @@ export type ChangeLogInitializerSources = {
 
 type Opts = {
   /**
-   * Read the resume point from the Postgres change log. It is authoritative
-   * whenever it is read, and its cookies are what a reseed installs.
+   * When true, Postgres supplies the resume point and the cookies for a new
+   * change log.
    *
-   * False is the flip, and the whole of it: the change log then resumes from
-   * its own head, and a log that has to be wiped is seeded from the replica
-   * rather than from Postgres. Those are `P§:6.8`'s two gate items, and they
-   * are one flag because they are one fact — a store that no longer owns the
-   * resume point has nothing to seed with.
+   * When false, a valid log resumes from its own head. The replica supplies the
+   * resume point for a new or invalid log.
    */
   // TODO: set false when retiring PG
   readonly initFromPgChangeLog: boolean;
   /**
-   * Derive the parameters from the replica as well.
+   * Derive the parameters from the replica. When Postgres is enabled, these
+   * parameters are used only for comparison.
    *
-   * While Postgres is a source this is computed, compared, and not used.
-   * Once Postgres is not, it is required — the replica is the floor under the
-   * change log, both as the seed for a cold one and as the fallback when the
-   * writer has failed soft.
+   * When Postgres is disabled, the replica supplies the seed and the fallback
+   * resume point.
    */
   readonly initFromReplica: boolean;
 };
@@ -182,32 +177,29 @@ export class ChangeLogInitializer {
   }
 
   /**
-   * How the last {@link initialize}'s two derivations compared, or `undefined`
-   * when only one source was consulted. Exposed for tests and for the
-   * integration assertions on the metrics; nothing acts on it.
+   * Returns the comparison result from the most recent {@link initialize}
+   * call. Returns `undefined` when that call used only one source.
+   *
+   * Tests and metrics use this result. It does not affect initialization.
    */
   lastComparison(): InitComparisonResult | undefined {
     return this.#lastComparison;
   }
 
   /**
-   * Everything one stream connection starts from, with the change log
-   * reconciled against it.
+   * Returns the initialization parameters for one stream connection after it
+   * reconciles the change log.
    *
-   * Reconciliation happens here rather than at the call site because the two
-   * are not separable in either direction. While Postgres owns the resume
-   * point, reconciliation is what brings the log into agreement with it; once
-   * the log owns it, reconciliation is where it *comes from*. Ordering them at
-   * the call site would mean the call site knowing which of those two worlds it
-   * is in, which is the one thing this class exists to hide.
+   * The selected source determines how reconciliation works. Keeping both
+   * operations here hides that choice from the caller.
    */
   async initialize(): Promise<InitializationParameters> {
     this.#lastComparison = undefined;
     const pg = this.#initFromPgChangeLog
       ? await this.#sources.pgChangeLog()
       : undefined;
-    // Required rather than observational once Postgres is gone: it is both the
-    // seed for a cold log and the fallback for a writer that has failed soft.
+    // The replica is required when Postgres is disabled. It seeds a new log and
+    // supplies a resume point when the writer is unavailable.
     const replica = this.#initFromReplica
       ? this.#readReplica(pg === undefined)
       : undefined;
@@ -219,35 +211,30 @@ export class ChangeLogInitializer {
 
     if (pg) {
       if (replica) {
-        // After the reconcile, never before: the fold reads the log's schema
-        // changes over the interval the replica trails by, and only a
-        // reconciled log holds exactly the transactions at or below the resume
-        // watermark. An un-reconciled one can hold phantoms, another replica's
-        // history, or nothing -- none of which is a disagreement between the
-        // two stores, and all of which would be reported as one.
+        // Compare only after reconciliation. The fold must read the schema
+        // changes from the replica watermark through the Postgres watermark.
+        // Reconciliation makes sure that the log contains that interval.
         this.#lastComparison = this.#compare(pg, replica);
       }
       return pg;
     }
 
-    // The log's own head, or -- when there is no log to have one -- the
-    // replica's, which is the floor.
+    // Use the reconciled log position. If the writer is unavailable, use the
+    // replica position.
     const resumePoint =
       reconciled ?? resumePointOf(must(replica, 'no initialization source'));
     return {
       lastWatermark: resumePoint.resumeWatermark,
       cookies: resumePoint.cookies,
-      // Projected rather than read: `BackfillRequest[]` is a view of the cookie
-      // set, and deriving it here is what keeps the requests and the watermark
-      // at one position without a second query that could see another.
+      // Derive the requests from these cookies so that the requests and the
+      // watermark describe the same position.
       backfillRequests: backfillRequestsFrom(resumePoint.cookies),
     };
   }
 
   /**
-   * Compares the two derivations, reports the classification, and returns it.
-   * Nothing acts on the result: Postgres remains authoritative until the flip,
-   * and after it there is no second store to compare against.
+   * Compares both sources and records the result. Postgres remains
+   * authoritative when both sources are enabled.
    */
   #compare(
     pg: InitializationParameters,

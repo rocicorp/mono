@@ -129,26 +129,18 @@ export class SQLiteChangeLogWriter {
   }
 
   /**
-   * Opens the log if necessary, brings it into agreement with the point
-   * Postgres says this stream connection resumes from, and returns the point
-   * the log ends up at. `undefined` when the writer is disabled, i.e. when
-   * there is no log to resume from and the caller has to fall back.
+   * Opens the log if necessary and reconciles it with the Postgres resume
+   * point. Returns the resume point stored in the log.
    *
-   * This runs per connection rather than once per process: the stream loop
-   * re-derives its resume point on every reconnect, so a routine reconnect —
-   * not just a restart — can leave the log holding watermarks above the new
-   * resume watermark, and the writer's plain `INSERT` would collide with the
-   * first re-delivered transaction.
+   * Returns `undefined` when the writer is disabled. The caller must then use
+   * another source.
    *
-   * `resumeFrom` is taken whole rather than as a bare watermark because a
-   * cookie set is not separable from the watermark it was folded to: a
-   * reconciliation that moves the head invalidates the cookies the log was
-   * holding, and only the set read at the same position (invariant 15) can
-   * replace them.
+   * This runs for every connection because Postgres supplies a new resume point
+   * after each reconnect. The log can contain transactions above that point.
+   * Reconciliation removes them before Postgres sends them again.
    *
-   * This is the transitional half of a pair — {@link reconcileFromLog} is the
-   * other — and `P§:6.9` deletes this method along with truncate-above and the
-   * reseed it feeds.
+   * `resumeFrom` includes cookies because the cookies must match the resume
+   * watermark.
    */
   reconcile(
     resumeFrom: ChangeLogResumePoint,
@@ -157,15 +149,10 @@ export class SQLiteChangeLogWriter {
   }
 
   /**
-   * The same, with the log itself supplying the resume point.
+   * Reconciles the log without a Postgres resume point.
    *
-   * A log this task may keep appending to is anchored on its own head, so
-   * there is nothing above it, nothing to truncate, and nothing to reseed —
-   * reconciliation degenerates to the rollback the stream loop already did on
-   * the interrupted transaction. `seed` is where a log that *cannot* be kept
-   * starts instead: the replica's state version and its cookies, read in one
-   * snapshot, which is the only other pairing of both halves at one position
-   * (invariant 15).
+   * A valid log uses its own head and cookies. A new or invalid log uses the
+   * replica values returned by `seed`.
    */
   reconcileFromLog(
     seed: () => ChangeLogResumePoint,
@@ -241,10 +228,8 @@ export class SQLiteChangeLogWriter {
       // are prepared fresh against whatever the reconciliation left behind.
       const db2 = must(this.#db, 'the SQLite change log is not open');
       this.#writer = new ChangeLogStreamWriter(new StatementRunner(db2));
-      // Read back rather than returned by reconciliation, and the same in every
-      // branch, because invariant 17 is exactly the statement that makes it
-      // valid: whichever of truncate or reseed moved the head also replaced the
-      // cookie set with the one that belongs there, in the same transaction.
+      // Read both values after reconciliation. A truncate or reseed updates the
+      // head and cookies in the same transaction.
       return {
         resumeWatermark: must(
           readChangeLogHead(db2),
@@ -259,14 +244,10 @@ export class SQLiteChangeLogWriter {
   }
 
   /**
-   * The resume point a log supplies for itself, once nothing else supplies one.
+   * Returns the resume point supplied by the log.
    *
-   * A log this task may keep appending to resumes from its own head — which is
-   * the whole of it: the head *is* the anchor, so phantoms cannot exist and
-   * reconciliation degenerates to the rollback the stream loop already did. A
-   * log that has to be wiped has no head worth having, and takes the replica's
-   * state version and cookies, which is the only other pairing of the two
-   * halves at one position (invariant 15).
+   * A valid log uses its own head and cookies. A log that must be recreated uses
+   * the replica values returned by `seed`.
    */
   #resumeFromLog(
     db: Database,
@@ -276,8 +257,7 @@ export class SQLiteChangeLogWriter {
       return seed();
     }
     const head = readChangeLogHead(db);
-    // An empty but otherwise valid log is `gap`'s case: there is no head to
-    // resume from, so it is seeded like any other wipe.
+    // An empty log has no resume point, so use the replica seed.
     return head === null
       ? seed()
       : {resumeWatermark: head, cookies: readCookies(db)};

@@ -490,12 +490,10 @@ describe('change-streamer/sqlite-change-log-writer', () => {
     });
 
     /**
-     * Nothing supplies a resume point, so the log's own head is one -- and a
-     * log that cannot be kept falls back to the replica's, never to Postgres's.
+     * When Postgres is disabled, a valid log supplies its own resume point. A
+     * new or invalid log uses the replica seed.
      *
-     * `seed` throws wherever it must not be called, which is the load-bearing
-     * half of these assertions: a warm log that consulted its seed would be
-     * resuming from a position it had already passed.
+     * `noSeed` throws if a valid log incorrectly reads the replica seed.
      */
     describe('resuming from the log itself', () => {
       const replicaSeed = resumeAt('03', pgCookies);
@@ -513,8 +511,8 @@ describe('change-streamer/sqlite-change-log-writer', () => {
           resumeWatermark: '04',
           cookies: folded,
         });
-        // Nothing was truncated and nothing was reseeded: the head *is* the
-        // anchor, so there is nothing above it to remove.
+        // The log already uses its own head and cookies, so reconciliation does
+        // not change it.
         expect(fixture.head()).toBe('04');
         expect(fixture.cookies()).toEqual(folded);
       });
@@ -524,7 +522,7 @@ describe('change-streamer/sqlite-change-log-writer', () => {
         transaction(fixture.writer, '04', createTable);
         fixture.writer.close();
 
-        // Same file, different replica: what a reused volume leaves behind.
+        // A reused volume can contain a log from a different replica.
         const other = new SQLiteChangeLogWriter(fixture.lc, {
           replicaFile: fixture.file.path,
           identity: {...IDENTITY, replicaID: 'a-different-replica'},
@@ -534,8 +532,8 @@ describe('change-streamer/sqlite-change-log-writer', () => {
           expect(other.reconcileFromLog(() => replicaSeed)).toEqual(
             replicaSeed,
           );
-          // Postgres' set is here because the fixture reuses it as the
-          // replica's; what matters is that it came from the seed.
+          // The fixture uses `pgCookies` as the replica seed. This assertion
+          // makes sure that the seed supplied the cookies.
           expect(fixture.cookies()).toEqual(pgCookies);
           expect(fixture.head()).toBe('03');
         } finally {
@@ -554,8 +552,8 @@ describe('change-streamer/sqlite-change-log-writer', () => {
           now: () => 1_700_000_000_000,
         });
         try {
-          // The first reconcile of a process whose file does not exist yet,
-          // which is every restore.
+          // A restore starts without a log, so reconciliation uses the replica
+          // seed.
           expect(writer.reconcileFromLog(() => replicaSeed)).toEqual(
             replicaSeed,
           );
@@ -567,8 +565,8 @@ describe('change-streamer/sqlite-change-log-writer', () => {
       test('a disabled writer supplies no resume point at all', () => {
         using fixture = setup('change-log-writer-from-log-disabled');
 
-        // Fail soft, which deletes the file and disables the writer. The
-        // caller falls back to the replica rather than resuming from nothing.
+        // A write failure deletes the log and disables the writer. The caller
+        // then uses the replica resume point.
         fixture.writer.write(
           ['data', {tag: 'insert'} as never],
           'not a transaction',

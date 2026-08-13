@@ -75,8 +75,8 @@ describe('change-streamer/change-log-initializer against a shard', () => {
   });
 
   /**
-   * `initFromPgChangeLog` is the flip, and the only difference between the two
-   * configurations under test.
+   * Creates an initializer with or without Postgres as an initialization
+   * source.
    */
   function makeInitializer(initFromPgChangeLog: boolean) {
     return new ChangeLogInitializer(
@@ -86,9 +86,9 @@ describe('change-streamer/change-log-initializer against a shard', () => {
         pgChangeLog: () =>
           shard.storer.getStartStreamInitializationParameters(),
         replica: () => readReplicaInitializationParameters(replica),
-        // Stands in for the writer. The log here is driven directly, so it is
-        // always already in agreement: Postgres's point passes through, and
-        // without one the log's own head is the resume point.
+        // This test writes directly to the log, so writer reconciliation is not
+        // necessary. Use the Postgres point when present. Otherwise, use the
+        // current log head.
         reconcileChangeLog: (resumeFrom, seed) => {
           if (resumeFrom) {
             return resumeFrom;
@@ -109,13 +109,10 @@ describe('change-streamer/change-log-initializer against a shard', () => {
   }
 
   /**
-   * The cutover, asserted directly: the two configurations produce the same
-   * parameters from the same stream. Everything else here says the SQLite side
-   * *agrees* with Postgres; this says the flip is a no-op, which is the claim
-   * it actually makes.
+   * Makes sure that both configurations produce the same initialization
+   * parameters from the same stream.
    *
-   * Ordered against Postgres's list rather than compared position-for-position,
-   * because the two are ordered in two engines under two collations.
+   * Sorts the requests because Postgres and SQLite use different collations.
    */
   async function expectFlipIsANoOp() {
     const withPg = await makeInitializer(true).initialize();

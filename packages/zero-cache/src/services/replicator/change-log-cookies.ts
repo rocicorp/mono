@@ -506,19 +506,14 @@ export function foldCookies(
 const backfillRequestsSchema = v.array(backfillRequestSchema);
 
 /**
- * Projects a cookie set into the {@link BackfillRequest}s a stream connection
- * hands the change source.
+ * Builds the {@link BackfillRequest}s for a stream connection from a cookie
+ * set.
  *
- * The projection is lossy in one direction and that is deliberate (§3.7): it is
- * driven off the *backfilling* half, so a table with no in-flight backfill
- * contributes no request even when its metadata is held. Which is why the two
- * are not interchangeable, and why a change log has to hold the whole cookie
- * set rather than the requests it last sent.
+ * Only tables with an active backfill produce requests. A table with metadata
+ * but no active backfill does not produce a request. Therefore, the change log
+ * stores the complete cookie set instead of only the generated requests.
  *
- * One implementation, shared by every store, for the same reason
- * {@link cookieOps} is: `Storer.getStartStreamInitializationParameters()` does
- * this join in SQL, and a second hand-written grouping is a second thing that
- * can be wrong about `metadata: null`.
+ * All stores use this function so they handle `metadata: null` in the same way.
  */
 export function backfillRequestsFrom(cookies: CookieSet): BackfillRequest[] {
   const metadata = new Map(
@@ -532,8 +527,8 @@ export function backfillRequestsFrom(cookies: CookieSet): BackfillRequest[] {
         table: {
           schema,
           name: table,
-          // `null`, not absent: a table can be backfilling with no metadata of
-          // its own, which is the LEFT half of the join Postgres does in SQL.
+          // Use `null` when a backfilling table has no metadata. This matches
+          // the result of the Postgres left join.
           metadata: metadata.get(tableKey(schema, table)) ?? null,
         },
         columns: {},

@@ -367,14 +367,11 @@ function readAutoVacuum(db: Database): number {
  * tolerated rather than thrown — see {@link ensureIncrementalAutoVacuum}.
  */
 /**
- * Produces the anchor for a database that is now open.
+ * Returns an anchor after the database opens.
  *
- * A function rather than a value because the anchor can depend on what the file
- * turns out to contain: once the log owns the resume point, a log this
- * task may keep appending to is anchored on its *own* head, and only one that
- * has to be wiped falls back to the replica's state version. It is called
- * again after a rebuild, against the fresh empty file, which is the answer
- * those paths need rather than a complication for them.
+ * The resolver can inspect the existing file before it selects the anchor. A
+ * valid log can use its own head. A new or invalid log uses the replica seed.
+ * The rebuild path calls the resolver again for the new file.
  */
 export type AnchorResolver = (db: Database) => ChangeLogAnchor;
 
@@ -767,14 +764,11 @@ function reconcile(
 }
 
 /**
- * Whether the log's contents can be kept, and if not, why.
+ * Returns the reason that the log must be recreated. Returns `undefined` when
+ * the writer can continue to use the log.
  *
- * Exported because it is also the question "can this log supply a resume point
- * of its own": once the log owns the resume point, its head is only usable
- * if the file is one this task may keep appending to, and that is exactly this
- * predicate. Taking the identity rather than a whole anchor is what makes that
- * call possible — at that moment there is no anchor yet, because the anchor is
- * what the answer produces.
+ * This function takes only the expected identity because callers use the result
+ * to select the anchor.
  */
 export function changeLogWipeReason(
   db: Database,

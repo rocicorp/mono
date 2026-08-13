@@ -184,14 +184,12 @@ export class BackfillingTracker {
 }
 
 /**
- * The {@link BackfillRequest}s the replica's state implies, in the shape
- * `Storer.getStartStreamInitializationParameters()` produces them from
- * `cdc.backfilling` LEFT JOIN `cdc.tableMetadata`.
+ * Returns the {@link BackfillRequest}s from the current replica cookies. The
+ * result has the same shape as the Postgres initialization result.
  *
- * A snapshot of the replica at its `_zero.replicationState.stateVersion`, only
- * meaningful paired with it. It trails the change log's head, which is why the
- * comparison folds the log's own schema changes onto it first rather than
- * expecting raw equality.
+ * The caller must pair this snapshot with the replica state version. When the
+ * replica trails the change log, the comparison applies the missing schema
+ * changes before it compares the results.
  */
 export function readBackfillRequests(db: Database): BackfillRequest[] {
   return backfillRequestsFrom(readReplicaCookies(db));

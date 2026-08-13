@@ -86,11 +86,11 @@ describe('change-streamer/change-log-initializer', () => {
   }
 
   /**
-   * Stands in for `SQLiteChangeLogWriter.reconcile` / `.reconcileFromLog`. The
-   * log here is driven directly, so it is always already in agreement and there
-   * is nothing to truncate: Postgres's point passes through, and without one
-   * the log's own head is the resume point -- which is what the writer's
-   * resolution reduces to for a log it may keep.
+   * Replaces writer reconciliation in these tests. The tests write directly to
+   * the log, so the log is already consistent.
+   *
+   * Uses the Postgres point when present. Otherwise, it uses the current log
+   * head or the supplied seed.
    */
   function reconcileChangeLog(
     resumeFrom: ChangeLogResumePoint | undefined,
@@ -513,9 +513,8 @@ describe('change-streamer/change-log-initializer', () => {
   });
 
   /**
-   * Postgres is not a source, so the resume point is the log's own head with
-   * its own cookies, and the requests are projected from those rather than
-   * queried from anywhere.
+   * When Postgres is disabled, the log supplies its own head and cookies. The
+   * initializer derives the backfill requests from those cookies.
    */
   describe('with Postgres retired', () => {
     const withoutPg = (
@@ -529,8 +528,8 @@ describe('change-streamer/change-log-initializer', () => {
 
     test('the log supplies the resume point, and it is the one Postgres would have', async () => {
       await transaction([CREATE_FOO]);
-      // The replica is held back, which after the flip is routine rather than
-      // interesting: nothing pairs its watermark with anything.
+      // The replica intentionally trails the log. Its watermark is not used
+      // because this configuration does not compare two sources.
       const head = await transaction(
         [
           {
@@ -564,7 +563,7 @@ describe('change-streamer/change-log-initializer', () => {
       await transaction([CREATE_FOO]);
       const replicated = readReplicaInitializationParameters(replica);
 
-      // What the writer returns for a wiped log: the seed it was handed.
+      // A recreated log starts from the supplied replica seed.
       const params = await withoutPg({
         reconcileChangeLog: (_, seed) => seed(),
       }).initialize();
@@ -579,8 +578,8 @@ describe('change-streamer/change-log-initializer', () => {
       await transaction([], {toReplica: false});
       const replicated = readReplicaInitializationParameters(replica);
 
-      // No log at all -- `sqliteChangeLogMode=off`, or a writer that deleted
-      // its file. The replica is the floor: there is always a resume point.
+      // When the log is unavailable, initialization uses the replica resume
+      // point.
       const params = await withoutPg({
         reconcileChangeLog: () => undefined,
       }).initialize();
@@ -606,8 +605,8 @@ describe('change-streamer/change-log-initializer', () => {
 
   test('with the replica alone its parameters are the ones returned', async () => {
     await transaction([CREATE_FOO]);
-    // What the flip produces. The replica's own state version, and the requests
-    // assembled from its own tables.
+    // With Postgres disabled, the replica supplies the state version and the
+    // backfill requests.
     const init = initializer({
       initFromPgChangeLog: false,
       pg: () => Promise.reject(new Error('must not be read')),
@@ -637,8 +636,8 @@ describe('change-streamer/change-log-initializer', () => {
     await init.initialize();
     expect(init.lastComparison()).toBe('equal');
 
-    // The next connection re-derives both sides, so a stale classification must
-    // not be reported for it -- this one has nothing to compare.
+    // The next initialization clears the previous result. This initializer has
+    // only one source, so it has no comparison result.
     const withoutReplica = initializer({initFromReplica: false});
     await withoutReplica.initialize();
     expect(withoutReplica.lastComparison()).toBeUndefined();
