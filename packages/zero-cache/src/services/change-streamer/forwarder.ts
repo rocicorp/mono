@@ -10,11 +10,7 @@ import type {ChangeTag, Status, WatermarkedChange} from './change-streamer.ts';
 import type {Subscriber} from './subscriber.ts';
 
 export type ProgressMonitorOptions = {
-  flowControlConsensusPaddingSeconds: number;
-  // When true, broadcasts schedule their own consensus-timeout release as soon
-  // as the majority-plus-padding condition is met, instead of waiting for the
-  // 1s progress tick to call checkProgress().
-  eventDrivenRelease?: boolean | undefined;
+  flowControlConsensusTimeoutProportion: number;
   // Injectable timers, for deterministic testing.
   setTimeoutFn?: typeof setTimeout | undefined;
   clearTimeoutFn?: typeof clearTimeout | undefined;
@@ -22,11 +18,12 @@ export type ProgressMonitorOptions = {
 
 export class Forwarder {
   readonly #lc: LogContext;
-  readonly #progressMonitorOptions: ProgressMonitorOptions;
   readonly #setTimeout: typeof setTimeout;
   readonly #clearTimeout: typeof clearTimeout;
   readonly #active = new Set<Subscriber>();
   readonly #queued = new Set<Subscriber>();
+  readonly #earlyReleaseOptions: EarlyReleaseOptions | undefined;
+
   readonly #flowControlWaits = getOrCreateCounter(
     'replication',
     'flow_control.waits',
@@ -44,12 +41,24 @@ export class Forwarder {
 
   constructor(
     lc: LogContext,
-    opts: ProgressMonitorOptions = {flowControlConsensusPaddingSeconds: 1},
+    opts: ProgressMonitorOptions = {
+      flowControlConsensusTimeoutProportion: 2.0,
+    },
   ) {
     this.#lc = lc.withContext('component', 'progress-monitor');
-    this.#progressMonitorOptions = opts;
     this.#setTimeout = opts.setTimeoutFn ?? setTimeout;
     this.#clearTimeout = opts.clearTimeoutFn ?? clearTimeout;
+
+    // A negative proportion disables early release entirely, falling back to
+    this.#earlyReleaseOptions =
+      opts.flowControlConsensusTimeoutProportion < 0
+        ? undefined
+        : {
+            consensusTimeoutProportion:
+              opts.flowControlConsensusTimeoutProportion,
+            setTimeoutFn: this.#setTimeout,
+            clearTimeoutFn: this.#clearTimeout,
+          };
 
     getOrCreateGauge(
       'replication',
@@ -106,16 +115,8 @@ export class Forwarder {
     for (const sub of this.#active) {
       sub.sampleProcessRate(now);
     }
-
-    const {flowControlConsensusPaddingSeconds} = this.#progressMonitorOptions;
-    // A negative number disables early flow control release.
-    if (flowControlConsensusPaddingSeconds >= 0) {
-      this.#currentBroadcast?.checkProgress(
-        this.#lc,
-        flowControlConsensusPaddingSeconds * 1000,
-        now,
-      );
-    }
+    this.#currentBroadcast?.logSlowRequests(now);
+    // TODO: Implement laggard detection.
   };
 
   stopProgressMonitor() {
@@ -161,21 +162,6 @@ export class Forwarder {
     }
   }
 
-  #earlyReleaseOptions(): EarlyReleaseOptions | undefined {
-    const {flowControlConsensusPaddingSeconds, eventDrivenRelease} =
-      this.#progressMonitorOptions;
-    // A negative padding disables early release entirely (mirrors the
-    // checkProgress() path, which is skipped when padding < 0).
-    if (!eventDrivenRelease || flowControlConsensusPaddingSeconds < 0) {
-      return undefined;
-    }
-    return {
-      consensusTimeoutMs: flowControlConsensusPaddingSeconds * 1000,
-      setTimeoutFn: this.#setTimeout,
-      clearTimeoutFn: this.#clearTimeout,
-    };
-  }
-
   /**
    * The flow-control-aware equivalent of {@link forward()}, returning a
    * Promise that resolves when replication should continue.
@@ -183,9 +169,10 @@ export class Forwarder {
   async forwardWithFlowControl(entry: WatermarkedChange) {
     const start = performance.now();
     const broadcast = new Broadcast(
+      this.#lc,
       this.#active.values(),
       entry,
-      this.#earlyReleaseOptions(),
+      this.#earlyReleaseOptions,
     );
     this.#updateActiveSubscribers(entry[1]);
 

@@ -60,7 +60,7 @@ const shard = {
 const benchmarkRecorder = createManualBenchmarkRecorder();
 const streamerOptions = {
   backPressureLimitHeapProportion: 0.04,
-  flowControlConsensusPaddingSeconds: 1,
+  flowControlConsensusTimeoutProportion: 2,
   statementTimeoutMs: 60_000,
   changeLogBatchSize: CHANGE_LOG_BATCH_SIZE,
 };

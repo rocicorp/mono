@@ -48,6 +48,7 @@ describe('change-streamer/broadcast', () => {
     const [sub4, stream4] = createSubscriber('00', true);
 
     const broadcast = new Broadcast(
+      lc,
       [sub1, sub2, sub3, sub4],
       [
         '11',
@@ -77,48 +78,6 @@ describe('change-streamer/broadcast', () => {
     }
   });
 
-  test('checkProgress', async () => {
-    const [sub1] = createSubscriber('00', true);
-    const [sub2] = createSubscriber('00', true);
-    const [sub3] = createSubscriber('00', true);
-    const [sub4] = createSubscriber('00', true);
-
-    const broadcast = new Broadcast(
-      [sub1, sub2, sub3, sub4],
-      [
-        '11',
-        'begin',
-        json(['begin', messages.begin(), {commitWatermark: '13'}]),
-      ],
-    );
-
-    expect(broadcast.isDone).toBe(false);
-
-    sub1.close();
-    sub2.close();
-
-    await sleep(1);
-    const twoDoneTime = performance.now();
-
-    // 2 is less than majority, so checkProgress should not yet advance.
-    expect(broadcast.checkProgress(lc, 2000, twoDoneTime + 2100)).toBe(false);
-
-    sub3.close();
-    await sleep(1);
-    const threeDoneTime = performance.now();
-
-    // 3 reaches majority, but not enough time has elapsed.
-    expect(broadcast.checkProgress(lc, 2000, threeDoneTime + 1100)).toBe(false);
-
-    expect(broadcast.isDone).toBe(false);
-
-    // Once enough time has elapsed, the flow should advance.
-    expect(broadcast.checkProgress(lc, 2000, threeDoneTime + 2100)).toBe(true);
-
-    await broadcast.done;
-    expect(broadcast.isDone).toBe(true);
-  });
-
   const begin: WatermarkedChange = [
     '11',
     'begin',
@@ -146,15 +105,15 @@ describe('change-streamer/broadcast', () => {
     return {scheduled, cleared, setTimeoutFn, clearTimeoutFn};
   }
 
-  test('event-driven early release once a majority acks', async () => {
+  test('early release once a majority acks', async () => {
     const [sub1] = createSubscriber('00', true);
     const [sub2] = createSubscriber('00', true);
     const [sub3] = createSubscriber('00', true);
     const [sub4] = createSubscriber('00', true);
     const {scheduled, setTimeoutFn, clearTimeoutFn} = captureTimers();
 
-    const broadcast = new Broadcast([sub1, sub2, sub3, sub4], begin, {
-      consensusTimeoutMs: 2000,
+    const broadcast = new Broadcast(lc, [sub1, sub2, sub3, sub4], begin, {
+      consensusTimeoutProportion: 2,
       setTimeoutFn,
       clearTimeoutFn,
     });
@@ -166,11 +125,13 @@ describe('change-streamer/broadcast', () => {
     expect(scheduled).toHaveLength(0);
     expect(broadcast.isDone).toBe(false);
 
-    // Third ack reaches the majority: the release timer is armed.
+    // Third ack reaches the majority: the release timer is armed with a delay
+    // proportional to how long the majority took to ack (ceil, so >= 1ms).
     sub3.close();
     await sleep(1);
     expect(scheduled).toHaveLength(1);
-    expect(scheduled[0].ms).toBe(2000);
+    expect(Number.isInteger(scheduled[0].ms)).toBe(true);
+    expect(scheduled[0].ms).toBeGreaterThanOrEqual(1);
     expect(broadcast.isDone).toBe(false);
 
     // Firing the timer releases via consensus-timeout, without a 1s tick.
@@ -180,7 +141,34 @@ describe('change-streamer/broadcast', () => {
     expect(broadcast.releaseMode).toBe('consensus-timeout');
   });
 
-  test('early-release timer re-arms on later completions; stale timers are ignored', async () => {
+  test('a zero proportion arms an immediate release timer', async () => {
+    const [sub1] = createSubscriber('00', true);
+    const [sub2] = createSubscriber('00', true);
+    const [sub3] = createSubscriber('00', true);
+    const [sub4] = createSubscriber('00', true);
+    const {scheduled, setTimeoutFn, clearTimeoutFn} = captureTimers();
+
+    const broadcast = new Broadcast(lc, [sub1, sub2, sub3, sub4], begin, {
+      consensusTimeoutProportion: 0,
+      setTimeoutFn,
+      clearTimeoutFn,
+    });
+
+    // Reaching the majority of 3 with a proportion of 0 arms a 0ms timer,
+    // regardless of how long the majority took.
+    sub1.close();
+    sub2.close();
+    sub3.close();
+    await sleep(1);
+    expect(scheduled).toHaveLength(1);
+    expect(scheduled[0].ms).toBe(0);
+
+    scheduled[0].cb();
+    await broadcast.done;
+    expect(broadcast.releaseMode).toBe('consensus-timeout');
+  });
+
+  test('early-release timer is armed once at majority and not re-armed by later completions', async () => {
     const [sub1] = createSubscriber('00', true);
     const [sub2] = createSubscriber('00', true);
     const [sub3] = createSubscriber('00', true);
@@ -188,33 +176,29 @@ describe('change-streamer/broadcast', () => {
     const [sub5] = createSubscriber('00', true);
     const {scheduled, cleared, setTimeoutFn, clearTimeoutFn} = captureTimers();
 
-    const broadcast = new Broadcast([sub1, sub2, sub3, sub4, sub5], begin, {
-      consensusTimeoutMs: 2000,
+    const broadcast = new Broadcast(lc, [sub1, sub2, sub3, sub4, sub5], begin, {
+      consensusTimeoutProportion: 2,
       setTimeoutFn,
       clearTimeoutFn,
     });
 
-    // Majority of 5 is 3: arms the timer.
+    // Majority of 5 is 3: arms the timer exactly once.
     sub1.close();
     sub2.close();
     sub3.close();
     await sleep(1);
     expect(scheduled).toHaveLength(1);
 
-    // A later completion re-arms (new generation) instead of releasing now, and
-    // cancels the previously-armed timer so stale timers don't accumulate.
+    // A later completion does NOT re-arm the timer (fixed proportional deadline)
+    // and does not cancel the already-armed one.
     sub4.close();
     await sleep(1);
-    expect(scheduled).toHaveLength(2);
-    expect(cleared).toContain(scheduled[0].handle);
+    expect(scheduled).toHaveLength(1);
+    expect(cleared).not.toContain(scheduled[0].handle);
     expect(broadcast.isDone).toBe(false);
 
-    // The stale (first-generation) timer must not release the broadcast.
+    // The single armed timer releases the broadcast.
     scheduled[0].cb();
-    expect(broadcast.isDone).toBe(false);
-
-    // The latest timer releases it.
-    scheduled[1].cb();
     await broadcast.done;
     expect(broadcast.releaseMode).toBe('consensus-timeout');
   });
@@ -225,8 +209,8 @@ describe('change-streamer/broadcast', () => {
     const [sub3] = createSubscriber('00', true);
     const {scheduled, cleared, setTimeoutFn, clearTimeoutFn} = captureTimers();
 
-    const broadcast = new Broadcast([sub1, sub2, sub3], begin, {
-      consensusTimeoutMs: 2000,
+    const broadcast = new Broadcast(lc, [sub1, sub2, sub3], begin, {
+      consensusTimeoutProportion: 2,
       setTimeoutFn,
       clearTimeoutFn,
     });
@@ -246,6 +230,26 @@ describe('change-streamer/broadcast', () => {
 
     // A late timer callback is a no-op: the broadcast is already done.
     scheduled[0].cb();
+    expect(broadcast.releaseMode).toBe('all-subscribers');
+  });
+
+  test('without early-release options, only all-subscribers releases', async () => {
+    const [sub1] = createSubscriber('00', true);
+    const [sub2] = createSubscriber('00', true);
+    const [sub3] = createSubscriber('00', true);
+    const [sub4] = createSubscriber('00', true);
+
+    const broadcast = new Broadcast(lc, [sub1, sub2, sub3, sub4], begin);
+
+    // Reaching the majority of 3 does not release when early release is off.
+    sub1.close();
+    sub2.close();
+    sub3.close();
+    await sleep(1);
+    expect(broadcast.isDone).toBe(false);
+
+    sub4.close();
+    await broadcast.done;
     expect(broadcast.releaseMode).toBe('all-subscribers');
   });
 });
