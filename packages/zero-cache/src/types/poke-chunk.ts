@@ -1,8 +1,10 @@
 import {assert} from '../../../shared/src/asserts.ts';
-import type {PokeChunk} from '../../../zero-protocol/src/poke.ts';
+import {
+  POKE_CHUNK_MESSAGE_TYPE,
+  type PokeChunk,
+} from '../../../zero-protocol/src/poke.ts';
 
 export const POKE_CHUNK_BYTES = 1024 * 1024;
-export const POKE_CHUNK_PROTOCOL_VERSION = 52;
 
 export type EmitPokeChunk = (chunk: PokeChunk) => Promise<void>;
 
@@ -16,15 +18,16 @@ export type EmitPokeChunk = (chunk: PokeChunk) => Promise<void>;
 export class PokeChunkEncoder {
   readonly #encoder = new TextEncoder();
   readonly #buffer: Uint8Array;
-  #bufferedBytes = 0;
+  #bufferedBytes = 1;
   #patchCount = 0;
   #finished = false;
 
   constructor(chunkBytes = POKE_CHUNK_BYTES) {
-    // Four bytes are required to encode the largest UTF-8 code point. A
-    // smaller buffer could make encodeInto() unable to make progress.
-    assert(chunkBytes >= 4, 'poke chunk size must be at least four bytes');
+    // One byte tags the binary message and four bytes are required to encode
+    // the largest UTF-8 code point. A smaller buffer could prevent progress.
+    assert(chunkBytes >= 5, 'poke chunk size must be at least five bytes');
     this.#buffer = new Uint8Array(chunkBytes);
+    this.#buffer[0] = POKE_CHUNK_MESSAGE_TYPE;
   }
 
   async addPatch(serializedPatch: string, emit: EmitPokeChunk): Promise<void> {
@@ -42,7 +45,7 @@ export class PokeChunkEncoder {
 
   cancel(): void {
     this.#finished = true;
-    this.#bufferedBytes = 0;
+    this.#bufferedBytes = 1;
   }
 
   async #write(value: string, emit: EmitPokeChunk): Promise<void> {
@@ -61,10 +64,10 @@ export class PokeChunkEncoder {
   }
 
   async #flush(emit: EmitPokeChunk): Promise<void> {
-    if (this.#bufferedBytes === 0) {
+    if (this.#bufferedBytes === 1) {
       return;
     }
     await emit(this.#buffer.subarray(0, this.#bufferedBytes));
-    this.#bufferedBytes = 0;
+    this.#bufferedBytes = 1;
   }
 }

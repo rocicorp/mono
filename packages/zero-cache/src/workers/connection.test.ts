@@ -8,20 +8,21 @@ import {
 import type {Downstream} from '../../../zero-protocol/src/down.ts';
 import {ErrorKind} from '../../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../../zero-protocol/src/error-origin.ts';
-import type {
-  PokeChunk,
-  PokeEndMessage,
-  PokePartMessage,
-  PokeStartMessage,
+import {
+  LAST_POKE_PART_PROTOCOL_VERSION,
+  POKE_CHUNK_MESSAGE_TYPE,
+  POKE_CHUNK_PROTOCOL_VERSION,
+  type PokeChunk,
+  type PokeEndMessage,
+  type PokePartMessage,
+  type PokeStartMessage,
 } from '../../../zero-protocol/src/poke.ts';
 import {MIN_SERVER_SUPPORTED_SYNC_PROTOCOL} from '../../../zero-protocol/src/protocol-version.ts';
 import {ProtocolErrorWithLevel} from '../types/error-with-level.ts';
-import {POKE_CHUNK_PROTOCOL_VERSION} from '../types/poke-chunk.ts';
 import {
   DownstreamSender,
   send,
   sendError,
-  serializedPokePatch,
   WEBSOCKET_SEND_TIMEOUT_MS,
   type WebSocketLike,
 } from './connection.ts';
@@ -148,7 +149,7 @@ describe('DownstreamSender poke compatibility', () => {
 
   test.each([
     MIN_SERVER_SUPPORTED_SYNC_PROTOCOL,
-    POKE_CHUNK_PROTOCOL_VERSION - 1,
+    LAST_POKE_PART_PROTOCOL_VERSION,
   ])(
     'keeps sending JSON pokePart messages to protocol version %i',
     async protocolVersion => {
@@ -178,10 +179,37 @@ describe('DownstreamSender poke compatibility', () => {
     expect(ws.sent).toHaveLength(3);
     expect(ws.sent[0]).toBe(JSON.stringify(pokeStart));
     expect(ws.sent[1]).toBeInstanceOf(Uint8Array);
-    expect(new TextDecoder().decode(ws.sent[1] as PokeChunk)).toBe(
-      '[{"rowsPatch":[{"op":"clear"}]}]',
+    const chunk = ws.sent[1] as PokeChunk;
+    expect(chunk[0]).toBe(POKE_CHUNK_MESSAGE_TYPE);
+    expect(new TextDecoder().decode(chunk.subarray(1))).toBe(
+      '[{"pokeID":"01","rowsPatch":[{"op":"clear"}]}]',
     );
     expect(ws.sent[2]).toBe(JSON.stringify(pokeEnd));
+  });
+
+  test('fails a stalled binary send after the websocket timeout', async () => {
+    vi.useFakeTimers();
+    try {
+      const ws = new MockSocket();
+      const sender = new DownstreamSender(lc, ws, POKE_CHUNK_PROTOCOL_VERSION);
+
+      sender.send(pokeStart, 'ignore-backpressure');
+      await sendWithBackpressure(sender, pokePart);
+      const pokeEndPromise = sendWithBackpressure(sender, pokeEnd);
+      const rejection = expect(pokeEndPromise).rejects.toMatchObject({
+        errorBody: {
+          kind: ErrorKind.Internal,
+          message: `WebSocket send timed out after ${WEBSOCKET_SEND_TIMEOUT_MS} ms`,
+          origin: ErrorOrigin.ZeroCache,
+        },
+        logLevel: 'info',
+      });
+
+      await vi.advanceTimersByTimeAsync(WEBSOCKET_SEND_TIMEOUT_MS);
+      await rejection;
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
@@ -193,29 +221,6 @@ function sendWithBackpressure(
     sender.send(downstream, error => (error ? reject(error) : resolve()));
   });
 }
-
-describe('serializedPokePatch', () => {
-  test('removes the legacy envelope and repeated pokeID', () => {
-    const message: PokePartMessage = [
-      'pokePart',
-      {pokeID: '01', rowsPatch: [{op: 'clear'}]},
-    ];
-    const serialized = JSON.stringify(message);
-
-    expect(serializedPokePatch(message, serialized)).toBe(
-      '{"rowsPatch":[{"op":"clear"}]}',
-    );
-  });
-
-  test('handles nonstandard property insertion order off the hot path', () => {
-    const message = [
-      'pokePart',
-      {rowsPatch: [{op: 'clear'}], pokeID: '01'},
-    ] as PokePartMessage;
-
-    expect(serializedPokePatch(message)).toBe('{"rowsPatch":[{"op":"clear"}]}');
-  });
-});
 
 describe('sendError', () => {
   let sink: TestLogSink;

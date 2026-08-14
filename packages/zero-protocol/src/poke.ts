@@ -18,8 +18,9 @@ import {nullableVersionSchema, versionSchema} from './version.ts';
  *
  * Through protocol version 51, the poke continues with zero to many
  * `poke-part` JSON messages. Starting in version 52, it continues with zero to
- * many binary `pokeChunk` messages. Concatenating and decoding the pokeChunks
- * produces a PokePatch array. pokeChunk boundaries have no semantic meaning.
+ * many binary `pokeChunk` messages. Each binary message starts with a message
+ * type byte. Concatenating and decoding the payload after that byte produces a
+ * PokePartBody array. pokeChunk boundaries have no semantic meaning.
  *
  * Finally, the poke ends with a `poke-end` message. The decoded patches can
  * now be applied as a whole to update from `baseCookie` to `cookie`.
@@ -49,7 +50,7 @@ export const pokeStartBodySchema = v.object({
   timestamp: v.number().optional(),
 });
 
-export const pokePatchSchema = v.object({
+export const pokePartBodySchema = v.object({
   // Changes to last mutation id by client id.
   lastMutationIDChanges: v.record(v.number()).optional(),
   // Patches to the desired query sets by client id.
@@ -61,9 +62,6 @@ export const pokePatchSchema = v.object({
   rowsPatch: rowsPatchSchema.optional(),
   // Mutation results patch
   mutationsPatch: mutationsPatchSchema.optional(),
-});
-
-export const pokePartBodySchema = pokePatchSchema.extend({
   pokeID: v.string(),
 });
 
@@ -71,11 +69,8 @@ export const pokePartBodySchema = pokePatchSchema.extend({
  * The logical payload carried by binary poke chunks. Chunk boundaries are
  * arbitrary; concatenating and decoding all chunks for a poke produces this
  * array.
- *
- * PokePatch retains the grouped fields from PokePartBody, but omits pokeID:
- * pokeStart and pokeEnd already delimit a single poke on the ordered stream.
  */
-export const pokePatchesSchema = v.array(pokePatchSchema);
+export const pokePartsSchema = v.array(pokePartBodySchema);
 
 export const pokeEndBodySchema = v.object({
   pokeID: v.string(),
@@ -100,12 +95,20 @@ export const pokeEndMessageSchema = v.tuple([
 ]);
 
 export type PokeStartBody = v.Infer<typeof pokeStartBodySchema>;
-export type PokePatch = v.Infer<typeof pokePatchSchema>;
 export type PokePartBody = v.Infer<typeof pokePartBodySchema>;
-export type PokePatches = v.Infer<typeof pokePatchesSchema>;
+export type PokeParts = v.Infer<typeof pokePartsSchema>;
 export type PokeEndBody = v.Infer<typeof pokeEndBodySchema>;
 
-/** A raw binary WebSocket message. It has no JSON envelope. */
+/** The first byte identifying a binary WebSocket message as a poke chunk. */
+export const POKE_CHUNK_MESSAGE_TYPE = 0x00;
+
+/** The first protocol version that receives binary poke chunks. */
+export const POKE_CHUNK_PROTOCOL_VERSION = 52;
+
+/** The last protocol version that receives JSON pokePart messages. */
+export const LAST_POKE_PART_PROTOCOL_VERSION = 51;
+
+/** A tagged binary poke chunk WebSocket message. */
 export type PokeChunk = Uint8Array;
 
 export type PokeStartMessage = v.Infer<typeof pokeStartMessageSchema>;

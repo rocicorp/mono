@@ -799,6 +799,7 @@ describe('poke handler', () => {
     );
     const parts = [
       {
+        pokeID: 'poke1',
         lastMutationIDChanges: {c1: 7},
         rowsPatch: [
           {

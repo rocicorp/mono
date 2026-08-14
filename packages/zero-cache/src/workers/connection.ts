@@ -13,10 +13,11 @@ import {
   isProtocolError,
   type ProtocolError,
 } from '../../../zero-protocol/src/error.ts';
-import type {
-  PokeChunk,
-  PokeEndMessage,
-  PokePartMessage,
+import {
+  POKE_CHUNK_PROTOCOL_VERSION,
+  type PokeChunk,
+  type PokeEndMessage,
+  type PokePartMessage,
 } from '../../../zero-protocol/src/poke.ts';
 import {
   MIN_SERVER_SUPPORTED_SYNC_PROTOCOL,
@@ -30,10 +31,7 @@ import {
   getLogLevel,
   wrapWithProtocolError,
 } from '../types/error-with-level.ts';
-import {
-  POKE_CHUNK_PROTOCOL_VERSION,
-  PokeChunkEncoder,
-} from '../types/poke-chunk.ts';
+import {PokeChunkEncoder} from '../types/poke-chunk.ts';
 import type {Source} from '../types/streams.ts';
 import type {ConnectParams} from './connect-params.ts';
 
@@ -408,16 +406,7 @@ export function send(
 
     let completed = false;
     const timer = setTimeout(() => {
-      complete(
-        new ProtocolErrorWithLevel(
-          {
-            kind: ErrorKind.Internal,
-            message: `WebSocket send timed out after ${WEBSOCKET_SEND_TIMEOUT_MS} ms`,
-            origin: ErrorOrigin.ZeroCache,
-          },
-          'info',
-        ),
-      );
+      complete(webSocketSendTimeoutError());
     }, WEBSOCKET_SEND_TIMEOUT_MS);
     timer.unref();
 
@@ -502,8 +491,13 @@ export class DownstreamSender {
     const encoder = this.#pokeChunkEncoder;
     assert(encoder, 'pokePart received without a pokeStart');
 
+    serialized ??= JSON.stringify(pokePart);
+    assert(
+      serialized.startsWith(POKE_PART_PREFIX) && serialized.endsWith(']'),
+      'invalid serialized pokePart',
+    );
     void encoder
-      .addPatch(serializedPokePatch(pokePart, serialized), chunk =>
+      .addPatch(serialized.slice(POKE_PART_PREFIX.length, -1), chunk =>
         sendBinary(this.#lc, this.#ws, chunk),
       )
       .then(
@@ -538,29 +532,6 @@ export class DownstreamSender {
 
 const POKE_PART_PREFIX = '["pokePart",';
 
-// Exported for testing the no-reserialization fast path.
-export function serializedPokePatch(
-  pokePart: PokePartMessage,
-  serialized = JSON.stringify(pokePart),
-): string {
-  const bodyPrefix = `${POKE_PART_PREFIX}{"pokeID":${JSON.stringify(
-    pokePart[1].pokeID,
-  )}`;
-  assert(
-    serialized.startsWith(POKE_PART_PREFIX) && serialized.endsWith('}]'),
-    'invalid serialized pokePart',
-  );
-  if (serialized.startsWith(bodyPrefix)) {
-    const fields = serialized.slice(bodyPrefix.length, -2);
-    return fields ? `{${fields.slice(1)}}` : '{}';
-  }
-
-  // Non-production callers may construct a body whose pokeID was inserted
-  // after other fields. Preserve correctness without penalizing the hot path.
-  const {pokeID: _, ...patch} = pokePart[1];
-  return JSON.stringify(patch);
-}
-
 function sendAsync(
   lc: LogContext,
   ws: WebSocketLike,
@@ -585,7 +556,23 @@ function sendBinary(
       reject(error);
       return;
     }
-    ws.send(chunk, error => (error ? reject(error) : resolve()));
+    let completed = false;
+    const timer = setTimeout(
+      () => complete(webSocketSendTimeoutError()),
+      WEBSOCKET_SEND_TIMEOUT_MS,
+    );
+    timer.unref();
+
+    const complete = (error?: Error | null) => {
+      if (completed) {
+        return;
+      }
+      completed = true;
+      clearTimeout(timer);
+      error ? reject(error) : resolve();
+    };
+
+    ws.send(chunk, complete);
   });
 }
 
@@ -607,6 +594,17 @@ function webSocketClosedError(): ProtocolErrorWithLevel {
     {
       kind: ErrorKind.Internal,
       message: 'WebSocket closed',
+      origin: ErrorOrigin.ZeroCache,
+    },
+    'info',
+  );
+}
+
+function webSocketSendTimeoutError(): ProtocolErrorWithLevel {
+  return new ProtocolErrorWithLevel(
+    {
+      kind: ErrorKind.Internal,
+      message: `WebSocket send timed out after ${WEBSOCKET_SEND_TIMEOUT_MS} ms`,
       origin: ErrorOrigin.ZeroCache,
     },
     'info',

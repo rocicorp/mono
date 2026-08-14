@@ -2,6 +2,10 @@ import {expect, test} from 'vitest';
 import {h64} from '../../shared/src/hash.ts';
 import {downstreamSchema} from './down.ts';
 import {
+  LAST_POKE_PART_PROTOCOL_VERSION,
+  POKE_CHUNK_PROTOCOL_VERSION,
+} from './poke.ts';
+import {
   MIN_SERVER_SUPPORTED_SYNC_PROTOCOL,
   PROTOCOL_VERSION,
 } from './protocol-version.ts';
@@ -16,6 +20,8 @@ test('protocol version', () => {
   // PROTOCOL_VERSION and update the expected values.
   expect(hash).toEqual('24niurwt66lah');
   expect(PROTOCOL_VERSION).toBe(52);
+  expect(LAST_POKE_PART_PROTOCOL_VERSION).toBe(51);
+  expect(POKE_CHUNK_PROTOCOL_VERSION).toBe(52);
 });
 
 test('server support retains the CloudZero protocol floor', () => {

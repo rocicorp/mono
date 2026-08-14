@@ -412,7 +412,7 @@ describe('view-syncer/client-handler', () => {
     ]);
   });
 
-  test('flushes poke parts by payload size instead of row count', async () => {
+  test('flushes poke parts at the patch-count threshold', async () => {
     const {subscription, close} = createSubscription();
     const handler = new ClientHandler(
       lc,
@@ -440,13 +440,14 @@ describe('view-syncer/client-handler', () => {
 
     const {received} = await close();
     const pokeParts = received.filter(message => message[0] === 'pokePart');
-    expect(pokeParts).toHaveLength(1);
+    expect(pokeParts).toHaveLength(2);
     expect((pokeParts[0]![1] as PokePartMessage[1]).rowsPatch).toHaveLength(
-      101,
+      100,
     );
+    expect((pokeParts[1]![1] as PokePartMessage[1]).rowsPatch).toHaveLength(1);
   });
 
-  test('keeps large rows in separate size-bounded poke parts', async () => {
+  test('uses a soft serialized-row character threshold', async () => {
     const {subscription, close} = createSubscription();
     const handler = new ClientHandler(
       lc,
@@ -474,14 +475,16 @@ describe('view-syncer/client-handler', () => {
 
     const {received, serialized} = await close();
     const pokeParts = received.filter(message => message[0] === 'pokePart');
-    expect(pokeParts).toHaveLength(3);
+    expect(pokeParts).toHaveLength(2);
     for (const pokePart of pokeParts) {
       const encoded = serialized.get(pokePart);
       expect(encoded).toBe(JSON.stringify(pokePart));
-      expect(encoded?.length).toBeLessThanOrEqual(
-        POKE_PART_FLUSH_THRESHOLD_CHARS,
-      );
     }
+    expect((pokeParts[0]![1] as PokePartMessage[1]).rowsPatch).toHaveLength(2);
+    expect((pokeParts[1]![1] as PokePartMessage[1]).rowsPatch).toHaveLength(1);
+    expect(serialized.get(pokeParts[0]!)?.length).toBeGreaterThan(
+      POKE_PART_FLUSH_THRESHOLD_CHARS,
+    );
   });
 
   describe('mutation results', () => {

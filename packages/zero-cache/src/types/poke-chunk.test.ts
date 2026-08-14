@@ -1,4 +1,5 @@
 import {describe, expect, test} from 'vitest';
+import {POKE_CHUNK_MESSAGE_TYPE} from '../../../zero-protocol/src/poke.ts';
 import {PokeChunkEncoder} from './poke-chunk.ts';
 
 describe('PokeChunkEncoder', () => {
@@ -56,7 +57,7 @@ describe('PokeChunkEncoder', () => {
     expect(chunkLengths).toHaveLength(11);
     expect(Math.max(...chunkLengths)).toBe(1024 * 1024);
     expect(chunkLengths.reduce((sum, length) => sum + length, 0)).toBe(
-      patch.length + 2,
+      patch.length + 2 + chunkLengths.length,
     );
   });
 
@@ -77,7 +78,8 @@ function joinAndDecode(chunks: Uint8Array[]): string {
   const decoder = new TextDecoder('utf-8', {fatal: true});
   const decoded: string[] = [];
   for (const chunk of chunks) {
-    decoded.push(decoder.decode(chunk, {stream: true}));
+    expect(chunk[0]).toBe(POKE_CHUNK_MESSAGE_TYPE);
+    decoded.push(decoder.decode(chunk.subarray(1), {stream: true}));
   }
   decoded.push(decoder.decode());
   return decoded.join('');

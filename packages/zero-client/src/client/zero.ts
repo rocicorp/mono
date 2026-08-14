@@ -61,11 +61,11 @@ import {
   mapCRUD,
 } from '../../../zero-protocol/src/mutation.ts';
 import type {PingMessage} from '../../../zero-protocol/src/ping.ts';
-import type {
-  PokeChunk,
-  PokeEndMessage,
-  PokePartMessage,
-  PokeStartMessage,
+import {
+  POKE_CHUNK_MESSAGE_TYPE,
+  type PokeEndMessage,
+  type PokePartMessage,
+  type PokeStartMessage,
 } from '../../../zero-protocol/src/poke.ts';
 import {PROTOCOL_VERSION} from '../../../zero-protocol/src/protocol-version.ts';
 import type {
@@ -1316,7 +1316,18 @@ export class Zero<
     let downMessage: Downstream;
     if (data instanceof ArrayBuffer) {
       this.#messageCount++;
-      this.#handlePokeChunk(new Uint8Array(data));
+      const message = new Uint8Array(data);
+      if (message[0] !== POKE_CHUNK_MESSAGE_TYPE) {
+        this.#disconnect(
+          lc,
+          new ClientError({
+            kind: ClientErrorKind.InvalidMessage,
+            message: `Unknown binary message type: ${String(message[0])}`,
+          }),
+        );
+        return;
+      }
+      this.#handlePokeChunk(message.subarray(1));
       return;
     }
     if (typeof data !== 'string') {
@@ -1935,7 +1946,7 @@ export class Zero<
     }
   }
 
-  #handlePokeChunk(chunk: PokeChunk): void {
+  #handlePokeChunk(chunk: Uint8Array): void {
     this.#abortPingTimeout();
     this.#pokeHandler.handlePokeChunk(chunk);
   }

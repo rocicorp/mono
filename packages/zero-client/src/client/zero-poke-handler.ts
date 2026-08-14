@@ -10,11 +10,10 @@ import {unreachable} from '../../../shared/src/asserts.ts';
 import * as v from '../../../shared/src/valita.ts';
 import type {MutationPatch} from '../../../zero-protocol/src/mutations-patch.ts';
 import {
-  pokePatchesSchema,
-  type PokeChunk,
+  pokePartsSchema,
   type PokeEndBody,
   type PokePartBody,
-  type PokePatches,
+  type PokeParts,
   type PokeStartBody,
 } from '../../../zero-protocol/src/poke.ts';
 import type {QueriesPatchOp} from '../../../zero-protocol/src/queries-patch.ts';
@@ -41,7 +40,7 @@ type PokeAccumulator = {
 type ReceivingPoke = {
   readonly pokeStart: PokeStartBody;
   readonly parts: PokePartBody[];
-  readonly chunks: PokeChunk[];
+  readonly chunks: Uint8Array[];
 };
 
 export type PokeEndResult = {
@@ -126,7 +125,7 @@ export class PokeHandler {
     return pokePart.lastMutationIDChanges?.[this.#clientID];
   }
 
-  handlePokeChunk(chunk: PokeChunk): void {
+  handlePokeChunk(chunk: Uint8Array): void {
     if (!this.#receivingPoke) {
       this.#handlePokeError('received a binary poke chunk without pokeStart');
       return;
@@ -152,32 +151,20 @@ export class PokeHandler {
       return;
     }
     const receivingPoke = this.#receivingPoke;
+    let parts = receivingPoke.parts;
     if (receivingPoke.chunks.length > 0) {
       try {
-        receivingPoke.parts.push(
-          ...decodePokeChunks(receivingPoke.chunks).map(patch => ({
-            ...patch,
-            pokeID: pokeEnd.pokeID,
-          })),
-        );
+        parts = decodePokeChunks(receivingPoke.chunks);
       } catch (e) {
         this.#handlePokeError(e);
         return;
       }
     }
-    for (const part of receivingPoke.parts) {
-      if (part.pokeID !== pokeEnd.pokeID) {
-        this.#handlePokeError(
-          `poke patch for ${part.pokeID}, when receiving ${pokeEnd.pokeID}`,
-        );
-        return;
-      }
-    }
 
-    const result = summarizePoke(receivingPoke.parts, this.#clientID);
+    const result = summarizePoke(parts, this.#clientID);
     this.#pokeBuffer.push({
       pokeStart: receivingPoke.pokeStart,
-      parts: receivingPoke.parts,
+      parts,
       pokeEnd,
     });
     this.#receivingPoke = undefined;
@@ -272,7 +259,7 @@ export class PokeHandler {
   }
 }
 
-function decodePokeChunks(chunks: PokeChunk[]): PokePatches {
+function decodePokeChunks(chunks: Uint8Array[]): PokeParts {
   const decoder = new TextDecoder('utf-8', {fatal: true});
   const decoded = new Array<string>(chunks.length + 1);
   for (let i = 0; i < chunks.length; i++) {
@@ -280,11 +267,7 @@ function decodePokeChunks(chunks: PokeChunk[]): PokePatches {
   }
   decoded[chunks.length] = decoder.decode();
   chunks.length = 0;
-  return v.parse(
-    JSON.parse(decoded.join('')),
-    pokePatchesSchema,
-    'passthrough',
-  );
+  return v.parse(JSON.parse(decoded.join('')), pokePartsSchema, 'passthrough');
 }
 
 function summarizePoke(

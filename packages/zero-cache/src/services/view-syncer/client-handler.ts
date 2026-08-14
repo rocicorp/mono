@@ -20,6 +20,7 @@ import type {InspectDownBody} from '../../../../zero-protocol/src/inspect-down.t
 import {mutationResultSchema} from '../../../../zero-protocol/src/mutation.ts';
 import type {
   PokePartBody,
+  PokePartMessage,
   PokeStartBody,
 } from '../../../../zero-protocol/src/poke.ts';
 import {primaryKeyValueRecordSchema} from '../../../../zero-protocol/src/primary-key.ts';
@@ -105,9 +106,9 @@ export function startPoke(
   };
 }
 
-// Keep poke parts small enough that clients observe progress while syncing.
-// A single patch can exceed this limit because rows are atomic at the protocol
-// level, but it will be sent in a part by itself.
+// Soft limit on the serialized row characters accumulated in a poke part.
+// This bounds view-syncer memory and keeps legacy JSON messages reasonably
+// sized. PokeChunkEncoder separately enforces the binary frame limit in bytes.
 export const POKE_PART_FLUSH_THRESHOLD_CHARS = 1024 * 1024;
 const PART_COUNT_FLUSH_THRESHOLD = 100;
 
@@ -211,9 +212,6 @@ export class ClientHandler {
     let pokeStarted = false;
     let body: PokePartBody | undefined;
     let partCount = 0;
-    const emptySerializedBody = JSON.stringify(['pokePart', {pokeID}]);
-    let serializedBody = emptySerializedBody;
-    const serializedRows: string[] = [];
     let serializedRowsLength = 0;
 
     const ensureBody = async () => {
@@ -224,32 +222,14 @@ export class ClientHandler {
       return (body ??= {pokeID});
     };
 
-    const serializedLength = (rowsLength = serializedRowsLength) =>
-      rowsLength
-        ? serializedBody.length - 2 + ',"rowsPatch":[]}]'.length + rowsLength
-        : serializedBody.length;
-
     const flushBody = async () => {
       if (body) {
-        const serialized = serializedRows.length
-          ? `${serializedBody.slice(0, -2)},"rowsPatch":[${serializedRows.join(',')}]}]`
-          : serializedBody;
-        assert(
-          serialized.length === serializedLength(),
-          'serialized poke part length did not match the measured length',
-        );
-        await this.#push(['pokePart', body], serialized);
+        const message = ['pokePart', body] satisfies PokePartMessage;
+        await this.#push(message, JSON.stringify(message));
         body = undefined;
         partCount = 0;
-        serializedBody = emptySerializedBody;
-        serializedRows.length = 0;
         serializedRowsLength = 0;
       }
-    };
-
-    const updateSerializedBody = (body: PokePartBody) => {
-      const {rowsPatch: _, ...rest} = body;
-      serializedBody = JSON.stringify(['pokePart', rest]);
     };
 
     const addPatch = async (patchToVersion: PatchToVersion) => {
@@ -257,8 +237,7 @@ export class ClientHandler {
       if (cmpVersions(toVersion, this.#baseVersion) <= 0) {
         return;
       }
-      let target = await ensureBody();
-      let addedSerializedRow = false;
+      const target = await ensureBody();
 
       const {type, op} = patch;
       switch (type) {
@@ -311,36 +290,18 @@ export class ClientHandler {
             }
           } else {
             const rowPatch = makeRowPatch(patch);
-            const serialized = JSON.stringify(rowPatch);
-            const nextRowsLength =
-              serializedRowsLength +
-              (serializedRows.length ? 1 : 0) +
-              serialized.length;
-            if (
-              partCount > 0 &&
-              serializedLength(nextRowsLength) > POKE_PART_FLUSH_THRESHOLD_CHARS
-            ) {
-              await flushBody();
-              target = await ensureBody();
-            }
             (target.rowsPatch ??= []).push(rowPatch);
-            serializedRowsLength +=
-              (serializedRows.length ? 1 : 0) + serialized.length;
-            serializedRows.push(serialized);
-            addedSerializedRow = true;
+            serializedRowsLength += JSON.stringify(rowPatch).length;
           }
           break;
         default:
           unreachable(patch);
       }
 
-      if (!addedSerializedRow) {
-        updateSerializedBody(target);
-      }
       partCount++;
       if (
-        serializedLength() >= POKE_PART_FLUSH_THRESHOLD_CHARS ||
-        (!addedSerializedRow && partCount >= PART_COUNT_FLUSH_THRESHOLD)
+        serializedRowsLength >= POKE_PART_FLUSH_THRESHOLD_CHARS ||
+        partCount >= PART_COUNT_FLUSH_THRESHOLD
       ) {
         await flushBody();
       }
