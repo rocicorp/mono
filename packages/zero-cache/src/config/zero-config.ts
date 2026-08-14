@@ -393,6 +393,28 @@ export const zeroOptions = {
         `(Note that this option has no effect for Postgres versions before 17.)`,
       ],
     },
+
+    pgStreamInboundTimeoutMs: {
+      type: v.number().optional(),
+      desc: [
+        `The time (in milliseconds) without any inbound message from the upstream`,
+        `wal sender after which the replication stream is considered unresponsive`,
+        `and torn down to force a reconnect.`,
+        ``,
+        `Defaults to 2x the server's {bold wal_sender_timeout}. That suits idle`,
+        `streams, but a busy wal sender can be legitimately silent for longer —`,
+        `e.g. while decoding through WAL from unpublished tables, or assembling a`,
+        `large transaction that is only sent at commit. If the server's`,
+        `{bold wal_sender_timeout} is aggressive (some managed environments`,
+        `default it as low as 5 seconds), the resulting teardown aborts and`,
+        `replays the in-flight transaction, which can prevent replication from`,
+        `ever catching up on a large backlog. Set this option to widen the`,
+        `client-side threshold without changing the server setting.`,
+        ``,
+        `(This option has no effect when {bold wal_sender_timeout} is 0, which`,
+        `disables inbound liveness detection entirely.)`,
+      ],
+    },
   },
 
   /** @deprecated */
