@@ -55,8 +55,7 @@ import {
 import {Subscriber} from './subscriber.ts';
 
 export type TuningOptions = StorerOptions & {
-  flowControlConsensusPaddingSeconds: number;
-  flowControlEventDrivenRelease?: boolean | undefined;
+  flowControlConsensusTimeoutProportion: number;
 };
 
 /**
@@ -342,9 +341,8 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       opts,
     );
     this.#forwarder = new Forwarder(lc, {
-      flowControlConsensusPaddingSeconds:
-        opts.flowControlConsensusPaddingSeconds,
-      eventDrivenRelease: opts.flowControlEventDrivenRelease,
+      flowControlConsensusTimeoutProportion:
+        opts.flowControlConsensusTimeoutProportion,
     });
     this.#replicationStatusPublisher = replicationStatusPublisher;
     this.#purgeLock = initialPurgeLock;
