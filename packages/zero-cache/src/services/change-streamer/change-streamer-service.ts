@@ -114,8 +114,7 @@ export type SQLiteCatchupOptions = {
 };
 
 export type TuningOptions = StorerOptions & {
-  flowControlConsensusPaddingSeconds: number;
-  flowControlEventDrivenRelease?: boolean | undefined;
+  flowControlConsensusTimeoutProportion: number;
   sqliteCatchup?: SQLiteCatchupOptions | undefined;
   /**
    * Supplied when `sqliteChangeLogMode != off`, i.e. this is the gate on the
@@ -456,9 +455,8 @@ class ChangeStreamerImpl implements ChangeStreamerService {
       opts,
     );
     this.#forwarder = new Forwarder(lc, {
-      flowControlConsensusPaddingSeconds:
-        opts.flowControlConsensusPaddingSeconds,
-      eventDrivenRelease: opts.flowControlEventDrivenRelease,
+      flowControlConsensusTimeoutProportion:
+        opts.flowControlConsensusTimeoutProportion,
     });
     this.#reservations = backupConfig
       ? new SnapshotReservations(lc, backupConfig, taskID =>
