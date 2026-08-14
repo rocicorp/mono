@@ -39,6 +39,7 @@ export async function subscribe(
   lsn: bigint,
   retriesIfReplicationSlotActive = DEFAULT_RETRIES_IF_REPLICATION_SLOT_ACTIVE,
   applicationName = 'zero-replicator',
+  inboundTimeoutOverrideMs?: number | undefined,
 ): Promise<{
   messages: SourceWithPendingQueue<StreamMessage>;
   acks: Sink<bigint>;
@@ -79,11 +80,15 @@ export async function subscribe(
     manualKeepaliveTimeout,
     inboundTimeoutMs,
     timerIntervalMs,
-  } = computeLivenessTimings(walSenderTimeoutMs);
+  } = computeLivenessTimings(walSenderTimeoutMs, inboundTimeoutOverrideMs);
   lc.info?.(
     livenessEnabled
       ? `wal_sender_timeout: ${walSenderTimeoutMs}ms. ` +
-          `Ensuring manual keepalives at least every ${manualKeepaliveTimeout}ms`
+          `Ensuring manual keepalives at least every ${manualKeepaliveTimeout}ms. ` +
+          `Inbound timeout: ${inboundTimeoutMs}ms` +
+          (inboundTimeoutMs === walSenderTimeoutMs * 2
+            ? ''
+            : ' (configured override)')
       : `wal_sender_timeout is disabled (0); skipping manual keepalives and ` +
           `inbound liveness detection.`,
   );
@@ -135,7 +140,7 @@ export async function subscribe(
         } else if (timedOut && !readable.destroyed) {
           lc.warn?.(
             `no message received from ${db.options.host} in ${sinceLastReceived}ms ` +
-              `(> 2x wal_sender_timeout ${walSenderTimeoutMs}ms). Destroying ` +
+              `(> inbound timeout ${inboundTimeoutMs}ms). Destroying ` +
               `replication stream to force reconnect.`,
           );
           readable.destroy(
@@ -206,9 +211,29 @@ export async function subscribe(
  * first tick and destroy the stream, while the timer itself would busy-spin at
  * a 0ms interval — together producing a continuous reconnect storm.
  *
+ * An `inboundTimeoutOverrideMs` (when positive) replaces the default
+ * `2x wal_sender_timeout` inbound threshold. The two timeouts protect
+ * different parties with asymmetric false-positive costs: `wal_sender_timeout`
+ * is the server reaping dead clients (a false positive there costs a cheap
+ * reconnect), while the inbound watchdog tears down the stream and replays the
+ * in-flight transaction — expensive, and self-defeating when the wal sender is
+ * legitimately silent for long stretches (e.g. decoding through WAL from
+ * unpublished tables, or assembling a large transaction that pgoutput only
+ * sends at commit). Operators who don't own the server setting (e.g. managed
+ * or operator-provisioned Postgres with an aggressive cluster-wide
+ * `wal_sender_timeout`) can widen the client-side fuse independently.
+ *
+ * The override has no effect when `wal_sender_timeout` is disabled (0): the
+ * server then sends no periodic keepalives, so inbound silence is normal even
+ * on an idle healthy connection and any silence-based watchdog would
+ * false-positive.
+ *
  * https://www.postgresql.org/docs/current/runtime-config-replication.html#GUC-WAL-SENDER-TIMEOUT
  */
-export function computeLivenessTimings(walSenderTimeoutMs: number): {
+export function computeLivenessTimings(
+  walSenderTimeoutMs: number,
+  inboundTimeoutOverrideMs?: number | undefined,
+): {
   enabled: boolean;
   manualKeepaliveTimeout: number;
   inboundTimeoutMs: number;
@@ -233,8 +258,12 @@ export function computeLivenessTimings(walSenderTimeoutMs: number): {
     // Force a reconnect after 2x wal_sender_timeout — i.e. two consecutive
     // missed keepalives — without any inbound message, to avoid spurious
     // reconnects from a single delayed keepalive (PG scheduling jitter under
-    // load, our own event-loop stalls, etc.).
-    inboundTimeoutMs: walSenderTimeoutMs * 2,
+    // load, our own event-loop stalls, etc.). A 0 / negative / NaN override
+    // falls back to the default rather than degenerating the threshold.
+    inboundTimeoutMs:
+      inboundTimeoutOverrideMs !== undefined && inboundTimeoutOverrideMs > 0
+        ? inboundTimeoutOverrideMs
+        : walSenderTimeoutMs * 2,
     // Poll at 1/5th of the manual keepalive interval.
     timerIntervalMs: manualKeepaliveTimeout / 5,
   };
