@@ -42,7 +42,7 @@ import {PurgeLocker} from './storer.ts';
 
 const opts: TuningOptions = {
   backPressureLimitHeapProportion: 0.04,
-  flowControlConsensusPaddingSeconds: 1,
+  flowControlConsensusTimeoutProportion: 2,
   statementTimeoutMs: 20_000,
   changeLogBatchSize: 2000,
 };

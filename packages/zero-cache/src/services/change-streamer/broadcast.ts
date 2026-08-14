@@ -6,14 +6,14 @@ import type {Subscriber} from './subscriber.ts';
 export type BroadcastReleaseMode = 'all-subscribers' | 'consensus-timeout';
 
 /**
- * Enables event-driven early release of a {@link Broadcast}. When provided, the
- * broadcast resolves exactly `consensusTimeoutMs` after the most recent
- * subscriber completion once a majority has acked, instead of relying on the
- * Forwarder's periodic progress tick to call {@link Broadcast.checkProgress()}.
+ * Enables event-driven early release of a {@link Broadcast}. When provided and a
+ * majority has acked, the broadcast schedules its own consensus-timeout release
+ * proportional to how long the majority took to ack, instead of relying on the
+ * Forwarder's periodic progress tick.
  */
 export type EarlyReleaseOptions = {
-  /** Milliseconds to wait after the majority acks before releasing. */
-  consensusTimeoutMs: number;
+  /** Time to wait, proportional to majority completion, before releasing. */
+  consensusTimeoutProportion: number;
   /** Injectable timer, for deterministic testing. */
   setTimeoutFn?: typeof setTimeout;
   /** Injectable timer cancellation, for deterministic testing. */
@@ -22,14 +22,59 @@ export type EarlyReleaseOptions = {
 
 /**
  * Initiates and tracks the progress of a change broadcasted to
- * a set of subscribers.
+ * a set of subscribers, implementing **consensus-based timeouts**
+ * to effect short-term graceful degradation when a minority of
+ * subscribers are behind.
  *
- * Creating a `Broadcast` automatically initiates the send.
+ * ### Background
  *
- * By default, {@link Broadcast.done} resolves when all subscribers
- * have acked the change. However, {@link Broadcast.checkProgress()}
- * can be called to resolve the broadcast earlier based on the flow
- * control policy.
+ * The purpose of flow control is to pull upstream replication changes
+ * no faster than the rate they are processed by downstream subscribers
+ * in the steady state. In the change-streamer, this is done by occasionally
+ * waiting for ACKs from subscribers before continuing; without doing so,
+ * I/O buffers fill up and cause the system to spend most of its time in GC.
+ *
+ * However, the naive algorithm of always waiting for all subscribers (e.g.
+ * `Promise.all()`) can behave poorly in scenarios where subscribers
+ * are imbalanced:
+ * * New subscribers may have a backlog of changes to catch up with.
+ *   Having all subscribers wait for the new subscriber to catch up results
+ *   in delaying the entire application.
+ * * Broken TCP connections similarly require all subscribers to wait until
+ *   connection liveness checks kick in and disconnect the subscriber.
+ *
+ * A simplistic approach is to add a limit to the amount of time waiting for
+ * subscribers, i.e. an ack timeout. However, deciding what this timeout
+ * should be is non-trivial because of the heterogeneous nature of changes;
+ * while most changes operate on single rows and are relatively predictable
+ * in terms of running time, some changes are table-wide operations and can
+ * legitimately take an arbitrary amount of time. In such scenarios, a
+ * timeout that is too short can stop progress on replication altogether.
+ *
+ * ### Consensus-based Timeout Algorithm
+ *
+ * To address these shortcomings, a "consensus-based timeout" algorithm is
+ * used:
+ * * Wait for more than half of the subscribers to finish. (In
+ *   case of a single node, or the case of one replication-manager
+ *   and one view-syncer, this reduces to waiting for all subscribers.)
+ * * Once more than half of the subscribers have finished, proceed after
+ *   the configured timeout, proportional to the time it took for the
+ *   majority of subscribers to ack, even if not all subscribers have
+ *   finished.
+ *
+ * In other words, the subscribers themselves are used to determine the
+ * timeout of each batch of changes; the majority determines this when
+ * they complete, upon which a timeout is logically started.
+ *
+ * In the common case, the remaining subscribers finish soon afterward and
+ * the timeout never elapses. However, in pathological cases where a minority
+ * of subscribers have a disproportionate amount of load, some will still
+ * be processing (or otherwise unresponsive). These subscribers are given
+ * a bounded amount of time to catch up at each flushed batch, up to the
+ * timeout interval. This guarantees eventual catchup because the
+ * subscribers with a backlog of changes necessarily have a higher
+ * processing rate than the subscribers that finished (and are made to wait).
  */
 export class Broadcast {
   /**
@@ -45,6 +90,7 @@ export class Broadcast {
     }
   }
 
+  readonly #lc: LogContext;
   readonly #pending: Set<Subscriber>;
   readonly #completed: Completed[];
   readonly #done = resolver();
@@ -55,14 +101,12 @@ export class Broadcast {
   readonly #majority: number;
 
   readonly #start = performance.now();
-  #latestCompleted = Number.MAX_VALUE;
 
   // When set, the broadcast schedules its own consensus-timeout release instead
   // of waiting for the Forwarder's periodic progress tick.
-  readonly #earlyReleaseTimeoutMs: number | undefined;
+  readonly #earlyReleaseTimeoutProportion: number | undefined;
   readonly #setTimeout: typeof setTimeout;
   readonly #clearTimeout: typeof clearTimeout;
-  #earlyReleaseGeneration = 0;
   #earlyReleaseTimer: ReturnType<typeof setTimeout> | undefined;
 
   /**
@@ -70,15 +114,18 @@ export class Broadcast {
    * completion.
    */
   constructor(
+    lc: LogContext,
     subscribers: Iterable<Subscriber>,
     change: WatermarkedChange,
     earlyRelease?: EarlyReleaseOptions,
   ) {
+    this.#lc = lc;
     this.#pending = new Set(subscribers);
     this.#completed = [];
     this.#watermark = change[0];
     this.#majority = Math.floor(this.#pending.size / 2) + 1;
-    this.#earlyReleaseTimeoutMs = earlyRelease?.consensusTimeoutMs;
+    this.#earlyReleaseTimeoutProportion =
+      earlyRelease?.consensusTimeoutProportion;
     this.#setTimeout = earlyRelease?.setTimeoutFn ?? setTimeout;
     this.#clearTimeout = earlyRelease?.clearTimeoutFn ?? clearTimeout;
 
@@ -97,46 +144,41 @@ export class Broadcast {
   }
 
   #markCompleted(sub: Subscriber, changes: number) {
-    const elapsed = (this.#latestCompleted = performance.now()) - this.#start;
+    const elapsed = performance.now() - this.#start;
     this.#completed.push({sub, changes, elapsed});
     this.#pending.delete(sub);
     if (this.#pending.size === 0) {
       this.#setDone('all-subscribers');
       return;
     }
-    // Event-driven consensus-timeout: once a majority has acked, resolve exactly
-    // #earlyReleaseTimeoutMs after this (the most recent) completion instead of
-    // waiting up to a full progress-tick interval for checkProgress() to run.
-    // Each later completion re-arms the timer; checkProgress() remains as a
-    // fallback and for logging.
+    // Event-driven consensus-timeout: the moment a majority acks, arm a single
+    // release timer proportional to how long the majority took to ack. The
+    // broadcast resolves when it fires, unless all subscribers ack first.
     if (
-      this.#earlyReleaseTimeoutMs !== undefined &&
-      this.#completed.length >= this.#majority
+      this.#earlyReleaseTimeoutProportion !== undefined &&
+      this.#earlyReleaseTimer === undefined &&
+      this.#completed.length === this.#majority
     ) {
-      this.#scheduleEarlyRelease();
+      const timeoutMs = Math.ceil(
+        elapsed * this.#earlyReleaseTimeoutProportion,
+      );
+      this.#earlyReleaseTimer = this.#setTimeout(
+        () => this.#setDone('consensus-timeout'),
+        timeoutMs,
+      );
     }
-  }
-
-  #scheduleEarlyRelease() {
-    const generation = ++this.#earlyReleaseGeneration;
-    // Cancel the timer armed by an earlier completion so stale timers don't
-    // accumulate (each retaining this Broadcast in memory and adding callback
-    // load) when many subscribers complete after the majority is reached.
-    this.#clearTimeout(this.#earlyReleaseTimer);
-    this.#earlyReleaseTimer = this.#setTimeout(() => {
-      // Skip if a later completion superseded this timer or the broadcast has
-      // already resolved (e.g. all subscribers acked). The generation check
-      // still guards the race where a timer fires just before it is cleared.
-      if (this.#isDone || generation !== this.#earlyReleaseGeneration) {
-        return;
-      }
-      this.#setDone('consensus-timeout');
-    }, this.#earlyReleaseTimeoutMs);
   }
 
   #setDone(releaseMode: BroadcastReleaseMode) {
     if (this.#isDone) {
       return;
+    }
+    if (releaseMode === 'consensus-timeout') {
+      const elapsed = performance.now() - this.#start;
+      this.#logWithState(
+        `continuing with ${this.#pending.size} subscriber(s) still pending`,
+        elapsed,
+      );
     }
     this.#isDone = true;
     this.#releaseMode = releaseMode;
@@ -157,116 +199,25 @@ export class Broadcast {
     return this.#releaseMode ?? 'all-subscribers';
   }
 
-  /**
-   * Checks for pathological situations in which flow should be reenabled
-   * before all subscribers have acked.
-   *
-   * ### Background
-   *
-   * The purpose of flow control is to pull upstream replication changes
-   * no faster than the rate as they are processed by downstream subscribers
-   * in the steady state. In the change-streamer, this is done by occasionally
-   * waiting for ACKs from subscribers before continuing; without doing so,
-   * I/O buffers fill up and cause the system to spend most of its time in GC.
-   *
-   * However, the naive algorithm of always waiting for all subscribers (e.g.
-   * `Promise.all()`) can behave poorly in scenarios where subscribers
-   * are imbalanced:
-   * * New subscribers may have a backlog of changes to catch up with.
-   *   Having all subscribers wait for the new subscriber to catch up results
-   *   in delaying the entire application.
-   * * Broken TCP connections similarly require all subscribers to wait until
-   *   connection liveness checks kick in and disconnect the subscriber.
-   *
-   * A simplistic approach is to add a limit to the amount of time waiting for
-   * subscribers, i.e. an ack timeout. However, deciding what this timeout
-   * should be is non-trivial because of the heterogeneous nature of changes;
-   * while most changes operate on single rows and are relatively predictable
-   * in terms of running time, some changes are table-wide operations and can
-   * legitimately take an arbitrary amount of time. In such scenarios, a
-   * timeout that is too short can stop progress on replication altogether.
-   *
-   * ### Consensus-based Timeout Algorithm
-   *
-   * To address these shortcomings, a "consensus-based timeout" algorithm is
-   * used:
-   * * Wait for more than half of the subscribers to finish. (In
-   *   case of a single node, or the case of one replication-manager
-   *   and one view-syncer, this reduces to waiting for all subscribers.)
-   * * Once more than half of the subscribers have finished, proceed after
-   *   a fixed timeout elapses (e.g. 1 second), even if not all subscribers
-   *   have finished.
-   *
-   * In other words, the subscribers themselves are used to determine the
-   * timeout of each batch of changes; the majority determines this when
-   * they complete, upon which a timeout is logically started.
-   *
-   * In the common case, the remaining subscribers finish soon afterward and
-   * the timeout never elapses. However, in pathological cases where a minority
-   * of subscribers have a disproportionate amount of load, some will still
-   * be processing (or otherwise unresponsive). These subscribers are given
-   * a bounded amount of time to catch up at each flushed batch, up to the
-   * timeout interval. This guarantees eventual catchup because the
-   * subscribers with a backlog of changes necessarily have a higher
-   * processing rate than the subscribers that finished (and are made to wait).
-   *
-   * ### Not implemented: Broken connection detection
-   *
-   * If a subscriber has not made progress for a certain interval, the
-   * algorithm could theoretically drop it preemptively, supplementing the
-   * existing websocket-level liveness checks.
-   *
-   * However, a more reliable approach would be to change the replicator
-   * to use non-blocking writes, and subsequently increase the frequency of
-   * connection-level liveness checks. The current synchronous replica writes
-   * can delay both ping responsiveness and change progress arbitrarily (e.g.
-   * a large index creation); an independently liveness check that is not
-   * delayed by synchronous writes on the subscriber would be a more failsafe
-   * solution.
-   *
-   * @returns `true` if the broadcast was already done or was marked done.
-   */
-  checkProgress(
-    lc: LogContext,
-    flowControlConsensusPaddingMs: number,
-    now: number,
-  ) {
-    if (this.#isDone) {
-      return true;
-    }
-    if (this.#pending.size === 0) {
-      return true;
+  logSlowRequests(now: number) {
+    if (this.#isDone || this.#pending.size === 0) {
+      return;
     }
     const elapsed = now - this.#start;
     if (this.#completed.length < this.#majority) {
       if (elapsed >= 1000) {
         this.#logWithState(
-          lc,
           `waiting for at least ${this.#majority} subscribers to finish`,
           elapsed,
         );
       }
-      return false;
     }
-    // Note: In the implementation, #latestCompleted is always updated,
-    // even after the majority is reached. This is fine and does not affect
-    // the important properties of the algorithm.
-    if (now - this.#latestCompleted >= flowControlConsensusPaddingMs) {
-      this.#logWithState(
-        lc,
-        `continuing with ${this.#pending.size} subscriber(s) still pending`,
-        elapsed,
-      );
-      this.#setDone('consensus-timeout');
-      return true;
-    }
-    return false;
   }
 
-  #logWithState(lc: LogContext, msg: string, elapsed: number) {
-    lc.withContext('watermark', this.#watermark).info?.(
-      `${msg} (${elapsed.toFixed(3)} ms)`,
-      {
+  #logWithState(msg: string, elapsed: number) {
+    this.#lc
+      .withContext('watermark', this.#watermark)
+      .info?.(`${msg} (${elapsed.toFixed(3)} ms)`, {
         completed: this.#completed.map(d => ({
           id: d.sub.id,
           processed: d.changes,
@@ -276,8 +227,7 @@ export class Broadcast {
           id: sub.id,
           ...sub.getStats(),
         })),
-      },
-    );
+      });
   }
 }
 
