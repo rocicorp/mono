@@ -67,6 +67,64 @@ jobs:
           SOURCE_SHA: ${{ github.event_name == 'push' && github.sha || '' }}
         run: node scripts/src/release-plan.ts
 
+  archive-cloudzero-source:
+    name: Archive source for Cloud Zero (${{ matrix.stage }})
+    runs-on: ubuntu-latest
+    needs: plan
+    environment: ${{ matrix.stage }}-source-archive
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - stage: staging
+            account_id: '946232032425'
+          - stage: production
+            account_id: '360831509486'
+    permissions:
+      contents: read
+      id-token: write # Required for OIDC authentication to AWS.
+    steps:
+      - name: Checkout release source
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          ref: ${{ needs.plan.outputs.source_sha }}
+          persist-credentials: false
+
+      - name: Configure archive credentials
+        uses: aws-actions/configure-aws-credentials@d979d5b3a71173a29b74b5b88418bfda9437d885 # v6.1.1
+        with:
+          role-to-assume: arn:aws:iam::${{ matrix.account_id }}:role/github-archive-zero-source
+          role-session-name: archive-zero-source-${{ github.run_id }}
+          aws-region: us-east-1
+          mask-aws-account-id: true
+          unset-current-credentials: true
+
+      - name: Archive source revision
+        env:
+          SOURCE_ARCHIVE_BUCKET: cloudzero-source-archives-${{ matrix.account_id }}
+          SOURCE_REPOSITORY: rocicorp/mono
+          SOURCE_REVISION: ${{ needs.plan.outputs.source_sha }}
+        run: |
+          set -euo pipefail
+          revision=$(git rev-parse --verify "${SOURCE_REVISION}^{commit}")
+          if [[ ! "$revision" =~ ^[0-9a-f]{40}$ ]] || [ "$revision" != "$SOURCE_REVISION" ]; then
+            echo "Expected exact commit SHA, got $SOURCE_REVISION -> $revision" >&2
+            exit 1
+          fi
+          archive="$RUNNER_TEMP/source.tar.gz"
+          git archive --format=tar "$revision" | gzip -n > "$archive"
+          key="repositories/$SOURCE_REPOSITORY/$revision/source.tar.gz"
+          if aws s3api head-object --bucket "$SOURCE_ARCHIVE_BUCKET" --key "$key" >/dev/null 2>&1; then
+            echo "Already archived $SOURCE_REPOSITORY@$revision"
+          else
+            aws s3api put-object \
+              --bucket "$SOURCE_ARCHIVE_BUCKET" \
+              --key "$key" \
+              --body "$archive" \
+              --content-type application/gzip \
+              --checksum-algorithm SHA256 >/dev/null
+          fi
+
   build:
     name: Build artifacts
     runs-on: ubuntu-latest
@@ -243,7 +301,7 @@ jobs:
   publish-docker:
     name: Publish Docker images
     runs-on: ubuntu-latest
-    needs: [plan, build]
+    needs: [plan, build, archive-cloudzero-source]
     environment:
       name: zero-release-docker
     permissions:
