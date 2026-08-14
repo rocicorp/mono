@@ -44,6 +44,38 @@ describe('computeLivenessTimings', () => {
       expect(t.manualKeepaliveTimeout).toBeGreaterThan(0);
     }
   });
+
+  test('a positive override replaces only the inbound threshold', () => {
+    // An aggressive server-side wal_sender_timeout (e.g. CloudNativePG
+    // defaults 5s cluster-wide) yields a 10s inbound fuse, which a busy wal
+    // sender can trip while silently decoding — the override widens the
+    // client-side threshold without touching the keepalive contract, which
+    // genuinely belongs to the server setting.
+    expect(computeLivenessTimings(5_000, 120_000)).toEqual({
+      enabled: true,
+      manualKeepaliveTimeout: 3_750, // still 75% of wal_sender_timeout
+      inboundTimeoutMs: 120_000, // the override
+      timerIntervalMs: 750, // still manualKeepaliveTimeout / 5
+    });
+  });
+
+  test('non-positive / non-finite overrides fall back to 2x wal_sender_timeout', () => {
+    for (const override of [0, -1, NaN]) {
+      expect(computeLivenessTimings(60_000, override).inboundTimeoutMs).toBe(
+        120_000,
+      );
+    }
+    expect(computeLivenessTimings(60_000, undefined).inboundTimeoutMs).toBe(
+      120_000,
+    );
+  });
+
+  test('the override does not re-enable liveness when wal_sender_timeout is disabled', () => {
+    // With wal_sender_timeout = 0 the server sends no periodic keepalives, so
+    // inbound silence is normal on an idle healthy connection — an inbound
+    // watchdog would false-positive regardless of its threshold.
+    expect(computeLivenessTimings(0, 120_000).enabled).toBe(false);
+  });
 });
 
 describe('evaluateInboundLiveness', () => {

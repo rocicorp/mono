@@ -145,6 +145,7 @@ export default async function runWorker(
               },
               context,
               replicationLag.reportIntervalMs,
+              upstream.pgStreamInboundTimeoutMs,
             )
           : await initializeCustomChangeSource(
               lc,
