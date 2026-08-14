@@ -72,6 +72,18 @@ function createRestorableReplica(file: string, watermark: string) {
   }
 }
 
+const SQLITE_FAMILY_SUFFIXES = ['', '-wal', '-wal2', '-shm', '-journal'];
+
+function sqliteFamilyFiles(file: string) {
+  return SQLITE_FAMILY_SUFFIXES.map(suffix => `${file}${suffix}`);
+}
+
+function writeSQLiteFamily(file: string, contents = 'test data') {
+  for (const familyFile of sqliteFamilyFiles(file)) {
+    writeFileSync(familyFile, contents);
+  }
+}
+
 describe('litestream/commands parseBackupCreatedTimes', () => {
   const lc = createSilentLogContext();
 
@@ -279,9 +291,163 @@ describe('litestream/commands restoreReplica', () => {
     );
   });
 
-  test('includes captured output when restore fails', async () => {
+  test('deletes a stale temporary SQLite family before restore', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'litestream-restore-test-'));
+    const source = join(dir, 'source.db');
+    const replica = join(dir, 'replica.db');
+    const temporaryReplica = `${replica}.tmp`;
+    const stagedWAL = `${temporaryReplica}-deadbeef-wal`;
+    createRestorableReplica(source, '01');
+    writeSQLiteFamily(temporaryReplica);
+    writeFileSync(stagedWAL, 'stale WAL data');
     const config = configWithFakeLitestream(
       `if [ "$1" = "restore" ]; then\n` +
+        `  for suffix in "" "-wal" "-wal2" "-shm" "-journal"; do\n` +
+        `    if [ -e "$6.tmp$suffix" ]; then exit 9; fi\n` +
+        `  done\n` +
+        `  if [ -e "$6.tmp-deadbeef-wal" ]; then exit 9; fi\n` +
+        `  cp "${source}" "$6"\n` +
+        `  exit 0\n` +
+        `fi\n` +
+        `exit 1`,
+      replica,
+    );
+
+    await restoreReplica(lc, config, {
+      replicaVersion: '01',
+      minWatermark: '01',
+    });
+
+    expect(sqliteFamilyFiles(temporaryReplica).some(existsSync)).toBe(false);
+    expect(existsSync(stagedWAL)).toBe(false);
+  });
+
+  test('deletes a temporary SQLite family left by a failed restore', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'litestream-restore-test-'));
+    const replica = join(dir, 'replica.db');
+    const temporaryReplica = `${replica}.tmp`;
+    const stagedWAL = `${temporaryReplica}-deadbeef-wal`;
+    const config = configWithFakeLitestream(
+      `if [ "$1" = "restore" ]; then\n` +
+        `  for suffix in "" "-wal" "-wal2" "-shm" "-journal"; do\n` +
+        `    printf "temporary" > "$6.tmp$suffix"\n` +
+        `  done\n` +
+        `  printf "temporary WAL" > "${stagedWAL}"\n` +
+        `  exit 1\n` +
+        `fi\n` +
+        `exit 1`,
+      replica,
+    );
+
+    await expect(
+      restoreReplica(lc, config, {
+        replicaVersion: '01',
+        minWatermark: '01',
+      }),
+    ).rejects.toThrow('litestream exited with code 1');
+
+    expect(sqliteFamilyFiles(temporaryReplica).some(existsSync)).toBe(false);
+    expect(existsSync(stagedWAL)).toBe(false);
+  }, 15_000);
+
+  test('temporary restore cleanup preserves the real replica family', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'litestream-restore-test-'));
+    const replica = join(dir, 'replica.db');
+    const temporaryReplica = `${replica}.tmp`;
+    writeSQLiteFamily(replica, 'real replica');
+    const config = configWithFakeLitestream(
+      `if [ "$1" = "restore" ]; then\n` +
+        `  printf "temporary" > "$6.tmp"\n` +
+        `  printf "temporary journal" > "$6.tmp-journal"\n` +
+        `  exit 1\n` +
+        `fi\n` +
+        `exit 1`,
+      replica,
+    );
+
+    await expect(
+      restoreReplica(lc, config, {
+        replicaVersion: '01',
+        minWatermark: '01',
+      }),
+    ).rejects.toThrow('litestream exited with code 1');
+
+    for (const familyFile of sqliteFamilyFiles(replica)) {
+      expect(readFileSync(familyFile, 'utf8')).toBe('real replica');
+    }
+    expect(sqliteFamilyFiles(temporaryReplica).some(existsSync)).toBe(false);
+  }, 15_000);
+
+  test('logs restore directory contents before and after temporary cleanup', async () => {
+    const sink = new TestLogSink();
+    const loggingLC = new LogContext('debug', undefined, sink);
+    const dir = mkdtempSync(join(tmpdir(), 'litestream-restore-test-'));
+    const source = join(dir, 'source.db');
+    const replica = join(dir, 'replica.db');
+    const temporaryReplica = `${replica}.tmp`;
+    const unexpectedFile = join(dir, 'unexpected-restore-file');
+    createRestorableReplica(source, '01');
+    writeFileSync(temporaryReplica, 'stale temporary data');
+    writeFileSync(unexpectedFile, 'unexpected data');
+    const config = configWithFakeLitestream(
+      `if [ "$1" = "restore" ]; then\n` +
+        `  cp "${source}" "$6"\n` +
+        `  exit 0\n` +
+        `fi\n` +
+        `exit 1`,
+      replica,
+    );
+
+    await restoreReplica(loggingLC, config, {
+      replicaVersion: '01',
+      minWatermark: '01',
+    });
+
+    const snapshots = sink.messages
+      .filter(
+        ([, , args]) => args[0] === 'Litestream restore directory contents',
+      )
+      .map(
+        ([, , args]) =>
+          args[1] as {
+            phase: string;
+            entryCount: number;
+            entries: {name: string; sizeBytes: number}[];
+          },
+      );
+    expect(snapshots.map(snapshot => snapshot.phase)).toEqual([
+      'before-temp-cleanup',
+      'after-temp-cleanup',
+    ]);
+    expect(snapshots[0]?.entries).toContainEqual(
+      expect.objectContaining({
+        name: 'replica.db.tmp',
+        sizeBytes: 20,
+      }),
+    );
+    expect(snapshots[1]?.entries.map(entry => entry.name)).not.toContain(
+      'replica.db.tmp',
+    );
+    for (const snapshot of snapshots) {
+      expect(snapshot.entryCount).toBeGreaterThan(0);
+      expect(snapshot.entries).toContainEqual(
+        expect.objectContaining({
+          name: 'unexpected-restore-file',
+          sizeBytes: 15,
+        }),
+      );
+    }
+  });
+
+  test('includes captured output when restore fails', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'litestream-restore-test-'));
+    const attempts = join(dir, 'attempts');
+    const config = configWithFakeLitestream(
+      `if [ "$1" = "restore" ]; then\n` +
+        `  count=$(cat "${attempts}" 2>/dev/null || echo 0)\n` +
+        `  count=$((count + 1))\n` +
+        `  echo "$count" > "${attempts}"\n` +
+        `  if [ "$count" -eq 3 ]; then mkdir "$6.tmp"; fi\n` +
         `  echo "restore stdout"\n` +
         `  echo "restore stderr" >&2\n` +
         `  exit 1\n` +

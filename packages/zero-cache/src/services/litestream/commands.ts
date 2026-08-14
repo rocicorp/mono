@@ -1,6 +1,7 @@
 import type {ChildProcess} from 'node:child_process';
 import {spawn} from 'node:child_process';
-import {existsSync, statSync} from 'node:fs';
+import {existsSync, readdirSync, rmSync, statSync} from 'node:fs';
+import {basename, dirname, join} from 'node:path';
 import type {LogContext, LogLevel} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {must} from '../../../../shared/src/must.ts';
@@ -57,6 +58,9 @@ type RestoreAttempt = {
   backupURL: string | undefined;
   result: RestoreResult;
 };
+
+const MAX_LOGGED_RESTORE_DIRECTORY_ENTRIES = 100;
+const LEGACY_RESTORE_WAL_INDEX = /^[0-9a-f]{8}$/;
 
 export class BackupNotFoundException extends Error {
   static readonly name = 'BackupNotFoundException';
@@ -229,9 +233,12 @@ async function tryRestore(
 
   const backupURL = snapshotStatus?.backupURL ?? config.litestream.backupURL;
   const attrs = litestreamRestoreMetricAttrs(config, role, backupURL);
+  const replicaFile = config.replica.file;
   let result: RestoreResult = 'error';
   try {
-    const replicaExistedBeforeRestore = existsSync(config.replica.file);
+    logRestoreDirectoryContents(lc, replicaFile, 'before-temp-cleanup');
+    deleteRestoreTempFiles(replicaFile);
+    const replicaExistedBeforeRestore = existsSync(replicaFile);
     const {litestream, env} = getLitestream(
       'restore',
       config,
@@ -337,9 +344,69 @@ async function tryRestore(
     }
     return {restored: true, backupURL, result};
   } finally {
-    litestreamRestoreAttempts().add(1, {
-      ...attrs,
-      result,
+    try {
+      deleteRestoreTempFiles(replicaFile);
+    } catch (e) {
+      lc.warn?.('Unable to clean up Litestream restore temporary files', {
+        replicaFile,
+        error: String(e),
+      });
+    }
+    logRestoreDirectoryContents(lc, replicaFile, 'after-temp-cleanup');
+    litestreamRestoreAttempts().add(1, {...attrs, result});
+  }
+}
+
+function deleteRestoreTempFiles(replicaFile: string) {
+  const temporaryReplicaFile = `${replicaFile}.tmp`;
+  deleteLiteDB(temporaryReplicaFile);
+
+  // rocicorp/litestream zero@v0.0.9 downloads WAL indexes in parallel to
+  // `<output>.tmp-<8 lowercase hex digits>-wal` before applying them.
+  const directory = dirname(temporaryReplicaFile);
+  if (!existsSync(directory)) {
+    return;
+  }
+  const prefix = `${basename(temporaryReplicaFile)}-`;
+  for (const name of readdirSync(directory)) {
+    if (!name.startsWith(prefix) || !name.endsWith('-wal')) {
+      continue;
+    }
+    const index = name.slice(prefix.length, -'-wal'.length);
+    if (LEGACY_RESTORE_WAL_INDEX.test(index)) {
+      rmSync(join(directory, name), {force: true});
+    }
+  }
+}
+
+function logRestoreDirectoryContents(
+  lc: LogContext,
+  replicaFile: string,
+  phase: 'before-temp-cleanup' | 'after-temp-cleanup',
+) {
+  const directory = dirname(replicaFile);
+  try {
+    const names = readdirSync(directory).sort();
+    const entries = names
+      .slice(0, MAX_LOGGED_RESTORE_DIRECTORY_ENTRIES)
+      .map(name => ({name, sizeBytes: statSync(join(directory, name)).size}));
+    lc.info?.('Litestream restore directory contents', {
+      phase,
+      directory,
+      replicaFile,
+      entryCount: names.length,
+      omittedEntryCount: Math.max(
+        0,
+        names.length - MAX_LOGGED_RESTORE_DIRECTORY_ENTRIES,
+      ),
+      entries,
+    });
+  } catch (e) {
+    lc.warn?.('Unable to inspect Litestream restore directory', {
+      phase,
+      directory,
+      replicaFile,
+      error: String(e),
     });
   }
 }
