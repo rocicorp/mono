@@ -1,0 +1,100 @@
+{
+  "timestamp": "2026-08-15T16:31:45.707Z",
+  "topology": {
+    "numReplicationManagers": 1,
+    "numViewSyncers": 1,
+    "totalClients": 2,
+    "clientsPerViewSyncer": 2
+  },
+  "config": {
+    "writeRatePerSecond": 10,
+    "loadDurationSeconds": 3,
+    "sqliteChangeLogMode": "serve",
+    "dbMode": "docker"
+  },
+  "loadStats": {
+    "writesAttempted": 30,
+    "writesSucceeded": 30,
+    "writesFailed": 0,
+    "durationMs": 3000.1309999999994,
+    "actualRate": 9.99956335240028
+  },
+  "clientStats": [
+    {
+      "clientID": "bench_client_0",
+      "clientGroupID": "bench_group_0_0",
+      "viewSyncerIndex": 0,
+      "connected": true,
+      "initialHydrationDurationMs": 71.22187499999973,
+      "pokesReceived": 32,
+      "lastPokeTimestamp": 6875.465333,
+      "lastPokeCookie": "51gkyd4",
+      "lastPokeWatermark": null,
+      "errors": ["WS error: ", "WS closed (1006): "]
+    },
+    {
+      "clientID": "bench_client_1",
+      "clientGroupID": "bench_group_0_1",
+      "viewSyncerIndex": 0,
+      "connected": true,
+      "initialHydrationDurationMs": 59.29945899999984,
+      "pokesReceived": 32,
+      "lastPokeTimestamp": 6876.2955,
+      "lastPokeCookie": "51gkyd4",
+      "lastPokeWatermark": null,
+      "errors": ["WS error: ", "WS closed (1006): "]
+    }
+  ],
+  "metrics": {
+    "replicationLagMs": {
+      "count": 21,
+      "sum": 32634,
+      "avg": 1554,
+      "min": 1554,
+      "p50": 1554,
+      "p90": 1554,
+      "p95": 1554,
+      "p99": 1554,
+      "max": 1554
+    },
+    "e2eServingLagMs": {
+      "count": 60,
+      "sum": 726,
+      "avg": 12.1,
+      "min": 8,
+      "p50": 12.1,
+      "p90": 12.1,
+      "p95": 12.1,
+      "p99": 12.1,
+      "max": 83
+    },
+    "advancementLatencyMs": {
+      "count": 60,
+      "sum": 341.5,
+      "avg": 5.691666666666666,
+      "min": 3.5,
+      "p50": 7.5,
+      "p90": 7.5,
+      "p95": 7.5,
+      "p99": 15,
+      "max": 15
+    },
+    "viewSyncerLagMs": null,
+    "hydrationTimeMs": {
+      "count": 2,
+      "sum": 70,
+      "avg": 35,
+      "min": 35,
+      "p50": 35,
+      "p90": 35,
+      "p95": 35,
+      "p99": 35,
+      "max": 35
+    },
+    "pipelineResets": 0,
+    "transactionsReplicated": 30,
+    "changesReplicated": 45,
+    "flowControlWaits": 0,
+    "flowControlWaitDurationMs": null
+  }
+}

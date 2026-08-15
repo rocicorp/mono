@@ -201,7 +201,11 @@ export async function initializePostgresChangeSource(
       streamInboundTimeoutMs,
     );
 
-    const backupPath = must(initialSyncedReplica ?? restoredReplica).backupPath;
+    const backupPath = (
+      initialSyncedReplica ??
+      restoredReplica ??
+      upstreamReplica
+    ).backupPath;
     const destinationBackupURL =
       backupPath && restoreOptions.litestream?.backupURL
         ? new URL(backupPath, restoreOptions.litestream.backupURL).toString()

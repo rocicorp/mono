@@ -1,0 +1,140 @@
+{
+  "timestamp": "2026-08-15T20:58:03.667Z",
+  "topology": {
+    "numReplicationManagers": 1,
+    "numViewSyncers": 2,
+    "totalClients": 4,
+    "clientsPerViewSyncer": 2
+  },
+  "config": {
+    "writeRatePerSecond": 100,
+    "loadDurationSeconds": 6,
+    "sqliteChangeLogMode": "serve",
+    "dbMode": "docker"
+  },
+  "loadStats": {
+    "writesAttempted": 601,
+    "writesSucceeded": 601,
+    "writesFailed": 0,
+    "durationMs": 6009.684,
+    "actualRate": 100.0052581799642
+  },
+  "clientStats": [
+    {
+      "clientID": "bench_client_0",
+      "clientGroupID": "bench_group_0_0",
+      "viewSyncerIndex": 0,
+      "connected": true,
+      "initialHydrationDurationMs": 63.724874999999884,
+      "pokesReceived": 578,
+      "lastPokeTimestamp": 14091.819209,
+      "lastPokeCookie": "52ff888",
+      "lastPokeWatermark": null,
+      "errors": []
+    },
+    {
+      "clientID": "bench_client_1",
+      "clientGroupID": "bench_group_0_1",
+      "viewSyncerIndex": 0,
+      "connected": true,
+      "initialHydrationDurationMs": 53.0385839999999,
+      "pokesReceived": 580,
+      "lastPokeTimestamp": 14091.689167,
+      "lastPokeCookie": "52ff888",
+      "lastPokeWatermark": null,
+      "errors": []
+    },
+    {
+      "clientID": "bench_client_2",
+      "clientGroupID": "bench_group_1_0",
+      "viewSyncerIndex": 1,
+      "connected": true,
+      "initialHydrationDurationMs": 47.2924579999999,
+      "pokesReceived": 579,
+      "lastPokeTimestamp": 14091.893375,
+      "lastPokeCookie": "52ff888",
+      "lastPokeWatermark": null,
+      "errors": [
+        "WS error: ",
+        "WS closed (1006): "
+      ]
+    },
+    {
+      "clientID": "bench_client_3",
+      "clientGroupID": "bench_group_1_1",
+      "viewSyncerIndex": 1,
+      "connected": true,
+      "initialHydrationDurationMs": 43.794834000000264,
+      "pokesReceived": 579,
+      "lastPokeTimestamp": 14091.95425,
+      "lastPokeCookie": "52ff888",
+      "lastPokeWatermark": null,
+      "errors": [
+        "WS error: ",
+        "WS closed (1006): "
+      ]
+    }
+  ],
+  "metrics": {
+    "replicationLagMs": {
+      "count": 32,
+      "sum": 70752,
+      "avg": 2211,
+      "min": 1345,
+      "p50": 3077,
+      "p90": 3077,
+      "p95": 3077,
+      "p99": 3077,
+      "max": 3077
+    },
+    "e2eServingLagMs": {
+      "count": 1154,
+      "sum": 9423.000000000007,
+      "avg": 8.165511265164652,
+      "min": 5,
+      "p50": 8.165511265164652,
+      "p90": 8.165511265164652,
+      "p95": 8.165511265164652,
+      "p99": 8.165511265164652,
+      "max": 53
+    },
+    "advancementLatencyMs": {
+      "count": 245,
+      "sum": 1186,
+      "avg": 4.840816326530613,
+      "min": 0.5,
+      "p50": 3.5,
+      "p90": 7.5,
+      "p95": 7.5,
+      "p99": 15,
+      "max": 35
+    },
+    "viewSyncerLagMs": null,
+    "hydrationTimeMs": {
+      "count": 2,
+      "sum": 50,
+      "avg": 25,
+      "min": 15,
+      "p50": 35,
+      "p90": 35,
+      "p95": 35,
+      "p99": 35,
+      "max": 35
+    },
+    "pipelineResets": 0,
+    "transactionsReplicated": 601,
+    "changesReplicated": 845,
+    "flowControlWaits": 9,
+    "flowControlWaitDurationMs": {
+      "count": 9,
+      "sum": 4.5,
+      "avg": 0.5,
+      "min": 0.5,
+      "p50": 0.5,
+      "p90": 0.5,
+      "p95": 0.5,
+      "p99": 0.5,
+      "max": 0.5
+    }
+  }
+}

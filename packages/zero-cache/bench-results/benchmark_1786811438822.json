@@ -1,0 +1,60 @@
+{
+  "timestamp": "2026-08-15T16:30:38.491Z",
+  "topology": {
+    "numReplicationManagers": 1,
+    "numViewSyncers": 1,
+    "totalClients": 2,
+    "clientsPerViewSyncer": 2
+  },
+  "config": {
+    "writeRatePerSecond": 10,
+    "loadDurationSeconds": 3,
+    "sqliteChangeLogMode": "serve",
+    "dbMode": "docker"
+  },
+  "loadStats": {
+    "writesAttempted": 30,
+    "writesSucceeded": 30,
+    "writesFailed": 0,
+    "durationMs": 3000.9086669999997,
+    "actualRate": 9.996972027139673
+  },
+  "clientStats": [
+    {
+      "clientID": "bench_client_0",
+      "clientGroupID": "bench_group_0_0",
+      "viewSyncerIndex": 0,
+      "connected": true,
+      "initialHydrationDurationMs": 52.5181249999996,
+      "pokesReceived": 32,
+      "lastPokeTimestamp": 6855.742,
+      "lastPokeCookie": "51dg00o",
+      "lastPokeWatermark": null,
+      "errors": ["WS error: ", "WS closed (1006): "]
+    },
+    {
+      "clientID": "bench_client_1",
+      "clientGroupID": "bench_group_0_1",
+      "viewSyncerIndex": 0,
+      "connected": true,
+      "initialHydrationDurationMs": 64.57054199999993,
+      "pokesReceived": 32,
+      "lastPokeTimestamp": 6856.034833,
+      "lastPokeCookie": "51dg00o",
+      "lastPokeWatermark": null,
+      "errors": ["WS error: ", "WS closed (1006): "]
+    }
+  ],
+  "metrics": {
+    "replicationLagMs": null,
+    "e2eServingLagMs": null,
+    "advancementLatencyMs": null,
+    "viewSyncerLagMs": null,
+    "hydrationTimeMs": null,
+    "pipelineResets": 0,
+    "transactionsReplicated": 0,
+    "changesReplicated": 0,
+    "flowControlWaits": 0,
+    "flowControlWaitDurationMs": null
+  }
+}

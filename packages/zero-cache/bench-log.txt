@@ -1,0 +1,1238 @@
+Starting Zero-Cache Pipeline Benchmark...
+Topology: 1 RM(s), 1 View-Syncer(s), 2 Client(s)/VS
+Load: 10 writes/sec for 3s
+{
+  severity_local: 'NOTICE',
+  severity: 'NOTICE',
+  code: '00000',
+  message: 'publication "zero_all" does not exist, skipping',
+  file: 'dropcmds.c',
+  line: '526',
+  routine: 'does_not_exist_skipping'
+}
+
+ZERO_CHANGE_STREAMER_ADDRESS is deprecated:
+Set the ZERO_CHANGE_STREAMER_URI on view-syncers instead.
+
+2026-08-15T09:29:34.333-07:00 [ 'pid=54267', 'worker=runner', 'workerIndex=0' ] 
+2026-08-15T09:29:34.343-07:00 [ 'pid=54267', 'worker=runner', 'workerIndex=0' ] network interfaces {"preferred":"192.168.5.193","interfaces":{"lo0":[{"address":"127.0.0.1","netmask":"255.0.0.0","family":"IPv4","mac":"00:00:00:00:00:00","internal":true,"cidr":"127.0.0.1/8"},{"address":"::1","netmask":"ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff","family":"IPv6","mac":"00:00:00:00:00:00","internal":true,"cidr":"::1/128","scopeid":0},{"address":"fe80::1","netmask":"ffff:ffff:ffff:ffff::","family":"IPv6","mac":"00:00:00:00:00:00","internal":true,"cidr":"fe80::1/64","scopeid":1}],"en0":[{"address":"fe80::1871:7705:83c5:61d5","netmask":"ffff:ffff:ffff:ffff::","family":"IPv6","mac":"fc:b2:14:c3:10:89","internal":false,"cidr":"fe80::1871:7705:83c5:61d5/64","scopeid":15},{"address":"fd3f:e18b:d363:30a5:1cf8:a3b9:f6dd:256a","netmask":"ffff:ffff:ffff:ffff::","family":"IPv6","mac":"fc:b2:14:c3:10:89","internal":false,"cidr":"fd3f:e18b:d363:30a5:1cf8:a3b9:f6dd:256a/64","scopeid":0},{"address":"192.168.5.193","netmask":"255.255.252.0","family":"IPv4","mac":"fc:b2:14:c3:10:89","internal":false,"cidr":"192.168.5.193/22"}],"awdl0":[{"address":"fe80::1491:bcff:fecb:6400","netmask":"ffff:ffff:ffff:ffff::","family":"IPv6","mac":"16:91:bc:cb:64:00","internal":false,"cidr":"fe80::1491:bcff:fecb:6400/64","scopeid":16}],"llw0":[{"address":"fe80::1491:bcff:fecb:6400","netmask":"ffff:ffff:ffff:ffff::","family":"IPv6","mac":"16:91:bc:cb:64:00","internal":false,"cidr":"fe80::1491:bcff:fecb:6400/64","scopeid":17}],"utun0":[{"address":"fe80::cb06:cde5:e99a:dd39","netmask":"ffff:ffff:ffff:ffff::","family":"IPv6","mac":"00:00:00:00:00:00","internal":false,"cidr":"fe80::cb06:cde5:e99a:dd39/64","scopeid":18}],"utun1":[{"address":"fe80::f7be:53b:2f96:f373","netmask":"ffff:ffff:ffff:ffff::","family":"IPv6","mac":"00:00:00:00:00:00","internal":false,"cidr":"fe80::f7be:53b:2f96:f373/64","scopeid":19}],"utun2":[{"address":"fe80::f5a9:60c2:c83:52b2","netmask":"ffff:ffff:ffff:ffff::","family":"IPv6","mac":"00:00:00:00:00:00","internal":false,"cidr":"fe80::f5a9:60c2:c83:52b2/64","scopeid":20}],"utun3":[{"address":"fe80::ce81:b1c:bd2c:69e","netmask":"ffff:ffff:ffff:ffff::","family":"IPv6","mac":"00:00:00:00:00:00","internal":false,"cidr":"fe80::ce81:b1c:bd2c:69e/64","scopeid":21}]}}
+2026-08-15T09:29:34.343-07:00 [ 'pid=54267', 'worker=runner', 'workerIndex=0' ] runtime env: taskID=uI9EX-OLn2C9MoaUs33xD, hostIP=192.168.5.193
+2026-08-15T09:29:34.344-07:00 [ 'pid=54267', 'worker=runner', 'workerIndex=0' ] starting server@1.10.0  {"protocolVersion":52,"taskID":"uI9EX-OLn2C9MoaUs33xD","app":{"id":"zero","publications":["zero_all"]},"shard":{"num":0},"port":13218}
+2026-08-15T09:29:34.344-07:00 [ 'pid=54267', 'worker=runner', 'workerIndex=0' ] starting zero-cache
+2026-08-15T09:29:34.879-07:00 [ 'pid=54283', 'worker=dispatcher', 'workerIndex=0' ] 
+2026-08-15T09:29:34.885-07:00 [ 'pid=54283', 'worker=dispatcher', 'workerIndex=0' ] 
+2026-08-15T09:29:35.343-07:00 [ 'pid=54291', 'worker=change-streamer', 'workerIndex=0' ] 
+2026-08-15T09:29:35.349-07:00 [ 'pid=54291', 'worker=change-streamer', 'workerIndex=0' ] 
+2026-08-15T09:29:35.382-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=zero_0/cdc'
+] Checking schema for compatibility with change-streamer at schema v6
+2026-08-15T09:29:35.390-07:00 [ 'pid=54291', 'worker=change-streamer', 'workerIndex=0' ] average ping to change db@localhost: 0.58 ms
+2026-08-15T09:29:35.391-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=zero_0/cdc'
+] Migrating schema from v0 to v6
+2026-08-15T09:29:35.391-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=zero_0/cdc'
+] Setting up CDC tables
+2026-08-15T09:29:35.404-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=zero_0/cdc'
+] bumping rollback limit from 0 to 1
+2026-08-15T09:29:35.406-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=zero_0/cdc'
+] Running change-streamer at schema v6
+2026-08-15T09:29:35.425-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=zero_0'
+] Checking schema for compatibility with upstream-shard-zero at schema v24
+2026-08-15T09:29:35.430-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=zero_0'
+] Migrating schema from v0 to v24
+2026-08-15T09:29:35.493-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=zero_0'
+] bumping rollback limit from 0 to 1
+2026-08-15T09:29:35.494-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=zero_0'
+] Running upstream-shard-zero at schema v24
+2026-08-15T09:29:35.496-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2'
+] Checking schema for compatibility with replica-zero-0 at schema v17
+2026-08-15T09:29:35.497-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2'
+] Migrating schema from v0 to v17
+2026-08-15T09:29:35.498-07:00 pid=54291,worker=change-streamer,workerIndex=0,initSchema=14aqzgwwja2 Unable to create full ReplicationStatusEvent {"code":"SQLITE_ERROR","name":"SqliteError","errorMsg":"no such table: _zero.tableMetadata: \n      SELECT \"schema\", \"table\" as \"name\", \"minRowVersion\" FROM \"_zero.tableMetadata\"\n    ","stack":"SqliteError: no such table: _zero.tableMetadata: \n      SELECT \"schema\", \"table\" as \"name\", \"minRowVersion\" FROM \"_zero.tableMetadata\"\n    \n    at Database.prepare (/Users/gregorybaker/github/mono/node_modules/.pnpm/@rocicorp+zero-sqlite3@1.1.4/node_modules/@rocicorp/zero-sqlite3/lib/methods/wrappers.js:5:21)\n    at file:///Users/gregorybaker/github/mono/packages/zqlite/src/db.ts:64:20\n    at #run (file:///Users/gregorybaker/github/mono/packages/zqlite/src/db.ts:130:14)\n    at Database.prepare (file:///Users/gregorybaker/github/mono/packages/zqlite/src/db.ts:57:21)\n    at TableMetadataTracker.getMinRowVersions (file:///Users/gregorybaker/github/mono/packages/zero-cache/src/services/replicator/schema/table-metadata.ts:88:59)\n    at listTables (file:///Users/gregorybaker/github/mono/packages/zero-cache/src/db/lite-tables.ts:73:36)\n    at computeZqlSpecs (file:///Users/gregorybaker/github/mono/packages/zero-cache/src/db/lite-tables.ts:218:5)\n    at getReplicatedTables (file:///Users/gregorybaker/github/mono/packages/zero-cache/src/services/replicator/replication-status.ts:182:24)\n    at replicationStatusEvent (file:///Users/gregorybaker/github/mono/packages/zero-cache/src/services/replicator/replication-status.ts:154:22)\n    at file:///Users/gregorybaker/github/mono/packages/zero-cache/src/services/replicator/replication-status.ts:66:7"}
+2026-08-15T09:29:35.498-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2'
+] ZeroEvent: zero/events/status/replication/v1 {"type":"zero/events/status/replication/v1","component":"replication","status":"OK","stage":"Initializing","time":"2026-08-15T16:29:35.498Z","state":{"tables":[],"indexes":[],"replicaSize":0}}
+2026-08-15T09:29:35.507-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2'
+] Ensuring upstream PUBLICATION on bench_up_472638@localhost
+2026-08-15T09:29:35.507-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=zero_0'
+] Checking schema for compatibility with upstream-shard-zero at schema v24
+2026-08-15T09:29:35.510-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=zero_0'
+] Running upstream-shard-zero at schema v24
+2026-08-15T09:29:35.511-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2'
+] Upstream is setup with publications [_zero_metadata_0,zero_all]
+2026-08-15T09:29:35.511-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2'
+] opening replication session to bench_up_472638@localhost
+2026-08-15T09:29:35.515-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2'
+] dropped inactive replication slots {"dropped":[{"slot":"zero_0_a","pg_drop_replication_slot":""}]}
+2026-08-15T09:29:35.530-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2'
+] Created replication slot zero_0_a {"slot_name":"zero_0_a","consistent_point":"0/4A5DCA8","snapshot_name":"00000007-0000040E-1","output_plugin":"pgoutput"}
+2026-08-15T09:29:35.557-07:00 pid=54291,worker=change-streamer,workerIndex=0,initSchema=14aqzgwwja2 
+
+
+Table "permissions" needs a primary key in order to be synced to clients. Add one with 'ALTER TABLE "permissions" ADD PRIMARY KEY (...)'.
+
+
+
+2026-08-15T09:29:35.566-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2'
+] Started 5 workers to copy 13 tables
+2026-08-15T09:29:35.570-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2',
+  'tx=1'
+] Computed initial download state for comment (1.853 ms) {"state":{"table":"comment","columns":["body","created","creatorID","id","issueID"],"rows":0,"totalRows":0,"totalBytes":57344}}
+2026-08-15T09:29:35.571-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2',
+  'tx=1'
+] Computed initial download state for emoji (0.656 ms) {"state":{"table":"emoji","columns":["annotation","created","creatorID","id","subjectID","value"],"rows":0,"totalRows":0,"totalBytes":8192}}
+2026-08-15T09:29:35.573-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2',
+  'tx=1'
+] Computed initial download state for issue (1.680 ms) {"state":{"table":"issue","columns":["assigneeID","created","creatorID","description","id","modified","open","projectID","shortID","title","visibility"],"rows":0,"totalRows":0,"totalBytes":57344}}
+2026-08-15T09:29:35.574-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2',
+  'tx=1'
+] Computed initial download state for issueLabel (1.630 ms) {"state":{"table":"issueLabel","columns":["issueID","labelID","projectID"],"rows":0,"totalRows":0,"totalBytes":16384}}
+2026-08-15T09:29:35.575-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2',
+  'tx=1'
+] Computed initial download state for issueNotifications (0.539 ms) {"state":{"table":"issueNotifications","columns":["created","issueID","subscribed","userID"],"rows":0,"totalRows":0,"totalBytes":8192}}
+2026-08-15T09:29:35.576-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2',
+  'tx=1'
+] Computed initial download state for label (0.590 ms) {"state":{"table":"label","columns":["id","name","projectID"],"rows":0,"totalRows":0,"totalBytes":16384}}
+2026-08-15T09:29:35.576-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2',
+  'tx=1'
+] Computed initial download state for project (0.573 ms) {"state":{"table":"project","columns":["id","issueCountEstimate","logoURL","lowerCaseName","markURL","name","supportsSearch"],"rows":0,"totalRows":0,"totalBytes":16384}}
+2026-08-15T09:29:35.578-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2',
+  'tx=1'
+] Computed initial download state for user (1.058 ms) {"state":{"table":"user","columns":["avatar","id","login","name","role"],"rows":0,"totalRows":0,"totalBytes":16384}}
+2026-08-15T09:29:35.578-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2',
+  'tx=1'
+] Computed initial download state for zero.permissions (0.655 ms) {"state":{"table":"zero.permissions","columns":["hash","permissions"],"rows":0,"totalRows":0,"totalBytes":16384}}
+2026-08-15T09:29:35.579-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2',
+  'tx=3'
+] Computed initial download state for userPref (2.258 ms) {"state":{"table":"userPref","columns":["key","userID","value"],"rows":0,"totalRows":0,"totalBytes":8192}}
+2026-08-15T09:29:35.580-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2',
+  'tx=2'
+] Computed initial download state for viewState (2.043 ms) {"state":{"table":"viewState","columns":["issueID","userID","viewed"],"rows":0,"totalRows":0,"totalBytes":8192}}
+2026-08-15T09:29:35.580-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2',
+  'tx=4'
+] Computed initial download state for zero_0.clients (1.872 ms) {"state":{"table":"zero_0.clients","columns":["clientGroupID","clientID","lastMutationID","userID"],"rows":0,"totalRows":0,"totalBytes":8192}}
+2026-08-15T09:29:35.580-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2',
+  'tx=5'
+] Computed initial download state for zero_0.mutations (1.864 ms) {"state":{"table":"zero_0.mutations","columns":["clientGroupID","clientID","mutationID","result"],"rows":0,"totalRows":0,"totalBytes":8192}}
+2026-08-15T09:29:35.581-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2'
+] ZeroEvent: zero/events/status/replication/v1 {"type":"zero/events/status/replication/v1","component":"replication","status":"OK","stage":"Initializing","description":"Copying 13 upstream tables at version 51afctk","time":"2026-08-15T16:29:35.580Z","state":{"tables":[{"table":"comment","columns":[{"column":"_0_version","upstreamType":"TEXT","clientType":null},{"column":"body","upstreamType":"text","clientType":null},{"column":"created","upstreamType":"int8","clientType":null},{"column":"creatorID","upstreamType":"text","clientType":null},{"column":"id","upstreamType":"text","clientType":null},{"column":"issueID","upstreamType":"text","clientType":null}]},{"table":"emoji","columns":[{"column":"_0_version","upstreamType":"TEXT","clientType":null},{"column":"annotation","upstreamType":"text","clientType":null},{"column":"created","upstreamType":"int8","clientType":null},{"column":"creatorID","upstreamType":"text","clientType":null},{"column":"id","upstreamType":"text","clientType":null},{"column":"subjectID","upstreamType":"text","clientType":null},{"column":"value","upstreamType":"text","clientType":null}]},{"table":"issue","columns":[{"column":"_0_version","upstreamType":"TEXT","clientType":null},{"column":"assigneeID","upstreamType":"text","clientType":null},{"column":"created","upstreamType":"int8","clientType":null},{"column":"creatorID","upstreamType":"text","clientType":null},{"column":"description","upstreamType":"text","clientType":null},{"column":"id","upstreamType":"text","clientType":null},{"column":"modified","upstreamType":"int8","clientType":null},{"column":"open","upstreamType":"bool","clientType":null},{"column":"projectID","upstreamType":"text","clientType":null},{"column":"shortID","upstreamType":"int4","clientType":null},{"column":"title","upstreamType":"text","clientType":null},{"column":"visibility","upstreamType":"text","clientType":null}]},{"table":"issueLabel","columns":[{"column":"_0_version","upstreamType":"TEXT","clientType":null},{"column":"issueID","upstreamType":"text","clientType":null},{"column":"labelID","upstreamType":"text","clientType":null},{"column":"projectID","upstreamType":"text","clientType":null}]},{"table":"issueNotifications","columns":[{"column":"_0_version","upstreamType":"TEXT","clientType":null},{"column":"created","upstreamType":"int8","clientType":null},{"column":"issueID","upstreamType":"text","clientType":null},{"column":"subscribed","upstreamType":"bool","clientType":null},{"column":"userID","upstreamType":"text","clientType":null}]},{"table":"label","columns":[{"column":"_0_version","upstreamType":"TEXT","clientType":null},{"column":"id","upstreamType":"text","clientType":null},{"column":"name","upstreamType":"text","clientType":null},{"column":"projectID","upstreamType":"text","clientType":null}]},{"table":"project","columns":[{"column":"_0_version","upstreamType":"TEXT","clientType":null},{"column":"id","upstreamType":"text","clientType":null},{"column":"issueCountEstimate","upstreamType":"int4","clientType":null},{"column":"logoURL","upstreamType":"text","clientType":null},{"column":"lowerCaseName","upstreamType":"text","clientType":null},{"column":"markURL","upstreamType":"text","clientType":null},{"column":"name","upstreamType":"text","clientType":null},{"column":"supportsSearch","upstreamType":"bool","clientType":null}]},{"table":"user","columns":[{"column":"_0_version","upstreamType":"TEXT","clientType":null},{"column":"avatar","upstreamType":"text","clientType":null},{"column":"id","upstreamType":"text","clientType":null},{"column":"login","upstreamType":"text","clientType":null},{"column":"name","upstreamType":"text","clientType":null},{"column":"role","upstreamType":"text","clientType":null}]},{"table":"userPref","columns":[{"column":"_0_version","upstreamType":"TEXT","clientType":null},{"column":"key","upstreamType":"text","clientType":null},{"column":"userID","upstreamType":"text","clientType":null},{"column":"value","upstreamType":"text","clientType":null}]},{"table":"viewState","columns":[{"column":"_0_version","upstreamType":"TEXT","clientType":null},{"column":"issueID","upstreamType":"text","clientType":null},{"column":"userID","upstreamType":"text","clientType":null},{"column":"viewed","upstreamType":"int8","clientType":null}]},{"table":"zero.permissions","columns":[{"column":"_0_version","upstreamType":"TEXT","clientType":null},{"column":"hash","upstreamType":"text","clientType":null},{"column":"permissions","upstreamType":"json","clientType":null}]},{"table":"zero_0.clients","columns":[{"column":"_0_version","upstreamType":"TEXT","clientType":null},{"column":"clientGroupID","upstreamType":"text","clientType":null},{"column":"clientID","upstreamType":"text","clientType":null},{"column":"lastMutationID","upstreamType":"int8","clientType":null},{"column":"userID","upstreamType":"text","clientType":null}]},{"table":"zero_0.mutations","columns":[{"column":"_0_version","upstreamType":"TEXT","clientType":null},{"column":"clientGroupID","upstreamType":"text","clientType":null},{"column":"clientID","upstreamType":"text","clientType":null},{"column":"mutationID","upstreamType":"int8","clientType":null},{"column":"result","upstreamType":"json","clientType":null}]}],"indexes":[],"replicaSize":122880,"downloadStatus":[{"table":"comment","columns":["body","created","creatorID","id","issueID"],"rows":0,"totalRows":0,"totalBytes":57344},{"table":"emoji","columns":["annotation","created","creatorID","id","subjectID","value"],"rows":0,"totalRows":0,"totalBytes":8192},{"table":"issue","columns":["assigneeID","created","creatorID","description","id","modified","open","projectID","shortID","title","visibility"],"rows":0,"totalRows":0,"totalBytes":57344},{"table":"issueLabel","columns":["issueID","labelID","projectID"],"rows":0,"totalRows":0,"totalBytes":16384},{"table":"issueNotifications","columns":["created","issueID","subscribed","userID"],"rows":0,"totalRows":0,"totalBytes":8192},{"table":"label","columns":["id","name","projectID"],"rows":0,"totalRows":0,"totalBytes":16384},{"table":"project","columns":["id","issueCountEstimate","logoURL","lowerCaseName","markURL","name","supportsSearch"],"rows":0,"totalRows":0,"totalBytes":16384},{"table":"user","columns":["avatar","id","login","name","role"],"rows":0,"totalRows":0,"totalBytes":16384},{"table":"userPref","columns":["key","userID","value"],"rows":0,"totalRows":0,"totalBytes":8192},{"table":"viewState","columns":["issueID","userID","viewed"],"rows":0,"totalRows":0,"totalBytes":8192},{"table":"zero.permissions","columns":["hash","permissions"],"rows":0,"totalRows":0,"totalBytes":16384},{"table":"zero_0.clients","columns":["clientGroupID","clientID","lastMutationID","userID"],"rows":0,"totalRows":0,"totalBytes":8192},{"table":"zero_0.mutations","columns":["clientGroupID","clientID","mutationID","result"],"rows":0,"totalRows":0,"totalBytes":8192}]}}
+2026-08-15T09:29:35.583-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2',
+  'tx=1'
+] Starting binary copy stream of comment: SELECT "body","created","creatorID","id","issueID" FROM "public"."comment" 
+2026-08-15T09:29:35.585-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2',
+  'tx=3'
+] Starting binary copy stream of emoji: SELECT "annotation","created","creatorID","id","subjectID","value" FROM "public"."emoji" 
+2026-08-15T09:29:35.588-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2',
+  'tx=2'
+] Starting binary copy stream of issue: SELECT "assigneeID","created","creatorID","description","id","modified","open","projectID","shortID","title","visibility" FROM "public"."issue" 
+2026-08-15T09:29:35.589-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2',
+  'tx=4'
+] Starting binary copy stream of issueLabel: SELECT "issueID","labelID","projectID" FROM "public"."issueLabel" 
+2026-08-15T09:29:35.590-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2',
+  'tx=5'
+] Starting binary copy stream of issueNotifications: SELECT "created","issueID","subscribed","userID" FROM "public"."issueNotifications" 
+2026-08-15T09:29:35.593-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2',
+  'tx=3'
+] Finished copying 0 rows into emoji (flush: 0.001 ms) (total: 9.528 ms)  {"schema":"public","table":"emoji","replicaTable":"emoji","syncMode":"initial","copyFormat":"binary","columnCount":6,"rows":0,"estimatedRows":0,"estimatedBytes":8192,"flushMs":0.0012500000000272848,"elapsedMs":9.52816699999994,"sourceWaitMs":7.338415999999938,"processingMs":0.4449170000000322,"copyBytes":21}
+2026-08-15T09:29:35.594-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2',
+  'tx=3'
+] Starting binary copy stream of label: SELECT "id","name","projectID" FROM "public"."label" 
+2026-08-15T09:29:35.595-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2',
+  'tx=4'
+] Finished copying 33 rows into issueLabel (flush: 0.067 ms) (total: 6.233 ms)  {"schema":"public","table":"issueLabel","replicaTable":"issueLabel","syncMode":"initial","copyFormat":"binary","columnCount":3,"rows":33,"estimatedRows":0,"estimatedBytes":16384,"flushMs":0.06708400000002257,"elapsedMs":6.233333000000016,"sourceWaitMs":5.106038999999782,"processingMs":0.25054400000021815,"copyBytes":1553}
+2026-08-15T09:29:35.597-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2',
+  'tx=4'
+] Starting binary copy stream of project: SELECT "id","issueCountEstimate","logoURL","lowerCaseName","markURL","name","supportsSearch" FROM "public"."project" 
+2026-08-15T09:29:35.597-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2',
+  'tx=5'
+] Finished copying 0 rows into issueNotifications (flush: 0.001 ms) (total: 7.946 ms)  {"schema":"public","table":"issueNotifications","replicaTable":"issueNotifications","syncMode":"initial","copyFormat":"binary","columnCount":4,"rows":0,"estimatedRows":0,"estimatedBytes":8192,"flushMs":0.0005419999999958236,"elapsedMs":7.945832999999993,"sourceWaitMs":6.793916999999965,"processingMs":0.058333000000061475,"copyBytes":21}
+2026-08-15T09:29:35.599-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2',
+  'tx=5'
+] Starting binary copy stream of user: SELECT "avatar","id","login","name","role" FROM "public"."user" 
+2026-08-15T09:29:35.600-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2',
+  'tx=1'
+] Finished copying 200 rows into comment (flush: 0.194 ms) (total: 18.615 ms)  {"schema":"public","table":"comment","replicaTable":"comment","syncMode":"initial","copyFormat":"binary","columnCount":5,"rows":200,"estimatedRows":0,"estimatedBytes":57344,"flushMs":0.19412499999998545,"elapsedMs":18.614624999999933,"sourceWaitMs":15.858581000001095,"processingMs":0.8190019999989318,"copyBytes":17421}
+2026-08-15T09:29:35.601-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2',
+  'tx=1'
+] Starting binary copy stream of userPref: SELECT "key","userID","value" FROM "public"."userPref" 
+2026-08-15T09:29:35.602-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2',
+  'tx=2'
+] Finished copying 100 rows into issue (flush: 0.237 ms) (total: 17.014 ms)  {"schema":"public","table":"issue","replicaTable":"issue","syncMode":"initial","copyFormat":"binary","columnCount":11,"rows":100,"estimatedRows":0,"estimatedBytes":57344,"flushMs":0.2373330000000351,"elapsedMs":17.013625000000047,"sourceWaitMs":13.267462000000137,"processingMs":0.6180379999998422,"copyBytes":18533}
+2026-08-15T09:29:35.603-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2',
+  'tx=2'
+] Starting binary copy stream of viewState: SELECT "issueID","userID","viewed" FROM "public"."viewState" 
+2026-08-15T09:29:35.604-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2',
+  'tx=3'
+] Finished copying 30 rows into label (flush: 0.049 ms) (total: 10.485 ms)  {"schema":"public","table":"label","replicaTable":"label","syncMode":"initial","copyFormat":"binary","columnCount":3,"rows":30,"estimatedRows":0,"estimatedBytes":16384,"flushMs":0.048833000000058746,"elapsedMs":10.484915999999998,"sourceWaitMs":9.515666999999553,"processingMs":0.09050000000047476,"copyBytes":1343}
+2026-08-15T09:29:35.604-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2',
+  'tx=3'
+] Starting binary copy stream of zero.permissions: SELECT "hash","permissions" FROM "zero"."permissions" 
+2026-08-15T09:29:35.605-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2',
+  'tx=4'
+] Finished copying 5 rows into project (flush: 0.018 ms) (total: 10.043 ms)  {"schema":"public","table":"project","replicaTable":"project","syncMode":"initial","copyFormat":"binary","columnCount":7,"rows":5,"estimatedRows":0,"estimatedBytes":16384,"flushMs":0.017833999999993466,"elapsedMs":10.043291999999951,"sourceWaitMs":7.988746999999762,"processingMs":0.046336000000223976,"copyBytes":322}
+2026-08-15T09:29:35.606-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2',
+  'tx=4'
+] Starting binary copy stream of zero_0.clients: SELECT "clientGroupID","clientID","lastMutationID","userID" FROM "zero_0"."clients" 
+2026-08-15T09:29:35.606-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2',
+  'tx=1'
+] Finished copying 0 rows into userPref (flush: 0.000 ms) (total: 6.048 ms)  {"schema":"public","table":"userPref","replicaTable":"userPref","syncMode":"initial","copyFormat":"binary","columnCount":3,"rows":0,"estimatedRows":0,"estimatedBytes":8192,"flushMs":0.0002910000000611035,"elapsedMs":6.047790999999961,"sourceWaitMs":5.000332000000185,"processingMs":0.009625999999911983,"copyBytes":21}
+2026-08-15T09:29:35.607-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2',
+  'tx=1'
+] Starting binary copy stream of zero_0.mutations: SELECT "clientGroupID","clientID","mutationID","result" FROM "zero_0"."mutations" 
+2026-08-15T09:29:35.608-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2',
+  'tx=2'
+] Finished copying 0 rows into viewState (flush: 0.000 ms) (total: 5.330 ms)  {"schema":"public","table":"viewState","replicaTable":"viewState","syncMode":"initial","copyFormat":"binary","columnCount":3,"rows":0,"estimatedRows":0,"estimatedBytes":8192,"flushMs":0.0003329999999550637,"elapsedMs":5.330290999999988,"sourceWaitMs":4.37954000000002,"processingMs":0.007750999999984742,"copyBytes":21}
+2026-08-15T09:29:35.608-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2',
+  'tx=5'
+] Finished copying 10 rows into user (flush: 0.024 ms) (total: 10.627 ms)  {"schema":"public","table":"user","replicaTable":"user","syncMode":"initial","copyFormat":"binary","columnCount":5,"rows":10,"estimatedRows":0,"estimatedBytes":16384,"flushMs":0.023708000000056018,"elapsedMs":10.626999999999953,"sourceWaitMs":9.12720599999966,"processingMs":0.04533500000025015,"copyBytes":791}
+2026-08-15T09:29:35.608-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2',
+  'tx=3'
+] Finished copying 2 rows into zero.permissions (flush: 0.016 ms) (total: 4.519 ms)  {"schema":"zero","table":"permissions","replicaTable":"zero.permissions","syncMode":"initial","copyFormat":"binary","columnCount":2,"rows":2,"estimatedRows":0,"estimatedBytes":16384,"flushMs":0.016166999999995824,"elapsedMs":4.5193329999999605,"sourceWaitMs":3.7042920000000095,"processingMs":0.05750000000000455,"copyBytes":3113}
+2026-08-15T09:29:35.608-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2',
+  'tx=4'
+] Finished copying 0 rows into zero_0.clients (flush: 0.000 ms) (total: 3.456 ms)  {"schema":"zero_0","table":"clients","replicaTable":"zero_0.clients","syncMode":"initial","copyFormat":"binary","columnCount":4,"rows":0,"estimatedRows":0,"estimatedBytes":8192,"flushMs":0.00016700000003311288,"elapsedMs":3.456042000000025,"sourceWaitMs":2.259916999999973,"processingMs":0.005792000000042208,"copyBytes":21}
+2026-08-15T09:29:35.609-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2',
+  'tx=1'
+] Finished copying 0 rows into zero_0.mutations (flush: 0.000 ms) (total: 2.277 ms)  {"schema":"zero_0","table":"mutations","replicaTable":"zero_0.mutations","syncMode":"initial","copyFormat":"binary","columnCount":4,"rows":0,"estimatedRows":0,"estimatedBytes":8192,"flushMs":0.0002919999999448919,"elapsedMs":2.2767090000000962,"sourceWaitMs":1.0913339999999607,"processingMs":0.014541000000008353,"copyBytes":21}
+2026-08-15T09:29:35.609-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2'
+] ZeroEvent: zero/events/status/replication/v1 {"type":"zero/events/status/replication/v1","component":"replication","status":"OK","stage":"Indexing","description":"Creating 20 indexes","time":"2026-08-15T16:29:35.609Z","state":{"tables":[{"table":"comment","columns":[{"column":"_0_version","upstreamType":"TEXT","clientType":null},{"column":"body","upstreamType":"text","clientType":null},{"column":"created","upstreamType":"int8","clientType":null},{"column":"creatorID","upstreamType":"text","clientType":null},{"column":"id","upstreamType":"text","clientType":null},{"column":"issueID","upstreamType":"text","clientType":null}]},{"table":"emoji","columns":[{"column":"_0_version","upstreamType":"TEXT","clientType":null},{"column":"annotation","upstreamType":"text","clientType":null},{"column":"created","upstreamType":"int8","clientType":null},{"column":"creatorID","upstreamType":"text","clientType":null},{"column":"id","upstreamType":"text","clientType":null},{"column":"subjectID","upstreamType":"text","clientType":null},{"column":"value","upstreamType":"text","clientType":null}]},{"table":"issue","columns":[{"column":"_0_version","upstreamType":"TEXT","clientType":null},{"column":"assigneeID","upstreamType":"text","clientType":null},{"column":"created","upstreamType":"int8","clientType":null},{"column":"creatorID","upstreamType":"text","clientType":null},{"column":"description","upstreamType":"text","clientType":null},{"column":"id","upstreamType":"text","clientType":null},{"column":"modified","upstreamType":"int8","clientType":null},{"column":"open","upstreamType":"bool","clientType":null},{"column":"projectID","upstreamType":"text","clientType":null},{"column":"shortID","upstreamType":"int4","clientType":null},{"column":"title","upstreamType":"text","clientType":null},{"column":"visibility","upstreamType":"text","clientType":null}]},{"table":"issueLabel","columns":[{"column":"_0_version","upstreamType":"TEXT","clientType":null},{"column":"issueID","upstreamType":"text","clientType":null},{"column":"labelID","upstreamType":"text","clientType":null},{"column":"projectID","upstreamType":"text","clientType":null}]},{"table":"issueNotifications","columns":[{"column":"_0_version","upstreamType":"TEXT","clientType":null},{"column":"created","upstreamType":"int8","clientType":null},{"column":"issueID","upstreamType":"text","clientType":null},{"column":"subscribed","upstreamType":"bool","clientType":null},{"column":"userID","upstreamType":"text","clientType":null}]},{"table":"label","columns":[{"column":"_0_version","upstreamType":"TEXT","clientType":null},{"column":"id","upstreamType":"text","clientType":null},{"column":"name","upstreamType":"text","clientType":null},{"column":"projectID","upstreamType":"text","clientType":null}]},{"table":"project","columns":[{"column":"_0_version","upstreamType":"TEXT","clientType":null},{"column":"id","upstreamType":"text","clientType":null},{"column":"issueCountEstimate","upstreamType":"int4","clientType":null},{"column":"logoURL","upstreamType":"text","clientType":null},{"column":"lowerCaseName","upstreamType":"text","clientType":null},{"column":"markURL","upstreamType":"text","clientType":null},{"column":"name","upstreamType":"text","clientType":null},{"column":"supportsSearch","upstreamType":"bool","clientType":null}]},{"table":"user","columns":[{"column":"_0_version","upstreamType":"TEXT","clientType":null},{"column":"avatar","upstreamType":"text","clientType":null},{"column":"id","upstreamType":"text","clientType":null},{"column":"login","upstreamType":"text","clientType":null},{"column":"name","upstreamType":"text","clientType":null},{"column":"role","upstreamType":"text","clientType":null}]},{"table":"userPref","columns":[{"column":"_0_version","upstreamType":"TEXT","clientType":null},{"column":"key","upstreamType":"text","clientType":null},{"column":"userID","upstreamType":"text","clientType":null},{"column":"value","upstreamType":"text","clientType":null}]},{"table":"viewState","columns":[{"column":"_0_version","upstreamType":"TEXT","clientType":null},{"column":"issueID","upstreamType":"text","clientType":null},{"column":"userID","upstreamType":"text","clientType":null},{"column":"viewed","upstreamType":"int8","clientType":null}]},{"table":"zero.permissions","columns":[{"column":"_0_version","upstreamType":"TEXT","clientType":null},{"column":"hash","upstreamType":"text","clientType":null},{"column":"permissions","upstreamType":"json","clientType":null}]},{"table":"zero_0.clients","columns":[{"column":"_0_version","upstreamType":"TEXT","clientType":null},{"column":"clientGroupID","upstreamType":"text","clientType":null},{"column":"clientID","upstreamType":"text","clientType":null},{"column":"lastMutationID","upstreamType":"int8","clientType":null},{"column":"userID","upstreamType":"text","clientType":null}]},{"table":"zero_0.mutations","columns":[{"column":"_0_version","upstreamType":"TEXT","clientType":null},{"column":"clientGroupID","upstreamType":"text","clientType":null},{"column":"clientID","upstreamType":"text","clientType":null},{"column":"mutationID","upstreamType":"int8","clientType":null},{"column":"result","upstreamType":"json","clientType":null}]}],"indexes":[],"replicaSize":159744}}
+2026-08-15T09:29:35.610-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2'
+] Creating index 1/20: CREATE  INDEX "comment_issueID_idx" ON "comment" ("issueID" ASC);
+2026-08-15T09:29:35.610-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2'
+] Created index 1/20 (0.068 ms): CREATE  INDEX "comment_issueID_idx" ON "comment" ("issueID" ASC);
+2026-08-15T09:29:35.610-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2'
+] Creating index 2/20: CREATE UNIQUE INDEX "comment_pkey" ON "comment" ("id" ASC);
+2026-08-15T09:29:35.610-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2'
+] Created index 2/20 (0.052 ms): CREATE UNIQUE INDEX "comment_pkey" ON "comment" ("id" ASC);
+2026-08-15T09:29:35.610-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2'
+] Creating index 3/20: CREATE UNIQUE INDEX "emoji_pkey" ON "emoji" ("id" ASC);
+2026-08-15T09:29:35.610-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2'
+] Created index 3/20 (0.019 ms): CREATE UNIQUE INDEX "emoji_pkey" ON "emoji" ("id" ASC);
+2026-08-15T09:29:35.610-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2'
+] Creating index 4/20: CREATE  INDEX "issue_creatorID_idx" ON "issue" ("creatorID" ASC);
+2026-08-15T09:29:35.610-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2'
+] Created index 4/20 (0.034 ms): CREATE  INDEX "issue_creatorID_idx" ON "issue" ("creatorID" ASC);
+2026-08-15T09:29:35.610-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2'
+] Creating index 5/20: CREATE  INDEX "issue_modified_idx" ON "issue" ("modified" DESC);
+2026-08-15T09:29:35.610-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2'
+] Created index 5/20 (0.027 ms): CREATE  INDEX "issue_modified_idx" ON "issue" ("modified" DESC);
+2026-08-15T09:29:35.610-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2'
+] Creating index 6/20: CREATE UNIQUE INDEX "issue_pkey" ON "issue" ("id" ASC);
+2026-08-15T09:29:35.610-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2'
+] Created index 6/20 (0.026 ms): CREATE UNIQUE INDEX "issue_pkey" ON "issue" ("id" ASC);
+2026-08-15T09:29:35.610-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2'
+] Creating index 7/20: CREATE  INDEX "issue_projectID_idx" ON "issue" ("projectID" ASC);
+2026-08-15T09:29:35.610-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2'
+] Created index 7/20 (0.029 ms): CREATE  INDEX "issue_projectID_idx" ON "issue" ("projectID" ASC);
+2026-08-15T09:29:35.610-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2'
+] Creating index 8/20: CREATE UNIQUE INDEX "issueLabel_pkey" ON "issueLabel" ("labelID" ASC,"issueID" ASC);
+2026-08-15T09:29:35.610-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2'
+] Created index 8/20 (0.025 ms): CREATE UNIQUE INDEX "issueLabel_pkey" ON "issueLabel" ("labelID" ASC,"issueID" ASC);
+2026-08-15T09:29:35.610-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2'
+] Creating index 9/20: CREATE UNIQUE INDEX "issueNotifications_pkey" ON "issueNotifications" ("userID" ASC,"issueID" ASC);
+2026-08-15T09:29:35.610-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2'
+] Created index 9/20 (0.017 ms): CREATE UNIQUE INDEX "issueNotifications_pkey" ON "issueNotifications" ("userID" ASC,"issueID" ASC);
+2026-08-15T09:29:35.610-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2'
+] Creating index 10/20: CREATE UNIQUE INDEX "label_pkey" ON "label" ("id" ASC);
+2026-08-15T09:29:35.610-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2'
+] Created index 10/20 (0.022 ms): CREATE UNIQUE INDEX "label_pkey" ON "label" ("id" ASC);
+2026-08-15T09:29:35.610-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2'
+] Creating index 11/20: CREATE UNIQUE INDEX "label_projectID_name_key" ON "label" ("projectID" ASC,"name" ASC);
+2026-08-15T09:29:35.610-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2'
+] Created index 11/20 (0.026 ms): CREATE UNIQUE INDEX "label_projectID_name_key" ON "label" ("projectID" ASC,"name" ASC);
+2026-08-15T09:29:35.610-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2'
+] Creating index 12/20: CREATE UNIQUE INDEX "project_lowerCaseName_key" ON "project" ("lowerCaseName" ASC);
+2026-08-15T09:29:35.610-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2'
+] Created index 12/20 (0.018 ms): CREATE UNIQUE INDEX "project_lowerCaseName_key" ON "project" ("lowerCaseName" ASC);
+2026-08-15T09:29:35.610-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2'
+] Creating index 13/20: CREATE UNIQUE INDEX "project_name_key" ON "project" ("name" ASC);
+2026-08-15T09:29:35.611-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2'
+] Created index 13/20 (0.019 ms): CREATE UNIQUE INDEX "project_name_key" ON "project" ("name" ASC);
+2026-08-15T09:29:35.611-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2'
+] Creating index 14/20: CREATE UNIQUE INDEX "project_pkey" ON "project" ("id" ASC);
+2026-08-15T09:29:35.611-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2'
+] Created index 14/20 (0.015 ms): CREATE UNIQUE INDEX "project_pkey" ON "project" ("id" ASC);
+2026-08-15T09:29:35.611-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2'
+] Creating index 15/20: CREATE UNIQUE INDEX "user_login_key" ON "user" ("login" ASC);
+2026-08-15T09:29:35.611-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2'
+] Created index 15/20 (0.016 ms): CREATE UNIQUE INDEX "user_login_key" ON "user" ("login" ASC);
+2026-08-15T09:29:35.611-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2'
+] Creating index 16/20: CREATE UNIQUE INDEX "user_pkey" ON "user" ("id" ASC);
+2026-08-15T09:29:35.611-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2'
+] Created index 16/20 (0.023 ms): CREATE UNIQUE INDEX "user_pkey" ON "user" ("id" ASC);
+2026-08-15T09:29:35.611-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2'
+] Creating index 17/20: CREATE UNIQUE INDEX "userPref_pkey" ON "userPref" ("userID" ASC,"key" ASC);
+2026-08-15T09:29:35.611-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2'
+] Created index 17/20 (0.015 ms): CREATE UNIQUE INDEX "userPref_pkey" ON "userPref" ("userID" ASC,"key" ASC);
+2026-08-15T09:29:35.611-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2'
+] Creating index 18/20: CREATE UNIQUE INDEX "viewState_pkey" ON "viewState" ("userID" ASC,"issueID" ASC);
+2026-08-15T09:29:35.611-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2'
+] Created index 18/20 (0.014 ms): CREATE UNIQUE INDEX "viewState_pkey" ON "viewState" ("userID" ASC,"issueID" ASC);
+2026-08-15T09:29:35.611-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2'
+] Creating index 19/20: CREATE UNIQUE INDEX "zero_0.clients_pkey" ON "zero_0.clients" ("clientGroupID" ASC,"clientID" ASC);
+2026-08-15T09:29:35.611-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2'
+] Created index 19/20 (0.016 ms): CREATE UNIQUE INDEX "zero_0.clients_pkey" ON "zero_0.clients" ("clientGroupID" ASC,"clientID" ASC);
+2026-08-15T09:29:35.611-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2'
+] Creating index 20/20: CREATE UNIQUE INDEX "zero_0.mutations_pkey" ON "zero_0.mutations" ("clientGroupID" ASC,"clientID" ASC,"mutationID" ASC);
+2026-08-15T09:29:35.611-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2'
+] Created index 20/20 (0.020 ms): CREATE UNIQUE INDEX "zero_0.mutations_pkey" ON "zero_0.mutations" ("clientGroupID" ASC,"clientID" ASC,"mutationID" ASC);
+2026-08-15T09:29:35.611-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2'
+] Created indexes (1.438 ms)
+2026-08-15T09:29:35.618-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2'
+] Synced 380 rows of 13 tables in _zero_metadata_0,zero_all up to 0/4A5DCA8 (flush: 0.608, index: 1.438, total: 115.498 ms) {"syncMode":"initial","copyFormat":"binary","publications":["_zero_metadata_0","zero_all"],"lsn":"0/4A5DCA8","tables":13,"rows":380,"copyMs":27.317499999999995,"flushMs":0.6079590000001645,"copyBytes":43202,"indexes":20,"indexMs":1.4382079999999178,"copyOtherMs":113.45187499999986,"totalMs":115.49804199999994}
+2026-08-15T09:29:35.623-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2'
+] bumping rollback limit from 0 to 1
+2026-08-15T09:29:35.625-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2'
+] ANALYZE completed
+2026-08-15T09:29:35.625-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'initSchema=14aqzgwwja2'
+] Running replica-zero-0 at schema v17 (130 ms)
+2026-08-15T09:29:35.637-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'component=change-log'
+] Using up to 169.37 MB of --max-old-space-size (~4288.00 MB) to absorb upstream spikes {"heapStats":{"total_heap_size":80379904,"total_heap_size_executable":2818048,"total_physical_size":77692928,"total_available_size":4434905976,"used_heap_size":56390784,"heap_size_limit":4496293888,"malloced_memory":811080,"peak_malloced_memory":13643776,"does_zap_garbage":0,"number_of_native_contexts":1,"number_of_detached_contexts":0,"total_global_handles_size":319488,"used_global_handles_size":319360,"external_memory":13024522}}
+2026-08-15T09:29:35.638-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'component=replica-poller'
+] starting replica monitor
+2026-08-15T09:29:35.663-07:00 [ 'pid=54291', 'worker=change-streamer', 'workerIndex=0' ] awaiting initial backup ...
+2026-08-15T09:29:35.664-07:00 [ 'pid=54291', 'worker=change-streamer', 'workerIndex=0' ] starting backup monitor
+2026-08-15T09:29:35.665-07:00 [ 'pid=54291', 'worker=change-streamer', 'workerIndex=0' ] received first backup up watermark {"backedUp":{"watermark":"51afctk","backupTimeMs":1786811375639}}
+2026-08-15T09:29:35.667-07:00 [ 'pid=54283', 'worker=dispatcher', 'workerIndex=0' ] waiting for workers to be ready ...
+2026-08-15T09:29:35.667-07:00 [ 'pid=54283', 'worker=dispatcher', 'workerIndex=0' ] all workers ready (794 ms)
+2026-08-15T09:29:35.668-07:00 [ 'pid=54267', 'worker=runner', 'workerIndex=0' ] zero-cache ready (1323.6367089999999 ms)
+2026-08-15T09:29:35.671-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'component=change-streamer-http-server'
+] change-streamer-http-server listening at http://[::]:13219
+2026-08-15T09:29:35.674-07:00 [ 'pid=54291', 'worker=change-streamer', 'workerIndex=0' ] starting ChangeStreamerService: startup delay elapsed (0 ms)
+2026-08-15T09:29:35.674-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'component=change-streamer'
+] starting change stream
+2026-08-15T09:29:35.686-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'component=lag-reporter'
+] initiated lag report at lsn 0/4A5E9A0 {"id":"9AM8AQixQPDJ1DE2cEWrJ","lsn":"0/4A5E9A0","sendTimeMs":1786811375684,"commitTimeMs":1786811375684.773}
+2026-08-15T09:29:35.686-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'component=change-log'
+] assuming ownership at localhost:13219
+2026-08-15T09:29:35.688-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'component=change-log'
+] assumed ownership at localhost:13219 (1.65 ms)
+2026-08-15T09:29:35.694-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'component=sqlite-change-log-writer'
+] reseeded the SQLite change log {"sqliteChangeLogReconcile":{"reason":"created","head":"51afctk","epoch":null,"generation":"51afctk","replicaID":"1786811375498","schemaVersion":4,"seededAtMs":1786811375692,"cookies":{"tableMetadata":0,"backfilling":0}}}
+2026-08-15T09:29:35.695-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'component=sqlite-change-log-writer'
+] SQLite change-log startup {"sqliteChangeLog":{"file":"/var/folders/1z/g3bkt5t559q_vxcrk0qdckzh0000gn/T/bench-rm1-472638-3419928.db-change-log","epoch":null,"generation":"51afctk","replicaID":"1786811375498","schemaVersion":4,"seedWatermark":"51afctk","seededAtMs":1786811375692,"headWatermark":"51afctk"}}
+2026-08-15T09:29:35.697-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'component=change-source'
+] terminated replication slots: [{"terminated":null,"pid":null}]
+2026-08-15T09:29:35.700-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'component=change-source'
+] starting replication stream@zero_0_a
+2026-08-15T09:29:35.704-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'component=change-source'
+] remaining replication slots {"remaining":[{"slot":"zero_0_a","pid":null,"id":"1786811375498"}]}
+2026-08-15T09:29:35.705-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'component=change-source'
+] finished cleaning up replicas and slots {"result":{"dropped":0,"active":1,"draining":0}}
+2026-08-15T09:29:35.706-07:00 [
+  'pid=54267',
+  'worker=runner',
+  'workerIndex=0',
+  'component=zero-dispatcher'
+] zero-dispatcher listening at http://[::]:13218
+2026-08-15T09:29:35.707-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'component=change-source'
+] wal_sender_timeout: 60000ms. Ensuring manual keepalives at least every 45000ms. Inbound timeout: 120000ms
+2026-08-15T09:29:35.708-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'component=backfill-manager'
+] starting backfill manager with 0 initial requests {"requests":[]}
+2026-08-15T09:29:35.709-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'component=change-source'
+] started replication stream@zero_0_a from 51afctk (replicaVersion: 51afctk)
+2026-08-15T09:29:35.709-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'component=change-log'
+] starting storer
+2026-08-15T09:29:35.908-07:00 [ 'pid=54295', 'worker=runner', 'workerIndex=0' ] 
+2026-08-15T09:29:35.918-07:00 [ 'pid=54295', 'worker=runner', 'workerIndex=0' ] network interfaces {"preferred":"192.168.5.193","interfaces":{"lo0":[{"address":"127.0.0.1","netmask":"255.0.0.0","family":"IPv4","mac":"00:00:00:00:00:00","internal":true,"cidr":"127.0.0.1/8"},{"address":"::1","netmask":"ffff:ffff:ffff:ffff:ffff:ffff:ffff:ffff","family":"IPv6","mac":"00:00:00:00:00:00","internal":true,"cidr":"::1/128","scopeid":0},{"address":"fe80::1","netmask":"ffff:ffff:ffff:ffff::","family":"IPv6","mac":"00:00:00:00:00:00","internal":true,"cidr":"fe80::1/64","scopeid":1}],"en0":[{"address":"fe80::1871:7705:83c5:61d5","netmask":"ffff:ffff:ffff:ffff::","family":"IPv6","mac":"fc:b2:14:c3:10:89","internal":false,"cidr":"fe80::1871:7705:83c5:61d5/64","scopeid":15},{"address":"fd3f:e18b:d363:30a5:1cf8:a3b9:f6dd:256a","netmask":"ffff:ffff:ffff:ffff::","family":"IPv6","mac":"fc:b2:14:c3:10:89","internal":false,"cidr":"fd3f:e18b:d363:30a5:1cf8:a3b9:f6dd:256a/64","scopeid":0},{"address":"192.168.5.193","netmask":"255.255.252.0","family":"IPv4","mac":"fc:b2:14:c3:10:89","internal":false,"cidr":"192.168.5.193/22"}],"awdl0":[{"address":"fe80::1491:bcff:fecb:6400","netmask":"ffff:ffff:ffff:ffff::","family":"IPv6","mac":"16:91:bc:cb:64:00","internal":false,"cidr":"fe80::1491:bcff:fecb:6400/64","scopeid":16}],"llw0":[{"address":"fe80::1491:bcff:fecb:6400","netmask":"ffff:ffff:ffff:ffff::","family":"IPv6","mac":"16:91:bc:cb:64:00","internal":false,"cidr":"fe80::1491:bcff:fecb:6400/64","scopeid":17}],"utun0":[{"address":"fe80::cb06:cde5:e99a:dd39","netmask":"ffff:ffff:ffff:ffff::","family":"IPv6","mac":"00:00:00:00:00:00","internal":false,"cidr":"fe80::cb06:cde5:e99a:dd39/64","scopeid":18}],"utun1":[{"address":"fe80::f7be:53b:2f96:f373","netmask":"ffff:ffff:ffff:ffff::","family":"IPv6","mac":"00:00:00:00:00:00","internal":false,"cidr":"fe80::f7be:53b:2f96:f373/64","scopeid":19}],"utun2":[{"address":"fe80::f5a9:60c2:c83:52b2","netmask":"ffff:ffff:ffff:ffff::","family":"IPv6","mac":"00:00:00:00:00:00","internal":false,"cidr":"fe80::f5a9:60c2:c83:52b2/64","scopeid":20}],"utun3":[{"address":"fe80::ce81:b1c:bd2c:69e","netmask":"ffff:ffff:ffff:ffff::","family":"IPv6","mac":"00:00:00:00:00:00","internal":false,"cidr":"fe80::ce81:b1c:bd2c:69e/64","scopeid":21}]}}
+2026-08-15T09:29:35.918-07:00 [ 'pid=54295', 'worker=runner', 'workerIndex=0' ] runtime env: taskID=ibNzV3LRm5hCsJ9EMAY9f, hostIP=192.168.5.193
+2026-08-15T09:29:35.919-07:00 [ 'pid=54295', 'worker=runner', 'workerIndex=0' ] starting server@1.10.0  {"protocolVersion":52,"taskID":"ibNzV3LRm5hCsJ9EMAY9f","app":{"id":"zero","publications":["zero_all"]},"shard":{"num":0},"port":30007}
+2026-08-15T09:29:35.919-07:00 [ 'pid=54295', 'worker=runner', 'workerIndex=0' ] starting zero-cache
+2026-08-15T09:29:36.273-07:00 [ 'pid=54314', 'worker=dispatcher', 'workerIndex=0' ] 
+2026-08-15T09:29:36.279-07:00 [ 'pid=54314', 'worker=dispatcher', 'workerIndex=0' ] 
+2026-08-15T09:29:36.602-07:00 [ 'pid=54315', 'worker=reaper', 'workerIndex=0' ] 
+2026-08-15T09:29:36.608-07:00 [ 'pid=54315', 'worker=reaper', 'workerIndex=0' ] 
+2026-08-15T09:29:36.608-07:00 [ 'pid=54315', 'worker=reaper', 'workerIndex=0' ] telemetry: starting in 1 minute
+2026-08-15T09:29:36.636-07:00 [
+  'pid=54315',
+  'worker=reaper',
+  'workerIndex=0',
+  'initSchema=zero_0/cvr'
+] Checking schema for compatibility with view-syncer at schema v17
+2026-08-15T09:29:36.644-07:00 [
+  'pid=54315',
+  'worker=reaper',
+  'workerIndex=0',
+  'initSchema=zero_0/cvr'
+] Migrating schema from v0 to v17
+2026-08-15T09:29:36.644-07:00 [
+  'pid=54315',
+  'worker=reaper',
+  'workerIndex=0',
+  'initSchema=zero_0/cvr'
+] Setting up CVR tables
+2026-08-15T09:29:36.669-07:00 [
+  'pid=54315',
+  'worker=reaper',
+  'workerIndex=0',
+  'initSchema=zero_0/cvr'
+] bumping rollback limit from 0 to 1
+2026-08-15T09:29:36.672-07:00 [
+  'pid=54315',
+  'worker=reaper',
+  'workerIndex=0',
+  'initSchema=zero_0/cvr'
+] Running view-syncer at schema v17
+2026-08-15T09:29:36.674-07:00 [ 'pid=54315', 'worker=reaper', 'workerIndex=0' ] running cvr-purger with [{"statement_timeout":"0"}]
+2026-08-15T09:29:36.678-07:00 [ 'pid=54315', 'worker=reaper', 'workerIndex=0' ] purged 0 inactive CVRs (3.71 ms). Next purge in 120000 ms
+2026-08-15T09:29:37.059-07:00 [ 'pid=54318', 'worker=serving-replicator', 'workerIndex=0' ] 
+2026-08-15T09:29:37.064-07:00 [ 'pid=54318', 'worker=serving-replicator', 'workerIndex=0' ] 
+2026-08-15T09:29:37.065-07:00 [ 'pid=54318', 'worker=serving-replicator', 'workerIndex=0' ] setting up serving replica
+2026-08-15T09:29:37.066-07:00 [
+  'pid=54318',
+  'worker=serving-replicator',
+  'workerIndex=0',
+  'initSchema=17in8xr3cq6'
+] Checking schema for compatibility with serving-replica at schema v17
+2026-08-15T09:29:37.066-07:00 [
+  'pid=54318',
+  'worker=serving-replicator',
+  'workerIndex=0',
+  'initSchema=17in8xr3cq6'
+] Running serving-replica at schema v17 (1 ms)
+2026-08-15T09:29:37.067-07:00 [ 'pid=54318', 'worker=serving-replicator', 'workerIndex=0' ] setting /var/folders/1z/g3bkt5t559q_vxcrk0qdckzh0000gn/T/bench-vs-472638-0-8413689.db to delete mode
+2026-08-15T09:29:37.067-07:00 [ 'pid=54318', 'worker=serving-replicator', 'workerIndex=0' ] Size of db /var/folders/1z/g3bkt5t559q_vxcrk0qdckzh0000gn/T/bench-vs-472638-0-8413689.db: 0.29 MB (0.00 MB freeable)
+2026-08-15T09:29:37.068-07:00 [ 'pid=54318', 'worker=serving-replicator', 'workerIndex=0' ] setting /var/folders/1z/g3bkt5t559q_vxcrk0qdckzh0000gn/T/bench-vs-472638-0-8413689.db to wal2 mode
+2026-08-15T09:29:37.068-07:00 [ 'pid=54318', 'worker=serving-replicator', 'workerIndex=0' ] optimized /var/folders/1z/g3bkt5t559q_vxcrk0qdckzh0000gn/T/bench-vs-472638-0-8413689.db
+2026-08-15T09:29:37.176-07:00 [ 'pid=54318', 'worker=write-worker', 'workerIndex=0' ] 
+2026-08-15T09:29:37.180-07:00 [
+  'pid=54318',
+  'worker=serving-replicator',
+  'workerIndex=0',
+  'component=replicator',
+  'serviceID=serving-replicator-54318'
+] Starting IncrementalSyncer
+2026-08-15T09:29:37.183-07:00 [ 'pid=54314', 'worker=dispatcher', 'workerIndex=0' ] waiting for workers to be ready ...
+2026-08-15T09:29:37.200-07:00 [ 'pid=54318', 'worker=serving-replicator', 'workerIndex=0' ] connecting to change-streamer@ws://localhost:13219/replication/v6/changes
+2026-08-15T09:29:37.206-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'component=change-streamer',
+  'subscriber=ibNzV3LRm5hCsJ9EMAY9f/serving-replicator-54318'
+] adding subscriber ibNzV3LRm5hCsJ9EMAY9f/serving-replicator-54318
+2026-08-15T09:29:37.206-07:00 [ 'pid=54318', 'worker=serving-replicator', 'workerIndex=0' ] connection to ws://localhost:13219/replication/v6/changes?taskID=ibNzV3LRm5hCsJ9EMAY9f&id=ibNzV3LRm5hCsJ9EMAY9f%2Fserving-replicator-54318&mode=serving&watermark=51afctk&replicaVersion=51afctk&initial=true&logsChangeStream=false established
+2026-08-15T09:29:37.209-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'component=change-log',
+  'pool=catchup',
+  'subscriber=ibNzV3LRm5hCsJ9EMAY9f/serving-replicator-54318'
+] starting catchup
+2026-08-15T09:29:37.209-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'component=change-log',
+  'pool=catchup',
+  'subscriber=ibNzV3LRm5hCsJ9EMAY9f/serving-replicator-54318'
+] catching up
+2026-08-15T09:29:37.212-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'component=change-log',
+  'pool=catchup',
+  'subscriber=ibNzV3LRm5hCsJ9EMAY9f/serving-replicator-54318'
+] caught up ibNzV3LRm5hCsJ9EMAY9f/serving-replicator-54318 with 0 changes (3 ms)
+2026-08-15T09:29:37.214-07:00 [
+  'pid=54318',
+  'worker=serving-replicator',
+  'workerIndex=0',
+  'component=replicator',
+  'serviceID=serving-replicator-54318'
+] replication lag: 1530 ms {"nextSendTimeMs":1786811405684,"lastTimings":{"sendTimeMs":1786811375684,"commitTimeMs":1786811375684.773,"receiveTimeMs":1786811375710,"replicateTimeMs":1786811377214}}
+2026-08-15T09:29:37.667-07:00 [ 'pid=54320', 'worker=syncer', 'workerIndex=0' ] 
+2026-08-15T09:29:37.673-07:00 [ 'pid=54320', 'worker=syncer', 'workerIndex=0' ] 
+2026-08-15T09:29:37.709-07:00 [ 'pid=54320', 'worker=syncer', 'workerIndex=0' ] telemetry: starting in 1 minute
+2026-08-15T09:29:37.729-07:00 [ 'pid=54320', 'worker=syncer', 'workerIndex=0' ] average ping to cvr db@localhost: 0.96 ms
+2026-08-15T09:29:37.730-07:00 [ 'pid=54320', 'worker=syncer', 'workerIndex=0' ] average ping to upstream db@localhost: 0.57 ms
+2026-08-15T09:29:37.730-07:00 [ 'pid=54314', 'worker=dispatcher', 'workerIndex=0' ] all workers ready (1463 ms)
+2026-08-15T09:29:37.731-07:00 [ 'pid=54295', 'worker=runner', 'workerIndex=0' ] zero-cache ready (1812.262875 ms)
+Harness execution failed: AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1194:18)
+    at afterConnectMultiple (node:net:1784:7) {
+  code: 'ECONNREFUSED',
+  [errors]: [
+    Error: connect ECONNREFUSED 127.0.0.1:30007
+        at createConnectionError (node:net:1747:14)
+        at afterConnectMultiple (node:net:1777:16) {
+      errno: -61,
+      code: 'ECONNREFUSED',
+      syscall: 'connect',
+      address: '127.0.0.1',
+      port: 30007
+    },
+    Error: connect ECONNREFUSED ::1:30007
+        at createConnectionError (node:net:1747:14)
+        at afterConnectMultiple (node:net:1777:16) {
+      errno: -61,
+      code: 'ECONNREFUSED',
+      syscall: 'connect',
+      address: '::1',
+      port: 30007
+    }
+  ]
+}
+node:internal/process/promises:394
+    triggerUncaughtException(err, true /* fromPromise */);
+    ^
+
+AggregateError [ECONNREFUSED]: 
+    at internalConnectMultiple (node:net:1194:18)
+    at afterConnectMultiple (node:net:1784:7) {
+  code: 'ECONNREFUSED',
+  [errors]: [
+    Error: connect ECONNREFUSED 127.0.0.1:30007
+        at createConnectionError (node:net:1747:14)
+        at afterConnectMultiple (node:net:1777:16) {
+      errno: -61,
+      code: 'ECONNREFUSED',
+      syscall: 'connect',
+      address: '127.0.0.1',
+      port: 30007
+    },
+    Error: connect ECONNREFUSED ::1:30007
+        at createConnectionError (node:net:1747:14)
+        at afterConnectMultiple (node:net:1777:16) {
+      errno: -61,
+      code: 'ECONNREFUSED',
+      syscall: 'connect',
+      address: '::1',
+      port: 30007
+    }
+  ]
+}
+
+Node.js v24.18.0
+2026-08-15T09:29:37.737-07:00 [
+  'pid=54267',
+  'worker=runner',
+  'workerIndex=0',
+  'component=process-manager'
+] initiating drain (SIGTERM)
+2026-08-15T09:29:37.737-07:00 [
+  'pid=54283',
+  'worker=dispatcher',
+  'workerIndex=0',
+  'component=process-manager'
+] initiating drain (SIGTERM)
+2026-08-15T09:29:37.737-07:00 [ 'pid=54267', 'worker=runner', 'workerIndex=0' ] stopping ZeroDispatcher zero-dispatcher (SIGTERM)
+2026-08-15T09:29:37.738-07:00 [
+  'pid=54267',
+  'worker=runner',
+  'workerIndex=0',
+  'component=zero-dispatcher'
+] zero-dispatcher: no longer accepting connections
+2026-08-15T09:29:37.738-07:00 [
+  'pid=54267',
+  'worker=runner',
+  'workerIndex=0',
+  'component=zero-dispatcher'
+] stopping zero-dispatcher 
+2026-08-15T09:29:37.738-07:00 [ 'pid=54283', 'worker=dispatcher', 'workerIndex=0' ] stopping WorkerDispatcher worker-dispatcher (SIGTERM)
+2026-08-15T09:29:37.738-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'component=process-manager'
+] exiting on SIGTERM
+2026-08-15T09:29:37.738-07:00 [ 'pid=54283', 'worker=dispatcher', 'workerIndex=0' ] stopping worker-dispatcher 
+2026-08-15T09:29:37.738-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'component=process-manager'
+] exiting with code 0
+2026-08-15T09:29:37.738-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'component=process-manager'
+] stopping process-manager 
+2026-08-15T09:29:37.738-07:00 [ 'pid=54283', 'worker=dispatcher', 'workerIndex=0' ] WorkerDispatcher (worker-dispatcher) stopped
+2026-08-15T09:29:37.738-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'component=process-manager'
+] initiating drain (SIGTERM)
+2026-08-15T09:29:37.738-07:00 [ 'pid=54291', 'worker=change-streamer', 'workerIndex=0' ] stopping ChangeStreamerHttpServer change-streamer-http-server (SIGTERM)
+2026-08-15T09:29:37.738-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'component=change-streamer-http-server'
+] change-streamer-http-server: no longer accepting connections
+2026-08-15T09:29:37.738-07:00 [
+  'pid=54291',
+  'worker=change-streamer',
+  'workerIndex=0',
+  'component=change-streamer-http-server'
+] stopping change-streamer-http-server 
+2026-08-15T09:29:37.738-07:00 [ 'pid=54267', 'worker=runner', 'workerIndex=0' ] ZeroDispatcher (zero-dispatcher) stopped
+2026-08-15T09:29:37.739-07:00 [ 'pid=54291', 'worker=change-streamer', 'workerIndex=0' ] stopping BackupMonitor backup-monitor (SIGTERM)
+2026-08-15T09:29:37.739-07:00 [ 'pid=54291', 'worker=change-streamer', 'workerIndex=0' ] watermark stream closed. BackupMonitor stopped.
+2026-08-15T09:29:37.761-07:00 [
+  'pid=54283',
+  'worker=dispatcher',
+  'workerIndex=0',
+  'component=process-manager'
+] change-streamer.ts (54291) exited with code (0) 
+2026-08-15T09:29:37.761-07:00 [ 'pid=54318', 'worker=serving-replicator', 'workerIndex=0' ] connection to ws://localhost:13219/replication/v6/changes?taskID=ibNzV3LRm5hCsJ9EMAY9f&id=ibNzV3LRm5hCsJ9EMAY9f%2Fserving-replicator-54318&mode=serving&watermark=51afctk&replicaVersion=51afctk&initial=true&logsChangeStream=false closed {"code":1005,"reason":"","wasClean":true}
+2026-08-15T09:29:37.761-07:00 [
+  'pid=54283',
+  'worker=dispatcher',
+  'workerIndex=0',
+  'component=process-manager'
+] exiting with code 0
+2026-08-15T09:29:37.762-07:00 [
+  'pid=54283',
+  'worker=dispatcher',
+  'workerIndex=0',
+  'component=process-manager'
+] stopping process-manager 
+2026-08-15T09:29:37.762-07:00 [
+  'pid=54318',
+  'worker=serving-replicator',
+  'workerIndex=0',
+  'component=replicator',
+  'serviceID=serving-replicator-54318'
+] retrying IncrementalSyncer in 25 ms undefined
+2026-08-15T09:29:37.762-07:00 [ 'pid=54283', 'worker=dispatcher', 'workerIndex=0' ] pid 54283 exiting normally
+2026-08-15T09:29:37.770-07:00 [
+  'pid=54295',
+  'worker=runner',
+  'workerIndex=0',
+  'component=zero-dispatcher'
+] zero-dispatcher listening at http://[::]:30007
+2026-08-15T09:29:37.771-07:00 [
+  'pid=54295',
+  'worker=runner',
+  'workerIndex=0',
+  'component=process-manager'
+] initiating drain (SIGTERM)
+2026-08-15T09:29:37.771-07:00 [ 'pid=54295', 'worker=runner', 'workerIndex=0' ] stopping ZeroDispatcher zero-dispatcher (SIGTERM)
+2026-08-15T09:29:37.771-07:00 [
+  'pid=54314',
+  'worker=dispatcher',
+  'workerIndex=0',
+  'component=process-manager'
+] initiating drain (SIGTERM)
+2026-08-15T09:29:37.771-07:00 [
+  'pid=54295',
+  'worker=runner',
+  'workerIndex=0',
+  'component=zero-dispatcher'
+] zero-dispatcher: no longer accepting connections
+2026-08-15T09:29:37.771-07:00 [
+  'pid=54295',
+  'worker=runner',
+  'workerIndex=0',
+  'component=zero-dispatcher'
+] stopping zero-dispatcher 
+2026-08-15T09:29:37.771-07:00 [ 'pid=54314', 'worker=dispatcher', 'workerIndex=0' ] stopping WorkerDispatcher worker-dispatcher (SIGTERM)
+2026-08-15T09:29:37.772-07:00 [ 'pid=54314', 'worker=dispatcher', 'workerIndex=0' ] stopping worker-dispatcher 
+2026-08-15T09:29:37.772-07:00 [ 'pid=54320', 'worker=syncer', 'workerIndex=0' ] draining Syncer syncer-54320 (SIGTERM)
+2026-08-15T09:29:37.772-07:00 [ 'pid=54314', 'worker=dispatcher', 'workerIndex=0' ] WorkerDispatcher (worker-dispatcher) stopped
+2026-08-15T09:29:37.772-07:00 [ 'pid=54320', 'worker=syncer', 'workerIndex=0' ] draining 0 view-syncers
+2026-08-15T09:29:37.772-07:00 [ 'pid=54295', 'worker=runner', 'workerIndex=0' ] ZeroDispatcher (zero-dispatcher) stopped
+2026-08-15T09:29:37.772-07:00 [ 'pid=54320', 'worker=syncer', 'workerIndex=0' ] finished draining (0 ms)
+2026-08-15T09:29:37.772-07:00 [ 'pid=54320', 'worker=syncer', 'workerIndex=0' ] stopping Syncer syncer-54320 (SIGTERM)
+2026-08-15T09:29:37.772-07:00 [ 'pid=54320', 'worker=syncer', 'workerIndex=0' ] Syncer (syncer-54320) stopped
+2026-08-15T09:29:37.773-07:00 [ 'pid=54320', 'worker=syncer', 'workerIndex=0' ] pid 54320 exiting normally
+2026-08-15T09:29:37.779-07:00 [
+  'pid=54267',
+  'worker=runner',
+  'workerIndex=0',
+  'component=process-manager'
+] zero-cache (54283) exited with code (0) 
+2026-08-15T09:29:37.779-07:00 [
+  'pid=54267',
+  'worker=runner',
+  'workerIndex=0',
+  'component=process-manager'
+] all user-facing workers drained (42 ms)
+2026-08-15T09:29:37.779-07:00 [
+  'pid=54267',
+  'worker=runner',
+  'workerIndex=0',
+  'component=process-manager'
+] exiting with code 0
+2026-08-15T09:29:37.779-07:00 [
+  'pid=54267',
+  'worker=runner',
+  'workerIndex=0',
+  'component=process-manager'
+] stopping process-manager 
+2026-08-15T09:29:37.787-07:00 [ 'pid=54318', 'worker=serving-replicator', 'workerIndex=0' ] connecting to change-streamer@ws://localhost:13219/replication/v6/changes
+2026-08-15T09:29:37.789-07:00 [ 'pid=54318', 'worker=serving-replicator', 'workerIndex=0' ] connection to ws://localhost:13219/replication/v6/changes?taskID=ibNzV3LRm5hCsJ9EMAY9f&id=ibNzV3LRm5hCsJ9EMAY9f%2Fserving-replicator-54318&mode=serving&watermark=51afctk&replicaVersion=51afctk&initial=true&logsChangeStream=false closed {"code":1006,"reason":"","wasClean":false}
+2026-08-15T09:29:37.789-07:00 [
+  'pid=54318',
+  'worker=serving-replicator',
+  'workerIndex=0',
+  'component=replicator',
+  'serviceID=serving-replicator-54318'
+] retrying IncrementalSyncer in 50 ms {"code":"ECONNREFUSED","name":"AggregateError","errorMsg":"","stack":"AggregateError [ECONNREFUSED]: \n    at internalConnectMultiple (node:net:1194:18)\n    at afterConnectMultiple (node:net:1784:7)"}
+2026-08-15T09:29:37.792-07:00 [
+  'pid=54314',
+  'worker=dispatcher',
+  'workerIndex=0',
+  'component=process-manager'
+] syncer.ts (54320) exited with code (0) 
+2026-08-15T09:29:37.792-07:00 [
+  'pid=54314',
+  'worker=dispatcher',
+  'workerIndex=0',
+  'component=process-manager'
+] all user-facing workers drained (21 ms)
+2026-08-15T09:29:37.793-07:00 [
+  'pid=54314',
+  'worker=dispatcher',
+  'workerIndex=0',
+  'component=process-manager'
+] exiting with code 0
+2026-08-15T09:29:37.793-07:00 [
+  'pid=54314',
+  'worker=dispatcher',
+  'workerIndex=0',
+  'component=process-manager'
+] stopping process-manager 
+2026-08-15T09:29:37.793-07:00 [ 'pid=54314', 'worker=dispatcher', 'workerIndex=0' ] pid 54314 exiting normally
+2026-08-15T09:29:37.793-07:00 [ 'pid=54318', 'worker=serving-replicator', 'workerIndex=0' ] stopping ReplicatorService serving-replicator-54318 (SIGTERM)
+2026-08-15T09:29:37.793-07:00 [ 'pid=54315', 'worker=reaper', 'workerIndex=0' ] stopping CVRPurger reaper (SIGTERM)
+2026-08-15T09:29:37.794-07:00 [
+  'pid=54318',
+  'worker=serving-replicator',
+  'workerIndex=0',
+  'component=replicator',
+  'serviceID=serving-replicator-54318'
+] stopping IncrementalSyncer 
+2026-08-15T09:29:37.794-07:00 [ 'pid=54315', 'worker=reaper', 'workerIndex=0' ] stopping reaper 
+2026-08-15T09:29:37.794-07:00 [
+  'pid=54318',
+  'worker=serving-replicator',
+  'workerIndex=0',
+  'component=replicator',
+  'serviceID=serving-replicator-54318'
+] IncrementalSyncer stopped
+2026-08-15T09:29:37.794-07:00 [ 'pid=54318', 'worker=serving-replicator', 'workerIndex=0' ] ReplicatorService (serving-replicator-54318) stopped
+2026-08-15T09:29:37.794-07:00 [ 'pid=54318', 'worker=serving-replicator', 'workerIndex=0' ] pid 54318 exiting normally
+2026-08-15T09:29:37.794-07:00 [ 'pid=54315', 'worker=reaper', 'workerIndex=0' ] stopping ActiveUsersGauge active-users-gauge (SIGTERM)
+2026-08-15T09:29:37.794-07:00 [ 'pid=54315', 'worker=reaper', 'workerIndex=0' ] stopping active-users-gauge 
+2026-08-15T09:29:37.794-07:00 [ 'pid=54315', 'worker=reaper', 'workerIndex=0' ] CVRPurger (reaper) stopped
+2026-08-15T09:29:37.794-07:00 [ 'pid=54315', 'worker=reaper', 'workerIndex=0' ] pid 54315 exiting normally
+2026-08-15T09:29:37.810-07:00 [
+  'pid=54295',
+  'worker=runner',
+  'workerIndex=0',
+  'component=process-manager'
+] zero-cache (54314) exited with code (0) 
+2026-08-15T09:29:37.810-07:00 [
+  'pid=54295',
+  'worker=runner',
+  'workerIndex=0',
+  'component=process-manager'
+] all user-facing workers drained (39 ms)
+2026-08-15T09:29:37.810-07:00 [
+  'pid=54295',
+  'worker=runner',
+  'workerIndex=0',
+  'component=process-manager'
+] exiting with code 0
+2026-08-15T09:29:37.810-07:00 [
+  'pid=54295',
+  'worker=runner',
+  'workerIndex=0',
+  'component=process-manager'
+] stopping process-manager 
