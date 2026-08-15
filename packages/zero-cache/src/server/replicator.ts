@@ -40,9 +40,9 @@ import {
 } from '../types/processes.ts';
 import {getShardConfig} from '../types/shards.ts';
 import {
+  deleteStaleChangeLog,
   getPragmaConfig,
   replicaFileModeSchema,
-  deleteStaleChangeLog,
   setUpMessageHandlers,
   setupReplica,
   type WalMode,
@@ -134,6 +134,7 @@ export default async function runWorker(
     taskID,
     `${workerName}-${pid}`,
     mode,
+    dbPath,
     changeStreamer,
     workerClient,
     runningLocalChangeStreamer

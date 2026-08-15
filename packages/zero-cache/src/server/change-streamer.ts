@@ -65,6 +65,7 @@ export default async function runWorker(
       startupDelayMs,
       backPressureLimitHeapProportion,
       flowControlConsensusTimeoutProportion,
+      flowControlSlowSubscriberGracePeriodSeconds,
       sqliteChangeLogMode,
       sqliteChangeLogRetentionMs,
       sqliteChangeLogReadBatchRows,
@@ -210,6 +211,10 @@ export default async function runWorker(
         {
           backPressureLimitHeapProportion,
           flowControlConsensusTimeoutProportion,
+          flowControlSlowSubscriberGracePeriodMs:
+            flowControlSlowSubscriberGracePeriodSeconds > 0
+              ? flowControlSlowSubscriberGracePeriodSeconds * 1000
+              : undefined,
           statementTimeoutMs: change.statementTimeoutMs,
           changeLogBatchSize: change.logBatchSize,
           sqliteCatchup: {

@@ -806,6 +806,33 @@ export const zeroOptions = {
         `available as an emergency measure.)`,
       ],
     },
+
+    flowControlSlowSubscriberGracePeriodSeconds: {
+      type: v.number().default(30),
+      desc: [
+        `The period of time after which a lagging subscriber is disconnected and instructed to`,
+        `restart. A subscriber is considered lagging if it {italic continuously} (1) exceeds the`,
+        `consensus timeout and (2) fails to exceed the change rate of healthy subscribers. These`,
+        `conditions distinguish expected, temporary periods of slowness from pathological`,
+        `scenarios, such as zombie tasks, in which the subscriber is unlikely to recover.`,
+        ``,
+        `In particular, the second condition excludes subscribers that are performing initial`,
+        `catchup, as the rate of change for catchup must eventually exceed the rate of upstream`,
+        `changes. Note, however, that catchup rate can be legitimately slow during (rare) expensive`,
+        `operations such as index creation.`,
+        ``,
+        `Thus, this grace period caps the amount of time that a lagging subscriber degrades overall`,
+        `throughput, but should be long enough to allow for legitimate intervals of slowness.`,
+        ``,
+        `Note that in the pathological case where a catchup operation exceeds this grace period,`,
+        `the system will eventually recover after the next backup/restore cycle, as the expensive`,
+        `operation (e.g. index creation) will have been applied to the restored replica and no longer`,
+        `executed during catchup.`,
+        ``,
+        `Set this to 0 or a negative number to disable laggard detection. (Not recommended, but`,
+        `available as an emergency measure.)`,
+      ],
+    },
   },
 
   taskID: {

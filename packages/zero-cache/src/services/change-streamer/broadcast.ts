@@ -144,7 +144,12 @@ export class Broadcast {
   }
 
   #markCompleted(sub: Subscriber, changes: number) {
+    if (this.#isDone) {
+      return;
+    }
     const elapsed = performance.now() - this.#start;
+    sub.trackResponseResult('on-time');
+
     this.#completed.push({sub, changes, elapsed});
     this.#pending.delete(sub);
     if (this.#pending.size === 0) {
@@ -180,6 +185,7 @@ export class Broadcast {
         elapsed,
       );
     }
+    this.#pending.forEach(sub => sub.trackResponseResult('timed-out'));
     this.#isDone = true;
     this.#releaseMode = releaseMode;
     this.#clearTimeout(this.#earlyReleaseTimer);
