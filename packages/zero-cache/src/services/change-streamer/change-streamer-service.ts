@@ -56,6 +56,7 @@ import {Subscriber} from './subscriber.ts';
 
 export type TuningOptions = StorerOptions & {
   flowControlConsensusTimeoutProportion: number;
+  flowControlSlowSubscriberGracePeriodMs?: number | undefined;
 };
 
 /**
@@ -343,6 +344,8 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     this.#forwarder = new Forwarder(lc, {
       flowControlConsensusTimeoutProportion:
         opts.flowControlConsensusTimeoutProportion,
+      flowControlSlowSubscriberGracePeriodMs:
+        opts.flowControlSlowSubscriberGracePeriodMs,
     });
     this.#replicationStatusPublisher = replicationStatusPublisher;
     this.#purgeLock = initialPurgeLock;
