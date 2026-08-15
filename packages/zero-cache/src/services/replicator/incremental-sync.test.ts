@@ -1,3 +1,4 @@
+import {existsSync} from 'node:fs';
 import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {
@@ -83,6 +84,7 @@ describe('replicator/incremental-sync', () => {
       {subscribe: subscribeFn.mockResolvedValue(downstream)},
       worker,
       'serving',
+      dbFile.path,
       ReplicationStatusPublisher.forReplicaFile(dbFile.path),
     );
   });
@@ -559,6 +561,7 @@ describe('replicator/incremental-sync', () => {
       TASK_ID,
       REPLICA_ID,
       'backup',
+      dbFile.path,
       {subscribe: subscribeFn.mockResolvedValue(downstream)},
       worker,
       ReplicationStatusPublisher.forReplicaFile(dbFile.path),
@@ -763,6 +766,7 @@ describe('replicator/incremental-sync', () => {
       },
       worker,
       'serving',
+      dbFile.path,
       ReplicationStatusPublisher.forReplicaFile(dbFile.path),
     );
 
@@ -793,6 +797,7 @@ describe('replicator/incremental-sync', () => {
       },
       worker,
       'serving',
+      dbFile.path,
       ReplicationStatusPublisher.forReplicaFile(dbFile.path),
     );
 
@@ -818,5 +823,7 @@ describe('replicator/incremental-sync', () => {
 
     // Should stop / resolve
     await syncing;
+
+    expect(existsSync(dbFile.path)).toBe(false);
   });
 });

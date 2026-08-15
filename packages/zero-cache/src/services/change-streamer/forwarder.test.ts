@@ -1,8 +1,10 @@
-import {describe, expect, test} from 'vitest';
+import {describe, expect, test, vi} from 'vitest';
 import {BigIntJSON} from '../../../../shared/src/bigint-json.ts';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import {ReplicationMessages} from '../replicator/test-utils.ts';
+import {StreamTooFarBehind} from './error-type-enum.ts';
 import {Forwarder} from './forwarder.ts';
+import type {SubscriberStats} from './subscriber.ts';
 import {createSubscriber} from './test-utils.ts';
 
 const json = BigIntJSON.stringify;
@@ -343,5 +345,151 @@ describe('change-streamer/forwarder', () => {
         ],
       ]
     `);
+  });
+
+  describe('lagging subscriber disconnection', () => {
+    // Adds an active subscriber whose sampled stats are controlled directly, so
+    // the progress-monitor's classification can be driven deterministically. The
+    // real reportChangeRate() accumulation still runs, so its `missedLastTimeout`
+    // state is set for real to match the mocked stats.
+    function addSubscriber(
+      forwarder: Forwarder,
+      stats: {processRate: number; missedLastTimeout: boolean},
+    ) {
+      const [sub] = createSubscriber('00', true);
+      vi.spyOn(sub, 'getStats').mockReturnValue({
+        processRate: stats.processRate,
+        pending: 0,
+        backlog: 0,
+        backlogBytes: 0,
+        totalBufferedBytes: 0,
+        missedLastTimeout: stats.missedLastTimeout,
+      } satisfies SubscriberStats);
+      sub.trackResponseResult(
+        stats.missedLastTimeout ? 'timed-out' : 'on-time',
+      );
+      const close = vi.spyOn(sub, 'close').mockImplementation(() => {});
+      forwarder.add(sub);
+      return {sub, close};
+    }
+
+    test('a lagging subscriber is disconnected only after the grace period', () => {
+      const forwarder = new Forwarder(createSilentLogContext(), {
+        flowControlConsensusTimeoutProportion: 2,
+        flowControlSlowSubscriberGracePeriodMs: 1000,
+      });
+      // The healthy subscriber's positive rate is the baseline; a `0`-seeded
+      // slowestOnTime would never adopt it and detection would silently no-op.
+      const healthy = addSubscriber(forwarder, {
+        processRate: 10,
+        missedLastTimeout: false,
+      });
+      const laggard = addSubscriber(forwarder, {
+        processRate: 1,
+        missedLastTimeout: true,
+      });
+
+      // Within the grace period the laggard is left alone.
+      forwarder.checkSubscriberProgress(1000);
+      forwarder.checkSubscriberProgress(1500);
+      expect(laggard.close).not.toHaveBeenCalled();
+
+      // Once it has lagged continuously for the grace period, it is disconnected.
+      forwarder.checkSubscriberProgress(2000);
+      expect(laggard.close).toHaveBeenCalledWith(
+        StreamTooFarBehind,
+        expect.stringContaining('lagging'),
+      );
+      expect(healthy.close).not.toHaveBeenCalled();
+    });
+
+    test('a catching-up subscriber is never disconnected', () => {
+      const forwarder = new Forwarder(createSilentLogContext(), {
+        flowControlConsensusTimeoutProportion: 2,
+        flowControlSlowSubscriberGracePeriodMs: 1000,
+      });
+      addSubscriber(forwarder, {processRate: 10, missedLastTimeout: false});
+      // Faster than the healthy baseline: timing out is expected while catching
+      // up, so it must never be counted as lagging no matter how long it takes.
+      const catchingUp = addSubscriber(forwarder, {
+        processRate: 100,
+        missedLastTimeout: true,
+      });
+
+      forwarder.checkSubscriberProgress(1000);
+      forwarder.checkSubscriberProgress(5000);
+      forwarder.checkSubscriberProgress(60_000);
+      expect(catchingUp.close).not.toHaveBeenCalled();
+    });
+
+    test('recovering before the grace period elapses avoids disconnection', () => {
+      const forwarder = new Forwarder(createSilentLogContext(), {
+        flowControlConsensusTimeoutProportion: 2,
+        flowControlSlowSubscriberGracePeriodMs: 1000,
+      });
+      addSubscriber(forwarder, {processRate: 10, missedLastTimeout: false});
+      const {sub, close} = addSubscriber(forwarder, {
+        processRate: 1,
+        missedLastTimeout: true,
+      });
+
+      forwarder.checkSubscriberProgress(1000);
+      forwarder.checkSubscriberProgress(1500);
+
+      // A subsequent broadcast the subscriber responds to on time resets the
+      // lagging clock, so it survives even a later stretch of lagging.
+      sub.trackResponseResult('on-time');
+      vi.spyOn(sub, 'getStats').mockReturnValue({
+        processRate: 1,
+        pending: 0,
+        backlog: 0,
+        backlogBytes: 0,
+        totalBufferedBytes: 0,
+        missedLastTimeout: true,
+      });
+      sub.trackResponseResult('timed-out');
+
+      forwarder.checkSubscriberProgress(2400); // clock restarts here
+      forwarder.checkSubscriberProgress(3200); // only 800ms of lagging so far
+      expect(close).not.toHaveBeenCalled();
+    });
+
+    test('detection is disabled when no grace period is configured', () => {
+      const forwarder = new Forwarder(createSilentLogContext(), {
+        flowControlConsensusTimeoutProportion: 2,
+        // flowControlSlowSubscriberGracePeriodMs omitted -> disabled.
+      });
+      addSubscriber(forwarder, {processRate: 10, missedLastTimeout: false});
+      const laggard = addSubscriber(forwarder, {
+        processRate: 1,
+        missedLastTimeout: true,
+      });
+
+      forwarder.checkSubscriberProgress(1000);
+      forwarder.checkSubscriberProgress(100_000);
+      expect(laggard.close).not.toHaveBeenCalled();
+    });
+
+    test('no subscriber is disconnected without an on-time baseline', () => {
+      const forwarder = new Forwarder(createSilentLogContext(), {
+        flowControlConsensusTimeoutProportion: 2,
+        flowControlSlowSubscriberGracePeriodMs: 1000,
+      });
+      // Every subscriber timed out: there is no healthy peer to judge against,
+      // so none can be classified as lagging.
+      const laggard1 = addSubscriber(forwarder, {
+        processRate: 1,
+        missedLastTimeout: true,
+      });
+      const laggard2 = addSubscriber(forwarder, {
+        processRate: 2,
+        missedLastTimeout: true,
+      });
+
+      forwarder.checkSubscriberProgress(1000);
+      forwarder.checkSubscriberProgress(100_000);
+      expect(laggard1.close).not.toHaveBeenCalled();
+      expect(laggard2.close).not.toHaveBeenCalled();
+    });
   });
 });
