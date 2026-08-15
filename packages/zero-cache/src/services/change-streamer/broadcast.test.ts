@@ -252,4 +252,57 @@ describe('change-streamer/broadcast', () => {
     await broadcast.done;
     expect(broadcast.releaseMode).toBe('all-subscribers');
   });
+
+  test('a consensus-timeout release marks pending subscribers as timed-out', async () => {
+    const [sub1] = createSubscriber('00', true);
+    const [sub2] = createSubscriber('00', true);
+    const [sub3] = createSubscriber('00', true);
+    const [sub4] = createSubscriber('00', true);
+    const {scheduled, setTimeoutFn, clearTimeoutFn} = captureTimers();
+
+    const broadcast = new Broadcast(lc, [sub1, sub2, sub3, sub4], begin, {
+      consensusTimeoutProportion: 2,
+      setTimeoutFn,
+      clearTimeoutFn,
+    });
+
+    // Majority of 3 acks; sub4 remains pending.
+    sub1.close();
+    sub2.close();
+    sub3.close();
+    await sleep(1);
+
+    // Firing the timer releases via consensus-timeout: the acked subscribers are
+    // recorded on-time and the one still pending is recorded timed-out.
+    scheduled[0].cb();
+    await broadcast.done;
+    expect(sub1.getStats().missedLastTimeout).toBe(false);
+    expect(sub2.getStats().missedLastTimeout).toBe(false);
+    expect(sub3.getStats().missedLastTimeout).toBe(false);
+    expect(sub4.getStats().missedLastTimeout).toBe(true);
+  });
+
+  test('an all-subscribers release marks every subscriber on-time', async () => {
+    const [sub1] = createSubscriber('00', true);
+    const [sub2] = createSubscriber('00', true);
+    const [sub3] = createSubscriber('00', true);
+
+    // Pre-existing timed-out state is cleared once the subscriber acks.
+    sub3.trackResponseResult('timed-out');
+
+    const broadcast = new Broadcast(lc, [sub1, sub2, sub3], begin, {
+      consensusTimeoutProportion: 2,
+      setTimeoutFn: captureTimers().setTimeoutFn,
+      clearTimeoutFn: captureTimers().clearTimeoutFn,
+    });
+
+    sub1.close();
+    sub2.close();
+    sub3.close();
+    await broadcast.done;
+    expect(broadcast.releaseMode).toBe('all-subscribers');
+    expect(sub1.getStats().missedLastTimeout).toBe(false);
+    expect(sub2.getStats().missedLastTimeout).toBe(false);
+    expect(sub3.getStats().missedLastTimeout).toBe(false);
+  });
 });

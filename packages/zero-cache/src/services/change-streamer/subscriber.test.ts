@@ -448,6 +448,7 @@ describe('change-streamer/subscriber', () => {
       pending: count + 1,
       backlog: 0,
       backlogBytes: 0,
+      totalBufferedBytes: 52027, // update this as necessary
     });
     expect(completed).toBe(0);
 
@@ -589,5 +590,67 @@ describe('change-streamer/subscriber', () => {
     // Only commits are acked, and only when the subscriber confirms them.
     expect(acks).toEqual(['12', '22']);
     expect(sub.acked).toBe('22');
+  });
+
+  describe('lagging detection', () => {
+    test('trackResponseResult sets missedLastTimeout', () => {
+      const [sub] = createSubscriber('00', true);
+      expect(sub.getStats().missedLastTimeout).toBe(false);
+
+      sub.trackResponseResult('timed-out');
+      expect(sub.getStats().missedLastTimeout).toBe(true);
+
+      sub.trackResponseResult('on-time');
+      expect(sub.getStats().missedLastTimeout).toBe(false);
+    });
+
+    test('reportChangeRate asserts the subscriber missed the last timeout', () => {
+      const [sub] = createSubscriber('00', true);
+      // Not timed out: reporting a change rate is a programming error.
+      expect(() => sub.reportChangeRate(100, 'lagging')).toThrow(
+        'reportChangeRate should only be called for slow subscribers',
+      );
+
+      sub.trackResponseResult('timed-out');
+      expect(() => sub.reportChangeRate(100, 'lagging')).not.toThrow();
+    });
+
+    test('lagging duration accumulates continuously from the first report', () => {
+      const [sub] = createSubscriber('00', true);
+      sub.trackResponseResult('timed-out');
+
+      // First report starts the clock; duration is measured from here.
+      expect(sub.reportChangeRate(1000, 'lagging')).toBe(0);
+      expect(sub.reportChangeRate(1500, 'lagging')).toBe(500);
+      expect(sub.reportChangeRate(2200, 'lagging')).toBe(1200);
+    });
+
+    test('catching-up resets the lagging clock', () => {
+      const [sub] = createSubscriber('00', true);
+      sub.trackResponseResult('timed-out');
+
+      expect(sub.reportChangeRate(1000, 'lagging')).toBe(0);
+      expect(sub.reportChangeRate(1500, 'lagging')).toBe(500);
+
+      // A single catching-up sample breaks continuity and resets the clock.
+      expect(sub.reportChangeRate(1600, 'catching-up')).toBe(0);
+
+      // Subsequent lagging restarts from the next report.
+      expect(sub.reportChangeRate(1700, 'lagging')).toBe(0);
+      expect(sub.reportChangeRate(1900, 'lagging')).toBe(200);
+    });
+
+    test('an on-time response resets the lagging clock', () => {
+      const [sub] = createSubscriber('00', true);
+      sub.trackResponseResult('timed-out');
+      expect(sub.reportChangeRate(1000, 'lagging')).toBe(0);
+      expect(sub.reportChangeRate(1800, 'lagging')).toBe(800);
+
+      // Responding on time breaks continuity, even before another timeout.
+      sub.trackResponseResult('on-time');
+      sub.trackResponseResult('timed-out');
+      expect(sub.reportChangeRate(2000, 'lagging')).toBe(0);
+      expect(sub.reportChangeRate(2300, 'lagging')).toBe(300);
+    });
   });
 });

@@ -375,6 +375,7 @@ async function startZeroCacheReplica(testDBs: PgTest['testDBs']) {
       TASK_ID,
       'chinook-zero-cache-fuzzer-replicator',
       'serving',
+      replicaDbFile.path,
       parseStringifiedChangeStreamer(changeStreamer),
       worker,
       null,

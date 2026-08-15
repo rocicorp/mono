@@ -37,6 +37,15 @@ export type BacklogFullWait = {
   cancel(): void;
 };
 
+export type SubscriberStats = {
+  processRate: number;
+  pending: number;
+  backlog: number;
+  backlogBytes: number;
+  totalBufferedBytes: number;
+  missedLastTimeout: boolean;
+};
+
 /**
  * Encapsulates a subscriber to changes. All subscribers start in a
  * "catchup" phase in which changes are buffered in a backlog while the
@@ -213,12 +222,15 @@ export class Subscriber {
   }
 
   async #sendStringifiedDownstream(json: string) {
+    const size = json.length;
     this.#pending++;
+    this.#pendingBytes += size;
     const {result} = this.#downstream.push(json);
     try {
       return await result;
     } finally {
       this.#pending--;
+      this.#pendingBytes -= size;
       this.#processed++;
     }
   }
@@ -232,6 +244,7 @@ export class Subscriber {
   // debugging, forensics, and potential improvements to the algorithm.
 
   #pending = 0;
+  #pendingBytes = 0;
   #processed = 0;
   #samples: {processed: number; timestamp: number}[] = [
     {processed: 0, timestamp: performance.now()},
@@ -264,12 +277,7 @@ export class Subscriber {
     return this;
   }
 
-  getStats(): {
-    processRate: number;
-    pending: number;
-    backlog: number;
-    backlogBytes: number;
-  } {
+  getStats(): SubscriberStats {
     const pending = this.numPending;
     if (this.#samples.length < 2) {
       return {
@@ -277,6 +285,8 @@ export class Subscriber {
         pending,
         backlog: this.#backlogCount,
         backlogBytes: this.#bufferedBacklogBytes,
+        totalBufferedBytes: this.#totalBufferedBytes,
+        missedLastTimeout: this.#missedLastTimeout,
       };
     }
     const from = this.#samples[0];
@@ -289,7 +299,43 @@ export class Subscriber {
       pending,
       backlog: this.#backlogCount,
       backlogBytes: this.#bufferedBacklogBytes,
+      totalBufferedBytes: this.#totalBufferedBytes,
+      missedLastTimeout: this.#missedLastTimeout,
     };
+  }
+
+  #missedLastTimeout = false;
+  #laggingSinceMs: number | undefined;
+
+  trackResponseResult(result: 'on-time' | 'timed-out') {
+    this.#missedLastTimeout = result === 'timed-out';
+    if (result === 'on-time') {
+      this.#laggingSinceMs = undefined;
+    }
+  }
+
+  /**
+   * Reports the change rate of a slow subscriber (i.e. that missed the last
+   * timeout) compared to the change rate of the (slowest) subscriber that
+   * responded on time.
+   *
+   * * `lagging` indicates that this subscriber is slower
+   * * `catching-up` indicates that it is faster
+   *
+   * Returns the total duration in which subscriber has been continuously
+   * reported as `lagging`.
+   */
+  reportChangeRate(now: number, status: 'lagging' | 'catching-up') {
+    assert(
+      this.#missedLastTimeout,
+      `reportChangeRate should only be called for slow subscribers`,
+    );
+    if (status === 'catching-up') {
+      this.#laggingSinceMs = undefined;
+      return 0;
+    }
+    this.#laggingSinceMs ??= now;
+    return now - this.#laggingSinceMs;
   }
 
   supportsMessage(tag: ChangeTag) {
@@ -346,6 +392,10 @@ export class Subscriber {
     // this, setCaughtUp() could move bytes out of #backlog faster than the
     // downstream Subscription can process them and release producers too early.
     return this.#backlogBytes + this.#backlogInFlightBytes;
+  }
+
+  get #totalBufferedBytes() {
+    return this.#bufferedBacklogBytes + this.#pendingBytes;
   }
 
   #pushBacklog(change: WatermarkedChange) {

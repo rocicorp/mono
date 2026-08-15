@@ -7,10 +7,12 @@ import {
 } from '../../observability/metrics.ts';
 import {Broadcast, type EarlyReleaseOptions} from './broadcast.ts';
 import type {ChangeTag, Status, WatermarkedChange} from './change-streamer.ts';
-import type {Subscriber} from './subscriber.ts';
+import {StreamTooFarBehind} from './error-type-enum.ts';
+import type {Subscriber, SubscriberStats} from './subscriber.ts';
 
 export type ProgressMonitorOptions = {
   flowControlConsensusTimeoutProportion: number;
+  flowControlSlowSubscriberGracePeriodMs?: number | undefined;
   // Injectable timers, for deterministic testing.
   setTimeoutFn?: typeof setTimeout | undefined;
   clearTimeoutFn?: typeof clearTimeout | undefined;
@@ -23,6 +25,7 @@ export class Forwarder {
   readonly #active = new Set<Subscriber>();
   readonly #queued = new Set<Subscriber>();
   readonly #earlyReleaseOptions: EarlyReleaseOptions | undefined;
+  readonly #flowControlSlowSubscriberGracePeriodMs: number | undefined;
 
   readonly #flowControlWaits = getOrCreateCounter(
     'replication',
@@ -49,7 +52,6 @@ export class Forwarder {
     this.#setTimeout = opts.setTimeoutFn ?? setTimeout;
     this.#clearTimeout = opts.clearTimeoutFn ?? clearTimeout;
 
-    // A negative proportion disables early release entirely, falling back to
     this.#earlyReleaseOptions =
       opts.flowControlConsensusTimeoutProportion < 0
         ? undefined
@@ -59,6 +61,8 @@ export class Forwarder {
             setTimeoutFn: this.#setTimeout,
             clearTimeoutFn: this.#clearTimeout,
           };
+    this.#flowControlSlowSubscriberGracePeriodMs =
+      opts.flowControlSlowSubscriberGracePeriodMs;
 
     getOrCreateGauge(
       'replication',
@@ -107,17 +111,60 @@ export class Forwarder {
 
   startProgressMonitor() {
     clearInterval(this.#progressMonitor);
-    this.#progressMonitor = setInterval(this.#trackProgress, 1000);
+    this.#progressMonitor = setInterval(
+      () => this.checkSubscriberProgress(performance.now()),
+      1000,
+    );
   }
 
-  readonly #trackProgress = () => {
-    const now = performance.now();
+  /**
+   * Runs one progress-monitor tick: samples each active subscriber's change
+   * rate, logs slow broadcasts, and disconnects subscribers that have been
+   * continuously lagging for longer than the configured grace period.
+   *
+   * Invoked on an interval by {@link startProgressMonitor()}; exposed (rather
+   * than private) so tests can drive a single tick with an explicit `now`.
+   */
+  checkSubscriberProgress(now: number) {
+    let timedOut: Map<Subscriber, SubscriberStats> | undefined;
+    let slowestOnTime: SubscriberStats | undefined;
+
     for (const sub of this.#active) {
-      sub.sampleProcessRate(now);
+      const stats = sub.sampleProcessRate(now).getStats();
+      if (stats.missedLastTimeout) {
+        (timedOut ??= new Map()).set(sub, stats);
+      } else if (
+        stats.processRate <= (slowestOnTime?.processRate ?? Infinity)
+      ) {
+        slowestOnTime = stats;
+      }
     }
     this.#currentBroadcast?.logSlowRequests(now);
-    // TODO: Implement laggard detection.
-  };
+
+    if (
+      this.#flowControlSlowSubscriberGracePeriodMs &&
+      timedOut?.size &&
+      slowestOnTime
+    ) {
+      for (const [sub, stats] of timedOut.entries()) {
+        const rate =
+          stats.processRate < slowestOnTime.processRate
+            ? 'lagging'
+            : 'catching-up';
+        const laggingDuration = sub.reportChangeRate(now, rate);
+        if (laggingDuration >= this.#flowControlSlowSubscriberGracePeriodMs) {
+          this.#lc.warn?.(
+            `subscriber ${sub.id} has lagged for ${laggingDuration}ms. disconnecting`,
+            {stats},
+          );
+          sub.close(
+            StreamTooFarBehind,
+            `lagging for over ${this.#flowControlSlowSubscriberGracePeriodMs}ms (${laggingDuration}ms)`,
+          );
+        }
+      }
+    }
+  }
 
   stopProgressMonitor() {
     clearInterval(this.#progressMonitor);

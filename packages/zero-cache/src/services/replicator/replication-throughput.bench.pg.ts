@@ -184,6 +184,7 @@ async function startReplicationPipeline(testDBs: PgTest['testDBs']) {
     TASK_ID,
     'logical-replication-throughput-replicator',
     'serving',
+    replicaDbFile.path,
     parseStringifiedChangeStreamer(changeStreamer),
     worker,
     null,

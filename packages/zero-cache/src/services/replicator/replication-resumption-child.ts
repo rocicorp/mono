@@ -271,6 +271,7 @@ export default async function runWorker(
     'replication-resumption-test',
     `replication-resumption-child-${pid}`,
     'serving',
+    dbPath,
     new IPCChangeStreamer(parent),
     worker,
     null,
