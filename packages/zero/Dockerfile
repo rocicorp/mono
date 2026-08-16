@@ -4,7 +4,7 @@ WORKDIR /src/
 RUN git clone --depth 1 --branch zero@v0.0.10 https://github.com/rocicorp/litestream.git
 WORKDIR /src/litestream/
 
-ARG LITESTREAM_VERSION=0.3.13+z0.0.9  # upstream version + zero version
+ARG LITESTREAM_VERSION=0.3.13+z0.0.10  # upstream version + zero version
 
 # Force use of the toolchain bundled in the builder image so the resulting
 # binary is compiled with Go 1.25.10 stdlib (fixes CVE-2025-68121 and a
