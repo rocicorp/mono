@@ -16,7 +16,41 @@ RUN --mount=type=cache,target=/root/.cache/go-build \
 	--mount=type=cache,target=/go/pkg \
 	go build -ldflags "-s -w -X 'main.Version=${LITESTREAM_VERSION}' -extldflags '-static'" -tags osusergo,netgo,sqlite_omit_load_extension -o /usr/local/bin/litestream ./cmd/litestream
 
-FROM litestream/litestream:0.5.16 AS litestream-v5
+# TODO: Use the official litestream image once our fork is no longer necessary, i.e.
+# FROM litestream/litestream:0.5.16 AS litestream-v5
+FROM golang:1.25.10@sha256:cd05a378aaf011e8056745363e5c40f4f2bef0fa4d9bf19b9c38316079c332ff AS litestream-v5
+
+# Install build dependencies for VFS extension
+RUN apt-get update && apt-get install -y gcc libc6-dev && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /src/
+RUN git clone --depth 1 --branch zero-v5@v0.5.16+z0.0.1 https://github.com/rocicorp/litestream.git
+WORKDIR /src/litestream
+COPY . .
+
+ARG LITESTREAM_V5_VERSION=0.5.16+z0.0.1 # upstream version + zero version 
+
+# Build litestream binary
+RUN --mount=type=cache,target=/root/.cache/go-build \
+	--mount=type=cache,target=/go/pkg \
+	go build -ldflags "-s -w -X 'main.Version=${LITESTREAM_V5_VERSION}' -extldflags '-static'" -tags osusergo,netgo,sqlite_omit_load_extension -o /usr/local/bin/litestream ./cmd/litestream
+
+# Build VFS loadable extension
+RUN --mount=type=cache,target=/root/.cache/go-build \
+	--mount=type=cache,target=/go/pkg \
+	mkdir -p dist && \
+	CGO_ENABLED=1 go build \
+	-tags "vfs,SQLITE3VFS_LOADABLE_EXT" \
+	-buildmode=c-archive \
+	-o dist/litestream-vfs.a ./cmd/litestream-vfs && \
+	mv dist/litestream-vfs.h src/litestream-vfs.h && \
+	gcc -DSQLITE3VFS_LOADABLE_EXT -g -fPIC -shared \
+	-o dist/litestream-vfs.so \
+	src/litestream-vfs.c \
+	dist/litestream-vfs.a \
+	-lpthread -ldl -lm
+
+RUN mv /src/litestream/dist/litestream-vfs.so /usr/local/lib/litestream-vfs.so
 
 FROM node:22.23.1-alpine3.23@sha256:8516dce0483394d5708d4b2ee6cacb79fb1d617ea4e2787c2120bcca92ce372e
 
