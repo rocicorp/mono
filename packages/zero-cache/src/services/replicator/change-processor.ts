@@ -19,10 +19,13 @@ import {
   type LiteTableSpecWithReplicationStatus,
 } from '../../db/lite-tables.ts';
 import {
+  isArrayColumn,
+  isEnumColumn,
   mapPostgresToLite,
   mapPostgresToLiteColumn,
   mapPostgresToLiteIndex,
 } from '../../db/pg-to-lite.ts';
+import type {ColumnSpec} from '../../db/specs.ts';
 import type {StatementRunner} from '../../db/statements.ts';
 import type {LexiVersion} from '../../types/lexi-version.ts';
 import {
@@ -697,36 +700,46 @@ class TransactionProcessor {
     let oldName = msg.old.name;
     const newName = msg.new.name;
 
-    // update-column can ignore defaults because it does not change the values
-    // in existing rows.
-    //
-    // https://www.postgresql.org/docs/current/sql-altertable.html#SQL-ALTERTABLE-DESC-SET-DROP-DEFAULT
-    //
-    // "The new default value will only apply in subsequent INSERT or UPDATE
-    //  commands; it does not cause rows already in the table to change."
-    //
-    // This allows support for _changing_ column defaults to any expression,
-    // since it does not affect what the replica needs to do.
-    const oldSpec = mapPostgresToLiteColumn(table, msg.old, 'ignore-default');
-    const newSpec = mapPostgresToLiteColumn(table, msg.new, 'ignore-default');
+    const storageTypesDiffer = differentStorageTypes(
+      msg.old.spec,
+      msg.new.spec,
+    );
 
     // If neither the column name nor the SQLite data type changes, only the
     // upstream metadata needs to be updated. This includes changes such as a
-    // varchar character limit, which SQLite does not enforce but a freshly
-    // built replica still records.
-    if (oldName === newName && oldSpec.dataType === newSpec.dataType) {
+    // varchar character limit and nullability, which SQLite does not enforce
+    // but a freshly built replica still records.
+    if (oldName === newName && !storageTypesDiffer) {
       this.#columnMetadata.update(
         table,
         msg.old.name,
         msg.new.name,
         msg.new.spec,
       );
-      this.#lc.info?.(msg.tag, 'updated metadata only', oldSpec, newSpec);
+      if (Boolean(msg.old.spec.notNull) !== Boolean(msg.new.spec.notNull)) {
+        this.#bumpVersions(msg.table);
+      }
+      this.#lc.info?.(msg.tag, 'updated metadata only', msg.old, msg.new);
       return;
     }
-    // If the data type changes, we have to make a new column with the new data type
-    // and copy the values over.
-    if (oldSpec.dataType !== newSpec.dataType) {
+    // Storage type changes require a new column so that SQLite uses the new
+    // representation for existing and future values.
+    if (storageTypesDiffer) {
+      // update-column can ignore defaults because it does not change the values
+      // in existing rows.
+      //
+      // https://www.postgresql.org/docs/current/sql-altertable.html#SQL-ALTERTABLE-DESC-SET-DROP-DEFAULT
+      //
+      // "The new default value will only apply in subsequent INSERT or UPDATE
+      //  commands; it does not cause rows already in the table to change."
+      //
+      // This allows support for _changing_ column defaults to any expression,
+      // since it does not affect what the replica needs to do.
+      const newLiteSpec = mapPostgresToLiteColumn(
+        table,
+        msg.new,
+        'ignore-default',
+      );
       const tableSpec = must(
         listTables(this.#db.db, false, false).find(
           tableSpec => tableSpec.name === table,
@@ -738,7 +751,7 @@ class TransactionProcessor {
       const tmpTable = `tmp.${table}`;
       const newColumns = mapEntries(tableSpec.columns, (column, spec) => [
         column === oldName ? newName : column,
-        column === oldName ? {...newSpec, pos: spec.pos} : spec,
+        column === oldName ? {...newLiteSpec, pos: spec.pos} : spec,
       ]);
       const sourceColumns = Object.keys(tableSpec.columns);
       const destinationColumns = Object.keys(newColumns);
@@ -1016,6 +1029,17 @@ class TransactionProcessor {
     lc.info?.(`aborting transaction ${this.#version}`);
     this.#db.rollback();
   }
+}
+
+function differentStorageTypes(
+  oldSpec: ColumnSpec,
+  newSpec: ColumnSpec,
+): boolean {
+  return (
+    oldSpec.dataType !== newSpec.dataType ||
+    isEnumColumn(oldSpec) !== isEnumColumn(newSpec) ||
+    isArrayColumn(oldSpec) !== isArrayColumn(newSpec)
+  );
 }
 
 function getBackfilledColumns(

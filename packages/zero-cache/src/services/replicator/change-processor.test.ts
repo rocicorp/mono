@@ -14,7 +14,7 @@ import {StatementRunner} from '../../db/statements.ts';
 import {expectTables, initDB} from '../../test/lite.ts';
 import type {ChangeStreamData} from '../change-source/protocol/current/downstream.ts';
 import {ChangeProcessor} from './change-processor.ts';
-import {DEL_OP, SET_OP} from './schema/change-log.ts';
+import {DEL_OP, RESET_OP, SET_OP} from './schema/change-log.ts';
 import {ColumnMetadataStore} from './schema/column-metadata.ts';
 import {
   getSubscriptionState,
@@ -1679,6 +1679,9 @@ describe('replicator/change-processor', () => {
       setup: `
         CREATE TABLE foo(id INT8, nolz TEXT, _0_version TEXT);
         CREATE UNIQUE INDEX foo_pkey ON foo (id ASC);
+        INSERT INTO "_zero.column_metadata"
+          (table_name, column_name, upstream_type, is_not_null, is_enum, is_array)
+          VALUES ('foo', 'nolz', 'TEXT', 0, 0, 0);
         INSERT INTO foo(id, nolz, _0_version) VALUES (1, 'hel', '00');
         INSERT INTO foo(id, nolz, _0_version) VALUES (2, 'low', '00');
         INSERT INTO foo(id, nolz, _0_version) VALUES (3, 'orl', '00');
@@ -1787,6 +1790,9 @@ describe('replicator/change-processor', () => {
       setup: `
         CREATE TABLE foo(id INT8, nolz TEXT, _0_version TEXT);
         CREATE UNIQUE INDEX foo_pkey ON foo (id ASC);
+        INSERT INTO "_zero.column_metadata"
+          (table_name, column_name, upstream_type, is_not_null, is_enum, is_array)
+          VALUES ('foo', 'nolz', 'TEXT', 0, 0, 0);
         INSERT INTO foo(id, nolz, _0_version) VALUES (1, 'hel', '00');
         INSERT INTO foo(id, nolz, _0_version) VALUES (2, 'low', '00');
         INSERT INTO foo(id, nolz, _0_version) VALUES (3, 'orl', '00');
@@ -3610,49 +3616,6 @@ describe('replicator/change-processor', () => {
     },
   ];
 
-  test('SET NOT NULL preserves compound index column order', () => {
-    initDB(
-      backupReplica,
-      `
-        CREATE TABLE foo(
-          id INT8,
-          tenant_id TEXT,
-          _0_version TEXT
-        );
-        CREATE UNIQUE INDEX foo_pkey ON foo(id);
-        CREATE INDEX foo_tenant_id_id ON foo(tenant_id, id);
-      `,
-    );
-
-    const messages = new ReplicationMessages({foo: 'id'});
-    backupProcessor.processMessage(lc, [
-      'begin',
-      messages.begin(),
-      {commitWatermark: '03'},
-    ]);
-    backupProcessor.processMessage(lc, [
-      'data',
-      messages.updateColumn(
-        'foo',
-        {name: 'tenant_id', spec: {pos: 2, dataType: 'TEXT'}},
-        {
-          name: 'tenant_id',
-          spec: {pos: 2, dataType: 'TEXT', notNull: true},
-        },
-      ),
-    ]);
-    backupProcessor.processMessage(lc, [
-      'commit',
-      messages.commit(),
-      {watermark: '03'},
-    ]);
-
-    const index = must(
-      listIndexes(backupReplica).find(({name}) => name === 'foo_tenant_id_id'),
-    );
-    expect(Object.keys(index.columns)).toEqual(['tenant_id', 'id']);
-  });
-
   for (const c of cases) {
     test(c.name, () => {
       for (const [replica, processor, log] of [
@@ -4231,6 +4194,97 @@ describe('replicator/column-metadata-integration', () => {
       isBackfilling: false,
     });
   });
+
+  test.each([
+    {from: false, to: true},
+    {from: true, to: false},
+  ])(
+    'update column nullability from $from to $to without rebuilding the SQLite schema',
+    ({from, to}) => {
+      const messages = new ReplicationMessages({foo: 'id'});
+
+      processor.processMessage(lc, [
+        'begin',
+        messages.begin(),
+        {commitWatermark: '0d'},
+      ]);
+      processor.processMessage(lc, [
+        'data',
+        messages.createTable({
+          schema: 'public',
+          name: 'foo',
+          columns: {
+            id: {pos: 0, dataType: 'int8'},
+            value: {pos: 1, dataType: 'text', notNull: from},
+          },
+          primaryKey: ['id'],
+        }),
+      ]);
+      processor.processMessage(lc, [
+        'data',
+        messages.createIndex({
+          schema: 'public',
+          tableName: 'foo',
+          name: 'foo_value_id_idx',
+          columns: {value: 'ASC', id: 'ASC'},
+          unique: false,
+        }),
+      ]);
+      processor.processMessage(lc, [
+        'data',
+        messages.insert('foo', {id: 1, value: 'one'}),
+      ]);
+      processor.processMessage(lc, [
+        'commit',
+        messages.commit(),
+        {watermark: '0d'},
+      ]);
+
+      const sqliteSchema = replica.prepare(
+        `SELECT name, rootpage, sql FROM sqlite_master
+         WHERE name IN ('foo', 'foo_value_id_idx') ORDER BY name`,
+      );
+      const schemaBeforeUpdate = sqliteSchema.all();
+
+      processor.processMessage(lc, [
+        'begin',
+        messages.begin(),
+        {commitWatermark: '0e'},
+      ]);
+      processor.processMessage(lc, [
+        'data',
+        messages.updateColumn(
+          'foo',
+          {name: 'value', spec: {pos: 1, dataType: 'text', notNull: from}},
+          {name: 'value', spec: {pos: 1, dataType: 'text', notNull: to}},
+        ),
+      ]);
+      processor.processMessage(lc, [
+        'commit',
+        messages.commit(),
+        {watermark: '0e'},
+      ]);
+
+      expect(sqliteSchema.all()).toEqual(schemaBeforeUpdate);
+      expect(replica.prepare('SELECT id, value FROM foo').all()).toEqual([
+        {id: 1, value: 'one'},
+      ]);
+      expect(
+        must(ColumnMetadataStore.getInstance(replica)).getColumn(
+          'foo',
+          'value',
+        ),
+      ).toMatchObject({isNotNull: to});
+      expect(
+        replica
+          .prepare(
+            `SELECT stateVersion, "table", op FROM "_zero.changeLog2"
+             WHERE stateVersion = '0e'`,
+          )
+          .all(),
+      ).toContainEqual({stateVersion: '0e', table: 'foo', op: RESET_OP});
+    },
+  );
 
   test('drop column deletes metadata', () => {
     const messages = new ReplicationMessages({foo: 'id'});
