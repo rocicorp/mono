@@ -987,6 +987,19 @@ export const zeroOptions = {
       ],
     },
 
+    configPathV5: {
+      type: v.string().default('./src/services/litestream/config-v5.yml'),
+      desc: [
+        `Path to the litestream v5 yaml config file. zero-cache will run this with its`,
+        `environment variables, which can be referenced in the file via $\\{ENV\\}`,
+        `substitution, for example:`,
+        `* {bold ZERO_REPLICA_FILE} for the db path`,
+        `* {bold ZERO_LITESTREAM_BACKUP_LOCATION} for the db replica url`,
+        `* {bold ZERO_LITESTREAM_LOG_LEVEL} for the log level`,
+        `* {bold ZERO_LOG_FORMAT} for the log type`,
+      ],
+    },
+
     vfsExtensionPath: {
       type: v.string().default('/usr/local/lib/litestream-vfs.so'),
       desc: [
@@ -998,9 +1011,11 @@ export const zeroOptions = {
     vfsProbeIntervalMs: {
       type: v.number().default(15 * 1000),
       desc: [
-        `Interval in milliseconds at which the standalone backup watermark reader`,
-        `logs the watermark when it is run without a parent worker. The integrated`,
-        `backup monitor requests watermarks on demand.`,
+        `Interval in milliseconds litestream vfs extension polls the backup store (e.g. s3)`,
+        `to determine the most recent backup.`,
+        ``,
+        `This, in turn, influences how quickly new backups are confirmed, allowing the`,
+        `change-streamer to ack the upstream change-source (e.g. replication slot).`,
       ],
     },
 
@@ -1065,9 +1080,12 @@ export const zeroOptions = {
       desc: [
         `The size of the WAL file at which to perform an SQlite checkpoint to apply`,
         `the writes in the WAL to the main database file. Each checkpoint creates`,
-        `a new WAL segment file that will be backed up by litestream. Smaller thresholds`,
+        `a new WAL segment file that will be backed up by litestream (v3). Smaller thresholds`,
         `may improve read performance, at the expense of creating more files to download`,
         `when restoring the replica from the backup.`,
+        ``,
+        `This setting is only relevant when replicating with litestream v3, and is ignored`,
+        `when replicating with litestream v5.`,
       ],
     },
 
@@ -1077,6 +1095,9 @@ export const zeroOptions = {
         `The WAL page count at which SQLite attempts a PASSIVE checkpoint, which`,
         `transfers pages to the main database file without blocking writers.`,
         `Defaults to {bold checkpointThresholdMB * 250} (since SQLite page size is 4KB).`,
+        ``,
+        `This setting is only relevant when replicating with litestream v3, and is ignored`,
+        `when replicating with litestream v5.`,
       ],
     },
 
@@ -1086,16 +1107,39 @@ export const zeroOptions = {
         `The WAL page count at which SQLite performs a RESTART checkpoint, which`,
         `blocks writers until complete. Defaults to {bold minCheckpointPageCount * 10}.`,
         `Set to {bold 0} to disable RESTART checkpoints entirely.`,
+        ``,
+        `This setting is only relevant when replicating with litestream v3, and is ignored`,
+        `when replicating with litestream v5.`,
       ],
     },
 
     incrementalBackupIntervalMinutes: {
       type: v.number().default(5),
       desc: [
-        `The interval between incremental backups of the replica. Shorter intervals`,
+        `The interval between incremental v3 backups of the replica. Shorter intervals`,
         `reduce the amount of change history that needs to be replayed when catching`,
         `up a new view-syncer, at the expense of increasing the number of files needed`,
         `to download for the initial litestream restore.`,
+        ``,
+        `This option only applies to litestream v3 backups and will be deprecated/removed`,
+        `once the zero-cache is transitioned to litestream v5. For configuring v5 backup`,
+        `frequency, use {bold ZERO_LITESTREAM_INCREMENTAL_BACKUP_INTERVAL_SECONDS}.`,
+      ],
+    },
+
+    incrementalBackupIntervalSeconds: {
+      type: v.number().default(15),
+      desc: [
+        `The interval between incremental v5 backups of the replica. With litestream v5`,
+        `the upstream change source is not ACKed until the corresponding changes have been`,
+        `applied to the replica and backed up by litestream. As such, shorter intervals`,
+        `incur a higher number of backup storage writes and files managed (e.g. in s3),`,
+        `while longer intervals result requiring a larger buffer for changes upstream `,
+        `(e.g. per-replication slot wal records). The default value of 15 seconds targets`,
+        `an s3 API cost of ~$1/month (not counting storage costs).`,
+        ``,
+        `This option only applies to litestream v5 backups. For v3 backups, use`,
+        `{bold ZERO_LITESTREAM_INCREMENTAL_BACKUP_INTERVAL_MINUTES}.`,
       ],
     },
 
@@ -1107,6 +1151,10 @@ export const zeroOptions = {
         `improves restore time at the expense of bandwidth. Applications with a`,
         `large database and low write rate can increase this interval to reduce`,
         `network usage for backups (litestream defaults to 24 hours).`,
+        ``,
+        `This setting is applied when replicating with either litestream v3 or v5.`,
+        `Note, however, that snapshots are generally not needed to improve restore time`,
+        `with v5, and so a longer interval (e.g. the litestream default of 24h) is fine.`,
       ],
     },
 

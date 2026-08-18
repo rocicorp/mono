@@ -1,0 +1,42 @@
+snapshot:
+  interval: ${ZERO_LITESTREAM_SNAPSHOT_BACKUP_INTERVAL_HOURS}h
+  retention: ${ZERO_LITESTREAM_SNAPSHOT_RETENTION_INTERVAL_HOURS}h
+
+# Retain raw L0 files well past worst-case restore duration so continuous
+# compaction can't delete a file an in-progress restore still needs.
+l0-retention: 1h
+l0-retention-check-interval: 5m
+
+# Compaction ladder (L1, L2, L3). Defaults are 30s/5m/1h, tuned for the 1s
+# monitor-interval default; at our 15s monitor-interval, the default 30s L1 would
+# only merge ~2 L0 files. These relaxed intervals produce fewer/fatter L1 files
+# and keep the per-run "list all L0" cost flat if l0-retention is extended further
+# (the busy-DB L0 LIST fires at L1 frequency). Coarser layers only reduce
+# timestamp-based historical restore resolution, which we don't use;
+# restore-to-latest is unaffected. Keep L1 <= l0-retention and L1 < L2 < L3.
+levels:
+  - interval: 2m # L1
+  - interval: 10m # L2
+  - interval: 1h # L3
+
+# Metadata-only (S3 ListObjects) TXID-chain check; negligible cost in v5.
+validation:
+  interval: 1h
+
+dbs:
+  - path: ${ZERO_REPLICA_FILE}
+    # The monitor-interval is the interval at which new l0 files are created.
+    monitor-interval: ${ZERO_LITESTREAM_INCREMENTAL_BACKUP_INTERVAL_SECONDS}s
+    replica:
+      url: ${ZERO_LITESTREAM_BACKUP_URL}
+      endpoint: ${ZERO_LITESTREAM_ENDPOINT}
+      region: ${ZERO_LITESTREAM_REGION}
+      auto-recover: true
+      concurrency: ${ZERO_LITESTREAM_MULTIPART_CONCURRENCY}
+      part-size: ${ZERO_LITESTREAM_MULTIPART_SIZE}
+
+logging:
+  level: ${ZERO_LITESTREAM_LOG_LEVEL}
+  type: ${ZERO_LOG_FORMAT}
+
+addr: localhost:${LITESTREAM_PORT}

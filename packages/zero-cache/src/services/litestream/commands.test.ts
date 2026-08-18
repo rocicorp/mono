@@ -40,6 +40,7 @@ vi.mock('node:child_process', async importOriginal => {
 function configWithFakeLitestream(
   sh: string,
   replicaFile?: string,
+  litestreamOverrides?: Record<string, unknown>,
 ): NormalizedZeroConfig {
   const dir = mkdtempSync(join(tmpdir(), 'litestream-test-'));
   const executable = join(dir, 'fake-litestream');
@@ -53,14 +54,17 @@ function configWithFakeLitestream(
       executable,
       backupURL: 's3://fake-bucket/backup',
       configPath: './src/services/litestream/config.yml',
+      configPathV5: './src/services/litestream/config-v5.yml',
       logLevel: 'warn',
       restoreUsingV5: false,
       checkpointThresholdMB: 40,
       incrementalBackupIntervalMinutes: 15,
+      incrementalBackupIntervalSeconds: 15,
       snapshotBackupIntervalHours: 12,
       multipartConcurrency: 48,
       multipartSize: 16 * 1024 * 1024,
       restoreParallelism: 48,
+      ...litestreamOverrides,
     },
   } as unknown as NormalizedZeroConfig;
 }
@@ -623,6 +627,56 @@ describe('litestream/commands restoreReplica', () => {
     expect(restoreCall?.[2]?.stdio).toEqual(['ignore', 'pipe', 'pipe']);
   });
 
+  // The v3/v5 fork is a silent one: v5 keys (l0-retention, levels,
+  // monitor-interval, ...) live only in config-v5.yml, so selecting the wrong
+  // file makes them no-ops with no error. Pin the mapping in both directions
+  // so a regression (e.g. inverting the `v5 ? configPathV5 : configPath`
+  // ternary) fails loudly.
+  async function litestreamConfigForRestore(
+    restoreUsingV5: boolean,
+  ): Promise<string | undefined> {
+    const spawnMock = vi.mocked(childProcess.spawn);
+    spawnMock.mockClear();
+    const dir = mkdtempSync(join(tmpdir(), 'litestream-restore-test-'));
+    const source = join(dir, 'source.db');
+    const replica = join(dir, 'replica.db');
+    createRestorableReplica(source, '01');
+    const {litestream} = configWithFakeLitestream(
+      `if [ "$1" = "restore" ]; then\n` +
+        `  cp "${source}" "$6"\n` +
+        `  exit 0\n` +
+        `fi\n` +
+        `exit 1`,
+      replica,
+      {restoreUsingV5},
+    );
+
+    await tryRestore(
+      lc,
+      litestream,
+      replica,
+      {replicaVersion: '01', minWatermark: '01'},
+      'replication_manager',
+    );
+
+    const restoreCall = spawnMock.mock.calls.find(
+      call => Array.isArray(call[1]) && call[1][0] === 'restore',
+    );
+    return restoreCall?.[2]?.env?.LITESTREAM_CONFIG;
+  }
+
+  test('restore uses the v5 config when restoreUsingV5 is set', async () => {
+    expect(await litestreamConfigForRestore(true)).toBe(
+      './src/services/litestream/config-v5.yml',
+    );
+  });
+
+  test('restore uses the v3 config when restoreUsingV5 is not set', async () => {
+    expect(await litestreamConfigForRestore(false)).toBe(
+      './src/services/litestream/config.yml',
+    );
+  });
+
   // The change log is a local cache that is deliberately not backed up: it
   // holds nothing that is not already in the replica's backup or re-derivable
   // from the upstream slot, and shipping it would give back the S3 and
@@ -651,5 +705,55 @@ describe('litestream/commands restoreReplica', () => {
     );
     expect(paths).toEqual([replica]);
     expect(paths).not.toContain(changeLogFileName(replica));
+  });
+
+  // Same invariant as above, for the v5 config we now render.
+  test('the rendered v5 litestream config never backs up the change-log database', () => {
+    const replica = join(
+      mkdtempSync(join(tmpdir(), 'litestream-config-test-')),
+      'replica.db',
+    );
+    const {litestream} = configWithFakeLitestream('exit 0', replica);
+    const env: Record<string, string> = {
+      ZERO_REPLICA_FILE: replica,
+      ZERO_LITESTREAM_BACKUP_URL: must(litestream.backupURL),
+    };
+    const yaml = readFileSync(
+      new URL('./config-v5.yml', import.meta.url),
+      'utf-8',
+    ).replace(/\$\{(\w+)\}/g, (_, name: string) => env[name] ?? '');
+
+    const paths = Array.from(
+      yaml.matchAll(/^\s*-?\s*path:\s*(\S+)\s*$/gm),
+      ([, path]) => path,
+    );
+    expect(paths).toEqual([replica]);
+    expect(paths).not.toContain(changeLogFileName(replica));
+  });
+
+  // Regression guard for a silent misconfiguration: `monitor-interval` is a
+  // DB-level key (it governs L0/LTX creation cadence). Nested under `replica:`
+  // it is an unknown key that litestream's non-strict YAML parser ignores, so
+  // the backup interval silently reverts to the 1s default. Assert it sits at
+  // the same indentation as `replica:` (a sibling under the db entry), not
+  // deeper.
+  test('config-v5.yml places monitor-interval at the db level, not under replica', () => {
+    const yaml = readFileSync(
+      new URL('./config-v5.yml', import.meta.url),
+      'utf-8',
+    );
+    const indentOf = (line: string) => line.length - line.trimStart().length;
+
+    const replicaLine = yaml
+      .split('\n')
+      .find(line => /^\s*replica:\s*$/.test(line));
+    const monitorLine = yaml
+      .split('\n')
+      .find(line => /^\s*monitor-interval:/.test(line));
+
+    expect(replicaLine).toBeDefined();
+    expect(monitorLine).toBeDefined();
+    // Sibling of `replica:` => nested one level under the `- path:` db entry.
+    expect(indentOf(must(monitorLine))).toBe(indentOf(must(replicaLine)));
   });
 });
