@@ -18,8 +18,8 @@ import {getSubscriptionState} from '../replicator/schema/replication-state.ts';
 import {
   litestreamBackupListDuration,
   litestreamBackupMetricAttrs,
-  litestreamBackupProcessMetricAttrs,
   litestreamBackupProcessDuration,
+  litestreamBackupProcessMetricAttrs,
   litestreamBackupProcessRuns,
   litestreamRestoreAttempts,
   litestreamRestoredDbBytes,
@@ -70,9 +70,11 @@ function getLitestream(
     executable,
     executableV5,
     restoreUsingV5,
+    backupUsingV5,
     backupURL,
     logLevel,
     configPath,
+    configPathV5,
     endpoint,
     region,
     port,
@@ -80,17 +82,20 @@ function getLitestream(
     minCheckpointPageCount = checkpointThresholdMB * 250, // SQLite page size is 4KB
     maxCheckpointPageCount = minCheckpointPageCount * 10,
     incrementalBackupIntervalMinutes,
+    incrementalBackupIntervalSeconds,
     snapshotBackupIntervalHours,
     multipartConcurrency,
     multipartSize,
   } = config;
 
+  const v5 =
+    (mode === 'restore' && restoreUsingV5) ||
+    (mode === 'replicate' && backupUsingV5);
   const litestream =
-    // The v0.5.8+ litestream executable can restore from either the new LTX
-    // format or the legacy WAL format, allowing forwards-compatibility /
-    // rollback safety with zero-cache versions that backup to LTX.
-    (mode === 'restore' && restoreUsingV5 ? executableV5 : executable) ??
+    (v5 ? executableV5 : executable) ??
     must(executable, `Missing --litestream-executable`);
+  const litestreamConfig = v5 ? configPathV5 : configPath;
+
   return {
     litestream,
     env: {
@@ -104,7 +109,10 @@ function getLitestream(
         maxCheckpointPageCount,
       ),
       ['ZERO_LITESTREAM_INCREMENTAL_BACKUP_INTERVAL_MINUTES']: String(
-        incrementalBackupIntervalMinutes,
+        incrementalBackupIntervalMinutes, // v3 only
+      ),
+      ['ZERO_LITESTREAM_INCREMENTAL_BACKUP_INTERVAL_SECONDS']: String(
+        incrementalBackupIntervalSeconds, // v5 only
       ),
       ['ZERO_LITESTREAM_LOG_LEVEL']: logLevelOverride ?? logLevel,
       ['ZERO_LITESTREAM_SNAPSHOT_BACKUP_INTERVAL_HOURS']: String(
@@ -116,7 +124,7 @@ function getLitestream(
       ['ZERO_LITESTREAM_MULTIPART_CONCURRENCY']: String(multipartConcurrency),
       ['ZERO_LITESTREAM_MULTIPART_SIZE']: String(multipartSize),
       ['ZERO_LOG_FORMAT']: 'json',
-      ['LITESTREAM_CONFIG']: configPath,
+      ['LITESTREAM_CONFIG']: litestreamConfig,
       ['LITESTREAM_PORT']: String(port),
       ...(endpoint ? {['ZERO_LITESTREAM_ENDPOINT']: endpoint} : {}),
       ...(region ? {['ZERO_LITESTREAM_REGION']: region} : {}),
