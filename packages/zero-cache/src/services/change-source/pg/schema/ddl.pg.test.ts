@@ -1353,6 +1353,48 @@ describe('change-source/tables/ddl', () => {
 
   test.each([
     [
+      'CREATE TABLE AS',
+      `CREATE TABLE pub.ctas_table AS SELECT 1::INT8 AS id, 'one'::TEXT AS value`,
+      'ctas_table',
+      'CREATE TABLE AS',
+    ],
+    [
+      'SELECT INTO',
+      `SELECT 1::INT8 AS id, 'one'::TEXT AS value INTO pub.select_into_table`,
+      'select_into_table',
+      'SELECT INTO',
+    ],
+  ])('%s emits a schema update', async (endTag, query, tableName, startTag) => {
+    await upstream.unsafe(query);
+
+    const messages = await expectReplicationMessagesToMatchObject([
+      {tag: 'begin'},
+      {tag: 'message', prefix: 'zap/0/ddl'},
+      {tag: 'relation'},
+      {tag: 'insert'},
+      {tag: 'message', prefix: 'zap/0/ddl'},
+      {tag: 'commit'},
+    ]);
+
+    expect(parseDDLStartEvent(messages[1] as MessageMessage)).toMatchObject({
+      type: 'ddlStart',
+      event: {tag: startTag},
+      context: {query},
+    });
+
+    const update = parseDDLUpdateEvent(messages[4] as MessageMessage);
+    expect(update).toMatchObject({
+      type: 'ddlUpdate',
+      event: {tag: endTag},
+      context: {query},
+    });
+    expect(update.schema.tables).toContainEqual(
+      expect.objectContaining({schema: 'pub', name: tableName}),
+    );
+  });
+
+  test.each([
+    [
       'COMMENT',
       /*sql*/ `
       ALTER PUBLICATION zero_sum DROP TABLE pub.boo;
