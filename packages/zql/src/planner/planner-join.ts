@@ -136,6 +136,14 @@ export class PlannerJoin {
     return this.#output;
   }
 
+  get parent(): Exclude<PlannerNode, PlannerTerminus> {
+    return this.#parent;
+  }
+
+  get child(): Exclude<PlannerNode, PlannerTerminus> {
+    return this.#child;
+  }
+
   closestJoinOrSource(): JoinOrConnection {
     return 'join';
   }
@@ -467,6 +475,8 @@ function getNodeName(node: PlannerNode): string {
       return 'FO';
     case 'fan-in':
       return 'FI';
+    case 'filter':
+      return 'filter';
     case 'terminus':
       return 'terminus';
   }

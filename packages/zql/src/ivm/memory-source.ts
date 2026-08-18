@@ -275,8 +275,19 @@ export class MemorySource implements Source {
       ? (r1, r2) => compareRows(r2, r1)
       : compareRows;
 
+    const reqFilter = req.filter;
+    const connFilterCondition = conn.filters?.condition;
+    const mergedFilterCondition: NoSubqueryCondition | undefined =
+      connFilterCondition && reqFilter
+        ? {type: 'and', conditions: [connFilterCondition, reqFilter]}
+        : (connFilterCondition ?? reqFilter);
+    const mergedFilterPredicate = mergePredicates(
+      conn.filters?.predicate,
+      reqFilter,
+    );
+
     const pkConstraint = primaryKeyConstraintFromFilters(
-      conn.filters?.condition,
+      mergedFilterCondition,
       this.#primaryKey,
     );
     // The primary key constraint will be more limiting than the constraint
@@ -353,7 +364,7 @@ export class MemorySource implements Source {
     // a large amount of per-row generator-resume overhead on the hottest path.
     const overlayActive =
       this.#overlay && conn.lastPushedEpoch >= this.#overlay.epoch;
-    if (!overlayActive && !req.start && !conn.filters) {
+    if (!overlayActive && !req.start && !conn.filters && !req.filter) {
       const {constraint} = req;
       for (const row of rowsIterable) {
         if (constraint && !constraintMatchesRow(constraint, row)) {
@@ -383,7 +394,7 @@ export class MemorySource implements Source {
       // not yet yielded add overlay will be yielded when the first row
       // not matching the constraint is reached.
       indexComparator,
-      conn.filters?.predicate,
+      mergedFilterPredicate,
     );
 
     const withConstraint = generateWithConstraint(
@@ -395,8 +406,8 @@ export class MemorySource implements Source {
       req.constraint,
     );
 
-    yield* conn.filters
-      ? generateWithFilter(withConstraint, conn.filters.predicate)
+    yield* mergedFilterPredicate
+      ? generateWithFilter(withConstraint, mergedFilterPredicate)
       : withConstraint;
   }
 
@@ -523,6 +534,20 @@ export class MemorySource implements Source {
       }
     }
   }
+}
+
+function mergePredicates(
+  connPredicate: ((row: Row) => boolean) | undefined,
+  reqFilter: NoSubqueryCondition | undefined,
+): ((row: Row) => boolean) | undefined {
+  if (!reqFilter) {
+    return connPredicate;
+  }
+  const reqPredicate = createPredicate(reqFilter);
+  if (!connPredicate) {
+    return reqPredicate;
+  }
+  return row => connPredicate(row) && reqPredicate(row);
 }
 
 function* generateWithConstraint(

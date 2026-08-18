@@ -3,6 +3,7 @@ import {assert} from '../../shared/src/asserts.ts';
 import {must} from '../../shared/src/must.ts';
 import type {Condition, Ordering} from '../../zero-protocol/src/ast.ts';
 import type {SchemaValue} from '../../zero-types/src/schema-value.ts';
+import {transformFilters} from '../../zql/src/builder/filter.ts';
 import type {
   ConnectionCostModel,
   CostModelCost,
@@ -10,7 +11,7 @@ import type {
 import type {PlannerConstraint} from '../../zql/src/planner/planner-constraint.ts';
 import type {Database, Statement} from './db.ts';
 import {compileInline} from './internal/sql-inline.ts';
-import {buildSelectQuery, type NoSubqueryCondition} from './query-builder.ts';
+import {buildSelectQuery} from './query-builder.ts';
 import {SQLiteStatFanout} from './sqlite-stat-fanout.ts';
 
 /**
@@ -47,12 +48,22 @@ export function createSQLiteCostModel(
     filters: Condition | undefined,
     constraint: PlannerConstraint | undefined,
   ): CostModelCost => {
-    // Transform filters to remove correlated subqueries
-    // The cost model can't handle correlated subqueries, so we estimate cost
-    // without them. This is conservative - actual cost may be higher.
-    const noSubqueryFilters = filters
-      ? removeCorrelatedSubqueries(filters)
-      : undefined;
+    // Transform filters to remove correlated subqueries.
+    //
+    // We use `transformFilters` (the same function the runtime uses to
+    // decide what to push to the source at connection time). It returns:
+    // - For AND: the non-CSQ conjuncts (a *superset* of the original).
+    // - For OR with any CSQ branch: `undefined` (the OR-with-CSQ is not
+    //   pushable, and matches a strict superset of any single branch).
+    //
+    // This matches what the runtime actually applies at the source. A
+    // previous implementation here had wrong OR semantics — it dropped the
+    // CSQ branch and returned the simple branch alone, which is a strict
+    // *subset* of the original OR's match set, causing the cost model to
+    // under-estimate scan rows for OR-with-CSQ shapes and biasing the
+    // planner toward semi-join plans. See the comment in
+    // `packages/zql/src/builder/filter.ts:transformFilters`.
+    const noSubqueryFilters = transformFilters(filters).filters;
 
     // Build the SQL query using the same logic as actual queries
     const {zqlSpec} = must(tableSpecs.get(tableName));
@@ -92,39 +103,6 @@ export function createSQLiteCostModel(
 
     return ret;
   };
-}
-
-/**
- * Removes correlated subqueries from conditions.
- * The cost model estimates cost without correlated subqueries since
- * they can't be included in the scanstatus query.
- */
-function removeCorrelatedSubqueries(
-  condition: Condition,
-): NoSubqueryCondition | undefined {
-  switch (condition.type) {
-    case 'correlatedSubquery':
-      // Remove subqueries - we can't estimate their cost via scanstatus
-      return undefined;
-    case 'simple':
-      return condition;
-    case 'and': {
-      const filtered = condition.conditions
-        .map(c => removeCorrelatedSubqueries(c))
-        .filter((c): c is NoSubqueryCondition => c !== undefined);
-      if (filtered.length === 0) return undefined;
-      if (filtered.length === 1) return filtered[0];
-      return {type: 'and', conditions: filtered};
-    }
-    case 'or': {
-      const filtered = condition.conditions
-        .map(c => removeCorrelatedSubqueries(c))
-        .filter((c): c is NoSubqueryCondition => c !== undefined);
-      if (filtered.length === 0) return undefined;
-      if (filtered.length === 1) return filtered[0];
-      return {type: 'or', conditions: filtered};
-    }
-  }
 }
 
 /**
