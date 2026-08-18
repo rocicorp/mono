@@ -312,11 +312,13 @@ async function assertBareImportsAreDeclared() {
 async function copyStaticFiles() {
   // Copy litestream config.yml to output directory
   const relPath = 'zero-cache/src/services/litestream';
-  const fileName = 'config.yml';
+  const fileNames = ['config.yml', 'config-v5.yml'];
   const srcDir = resolve('..', relPath);
   const destDir = resolve('out', relPath);
   await mkdir(destDir, {recursive: true});
-  await copyFile(resolve(srcDir, fileName), resolve(destDir, fileName));
+  for (const fileName of fileNames) {
+    await copyFile(resolve(srcDir, fileName), resolve(destDir, fileName));
+  }
 }
 
 async function runPromise(p: Promise<unknown>, label: string) {
