@@ -24,7 +24,12 @@ export function canonicalReplicaState(db: Database) {
       name,
       columns: Object.entries(columns)
         .filter(([column]) => column !== ZERO_VERSION_COLUMN_NAME)
-        .map(([column, spec], pos) => ({column, ...spec, pos: pos + 1})),
+        .map(([column, spec], pos) => ({
+          column,
+          ...spec,
+          dataType: canonicalPhysicalDataType(spec.dataType),
+          pos: pos + 1,
+        })),
     }))
     .sort(byName);
 
@@ -83,6 +88,11 @@ export function canonicalReplicaState(db: Database) {
 
 function byName<T extends {name: string}>(a: T, b: T) {
   return a.name.localeCompare(b.name);
+}
+
+function canonicalPhysicalDataType(dataType: string) {
+  // Nullability is logical metadata, and SQLite type names are case-insensitive.
+  return dataType.replace('|NOT_NULL', '').toLowerCase();
 }
 
 function canonicalizeRow(row: Record<string, unknown>) {
