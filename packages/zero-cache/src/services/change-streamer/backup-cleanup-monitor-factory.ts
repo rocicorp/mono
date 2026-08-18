@@ -47,12 +47,16 @@ export function createBackupCleanupMonitor({
   } else if (config.litestream.backupUsingV5) {
     const {
       logLevel,
+      endpoint,
+      region,
       vfsLogFile: logFile,
       vfsProbeIntervalMs: remotePollIntervalMs,
     } = litestream;
     const sub = Subscription.create<BackedUpWatermark>();
     const vfsEnv = getVfsEnv({
       backupURL,
+      endpoint,
+      region,
       logLevel,
       logFile,
       remotePollIntervalMs,
