@@ -15,6 +15,15 @@ export type PendingUpstreamCommit = {
  * distribution rather than a periodic snapshot of how far behind things are.
  * A ViewSyncer that is stuck contributes nothing until it recovers, instead of
  * re-reporting its age on every sample tick.
+ *
+ * "Reaches clients" includes an advancement that had nothing to send this
+ * client group. Such an advancement still establishes that the group is
+ * current as of that commit, so it must clear the pending commit; a tracker
+ * that waited for a *data* poke would instead accumulate the oldest commit
+ * across every quiet interval and report the whole interval as lag the next
+ * time the group happened to match a transaction. The caller is responsible
+ * for passing the replica version it advanced to rather than the CVR version,
+ * which only moves when there is something to write.
  */
 export class E2EServingLagTracker {
   #pending: PendingUpstreamCommit | null = null;

@@ -4222,6 +4222,7 @@ describe('view-syncer/service', () => {
 
     // Perform an unrelated transaction that does not affect any queries.
     // This should not result in a poke.
+    await vi.waitFor(() => expect(vs.servedVersion).toBe('01'));
     replicator.processTransaction(
       '101',
       messages.insert('users', {
@@ -4231,6 +4232,12 @@ describe('view-syncer/service', () => {
     );
     stateChanges.push({state: 'version-ready'});
     await expectNoPokes(client);
+
+    // ... but the client group *is* current as of '101'. The CVR version does
+    // not move (nothing was written), so servedVersion has to track the replica
+    // version that was advanced to. Otherwise sync.serving_lag_stats and
+    // sync.e2e_serving_lag would report the growing time since '01' as lag.
+    await vi.waitFor(() => expect(vs.servedVersion).toBe('101'));
 
     // Then, a relevant change should bump the client from '01' directly to '123'.
     replicator.processTransaction(
