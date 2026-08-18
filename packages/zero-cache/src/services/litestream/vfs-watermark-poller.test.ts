@@ -6,7 +6,7 @@ import {afterEach, beforeEach, describe, expect, test, vi} from 'vitest';
 import {createSilentLogContext} from '../../../../shared/src/logging-test-utils.ts';
 import {Database} from '../../../../zqlite/src/db.ts';
 import type {Worker} from '../../types/processes.ts';
-import {VfsBackupWatermarkPoller} from './vfs-watermark-poller.ts';
+import {getVfsEnv, VfsBackupWatermarkPoller} from './vfs-watermark-poller.ts';
 
 const lc = createSilentLogContext();
 
@@ -152,6 +152,23 @@ function makePoller(
     remoteCloseCount: () => remoteCloseCount,
   };
 }
+
+test('vfs env', () => {
+  expect(
+    getVfsEnv({
+      backupURL: 's3://foo/bar',
+      remotePollIntervalMs: 15000,
+      region: 'us-west-1',
+      logLevel: 'info',
+      logFile: '/tmp/log',
+    }),
+  ).toMatchObject({
+    LITESTREAM_LOG_FILE: '/tmp/log',
+    LITESTREAM_LOG_LEVEL: 'info',
+    LITESTREAM_POLL_INTERVAL: '15000ms',
+    LITESTREAM_REPLICA_URL: 's3://foo/bar?region=us-west-1',
+  });
+});
 
 describe('litestream/vfs-watermark-poller checkWatermarks', () => {
   test('opens remote once on startup, then stays idle while local matches', () => {

@@ -51,6 +51,7 @@ type WatermarkReader<Result extends WatermarkRow> = {
 // https://github.com/benbjohnson/litestream/issues/1150 is released.
 export type VfsBackupWatermarkPollerEnvOptions = {
   readonly backupURL: string;
+  readonly remotePollIntervalMs: number;
   readonly endpoint?: string | undefined;
   readonly region?: string | undefined;
 
@@ -109,6 +110,11 @@ export function getVfsEnv(
     LITESTREAM_REPLICA_URL: buildLitestreamVfsReplicaURL(options),
     LITESTREAM_LOG_LEVEL: options.logLevel ?? DEFAULT_VFS_LOG_LEVEL,
     LITESTREAM_LOG_FILE: options.logFile,
+
+    // Supported by the rocicorp fork: https://github.com/rocicorp/litestream/pull/20
+    // TODO: Remove and use official build when
+    // https://github.com/benbjohnson/litestream/pull/1157 is released.
+    LITESTREAM_POLL_INTERVAL: `${options.remotePollIntervalMs}ms`,
   };
 }
 
