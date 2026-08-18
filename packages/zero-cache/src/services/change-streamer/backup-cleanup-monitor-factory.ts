@@ -45,9 +45,18 @@ export function createBackupCleanupMonitor({
   if (!backupURL) {
     stream = new ReplicaPoller(lc, replicaFile).start();
   } else if (config.litestream.backupUsingV5) {
-    const {logLevel, vfsLogFile: logFile} = litestream;
+    const {
+      logLevel,
+      vfsLogFile: logFile,
+      vfsProbeIntervalMs: remotePollIntervalMs,
+    } = litestream;
     const sub = Subscription.create<BackedUpWatermark>();
-    const vfsEnv = getVfsEnv({backupURL, logLevel, logFile});
+    const vfsEnv = getVfsEnv({
+      backupURL,
+      logLevel,
+      logFile,
+      remotePollIntervalMs,
+    });
     processes
       .addWorker(
         forkChildWorker(BACKUP_WATERMARK_POLLER_URL, {...env, ...vfsEnv}),
