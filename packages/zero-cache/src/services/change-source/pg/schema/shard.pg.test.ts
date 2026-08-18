@@ -72,6 +72,7 @@ describe('change-source/pg', () => {
       [`_zro_metadata_0`, 'zro', 'permissions', null],
       [`_zro_metadata_0`, `zro_0`, 'clients', null],
       [`_zro_metadata_0`, `zro_0`, 'mutations', null],
+      [`_zro_metadata_0`, `zro_0`, 'replicas', null],
       ['_zro_public_0', null, null, null],
     ]);
 
@@ -123,6 +124,7 @@ describe('change-source/pg', () => {
       [`_zro_metadata_0`, 'zro', 'permissions', null],
       [`_zro_metadata_0`, `zro_0`, 'clients', null],
       [`_zro_metadata_0`, `zro_0`, 'mutations', null],
+      [`_zro_metadata_0`, `zro_0`, 'replicas', null],
       ['_zro_public_0', 'public', 'join_table', null],
     ]);
 
@@ -161,6 +163,7 @@ describe('change-source/pg', () => {
       [`_1_metadata_0`, '1', 'permissions', null],
       [`_1_metadata_0`, `1_0`, 'clients', null],
       [`_1_metadata_0`, `1_0`, 'mutations', null],
+      [`_1_metadata_0`, `1_0`, 'replicas', null],
       [`_1_public_0`, null, null, null],
     ]);
 
@@ -198,9 +201,11 @@ describe('change-source/pg', () => {
       [`_zro_metadata_0`, 'zro', 'permissions', null],
       [`_zro_metadata_0`, `zro_0`, 'clients', null],
       [`_zro_metadata_0`, `zro_0`, 'mutations', null],
+      [`_zro_metadata_0`, `zro_0`, 'replicas', null],
       [`_zro_metadata_1`, 'zro', 'permissions', null],
       [`_zro_metadata_1`, `zro_1`, 'clients', null],
       [`_zro_metadata_1`, `zro_1`, 'mutations', null],
+      [`_zro_metadata_1`, `zro_1`, 'replicas', null],
       ['_zro_public_0', null, null, null],
       ['_zro_public_1', null, null, null],
     ]);
@@ -288,6 +293,7 @@ describe('change-source/pg', () => {
       [`_zro_metadata_2`, 'zro', 'permissions', null],
       [`_zro_metadata_2`, `zro_2`, 'clients', null],
       [`_zro_metadata_2`, `zro_2`, 'mutations', null],
+      [`_zro_metadata_2`, `zro_2`, 'replicas', null],
       ['zero_bar', 'far', 'bar', null],
       ['zero_foo', 'public', 'foo', '(id > 1000)'],
     ]);
@@ -327,6 +333,7 @@ describe('change-source/pg', () => {
       [`_supaneon_metadata_0`, 'supaneon', 'permissions', null],
       [`_supaneon_metadata_0`, `supaneon_0`, 'clients', null],
       ['_supaneon_metadata_0', 'supaneon_0', 'mutations', null],
+      ['_supaneon_metadata_0', 'supaneon_0', 'replicas', null],
       ['zero_foo', 'public', 'foo', null],
     ]);
 

@@ -120,6 +120,24 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
     return queue;
   }
 
+  // The "replicas" table is included in the metadata publication (see
+  // schema/shard.ts) so that the change-log and replica backups advance
+  // past the consistent_point_lsn of new replication slots. This means
+  // that the stream started from watermark '00' in beforeAll() replays,
+  // as its first transaction(s), bookkeeping changes to the replica's own
+  // row in that table (the INSERT from initial sync, and an UPDATE from
+  // starting the stream). None of the test.each cases below are concerned
+  // with those bookkeeping rows, so transactions consisting entirely of
+  // such changes are applied to the replica (to keep it consistent) but
+  // not surfaced to callers of nextTransaction().
+  function isReplicasBookkeepingChange(change: DataOrSchemaChange): boolean {
+    return (
+      'relation' in change &&
+      change.relation.name === 'replicas' &&
+      change.relation.schema === `${APP_ID}_0`
+    );
+  }
+
   async function nextTransaction(): Promise<DataOrSchemaChange[]> {
     const data: DataOrSchemaChange[] = [];
     for (;;) {
@@ -139,10 +157,11 @@ describe('change-source/pg/end-to-mid-test', {timeout: 30000}, () => {
           data.push(change[1]);
           break;
         case 'commit':
-          if (data.length) {
+          if (data.length && !data.every(isReplicasBookkeepingChange)) {
             return data;
           }
-          break; // skip empty transactions
+          data.length = 0; // skip empty or bookkeeping-only transactions
+          break;
         case 'rollback':
           throw new Error(`received rollback: ${JSON.stringify(change)}`);
         case 'control':

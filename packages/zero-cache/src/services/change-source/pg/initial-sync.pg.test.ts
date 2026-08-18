@@ -132,6 +132,98 @@ const ZERO_CLIENTS_SPEC: PublishedTableSpec = {
   publications: {[`_${APP_ID}_metadata_${SHARD_NUM}`]: {rowFilter: null}},
 } as const;
 
+const ZERO_REPLICAS_SPEC: PublishedTableSpec = {
+  columns: {
+    id: {
+      pos: 1,
+      characterMaximumLength: null,
+      dataType: 'text',
+      typeOID: 25,
+      notNull: true,
+      dflt: "replace((gen_random_uuid())::text, '-'::text, ''::text)",
+      elemPgTypeClass: null,
+    },
+    rank: {
+      pos: 2,
+      characterMaximumLength: null,
+      dataType: 'int8',
+      typeOID: 20,
+      notNull: true,
+      dflt: `nextval('"${APP_ID}_${SHARD_NUM}".replicas_rank_seq'::regclass)`,
+      elemPgTypeClass: null,
+    },
+    slot: {
+      pos: 3,
+      characterMaximumLength: null,
+      dataType: 'text',
+      typeOID: 25,
+      notNull: true,
+      dflt: null,
+      elemPgTypeClass: null,
+    },
+    version: {
+      pos: 4,
+      characterMaximumLength: null,
+      dataType: 'text',
+      typeOID: 25,
+      notNull: true,
+      dflt: null,
+      elemPgTypeClass: null,
+    },
+    generation: {
+      pos: 5,
+      characterMaximumLength: null,
+      dataType: 'text',
+      typeOID: 25,
+      notNull: false,
+      dflt: null,
+      elemPgTypeClass: null,
+    },
+    backupPath: {
+      pos: 6,
+      characterMaximumLength: null,
+      dataType: 'text',
+      typeOID: 25,
+      notNull: false,
+      dflt: null,
+      elemPgTypeClass: null,
+    },
+    initialSchema: {
+      pos: 7,
+      characterMaximumLength: null,
+      dataType: 'json',
+      typeOID: 114,
+      notNull: false,
+      dflt: null,
+      elemPgTypeClass: null,
+    },
+    initialSyncContext: {
+      pos: 8,
+      characterMaximumLength: null,
+      dataType: 'json',
+      typeOID: 114,
+      notNull: false,
+      dflt: null,
+      elemPgTypeClass: null,
+    },
+    subscriberContext: {
+      pos: 9,
+      characterMaximumLength: null,
+      dataType: 'json',
+      typeOID: 114,
+      notNull: false,
+      dflt: null,
+      elemPgTypeClass: null,
+    },
+  },
+  oid: expect.any(Number),
+  name: 'replicas',
+  primaryKey: ['id'],
+  schema: `${APP_ID}_${SHARD_NUM}`,
+  schemaOID: expect.any(Number),
+  publications: {[`_${APP_ID}_metadata_${SHARD_NUM}`]: {rowFilter: null}},
+} as const;
+
 const ZERO_MUTATIONS_SPEC: PublishedTableSpec = {
   columns: {
     clientGroupID: {
@@ -285,6 +377,84 @@ const REPLICATED_ZERO_MUTATIONS_SPEC: LiteTableSpec = {
   name: `${APP_ID}_${SHARD_NUM}.mutations`,
 } as const;
 
+const REPLICATED_ZERO_REPLICAS_SPEC: LiteTableSpec = {
+  columns: {
+    id: {
+      pos: 1,
+      characterMaximumLength: null,
+      dataType: 'text|NOT_NULL',
+      notNull: false,
+      dflt: null,
+      elemPgTypeClass: null,
+    },
+    rank: {
+      pos: 2,
+      characterMaximumLength: null,
+      dataType: 'int8|NOT_NULL',
+      notNull: false,
+      dflt: null,
+      elemPgTypeClass: null,
+    },
+    slot: {
+      pos: 3,
+      characterMaximumLength: null,
+      dataType: 'text|NOT_NULL',
+      notNull: false,
+      dflt: null,
+      elemPgTypeClass: null,
+    },
+    version: {
+      pos: 4,
+      characterMaximumLength: null,
+      dataType: 'text|NOT_NULL',
+      notNull: false,
+      dflt: null,
+      elemPgTypeClass: null,
+    },
+    generation: {
+      pos: 5,
+      characterMaximumLength: null,
+      dataType: 'text',
+      notNull: false,
+      dflt: null,
+      elemPgTypeClass: null,
+    },
+    backupPath: {
+      pos: 6,
+      characterMaximumLength: null,
+      dataType: 'text',
+      notNull: false,
+      dflt: null,
+      elemPgTypeClass: null,
+    },
+    initialSchema: {
+      pos: 7,
+      characterMaximumLength: null,
+      dataType: 'json',
+      notNull: false,
+      dflt: null,
+      elemPgTypeClass: null,
+    },
+    initialSyncContext: {
+      pos: 8,
+      characterMaximumLength: null,
+      dataType: 'json',
+      notNull: false,
+      dflt: null,
+      elemPgTypeClass: null,
+    },
+    subscriberContext: {
+      pos: 9,
+      characterMaximumLength: null,
+      dataType: 'json',
+      notNull: false,
+      dflt: null,
+      elemPgTypeClass: null,
+    },
+  },
+  name: `${APP_ID}_${SHARD_NUM}.replicas`,
+} as const;
+
 const WATERMARK_REGEX = /[0-9a-z]{4,}/;
 
 describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
@@ -309,11 +479,13 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
         [`${APP_ID}_${SHARD_NUM}.clients`]: ZERO_CLIENTS_SPEC,
         [`${APP_ID}_${SHARD_NUM}.mutations`]: ZERO_MUTATIONS_SPEC,
         [`${APP_ID}.permissions`]: ZERO_PERMISSIONS_SPEC,
+        [`${APP_ID}_${SHARD_NUM}.replicas`]: ZERO_REPLICAS_SPEC,
       },
       replicatedSchema: {
         [`${APP_ID}_${SHARD_NUM}.clients`]: REPLICATED_ZERO_CLIENTS_SPEC,
         [`${APP_ID}_${SHARD_NUM}.mutations`]: REPLICATED_ZERO_MUTATIONS_SPEC,
         [`${APP_ID}.permissions`]: REPLICATED_ZERO_PERMISSIONS_SPEC,
+        [`${APP_ID}_${SHARD_NUM}.replicas`]: REPLICATED_ZERO_REPLICAS_SPEC,
       },
       replicatedIndexes: [
         {
@@ -342,6 +514,13 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
           name: 'mutations_pkey',
           schema: `${APP_ID}_${SHARD_NUM}`,
           tableName: 'mutations',
+          unique: true,
+        },
+        {
+          columns: {id: 'ASC'},
+          name: 'replicas_pkey',
+          schema: `${APP_ID}_${SHARD_NUM}`,
+          tableName: 'replicas',
           unique: true,
         },
       ],
@@ -455,6 +634,87 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
             table_name: '1_18.mutations',
             upstream_type: 'json',
           },
+          {
+            character_max_length: null,
+            column_name: 'backupPath',
+            is_array: 0n,
+            is_enum: 0n,
+            is_not_null: 0n,
+            table_name: '1_18.replicas',
+            upstream_type: 'text',
+          },
+          {
+            character_max_length: null,
+            column_name: 'generation',
+            is_array: 0n,
+            is_enum: 0n,
+            is_not_null: 0n,
+            table_name: '1_18.replicas',
+            upstream_type: 'text',
+          },
+          {
+            character_max_length: null,
+            column_name: 'id',
+            is_array: 0n,
+            is_enum: 0n,
+            is_not_null: 1n,
+            table_name: '1_18.replicas',
+            upstream_type: 'text',
+          },
+          {
+            character_max_length: null,
+            column_name: 'initialSchema',
+            is_array: 0n,
+            is_enum: 0n,
+            is_not_null: 0n,
+            table_name: '1_18.replicas',
+            upstream_type: 'json',
+          },
+          {
+            character_max_length: null,
+            column_name: 'initialSyncContext',
+            is_array: 0n,
+            is_enum: 0n,
+            is_not_null: 0n,
+            table_name: '1_18.replicas',
+            upstream_type: 'json',
+          },
+          {
+            character_max_length: null,
+            column_name: 'rank',
+            is_array: 0n,
+            is_enum: 0n,
+            is_not_null: 1n,
+            table_name: '1_18.replicas',
+            upstream_type: 'int8',
+          },
+          {
+            character_max_length: null,
+            column_name: 'slot',
+            is_array: 0n,
+            is_enum: 0n,
+            is_not_null: 1n,
+            table_name: '1_18.replicas',
+            upstream_type: 'text',
+          },
+          {
+            character_max_length: null,
+            column_name: 'subscriberContext',
+            is_array: 0n,
+            is_enum: 0n,
+            is_not_null: 0n,
+            table_name: '1_18.replicas',
+            upstream_type: 'json',
+          },
+          {
+            character_max_length: null,
+            column_name: 'version',
+            is_array: 0n,
+            is_enum: 0n,
+            is_not_null: 1n,
+            table_name: '1_18.replicas',
+            upstream_type: 'text',
+          },
         ],
       },
       resultingPublications: [
@@ -500,6 +760,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
         [`${APP_ID}_${SHARD_NUM}.clients`]: ZERO_CLIENTS_SPEC,
         [`${APP_ID}_${SHARD_NUM}.mutations`]: ZERO_MUTATIONS_SPEC,
         [`${APP_ID}.permissions`]: ZERO_PERMISSIONS_SPEC,
+        [`${APP_ID}_${SHARD_NUM}.replicas`]: ZERO_REPLICAS_SPEC,
         ['public.issues']: {
           columns: {
             'issueID': {
@@ -695,6 +956,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
       },
       replicatedSchema: {
         [`${APP_ID}_${SHARD_NUM}.clients`]: REPLICATED_ZERO_CLIENTS_SPEC,
+        [`${APP_ID}_${SHARD_NUM}.replicas`]: REPLICATED_ZERO_REPLICAS_SPEC,
         ['issues']: {
           columns: {
             'issueID': {
@@ -887,6 +1149,13 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
           name: 'mutations_pkey',
           schema: `${APP_ID}_${SHARD_NUM}`,
           tableName: 'mutations',
+          unique: true,
+        },
+        {
+          columns: {id: 'ASC'},
+          name: 'replicas_pkey',
+          schema: `${APP_ID}_${SHARD_NUM}`,
+          tableName: 'replicas',
           unique: true,
         },
         {
@@ -1116,6 +1385,87 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
           },
           {
             character_max_length: null,
+            column_name: 'backupPath',
+            is_array: 0n,
+            is_enum: 0n,
+            is_not_null: 0n,
+            table_name: '1_18.replicas',
+            upstream_type: 'text',
+          },
+          {
+            character_max_length: null,
+            column_name: 'generation',
+            is_array: 0n,
+            is_enum: 0n,
+            is_not_null: 0n,
+            table_name: '1_18.replicas',
+            upstream_type: 'text',
+          },
+          {
+            character_max_length: null,
+            column_name: 'id',
+            is_array: 0n,
+            is_enum: 0n,
+            is_not_null: 1n,
+            table_name: '1_18.replicas',
+            upstream_type: 'text',
+          },
+          {
+            character_max_length: null,
+            column_name: 'initialSchema',
+            is_array: 0n,
+            is_enum: 0n,
+            is_not_null: 0n,
+            table_name: '1_18.replicas',
+            upstream_type: 'json',
+          },
+          {
+            character_max_length: null,
+            column_name: 'initialSyncContext',
+            is_array: 0n,
+            is_enum: 0n,
+            is_not_null: 0n,
+            table_name: '1_18.replicas',
+            upstream_type: 'json',
+          },
+          {
+            character_max_length: null,
+            column_name: 'rank',
+            is_array: 0n,
+            is_enum: 0n,
+            is_not_null: 1n,
+            table_name: '1_18.replicas',
+            upstream_type: 'int8',
+          },
+          {
+            character_max_length: null,
+            column_name: 'slot',
+            is_array: 0n,
+            is_enum: 0n,
+            is_not_null: 1n,
+            table_name: '1_18.replicas',
+            upstream_type: 'text',
+          },
+          {
+            character_max_length: null,
+            column_name: 'subscriberContext',
+            is_array: 0n,
+            is_enum: 0n,
+            is_not_null: 0n,
+            table_name: '1_18.replicas',
+            upstream_type: 'json',
+          },
+          {
+            character_max_length: null,
+            column_name: 'version',
+            is_array: 0n,
+            is_enum: 0n,
+            is_not_null: 1n,
+            table_name: '1_18.replicas',
+            upstream_type: 'text',
+          },
+          {
+            character_max_length: null,
             column_name: 'bigint',
             is_array: 0n,
             is_enum: 0n,
@@ -1307,6 +1657,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
         [`${APP_ID}_${SHARD_NUM}.clients`]: ZERO_CLIENTS_SPEC,
         [`${APP_ID}_${SHARD_NUM}.mutations`]: ZERO_MUTATIONS_SPEC,
         [`${APP_ID}.permissions`]: ZERO_PERMISSIONS_SPEC,
+        [`${APP_ID}_${SHARD_NUM}.replicas`]: ZERO_REPLICAS_SPEC,
         ['public.foo']: {
           columns: {
             id: {
@@ -1365,6 +1716,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
       },
       replicatedSchema: {
         [`${APP_ID}_${SHARD_NUM}.clients`]: REPLICATED_ZERO_CLIENTS_SPEC,
+        [`${APP_ID}_${SHARD_NUM}.replicas`]: REPLICATED_ZERO_REPLICAS_SPEC,
         ['foo']: {
           columns: {
             id: {
@@ -1449,6 +1801,13 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
         },
         {
           columns: {id: 'ASC'},
+          name: 'replicas_pkey',
+          schema: `${APP_ID}_${SHARD_NUM}`,
+          tableName: 'replicas',
+          unique: true,
+        },
+        {
+          columns: {id: 'ASC'},
           name: 'foo_pkey',
           schema: 'public',
           tableName: 'foo',
@@ -1497,6 +1856,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
         [`${APP_ID}_${SHARD_NUM}.clients`]: ZERO_CLIENTS_SPEC,
         [`${APP_ID}_${SHARD_NUM}.mutations`]: ZERO_MUTATIONS_SPEC,
         [`${APP_ID}.permissions`]: ZERO_PERMISSIONS_SPEC,
+        [`${APP_ID}_${SHARD_NUM}.replicas`]: ZERO_REPLICAS_SPEC,
         ['public.users']: {
           columns: {
             userID: {
@@ -1531,6 +1891,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
         [`${APP_ID}_${SHARD_NUM}.clients`]: REPLICATED_ZERO_CLIENTS_SPEC,
         [`${APP_ID}_${SHARD_NUM}.mutations`]: REPLICATED_ZERO_MUTATIONS_SPEC,
         [`${APP_ID}.permissions`]: REPLICATED_ZERO_PERMISSIONS_SPEC,
+        [`${APP_ID}_${SHARD_NUM}.replicas`]: REPLICATED_ZERO_REPLICAS_SPEC,
         ['users']: {
           columns: {
             userID: {
@@ -1588,6 +1949,13 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
           name: 'mutations_pkey',
           schema: `${APP_ID}_${SHARD_NUM}`,
           tableName: 'mutations',
+          unique: true,
+        },
+        {
+          columns: {id: 'ASC'},
+          name: 'replicas_pkey',
+          schema: `${APP_ID}_${SHARD_NUM}`,
+          tableName: 'replicas',
           unique: true,
         },
         {
@@ -1637,6 +2005,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
         [`${APP_ID}_${SHARD_NUM}.clients`]: ZERO_CLIENTS_SPEC,
         [`${APP_ID}_${SHARD_NUM}.mutations`]: ZERO_MUTATIONS_SPEC,
         [`${APP_ID}.permissions`]: ZERO_PERMISSIONS_SPEC,
+        [`${APP_ID}_${SHARD_NUM}.replicas`]: ZERO_REPLICAS_SPEC,
         ['public.users']: {
           columns: {
             userID: {
@@ -1674,6 +2043,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
         [`${APP_ID}_${SHARD_NUM}.clients`]: REPLICATED_ZERO_CLIENTS_SPEC,
         [`${APP_ID}_${SHARD_NUM}.mutations`]: REPLICATED_ZERO_MUTATIONS_SPEC,
         [`${APP_ID}.permissions`]: REPLICATED_ZERO_PERMISSIONS_SPEC,
+        [`${APP_ID}_${SHARD_NUM}.replicas`]: REPLICATED_ZERO_REPLICAS_SPEC,
         ['users']: {
           columns: {
             userID: {
@@ -1731,6 +2101,13 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
           name: 'mutations_pkey',
           schema: `${APP_ID}_${SHARD_NUM}`,
           tableName: 'mutations',
+          unique: true,
+        },
+        {
+          columns: {id: 'ASC'},
+          name: 'replicas_pkey',
+          schema: `${APP_ID}_${SHARD_NUM}`,
+          tableName: 'replicas',
           unique: true,
         },
         {
@@ -1786,6 +2163,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
         [`${APP_ID}_${SHARD_NUM}.clients`]: ZERO_CLIENTS_SPEC,
         [`${APP_ID}_${SHARD_NUM}.mutations`]: ZERO_MUTATIONS_SPEC,
         [`${APP_ID}.permissions`]: ZERO_PERMISSIONS_SPEC,
+        [`${APP_ID}_${SHARD_NUM}.replicas`]: ZERO_REPLICAS_SPEC,
         ['public.users']: {
           columns: {
             userID: {
@@ -1828,6 +2206,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
         [`${APP_ID}_${SHARD_NUM}.clients`]: REPLICATED_ZERO_CLIENTS_SPEC,
         [`${APP_ID}_${SHARD_NUM}.mutations`]: REPLICATED_ZERO_MUTATIONS_SPEC,
         [`${APP_ID}.permissions`]: REPLICATED_ZERO_PERMISSIONS_SPEC,
+        [`${APP_ID}_${SHARD_NUM}.replicas`]: REPLICATED_ZERO_REPLICAS_SPEC,
         ['users']: {
           columns: {
             userID: {
@@ -1892,6 +2271,13 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
           name: 'mutations_pkey',
           schema: `${APP_ID}_${SHARD_NUM}`,
           tableName: 'mutations',
+          unique: true,
+        },
+        {
+          columns: {id: 'ASC'},
+          name: 'replicas_pkey',
+          schema: `${APP_ID}_${SHARD_NUM}`,
+          tableName: 'replicas',
           unique: true,
         },
         {
@@ -1956,6 +2342,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
         [`${APP_ID}_${SHARD_NUM}.clients`]: ZERO_CLIENTS_SPEC,
         [`${APP_ID}_${SHARD_NUM}.mutations`]: ZERO_MUTATIONS_SPEC,
         [`${APP_ID}.permissions`]: ZERO_PERMISSIONS_SPEC,
+        [`${APP_ID}_${SHARD_NUM}.replicas`]: ZERO_REPLICAS_SPEC,
         ['public.issues']: {
           columns: {
             issueID: {
@@ -2005,6 +2392,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
       },
       replicatedSchema: {
         [`${APP_ID}_${SHARD_NUM}.clients`]: REPLICATED_ZERO_CLIENTS_SPEC,
+        [`${APP_ID}_${SHARD_NUM}.replicas`]: REPLICATED_ZERO_REPLICAS_SPEC,
         ['issues']: {
           columns: {
             issueID: {
@@ -2085,6 +2473,13 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
           unique: true,
         },
         {
+          columns: {id: 'ASC'},
+          name: 'replicas_pkey',
+          schema: `${APP_ID}_${SHARD_NUM}`,
+          tableName: 'replicas',
+          unique: true,
+        },
+        {
           columns: {
             orgID: 'DESC',
             other: 'ASC',
@@ -2121,6 +2516,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
         [`${APP_ID}_${SHARD_NUM}.clients`]: ZERO_CLIENTS_SPEC,
         [`${APP_ID}_${SHARD_NUM}.mutations`]: ZERO_MUTATIONS_SPEC,
         [`${APP_ID}.permissions`]: ZERO_PERMISSIONS_SPEC,
+        [`${APP_ID}_${SHARD_NUM}.replicas`]: ZERO_REPLICAS_SPEC,
         ['public.giant']: {
           columns: {
             id: {
@@ -2145,6 +2541,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
         [`${APP_ID}_${SHARD_NUM}.clients`]: REPLICATED_ZERO_CLIENTS_SPEC,
         [`${APP_ID}_${SHARD_NUM}.mutations`]: REPLICATED_ZERO_MUTATIONS_SPEC,
         [`${APP_ID}.permissions`]: REPLICATED_ZERO_PERMISSIONS_SPEC,
+        [`${APP_ID}_${SHARD_NUM}.replicas`]: REPLICATED_ZERO_REPLICAS_SPEC,
         ['giant']: {
           columns: {
             id: {
@@ -2197,6 +2594,13 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
         },
         {
           columns: {id: 'ASC'},
+          name: 'replicas_pkey',
+          schema: `${APP_ID}_${SHARD_NUM}`,
+          tableName: 'replicas',
+          unique: true,
+        },
+        {
+          columns: {id: 'ASC'},
           name: 'giant_pkey',
           schema: 'public',
           tableName: 'giant',
@@ -2232,6 +2636,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
         [`${APP_ID}_${SHARD_NUM}.clients`]: ZERO_CLIENTS_SPEC,
         [`${APP_ID}_${SHARD_NUM}.mutations`]: ZERO_MUTATIONS_SPEC,
         [`${APP_ID}.permissions`]: ZERO_PERMISSIONS_SPEC,
+        [`${APP_ID}_${SHARD_NUM}.replicas`]: ZERO_REPLICAS_SPEC,
         ['public.funk']: {
           columns: {
             id: {
@@ -2287,6 +2692,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
       },
       replicatedSchema: {
         [`${APP_ID}_${SHARD_NUM}.clients`]: REPLICATED_ZERO_CLIENTS_SPEC,
+        [`${APP_ID}_${SHARD_NUM}.replicas`]: REPLICATED_ZERO_REPLICAS_SPEC,
         ['funk']: {
           columns: {
             id: {
@@ -2370,6 +2776,13 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
           unique: true,
         },
         {
+          columns: {id: 'ASC'},
+          name: 'replicas_pkey',
+          schema: `${APP_ID}_${SHARD_NUM}`,
+          tableName: 'replicas',
+          unique: true,
+        },
+        {
           columns: {name: 'ASC'},
           name: 'funk_name_unique',
           schema: 'public',
@@ -2445,6 +2858,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
         [`${APP_ID}_${SHARD_NUM}.clients`]: ZERO_CLIENTS_SPEC,
         [`${APP_ID}_${SHARD_NUM}.mutations`]: ZERO_MUTATIONS_SPEC,
         [`${APP_ID}.permissions`]: ZERO_PERMISSIONS_SPEC,
+        [`${APP_ID}_${SHARD_NUM}.replicas`]: ZERO_REPLICAS_SPEC,
         ...Object.fromEntries(
           Array.from({length: 10}, (_, i) => [
             `public.t${i}`,
@@ -2488,6 +2902,7 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
       },
       replicatedSchema: {
         [`${APP_ID}_${SHARD_NUM}.clients`]: REPLICATED_ZERO_CLIENTS_SPEC,
+        [`${APP_ID}_${SHARD_NUM}.replicas`]: REPLICATED_ZERO_REPLICAS_SPEC,
         ...Object.fromEntries(
           Array.from({length: 10}, (_, i) => [
             `t${i}`,
@@ -2553,6 +2968,13 @@ describe('change-source/pg/initial-sync', {timeout: 10000}, () => {
           name: 'mutations_pkey',
           schema: `${APP_ID}_${SHARD_NUM}`,
           tableName: 'mutations',
+          unique: true,
+        },
+        {
+          columns: {id: 'ASC'},
+          name: 'replicas_pkey',
+          schema: `${APP_ID}_${SHARD_NUM}`,
+          tableName: 'replicas',
           unique: true,
         },
         ...Array.from(

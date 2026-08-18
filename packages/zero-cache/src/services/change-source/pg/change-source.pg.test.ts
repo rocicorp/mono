@@ -194,15 +194,101 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
 
   const MAX_ATTEMPTS_IF_REPLICATION_SLOT_ACTIVE = 10;
 
+  // The "replicas" table is included in the metadata publication (see
+  // schema/shard.ts) so that the change-log and replica backups advance
+  // past the consistent_point_lsn of new replication slots. This means
+  // that a stream started from watermark '00' (i.e. replaying the entire
+  // history of the shard) will replay, as its first transaction(s), the
+  // bookkeeping INSERT of the replica's own row into that table (from
+  // initial sync) as well as an UPDATE to that row's subscriberContext
+  // (from starting the stream). None of the tests in this file are
+  // concerned with those bookkeeping rows, so transparently filter them
+  // out here to keep the rest of the tests agnostic to this
+  // implementation detail.
+  function skipReplicasBookkeepingInsert(
+    changes: Source<ChangeStreamMessage>,
+  ): Source<ChangeStreamMessage> {
+    const it = changes[Symbol.asyncIterator]();
+
+    // Reads one full transaction (or a single non-transactional message)
+    // starting from the next value. Returns the buffered messages, and
+    // whether the transaction consisted entirely of "replicas" table
+    // changes (and thus should be dropped).
+    async function readNext(): Promise<{
+      buffered: ChangeStreamMessage[];
+      done: boolean;
+      onlyReplicas: boolean;
+    }> {
+      const {value: first, done: firstDone} = await it.next();
+      if (firstDone) {
+        return {buffered: [], done: true, onlyReplicas: false};
+      }
+      if (first[0] !== 'begin') {
+        // A standalone 'status'/'control' message (e.g. a periodic lag
+        // report) arrives outside of any begin/commit transaction. Pass
+        // it through immediately rather than buffering it while waiting
+        // for a 'commit' that will never arrive.
+        return {buffered: [first], done: false, onlyReplicas: false};
+      }
+
+      const buffered: ChangeStreamMessage[] = [first];
+      let onlyReplicas = true;
+      let sawData = false;
+      for (;;) {
+        const {value, done} = await it.next();
+        if (done) {
+          return {buffered, done: true, onlyReplicas: false};
+        }
+        buffered.push(value);
+        if (value[0] === 'status') {
+          // A status/lag-report can be interleaved mid-transaction; it
+          // doesn't end the transaction and isn't itself a data change.
+          continue;
+        }
+        if (value[0] === 'data') {
+          sawData = true;
+          const change = value[1];
+          if (!('relation' in change) || change.relation.name !== 'replicas') {
+            onlyReplicas = false;
+          }
+          continue;
+        }
+        // 'commit' or 'rollback': end of this transaction.
+        break;
+      }
+      return {buffered, done: false, onlyReplicas: onlyReplicas && sawData};
+    }
+
+    async function* gen() {
+      for (;;) {
+        const {buffered, done, onlyReplicas} = await readNext();
+        if (!onlyReplicas) {
+          yield* buffered;
+        }
+        if (done) {
+          return;
+        }
+      }
+    }
+
+    return Object.assign(gen(), {
+      cancel: (err?: Error) => changes.cancel(err),
+    });
+  }
+
   async function startStream(watermark: string, src = source) {
     let err;
     for (let i = 0; i < MAX_ATTEMPTS_IF_REPLICATION_SLOT_ACTIVE; i++) {
       try {
         assert(src, 'ChangeSource not initialized');
         const stream = await src.startStream(watermark);
+        const wrapped = {
+          ...stream,
+          changes: skipReplicasBookkeepingInsert(stream.changes),
+        };
         // cleanup in afterEach() ensures that replication slots are released
-        streams.push(stream);
-        return stream;
+        streams.push(wrapped);
+        return wrapped;
       } catch (e) {
         if (e instanceof PostgresError && e.code === PG_OBJECT_IN_USE) {
           // Sometimes Postgres still considers the replication slot active
