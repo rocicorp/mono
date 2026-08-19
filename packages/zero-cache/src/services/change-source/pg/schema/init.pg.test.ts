@@ -67,7 +67,8 @@ describe('change-streamer/pg/schema/init', () => {
             slot: `${APP_ID}_${SHARD_NUM}_1234`,
             version: '2dhf29ef',
             generation: '2dhf29ef',
-            backupPath: null,
+            backupPath: '12345',
+            backupV5: true,
             initialSchema: {tables: [], indexes: []},
             initialSyncContext: {foo: 'bar'},
             subscriberContext: null,
@@ -100,7 +101,8 @@ describe('change-streamer/pg/schema/init', () => {
             slot: `${APP_ID}_${SHARD_NUM}_5678`,
             version: 's8dfh2d',
             generation: 's8dfh2d',
-            backupPath: null,
+            backupPath: '12345',
+            backupV5: true,
             initialSchema: {tables: [], indexes: []},
           },
         ],
@@ -186,6 +188,7 @@ describe('change-streamer/pg/schema/init', () => {
             version: '123',
             generation: '123',
             backupPath: null,
+            backupV5: false,
             initialSchema: {tables: [], indexes: []},
           },
         ],
@@ -215,6 +218,10 @@ describe('change-streamer/pg/schema/init', () => {
           '12345',
           c.newReplica[0],
           c.newReplica[1],
+          {
+            backupPath: '12345',
+            backupV5: true,
+          },
         );
         await initReplica(
           upstream,

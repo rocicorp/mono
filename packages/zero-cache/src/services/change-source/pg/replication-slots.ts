@@ -13,6 +13,7 @@ import {
   createReplica,
   replicationSlotExpression,
   replicationSlotPrefix,
+  type BackupOptions,
 } from './schema/shard.ts';
 
 // Record returned by `CREATE_REPLICATION_SLOT`
@@ -136,6 +137,7 @@ export async function createReplicaAndSlot(
   shard: ShardID,
   replicaID: string,
   failover: boolean,
+  backupOptions: BackupOptions,
 ): Promise<ReplicationSlot> {
   const lockName = replicationSlotManagementLock(shard);
   const slotPoolPrefix = replicationSlotPrefix(shard);
@@ -171,6 +173,7 @@ export async function createReplicaAndSlot(
           replicaID,
           slot.slot_name,
           toStateVersionString(slot.consistent_point),
+          backupOptions,
         );
 
         return slot;

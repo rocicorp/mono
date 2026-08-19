@@ -58,6 +58,7 @@ describe('change-source/pg', () => {
         '12345',
         'zro_0_1234',
         '0wdfj02',
+        {backupPath: '12345', backupV5: true},
       );
       await initReplica(
         tx,
@@ -90,7 +91,8 @@ describe('change-source/pg', () => {
           slot: 'zro_0_1234',
           version: '0wdfj02',
           generation: '0wdfj02',
-          backupPath: null,
+          backupPath: '12345',
+          backupV5: true,
           initialSchema: {tables: [], indexes: []},
           initialSyncContext: {foo: 'bar'},
           subscriberContext: null,

@@ -172,7 +172,10 @@ describe('createReplicationSlot', () => {
     ).toEqual([['zero_18_a'], ['zero_18_d']]);
 
     const create = (id: string) =>
-      createReplicaAndSlot(lc, upstream, session, shard, id, false);
+      createReplicaAndSlot(lc, upstream, session, shard, id, false, {
+        backupPath: id,
+        backupV5: true,
+      });
 
     let {slot_name: name} = await create('rep_1');
     expect(name).toBe('zero_18_a');
@@ -241,7 +244,10 @@ describe('createReplicationSlot', () => {
 
     const results = await Promise.all(
       sessions.map((session, i) =>
-        createReplicaAndSlot(lc, upstream, session, shard, `rep_${i}`, false),
+        createReplicaAndSlot(lc, upstream, session, shard, `rep_${i}`, false, {
+          backupPath: `rep_${i}`,
+          backupV5: true,
+        }),
       ),
     );
     const expectedSlots = new Set(['zero_18_a', 'zero_18_b', 'zero_18_c']);
@@ -271,7 +277,10 @@ describe('createReplicationSlot', () => {
     await upstream`CREATE PUBLICATION foo_pub FOR ALL TABLES`;
 
     const create = (id: string) =>
-      createReplicaAndSlot(lc, upstream, session, shard, id, false);
+      createReplicaAndSlot(lc, upstream, session, shard, id, false, {
+        backupPath: id,
+        backupV5: true,
+      });
 
     await create('rep_1');
     await create('rep_2');

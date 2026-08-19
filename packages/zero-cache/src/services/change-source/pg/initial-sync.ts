@@ -95,6 +95,10 @@ export type InitialSyncOptions = {
     | undefined;
 };
 
+export type ReplicaOptions = {
+  backupV5: boolean;
+};
+
 /** Server context to store with the initial sync metadata for debugging. */
 export type ServerContext = JSONObject;
 
@@ -109,6 +113,7 @@ export async function initialSync(
   upstreamURI: string,
   syncOptions: InitialSyncOptions,
   context: ServerContext,
+  {backupV5}: ReplicaOptions = {backupV5: true},
 ): Promise<ReplicaState | undefined> {
   if (!ALLOWED_APP_ID_CHARACTERS.test(shard.appID)) {
     throw new Error(
@@ -184,6 +189,13 @@ export async function initialSync(
         shard,
         replicaID,
         replicationSlotFailover && pgVersion >= PG_17,
+        {
+          // When backing up with litestream v5, a unique backup path is
+          // required since the LTX format does not tolerate multiple writers
+          // (and there are no v3 "generations" to workaround it).
+          backupPath: backupV5 ? replicaID : null,
+          backupV5,
+        },
       );
       snapshot = slot.snapshot_name;
       lsn = slot.consistent_point;

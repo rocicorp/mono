@@ -147,7 +147,13 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
     return toBigInt(lsn);
   }
 
-  async function startReplication(lagReportIntervalMs?: number) {
+  async function startReplication({
+    lagReportIntervalMs,
+    backupV5 = true,
+  }: {
+    lagReportIntervalMs?: number;
+    backupV5?: boolean;
+  } = {}) {
     ({changeSource: source} = await initializePostgresChangeSource(
       lc,
       upstreamURI,
@@ -160,6 +166,8 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
       {tableCopyWorkers: 5},
       {test: 'context'},
       lagReportIntervalMs,
+      {},
+      {backupV5},
     ));
 
     const [{slot, initialSyncContext, subscriberContext}] = await upstream`
@@ -891,7 +899,7 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
     ['received', false],
     ['resumed if skipped', true],
   ])('replication lag reports: %s', async (_name, startStreamAfterReport) => {
-    await startReplication(10);
+    await startReplication({lagReportIntervalMs: 10});
 
     const initialSend = await source?.startLagReporter();
     expect(initialSend).toMatchObject({
@@ -995,6 +1003,62 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
       err = e;
     }
     expect(err).toBeInstanceOf(AbortError);
+  });
+
+  async function backupOptions() {
+    return (
+      await upstream /*sql*/ `
+        SELECT "backupPath", "backupV5" FROM ${upstream(`${APP_ID}_${SHARD_NUM}.replicas`)}`
+    )[0];
+  }
+
+  test('v5 backup options recordes', async () => {
+    await startReplication({backupV5: true});
+
+    const originalBackupOptions = await backupOptions();
+    expect(originalBackupOptions).toMatchObject({
+      backupPath: /\d{10,}/,
+      backupV5: true,
+    });
+
+    // Now simulate the state after a different replication-manager was backing
+    // up with this slot.
+    await upstream /*sql*/ `
+      UPDATE ${upstream(`${APP_ID}_${SHARD_NUM}.replicas`)}
+        SET "backupPath" = NULL,
+            "backupV5" = false
+    `;
+
+    // Starting the stream should update the replicas table with the
+    // stream's configured backup options.
+    const {changes} = await startStream('00');
+    expect(await backupOptions()).toEqual(originalBackupOptions);
+
+    changes.cancel();
+  });
+
+  test('v3 backup options recorded', async () => {
+    await startReplication({backupV5: false});
+    const originalBackupOptions = await backupOptions();
+    expect(originalBackupOptions).toEqual({
+      backupPath: null,
+      backupV5: false,
+    });
+
+    // Now simulate the state after a different replication-manager was backing
+    // up with this slot.
+    await upstream /*sql*/ `
+      UPDATE ${upstream(`${APP_ID}_${SHARD_NUM}.replicas`)}
+        SET "backupPath" = 'foo-bar-baz',
+            "backupV5" = true
+    `;
+
+    // Starting the stream should update the replicas table with the
+    // stream's configured backup options.
+    const {changes} = await startStream('00');
+    expect(await backupOptions()).toEqual(originalBackupOptions);
+
+    changes.cancel();
   });
 
   test('handoff', {retry: 3}, async () => {

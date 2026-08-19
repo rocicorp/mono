@@ -178,6 +178,7 @@ export default async function runWorker(
               context,
               replicationLag.reportIntervalMs,
               restoreOptions,
+              {backupV5: litestream.backupUsingV5},
               purgeLock,
               upstream.pgStreamInboundTimeoutMs,
             )
@@ -204,7 +205,10 @@ export default async function runWorker(
         replicationStatusPublisher,
         subscriptionState,
         destinationBackupURL
-          ? {backupURL: destinationBackupURL, litestreamVersion: 'legacy'}
+          ? {
+              backupURL: destinationBackupURL,
+              litestreamVersion: litestream.backupUsingV5 ? 'v5' : 'legacy',
+            }
           : null,
         purgeLock,
         autoReset ?? false,
@@ -341,10 +345,14 @@ export default async function runWorker(
   );
 
   if (waitForFirstBackupBeforeServing) {
+    const start = performance.now();
     lc.info?.(`awaiting initial backup ...`);
-    void backupMonitor
-      .firstBackupReceived()
-      .then(() => parent.send(['ready', {ready: true}]));
+
+    void backupMonitor.firstBackupReceived().then(() => {
+      const elapsed = performance.now() - start;
+      lc.info?.(`initial backup confirmed after ${elapsed.toFixed(2)}ms`);
+      parent.send(['ready', {ready: true}]);
+    });
   } else {
     parent.send(['ready', {ready: true}]);
   }
