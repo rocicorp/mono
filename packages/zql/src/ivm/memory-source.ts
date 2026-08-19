@@ -383,6 +383,15 @@ export class MemorySource implements Source {
       // not yet yielded add overlay will be yielded when the first row
       // not matching the constraint is reached.
       indexComparator,
+      // `startAt` is `req.start.row`, a bound in the connection's sort order,
+      // so it must be compared in that order -- not `indexComparator`, which
+      // with a constraint leads with the constraint keys. The two agree only
+      // when the overlay row and `startAt` share those key values; they do not
+      // for `#fetchMulti`'s per-value sub-fetches, which pin one primary key
+      // while still carrying the caller's connection-sort `start`. Comparing
+      // there by the constraint key dropped the in-flight overlay and served
+      // pre-push data. Same distinction #4926 drew for `generateWithStart`.
+      connectionComparator,
       conn.filters?.predicate,
     );
 
@@ -715,7 +724,15 @@ export function* generateWithStart(
  * @param constraint - constraint that was applied to the rowIterator and should
  * also be applied to the overlay.
  * @param overlay - the overlay values to splice in
- * @param compare - the comparator to use to find the position for the overlay
+ * @param compare - the comparator to use to find the position for the overlay.
+ * Must order rows the same way `rows` is ordered. For `MemorySource` that is
+ * *index* order, which leads with the constraint keys.
+ * @param startAtCompare - the comparator for `startAt`, which is a bound in the
+ * *connection's* sort order. Only the same as `compare` when the stream's order
+ * happens to be the connection's -- true for `TableSource` (SQL does the
+ * ordering) but not for a constrained `MemorySource` fetch. Conflating the two
+ * is what #4926 fixed for `generateWithStart`; this parameter is the same
+ * distinction for the overlay's own `startAt` pruning.
  */
 export function* generateWithOverlay(
   startAt: Row | undefined,
@@ -724,6 +741,7 @@ export function* generateWithOverlay(
   overlay: Overlay | undefined,
   lastPushedEpoch: number,
   compare: Comparator,
+  startAtCompare: Comparator,
   filterPredicate?: (row: Row) => boolean | undefined,
   multiConstraints?: readonly MultiConstraint[] | undefined,
 ) {
@@ -735,7 +753,7 @@ export function* generateWithOverlay(
     startAt,
     constraint,
     overlayToApply,
-    compare,
+    startAtCompare,
     filterPredicate,
     multiConstraints,
   );
@@ -746,7 +764,9 @@ function computeOverlays(
   startAt: Row | undefined,
   constraint: Constraint | undefined,
   overlay: Overlay | undefined,
-  compare: Comparator,
+  // Only ever used for `overlaysForStartAt`, so this is the *connection*-order
+  // comparator, not the one used to splice the overlay into the row stream.
+  startAtCompare: Comparator,
   filterPredicate?: (row: Row) => boolean | undefined,
   multiConstraints?: readonly MultiConstraint[] | undefined,
 ): Overlays {
@@ -776,7 +796,7 @@ function computeOverlays(
   }
 
   if (startAt) {
-    overlays = overlaysForStartAt(overlays, startAt, compare);
+    overlays = overlaysForStartAt(overlays, startAt, startAtCompare);
   }
 
   if (constraint) {

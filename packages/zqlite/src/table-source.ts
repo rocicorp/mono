@@ -310,6 +310,10 @@ export class TableSource implements Source {
               this.#overlay,
               connection.lastPushedEpoch,
               comparator,
+              // SQL does the ordering and constraining, so the row stream is
+              // already in the connection's sort order: the splice comparator
+              // and the `startAt` comparator coincide here.
+              comparator,
               connection.filters?.predicate,
               req.multiConstraints,
             ),

@@ -971,6 +971,7 @@ describe('multiConstraints overlay handling — both helpers', () => {
             overlay,
             1,
             compare,
+            compare,
             undefined,
             multiConstraints,
           ),
