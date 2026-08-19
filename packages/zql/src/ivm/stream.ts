@@ -20,6 +20,15 @@ export function* take<T>(stream: Stream<T>, limit: number): Stream<T> {
   }
 }
 
+/**
+ * Returns the first element of `stream`, or `undefined` if it is empty.
+ *
+ * NOTE: operator `fetch` streams are `Stream<Node | 'yield'>` -- they
+ * interleave 'yield' sentinels for cooperative multitasking. Calling this on
+ * one answers "was the stream non-empty?", NOT "did it produce a row": a
+ * sentinel is returned as if it were a `Node`. Wrap such a stream in
+ * `skipYields()` first.
+ */
 export function first<T>(stream: Stream<T>): T | undefined {
   const it = stream[Symbol.iterator]();
   const {value} = it.next();

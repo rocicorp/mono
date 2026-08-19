@@ -1,13 +1,21 @@
 /**
- * Minimal repro for the prod `Bound should be set` crash (take.ts:448).
+ * Regression test for the prod `Bound should be set` crash (take.ts:448).
  *
  *   source -> UnionFanOut -> [filter | flipped-exists] -> UnionFanIn -> Take
  *
- * Reproduces on BOTH source implementations, but only when cooperative
- * multitasking is in play: prod's view-syncer constructs TableSource with a
- * `shouldYield` callback (pipeline-driver.ts:1095), so 'yield' sentinels
- * thread through every fetch and push stream. Without yields, 3M+ zqlite runs
- * found nothing; with them, a 2-operation script is enough.
+ * Root cause: `UnionFanIn.#pushInternalChange` probed each sibling branch with
+ * `first(input.fetch(...))` to decide whether another branch already held the
+ * row. `fetch` interleaves 'yield' sentinels for cooperative multitasking, so
+ * an empty branch that happened to yield was misread as a branch holding the
+ * row, and the add was silently dropped. `Take` then never saw the row its own
+ * fetch could see, leaving `bound` unset for the following edit. Fixed by
+ * `first(skipYields(...))` in union-fan-in.ts.
+ *
+ * Only reproduced when cooperative multitasking is in play: prod's view-syncer
+ * constructs TableSource with a `shouldYield` callback
+ * (pipeline-driver.ts:1095), so sentinels thread through every fetch and push
+ * stream. Without yields, 3M+ zqlite runs found nothing; with them, a
+ * 2-operation script was enough.
  *
  * Run under `zql` (MemorySource) and `zqlite-zql-test` (SQLite TableSource).
  */
@@ -70,9 +78,9 @@ function mulberry32(seed: number): () => number {
 }
 
 /**
- * The yield schedule decides whether the take's maintenance fetch is
- * interrupted mid-stream, so scan seeds rather than pinning one: the
- * MemorySource and SQLite sources fail on different schedules.
+ * The yield schedule decides where sentinels land, so scan seeds rather than
+ * pinning one: before the fix the MemorySource and SQLite sources broke on
+ * different schedules, each within the first seed tried.
  */
 function findFailingSeed(): {seed: number; error: string} | undefined {
   for (let i = 0; i < 400; i++) {
@@ -134,10 +142,9 @@ function findFailingSeed(): {seed: number; error: string} | undefined {
   return undefined;
 }
 
-test('take over union-fan-in crashes under cooperative yields', () => {
-  const found = findFailingSeed();
-  expect(found, 'expected a yield schedule that breaks Take').toBeDefined();
-  // take.ts:448 -- the exact assert from the prod view-syncer crash. Both
-  // MemorySource and the SQLite TableSource fail on the first seed tried.
-  expect(must(found).error).toBe('Bound should be set');
+test('take over union-fan-in survives cooperative yields', () => {
+  // Before the fix this returned on the first seed tried, on both source
+  // implementations, with 'Bound should be set' -- the exact assert from the
+  // prod view-syncer crash (take.ts:448).
+  expect(findFailingSeed()).toBeUndefined();
 });

@@ -1,5 +1,8 @@
 # `Bound should be set` — Take over UnionFanIn is not yield-safe
 
+> **STATUS: root-caused and fixed.** `UnionFanIn.#pushInternalChange` read the
+> `'yield'` sentinel as a row. See [Root cause](#root-cause--found).
+
 **TL;DR:** A `'yield'` landing inside a `Take` maintenance fetch that reads
 through a `UnionFanIn` corrupts the take's window state. The next edit through
 that pipeline trips `assert(takeState.bound, 'Bound should be set')` and kills
@@ -73,20 +76,82 @@ Four necessary conditions:
 3. **after** hydration — inside a maintenance fetch issued while handling a push
 4. with a **flipped exists in the OR**, i.e. `UnionFanIn` on the fetch path
 
-## Where the fix belongs
+## Root cause — FOUND
 
-**`UnionFanIn`, not `Take`** — the read path, despite the assert firing in
-`Take`. Start with `UnionFanIn.fetch` / `mergeFetches` in
-`zql/src/ivm/union-fan-in.ts`. Two specifics to look at (neither confirmed as
-the defect):
+`union-fan-in.ts:173`. `UnionFanIn` read the `'yield'` sentinel as if it were a
+row.
 
-- `mergeFetches` is **one-ahead**: it calls `iter.next()` on the min branch
-  before yielding `minNode`, so a `'yield'` from that call reaches the consumer
-  ahead of the node already pulled.
-- `UnionFanIn.fetch` is not a generator — it eagerly creates every branch's
-  iterable, and `mergeFetches`'s `finally` calls `iter.return?.()` on all of
-  them when the consumer breaks early. `Take`'s maintenance fetches break after
-  at most one node, every time.
+```ts
+const fetchResult = input.fetch({constraint});
+
+if (first(fetchResult) !== undefined) {   // <-- the defect
+  // Another branch has the row, so the add/remove is not needed.
+  return;
+}
+```
+
+`first()` (`stream.ts`) is `it.next().value`, generic over `T`. Here `T` is
+`Node | 'yield'`, so the call is type-correct and semantically wrong: the
+question is *"does a sibling branch hold this row?"*, but the answer computed
+is *"was the stream non-empty?"*. `'yield'` is not `undefined`, so **an empty
+branch that happens to emit a scheduling sentinel is misread as a branch that
+holds the row**, and the `add`/`remove` is silently dropped.
+
+It is not corruption while *sending* a yield — `UnionFanIn` never gets that
+far. It is corruption from *reading* one, on a fetch that happens to sit on the
+push path.
+
+Walking the 2-op repro:
+
+1. `+message(c1,'x')` — the flipped join emits `add(c1)` out of the exists
+   branch. `#fanOutPushStarted` is false (the change originated *inside* the
+   sub-graph), so `#pushInternalChange` runs.
+2. It probes the sibling `mode='a'` branch with `constraint {id:'c1'}`.
+   `c1.mode='b'`, so the branch is genuinely **empty** — but the source's
+   fetch emits a trailing `'yield'`. `first()` returns `'yield'` → early
+   `return`.
+3. `add(c1)` never reaches `Take`. `takeState` stays
+   `{size: 0, bound: undefined}` — while `Take.fetch`, reading through
+   `mergeFetches`, happily reports `c1`. Push and fetch now disagree.
+4. `c1.lastMessageAt → 75` enters via `UnionFanOut` → accumulate →
+   `fanOutDonePushing` → `pushAccumulatedChanges` → `Take.#pushEditChange`
+   → `assert(takeState.bound, 'Bound should be set')`. The prod stack,
+   frame for frame.
+
+The `remove` direction is the same defect with a quieter symptom: a spurious
+yield suppresses the remove and `Take` keeps a row that no longer matches.
+
+This accounts for all four necessary conditions above: the corrupted stream is
+`input.fetch(...)` **called from within a push** (so fetch-mode yields only,
+never push-mode); the sibling branches probed all read the *parent* source (so
+never the flipped join's child); `#pushInternalChange` only runs during a push
+(so post-hydration only); and its add/remove arm is only reachable for a change
+originating inside the fan-out/fan-in sub-graph, which only a flipped join
+produces (so the flip is required).
+
+`mergeFetches` is clean. It drains `'yield'` correctly in both loops, and the
+one-ahead `iter.next()` and the `finally`/`iter.return?.()` early-break path
+are both benign — every consumer of `UnionFanIn.fetch`, `Take` included
+(`take.ts:595`, `take.ts:649`), checks `node === 'yield'` and continues.
+
+## The fix
+
+`first(skipYields(fetchResult))`. `skipYields` (`zql/src/ivm/skip-yields.ts`)
+is the established idiom for this hazard — `run-ast.ts:101` and
+`pipeline-driver.ts:555` already carry comments about it. It preserves today's
+yield-emission profile exactly, since `first()` swallowed the sentinel anyway.
+
+`first` has exactly one importer in the repo, so the blast radius is that one
+call site; its docstring in `stream.ts` now warns about the sentinel.
+
+**Verified:**
+
+| Check | Before | After |
+| ----- | ------ | ----- |
+| `take-union-bound.repro`, 400 schedules x 2 sources | fails on first seed, both | **0** |
+| `take-union-yield-mode.diag`, `SWEEP=1` (10 cells x 2000) | 985 / 1083 / 1000 / 991 | **0 in all 10** |
+| `take-union-empty-window`, zqlite `SWEEP_LEN=2 SWEEP_YIELD=4` (620,928 runs) | 1,888 failures | **0** |
+| full `zql` + `zqlite-zql-test` suites | — | 1316 pass, 0 fail (each) |
 
 ## What this is NOT
 
@@ -166,10 +231,30 @@ result divergences* against the PG oracle on
 `exists_or x flip x limit=small x start=mid_exclusive` (wrong answers, no
 throw — a second defect this cell was hiding).
 
+After the `skipYields` fix that lane is at **2/48**: the two `exists_or`
+divergences on `track` and `invoice` are gone. What remains is **not this
+bug**, and not the yield class at all — re-running the lane with yields
+forced off (`() => 1` as the wrapper's rng) reproduces both failures
+identically:
+
+- `genre | exists_top | flip | limit=large | start=none` —
+  `Take: afterBoundNode must be found during fetch`. `exists_top` is not an
+  OR, so `builder.ts:449` builds **no union**; the stack runs
+  `FlippedJoin.#pushParent` straight into `Take.push`. A `Take`-over-
+  `FlippedJoin` defect with no `UnionFanIn` involved.
+- `employee | exists_or | flip | limit=small | start=mid_exclusive` — a
+  silent divergence that survives with yields disabled.
+
+Both are pre-existing flip/take defects that the new lane surfaced on its own
+merits, and both want their own investigation.
+
 ## Reproducing
 
+`take-union-bound.repro.test.ts` is now a **regression test** — it asserts
+that no yield schedule breaks `Take`, so it fails if the fix is reverted.
+
 ```bash
-# minimal repro (both sources)
+# regression test (both sources)
 pnpm --filter zql            run test take-union-bound.repro
 pnpm --filter zqlite-zql-test run test take-union-bound.repro
 

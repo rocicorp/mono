@@ -19,6 +19,7 @@ import {
   pushAccumulatedChanges,
 } from './push-accumulated.ts';
 import type {SourceSchema} from './schema.ts';
+import {skipYields} from './skip-yields.ts';
 import {first, type Stream} from './stream.ts';
 import type {UnionFanOut} from './union-fan-out.ts';
 
@@ -170,7 +171,13 @@ export class UnionFanIn implements Operator {
         constraint,
       });
 
-      if (first(fetchResult) !== undefined) {
+      // `skipYields` is required. `fetch` interleaves 'yield' sentinels for
+      // cooperative multitasking, and a bare `first()` reads one as if it were
+      // a row: an empty branch that happens to yield is misread as a branch
+      // that holds the row, silently dropping this add/remove. That desyncs
+      // the push and fetch paths of a downstream `Take` and trips
+      // `assert(takeState.bound, 'Bound should be set')` on the next edit.
+      if (first(skipYields(fetchResult)) !== undefined) {
         // Another branch has the row, so the add/remove is not needed.
         return;
       }
