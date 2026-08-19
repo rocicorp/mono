@@ -106,6 +106,66 @@ not cover. Its siblings at `take.ts:597` / `take.ts:649`
 (`newBoundNode`/`afterBoundNode must be found during fetch`) fire from the same
 defect.
 
+## Why the fuzzer never found it
+
+The chinook fuzzer (`packages/zql-integration-tests/src/chinook/fuzz/`) has
+both a flip lane and a yield lane. They are orthogonal and never intersect, and
+this bug lives in the uncovered cell — **flip x push x yield**.
+
+1. **The yield lane never builds a union.** `checkYield` (`driver.ts`) lowers
+   with `lower(s)`, which calls `.whereExists(rel, sub)` with **no flip
+   option**, and the fuzz driver never runs the planner — the only mention of
+   the planner anywhere under `fuzz/` is a doc comment in `flip.ts`. So `flip`
+   stays undefined, every EXISTS lowers as a semi-join,
+   `applyFilterWithFlips` is never entered, and no `UnionFanOut`/`UnionFanIn`
+   is ever constructed in a yield-lane pipeline. Pinned by
+   `take-union-shape.test.ts`.
+2. **The flip lane never pushes and never yields.** `checkFlipInvariance`
+   enumerates all `2^k` flip assignments but routes them to
+   `checkHydrateCases` — hydrate only, straight (unwrapped) sources. This bug
+   needs a post-hydration maintenance fetch during a push; hydration-only
+   yields never fail (0/2000 above).
+3. **The scale yield lane is hydrate-only too.** Per `checkYieldTail`'s own
+   doc: "Push is mini-fixture-only ... so this scale path is hydrate-only."
+
+Contributing: `flip` is not one of the covering-array axes at all
+(`AXES = filter x exists x order x limit x start`, `axes.ts:333`), so it is
+never part of t-wise coverage — it is a bolt-on lane. The backbone yield lane
+also runs `enumerate({depth: 1, related: 1, exists: 1})`.
+
+Note the oracle would not have had to catch a silent divergence here: the bug
+**throws**. The fuzzer simply never built the pipeline.
+
+### Fixed (this branch)
+
+Three changes, because closing the cell needed all three:
+
+1. **`flip` is now a real axis** (`axes.ts`): `FLIP_VALS = ['none', 'flip']`.
+   It carries the space's only inter-axis constraint — `flip` is meaningful
+   only on a *positive* gate — so `flipRealizable` / `tupleRealizable` /
+   `assignmentRealizable` teach both the covering-array builder and the
+   coverage report about it. Unrealizable cells are never generated and never
+   counted in the denominator, so the "100%" gate stays meetable.
+2. **L1 runs at strength 3** (`l1QueryCases(data, t = 3)`). Pairwise is not
+   enough: a flipped gate only builds a fan-in when it sits *inside an OR*, and
+   a `Take` only sits above that fan-in when the query is *limited*. That is a
+   3-way interaction. Measured: at `t=2` the greedy cover realizes
+   `flip x exists_or x limit` in **0** rows; at `t=3`, in **17**. Cost: 112 ->
+   494 rows, 4,640 L1 cases (~35s wall on the backbone), still 100% t-wise.
+3. **A new push lane** (`checkYieldPush` + `fanInTakeCases`). Coverage alone
+   was not enough: the covering array only fed *hydrate* lanes, while
+   `checkYield` ran decoration-free skeletons (no `limit`, hence no `Take`).
+   The new lane takes the decorated L1 cases that actually build a `Take` over
+   a `UnionFanIn` and drives them through the four-phase push walk with both
+   IVM sources yield-wrapped. `checkYield` itself also now runs every flip
+   assignment, not just the builder default.
+
+**Result:** the backbone lane finds it. 4 failures in 48 selected cases —
+one `Take: afterBoundNode must be found during fetch`, and three *silent
+result divergences* against the PG oracle on
+`exists_or x flip x limit=small x start=mid_exclusive` (wrong answers, no
+throw — a second defect this cell was hiding).
+
 ## Reproducing
 
 ```bash

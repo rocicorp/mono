@@ -19,7 +19,7 @@ import type {
   Condition,
   CorrelatedSubquery,
 } from '../../../../zero-protocol/src/ast.ts';
-import {AXES, columnsOf, hasColumn, N_AXES} from './axes.ts';
+import {AXES, columnsOf, hasColumn, N_AXES, tupleRealizable} from './axes.ts';
 
 // ── combinatorics (shared with the covering-array builder) ────────────────────────────
 
@@ -109,11 +109,21 @@ export class Coverage {
     }
   }
 
-  /** Total coverable t-tuples (Σ over t-axis subsets of value combinations). */
+  /**
+   * Total coverable t-tuples (Σ over t-axis subsets of value combinations), **excluding
+   * structurally unrealizable ones** — see `tupleRealizable`. A tuple that can never be
+   * built is not a coverage goal, so it must not sit in the denominator or the "100%
+   * pairwise" gate could never be met.
+   */
   total(): number {
     let n = 0;
     for (const combo of axisCombinations(N_AXES, this.#t)) {
-      n += combo.reduce((acc, a) => acc * this.#domains[a], 1);
+      const sizes = combo.map(a => this.#domains[a]);
+      for (const values of cartesian(sizes)) {
+        if (tupleRealizable(combo.map((a, i) => [a, values[i]] as const))) {
+          n += 1;
+        }
+      }
     }
     return n;
   }
@@ -136,6 +146,9 @@ export class Coverage {
       const sizes = combo.map(a => this.#domains[a]);
       for (const values of cartesian(sizes)) {
         const tuple = combo.map((a, i) => [a, values[i]] as const);
+        if (!tupleRealizable(tuple)) {
+          continue;
+        }
         if (!this.#hit.has(tupleKey(tuple))) {
           out.push(
             tuple.map(

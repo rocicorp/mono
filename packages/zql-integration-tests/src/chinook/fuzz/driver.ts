@@ -18,7 +18,7 @@ import {expect} from 'vitest';
 import {astToZQL} from '../../../../ast-to-zql/src/ast-to-zql.ts';
 import {formatOutput} from '../../../../ast-to-zql/src/format.ts';
 import {must} from '../../../../shared/src/must.ts';
-import type {AST} from '../../../../zero-protocol/src/ast.ts';
+import type {AST, Condition} from '../../../../zero-protocol/src/ast.ts';
 import type {Row} from '../../../../zero-protocol/src/data.ts';
 import type {NameMapper} from '../../../../zero-schema/src/name-mapper.ts';
 import {makeServerTransaction} from '../../../../zero-server/src/custom.ts';
@@ -50,7 +50,7 @@ import {Coverage} from './coverage.ts';
 import {flipAssignments, flippableExistsCount, setFlips} from './flip.ts';
 import type {Data} from './literals.ts';
 import {mutate} from './mutate.ts';
-import {type Mutation, pushForSkeleton} from './push.ts';
+import {fourPhase, type Mutation, pushForSkeleton} from './push.ts';
 import type {Regression} from './regressions.ts';
 import {rng} from './rng.ts';
 import {scalarizableExistsCount, setScalars} from './scalar.ts';
@@ -143,13 +143,24 @@ export function skeletonQueryCases(
   return skels.map(s => ({label: label(s), query: lower(s)}));
 }
 
-/** The L1 pairwise-decoration corpus as target-independent query cases. */
-export function l1QueryCases(data: Data): {
+/**
+ * The L1 decoration corpus as target-independent query cases.
+ *
+ * Strength defaults to **3**. Pairwise is not enough once `flip` is an axis: the shapes
+ * that matter are 3-way — a flipped gate must sit *inside an OR* (that is what makes
+ * `builder.ts` construct the `UnionFanOut`/`UnionFanIn` pair) *and* carry a `limit` (to
+ * put a `Take` above the fan-in). At `t=2` the greedy cover realizes
+ * `flip x exists_or x limit` in zero rows; at `t=3`, in 17.
+ */
+export function l1QueryCases(
+  data: Data,
+  t = 3,
+): {
   readonly cases: readonly QueryCase[];
   readonly coverage: Coverage;
 } {
-  const rows = greedyCover(2);
-  const coverage = new Coverage(2);
+  const rows = greedyCover(t);
+  const coverage = new Coverage(t);
   const cases: QueryCase[] = [];
 
   for (const row of rows) {
@@ -681,29 +692,150 @@ export async function checkYield(
   skels: readonly Skeleton[],
   n: number,
   seed: number,
+  maxFlips = 2,
 ): Promise<Report> {
   const failures: Array<[string, string]> = [];
   let total = 0;
   let idx = 0;
   for (const s of skels) {
-    const i = idx++;
-    // Per-skeleton deterministic yield stream so a failure replays from (seed, index).
-    const r = rng((seed ^ Math.imul(i + 1, 0x9e3779b9)) >>> 0);
-    const wrap = createRandomYieldWrapper(() => r.float(), YIELD_P);
-    const query = lower(s);
     const mutations = pushForSkeleton(data, s, n);
+    for (const [suffix, query] of yieldPlanVariants(s, maxFlips)) {
+      const i = idx++;
+      // Per-variant deterministic yield stream so a failure replays from (seed, index).
+      const r = rng((seed ^ Math.imul(i + 1, 0x9e3779b9)) >>> 0);
+      const wrap = createRandomYieldWrapper(() => r.float(), YIELD_P);
+      total += 1;
+      const msg = await capture(() =>
+        transact(
+          d =>
+            mutations.length > 0
+              ? pushWalk(d, query, mutations)
+              : runAndCompare(schema, d, query, undefined),
+          wrap,
+        ),
+      );
+      if (msg) {
+        failures.push([`yield|${label(s)}${suffix}`, msg]);
+      }
+    }
+  }
+  return {total, failures};
+}
+
+/**
+ * The plan variants a skeleton contributes to the yield lane: the builder's default
+ * lowering, plus **every** flip assignment of its positive EXISTS gates.
+ *
+ * Flips are not cosmetic here. A flipped gate is the only thing that makes `builder.ts`
+ * construct a `UnionFanOut`/`UnionFanIn` pair, so without them the yield lane never
+ * interleaves a fetch or push through a fan-in at all — the operator whose maintenance
+ * fetch is the one that has to survive a `'yield'`. The flip-invariance lane enumerates
+ * the same assignments but only *hydrates* them; this is where they meet pushes.
+ */
+function yieldPlanVariants(
+  s: Skeleton,
+  maxFlips: number,
+): Array<[string, AnyQuery]> {
+  const base = lower(s);
+  const out: Array<[string, AnyQuery]> = [['', base]];
+  const ast = asQueryInternals(base).ast;
+  const k = flippableExistsCount(ast);
+  if (k === 0 || k > maxFlips) {
+    return out;
+  }
+  for (const bits of flipAssignments(k)) {
+    if (!bits.some(b => b)) {
+      continue; // all-false is the default lowering, already in `out`
+    }
+    out.push([
+      `|flip${bits.map(b => (b ? 1 : 0)).join('')}`,
+      wrapAst(setFlips(ast, bits)),
+    ]);
+  }
+  return out;
+}
+
+/**
+ * The tables an AST touches (root + every correlated subquery / related child), so a
+ * decorated case can be given mutations on both sides of a gate.
+ */
+function astTables(ast: AST, out: Set<string> = new Set()): Set<string> {
+  out.add(ast.table);
+  for (const r of ast.related ?? []) {
+    astTables(r.subquery, out);
+  }
+  const walk = (c: Condition | undefined): void => {
+    if (!c) {
+      return;
+    }
+    if (c.type === 'and' || c.type === 'or') {
+      c.conditions.forEach(walk);
+    } else if (c.type === 'correlatedSubquery') {
+      astTables(c.related.subquery, out);
+    }
+  };
+  walk(ast.where);
+  return out;
+}
+
+/**
+ * The L1 cases that build a **`Take` above a `UnionFanIn`**: a flipped EXISTS gate (the
+ * only thing that makes `builder.ts` construct a `UnionFanOut`/`UnionFanIn` pair) sitting
+ * under a `limit`. This is a 3-way axis interaction (`flip` x `exists_*_or` x `limit`), so
+ * it exists in the corpus only at `t >= 3`.
+ */
+export function fanInTakeCases(
+  cases: readonly QueryCase[],
+): readonly QueryCase[] {
+  return cases.filter(c => {
+    const ast = asQueryInternals(c.query).ast;
+    return (
+      ast.limit !== undefined &&
+      JSON.stringify(ast.where ?? null).includes('"flip":true')
+    );
+  });
+}
+
+/**
+ * **Random-yield push sweep over decorated L1 cases.**
+ *
+ * {@link checkYield} runs *skeletons* — structure only, no decorations — so it never has a
+ * `limit`, hence never a `Take`. {@link checkFlipInvariance} enumerates flips but only
+ * hydrates. Neither lane can reach a `Take` sitting above a `UnionFanIn` while a `'yield'`
+ * interrupts a maintenance fetch mid-push, which is exactly where that pair breaks.
+ *
+ * This lane closes that cell: decorated cases (so `limit` is real), filtered to the ones
+ * that actually build the fan-in, driven through the four-phase push walk with both IVM
+ * sources yield-wrapped. `max` caps the fan-out so it stays a per-PR cost.
+ */
+export async function checkYieldPush(
+  transact: Transact,
+  data: Data,
+  cases: readonly QueryCase[],
+  n: number,
+  seed: number,
+  max = 48,
+): Promise<Report> {
+  const selected = fanInTakeCases(cases).slice(0, max);
+  const failures: Array<[string, string]> = [];
+  let total = 0;
+  for (let i = 0; i < selected.length; i++) {
+    const c = selected[i];
+    const r = rng((seed ^ Math.imul(i + 1, 0x27d4eb2f)) >>> 0);
+    const wrap = createRandomYieldWrapper(() => r.float(), YIELD_P);
+    const ast = asQueryInternals(c.query).ast;
+    // Mutate both sides of the gate: parent pushes drive the fan-out, child pushes drive
+    // the flipped join's own push path into the fan-in.
+    const mutations = [...astTables(ast)].flatMap(t => fourPhase(data, t, n));
+    if (mutations.length === 0) {
+      continue;
+    }
     total += 1;
     const msg = await capture(() =>
-      transact(
-        d =>
-          mutations.length > 0
-            ? pushWalk(d, query, mutations)
-            : runAndCompare(schema, d, query, undefined),
-        wrap,
-      ),
+      transact(d => pushWalk(d, c.query, mutations), wrap),
     );
     if (msg) {
-      failures.push([`yield|${label(s)}`, msg]);
+      failures.push([`yieldPush|${c.label}`, msg]);
     }
   }
   return {total, failures};

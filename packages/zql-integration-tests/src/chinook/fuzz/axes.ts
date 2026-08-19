@@ -319,6 +319,18 @@ export const START_VALS = [
 ] as const;
 export type StartVal = (typeof START_VALS)[number];
 
+/**
+ * How an EXISTS gate is **planned**: `none` leaves the builder's default lowering (a
+ * semi-join), `flip` forces a `FlippedJoin`. `flip` is a plan choice the oracle ignores,
+ * so it must never change the answer — but it changes the *operator graph*: an OR
+ * containing a flipped gate is the only thing that makes `builder.ts` construct a
+ * `UnionFanOut`/`UnionFanIn` pair. Without this axis, no fan-in ever appears in a
+ * covering-array query, and every interaction with `limit` (`Take` over `UnionFanIn`),
+ * `start`, or `order` is invisible to t-wise coverage.
+ */
+export const FLIP_VALS = ['none', 'flip'] as const;
+export type FlipVal = (typeof FLIP_VALS)[number];
+
 /** One formal axis: a name + its ordered value-token domain. */
 export type AxisSpec = {
   readonly name: string;
@@ -336,6 +348,7 @@ export const AXES: readonly AxisSpec[] = [
   {name: 'order', values: ORDER_VALS},
   {name: 'limit', values: LIMIT_VALS},
   {name: 'start', values: START_VALS},
+  {name: 'flip', values: FLIP_VALS},
 ];
 
 export const N_AXES = AXES.length;
@@ -347,4 +360,60 @@ export function axisIndex(name: string): number {
     throw new Error(`unknown axis ${name}`);
   }
   return i;
+}
+
+// ── the one inter-axis constraint (exists x flip) ─────────────────────────────────────
+
+/**
+ * `flip` is only meaningful on a **positive** EXISTS gate: with no gate there is nothing
+ * to flip, and a flipped NOT EXISTS (anti-join) is not a supported plan — the same
+ * restriction `flip.ts` applies to flip-invariance.
+ *
+ * This is the **only** inter-axis constraint in the space. The covering-array builder and
+ * the coverage report both consult it, so unrealizable cells are never generated and never
+ * counted in the denominator — otherwise the "100% pairwise" gate could never be met.
+ */
+export function flipRealizable(ev: ExistsVal, fv: FlipVal): boolean {
+  return fv === 'none' || ev.startsWith('exists');
+}
+
+/**
+ * Whether a t-tuple (a list of `[axisIndex, valueIndex]`) is structurally realizable.
+ * Only constrained when the tuple pins **both** `exists` and `flip`; a tuple that pins
+ * just one of them is realizable, since the other axis is free to take a compatible
+ * value in some row.
+ */
+export function tupleRealizable(
+  tuple: ReadonlyArray<readonly [number, number]>,
+): boolean {
+  const ei = axisIndex('exists');
+  const fi = axisIndex('flip');
+  let e: number | undefined;
+  let f: number | undefined;
+  for (const [a, v] of tuple) {
+    if (a === ei) {
+      e = v;
+    } else if (a === fi) {
+      f = v;
+    }
+  }
+  if (e === undefined || f === undefined) {
+    return true;
+  }
+  return flipRealizable(EXISTS_VALS[e], FLIP_VALS[f]);
+}
+
+/**
+ * Whether a partial assignment (`null` = not yet chosen) violates the constraint. Used by
+ * the greedy fill so it never commits to an unrealizable pair.
+ */
+export function assignmentRealizable(
+  row: ReadonlyArray<number | null>,
+): boolean {
+  const e = row[axisIndex('exists')];
+  const f = row[axisIndex('flip')];
+  if (e === null || e === undefined || f === null || f === undefined) {
+    return true;
+  }
+  return flipRealizable(EXISTS_VALS[e], FLIP_VALS[f]);
 }

@@ -54,6 +54,56 @@ class ShapeRecordingDelegate extends QueryDelegateImpl {
   }
 }
 
+function shapeFor(flip: boolean | undefined): string[] {
+  const chatSchema = schema.tables.chat;
+  const messageSchema = schema.tables.message;
+  const delegate = new ShapeRecordingDelegate({
+    sources: {
+      chat: createSource(
+        lc,
+        testLogConfig,
+        'chat',
+        chatSchema.columns,
+        chatSchema.primaryKey,
+      ),
+      message: createSource(
+        lc,
+        testLogConfig,
+        'message',
+        messageSchema.columns,
+        messageSchema.primaryKey,
+      ),
+    },
+  });
+  delegate.materialize(
+    newQuery(schema, 'chat')
+      .where(({or, cmp, exists}) =>
+        or(
+          cmp('lastMessageAt', '>', 100),
+          exists(
+            'messages',
+            m => m.where('body', '=', 'x'),
+            flip === undefined ? undefined : {flip},
+          ),
+        ),
+      )
+      .orderBy('lastMessageAt', 'asc')
+      .orderBy('id', 'asc')
+      .limit(1),
+  );
+  return delegate.names.map(n => n.slice(n.lastIndexOf(':') + 1));
+}
+
+test('an EXISTS lowered without an explicit flip builds no union', () => {
+  // The fuzzer's `lower()` calls `.whereExists(rel, sub)` with no flip option and
+  // its driver never runs the planner, so every fuzzed EXISTS takes this path.
+  expect(shapeFor(undefined)).not.toContain('ufo');
+  expect(shapeFor(undefined)).not.toContain('ufi');
+  expect(shapeFor(false)).not.toContain('ufi');
+  // Only an explicit flip builds the fan-out/fan-in pair.
+  expect(shapeFor(true)).toContain('ufi');
+});
+
 test('take sits above a union fan-in for both source implementations', () => {
   const chatSchema = schema.tables.chat;
   const messageSchema = schema.tables.message;

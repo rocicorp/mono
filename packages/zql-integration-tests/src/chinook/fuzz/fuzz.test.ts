@@ -19,7 +19,17 @@ import type {AnyQuery} from '../../../../zql/src/query/query.ts';
 import {newStaticQuery} from '../../../../zql/src/query/static-query.ts';
 import {QueryDelegateImpl as TestMemoryQueryDelegate} from '../../../../zql/src/query/test/query-delegate.ts';
 import {schema} from '../schema.ts';
-import {AXES, hasText, pkOf, relsOf, tables} from './axes.ts';
+import {
+  AXES,
+  axisIndex,
+  EXISTS_VALS,
+  FLIP_VALS,
+  hasText,
+  LIMIT_VALS,
+  pkOf,
+  relsOf,
+  tables,
+} from './axes.ts';
 import {CostModel} from './cost.ts';
 import {
   decorate,
@@ -97,29 +107,71 @@ describe('coverage', () => {
     }
     expect(cov.fraction()).toBe(1);
     expect(cov.missed()).toEqual([]);
-    // Far smaller than the full cross-product (16·7·4·3·4 = 5376) …
+    // Far smaller than the full cross-product (16·7·4·3·4·2 = 10752) …
     expect(rows.length).toBeLessThan(200);
     // … but at least the largest single-pair domain product (filter·exists = 16·7).
     expect(rows.length).toBeGreaterThanOrEqual(16 * 7);
   });
 
-  test('observe marks every t-subset; total is the pairwise tuple count', () => {
+  test('observe marks every t-subset; total is the realizable pairwise tuple count', () => {
     const cov = new Coverage(2);
     expect(cov.hitCount()).toBe(0);
-    // Pairwise total is Σ over axis-pairs of dom_i·dom_j.
+    // Pairwise total is Σ over axis-pairs of dom_i·dom_j …
     const domains = AXES.map(a => a.values.length);
-    const expected = domains.flatMap((d, i) =>
-      domains.slice(i + 1).map(e => d * e),
-    );
+    const gross = domains
+      .flatMap((d, i) => domains.slice(i + 1).map(e => d * e))
+      .reduce((acc, n) => acc + n, 0);
+    // … minus the structurally unrealizable exists×flip cells: `flip=flip` is only
+    // meaningful on a positive gate, so it pairs with none of the 4 non-positive
+    // `exists` values (`none` + the three `not_exists_*`).
+    const unrealizable = EXISTS_VALS.filter(
+      e => !e.startsWith('exists'),
+    ).length;
+    expect(unrealizable).toBe(4);
+    expect(cov.total()).toBe(gross - unrealizable);
+
     const pairCount = (AXES.length * (AXES.length - 1)) / 2;
-    const total = cov.total();
-    expect(total).toBe(expected.reduce((acc, n) => acc + n, 0));
-    cov.observe([0, 0, 0, 0, 0]); // one assignment hits C(N_AXES,2) tuples
+    const zeros = new Array(AXES.length).fill(0);
+    const ones = new Array(AXES.length).fill(1);
+    cov.observe(zeros); // one assignment hits C(N_AXES,2) tuples
     expect(cov.hitCount()).toBe(pairCount);
-    cov.observe([1, 1, 1, 1, 1]); // a fully-different assignment adds fresh tuples
+    cov.observe(ones); // a fully-different assignment adds fresh tuples
     expect(cov.hitCount()).toBe(pairCount * 2);
-    cov.observe([0, 0, 0, 0, 0]); // re-observing is idempotent
+    cov.observe(zeros); // re-observing is idempotent
     expect(cov.hitCount()).toBe(pairCount * 2);
+  });
+
+  test('the flip axis is covered and never pairs with a non-positive gate', () => {
+    const rows = greedyCover(2);
+    const ei = axisIndex('exists');
+    const fi = axisIndex('flip');
+    const flipped = rows.filter(r => FLIP_VALS[r[fi]] === 'flip');
+    expect(flipped.length).toBeGreaterThan(0);
+    for (const r of flipped) {
+      expect(
+        EXISTS_VALS[r[ei]].startsWith('exists'),
+        `flip=flip paired with exists=${EXISTS_VALS[r[ei]]}`,
+      ).toBe(true);
+    }
+  });
+
+  test('strength 3 is what reaches the flip×or×limit shape', () => {
+    // A flipped gate only builds a UnionFanOut/FanIn when it sits inside an OR, and a
+    // Take only sits above that fan-in when the query is limited. That is a 3-way
+    // interaction, so pairwise does not guarantee it — this pins why `l1QueryCases`
+    // defaults to t=3.
+    const ei = axisIndex('exists');
+    const fi = axisIndex('flip');
+    const li = axisIndex('limit');
+    const hits = (t: number) =>
+      greedyCover(t).filter(
+        r =>
+          FLIP_VALS[r[fi]] === 'flip' &&
+          EXISTS_VALS[r[ei]] === 'exists_or' &&
+          LIMIT_VALS[r[li]] !== 'none',
+      ).length;
+    expect(hits(2)).toBe(0);
+    expect(hits(3)).toBeGreaterThan(0);
   });
 });
 
