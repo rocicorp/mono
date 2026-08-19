@@ -1012,7 +1012,7 @@ describe('change-source/pg', {timeout: 30000, retry: 3}, () => {
     )[0];
   }
 
-  test('v5 backup options recordes', async () => {
+  test('v5 backup options recorded', async () => {
     await startReplication({backupV5: true});
 
     const originalBackupOptions = await backupOptions();

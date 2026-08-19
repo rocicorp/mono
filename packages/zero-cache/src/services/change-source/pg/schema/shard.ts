@@ -368,7 +368,7 @@ export async function getReplicaAtVersion(
       SELECT id, slot, version, "initialSyncContext", "subscriberContext" 
         FROM ${schema}.replicas`;
     lc.info?.(
-      `Replica ${id} ` +
+      `Replica ${id}@${replicaVersion}` +
         (context ? `(context: ${stringify(context)}) ` : '') +
         `not found in: ${stringify(allReplicas)}`,
     );
@@ -399,7 +399,7 @@ export async function getActiveReplicas(
       ORDER BY generation DESC, confirmed_flush_lsn DESC;
   `;
   const replicas = v.parse(results, v.array(replicaStateSchema), 'passthrough');
-  lc.info?.(`current replicas in ${shard.appID}_${shard.shardNum}`, {replicas});
+  lc.info?.(`current replicas`, {replicas});
   return replicas;
 }
 
