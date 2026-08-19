@@ -365,7 +365,15 @@ export class MemorySource implements Source {
     }
 
     const withOverlay = generateWithOverlay(
-      startAt,
+      // Only prune overlays by `startAt` when the row stream genuinely begins
+      // there. With a constraint, `scanStart` is derived from the constraint
+      // instead, and the index leads with the constraint keys — so comparing a
+      // connection-sort bound against an overlay row with `indexComparator`
+      // compares the wrong things and drops valid overlays. (Pruning is a pure
+      // optimization here anyway: an overlay that matches the constraint is
+      // never before the constraint-derived `scanStart`, and `req.start` is
+      // still applied below by `generateWithStart` with `connectionComparator`.)
+      fetchOrPkConstraint ? undefined : startAt,
       pkConstraint ? once(rowsIterable) : rowsIterable,
       // use `req.constraint` here and not `fetchOrPkConstraint` since `fetchOrPkConstraint` could be the
       // primary key constraint. The primary key constraint comes from filters and is acting as a filter

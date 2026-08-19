@@ -245,8 +245,67 @@ identically:
 - `employee | exists_or | flip | limit=small | start=mid_exclusive` — a
   silent divergence that survives with yields disabled.
 
-Both are pre-existing flip/take defects that the new lane surfaced on its own
-merits, and both want their own investigation.
+Both were pre-existing defects that the new lane surfaced on its own merits.
+**Both have since been root-caused — they are one bug, in `MemorySource` — and
+fixed.** See [Second defect](#second-defect--memorysource-push-overlay-vs-start).
+
+## Second defect — MemorySource push overlay vs. `start`
+
+Not a yield bug, not a `UnionFanIn` bug, and not a `Take` bug: `Take`'s asserts
+fired on stale data handed to it by the source. `TableSource` (SQLite) was
+never affected, so this is **client-side only**.
+
+`MemorySource.#fetch` passed `req.start.row` to `generateWithOverlay` as the
+stream's lower bound, and `overlaysForStartAt` pruned the in-flight push
+overlay with `indexComparator`:
+
+```ts
+const undefinedIfBeforeStartAt = (row: Row | undefined) =>
+  row === undefined || compare(row, startAt) < 0 ? undefined : row;
+```
+
+That is only sound when the index sort *is* the connection sort — the
+no-constraint branch, where `scanStart = startAt` and the stream really does
+begin at `startAt`. When there is a constraint, `scanStart` is built from the
+constraint instead and `indexSort` leads with the constraint keys (for a
+PK-shaped constraint it is *only* the PK). Comparing a connection-sort bound
+against an overlay row in that order compares the wrong columns, so a valid
+overlay is dropped and the fetch returns pre-push data.
+
+A flipped EXISTS is what brings the two together. `FlippedJoin.#fetchBatched`
+fetches its parent with `multiConstraints`, which `#fetchMulti` splits into one
+sub-fetch per value — each carrying a **primary-key `constraint`** — while
+forwarding the `start` that `Take` uses for its maintenance fetches. So:
+
+- **genre case.** Window not full (`limit` >= matching rows), so `bound` is the
+  largest row. Editing a row from inside the window to past the bound puts
+  `Take` in its `oldCmp < 0 && newCmp > 0` arm, which fetches
+  `{start: {row: bound, basis: 'after'}}` for `afterBoundNode`. That row *is*
+  the edit, visible only through the overlay — pruned, so the fetch came back
+  empty and the assert fired.
+- **employee case.** Identical mechanism, silent: the row that should have
+  entered the window was never added, so the view was short one row.
+
+Both reduce to a 2-operation, no-yield, no-PG repro. Isolation on the genre
+case: fails for `flip` at `limit` 3/4/10000 (window not full), clean for
+`noflip`, for no gate at all, and for `limit` 1/2 — on `MemorySource` only.
+
+**Fix:** pass the stream's real lower bound — i.e. only prune by `startAt` when
+there is no constraint. Pruning was a pure optimization in the constrained
+case anyway: an overlay matching the constraint is never before the
+constraint-derived `scanStart`, and `req.start` is still applied afterwards by
+`generateWithStart` with `connectionComparator`.
+
+```ts
+const withOverlay = generateWithOverlay(
+  fetchOrPkConstraint ? undefined : startAt,
+  ...
+```
+
+**Result:** the backbone lane goes 2/48 → **0/48**; all 7 backbone tests pass.
+Pinned by `packages/zql/src/query/flip-take-overlay-start.test.ts`, which
+reproduces both cases and fails on `MemorySource` without the fix (a throw and
+a wrong result respectively) while passing on `TableSource`.
 
 ## Reproducing
 
