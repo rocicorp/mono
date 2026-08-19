@@ -50,6 +50,7 @@ describe('config/normalize litestream v5 gating', () => {
     expect(() =>
       assertNormalized(
         configWith({
+          backupURL: 's3://foo/bar',
           backupUsingV5: true,
           restoreUsingV5: true,
           executableV5: undefined,
@@ -66,6 +67,7 @@ describe('config/normalize litestream v5 gating', () => {
     expect(() =>
       assertNormalized(
         configWith({
+          backupURL: 's3://foo/bar',
           restoreUsingV5: true,
           executableV5: undefined,
         }),

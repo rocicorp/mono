@@ -78,7 +78,8 @@ export function assertNormalized(
     '--litestream-backup-using-v5 requires --litestream-restore-using-v5',
   );
   assert(
-    config.litestream.executableV5 ||
+    !config.litestream.backupURL ||
+      config.litestream.executableV5 ||
       !(config.litestream.restoreUsingV5 || config.litestream.backupUsingV5),
     '--litestream-restore-using-v5 and --litestream-backup-using-v5 ' +
       'require --litestream-executable to be specified',
