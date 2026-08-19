@@ -313,6 +313,68 @@ export class Storer implements Service {
     return minWatermark;
   }
 
+  /**
+   * Returns the retained Postgres catchup bounds.
+   * `minWatermark` is the oldest transaction, or `null` for a new replica.
+   * `lastWatermark` is the durable head.
+   */
+  async getCatchupBounds(): Promise<{
+    minWatermark: string | null;
+    lastWatermark: string;
+  }> {
+    const [bounds] = await this.#db<
+      {minWatermark: string | null; lastWatermark: string}[]
+    > /*sql*/ `
+      SELECT
+        (SELECT min(watermark) FROM ${this.#cdc('changeLog')}) as "minWatermark",
+        (SELECT "lastWatermark" FROM ${this.#cdc('replicationState')}) as "lastWatermark"`;
+    return bounds;
+  }
+
+  /**
+   * Lists at most `limit` committed transaction watermarks in
+   * `(afterWatermark, throughWatermark]`, in ascending order.
+   */
+  async listCommitWatermarks(
+    afterWatermark: string,
+    throughWatermark: string,
+    limit: number,
+  ): Promise<string[]> {
+    const rows = await this.#db<{watermark: string}[]> /*sql*/ `
+      SELECT watermark FROM ${this.#cdc('changeLog')}
+       WHERE precommit IS NOT NULL
+         AND watermark > ${afterWatermark}
+         AND watermark <= ${throughWatermark}
+       ORDER BY watermark
+       LIMIT ${limit}`;
+    return rows.map(({watermark}) => watermark);
+  }
+
+  /**
+   * Reads `(afterWatermark, throughWatermark]` in stream order and bounded batches.
+   * This query matches the subscriber catchup query.
+   *
+   * Both queries fail when an escaped NUL reaches `change->'tag'`.
+   * Postgres cannot convert that value to text.
+   */
+  readCatchupRange(
+    afterWatermark: string,
+    throughWatermark: string,
+    batchRows = 2000,
+  ): AsyncIterable<ChangeLogEntry[]> {
+    assert(
+      Number.isSafeInteger(batchRows) && batchRows > 0,
+      'Postgres change log batch size must be a positive safe integer',
+    );
+    return this.#db<ChangeLogEntry[]> /*sql*/ `
+      SELECT watermark, change->'tag' as tag, change::text FROM ${this.#cdc('changeLog')}
+       WHERE watermark > ${afterWatermark}
+         AND watermark <= ${throughWatermark}
+       ORDER BY watermark, pos`.cursor(batchRows) as AsyncIterable<
+      ChangeLogEntry[]
+    >;
+  }
+
   purgeRecordsBefore(watermark: string): Promise<number> {
     return runTx(this.#db, async sql => {
       // This NOWAIT pre-check is an optimization to abort the transaction
