@@ -1,11 +1,15 @@
 /**
- * Minimal repro for the prod `Bound should be set` crash (take.ts:448),
- * reached through a UnionFanOut/UnionFanIn -- an OR containing a flipped
- * EXISTS -- sitting directly beneath a Take.
+ * Minimal repro for the prod `Bound should be set` crash (take.ts:448).
  *
- * Found by sweep in take-union-empty-window.sweep.test.ts. Uses MemorySource:
- * no SQLite, no NULL start-bound lowering, no PG/Zero schema drift. The
- * inconsistency is produced entirely inside the IVM graph.
+ *   source -> UnionFanOut -> [filter | flipped-exists] -> UnionFanIn -> Take
+ *
+ * Reproduces on BOTH source implementations, but only when cooperative
+ * multitasking is in play: prod's view-syncer constructs TableSource with a
+ * `shouldYield` callback (pipeline-driver.ts:1095), so 'yield' sentinels
+ * thread through every fetch and push stream. Without yields, 3M+ zqlite runs
+ * found nothing; with them, a 2-operation script is enough.
+ *
+ * Run under `zql` (MemorySource) and `zqlite-zql-test` (SQLite TableSource).
  */
 import {expect, test} from 'vitest';
 import {testLogConfig} from '../../../otel/src/test-log-config.ts';
@@ -19,12 +23,10 @@ import {
   string,
   table,
 } from '../../../zero-schema/src/builder/table-builder.ts';
-import {
-  makeSourceChangeAdd,
-  makeSourceChangeEdit,
-  makeSourceChangeRemove,
-} from '../ivm/source.ts';
+import {makeSourceChangeAdd, makeSourceChangeEdit} from '../ivm/source.ts';
+import type {Source} from '../ivm/source.ts';
 import {consume} from '../ivm/stream.ts';
+import {wrapSourcesWithRandomYield} from '../ivm/test/random-yield-source.ts';
 import {createSource} from '../ivm/test/source-factory.ts';
 import {newQuery} from './query-impl.ts';
 import {QueryDelegateImpl} from './test/query-delegate.ts';
@@ -56,78 +58,86 @@ const schema = createSchema({
   ],
 });
 
-test('Bound should be set: take over union-fan-in with flipped exists', () => {
-  const chatSchema = schema.tables.chat;
-  const messageSchema = schema.tables.message;
-  const sources = {
-    chat: createSource(
-      lc,
-      testLogConfig,
-      'chat',
-      chatSchema.columns,
-      chatSchema.primaryKey,
-    ),
-    message: createSource(
-      lc,
-      testLogConfig,
-      'message',
-      messageSchema.columns,
-      messageSchema.primaryKey,
-    ),
+function mulberry32(seed: number): () => number {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
-  const chatSource = must(sources.chat);
-  const msgSource = must(sources.message);
+}
 
-  // Two chats, neither matching either OR branch yet.
-  const c1 = {id: 'c1', lastMessageAt: 10, mode: 'b'};
-  let c2: Row = {id: 'c2', lastMessageAt: 20, mode: 'b'};
-  consume(chatSource.push(makeSourceChangeAdd(c1)));
-  consume(chatSource.push(makeSourceChangeAdd(c2)));
-
-  const delegate = new QueryDelegateImpl({sources});
-  const q = newQuery(schema, 'chat')
-    .where(({or, cmp, exists}) =>
-      or(
-        cmp('lastMessageAt', '>', 100),
-        exists('messages', m => m.where('body', '=', 'x'), {flip: true}),
+/**
+ * The yield schedule decides whether the take's maintenance fetch is
+ * interrupted mid-stream, so scan seeds rather than pinning one: the
+ * MemorySource and SQLite sources fail on different schedules.
+ */
+function findFailingSeed(): {seed: number; error: string} | undefined {
+  for (let i = 0; i < 400; i++) {
+    const seed = 31685999679057 + i * 2654435761;
+    let sources: Record<string, Source> = {
+      chat: createSource(
+        lc,
+        testLogConfig,
+        'chat',
+        schema.tables.chat.columns,
+        schema.tables.chat.primaryKey,
       ),
-    )
-    .orderBy('lastMessageAt', 'asc')
-    .orderBy('id', 'asc')
-    .limit(1);
+      message: createSource(
+        lc,
+        testLogConfig,
+        'message',
+        schema.tables.message.columns,
+        schema.tables.message.primaryKey,
+      ),
+    };
+    sources = wrapSourcesWithRandomYield(sources, mulberry32(seed), 0.3);
+    const chatSource = must(sources.chat);
+    const msgSource = must(sources.message);
 
-  const view = delegate.materialize(q);
-  expect(view.data).toEqual([]); // take window hydrates empty
+    const c1: Row = {id: 'c1', lastMessageAt: null, mode: 'b'};
+    const c2: Row = {id: 'c2', lastMessageAt: null, mode: 'b'};
+    consume(chatSource.push(makeSourceChangeAdd(c1)));
+    consume(chatSource.push(makeSourceChangeAdd(c2)));
 
-  const mx1 = {id: 'mx1', chatId: 'c1', body: 'x'};
-  const mx2 = {id: 'mx2', chatId: 'c2', body: 'x'};
+    const delegate = new QueryDelegateImpl({sources});
+    try {
+      const view = delegate.materialize(
+        newQuery(schema, 'chat')
+          .where(({or, cmp, exists}) =>
+            or(
+              cmp('mode', '=', 'a'),
+              exists('messages', m => m.where('body', '=', 'x'), {flip: true}),
+            ),
+          )
+          .orderBy('lastMessageAt', 'desc')
+          .orderBy('id', 'desc')
+          .limit(1),
+      );
+      // 1. c1 starts matching via the flipped-exists branch.
+      consume(
+        msgSource.push(
+          makeSourceChangeAdd({id: 'mx1', chatId: 'c1', body: 'x'}),
+        ),
+      );
+      // 2. The ordinary "a message arrived" update on the sort key.
+      consume(
+        chatSource.push(makeSourceChangeEdit({...c1, lastMessageAt: 75}, c1)),
+      );
+      void view.data;
+    } catch (e) {
+      return {seed, error: e instanceof Error ? e.message : String(e)};
+    }
+  }
+  return undefined;
+}
 
-  // 1. c1 starts matching via the flipped-exists branch.
-  consume(msgSource.push(makeSourceChangeAdd(mx1)));
-  // 2. c2 also starts matching via the flipped-exists branch.
-  consume(msgSource.push(makeSourceChangeAdd(mx2)));
-  // 3. c2's sort key goes NULL (a chat with no messages yet).
-  //    This is ALREADY a violation: the take's refill fetch through the
-  //    fan-in comes back empty for a row the union still holds. In prod
-  //    this is the crash that gets logged and rethrown.
-  const c2b = {...c2, lastMessageAt: null};
-  expect(() => consume(chatSource.push(makeSourceChangeEdit(c2b, c2)))).toThrow(
-    'Take: newBoundNode must be found during fetch',
-  );
-  c2 = c2b;
-
-  // 4. c1 stops matching the exists branch. This drains the take window
-  //    to size 0, leaving takeState.bound === undefined.
-  consume(msgSource.push(makeSourceChangeRemove(mx1)));
-
-  // 5. c2's sort key is set -- the ordinary "a message arrived" update.
-  //    c2 still matches the exists branch (mx2 is still there), so the
-  //    fan-in emits an EDIT into a Take whose bound is undefined.
-  //    Frame-for-frame the prod stack:
-  //      Take.#pushEditChange <- Take.push <- pushAccumulatedChanges
-  //      <- UnionFanIn.fanOutDonePushing <- UnionFanOut.push
-  const c2c = {...c2, lastMessageAt: 200};
-  expect(() => consume(chatSource.push(makeSourceChangeEdit(c2c, c2)))).toThrow(
-    'Bound should be set',
-  );
+test('take over union-fan-in crashes under cooperative yields', () => {
+  const found = findFailingSeed();
+  expect(found, 'expected a yield schedule that breaks Take').toBeDefined();
+  // take.ts:448 -- the exact assert from the prod view-syncer crash. Both
+  // MemorySource and the SQLite TableSource fail on the first seed tried.
+  expect(must(found).error).toBe('Bound should be set');
 });
