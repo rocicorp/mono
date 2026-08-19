@@ -267,6 +267,26 @@ describe('sqlite change log reader', () => {
     await expect(collect(reader, '06', '06', 2)).resolves.toEqual([]);
   });
 
+  test('caps total rows across read batches', async () => {
+    const {db, path} = createChangeLog();
+    using writer = db;
+    const tx04 = appendTransaction(writer, '04', [
+      truncate(),
+      truncate(),
+      truncate(),
+      truncate(),
+      truncate(),
+    ]);
+    using reader = new SQLiteChangeLogReader(lc, path);
+
+    const batches: (readonly WatermarkedChange[])[] = [];
+    for await (const batch of reader.read('02', '04', 2, undefined, 5)) {
+      batches.push(batch);
+    }
+    expect(batches.map(batch => batch.length)).toEqual([2, 2, 1]);
+    expect(flatten(batches)).toEqual(tx04.slice(0, 5));
+  });
+
   test('pins the head while another connection appends and purges', async () => {
     const {db, path} = createChangeLog();
     using writer = db;
