@@ -62,6 +62,7 @@ import {
   ProtocolErrorWithLevel,
   wrapWithProtocolError,
 } from '../../types/error-with-level.ts';
+import type {LexiVersion} from '../../types/lexi-version.ts';
 import type {PostgresDB} from '../../types/pg.ts';
 import {rowIDString, type RowKey} from '../../types/row-key.ts';
 import type {ShardID} from '../../types/shards.ts';
@@ -293,7 +294,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
   #cvr: CVRSnapshot | undefined;
   #pipelinesSynced = false;
-  #servedVersion: string | null = null;
+  #servedVersion: LexiVersion | null = null;
   readonly #e2eServingLagTracker = new E2EServingLagTracker();
 
   #expiredQueriesTimer: ReturnType<SetTimeout> | 0 = 0;
@@ -341,8 +342,12 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         'End-to-end lag from upstream commit to ViewSyncer output. Spans the ' +
         'whole pipeline: the upstream transaction commit, replication to the ' +
         'replica, IVM advancement, CVR flush, and pokeEnd. Recorded once per ' +
-        'served version, not sampled, so each observation is the completion ' +
-        'latency of real replicated work.',
+        'advancement, not sampled, so each observation is the completion ' +
+        'latency of real replicated work. An advancement that produced no ' +
+        'changes for this client group still counts: the group is genuinely ' +
+        'current as of that commit, and excluding it would make the metric ' +
+        'measure the time since the group last received data instead of the ' +
+        'pipeline latency.',
       unit: 's',
     },
   );
@@ -728,7 +733,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     return this.#cvrStore.rowCount;
   }
 
-  get servedVersion(): string | null {
+  get servedVersion(): LexiVersion | null {
     return this.#servedVersion;
   }
 
@@ -739,10 +744,29 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
     );
   }
 
-  #markVersionServed(version: CVRVersion) {
-    this.#servedVersion = version.stateVersion;
+  /**
+   * Records that this client group is caught up through `stateVersion`, i.e.
+   * everything the replica had at that version has been poked to clients.
+   *
+   * This is the *replica* state version that was processed, not the CVR
+   * version. The two diverge whenever an advancement produces no writes for
+   * this client group: `CVRUpdater.flush()` returns the pre-update snapshot on
+   * a no-op flush, so the CVR version stays where it was even though the group
+   * is fully current with the replica. Marking the CVR version here would
+   * leave every client group that did not happen to match a transaction
+   * looking permanently unserved, and both `sync.serving_lag_stats` and
+   * `sync.e2e_serving_lag` would then report the time since the group's last
+   * *data* change as though it were lag.
+   *
+   * Monotonic: `#catchupClients` may pass a CVR that is not the current one.
+   */
+  #markVersionServed(stateVersion: LexiVersion) {
+    if (this.#servedVersion !== null && stateVersion <= this.#servedVersion) {
+      return;
+    }
+    this.#servedVersion = stateVersion;
     const observation = this.#e2eServingLagTracker.onVersionServed(
-      version.stateVersion,
+      stateVersion,
       Date.now(),
     );
     if (observation !== null) {
@@ -2424,7 +2448,9 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       await startAsyncSpan(tracer, 'vs.#syncQueryPipelineSet.pokeEnd', () =>
         pokers.end(finalVersion),
       );
-      this.#markVersionServed(finalVersion);
+      // `stateVersion` is the replica version the queries were hydrated at,
+      // which is what the CVR was advanced to. See #markVersionServed.
+      this.#markVersionServed(stateVersion);
 
       const wallTime = performance.now() - start;
       lc.info?.(
@@ -2529,7 +2555,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
       if (!usePokers) {
         await pokers.end(cvr.version);
-        this.#markVersionServed(cvr.version);
+        this.#markVersionServed(cvr.version.stateVersion);
       }
     });
   }
@@ -2686,7 +2712,10 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
       await startAsyncSpan(tracer, 'vs.#advancePipelines.pokeEnd', () =>
         pokers.end(finalVersion),
       );
-      this.#markVersionServed(finalVersion);
+      // `version`, not `finalVersion`: the pipelines advanced to the replica's
+      // `version` and every resulting change has now been poked. `finalVersion`
+      // lags it whenever the CVR flush was a no-op. See #markVersionServed.
+      this.#markVersionServed(version);
 
       const wallTime = performance.now() - start;
       const totalProcessTime = timer.totalElapsed();
