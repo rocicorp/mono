@@ -991,11 +991,19 @@ describe('db/transaction-pool', () => {
     // Run the pool.
     pool.run(db);
 
-    // Run the readers.
+    // Run 2 readers.
+    const numReadWorkers = 2;
     const {init: importInit, imported} = importSnapshot(await snapshotID);
-    const readers = newTransactionPool(Mode.READONLY, importInit);
+    const readers = newTransactionPool(
+      Mode.READONLY,
+      importInit,
+      undefined,
+      numReadWorkers,
+    );
     readers.run(db);
-    await imported;
+    for (let i = 0; i < numReadWorkers; i++) {
+      await imported.dequeue();
+    }
 
     const processed: Promise<number[]>[] = [];
 

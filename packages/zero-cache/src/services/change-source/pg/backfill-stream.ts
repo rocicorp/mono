@@ -309,7 +309,7 @@ async function createSnapshotTransaction(
 
     const {init, imported} = importSnapshot(snapshot);
     const tx = new TransactionPool(lc, {mode: READONLY, init}).run(db);
-    await imported;
+    await imported.dequeue();
 
     const watermark = toStateVersionString(lsn);
     lc.info?.(`Opened snapshot transaction at LSN ${lsn} (${watermark})`);
