@@ -318,7 +318,7 @@ jobs:
           path: dist/docker
 
       - name: Push GHCR Docker image
-        uses: docker://quay.io/containers/skopeo:v1.22.2@sha256:e268031b80e65ba25dd2020383232587daf0ae670727b5ccdbe7a0008e9216bc
+        uses: docker://quay.io/containers/skopeo:v1.22.2-immutable@sha256:ca4fd94dba8cab15cf79c4c156bfc26d28e2265411294e9bba87756942e739ad
         with:
           args: >-
             copy --all
@@ -330,7 +330,7 @@ jobs:
         # Moving tag tracking the newest head release. The cosign signature
         # below covers it because signatures attach to the digest.
         if: needs.plan.outputs.mode == 'head'
-        uses: docker://quay.io/containers/skopeo:v1.22.2@sha256:e268031b80e65ba25dd2020383232587daf0ae670727b5ccdbe7a0008e9216bc
+        uses: docker://quay.io/containers/skopeo:v1.22.2-immutable@sha256:ca4fd94dba8cab15cf79c4c156bfc26d28e2265411294e9bba87756942e739ad
         with:
           args: >-
             copy --all
@@ -340,7 +340,7 @@ jobs:
 
       - name: Push Docker Hub image
         if: needs.plan.outputs.mode != 'head'
-        uses: docker://quay.io/containers/skopeo:v1.22.2@sha256:e268031b80e65ba25dd2020383232587daf0ae670727b5ccdbe7a0008e9216bc
+        uses: docker://quay.io/containers/skopeo:v1.22.2-immutable@sha256:ca4fd94dba8cab15cf79c4c156bfc26d28e2265411294e9bba87756942e739ad
         with:
           args: >-
             copy --all
