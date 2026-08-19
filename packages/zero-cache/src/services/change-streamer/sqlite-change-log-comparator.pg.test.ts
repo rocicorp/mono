@@ -774,6 +774,72 @@ describe('change-streamer/sqlite-change-log-comparator', () => {
     });
   });
 
+  test('caps total catchup bytes per source and defers, then skips, a wide transaction', async () => {
+    await feedBoth(
+      tx('03', messages.insert('foo', {id: 'narrow'})),
+      // One row wider than a whole cycle budget.
+      tx('04', messages.insert('foo', {id: 'wide', pad: 'x'.repeat(5000)})),
+    );
+    const comparator = newComparator({maxBytesPerSourcePerCycle: 2000});
+
+    // The narrow transaction fits and spends part of the budget. The wide one
+    // cannot fit in what remains, so it waits for a fresh budget.
+    expect(await comparator.compareOnce()).toMatchObject({
+      throughWatermark: '03',
+      transactions: 1,
+      sampled: 2,
+      matched: 1,
+      deferred: 1,
+      oversized: 0,
+      mismatched: 0,
+    });
+
+    // A fresh budget does not fit it either, so it is skipped rather than
+    // retried forever, and the cursor advances past it.
+    expect(await comparator.compareOnce()).toMatchObject({
+      fromWatermark: '03',
+      throughWatermark: '04',
+      sampled: 1,
+      matched: 0,
+      deferred: 0,
+      oversized: 1,
+      mismatched: 0,
+    });
+    // A byte limit is not divergence.
+    expect(divergedWatermarks()).toEqual([]);
+  });
+
+  test('a generous byte budget leaves the row budget binding', async () => {
+    await feedBoth(
+      tx('03', messages.insert('foo', {id: 'first'})),
+      tx(
+        '04',
+        messages.insert('foo', {id: 'second-a'}),
+        messages.insert('foo', {id: 'second-b'}),
+      ),
+    );
+    // The same expectations as the row-budget test above.
+    const comparator = newComparator({
+      maxRowsPerSourcePerCycle: 5,
+      maxBytesPerSourcePerCycle: 1024 * 1024,
+      readBatchRows: 2,
+    });
+
+    expect(await comparator.compareOnce()).toMatchObject({
+      throughWatermark: '03',
+      matched: 1,
+      deferred: 1,
+      oversized: 0,
+    });
+    expect(await comparator.compareOnce()).toMatchObject({
+      fromWatermark: '03',
+      throughWatermark: '04',
+      matched: 1,
+      deferred: 0,
+      oversized: 0,
+    });
+  });
+
   test('compares a transaction that exactly fills the cycle row budget', async () => {
     await feedBoth(tx('03', messages.insert('foo', {id: 'exact'})));
 

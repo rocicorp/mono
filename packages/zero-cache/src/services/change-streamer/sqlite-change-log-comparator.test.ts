@@ -13,6 +13,9 @@ import {
 describe('change-streamer/sqlite-change-log-comparator/properties', () => {
   type TxKind = 'complete' | 'orphan' | 'rollback';
 
+  /** Isolates the row budget in tests that do not exercise the byte budget. */
+  const NO_BYTE_LIMIT = Number.MAX_SAFE_INTEGER;
+
   const streamScenario = fc.record({
     txs: fc.array(
       fc.record({
@@ -83,6 +86,7 @@ describe('change-streamer/sqlite-change-log-comparator/properties', () => {
       chunked(rows, sizes),
       rows.at(-1)?.[0] ?? '',
       rows.length + 1,
+      NO_BYTE_LIMIT,
     );
 
   test('the digest is a pure function of the served rows, not their batching', async () => {
@@ -189,6 +193,7 @@ describe('change-streamer/sqlite-change-log-comparator/properties', () => {
             chunked(rows, [4]),
             through,
             maxRows,
+            NO_BYTE_LIMIT,
           );
 
           const served = Math.min(maxRows, rows.length);
@@ -202,6 +207,65 @@ describe('change-streamer/sqlite-change-log-comparator/properties', () => {
       ),
       {numRuns: 100},
     );
+  });
+
+  test('the byte budget bounds the read', async () => {
+    const rows = buildRows([{width: 5, kind: 'complete'}]);
+    const through = rows.at(-1)?.[0] ?? '';
+    const read = (maxBytes: number) =>
+      digestCatchupRange(
+        chunked(rows, [4]),
+        through,
+        rows.length + 1,
+        maxBytes,
+      );
+
+    // A budget above the cost of the range serves all of it.
+    const full = await read(NO_BYTE_LIMIT);
+    expect(full.rows).toBe(rows.length);
+    expect(full.bytes).toBeGreaterThan(0);
+    expect(full.limitReached).toBe(false);
+
+    // A budget below that cost stops before the closing commit.
+    const cut = await read(Math.floor(full.bytes / 2));
+    expect(cut.limitReached).toBe(true);
+    expect(cut.rows).toBeLessThan(full.rows);
+    expect(cut.bytes).toBeLessThan(full.bytes);
+
+    // A row wider than the whole budget stops the read before it is parsed.
+    const none = await read(1);
+    expect(none.rows).toBe(0);
+    expect(none.bytes).toBe(0);
+    expect(none.limitReached).toBe(true);
+  });
+
+  test('the byte count measures normalized payloads, not stored text', async () => {
+    // The same logical rows, one store padding its JSON with whitespace.
+    const canonical = buildRows([{width: 3, kind: 'complete'}]);
+    const padded = canonical.map(
+      ([w, tag, json]) =>
+        [w, tag, json.replaceAll(',', ' ,\n  ')] as WatermarkedChange,
+    );
+    const through = canonical.at(-1)?.[0] ?? '';
+
+    const a = await digestCatchupRange(
+      chunked(canonical, [4]),
+      through,
+      canonical.length + 1,
+      NO_BYTE_LIMIT,
+    );
+    const b = await digestCatchupRange(
+      chunked(padded, [4]),
+      through,
+      padded.length + 1,
+      NO_BYTE_LIMIT,
+    );
+
+    // Both stores spend the same budget, so a limit falls in the same place
+    // for both and neither side is sampled less than the other.
+    expect(b.bytes).toBe(a.bytes);
+    expect(b.digest).toBe(a.digest);
+    expect(b.rows).toBe(a.rows);
   });
 
   test('sampling is stable, bounded, and monotone in the percentage', () => {

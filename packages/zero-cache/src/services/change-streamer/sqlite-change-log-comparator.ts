@@ -32,6 +32,15 @@ const DEFAULT_MAX_TRANSACTIONS_PER_CYCLE = 256;
 /** Maximum catchup rows read from each store per cycle. */
 const DEFAULT_MAX_ROWS_PER_SOURCE_PER_CYCLE = 1000;
 
+/**
+ * Maximum normalized catchup bytes read from each store per cycle.
+ *
+ * Rows bound the per-row overhead. Bytes bound the parse and hash work,
+ * which scales with payload size instead of row count. Normal traffic
+ * reaches the row limit first. Wide payloads reach this one.
+ */
+const DEFAULT_MAX_BYTES_PER_SOURCE_PER_CYCLE = 32 * 1024 * 1024;
+
 /** Rows per SQLite catchup batch. */
 const DEFAULT_READ_BATCH_ROWS = 1000;
 
@@ -82,9 +91,9 @@ export type CompareCycleResult =
       readonly mismatched: number;
       /** Suspects rejected because store bounds changed. */
       readonly inconclusive: number;
-      /** Sampled transactions deferred to a fresh row budget. */
+      /** Sampled transactions deferred to a fresh budget. */
       readonly deferred: number;
-      /** Sampled transactions that exceed a fresh row budget. */
+      /** Sampled transactions that exceed a fresh budget. */
       readonly oversized: number;
     };
 
@@ -115,6 +124,8 @@ export type SQLiteChangeLogCompareOptions = {
   readonly maxTransactionsPerCycle?: number | undefined;
   /** Maximum catchup rows read from each store in one cycle. */
   readonly maxRowsPerSourcePerCycle?: number | undefined;
+  /** Maximum normalized catchup bytes read from each store in one cycle. */
+  readonly maxBytesPerSourcePerCycle?: number | undefined;
   readonly readBatchRows?: number | undefined;
   /** Clock for the warm-up period. Defaults to `Date.now`. */
   readonly now?: (() => number) | undefined;
@@ -159,7 +170,9 @@ export function normalizeChangeJSON(change: string): string {
 export type CatchupRangeDigest = {
   readonly digest: string;
   readonly rows: number;
-  /** The row limit was reached before the closing commit. */
+  /** Normalized bytes hashed. This is the payload cost of the range. */
+  readonly bytes: number;
+  /** A row or byte limit was reached before the closing commit. */
   readonly limitReached: boolean;
 };
 
@@ -168,29 +181,43 @@ export type CatchupRangeDigest = {
  *
  * The row position makes missing, extra, changed, and reordered rows change the digest.
  * The digest omits `precommit` because a commit already includes its watermark.
+ *
+ * The read stops at `maxRows` or at `maxBytes`, whichever comes first.
  */
 export async function digestCatchupRange(
   batches: AsyncIterable<readonly WatermarkedChange[]>,
   throughWatermark: string,
   maxRows: number,
+  maxBytes: number,
 ): Promise<CatchupRangeDigest> {
   const hasher = new ChangeLogTransactionHasher();
   let rows = 0;
+  let bytes = 0;
   let servedClosingCommit = false;
 
   for await (const batch of batches) {
     for (const [watermark, tag, json] of batch) {
-      if (rows === maxRows) {
-        return {digest: hasher.digest(), rows, limitReached: true};
+      if (rows === maxRows || bytes >= maxBytes) {
+        return {digest: hasher.digest(), rows, bytes, limitReached: true};
       }
+      // Measure the stored text before parsing it. A row wider than the
+      // whole budget never fits, and normalizing it first would pay the
+      // cost that this limit exists to avoid.
+      if (json.length > maxBytes) {
+        return {digest: hasher.digest(), rows, bytes, limitReached: true};
+      }
+      const change = normalizeChangeJSON(extractChangeSubstring(json, tag));
       hasher.add({
         watermark,
         pos: rows,
         tag,
-        change: normalizeChangeJSON(extractChangeSubstring(json, tag)),
+        change,
         precommit: null,
       });
       rows++;
+      // Count the normalized length so both stores measure the same logical
+      // payload. Stored encodings differ between them. Normalized ones do not.
+      bytes += change.length;
       if (tag === 'commit' && watermark === throughWatermark) {
         servedClosingCommit = true;
       }
@@ -199,7 +226,9 @@ export async function digestCatchupRange(
   return {
     digest: hasher.digest(),
     rows,
-    limitReached: rows === maxRows && !servedClosingCommit,
+    bytes,
+    limitReached:
+      (rows === maxRows || bytes >= maxBytes) && !servedClosingCommit,
   };
 }
 
@@ -238,6 +267,8 @@ type SampledComparison = {
   readonly outcome: CompareOutcome;
   readonly sqliteRowsRead: number;
   readonly pgRowsRead: number;
+  readonly sqliteBytesRead: number;
+  readonly pgBytesRead: number;
 };
 
 /**
@@ -467,9 +498,16 @@ export class SQLiteChangeLogComparator {
         this.#opts.maxRowsPerSourcePerCycle ??
           DEFAULT_MAX_ROWS_PER_SOURCE_PER_CYCLE,
       );
+      const maxBytesPerSource = Math.max(
+        1,
+        this.#opts.maxBytesPerSourcePerCycle ??
+          DEFAULT_MAX_BYTES_PER_SOURCE_PER_CYCLE,
+      );
 
       let sqliteRowsRead = 0;
       let pgRowsRead = 0;
+      let sqliteBytesRead = 0;
+      let pgBytesRead = 0;
       let previousBoundary = from;
       let handledThrough = from;
       for (const {watermark, inSqlite, inPg} of union) {
@@ -489,7 +527,16 @@ export class SQLiteChangeLogComparator {
         ) {
           const sqliteRowsRemaining = maxRowsPerSource - sqliteRowsRead;
           const pgRowsRemaining = maxRowsPerSource - pgRowsRead;
-          if (sqliteRowsRemaining === 0 || pgRowsRemaining === 0) {
+          // A read may pass the byte budget by its last row, so this
+          // compares against zero rather than checking for equality.
+          const sqliteBytesRemaining = maxBytesPerSource - sqliteBytesRead;
+          const pgBytesRemaining = maxBytesPerSource - pgBytesRead;
+          if (
+            sqliteRowsRemaining === 0 ||
+            pgRowsRemaining === 0 ||
+            sqliteBytesRemaining <= 0 ||
+            pgBytesRemaining <= 0
+          ) {
             record(watermark, 'deferred');
             break;
           }
@@ -502,10 +549,15 @@ export class SQLiteChangeLogComparator {
             watermark,
             sqliteRowsRemaining,
             pgRowsRemaining,
+            sqliteBytesRemaining,
+            pgBytesRemaining,
             maxRowsPerSource,
+            maxBytesPerSource,
           );
           sqliteRowsRead += comparison.sqliteRowsRead;
           pgRowsRead += comparison.pgRowsRead;
+          sqliteBytesRead += comparison.sqliteBytesRead;
+          pgBytesRead += comparison.pgBytesRead;
           const outcome =
             fileGeneration === this.#fileGeneration
               ? comparison.outcome
@@ -518,7 +570,7 @@ export class SQLiteChangeLogComparator {
             break;
           }
           if (outcome === 'oversized') {
-            // Advance past a transaction that cannot fit in a fresh row budget.
+            // Advance past a transaction that cannot fit in a fresh budget.
             stopAfterTransaction = true;
           }
           // Yield between sampled reads so other stream work can continue.
@@ -672,7 +724,10 @@ export class SQLiteChangeLogComparator {
     watermark: string,
     sqliteMaxRows: number,
     pgMaxRows: number,
+    sqliteMaxBytes: number,
+    pgMaxBytes: number,
     maxRowsPerSource: number,
+    maxBytesPerSource: number,
   ): Promise<SampledComparison> {
     let sqlite: CatchupRangeDigest;
     let pg: CatchupRangeDigest;
@@ -688,6 +743,7 @@ export class SQLiteChangeLogComparator {
         ),
         watermark,
         sqliteMaxRows,
+        sqliteMaxBytes,
       );
       pg = await digestCatchupRange(
         reconstructBatches(
@@ -695,6 +751,7 @@ export class SQLiteChangeLogComparator {
         ),
         watermark,
         pgMaxRows,
+        pgMaxBytes,
       );
     } catch (e) {
       // A failed catchup read makes the transaction suspect.
@@ -706,25 +763,37 @@ export class SQLiteChangeLogComparator {
         outcome: await this.#reconfirm(db, pinned, watermark),
         sqliteRowsRead: 0,
         pgRowsRead: 0,
+        sqliteBytesRead: 0,
+        pgBytesRead: 0,
       };
     }
-    const rowsRead = {sqliteRowsRead: sqlite.rows, pgRowsRead: pg.rows};
+    const read = {
+      sqliteRowsRead: sqlite.rows,
+      pgRowsRead: pg.rows,
+      sqliteBytesRead: sqlite.bytes,
+      pgBytesRead: pg.bytes,
+    };
     if (sqlite.limitReached || pg.limitReached) {
       // Skip a transaction that cannot fit in a fresh budget.
       // Defer one that does not fit only in the remaining budget.
+      // A budget is fresh when neither dimension has been spent.
+      const sqliteFresh =
+        sqliteMaxRows === maxRowsPerSource &&
+        sqliteMaxBytes === maxBytesPerSource;
+      const pgFresh =
+        pgMaxRows === maxRowsPerSource && pgMaxBytes === maxBytesPerSource;
       const outcome =
-        (sqlite.limitReached && sqliteMaxRows === maxRowsPerSource) ||
-        (pg.limitReached && pgMaxRows === maxRowsPerSource)
+        (sqlite.limitReached && sqliteFresh) || (pg.limitReached && pgFresh)
           ? 'oversized'
           : 'deferred';
-      return {outcome, ...rowsRead};
+      return {outcome, ...read};
     }
     if (sqlite.digest === pg.digest) {
-      return {outcome: 'match', ...rowsRead};
+      return {outcome: 'match', ...read};
     }
     return {
       outcome: await this.#reconfirm(db, pinned, watermark),
-      ...rowsRead,
+      ...read,
     };
   }
 
