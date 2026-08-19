@@ -12,6 +12,7 @@ function configWith(litestream: Partial<ZeroConfig['litestream']>): ZeroConfig {
       address: 'localhost',
       sqliteChangeLogMode: 'off',
       sqliteChangeLogReadPercent: 0,
+      sqliteChangeLogComparePercent: 1,
       sqliteChangeLogRetentionMs: 60_000,
       sqliteChangeLogReadBatchRows: 1000,
       sqliteChangeLogPurgeBatchRows: 1000,
@@ -128,6 +129,21 @@ describe('config/normalize SQLite change log', () => {
         'must be an integer between 0 and 100',
       );
     }
+  });
+
+  test('compare percentage must be an integer from 0 through 100, in any mode', () => {
+    for (const percent of [-1, 1.5, 101]) {
+      const config = configWith({});
+      config.changeStreamer.sqliteChangeLogComparePercent = percent;
+
+      expect(() => assertNormalized(config)).toThrow(
+        '--change-streamer-sqlite-change-log-compare-percent must be an integer between 0 and 100',
+      );
+    }
+    // A nonzero value is valid in every mode. Sampling starts in `compare` mode.
+    const config = configWith({});
+    config.changeStreamer.sqliteChangeLogComparePercent = 100;
+    expect(() => assertNormalized(config)).not.toThrow();
   });
 
   test('accepts positive integer tuning values', () => {
