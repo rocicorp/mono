@@ -718,18 +718,23 @@ export function sharedSnapshot(): {
 }
 
 /**
- * @returns An `init` Task for importing a snapshot from another transaction.
+ * @returns An `init` Task for importing a snapshot from another transaction,
+ *          as well as an `imported` Queue which resolves or rejects when each
+ *          worker is initialized.
  */
 export function importSnapshot(snapshotID: string): {
   init: Task;
-  imported: Promise<void>;
+  imported: Queue<void>;
 } {
-  const {promise: imported, resolve, reject} = resolver<void>();
+  const imported = new Queue<void>();
 
   return {
     init: tx => {
       const stmt = tx.unsafe(`SET TRANSACTION SNAPSHOT '${snapshotID}'`);
-      stmt.then(() => resolve(), reject);
+      stmt.then(
+        () => imported.enqueue(),
+        err => imported.enqueueRejection(err),
+      );
       return [stmt];
     },
 
