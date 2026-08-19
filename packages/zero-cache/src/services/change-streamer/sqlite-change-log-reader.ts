@@ -151,10 +151,15 @@ export class SQLiteChangeLogReader implements Disposable {
     throughWatermark: string,
     batchSize: number,
     signal?: AbortSignal | undefined,
+    maxRows?: number | undefined,
   ): AsyncIterable<readonly WatermarkedChange[]> {
     assert(
       Number.isSafeInteger(batchSize) && batchSize > 0,
       'SQLite change log batch size must be a positive safe integer',
+    );
+    assert(
+      maxRows === undefined || (Number.isSafeInteger(maxRows) && maxRows > 0),
+      'SQLite change log row limit must be a positive safe integer',
     );
     this.#assertOpen();
     const statements = this.#prepare();
@@ -168,14 +173,20 @@ export class SQLiteChangeLogReader implements Disposable {
     // real stream position is far below this sentinel.
     let lastPos = Number.MAX_SAFE_INTEGER;
     let lastTag: string | undefined;
+    let rowsRead = 0;
 
     while (true) {
       this.#throwIfAborted(signal);
+      const remainingRows =
+        maxRows === undefined ? batchSize : maxRows - rowsRead;
+      if (remainingRows === 0) {
+        break;
+      }
       const rows = statements.readBatch.all<ChangeLogRow>(
         lastWatermark,
         lastPos,
         throughWatermark,
-        batchSize,
+        Math.min(batchSize, remainingRows),
       );
       this.#throwIfAborted(signal);
 
@@ -189,6 +200,7 @@ export class SQLiteChangeLogReader implements Disposable {
       lastWatermark = last.watermark;
       lastPos = last.pos;
       lastTag = last.tag;
+      rowsRead += rows.length;
 
       // all() has exhausted the SELECT and closed its implicit read
       // transaction. This yield therefore cannot pin the WAL while subscriber
@@ -201,7 +213,14 @@ export class SQLiteChangeLogReader implements Disposable {
     // `_zero.replicationState`, which is what this assertion used to guard.
     // What remains is a concurrent purge of the head transaction, which the
     // purge policy (never past the latest durable transaction) does not do.
-    if (fromWatermark !== throughWatermark) {
+    // A read that stopped at `maxRows` cannot know whether more rows follow,
+    // so completeness is only asserted for a read that ran out on its own.
+    // Detecting a short bounded read is left to the caller, which set the
+    // limit and is the only side that knows what a full range should hold.
+    if (
+      fromWatermark !== throughWatermark &&
+      (maxRows === undefined || rowsRead < maxRows)
+    ) {
       assert(
         lastWatermark === throughWatermark && lastTag === 'commit',
         () =>
