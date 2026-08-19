@@ -203,6 +203,7 @@ export function shardSetup(
     "version"            TEXT NOT NULL,
     "generation"         TEXT,  -- to replace version, NULL-able in the interim
     "backupPath"         TEXT,  -- subpath within the litestream backup URL
+    "backupV5"           BOOL DEFAULT false,
     "initialSchema"      JSON,  -- set after initial sync
     "initialSyncContext" JSON,
     "subscriberContext"  JSON
@@ -238,6 +239,7 @@ const replicaInfoSchema = v.object({
   version: v.string(),
   generation: v.string().nullable(),
   backupPath: v.string().nullable(),
+  backupV5: v.boolean(),
 });
 
 const fullReplicaRowSchema = replicaInfoSchema.extend({
@@ -280,6 +282,11 @@ function triggerSetup(shard: ShardConfig): string {
   );
 }
 
+export type BackupOptions = {
+  backupPath: string | null;
+  backupV5: boolean;
+};
+
 /**
  * Creates a new replica to mark it as the owner of a specified `slot`.
  * This should be done with an advisory lock for replica/slot management
@@ -295,6 +302,7 @@ export async function createReplica(
   id: string,
   slot: string,
   replicaVersion: string,
+  {backupPath, backupV5}: BackupOptions,
 ) {
   const schema = upstreamSchema(shard);
   const values: Partial<v.Infer<typeof fullReplicaRowSchema>> = {
@@ -302,9 +310,8 @@ export async function createReplica(
     slot,
     version: replicaVersion,
     generation: replicaVersion,
-    // TODO: Start setting replica-specific backupPaths after the code that
-    //       supports reading from them has been in one release.
-    // backupPath: id,
+    backupPath,
+    backupV5,
   };
   await sql`INSERT INTO ${sql(schema)}.replicas ${sql(values)}`;
 }
@@ -324,13 +331,15 @@ export async function initReplica(
 }
 
 /**
- * Gets the latest (by rank) initialized replica at the specified version.
+ * Gets at the given version and optional ID. If no ID is specified, gets
+ * the latest (i.e. highest rank) replica with that version.
  */
 export async function getReplicaAtVersion(
   lc: LogContext,
   sql: PostgresDB,
   shard: ShardID,
   replicaVersion: string,
+  id: string | null = null,
   context?: JSONObject,
 ): Promise<Replica | null> {
   const schema = sql(upstreamSchema(shard));
@@ -342,6 +351,7 @@ export async function getReplicaAtVersion(
       replicas."version",
       replicas."generation",
       replicas."backupPath",
+      replicas."backupV5",
       replicas."initialSchema",
       replicas."initialSyncContext",
       replicas."subscriberContext",
@@ -349,6 +359,7 @@ export async function getReplicaAtVersion(
       "shardConfig"."ddlDetection"
     FROM ${schema}.replicas JOIN ${schema}."shardConfig" ON true
       WHERE version = ${replicaVersion} AND "initialSyncContext" IS NOT NULL
+      AND id = COALESCE(${id}, id)
       ORDER BY rank DESC LIMIT 1;
   `;
   if (result.length === 0) {
@@ -357,7 +368,7 @@ export async function getReplicaAtVersion(
       SELECT id, slot, version, "initialSyncContext", "subscriberContext" 
         FROM ${schema}.replicas`;
     lc.info?.(
-      `Replica ${replicaVersion} ` +
+      `Replica ${id}@${replicaVersion}` +
         (context ? `(context: ${stringify(context)}) ` : '') +
         `not found in: ${stringify(allReplicas)}`,
     );
@@ -380,6 +391,7 @@ export async function getActiveReplicas(
       replicas."version",
       replicas."generation",
       replicas."backupPath",
+      replicas."backupV5",
       slots."active",
       slots."confirmed_flush_lsn" as "confirmedFlushLsn"
     FROM ${schema}.replicas JOIN pg_replication_slots slots ON slot = slot_name
@@ -405,6 +417,7 @@ export async function getReplicaState(
       replicas."version",
       replicas."generation",
       replicas."backupPath",
+      replicas."backupV5",
       slots."active",
       slots."confirmed_flush_lsn" as "confirmedFlushLsn"
     FROM ${schema}.replicas JOIN pg_replication_slots slots ON slot = slot_name

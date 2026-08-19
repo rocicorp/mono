@@ -229,6 +229,19 @@ function getIncrementalMigrations(shard: ShardConfig): IncrementalMigrationMap {
         `;
       },
     },
+
+    // v25 (1.10.0):
+    // - adds the "backupV5" column to signal the current semantics
+    //   of the replication slot's confirmed_flush_lsn with respect to what
+    //   has been backed up.
+    25: {
+      migrateSchema: async (_, sql) => {
+        await sql`
+          ALTER TABLE ${sql(upstreamSchema(shard))}.replicas 
+            ADD COLUMN "backupV5" BOOL DEFAULT false;
+        `;
+      },
+    },
   };
 }
 

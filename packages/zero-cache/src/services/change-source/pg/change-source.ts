@@ -86,6 +86,7 @@ import {streamBackfill} from './backfill-stream.ts';
 import {
   initialSync,
   type InitialSyncOptions,
+  type ReplicaOptions,
   type ServerContext,
 } from './initial-sync.ts';
 import type {
@@ -112,6 +113,7 @@ import {
   internalPublicationPrefix,
   replicaIdentitiesForTablesWithoutPrimaryKeys,
   replicationSlotPrefix,
+  type BackupOptions,
   type InternalShardConfig,
   type Replica,
   type ReplicaState,
@@ -138,6 +140,7 @@ export async function initializePostgresChangeSource(
   context: ServerContext,
   lagReportIntervalMs = 0,
   restoreOptions: RestoreOptions = {},
+  {backupV5}: ReplicaOptions = {backupV5: true},
   purgeLock?: PurgeLock | null,
   streamInboundTimeoutMs?: number | undefined,
 ): Promise<InitializeResult> {
@@ -171,6 +174,7 @@ export async function initializePostgresChangeSource(
           upstreamURI,
           syncOptions,
           context,
+          {backupV5},
         );
       },
     );
@@ -188,20 +192,30 @@ export async function initializePostgresChangeSource(
       db,
       shard,
       subscriptionState,
+      (initialSyncedReplica ?? restoredReplica)?.id,
     );
+
+    const backupPath = initialSyncedReplica
+      ? // If initial sync was performed, use that initial backupPath.
+        initialSyncedReplica.backupPath
+      : // Otherwise, use a new, unique path when backing up with litestream v5. This will be
+        // recorded in the replicas table by the PostgresChangeSource.
+        backupV5
+        ? String(Date.now())
+        : (restoredReplica?.backupPath ?? null);
 
     const changeSource = new PostgresChangeSource(
       lc,
       upstreamURI,
       shard,
       upstreamReplica,
+      {backupPath, backupV5},
       context,
       lagReportIntervalMs,
       syncOptions.textCopy,
       streamInboundTimeoutMs,
     );
 
-    const backupPath = must(initialSyncedReplica ?? restoredReplica).backupPath;
     const destinationBackupURL =
       backupPath && restoreOptions.litestream?.backupURL
         ? new URL(backupPath, restoreOptions.litestream.backupURL).toString()
@@ -217,11 +231,12 @@ export async function initializePostgresChangeSource(
       // `replicaVersion`) is shared by every sibling of a forked replica and so
       // cannot distinguish two siblings' logs.
       replicaID: upstreamReplica.id,
-      // For RMv1, wait for the backup if an initial-sync was performed. When
-      // replica-specific backups are enabled (e.g. for > RMv1), the condition
-      // can be generalized to:
-      //   restoredReplica?.backupPath !== initializedReplica?.backupPath,
-      waitForBackupBeforeServing: initialSyncedReplica !== undefined,
+      waitForBackupBeforeServing:
+        // Wait for the first backup if there was an initial sync,
+        initialSyncedReplica !== undefined ||
+        // or if the destination differs from where it was restored
+        // (i.e. backupV5).
+        backupPath !== (restoredReplica?.backupPath ?? null),
     };
   } finally {
     await db.end();
@@ -235,19 +250,19 @@ async function selectAndRestoreReplica(
   replicaFile: string,
   {litestream, constraints}: RestoreOptions,
 ): Promise<ReplicaState | undefined> {
+  const replicas = (await getActiveReplicas(lc, sql, shard)).filter(
+    // filter to the generation specified by the constraints, if present
+    ({generation}) =>
+      generation === (constraints?.replicaVersion ?? generation),
+  );
+  if (replicas.length === 0) {
+    lc.info?.(`no suitable replicas to restore from`, {replicas});
+    return undefined;
+  }
+  const [replica] = replicas;
+
   if (litestream?.backupURL) {
     const {backupURL: backupBaseURL} = litestream;
-    const replicas = (await getActiveReplicas(lc, sql, shard)).filter(
-      // filter to the generation specified by the constraints, if present
-      ({generation}) =>
-        generation === (constraints?.replicaVersion ?? generation),
-    );
-    if (replicas.length === 0) {
-      lc.info?.(`no suitable replicas to restore from`, {replicas});
-      return undefined;
-    }
-
-    const [replica] = replicas;
     const {slot, backupPath, confirmedFlushLsn} = replica;
     const backupURL = new URL(backupPath ?? '', backupBaseURL).toString();
     lc.info?.(
@@ -260,9 +275,8 @@ async function selectAndRestoreReplica(
       replicaFile,
       constraints,
     );
-    return replica;
   }
-  return undefined;
+  return replica;
 }
 
 async function checkAndUpdateUpstream(
@@ -274,17 +288,19 @@ async function checkAndUpdateUpstream(
     publications: subscribed,
     initialSyncContext,
   }: SubscriptionStateAndContext,
+  replicaID: string | undefined,
 ) {
   const upstreamReplica = await getReplicaAtVersion(
     lc,
     sql,
     shard,
     replicaVersion,
+    replicaID,
     initialSyncContext,
   );
   if (!upstreamReplica) {
     throw new AutoResetSignal(
-      `No replication slot for replica at version ${replicaVersion}`,
+      `No replication slot for replica at version ${replicaVersion} and id ${replicaID}}`,
     );
   }
 
@@ -357,6 +373,7 @@ class PostgresChangeSource implements ChangeSource {
   readonly #upstreamUri: string;
   readonly #shard: ShardID;
   readonly #replica: Replica;
+  readonly #backupOptions: BackupOptions;
   readonly #context: ServerContext;
   readonly #lagReporter: LagReporter | null;
   readonly #textCopy: boolean;
@@ -368,6 +385,7 @@ class PostgresChangeSource implements ChangeSource {
     upstreamUri: string,
     shard: ShardID,
     replica: Replica,
+    backupOptions: BackupOptions,
     context: ServerContext,
     lagReportIntervalMs: number,
     textCopy?: boolean | undefined,
@@ -382,6 +400,7 @@ class PostgresChangeSource implements ChangeSource {
     this.#upstreamUri = upstreamUri;
     this.#shard = shard;
     this.#replica = replica;
+    this.#backupOptions = backupOptions;
     this.#context = context;
     this.#textCopy = textCopy ?? false;
     this.#streamInboundTimeoutMs = streamInboundTimeoutMs;
@@ -440,7 +459,7 @@ class PostgresChangeSource implements ChangeSource {
     clientWatermark: string,
     backfillRequests: BackfillRequest[] = [],
   ): Promise<ChangeStream> {
-    await this.#stopExistingReplicationSlotSubscriber();
+    await this.#takeoverReplicationSlot();
     const config = await getInternalShardConfig(this.#db, this.#shard);
     const {slot} = this.#replica;
     this.#lc.info?.(`starting replication stream@${slot}`);
@@ -607,6 +626,7 @@ class PostgresChangeSource implements ChangeSource {
         this.#db,
         this.#shard,
         this.#replica.generation,
+        this.#replica.id,
       );
       if (replica) {
         this.#lc.info?.(
@@ -619,10 +639,22 @@ class PostgresChangeSource implements ChangeSource {
   }
 
   /**
-   * Stops replication slots associated with this shard, and asynchronously
-   * runs a cleanup task that drops older replicas and slots.
+   * In RMv1, a single replication slot is taken over by the next
+   * replication-manager, signaling the old one to shut down.
+   *
+   * With litestream v5, the two replication-managers must replicate to unique
+   * backupPaths, as is required by the LTX backup schema.
+   *
+   * Thus, in addition to taking over the replication slot, the
+   * replication-manager also updates the `replicas` table with its
+   * `backupPath` so that future RM's restore from that path instead
+   * of the vestigial path of the previous replication-manager.
+   *
+   * In RMv2, each replication-manager will have its own slot and
+   * row in the `replicas` table, so this "takeover" will be unnecessary
+   * (but a harmless no-op).
    */
-  async #stopExistingReplicationSlotSubscriber() {
+  async #takeoverReplicationSlot() {
     const sql = this.#db;
     const {id: replicaID, slot} = this.#replica;
     const replicasTable = `${upstreamSchema(this.#shard)}.replicas`;
@@ -655,7 +687,9 @@ class PostgresChangeSource implements ChangeSource {
     this.#lc.info?.(`terminated replication slots: ${JSON.stringify(result)}`);
     await sql`
       UPDATE ${sql(replicasTable)} 
-        SET "subscriberContext" = ${this.#context}
+        SET "subscriberContext" = ${this.#context},
+            "backupPath" = ${this.#backupOptions.backupPath},
+            "backupV5" = ${this.#backupOptions.backupV5}
         WHERE id = ${replicaID}`;
     void this.#cleanUpOlderReplicasAndSlots();
   }
