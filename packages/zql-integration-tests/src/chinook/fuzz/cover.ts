@@ -20,6 +20,7 @@ import type {AnyQuery} from '../../../../zql/src/query/query.ts';
 import {newStaticQuery} from '../../../../zql/src/query/static-query.ts';
 import {schema} from '../schema.ts';
 import {
+  assignmentRealizable,
   AXES,
   axisIndex,
   EXISTS_VALS,
@@ -35,8 +36,11 @@ import {
   type Rel,
   relsOf,
   rolesOf,
+  FLIP_VALS,
+  type FlipVal,
   START_VALS,
   type StartVal,
+  tupleRealizable,
 } from './axes.ts';
 import {axisCombinations} from './coverage.ts';
 import {type Data, filterCondition, simple} from './literals.ts';
@@ -56,6 +60,9 @@ function allTuples(domains: readonly number[], t: number): Map<string, Tuple> {
     const sizes = combo.map(a => domains[a]);
     for (const values of cartesianLocal(sizes)) {
       const tuple = combo.map((a, i) => [a, values[i]] as const);
+      if (!tupleRealizable(tuple)) {
+        continue; // structurally impossible (exists x flip) — never a coverage goal
+      }
       out.set(tupleKey(tuple), tuple);
     }
   }
@@ -122,13 +129,28 @@ export function greedyCover(t: number): number[][] {
       let bestGain = -1;
       for (let v = 0; v < domains[axis]; v++) {
         row[axis] = v;
+        if (!assignmentRealizable(row)) {
+          continue; // would pin an impossible exists x flip pair
+        }
         const gain = coveredNow(row, uncovered);
         if (gain > bestGain) {
           bestGain = gain;
           bestV = v;
         }
       }
-      row[axis] = bestV; // value 0 (a "none") is always a valid fallback
+      if (bestGain < 0) {
+        // No value gained a tuple: fall back to the first *realizable* one. Value 0 is
+        // "none" on every axis, but "none" on `exists` is itself unrealizable when the
+        // seed already pinned flip=flip, so the constraint still has to be consulted.
+        for (let v = 0; v < domains[axis]; v++) {
+          row[axis] = v;
+          if (assignmentRealizable(row)) {
+            bestV = v;
+            break;
+          }
+        }
+      }
+      row[axis] = bestV;
     }
     const full = row.map(x => x as number);
     for (const tuple of rowTuples(full, t)) {
@@ -247,12 +269,17 @@ export function existsCondition(
   table: string,
   rel: Rel,
   ev: ExistsVal,
+  /**
+   * Force a positive gate to lower as a `FlippedJoin` rather than a semi-join. Only a
+   * positive gate is flippable (see `flipRealizable`); a `not_exists_*` value ignores it.
+   */
+  flip = false,
 ): Condition {
   const r = rolesOf(table);
   const notExists = ev.startsWith('not_exists');
   const gate: Condition = notExists
     ? eb.not(eb.exists(rel.name))
-    : eb.exists(rel.name);
+    : eb.exists(rel.name, undefined, flip ? {flip: true} : undefined);
   switch (ev) {
     case 'exists_top':
     case 'not_exists_top':
@@ -275,6 +302,7 @@ function applyWhere(
   filterCond: Condition | null,
   gateRel: Rel | undefined,
   ev: ExistsVal,
+  flip: boolean,
 ): AnyQuery {
   if (!filterCond && !gateRel) {
     return q;
@@ -286,7 +314,7 @@ function applyWhere(
       parts.push(filterCond);
     }
     if (gateRel) {
-      parts.push(existsCondition(eb, table, gateRel, ev));
+      parts.push(existsCondition(eb, table, gateRel, ev, flip));
     }
     return parts.length === 1 ? parts[0] : eb.and(...parts);
   });
@@ -309,6 +337,7 @@ function applyDecorations(
   const ov = ORDER_VALS[a[axisIndex('order')]] as OrderVal;
   const lv = LIMIT_VALS[a[axisIndex('limit')]] as LimitVal;
   const sv = START_VALS[a[axisIndex('start')]] as StartVal;
+  const flv = FLIP_VALS[a[axisIndex('flip')]] as FlipVal;
 
   if (!filterRealizable(table, fv)) {
     return null;
@@ -325,7 +354,7 @@ function applyDecorations(
     }
   }
 
-  let out = applyWhere(q, table, filterCond, gateRel, ev);
+  let out = applyWhere(q, table, filterCond, gateRel, ev, flv === 'flip');
   out = applyOrder(out, table, ov);
   const started = applyStart(out, table, sv, data);
   if (!started) {

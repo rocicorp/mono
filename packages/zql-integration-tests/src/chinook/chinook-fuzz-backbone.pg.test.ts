@@ -32,6 +32,9 @@ import {
   checkL1,
   checkPushWalk,
   checkYield,
+  checkYieldPush,
+  fanInTakeCases,
+  l1QueryCases,
   panicIfFailed,
 } from './fuzz/driver.ts';
 import {Data} from './fuzz/literals.ts';
@@ -67,7 +70,7 @@ test(
 );
 
 test(
-  'L1 — pairwise covering array: 100% coverage + hydrate-equal over mini',
+  'L1 — 3-way covering array: 100% coverage + hydrate-equal over mini',
   async () => {
     const {report, coverage} = await checkL1(harness.delegates, data);
     console.log(
@@ -75,7 +78,7 @@ test(
     );
     expect(
       coverage.fraction(),
-      `pairwise coverage incomplete (${coverage.summary()}); missed: ${JSON.stringify(
+      `t-wise coverage incomplete (${coverage.summary()}); missed: ${JSON.stringify(
         coverage.missed(),
       )}`,
     ).toBe(1);
@@ -156,6 +159,35 @@ test(
     );
     console.log(
       `Random-yield backbone (D≤1): ${report.total} cases, ${report.failures.length} failures`,
+    );
+    panicIfFailed(report, 12);
+  },
+  TIMEOUT_MS,
+);
+
+test(
+  'Random-yield push — Take over UnionFanIn survives interleaved maintenance fetches',
+  async () => {
+    // The cell no other lane reaches. `checkYield` runs decoration-free skeletons, so it
+    // never carries a `limit` (hence never a `Take`); `checkFlipInvariance` enumerates
+    // flips but only hydrates. A `Take` sitting above a `UnionFanIn` while a `'yield'`
+    // interrupts a maintenance fetch mid-push is a 3-way axis interaction
+    // (`flip` x `exists_*_or` x `limit`) that only exists in the corpus at t >= 3.
+    const {cases} = l1QueryCases(data);
+    const selected = fanInTakeCases(cases);
+    expect(
+      selected.length,
+      'no L1 case builds a Take over a UnionFanIn — the flip axis or t=3 regressed',
+    ).toBeGreaterThan(0);
+    const report = await checkYieldPush(
+      harness.transact,
+      data,
+      cases,
+      1,
+      YIELD_SEED,
+    );
+    console.log(
+      `Random-yield push (fan-in+take): ${report.total}/${selected.length} selected, ${report.failures.length} failures`,
     );
     panicIfFailed(report, 12);
   },
