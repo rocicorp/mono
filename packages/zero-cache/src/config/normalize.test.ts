@@ -46,44 +46,42 @@ describe('config/normalize litestream v5 gating', () => {
     );
   });
 
-  test('backupUsingV5 requires the executable flipped to the v5 binary', () => {
+  test('restoreUsingV5 requires executableV5 to actually be configured', () => {
+    expect(() =>
+      assertNormalized(
+        configWith({
+          backupUsingV5: true,
+          restoreUsingV5: true,
+          executableV5: undefined,
+        }),
+      ),
+    ).toThrow(
+      '--litestream-restore-using-v5 and --litestream-backup-using-v5 require --litestream-executable to be specified',
+    );
+  });
+
+  test('restoreUsingV5 requires executableV5 to actually be configured', () => {
+    // Guards against `undefined === undefined` slipping past the equality check
+    // when neither executable is set.
+    expect(() =>
+      assertNormalized(
+        configWith({
+          restoreUsingV5: true,
+          executableV5: undefined,
+        }),
+      ),
+    ).toThrow(
+      '--litestream-restore-using-v5 and --litestream-backup-using-v5 require --litestream-executable to be specified',
+    );
+  });
+
+  test('allows backupUsingV5 when executable !== executableV5', () => {
     expect(() =>
       assertNormalized(
         configWith({
           backupUsingV5: true,
           restoreUsingV5: true,
           executable: '/bin/litestream-v3',
-          executableV5: '/bin/litestream-v5',
-        }),
-      ),
-    ).toThrow(
-      '--litestream-backup-using-v5 requires --litestream-executable to be ' +
-        'flipped to the v5 binary',
-    );
-  });
-
-  test('backupUsingV5 requires executableV5 to actually be configured', () => {
-    // Guards against `undefined === undefined` slipping past the equality check
-    // when neither executable is set.
-    expect(() =>
-      assertNormalized(
-        configWith({
-          backupUsingV5: true,
-          restoreUsingV5: true,
-          executable: undefined,
-          executableV5: undefined,
-        }),
-      ),
-    ).toThrow('--litestream-executable must equal');
-  });
-
-  test('allows backupUsingV5 when executable === executableV5', () => {
-    expect(() =>
-      assertNormalized(
-        configWith({
-          backupUsingV5: true,
-          restoreUsingV5: true,
-          executable: '/bin/litestream-v5',
           executableV5: '/bin/litestream-v5',
         }),
       ),
