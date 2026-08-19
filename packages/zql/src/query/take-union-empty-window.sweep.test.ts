@@ -36,7 +36,10 @@ import {
 } from '../ivm/source.ts';
 import type {Source} from '../ivm/source.ts';
 import {consume} from '../ivm/stream.ts';
-import {wrapSourcesWithRandomYield} from '../ivm/test/random-yield-source.ts';
+import {
+  wrapSourcesWithModeYield,
+  type YieldMode,
+} from '../ivm/test/mode-yield-source.ts';
 import {createSource} from '../ivm/test/source-factory.ts';
 import {newQuery} from './query-impl.ts';
 import type {Query} from './query.ts';
@@ -376,6 +379,8 @@ const CONTINUE = process.env.SWEEP_CONTINUE === '1';
 // with a shouldYield callback, so 'yield' sentinels thread through every
 // fetch/push stream. Nothing in a plain harness ever yields.
 const YIELD_SEEDS = Number(process.env.SWEEP_YIELD ?? 0);
+// 'fetch' | 'push' | 'both' -- isolates which stream the corruption needs.
+const YIELD_MODE = (process.env.SWEEP_YIELD_MODE ?? 'both') as YieldMode;
 
 function* scripts(len: number): Generator<number[]> {
   const start = ONLY_LEN ? len : 1;
@@ -405,7 +410,12 @@ function runOne(
 ): void {
   let sources = makeSources();
   if (yieldSeed !== undefined) {
-    sources = wrapSourcesWithRandomYield(sources, mulberry32(yieldSeed), 0.3);
+    sources = wrapSourcesWithModeYield(
+      sources,
+      mulberry32(yieldSeed),
+      YIELD_MODE,
+      0.3,
+    );
   }
   const runner = new Runner(sources);
   for (const c of seed.chats) runner.addChat(c);
