@@ -455,15 +455,16 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
         rowQuery,
       ))
     ) {
-      this.#lc.warn?.(
-        `Permission check failed for ${JSON.stringify(
-          op,
-        )}, action ${action}, phase ${phase}, authData: ${JSON.stringify(
-          authData,
-        )}, rowPolicies: ${JSON.stringify(
-          applicableRowPolicy,
-        )}, cellPolicies: ${JSON.stringify(applicableCellPolicies)}`,
-      );
+      // Never log `op` or `authData`: `op.value` is the row the client is
+      // writing and `authData` is the decoded JWT payload.
+      this.#lc.warn?.('Permission check failed', {
+        action,
+        phase,
+        tableName: op.tableName,
+        columns: Object.keys(op.value),
+        rowPolicy: applicableRowPolicy !== undefined,
+        cellPolicyCount: applicableCellPolicies.length,
+      });
       return false;
     }
 

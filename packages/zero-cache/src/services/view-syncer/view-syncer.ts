@@ -1802,8 +1802,16 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
     for (const q of transformedCustomQueries) {
       if ('error' in q) {
-        const errorMessage = `Error transforming custom query ${q.name}: ${q.error}${q.details ? ` ${JSON.stringify(q.details)}` : ''}`;
-        lc.warn?.(errorMessage, q);
+        // `q.details` and app-supplied `q.message` come from the customer's
+        // own query handler and can carry arbitrary data. Log the query
+        // identity and the error kind only.
+        lc.warn?.('Error transforming custom query', {
+          id: q.id,
+          name: q.name,
+          error: q.error,
+          message: q.error === 'parse' ? q.message : undefined,
+          hasDetails: q.details !== undefined,
+        });
         appQueryErrors.push(q);
         continue;
       }
