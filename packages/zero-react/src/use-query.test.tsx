@@ -191,6 +191,33 @@ describe('ViewStore', () => {
 
       expect(getAllViewsSizeForTesting(viewStore)).toBe(1);
     });
+
+    test('getView with an unchanged TTL does not call updateTTL on the underlying view', () => {
+      const viewStore = new ViewStore();
+
+      const zero = newMockZero('client1');
+      viewStore.getView(zero, newMockQuery('query1'), true, '1m');
+
+      const underlyingView = vi.mocked(zero.materialize).mock.results[0]
+        .value as {updateTTL: (ttl: unknown) => void};
+      const updateTTLSpy = vi.spyOn(underlyingView, 'updateTTL');
+
+      viewStore.getView(
+        newMockZero('client1'),
+        newMockQuery('query1'),
+        true,
+        '1m',
+      );
+      expect(updateTTLSpy).not.toHaveBeenCalled();
+
+      viewStore.getView(
+        newMockZero('client1'),
+        newMockQuery('query1'),
+        true,
+        '5m',
+      );
+      expect(updateTTLSpy).toHaveBeenCalledExactlyOnceWith('5m');
+    });
   });
 
   describe('destruction', () => {
@@ -1587,5 +1614,269 @@ describe('maybe queries', () => {
       expect(container.textContent).toBe('Has query');
     });
     expect(zero.materialize).toHaveBeenCalled();
+  });
+});
+
+describe('render-path memoization', () => {
+  let element: HTMLDivElement;
+  let root: Root;
+  let unique = 0;
+
+  beforeEach(() => {
+    vi.useRealTimers();
+    element = document.createElement('div');
+    document.body.appendChild(element);
+    root = createRoot(element);
+    unique++;
+  });
+
+  afterEach(() => {
+    root.unmount();
+    document.body.removeChild(element);
+  });
+
+  const testSchema = createSchema({
+    tables: [
+      table('item').columns({id: number(), name: string()}).primaryKey('id'),
+    ],
+  });
+
+  function newMockQueryRequest(name: string, fn: Mock) {
+    const query = (args: ReadonlyJSONValue) =>
+      ({
+        args,
+        'query': query,
+        '~': 'QueryRequest',
+      }) as unknown as Query<'item', typeof testSchema>;
+    return Object.assign(query, {'queryName': name, fn, '~': 'Query'});
+  }
+
+  test('re-rendering with an equivalent query request does not re-run the query builder', async () => {
+    const zero = newMockZero('client-request-' + unique);
+    const builderFn = vi.fn(({args}: {args: {id: number}}) =>
+      newQuery(testSchema, 'item').where('id', args.id),
+    );
+    const request = newMockQueryRequest('myQuery', builderFn);
+
+    function Comp({id, tick}: {id: number; tick: number}) {
+      const [data] = useQuery(request({id}));
+      return <div>{`${tick}:${JSON.stringify(data)}`}</div>;
+    }
+
+    root.render(
+      <ZeroProvider zero={zero}>
+        <Comp id={1} tick={1} />
+      </ZeroProvider>,
+    );
+    await expect.poll(() => element.textContent).toBe('1:[]');
+    expect(builderFn).toHaveBeenCalledTimes(1);
+    expect(zero.materialize).toHaveBeenCalledTimes(1);
+
+    // A fresh but equivalent request does not re-run validation/builder.
+    root.render(
+      <ZeroProvider zero={zero}>
+        <Comp id={1} tick={2} />
+      </ZeroProvider>,
+    );
+    await expect.poll(() => element.textContent).toBe('2:[]');
+    expect(builderFn).toHaveBeenCalledTimes(1);
+    expect(zero.materialize).toHaveBeenCalledTimes(1);
+
+    // Changing args re-runs the builder and creates a new view.
+    root.render(
+      <ZeroProvider zero={zero}>
+        <Comp id={2} tick={3} />
+      </ZeroProvider>,
+    );
+    await expect.poll(() => element.textContent).toBe('3:[]');
+    expect(builderFn).toHaveBeenCalledTimes(2);
+    expect(builderFn).toHaveBeenLastCalledWith({ctx: undefined, args: {id: 2}});
+    expect(zero.materialize).toHaveBeenCalledTimes(2);
+  });
+
+  test('re-rendering with a deep-equal query reuses the previously resolved query', async () => {
+    const zero = newMockZero('client-builder-' + unique);
+    const makeQuery = (id: number) =>
+      newQuery(testSchema, 'item').where('id', id);
+    const q1 = makeQuery(1);
+    const q2 = makeQuery(1);
+    const q3 = makeQuery(2);
+    const hashSpy1 = vi.spyOn(q1 as unknown as {hash: () => string}, 'hash');
+    const hashSpy2 = vi.spyOn(q2 as unknown as {hash: () => string}, 'hash');
+
+    function Comp({
+      q,
+      tick,
+    }: {
+      q: Query<'item', typeof testSchema>;
+      tick: number;
+    }) {
+      const [data] = useQuery(q);
+      return <div>{`${tick}:${JSON.stringify(data)}`}</div>;
+    }
+
+    root.render(
+      <ZeroProvider zero={zero}>
+        <Comp q={q1} tick={1} />
+      </ZeroProvider>,
+    );
+    await expect.poll(() => element.textContent).toBe('1:[]');
+    expect(zero.materialize).toHaveBeenCalledTimes(1);
+    expect(vi.mocked(zero.materialize).mock.calls[0][0]).toBe(q1);
+
+    // A distinct but deep-equal query object is never hashed; the previously
+    // resolved query keeps being used.
+    root.render(
+      <ZeroProvider zero={zero}>
+        <Comp q={q2} tick={2} />
+      </ZeroProvider>,
+    );
+    await expect.poll(() => element.textContent).toBe('2:[]');
+    expect(zero.materialize).toHaveBeenCalledTimes(1);
+    expect(hashSpy1).toHaveBeenCalledTimes(1);
+    expect(hashSpy2).not.toHaveBeenCalled();
+
+    // A query with a different AST creates a new view.
+    root.render(
+      <ZeroProvider zero={zero}>
+        <Comp q={q3} tick={3} />
+      </ZeroProvider>,
+    );
+    await expect.poll(() => element.textContent).toBe('3:[]');
+    expect(zero.materialize).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(zero.materialize).mock.calls[1][0]).toBe(q3);
+  });
+
+  test('changing the Zero instance re-resolves the query', async () => {
+    const zero1 = newMockZero('client-z1-' + unique);
+    const zero2 = newMockZero('client-z2-' + unique);
+    const builderFn = vi.fn(() => newQuery(testSchema, 'item'));
+    const request = newMockQueryRequest('zQuery', builderFn);
+
+    function Comp({tick}: {tick: number}) {
+      const [data] = useQuery(request({id: 1}));
+      return <div>{`${tick}:${JSON.stringify(data)}`}</div>;
+    }
+
+    root.render(
+      <ZeroProvider zero={zero1}>
+        <Comp tick={1} />
+      </ZeroProvider>,
+    );
+    await expect.poll(() => element.textContent).toBe('1:[]');
+    expect(builderFn).toHaveBeenCalledTimes(1);
+    expect(zero1.materialize).toHaveBeenCalledTimes(1);
+
+    root.render(
+      <ZeroProvider zero={zero2}>
+        <Comp tick={2} />
+      </ZeroProvider>,
+    );
+    await expect.poll(() => element.textContent).toBe('2:[]');
+    expect(builderFn).toHaveBeenCalledTimes(2);
+    expect(zero2.materialize).toHaveBeenCalledTimes(1);
+  });
+
+  test('toggling a query off and back on reuses the resolved query', async () => {
+    const zero = newMockZero('client-toggle-' + unique);
+    const builderFn = vi.fn(() => newQuery(testSchema, 'item'));
+    const request = newMockQueryRequest('tQuery', builderFn);
+
+    function Comp({on, tick}: {on: boolean; tick: number}) {
+      const [data] = useQuery(on && request({id: 1}));
+      return <div>{`${tick}:${JSON.stringify(data)}`}</div>;
+    }
+
+    root.render(
+      <ZeroProvider zero={zero}>
+        <Comp on={true} tick={1} />
+      </ZeroProvider>,
+    );
+    await expect.poll(() => element.textContent).toBe('1:[]');
+    expect(builderFn).toHaveBeenCalledTimes(1);
+
+    root.render(
+      <ZeroProvider zero={zero}>
+        <Comp on={false} tick={2} />
+      </ZeroProvider>,
+    );
+    await expect.poll(() => element.textContent).toBe('2:undefined');
+
+    root.render(
+      <ZeroProvider zero={zero}>
+        <Comp on={true} tick={3} />
+      </ZeroProvider>,
+    );
+    await expect.poll(() => element.textContent).toBe('3:[]');
+    expect(builderFn).toHaveBeenCalledTimes(1);
+  });
+
+  test('changed args are detected even when an undefined-valued key masks a new key', async () => {
+    const zero = newMockZero('client-mask-' + unique);
+    const builderFn = vi.fn(() => newQuery(testSchema, 'item'));
+    const request = newMockQueryRequest('mQuery', builderFn);
+
+    function Comp({args, tick}: {args: ReadonlyJSONValue; tick: number}) {
+      const [data] = useQuery(request(args));
+      return <div>{`${tick}:${JSON.stringify(data)}`}</div>;
+    }
+
+    root.render(
+      <ZeroProvider zero={zero}>
+        <Comp args={{q: undefined, page: 1}} tick={1} />
+      </ZeroProvider>,
+    );
+    await expect.poll(() => element.textContent).toBe('1:[]');
+    expect(builderFn).toHaveBeenCalledTimes(1);
+
+    // Equal args, reordered, with the same explicitly-undefined key still
+    // memoize.
+    root.render(
+      <ZeroProvider zero={zero}>
+        <Comp args={{page: 1, q: undefined}} tick={2} />
+      </ZeroProvider>,
+    );
+    await expect.poll(() => element.textContent).toBe('2:[]');
+    expect(builderFn).toHaveBeenCalledTimes(1);
+
+    // Same own-key count, but a defined key replaces the undefined-valued
+    // one. deepEqual alone reports these as equal; the builder must re-run.
+    root.render(
+      <ZeroProvider zero={zero}>
+        <Comp args={{page: 1, sort: 'x'}} tick={3} />
+      </ZeroProvider>,
+    );
+    await expect.poll(() => element.textContent).toBe('3:[]');
+    expect(builderFn).toHaveBeenCalledTimes(2);
+    expect(builderFn).toHaveBeenLastCalledWith({
+      ctx: undefined,
+      args: {page: 1, sort: 'x'},
+    });
+  });
+
+  test('enabled: false returns the default snapshot shape without materializing', async () => {
+    const zero = newMockZero('client-disabled-' + unique);
+    const pluralQuery = newQuery(testSchema, 'item');
+    const singularQuery = pluralQuery.one();
+
+    let pluralData: unknown = 'unset';
+    let singularData: unknown = 'unset';
+
+    function Comp() {
+      [pluralData] = useQuery(pluralQuery, {enabled: false});
+      [singularData] = useQuery(singularQuery, {enabled: false});
+      return <div>done</div>;
+    }
+
+    root.render(
+      <ZeroProvider zero={zero}>
+        <Comp />
+      </ZeroProvider>,
+    );
+    await expect.poll(() => element.textContent).toBe('done');
+
+    expect(pluralData).toEqual([]);
+    expect(singularData).toBe(undefined);
+    expect(zero.materialize).not.toHaveBeenCalled();
   });
 });

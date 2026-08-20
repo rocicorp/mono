@@ -1,6 +1,10 @@
 import {resolver} from '@rocicorp/resolver';
-import React, {useSyncExternalStore} from 'react';
+import React, {useRef, useSyncExternalStore} from 'react';
+import {deepEqual} from '../../shared/src/json.ts';
 import {TESTING} from '../../shared/src/testing.ts';
+import type {AST} from '../../zero-protocol/src/ast.ts';
+import type {Format} from '../../zero-types/src/format.ts';
+import type {CustomQueryID} from '../../zql/src/query/named.ts';
 import {
   type Immutable,
   addContextToQuery,
@@ -77,6 +81,153 @@ const suspend: (p: Promise<unknown>) => void = reactUse
       throw p;
     };
 
+type ResolvedQueryCacheEntry = {
+  zero: unknown;
+  context: unknown;
+  rawQuery: object;
+  customQuery: unknown;
+  args: ReadonlyJSONValue | undefined;
+  ast: AST | undefined;
+  format: Format | undefined;
+  customQueryID: CustomQueryID | undefined;
+  // oxlint-disable-next-line @typescript-eslint/no-explicit-any
+  q: Query<any, any, any>;
+};
+
+/**
+ * deepEqual only value-compares the keys of its first argument and then
+ * compares own-key counts, so an explicitly-undefined key on one side can
+ * absorb a differently-named defined key on the other:
+ * `deepEqual({q: undefined, page: 1}, {page: 1, sort: 'x'})` is true.
+ * Comparing in both directions closes that hole — a defined key present on
+ * only one side is always caught by the pass iterating that side.
+ */
+function symmetricDeepEqual(
+  a: ReadonlyJSONValue | undefined,
+  b: ReadonlyJSONValue | undefined,
+): boolean {
+  return deepEqual(a, b) && deepEqual(b, a);
+}
+
+function equalCustomQueryID(
+  a: CustomQueryID | undefined,
+  b: CustomQueryID | undefined,
+): boolean {
+  if (a === b) {
+    return true;
+  }
+  if (a === undefined || b === undefined) {
+    return false;
+  }
+  return a.name === b.name && symmetricDeepEqual(a.args, b.args);
+}
+
+/**
+ * Resolves the query (applying the context to query requests) while keeping
+ * the resolved query object identity-stable across re-renders.
+ *
+ * Queries are typically rebuilt inline on every render
+ * (`useQuery(queries.issue({id}))` or `useQuery(z.query.issue.where(...))`),
+ * and all the caches downstream of here (`QueryImpl`'s hash, AST
+ * normalization, the view store key) are keyed on object identity. Without
+ * this, every render re-runs argument validation, the query builder chain,
+ * and AST hashing even though nothing changed.
+ *
+ * A query request resolves to the previous query when it has the same query
+ * function, the same context, and deep-equal args. A plain query is reused
+ * when its AST and format are deep-equal to the previous one.
+ *
+ * The ref is written during render, which is safe because it is a pure
+ * memoization cache: entries are derived only from the inputs, so re-renders
+ * and discarded concurrent renders always leave it in a valid state.
+ */
+function useStableQuery<
+  TTable extends keyof TSchema['tables'] & string,
+  TInput extends ReadonlyJSONValue | undefined,
+  TOutput extends ReadonlyJSONValue | undefined,
+  TSchema extends BaseDefaultSchema,
+  TReturn,
+  TContext extends BaseDefaultContext,
+>(
+  query:
+    | QueryOrQueryRequest<TTable, TInput, TOutput, TSchema, TReturn, TContext>
+    | Falsy,
+  zero: Zero<TSchema, undefined, TContext>,
+): Query<TTable, TSchema, TReturn> | undefined {
+  const cacheRef = useRef<ResolvedQueryCacheEntry | undefined>(undefined);
+
+  // Keep the cache when the query is falsy so a query that is toggled off
+  // and back on is still reused.
+  if (!query) {
+    return undefined;
+  }
+
+  const cache = cacheRef.current;
+  if (cache && cache.zero === zero) {
+    if (cache.rawQuery === query) {
+      return cache.q as Query<TTable, TSchema, TReturn>;
+    }
+    if ('query' in query) {
+      if (
+        cache.customQuery === query.query &&
+        cache.context === zero.context &&
+        symmetricDeepEqual(cache.args, query.args)
+      ) {
+        cache.rawQuery = query;
+        return cache.q as Query<TTable, TSchema, TReturn>;
+      }
+    } else if (cache.ast !== undefined) {
+      const qi = asQueryInternals(query);
+      // Mocked queries may lack an AST; those never match and fall through
+      // to a rebuild.
+      if (
+        (qi.ast as AST | undefined) !== undefined &&
+        symmetricDeepEqual(
+          qi.format as unknown as ReadonlyJSONValue,
+          cache.format as unknown as ReadonlyJSONValue,
+        ) &&
+        equalCustomQueryID(qi.customQueryID, cache.customQueryID) &&
+        symmetricDeepEqual(
+          qi.ast as unknown as ReadonlyJSONValue,
+          cache.ast as unknown as ReadonlyJSONValue,
+        )
+      ) {
+        cache.rawQuery = query;
+        return cache.q as Query<TTable, TSchema, TReturn>;
+      }
+    }
+  }
+
+  const q = addContextToQuery(query, zero.context);
+  if ('query' in query) {
+    cacheRef.current = {
+      zero,
+      context: zero.context,
+      rawQuery: query,
+      customQuery: query.query,
+      args: query.args,
+      ast: undefined,
+      format: undefined,
+      customQueryID: undefined,
+      q,
+    };
+  } else {
+    const qi = asQueryInternals(q);
+    cacheRef.current = {
+      zero,
+      context: zero.context,
+      rawQuery: query,
+      customQuery: undefined,
+      args: undefined,
+      ast: qi.ast,
+      format: qi.format,
+      customQueryID: qi.customQueryID,
+      q,
+    };
+  }
+  return q;
+}
+
 // Overload 1: Query
 export function useQuery<
   TTable extends keyof TSchema['tables'] & string,
@@ -137,7 +288,7 @@ export function useQuery<
   const zero = useZero<TSchema, undefined, TContext>();
 
   // When query is falsy, use disabled subscriber/snapshot to maintain hook order
-  const q = query ? addContextToQuery(query, zero.context) : undefined;
+  const q = useStableQuery(query, zero);
   const view = q ? viewStore.getView(zero, q, enabled, ttl) : undefined;
 
   // https://react.dev/reference/react/useSyncExternalStore
@@ -216,7 +367,7 @@ export function useSuspenseQuery<
   const zero = useZero<TSchema, undefined, TContext>();
 
   // When query is falsy, use disabled subscriber/snapshot to maintain hook order
-  const q = query ? addContextToQuery(query, zero.context) : undefined;
+  const q = useStableQuery(query, zero);
   const view = q ? viewStore.getView(zero, q, enabled, ttl) : undefined;
 
   // https://react.dev/reference/react/useSyncExternalStore
@@ -348,6 +499,12 @@ function makeError(retry: () => void, error: ErroredQuery): QueryErrorDetails {
 // oxlint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyViewWrapper = ViewWrapper<any, any, any, any, any>;
 
+// Caches `hash + format` per query object so renders that reuse the same
+// resolved query (see useStableQuery) skip re-hashing. The client ID is
+// appended per call because a query object may be used with multiple Zero
+// instances.
+const queryKeyCache = new WeakMap<object, string>();
+
 const allViews = new WeakMap<ViewStore, Map<string, AnyViewWrapper>>();
 
 export function getAllViewsSizeForTesting(store: ViewStore): number {
@@ -448,7 +605,12 @@ export class ViewStore {
       };
     }
 
-    const hash = qi.hash() + JSON.stringify(qi.format) + zero.clientID;
+    let queryKey = queryKeyCache.get(qi);
+    if (queryKey === undefined) {
+      queryKey = qi.hash() + JSON.stringify(qi.format);
+      queryKeyCache.set(qi, queryKey);
+    }
+    const hash = queryKey + zero.clientID;
     let existing = this.#views.get(hash);
     if (!existing) {
       existing = new ViewWrapper(q, zero, ttl, view => {
@@ -635,6 +797,9 @@ class ViewWrapper<
   };
 
   updateTTL(ttl: TTL): void {
+    if (this.#ttl === ttl) {
+      return;
+    }
     this.#ttl = ttl;
     this.#view?.updateTTL(ttl);
   }
