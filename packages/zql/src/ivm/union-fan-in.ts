@@ -19,7 +19,7 @@ import {
   pushAccumulatedChanges,
 } from './push-accumulated.ts';
 import type {SourceSchema} from './schema.ts';
-import {first, type Stream} from './stream.ts';
+import type {Stream} from './stream.ts';
 import type {UnionFanOut} from './union-fan-out.ts';
 
 export class UnionFanIn implements Operator {
@@ -170,7 +170,24 @@ export class UnionFanIn implements Operator {
         constraint,
       });
 
-      if (first(fetchResult) !== undefined) {
+      // `fetch` interleaves 'yield' sentinels for cooperative multitasking.
+      // They must be forwarded, not just skipped: this probe runs inside a
+      // push, and the sentinel is the source offering the scheduler a breath.
+      // They must also not be mistaken for rows -- reading one as a row is
+      // what broke this before, since an empty branch that happened to yield
+      // looked like a branch holding the row, silently dropping the
+      // add/remove and desyncing a downstream `Take`'s push and fetch paths.
+      let otherBranchHasRow = false;
+      for (const node of fetchResult) {
+        if (node === 'yield') {
+          yield node;
+          continue;
+        }
+        otherBranchHasRow = true;
+        break;
+      }
+
+      if (otherBranchHasRow) {
         // Another branch has the row, so the add/remove is not needed.
         return;
       }
