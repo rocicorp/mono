@@ -124,7 +124,15 @@ export type SQLiteCatchupOptions = {
 export type SQLiteChangeLogServeOptions = {
   /** Stable percentage of eligible serving tasks routed to SQLite. */
   readPercent: number;
-  /** A reseeded log must age through this whole window before it can serve. */
+  /**
+   * Stable percentage of eligible serving tasks routed to a log that has not
+   * yet aged through {@link retentionMs}. Zero keeps a reseeded log on PG for
+   * that whole window; above zero it serves that share of tasks, and a
+   * reservation it cannot cover is demoted rather than held pending.
+   * Defaults to zero.
+   */
+  coldReadPercent?: number | undefined;
+  /** The warm-up window a reseeded log ages through. */
   retentionMs: number;
   /** Injectable for deterministic breaker tests. */
   failureCooldownMs?: number | undefined;
@@ -515,6 +523,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
         ? new SQLiteChangeLogReadRouter({
             shard,
             readPercent: serveOptions.readPercent,
+            coldReadPercent: serveOptions.coldReadPercent,
             retentionMs: serveOptions.retentionMs,
             failureCooldownMs: serveOptions.failureCooldownMs,
             now: serveOptions.now,
@@ -1399,9 +1408,9 @@ class ChangeStreamerImpl implements ChangeStreamerService {
         catchup,
         reason: route?.reason ?? 'selector',
         coverage: route?.coverage,
-        // Every route the router selects has passed the warm-up gate.
         // Legacy focused-test selection has no warm classification.
-        logWarm: route === undefined ? undefined : true,
+        logWarm:
+          route === undefined ? undefined : route.reason !== 'selected-cold',
       };
     } else {
       this.#recordCatchupRoute('pg', 'log-unavailable');

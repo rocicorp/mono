@@ -68,6 +68,7 @@ export default async function runWorker(
       flowControlSlowSubscriberGracePeriodSeconds,
       sqliteChangeLogMode,
       sqliteChangeLogReadPercent,
+      sqliteChangeLogColdReadPercent,
       sqliteChangeLogComparePercent,
       sqliteChangeLogRetentionMs,
       sqliteChangeLogReadBatchRows,
@@ -268,6 +269,7 @@ export default async function runWorker(
             sqliteChangeLogMode === 'serve'
               ? {
                   readPercent: sqliteChangeLogReadPercent,
+                  coldReadPercent: sqliteChangeLogColdReadPercent,
                   retentionMs: sqliteChangeLogRetentionMs,
                 }
               : undefined,

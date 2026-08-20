@@ -12,6 +12,7 @@ function configWith(litestream: Partial<ZeroConfig['litestream']>): ZeroConfig {
       address: 'localhost',
       sqliteChangeLogMode: 'off',
       sqliteChangeLogReadPercent: 0,
+      sqliteChangeLogColdReadPercent: 0,
       sqliteChangeLogComparePercent: 1,
       sqliteChangeLogRetentionMs: 60_000,
       sqliteChangeLogReadBatchRows: 1000,
@@ -146,10 +147,47 @@ describe('config/normalize SQLite change log', () => {
     expect(() => assertNormalized(config)).not.toThrow();
   });
 
+  test('cold read percentage is only allowed in serve mode', () => {
+    const config = configWith({});
+    config.changeStreamer.sqliteChangeLogMode = 'compare';
+    config.changeStreamer.sqliteChangeLogColdReadPercent = 1;
+
+    expect(() => assertNormalized(config)).toThrow(
+      '--change-streamer-sqlite-change-log-cold-read-percent must be 0 unless ' +
+        '--change-streamer-sqlite-change-log-mode=serve',
+    );
+  });
+
+  test('cold read percentage must be an integer from 0 through 100', () => {
+    for (const percent of [-1, 1.5, 101]) {
+      const config = configWith({});
+      config.changeStreamer.sqliteChangeLogMode = 'serve';
+      config.changeStreamer.sqliteChangeLogColdReadPercent = percent;
+
+      expect(() => assertNormalized(config)).toThrow(
+        '--change-streamer-sqlite-change-log-cold-read-percent must be an ' +
+          'integer between 0 and 100',
+      );
+    }
+  });
+
+  test('cold read percentage must be 0 when the read percentage is 0', () => {
+    const config = configWith({});
+    config.changeStreamer.sqliteChangeLogMode = 'serve';
+    config.changeStreamer.sqliteChangeLogReadPercent = 0;
+    config.changeStreamer.sqliteChangeLogColdReadPercent = 25;
+
+    expect(() => assertNormalized(config)).toThrow(
+      '--change-streamer-sqlite-change-log-cold-read-percent must be 0 when ' +
+        '--change-streamer-sqlite-change-log-read-percent is 0',
+    );
+  });
+
   test('accepts positive integer tuning values', () => {
     const config = configWith({});
     config.changeStreamer.sqliteChangeLogMode = 'serve';
     config.changeStreamer.sqliteChangeLogReadPercent = 100;
+    config.changeStreamer.sqliteChangeLogColdReadPercent = 5;
 
     expect(() => assertNormalized(config)).not.toThrow();
   });

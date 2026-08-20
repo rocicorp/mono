@@ -724,6 +724,19 @@ export const zeroOptions = {
       hidden: true,
     },
 
+    sqliteChangeLogColdReadPercent: {
+      type: v.number().default(0),
+      desc: [
+        `The stable percentage of eligible catchup subscriptions served from a`,
+        `SQLite change log that is younger than its retention window, i.e. one`,
+        `seeded less than {bold --change-streamer-sqlite-change-log-retention-ms}`,
+        `ago. Selection uses the same hash as`,
+        `{bold --change-streamer-sqlite-change-log-read-percent}, so a task that`,
+        `serves cold is always one that would serve warm.`,
+      ],
+      hidden: true,
+    },
+
     sqliteChangeLogComparePercent: {
       type: v.number().default(1),
       desc: [

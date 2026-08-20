@@ -20,6 +20,10 @@ export type SQLiteChangeLogCoverage = {
 
 export type ChangeLogReadRouteReason =
   | 'selected'
+  // Selected while the log was still inside its warm-up window. Kept
+  // distinct from 'selected' so bootstrap serving is separable in metrics
+  // from steady-state serving.
+  | 'selected-cold'
   | 'percentage'
   | 'cold-log'
   | 'log-unavailable'
@@ -39,6 +43,12 @@ export type ChangeLogReadRoute = {
 export type SQLiteChangeLogReadRouterOptions = {
   readonly shard: ShardID;
   readonly readPercent: number;
+  /**
+   * Percentage of eligible tasks served from a log that has not yet aged
+   * through {@link retentionMs}. Defaults to zero, which keeps every such
+   * task on PG.
+   */
+  readonly coldReadPercent?: number | undefined;
   readonly retentionMs: number;
   readonly inspect: () => SQLiteChangeLogCoverage | undefined;
   readonly failureCooldownMs?: number | undefined;
@@ -60,6 +70,7 @@ const DEFAULT_FAILURE_COOLDOWN_MS = 30_000;
 export class SQLiteChangeLogReadRouter {
   readonly #shard: ShardID;
   readonly #readPercent: number;
+  readonly #coldReadPercent: number;
   readonly #retentionMs: number;
   readonly #inspect: () => SQLiteChangeLogCoverage | undefined;
   readonly #failureCooldownMs: number;
@@ -72,6 +83,7 @@ export class SQLiteChangeLogReadRouter {
   constructor(opts: SQLiteChangeLogReadRouterOptions) {
     this.#shard = opts.shard;
     this.#readPercent = opts.readPercent;
+    this.#coldReadPercent = opts.coldReadPercent ?? 0;
     this.#retentionMs = opts.retentionMs;
     this.#inspect = opts.inspect;
     this.#failureCooldownMs =
@@ -172,7 +184,16 @@ export class SQLiteChangeLogReadRouter {
     // -- does not leave the cooldown armed against the next ordinary
     // unavailability.
     this.#breakerUntilMs = undefined;
-    if (now - coverage.seededAtMs < this.#retentionMs) {
+    // A log seeded less than a retention window ago holds less history than
+    // the purger promises to keep, so it is the case that most often cannot
+    // cover a follower. It is also the only path that has no PG to fall back
+    // to once PG is retired, which is the argument for exercising it now
+    // rather than meeting it at the cutover: `coldReadPercent` is that dial.
+    const cold = now - coverage.seededAtMs < this.#retentionMs;
+    if (
+      cold &&
+      !isSampledForShard(this.#shard, taskID, this.#coldReadPercent)
+    ) {
       return {source: 'pg', reason: 'cold-log', coverage};
     }
 
@@ -181,7 +202,11 @@ export class SQLiteChangeLogReadRouter {
     if (!isSampledForShard(this.#shard, taskID, this.#readPercent)) {
       return {source: 'pg', reason: 'percentage', coverage};
     }
-    return {source: 'sqlite', reason: 'selected', coverage};
+    return {
+      source: 'sqlite',
+      reason: cold ? 'selected-cold' : 'selected',
+      coverage,
+    };
   }
 
   #asPinned(route: ChangeLogReadRoute): ChangeLogReadRoute {

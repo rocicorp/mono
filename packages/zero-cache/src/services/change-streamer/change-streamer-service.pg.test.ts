@@ -674,6 +674,52 @@ describe('change-streamer/service', () => {
     }
   });
 
+  test('cold reads serve a freshly seeded log from its seed anchor', async () => {
+    const readerRead = vi.spyOn(SQLiteChangeLogReader.prototype, 'read');
+    const logFile = new DbFile('sqlite-change-log-cold-serve');
+    const retentionMs = 60_000;
+    // Never advanced: the log stays inside its warm-up window throughout.
+    const now = Date.now();
+    await restartWithInlineChangeLogWriter(logFile, {
+      sqliteCatchup: {barrierPollIntervalMs: 10},
+      sqliteChangeLogServe: {
+        readPercent: 100,
+        coldReadPercent: 100,
+        retentionMs,
+        now: () => now,
+      },
+    });
+
+    try {
+      changes.push(['begin', messages.begin(), {commitWatermark: '06'}]);
+      changes.push(['data', messages.insert('foo', {id: 'bootstrap'})]);
+      changes.push(['commit', messages.commit(), {watermark: '06'}]);
+      await expectAcks('06');
+
+      // The subscriber is exactly at the watermark the log was seeded at,
+      // which is what `seedChangeLogStream`'s synthetic transaction exists to
+      // make serviceable. The warm-up gate is the reason that had never run
+      // outside a reader unit test.
+      const sub = await subscribeServing('cold-serve');
+      const output = drainToQueue(sub);
+      expect(await nextChange(output)).toMatchObject({tag: 'status'});
+      expect(await nextChange(output)).toMatchObject({tag: 'begin'});
+      expect(await nextChange(output)).toMatchObject({
+        tag: 'insert',
+        new: {id: 'bootstrap'},
+      });
+      expect(await nextChange(output)).toMatchObject({tag: 'commit'});
+      expect(readerRead).toHaveBeenCalled();
+      sub.cancel();
+    } finally {
+      readerRead.mockRestore();
+      await streamer.stop();
+      await streamerDone;
+      deleteChangeLogDB(logFile.path);
+      logFile.delete();
+    }
+  });
+
   test('serve mode sends a subscriber below the SQLite floor to PG', async () => {
     const readerRead = vi.spyOn(SQLiteChangeLogReader.prototype, 'read');
     const pgCatchup = vi.spyOn(Storer.prototype, 'catchup');
