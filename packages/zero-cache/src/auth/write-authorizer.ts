@@ -455,8 +455,9 @@ export class WriteAuthorizerImpl implements WriteAuthorizer {
         rowQuery,
       ))
     ) {
-      // Never log `op` or `authData`: `op.value` is the row the client is
-      // writing and `authData` is the decoded JWT payload.
+      // `op.value` is the row being written and `authData` is the decoded
+      // JWT payload, so neither can go into the log. Column names and policy
+      // counts are enough to debug a failed permission check.
       this.#lc.warn?.('Permission check failed', {
         action,
         phase,
