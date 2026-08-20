@@ -3,10 +3,12 @@ import type {Source} from '../../types/streams.ts';
 import {Subscription} from '../../types/subscription.ts';
 import {
   litestreamMonitorMetricAttrs,
+  litestreamSnapshotReservationConfirmDuration,
   litestreamSnapshotReservationDuration,
 } from '../litestream/metrics.ts';
 import type {BackupConfig} from './change-streamer-service.ts';
 import type {SnapshotMessage} from './snapshot.ts';
+import type {ChangeLogReadSource} from './sqlite-change-log-read-router.ts';
 
 export class SnapshotReservations {
   readonly #lc: LogContext;
@@ -44,6 +46,14 @@ export class SnapshotReservations {
     return this.#reservations.get(taskID)?.owns(source) ?? false;
   }
 
+  #metricAttrs() {
+    return litestreamMonitorMetricAttrs(
+      this.#backupConfig.backupURL,
+      this.#backupConfig.litestreamVersion,
+      'view_syncer',
+    );
+  }
+
   #close(taskID: string, cancelledInstanceID: InstanceID | undefined) {
     const res = this.#reservations.get(taskID);
     if (
@@ -59,14 +69,15 @@ export class SnapshotReservations {
       this.#lc.info?.(
         `ended snapshot reservation for ${taskID} (${duration} ms)`,
       );
+      // `result` reports how the reservation ended and `confirmed` whether it
+      // ever received its bounds. They are separate dimensions: a follower
+      // that gives up while waiting for a confirmation is
+      // `result=cancelled, confirmed=false`, which a single collapsed
+      // attribute cannot distinguish from a client that simply went away.
       litestreamSnapshotReservationDuration().recordMs(duration, {
-        ...litestreamMonitorMetricAttrs(
-          this.#backupConfig.backupURL,
-          this.#backupConfig.litestreamVersion,
-          'view_syncer',
-        ),
-        result:
-          cancelledInstanceID || !res.confirmed() ? 'cancelled' : 'closed',
+        ...this.#metricAttrs(),
+        result: cancelledInstanceID ? 'cancelled' : 'closed',
+        confirmed: res.confirmed(),
       });
     }
   }
@@ -91,6 +102,7 @@ export class SnapshotReservations {
     taskID: string,
     replicaVersion: string,
     minWatermark: string,
+    source: ChangeLogReadSource,
   ): void {
     const res = this.#reservations.get(taskID);
     if (res && !res.confirmed()) {
@@ -98,7 +110,22 @@ export class SnapshotReservations {
         `reserving change-log entries since ${minWatermark} for ${taskID}`,
       );
       res.confirm(this.#backupConfig.backupURL, replicaVersion, minWatermark);
+      // Measured from `open()`, not from the first confirmation attempt: what
+      // matters is how long the follower waited before it could restore.
+      litestreamSnapshotReservationConfirmDuration().recordMs(
+        Date.now() - res.startTime.getTime(),
+        {...this.#metricAttrs(), source},
+      );
     }
+  }
+
+  /**
+   * Notes that a confirmation was deferred, returning true only the first time
+   * for this reservation. Confirmation is retried on every backup, so an
+   * undeduplicated count would measure backups rather than delayed followers.
+   */
+  noteConfirmationDelayed(taskID: string): boolean {
+    return this.#reservations.get(taskID)?.noteDelayed() ?? false;
   }
 
   getReservedWatermarks() {
@@ -116,6 +143,7 @@ class Reservation {
   readonly startTime: Date = new Date();
   readonly #downstream: Subscription<SnapshotMessage>;
   #watermark: string | null = null;
+  #delayNoted = false;
 
   constructor(
     instanceID: InstanceID,
@@ -135,6 +163,14 @@ class Reservation {
 
   owns(source: Source<SnapshotMessage>): boolean {
     return this.#downstream === source;
+  }
+
+  noteDelayed(): boolean {
+    if (this.#delayNoted) {
+      return false;
+    }
+    this.#delayNoted = true;
+    return true;
   }
 
   confirm(backupURL: string, replicaVersion: string, minWatermark: string) {

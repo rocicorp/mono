@@ -423,6 +423,13 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     'sqlite_change_log.catchup_routes',
     'Catchup subscriptions by selected source and low-cardinality reason.',
   );
+  readonly #reservationConfirmDelays = getOrCreateCounter(
+    'replication',
+    'sqlite_change_log.reservation_confirm_delays',
+    'Snapshot reservations whose confirmation was deferred because the ' +
+      "selected source's change-log minimum was later than the backup " +
+      'watermark. Counted once per reservation, by that source.',
+  );
 
   #latestStatus: Status;
   #latestLagReportCommitTimeMs = 0;
@@ -1035,11 +1042,17 @@ class ChangeStreamerImpl implements ChangeStreamerService {
           taskID,
           pgState.replicaVersion,
           backupWatermark,
+          route?.source ?? 'pg',
         );
       } else {
         // The selected source cannot catch a restored replica up from this
         // backup yet. Keep the reservation pending until a later backup moves
         // the durable watermark into its covered range.
+        if (reservations.noteConfirmationDelayed(taskID)) {
+          this.#reservationConfirmDelays.add(1, {
+            source: route?.source ?? 'pg',
+          });
+        }
         this.#lc.error?.(
           `${route?.source ?? 'pg'} change-log minWatermark ${minWatermark} ` +
             `is later than backupWatermark ${backupWatermark}. Delaying ` +

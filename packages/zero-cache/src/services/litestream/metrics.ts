@@ -182,6 +182,14 @@ export function litestreamSnapshotReservationDuration() {
   );
 }
 
+export function litestreamSnapshotReservationConfirmDuration() {
+  return litestreamDurationHistogram(
+    'litestream.snapshot.reservation_confirm_duration',
+    'Time from opening a snapshot reservation to confirming its change-log ' +
+      'bounds, by the source those bounds came from.',
+  );
+}
+
 function litestreamDurationHistogram(name: string, description: string) {
   return getOrCreateHistogram('replica', name, {
     description,
