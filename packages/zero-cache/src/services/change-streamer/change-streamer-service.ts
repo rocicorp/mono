@@ -59,6 +59,10 @@ import {
   type SQLiteChangeLogCleanupGuard,
 } from './sqlite-change-log-catchup.ts';
 import {
+  SQLiteChangeLogComparator,
+  type SQLiteChangeLogCompareOptions,
+} from './sqlite-change-log-comparator.ts';
+import {
   SQLiteChangeLogPurgeScheduler,
   type PurgeContinuation,
   type SQLiteChangeLogPurgeSchedulerOptions,
@@ -137,14 +141,15 @@ export type TuningOptions = StorerOptions & {
    */
   sqliteChangeLogPurge?: SQLiteChangeLogPurgeSchedulerOptions | undefined;
   /**
-   * Supplied at `sqliteChangeLogMode >= compare`, and the gate on deriving the
-   * stream's initialization parameters from the replica as well as from
-   * Postgres. Postgres stays authoritative; the two are compared and the
-   * result is reported. Not a new configuration option -- the mode ladder
-   * carries it, because a state in which the log's buffer and its cookies were
-   * at different rollout stages is what invariant 15 exists to forbid.
+   * Supplied in `compare` mode and later modes.
+   * `replicaFile` enables the initialization comparison.
+   * The other fields configure sampled catchup comparisons.
+   * Both checks are advisory, and Postgres remains authoritative.
+   * The comparator also requires the writer and catchup options.
    */
-  sqliteChangeLogCompare?: {replicaFile: string} | undefined;
+  sqliteChangeLogCompare?:
+    | (SQLiteChangeLogCompareOptions & {replicaFile: string})
+    | undefined;
 };
 
 /**
@@ -357,6 +362,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
   readonly #sqliteCatchupOptions: SQLiteCatchupOptions | undefined;
   readonly #changeLogWriter: SQLiteChangeLogWriter | undefined;
   readonly #purgeScheduler: SQLiteChangeLogPurgeScheduler | undefined;
+  readonly #comparator: SQLiteChangeLogComparator | undefined;
   readonly #acker: UpstreamAcker;
   readonly #initializer: ChangeLogInitializer;
 
@@ -479,8 +485,15 @@ class ChangeStreamerImpl implements ChangeStreamerService {
           // Fail-soft deletes the file, and the reader is cached here, so it
           // has to go with it: otherwise it serves an unlinked inode while
           // every new open sees nothing.
-          onDisabled: () => this.#closeSQLiteCatchup(),
-          onRebuilt: () => this.#closeSQLiteCatchup(),
+          onDisabled: () => {
+            this.#closeSQLiteCatchup();
+            this.#comparator?.stop();
+          },
+          onRebuilt: () => {
+            this.#closeSQLiteCatchup();
+            // Invalidate cycles that can still read the replaced file.
+            this.#comparator?.invalidate();
+          },
         })
       : undefined;
     // The purge scheduler runs on the writer's own connection, which is also
@@ -535,6 +548,20 @@ class ChangeStreamerImpl implements ChangeStreamerService {
             this.#purgeScheduler?.cleanupGuard,
         }
       : undefined;
+    // Compare mode requires the writer and catchup configuration.
+    this.#comparator =
+      opts.sqliteChangeLogCompare &&
+      opts.sqliteChangeLogWriter &&
+      opts.sqliteCatchup
+        ? new SQLiteChangeLogComparator(
+            lc,
+            shard,
+            opts.sqliteCatchup.changeLogFile,
+            opts.sqliteChangeLogWriter.identity,
+            this.#storer,
+            {setTimeoutFn, ...opts.sqliteChangeLogCompare},
+          )
+        : undefined;
     this.#purgeLock = initialPurgeLock;
     this.#autoReset = autoReset;
     this.#state = new RunningState(this.id, undefined, setTimeoutFn);
@@ -1034,6 +1061,7 @@ class ChangeStreamerImpl implements ChangeStreamerService {
     this.#state.stop(this.#lc, err);
     this.#stream?.changes.cancel();
     this.#purgeScheduler?.stop();
+    this.#comparator?.stop();
     this.#sqliteCatchup?.close();
     this.#changeLogWriter?.close();
     await Promise.allSettled([this.#storer.stop(), this.#source.stop()]);

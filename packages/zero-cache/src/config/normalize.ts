@@ -46,6 +46,7 @@ export function assertNormalized(
   const {
     sqliteChangeLogMode,
     sqliteChangeLogReadPercent,
+    sqliteChangeLogComparePercent,
     sqliteChangeLogRetentionMs,
     sqliteChangeLogReadBatchRows,
     sqliteChangeLogPurgeBatchRows,
@@ -56,6 +57,13 @@ export function assertNormalized(
       sqliteChangeLogReadPercent >= 0 &&
       sqliteChangeLogReadPercent <= 100,
     '--change-streamer-sqlite-change-log-read-percent must be an integer between 0 and 100',
+  );
+  // This setting has no mode restriction. Comparison starts in `compare` mode.
+  assert(
+    Number.isSafeInteger(sqliteChangeLogComparePercent) &&
+      sqliteChangeLogComparePercent >= 0 &&
+      sqliteChangeLogComparePercent <= 100,
+    '--change-streamer-sqlite-change-log-compare-percent must be an integer between 0 and 100',
   );
   assert(
     sqliteChangeLogMode === 'serve' || sqliteChangeLogReadPercent === 0,
