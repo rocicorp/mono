@@ -23,7 +23,11 @@ export type ChangeLogReadRouteReason =
   | 'percentage'
   | 'cold-log'
   | 'log-unavailable'
-  | 'breaker-open';
+  | 'breaker-open'
+  // Pinned to SQLite, then demoted because the log could not cover the
+  // backup the reservation is restoring from. See {@link
+  // SQLiteChangeLogReadRouter.demote}.
+  | 'backup-uncovered';
 
 export type ChangeLogReadRoute = {
   readonly source: ChangeLogReadSource;
@@ -101,6 +105,28 @@ export class SQLiteChangeLogReadRouter {
   /** Releases a pin whose snapshot reservation ended before subscribing. */
   release(taskID: string): void {
     this.#pins.delete(taskID);
+  }
+
+  /**
+   * Replaces a pinned SQLite route with PG, for a reservation whose backup
+   * the log cannot cover -- most often a log seeded after that backup.
+   *
+   * The pin moves, not just the reservation's advertised bounds. Confirming
+   * with PG bounds while the task's `/changes` request still resolves to
+   * SQLite is exactly the mismatch the reservation path exists to prevent,
+   * so the two have to change together.
+   *
+   * A task with no pin is left alone: `consume` makes it a fresh choice.
+   */
+  demote(taskID: string): ChangeLogReadRoute {
+    const route: ChangeLogReadRoute = {
+      source: 'pg',
+      reason: 'backup-uncovered',
+    };
+    if (this.#pins.has(taskID)) {
+      this.#pins.set(taskID, route);
+    }
+    return route;
   }
 
   /** Opens the post-registration failure breaker. */

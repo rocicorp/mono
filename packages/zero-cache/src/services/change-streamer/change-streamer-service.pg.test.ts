@@ -789,6 +789,98 @@ describe('change-streamer/service', () => {
     }
   });
 
+  test('a reservation the log cannot cover is demoted to PG, pin included', async () => {
+    const readerRead = vi.spyOn(SQLiteChangeLogReader.prototype, 'read');
+    const pgCatchup = vi.spyOn(Storer.prototype, 'catchup');
+    const logFile = new DbFile('sqlite-change-log-reservation-demotion');
+    await restartWithInlineChangeLogWriter(logFile, {
+      sqliteCatchup: {barrierPollIntervalMs: 10},
+      backupURL: 's3://foo/bar',
+      sqliteChangeLogServe: {
+        readPercent: 100,
+        retentionMs: 0,
+        // A log seeded after the backup this follower restores from. Its
+        // minimum is later than the durable watermark, so it cannot catch
+        // that replica up no matter how long the reservation waits.
+        inspect: () => ({
+          seededAtMs: 0,
+          seedWatermark: '08',
+          minWatermark: '08',
+          headWatermark: '08',
+        }),
+      },
+    });
+
+    try {
+      changes.push(['begin', messages.begin(), {commitWatermark: '06'}]);
+      changes.push(['data', messages.insert('foo', {id: 'from-pg'})]);
+      changes.push(['commit', messages.commit(), {watermark: '06'}]);
+      await expectAcks('06');
+
+      streamer.trackBackupWatermark('06');
+      const reservation = await streamer.startSnapshotReservation('follower');
+      const [, status] = await drainSnapshotMessages(reservation).dequeue();
+
+      // Confirmed at all: without the demotion the log's '08' minimum fails
+      // the coverage check against backup '06', and the reservation stays
+      // pending with no status pushed. The advertised bound is the backup
+      // watermark, reached via PG's range rather than the log's.
+      expect(status).toMatchObject({
+        minWatermark: '06',
+        replicaVersion: REPLICA_VERSION,
+      });
+      expect(logSink.messages).toContainEqual([
+        'info',
+        expect.anything(),
+        [
+          expect.stringContaining(
+            'demoting follower to PG catchup: SQLite change-log minimum 08 ' +
+              'is later than backupWatermark 06',
+          ),
+        ],
+      ]);
+
+      // The pin moved with the bounds: the /changes request that follows the
+      // reservation resolves to PG for the same reason.
+      const sub = await streamer.subscribe({
+        protocolVersion: PROTOCOL_VERSION,
+        taskID: 'follower',
+        id: 'follower',
+        mode: 'serving',
+        watermark: REPLICA_VERSION,
+        replicaVersion: REPLICA_VERSION,
+        initial: true,
+        logsChangeStream: false,
+      });
+      const output = drainToQueue(sub);
+      expect(await nextChange(output)).toMatchObject({tag: 'status'});
+      expect(await nextChange(output)).toMatchObject({tag: 'begin'});
+      expect(await nextChange(output)).toMatchObject({
+        tag: 'insert',
+        new: {id: 'from-pg'},
+      });
+      expect(logSink.messages).toContainEqual([
+        'debug',
+        expect.anything(),
+        [
+          expect.stringContaining(
+            'serving follower from PG catchup: SQLite route backup-uncovered',
+          ),
+        ],
+      ]);
+      expect(pgCatchup).toHaveBeenCalled();
+      expect(readerRead).not.toHaveBeenCalled();
+      sub.cancel();
+    } finally {
+      readerRead.mockRestore();
+      pgCatchup.mockRestore();
+      await streamer.stop();
+      await streamerDone;
+      deleteChangeLogDB(logFile.path);
+      logFile.delete();
+    }
+  });
+
   /**
    * §6.6's rollback drill. At readPercent=100, with a subscriber served from
    * SQLite and a snapshot reservation confirmed while SQLite was the pinned

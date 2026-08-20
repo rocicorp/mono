@@ -124,6 +124,58 @@ describe('change-streamer/sqlite-change-log-read-router', () => {
     });
   });
 
+  test('demote() moves the pin, not just the reservation bounds', () => {
+    const router = new SQLiteChangeLogReadRouter({
+      shard,
+      readPercent: 100,
+      retentionMs: 100,
+      now: () => 2_000,
+      inspect: () => warm,
+    });
+
+    expect(router.pin('task')).toMatchObject({source: 'sqlite'});
+    expect(router.demote('task')).toEqual({
+      source: 'pg',
+      reason: 'backup-uncovered',
+    });
+    // The /changes request that follows the reservation must agree with the
+    // bounds it was confirmed with.
+    expect(router.peek('task')).toMatchObject({
+      source: 'pg',
+      reason: 'backup-uncovered',
+      pinned: true,
+    });
+    expect(router.consume('task')).toMatchObject({
+      source: 'pg',
+      reason: 'backup-uncovered',
+      pinned: true,
+    });
+  });
+
+  test('demote() does not resurrect a released pin', () => {
+    const router = new SQLiteChangeLogReadRouter({
+      shard,
+      readPercent: 100,
+      retentionMs: 100,
+      now: () => 2_000,
+      inspect: () => warm,
+    });
+
+    router.pin('task');
+    router.release('task');
+    expect(router.demote('task')).toEqual({
+      source: 'pg',
+      reason: 'backup-uncovered',
+    });
+    // Unpinned: the next request makes a fresh choice rather than inheriting
+    // a demotion that belonged to a reservation that is already gone.
+    expect(router.peek('task')).toBeUndefined();
+    expect(router.consume('task')).toMatchObject({
+      source: 'sqlite',
+      reason: 'selected',
+    });
+  });
+
   test('post-registration failures route retries to PG until a bounded probe succeeds', () => {
     let now = 2_000;
     let available = true;
