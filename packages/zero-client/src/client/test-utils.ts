@@ -12,13 +12,14 @@ import type {
   ErrorBody,
   ErrorMessage,
 } from '../../../zero-protocol/src/error.ts';
-import type {
-  PokeEndBody,
-  PokeEndMessage,
-  PokePartBody,
-  PokePartMessage,
-  PokeStartBody,
-  PokeStartMessage,
+import {
+  POKE_CHUNK_MESSAGE_TYPE,
+  type PokeEndBody,
+  type PokeEndMessage,
+  type PokePartBody,
+  type PokePartMessage,
+  type PokeStartBody,
+  type PokeStartMessage,
 } from '../../../zero-protocol/src/poke.ts';
 import type {PongMessage} from '../../../zero-protocol/src/pong.ts';
 import type {
@@ -216,6 +217,23 @@ export class TestZero<
     return this.triggerMessage(msg);
   }
 
+  async triggerPokeChunks(pokeParts: PokePartBody[]): Promise<void> {
+    const socket = await this.socket;
+    assert(!socket.closed, 'Expected socket to be open');
+    const payload = new TextEncoder().encode(JSON.stringify(pokeParts));
+    const bytes = new Uint8Array(payload.byteLength + 1);
+    bytes[0] = POKE_CHUNK_MESSAGE_TYPE;
+    bytes.set(payload, 1);
+    socket.dispatchEvent(
+      new MessageEvent('message', {
+        data: bytes.buffer.slice(
+          bytes.byteOffset,
+          bytes.byteOffset + bytes.byteLength,
+        ),
+      }),
+    );
+  }
+
   triggerPokeEnd(pokeEnd: PokeEndBody): Promise<void> {
     const msg: PokeEndMessage = ['pokeEnd', pokeEnd];
     return this.triggerMessage(msg);
@@ -229,10 +247,7 @@ export class TestZero<
       pokeID: id,
       baseCookie: baseCookieStr,
     });
-    await this.triggerPokePart({
-      ...pokePart,
-      pokeID: id,
-    });
+    await this.triggerPokeChunks([{...pokePart, pokeID: id}]);
     if (this.#cookie === null) {
       this.#cookie = 1;
     } else {

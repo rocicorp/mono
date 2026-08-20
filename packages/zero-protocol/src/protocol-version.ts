@@ -57,16 +57,23 @@ import {assert} from '../../shared/src/asserts.ts';
 // -- version 49 adds `scalar` to CorrelatedSubqueryCondition, removes scalarSubquery
 // -- version 50 adds OTEL headers to push and query messages
 // -- version 51 changes inspector metrics fields
-export const PROTOCOL_VERSION = 51;
+// -- version 52 replaces JSON pokePart messages with binary poke chunks for
+//    clients using protocol version 52 or newer. Older clients retain pokePart.
+export const PROTOCOL_VERSION = 52;
 
 /**
  * The minimum server-supported sync protocol version (i.e. the version
- * declared in the "/sync/v{#}/connect" URL). The contract for
- * backwards compatibility is that a `zero-cache` supports the current
- * `PROTOCOL_VERSION` and at least the previous one (i.e. `PROTOCOL_VERSION - 1`)
- * if not earlier ones as well. This corresponds to supporting clients running
- * the current release and the previous (major) release. Any client connections
- * from protocol versions before `MIN_SERVER_SUPPORTED_PROTOCOL_VERSION` are
+ * declared in the "/sync/v{#}/connect" URL).
+ *
+ * CloudZero can serve applications running old client releases indefinitely.
+ * Consequently, this value must never be increased: `zero-cache` must continue
+ * to support every sync protocol from this version through `PROTOCOL_VERSION`.
+ * A wire change that an old client cannot ignore must branch on the client's
+ * protocol version and retain the old behavior. Keep each compatibility fork
+ * isolated at the boundary that owns the changed behavior and test both sides
+ * of its version cutoff.
+ *
+ * Client connections from protocol versions before this historical floor are
  * closed with a `VersionNotSupported` error.
  */
 export const MIN_SERVER_SUPPORTED_SYNC_PROTOCOL = 30;

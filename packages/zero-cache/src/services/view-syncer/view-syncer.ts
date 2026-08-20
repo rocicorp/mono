@@ -25,7 +25,6 @@ import type {
 } from '../../../../zero-protocol/src/connect.ts';
 import type {ErroredQuery} from '../../../../zero-protocol/src/custom-queries.ts';
 import type {DeleteClientsMessage} from '../../../../zero-protocol/src/delete-clients.ts';
-import type {Downstream} from '../../../../zero-protocol/src/down.ts';
 import {ErrorKind} from '../../../../zero-protocol/src/error-kind.ts';
 import {ErrorOrigin} from '../../../../zero-protocol/src/error-origin.ts';
 import {
@@ -57,6 +56,7 @@ import {
   getOrCreateUpDownCounter,
 } from '../../observability/metrics.ts';
 import type {InspectorDelegate} from '../../server/inspector-delegate.ts';
+import type {ViewSyncerDownstream} from '../../types/downstream.ts';
 import {
   getLogLevel,
   ProtocolErrorWithLevel,
@@ -139,7 +139,7 @@ export interface ViewSyncer {
   initConnection(
     selector: ConnectionSelector,
     initConnectionMessage: InitConnectionMessage,
-  ): Source<Downstream>;
+  ): Source<ViewSyncerDownstream>;
 
   changeDesiredQueries(
     selector: ConnectionSelector,
@@ -953,7 +953,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   initConnection(
     selector: ConnectionSelector,
     initConnectionMessage: InitConnectionMessage,
-  ): Source<Downstream> {
+  ): Source<ViewSyncerDownstream> {
     this.#lc.debug?.('viewSyncer.initConnection');
     return startSpan(tracer, 'vs.initConnection', () => {
       const connCtx =
@@ -964,7 +964,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         .withContext('wsID', connCtx.wsID);
 
       // Setup the downstream connection.
-      const downstream = Subscription.create<Downstream>({
+      const downstream = Subscription.create<ViewSyncerDownstream>({
         cleanup: (_, err) => {
           err
             ? lc[getLogLevel(err)]?.(`client closed with error`, err)

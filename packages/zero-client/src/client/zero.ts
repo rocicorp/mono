@@ -61,10 +61,11 @@ import {
   mapCRUD,
 } from '../../../zero-protocol/src/mutation.ts';
 import type {PingMessage} from '../../../zero-protocol/src/ping.ts';
-import type {
-  PokeEndMessage,
-  PokePartMessage,
-  PokeStartMessage,
+import {
+  POKE_CHUNK_MESSAGE_TYPE,
+  type PokeEndMessage,
+  type PokePartMessage,
+  type PokeStartMessage,
 } from '../../../zero-protocol/src/poke.ts';
 import {PROTOCOL_VERSION} from '../../../zero-protocol/src/protocol-version.ts';
 import type {
@@ -1298,16 +1299,47 @@ export class Zero<
     }
   }
 
-  #onMessage = (e: MessageEvent<string>) => {
+  #onMessage = (e: MessageEvent<string | ArrayBuffer>) => {
     const lc = this.#lc;
-    lc.debug?.('received message', e.data);
+    const {data} = e;
+    lc.debug?.(
+      'received message',
+      data instanceof ArrayBuffer
+        ? {type: 'binary', byteLength: data.byteLength}
+        : data,
+    );
     if (this.closed) {
       lc.debug?.('ignoring message because already closed');
       return;
     }
 
     let downMessage: Downstream;
-    const {data} = e;
+    if (data instanceof ArrayBuffer) {
+      this.#messageCount++;
+      const message = new Uint8Array(data);
+      if (message[0] !== POKE_CHUNK_MESSAGE_TYPE) {
+        this.#disconnect(
+          lc,
+          new ClientError({
+            kind: ClientErrorKind.InvalidMessage,
+            message: `Unknown binary message type: ${String(message[0])}`,
+          }),
+        );
+        return;
+      }
+      this.#handlePokeChunk(message.subarray(1));
+      return;
+    }
+    if (typeof data !== 'string') {
+      this.#disconnect(
+        lc,
+        new ClientError({
+          kind: ClientErrorKind.InvalidMessage,
+          message: 'Invalid binary message received from server',
+        }),
+      );
+      return;
+    }
     try {
       downMessage = valita.parse(
         JSON.parse(data),
@@ -1914,9 +1946,22 @@ export class Zero<
     }
   }
 
+  #handlePokeChunk(chunk: Uint8Array): void {
+    this.#abortPingTimeout();
+    this.#pokeHandler.handlePokeChunk(chunk);
+  }
+
   #handlePokeEnd(_lc: LogContext, pokeMessage: PokeEndMessage): void {
     this.#abortPingTimeout();
-    this.#pokeHandler.handlePokeEnd(pokeMessage[1]);
+    const result = this.#pokeHandler.handlePokeEnd(pokeMessage[1]);
+    if (result?.hasRows) {
+      // Receiving row data indicates that the client is in a good state and
+      // can reset the reload backoff state.
+      resetBackoff();
+    }
+    if (result?.lastMutationIDChangeForSelf !== undefined) {
+      this.#lastMutationIDReceived = result.lastMutationIDChangeForSelf;
+    }
   }
 
   #onPokeError(error: unknown): void {
@@ -2795,15 +2840,13 @@ export async function createSocket(
     deletedClients = undefined;
   }
   onEvent?.('creating the WebSocket');
-  return [
-    new WS(
-      // toString() required for RN URL polyfill.
-      url.toString(),
-      secProtocol,
-    ),
-    queriesPatch,
-    skipEmptyDeletedClients(deletedClients),
-  ];
+  const socket = new WS(
+    // toString() required for RN URL polyfill.
+    url.toString(),
+    secProtocol,
+  );
+  socket.binaryType = 'arraybuffer';
+  return [socket, queriesPatch, skipEmptyDeletedClients(deletedClients)];
 }
 
 export async function createConnectionURL(
