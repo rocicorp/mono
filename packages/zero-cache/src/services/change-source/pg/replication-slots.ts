@@ -1,3 +1,4 @@
+import type {Readable} from 'node:stream';
 import {
   PG_CONFIGURATION_LIMIT_EXCEEDED,
   PG_INSUFFICIENT_PRIVILEGE,
@@ -8,9 +9,14 @@ import {runTx} from '../../../db/run-transaction.ts';
 import {isPostgresError, type PostgresDB} from '../../../types/pg.ts';
 import {upstreamSchema, type ShardID} from '../../../types/shards.ts';
 import {orTimeout} from '../../../types/timeout.ts';
-import {toStateVersionString} from './lsn.ts';
+import {
+  createReplicationSessionFor,
+  keepSlotActiveUntilTakenOver,
+} from './logical-replication/stream.ts';
+import {toBigInt, toStateVersionString} from './lsn.ts';
 import {
   createReplica,
+  metadataPublicationName,
   replicationSlotExpression,
   replicationSlotPrefix,
   type BackupOptions,
@@ -22,6 +28,12 @@ export type ReplicationSlot = {
   consistent_point: string;
   snapshot_name: string;
   output_plugin: string;
+};
+
+export type ReplicationSlotResult<T> = {
+  slot: ReplicationSlot;
+  capturedSnapshot: T;
+  initialSession: Readable;
 };
 
 export type CreateSlotSpec = {
@@ -129,26 +141,49 @@ export async function createReplicationSlot(
  * 2. Running replication managers (which use an earlier replica of a lower
  *    rank) will not delete the new slot during their cleanup logic, since
  *    the slot will belong to a replica of a higher rank.
+ *
+ * When the replication slot is created, `captureSnapshot` callback is first
+ * run while the snapshot at the consistent point is available. The callback
+ * must capture the snapshot in postgres (e.g. `SET TRANSACTION SNAPSHOT`)
+ * in order to use it. Once the callback completes, a placeholder replication
+ * session (i.e. that does not consume any messages) is started, in order to
+ * reserve the slot by mark it "active", effectively distinguishing the
+ * initializing session from a failed or abandoned session.
+ *
+ * Note that starting the replication session releases the initial snapshot,
+ * which is why the callback must capture it synchronously, before the
+ * replication session is started.
+ *
+ * The placeholder replication session is closed when the
+ * PostgresChangeSource takes over the slot to process the stream in earnest.
+ * It is also returned for cleanup in the case of failures (and for control
+ * in unit tests).
  */
-export async function createReplicaAndSlot(
+export async function createReplicaAndSlot<T>(
   lc: LogContext,
   sql: PostgresDB,
-  replicationSession: postgres.Sql,
+  sessionName: string,
   shard: ShardID,
   replicaID: string,
   failover: boolean,
   backupOptions: BackupOptions,
-): Promise<ReplicationSlot> {
+  captureSnapshot: (snapshot: string) => Promise<T>,
+): Promise<ReplicationSlotResult<T>> {
+  // Note: The replicationSession is closed by keepSlotActiveUntilTakenOver,
+  // and only closed in this function if an error occurrs.
+  const replicationSession = createReplicationSessionFor(sql, sessionName);
   const lockName = replicationSlotManagementLock(shard);
   const slotPoolPrefix = replicationSlotPrefix(shard);
+
   for (let first = true; ; first = false) {
     await dropUnclaimedSlots(lc, sql, shard);
+
+    let slotName: string | undefined;
     try {
       return await runTx(sql, async tx => {
         await tx`SELECT pg_advisory_xact_lock(hashtext(${lockName}))`;
 
         // Pick an available slotName from the slotPoolPrefix pool.
-        let slotName: string;
         const names = await tx<{name: string}[]> /*sql*/ `
           SELECT slot_name as name FROM pg_replication_slots
             WHERE slot_name LIKE ${slotPoolPrefix + '%'};
@@ -166,6 +201,14 @@ export async function createReplicaAndSlot(
           slotName,
           failover,
         });
+        const capturedSnapshot = await captureSnapshot(slot.snapshot_name);
+        const initialSession = await keepSlotActiveUntilTakenOver(
+          lc,
+          replicationSession,
+          slot.slot_name,
+          metadataPublicationName(shard.appID, shard.shardNum),
+          toBigInt(slot.consistent_point),
+        );
 
         await createReplica(
           tx,
@@ -176,7 +219,7 @@ export async function createReplicaAndSlot(
           backupOptions,
         );
 
-        return slot;
+        return {slot, capturedSnapshot, initialSession};
       });
     } catch (e) {
       if (first && isPostgresError(e, PG_INSUFFICIENT_PRIVILEGE)) {
@@ -202,6 +245,12 @@ export async function createReplicaAndSlot(
           DELETE FROM ${sql(replicasTable)} USING pg_replication_slots slots
             WHERE replicas.slot = slots.slot_name AND NOT slots.active`;
         continue; // then let dropUnclaimedSlots() perform its cleanup
+      }
+      // Otherwise, clean up any created slot if something went wrong.
+      if (slotName) {
+        lc.warn?.(`deleting slot ${slotName} due to error`, e);
+        await replicationSession.end();
+        await sql`SELECT pg_drop_replication_slot(${slotName})`;
       }
       throw e;
     }
