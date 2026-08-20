@@ -8,10 +8,12 @@ import type {
   PokePartMessage,
   PokeStartMessage,
 } from '../../../../zero-protocol/src/poke.ts';
+import type {ViewSyncerDownstream} from '../../types/downstream.ts';
 import {Subscription} from '../../types/subscription.ts';
 import {
   ClientHandler,
   ensureSafeJSON,
+  POKE_PART_FLUSH_THRESHOLD_CHARS,
   startPoke,
   type Patch,
   type PokeHandler,
@@ -27,15 +29,19 @@ describe('view-syncer/client-handler', () => {
   function createSubscription() {
     const received: Downstream[] = [];
     const unconsumed: Downstream[] = [];
-    const subscription = Subscription.create<Downstream>({
-      cleanup: msgs => unconsumed.push(...msgs),
+    const serialized = new Map<Downstream, string>();
+    const subscription = Subscription.create<ViewSyncerDownstream>({
+      cleanup: msgs => unconsumed.push(...msgs.map(msg => msg.message)),
     });
     let err: Error | undefined;
     const {promise: loopDone, resolve: onDone} = resolver();
     void (async function () {
       try {
-        for await (const msg of subscription) {
-          received.push(msg);
+        for await (const {message, serialized: encoded} of subscription) {
+          received.push(message);
+          if (encoded !== undefined) {
+            serialized.set(message, encoded);
+          }
         }
       } catch (e) {
         err = e instanceof Error ? e : new Error(String(e));
@@ -49,7 +55,7 @@ describe('view-syncer/client-handler', () => {
       close: async () => {
         subscription.cancel();
         await loopDone;
-        return {received: [...received, ...unconsumed], err};
+        return {received: [...received, ...unconsumed], serialized, err};
       },
     };
   }
@@ -404,6 +410,81 @@ describe('view-syncer/client-handler', () => {
       ] satisfies PokeStartMessage,
       ['pokeEnd', {pokeID: '123', cookie: '123'}] satisfies PokeEndMessage,
     ]);
+  });
+
+  test('flushes poke parts at the patch-count threshold', async () => {
+    const {subscription, close} = createSubscription();
+    const handler = new ClientHandler(
+      lc,
+      'g1',
+      'id1',
+      'ws1',
+      SHARD,
+      '121',
+      subscription,
+    );
+    const poker = handler.startPoke({stateVersion: '123'});
+
+    for (let i = 0; i < 101; i++) {
+      await poker.addPatch({
+        toVersion: {stateVersion: '123'},
+        patch: {
+          type: 'row',
+          op: 'put',
+          id: {schema: 'public', table: 'issues', rowKey: {id: `small-${i}`}},
+          contents: {id: `small-${i}`},
+        },
+      });
+    }
+    await poker.end({stateVersion: '123'});
+
+    const {received} = await close();
+    const pokeParts = received.filter(message => message[0] === 'pokePart');
+    expect(pokeParts).toHaveLength(2);
+    expect((pokeParts[0]![1] as PokePartMessage[1]).rowsPatch).toHaveLength(
+      100,
+    );
+    expect((pokeParts[1]![1] as PokePartMessage[1]).rowsPatch).toHaveLength(1);
+  });
+
+  test('uses a soft serialized-row character threshold', async () => {
+    const {subscription, close} = createSubscription();
+    const handler = new ClientHandler(
+      lc,
+      'g1',
+      'id1',
+      'ws1',
+      SHARD,
+      '121',
+      subscription,
+    );
+    const poker = handler.startPoke({stateVersion: '123'});
+
+    for (let i = 0; i < 3; i++) {
+      await poker.addPatch({
+        toVersion: {stateVersion: '123'},
+        patch: {
+          type: 'row',
+          op: 'put',
+          id: {schema: 'public', table: 'issues', rowKey: {id: `large-${i}`}},
+          contents: {id: `large-${i}`, value: 'x'.repeat(600_000)},
+        },
+      });
+    }
+    await poker.end({stateVersion: '123'});
+
+    const {received, serialized} = await close();
+    const pokeParts = received.filter(message => message[0] === 'pokePart');
+    expect(pokeParts).toHaveLength(2);
+    for (const pokePart of pokeParts) {
+      const encoded = serialized.get(pokePart);
+      expect(encoded).toBe(JSON.stringify(pokePart));
+    }
+    expect((pokeParts[0]![1] as PokePartMessage[1]).rowsPatch).toHaveLength(2);
+    expect((pokeParts[1]![1] as PokePartMessage[1]).rowsPatch).toHaveLength(1);
+    expect(serialized.get(pokeParts[0]!)?.length).toBeGreaterThan(
+      POKE_PART_FLUSH_THRESHOLD_CHARS,
+    );
   });
 
   describe('mutation results', () => {

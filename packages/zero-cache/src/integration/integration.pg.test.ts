@@ -17,7 +17,12 @@ import {
 } from '../../../zero-permissions/src/permissions.ts';
 import type {AST} from '../../../zero-protocol/src/ast.ts';
 import type {InitConnectionMessage} from '../../../zero-protocol/src/connect.ts';
-import type {PokeStartMessage} from '../../../zero-protocol/src/poke.ts';
+import {
+  LAST_POKE_PART_PROTOCOL_VERSION,
+  POKE_CHUNK_MESSAGE_TYPE,
+  type PokePartBody,
+  type PokeStartMessage,
+} from '../../../zero-protocol/src/poke.ts';
 import {PROTOCOL_VERSION} from '../../../zero-protocol/src/protocol-version.ts';
 import {createSchema} from '../../../zero-schema/src/builder/schema-builder.ts';
 import {string, table} from '../../../zero-schema/src/builder/table-builder.ts';
@@ -605,7 +610,8 @@ describe('integration', {timeout: 30000}, () => {
 
     const downstream = new Queue<unknown>();
     const ws = new WebSocket(
-      `ws://localhost:${port}/zero/sync/v${PROTOCOL_VERSION}/connect` +
+      // This test asserts the legacy JSON pokePart representation.
+      `ws://localhost:${port}/zero/sync/v${LAST_POKE_PART_PROTOCOL_VERSION}/connect` +
         `?clientGroupID=abc&clientID=def&wsid=123&schemaVersion=1&baseCookie=&ts=123456789&lmid=1`,
       encodeURIComponent(btoa('{}')),
     );
@@ -690,6 +696,83 @@ describe('integration', {timeout: 30000}, () => {
     expect(await dequeueMessage(downstream)).toMatchObject([
       'pokeEnd',
       {pokeID: contentPokeID},
+    ]);
+  });
+
+  test('streams tagged binary poke chunks to current clients', async () => {
+    await upDB.unsafe(initialPGSetup());
+    await startZero([env]);
+
+    const downstream = new Queue<unknown>();
+    const ws = new WebSocket(
+      `ws://localhost:${port}/zero/sync/v${PROTOCOL_VERSION}/connect` +
+        `?clientGroupID=abc&clientID=def&wsid=123&schemaVersion=1&baseCookie=&ts=123456789&lmid=1`,
+      encodeURIComponent(btoa('{}')),
+    );
+    ws.on('message', (data, isBinary) =>
+      downstream.enqueue(
+        isBinary
+          ? new Uint8Array(data as Buffer)
+          : JSON.parse(data.toString('utf-8')),
+      ),
+    );
+    ws.on('open', () =>
+      ws.send(
+        JSON.stringify([
+          'initConnection',
+          {
+            desiredQueriesPatch: [
+              {op: 'put', hash: 'book-query-hash', ast: BOOK_QUERY},
+            ],
+            clientSchema: {
+              tables: {
+                book: {
+                  primaryKey: ['id'],
+                  columns: {
+                    id: {type: 'string'},
+                    ip: {type: 'string'},
+                    mac: {type: 'string'},
+                    title: {type: 'string'},
+                  },
+                },
+              },
+            },
+          },
+        ] satisfies InitConnectionMessage),
+      ),
+    );
+
+    expect(await dequeueMessage(downstream)).toMatchObject([
+      'connected',
+      {wsid: '123'},
+    ]);
+    expect(await dequeueMessage(downstream)).toMatchObject([
+      'pokeStart',
+      {pokeID: '00:01'},
+    ]);
+
+    const decoder = new TextDecoder('utf-8', {fatal: true});
+    const decoded: string[] = [];
+    for (;;) {
+      const message = await dequeueMessage(downstream);
+      if (message instanceof Uint8Array) {
+        expect(message[0]).toBe(POKE_CHUNK_MESSAGE_TYPE);
+        decoded.push(decoder.decode(message.subarray(1), {stream: true}));
+        continue;
+      }
+      decoded.push(decoder.decode());
+      expect(message).toMatchObject(['pokeEnd', {pokeID: '00:01'}]);
+      break;
+    }
+
+    const parts = JSON.parse(decoded.join('')) as PokePartBody[];
+    expect(parts).toMatchObject([
+      {
+        pokeID: '00:01',
+        desiredQueriesPatches: {
+          def: [{op: 'put', hash: 'book-query-hash'}],
+        },
+      },
     ]);
   });
 
@@ -806,7 +889,8 @@ describe('integration', {timeout: 30000}, () => {
 
       const downstream = new Queue<unknown>();
       const ws = new WebSocket(
-        `ws://localhost:${port}/zero/sync/v${PROTOCOL_VERSION}/connect` +
+        // This test asserts the legacy JSON pokePart representation.
+        `ws://localhost:${port}/zero/sync/v${LAST_POKE_PART_PROTOCOL_VERSION}/connect` +
           `?clientGroupID=abc&clientID=def&wsid=123&schemaVersion=1&baseCookie=&ts=123456789&lmid=1`,
         encodeURIComponent(btoa('{}')), // auth token
       );

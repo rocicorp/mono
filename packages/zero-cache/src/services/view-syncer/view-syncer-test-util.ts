@@ -42,6 +42,7 @@ import {CustomQueryTransformer} from '../../custom-queries/transform-query.ts';
 import {InspectorDelegate} from '../../server/inspector-delegate.ts';
 import type {TestDBs} from '../../test/db.ts';
 import {DbFile} from '../../test/lite.ts';
+import type {ViewSyncerDownstream} from '../../types/downstream.ts';
 import type {PostgresDB} from '../../types/pg.ts';
 import {upstreamSchema} from '../../types/shards.ts';
 import {id} from '../../types/sql.ts';
@@ -844,7 +845,7 @@ export async function setup(
     desiredQueriesPatch: UpQueriesPatch,
     clientSchema: ClientSchema | null = defaultClientSchema,
     activeClients?: string[],
-  ): {queue: Queue<Downstream>; source: Source<Downstream>} {
+  ): {queue: Queue<Downstream>; source: Source<ViewSyncerDownstream>} {
     const selector = {clientID: ctx.clientID, wsID: ctx.wsID};
     vs.connContextManager.registerConnection(
       selector,
@@ -883,8 +884,8 @@ export async function setup(
 
     void (async function () {
       try {
-        for await (const msg of source) {
-          queue.enqueue(msg);
+        for await (const {message} of source) {
+          queue.enqueue(message);
         }
       } catch (e) {
         queue.enqueueRejection(e);
@@ -1061,8 +1062,8 @@ export function restartViewSyncer(params: {
     const queue = new Queue<Downstream>();
     void (async function () {
       try {
-        for await (const msg of source) {
-          queue.enqueue(msg);
+        for await (const {message} of source) {
+          queue.enqueue(message);
         }
       } catch (e) {
         queue.enqueueRejection(e);
