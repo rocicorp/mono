@@ -2,7 +2,11 @@ import type {LogContext} from '@rocicorp/logger';
 import {resolver} from '@rocicorp/resolver';
 import {AbortError} from '../../../../shared/src/abort-error.ts';
 import {sleep} from '../../../../shared/src/sleep.ts';
-import {getOrCreateCounter} from '../../observability/metrics.ts';
+import {
+  getOrCreateCounter,
+  getOrCreateLatencyHistogram,
+  getOrCreateValueHistogram,
+} from '../../observability/metrics.ts';
 import type {WatermarkedChange} from './change-streamer.ts';
 import * as ErrorType from './error-type-enum.ts';
 import type {Forwarder} from './forwarder.ts';
@@ -42,7 +46,31 @@ export type SQLiteChangeLogCatchupOptions = {
   cleanupGuard?: SQLiteChangeLogCleanupGuard | undefined;
   sleep?: typeof sleep | undefined;
   now?: (() => number) | undefined;
+  /** Opens slice 11's process-local breaker after registration has committed. */
+  onFailure?: ((failure: SQLiteChangeLogCatchupFailure) => void) | undefined;
 };
+
+export type SQLiteChangeLogCatchupRequest = {
+  /**
+   * Whether the routing warm-up gate classified the log as warm *for this
+   * subscriber*. The coordinator is opened once and reused, so this cannot be
+   * a property of it: `coldReadPercent` serves some subscribers from a log
+   * that is still inside its warm-up window, and the catchup metrics have to
+   * separate those from steady-state serving.
+   */
+  readonly logWarm?: boolean | undefined;
+};
+
+export type SQLiteChangeLogCatchupFailure = 'barrier-timeout' | 'reader-error';
+
+export type SQLiteChangeLogCatchupRegistration =
+  | {readonly kind: 'registered'}
+  | {readonly kind: 'uncovered'; readonly minWatermark: string}
+  // Registration failed before the subscriber was committed to SQLite, so PG
+  // catchup is still available and the caller falls back to it.
+  | {readonly kind: 'declined'; readonly error: unknown}
+  // The coordinator closed or failed the subscriber itself.
+  | {readonly kind: 'handled'};
 
 const NOOP_CLEANUP_GUARD: SQLiteChangeLogCleanupGuard = {
   runWhilePurgeBlocked: register => Promise.resolve(register()),
@@ -67,6 +95,9 @@ export class SQLiteChangeLogCatchup implements Disposable {
   readonly #cleanupGuard: SQLiteChangeLogCleanupGuard;
   readonly #sleep: typeof sleep;
   readonly #now: () => number;
+  readonly #onFailure:
+    | ((failure: SQLiteChangeLogCatchupFailure) => void)
+    | undefined;
   readonly #barrierTimeouts = getOrCreateCounter(
     'replication',
     'sqlite_change_log.barrier_timeouts',
@@ -84,6 +115,46 @@ export class SQLiteChangeLogCatchup implements Disposable {
     'SQLite catchup barrier waits, labeled by what ended the wait. A ' +
       'population dominated by "poll" means the change-log writer\'s commit ' +
       'notification is not reaching the barrier.',
+  );
+  readonly #catchupResults = getOrCreateCounter(
+    'replication',
+    'sqlite_change_log.catchup_results',
+    'SQLite catchup subscriptions by outcome.',
+  );
+  readonly #catchupRows = getOrCreateCounter(
+    'replication',
+    'sqlite_change_log.catchup_rows',
+    'Rows served from the SQLite change log during catchup.',
+  );
+  readonly #catchupBytes = getOrCreateCounter(
+    'replication',
+    'sqlite_change_log.catchup_bytes',
+    {
+      description: 'Bytes served from the SQLite change log during catchup.',
+      unit: 'By',
+    },
+  );
+  readonly #catchupDuration = getOrCreateLatencyHistogram(
+    'replication',
+    'sqlite_change_log.catchup_duration',
+    'Duration of a SQLite change-log catchup.',
+  );
+  readonly #barrierWaitDuration = getOrCreateLatencyHistogram(
+    'replication',
+    'sqlite_change_log.barrier_wait_duration',
+    'Time SQLite catchup waits for its pinned required head.',
+  );
+  readonly #catchupBacklogPeak = getOrCreateValueHistogram(
+    'replication',
+    'sqlite_change_log.catchup_backlog_peak_bytes',
+    {
+      description:
+        'Peak live backlog bytes buffered while a subscriber catches up from SQLite.',
+      unit: 'By',
+      bucketBoundaries: [
+        0, 1024, 16_384, 65_536, 262_144, 1_048_576, 4_194_304, 16_777_216,
+      ],
+    },
   );
   readonly #catchups = new Map<Subscriber, AbortController>();
   readonly #commitWaiters = new Set<CommitWaiter>();
@@ -105,6 +176,7 @@ export class SQLiteChangeLogCatchup implements Disposable {
     this.#cleanupGuard = opts.cleanupGuard ?? NOOP_CLEANUP_GUARD;
     this.#sleep = opts.sleep ?? sleep;
     this.#now = opts.now ?? Date.now;
+    this.#onFailure = opts.onFailure;
   }
 
   /**
@@ -115,34 +187,70 @@ export class SQLiteChangeLogCatchup implements Disposable {
   async catchup(
     subscriber: Subscriber,
     captureRequiredHead: () => string | Promise<string>,
-  ): Promise<void> {
+    request: SQLiteChangeLogCatchupRequest = {},
+  ): Promise<SQLiteChangeLogCatchupRegistration> {
     if (this.#closed) {
       subscriber.fail(new AbortError('SQLite change-log catchup is closed'));
-      return;
+      return {kind: 'handled'};
     }
 
     const abort = new AbortController();
     this.#catchups.set(subscriber, abort);
     let requiredHead: string | Promise<string> | undefined;
+    let uncoveredMinWatermark: string | undefined;
+    let committed = false;
     try {
       await this.#cleanupGuard.runWhilePurgeBlocked(() => {
         this.#throwIfAborted(abort.signal);
+        // The router's eligibility inspection happens before this async guard
+        // is acquired. Recheck the exact boundary here: an in-flight purge can
+        // have advanced the minimum while registration waited. Once added to
+        // the Forwarder, the subscriber's ACK prevents any later purge from
+        // crossing this boundary.
+        const plan = this.#reader.plan(subscriber.watermark);
+        if (plan.kind === 'too-old') {
+          uncoveredMinWatermark = plan.minWatermark;
+          return;
+        }
         requiredHead = captureRequiredHead();
         this.#forwarder.add(subscriber);
+        committed = true;
       });
     } catch (error) {
       this.#catchups.delete(subscriber);
-      if (!abort.signal.aborted) {
-        this.#lc.error?.(
-          `error while registering SQLite catchup subscriber ${subscriber.id}`,
-          error,
-        );
-        subscriber.fail(error);
+      if (abort.signal.aborted) {
+        return {kind: 'handled'};
       }
-      return;
+      if (!committed) {
+        // Nothing was committed to SQLite -- the subscriber never reached
+        // Forwarder.add() -- so PG catchup is still available. Failing here
+        // would send the client a terminal ['error', ...], which
+        // IncrementalSyncer answers with a full litestream replica restore,
+        // for a fallback that was still open. Trip the breaker as well: this
+        // is a reader failure like any other, and without it the retry picks
+        // SQLite again and the reset repeats.
+        this.#onFailure?.('reader-error');
+        return {kind: 'declined', error};
+      }
+      this.#lc.error?.(
+        `error while registering SQLite catchup subscriber ${subscriber.id}`,
+        error,
+      );
+      subscriber.fail(error);
+      return {kind: 'handled'};
+    }
+    if (uncoveredMinWatermark !== undefined) {
+      this.#catchups.delete(subscriber);
+      return {kind: 'uncovered', minWatermark: uncoveredMinWatermark};
     }
 
-    void this.#run(subscriber, requiredHead as string | Promise<string>, abort);
+    void this.#run(
+      subscriber,
+      requiredHead as string | Promise<string>,
+      abort,
+      request.logWarm,
+    );
+    return {kind: 'registered'};
   }
 
   /**
@@ -190,8 +298,12 @@ export class SQLiteChangeLogCatchup implements Disposable {
     subscriber: Subscriber,
     requiredHead: string | Promise<string>,
     abort: AbortController,
+    logWarm: boolean | undefined,
   ): Promise<void> {
     const {signal} = abort;
+    const catchupStart = this.#now();
+    let outcome = 'aborted';
+    let backlogPeakBytes = 0;
     try {
       const requiredHeadStart = this.#now();
       const required = await this.#awaitRequiredHead(requiredHead, signal);
@@ -208,15 +320,19 @@ export class SQLiteChangeLogCatchup implements Disposable {
       // during a transaction longer than barrierTimeoutMs, however current
       // the replica is.
       const deadline = this.#now() + this.#barrierTimeoutMs;
-      const plan = await this.#waitForPlan(
-        subscriber,
-        required,
-        deadline,
-        signal,
-      );
+      const barrierStart = this.#now();
+      let plan: CatchupPlan;
+      try {
+        plan = await this.#waitForPlan(subscriber, required, deadline, signal);
+      } finally {
+        // Record failed and aborted barriers too; their wait distribution is
+        // at least as operationally important as the successful path.
+        this.#barrierWaitDuration.recordMs(this.#now() - barrierStart);
+      }
       this.#throwIfAborted(signal);
 
       if (plan.kind === 'too-old') {
+        outcome = 'too-old';
         const message =
           `earliest supported watermark is ${plan.minWatermark} ` +
           `(requested ${subscriber.watermark})`;
@@ -229,6 +345,7 @@ export class SQLiteChangeLogCatchup implements Disposable {
       }
 
       let count = 0;
+      let bytes = 0;
       const start = this.#now();
       if (plan.kind === 'range') {
         let lastBatchConsumed: Promise<unknown> | undefined;
@@ -251,10 +368,17 @@ export class SQLiteChangeLogCatchup implements Disposable {
           for (const change of changes) {
             lastBatchConsumed = subscriber.catchup(change);
             count++;
+            bytes += Buffer.byteLength(change[2]);
           }
+          backlogPeakBytes = Math.max(
+            backlogPeakBytes,
+            subscriber.getStats().backlogBytes,
+          );
         }
         await lastBatchConsumed;
+        outcome = 'range';
       } else {
+        outcome = 'ahead';
         this.#lc.warn?.(
           `subscriber ${subscriber.id} at watermark ${subscriber.watermark} ` +
             `is ahead of the SQLite change-log head ${plan.headWatermark}; ` +
@@ -267,6 +391,12 @@ export class SQLiteChangeLogCatchup implements Disposable {
         `caught up ${subscriber.id} from SQLite with ${count} changes ` +
           `(${this.#now() - start} ms)`,
       );
+      const attributes = {
+        classification: outcome,
+        log_warm: logWarm ?? 'unknown',
+      };
+      this.#catchupRows.add(count, attributes);
+      this.#catchupBytes.add(bytes, attributes);
       // Keep buffering live sends until the asynchronous backlog drain has
       // established its ordering boundary.
       void subscriber.setCaughtUp();
@@ -277,6 +407,15 @@ export class SQLiteChangeLogCatchup implements Disposable {
       if (error instanceof SQLiteChangeLogBarrierError) {
         if (error instanceof SQLiteChangeLogBarrierTimeoutError) {
           this.#barrierTimeouts.add(1);
+          outcome = 'barrier-timeout';
+          this.#onFailure?.('barrier-timeout');
+        } else {
+          // No #onFailure: a backlog high water mark is a property of this
+          // one subscriber's consumption, not of the log. Tripping the
+          // process-wide breaker for it would take every task in the shard
+          // off SQLite, which a client that reconnects and stalls again
+          // could hold open indefinitely.
+          outcome = 'barrier-backlog';
         }
         // Giving up on the barrier means the replica has not caught up *yet*,
         // not that it cannot serve this subscriber. End the subscription
@@ -293,12 +432,25 @@ export class SQLiteChangeLogCatchup implements Disposable {
         subscriber.close();
         return;
       }
+      outcome = 'reader-error';
+      this.#onFailure?.('reader-error');
       this.#lc.error?.(
         `error while catching up subscriber ${subscriber.id} from SQLite`,
         error,
       );
       subscriber.fail(error);
     } finally {
+      backlogPeakBytes = Math.max(
+        backlogPeakBytes,
+        subscriber.getStats().backlogBytes,
+      );
+      const attributes = {
+        classification: outcome,
+        log_warm: logWarm ?? 'unknown',
+      };
+      this.#catchupResults.add(1, attributes);
+      this.#catchupDuration.recordMs(this.#now() - catchupStart, attributes);
+      this.#catchupBacklogPeak.record(backlogPeakBytes, attributes);
       if (this.#catchups.get(subscriber) === abort) {
         this.#catchups.delete(subscriber);
       }

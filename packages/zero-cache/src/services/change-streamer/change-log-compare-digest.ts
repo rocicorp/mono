@@ -1,35 +1,16 @@
 /**
  * Pure building blocks for comparing catchup output between the Postgres and
- * SQLite change logs: which transactions to sample, and how to reduce a
- * catchup range to a single comparable digest.
+ * SQLite change logs: how to reduce a catchup range to a single comparable
+ * digest. Which transactions to sample is `isSampledForShard`, in
+ * `shard-sampling.ts`.
  *
  * Nothing here touches either store. The comparator service supplies the
  * batches.
  */
 
-import {createHash} from 'node:crypto';
-import type {ShardID} from '../../types/shards.ts';
 import {extractChangeSubstring} from './change-log-codec.ts';
 import {ChangeLogTransactionHasher} from './change-log-transaction-hash.ts';
 import type {WatermarkedChange} from './change-streamer.ts';
-
-/** Selects a stable sample by shard and watermark. */
-export function isSampledForCompare(
-  shard: ShardID,
-  watermark: string,
-  percent: number,
-): boolean {
-  if (percent >= 100) {
-    return true;
-  }
-  if (percent <= 0) {
-    return false;
-  }
-  const digest = createHash('sha256')
-    .update(`${shard.appID}/${shard.shardNum}:${watermark}`)
-    .digest();
-  return digest.readUInt32BE(0) % 100 < percent;
-}
 
 export type CatchupRangeDigest = {
   readonly digest: string;

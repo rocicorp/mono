@@ -18,10 +18,10 @@ import {
 } from './change-log-codec.ts';
 import {
   digestCatchupRange,
-  isSampledForCompare,
   type CatchupRangeDigest,
 } from './change-log-compare-digest.ts';
 import type {WatermarkedChange} from './change-streamer.ts';
+import {isSampledForShard} from './shard-sampling.ts';
 import {SQLiteChangeLogReader} from './sqlite-change-log-reader.ts';
 
 /** Interval between comparison cycles. */
@@ -427,7 +427,7 @@ export class SQLiteChangeLogComparator {
             fileGeneration === this.#fileGeneration ? outcome : 'inconclusive',
           );
         } else if (
-          isSampledForCompare(this.#shard, watermark, this.#opts.comparePercent)
+          isSampledForShard(this.#shard, watermark, this.#opts.comparePercent)
         ) {
           const sqliteRowsRemaining = maxRowsPerSource - sqliteRowsRead;
           const pgRowsRemaining = maxRowsPerSource - pgRowsRead;

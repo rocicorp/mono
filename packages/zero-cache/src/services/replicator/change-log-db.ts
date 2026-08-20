@@ -932,6 +932,28 @@ export function readChangeLogHead(db: Database): string | null {
 }
 
 /**
+ * The covered watermark range. Both scalar subqueries seek the watermark
+ * index, so unlike a `count()` this does not scan the log. Both bounds are
+ * null when it is empty.
+ */
+export function readChangeLogBounds(db: Database): ChangeLogBounds {
+  return db
+    .prepare(/*sql*/ `
+      SELECT
+        (SELECT min("watermark") FROM "${CHANGE_LOG_STREAM_TABLE}")
+          AS "minWatermark",
+        (SELECT max("watermark") FROM "${CHANGE_LOG_STREAM_TABLE}")
+          AS "headWatermark"
+    `)
+    .get<ChangeLogBounds>();
+}
+
+export type ChangeLogBounds = {
+  readonly minWatermark: string | null;
+  readonly headWatermark: string | null;
+};
+
+/**
  * What was installed, for the reconcile log line. Normally `{0, 0}`: a nonzero
  * `backfilling` means the resumed stream is being handed backfills to re-request.
  */
