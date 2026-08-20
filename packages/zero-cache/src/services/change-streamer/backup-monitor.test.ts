@@ -49,16 +49,19 @@ describe('change-streamer/backup-monitor', () => {
     await run;
   });
 
-  test('forwards every watermark to the changeStreamer, in order', async () => {
+  test('forwards watermarks to the changeStreamer, in order, skipping redundant watermarks', async () => {
     const run = monitor.run();
 
-    watermarks.push(backedUp('01'));
+    watermarks.push(backedUp('01', 1000));
+    watermarks.push(backedUp('01', 1234)); // duplicate suppressed
     await vi.waitFor(() =>
       expect(trackBackupWatermark).toHaveBeenCalledTimes(1),
     );
 
     watermarks.push(backedUp('02'));
     watermarks.push(backedUp('03'));
+    watermarks.push(backedUp('03', 2345)); // duplicate suppressed
+    watermarks.push(backedUp('02')); // ignored earlier watermarks
     await vi.waitFor(() =>
       expect(trackBackupWatermark).toHaveBeenCalledTimes(3),
     );

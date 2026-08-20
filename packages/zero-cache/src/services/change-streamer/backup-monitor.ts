@@ -45,9 +45,15 @@ export class BackupMonitor implements SingletonService {
 
     for await (const backedUp of this.#watermarks) {
       if (!this.#latestBackup) {
-        this.#lc.info?.(`received first backup up watermark`, {backedUp});
         this.#firstBackupReceived.resolve();
+      } else if (backedUp.watermark < this.#latestBackup.watermark) {
+        this.#lc.warn?.(`ignoring earlier backup watermark`, {backedUp});
+        continue;
+      } else if (backedUp.watermark === this.#latestBackup.watermark) {
+        this.#lc.debug?.(`ignoring redundant backup watermark`, {backedUp});
+        continue;
       }
+      this.#lc.info?.(`received backup watermark`, {backedUp});
       this.#latestBackup = backedUp;
       this.#changeStreamer.trackBackupWatermark(backedUp.watermark);
     }
