@@ -6320,6 +6320,52 @@ describe('view-syncer/service', () => {
     expect(destroyCalledAfterRelease).toBe(true);
   });
 
+  test('resumes initial pipeline sync when a validated connection is replaced', async () => {
+    const client = connect(SYNC_CONTEXT, [
+      {op: 'put', hash: 'query-hash1', ast: ISSUES_QUERY},
+    ]);
+    await nextPoke(client);
+
+    // Simulate the connection disappearing after it initialized the
+    // view-syncer but before the first version-ready event is processed.
+    vs.connContextManager.closeConnection({
+      clientID: SYNC_CONTEXT.clientID,
+      wsID: SYNC_CONTEXT.wsID,
+    });
+    stateChanges.push({state: 'version-ready'});
+
+    await vi.waitFor(() =>
+      expect(
+        logSink.messages.some(([, , args]) =>
+          args.includes(
+            'Deferring pipeline sync until a validated connection is available',
+          ),
+        ),
+      ).toBe(true),
+    );
+
+    // A replacement connection should automatically retry the deferred work;
+    // no additional replica state change is required.
+    connect({...SYNC_CONTEXT, wsID: 'ws2'}, []);
+    await vi.waitFor(() => expect(vs.queryCount).toBeGreaterThan(0));
+
+    const stopped = vi.fn();
+    void viewSyncerDone.then(stopped);
+    await sleep(50);
+    expect(stopped).not.toHaveBeenCalled();
+    expect(
+      logSink.messages.some(([, , args]) =>
+        args.some(
+          arg =>
+            typeof arg === 'string' &&
+            arg.includes(
+              'No validated connection is available for shared query work.',
+            ),
+        ),
+      ),
+    ).toBe(false);
+  });
+
   // Regression test: a client that disconnects before initConnection's async
   // callback resolves #initialized used to leave the ViewSyncer as a zombie
   // in the ServiceRunner (run() blocked on readyState() forever), inflating

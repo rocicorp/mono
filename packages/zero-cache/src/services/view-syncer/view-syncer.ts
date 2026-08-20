@@ -294,6 +294,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
 
   #cvr: CVRSnapshot | undefined;
   #pipelinesSynced = false;
+  #pipelineSyncDeferred = false;
   #servedVersion: LexiVersion | null = null;
   readonly #e2eServingLagTracker = new E2EServingLagTracker();
 
@@ -615,7 +616,22 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
           // stateVersion is at or beyond CVR version for the first time.
           lc.info?.(`init pipelines@${version} (cvr@${cvrVer})`);
 
-          const driftedQueryIDs = await this.#hydrateUnchangedQueries(lc, cvr);
+          const backgroundContext =
+            this.connContextManager.getBackgroundConnectionContext();
+          if (!backgroundContext) {
+            lc.debug?.(
+              'Deferring pipeline sync until a validated connection is available',
+            );
+            this.#pipelineSyncDeferred = true;
+            return;
+          }
+          this.#pipelineSyncDeferred = false;
+
+          const driftedQueryIDs = await this.#hydrateUnchangedQueries(
+            lc,
+            cvr,
+            backgroundContext,
+          );
           // hydrateUnchangedQueries just transformed
           // all the custom queries, this #syncQueryPipelineSet call
           // should retransform those that are missing from #pipelines, which
@@ -626,7 +642,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
             lc,
             cvr,
             'missing',
-            undefined,
+            backgroundContext,
             driftedQueryIDs,
           );
           this.#pipelinesSynced = true;
@@ -1538,6 +1554,7 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
   async #hydrateUnchangedQueries(
     lc: LogContext,
     cvr: CVRSnapshot,
+    backgroundContext: ConnectionContext,
   ): Promise<Set<string>> {
     assert(this.#pipelines.initialized(), 'pipelines must be initialized');
 
@@ -1586,8 +1603,6 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         'Custom/named queries were requested but no `ZERO_QUERY_URL` is configured for Zero Cache.',
       );
     }
-    const backgroundContext =
-      this.connContextManager.mustGetBackgroundConnectionContext();
     const customQueryTransformer = this.#customQueryTransformer;
     if (customQueryTransformer && customQueries.size > 0) {
       // Always transform custom queries during initialization to ensure
@@ -2861,11 +2876,15 @@ export class ViewSyncerService implements ViewSyncer, ActivityBasedService {
         validation = {kind: 'client-fallback'};
       }
 
-      this.connContextManager.validateConnection(
+      const validationResult = this.connContextManager.validateConnection(
         connCtx,
         connCtx.revision,
         validation,
       );
+      if (validationResult && this.#pipelineSyncDeferred) {
+        this.#pipelineSyncDeferred = false;
+        this.#stateChanges.push({state: 'version-ready'});
+      }
       return true;
     } catch (e) {
       if (isProtocolError(e) && isAuthErrorBody(e.errorBody)) {
