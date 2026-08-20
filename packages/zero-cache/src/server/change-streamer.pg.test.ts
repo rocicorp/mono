@@ -212,7 +212,12 @@ test('change-streamer startup does not deadlock on autoreset retry when change a
     await ensureReplicationConfig(lc, upstream, subscriptionState, shard, true);
 
     await initialSource.stop();
-    await upstream`SELECT pg_drop_replication_slot(${oldSlot})`;
+    await upstream`
+      SELECT pg_terminate_backend(active_pid) FROM pg_replication_slots
+        WHERE slot_name = ${oldSlot}`;
+    await vi.waitFor(
+      () => upstream`SELECT pg_drop_replication_slot(${oldSlot})`,
+    );
 
     // The auto-reset resyncs the replica at a new replicaVersion, so the
     // change log written beside the old one must not survive it. Asserted here

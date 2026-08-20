@@ -31,20 +31,11 @@ type SourceWithPendingQueue<T> = Source<T> & {
   queued: number;
 };
 
-export async function subscribe(
-  lc: LogContext,
+export function createReplicationSessionFor(
   db: PostgresDB,
-  slot: string,
-  publications: string[],
-  lsn: bigint,
-  retriesIfReplicationSlotActive = DEFAULT_RETRIES_IF_REPLICATION_SLOT_ACTIVE,
-  applicationName = 'zero-replicator',
-  inboundTimeoutOverrideMs?: number | undefined,
-): Promise<{
-  messages: SourceWithPendingQueue<StreamMessage>;
-  acks: Sink<bigint>;
-}> {
-  const session = postgres(
+  applicationName: string,
+) {
+  return postgres(
     defu(
       {
         max: 1,
@@ -63,6 +54,22 @@ export async function subscribe(
       db.options as unknown as Options<Record<string, PostgresType>>,
     ),
   );
+}
+
+export async function subscribe(
+  lc: LogContext,
+  db: PostgresDB,
+  slot: string,
+  publications: string[],
+  lsn: bigint,
+  retriesIfReplicationSlotActive = DEFAULT_RETRIES_IF_REPLICATION_SLOT_ACTIVE,
+  applicationName = 'zero-replicator',
+  inboundTimeoutOverrideMs?: number | undefined,
+): Promise<{
+  messages: SourceWithPendingQueue<StreamMessage>;
+  acks: Sink<bigint>;
+}> {
+  const session = createReplicationSessionFor(db, applicationName);
 
   // Postgres will send keepalives before timing out a wal_sender. It is possible that
   // these keepalives are not received if there is back-pressure in the replication
@@ -360,6 +367,60 @@ async function startReplicationStream(
   throw new Error(
     `exceeded max attempts (${maxAttempts}) to start the Postgres stream`,
   );
+}
+
+/**
+ * Starts a "dummy" replication session for the specified `slot` which:
+ * * does not consume any records
+ * * keeps the session alive by sending status messages at the starting LSN
+ *
+ * This essentially reserves the replication slot for this process by marking
+ * it as "active" in pg_replication_slots, allowing replication slot cleanup
+ * logic to distinguish a new-but-initializing replication slot from one that
+ * has been abandoned / orphaned.
+ *
+ * When initialization (e.g. initial-sync) has finished, the server should take
+ * over the replication slot using pg_terminate_backend, which will close the
+ * session.
+ *
+ * Note that caller should not close the supplied `session`, as that will
+ * also terminate the dummy replication session.
+ */
+export async function keepSlotActiveUntilTakenOver(
+  lc: LogContext,
+  session: postgres.Sql,
+  slot: string,
+  dummyPublication: string,
+  lsn: bigint,
+) {
+  const [readable, writeable] = await startReplicationStream(
+    lc,
+    session,
+    slot,
+    [dummyPublication],
+    lsn,
+    1,
+  );
+  lc.info?.(`keeping ${slot} active until taken over ...`);
+  // Send periodic status messages upstream to indicate that the session is
+  // alive, but keep the confirmed_flush_lsn at the initial lsn.
+  const keepalive = setInterval(() => writeable.write(makeAck(lsn)), 10_000);
+
+  readable.on('close', async () => {
+    lc.info?.(`released initial reservation of ${slot}`);
+    clearInterval(keepalive);
+    try {
+      await session.end();
+      lc.info?.(`ended session`);
+    } catch (e) {
+      lc.warn?.(`error ending session`, e);
+    }
+  });
+  readable.once('error', e => {
+    lc.info?.(`closing replication session to ${session.options.host}`, e);
+    readable.destroy();
+  });
+  return readable;
 }
 
 function parseStreamMessage(

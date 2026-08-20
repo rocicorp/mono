@@ -1,10 +1,9 @@
 import {mkdtemp, rm} from 'node:fs/promises';
 import {platform, tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {Writable} from 'node:stream';
+import {Writable, type Readable} from 'node:stream';
 import {pipeline} from 'node:stream/promises';
 import type {LogContext} from '@rocicorp/logger';
-import {resolver} from '@rocicorp/resolver';
 import {assert} from '../../../../../shared/src/asserts.ts';
 import type {JSONObject} from '../../../../../shared/src/bigint-json.ts';
 import {must} from '../../../../../shared/src/must.ts';
@@ -45,7 +44,6 @@ import {liteTableName} from '../../../types/names.ts';
 import {PG_15, PG_17} from '../../../types/pg-versions.ts';
 import {
   connectPgClient,
-  pgClient,
   type PostgresDB,
   type PostgresTransaction,
   type PostgresValueType,
@@ -131,27 +129,16 @@ export async function initialSync(
   const copyFormat: CopyFormat = textCopy ? 'text' : 'binary';
   const start = performance.now();
   let sql: PostgresDB | undefined;
-  let replicationSession: PostgresDB | undefined;
   const replicaID = Date.now().toString();
   let slotName: string | undefined; // undefined === shadow
+  let slotSession: Readable | undefined; // undefined === shadow
   const statusPublisher = ReplicationStatusPublisher.forRunningTransaction(
     tx,
     shadow ? async () => {} : undefined,
   ).publish(lc, 'Initializing');
-  let releaseShadowSnapshot: (() => Promise<void>) | undefined;
   try {
     const copyProfiler = profileCopy ? await CpuProfiler.connect() : null;
     sql = await connectPgClient(lc, upstreamURI, 'initial-sync');
-    // Replication session is only needed to create a replication slot in the
-    // real path. In shadow mode we export a snapshot on a normal connection
-    // instead, so no replication session is opened.
-    replicationSession = shadow
-      ? undefined
-      : pgClient(lc, upstreamURI, 'initial-sync-replication-session', {
-          ['fetch_types']: false, // Necessary for the streaming protocol
-          connection: {replication: 'database'}, // https://www.postgresql.org/docs/current/protocol-replication.html
-        });
-
     const pgVersion = await checkUpstreamConfig(sql);
 
     // In shadow mode we assume the shard is already initialized and just
@@ -170,22 +157,79 @@ export async function initialSync(
         : `opening replication session to ${database}@${host}`,
     );
 
-    let snapshot: string;
-    let lsn: string;
+    // Captures the necessary information from the consistent snapshot
+    // created for the new replication slot (or a suitable equivalent
+    // for shadow sync).
+    async function captureSnapshot(snapshot: string) {
+      // Run up to MAX_WORKERS to copy of tables at the replication slot's snapshot.
+      // Retrieve the published schema at the consistent_point.
+      const published = await runTx(
+        must(sql),
+        async tx => {
+          await tx.unsafe(/* sql*/ `SET TRANSACTION SNAPSHOT '${snapshot}'`);
+          return getPublicationInfo(tx, publications);
+        },
+        {mode: Mode.READONLY},
+      );
+      // Note: If this throws, initial-sync is aborted.
+      validatePublications(lc, published);
 
-    if (shadow) {
-      const acquired = await acquireExportedSnapshotForShadowSync(
+      // Now that tables have been validated, kick off the copiers.
+      const {tables, indexes} = published;
+      const numTables = tables.length;
+      if (platform() === 'win32' && tableCopyWorkers < numTables) {
+        lc.warn?.(
+          `Increasing the number of copy workers from ${tableCopyWorkers} to ` +
+            `${numTables} to work around a Node/Postgres connection bug`,
+        );
+      }
+      const numWorkers =
+        platform() === 'win32'
+          ? numTables
+          : Math.min(tableCopyWorkers, numTables);
+
+      const copyPool = await connectPgClient(
         lc,
         upstreamURI,
+        'initial-sync-copy-worker',
+        {
+          max: numWorkers,
+          ['max_lifetime']: 120 * 60, // set a long (2h) limit for COPY streaming
+        },
       );
-      snapshot = acquired.snapshot;
-      lsn = acquired.lsn;
-      releaseShadowSnapshot = acquired.release;
+      const copiers = await startTableCopyWorkers(
+        lc,
+        copyPool,
+        snapshot,
+        numWorkers,
+        numTables,
+      );
+      return {
+        published,
+        tables,
+        indexes,
+        numTables,
+        copyPool,
+        copiers,
+      };
+    }
+
+    let lsn: string;
+    let snapshotResult: Awaited<ReturnType<typeof captureSnapshot>>;
+
+    if (shadow) {
+      const exported = await acquireExportedSnapshotForShadowSync(
+        lc,
+        upstreamURI,
+        captureSnapshot,
+      );
+      lsn = exported.lsn;
+      snapshotResult = exported.result;
     } else {
-      const slot = await createReplicaAndSlot(
+      const replication = await createReplicaAndSlot(
         lc,
         sql,
-        must(replicationSession),
+        'initial-sync-replication-session',
         shard,
         replicaID,
         replicationSlotFailover && pgVersion >= PG_17,
@@ -196,59 +240,19 @@ export async function initialSync(
           backupPath: backupV5 ? replicaID : null,
           backupV5,
         },
+        captureSnapshot,
       );
-      snapshot = slot.snapshot_name;
-      lsn = slot.consistent_point;
-      slotName = slot.slot_name;
+      lsn = replication.slot.consistent_point;
+      slotName = replication.slot.slot_name;
+      snapshotResult = replication.capturedSnapshot;
+      slotSession = replication.initialSession;
     }
+
+    const {published, tables, indexes, numTables, copyPool, copiers} =
+      snapshotResult;
 
     const initialVersion = toStateVersionString(lsn);
-
     initReplicationState(tx, publications, initialVersion, context);
-
-    // Run up to MAX_WORKERS to copy of tables at the replication slot's snapshot.
-    // Retrieve the published schema at the consistent_point.
-    const published = await runTx(
-      sql,
-      async tx => {
-        await tx.unsafe(/* sql*/ `SET TRANSACTION SNAPSHOT '${snapshot}'`);
-        return getPublicationInfo(tx, publications);
-      },
-      {mode: Mode.READONLY},
-    );
-    // Note: If this throws, initial-sync is aborted.
-    validatePublications(lc, published);
-
-    // Now that tables have been validated, kick off the copiers.
-    const {tables, indexes} = published;
-    const numTables = tables.length;
-    if (platform() === 'win32' && tableCopyWorkers < numTables) {
-      lc.warn?.(
-        `Increasing the number of copy workers from ${tableCopyWorkers} to ` +
-          `${numTables} to work around a Node/Postgres connection bug`,
-      );
-    }
-    const numWorkers =
-      platform() === 'win32'
-        ? numTables
-        : Math.min(tableCopyWorkers, numTables);
-
-    const copyPool = await connectPgClient(
-      lc,
-      upstreamURI,
-      'initial-sync-copy-worker',
-      {
-        max: numWorkers,
-        ['max_lifetime']: 120 * 60, // set a long (2h) limit for COPY streaming
-      },
-    );
-    const copiers = startTableCopyWorkers(
-      lc,
-      copyPool,
-      snapshot,
-      numWorkers,
-      numTables,
-    );
     try {
       createLiteTables(tx, tables, initialVersion);
       const sampleRate = shadow?.sampleRate;
@@ -373,6 +377,8 @@ export async function initialSync(
       // orphaned replication slot to avoid running out of slots in
       // pathological cases that result in repeated failures.
       lc.warn?.(`dropping replication slot ${slotName}`, e);
+      // release any initial replication session so the slot can be dropped
+      slotSession?.destroy();
       await sql`
         SELECT pg_drop_replication_slot(slot_name) FROM pg_replication_slots
           WHERE slot_name = ${slotName};
@@ -381,14 +387,6 @@ export async function initialSync(
     throw await statusPublisher.publishAndThrowError(lc, 'Initializing', e);
   } finally {
     statusPublisher.stop();
-    if (releaseShadowSnapshot) {
-      await releaseShadowSnapshot().catch(e =>
-        lc.warn?.(`Error releasing shadow snapshot`, e),
-      );
-    }
-    if (replicationSession) {
-      await replicationSession.end();
-    }
     if (sql) {
       await sql.end();
     }
@@ -524,20 +522,26 @@ async function ensurePublishedTables(
   return {publications};
 }
 
-function startTableCopyWorkers(
+async function startTableCopyWorkers(
   lc: LogContext,
   db: PostgresDB,
   snapshot: string,
   numWorkers: number,
   numTables: number,
-): TransactionPool {
-  const {init} = importSnapshot(snapshot);
+): Promise<TransactionPool> {
+  const {init, imported} = importSnapshot(snapshot);
   const tableCopiers = new TransactionPool(lc, {
     mode: Mode.READONLY,
     init,
     initialWorkers: numWorkers,
   });
   tableCopiers.run(db);
+
+  // Wait for all workers to run the importSnapshot() init task before
+  // proceeding (to allow the snapshot to be released).
+  for (let i = 0; i < numWorkers; i++) {
+    await imported.dequeue();
+  }
 
   lc.info?.(`Started ${numWorkers} workers to copy ${numTables} tables`);
 
@@ -557,70 +561,31 @@ function startTableCopyWorkers(
 /**
  * Shadow-mode alternative to `createReplicationSlot`: opens a dedicated
  * READ ONLY REPEATABLE READ transaction on a normal connection, exports the
- * snapshot and captures the current WAL LSN, then holds the transaction
- * open until `release()` is called. The held transaction keeps the snapshot
- * importable by the table-copy workers for the duration of the COPY phase.
- *
- * Idle-in-transaction timeout is disabled locally so the exporter doesn't
- * get killed while workers are still importing.
+ * snapshot and captures the current WAL LSN. Note that the LSN and snapshot
+ * are not guaranteed to be consistent but it this is fine for shadow sync
+ * where the LSN is not actually relied on for anything.
  */
-async function acquireExportedSnapshotForShadowSync(
+async function acquireExportedSnapshotForShadowSync<T>(
   lc: LogContext,
   upstreamURI: string,
+  captureSnapshot: (snapshot: string) => Promise<T>,
 ): Promise<{
-  snapshot: string;
   lsn: string;
-  release: () => Promise<void>;
+  result: T;
 }> {
   const holder = await connectPgClient(
     lc,
     upstreamURI,
     'shadow-initial-sync-snapshot',
-    {
-      max: 1,
-    },
+    {max: 1},
   );
-  const ready = resolver<{snapshot: string; lsn: string}>();
-  const release = resolver<void>();
-  const held = holder
-    .begin(Mode.READONLY, async tx => {
-      await tx`SET LOCAL idle_in_transaction_session_timeout = 0`.execute();
-      const [row] = await tx<{snapshot: string; lsn: string}[]>`
+  return holder.begin(Mode.READONLY, async tx => {
+    const [{lsn, snapshot}] = await tx<{snapshot: string; lsn: string}[]>`
         SELECT pg_export_snapshot() AS snapshot,
                pg_current_wal_lsn()::text AS lsn`;
-      ready.resolve(row);
-      await release.promise;
-    })
-    .catch(e => ready.reject(e));
-
-  let snapshot: string;
-  let lsn: string;
-  try {
-    ({snapshot, lsn} = await ready.promise);
-  } catch (e) {
-    await holder
-      .end()
-      .catch(err =>
-        lc.warn?.(`Error ending shadow snapshot holder after failure`, err),
-      );
-    throw e;
-  }
-  lc.info?.(
-    `Exported snapshot ${snapshot} at LSN ${lsn} (shadow initial sync)`,
-  );
-  return {
-    snapshot,
-    lsn,
-    release: async () => {
-      release.resolve();
-      try {
-        await held;
-      } catch (e) {
-        lc.warn?.(`snapshot holder transaction ended with error`, e);
-      }
-      await holder.end();
-    },
-  };
+    const result = await captureSnapshot(snapshot);
+    return {lsn, result};
+  });
 }
 
 function createLiteTables(
