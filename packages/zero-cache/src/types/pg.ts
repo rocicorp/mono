@@ -434,24 +434,39 @@ export function pgClient(
 ): PostgresDB {
   applicationName = `zero-${applicationName}`;
 
+  // Postgres carries row values in the `detail`, `hint`, `where` and
+  // `internal_query` fields -- e.g. a unique violation reports
+  // `Key (email)=(someone@example.com) already exists` in `detail`. Forward
+  // only the severity, SQLSTATE and schema location; never the Notice itself.
+  const safeNotice = (n: Notice) => ({
+    severity: n.severity,
+    code: n.code,
+    message: n.message,
+    schema: n.schema_name,
+    table: n.table_name,
+    column: n.column_name,
+    constraint: n.constraint_name,
+    routine: n.routine,
+  });
+
   const onnotice = (n: Notice) => {
     // https://www.postgresql.org/docs/current/plpgsql-errors-and-messages.html#PLPGSQL-STATEMENTS-RAISE
     switch (n.severity) {
       case 'NOTICE':
         return; // silenced
       case 'DEBUG':
-        lc.debug?.(n);
+        lc.debug?.('pg notice', safeNotice(n));
         return;
       case 'WARNING':
-        lc.warn?.(n);
+        lc.warn?.('pg notice', safeNotice(n));
         return;
       case 'EXCEPTION':
-        lc.error?.(n);
+        lc.error?.('pg notice', safeNotice(n));
         return;
       case 'LOG':
       case 'INFO':
       default:
-        lc.info?.(n);
+        lc.info?.('pg notice', safeNotice(n));
     }
   };
   const url = new URL(connectionURI);

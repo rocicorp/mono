@@ -329,7 +329,9 @@ export async function processMutationWithTx(
       return await stmt.execute();
     } finally {
       const q = stmt as unknown as Query;
-      lc.debug?.(`${q.string}: ${JSON.stringify(q.parameters)}`);
+      // `q.parameters` are the bound row values -- log the parameterized
+      // statement and the parameter count, never the values themselves.
+      lc.debug?.(`${q.string} (${q.parameters.length} params)`);
     }
   }
 
